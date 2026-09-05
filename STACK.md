@@ -95,7 +95,7 @@ Context com useReducer foi descartado porque re-renderiza todos os consumidores 
 
 O Wails v3 dá dois canais:
 
-- **Bindings** para comandos com resposta, como criar feature ou aprovar task. Um método Go num service vira, após `wails3 generate bindings`, uma função TypeScript tipada. A chamada atravessa a ponte interna do webview e executa no mesmo processo, sem HTTP, porta ou rede.
+- **Bindings** para comandos com resposta, como criar task ou aprovar step. Um método Go num service vira, após `wails3 generate bindings`, uma função TypeScript tipada. A chamada atravessa a ponte interna do webview e executa no mesmo processo, sem HTTP, porta ou rede.
 - **Eventos** para tudo que muda ao longo do tempo. O Go emite com `app.Event.Emit`, o React escuta com `Events.On` e alimenta o store.
 
 ## Integração com o Claude Code
@@ -124,7 +124,7 @@ Um processo por mensagem foi descartado: paga a inicialização do CLI a cada me
 ### Flags relevantes
 
 - `--permission-mode auto`, o mesmo modo que o usuário usa hoje.
-- `--model` por etapa, conforme a configuração da feature. Comandos como `/model` e `/effort` também funcionam dentro do prompt em modo `-p`.
+- `--model` por etapa, conforme a configuração da task. Comandos como `/model` e `/effort` também funcionam dentro do prompt em modo `-p`.
 - `--mcp-config` apontando para o servidor MCP do app e `--permission-prompt-tool` nomeando a ferramenta de permissão.
 - `--include-partial-messages` com `--verbose` para receber tokens conforme são gerados.
 
@@ -154,10 +154,10 @@ A abertura da PR é do agente, pela skill, usando o `gh`. O app usa o mesmo bin�
 
 Dois tipos de dado, cada um com uma única fonte de verdade:
 
-- **Artefatos**: PRD, tech spec, arquivos de task e prompts. Todos Markdown. Vivem como arquivos no diretório de dados do app, seguindo XDG, uma pasta por feature. As sessões do Claude Code precisam lê-los por caminho, e como arquivos eles ficam legíveis, diffáveis e inspecionáveis fora do app.
-- **Estado**: features, etapa, status de task, ids de sessão, caminhos de worktree, modelo e esforço por etapa, configurações. Vive em SQLite, pelo service que o Wails v3 traz. Consultas como "tudo que depende de mim" ficam baratas e confiáveis.
+- **Artefatos**: PRD, tech spec, arquivos de step e prompts. Todos Markdown. Vivem como arquivos no diretório de dados do app, seguindo XDG, uma pasta por task. As sessões do Claude Code precisam lê-los por caminho, e como arquivos eles ficam legíveis, diffáveis e inspecionáveis fora do app.
+- **Estado**: tasks, etapa, status de step, ids de sessão, caminhos de worktree, modelo e esforço por etapa, configurações. Vive em SQLite, pelo service que o Wails v3 traz. Consultas como "tudo que depende de mim" ficam baratas e confiáveis.
 
-Nada de estado vive dentro dos Markdown. O status de uma task, que nas skills originais era uma linha no topo do arquivo, é só uma coluna no banco.
+Nada de estado vive dentro dos Markdown. O status de um step, que nas skills originais era uma linha no topo do arquivo, é só uma coluna no banco.
 
 ## Notificações
 
