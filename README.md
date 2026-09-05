@@ -138,11 +138,55 @@ and a clock and has no window-title or app-icon module, so there is nothing
 app-specific to check there. The window-identity requirement is covered by the
 `app_id` above.
 
+### 4. Single instance (verified)
+
+With the app open on one folder, running `myspec <other folder>` from a terminal
+in a third directory gives the window focus, switches the title to the new
+workspace and logs `second instance` with the arguments and working directory.
+Relative arguments resolve against the second invocation's working directory.
+`myspec /does/not/exist` keeps the open workspace and logs
+`invalid workspace path`, which is what the welcome notice renders.
+
+The second process runs its whole startup — log, database, `Bootstrap` — before
+`application.New` finds the lock and hands the arguments over, so the log carries
+a second `app starting` for a process that then exits. Nothing is corrupted (the
+writes are idempotent and SQLite serialises them), but the work is wasted.
+
+### 5. Native dialog (not verifiable yet)
+
+Nothing triggers the folder chooser until the frontend has a button for it, in
+task 5 of this feature. `App.PickFolder` is in place and the binding is
+generated; the check moves to that task.
+
+### System theme: read from the portal, not from Wails
+
+The tech spec, section 12, has `internal/app` ask Wails for the desktop colour
+scheme. Neither half of that works in `v3.0.0-beta.16` on the GTK4 backend:
+
+- `Env.IsDarkMode()` returns false whenever `App.impl` is nil, and `impl` is only
+  built inside `Run()` — after the options, the services and the window are
+  created. Every reading before the main loop starts reports a light desktop.
+- `events.Common.ThemeChanged` never fires. The portal watcher that would raise
+  it, `listenForSystemThemeChanges`, is started from `(*linuxApp).init`, which is
+  not part of the `platformApp` interface and is never called on this backend.
+  Verified with `dbus-monitor`: the portal does emit `SettingChanged` for
+  `org.freedesktop.appearance` / `color-scheme`, and Wails ignores it.
+
+The PRD requires the interface to follow a system theme change immediately, so
+`internal/app/theme.go` reads `org.freedesktop.portal.Settings` over D-Bus itself
+and subscribes to `SettingChanged`. That also puts the right colour behind the
+webview from the first frame, since the reading now happens before the window is
+created. `github.com/godbus/dbus/v5` was already in the module graph through
+Wails and is now a direct dependency.
+
 ### Other observations
 
 - WebKitGTK creates `~/.local/share/myspec/` (`mediakeys/`, `storage/`) on first
   run, derived from `Linux.ProgramName`. That is the same directory the app's own
   XDG data path will use.
 - The window is transparent while `BackgroundColour` is unset. The window options
-  in the tech spec, section 12, set it, so this disappears once
-  `internal/app` lands.
+  in the tech spec, section 12, set it, so this is gone now that `internal/app`
+  has landed.
+- The database file lands with mode 0644 rather than 0600: WebKitGTK creates
+  `~/.local/share/myspec/` before the app does, so the `0o700` in `store.Open`
+  and `xdg.Ensure` finds the directory already there and changes nothing.

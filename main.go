@@ -3,9 +3,9 @@ package main
 
 import (
 	"embed"
-	"log"
+	"os"
 
-	"github.com/wailsapp/wails/v3/pkg/application"
+	"github.com/guilhermt/myspec/internal/app"
 )
 
 //go:embed all:frontend/dist
@@ -15,22 +15,13 @@ var assets embed.FS
 var icon []byte
 
 func main() {
-	app := application.New(application.Options{
-		Name:        "MySpec",
-		Description: "Orchestrates a Claude Code development workflow",
-		Icon:        icon,
-		Assets: application.AssetOptions{
-			Handler: application.AssetFileServerFS(assets),
-		},
-		Linux: application.LinuxOptions{ProgramName: "myspec"},
-	})
+	cwd, _ := os.Getwd()
 
-	app.Window.NewWithOptions(application.WebviewWindowOptions{
-		Title: "MySpec",
-		URL:   "/",
-	})
-
-	if err := app.Run(); err != nil {
-		log.Fatal(err)
-	}
+	os.Exit(app.Run(app.Config{
+		Assets:  assets,
+		Icon:    icon,
+		Args:    os.Args[1:],
+		Cwd:     cwd,
+		Version: "0.1.0",
+	}))
 }
