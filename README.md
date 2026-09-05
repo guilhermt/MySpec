@@ -80,6 +80,11 @@ unwanted here.
 | `task install` | Installs the app for the current user |
 | `task uninstall` | Removes what `install` put in place; never touches app data |
 
+`main.go` embeds `frontend/dist`, which is build output and so is missing from a
+fresh clone — and `//go:embed` refuses to typecheck against a directory with no
+files in it. The Go tasks put an empty placeholder there when they find none, so
+`task check` works before the first `task build` and a real build replaces it.
+
 `task install` writes, under `$HOME`:
 
 - `.local/bin/myspec`

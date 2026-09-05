@@ -57,6 +57,7 @@ tasks:
     deps: [lint:go, lint:web]
 
   lint:go:
+    deps: [embed:stub]
     cmds:
       - golangci-lint run ./...
 
@@ -73,6 +74,7 @@ tasks:
     deps: [test:go, test:web]
 
   test:go:
+    deps: [embed:stub]
     cmds:
       - mkdir -p coverage
       - gotestsum --format testdox -- -race -shuffle=on -count=1 -covermode=atomic -coverprofile=coverage/go.out ./...
@@ -84,8 +86,23 @@ tasks:
       - pnpm vitest run --coverage
 
   vuln:
+    deps: [embed:stub]
     cmds:
       - govulncheck ./...
+
+  embed:stub:
+    summary: Creates the embed target so the Go tasks can build without a frontend build
+    # main.go embeds frontend/dist, and `//go:embed` fails to typecheck when the
+    # directory holds no files. dist is build output, so it is absent on a fresh
+    # clone and every Go task that compiles the root package would fail. Skipped
+    # as soon as a real build has filled the directory.
+    internal: true
+    run: once
+    status:
+      - test -n "$(ls -A frontend/dist 2>/dev/null)"
+    cmds:
+      - mkdir -p frontend/dist
+      - touch frontend/dist/.gitkeep
 
   tidy:check:
     cmds:
