@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=MySpec
+GenericName=Development workflow
+Comment=Orchestrates a Claude Code development workflow
+Exec=@EXEC@
+Icon=org.wails.myspec
+Terminal=false
+Categories=Development;
+Keywords=claude;workflow;spec;prd;tasks;
+StartupNotify=true
+StartupWMClass=org.wails.myspec

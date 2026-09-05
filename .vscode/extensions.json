@@ -1,0 +1,11 @@
+{
+  "recommendations": [
+    // Load-bearing: settings.json names these as the formatters for this repo.
+    "biomejs.biome",
+    "golang.go",
+    // Schema and highlighting for the files the workflow runs on.
+    "tamasfe.even-better-toml",
+    "redhat.vscode-yaml"
+  ],
+  "unwantedRecommendations": ["esbenp.prettier-vscode", "dbaeumer.vscode-eslint"]
+}

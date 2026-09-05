@@ -1,0 +1,10 @@
+profile: coverage/go.out
+local-prefix: github.com/guilhermt/myspec
+threshold:
+  file: 60
+  package: 70
+  total: 80
+exclude:
+  paths:
+    - ^internal/app/
+    - ^main\.go$
