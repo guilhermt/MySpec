@@ -17,6 +17,11 @@ Leia estes documentos antes de qualquer planejamento ou implementação. Eles s�
 
 As skills atuais, descritas em WORKFLOW.md, usam outros nomes para as mesmas coisas: chamam a task de "feature" e os steps de "tasks". PRODUCT.md e STACK.md usam o vocabulário do produto.
 
+## Convenções
+
+- Interface do produto em inglês. Código, identificadores e commits em inglês. Documentação em português.
+- O texto integral das skills que originam os prompts padrão do produto está em `~/.claude/skills/gm-prd/SKILL.md`, `~/.claude/skills/gm-tech-spec/SKILL.md` e `~/.claude/skills/gm-plan-tasks/SKILL.md`. Quando o produto precisar desse texto como asset, ele entra no repositório a partir desses arquivos.
+
 ## Planejamento
 
 O planejamento de cada task deste projeto fica em `planning/{task-name}/`, com `PRD.md`, `tech-spec.md` e `tasks/`, produzidos pelas skills descritas em WORKFLOW.md. A pasta `tasks/` contém os steps, no nome que as skills usam.
