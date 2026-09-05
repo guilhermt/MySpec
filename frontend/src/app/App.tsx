@@ -1,22 +1,11 @@
 import { useEffect } from "react";
+import { AppShell } from "@/app/AppShell";
 import { bootstrap } from "@/app/bootstrap";
 import { useGlobalShortcuts } from "@/app/useGlobalShortcuts";
 import { ErrorNotice } from "@/features/notice/Notice";
 import { useApplyTheme } from "@/features/theme/useApplyTheme";
 import { WelcomeScreen } from "@/features/welcome/WelcomeScreen";
-import { displayPath } from "@/lib/paths";
-import type { Workspace } from "@/lib/wails";
 import { useAppStore, useError } from "@/store/app-store";
-
-// Temporary placeholder: the app shell replaces it.
-function WorkspacePlaceholder({ workspace }: { workspace: Workspace }) {
-  return (
-    <main className="flex h-dvh flex-col items-center justify-center gap-2 bg-background text-foreground">
-      <h1 className="text-2xl font-semibold">MySpec</h1>
-      <p className="font-mono text-xs">{displayPath(workspace.path)}</p>
-    </main>
-  );
-}
 
 export function App() {
   useApplyTheme();
@@ -55,11 +44,7 @@ export function App() {
           </div>
         </div>
       )}
-      {app.workspace === null ? (
-        <WelcomeScreen />
-      ) : (
-        <WorkspacePlaceholder workspace={app.workspace} />
-      )}
+      {app.workspace === null ? <WelcomeScreen /> : <AppShell />}
     </>
   );
 }

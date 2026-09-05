@@ -10,11 +10,13 @@ beforeEach(() => {
 });
 
 describe("App", () => {
-  it("renders the open workspace once the first snapshot arrives", async () => {
+  it("renders the shell of the open workspace once the first snapshot arrives", async () => {
     renderWithStore(<App />);
 
-    expect(await screen.findByRole("heading", { name: "MySpec" })).toBeInTheDocument();
-    expect(screen.getByText("~/projects")).toBeInTheDocument();
+    expect(await screen.findByRole("treeitem", { name: "projects Root" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "projects" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Switch workspace: projects" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Theme" })).toBeInTheDocument();
   });
 
   it("renders the welcome screen without a workspace", async () => {
@@ -27,7 +29,7 @@ describe("App", () => {
 
   it("opens the folder dialog on Ctrl+O", async () => {
     const { user } = renderWithStore(<App />);
-    await screen.findByRole("heading", { name: "MySpec" });
+    await screen.findByRole("treeitem", { name: "projects Root" });
 
     await user.keyboard("{Control>}o{/Control}");
 
@@ -37,7 +39,7 @@ describe("App", () => {
   it("shows a rejected binding and dismisses it", async () => {
     vi.mocked(api.openFolderDialog).mockRejectedValueOnce(new Error("dialog failed"));
     const { user } = renderWithStore(<App />);
-    await screen.findByRole("heading", { name: "MySpec" });
+    await screen.findByRole("treeitem", { name: "projects Root" });
 
     await user.keyboard("{Control>}o{/Control}");
 
@@ -50,7 +52,7 @@ describe("App", () => {
 
   it("unsubscribes when it unmounts", async () => {
     const { unmount } = renderWithStore(<App />);
-    await screen.findByRole("heading", { name: "MySpec" });
+    await screen.findByRole("treeitem", { name: "projects Root" });
 
     unmount();
 

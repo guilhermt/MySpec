@@ -24,7 +24,7 @@ function Banner({ title, children, onDismiss, className }: BannerProps) {
       <TriangleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
       <div className="min-w-0 flex-1">
         <p className="font-medium">{title}</p>
-        <p className="text-muted-foreground break-words">{children}</p>
+        <p className="break-words">{children}</p>
       </div>
       <Button
         variant="ghost"
