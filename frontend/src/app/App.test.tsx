@@ -17,12 +17,35 @@ describe("App", () => {
     expect(screen.getByText("~/projects")).toBeInTheDocument();
   });
 
-  it("renders the welcome placeholder without a workspace", async () => {
+  it("renders the welcome screen without a workspace", async () => {
     vi.mocked(api.getState).mockResolvedValue(makeState({ workspace: null }));
 
     renderWithStore(<App />);
 
-    expect(await screen.findByText("No workspace open")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /^Open folder/ })).toBeInTheDocument();
+  });
+
+  it("opens the folder dialog on Ctrl+O", async () => {
+    const { user } = renderWithStore(<App />);
+    await screen.findByRole("heading", { name: "MySpec" });
+
+    await user.keyboard("{Control>}o{/Control}");
+
+    expect(api.openFolderDialog).toHaveBeenCalledOnce();
+  });
+
+  it("shows a rejected binding and dismisses it", async () => {
+    vi.mocked(api.openFolderDialog).mockRejectedValueOnce(new Error("dialog failed"));
+    const { user } = renderWithStore(<App />);
+    await screen.findByRole("heading", { name: "MySpec" });
+
+    await user.keyboard("{Control>}o{/Control}");
+
+    expect(await screen.findByRole("status")).toHaveTextContent("dialog failed");
+
+    await user.click(screen.getByRole("button", { name: "Dismiss" }));
+
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
   it("unsubscribes when it unmounts", async () => {

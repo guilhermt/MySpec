@@ -1,0 +1,71 @@
+import { Button } from "@/components/ui/button";
+import { Kbd, KbdGroup } from "@/components/ui/kbd";
+import { Notice } from "@/features/notice/Notice";
+import { RecentList } from "@/features/welcome/RecentList";
+import { asNoticeReason } from "@/lib/wails";
+import { dismissNotice, openFolderDialog } from "@/store/actions";
+import { useNotice, useRecents } from "@/store/app-store";
+
+function AppMark() {
+  return (
+    <svg
+      viewBox="0 0 512 512"
+      className="size-10"
+      aria-hidden="true"
+      focusable="false"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <rect width="512" height="512" rx="112" fill="var(--primary)" />
+      <path
+        d="M132 380V152l124 152 124-152v228"
+        fill="none"
+        stroke="var(--primary-foreground)"
+        strokeWidth="56"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+export function WelcomeScreen() {
+  const notice = useNotice();
+  const recents = useRecents();
+
+  return (
+    <main className="flex h-dvh items-center justify-center bg-background px-6 text-foreground">
+      <div className="flex w-full max-w-[560px] flex-col gap-8">
+        <header className="flex flex-col gap-2">
+          <div className="flex items-center gap-3">
+            <AppMark />
+            <h1 className="text-[28px] font-semibold leading-none">MySpec</h1>
+          </div>
+          <p className="text-muted-foreground">Your Claude Code workflow, in one place.</p>
+        </header>
+
+        {notice !== null && (
+          <Notice
+            path={notice.path}
+            reason={asNoticeReason(notice.reason)}
+            onDismiss={() => void dismissNotice()}
+          />
+        )}
+
+        <Button onClick={() => void openFolderDialog()} className="w-full justify-between">
+          Open folder
+          <KbdGroup>
+            <Kbd>Ctrl</Kbd>
+            <Kbd>O</Kbd>
+          </KbdGroup>
+        </Button>
+
+        {recents.length > 0 && (
+          <section className="flex flex-col gap-2">
+            <h2 className="text-xs uppercase tracking-wide text-muted-foreground">Recent</h2>
+            <RecentList recents={recents} />
+          </section>
+        )}
+      </div>
+    </main>
+  );
+}

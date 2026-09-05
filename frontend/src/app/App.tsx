@@ -1,10 +1,27 @@
 import { useEffect } from "react";
 import { bootstrap } from "@/app/bootstrap";
+import { useGlobalShortcuts } from "@/app/useGlobalShortcuts";
+import { ErrorNotice } from "@/features/notice/Notice";
+import { useApplyTheme } from "@/features/theme/useApplyTheme";
+import { WelcomeScreen } from "@/features/welcome/WelcomeScreen";
 import { displayPath } from "@/lib/paths";
-import { cn } from "@/lib/utils";
-import { useAppStore, useWorkspace } from "@/store/app-store";
+import type { Workspace } from "@/lib/wails";
+import { useAppStore, useError } from "@/store/app-store";
+
+// Temporary placeholder: the app shell replaces it.
+function WorkspacePlaceholder({ workspace }: { workspace: Workspace }) {
+  return (
+    <main className="flex h-dvh flex-col items-center justify-center gap-2 bg-background text-foreground">
+      <h1 className="text-2xl font-semibold">MySpec</h1>
+      <p className="font-mono text-xs">{displayPath(workspace.path)}</p>
+    </main>
+  );
+}
 
 export function App() {
+  useApplyTheme();
+  useGlobalShortcuts();
+
   useEffect(() => {
     let unsubscribe: (() => void) | null = null;
     let stopped = false;
@@ -22,21 +39,27 @@ export function App() {
   }, []);
 
   const app = useAppStore((state) => state.app);
-  const workspace = useWorkspace();
+  const setError = useAppStore((state) => state.setError);
+  const error = useError();
 
   if (app === null) {
     return <div className="h-dvh bg-background" />;
   }
 
-  // Temporary placeholder: the welcome screen and the app shell replace it.
   return (
-    <main className="flex h-dvh flex-col items-center justify-center gap-2 bg-background text-foreground">
-      <h1 className="text-2xl font-semibold">MySpec</h1>
-      <p
-        className={cn("font-mono text-xs", workspace ? "text-foreground" : "text-muted-foreground")}
-      >
-        {workspace ? displayPath(workspace.path) : "No workspace open"}
-      </p>
-    </main>
+    <>
+      {error !== null && (
+        <div className="fixed inset-x-0 top-0 z-50 flex justify-center p-3">
+          <div className="w-full max-w-[560px]">
+            <ErrorNotice message={error} onDismiss={() => setError(null)} />
+          </div>
+        </div>
+      )}
+      {app.workspace === null ? (
+        <WelcomeScreen />
+      ) : (
+        <WorkspacePlaceholder workspace={app.workspace} />
+      )}
+    </>
   );
 }
