@@ -9,7 +9,7 @@ Este documento registra a stack técnica escolhida para o produto descrito em [P
 | Forma do app | Aplicação desktop |
 | Base desktop | Wails v3, backend em Go, webview do sistema |
 | Frontend | React com TypeScript |
-| Estilo e componentes | Tailwind CSS e shadcn/ui |
+| Estilo e componentes | Tailwind CSS e shadcn/ui sobre Base UI |
 | Markdown e diagramas | Streamdown, com mermaid |
 | Estado da interface | Zustand |
 | Ponte Go e React | Bindings e eventos do Wails |
@@ -18,9 +18,9 @@ Este documento registra a stack técnica escolhida para o produto descrito em [P
 | Git | Binário `git`, com fsnotify para observar as worktrees |
 | GitHub | Binário `gh`, somente leitura |
 | Artefatos | Arquivos Markdown no diretório de dados XDG |
-| Estado do app | SQLite, pelo service do Wails |
+| Estado do app | SQLite via `modernc.org/sqlite`, acessado só pelo Go |
 | Notificações | Service de notificações do Wails |
-| Ferramentas | pnpm, Biome, Vitest, golangci-lint, slog, Taskfile |
+| Ferramentas | mise, pnpm, Biome, Vitest, golangci-lint, slog, Taskfile |
 
 ## Forma do app: desktop
 
@@ -63,19 +63,19 @@ O que muda de v2 para v3 e importa aqui:
 
 ### O webview no Linux
 
-O Wails usa WebKitGTK no Linux, igual ao Tauri. Em Hyprland e Wayland ele funciona, mas há casos que exigem variáveis de ambiente para evitar tela preta ou glitches, principalmente com NVIDIA. Esse ponto é verificado no primeiro scaffold do projeto, na máquina alvo.
+O Wails usa WebKitGTK no Linux, igual ao Tauri. Desde o v3 alpha.93 o padrão é GTK4 com WebKitGTK 6.0; o caminho GTK3 com webkit2gtk-4.1 existe pela tag de build `gtk3` e é legado. O produto usa o padrão, GTK4, o que exige o pacote `webkitgtk-6.0` na máquina. Em Hyprland e Wayland ele funciona, mas há casos que exigem variáveis de ambiente para evitar tela preta ou glitches, principalmente com NVIDIA. Esse ponto é verificado no primeiro scaffold do projeto, na máquina alvo.
 
 ## Frontend
 
 ### React com TypeScript
 
-A interface é onde vive o refinamento, então a profundidade do ecossistema pesa. React tem o maior conjunto de componentes polidos: shadcn/ui sobre Radix, painéis redimensionáveis, command palettes, listas virtualizadas, visualizadores de diff. As bibliotecas de Markdown e mermaid são maduras, e o Wails tem template React.
+A interface é onde vive o refinamento, então a profundidade do ecossistema pesa. React tem o maior conjunto de componentes polidos: shadcn/ui sobre Base UI ou Radix, painéis redimensionáveis, command palettes, listas virtualizadas, visualizadores de diff. As bibliotecas de Markdown e mermaid são maduras, e o Wails tem template React.
 
 Svelte 5 foi considerado: mais enxuto e rápido em runtime, com shadcn-svelte e Bits UI cobrindo o básico. A diferença de runtime é irrelevante para este app, e o ecossistema de componentes é o que entrega o polimento sem construir tudo à mão.
 
 ### Tailwind CSS e shadcn/ui
 
-Tailwind para estilo. shadcn/ui fornece primitivos acessíveis do Radix como código-fonte copiado para o projeto, não como dependência com aparência própria. Isso permite refinar cada componente até onde for necessário e manter uma identidade visual própria.
+Tailwind para estilo. shadcn/ui fornece primitivos acessíveis como código-fonte copiado para o projeto, não como dependência com aparência própria. Os primitivos são os do Base UI, padrão do shadcn para projetos novos desde julho de 2026; Radix segue suportado pelo shadcn e foi a primeira escolha deste documento, trocada em 2026-09-05 para não migrar depois. Isso permite refinar cada componente até onde for necessário e manter uma identidade visual própria.
 
 Bibliotecas de design system completas, como Mantine ou Chakra, foram descartadas: mais rápidas para começar, mais difíceis de dobrar para um visual distinto.
 
@@ -155,7 +155,7 @@ A abertura da PR é do agente, pela skill, usando o `gh`. O app usa o mesmo bin�
 Dois tipos de dado, cada um com uma única fonte de verdade:
 
 - **Artefatos**: PRD, tech spec, arquivos de step e prompts. Todos Markdown. Vivem como arquivos no diretório de dados do app, seguindo XDG, uma pasta por task. As sessões do Claude Code precisam lê-los por caminho, e como arquivos eles ficam legíveis, diffáveis e inspecionáveis fora do app.
-- **Estado**: tasks, etapa, status de step, ids de sessão, caminhos de worktree, modelo e esforço por etapa, configurações. Vive em SQLite, pelo service que o Wails v3 traz. Consultas como "tudo que depende de mim" ficam baratas e confiáveis.
+- **Estado**: tasks, etapa, status de step, ids de sessão, caminhos de worktree, modelo e esforço por etapa, configurações. Vive em SQLite, com o driver `modernc.org/sqlite`, o mesmo que o service de SQLite do Wails usa por dentro, acessado só pelo Go com `database/sql`. O service do Wails existe para expor SQL ao frontend; como o produto é o dono do estado, o SQL fica no Go, tipado e com transações. Consultas como "tudo que depende de mim" ficam baratas e confiáveis.
 
 Nada de estado vive dentro dos Markdown. O status de um step, que nas skills originais era uma linha no topo do arquivo, é só uma coluna no banco.
 
@@ -166,13 +166,14 @@ O service de notificações do Wails v3 cobre o requisito de avisar o usuário f
 ## Ferramentas de desenvolvimento
 
 - **Layout**: um repositório só, no formato do Wails v3. Módulo Go na raiz, `frontend/` com Vite, React e TypeScript em modo strict.
+- **Toolchain**: mise pina, num `mise.toml` na raiz, as versões de Go, Node, pnpm, Task, golangci-lint e das demais ferramentas de linha de comando. O CLI `wails3`, ainda em beta, é instalado por `go install` numa tarefa de setup.
 - **Frontend**: pnpm como gerenciador de pacotes, Biome para lint e formatação no lugar de ESLint mais Prettier, Vitest com Testing Library para testes.
 - **Go**: golangci-lint, `slog` para logs, `go test` padrão.
 - **Automação**: o Taskfile que o Wails v3 gera, para dev, build e geração de bindings.
 
 ## Pontos a verificar no protótipo
 
-1. WebKitGTK renderizando corretamente no Hyprland da máquina alvo.
+1. WebKitGTK 6.0 sobre GTK4 renderizando corretamente no Hyprland da máquina alvo, com GPU AMD.
 2. Streamdown atendendo ao streaming do chat e ao mermaid; caso contrário, cair para react-markdown, remark-gfm, Shiki e mermaid.
 3. Estabilidade do Wails v3 beta nas funcionalidades usadas: services, eventos, SQLite, notificações.
 4. A flag de opt-out do `--bare` quando ele virar padrão do `-p`.
