@@ -15,6 +15,11 @@
       "!frontend/dist"
     ]
   },
+  "css": {
+    "parser": {
+      "tailwindDirectives": true
+    }
+  },
   "formatter": {
     "enabled": true,
     "indentStyle": "space",
@@ -38,6 +43,9 @@
       "preset": "recommended",
       "a11y": {
         "preset": "recommended"
+      },
+      "complexity": {
+        "noImportantStyles": "off"
       },
       "correctness": {
         "noUnusedImports": "error",

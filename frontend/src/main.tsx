@@ -1,9 +1,17 @@
-import React from "react";
-import ReactDOM from "react-dom/client";
-import App from "./App";
+import "@/styles/fonts.css";
+import "@/styles/globals.css";
+import "@/styles/tokens.css";
+import { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
+import { App } from "@/app/App";
 
-ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
-  <React.StrictMode>
+const container = document.getElementById("root");
+if (container === null) {
+  throw new Error("missing #root element");
+}
+
+createRoot(container).render(
+  <StrictMode>
     <App />
-  </React.StrictMode>,
+  </StrictMode>,
 );
