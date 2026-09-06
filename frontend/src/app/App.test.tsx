@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "@/app/App";
 import { api } from "@/lib/wails";
 import { renderWithStore, resetAppStore } from "@/test/render";
-import { makeState, subscriberCount } from "@/test/wails-mock";
+import { makeState, makeTask, subscriberCount } from "@/test/wails-mock";
 
 beforeEach(() => {
   resetAppStore();
@@ -79,5 +79,20 @@ describe("App", () => {
     await waitFor(() => {
       expect(subscriberCount()).toBe(0);
     });
+  });
+
+  it("swaps the node panel for the task screen and back", async () => {
+    vi.mocked(api.getState).mockResolvedValue(makeState({ tasks: [makeTask()] }));
+    const { user } = renderWithStore(<App />);
+
+    await user.click(await screen.findByRole("treeitem", { name: /add-login/ }));
+
+    expect(await screen.findByRole("button", { name: "Delete task" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "projects" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("treeitem", { name: "projects Root" }));
+
+    expect(await screen.findByRole("heading", { name: "projects" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Delete task" })).not.toBeInTheDocument();
   });
 });

@@ -8,7 +8,7 @@ for the workflow it automates and [STACK.md](./STACK.md) for the technical stack
 
 ## Prerequisites
 
-Two things are installed by hand; everything else comes from them.
+Three things are installed by hand; everything else comes from them.
 
 **1. System packages.** The Wails build dependencies on Linux, plus the C
 toolchain cgo needs:
@@ -20,6 +20,10 @@ sudo pacman -S --needed gtk4 webkitgtk-6.0 base-devel pkgconf
 **2. [mise](https://mise.jdx.dev).** `sudo pacman -S mise` (this machine uses
 `mise-bin` from the Omarchy repository), with `mise activate` in your shell so
 entering the project directory activates the pinned versions.
+
+**3. Claude Code.** The `claude` CLI on the PATH (or in `~/.local/bin`), logged
+in once with `claude` in a terminal. `MYSPEC_CLAUDE_PATH` overrides where the app
+looks for it.
 
 Go, Node, pnpm, Task, Biome, golangci-lint, gotestsum, lefthook, govulncheck and
 go-test-coverage are all pinned in [`mise.toml`](./mise.toml) and installed by
@@ -94,6 +98,35 @@ files in it. The Go tasks put an empty placeholder there when they find none, so
 
 `task uninstall` removes exactly those four files. The app data directory is
 never touched.
+
+## Data directory
+
+Everything the app keeps lives under `~/.local/share/myspec/`:
+
+- `myspec.db`, the SQLite database with the settings, the workspaces, the tasks
+  and every conversation.
+- `prompts/prd.md`, the prompt that starts a PRD session. It is written on first
+  run, meant to be edited, and recreated the next time the app starts if it is
+  deleted. A session already running keeps the prompt it started with.
+- `workspaces/<name>-<hash>/tasks/<task>/PRD.md`, the artifacts of each task, in
+  a folder per workspace and per task. The hash keeps two workspaces with the
+  same folder name apart.
+
+## Sessions
+
+Each task runs its own `claude` process, started with the fixed flags of
+`claude.Args`: `-p` with `--output-format stream-json`, `--input-format
+stream-json`, `--verbose`, `--include-partial-messages`, `--permission-mode auto`
+and `--permission-prompt-tool stdio`, plus `--session-id` on the first run and
+`--resume` on the following ones. The app writes the user's messages into stdin
+and reads the event stream back. A process with nothing to do for ten minutes is
+stopped; the next message brings it back with `--resume`, and the agent still
+remembers the conversation.
+
+When something looks wrong, the log is at `~/.local/state/myspec/myspec.log`.
+`claude session ready` marks a process that started and answered, with the task
+it belongs to, and `binding failed` marks a call from the interface the Go side
+rejected, with the method that refused it.
 
 ## Continuous integration
 
