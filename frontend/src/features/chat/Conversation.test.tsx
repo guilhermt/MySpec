@@ -1,0 +1,153 @@
+import { act, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import { Conversation } from "@/features/chat/Conversation";
+import type { Entry, TaskSummary } from "@/lib/wails";
+import { useAppStore } from "@/store/app-store";
+import type { TranscriptState } from "@/store/transcript";
+import { renderWithStore } from "@/test/render";
+import { makeEntry, makeState, makeTask, makeTranscript } from "@/test/wails-mock";
+
+function ready(entries: Entry[], pending: Entry[] = []): Record<string, TranscriptState> {
+  return { "task-1": { status: "ready", entries, pending, buffered: [] } };
+}
+
+function loading(): Record<string, TranscriptState> {
+  return { "task-1": { status: "loading", entries: [], pending: [], buffered: [] } };
+}
+
+function withTask(overrides: Partial<TaskSummary> = {}) {
+  return makeState({ tasks: [makeTask(overrides)] });
+}
+
+function action(turnId: string, target: string, status = "done"): Entry {
+  return makeEntry("action", {
+    turnId,
+    action: { toolUseId: target, tool: "Read", label: "Read", target, status },
+  });
+}
+
+describe("Conversation", () => {
+  it("shows a placeholder until the conversation is loaded", () => {
+    renderWithStore(<Conversation taskId="task-1" />, {
+      state: withTask(),
+      ui: { transcripts: loading() },
+    });
+
+    expect(screen.queryByText("Add a login screen")).not.toBeInTheDocument();
+  });
+
+  it("draws what was said and what was done, in order", () => {
+    const entries = [makeEntry("user"), makeEntry("assistant"), makeEntry("marker")];
+    renderWithStore(<Conversation taskId="task-1" />, {
+      state: withTask(),
+      ui: { transcripts: ready(entries) },
+    });
+
+    expect(screen.getByText("Add a login screen")).toBeInTheDocument();
+    expect(screen.getByTestId("markdown")).toHaveTextContent("On it.");
+    expect(screen.getByText("PRD written")).toBeInTheDocument();
+  });
+
+  it("collapses the actions of a turn into one line", async () => {
+    const entries = [action("turn-1", "a.ts"), action("turn-1", "b.ts")];
+    const { user } = renderWithStore(<Conversation taskId="task-1" />, {
+      state: withTask(),
+      ui: { transcripts: ready(entries) },
+    });
+
+    const trigger = screen.getByRole("button", { name: /2 actions/ });
+    expect(screen.queryByText("a.ts")).not.toBeInTheDocument();
+
+    await user.click(trigger);
+
+    expect(screen.getByText("a.ts")).toBeInTheDocument();
+    expect(screen.getByText("b.ts")).toBeInTheDocument();
+  });
+
+  it("marks a message that is still waiting its turn", () => {
+    const pending = [
+      makeEntry("user", { user: { text: "and dark mode", pending: true, prompt: false } }),
+    ];
+    renderWithStore(<Conversation taskId="task-1" />, {
+      state: withTask({ pendingCount: 1 }),
+      ui: { transcripts: ready([], pending) },
+    });
+
+    expect(screen.getByText("and dark mode")).toBeInTheDocument();
+    expect(screen.getByText("Queued")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Remove queued message" })).toBeInTheDocument();
+  });
+
+  it("says the agent is thinking when nothing else is happening", () => {
+    renderWithStore(<Conversation taskId="task-1" />, {
+      state: withTask({ sessionStatus: "working", turnRunning: true, processRunning: true }),
+      ui: { transcripts: ready([makeEntry("user")]) },
+    });
+
+    expect(screen.getByRole("status")).toHaveTextContent("Thinking…");
+  });
+
+  it("says the session is starting before the process is up", () => {
+    renderWithStore(<Conversation taskId="task-1" />, {
+      state: withTask({ sessionStatus: "working", turnRunning: true }),
+      ui: { transcripts: ready([]) },
+    });
+
+    expect(screen.getByRole("status")).toHaveTextContent("Starting session…");
+  });
+
+  it("says which attempt is on when the session is being retried", () => {
+    renderWithStore(<Conversation taskId="task-1" />, {
+      state: withTask({ sessionStatus: "working", turnRunning: true, retryAttempt: 2 }),
+      ui: { transcripts: ready([]) },
+    });
+
+    expect(screen.getByRole("status")).toHaveTextContent("Retrying (attempt 2)…");
+  });
+
+  it("stays quiet while a tool is running, since the action already says so", () => {
+    renderWithStore(<Conversation taskId="task-1" />, {
+      state: withTask({ sessionStatus: "working", turnRunning: true, processRunning: true }),
+      ui: { transcripts: ready([action("turn-1", "a.ts", "running")]) },
+    });
+
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("stays quiet between turns", () => {
+    renderWithStore(<Conversation taskId="task-1" />, {
+      state: withTask(),
+      ui: { transcripts: ready([makeEntry("assistant")]) },
+    });
+
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("offers a way back to the end when the reader is further up", async () => {
+    const { container, user } = renderWithStore(<Conversation taskId="task-1" />, {
+      state: withTask(),
+      ui: { transcripts: ready([makeEntry("user")]) },
+    });
+    const scroller = container.querySelector('[data-slot="conversation"]');
+    if (scroller === null) {
+      throw new Error("the conversation has no scrolling region");
+    }
+    const scrollTo = vi.fn<(options: ScrollToOptions) => void>();
+    Object.defineProperty(scroller, "scrollHeight", { value: 1000, configurable: true });
+    Object.defineProperty(scroller, "scrollTo", { value: scrollTo, configurable: true });
+    act(() => {
+      scroller.dispatchEvent(new Event("scroll"));
+    });
+
+    act(() => {
+      useAppStore
+        .getState()
+        .setTranscript(makeTranscript({ entries: [makeEntry("user"), makeEntry("assistant")] }));
+    });
+
+    await user.click(screen.getByRole("button", { name: "New messages" }));
+
+    expect(scrollTo).toHaveBeenCalledWith({ top: 1000 });
+    expect(screen.queryByRole("button", { name: "New messages" })).not.toBeInTheDocument();
+  });
+});
