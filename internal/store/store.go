@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"time"
 
 	_ "modernc.org/sqlite" // database/sql driver
 )
@@ -29,6 +30,9 @@ type Store struct {
 	db       *sql.DB
 	Recents  *RecentsRepo
 	Settings *SettingsRepo
+	Tasks    *TasksRepo
+	Sessions *SessionsRepo
+	Entries  *EntriesRepo
 }
 
 // Open opens the database at path, creating its directory and applying the
@@ -74,6 +78,9 @@ func open(ctx context.Context, dsn, path string, log *slog.Logger) (*Store, erro
 		db:       db,
 		Recents:  &RecentsRepo{db: db},
 		Settings: &SettingsRepo{db: db},
+		Tasks:    &TasksRepo{db: db},
+		Sessions: &SessionsRepo{db: db},
+		Entries:  &EntriesRepo{db: db},
 	}, nil
 }
 
@@ -88,4 +95,30 @@ func (s *Store) Close() error {
 // SchemaVersion is the migration version currently applied.
 func (s *Store) SchemaVersion(ctx context.Context) (int, error) {
 	return schemaVersion(ctx, s.db)
+}
+
+// scanner is what *sql.Row and *sql.Rows have in common, so a row of a table
+// is scanned by one function whatever the query returned it.
+type scanner interface {
+	Scan(dest ...any) error
+}
+
+// formatTime writes an instant the way every timestamp column stores it.
+func formatTime(t time.Time) string {
+	return t.UTC().Format(time.RFC3339Nano)
+}
+
+// parseTime reads a timestamp column; subject names the row in the error.
+func parseTime(value, subject string) (time.Time, error) {
+	parsed, err := time.Parse(time.RFC3339Nano, value)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("parse time of %s: %w", subject, err)
+	}
+	return parsed, nil
+}
+
+// nullString stores an empty string as NULL, which is how the nullable columns
+// spell "absent".
+func nullString(value string) sql.NullString {
+	return sql.NullString{String: value, Valid: value != ""}
 }

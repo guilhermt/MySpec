@@ -7,8 +7,11 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/store"
+	"github.com/guilhermt/myspec/internal/task"
 )
 
 // logCapture is a logger writing JSON records into a buffer.
@@ -62,4 +65,59 @@ func newStore(t *testing.T) *store.Store {
 func writeEmptyFile(t *testing.T, path string) error {
 	t.Helper()
 	return os.WriteFile(path, nil, 0o600)
+}
+
+// fixedTime is the instant the repository fixtures are stamped with.
+var fixedTime = time.Date(2026, time.September, 6, 10, 0, 0, 0, time.UTC)
+
+// newTask builds a task of the given workspace, ready to insert.
+func newTask(id, workspacePath, name string, created time.Time) task.Task {
+	return task.Task{
+		ID:              id,
+		WorkspacePath:   workspacePath,
+		Name:            name,
+		InitialContext:  "context of " + name,
+		Stage:           task.StagePRD,
+		ArtifactsDir:    "/data/tasks/" + name,
+		ArtifactVersion: 0,
+		CreatedAt:       created,
+		UpdatedAt:       created,
+	}
+}
+
+// newSession builds the session of a task, ready to insert.
+func newSession(id, taskID string) session.Record {
+	return session.Record{
+		ID:        id,
+		TaskID:    taskID,
+		Stage:     string(task.StagePRD),
+		CreatedAt: fixedTime,
+		UpdatedAt: fixedTime,
+	}
+}
+
+// newEntry builds a user entry at the given position.
+func newEntry(id string, seq int, text string) session.Entry {
+	return session.Entry{
+		ID:        id,
+		Seq:       seq,
+		TurnID:    id,
+		Kind:      session.KindUser,
+		CreatedAt: fixedTime,
+		User:      &session.UserEntry{Text: text},
+	}
+}
+
+// seedSession inserts a task with a session and returns both ids.
+func seedSession(t *testing.T, s *store.Store) (taskID, sessionID string) {
+	t.Helper()
+
+	taskID, sessionID = "task-1", "sess-1"
+	if err := s.Tasks.Insert(t.Context(), newTask(taskID, "/ws", "one", fixedTime)); err != nil {
+		t.Fatalf("Tasks.Insert() = %v, want nil", err)
+	}
+	if err := s.Sessions.Insert(t.Context(), newSession(sessionID, taskID)); err != nil {
+		t.Fatalf("Sessions.Insert() = %v, want nil", err)
+	}
+	return taskID, sessionID
 }
