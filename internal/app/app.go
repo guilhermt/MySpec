@@ -16,8 +16,11 @@ import (
 	"github.com/guilhermt/myspec/internal/bindings"
 	"github.com/guilhermt/myspec/internal/platform/logging"
 	"github.com/guilhermt/myspec/internal/platform/xdg"
+	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/scan"
+	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/store"
+	"github.com/guilhermt/myspec/internal/task"
 	"github.com/guilhermt/myspec/internal/theme"
 	"github.com/guilhermt/myspec/internal/workspace"
 )
@@ -34,12 +37,18 @@ const startupTimeout = 10 * time.Second
 // callTimeout bounds the database work done while the app is running.
 const callTimeout = 5 * time.Second
 
+// shutdownTimeout is how long the sessions have to stop gracefully before
+// their processes are killed.
+const shutdownTimeout = 8 * time.Second
+
 // App holds the running application: the Wails handles and the domain services
 // they are wired to.
 type App struct {
-	log   *slog.Logger
-	ws    *workspace.Service
-	theme *theme.Service
+	log      *slog.Logger
+	ws       *workspace.Service
+	theme    *theme.Service
+	tasks    *task.Service
+	sessions *session.Service
 
 	mu      sync.Mutex
 	wails   *application.App
@@ -86,6 +95,10 @@ func Run(cfg Config) int {
 	}
 	defer func() { _ = st.Close() }()
 
+	if err = prompts.Seed(dirs.Data, log); err != nil {
+		return fail(log, "seed prompts", err)
+	}
+
 	bindings.RegisterEvents()
 
 	a := &App{log: log}
@@ -94,20 +107,40 @@ func Run(cfg Config) int {
 	if err != nil {
 		return fail(log, "read settings", err)
 	}
+	sessions := session.New(session.Deps{
+		Sessions:     st.Sessions,
+		Entries:      st.Entries,
+		Launcher:     claudeLauncher{log: log},
+		RenderPrompt: func(vars prompts.Vars) (string, error) { return prompts.Render(dirs.Data, prompts.StagePRD, vars) },
+		Log:          log,
+		OnState:      func(string) { a.publish() },
+		OnTranscript: a.emitTranscript,
+	})
+	tasks, err := task.New(task.Deps{
+		Repo:       st.Tasks,
+		DataDir:    dirs.Data,
+		Log:        log,
+		Repos:      a.repoPaths,
+		OnChange:   a.publish,
+		OnArtifact: func(t task.Task, first bool) { sessions.MarkArtifact(context.Background(), t.ID, first) },
+	})
+	if err != nil {
+		return fail(log, "watch artifacts", err)
+	}
 	wsSvc := workspace.New(workspace.Deps{
 		Recents:  st.Recents,
 		Scan:     func(root string) ([]string, error) { return scan.Repos(root, log) },
 		Log:      log,
-		OnChange: a.publish,
+		OnChange: a.onWorkspaceChanged,
 	})
-	a.theme, a.ws = themeSvc, wsSvc
+	a.theme, a.ws, a.tasks, a.sessions = themeSvc, wsSvc, tasks, sessions
 
 	if err := wsSvc.Bootstrap(ctx, firstArg(cfg.Args, log), cfg.Cwd); err != nil {
 		return fail(log, "open initial workspace", err)
 	}
 	a.watchSystemTheme()
 
-	wails := application.New(a.options(cfg, wsSvc, themeSvc, log))
+	wails := application.New(a.options(cfg, wsSvc, themeSvc, tasks, sessions, log))
 	a.setWails(wails)
 	a.openWindow(cfg)
 
@@ -124,7 +157,14 @@ func Run(cfg Config) int {
 
 // options are the Wails application options, including the services the
 // frontend binds to.
-func (a *App) options(cfg Config, ws *workspace.Service, themeSvc *theme.Service, log *slog.Logger) application.Options {
+func (a *App) options(
+	cfg Config,
+	ws *workspace.Service,
+	themeSvc *theme.Service,
+	tasks *task.Service,
+	sessions *session.Service,
+	log *slog.Logger,
+) application.Options {
 	return application.Options{
 		Name:        "MySpec",
 		Description: "Orchestrates a Claude Code development workflow",
@@ -132,6 +172,7 @@ func (a *App) options(cfg Config, ws *workspace.Service, themeSvc *theme.Service
 		Services: []application.Service{
 			application.NewService(bindings.NewWorkspaceService(ws, a.snapshot, a, log)),
 			application.NewService(bindings.NewSettingsService(themeSvc, log)),
+			application.NewService(bindings.NewTaskService(tasks, sessions, log)),
 		},
 		Assets: application.AssetOptions{Handler: application.AssetFileServerFS(cfg.Assets)},
 		Linux:  application.LinuxOptions{ProgramName: "myspec"},
@@ -139,9 +180,53 @@ func (a *App) options(cfg Config, ws *workspace.Service, themeSvc *theme.Service
 			UniqueID:               "myspec",
 			OnSecondInstanceLaunch: a.onSecondInstance,
 		},
-		Logger:   log,
-		LogLevel: wailsLogLevel(),
+		OnShutdown: a.shutdown,
+		Logger:     log,
+		LogLevel:   wailsLogLevel(),
 	}
+}
+
+// onWorkspaceChanged brings the tasks in line with the workspace that just
+// changed before the state reaches the frontend.
+func (a *App) onWorkspaceChanged() {
+	a.syncTasks()
+	a.publish()
+}
+
+// syncTasks loads the tasks of the open workspace and opens their sessions.
+// A task that cannot be loaded is logged and left out; it never keeps the
+// workspace from opening.
+func (a *App) syncTasks() {
+	current := a.ws.Current()
+	if current == nil {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+
+	if err := a.tasks.Sync(ctx, current.Path); err != nil {
+		a.log.Error("sync tasks failed", "workspace", current.Path, "err", err)
+		return
+	}
+	for _, t := range a.tasks.List() {
+		if err := a.sessions.Open(ctx, bindings.TaskInfo(t)); err != nil {
+			a.log.Error("open session failed", "task", t.ID, "err", err)
+		}
+	}
+}
+
+// shutdown stops every session and the artifact watcher while the window is
+// still closing, so no CLI process outlives the app.
+func (a *App) shutdown() {
+	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	defer cancel()
+
+	a.sessions.Shutdown(ctx)
+	if err := a.tasks.Close(); err != nil {
+		a.log.Error("close artifact watcher failed", "err", err)
+	}
+	a.log.Info("sessions stopped")
 }
 
 // setWails records the application handle for the callbacks that run after it

@@ -5,15 +5,79 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"os"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/guilhermt/myspec/internal/bindings"
+	"github.com/guilhermt/myspec/internal/claude"
+	"github.com/guilhermt/myspec/internal/claude/claudetest"
+	"github.com/guilhermt/myspec/internal/prompts"
+	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/store"
+	"github.com/guilhermt/myspec/internal/task"
 	"github.com/guilhermt/myspec/internal/theme"
 	"github.com/guilhermt/myspec/internal/workspace"
 )
+
+// TestMain lets the test binary stand in for the claude CLI: a child process
+// started with EnvFlag set runs the fake instead of the tests.
+func TestMain(m *testing.M) {
+	if os.Getenv(claudetest.EnvFlag) == "1" {
+		os.Exit(claudetest.Run())
+	}
+	os.Exit(m.Run())
+}
+
+// The bounds a fixture puts on the fake CLI, which runs as another process.
+const (
+	pollTimeout     = 10 * time.Second
+	pollStep        = 10 * time.Millisecond
+	shutdownTimeout = 10 * time.Second
+)
+
+// fakeLauncher runs this test binary as the fake CLI playing the echo
+// scenario, where every message comes back as the agent's answer.
+type fakeLauncher struct{}
+
+func (fakeLauncher) Locate() (string, error) { return os.Args[0], nil }
+
+func (fakeLauncher) Preflight(context.Context, string) error { return nil }
+
+func (fakeLauncher) Start(ctx context.Context, cfg claude.Config) (session.Process, error) {
+	cfg.Env = append(os.Environ(),
+		claudetest.EnvFlag+"=1",
+		claudetest.EnvScenario+"=echo",
+	)
+	proc, err := claude.Start(ctx, cfg, slog.New(slog.DiscardHandler))
+	if err != nil {
+		return nil, err
+	}
+	return proc, nil
+}
+
+// syncBuffer collects the log while the services behind it are still writing,
+// which is what lets a test read it from a parallel subtest.
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuffer) Write(chunk []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	return b.buf.Write(chunk)
+}
+
+func (b *syncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	return b.buf.String()
+}
 
 // fakePicker stands in for the native folder chooser.
 type fakePicker struct {
@@ -35,11 +99,15 @@ func (p *fakePicker) PickFolder(startIn string) (string, bool, error) {
 type fixture struct {
 	workspace *bindings.WorkspaceService
 	settings  *bindings.SettingsService
+	tasks     *bindings.TaskService
 	ws        *workspace.Service
 	theme     *theme.Service
 	store     *store.Store
+	taskSvc   *task.Service
+	sessions  *session.Service
+	dataDir   string
 	picker    *fakePicker
-	logs      *bytes.Buffer
+	logs      *syncBuffer
 
 	mu      sync.Mutex
 	repos   []string
@@ -49,7 +117,7 @@ type fixture struct {
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
 
-	logs := &bytes.Buffer{}
+	logs := &syncBuffer{}
 	log := slog.New(slog.NewJSONHandler(logs, nil))
 
 	st, err := store.OpenMemory(t.Context(), log)
@@ -70,9 +138,99 @@ func newFixture(t *testing.T) *fixture {
 		Log:     log,
 	})
 
+	f.dataDir = t.TempDir()
+	if err = prompts.Seed(f.dataDir, log); err != nil {
+		t.Fatalf("prompts.Seed() = %v, want nil", err)
+	}
+	f.sessions = session.New(session.Deps{
+		Sessions:     st.Sessions,
+		Entries:      st.Entries,
+		Launcher:     fakeLauncher{},
+		RenderPrompt: func(vars prompts.Vars) (string, error) { return prompts.Render(f.dataDir, prompts.StagePRD, vars) },
+		Log:          log,
+	})
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+		defer cancel()
+		f.sessions.Shutdown(ctx)
+	})
+	f.taskSvc, err = task.New(task.Deps{
+		Repo:    st.Tasks,
+		DataDir: f.dataDir,
+		Log:     log,
+		Repos:   f.repoPaths,
+		OnArtifact: func(t task.Task, first bool) {
+			f.sessions.MarkArtifact(context.Background(), t.ID, first)
+		},
+	})
+	if err != nil {
+		t.Fatalf("task.New() = %v, want nil", err)
+	}
+	t.Cleanup(func() { _ = f.taskSvc.Close() })
+
 	f.workspace = bindings.NewWorkspaceService(f.ws, f.snapshot, f.picker, log)
 	f.settings = bindings.NewSettingsService(f.theme, log)
+	f.tasks = bindings.NewTaskService(f.taskSvc, f.sessions, log)
 	return f
+}
+
+// open opens dir as the workspace and loads its tasks, the way internal/app
+// does on every workspace change.
+func (f *fixture) open(t *testing.T, dir string) {
+	t.Helper()
+
+	if err := f.ws.Open(t.Context(), dir); err != nil {
+		t.Fatalf("Open(%s) = %v, want nil", dir, err)
+	}
+	if err := f.taskSvc.Sync(t.Context(), dir); err != nil {
+		t.Fatalf("Sync(%s) = %v, want nil", dir, err)
+	}
+}
+
+// repoPaths are the repositories of the open workspace, as internal/app gives
+// them to the task service.
+func (f *fixture) repoPaths() []string {
+	current := f.ws.Current()
+	if current == nil {
+		return nil
+	}
+
+	paths := make([]string, len(current.Repos))
+	for i, repo := range current.Repos {
+		paths[i] = repo.Path
+	}
+	return paths
+}
+
+// taskOf returns the task with the given id from the current state, failing
+// the test when the state does not hold it.
+func (f *fixture) taskOf(t *testing.T, id string) bindings.TaskSummary {
+	t.Helper()
+
+	for _, summary := range f.workspace.GetState().Tasks {
+		if summary.ID == id {
+			return summary
+		}
+	}
+	t.Fatalf("task %s is not in the state", id)
+	return bindings.TaskSummary{}
+}
+
+// waitForStatus waits until the session of a task reaches status, failing the
+// test when it does not in time.
+func (f *fixture) waitForStatus(t *testing.T, id, status string) {
+	t.Helper()
+
+	deadline := time.Now().Add(pollTimeout)
+	last := ""
+	for time.Now().Before(deadline) {
+		last = f.taskOf(t, id).SessionStatus
+		if last == status {
+			return
+		}
+		time.Sleep(pollStep)
+	}
+	t.Fatalf("sessionStatus of task %s = %q, want %q", id, last, status)
 }
 
 // scan is the Scanner the workspace service uses.
@@ -101,6 +259,7 @@ func (f *fixture) snapshot() bindings.State {
 		Theme:      string(f.theme.Preference()),
 		SystemDark: f.theme.SystemDark(),
 		Notice:     bindings.FromNotice(f.ws.Notice()),
+		Tasks:      bindings.FromTasks(f.taskSvc.List(), f.sessions.Summaries()),
 	}
 }
 

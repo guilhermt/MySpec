@@ -48,6 +48,7 @@ export function makeState(overrides: Partial<State> = {}): State {
     theme: "system",
     systemDark: false,
     notice: null,
+    tasks: [],
     ...overrides,
   };
 }

@@ -16,7 +16,7 @@ func TestGetStateStartsEmpty(t *testing.T) {
 
 	got := f.workspace.GetState()
 
-	want := bindings.State{Recents: []bindings.Recent{}, Theme: "system"}
+	want := bindings.State{Recents: []bindings.Recent{}, Theme: "system", Tasks: []bindings.TaskSummary{}}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("GetState() mismatch (-want +got):\n%s", diff)
 	}
@@ -42,6 +42,7 @@ func TestOpenPathOpensTheWorkspace(t *testing.T) {
 		},
 		Recents: []bindings.Recent{{Name: filepath.Base(root), Path: root}},
 		Theme:   "system",
+		Tasks:   []bindings.TaskSummary{},
 	}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("GetState() mismatch (-want +got):\n%s", diff)
