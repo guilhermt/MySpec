@@ -36,6 +36,26 @@ describe("App", () => {
     expect(api.openFolderDialog).toHaveBeenCalledOnce();
   });
 
+  it("opens the new task dialog on Ctrl+N", async () => {
+    const { user } = renderWithStore(<App />);
+    await screen.findByRole("treeitem", { name: "projects Root" });
+
+    await user.keyboard("{Control>}n{/Control}");
+
+    expect(await screen.findByRole("heading", { name: "New task" })).toBeInTheDocument();
+    expect(screen.getByText("At the workspace root")).toBeInTheDocument();
+  });
+
+  it("leaves Ctrl+N alone without a workspace", async () => {
+    vi.mocked(api.getState).mockResolvedValue(makeState({ workspace: null }));
+    const { user } = renderWithStore(<App />);
+    await screen.findByRole("button", { name: /^Open folder/ });
+
+    await user.keyboard("{Control>}n{/Control}");
+
+    expect(screen.queryByRole("heading", { name: "New task" })).not.toBeInTheDocument();
+  });
+
   it("shows a rejected binding and dismisses it", async () => {
     vi.mocked(api.openFolderDialog).mockRejectedValueOnce(new Error("dialog failed"));
     const { user } = renderWithStore(<App />);

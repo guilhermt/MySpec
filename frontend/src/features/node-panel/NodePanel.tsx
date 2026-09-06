@@ -1,17 +1,20 @@
-import { Copy, FolderGit2, House } from "lucide-react";
+import { Copy, FolderGit2, House, Plus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { EmptyTasks } from "@/features/node-panel/EmptyTasks";
+import { TaskList } from "@/features/node-panel/TaskList";
 import { Notice } from "@/features/notice/Notice";
 import { findNode } from "@/features/tree/tree-model";
 import { asNoticeReason } from "@/lib/wails";
 import { dismissNotice } from "@/store/actions";
-import { useAppStore, useNotice } from "@/store/app-store";
+import { useAppStore, useNotice, useTasksOf } from "@/store/app-store";
 
 export function NodePanel() {
   const app = useAppStore((state) => state.app);
   const selectedNodeId = useAppStore((state) => state.selectedNodeId);
+  const openNewTask = useAppStore((state) => state.openNewTask);
+  const tasks = useTasksOf(selectedNodeId);
   const notice = useNotice();
 
   const node = app === null ? null : findNode(app, selectedNodeId);
@@ -37,6 +40,11 @@ export function NodePanel() {
             <Icon aria-hidden="true" className="size-6 shrink-0 text-muted-foreground" />
             <h1 className="text-[20px] font-semibold">{node.label}</h1>
             {node.isRoot && <Badge variant="secondary">Root</Badge>}
+            <span className="flex-1" />
+            <Button size="sm" onClick={() => openNewTask(node.id)}>
+              <Plus />
+              New task
+            </Button>
           </div>
           <div className="flex min-w-0 items-center gap-1">
             <span className="truncate font-mono text-sm text-muted-foreground">{node.path}</span>
@@ -53,7 +61,15 @@ export function NodePanel() {
 
         <Separator className="my-6" />
 
-        <EmptyTasks kind={node.isRoot ? "root" : "repo"} name={node.label} />
+        {tasks.length === 0 ? (
+          <EmptyTasks
+            kind={node.isRoot ? "root" : "repo"}
+            name={node.label}
+            onNewTask={() => openNewTask(node.id)}
+          />
+        ) : (
+          <TaskList tasks={tasks} />
+        )}
       </div>
     </main>
   );

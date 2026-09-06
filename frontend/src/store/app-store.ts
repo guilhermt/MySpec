@@ -267,6 +267,7 @@ export function useThemeState(): ThemeState {
 export interface TreeUi {
   selectedNodeId: NodeId;
   expandedNodeIds: ReadonlySet<NodeId>;
+  openTaskId: string | null;
 }
 
 export function useTreeUi(): TreeUi {
@@ -274,6 +275,7 @@ export function useTreeUi(): TreeUi {
     useShallow((state) => ({
       selectedNodeId: state.selectedNodeId,
       expandedNodeIds: state.expandedNodeIds,
+      openTaskId: state.openTaskId,
     })),
   );
 }

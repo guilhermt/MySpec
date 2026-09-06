@@ -4,7 +4,17 @@ import { WorkspaceTree } from "@/features/tree/WorkspaceTree";
 import { onStateChanged } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
-import { emitState, makeState } from "@/test/wails-mock";
+import { emitState, makeState, makeTask } from "@/test/wails-mock";
+
+const TASKS = [
+  makeTask({ id: "t-root", name: "add-login", repoPath: "" }),
+  makeTask({
+    id: "t-web",
+    name: "fix-header",
+    repoPath: "/home/dev/projects/web",
+    sessionStatus: "working",
+  }),
+];
 
 function labels(): string[] {
   return screen.getAllByRole("treeitem").map((row) => row.textContent ?? "");
@@ -161,6 +171,96 @@ describe("WorkspaceTree", () => {
       "true",
     );
     expect(labels()).toEqual(["labs Root", "cli"]);
+  });
+
+  it("lists the tasks of a node under it", async () => {
+    const { user } = renderWithStore(<WorkspaceTree />, { state: makeState({ tasks: TASKS }) });
+
+    expect(labels()).toEqual(["projects Root", "add-login Waiting", "api", "web"]);
+
+    await user.click(within(screen.getByRole("treeitem", { name: "web" })).getByTestId("chevron"));
+
+    expect(labels()).toEqual([
+      "projects Root",
+      "add-login Waiting",
+      "api",
+      "web",
+      "fix-header Working",
+    ]);
+  });
+
+  it("opens the task that is clicked and takes the selection from the node", async () => {
+    const { user } = renderWithStore(<WorkspaceTree />, { state: makeState({ tasks: TASKS }) });
+
+    await user.click(screen.getByRole("treeitem", { name: "add-login Waiting" }));
+
+    expect(useAppStore.getState().openTaskId).toBe("t-root");
+    expect(screen.getByRole("treeitem", { name: "add-login Waiting" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.getByRole("treeitem", { name: "projects Root" })).toHaveAttribute(
+      "aria-selected",
+      "false",
+    );
+  });
+
+  it("closes the open task when a node is clicked", async () => {
+    const { user } = renderWithStore(<WorkspaceTree />, {
+      state: makeState({ tasks: TASKS }),
+      ui: { openTaskId: "t-root" },
+    });
+
+    await user.click(screen.getByRole("treeitem", { name: "api" }));
+
+    expect(useAppStore.getState().openTaskId).toBeNull();
+    expect(screen.getByRole("treeitem", { name: "api" })).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("walks through the tasks with the arrow keys and opens them", async () => {
+    const { user } = renderWithStore(<WorkspaceTree />, { state: makeState({ tasks: TASKS }) });
+
+    screen.getByRole("treeitem", { name: "projects Root" }).focus();
+    await user.keyboard("{ArrowDown}");
+
+    const task = screen.getByRole("treeitem", { name: "add-login Waiting" });
+    expect(useAppStore.getState().openTaskId).toBe("t-root");
+    expect(task).toHaveFocus();
+    expect(task).toHaveAttribute("aria-selected", "true");
+
+    await user.keyboard("{ArrowDown}");
+
+    expect(useAppStore.getState().openTaskId).toBeNull();
+    expect(screen.getByRole("treeitem", { name: "api" })).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("steps into the first task of the root with ArrowRight", async () => {
+    const { user } = renderWithStore(<WorkspaceTree />, { state: makeState({ tasks: TASKS }) });
+
+    screen.getByRole("treeitem", { name: "projects Root" }).focus();
+    await user.keyboard("{ArrowRight}");
+
+    expect(useAppStore.getState().openTaskId).toBe("t-root");
+    expect(screen.getByRole("treeitem", { name: "add-login Waiting" })).toHaveFocus();
+  });
+
+  it("leaves a task alone on the horizontal arrows and opens it with Enter", async () => {
+    const { user } = renderWithStore(<WorkspaceTree />, {
+      state: makeState({ tasks: TASKS }),
+      ui: { openTaskId: "t-root" },
+    });
+
+    screen.getByRole("treeitem", { name: "add-login Waiting" }).focus();
+    await user.keyboard("{ArrowRight}{ArrowLeft}");
+
+    expect(labels()).toEqual(["projects Root", "add-login Waiting", "api", "web"]);
+    expect(useAppStore.getState().openTaskId).toBe("t-root");
+
+    useAppStore.getState().closeTask();
+    screen.getByRole("treeitem", { name: "projects Root" }).focus();
+    await user.keyboard("{ArrowDown}{Enter}");
+
+    expect(useAppStore.getState().openTaskId).toBe("t-root");
   });
 
   it("gives the tree an accessible name", () => {
