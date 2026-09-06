@@ -1,11 +1,13 @@
-import { ListTodo } from "lucide-react";
+import { ListTodo, Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export interface EmptyTasksProps {
   kind: "root" | "repo";
   name: string;
+  onNewTask: () => void;
 }
 
-export function EmptyTasks({ kind, name }: EmptyTasksProps) {
+export function EmptyTasks({ kind, name, onNewTask }: EmptyTasksProps) {
   const title = kind === "root" ? "No tasks in this workspace root" : `No tasks in ${name}`;
   const description =
     kind === "root"
@@ -17,6 +19,10 @@ export function EmptyTasks({ kind, name }: EmptyTasksProps) {
       <ListTodo aria-hidden="true" className="size-8 text-muted-foreground" />
       <p className="font-medium">{title}</p>
       <p className="max-w-[420px] text-muted-foreground">{description}</p>
+      <Button variant="outline" size="sm" onClick={onNewTask} className="mt-2">
+        <Plus />
+        New task
+      </Button>
     </div>
   );
 }

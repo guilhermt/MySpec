@@ -8,3 +8,4 @@ exclude:
   paths:
     - ^internal/app/
     - ^main\.go$
+    - ^internal/claude/claudetest/

@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { openFolderDialog } from "@/store/actions";
+import { useAppStore } from "@/store/app-store";
 
 export function useGlobalShortcuts(): void {
   useEffect(() => {
@@ -7,11 +8,24 @@ export function useGlobalShortcuts(): void {
       if (event.repeat || !(event.ctrlKey || event.metaKey)) {
         return;
       }
-      if (event.key.toLowerCase() !== "o") {
-        return;
+      switch (event.key.toLowerCase()) {
+        case "o":
+          event.preventDefault();
+          void openFolderDialog();
+          break;
+        case "n": {
+          const store = useAppStore.getState();
+          // The welcome screen has no node to create a task for.
+          if ((store.app?.workspace ?? null) === null) {
+            return;
+          }
+          event.preventDefault();
+          store.openNewTask(store.selectedNodeId);
+          break;
+        }
+        default:
+          break;
       }
-      event.preventDefault();
-      void openFolderDialog();
     };
 
     window.addEventListener("keydown", onKeyDown);

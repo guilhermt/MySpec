@@ -6,7 +6,18 @@ import { type AppStore, type NodeId, ROOT_NODE_ID, useAppStore } from "@/store/a
 
 export interface StoreOptions {
   state?: State | null;
-  ui?: Partial<Pick<AppStore, "selectedNodeId" | "expandedNodeIds" | "error">>;
+  ui?: Partial<
+    Pick<
+      AppStore,
+      | "selectedNodeId"
+      | "expandedNodeIds"
+      | "error"
+      | "openTaskId"
+      | "transcripts"
+      | "drafts"
+      | "newTaskFor"
+    >
+  >;
 }
 
 export interface RenderWithStoreResult extends RenderResult {
@@ -19,6 +30,10 @@ export function resetAppStore(options: StoreOptions = {}): void {
     error: options.ui?.error ?? null,
     selectedNodeId: options.ui?.selectedNodeId ?? ROOT_NODE_ID,
     expandedNodeIds: options.ui?.expandedNodeIds ?? new Set<NodeId>([ROOT_NODE_ID]),
+    openTaskId: options.ui?.openTaskId ?? null,
+    transcripts: options.ui?.transcripts ?? {},
+    drafts: options.ui?.drafts ?? {},
+    newTaskFor: options.ui?.newTaskFor ?? null,
   });
 }
 

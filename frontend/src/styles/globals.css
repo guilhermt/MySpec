@@ -2,6 +2,11 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
+/* Tailwind only scans source files, and these packages ship classes of their own. */
+@source "../../node_modules/streamdown/dist/*.js";
+@source "../../node_modules/@streamdown/code/dist/*.js";
+@source "../../node_modules/@streamdown/mermaid/dist/*.js";
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
@@ -125,5 +130,24 @@
   }
   html {
     @apply font-sans;
+  }
+}
+
+@layer components {
+  /* Streamdown brings its own classes with the theme variables; only the sizes
+     that make a conversation read well are adjusted here. */
+  .markdown {
+    & pre {
+      @apply text-xs;
+    }
+    & :is(h1, h2, h3) {
+      @apply font-semibold tracking-tight;
+    }
+    & table {
+      @apply text-sm;
+    }
+    & img {
+      @apply max-w-full;
+    }
   }
 }

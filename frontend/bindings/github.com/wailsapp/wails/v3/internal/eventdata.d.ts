@@ -13,6 +13,7 @@ declare module "@wailsio/runtime" {
     namespace Events {
         interface CustomEvents {
             "state:changed": bindings$0.State;
+            "transcript:changed": bindings$0.TranscriptEvent;
         }
     }
 }

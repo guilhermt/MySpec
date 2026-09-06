@@ -1,11 +1,16 @@
 package store_test
 
 import (
+	"errors"
 	"path/filepath"
 	"testing"
 
+	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/store"
 )
+
+// schemaVersionNow is how many migrations the embedded set holds.
+const schemaVersionNow = 2
 
 func TestOpenMemoryAppliesMigrations(t *testing.T) {
 	t.Parallel()
@@ -15,8 +20,8 @@ func TestOpenMemoryAppliesMigrations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SchemaVersion() = %v, want nil", err)
 	}
-	if version != 1 {
-		t.Errorf("SchemaVersion() = %d, want 1", version)
+	if version != schemaVersionNow {
+		t.Errorf("SchemaVersion() = %d, want %d", version, schemaVersionNow)
 	}
 }
 
@@ -24,12 +29,21 @@ func TestOpenMemoryCreatesTheTables(t *testing.T) {
 	t.Parallel()
 	s := newStore(t)
 
-	// A read on each table proves the initial migration ran.
+	// A read on each table proves every migration ran.
 	if _, err := s.Recents.List(t.Context()); err != nil {
 		t.Errorf("Recents.List() = %v, want nil", err)
 	}
 	if _, _, err := s.Settings.Get(t.Context(), "theme"); err != nil {
 		t.Errorf("Settings.Get() = %v, want nil", err)
+	}
+	if _, err := s.Tasks.ListByWorkspace(t.Context(), "/ws"); err != nil {
+		t.Errorf("Tasks.ListByWorkspace() = %v, want nil", err)
+	}
+	if _, err := s.Sessions.GetByTask(t.Context(), "missing"); !errors.Is(err, session.ErrNotFound) {
+		t.Errorf("Sessions.GetByTask() = %v, want session.ErrNotFound", err)
+	}
+	if _, err := s.Entries.List(t.Context(), "missing"); err != nil {
+		t.Errorf("Entries.List() = %v, want nil", err)
 	}
 }
 
@@ -46,8 +60,8 @@ func TestOpenCreatesTheDatabaseDirectory(t *testing.T) {
 		t.Fatalf("Close() = %v, want nil", err)
 	}
 
-	if got := capture.count(t, "migration applied"); got != 1 {
-		t.Errorf("applied %d migrations, want 1", got)
+	if got := capture.count(t, "migration applied"); got != schemaVersionNow {
+		t.Errorf("applied %d migrations, want %d", got, schemaVersionNow)
 	}
 	if got := capture.count(t, "database opened"); got != 1 {
 		t.Errorf("logged %d openings, want 1", got)
@@ -84,8 +98,8 @@ func TestOpenTwiceDoesNotReapplyMigrations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SchemaVersion() = %v, want nil", err)
 	}
-	if version != 1 {
-		t.Errorf("SchemaVersion() = %d, want 1", version)
+	if version != schemaVersionNow {
+		t.Errorf("SchemaVersion() = %d, want %d", version, schemaVersionNow)
 	}
 }
 

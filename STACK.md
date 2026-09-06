@@ -14,7 +14,7 @@ Este documento registra a stack técnica escolhida para o produto descrito em [P
 | Estado da interface | Zustand |
 | Ponte Go e React | Bindings e eventos do Wails |
 | Claude Code | CLI como subprocesso, um processo vivo por sessão |
-| Permissões das sessões | Servidor MCP local em Go, via `--permission-prompt-tool` |
+| Permissões das sessões | Canal de controle do CLI por stdio (`--permission-prompt-tool stdio`) |
 | Git | Binário `git`, com fsnotify para observar as worktrees |
 | GitHub | Binário `gh`, somente leitura |
 | Artefatos | Arquivos Markdown no diretório de dados XDG |
@@ -111,13 +111,13 @@ O que o SDK daria pronto e o app implementa por conta própria:
 - ler o stream JSON de eventos do processo, linha a linha, e montar a conversa a partir dele;
 - guardar o id da sessão e usar `--resume` para continuar;
 - interromper com sinal;
-- responder escaladas de permissão, via ferramenta MCP.
+- responder escaladas de permissão e perguntas estruturadas, pelo canal de controle no stdin e no stdout.
 
 O custo real é de manutenção, porque o formato evolui com as versões do CLI. O `system/init` do stream traz um array `capabilities` para detectar comportamentos do protocolo sem comparar versões.
 
 ### Modelo de processos
 
-Um processo `claude` vivo por sessão ativa, com `--output-format stream-json` e `--input-format stream-json`. O app escreve as mensagens do usuário na entrada e lê o stream de eventos para renderizar o chat em tempo real. Pausar mata o processo. Retomar sobe outro com `--resume` e o id da sessão. Interromper uma resposta é um SIGINT.
+Um processo `claude` vivo por sessão ativa, com `--output-format stream-json` e `--input-format stream-json`. O app escreve as mensagens do usuário na entrada e lê o stream de eventos para renderizar o chat em tempo real. Pausar mata o processo. Retomar sobe outro com `--resume` e o id da sessão. Interromper uma resposta é um `control_request` de `interrupt` escrito no stdin; o CLI encerra o turno com um `result` abortado e segue vivo. Um processo ocioso ocupa cerca de 260 MB, por isso o app o encerra depois de 10 minutos sem atividade e o retoma, com `--resume`, na próxima mensagem.
 
 Um processo por mensagem foi descartado: paga a inicialização do CLI a cada mensagem e não permite interromper no meio de um turno.
 
@@ -125,14 +125,15 @@ Um processo por mensagem foi descartado: paga a inicialização do CLI a cada me
 
 - `--permission-mode auto`, o mesmo modo que o usuário usa hoje.
 - `--model` por etapa, conforme a configuração da task. Comandos como `/model` e `/effort` também funcionam dentro do prompt em modo `-p`.
-- `--mcp-config` apontando para o servidor MCP do app e `--permission-prompt-tool` nomeando a ferramenta de permissão.
+- `--permission-prompt-tool stdio`, que faz as escaladas chegarem como `control_request` no stdout e aceita a resposta como `control_response` no stdin, o mesmo canal que o Agent SDK usa.
+- `--session-id` na primeira execução e `--resume` nas seguintes, para o app escolher o id da sessão.
 - `--include-partial-messages` com `--verbose` para receber tokens conforme são gerados.
 
 Ponto a acompanhar: a documentação diz que `--bare` vai virar o padrão do `-p` numa versão futura, e bare não lê credenciais OAuth. Quando isso acontecer, o app precisa passar a flag de opt-out para continuar usando a assinatura.
 
-### Permissões por MCP
+### Permissões pelo canal de controle
 
-Em `-p`, sem ninguém para responder, o CLI nega qualquer ação que pediria confirmação. Para o app responder, ele expõe uma ferramenta MCP de permissão e a passa em `--permission-prompt-tool`. O app roda um servidor MCP em processo, sobre HTTP local, usando o SDK oficial de MCP para Go. Quando o modo auto escala, o CLI chama a ferramenta, o app mostra o pedido como "depende de mim", e a resposta do usuário volta como resultado da ferramenta.
+Em `-p`, sem ninguém para responder, o CLI nega qualquer ação que pediria confirmação. Com `--permission-prompt-tool stdio`, ele escreve o pedido no stdout como `control_request` `can_use_tool`, com a ferramenta, a entrada exata, sugestões de regra e o motivo da escalada, e espera um `control_response` no stdin com `allow` ou `deny`. Perguntas estruturadas do agente (`AskUserQuestion`) chegam pelo mesmo canal e são respondidas com as opções escolhidas. Não há servidor MCP nem porta local. Verificado em 2026-09-05 com o Claude Code 2.1.261; o `system/init` traz `capabilities` para detectar mudanças de protocolo.
 
 ## Git e GitHub
 
@@ -174,6 +175,7 @@ O service de notificações do Wails v3 cobre o requisito de avisar o usuário f
 ## Pontos a verificar no protótipo
 
 1. WebKitGTK 6.0 sobre GTK4 renderizando corretamente no Hyprland da máquina alvo, com GPU AMD.
-2. Streamdown atendendo ao streaming do chat e ao mermaid; caso contrário, cair para react-markdown, remark-gfm, Shiki e mermaid.
+2. Streamdown atendendo ao streaming do chat e ao mermaid; caso contrário, cair para react-markdown, remark-gfm, Shiki e mermaid. Verificado na task 02.
 3. Estabilidade do Wails v3 beta nas funcionalidades usadas: services, eventos, SQLite, notificações.
 4. A flag de opt-out do `--bare` quando ele virar padrão do `-p`.
+5. O canal de controle por stdio continuar disponível nas versões seguintes do CLI (feature-detect por `capabilities`).

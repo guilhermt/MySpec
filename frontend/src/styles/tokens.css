@@ -14,6 +14,17 @@
   --duration-fast: 120ms;
   --duration-base: 150ms;
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* Session status. Colour is never the only carrier: every dot has a label. */
+  --status-working: var(--primary);
+  --status-attention: oklch(0.72 0.16 70);
+  --status-success: oklch(0.6 0.15 150);
+  --status-paused: var(--muted-foreground);
+}
+
+.dark {
+  --status-attention: oklch(0.8 0.15 75);
+  --status-success: oklch(0.72 0.15 150);
 }
 
 html {

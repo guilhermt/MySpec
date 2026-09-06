@@ -1,0 +1,139 @@
+package store
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/guilhermt/myspec/internal/task"
+)
+
+// TasksRepo stores the tasks of every workspace. It implements
+// task.Repository.
+type TasksRepo struct{ db *sql.DB }
+
+// taskColumns is the column list every task query selects, in scan order.
+const taskColumns = `id, workspace_path, name, repo_path, initial_context, stage,
+	artifacts_dir, artifact_version, created_at, updated_at`
+
+// ListByWorkspace returns the tasks of a workspace in creation order.
+func (r *TasksRepo) ListByWorkspace(ctx context.Context, workspacePath string) ([]task.Task, error) {
+	const query = `SELECT ` + taskColumns + ` FROM tasks
+		WHERE workspace_path = ? ORDER BY created_at, name`
+
+	rows, err := r.db.QueryContext(ctx, query, workspacePath)
+	if err != nil {
+		return nil, fmt.Errorf("list tasks of %s: %w", workspacePath, err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var tasks []task.Task
+	for rows.Next() {
+		t, err := scanTask(rows)
+		if err != nil {
+			return nil, err
+		}
+		tasks = append(tasks, t)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list tasks of %s: %w", workspacePath, err)
+	}
+	return tasks, nil
+}
+
+// Get returns a task by id, or task.ErrNotFound.
+func (r *TasksRepo) Get(ctx context.Context, id string) (task.Task, error) {
+	const query = `SELECT ` + taskColumns + ` FROM tasks WHERE id = ?`
+
+	t, err := scanTask(r.db.QueryRowContext(ctx, query, id))
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return task.Task{}, fmt.Errorf("get task %s: %w", id, task.ErrNotFound)
+	case err != nil:
+		return task.Task{}, err
+	}
+	return t, nil
+}
+
+// Insert stores a new task. It returns task.ErrNameTaken when the workspace
+// already has a task with that name.
+func (r *TasksRepo) Insert(ctx context.Context, t task.Task) error {
+	const taken = `SELECT 1 FROM tasks WHERE workspace_path = ? AND name = ?`
+	const stmt = `INSERT INTO tasks (` + taskColumns + `)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin insert task: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var one int
+	err = tx.QueryRowContext(ctx, taken, t.WorkspacePath, t.Name).Scan(&one)
+	switch {
+	case err == nil:
+		return fmt.Errorf("insert task %s: %w", t.Name, task.ErrNameTaken)
+	case !errors.Is(err, sql.ErrNoRows):
+		return fmt.Errorf("check task name %s: %w", t.Name, err)
+	}
+
+	_, err = tx.ExecContext(ctx, stmt,
+		t.ID, t.WorkspacePath, t.Name, nullString(t.RepoPath), t.InitialContext, string(t.Stage),
+		t.ArtifactsDir, t.ArtifactVersion, formatTime(t.CreatedAt), formatTime(t.UpdatedAt))
+	if err != nil {
+		return fmt.Errorf("insert task %s: %w", t.Name, err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit insert task %s: %w", t.Name, err)
+	}
+	return nil
+}
+
+// UpdateStage rewrites the stage and the artifact version of a task.
+func (r *TasksRepo) UpdateStage(ctx context.Context, id, stage string, artifactVersion int, updatedAt time.Time) error {
+	const stmt = `UPDATE tasks SET stage = ?, artifact_version = ?, updated_at = ? WHERE id = ?`
+
+	if _, err := r.db.ExecContext(ctx, stmt, stage, artifactVersion, formatTime(updatedAt), id); err != nil {
+		return fmt.Errorf("update stage of task %s: %w", id, err)
+	}
+	return nil
+}
+
+// Delete removes a task and, by cascade, its session and transcript.
+func (r *TasksRepo) Delete(ctx context.Context, id string) error {
+	const stmt = `DELETE FROM tasks WHERE id = ?`
+
+	if _, err := r.db.ExecContext(ctx, stmt, id); err != nil {
+		return fmt.Errorf("delete task %s: %w", id, err)
+	}
+	return nil
+}
+
+func scanTask(row scanner) (task.Task, error) {
+	var (
+		t                    task.Task
+		repoPath             sql.NullString
+		stage                string
+		createdAt, updatedAt string
+	)
+	err := row.Scan(&t.ID, &t.WorkspacePath, &t.Name, &repoPath, &t.InitialContext, &stage,
+		&t.ArtifactsDir, &t.ArtifactVersion, &createdAt, &updatedAt)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return task.Task{}, err
+	case err != nil:
+		return task.Task{}, fmt.Errorf("scan task: %w", err)
+	}
+
+	t.RepoPath = repoPath.String
+	t.Stage = task.Stage(stage)
+	if t.CreatedAt, err = parseTime(createdAt, "task "+t.ID); err != nil {
+		return task.Task{}, err
+	}
+	if t.UpdatedAt, err = parseTime(updatedAt, "task "+t.ID); err != nil {
+		return task.Task{}, err
+	}
+	return t, nil
+}

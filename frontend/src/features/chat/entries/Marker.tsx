@@ -1,0 +1,37 @@
+import { Archive, Ban, FileCheck, FileText, type LucideIcon } from "lucide-react";
+import { asMarkerType, type MarkerEntry, type MarkerType } from "@/lib/wails";
+
+const MARKERS: Record<MarkerType, { icon: LucideIcon; text: string }> = {
+  prd_written: { icon: FileCheck, text: "PRD written" },
+  prd_updated: { icon: FileText, text: "PRD updated" },
+  compacted: { icon: Archive, text: "Context compacted" },
+  interrupted: { icon: Ban, text: "Interrupted" },
+};
+
+function timeOf(createdAt: string): string {
+  const at = new Date(createdAt);
+  return Number.isNaN(at.getTime())
+    ? ""
+    : at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+}
+
+export interface MarkerProps {
+  marker: MarkerEntry;
+  createdAt: string;
+}
+
+/** Marker is a milestone of the conversation, drawn as a rule across it. */
+export function Marker({ marker, createdAt }: MarkerProps) {
+  const { icon: Icon, text } = MARKERS[asMarkerType(marker.type)];
+  const time = timeOf(createdAt);
+
+  return (
+    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+      <span aria-hidden="true" className="flex-1 border-t" />
+      <Icon className="size-3 shrink-0" />
+      <span>{text}</span>
+      {time !== "" && <span className="tabular-nums">{time}</span>}
+      <span aria-hidden="true" className="flex-1 border-t" />
+    </div>
+  );
+}

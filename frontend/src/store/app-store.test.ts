@@ -1,18 +1,40 @@
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
+import type { TranscriptEvent } from "@/lib/wails";
 import {
   ROOT_NODE_ID,
   repoNodeId,
   useAppStore,
+  useDraft,
   useError,
   useNotice,
+  useOpenTask,
   useRecents,
+  useTask,
+  useTasks,
+  useTasksOf,
   useThemeState,
+  useTranscript,
   useTreeUi,
   useWorkspace,
 } from "@/store/app-store";
 import { resetAppStore } from "@/test/render";
-import { makeState } from "@/test/wails-mock";
+import { makeEntry, makeState, makeTask, makeTranscript } from "@/test/wails-mock";
+
+const ROOT_TASK = makeTask({ id: "task-root", name: "add-login" });
+const REPO_TASK = makeTask({
+  id: "task-web",
+  name: "fix-header",
+  repoPath: "/home/dev/projects/web",
+});
+
+function withTasks() {
+  return makeState({ tasks: [ROOT_TASK, REPO_TASK] });
+}
+
+function transcriptEvent(overrides: Partial<TranscriptEvent> = {}): TranscriptEvent {
+  return { taskId: ROOT_TASK.id, kind: "entry", entry: null, entryId: "", text: "", ...overrides };
+}
 
 const API_NODE = repoNodeId("/home/dev/projects/api");
 const WEB_NODE = repoNodeId("/home/dev/projects/web");
@@ -156,6 +178,199 @@ describe("selectors", () => {
 
     act(() => {
       useAppStore.getState().applyState(makeState({ recents: null }));
+    });
+
+    expect(result.current).toEqual([]);
+  });
+});
+
+describe("open task", () => {
+  it("reveals the node of the task it opens", () => {
+    useAppStore.getState().applyState(withTasks());
+
+    useAppStore.getState().openTask(REPO_TASK.id);
+
+    expect(useAppStore.getState().openTaskId).toBe(REPO_TASK.id);
+    expect(useAppStore.getState().selectedNodeId).toBe(WEB_NODE);
+    expect(useAppStore.getState().expandedNodeIds.has(WEB_NODE)).toBe(true);
+  });
+
+  it("selects the root for a task of the workspace root", () => {
+    useAppStore.getState().applyState(withTasks());
+    useAppStore.getState().selectNode(WEB_NODE);
+
+    useAppStore.getState().openTask(ROOT_TASK.id);
+
+    expect(useAppStore.getState().selectedNodeId).toBe(ROOT_NODE_ID);
+  });
+
+  it("opens a task the snapshot does not have yet without touching the tree", () => {
+    useAppStore.getState().applyState(withTasks());
+
+    useAppStore.getState().openTask("task-unknown");
+
+    expect(useAppStore.getState().openTaskId).toBe("task-unknown");
+    expect(useAppStore.getState().selectedNodeId).toBe(ROOT_NODE_ID);
+  });
+
+  it("closes the task", () => {
+    useAppStore.getState().applyState(withTasks());
+    useAppStore.getState().openTask(ROOT_TASK.id);
+
+    useAppStore.getState().closeTask();
+
+    expect(useAppStore.getState().openTaskId).toBeNull();
+  });
+
+  it("closes a task that the snapshot no longer has and drops its transcript", () => {
+    useAppStore.getState().applyState(withTasks());
+    useAppStore.getState().openTask(ROOT_TASK.id);
+    useAppStore.getState().setTranscript(makeTranscript({ taskId: ROOT_TASK.id }));
+
+    useAppStore.getState().applyState(makeState({ tasks: [REPO_TASK] }));
+
+    expect(useAppStore.getState().openTaskId).toBeNull();
+    expect(useAppStore.getState().transcripts[ROOT_TASK.id]).toBeUndefined();
+  });
+
+  it("forgets tasks, transcripts and drafts when the workspace changes", () => {
+    useAppStore.getState().applyState(withTasks());
+    useAppStore.getState().openTask(ROOT_TASK.id);
+    useAppStore.getState().setTranscript(makeTranscript({ taskId: ROOT_TASK.id }));
+    useAppStore.getState().setDraft(ROOT_TASK.id, "half a message");
+    useAppStore.getState().openNewTask(ROOT_NODE_ID);
+
+    useAppStore
+      .getState()
+      .applyState(makeState({ workspace: { name: "labs", path: "/home/dev/labs", repos: [] } }));
+
+    expect(useAppStore.getState().openTaskId).toBeNull();
+    expect(useAppStore.getState().transcripts).toEqual({});
+    expect(useAppStore.getState().drafts).toEqual({});
+    expect(useAppStore.getState().newTaskFor).toBeNull();
+  });
+
+  it("remembers which node the creation dialog is open for", () => {
+    useAppStore.getState().openNewTask(WEB_NODE);
+    expect(useAppStore.getState().newTaskFor).toBe(WEB_NODE);
+
+    useAppStore.getState().closeNewTask();
+    expect(useAppStore.getState().newTaskFor).toBeNull();
+  });
+});
+
+describe("transcripts", () => {
+  it("buffers what arrives while loading and applies it once loaded", () => {
+    const entry = makeEntry("user", { id: "a", seq: 1 });
+    useAppStore.getState().beginTranscript(ROOT_TASK.id);
+
+    useAppStore.getState().applyTranscriptEvent(transcriptEvent({ entry }));
+    expect(useAppStore.getState().transcripts[ROOT_TASK.id]?.entries).toEqual([]);
+
+    useAppStore.getState().setTranscript(makeTranscript({ taskId: ROOT_TASK.id }));
+
+    const transcript = useAppStore.getState().transcripts[ROOT_TASK.id];
+    expect(transcript?.status).toBe("ready");
+    expect(transcript?.entries).toEqual([entry]);
+    expect(transcript?.buffered).toEqual([]);
+  });
+
+  it("applies an event to a conversation it has already loaded", () => {
+    const entry = makeEntry("user", { id: "a", seq: 1 });
+    useAppStore.getState().setTranscript(makeTranscript({ taskId: ROOT_TASK.id }));
+
+    useAppStore.getState().applyTranscriptEvent(transcriptEvent({ entry }));
+
+    expect(useAppStore.getState().transcripts[ROOT_TASK.id]?.entries).toEqual([entry]);
+  });
+
+  it("ignores an event for a task nobody opened", () => {
+    useAppStore.getState().applyTranscriptEvent(transcriptEvent({ taskId: "task-other" }));
+
+    expect(useAppStore.getState().transcripts).toEqual({});
+  });
+
+  it("ignores an event that changes nothing", () => {
+    useAppStore.getState().setTranscript(makeTranscript({ taskId: ROOT_TASK.id }));
+    const before = useAppStore.getState().transcripts[ROOT_TASK.id];
+
+    useAppStore.getState().applyTranscriptEvent(transcriptEvent({ kind: "text", entryId: "gone" }));
+
+    expect(useAppStore.getState().transcripts[ROOT_TASK.id]).toBe(before);
+  });
+
+  it("keeps the entries it has while reloading", () => {
+    const entry = makeEntry("user", { id: "a", seq: 1 });
+    useAppStore
+      .getState()
+      .setTranscript(makeTranscript({ taskId: ROOT_TASK.id, entries: [entry] }));
+
+    useAppStore.getState().beginTranscript(ROOT_TASK.id);
+
+    const transcript = useAppStore.getState().transcripts[ROOT_TASK.id];
+    expect(transcript?.status).toBe("loading");
+    expect(transcript?.entries).toEqual([entry]);
+  });
+
+  it("drops a conversation on request", () => {
+    useAppStore.getState().setTranscript(makeTranscript({ taskId: ROOT_TASK.id }));
+
+    useAppStore.getState().dropTranscript(ROOT_TASK.id);
+
+    expect(useAppStore.getState().transcripts[ROOT_TASK.id]).toBeUndefined();
+  });
+
+  it("keeps one draft per task", () => {
+    useAppStore.getState().setDraft(ROOT_TASK.id, "hello");
+    useAppStore.getState().setDraft(REPO_TASK.id, "there");
+
+    expect(useAppStore.getState().drafts).toEqual({
+      [ROOT_TASK.id]: "hello",
+      [REPO_TASK.id]: "there",
+    });
+  });
+});
+
+describe("task selectors", () => {
+  it("report the tasks of the snapshot and of each node", () => {
+    const { result } = renderHook(() => ({
+      tasks: useTasks(),
+      root: useTasksOf(ROOT_NODE_ID),
+      web: useTasksOf(WEB_NODE),
+      api: useTasksOf(API_NODE),
+      task: useTask(REPO_TASK.id),
+      open: useOpenTask(),
+      transcript: useTranscript(ROOT_TASK.id),
+      draft: useDraft(ROOT_TASK.id),
+    }));
+
+    expect(result.current.tasks).toEqual([]);
+    expect(result.current.task).toBeNull();
+    expect(result.current.transcript).toBeNull();
+    expect(result.current.draft).toBe("");
+
+    act(() => {
+      useAppStore.getState().applyState(withTasks());
+      useAppStore.getState().openTask(ROOT_TASK.id);
+      useAppStore.getState().setDraft(ROOT_TASK.id, "hello");
+      useAppStore.getState().setTranscript(makeTranscript({ taskId: ROOT_TASK.id }));
+    });
+
+    expect(result.current.tasks).toHaveLength(2);
+    expect(result.current.root).toEqual([ROOT_TASK]);
+    expect(result.current.web).toEqual([REPO_TASK]);
+    expect(result.current.api).toEqual([]);
+    expect(result.current.task).toEqual(REPO_TASK);
+    expect(result.current.open).toEqual(ROOT_TASK);
+    expect(result.current.transcript?.status).toBe("ready");
+    expect(result.current.draft).toBe("hello");
+  });
+
+  it("falls back to an empty task list when the snapshot has none", () => {
+    const { result } = renderHook(() => useTasks());
+
+    act(() => {
+      useAppStore.getState().applyState(makeState({ tasks: null }));
     });
 
     expect(result.current).toEqual([]);

@@ -2,8 +2,20 @@ import { screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { NodePanel } from "@/features/node-panel/NodePanel";
 import { api } from "@/lib/wails";
+import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
-import { makeState } from "@/test/wails-mock";
+import { makeState, makeTask } from "@/test/wails-mock";
+
+const TASKS = [
+  makeTask({ id: "t-root", name: "add-login", repoPath: "", contextPercent: 42 }),
+  makeTask({
+    id: "t-web",
+    name: "fix-header",
+    repoPath: "/home/dev/projects/web",
+    stage: "prd_done",
+    sessionStatus: "working",
+  }),
+];
 
 const REPO_NODE = { selectedNodeId: "repo:/home/dev/projects/web" } as const;
 
@@ -38,6 +50,55 @@ describe("NodePanel", () => {
     await user.click(screen.getByRole("button", { name: "Copy path" }));
 
     await expect(navigator.clipboard.readText()).resolves.toBe("/home/dev/projects/web");
+  });
+
+  it("lists the tasks of the selected node", () => {
+    renderWithStore(<NodePanel />, { state: makeState({ tasks: TASKS }) });
+
+    expect(screen.queryByText("No tasks in this workspace root")).not.toBeInTheDocument();
+    const tasks = screen.getAllByRole("listitem");
+    expect(tasks).toHaveLength(1);
+    expect(tasks[0]).toHaveTextContent("add-login");
+    expect(tasks[0]).toHaveTextContent("PRD");
+    expect(tasks[0]).toHaveTextContent("Waiting");
+    expect(tasks[0]).toHaveTextContent("42%");
+  });
+
+  it("lists only the tasks of the repository that is selected", () => {
+    renderWithStore(<NodePanel />, { state: makeState({ tasks: TASKS }), ui: REPO_NODE });
+
+    const tasks = screen.getAllByRole("listitem");
+    expect(tasks).toHaveLength(1);
+    expect(tasks[0]).toHaveTextContent("fix-header");
+    expect(tasks[0]).toHaveTextContent("PRD done");
+    expect(tasks[0]).toHaveTextContent("Working");
+  });
+
+  it("opens the task that is clicked", async () => {
+    const { user } = renderWithStore(<NodePanel />, { state: makeState({ tasks: TASKS }) });
+
+    await user.click(screen.getByRole("button", { name: /add-login/ }));
+
+    expect(useAppStore.getState().openTaskId).toBe("t-root");
+  });
+
+  it("offers the new task dialog from the header and from the empty state", async () => {
+    const { user } = renderWithStore(<NodePanel />, { state: makeState(), ui: REPO_NODE });
+
+    const buttons = screen.getAllByRole("button", { name: "New task" });
+    expect(buttons).toHaveLength(2);
+
+    await user.click(buttons[1] as HTMLElement);
+
+    expect(useAppStore.getState().newTaskFor).toBe("repo:/home/dev/projects/web");
+  });
+
+  it("keeps the new task action in the header once there are tasks", async () => {
+    const { user } = renderWithStore(<NodePanel />, { state: makeState({ tasks: TASKS }) });
+
+    await user.click(screen.getByRole("button", { name: "New task" }));
+
+    expect(useAppStore.getState().newTaskFor).toBe("root");
   });
 
   it("carries the notice above the header", async () => {

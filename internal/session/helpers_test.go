@@ -1,0 +1,520 @@
+package session_test
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"os"
+	"path/filepath"
+	"slices"
+	"strconv"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/guilhermt/myspec/internal/claude"
+	"github.com/guilhermt/myspec/internal/claude/claudetest"
+	"github.com/guilhermt/myspec/internal/prompts"
+	"github.com/guilhermt/myspec/internal/session"
+)
+
+// base is the fixed instant the tests build their timestamps from.
+var base = time.Date(2026, time.September, 6, 12, 0, 0, 0, time.UTC)
+
+// pollTimeout and pollStep bound how long a test waits for the fake CLI, which
+// runs as another process.
+const (
+	pollTimeout = 5 * time.Second
+	pollStep    = 10 * time.Millisecond
+)
+
+// shutdownTimeout is how long a fixture gives its processes to leave.
+const shutdownTimeout = 10 * time.Second
+
+// renderPrompt is the prompt the tests send: every variable shows up in it, so
+// the echo of the fake tells whether the rendering happened.
+func renderPrompt(vars prompts.Vars) (string, error) {
+	return fmt.Sprintf("Task %s writes %s in %s from: %s",
+		vars.TaskName, vars.PRDPath, vars.ArtifactsDir, vars.InitialContext), nil
+}
+
+// memSessions is an in-memory session.SessionRepository.
+type memSessions struct {
+	mu   sync.Mutex
+	recs map[string]session.Record // by task id
+}
+
+func newMemSessions() *memSessions {
+	return &memSessions{recs: map[string]session.Record{}}
+}
+
+func (r *memSessions) GetByTask(_ context.Context, taskID string) (session.Record, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	rec, ok := r.recs[taskID]
+	if !ok {
+		return session.Record{}, fmt.Errorf("get session of task %s: %w", taskID, session.ErrNotFound)
+	}
+	return rec, nil
+}
+
+func (r *memSessions) Insert(_ context.Context, rec session.Record) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.recs[rec.TaskID] = rec
+	return nil
+}
+
+func (r *memSessions) Update(_ context.Context, rec session.Record) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if _, ok := r.recs[rec.TaskID]; !ok {
+		return fmt.Errorf("update session %s: %w", rec.ID, session.ErrNotFound)
+	}
+	r.recs[rec.TaskID] = rec
+	return nil
+}
+
+// get returns the stored record of a task, failing the test when it is gone.
+func (r *memSessions) get(t *testing.T, taskID string) session.Record {
+	t.Helper()
+
+	rec, err := r.GetByTask(t.Context(), taskID)
+	if err != nil {
+		t.Fatalf("GetByTask(%s) = %v, want nil", taskID, err)
+	}
+	return rec
+}
+
+// storedEntry is one row of the in-memory entry table. The payload is kept
+// encoded, as the database does, so that the repository never shares memory
+// with the service.
+type storedEntry struct {
+	sessionID string
+	entry     session.Entry
+	payload   []byte
+}
+
+// memEntries is an in-memory session.EntryRepository.
+type memEntries struct {
+	mu    sync.Mutex
+	items []storedEntry
+}
+
+func (r *memEntries) List(_ context.Context, sessionID string) ([]session.Entry, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	var out []session.Entry
+	for _, item := range r.items {
+		if item.sessionID != sessionID {
+			continue
+		}
+		e, err := session.UnmarshalPayload(item.entry.Kind, item.payload)
+		if err != nil {
+			return nil, err
+		}
+		e.ID = item.entry.ID
+		e.Seq = item.entry.Seq
+		e.TurnID = item.entry.TurnID
+		e.CreatedAt = item.entry.CreatedAt
+		out = append(out, e)
+	}
+	slices.SortStableFunc(out, func(a, b session.Entry) int { return a.Seq - b.Seq })
+	return out, nil
+}
+
+func (r *memEntries) Insert(_ context.Context, sessionID string, e session.Entry) error {
+	payload, err := e.MarshalPayload()
+	if err != nil {
+		return err
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.indexOf(e.ID) >= 0 {
+		return fmt.Errorf("insert entry %s: duplicate id", e.ID)
+	}
+	r.items = append(r.items, storedEntry{sessionID: sessionID, entry: e, payload: payload})
+	return nil
+}
+
+func (r *memEntries) Update(_ context.Context, e session.Entry) error {
+	payload, err := e.MarshalPayload()
+	if err != nil {
+		return err
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	index := r.indexOf(e.ID)
+	if index < 0 {
+		return fmt.Errorf("update entry %s: %w", e.ID, session.ErrNotFound)
+	}
+	r.items[index].entry = e
+	r.items[index].payload = payload
+	return nil
+}
+
+func (r *memEntries) Delete(_ context.Context, id string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if index := r.indexOf(id); index >= 0 {
+		r.items = slices.Delete(r.items, index, index+1)
+	}
+	return nil
+}
+
+func (r *memEntries) MaxSeq(_ context.Context, sessionID string) (int, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	maxSeq := 0
+	for _, item := range r.items {
+		if item.sessionID == sessionID {
+			maxSeq = max(maxSeq, item.entry.Seq)
+		}
+	}
+	return maxSeq, nil
+}
+
+// seed stores entries directly, bypassing the service.
+func (r *memEntries) seed(t *testing.T, sessionID string, entries ...session.Entry) {
+	t.Helper()
+
+	for _, e := range entries {
+		if err := r.Insert(t.Context(), sessionID, e); err != nil {
+			t.Fatalf("seed entry %s: %v", e.ID, err)
+		}
+	}
+}
+
+// list returns the stored entries of a session, failing the test on error.
+func (r *memEntries) list(t *testing.T, sessionID string) []session.Entry {
+	t.Helper()
+
+	entries, err := r.List(t.Context(), sessionID)
+	if err != nil {
+		t.Fatalf("List(%s) = %v, want nil", sessionID, err)
+	}
+	return entries
+}
+
+// indexOf finds a stored entry. The caller holds the mutex.
+func (r *memEntries) indexOf(id string) int {
+	return slices.IndexFunc(r.items, func(item storedEntry) bool { return item.entry.ID == id })
+}
+
+// fakeLauncher runs this test binary as the fake CLI playing one scenario. It
+// records every Config it started, and fails where a test tells it to.
+type fakeLauncher struct {
+	scenario string
+
+	mu           sync.Mutex
+	locateErr    error
+	preflightErr error
+	starts       []claude.Config
+}
+
+func (l *fakeLauncher) Locate() (string, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	if l.locateErr != nil {
+		return "", l.locateErr
+	}
+	return os.Args[0], nil
+}
+
+func (l *fakeLauncher) Preflight(_ context.Context, _ string) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	return l.preflightErr
+}
+
+func (l *fakeLauncher) Start(ctx context.Context, cfg claude.Config) (session.Process, error) {
+	l.mu.Lock()
+	l.starts = append(l.starts, cfg)
+	l.mu.Unlock()
+
+	cfg.Env = append(os.Environ(),
+		claudetest.EnvFlag+"=1",
+		claudetest.EnvScenario+"="+l.scenario,
+	)
+	p, err := claude.Start(ctx, cfg, slog.New(slog.DiscardHandler))
+	if err != nil {
+		return nil, err
+	}
+	return p, nil
+}
+
+// fix clears the failures so the next start succeeds.
+func (l *fakeLauncher) fix() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	l.locateErr = nil
+	l.preflightErr = nil
+}
+
+// started returns the configs of every process started so far.
+func (l *fakeLauncher) started() []claude.Config {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	return slices.Clone(l.starts)
+}
+
+// fixture is a Service with its collaborators, ready to assert on.
+type fixture struct {
+	service  *session.Service
+	sessions *memSessions
+	entries  *memEntries
+	launcher *fakeLauncher
+
+	mu     sync.Mutex
+	states []string
+	events []session.TranscriptEvent
+}
+
+// newFixture builds a Service whose processes play one fake scenario.
+func newFixture(t *testing.T, scenario string) *fixture {
+	t.Helper()
+
+	return newFixtureWith(t, &fakeLauncher{scenario: scenario}, 0)
+}
+
+// newFixtureWith builds a Service over a given launcher and idle timeout, 0
+// meaning the default.
+func newFixtureWith(t *testing.T, launcher *fakeLauncher, idle time.Duration) *fixture {
+	t.Helper()
+
+	f := &fixture{
+		sessions: newMemSessions(),
+		entries:  &memEntries{},
+		launcher: launcher,
+	}
+
+	var ids int
+	var idMu sync.Mutex
+	f.service = session.New(session.Deps{
+		Sessions:     f.sessions,
+		Entries:      f.entries,
+		Launcher:     launcher,
+		RenderPrompt: renderPrompt,
+		Log:          slog.New(slog.DiscardHandler),
+		Now:          func() time.Time { return base },
+		NewID: func() string {
+			idMu.Lock()
+			defer idMu.Unlock()
+			ids++
+			return "id-" + strconv.Itoa(ids)
+		},
+		IdleTimeout:  idle,
+		OnState:      f.onState,
+		OnTranscript: f.onTranscript,
+	})
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+		defer cancel()
+		f.service.Shutdown(ctx)
+	})
+	return f
+}
+
+func (f *fixture) onState(taskID string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.states = append(f.states, taskID)
+}
+
+func (f *fixture) onTranscript(ev session.TranscriptEvent) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.events = append(f.events, ev)
+}
+
+// stateCount returns how many times OnState ran for a task.
+func (f *fixture) stateCount(taskID string) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	total := 0
+	for _, id := range f.states {
+		if id == taskID {
+			total++
+		}
+	}
+	return total
+}
+
+// eventsOf returns the transcript events of a task with the given kind, in
+// order.
+func (f *fixture) eventsOf(taskID string, kind session.EventKind) []session.TranscriptEvent {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	var out []session.TranscriptEvent
+	for _, ev := range f.events {
+		if ev.TaskID == taskID && ev.Kind == kind {
+			out = append(out, ev)
+		}
+	}
+	return out
+}
+
+// textsOf returns every streamed text of an entry, in order.
+func (f *fixture) textsOf(taskID, entryID string) []string {
+	var out []string
+	for _, ev := range f.eventsOf(taskID, session.EventText) {
+		if ev.EntryID == entryID {
+			out = append(out, ev.Text)
+		}
+	}
+	return out
+}
+
+// taskInfo describes a task whose working directory is a fresh temporary one.
+func taskInfo(t *testing.T, id string) session.TaskInfo {
+	t.Helper()
+
+	artifacts := t.TempDir()
+	return session.TaskInfo{
+		ID:             id,
+		Name:           "login-screen",
+		Dir:            t.TempDir(),
+		ArtifactsDir:   artifacts,
+		PRDPath:        filepath.Join(artifacts, "PRD.md"),
+		InitialContext: "a login screen with email and password",
+	}
+}
+
+// start opens the session of a new task and queues its prompt.
+func (f *fixture) start(t *testing.T, info session.TaskInfo) {
+	t.Helper()
+
+	if err := f.service.Start(t.Context(), info); err != nil {
+		t.Fatalf("Start(%s) = %v, want nil", info.ID, err)
+	}
+}
+
+// open loads the session of an existing task.
+func (f *fixture) open(t *testing.T, info session.TaskInfo) {
+	t.Helper()
+
+	if err := f.service.Open(t.Context(), info); err != nil {
+		t.Fatalf("Open(%s) = %v, want nil", info.ID, err)
+	}
+}
+
+// send queues a message, failing the test when the service refuses it.
+func (f *fixture) send(t *testing.T, taskID, text string) {
+	t.Helper()
+
+	if err := f.service.Send(t.Context(), taskID, text); err != nil {
+		t.Fatalf("Send(%s, %q) = %v, want nil", taskID, text, err)
+	}
+}
+
+// summary returns the summary of a task, failing the test when it is not open.
+func (f *fixture) summary(t *testing.T, taskID string) session.Summary {
+	t.Helper()
+
+	sum, ok := f.service.Summary(taskID)
+	if !ok {
+		t.Fatalf("Summary(%s) not found", taskID)
+	}
+	return sum
+}
+
+// transcript returns the conversation of a task, failing the test on error.
+func (f *fixture) transcript(t *testing.T, taskID string) session.Transcript {
+	t.Helper()
+
+	tr, err := f.service.Transcript(t.Context(), taskID)
+	if err != nil {
+		t.Fatalf("Transcript(%s) = %v, want nil", taskID, err)
+	}
+	return tr
+}
+
+// entriesOf returns the delivered entries of a task with the given kind.
+func (f *fixture) entriesOf(t *testing.T, taskID string, kind session.Kind) []session.Entry {
+	t.Helper()
+
+	var out []session.Entry
+	for _, e := range f.transcript(t, taskID).Entries {
+		if e.Kind == kind {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// waitStatus waits until the summary of a task satisfies cond.
+func (f *fixture) waitStatus(t *testing.T, taskID, subject string, cond func(session.Summary) bool) session.Summary {
+	t.Helper()
+
+	var sum session.Summary
+	waitFor(t, subject, func() bool {
+		sum = f.summary(t, taskID)
+		return cond(sum)
+	})
+	return sum
+}
+
+// waitIdle waits until the turn of a task is over and the process waits for
+// the next message.
+func (f *fixture) waitIdle(t *testing.T, taskID string) session.Summary {
+	t.Helper()
+
+	return f.waitStatus(t, taskID, "the turn to end", func(s session.Summary) bool {
+		return s.Status == session.StatusWaiting && s.ProcessRunning
+	})
+}
+
+// waitEntries waits until a task has at least n delivered entries of a kind.
+func (f *fixture) waitEntries(t *testing.T, taskID string, kind session.Kind, n int) []session.Entry {
+	t.Helper()
+
+	var entries []session.Entry
+	waitFor(t, fmt.Sprintf("%d %s entries", n, kind), func() bool {
+		entries = f.entriesOf(t, taskID, kind)
+		return len(entries) >= n
+	})
+	return entries
+}
+
+// waitFor polls until cond holds, failing the test with subject when it never
+// does.
+func waitFor(t *testing.T, subject string, cond func() bool) {
+	t.Helper()
+
+	deadline := time.Now().Add(pollTimeout)
+	for time.Now().Before(deadline) {
+		if cond() {
+			return
+		}
+		time.Sleep(pollStep)
+	}
+	t.Fatalf("timed out waiting for %s", subject)
+}
+
+// wantErrIs fails the test unless err matches want.
+func wantErrIs(t *testing.T, err, want error) {
+	t.Helper()
+
+	if !errors.Is(err, want) {
+		t.Fatalf("error = %v, want %v", err, want)
+	}
+}

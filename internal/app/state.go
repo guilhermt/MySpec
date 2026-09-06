@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/guilhermt/myspec/internal/bindings"
+	"github.com/guilhermt/myspec/internal/session"
 )
 
 // appName is the window title with no workspace open, and its suffix with one.
@@ -17,6 +18,17 @@ func (a *App) snapshot() bindings.State {
 		Theme:      string(a.theme.Preference()),
 		SystemDark: a.theme.SystemDark(),
 		Notice:     bindings.FromNotice(a.ws.Notice()),
+		Tasks:      bindings.FromTasks(a.tasks.List(), a.sessions.Summaries()),
+	}
+}
+
+// emitTranscript sends one change of a conversation to the frontend. The
+// conversation has its own event because it changes far more often than the
+// rest of the state, and each event is idempotent on its own.
+func (a *App) emitTranscript(ev session.TranscriptEvent) {
+	wails, _ := a.handles()
+	if wails != nil {
+		wails.Event.Emit(bindings.EventTranscriptChanged, bindings.FromTranscriptEvent(ev))
 	}
 }
 
