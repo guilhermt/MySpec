@@ -1,0 +1,803 @@
+package session_test
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/google/go-cmp/cmp"
+
+	"github.com/guilhermt/myspec/internal/claude"
+	"github.com/guilhermt/myspec/internal/claude/claudetest"
+	"github.com/guilhermt/myspec/internal/prompts"
+	"github.com/guilhermt/myspec/internal/session"
+)
+
+func TestStartEchoesTheRenderedPrompt(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	info := taskInfo(t, "t1")
+	f.start(t, info)
+
+	sum := f.waitIdle(t, "t1")
+	if sum.ContextPercent <= 0 {
+		t.Errorf("ContextPercent = %d, want > 0 after the first result", sum.ContextPercent)
+	}
+	if sum.TurnRunning || sum.PendingCount != 0 || sum.LastError != "" {
+		t.Errorf("summary = %+v, want an idle session", sum)
+	}
+
+	tr := f.transcript(t, "t1")
+	if len(tr.Entries) != 2 {
+		t.Fatalf("entries = %d, want the prompt and its answer", len(tr.Entries))
+	}
+	user, assistant := tr.Entries[0], tr.Entries[1]
+	wantUser := &session.UserEntry{Text: info.InitialContext, Prompt: true}
+	if diff := cmp.Diff(wantUser, user.User); diff != "" {
+		t.Errorf("user entry mismatch (-want +got):\n%s", diff)
+	}
+	if user.TurnID != user.ID || assistant.TurnID != user.ID {
+		t.Errorf("turn ids = %q, %q, want both %q", user.TurnID, assistant.TurnID, user.ID)
+	}
+
+	rendered, _ := renderPrompt(prompts.Vars{
+		TaskName:       info.Name,
+		ArtifactsDir:   info.ArtifactsDir,
+		PRDPath:        info.PRDPath,
+		InitialContext: info.InitialContext,
+	})
+	wantAssistant := &session.AssistantEntry{MessageID: "msg_fake_1", Text: rendered, Complete: true}
+	if diff := cmp.Diff(wantAssistant, assistant.Assistant); diff != "" {
+		t.Errorf("assistant entry mismatch (-want +got):\n%s", diff)
+	}
+
+	// The prompt was created pending and delivered right away: both versions
+	// were emitted, and the final one is the one the transcript holds.
+	events := f.eventsOf("t1", session.EventEntry)
+	if len(events) < 3 {
+		t.Fatalf("entry events = %d, want the pending prompt, its delivery and the answer", len(events))
+	}
+	if !events[0].Entry.User.Pending || events[1].Entry.User.Pending {
+		t.Errorf("first two events pending = %v, %v, want true then false",
+			events[0].Entry.User.Pending, events[1].Entry.User.Pending)
+	}
+	last := events[len(events)-1].Entry
+	if diff := cmp.Diff(assistant, *last); diff != "" {
+		t.Errorf("last event mismatch (-want +got):\n%s", diff)
+	}
+
+	rec := f.sessions.get(t, "t1")
+	if !rec.Started || rec.ContextWindow != claudetest.ContextWindow || rec.ID != tr.SessionID {
+		t.Errorf("record = %+v, want started with the fake's window and id %s", rec, tr.SessionID)
+	}
+	starts := f.launcher.started()
+	if len(starts) != 1 || starts[0].Resume || starts[0].SessionID != rec.ID || starts[0].Dir != info.Dir {
+		t.Errorf("starts = %+v, want one fresh session %s in %s", starts, rec.ID, info.Dir)
+	}
+	if diff := cmp.Diff(tr.Entries, f.entries.list(t, tr.SessionID)); diff != "" {
+		t.Errorf("stored entries mismatch (-memory +stored):\n%s", diff)
+	}
+}
+
+func TestToolCallBecomesAnAction(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "tool")
+	f.start(t, taskInfo(t, "t1"))
+	f.waitIdle(t, "t1")
+
+	tr := f.transcript(t, "t1")
+	kinds := make([]session.Kind, 0, len(tr.Entries))
+	for _, e := range tr.Entries {
+		kinds = append(kinds, e.Kind)
+	}
+	want := []session.Kind{session.KindUser, session.KindAction, session.KindAssistant}
+	if diff := cmp.Diff(want, kinds); diff != "" {
+		t.Fatalf("kinds mismatch (-want +got):\n%s", diff)
+	}
+
+	wantAction := &session.ActionEntry{
+		ToolUseID: "toolu_fake_3",
+		Tool:      "Read",
+		Label:     "Reading",
+		Target:    claudetest.ReadPath,
+		Status:    session.ActionDone,
+	}
+	if diff := cmp.Diff(wantAction, tr.Entries[1].Action); diff != "" {
+		t.Errorf("action mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestCompactionAddsAMarker(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "compact")
+	f.start(t, taskInfo(t, "t1"))
+	f.waitIdle(t, "t1")
+
+	markers := f.entriesOf(t, "t1", session.KindMarker)
+	want := []*session.MarkerEntry{{Type: session.MarkerCompacted, PreTokens: 120000}}
+	got := make([]*session.MarkerEntry, 0, len(markers))
+	for _, m := range markers {
+		got = append(got, m.Marker)
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("markers mismatch (-want +got):\n%s", diff)
+	}
+}
+
+// waitPermission starts a permission scenario and returns the pending request.
+func waitPermission(t *testing.T, f *fixture) session.Entry {
+	t.Helper()
+
+	f.start(t, taskInfo(t, "t1"))
+	sum := f.waitStatus(t, "t1", "the permission request", func(s session.Summary) bool {
+		return s.Status == session.StatusNeedsPermission
+	})
+	if !sum.TurnRunning {
+		t.Errorf("TurnRunning = false, want true while the request is pending")
+	}
+
+	permissions := f.entriesOf(t, "t1", session.KindPermission)
+	if len(permissions) != 1 {
+		t.Fatalf("permission entries = %d, want 1", len(permissions))
+	}
+	p := permissions[0].Permission
+	if p.Tool != "Bash" || p.RequestID == "" || p.Status != session.PermissionPending {
+		t.Fatalf("permission = %+v, want a pending Bash request", p)
+	}
+	if p.BlockedPath != claudetest.ReadPath || string(p.Suggestions) == "null" || string(p.Input) == "null" {
+		t.Errorf("permission = %+v, want the blocked path, suggestions and input of the fake", p)
+	}
+	return permissions[0]
+}
+
+// finalText is the text of the last assistant entry of a task.
+func finalText(t *testing.T, f *fixture, taskID string) string {
+	t.Helper()
+
+	assistants := f.entriesOf(t, taskID, session.KindAssistant)
+	if len(assistants) == 0 {
+		t.Fatal("no assistant entry")
+	}
+	return assistants[len(assistants)-1].Assistant.Text
+}
+
+func TestAnswerPermission(t *testing.T) {
+	t.Parallel()
+
+	t.Run("allow", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture(t, "permission")
+		request := waitPermission(t, f)
+
+		err := f.service.AnswerPermission(t.Context(), "t1", request.Permission.RequestID, session.DecisionAllow, "")
+		if err != nil {
+			t.Fatalf("AnswerPermission() = %v, want nil", err)
+		}
+		f.waitIdle(t, "t1")
+
+		got := f.entriesOf(t, "t1", session.KindPermission)[0].Permission
+		if got.Status != session.PermissionAllowed || got.AnsweredAt == nil || got.DenyMessage != "" {
+			t.Errorf("permission = %+v, want allowed with an answer time", got)
+		}
+		if text := finalText(t, f, "t1"); text != "done" {
+			t.Errorf("final text = %q, want done", text)
+		}
+		actions := f.entriesOf(t, "t1", session.KindAction)
+		if len(actions) != 1 || actions[0].Action.Status != session.ActionDone {
+			t.Errorf("actions = %+v, want one done Bash action", actions)
+		}
+	})
+
+	t.Run("deny", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture(t, "permission")
+		request := waitPermission(t, f)
+
+		err := f.service.AnswerPermission(t.Context(), "t1", request.Permission.RequestID, session.DecisionDeny, "not now")
+		if err != nil {
+			t.Fatalf("AnswerPermission() = %v, want nil", err)
+		}
+		f.waitIdle(t, "t1")
+
+		got := f.entriesOf(t, "t1", session.KindPermission)[0].Permission
+		if got.Status != session.PermissionDenied || got.DenyMessage != "not now" {
+			t.Errorf("permission = %+v, want denied with the message", got)
+		}
+		if text := finalText(t, f, "t1"); text != "denied: not now" {
+			t.Errorf("final text = %q, want denied: not now", text)
+		}
+	})
+
+	t.Run("allow for the session rewrites the suggestions", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture(t, "permission")
+		request := waitPermission(t, f)
+
+		err := f.service.AnswerPermission(t.Context(), "t1", request.Permission.RequestID, session.DecisionAllowSession, "")
+		if err != nil {
+			t.Fatalf("AnswerPermission() = %v, want nil", err)
+		}
+		f.waitIdle(t, "t1")
+
+		got := f.entriesOf(t, "t1", session.KindPermission)[0].Permission
+		if got.Status != session.PermissionAllowedSession {
+			t.Errorf("status = %q, want allowed_session", got.Status)
+		}
+
+		text := finalText(t, f, "t1")
+		echoed, ok := strings.CutPrefix(text, "done ")
+		if !ok {
+			t.Fatalf("final text = %q, want the echoed permissions after done", text)
+		}
+		var suggestions []map[string]any
+		if err := json.Unmarshal([]byte(echoed), &suggestions); err != nil {
+			t.Fatalf("decode echoed permissions %q: %v", echoed, err)
+		}
+		if len(suggestions) != 2 {
+			t.Fatalf("suggestions = %d, want the rule and the directory", len(suggestions))
+		}
+		for _, suggestion := range suggestions {
+			if suggestion["destination"] != "session" {
+				t.Errorf("suggestion %v, want destination session", suggestion)
+			}
+		}
+	})
+
+	t.Run("unknown request", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture(t, "permission")
+		waitPermission(t, f)
+
+		err := f.service.AnswerPermission(t.Context(), "t1", "nope", session.DecisionAllow, "")
+		wantErrIs(t, err, session.ErrNoRequest)
+		err = f.service.AnswerQuestion(t.Context(), "t1", "nope", nil)
+		wantErrIs(t, err, session.ErrNoRequest)
+	})
+}
+
+func TestAnswerQuestion(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "question")
+	f.start(t, taskInfo(t, "t1"))
+	f.waitStatus(t, "t1", "the question", func(s session.Summary) bool {
+		return s.Status == session.StatusNeedsPermission
+	})
+
+	questions := f.entriesOf(t, "t1", session.KindQuestion)
+	if len(questions) != 1 {
+		t.Fatalf("question entries = %d, want 1", len(questions))
+	}
+	q := questions[0].Question
+	if len(q.Questions) != 2 || q.Questions[0].MultiSelect || !q.Questions[1].MultiSelect {
+		t.Fatalf("questions = %+v, want two, the second multiple choice", q.Questions)
+	}
+	if q.Status != session.PermissionPending || q.Answers != nil {
+		t.Errorf("question = %+v, want pending without answers", q)
+	}
+	if actions := f.entriesOf(t, "t1", session.KindAction); len(actions) != 0 {
+		t.Errorf("actions = %+v, want none for a question", actions)
+	}
+
+	answers := map[string]string{
+		q.Questions[0].Question: "Red",
+		q.Questions[1].Question: "Apple, Pear",
+	}
+	if err := f.service.AnswerQuestion(t.Context(), "t1", q.RequestID, answers); err != nil {
+		t.Fatalf("AnswerQuestion() = %v, want nil", err)
+	}
+	f.waitIdle(t, "t1")
+
+	got := f.entriesOf(t, "t1", session.KindQuestion)[0].Question
+	if got.Status != session.PermissionAllowed {
+		t.Errorf("status = %q, want allowed", got.Status)
+	}
+	if diff := cmp.Diff(answers, got.Answers); diff != "" {
+		t.Errorf("answers mismatch (-want +got):\n%s", diff)
+	}
+	var echoed map[string]string
+	if err := json.Unmarshal([]byte(finalText(t, f, "t1")), &echoed); err != nil {
+		t.Fatalf("decode echoed answers: %v", err)
+	}
+	if diff := cmp.Diff(answers, echoed); diff != "" {
+		t.Errorf("echoed answers mismatch (-want +got):\n%s", diff)
+	}
+}
+
+// waitStreaming starts a slow scenario and waits until text is flowing.
+func waitStreaming(t *testing.T, f *fixture, taskID string) session.Entry {
+	t.Helper()
+
+	f.waitStatus(t, taskID, "the turn to run", func(s session.Summary) bool {
+		return s.Status == session.StatusWorking && s.TurnRunning
+	})
+	assistants := f.waitEntries(t, taskID, session.KindAssistant, 1)
+	entry := assistants[len(assistants)-1]
+	waitFor(t, "streamed text", func() bool { return len(f.textsOf(taskID, entry.ID)) >= 2 })
+	return entry
+}
+
+func TestInterruptEndsTheTurn(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "slow")
+	f.start(t, taskInfo(t, "t1"))
+	entry := waitStreaming(t, f, "t1")
+
+	if err := f.service.Interrupt(t.Context(), "t1"); err != nil {
+		t.Fatalf("Interrupt() = %v, want nil", err)
+	}
+	f.waitIdle(t, "t1")
+
+	texts := f.textsOf("t1", entry.ID)
+	for i := 1; i < len(texts); i++ {
+		if !strings.HasPrefix(texts[i], texts[i-1]) || len(texts[i]) < len(texts[i-1]) {
+			t.Errorf("text events %q then %q, want growing text", texts[i-1], texts[i])
+		}
+	}
+
+	got := f.entriesOf(t, "t1", session.KindAssistant)[0].Assistant
+	if !got.Complete || !got.Interrupted || !strings.HasPrefix(got.Text, "tick ") {
+		t.Errorf("assistant = %+v, want a complete, interrupted entry with the ticks", got)
+	}
+	if markers := f.entriesOf(t, "t1", session.KindMarker); len(markers) != 0 {
+		t.Errorf("markers = %+v, want none when text was interrupted", markers)
+	}
+
+	// Interrupting an idle session does nothing.
+	if err := f.service.Interrupt(t.Context(), "t1"); err != nil {
+		t.Fatalf("Interrupt() on idle = %v, want nil", err)
+	}
+
+	f.send(t, "t1", "again")
+	f.waitEntries(t, "t1", session.KindAssistant, 2)
+	if starts := f.launcher.started(); len(starts) != 1 {
+		t.Errorf("starts = %d, want the same process to take the next message", len(starts))
+	}
+}
+
+func TestSendDuringATurnQueues(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "slow")
+	f.start(t, taskInfo(t, "t1"))
+	waitStreaming(t, f, "t1")
+
+	f.send(t, "t1", "first")
+	f.send(t, "t1", "  second  ")
+	tr := f.transcript(t, "t1")
+	if len(tr.Pending) != 2 || !tr.Pending[0].User.Pending || tr.Pending[1].User.Text != "second" {
+		t.Fatalf("pending = %+v, want first and second, trimmed and pending", tr.Pending)
+	}
+	if sum := f.summary(t, "t1"); sum.PendingCount != 2 || sum.Status != session.StatusWorking {
+		t.Errorf("summary = %+v, want two pending while working", sum)
+	}
+
+	first := tr.Pending[0].ID
+	if err := f.service.RemovePending(t.Context(), "t1", first); err != nil {
+		t.Fatalf("RemovePending() = %v, want nil", err)
+	}
+	wantErrIs(t, f.service.RemovePending(t.Context(), "t1", first), session.ErrNotPending)
+	if sum := f.summary(t, "t1"); sum.PendingCount != 1 {
+		t.Errorf("PendingCount = %d, want 1 after the removal", sum.PendingCount)
+	}
+	removes := f.eventsOf("t1", session.EventRemove)
+	if len(removes) != 1 || removes[0].EntryID != first {
+		t.Errorf("remove events = %+v, want one for %s", removes, first)
+	}
+
+	if err := f.service.Interrupt(t.Context(), "t1"); err != nil {
+		t.Fatalf("Interrupt() = %v, want nil", err)
+	}
+	sum := f.waitStatus(t, "t1", "the pending message to go out", func(s session.Summary) bool {
+		return s.PendingCount == 0 && s.TurnRunning
+	})
+	if sum.Status != session.StatusWorking {
+		t.Errorf("status = %q, want working on the queued message", sum.Status)
+	}
+
+	tr = f.transcript(t, "t1")
+	users := f.entriesOf(t, "t1", session.KindUser)
+	if len(users) != 2 || users[1].User.Text != "second" || users[1].User.Pending {
+		t.Errorf("users = %+v, want the prompt then second, delivered", users)
+	}
+	last := tr.Entries[len(tr.Entries)-1]
+	if last.Kind == session.KindUser && last.Seq <= tr.Entries[len(tr.Entries)-2].Seq {
+		t.Errorf("delivered message seq = %d, want after the interrupted answer", last.Seq)
+	}
+	if err := f.service.RemovePending(t.Context(), "t1", users[1].ID); !errors.Is(err, session.ErrNotPending) {
+		t.Errorf("RemovePending(delivered) = %v, want ErrNotPending", err)
+	}
+}
+
+func TestCrashIsReportedAndRetried(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "crash")
+	f.start(t, taskInfo(t, "t1"))
+
+	sum := f.waitStatus(t, "t1", "the crash", func(s session.Summary) bool {
+		return s.Status == session.StatusError
+	})
+	if sum.ProcessRunning || sum.TurnRunning {
+		t.Errorf("summary = %+v, want no process and no turn after the crash", sum)
+	}
+	if !strings.Contains(sum.LastError, "exited with code 2") || !strings.Contains(sum.LastError, "boom") {
+		t.Errorf("LastError = %q, want the exit code and stderr", sum.LastError)
+	}
+
+	errs := f.entriesOf(t, "t1", session.KindError)
+	if len(errs) != 1 {
+		t.Fatalf("error entries = %d, want 1", len(errs))
+	}
+	want := &session.ErrorEntry{Kind: session.ErrorProcessExit, Message: sum.LastError, Retryable: true}
+	if diff := cmp.Diff(want, errs[0].Error); diff != "" {
+		t.Errorf("error entry mismatch (-want +got):\n%s", diff)
+	}
+	markers := f.entriesOf(t, "t1", session.KindMarker)
+	if len(markers) != 1 || markers[0].Marker.Type != session.MarkerInterrupted {
+		t.Errorf("markers = %+v, want the interrupted marker of a turn without text", markers)
+	}
+	if rec := f.sessions.get(t, "t1"); rec.LastError != sum.LastError || !rec.Started {
+		t.Errorf("record = %+v, want the error persisted on a started session", rec)
+	}
+
+	if err := f.service.Retry(t.Context(), "t1"); err != nil {
+		t.Fatalf("Retry() = %v, want nil", err)
+	}
+	sum = f.waitIdle(t, "t1")
+	if sum.LastError != "" {
+		t.Errorf("LastError = %q, want cleared", sum.LastError)
+	}
+	starts := f.launcher.started()
+	if len(starts) != 2 || !starts[1].Resume || starts[1].SessionID != starts[0].SessionID {
+		t.Errorf("starts = %+v, want a resumed second process", starts)
+	}
+}
+
+func TestPauseStopsAndResumeContinues(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "slow")
+	f.start(t, taskInfo(t, "t1"))
+	waitStreaming(t, f, "t1")
+
+	if err := f.service.Pause(t.Context(), "t1"); err != nil {
+		t.Fatalf("Pause() = %v, want nil", err)
+	}
+	sum := f.waitStatus(t, "t1", "the process to stop", func(s session.Summary) bool {
+		return s.Status == session.StatusPaused && !s.ProcessRunning
+	})
+	if sum.TurnRunning {
+		t.Errorf("TurnRunning = true, want false after the pause")
+	}
+	got := f.entriesOf(t, "t1", session.KindAssistant)[0].Assistant
+	if !got.Complete || !got.Interrupted {
+		t.Errorf("assistant = %+v, want completed as interrupted", got)
+	}
+	wantErrIs(t, f.service.Send(t.Context(), "t1", "later"), session.ErrPaused)
+	if rec := f.sessions.get(t, "t1"); !rec.Paused {
+		t.Errorf("record paused = false, want true")
+	}
+
+	if err := f.service.Resume(t.Context(), "t1"); err != nil {
+		t.Fatalf("Resume() = %v, want nil", err)
+	}
+	sum = f.summary(t, "t1")
+	if sum.Status != session.StatusWaiting || sum.ProcessRunning {
+		t.Errorf("summary = %+v, want waiting without a process until a message comes", sum)
+	}
+
+	f.send(t, "t1", "more")
+	f.waitStatus(t, "t1", "the new turn", func(s session.Summary) bool {
+		return s.Status == session.StatusWorking && s.ProcessRunning
+	})
+	starts := f.launcher.started()
+	if len(starts) != 2 || !starts[1].Resume {
+		t.Errorf("starts = %+v, want a resumed second process", starts)
+	}
+}
+
+func TestIdleProcessStopsAndResumesOnDemand(t *testing.T) {
+	t.Parallel()
+
+	f := newFixtureWith(t, &fakeLauncher{scenario: "echo"}, 50*time.Millisecond)
+	f.start(t, taskInfo(t, "t1"))
+
+	f.waitStatus(t, "t1", "the idle stop", func(s session.Summary) bool {
+		return s.Status == session.StatusWaiting && !s.ProcessRunning
+	})
+	if errs := f.entriesOf(t, "t1", session.KindError); len(errs) != 0 {
+		t.Errorf("errors = %+v, want none for an expected exit", errs)
+	}
+
+	f.send(t, "t1", "again please")
+	f.waitIdle(t, "t1")
+	assistants := f.entriesOf(t, "t1", session.KindAssistant)
+	if len(assistants) != 2 || assistants[1].Assistant.Text != "again please" {
+		t.Errorf("second answer = %q, want the echo of the message", assistants[1].Assistant.Text)
+	}
+	starts := f.launcher.started()
+	if len(starts) != 2 || !starts[1].Resume {
+		t.Errorf("starts = %+v, want a resumed second process", starts)
+	}
+}
+
+func TestOpenReconcilesALeftoverTranscript(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	rec := session.Record{ID: "sess-1", TaskID: "t1", Stage: "prd", Started: true, CreatedAt: base, UpdatedAt: base}
+	if err := f.sessions.Insert(t.Context(), rec); err != nil {
+		t.Fatalf("Insert() = %v, want nil", err)
+	}
+	f.entries.seed(t, "sess-1",
+		session.Entry{
+			ID: "u1", Seq: 1, TurnID: "u1", Kind: session.KindUser, CreatedAt: base,
+			User: &session.UserEntry{Text: "hello", Prompt: true},
+		},
+		session.Entry{
+			ID: "a1", Seq: 2, TurnID: "u1", Kind: session.KindAssistant, CreatedAt: base,
+			Assistant: &session.AssistantEntry{MessageID: "m1", Text: "half"},
+		},
+		session.Entry{
+			ID: "c1", Seq: 3, TurnID: "u1", Kind: session.KindAction, CreatedAt: base,
+			Action: &session.ActionEntry{ToolUseID: "x", Tool: "Bash", Label: "Running", Status: session.ActionRunning},
+		},
+		session.Entry{
+			ID: "p1", Seq: 4, TurnID: "u1", Kind: session.KindPermission, CreatedAt: base,
+			Permission: &session.PermissionEntry{
+				RequestID: "r1", Tool: "Bash", Status: session.PermissionPending,
+				Input: json.RawMessage("null"), Suggestions: json.RawMessage("null"),
+			},
+		},
+		session.Entry{
+			ID: "q1", Seq: 5, TurnID: "u1", Kind: session.KindQuestion, CreatedAt: base,
+			Question: &session.QuestionEntry{RequestID: "r2", Status: session.PermissionPending},
+		},
+	)
+
+	info := taskInfo(t, "t1")
+	info.PRDExists = true
+	f.open(t, info)
+
+	tr := f.transcript(t, "t1")
+	if tr.SessionID != "sess-1" || len(tr.Entries) != 6 || len(tr.Pending) != 0 {
+		t.Fatalf("transcript = %+v, want the five stored entries and the PRD marker", tr)
+	}
+	if a := tr.Entries[1].Assistant; !a.Complete || !a.Interrupted || a.Text != "half" {
+		t.Errorf("assistant = %+v, want complete and interrupted", a)
+	}
+	if c := tr.Entries[2].Action; c.Status != session.ActionInterrupted {
+		t.Errorf("action status = %q, want interrupted", c.Status)
+	}
+	if p := tr.Entries[3].Permission; p.Status != session.PermissionCancelled {
+		t.Errorf("permission status = %q, want cancelled", p.Status)
+	}
+	if q := tr.Entries[4].Question; q.Status != session.PermissionCancelled {
+		t.Errorf("question status = %q, want cancelled", q.Status)
+	}
+	if m := tr.Entries[5]; m.Kind != session.KindMarker || m.Marker.Type != session.MarkerPRDWritten || m.Seq != 6 {
+		t.Errorf("last entry = %+v, want the prd_written marker at seq 6", m)
+	}
+	if diff := cmp.Diff(tr.Entries, f.entries.list(t, "sess-1")); diff != "" {
+		t.Errorf("stored entries mismatch (-memory +stored):\n%s", diff)
+	}
+
+	sum := f.summary(t, "t1")
+	if sum.Status != session.StatusWaiting || sum.ProcessRunning {
+		t.Errorf("summary = %+v, want waiting without a process", sum)
+	}
+	if starts := f.launcher.started(); len(starts) != 0 {
+		t.Errorf("starts = %d, want none: opening a task never starts the CLI", len(starts))
+	}
+
+	// Opening again keeps the run and adds no second marker.
+	f.open(t, info)
+	if markers := f.entriesOf(t, "t1", session.KindMarker); len(markers) != 1 {
+		t.Errorf("markers = %d, want 1 after a second Open", len(markers))
+	}
+}
+
+func TestOpenDeliversWhatWasQueued(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	rec := session.Record{
+		ID: "sess-1", TaskID: "t1", Stage: "prd", Started: true, Paused: true,
+		CreatedAt: base, UpdatedAt: base,
+	}
+	if err := f.sessions.Insert(t.Context(), rec); err != nil {
+		t.Fatalf("Insert() = %v, want nil", err)
+	}
+	f.entries.seed(t, "sess-1",
+		session.Entry{
+			ID: "u1", Seq: 1, TurnID: "u1", Kind: session.KindUser, CreatedAt: base,
+			User: &session.UserEntry{Text: "queued while paused", Pending: true},
+		},
+	)
+
+	f.open(t, taskInfo(t, "t1"))
+	sum := f.summary(t, "t1")
+	if sum.Status != session.StatusPaused || sum.PendingCount != 1 || sum.ProcessRunning {
+		t.Errorf("summary = %+v, want paused with one pending and no process", sum)
+	}
+
+	if err := f.service.Resume(t.Context(), "t1"); err != nil {
+		t.Fatalf("Resume() = %v, want nil", err)
+	}
+	sum = f.waitIdle(t, "t1")
+	if sum.PendingCount != 0 {
+		t.Errorf("PendingCount = %d, want 0 once delivered", sum.PendingCount)
+	}
+	assistants := f.entriesOf(t, "t1", session.KindAssistant)
+	if len(assistants) != 1 || assistants[0].Assistant.Text != "queued while paused" {
+		t.Errorf("assistants = %+v, want the echo of the queued message", assistants)
+	}
+	if starts := f.launcher.started(); len(starts) != 1 || !starts[0].Resume {
+		t.Errorf("starts = %+v, want one resumed process", starts)
+	}
+}
+
+func TestStartFailures(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]struct {
+		launcher    *fakeLauncher
+		wantKind    session.ErrorKind
+		wantMessage string
+	}{
+		"not found": {
+			launcher:    &fakeLauncher{scenario: "echo", locateErr: claude.ErrNotFound},
+			wantKind:    session.ErrorNotFound,
+			wantMessage: "Claude Code was not found",
+		},
+		"not logged in": {
+			launcher:    &fakeLauncher{scenario: "echo", preflightErr: claude.ErrNotLoggedIn},
+			wantKind:    session.ErrorNotLoggedIn,
+			wantMessage: "Claude Code is not logged in",
+		},
+		"preflight failed": {
+			launcher:    &fakeLauncher{scenario: "echo", preflightErr: errors.New("exec: permission denied")},
+			wantKind:    session.ErrorStartFailed,
+			wantMessage: "Could not check Claude Code: exec: permission denied",
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			f := newFixtureWith(t, tc.launcher, 0)
+			f.start(t, taskInfo(t, "t1"))
+
+			sum := f.summary(t, "t1")
+			if sum.Status != session.StatusError || sum.PendingCount != 1 || sum.ProcessRunning {
+				t.Errorf("summary = %+v, want error with the prompt still pending", sum)
+			}
+			if !strings.HasPrefix(sum.LastError, tc.wantMessage) {
+				t.Errorf("LastError = %q, want prefix %q", sum.LastError, tc.wantMessage)
+			}
+			errs := f.entriesOf(t, "t1", session.KindError)
+			if len(errs) != 1 || errs[0].Error.Kind != tc.wantKind || !errs[0].Error.Retryable {
+				t.Fatalf("errors = %+v, want one retryable %s", errs, tc.wantKind)
+			}
+
+			tc.launcher.fix()
+			if err := f.service.Retry(t.Context(), "t1"); err != nil {
+				t.Fatalf("Retry() = %v, want nil", err)
+			}
+			sum = f.waitIdle(t, "t1")
+			if sum.LastError != "" || sum.PendingCount != 0 {
+				t.Errorf("summary = %+v, want the prompt delivered and the error gone", sum)
+			}
+		})
+	}
+}
+
+func TestShutdownStopsEveryProcess(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	f.start(t, taskInfo(t, "t1"))
+	f.start(t, taskInfo(t, "t2"))
+	f.waitIdle(t, "t1")
+	f.waitIdle(t, "t2")
+
+	ctx, cancel := context.WithTimeout(t.Context(), pollTimeout)
+	defer cancel()
+	began := time.Now()
+	f.service.Shutdown(ctx)
+	if elapsed := time.Since(began); elapsed > pollTimeout {
+		t.Errorf("Shutdown took %s, want within %s", elapsed, pollTimeout)
+	}
+
+	for id, sum := range f.service.Summaries() {
+		if sum.ProcessRunning || sum.Status != session.StatusWaiting {
+			t.Errorf("summary of %s = %+v, want waiting without a process", id, sum)
+		}
+	}
+	if got := len(f.service.Summaries()); got != 2 {
+		t.Errorf("summaries = %d, want both tasks still known", got)
+	}
+}
+
+func TestCloseForgetsTheTask(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "slow")
+	f.start(t, taskInfo(t, "t1"))
+	waitStreaming(t, f, "t1")
+
+	if err := f.service.Close(t.Context(), "t1"); err != nil {
+		t.Fatalf("Close() = %v, want nil", err)
+	}
+	if _, ok := f.service.Summary("t1"); ok {
+		t.Error("Summary() found the task after Close")
+	}
+	_, err := f.service.Transcript(t.Context(), "t1")
+	wantErrIs(t, err, session.ErrNotFound)
+	wantErrIs(t, f.service.Send(t.Context(), "t1", "hi"), session.ErrNotFound)
+
+	// Closing what is not open is not an error.
+	if err := f.service.Close(t.Context(), "t1"); err != nil {
+		t.Errorf("Close() again = %v, want nil", err)
+	}
+}
+
+func TestSendValidation(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	f.open(t, taskInfo(t, "t1"))
+
+	wantErrIs(t, f.service.Send(t.Context(), "t1", "   "), session.ErrEmptyMessage)
+	wantErrIs(t, f.service.Send(t.Context(), "missing", "hi"), session.ErrNotFound)
+	wantErrIs(t, f.service.Pause(t.Context(), "missing"), session.ErrNotFound)
+	wantErrIs(t, f.service.Resume(t.Context(), "missing"), session.ErrNotFound)
+	wantErrIs(t, f.service.Retry(t.Context(), "missing"), session.ErrNotFound)
+	wantErrIs(t, f.service.Interrupt(t.Context(), "missing"), session.ErrNotFound)
+	wantErrIs(t, f.service.RemovePending(t.Context(), "missing", "x"), session.ErrNotFound)
+	if starts := f.launcher.started(); len(starts) != 0 {
+		t.Errorf("starts = %d, want none", len(starts))
+	}
+}
+
+func TestMarkArtifact(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	f.start(t, taskInfo(t, "t1"))
+	f.waitIdle(t, "t1")
+	before := f.stateCount("t1")
+
+	f.service.MarkArtifact(t.Context(), "t1", true)
+	f.service.MarkArtifact(t.Context(), "t1", false)
+	f.service.MarkArtifact(t.Context(), "missing", true)
+
+	markers := f.entriesOf(t, "t1", session.KindMarker)
+	want := []session.MarkerType{session.MarkerPRDWritten, session.MarkerPRDUpdated}
+	got := make([]session.MarkerType, 0, len(markers))
+	for _, m := range markers {
+		got = append(got, m.Marker.Type)
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("markers mismatch (-want +got):\n%s", diff)
+	}
+	events := f.eventsOf("t1", session.EventEntry)
+	if last := events[len(events)-1].Entry; last.Kind != session.KindMarker || last.Marker.Type != session.MarkerPRDUpdated {
+		t.Errorf("last event = %+v, want the prd_updated marker", last)
+	}
+	if after := f.stateCount("t1"); after != before {
+		t.Errorf("OnState ran %d times for a marker, want 0", after-before)
+	}
+}

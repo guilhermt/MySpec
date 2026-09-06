@@ -1,0 +1,868 @@
+package session
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"log/slog"
+	"math"
+	"slices"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/google/uuid"
+
+	"github.com/guilhermt/myspec/internal/claude"
+	"github.com/guilhermt/myspec/internal/prompts"
+)
+
+// SessionRepository persists one Record per task.
+//
+//nolint:revive // the name pairs with EntryRepository, as the spec defines the two
+type SessionRepository interface {
+	GetByTask(ctx context.Context, taskID string) (Record, error) // ErrNotFound
+	Insert(ctx context.Context, rec Record) error
+	Update(ctx context.Context, rec Record) error
+}
+
+// EntryRepository persists the transcript of every session.
+type EntryRepository interface {
+	List(ctx context.Context, sessionID string) ([]Entry, error)
+	Insert(ctx context.Context, sessionID string, e Entry) error
+	Update(ctx context.Context, e Entry) error
+	Delete(ctx context.Context, id string) error
+	MaxSeq(ctx context.Context, sessionID string) (int, error)
+}
+
+// Process is the running CLI, as internal/claude provides it.
+type Process interface {
+	Events() <-chan claude.Event
+	Send(text string) error
+	Interrupt() (string, error)
+	Respond(requestID string, resp claude.PermissionResponse) error
+	CloseInput() error
+	Terminate() error
+	Kill() error
+	Wait() claude.ExitInfo
+	Done() <-chan struct{}
+}
+
+// Launcher finds, checks and starts the CLI. internal/app adapts
+// internal/claude to it.
+type Launcher interface {
+	Locate() (string, error)
+	Preflight(ctx context.Context, binary string) error
+	Start(ctx context.Context, cfg claude.Config) (Process, error)
+}
+
+// TaskInfo is what the session needs to know about its task.
+type TaskInfo struct {
+	ID             string
+	Name           string
+	Dir            string // working directory of the CLI
+	ArtifactsDir   string
+	PRDPath        string
+	InitialContext string
+	PRDExists      bool
+}
+
+// Deps are what Service needs from the outside.
+type Deps struct {
+	Sessions     SessionRepository
+	Entries      EntryRepository
+	Launcher     Launcher
+	RenderPrompt func(vars prompts.Vars) (string, error)
+	Log          *slog.Logger
+	Now          func() time.Time         // defaults to time.Now
+	NewID        func() string            // defaults to uuid.NewString
+	IdleTimeout  time.Duration            // defaults to DefaultIdleTimeout
+	OnState      func(taskID string)      // a Summary changed; may be nil
+	OnTranscript func(ev TranscriptEvent) // the conversation changed; may be nil
+}
+
+// The errors the service reports to its callers.
+var (
+	ErrEmptyMessage = errors.New("session: message is empty")
+	ErrPaused       = errors.New("session: paused")
+	ErrNoRequest    = errors.New("session: no pending request with that id")
+	ErrNotPending   = errors.New("session: entry is not pending")
+)
+
+// The timeouts of a session's life cycle.
+const (
+	// DefaultIdleTimeout is how long a process without a turn, a request or a
+	// pending message stays alive before the session stops it.
+	DefaultIdleTimeout = 10 * time.Minute
+	// StartTimeout is how long a started process has to say anything.
+	StartTimeout = 90 * time.Second
+	// InterruptTimeout is how long an interrupted turn has to end.
+	InterruptTimeout = 5 * time.Second
+	// TextFlushInterval is how often streaming text reaches the interface.
+	TextFlushInterval = 40 * time.Millisecond
+	// graceInputClose is how long a process has to exit after its input closes.
+	graceInputClose = 5 * time.Second
+	// graceTerminate is how long a process has to exit after SIGTERM.
+	graceTerminate = 2 * time.Second
+	// preflightTimeout bounds the login check before the first start.
+	preflightTimeout = 10 * time.Second
+	// persistTimeout bounds the database work done on the session's own
+	// goroutines, which have no caller to carry a context.
+	persistTimeout = 5 * time.Second
+)
+
+// Service owns the sessions of every open task.
+type Service struct {
+	sessions     SessionRepository
+	entries      EntryRepository
+	launcher     Launcher
+	renderPrompt func(vars prompts.Vars) (string, error)
+	log          *slog.Logger
+	now          func() time.Time
+	newID        func() string
+	idleTimeout  time.Duration
+	onState      func(taskID string)
+	onTranscript func(ev TranscriptEvent)
+
+	mu          sync.Mutex
+	runs        map[string]*run
+	preflightOK bool
+}
+
+// New builds a Service from deps.
+func New(deps Deps) *Service {
+	s := &Service{
+		sessions:     deps.Sessions,
+		entries:      deps.Entries,
+		launcher:     deps.Launcher,
+		renderPrompt: deps.RenderPrompt,
+		log:          deps.Log,
+		now:          deps.Now,
+		newID:        deps.NewID,
+		idleTimeout:  deps.IdleTimeout,
+		onState:      deps.OnState,
+		onTranscript: deps.OnTranscript,
+		runs:         map[string]*run{},
+	}
+	if s.log == nil {
+		s.log = slog.New(slog.DiscardHandler)
+	}
+	if s.now == nil {
+		s.now = time.Now
+	}
+	if s.newID == nil {
+		s.newID = uuid.NewString
+	}
+	if s.idleTimeout <= 0 {
+		s.idleTimeout = DefaultIdleTimeout
+	}
+	return s
+}
+
+// Open loads or creates the session of a task and reconciles its transcript.
+// It is idempotent and safe to call on every workspace sync.
+func (s *Service) Open(ctx context.Context, t TaskInfo) error {
+	n := &notes{}
+	defer s.flush(n)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if r, ok := s.runs[t.ID]; ok {
+		r.task = t
+		return nil
+	}
+
+	r, err := s.load(ctx, t)
+	if err != nil {
+		return err
+	}
+	s.runs[t.ID] = r
+
+	if len(r.pending) > 0 && !r.rec.Paused {
+		s.flushPendingLocked(ctx, r, n)
+	}
+	return nil
+}
+
+// load reads the session of a task from the repositories, creating the record
+// when there is none, and brings a transcript left by a previous run to rest.
+func (s *Service) load(ctx context.Context, t TaskInfo) (*run, error) {
+	rec, err := s.sessions.GetByTask(ctx, t.ID)
+	switch {
+	case errors.Is(err, ErrNotFound):
+		now := s.now().UTC()
+		rec = Record{ID: s.newID(), TaskID: t.ID, Stage: string(prompts.StagePRD), CreatedAt: now, UpdatedAt: now}
+		if insertErr := s.sessions.Insert(ctx, rec); insertErr != nil {
+			return nil, insertErr
+		}
+	case err != nil:
+		return nil, err
+	}
+
+	stored, err := s.entries.List(ctx, rec.ID)
+	if err != nil {
+		return nil, err
+	}
+	maxSeq, err := s.entries.MaxSeq(ctx, rec.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	r := newRun(t, rec, maxSeq+1)
+	prdMarked := false
+	for i := range stored {
+		e := &stored[i]
+		r.byID[e.ID] = e
+		if e.Kind == KindUser && e.User.Pending {
+			r.pending = append(r.pending, e)
+			continue
+		}
+		r.entries = append(r.entries, e)
+		if e.Kind == KindMarker && e.Marker.Type == MarkerPRDWritten {
+			prdMarked = true
+		}
+		if settle(e) {
+			if err := s.entries.Update(ctx, *e); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	if t.PRDExists && !prdMarked {
+		e := r.newEntry(s, Entry{Kind: KindMarker, Marker: &MarkerEntry{Type: MarkerPRDWritten}})
+		r.entries = append(r.entries, e)
+		r.byID[e.ID] = e
+		if err := s.entries.Insert(ctx, rec.ID, *e); err != nil {
+			return nil, err
+		}
+	}
+	return r, nil
+}
+
+// settle marks an entry a previous run left open as interrupted or cancelled,
+// reporting whether it changed anything.
+func settle(e *Entry) bool {
+	switch {
+	case e.Kind == KindAssistant && !e.Assistant.Complete:
+		e.Assistant.Complete = true
+		e.Assistant.Interrupted = true
+	case e.Kind == KindAction && e.Action.Status == ActionRunning:
+		e.Action.Status = ActionInterrupted
+	case e.Kind == KindPermission && e.Permission.Status == PermissionPending:
+		e.Permission.Status = PermissionCancelled
+	case e.Kind == KindQuestion && e.Question.Status == PermissionPending:
+		e.Question.Status = PermissionCancelled
+	default:
+		return false
+	}
+	return true
+}
+
+// Start opens the session of a freshly created task and queues the prompt.
+func (s *Service) Start(ctx context.Context, t TaskInfo) error {
+	if err := s.Open(ctx, t); err != nil {
+		return err
+	}
+
+	n := &notes{}
+	defer s.flush(n)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	r := s.runs[t.ID]
+	if err := s.enqueueLocked(ctx, r, &UserEntry{Text: t.InitialContext, Prompt: true}, n); err != nil {
+		return err
+	}
+	s.flushPendingLocked(ctx, r, n)
+	return nil
+}
+
+// Send queues a message and delivers it right away when the session is free.
+func (s *Service) Send(ctx context.Context, taskID, text string) error {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return ErrEmptyMessage
+	}
+
+	n := &notes{}
+	defer s.flush(n)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	r, err := s.runOf(taskID)
+	if err != nil {
+		return err
+	}
+	if r.rec.Paused {
+		return fmt.Errorf("send to task %s: %w", taskID, ErrPaused)
+	}
+	if err := s.enqueueLocked(ctx, r, &UserEntry{Text: text}, n); err != nil {
+		return err
+	}
+	r.stopTimer(&r.idleTimer)
+	s.flushPendingLocked(ctx, r, n)
+	return nil
+}
+
+// RemovePending drops a queued message before it reaches the CLI.
+func (s *Service) RemovePending(ctx context.Context, taskID, entryID string) error {
+	n := &notes{}
+	defer s.flush(n)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	r, err := s.runOf(taskID)
+	if err != nil {
+		return err
+	}
+	index := slices.IndexFunc(r.pending, func(e *Entry) bool { return e.ID == entryID })
+	if index < 0 {
+		return fmt.Errorf("remove entry %s: %w", entryID, ErrNotPending)
+	}
+
+	r.pending = slices.Delete(r.pending, index, index+1)
+	delete(r.byID, entryID)
+	if err := s.entries.Delete(ctx, entryID); err != nil {
+		return err
+	}
+	n.remove(taskID, entryID)
+	n.state(taskID)
+	return nil
+}
+
+// Interrupt asks the CLI to abort the running turn. The session stays alive.
+func (s *Service) Interrupt(_ context.Context, taskID string) error {
+	n := &notes{}
+	defer s.flush(n)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	r, err := s.runOf(taskID)
+	if err != nil {
+		return err
+	}
+	if r.turn == nil || r.proc == nil || r.interruptReq != "" {
+		return nil
+	}
+
+	id, err := r.proc.Interrupt()
+	if err != nil {
+		return fmt.Errorf("interrupt task %s: %w", taskID, err)
+	}
+	r.interruptReq = id
+	gen := r.procGen
+	r.stopTimer(&r.interruptTmr)
+	r.interruptTmr = time.AfterFunc(InterruptTimeout, func() { s.interruptExpired(taskID, gen) })
+	n.state(taskID)
+	return nil
+}
+
+// interruptExpired stops the process of a turn that ignored an interrupt.
+func (s *Service) interruptExpired(taskID string, gen int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	r := s.runs[taskID]
+	if r == nil || r.procGen != gen || r.turn == nil || r.interruptReq == "" || r.stopping {
+		return
+	}
+	go s.stopProcess(taskID, gen, false, defaultGraces)
+}
+
+// Pause stops the process and holds every message until Resume.
+func (s *Service) Pause(ctx context.Context, taskID string) error {
+	n := &notes{}
+	defer s.flush(n)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	r, err := s.runOf(taskID)
+	if err != nil {
+		return err
+	}
+	r.rec.Paused = true
+	if err := s.persistRecord(ctx, r); err != nil {
+		return err
+	}
+	n.state(taskID)
+	if r.proc != nil && !r.stopping {
+		go s.stopProcess(taskID, r.procGen, true, defaultGraces)
+	}
+	return nil
+}
+
+// Resume lifts a pause and delivers what was queued meanwhile.
+func (s *Service) Resume(ctx context.Context, taskID string) error {
+	n := &notes{}
+	defer s.flush(n)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	r, err := s.runOf(taskID)
+	if err != nil {
+		return err
+	}
+	r.rec.Paused = false
+	if err := s.persistRecord(ctx, r); err != nil {
+		return err
+	}
+	n.state(taskID)
+	s.flushPendingLocked(ctx, r, n)
+	return nil
+}
+
+// Retry clears the last error and starts the process again.
+func (s *Service) Retry(ctx context.Context, taskID string) error {
+	n := &notes{}
+	defer s.flush(n)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	r, err := s.runOf(taskID)
+	if err != nil {
+		return err
+	}
+	r.rec.LastError = ""
+	if err := s.persistRecord(ctx, r); err != nil {
+		return err
+	}
+	if err := s.ensureProcessLocked(ctx, r, n); err != nil {
+		return err
+	}
+	if !s.flushPendingLocked(ctx, r, n) {
+		s.armIdleLocked(r)
+	}
+	n.state(taskID)
+	return nil
+}
+
+// Decision is the user's answer to a permission request.
+type Decision string
+
+// The answers a permission request accepts.
+const (
+	DecisionAllow        Decision = "allow"
+	DecisionAllowSession Decision = "allow_session"
+	DecisionDeny         Decision = "deny"
+)
+
+// defaultDenyMessage is what the agent reads when the user denies without a
+// word.
+const defaultDenyMessage = "The user denied this action."
+
+// AnswerPermission answers the pending permission request of a task.
+func (s *Service) AnswerPermission(ctx context.Context, taskID, requestID string, d Decision, message string) error {
+	n := &notes{}
+	defer s.flush(n)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	r, e, err := s.pendingRequest(taskID, requestID, KindPermission)
+	if err != nil {
+		return err
+	}
+	p := e.Permission
+
+	var resp claude.PermissionResponse
+	status := PermissionAllowed
+	switch d {
+	case DecisionAllow:
+		resp = claude.PermissionResponse{Behavior: "allow", UpdatedInput: p.Input}
+	case DecisionAllowSession:
+		status = PermissionAllowedSession
+		resp = claude.PermissionResponse{
+			Behavior:           "allow",
+			UpdatedInput:       p.Input,
+			UpdatedPermissions: sessionSuggestions(p.Suggestions),
+		}
+	case DecisionDeny:
+		status = PermissionDenied
+		if message == "" {
+			message = defaultDenyMessage
+		}
+		resp = claude.PermissionResponse{Behavior: "deny", Message: message}
+	default:
+		return fmt.Errorf("answer permission %s: unknown decision %q", requestID, d)
+	}
+
+	if err := r.proc.Respond(requestID, resp); err != nil {
+		return fmt.Errorf("answer permission %s: %w", requestID, err)
+	}
+
+	answeredAt := s.now().UTC()
+	p.Status = status
+	p.AnsweredAt = &answeredAt
+	if d == DecisionDeny {
+		p.DenyMessage = message
+	}
+	s.answered(ctx, r, e, n)
+	return nil
+}
+
+// AnswerQuestion answers the pending structured question of a task. The
+// answers map each question text to the chosen label, or labels joined with
+// ", " for a multiple choice.
+func (s *Service) AnswerQuestion(ctx context.Context, taskID, requestID string, answers map[string]string) error {
+	n := &notes{}
+	defer s.flush(n)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	r, e, err := s.pendingRequest(taskID, requestID, KindQuestion)
+	if err != nil {
+		return err
+	}
+	q := e.Question
+
+	updatedInput, err := json.Marshal(struct {
+		Questions []Question        `json:"questions"`
+		Answers   map[string]string `json:"answers"`
+	}{Questions: q.Questions, Answers: answers})
+	if err != nil {
+		return fmt.Errorf("answer question %s: %w", requestID, err)
+	}
+	resp := claude.PermissionResponse{Behavior: "allow", UpdatedInput: updatedInput}
+	if err := r.proc.Respond(requestID, resp); err != nil {
+		return fmt.Errorf("answer question %s: %w", requestID, err)
+	}
+
+	q.Answers = answers
+	q.Status = PermissionAllowed
+	s.answered(ctx, r, e, n)
+	return nil
+}
+
+// pendingRequest finds the pending request of a task by id and kind, with the
+// process that has to hear the answer. The caller holds the mutex.
+func (s *Service) pendingRequest(taskID, requestID string, kind Kind) (*run, *Entry, error) {
+	r, err := s.runOf(taskID)
+	if err != nil {
+		return nil, nil, err
+	}
+	e := r.permission
+	if e == nil || e.Kind != kind || requestOf(e) != requestID || statusOf(e) != PermissionPending {
+		return nil, nil, fmt.Errorf("answer request %s: %w", requestID, ErrNoRequest)
+	}
+	if r.proc == nil {
+		return nil, nil, fmt.Errorf("answer request %s: %w", requestID, ErrNoRequest)
+	}
+	return r, e, nil
+}
+
+// answered records the answer to the pending request of a run.
+func (s *Service) answered(ctx context.Context, r *run, e *Entry, n *notes) {
+	r.permission = nil
+	r.stopTimer(&r.idleTimer)
+	s.updateLocked(ctx, r, e, n)
+	n.state(r.task.ID)
+}
+
+// requestOf is the request id of a permission or question entry.
+func requestOf(e *Entry) string {
+	if e.Kind == KindQuestion {
+		return e.Question.RequestID
+	}
+	return e.Permission.RequestID
+}
+
+// statusOf is the status of a permission or question entry.
+func statusOf(e *Entry) PermissionStatus {
+	if e.Kind == KindQuestion {
+		return e.Question.Status
+	}
+	return e.Permission.Status
+}
+
+// sessionSuggestions keeps the permission suggestions the CLI can apply to the
+// session alone, so that nothing is written to the user's settings. It returns
+// nil when none remains.
+func sessionSuggestions(raw json.RawMessage) json.RawMessage {
+	var suggestions []map[string]any
+	if err := json.Unmarshal(raw, &suggestions); err != nil {
+		return nil
+	}
+
+	kept := make([]map[string]any, 0, len(suggestions))
+	for _, suggestion := range suggestions {
+		kind, _ := suggestion["type"].(string)
+		if kind != "addRules" && kind != "addDirectories" {
+			continue
+		}
+		suggestion["destination"] = "session"
+		kept = append(kept, suggestion)
+	}
+	if len(kept) == 0 {
+		return nil
+	}
+
+	encoded, err := json.Marshal(kept)
+	if err != nil {
+		return nil
+	}
+	return encoded
+}
+
+// MarkArtifact records that the PRD appeared (first) or was rewritten.
+func (s *Service) MarkArtifact(ctx context.Context, taskID string, first bool) {
+	n := &notes{}
+	defer s.flush(n)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	r, err := s.runOf(taskID)
+	if err != nil {
+		return
+	}
+	kind := MarkerPRDUpdated
+	if first {
+		kind = MarkerPRDWritten
+	}
+	s.appendLocked(ctx, r, Entry{Kind: KindMarker, Marker: &MarkerEntry{Type: kind}}, n)
+}
+
+// Transcript returns a copy of the conversation of a task.
+func (s *Service) Transcript(_ context.Context, taskID string) (Transcript, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	r, err := s.runOf(taskID)
+	if err != nil {
+		return Transcript{}, err
+	}
+	return Transcript{
+		TaskID:    taskID,
+		SessionID: r.rec.ID,
+		Entries:   cloneEntries(r.entries),
+		Pending:   cloneEntries(r.pending),
+	}, nil
+}
+
+// Summary describes the session of a task, false when the task is not open.
+func (s *Service) Summary(taskID string) (Summary, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	r, ok := s.runs[taskID]
+	if !ok {
+		return Summary{}, false
+	}
+	return r.summary(), true
+}
+
+// Summaries describes every open session, by task id.
+func (s *Service) Summaries() map[string]Summary {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	out := make(map[string]Summary, len(s.runs))
+	for id, r := range s.runs {
+		out[id] = r.summary()
+	}
+	return out
+}
+
+// Close stops the process of a task, quickly, and forgets it. Used before a
+// task is deleted.
+func (s *Service) Close(_ context.Context, taskID string) error {
+	s.mu.Lock()
+	r, ok := s.runs[taskID]
+	if !ok {
+		s.mu.Unlock()
+		return nil
+	}
+	gen := r.procGen
+	s.mu.Unlock()
+
+	s.stopProcess(taskID, gen, false, closeGraces)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	r.stopTimers()
+	delete(s.runs, taskID)
+	return nil
+}
+
+// Shutdown stops every process gracefully within ctx, and kills what is left
+// when ctx expires.
+func (s *Service) Shutdown(ctx context.Context) {
+	s.mu.Lock()
+	type live struct {
+		taskID string
+		gen    int
+		proc   Process
+	}
+	var procs []live
+	for id, r := range s.runs {
+		if r.proc != nil {
+			procs = append(procs, live{taskID: id, gen: r.procGen, proc: r.proc})
+		}
+	}
+	s.mu.Unlock()
+
+	var wg sync.WaitGroup
+	for _, p := range procs {
+		wg.Go(func() { s.stopProcess(p.taskID, p.gen, true, defaultGraces) })
+	}
+
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-ctx.Done():
+		for _, p := range procs {
+			if err := p.proc.Kill(); err != nil {
+				s.log.Warn("kill claude failed", "task", p.taskID, "error", err)
+			}
+		}
+		<-done
+	}
+}
+
+// runOf finds the run of an open task. The caller holds the mutex.
+func (s *Service) runOf(taskID string) (*run, error) {
+	r, ok := s.runs[taskID]
+	if !ok {
+		return nil, fmt.Errorf("session of task %s: %w", taskID, ErrNotFound)
+	}
+	return r, nil
+}
+
+// persistRecord writes the session row, stamping the update time.
+func (s *Service) persistRecord(ctx context.Context, r *run) error {
+	r.rec.UpdatedAt = s.now().UTC()
+	if err := s.sessions.Update(ctx, r.rec); err != nil {
+		s.log.Error("update session failed", "task", r.task.ID, "error", err)
+		return err
+	}
+	return nil
+}
+
+// appendLocked adds an entry to the end of the conversation, persists it and
+// emits it. The caller holds the mutex.
+func (s *Service) appendLocked(ctx context.Context, r *run, e Entry, n *notes) *Entry {
+	entry := r.newEntry(s, e)
+	r.entries = append(r.entries, entry)
+	r.byID[entry.ID] = entry
+	if err := s.entries.Insert(ctx, r.rec.ID, *entry); err != nil {
+		s.log.Error("insert entry failed", "task", r.task.ID, "entry", entry.ID, "error", err)
+	}
+	n.entry(r.task.ID, entry)
+	return entry
+}
+
+// updateLocked persists a changed entry and emits it. The caller holds the
+// mutex.
+func (s *Service) updateLocked(ctx context.Context, r *run, e *Entry, n *notes) {
+	if err := s.entries.Update(ctx, *e); err != nil {
+		s.log.Error("update entry failed", "task", r.task.ID, "entry", e.ID, "error", err)
+	}
+	n.entry(r.task.ID, e)
+}
+
+// bgCtx bounds the database work of the session's own goroutines.
+func bgCtx() (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.Background(), persistTimeout)
+}
+
+// notes collects the callbacks an operation owes, so that they run once the
+// mutex is released: OnState and OnTranscript are never called with it held.
+type notes struct {
+	states []string
+	events []TranscriptEvent
+}
+
+// state notes that the summary of a task changed.
+func (n *notes) state(taskID string) {
+	if !slices.Contains(n.states, taskID) {
+		n.states = append(n.states, taskID)
+	}
+}
+
+// entry notes that an entry was created or changed, with a copy of it as it
+// is now.
+func (n *notes) entry(taskID string, e *Entry) {
+	c := cloneEntry(e)
+	n.events = append(n.events, TranscriptEvent{TaskID: taskID, Kind: EventEntry, Entry: &c, EntryID: e.ID})
+}
+
+// text notes the current text of a streaming entry.
+func (n *notes) text(taskID, entryID, text string) {
+	n.events = append(n.events, TranscriptEvent{TaskID: taskID, Kind: EventText, EntryID: entryID, Text: text})
+}
+
+// remove notes that an entry was deleted.
+func (n *notes) remove(taskID, entryID string) {
+	n.events = append(n.events, TranscriptEvent{TaskID: taskID, Kind: EventRemove, EntryID: entryID})
+}
+
+// flush runs the callbacks an operation collected. It must be called after
+// the mutex is released.
+func (s *Service) flush(n *notes) {
+	if s.onTranscript != nil {
+		for _, ev := range n.events {
+			s.onTranscript(ev)
+		}
+	}
+	if s.onState != nil {
+		for _, taskID := range n.states {
+			s.onState(taskID)
+		}
+	}
+}
+
+// cloneEntry copies an entry and its payload, so that a reader outside the
+// mutex never shares memory with the live conversation.
+func cloneEntry(e *Entry) Entry {
+	c := *e
+	if e.User != nil {
+		v := *e.User
+		c.User = &v
+	}
+	if e.Assistant != nil {
+		v := *e.Assistant
+		c.Assistant = &v
+	}
+	if e.Action != nil {
+		v := *e.Action
+		c.Action = &v
+	}
+	if e.Permission != nil {
+		v := *e.Permission
+		c.Permission = &v
+	}
+	if e.Question != nil {
+		v := *e.Question
+		c.Question = &v
+	}
+	if e.Marker != nil {
+		v := *e.Marker
+		c.Marker = &v
+	}
+	if e.Error != nil {
+		v := *e.Error
+		c.Error = &v
+	}
+	return c
+}
+
+// cloneEntries copies a list of entries.
+func cloneEntries(entries []*Entry) []Entry {
+	out := make([]Entry, 0, len(entries))
+	for _, e := range entries {
+		out = append(out, cloneEntry(e))
+	}
+	return out
+}
+
+// contextPercent is how full the context window is, 0 until the first result
+// of the session says how large the window is.
+func contextPercent(tokens, window int) int {
+	if window <= 0 {
+		return 0
+	}
+	return int(math.Round(100 * float64(tokens) / float64(window)))
+}

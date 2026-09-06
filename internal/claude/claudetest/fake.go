@@ -139,9 +139,10 @@ type response struct {
 
 // permission is the part of a control response the scenarios act on.
 type permission struct {
-	Behavior     string          `json:"behavior"`
-	Message      string          `json:"message"`
-	UpdatedInput json.RawMessage `json:"updatedInput"`
+	Behavior           string          `json:"behavior"`
+	Message            string          `json:"message"`
+	UpdatedInput       json.RawMessage `json:"updatedInput"`
+	UpdatedPermissions json.RawMessage `json:"updatedPermissions"`
 }
 
 // fake is one run of the fake CLI.
@@ -338,6 +339,10 @@ func (f *fake) permissionTurn() {
 	reply := "done"
 	if answer.Behavior == "allow" {
 		f.toolResult(toolUseID, "(Bash completed with no output)", false)
+		// The app's rewrite of the suggestions is echoed so a test can read it.
+		if len(answer.UpdatedPermissions) > 0 {
+			reply += " " + string(answer.UpdatedPermissions)
+		}
 	} else {
 		reply = "denied: " + answer.Message
 	}
