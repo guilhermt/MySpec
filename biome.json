@@ -1,0 +1,71 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.12/schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "includes": [
+      "frontend/src/**",
+      "frontend/*.ts",
+      "frontend/index.html",
+      "!frontend/src/components/ui",
+      "!frontend/bindings",
+      "!frontend/dist"
+    ]
+  },
+  "css": {
+    "parser": {
+      "tailwindDirectives": true
+    }
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double",
+      "semicolons": "always",
+      "trailingCommas": "all"
+    }
+  },
+  "linter": {
+    "enabled": true,
+    "domains": {
+      "react": "recommended",
+      "test": "recommended"
+    },
+    "rules": {
+      "preset": "recommended",
+      "a11y": {
+        "preset": "recommended"
+      },
+      "complexity": {
+        "noImportantStyles": "off"
+      },
+      "correctness": {
+        "noUnusedImports": "error",
+        "noUnusedVariables": "error",
+        "useExhaustiveDependencies": "error"
+      },
+      "style": {
+        "noNonNullAssertion": "error",
+        "useImportType": "error"
+      },
+      "suspicious": {
+        "noExplicitAny": "error"
+      }
+    }
+  },
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    }
+  }
+}

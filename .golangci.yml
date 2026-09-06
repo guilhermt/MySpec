@@ -1,0 +1,67 @@
+version: "2"
+
+run:
+  timeout: 5m
+  modules-download-mode: readonly
+
+linters:
+  default: none
+  enable:
+    - copyloopvar
+    - errcheck
+    - errorlint
+    - exhaustive
+    - gocritic
+    - gosec
+    - govet
+    - ineffassign
+    - intrange
+    - misspell
+    - nilerr
+    - nolintlint
+    - perfsprint
+    - prealloc
+    - predeclared
+    - revive
+    - sloglint
+    - staticcheck
+    - thelper
+    - tparallel
+    - unconvert
+    - unparam
+    - unused
+    - usetesting
+    - wastedassign
+  settings:
+    govet:
+      enable:
+        - shadow
+    sloglint:
+      kv-only: true
+      static-msg: true
+      no-global: all
+    gosec:
+      excludes:
+        - G304 # opening user-supplied paths is the point of the app
+    exhaustive:
+      default-signifies-exhaustive: true
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+  exclusions:
+    generated: lax
+    presets:
+      - common-false-positives
+      - std-error-handling
+    rules:
+      - path: _test\.go
+        linters: [gosec, unparam]
+
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/guilhermt/myspec

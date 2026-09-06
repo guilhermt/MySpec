@@ -1,0 +1,43 @@
+/*
+ * Plain CSS on purpose: Tailwind only processes the file that imports it, so a
+ * @theme block here would reach the browser as an unknown at-rule. The theme
+ * variables are overridden in :root instead, which the utilities read anyway.
+ */
+:root {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, "JetBrainsMono Nerd Font", monospace;
+
+  --sidebar-width: 280px;
+  --row-height: 28px;
+  --text-base: 13px;
+  --leading-base: 1.45;
+  --duration-fast: 120ms;
+  --duration-base: 150ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+}
+
+html {
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: var(--leading-base);
+  font-feature-settings: "cv11", "ss01"; /* Inter: forms that read better in UI */
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  overscroll-behavior: none;
+  user-select: none;
+}
+
+::selection {
+  background: color-mix(in oklch, var(--primary) 30%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0ms !important;
+    animation-duration: 0ms !important;
+  }
+}

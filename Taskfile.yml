@@ -1,0 +1,151 @@
+version: '3'
+
+vars:
+  APP_NAME: myspec
+  APP_ID: org.wails.myspec
+  BIN_DIR: bin
+  PACKAGE_MANAGER: pnpm
+  VITE_PORT: '{{.WAILS_VITE_PORT | default 9245}}'
+  MODULE: github.com/guilhermt/myspec
+
+includes:
+  common: ./build/Taskfile.yml
+  linux: ./build/linux/Taskfile.yml
+
+tasks:
+  setup:
+    summary: Prepares a fresh clone (tools, deps, git hooks)
+    cmds:
+      - mise install
+      - go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.16
+      - go mod download
+      - task: common:install:frontend:deps
+      - lefthook install
+
+  dev:
+    summary: Runs the app in development mode with Vite HMR
+    cmds:
+      - wails3 dev -config ./build/config.yml -port {{.VITE_PORT}}
+
+  build:
+    summary: Production build to bin/myspec
+    cmds:
+      - task: linux:build
+
+  run:
+    cmds:
+      - task: linux:run
+
+  generate:
+    summary: Regenerates frontend/bindings from the Go services
+    cmds:
+      - task: common:generate:bindings
+
+  fmt:
+    summary: Formats Go and frontend code
+    deps: [fmt:go, fmt:web]
+
+  fmt:go:
+    cmds:
+      - golangci-lint fmt ./...
+
+  fmt:web:
+    cmds:
+      - biome check --write .
+
+  lint:
+    deps: [lint:go, lint:web]
+
+  lint:go:
+    deps: [embed:stub]
+    cmds:
+      - golangci-lint run ./...
+
+  lint:web:
+    cmds:
+      - biome ci .
+
+  typecheck:
+    dir: frontend
+    cmds:
+      - pnpm tsc --noEmit -p tsconfig.json
+
+  test:
+    deps: [test:go, test:web]
+
+  test:go:
+    deps: [embed:stub]
+    cmds:
+      - mkdir -p coverage
+      - gotestsum --format testdox -- -race -shuffle=on -count=1 -covermode=atomic -coverprofile=coverage/go.out ./...
+      - go-test-coverage --config .testcoverage.yml
+
+  test:web:
+    dir: frontend
+    cmds:
+      - pnpm vitest run --coverage
+
+  vuln:
+    deps: [embed:stub]
+    cmds:
+      - govulncheck ./...
+
+  embed:stub:
+    summary: Creates the embed target so the Go tasks can build without a frontend build
+    # main.go embeds frontend/dist, and `//go:embed` fails to typecheck when the
+    # directory holds no files. dist is build output, so it is absent on a fresh
+    # clone and every Go task that compiles the root package would fail. Skipped
+    # as soon as a real build has filled the directory.
+    internal: true
+    run: once
+    status:
+      - test -n "$(ls -A frontend/dist 2>/dev/null)"
+    cmds:
+      - mkdir -p frontend/dist
+      - touch frontend/dist/.gitkeep
+
+  tidy:check:
+    cmds:
+      - go mod tidy -diff
+
+  bindings:check:
+    summary: Fails when frontend/bindings is out of date
+    cmds:
+      - task: generate
+      - git diff --exit-code -- frontend/bindings
+
+  check:
+    summary: Everything the CI runs, in order
+    cmds:
+      - task: tidy:check
+      - task: lint
+      - task: typecheck
+      - task: test
+      - task: vuln
+      - task: bindings:check
+
+  install:
+    summary: Installs the app for the current user (binary, launcher entry, icons)
+    deps: [build]
+    cmds:
+      - install -Dm755 {{.BIN_DIR}}/{{.APP_NAME}} "$HOME/.local/bin/{{.APP_NAME}}"
+      - mkdir -p "$HOME/.local/share/applications"
+      - sed "s|@EXEC@|$HOME/.local/bin/{{.APP_NAME}}|" build/linux/{{.APP_ID}}.desktop > "$HOME/.local/share/applications/{{.APP_ID}}.desktop"
+      - install -Dm644 build/linux/icon.svg "$HOME/.local/share/icons/hicolor/scalable/apps/{{.APP_ID}}.svg"
+      - install -Dm644 build/appicon.png "$HOME/.local/share/icons/hicolor/512x512/apps/{{.APP_ID}}.png"
+      - cmd: update-desktop-database "$HOME/.local/share/applications"
+        ignore_error: true
+      - cmd: gtk-update-icon-cache -f -t "$HOME/.local/share/icons/hicolor"
+        ignore_error: true
+
+  uninstall:
+    summary: Removes what install put in place; never touches app data
+    cmds:
+      - rm -f "$HOME/.local/bin/{{.APP_NAME}}"
+      - rm -f "$HOME/.local/share/applications/{{.APP_ID}}.desktop"
+      - rm -f "$HOME/.local/share/icons/hicolor/scalable/apps/{{.APP_ID}}.svg"
+      - rm -f "$HOME/.local/share/icons/hicolor/512x512/apps/{{.APP_ID}}.png"
+      - cmd: update-desktop-database "$HOME/.local/share/applications"
+        ignore_error: true
+      - cmd: gtk-update-icon-cache -f -t "$HOME/.local/share/icons/hicolor"
+        ignore_error: true

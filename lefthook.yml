@@ -1,0 +1,12 @@
+pre-commit:
+  parallel: true
+  commands:
+    biome:
+      glob: "frontend/**/*.{ts,tsx,json,css,html}"
+      exclude: "frontend/src/components/ui/**"
+      run: biome check --write --no-errors-on-unmatched {staged_files}
+      stage_fixed: true
+    go-fmt:
+      glob: "*.go"
+      run: golangci-lint fmt {staged_files}
+      stage_fixed: true
