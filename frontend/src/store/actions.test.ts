@@ -1,8 +1,27 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "@/lib/wails";
-import { dismissNotice, openFolderDialog, openPath, removeRecent, setTheme } from "@/store/actions";
+import {
+  answerPermission,
+  answerQuestion,
+  createTask,
+  deleteTask,
+  dismissNotice,
+  interrupt,
+  loadTranscript,
+  openExternal,
+  openFolderDialog,
+  openPath,
+  pause,
+  removePending,
+  removeRecent,
+  resume,
+  retry,
+  sendMessage,
+  setTheme,
+} from "@/store/actions";
 import { useAppStore } from "@/store/app-store";
 import { resetAppStore } from "@/test/render";
+import { makeEntry, makeTranscript } from "@/test/wails-mock";
 
 beforeEach(() => {
   resetAppStore();
@@ -44,5 +63,86 @@ describe("actions", () => {
     await openPath("/home/dev/projects");
 
     expect(useAppStore.getState().app).toBeNull();
+  });
+});
+
+describe("task actions", () => {
+  it("delegate to the matching binding", async () => {
+    await deleteTask("task-1");
+    await sendMessage("task-1", "go on");
+    await removePending("task-1", "entry-1");
+    await interrupt("task-1");
+    await pause("task-1");
+    await resume("task-1");
+    await retry("task-1");
+    await answerPermission("task-1", "req-1", "allow_session", "");
+    await answerQuestion("task-1", "req-1", { "Which database?": "SQLite" });
+    await openExternal("https://anthropic.com");
+
+    expect(api.deleteTask).toHaveBeenCalledWith("task-1");
+    expect(api.sendMessage).toHaveBeenCalledWith("task-1", "go on");
+    expect(api.removePending).toHaveBeenCalledWith("task-1", "entry-1");
+    expect(api.interrupt).toHaveBeenCalledWith("task-1");
+    expect(api.pause).toHaveBeenCalledWith("task-1");
+    expect(api.resume).toHaveBeenCalledWith("task-1");
+    expect(api.retry).toHaveBeenCalledWith("task-1");
+    expect(api.answerPermission).toHaveBeenCalledWith("task-1", "req-1", "allow_session", "");
+    expect(api.answerQuestion).toHaveBeenCalledWith("task-1", "req-1", {
+      "Which database?": "SQLite",
+    });
+    expect(api.openExternal).toHaveBeenCalledWith("https://anthropic.com");
+    expect(useAppStore.getState().error).toBeNull();
+  });
+
+  it("reports a failed task action in the banner", async () => {
+    vi.mocked(api.pause).mockRejectedValueOnce(new Error("no session"));
+
+    await pause("task-1");
+
+    expect(useAppStore.getState().error).toBe("no session");
+  });
+});
+
+describe("createTask", () => {
+  it("answers with the id of the new task", async () => {
+    vi.mocked(api.createTask).mockResolvedValueOnce("task-9");
+
+    const id = await createTask({ name: "add-login", repoPath: "", initialContext: "a login" });
+
+    expect(id).toBe("task-9");
+  });
+
+  it("rejects instead of using the banner, so the dialog can show the message", async () => {
+    vi.mocked(api.createTask).mockRejectedValueOnce(new Error("claude is not logged in"));
+
+    await expect(
+      createTask({ name: "add-login", repoPath: "", initialContext: "a login" }),
+    ).rejects.toThrow("claude is not logged in");
+    expect(useAppStore.getState().error).toBeNull();
+  });
+});
+
+describe("loadTranscript", () => {
+  it("marks the conversation loading and fills it with the answer", async () => {
+    const entry = makeEntry("user", { id: "a", seq: 1 });
+    vi.mocked(api.getTranscript).mockResolvedValueOnce(
+      makeTranscript({ taskId: "task-1", entries: [entry] }),
+    );
+
+    const loading = loadTranscript("task-1");
+    expect(useAppStore.getState().transcripts["task-1"]?.status).toBe("loading");
+    await loading;
+
+    const transcript = useAppStore.getState().transcripts["task-1"];
+    expect(transcript?.status).toBe("ready");
+    expect(transcript?.entries).toEqual([entry]);
+  });
+
+  it("reports a conversation it could not read", async () => {
+    vi.mocked(api.getTranscript).mockRejectedValueOnce(new Error("no such task"));
+
+    await loadTranscript("task-1");
+
+    expect(useAppStore.getState().error).toBe("no such task");
   });
 });
