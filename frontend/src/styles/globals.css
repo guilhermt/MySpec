@@ -132,3 +132,22 @@
     @apply font-sans;
   }
 }
+
+@layer components {
+  /* Streamdown brings its own classes with the theme variables; only the sizes
+     that make a conversation read well are adjusted here. */
+  .markdown {
+    & pre {
+      @apply text-xs;
+    }
+    & :is(h1, h2, h3) {
+      @apply font-semibold tracking-tight;
+    }
+    & table {
+      @apply text-sm;
+    }
+    & img {
+      @apply max-w-full;
+    }
+  }
+}
