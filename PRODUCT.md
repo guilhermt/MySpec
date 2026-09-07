@@ -146,7 +146,7 @@ Se o usuário quer mudanças, ele as pede na conversa da sessão. O agente aplic
 
 A aprovação é uma ação no produto. Ela só fica disponível quando **todos os arquivos alterados estão em stage**. Enquanto o progresso do review não chega a 100%, aprovar não é possível.
 
-Ao aprovar, o produto abre uma sessão de commit na worktree, com o prompt de commit. O agente commita as alterações com uma mensagem simples e legível que descreve o que foi feito. Assim que o commit existe, o produto marca o step como concluído. O status do step é do produto; ninguém edita arquivo de step para marcar conclusão.
+Ao aprovar, o produto envia o prompt de commit na própria sessão do step, para o mesmo agente que implementou. Ele commita as alterações com uma mensagem simples e legível que descreve o que foi feito. Assim que o commit existe, o produto marca o step como concluído. O status do step é do produto; ninguém edita arquivo de step para marcar conclusão.
 
 #### Próximo step
 
@@ -237,7 +237,7 @@ Os prompts de PRD, tech spec e plano de steps são o texto das skills com os aju
 
 - os caminhos de PRD, tech spec e steps apontam para o armazenamento do produto, não para uma pasta `planning/` no repositório;
 - cada step carrega o repositório em que será implementada;
-- o template do step não tem mais a linha de status nem os passos de commit e atualização de status. O status é do produto, e o commit é feito pela sessão de commit depois da aprovação.
+- o template do step não tem mais a linha de status nem os passos de commit e atualização de status. O status é do produto, e o commit é feito com o prompt de commit depois da aprovação.
 
 As skills em `~/.claude/skills` continuam existindo e utilizáveis fora do produto. O produto não depende delas.
 

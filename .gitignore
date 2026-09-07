@@ -5,5 +5,5 @@ frontend/coverage
 frontend/dist
 frontend/node_modules
 .tools
-planning
 __pycache__
+planning
