@@ -41,11 +41,12 @@ func FromNotice(notice *workspace.Notice) *Notice {
 }
 
 // FromTasks converts the tasks of the open workspace, pairing each with the
-// summary of its session when there is one.
-func FromTasks(tasks []task.Task, summaries map[string]session.Summary) []TaskSummary {
+// artifacts of its folder and the summary of its session when there is one.
+func FromTasks(tasks []task.Task, artifacts func(id string) task.Artifacts, summaries map[string]session.Summary) []TaskSummary {
 	converted := make([]TaskSummary, len(tasks))
 	for i, t := range tasks {
 		summary := summaries[t.ID]
+		a := artifacts(t.ID)
 		if summary.Status == "" {
 			summary.Status = session.StatusWaiting
 		}
@@ -61,7 +62,7 @@ func FromTasks(tasks []task.Task, summaries map[string]session.Summary) []TaskSu
 			RetryAttempt:    summary.RetryAttempt,
 			ContextPercent:  summary.ContextPercent,
 			PendingCount:    summary.PendingCount,
-			HasPRD:          t.Stage == task.StagePRDDone,
+			HasPRD:          a.PRD,
 			ArtifactVersion: t.ArtifactVersion,
 			LastError:       summary.LastError,
 			CreatedAt:       t.CreatedAt.Format(time.RFC3339),

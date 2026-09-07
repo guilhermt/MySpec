@@ -2,6 +2,8 @@ package task_test
 
 import (
 	"os"
+	"path/filepath"
+	"slices"
 	"strconv"
 	"testing"
 	"time"
@@ -9,7 +11,19 @@ import (
 	"github.com/guilhermt/myspec/internal/task"
 )
 
-func TestWatcherFinishesTheStageOnceForABurstOfWrites(t *testing.T) {
+// quietFor is how long a test waits to be sure no further debounce fires.
+const quietFor = 400 * time.Millisecond
+
+// kinds lists the artifacts a recorded call carried, in order.
+func kinds(call artifactCall) []task.ArtifactKind {
+	out := make([]task.ArtifactKind, 0, len(call.Changes))
+	for _, c := range call.Changes {
+		out = append(out, c.Kind)
+	}
+	return out
+}
+
+func TestWatcherReportsThePRDOnceForABurstOfWrites(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
@@ -21,36 +35,37 @@ func TestWatcherFinishesTheStageOnceForABurstOfWrites(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 
-	waitFor(t, "the PRD to finish the stage", func() bool {
-		return len(f.artifactCalls()) > 0
-	})
+	waitFor(t, "the PRD to be reported", func() bool { return len(f.artifactCalls()) > 0 })
 	// Long enough for a second debounce to have fired, had one been armed.
-	time.Sleep(400 * time.Millisecond)
+	time.Sleep(quietFor)
 
 	calls := f.artifactCalls()
 	if len(calls) != 1 {
 		t.Fatalf("OnArtifact ran %d times, want 1", len(calls))
 	}
-	if !calls[0].First {
-		t.Error("first = false, want true for the PRD appearing")
+	change, ok := calls[0].change(task.ArtifactPRD)
+	if !ok {
+		t.Fatalf("changes = %v, want the PRD", kinds(calls[0]))
 	}
-	if got := calls[0].Task.Stage; got != task.StagePRDDone {
-		t.Errorf("Stage = %q, want %q", got, task.StagePRDDone)
+	if !change.First {
+		t.Error("First = false, want true for the PRD appearing")
 	}
 	if got := calls[0].Task.ArtifactVersion; got != 1 {
 		t.Errorf("ArtifactVersion = %d, want 1", got)
 	}
 
-	loaded, _ := f.service.Get(created.ID)
-	if loaded.Stage != task.StagePRDDone {
-		t.Errorf("loaded stage = %q, want %q", loaded.Stage, task.StagePRDDone)
+	if cached, _ := f.service.Artifacts(created.ID); !cached.PRD {
+		t.Error("Artifacts().PRD = false, want the cache refreshed")
 	}
-	if stored := f.repo.get(t, created.ID); stored.Stage != task.StagePRDDone || stored.ArtifactVersion != 1 {
-		t.Errorf("stored task = %q/%d, want prd_done/1", stored.Stage, stored.ArtifactVersion)
+	if stored := f.repo.get(t, created.ID); stored.ArtifactVersion != 1 {
+		t.Errorf("stored artifact version = %d, want 1", stored.ArtifactVersion)
+	}
+	if stored := f.repo.get(t, created.ID); stored.Stage != task.StagePRD {
+		t.Errorf("stored stage = %q, want the watcher to leave the stage alone", stored.Stage)
 	}
 }
 
-func TestWatcherReportsARewriteWithoutLeavingTheStage(t *testing.T) {
+func TestWatcherReportsARewriteWithoutFirst(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
@@ -63,40 +78,98 @@ func TestWatcherReportsARewriteWithoutLeavingTheStage(t *testing.T) {
 	waitFor(t, "the PRD to be rewritten", func() bool { return len(f.artifactCalls()) == 2 })
 
 	calls := f.artifactCalls()
-	if calls[1].First {
-		t.Error("first = true on the rewrite, want false")
+	change, ok := calls[1].change(task.ArtifactPRD)
+	if !ok {
+		t.Fatalf("changes = %v, want the PRD", kinds(calls[1]))
 	}
-	if got := calls[1].Task.Stage; got != task.StagePRDDone {
-		t.Errorf("Stage = %q, want the stage to stay %q", got, task.StagePRDDone)
+	if change.First {
+		t.Error("First = true on the rewrite, want false")
 	}
 	if got := calls[1].Task.ArtifactVersion; got != 2 {
 		t.Errorf("ArtifactVersion = %d, want 2", got)
 	}
 }
 
-func TestWatcherLeavesTheStageWhenThePRDIsRemoved(t *testing.T) {
+func TestWatcherReportsTheTechSpec(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
 	created := f.create(t, "add-login", "")
 
-	writePRD(t, created, "# PRD")
-	waitFor(t, "the PRD to appear", func() bool { return len(f.artifactCalls()) == 1 })
-	changes := f.changeCount()
+	writeTechSpec(t, created, "# Tech spec")
+	waitFor(t, "the tech spec to be reported", func() bool { return len(f.artifactCalls()) == 1 })
 
-	if err := os.Remove(created.PRDPath()); err != nil {
-		t.Fatalf("remove PRD: %v", err)
+	call := f.artifactCalls()[0]
+	if got := kinds(call); !slices.Equal(got, []task.ArtifactKind{task.ArtifactTechSpec}) {
+		t.Fatalf("changes = %v, want the tech spec alone", got)
+	}
+	if change, _ := call.change(task.ArtifactTechSpec); !change.First {
+		t.Error("First = false, want true for the tech spec appearing")
+	}
+}
+
+func TestWatcherReportsThePlanOnlyOnceItIsValid(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	created := f.create(t, "add-login", "")
+
+	// A step with no metadata header is a plan with a problem, not a plan.
+	if err := os.MkdirAll(created.StepsDir(), 0o700); err != nil {
+		t.Fatalf("create steps directory: %v", err)
+	}
+	writeFile(t, filepath.Join(created.StepsDir(), "1-add-the-store.md"), "# Step 1: Add the store\n")
+
+	waitFor(t, "the steps folder to settle", func() bool { return len(f.artifactCalls()) > 0 })
+	time.Sleep(quietFor)
+
+	calls := f.artifactCalls()
+	if _, ok := calls[len(calls)-1].change(task.ArtifactPlan); ok {
+		t.Errorf("changes = %v, want no plan for a plan with problems", kinds(calls[len(calls)-1]))
 	}
 
-	waitFor(t, "the stage to go back", func() bool {
-		loaded, ok := f.service.Get(created.ID)
-		return ok && loaded.Stage == task.StagePRD
+	writeStep(t, created, "1-add-the-store.md", "api", "Step 1: Add the store")
+	waitFor(t, "the plan to be reported", func() bool {
+		latest := f.artifactCalls()
+		_, ok := latest[len(latest)-1].change(task.ArtifactPlan)
+		return ok
 	})
-	if got := len(f.artifactCalls()); got != 1 {
-		t.Errorf("OnArtifact ran %d times, want the removal to be silent", got)
+
+	latest := f.artifactCalls()
+	change, _ := latest[len(latest)-1].change(task.ArtifactPlan)
+	if !change.First {
+		t.Error("First = false, want true for the plan becoming valid")
 	}
-	if f.changeCount() <= changes {
-		t.Error("OnChange did not run for the removal")
+}
+
+func TestWatcherFollowsTheStepsFolderAsItComesAndGoes(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	created := f.create(t, "add-login", "")
+
+	writeStep(t, created, "1-add-the-store.md", "api", "Step 1: Add the store")
+	waitFor(t, "the plan to appear", func() bool {
+		calls := f.artifactCalls()
+		if len(calls) == 0 {
+			return false
+		}
+		_, ok := calls[len(calls)-1].change(task.ArtifactPlan)
+		return ok
+	})
+	seen := len(f.artifactCalls())
+
+	if err := os.RemoveAll(created.StepsDir()); err != nil {
+		t.Fatalf("remove steps directory: %v", err)
+	}
+	waitFor(t, "the removal to settle", func() bool { return len(f.artifactCalls()) > seen })
+
+	calls := f.artifactCalls()
+	if _, ok := calls[len(calls)-1].change(task.ArtifactPlan); ok {
+		t.Error("the plan was reported although the folder is gone")
+	}
+	if cached, _ := f.service.Artifacts(created.ID); cached.Plan.Present {
+		t.Error("Artifacts().Plan.Present = true, want the cache to follow the folder")
 	}
 }
 
@@ -106,16 +179,11 @@ func TestWatcherIgnoresOtherFilesInTheFolder(t *testing.T) {
 	f := newFixture(t)
 	created := f.create(t, "add-login", "")
 
-	if err := os.WriteFile(created.ArtifactsDir+"/notes.md", []byte("notes"), 0o600); err != nil {
-		t.Fatalf("write notes: %v", err)
-	}
-	time.Sleep(400 * time.Millisecond)
+	writeFile(t, filepath.Join(created.ArtifactsDir, "notes.md"), "notes")
+	time.Sleep(quietFor)
 
 	if got := len(f.artifactCalls()); got != 0 {
 		t.Errorf("OnArtifact ran %d times, want 0", got)
-	}
-	if got, _ := f.service.Get(created.ID); got.Stage != task.StagePRD {
-		t.Errorf("Stage = %q, want %q", got.Stage, task.StagePRD)
 	}
 }
 
@@ -132,8 +200,8 @@ func TestWatcherKeepsTheTasksApart(t *testing.T) {
 	if got := f.artifactCalls()[0].Task.ID; got != first.ID {
 		t.Errorf("OnArtifact task = %q, want %q", got, first.ID)
 	}
-	if loaded, _ := f.service.Get(second.ID); loaded.Stage != task.StagePRD {
-		t.Errorf("second task stage = %q, want %q", loaded.Stage, task.StagePRD)
+	if cached, _ := f.service.Artifacts(second.ID); cached.PRD {
+		t.Error("the second task got the PRD of the first")
 	}
 }
 
@@ -151,7 +219,7 @@ func TestWatcherStopsAtTheDeletedTask(t *testing.T) {
 		t.Fatalf("recreate artifacts directory: %v", err)
 	}
 	writePRD(t, created, "# PRD")
-	time.Sleep(400 * time.Millisecond)
+	time.Sleep(quietFor)
 
 	if got := len(f.artifactCalls()); got != 0 {
 		t.Errorf("OnArtifact ran %d times for a deleted task, want 0", got)
@@ -170,7 +238,7 @@ func TestWatcherStaysQuietAfterClose(t *testing.T) {
 	}
 
 	writePRD(t, created, "# PRD")
-	time.Sleep(400 * time.Millisecond)
+	time.Sleep(quietFor)
 
 	if got := len(f.artifactCalls()); got != 0 {
 		t.Errorf("OnArtifact ran %d times after Close, want 0", got)

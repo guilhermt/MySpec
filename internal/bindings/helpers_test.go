@@ -159,8 +159,12 @@ func newFixture(t *testing.T) *fixture {
 		DataDir: f.dataDir,
 		Log:     log,
 		Repos:   f.repoPaths,
-		OnArtifact: func(t task.Task, first bool) {
-			f.sessions.MarkArtifact(context.Background(), t.ID, first)
+		OnArtifact: func(t task.Task, changes []task.Change) {
+			for _, c := range changes {
+				if c.Kind == task.ArtifactPRD {
+					f.sessions.MarkArtifact(context.Background(), t.ID, c.First)
+				}
+			}
 		},
 	})
 	if err != nil {
@@ -247,6 +251,13 @@ func (f *fixture) setScan(repos []string, err error) {
 	f.repos, f.scanErr = repos, err
 }
 
+// taskArtifacts is what the task service last saw in a task's folder, the way
+// internal/app reads it for the snapshot.
+func (f *fixture) taskArtifacts(id string) task.Artifacts {
+	artifacts, _ := f.taskSvc.Artifacts(id)
+	return artifacts
+}
+
 // snapshot is the same state internal/app publishes.
 func (f *fixture) snapshot() bindings.State {
 	recents, err := f.ws.Recents(context.Background())
@@ -259,7 +270,7 @@ func (f *fixture) snapshot() bindings.State {
 		Theme:      string(f.theme.Preference()),
 		SystemDark: f.theme.SystemDark(),
 		Notice:     bindings.FromNotice(f.ws.Notice()),
-		Tasks:      bindings.FromTasks(f.taskSvc.List(), f.sessions.Summaries()),
+		Tasks:      bindings.FromTasks(f.taskSvc.List(), f.taskArtifacts, f.sessions.Summaries()),
 	}
 }
 

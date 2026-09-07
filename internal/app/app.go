@@ -122,7 +122,7 @@ func Run(cfg Config) int {
 		Log:        log,
 		Repos:      a.repoPaths,
 		OnChange:   a.publish,
-		OnArtifact: func(t task.Task, first bool) { sessions.MarkArtifact(context.Background(), t.ID, first) },
+		OnArtifact: a.onArtifact,
 	})
 	if err != nil {
 		return fail(log, "watch artifacts", err)

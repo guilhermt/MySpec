@@ -5,6 +5,7 @@ import (
 
 	"github.com/guilhermt/myspec/internal/bindings"
 	"github.com/guilhermt/myspec/internal/session"
+	"github.com/guilhermt/myspec/internal/task"
 )
 
 // appName is the window title with no workspace open, and its suffix with one.
@@ -18,7 +19,26 @@ func (a *App) snapshot() bindings.State {
 		Theme:      string(a.theme.Preference()),
 		SystemDark: a.theme.SystemDark(),
 		Notice:     bindings.FromNotice(a.ws.Notice()),
-		Tasks:      bindings.FromTasks(a.tasks.List(), a.sessions.Summaries()),
+		Tasks:      bindings.FromTasks(a.tasks.List(), a.taskArtifacts, a.sessions.Summaries()),
+	}
+}
+
+// taskArtifacts is what the last inspection of a task's folder found, which is
+// nothing at all for a task the service does not hold.
+func (a *App) taskArtifacts(id string) task.Artifacts {
+	artifacts, _ := a.tasks.Artifacts(id)
+	return artifacts
+}
+
+// onArtifact records what changed in the conversation of a task.
+func (a *App) onArtifact(t task.Task, changes []task.Change) {
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+
+	for _, c := range changes {
+		if c.Kind == task.ArtifactPRD {
+			a.sessions.MarkArtifact(ctx, t.ID, c.First)
+		}
 	}
 }
 

@@ -1,5 +1,6 @@
 // Package task owns the tasks of a workspace: their identity, their artifact
-// folders and the stage derived from the artifacts on disk.
+// folders and the stage they were told to record. It reports what changed on
+// disk; deciding what to do about it belongs elsewhere.
 package task
 
 import (
@@ -24,10 +25,6 @@ const (
 	StagePlan           Stage = "plan"
 	StageImplementation Stage = "implementation"
 )
-
-// StagePRDDone is the stage the previous version stored once the PRD was
-// written. Nothing sets it any more; reconciliation still reads it.
-const StagePRDDone Stage = "prd_done"
 
 // Stages lists the stages in workflow order.
 var Stages = []Stage{StagePRD, StageTechSpec, StagePlan, StageImplementation}

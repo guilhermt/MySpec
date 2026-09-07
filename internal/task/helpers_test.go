@@ -138,7 +138,7 @@ func (r *memRepo) Insert(_ context.Context, t task.Task) error {
 	return nil
 }
 
-func (r *memRepo) UpdateStage(_ context.Context, id, stage string, artifactVersion int, updatedAt time.Time) error {
+func (r *memRepo) UpdateStage(_ context.Context, id, stage string, revisiting bool, updatedAt time.Time) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -150,7 +150,23 @@ func (r *memRepo) UpdateStage(_ context.Context, id, stage string, artifactVersi
 		return task.ErrNotFound
 	}
 	r.items[index].Stage = task.Stage(stage)
-	r.items[index].ArtifactVersion = artifactVersion
+	r.items[index].Revisiting = revisiting
+	r.items[index].UpdatedAt = updatedAt
+	return nil
+}
+
+func (r *memRepo) UpdateArtifactVersion(_ context.Context, id string, version int, updatedAt time.Time) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.updateErr != nil {
+		return r.updateErr
+	}
+	index := r.indexOf(id)
+	if index < 0 {
+		return task.ErrNotFound
+	}
+	r.items[index].ArtifactVersion = version
 	r.items[index].UpdatedAt = updatedAt
 	return nil
 }
@@ -194,8 +210,18 @@ func (r *memRepo) indexOf(id string) int {
 
 // artifactCall is one OnArtifact callback the fixture recorded.
 type artifactCall struct {
-	Task  task.Task
-	First bool
+	Task    task.Task
+	Changes []task.Change
+}
+
+// change returns the recorded change of a kind, if the call carried one.
+func (c artifactCall) change(kind task.ArtifactKind) (task.Change, bool) {
+	for _, ch := range c.Changes {
+		if ch.Kind == kind {
+			return ch, true
+		}
+	}
+	return task.Change{}, false
 }
 
 // fixture is a Service with its collaborators, ready to assert on.
@@ -271,11 +297,11 @@ func (f *fixture) onChange() {
 	f.changes++
 }
 
-func (f *fixture) onArtifact(t task.Task, first bool) {
+func (f *fixture) onArtifact(t task.Task, changes []task.Change) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	f.artifacts = append(f.artifacts, artifactCall{Task: t, First: first})
+	f.artifacts = append(f.artifacts, artifactCall{Task: t, Changes: changes})
 }
 
 // changeCount returns how many times OnChange ran.
@@ -313,8 +339,33 @@ func (f *fixture) create(t *testing.T, name, repoPath string) task.Task {
 func writePRD(t *testing.T, tk task.Task, content string) {
 	t.Helper()
 
-	if err := os.WriteFile(tk.PRDPath(), []byte(content), 0o600); err != nil {
-		t.Fatalf("write PRD: %v", err)
+	writeFile(t, tk.PRDPath(), content)
+}
+
+// writeTechSpec writes the tech spec of a task, as the agent would.
+func writeTechSpec(t *testing.T, tk task.Task, content string) {
+	t.Helper()
+
+	writeFile(t, tk.TechSpecPath(), content)
+}
+
+// writeStep writes one step file of the plan of a task, with the front matter
+// the parser asks for.
+func writeStep(t *testing.T, tk task.Task, file, repository, title string) {
+	t.Helper()
+
+	if err := os.MkdirAll(tk.StepsDir(), 0o700); err != nil {
+		t.Fatalf("create steps directory: %v", err)
+	}
+	writeFile(t, filepath.Join(tk.StepsDir(), file), "---\nrepository: "+repository+"\n---\n\n# "+title+"\n")
+}
+
+// writeFile puts content at path, failing the test on error.
+func writeFile(t *testing.T, path, content string) {
+	t.Helper()
+
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("write %s: %v", path, err)
 	}
 }
 
