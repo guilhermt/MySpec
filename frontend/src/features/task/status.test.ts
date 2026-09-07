@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  hasArtifacts,
   isAttention,
   taskStageLabel,
   taskStatusLabel,
@@ -57,5 +58,16 @@ describe("taskStageLabel", () => {
 
   it("says when a stage was reopened", () => {
     expect(taskStageLabel(makeTask({ stage: "plan", revisiting: true }))).toBe("Plan · revisiting");
+  });
+});
+
+describe("hasArtifacts", () => {
+  it.each([
+    [{}, false],
+    [{ hasPrd: true }, true],
+    [{ hasTechSpec: true }, true],
+    [{ steps: [makeStep()] }, true],
+  ])("knows whether the task wrote anything %#", (overrides, expected) => {
+    expect(hasArtifacts(makeTask(overrides))).toBe(expected);
   });
 });

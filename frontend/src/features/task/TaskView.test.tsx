@@ -28,6 +28,13 @@ describe("TaskView", () => {
     });
   });
 
+  it("puts the stage track under the header", () => {
+    view({ stage: "tech_spec" });
+
+    expect(screen.getByRole("button", { name: "PRD" })).toBeInTheDocument();
+    expect(screen.getByText("Closing")).toBeInTheDocument();
+  });
+
   it("fetches the conversation only the first time the task is opened", async () => {
     const { rerender } = view();
     await waitFor(() => {

@@ -56,3 +56,8 @@ export function taskStageLabel(task: TaskSummary): string {
   const label = stageLabel(asTaskStage(task.stage));
   return task.revisiting ? `${label} · revisiting` : label;
 }
+
+/** hasArtifacts reports whether the task has written anything to read yet. */
+export function hasArtifacts(task: TaskSummary): boolean {
+  return task.hasPrd || task.hasTechSpec || (task.steps ?? []).length > 0;
+}

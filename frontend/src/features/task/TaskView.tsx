@@ -4,6 +4,7 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/componen
 import { Composer } from "@/features/chat/Composer";
 import { Conversation } from "@/features/chat/Conversation";
 import { ArtifactPanel } from "@/features/task/ArtifactPanel";
+import { StageTrack } from "@/features/task/StageTrack";
 import { TaskHeader } from "@/features/task/TaskHeader";
 import { loadTranscript } from "@/store/actions";
 import { useAppStore, useTask } from "@/store/app-store";
@@ -95,6 +96,7 @@ export function TaskView({ taskId }: TaskViewProps) {
   return (
     <section className="flex h-dvh min-w-0 flex-col bg-background">
       <TaskHeader task={task} artifactsOpen={artifactsOpen} onToggleArtifacts={toggleArtifacts} />
+      <StageTrack task={task} />
       <ResizablePanelGroup
         orientation="horizontal"
         defaultLayout={defaultLayout}
