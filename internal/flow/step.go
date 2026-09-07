@@ -388,3 +388,218 @@ func noRepositoryDetail(step task.Step) string {
 func indexOfRun(runs []task.StepRun, number int) int {
 	return slices.IndexFunc(runs, func(r task.StepRun) bool { return r.Number == number })
 }
+
+// currentStepOf is the step a user operation acts on, with the run the app
+// recorded for it. The caller holds the lock of the task.
+func (s *Service) currentStepOf(id string) (task.Step, *task.StepRun, error) {
+	t, ok := s.tasks.Get(id)
+	if !ok {
+		return task.Step{}, nil, fmt.Errorf("step of task %s: %w", id, task.ErrNotFound)
+	}
+	if t.Stage != task.StageImplementation {
+		return task.Step{}, nil, fmt.Errorf("step of task %s in %s: %w", id, t.Stage, ErrNotImplementing)
+	}
+	a, err := s.tasks.Inspect(id)
+	if err != nil {
+		return task.Step{}, nil, err
+	}
+	step, ok := currentStep(a.Plan)
+	if !ok {
+		return task.Step{}, nil, fmt.Errorf("step of task %s: %w", id, ErrNoStep)
+	}
+	var run *task.StepRun
+	runs := s.tasks.StepRuns(id)
+	if index := indexOfRun(runs, step.Number); index >= 0 {
+		run = &runs[index]
+	}
+	return step, run, nil
+}
+
+// RetryStep prepares a blocked step again, from the fetch on, which is what
+// the user asks for after fixing whatever git complained about.
+func (s *Service) RetryStep(ctx context.Context, id string) error {
+	l := s.lockOf(id)
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	step, run, err := s.currentStepOf(id)
+	if err != nil {
+		return err
+	}
+	if run == nil || run.Status != task.StepBlocked {
+		return fmt.Errorf("retry step %d of task %s: %w", step.Number, id, ErrStepNotBlocked)
+	}
+	if _, err := s.tasks.SetStepRun(ctx, id, step.Number, task.StepPreparing, nil); err != nil {
+		return err
+	}
+	s.log.Info("step retried", "task", id, "step", step.Number)
+	s.spawnPrepare(id, prepareOptions{})
+	return nil
+}
+
+// CleanAndStartStep throws away every change of the worktree of a step blocked
+// by a dirty one and prepares it again. The cleaning runs on the preparation,
+// so the call returns at once.
+func (s *Service) CleanAndStartStep(ctx context.Context, id string) error {
+	l := s.lockOf(id)
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	step, run, err := s.currentStepOf(id)
+	if err != nil {
+		return err
+	}
+	if run == nil || run.Status != task.StepBlocked || run.Block == nil || run.Block.Reason != task.BlockDirty {
+		return fmt.Errorf("clean and start step %d of task %s: %w", step.Number, id, ErrStepNotDirty)
+	}
+	if _, err := s.tasks.SetStepRun(ctx, id, step.Number, task.StepPreparing, nil); err != nil {
+		return err
+	}
+	s.log.Info("step cleaned and started", "task", id, "step", step.Number)
+	s.spawnPrepare(id, prepareOptions{clean: true})
+	return nil
+}
+
+// DiscardStep ends the session of a started step, deletes its conversation and
+// starts the step over, optionally cleaning the worktree first.
+func (s *Service) DiscardStep(ctx context.Context, id string, cleanWorktree bool) error {
+	s.abortPrepare(id)
+
+	l := s.lockOf(id)
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	step, run, err := s.currentStepOf(id)
+	if err != nil {
+		return err
+	}
+	if run == nil || run.Status != task.StepStarted {
+		return fmt.Errorf("discard step %d of task %s: %w", step.Number, id, ErrStepNotStarted)
+	}
+	if err := s.sessions.Discard(ctx, id, session.StepStage(step.Number)); err != nil {
+		return err
+	}
+	if _, err := s.tasks.SetStepRun(ctx, id, step.Number, task.StepPreparing, nil); err != nil {
+		return err
+	}
+	s.log.Info("step discarded", "task", id, "step", step.Number, "clean_worktree", cleanWorktree)
+	s.spawnPrepare(id, prepareOptions{clean: cleanWorktree, restarted: true})
+	return nil
+}
+
+// abortPrepare cancels the preparation of a task, if there is one. It does not
+// wait: whoever calls it takes the lock of the task next, and that lock is
+// what the preparation holds until it gives up.
+func (s *Service) abortPrepare(id string) {
+	l := s.lockOf(id)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if l.cancel != nil {
+		l.cancel()
+	}
+}
+
+// tearDownSteps stops the step session, removes the worktrees and the branches
+// of a task and forgets its steps. It is what discarding the plan, going back
+// and deleting the task have in common, and it fails whole: a worktree git
+// cannot remove leaves everything as it was, with the session open again.
+func (s *Service) tearDownSteps(ctx context.Context, t task.Task) error {
+	runs := s.tasks.StepRuns(t.ID)
+	if len(runs) == 0 {
+		return nil
+	}
+
+	// A step session is stopped before the worktree it runs in goes away.
+	stepOpen := false
+	if sum, open := s.sessions.Summary(t.ID); open {
+		_, stepOpen = session.ParseStepStage(sum.Stage)
+	}
+	if stepOpen {
+		if err := s.sessions.Close(ctx, t.ID); err != nil {
+			return err
+		}
+	}
+
+	if err := s.worktrees.RemoveAll(ctx, t.ID); err != nil {
+		// Nothing was removed, so the user is left where they were.
+		if stepOpen {
+			s.reopenStep(ctx, t)
+		}
+		return err
+	}
+
+	if err := s.sessions.Discard(ctx, t.ID, stepStages(runs)...); err != nil {
+		return err
+	}
+	if err := s.tasks.ClearStepRuns(ctx, t.ID); err != nil {
+		return err
+	}
+	s.log.Info("steps torn down", "task", t.ID, "steps", len(runs))
+	return nil
+}
+
+// stepStages names the session of every step the app recorded, which is what
+// discarding them takes.
+func stepStages(runs []task.StepRun) []string {
+	stages := make([]string, len(runs))
+	for i, run := range runs {
+		stages[i] = session.StepStage(run.Number)
+	}
+	return stages
+}
+
+// reopenStep brings back the session of the current step after a teardown that
+// could not go through. It is best effort: a failure only reaches the log.
+func (s *Service) reopenStep(ctx context.Context, t task.Task) {
+	a, err := s.tasks.Inspect(t.ID)
+	if err != nil {
+		s.log.Error("inspect artifacts failed", "task", t.ID, "stage", string(t.Stage), "error", err)
+		return
+	}
+	step, ok := currentStep(a.Plan)
+	if !ok {
+		return
+	}
+	wt, ok := s.worktrees.Get(t.ID, step.RepoPath)
+	if !ok {
+		return
+	}
+	if err := s.sessions.Open(ctx, stepInfo(t, step, wt, s.tasks.Repositories(t))); err != nil {
+		s.log.Error("reopen step session failed", "task", t.ID, "step", step.Number, "error", err)
+	}
+}
+
+// Delete removes a task with its worktrees, its branches and its artifacts. A
+// worktree git cannot remove keeps the task, and the reason reaches the user.
+func (s *Service) Delete(ctx context.Context, id string) error {
+	s.abortPrepare(id)
+
+	l := s.lockOf(id)
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	t, ok := s.tasks.Get(id)
+	if !ok {
+		return fmt.Errorf("delete task %s: %w", id, task.ErrNotFound)
+	}
+	// A task still being planned has no steps, and no worktrees either.
+	if t.Stage == task.StageImplementation {
+		if err := s.tearDownSteps(ctx, t); err != nil {
+			return err
+		}
+	}
+	if err := s.sessions.Close(ctx, id); err != nil {
+		return err
+	}
+	if err := s.tasks.Delete(ctx, id); err != nil {
+		return err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	delete(s.locks, id)
+	return nil
+}

@@ -1,7 +1,9 @@
 package flow_test
 
 import (
+	"errors"
 	"fmt"
+	"slices"
 	"testing"
 
 	"github.com/guilhermt/myspec/internal/flow"
@@ -283,4 +285,322 @@ func TestStepsOfATaskWithoutAPlanAreEmpty(t *testing.T) {
 	if states := f.service.Steps("nobody"); len(states) != 0 {
 		t.Errorf("Steps(nobody) = %+v, want none", states)
 	}
+}
+
+func TestRetryStepPreparesABlockedStepAgain(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.worktrees.failEnsure(fmt.Errorf("git fetch origin: no such remote: %w", worktree.ErrFetchFailed))
+	implementing(f, "task-1", twoStepPlan())
+
+	f.service.Sync(t.Context())
+	f.waitStep(t, "task-1", 1, flow.StepBlocked)
+
+	f.worktrees.failEnsure(nil)
+	if err := f.service.RetryStep(t.Context(), "task-1"); err != nil {
+		t.Fatalf("RetryStep: %v", err)
+	}
+	f.waitStep(t, "task-1", 1, flow.StepImplementing)
+
+	f.waitWorktreeCalls(t, "ensure:task-1:api", "ensure:task-1:api", "status:task-1:task-1")
+	f.wantCalls(t, "start:task-1:step:1:restarted=false")
+}
+
+func TestRetryStepOfAStepThatIsNotBlockedIsRefused(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	implementing(f, "task-1", twoStepPlan())
+
+	f.service.Sync(t.Context())
+	f.waitStep(t, "task-1", 1, flow.StepImplementing)
+
+	wantErrIs(t, f.service.RetryStep(t.Context(), "task-1"), flow.ErrStepNotBlocked)
+}
+
+func TestRetryStepOutsideImplementationIsRefused(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.tasks.add("task-1", task.StagePlan, task.Artifacts{PRD: true, TechSpec: true, Plan: twoStepPlan()})
+
+	wantErrIs(t, f.service.RetryStep(t.Context(), "task-1"), flow.ErrNotImplementing)
+	wantErrIs(t, f.service.RetryStep(t.Context(), "nobody"), task.ErrNotFound)
+}
+
+func TestRetryStepOfATaskWithoutStepsIsRefused(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	implementing(f, "task-1", task.Plan{Present: true})
+
+	wantErrIs(t, f.service.RetryStep(t.Context(), "task-1"), flow.ErrNoStep)
+}
+
+func TestCleanAndStartStepDiscardsTheChangesAndStarts(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.worktrees.setStatus(worktree.Status{Entries: []string{" M main.go"}})
+	implementing(f, "task-1", twoStepPlan())
+
+	f.service.Sync(t.Context())
+	f.waitStep(t, "task-1", 1, flow.StepBlocked)
+
+	if err := f.service.CleanAndStartStep(t.Context(), "task-1"); err != nil {
+		t.Fatalf("CleanAndStartStep: %v", err)
+	}
+	f.waitStep(t, "task-1", 1, flow.StepImplementing)
+
+	f.waitWorktreeCalls(t,
+		"ensure:task-1:api", "status:task-1:task-1",
+		"ensure:task-1:api", "clean:task-1:task-1", "status:task-1:task-1",
+	)
+	f.wantCalls(t, "start:task-1:step:1:restarted=false")
+}
+
+func TestCleanAndStartStepOfABlockThatIsNotDirtIsRefused(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.worktrees.failEnsure(fmt.Errorf("git fetch origin: %w", worktree.ErrFetchFailed))
+	implementing(f, "task-1", twoStepPlan())
+
+	f.service.Sync(t.Context())
+	f.waitStep(t, "task-1", 1, flow.StepBlocked)
+
+	wantErrIs(t, f.service.CleanAndStartStep(t.Context(), "task-1"), flow.ErrStepNotDirty)
+}
+
+func TestDiscardStepStartsTheStepOverInACleanWorktree(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	implementing(f, "task-1", twoStepPlan())
+
+	f.service.Sync(t.Context())
+	f.waitStep(t, "task-1", 1, flow.StepImplementing)
+
+	f.worktrees.setStatus(worktree.Status{Entries: []string{"?? scratch.md"}})
+	if err := f.service.DiscardStep(t.Context(), "task-1", true); err != nil {
+		t.Fatalf("DiscardStep: %v", err)
+	}
+	f.waitStep(t, "task-1", 1, flow.StepImplementing)
+
+	f.waitCalls(t,
+		"start:task-1:step:1:restarted=false",
+		"discard:task-1:step:1",
+		"start:task-1:step:1:restarted=true",
+	)
+	f.waitWorktreeCalls(t,
+		"ensure:task-1:api", "status:task-1:task-1",
+		"ensure:task-1:api", "clean:task-1:task-1", "status:task-1:task-1",
+	)
+}
+
+func TestDiscardStepWithoutCleaningLeavesADirtyWorktreeBlocked(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	implementing(f, "task-1", twoStepPlan())
+
+	f.service.Sync(t.Context())
+	f.waitStep(t, "task-1", 1, flow.StepImplementing)
+
+	f.worktrees.setStatus(worktree.Status{Entries: []string{"?? scratch.md"}})
+	if err := f.service.DiscardStep(t.Context(), "task-1", false); err != nil {
+		t.Fatalf("DiscardStep: %v", err)
+	}
+	f.waitStep(t, "task-1", 1, flow.StepBlocked)
+
+	block := f.stepState(t, "task-1", 1).Block
+	if block == nil || block.Reason != task.BlockDirty || block.Files != 1 {
+		t.Fatalf("block = %+v, want a dirty worktree of one file", block)
+	}
+	if calls := f.worktrees.recorded(); slices.Contains(calls, "clean:task-1:task-1") {
+		t.Errorf("worktree calls = %v, want no cleaning", calls)
+	}
+}
+
+func TestDiscardStepBeforeTheStepStartedIsRefused(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.worktrees.setStatus(worktree.Status{Entries: []string{" M main.go"}})
+	implementing(f, "task-1", twoStepPlan())
+
+	f.service.Sync(t.Context())
+	f.waitStep(t, "task-1", 1, flow.StepBlocked)
+
+	wantErrIs(t, f.service.DiscardStep(t.Context(), "task-1", false), flow.ErrStepNotStarted)
+}
+
+func TestDiscardStepCancelsAPreparationInFlight(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	created := implementing(f, "task-1", twoStepPlan())
+	f.tasks.setStepRun("task-1", task.StepRun{Number: 1, Status: task.StepStarted})
+	f.worktrees.seed(created, repos[0])
+
+	f.service.Sync(t.Context())
+	f.waitCalls(t, "open:task-1:step:1")
+
+	// A discard restarts the step, and the preparation it spawns hangs.
+	release := f.worktrees.blockEnsure()
+	defer close(release)
+	if err := f.service.DiscardStep(t.Context(), "task-1", false); err != nil {
+		t.Fatalf("DiscardStep: %v", err)
+	}
+	f.waitWorktreeCalls(t, "ensure:task-1:api")
+
+	// The second discard cancels it; the step is left preparing, not started.
+	wantErrIs(t, f.service.DiscardStep(t.Context(), "task-1", false), flow.ErrStepNotStarted)
+	run, ok := f.tasks.stepRun("task-1", 1)
+	if !ok || run.Status != task.StepPreparing {
+		t.Errorf("run = %+v, %v, want preparing", run, ok)
+	}
+}
+
+func TestDiscardingThePlanTearsTheStepsDownFirst(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	implementing(f, "task-1", twoStepPlan())
+
+	f.service.Sync(t.Context())
+	f.waitStep(t, "task-1", 1, flow.StepImplementing)
+
+	if err := f.service.Discard(t.Context(), "task-1", task.StagePlan); err != nil {
+		t.Fatalf("Discard: %v", err)
+	}
+
+	f.wantCalls(t,
+		"start:task-1:step:1:restarted=false",
+		"close:task-1",
+		"discard:task-1:step:1",
+		"discard:task-1:plan",
+		"start:task-1:plan:restarted=true",
+	)
+	f.waitWorktreeCalls(t, "ensure:task-1:api", "status:task-1:task-1", "removeAll:task-1")
+	if runs := f.tasks.StepRuns("task-1"); len(runs) != 0 {
+		t.Errorf("step runs = %+v, want none", runs)
+	}
+}
+
+func TestBackToTheTechSpecTearsTheStepsDownFirst(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	implementing(f, "task-1", twoStepPlan())
+
+	f.service.Sync(t.Context())
+	f.waitStep(t, "task-1", 1, flow.StepImplementing)
+
+	if err := f.service.Back(t.Context(), "task-1", task.StageTechSpec); err != nil {
+		t.Fatalf("Back: %v", err)
+	}
+
+	f.wantCalls(t,
+		"start:task-1:step:1:restarted=false",
+		"close:task-1",
+		"discard:task-1:step:1",
+		"discard:task-1:plan",
+		"open:task-1:tech_spec",
+	)
+	f.waitWorktreeCalls(t, "ensure:task-1:api", "status:task-1:task-1", "removeAll:task-1")
+}
+
+func TestAWorktreeThatCannotBeRemovedKeepsEverythingAndReopensTheSession(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	implementing(f, "task-1", twoStepPlan())
+
+	f.service.Sync(t.Context())
+	f.waitStep(t, "task-1", 1, flow.StepImplementing)
+
+	errRemove := errors.New("git worktree remove --force /ws: fatal: is dirty")
+	f.worktrees.failRemoveAll(errRemove)
+
+	wantErrIs(t, f.service.Discard(t.Context(), "task-1", task.StagePlan), errRemove)
+
+	f.wantCalls(t,
+		"start:task-1:step:1:restarted=false",
+		"close:task-1",
+		"open:task-1:step:1",
+	)
+	if runs := f.tasks.StepRuns("task-1"); len(runs) != 1 {
+		t.Errorf("step runs = %+v, want the one that was there", runs)
+	}
+	if got, _ := f.tasks.Get("task-1"); got.Stage != task.StageImplementation {
+		t.Errorf("stage = %q, want implementation", got.Stage)
+	}
+}
+
+func TestDiscardingThePlanCancelsAPreparationInFlight(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	implementing(f, "task-1", twoStepPlan())
+	release := f.worktrees.blockEnsure()
+	defer close(release)
+
+	f.service.Sync(t.Context())
+	f.waitWorktreeCalls(t, "ensure:task-1:api")
+
+	if err := f.service.Discard(t.Context(), "task-1", task.StagePlan); err != nil {
+		t.Fatalf("Discard: %v", err)
+	}
+
+	// The cancelled preparation never started the step.
+	f.wantCalls(t,
+		"discard:task-1:step:1",
+		"discard:task-1:plan",
+		"start:task-1:plan:restarted=true",
+	)
+	f.waitWorktreeCalls(t, "ensure:task-1:api", "removeAll:task-1")
+}
+
+func TestDeleteTearsTheStepsDownAndRemovesTheTask(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	implementing(f, "task-1", twoStepPlan())
+
+	f.service.Sync(t.Context())
+	f.waitStep(t, "task-1", 1, flow.StepImplementing)
+
+	if err := f.service.Delete(t.Context(), "task-1"); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+
+	f.wantCalls(t,
+		"start:task-1:step:1:restarted=false",
+		"close:task-1",
+		"discard:task-1:step:1",
+		"close:task-1",
+	)
+	f.waitWorktreeCalls(t, "ensure:task-1:api", "status:task-1:task-1", "removeAll:task-1")
+	if _, ok := f.tasks.Get("task-1"); ok {
+		t.Error("the task is still there")
+	}
+}
+
+func TestDeleteOfAPlannedTaskTouchesNoWorktree(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.tasks.add("task-1", task.StagePRD, task.Artifacts{})
+
+	if err := f.service.Delete(t.Context(), "task-1"); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+
+	f.wantCalls(t, "close:task-1")
+	if calls := f.worktrees.recorded(); len(calls) != 0 {
+		t.Errorf("worktree calls = %v, want none", calls)
+	}
+	wantErrIs(t, f.service.Delete(t.Context(), "nobody"), task.ErrNotFound)
 }

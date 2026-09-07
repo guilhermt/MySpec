@@ -145,6 +145,8 @@ func (s *Service) start(ctx context.Context, t task.Task, restarted bool) error 
 // the artifacts of every stage after it. The target is the PRD or the tech
 // spec, and the task waits for Continue from there on.
 func (s *Service) Back(ctx context.Context, id string, target task.Stage) error {
+	s.abortPrepare(id)
+
 	l := s.lockOf(id)
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -158,6 +160,11 @@ func (s *Service) Back(ctx context.Context, id string, target task.Stage) error 
 		return fmt.Errorf("back to %s from %s: %w", target, t.Stage, ErrInvalidTarget)
 	}
 
+	// The worktrees and the branches of the steps go before anything else, so
+	// that one git cannot remove leaves the task exactly as it was.
+	if err := s.tearDownSteps(ctx, t); err != nil {
+		return err
+	}
 	after, _ := target.Next()
 	if err := s.sessions.Discard(ctx, id, sessionStages(after)...); err != nil {
 		return err
@@ -181,6 +188,8 @@ func (s *Service) Back(ctx context.Context, id string, target task.Stage) error 
 // Discard throws away a stage of a task and everything after it, and starts
 // the stage again from scratch.
 func (s *Service) Discard(ctx context.Context, id string, stage task.Stage) error {
+	s.abortPrepare(id)
+
 	l := s.lockOf(id)
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -193,6 +202,9 @@ func (s *Service) Discard(ctx context.Context, id string, stage task.Stage) erro
 		return fmt.Errorf("discard %s of a task in %s: %w", stage, t.Stage, ErrInvalidTarget)
 	}
 
+	if err := s.tearDownSteps(ctx, t); err != nil {
+		return err
+	}
 	if err := s.sessions.Discard(ctx, id, sessionStages(stage)...); err != nil {
 		return err
 	}

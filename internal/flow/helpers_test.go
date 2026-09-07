@@ -728,3 +728,11 @@ func wantErrIs(t *testing.T, err, want error) {
 		t.Fatalf("error = %v, want %v", err, want)
 	}
 }
+
+// failRemoveAll makes every removal of the worktrees of a task fail with err.
+func (m *memWorktrees) failRemoveAll(err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.removeErr = err
+}
