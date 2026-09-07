@@ -86,15 +86,18 @@ export interface ErrorEntry {
 export interface MarkerEntry {
     /**
      * Type is prd_written, prd_updated, tech_spec_written, tech_spec_updated,
-     * plan_written, plan_updated, stage_started, compacted or interrupted.
+     * plan_written, plan_updated, stage_started, step_started, compacted or
+     * interrupted.
      */
     "type": string;
     "preTokens": number;
 
     /**
-     * Stage and Restarted belong to stage_started alone.
+     * Stage belongs to stage_started alone and Step to step_started alone;
+     * Restarted belongs to both.
      */
     "stage": string;
+    "step": number;
     "restarted": boolean;
 }
 
@@ -271,9 +274,47 @@ export interface Step {
     "repoPath": string;
 
     /**
-     * Status is not_started; a string for the same reason as Notice.Reason.
+     * Status is not_started, preparing, blocked, implementing or
+     * awaiting_review, a string for the same reason as Notice.Reason.
      */
     "status": string;
+
+    /**
+     * Phase is fetching, creating or checking while preparing; "" otherwise.
+     */
+    "phase": string;
+
+    /**
+     * blocked only
+     */
+    "block": StepBlock | null;
+
+    /**
+     * "" until the worktree exists
+     */
+    "worktreePath": string;
+}
+
+/**
+ * StepBlock is why a step is blocked.
+ */
+export interface StepBlock {
+    /**
+     * Reason is dirty_worktree, fetch_failed, no_base_branch, path_exists,
+     * branch_exists, git_failed or no_repository, a string for the same reason
+     * as Notice.Reason.
+     */
+    "reason": string;
+
+    /**
+     * what git said, or the status lines of a dirty worktree
+     */
+    "detail": string;
+
+    /**
+     * dirty worktree only
+     */
+    "files": number;
 }
 
 /**
@@ -318,6 +359,11 @@ export interface TaskSummary {
      * never nil
      */
     "steps": Step[] | null;
+
+    /**
+     * the step that runs or runs next; 0 when the task has no steps
+     */
+    "currentStep": number;
 
     /**
      * never nil

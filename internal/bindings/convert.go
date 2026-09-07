@@ -3,6 +3,7 @@ package bindings
 import (
 	"time"
 
+	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
 	"github.com/guilhermt/myspec/internal/workspace"
@@ -40,12 +41,19 @@ func FromNotice(notice *workspace.Notice) *Notice {
 }
 
 // FromTasks converts the tasks of the open workspace, pairing each with the
-// artifacts of its folder and the summary of its session when there is one.
-func FromTasks(tasks []task.Task, artifacts func(id string) task.Artifacts, summaries map[string]session.Summary) []TaskSummary {
+// artifacts of its folder, the state of its steps and the summary of its
+// session when there is one.
+func FromTasks(
+	tasks []task.Task,
+	artifacts func(id string) task.Artifacts,
+	steps func(id string) []flow.StepState,
+	summaries map[string]session.Summary,
+) []TaskSummary {
 	converted := make([]TaskSummary, len(tasks))
 	for i, t := range tasks {
 		summary := summaries[t.ID]
 		a := artifacts(t.ID)
+		states := steps(t.ID)
 		if summary.Status == "" {
 			summary.Status = session.StatusWaiting
 		}
@@ -65,7 +73,8 @@ func FromTasks(tasks []task.Task, artifacts func(id string) task.Artifacts, summ
 			Corrections:     summary.Corrections,
 			HasPRD:          a.PRD,
 			HasTechSpec:     a.TechSpec,
-			Steps:           fromSteps(a.Plan.Steps),
+			Steps:           fromSteps(states),
+			CurrentStep:     currentStep(states),
 			PlanProblems:    fromProblems(a.Plan.Problems),
 			CanContinue:     t.Revisiting && a.Done(t.Stage) && summary.Idle,
 			ArtifactVersion: t.ArtifactVersion,
@@ -77,25 +86,41 @@ func FromTasks(tasks []task.Task, artifacts func(id string) task.Artifacts, summ
 	return converted
 }
 
-// stepNotStarted is the only status a step has in this version: the steps are
-// listed, not run.
-const stepNotStarted = "not_started"
-
-// fromSteps converts the steps of a plan, always returning a slice so the
-// frontend never sees null.
-func fromSteps(steps []task.Step) []Step {
-	converted := make([]Step, len(steps))
-	for i, step := range steps {
+// fromSteps converts the steps of a plan with their state, always returning a
+// slice so the frontend never sees null.
+func fromSteps(states []flow.StepState) []Step {
+	converted := make([]Step, len(states))
+	for i, state := range states {
 		converted[i] = Step{
-			Number:     step.Number,
-			File:       step.File,
-			Title:      step.Title,
-			Repository: step.Repository,
-			RepoPath:   step.RepoPath,
-			Status:     stepNotStarted,
+			Number:       state.Step.Number,
+			File:         state.Step.File,
+			Title:        state.Step.Title,
+			Repository:   state.Step.Repository,
+			RepoPath:     state.Step.RepoPath,
+			Status:       string(state.Status),
+			Phase:        string(state.Phase),
+			Block:        fromBlock(state.Block),
+			WorktreePath: state.WorktreePath,
 		}
 	}
 	return converted
+}
+
+// fromBlock converts why a step is blocked, keeping nil for a step that is not.
+func fromBlock(block *task.StepBlock) *StepBlock {
+	if block == nil {
+		return nil
+	}
+	return &StepBlock{Reason: string(block.Reason), Detail: block.Detail, Files: block.Files}
+}
+
+// currentStep is the number of the step that runs or runs next, 0 for a task
+// with no steps.
+func currentStep(states []flow.StepState) int {
+	if len(states) == 0 {
+		return 0
+	}
+	return states[0].Step.Number
 }
 
 // fromProblems converts the reasons a plan is not valid, always returning a
@@ -190,6 +215,7 @@ func FromEntry(e session.Entry) Entry {
 			Type:      string(e.Marker.Type),
 			PreTokens: e.Marker.PreTokens,
 			Stage:     e.Marker.Stage,
+			Step:      e.Marker.Step,
 			Restarted: e.Marker.Restarted,
 		}
 	}

@@ -40,6 +40,14 @@ export function BackToStage(taskID: string, stage: string): $CancellablePromise<
 }
 
 /**
+ * CleanAndStartStep throws away every change of the worktree of a step blocked
+ * by a dirty one and prepares it again.
+ */
+export function CleanAndStartStep(taskID: string): $CancellablePromise<void> {
+    return $Call.ByID(4154159802, taskID);
+}
+
+/**
  * ContinueStage moves a task that is revisiting a stage on to the next one.
  */
 export function ContinueStage(taskID: string): $CancellablePromise<void> {
@@ -56,7 +64,9 @@ export function CreateTask(req: $models.CreateTaskRequest): $CancellablePromise<
 }
 
 /**
- * DeleteTask stops the session of a task and removes it with its artifacts.
+ * DeleteTask stops the session of a task, removes its worktrees and branches,
+ * and removes it with its artifacts. A worktree git cannot remove keeps the
+ * task, and the reason reaches the user.
  */
 export function DeleteTask(taskID: string): $CancellablePromise<void> {
     return $Call.ByID(797789264, taskID);
@@ -68,6 +78,14 @@ export function DeleteTask(taskID: string): $CancellablePromise<void> {
  */
 export function DiscardStage(taskID: string, stage: string): $CancellablePromise<void> {
     return $Call.ByID(3069692862, taskID, stage);
+}
+
+/**
+ * DiscardStep throws away the conversation of the current step and starts it
+ * over, optionally cleaning its worktree first.
+ */
+export function DiscardStep(taskID: string, cleanWorktree: boolean): $CancellablePromise<void> {
+    return $Call.ByID(216385730, taskID, cleanWorktree);
 }
 
 /**
@@ -84,6 +102,13 @@ export function GetTranscript(taskID: string): $CancellablePromise<$models.Trans
  */
 export function Interrupt(taskID: string): $CancellablePromise<void> {
     return $Call.ByID(1759278057, taskID);
+}
+
+/**
+ * OpenInEditor opens the worktree of the current step of a task in the editor.
+ */
+export function OpenInEditor(taskID: string): $CancellablePromise<void> {
+    return $Call.ByID(1075572732, taskID);
 }
 
 /**
@@ -119,6 +144,14 @@ export function Resume(taskID: string): $CancellablePromise<void> {
  */
 export function Retry(taskID: string): $CancellablePromise<void> {
     return $Call.ByID(696681228, taskID);
+}
+
+/**
+ * RetryStep prepares a blocked step again, which is what the user asks for
+ * after fixing whatever git complained about.
+ */
+export function RetryStep(taskID: string): $CancellablePromise<void> {
+    return $Call.ByID(3942932222, taskID);
 }
 
 /**

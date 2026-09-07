@@ -5,23 +5,40 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
+	"github.com/guilhermt/myspec/internal/editor"
 	"github.com/guilhermt/myspec/internal/flow"
+	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
 )
+
+// removeTimeout bounds the calls that remove worktrees: they run git, and a
+// removal is far slower than the database work callTimeout was written for.
+const removeTimeout = time.Minute
+
+// Editor opens a folder in the user's editor. internal/app passes editor.Open.
+type Editor func(path string) error
 
 // TaskService is the task, session and flow API the frontend calls.
 type TaskService struct {
 	tasks    *task.Service
 	sessions *session.Service
 	flow     *flow.Service
+	editor   Editor
 	log      *slog.Logger
 }
 
 // NewTaskService builds the service over the task, session and flow domains.
-func NewTaskService(tasks *task.Service, sessions *session.Service, flow *flow.Service, log *slog.Logger) *TaskService {
-	return &TaskService{tasks: tasks, sessions: sessions, flow: flow, log: log}
+func NewTaskService(
+	tasks *task.Service,
+	sessions *session.Service,
+	flow *flow.Service,
+	editor Editor,
+	log *slog.Logger,
+) *TaskService {
+	return &TaskService{tasks: tasks, sessions: sessions, flow: flow, editor: editor, log: log}
 }
 
 // CreateTask creates a task and starts its first stage with the stage prompt.
@@ -49,15 +66,14 @@ func (s *TaskService) CreateTask(req CreateTaskRequest) (string, error) {
 	return t.ID, nil
 }
 
-// DeleteTask stops the session of a task and removes it with its artifacts.
+// DeleteTask stops the session of a task, removes its worktrees and branches,
+// and removes it with its artifacts. A worktree git cannot remove keeps the
+// task, and the reason reaches the user.
 func (s *TaskService) DeleteTask(taskID string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), removeTimeout)
 	defer cancel()
 
-	if err := s.sessions.Close(ctx, taskID); err != nil {
-		return s.fail("DeleteTask", err)
-	}
-	if err := s.tasks.Delete(ctx, taskID); err != nil {
+	if err := s.flow.Delete(ctx, taskID); err != nil {
 		return s.fail("DeleteTask", err)
 	}
 	return nil
@@ -92,7 +108,8 @@ func (s *TaskService) BackToStage(taskID, stage string) error {
 		return s.fail("BackToStage", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	// Going back tears down the worktrees of the steps, which is git work.
+	ctx, cancel := context.WithTimeout(context.Background(), removeTimeout)
 	defer cancel()
 
 	if err := s.flow.Back(ctx, taskID, target); err != nil {
@@ -109,7 +126,8 @@ func (s *TaskService) DiscardStage(taskID, stage string) error {
 		return s.fail("DiscardStage", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	// Discarding tears down the worktrees of the steps, which is git work.
+	ctx, cancel := context.WithTimeout(context.Background(), removeTimeout)
 	defer cancel()
 
 	if err := s.flow.Discard(ctx, taskID, target); err != nil {
@@ -125,6 +143,57 @@ func (s *TaskService) ContinueStage(taskID string) error {
 
 	if err := s.flow.Continue(ctx, taskID); err != nil {
 		return s.fail("ContinueStage", err)
+	}
+	return nil
+}
+
+// RetryStep prepares a blocked step again, which is what the user asks for
+// after fixing whatever git complained about.
+func (s *TaskService) RetryStep(taskID string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+
+	if err := s.flow.RetryStep(ctx, taskID); err != nil {
+		return s.fail("RetryStep", err)
+	}
+	return nil
+}
+
+// CleanAndStartStep throws away every change of the worktree of a step blocked
+// by a dirty one and prepares it again.
+func (s *TaskService) CleanAndStartStep(taskID string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+
+	if err := s.flow.CleanAndStartStep(ctx, taskID); err != nil {
+		return s.fail("CleanAndStartStep", err)
+	}
+	return nil
+}
+
+// DiscardStep throws away the conversation of the current step and starts it
+// over, optionally cleaning its worktree first.
+func (s *TaskService) DiscardStep(taskID string, cleanWorktree bool) error {
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+
+	if err := s.flow.DiscardStep(ctx, taskID, cleanWorktree); err != nil {
+		return s.fail("DiscardStep", err)
+	}
+	return nil
+}
+
+// OpenInEditor opens the worktree of the current step of a task in the editor.
+func (s *TaskService) OpenInEditor(taskID string) error {
+	step, ok := s.flow.CurrentStep(taskID)
+	if !ok {
+		return s.fail("OpenInEditor", fmt.Errorf("open task %s in the editor: %w", taskID, flow.ErrNoStep))
+	}
+	if step.WorktreePath == "" {
+		return s.fail("OpenInEditor", fmt.Errorf("open task %s in the editor: %w", taskID, flow.ErrNoWorktree))
+	}
+	if err := s.editor(step.WorktreePath); err != nil {
+		return s.fail("OpenInEditor", err)
 	}
 	return nil
 }
@@ -262,6 +331,14 @@ var userMessages = []struct {
 	{flow.ErrInvalidTarget, "This stage can't be reached from here."},
 	{flow.ErrNotRevisiting, "The task isn't revisiting a stage."},
 	{flow.ErrNotReady, "Wait for the agent to finish and the document to be written."},
+	{flow.ErrNotImplementing, "The task isn't implementing."},
+	{flow.ErrNoStep, "The task has no step to run."},
+	{flow.ErrStepNotBlocked, "The step isn't blocked."},
+	{flow.ErrStepNotDirty, "The worktree isn't what blocks the step."},
+	{flow.ErrStepNotStarted, "The step hasn't started yet."},
+	{flow.ErrNoWorktree, "The worktree doesn't exist yet."},
+	{editor.ErrNotFound, "VS Code was not found: `code` isn't on the PATH."},
+	{git.ErrNotFound, "Git was not found on the PATH."},
 }
 
 // fail is what a failed binding call returns: a mistake the user can correct

@@ -134,6 +134,7 @@ export function makeTask(overrides: Partial<TaskSummary> = {}): TaskSummary {
     hasPrd: false,
     hasTechSpec: false,
     steps: [],
+    currentStep: 0,
     planProblems: [],
     canContinue: false,
     artifactVersion: 0,
@@ -152,6 +153,9 @@ export function makeStep(overrides: Partial<Step> = {}): Step {
     repository: "web",
     repoPath: "/home/dev/projects/web",
     status: "not_started",
+    phase: "",
+    block: null,
+    worktreePath: "",
     ...overrides,
   };
 }
@@ -241,7 +245,7 @@ function payloadOf(kind: EntryKind): Omit<Entry, "id" | "seq" | "turnId" | "kind
     case "marker":
       return {
         ...empty,
-        marker: { type: "prd_written", preTokens: 0, stage: "", restarted: false },
+        marker: { type: "prd_written", preTokens: 0, stage: "", step: 0, restarted: false },
       };
     case "error":
       return {

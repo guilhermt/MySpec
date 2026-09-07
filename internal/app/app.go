@@ -14,6 +14,7 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/application"
 
 	"github.com/guilhermt/myspec/internal/bindings"
+	"github.com/guilhermt/myspec/internal/editor"
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/platform/logging"
@@ -195,7 +196,7 @@ func (a *App) options(
 		Services: []application.Service{
 			application.NewService(bindings.NewWorkspaceService(ws, a.snapshot, a, log)),
 			application.NewService(bindings.NewSettingsService(themeSvc, log)),
-			application.NewService(bindings.NewTaskService(tasks, sessions, flowSvc, log)),
+			application.NewService(bindings.NewTaskService(tasks, sessions, flowSvc, editor.Open, log)),
 		},
 		Assets: application.AssetOptions{Handler: application.AssetFileServerFS(cfg.Assets)},
 		Linux:  application.LinuxOptions{ProgramName: "myspec"},

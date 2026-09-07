@@ -13,6 +13,7 @@ import (
 	"github.com/guilhermt/myspec/internal/git/gittest"
 	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/task"
+	"github.com/guilhermt/myspec/internal/worktree"
 )
 
 // newTask is the request every test starts from.
@@ -347,7 +348,10 @@ func stepFile(number int, title, repo string) string {
 var (
 	prdWriter      = writeBlock("{{prd_path}}", "# PRD")
 	techSpecWriter = writeBlock("{{tech_spec_path}}", "# Tech spec")
-	planWriter     = writeBlock("{{steps_dir}}/1-first.md", stepFile(1, "First", "api")) +
+	// The first step carries a write block of its own: the file is the prompt
+	// of the step session, so the fake CLI writes hello.txt in the worktree it
+	// runs in.
+	planWriter = writeBlock("{{steps_dir}}/1-first.md", stepFile(1, "First", "api")+writeBlock("hello.txt", "hi")) +
 		writeBlock("{{steps_dir}}/2-second.md", stepFile(2, "Second", "api"))
 )
 
@@ -420,6 +424,7 @@ func TestPlanWrittenReachesImplementation(t *testing.T) {
 	t.Parallel()
 
 	f, dir, id := plannedTask(t)
+	f.waitStep(t, id, 1, "awaiting_review")
 
 	summary := f.taskOf(t, id)
 	if !summary.HasPRD || !summary.HasTechSpec {
@@ -428,13 +433,233 @@ func TestPlanWrittenReachesImplementation(t *testing.T) {
 	if len(summary.PlanProblems) != 0 {
 		t.Errorf("planProblems = %+v, want none", summary.PlanProblems)
 	}
+	if summary.CurrentStep != 1 {
+		t.Errorf("currentStep = %d, want 1", summary.CurrentStep)
+	}
+	repo := filepath.Join(dir, "api")
+	wt := worktree.Path(dir, "api", "login-screen")
 	want := []bindings.Step{
-		{Number: 1, File: "1-first.md", Title: "First", Repository: "api", RepoPath: filepath.Join(dir, "api"), Status: "not_started"},
-		{Number: 2, File: "2-second.md", Title: "Second", Repository: "api", RepoPath: filepath.Join(dir, "api"), Status: "not_started"},
+		{
+			Number: 1, File: "1-first.md", Title: "First",
+			Repository: "api", RepoPath: repo, Status: "awaiting_review", WorktreePath: wt,
+		},
+		{
+			Number: 2, File: "2-second.md", Title: "Second",
+			Repository: "api", RepoPath: repo, Status: "not_started", WorktreePath: wt,
+		},
 	}
 	if diff := cmp.Diff(want, summary.Steps); diff != "" {
 		t.Errorf("steps mismatch (-want +got):\n%s", diff)
 	}
+}
+
+func TestAStepRunsInAWorktreeOfItsRepository(t *testing.T) {
+	t.Parallel()
+
+	f, dir, id := plannedTask(t)
+	step := f.waitStep(t, id, 1, "awaiting_review")
+
+	wt := worktree.Path(dir, "api", "login-screen")
+	if step.WorktreePath != wt {
+		t.Errorf("worktreePath = %q, want %q", step.WorktreePath, wt)
+	}
+	if _, err := os.Stat(wt); err != nil {
+		t.Errorf("Stat(%s) = %v, want the worktree to exist", wt, err)
+	}
+	if !hasBranch(t, filepath.Join(dir, "api"), "login-screen") {
+		t.Error("the branch of the task does not exist in the repository")
+	}
+	// The session of the step ran in the worktree, so what the agent wrote is
+	// in it and not in the repository it came from.
+	if _, err := os.Stat(filepath.Join(wt, "hello.txt")); err != nil {
+		t.Errorf("Stat(hello.txt in the worktree) = %v, want the file the step wrote", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "api", "hello.txt")); !os.IsNotExist(err) {
+		t.Errorf("Stat(hello.txt in the repository) = %v, want the repository untouched", err)
+	}
+}
+
+func TestTheConversationOfAStepIsItsOwn(t *testing.T) {
+	t.Parallel()
+
+	f, _, id := plannedTask(t)
+	f.waitStep(t, id, 1, "awaiting_review")
+
+	transcript, err := f.tasks.GetTranscript(id)
+	if err != nil {
+		t.Fatalf("GetTranscript(%s) = %v, want nil", id, err)
+	}
+	if transcript.Stage != "step:1" {
+		t.Errorf("stage = %q, want step:1", transcript.Stage)
+	}
+	if len(transcript.Entries) == 0 {
+		t.Fatal("the conversation of the step is empty")
+	}
+	marker := transcript.Entries[0].Marker
+	if marker == nil || marker.Type != "step_started" || marker.Step != 1 || marker.Restarted {
+		t.Errorf("first entry = %+v, want the first step_started of step 1", transcript.Entries[0])
+	}
+}
+
+func TestDiscardingAStepBlocksOnTheWorkItLeftBehind(t *testing.T) {
+	t.Parallel()
+
+	f, dir, id := plannedTask(t)
+	f.waitStep(t, id, 1, "awaiting_review")
+
+	// The step wrote hello.txt, so its worktree is dirty and starting over
+	// without cleaning it cannot go through.
+	if err := f.tasks.DiscardStep(id, false); err != nil {
+		t.Fatalf("DiscardStep(%s, false) = %v, want nil", id, err)
+	}
+	step := f.waitStep(t, id, 1, "blocked")
+	if step.Block == nil || step.Block.Reason != "dirty_worktree" || step.Block.Files != 1 {
+		t.Fatalf("block = %+v, want one dirty file", step.Block)
+	}
+	if !strings.Contains(step.Block.Detail, "hello.txt") {
+		t.Errorf("detail = %q, want it to name the file git listed", step.Block.Detail)
+	}
+
+	if err := f.tasks.CleanAndStartStep(id); err != nil {
+		t.Fatalf("CleanAndStartStep(%s) = %v, want nil", id, err)
+	}
+	f.waitStep(t, id, 1, "awaiting_review")
+
+	// The new session ran the step file again, in the cleaned worktree.
+	path := filepath.Join(worktree.Path(dir, "api", "login-screen"), "hello.txt")
+	if _, err := os.Stat(path); err != nil {
+		t.Errorf("Stat(%s) = %v, want the file written again", path, err)
+	}
+}
+
+func TestStepOperationsReportWhatTheUserGotWrong(t *testing.T) {
+	t.Parallel()
+
+	f, _, id := plannedTask(t)
+	f.waitStep(t, id, 1, "awaiting_review")
+
+	tests := []struct {
+		name string
+		call func() error
+		want string
+	}{
+		{
+			name: "retry a step that is not blocked",
+			call: func() error { return f.tasks.RetryStep(id) },
+			want: "The step isn't blocked.",
+		},
+		{
+			name: "clean a step that is not blocked by a dirty worktree",
+			call: func() error { return f.tasks.CleanAndStartStep(id) },
+			want: "The worktree isn't what blocks the step.",
+		},
+	}
+
+	for _, tt := range tests {
+		if err := tt.call(); err == nil || err.Error() != tt.want {
+			t.Errorf("%s: error = %v, want %q", tt.name, err, tt.want)
+		}
+	}
+	if f.logged(t, "binding failed") {
+		t.Error("a mistake the user can correct was logged as a failure")
+	}
+}
+
+func TestOpenInEditorOpensTheWorktreeOfTheStep(t *testing.T) {
+	t.Parallel()
+
+	f, _, id := createdTask(t)
+	if err := f.tasks.OpenInEditor(id); err == nil || err.Error() != "The task has no step to run." {
+		t.Errorf("OpenInEditor() error = %v, want the missing step notice", err)
+	}
+
+	planned, dir, plannedID := plannedTask(t)
+	planned.waitStep(t, plannedID, 1, "awaiting_review")
+
+	if err := planned.tasks.OpenInEditor(plannedID); err != nil {
+		t.Fatalf("OpenInEditor(%s) = %v, want nil", plannedID, err)
+	}
+	want := []string{worktree.Path(dir, "api", "login-screen")}
+	if diff := cmp.Diff(want, planned.editor.opened()); diff != "" {
+		t.Errorf("opened folders mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestOpenInEditorWaitsForTheWorktree(t *testing.T) {
+	t.Parallel()
+
+	f, _ := repoWorkspace(t)
+	f.seedPrompt(t, prompts.StagePRD, prdWriter)
+	f.seedPrompt(t, prompts.StageTechSpec, techSpecWriter)
+	// A step of a repository the workspace does not have never gets a
+	// worktree, which is what leaves the editor with nothing to open.
+	f.seedPrompt(t, prompts.StagePlan, writeBlock("{{steps_dir}}/1-first.md", stepFile(1, "First", "api")))
+
+	id, err := f.tasks.CreateTask(newTask("login-screen"))
+	if err != nil {
+		t.Fatalf("CreateTask() = %v, want nil", err)
+	}
+	f.waitStage(t, id, "implementation")
+
+	// The worktree is only registered once the preparation gets that far, so
+	// the answer before it does is that there is none yet.
+	if err := f.tasks.OpenInEditor(id); err != nil && err.Error() != "The worktree doesn't exist yet." {
+		t.Errorf("OpenInEditor() error = %v, want the missing worktree notice", err)
+	}
+}
+
+func TestDiscardingThePlanRemovesTheWorktrees(t *testing.T) {
+	t.Parallel()
+
+	f, dir, id := plannedTask(t)
+	f.waitStep(t, id, 1, "awaiting_review")
+	wt := worktree.Path(dir, "api", "login-screen")
+
+	if err := f.tasks.DiscardStage(id, "plan"); err != nil {
+		t.Fatalf("DiscardStage(%s, plan) = %v, want nil", id, err)
+	}
+	f.waitStage(t, id, "plan")
+
+	assertWorktreeGone(t, wt, filepath.Join(dir, "api"))
+	if steps := f.taskOf(t, id).Steps; len(steps) != 0 {
+		t.Errorf("steps = %+v, want the plan thrown away", steps)
+	}
+}
+
+func TestDeleteTaskRemovesTheWorktrees(t *testing.T) {
+	t.Parallel()
+
+	f, dir, id := plannedTask(t)
+	f.waitStep(t, id, 1, "awaiting_review")
+	wt := worktree.Path(dir, "api", "login-screen")
+
+	if err := f.tasks.DeleteTask(id); err != nil {
+		t.Fatalf("DeleteTask(%s) = %v, want nil", id, err)
+	}
+	if tasks := f.workspace.GetState().Tasks; len(tasks) != 0 {
+		t.Errorf("state has %d tasks, want none", len(tasks))
+	}
+	assertWorktreeGone(t, wt, filepath.Join(dir, "api"))
+}
+
+// assertWorktreeGone checks that neither the worktree of a task nor its branch
+// is left in the repository.
+func assertWorktreeGone(t *testing.T, wt, repo string) {
+	t.Helper()
+
+	if _, err := os.Stat(wt); !os.IsNotExist(err) {
+		t.Errorf("Stat(%s) = %v, want the worktree to be gone", wt, err)
+	}
+	if hasBranch(t, repo, "login-screen") {
+		t.Error("the branch of the task is still in the repository")
+	}
+}
+
+// hasBranch reports whether repo has a local branch by that name.
+func hasBranch(t *testing.T, repo, branch string) bool {
+	t.Helper()
+
+	return gittest.Run(t, repo, "branch", "--list", branch) != ""
 }
 
 func TestInvalidPlanIsCorrected(t *testing.T) {
@@ -569,26 +794,6 @@ func TestContinueRequiresAFinishedStage(t *testing.T) {
 	}
 	if f.logged(t, "binding failed") {
 		t.Error("a mistake the user can correct was logged as a failure")
-	}
-}
-
-func TestGetTranscriptOfAPlannedTaskIsEmpty(t *testing.T) {
-	t.Parallel()
-
-	f, _, id := plannedTask(t)
-
-	transcript, err := f.tasks.GetTranscript(id)
-	if err != nil {
-		t.Fatalf("GetTranscript(%s) = %v, want nil", id, err)
-	}
-	want := bindings.Transcript{
-		TaskID:  id,
-		Stage:   "implementation",
-		Entries: []bindings.Entry{},
-		Pending: []bindings.Entry{},
-	}
-	if diff := cmp.Diff(want, transcript); diff != "" {
-		t.Errorf("transcript mismatch (-want +got):\n%s", diff)
 	}
 }
 
