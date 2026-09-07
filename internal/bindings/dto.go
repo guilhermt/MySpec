@@ -50,6 +50,16 @@ type State struct {
 // changes.
 const EventTranscriptChanged = "transcript:changed"
 
+// StepBlock is why a step is blocked.
+type StepBlock struct {
+	// Reason is dirty_worktree, fetch_failed, no_base_branch, path_exists,
+	// branch_exists, git_failed or no_repository, a string for the same reason
+	// as Notice.Reason.
+	Reason string `json:"reason"`
+	Detail string `json:"detail"` // what git said, or the status lines of a dirty worktree
+	Files  int    `json:"files"`  // dirty worktree only
+}
+
 // Step is one step of the plan of a task.
 type Step struct {
 	Number int    `json:"number"`
@@ -59,8 +69,13 @@ type Step struct {
 	// repository of the task matches it.
 	Repository string `json:"repository"`
 	RepoPath   string `json:"repoPath"`
-	// Status is not_started; a string for the same reason as Notice.Reason.
+	// Status is not_started, preparing, blocked, implementing or
+	// awaiting_review, a string for the same reason as Notice.Reason.
 	Status string `json:"status"`
+	// Phase is fetching, creating or checking while preparing; "" otherwise.
+	Phase        string     `json:"phase"`
+	Block        *StepBlock `json:"block"`        // blocked only
+	WorktreePath string     `json:"worktreePath"` // "" until the worktree exists
 }
 
 // PlanProblem is one reason the step files are not a valid plan.
@@ -92,6 +107,7 @@ type TaskSummary struct {
 	HasPRD          bool          `json:"hasPrd"`
 	HasTechSpec     bool          `json:"hasTechSpec"`
 	Steps           []Step        `json:"steps"`        // never nil
+	CurrentStep     int           `json:"currentStep"`  // the step that runs or runs next; 0 when the task has no steps
 	PlanProblems    []PlanProblem `json:"planProblems"` // never nil
 	CanContinue     bool          `json:"canContinue"`
 	ArtifactVersion int           `json:"artifactVersion"`
@@ -176,11 +192,14 @@ type QuestionEntry struct {
 // MarkerEntry is a milestone of the conversation.
 type MarkerEntry struct {
 	// Type is prd_written, prd_updated, tech_spec_written, tech_spec_updated,
-	// plan_written, plan_updated, stage_started, compacted or interrupted.
+	// plan_written, plan_updated, stage_started, step_started, compacted or
+	// interrupted.
 	Type      string `json:"type"`
 	PreTokens int    `json:"preTokens"`
-	// Stage and Restarted belong to stage_started alone.
+	// Stage belongs to stage_started alone and Step to step_started alone;
+	// Restarted belongs to both.
 	Stage     string `json:"stage"`
+	Step      int    `json:"step"`
 	Restarted bool   `json:"restarted"`
 }
 

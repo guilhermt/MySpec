@@ -4,21 +4,25 @@ import {
   answerPermission,
   answerQuestion,
   backToStage,
+  cleanAndStartStep,
   continueStage,
   createTask,
   deleteTask,
   discardStage,
+  discardStep,
   dismissNotice,
   interrupt,
   loadTranscript,
   openExternal,
   openFolderDialog,
+  openInEditor,
   openPath,
   pause,
   removePending,
   removeRecent,
   resume,
   retry,
+  retryStep,
   sendMessage,
   setTheme,
 } from "@/store/actions";
@@ -84,6 +88,10 @@ describe("task actions", () => {
     await backToStage("task-1", "prd");
     await discardStage("task-1", "tech_spec");
     await continueStage("task-1");
+    await retryStep("task-1");
+    await cleanAndStartStep("task-1");
+    await discardStep("task-1", true);
+    await openInEditor("task-1");
 
     expect(api.deleteTask).toHaveBeenCalledWith("task-1");
     expect(api.sendMessage).toHaveBeenCalledWith("task-1", "go on");
@@ -100,6 +108,10 @@ describe("task actions", () => {
     expect(api.backToStage).toHaveBeenCalledWith("task-1", "prd");
     expect(api.discardStage).toHaveBeenCalledWith("task-1", "tech_spec");
     expect(api.continueStage).toHaveBeenCalledWith("task-1");
+    expect(api.retryStep).toHaveBeenCalledWith("task-1");
+    expect(api.cleanAndStartStep).toHaveBeenCalledWith("task-1");
+    expect(api.discardStep).toHaveBeenCalledWith("task-1", true);
+    expect(api.openInEditor).toHaveBeenCalledWith("task-1");
     expect(useAppStore.getState().error).toBeNull();
   });
 

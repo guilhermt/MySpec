@@ -126,7 +126,12 @@ export function ArtifactPanel({ task }: ArtifactPanelProps) {
 
       <div className="min-h-0 flex-1 overflow-y-auto p-6">
         {view === "steps" ? (
-          <StepList steps={steps} problems={task.planProblems ?? []} onOpen={openStepFile} />
+          <StepList
+            steps={steps}
+            problems={task.planProblems ?? []}
+            currentStep={task.currentStep}
+            onOpen={openStepFile}
+          />
         ) : (
           <>
             {artifact.status === "empty" && <Empty />}

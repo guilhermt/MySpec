@@ -9,3 +9,4 @@ exclude:
     - ^internal/app/
     - ^main\.go$
     - ^internal/claude/claudetest/
+    - ^internal/git/gittest/

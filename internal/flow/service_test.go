@@ -32,7 +32,7 @@ func TestAStageEndsOnlyWhenTheSessionIsIdle(t *testing.T) {
 	f.wantTaskCalls(t, "stage:task-1:tech_spec:revisiting=false")
 }
 
-func TestAFinishedPlanReachesImplementationWithoutASession(t *testing.T) {
+func TestAFinishedPlanReachesImplementationAndStartsAStep(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
@@ -42,8 +42,13 @@ func TestAFinishedPlanReachesImplementationWithoutASession(t *testing.T) {
 	f.service.Check("task-1")
 	f.waitStage(t, "task-1", task.StageImplementation)
 
-	f.wantCalls(t, "close:task-1")
-	f.wantTaskCalls(t, "stage:task-1:implementation:revisiting=false")
+	// The stage itself has no conversation: the first step of the plan does.
+	f.waitCalls(t, "close:task-1", "start:task-1:step:1:restarted=false")
+	f.wantTaskCalls(t,
+		"stage:task-1:implementation:revisiting=false",
+		"step:task-1:1:preparing",
+		"step:task-1:1:started",
+	)
 }
 
 func TestAnInvalidPlanIsCorrectedUpToThreeTimes(t *testing.T) {
@@ -232,7 +237,14 @@ func TestSyncOpensTheSessionsAndAdvancesWhatIsDone(t *testing.T) {
 	f := newFixture(t)
 	f.tasks.add("task-1", task.StagePRD, task.Artifacts{PRD: true})
 	f.tasks.add("task-2", task.StagePRD, task.Artifacts{})
+	// A step already blocked keeps task-3 from starting anything of its own,
+	// which the step tests cover on their own.
 	f.tasks.add("task-3", task.StageImplementation, task.Artifacts{PRD: true, TechSpec: true, Plan: plan()})
+	f.tasks.setStepRun("task-3", task.StepRun{
+		Number: 1,
+		Status: task.StepBlocked,
+		Block:  &task.StepBlock{Reason: task.BlockDirty},
+	})
 
 	f.service.Sync(t.Context())
 	f.waitStage(t, "task-1", task.StageTechSpec)

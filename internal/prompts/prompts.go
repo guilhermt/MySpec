@@ -1,5 +1,7 @@
 // Package prompts owns the session prompts: the defaults embedded in the
-// binary, the editable copies in the data directory and their rendering.
+// binary, the editable copies in the data directory and their rendering. The
+// prompt of a step is the step file itself, which the app writes, so it has
+// no default and no copy here.
 package prompts
 
 import (
@@ -28,6 +30,9 @@ const (
 	StageTechSpec Stage = "tech_spec"
 	StagePlan     Stage = "plan"
 )
+
+// StageStep is the prompt of a step session: the step file itself.
+const StageStep Stage = "step"
 
 // dirPerm and filePerm keep the prompts private to the user.
 const (
@@ -112,6 +117,7 @@ type Vars struct {
 	StepsDir       string
 	Repositories   []string // paths relative to the session directory
 	InitialContext string   // PRD only
+	StepPath       string   // StageStep only: the file whose content is the prompt
 }
 
 // repositoryList renders paths as the Markdown list a prompt shows the agent.
@@ -130,8 +136,17 @@ func repositoryList(paths []string) string {
 // Render reads the prompt file for stage and replaces its placeholders. A
 // prompt the user edited may have lost a placeholder, which is not an error;
 // a prompt with an initial context to pass and no placeholder for it gets the
-// context appended, so that what the user wrote is never dropped.
+// context appended, so that what the user wrote is never dropped. StageStep
+// is the exception: the step file is sent verbatim.
 func Render(dataDir string, stage Stage, vars Vars) (string, error) {
+	if stage == StageStep {
+		raw, err := os.ReadFile(vars.StepPath)
+		if err != nil {
+			return "", fmt.Errorf("read step %s: %w", vars.StepPath, err)
+		}
+		return string(raw), nil
+	}
+
 	path := pathFor(dataDir, stage)
 	raw, err := os.ReadFile(path)
 	if err != nil {

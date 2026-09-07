@@ -49,6 +49,12 @@ export const api = {
   backToStage: vi.fn<(taskId: string, stage: TaskStage) => Promise<void>>(() => Promise.resolve()),
   discardStage: vi.fn<(taskId: string, stage: TaskStage) => Promise<void>>(() => Promise.resolve()),
   continueStage: vi.fn<(taskId: string) => Promise<void>>(() => Promise.resolve()),
+  retryStep: vi.fn<(taskId: string) => Promise<void>>(() => Promise.resolve()),
+  cleanAndStartStep: vi.fn<(taskId: string) => Promise<void>>(() => Promise.resolve()),
+  discardStep: vi.fn<(taskId: string, cleanWorktree: boolean) => Promise<void>>(() =>
+    Promise.resolve(),
+  ),
+  openInEditor: vi.fn<(taskId: string) => Promise<void>>(() => Promise.resolve()),
   openExternal: vi.fn<(url: string) => Promise<void>>(() => Promise.resolve()),
 };
 
@@ -134,6 +140,7 @@ export function makeTask(overrides: Partial<TaskSummary> = {}): TaskSummary {
     hasPrd: false,
     hasTechSpec: false,
     steps: [],
+    currentStep: 0,
     planProblems: [],
     canContinue: false,
     artifactVersion: 0,
@@ -152,6 +159,9 @@ export function makeStep(overrides: Partial<Step> = {}): Step {
     repository: "web",
     repoPath: "/home/dev/projects/web",
     status: "not_started",
+    phase: "",
+    block: null,
+    worktreePath: "",
     ...overrides,
   };
 }
@@ -241,7 +251,7 @@ function payloadOf(kind: EntryKind): Omit<Entry, "id" | "seq" | "turnId" | "kind
     case "marker":
       return {
         ...empty,
-        marker: { type: "prd_written", preTokens: 0, stage: "", restarted: false },
+        marker: { type: "prd_written", preTokens: 0, stage: "", step: 0, restarted: false },
       };
     case "error":
       return {

@@ -1,3 +1,4 @@
+import { currentStepDisplay } from "@/features/task/step-status";
 import { stageLabel } from "@/lib/stages";
 import type { TaskSummary } from "@/lib/wails";
 import { asSessionStatus, asTaskStage } from "@/lib/wails";
@@ -7,9 +8,14 @@ export type StatusTone = "working" | "attention" | "paused" | "error" | "done" |
 
 /** taskStatusLabel is the one word the tree, the list and the header show. */
 export function taskStatusLabel(task: TaskSummary): string {
-  // The implementation stage has no conversation, so the steps carry the state.
+  // The implementation stage has no conversation of its own: the current step
+  // carries the state, and its number places the task in the plan.
   if (asTaskStage(task.stage) === "implementation") {
-    return `0 of ${(task.steps ?? []).length} steps`;
+    const { label } = currentStepDisplay(task);
+    if (task.currentStep === 0) {
+      return label;
+    }
+    return `Step ${task.currentStep} of ${(task.steps ?? []).length} · ${label}`;
   }
   switch (asSessionStatus(task.sessionStatus)) {
     case "paused":
@@ -28,7 +34,7 @@ export function taskStatusLabel(task: TaskSummary): string {
 /** taskStatusTone maps a status to the colour that carries it. */
 export function taskStatusTone(task: TaskSummary): StatusTone {
   if (asTaskStage(task.stage) === "implementation") {
-    return "idle";
+    return currentStepDisplay(task).tone;
   }
   switch (asSessionStatus(task.sessionStatus)) {
     case "paused":

@@ -143,6 +143,7 @@ const (
 	MarkerPlanWritten     MarkerType = "plan_written"
 	MarkerPlanUpdated     MarkerType = "plan_updated"
 	MarkerStageStarted    MarkerType = "stage_started"
+	MarkerStepStarted     MarkerType = "step_started"
 	MarkerCompacted       MarkerType = "compacted"
 	MarkerInterrupted     MarkerType = "interrupted"
 )
@@ -187,7 +188,8 @@ type MarkerEntry struct {
 	Type      MarkerType `json:"type"`
 	PreTokens int        `json:"preTokens"` // compacted only
 	Stage     string     `json:"stage"`     // stage_started only
-	Restarted bool       `json:"restarted"` // stage_started only: the stage was started again
+	Step      int        `json:"step"`      // step_started only
+	Restarted bool       `json:"restarted"` // stage_started and step_started only: it was started again
 }
 
 // ErrorKind says what went wrong.

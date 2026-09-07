@@ -6,8 +6,10 @@ import { Conversation } from "@/features/chat/Conversation";
 import { ArtifactPanel } from "@/features/task/ArtifactPanel";
 import { PlanProblemsNotice } from "@/features/task/PlanProblemsNotice";
 import { StageTrack } from "@/features/task/StageTrack";
-import { StepsView } from "@/features/task/StepsView";
+import { StepBar } from "@/features/task/StepBar";
+import { StepPane } from "@/features/task/StepPane";
 import { hasArtifacts } from "@/features/task/status";
+import { currentStepOf, hasStepSession } from "@/features/task/step-status";
 import { TaskHeader } from "@/features/task/TaskHeader";
 import { asTaskStage } from "@/lib/wails";
 import { loadTranscript } from "@/store/actions";
@@ -55,8 +57,10 @@ export function TaskView({ taskId }: TaskViewProps) {
 
   const anyArtifact = task !== null && hasArtifacts(task);
   const implementing = task !== null && asTaskStage(task.stage) === "implementation";
-  // The implementation stage has no conversation to fetch.
-  const hasConversation = task !== null && !implementing;
+  const step = task !== null && implementing ? currentStepOf(task) : null;
+  // In the implementation stage the conversation is the one of the step, which
+  // is there only once the step opened a session of its own.
+  const hasConversation = task !== null && (!implementing || hasStepSession(step));
 
   // The conversation is fetched once and then kept: leaving the task and coming
   // back costs nothing, and the events keep being applied while it is away. It
@@ -116,7 +120,10 @@ export function TaskView({ taskId }: TaskViewProps) {
           className="flex min-w-0 flex-col"
         >
           {implementing ? (
-            <StepsView task={task} />
+            <>
+              <StepBar task={task} />
+              <StepPane task={task} />
+            </>
           ) : (
             <>
               <Conversation taskId={task.id} />

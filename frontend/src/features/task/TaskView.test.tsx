@@ -36,10 +36,47 @@ describe("TaskView", () => {
     expect(screen.getByText("Closing")).toBeInTheDocument();
   });
 
-  it("shows the steps instead of a conversation once the task is implementing", () => {
-    view({ stage: "implementation", steps: [makeStep()] });
+  it("shows the step being run instead of a conversation of its own", () => {
+    view({
+      stage: "implementation",
+      steps: [makeStep({ status: "preparing", phase: "fetching" })],
+      currentStep: 1,
+    });
 
-    expect(screen.getByRole("heading", { name: "Steps" })).toBeInTheDocument();
+    expect(screen.getByText("Step 1 of 1")).toBeInTheDocument();
+    // The bar names the phase next to the step, the pane in the empty space
+    // where the conversation will be.
+    expect(screen.getAllByText("Fetching origin…")).toHaveLength(2);
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    expect(api.getTranscript).not.toHaveBeenCalled();
+  });
+
+  it("fetches the conversation of a step that opened a session", async () => {
+    view({
+      stage: "implementation",
+      steps: [makeStep({ status: "implementing", worktreePath: "/w/api/add-login" })],
+      currentStep: 1,
+    });
+
+    expect(screen.getByRole("textbox")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(api.getTranscript).toHaveBeenCalledWith("task-1");
+    });
+  });
+
+  it("shows no conversation while the step is blocked", () => {
+    view({
+      stage: "implementation",
+      steps: [
+        makeStep({
+          status: "blocked",
+          block: { reason: "fetch_failed", detail: "fatal: unable to access", files: 0 },
+        }),
+      ],
+      currentStep: 1,
+    });
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Couldn't fetch origin");
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
     expect(api.getTranscript).not.toHaveBeenCalled();
   });

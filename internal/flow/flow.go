@@ -13,16 +13,22 @@ import (
 	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
+	"github.com/guilhermt/myspec/internal/worktree"
 )
 
 // Tasks is what the flow needs from internal/task.
 type Tasks interface {
 	Get(id string) (task.Task, bool)
 	List() []task.Task
+	Artifacts(id string) (task.Artifacts, bool) // the last inspection, for snapshots
 	Inspect(id string) (task.Artifacts, error)
 	SetStage(ctx context.Context, id string, stage task.Stage, revisiting bool) (task.Task, error)
 	RemoveArtifacts(ctx context.Context, id string, from task.Stage) error
 	Repositories(t task.Task) []task.Repository
+	StepRuns(id string) []task.StepRun
+	SetStepRun(ctx context.Context, id string, number int, status task.StepStatus, block *task.StepBlock) (task.StepRun, error)
+	ClearStepRuns(ctx context.Context, id string) error
+	Delete(ctx context.Context, id string) error
 }
 
 // Sessions is what the flow needs from internal/session.
@@ -35,11 +41,24 @@ type Sessions interface {
 	SendFromApp(ctx context.Context, taskID, text string) error
 }
 
+// Worktrees is what the flow needs from internal/worktree.
+type Worktrees interface {
+	Get(taskID, repoPath string) (worktree.Worktree, bool)
+	Ensure(ctx context.Context, t task.Task, repo task.Repository, onPhase func(worktree.Phase)) (worktree.Worktree, error)
+	Status(ctx context.Context, wt worktree.Worktree) (worktree.Status, error)
+	Clean(ctx context.Context, wt worktree.Worktree) error
+	RemoveAll(ctx context.Context, taskID string) error
+}
+
 // Deps are what Service needs from the outside.
 type Deps struct {
-	Tasks    Tasks
-	Sessions Sessions
-	Log      *slog.Logger
+	Tasks     Tasks
+	Sessions  Sessions
+	Worktrees Worktrees
+	Log       *slog.Logger
+	// OnChange says that the in-memory state of a step changed, which is what
+	// the phases of a preparation are; it may be nil.
+	OnChange func(taskID string)
 }
 
 // MaxCorrections is how many times the app corrects an invalid plan on its
@@ -59,9 +78,11 @@ var (
 
 // Service is the state machine of every task of the open workspace.
 type Service struct {
-	tasks    Tasks
-	sessions Sessions
-	log      *slog.Logger
+	tasks     Tasks
+	sessions  Sessions
+	worktrees Worktrees
+	log       *slog.Logger
+	onChange  func(taskID string)
 
 	mu     sync.Mutex
 	locks  map[string]*taskLock // by task id
@@ -70,8 +91,11 @@ type Service struct {
 
 // taskLock serializes the work on one task and coalesces its pending checks.
 type taskLock struct {
-	mu     sync.Mutex
-	queued bool
+	mu        sync.Mutex
+	queued    bool
+	preparing bool               // a prepare goroutine exists for the task
+	cancel    context.CancelFunc // cancels it; nil when there is none
+	phase     Phase              // what that goroutine is doing
 }
 
 // TaskInfo is what the session of a task needs to know about it at the stage
@@ -86,7 +110,8 @@ func TaskInfo(t task.Task, a task.Artifacts, repos []task.Repository) session.Ta
 		Name:           t.Name,
 		Dir:            t.Dir(),
 		ArtifactsDir:   t.ArtifactsDir,
-		Stage:          prompts.Stage(t.Stage),
+		Stage:          string(t.Stage),
+		Prompt:         prompts.Stage(t.Stage),
 		PRDPath:        t.PRDPath(),
 		TechSpecPath:   t.TechSpecPath(),
 		StepsDir:       t.StepsDir(),

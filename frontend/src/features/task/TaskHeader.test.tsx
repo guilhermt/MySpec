@@ -62,11 +62,21 @@ describe("TaskHeader", () => {
     expect(screen.getByRole("button", { name: "Pause" })).toBeDisabled();
   });
 
-  it("has nothing to pause once the task is implementing", () => {
-    header({ stage: "implementation" });
+  it("has nothing to pause while the step has no session yet", () => {
+    header({ stage: "implementation", steps: [makeStep({ status: "preparing" })], currentStep: 1 });
 
     expect(screen.queryByRole("button", { name: "Pause" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Resume" })).not.toBeInTheDocument();
+  });
+
+  it("pauses the session of the step being implemented", () => {
+    header({
+      stage: "implementation",
+      steps: [makeStep({ status: "implementing" })],
+      currentStep: 1,
+    });
+
+    expect(screen.getByRole("button", { name: "Pause" })).toBeInTheDocument();
   });
 
   it("says the panel is empty until an artifact exists", async () => {
@@ -105,6 +115,16 @@ describe("TaskHeader", () => {
     await user.click(screen.getByRole("button", { name: "Delete" }));
 
     expect(api.deleteTask).toHaveBeenCalledWith("task-1");
+  });
+
+  it("warns about the worktrees when the task is implementing", async () => {
+    const { user } = header({ stage: "implementation" });
+
+    await user.click(screen.getByRole("button", { name: "Delete task" }));
+
+    expect(await screen.findByRole("alertdialog")).toHaveTextContent(
+      "The worktrees and branches of the task are removed too, with any uncommitted work in them.",
+    );
   });
 
   it("keeps the task when the confirmation is refused", async () => {

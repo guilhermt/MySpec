@@ -27,6 +27,7 @@ export type {
     Repo,
     State,
     Step,
+    StepBlock,
     TaskSummary,
     Transcript,
     TranscriptEvent,

@@ -17,12 +17,15 @@ import (
 	"github.com/guilhermt/myspec/internal/claude"
 	"github.com/guilhermt/myspec/internal/claude/claudetest"
 	"github.com/guilhermt/myspec/internal/flow"
+	"github.com/guilhermt/myspec/internal/git"
+	"github.com/guilhermt/myspec/internal/git/gittest"
 	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/store"
 	"github.com/guilhermt/myspec/internal/task"
 	"github.com/guilhermt/myspec/internal/theme"
 	"github.com/guilhermt/myspec/internal/workspace"
+	"github.com/guilhermt/myspec/internal/worktree"
 )
 
 // TestMain lets the test binary stand in for the claude CLI: a child process
@@ -86,6 +89,29 @@ func (b *syncBuffer) String() string {
 	return b.buf.String()
 }
 
+// fakeEditor stands in for VS Code, recording the folder it was asked to open.
+type fakeEditor struct {
+	mu    sync.Mutex
+	paths []string
+	err   error
+}
+
+func (e *fakeEditor) open(path string) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	e.paths = append(e.paths, path)
+	return e.err
+}
+
+// opened are the folders the editor was asked to open, in order.
+func (e *fakeEditor) opened() []string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	return slices.Clone(e.paths)
+}
+
 // fakePicker stands in for the native folder chooser.
 type fakePicker struct {
 	path    string
@@ -112,9 +138,11 @@ type fixture struct {
 	store     *store.Store
 	taskSvc   *task.Service
 	sessions  *session.Service
+	worktrees *worktree.Service
 	flow      *flow.Service
 	dataDir   string
 	picker    *fakePicker
+	editor    *fakeEditor
 	logs      *syncBuffer
 
 	mu          sync.Mutex
@@ -137,7 +165,13 @@ func newFixture(t *testing.T) *fixture {
 	}
 	t.Cleanup(func() { _ = st.Close() })
 
-	f := &fixture{store: st, picker: &fakePicker{}, logs: logs, corrections: map[string]int{}}
+	f := &fixture{
+		store:       st,
+		picker:      &fakePicker{},
+		editor:      &fakeEditor{},
+		logs:        logs,
+		corrections: map[string]int{},
+	}
 
 	f.theme, err = theme.New(t.Context(), st.Settings, false, log, func() {})
 	if err != nil {
@@ -186,12 +220,23 @@ func newFixture(t *testing.T) *fixture {
 	}
 	t.Cleanup(func() { _ = f.taskSvc.Close() })
 
-	f.flow = flow.New(flow.Deps{Tasks: f.taskSvc, Sessions: f.sessions, Log: log})
+	f.worktrees = worktree.New(worktree.Deps{
+		Git:   git.New(git.Deps{Log: log, Env: gittest.Env(t)}),
+		Store: st.Worktrees,
+		Log:   log,
+	})
+	f.flow = flow.New(flow.Deps{
+		Tasks:     f.taskSvc,
+		Sessions:  f.sessions,
+		Worktrees: f.worktrees,
+		Log:       log,
+		OnChange:  func(string) {},
+	})
 	t.Cleanup(f.flow.Close)
 
 	f.workspace = bindings.NewWorkspaceService(f.ws, f.snapshot, f.picker, log)
 	f.settings = bindings.NewSettingsService(f.theme, log)
-	f.tasks = bindings.NewTaskService(f.taskSvc, f.sessions, f.flow, log)
+	f.tasks = bindings.NewTaskService(f.taskSvc, f.sessions, f.flow, f.editor.open, log)
 	return f
 }
 
@@ -286,6 +331,29 @@ func (f *fixture) waitStage(t *testing.T, id, stage string) {
 	t.Fatalf("stage of task %s = %q, want %q", id, last, stage)
 }
 
+// waitStep waits until a step of a task reaches status, failing the test when
+// it does not in time.
+func (f *fixture) waitStep(t *testing.T, id string, number int, status string) bindings.Step {
+	t.Helper()
+
+	deadline := time.Now().Add(pollTimeout)
+	last := ""
+	for time.Now().Before(deadline) {
+		for _, step := range f.taskOf(t, id).Steps {
+			if step.Number != number {
+				continue
+			}
+			last = step.Status
+			if last == status {
+				return step
+			}
+		}
+		time.Sleep(pollStep)
+	}
+	t.Fatalf("status of step %d of task %s = %q, want %q", number, id, last, status)
+	return bindings.Step{}
+}
+
 // open opens dir as the workspace and loads its tasks, the way internal/app
 // does on every workspace change.
 func (f *fixture) open(t *testing.T, dir string) {
@@ -296,6 +364,14 @@ func (f *fixture) open(t *testing.T, dir string) {
 	}
 	if err := f.taskSvc.Sync(t.Context(), dir); err != nil {
 		t.Fatalf("Sync(%s) = %v, want nil", dir, err)
+	}
+	loaded := f.taskSvc.List()
+	ids := make([]string, len(loaded))
+	for i, one := range loaded {
+		ids[i] = one.ID
+	}
+	if err := f.worktrees.Sync(t.Context(), ids); err != nil {
+		t.Fatalf("worktrees.Sync() = %v, want nil", err)
 	}
 	f.flow.Sync(t.Context())
 }
@@ -394,7 +470,7 @@ func (f *fixture) snapshot() bindings.State {
 		Theme:      string(f.theme.Preference()),
 		SystemDark: f.theme.SystemDark(),
 		Notice:     bindings.FromNotice(f.ws.Notice()),
-		Tasks:      bindings.FromTasks(f.taskSvc.List(), f.taskArtifacts, f.sessions.Summaries()),
+		Tasks:      bindings.FromTasks(f.taskSvc.List(), f.taskArtifacts, f.flow.Steps, f.sessions.Summaries()),
 	}
 }
 

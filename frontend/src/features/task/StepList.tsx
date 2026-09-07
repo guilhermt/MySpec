@@ -1,4 +1,6 @@
 import { Badge } from "@/components/ui/badge";
+import { ToneDot } from "@/features/task/StatusDot";
+import { stepStatusLabel, stepStatusTone } from "@/features/task/step-status";
 import { findNode } from "@/features/tree/tree-model";
 import { cn } from "@/lib/utils";
 import type { PlanProblem, State, Step } from "@/lib/wails";
@@ -8,7 +10,7 @@ const ROW = "flex w-full items-center gap-3 rounded-md px-2 py-1.5 text-left tex
 
 // A step names its repository the way the plan wrote it; the list shows the
 // name the tree gives that repository, which is what the user recognises.
-function repoLabel(app: State | null, step: Step): string {
+export function repoLabel(app: State | null, step: Step): string {
   if (app === null) {
     return step.repository;
   }
@@ -42,7 +44,7 @@ function Problems({ problems }: { problems: readonly PlanProblem[] }) {
 }
 
 /** Row is one step, in the order the plan gave it. */
-function Row({ step, app }: { step: Step; app: State | null }) {
+function Row({ step, app, current }: { step: Step; app: State | null; current: boolean }) {
   const label = repoLabel(app, step);
 
   return (
@@ -57,7 +59,15 @@ function Row({ step, app }: { step: Step; app: State | null }) {
           {label}
         </Badge>
       )}
-      <span className="shrink-0 text-xs text-muted-foreground">Not started</span>
+      <span
+        className={cn(
+          "flex shrink-0 items-center gap-1.5 text-xs",
+          !current && "text-muted-foreground",
+        )}
+      >
+        <ToneDot tone={stepStatusTone(step)} />
+        {stepStatusLabel(step)}
+      </span>
     </>
   );
 }
@@ -65,35 +75,42 @@ function Row({ step, app }: { step: Step; app: State | null }) {
 export interface StepListProps {
   steps: readonly Step[];
   problems: readonly PlanProblem[];
+  /** currentStep is the step being run, 0 when none is. */
+  currentStep: number;
   /** onOpen makes each step a way into the file behind it. */
   onOpen?: (step: Step) => void;
 }
 
 /** StepList is the plan of a task: what will be built, in which repository. */
-export function StepList({ steps, problems, onOpen }: StepListProps) {
+export function StepList({ steps, problems, currentStep, onOpen }: StepListProps) {
   const app = useAppStore((state) => state.app);
 
   return (
     <div className="flex flex-col gap-3">
       {problems.length > 0 && <Problems problems={problems} />}
       <ol className="flex flex-col">
-        {steps.map((step) => (
-          <li key={step.file}>
-            {onOpen === undefined ? (
-              <div className={ROW}>
-                <Row step={step} app={app} />
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => onOpen(step)}
-                className={cn(ROW, "transition-colors hover:bg-accent")}
-              >
-                <Row step={step} app={app} />
-              </button>
-            )}
-          </li>
-        ))}
+        {steps.map((step) => {
+          const current = step.number === currentStep;
+          const highlight = current && "bg-accent/60 font-medium";
+
+          return (
+            <li key={step.file} aria-current={current ? "step" : undefined}>
+              {onOpen === undefined ? (
+                <div className={cn(ROW, highlight)}>
+                  <Row step={step} app={app} current={current} />
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => onOpen(step)}
+                  className={cn(ROW, "transition-colors hover:bg-accent", highlight)}
+                >
+                  <Row step={step} app={app} current={current} />
+                </button>
+              )}
+            </li>
+          );
+        })}
       </ol>
     </div>
   );

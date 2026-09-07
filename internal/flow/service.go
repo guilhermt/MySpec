@@ -11,10 +11,12 @@ import (
 // New builds a Service from deps.
 func New(deps Deps) *Service {
 	s := &Service{
-		tasks:    deps.Tasks,
-		sessions: deps.Sessions,
-		log:      deps.Log,
-		locks:    map[string]*taskLock{},
+		tasks:     deps.Tasks,
+		sessions:  deps.Sessions,
+		worktrees: deps.Worktrees,
+		log:       deps.Log,
+		onChange:  deps.OnChange,
+		locks:     map[string]*taskLock{},
 	}
 	if s.log == nil {
 		s.log = slog.New(slog.DiscardHandler)
@@ -120,6 +122,10 @@ func (s *Service) advance(ctx context.Context, t task.Task) error {
 	s.log.Info("stage advanced", "task", t.ID, "from", string(t.Stage), "to", string(next))
 
 	if !next.HasSession() {
+		// Implementation has no conversation of its own: its first step does.
+		if next == task.StageImplementation {
+			return s.beginStep(ctx, moved)
+		}
 		return nil
 	}
 	return s.start(ctx, moved, false)
@@ -139,6 +145,8 @@ func (s *Service) start(ctx context.Context, t task.Task, restarted bool) error 
 // the artifacts of every stage after it. The target is the PRD or the tech
 // spec, and the task waits for Continue from there on.
 func (s *Service) Back(ctx context.Context, id string, target task.Stage) error {
+	s.abortPrepare(id)
+
 	l := s.lockOf(id)
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -152,6 +160,11 @@ func (s *Service) Back(ctx context.Context, id string, target task.Stage) error 
 		return fmt.Errorf("back to %s from %s: %w", target, t.Stage, ErrInvalidTarget)
 	}
 
+	// The worktrees and the branches of the steps go before anything else, so
+	// that one git cannot remove leaves the task exactly as it was.
+	if err := s.tearDownSteps(ctx, t); err != nil {
+		return err
+	}
 	after, _ := target.Next()
 	if err := s.sessions.Discard(ctx, id, sessionStages(after)...); err != nil {
 		return err
@@ -175,6 +188,8 @@ func (s *Service) Back(ctx context.Context, id string, target task.Stage) error 
 // Discard throws away a stage of a task and everything after it, and starts
 // the stage again from scratch.
 func (s *Service) Discard(ctx context.Context, id string, stage task.Stage) error {
+	s.abortPrepare(id)
+
 	l := s.lockOf(id)
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -187,6 +202,9 @@ func (s *Service) Discard(ctx context.Context, id string, stage task.Stage) erro
 		return fmt.Errorf("discard %s of a task in %s: %w", stage, t.Stage, ErrInvalidTarget)
 	}
 
+	if err := s.tearDownSteps(ctx, t); err != nil {
+		return err
+	}
 	if err := s.sessions.Discard(ctx, id, sessionStages(stage)...); err != nil {
 		return err
 	}
@@ -243,16 +261,18 @@ func (s *Service) StartTask(ctx context.Context, t task.Task) error {
 func (s *Service) Sync(ctx context.Context) {
 	tasks := s.tasks.List()
 	for _, t := range tasks {
-		if !t.Stage.HasSession() {
-			continue
-		}
-		a, err := s.tasks.Inspect(t.ID)
-		if err != nil {
-			s.log.Error("inspect artifacts failed", "task", t.ID, "stage", string(t.Stage), "error", err)
-			continue
-		}
-		if err := s.sessions.Open(ctx, TaskInfo(t, a, s.tasks.Repositories(t))); err != nil {
-			s.log.Error("open session failed", "task", t.ID, "stage", string(t.Stage), "error", err)
+		switch {
+		case t.Stage.HasSession():
+			a, err := s.tasks.Inspect(t.ID)
+			if err != nil {
+				s.log.Error("inspect artifacts failed", "task", t.ID, "stage", string(t.Stage), "error", err)
+				continue
+			}
+			if err := s.sessions.Open(ctx, TaskInfo(t, a, s.tasks.Repositories(t))); err != nil {
+				s.log.Error("open session failed", "task", t.ID, "stage", string(t.Stage), "error", err)
+			}
+		case t.Stage == task.StageImplementation:
+			s.resumeSteps(ctx, t)
 		}
 	}
 	for _, t := range tasks {
@@ -260,13 +280,18 @@ func (s *Service) Sync(ctx context.Context) {
 	}
 }
 
-// Close stops the flow from evaluating anything else. The evaluations under
-// way end on their own.
+// Close stops the flow from evaluating anything else and cancels every
+// preparation in flight. The evaluations under way end on their own.
 func (s *Service) Close() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	s.closed = true
+	for _, l := range s.locks {
+		if l.cancel != nil {
+			l.cancel()
+		}
+	}
 }
 
 // isClosed reports whether the flow was closed.

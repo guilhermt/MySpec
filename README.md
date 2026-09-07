@@ -25,6 +25,12 @@ entering the project directory activates the pinned versions.
 in once with `claude` in a terminal. `MYSPEC_CLAUDE_PATH` overrides where the app
 looks for it.
 
+**4. git and VS Code.** `git` on the PATH, able to reach the `origin` of the
+repositories of the workspace without a prompt — the app runs it with
+`GIT_TERMINAL_PROMPT=0`, so a fetch that asks for a password fails instead of
+hanging. `code` on the PATH is what **Open in VS Code** runs; without it the app
+says so and everything else keeps working.
+
 Go, Node, pnpm, Task, Biome, golangci-lint, gotestsum, lefthook, govulncheck and
 go-test-coverage are all pinned in [`mise.toml`](./mise.toml) and installed by
 mise. The CI installs the same file with `jdx/mise-action`, so both run the same
@@ -114,11 +120,17 @@ Everything the app keeps lives under `~/.local/share/myspec/`:
   `steps/<number>-<short-description>.md`, one file per step. The hash keeps two
   workspaces with the same folder name apart.
 
+The worktrees are the exception: they live in the workspace itself, under
+`.myspec/worktrees/`, so the code the agent writes sits next to the repository it
+belongs to. See [Steps and worktrees](#steps-and-worktrees).
+
 ## Sessions
 
 A task runs one `claude` process at a time: the one of the stage it is in. Each
 stage keeps its own conversation, so going back to a stage picks its session up
-where it was left and moving on opens a fresh one.
+where it was left and moving on opens a fresh one. In the implementation stage
+each step has a session of its own, opened inside the worktree of its repository
+with the step file as the first message.
 
 Each session is started with the fixed flags of `claude.Args`: `-p` with
 `--output-format stream-json`, `--input-format stream-json`, `--verbose`,
@@ -135,6 +147,12 @@ it belongs to, and `binding failed` marks a call from the interface the Go side
 rejected, with the method that refused it. `stage advanced`, `stage revisited`
 and `stage discarded` mark every move between stages, with the task and the
 stages involved.
+
+Steps and worktrees have their own lines: `worktree created`, `worktree cleaned`,
+`worktree removed` and `worktree recreated`, with the task and the path;
+`step started`, `step retried`, `step cleaned and started`, `step discarded` and
+`steps torn down`, with the task and the step number; and `step blocked`, with
+the reason the step could not start.
 
 ## Stages
 
@@ -157,6 +175,40 @@ no gaps and no repeats. When they do not, the app tells the agent what is wrong
 and asks it to fix it, up to three times. After that it stops correcting and
 shows the problems above the composer, for the user to sort out with the agent
 or to discard the plan and start over.
+
+## Steps and worktrees
+
+Once the plan is valid the task enters the implementation stage and the app
+starts the first step by itself. Each step belongs to one repository and runs in
+a worktree of it, created at
+`<workspace>/.myspec/worktrees/<repository>/<task>/`, on a branch named after the
+task. The base of the branch is resolved when the worktree is created: the app
+runs `git fetch origin` and branches from `origin/dev`, or from `origin/main`
+when there is no `dev`. The fetch happens only then; starting a step in a
+worktree that already exists does not fetch again. `.myspec` is hidden, so the
+workspace scan never takes a worktree for a repository.
+
+The app owns the worktrees it created, and only those: it never reuses or
+deletes a path or a branch it did not create. A worktree and its branch are
+removed when the task is deleted, when the plan is discarded and when the task
+goes back to the tech spec, with whatever was left uncommitted in them.
+
+Before starting a step the app checks that the worktree is clean — nothing
+modified, staged, deleted or untracked, ignored files aside. A dirty worktree
+blocks the step, with what was found and two ways out: clean it yourself and
+**Try again**, or let the app throw every change away with **Clean and start**.
+A step is blocked the same way when the fetch fails, when neither base branch
+exists, when the path or the branch is already there, or when the step file
+names no repository of the task. The message from git is shown as git wrote it.
+
+The step bar above the conversation carries the state — preparing, implementing,
+awaiting review or blocked — and the controls: **Open in VS Code**, which runs
+`code` on the worktree, and **Discard step**, which ends the session, deletes the
+conversation of the step and starts it over, cleaning the worktree unless the
+user says otherwise. The step waits for review as soon as the agent finishes a
+turn with nothing pending; asking for a change in the conversation puts it back
+to implementing. Approving a step, committing it and moving on to the next one
+come in a later version.
 
 ## Continuous integration
 

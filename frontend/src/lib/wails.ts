@@ -15,6 +15,7 @@ import type {
   Repo,
   State,
   Step,
+  StepBlock,
   TaskSummary,
   Transcript,
   TranscriptEvent,
@@ -43,6 +44,7 @@ export type {
   Repo,
   State,
   Step,
+  StepBlock,
   TaskSummary,
   Transcript,
   TranscriptEvent,
@@ -53,6 +55,20 @@ export type {
 export type ThemePreference = "system" | "light" | "dark";
 export type NoticeReason = "not_found" | "not_directory" | "not_readable" | "last_recent_missing";
 export type TaskStage = "prd" | "tech_spec" | "plan" | "implementation";
+export type StepStatus =
+  | "not_started"
+  | "preparing"
+  | "blocked"
+  | "implementing"
+  | "awaiting_review";
+export type BlockReason =
+  | "dirty_worktree"
+  | "fetch_failed"
+  | "no_base_branch"
+  | "path_exists"
+  | "branch_exists"
+  | "git_failed"
+  | "no_repository";
 export type SessionStatus = "working" | "waiting" | "needs_permission" | "paused" | "error";
 export type EntryKind =
   | "user"
@@ -72,6 +88,7 @@ export type MarkerType =
   | "plan_written"
   | "plan_updated"
   | "stage_started"
+  | "step_started"
   | "compacted"
   | "interrupted";
 export type ErrorKind =
@@ -115,6 +132,34 @@ export function asTaskStage(value: string): TaskStage {
       return value;
     default:
       return "prd";
+  }
+}
+
+export function asStepStatus(value: string): StepStatus {
+  switch (value) {
+    case "not_started":
+    case "preparing":
+    case "blocked":
+    case "implementing":
+    case "awaiting_review":
+      return value;
+    default:
+      return "not_started";
+  }
+}
+
+export function asBlockReason(value: string): BlockReason {
+  switch (value) {
+    case "dirty_worktree":
+    case "fetch_failed":
+    case "no_base_branch":
+    case "path_exists":
+    case "branch_exists":
+    case "git_failed":
+    case "no_repository":
+      return value;
+    default:
+      return "git_failed";
   }
 }
 
@@ -180,6 +225,7 @@ export function asMarkerType(value: string): MarkerType {
     case "plan_written":
     case "plan_updated":
     case "stage_started":
+    case "step_started":
     case "compacted":
     case "interrupted":
       return value;
@@ -250,6 +296,11 @@ export const api = {
   discardStage: (taskId: string, stage: TaskStage): Promise<void> =>
     TaskService.DiscardStage(taskId, stage),
   continueStage: (taskId: string): Promise<void> => TaskService.ContinueStage(taskId),
+  retryStep: (taskId: string): Promise<void> => TaskService.RetryStep(taskId),
+  cleanAndStartStep: (taskId: string): Promise<void> => TaskService.CleanAndStartStep(taskId),
+  discardStep: (taskId: string, cleanWorktree: boolean): Promise<void> =>
+    TaskService.DiscardStep(taskId, cleanWorktree),
+  openInEditor: (taskId: string): Promise<void> => TaskService.OpenInEditor(taskId),
   openExternal: (url: string): Promise<void> => Browser.OpenURL(url),
 };
 

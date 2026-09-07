@@ -19,7 +19,7 @@ func (a *App) snapshot() bindings.State {
 		Theme:      string(a.theme.Preference()),
 		SystemDark: a.theme.SystemDark(),
 		Notice:     bindings.FromNotice(a.ws.Notice()),
-		Tasks:      bindings.FromTasks(a.tasks.List(), a.taskArtifacts, a.sessions.Summaries()),
+		Tasks:      bindings.FromTasks(a.tasks.List(), a.taskArtifacts, a.flow.Steps, a.sessions.Summaries()),
 	}
 }
 

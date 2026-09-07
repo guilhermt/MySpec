@@ -9,9 +9,12 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
-// stagesVersion is the migration that brought the stages after the PRD, and
-// the version the embedded migrations end at.
-const stagesVersion = 3
+// stagesVersion is the migration that brought the stages after the PRD;
+// latestVersion is the version the embedded migrations end at.
+const (
+	stagesVersion = 3
+	latestVersion = 4
+)
 
 // mapFS builds a migrations tree with the given file names.
 func mapFS(names ...string) fstest.MapFS {
@@ -115,24 +118,24 @@ func TestParseVersion(t *testing.T) {
 	}
 }
 
-func TestMigrateEndsAtTheStagesVersion(t *testing.T) {
+func TestMigrateEndsAtTheLatestVersion(t *testing.T) {
 	t.Parallel()
 
 	migrations, err := loadMigrations(migrationsFS)
 	if err != nil {
 		t.Fatalf("loadMigrations() = %v, want nil", err)
 	}
-	if got := migrations[len(migrations)-1].version; got != stagesVersion {
-		t.Errorf("last migration version = %d, want %d", got, stagesVersion)
+	if got := migrations[len(migrations)-1].version; got != latestVersion {
+		t.Errorf("last migration version = %d, want %d", got, latestVersion)
 	}
 
-	db := openAt(t, stagesVersion)
+	db := openAt(t, latestVersion)
 	got, err := schemaVersion(t.Context(), db)
 	if err != nil {
 		t.Fatalf("schemaVersion() = %v, want nil", err)
 	}
-	if got != stagesVersion {
-		t.Errorf("schemaVersion() = %d, want %d", got, stagesVersion)
+	if got != latestVersion {
+		t.Errorf("schemaVersion() = %d, want %d", got, latestVersion)
 	}
 }
 

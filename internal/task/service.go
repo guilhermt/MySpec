@@ -1,6 +1,7 @@
 package task
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -32,6 +33,9 @@ type Store interface {
 	UpdateStage(ctx context.Context, id, stage string, revisiting bool, updatedAt time.Time) error
 	UpdateArtifactVersion(ctx context.Context, id string, version int, updatedAt time.Time) error
 	Delete(ctx context.Context, id string) error
+	ListStepRuns(ctx context.Context, taskID string) ([]StepRun, error)
+	UpsertStepRun(ctx context.Context, run StepRun) error
+	DeleteStepRuns(ctx context.Context, taskID string) error
 }
 
 // Deps are what Service needs from the outside.
@@ -64,6 +68,7 @@ type Service struct {
 	workspacePath string
 	tasks         []Task
 	artifacts     map[string]Artifacts // by task id, what the last inspection saw
+	stepRuns      map[string][]StepRun // by task id, ordered by number
 }
 
 // New builds a Service from deps, with the artifact watcher running.
@@ -78,6 +83,7 @@ func New(deps Deps) (*Service, error) {
 		onChange:   deps.OnChange,
 		onArtifact: deps.OnArtifact,
 		artifacts:  map[string]Artifacts{},
+		stepRuns:   map[string][]StepRun{},
 	}
 	if s.now == nil {
 		s.now = time.Now
@@ -114,8 +120,14 @@ func (s *Service) Sync(ctx context.Context, workspacePath string) error {
 	}
 
 	artifacts := make(map[string]Artifacts, len(tasks))
+	stepRuns := make(map[string][]StepRun, len(tasks))
 	for _, t := range tasks {
 		artifacts[t.ID] = s.inspect(t)
+		runs, err := s.repo.ListStepRuns(ctx, t.ID)
+		if err != nil {
+			return fmt.Errorf("list step runs of task %s: %w", t.ID, err)
+		}
+		stepRuns[t.ID] = runs
 	}
 
 	s.mu.Lock()
@@ -123,6 +135,7 @@ func (s *Service) Sync(ctx context.Context, workspacePath string) error {
 	s.workspacePath = workspacePath
 	s.tasks = tasks
 	s.artifacts = artifacts
+	s.stepRuns = stepRuns
 	s.mu.Unlock()
 
 	for _, t := range previous {
@@ -227,6 +240,7 @@ func (s *Service) Create(ctx context.Context, p CreateParams) (Task, error) {
 	s.mu.Lock()
 	s.tasks = append(s.tasks, t)
 	s.artifacts[t.ID] = Artifacts{}
+	s.stepRuns[t.ID] = nil
 	s.mu.Unlock()
 
 	s.watch(t)
@@ -259,6 +273,7 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 		s.tasks = slices.Delete(s.tasks, index, index+1)
 	}
 	delete(s.artifacts, id)
+	delete(s.stepRuns, id)
 	s.mu.Unlock()
 
 	s.log.Info("task deleted", "task", t.ID, "name", t.Name)
@@ -318,6 +333,75 @@ func (s *Service) SetStage(ctx context.Context, id string, stage Stage, revisiti
 	s.log.Info("task stage set", "task", t.ID, "stage", string(t.Stage), "revisiting", t.Revisiting)
 	s.changed()
 	return t, nil
+}
+
+// StepRuns is what the app recorded about the steps of a task, by number.
+func (s *Service) StepRuns(id string) []StepRun {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return cloneStepRuns(s.stepRuns[id])
+}
+
+// SetStepRun records the state of a step, creating the record on the first
+// call for it. block is nil unless status is StepBlocked.
+func (s *Service) SetStepRun(ctx context.Context, id string, number int, status StepStatus, block *StepBlock) (StepRun, error) {
+	if _, ok := s.Get(id); !ok {
+		return StepRun{}, fmt.Errorf("set step %d of task %s: %w", number, id, ErrNotFound)
+	}
+
+	now := s.now().UTC()
+	run := StepRun{TaskID: id, Number: number, Status: status, CreatedAt: now, UpdatedAt: now}
+	if block != nil {
+		copied := *block
+		run.Block = &copied
+	}
+
+	s.mu.Lock()
+	// A step keeps the instant it was first recorded at across every retry.
+	if index := indexOfRun(s.stepRuns[id], number); index >= 0 {
+		run.CreatedAt = s.stepRuns[id][index].CreatedAt
+	}
+	s.mu.Unlock()
+
+	if err := s.repo.UpsertStepRun(ctx, run); err != nil {
+		return StepRun{}, err
+	}
+
+	s.mu.Lock()
+	runs := s.stepRuns[id]
+	if index := indexOfRun(runs, number); index >= 0 {
+		runs[index] = run
+	} else {
+		position, _ := slices.BinarySearchFunc(runs, run, func(a, b StepRun) int { return cmp.Compare(a.Number, b.Number) })
+		runs = slices.Insert(runs, position, run)
+	}
+	s.stepRuns[id] = runs
+	s.mu.Unlock()
+
+	reason := ""
+	if run.Block != nil {
+		reason = string(run.Block.Reason)
+	}
+	s.log.Info("step run set", "task", id, "step", number, "status", string(status), "reason", reason)
+	s.changed()
+	return run, nil
+}
+
+// ClearStepRuns forgets every step of a task, which is what discarding the
+// plan means for them.
+func (s *Service) ClearStepRuns(ctx context.Context, id string) error {
+	if err := s.repo.DeleteStepRuns(ctx, id); err != nil {
+		return err
+	}
+
+	s.mu.Lock()
+	delete(s.stepRuns, id)
+	s.mu.Unlock()
+
+	s.log.Info("step runs cleared", "task", id)
+	s.changed()
+	return nil
 }
 
 // RemoveArtifacts throws away the artifact of a stage and of every stage after
@@ -538,4 +622,26 @@ func (s *Service) changed() {
 // indexOf finds a task by id, -1 when the list does not hold it.
 func indexOf(tasks []Task, id string) int {
 	return slices.IndexFunc(tasks, func(t Task) bool { return t.ID == id })
+}
+
+// indexOfRun finds a step run by number, -1 when the list does not hold it.
+func indexOfRun(runs []StepRun, number int) int {
+	return slices.IndexFunc(runs, func(r StepRun) bool { return r.Number == number })
+}
+
+// cloneStepRuns copies the runs and the block each one carries, so that what
+// a caller holds never changes under it.
+func cloneStepRuns(runs []StepRun) []StepRun {
+	if len(runs) == 0 {
+		return nil
+	}
+	out := make([]StepRun, len(runs))
+	for i, run := range runs {
+		if run.Block != nil {
+			block := *run.Block
+			run.Block = &block
+		}
+		out[i] = run
+	}
+	return out
 }

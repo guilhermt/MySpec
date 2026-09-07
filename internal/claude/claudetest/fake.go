@@ -327,13 +327,37 @@ func (f *fake) writeBlocks(text string) bool {
 		if !found {
 			return wrote
 		}
-		content, remainder, found := strings.Cut(body, endMarker)
+		content, remainder, found := cutBlock(body)
 		if !found {
 			return wrote
 		}
 		f.writeFile(strings.TrimSpace(path), content)
 		wrote = true
 		rest = remainder
+	}
+}
+
+// cutBlock takes the body of a write block up to the @@end that closes it,
+// skipping the blocks nested in it: a file the fake writes may itself be a
+// prompt carrying write blocks, which is what a step file is.
+func cutBlock(body string) (content, remainder string, found bool) {
+	depth, offset := 0, 0
+	for {
+		rest := body[offset:]
+		end := strings.Index(rest, endMarker)
+		if end < 0 {
+			return "", "", false
+		}
+		if start := strings.Index(rest, writeMarker); start >= 0 && start < end {
+			depth++
+			offset += start + len(writeMarker)
+			continue
+		}
+		if depth == 0 {
+			return body[:offset+end], rest[end+len(endMarker):], true
+		}
+		depth--
+		offset += end + len(endMarker)
 	}
 }
 
