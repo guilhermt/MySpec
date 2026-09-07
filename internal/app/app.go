@@ -15,6 +15,7 @@ import (
 
 	"github.com/guilhermt/myspec/internal/bindings"
 	"github.com/guilhermt/myspec/internal/flow"
+	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/platform/logging"
 	"github.com/guilhermt/myspec/internal/platform/xdg"
 	"github.com/guilhermt/myspec/internal/prompts"
@@ -24,6 +25,7 @@ import (
 	"github.com/guilhermt/myspec/internal/task"
 	"github.com/guilhermt/myspec/internal/theme"
 	"github.com/guilhermt/myspec/internal/workspace"
+	"github.com/guilhermt/myspec/internal/worktree"
 )
 
 // The process exit codes Run returns.
@@ -45,12 +47,13 @@ const shutdownTimeout = 8 * time.Second
 // App holds the running application: the Wails handles and the domain services
 // they are wired to.
 type App struct {
-	log      *slog.Logger
-	ws       *workspace.Service
-	theme    *theme.Service
-	tasks    *task.Service
-	sessions *session.Service
-	flow     *flow.Service
+	log       *slog.Logger
+	ws        *workspace.Service
+	theme     *theme.Service
+	tasks     *task.Service
+	sessions  *session.Service
+	worktrees *worktree.Service
+	flow      *flow.Service
 
 	mu      sync.Mutex
 	wails   *application.App
@@ -134,9 +137,17 @@ func Run(cfg Config) int {
 	if err != nil {
 		return fail(log, "watch artifacts", err)
 	}
+	gitRunner := git.New(git.Deps{Log: log})
+	worktrees := worktree.New(worktree.Deps{Git: gitRunner, Store: st.Worktrees, Log: log})
 	// The session and task callbacks reach the flow through the app, which
 	// holds it before anything can run: no process starts before Bootstrap.
-	flowSvc := flow.New(flow.Deps{Tasks: tasks, Sessions: sessions, Log: log})
+	flowSvc := flow.New(flow.Deps{
+		Tasks:     tasks,
+		Sessions:  sessions,
+		Worktrees: worktrees,
+		Log:       log,
+		OnChange:  func(string) { a.publish() },
+	})
 	wsSvc := workspace.New(workspace.Deps{
 		Recents:  st.Recents,
 		Scan:     func(root string) ([]string, error) { return scan.Repos(root, log) },
@@ -144,6 +155,7 @@ func Run(cfg Config) int {
 		OnChange: a.onWorkspaceChanged,
 	})
 	a.theme, a.ws, a.tasks, a.sessions, a.flow = themeSvc, wsSvc, tasks, sessions, flowSvc
+	a.worktrees = worktrees
 
 	if err := wsSvc.Bootstrap(ctx, firstArg(cfg.Args, log), cfg.Cwd); err != nil {
 		return fail(log, "open initial workspace", err)
@@ -220,6 +232,16 @@ func (a *App) syncTasks() {
 	if err := a.tasks.Sync(ctx, current.Path); err != nil {
 		a.log.Error("sync tasks failed", "workspace", current.Path, "err", err)
 		return
+	}
+	// The flow reads the registry of worktrees as it resumes the steps, so it
+	// is loaded first; a failure only leaves the steps to block on their own.
+	tasks := a.tasks.List()
+	ids := make([]string, len(tasks))
+	for i, t := range tasks {
+		ids[i] = t.ID
+	}
+	if err := a.worktrees.Sync(ctx, ids); err != nil {
+		a.log.Error("sync worktrees failed", "workspace", current.Path, "err", err)
 	}
 	a.flow.Sync(ctx)
 }

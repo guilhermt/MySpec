@@ -14,6 +14,7 @@ import (
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
+	"github.com/guilhermt/myspec/internal/worktree"
 )
 
 // pollTimeout and pollStep bound how long a test waits for an evaluation,
@@ -39,6 +40,7 @@ type memTasks struct {
 	mu        sync.Mutex
 	items     []task.Task
 	artifacts map[string]task.Artifacts
+	runs      map[string][]task.StepRun
 	calls     []string
 	err       error         // returned by every mutation
 	block     chan struct{} // when set, Inspect waits on it
@@ -46,7 +48,7 @@ type memTasks struct {
 }
 
 func newTasks() *memTasks {
-	return &memTasks{artifacts: map[string]task.Artifacts{}}
+	return &memTasks{artifacts: map[string]task.Artifacts{}, runs: map[string][]task.StepRun{}}
 }
 
 func (m *memTasks) Get(id string) (task.Task, bool) {
@@ -121,8 +123,92 @@ func (m *memTasks) RemoveArtifacts(_ context.Context, id string, from task.Stage
 	return nil
 }
 
+func (m *memTasks) Artifacts(id string) (task.Artifacts, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	a, ok := m.artifacts[id]
+	return a, ok
+}
+
 func (m *memTasks) Repositories(task.Task) []task.Repository {
 	return repos
+}
+
+func (m *memTasks) StepRuns(id string) []task.StepRun {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return slices.Clone(m.runs[id])
+}
+
+func (m *memTasks) SetStepRun(
+	_ context.Context, id string, number int, status task.StepStatus, block *task.StepBlock,
+) (task.StepRun, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.calls = append(m.calls, "step:"+id+":"+strconv.Itoa(number)+":"+string(status))
+	if m.err != nil {
+		return task.StepRun{}, m.err
+	}
+	run := task.StepRun{TaskID: id, Number: number, Status: status, Block: block}
+	runs := m.runs[id]
+	index := slices.IndexFunc(runs, func(r task.StepRun) bool { return r.Number == number })
+	if index < 0 {
+		m.runs[id] = append(runs, run)
+	} else {
+		runs[index] = run
+	}
+	return run, nil
+}
+
+func (m *memTasks) ClearStepRuns(_ context.Context, id string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.calls = append(m.calls, "clearSteps:"+id)
+	if m.err != nil {
+		return m.err
+	}
+	delete(m.runs, id)
+	return nil
+}
+
+func (m *memTasks) Delete(_ context.Context, id string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.calls = append(m.calls, "delete:"+id)
+	if m.err != nil {
+		return m.err
+	}
+	if index := m.indexOf(id); index >= 0 {
+		m.items = slices.Delete(m.items, index, index+1)
+	}
+	return nil
+}
+
+// stepRun is what the fake recorded about a step, if anything.
+func (m *memTasks) stepRun(id string, number int) (task.StepRun, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	index := slices.IndexFunc(m.runs[id], func(r task.StepRun) bool { return r.Number == number })
+	if index < 0 {
+		return task.StepRun{}, false
+	}
+	return m.runs[id][index], true
+}
+
+// setStepRun seeds a step run without going through the flow, which is how a
+// test says what the app recorded before it closed.
+func (m *memTasks) setStepRun(id string, run task.StepRun) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	run.TaskID = id
+	m.runs[id] = append(m.runs[id], run)
 }
 
 // add stores a task at a stage, with the artifacts the disk holds for it.
@@ -341,18 +427,174 @@ func (m *memTasks) recorded() []string {
 	return slices.Clone(m.calls)
 }
 
-// fixture is a flow.Service over the two fakes.
+// memWorktrees is an in-memory flow.Worktrees: it hands out the worktrees a
+// test seeds, answers with the failures it was told to, and records the calls.
+type memWorktrees struct {
+	mu        sync.Mutex
+	items     map[string][]worktree.Worktree // by task id
+	calls     []string
+	status    worktree.Status
+	phases    []worktree.Phase // reported by every Ensure
+	ensureErr error
+	statusErr error
+	cleanErr  error
+	removeErr error
+	block     chan struct{} // when set, Ensure waits on it or on the context
+}
+
+func newWorktrees() *memWorktrees {
+	return &memWorktrees{
+		items:  map[string][]worktree.Worktree{},
+		phases: []worktree.Phase{worktree.PhaseFetching, worktree.PhaseCreating},
+	}
+}
+
+func (m *memWorktrees) Get(taskID, repoPath string) (worktree.Worktree, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	index := slices.IndexFunc(m.items[taskID], func(wt worktree.Worktree) bool { return wt.RepoPath == repoPath })
+	if index < 0 {
+		return worktree.Worktree{}, false
+	}
+	return m.items[taskID][index], true
+}
+
+func (m *memWorktrees) Ensure(
+	ctx context.Context, t task.Task, repo task.Repository, onPhase func(worktree.Phase),
+) (worktree.Worktree, error) {
+	m.mu.Lock()
+	m.calls = append(m.calls, "ensure:"+t.ID+":"+repo.Rel)
+	block, phases, err := m.block, slices.Clone(m.phases), m.ensureErr
+	m.mu.Unlock()
+
+	if block != nil {
+		select {
+		case <-block:
+		case <-ctx.Done():
+			return worktree.Worktree{}, ctx.Err()
+		}
+	}
+	for _, phase := range phases {
+		onPhase(phase)
+	}
+	if err != nil {
+		return worktree.Worktree{}, err
+	}
+	if wt, ok := m.Get(t.ID, repo.Path); ok {
+		return wt, nil
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	wt := worktree.Worktree{
+		TaskID:   t.ID,
+		RepoPath: repo.Path,
+		Path:     worktree.Path(t.WorkspacePath, repo.Rel, t.Name),
+		Branch:   t.Name,
+	}
+	m.items[t.ID] = append(m.items[t.ID], wt)
+	return wt, nil
+}
+
+func (m *memWorktrees) Status(_ context.Context, wt worktree.Worktree) (worktree.Status, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.calls = append(m.calls, "status:"+wt.TaskID+":"+filepath.Base(wt.Path))
+	if m.statusErr != nil {
+		return worktree.Status{}, m.statusErr
+	}
+	return m.status, nil
+}
+
+func (m *memWorktrees) Clean(_ context.Context, wt worktree.Worktree) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.calls = append(m.calls, "clean:"+wt.TaskID+":"+filepath.Base(wt.Path))
+	if m.cleanErr != nil {
+		return m.cleanErr
+	}
+	m.status = worktree.Status{}
+	return nil
+}
+
+func (m *memWorktrees) RemoveAll(_ context.Context, taskID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.calls = append(m.calls, "removeAll:"+taskID)
+	if m.removeErr != nil {
+		return m.removeErr
+	}
+	delete(m.items, taskID)
+	return nil
+}
+
+// seed registers a worktree the way a previous run of the app left it.
+func (m *memWorktrees) seed(t task.Task, repo task.Repository) worktree.Worktree {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	wt := worktree.Worktree{
+		TaskID:   t.ID,
+		RepoPath: repo.Path,
+		Path:     worktree.Path(t.WorkspacePath, repo.Rel, t.Name),
+		Branch:   t.Name,
+	}
+	m.items[t.ID] = append(m.items[t.ID], wt)
+	return wt
+}
+
+// recorded returns the calls the fake took, in order.
+func (m *memWorktrees) recorded() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return slices.Clone(m.calls)
+}
+
+// setStatus is what the next check of a worktree reports.
+func (m *memWorktrees) setStatus(status worktree.Status) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.status = status
+}
+
+// failEnsure makes every creation of a worktree fail with err.
+func (m *memWorktrees) failEnsure(err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.ensureErr = err
+}
+
+// blockEnsure holds every creation of a worktree until the returned channel is
+// closed, which is how a test keeps a preparation running.
+func (m *memWorktrees) blockEnsure() chan struct{} {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.block = make(chan struct{})
+	return m.block
+}
+
+// fixture is a flow.Service over the three fakes.
 type fixture struct {
-	service  *flow.Service
-	tasks    *memTasks
-	sessions *memSessions
+	service   *flow.Service
+	tasks     *memTasks
+	sessions  *memSessions
+	worktrees *memWorktrees
 }
 
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
 
-	f := &fixture{tasks: newTasks(), sessions: newSessions()}
-	f.service = flow.New(flow.Deps{Tasks: f.tasks, Sessions: f.sessions})
+	f := &fixture{tasks: newTasks(), sessions: newSessions(), worktrees: newWorktrees()}
+	f.service = flow.New(flow.Deps{Tasks: f.tasks, Sessions: f.sessions, Worktrees: f.worktrees})
 	t.Cleanup(f.service.Close)
 	return f
 }
@@ -395,6 +637,44 @@ func (f *fixture) waitEvaluations(t *testing.T, n int) {
 	t.Helper()
 
 	waitFor(t, "evaluation number "+strconv.Itoa(n), func() bool { return f.tasks.inspectCount() >= n })
+}
+
+// waitStep polls until a step of a task reaches a status.
+func (f *fixture) waitStep(t *testing.T, id string, number int, status flow.StepStatus) {
+	t.Helper()
+
+	waitFor(t, "step "+strconv.Itoa(number)+" of "+id+" to be "+string(status), func() bool {
+		for _, state := range f.service.Steps(id) {
+			if state.Step.Number == number {
+				return state.Status == status
+			}
+		}
+		return false
+	})
+}
+
+// stepState is the state of a step of a task, failing the test when the plan
+// has no such step.
+func (f *fixture) stepState(t *testing.T, id string, number int) flow.StepState {
+	t.Helper()
+
+	for _, state := range f.service.Steps(id) {
+		if state.Step.Number == number {
+			return state
+		}
+	}
+	t.Fatalf("task %s has no step %d", id, number)
+	return flow.StepState{}
+}
+
+// waitWorktreeCalls polls until the worktrees fake took the given calls, in
+// order.
+func (f *fixture) waitWorktreeCalls(t *testing.T, want ...string) {
+	t.Helper()
+
+	waitFor(t, "worktree calls "+strings.Join(want, " "), func() bool {
+		return slices.Equal(f.worktrees.recorded(), want)
+	})
 }
 
 // waitStage polls until a task reaches a stage.

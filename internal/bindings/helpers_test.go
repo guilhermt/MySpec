@@ -17,12 +17,15 @@ import (
 	"github.com/guilhermt/myspec/internal/claude"
 	"github.com/guilhermt/myspec/internal/claude/claudetest"
 	"github.com/guilhermt/myspec/internal/flow"
+	"github.com/guilhermt/myspec/internal/git"
+	"github.com/guilhermt/myspec/internal/git/gittest"
 	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/store"
 	"github.com/guilhermt/myspec/internal/task"
 	"github.com/guilhermt/myspec/internal/theme"
 	"github.com/guilhermt/myspec/internal/workspace"
+	"github.com/guilhermt/myspec/internal/worktree"
 )
 
 // TestMain lets the test binary stand in for the claude CLI: a child process
@@ -112,6 +115,7 @@ type fixture struct {
 	store     *store.Store
 	taskSvc   *task.Service
 	sessions  *session.Service
+	worktrees *worktree.Service
 	flow      *flow.Service
 	dataDir   string
 	picker    *fakePicker
@@ -186,7 +190,18 @@ func newFixture(t *testing.T) *fixture {
 	}
 	t.Cleanup(func() { _ = f.taskSvc.Close() })
 
-	f.flow = flow.New(flow.Deps{Tasks: f.taskSvc, Sessions: f.sessions, Log: log})
+	f.worktrees = worktree.New(worktree.Deps{
+		Git:   git.New(git.Deps{Log: log, Env: gittest.Env(t)}),
+		Store: st.Worktrees,
+		Log:   log,
+	})
+	f.flow = flow.New(flow.Deps{
+		Tasks:     f.taskSvc,
+		Sessions:  f.sessions,
+		Worktrees: f.worktrees,
+		Log:       log,
+		OnChange:  func(string) {},
+	})
 	t.Cleanup(f.flow.Close)
 
 	f.workspace = bindings.NewWorkspaceService(f.ws, f.snapshot, f.picker, log)
@@ -296,6 +311,14 @@ func (f *fixture) open(t *testing.T, dir string) {
 	}
 	if err := f.taskSvc.Sync(t.Context(), dir); err != nil {
 		t.Fatalf("Sync(%s) = %v, want nil", dir, err)
+	}
+	loaded := f.taskSvc.List()
+	ids := make([]string, len(loaded))
+	for i, one := range loaded {
+		ids[i] = one.ID
+	}
+	if err := f.worktrees.Sync(t.Context(), ids); err != nil {
+		t.Fatalf("worktrees.Sync() = %v, want nil", err)
 	}
 	f.flow.Sync(t.Context())
 }

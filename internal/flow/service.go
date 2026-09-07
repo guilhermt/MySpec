@@ -11,10 +11,12 @@ import (
 // New builds a Service from deps.
 func New(deps Deps) *Service {
 	s := &Service{
-		tasks:    deps.Tasks,
-		sessions: deps.Sessions,
-		log:      deps.Log,
-		locks:    map[string]*taskLock{},
+		tasks:     deps.Tasks,
+		sessions:  deps.Sessions,
+		worktrees: deps.Worktrees,
+		log:       deps.Log,
+		onChange:  deps.OnChange,
+		locks:     map[string]*taskLock{},
 	}
 	if s.log == nil {
 		s.log = slog.New(slog.DiscardHandler)
@@ -120,6 +122,10 @@ func (s *Service) advance(ctx context.Context, t task.Task) error {
 	s.log.Info("stage advanced", "task", t.ID, "from", string(t.Stage), "to", string(next))
 
 	if !next.HasSession() {
+		// Implementation has no conversation of its own: its first step does.
+		if next == task.StageImplementation {
+			return s.beginStep(ctx, moved)
+		}
 		return nil
 	}
 	return s.start(ctx, moved, false)
@@ -243,16 +249,18 @@ func (s *Service) StartTask(ctx context.Context, t task.Task) error {
 func (s *Service) Sync(ctx context.Context) {
 	tasks := s.tasks.List()
 	for _, t := range tasks {
-		if !t.Stage.HasSession() {
-			continue
-		}
-		a, err := s.tasks.Inspect(t.ID)
-		if err != nil {
-			s.log.Error("inspect artifacts failed", "task", t.ID, "stage", string(t.Stage), "error", err)
-			continue
-		}
-		if err := s.sessions.Open(ctx, TaskInfo(t, a, s.tasks.Repositories(t))); err != nil {
-			s.log.Error("open session failed", "task", t.ID, "stage", string(t.Stage), "error", err)
+		switch {
+		case t.Stage.HasSession():
+			a, err := s.tasks.Inspect(t.ID)
+			if err != nil {
+				s.log.Error("inspect artifacts failed", "task", t.ID, "stage", string(t.Stage), "error", err)
+				continue
+			}
+			if err := s.sessions.Open(ctx, TaskInfo(t, a, s.tasks.Repositories(t))); err != nil {
+				s.log.Error("open session failed", "task", t.ID, "stage", string(t.Stage), "error", err)
+			}
+		case t.Stage == task.StageImplementation:
+			s.resumeSteps(ctx, t)
 		}
 	}
 	for _, t := range tasks {
@@ -260,13 +268,18 @@ func (s *Service) Sync(ctx context.Context) {
 	}
 }
 
-// Close stops the flow from evaluating anything else. The evaluations under
-// way end on their own.
+// Close stops the flow from evaluating anything else and cancels every
+// preparation in flight. The evaluations under way end on their own.
 func (s *Service) Close() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	s.closed = true
+	for _, l := range s.locks {
+		if l.cancel != nil {
+			l.cancel()
+		}
+	}
 }
 
 // isClosed reports whether the flow was closed.

@@ -10,6 +10,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 
 	"github.com/guilhermt/myspec/internal/bindings"
+	"github.com/guilhermt/myspec/internal/git/gittest"
 	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/task"
 )
@@ -357,6 +358,9 @@ func repoWorkspace(t *testing.T) (*fixture, string) {
 
 	f := newFixture(t)
 	dir := t.TempDir()
+	// api is a real clone: the steps of a plan are implemented in worktrees of
+	// it, which only git can make.
+	gittest.Clone(t, gittest.Origin(t, true), filepath.Join(dir, "api"))
 	f.setScan([]string{filepath.Join(dir, "api")}, nil)
 	f.open(t, dir)
 	return f, dir
