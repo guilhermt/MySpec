@@ -8,7 +8,7 @@ const ROW = "flex w-full items-center gap-3 rounded-md px-2 py-1.5 text-left tex
 
 // A step names its repository the way the plan wrote it; the list shows the
 // name the tree gives that repository, which is what the user recognises.
-function repoLabel(app: State | null, step: Step): string {
+export function repoLabel(app: State | null, step: Step): string {
   if (app === null) {
     return step.repository;
   }
