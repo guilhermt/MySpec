@@ -78,6 +78,17 @@ describe("ArtifactPanel", () => {
     expect(api.readArtifact).not.toHaveBeenCalled();
   });
 
+  it("marks the step being run in the list", () => {
+    panel({
+      stage: "implementation",
+      steps: [makeStep({ status: "implementing" })],
+      currentStep: 1,
+    });
+
+    expect(screen.getByText("Implementing")).toBeInTheDocument();
+    expect(screen.getByRole("listitem")).toHaveAttribute("aria-current", "step");
+  });
+
   it("reads one step file, with its header shown as metadata", async () => {
     vi.mocked(api.readArtifact).mockResolvedValue(STEP_FILE);
     const { user } = panel({

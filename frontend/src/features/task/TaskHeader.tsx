@@ -7,6 +7,7 @@ import { ContextGauge } from "@/features/task/ContextGauge";
 import { DeleteTaskDialog } from "@/features/task/DeleteTaskDialog";
 import { StatusBadge } from "@/features/task/StatusBadge";
 import { hasArtifacts } from "@/features/task/status";
+import { currentStepOf, hasStepSession } from "@/features/task/step-status";
 import { findNode } from "@/features/tree/tree-model";
 import { asSessionStatus, asTaskStage, type TaskSummary } from "@/lib/wails";
 import { pause, resume } from "@/store/actions";
@@ -31,8 +32,10 @@ export function TaskHeader({ task, artifactsOpen, onToggleArtifacts }: TaskHeade
   const status = asSessionStatus(task.sessionStatus);
   const paused = status === "paused";
   const Icon = task.repoPath === "" ? House : FolderGit2;
-  // The implementation stage has no session of its own to hold.
-  const running = asTaskStage(task.stage) !== "implementation";
+  // The implementation stage holds the session of the step being run, and only
+  // once the step got as far as opening one.
+  const implementing = asTaskStage(task.stage) === "implementation";
+  const running = !implementing || hasStepSession(currentStepOf(task));
 
   return (
     <header className="flex h-11 shrink-0 items-center gap-2 border-b px-3">

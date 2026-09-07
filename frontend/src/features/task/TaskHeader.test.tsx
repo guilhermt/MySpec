@@ -62,11 +62,21 @@ describe("TaskHeader", () => {
     expect(screen.getByRole("button", { name: "Pause" })).toBeDisabled();
   });
 
-  it("has nothing to pause once the task is implementing", () => {
-    header({ stage: "implementation" });
+  it("has nothing to pause while the step has no session yet", () => {
+    header({ stage: "implementation", steps: [makeStep({ status: "preparing" })], currentStep: 1 });
 
     expect(screen.queryByRole("button", { name: "Pause" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Resume" })).not.toBeInTheDocument();
+  });
+
+  it("pauses the session of the step being implemented", () => {
+    header({
+      stage: "implementation",
+      steps: [makeStep({ status: "implementing" })],
+      currentStep: 1,
+    });
+
+    expect(screen.getByRole("button", { name: "Pause" })).toBeInTheDocument();
   });
 
   it("says the panel is empty until an artifact exists", async () => {

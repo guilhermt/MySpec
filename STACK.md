@@ -143,6 +143,10 @@ O app precisa criar e apagar worktrees, ler o estado de stage, verificar worktre
 
 go-git foi descartado: worktrees não são bem suportadas e o comportamento nem sempre bate com o git real.
 
+Todo comando roda com `GIT_TERMINAL_PROMPT=0`. Sem um terminal para responder, um `git fetch` que peça usuário ou senha ficaria pendurado até o timeout; assim ele falha na hora, com a mensagem do próprio git, que é o que o app mostra ao usuário.
+
+As operações de git de um mesmo repositório são serializadas pelo app, uma de cada vez. Duas tasks no mesmo repositório implementam em paralelo, cada uma na sua worktree, mas os comandos que tocam o repositório compartilhado não se atropelam.
+
 ### fsnotify
 
 Para o progresso do review em tempo real, o app observa a worktree com fsnotify e roda `git status` quando algo muda, em vez de consultar em intervalo.

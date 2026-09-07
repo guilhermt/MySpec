@@ -15,6 +15,7 @@ describe("StepList", () => {
           makeStep({ number: 2, file: "2-check-the-token.md", title: "Check the token" }),
         ]}
         problems={[]}
+        currentStep={0}
       />,
       { state },
     );
@@ -27,7 +28,11 @@ describe("StepList", () => {
 
   it("shows the value of the file when it names no repository of the task", () => {
     renderWithStore(
-      <StepList steps={[makeStep({ repository: "mobile", repoPath: "" })]} problems={[]} />,
+      <StepList
+        steps={[makeStep({ repository: "mobile", repoPath: "" })]}
+        problems={[]}
+        currentStep={0}
+      />,
       { state },
     );
 
@@ -37,9 +42,12 @@ describe("StepList", () => {
   it("opens a step when the list is there to be read", async () => {
     const onOpen = vi.fn();
     const step = makeStep();
-    const { user } = renderWithStore(<StepList steps={[step]} problems={[]} onOpen={onOpen} />, {
-      state,
-    });
+    const { user } = renderWithStore(
+      <StepList steps={[step]} problems={[]} currentStep={1} onOpen={onOpen} />,
+      {
+        state,
+      },
+    );
 
     await user.click(screen.getByRole("button", { name: /Add the login form/ }));
 
@@ -47,15 +55,37 @@ describe("StepList", () => {
   });
 
   it("is a plain list when there is nothing to open", () => {
-    renderWithStore(<StepList steps={[makeStep()]} problems={[]} />, { state });
+    renderWithStore(<StepList steps={[makeStep()]} problems={[]} currentStep={0} />, { state });
 
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  });
+
+  it("shows the state of every step, and marks the one being run", () => {
+    renderWithStore(
+      <StepList
+        steps={[
+          makeStep({ status: "awaiting_review" }),
+          makeStep({ number: 2, file: "2-check-the-token.md", title: "Check the token" }),
+        ]}
+        problems={[]}
+        currentStep={1}
+      />,
+      { state },
+    );
+
+    expect(screen.getByText("Awaiting review")).toBeInTheDocument();
+    expect(screen.getByText("Not started")).toBeInTheDocument();
+
+    const [first, second] = screen.getAllByRole("listitem");
+    expect(first).toHaveAttribute("aria-current", "step");
+    expect(second).not.toHaveAttribute("aria-current");
   });
 
   it("says what keeps the step files from being a plan", () => {
     renderWithStore(
       <StepList
         steps={[]}
+        currentStep={0}
         problems={[
           { file: "", message: "step 2 is missing" },
           { file: "1-add-the-login-form.md", message: "no repository" },
