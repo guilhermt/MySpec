@@ -79,7 +79,7 @@ func (b *syncBuffer) String() string {
 	return b.buf.String()
 }
 
-// memRepo is an in-memory task.Repository.
+// memRepo is an in-memory task.Store.
 type memRepo struct {
 	mu        sync.Mutex
 	items     []task.Task

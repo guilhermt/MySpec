@@ -11,7 +11,7 @@ import (
 )
 
 // TasksRepo stores the tasks of every workspace. It implements
-// task.Repository.
+// task.Store.
 type TasksRepo struct{ db *sql.DB }
 
 // taskColumns is the column list every task query selects, in scan order.

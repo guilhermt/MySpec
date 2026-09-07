@@ -23,8 +23,9 @@ const dirPerm = 0o700
 // which has no caller to carry a context.
 const settleTimeout = 5 * time.Second
 
-// Repository persists the tasks of every workspace.
-type Repository interface {
+// Store persists the tasks of every workspace. It is named apart from
+// Repository, which is a code repository a task touches.
+type Store interface {
 	ListByWorkspace(ctx context.Context, workspacePath string) ([]Task, error)
 	Get(ctx context.Context, id string) (Task, error)
 	Insert(ctx context.Context, t Task) error
@@ -34,7 +35,7 @@ type Repository interface {
 
 // Deps are what Service needs from the outside.
 type Deps struct {
-	Repo       Repository
+	Repo       Store
 	DataDir    string
 	Log        *slog.Logger
 	Now        func() time.Time         // defaults to time.Now
@@ -47,7 +48,7 @@ type Deps struct {
 // Service owns the tasks of the open workspace and keeps their stage in step
 // with the artifacts on disk.
 type Service struct {
-	repo       Repository
+	repo       Store
 	dataDir    string
 	log        *slog.Logger
 	now        func() time.Time
@@ -356,14 +357,55 @@ func (s *Service) reconcile(t Task) (next Task, first, changed bool) {
 // prdWritten reports whether the PRD of a task exists with content in it. An
 // agent creating the file empty is not a finished stage.
 func (s *Service) prdWritten(t Task) bool {
-	info, err := os.Stat(t.PRDPath())
+	return s.fileWritten(t.PRDPath())
+}
+
+// Repositories are the repositories a task may touch, named as the prompts
+// name them: the repository of a repository task, every repository of the
+// workspace for a root task. A path the workspace does not hold is dropped.
+func (s *Service) Repositories(t Task) []Repository {
+	paths := s.repos()
+	if t.RepoPath != "" {
+		paths = []string{t.RepoPath}
+	}
+
+	repos := make([]Repository, 0, len(paths))
+	for _, path := range paths {
+		rel, err := filepath.Rel(t.WorkspacePath, path)
+		if err != nil {
+			s.log.Warn("repository outside the workspace", "task", t.ID, "path", path, "error", err)
+			continue
+		}
+		if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			s.log.Warn("repository outside the workspace", "task", t.ID, "path", path)
+			continue
+		}
+		repos = append(repos, Repository{Rel: rel, Path: path})
+	}
+	slices.SortFunc(repos, func(a, b Repository) int { return strings.Compare(a.Rel, b.Rel) })
+	return repos
+}
+
+// inspect reads the artifacts of a task off the disk.
+func (s *Service) inspect(t Task) Artifacts {
+	return Artifacts{
+		PRD:      s.fileWritten(t.PRDPath()),
+		TechSpec: s.fileWritten(t.TechSpecPath()),
+		Plan:     ReadPlan(t.StepsDir(), s.Repositories(t)),
+	}
+}
+
+// fileWritten reports whether an artifact exists with content in it. An agent
+// creating the file empty is not a finished stage.
+func (s *Service) fileWritten(path string) bool {
+	info, err := os.Stat(path)
 	switch {
 	case err == nil:
 		return info.Size() > 0
 	case errors.Is(err, os.ErrNotExist):
 		return false
 	default:
-		s.log.Warn("stat artifact failed", "path", t.PRDPath(), "error", err)
+		s.log.Warn("stat artifact failed", "path", path, "error", err)
 		return false
 	}
 }
