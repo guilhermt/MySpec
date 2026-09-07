@@ -36,9 +36,7 @@ func (a *App) onArtifact(t task.Task, changes []task.Change) {
 	defer cancel()
 
 	for _, c := range changes {
-		if c.Kind == task.ArtifactPRD {
-			a.sessions.MarkArtifact(ctx, t.ID, c.First)
-		}
+		a.sessions.MarkArtifact(ctx, t.ID, session.ArtifactKind(c.Kind), c.First)
 	}
 }
 

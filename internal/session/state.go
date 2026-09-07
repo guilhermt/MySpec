@@ -1,6 +1,7 @@
 package session
 
 import (
+	"context"
 	"errors"
 	"time"
 )
@@ -8,18 +9,29 @@ import (
 // ErrNotFound is returned when a task has no persisted session.
 var ErrNotFound = errors.New("session: not found")
 
-// Record is the persisted session row.
+// Record is the persisted session row: one per stage of a task.
 type Record struct {
 	ID            string // also the Claude Code session id
 	TaskID        string
-	Stage         string // "prd"
+	Stage         string // prd, tech_spec or plan
 	Started       bool   // system/init has arrived at least once for this id
 	Paused        bool
 	ContextTokens int
 	ContextWindow int
+	Corrections   int // automatic corrections the app sent to this session
 	LastError     string
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
+}
+
+// SessionRepository persists one Record per stage of a task.
+//
+//nolint:revive // the name pairs with EntryRepository, as the spec defines the two
+type SessionRepository interface {
+	Get(ctx context.Context, taskID, stage string) (Record, error) // ErrNotFound
+	Insert(ctx context.Context, rec Record) error
+	Update(ctx context.Context, rec Record) error
+	Delete(ctx context.Context, taskID string, stages ...string) error
 }
 
 // Status is what the interface shows about a session at a glance.
@@ -37,19 +49,25 @@ const (
 // Summary is what the interface shows about a session without opening it.
 type Summary struct {
 	TaskID         string
+	Stage          string // stage of the session behind it
 	Status         Status
 	TurnRunning    bool
 	ProcessRunning bool
 	RetryAttempt   int // last api_retry attempt of the running turn, 0 otherwise
 	ContextPercent int // 0 until the first result of the session
 	PendingCount   int
+	Corrections    int
 	LastError      string
+	// Idle is the session at rest: no turn, no pending message, no request, no
+	// pause and no error.
+	Idle bool
 }
 
 // Transcript is the whole conversation of a task.
 type Transcript struct {
 	TaskID    string
 	SessionID string
+	Stage     string
 	Entries   []Entry // ordered by Seq, pending user entries excluded
 	Pending   []Entry // queued user entries in send order
 }

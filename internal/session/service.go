@@ -18,15 +18,6 @@ import (
 	"github.com/guilhermt/myspec/internal/prompts"
 )
 
-// SessionRepository persists one Record per task.
-//
-//nolint:revive // the name pairs with EntryRepository, as the spec defines the two
-type SessionRepository interface {
-	GetByTask(ctx context.Context, taskID string) (Record, error) // ErrNotFound
-	Insert(ctx context.Context, rec Record) error
-	Update(ctx context.Context, rec Record) error
-}
-
 // EntryRepository persists the transcript of every session.
 type EntryRepository interface {
 	List(ctx context.Context, sessionID string) ([]Entry, error)
@@ -57,15 +48,32 @@ type Launcher interface {
 	Start(ctx context.Context, cfg claude.Config) (Process, error)
 }
 
-// TaskInfo is what the session needs to know about its task.
+// TaskInfo is what the session needs to know about its task, at the stage it
+// is in.
 type TaskInfo struct {
 	ID             string
 	Name           string
 	Dir            string // working directory of the CLI
 	ArtifactsDir   string
+	Stage          prompts.Stage
 	PRDPath        string
+	TechSpecPath   string
+	StepsDir       string
+	Repositories   []string // relative paths, what the prompt lists
 	InitialContext string
-	PRDExists      bool
+	ArtifactExists bool // the artifact of Stage is already there
+}
+
+// artifactOf is the artifact a stage produces.
+func artifactOf(stage prompts.Stage) ArtifactKind {
+	switch stage {
+	case prompts.StageTechSpec:
+		return ArtifactTechSpec
+	case prompts.StagePlan:
+		return ArtifactPlan
+	default:
+		return ArtifactPRD
+	}
 }
 
 // Deps are what Service needs from the outside.
@@ -73,7 +81,7 @@ type Deps struct {
 	Sessions     SessionRepository
 	Entries      EntryRepository
 	Launcher     Launcher
-	RenderPrompt func(vars prompts.Vars) (string, error)
+	RenderPrompt func(stage prompts.Stage, vars prompts.Vars) (string, error)
 	Log          *slog.Logger
 	Now          func() time.Time         // defaults to time.Now
 	NewID        func() string            // defaults to uuid.NewString
@@ -117,7 +125,7 @@ type Service struct {
 	sessions     SessionRepository
 	entries      EntryRepository
 	launcher     Launcher
-	renderPrompt func(vars prompts.Vars) (string, error)
+	renderPrompt func(stage prompts.Stage, vars prompts.Vars) (string, error)
 	log          *slog.Logger
 	now          func() time.Time
 	newID        func() string
@@ -160,39 +168,59 @@ func New(deps Deps) *Service {
 	return s
 }
 
-// Open loads or creates the session of a task and reconciles its transcript.
-// It is idempotent and safe to call on every workspace sync.
+// Open loads or creates the session of a task at the stage it is in and
+// reconciles its transcript. A run left in another stage is closed first, so a
+// task never has two sessions in memory. It is idempotent and safe to call on
+// every workspace sync.
 func (s *Service) Open(ctx context.Context, t TaskInfo) error {
+	for {
+		opened, err := s.tryOpen(ctx, t)
+		if err != nil || opened {
+			return err
+		}
+		if err := s.Close(ctx, t.ID); err != nil {
+			return err
+		}
+	}
+}
+
+// tryOpen opens the session of a task, reporting false when the run in memory
+// belongs to another stage and has to be closed outside the mutex first.
+func (s *Service) tryOpen(ctx context.Context, t TaskInfo) (bool, error) {
 	n := &notes{}
 	defer s.flush(n)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	if r, ok := s.runs[t.ID]; ok {
+		if r.rec.Stage != string(t.Stage) {
+			return false, nil
+		}
 		r.task = t
-		return nil
+		return true, nil
 	}
 
-	r, err := s.load(ctx, t)
+	r, err := s.load(ctx, t, n)
 	if err != nil {
-		return err
+		return false, err
 	}
 	s.runs[t.ID] = r
 
 	if len(r.pending) > 0 && !r.rec.Paused {
 		s.flushPendingLocked(ctx, r, n)
 	}
-	return nil
+	return true, nil
 }
 
-// load reads the session of a task from the repositories, creating the record
-// when there is none, and brings a transcript left by a previous run to rest.
-func (s *Service) load(ctx context.Context, t TaskInfo) (*run, error) {
-	rec, err := s.sessions.GetByTask(ctx, t.ID)
+// load reads the session of a task at its stage from the repositories,
+// creating the record when there is none, and brings a transcript left by a
+// previous run to rest.
+func (s *Service) load(ctx context.Context, t TaskInfo, n *notes) (*run, error) {
+	rec, err := s.sessions.Get(ctx, t.ID, string(t.Stage))
 	switch {
 	case errors.Is(err, ErrNotFound):
 		now := s.now().UTC()
-		rec = Record{ID: s.newID(), TaskID: t.ID, Stage: string(prompts.StagePRD), CreatedAt: now, UpdatedAt: now}
+		rec = Record{ID: s.newID(), TaskID: t.ID, Stage: string(t.Stage), CreatedAt: now, UpdatedAt: now}
 		if insertErr := s.sessions.Insert(ctx, rec); insertErr != nil {
 			return nil, insertErr
 		}
@@ -210,7 +238,8 @@ func (s *Service) load(ctx context.Context, t TaskInfo) (*run, error) {
 	}
 
 	r := newRun(t, rec, maxSeq+1)
-	prdMarked := false
+	written := writtenMarker(artifactOf(t.Stage))
+	marked := false
 	for i := range stored {
 		e := &stored[i]
 		r.byID[e.ID] = e
@@ -219,8 +248,8 @@ func (s *Service) load(ctx context.Context, t TaskInfo) (*run, error) {
 			continue
 		}
 		r.entries = append(r.entries, e)
-		if e.Kind == KindMarker && e.Marker.Type == MarkerPRDWritten {
-			prdMarked = true
+		if e.Kind == KindMarker && e.Marker.Type == written {
+			marked = true
 		}
 		if settle(e) {
 			if err := s.entries.Update(ctx, *e); err != nil {
@@ -229,14 +258,18 @@ func (s *Service) load(ctx context.Context, t TaskInfo) (*run, error) {
 		}
 	}
 
-	if t.PRDExists && !prdMarked {
-		e := r.newEntry(s, Entry{Kind: KindMarker, Marker: &MarkerEntry{Type: MarkerPRDWritten}})
+	if t.ArtifactExists && !marked {
+		e := r.newEntry(s, Entry{Kind: KindMarker, Marker: &MarkerEntry{Type: written}})
 		r.entries = append(r.entries, e)
 		r.byID[e.ID] = e
 		if err := s.entries.Insert(ctx, rec.ID, *e); err != nil {
 			return nil, err
 		}
 	}
+
+	// The conversation on screen is the one of the stage that just loaded, so
+	// the frontend has to read it again from scratch.
+	n.reset(t.ID)
 	return r, nil
 }
 
@@ -259,8 +292,10 @@ func settle(e *Entry) bool {
 	return true
 }
 
-// Start opens the session of a freshly created task and queues the prompt.
-func (s *Service) Start(ctx context.Context, t TaskInfo) error {
+// Start opens the session of a stage, marks its beginning and queues the
+// prompt. restarted says the stage is being started over, not reached for the
+// first time.
+func (s *Service) Start(ctx context.Context, t TaskInfo, restarted bool) error {
 	if err := s.Open(ctx, t); err != nil {
 		return err
 	}
@@ -270,8 +305,21 @@ func (s *Service) Start(ctx context.Context, t TaskInfo) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	r := s.runs[t.ID]
-	if err := s.enqueueLocked(ctx, r, &UserEntry{Text: t.InitialContext, Prompt: true}, n); err != nil {
+	r, err := s.runOf(t.ID)
+	if err != nil {
+		return err
+	}
+	s.appendLocked(ctx, r, Entry{Kind: KindMarker, Marker: &MarkerEntry{
+		Type: MarkerStageStarted, Stage: string(t.Stage), Restarted: restarted,
+	}}, n)
+
+	// Only the PRD prompt carries what the user wrote when they created the
+	// task; every later stage reads the artifacts of the ones before it.
+	text := ""
+	if t.Stage == prompts.StagePRD {
+		text = t.InitialContext
+	}
+	if err := s.enqueueLocked(ctx, r, &UserEntry{Text: text, Prompt: true}, n); err != nil {
 		return err
 	}
 	s.flushPendingLocked(ctx, r, n)
@@ -303,6 +351,54 @@ func (s *Service) Send(ctx context.Context, taskID, text string) error {
 	r.stopTimer(&r.idleTimer)
 	s.flushPendingLocked(ctx, r, n)
 	return nil
+}
+
+// SendFromApp queues a message the app wrote for the agent, and counts it as
+// one more correction of the session.
+func (s *Service) SendFromApp(ctx context.Context, taskID, text string) error {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return ErrEmptyMessage
+	}
+
+	n := &notes{}
+	defer s.flush(n)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	r, err := s.runOf(taskID)
+	if err != nil {
+		return err
+	}
+	if r.rec.Paused {
+		return fmt.Errorf("send to task %s: %w", taskID, ErrPaused)
+	}
+	r.rec.Corrections++
+	if err := s.persistRecord(ctx, r); err != nil {
+		return err
+	}
+	if err := s.enqueueLocked(ctx, r, &UserEntry{Text: text, App: true}, n); err != nil {
+		return err
+	}
+	r.stopTimer(&r.idleTimer)
+	s.flushPendingLocked(ctx, r, n)
+	return nil
+}
+
+// Discard throws away the sessions of a task in the given stages, with their
+// conversations. The one in memory is stopped first when it is among them.
+func (s *Service) Discard(ctx context.Context, taskID string, stages ...string) error {
+	s.mu.Lock()
+	r, open := s.runs[taskID]
+	live := open && slices.Contains(stages, r.rec.Stage)
+	s.mu.Unlock()
+
+	if live {
+		if err := s.Close(ctx, taskID); err != nil {
+			return err
+		}
+	}
+	return s.sessions.Delete(ctx, taskID, stages...)
 }
 
 // RemovePending drops a queued message before it reaches the CLI.
@@ -603,8 +699,8 @@ func sessionSuggestions(raw json.RawMessage) json.RawMessage {
 	return encoded
 }
 
-// MarkArtifact records that the PRD appeared (first) or was rewritten.
-func (s *Service) MarkArtifact(ctx context.Context, taskID string, first bool) {
+// MarkArtifact records that an artifact appeared (first) or was rewritten.
+func (s *Service) MarkArtifact(ctx context.Context, taskID string, kind ArtifactKind, first bool) {
 	n := &notes{}
 	defer s.flush(n)
 	s.mu.Lock()
@@ -614,11 +710,11 @@ func (s *Service) MarkArtifact(ctx context.Context, taskID string, first bool) {
 	if err != nil {
 		return
 	}
-	kind := MarkerPRDUpdated
+	marker := updatedMarker(kind)
 	if first {
-		kind = MarkerPRDWritten
+		marker = writtenMarker(kind)
 	}
-	s.appendLocked(ctx, r, Entry{Kind: KindMarker, Marker: &MarkerEntry{Type: kind}}, n)
+	s.appendLocked(ctx, r, Entry{Kind: KindMarker, Marker: &MarkerEntry{Type: marker}}, n)
 }
 
 // Transcript returns a copy of the conversation of a task.
@@ -633,6 +729,7 @@ func (s *Service) Transcript(_ context.Context, taskID string) (Transcript, erro
 	return Transcript{
 		TaskID:    taskID,
 		SessionID: r.rec.ID,
+		Stage:     r.rec.Stage,
 		Entries:   cloneEntries(r.entries),
 		Pending:   cloneEntries(r.pending),
 	}, nil
@@ -797,6 +894,11 @@ func (n *notes) text(taskID, entryID, text string) {
 // remove notes that an entry was deleted.
 func (n *notes) remove(taskID, entryID string) {
 	n.events = append(n.events, TranscriptEvent{TaskID: taskID, Kind: EventRemove, EntryID: entryID})
+}
+
+// reset notes that the conversation of a task has to be read again whole.
+func (n *notes) reset(taskID string) {
+	n.events = append(n.events, TranscriptEvent{TaskID: taskID, Kind: EventReset})
 }
 
 // flush runs the callbacks an operation collected. It must be called after

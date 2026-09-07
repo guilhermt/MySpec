@@ -72,11 +72,13 @@ type TaskSummary struct {
 	UpdatedAt       string `json:"updatedAt"`
 }
 
-// UserEntry is a message the user wrote.
+// UserEntry is a message sent to the agent: one the user wrote, or one the app
+// sent on their behalf.
 type UserEntry struct {
 	Text    string `json:"text"`
 	Pending bool   `json:"pending"`
 	Prompt  bool   `json:"prompt"`
+	App     bool   `json:"app"`
 }
 
 // AssistantEntry is one content block of an assistant message.
@@ -145,9 +147,13 @@ type QuestionEntry struct {
 
 // MarkerEntry is a milestone of the conversation.
 type MarkerEntry struct {
-	// Type is prd_written, prd_updated, compacted or interrupted.
+	// Type is prd_written, prd_updated, tech_spec_written, tech_spec_updated,
+	// plan_written, plan_updated, stage_started, compacted or interrupted.
 	Type      string `json:"type"`
 	PreTokens int    `json:"preTokens"`
+	// Stage and Restarted belong to stage_started alone.
+	Stage     string `json:"stage"`
+	Restarted bool   `json:"restarted"`
 }
 
 // ErrorEntry is a failure shown in the conversation.
@@ -180,10 +186,12 @@ type Entry struct {
 
 // Transcript is the whole conversation of a task.
 type Transcript struct {
-	TaskID    string  `json:"taskId"`
-	SessionID string  `json:"sessionId"`
-	Entries   []Entry `json:"entries"` // never nil
-	Pending   []Entry `json:"pending"` // never nil
+	TaskID    string `json:"taskId"`
+	SessionID string `json:"sessionId"`
+	// Stage is the stage of the session the conversation belongs to.
+	Stage   string  `json:"stage"`
+	Entries []Entry `json:"entries"` // never nil
+	Pending []Entry `json:"pending"` // never nil
 }
 
 // TranscriptEvent is one change to the conversation of a task.

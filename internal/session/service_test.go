@@ -32,10 +32,14 @@ func TestStartEchoesTheRenderedPrompt(t *testing.T) {
 	}
 
 	tr := f.transcript(t, "t1")
-	if len(tr.Entries) != 2 {
-		t.Fatalf("entries = %d, want the prompt and its answer", len(tr.Entries))
+	if len(tr.Entries) != 3 {
+		t.Fatalf("entries = %d, want the stage marker, the prompt and its answer", len(tr.Entries))
 	}
-	user, assistant := tr.Entries[0], tr.Entries[1]
+	marker, user, assistant := tr.Entries[0], tr.Entries[1], tr.Entries[2]
+	wantMarker := &session.MarkerEntry{Type: session.MarkerStageStarted, Stage: string(prompts.StagePRD)}
+	if diff := cmp.Diff(wantMarker, marker.Marker); diff != "" {
+		t.Errorf("stage marker mismatch (-want +got):\n%s", diff)
+	}
 	wantUser := &session.UserEntry{Text: info.InitialContext, Prompt: true}
 	if diff := cmp.Diff(wantUser, user.User); diff != "" {
 		t.Errorf("user entry mismatch (-want +got):\n%s", diff)
@@ -44,7 +48,7 @@ func TestStartEchoesTheRenderedPrompt(t *testing.T) {
 		t.Errorf("turn ids = %q, %q, want both %q", user.TurnID, assistant.TurnID, user.ID)
 	}
 
-	rendered, _ := renderPrompt(prompts.Vars{
+	rendered, _ := renderPrompt(prompts.StagePRD, prompts.Vars{
 		TaskName:       info.Name,
 		ArtifactsDir:   info.ArtifactsDir,
 		PRDPath:        info.PRDPath,
@@ -58,19 +62,19 @@ func TestStartEchoesTheRenderedPrompt(t *testing.T) {
 	// The prompt was created pending and delivered right away: both versions
 	// were emitted, and the final one is the one the transcript holds.
 	events := f.eventsOf("t1", session.EventEntry)
-	if len(events) < 3 {
-		t.Fatalf("entry events = %d, want the pending prompt, its delivery and the answer", len(events))
+	if len(events) < 4 {
+		t.Fatalf("entry events = %d, want the marker, the pending prompt, its delivery and the answer", len(events))
 	}
-	if !events[0].Entry.User.Pending || events[1].Entry.User.Pending {
-		t.Errorf("first two events pending = %v, %v, want true then false",
-			events[0].Entry.User.Pending, events[1].Entry.User.Pending)
+	if !events[1].Entry.User.Pending || events[2].Entry.User.Pending {
+		t.Errorf("prompt events pending = %v, %v, want true then false",
+			events[1].Entry.User.Pending, events[2].Entry.User.Pending)
 	}
 	last := events[len(events)-1].Entry
 	if diff := cmp.Diff(assistant, *last); diff != "" {
 		t.Errorf("last event mismatch (-want +got):\n%s", diff)
 	}
 
-	rec := f.sessions.get(t, "t1")
+	rec := f.sessions.get(t, "t1", prompts.StagePRD)
 	if !rec.Started || rec.ContextWindow != claudetest.ContextWindow || rec.ID != tr.SessionID {
 		t.Errorf("record = %+v, want started with the fake's window and id %s", rec, tr.SessionID)
 	}
@@ -95,7 +99,7 @@ func TestToolCallBecomesAnAction(t *testing.T) {
 	for _, e := range tr.Entries {
 		kinds = append(kinds, e.Kind)
 	}
-	want := []session.Kind{session.KindUser, session.KindAction, session.KindAssistant}
+	want := []session.Kind{session.KindMarker, session.KindUser, session.KindAction, session.KindAssistant}
 	if diff := cmp.Diff(want, kinds); diff != "" {
 		t.Fatalf("kinds mismatch (-want +got):\n%s", diff)
 	}
@@ -107,7 +111,7 @@ func TestToolCallBecomesAnAction(t *testing.T) {
 		Target:    claudetest.ReadPath,
 		Status:    session.ActionDone,
 	}
-	if diff := cmp.Diff(wantAction, tr.Entries[1].Action); diff != "" {
+	if diff := cmp.Diff(wantAction, tr.Entries[2].Action); diff != "" {
 		t.Errorf("action mismatch (-want +got):\n%s", diff)
 	}
 }
@@ -120,7 +124,10 @@ func TestCompactionAddsAMarker(t *testing.T) {
 	f.waitIdle(t, "t1")
 
 	markers := f.entriesOf(t, "t1", session.KindMarker)
-	want := []*session.MarkerEntry{{Type: session.MarkerCompacted, PreTokens: 120000}}
+	want := []*session.MarkerEntry{
+		{Type: session.MarkerStageStarted, Stage: string(prompts.StagePRD)},
+		{Type: session.MarkerCompacted, PreTokens: 120000},
+	}
 	got := make([]*session.MarkerEntry, 0, len(markers))
 	for _, m := range markers {
 		got = append(got, m.Marker)
@@ -350,8 +357,8 @@ func TestInterruptEndsTheTurn(t *testing.T) {
 	if !got.Complete || !got.Interrupted || !strings.HasPrefix(got.Text, "tick ") {
 		t.Errorf("assistant = %+v, want a complete, interrupted entry with the ticks", got)
 	}
-	if markers := f.entriesOf(t, "t1", session.KindMarker); len(markers) != 0 {
-		t.Errorf("markers = %+v, want none when text was interrupted", markers)
+	if markers := f.entriesOf(t, "t1", session.KindMarker); len(markers) != 1 {
+		t.Errorf("markers = %+v, want only the stage marker when text was interrupted", markers)
 	}
 
 	// Interrupting an idle session does nothing.
@@ -445,10 +452,10 @@ func TestCrashIsReportedAndRetried(t *testing.T) {
 		t.Errorf("error entry mismatch (-want +got):\n%s", diff)
 	}
 	markers := f.entriesOf(t, "t1", session.KindMarker)
-	if len(markers) != 1 || markers[0].Marker.Type != session.MarkerInterrupted {
+	if len(markers) != 2 || markers[1].Marker.Type != session.MarkerInterrupted {
 		t.Errorf("markers = %+v, want the interrupted marker of a turn without text", markers)
 	}
-	if rec := f.sessions.get(t, "t1"); rec.LastError != sum.LastError || !rec.Started {
+	if rec := f.sessions.get(t, "t1", prompts.StagePRD); rec.LastError != sum.LastError || !rec.Started {
 		t.Errorf("record = %+v, want the error persisted on a started session", rec)
 	}
 
@@ -486,7 +493,7 @@ func TestPauseStopsAndResumeContinues(t *testing.T) {
 		t.Errorf("assistant = %+v, want completed as interrupted", got)
 	}
 	wantErrIs(t, f.service.Send(t.Context(), "t1", "later"), session.ErrPaused)
-	if rec := f.sessions.get(t, "t1"); !rec.Paused {
+	if rec := f.sessions.get(t, "t1", prompts.StagePRD); !rec.Paused {
 		t.Errorf("record paused = false, want true")
 	}
 
@@ -541,7 +548,8 @@ func TestOpenReconcilesALeftoverTranscript(t *testing.T) {
 	if err := f.sessions.Insert(t.Context(), rec); err != nil {
 		t.Fatalf("Insert() = %v, want nil", err)
 	}
-	f.entries.seed(t, "sess-1",
+	f.entries.seed(
+		t, "sess-1",
 		session.Entry{
 			ID: "u1", Seq: 1, TurnID: "u1", Kind: session.KindUser, CreatedAt: base,
 			User: &session.UserEntry{Text: "hello", Prompt: true},
@@ -568,7 +576,7 @@ func TestOpenReconcilesALeftoverTranscript(t *testing.T) {
 	)
 
 	info := taskInfo(t, "t1")
-	info.PRDExists = true
+	info.ArtifactExists = true
 	f.open(t, info)
 
 	tr := f.transcript(t, "t1")
@@ -620,7 +628,8 @@ func TestOpenDeliversWhatWasQueued(t *testing.T) {
 	if err := f.sessions.Insert(t.Context(), rec); err != nil {
 		t.Fatalf("Insert() = %v, want nil", err)
 	}
-	f.entries.seed(t, "sess-1",
+	f.entries.seed(
+		t, "sess-1",
 		session.Entry{
 			ID: "u1", Seq: 1, TurnID: "u1", Kind: session.KindUser, CreatedAt: base,
 			User: &session.UserEntry{Text: "queued while paused", Pending: true},
@@ -780,12 +789,19 @@ func TestMarkArtifact(t *testing.T) {
 	f.waitIdle(t, "t1")
 	before := f.stateCount("t1")
 
-	f.service.MarkArtifact(t.Context(), "t1", true)
-	f.service.MarkArtifact(t.Context(), "t1", false)
-	f.service.MarkArtifact(t.Context(), "missing", true)
+	for _, kind := range []session.ArtifactKind{session.ArtifactPRD, session.ArtifactTechSpec, session.ArtifactPlan} {
+		f.service.MarkArtifact(t.Context(), "t1", kind, true)
+		f.service.MarkArtifact(t.Context(), "t1", kind, false)
+	}
+	f.service.MarkArtifact(t.Context(), "missing", session.ArtifactPRD, true)
 
 	markers := f.entriesOf(t, "t1", session.KindMarker)
-	want := []session.MarkerType{session.MarkerPRDWritten, session.MarkerPRDUpdated}
+	want := []session.MarkerType{
+		session.MarkerStageStarted,
+		session.MarkerPRDWritten, session.MarkerPRDUpdated,
+		session.MarkerTechSpecWritten, session.MarkerTechSpecUpdated,
+		session.MarkerPlanWritten, session.MarkerPlanUpdated,
+	}
 	got := make([]session.MarkerType, 0, len(markers))
 	for _, m := range markers {
 		got = append(got, m.Marker.Type)
@@ -794,10 +810,211 @@ func TestMarkArtifact(t *testing.T) {
 		t.Errorf("markers mismatch (-want +got):\n%s", diff)
 	}
 	events := f.eventsOf("t1", session.EventEntry)
-	if last := events[len(events)-1].Entry; last.Kind != session.KindMarker || last.Marker.Type != session.MarkerPRDUpdated {
-		t.Errorf("last event = %+v, want the prd_updated marker", last)
+	if last := events[len(events)-1].Entry; last.Kind != session.KindMarker || last.Marker.Type != session.MarkerPlanUpdated {
+		t.Errorf("last event = %+v, want the plan_updated marker", last)
 	}
 	if after := f.stateCount("t1"); after != before {
 		t.Errorf("OnState ran %d times for a marker, want 0", after-before)
+	}
+}
+
+func TestStartOfALaterStageSendsItsPromptWithoutTheInitialContext(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	info := atStage(taskInfo(t, "t1"), prompts.StageTechSpec)
+	f.start(t, info)
+	f.waitIdle(t, "t1")
+
+	tr := f.transcript(t, "t1")
+	if tr.Stage != string(prompts.StageTechSpec) {
+		t.Errorf("transcript stage = %q, want %q", tr.Stage, prompts.StageTechSpec)
+	}
+	if len(tr.Entries) != 3 {
+		t.Fatalf("entries = %d, want the stage marker, the prompt and its answer", len(tr.Entries))
+	}
+	wantMarker := &session.MarkerEntry{Type: session.MarkerStageStarted, Stage: string(prompts.StageTechSpec)}
+	if diff := cmp.Diff(wantMarker, tr.Entries[0].Marker); diff != "" {
+		t.Errorf("stage marker mismatch (-want +got):\n%s", diff)
+	}
+	// What the user typed belongs to the PRD alone; a later stage reads the
+	// artifacts instead, so its user entry is empty.
+	wantUser := &session.UserEntry{Prompt: true}
+	if diff := cmp.Diff(wantUser, tr.Entries[1].User); diff != "" {
+		t.Errorf("user entry mismatch (-want +got):\n%s", diff)
+	}
+	rendered, _ := renderPrompt(prompts.StageTechSpec, prompts.Vars{
+		TaskName:     info.Name,
+		ArtifactsDir: info.ArtifactsDir,
+		PRDPath:      info.PRDPath,
+	})
+	if got := tr.Entries[2].Assistant.Text; got != rendered {
+		t.Errorf("prompt sent = %q, want %q", got, rendered)
+	}
+}
+
+func TestStartAgainMarksTheStageAsRestarted(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	info := taskInfo(t, "t1")
+	f.start(t, info)
+	f.waitIdle(t, "t1")
+
+	if err := f.service.Start(t.Context(), info, true); err != nil {
+		t.Fatalf("Start() = %v, want nil", err)
+	}
+
+	markers := f.entriesOf(t, "t1", session.KindMarker)
+	if len(markers) != 2 {
+		t.Fatalf("markers = %d, want one per start", len(markers))
+	}
+	if m := markers[1].Marker; m.Type != session.MarkerStageStarted || !m.Restarted {
+		t.Errorf("second marker = %+v, want a restarted stage_started", m)
+	}
+}
+
+func TestOpenInAnotherStageClosesTheRunAndResets(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	info := taskInfo(t, "t1")
+	f.start(t, info)
+	f.waitIdle(t, "t1")
+	prd := f.transcript(t, "t1")
+
+	f.open(t, atStage(info, prompts.StageTechSpec))
+
+	tr := f.transcript(t, "t1")
+	if tr.Stage != string(prompts.StageTechSpec) {
+		t.Errorf("stage = %q, want %q", tr.Stage, prompts.StageTechSpec)
+	}
+	if tr.SessionID == prd.SessionID {
+		t.Errorf("session id = %q, want a session of its own for the new stage", tr.SessionID)
+	}
+	if len(tr.Entries) != 0 {
+		t.Errorf("entries = %+v, want an empty conversation", tr.Entries)
+	}
+	if sum := f.summary(t, "t1"); sum.Stage != string(prompts.StageTechSpec) || sum.ProcessRunning {
+		t.Errorf("summary = %+v, want the new stage with no process", sum)
+	}
+	// The conversation on screen belongs to the stage that just left, so the
+	// frontend is told to read it again.
+	if resets := f.eventsOf("t1", session.EventReset); len(resets) != 2 {
+		t.Errorf("reset events = %d, want one per load", len(resets))
+	}
+
+	// The conversation of the stage that was left is still stored.
+	if entries := f.entries.list(t, prd.SessionID); len(entries) != len(prd.Entries) {
+		t.Errorf("stored entries of the PRD = %d, want %d", len(entries), len(prd.Entries))
+	}
+}
+
+func TestSendFromAppMarksTheMessageAndCountsIt(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	f.start(t, taskInfo(t, "t1"))
+	f.waitIdle(t, "t1")
+
+	if err := f.service.SendFromApp(t.Context(), "t1", "  fix the plan  "); err != nil {
+		t.Fatalf("SendFromApp() = %v, want nil", err)
+	}
+	f.waitIdle(t, "t1")
+
+	users := f.entriesOf(t, "t1", session.KindUser)
+	if len(users) != 2 {
+		t.Fatalf("user entries = %d, want the prompt and the correction", len(users))
+	}
+	want := &session.UserEntry{Text: "fix the plan", App: true}
+	if diff := cmp.Diff(want, users[1].User); diff != "" {
+		t.Errorf("app entry mismatch (-want +got):\n%s", diff)
+	}
+	if sum := f.summary(t, "t1"); sum.Corrections != 1 {
+		t.Errorf("Corrections = %d, want 1", sum.Corrections)
+	}
+	if rec := f.sessions.get(t, "t1", prompts.StagePRD); rec.Corrections != 1 {
+		t.Errorf("stored corrections = %d, want 1", rec.Corrections)
+	}
+	wantErrIs(t, f.service.SendFromApp(t.Context(), "t1", "   "), session.ErrEmptyMessage)
+}
+
+func TestDiscardClosesTheRunAndDropsTheRecords(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	info := taskInfo(t, "t1")
+	f.start(t, info)
+	f.waitIdle(t, "t1")
+
+	// A stage the task never reached is discarded just the same.
+	stages := []string{string(prompts.StagePRD), string(prompts.StagePlan)}
+	if err := f.service.Discard(t.Context(), "t1", stages...); err != nil {
+		t.Fatalf("Discard() = %v, want nil", err)
+	}
+
+	if _, ok := f.service.Summary("t1"); ok {
+		t.Error("Summary() found a run, want the session closed")
+	}
+	if _, err := f.sessions.Get(t.Context(), "t1", string(prompts.StagePRD)); !errors.Is(err, session.ErrNotFound) {
+		t.Errorf("Get() = %v, want session.ErrNotFound", err)
+	}
+
+	// Starting the stage again builds a conversation from scratch.
+	f.start(t, info)
+	if tr := f.transcript(t, "t1"); len(tr.Entries) != 2 {
+		t.Errorf("entries = %d, want the stage marker and the prompt of a fresh session", len(tr.Entries))
+	}
+}
+
+func TestSummaryIsIdleOnlyAtRest(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "slow")
+	info := taskInfo(t, "t1")
+	f.start(t, info)
+
+	// A turn in flight is not rest.
+	f.waitStatus(t, "t1", "the turn to start", func(s session.Summary) bool { return s.TurnRunning })
+	if sum := f.summary(t, "t1"); sum.Idle {
+		t.Error("Idle = true while a turn runs, want false")
+	}
+
+	// Nor is a message still queued behind it.
+	f.send(t, "t1", "next")
+	sum := f.summary(t, "t1")
+	if sum.PendingCount != 1 || sum.Idle {
+		t.Errorf("summary = %+v, want a queued message and Idle false", sum)
+	}
+	pending := f.transcript(t, "t1").Pending[0]
+	if err := f.service.RemovePending(t.Context(), "t1", pending.ID); err != nil {
+		t.Fatalf("RemovePending() = %v, want nil", err)
+	}
+
+	// With the turn interrupted and the queue empty, the session is at rest.
+	if err := f.service.Interrupt(t.Context(), "t1"); err != nil {
+		t.Fatalf("Interrupt() = %v, want nil", err)
+	}
+	if sum := f.waitIdle(t, "t1"); !sum.Idle {
+		t.Errorf("summary = %+v, want Idle true", sum)
+	}
+
+	// A paused session is not rest.
+	if err := f.service.Pause(t.Context(), "t1"); err != nil {
+		t.Fatalf("Pause() = %v, want nil", err)
+	}
+	if sum := f.summary(t, "t1"); sum.Idle {
+		t.Error("Idle = true while paused, want false")
+	}
+	if err := f.service.Resume(t.Context(), "t1"); err != nil {
+		t.Fatalf("Resume() = %v, want nil", err)
+	}
+	waitFor(t, "the session to come back", func() bool { return f.summary(t, "t1").Idle })
+
+	// Nor is one holding an error.
+	broken := newFixtureWith(t, &fakeLauncher{scenario: "echo", locateErr: claude.ErrNotFound}, 0)
+	broken.start(t, taskInfo(t, "t2"))
+	if sum := broken.summary(t, "t2"); sum.Idle || sum.Status != session.StatusError {
+		t.Errorf("summary = %+v, want an error and Idle false", sum)
 	}
 }

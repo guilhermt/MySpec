@@ -1,9 +1,9 @@
 package bindings
 
 import (
-	"os"
 	"time"
 
+	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
 	"github.com/guilhermt/myspec/internal/workspace"
@@ -72,18 +72,25 @@ func FromTasks(tasks []task.Task, artifacts func(id string) task.Artifacts, summ
 	return converted
 }
 
-// TaskInfo is what a session needs to know about its task. internal/app and
-// TaskService both build it, so it lives here.
-func TaskInfo(t task.Task) session.TaskInfo {
-	_, err := os.Stat(t.PRDPath())
+// TaskInfo is what a session needs to know about its task at the stage it is
+// in. internal/app and TaskService both build it, so it lives here.
+func TaskInfo(t task.Task, a task.Artifacts, repos []task.Repository) session.TaskInfo {
+	rels := make([]string, len(repos))
+	for i, repo := range repos {
+		rels[i] = repo.Rel
+	}
 	return session.TaskInfo{
 		ID:             t.ID,
 		Name:           t.Name,
 		Dir:            t.Dir(),
 		ArtifactsDir:   t.ArtifactsDir,
+		Stage:          prompts.Stage(t.Stage),
 		PRDPath:        t.PRDPath(),
+		TechSpecPath:   t.TechSpecPath(),
+		StepsDir:       t.StepsDir(),
+		Repositories:   rels,
 		InitialContext: t.InitialContext,
-		PRDExists:      err == nil,
+		ArtifactExists: a.Done(t.Stage),
 	}
 }
 
@@ -93,6 +100,7 @@ func FromTranscript(tr session.Transcript) Transcript {
 	return Transcript{
 		TaskID:    tr.TaskID,
 		SessionID: tr.SessionID,
+		Stage:     tr.Stage,
 		Entries:   fromEntries(tr.Entries),
 		Pending:   fromEntries(tr.Pending),
 	}
@@ -132,7 +140,12 @@ func FromEntry(e session.Entry) Entry {
 		CreatedAt: e.CreatedAt.Format(time.RFC3339),
 	}
 	if e.User != nil {
-		converted.User = &UserEntry{Text: e.User.Text, Pending: e.User.Pending, Prompt: e.User.Prompt}
+		converted.User = &UserEntry{
+			Text:    e.User.Text,
+			Pending: e.User.Pending,
+			Prompt:  e.User.Prompt,
+			App:     e.User.App,
+		}
 	}
 	if e.Assistant != nil {
 		converted.Assistant = &AssistantEntry{
@@ -159,7 +172,12 @@ func FromEntry(e session.Entry) Entry {
 		converted.Question = fromQuestion(e.Question)
 	}
 	if e.Marker != nil {
-		converted.Marker = &MarkerEntry{Type: string(e.Marker.Type), PreTokens: e.Marker.PreTokens}
+		converted.Marker = &MarkerEntry{
+			Type:      string(e.Marker.Type),
+			PreTokens: e.Marker.PreTokens,
+			Stage:     e.Marker.Stage,
+			Restarted: e.Marker.Restarted,
+		}
 	}
 	if e.Error != nil {
 		converted.Error = &ErrorEntry{

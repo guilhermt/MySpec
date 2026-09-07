@@ -127,21 +127,32 @@ func TestGetTranscriptCarriesThePrompt(t *testing.T) {
 	if len(transcript.Pending) != 0 {
 		t.Errorf("len(Pending) = %d, want 0", len(transcript.Pending))
 	}
-	if len(transcript.Entries) == 0 {
-		t.Fatal("GetTranscript() returned no entries, want the prompt")
+	if len(transcript.Entries) < 2 {
+		t.Fatalf("entries = %d, want the stage marker and the prompt", len(transcript.Entries))
+	}
+	if transcript.Stage != "prd" {
+		t.Errorf("stage = %q, want prd", transcript.Stage)
 	}
 
-	first := transcript.Entries[0]
-	if first.Kind != "user" || first.User == nil {
-		t.Fatalf("first entry = %+v, want a user one", first)
+	marker := transcript.Entries[0]
+	if marker.Kind != "marker" || marker.Marker == nil {
+		t.Fatalf("first entry = %+v, want a marker", marker)
 	}
-	if !first.User.Prompt {
-		t.Error("first entry is not marked as the prompt")
+	if marker.Marker.Type != "stage_started" || marker.Marker.Stage != "prd" || marker.Marker.Restarted {
+		t.Errorf("marker = %+v, want the first stage_started of the PRD", marker.Marker)
 	}
-	if first.User.Text != "a login screen with email and password" {
-		t.Errorf("prompt text = %q, want the initial context", first.User.Text)
+
+	prompt := transcript.Entries[1]
+	if prompt.Kind != "user" || prompt.User == nil {
+		t.Fatalf("second entry = %+v, want a user one", prompt)
 	}
-	if first.User.Pending {
+	if !prompt.User.Prompt || prompt.User.App {
+		t.Errorf("prompt flags = %+v, want the prompt of the user", prompt.User)
+	}
+	if prompt.User.Text != "a login screen with email and password" {
+		t.Errorf("prompt text = %q, want the initial context", prompt.User.Text)
+	}
+	if prompt.User.Pending {
 		t.Error("the prompt is still pending, want it delivered")
 	}
 }

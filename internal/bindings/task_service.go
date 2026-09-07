@@ -38,7 +38,8 @@ func (s *TaskService) CreateTask(req CreateTaskRequest) (string, error) {
 		return "", s.fail("CreateTask", err)
 	}
 
-	if err := s.sessions.Start(ctx, TaskInfo(t)); err != nil {
+	artifacts, _ := s.tasks.Artifacts(t.ID)
+	if err := s.sessions.Start(ctx, TaskInfo(t, artifacts, s.tasks.Repositories(t)), false); err != nil {
 		if deleteErr := s.tasks.Delete(ctx, t.ID); deleteErr != nil {
 			s.log.Error("binding failed", "method", "CreateTask", "err", deleteErr)
 		}

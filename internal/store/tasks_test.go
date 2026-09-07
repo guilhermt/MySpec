@@ -184,8 +184,8 @@ func TestTasksDeleteCascadesToTheSessionAndItsEntries(t *testing.T) {
 	if _, err := s.Tasks.Get(t.Context(), taskID); !errors.Is(err, task.ErrNotFound) {
 		t.Errorf("Get() = %v, want task.ErrNotFound", err)
 	}
-	if _, err := s.Sessions.GetByTask(t.Context(), taskID); !errors.Is(err, session.ErrNotFound) {
-		t.Errorf("Sessions.GetByTask() = %v, want session.ErrNotFound", err)
+	if _, err := s.Sessions.Get(t.Context(), taskID, string(task.StagePRD)); !errors.Is(err, session.ErrNotFound) {
+		t.Errorf("Sessions.Get() = %v, want session.ErrNotFound", err)
 	}
 	entries, err := s.Entries.List(t.Context(), sessionID)
 	if err != nil {

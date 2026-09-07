@@ -85,10 +85,17 @@ export interface ErrorEntry {
  */
 export interface MarkerEntry {
     /**
-     * Type is prd_written, prd_updated, compacted or interrupted.
+     * Type is prd_written, prd_updated, tech_spec_written, tech_spec_updated,
+     * plan_written, plan_updated, stage_started, compacted or interrupted.
      */
     "type": string;
     "preTokens": number;
+
+    /**
+     * Stage and Restarted belong to stage_started alone.
+     */
+    "stage": string;
+    "restarted": boolean;
 }
 
 /**
@@ -275,6 +282,11 @@ export interface Transcript {
     "sessionId": string;
 
     /**
+     * Stage is the stage of the session the conversation belongs to.
+     */
+    "stage": string;
+
+    /**
      * never nil
      */
     "entries": Entry[] | null;
@@ -301,12 +313,14 @@ export interface TranscriptEvent {
 }
 
 /**
- * UserEntry is a message the user wrote.
+ * UserEntry is a message sent to the agent: one the user wrote, or one the app
+ * sent on their behalf.
  */
 export interface UserEntry {
     "text": string;
     "pending": boolean;
     "prompt": boolean;
+    "app": boolean;
 }
 
 /**

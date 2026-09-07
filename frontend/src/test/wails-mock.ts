@@ -148,7 +148,10 @@ function payloadOf(kind: EntryKind): Omit<Entry, "id" | "seq" | "turnId" | "kind
   };
   switch (kind) {
     case "user":
-      return { ...empty, user: { text: "Add a login screen", pending: false, prompt: false } };
+      return {
+        ...empty,
+        user: { text: "Add a login screen", pending: false, prompt: false, app: false },
+      };
     case "assistant":
       return {
         ...empty,
@@ -213,7 +216,10 @@ function payloadOf(kind: EntryKind): Omit<Entry, "id" | "seq" | "turnId" | "kind
         },
       };
     case "marker":
-      return { ...empty, marker: { type: "prd_written", preTokens: 0 } };
+      return {
+        ...empty,
+        marker: { type: "prd_written", preTokens: 0, stage: "", restarted: false },
+      };
     case "error":
       return {
         ...empty,
@@ -239,6 +245,7 @@ export function makeTranscript(overrides: Partial<Transcript> = {}): Transcript 
   return {
     taskId: "task-1",
     sessionId: "session-1",
+    stage: "prd",
     entries: [],
     pending: [],
     ...overrides,

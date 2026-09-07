@@ -143,11 +143,13 @@ func newFixture(t *testing.T) *fixture {
 		t.Fatalf("prompts.Seed() = %v, want nil", err)
 	}
 	f.sessions = session.New(session.Deps{
-		Sessions:     st.Sessions,
-		Entries:      st.Entries,
-		Launcher:     fakeLauncher{},
-		RenderPrompt: func(vars prompts.Vars) (string, error) { return prompts.Render(f.dataDir, prompts.StagePRD, vars) },
-		Log:          log,
+		Sessions: st.Sessions,
+		Entries:  st.Entries,
+		Launcher: fakeLauncher{},
+		RenderPrompt: func(stage prompts.Stage, vars prompts.Vars) (string, error) {
+			return prompts.Render(f.dataDir, stage, vars)
+		},
+		Log: log,
 	})
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
@@ -161,9 +163,7 @@ func newFixture(t *testing.T) *fixture {
 		Repos:   f.repoPaths,
 		OnArtifact: func(t task.Task, changes []task.Change) {
 			for _, c := range changes {
-				if c.Kind == task.ArtifactPRD {
-					f.sessions.MarkArtifact(context.Background(), t.ID, c.First)
-				}
+				f.sessions.MarkArtifact(context.Background(), t.ID, session.ArtifactKind(c.Kind), c.First)
 			}
 		},
 	})

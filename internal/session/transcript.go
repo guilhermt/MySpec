@@ -40,11 +40,13 @@ type Entry struct {
 	Error      *ErrorEntry
 }
 
-// UserEntry is a message the user wrote.
+// UserEntry is a message sent to the agent: one the user wrote, or one the app
+// sent on their behalf.
 type UserEntry struct {
 	Text    string `json:"text"`
 	Pending bool   `json:"pending"` // queued, not yet delivered to the CLI
-	Prompt  bool   `json:"prompt"`  // the first message: Text is the initial context, the CLI got the rendered prompt
+	Prompt  bool   `json:"prompt"`  // the first message of a stage: Text is the initial context, the CLI got the rendered prompt
+	App     bool   `json:"app"`     // the app wrote it, not the user
 }
 
 // AssistantEntry is one content block of an assistant message.
@@ -134,16 +136,58 @@ type MarkerType string
 
 // The markers the conversation shows between messages.
 const (
-	MarkerPRDWritten  MarkerType = "prd_written"
-	MarkerPRDUpdated  MarkerType = "prd_updated"
-	MarkerCompacted   MarkerType = "compacted"
-	MarkerInterrupted MarkerType = "interrupted"
+	MarkerPRDWritten      MarkerType = "prd_written"
+	MarkerPRDUpdated      MarkerType = "prd_updated"
+	MarkerTechSpecWritten MarkerType = "tech_spec_written"
+	MarkerTechSpecUpdated MarkerType = "tech_spec_updated"
+	MarkerPlanWritten     MarkerType = "plan_written"
+	MarkerPlanUpdated     MarkerType = "plan_updated"
+	MarkerStageStarted    MarkerType = "stage_started"
+	MarkerCompacted       MarkerType = "compacted"
+	MarkerInterrupted     MarkerType = "interrupted"
 )
+
+// ArtifactKind is the artifact a marker refers to. The values are the ones of
+// task.ArtifactKind; internal/app converts between the two.
+type ArtifactKind string
+
+// The artifacts a conversation produces.
+const (
+	ArtifactPRD      ArtifactKind = "prd"
+	ArtifactTechSpec ArtifactKind = "tech_spec"
+	ArtifactPlan     ArtifactKind = "plan"
+)
+
+// writtenMarker is the marker of an artifact written for the first time.
+func writtenMarker(kind ArtifactKind) MarkerType {
+	switch kind {
+	case ArtifactTechSpec:
+		return MarkerTechSpecWritten
+	case ArtifactPlan:
+		return MarkerPlanWritten
+	default:
+		return MarkerPRDWritten
+	}
+}
+
+// updatedMarker is the marker of an artifact rewritten after the first time.
+func updatedMarker(kind ArtifactKind) MarkerType {
+	switch kind {
+	case ArtifactTechSpec:
+		return MarkerTechSpecUpdated
+	case ArtifactPlan:
+		return MarkerPlanUpdated
+	default:
+		return MarkerPRDUpdated
+	}
+}
 
 // MarkerEntry is a milestone of the conversation.
 type MarkerEntry struct {
 	Type      MarkerType `json:"type"`
 	PreTokens int        `json:"preTokens"` // compacted only
+	Stage     string     `json:"stage"`     // stage_started only
+	Restarted bool       `json:"restarted"` // stage_started only: the stage was started again
 }
 
 // ErrorKind says what went wrong.

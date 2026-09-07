@@ -32,30 +32,34 @@ const (
 // shutdownTimeout is how long a fixture gives its processes to leave.
 const shutdownTimeout = 10 * time.Second
 
-// renderPrompt is the prompt the tests send: every variable shows up in it, so
-// the echo of the fake tells whether the rendering happened.
-func renderPrompt(vars prompts.Vars) (string, error) {
-	return fmt.Sprintf("Task %s writes %s in %s from: %s",
-		vars.TaskName, vars.PRDPath, vars.ArtifactsDir, vars.InitialContext), nil
+// renderPrompt is the prompt the tests send: the stage and every variable show
+// up in it, so the echo of the fake tells whether the rendering happened.
+func renderPrompt(stage prompts.Stage, vars prompts.Vars) (string, error) {
+	return fmt.Sprintf("Stage %s of task %s writes %s in %s from: %s",
+		stage, vars.TaskName, vars.PRDPath, vars.ArtifactsDir, vars.InitialContext), nil
 }
 
-// memSessions is an in-memory session.SessionRepository.
+// memSessions is an in-memory session.SessionRepository, one record per stage
+// of a task.
 type memSessions struct {
 	mu   sync.Mutex
-	recs map[string]session.Record // by task id
+	recs map[string]session.Record // by task id and stage
 }
 
 func newMemSessions() *memSessions {
 	return &memSessions{recs: map[string]session.Record{}}
 }
 
-func (r *memSessions) GetByTask(_ context.Context, taskID string) (session.Record, error) {
+// key indexes a record by the task and stage it belongs to.
+func key(taskID, stage string) string { return taskID + "/" + stage }
+
+func (r *memSessions) Get(_ context.Context, taskID, stage string) (session.Record, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	rec, ok := r.recs[taskID]
+	rec, ok := r.recs[key(taskID, stage)]
 	if !ok {
-		return session.Record{}, fmt.Errorf("get session of task %s: %w", taskID, session.ErrNotFound)
+		return session.Record{}, fmt.Errorf("get %s session of task %s: %w", stage, taskID, session.ErrNotFound)
 	}
 	return rec, nil
 }
@@ -64,7 +68,7 @@ func (r *memSessions) Insert(_ context.Context, rec session.Record) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	r.recs[rec.TaskID] = rec
+	r.recs[key(rec.TaskID, rec.Stage)] = rec
 	return nil
 }
 
@@ -72,20 +76,30 @@ func (r *memSessions) Update(_ context.Context, rec session.Record) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if _, ok := r.recs[rec.TaskID]; !ok {
+	if _, ok := r.recs[key(rec.TaskID, rec.Stage)]; !ok {
 		return fmt.Errorf("update session %s: %w", rec.ID, session.ErrNotFound)
 	}
-	r.recs[rec.TaskID] = rec
+	r.recs[key(rec.TaskID, rec.Stage)] = rec
 	return nil
 }
 
-// get returns the stored record of a task, failing the test when it is gone.
-func (r *memSessions) get(t *testing.T, taskID string) session.Record {
+func (r *memSessions) Delete(_ context.Context, taskID string, stages ...string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for _, stage := range stages {
+		delete(r.recs, key(taskID, stage))
+	}
+	return nil
+}
+
+// get returns the stored record of a stage, failing the test when it is gone.
+func (r *memSessions) get(t *testing.T, taskID string, stage prompts.Stage) session.Record {
 	t.Helper()
 
-	rec, err := r.GetByTask(t.Context(), taskID)
+	rec, err := r.Get(t.Context(), taskID, string(stage))
 	if err != nil {
-		t.Fatalf("GetByTask(%s) = %v, want nil", taskID, err)
+		t.Fatalf("Get(%s, %s) = %v, want nil", taskID, stage, err)
 	}
 	return rec
 }
@@ -384,7 +398,8 @@ func (f *fixture) textsOf(taskID, entryID string) []string {
 	return out
 }
 
-// taskInfo describes a task whose working directory is a fresh temporary one.
+// taskInfo describes a task in its PRD stage, whose working directory is a
+// fresh temporary one.
 func taskInfo(t *testing.T, id string) session.TaskInfo {
 	t.Helper()
 
@@ -394,16 +409,26 @@ func taskInfo(t *testing.T, id string) session.TaskInfo {
 		Name:           "login-screen",
 		Dir:            t.TempDir(),
 		ArtifactsDir:   artifacts,
+		Stage:          prompts.StagePRD,
 		PRDPath:        filepath.Join(artifacts, "PRD.md"),
+		TechSpecPath:   filepath.Join(artifacts, "tech-spec.md"),
+		StepsDir:       filepath.Join(artifacts, "steps"),
+		Repositories:   []string{"api"},
 		InitialContext: "a login screen with email and password",
 	}
 }
 
-// start opens the session of a new task and queues its prompt.
+// atStage is the same task moved on to another stage.
+func atStage(info session.TaskInfo, stage prompts.Stage) session.TaskInfo {
+	info.Stage = stage
+	return info
+}
+
+// start opens the session of a stage and queues its prompt.
 func (f *fixture) start(t *testing.T, info session.TaskInfo) {
 	t.Helper()
 
-	if err := f.service.Start(t.Context(), info); err != nil {
+	if err := f.service.Start(t.Context(), info, false); err != nil {
 		t.Fatalf("Start(%s) = %v, want nil", info.ID, err)
 	}
 }

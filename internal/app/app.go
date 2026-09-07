@@ -108,10 +108,12 @@ func Run(cfg Config) int {
 		return fail(log, "read settings", err)
 	}
 	sessions := session.New(session.Deps{
-		Sessions:     st.Sessions,
-		Entries:      st.Entries,
-		Launcher:     claudeLauncher{log: log},
-		RenderPrompt: func(vars prompts.Vars) (string, error) { return prompts.Render(dirs.Data, prompts.StagePRD, vars) },
+		Sessions: st.Sessions,
+		Entries:  st.Entries,
+		Launcher: claudeLauncher{log: log},
+		RenderPrompt: func(stage prompts.Stage, vars prompts.Vars) (string, error) {
+			return prompts.Render(dirs.Data, stage, vars)
+		},
 		Log:          log,
 		OnState:      func(string) { a.publish() },
 		OnTranscript: a.emitTranscript,
@@ -193,9 +195,9 @@ func (a *App) onWorkspaceChanged() {
 	a.publish()
 }
 
-// syncTasks loads the tasks of the open workspace and opens their sessions.
-// A task that cannot be loaded is logged and left out; it never keeps the
-// workspace from opening.
+// syncTasks loads the tasks of the open workspace and opens the session of the
+// stage each one is in. A task that cannot be loaded is logged and left out; it
+// never keeps the workspace from opening.
 func (a *App) syncTasks() {
 	current := a.ws.Current()
 	if current == nil {
@@ -210,7 +212,11 @@ func (a *App) syncTasks() {
 		return
 	}
 	for _, t := range a.tasks.List() {
-		if err := a.sessions.Open(ctx, bindings.TaskInfo(t)); err != nil {
+		if !t.Stage.HasSession() {
+			continue
+		}
+		info := bindings.TaskInfo(t, a.taskArtifacts(t.ID), a.tasks.Repositories(t))
+		if err := a.sessions.Open(ctx, info); err != nil {
 			a.log.Error("open session failed", "task", t.ID, "err", err)
 		}
 	}

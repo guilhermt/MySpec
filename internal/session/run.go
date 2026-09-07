@@ -105,11 +105,13 @@ func (r *run) newEntry(s *Service, e Entry) *Entry {
 func (r *run) summary() Summary {
 	sum := Summary{
 		TaskID:         r.task.ID,
+		Stage:          r.rec.Stage,
 		TurnRunning:    r.turn != nil,
 		ProcessRunning: r.proc != nil,
 		RetryAttempt:   r.retryAttempt,
 		ContextPercent: contextPercent(r.rec.ContextTokens, r.rec.ContextWindow),
 		PendingCount:   len(r.pending),
+		Corrections:    r.rec.Corrections,
 		LastError:      r.rec.LastError,
 	}
 	switch {
@@ -124,6 +126,7 @@ func (r *run) summary() Summary {
 	default:
 		sum.Status = StatusWaiting
 	}
+	sum.Idle = sum.Status == StatusWaiting && len(r.pending) == 0
 	return sum
 }
 
@@ -273,10 +276,13 @@ func (s *Service) flushPendingLocked(ctx context.Context, r *run, n *notes) bool
 	e := r.pending[0]
 	text := e.User.Text
 	if e.User.Prompt {
-		rendered, err := s.renderPrompt(prompts.Vars{
+		rendered, err := s.renderPrompt(prompts.Stage(r.rec.Stage), prompts.Vars{
 			TaskName:       r.task.Name,
 			ArtifactsDir:   r.task.ArtifactsDir,
 			PRDPath:        r.task.PRDPath,
+			TechSpecPath:   r.task.TechSpecPath,
+			StepsDir:       r.task.StepsDir,
+			Repositories:   r.task.Repositories,
 			InitialContext: e.User.Text,
 		})
 		if err != nil {

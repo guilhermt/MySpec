@@ -62,7 +62,7 @@ describe("applyEvent", () => {
     const queued = makeEntry("user", {
       id: "a",
       seq: 1,
-      user: { text: "later", pending: true, prompt: false },
+      user: { text: "later", pending: true, prompt: false, app: false },
     });
 
     const state = applyEvent(ready(), entryEvent(queued));
@@ -75,9 +75,12 @@ describe("applyEvent", () => {
     const queued = makeEntry("user", {
       id: "a",
       seq: 1,
-      user: { text: "later", pending: true, prompt: false },
+      user: { text: "later", pending: true, prompt: false, app: false },
     });
-    const delivered = { ...queued, user: { text: "later", pending: false, prompt: false } };
+    const delivered = {
+      ...queued,
+      user: { text: "later", pending: false, prompt: false, app: false },
+    };
 
     let state = applyEvent(ready(), entryEvent(queued));
     state = applyEvent(state, entryEvent(delivered));
@@ -90,12 +93,12 @@ describe("applyEvent", () => {
     const first = makeEntry("user", {
       id: "a",
       seq: 1,
-      user: { text: "one", pending: true, prompt: false },
+      user: { text: "one", pending: true, prompt: false, app: false },
     });
     const second = makeEntry("user", {
       id: "b",
       seq: 2,
-      user: { text: "two", pending: true, prompt: false },
+      user: { text: "two", pending: true, prompt: false, app: false },
     });
 
     let state = applyEvent(ready(), entryEvent(first));
@@ -139,7 +142,7 @@ describe("applyEvent", () => {
     const queued = makeEntry("user", {
       id: "b",
       seq: 2,
-      user: { text: "later", pending: true, prompt: false },
+      user: { text: "later", pending: true, prompt: false, app: false },
     });
     const state = ready([entry], [queued]);
 

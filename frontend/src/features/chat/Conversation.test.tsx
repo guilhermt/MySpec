@@ -66,7 +66,9 @@ describe("Conversation", () => {
 
   it("marks a message that is still waiting its turn", () => {
     const pending = [
-      makeEntry("user", { user: { text: "and dark mode", pending: true, prompt: false } }),
+      makeEntry("user", {
+        user: { text: "and dark mode", pending: true, prompt: false, app: false },
+      }),
     ];
     renderWithStore(<Conversation taskId="task-1" />, {
       state: withTask({ pendingCount: 1 }),
