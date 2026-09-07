@@ -151,6 +151,17 @@ export interface PermissionEntry {
 }
 
 /**
+ * PlanProblem is one reason the step files are not a valid plan.
+ */
+export interface PlanProblem {
+    /**
+     * "" for the plan as a whole
+     */
+    "file": string;
+    "message": string;
+}
+
+/**
  * Question is one of the questions of an AskUserQuestion call.
  */
 export interface Question {
@@ -241,6 +252,31 @@ export interface State {
 }
 
 /**
+ * Step is one step of the plan of a task.
+ */
+export interface Step {
+    "number": number;
+
+    /**
+     * name inside steps/, the artifact is "steps/" + File
+     */
+    "file": string;
+    "title": string;
+
+    /**
+     * Repository is the value the file carries; RepoPath is "" when no
+     * repository of the task matches it.
+     */
+    "repository": string;
+    "repoPath": string;
+
+    /**
+     * Status is not_started; a string for the same reason as Notice.Reason.
+     */
+    "status": string;
+}
+
+/**
  * TaskSummary is a task of the open workspace with the state of its session.
  */
 export interface TaskSummary {
@@ -254,9 +290,16 @@ export interface TaskSummary {
     "dir": string;
 
     /**
-     * Stage is prd or prd_done, a string for the same reason as Notice.Reason.
+     * Stage is prd, tech_spec, plan or implementation, a string for the same
+     * reason as Notice.Reason.
      */
     "stage": string;
+
+    /**
+     * Revisiting is a stage reopened by the user, which moves on only when
+     * they say so.
+     */
+    "revisiting": boolean;
 
     /**
      * SessionStatus is working, waiting, needs_permission, paused or error.
@@ -267,7 +310,20 @@ export interface TaskSummary {
     "retryAttempt": number;
     "contextPercent": number;
     "pendingCount": number;
+    "corrections": number;
     "hasPrd": boolean;
+    "hasTechSpec": boolean;
+
+    /**
+     * never nil
+     */
+    "steps": Step[] | null;
+
+    /**
+     * never nil
+     */
+    "planProblems": PlanProblem[] | null;
+    "canContinue": boolean;
     "artifactVersion": number;
     "lastError": string;
     "createdAt": string;

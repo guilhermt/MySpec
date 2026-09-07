@@ -50,26 +50,54 @@ type State struct {
 // changes.
 const EventTranscriptChanged = "transcript:changed"
 
+// Step is one step of the plan of a task.
+type Step struct {
+	Number int    `json:"number"`
+	File   string `json:"file"` // name inside steps/, the artifact is "steps/" + File
+	Title  string `json:"title"`
+	// Repository is the value the file carries; RepoPath is "" when no
+	// repository of the task matches it.
+	Repository string `json:"repository"`
+	RepoPath   string `json:"repoPath"`
+	// Status is not_started; a string for the same reason as Notice.Reason.
+	Status string `json:"status"`
+}
+
+// PlanProblem is one reason the step files are not a valid plan.
+type PlanProblem struct {
+	File    string `json:"file"` // "" for the plan as a whole
+	Message string `json:"message"`
+}
+
 // TaskSummary is a task of the open workspace with the state of its session.
 type TaskSummary struct {
 	ID       string `json:"id"`
 	Name     string `json:"name"`
 	RepoPath string `json:"repoPath"` // "" for a root task
 	Dir      string `json:"dir"`
-	// Stage is prd or prd_done, a string for the same reason as Notice.Reason.
+	// Stage is prd, tech_spec, plan or implementation, a string for the same
+	// reason as Notice.Reason.
 	Stage string `json:"stage"`
+	// Revisiting is a stage reopened by the user, which moves on only when
+	// they say so.
+	Revisiting bool `json:"revisiting"`
 	// SessionStatus is working, waiting, needs_permission, paused or error.
-	SessionStatus   string `json:"sessionStatus"`
-	TurnRunning     bool   `json:"turnRunning"`
-	ProcessRunning  bool   `json:"processRunning"`
-	RetryAttempt    int    `json:"retryAttempt"`
-	ContextPercent  int    `json:"contextPercent"`
-	PendingCount    int    `json:"pendingCount"`
-	HasPRD          bool   `json:"hasPrd"`
-	ArtifactVersion int    `json:"artifactVersion"`
-	LastError       string `json:"lastError"`
-	CreatedAt       string `json:"createdAt"`
-	UpdatedAt       string `json:"updatedAt"`
+	SessionStatus   string        `json:"sessionStatus"`
+	TurnRunning     bool          `json:"turnRunning"`
+	ProcessRunning  bool          `json:"processRunning"`
+	RetryAttempt    int           `json:"retryAttempt"`
+	ContextPercent  int           `json:"contextPercent"`
+	PendingCount    int           `json:"pendingCount"`
+	Corrections     int           `json:"corrections"`
+	HasPRD          bool          `json:"hasPrd"`
+	HasTechSpec     bool          `json:"hasTechSpec"`
+	Steps           []Step        `json:"steps"`        // never nil
+	PlanProblems    []PlanProblem `json:"planProblems"` // never nil
+	CanContinue     bool          `json:"canContinue"`
+	ArtifactVersion int           `json:"artifactVersion"`
+	LastError       string        `json:"lastError"`
+	CreatedAt       string        `json:"createdAt"`
+	UpdatedAt       string        `json:"updatedAt"`
 }
 
 // UserEntry is a message sent to the agent: one the user wrote, or one the app

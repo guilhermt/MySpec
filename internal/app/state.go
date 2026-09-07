@@ -30,7 +30,7 @@ func (a *App) taskArtifacts(id string) task.Artifacts {
 	return artifacts
 }
 
-// onArtifact records what changed in the conversation of a task.
+// onArtifact records what changed in the conversation and lets the flow decide.
 func (a *App) onArtifact(t task.Task, changes []task.Change) {
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
@@ -38,6 +38,7 @@ func (a *App) onArtifact(t task.Task, changes []task.Change) {
 	for _, c := range changes {
 		a.sessions.MarkArtifact(ctx, t.ID, session.ArtifactKind(c.Kind), c.First)
 	}
+	a.flow.Check(t.ID)
 }
 
 // emitTranscript sends one change of a conversation to the frontend. The

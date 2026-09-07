@@ -3,7 +3,6 @@ package bindings
 import (
 	"time"
 
-	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
 	"github.com/guilhermt/myspec/internal/workspace"
@@ -56,13 +55,19 @@ func FromTasks(tasks []task.Task, artifacts func(id string) task.Artifacts, summ
 			RepoPath:        t.RepoPath,
 			Dir:             t.Dir(),
 			Stage:           string(t.Stage),
+			Revisiting:      t.Revisiting,
 			SessionStatus:   string(summary.Status),
 			TurnRunning:     summary.TurnRunning,
 			ProcessRunning:  summary.ProcessRunning,
 			RetryAttempt:    summary.RetryAttempt,
 			ContextPercent:  summary.ContextPercent,
 			PendingCount:    summary.PendingCount,
+			Corrections:     summary.Corrections,
 			HasPRD:          a.PRD,
+			HasTechSpec:     a.TechSpec,
+			Steps:           fromSteps(a.Plan.Steps),
+			PlanProblems:    fromProblems(a.Plan.Problems),
+			CanContinue:     t.Revisiting && a.Done(t.Stage) && summary.Idle,
 			ArtifactVersion: t.ArtifactVersion,
 			LastError:       summary.LastError,
 			CreatedAt:       t.CreatedAt.Format(time.RFC3339),
@@ -72,26 +77,35 @@ func FromTasks(tasks []task.Task, artifacts func(id string) task.Artifacts, summ
 	return converted
 }
 
-// TaskInfo is what a session needs to know about its task at the stage it is
-// in. internal/app and TaskService both build it, so it lives here.
-func TaskInfo(t task.Task, a task.Artifacts, repos []task.Repository) session.TaskInfo {
-	rels := make([]string, len(repos))
-	for i, repo := range repos {
-		rels[i] = repo.Rel
+// stepNotStarted is the only status a step has in this version: the steps are
+// listed, not run.
+const stepNotStarted = "not_started"
+
+// fromSteps converts the steps of a plan, always returning a slice so the
+// frontend never sees null.
+func fromSteps(steps []task.Step) []Step {
+	converted := make([]Step, len(steps))
+	for i, step := range steps {
+		converted[i] = Step{
+			Number:     step.Number,
+			File:       step.File,
+			Title:      step.Title,
+			Repository: step.Repository,
+			RepoPath:   step.RepoPath,
+			Status:     stepNotStarted,
+		}
 	}
-	return session.TaskInfo{
-		ID:             t.ID,
-		Name:           t.Name,
-		Dir:            t.Dir(),
-		ArtifactsDir:   t.ArtifactsDir,
-		Stage:          prompts.Stage(t.Stage),
-		PRDPath:        t.PRDPath(),
-		TechSpecPath:   t.TechSpecPath(),
-		StepsDir:       t.StepsDir(),
-		Repositories:   rels,
-		InitialContext: t.InitialContext,
-		ArtifactExists: a.Done(t.Stage),
+	return converted
+}
+
+// fromProblems converts the reasons a plan is not valid, always returning a
+// slice so the frontend never sees null.
+func fromProblems(problems []task.PlanProblem) []PlanProblem {
+	converted := make([]PlanProblem, len(problems))
+	for i, problem := range problems {
+		converted[i] = PlanProblem{File: problem.File, Message: problem.Message}
 	}
+	return converted
 }
 
 // FromTranscript converts a whole conversation, always returning slices so the
