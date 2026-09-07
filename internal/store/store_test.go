@@ -10,7 +10,7 @@ import (
 )
 
 // schemaVersionNow is how many migrations the embedded set holds.
-const schemaVersionNow = 3
+const schemaVersionNow = 4
 
 func TestOpenMemoryAppliesMigrations(t *testing.T) {
 	t.Parallel()
@@ -44,6 +44,9 @@ func TestOpenMemoryCreatesTheTables(t *testing.T) {
 	}
 	if _, err := s.Entries.List(t.Context(), "missing"); err != nil {
 		t.Errorf("Entries.List() = %v, want nil", err)
+	}
+	if _, err := s.Tasks.ListStepRuns(t.Context(), "missing"); err != nil {
+		t.Errorf("Tasks.ListStepRuns() = %v, want nil", err)
 	}
 }
 

@@ -2,6 +2,7 @@ package task_test
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -83,7 +84,9 @@ func (b *syncBuffer) String() string {
 type memRepo struct {
 	mu        sync.Mutex
 	items     []task.Task
+	runs      map[string][]task.StepRun // step runs by task id
 	listErr   error
+	runsErr   error
 	insertErr error
 	updateErr error
 	deleteErr error
@@ -182,6 +185,68 @@ func (r *memRepo) Delete(_ context.Context, id string) error {
 		r.items = slices.Delete(r.items, index, index+1)
 	}
 	return nil
+}
+
+func (r *memRepo) ListStepRuns(_ context.Context, taskID string) ([]task.StepRun, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.runsErr != nil {
+		return nil, r.runsErr
+	}
+	return slices.Clone(r.runs[taskID]), nil
+}
+
+func (r *memRepo) UpsertStepRun(_ context.Context, run task.StepRun) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.updateErr != nil {
+		return r.updateErr
+	}
+	if r.runs == nil {
+		r.runs = map[string][]task.StepRun{}
+	}
+	runs := r.runs[run.TaskID]
+	index := slices.IndexFunc(runs, func(stored task.StepRun) bool { return stored.Number == run.Number })
+	if index >= 0 {
+		runs[index] = run
+	} else {
+		runs = append(runs, run)
+		slices.SortFunc(runs, func(a, b task.StepRun) int { return cmp.Compare(a.Number, b.Number) })
+	}
+	r.runs[run.TaskID] = runs
+	return nil
+}
+
+func (r *memRepo) DeleteStepRuns(_ context.Context, taskID string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.deleteErr != nil {
+		return r.deleteErr
+	}
+	delete(r.runs, taskID)
+	return nil
+}
+
+// seedRun stores a step run directly, bypassing the service.
+func (r *memRepo) seedRun(run task.StepRun) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.runs == nil {
+		r.runs = map[string][]task.StepRun{}
+	}
+	r.runs[run.TaskID] = append(r.runs[run.TaskID], run)
+}
+
+// stepRuns returns the stored runs of a task, by number.
+func (r *memRepo) stepRuns(taskID string) []task.StepRun {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	return slices.Clone(r.runs[taskID])
 }
 
 // get returns a stored task by id, failing the test when it is gone.

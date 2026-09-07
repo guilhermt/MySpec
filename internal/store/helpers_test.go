@@ -96,6 +96,24 @@ func newSession(id, taskID string, stage task.Stage) session.Record {
 	}
 }
 
+// newStepRun builds the record of a step of a task, ready to upsert.
+func newStepRun(taskID string, number int, status task.StepStatus) task.StepRun {
+	return task.StepRun{
+		TaskID:    taskID,
+		Number:    number,
+		Status:    status,
+		CreatedAt: fixedTime,
+		UpdatedAt: fixedTime,
+	}
+}
+
+// newBlockedStepRun builds the record of a step blocked by a dirty worktree.
+func newBlockedStepRun(taskID string, number int) task.StepRun {
+	run := newStepRun(taskID, number, task.StepBlocked)
+	run.Block = &task.StepBlock{Reason: task.BlockDirty, Detail: " M main.go\n?? new.go", Files: 2}
+	return run
+}
+
 // newEntry builds a user entry at the given position.
 func newEntry(id string, seq int, text string) session.Entry {
 	return session.Entry{
