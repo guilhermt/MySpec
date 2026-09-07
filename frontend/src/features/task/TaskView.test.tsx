@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { TaskView } from "@/features/task/TaskView";
 import { api, type TaskSummary } from "@/lib/wails";
 import { renderWithStore } from "@/test/render";
-import { makeState, makeTask } from "@/test/wails-mock";
+import { makeState, makeStep, makeTask } from "@/test/wails-mock";
 
 const SEEN_KEY = "myspec.artifacts.seen:task-1";
 
@@ -31,8 +31,17 @@ describe("TaskView", () => {
   it("puts the stage track under the header", () => {
     view({ stage: "tech_spec" });
 
-    expect(screen.getByRole("button", { name: "PRD" })).toBeInTheDocument();
+    const chips = screen.getAllByRole("button", { name: "PRD" });
+    expect(chips.some((chip) => chip.getAttribute("aria-haspopup") === "menu")).toBe(true);
     expect(screen.getByText("Closing")).toBeInTheDocument();
+  });
+
+  it("shows the steps instead of a conversation once the task is implementing", () => {
+    view({ stage: "implementation", steps: [makeStep()] });
+
+    expect(screen.getByRole("heading", { name: "Steps" })).toBeInTheDocument();
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    expect(api.getTranscript).not.toHaveBeenCalled();
   });
 
   it("fetches the conversation only the first time the task is opened", async () => {
@@ -48,6 +57,14 @@ describe("TaskView", () => {
 
   it("remembers that the artifacts of the task have been shown", async () => {
     view({ hasPrd: true, artifactVersion: 1 });
+
+    await waitFor(() => {
+      expect(localStorage.getItem(SEEN_KEY)).not.toBeNull();
+    });
+  });
+
+  it("opens the panel for a tech spec of a task that never had a PRD read", async () => {
+    view({ hasTechSpec: true, stage: "plan", artifactVersion: 1 });
 
     await waitFor(() => {
       expect(localStorage.getItem(SEEN_KEY)).not.toBeNull();
