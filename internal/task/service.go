@@ -23,44 +23,47 @@ const dirPerm = 0o700
 // which has no caller to carry a context.
 const settleTimeout = 5 * time.Second
 
-// Repository persists the tasks of every workspace.
-type Repository interface {
+// Store persists the tasks of every workspace. It is named apart from
+// Repository, which is a code repository a task touches.
+type Store interface {
 	ListByWorkspace(ctx context.Context, workspacePath string) ([]Task, error)
 	Get(ctx context.Context, id string) (Task, error)
 	Insert(ctx context.Context, t Task) error
-	UpdateStage(ctx context.Context, id, stage string, artifactVersion int, updatedAt time.Time) error
+	UpdateStage(ctx context.Context, id, stage string, revisiting bool, updatedAt time.Time) error
+	UpdateArtifactVersion(ctx context.Context, id string, version int, updatedAt time.Time) error
 	Delete(ctx context.Context, id string) error
 }
 
 // Deps are what Service needs from the outside.
 type Deps struct {
-	Repo       Repository
+	Repo       Store
 	DataDir    string
 	Log        *slog.Logger
-	Now        func() time.Time         // defaults to time.Now
-	NewID      func() string            // defaults to uuid.NewString
-	Repos      func() []string          // repository paths of the open workspace
-	OnChange   func()                   // after any change to the list or a task; may be nil
-	OnArtifact func(t Task, first bool) // PRD appeared (first) or was rewritten; may be nil
+	Now        func() time.Time               // defaults to time.Now
+	NewID      func() string                  // defaults to uuid.NewString
+	Repos      func() []string                // repository paths of the open workspace
+	OnChange   func()                         // after any change to the list or a task; may be nil
+	OnArtifact func(t Task, changes []Change) // the artifact folder went quiet; may be nil
 }
 
-// Service owns the tasks of the open workspace and keeps their stage in step
-// with the artifacts on disk.
+// Service owns the tasks of the open workspace and what their artifact folders
+// hold.
 type Service struct {
-	repo       Repository
+	repo       Store
 	dataDir    string
 	log        *slog.Logger
 	now        func() time.Time
 	newID      func() string
 	repos      func() []string
 	onChange   func()
-	onArtifact func(t Task, first bool)
+	onArtifact func(t Task, changes []Change)
 
 	watcher *watcher
 
 	mu            sync.Mutex
 	workspacePath string
 	tasks         []Task
+	artifacts     map[string]Artifacts // by task id, what the last inspection saw
 }
 
 // New builds a Service from deps, with the artifact watcher running.
@@ -74,6 +77,7 @@ func New(deps Deps) (*Service, error) {
 		repos:      deps.Repos,
 		onChange:   deps.OnChange,
 		onArtifact: deps.OnArtifact,
+		artifacts:  map[string]Artifacts{},
 	}
 	if s.now == nil {
 		s.now = time.Now
@@ -93,9 +97,9 @@ func New(deps Deps) (*Service, error) {
 	return s, nil
 }
 
-// Sync loads the tasks of workspacePath, reconciles each stage with the disk
-// and watches their artifact folders. Calling it again with the same path is
-// a no-op. It does not call OnChange.
+// Sync loads the tasks of workspacePath, reads their artifact folders and
+// watches them. Calling it again with the same path is a no-op. It does not
+// call OnChange.
 func (s *Service) Sync(ctx context.Context, workspacePath string) error {
 	s.mu.Lock()
 	same := s.workspacePath == workspacePath
@@ -109,27 +113,16 @@ func (s *Service) Sync(ctx context.Context, workspacePath string) error {
 		return fmt.Errorf("list tasks of %s: %w", workspacePath, err)
 	}
 
-	// The PRD may have been written, or thrown away, while the app was closed.
-	for i, t := range tasks {
-		stage := StagePRD
-		if s.prdWritten(t) {
-			stage = StagePRDDone
-		}
-		if stage == t.Stage {
-			continue
-		}
-		t.Stage = stage
-		t.UpdatedAt = s.now().UTC()
-		if err := s.repo.UpdateStage(ctx, t.ID, string(t.Stage), t.ArtifactVersion, t.UpdatedAt); err != nil {
-			return fmt.Errorf("reconcile stage of task %s: %w", t.ID, err)
-		}
-		tasks[i] = t
+	artifacts := make(map[string]Artifacts, len(tasks))
+	for _, t := range tasks {
+		artifacts[t.ID] = s.inspect(t)
 	}
 
 	s.mu.Lock()
 	previous := s.tasks
 	s.workspacePath = workspacePath
 	s.tasks = tasks
+	s.artifacts = artifacts
 	s.mu.Unlock()
 
 	for _, t := range previous {
@@ -233,6 +226,7 @@ func (s *Service) Create(ctx context.Context, p CreateParams) (Task, error) {
 
 	s.mu.Lock()
 	s.tasks = append(s.tasks, t)
+	s.artifacts[t.ID] = Artifacts{}
 	s.mu.Unlock()
 
 	s.watch(t)
@@ -264,6 +258,7 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	if index := indexOf(s.tasks, id); index >= 0 {
 		s.tasks = slices.Delete(s.tasks, index, index+1)
 	}
+	delete(s.artifacts, id)
 	s.mu.Unlock()
 
 	s.log.Info("task deleted", "task", t.ID, "name", t.Name)
@@ -271,10 +266,108 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-// ReadArtifact returns the content of an artifact by file name. Only PRDFile
-// is accepted in this version; anything else is ErrNotFound.
+// Artifacts is what the last inspection of a task's folder found.
+func (s *Service) Artifacts(id string) (Artifacts, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	a, ok := s.artifacts[id]
+	return a, ok
+}
+
+// Inspect reads the artifact folder of a task now and refreshes the cache with
+// what it found. It is the fresh reading a decision is made on, so it moves
+// neither the artifact version nor the callbacks.
+func (s *Service) Inspect(id string) (Artifacts, error) {
+	t, ok := s.Get(id)
+	if !ok {
+		return Artifacts{}, fmt.Errorf("inspect task %s: %w", id, ErrNotFound)
+	}
+
+	a := s.inspect(t)
+
+	s.mu.Lock()
+	s.artifacts[id] = a
+	s.mu.Unlock()
+	return a, nil
+}
+
+// SetStage records the stage of a task and whether it is being revisited.
+func (s *Service) SetStage(ctx context.Context, id string, stage Stage, revisiting bool) (Task, error) {
+	if _, err := ParseStage(string(stage)); err != nil {
+		return Task{}, fmt.Errorf("set stage of task %s: %w", id, err)
+	}
+	t, ok := s.Get(id)
+	if !ok {
+		return Task{}, fmt.Errorf("set stage of task %s: %w", id, ErrNotFound)
+	}
+
+	t.Stage = stage
+	t.Revisiting = revisiting
+	t.UpdatedAt = s.now().UTC()
+	if err := s.repo.UpdateStage(ctx, t.ID, string(t.Stage), t.Revisiting, t.UpdatedAt); err != nil {
+		return Task{}, err
+	}
+
+	s.mu.Lock()
+	if index := indexOf(s.tasks, id); index >= 0 {
+		s.tasks[index] = t
+	}
+	s.mu.Unlock()
+
+	s.log.Info("task stage set", "task", t.ID, "stage", string(t.Stage), "revisiting", t.Revisiting)
+	s.changed()
+	return t, nil
+}
+
+// RemoveArtifacts throws away the artifact of a stage and of every stage after
+// it, which is what going back to that stage means.
+func (s *Service) RemoveArtifacts(ctx context.Context, id string, from Stage) error {
+	t, ok := s.Get(id)
+	if !ok {
+		return fmt.Errorf("remove artifacts of task %s: %w", id, ErrNotFound)
+	}
+
+	for _, stage := range from.From() {
+		var err error
+		switch stage {
+		case StagePRD:
+			err = removePath(t.PRDPath(), false)
+		case StageTechSpec:
+			err = removePath(t.TechSpecPath(), false)
+		case StagePlan:
+			err = removePath(t.StepsDir(), true)
+		case StageImplementation:
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("remove artifacts of task %s: %w", id, err)
+		}
+	}
+
+	a := s.inspect(t)
+	t.ArtifactVersion++
+	t.UpdatedAt = s.now().UTC()
+	if err := s.repo.UpdateArtifactVersion(ctx, t.ID, t.ArtifactVersion, t.UpdatedAt); err != nil {
+		return err
+	}
+
+	s.mu.Lock()
+	if index := indexOf(s.tasks, id); index >= 0 {
+		s.tasks[index] = t
+	}
+	s.artifacts[id] = a
+	s.mu.Unlock()
+
+	s.log.Info("artifacts removed", "task", t.ID, "stage", string(from), "artifact_version", t.ArtifactVersion)
+	s.changed()
+	return nil
+}
+
+// ReadArtifact returns the content of an artifact by file name: the PRD, the
+// tech spec or a step file under the steps folder. Anything else is ErrNotFound.
 func (s *Service) ReadArtifact(id, name string) (string, error) {
-	if name != PRDFile {
+	if !readableArtifact(name) {
 		return "", fmt.Errorf("read artifact %s of task %s: %w", name, id, ErrNotFound)
 	}
 	t, ok := s.Get(id)
@@ -282,14 +375,40 @@ func (s *Service) ReadArtifact(id, name string) (string, error) {
 		return "", fmt.Errorf("read artifact of task %s: %w", id, ErrNotFound)
 	}
 
-	content, err := os.ReadFile(t.PRDPath())
+	path := filepath.Join(t.ArtifactsDir, name)
+	content, err := os.ReadFile(path)
 	switch {
 	case errors.Is(err, os.ErrNotExist):
-		return "", fmt.Errorf("read artifact %s: %w", t.PRDPath(), ErrNotFound)
+		return "", fmt.Errorf("read artifact %s: %w", path, ErrNotFound)
 	case err != nil:
-		return "", fmt.Errorf("read artifact %s: %w", t.PRDPath(), err)
+		return "", fmt.Errorf("read artifact %s: %w", path, err)
 	}
 	return string(content), nil
+}
+
+// readableArtifact reports whether a name is one of the artifacts the app
+// shows. The step files are matched by their own pattern, which no path can
+// slip through.
+func readableArtifact(name string) bool {
+	if name == PRDFile || name == TechSpecFile {
+		return true
+	}
+	step, found := strings.CutPrefix(name, StepsDirName+"/")
+	return found && stepFilePattern.MatchString(step)
+}
+
+// removePath deletes an artifact that may not be there, which is not a failure.
+func removePath(path string, dir bool) error {
+	var err error
+	if dir {
+		err = os.RemoveAll(path)
+	} else {
+		err = os.Remove(path)
+	}
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("remove %s: %w", path, err)
+	}
+	return nil
 }
 
 // Close stops the watcher.
@@ -297,73 +416,106 @@ func (s *Service) Close() error {
 	return s.watcher.close()
 }
 
-// artifactSettled reconciles a task with its artifact folder after the watcher
-// saw the folder go quiet.
-func (s *Service) artifactSettled(id string) {
+// artifactSettled reports what the artifact folder of a task holds after the
+// watcher saw it go quiet. The kinds are the artifacts that had events; what
+// they mean for the stage is not this package's call.
+func (s *Service) artifactSettled(id string, kinds []ArtifactKind) {
 	t, ok := s.Get(id)
 	if !ok {
 		return
 	}
 
-	next, first, changed := s.reconcile(t)
-	if !changed {
-		return
+	s.mu.Lock()
+	before := s.artifacts[id]
+	s.mu.Unlock()
+
+	after := s.inspect(t)
+	changes := make([]Change, 0, len(kinds))
+	for _, kind := range kinds {
+		// A plan only counts once it is whole; a half-written steps folder is
+		// not a change anyone can act on.
+		if kind == ArtifactPlan {
+			if after.Plan.Valid() {
+				changes = append(changes, Change{Kind: kind, First: !before.Plan.Valid()})
+			}
+			continue
+		}
+		if after.Has(kind) {
+			changes = append(changes, Change{Kind: kind, First: !before.Has(kind)})
+		}
 	}
+
+	t.ArtifactVersion++
+	t.UpdatedAt = s.now().UTC()
 
 	ctx, cancel := context.WithTimeout(context.Background(), settleTimeout)
 	defer cancel()
 
-	if err := s.repo.UpdateStage(ctx, next.ID, string(next.Stage), next.ArtifactVersion, next.UpdatedAt); err != nil {
-		s.log.Error("update task stage failed", "task", next.ID, "error", err)
+	if err := s.repo.UpdateArtifactVersion(ctx, t.ID, t.ArtifactVersion, t.UpdatedAt); err != nil {
+		s.log.Error("update artifact version failed", "task", t.ID, "error", err)
 		return
 	}
 
 	s.mu.Lock()
 	if index := indexOf(s.tasks, id); index >= 0 {
-		s.tasks[index] = next
+		s.tasks[index] = t
 	}
+	s.artifacts[id] = after
 	s.mu.Unlock()
 
-	s.log.Info("artifact changed",
-		"task", next.ID,
-		"stage", string(next.Stage),
-		"artifact_version", next.ArtifactVersion,
-	)
-	if next.Stage == StagePRDDone && s.onArtifact != nil {
-		s.onArtifact(next, first)
+	s.log.Info("artifact changed", "task", t.ID, "artifact_version", t.ArtifactVersion, "kinds", kinds)
+	if s.onArtifact != nil {
+		s.onArtifact(t, changes)
 	}
 	s.changed()
 }
 
-// reconcile returns the task its artifact folder implies: first says the PRD
-// had not been seen before, changed says anything moved at all.
-func (s *Service) reconcile(t Task) (next Task, first, changed bool) {
-	if s.prdWritten(t) {
-		t.ArtifactVersion++
-		first = t.Stage != StagePRDDone
-		t.Stage = StagePRDDone
-		t.UpdatedAt = s.now().UTC()
-		return t, first, true
+// Repositories are the repositories a task may touch, named as the prompts
+// name them: the repository of a repository task, every repository of the
+// workspace for a root task. A path the workspace does not hold is dropped.
+func (s *Service) Repositories(t Task) []Repository {
+	paths := s.repos()
+	if t.RepoPath != "" {
+		paths = []string{t.RepoPath}
 	}
-	if t.Stage == StagePRDDone {
-		t.Stage = StagePRD
-		t.UpdatedAt = s.now().UTC()
-		return t, false, true
+
+	repos := make([]Repository, 0, len(paths))
+	for _, path := range paths {
+		rel, err := filepath.Rel(t.WorkspacePath, path)
+		if err != nil {
+			s.log.Warn("repository outside the workspace", "task", t.ID, "path", path, "error", err)
+			continue
+		}
+		if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			s.log.Warn("repository outside the workspace", "task", t.ID, "path", path)
+			continue
+		}
+		repos = append(repos, Repository{Rel: rel, Path: path})
 	}
-	return t, false, false
+	slices.SortFunc(repos, func(a, b Repository) int { return strings.Compare(a.Rel, b.Rel) })
+	return repos
 }
 
-// prdWritten reports whether the PRD of a task exists with content in it. An
-// agent creating the file empty is not a finished stage.
-func (s *Service) prdWritten(t Task) bool {
-	info, err := os.Stat(t.PRDPath())
+// inspect reads the artifacts of a task off the disk.
+func (s *Service) inspect(t Task) Artifacts {
+	return Artifacts{
+		PRD:      s.fileWritten(t.PRDPath()),
+		TechSpec: s.fileWritten(t.TechSpecPath()),
+		Plan:     ReadPlan(t.StepsDir(), s.Repositories(t)),
+	}
+}
+
+// fileWritten reports whether an artifact exists with content in it. An agent
+// creating the file empty is not a finished stage.
+func (s *Service) fileWritten(path string) bool {
+	info, err := os.Stat(path)
 	switch {
 	case err == nil:
 		return info.Size() > 0
 	case errors.Is(err, os.ErrNotExist):
 		return false
 	default:
-		s.log.Warn("stat artifact failed", "path", t.PRDPath(), "error", err)
+		s.log.Warn("stat artifact failed", "path", path, "error", err)
 		return false
 	}
 }

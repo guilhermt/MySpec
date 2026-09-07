@@ -5,6 +5,8 @@ import type {
   EntryKind,
   PermissionDecision,
   State,
+  Step,
+  TaskStage,
   TaskSummary,
   ThemePreference,
   Transcript,
@@ -44,6 +46,9 @@ export const api = {
   readArtifact: vi.fn<(taskId: string, name: string) => Promise<string>>(() =>
     Promise.resolve("# PRD\n"),
   ),
+  backToStage: vi.fn<(taskId: string, stage: TaskStage) => Promise<void>>(() => Promise.resolve()),
+  discardStage: vi.fn<(taskId: string, stage: TaskStage) => Promise<void>>(() => Promise.resolve()),
+  continueStage: vi.fn<(taskId: string) => Promise<void>>(() => Promise.resolve()),
   openExternal: vi.fn<(url: string) => Promise<void>>(() => Promise.resolve()),
 };
 
@@ -118,17 +123,35 @@ export function makeTask(overrides: Partial<TaskSummary> = {}): TaskSummary {
     repoPath: "",
     dir: "/home/dev/.local/share/myspec/workspaces/projects-1a2b3c4d/tasks/add-login",
     stage: "prd",
+    revisiting: false,
     sessionStatus: "waiting",
     turnRunning: false,
     processRunning: false,
     retryAttempt: 0,
     contextPercent: 0,
     pendingCount: 0,
+    corrections: 0,
     hasPrd: false,
+    hasTechSpec: false,
+    steps: [],
+    planProblems: [],
+    canContinue: false,
     artifactVersion: 0,
     lastError: "",
     createdAt: "2026-09-05T10:00:00Z",
     updatedAt: "2026-09-05T10:00:00Z",
+    ...overrides,
+  };
+}
+
+export function makeStep(overrides: Partial<Step> = {}): Step {
+  return {
+    number: 1,
+    file: "1-add-the-login-form.md",
+    title: "Add the login form",
+    repository: "web",
+    repoPath: "/home/dev/projects/web",
+    status: "not_started",
     ...overrides,
   };
 }
@@ -148,7 +171,10 @@ function payloadOf(kind: EntryKind): Omit<Entry, "id" | "seq" | "turnId" | "kind
   };
   switch (kind) {
     case "user":
-      return { ...empty, user: { text: "Add a login screen", pending: false, prompt: false } };
+      return {
+        ...empty,
+        user: { text: "Add a login screen", pending: false, prompt: false, app: false },
+      };
     case "assistant":
       return {
         ...empty,
@@ -213,7 +239,10 @@ function payloadOf(kind: EntryKind): Omit<Entry, "id" | "seq" | "turnId" | "kind
         },
       };
     case "marker":
-      return { ...empty, marker: { type: "prd_written", preTokens: 0 } };
+      return {
+        ...empty,
+        marker: { type: "prd_written", preTokens: 0, stage: "", restarted: false },
+      };
     case "error":
       return {
         ...empty,
@@ -239,6 +268,7 @@ export function makeTranscript(overrides: Partial<Transcript> = {}): Transcript 
   return {
     taskId: "task-1",
     sessionId: "session-1",
+    stage: "prd",
     entries: [],
     pending: [],
     ...overrides,

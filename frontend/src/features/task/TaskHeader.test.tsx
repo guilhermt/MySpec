@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { TaskHeader } from "@/features/task/TaskHeader";
 import { api, type TaskSummary } from "@/lib/wails";
 import { renderWithStore } from "@/test/render";
-import { makeState, makeTask } from "@/test/wails-mock";
+import { makeState, makeStep, makeTask } from "@/test/wails-mock";
 
 function header(overrides: Partial<TaskSummary> = {}, onToggle = vi.fn()) {
   const task = makeTask(overrides);
@@ -14,12 +14,11 @@ function header(overrides: Partial<TaskSummary> = {}, onToggle = vi.fn()) {
 }
 
 describe("TaskHeader", () => {
-  it("names the task, its place and its stage", () => {
+  it("names the task and its place", () => {
     header();
 
     expect(screen.getByText("add-login")).toBeInTheDocument();
     expect(screen.getByText("Root")).toBeInTheDocument();
-    expect(screen.getByText("PRD")).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("Waiting");
   });
 
@@ -35,7 +34,6 @@ describe("TaskHeader", () => {
     [{ sessionStatus: "needs_permission" }, "Permission"],
     [{ sessionStatus: "paused" }, "Paused"],
     [{ sessionStatus: "error" }, "Error"],
-    [{ stage: "prd_done" }, "PRD done"],
   ] as const)("shows the state of the session %#", (overrides, expected) => {
     header(overrides);
 
@@ -64,9 +62,19 @@ describe("TaskHeader", () => {
     expect(screen.getByRole("button", { name: "Pause" })).toBeDisabled();
   });
 
-  it("says the panel is empty until the PRD exists", async () => {
+  it("has nothing to pause once the task is implementing", () => {
+    header({ stage: "implementation" });
+
+    expect(screen.queryByRole("button", { name: "Pause" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Resume" })).not.toBeInTheDocument();
+  });
+
+  it("says the panel is empty until an artifact exists", async () => {
     const onToggle = vi.fn();
     const { user } = header({}, onToggle);
+
+    await user.hover(screen.getByRole("button", { name: "Artifacts" }));
+    expect(await screen.findByText("No artifacts yet")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Artifacts" }));
 
@@ -76,6 +84,17 @@ describe("TaskHeader", () => {
       "false",
     );
   });
+
+  it.each([[{ hasPrd: true }], [{ hasTechSpec: true }], [{ steps: [makeStep()] }]])(
+    "opens the panel on anything the task wrote %#",
+    async (overrides) => {
+      const { user } = header(overrides);
+
+      await user.hover(screen.getByRole("button", { name: "Artifacts" }));
+
+      expect(await screen.findByText("Artifacts")).toBeInTheDocument();
+    },
+  );
 
   it("deletes the task after the confirmation", async () => {
     const { user } = header();

@@ -51,18 +51,25 @@ describe("asNoticeReason", () => {
 
 describe("narrowing", () => {
   it("keeps the values Go sends", () => {
-    expect(asTaskStage("prd_done")).toBe("prd_done");
+    expect(asTaskStage("tech_spec")).toBe("tech_spec");
+    expect(asTaskStage("plan")).toBe("plan");
+    expect(asTaskStage("implementation")).toBe("implementation");
     expect(asSessionStatus("needs_permission")).toBe("needs_permission");
     expect(asEntryKind("permission")).toBe("permission");
     expect(asActionStatus("interrupted")).toBe("interrupted");
     expect(asPermissionStatus("allowed_session")).toBe("allowed_session");
     expect(asMarkerType("prd_updated")).toBe("prd_updated");
+    expect(asMarkerType("tech_spec_written")).toBe("tech_spec_written");
+    expect(asMarkerType("tech_spec_updated")).toBe("tech_spec_updated");
+    expect(asMarkerType("plan_written")).toBe("plan_written");
+    expect(asMarkerType("plan_updated")).toBe("plan_updated");
+    expect(asMarkerType("stage_started")).toBe("stage_started");
     expect(asErrorKind("not_logged_in")).toBe("not_logged_in");
     expect(asTranscriptEventKind("text")).toBe("text");
   });
 
   it("falls back on a value a newer backend invented", () => {
-    expect(asTaskStage("tech_spec")).toBe("prd");
+    expect(asTaskStage("archived")).toBe("prd");
     expect(asSessionStatus("hibernating")).toBe("waiting");
     expect(asEntryKind("diagram")).toBe("marker");
     expect(asActionStatus("queued")).toBe("done");
@@ -94,10 +101,13 @@ describe("api", () => {
     await wails.api.answerPermission("task-1", "req-1", "allow", "");
     await wails.api.answerQuestion("task-1", "req-1", { "Which database?": "SQLite" });
     await wails.api.readArtifact("task-1", "PRD.md");
+    await wails.api.backToStage("task-1", "prd");
+    await wails.api.discardStage("task-1", "tech_spec");
+    await wails.api.continueStage("task-1");
 
-    expect(Call.ByID).toHaveBeenCalledTimes(18);
+    expect(Call.ByID).toHaveBeenCalledTimes(21);
     const ids = vi.mocked(Call.ByID).mock.calls.map(([id]) => id);
-    expect(new Set(ids).size).toBe(18);
+    expect(new Set(ids).size).toBe(21);
   });
 
   it("opens a link in the browser of the desktop, never in the webview", async () => {

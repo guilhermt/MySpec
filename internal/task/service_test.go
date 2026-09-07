@@ -322,34 +322,55 @@ func TestDeleteFailsWhenTheRowSurvives(t *testing.T) {
 	}
 }
 
-func TestReadArtifactReturnsThePRD(t *testing.T) {
+func TestReadArtifactReturnsTheArtifacts(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
 	created := f.create(t, "add-login", "")
 	writePRD(t, created, "# PRD\n")
+	writeTechSpec(t, created, "# Tech spec\n")
+	writeStep(t, created, "1-add-the-store.md", "api", "Step 1: Add the store")
 
-	got, err := f.service.ReadArtifact(created.ID, task.PRDFile)
-	if err != nil {
-		t.Fatalf("ReadArtifact() = %v, want nil", err)
+	tests := map[string]struct{ name, want string }{
+		"the PRD":       {name: task.PRDFile, want: "# PRD\n"},
+		"the tech spec": {name: task.TechSpecFile, want: "# Tech spec\n"},
+		"a step": {
+			name: "steps/1-add-the-store.md",
+			want: "---\nrepository: api\n---\n\n# Step 1: Add the store\n",
+		},
 	}
-	if want := "# PRD\n"; got != want {
-		t.Errorf("ReadArtifact() = %q, want %q", got, want)
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := f.service.ReadArtifact(created.ID, tc.name)
+			if err != nil {
+				t.Fatalf("ReadArtifact(%q) = %v, want nil", tc.name, err)
+			}
+			if got != tc.want {
+				t.Errorf("ReadArtifact(%q) = %q, want %q", tc.name, got, tc.want)
+			}
+		})
 	}
 }
 
-func TestReadArtifactRefusesAnythingButThePRD(t *testing.T) {
+func TestReadArtifactRefusesAnythingButTheArtifacts(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
 	created := f.create(t, "add-login", "")
 
 	tests := map[string]struct{ id, name string }{
-		"another file":   {id: created.ID, name: "notes.md"},
-		"a path":         {id: created.ID, name: "../PRD.md"},
-		"unknown task":   {id: "nope", name: task.PRDFile},
-		"missing file":   {id: created.ID, name: task.PRDFile},
-		"empty artifact": {id: created.ID, name: ""},
+		"another file":           {id: created.ID, name: "notes.md"},
+		"a path":                 {id: created.ID, name: "../PRD.md"},
+		"a path through steps":   {id: created.ID, name: "steps/../PRD.md"},
+		"a step with a bad name": {id: created.ID, name: "steps/notes.md"},
+		"a folder":               {id: created.ID, name: task.StepsDirName},
+		"unknown task":           {id: "nope", name: task.PRDFile},
+		"missing file":           {id: created.ID, name: task.PRDFile},
+		"missing step":           {id: created.ID, name: "steps/1-add-the-store.md"},
+		"empty artifact":         {id: created.ID, name: ""},
 	}
 
 	for name, tc := range tests {
@@ -412,61 +433,6 @@ func TestSyncLoadsTheTasksOfTheWorkspace(t *testing.T) {
 	}
 }
 
-func TestSyncReconcilesTheStageWithTheDisk(t *testing.T) {
-	t.Parallel()
-
-	f := newFixture(t)
-	written := f.create(t, "written", "")
-	thrownAway := f.create(t, "thrown-away", "")
-	writePRD(t, written, "# PRD")
-
-	// The stage of a task the app never saw finish is caught by the reload.
-	if err := f.repo.UpdateStage(t.Context(), thrownAway.ID, string(task.StagePRDDone), 3, base); err != nil {
-		t.Fatalf("UpdateStage() = %v, want nil", err)
-	}
-
-	reopened := newService(t, f)
-	if err := reopened.Sync(t.Context(), f.workspace); err != nil {
-		t.Fatalf("Sync() = %v, want nil", err)
-	}
-
-	got := map[string]task.Stage{}
-	for _, tk := range reopened.List() {
-		got[tk.Name] = tk.Stage
-	}
-	want := map[string]task.Stage{"written": task.StagePRDDone, "thrown-away": task.StagePRD}
-	if diff := cmp.Diff(want, got); diff != "" {
-		t.Errorf("stages mismatch (-want +got):\n%s", diff)
-	}
-
-	if stored := f.repo.get(t, written.ID); stored.Stage != task.StagePRDDone {
-		t.Errorf("stored stage = %q, want %q", stored.Stage, task.StagePRDDone)
-	}
-	if stored := f.repo.get(t, thrownAway.ID); stored.ArtifactVersion != 3 {
-		t.Errorf("artifact version = %d, want the reconcile to leave it alone", stored.ArtifactVersion)
-	}
-	if got := f.artifactCalls(); len(got) != 0 {
-		t.Errorf("OnArtifact ran %d times, want Sync to be silent", len(got))
-	}
-}
-
-func TestSyncTreatsAnEmptyPRDAsUnfinished(t *testing.T) {
-	t.Parallel()
-
-	f := newFixture(t)
-	created := f.create(t, "add-login", "")
-	writePRD(t, created, "")
-
-	reopened := newService(t, f)
-	if err := reopened.Sync(t.Context(), f.workspace); err != nil {
-		t.Fatalf("Sync() = %v, want nil", err)
-	}
-
-	if got := reopened.List()[0].Stage; got != task.StagePRD {
-		t.Errorf("Stage = %q, want %q", got, task.StagePRD)
-	}
-}
-
 func TestSyncRecreatesAFolderThatIsGone(t *testing.T) {
 	t.Parallel()
 
@@ -493,20 +459,6 @@ func TestSyncFailsWhenTheTasksCannotBeListed(t *testing.T) {
 	f.repo.listErr = errors.New("database is locked")
 
 	if err := f.service.Sync(t.Context(), t.TempDir()); err == nil {
-		t.Error("Sync() = nil, want an error")
-	}
-}
-
-func TestSyncFailsWhenTheStageCannotBeReconciled(t *testing.T) {
-	t.Parallel()
-
-	f := newFixture(t)
-	created := f.create(t, "add-login", "")
-	writePRD(t, created, "# PRD")
-	f.repo.updateErr = errors.New("database is locked")
-
-	reopened := newService(t, f)
-	if err := reopened.Sync(t.Context(), f.workspace); err == nil {
 		t.Error("Sync() = nil, want an error")
 	}
 }
@@ -567,4 +519,166 @@ func TestNewDefaultsTheIdentityAndTheClock(t *testing.T) {
 	if !strings.HasPrefix(created.ArtifactsDir, filepath.Join(created.ArtifactsDir, "..", "..", "..")) {
 		t.Errorf("ArtifactsDir = %q, want it under the data directory", created.ArtifactsDir)
 	}
+}
+
+func TestArtifactsReportsWhatTheFolderHolds(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	created := f.create(t, "add-login", "")
+
+	if got, ok := f.service.Artifacts(created.ID); !ok || got.PRD || got.TechSpec || got.Plan.Present {
+		t.Errorf("Artifacts() = %+v %t, want an empty folder", got, ok)
+	}
+	if _, ok := f.service.Artifacts("nope"); ok {
+		t.Error("Artifacts(nope) found a task, want none")
+	}
+
+	writePRD(t, created, "# PRD")
+	writeTechSpec(t, created, "# Tech spec")
+	writeStep(t, created, "1-add-the-store.md", "api", "Step 1: Add the store")
+
+	got, err := f.service.Inspect(created.ID)
+	if err != nil {
+		t.Fatalf("Inspect() = %v, want nil", err)
+	}
+	if !got.PRD || !got.TechSpec || !got.Plan.Valid() {
+		t.Errorf("Inspect() = %+v, want the three artifacts", got)
+	}
+	if cached, _ := f.service.Artifacts(created.ID); !cached.PRD || !cached.Plan.Valid() {
+		t.Errorf("Artifacts() = %+v, want Inspect to have refreshed the cache", cached)
+	}
+	if stored := f.repo.get(t, created.ID); stored.ArtifactVersion != 0 {
+		t.Errorf("ArtifactVersion = %d, want Inspect to leave it alone", stored.ArtifactVersion)
+	}
+	if got := len(f.artifactCalls()); got != 0 {
+		t.Errorf("OnArtifact ran %d times, want Inspect to be silent", got)
+	}
+}
+
+func TestInspectReportsAnUnknownTask(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	_, err := f.service.Inspect("nope")
+	wantErrIs(t, err, task.ErrNotFound)
+}
+
+func TestSetStageStoresTheStageAndTheRevisit(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	created := f.create(t, "add-login", "")
+	changes := f.changeCount()
+
+	got, err := f.service.SetStage(t.Context(), created.ID, task.StageTechSpec, true)
+	if err != nil {
+		t.Fatalf("SetStage() = %v, want nil", err)
+	}
+	if got.Stage != task.StageTechSpec || !got.Revisiting {
+		t.Errorf("SetStage() = %q revisiting=%t, want tech_spec revisiting=true", got.Stage, got.Revisiting)
+	}
+
+	if loaded, _ := f.service.Get(created.ID); loaded.Stage != task.StageTechSpec || !loaded.Revisiting {
+		t.Errorf("Get() = %q revisiting=%t, want tech_spec revisiting=true", loaded.Stage, loaded.Revisiting)
+	}
+	if stored := f.repo.get(t, created.ID); stored.Stage != task.StageTechSpec || !stored.Revisiting {
+		t.Errorf("stored = %q revisiting=%t, want tech_spec revisiting=true", stored.Stage, stored.Revisiting)
+	}
+	if f.changeCount() <= changes {
+		t.Error("OnChange did not run for the new stage")
+	}
+	if got := f.logs.count(t, "task stage set"); got != 1 {
+		t.Errorf("task stage set records = %d, want 1", got)
+	}
+}
+
+func TestSetStageRefusesAnUnknownStageOrTask(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	created := f.create(t, "add-login", "")
+
+	_, err := f.service.SetStage(t.Context(), created.ID, task.Stage("prd_done"), false)
+	wantErrIs(t, err, task.ErrUnknownStage)
+
+	_, err = f.service.SetStage(t.Context(), "nope", task.StagePlan, false)
+	wantErrIs(t, err, task.ErrNotFound)
+}
+
+func TestSetStageFailsWhenItCannotBeStored(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	created := f.create(t, "add-login", "")
+	f.repo.updateErr = errors.New("database is locked")
+
+	if _, err := f.service.SetStage(t.Context(), created.ID, task.StagePlan, false); err == nil {
+		t.Fatal("SetStage() = nil, want an error")
+	}
+	if loaded, _ := f.service.Get(created.ID); loaded.Stage != task.StagePRD {
+		t.Errorf("Stage = %q, want the failed update to change nothing", loaded.Stage)
+	}
+}
+
+func TestRemoveArtifactsThrowsAwayTheStageAndTheOnesAfterIt(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		from                         task.Stage
+		wantPRD, wantSpec, wantSteps bool
+	}{
+		"from the PRD":       {from: task.StagePRD},
+		"from the tech spec": {from: task.StageTechSpec, wantPRD: true},
+		"from the plan":      {from: task.StagePlan, wantPRD: true, wantSpec: true},
+		"from implementation": {
+			from: task.StageImplementation, wantPRD: true, wantSpec: true, wantSteps: true,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			f := newFixture(t)
+			created := f.create(t, "add-login", "")
+			writePRD(t, created, "# PRD")
+			writeTechSpec(t, created, "# Tech spec")
+			writeStep(t, created, "1-add-the-store.md", "api", "Step 1: Add the store")
+
+			if err := f.service.RemoveArtifacts(t.Context(), created.ID, tc.from); err != nil {
+				t.Fatalf("RemoveArtifacts(%q) = %v, want nil", tc.from, err)
+			}
+
+			if got := exists(created.PRDPath()); got != tc.wantPRD {
+				t.Errorf("PRD exists = %t, want %t", got, tc.wantPRD)
+			}
+			if got := exists(created.TechSpecPath()); got != tc.wantSpec {
+				t.Errorf("tech spec exists = %t, want %t", got, tc.wantSpec)
+			}
+			if got := exists(created.StepsDir()); got != tc.wantSteps {
+				t.Errorf("steps folder exists = %t, want %t", got, tc.wantSteps)
+			}
+
+			cached, _ := f.service.Artifacts(created.ID)
+			if cached.PRD != tc.wantPRD || cached.TechSpec != tc.wantSpec || cached.Plan.Present != tc.wantSteps {
+				t.Errorf("Artifacts() = %+v, want it to match the folder", cached)
+			}
+			if stored := f.repo.get(t, created.ID); stored.ArtifactVersion != 1 {
+				t.Errorf("ArtifactVersion = %d, want 1", stored.ArtifactVersion)
+			}
+		})
+	}
+}
+
+func TestRemoveArtifactsOfAFolderAlreadyEmpty(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	created := f.create(t, "add-login", "")
+
+	if err := f.service.RemoveArtifacts(t.Context(), created.ID, task.StagePRD); err != nil {
+		t.Errorf("RemoveArtifacts() = %v, want nil", err)
+	}
+	wantErrIs(t, f.service.RemoveArtifacts(t.Context(), "nope", task.StagePRD), task.ErrNotFound)
 }

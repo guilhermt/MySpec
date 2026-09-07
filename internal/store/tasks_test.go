@@ -117,12 +117,13 @@ func TestTasksUpdateStage(t *testing.T) {
 	s := newStore(t)
 
 	tk := newTask("task-1", "/ws", "one", fixedTime)
+	tk.ArtifactVersion = 3
 	if err := s.Tasks.Insert(t.Context(), tk); err != nil {
 		t.Fatalf("Insert() = %v, want nil", err)
 	}
 
 	updatedAt := fixedTime.Add(time.Minute)
-	if err := s.Tasks.UpdateStage(t.Context(), tk.ID, string(task.StagePRDDone), 3, updatedAt); err != nil {
+	if err := s.Tasks.UpdateStage(t.Context(), tk.ID, string(task.StageTechSpec), true, updatedAt); err != nil {
 		t.Fatalf("UpdateStage() = %v, want nil", err)
 	}
 
@@ -130,9 +131,40 @@ func TestTasksUpdateStage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Get() = %v, want nil", err)
 	}
-	if got.Stage != task.StagePRDDone || got.ArtifactVersion != 3 || !got.UpdatedAt.Equal(updatedAt) {
-		t.Errorf("Get() = %q %d %v, want %q 3 %v",
-			got.Stage, got.ArtifactVersion, got.UpdatedAt, task.StagePRDDone, updatedAt)
+	if got.Stage != task.StageTechSpec || !got.Revisiting || !got.UpdatedAt.Equal(updatedAt) {
+		t.Errorf("Get() = %q revisiting=%t %v, want %q revisiting=true %v",
+			got.Stage, got.Revisiting, got.UpdatedAt, task.StageTechSpec, updatedAt)
+	}
+	if got.ArtifactVersion != 3 {
+		t.Errorf("ArtifactVersion = %d, want the stage update to leave it alone", got.ArtifactVersion)
+	}
+}
+
+func TestTasksUpdateArtifactVersion(t *testing.T) {
+	t.Parallel()
+	s := newStore(t)
+
+	tk := newTask("task-1", "/ws", "one", fixedTime)
+	tk.Stage = task.StagePlan
+	tk.Revisiting = true
+	if err := s.Tasks.Insert(t.Context(), tk); err != nil {
+		t.Fatalf("Insert() = %v, want nil", err)
+	}
+
+	updatedAt := fixedTime.Add(time.Minute)
+	if err := s.Tasks.UpdateArtifactVersion(t.Context(), tk.ID, 7, updatedAt); err != nil {
+		t.Fatalf("UpdateArtifactVersion() = %v, want nil", err)
+	}
+
+	got, err := s.Tasks.Get(t.Context(), tk.ID)
+	if err != nil {
+		t.Fatalf("Get() = %v, want nil", err)
+	}
+	if got.ArtifactVersion != 7 || !got.UpdatedAt.Equal(updatedAt) {
+		t.Errorf("Get() = %d %v, want 7 %v", got.ArtifactVersion, got.UpdatedAt, updatedAt)
+	}
+	if got.Stage != task.StagePlan || !got.Revisiting {
+		t.Errorf("Get() = %q revisiting=%t, want the stage left alone", got.Stage, got.Revisiting)
 	}
 }
 
@@ -152,8 +184,8 @@ func TestTasksDeleteCascadesToTheSessionAndItsEntries(t *testing.T) {
 	if _, err := s.Tasks.Get(t.Context(), taskID); !errors.Is(err, task.ErrNotFound) {
 		t.Errorf("Get() = %v, want task.ErrNotFound", err)
 	}
-	if _, err := s.Sessions.GetByTask(t.Context(), taskID); !errors.Is(err, session.ErrNotFound) {
-		t.Errorf("Sessions.GetByTask() = %v, want session.ErrNotFound", err)
+	if _, err := s.Sessions.Get(t.Context(), taskID, string(task.StagePRD)); !errors.Is(err, session.ErrNotFound) {
+		t.Errorf("Sessions.Get() = %v, want session.ErrNotFound", err)
 	}
 	entries, err := s.Entries.List(t.Context(), sessionID)
 	if err != nil {

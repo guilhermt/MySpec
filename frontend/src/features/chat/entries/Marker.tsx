@@ -1,12 +1,36 @@
-import { Archive, Ban, FileCheck, FileText, type LucideIcon } from "lucide-react";
-import { asMarkerType, type MarkerEntry, type MarkerType } from "@/lib/wails";
+import {
+  Archive,
+  Ban,
+  FileCheck,
+  FileText,
+  ListChecks,
+  type LucideIcon,
+  Play,
+  RotateCcw,
+} from "lucide-react";
+import { stageLabel } from "@/lib/stages";
+import { asMarkerType, asTaskStage, type MarkerEntry, type MarkerType } from "@/lib/wails";
 
 const MARKERS: Record<MarkerType, { icon: LucideIcon; text: string }> = {
   prd_written: { icon: FileCheck, text: "PRD written" },
   prd_updated: { icon: FileText, text: "PRD updated" },
+  tech_spec_written: { icon: FileCheck, text: "Tech spec written" },
+  tech_spec_updated: { icon: FileText, text: "Tech spec updated" },
+  plan_written: { icon: ListChecks, text: "Plan written" },
+  plan_updated: { icon: ListChecks, text: "Plan updated" },
+  stage_started: { icon: Play, text: "Stage started" },
   compacted: { icon: Archive, text: "Context compacted" },
   interrupted: { icon: Ban, text: "Interrupted" },
 };
+
+// A stage marker names the stage it opened, and says whether the user asked
+// for it again.
+function stageMarker(marker: MarkerEntry): { icon: LucideIcon; text: string } {
+  return {
+    icon: marker.restarted ? RotateCcw : Play,
+    text: `${stageLabel(asTaskStage(marker.stage))} ${marker.restarted ? "restarted" : "started"}`,
+  };
+}
 
 function timeOf(createdAt: string): string {
   const at = new Date(createdAt);
@@ -22,7 +46,8 @@ export interface MarkerProps {
 
 /** Marker is a milestone of the conversation, drawn as a rule across it. */
 export function Marker({ marker, createdAt }: MarkerProps) {
-  const { icon: Icon, text } = MARKERS[asMarkerType(marker.type)];
+  const type = asMarkerType(marker.type);
+  const { icon: Icon, text } = type === "stage_started" ? stageMarker(marker) : MARKERS[type];
   const time = timeOf(createdAt);
 
   return (

@@ -5,10 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ContextGauge } from "@/features/task/ContextGauge";
 import { DeleteTaskDialog } from "@/features/task/DeleteTaskDialog";
-import { StageBadge } from "@/features/task/StageBadge";
 import { StatusBadge } from "@/features/task/StatusBadge";
+import { hasArtifacts } from "@/features/task/status";
 import { findNode } from "@/features/tree/tree-model";
-import { asSessionStatus, type TaskSummary } from "@/lib/wails";
+import { asSessionStatus, asTaskStage, type TaskSummary } from "@/lib/wails";
 import { pause, resume } from "@/store/actions";
 import { repoNodeId, useAppStore } from "@/store/app-store";
 
@@ -31,27 +31,30 @@ export function TaskHeader({ task, artifactsOpen, onToggleArtifacts }: TaskHeade
   const status = asSessionStatus(task.sessionStatus);
   const paused = status === "paused";
   const Icon = task.repoPath === "" ? House : FolderGit2;
+  // The implementation stage has no session of its own to hold.
+  const running = asTaskStage(task.stage) !== "implementation";
 
   return (
     <header className="flex h-11 shrink-0 items-center gap-2 border-b px-3">
       <Icon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
       <span className="min-w-0 truncate font-medium">{task.name}</span>
       <Badge variant="secondary">{task.repoPath === "" ? "Root" : repoName}</Badge>
-      <StageBadge task={task} />
       <StatusBadge task={task} />
 
       <span className="flex-1" />
 
       <ContextGauge percent={task.contextPercent} />
-      <Button
-        variant="ghost"
-        size="sm"
-        disabled={!paused && status === "error"}
-        onClick={() => void (paused ? resume(task.id) : pause(task.id))}
-      >
-        {paused ? <Play /> : <Pause />}
-        {paused ? "Resume" : "Pause"}
-      </Button>
+      {running && (
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={!paused && status === "error"}
+          onClick={() => void (paused ? resume(task.id) : pause(task.id))}
+        >
+          {paused ? <Play /> : <Pause />}
+          {paused ? "Resume" : "Pause"}
+        </Button>
+      )}
       <Tooltip>
         <TooltipTrigger
           render={<Button variant="ghost" size="icon-sm" />}
@@ -61,7 +64,7 @@ export function TaskHeader({ task, artifactsOpen, onToggleArtifacts }: TaskHeade
         >
           <PanelRight />
         </TooltipTrigger>
-        <TooltipContent>{task.hasPrd ? "Artifacts" : "No artifacts yet"}</TooltipContent>
+        <TooltipContent>{hasArtifacts(task) ? "Artifacts" : "No artifacts yet"}</TooltipContent>
       </Tooltip>
       <Button
         variant="ghost"

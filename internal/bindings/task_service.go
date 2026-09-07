@@ -6,25 +6,27 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
 )
 
-// TaskService is the task and session API the frontend calls.
+// TaskService is the task, session and flow API the frontend calls.
 type TaskService struct {
 	tasks    *task.Service
 	sessions *session.Service
+	flow     *flow.Service
 	log      *slog.Logger
 }
 
-// NewTaskService builds the service over the task and session domains.
-func NewTaskService(tasks *task.Service, sessions *session.Service, log *slog.Logger) *TaskService {
-	return &TaskService{tasks: tasks, sessions: sessions, log: log}
+// NewTaskService builds the service over the task, session and flow domains.
+func NewTaskService(tasks *task.Service, sessions *session.Service, flow *flow.Service, log *slog.Logger) *TaskService {
+	return &TaskService{tasks: tasks, sessions: sessions, flow: flow, log: log}
 }
 
-// CreateTask creates a task and starts its session with the stage prompt. A
-// session that fails to start undoes the task, so a half-created one is never
-// left behind.
+// CreateTask creates a task and starts its first stage with the stage prompt.
+// A session that fails to start undoes the task, so a half-created one is
+// never left behind.
 func (s *TaskService) CreateTask(req CreateTaskRequest) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
@@ -38,7 +40,7 @@ func (s *TaskService) CreateTask(req CreateTaskRequest) (string, error) {
 		return "", s.fail("CreateTask", err)
 	}
 
-	if err := s.sessions.Start(ctx, TaskInfo(t)); err != nil {
+	if err := s.flow.StartTask(ctx, t); err != nil {
 		if deleteErr := s.tasks.Delete(ctx, t.ID); deleteErr != nil {
 			s.log.Error("binding failed", "method", "CreateTask", "err", deleteErr)
 		}
@@ -69,10 +71,62 @@ func (s *TaskService) GetTranscript(taskID string) (Transcript, error) {
 	defer cancel()
 
 	transcript, err := s.sessions.Transcript(ctx, taskID)
+	// A task past the stages that have a conversation has none, and the
+	// frontend asks for it all the same; its stage answers with an empty one.
+	if errors.Is(err, session.ErrNotFound) {
+		if t, ok := s.tasks.Get(taskID); ok {
+			return Transcript{TaskID: taskID, Stage: string(t.Stage), Entries: []Entry{}, Pending: []Entry{}}, nil
+		}
+	}
 	if err != nil {
 		return Transcript{}, s.fail("GetTranscript", err)
 	}
 	return FromTranscript(transcript), nil
+}
+
+// BackToStage reopens a finished stage of a task, throwing away what came
+// after it. The stage is prd or tech_spec.
+func (s *TaskService) BackToStage(taskID, stage string) error {
+	target, err := task.ParseStage(stage)
+	if err != nil {
+		return s.fail("BackToStage", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+
+	if err := s.flow.Back(ctx, taskID, target); err != nil {
+		return s.fail("BackToStage", err)
+	}
+	return nil
+}
+
+// DiscardStage throws away a stage and everything after it, and starts the
+// stage again. The stage is prd, tech_spec or plan.
+func (s *TaskService) DiscardStage(taskID, stage string) error {
+	target, err := task.ParseStage(stage)
+	if err != nil {
+		return s.fail("DiscardStage", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+
+	if err := s.flow.Discard(ctx, taskID, target); err != nil {
+		return s.fail("DiscardStage", err)
+	}
+	return nil
+}
+
+// ContinueStage moves a task that is revisiting a stage on to the next one.
+func (s *TaskService) ContinueStage(taskID string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+
+	if err := s.flow.Continue(ctx, taskID); err != nil {
+		return s.fail("ContinueStage", err)
+	}
+	return nil
 }
 
 // SendMessage queues a message for the agent, delivered right away when the
@@ -201,8 +255,13 @@ var userMessages = []struct {
 	{task.ErrNameTaken, "A task with this name already exists in this workspace."},
 	{task.ErrEmptyContext, "Describe what you want to build."},
 	{task.ErrRepoOutside, "This repository is not part of the workspace."},
+	{task.ErrUnknownStage, "Unknown stage."},
 	{session.ErrEmptyMessage, "Write a message first."},
 	{session.ErrPaused, "Resume the task to send messages."},
+	{session.ErrNotFound, "This conversation has ended."},
+	{flow.ErrInvalidTarget, "This stage can't be reached from here."},
+	{flow.ErrNotRevisiting, "The task isn't revisiting a stage."},
+	{flow.ErrNotReady, "Wait for the agent to finish and the document to be written."},
 }
 
 // fail is what a failed binding call returns: a mistake the user can correct

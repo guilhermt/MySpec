@@ -1,7 +1,6 @@
 package bindings
 
 import (
-	"os"
 	"time"
 
 	"github.com/guilhermt/myspec/internal/session"
@@ -41,11 +40,12 @@ func FromNotice(notice *workspace.Notice) *Notice {
 }
 
 // FromTasks converts the tasks of the open workspace, pairing each with the
-// summary of its session when there is one.
-func FromTasks(tasks []task.Task, summaries map[string]session.Summary) []TaskSummary {
+// artifacts of its folder and the summary of its session when there is one.
+func FromTasks(tasks []task.Task, artifacts func(id string) task.Artifacts, summaries map[string]session.Summary) []TaskSummary {
 	converted := make([]TaskSummary, len(tasks))
 	for i, t := range tasks {
 		summary := summaries[t.ID]
+		a := artifacts(t.ID)
 		if summary.Status == "" {
 			summary.Status = session.StatusWaiting
 		}
@@ -55,13 +55,19 @@ func FromTasks(tasks []task.Task, summaries map[string]session.Summary) []TaskSu
 			RepoPath:        t.RepoPath,
 			Dir:             t.Dir(),
 			Stage:           string(t.Stage),
+			Revisiting:      t.Revisiting,
 			SessionStatus:   string(summary.Status),
 			TurnRunning:     summary.TurnRunning,
 			ProcessRunning:  summary.ProcessRunning,
 			RetryAttempt:    summary.RetryAttempt,
 			ContextPercent:  summary.ContextPercent,
 			PendingCount:    summary.PendingCount,
-			HasPRD:          t.Stage == task.StagePRDDone,
+			Corrections:     summary.Corrections,
+			HasPRD:          a.PRD,
+			HasTechSpec:     a.TechSpec,
+			Steps:           fromSteps(a.Plan.Steps),
+			PlanProblems:    fromProblems(a.Plan.Problems),
+			CanContinue:     t.Revisiting && a.Done(t.Stage) && summary.Idle,
 			ArtifactVersion: t.ArtifactVersion,
 			LastError:       summary.LastError,
 			CreatedAt:       t.CreatedAt.Format(time.RFC3339),
@@ -71,19 +77,35 @@ func FromTasks(tasks []task.Task, summaries map[string]session.Summary) []TaskSu
 	return converted
 }
 
-// TaskInfo is what a session needs to know about its task. internal/app and
-// TaskService both build it, so it lives here.
-func TaskInfo(t task.Task) session.TaskInfo {
-	_, err := os.Stat(t.PRDPath())
-	return session.TaskInfo{
-		ID:             t.ID,
-		Name:           t.Name,
-		Dir:            t.Dir(),
-		ArtifactsDir:   t.ArtifactsDir,
-		PRDPath:        t.PRDPath(),
-		InitialContext: t.InitialContext,
-		PRDExists:      err == nil,
+// stepNotStarted is the only status a step has in this version: the steps are
+// listed, not run.
+const stepNotStarted = "not_started"
+
+// fromSteps converts the steps of a plan, always returning a slice so the
+// frontend never sees null.
+func fromSteps(steps []task.Step) []Step {
+	converted := make([]Step, len(steps))
+	for i, step := range steps {
+		converted[i] = Step{
+			Number:     step.Number,
+			File:       step.File,
+			Title:      step.Title,
+			Repository: step.Repository,
+			RepoPath:   step.RepoPath,
+			Status:     stepNotStarted,
+		}
 	}
+	return converted
+}
+
+// fromProblems converts the reasons a plan is not valid, always returning a
+// slice so the frontend never sees null.
+func fromProblems(problems []task.PlanProblem) []PlanProblem {
+	converted := make([]PlanProblem, len(problems))
+	for i, problem := range problems {
+		converted[i] = PlanProblem{File: problem.File, Message: problem.Message}
+	}
+	return converted
 }
 
 // FromTranscript converts a whole conversation, always returning slices so the
@@ -92,6 +114,7 @@ func FromTranscript(tr session.Transcript) Transcript {
 	return Transcript{
 		TaskID:    tr.TaskID,
 		SessionID: tr.SessionID,
+		Stage:     tr.Stage,
 		Entries:   fromEntries(tr.Entries),
 		Pending:   fromEntries(tr.Pending),
 	}
@@ -131,7 +154,12 @@ func FromEntry(e session.Entry) Entry {
 		CreatedAt: e.CreatedAt.Format(time.RFC3339),
 	}
 	if e.User != nil {
-		converted.User = &UserEntry{Text: e.User.Text, Pending: e.User.Pending, Prompt: e.User.Prompt}
+		converted.User = &UserEntry{
+			Text:    e.User.Text,
+			Pending: e.User.Pending,
+			Prompt:  e.User.Prompt,
+			App:     e.User.App,
+		}
 	}
 	if e.Assistant != nil {
 		converted.Assistant = &AssistantEntry{
@@ -158,7 +186,12 @@ func FromEntry(e session.Entry) Entry {
 		converted.Question = fromQuestion(e.Question)
 	}
 	if e.Marker != nil {
-		converted.Marker = &MarkerEntry{Type: string(e.Marker.Type), PreTokens: e.Marker.PreTokens}
+		converted.Marker = &MarkerEntry{
+			Type:      string(e.Marker.Type),
+			PreTokens: e.Marker.PreTokens,
+			Stage:     e.Marker.Stage,
+			Restarted: e.Marker.Restarted,
+		}
 	}
 	if e.Error != nil {
 		converted.Error = &ErrorEntry{

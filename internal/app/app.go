@@ -14,6 +14,7 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/application"
 
 	"github.com/guilhermt/myspec/internal/bindings"
+	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/platform/logging"
 	"github.com/guilhermt/myspec/internal/platform/xdg"
 	"github.com/guilhermt/myspec/internal/prompts"
@@ -49,6 +50,7 @@ type App struct {
 	theme    *theme.Service
 	tasks    *task.Service
 	sessions *session.Service
+	flow     *flow.Service
 
 	mu      sync.Mutex
 	wails   *application.App
@@ -108,12 +110,17 @@ func Run(cfg Config) int {
 		return fail(log, "read settings", err)
 	}
 	sessions := session.New(session.Deps{
-		Sessions:     st.Sessions,
-		Entries:      st.Entries,
-		Launcher:     claudeLauncher{log: log},
-		RenderPrompt: func(vars prompts.Vars) (string, error) { return prompts.Render(dirs.Data, prompts.StagePRD, vars) },
-		Log:          log,
-		OnState:      func(string) { a.publish() },
+		Sessions: st.Sessions,
+		Entries:  st.Entries,
+		Launcher: claudeLauncher{log: log},
+		RenderPrompt: func(stage prompts.Stage, vars prompts.Vars) (string, error) {
+			return prompts.Render(dirs.Data, stage, vars)
+		},
+		Log: log,
+		OnState: func(taskID string) {
+			a.publish()
+			a.flow.Check(taskID)
+		},
 		OnTranscript: a.emitTranscript,
 	})
 	tasks, err := task.New(task.Deps{
@@ -122,25 +129,28 @@ func Run(cfg Config) int {
 		Log:        log,
 		Repos:      a.repoPaths,
 		OnChange:   a.publish,
-		OnArtifact: func(t task.Task, first bool) { sessions.MarkArtifact(context.Background(), t.ID, first) },
+		OnArtifact: a.onArtifact,
 	})
 	if err != nil {
 		return fail(log, "watch artifacts", err)
 	}
+	// The session and task callbacks reach the flow through the app, which
+	// holds it before anything can run: no process starts before Bootstrap.
+	flowSvc := flow.New(flow.Deps{Tasks: tasks, Sessions: sessions, Log: log})
 	wsSvc := workspace.New(workspace.Deps{
 		Recents:  st.Recents,
 		Scan:     func(root string) ([]string, error) { return scan.Repos(root, log) },
 		Log:      log,
 		OnChange: a.onWorkspaceChanged,
 	})
-	a.theme, a.ws, a.tasks, a.sessions = themeSvc, wsSvc, tasks, sessions
+	a.theme, a.ws, a.tasks, a.sessions, a.flow = themeSvc, wsSvc, tasks, sessions, flowSvc
 
 	if err := wsSvc.Bootstrap(ctx, firstArg(cfg.Args, log), cfg.Cwd); err != nil {
 		return fail(log, "open initial workspace", err)
 	}
 	a.watchSystemTheme()
 
-	wails := application.New(a.options(cfg, wsSvc, themeSvc, tasks, sessions, log))
+	wails := application.New(a.options(cfg, wsSvc, themeSvc, tasks, sessions, flowSvc, log))
 	a.setWails(wails)
 	a.openWindow(cfg)
 
@@ -163,6 +173,7 @@ func (a *App) options(
 	themeSvc *theme.Service,
 	tasks *task.Service,
 	sessions *session.Service,
+	flowSvc *flow.Service,
 	log *slog.Logger,
 ) application.Options {
 	return application.Options{
@@ -172,7 +183,7 @@ func (a *App) options(
 		Services: []application.Service{
 			application.NewService(bindings.NewWorkspaceService(ws, a.snapshot, a, log)),
 			application.NewService(bindings.NewSettingsService(themeSvc, log)),
-			application.NewService(bindings.NewTaskService(tasks, sessions, log)),
+			application.NewService(bindings.NewTaskService(tasks, sessions, flowSvc, log)),
 		},
 		Assets: application.AssetOptions{Handler: application.AssetFileServerFS(cfg.Assets)},
 		Linux:  application.LinuxOptions{ProgramName: "myspec"},
@@ -193,9 +204,10 @@ func (a *App) onWorkspaceChanged() {
 	a.publish()
 }
 
-// syncTasks loads the tasks of the open workspace and opens their sessions.
-// A task that cannot be loaded is logged and left out; it never keeps the
-// workspace from opening.
+// syncTasks loads the tasks of the open workspace and hands them to the flow,
+// which opens the session of the stage each one is in and moves on the stages
+// that finished while the app was closed. A task that cannot be loaded is
+// logged and left out; it never keeps the workspace from opening.
 func (a *App) syncTasks() {
 	current := a.ws.Current()
 	if current == nil {
@@ -209,11 +221,7 @@ func (a *App) syncTasks() {
 		a.log.Error("sync tasks failed", "workspace", current.Path, "err", err)
 		return
 	}
-	for _, t := range a.tasks.List() {
-		if err := a.sessions.Open(ctx, bindings.TaskInfo(t)); err != nil {
-			a.log.Error("open session failed", "task", t.ID, "err", err)
-		}
-	}
+	a.flow.Sync(ctx)
 }
 
 // shutdown stops every session and the artifact watcher while the window is
@@ -222,6 +230,7 @@ func (a *App) shutdown() {
 	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 
+	a.flow.Close()
 	a.sessions.Shutdown(ctx)
 	if err := a.tasks.Close(); err != nil {
 		a.log.Error("close artifact watcher failed", "err", err)

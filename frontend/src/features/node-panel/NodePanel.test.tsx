@@ -12,7 +12,7 @@ const TASKS = [
     id: "t-web",
     name: "fix-header",
     repoPath: "/home/dev/projects/web",
-    stage: "prd_done",
+    stage: "tech_spec",
     sessionStatus: "working",
   }),
 ];
@@ -70,7 +70,7 @@ describe("NodePanel", () => {
     const tasks = screen.getAllByRole("listitem");
     expect(tasks).toHaveLength(1);
     expect(tasks[0]).toHaveTextContent("fix-header");
-    expect(tasks[0]).toHaveTextContent("PRD done");
+    expect(tasks[0]).toHaveTextContent("Tech spec");
     expect(tasks[0]).toHaveTextContent("Working");
   });
 

@@ -1,12 +1,39 @@
-import { FileText } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Markdown } from "@/features/chat/Markdown";
 import { ErrorNotice } from "@/features/notice/Notice";
+import { StepList } from "@/features/task/StepList";
 import { useArtifact } from "@/features/task/useArtifact";
-import type { TaskSummary } from "@/lib/wails";
+import { splitFrontMatter } from "@/lib/front-matter";
+import { asTaskStage, type Step, type TaskStage, type TaskSummary } from "@/lib/wails";
 
 const LOADING_WIDTHS = ["w-1/2", "w-full", "w-3/4"];
+
+/** Selection is the tab the panel is on, or the step file it drilled into. */
+type Selection = "prd" | "tech_spec" | "steps" | { step: string };
+
+// The document a stage was given to work from is the one worth having open.
+const DEFAULT_SELECTION: Record<TaskStage, Selection> = {
+  prd: "prd",
+  tech_spec: "prd",
+  plan: "tech_spec",
+  implementation: "steps",
+};
+
+function artifactName(selection: Selection, task: TaskSummary): string | null {
+  if (typeof selection === "object") {
+    return `steps/${selection.step}`;
+  }
+  if (selection === "prd") {
+    return task.hasPrd ? "PRD.md" : null;
+  }
+  if (selection === "tech_spec") {
+    return task.hasTechSpec ? "tech-spec.md" : null;
+  }
+  return null;
+}
 
 function Empty() {
   return (
@@ -19,37 +46,112 @@ function Empty() {
   );
 }
 
+/** StepDocument shows a step file with its header read as metadata. */
+function StepDocument({ content }: { content: string }) {
+  const { fields, body } = splitFrontMatter(content);
+  const repository = fields.repository ?? "";
+
+  return (
+    <div className="flex max-w-[760px] flex-col gap-2 select-text">
+      {repository !== "" && (
+        <p className="text-xs text-muted-foreground">
+          Repository · <span className="font-mono">{repository}</span>
+        </p>
+      )}
+      <Markdown>{body}</Markdown>
+    </div>
+  );
+}
+
 export interface ArtifactPanelProps {
   task: TaskSummary;
 }
 
-/** ArtifactPanel shows the PRD next to the conversation that is shaping it. */
+/** ArtifactPanel shows what the task has written, next to the conversation. */
 export function ArtifactPanel({ task }: ArtifactPanelProps) {
-  const artifact = useArtifact(task.id, task.hasPrd, task.artifactVersion);
+  const steps = task.steps ?? [];
+  const stage = asTaskStage(task.stage);
+  const [selection, setSelection] = useState<Selection>(DEFAULT_SELECTION[stage]);
   const [dismissed, setDismissed] = useState("");
+
+  // A new stage brings a new document to read; the user is free from there on.
+  useEffect(() => {
+    setSelection(DEFAULT_SELECTION[stage]);
+  }, [stage]);
+
+  const openStep =
+    typeof selection === "object"
+      ? (steps.find((step) => step.file === selection.step) ?? null)
+      : null;
+  // A step file the plan no longer has falls back to the list it came from.
+  const view = typeof selection === "object" && openStep === null ? "steps" : selection;
+  const artifact = useArtifact(task.id, artifactName(view, task), task.artifactVersion);
+
+  const openStepFile = (step: Step) => setSelection({ step: step.file });
 
   return (
     <section className="flex h-full min-w-0 flex-col bg-background">
-      <header className="flex h-9 shrink-0 items-center gap-2 border-b px-3">
-        <FileText aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
-        <span className="text-sm font-medium">PRD</span>
+      <header className="flex h-9 shrink-0 items-center border-b px-3">
+        <ToggleGroup
+          aria-label="Artifacts"
+          size="sm"
+          value={[typeof view === "object" ? "steps" : view]}
+          onValueChange={(next: string[]) => {
+            const [value] = next;
+            if (value === "prd" || value === "tech_spec" || value === "steps") {
+              setSelection(value);
+            }
+          }}
+        >
+          <ToggleGroupItem value="prd" disabled={!task.hasPrd}>
+            PRD
+          </ToggleGroupItem>
+          <ToggleGroupItem value="tech_spec" disabled={!task.hasTechSpec}>
+            Tech spec
+          </ToggleGroupItem>
+          <ToggleGroupItem value="steps" disabled={steps.length === 0}>
+            {steps.length > 0 ? `Steps (${steps.length})` : "Steps"}
+          </ToggleGroupItem>
+        </ToggleGroup>
       </header>
+
+      {openStep !== null && (
+        <div className="flex h-8 shrink-0 items-center gap-2 border-b px-3">
+          <Button variant="ghost" size="sm" onClick={() => setSelection("steps")}>
+            ← Steps
+          </Button>
+          <span className="min-w-0 truncate text-sm font-medium">{openStep.title}</span>
+        </div>
+      )}
+
       <div className="min-h-0 flex-1 overflow-y-auto p-6">
-        {artifact.status === "empty" && <Empty />}
-        {artifact.status === "loading" && (
-          <div className="flex flex-col gap-3">
-            {LOADING_WIDTHS.map((width) => (
-              <Skeleton key={width} className={`h-4 ${width}`} />
-            ))}
-          </div>
-        )}
-        {artifact.status === "error" && artifact.error !== dismissed && (
-          <ErrorNotice message={artifact.error} onDismiss={() => setDismissed(artifact.error)} />
-        )}
-        {artifact.status === "ready" && (
-          <div className="max-w-[760px] select-text">
-            <Markdown>{artifact.content}</Markdown>
-          </div>
+        {view === "steps" ? (
+          <StepList steps={steps} problems={task.planProblems ?? []} onOpen={openStepFile} />
+        ) : (
+          <>
+            {artifact.status === "empty" && <Empty />}
+            {artifact.status === "loading" && (
+              <div className="flex flex-col gap-3">
+                {LOADING_WIDTHS.map((width) => (
+                  <Skeleton key={width} className={`h-4 ${width}`} />
+                ))}
+              </div>
+            )}
+            {artifact.status === "error" && artifact.error !== dismissed && (
+              <ErrorNotice
+                message={artifact.error}
+                onDismiss={() => setDismissed(artifact.error)}
+              />
+            )}
+            {artifact.status === "ready" &&
+              (openStep === null ? (
+                <div className="max-w-[760px] select-text">
+                  <Markdown>{artifact.content}</Markdown>
+                </div>
+              ) : (
+                <StepDocument content={artifact.content} />
+              ))}
+          </>
         )}
       </div>
     </section>

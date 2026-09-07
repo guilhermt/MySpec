@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -24,6 +25,11 @@ const (
 	EnvScenario = "MYSPEC_FAKE_SCENARIO"
 	// EnvAuth set to "out" makes `auth status` report a logged out user.
 	EnvAuth = "MYSPEC_FAKE_AUTH"
+	// EnvWriterFix names the step file the writer scenario rewrites from its
+	// second turn on, which is how a test drives the correction of a plan.
+	EnvWriterFix = "MYSPEC_FAKE_WRITER_FIX"
+	// EnvWriterRepo is the repository the rewritten step file carries.
+	EnvWriterRepo = "MYSPEC_FAKE_WRITER_REPO"
 )
 
 // The exit codes the fake uses.
@@ -238,6 +244,8 @@ func (f *fake) play(scenario string) int {
 			f.questionTurn()
 		case "slow":
 			f.slowTurn()
+		case "writer":
+			f.writerTurn(text)
 		case "crash":
 			f.emitInit()
 			_, _ = fmt.Fprintln(os.Stderr, "boom")
@@ -274,6 +282,72 @@ func (f *fake) echoTurn(text string, compact bool) {
 	f.endMessage()
 	f.assistantText(messageID, text)
 	f.result("success", false, text, "completed")
+}
+
+// The markers that wrap a file a writer message asks for.
+const (
+	writeMarker = "@@write "
+	endMarker   = "@@end"
+)
+
+// The permissions the writer scenario leaves on what it writes.
+const (
+	writerDirPerm  = 0o755
+	writerFilePerm = 0o644
+)
+
+// fixedStep is the step file the writer scenario leaves behind when it is
+// asked to fix a plan.
+const fixedStep = "---\nrepository: %s\n---\n\n# Step 1: Fixed\n"
+
+// writerTurn writes the files the message asks for and then answers like echo.
+func (f *fake) writerTurn(text string) {
+	wrote := f.writeBlocks(text)
+	if path := os.Getenv(EnvWriterFix); path != "" && f.turns > 1 {
+		f.writeFile(path, fmt.Sprintf(fixedStep, os.Getenv(EnvWriterRepo)))
+	}
+
+	reply := text
+	if wrote {
+		reply = "written"
+	}
+	f.echoTurn(reply, false)
+}
+
+// writeBlocks writes every file the message carries between the markers,
+// reporting whether it carried any.
+func (f *fake) writeBlocks(text string) bool {
+	wrote := false
+	for rest := text; ; {
+		_, after, found := strings.Cut(rest, writeMarker)
+		if !found {
+			return wrote
+		}
+		path, body, found := strings.Cut(after, "\n")
+		if !found {
+			return wrote
+		}
+		content, remainder, found := strings.Cut(body, endMarker)
+		if !found {
+			return wrote
+		}
+		f.writeFile(strings.TrimSpace(path), content)
+		wrote = true
+		rest = remainder
+	}
+}
+
+// writeFile puts content at path, creating the folders above it.
+//
+//nolint:gosec // G703: writing where the message says to is what this scenario is for
+func (f *fake) writeFile(path, content string) {
+	if err := os.MkdirAll(filepath.Dir(path), writerDirPerm); err != nil {
+		fail("create %s: %v", filepath.Dir(path), err)
+		return
+	}
+	if err := os.WriteFile(path, []byte(content), writerFilePerm); err != nil {
+		fail("write %s: %v", path, err)
+	}
 }
 
 // toolTurn reads a file before answering with the text it was given.

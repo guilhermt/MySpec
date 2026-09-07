@@ -28,7 +28,8 @@ export function DeleteTaskDialog({ task, open, onOpenChange }: DeleteTaskDialogP
         <AlertDialogHeader>
           <AlertDialogTitle>{`Delete "${task.name}"?`}</AlertDialogTitle>
           <AlertDialogDescription>
-            This removes the conversation, the PRD and every record of the task. It can't be undone.
+            This removes the conversations, the documents, the steps and every record of the task.
+            It can't be undone.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

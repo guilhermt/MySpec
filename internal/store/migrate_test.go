@@ -1,9 +1,17 @@
 package store
 
 import (
+	"database/sql"
+	"log/slog"
 	"testing"
 	"testing/fstest"
+
+	"github.com/google/go-cmp/cmp"
 )
+
+// stagesVersion is the migration that brought the stages after the PRD, and
+// the version the embedded migrations end at.
+const stagesVersion = 3
 
 // mapFS builds a migrations tree with the given file names.
 func mapFS(names ...string) fstest.MapFS {
@@ -105,4 +113,101 @@ func TestParseVersion(t *testing.T) {
 	if got != 42 {
 		t.Errorf("parseVersion() = %d, want 42", got)
 	}
+}
+
+func TestMigrateEndsAtTheStagesVersion(t *testing.T) {
+	t.Parallel()
+
+	migrations, err := loadMigrations(migrationsFS)
+	if err != nil {
+		t.Fatalf("loadMigrations() = %v, want nil", err)
+	}
+	if got := migrations[len(migrations)-1].version; got != stagesVersion {
+		t.Errorf("last migration version = %d, want %d", got, stagesVersion)
+	}
+
+	db := openAt(t, stagesVersion)
+	got, err := schemaVersion(t.Context(), db)
+	if err != nil {
+		t.Fatalf("schemaVersion() = %v, want nil", err)
+	}
+	if got != stagesVersion {
+		t.Errorf("schemaVersion() = %d, want %d", got, stagesVersion)
+	}
+}
+
+func TestMigrateTurnsAFinishedPRDIntoThePRDStage(t *testing.T) {
+	t.Parallel()
+
+	db := openAt(t, stagesVersion-1)
+	const insert = `INSERT INTO tasks
+		(id, workspace_path, name, initial_context, stage, artifacts_dir, created_at, updated_at)
+		VALUES (?, '/ws', ?, 'context', ?, '/data/x', '2026-09-06T10:00:00Z', '2026-09-06T10:00:00Z')`
+	for _, row := range [][2]string{{"done", "prd_done"}, {"open", "prd"}} {
+		if _, err := db.ExecContext(t.Context(), insert, row[0], row[0], row[1]); err != nil {
+			t.Fatalf("insert task %s: %v", row[0], err)
+		}
+	}
+
+	if err := migrate(t.Context(), db, slog.New(slog.DiscardHandler)); err != nil {
+		t.Fatalf("migrate() = %v, want nil", err)
+	}
+
+	rows, err := db.QueryContext(t.Context(), `SELECT id, stage, revisiting FROM tasks ORDER BY id`)
+	if err != nil {
+		t.Fatalf("query tasks: %v", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	got := map[string]string{}
+	for rows.Next() {
+		var id, stage string
+		var revisiting bool
+		if err := rows.Scan(&id, &stage, &revisiting); err != nil {
+			t.Fatalf("scan task: %v", err)
+		}
+		if revisiting {
+			t.Errorf("task %s revisiting = true, want the column to default to false", id)
+		}
+		got[id] = stage
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("query tasks: %v", err)
+	}
+
+	want := map[string]string{"done": "prd", "open": "prd"}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("stages mismatch (-want +got):\n%s", diff)
+	}
+}
+
+// openAt opens an in-memory database migrated up to version, closed at the end
+// of the test.
+func openAt(t *testing.T, version int) *sql.DB {
+	t.Helper()
+
+	db, err := sql.Open("sqlite", memoryDSN)
+	if err != nil {
+		t.Fatalf("sql.Open() = %v, want nil", err)
+	}
+	db.SetMaxOpenConns(1)
+	t.Cleanup(func() {
+		if closeErr := db.Close(); closeErr != nil {
+			t.Errorf("Close() = %v, want nil", closeErr)
+		}
+	})
+
+	migrations, err := loadMigrations(migrationsFS)
+	if err != nil {
+		t.Fatalf("loadMigrations() = %v, want nil", err)
+	}
+	for _, m := range migrations {
+		if m.version > version {
+			break
+		}
+		if err := apply(t.Context(), db, m); err != nil {
+			t.Fatalf("apply(%s) = %v, want nil", m.file, err)
+		}
+	}
+	return db
 }

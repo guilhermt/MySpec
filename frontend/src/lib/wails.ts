@@ -7,12 +7,14 @@ import type {
   MarkerEntry,
   Notice,
   PermissionEntry,
+  PlanProblem,
   Question,
   QuestionEntry,
   QuestionOption,
   Recent,
   Repo,
   State,
+  Step,
   TaskSummary,
   Transcript,
   TranscriptEvent,
@@ -33,12 +35,14 @@ export type {
   MarkerEntry,
   Notice,
   PermissionEntry,
+  PlanProblem,
   Question,
   QuestionEntry,
   QuestionOption,
   Recent,
   Repo,
   State,
+  Step,
   TaskSummary,
   Transcript,
   TranscriptEvent,
@@ -48,7 +52,7 @@ export type {
 
 export type ThemePreference = "system" | "light" | "dark";
 export type NoticeReason = "not_found" | "not_directory" | "not_readable" | "last_recent_missing";
-export type TaskStage = "prd" | "prd_done";
+export type TaskStage = "prd" | "tech_spec" | "plan" | "implementation";
 export type SessionStatus = "working" | "waiting" | "needs_permission" | "paused" | "error";
 export type EntryKind =
   | "user"
@@ -60,7 +64,16 @@ export type EntryKind =
   | "error";
 export type ActionStatus = "running" | "done" | "error" | "interrupted";
 export type PermissionStatus = "pending" | "allowed" | "allowed_session" | "denied" | "cancelled";
-export type MarkerType = "prd_written" | "prd_updated" | "compacted" | "interrupted";
+export type MarkerType =
+  | "prd_written"
+  | "prd_updated"
+  | "tech_spec_written"
+  | "tech_spec_updated"
+  | "plan_written"
+  | "plan_updated"
+  | "stage_started"
+  | "compacted"
+  | "interrupted";
 export type ErrorKind =
   | "process_exit"
   | "start_failed"
@@ -94,7 +107,15 @@ export function asNoticeReason(value: string): NoticeReason {
 }
 
 export function asTaskStage(value: string): TaskStage {
-  return value === "prd_done" ? "prd_done" : "prd";
+  switch (value) {
+    case "prd":
+    case "tech_spec":
+    case "plan":
+    case "implementation":
+      return value;
+    default:
+      return "prd";
+  }
 }
 
 export function asSessionStatus(value: string): SessionStatus {
@@ -154,6 +175,11 @@ export function asMarkerType(value: string): MarkerType {
   switch (value) {
     case "prd_written":
     case "prd_updated":
+    case "tech_spec_written":
+    case "tech_spec_updated":
+    case "plan_written":
+    case "plan_updated":
+    case "stage_started":
     case "compacted":
     case "interrupted":
       return value;
@@ -219,6 +245,11 @@ export const api = {
   ): Promise<void> => TaskService.AnswerQuestion(taskId, requestId, answers),
   readArtifact: (taskId: string, name: string): Promise<string> =>
     TaskService.ReadArtifact(taskId, name),
+  backToStage: (taskId: string, stage: TaskStage): Promise<void> =>
+    TaskService.BackToStage(taskId, stage),
+  discardStage: (taskId: string, stage: TaskStage): Promise<void> =>
+    TaskService.DiscardStage(taskId, stage),
+  continueStage: (taskId: string): Promise<void> => TaskService.ContinueStage(taskId),
   openExternal: (url: string): Promise<void> => Browser.OpenURL(url),
 };
 

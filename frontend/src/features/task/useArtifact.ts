@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/wails";
 
-/** ArtifactState is the PRD of a task as the panel holds it. */
+/** ArtifactState is one document of a task as the panel holds it. */
 export interface ArtifactState {
   status: "empty" | "loading" | "ready" | "error";
   content: string;
@@ -15,12 +15,12 @@ function messageOf(error: unknown): string {
 }
 
 /**
- * useArtifact reads the PRD of a task, again on every version the watcher
+ * useArtifact reads one document of a task, again on every version the watcher
  * announces. A late answer to a read the panel no longer waits for is dropped.
  */
 export function useArtifact(
   taskId: string,
-  hasPrd: boolean,
+  name: string | null,
   artifactVersion: number,
 ): ArtifactState {
   const [state, setState] = useState<ArtifactState>(EMPTY);
@@ -28,14 +28,14 @@ export function useArtifact(
   // A new artifactVersion is the watcher saying the file changed on disk.
   // biome-ignore lint/correctness/useExhaustiveDependencies: that is what rereads it
   useEffect(() => {
-    if (!hasPrd) {
+    if (name === null) {
       setState(EMPTY);
       return;
     }
     let stale = false;
     setState({ status: "loading", content: "", error: "" });
     api
-      .readArtifact(taskId, "PRD.md")
+      .readArtifact(taskId, name)
       .then((content) => {
         if (!stale) {
           setState({ status: "ready", content, error: "" });
@@ -49,7 +49,7 @@ export function useArtifact(
     return () => {
       stale = true;
     };
-  }, [taskId, hasPrd, artifactVersion]);
+  }, [taskId, name, artifactVersion]);
 
   return state;
 }

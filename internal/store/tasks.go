@@ -11,11 +11,11 @@ import (
 )
 
 // TasksRepo stores the tasks of every workspace. It implements
-// task.Repository.
+// task.Store.
 type TasksRepo struct{ db *sql.DB }
 
 // taskColumns is the column list every task query selects, in scan order.
-const taskColumns = `id, workspace_path, name, repo_path, initial_context, stage,
+const taskColumns = `id, workspace_path, name, repo_path, initial_context, stage, revisiting,
 	artifacts_dir, artifact_version, created_at, updated_at`
 
 // ListByWorkspace returns the tasks of a workspace in creation order.
@@ -62,7 +62,7 @@ func (r *TasksRepo) Get(ctx context.Context, id string) (task.Task, error) {
 func (r *TasksRepo) Insert(ctx context.Context, t task.Task) error {
 	const taken = `SELECT 1 FROM tasks WHERE workspace_path = ? AND name = ?`
 	const stmt = `INSERT INTO tasks (` + taskColumns + `)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -80,7 +80,7 @@ func (r *TasksRepo) Insert(ctx context.Context, t task.Task) error {
 	}
 
 	_, err = tx.ExecContext(ctx, stmt,
-		t.ID, t.WorkspacePath, t.Name, nullString(t.RepoPath), t.InitialContext, string(t.Stage),
+		t.ID, t.WorkspacePath, t.Name, nullString(t.RepoPath), t.InitialContext, string(t.Stage), t.Revisiting,
 		t.ArtifactsDir, t.ArtifactVersion, formatTime(t.CreatedAt), formatTime(t.UpdatedAt))
 	if err != nil {
 		return fmt.Errorf("insert task %s: %w", t.Name, err)
@@ -91,12 +91,22 @@ func (r *TasksRepo) Insert(ctx context.Context, t task.Task) error {
 	return nil
 }
 
-// UpdateStage rewrites the stage and the artifact version of a task.
-func (r *TasksRepo) UpdateStage(ctx context.Context, id, stage string, artifactVersion int, updatedAt time.Time) error {
-	const stmt = `UPDATE tasks SET stage = ?, artifact_version = ?, updated_at = ? WHERE id = ?`
+// UpdateStage rewrites the stage and the revisit flag of a task.
+func (r *TasksRepo) UpdateStage(ctx context.Context, id, stage string, revisiting bool, updatedAt time.Time) error {
+	const stmt = `UPDATE tasks SET stage = ?, revisiting = ?, updated_at = ? WHERE id = ?`
 
-	if _, err := r.db.ExecContext(ctx, stmt, stage, artifactVersion, formatTime(updatedAt), id); err != nil {
+	if _, err := r.db.ExecContext(ctx, stmt, stage, revisiting, formatTime(updatedAt), id); err != nil {
 		return fmt.Errorf("update stage of task %s: %w", id, err)
+	}
+	return nil
+}
+
+// UpdateArtifactVersion rewrites the artifact version of a task.
+func (r *TasksRepo) UpdateArtifactVersion(ctx context.Context, id string, version int, updatedAt time.Time) error {
+	const stmt = `UPDATE tasks SET artifact_version = ?, updated_at = ? WHERE id = ?`
+
+	if _, err := r.db.ExecContext(ctx, stmt, version, formatTime(updatedAt), id); err != nil {
+		return fmt.Errorf("update artifact version of task %s: %w", id, err)
 	}
 	return nil
 }
@@ -118,7 +128,7 @@ func scanTask(row scanner) (task.Task, error) {
 		stage                string
 		createdAt, updatedAt string
 	)
-	err := row.Scan(&t.ID, &t.WorkspacePath, &t.Name, &repoPath, &t.InitialContext, &stage,
+	err := row.Scan(&t.ID, &t.WorkspacePath, &t.Name, &repoPath, &t.InitialContext, &stage, &t.Revisiting,
 		&t.ArtifactsDir, &t.ArtifactVersion, &createdAt, &updatedAt)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):

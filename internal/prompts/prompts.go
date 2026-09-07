@@ -22,8 +22,12 @@ const defaultsDir = "defaults"
 // Stage names a prompt.
 type Stage string
 
-// StagePRD is the prompt that runs the PRD stage of a task.
-const StagePRD Stage = "prd"
+// The stages that have a prompt, in workflow order.
+const (
+	StagePRD      Stage = "prd"
+	StageTechSpec Stage = "tech_spec"
+	StagePlan     Stage = "plan"
+)
 
 // dirPerm and filePerm keep the prompts private to the user.
 const (
@@ -36,6 +40,9 @@ const (
 	taskNamePlaceholder       = "{{task_name}}"
 	artifactsDirPlaceholder   = "{{artifacts_dir}}"
 	prdPathPlaceholder        = "{{prd_path}}"
+	techSpecPathPlaceholder   = "{{tech_spec_path}}"
+	stepsDirPlaceholder       = "{{steps_dir}}"
+	repositoriesPlaceholder   = "{{repositories}}"
 	initialContextPlaceholder = "{{initial_context}}"
 )
 
@@ -101,13 +108,29 @@ type Vars struct {
 	TaskName       string
 	ArtifactsDir   string
 	PRDPath        string
-	InitialContext string
+	TechSpecPath   string
+	StepsDir       string
+	Repositories   []string // paths relative to the session directory
+	InitialContext string   // PRD only
+}
+
+// repositoryList renders paths as the Markdown list a prompt shows the agent.
+func repositoryList(paths []string) string {
+	if len(paths) == 0 {
+		return "- (none)"
+	}
+
+	items := make([]string, len(paths))
+	for i, path := range paths {
+		items[i] = "- `" + path + "`"
+	}
+	return strings.Join(items, "\n")
 }
 
 // Render reads the prompt file for stage and replaces its placeholders. A
 // prompt the user edited may have lost a placeholder, which is not an error;
-// a prompt without the initial context one gets the context appended, so that
-// what the user wrote is never dropped.
+// a prompt with an initial context to pass and no placeholder for it gets the
+// context appended, so that what the user wrote is never dropped.
 func Render(dataDir string, stage Stage, vars Vars) (string, error) {
 	path := pathFor(dataDir, stage)
 	raw, err := os.ReadFile(path)
@@ -120,10 +143,13 @@ func Render(dataDir string, stage Stage, vars Vars) (string, error) {
 		taskNamePlaceholder, vars.TaskName,
 		artifactsDirPlaceholder, vars.ArtifactsDir,
 		prdPathPlaceholder, vars.PRDPath,
+		techSpecPathPlaceholder, vars.TechSpecPath,
+		stepsDirPlaceholder, vars.StepsDir,
+		repositoriesPlaceholder, repositoryList(vars.Repositories),
 		initialContextPlaceholder, vars.InitialContext,
 	).Replace(text)
 
-	if !strings.Contains(text, initialContextPlaceholder) {
+	if !strings.Contains(text, initialContextPlaceholder) && vars.InitialContext != "" {
 		rendered += contextHeading + vars.InitialContext
 	}
 	return rendered, nil

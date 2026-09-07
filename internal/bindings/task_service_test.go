@@ -1,12 +1,16 @@
 package bindings_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
+
 	"github.com/guilhermt/myspec/internal/bindings"
+	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/task"
 )
 
@@ -47,6 +51,8 @@ func TestCreateTaskAddsTheTaskToTheState(t *testing.T) {
 		Dir:           dir,
 		Stage:         "prd",
 		SessionStatus: "waiting",
+		Steps:         []bindings.Step{},
+		PlanProblems:  []bindings.PlanProblem{},
 		CreatedAt:     got.CreatedAt,
 		UpdatedAt:     got.UpdatedAt,
 	}
@@ -54,8 +60,8 @@ func TestCreateTaskAddsTheTaskToTheState(t *testing.T) {
 	// process may still be idling; neither belongs in this comparison.
 	got.ContextPercent = 0
 	got.ProcessRunning = false
-	if got != want {
-		t.Errorf("task = %+v, want %+v", got, want)
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("task mismatch (-want +got):\n%s", diff)
 	}
 }
 
@@ -127,21 +133,32 @@ func TestGetTranscriptCarriesThePrompt(t *testing.T) {
 	if len(transcript.Pending) != 0 {
 		t.Errorf("len(Pending) = %d, want 0", len(transcript.Pending))
 	}
-	if len(transcript.Entries) == 0 {
-		t.Fatal("GetTranscript() returned no entries, want the prompt")
+	if len(transcript.Entries) < 2 {
+		t.Fatalf("entries = %d, want the stage marker and the prompt", len(transcript.Entries))
+	}
+	if transcript.Stage != "prd" {
+		t.Errorf("stage = %q, want prd", transcript.Stage)
 	}
 
-	first := transcript.Entries[0]
-	if first.Kind != "user" || first.User == nil {
-		t.Fatalf("first entry = %+v, want a user one", first)
+	marker := transcript.Entries[0]
+	if marker.Kind != "marker" || marker.Marker == nil {
+		t.Fatalf("first entry = %+v, want a marker", marker)
 	}
-	if !first.User.Prompt {
-		t.Error("first entry is not marked as the prompt")
+	if marker.Marker.Type != "stage_started" || marker.Marker.Stage != "prd" || marker.Marker.Restarted {
+		t.Errorf("marker = %+v, want the first stage_started of the PRD", marker.Marker)
 	}
-	if first.User.Text != "a login screen with email and password" {
-		t.Errorf("prompt text = %q, want the initial context", first.User.Text)
+
+	prompt := transcript.Entries[1]
+	if prompt.Kind != "user" || prompt.User == nil {
+		t.Fatalf("second entry = %+v, want a user one", prompt)
 	}
-	if first.User.Pending {
+	if !prompt.User.Prompt || prompt.User.App {
+		t.Errorf("prompt flags = %+v, want the prompt of the user", prompt.User)
+	}
+	if prompt.User.Text != "a login screen with email and password" {
+		t.Errorf("prompt text = %q, want the initial context", prompt.User.Text)
+	}
+	if prompt.User.Pending {
 		t.Error("the prompt is still pending, want it delivered")
 	}
 }
@@ -150,11 +167,12 @@ func TestGetTranscriptRejectsAnUnknownTask(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	if _, err := f.tasks.GetTranscript("nope"); err == nil {
+	_, err := f.tasks.GetTranscript("nope")
+	if err == nil {
 		t.Fatal("GetTranscript() = nil, want an error")
 	}
-	if !f.logged(t, "binding failed") {
-		t.Error("the failure was not logged")
+	if err.Error() != "This conversation has ended." {
+		t.Errorf("GetTranscript() error = %q, want the ended conversation notice", err)
 	}
 }
 
@@ -307,6 +325,287 @@ func TestReadArtifactReturnsThePRD(t *testing.T) {
 func hasUserText(transcript bindings.Transcript, text string) bool {
 	for _, entry := range transcript.Entries {
 		if entry.Kind == "user" && entry.User != nil && entry.User.Text == text {
+			return true
+		}
+	}
+	return false
+}
+
+// writeBlock is what a seeded prompt carries for the fake CLI to write a file.
+func writeBlock(path, content string) string {
+	return "@@write " + path + "\n" + content + "\n@@end\n"
+}
+
+// stepFile is one step of a plan, as the fake CLI writes it.
+func stepFile(number int, title, repo string) string {
+	return fmt.Sprintf("---\nrepository: %s\n---\n\n# Step %d: %s\n", repo, number, title)
+}
+
+// The prompts that make the fake CLI finish a stage: each writes the artifact
+// the stage waits for.
+var (
+	prdWriter      = writeBlock("{{prd_path}}", "# PRD")
+	techSpecWriter = writeBlock("{{tech_spec_path}}", "# Tech spec")
+	planWriter     = writeBlock("{{steps_dir}}/1-first.md", stepFile(1, "First", "api")) +
+		writeBlock("{{steps_dir}}/2-second.md", stepFile(2, "Second", "api"))
+)
+
+// repoWorkspace opens a workspace holding one repository, which is what a plan
+// names in its step files.
+func repoWorkspace(t *testing.T) (*fixture, string) {
+	t.Helper()
+
+	f := newFixture(t)
+	dir := t.TempDir()
+	f.setScan([]string{filepath.Join(dir, "api")}, nil)
+	f.open(t, dir)
+	return f, dir
+}
+
+// plannedTask walks a task through the three stages with prompts that write
+// every artifact, leaving it in implementation.
+func plannedTask(t *testing.T) (*fixture, string, string) {
+	t.Helper()
+
+	f, dir := repoWorkspace(t)
+	f.seedPrompt(t, prompts.StagePRD, prdWriter)
+	f.seedPrompt(t, prompts.StageTechSpec, techSpecWriter)
+	f.seedPrompt(t, prompts.StagePlan, planWriter)
+
+	id, err := f.tasks.CreateTask(newTask("login-screen"))
+	if err != nil {
+		t.Fatalf("CreateTask() = %v, want nil", err)
+	}
+	f.waitStage(t, id, "implementation")
+	return f, dir, id
+}
+
+func TestPRDWrittenStartsTheTechSpec(t *testing.T) {
+	t.Parallel()
+
+	f, _ := repoWorkspace(t)
+	f.seedPrompt(t, prompts.StagePRD, prdWriter)
+
+	id, err := f.tasks.CreateTask(newTask("login-screen"))
+	if err != nil {
+		t.Fatalf("CreateTask() = %v, want nil", err)
+	}
+	f.waitStage(t, id, "tech_spec")
+
+	if summary := f.taskOf(t, id); !summary.HasPRD || summary.Revisiting {
+		t.Errorf("task = %+v, want the PRD written and no revisit", summary)
+	}
+
+	transcript, err := f.tasks.GetTranscript(id)
+	if err != nil {
+		t.Fatalf("GetTranscript(%s) = %v, want nil", id, err)
+	}
+	if transcript.Stage != "tech_spec" {
+		t.Errorf("stage = %q, want tech_spec", transcript.Stage)
+	}
+	if len(transcript.Entries) == 0 {
+		t.Fatal("the conversation of the tech spec is empty")
+	}
+	marker := transcript.Entries[0].Marker
+	if marker == nil || marker.Type != "stage_started" || marker.Stage != "tech_spec" || marker.Restarted {
+		t.Errorf("first entry = %+v, want the stage_started of the tech spec", transcript.Entries[0])
+	}
+}
+
+func TestPlanWrittenReachesImplementation(t *testing.T) {
+	t.Parallel()
+
+	f, dir, id := plannedTask(t)
+
+	summary := f.taskOf(t, id)
+	if !summary.HasPRD || !summary.HasTechSpec {
+		t.Errorf("task = %+v, want the PRD and the tech spec written", summary)
+	}
+	if len(summary.PlanProblems) != 0 {
+		t.Errorf("planProblems = %+v, want none", summary.PlanProblems)
+	}
+	want := []bindings.Step{
+		{Number: 1, File: "1-first.md", Title: "First", Repository: "api", RepoPath: filepath.Join(dir, "api"), Status: "not_started"},
+		{Number: 2, File: "2-second.md", Title: "Second", Repository: "api", RepoPath: filepath.Join(dir, "api"), Status: "not_started"},
+	}
+	if diff := cmp.Diff(want, summary.Steps); diff != "" {
+		t.Errorf("steps mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestInvalidPlanIsCorrected(t *testing.T) {
+	t.Parallel()
+
+	f, dir := repoWorkspace(t)
+	f.seedPrompt(t, prompts.StagePRD, prdWriter)
+	f.seedPrompt(t, prompts.StageTechSpec, techSpecWriter)
+	f.seedPrompt(t, prompts.StagePlan, writeBlock("{{steps_dir}}/1-first.md", stepFile(1, "First", "cli")))
+	f.fixStep(filepath.Join(task.ArtifactsDir(f.dataDir, dir, "login-screen"), "steps", "1-first.md"), "api")
+
+	id, err := f.tasks.CreateTask(newTask("login-screen"))
+	if err != nil {
+		t.Fatalf("CreateTask() = %v, want nil", err)
+	}
+	f.waitStage(t, id, "implementation")
+
+	if got := f.correctionCount(id); got != 1 {
+		t.Errorf("corrections = %d, want 1", got)
+	}
+	if !hasAppMessage(f.entries(), "1-first.md") {
+		t.Error("the plan was not corrected by a message from the app")
+	}
+}
+
+func TestBackToPRDReopensTheConversation(t *testing.T) {
+	t.Parallel()
+
+	f, dir, id := taskWithPRD(t)
+	f.waitStage(t, id, "tech_spec")
+
+	if err := f.tasks.BackToStage(id, "prd"); err != nil {
+		t.Fatalf("BackToStage(%s) = %v, want nil", id, err)
+	}
+
+	summary := f.taskOf(t, id)
+	if summary.Stage != "prd" || !summary.Revisiting {
+		t.Errorf("task = %+v, want the PRD stage revisited", summary)
+	}
+	f.waitContinue(t, id)
+
+	transcript, err := f.tasks.GetTranscript(id)
+	if err != nil {
+		t.Fatalf("GetTranscript(%s) = %v, want nil", id, err)
+	}
+	if transcript.Stage != "prd" {
+		t.Errorf("stage = %q, want prd", transcript.Stage)
+	}
+	if !hasUserText(transcript, "a login screen with email and password") {
+		t.Error("the conversation of the PRD did not come back")
+	}
+
+	if err := f.tasks.ContinueStage(id); err != nil {
+		t.Fatalf("ContinueStage(%s) = %v, want nil", id, err)
+	}
+	f.waitStage(t, id, "tech_spec")
+
+	path := filepath.Join(task.ArtifactsDir(f.dataDir, dir, "login-screen"), "PRD.md")
+	if _, err := os.Stat(path); err != nil {
+		t.Errorf("Stat(%s) = %v, want the PRD to be kept", path, err)
+	}
+}
+
+func TestDiscardRestartsTheStage(t *testing.T) {
+	t.Parallel()
+
+	f, dir, id := taskWithPRD(t)
+	f.waitStage(t, id, "tech_spec")
+
+	if err := f.tasks.DiscardStage(id, "prd"); err != nil {
+		t.Fatalf("DiscardStage(%s) = %v, want nil", id, err)
+	}
+	f.waitStage(t, id, "prd")
+
+	if summary := f.taskOf(t, id); summary.HasPRD || summary.Revisiting {
+		t.Errorf("task = %+v, want the PRD thrown away and no revisit", summary)
+	}
+	path := filepath.Join(task.ArtifactsDir(f.dataDir, dir, "login-screen"), "PRD.md")
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Errorf("Stat(%s) = %v, want the PRD to be gone", path, err)
+	}
+
+	transcript, err := f.tasks.GetTranscript(id)
+	if err != nil {
+		t.Fatalf("GetTranscript(%s) = %v, want nil", id, err)
+	}
+	if len(transcript.Entries) == 0 {
+		t.Fatal("the conversation of the restarted PRD is empty")
+	}
+	marker := transcript.Entries[0].Marker
+	if marker == nil || marker.Type != "stage_started" || marker.Stage != "prd" || !marker.Restarted {
+		t.Errorf("first entry = %+v, want a restarted stage_started of the PRD", transcript.Entries[0])
+	}
+}
+
+func TestContinueRequiresAFinishedStage(t *testing.T) {
+	t.Parallel()
+
+	f, _, id := createdTask(t)
+
+	tests := []struct {
+		name string
+		call func() error
+		want string
+	}{
+		{
+			name: "continue without a revisit",
+			call: func() error { return f.tasks.ContinueStage(id) },
+			want: "The task isn't revisiting a stage.",
+		},
+		{
+			name: "back to a stage that is not one",
+			call: func() error { return f.tasks.BackToStage(id, "review") },
+			want: "Unknown stage.",
+		},
+		{
+			name: "back to a stage not reached yet",
+			call: func() error { return f.tasks.BackToStage(id, "tech_spec") },
+			want: "This stage can't be reached from here.",
+		},
+		{
+			name: "discard a stage not reached yet",
+			call: func() error { return f.tasks.DiscardStage(id, "plan") },
+			want: "This stage can't be reached from here.",
+		},
+	}
+
+	for _, tt := range tests {
+		if err := tt.call(); err == nil || err.Error() != tt.want {
+			t.Errorf("%s: error = %v, want %q", tt.name, err, tt.want)
+		}
+	}
+	if f.logged(t, "binding failed") {
+		t.Error("a mistake the user can correct was logged as a failure")
+	}
+}
+
+func TestGetTranscriptOfAPlannedTaskIsEmpty(t *testing.T) {
+	t.Parallel()
+
+	f, _, id := plannedTask(t)
+
+	transcript, err := f.tasks.GetTranscript(id)
+	if err != nil {
+		t.Fatalf("GetTranscript(%s) = %v, want nil", id, err)
+	}
+	want := bindings.Transcript{
+		TaskID:  id,
+		Stage:   "implementation",
+		Entries: []bindings.Entry{},
+		Pending: []bindings.Entry{},
+	}
+	if diff := cmp.Diff(want, transcript); diff != "" {
+		t.Errorf("transcript mismatch (-want +got):\n%s", diff)
+	}
+}
+
+// taskWithPRD creates a task whose prompts write nothing and puts a PRD in its
+// folder, which is what ends the stage without the agent finishing anything
+// else.
+func taskWithPRD(t *testing.T) (*fixture, string, string) {
+	t.Helper()
+
+	f, dir, id := createdTask(t)
+	path := filepath.Join(task.ArtifactsDir(f.dataDir, dir, "login-screen"), "PRD.md")
+	if err := os.WriteFile(path, []byte("# PRD\n"), 0o600); err != nil {
+		t.Fatalf("WriteFile(%s) = %v, want nil", path, err)
+	}
+	return f, dir, id
+}
+
+// hasAppMessage reports whether the app wrote a message naming file.
+func hasAppMessage(entries []bindings.Entry, file string) bool {
+	for _, entry := range entries {
+		if entry.User != nil && entry.User.App && strings.Contains(entry.User.Text, file) {
 			return true
 		}
 	}

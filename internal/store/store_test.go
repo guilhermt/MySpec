@@ -10,7 +10,7 @@ import (
 )
 
 // schemaVersionNow is how many migrations the embedded set holds.
-const schemaVersionNow = 2
+const schemaVersionNow = 3
 
 func TestOpenMemoryAppliesMigrations(t *testing.T) {
 	t.Parallel()
@@ -39,8 +39,8 @@ func TestOpenMemoryCreatesTheTables(t *testing.T) {
 	if _, err := s.Tasks.ListByWorkspace(t.Context(), "/ws"); err != nil {
 		t.Errorf("Tasks.ListByWorkspace() = %v, want nil", err)
 	}
-	if _, err := s.Sessions.GetByTask(t.Context(), "missing"); !errors.Is(err, session.ErrNotFound) {
-		t.Errorf("Sessions.GetByTask() = %v, want session.ErrNotFound", err)
+	if _, err := s.Sessions.Get(t.Context(), "missing", "prd"); !errors.Is(err, session.ErrNotFound) {
+		t.Errorf("Sessions.Get() = %v, want session.ErrNotFound", err)
 	}
 	if _, err := s.Entries.List(t.Context(), "missing"); err != nil {
 		t.Errorf("Entries.List() = %v, want nil", err)

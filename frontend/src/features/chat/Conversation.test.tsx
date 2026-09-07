@@ -48,6 +48,51 @@ describe("Conversation", () => {
     expect(screen.getByText("PRD written")).toBeInTheDocument();
   });
 
+  it("shows what the app said to the agent as coming from the app", () => {
+    const entries = [
+      makeEntry("user", {
+        user: { text: "The plan is not valid yet.", pending: false, prompt: false, app: true },
+      }),
+    ];
+    renderWithStore(<Conversation taskId="task-1" />, {
+      state: withTask(),
+      ui: { transcripts: ready(entries) },
+    });
+
+    expect(screen.getByText("MySpec · sent to the agent")).toBeInTheDocument();
+    expect(screen.getByText("The plan is not valid yet.")).toBeInTheDocument();
+  });
+
+  it("leaves the stage prompt out of the conversation", () => {
+    const entries = [
+      makeEntry("user", {
+        user: { text: "", pending: false, prompt: true, app: false },
+      }),
+      makeEntry("assistant"),
+    ];
+    renderWithStore(<Conversation taskId="task-1" />, {
+      state: withTask(),
+      ui: { transcripts: ready(entries) },
+    });
+
+    expect(screen.getByTestId("markdown")).toHaveTextContent("On it.");
+    expect(screen.queryByText("MySpec · sent to the agent")).not.toBeInTheDocument();
+  });
+
+  it("keeps the brief the user gave along with the first prompt", () => {
+    const entries = [
+      makeEntry("user", {
+        user: { text: "Add a login screen", pending: false, prompt: true, app: false },
+      }),
+    ];
+    renderWithStore(<Conversation taskId="task-1" />, {
+      state: withTask(),
+      ui: { transcripts: ready(entries) },
+    });
+
+    expect(screen.getByText("Add a login screen")).toBeInTheDocument();
+  });
+
   it("collapses the actions of a turn into one line", async () => {
     const entries = [action("turn-1", "a.ts"), action("turn-1", "b.ts")];
     const { user } = renderWithStore(<Conversation taskId="task-1" />, {
@@ -66,7 +111,9 @@ describe("Conversation", () => {
 
   it("marks a message that is still waiting its turn", () => {
     const pending = [
-      makeEntry("user", { user: { text: "and dark mode", pending: true, prompt: false } }),
+      makeEntry("user", {
+        user: { text: "and dark mode", pending: true, prompt: false, app: false },
+      }),
     ];
     renderWithStore(<Conversation taskId="task-1" />, {
       state: withTask({ pendingCount: 1 }),

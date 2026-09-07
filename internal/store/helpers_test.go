@@ -85,12 +85,12 @@ func newTask(id, workspacePath, name string, created time.Time) task.Task {
 	}
 }
 
-// newSession builds the session of a task, ready to insert.
-func newSession(id, taskID string) session.Record {
+// newSession builds the session of a task at a stage, ready to insert.
+func newSession(id, taskID string, stage task.Stage) session.Record {
 	return session.Record{
 		ID:        id,
 		TaskID:    taskID,
-		Stage:     string(task.StagePRD),
+		Stage:     string(stage),
 		CreatedAt: fixedTime,
 		UpdatedAt: fixedTime,
 	}
@@ -116,7 +116,7 @@ func seedSession(t *testing.T, s *store.Store) (taskID, sessionID string) {
 	if err := s.Tasks.Insert(t.Context(), newTask(taskID, "/ws", "one", fixedTime)); err != nil {
 		t.Fatalf("Tasks.Insert() = %v, want nil", err)
 	}
-	if err := s.Sessions.Insert(t.Context(), newSession(sessionID, taskID)); err != nil {
+	if err := s.Sessions.Insert(t.Context(), newSession(sessionID, taskID, task.StagePRD)); err != nil {
 		t.Fatalf("Sessions.Insert() = %v, want nil", err)
 	}
 	return taskID, sessionID

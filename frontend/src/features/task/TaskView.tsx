@@ -4,7 +4,12 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/componen
 import { Composer } from "@/features/chat/Composer";
 import { Conversation } from "@/features/chat/Conversation";
 import { ArtifactPanel } from "@/features/task/ArtifactPanel";
+import { PlanProblemsNotice } from "@/features/task/PlanProblemsNotice";
+import { StageTrack } from "@/features/task/StageTrack";
+import { StepsView } from "@/features/task/StepsView";
+import { hasArtifacts } from "@/features/task/status";
 import { TaskHeader } from "@/features/task/TaskHeader";
+import { asTaskStage } from "@/lib/wails";
 import { loadTranscript } from "@/store/actions";
 import { useAppStore, useTask } from "@/store/app-store";
 
@@ -48,33 +53,35 @@ export function TaskView({ taskId }: TaskViewProps) {
     panelIds: PANEL_IDS,
   });
 
-  const hasPrd = task?.hasPrd ?? false;
-  const exists = task !== null;
+  const anyArtifact = task !== null && hasArtifacts(task);
+  const implementing = task !== null && asTaskStage(task.stage) === "implementation";
+  // The implementation stage has no conversation to fetch.
+  const hasConversation = task !== null && !implementing;
 
   // The conversation is fetched once and then kept: leaving the task and coming
   // back costs nothing, and the events keep being applied while it is away. It
   // waits for the task to be in the snapshot, which a brand new one is not yet.
   useEffect(() => {
-    if (exists && useAppStore.getState().transcripts[taskId] === undefined) {
+    if (hasConversation && useAppStore.getState().transcripts[taskId] === undefined) {
       void loadTranscript(taskId);
     }
-  }, [taskId, exists]);
+  }, [taskId, hasConversation]);
 
   // Nothing to read yet, and no size the user chose: stay out of the way.
   useEffect(() => {
-    if (defaultLayout === undefined && !hasPrd) {
+    if (defaultLayout === undefined && !anyArtifact) {
       panelRef.current?.collapse();
     }
-  }, [defaultLayout, hasPrd, panelRef]);
+  }, [defaultLayout, anyArtifact, panelRef]);
 
-  // The first PRD of a task opens the panel by itself, once.
+  // The first artifact of a task opens the panel by itself, once.
   useEffect(() => {
-    if (!hasPrd || wasSeen(taskId)) {
+    if (!anyArtifact || wasSeen(taskId)) {
       return;
     }
     markSeen(taskId);
     panelRef.current?.expand();
-  }, [taskId, hasPrd, panelRef]);
+  }, [taskId, anyArtifact, panelRef]);
 
   const toggleArtifacts = useCallback(() => {
     const panel = panelRef.current;
@@ -95,6 +102,7 @@ export function TaskView({ taskId }: TaskViewProps) {
   return (
     <section className="flex h-dvh min-w-0 flex-col bg-background">
       <TaskHeader task={task} artifactsOpen={artifactsOpen} onToggleArtifacts={toggleArtifacts} />
+      <StageTrack task={task} />
       <ResizablePanelGroup
         orientation="horizontal"
         defaultLayout={defaultLayout}
@@ -107,8 +115,15 @@ export function TaskView({ taskId }: TaskViewProps) {
           minSize="40%"
           className="flex min-w-0 flex-col"
         >
-          <Conversation taskId={task.id} />
-          <Composer task={task} />
+          {implementing ? (
+            <StepsView task={task} />
+          ) : (
+            <>
+              <Conversation taskId={task.id} />
+              <PlanProblemsNotice task={task} />
+              <Composer task={task} />
+            </>
+          )}
         </ResizablePanel>
         <ResizableHandle />
         <ResizablePanel
