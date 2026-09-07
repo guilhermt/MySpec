@@ -107,6 +107,16 @@ describe("TaskHeader", () => {
     expect(api.deleteTask).toHaveBeenCalledWith("task-1");
   });
 
+  it("warns about the worktrees when the task is implementing", async () => {
+    const { user } = header({ stage: "implementation" });
+
+    await user.click(screen.getByRole("button", { name: "Delete task" }));
+
+    expect(await screen.findByRole("alertdialog")).toHaveTextContent(
+      "The worktrees and branches of the task are removed too, with any uncommitted work in them.",
+    );
+  });
+
   it("keeps the task when the confirmation is refused", async () => {
     const { user } = header();
 

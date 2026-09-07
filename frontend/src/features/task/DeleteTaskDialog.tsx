@@ -9,6 +9,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import type { TaskSummary } from "@/lib/wails";
+import { asTaskStage } from "@/lib/wails";
 import { deleteTask } from "@/store/actions";
 
 export interface DeleteTaskDialogProps {
@@ -22,6 +23,8 @@ export interface DeleteTaskDialogProps {
  * its own: the next snapshot no longer has the task.
  */
 export function DeleteTaskDialog({ task, open, onOpenChange }: DeleteTaskDialogProps) {
+  const implementing = asTaskStage(task.stage) === "implementation";
+
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
@@ -30,6 +33,8 @@ export function DeleteTaskDialog({ task, open, onOpenChange }: DeleteTaskDialogP
           <AlertDialogDescription>
             This removes the conversations, the documents, the steps and every record of the task.
             It can't be undone.
+            {implementing &&
+              " The worktrees and branches of the task are removed too, with any uncommitted work in them."}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

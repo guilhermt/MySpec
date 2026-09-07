@@ -15,6 +15,7 @@ const LOSSES: readonly string[] = [
   "the PRD conversation and document",
   "the tech spec conversation and document",
   "the plan conversation and the step files",
+  "the step conversations, worktrees and branches, with any uncommitted work in them",
 ];
 
 // How a stage reads in the middle of a sentence, where the label of the track

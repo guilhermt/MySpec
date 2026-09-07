@@ -118,6 +118,26 @@ export function continueStage(taskId: string): Promise<void> {
   return run(() => api.continueStage(taskId));
 }
 
+/** retryStep starts a blocked step over, from the fetch. */
+export function retryStep(taskId: string): Promise<void> {
+  return run(() => api.retryStep(taskId));
+}
+
+/** cleanAndStartStep throws away every change in the worktree and starts the step. */
+export function cleanAndStartStep(taskId: string): Promise<void> {
+  return run(() => api.cleanAndStartStep(taskId));
+}
+
+/** discardStep deletes the conversation of the step and runs it again from scratch. */
+export function discardStep(taskId: string, cleanWorktree: boolean): Promise<void> {
+  return run(() => api.discardStep(taskId, cleanWorktree));
+}
+
+/** openInEditor opens the worktree of the current step in the editor of the user. */
+export function openInEditor(taskId: string): Promise<void> {
+  return run(() => api.openInEditor(taskId));
+}
+
 export function openExternal(url: string): Promise<void> {
   return run(() => api.openExternal(url));
 }

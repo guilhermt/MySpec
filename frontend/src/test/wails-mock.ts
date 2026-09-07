@@ -49,6 +49,12 @@ export const api = {
   backToStage: vi.fn<(taskId: string, stage: TaskStage) => Promise<void>>(() => Promise.resolve()),
   discardStage: vi.fn<(taskId: string, stage: TaskStage) => Promise<void>>(() => Promise.resolve()),
   continueStage: vi.fn<(taskId: string) => Promise<void>>(() => Promise.resolve()),
+  retryStep: vi.fn<(taskId: string) => Promise<void>>(() => Promise.resolve()),
+  cleanAndStartStep: vi.fn<(taskId: string) => Promise<void>>(() => Promise.resolve()),
+  discardStep: vi.fn<(taskId: string, cleanWorktree: boolean) => Promise<void>>(() =>
+    Promise.resolve(),
+  ),
+  openInEditor: vi.fn<(taskId: string) => Promise<void>>(() => Promise.resolve()),
   openExternal: vi.fn<(url: string) => Promise<void>>(() => Promise.resolve()),
 };
 

@@ -39,6 +39,20 @@ describe("Marker", () => {
     expect(screen.getByText(expected)).toBeInTheDocument();
   });
 
+  it.each([
+    [false, "Step 1 started"],
+    [true, "Step 1 restarted"],
+  ])("names the step a step_started marker opened (restarted: %s)", (restarted, expected) => {
+    renderWithStore(
+      <Marker
+        marker={{ type: "step_started", preTokens: 0, stage: "", step: 1, restarted }}
+        createdAt="2026-09-05T10:00:00Z"
+      />,
+    );
+
+    expect(screen.getByText(expected)).toBeInTheDocument();
+  });
+
   it("shows the time the milestone happened", () => {
     renderWithStore(
       <Marker

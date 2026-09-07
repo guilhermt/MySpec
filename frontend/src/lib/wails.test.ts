@@ -2,12 +2,14 @@ import { Browser, Call, Events } from "@wailsio/runtime";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   asActionStatus,
+  asBlockReason,
   asEntryKind,
   asErrorKind,
   asMarkerType,
   asNoticeReason,
   asPermissionStatus,
   asSessionStatus,
+  asStepStatus,
   asTaskStage,
   asThemePreference,
   asTranscriptEventKind,
@@ -64,6 +66,17 @@ describe("narrowing", () => {
     expect(asMarkerType("plan_written")).toBe("plan_written");
     expect(asMarkerType("plan_updated")).toBe("plan_updated");
     expect(asMarkerType("stage_started")).toBe("stage_started");
+    expect(asMarkerType("step_started")).toBe("step_started");
+    expect(asStepStatus("preparing")).toBe("preparing");
+    expect(asStepStatus("blocked")).toBe("blocked");
+    expect(asStepStatus("implementing")).toBe("implementing");
+    expect(asStepStatus("awaiting_review")).toBe("awaiting_review");
+    expect(asBlockReason("dirty_worktree")).toBe("dirty_worktree");
+    expect(asBlockReason("fetch_failed")).toBe("fetch_failed");
+    expect(asBlockReason("no_base_branch")).toBe("no_base_branch");
+    expect(asBlockReason("path_exists")).toBe("path_exists");
+    expect(asBlockReason("branch_exists")).toBe("branch_exists");
+    expect(asBlockReason("no_repository")).toBe("no_repository");
     expect(asErrorKind("not_logged_in")).toBe("not_logged_in");
     expect(asTranscriptEventKind("text")).toBe("text");
   });
@@ -75,6 +88,8 @@ describe("narrowing", () => {
     expect(asActionStatus("queued")).toBe("done");
     expect(asPermissionStatus("expired")).toBe("cancelled");
     expect(asMarkerType("branched")).toBe("compacted");
+    expect(asStepStatus("committing")).toBe("not_started");
+    expect(asBlockReason("rebase_in_progress")).toBe("git_failed");
     expect(asErrorKind("out_of_quota")).toBe("turn_error");
     expect(asTranscriptEventKind("patch")).toBe("reset");
   });
@@ -104,10 +119,14 @@ describe("api", () => {
     await wails.api.backToStage("task-1", "prd");
     await wails.api.discardStage("task-1", "tech_spec");
     await wails.api.continueStage("task-1");
+    await wails.api.retryStep("task-1");
+    await wails.api.cleanAndStartStep("task-1");
+    await wails.api.discardStep("task-1", true);
+    await wails.api.openInEditor("task-1");
 
-    expect(Call.ByID).toHaveBeenCalledTimes(21);
+    expect(Call.ByID).toHaveBeenCalledTimes(25);
     const ids = vi.mocked(Call.ByID).mock.calls.map(([id]) => id);
-    expect(new Set(ids).size).toBe(21);
+    expect(new Set(ids).size).toBe(25);
   });
 
   it("opens a link in the browser of the desktop, never in the webview", async () => {

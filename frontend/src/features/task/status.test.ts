@@ -30,22 +30,43 @@ describe("task status", () => {
     expect(taskStatusTone(task)).toBe("attention");
   });
 
-  it("counts the steps once the implementation starts", () => {
+  it("places the current step in the plan once the implementation starts", () => {
+    const task = makeTask({
+      stage: "implementation",
+      sessionStatus: "waiting",
+      currentStep: 1,
+      steps: [
+        makeStep({ status: "awaiting_review" }),
+        makeStep({ number: 2, file: "2-wire-the-api.md" }),
+      ],
+    });
+
+    expect(taskStatusLabel(task)).toBe("Step 1 of 2 · Awaiting review");
+    expect(taskStatusTone(task)).toBe("attention");
+    expect(isAttention(task)).toBe(true);
+  });
+
+  it("reads a working step through its session", () => {
     const task = makeTask({
       stage: "implementation",
       sessionStatus: "working",
-      steps: [makeStep(), makeStep({ number: 2, file: "2-wire-the-api.md" })],
+      currentStep: 1,
+      steps: [
+        makeStep({ status: "implementing" }),
+        makeStep({ number: 2, file: "2-wire-the-api.md" }),
+      ],
     });
 
-    expect(taskStatusLabel(task)).toBe("0 of 2 steps");
-    expect(taskStatusTone(task)).toBe("idle");
+    expect(taskStatusLabel(task)).toBe("Step 1 of 2 · Implementing");
+    expect(taskStatusTone(task)).toBe("working");
     expect(isAttention(task)).toBe(false);
   });
 
-  it("counts no steps when the backend sends none", () => {
+  it("says so when the backend sends no steps", () => {
     const task = makeTask({ stage: "implementation", steps: null });
 
-    expect(taskStatusLabel(task)).toBe("0 of 0 steps");
+    expect(taskStatusLabel(task)).toBe("No steps");
+    expect(taskStatusTone(task)).toBe("idle");
   });
 });
 

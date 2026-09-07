@@ -19,6 +19,7 @@ const MARKERS: Record<MarkerType, { icon: LucideIcon; text: string }> = {
   plan_written: { icon: ListChecks, text: "Plan written" },
   plan_updated: { icon: ListChecks, text: "Plan updated" },
   stage_started: { icon: Play, text: "Stage started" },
+  step_started: { icon: Play, text: "Step started" },
   compacted: { icon: Archive, text: "Context compacted" },
   interrupted: { icon: Ban, text: "Interrupted" },
 };
@@ -30,6 +31,27 @@ function stageMarker(marker: MarkerEntry): { icon: LucideIcon; text: string } {
     icon: marker.restarted ? RotateCcw : Play,
     text: `${stageLabel(asTaskStage(marker.stage))} ${marker.restarted ? "restarted" : "started"}`,
   };
+}
+
+// A step marker names the step it opened, and says whether the user discarded
+// the step and started it over.
+function stepMarker(marker: MarkerEntry): { icon: LucideIcon; text: string } {
+  return {
+    icon: marker.restarted ? RotateCcw : Play,
+    text: `Step ${marker.step} ${marker.restarted ? "restarted" : "started"}`,
+  };
+}
+
+// A stage and a step marker read from the marker itself; the rest are fixed.
+function markerOf(type: MarkerType, marker: MarkerEntry): { icon: LucideIcon; text: string } {
+  switch (type) {
+    case "stage_started":
+      return stageMarker(marker);
+    case "step_started":
+      return stepMarker(marker);
+    default:
+      return MARKERS[type];
+  }
 }
 
 function timeOf(createdAt: string): string {
@@ -47,7 +69,7 @@ export interface MarkerProps {
 /** Marker is a milestone of the conversation, drawn as a rule across it. */
 export function Marker({ marker, createdAt }: MarkerProps) {
   const type = asMarkerType(marker.type);
-  const { icon: Icon, text } = type === "stage_started" ? stageMarker(marker) : MARKERS[type];
+  const { icon: Icon, text } = markerOf(type, marker);
   const time = timeOf(createdAt);
 
   return (

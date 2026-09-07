@@ -33,11 +33,12 @@ describe("stage actions", () => {
     ]);
   });
 
-  it("loses every planning stage the task reached since", () => {
+  it("loses every stage the task reached since, worktrees included", () => {
     expect(lostItems("prd", "implementation")).toEqual([
       "the PRD conversation and document",
       "the tech spec conversation and document",
       "the plan conversation and the step files",
+      "the step conversations, worktrees and branches, with any uncommitted work in them",
     ]);
   });
 
@@ -60,9 +61,9 @@ describe("stage actions", () => {
     );
   });
 
-  it("counts the plan in when the task is already implementing", () => {
+  it("counts the plan and the worktrees in when the task is already implementing", () => {
     expect(backDescription("tech_spec", "implementation")).toBe(
-      "This deletes the plan conversation and the step files. The Tech spec stays, and the next stage starts again from scratch when you continue.",
+      "This deletes the plan conversation and the step files and the step conversations, worktrees and branches, with any uncommitted work in them. The Tech spec stays, and the next stage starts again from scratch when you continue.",
     );
   });
 
@@ -72,9 +73,9 @@ describe("stage actions", () => {
     );
   });
 
-  it("restarts the plan alone once the task is implementing", () => {
+  it("takes the worktrees with the plan once the task is implementing", () => {
     expect(discardDescription("plan", "implementation")).toBe(
-      "This deletes the plan conversation and the step files. A new Plan session starts right away.",
+      "This deletes the plan conversation and the step files and the step conversations, worktrees and branches, with any uncommitted work in them. A new Plan session starts right away.",
     );
   });
 });
