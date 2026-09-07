@@ -33,8 +33,12 @@ const (
 const shutdownTimeout = 10 * time.Second
 
 // renderPrompt is the prompt the tests send: the stage and every variable show
-// up in it, so the echo of the fake tells whether the rendering happened.
+// up in it, so the echo of the fake tells whether the rendering happened. A
+// step prompt goes through the real rendering, which reads the step file.
 func renderPrompt(stage prompts.Stage, vars prompts.Vars) (string, error) {
+	if stage == prompts.StageStep {
+		return prompts.Render("", stage, vars)
+	}
 	return fmt.Sprintf("Stage %s of task %s writes %s in %s from: %s",
 		stage, vars.TaskName, vars.PRDPath, vars.ArtifactsDir, vars.InitialContext), nil
 }
@@ -93,11 +97,12 @@ func (r *memSessions) Delete(_ context.Context, taskID string, stages ...string)
 	return nil
 }
 
-// get returns the stored record of a stage, failing the test when it is gone.
-func (r *memSessions) get(t *testing.T, taskID string, stage prompts.Stage) session.Record {
+// get returns the stored record of a session key, failing the test when it is
+// gone.
+func (r *memSessions) get(t *testing.T, taskID, stage string) session.Record {
 	t.Helper()
 
-	rec, err := r.Get(t.Context(), taskID, string(stage))
+	rec, err := r.Get(t.Context(), taskID, stage)
 	if err != nil {
 		t.Fatalf("Get(%s, %s) = %v, want nil", taskID, stage, err)
 	}
@@ -409,7 +414,8 @@ func taskInfo(t *testing.T, id string) session.TaskInfo {
 		Name:           "login-screen",
 		Dir:            t.TempDir(),
 		ArtifactsDir:   artifacts,
-		Stage:          prompts.StagePRD,
+		Stage:          string(prompts.StagePRD),
+		Prompt:         prompts.StagePRD,
 		PRDPath:        filepath.Join(artifacts, "PRD.md"),
 		TechSpecPath:   filepath.Join(artifacts, "tech-spec.md"),
 		StepsDir:       filepath.Join(artifacts, "steps"),
@@ -420,7 +426,27 @@ func taskInfo(t *testing.T, id string) session.TaskInfo {
 
 // atStage is the same task moved on to another stage.
 func atStage(info session.TaskInfo, stage prompts.Stage) session.TaskInfo {
-	info.Stage = stage
+	info.Stage = string(stage)
+	info.Prompt = stage
+	return info
+}
+
+// atStep is the same task implementing a step: the session key is the step's,
+// the prompt is the file written in dir, which is also where the CLI runs.
+func atStep(t *testing.T, info session.TaskInfo, number int, content string) session.TaskInfo {
+	t.Helper()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "step.md")
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("write step file: %v", err)
+	}
+
+	info.Dir = dir
+	info.Stage = session.StepStage(number)
+	info.Prompt = prompts.StageStep
+	info.Step = number
+	info.StepPath = path
 	return info
 }
 

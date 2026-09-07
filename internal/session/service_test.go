@@ -74,7 +74,7 @@ func TestStartEchoesTheRenderedPrompt(t *testing.T) {
 		t.Errorf("last event mismatch (-want +got):\n%s", diff)
 	}
 
-	rec := f.sessions.get(t, "t1", prompts.StagePRD)
+	rec := f.sessions.get(t, "t1", string(prompts.StagePRD))
 	if !rec.Started || rec.ContextWindow != claudetest.ContextWindow || rec.ID != tr.SessionID {
 		t.Errorf("record = %+v, want started with the fake's window and id %s", rec, tr.SessionID)
 	}
@@ -455,7 +455,7 @@ func TestCrashIsReportedAndRetried(t *testing.T) {
 	if len(markers) != 2 || markers[1].Marker.Type != session.MarkerInterrupted {
 		t.Errorf("markers = %+v, want the interrupted marker of a turn without text", markers)
 	}
-	if rec := f.sessions.get(t, "t1", prompts.StagePRD); rec.LastError != sum.LastError || !rec.Started {
+	if rec := f.sessions.get(t, "t1", string(prompts.StagePRD)); rec.LastError != sum.LastError || !rec.Started {
 		t.Errorf("record = %+v, want the error persisted on a started session", rec)
 	}
 
@@ -493,7 +493,7 @@ func TestPauseStopsAndResumeContinues(t *testing.T) {
 		t.Errorf("assistant = %+v, want completed as interrupted", got)
 	}
 	wantErrIs(t, f.service.Send(t.Context(), "t1", "later"), session.ErrPaused)
-	if rec := f.sessions.get(t, "t1", prompts.StagePRD); !rec.Paused {
+	if rec := f.sessions.get(t, "t1", string(prompts.StagePRD)); !rec.Paused {
 		t.Errorf("record paused = false, want true")
 	}
 
@@ -933,7 +933,7 @@ func TestSendFromAppMarksTheMessageAndCountsIt(t *testing.T) {
 	if sum := f.summary(t, "t1"); sum.Corrections != 1 {
 		t.Errorf("Corrections = %d, want 1", sum.Corrections)
 	}
-	if rec := f.sessions.get(t, "t1", prompts.StagePRD); rec.Corrections != 1 {
+	if rec := f.sessions.get(t, "t1", string(prompts.StagePRD)); rec.Corrections != 1 {
 		t.Errorf("stored corrections = %d, want 1", rec.Corrections)
 	}
 	wantErrIs(t, f.service.SendFromApp(t.Context(), "t1", "   "), session.ErrEmptyMessage)
@@ -1016,5 +1016,107 @@ func TestSummaryIsIdleOnlyAtRest(t *testing.T) {
 	broken.start(t, taskInfo(t, "t2"))
 	if sum := broken.summary(t, "t2"); sum.Idle || sum.Status != session.StatusError {
 		t.Errorf("summary = %+v, want an error and Idle false", sum)
+	}
+}
+
+func TestStepStageIsTheSessionKeyOfAStep(t *testing.T) {
+	t.Parallel()
+
+	if got := session.StepStage(7); got != "step:7" {
+		t.Errorf("StepStage(7) = %q, want %q", got, "step:7")
+	}
+	for _, tc := range []struct {
+		stage  string
+		number int
+		ok     bool
+	}{
+		{stage: "step:1", number: 1, ok: true},
+		{stage: "step:12", number: 12, ok: true},
+		{stage: "prd", number: 0, ok: false},
+		{stage: "step:", number: 0, ok: false},
+		{stage: "step:x", number: 0, ok: false},
+		{stage: "step:0", number: 0, ok: false},
+		{stage: "step:-1", number: 0, ok: false},
+	} {
+		number, ok := session.ParseStepStage(tc.stage)
+		if number != tc.number || ok != tc.ok {
+			t.Errorf("ParseStepStage(%q) = %d, %v, want %d, %v", tc.stage, number, ok, tc.number, tc.ok)
+		}
+	}
+}
+
+func TestStartOfAStepSendsTheStepFileVerbatim(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	// The step file carries a placeholder to prove nothing is replaced in it.
+	content := "# Task 1: Step one\n\nWrite {{task_name}} as it is.\n"
+	info := atStep(t, taskInfo(t, "t1"), 1, content)
+	f.start(t, info)
+	f.waitIdle(t, "t1")
+
+	tr := f.transcript(t, "t1")
+	if tr.Stage != "step:1" {
+		t.Errorf("transcript stage = %q, want %q", tr.Stage, "step:1")
+	}
+	if len(tr.Entries) != 3 {
+		t.Fatalf("entries = %d, want the step marker, the prompt and its answer", len(tr.Entries))
+	}
+	wantMarker := &session.MarkerEntry{Type: session.MarkerStepStarted, Step: 1}
+	if diff := cmp.Diff(wantMarker, tr.Entries[0].Marker); diff != "" {
+		t.Errorf("step marker mismatch (-want +got):\n%s", diff)
+	}
+	if got := tr.Entries[2].Assistant.Text; got != content {
+		t.Errorf("prompt sent = %q, want the step file %q", got, content)
+	}
+
+	if rec := f.sessions.get(t, "t1", "step:1"); rec.Stage != "step:1" || rec.ID != tr.SessionID {
+		t.Errorf("record = %+v, want the session of step:1 with id %s", rec, tr.SessionID)
+	}
+	if sum := f.summary(t, "t1"); sum.Stage != "step:1" {
+		t.Errorf("summary stage = %q, want %q", sum.Stage, "step:1")
+	}
+	// The CLI runs in the worktree of the step, not in the task directory.
+	if started := f.launcher.started(); len(started) != 1 || started[0].Dir != info.Dir {
+		t.Errorf("started = %+v, want one process in %s", started, info.Dir)
+	}
+}
+
+func TestStartOfAStepAgainMarksItAsRestarted(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	info := atStep(t, taskInfo(t, "t1"), 2, "# Task 2\n")
+	f.start(t, info)
+	f.waitIdle(t, "t1")
+	if err := f.service.Start(t.Context(), info, true); err != nil {
+		t.Fatalf("Start() = %v, want nil", err)
+	}
+
+	markers := f.entriesOf(t, "t1", session.KindMarker)
+	if len(markers) != 2 {
+		t.Fatalf("markers = %d, want one per start", len(markers))
+	}
+	wantMarker := &session.MarkerEntry{Type: session.MarkerStepStarted, Step: 2, Restarted: true}
+	if diff := cmp.Diff(wantMarker, markers[1].Marker); diff != "" {
+		t.Errorf("step marker mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestDiscardOfAStepClosesTheRunAndDropsTheRecord(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	f.start(t, atStep(t, taskInfo(t, "t1"), 1, "# Task 1\n"))
+	f.waitIdle(t, "t1")
+
+	if err := f.service.Discard(t.Context(), "t1", session.StepStage(1)); err != nil {
+		t.Fatalf("Discard() = %v, want nil", err)
+	}
+	if _, ok := f.service.Summary("t1"); ok {
+		t.Error("Summary() found a run, want the session closed")
+	}
+	if _, err := f.sessions.Get(t.Context(), "t1", "step:1"); !errors.Is(err, session.ErrNotFound) {
+		t.Errorf("Get() = %v, want session.ErrNotFound", err)
 	}
 }

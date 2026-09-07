@@ -53,24 +53,29 @@ type Launcher interface {
 type TaskInfo struct {
 	ID             string
 	Name           string
-	Dir            string // working directory of the CLI
+	Dir            string // working directory of the CLI: the task dir, or the worktree of a step
 	ArtifactsDir   string
-	Stage          prompts.Stage
+	Stage          string        // session key: a task stage, or StepStage(n)
+	Prompt         prompts.Stage // the prompt that opens the session
+	Step           int           // step sessions: the number; 0 otherwise
+	StepPath       string        // step sessions: the file sent as the prompt, verbatim
 	PRDPath        string
 	TechSpecPath   string
 	StepsDir       string
 	Repositories   []string // relative paths, what the prompt lists
 	InitialContext string
-	ArtifactExists bool // the artifact of Stage is already there
+	ArtifactExists bool // the artifact of Prompt is already there; always false for a step
 }
 
-// artifactOf is the artifact a stage produces.
+// artifactOf is the artifact a prompt produces, "" when it produces none.
 func artifactOf(stage prompts.Stage) ArtifactKind {
 	switch stage {
 	case prompts.StageTechSpec:
 		return ArtifactTechSpec
 	case prompts.StagePlan:
 		return ArtifactPlan
+	case prompts.StageStep:
+		return ""
 	default:
 		return ArtifactPRD
 	}
@@ -193,7 +198,7 @@ func (s *Service) tryOpen(ctx context.Context, t TaskInfo) (bool, error) {
 	defer s.mu.Unlock()
 
 	if r, ok := s.runs[t.ID]; ok {
-		if r.rec.Stage != string(t.Stage) {
+		if r.rec.Stage != t.Stage {
 			return false, nil
 		}
 		r.task = t
@@ -216,11 +221,11 @@ func (s *Service) tryOpen(ctx context.Context, t TaskInfo) (bool, error) {
 // creating the record when there is none, and brings a transcript left by a
 // previous run to rest.
 func (s *Service) load(ctx context.Context, t TaskInfo, n *notes) (*run, error) {
-	rec, err := s.sessions.Get(ctx, t.ID, string(t.Stage))
+	rec, err := s.sessions.Get(ctx, t.ID, t.Stage)
 	switch {
 	case errors.Is(err, ErrNotFound):
 		now := s.now().UTC()
-		rec = Record{ID: s.newID(), TaskID: t.ID, Stage: string(t.Stage), CreatedAt: now, UpdatedAt: now}
+		rec = Record{ID: s.newID(), TaskID: t.ID, Stage: t.Stage, CreatedAt: now, UpdatedAt: now}
 		if insertErr := s.sessions.Insert(ctx, rec); insertErr != nil {
 			return nil, insertErr
 		}
@@ -238,7 +243,13 @@ func (s *Service) load(ctx context.Context, t TaskInfo, n *notes) (*run, error) 
 	}
 
 	r := newRun(t, rec, maxSeq+1)
-	written := writtenMarker(artifactOf(t.Stage))
+	// A step session produces no artifact, so it has no written marker to
+	// look for either.
+	kind := artifactOf(t.Prompt)
+	written := MarkerType("")
+	if kind != "" {
+		written = writtenMarker(kind)
+	}
 	marked := false
 	for i := range stored {
 		e := &stored[i]
@@ -248,7 +259,7 @@ func (s *Service) load(ctx context.Context, t TaskInfo, n *notes) (*run, error) 
 			continue
 		}
 		r.entries = append(r.entries, e)
-		if e.Kind == KindMarker && e.Marker.Type == written {
+		if written != "" && e.Kind == KindMarker && e.Marker.Type == written {
 			marked = true
 		}
 		if settle(e) {
@@ -292,9 +303,9 @@ func settle(e *Entry) bool {
 	return true
 }
 
-// Start opens the session of a stage, marks its beginning and queues the
-// prompt. restarted says the stage is being started over, not reached for the
-// first time.
+// Start opens the session of a stage or a step, marks its beginning and
+// queues the prompt. restarted says it is being started over, not reached for
+// the first time.
 func (s *Service) Start(ctx context.Context, t TaskInfo, restarted bool) error {
 	if err := s.Open(ctx, t); err != nil {
 		return err
@@ -309,14 +320,16 @@ func (s *Service) Start(ctx context.Context, t TaskInfo, restarted bool) error {
 	if err != nil {
 		return err
 	}
-	s.appendLocked(ctx, r, Entry{Kind: KindMarker, Marker: &MarkerEntry{
-		Type: MarkerStageStarted, Stage: string(t.Stage), Restarted: restarted,
-	}}, n)
+	marker := MarkerEntry{Type: MarkerStageStarted, Stage: t.Stage, Restarted: restarted}
+	if t.Step > 0 {
+		marker = MarkerEntry{Type: MarkerStepStarted, Step: t.Step, Restarted: restarted}
+	}
+	s.appendLocked(ctx, r, Entry{Kind: KindMarker, Marker: &marker}, n)
 
 	// Only the PRD prompt carries what the user wrote when they created the
 	// task; every later stage reads the artifacts of the ones before it.
 	text := ""
-	if t.Stage == prompts.StagePRD {
+	if t.Prompt == prompts.StagePRD {
 		text = t.InitialContext
 	}
 	if err := s.enqueueLocked(ctx, r, &UserEntry{Text: text, Prompt: true}, n); err != nil {

@@ -321,3 +321,35 @@ func TestRenderFailsWhenThePromptIsMissing(t *testing.T) {
 		t.Error("Render() = nil, want an error")
 	}
 }
+
+func TestRenderOfAStepIsTheStepFileItself(t *testing.T) {
+	t.Parallel()
+
+	// The placeholders and the initial context prove that a step file is sent
+	// exactly as it is: nothing replaced, nothing appended.
+	content := "# Task 1: First step\n\nWrite {{task_name}} in {{artifacts_dir}}.\n"
+	path := filepath.Join(t.TempDir(), "1-first.md")
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("write step file: %v", err)
+	}
+
+	vars := prdVars()
+	vars.StepPath = path
+	got, err := prompts.Render(t.TempDir(), prompts.StageStep, vars)
+	if err != nil {
+		t.Fatalf("Render() = %v, want nil", err)
+	}
+
+	if got != content {
+		t.Errorf("Render() = %q, want %q", got, content)
+	}
+}
+
+func TestRenderOfAStepFailsWhenTheFileIsMissing(t *testing.T) {
+	t.Parallel()
+
+	vars := prompts.Vars{StepPath: filepath.Join(t.TempDir(), "gone.md")}
+	if _, err := prompts.Render(t.TempDir(), prompts.StageStep, vars); err == nil {
+		t.Error("Render() = nil, want an error")
+	}
+}

@@ -3,6 +3,8 @@ package session
 import (
 	"context"
 	"errors"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -13,7 +15,7 @@ var ErrNotFound = errors.New("session: not found")
 type Record struct {
 	ID            string // also the Claude Code session id
 	TaskID        string
-	Stage         string // prd, tech_spec or plan
+	Stage         string // prd, tech_spec, plan or step:<number>
 	Started       bool   // system/init has arrived at least once for this id
 	Paused        bool
 	ContextTokens int
@@ -22,6 +24,26 @@ type Record struct {
 	LastError     string
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
+}
+
+// stepStagePrefix opens the session key of a step: "step:<number>".
+const stepStagePrefix = "step:"
+
+// StepStage is the session key of a step, which is what the sessions table
+// records in its stage column.
+func StepStage(number int) string { return stepStagePrefix + strconv.Itoa(number) }
+
+// ParseStepStage reads the number out of a step session key.
+func ParseStepStage(stage string) (number int, ok bool) {
+	rest, found := strings.CutPrefix(stage, stepStagePrefix)
+	if !found {
+		return 0, false
+	}
+	number, err := strconv.Atoi(rest)
+	if err != nil || number <= 0 {
+		return 0, false
+	}
+	return number, true
 }
 
 // SessionRepository persists one Record per stage of a task.

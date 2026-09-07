@@ -276,12 +276,13 @@ func (s *Service) flushPendingLocked(ctx context.Context, r *run, n *notes) bool
 	e := r.pending[0]
 	text := e.User.Text
 	if e.User.Prompt {
-		rendered, err := s.renderPrompt(prompts.Stage(r.rec.Stage), prompts.Vars{
+		rendered, err := s.renderPrompt(r.task.Prompt, prompts.Vars{
 			TaskName:       r.task.Name,
 			ArtifactsDir:   r.task.ArtifactsDir,
 			PRDPath:        r.task.PRDPath,
 			TechSpecPath:   r.task.TechSpecPath,
 			StepsDir:       r.task.StepsDir,
+			StepPath:       r.task.StepPath,
 			Repositories:   r.task.Repositories,
 			InitialContext: e.User.Text,
 		})

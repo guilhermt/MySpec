@@ -209,7 +209,7 @@ func (m *memSessions) Open(_ context.Context, t session.TaskInfo) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.calls = append(m.calls, "open:"+t.ID+":"+string(t.Stage))
+	m.calls = append(m.calls, "open:"+t.ID+":"+t.Stage)
 	if m.err != nil {
 		return m.err
 	}
@@ -223,11 +223,11 @@ func (m *memSessions) Start(_ context.Context, t session.TaskInfo, restarted boo
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.calls = append(m.calls, "start:"+t.ID+":"+string(t.Stage)+":restarted="+strconv.FormatBool(restarted))
+	m.calls = append(m.calls, "start:"+t.ID+":"+t.Stage+":restarted="+strconv.FormatBool(restarted))
 	if m.err != nil {
 		return m.err
 	}
-	m.summaries[t.ID] = session.Summary{TaskID: t.ID, Stage: string(t.Stage), Status: session.StatusWorking}
+	m.summaries[t.ID] = session.Summary{TaskID: t.ID, Stage: t.Stage, Status: session.StatusWorking}
 	return nil
 }
 
