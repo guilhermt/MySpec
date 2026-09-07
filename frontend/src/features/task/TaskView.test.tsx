@@ -44,6 +44,18 @@ describe("TaskView", () => {
     expect(api.getTranscript).not.toHaveBeenCalled();
   });
 
+  it("warns above the composer when the plan stayed invalid", () => {
+    view({
+      stage: "plan",
+      corrections: 3,
+      planProblems: [{ file: "", message: "no step files were written" }],
+    });
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "The plan is still invalid after three automatic corrections.",
+    );
+  });
+
   it("fetches the conversation only the first time the task is opened", async () => {
     const { rerender } = view();
     await waitFor(() => {

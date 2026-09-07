@@ -105,19 +105,25 @@ Everything the app keeps lives under `~/.local/share/myspec/`:
 
 - `myspec.db`, the SQLite database with the settings, the workspaces, the tasks
   and every conversation.
-- `prompts/prd.md`, the prompt that starts a PRD session. It is written on first
-  run, meant to be edited, and recreated the next time the app starts if it is
+- `prompts/prd.md`, `prompts/tech_spec.md` and `prompts/plan.md`, the prompts
+  that start the session of each planning stage. They are written on first run,
+  meant to be edited, and recreated the next time the app starts if they are
   deleted. A session already running keeps the prompt it started with.
-- `workspaces/<name>-<hash>/tasks/<task>/PRD.md`, the artifacts of each task, in
-  a folder per workspace and per task. The hash keeps two workspaces with the
-  same folder name apart.
+- `workspaces/<name>-<hash>/tasks/<task>/`, the artifacts of each task, in a
+  folder per workspace and per task: `PRD.md`, `tech-spec.md` and
+  `steps/<number>-<short-description>.md`, one file per step. The hash keeps two
+  workspaces with the same folder name apart.
 
 ## Sessions
 
-Each task runs its own `claude` process, started with the fixed flags of
-`claude.Args`: `-p` with `--output-format stream-json`, `--input-format
-stream-json`, `--verbose`, `--include-partial-messages`, `--permission-mode auto`
-and `--permission-prompt-tool stdio`, plus `--session-id` on the first run and
+A task runs one `claude` process at a time: the one of the stage it is in. Each
+stage keeps its own conversation, so going back to a stage picks its session up
+where it was left and moving on opens a fresh one.
+
+Each session is started with the fixed flags of `claude.Args`: `-p` with
+`--output-format stream-json`, `--input-format stream-json`, `--verbose`,
+`--include-partial-messages`, `--permission-mode auto` and
+`--permission-prompt-tool stdio`, plus `--session-id` on the first run and
 `--resume` on the following ones. The app writes the user's messages into stdin
 and reads the event stream back. A process with nothing to do for ten minutes is
 stopped; the next message brings it back with `--resume`, and the agent still
@@ -126,7 +132,31 @@ remembers the conversation.
 When something looks wrong, the log is at `~/.local/state/myspec/myspec.log`.
 `claude session ready` marks a process that started and answered, with the task
 it belongs to, and `binding failed` marks a call from the interface the Go side
-rejected, with the method that refused it.
+rejected, with the method that refused it. `stage advanced`, `stage revisited`
+and `stage discarded` mark every move between stages, with the task and the
+stages involved.
+
+## Stages
+
+A task goes through PRD, tech spec, plan and implementation. It moves on by
+itself as soon as the document of the stage exists on disk and the conversation
+is idle — the agent is waiting and nothing is queued. The stage track at the top
+of a task shows where it is and what it can do:
+
+- **Back to a stage** reopens an earlier stage and throws away everything after
+  it. The task stays there, revisiting, until **Continue** is pressed, so the
+  document can be reworked without the app moving on mid-sentence.
+- **Discard and restart** throws the stage away too and starts a new session for
+  it right away.
+
+The plan stage has one more rule: the step files have to be a valid plan before
+the task moves on. Each file is named `<number>-<short-description>.md`, starts
+with a `---` header carrying `repository: <value>` that names a repository of the
+workspace, and carries a `# Step N: Title` heading; the numbers run from 1 with
+no gaps and no repeats. When they do not, the app tells the agent what is wrong
+and asks it to fix it, up to three times. After that it stops correcting and
+shows the problems above the composer, for the user to sort out with the agent
+or to discard the plan and start over.
 
 ## Continuous integration
 

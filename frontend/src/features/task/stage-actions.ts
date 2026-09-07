@@ -1,6 +1,12 @@
 import { stageIndex, stageLabel } from "@/lib/stages";
 import type { TaskStage } from "@/lib/wails";
 
+/**
+ * MAX_CORRECTIONS is how many times the app corrects an invalid plan before it
+ * hands the plan back to the user. It mirrors flow.MaxCorrections.
+ */
+export const MAX_CORRECTIONS = 3;
+
 /** StageAction is what the stage track can do to a stage. */
 export type StageAction = "back" | "discard";
 

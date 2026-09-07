@@ -2,6 +2,7 @@ import { useMemo, useRef } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ActivityIndicator } from "@/features/chat/ActivityIndicator";
 import { ActionGroup } from "@/features/chat/entries/ActionGroup";
+import { AppMessage } from "@/features/chat/entries/AppMessage";
 import { AssistantMessage } from "@/features/chat/entries/AssistantMessage";
 import { ErrorCard } from "@/features/chat/entries/ErrorCard";
 import { Marker } from "@/features/chat/entries/Marker";
@@ -31,7 +32,12 @@ function Loading() {
 
 function EntryBlock({ taskId, entry }: { taskId: string; entry: Entry }) {
   if (entry.user !== null) {
-    return <UserMessage user={entry.user} />;
+    // The stage prompt is the agent's instructions, not a line of the
+    // conversation: only what the app says on top of it is worth showing.
+    if (entry.user.prompt && entry.user.text === "") {
+      return null;
+    }
+    return entry.user.app ? <AppMessage user={entry.user} /> : <UserMessage user={entry.user} />;
   }
   if (entry.assistant !== null) {
     return <AssistantMessage assistant={entry.assistant} />;

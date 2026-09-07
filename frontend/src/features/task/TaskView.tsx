@@ -4,6 +4,7 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/componen
 import { Composer } from "@/features/chat/Composer";
 import { Conversation } from "@/features/chat/Conversation";
 import { ArtifactPanel } from "@/features/task/ArtifactPanel";
+import { PlanProblemsNotice } from "@/features/task/PlanProblemsNotice";
 import { StageTrack } from "@/features/task/StageTrack";
 import { StepsView } from "@/features/task/StepsView";
 import { hasArtifacts } from "@/features/task/status";
@@ -119,6 +120,7 @@ export function TaskView({ taskId }: TaskViewProps) {
           ) : (
             <>
               <Conversation taskId={task.id} />
+              <PlanProblemsNotice task={task} />
               <Composer task={task} />
             </>
           )}

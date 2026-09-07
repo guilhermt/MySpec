@@ -15,6 +15,19 @@ function repoLabel(app: State | null, step: Step): string {
   return findNode(app, repoNodeId(step.repoPath))?.label ?? step.repository;
 }
 
+/** ProblemList reads out every reason the step files are not a plan. */
+export function ProblemList({ problems }: { problems: readonly PlanProblem[] }) {
+  return (
+    <ul className="flex flex-col gap-0.5 text-sm">
+      {problems.map((problem) => (
+        <li key={`${problem.file}:${problem.message}`} className="break-words select-text">
+          {`${problem.file === "" ? "(plan)" : problem.file}: ${problem.message}`}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 /** Problems is what keeps the step files from being a plan. */
 function Problems({ problems }: { problems: readonly PlanProblem[] }) {
   return (
@@ -23,13 +36,7 @@ function Problems({ problems }: { problems: readonly PlanProblem[] }) {
       className="flex flex-col gap-1 rounded-lg border border-destructive/40 bg-destructive/10 p-4"
     >
       <p className="font-medium">The step files aren't a valid plan</p>
-      <ul className="flex flex-col gap-0.5 text-sm">
-        {problems.map((problem) => (
-          <li key={`${problem.file}:${problem.message}`} className="break-words select-text">
-            {`${problem.file === "" ? "(plan)" : problem.file}: ${problem.message}`}
-          </li>
-        ))}
-      </ul>
+      <ProblemList problems={problems} />
     </div>
   );
 }
