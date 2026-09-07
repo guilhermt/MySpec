@@ -1,9 +1,14 @@
-import { Archive, Ban, FileCheck, FileText, type LucideIcon } from "lucide-react";
+import { Archive, Ban, FileCheck, FileText, ListChecks, type LucideIcon, Play } from "lucide-react";
 import { asMarkerType, type MarkerEntry, type MarkerType } from "@/lib/wails";
 
 const MARKERS: Record<MarkerType, { icon: LucideIcon; text: string }> = {
   prd_written: { icon: FileCheck, text: "PRD written" },
   prd_updated: { icon: FileText, text: "PRD updated" },
+  tech_spec_written: { icon: FileCheck, text: "Tech spec written" },
+  tech_spec_updated: { icon: FileText, text: "Tech spec updated" },
+  plan_written: { icon: ListChecks, text: "Plan written" },
+  plan_updated: { icon: ListChecks, text: "Plan updated" },
+  stage_started: { icon: Play, text: "Stage started" },
   compacted: { icon: Archive, text: "Context compacted" },
   interrupted: { icon: Ban, text: "Interrupted" },
 };

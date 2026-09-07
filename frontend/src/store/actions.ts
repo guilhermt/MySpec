@@ -1,4 +1,9 @@
-import type { CreateTaskRequest, PermissionDecision, ThemePreference } from "@/lib/wails";
+import type {
+  CreateTaskRequest,
+  PermissionDecision,
+  TaskStage,
+  ThemePreference,
+} from "@/lib/wails";
 import { api } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
 
@@ -96,6 +101,21 @@ export function answerQuestion(
   answers: Record<string, string>,
 ): Promise<void> {
   return run(() => api.answerQuestion(taskId, requestId, answers));
+}
+
+/** backToStage reopens a stage that is already done. */
+export function backToStage(taskId: string, stage: TaskStage): Promise<void> {
+  return run(() => api.backToStage(taskId, stage));
+}
+
+/** discardStage throws a stage away and starts it over. */
+export function discardStage(taskId: string, stage: TaskStage): Promise<void> {
+  return run(() => api.discardStage(taskId, stage));
+}
+
+/** continueStage moves a task revisiting a stage on to the next one. */
+export function continueStage(taskId: string): Promise<void> {
+  return run(() => api.continueStage(taskId));
 }
 
 export function openExternal(url: string): Promise<void> {

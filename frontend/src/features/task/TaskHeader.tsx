@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ContextGauge } from "@/features/task/ContextGauge";
 import { DeleteTaskDialog } from "@/features/task/DeleteTaskDialog";
-import { StageBadge } from "@/features/task/StageBadge";
 import { StatusBadge } from "@/features/task/StatusBadge";
 import { findNode } from "@/features/tree/tree-model";
 import { asSessionStatus, type TaskSummary } from "@/lib/wails";
@@ -37,7 +36,6 @@ export function TaskHeader({ task, artifactsOpen, onToggleArtifacts }: TaskHeade
       <Icon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
       <span className="min-w-0 truncate font-medium">{task.name}</span>
       <Badge variant="secondary">{task.repoPath === "" ? "Root" : repoName}</Badge>
-      <StageBadge task={task} />
       <StatusBadge task={task} />
 
       <span className="flex-1" />

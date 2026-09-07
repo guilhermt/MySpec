@@ -3,8 +3,11 @@ import { api } from "@/lib/wails";
 import {
   answerPermission,
   answerQuestion,
+  backToStage,
+  continueStage,
   createTask,
   deleteTask,
+  discardStage,
   dismissNotice,
   interrupt,
   loadTranscript,
@@ -78,6 +81,9 @@ describe("task actions", () => {
     await answerPermission("task-1", "req-1", "allow_session", "");
     await answerQuestion("task-1", "req-1", { "Which database?": "SQLite" });
     await openExternal("https://anthropic.com");
+    await backToStage("task-1", "prd");
+    await discardStage("task-1", "tech_spec");
+    await continueStage("task-1");
 
     expect(api.deleteTask).toHaveBeenCalledWith("task-1");
     expect(api.sendMessage).toHaveBeenCalledWith("task-1", "go on");
@@ -91,6 +97,9 @@ describe("task actions", () => {
       "Which database?": "SQLite",
     });
     expect(api.openExternal).toHaveBeenCalledWith("https://anthropic.com");
+    expect(api.backToStage).toHaveBeenCalledWith("task-1", "prd");
+    expect(api.discardStage).toHaveBeenCalledWith("task-1", "tech_spec");
+    expect(api.continueStage).toHaveBeenCalledWith("task-1");
     expect(useAppStore.getState().error).toBeNull();
   });
 

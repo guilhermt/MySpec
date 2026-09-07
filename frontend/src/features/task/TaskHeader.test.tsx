@@ -14,12 +14,11 @@ function header(overrides: Partial<TaskSummary> = {}, onToggle = vi.fn()) {
 }
 
 describe("TaskHeader", () => {
-  it("names the task, its place and its stage", () => {
+  it("names the task and its place", () => {
     header();
 
     expect(screen.getByText("add-login")).toBeInTheDocument();
     expect(screen.getByText("Root")).toBeInTheDocument();
-    expect(screen.getByText("PRD")).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("Waiting");
   });
 
@@ -35,7 +34,6 @@ describe("TaskHeader", () => {
     [{ sessionStatus: "needs_permission" }, "Permission"],
     [{ sessionStatus: "paused" }, "Paused"],
     [{ sessionStatus: "error" }, "Error"],
-    [{ stage: "prd_done" }, "PRD done"],
   ] as const)("shows the state of the session %#", (overrides, expected) => {
     header(overrides);
 

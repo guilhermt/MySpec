@@ -1,17 +1,21 @@
 import { describe, expect, it } from "vitest";
-import { isAttention, taskStatusLabel, taskStatusTone } from "@/features/task/status";
-import { makeTask } from "@/test/wails-mock";
+import {
+  isAttention,
+  taskStageLabel,
+  taskStatusLabel,
+  taskStatusTone,
+} from "@/features/task/status";
+import { makeStep, makeTask } from "@/test/wails-mock";
 
 describe("task status", () => {
   it.each([
-    ["working", "prd", "Working", "working", false],
-    ["waiting", "prd", "Waiting", "attention", true],
-    ["waiting", "prd_done", "PRD done", "done", false],
-    ["needs_permission", "prd", "Permission", "attention", true],
-    ["paused", "prd", "Paused", "paused", false],
-    ["error", "prd", "Error", "error", true],
-  ])("reads %s at stage %s", (sessionStatus, stage, label, tone, attention) => {
-    const task = makeTask({ sessionStatus, stage });
+    ["working", "Working", "working", false],
+    ["waiting", "Waiting", "attention", true],
+    ["needs_permission", "Permission", "attention", true],
+    ["paused", "Paused", "paused", false],
+    ["error", "Error", "error", true],
+  ])("reads %s", (sessionStatus, label, tone, attention) => {
+    const task = makeTask({ sessionStatus });
 
     expect(taskStatusLabel(task)).toBe(label);
     expect(taskStatusTone(task)).toBe(tone);
@@ -23,5 +27,35 @@ describe("task status", () => {
 
     expect(taskStatusLabel(task)).toBe("Waiting");
     expect(taskStatusTone(task)).toBe("attention");
+  });
+
+  it("counts the steps once the implementation starts", () => {
+    const task = makeTask({
+      stage: "implementation",
+      sessionStatus: "working",
+      steps: [makeStep(), makeStep({ number: 2, file: "2-wire-the-api.md" })],
+    });
+
+    expect(taskStatusLabel(task)).toBe("0 of 2 steps");
+    expect(taskStatusTone(task)).toBe("idle");
+    expect(isAttention(task)).toBe(false);
+  });
+
+  it("counts no steps when the backend sends none", () => {
+    const task = makeTask({ stage: "implementation", steps: null });
+
+    expect(taskStatusLabel(task)).toBe("0 of 0 steps");
+  });
+});
+
+describe("taskStageLabel", () => {
+  it("names the stage the task is in", () => {
+    expect(taskStageLabel(makeTask())).toBe("PRD");
+    expect(taskStageLabel(makeTask({ stage: "tech_spec" }))).toBe("Tech spec");
+    expect(taskStageLabel(makeTask({ stage: "implementation" }))).toBe("Implementation");
+  });
+
+  it("says when a stage was reopened", () => {
+    expect(taskStageLabel(makeTask({ stage: "plan", revisiting: true }))).toBe("Plan · revisiting");
   });
 });
