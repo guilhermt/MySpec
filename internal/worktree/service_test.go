@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -272,7 +273,7 @@ func TestStatusIsCleanInAWorktreeNobodyTouched(t *testing.T) {
 	wt := f.ensure(t)
 	got := f.status(t, wt)
 	if !got.Clean() {
-		t.Errorf("Status() = %v, want clean", got.Entries)
+		t.Errorf("Status() = %v, want clean", got.Lines())
 	}
 }
 
@@ -290,8 +291,85 @@ func TestStatusListsWhatChangedAndIgnoresWhatGitIgnores(t *testing.T) {
 	if got.Clean() {
 		t.Fatal("Status() is clean, want the changes")
 	}
-	if len(got.Entries) != 2 {
-		t.Errorf("Status() = %v, want the modified and the untracked file only", got.Entries)
+	if len(got.Changes) != 2 {
+		t.Errorf("Status() = %v, want the modified and the untracked file only", got.Lines())
+	}
+}
+
+func TestStatusReadsTheHeadOfTheWorktreeBranch(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, true)
+
+	wt := f.ensure(t)
+	if got, want := f.status(t, wt).Head, headOf(t, wt.Path, "HEAD"); got != want {
+		t.Errorf("Status().Head = %q, want %q", got, want)
+	}
+}
+
+func TestGitDirPointsInsideTheRepositoryOfTheWorktree(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, true)
+
+	wt := f.ensure(t)
+	got, err := f.svc.GitDir(t.Context(), wt)
+	if err != nil {
+		t.Fatalf("GitDir() = %v, want nil", err)
+	}
+	if want := filepath.Join(f.repo.Path, ".git", "worktrees", taskName); got != want {
+		t.Errorf("GitDir() = %q, want %q", got, want)
+	}
+}
+
+func TestTrackedFilesListsWhatTheWorktreeHasFromGit(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, true)
+
+	wt := f.ensure(t)
+	write(t, wt.Path, "untracked.txt", "untracked\n")
+
+	got, err := f.svc.TrackedFiles(t.Context(), wt)
+	if err != nil {
+		t.Fatalf("TrackedFiles() = %v, want nil", err)
+	}
+	if want := []string{"README.md"}; !slices.Equal(got, want) {
+		t.Errorf("TrackedFiles() = %q, want %q", got, want)
+	}
+}
+
+func TestIsIgnoredAnswersForAPathOfTheWorktree(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, true)
+
+	wt := f.ensure(t)
+	gittest.Commit(t, wt.Path, ".gitignore", "ignored.txt\n", "Ignore the scratch file")
+
+	for path, want := range map[string]bool{"ignored.txt": true, "README.md": false} {
+		got, err := f.svc.IsIgnored(t.Context(), wt, path)
+		if err != nil {
+			t.Fatalf("IsIgnored(%s) = %v, want nil", path, err)
+		}
+		if got != want {
+			t.Errorf("IsIgnored(%s) = %t, want %t", path, got, want)
+		}
+	}
+}
+
+func TestCommitReadsWhatTheWorktreeCommitted(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, true)
+
+	wt := f.ensure(t)
+	gittest.Commit(t, wt.Path, "one.txt", "one\n", "Add the first file")
+
+	got, err := f.svc.Commit(t.Context(), wt, "HEAD")
+	if err != nil {
+		t.Fatalf("Commit() = %v, want nil", err)
+	}
+	if want := headOf(t, wt.Path, "HEAD"); got.SHA != want {
+		t.Errorf("Commit().SHA = %q, want %q", got.SHA, want)
+	}
+	if want := "Add the first file"; got.Subject != want {
+		t.Errorf("Commit().Subject = %q, want %q", got.Subject, want)
 	}
 }
 
@@ -310,7 +388,7 @@ func TestCleanThrowsAwayEveryChangeButTheIgnoredFiles(t *testing.T) {
 	}
 
 	if got := f.status(t, wt); !got.Clean() {
-		t.Errorf("Status() = %v, want clean", got.Entries)
+		t.Errorf("Status() = %v, want clean", got.Lines())
 	}
 	if got := read(t, filepath.Join(wt.Path, "README.md")); got != "# seed\n" {
 		t.Errorf("README.md = %q, want it restored", got)

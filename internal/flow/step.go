@@ -265,7 +265,7 @@ func (s *Service) prepare(ctx context.Context, id string, opts prepareOptions) {
 		return
 	}
 	if !status.Clean() {
-		block(task.BlockDirty, strings.Join(status.Entries, "\n"), len(status.Entries))
+		block(task.BlockDirty, strings.Join(status.Lines(), "\n"), len(status.Changes))
 		return
 	}
 

@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
@@ -45,7 +46,7 @@ type Sessions interface {
 type Worktrees interface {
 	Get(taskID, repoPath string) (worktree.Worktree, bool)
 	Ensure(ctx context.Context, t task.Task, repo task.Repository, onPhase func(worktree.Phase)) (worktree.Worktree, error)
-	Status(ctx context.Context, wt worktree.Worktree) (worktree.Status, error)
+	Status(ctx context.Context, wt worktree.Worktree) (git.Status, error)
 	Clean(ctx context.Context, wt worktree.Worktree) error
 	RemoveAll(ctx context.Context, taskID string) error
 }

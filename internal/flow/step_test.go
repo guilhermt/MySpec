@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/guilhermt/myspec/internal/flow"
+	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
 	"github.com/guilhermt/myspec/internal/worktree"
@@ -97,7 +98,10 @@ func TestADirtyWorktreeBlocksTheStep(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	f.worktrees.setStatus(worktree.Status{Entries: []string{" M main.go", "?? notes.md"}})
+	f.worktrees.setStatus(git.Status{Changes: []git.Change{
+		{X: '.', Y: 'M', Path: "main.go"},
+		{X: '?', Y: '?', Path: "notes.md"},
+	}})
 	implementing(f, "task-1", twoStepPlan())
 
 	f.service.Sync(t.Context())
@@ -342,7 +346,7 @@ func TestCleanAndStartStepDiscardsTheChangesAndStarts(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	f.worktrees.setStatus(worktree.Status{Entries: []string{" M main.go"}})
+	f.worktrees.setStatus(git.Status{Changes: []git.Change{{X: '.', Y: 'M', Path: "main.go"}}})
 	implementing(f, "task-1", twoStepPlan())
 
 	f.service.Sync(t.Context())
@@ -382,7 +386,7 @@ func TestDiscardStepStartsTheStepOverInACleanWorktree(t *testing.T) {
 	f.service.Sync(t.Context())
 	f.waitStep(t, "task-1", 1, flow.StepImplementing)
 
-	f.worktrees.setStatus(worktree.Status{Entries: []string{"?? scratch.md"}})
+	f.worktrees.setStatus(git.Status{Changes: []git.Change{{X: '?', Y: '?', Path: "scratch.md"}}})
 	if err := f.service.DiscardStep(t.Context(), "task-1", true); err != nil {
 		t.Fatalf("DiscardStep: %v", err)
 	}
@@ -408,7 +412,7 @@ func TestDiscardStepWithoutCleaningLeavesADirtyWorktreeBlocked(t *testing.T) {
 	f.service.Sync(t.Context())
 	f.waitStep(t, "task-1", 1, flow.StepImplementing)
 
-	f.worktrees.setStatus(worktree.Status{Entries: []string{"?? scratch.md"}})
+	f.worktrees.setStatus(git.Status{Changes: []git.Change{{X: '?', Y: '?', Path: "scratch.md"}}})
 	if err := f.service.DiscardStep(t.Context(), "task-1", false); err != nil {
 		t.Fatalf("DiscardStep: %v", err)
 	}
@@ -427,7 +431,7 @@ func TestDiscardStepBeforeTheStepStartedIsRefused(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	f.worktrees.setStatus(worktree.Status{Entries: []string{" M main.go"}})
+	f.worktrees.setStatus(git.Status{Changes: []git.Change{{X: '.', Y: 'M', Path: "main.go"}}})
 	implementing(f, "task-1", twoStepPlan())
 
 	f.service.Sync(t.Context())

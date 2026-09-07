@@ -201,18 +201,54 @@ func (s *Service) Ensure(
 	return wt, nil
 }
 
-// Status reads git status of a worktree.
-func (s *Service) Status(ctx context.Context, wt Worktree) (Status, error) {
+// Status reads the state of the working tree of a worktree.
+func (s *Service) Status(ctx context.Context, wt Worktree) (git.Status, error) {
 	unlock := s.lockRepo(wt.RepoPath)
 	defer unlock()
 
-	entries, err := ask(ctx, CommandTimeout, func(ctx context.Context) ([]string, error) {
+	return ask(ctx, CommandTimeout, func(ctx context.Context) (git.Status, error) {
 		return s.git.Status(ctx, wt.Path)
 	})
-	if err != nil {
-		return Status{}, err
-	}
-	return Status{Entries: entries}, nil
+}
+
+// GitDir is the git directory of a worktree, where its index lives.
+func (s *Service) GitDir(ctx context.Context, wt Worktree) (string, error) {
+	unlock := s.lockRepo(wt.RepoPath)
+	defer unlock()
+
+	return ask(ctx, CommandTimeout, func(ctx context.Context) (string, error) {
+		return s.git.GitDir(ctx, wt.Path)
+	})
+}
+
+// TrackedFiles lists the paths git tracks in a worktree, relative to it.
+func (s *Service) TrackedFiles(ctx context.Context, wt Worktree) ([]string, error) {
+	unlock := s.lockRepo(wt.RepoPath)
+	defer unlock()
+
+	return ask(ctx, CommandTimeout, func(ctx context.Context) ([]string, error) {
+		return s.git.TrackedFiles(ctx, wt.Path)
+	})
+}
+
+// IsIgnored reports whether a path of a worktree is ignored.
+func (s *Service) IsIgnored(ctx context.Context, wt Worktree, path string) (bool, error) {
+	unlock := s.lockRepo(wt.RepoPath)
+	defer unlock()
+
+	return ask(ctx, CommandTimeout, func(ctx context.Context) (bool, error) {
+		return s.git.IsIgnored(ctx, wt.Path, path)
+	})
+}
+
+// Commit reads a commit of the repository of a worktree.
+func (s *Service) Commit(ctx context.Context, wt Worktree, rev string) (git.Commit, error) {
+	unlock := s.lockRepo(wt.RepoPath)
+	defer unlock()
+
+	return ask(ctx, CommandTimeout, func(ctx context.Context) (git.Commit, error) {
+		return s.git.Commit(ctx, wt.Path, rev)
+	})
 }
 
 // Clean throws away every change of a worktree: tracked files are restored,

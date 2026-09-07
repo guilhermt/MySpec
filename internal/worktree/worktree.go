@@ -51,14 +51,6 @@ const (
 	PhaseCreating Phase = "creating"
 )
 
-// Status is what git status reports of a worktree.
-type Status struct {
-	Entries []string // the porcelain lines; empty when clean
-}
-
-// Clean reports whether nothing is modified, staged, deleted or untracked.
-func (s Status) Clean() bool { return len(s.Entries) == 0 }
-
 // The reasons Ensure refuses to create a worktree. Each wraps the git error
 // when there is one, so errors.As(err, &gitErr) also works.
 var (

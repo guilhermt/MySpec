@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/guilhermt/myspec/internal/flow"
+	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
 	"github.com/guilhermt/myspec/internal/worktree"
@@ -433,7 +434,7 @@ type memWorktrees struct {
 	mu        sync.Mutex
 	items     map[string][]worktree.Worktree // by task id
 	calls     []string
-	status    worktree.Status
+	status    git.Status
 	phases    []worktree.Phase // reported by every Ensure
 	ensureErr error
 	statusErr error
@@ -498,13 +499,13 @@ func (m *memWorktrees) Ensure(
 	return wt, nil
 }
 
-func (m *memWorktrees) Status(_ context.Context, wt worktree.Worktree) (worktree.Status, error) {
+func (m *memWorktrees) Status(_ context.Context, wt worktree.Worktree) (git.Status, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	m.calls = append(m.calls, "status:"+wt.TaskID+":"+filepath.Base(wt.Path))
 	if m.statusErr != nil {
-		return worktree.Status{}, m.statusErr
+		return git.Status{}, m.statusErr
 	}
 	return m.status, nil
 }
@@ -517,7 +518,7 @@ func (m *memWorktrees) Clean(_ context.Context, wt worktree.Worktree) error {
 	if m.cleanErr != nil {
 		return m.cleanErr
 	}
-	m.status = worktree.Status{}
+	m.status = git.Status{}
 	return nil
 }
 
@@ -557,7 +558,7 @@ func (m *memWorktrees) recorded() []string {
 }
 
 // setStatus is what the next check of a worktree reports.
-func (m *memWorktrees) setStatus(status worktree.Status) {
+func (m *memWorktrees) setStatus(status git.Status) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
