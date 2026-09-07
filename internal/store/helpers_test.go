@@ -12,6 +12,7 @@ import (
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/store"
 	"github.com/guilhermt/myspec/internal/task"
+	"github.com/guilhermt/myspec/internal/worktree"
 )
 
 // logCapture is a logger writing JSON records into a buffer.
@@ -112,6 +113,17 @@ func newBlockedStepRun(taskID string, number int) task.StepRun {
 	run := newStepRun(taskID, number, task.StepBlocked)
 	run.Block = &task.StepBlock{Reason: task.BlockDirty, Detail: " M main.go\n?? new.go", Files: 2}
 	return run
+}
+
+// newWorktree builds the worktree of a task in a repository, ready to insert.
+func newWorktree(taskID, repoPath, path, branch string) worktree.Worktree {
+	return worktree.Worktree{
+		TaskID:    taskID,
+		RepoPath:  repoPath,
+		Path:      path,
+		Branch:    branch,
+		CreatedAt: fixedTime,
+	}
 }
 
 // newEntry builds a user entry at the given position.

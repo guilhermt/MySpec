@@ -27,12 +27,13 @@ const dirPerm = 0o700
 
 // Store owns the database connection and the repositories built on it.
 type Store struct {
-	db       *sql.DB
-	Recents  *RecentsRepo
-	Settings *SettingsRepo
-	Tasks    *TasksRepo
-	Sessions *SessionsRepo
-	Entries  *EntriesRepo
+	db        *sql.DB
+	Recents   *RecentsRepo
+	Settings  *SettingsRepo
+	Tasks     *TasksRepo
+	Sessions  *SessionsRepo
+	Entries   *EntriesRepo
+	Worktrees *WorktreesRepo
 }
 
 // Open opens the database at path, creating its directory and applying the
@@ -75,12 +76,13 @@ func open(ctx context.Context, dsn, path string, log *slog.Logger) (*Store, erro
 	log.Info("database opened", "path", path, "schema_version", version)
 
 	return &Store{
-		db:       db,
-		Recents:  &RecentsRepo{db: db},
-		Settings: &SettingsRepo{db: db},
-		Tasks:    &TasksRepo{db: db},
-		Sessions: &SessionsRepo{db: db},
-		Entries:  &EntriesRepo{db: db},
+		db:        db,
+		Recents:   &RecentsRepo{db: db},
+		Settings:  &SettingsRepo{db: db},
+		Tasks:     &TasksRepo{db: db},
+		Sessions:  &SessionsRepo{db: db},
+		Entries:   &EntriesRepo{db: db},
+		Worktrees: &WorktreesRepo{db: db},
 	}, nil
 }
 
