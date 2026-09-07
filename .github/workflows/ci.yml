@@ -43,7 +43,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: task lint:web
       - run: pnpm typecheck
-      - run: pnpm test:coverage
+      - run: pnpm test:coverage --reporter=default --reporter=json --outputFile.json=./coverage/test-results.json
       - uses: davelosert/vitest-coverage-report-action@v2
         if: github.event_name == 'pull_request'
         with:
@@ -51,6 +51,18 @@ jobs:
           json-summary-path: ./coverage/coverage-summary.json
           json-final-path: ./coverage/coverage-final.json
           vite-config-path: ./vitest.config.ts
+      # The action takes no extra text, so the run summary is added to the
+      # comment it just wrote, found by the marker the action leaves behind.
+      - name: Add the test summary to the coverage comment
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 ../.github/scripts/coverage_comment.py \
+            --report ./coverage/test-results.json \
+            --repo ${{ github.repository }} \
+            --pr ${{ github.event.pull_request.number }} \
+            --marker '<!-- vitest-coverage-report-marker-./frontend -->'
 
   go:
     name: Go
@@ -78,16 +90,34 @@ jobs:
       - run: task lint:go
       - run: task vuln
       - run: task test:go
+        env:
+          GOTESTSUM_JUNITFILE: coverage/junit.xml
       - uses: actions/upload-artifact@v7
         with:
           name: code-coverage
           path: coverage/go.out
       - uses: fgrosse/go-coverage-report@v1.3.1
+        id: coverage
         if: github.event_name == 'pull_request'
         with:
           coverage-artifact-name: code-coverage
           coverage-file-name: go.out
           root-package: github.com/guilhermt/myspec
+          # The report is posted below instead, with the run summary on it.
+          skip-comment: true
+      - name: Comment the coverage report with the test summary
+        if: github.event_name == 'pull_request' && steps.coverage.outputs.coverage_report != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPORT: ${{ steps.coverage.outputs.coverage_report }}
+        run: |
+          printf '%s' "$REPORT" > coverage/report.md
+          python3 .github/scripts/coverage_comment.py \
+            --report coverage/junit.xml \
+            --repo ${{ github.repository }} \
+            --pr ${{ github.event.pull_request.number }} \
+            --marker '<!-- go-coverage-report -->' \
+            --body-file coverage/report.md
 
   build:
     name: Build
