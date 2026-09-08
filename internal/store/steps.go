@@ -10,7 +10,7 @@ import (
 
 // stepColumns is the column list every step query selects, in scan order.
 const stepColumns = `task_id, number, status, block_reason, block_detail, block_files,
-	created_at, updated_at`
+	created_at, updated_at, start_commit, commit_sha, commit_subject`
 
 // ListStepRuns returns what the app recorded about the steps of a task, by
 // number.
@@ -39,13 +39,16 @@ func (r *TasksRepo) ListStepRuns(ctx context.Context, taskID string) ([]task.Ste
 
 // UpsertStepRun stores the state of a step, rewriting what was there.
 func (r *TasksRepo) UpsertStepRun(ctx context.Context, run task.StepRun) error {
-	const stmt = `INSERT INTO steps (` + stepColumns + `) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	const stmt = `INSERT INTO steps (` + stepColumns + `) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (task_id, number) DO UPDATE SET
 			status = excluded.status,
 			block_reason = excluded.block_reason,
 			block_detail = excluded.block_detail,
 			block_files = excluded.block_files,
-			updated_at = excluded.updated_at`
+			updated_at = excluded.updated_at,
+			start_commit = excluded.start_commit,
+			commit_sha = excluded.commit_sha,
+			commit_subject = excluded.commit_subject`
 
 	var block task.StepBlock
 	if run.Block != nil {
@@ -53,7 +56,8 @@ func (r *TasksRepo) UpsertStepRun(ctx context.Context, run task.StepRun) error {
 	}
 	_, err := r.db.ExecContext(ctx, stmt, run.TaskID, run.Number, string(run.Status),
 		nullString(string(block.Reason)), nullString(block.Detail), block.Files,
-		formatTime(run.CreatedAt), formatTime(run.UpdatedAt))
+		formatTime(run.CreatedAt), formatTime(run.UpdatedAt),
+		run.StartCommit, run.CommitSHA, run.CommitSubject)
 	if err != nil {
 		return fmt.Errorf("upsert step %d of task %s: %w", run.Number, run.TaskID, err)
 	}
@@ -78,7 +82,8 @@ func scanStepRun(row scanner) (task.StepRun, error) {
 		files                int
 		createdAt, updatedAt string
 	)
-	err := row.Scan(&run.TaskID, &run.Number, &status, &reason, &detail, &files, &createdAt, &updatedAt)
+	err := row.Scan(&run.TaskID, &run.Number, &status, &reason, &detail, &files, &createdAt, &updatedAt,
+		&run.StartCommit, &run.CommitSHA, &run.CommitSubject)
 	if err != nil {
 		return task.StepRun{}, fmt.Errorf("scan step: %w", err)
 	}

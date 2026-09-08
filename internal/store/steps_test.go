@@ -82,6 +82,32 @@ func TestStepsCarryTheBlockOnlyWhenBlocked(t *testing.T) {
 	}
 }
 
+func TestStepsCarryTheCommitsOfTheStep(t *testing.T) {
+	t.Parallel()
+	s := newStore(t)
+
+	taskID := seedTask(t, s)
+	run := newStepRun(taskID, 1, task.StepStarted)
+	run.StartCommit = "1111111111111111111111111111111111111111"
+	if err := s.Tasks.UpsertStepRun(t.Context(), run); err != nil {
+		t.Fatalf("UpsertStepRun() = %v, want nil", err)
+	}
+	if diff := cmp.Diff([]task.StepRun{run}, listStepRuns(t, s, taskID)); diff != "" {
+		t.Errorf("ListStepRuns() mismatch (-want +got):\n%s", diff)
+	}
+
+	run.Status = task.StepDone
+	run.CommitSHA = "2222222222222222222222222222222222222222"
+	run.CommitSubject = "Add the login screen"
+	run.UpdatedAt = fixedTime.Add(time.Minute)
+	if err := s.Tasks.UpsertStepRun(t.Context(), run); err != nil {
+		t.Fatalf("UpsertStepRun(done) = %v, want nil", err)
+	}
+	if diff := cmp.Diff([]task.StepRun{run}, listStepRuns(t, s, taskID)); diff != "" {
+		t.Errorf("ListStepRuns() after the commit mismatch (-want +got):\n%s", diff)
+	}
+}
+
 func TestStepsAreListedByNumber(t *testing.T) {
 	t.Parallel()
 	s := newStore(t)

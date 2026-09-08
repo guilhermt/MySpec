@@ -88,6 +88,8 @@ func (s *Service) Steps(id string) []StepState {
 				if open && sum.Stage == session.StepStage(step.Number) && sum.Idle {
 					state.Status = StepAwaitingReview
 				}
+			case task.StepCommitting, task.StepDone:
+				// Nothing records a step past its implementation yet.
 			}
 		}
 		states = append(states, state)
@@ -337,6 +339,8 @@ func (s *Service) resumeSteps(ctx context.Context, t task.Task) {
 		if err := s.sessions.Open(ctx, stepInfo(t, step, wt, s.tasks.Repositories(t))); err != nil {
 			s.log.Error("open step session failed", "task", t.ID, "step", step.Number, "error", err)
 		}
+	case task.StepCommitting, task.StepDone:
+		// Nothing records a step past its implementation yet.
 	}
 }
 
