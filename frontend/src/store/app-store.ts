@@ -1,8 +1,10 @@
 import { create } from "zustand";
 import { useShallow } from "zustand/react/shallow";
+import { defaultRepoPath, reposOf } from "@/lib/repos";
 import type {
   Notice,
   Recent,
+  RepoPR,
   State,
   TaskSummary,
   ThemePreference,
@@ -35,6 +37,10 @@ export interface AppStore {
   /** transcripts and drafts are keyed by sessionKey: a task has one per stage. */
   transcripts: Record<string, TranscriptState>;
   drafts: Record<string, string>;
+  /** openRepo is the repository tab of a task in the PR stage, by task id. */
+  openRepo: Record<string, string>;
+  /** prDrafts is the pull request the user is editing, by repoKey. */
+  prDrafts: Record<string, PrDraft>;
   newTaskFor: NodeId | null;
 
   applyState: (next: State) => void;
@@ -52,6 +58,20 @@ export interface AppStore {
   applyTranscriptEvent: (event: TranscriptEvent) => void;
   dropTranscript: (taskId: string, stage: string) => void;
   setDraft: (taskId: string, stage: string, text: string) => void;
+  selectRepo: (taskId: string, repoPath: string) => void;
+  setPrDraft: (taskId: string, repoPath: string, draft: PrDraft) => void;
+  clearPrDraft: (taskId: string, repoPath: string) => void;
+}
+
+/** PrDraft is the title and the description of a pull request being edited. */
+export interface PrDraft {
+  title: string;
+  body: string;
+}
+
+/** repoKey identifies one pull request draft: a task and one of its repositories. */
+export function repoKey(taskId: string, repoPath: string): string {
+  return `${taskId}|${repoPath}`;
 }
 
 function tasksOf(state: State | null): readonly TaskSummary[] {
@@ -110,8 +130,18 @@ function initialTreeUi(): Pick<AppStore, "selectedNodeId" | "expandedNodeIds"> {
 }
 
 // Nothing of another workspace survives: its tasks are gone from the snapshot.
-function initialTaskUi(): Pick<AppStore, "openTaskId" | "transcripts" | "drafts" | "newTaskFor"> {
-  return { openTaskId: null, transcripts: {}, drafts: {}, newTaskFor: null };
+function initialTaskUi(): Pick<
+  AppStore,
+  "openTaskId" | "transcripts" | "drafts" | "openRepo" | "prDrafts" | "newTaskFor"
+> {
+  return {
+    openTaskId: null,
+    transcripts: {},
+    drafts: {},
+    openRepo: {},
+    prDrafts: {},
+    newTaskFor: null,
+  };
 }
 
 export const useAppStore = create<AppStore>()((set) => ({
@@ -222,6 +252,20 @@ export const useAppStore = create<AppStore>()((set) => ({
 
   setDraft: (taskId, stage, text) =>
     set((state) => ({ drafts: { ...state.drafts, [sessionKey(taskId, stage)]: text } })),
+
+  selectRepo: (taskId, repoPath) =>
+    set((state) => ({ openRepo: { ...state.openRepo, [taskId]: repoPath } })),
+
+  // The draft the user is editing outlives what the agent says next; only
+  // opening the pull request, or throwing the draft away, clears it.
+  setPrDraft: (taskId, repoPath, draft) =>
+    set((state) => ({ prDrafts: { ...state.prDrafts, [repoKey(taskId, repoPath)]: draft } })),
+
+  clearPrDraft: (taskId, repoPath) =>
+    set((state) => {
+      const { [repoKey(taskId, repoPath)]: _dropped, ...rest } = state.prDrafts;
+      return { prDrafts: rest };
+    }),
 }));
 
 const NO_RECENTS: readonly Recent[] = [];
@@ -267,6 +311,29 @@ export function useTranscript(taskId: string, stage: string): TranscriptState | 
 
 export function useDraft(taskId: string, stage: string): string {
   return useAppStore((state) => state.drafts[sessionKey(taskId, stage)] ?? "");
+}
+
+export function useRepos(taskId: string): readonly RepoPR[] {
+  return useAppStore((state) => reposOf(findTask(state.app, taskId)));
+}
+
+/**
+ * useOpenRepo is the selected repository tab of a task. A selection that no
+ * longer names a repository of the task falls back to the default.
+ */
+export function useOpenRepo(taskId: string): string {
+  return useAppStore((state) => {
+    const repos = reposOf(findTask(state.app, taskId));
+    const selected = state.openRepo[taskId];
+    if (selected !== undefined && repos.some((repo) => repo.repoPath === selected)) {
+      return selected;
+    }
+    return defaultRepoPath(repos);
+  });
+}
+
+export function usePrDraft(taskId: string, repoPath: string): PrDraft | null {
+  return useAppStore((state) => state.prDrafts[repoKey(taskId, repoPath)] ?? null);
 }
 
 export interface ThemeState {

@@ -1,16 +1,20 @@
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
-import type { TranscriptEvent } from "@/lib/wails";
+import type { RepoPR, TranscriptEvent } from "@/lib/wails";
 import { sessionKey } from "@/lib/wails";
 import {
   ROOT_NODE_ID,
+  repoKey,
   repoNodeId,
   useAppStore,
   useDraft,
   useError,
   useNotice,
+  useOpenRepo,
   useOpenTask,
+  usePrDraft,
   useRecents,
+  useRepos,
   useTask,
   useTasks,
   useTasksOf,
@@ -20,7 +24,7 @@ import {
   useWorkspace,
 } from "@/store/app-store";
 import { resetAppStore } from "@/test/render";
-import { makeEntry, makeState, makeTask, makeTranscript } from "@/test/wails-mock";
+import { makeEntry, makeRepoPR, makeState, makeTask, makeTranscript } from "@/test/wails-mock";
 
 const ROOT_TASK = makeTask({ id: "task-root", name: "add-login" });
 const REPO_TASK = makeTask({
@@ -422,5 +426,146 @@ describe("task selectors", () => {
     });
 
     expect(result.current).toEqual([]);
+  });
+});
+
+const API_REPO = makeRepoPR({
+  repository: "api",
+  repoPath: "/home/dev/projects/api",
+  slug: "api",
+});
+const WEB_REPO = makeRepoPR({ status: "drafting" });
+
+function withRepos(...repos: RepoPR[]) {
+  return makeState({ tasks: [{ ...ROOT_TASK, stage: "pr", repos }] });
+}
+
+describe("repository selection", () => {
+  it("opens on the first repository waiting for the user", () => {
+    const { result } = renderHook(() => ({
+      repos: useRepos(ROOT_TASK.id),
+      open: useOpenRepo(ROOT_TASK.id),
+    }));
+
+    act(() => {
+      useAppStore
+        .getState()
+        .applyState(withRepos(API_REPO, { ...WEB_REPO, status: "draft_ready" }));
+    });
+
+    expect(result.current.repos).toHaveLength(2);
+    expect(result.current.open).toBe(WEB_REPO.repoPath);
+  });
+
+  it("opens on the first repository when none waits", () => {
+    const { result } = renderHook(() => useOpenRepo(ROOT_TASK.id));
+
+    act(() => {
+      useAppStore.getState().applyState(withRepos(API_REPO, WEB_REPO));
+    });
+
+    expect(result.current).toBe(API_REPO.repoPath);
+  });
+
+  it("has no repository outside the PR stage", () => {
+    const { result } = renderHook(() => ({
+      repos: useRepos(ROOT_TASK.id),
+      open: useOpenRepo(ROOT_TASK.id),
+    }));
+
+    act(() => {
+      useAppStore.getState().applyState(withTasks());
+    });
+
+    expect(result.current.repos).toEqual([]);
+    expect(result.current.open).toBe("");
+  });
+
+  it("keeps the repository the user picked", () => {
+    const { result } = renderHook(() => useOpenRepo(ROOT_TASK.id));
+
+    act(() => {
+      useAppStore
+        .getState()
+        .applyState(withRepos(API_REPO, { ...WEB_REPO, status: "draft_ready" }));
+      useAppStore.getState().selectRepo(ROOT_TASK.id, API_REPO.repoPath);
+    });
+
+    expect(result.current).toBe(API_REPO.repoPath);
+  });
+
+  it("falls back to the default when the selection leaves the task", () => {
+    const { result } = renderHook(() => useOpenRepo(ROOT_TASK.id));
+
+    act(() => {
+      useAppStore.getState().applyState(withRepos(API_REPO, WEB_REPO));
+      useAppStore.getState().selectRepo(ROOT_TASK.id, WEB_REPO.repoPath);
+    });
+    expect(result.current).toBe(WEB_REPO.repoPath);
+
+    act(() => {
+      useAppStore.getState().applyState(withRepos(API_REPO));
+    });
+
+    expect(result.current).toBe(API_REPO.repoPath);
+  });
+});
+
+describe("pull request drafts", () => {
+  const draft = { title: "Add the login form", body: "Closes #12" };
+
+  it("keeps what the user is editing across state updates", () => {
+    const { result } = renderHook(() => usePrDraft(ROOT_TASK.id, WEB_REPO.repoPath));
+
+    act(() => {
+      useAppStore.getState().applyState(withRepos(WEB_REPO));
+      useAppStore.getState().setPrDraft(ROOT_TASK.id, WEB_REPO.repoPath, draft);
+    });
+    expect(result.current).toEqual(draft);
+
+    act(() => {
+      useAppStore.getState().applyState(withRepos({ ...WEB_REPO, status: "draft_ready" }));
+    });
+
+    expect(result.current).toEqual(draft);
+  });
+
+  it("keys a draft by task and repository", () => {
+    act(() => {
+      useAppStore.getState().setPrDraft(ROOT_TASK.id, WEB_REPO.repoPath, draft);
+    });
+
+    expect(useAppStore.getState().prDrafts).toEqual({
+      [repoKey(ROOT_TASK.id, WEB_REPO.repoPath)]: draft,
+    });
+  });
+
+  it("clears one draft and leaves the others", () => {
+    act(() => {
+      useAppStore.getState().setPrDraft(ROOT_TASK.id, WEB_REPO.repoPath, draft);
+      useAppStore.getState().setPrDraft(ROOT_TASK.id, API_REPO.repoPath, draft);
+      useAppStore.getState().clearPrDraft(ROOT_TASK.id, WEB_REPO.repoPath);
+    });
+
+    expect(useAppStore.getState().prDrafts).toEqual({
+      [repoKey(ROOT_TASK.id, API_REPO.repoPath)]: draft,
+    });
+  });
+
+  it("drops the selection and the drafts when the workspace changes", () => {
+    act(() => {
+      useAppStore.getState().applyState(withRepos(API_REPO, WEB_REPO));
+      useAppStore.getState().selectRepo(ROOT_TASK.id, WEB_REPO.repoPath);
+      useAppStore.getState().setPrDraft(ROOT_TASK.id, WEB_REPO.repoPath, draft);
+    });
+
+    act(() => {
+      useAppStore
+        .getState()
+        .applyState(makeState({ workspace: { name: "labs", path: "/home/dev/labs", repos: [] } }));
+    });
+
+    expect(useAppStore.getState().openRepo).toEqual({});
+    expect(useAppStore.getState().prDrafts).toEqual({});
   });
 });

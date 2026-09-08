@@ -6,7 +6,8 @@ import {
   taskStatusLabel,
   taskStatusTone,
 } from "@/features/task/status";
-import { makeReview, makeStep, makeTask } from "@/test/wails-mock";
+import type { RepoPR } from "@/lib/wails";
+import { makeRepoPR, makeReview, makeStep, makeTask } from "@/test/wails-mock";
 
 describe("task status", () => {
   it.each([
@@ -103,6 +104,99 @@ describe("task status", () => {
     const task = makeTask({ stage: "implementation", steps: null });
 
     expect(taskStatusLabel(task)).toBe("No steps");
+    expect(taskStatusTone(task)).toBe("idle");
+  });
+});
+
+// A repository with a pull request already open puts the task in the review
+// half of the stage.
+function prTask(...repos: RepoPR[]) {
+  return makeTask({ stage: "pr", repos });
+}
+
+const API = { repository: "api", repoPath: "/home/dev/projects/api", slug: "api" };
+
+describe("task status in the PR stage", () => {
+  it.each([
+    ["preparing", "PR · checking GitHub", "working"],
+    ["blocked", "PR · blocked", "attention"],
+    ["drafting", "PR · writing the draft", "working"],
+    ["draft_ready", "PR · draft to approve", "attention"],
+    ["opening", "PR · opening the pull request", "working"],
+  ] as const)("reads a single repository before the PR exists: %s", (status, label, tone) => {
+    const task = prTask(makeRepoPR({ status }));
+
+    expect(taskStatusLabel(task)).toBe(label);
+    expect(taskStatusTone(task)).toBe(tone);
+  });
+
+  it.each([
+    ["reviewing", "PR review · reviewing", "working"],
+    ["awaiting_decision", "PR review · decision needed", "attention"],
+    ["ready_to_approve", "PR review · ready to approve", "attention"],
+    ["committing", "PR review · committing", "working"],
+    ["done", "PR review · ready to close", "done"],
+  ] as const)("reads a single repository once the PR is open: %s", (status, label, tone) => {
+    const task = prTask(makeRepoPR({ status, prNumber: 12 }));
+
+    expect(taskStatusLabel(task)).toBe(label);
+    expect(taskStatusTone(task)).toBe(tone);
+  });
+
+  it("carries how much of a review is staged", () => {
+    const task = prTask(
+      makeRepoPR({ status: "in_review", prNumber: 12, review: makeReview({ percent: 60 }) }),
+    );
+
+    expect(taskStatusLabel(task)).toBe("PR review · 60% staged");
+    expect(taskStatusTone(task)).toBe("attention");
+    expect(isAttention(task)).toBe(true);
+  });
+
+  it("counts the repositories sharing the state it shows", () => {
+    const task = prTask(
+      makeRepoPR({ status: "draft_ready" }),
+      makeRepoPR({ ...API, status: "draft_ready" }),
+    );
+
+    expect(taskStatusLabel(task)).toBe("PR · draft to approve (2 of 2)");
+  });
+
+  it("shows the repository that most needs the user", () => {
+    const task = prTask(
+      makeRepoPR({ status: "drafting" }),
+      makeRepoPR({ ...API, status: "draft_ready" }),
+    );
+
+    expect(taskStatusLabel(task)).toBe("PR · draft to approve (1 of 2)");
+    expect(taskStatusTone(task)).toBe("attention");
+  });
+
+  it("puts a block above everything else", () => {
+    const task = prTask(
+      makeRepoPR({ status: "ready_to_approve", prNumber: 12 }),
+      makeRepoPR({ ...API, status: "blocked" }),
+    );
+
+    expect(taskStatusLabel(task)).toBe("PR · blocked (1 of 2)");
+    expect(taskStatusTone(task)).toBe("attention");
+  });
+
+  it("counts the pull requests left to close, skipping the ones without", () => {
+    const task = prTask(
+      makeRepoPR({ status: "done", prNumber: 12 }),
+      makeRepoPR({ ...API, status: "skipped" }),
+    );
+
+    expect(taskStatusLabel(task)).toBe("PR review · 1 of 2 ready to close");
+    expect(taskStatusTone(task)).toBe("done");
+    expect(isAttention(task)).toBe(false);
+  });
+
+  it("names the stage alone before the repositories are known", () => {
+    const task = prTask();
+
+    expect(taskStatusLabel(task)).toBe("PR");
     expect(taskStatusTone(task)).toBe("idle");
   });
 });

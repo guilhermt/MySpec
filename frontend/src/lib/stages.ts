@@ -1,3 +1,4 @@
+import { everyRepoHasPR, reposOf } from "@/lib/repos";
 import type { TaskStage, TaskSummary } from "@/lib/wails";
 import { asTaskStage } from "@/lib/wails";
 
@@ -5,7 +6,7 @@ import { asTaskStage } from "@/lib/wails";
  * LifecycleStage is every stage of a task, including the ones after the plan
  * that the product does not drive yet.
  */
-export type LifecycleStage = TaskStage | "pr" | "pr_review" | "closing";
+export type LifecycleStage = TaskStage | "pr_review" | "closing";
 
 export const LIFECYCLE: readonly { id: LifecycleStage; label: string }[] = [
   { id: "prd", label: "PRD" },
@@ -31,7 +32,17 @@ export function stageLabel(id: LifecycleStage): string {
 export type StageState = "done" | "current" | "upcoming";
 
 export function stageState(task: TaskSummary, id: LifecycleStage): StageState {
-  const current = stageIndex(asTaskStage(task.stage));
+  const stage = asTaskStage(task.stage);
+  // The PR stage covers two chips: the pull requests are written first, and
+  // reviewed once they are all open.
+  if (stage === "pr" && (id === "pr" || id === "pr_review")) {
+    const reviewing = everyRepoHasPR(reposOf(task));
+    if (id === "pr") {
+      return reviewing ? "done" : "current";
+    }
+    return reviewing ? "current" : "upcoming";
+  }
+  const current = stageIndex(stage);
   const index = stageIndex(id);
   if (index < current) {
     return "done";

@@ -140,6 +140,47 @@ export function approveStep(taskId: string): Promise<void> {
   return run(() => api.approveStep(taskId));
 }
 
+/** openPR sends the draft the user approved to the agent, which opens the PR. */
+export function openPR(
+  taskId: string,
+  repoPath: string,
+  title: string,
+  body: string,
+): Promise<void> {
+  return run(async () => {
+    await api.openPR(taskId, repoPath, title, body);
+    useAppStore.getState().clearPrDraft(taskId, repoPath);
+  });
+}
+
+/** approveRepo sends the reviewed pull request to be committed and pushed. */
+export function approveRepo(taskId: string, repoPath: string): Promise<void> {
+  return run(() => api.approveRepo(taskId, repoPath));
+}
+
+/** reviewAgain runs another review pass over an open pull request. */
+export function reviewAgain(taskId: string, repoPath: string): Promise<void> {
+  return run(() => api.reviewAgain(taskId, repoPath));
+}
+
+/** discardDraft throws away the draft of a repository and writes it again. */
+export function discardDraft(taskId: string, repoPath: string): Promise<void> {
+  return run(async () => {
+    await api.discardDraft(taskId, repoPath);
+    useAppStore.getState().clearPrDraft(taskId, repoPath);
+  });
+}
+
+/** retryRepo starts the PR stage of a blocked repository over. */
+export function retryRepo(taskId: string, repoPath: string): Promise<void> {
+  return run(() => api.retryRepo(taskId, repoPath));
+}
+
+/** refreshPR asks GitHub again what became of the pull request. */
+export function refreshPR(taskId: string, repoPath: string): Promise<void> {
+  return run(() => api.refreshPR(taskId, repoPath));
+}
+
 /**
  * openInEditor opens a worktree of the task in the editor of the user: the one
  * of the given repository, or the one of the current step when none is given.

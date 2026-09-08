@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { LIFECYCLE, stageIndex, stageLabel, stageState } from "@/lib/stages";
-import { makeTask } from "@/test/wails-mock";
+import { makeRepoPR, makeTask } from "@/test/wails-mock";
 
 describe("LIFECYCLE", () => {
   it("runs from the PRD to the closing", () => {
@@ -52,5 +52,56 @@ describe("stageState", () => {
 
   it("falls back to the PRD on a stage it does not know", () => {
     expect(stageState(makeTask({ stage: "archived" }), "prd")).toBe("current");
+  });
+
+  // The PR stage covers two chips, and the pull requests decide which of them
+  // the task is on.
+  it("stays on the PR chip while a pull request is missing", () => {
+    const task = makeTask({
+      stage: "pr",
+      repos: [
+        makeRepoPR({ status: "reviewing", prNumber: 12 }),
+        makeRepoPR({ repoPath: "/home/dev/projects/api", status: "draft_ready" }),
+      ],
+    });
+
+    expect(stageState(task, "implementation")).toBe("done");
+    expect(stageState(task, "pr")).toBe("current");
+    expect(stageState(task, "pr_review")).toBe("upcoming");
+    expect(stageState(task, "closing")).toBe("upcoming");
+  });
+
+  it("moves to the PR review chip once every pull request is open", () => {
+    const task = makeTask({
+      stage: "pr",
+      repos: [
+        makeRepoPR({ status: "reviewing", prNumber: 12 }),
+        makeRepoPR({ repoPath: "/home/dev/projects/api", status: "in_review", prNumber: 13 }),
+      ],
+    });
+
+    expect(stageState(task, "pr")).toBe("done");
+    expect(stageState(task, "pr_review")).toBe("current");
+    expect(stageState(task, "closing")).toBe("upcoming");
+  });
+
+  it("lets a skipped repository through, having no pull request to open", () => {
+    const task = makeTask({
+      stage: "pr",
+      repos: [
+        makeRepoPR({ status: "done", prNumber: 12 }),
+        makeRepoPR({ repoPath: "/home/dev/projects/api", status: "skipped" }),
+      ],
+    });
+
+    expect(stageState(task, "pr")).toBe("done");
+    expect(stageState(task, "pr_review")).toBe("current");
+  });
+
+  it("stays on the PR chip before the repositories are known", () => {
+    const task = makeTask({ stage: "pr", repos: [] });
+
+    expect(stageState(task, "pr")).toBe("current");
+    expect(stageState(task, "pr_review")).toBe("upcoming");
   });
 });

@@ -4,6 +4,7 @@ import type {
   Entry,
   EntryKind,
   PermissionDecision,
+  RepoPR,
   Review,
   State,
   Step,
@@ -66,6 +67,14 @@ export const api = {
     Promise.resolve(),
   ),
   approveStep: vi.fn<(taskId: string) => Promise<void>>(() => Promise.resolve()),
+  openPR: vi.fn<(taskId: string, repoPath: string, title: string, body: string) => Promise<void>>(
+    () => Promise.resolve(),
+  ),
+  approveRepo: vi.fn<(taskId: string, repoPath: string) => Promise<void>>(() => Promise.resolve()),
+  reviewAgain: vi.fn<(taskId: string, repoPath: string) => Promise<void>>(() => Promise.resolve()),
+  discardDraft: vi.fn<(taskId: string, repoPath: string) => Promise<void>>(() => Promise.resolve()),
+  retryRepo: vi.fn<(taskId: string, repoPath: string) => Promise<void>>(() => Promise.resolve()),
+  refreshPR: vi.fn<(taskId: string, repoPath: string) => Promise<void>>(() => Promise.resolve()),
   openInEditor: vi.fn<(taskId: string, repoPath: string) => Promise<void>>(() => Promise.resolve()),
   openFileInEditor: vi.fn<(taskId: string, repoPath: string, path: string) => Promise<void>>(() =>
     Promise.resolve(),
@@ -182,6 +191,36 @@ export function makeStep(overrides: Partial<Step> = {}): Step {
     commitSha: "",
     commitSubject: "",
     commitFailed: false,
+    ...overrides,
+  };
+}
+
+export function makeRepoPR(overrides: Partial<RepoPR> = {}): RepoPR {
+  return {
+    repository: "web",
+    repoPath: "/home/dev/projects/web",
+    slug: "web",
+    status: "preparing",
+    block: null,
+    worktreePath: "/home/dev/.local/share/myspec/worktrees/add-login-web",
+    branch: "add-login",
+    baseBranch: "origin/dev",
+    draft: null,
+    reports: [],
+    review: null,
+    commitFailed: false,
+    prNumber: 0,
+    prUrl: "",
+    prState: "",
+    checkedAt: "",
+    sessionStage: "pr:web",
+    sessionStatus: "waiting",
+    turnRunning: false,
+    processRunning: false,
+    retryAttempt: 0,
+    contextPercent: 0,
+    pendingCount: 0,
+    lastError: "",
     ...overrides,
   };
 }

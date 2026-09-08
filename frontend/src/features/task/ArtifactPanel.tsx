@@ -20,6 +20,7 @@ const DEFAULT_SELECTION: Record<TaskStage, Selection> = {
   tech_spec: "prd",
   plan: "tech_spec",
   implementation: "steps",
+  pr: "steps",
 };
 
 function artifactName(selection: Selection, task: TaskSummary): string | null {

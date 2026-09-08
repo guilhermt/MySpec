@@ -8,11 +8,15 @@ import type {
   Notice,
   PermissionEntry,
   PlanProblem,
+  PRBlock,
+  PRDraft,
+  PRReport,
   Question,
   QuestionEntry,
   QuestionOption,
   Recent,
   Repo,
+  RepoPR,
   Review,
   ReviewFile,
   State,
@@ -39,11 +43,15 @@ export type {
   Notice,
   PermissionEntry,
   PlanProblem,
+  PRBlock,
+  PRDraft,
+  PRReport,
   Question,
   QuestionEntry,
   QuestionOption,
   Recent,
   Repo,
+  RepoPR,
   Review,
   ReviewFile,
   State,
@@ -58,7 +66,7 @@ export type {
 
 export type ThemePreference = "system" | "light" | "dark";
 export type NoticeReason = "not_found" | "not_directory" | "not_readable" | "last_recent_missing";
-export type TaskStage = "prd" | "tech_spec" | "plan" | "implementation";
+export type TaskStage = "prd" | "tech_spec" | "plan" | "implementation" | "pr";
 export type StepStatus =
   | "not_started"
   | "preparing"
@@ -71,6 +79,23 @@ export type StepStatus =
   | "review_failed"
   | "committing"
   | "done";
+/** RepoStatus is where one repository of a task stands in the PR stage. */
+export type RepoStatus =
+  | "preparing"
+  | "blocked"
+  | "drafting"
+  | "draft_ready"
+  | "opening"
+  | "reviewing"
+  | "awaiting_decision"
+  | "in_review"
+  | "ready_to_approve"
+  | "committing"
+  | "done"
+  | "skipped";
+
+/** PRState is what GitHub last said about a pull request; "" before it is read. */
+export type PRState = "open" | "merged" | "closed" | "";
 export type ReviewFileKind = "added" | "modified" | "deleted" | "renamed" | "untracked";
 export type BlockReason =
   | "dirty_worktree"
@@ -145,6 +170,7 @@ export function asTaskStage(value: string): TaskStage {
     case "tech_spec":
     case "plan":
     case "implementation":
+    case "pr":
       return value;
     default:
       return "prd";
@@ -167,6 +193,37 @@ export function asStepStatus(value: string): StepStatus {
       return value;
     default:
       return "not_started";
+  }
+}
+
+export function asRepoStatus(value: string): RepoStatus {
+  switch (value) {
+    case "preparing":
+    case "blocked":
+    case "drafting":
+    case "draft_ready":
+    case "opening":
+    case "reviewing":
+    case "awaiting_decision":
+    case "in_review":
+    case "ready_to_approve":
+    case "committing":
+    case "done":
+    case "skipped":
+      return value;
+    default:
+      return "preparing";
+  }
+}
+
+export function asPRState(value: string): PRState {
+  switch (value) {
+    case "open":
+    case "merged":
+    case "closed":
+      return value;
+    default:
+      return "";
   }
 }
 
@@ -339,6 +396,18 @@ export const api = {
   discardStep: (taskId: string, cleanWorktree: boolean): Promise<void> =>
     TaskService.DiscardStep(taskId, cleanWorktree),
   approveStep: (taskId: string): Promise<void> => TaskService.ApproveStep(taskId),
+  openPR: (taskId: string, repoPath: string, title: string, body: string): Promise<void> =>
+    TaskService.OpenPR(taskId, repoPath, title, body),
+  approveRepo: (taskId: string, repoPath: string): Promise<void> =>
+    TaskService.ApproveRepo(taskId, repoPath),
+  reviewAgain: (taskId: string, repoPath: string): Promise<void> =>
+    TaskService.ReviewAgain(taskId, repoPath),
+  discardDraft: (taskId: string, repoPath: string): Promise<void> =>
+    TaskService.DiscardDraft(taskId, repoPath),
+  retryRepo: (taskId: string, repoPath: string): Promise<void> =>
+    TaskService.RetryRepo(taskId, repoPath),
+  refreshPR: (taskId: string, repoPath: string): Promise<void> =>
+    TaskService.RefreshPR(taskId, repoPath),
   openInEditor: (taskId: string, repoPath: string): Promise<void> =>
     TaskService.OpenInEditor(taskId, repoPath),
   openFileInEditor: (taskId: string, repoPath: string, path: string): Promise<void> =>

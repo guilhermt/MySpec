@@ -25,6 +25,7 @@ const NOUNS: Record<TaskStage, string> = {
   tech_spec: "tech spec",
   plan: "plan",
   implementation: "implementation",
+  pr: "PR",
 };
 
 /** stageNoun names a stage inside a sentence. */

@@ -8,6 +8,8 @@ import {
   asMarkerType,
   asNoticeReason,
   asPermissionStatus,
+  asPRState,
+  asRepoStatus,
   asReviewFileKind,
   asSessionStatus,
   asStepStatus,
@@ -57,6 +59,7 @@ describe("narrowing", () => {
     expect(asTaskStage("tech_spec")).toBe("tech_spec");
     expect(asTaskStage("plan")).toBe("plan");
     expect(asTaskStage("implementation")).toBe("implementation");
+    expect(asTaskStage("pr")).toBe("pr");
     expect(asSessionStatus("needs_permission")).toBe("needs_permission");
     expect(asEntryKind("permission")).toBe("permission");
     expect(asActionStatus("interrupted")).toBe("interrupted");
@@ -78,6 +81,21 @@ describe("narrowing", () => {
     expect(asStepStatus("review_failed")).toBe("review_failed");
     expect(asStepStatus("committing")).toBe("committing");
     expect(asStepStatus("done")).toBe("done");
+    expect(asRepoStatus("preparing")).toBe("preparing");
+    expect(asRepoStatus("blocked")).toBe("blocked");
+    expect(asRepoStatus("drafting")).toBe("drafting");
+    expect(asRepoStatus("draft_ready")).toBe("draft_ready");
+    expect(asRepoStatus("opening")).toBe("opening");
+    expect(asRepoStatus("reviewing")).toBe("reviewing");
+    expect(asRepoStatus("awaiting_decision")).toBe("awaiting_decision");
+    expect(asRepoStatus("in_review")).toBe("in_review");
+    expect(asRepoStatus("ready_to_approve")).toBe("ready_to_approve");
+    expect(asRepoStatus("committing")).toBe("committing");
+    expect(asRepoStatus("done")).toBe("done");
+    expect(asRepoStatus("skipped")).toBe("skipped");
+    expect(asPRState("open")).toBe("open");
+    expect(asPRState("merged")).toBe("merged");
+    expect(asPRState("closed")).toBe("closed");
     expect(asReviewFileKind("added")).toBe("added");
     expect(asReviewFileKind("modified")).toBe("modified");
     expect(asReviewFileKind("deleted")).toBe("deleted");
@@ -101,6 +119,10 @@ describe("narrowing", () => {
     expect(asPermissionStatus("expired")).toBe("cancelled");
     expect(asMarkerType("branched")).toBe("compacted");
     expect(asStepStatus("rebasing")).toBe("not_started");
+    expect(asRepoStatus("rebasing")).toBe("preparing");
+    // "" is what the app carries before gh has said anything.
+    expect(asPRState("draft")).toBe("");
+    expect(asPRState("")).toBe("");
     expect(asReviewFileKind("copied")).toBe("modified");
     expect(asBlockReason("rebase_in_progress")).toBe("git_failed");
     expect(asErrorKind("out_of_quota")).toBe("turn_error");
@@ -149,10 +171,16 @@ describe("api", () => {
     await wails.api.openInEditor("task-1", "");
     await wails.api.approveStep("task-1");
     await wails.api.openFileInEditor("task-1", "", "src/login.ts");
+    await wails.api.openPR("task-1", "/repo/web", "Log in", "why");
+    await wails.api.approveRepo("task-1", "/repo/web");
+    await wails.api.reviewAgain("task-1", "/repo/web");
+    await wails.api.discardDraft("task-1", "/repo/web");
+    await wails.api.retryRepo("task-1", "/repo/web");
+    await wails.api.refreshPR("task-1", "/repo/web");
 
-    expect(Call.ByID).toHaveBeenCalledTimes(27);
+    expect(Call.ByID).toHaveBeenCalledTimes(33);
     const ids = vi.mocked(Call.ByID).mock.calls.map(([id]) => id);
-    expect(new Set(ids).size).toBe(27);
+    expect(new Set(ids).size).toBe(33);
   });
 
   it("opens a link in the browser of the desktop, never in the webview", async () => {

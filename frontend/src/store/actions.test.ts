@@ -3,12 +3,14 @@ import { api } from "@/lib/wails";
 import {
   answerPermission,
   answerQuestion,
+  approveRepo,
   approveStep,
   backToStage,
   cleanAndStartStep,
   continueStage,
   createTask,
   deleteTask,
+  discardDraft,
   discardStage,
   discardStep,
   dismissNotice,
@@ -19,16 +21,20 @@ import {
   openFolderDialog,
   openInEditor,
   openPath,
+  openPR,
   pause,
+  refreshPR,
   removePending,
   removeRecent,
   resume,
   retry,
+  retryRepo,
   retryStep,
+  reviewAgain,
   sendMessage,
   setTheme,
 } from "@/store/actions";
-import { useAppStore } from "@/store/app-store";
+import { repoKey, useAppStore } from "@/store/app-store";
 import { resetAppStore } from "@/test/render";
 import { makeEntry, makeTranscript } from "@/test/wails-mock";
 
@@ -96,6 +102,10 @@ describe("task actions", () => {
     await openInEditor("task-1");
     await approveStep("task-1");
     await openFileInEditor("task-1", "src/login.ts");
+    await approveRepo("task-1", "/repo/web");
+    await reviewAgain("task-1", "/repo/web");
+    await retryRepo("task-1", "/repo/web");
+    await refreshPR("task-1", "/repo/web");
 
     expect(api.deleteTask).toHaveBeenCalledWith("task-1");
     expect(api.sendMessage).toHaveBeenCalledWith("task-1", "prd", "go on");
@@ -124,7 +134,39 @@ describe("task actions", () => {
     expect(api.openInEditor).toHaveBeenCalledWith("task-1", "");
     expect(api.approveStep).toHaveBeenCalledWith("task-1");
     expect(api.openFileInEditor).toHaveBeenCalledWith("task-1", "", "src/login.ts");
+    expect(api.approveRepo).toHaveBeenCalledWith("task-1", "/repo/web");
+    expect(api.reviewAgain).toHaveBeenCalledWith("task-1", "/repo/web");
+    expect(api.retryRepo).toHaveBeenCalledWith("task-1", "/repo/web");
+    expect(api.refreshPR).toHaveBeenCalledWith("task-1", "/repo/web");
     expect(useAppStore.getState().error).toBeNull();
+  });
+
+  // The draft is the text of the user; it goes away once it has been sent, or
+  // when the user throws it away.
+  it("clear the pull request draft once it is out of the hands of the user", async () => {
+    useAppStore.getState().setPrDraft("task-1", "/repo/web", { title: "Log in", body: "why" });
+    useAppStore.getState().setPrDraft("task-1", "/repo/api", { title: "Log in", body: "why" });
+
+    await openPR("task-1", "/repo/web", "Log in", "why");
+
+    expect(api.openPR).toHaveBeenCalledWith("task-1", "/repo/web", "Log in", "why");
+    expect(useAppStore.getState().prDrafts[repoKey("task-1", "/repo/web")]).toBeUndefined();
+
+    await discardDraft("task-1", "/repo/api");
+
+    expect(api.discardDraft).toHaveBeenCalledWith("task-1", "/repo/api");
+    expect(useAppStore.getState().prDrafts[repoKey("task-1", "/repo/api")]).toBeUndefined();
+  });
+
+  it("keeps the draft when opening the pull request fails", async () => {
+    const draft = { title: "Log in", body: "why" };
+    useAppStore.getState().setPrDraft("task-1", "/repo/web", draft);
+    vi.mocked(api.openPR).mockRejectedValueOnce(new Error("the draft is empty"));
+
+    await openPR("task-1", "/repo/web", "Log in", "why");
+
+    expect(useAppStore.getState().error).toBe("the draft is empty");
+    expect(useAppStore.getState().prDrafts[repoKey("task-1", "/repo/web")]).toEqual(draft);
   });
 
   it("reports a failed task action in the banner", async () => {
