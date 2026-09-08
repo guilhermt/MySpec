@@ -8,11 +8,15 @@ import type {
   Notice,
   PermissionEntry,
   PlanProblem,
+  PRBlock,
+  PRDraft,
+  PRReport,
   Question,
   QuestionEntry,
   QuestionOption,
   Recent,
   Repo,
+  RepoPR,
   Review,
   ReviewFile,
   State,
@@ -39,11 +43,15 @@ export type {
   Notice,
   PermissionEntry,
   PlanProblem,
+  PRBlock,
+  PRDraft,
+  PRReport,
   Question,
   QuestionEntry,
   QuestionOption,
   Recent,
   Repo,
+  RepoPR,
   Review,
   ReviewFile,
   State,
@@ -58,7 +66,7 @@ export type {
 
 export type ThemePreference = "system" | "light" | "dark";
 export type NoticeReason = "not_found" | "not_directory" | "not_readable" | "last_recent_missing";
-export type TaskStage = "prd" | "tech_spec" | "plan" | "implementation";
+export type TaskStage = "prd" | "tech_spec" | "plan" | "implementation" | "pr";
 export type StepStatus =
   | "not_started"
   | "preparing"
@@ -71,6 +79,31 @@ export type StepStatus =
   | "review_failed"
   | "committing"
   | "done";
+/** RepoStatus is where one repository of a task stands in the PR stage. */
+export type RepoStatus =
+  | "preparing"
+  | "blocked"
+  | "drafting"
+  | "draft_ready"
+  | "opening"
+  | "reviewing"
+  | "awaiting_decision"
+  | "in_review"
+  | "ready_to_approve"
+  | "committing"
+  | "done"
+  | "skipped";
+
+/** PRBlockReason is why the PR stage of a repository cannot go on. */
+export type PRBlockReason =
+  | "gh_missing"
+  | "gh_unauthenticated"
+  | "gh_failed"
+  | "git_failed"
+  | "no_worktree";
+
+/** PRState is what GitHub last said about a pull request; "" before it is read. */
+export type PRState = "open" | "merged" | "closed" | "";
 export type ReviewFileKind = "added" | "modified" | "deleted" | "renamed" | "untracked";
 export type BlockReason =
   | "dirty_worktree"
@@ -111,6 +144,11 @@ export type ErrorKind =
 export type PermissionDecision = "allow" | "allow_session" | "deny";
 export type TranscriptEventKind = "entry" | "text" | "remove" | "reset";
 
+/** sessionKey identifies one conversation: a task and the stage it belongs to. */
+export function sessionKey(taskId: string, stage: string): string {
+  return `${taskId}|${stage}`;
+}
+
 export function asThemePreference(value: string): ThemePreference {
   switch (value) {
     case "light":
@@ -140,6 +178,7 @@ export function asTaskStage(value: string): TaskStage {
     case "tech_spec":
     case "plan":
     case "implementation":
+    case "pr":
       return value;
     default:
       return "prd";
@@ -162,6 +201,50 @@ export function asStepStatus(value: string): StepStatus {
       return value;
     default:
       return "not_started";
+  }
+}
+
+export function asRepoStatus(value: string): RepoStatus {
+  switch (value) {
+    case "preparing":
+    case "blocked":
+    case "drafting":
+    case "draft_ready":
+    case "opening":
+    case "reviewing":
+    case "awaiting_decision":
+    case "in_review":
+    case "ready_to_approve":
+    case "committing":
+    case "done":
+    case "skipped":
+      return value;
+    default:
+      return "preparing";
+  }
+}
+
+export function asPRBlockReason(value: string): PRBlockReason {
+  switch (value) {
+    case "gh_missing":
+    case "gh_unauthenticated":
+    case "gh_failed":
+    case "git_failed":
+    case "no_worktree":
+      return value;
+    default:
+      return "gh_failed";
+  }
+}
+
+export function asPRState(value: string): PRState {
+  switch (value) {
+    case "open":
+    case "merged":
+    case "closed":
+      return value;
+    default:
+      return "";
   }
 }
 
@@ -299,26 +382,29 @@ export const api = {
 
   createTask: (req: CreateTaskRequest): Promise<string> => TaskService.CreateTask(req),
   deleteTask: (taskId: string): Promise<void> => TaskService.DeleteTask(taskId),
-  getTranscript: (taskId: string): Promise<Transcript> => TaskService.GetTranscript(taskId),
-  sendMessage: (taskId: string, text: string): Promise<void> =>
-    TaskService.SendMessage(taskId, text),
-  removePending: (taskId: string, entryId: string): Promise<void> =>
-    TaskService.RemovePending(taskId, entryId),
-  interrupt: (taskId: string): Promise<void> => TaskService.Interrupt(taskId),
-  pause: (taskId: string): Promise<void> => TaskService.Pause(taskId),
-  resume: (taskId: string): Promise<void> => TaskService.Resume(taskId),
-  retry: (taskId: string): Promise<void> => TaskService.Retry(taskId),
+  getTranscript: (taskId: string, stage: string): Promise<Transcript> =>
+    TaskService.GetTranscript(taskId, stage),
+  sendMessage: (taskId: string, stage: string, text: string): Promise<void> =>
+    TaskService.SendMessage(taskId, stage, text),
+  removePending: (taskId: string, stage: string, entryId: string): Promise<void> =>
+    TaskService.RemovePending(taskId, stage, entryId),
+  interrupt: (taskId: string, stage: string): Promise<void> => TaskService.Interrupt(taskId, stage),
+  pause: (taskId: string, stage: string): Promise<void> => TaskService.Pause(taskId, stage),
+  resume: (taskId: string, stage: string): Promise<void> => TaskService.Resume(taskId, stage),
+  retry: (taskId: string, stage: string): Promise<void> => TaskService.Retry(taskId, stage),
   answerPermission: (
     taskId: string,
+    stage: string,
     requestId: string,
     decision: PermissionDecision,
     message: string,
-  ): Promise<void> => TaskService.AnswerPermission(taskId, requestId, decision, message),
+  ): Promise<void> => TaskService.AnswerPermission(taskId, stage, requestId, decision, message),
   answerQuestion: (
     taskId: string,
+    stage: string,
     requestId: string,
     answers: Record<string, string>,
-  ): Promise<void> => TaskService.AnswerQuestion(taskId, requestId, answers),
+  ): Promise<void> => TaskService.AnswerQuestion(taskId, stage, requestId, answers),
   readArtifact: (taskId: string, name: string): Promise<string> =>
     TaskService.ReadArtifact(taskId, name),
   backToStage: (taskId: string, stage: TaskStage): Promise<void> =>
@@ -331,9 +417,22 @@ export const api = {
   discardStep: (taskId: string, cleanWorktree: boolean): Promise<void> =>
     TaskService.DiscardStep(taskId, cleanWorktree),
   approveStep: (taskId: string): Promise<void> => TaskService.ApproveStep(taskId),
-  openInEditor: (taskId: string): Promise<void> => TaskService.OpenInEditor(taskId),
-  openFileInEditor: (taskId: string, path: string): Promise<void> =>
-    TaskService.OpenFileInEditor(taskId, path),
+  openPR: (taskId: string, repoPath: string, title: string, body: string): Promise<void> =>
+    TaskService.OpenPR(taskId, repoPath, title, body),
+  approveRepo: (taskId: string, repoPath: string): Promise<void> =>
+    TaskService.ApproveRepo(taskId, repoPath),
+  reviewAgain: (taskId: string, repoPath: string): Promise<void> =>
+    TaskService.ReviewAgain(taskId, repoPath),
+  discardDraft: (taskId: string, repoPath: string): Promise<void> =>
+    TaskService.DiscardDraft(taskId, repoPath),
+  retryRepo: (taskId: string, repoPath: string): Promise<void> =>
+    TaskService.RetryRepo(taskId, repoPath),
+  refreshPR: (taskId: string, repoPath: string): Promise<void> =>
+    TaskService.RefreshPR(taskId, repoPath),
+  openInEditor: (taskId: string, repoPath: string): Promise<void> =>
+    TaskService.OpenInEditor(taskId, repoPath),
+  openFileInEditor: (taskId: string, repoPath: string, path: string): Promise<void> =>
+    TaskService.OpenFileInEditor(taskId, repoPath, path),
   openExternal: (url: string): Promise<void> => Browser.OpenURL(url),
 };
 

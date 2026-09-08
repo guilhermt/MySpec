@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -291,6 +292,20 @@ func (r *Runner) Commit(ctx context.Context, dir, rev string) (Commit, error) {
 		return Commit{}, fmt.Errorf("parse git log: unexpected output %q", out)
 	}
 	return Commit{SHA: sha, Subject: subject}, nil
+}
+
+// CountCommits is how many commits ref has that base does not.
+func (r *Runner) CountCommits(ctx context.Context, dir, base, ref string) (int, error) {
+	out, err := r.Run(ctx, dir, "rev-list", "--count", base+".."+ref)
+	if err != nil {
+		return 0, err
+	}
+
+	count, err := strconv.Atoi(out)
+	if err != nil {
+		return 0, fmt.Errorf("parse git rev-list --count: unexpected output %q", out)
+	}
+	return count, nil
 }
 
 // Reset restores the tracked files of the working tree at dir.

@@ -8,6 +8,8 @@ import {
   asMarkerType,
   asNoticeReason,
   asPermissionStatus,
+  asPRState,
+  asRepoStatus,
   asReviewFileKind,
   asSessionStatus,
   asStepStatus,
@@ -57,6 +59,7 @@ describe("narrowing", () => {
     expect(asTaskStage("tech_spec")).toBe("tech_spec");
     expect(asTaskStage("plan")).toBe("plan");
     expect(asTaskStage("implementation")).toBe("implementation");
+    expect(asTaskStage("pr")).toBe("pr");
     expect(asSessionStatus("needs_permission")).toBe("needs_permission");
     expect(asEntryKind("permission")).toBe("permission");
     expect(asActionStatus("interrupted")).toBe("interrupted");
@@ -78,6 +81,21 @@ describe("narrowing", () => {
     expect(asStepStatus("review_failed")).toBe("review_failed");
     expect(asStepStatus("committing")).toBe("committing");
     expect(asStepStatus("done")).toBe("done");
+    expect(asRepoStatus("preparing")).toBe("preparing");
+    expect(asRepoStatus("blocked")).toBe("blocked");
+    expect(asRepoStatus("drafting")).toBe("drafting");
+    expect(asRepoStatus("draft_ready")).toBe("draft_ready");
+    expect(asRepoStatus("opening")).toBe("opening");
+    expect(asRepoStatus("reviewing")).toBe("reviewing");
+    expect(asRepoStatus("awaiting_decision")).toBe("awaiting_decision");
+    expect(asRepoStatus("in_review")).toBe("in_review");
+    expect(asRepoStatus("ready_to_approve")).toBe("ready_to_approve");
+    expect(asRepoStatus("committing")).toBe("committing");
+    expect(asRepoStatus("done")).toBe("done");
+    expect(asRepoStatus("skipped")).toBe("skipped");
+    expect(asPRState("open")).toBe("open");
+    expect(asPRState("merged")).toBe("merged");
+    expect(asPRState("closed")).toBe("closed");
     expect(asReviewFileKind("added")).toBe("added");
     expect(asReviewFileKind("modified")).toBe("modified");
     expect(asReviewFileKind("deleted")).toBe("deleted");
@@ -101,10 +119,25 @@ describe("narrowing", () => {
     expect(asPermissionStatus("expired")).toBe("cancelled");
     expect(asMarkerType("branched")).toBe("compacted");
     expect(asStepStatus("rebasing")).toBe("not_started");
+    expect(asRepoStatus("rebasing")).toBe("preparing");
+    // "" is what the app carries before gh has said anything.
+    expect(asPRState("draft")).toBe("");
+    expect(asPRState("")).toBe("");
     expect(asReviewFileKind("copied")).toBe("modified");
     expect(asBlockReason("rebase_in_progress")).toBe("git_failed");
     expect(asErrorKind("out_of_quota")).toBe("turn_error");
     expect(asTranscriptEventKind("patch")).toBe("reset");
+  });
+});
+
+describe("sessionKey", () => {
+  it("names a conversation by its task and stage", () => {
+    expect(wails.sessionKey("task-1", "prd")).toBe("task-1|prd");
+    expect(wails.sessionKey("task-1", "step:2")).toBe("task-1|step:2");
+  });
+
+  it("tells the stages of one task apart", () => {
+    expect(wails.sessionKey("task-1", "prd")).not.toBe(wails.sessionKey("task-1", "tech_spec"));
   });
 });
 
@@ -119,15 +152,15 @@ describe("api", () => {
 
     await wails.api.createTask({ name: "add-login", repoPath: "", initialContext: "a login" });
     await wails.api.deleteTask("task-1");
-    await wails.api.getTranscript("task-1");
-    await wails.api.sendMessage("task-1", "go on");
-    await wails.api.removePending("task-1", "entry-1");
-    await wails.api.interrupt("task-1");
-    await wails.api.pause("task-1");
-    await wails.api.resume("task-1");
-    await wails.api.retry("task-1");
-    await wails.api.answerPermission("task-1", "req-1", "allow", "");
-    await wails.api.answerQuestion("task-1", "req-1", { "Which database?": "SQLite" });
+    await wails.api.getTranscript("task-1", "prd");
+    await wails.api.sendMessage("task-1", "prd", "go on");
+    await wails.api.removePending("task-1", "prd", "entry-1");
+    await wails.api.interrupt("task-1", "prd");
+    await wails.api.pause("task-1", "prd");
+    await wails.api.resume("task-1", "prd");
+    await wails.api.retry("task-1", "prd");
+    await wails.api.answerPermission("task-1", "prd", "req-1", "allow", "");
+    await wails.api.answerQuestion("task-1", "prd", "req-1", { "Which database?": "SQLite" });
     await wails.api.readArtifact("task-1", "PRD.md");
     await wails.api.backToStage("task-1", "prd");
     await wails.api.discardStage("task-1", "tech_spec");
@@ -135,13 +168,19 @@ describe("api", () => {
     await wails.api.retryStep("task-1");
     await wails.api.cleanAndStartStep("task-1");
     await wails.api.discardStep("task-1", true);
-    await wails.api.openInEditor("task-1");
+    await wails.api.openInEditor("task-1", "");
     await wails.api.approveStep("task-1");
-    await wails.api.openFileInEditor("task-1", "src/login.ts");
+    await wails.api.openFileInEditor("task-1", "", "src/login.ts");
+    await wails.api.openPR("task-1", "/repo/web", "Log in", "why");
+    await wails.api.approveRepo("task-1", "/repo/web");
+    await wails.api.reviewAgain("task-1", "/repo/web");
+    await wails.api.discardDraft("task-1", "/repo/web");
+    await wails.api.retryRepo("task-1", "/repo/web");
+    await wails.api.refreshPR("task-1", "/repo/web");
 
-    expect(Call.ByID).toHaveBeenCalledTimes(27);
+    expect(Call.ByID).toHaveBeenCalledTimes(33);
     const ids = vi.mocked(Call.ByID).mock.calls.map(([id]) => id);
-    expect(new Set(ids).size).toBe(27);
+    expect(new Set(ids).size).toBe(33);
   });
 
   it("opens a link in the browser of the desktop, never in the webview", async () => {

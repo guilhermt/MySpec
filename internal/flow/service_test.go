@@ -28,7 +28,7 @@ func TestAStageEndsOnlyWhenTheSessionIsIdle(t *testing.T) {
 	f.service.Check("task-1")
 	f.waitStage(t, "task-1", task.StageTechSpec)
 
-	f.waitCalls(t, "close:task-1", "start:task-1:tech_spec:restarted=false")
+	f.waitCalls(t, "close:task-1:prd", "start:task-1:tech_spec:restarted=false")
 	f.wantTaskCalls(t, "stage:task-1:tech_spec:revisiting=false")
 }
 
@@ -43,7 +43,7 @@ func TestAFinishedPlanReachesImplementationAndStartsAStep(t *testing.T) {
 	f.waitStage(t, "task-1", task.StageImplementation)
 
 	// The stage itself has no conversation: the first step of the plan does.
-	f.waitCalls(t, "close:task-1", "start:task-1:step:1:restarted=false")
+	f.waitCalls(t, "close:task-1:plan", "start:task-1:step:1:restarted=false")
 	f.wantTaskCalls(t,
 		"stage:task-1:implementation:revisiting=false",
 		"step:task-1:1:preparing",
@@ -116,7 +116,7 @@ func TestARevisitedStageWaitsForContinue(t *testing.T) {
 	if got, _ := f.tasks.Get("task-1"); got.Stage != task.StageTechSpec {
 		t.Errorf("stage = %q, want tech_spec", got.Stage)
 	}
-	f.wantCalls(t, "close:task-1", "start:task-1:tech_spec:restarted=false")
+	f.wantCalls(t, "close:task-1:prd", "start:task-1:tech_spec:restarted=false")
 }
 
 func TestContinueNeedsAFinishedStage(t *testing.T) {
@@ -252,7 +252,7 @@ func TestSyncOpensTheSessionsAndAdvancesWhatIsDone(t *testing.T) {
 	f.waitCalls(t,
 		"open:task-1:prd",
 		"open:task-2:prd",
-		"close:task-1",
+		"close:task-1:prd",
 		"start:task-1:tech_spec:restarted=false",
 	)
 	if got, _ := f.tasks.Get("task-2"); got.Stage != task.StagePRD {
@@ -323,13 +323,13 @@ func TestAStageThatCannotBeRecordedIsNotStarted(t *testing.T) {
 	f.tasks.failWith(errStore)
 
 	f.service.Check("task-1")
-	f.waitCalls(t, "close:task-1")
+	f.waitCalls(t, "close:task-1:prd")
 	f.waitEvaluations(t, 1)
 
 	if got, _ := f.tasks.Get("task-1"); got.Stage != task.StagePRD {
 		t.Errorf("stage = %q, want prd, which is where the failure left it", got.Stage)
 	}
-	f.wantCalls(t, "close:task-1")
+	f.wantCalls(t, "close:task-1:prd")
 }
 
 func TestSummaryOfAnUnopenedSessionStopsTheEvaluation(t *testing.T) {

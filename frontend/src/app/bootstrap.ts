@@ -1,5 +1,5 @@
 import type { StoreApi } from "zustand";
-import { api, onStateChanged, onTranscriptChanged } from "@/lib/wails";
+import { api, onStateChanged, onTranscriptChanged, sessionKey } from "@/lib/wails";
 import { loadTranscript } from "@/store/actions";
 import type { AppStore } from "@/store/app-store";
 
@@ -8,10 +8,11 @@ import type { AppStore } from "@/store/app-store";
 export async function bootstrap(store: StoreApi<AppStore>): Promise<() => void> {
   const stopTranscript = onTranscriptChanged((event) => {
     store.getState().applyTranscriptEvent(event);
-    // A reset says the conversation changed wholesale; only a task the
-    // interface already loaded is worth loading again.
-    if (event.kind === "reset" && store.getState().transcripts[event.taskId] !== undefined) {
-      void loadTranscript(event.taskId);
+    // A reset says the conversation changed wholesale; only a conversation
+    // the interface already loaded is worth loading again.
+    const key = sessionKey(event.taskId, event.stage);
+    if (event.kind === "reset" && store.getState().transcripts[key] !== undefined) {
+      void loadTranscript(event.taskId, event.stage);
     }
   });
   const stopState = onStateChanged((state) => store.getState().applyState(state));

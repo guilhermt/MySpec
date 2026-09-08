@@ -122,6 +122,7 @@ func newWorktree(taskID, repoPath, path, branch string) worktree.Worktree {
 		RepoPath:  repoPath,
 		Path:      path,
 		Branch:    branch,
+		Base:      "origin/dev",
 		CreatedAt: fixedTime,
 	}
 }

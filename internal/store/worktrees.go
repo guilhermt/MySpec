@@ -15,7 +15,7 @@ type WorktreesRepo struct{ db *sql.DB }
 
 // worktreeColumns is the column list every worktree query selects, in scan
 // order.
-const worktreeColumns = `task_id, repo_path, path, branch, created_at`
+const worktreeColumns = `task_id, repo_path, path, branch, base, created_at`
 
 // ListByTasks returns the worktrees registered for the given tasks. An empty
 // list of tasks asks the database nothing.
@@ -56,9 +56,9 @@ func (r *WorktreesRepo) ListByTasks(ctx context.Context, taskIDs []string) ([]wo
 
 // Insert stores a new worktree.
 func (r *WorktreesRepo) Insert(ctx context.Context, wt worktree.Worktree) error {
-	const stmt = `INSERT INTO worktrees (` + worktreeColumns + `) VALUES (?, ?, ?, ?, ?)`
+	const stmt = `INSERT INTO worktrees (` + worktreeColumns + `) VALUES (?, ?, ?, ?, ?, ?)`
 
-	_, err := r.db.ExecContext(ctx, stmt, wt.TaskID, wt.RepoPath, wt.Path, wt.Branch,
+	_, err := r.db.ExecContext(ctx, stmt, wt.TaskID, wt.RepoPath, wt.Path, wt.Branch, wt.Base,
 		formatTime(wt.CreatedAt))
 	if err != nil {
 		return fmt.Errorf("insert worktree %s: %w", wt.Path, err)
@@ -82,7 +82,7 @@ func scanWorktree(row scanner) (worktree.Worktree, error) {
 		wt        worktree.Worktree
 		createdAt string
 	)
-	if err := row.Scan(&wt.TaskID, &wt.RepoPath, &wt.Path, &wt.Branch, &createdAt); err != nil {
+	if err := row.Scan(&wt.TaskID, &wt.RepoPath, &wt.Path, &wt.Branch, &wt.Base, &createdAt); err != nil {
 		return worktree.Worktree{}, fmt.Errorf("scan worktree: %w", err)
 	}
 

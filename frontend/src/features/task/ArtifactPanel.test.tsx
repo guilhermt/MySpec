@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ArtifactPanel } from "@/features/task/ArtifactPanel";
 import { api, type TaskSummary } from "@/lib/wails";
 import { renderWithStore } from "@/test/render";
-import { makeState, makeStep, makeTask } from "@/test/wails-mock";
+import { makeRepoPR, makeState, makeStep, makeTask } from "@/test/wails-mock";
 
 const state = makeState();
 
@@ -27,6 +27,7 @@ describe("ArtifactPanel", () => {
     expect(screen.getByRole("button", { name: "PRD" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Tech spec" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Steps" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "PR" })).toBeDisabled();
   });
 
   it("renders the PRD once it is written", async () => {
@@ -119,5 +120,66 @@ describe("ArtifactPanel", () => {
     await waitFor(() => {
       expect(screen.queryByRole("status")).not.toBeInTheDocument();
     });
+  });
+
+  // The pull request documents live in the pr folder, grouped by repository.
+  const DRAFT = { title: "Add the login form", body: "Closes #12", file: "web-draft.md" };
+
+  function prTask() {
+    return {
+      stage: "pr",
+      repos: [
+        makeRepoPR({
+          draft: DRAFT,
+          reports: [
+            { pass: 1, file: "web-review-1.md", clean: false },
+            { pass: 2, file: "web-review-2.md", clean: true },
+          ],
+        }),
+        makeRepoPR({
+          repository: "api",
+          repoPath: "/home/dev/projects/api",
+          slug: "api",
+          draft: { title: "Wire the api", body: "why", file: "api-draft.md" },
+        }),
+      ],
+    };
+  }
+
+  it("opens on the PR tab in the PR stage, one section per repository", () => {
+    panel(prTask());
+
+    expect(screen.getByRole("button", { name: "PR" })).toBeEnabled();
+    expect(screen.getByRole("heading", { name: "web" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "api" })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Draft" })).toHaveLength(2);
+    expect(screen.getByRole("button", { name: "Pass 1 · changes requested" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Pass 2 · nothing to change" })).toBeInTheDocument();
+  });
+
+  it("reads a pull request document out of the pr folder", async () => {
+    vi.mocked(api.readArtifact).mockResolvedValue("# Add the login form");
+    const { user } = panel(prTask());
+
+    await user.click(screen.getAllByRole("button", { name: "Draft" })[0] as HTMLElement);
+
+    expect(await screen.findByTestId("markdown")).toHaveTextContent("# Add the login form");
+    expect(api.readArtifact).toHaveBeenCalledWith("task-1", "pr/web-draft.md");
+  });
+
+  it("comes back from a pull request document to the list", async () => {
+    vi.mocked(api.readArtifact).mockResolvedValue("# Add the login form");
+    const { user } = panel(prTask());
+
+    await user.click(screen.getAllByRole("button", { name: "Draft" })[0] as HTMLElement);
+    await user.click(await screen.findByRole("button", { name: "← PR" }));
+
+    expect(screen.getByRole("heading", { name: "web" })).toBeInTheDocument();
+  });
+
+  it("has no PR tab before anything of a pull request is written", () => {
+    panel({ stage: "pr", repos: [makeRepoPR({ status: "preparing" })] });
+
+    expect(screen.getByRole("button", { name: "PR" })).toBeDisabled();
   });
 });

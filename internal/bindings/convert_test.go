@@ -149,6 +149,7 @@ func TestFromTasksCarriesTheStateOfEachStep(t *testing.T) {
 		tasks,
 		func(string) task.Artifacts { return task.Artifacts{} },
 		func(string) []flow.StepState { return states },
+		noRepos,
 		nil,
 	)
 	if len(got) != 1 {
@@ -169,6 +170,7 @@ func TestFromTasksHasNoCurrentStepWithoutAPlan(t *testing.T) {
 		[]task.Task{{ID: "task-1", Name: "login-screen", Stage: task.StagePRD}},
 		func(string) task.Artifacts { return task.Artifacts{} },
 		func(string) []flow.StepState { return nil },
+		noRepos,
 		nil,
 	)
 	if len(got) != 1 {
@@ -290,6 +292,7 @@ func TestTheCurrentStepIsTheFirstOneThatIsNotDone(t *testing.T) {
 				[]task.Task{{ID: "task-1", Stage: task.StageImplementation}},
 				func(string) task.Artifacts { return task.Artifacts{} },
 				func(string) []flow.StepState { return states },
+				noRepos,
 				nil,
 			)
 			if got[0].CurrentStep != test.want {
@@ -298,6 +301,9 @@ func TestTheCurrentStepIsTheFirstOneThatIsNotDone(t *testing.T) {
 		})
 	}
 }
+
+// noRepos is the PR stage of a task that has not reached it.
+func noRepos(string) []flow.RepoState { return nil }
 
 // stepsOf converts the steps of a single implementing task, which is what
 // every step conversion test needs.
@@ -308,6 +314,7 @@ func stepsOf(t *testing.T, states []flow.StepState) []bindings.Step {
 		[]task.Task{{ID: "task-1", Name: "login-screen", Stage: task.StageImplementation}},
 		func(string) task.Artifacts { return task.Artifacts{} },
 		func(string) []flow.StepState { return states },
+		noRepos,
 		nil,
 	)
 	if len(got) != 1 {
@@ -326,5 +333,153 @@ func TestFromEntryCarriesTheStepOfAMarker(t *testing.T) {
 	want := &bindings.MarkerEntry{Type: "step_started", Step: 2, Restarted: true}
 	if diff := cmp.Diff(want, got.Marker); diff != "" {
 		t.Errorf("marker mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestFromTasksPicksTheSessionOfTheStageTheTaskIsIn(t *testing.T) {
+	t.Parallel()
+
+	summaries := map[session.Key]session.Summary{
+		{TaskID: "task-1", Stage: "prd"}:    {Status: session.StatusWorking, PendingCount: 2},
+		{TaskID: "task-2", Stage: "plan"}:   {Status: session.StatusPaused},
+		{TaskID: "task-2", Stage: "step:2"}: {Status: session.StatusNeedsPermission, ContextPercent: 40},
+	}
+	states := []flow.StepState{
+		{Step: task.Step{Number: 1}, Status: flow.StepDone},
+		{Step: task.Step{Number: 2}, Status: flow.StepImplementing},
+	}
+
+	got := bindings.FromTasks(
+		[]task.Task{
+			{ID: "task-1", Stage: task.StagePRD},
+			{ID: "task-2", Stage: task.StageImplementation},
+		},
+		func(string) task.Artifacts { return task.Artifacts{} },
+		func(id string) []flow.StepState {
+			if id == "task-2" {
+				return states
+			}
+			return nil
+		},
+		noRepos,
+		summaries,
+	)
+	if len(got) != 2 {
+		t.Fatalf("len(FromTasks()) = %d, want 2", len(got))
+	}
+	if got[0].SessionStatus != "working" || got[0].PendingCount != 2 {
+		t.Errorf("task-1 = %+v, want the session of its own stage", got[0])
+	}
+	// The implementing task is shown through the session of the step that
+	// runs, never through the one the planning stage left behind.
+	if got[1].SessionStatus != "needs_permission" || got[1].ContextPercent != 40 {
+		t.Errorf("task-2 = %+v, want the session of step 2", got[1])
+	}
+}
+
+func TestFromTasksLeavesAnImplementingTaskWithoutAStepAtRest(t *testing.T) {
+	t.Parallel()
+
+	summaries := map[session.Key]session.Summary{
+		{TaskID: "task-1", Stage: "step:1"}: {Status: session.StatusWorking},
+	}
+	states := []flow.StepState{{Step: task.Step{Number: 1}, Status: flow.StepDone}}
+
+	got := bindings.FromTasks(
+		[]task.Task{{ID: "task-1", Stage: task.StageImplementation}},
+		func(string) task.Artifacts { return task.Artifacts{} },
+		func(string) []flow.StepState { return states },
+		noRepos,
+		summaries,
+	)
+	if got[0].SessionStatus != "waiting" {
+		t.Errorf("sessionStatus = %q, want waiting: every step is committed", got[0].SessionStatus)
+	}
+}
+
+func TestFromTasksCarriesTheRepositoriesOfThePRStage(t *testing.T) {
+	t.Parallel()
+
+	checkedAt := time.Date(2026, 9, 5, 10, 0, 0, 0, time.UTC)
+	states := []flow.RepoState{
+		{
+			Repository:   "api",
+			RepoPath:     "/home/u/code/api",
+			Slug:         "api",
+			Status:       flow.RepoReadyToApprove,
+			WorktreePath: "/home/u/code/.myspec/worktrees/api/login-screen",
+			Branch:       "login-screen",
+			BaseBranch:   "origin/dev",
+			Draft:        &task.Draft{Present: true, Title: "Add the login screen", Body: "It adds the screen."},
+			Reports:      []task.ReviewReport{{Pass: 1, File: "api-review-1.md", Clean: false}},
+			Review:       &review.Snapshot{Staged: 2, Total: 2},
+			PR: task.PRDetails{
+				Number: 7, URL: "https://github.com/acme/api/pull/7", State: task.PRStateOpen, CheckedAt: checkedAt,
+			},
+			SessionStage: "pr_review:api",
+			Session:      session.Summary{Status: session.StatusWaiting, ContextPercent: 30},
+		},
+		{
+			Repository: "web",
+			RepoPath:   "/home/u/code/web",
+			Slug:       "web",
+			Status:     flow.RepoBlocked,
+			Block:      &task.PRBlock{Reason: task.PRBlockGHAuth, Detail: "gh: not authenticated"},
+		},
+	}
+
+	got := bindings.FromTasks(
+		[]task.Task{{ID: "task-1", Name: "login-screen", Stage: task.StagePR}},
+		func(string) task.Artifacts { return task.Artifacts{} },
+		func(string) []flow.StepState { return nil },
+		func(string) []flow.RepoState { return states },
+		map[session.Key]session.Summary{
+			{TaskID: "task-1", Stage: "pr_review:api"}: {Status: session.StatusWaiting},
+		},
+	)
+	if len(got) != 1 {
+		t.Fatalf("len(FromTasks()) = %d, want 1", len(got))
+	}
+
+	want := []bindings.RepoPR{
+		{
+			Repository:   "api",
+			RepoPath:     "/home/u/code/api",
+			Slug:         "api",
+			Status:       "ready_to_approve",
+			WorktreePath: "/home/u/code/.myspec/worktrees/api/login-screen",
+			Branch:       "login-screen",
+			BaseBranch:   "origin/dev",
+			Draft: &bindings.PRDraft{
+				Title: "Add the login screen", Body: "It adds the screen.", File: "api-draft.md",
+			},
+			Reports: []bindings.PRReport{{Pass: 1, File: "api-review-1.md"}},
+			Review: &bindings.Review{
+				Files: []bindings.ReviewFile{}, Staged: 2, Total: 2, Percent: 100,
+			},
+			PRNumber:       7,
+			PRURL:          "https://github.com/acme/api/pull/7",
+			PRState:        "open",
+			CheckedAt:      "2026-09-05T10:00:00Z",
+			SessionStage:   "pr_review:api",
+			SessionStatus:  "waiting",
+			ContextPercent: 30,
+		},
+		{
+			Repository: "web",
+			RepoPath:   "/home/u/code/web",
+			Slug:       "web",
+			Status:     "blocked",
+			Block:      &bindings.PRBlock{Reason: "gh_unauthenticated", Detail: "gh: not authenticated"},
+			Reports:    []bindings.PRReport{},
+		},
+	}
+	if diff := cmp.Diff(want, got[0].Repos); diff != "" {
+		t.Errorf("repositories mismatch (-want +got):\n%s", diff)
+	}
+	// The PR stage has no conversation of its own: every one of them belongs
+	// to a repository, and the fields of the task stay empty.
+	if got[0].SessionStatus != "waiting" || got[0].ContextPercent != 0 {
+		t.Errorf("task = %+v, want no session of its own", got[0])
 	}
 }

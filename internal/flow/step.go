@@ -80,9 +80,7 @@ type prepareOptions struct {
 func (s *Service) Steps(id string) []StepState {
 	a, _ := s.tasks.Artifacts(id)
 	runs := s.tasks.StepRuns(id)
-	sum, open := s.sessions.Summary(id)
 	phase := s.phaseOf(id)
-	snap, read := s.review.Snapshot(id)
 	// The warning belongs to the step the user is on, which is the first one
 	// without a commit; every other step is either done or still to come.
 	noCommit := s.noCommitOf(id)
@@ -95,6 +93,9 @@ func (s *Service) Steps(id string) []StepState {
 				state.WorktreePath = wt.Path
 			}
 		}
+		// The reading belongs to the worktree of the repository of the step,
+		// which is the key it was tracked under.
+		snap, read := s.review.Snapshot(reviewKey(id, step.RepoPath))
 		if index := indexOfRun(runs, step.Number); index >= 0 {
 			run := runs[index]
 			switch run.Status {
@@ -106,7 +107,7 @@ func (s *Service) Steps(id string) []StepState {
 				state.Status = StepImplementing
 				// The progress only means something with the work stopped, so
 				// it is read while the agent is not writing.
-				if open && sum.Stage == session.StepStage(step.Number) && sum.Idle {
+				if sum, open := s.sessions.Summary(stepKey(id, step.Number)); open && sum.Idle {
 					state.Status = reviewStatus(snap, read)
 					state.Review = reading(snap, read)
 				}
@@ -123,6 +124,17 @@ func (s *Service) Steps(id string) []StepState {
 		states = append(states, state)
 	}
 	return states
+}
+
+// stepKey is the session of one step of a task.
+func stepKey(taskID string, number int) session.Key {
+	return session.Key{TaskID: taskID, Stage: session.StepStage(number)}
+}
+
+// reviewKey is the worktree a step is reviewed in: the repository it belongs
+// to, inside the task.
+func reviewKey(taskID, repoPath string) review.Key {
+	return review.Key{TaskID: taskID, RepoPath: repoPath}
 }
 
 // reviewStatus turns the last reading of the worktree into the state the step
@@ -448,7 +460,7 @@ func (s *Service) evaluateStep(ctx context.Context, t task.Task) {
 	step, ok := currentStep(a.Plan, runs)
 	if !ok {
 		// Every step is committed: nothing left to watch.
-		s.review.Forget(t.ID)
+		s.review.ForgetTask(t.ID)
 		return
 	}
 	index := indexOfRun(runs, step.Number)
@@ -459,7 +471,7 @@ func (s *Service) evaluateStep(ctx context.Context, t task.Task) {
 	run := runs[index]
 	if run.Status != task.StepStarted && run.Status != task.StepCommitting {
 		// Preparing or blocked: the worktree is not the user's to review.
-		s.review.Forget(t.ID)
+		s.review.Forget(reviewKey(t.ID, step.RepoPath))
 		return
 	}
 	wt, ok := s.worktrees.Get(t.ID, step.RepoPath)
@@ -467,19 +479,20 @@ func (s *Service) evaluateStep(ctx context.Context, t task.Task) {
 		return
 	}
 
-	sum, open := s.sessions.Summary(t.ID)
-	idle := open && sum.Stage == session.StepStage(step.Number) && sum.Idle
+	sum, open := s.sessions.Summary(stepKey(t.ID, step.Number))
+	idle := open && sum.Idle
 	committing := run.Status == task.StepCommitting
-	s.review.Track(t.ID, wt, idle || committing)
+	key := reviewKey(t.ID, step.RepoPath)
+	s.review.Track(key, wt, idle || committing)
 	if !idle && !committing {
 		return
 	}
 
-	snap, read := s.review.Snapshot(t.ID)
+	snap, read := s.review.Snapshot(key)
 	if committing && idle {
 		// The commit turn is over: decide on a reading newer than it, not on
 		// one the debounce still owes.
-		snap, read = s.review.Refresh(t.ID)
+		snap, read = s.review.Refresh(key)
 	}
 	if !read || snap.Err != "" {
 		return
@@ -502,8 +515,8 @@ func (s *Service) evaluateStep(ctx context.Context, t task.Task) {
 }
 
 // completeStep records the commit a step produced, closes its session and
-// starts the next one. A task whose last step is committed simply stops here:
-// the PR stage does not exist in this version.
+// starts the next one. A task whose last step is committed moves on to the PR
+// stage.
 func (s *Service) completeStep(
 	ctx context.Context, t task.Task, plan task.Plan, step task.Step, wt worktree.Worktree, head string,
 ) {
@@ -517,15 +530,18 @@ func (s *Service) completeStep(
 		s.log.Error("record committed step failed", "task", t.ID, "step", step.Number, "error", err)
 		return
 	}
-	s.review.Forget(t.ID)
+	s.review.Forget(reviewKey(t.ID, step.RepoPath))
 	s.setNoCommit(t.ID, false)
-	if err := s.sessions.Close(ctx, t.ID); err != nil {
+	if err := s.sessions.Close(ctx, stepKey(t.ID, step.Number)); err != nil {
 		s.log.Error("close step session failed", "task", t.ID, "step", step.Number, "error", err)
 	}
 
 	next, ok := nextStep(plan, step.Number)
 	if !ok {
 		s.log.Info("implementation complete", "task", t.ID, "steps", len(plan.Steps))
+		if err := s.beginPR(ctx, t, plan); err != nil {
+			s.log.Error("begin pr stage failed", "task", t.ID, "error", err)
+		}
 		return
 	}
 	if _, err := s.tasks.SetStepRun(ctx, t.ID, next.Number, task.StepPreparing, nil); err != nil {
@@ -634,20 +650,21 @@ func (s *Service) ApproveStep(ctx context.Context, id string) error {
 	if run == nil || run.Status != task.StepStarted {
 		return fmt.Errorf("approve step %d of task %s: %w", step.Number, id, ErrStepNotStarted)
 	}
-	snap, read := s.review.Snapshot(id)
+	snap, read := s.review.Snapshot(reviewKey(id, step.RepoPath))
 	if !read || snap.Err != "" || !snap.Ready() {
 		return fmt.Errorf("approve step %d of task %s: %w", step.Number, id, ErrStepNotReady)
 	}
 
-	sum, open := s.sessions.Summary(id)
+	key := stepKey(id, step.Number)
+	sum, open := s.sessions.Summary(key)
 	if !open {
 		return fmt.Errorf("approve step %d of task %s: %w", step.Number, id, session.ErrNotFound)
 	}
 	if sum.Status == session.StatusPaused {
-		if resumeErr := s.sessions.Resume(ctx, id); resumeErr != nil {
+		if resumeErr := s.sessions.Resume(ctx, key); resumeErr != nil {
 			return resumeErr
 		}
-		sum, open = s.sessions.Summary(id)
+		sum, open = s.sessions.Summary(key)
 		if !open {
 			return fmt.Errorf("approve step %d of task %s: %w", step.Number, id, session.ErrNotFound)
 		}
@@ -664,7 +681,7 @@ func (s *Service) ApproveStep(ctx context.Context, id string) error {
 		return err
 	}
 	s.setNoCommit(id, false)
-	if err := s.sessions.SendFromApp(ctx, id, message); err != nil {
+	if err := s.sessions.SendFromApp(ctx, key, message); err != nil {
 		// The button stays where the user left it: the step is theirs again.
 		if _, setErr := s.tasks.SetStepRun(ctx, id, step.Number, task.StepStarted, nil); setErr != nil {
 			s.log.Error("record started step failed", "task", id, "step", step.Number, "error", setErr)
@@ -763,9 +780,10 @@ func (s *Service) DiscardStep(ctx context.Context, id string, cleanWorktree bool
 	return nil
 }
 
-// abortPrepare cancels the preparation of a task, if there is one. It does not
-// wait: whoever calls it takes the lock of the task next, and that lock is
-// what the preparation holds until it gives up.
+// abortPrepare cancels the preparation of a task and the work of every
+// repository of its PR stage, if there is any. It does not wait: whoever calls
+// it takes the lock of the task next, and that lock is what the preparation
+// holds until it gives up.
 func (s *Service) abortPrepare(id string) {
 	l := s.lockOf(id)
 
@@ -775,6 +793,11 @@ func (s *Service) abortPrepare(id string) {
 	if l.cancel != nil {
 		l.cancel()
 	}
+	for _, w := range l.repos {
+		if w.cancel != nil {
+			w.cancel()
+		}
+	}
 }
 
 // tearDownSteps stops the step session, removes the worktrees and the branches
@@ -782,19 +805,26 @@ func (s *Service) abortPrepare(id string) {
 // and deleting the task have in common, and it fails whole: a worktree git
 // cannot remove leaves everything as it was, with the session open again.
 func (s *Service) tearDownSteps(ctx context.Context, t task.Task) error {
+	// The PR sessions run inside the worktrees of the steps, so they go first.
+	if err := s.tearDownPR(ctx, t); err != nil {
+		return err
+	}
 	runs := s.tasks.StepRuns(t.ID)
 	if len(runs) == 0 {
 		return nil
 	}
-	s.review.Forget(t.ID)
+	s.review.ForgetTask(t.ID)
 
 	// A step session is stopped before the worktree it runs in goes away.
 	stepOpen := false
-	if sum, open := s.sessions.Summary(t.ID); open {
-		_, stepOpen = session.ParseStepStage(sum.Stage)
+	for _, run := range runs {
+		if _, open := s.sessions.Summary(stepKey(t.ID, run.Number)); open {
+			stepOpen = true
+			break
+		}
 	}
 	if stepOpen {
-		if err := s.sessions.Close(ctx, t.ID); err != nil {
+		if err := s.sessions.CloseTask(ctx, t.ID); err != nil {
 			return err
 		}
 	}
@@ -862,12 +892,12 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 		return fmt.Errorf("delete task %s: %w", id, task.ErrNotFound)
 	}
 	// A task still being planned has no steps, and no worktrees either.
-	if t.Stage == task.StageImplementation {
+	if t.Stage == task.StageImplementation || t.Stage == task.StagePR {
 		if err := s.tearDownSteps(ctx, t); err != nil {
 			return err
 		}
 	}
-	if err := s.sessions.Close(ctx, id); err != nil {
+	if err := s.sessions.CloseTask(ctx, id); err != nil {
 		return err
 	}
 	if err := s.tasks.Delete(ctx, id); err != nil {

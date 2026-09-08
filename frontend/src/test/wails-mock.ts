@@ -4,6 +4,7 @@ import type {
   Entry,
   EntryKind,
   PermissionDecision,
+  RepoPR,
   Review,
   State,
   Step,
@@ -24,25 +25,35 @@ export const api = {
 
   createTask: vi.fn<(req: CreateTaskRequest) => Promise<string>>(() => Promise.resolve("task-1")),
   deleteTask: vi.fn<(taskId: string) => Promise<void>>(() => Promise.resolve()),
-  getTranscript: vi.fn<(taskId: string) => Promise<Transcript>>((taskId) =>
-    Promise.resolve(makeTranscript({ taskId })),
+  getTranscript: vi.fn<(taskId: string, stage: string) => Promise<Transcript>>((taskId, stage) =>
+    Promise.resolve(makeTranscript({ taskId, stage })),
   ),
-  sendMessage: vi.fn<(taskId: string, text: string) => Promise<void>>(() => Promise.resolve()),
-  removePending: vi.fn<(taskId: string, entryId: string) => Promise<void>>(() => Promise.resolve()),
-  interrupt: vi.fn<(taskId: string) => Promise<void>>(() => Promise.resolve()),
-  pause: vi.fn<(taskId: string) => Promise<void>>(() => Promise.resolve()),
-  resume: vi.fn<(taskId: string) => Promise<void>>(() => Promise.resolve()),
-  retry: vi.fn<(taskId: string) => Promise<void>>(() => Promise.resolve()),
+  sendMessage: vi.fn<(taskId: string, stage: string, text: string) => Promise<void>>(() =>
+    Promise.resolve(),
+  ),
+  removePending: vi.fn<(taskId: string, stage: string, entryId: string) => Promise<void>>(() =>
+    Promise.resolve(),
+  ),
+  interrupt: vi.fn<(taskId: string, stage: string) => Promise<void>>(() => Promise.resolve()),
+  pause: vi.fn<(taskId: string, stage: string) => Promise<void>>(() => Promise.resolve()),
+  resume: vi.fn<(taskId: string, stage: string) => Promise<void>>(() => Promise.resolve()),
+  retry: vi.fn<(taskId: string, stage: string) => Promise<void>>(() => Promise.resolve()),
   answerPermission: vi.fn<
     (
       taskId: string,
+      stage: string,
       requestId: string,
       decision: PermissionDecision,
       message: string,
     ) => Promise<void>
   >(() => Promise.resolve()),
   answerQuestion: vi.fn<
-    (taskId: string, requestId: string, answers: Record<string, string>) => Promise<void>
+    (
+      taskId: string,
+      stage: string,
+      requestId: string,
+      answers: Record<string, string>,
+    ) => Promise<void>
   >(() => Promise.resolve()),
   readArtifact: vi.fn<(taskId: string, name: string) => Promise<string>>(() =>
     Promise.resolve("# PRD\n"),
@@ -56,8 +67,18 @@ export const api = {
     Promise.resolve(),
   ),
   approveStep: vi.fn<(taskId: string) => Promise<void>>(() => Promise.resolve()),
-  openInEditor: vi.fn<(taskId: string) => Promise<void>>(() => Promise.resolve()),
-  openFileInEditor: vi.fn<(taskId: string, path: string) => Promise<void>>(() => Promise.resolve()),
+  openPR: vi.fn<(taskId: string, repoPath: string, title: string, body: string) => Promise<void>>(
+    () => Promise.resolve(),
+  ),
+  approveRepo: vi.fn<(taskId: string, repoPath: string) => Promise<void>>(() => Promise.resolve()),
+  reviewAgain: vi.fn<(taskId: string, repoPath: string) => Promise<void>>(() => Promise.resolve()),
+  discardDraft: vi.fn<(taskId: string, repoPath: string) => Promise<void>>(() => Promise.resolve()),
+  retryRepo: vi.fn<(taskId: string, repoPath: string) => Promise<void>>(() => Promise.resolve()),
+  refreshPR: vi.fn<(taskId: string, repoPath: string) => Promise<void>>(() => Promise.resolve()),
+  openInEditor: vi.fn<(taskId: string, repoPath: string) => Promise<void>>(() => Promise.resolve()),
+  openFileInEditor: vi.fn<(taskId: string, repoPath: string, path: string) => Promise<void>>(() =>
+    Promise.resolve(),
+  ),
   openExternal: vi.fn<(url: string) => Promise<void>>(() => Promise.resolve()),
 };
 
@@ -144,6 +165,7 @@ export function makeTask(overrides: Partial<TaskSummary> = {}): TaskSummary {
     hasTechSpec: false,
     steps: [],
     currentStep: 0,
+    repos: [],
     planProblems: [],
     canContinue: false,
     artifactVersion: 0,
@@ -169,6 +191,36 @@ export function makeStep(overrides: Partial<Step> = {}): Step {
     commitSha: "",
     commitSubject: "",
     commitFailed: false,
+    ...overrides,
+  };
+}
+
+export function makeRepoPR(overrides: Partial<RepoPR> = {}): RepoPR {
+  return {
+    repository: "web",
+    repoPath: "/home/dev/projects/web",
+    slug: "web",
+    status: "preparing",
+    block: null,
+    worktreePath: "/home/dev/.local/share/myspec/worktrees/add-login-web",
+    branch: "add-login",
+    baseBranch: "origin/dev",
+    draft: null,
+    reports: [],
+    review: null,
+    commitFailed: false,
+    prNumber: 0,
+    prUrl: "",
+    prState: "",
+    checkedAt: "",
+    sessionStage: "pr:web",
+    sessionStatus: "waiting",
+    turnRunning: false,
+    processRunning: false,
+    retryAttempt: 0,
+    contextPercent: 0,
+    pendingCount: 0,
+    lastError: "",
     ...overrides,
   };
 }
@@ -272,7 +324,14 @@ function payloadOf(kind: EntryKind): Omit<Entry, "id" | "seq" | "turnId" | "kind
     case "marker":
       return {
         ...empty,
-        marker: { type: "prd_written", preTokens: 0, stage: "", step: 0, restarted: false },
+        marker: {
+          type: "prd_written",
+          preTokens: 0,
+          stage: "",
+          step: 0,
+          pass: 0,
+          restarted: false,
+        },
       };
     case "error":
       return {
@@ -317,5 +376,7 @@ export function resetWailsMock(): void {
   onTranscriptChanged.mockClear();
   api.getState.mockImplementation(() => Promise.resolve(makeState()));
   api.createTask.mockImplementation(() => Promise.resolve("task-1"));
-  api.getTranscript.mockImplementation((taskId) => Promise.resolve(makeTranscript({ taskId })));
+  api.getTranscript.mockImplementation((taskId, stage) =>
+    Promise.resolve(makeTranscript({ taskId, stage })),
+  );
 }

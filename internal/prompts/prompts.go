@@ -30,6 +30,8 @@ const (
 	StageTechSpec Stage = "tech_spec"
 	StagePlan     Stage = "plan"
 	StageCommit   Stage = "commit"
+	StagePR       Stage = "pr"
+	StagePRReview Stage = "pr_review"
 )
 
 // StageStep is the prompt of a step session: the step file itself.
@@ -50,11 +52,27 @@ const (
 	stepsDirPlaceholder       = "{{steps_dir}}"
 	repositoriesPlaceholder   = "{{repositories}}"
 	initialContextPlaceholder = "{{initial_context}}"
+	repositoryPlaceholder     = "{{repository}}"
+	branchPlaceholder         = "{{branch}}"
+	baseBranchPlaceholder     = "{{base_branch}}"
+	draftPathPlaceholder      = "{{draft_path}}"
+	reviewPathPlaceholder     = "{{review_path}}"
+	prNumberPlaceholder       = "{{pr_number}}"
+	prURLPlaceholder          = "{{pr_url}}"
+	pushPlaceholder           = "{{push}}"
 )
+
+// PushInstruction is what the app puts in the commit prompt when the commit
+// belongs to a pull request that already exists.
+const PushInstruction = "After committing, push this branch to `origin`, so the commit reaches the pull request. Push only this branch, and never force-push."
 
 // contextHeading opens the section Render appends when a prompt has no
 // placeholder for the initial context.
 const contextHeading = "\n\n## Initial context\n\n"
+
+// pushHeading opens the section Render appends when a prompt has no
+// placeholder for the push instruction.
+const pushHeading = "\n\n## Pushing\n\n"
 
 // Dir is the prompts directory inside the data directory.
 func Dir(dataDir string) string {
@@ -119,6 +137,24 @@ type Vars struct {
 	Repositories   []string // paths relative to the session directory
 	InitialContext string   // PRD only
 	StepPath       string   // StageStep only: the file whose content is the prompt
+
+	Repository string // relative path of the repository of a PR session
+	Branch     string
+	BaseBranch string
+	DraftPath  string
+	ReviewPath string
+	PRNumber   string
+	PRURL      string
+	Push       bool // the commit of this session goes up to the pull request
+}
+
+// pushInstruction is what {{push}} becomes: the instruction when the commit
+// belongs to a pull request, nothing when it does not.
+func pushInstruction(push bool) string {
+	if push {
+		return PushInstruction
+	}
+	return ""
 }
 
 // repositoryList renders paths as the Markdown list a prompt shows the agent.
@@ -163,10 +199,21 @@ func Render(dataDir string, stage Stage, vars Vars) (string, error) {
 		stepsDirPlaceholder, vars.StepsDir,
 		repositoriesPlaceholder, repositoryList(vars.Repositories),
 		initialContextPlaceholder, vars.InitialContext,
+		repositoryPlaceholder, vars.Repository,
+		branchPlaceholder, vars.Branch,
+		baseBranchPlaceholder, vars.BaseBranch,
+		draftPathPlaceholder, vars.DraftPath,
+		reviewPathPlaceholder, vars.ReviewPath,
+		prNumberPlaceholder, vars.PRNumber,
+		prURLPlaceholder, vars.PRURL,
+		pushPlaceholder, pushInstruction(vars.Push),
 	).Replace(text)
 
 	if !strings.Contains(text, initialContextPlaceholder) && vars.InitialContext != "" {
 		rendered += contextHeading + vars.InitialContext
+	}
+	if !strings.Contains(text, pushPlaceholder) && vars.Push {
+		rendered += pushHeading + PushInstruction
 	}
 	return rendered, nil
 }

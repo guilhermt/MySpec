@@ -50,29 +50,31 @@ func (c *counting) count() int {
 }
 
 // fixture is a repository with one worktree of it, and the review service
-// watching that worktree.
+// watching that worktree under the key of the task and the repository.
 type fixture struct {
 	svc       *review.Service
 	worktrees *counting
 	wt        worktree.Worktree
+	key       review.Key
 	repo      string
-	changes   chan string
+	changes   chan review.Key
 }
 
 // newFixture builds the service over a worktree of a fresh clone.
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
 
-	f := &fixture{changes: make(chan string, 32)}
+	f := &fixture{changes: make(chan review.Key, 32)}
 	f.repo = gittest.Clone(t, gittest.Origin(t, true), filepath.Join(t.TempDir(), "api"))
 	f.wt = f.worktreeOf(t, branch)
+	f.key = review.Key{TaskID: taskID, RepoPath: f.repo}
 	f.worktrees = &counting{Worktrees: worktree.New(worktree.Deps{
 		Git: git.New(git.Deps{Env: gittest.Env(t)}),
 	})}
 
 	svc, err := review.New(review.Deps{
 		Worktrees: f.worktrees,
-		OnChange:  func(id string) { f.changes <- id },
+		OnChange:  func(k review.Key) { f.changes <- k },
 	})
 	if err != nil {
 		t.Fatalf("New() = %v, want nil", err)
@@ -96,24 +98,48 @@ func (f *fixture) worktreeOf(t *testing.T, name string) worktree.Worktree {
 	return worktree.Worktree{TaskID: taskID, RepoPath: f.repo, Path: path, Branch: name}
 }
 
+// otherRepo is a second repository of the same task, with a worktree of its
+// own: what a task that touches two repositories looks like.
+func (f *fixture) otherRepo(t *testing.T, name string) (review.Key, worktree.Worktree) {
+	t.Helper()
+
+	repo := gittest.Clone(t, gittest.Origin(t, true), filepath.Join(t.TempDir(), name))
+	path := filepath.Join(t.TempDir(), name+"-worktree")
+	gittest.Run(t, repo, "worktree", "add", "--no-track", "-b", branch, path, "main")
+
+	key := review.Key{TaskID: taskID, RepoPath: repo}
+	wt := worktree.Worktree{TaskID: taskID, RepoPath: repo, Path: path, Branch: branch}
+	return key, wt
+}
+
 // track puts the fixture worktree under watch and waits for the first reading.
 func (f *fixture) track(t *testing.T) {
 	t.Helper()
 
-	f.svc.Track(taskID, f.wt, true)
-	if _, ok := f.svc.Snapshot(taskID); !ok {
+	f.svc.Track(f.key, f.wt, true)
+	if _, ok := f.svc.Snapshot(f.key); !ok {
 		t.Fatal("Snapshot() found nothing, want the reading Track does at once")
 	}
 	f.drain()
 }
 
-// waitFor polls the snapshot until it says what the test is waiting for.
+// waitFor polls the snapshot of the fixture worktree until it says what the
+// test is waiting for.
 func (f *fixture) waitFor(t *testing.T, what string, ok func(review.Snapshot) bool) review.Snapshot {
+	t.Helper()
+
+	return f.waitForKey(t, f.key, what, ok)
+}
+
+// waitForKey is waitFor over any key the fixture tracks.
+func (f *fixture) waitForKey(
+	t *testing.T, k review.Key, what string, ok func(review.Snapshot) bool,
+) review.Snapshot {
 	t.Helper()
 
 	deadline := time.Now().Add(5 * time.Second)
 	for {
-		snap, found := f.svc.Snapshot(taskID)
+		snap, found := f.svc.Snapshot(k)
 		if found && ok(snap) {
 			return snap
 		}
@@ -129,8 +155,8 @@ func (f *fixture) wantNoChange(t *testing.T) {
 	t.Helper()
 
 	select {
-	case id := <-f.changes:
-		t.Fatalf("OnChange(%s) was called, want nothing reported", id)
+	case k := <-f.changes:
+		t.Fatalf("OnChange(%+v) was called, want nothing reported", k)
 	case <-time.After(settle):
 	}
 }

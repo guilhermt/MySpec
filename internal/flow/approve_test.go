@@ -117,12 +117,12 @@ func TestApprovingAStepSendsTheCommitPromptAsAMessageOfTheApp(t *testing.T) {
 		t.Fatalf("ApproveStep() = %v, want nil", err)
 	}
 
-	if want := []string{commitPrompt("task-1")}; !slices.Equal(f.sessions.sent(), want) {
+	if want := []string{commitPrompt("task-1", false)}; !slices.Equal(f.sessions.sent(), want) {
 		t.Errorf("messages = %q, want %q", f.sessions.sent(), want)
 	}
 	// The commit prompt is not a correction: it must not count against the
 	// corrections the app allows itself.
-	sum, _ := f.sessions.Summary("task-1")
+	sum, _ := f.sessions.Summary(session.Key{TaskID: "task-1", Stage: session.StepStage(1)})
 	if sum.Corrections != 0 {
 		t.Errorf("corrections = %d, want 0: approving is not a correction", sum.Corrections)
 	}
@@ -158,7 +158,7 @@ func TestApprovingAPausedTaskResumesItFirst(t *testing.T) {
 	}
 
 	calls := f.sessions.recorded()
-	resume, send := slices.Index(calls, "resume:task-1"), slices.Index(calls, "send:task-1")
+	resume, send := slices.Index(calls, "resume:task-1:step:1"), slices.Index(calls, "send:task-1:step:1")
 	if resume < 0 || send < 0 || resume > send {
 		t.Errorf("session calls = %q, want the task resumed before the prompt goes out", calls)
 	}
@@ -183,7 +183,7 @@ func TestAStepIsConcludedWhenItsBranchMovesAndTheNextOneIsPrepared(t *testing.T)
 	if state.CommitSHA != commitSHA || state.CommitSubject != "Do the work of the step" {
 		t.Errorf("commit = %q %q, want the one the step produced", state.CommitSHA, state.CommitSubject)
 	}
-	if !slices.Contains(f.reviews.reviewCalls(), "forget:task-1") {
+	if !slices.Contains(f.reviews.reviewCalls(), "forget:task-1:api") {
 		t.Errorf("review calls = %q, want the worktree of the step forgotten", f.reviews.reviewCalls())
 	}
 
@@ -218,7 +218,7 @@ func TestTheLastStepOfAPlanIsConcludedWithNothingAfterIt(t *testing.T) {
 		t.Errorf("step runs = %d, want only the one the plan has", len(runs))
 	}
 	// The conversation of a step that is over takes no more messages.
-	if !slices.Contains(f.sessions.recorded(), "close:task-1") {
+	if !slices.Contains(f.sessions.recorded(), "close:task-1:step:1") {
 		t.Errorf("session calls = %q, want the session of the step closed", f.sessions.recorded())
 	}
 }
@@ -239,7 +239,7 @@ func TestACommitTurnThatEndsWithoutACommitGivesTheStepBack(t *testing.T) {
 	f.waitStep(t, "task-1", 1, flow.StepReadyToApprove)
 	// The decision is taken on a reading newer than the turn, not on one the
 	// debounce still owes.
-	if !slices.Contains(f.reviews.reviewCalls(), "refresh:task-1") {
+	if !slices.Contains(f.reviews.reviewCalls(), "refresh:task-1:api") {
 		t.Errorf("review calls = %q, want the worktree read again", f.reviews.reviewCalls())
 	}
 	if state := f.stepState(t, "task-1", 1); !state.CommitFailed {

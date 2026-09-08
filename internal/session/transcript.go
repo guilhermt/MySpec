@@ -142,6 +142,7 @@ const (
 	MarkerTechSpecUpdated MarkerType = "tech_spec_updated"
 	MarkerPlanWritten     MarkerType = "plan_written"
 	MarkerPlanUpdated     MarkerType = "plan_updated"
+	MarkerPRReviewWritten MarkerType = "pr_review_written"
 	MarkerStageStarted    MarkerType = "stage_started"
 	MarkerStepStarted     MarkerType = "step_started"
 	MarkerCompacted       MarkerType = "compacted"
@@ -189,6 +190,7 @@ type MarkerEntry struct {
 	PreTokens int        `json:"preTokens"` // compacted only
 	Stage     string     `json:"stage"`     // stage_started only
 	Step      int        `json:"step"`      // step_started only
+	Pass      int        `json:"pass"`      // pr_review_written only: the pass it closed
 	Restarted bool       `json:"restarted"` // stage_started and step_started only: it was started again
 }
 

@@ -11,11 +11,17 @@ import (
 // ErrNotFound is returned when a task has no persisted session.
 var ErrNotFound = errors.New("session: not found")
 
+// Key identifies one session: a task and the stage it belongs to.
+type Key struct {
+	TaskID string
+	Stage  string
+}
+
 // Record is the persisted session row: one per stage of a task.
 type Record struct {
 	ID            string // also the Claude Code session id
 	TaskID        string
-	Stage         string // prd, tech_spec, plan or step:<number>
+	Stage         string // prd, tech_spec, plan, step:<n>, pr:<slug> or pr_review:<slug>
 	Started       bool   // system/init has arrived at least once for this id
 	Paused        bool
 	ContextTokens int
@@ -26,8 +32,13 @@ type Record struct {
 	UpdatedAt     time.Time
 }
 
-// stepStagePrefix opens the session key of a step: "step:<number>".
-const stepStagePrefix = "step:"
+// The prefixes that open the session key of a stage a task has more than one
+// of: one step, or one repository of the PR stages.
+const (
+	stepStagePrefix     = "step:"
+	prStagePrefix       = "pr:"
+	prReviewStagePrefix = "pr_review:"
+)
 
 // StepStage is the session key of a step, which is what the sessions table
 // records in its stage column.
@@ -44,6 +55,34 @@ func ParseStepStage(stage string) (number int, ok bool) {
 		return 0, false
 	}
 	return number, true
+}
+
+// PRStage is the session key of the pull request stage of one repository,
+// named by its slug.
+func PRStage(slug string) string { return prStagePrefix + slug }
+
+// PRReviewStage is the session key of the pull request review of one
+// repository, named by its slug.
+func PRReviewStage(slug string) string { return prReviewStagePrefix + slug }
+
+// ParsePRStage reads the repository slug out of a PR session key. review says
+// which of the two stages it is.
+func ParsePRStage(stage string) (slug string, review bool, ok bool) {
+	// The review prefix is tested first: a naive reading of "pr_review:x"
+	// would not see "pr:" anyway, but the order is what makes that a rule.
+	if rest, found := strings.CutPrefix(stage, prReviewStagePrefix); found {
+		if rest == "" {
+			return "", false, false
+		}
+		return rest, true, true
+	}
+	if rest, found := strings.CutPrefix(stage, prStagePrefix); found {
+		if rest == "" {
+			return "", false, false
+		}
+		return rest, false, true
+	}
+	return "", false, false
 }
 
 // SessionRepository persists one Record per stage of a task.
@@ -108,6 +147,7 @@ const (
 // TranscriptEvent is one change to the conversation of a task.
 type TranscriptEvent struct {
 	TaskID  string
+	Stage   string
 	Kind    EventKind
 	Entry   *Entry
 	EntryID string

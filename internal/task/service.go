@@ -36,6 +36,9 @@ type Store interface {
 	ListStepRuns(ctx context.Context, taskID string) ([]StepRun, error)
 	UpsertStepRun(ctx context.Context, run StepRun) error
 	DeleteStepRuns(ctx context.Context, taskID string) error
+	ListPRRuns(ctx context.Context, taskID string) ([]PRRun, error)
+	UpsertPRRun(ctx context.Context, run PRRun) error
+	DeletePRRuns(ctx context.Context, taskID string) error
 }
 
 // Deps are what Service needs from the outside.
@@ -69,6 +72,7 @@ type Service struct {
 	tasks         []Task
 	artifacts     map[string]Artifacts // by task id, what the last inspection saw
 	stepRuns      map[string][]StepRun // by task id, ordered by number
+	prRuns        map[string][]PRRun   // by task id, ordered by repository path
 }
 
 // New builds a Service from deps, with the artifact watcher running.
@@ -84,6 +88,7 @@ func New(deps Deps) (*Service, error) {
 		onArtifact: deps.OnArtifact,
 		artifacts:  map[string]Artifacts{},
 		stepRuns:   map[string][]StepRun{},
+		prRuns:     map[string][]PRRun{},
 	}
 	if s.now == nil {
 		s.now = time.Now
@@ -121,6 +126,7 @@ func (s *Service) Sync(ctx context.Context, workspacePath string) error {
 
 	artifacts := make(map[string]Artifacts, len(tasks))
 	stepRuns := make(map[string][]StepRun, len(tasks))
+	prRuns := make(map[string][]PRRun, len(tasks))
 	for _, t := range tasks {
 		artifacts[t.ID] = s.inspect(t)
 		runs, err := s.repo.ListStepRuns(ctx, t.ID)
@@ -128,6 +134,12 @@ func (s *Service) Sync(ctx context.Context, workspacePath string) error {
 			return fmt.Errorf("list step runs of task %s: %w", t.ID, err)
 		}
 		stepRuns[t.ID] = runs
+
+		prs, err := s.repo.ListPRRuns(ctx, t.ID)
+		if err != nil {
+			return fmt.Errorf("list pr runs of task %s: %w", t.ID, err)
+		}
+		prRuns[t.ID] = prs
 	}
 
 	s.mu.Lock()
@@ -136,6 +148,7 @@ func (s *Service) Sync(ctx context.Context, workspacePath string) error {
 	s.tasks = tasks
 	s.artifacts = artifacts
 	s.stepRuns = stepRuns
+	s.prRuns = prRuns
 	s.mu.Unlock()
 
 	for _, t := range previous {
@@ -239,8 +252,9 @@ func (s *Service) Create(ctx context.Context, p CreateParams) (Task, error) {
 
 	s.mu.Lock()
 	s.tasks = append(s.tasks, t)
-	s.artifacts[t.ID] = Artifacts{}
+	s.artifacts[t.ID] = Artifacts{PR: map[string]RepoArtifacts{}}
 	s.stepRuns[t.ID] = nil
+	s.prRuns[t.ID] = nil
 	s.mu.Unlock()
 
 	s.watch(t)
@@ -274,6 +288,7 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	}
 	delete(s.artifacts, id)
 	delete(s.stepRuns, id)
+	delete(s.prRuns, id)
 	s.mu.Unlock()
 
 	s.log.Info("task deleted", "task", t.ID, "name", t.Name)
@@ -445,6 +460,109 @@ func (s *Service) ClearStepRuns(ctx context.Context, id string) error {
 	return nil
 }
 
+// PRRuns is what the app recorded about the PR stage of the repositories of a
+// task, by repository path.
+func (s *Service) PRRuns(id string) []PRRun {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return clonePRRuns(s.prRuns[id])
+}
+
+// updatePRRun rewrites the PR run of a repository from what the cache holds,
+// so that a change of status never drops the pull request the run carries.
+func (s *Service) updatePRRun(
+	ctx context.Context, id, repoPath string, mutate func(*PRRun),
+) (PRRun, error) {
+	if _, ok := s.Get(id); !ok {
+		return PRRun{}, fmt.Errorf("set pr run of %s in task %s: %w", repoPath, id, ErrNotFound)
+	}
+
+	now := s.now().UTC()
+	run := PRRun{TaskID: id, RepoPath: repoPath, CreatedAt: now}
+
+	s.mu.Lock()
+	// A repository keeps everything it recorded before, and the instant it was
+	// first recorded at, across every retry.
+	if index := indexOfPRRun(s.prRuns[id], repoPath); index >= 0 {
+		run = s.prRuns[id][index]
+	}
+	s.mu.Unlock()
+
+	run.UpdatedAt = now
+	mutate(&run)
+
+	if err := s.repo.UpsertPRRun(ctx, run); err != nil {
+		return PRRun{}, err
+	}
+
+	s.mu.Lock()
+	runs := s.prRuns[id]
+	if index := indexOfPRRun(runs, repoPath); index >= 0 {
+		runs[index] = run
+	} else {
+		position, _ := slices.BinarySearchFunc(runs, run, func(a, b PRRun) int {
+			return strings.Compare(a.RepoPath, b.RepoPath)
+		})
+		runs = slices.Insert(runs, position, run)
+	}
+	s.prRuns[id] = runs
+	s.mu.Unlock()
+
+	reason := ""
+	if run.Block != nil {
+		reason = string(run.Block.Reason)
+	}
+	s.log.Info("pr run set", "task", id, "repo", repoPath, "status", string(run.Status), "reason", reason)
+	s.changed()
+	return run, nil
+}
+
+// SetPRRun records the state of the PR stage of a repository, creating the
+// record on the first call for it. block is nil unless status is PRBlocked.
+func (s *Service) SetPRRun(
+	ctx context.Context, id, repoPath string, status PRStatus, block *PRBlock,
+) (PRRun, error) {
+	return s.updatePRRun(ctx, id, repoPath, func(run *PRRun) {
+		run.Status = status
+		run.Block = nil
+		if block != nil {
+			copied := *block
+			run.Block = &copied
+		}
+	})
+}
+
+// SetPRDetails records the pull request of a repository as gh reported it.
+func (s *Service) SetPRDetails(ctx context.Context, id, repoPath string, pr PRDetails) (PRRun, error) {
+	return s.updatePRRun(ctx, id, repoPath, func(run *PRRun) {
+		run.PR = pr
+	})
+}
+
+// SetPRReviewed records the pass a report closed and the commit it covered,
+// which is what makes the next pass wait for a new commit.
+func (s *Service) SetPRReviewed(ctx context.Context, id, repoPath, commit string, pass int) (PRRun, error) {
+	return s.updatePRRun(ctx, id, repoPath, func(run *PRRun) {
+		run.ReviewedCommit, run.ReportedPass = commit, pass
+	})
+}
+
+// ClearPRRuns forgets the PR stage of every repository of a task.
+func (s *Service) ClearPRRuns(ctx context.Context, id string) error {
+	if err := s.repo.DeletePRRuns(ctx, id); err != nil {
+		return err
+	}
+
+	s.mu.Lock()
+	delete(s.prRuns, id)
+	s.mu.Unlock()
+
+	s.log.Info("pr runs cleared", "task", id)
+	s.changed()
+	return nil
+}
+
 // RemoveArtifacts throws away the artifact of a stage and of every stage after
 // it, which is what going back to that stage means.
 func (s *Service) RemoveArtifacts(ctx context.Context, id string, from Stage) error {
@@ -463,7 +581,10 @@ func (s *Service) RemoveArtifacts(ctx context.Context, id string, from Stage) er
 		case StagePlan:
 			err = removePath(t.StepsDir(), true)
 		case StageImplementation:
-			continue
+		case StagePR:
+			// The drafts and the reports are about the commits the steps
+			// produced; going back to them leaves nothing to open a PR from.
+			err = removePath(t.PRDir(), true)
 		}
 		if err != nil {
 			return fmt.Errorf("remove artifacts of task %s: %w", id, err)
@@ -490,7 +611,8 @@ func (s *Service) RemoveArtifacts(ctx context.Context, id string, from Stage) er
 }
 
 // ReadArtifact returns the content of an artifact by file name: the PRD, the
-// tech spec or a step file under the steps folder. Anything else is ErrNotFound.
+// tech spec, a step file under the steps folder or a draft or a review report
+// under the pr folder. Anything else is ErrNotFound.
 func (s *Service) ReadArtifact(id, name string) (string, error) {
 	if !readableArtifact(name) {
 		return "", fmt.Errorf("read artifact %s of task %s: %w", name, id, ErrNotFound)
@@ -512,14 +634,17 @@ func (s *Service) ReadArtifact(id, name string) (string, error) {
 }
 
 // readableArtifact reports whether a name is one of the artifacts the app
-// shows. The step files are matched by their own pattern, which no path can
-// slip through.
+// shows. The files of a folder are matched by their own pattern, which no path
+// can slip through.
 func readableArtifact(name string) bool {
 	if name == PRDFile || name == TechSpecFile {
 		return true
 	}
-	step, found := strings.CutPrefix(name, StepsDirName+"/")
-	return found && stepFilePattern.MatchString(step)
+	if step, found := strings.CutPrefix(name, StepsDirName+"/"); found {
+		return stepFilePattern.MatchString(step)
+	}
+	pr, found := strings.CutPrefix(name, PRDirName+"/")
+	return found && prArtifactName(pr)
 }
 
 // removePath deletes an artifact that may not be there, which is not a failure.
@@ -623,10 +748,17 @@ func (s *Service) Repositories(t Task) []Repository {
 
 // inspect reads the artifacts of a task off the disk.
 func (s *Service) inspect(t Task) Artifacts {
+	repos := s.Repositories(t)
+	slugs := make([]string, 0, len(repos))
+	for _, repo := range repos {
+		slugs = append(slugs, Slug(repo.Rel))
+	}
+
 	return Artifacts{
 		PRD:      s.fileWritten(t.PRDPath()),
 		TechSpec: s.fileWritten(t.TechSpecPath()),
-		Plan:     ReadPlan(t.StepsDir(), s.Repositories(t)),
+		Plan:     ReadPlan(t.StepsDir(), repos),
+		PR:       ReadPRArtifacts(t.PRDir(), slugs),
 	}
 }
 
@@ -668,6 +800,29 @@ func indexOf(tasks []Task, id string) int {
 // indexOfRun finds a step run by number, -1 when the list does not hold it.
 func indexOfRun(runs []StepRun, number int) int {
 	return slices.IndexFunc(runs, func(r StepRun) bool { return r.Number == number })
+}
+
+// indexOfPRRun finds a PR run by repository path, -1 when the list does not
+// hold it.
+func indexOfPRRun(runs []PRRun, repoPath string) int {
+	return slices.IndexFunc(runs, func(r PRRun) bool { return r.RepoPath == repoPath })
+}
+
+// clonePRRuns copies the runs and the block each one carries, so that what a
+// caller holds never changes under it.
+func clonePRRuns(runs []PRRun) []PRRun {
+	if len(runs) == 0 {
+		return nil
+	}
+	out := make([]PRRun, len(runs))
+	for i, run := range runs {
+		if run.Block != nil {
+			block := *run.Block
+			run.Block = &block
+		}
+		out[i] = run
+	}
+	return out
 }
 
 // cloneStepRuns copies the runs and the block each one carries, so that what

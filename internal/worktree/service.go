@@ -179,6 +179,7 @@ func (s *Service) Ensure(
 		RepoPath:  repo.Path,
 		Path:      path,
 		Branch:    t.Name,
+		Base:      base,
 		CreatedAt: s.now().UTC(),
 	}
 	// Registered before the command, so that a creation that fails or is
@@ -238,6 +239,30 @@ func (s *Service) IsIgnored(ctx context.Context, wt Worktree, path string) (bool
 
 	return ask(ctx, CommandTimeout, func(ctx context.Context) (bool, error) {
 		return s.git.IsIgnored(ctx, wt.Path, path)
+	})
+}
+
+// Base is the ref the branch of a worktree was created from. An old worktree
+// registered before the column existed has none, and the rule is applied
+// again.
+func (s *Service) Base(ctx context.Context, wt Worktree) (string, error) {
+	if wt.Base != "" {
+		return wt.Base, nil
+	}
+
+	unlock := s.lockRepo(wt.RepoPath)
+	defer unlock()
+
+	return s.base(ctx, wt.RepoPath)
+}
+
+// Ahead is how many commits the worktree branch has past base.
+func (s *Service) Ahead(ctx context.Context, wt Worktree, base string) (int, error) {
+	unlock := s.lockRepo(wt.RepoPath)
+	defer unlock()
+
+	return ask(ctx, CommandTimeout, func(ctx context.Context) (int, error) {
+		return s.git.CountCommits(ctx, wt.Path, base, wt.Branch)
 	})
 }
 

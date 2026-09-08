@@ -124,3 +124,12 @@ func parseTime(value, subject string) (time.Time, error) {
 func nullString(value string) sql.NullString {
 	return sql.NullString{String: value, Valid: value != ""}
 }
+
+// nullTime stores an instant nobody recorded as NULL, which is how a nullable
+// timestamp column spells "never".
+func nullTime(t time.Time) sql.NullString {
+	if t.IsZero() {
+		return sql.NullString{}
+	}
+	return sql.NullString{String: formatTime(t), Valid: true}
+}

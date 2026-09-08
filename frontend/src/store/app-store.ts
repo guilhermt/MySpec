@@ -1,8 +1,10 @@
 import { create } from "zustand";
 import { useShallow } from "zustand/react/shallow";
+import { defaultRepoPath, reposOf } from "@/lib/repos";
 import type {
   Notice,
   Recent,
+  RepoPR,
   State,
   TaskSummary,
   ThemePreference,
@@ -10,7 +12,7 @@ import type {
   TranscriptEvent,
   Workspace,
 } from "@/lib/wails";
-import { asThemePreference } from "@/lib/wails";
+import { asThemePreference, sessionKey } from "@/lib/wails";
 import {
   applyEvent,
   emptyTranscript,
@@ -32,8 +34,13 @@ export interface AppStore {
   selectedNodeId: NodeId;
   expandedNodeIds: ReadonlySet<NodeId>;
   openTaskId: string | null;
+  /** transcripts and drafts are keyed by sessionKey: a task has one per stage. */
   transcripts: Record<string, TranscriptState>;
   drafts: Record<string, string>;
+  /** openRepo is the repository tab of a task in the PR stage, by task id. */
+  openRepo: Record<string, string>;
+  /** prDrafts is the pull request the user is editing, by repoKey. */
+  prDrafts: Record<string, PrDraft>;
   newTaskFor: NodeId | null;
 
   applyState: (next: State) => void;
@@ -46,11 +53,25 @@ export interface AppStore {
   closeTask: () => void;
   openNewTask: (nodeId: NodeId) => void;
   closeNewTask: () => void;
-  beginTranscript: (taskId: string) => void;
+  beginTranscript: (taskId: string, stage: string) => void;
   setTranscript: (transcript: Transcript) => void;
   applyTranscriptEvent: (event: TranscriptEvent) => void;
-  dropTranscript: (taskId: string) => void;
-  setDraft: (taskId: string, text: string) => void;
+  dropTranscript: (taskId: string, stage: string) => void;
+  setDraft: (taskId: string, stage: string, text: string) => void;
+  selectRepo: (taskId: string, repoPath: string) => void;
+  setPrDraft: (taskId: string, repoPath: string, draft: PrDraft) => void;
+  clearPrDraft: (taskId: string, repoPath: string) => void;
+}
+
+/** PrDraft is the title and the description of a pull request being edited. */
+export interface PrDraft {
+  title: string;
+  body: string;
+}
+
+/** repoKey identifies one pull request draft: a task and one of its repositories. */
+export function repoKey(taskId: string, repoPath: string): string {
+  return `${taskId}|${repoPath}`;
 }
 
 function tasksOf(state: State | null): readonly TaskSummary[] {
@@ -88,10 +109,20 @@ function withExpanded(
 
 function withoutTranscript(
   transcripts: Record<string, TranscriptState>,
+  key: string,
+): Record<string, TranscriptState> {
+  const { [key]: _dropped, ...rest } = transcripts;
+  return rest;
+}
+
+// A task that is gone takes every conversation it had with it, whatever stage
+// each belonged to.
+function withoutTaskTranscripts(
+  transcripts: Record<string, TranscriptState>,
   taskId: string,
 ): Record<string, TranscriptState> {
-  const { [taskId]: _dropped, ...rest } = transcripts;
-  return rest;
+  const prefix = sessionKey(taskId, "");
+  return Object.fromEntries(Object.entries(transcripts).filter(([key]) => !key.startsWith(prefix)));
 }
 
 function initialTreeUi(): Pick<AppStore, "selectedNodeId" | "expandedNodeIds"> {
@@ -99,8 +130,18 @@ function initialTreeUi(): Pick<AppStore, "selectedNodeId" | "expandedNodeIds"> {
 }
 
 // Nothing of another workspace survives: its tasks are gone from the snapshot.
-function initialTaskUi(): Pick<AppStore, "openTaskId" | "transcripts" | "drafts" | "newTaskFor"> {
-  return { openTaskId: null, transcripts: {}, drafts: {}, newTaskFor: null };
+function initialTaskUi(): Pick<
+  AppStore,
+  "openTaskId" | "transcripts" | "drafts" | "openRepo" | "prDrafts" | "newTaskFor"
+> {
+  return {
+    openTaskId: null,
+    transcripts: {},
+    drafts: {},
+    openRepo: {},
+    prDrafts: {},
+    newTaskFor: null,
+  };
 }
 
 export const useAppStore = create<AppStore>()((set) => ({
@@ -125,7 +166,7 @@ export const useAppStore = create<AppStore>()((set) => ({
         app: next,
         selectedNodeId,
         openTaskId: null,
-        transcripts: withoutTranscript(state.transcripts, openTaskId),
+        transcripts: withoutTaskTranscripts(state.transcripts, openTaskId),
       };
     }),
 
@@ -162,30 +203,35 @@ export const useAppStore = create<AppStore>()((set) => ({
 
   closeNewTask: () => set({ newTaskFor: null }),
 
-  beginTranscript: (taskId) =>
-    set((state) => ({
-      transcripts: {
-        ...state.transcripts,
-        [taskId]: {
-          ...(state.transcripts[taskId] ?? emptyTranscript()),
-          status: "loading",
-          buffered: [],
+  beginTranscript: (taskId, stage) =>
+    set((state) => {
+      const key = sessionKey(taskId, stage);
+      return {
+        transcripts: {
+          ...state.transcripts,
+          [key]: {
+            ...(state.transcripts[key] ?? emptyTranscript()),
+            status: "loading",
+            buffered: [],
+          },
         },
-      },
-    })),
+      };
+    }),
 
   // What arrived while loading is folded in afterwards, so the events that
   // raced with GetTranscript are neither lost nor applied out of order.
   setTranscript: (transcript) =>
     set((state) => {
-      const buffered = state.transcripts[transcript.taskId]?.buffered ?? [];
+      const key = sessionKey(transcript.taskId, transcript.stage);
+      const buffered = state.transcripts[key]?.buffered ?? [];
       const loaded = buffered.reduce(applyEvent, fromTranscript(transcript));
-      return { transcripts: { ...state.transcripts, [transcript.taskId]: loaded } };
+      return { transcripts: { ...state.transcripts, [key]: loaded } };
     }),
 
   applyTranscriptEvent: (event) =>
     set((state) => {
-      const current = state.transcripts[event.taskId];
+      const key = sessionKey(event.taskId, event.stage);
+      const current = state.transcripts[key];
       if (current === undefined) {
         return {};
       }
@@ -196,13 +242,30 @@ export const useAppStore = create<AppStore>()((set) => ({
       if (next === current) {
         return {};
       }
-      return { transcripts: { ...state.transcripts, [event.taskId]: next } };
+      return { transcripts: { ...state.transcripts, [key]: next } };
     }),
 
-  dropTranscript: (taskId) =>
-    set((state) => ({ transcripts: withoutTranscript(state.transcripts, taskId) })),
+  dropTranscript: (taskId, stage) =>
+    set((state) => ({
+      transcripts: withoutTranscript(state.transcripts, sessionKey(taskId, stage)),
+    })),
 
-  setDraft: (taskId, text) => set((state) => ({ drafts: { ...state.drafts, [taskId]: text } })),
+  setDraft: (taskId, stage, text) =>
+    set((state) => ({ drafts: { ...state.drafts, [sessionKey(taskId, stage)]: text } })),
+
+  selectRepo: (taskId, repoPath) =>
+    set((state) => ({ openRepo: { ...state.openRepo, [taskId]: repoPath } })),
+
+  // The draft the user is editing outlives what the agent says next; only
+  // opening the pull request, or throwing the draft away, clears it.
+  setPrDraft: (taskId, repoPath, draft) =>
+    set((state) => ({ prDrafts: { ...state.prDrafts, [repoKey(taskId, repoPath)]: draft } })),
+
+  clearPrDraft: (taskId, repoPath) =>
+    set((state) => {
+      const { [repoKey(taskId, repoPath)]: _dropped, ...rest } = state.prDrafts;
+      return { prDrafts: rest };
+    }),
 }));
 
 const NO_RECENTS: readonly Recent[] = [];
@@ -242,12 +305,35 @@ export function useOpenTask(): TaskSummary | null {
   return useAppStore((state) => findTask(state.app, state.openTaskId));
 }
 
-export function useTranscript(taskId: string): TranscriptState | null {
-  return useAppStore((state) => state.transcripts[taskId] ?? null);
+export function useTranscript(taskId: string, stage: string): TranscriptState | null {
+  return useAppStore((state) => state.transcripts[sessionKey(taskId, stage)] ?? null);
 }
 
-export function useDraft(taskId: string): string {
-  return useAppStore((state) => state.drafts[taskId] ?? "");
+export function useDraft(taskId: string, stage: string): string {
+  return useAppStore((state) => state.drafts[sessionKey(taskId, stage)] ?? "");
+}
+
+export function useRepos(taskId: string): readonly RepoPR[] {
+  return useAppStore((state) => reposOf(findTask(state.app, taskId)));
+}
+
+/**
+ * useOpenRepo is the selected repository tab of a task. A selection that no
+ * longer names a repository of the task falls back to the default.
+ */
+export function useOpenRepo(taskId: string): string {
+  return useAppStore((state) => {
+    const repos = reposOf(findTask(state.app, taskId));
+    const selected = state.openRepo[taskId];
+    if (selected !== undefined && repos.some((repo) => repo.repoPath === selected)) {
+      return selected;
+    }
+    return defaultRepoPath(repos);
+  });
+}
+
+export function usePrDraft(taskId: string, repoPath: string): PrDraft | null {
+  return useAppStore((state) => state.prDrafts[repoKey(taskId, repoPath)] ?? null);
 }
 
 export interface ThemeState {

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -32,11 +33,12 @@ type debounce struct {
 	kinds map[ArtifactKind]struct{}
 }
 
-// watched is a folder the watcher follows: the task it belongs to, and whether
-// it is the steps folder rather than the artifact folder itself.
+// watched is a folder the watcher follows: the task it belongs to, and which
+// artifact it holds. An empty kind is the artifact folder of the task itself,
+// where the file tells the artifact apart.
 type watched struct {
 	taskID string
-	steps  bool
+	kind   ArtifactKind
 }
 
 // watcher turns the filesystem noise of the artifact folders into one settled
@@ -72,7 +74,7 @@ func newWatcher(log *slog.Logger, settled func(taskID string, kinds []ArtifactKi
 }
 
 // watch follows the artifact folder of a task, creating it when it is gone,
-// and the steps folder inside it when the plan stage already made one.
+// and the steps and pr folders inside it when a stage already made them.
 func (w *watcher) watch(taskID, dir string) error {
 	if err := os.MkdirAll(dir, dirPerm); err != nil {
 		return fmt.Errorf("create artifacts directory %s: %w", dir, err)
@@ -86,17 +88,33 @@ func (w *watcher) watch(taskID, dir string) error {
 		return fmt.Errorf("watch artifacts directory %s: %w", dir, err)
 	}
 
-	steps := filepath.Join(dir, StepsDirName)
-	if info, err := os.Stat(steps); err == nil && info.IsDir() {
-		w.addSteps(taskID, steps)
+	for _, sub := range subFolders {
+		path := filepath.Join(dir, sub.name)
+		if info, err := os.Stat(path); err == nil && info.IsDir() {
+			w.addFolder(taskID, path, sub.kind)
+		}
 	}
 	return nil
 }
 
+// subFolders are the folders of artifacts inside the folder of a task, each
+// one followed on its own.
+var subFolders = []struct {
+	name string
+	kind ArtifactKind
+}{
+	{name: StepsDirName, kind: ArtifactPlan},
+	{name: PRDirName, kind: ArtifactPR},
+}
+
 // unwatch stops following the folders of a task and drops its pending wait.
 func (w *watcher) unwatch(taskID, dir string) {
-	steps := filepath.Join(dir, StepsDirName)
-	for _, path := range []string{dir, steps} {
+	paths := make([]string, 0, 1+len(subFolders))
+	paths = append(paths, dir)
+	for _, sub := range subFolders {
+		paths = append(paths, filepath.Join(dir, sub.name))
+	}
+	for _, path := range paths {
 		if err := w.fs.Remove(path); err != nil && !errors.Is(err, fsnotify.ErrNonExistentWatch) {
 			w.log.Warn("unwatch artifacts directory failed", "path", path, "error", err)
 		}
@@ -105,26 +123,28 @@ func (w *watcher) unwatch(taskID, dir string) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	delete(w.dirs, dir)
-	delete(w.dirs, steps)
+	for _, path := range paths {
+		delete(w.dirs, path)
+	}
 	if p, ok := w.pending[taskID]; ok {
 		p.timer.Stop()
 		delete(w.pending, taskID)
 	}
 }
 
-// addSteps follows a steps folder. A folder the watcher cannot follow only
-// costs the automatic detection of the plan.
-func (w *watcher) addSteps(taskID, dir string) {
+// addFolder follows a folder of artifacts inside the folder of a task. A
+// folder the watcher cannot follow only costs the automatic detection of what
+// is written into it.
+func (w *watcher) addFolder(taskID, dir string, kind ArtifactKind) {
 	if err := w.fs.Add(dir); err != nil {
-		w.log.Warn("watch steps directory failed", "task", taskID, "path", dir, "error", err)
+		w.log.Warn("watch artifact directory failed", "task", taskID, "path", dir, "error", err)
 		return
 	}
 
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	w.dirs[dir] = watched{taskID: taskID, steps: true}
+	w.dirs[dir] = watched{taskID: taskID, kind: kind}
 }
 
 // close stops the goroutine and every wait in flight.
@@ -182,28 +202,38 @@ func (w *watcher) handle(ev fsnotify.Event) {
 	w.arm(where.taskID, kind)
 }
 
-// kindOf names the artifact an event touched, and follows the steps folder as
-// it comes and goes.
+// kindOf names the artifact an event touched, and follows the folders of
+// artifacts as they come and go.
 func (w *watcher) kindOf(ev fsnotify.Event, where watched) (ArtifactKind, bool) {
-	if where.steps {
-		return ArtifactPlan, true
+	name := filepath.Base(ev.Name)
+	if where.kind != "" {
+		// The agent writes the drafts and the reports whole; a hidden file is
+		// an editor of its own passing through.
+		if where.kind == ArtifactPR && strings.HasPrefix(name, ".") {
+			return "", false
+		}
+		return where.kind, true
 	}
 
-	switch filepath.Base(ev.Name) {
+	switch name {
 	case PRDFile:
 		return ArtifactPRD, true
 	case TechSpecFile:
 		return ArtifactTechSpec, true
-	case StepsDirName:
+	case StepsDirName, PRDirName:
+		kind := ArtifactPlan
+		if name == PRDirName {
+			kind = ArtifactPR
+		}
 		if ev.Has(fsnotify.Create) {
-			w.addSteps(where.taskID, ev.Name)
+			w.addFolder(where.taskID, ev.Name, kind)
 		}
 		if ev.Has(fsnotify.Remove | fsnotify.Rename) {
 			w.mu.Lock()
 			delete(w.dirs, ev.Name)
 			w.mu.Unlock()
 		}
-		return ArtifactPlan, true
+		return kind, true
 	default:
 		return "", false
 	}

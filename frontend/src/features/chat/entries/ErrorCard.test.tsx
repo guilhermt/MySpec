@@ -20,32 +20,39 @@ describe("ErrorCard", () => {
     ["not_logged_in", "Claude Code isn't logged in"],
     ["turn_error", "The agent couldn't finish"],
   ] as const)("names the %s failure", (kind: ErrorKind, expected) => {
-    renderWithStore(<ErrorCard taskId="task-1" error={failure({ kind })} />, { state: STOPPED });
+    renderWithStore(<ErrorCard stage="prd" taskId="task-1" error={failure({ kind })} />, {
+      state: STOPPED,
+    });
 
     expect(screen.getByRole("alert")).toHaveTextContent(expected);
     expect(screen.getByText("the agent stopped")).toBeInTheDocument();
   });
 
   it("retries the turn that failed", async () => {
-    const { user } = renderWithStore(<ErrorCard taskId="task-1" error={failure()} />, {
+    const { user } = renderWithStore(<ErrorCard stage="prd" taskId="task-1" error={failure()} />, {
       state: STOPPED,
     });
 
     await user.click(screen.getByRole("button", { name: "Retry" }));
 
-    expect(api.retry).toHaveBeenCalledWith("task-1");
+    expect(api.retry).toHaveBeenCalledWith("task-1", "prd");
   });
 
   it("offers no retry for a failure nothing can undo", () => {
-    renderWithStore(<ErrorCard taskId="task-1" error={failure({ retryable: false })} />, {
-      state: STOPPED,
-    });
+    renderWithStore(
+      <ErrorCard stage="prd" taskId="task-1" error={failure({ retryable: false })} />,
+      {
+        state: STOPPED,
+      },
+    );
 
     expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
   });
 
   it("offers no retry once the session has moved on", () => {
-    renderWithStore(<ErrorCard taskId="task-1" error={failure()} />, { state: RECOVERED });
+    renderWithStore(<ErrorCard stage="prd" taskId="task-1" error={failure()} />, {
+      state: RECOVERED,
+    });
 
     expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
   });

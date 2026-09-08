@@ -86,18 +86,20 @@ export interface ErrorEntry {
 export interface MarkerEntry {
     /**
      * Type is prd_written, prd_updated, tech_spec_written, tech_spec_updated,
-     * plan_written, plan_updated, stage_started, step_started, compacted or
-     * interrupted.
+     * plan_written, plan_updated, pr_review_written, stage_started,
+     * step_started, compacted or interrupted.
      */
     "type": string;
     "preTokens": number;
 
     /**
-     * Stage belongs to stage_started alone and Step to step_started alone;
-     * Restarted belongs to both.
+     * Stage belongs to stage_started alone, Step to step_started alone and
+     * Pass to pr_review_written alone; Restarted belongs to the two started
+     * ones.
      */
     "stage": string;
     "step": number;
+    "pass": number;
     "restarted": boolean;
 }
 
@@ -113,6 +115,49 @@ export interface Notice {
      * frontend union types instead of emitting a TypeScript enum.
      */
     "reason": string;
+}
+
+/**
+ * PRBlock is why the pull request stage of a repository cannot go on.
+ */
+export interface PRBlock {
+    /**
+     * Reason is gh_missing, gh_unauthenticated, gh_failed, git_failed or
+     * no_worktree, a string for the same reason as Notice.Reason.
+     */
+    "reason": string;
+
+    /**
+     * what gh or git said, verbatim
+     */
+    "detail": string;
+}
+
+/**
+ * PRDraft is the description of a pull request the agent wrote and the user
+ * edits.
+ */
+export interface PRDraft {
+    "title": string;
+    "body": string;
+
+    /**
+     * name inside the pr folder, for ReadArtifact
+     */
+    "file": string;
+}
+
+/**
+ * PRReport is one pass of the review of a pull request.
+ */
+export interface PRReport {
+    "pass": number;
+
+    /**
+     * name inside the pr folder, for ReadArtifact
+     */
+    "file": string;
+    "clean": boolean;
 }
 
 /**
@@ -223,6 +268,83 @@ export interface Recent {
 export interface Repo {
     "name": string;
     "path": string;
+}
+
+/**
+ * RepoPR is one repository of a task in the pull request stage, with its own
+ * conversation and its own state.
+ */
+export interface RepoPR {
+    /**
+     * relative path, as the steps name it
+     */
+    "repository": string;
+    "repoPath": string;
+    "slug": string;
+
+    /**
+     * Status is preparing, blocked, drafting, draft_ready, opening, reviewing,
+     * awaiting_decision, in_review, ready_to_approve, committing, done or
+     * skipped, a string for the same reason as Notice.Reason.
+     */
+    "status": string;
+
+    /**
+     * blocked only
+     */
+    "block": PRBlock | null;
+    "worktreePath": string;
+    "branch": string;
+    "baseBranch": string;
+
+    /**
+     * nil until the draft is written
+     */
+    "draft": PRDraft | null;
+
+    /**
+     * never nil
+     */
+    "reports": PRReport[] | null;
+
+    /**
+     * the review states and committing only
+     */
+    "review": Review | null;
+
+    /**
+     * CommitFailed says the last approval of this repository ended without a
+     * commit.
+     */
+    "commitFailed": boolean;
+    "prNumber": number;
+    "prUrl": string;
+
+    /**
+     * open, merged or closed; "" when unknown
+     */
+    "prState": string;
+
+    /**
+     * CheckedAt is when gh last reported the pull request; "" before that.
+     */
+    "checkedAt": string;
+
+    /**
+     * "" when the repository has no conversation
+     */
+    "sessionStage": string;
+
+    /**
+     * SessionStatus is working, waiting, needs_permission, paused or error.
+     */
+    "sessionStatus": string;
+    "turnRunning": boolean;
+    "processRunning": boolean;
+    "retryAttempt": number;
+    "contextPercent": number;
+    "pendingCount": number;
+    "lastError": string;
 }
 
 /**
@@ -388,8 +510,8 @@ export interface TaskSummary {
     "dir": string;
 
     /**
-     * Stage is prd, tech_spec, plan or implementation, a string for the same
-     * reason as Notice.Reason.
+     * Stage is prd, tech_spec, plan, implementation or pr, a string for the
+     * same reason as Notice.Reason.
      */
     "stage": string;
 
@@ -421,6 +543,11 @@ export interface TaskSummary {
      * the step that runs or runs next; 0 when the task has no steps
      */
     "currentStep": number;
+
+    /**
+     * never nil; empty outside the pull request stage
+     */
+    "repos": RepoPR[] | null;
 
     /**
      * never nil
@@ -461,6 +588,7 @@ export interface Transcript {
  */
 export interface TranscriptEvent {
     "taskId": string;
+    "stage": string;
 
     /**
      * Kind is entry, text, remove or reset.

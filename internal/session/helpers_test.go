@@ -300,8 +300,14 @@ type fixture struct {
 	launcher *fakeLauncher
 
 	mu     sync.Mutex
-	states []string
+	states []session.Key
 	events []session.TranscriptEvent
+}
+
+// prd is the session key of a task in the PRD stage, which is where most of
+// these tests keep theirs.
+func prd(taskID string) session.Key {
+	return session.Key{TaskID: taskID, Stage: string(prompts.StagePRD)}
 }
 
 // newFixture builds a Service whose processes play one fake scenario.
@@ -349,11 +355,11 @@ func newFixtureWith(t *testing.T, launcher *fakeLauncher, idle time.Duration) *f
 	return f
 }
 
-func (f *fixture) onState(taskID string) {
+func (f *fixture) onState(k session.Key) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	f.states = append(f.states, taskID)
+	f.states = append(f.states, k)
 }
 
 func (f *fixture) onTranscript(ev session.TranscriptEvent) {
@@ -363,29 +369,29 @@ func (f *fixture) onTranscript(ev session.TranscriptEvent) {
 	f.events = append(f.events, ev)
 }
 
-// stateCount returns how many times OnState ran for a task.
-func (f *fixture) stateCount(taskID string) int {
+// stateCount returns how many times OnState ran for a session.
+func (f *fixture) stateCount(k session.Key) int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
 	total := 0
-	for _, id := range f.states {
-		if id == taskID {
+	for _, state := range f.states {
+		if state == k {
 			total++
 		}
 	}
 	return total
 }
 
-// eventsOf returns the transcript events of a task with the given kind, in
+// eventsOf returns the transcript events of a session with the given kind, in
 // order.
-func (f *fixture) eventsOf(taskID string, kind session.EventKind) []session.TranscriptEvent {
+func (f *fixture) eventsOf(k session.Key, kind session.EventKind) []session.TranscriptEvent {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
 	var out []session.TranscriptEvent
 	for _, ev := range f.events {
-		if ev.TaskID == taskID && ev.Kind == kind {
+		if ev.TaskID == k.TaskID && ev.Stage == k.Stage && ev.Kind == kind {
 			out = append(out, ev)
 		}
 	}
@@ -393,9 +399,9 @@ func (f *fixture) eventsOf(taskID string, kind session.EventKind) []session.Tran
 }
 
 // textsOf returns every streamed text of an entry, in order.
-func (f *fixture) textsOf(taskID, entryID string) []string {
+func (f *fixture) textsOf(k session.Key, entryID string) []string {
 	var out []string
-	for _, ev := range f.eventsOf(taskID, session.EventText) {
+	for _, ev := range f.eventsOf(k, session.EventText) {
 		if ev.EntryID == entryID {
 			out = append(out, ev.Text)
 		}
@@ -469,42 +475,43 @@ func (f *fixture) open(t *testing.T, info session.TaskInfo) {
 }
 
 // send queues a message, failing the test when the service refuses it.
-func (f *fixture) send(t *testing.T, taskID, text string) {
+func (f *fixture) send(t *testing.T, k session.Key, text string) {
 	t.Helper()
 
-	if err := f.service.Send(t.Context(), taskID, text); err != nil {
-		t.Fatalf("Send(%s, %q) = %v, want nil", taskID, text, err)
+	if err := f.service.Send(t.Context(), k, text); err != nil {
+		t.Fatalf("Send(%v, %q) = %v, want nil", k, text, err)
 	}
 }
 
-// summary returns the summary of a task, failing the test when it is not open.
-func (f *fixture) summary(t *testing.T, taskID string) session.Summary {
+// summary returns the summary of a session, failing the test when it is not
+// open.
+func (f *fixture) summary(t *testing.T, k session.Key) session.Summary {
 	t.Helper()
 
-	sum, ok := f.service.Summary(taskID)
+	sum, ok := f.service.Summary(k)
 	if !ok {
-		t.Fatalf("Summary(%s) not found", taskID)
+		t.Fatalf("Summary(%v) not found", k)
 	}
 	return sum
 }
 
-// transcript returns the conversation of a task, failing the test on error.
-func (f *fixture) transcript(t *testing.T, taskID string) session.Transcript {
+// transcript returns the conversation of a session, failing the test on error.
+func (f *fixture) transcript(t *testing.T, k session.Key) session.Transcript {
 	t.Helper()
 
-	tr, err := f.service.Transcript(t.Context(), taskID)
+	tr, err := f.service.Transcript(t.Context(), k)
 	if err != nil {
-		t.Fatalf("Transcript(%s) = %v, want nil", taskID, err)
+		t.Fatalf("Transcript(%v) = %v, want nil", k, err)
 	}
 	return tr
 }
 
-// entriesOf returns the delivered entries of a task with the given kind.
-func (f *fixture) entriesOf(t *testing.T, taskID string, kind session.Kind) []session.Entry {
+// entriesOf returns the delivered entries of a session with the given kind.
+func (f *fixture) entriesOf(t *testing.T, k session.Key, kind session.Kind) []session.Entry {
 	t.Helper()
 
 	var out []session.Entry
-	for _, e := range f.transcript(t, taskID).Entries {
+	for _, e := range f.transcript(t, k).Entries {
 		if e.Kind == kind {
 			out = append(out, e)
 		}
@@ -512,35 +519,37 @@ func (f *fixture) entriesOf(t *testing.T, taskID string, kind session.Kind) []se
 	return out
 }
 
-// waitStatus waits until the summary of a task satisfies cond.
-func (f *fixture) waitStatus(t *testing.T, taskID, subject string, cond func(session.Summary) bool) session.Summary {
+// waitStatus waits until the summary of a session satisfies cond.
+func (f *fixture) waitStatus(
+	t *testing.T, k session.Key, subject string, cond func(session.Summary) bool,
+) session.Summary {
 	t.Helper()
 
 	var sum session.Summary
 	waitFor(t, subject, func() bool {
-		sum = f.summary(t, taskID)
+		sum = f.summary(t, k)
 		return cond(sum)
 	})
 	return sum
 }
 
-// waitIdle waits until the turn of a task is over and the process waits for
+// waitIdle waits until the turn of a session is over and the process waits for
 // the next message.
-func (f *fixture) waitIdle(t *testing.T, taskID string) session.Summary {
+func (f *fixture) waitIdle(t *testing.T, k session.Key) session.Summary {
 	t.Helper()
 
-	return f.waitStatus(t, taskID, "the turn to end", func(s session.Summary) bool {
+	return f.waitStatus(t, k, "the turn to end", func(s session.Summary) bool {
 		return s.Status == session.StatusWaiting && s.ProcessRunning
 	})
 }
 
-// waitEntries waits until a task has at least n delivered entries of a kind.
-func (f *fixture) waitEntries(t *testing.T, taskID string, kind session.Kind, n int) []session.Entry {
+// waitEntries waits until a session has at least n delivered entries of a kind.
+func (f *fixture) waitEntries(t *testing.T, k session.Key, kind session.Kind, n int) []session.Entry {
 	t.Helper()
 
 	var entries []session.Entry
 	waitFor(t, fmt.Sprintf("%d %s entries", n, kind), func() bool {
-		entries = f.entriesOf(t, taskID, kind)
+		entries = f.entriesOf(t, k, kind)
 		return len(entries) >= n
 	})
 	return entries

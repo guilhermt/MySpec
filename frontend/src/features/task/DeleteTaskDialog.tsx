@@ -8,6 +8,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { OrphanPRs } from "@/features/task/OrphanPRs";
 import type { TaskSummary } from "@/lib/wails";
 import { asTaskStage } from "@/lib/wails";
 import { deleteTask } from "@/store/actions";
@@ -23,7 +24,8 @@ export interface DeleteTaskDialogProps {
  * its own: the next snapshot no longer has the task.
  */
 export function DeleteTaskDialog({ task, open, onOpenChange }: DeleteTaskDialogProps) {
-  const implementing = asTaskStage(task.stage) === "implementation";
+  // The worktrees outlive the implementation: the PR stage works in them too.
+  const hasWorktrees = ["implementation", "pr"].includes(asTaskStage(task.stage));
 
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
@@ -33,10 +35,11 @@ export function DeleteTaskDialog({ task, open, onOpenChange }: DeleteTaskDialogP
           <AlertDialogDescription>
             This removes the conversations, the documents, the steps and every record of the task.
             It can't be undone.
-            {implementing &&
+            {hasWorktrees &&
               " The worktrees and branches of the task are removed too, with any uncommitted work in them."}
           </AlertDialogDescription>
         </AlertDialogHeader>
+        <OrphanPRs task={task} />
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>
           <AlertDialogAction

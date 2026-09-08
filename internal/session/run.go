@@ -10,8 +10,8 @@ import (
 	"github.com/guilhermt/myspec/internal/prompts"
 )
 
-// run is the in-memory state of one task's session. Every field is protected
-// by Service.mu.
+// run is the in-memory state of one session. Every field is protected by
+// Service.mu.
 type run struct {
 	task    TaskInfo
 	rec     Record
@@ -76,6 +76,9 @@ func newRun(t TaskInfo, rec Record, nextSeq int) *run {
 		dirty:   map[string]struct{}{},
 	}
 }
+
+// key is the session this run is held under.
+func (r *run) key() Key { return Key{TaskID: r.task.ID, Stage: r.rec.Stage} }
 
 func newTurn(id string) *turn {
 	return &turn{
@@ -197,8 +200,8 @@ func (s *Service) ensureProcessLocked(ctx context.Context, r *run, n *notes) err
 		r.rec.LastError = ""
 		_ = s.persistRecord(ctx, r)
 	}
-	go s.consume(r.task.ID, r.procGen, p)
-	n.state(r.task.ID)
+	go s.consume(r.key(), r.procGen, p)
+	n.state(r.key())
 	return nil
 }
 
@@ -209,12 +212,12 @@ func (s *Service) armStartLocked(r *run) {
 	if r.eventSeen || r.startTimer != nil {
 		return
 	}
-	taskID, gen := r.task.ID, r.procGen
-	r.startTimer = time.AfterFunc(StartTimeout, func() { s.startExpired(taskID, gen) })
+	key, gen := r.key(), r.procGen
+	r.startTimer = time.AfterFunc(StartTimeout, func() { s.startExpired(key, gen) })
 }
 
 // startExpired gives up on a process that said nothing since it started.
-func (s *Service) startExpired(taskID string, gen int) {
+func (s *Service) startExpired(k Key, gen int) {
 	ctx, cancel := bgCtx()
 	defer cancel()
 	n := &notes{}
@@ -222,14 +225,14 @@ func (s *Service) startExpired(taskID string, gen int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	r := s.runs[taskID]
+	r := s.runs[k]
 	if r == nil || r.procGen != gen || r.startTimer == nil || r.proc == nil {
 		return
 	}
 	r.startTimer = nil
 	r.stopping = true
 	if err := r.proc.Terminate(); err != nil {
-		s.log.Warn("terminate claude failed", "task", taskID, "error", err)
+		s.log.Warn("terminate claude failed", "task", k.TaskID, "stage", k.Stage, "error", err)
 	}
 	_ = s.failStart(ctx, r, n, ErrorStartFailed, "Claude Code did not respond in time.", nil)
 }
@@ -240,7 +243,7 @@ func (s *Service) failStart(ctx context.Context, r *run, n *notes, kind ErrorKin
 	r.rec.LastError = message
 	_ = s.persistRecord(ctx, r)
 	s.appendLocked(ctx, r, Entry{Kind: KindError, Error: &ErrorEntry{Kind: kind, Message: message, Retryable: true}}, n)
-	n.state(r.task.ID)
+	n.state(r.key())
 	if cause == nil {
 		return errors.New(message)
 	}
@@ -257,8 +260,8 @@ func (s *Service) enqueueLocked(ctx context.Context, r *run, u *UserEntry, n *no
 	if err := s.entries.Insert(ctx, r.rec.ID, *e); err != nil {
 		return err
 	}
-	n.entry(r.task.ID, e)
-	n.state(r.task.ID)
+	n.entry(r.key(), e)
+	n.state(r.key())
 	return nil
 }
 
@@ -285,6 +288,13 @@ func (s *Service) flushPendingLocked(ctx context.Context, r *run, n *notes) bool
 			StepPath:       r.task.StepPath,
 			Repositories:   r.task.Repositories,
 			InitialContext: e.User.Text,
+			Repository:     r.task.Repository,
+			Branch:         r.task.Branch,
+			BaseBranch:     r.task.BaseBranch,
+			DraftPath:      r.task.DraftPath,
+			ReviewPath:     r.task.ReviewPath,
+			PRNumber:       r.task.PRNumber,
+			PRURL:          r.task.PRURL,
 		})
 		if err != nil {
 			_ = s.failStart(ctx, r, n, ErrorStartFailed, "Could not render the prompt: "+err.Error(), err)
@@ -314,7 +324,7 @@ func (s *Service) flushPendingLocked(ctx context.Context, r *run, n *notes) bool
 	r.turnDone = make(chan struct{})
 	r.stopTimer(&r.idleTimer)
 	s.armStartLocked(r)
-	n.state(r.task.ID)
+	n.state(r.key())
 	return true
 }
 
@@ -323,17 +333,17 @@ func (s *Service) armIdleLocked(r *run) {
 	if r.proc == nil || r.stopping {
 		return
 	}
-	taskID, gen := r.task.ID, r.procGen
+	key, gen := r.key(), r.procGen
 	r.stopTimer(&r.idleTimer)
-	r.idleTimer = time.AfterFunc(s.idleTimeout, func() { s.idleExpired(taskID, gen) })
+	r.idleTimer = time.AfterFunc(s.idleTimeout, func() { s.idleExpired(key, gen) })
 }
 
 // idleExpired stops a process that stayed idle for the whole timeout.
-func (s *Service) idleExpired(taskID string, gen int) {
+func (s *Service) idleExpired(k Key, gen int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	r := s.runs[taskID]
+	r := s.runs[k]
 	if r == nil || r.procGen != gen {
 		return
 	}
@@ -341,18 +351,18 @@ func (s *Service) idleExpired(taskID string, gen int) {
 	if r.proc == nil || r.stopping || r.turn != nil || r.permission != nil || len(r.pending) > 0 {
 		return
 	}
-	go s.stopProcess(taskID, gen, false, defaultGraces)
+	go s.stopProcess(k, gen, false, defaultGraces)
 }
 
 // stopProcess ends the process of a run and returns once it has exited. With
 // graceful, a turn in progress is interrupted first and given the chance to
 // end. The mutex is held only while state changes, never while waiting.
-func (s *Service) stopProcess(taskID string, gen int, graceful bool, g graces) {
+func (s *Service) stopProcess(k Key, gen int, graceful bool, g graces) {
 	ctx, cancel := bgCtx()
 	defer cancel()
 
 	s.mu.Lock()
-	r := s.runs[taskID]
+	r := s.runs[k]
 	if r == nil || r.procGen != gen || r.proc == nil {
 		s.mu.Unlock()
 		return
@@ -374,7 +384,7 @@ func (s *Service) stopProcess(taskID string, gen int, graceful bool, g graces) {
 			if id, err := p.Interrupt(); err == nil {
 				r.interruptReq = id
 			} else {
-				s.log.Warn("interrupt claude failed", "task", taskID, "error", err)
+				s.log.Warn("interrupt claude failed", "task", k.TaskID, "stage", k.Stage, "error", err)
 			}
 		}
 		turnDone = r.turnDone
@@ -395,15 +405,15 @@ func (s *Service) stopProcess(taskID string, gen int, graceful bool, g graces) {
 	s.flush(n)
 
 	if err := p.CloseInput(); err != nil {
-		s.log.Warn("close claude input failed", "task", taskID, "error", err)
+		s.log.Warn("close claude input failed", "task", k.TaskID, "stage", k.Stage, "error", err)
 	}
 	if !wait(p.Done(), g.inputClose) {
 		if err := p.Terminate(); err != nil {
-			s.log.Warn("terminate claude failed", "task", taskID, "error", err)
+			s.log.Warn("terminate claude failed", "task", k.TaskID, "stage", k.Stage, "error", err)
 		}
 		if !wait(p.Done(), g.terminate) {
 			if err := p.Kill(); err != nil {
-				s.log.Warn("kill claude failed", "task", taskID, "error", err)
+				s.log.Warn("kill claude failed", "task", k.TaskID, "stage", k.Stage, "error", err)
 			}
 			<-p.Done()
 		}

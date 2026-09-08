@@ -7,7 +7,7 @@ import { renderWithStore } from "@/test/render";
 import { makeEntry, makeReview, makeState, makeStep, makeTask } from "@/test/wails-mock";
 
 const READY: Record<string, TranscriptState> = {
-  "task-1": { status: "ready", entries: [makeEntry("user")], pending: [], buffered: [] },
+  "task-1|step:1": { status: "ready", entries: [makeEntry("user")], pending: [], buffered: [] },
 };
 
 function pane(step: Partial<Step> | null, overrides: Partial<TaskSummary> = {}) {

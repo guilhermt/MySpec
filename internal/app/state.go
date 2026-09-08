@@ -19,7 +19,9 @@ func (a *App) snapshot() bindings.State {
 		Theme:      string(a.theme.Preference()),
 		SystemDark: a.theme.SystemDark(),
 		Notice:     bindings.FromNotice(a.ws.Notice()),
-		Tasks:      bindings.FromTasks(a.tasks.List(), a.taskArtifacts, a.flow.Steps, a.sessions.Summaries()),
+		Tasks: bindings.FromTasks(
+			a.tasks.List(), a.taskArtifacts, a.flow.Steps, a.flow.Repos, a.sessions.Summaries(),
+		),
 	}
 }
 
@@ -35,8 +37,9 @@ func (a *App) onArtifact(t task.Task, changes []task.Change) {
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
+	key := session.Key{TaskID: t.ID, Stage: string(t.Stage)}
 	for _, c := range changes {
-		a.sessions.MarkArtifact(ctx, t.ID, session.ArtifactKind(c.Kind), c.First)
+		a.sessions.MarkArtifact(ctx, key, session.ArtifactKind(c.Kind), c.First)
 	}
 	a.flow.Check(t.ID)
 }

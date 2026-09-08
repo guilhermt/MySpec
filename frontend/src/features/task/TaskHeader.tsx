@@ -7,7 +7,7 @@ import { ContextGauge } from "@/features/task/ContextGauge";
 import { DeleteTaskDialog } from "@/features/task/DeleteTaskDialog";
 import { StatusBadge } from "@/features/task/StatusBadge";
 import { hasArtifacts } from "@/features/task/status";
-import { currentStepOf, hasStepSession } from "@/features/task/step-status";
+import { currentStepOf, hasStepSession, stepStage } from "@/features/task/step-status";
 import { findNode } from "@/features/tree/tree-model";
 import { asSessionStatus, asTaskStage, type TaskSummary } from "@/lib/wails";
 import { pause, resume } from "@/store/actions";
@@ -33,9 +33,14 @@ export function TaskHeader({ task, artifactsOpen, onToggleArtifacts }: TaskHeade
   const paused = status === "paused";
   const Icon = task.repoPath === "" ? House : FolderGit2;
   // The implementation stage holds the session of the step being run, and only
-  // once the step got as far as opening one.
+  // once the step got as far as opening one. The PR stage holds none at all:
+  // its sessions are of the repositories, and the bar of each one pauses it.
   const implementing = asTaskStage(task.stage) === "implementation";
-  const running = !implementing || hasStepSession(currentStepOf(task));
+  const step = currentStepOf(task);
+  const running = asTaskStage(task.stage) !== "pr" && (!implementing || hasStepSession(step));
+  // Pausing acts on the session on screen, which in the implementation stage
+  // is the one of the step that runs.
+  const stage = implementing && step !== null ? stepStage(step.number) : task.stage;
 
   return (
     <header className="flex h-11 shrink-0 items-center gap-2 border-b px-3">
@@ -52,7 +57,7 @@ export function TaskHeader({ task, artifactsOpen, onToggleArtifacts }: TaskHeade
           variant="ghost"
           size="sm"
           disabled={!paused && status === "error"}
-          onClick={() => void (paused ? resume(task.id) : pause(task.id))}
+          onClick={() => void (paused ? resume(task.id, stage) : pause(task.id, stage))}
         >
           {paused ? <Play /> : <Pause />}
           {paused ? "Resume" : "Pause"}

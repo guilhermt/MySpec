@@ -8,6 +8,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { OrphanPRs } from "@/features/task/OrphanPRs";
 import {
   backDescription,
   discardDescription,
@@ -53,6 +54,7 @@ export function StageActionDialog({
             {back ? backDescription(stage, current) : discardDescription(stage, current)}
           </AlertDialogDescription>
         </AlertDialogHeader>
+        <OrphanPRs task={task} />
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>
           <AlertDialogAction

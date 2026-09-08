@@ -25,7 +25,7 @@ describe("ImplementationDone", () => {
 
     expect(screen.getByText("Every step is committed")).toBeInTheDocument();
     expect(screen.getByText("2 steps in web, api.")).toBeInTheDocument();
-    expect(screen.getByText(/PR stage doesn't exist in this version/)).toBeInTheDocument();
+    expect(screen.getByText(/The PR stage starts next/)).toBeInTheDocument();
   });
 
   it("counts one step as one, and names each repository once", () => {

@@ -70,6 +70,7 @@ function answerText(status: Exclude<PermissionStatus, "pending">, message: strin
 
 export interface PermissionCardProps {
   taskId: string;
+  stage: string;
   permission: PermissionEntry;
 }
 
@@ -77,7 +78,7 @@ export interface PermissionCardProps {
  * PermissionCard is the agent asking to use a tool. Nothing runs until the user
  * answers, so the card is the one thing in the conversation that blocks.
  */
-export function PermissionCard({ taskId, permission }: PermissionCardProps) {
+export function PermissionCard({ taskId, stage, permission }: PermissionCardProps) {
   const titleId = useId();
   const [denying, setDenying] = useState(false);
   const [message, setMessage] = useState("");
@@ -86,7 +87,7 @@ export function PermissionCard({ taskId, permission }: PermissionCardProps) {
   const pending = status === "pending";
 
   const answer = (decision: "allow" | "allow_session" | "deny", text: string) => {
-    void answerPermission(taskId, permission.requestId, decision, text);
+    void answerPermission(taskId, stage, permission.requestId, decision, text);
   };
 
   return (

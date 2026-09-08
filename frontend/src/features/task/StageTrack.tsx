@@ -59,7 +59,9 @@ function menuItems(current: TaskStage, id: LifecycleStage): StageMenuItem[] {
   if (id === "plan" && current === "implementation") {
     return [discardItem("plan")];
   }
-  if (id === current && current !== "implementation") {
+  // The implementation and the PR stage are made of steps and repositories;
+  // neither is thrown away from the track.
+  if (id === current && current !== "implementation" && current !== "pr") {
     return [discardItem(current)];
   }
   return [];

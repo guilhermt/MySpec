@@ -6,7 +6,7 @@ The user has just reviewed the work of this step and approved it. Commit it.
 
 Commit **exactly what is staged**. Never run `git add`, `git commit -a`, `git add -p` or anything else that stages files: what the user wants in this commit is already in the index, and whatever is out of it was left out on purpose.
 
-Make **one commit**. Do not amend, rebase, tag, push or create branches.
+Make **one commit**. Do not amend, rebase, tag or create branches.
 
 ## The message
 
@@ -21,6 +21,10 @@ Unless the repository says otherwise:
 Never mention the planning behind the change: no task name, no step number, no reference to a PRD, a tech spec or a step file. The message describes the change, not the process that produced it.
 
 Never add authorship trailers. No `Co-Authored-By`, no mention of Claude Code or of any agent.
+
+## Pushing
+
+{{push}}
 
 ## When you are done
 

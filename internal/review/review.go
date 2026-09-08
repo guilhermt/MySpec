@@ -1,6 +1,6 @@
-// Package review watches the worktree of a step under review and keeps what
-// git says about it, so the app can show the progress of the review as the
-// user stages what they have read.
+// Package review watches the worktrees under review and keeps what git says
+// about them, so the app can show the progress of a review as the user stages
+// what they have read.
 package review
 
 import (
@@ -16,6 +16,13 @@ const reviewDebounce = 200 * time.Millisecond
 
 // readTimeout bounds one reading, which runs on the watcher's goroutine.
 const readTimeout = 30 * time.Second
+
+// Key identifies one worktree under review: a task and the repository it
+// belongs to.
+type Key struct {
+	TaskID   string
+	RepoPath string
+}
 
 // File is one changed path of a worktree under review.
 type File struct {
@@ -44,7 +51,7 @@ func (s Snapshot) Percent() int {
 	return s.Staged * 100 / s.Total
 }
 
-// Ready reports whether the step can be approved: something changed, and
+// Ready reports whether the review can be approved: something changed, and
 // nothing is left outside the index.
 func (s Snapshot) Ready() bool { return s.Err == "" && s.Total > 0 && s.Staged == s.Total }
 

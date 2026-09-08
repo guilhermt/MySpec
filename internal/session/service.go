@@ -65,7 +65,20 @@ type TaskInfo struct {
 	Repositories   []string // relative paths, what the prompt lists
 	InitialContext string
 	ArtifactExists bool // the artifact of Prompt is already there; always false for a step
+
+	// The PR sessions of a repository: what the prompt of the pull request and
+	// the prompt of its review are about.
+	Repository string // relative path of the repository this session belongs to
+	Branch     string
+	BaseBranch string
+	DraftPath  string
+	ReviewPath string
+	PRNumber   string
+	PRURL      string
 }
+
+// Key is the session this task and stage are held under.
+func (t TaskInfo) Key() Key { return Key{TaskID: t.ID, Stage: t.Stage} }
 
 // artifactOf is the artifact a prompt produces, "" when it produces none.
 func artifactOf(stage prompts.Stage) ArtifactKind {
@@ -74,7 +87,9 @@ func artifactOf(stage prompts.Stage) ArtifactKind {
 		return ArtifactTechSpec
 	case prompts.StagePlan:
 		return ArtifactPlan
-	case prompts.StageStep:
+	case prompts.StageStep, prompts.StagePR, prompts.StagePRReview:
+		// A step file and the PR prompts produce no artifact of the planning:
+		// what they write belongs to a repository, not to the task.
 		return ""
 	default:
 		return ArtifactPRD
@@ -91,7 +106,7 @@ type Deps struct {
 	Now          func() time.Time         // defaults to time.Now
 	NewID        func() string            // defaults to uuid.NewString
 	IdleTimeout  time.Duration            // defaults to DefaultIdleTimeout
-	OnState      func(taskID string)      // a Summary changed; may be nil
+	OnState      func(k Key)              // a Summary changed; may be nil
 	OnTranscript func(ev TranscriptEvent) // the conversation changed; may be nil
 }
 
@@ -135,11 +150,11 @@ type Service struct {
 	now          func() time.Time
 	newID        func() string
 	idleTimeout  time.Duration
-	onState      func(taskID string)
+	onState      func(k Key)
 	onTranscript func(ev TranscriptEvent)
 
 	mu          sync.Mutex
-	runs        map[string]*run
+	runs        map[Key]*run
 	preflightOK bool
 }
 
@@ -156,7 +171,7 @@ func New(deps Deps) *Service {
 		idleTimeout:  deps.IdleTimeout,
 		onState:      deps.OnState,
 		onTranscript: deps.OnTranscript,
-		runs:         map[string]*run{},
+		runs:         map[Key]*run{},
 	}
 	if s.log == nil {
 		s.log = slog.New(slog.DiscardHandler)
@@ -174,47 +189,31 @@ func New(deps Deps) *Service {
 }
 
 // Open loads or creates the session of a task at the stage it is in and
-// reconciles its transcript. A run left in another stage is closed first, so a
-// task never has two sessions in memory. It is idempotent and safe to call on
-// every workspace sync.
+// reconciles its transcript. A task may have one session per stage, and each
+// is opened on its own key. It is idempotent and safe to call on every
+// workspace sync.
 func (s *Service) Open(ctx context.Context, t TaskInfo) error {
-	for {
-		opened, err := s.tryOpen(ctx, t)
-		if err != nil || opened {
-			return err
-		}
-		if err := s.Close(ctx, t.ID); err != nil {
-			return err
-		}
-	}
-}
-
-// tryOpen opens the session of a task, reporting false when the run in memory
-// belongs to another stage and has to be closed outside the mutex first.
-func (s *Service) tryOpen(ctx context.Context, t TaskInfo) (bool, error) {
 	n := &notes{}
 	defer s.flush(n)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if r, ok := s.runs[t.ID]; ok {
-		if r.rec.Stage != t.Stage {
-			return false, nil
-		}
+	k := t.Key()
+	if r, ok := s.runs[k]; ok {
 		r.task = t
-		return true, nil
+		return nil
 	}
 
 	r, err := s.load(ctx, t, n)
 	if err != nil {
-		return false, err
+		return err
 	}
-	s.runs[t.ID] = r
+	s.runs[k] = r
 
 	if len(r.pending) > 0 && !r.rec.Paused {
 		s.flushPendingLocked(ctx, r, n)
 	}
-	return true, nil
+	return nil
 }
 
 // load reads the session of a task at its stage from the repositories,
@@ -280,7 +279,7 @@ func (s *Service) load(ctx context.Context, t TaskInfo, n *notes) (*run, error) 
 
 	// The conversation on screen is the one of the stage that just loaded, so
 	// the frontend has to read it again from scratch.
-	n.reset(t.ID)
+	n.reset(t.Key())
 	return r, nil
 }
 
@@ -316,7 +315,7 @@ func (s *Service) Start(ctx context.Context, t TaskInfo, restarted bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	r, err := s.runOf(t.ID)
+	r, err := s.runOf(t.Key())
 	if err != nil {
 		return err
 	}
@@ -340,7 +339,7 @@ func (s *Service) Start(ctx context.Context, t TaskInfo, restarted bool) error {
 }
 
 // Send queues a message and delivers it right away when the session is free.
-func (s *Service) Send(ctx context.Context, taskID, text string) error {
+func (s *Service) Send(ctx context.Context, k Key, text string) error {
 	text = strings.TrimSpace(text)
 	if text == "" {
 		return ErrEmptyMessage
@@ -351,12 +350,12 @@ func (s *Service) Send(ctx context.Context, taskID, text string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	r, err := s.runOf(taskID)
+	r, err := s.runOf(k)
 	if err != nil {
 		return err
 	}
 	if r.rec.Paused {
-		return fmt.Errorf("send to task %s: %w", taskID, ErrPaused)
+		return fmt.Errorf("send to task %s: %w", k.TaskID, ErrPaused)
 	}
 	if err := s.enqueueLocked(ctx, r, &UserEntry{Text: text}, n); err != nil {
 		return err
@@ -367,19 +366,19 @@ func (s *Service) Send(ctx context.Context, taskID, text string) error {
 }
 
 // SendFromApp queues a message the app wrote for the agent.
-func (s *Service) SendFromApp(ctx context.Context, taskID, text string) error {
-	return s.sendFromApp(ctx, taskID, text, false)
+func (s *Service) SendFromApp(ctx context.Context, k Key, text string) error {
+	return s.sendFromApp(ctx, k, text, false)
 }
 
 // SendCorrection queues a message the app wrote to fix what the agent
 // produced, and counts it against MaxCorrections.
-func (s *Service) SendCorrection(ctx context.Context, taskID, text string) error {
-	return s.sendFromApp(ctx, taskID, text, true)
+func (s *Service) SendCorrection(ctx context.Context, k Key, text string) error {
+	return s.sendFromApp(ctx, k, text, true)
 }
 
 // sendFromApp queues a message of the app, counting it as a correction of the
 // session when it is one.
-func (s *Service) sendFromApp(ctx context.Context, taskID, text string, correction bool) error {
+func (s *Service) sendFromApp(ctx context.Context, k Key, text string, correction bool) error {
 	text = strings.TrimSpace(text)
 	if text == "" {
 		return ErrEmptyMessage
@@ -390,12 +389,12 @@ func (s *Service) sendFromApp(ctx context.Context, taskID, text string, correcti
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	r, err := s.runOf(taskID)
+	r, err := s.runOf(k)
 	if err != nil {
 		return err
 	}
 	if r.rec.Paused {
-		return fmt.Errorf("send to task %s: %w", taskID, ErrPaused)
+		return fmt.Errorf("send to task %s: %w", k.TaskID, ErrPaused)
 	}
 	if correction {
 		r.rec.Corrections++
@@ -412,15 +411,19 @@ func (s *Service) sendFromApp(ctx context.Context, taskID, text string, correcti
 }
 
 // Discard throws away the sessions of a task in the given stages, with their
-// conversations. The one in memory is stopped first when it is among them.
+// conversations. The ones in memory are stopped first.
 func (s *Service) Discard(ctx context.Context, taskID string, stages ...string) error {
 	s.mu.Lock()
-	r, open := s.runs[taskID]
-	live := open && slices.Contains(stages, r.rec.Stage)
+	live := make([]Key, 0, len(stages))
+	for k := range s.runs {
+		if k.TaskID == taskID && slices.Contains(stages, k.Stage) {
+			live = append(live, k)
+		}
+	}
 	s.mu.Unlock()
 
-	if live {
-		if err := s.Close(ctx, taskID); err != nil {
+	for _, k := range live {
+		if err := s.Close(ctx, k); err != nil {
 			return err
 		}
 	}
@@ -428,13 +431,13 @@ func (s *Service) Discard(ctx context.Context, taskID string, stages ...string) 
 }
 
 // RemovePending drops a queued message before it reaches the CLI.
-func (s *Service) RemovePending(ctx context.Context, taskID, entryID string) error {
+func (s *Service) RemovePending(ctx context.Context, k Key, entryID string) error {
 	n := &notes{}
 	defer s.flush(n)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	r, err := s.runOf(taskID)
+	r, err := s.runOf(k)
 	if err != nil {
 		return err
 	}
@@ -448,19 +451,19 @@ func (s *Service) RemovePending(ctx context.Context, taskID, entryID string) err
 	if err := s.entries.Delete(ctx, entryID); err != nil {
 		return err
 	}
-	n.remove(taskID, entryID)
-	n.state(taskID)
+	n.remove(k, entryID)
+	n.state(k)
 	return nil
 }
 
 // Interrupt asks the CLI to abort the running turn. The session stays alive.
-func (s *Service) Interrupt(_ context.Context, taskID string) error {
+func (s *Service) Interrupt(_ context.Context, k Key) error {
 	n := &notes{}
 	defer s.flush(n)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	r, err := s.runOf(taskID)
+	r, err := s.runOf(k)
 	if err != nil {
 		return err
 	}
@@ -470,36 +473,36 @@ func (s *Service) Interrupt(_ context.Context, taskID string) error {
 
 	id, err := r.proc.Interrupt()
 	if err != nil {
-		return fmt.Errorf("interrupt task %s: %w", taskID, err)
+		return fmt.Errorf("interrupt task %s: %w", k.TaskID, err)
 	}
 	r.interruptReq = id
 	gen := r.procGen
 	r.stopTimer(&r.interruptTmr)
-	r.interruptTmr = time.AfterFunc(InterruptTimeout, func() { s.interruptExpired(taskID, gen) })
-	n.state(taskID)
+	r.interruptTmr = time.AfterFunc(InterruptTimeout, func() { s.interruptExpired(k, gen) })
+	n.state(k)
 	return nil
 }
 
 // interruptExpired stops the process of a turn that ignored an interrupt.
-func (s *Service) interruptExpired(taskID string, gen int) {
+func (s *Service) interruptExpired(k Key, gen int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	r := s.runs[taskID]
+	r := s.runs[k]
 	if r == nil || r.procGen != gen || r.turn == nil || r.interruptReq == "" || r.stopping {
 		return
 	}
-	go s.stopProcess(taskID, gen, false, defaultGraces)
+	go s.stopProcess(k, gen, false, defaultGraces)
 }
 
 // Pause stops the process and holds every message until Resume.
-func (s *Service) Pause(ctx context.Context, taskID string) error {
+func (s *Service) Pause(ctx context.Context, k Key) error {
 	n := &notes{}
 	defer s.flush(n)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	r, err := s.runOf(taskID)
+	r, err := s.runOf(k)
 	if err != nil {
 		return err
 	}
@@ -507,21 +510,21 @@ func (s *Service) Pause(ctx context.Context, taskID string) error {
 	if err := s.persistRecord(ctx, r); err != nil {
 		return err
 	}
-	n.state(taskID)
+	n.state(k)
 	if r.proc != nil && !r.stopping {
-		go s.stopProcess(taskID, r.procGen, true, defaultGraces)
+		go s.stopProcess(k, r.procGen, true, defaultGraces)
 	}
 	return nil
 }
 
 // Resume lifts a pause and delivers what was queued meanwhile.
-func (s *Service) Resume(ctx context.Context, taskID string) error {
+func (s *Service) Resume(ctx context.Context, k Key) error {
 	n := &notes{}
 	defer s.flush(n)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	r, err := s.runOf(taskID)
+	r, err := s.runOf(k)
 	if err != nil {
 		return err
 	}
@@ -529,19 +532,19 @@ func (s *Service) Resume(ctx context.Context, taskID string) error {
 	if err := s.persistRecord(ctx, r); err != nil {
 		return err
 	}
-	n.state(taskID)
+	n.state(k)
 	s.flushPendingLocked(ctx, r, n)
 	return nil
 }
 
 // Retry clears the last error and starts the process again.
-func (s *Service) Retry(ctx context.Context, taskID string) error {
+func (s *Service) Retry(ctx context.Context, k Key) error {
 	n := &notes{}
 	defer s.flush(n)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	r, err := s.runOf(taskID)
+	r, err := s.runOf(k)
 	if err != nil {
 		return err
 	}
@@ -555,7 +558,7 @@ func (s *Service) Retry(ctx context.Context, taskID string) error {
 	if !s.flushPendingLocked(ctx, r, n) {
 		s.armIdleLocked(r)
 	}
-	n.state(taskID)
+	n.state(k)
 	return nil
 }
 
@@ -574,13 +577,13 @@ const (
 const defaultDenyMessage = "The user denied this action."
 
 // AnswerPermission answers the pending permission request of a task.
-func (s *Service) AnswerPermission(ctx context.Context, taskID, requestID string, d Decision, message string) error {
+func (s *Service) AnswerPermission(ctx context.Context, k Key, requestID string, d Decision, message string) error {
 	n := &notes{}
 	defer s.flush(n)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	r, e, err := s.pendingRequest(taskID, requestID, KindPermission)
+	r, e, err := s.pendingRequest(k, requestID, KindPermission)
 	if err != nil {
 		return err
 	}
@@ -625,13 +628,13 @@ func (s *Service) AnswerPermission(ctx context.Context, taskID, requestID string
 // AnswerQuestion answers the pending structured question of a task. The
 // answers map each question text to the chosen label, or labels joined with
 // ", " for a multiple choice.
-func (s *Service) AnswerQuestion(ctx context.Context, taskID, requestID string, answers map[string]string) error {
+func (s *Service) AnswerQuestion(ctx context.Context, k Key, requestID string, answers map[string]string) error {
 	n := &notes{}
 	defer s.flush(n)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	r, e, err := s.pendingRequest(taskID, requestID, KindQuestion)
+	r, e, err := s.pendingRequest(k, requestID, KindQuestion)
 	if err != nil {
 		return err
 	}
@@ -657,8 +660,8 @@ func (s *Service) AnswerQuestion(ctx context.Context, taskID, requestID string, 
 
 // pendingRequest finds the pending request of a task by id and kind, with the
 // process that has to hear the answer. The caller holds the mutex.
-func (s *Service) pendingRequest(taskID, requestID string, kind Kind) (*run, *Entry, error) {
-	r, err := s.runOf(taskID)
+func (s *Service) pendingRequest(k Key, requestID string, kind Kind) (*run, *Entry, error) {
+	r, err := s.runOf(k)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -677,7 +680,7 @@ func (s *Service) answered(ctx context.Context, r *run, e *Entry, n *notes) {
 	r.permission = nil
 	r.stopTimer(&r.idleTimer)
 	s.updateLocked(ctx, r, e, n)
-	n.state(r.task.ID)
+	n.state(r.key())
 }
 
 // requestOf is the request id of a permission or question entry.
@@ -726,13 +729,13 @@ func sessionSuggestions(raw json.RawMessage) json.RawMessage {
 }
 
 // MarkArtifact records that an artifact appeared (first) or was rewritten.
-func (s *Service) MarkArtifact(ctx context.Context, taskID string, kind ArtifactKind, first bool) {
+func (s *Service) MarkArtifact(ctx context.Context, k Key, kind ArtifactKind, first bool) {
 	n := &notes{}
 	defer s.flush(n)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	r, err := s.runOf(taskID)
+	r, err := s.runOf(k)
 	if err != nil {
 		return
 	}
@@ -743,17 +746,33 @@ func (s *Service) MarkArtifact(ctx context.Context, taskID string, kind Artifact
 	s.appendLocked(ctx, r, Entry{Kind: KindMarker, Marker: &MarkerEntry{Type: marker}}, n)
 }
 
-// Transcript returns a copy of the conversation of a task.
-func (s *Service) Transcript(_ context.Context, taskID string) (Transcript, error) {
+// MarkPRReview records that a pass of the review of a pull request was
+// written.
+func (s *Service) MarkPRReview(ctx context.Context, k Key, pass int) {
+	n := &notes{}
+	defer s.flush(n)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	r, err := s.runOf(taskID)
+	r, err := s.runOf(k)
+	if err != nil {
+		return
+	}
+	marker := &MarkerEntry{Type: MarkerPRReviewWritten, Pass: pass}
+	s.appendLocked(ctx, r, Entry{Kind: KindMarker, Marker: marker}, n)
+}
+
+// Transcript returns a copy of the conversation of a task.
+func (s *Service) Transcript(_ context.Context, k Key) (Transcript, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	r, err := s.runOf(k)
 	if err != nil {
 		return Transcript{}, err
 	}
 	return Transcript{
-		TaskID:    taskID,
+		TaskID:    k.TaskID,
 		SessionID: r.rec.ID,
 		Stage:     r.rec.Stage,
 		Entries:   cloneEntries(r.entries),
@@ -761,35 +780,35 @@ func (s *Service) Transcript(_ context.Context, taskID string) (Transcript, erro
 	}, nil
 }
 
-// Summary describes the session of a task, false when the task is not open.
-func (s *Service) Summary(taskID string) (Summary, bool) {
+// Summary describes one session, false when it is not open.
+func (s *Service) Summary(k Key) (Summary, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	r, ok := s.runs[taskID]
+	r, ok := s.runs[k]
 	if !ok {
 		return Summary{}, false
 	}
 	return r.summary(), true
 }
 
-// Summaries describes every open session, by task id.
-func (s *Service) Summaries() map[string]Summary {
+// Summaries describes every open session, by key.
+func (s *Service) Summaries() map[Key]Summary {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	out := make(map[string]Summary, len(s.runs))
-	for id, r := range s.runs {
-		out[id] = r.summary()
+	out := make(map[Key]Summary, len(s.runs))
+	for k, r := range s.runs {
+		out[k] = r.summary()
 	}
 	return out
 }
 
-// Close stops the process of a task, quickly, and forgets it. Used before a
-// task is deleted.
-func (s *Service) Close(_ context.Context, taskID string) error {
+// Close stops the process of one session, quickly, and forgets it. Used when
+// a stage is over or a task is deleted.
+func (s *Service) Close(_ context.Context, k Key) error {
 	s.mu.Lock()
-	r, ok := s.runs[taskID]
+	r, ok := s.runs[k]
 	if !ok {
 		s.mu.Unlock()
 		return nil
@@ -797,12 +816,32 @@ func (s *Service) Close(_ context.Context, taskID string) error {
 	gen := r.procGen
 	s.mu.Unlock()
 
-	s.stopProcess(taskID, gen, false, closeGraces)
+	s.stopProcess(k, gen, false, closeGraces)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	r.stopTimers()
-	delete(s.runs, taskID)
+	delete(s.runs, k)
+	return nil
+}
+
+// CloseTask stops every session of a task and forgets them all. Used before
+// the task, or the worktrees its sessions run in, go away.
+func (s *Service) CloseTask(ctx context.Context, taskID string) error {
+	s.mu.Lock()
+	keys := make([]Key, 0, len(s.runs))
+	for k := range s.runs {
+		if k.TaskID == taskID {
+			keys = append(keys, k)
+		}
+	}
+	s.mu.Unlock()
+
+	for _, k := range keys {
+		if err := s.Close(ctx, k); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -811,21 +850,21 @@ func (s *Service) Close(_ context.Context, taskID string) error {
 func (s *Service) Shutdown(ctx context.Context) {
 	s.mu.Lock()
 	type live struct {
-		taskID string
-		gen    int
-		proc   Process
+		key  Key
+		gen  int
+		proc Process
 	}
 	var procs []live
-	for id, r := range s.runs {
+	for k, r := range s.runs {
 		if r.proc != nil {
-			procs = append(procs, live{taskID: id, gen: r.procGen, proc: r.proc})
+			procs = append(procs, live{key: k, gen: r.procGen, proc: r.proc})
 		}
 	}
 	s.mu.Unlock()
 
 	var wg sync.WaitGroup
 	for _, p := range procs {
-		wg.Go(func() { s.stopProcess(p.taskID, p.gen, true, defaultGraces) })
+		wg.Go(func() { s.stopProcess(p.key, p.gen, true, defaultGraces) })
 	}
 
 	done := make(chan struct{})
@@ -838,18 +877,18 @@ func (s *Service) Shutdown(ctx context.Context) {
 	case <-ctx.Done():
 		for _, p := range procs {
 			if err := p.proc.Kill(); err != nil {
-				s.log.Warn("kill claude failed", "task", p.taskID, "error", err)
+				s.log.Warn("kill claude failed", "task", p.key.TaskID, "stage", p.key.Stage, "error", err)
 			}
 		}
 		<-done
 	}
 }
 
-// runOf finds the run of an open task. The caller holds the mutex.
-func (s *Service) runOf(taskID string) (*run, error) {
-	r, ok := s.runs[taskID]
+// runOf finds an open session by key. The caller holds the mutex.
+func (s *Service) runOf(k Key) (*run, error) {
+	r, ok := s.runs[k]
 	if !ok {
-		return nil, fmt.Errorf("session of task %s: %w", taskID, ErrNotFound)
+		return nil, fmt.Errorf("session %s of task %s: %w", k.Stage, k.TaskID, ErrNotFound)
 	}
 	return r, nil
 }
@@ -873,7 +912,7 @@ func (s *Service) appendLocked(ctx context.Context, r *run, e Entry, n *notes) *
 	if err := s.entries.Insert(ctx, r.rec.ID, *entry); err != nil {
 		s.log.Error("insert entry failed", "task", r.task.ID, "entry", entry.ID, "error", err)
 	}
-	n.entry(r.task.ID, entry)
+	n.entry(r.key(), entry)
 	return entry
 }
 
@@ -883,7 +922,7 @@ func (s *Service) updateLocked(ctx context.Context, r *run, e *Entry, n *notes) 
 	if err := s.entries.Update(ctx, *e); err != nil {
 		s.log.Error("update entry failed", "task", r.task.ID, "entry", e.ID, "error", err)
 	}
-	n.entry(r.task.ID, e)
+	n.entry(r.key(), e)
 }
 
 // bgCtx bounds the database work of the session's own goroutines.
@@ -894,37 +933,43 @@ func bgCtx() (context.Context, context.CancelFunc) {
 // notes collects the callbacks an operation owes, so that they run once the
 // mutex is released: OnState and OnTranscript are never called with it held.
 type notes struct {
-	states []string
+	states []Key
 	events []TranscriptEvent
 }
 
-// state notes that the summary of a task changed.
-func (n *notes) state(taskID string) {
-	if !slices.Contains(n.states, taskID) {
-		n.states = append(n.states, taskID)
+// state notes that the summary of a session changed.
+func (n *notes) state(k Key) {
+	if !slices.Contains(n.states, k) {
+		n.states = append(n.states, k)
 	}
 }
 
 // entry notes that an entry was created or changed, with a copy of it as it
 // is now.
-func (n *notes) entry(taskID string, e *Entry) {
+func (n *notes) entry(k Key, e *Entry) {
 	c := cloneEntry(e)
-	n.events = append(n.events, TranscriptEvent{TaskID: taskID, Kind: EventEntry, Entry: &c, EntryID: e.ID})
+	n.events = append(n.events, event(k, TranscriptEvent{Kind: EventEntry, Entry: &c, EntryID: e.ID}))
 }
 
 // text notes the current text of a streaming entry.
-func (n *notes) text(taskID, entryID, text string) {
-	n.events = append(n.events, TranscriptEvent{TaskID: taskID, Kind: EventText, EntryID: entryID, Text: text})
+func (n *notes) text(k Key, entryID, text string) {
+	n.events = append(n.events, event(k, TranscriptEvent{Kind: EventText, EntryID: entryID, Text: text}))
 }
 
 // remove notes that an entry was deleted.
-func (n *notes) remove(taskID, entryID string) {
-	n.events = append(n.events, TranscriptEvent{TaskID: taskID, Kind: EventRemove, EntryID: entryID})
+func (n *notes) remove(k Key, entryID string) {
+	n.events = append(n.events, event(k, TranscriptEvent{Kind: EventRemove, EntryID: entryID}))
 }
 
-// reset notes that the conversation of a task has to be read again whole.
-func (n *notes) reset(taskID string) {
-	n.events = append(n.events, TranscriptEvent{TaskID: taskID, Kind: EventReset})
+// reset notes that a conversation has to be read again whole.
+func (n *notes) reset(k Key) {
+	n.events = append(n.events, event(k, TranscriptEvent{Kind: EventReset}))
+}
+
+// event stamps the session an event belongs to.
+func event(k Key, ev TranscriptEvent) TranscriptEvent {
+	ev.TaskID, ev.Stage = k.TaskID, k.Stage
+	return ev
 }
 
 // flush runs the callbacks an operation collected. It must be called after
@@ -936,8 +981,8 @@ func (s *Service) flush(n *notes) {
 		}
 	}
 	if s.onState != nil {
-		for _, taskID := range n.states {
-			s.onState(taskID)
+		for _, k := range n.states {
+			s.onState(k)
 		}
 	}
 }

@@ -15,9 +15,9 @@ func TestTrackReadsTheWorktreeAtOnce(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 
-	f.svc.Track(taskID, f.wt, true)
+	f.svc.Track(f.key, f.wt, true)
 
-	snap, ok := f.svc.Snapshot(taskID)
+	snap, ok := f.svc.Snapshot(f.key)
 	if !ok {
 		t.Fatal("Snapshot() found nothing, want the first reading")
 	}
@@ -32,8 +32,8 @@ func TestTrackReadsTheWorktreeAtOnce(t *testing.T) {
 	}
 	// A first reading is news even when it found nothing: the flow tells a
 	// worktree with no change from one it has not read yet.
-	if id := <-f.changes; id != taskID {
-		t.Errorf("OnChange(%s), want %s", id, taskID)
+	if k := <-f.changes; k != f.key {
+		t.Errorf("OnChange(%+v), want %+v", k, f.key)
 	}
 }
 
@@ -42,8 +42,8 @@ func TestTrackReadsNothingWhenItChangesNothing(t *testing.T) {
 	f := newFixture(t)
 
 	f.track(t)
-	f.svc.Track(taskID, f.wt, true)
-	f.svc.Track(taskID, f.wt, true)
+	f.svc.Track(f.key, f.wt, true)
+	f.svc.Track(f.key, f.wt, true)
 
 	if got := f.worktrees.count(); got != 1 {
 		t.Errorf("readings = %d, want the one Track did", got)
@@ -54,10 +54,10 @@ func TestSnapshotFindsNothingForATaskThatIsNotTracked(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 
-	if _, ok := f.svc.Snapshot(taskID); ok {
+	if _, ok := f.svc.Snapshot(f.key); ok {
 		t.Error("Snapshot() found a reading, want none before Track")
 	}
-	if _, ok := f.svc.Refresh(taskID); ok {
+	if _, ok := f.svc.Refresh(f.key); ok {
 		t.Error("Refresh() read something, want nothing before Track")
 	}
 }
@@ -113,8 +113,8 @@ func TestAnInactiveTaskIsWatchedButNotRead(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 
-	f.svc.Track(taskID, f.wt, false)
-	if _, ok := f.svc.Snapshot(taskID); ok {
+	f.svc.Track(f.key, f.wt, false)
+	if _, ok := f.svc.Snapshot(f.key); ok {
 		t.Error("Snapshot() found a reading, want none while the agent works")
 	}
 
@@ -126,8 +126,8 @@ func TestAnInactiveTaskIsWatchedButNotRead(t *testing.T) {
 
 	// Becoming active reads the worktree, so nothing depends on an event that
 	// happened while the numbers did not matter.
-	f.svc.Track(taskID, f.wt, true)
-	got, ok := f.svc.Snapshot(taskID)
+	f.svc.Track(f.key, f.wt, true)
+	got, ok := f.svc.Snapshot(f.key)
 	if !ok {
 		t.Fatal("Snapshot() found nothing, want the reading of an active task")
 	}
@@ -172,7 +172,7 @@ func TestAnIgnoredDirectoryIsNeitherFollowedNorCounted(t *testing.T) {
 	if got := f.worktrees.count(); got != reads {
 		t.Errorf("readings = %d, want the %d of before the build wrote", got, reads)
 	}
-	if got, _ := f.svc.Refresh(taskID); !got.Empty() {
+	if got, _ := f.svc.Refresh(f.key); !got.Empty() {
 		t.Errorf("Snapshot() = %+v, want nothing about an ignored folder", got)
 	}
 }
@@ -183,14 +183,14 @@ func TestRefreshReadsWithoutWaitingForTheDebounce(t *testing.T) {
 	f.track(t)
 
 	write(t, f.wt.Path, "README.md", "# changed\n")
-	got, ok := f.svc.Refresh(taskID)
+	got, ok := f.svc.Refresh(f.key)
 	if !ok {
 		t.Fatal("Refresh() read nothing, want the worktree")
 	}
 	if want := []string{"README.md"}; !slices.Equal(paths(got), want) {
 		t.Errorf("files = %q, want %q", paths(got), want)
 	}
-	if snap, _ := f.svc.Snapshot(taskID); !slices.Equal(paths(snap), paths(got)) {
+	if snap, _ := f.svc.Snapshot(f.key); !slices.Equal(paths(snap), paths(got)) {
 		t.Errorf("Snapshot() = %+v, want what Refresh() found", snap)
 	}
 }
@@ -206,7 +206,7 @@ func TestAFailedReadingCarriesWhatGitSaidAndNoNumbers(t *testing.T) {
 		t.Fatalf("RemoveAll(%s) = %v, want nil", f.wt.Path, err)
 	}
 
-	got, ok := f.svc.Refresh(taskID)
+	got, ok := f.svc.Refresh(f.key)
 	if !ok {
 		t.Fatal("Refresh() read nothing, want the failure")
 	}
@@ -228,9 +228,9 @@ func TestTrackFollowsATaskThatMovesToAnotherWorktree(t *testing.T) {
 	f.track(t)
 
 	other := f.worktreeOf(t, "other-step")
-	f.svc.Track(taskID, other, true)
+	f.svc.Track(f.key, other, true)
 
-	got, ok := f.svc.Snapshot(taskID)
+	got, ok := f.svc.Snapshot(f.key)
 	if !ok {
 		t.Fatal("Snapshot() found nothing, want the reading of the new worktree")
 	}
@@ -252,8 +252,8 @@ func TestForgetStopsWatchingAndDropsTheReading(t *testing.T) {
 	f := newFixture(t)
 	f.track(t)
 
-	f.svc.Forget(taskID)
-	if _, ok := f.svc.Snapshot(taskID); ok {
+	f.svc.Forget(f.key)
+	if _, ok := f.svc.Snapshot(f.key); ok {
 		t.Error("Snapshot() found a reading, want it dropped")
 	}
 
@@ -263,7 +263,7 @@ func TestForgetStopsWatchingAndDropsTheReading(t *testing.T) {
 		t.Errorf("readings = %d, want no reading after Forget", got)
 	}
 
-	f.svc.Forget(taskID) // forgetting twice is not a failure
+	f.svc.Forget(f.key) // forgetting twice is not a failure
 }
 
 func TestCloseStopsEveryWaitInFlight(t *testing.T) {
@@ -276,13 +276,13 @@ func TestCloseStopsEveryWaitInFlight(t *testing.T) {
 		t.Fatalf("Close() = %v, want nil", err)
 	}
 	f.wantNoChange(t)
-	if _, ok := f.svc.Snapshot(taskID); ok {
+	if _, ok := f.svc.Snapshot(f.key); ok {
 		t.Error("Snapshot() found a reading, want none after Close")
 	}
 
 	// A closed service takes no task back.
-	f.svc.Track(taskID, f.wt, true)
-	if _, ok := f.svc.Snapshot(taskID); ok {
+	f.svc.Track(f.key, f.wt, true)
+	if _, ok := f.svc.Snapshot(f.key); ok {
 		t.Error("Track() after Close was taken, want it ignored")
 	}
 }
@@ -309,4 +309,65 @@ func TestTheKindOfEachFileComesFromGit(t *testing.T) {
 	if got.Percent() != 33 {
 		t.Errorf("Percent() = %d, want 33", got.Percent())
 	}
+}
+
+func TestTwoRepositoriesOfATaskAreWatchedAtTheSameTime(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	f.track(t)
+
+	other, otherWt := f.otherRepo(t, "web")
+	f.svc.Track(other, otherWt, true)
+
+	// Each key reads its own worktree: what is written in one repository is
+	// not seen in the other.
+	write(t, f.wt.Path, "README.md", "# changed\n")
+	write(t, otherWt.Path, "notes.md", "notes\n")
+	write(t, otherWt.Path, "other.md", "other\n")
+
+	got := f.waitFor(t, "saw the file of the first repository", func(s review.Snapshot) bool {
+		return s.Total == 1
+	})
+	if want := []string{"README.md"}; !slices.Equal(paths(got), want) {
+		t.Errorf("files = %q, want %q", paths(got), want)
+	}
+
+	got = f.waitForKey(t, other, "saw the files of the second repository", func(s review.Snapshot) bool {
+		return s.Total == 2
+	})
+	if want := []string{"notes.md", "other.md"}; !slices.Equal(paths(got), want) {
+		t.Errorf("files = %q, want %q", paths(got), want)
+	}
+
+	// Forgetting one repository leaves the other exactly where it was.
+	f.svc.Forget(f.key)
+	if _, ok := f.svc.Snapshot(f.key); ok {
+		t.Error("Snapshot() found a reading of the forgotten repository, want it dropped")
+	}
+	gittest.Run(t, otherWt.Path, "add", "notes.md")
+	f.waitForKey(t, other, "saw the staged file", func(s review.Snapshot) bool { return s.Staged == 1 })
+}
+
+func TestForgetTaskLetsGoOfEveryRepositoryOfTheTask(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	f.track(t)
+
+	other, otherWt := f.otherRepo(t, "web")
+	f.svc.Track(other, otherWt, true)
+	f.waitForKey(t, other, "read the second repository", func(s review.Snapshot) bool { return s.Empty() })
+	f.drain()
+
+	f.svc.ForgetTask(taskID)
+	for _, k := range []review.Key{f.key, other} {
+		if _, ok := f.svc.Snapshot(k); ok {
+			t.Errorf("Snapshot(%+v) found a reading, want it dropped", k)
+		}
+	}
+
+	write(t, f.wt.Path, "README.md", "# changed\n")
+	write(t, otherWt.Path, "notes.md", "notes\n")
+	f.wantNoChange(t)
+
+	f.svc.ForgetTask(taskID) // forgetting twice is not a failure
 }

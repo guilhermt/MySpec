@@ -13,6 +13,7 @@ const TITLES: Record<ErrorKind, string> = {
 
 export interface ErrorCardProps {
   taskId: string;
+  stage: string;
   error: ErrorEntry;
 }
 
@@ -20,7 +21,7 @@ export interface ErrorCardProps {
  * ErrorCard is a failure the user has to see. Retrying is offered only while
  * the task is still stopped on it: an error already left behind is history.
  */
-export function ErrorCard({ taskId, error }: ErrorCardProps) {
+export function ErrorCard({ taskId, stage, error }: ErrorCardProps) {
   const task = useTask(taskId);
   const canRetry = error.retryable && task?.sessionStatus === "error";
 
@@ -33,7 +34,7 @@ export function ErrorCard({ taskId, error }: ErrorCardProps) {
       {error.message !== "" && <p className="break-words select-text">{error.message}</p>}
       {canRetry && (
         <div>
-          <Button variant="outline" size="sm" onClick={() => void retry(taskId)}>
+          <Button variant="outline" size="sm" onClick={() => void retry(taskId, stage)}>
             Retry
           </Button>
         </div>

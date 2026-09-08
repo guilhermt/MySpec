@@ -54,53 +54,55 @@ export function deleteTask(taskId: string): Promise<void> {
 }
 
 /** loadTranscript fetches a conversation and buffers what arrives meanwhile. */
-export function loadTranscript(taskId: string): Promise<void> {
-  useAppStore.getState().beginTranscript(taskId);
+export function loadTranscript(taskId: string, stage: string): Promise<void> {
+  useAppStore.getState().beginTranscript(taskId, stage);
   return run(async () => {
-    const transcript = await api.getTranscript(taskId);
+    const transcript = await api.getTranscript(taskId, stage);
     useAppStore.getState().setTranscript(transcript);
   });
 }
 
-export function sendMessage(taskId: string, text: string): Promise<void> {
-  return run(() => api.sendMessage(taskId, text));
+export function sendMessage(taskId: string, stage: string, text: string): Promise<void> {
+  return run(() => api.sendMessage(taskId, stage, text));
 }
 
-export function removePending(taskId: string, entryId: string): Promise<void> {
-  return run(() => api.removePending(taskId, entryId));
+export function removePending(taskId: string, stage: string, entryId: string): Promise<void> {
+  return run(() => api.removePending(taskId, stage, entryId));
 }
 
-export function interrupt(taskId: string): Promise<void> {
-  return run(() => api.interrupt(taskId));
+export function interrupt(taskId: string, stage: string): Promise<void> {
+  return run(() => api.interrupt(taskId, stage));
 }
 
-export function pause(taskId: string): Promise<void> {
-  return run(() => api.pause(taskId));
+export function pause(taskId: string, stage: string): Promise<void> {
+  return run(() => api.pause(taskId, stage));
 }
 
-export function resume(taskId: string): Promise<void> {
-  return run(() => api.resume(taskId));
+export function resume(taskId: string, stage: string): Promise<void> {
+  return run(() => api.resume(taskId, stage));
 }
 
-export function retry(taskId: string): Promise<void> {
-  return run(() => api.retry(taskId));
+export function retry(taskId: string, stage: string): Promise<void> {
+  return run(() => api.retry(taskId, stage));
 }
 
 export function answerPermission(
   taskId: string,
+  stage: string,
   requestId: string,
   decision: PermissionDecision,
   message: string,
 ): Promise<void> {
-  return run(() => api.answerPermission(taskId, requestId, decision, message));
+  return run(() => api.answerPermission(taskId, stage, requestId, decision, message));
 }
 
 export function answerQuestion(
   taskId: string,
+  stage: string,
   requestId: string,
   answers: Record<string, string>,
 ): Promise<void> {
-  return run(() => api.answerQuestion(taskId, requestId, answers));
+  return run(() => api.answerQuestion(taskId, stage, requestId, answers));
 }
 
 /** backToStage reopens a stage that is already done. */
@@ -138,14 +140,58 @@ export function approveStep(taskId: string): Promise<void> {
   return run(() => api.approveStep(taskId));
 }
 
-/** openInEditor opens the worktree of the current step in the editor of the user. */
-export function openInEditor(taskId: string): Promise<void> {
-  return run(() => api.openInEditor(taskId));
+/** openPR sends the draft the user approved to the agent, which opens the PR. */
+export function openPR(
+  taskId: string,
+  repoPath: string,
+  title: string,
+  body: string,
+): Promise<void> {
+  return run(async () => {
+    await api.openPR(taskId, repoPath, title, body);
+    useAppStore.getState().clearPrDraft(taskId, repoPath);
+  });
 }
 
-/** openFileInEditor opens one changed file of the step in the editor of the user. */
-export function openFileInEditor(taskId: string, path: string): Promise<void> {
-  return run(() => api.openFileInEditor(taskId, path));
+/** approveRepo sends the reviewed pull request to be committed and pushed. */
+export function approveRepo(taskId: string, repoPath: string): Promise<void> {
+  return run(() => api.approveRepo(taskId, repoPath));
+}
+
+/** reviewAgain runs another review pass over an open pull request. */
+export function reviewAgain(taskId: string, repoPath: string): Promise<void> {
+  return run(() => api.reviewAgain(taskId, repoPath));
+}
+
+/** discardDraft throws away the draft of a repository and writes it again. */
+export function discardDraft(taskId: string, repoPath: string): Promise<void> {
+  return run(async () => {
+    await api.discardDraft(taskId, repoPath);
+    useAppStore.getState().clearPrDraft(taskId, repoPath);
+  });
+}
+
+/** retryRepo starts the PR stage of a blocked repository over. */
+export function retryRepo(taskId: string, repoPath: string): Promise<void> {
+  return run(() => api.retryRepo(taskId, repoPath));
+}
+
+/** refreshPR asks GitHub again what became of the pull request. */
+export function refreshPR(taskId: string, repoPath: string): Promise<void> {
+  return run(() => api.refreshPR(taskId, repoPath));
+}
+
+/**
+ * openInEditor opens a worktree of the task in the editor of the user: the one
+ * of the given repository, or the one of the current step when none is given.
+ */
+export function openInEditor(taskId: string, repoPath = ""): Promise<void> {
+  return run(() => api.openInEditor(taskId, repoPath));
+}
+
+/** openFileInEditor opens one changed file of a worktree in the editor of the user. */
+export function openFileInEditor(taskId: string, path: string, repoPath = ""): Promise<void> {
+  return run(() => api.openFileInEditor(taskId, repoPath, path));
 }
 
 export function openExternal(url: string): Promise<void> {
