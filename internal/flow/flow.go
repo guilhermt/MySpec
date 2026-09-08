@@ -52,6 +52,7 @@ type Sessions interface {
 	Summary(k session.Key) (session.Summary, bool)
 	SendFromApp(ctx context.Context, k session.Key, text string) error
 	SendCorrection(ctx context.Context, k session.Key, text string) error
+	MarkPRReview(ctx context.Context, k session.Key, pass int)
 }
 
 // Reviews is what the flow needs from internal/review.
@@ -149,6 +150,12 @@ type taskLock struct {
 	// repos is the asynchronous work of the PR stage, one entry per repository
 	// under way; the lock of the task is not held while it runs.
 	repos map[string]*repoWork
+	// passAsked is the commit the app asked a review pass about, by
+	// repository: one commit asks for one pass.
+	passAsked map[string]string
+	// repoNoCommit says the last approval of a repository ended without a
+	// commit. Like the one of a step, it is transient on purpose.
+	repoNoCommit map[string]bool
 }
 
 // repoWork is the goroutine that talks to git and to gh about one repository

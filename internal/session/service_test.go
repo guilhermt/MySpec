@@ -818,6 +818,23 @@ func TestMarkArtifact(t *testing.T) {
 	}
 }
 
+func TestMarkPRReview(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	f.start(t, taskInfo(t, "t1"))
+	f.waitIdle(t, prd("t1"))
+
+	f.service.MarkPRReview(t.Context(), prd("t1"), 2)
+	f.service.MarkPRReview(t.Context(), prd("missing"), 1)
+
+	markers := f.entriesOf(t, prd("t1"), session.KindMarker)
+	last := markers[len(markers)-1].Marker
+	if last.Type != session.MarkerPRReviewWritten || last.Pass != 2 {
+		t.Errorf("marker = %+v, want the pass of the review that was written", last)
+	}
+}
+
 func TestStartOfALaterStageSendsItsPromptWithoutTheInitialContext(t *testing.T) {
 	t.Parallel()
 

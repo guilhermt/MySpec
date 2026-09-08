@@ -117,7 +117,7 @@ func TestApprovingAStepSendsTheCommitPromptAsAMessageOfTheApp(t *testing.T) {
 		t.Fatalf("ApproveStep() = %v, want nil", err)
 	}
 
-	if want := []string{commitPrompt("task-1")}; !slices.Equal(f.sessions.sent(), want) {
+	if want := []string{commitPrompt("task-1", false)}; !slices.Equal(f.sessions.sent(), want) {
 		t.Errorf("messages = %q, want %q", f.sessions.sent(), want)
 	}
 	// The commit prompt is not a correction: it must not count against the

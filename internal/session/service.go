@@ -746,6 +746,22 @@ func (s *Service) MarkArtifact(ctx context.Context, k Key, kind ArtifactKind, fi
 	s.appendLocked(ctx, r, Entry{Kind: KindMarker, Marker: &MarkerEntry{Type: marker}}, n)
 }
 
+// MarkPRReview records that a pass of the review of a pull request was
+// written.
+func (s *Service) MarkPRReview(ctx context.Context, k Key, pass int) {
+	n := &notes{}
+	defer s.flush(n)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	r, err := s.runOf(k)
+	if err != nil {
+		return
+	}
+	marker := &MarkerEntry{Type: MarkerPRReviewWritten, Pass: pass}
+	s.appendLocked(ctx, r, Entry{Kind: KindMarker, Marker: marker}, n)
+}
+
 // Transcript returns a copy of the conversation of a task.
 func (s *Service) Transcript(_ context.Context, k Key) (Transcript, error) {
 	s.mu.Lock()

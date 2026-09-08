@@ -81,7 +81,7 @@ func (s *Service) evaluate(ctx context.Context, id string) {
 	// The PR stage has no conversation of its own either: each repository has
 	// one, and what it needs is decided on its pull request.
 	if t.Stage == task.StagePR {
-		s.evaluatePR(t)
+		s.evaluatePR(ctx, t)
 		return
 	}
 	if !t.Stage.HasSession() {

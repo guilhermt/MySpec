@@ -374,6 +374,17 @@ func (m *memTasks) add(id string, stage task.Stage, a task.Artifacts) task.Task 
 	return t
 }
 
+// useDir puts the artifacts of a task in a directory of the test, which is
+// what the actions that write a file into it need.
+func (m *memTasks) useDir(id, dir string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if index := m.indexOf(id); index >= 0 {
+		m.items[index].ArtifactsDir = dir
+	}
+}
+
 // blockInspect holds every reading of the disk until the returned channel is
 // closed, which is how a test keeps an evaluation running.
 func (m *memTasks) blockInspect() chan struct{} {
@@ -544,6 +555,13 @@ func (m *memSessions) SendFromApp(_ context.Context, k session.Key, text string)
 
 func (m *memSessions) SendCorrection(_ context.Context, k session.Key, text string) error {
 	return m.send(k, text, true)
+}
+
+func (m *memSessions) MarkPRReview(_ context.Context, k session.Key, pass int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.calls = append(m.calls, "mark:"+k.TaskID+":"+k.Stage+":pass="+strconv.Itoa(pass))
 }
 
 // send records a message of the app, counting it as the service would.
@@ -1021,8 +1039,18 @@ func (m *memGH) ghCalls() []string {
 
 // commitPrompt is what the fake renderer answers with for the commit stage,
 // with the name of the task so that a test can see the placeholders went
-// through.
-func commitPrompt(name string) string { return "Commit the work of " + name }
+// through, and the push instruction when the commit belongs to a pull request.
+func commitPrompt(name string, push bool) string {
+	message := "Commit the work of " + name
+	if push {
+		message += ". " + prompts.PushInstruction
+	}
+	return message
+}
+
+// reviewPrompt is what the fake renderer answers with for the prompt of a
+// review pass, with the report it is about.
+func reviewPrompt(path string) string { return "Review the pull request into " + path }
 
 // fixture is a flow.Service over the four fakes.
 type fixture struct {
@@ -1051,10 +1079,14 @@ func newFixture(t *testing.T) *fixture {
 		Review:    f.reviews,
 		GH:        f.gh,
 		RenderPrompt: func(stage prompts.Stage, vars prompts.Vars) (string, error) {
-			if stage != prompts.StageCommit {
+			switch stage {
+			case prompts.StageCommit:
+				return commitPrompt(vars.TaskName, vars.Push), nil
+			case prompts.StagePRReview:
+				return reviewPrompt(vars.ReviewPath), nil
+			default:
 				return "", errors.New("unexpected prompt stage " + string(stage))
 			}
-			return commitPrompt(vars.TaskName), nil
 		},
 	})
 	t.Cleanup(f.service.Close)
