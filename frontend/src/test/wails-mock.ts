@@ -4,6 +4,7 @@ import type {
   Entry,
   EntryKind,
   PermissionDecision,
+  Review,
   State,
   Step,
   TaskStage,
@@ -54,7 +55,9 @@ export const api = {
   discardStep: vi.fn<(taskId: string, cleanWorktree: boolean) => Promise<void>>(() =>
     Promise.resolve(),
   ),
+  approveStep: vi.fn<(taskId: string) => Promise<void>>(() => Promise.resolve()),
   openInEditor: vi.fn<(taskId: string) => Promise<void>>(() => Promise.resolve()),
+  openFileInEditor: vi.fn<(taskId: string, path: string) => Promise<void>>(() => Promise.resolve()),
   openExternal: vi.fn<(url: string) => Promise<void>>(() => Promise.resolve()),
 };
 
@@ -162,6 +165,24 @@ export function makeStep(overrides: Partial<Step> = {}): Step {
     phase: "",
     block: null,
     worktreePath: "",
+    review: null,
+    commitSha: "",
+    commitSubject: "",
+    commitFailed: false,
+    ...overrides,
+  };
+}
+
+export function makeReview(overrides: Partial<Review> = {}): Review {
+  return {
+    files: [
+      { path: "src/LoginForm.tsx", kind: "modified", staged: true },
+      { path: "src/api/login.ts", kind: "added", staged: false },
+    ],
+    staged: 1,
+    total: 2,
+    percent: 50,
+    error: "",
     ...overrides,
   };
 }

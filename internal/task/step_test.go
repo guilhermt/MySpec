@@ -14,7 +14,10 @@ import (
 func TestParseStepStatus(t *testing.T) {
 	t.Parallel()
 
-	for _, status := range []task.StepStatus{task.StepPreparing, task.StepBlocked, task.StepStarted} {
+	statuses := []task.StepStatus{
+		task.StepPreparing, task.StepBlocked, task.StepStarted, task.StepCommitting, task.StepDone,
+	}
+	for _, status := range statuses {
 		got, err := task.ParseStepStatus(string(status))
 		if err != nil {
 			t.Errorf("ParseStepStatus(%q) = %v, want nil", status, err)
@@ -24,7 +27,7 @@ func TestParseStepStatus(t *testing.T) {
 		}
 	}
 
-	for _, value := range []string{"", "Preparing", "awaiting_review", "done"} {
+	for _, value := range []string{"", "Preparing", "awaiting_review", "committed"} {
 		if _, err := task.ParseStepStatus(value); !errors.Is(err, task.ErrUnknownStepStatus) {
 			t.Errorf("ParseStepStatus(%q) = %v, want ErrUnknownStepStatus", value, err)
 		}
@@ -96,6 +99,108 @@ func TestSetStepRunRecordsAndUpdatesAStep(t *testing.T) {
 	if got := f.logs.count(t, "step run set"); got != 2 {
 		t.Errorf("logged %d step run records, want 2", got)
 	}
+}
+
+func TestSetStepRunKeepsWhatItDoesNotChange(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	created := f.create(t, "add-login", "")
+
+	const start = "1111111111111111111111111111111111111111"
+	if _, err := f.service.SetStepStarted(t.Context(), created.ID, 1, start); err != nil {
+		t.Fatalf("SetStepStarted() = %v, want nil", err)
+	}
+
+	// Going back to preparing says nothing about the commit the step began
+	// from, so the record keeps it.
+	run, err := f.service.SetStepRun(t.Context(), created.ID, 1, task.StepPreparing, nil)
+	if err != nil {
+		t.Fatalf("SetStepRun() = %v, want nil", err)
+	}
+	if run.StartCommit != start {
+		t.Errorf("StartCommit = %q, want %q", run.StartCommit, start)
+	}
+	if diff := cmp.Diff([]task.StepRun{run}, f.repo.stepRuns(created.ID)); diff != "" {
+		t.Errorf("stored runs mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestSetStepStartedRecordsTheCommitTheStepBeganFrom(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	created := f.create(t, "add-login", "")
+	before := f.changeCount()
+
+	const start = "1111111111111111111111111111111111111111"
+	run, err := f.service.SetStepStarted(t.Context(), created.ID, 1, start)
+	if err != nil {
+		t.Fatalf("SetStepStarted() = %v, want nil", err)
+	}
+	want := task.StepRun{
+		TaskID: created.ID, Number: 1, Status: task.StepStarted,
+		CreatedAt: base, UpdatedAt: base, StartCommit: start,
+	}
+	if diff := cmp.Diff(want, run); diff != "" {
+		t.Errorf("SetStepStarted() mismatch (-want +got):\n%s", diff)
+	}
+	if diff := cmp.Diff([]task.StepRun{want}, f.repo.stepRuns(created.ID)); diff != "" {
+		t.Errorf("stored runs mismatch (-want +got):\n%s", diff)
+	}
+	if got := f.changeCount(); got != before+1 {
+		t.Errorf("OnChange ran %d times, want 1", got-before)
+	}
+}
+
+func TestSetStepCommittedIsWhatMakesAStepDone(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	created := f.create(t, "add-login", "")
+
+	const (
+		start   = "1111111111111111111111111111111111111111"
+		sha     = "2222222222222222222222222222222222222222"
+		subject = "Add the login screen"
+	)
+	if _, err := f.service.SetStepStarted(t.Context(), created.ID, 1, start); err != nil {
+		t.Fatalf("SetStepStarted() = %v, want nil", err)
+	}
+	if _, err := f.service.SetStepRun(t.Context(), created.ID, 1, task.StepCommitting, nil); err != nil {
+		t.Fatalf("SetStepRun(committing) = %v, want nil", err)
+	}
+
+	run, err := f.service.SetStepCommitted(t.Context(), created.ID, 1, sha, subject)
+	if err != nil {
+		t.Fatalf("SetStepCommitted() = %v, want nil", err)
+	}
+	want := task.StepRun{
+		TaskID: created.ID, Number: 1, Status: task.StepDone,
+		CreatedAt: base, UpdatedAt: base,
+		StartCommit: start, CommitSHA: sha, CommitSubject: subject,
+	}
+	if diff := cmp.Diff(want, run); diff != "" {
+		t.Errorf("SetStepCommitted() mismatch (-want +got):\n%s", diff)
+	}
+	if diff := cmp.Diff([]task.StepRun{want}, f.service.StepRuns(created.ID)); diff != "" {
+		t.Errorf("StepRuns() mismatch (-want +got):\n%s", diff)
+	}
+	if got := f.logs.count(t, "step committed"); got != 1 {
+		t.Errorf("logged %d commits, want 1", got)
+	}
+}
+
+func TestSetStepStartedAndCommittedRejectAnUnknownTask(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+
+	_, err := f.service.SetStepStarted(t.Context(), "nope", 1, "sha")
+	wantErrIs(t, err, task.ErrNotFound)
+
+	_, err = f.service.SetStepCommitted(t.Context(), "nope", 1, "sha", "subject")
+	wantErrIs(t, err, task.ErrNotFound)
 }
 
 func TestSetStepRunKeepsTheStepsInOrder(t *testing.T) {

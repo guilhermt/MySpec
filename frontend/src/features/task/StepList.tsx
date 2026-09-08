@@ -59,6 +59,14 @@ function Row({ step, app, current }: { step: Step; app: State | null; current: b
           {label}
         </Badge>
       )}
+      {step.commitSha !== "" && (
+        <span className="flex min-w-0 flex-1 items-center gap-2 text-xs text-muted-foreground">
+          <span className="shrink-0 font-mono">{step.commitSha.slice(0, 7)}</span>
+          <span className="truncate" title={step.commitSubject}>
+            {step.commitSubject}
+          </span>
+        </span>
+      )}
       <span
         className={cn(
           "flex shrink-0 items-center gap-1.5 text-xs",

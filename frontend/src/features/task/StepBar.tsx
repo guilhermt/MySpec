@@ -1,4 +1,4 @@
-import { Code, LoaderCircle, RotateCcw } from "lucide-react";
+import { Check, Code, LoaderCircle, RotateCcw } from "lucide-react";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -7,14 +7,51 @@ import { DiscardStepDialog } from "@/features/task/DiscardStepDialog";
 import { ToneDot } from "@/features/task/StatusDot";
 import { repoLabel } from "@/features/task/StepList";
 import {
+  canApprove,
   currentStepDisplay,
   currentStepOf,
   hasStepSession,
+  reviewCountLabel,
   stepPhaseLabel,
+  stepStatusLabel,
 } from "@/features/task/step-status";
-import { asStepStatus, type TaskSummary } from "@/lib/wails";
-import { openInEditor } from "@/store/actions";
+import { asStepStatus, type Step, type StepStatus, type TaskSummary } from "@/lib/wails";
+import { approveStep, openInEditor } from "@/store/actions";
 import { useAppStore } from "@/store/app-store";
+
+// The states where the review of the step is what the bar is about.
+const REVIEW_STATES: readonly StepStatus[] = [
+  "awaiting_review",
+  "in_review",
+  "ready_to_approve",
+  "nothing_to_commit",
+  "review_failed",
+];
+
+/** approveHint says what is missing before the step can be approved. */
+function approveHint(status: StepStatus): string {
+  switch (status) {
+    case "nothing_to_commit":
+      return "The agent didn't change anything";
+    case "review_failed":
+      return "The worktree couldn't be read";
+    default:
+      return "Stage every changed file in VS Code to approve";
+  }
+}
+
+/**
+ * stateText reads the state of the step, with the count while it is reviewed.
+ * The bar spells the progress out in files; the percentage is what the tree and
+ * the list of tasks show, where there is no room for the count.
+ */
+function stateText(step: Step, label: string): string {
+  const review = step.review;
+  if (review === null || review.error !== "" || review.total === 0) {
+    return label;
+  }
+  return `${label} · ${reviewCountLabel(review)}`;
+}
 
 export interface StepBarProps {
   task: TaskSummary;
@@ -32,7 +69,10 @@ export function StepBar({ task }: StepBarProps) {
 
   const label = repoLabel(app, step);
   const display = currentStepDisplay(task);
-  const preparing = asStepStatus(step.status) === "preparing";
+  const status = asStepStatus(step.status);
+  const preparing = status === "preparing";
+  const committing = status === "committing";
+  const reviewing = REVIEW_STATES.includes(status);
   // The worktree is only there once it has been created.
   const canOpen = step.worktreePath !== "";
 
@@ -45,6 +85,18 @@ export function StepBar({ task }: StepBarProps) {
     >
       <Code />
       Open in VS Code
+    </Button>
+  );
+
+  const approveButton = (
+    <Button
+      variant="default"
+      size="sm"
+      disabled={!canApprove(step)}
+      onClick={() => void approveStep(task.id)}
+    >
+      {committing ? <LoaderCircle aria-hidden="true" className="animate-spin" /> : <Check />}
+      Approve
     </Button>
   );
 
@@ -68,12 +120,27 @@ export function StepBar({ task }: StepBarProps) {
         ) : (
           <>
             <ToneDot tone={display.tone} />
-            {display.label}
+            {stateText(step, reviewing ? stepStatusLabel(step) : display.label)}
           </>
         )}
       </span>
+      {step.commitFailed && (
+        <span className="shrink-0 text-xs text-muted-foreground">
+          The last approval didn't produce a commit.
+        </span>
+      )}
 
       <span className="flex-1" />
+
+      {(reviewing || committing) &&
+        (canApprove(step) || committing ? (
+          approveButton
+        ) : (
+          <Tooltip>
+            <TooltipTrigger render={<span />}>{approveButton}</TooltipTrigger>
+            <TooltipContent>{approveHint(status)}</TooltipContent>
+          </Tooltip>
+        ))}
 
       {canOpen ? (
         openButton

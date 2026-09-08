@@ -3,13 +3,20 @@ package git
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 )
 
-// refNotFound is the exit code rev-parse --verify --quiet uses for a ref that
-// does not exist.
-const refNotFound = 1
+// The exit codes the app reads as an answer instead of a failure.
+const (
+	// refNotFound is what rev-parse --verify --quiet uses for a ref that does
+	// not exist.
+	refNotFound = 1
+	// pathNotIgnored is what check-ignore --quiet uses for a path the
+	// repository does not ignore.
+	pathNotIgnored = 1
+)
 
 // Fetch updates the remote-tracking branches of remote.
 func (r *Runner) Fetch(ctx context.Context, dir, remote string) error {
@@ -63,22 +70,227 @@ func (r *Runner) DeleteBranch(ctx context.Context, dir, name string) error {
 	return err
 }
 
-// Status returns the porcelain lines of the working tree at dir, in git's
-// order, empty when nothing changed. --untracked-files=all lists every file of
-// a new directory, so a count matches what the user sees.
-func (r *Runner) Status(ctx context.Context, dir string) ([]string, error) {
-	out, err := r.Run(ctx, dir, "status", "--porcelain=v1", "--untracked-files=all")
+// Kind is what happened to a path, for the interface to label it.
+type Kind string
+
+// The kinds of change the app shows.
+const (
+	KindAdded     Kind = "added"
+	KindModified  Kind = "modified"
+	KindDeleted   Kind = "deleted"
+	KindRenamed   Kind = "renamed"
+	KindUntracked Kind = "untracked"
+)
+
+// Change is what git reports about one path of a working tree, with the two
+// codes porcelain v2 uses: X, the index against HEAD, and Y, the working tree
+// against the index. '.' means unchanged, and '?' marks an untracked path.
+type Change struct {
+	X, Y     byte
+	Path     string // relative to the working tree root
+	OrigPath string // where a rename or a copy came from; "" otherwise
+}
+
+// Staged reports whether nothing of the path is left outside the index: the
+// index differs from HEAD and the working tree matches the index.
+func (c Change) Staged() bool { return c.X != '.' && c.X != '?' && c.Y == '.' }
+
+// Kind names the change for the interface.
+func (c Change) Kind() Kind {
+	switch {
+	case c.X == '?':
+		return KindUntracked
+	case c.X == 'R' || c.X == 'C':
+		return KindRenamed
+	case c.X == 'D' || c.Y == 'D':
+		return KindDeleted
+	case c.X == 'A':
+		return KindAdded
+	default:
+		return KindModified
+	}
+}
+
+// Line renders the change the way git status --porcelain=v1 prints it, which
+// is how the app quotes git back to the user.
+func (c Change) Line() string {
+	if c.X == '?' {
+		return "?? " + c.Path
+	}
+
+	path := c.Path
+	if c.OrigPath != "" {
+		path = c.OrigPath + " -> " + c.Path
+	}
+	return string([]byte{code(c.X), code(c.Y)}) + " " + path
+}
+
+// code is how v1 prints one of the two codes: a space for an unchanged side.
+func code(b byte) byte {
+	if b == '.' {
+		return ' '
+	}
+	return b
+}
+
+// Status is the state of a working tree at a point in time.
+type Status struct {
+	Head    string // the commit HEAD points at; "" on a branch with no commit yet
+	Changes []Change
+}
+
+// Clean reports whether nothing is modified, staged, deleted or untracked.
+func (s Status) Clean() bool { return len(s.Changes) == 0 }
+
+// Lines renders the changes as git status --porcelain=v1 would print them.
+func (s Status) Lines() []string {
+	lines := make([]string, 0, len(s.Changes))
+	for _, change := range s.Changes {
+		lines = append(lines, change.Line())
+	}
+	return lines
+}
+
+// Status reads the state of the working tree at dir. --no-optional-locks keeps
+// the read from refreshing the index, so it neither writes nor takes
+// index.lock while the agent works in the same worktree.
+// --untracked-files=all lists every file of a new directory, so a count
+// matches what the user sees.
+func (r *Runner) Status(ctx context.Context, dir string) (Status, error) {
+	out, err := r.Run(ctx, dir,
+		"--no-optional-locks", "status", "--porcelain=v2", "--branch", "-z", "--untracked-files=all")
+	if err != nil {
+		return Status{}, err
+	}
+	return parseStatus(out)
+}
+
+// The record headers of --porcelain=v2, and how many fields each one has
+// before its path.
+const (
+	headerBranchOID = "# branch.oid "
+	fieldsChanged   = 9  // 1 <XY> <sub> <mH> <mI> <mW> <hH> <hI> <path>
+	fieldsRenamed   = 10 // 2 <XY> <sub> <mH> <mI> <mW> <hH> <hI> <Xscore> <path>
+	fieldsUnmerged  = 11 // u <XY> <sub> <m1> <m2> <m3> <mW> <h1> <h2> <h3> <path>
+)
+
+// parseStatus reads the NUL separated records of --porcelain=v2 --branch.
+func parseStatus(out string) (Status, error) {
+	var status Status
+
+	records := strings.Split(out, "\x00")
+	for len(records) > 0 {
+		record := records[0]
+		records = records[1:]
+
+		var (
+			change Change
+			err    error
+		)
+		switch {
+		case record == "":
+			continue
+		case strings.HasPrefix(record, headerBranchOID):
+			if oid := strings.TrimPrefix(record, headerBranchOID); oid != "(initial)" {
+				status.Head = oid
+			}
+			continue
+		case strings.HasPrefix(record, "# "):
+			continue
+		case strings.HasPrefix(record, "! "):
+			// The command does not ask for ignored files; one is not a change.
+			continue
+		case strings.HasPrefix(record, "? "):
+			change = Change{X: '?', Y: '?', Path: strings.TrimPrefix(record, "? ")}
+		case strings.HasPrefix(record, "1 "):
+			change, err = parseChange(record, fieldsChanged)
+		case strings.HasPrefix(record, "2 "):
+			if change, err = parseChange(record, fieldsRenamed); err == nil {
+				// The path it came from is the record right after it.
+				if len(records) == 0 {
+					err = fmt.Errorf("parse git status: %q has no original path", record)
+				} else {
+					change.OrigPath, records = records[0], records[1:]
+				}
+			}
+		case strings.HasPrefix(record, "u "):
+			change, err = parseChange(record, fieldsUnmerged)
+		default:
+			err = fmt.Errorf("parse git status: unexpected record %q", record)
+		}
+		if err != nil {
+			return Status{}, err
+		}
+		status.Changes = append(status.Changes, change)
+	}
+	return status, nil
+}
+
+// parseChange reads a record whose path is its last field, of fields in all.
+func parseChange(record string, fields int) (Change, error) {
+	parts := strings.SplitN(record, " ", fields)
+	if len(parts) < fields || len(parts[1]) != 2 || parts[fields-1] == "" {
+		return Change{}, fmt.Errorf("parse git status: unexpected record %q", record)
+	}
+	return Change{X: parts[1][0], Y: parts[1][1], Path: parts[fields-1]}, nil
+}
+
+// GitDir is the absolute git directory of the working tree at dir. For a
+// linked worktree it is <repo>/.git/worktrees/<name>, where its index lives.
+func (r *Runner) GitDir(ctx context.Context, dir string) (string, error) {
+	return r.Run(ctx, dir, "rev-parse", "--absolute-git-dir")
+}
+
+// TrackedFiles lists the paths git tracks in the working tree at dir,
+// relative to it.
+func (r *Runner) TrackedFiles(ctx context.Context, dir string) ([]string, error) {
+	out, err := r.Run(ctx, dir, "ls-files", "-z")
 	if err != nil {
 		return nil, err
 	}
 
-	var lines []string
-	for _, line := range strings.Split(out, "\n") {
-		if line != "" {
-			lines = append(lines, line)
+	var files []string
+	for path := range strings.SplitSeq(out, "\x00") {
+		if path != "" {
+			files = append(files, path)
 		}
 	}
-	return lines, nil
+	return files, nil
+}
+
+// IsIgnored reports whether path, absolute or relative to dir, is ignored by
+// the repository.
+func (r *Runner) IsIgnored(ctx context.Context, dir, path string) (bool, error) {
+	_, err := r.Run(ctx, dir, "check-ignore", "--quiet", "--", path)
+	if err == nil {
+		return true, nil
+	}
+
+	var gitErr *Error
+	if errors.As(err, &gitErr) && gitErr.ExitCode == pathNotIgnored {
+		return false, nil
+	}
+	return false, err
+}
+
+// Commit is one commit, as the app shows it.
+type Commit struct {
+	SHA     string
+	Subject string
+}
+
+// Commit reads a commit of the repository at dir.
+func (r *Runner) Commit(ctx context.Context, dir, rev string) (Commit, error) {
+	out, err := r.Run(ctx, dir, "log", "-1", "--format=%H%x00%s", rev)
+	if err != nil {
+		return Commit{}, err
+	}
+
+	sha, subject, found := strings.Cut(out, "\x00")
+	if !found {
+		return Commit{}, fmt.Errorf("parse git log: unexpected output %q", out)
+	}
+	return Commit{SHA: sha, Subject: subject}, nil
 }
 
 // Reset restores the tracked files of the working tree at dir.

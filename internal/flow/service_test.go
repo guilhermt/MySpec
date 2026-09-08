@@ -28,7 +28,7 @@ func TestAStageEndsOnlyWhenTheSessionIsIdle(t *testing.T) {
 	f.service.Check("task-1")
 	f.waitStage(t, "task-1", task.StageTechSpec)
 
-	f.wantCalls(t, "close:task-1", "start:task-1:tech_spec:restarted=false")
+	f.waitCalls(t, "close:task-1", "start:task-1:tech_spec:restarted=false")
 	f.wantTaskCalls(t, "stage:task-1:tech_spec:revisiting=false")
 }
 

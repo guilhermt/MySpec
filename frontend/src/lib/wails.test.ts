@@ -8,6 +8,7 @@ import {
   asMarkerType,
   asNoticeReason,
   asPermissionStatus,
+  asReviewFileKind,
   asSessionStatus,
   asStepStatus,
   asTaskStage,
@@ -71,6 +72,17 @@ describe("narrowing", () => {
     expect(asStepStatus("blocked")).toBe("blocked");
     expect(asStepStatus("implementing")).toBe("implementing");
     expect(asStepStatus("awaiting_review")).toBe("awaiting_review");
+    expect(asStepStatus("in_review")).toBe("in_review");
+    expect(asStepStatus("ready_to_approve")).toBe("ready_to_approve");
+    expect(asStepStatus("nothing_to_commit")).toBe("nothing_to_commit");
+    expect(asStepStatus("review_failed")).toBe("review_failed");
+    expect(asStepStatus("committing")).toBe("committing");
+    expect(asStepStatus("done")).toBe("done");
+    expect(asReviewFileKind("added")).toBe("added");
+    expect(asReviewFileKind("modified")).toBe("modified");
+    expect(asReviewFileKind("deleted")).toBe("deleted");
+    expect(asReviewFileKind("renamed")).toBe("renamed");
+    expect(asReviewFileKind("untracked")).toBe("untracked");
     expect(asBlockReason("dirty_worktree")).toBe("dirty_worktree");
     expect(asBlockReason("fetch_failed")).toBe("fetch_failed");
     expect(asBlockReason("no_base_branch")).toBe("no_base_branch");
@@ -88,7 +100,8 @@ describe("narrowing", () => {
     expect(asActionStatus("queued")).toBe("done");
     expect(asPermissionStatus("expired")).toBe("cancelled");
     expect(asMarkerType("branched")).toBe("compacted");
-    expect(asStepStatus("committing")).toBe("not_started");
+    expect(asStepStatus("rebasing")).toBe("not_started");
+    expect(asReviewFileKind("copied")).toBe("modified");
     expect(asBlockReason("rebase_in_progress")).toBe("git_failed");
     expect(asErrorKind("out_of_quota")).toBe("turn_error");
     expect(asTranscriptEventKind("patch")).toBe("reset");
@@ -123,10 +136,12 @@ describe("api", () => {
     await wails.api.cleanAndStartStep("task-1");
     await wails.api.discardStep("task-1", true);
     await wails.api.openInEditor("task-1");
+    await wails.api.approveStep("task-1");
+    await wails.api.openFileInEditor("task-1", "src/login.ts");
 
-    expect(Call.ByID).toHaveBeenCalledTimes(25);
+    expect(Call.ByID).toHaveBeenCalledTimes(27);
     const ids = vi.mocked(Call.ByID).mock.calls.map(([id]) => id);
-    expect(new Set(ids).size).toBe(25);
+    expect(new Set(ids).size).toBe(27);
   });
 
   it("opens a link in the browser of the desktop, never in the webview", async () => {

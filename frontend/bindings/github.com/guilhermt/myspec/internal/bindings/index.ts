@@ -25,6 +25,8 @@ export type {
     QuestionOption,
     Recent,
     Repo,
+    Review,
+    ReviewFile,
     State,
     Step,
     StepBlock,

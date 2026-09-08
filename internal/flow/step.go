@@ -8,7 +8,9 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/prompts"
+	"github.com/guilhermt/myspec/internal/review"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
 	"github.com/guilhermt/myspec/internal/worktree"
@@ -19,11 +21,17 @@ type StepStatus string
 
 // The states a step of a plan is shown in.
 const (
-	StepNotStarted     StepStatus = "not_started"
-	StepPreparing      StepStatus = "preparing"
-	StepBlocked        StepStatus = "blocked"
-	StepImplementing   StepStatus = "implementing"
-	StepAwaitingReview StepStatus = "awaiting_review"
+	StepNotStarted      StepStatus = "not_started"
+	StepPreparing       StepStatus = "preparing"
+	StepBlocked         StepStatus = "blocked"
+	StepImplementing    StepStatus = "implementing"
+	StepAwaitingReview  StepStatus = "awaiting_review"   // idle, nothing staged yet
+	StepInReview        StepStatus = "in_review"         // something staged, something left
+	StepReadyToApprove  StepStatus = "ready_to_approve"  // nothing left outside the index
+	StepNothingToCommit StepStatus = "nothing_to_commit" // the worktree has no change at all
+	StepReviewFailed    StepStatus = "review_failed"     // the worktree could not be read
+	StepCommitting      StepStatus = "committing"
+	StepDone            StepStatus = "done"
 )
 
 // Phase is what the preparation of a step is doing.
@@ -40,9 +48,14 @@ const (
 type StepState struct {
 	Step         task.Step
 	Status       StepStatus
-	Phase        Phase           // preparing only
-	Block        *task.StepBlock // blocked only
-	WorktreePath string          // "" until the worktree of the repository of the step exists
+	Phase        Phase            // preparing only
+	Block        *task.StepBlock  // blocked only
+	WorktreePath string           // "" until the worktree of the repository of the step exists
+	Review       *review.Snapshot // the review states and committing only
+
+	CommitSHA     string // done only
+	CommitSubject string
+	CommitFailed  bool // the last approval ended without a commit
 }
 
 // The ways the flow refuses to act on a step.
@@ -53,6 +66,8 @@ var (
 	ErrStepNotDirty    = errors.New("flow: step is not blocked by a dirty worktree")
 	ErrStepNotStarted  = errors.New("flow: step has not started")
 	ErrNoWorktree      = errors.New("flow: the worktree of the step does not exist yet")
+	ErrStepNotReady    = errors.New("flow: the review is not finished")
+	ErrStepBusy        = errors.New("flow: the agent is still working")
 )
 
 // prepareOptions say how a step is (re)started.
@@ -67,6 +82,10 @@ func (s *Service) Steps(id string) []StepState {
 	runs := s.tasks.StepRuns(id)
 	sum, open := s.sessions.Summary(id)
 	phase := s.phaseOf(id)
+	snap, read := s.review.Snapshot(id)
+	// The warning belongs to the step the user is on, which is the first one
+	// without a commit; every other step is either done or still to come.
+	noCommit := s.noCommitOf(id)
 
 	states := make([]StepState, 0, len(a.Plan.Steps))
 	for _, step := range a.Plan.Steps {
@@ -85,32 +104,80 @@ func (s *Service) Steps(id string) []StepState {
 				state.Status, state.Block = StepBlocked, run.Block
 			case task.StepStarted:
 				state.Status = StepImplementing
+				// The progress only means something with the work stopped, so
+				// it is read while the agent is not writing.
 				if open && sum.Stage == session.StepStage(step.Number) && sum.Idle {
-					state.Status = StepAwaitingReview
+					state.Status = reviewStatus(snap, read)
+					state.Review = reading(snap, read)
 				}
+			case task.StepCommitting:
+				state.Status, state.Review = StepCommitting, reading(snap, read)
+			case task.StepDone:
+				state.Status = StepDone
+				state.CommitSHA, state.CommitSubject = run.CommitSHA, run.CommitSubject
 			}
+		}
+		if state.Status != StepDone && noCommit {
+			state.CommitFailed, noCommit = true, false
 		}
 		states = append(states, state)
 	}
 	return states
 }
 
-// CurrentStep is the step that runs or runs next: the first one not done. In
-// this version no step is ever done, so it is step 1.
-func (s *Service) CurrentStep(id string) (StepState, bool) {
-	states := s.Steps(id)
-	if len(states) == 0 {
-		return StepState{}, false
+// reviewStatus turns the last reading of the worktree into the state the step
+// is shown in. Without a reading the step is simply awaiting review: the
+// numbers are on their way.
+func reviewStatus(snap review.Snapshot, ok bool) StepStatus {
+	switch {
+	case !ok:
+		return StepAwaitingReview
+	case snap.Err != "":
+		return StepReviewFailed
+	case snap.Total == 0:
+		return StepNothingToCommit
+	case snap.Staged == 0:
+		return StepAwaitingReview
+	case snap.Staged < snap.Total:
+		return StepInReview
+	default:
+		return StepReadyToApprove
 	}
-	return states[0], true
 }
 
-// currentStep is the step of a plan that runs or runs next.
-func currentStep(plan task.Plan) (task.Step, bool) {
-	if len(plan.Steps) == 0 {
-		return task.Step{}, false
+// reading is the snapshot a step state carries, nil while the worktree has not
+// been read: an absent number is not a zero one.
+func reading(snap review.Snapshot, ok bool) *review.Snapshot {
+	if !ok {
+		return nil
 	}
-	return plan.Steps[0], true
+	return &snap
+}
+
+// CurrentStep is the step that runs or runs next: the first one that has not
+// been committed.
+func (s *Service) CurrentStep(id string) (StepState, bool) {
+	runs := s.tasks.StepRuns(id)
+	states := s.Steps(id)
+	for _, state := range states {
+		if index := indexOfRun(runs, state.Step.Number); index >= 0 && runs[index].CommitSHA != "" {
+			continue
+		}
+		return state, true
+	}
+	return StepState{}, false
+}
+
+// currentStep is the step of a plan that runs or runs next: the first one
+// that has not been committed.
+func currentStep(plan task.Plan, runs []task.StepRun) (task.Step, bool) {
+	for _, step := range plan.Steps {
+		if index := indexOfRun(runs, step.Number); index >= 0 && runs[index].CommitSHA != "" {
+			continue
+		}
+		return step, true
+	}
+	return task.Step{}, false
 }
 
 // beginStep records the first step of a task that has just reached
@@ -121,7 +188,7 @@ func (s *Service) beginStep(ctx context.Context, t task.Task) error {
 	if err != nil {
 		return err
 	}
-	step, ok := currentStep(a.Plan)
+	step, ok := currentStep(a.Plan, s.tasks.StepRuns(t.ID))
 	if !ok {
 		s.log.Warn("no step to run", "task", t.ID)
 		return nil
@@ -175,6 +242,28 @@ func (s *Service) phaseOf(id string) Phase {
 	return l.phase
 }
 
+// setNoCommit records whether the last approval of the current step of a task
+// ended without a commit.
+func (s *Service) setNoCommit(id string, v bool) {
+	l := s.lockOf(id)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	l.noCommit = v
+}
+
+// noCommitOf reports whether the last approval of the current step of a task
+// ended without a commit.
+func (s *Service) noCommitOf(id string) bool {
+	l := s.lockOf(id)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return l.noCommit
+}
+
 // prepare fetches, creates and checks the worktree of the current step of a
 // task and starts its session, or records what blocked it. It runs on a
 // goroutine of its own, holding the lock of the task from end to end.
@@ -206,13 +295,13 @@ func (s *Service) prepare(ctx context.Context, id string, opts prepareOptions) {
 		s.log.Error("inspect artifacts failed", "task", id, "stage", string(t.Stage), "error", err)
 		return
 	}
-	step, ok := currentStep(a.Plan)
-	if !ok {
-		return
-	}
 	// Someone may have changed the state of the step while the goroutine
 	// waited for the lock, and then this preparation is not the current one.
 	runs := s.tasks.StepRuns(id)
+	step, ok := currentStep(a.Plan, runs)
+	if !ok {
+		return
+	}
 	index := indexOfRun(runs, step.Number)
 	if index < 0 || runs[index].Status != task.StepPreparing {
 		return
@@ -265,7 +354,7 @@ func (s *Service) prepare(ctx context.Context, id string, opts prepareOptions) {
 		return
 	}
 	if !status.Clean() {
-		block(task.BlockDirty, strings.Join(status.Entries, "\n"), len(status.Entries))
+		block(task.BlockDirty, strings.Join(status.Lines(), "\n"), len(status.Changes))
 		return
 	}
 
@@ -273,7 +362,9 @@ func (s *Service) prepare(ctx context.Context, id string, opts prepareOptions) {
 	dbCtx, cancel := context.WithTimeout(context.Background(), evaluateTimeout)
 	defer cancel()
 
-	if _, err := s.tasks.SetStepRun(dbCtx, id, step.Number, task.StepStarted, nil); err != nil {
+	// The commit the worktree is on is what says later whether the step
+	// produced one; the status reading above already gives it.
+	if _, err := s.tasks.SetStepStarted(dbCtx, id, step.Number, status.Head); err != nil {
 		s.log.Error("record started step failed", "task", id, "step", step.Number, "error", err)
 		return
 	}
@@ -300,11 +391,11 @@ func (s *Service) resumeSteps(ctx context.Context, t task.Task) {
 		s.log.Error("inspect artifacts failed", "task", t.ID, "stage", string(t.Stage), "error", err)
 		return
 	}
-	step, ok := currentStep(a.Plan)
+	runs := s.tasks.StepRuns(t.ID)
+	step, ok := currentStep(a.Plan, runs)
 	if !ok {
 		return
 	}
-	runs := s.tasks.StepRuns(t.ID)
 	index := indexOfRun(runs, step.Number)
 	if index < 0 {
 		// The app closed between the stage change and the first preparation.
@@ -321,7 +412,9 @@ func (s *Service) resumeSteps(ctx context.Context, t task.Task) {
 		// A half-created worktree comes back as "path already exists".
 		s.spawnPrepare(t.ID, prepareOptions{})
 	case task.StepBlocked:
-	case task.StepStarted:
+	case task.StepStarted, task.StepCommitting:
+		// A step left committing reopens like a started one; what to do about
+		// the commit is for the evaluation that follows.
 		wt, ok := s.worktrees.Get(t.ID, step.RepoPath)
 		if !ok {
 			s.log.Error("the worktree of a started step is missing", "task", t.ID, "step", step.Number)
@@ -337,7 +430,118 @@ func (s *Service) resumeSteps(ctx context.Context, t task.Task) {
 		if err := s.sessions.Open(ctx, stepInfo(t, step, wt, s.tasks.Repositories(t))); err != nil {
 			s.log.Error("open step session failed", "task", t.ID, "step", step.Number, "error", err)
 		}
+	case task.StepDone:
+		// currentStep never returns a step that is already committed.
 	}
+}
+
+// evaluateStep keeps the review of the current step in step with the session
+// and the worktree: it watches while the numbers matter, concludes the step
+// when a commit appears, and starts the next one.
+func (s *Service) evaluateStep(ctx context.Context, t task.Task) {
+	a, err := s.tasks.Inspect(t.ID)
+	if err != nil {
+		s.log.Error("inspect artifacts failed", "task", t.ID, "stage", string(t.Stage), "error", err)
+		return
+	}
+	runs := s.tasks.StepRuns(t.ID)
+	step, ok := currentStep(a.Plan, runs)
+	if !ok {
+		// Every step is committed: nothing left to watch.
+		s.review.Forget(t.ID)
+		return
+	}
+	index := indexOfRun(runs, step.Number)
+	if index < 0 {
+		// beginStep records the first one; there is nothing to watch yet.
+		return
+	}
+	run := runs[index]
+	if run.Status != task.StepStarted && run.Status != task.StepCommitting {
+		// Preparing or blocked: the worktree is not the user's to review.
+		s.review.Forget(t.ID)
+		return
+	}
+	wt, ok := s.worktrees.Get(t.ID, step.RepoPath)
+	if !ok {
+		return
+	}
+
+	sum, open := s.sessions.Summary(t.ID)
+	idle := open && sum.Stage == session.StepStage(step.Number) && sum.Idle
+	committing := run.Status == task.StepCommitting
+	s.review.Track(t.ID, wt, idle || committing)
+	if !idle && !committing {
+		return
+	}
+
+	snap, read := s.review.Snapshot(t.ID)
+	if committing && idle {
+		// The commit turn is over: decide on a reading newer than it, not on
+		// one the debounce still owes.
+		snap, read = s.review.Refresh(t.ID)
+	}
+	if !read || snap.Err != "" {
+		return
+	}
+
+	if snap.Head != "" && snap.Head != run.StartCommit {
+		s.completeStep(ctx, t, a.Plan, step, wt, snap.Head)
+		return
+	}
+	if committing && idle {
+		// The agent finished its turn and the branch is where it was: whatever
+		// it did, it did not commit, and the step goes back to the user.
+		if _, err := s.tasks.SetStepRun(ctx, t.ID, step.Number, task.StepStarted, nil); err != nil {
+			s.log.Error("record started step failed", "task", t.ID, "step", step.Number, "error", err)
+			return
+		}
+		s.setNoCommit(t.ID, true)
+		s.log.Warn("commit did not happen", "task", t.ID, "step", step.Number)
+	}
+}
+
+// completeStep records the commit a step produced, closes its session and
+// starts the next one. A task whose last step is committed simply stops here:
+// the PR stage does not exist in this version.
+func (s *Service) completeStep(
+	ctx context.Context, t task.Task, plan task.Plan, step task.Step, wt worktree.Worktree, head string,
+) {
+	commit, err := s.worktrees.Commit(ctx, wt, head)
+	if err != nil {
+		// The commit is a fact of the branch; its subject is a nicety.
+		s.log.Warn("read commit failed", "task", t.ID, "step", step.Number, "error", err)
+		commit = git.Commit{SHA: head}
+	}
+	if _, err := s.tasks.SetStepCommitted(ctx, t.ID, step.Number, commit.SHA, commit.Subject); err != nil {
+		s.log.Error("record committed step failed", "task", t.ID, "step", step.Number, "error", err)
+		return
+	}
+	s.review.Forget(t.ID)
+	s.setNoCommit(t.ID, false)
+	if err := s.sessions.Close(ctx, t.ID); err != nil {
+		s.log.Error("close step session failed", "task", t.ID, "step", step.Number, "error", err)
+	}
+
+	next, ok := nextStep(plan, step.Number)
+	if !ok {
+		s.log.Info("implementation complete", "task", t.ID, "steps", len(plan.Steps))
+		return
+	}
+	if _, err := s.tasks.SetStepRun(ctx, t.ID, next.Number, task.StepPreparing, nil); err != nil {
+		s.log.Error("record preparing step failed", "task", t.ID, "step", next.Number, "error", err)
+		return
+	}
+	s.spawnPrepare(t.ID, prepareOptions{})
+}
+
+// nextStep is the step after number, if the plan has one.
+func nextStep(plan task.Plan, number int) (task.Step, bool) {
+	index := slices.IndexFunc(plan.Steps, func(step task.Step) bool { return step.Number == number })
+	if index < 0 || index+1 >= len(plan.Steps) {
+		return task.Step{}, false
+	}
+	return plan.Steps[index+1], true
 }
 
 // stepInfo is what the session of a step needs to know: the worktree it runs
@@ -389,30 +593,102 @@ func indexOfRun(runs []task.StepRun, number int) int {
 	return slices.IndexFunc(runs, func(r task.StepRun) bool { return r.Number == number })
 }
 
-// currentStepOf is the step a user operation acts on, with the run the app
-// recorded for it. The caller holds the lock of the task.
-func (s *Service) currentStepOf(id string) (task.Step, *task.StepRun, error) {
+// currentStepOf is the task a user operation acts on with the step it is on,
+// and the run the app recorded for it. The caller holds the lock of the task.
+func (s *Service) currentStepOf(id string) (task.Task, task.Step, *task.StepRun, error) {
 	t, ok := s.tasks.Get(id)
 	if !ok {
-		return task.Step{}, nil, fmt.Errorf("step of task %s: %w", id, task.ErrNotFound)
+		return task.Task{}, task.Step{}, nil, fmt.Errorf("step of task %s: %w", id, task.ErrNotFound)
 	}
 	if t.Stage != task.StageImplementation {
-		return task.Step{}, nil, fmt.Errorf("step of task %s in %s: %w", id, t.Stage, ErrNotImplementing)
+		return task.Task{}, task.Step{}, nil, fmt.Errorf("step of task %s in %s: %w", id, t.Stage, ErrNotImplementing)
 	}
 	a, err := s.tasks.Inspect(id)
 	if err != nil {
-		return task.Step{}, nil, err
+		return task.Task{}, task.Step{}, nil, err
 	}
-	step, ok := currentStep(a.Plan)
+	runs := s.tasks.StepRuns(id)
+	step, ok := currentStep(a.Plan, runs)
 	if !ok {
-		return task.Step{}, nil, fmt.Errorf("step of task %s: %w", id, ErrNoStep)
+		return task.Task{}, task.Step{}, nil, fmt.Errorf("step of task %s: %w", id, ErrNoStep)
 	}
 	var run *task.StepRun
-	runs := s.tasks.StepRuns(id)
 	if index := indexOfRun(runs, step.Number); index >= 0 {
 		run = &runs[index]
 	}
-	return step, run, nil
+	return t, step, run, nil
+}
+
+// ApproveStep approves the review of the current step and asks the agent that
+// implemented it to commit what is staged. A paused task is resumed first: the
+// user should not have to think about processes to approve what they read.
+func (s *Service) ApproveStep(ctx context.Context, id string) error {
+	l := s.lockOf(id)
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	t, step, run, err := s.currentStepOf(id)
+	if err != nil {
+		return err
+	}
+	if run == nil || run.Status != task.StepStarted {
+		return fmt.Errorf("approve step %d of task %s: %w", step.Number, id, ErrStepNotStarted)
+	}
+	snap, read := s.review.Snapshot(id)
+	if !read || snap.Err != "" || !snap.Ready() {
+		return fmt.Errorf("approve step %d of task %s: %w", step.Number, id, ErrStepNotReady)
+	}
+
+	sum, open := s.sessions.Summary(id)
+	if !open {
+		return fmt.Errorf("approve step %d of task %s: %w", step.Number, id, session.ErrNotFound)
+	}
+	if sum.Status == session.StatusPaused {
+		if resumeErr := s.sessions.Resume(ctx, id); resumeErr != nil {
+			return resumeErr
+		}
+		sum, open = s.sessions.Summary(id)
+		if !open {
+			return fmt.Errorf("approve step %d of task %s: %w", step.Number, id, session.ErrNotFound)
+		}
+	}
+	if !sum.Idle {
+		return fmt.Errorf("approve step %d of task %s: %w", step.Number, id, ErrStepBusy)
+	}
+
+	message, err := s.renderPrompt(prompts.StageCommit, commitVars(t, s.tasks.Repositories(t)))
+	if err != nil {
+		return err
+	}
+	if _, err := s.tasks.SetStepRun(ctx, id, step.Number, task.StepCommitting, nil); err != nil {
+		return err
+	}
+	s.setNoCommit(id, false)
+	if err := s.sessions.SendFromApp(ctx, id, message); err != nil {
+		// The button stays where the user left it: the step is theirs again.
+		if _, setErr := s.tasks.SetStepRun(ctx, id, step.Number, task.StepStarted, nil); setErr != nil {
+			s.log.Error("record started step failed", "task", id, "step", step.Number, "error", setErr)
+		}
+		return err
+	}
+	s.log.Info("step approved", "task", id, "step", step.Number, "files", snap.Total)
+	return nil
+}
+
+// commitVars are the placeholders the commit prompt may use.
+func commitVars(t task.Task, repos []task.Repository) prompts.Vars {
+	rels := make([]string, len(repos))
+	for i, repo := range repos {
+		rels[i] = repo.Rel
+	}
+	return prompts.Vars{
+		TaskName:     t.Name,
+		ArtifactsDir: t.ArtifactsDir,
+		PRDPath:      t.PRDPath(),
+		TechSpecPath: t.TechSpecPath(),
+		StepsDir:     t.StepsDir(),
+		Repositories: rels,
+	}
 }
 
 // RetryStep prepares a blocked step again, from the fetch on, which is what
@@ -422,7 +698,7 @@ func (s *Service) RetryStep(ctx context.Context, id string) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	step, run, err := s.currentStepOf(id)
+	_, step, run, err := s.currentStepOf(id)
 	if err != nil {
 		return err
 	}
@@ -445,7 +721,7 @@ func (s *Service) CleanAndStartStep(ctx context.Context, id string) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	step, run, err := s.currentStepOf(id)
+	_, step, run, err := s.currentStepOf(id)
 	if err != nil {
 		return err
 	}
@@ -469,7 +745,7 @@ func (s *Service) DiscardStep(ctx context.Context, id string, cleanWorktree bool
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	step, run, err := s.currentStepOf(id)
+	_, step, run, err := s.currentStepOf(id)
 	if err != nil {
 		return err
 	}
@@ -510,6 +786,7 @@ func (s *Service) tearDownSteps(ctx context.Context, t task.Task) error {
 	if len(runs) == 0 {
 		return nil
 	}
+	s.review.Forget(t.ID)
 
 	// A step session is stopped before the worktree it runs in goes away.
 	stepOpen := false
@@ -558,7 +835,7 @@ func (s *Service) reopenStep(ctx context.Context, t task.Task) {
 		s.log.Error("inspect artifacts failed", "task", t.ID, "stage", string(t.Stage), "error", err)
 		return
 	}
-	step, ok := currentStep(a.Plan)
+	step, ok := currentStep(a.Plan, s.tasks.StepRuns(t.ID))
 	if !ok {
 		return
 	}

@@ -366,9 +366,20 @@ func (s *Service) Send(ctx context.Context, taskID, text string) error {
 	return nil
 }
 
-// SendFromApp queues a message the app wrote for the agent, and counts it as
-// one more correction of the session.
+// SendFromApp queues a message the app wrote for the agent.
 func (s *Service) SendFromApp(ctx context.Context, taskID, text string) error {
+	return s.sendFromApp(ctx, taskID, text, false)
+}
+
+// SendCorrection queues a message the app wrote to fix what the agent
+// produced, and counts it against MaxCorrections.
+func (s *Service) SendCorrection(ctx context.Context, taskID, text string) error {
+	return s.sendFromApp(ctx, taskID, text, true)
+}
+
+// sendFromApp queues a message of the app, counting it as a correction of the
+// session when it is one.
+func (s *Service) sendFromApp(ctx context.Context, taskID, text string, correction bool) error {
 	text = strings.TrimSpace(text)
 	if text == "" {
 		return ErrEmptyMessage
@@ -386,9 +397,11 @@ func (s *Service) SendFromApp(ctx context.Context, taskID, text string) error {
 	if r.rec.Paused {
 		return fmt.Errorf("send to task %s: %w", taskID, ErrPaused)
 	}
-	r.rec.Corrections++
-	if err := s.persistRecord(ctx, r); err != nil {
-		return err
+	if correction {
+		r.rec.Corrections++
+		if err := s.persistRecord(ctx, r); err != nil {
+			return err
+		}
 	}
 	if err := s.enqueueLocked(ctx, r, &UserEntry{Text: text, App: true}, n); err != nil {
 		return err

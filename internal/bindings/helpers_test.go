@@ -20,6 +20,7 @@ import (
 	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/git/gittest"
 	"github.com/guilhermt/myspec/internal/prompts"
+	"github.com/guilhermt/myspec/internal/review"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/store"
 	"github.com/guilhermt/myspec/internal/task"
@@ -89,22 +90,22 @@ func (b *syncBuffer) String() string {
 	return b.buf.String()
 }
 
-// fakeEditor stands in for VS Code, recording the folder it was asked to open.
+// fakeEditor stands in for VS Code, recording what it was asked to open.
 type fakeEditor struct {
 	mu    sync.Mutex
 	paths []string
 	err   error
 }
 
-func (e *fakeEditor) open(path string) error {
+func (e *fakeEditor) open(paths ...string) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	e.paths = append(e.paths, path)
+	e.paths = append(e.paths, strings.Join(paths, " "))
 	return e.err
 }
 
-// opened are the folders the editor was asked to open, in order.
+// opened is what the editor was asked to open, in order, one entry per call.
 func (e *fakeEditor) opened() []string {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -139,6 +140,7 @@ type fixture struct {
 	taskSvc   *task.Service
 	sessions  *session.Service
 	worktrees *worktree.Service
+	reviews   *review.Service
 	flow      *flow.Service
 	dataDir   string
 	picker    *fakePicker
@@ -225,12 +227,22 @@ func newFixture(t *testing.T) *fixture {
 		Store: st.Worktrees,
 		Log:   log,
 	})
+	f.reviews, err = review.New(review.Deps{Worktrees: f.worktrees, Log: log})
+	if err != nil {
+		t.Fatalf("review.New() = %v, want nil", err)
+	}
+	t.Cleanup(func() { _ = f.reviews.Close() })
+
 	f.flow = flow.New(flow.Deps{
 		Tasks:     f.taskSvc,
 		Sessions:  f.sessions,
 		Worktrees: f.worktrees,
+		Review:    f.reviews,
 		Log:       log,
-		OnChange:  func(string) {},
+		RenderPrompt: func(stage prompts.Stage, vars prompts.Vars) (string, error) {
+			return prompts.Render(f.dataDir, stage, vars)
+		},
+		OnChange: func(string) {},
 	})
 	t.Cleanup(f.flow.Close)
 
@@ -336,21 +348,45 @@ func (f *fixture) waitStage(t *testing.T, id, stage string) {
 func (f *fixture) waitStep(t *testing.T, id string, number int, status string) bindings.Step {
 	t.Helper()
 
+	return f.waitStepWhere(t, id, number, "status "+status, func(step bindings.Step) bool {
+		return step.Status == status
+	})
+}
+
+// waitReviewed waits until a step of a task is the user's to review: the agent
+// has stopped and the reading of its worktree has landed with what it wrote.
+// Waiting for the reading is what tells the turn of the step apart from the
+// idle moment before it starts.
+func (f *fixture) waitReviewed(t *testing.T, id string, number int) bindings.Step {
+	t.Helper()
+
+	return f.waitStepWhere(t, id, number, "the reading of its worktree", func(step bindings.Step) bool {
+		return step.Status == "awaiting_review" && step.Review != nil && step.Review.Total > 0
+	})
+}
+
+// waitStepWhere waits until a step of a task is what cond says, failing the
+// test with subject when it never is.
+func (f *fixture) waitStepWhere(
+	t *testing.T, id string, number int, subject string, cond func(bindings.Step) bool,
+) bindings.Step {
+	t.Helper()
+
 	deadline := time.Now().Add(pollTimeout)
-	last := ""
+	last := bindings.Step{}
 	for time.Now().Before(deadline) {
 		for _, step := range f.taskOf(t, id).Steps {
 			if step.Number != number {
 				continue
 			}
-			last = step.Status
-			if last == status {
+			last = step
+			if cond(step) {
 				return step
 			}
 		}
 		time.Sleep(pollStep)
 	}
-	t.Fatalf("status of step %d of task %s = %q, want %q", number, id, last, status)
+	t.Fatalf("step %d of task %s = %+v, want %s", number, id, last, subject)
 	return bindings.Step{}
 }
 
@@ -393,6 +429,31 @@ func (f *fixture) repoPaths() []string {
 
 // taskOf returns the task with the given id from the current state, failing
 // the test when the state does not hold it.
+// waitTranscript waits until the conversation of a stage of a task has been
+// opened. The stage of the task is recorded before the session behind it writes
+// its first entry, so a test that waits on the stage alone can read the
+// conversation while it is still empty.
+func (f *fixture) waitTranscript(t *testing.T, id, stage string) bindings.Transcript {
+	t.Helper()
+
+	deadline := time.Now().Add(pollTimeout)
+	last := bindings.Transcript{}
+	for time.Now().Before(deadline) {
+		transcript, err := f.tasks.GetTranscript(id)
+		if err != nil {
+			t.Fatalf("GetTranscript(%s) = %v, want nil", id, err)
+		}
+		last = transcript
+		if transcript.Stage == stage && len(transcript.Entries) > 0 {
+			return transcript
+		}
+		time.Sleep(pollStep)
+	}
+	t.Fatalf("conversation of task %s = stage %q with %d entries, want %q with entries",
+		id, last.Stage, len(last.Entries), stage)
+	return bindings.Transcript{}
+}
+
 func (f *fixture) taskOf(t *testing.T, id string) bindings.TaskSummary {
 	t.Helper()
 

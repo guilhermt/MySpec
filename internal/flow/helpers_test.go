@@ -12,6 +12,9 @@ import (
 	"time"
 
 	"github.com/guilhermt/myspec/internal/flow"
+	"github.com/guilhermt/myspec/internal/git"
+	"github.com/guilhermt/myspec/internal/prompts"
+	"github.com/guilhermt/myspec/internal/review"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
 	"github.com/guilhermt/myspec/internal/worktree"
@@ -145,6 +148,24 @@ func (m *memTasks) StepRuns(id string) []task.StepRun {
 func (m *memTasks) SetStepRun(
 	_ context.Context, id string, number int, status task.StepStatus, block *task.StepBlock,
 ) (task.StepRun, error) {
+	return m.updateRun(id, number, status, func(run *task.StepRun) { run.Block = block })
+}
+
+func (m *memTasks) SetStepStarted(_ context.Context, id string, number int, startCommit string) (task.StepRun, error) {
+	return m.updateRun(id, number, task.StepStarted, func(run *task.StepRun) { run.StartCommit = startCommit })
+}
+
+func (m *memTasks) SetStepCommitted(_ context.Context, id string, number int, sha, subject string) (task.StepRun, error) {
+	return m.updateRun(id, number, task.StepDone, func(run *task.StepRun) {
+		run.CommitSHA, run.CommitSubject = sha, subject
+	})
+}
+
+// updateRun records the state of a step the way task.Service does: what the
+// call says nothing about is kept.
+func (m *memTasks) updateRun(
+	id string, number int, status task.StepStatus, mutate func(*task.StepRun),
+) (task.StepRun, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -152,15 +173,38 @@ func (m *memTasks) SetStepRun(
 	if m.err != nil {
 		return task.StepRun{}, m.err
 	}
-	run := task.StepRun{TaskID: id, Number: number, Status: status, Block: block}
+
 	runs := m.runs[id]
+	run := task.StepRun{TaskID: id, Number: number}
 	index := slices.IndexFunc(runs, func(r task.StepRun) bool { return r.Number == number })
+	if index >= 0 {
+		run = runs[index]
+	}
+	run.Status, run.Block = status, nil
+	mutate(&run)
+
 	if index < 0 {
 		m.runs[id] = append(runs, run)
 	} else {
 		runs[index] = run
 	}
 	return run, nil
+}
+
+// setRun seeds the record of a step, which is what a task resumed from the
+// database comes back with.
+func (m *memTasks) setRun(id string, run task.StepRun) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	run.TaskID = id
+	runs := m.runs[id]
+	index := slices.IndexFunc(runs, func(r task.StepRun) bool { return r.Number == run.Number })
+	if index < 0 {
+		m.runs[id] = append(runs, run)
+	} else {
+		runs[index] = run
+	}
 }
 
 func (m *memTasks) ClearStepRuns(_ context.Context, id string) error {
@@ -341,6 +385,23 @@ func (m *memSessions) Close(_ context.Context, taskID string) error {
 	return nil
 }
 
+func (m *memSessions) Resume(_ context.Context, taskID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.calls = append(m.calls, "resume:"+taskID)
+	if m.err != nil {
+		return m.err
+	}
+	sum, ok := m.summaries[taskID]
+	if !ok {
+		return session.ErrNotFound
+	}
+	sum.Status, sum.Idle = session.StatusWaiting, true
+	m.summaries[taskID] = sum
+	return nil
+}
+
 func (m *memSessions) Summary(taskID string) (session.Summary, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -350,6 +411,15 @@ func (m *memSessions) Summary(taskID string) (session.Summary, bool) {
 }
 
 func (m *memSessions) SendFromApp(_ context.Context, taskID, text string) error {
+	return m.send(taskID, text, false)
+}
+
+func (m *memSessions) SendCorrection(_ context.Context, taskID, text string) error {
+	return m.send(taskID, text, true)
+}
+
+// send records a message of the app, counting it as the service would.
+func (m *memSessions) send(taskID, text string, correction bool) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -359,7 +429,9 @@ func (m *memSessions) SendFromApp(_ context.Context, taskID, text string) error 
 	}
 	m.messages = append(m.messages, text)
 	sum := m.summaries[taskID]
-	sum.Corrections++
+	if correction {
+		sum.Corrections++
+	}
 	sum.Idle = false
 	sum.Status = session.StatusWorking
 	m.summaries[taskID] = sum
@@ -433,10 +505,12 @@ type memWorktrees struct {
 	mu        sync.Mutex
 	items     map[string][]worktree.Worktree // by task id
 	calls     []string
-	status    worktree.Status
+	status    git.Status
+	subject   string           // the subject every commit reading answers with
 	phases    []worktree.Phase // reported by every Ensure
 	ensureErr error
 	statusErr error
+	commitErr error
 	cleanErr  error
 	removeErr error
 	block     chan struct{} // when set, Ensure waits on it or on the context
@@ -444,8 +518,9 @@ type memWorktrees struct {
 
 func newWorktrees() *memWorktrees {
 	return &memWorktrees{
-		items:  map[string][]worktree.Worktree{},
-		phases: []worktree.Phase{worktree.PhaseFetching, worktree.PhaseCreating},
+		items:   map[string][]worktree.Worktree{},
+		subject: "Do the work of the step",
+		phases:  []worktree.Phase{worktree.PhaseFetching, worktree.PhaseCreating},
 	}
 }
 
@@ -498,15 +573,26 @@ func (m *memWorktrees) Ensure(
 	return wt, nil
 }
 
-func (m *memWorktrees) Status(_ context.Context, wt worktree.Worktree) (worktree.Status, error) {
+func (m *memWorktrees) Status(_ context.Context, wt worktree.Worktree) (git.Status, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	m.calls = append(m.calls, "status:"+wt.TaskID+":"+filepath.Base(wt.Path))
 	if m.statusErr != nil {
-		return worktree.Status{}, m.statusErr
+		return git.Status{}, m.statusErr
 	}
 	return m.status, nil
+}
+
+func (m *memWorktrees) Commit(_ context.Context, wt worktree.Worktree, rev string) (git.Commit, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.calls = append(m.calls, "commit:"+wt.TaskID+":"+rev)
+	if m.commitErr != nil {
+		return git.Commit{}, m.commitErr
+	}
+	return git.Commit{SHA: rev, Subject: m.subject}, nil
 }
 
 func (m *memWorktrees) Clean(_ context.Context, wt worktree.Worktree) error {
@@ -517,7 +603,7 @@ func (m *memWorktrees) Clean(_ context.Context, wt worktree.Worktree) error {
 	if m.cleanErr != nil {
 		return m.cleanErr
 	}
-	m.status = worktree.Status{}
+	m.status = git.Status{}
 	return nil
 }
 
@@ -557,7 +643,7 @@ func (m *memWorktrees) recorded() []string {
 }
 
 // setStatus is what the next check of a worktree reports.
-func (m *memWorktrees) setStatus(status worktree.Status) {
+func (m *memWorktrees) setStatus(status git.Status) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -582,19 +668,112 @@ func (m *memWorktrees) blockEnsure() chan struct{} {
 	return m.block
 }
 
-// fixture is a flow.Service over the three fakes.
+// memReviews is an in-memory flow.Reviews: it hands out the reading a test
+// seeds and records which worktree it was told to watch, and how.
+type memReviews struct {
+	mu      sync.Mutex
+	calls   []string
+	snap    review.Snapshot
+	has     bool
+	tracked map[string]bool // task id -> whether its numbers matter now
+}
+
+func newReviews() *memReviews {
+	return &memReviews{tracked: map[string]bool{}}
+}
+
+func (m *memReviews) Track(taskID string, wt worktree.Worktree, active bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.calls = append(m.calls, "track:"+taskID+":"+filepath.Base(wt.Path)+":"+strconv.FormatBool(active))
+	m.tracked[taskID] = active
+}
+
+func (m *memReviews) Refresh(taskID string) (review.Snapshot, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.calls = append(m.calls, "refresh:"+taskID)
+	return m.snap, m.has
+}
+
+func (m *memReviews) Snapshot(_ string) (review.Snapshot, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return m.snap, m.has
+}
+
+func (m *memReviews) Forget(taskID string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.calls = append(m.calls, "forget:"+taskID)
+	delete(m.tracked, taskID)
+}
+
+// activeOf says whether the worktree of a task is watched, and whether its
+// numbers matter now.
+func (m *memReviews) activeOf(taskID string) (active, watched bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	active, watched = m.tracked[taskID]
+	return active, watched
+}
+
+// setSnapshot makes every reading answer with snap.
+func (m *memReviews) setSnapshot(snap review.Snapshot) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.snap, m.has = snap, true
+}
+
+// reviewCalls is what the review service was asked, in order.
+func (m *memReviews) reviewCalls() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return slices.Clone(m.calls)
+}
+
+// commitPrompt is what the fake renderer answers with for the commit stage,
+// with the name of the task so that a test can see the placeholders went
+// through.
+func commitPrompt(name string) string { return "Commit the work of " + name }
+
+// fixture is a flow.Service over the four fakes.
 type fixture struct {
 	service   *flow.Service
 	tasks     *memTasks
 	sessions  *memSessions
 	worktrees *memWorktrees
+	reviews   *memReviews
 }
 
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
 
-	f := &fixture{tasks: newTasks(), sessions: newSessions(), worktrees: newWorktrees()}
-	f.service = flow.New(flow.Deps{Tasks: f.tasks, Sessions: f.sessions, Worktrees: f.worktrees})
+	f := &fixture{
+		tasks:     newTasks(),
+		sessions:  newSessions(),
+		worktrees: newWorktrees(),
+		reviews:   newReviews(),
+	}
+	f.service = flow.New(flow.Deps{
+		Tasks:     f.tasks,
+		Sessions:  f.sessions,
+		Worktrees: f.worktrees,
+		Review:    f.reviews,
+		RenderPrompt: func(stage prompts.Stage, vars prompts.Vars) (string, error) {
+			if stage != prompts.StageCommit {
+				return "", errors.New("unexpected prompt stage " + string(stage))
+			}
+			return commitPrompt(vars.TaskName), nil
+		},
+	})
 	t.Cleanup(f.service.Close)
 	return f
 }
@@ -650,6 +829,20 @@ func (f *fixture) waitStep(t *testing.T, id string, number int, status flow.Step
 			}
 		}
 		return false
+	})
+}
+
+// waitStepSession polls until the session of a step has been opened. Starting a
+// step records the run before it starts the session, so a test that waits on
+// the status alone can still be ahead of the Start call, and whatever it does
+// to the session then is overwritten by it.
+func (f *fixture) waitStepSession(t *testing.T, id string, number int) {
+	t.Helper()
+
+	stage := session.StepStage(number)
+	waitFor(t, "the session of step "+strconv.Itoa(number)+" of "+id, func() bool {
+		sum, ok := f.sessions.Summary(id)
+		return ok && sum.Stage == stage
 	})
 }
 

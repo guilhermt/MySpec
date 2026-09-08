@@ -29,6 +29,7 @@ const (
 	StagePRD      Stage = "prd"
 	StageTechSpec Stage = "tech_spec"
 	StagePlan     Stage = "plan"
+	StageCommit   Stage = "commit"
 )
 
 // StageStep is the prompt of a step session: the step file itself.

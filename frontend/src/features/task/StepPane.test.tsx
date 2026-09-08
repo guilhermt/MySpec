@@ -4,7 +4,7 @@ import { StepPane } from "@/features/task/StepPane";
 import type { Step, TaskSummary } from "@/lib/wails";
 import type { TranscriptState } from "@/store/transcript";
 import { renderWithStore } from "@/test/render";
-import { makeEntry, makeState, makeStep, makeTask } from "@/test/wails-mock";
+import { makeEntry, makeReview, makeState, makeStep, makeTask } from "@/test/wails-mock";
 
 const READY: Record<string, TranscriptState> = {
   "task-1": { status: "ready", entries: [makeEntry("user")], pending: [], buffered: [] },
@@ -57,6 +57,35 @@ describe("StepPane", () => {
     pane({ status: "not_started" });
 
     expect(screen.getByRole("status")).toHaveTextContent("Starting…");
+  });
+
+  it("puts the review above the conversation while the step is reviewed", () => {
+    pane({ status: "in_review", review: makeReview({ staged: 3, total: 5, percent: 60 }) });
+
+    expect(screen.getByRole("progressbar", { name: "Review progress" })).toBeInTheDocument();
+    expect(screen.getByText("Add a login screen")).toBeInTheDocument();
+  });
+
+  it("keeps the conversation while the commit is being made", () => {
+    pane({ status: "committing", review: makeReview({ staged: 2, total: 2, percent: 100 }) });
+
+    expect(screen.getByText("Add a login screen")).toBeInTheDocument();
+  });
+
+  it("closes the implementation once every step is committed", () => {
+    const task = makeTask({
+      stage: "implementation",
+      currentStep: 0,
+      steps: [makeStep({ status: "done" })],
+    });
+
+    renderWithStore(<StepPane task={task} />, {
+      state: makeState({ tasks: [task] }),
+      ui: { transcripts: READY },
+    });
+
+    expect(screen.getByText("Every step is committed")).toBeInTheDocument();
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
   });
 
   it("says so when the plan has no steps", () => {

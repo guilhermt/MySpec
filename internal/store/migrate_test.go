@@ -9,11 +9,13 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
-// stagesVersion is the migration that brought the stages after the PRD;
-// latestVersion is the version the embedded migrations end at.
+// stagesVersion is the migration that brought the stages after the PRD,
+// commitsVersion the one that gave a step its commits, and latestVersion the
+// version the embedded migrations end at.
 const (
-	stagesVersion = 3
-	latestVersion = 4
+	stagesVersion  = 3
+	commitsVersion = 5
+	latestVersion  = 5
 )
 
 // mapFS builds a migrations tree with the given file names.
@@ -181,6 +183,37 @@ func TestMigrateTurnsAFinishedPRDIntoThePRDStage(t *testing.T) {
 	want := map[string]string{"done": "prd", "open": "prd"}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("stages mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestMigrateGivesTheStepsOfAnOlderDatabaseEmptyCommits(t *testing.T) {
+	t.Parallel()
+
+	db := openAt(t, commitsVersion-1)
+	const insertTask = `INSERT INTO tasks
+		(id, workspace_path, name, initial_context, stage, artifacts_dir, created_at, updated_at, revisiting)
+		VALUES ('task-1', '/ws', 'one', 'context', 'implementation', '/data/x',
+			'2026-09-06T10:00:00Z', '2026-09-06T10:00:00Z', 0)`
+	if _, err := db.ExecContext(t.Context(), insertTask); err != nil {
+		t.Fatalf("insert task: %v", err)
+	}
+	const insertStep = `INSERT INTO steps (task_id, number, status, block_files, created_at, updated_at)
+		VALUES ('task-1', 1, 'started', 0, '2026-09-06T10:00:00Z', '2026-09-06T10:00:00Z')`
+	if _, err := db.ExecContext(t.Context(), insertStep); err != nil {
+		t.Fatalf("insert step: %v", err)
+	}
+
+	if err := migrate(t.Context(), db, slog.New(slog.DiscardHandler)); err != nil {
+		t.Fatalf("migrate() = %v, want nil", err)
+	}
+
+	const query = `SELECT start_commit, commit_sha, commit_subject FROM steps WHERE task_id = 'task-1'`
+	var start, sha, subject string
+	if err := db.QueryRowContext(t.Context(), query).Scan(&start, &sha, &subject); err != nil {
+		t.Fatalf("query step: %v", err)
+	}
+	if start != "" || sha != "" || subject != "" {
+		t.Errorf("commits = %q %q %q, want them empty on a step recorded before the column", start, sha, subject)
 	}
 }
 

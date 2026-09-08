@@ -1,5 +1,5 @@
 import type { StatusTone } from "@/features/task/status";
-import type { BlockReason, Step, TaskSummary } from "@/lib/wails";
+import type { BlockReason, Review, Step, TaskSummary } from "@/lib/wails";
 import { asBlockReason, asSessionStatus, asStepStatus } from "@/lib/wails";
 
 /** currentStepOf is the step that runs or runs next, null when there is none. */
@@ -12,8 +12,21 @@ export function hasStepSession(step: Step | null): boolean {
   if (step === null) {
     return false;
   }
-  const status = asStepStatus(step.status);
-  return status === "implementing" || status === "awaiting_review";
+  switch (asStepStatus(step.status)) {
+    case "implementing":
+    case "awaiting_review":
+    case "in_review":
+    case "ready_to_approve":
+    case "nothing_to_commit":
+    case "review_failed":
+    case "committing":
+      return true;
+    case "not_started":
+    case "preparing":
+    case "blocked":
+    case "done":
+      return false;
+  }
 }
 
 /** stepStatusLabel is how a step reads on its own, without its session. */
@@ -29,6 +42,18 @@ export function stepStatusLabel(step: Step): string {
       return "Implementing";
     case "awaiting_review":
       return "Awaiting review";
+    case "in_review":
+      return "In review";
+    case "ready_to_approve":
+      return "Ready to approve";
+    case "nothing_to_commit":
+      return "Nothing to approve";
+    case "review_failed":
+      return "Can't read the worktree";
+    case "committing":
+      return "Committing";
+    case "done":
+      return "Done";
   }
 }
 
@@ -45,8 +70,27 @@ export function stepStatusTone(step: Step): StatusTone {
       return "working";
     // The agent is done and the user has to look at what it did.
     case "awaiting_review":
+    case "in_review":
+    case "ready_to_approve":
+    case "nothing_to_commit":
       return "attention";
+    case "review_failed":
+      return "error";
+    case "committing":
+      return "working";
+    case "done":
+      return "done";
   }
+}
+
+/** reviewCountLabel says how much of the review is done, in files. */
+export function reviewCountLabel(review: Review): string {
+  return `${review.staged} of ${review.total} ${review.total === 1 ? "file" : "files"} staged`;
+}
+
+/** canApprove reports whether the step is reviewed and waiting for the approval. */
+export function canApprove(step: Step): boolean {
+  return asStepStatus(step.status) === "ready_to_approve";
 }
 
 /** stepPhaseLabel names what the app is doing while the step prepares. */
@@ -76,9 +120,16 @@ export interface StepDisplay {
 export function currentStepDisplay(task: TaskSummary): StepDisplay {
   const step = currentStepOf(task);
   if (step === null) {
-    return { label: "No steps", tone: "idle" };
+    // No current step with a plan behind it means every step is committed.
+    return (task.steps ?? []).length > 0
+      ? { label: "Implemented", tone: "done" }
+      : { label: "No steps", tone: "idle" };
   }
-  if (asStepStatus(step.status) !== "implementing") {
+  const status = asStepStatus(step.status);
+  if (status === "in_review" || status === "ready_to_approve") {
+    return { label: `Review ${step.review?.percent ?? 0}%`, tone: stepStatusTone(step) };
+  }
+  if (status !== "implementing") {
     return { label: stepStatusLabel(step), tone: stepStatusTone(step) };
   }
   switch (asSessionStatus(task.sessionStatus)) {

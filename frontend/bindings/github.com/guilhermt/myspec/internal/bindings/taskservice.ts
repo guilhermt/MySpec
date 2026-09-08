@@ -32,6 +32,14 @@ export function AnswerQuestion(taskID: string, requestID: string, answers: { [_ 
 }
 
 /**
+ * ApproveStep approves the review of the current step of a task and asks the
+ * agent to commit what is staged.
+ */
+export function ApproveStep(taskID: string): $CancellablePromise<void> {
+    return $Call.ByID(3269304029, taskID);
+}
+
+/**
  * BackToStage reopens a finished stage of a task, throwing away what came
  * after it. The stage is prd or tech_spec.
  */
@@ -102,6 +110,14 @@ export function GetTranscript(taskID: string): $CancellablePromise<$models.Trans
  */
 export function Interrupt(taskID: string): $CancellablePromise<void> {
     return $Call.ByID(1759278057, taskID);
+}
+
+/**
+ * OpenFileInEditor opens one file of the worktree of the current step in the
+ * editor, in the window of that worktree.
+ */
+export function OpenFileInEditor(taskID: string, path: string): $CancellablePromise<void> {
+    return $Call.ByID(1486307698, taskID, path);
 }
 
 /**

@@ -13,6 +13,8 @@ import type {
   QuestionOption,
   Recent,
   Repo,
+  Review,
+  ReviewFile,
   State,
   Step,
   StepBlock,
@@ -42,6 +44,8 @@ export type {
   QuestionOption,
   Recent,
   Repo,
+  Review,
+  ReviewFile,
   State,
   Step,
   StepBlock,
@@ -60,7 +64,14 @@ export type StepStatus =
   | "preparing"
   | "blocked"
   | "implementing"
-  | "awaiting_review";
+  | "awaiting_review"
+  | "in_review"
+  | "ready_to_approve"
+  | "nothing_to_commit"
+  | "review_failed"
+  | "committing"
+  | "done";
+export type ReviewFileKind = "added" | "modified" | "deleted" | "renamed" | "untracked";
 export type BlockReason =
   | "dirty_worktree"
   | "fetch_failed"
@@ -142,9 +153,28 @@ export function asStepStatus(value: string): StepStatus {
     case "blocked":
     case "implementing":
     case "awaiting_review":
+    case "in_review":
+    case "ready_to_approve":
+    case "nothing_to_commit":
+    case "review_failed":
+    case "committing":
+    case "done":
       return value;
     default:
       return "not_started";
+  }
+}
+
+export function asReviewFileKind(value: string): ReviewFileKind {
+  switch (value) {
+    case "added":
+    case "modified":
+    case "deleted":
+    case "renamed":
+    case "untracked":
+      return value;
+    default:
+      return "modified";
   }
 }
 
@@ -300,7 +330,10 @@ export const api = {
   cleanAndStartStep: (taskId: string): Promise<void> => TaskService.CleanAndStartStep(taskId),
   discardStep: (taskId: string, cleanWorktree: boolean): Promise<void> =>
     TaskService.DiscardStep(taskId, cleanWorktree),
+  approveStep: (taskId: string): Promise<void> => TaskService.ApproveStep(taskId),
   openInEditor: (taskId: string): Promise<void> => TaskService.OpenInEditor(taskId),
+  openFileInEditor: (taskId: string, path: string): Promise<void> =>
+    TaskService.OpenFileInEditor(taskId, path),
   openExternal: (url: string): Promise<void> => Browser.OpenURL(url),
 };
 

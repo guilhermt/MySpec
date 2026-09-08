@@ -14,9 +14,12 @@ func New(deps Deps) *Service {
 		tasks:     deps.Tasks,
 		sessions:  deps.Sessions,
 		worktrees: deps.Worktrees,
+		review:    deps.Review,
 		log:       deps.Log,
 		onChange:  deps.OnChange,
-		locks:     map[string]*taskLock{},
+
+		renderPrompt: deps.RenderPrompt,
+		locks:        map[string]*taskLock{},
 	}
 	if s.log == nil {
 		s.log = slog.New(slog.DiscardHandler)
@@ -64,7 +67,16 @@ func (s *Service) evaluate(ctx context.Context, id string) {
 	}
 
 	t, ok := s.tasks.Get(id)
-	if !ok || !t.Stage.HasSession() {
+	if !ok {
+		return
+	}
+	// Implementation has no conversation of its own: what it needs is decided
+	// on the step that runs and the worktree it runs in.
+	if t.Stage == task.StageImplementation {
+		s.evaluateStep(ctx, t)
+		return
+	}
+	if !t.Stage.HasSession() {
 		return
 	}
 	a, err := s.tasks.Inspect(id)
@@ -86,7 +98,7 @@ func (s *Service) evaluate(ctx context.Context, id string) {
 			return
 		}
 		message := correctionMessage(t.StepsDir(), a.Plan.Problems, s.tasks.Repositories(t))
-		if err := s.sessions.SendFromApp(ctx, id, message); err != nil {
+		if err := s.sessions.SendCorrection(ctx, id, message); err != nil {
 			s.log.Error("send plan correction failed", "task", id, "stage", string(t.Stage), "error", err)
 		}
 		return

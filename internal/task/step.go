@@ -13,13 +13,17 @@ type StepStatus string
 
 // How far the app got with a step it started.
 const (
-	StepPreparing StepStatus = "preparing" // fetch, worktree and check under way
-	StepBlocked   StepStatus = "blocked"   // the start failed; Block says why
-	StepStarted   StepStatus = "started"   // the session of the step exists
+	StepPreparing  StepStatus = "preparing"  // fetch, worktree and check under way
+	StepBlocked    StepStatus = "blocked"    // the start failed; Block says why
+	StepStarted    StepStatus = "started"    // the session of the step exists
+	StepCommitting StepStatus = "committing" // the commit prompt was sent, waiting for the commit
+	StepDone       StepStatus = "done"       // the branch has a commit past StartCommit
 )
 
 // stepStatuses lists every status a step run may carry.
-var stepStatuses = []StepStatus{StepPreparing, StepBlocked, StepStarted}
+var stepStatuses = []StepStatus{
+	StepPreparing, StepBlocked, StepStarted, StepCommitting, StepDone,
+}
 
 // BlockReason says why a step could not start.
 type BlockReason string
@@ -62,6 +66,21 @@ type StepRun struct {
 	Block     *StepBlock // blocked only
 	CreatedAt time.Time
 	UpdatedAt time.Time
+
+	StartCommit   string // the commit the worktree was on when the step started
+	CommitSHA     string // the commit the step produced; set with StepDone
+	CommitSubject string
+}
+
+// shortSHALen is how many characters of a commit sha the app shows.
+const shortSHALen = 7
+
+// shortSHA abbreviates a commit sha, the way git and the interface print it.
+func shortSHA(sha string) string {
+	if len(sha) <= shortSHALen {
+		return sha
+	}
+	return sha[:shortSHALen]
 }
 
 // ParseStepStatus narrows a stored or received string to a step status.

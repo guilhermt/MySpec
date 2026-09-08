@@ -10,7 +10,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/prompts"
+	"github.com/guilhermt/myspec/internal/review"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
 	"github.com/guilhermt/myspec/internal/worktree"
@@ -27,6 +29,8 @@ type Tasks interface {
 	Repositories(t task.Task) []task.Repository
 	StepRuns(id string) []task.StepRun
 	SetStepRun(ctx context.Context, id string, number int, status task.StepStatus, block *task.StepBlock) (task.StepRun, error)
+	SetStepStarted(ctx context.Context, id string, number int, startCommit string) (task.StepRun, error)
+	SetStepCommitted(ctx context.Context, id string, number int, sha, subject string) (task.StepRun, error)
 	ClearStepRuns(ctx context.Context, id string) error
 	Delete(ctx context.Context, id string) error
 }
@@ -37,15 +41,26 @@ type Sessions interface {
 	Start(ctx context.Context, t session.TaskInfo, restarted bool) error
 	Discard(ctx context.Context, taskID string, stages ...string) error
 	Close(ctx context.Context, taskID string) error
+	Resume(ctx context.Context, taskID string) error
 	Summary(taskID string) (session.Summary, bool)
 	SendFromApp(ctx context.Context, taskID, text string) error
+	SendCorrection(ctx context.Context, taskID, text string) error
+}
+
+// Reviews is what the flow needs from internal/review.
+type Reviews interface {
+	Track(taskID string, wt worktree.Worktree, active bool)
+	Refresh(taskID string) (review.Snapshot, bool)
+	Snapshot(taskID string) (review.Snapshot, bool)
+	Forget(taskID string)
 }
 
 // Worktrees is what the flow needs from internal/worktree.
 type Worktrees interface {
 	Get(taskID, repoPath string) (worktree.Worktree, bool)
 	Ensure(ctx context.Context, t task.Task, repo task.Repository, onPhase func(worktree.Phase)) (worktree.Worktree, error)
-	Status(ctx context.Context, wt worktree.Worktree) (worktree.Status, error)
+	Status(ctx context.Context, wt worktree.Worktree) (git.Status, error)
+	Commit(ctx context.Context, wt worktree.Worktree, rev string) (git.Commit, error)
 	Clean(ctx context.Context, wt worktree.Worktree) error
 	RemoveAll(ctx context.Context, taskID string) error
 }
@@ -55,7 +70,11 @@ type Deps struct {
 	Tasks     Tasks
 	Sessions  Sessions
 	Worktrees Worktrees
+	Review    Reviews
 	Log       *slog.Logger
+	// RenderPrompt turns a prompt of the data directory into the message the
+	// app sends; the flow uses it for the commit prompt.
+	RenderPrompt func(stage prompts.Stage, vars prompts.Vars) (string, error)
 	// OnChange says that the in-memory state of a step changed, which is what
 	// the phases of a preparation are; it may be nil.
 	OnChange func(taskID string)
@@ -81,8 +100,11 @@ type Service struct {
 	tasks     Tasks
 	sessions  Sessions
 	worktrees Worktrees
+	review    Reviews
 	log       *slog.Logger
 	onChange  func(taskID string)
+
+	renderPrompt func(stage prompts.Stage, vars prompts.Vars) (string, error)
 
 	mu     sync.Mutex
 	locks  map[string]*taskLock // by task id
@@ -96,6 +118,10 @@ type taskLock struct {
 	preparing bool               // a prepare goroutine exists for the task
 	cancel    context.CancelFunc // cancels it; nil when there is none
 	phase     Phase              // what that goroutine is doing
+	// noCommit says the last approval of the step ended without a commit. It
+	// is transient on purpose: reopening the app leaves the step ready to
+	// approve, which is what git says.
+	noCommit bool
 }
 
 // TaskInfo is what the session of a task needs to know about it at the stage

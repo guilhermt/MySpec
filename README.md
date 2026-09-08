@@ -111,10 +111,12 @@ Everything the app keeps lives under `~/.local/share/myspec/`:
 
 - `myspec.db`, the SQLite database with the settings, the workspaces, the tasks
   and every conversation.
-- `prompts/prd.md`, `prompts/tech_spec.md` and `prompts/plan.md`, the prompts
-  that start the session of each planning stage. They are written on first run,
-  meant to be edited, and recreated the next time the app starts if they are
-  deleted. A session already running keeps the prompt it started with.
+- `prompts/prd.md`, `prompts/tech_spec.md`, `prompts/plan.md` and
+  `prompts/commit.md`, the prompts the app sends: the first three start the
+  session of each planning stage, and the last one is what an approved step is
+  committed with. They are written on first run, meant to be edited, and
+  recreated the next time the app starts if they are deleted. A session already
+  running keeps the prompt it started with.
 - `workspaces/<name>-<hash>/tasks/<task>/`, the artifacts of each task, in a
   folder per workspace and per task: `PRD.md`, `tech-spec.md` and
   `steps/<number>-<short-description>.md`, one file per step. The hash keeps two
@@ -153,6 +155,12 @@ Steps and worktrees have their own lines: `worktree created`, `worktree cleaned`
 `step started`, `step retried`, `step cleaned and started`, `step discarded` and
 `steps torn down`, with the task and the step number; and `step blocked`, with
 the reason the step could not start.
+
+The review and the commit add `step approved`, when the user approves a step and
+the commit prompt is sent; `step committed`, with the short sha and the subject
+of the commit; `commit did not happen`, when the commit turn ended without one;
+`implementation complete`, when the last step is committed; and
+`review read failed`, with the path of the worktree and what git said.
 
 ## Stages
 
@@ -202,13 +210,41 @@ exists, when the path or the branch is already there, or when the step file
 names no repository of the task. The message from git is shown as git wrote it.
 
 The step bar above the conversation carries the state — preparing, implementing,
-awaiting review or blocked — and the controls: **Open in VS Code**, which runs
-`code` on the worktree, and **Discard step**, which ends the session, deletes the
+awaiting review, in review, ready to approve, committing, done or blocked — and
+the controls: **Open in VS Code**, which runs `code` on the worktree,
+**Approve**, and **Discard step**, which ends the session, deletes the
 conversation of the step and starts it over, cleaning the worktree unless the
-user says otherwise. The step waits for review as soon as the agent finishes a
-turn with nothing pending; asking for a change in the conversation puts it back
-to implementing. Approving a step, committing it and moving on to the next one
-come in a later version.
+user says otherwise.
+The step waits for review as soon as the agent finishes a turn with nothing
+pending; asking for a change in the conversation puts it back to implementing.
+
+While a step waits for review the app watches its worktree — the tracked
+directories and the git directory, so staging in the editor is seen as it
+happens — and reads `git status` once per burst of events. Every changed file
+git reports counts, new files one by one, ignored files never; a file counts as
+reviewed when nothing of it is left outside the index, so a partly staged file is
+still pending. The review strip under the step bar shows the bar, the count and
+the list of changed files, each one opening in the editor of the worktree when
+clicked. The same progress reads as a percentage in the task list and in the
+tree, so a review can be followed without opening the task. The app never stages
+anything itself: staging is the review, and the review is the gate.
+
+**Approve** is enabled only at 100%; below that it says what is missing. It also
+needs the session to be idle — no turn running, nothing queued, no permission or
+question waiting — and it resumes a paused task by itself, so a review can be
+approved without thinking about the process. Approving sends the commit prompt as
+a message of the app in the conversation of the step, so the agent that wrote the
+code is the one that commits it: exactly what is staged, in one commit, with a
+subject in the imperative and the convention of the repository. A step is done
+when a commit appears on the branch beyond the one it started from, whether it
+came from the commit turn or from the user's own hand; if the turn ends with no
+commit, the step goes back to ready to approve and says so. The app then ends
+the process of the step and starts the next one by itself, creating the worktree
+when the step changes repository, and blocking the usual way when it cannot
+start. After the
+last step is committed the task stays in the implementation stage, with every
+step committed and no session running: the PR stage does not exist in this
+version.
 
 ## Continuous integration
 

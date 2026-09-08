@@ -2,15 +2,17 @@ import { describe, expect, it } from "vitest";
 import {
   blockHint,
   blockTitle,
+  canApprove,
   currentStepDisplay,
   currentStepOf,
   hasStepSession,
+  reviewCountLabel,
   stepPhaseLabel,
   stepStatusLabel,
   stepStatusTone,
 } from "@/features/task/step-status";
 import type { BlockReason, Step, TaskSummary } from "@/lib/wails";
-import { makeStep, makeTask } from "@/test/wails-mock";
+import { makeReview, makeStep, makeTask } from "@/test/wails-mock";
 
 function implementing(step: Partial<Step>, task: Partial<TaskSummary> = {}): TaskSummary {
   return makeTask({
@@ -39,6 +41,12 @@ describe("hasStepSession", () => {
     ["blocked", false],
     ["implementing", true],
     ["awaiting_review", true],
+    ["in_review", true],
+    ["ready_to_approve", true],
+    ["nothing_to_commit", true],
+    ["review_failed", true],
+    ["committing", true],
+    ["done", false],
   ])("knows whether %s has a conversation", (status, expected) => {
     expect(hasStepSession(makeStep({ status }))).toBe(expected);
   });
@@ -55,6 +63,12 @@ describe("step status", () => {
     ["blocked", "Blocked", "attention"],
     ["implementing", "Implementing", "working"],
     ["awaiting_review", "Awaiting review", "attention"],
+    ["in_review", "In review", "attention"],
+    ["ready_to_approve", "Ready to approve", "attention"],
+    ["nothing_to_commit", "Nothing to approve", "attention"],
+    ["review_failed", "Can't read the worktree", "error"],
+    ["committing", "Committing", "working"],
+    ["done", "Done", "done"],
   ])("reads %s", (status, label, tone) => {
     const step = makeStep({ status });
 
@@ -63,8 +77,31 @@ describe("step status", () => {
   });
 
   it("treats a status it does not know as not started", () => {
-    expect(stepStatusLabel(makeStep({ status: "committing" }))).toBe("Not started");
-    expect(stepStatusTone(makeStep({ status: "committing" }))).toBe("idle");
+    expect(stepStatusLabel(makeStep({ status: "rebasing" }))).toBe("Not started");
+    expect(stepStatusTone(makeStep({ status: "rebasing" }))).toBe("idle");
+  });
+});
+
+describe("reviewCountLabel", () => {
+  it.each([
+    [1, 2, "1 of 2 files staged"],
+    [0, 1, "0 of 1 file staged"],
+    [1, 1, "1 of 1 file staged"],
+  ])("counts %d of %d", (staged, total, expected) => {
+    expect(reviewCountLabel(makeReview({ staged, total }))).toBe(expected);
+  });
+});
+
+describe("canApprove", () => {
+  it.each([
+    ["awaiting_review", false],
+    ["in_review", false],
+    ["ready_to_approve", true],
+    ["nothing_to_commit", false],
+    ["review_failed", false],
+    ["committing", false],
+  ])("knows whether %s can be approved", (status, expected) => {
+    expect(canApprove(makeStep({ status }))).toBe(expected);
   });
 });
 
@@ -87,15 +124,39 @@ describe("currentStepDisplay", () => {
     });
   });
 
+  it("says the implementation is over when every step is committed", () => {
+    const task = implementing({ status: "done" }, { currentStep: 0 });
+
+    expect(currentStepDisplay(task)).toEqual({ label: "Implemented", tone: "done" });
+  });
+
   it.each([
     ["not_started", "Not started", "idle"],
     ["preparing", "Preparing", "working"],
     ["blocked", "Blocked", "attention"],
     ["awaiting_review", "Awaiting review", "attention"],
+    ["nothing_to_commit", "Nothing to approve", "attention"],
+    ["review_failed", "Can't read the worktree", "error"],
+    ["committing", "Committing", "working"],
   ])("reads %s from the step alone", (status, label, tone) => {
     const task = implementing({ status }, { sessionStatus: "paused" });
 
     expect(currentStepDisplay(task)).toEqual({ label, tone });
+  });
+
+  it.each([
+    ["in_review", 60],
+    ["ready_to_approve", 100],
+  ])("carries the percentage of a step %s", (status, percent) => {
+    const task = implementing({ status, review: makeReview({ percent }) });
+
+    expect(currentStepDisplay(task)).toEqual({ label: `Review ${percent}%`, tone: "attention" });
+  });
+
+  it("reads a review the backend did not send as no progress", () => {
+    const task = implementing({ status: "in_review" });
+
+    expect(currentStepDisplay(task)).toEqual({ label: "Review 0%", tone: "attention" });
   });
 
   it.each([

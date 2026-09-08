@@ -343,26 +343,29 @@ func (s *Service) StepRuns(id string) []StepRun {
 	return cloneStepRuns(s.stepRuns[id])
 }
 
-// SetStepRun records the state of a step, creating the record on the first
-// call for it. block is nil unless status is StepBlocked.
-func (s *Service) SetStepRun(ctx context.Context, id string, number int, status StepStatus, block *StepBlock) (StepRun, error) {
+// updateStepRun rewrites the run of a step from what the cache holds, so that
+// a change of status never drops the commits the run carries.
+func (s *Service) updateStepRun(
+	ctx context.Context, id string, number int, mutate func(*StepRun),
+) (StepRun, error) {
 	if _, ok := s.Get(id); !ok {
 		return StepRun{}, fmt.Errorf("set step %d of task %s: %w", number, id, ErrNotFound)
 	}
 
 	now := s.now().UTC()
-	run := StepRun{TaskID: id, Number: number, Status: status, CreatedAt: now, UpdatedAt: now}
-	if block != nil {
-		copied := *block
-		run.Block = &copied
-	}
+	run := StepRun{TaskID: id, Number: number, CreatedAt: now}
 
 	s.mu.Lock()
-	// A step keeps the instant it was first recorded at across every retry.
+	// A step keeps everything it recorded before, and the instant it was first
+	// recorded at, across every retry.
 	if index := indexOfRun(s.stepRuns[id], number); index >= 0 {
-		run.CreatedAt = s.stepRuns[id][index].CreatedAt
+		run = s.stepRuns[id][index]
 	}
 	s.mu.Unlock()
+
+	run.Block = nil
+	run.UpdatedAt = now
+	mutate(&run)
 
 	if err := s.repo.UpsertStepRun(ctx, run); err != nil {
 		return StepRun{}, err
@@ -383,8 +386,46 @@ func (s *Service) SetStepRun(ctx context.Context, id string, number int, status 
 	if run.Block != nil {
 		reason = string(run.Block.Reason)
 	}
-	s.log.Info("step run set", "task", id, "step", number, "status", string(status), "reason", reason)
+	s.log.Info("step run set", "task", id, "step", number, "status", string(run.Status), "reason", reason)
 	s.changed()
+	return run, nil
+}
+
+// SetStepRun records the state of a step, creating the record on the first
+// call for it. block is nil unless status is StepBlocked.
+func (s *Service) SetStepRun(
+	ctx context.Context, id string, number int, status StepStatus, block *StepBlock,
+) (StepRun, error) {
+	return s.updateStepRun(ctx, id, number, func(run *StepRun) {
+		run.Status = status
+		if block != nil {
+			copied := *block
+			run.Block = &copied
+		}
+	})
+}
+
+// SetStepStarted records a step whose session is about to open, with the
+// commit its worktree is on.
+func (s *Service) SetStepStarted(ctx context.Context, id string, number int, startCommit string) (StepRun, error) {
+	return s.updateStepRun(ctx, id, number, func(run *StepRun) {
+		run.Status = StepStarted
+		run.StartCommit = startCommit
+	})
+}
+
+// SetStepCommitted records the commit a step produced, which is what makes it
+// done.
+func (s *Service) SetStepCommitted(ctx context.Context, id string, number int, sha, subject string) (StepRun, error) {
+	run, err := s.updateStepRun(ctx, id, number, func(run *StepRun) {
+		run.Status = StepDone
+		run.CommitSHA, run.CommitSubject = sha, subject
+	})
+	if err != nil {
+		return StepRun{}, err
+	}
+
+	s.log.Info("step committed", "task", id, "step", number, "commit", shortSHA(sha), "subject", subject)
 	return run, nil
 }
 

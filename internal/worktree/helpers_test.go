@@ -111,7 +111,7 @@ func (f fixture) ensure(t *testing.T) worktree.Worktree {
 }
 
 // status reads the status of a worktree, failing the test on error.
-func (f fixture) status(t *testing.T, wt worktree.Worktree) worktree.Status {
+func (f fixture) status(t *testing.T, wt worktree.Worktree) git.Status {
 	t.Helper()
 
 	got, err := f.svc.Status(t.Context(), wt)
