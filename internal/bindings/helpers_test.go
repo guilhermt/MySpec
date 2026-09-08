@@ -239,7 +239,10 @@ func newFixture(t *testing.T) *fixture {
 		Worktrees: f.worktrees,
 		Review:    f.reviews,
 		Log:       log,
-		OnChange:  func(string) {},
+		RenderPrompt: func(stage prompts.Stage, vars prompts.Vars) (string, error) {
+			return prompts.Render(f.dataDir, stage, vars)
+		},
+		OnChange: func(string) {},
 	})
 	t.Cleanup(f.flow.Close)
 

@@ -17,7 +17,9 @@ func New(deps Deps) *Service {
 		review:    deps.Review,
 		log:       deps.Log,
 		onChange:  deps.OnChange,
-		locks:     map[string]*taskLock{},
+
+		renderPrompt: deps.RenderPrompt,
+		locks:        map[string]*taskLock{},
 	}
 	if s.log == nil {
 		s.log = slog.New(slog.DiscardHandler)
@@ -71,7 +73,7 @@ func (s *Service) evaluate(ctx context.Context, id string) {
 	// Implementation has no conversation of its own: what it needs is decided
 	// on the step that runs and the worktree it runs in.
 	if t.Stage == task.StageImplementation {
-		s.evaluateStep(t)
+		s.evaluateStep(ctx, t)
 		return
 	}
 	if !t.Stage.HasSession() {

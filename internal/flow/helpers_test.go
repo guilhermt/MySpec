@@ -13,6 +13,7 @@ import (
 
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/git"
+	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/review"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
@@ -152,6 +153,12 @@ func (m *memTasks) SetStepRun(
 
 func (m *memTasks) SetStepStarted(_ context.Context, id string, number int, startCommit string) (task.StepRun, error) {
 	return m.updateRun(id, number, task.StepStarted, func(run *task.StepRun) { run.StartCommit = startCommit })
+}
+
+func (m *memTasks) SetStepCommitted(_ context.Context, id string, number int, sha, subject string) (task.StepRun, error) {
+	return m.updateRun(id, number, task.StepDone, func(run *task.StepRun) {
+		run.CommitSHA, run.CommitSubject = sha, subject
+	})
 }
 
 // updateRun records the state of a step the way task.Service does: what the
@@ -378,6 +385,23 @@ func (m *memSessions) Close(_ context.Context, taskID string) error {
 	return nil
 }
 
+func (m *memSessions) Resume(_ context.Context, taskID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.calls = append(m.calls, "resume:"+taskID)
+	if m.err != nil {
+		return m.err
+	}
+	sum, ok := m.summaries[taskID]
+	if !ok {
+		return session.ErrNotFound
+	}
+	sum.Status, sum.Idle = session.StatusWaiting, true
+	m.summaries[taskID] = sum
+	return nil
+}
+
 func (m *memSessions) Summary(taskID string) (session.Summary, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -482,9 +506,11 @@ type memWorktrees struct {
 	items     map[string][]worktree.Worktree // by task id
 	calls     []string
 	status    git.Status
+	subject   string           // the subject every commit reading answers with
 	phases    []worktree.Phase // reported by every Ensure
 	ensureErr error
 	statusErr error
+	commitErr error
 	cleanErr  error
 	removeErr error
 	block     chan struct{} // when set, Ensure waits on it or on the context
@@ -492,8 +518,9 @@ type memWorktrees struct {
 
 func newWorktrees() *memWorktrees {
 	return &memWorktrees{
-		items:  map[string][]worktree.Worktree{},
-		phases: []worktree.Phase{worktree.PhaseFetching, worktree.PhaseCreating},
+		items:   map[string][]worktree.Worktree{},
+		subject: "Do the work of the step",
+		phases:  []worktree.Phase{worktree.PhaseFetching, worktree.PhaseCreating},
 	}
 }
 
@@ -555,6 +582,17 @@ func (m *memWorktrees) Status(_ context.Context, wt worktree.Worktree) (git.Stat
 		return git.Status{}, m.statusErr
 	}
 	return m.status, nil
+}
+
+func (m *memWorktrees) Commit(_ context.Context, wt worktree.Worktree, rev string) (git.Commit, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.calls = append(m.calls, "commit:"+wt.TaskID+":"+rev)
+	if m.commitErr != nil {
+		return git.Commit{}, m.commitErr
+	}
+	return git.Commit{SHA: rev, Subject: m.subject}, nil
 }
 
 func (m *memWorktrees) Clean(_ context.Context, wt worktree.Worktree) error {
@@ -701,6 +739,11 @@ func (m *memReviews) reviewCalls() []string {
 	return slices.Clone(m.calls)
 }
 
+// commitPrompt is what the fake renderer answers with for the commit stage,
+// with the name of the task so that a test can see the placeholders went
+// through.
+func commitPrompt(name string) string { return "Commit the work of " + name }
+
 // fixture is a flow.Service over the four fakes.
 type fixture struct {
 	service   *flow.Service
@@ -724,6 +767,12 @@ func newFixture(t *testing.T) *fixture {
 		Sessions:  f.sessions,
 		Worktrees: f.worktrees,
 		Review:    f.reviews,
+		RenderPrompt: func(stage prompts.Stage, vars prompts.Vars) (string, error) {
+			if stage != prompts.StageCommit {
+				return "", errors.New("unexpected prompt stage " + string(stage))
+			}
+			return commitPrompt(vars.TaskName), nil
+		},
 	})
 	t.Cleanup(f.service.Close)
 	return f

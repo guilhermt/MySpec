@@ -161,7 +161,10 @@ func Run(cfg Config) int {
 		Worktrees: worktrees,
 		Review:    reviews,
 		Log:       log,
-		OnChange:  func(string) { a.publish() },
+		RenderPrompt: func(stage prompts.Stage, vars prompts.Vars) (string, error) {
+			return prompts.Render(dirs.Data, stage, vars)
+		},
+		OnChange: func(string) { a.publish() },
 	})
 	wsSvc := workspace.New(workspace.Deps{
 		Recents:  st.Recents,
