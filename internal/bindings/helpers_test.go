@@ -532,7 +532,9 @@ func (f *fixture) snapshot() bindings.State {
 		Theme:      string(f.theme.Preference()),
 		SystemDark: f.theme.SystemDark(),
 		Notice:     bindings.FromNotice(f.ws.Notice()),
-		Tasks:      bindings.FromTasks(f.taskSvc.List(), f.taskArtifacts, f.flow.Steps, f.sessions.Summaries()),
+		Tasks: bindings.FromTasks(
+			f.taskSvc.List(), f.taskArtifacts, f.flow.Steps, f.flow.Repos, f.sessions.Summaries(),
+		),
 	}
 }
 

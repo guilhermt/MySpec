@@ -50,7 +50,7 @@ describe("ReviewStrip", () => {
 
     await user.click(screen.getByRole("button", { name: /src\/LoginForm.tsx/ }));
 
-    expect(api.openFileInEditor).toHaveBeenCalledWith("task-1", "src/LoginForm.tsx");
+    expect(api.openFileInEditor).toHaveBeenCalledWith("task-1", "", "src/LoginForm.tsx");
   });
 
   it("has nothing to open for a file that was deleted", () => {

@@ -146,9 +146,9 @@ describe("api", () => {
     await wails.api.retryStep("task-1");
     await wails.api.cleanAndStartStep("task-1");
     await wails.api.discardStep("task-1", true);
-    await wails.api.openInEditor("task-1");
+    await wails.api.openInEditor("task-1", "");
     await wails.api.approveStep("task-1");
-    await wails.api.openFileInEditor("task-1", "src/login.ts");
+    await wails.api.openFileInEditor("task-1", "", "src/login.ts");
 
     expect(Call.ByID).toHaveBeenCalledTimes(27);
     const ids = vi.mocked(Call.ByID).mock.calls.map(([id]) => id);

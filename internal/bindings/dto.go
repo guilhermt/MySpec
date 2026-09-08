@@ -102,6 +102,68 @@ type Step struct {
 	CommitFailed  bool    `json:"commitFailed"`  // the last approval ended without a commit
 }
 
+// PRBlock is why the pull request stage of a repository cannot go on.
+type PRBlock struct {
+	// Reason is gh_missing, gh_unauthenticated, gh_failed, git_failed or
+	// no_worktree, a string for the same reason as Notice.Reason.
+	Reason string `json:"reason"`
+	Detail string `json:"detail"` // what gh or git said, verbatim
+}
+
+// PRDraft is the description of a pull request the agent wrote and the user
+// edits.
+type PRDraft struct {
+	Title string `json:"title"`
+	Body  string `json:"body"`
+	File  string `json:"file"` // name inside the pr folder, for ReadArtifact
+}
+
+// PRReport is one pass of the review of a pull request.
+type PRReport struct {
+	Pass  int    `json:"pass"`
+	File  string `json:"file"` // name inside the pr folder, for ReadArtifact
+	Clean bool   `json:"clean"`
+}
+
+// RepoPR is one repository of a task in the pull request stage, with its own
+// conversation and its own state.
+type RepoPR struct {
+	Repository string `json:"repository"` // relative path, as the steps name it
+	RepoPath   string `json:"repoPath"`
+	Slug       string `json:"slug"`
+	// Status is preparing, blocked, drafting, draft_ready, opening, reviewing,
+	// awaiting_decision, in_review, ready_to_approve, committing, done or
+	// skipped, a string for the same reason as Notice.Reason.
+	Status       string   `json:"status"`
+	Block        *PRBlock `json:"block"` // blocked only
+	WorktreePath string   `json:"worktreePath"`
+	Branch       string   `json:"branch"`
+	BaseBranch   string   `json:"baseBranch"`
+
+	Draft   *PRDraft   `json:"draft"`   // nil until the draft is written
+	Reports []PRReport `json:"reports"` // never nil
+	Review  *Review    `json:"review"`  // the review states and committing only
+	// CommitFailed says the last approval of this repository ended without a
+	// commit.
+	CommitFailed bool `json:"commitFailed"`
+
+	PRNumber int    `json:"prNumber"`
+	PRURL    string `json:"prUrl"`
+	PRState  string `json:"prState"` // open, merged or closed; "" when unknown
+	// CheckedAt is when gh last reported the pull request; "" before that.
+	CheckedAt string `json:"checkedAt"`
+
+	SessionStage string `json:"sessionStage"` // "" when the repository has no conversation
+	// SessionStatus is working, waiting, needs_permission, paused or error.
+	SessionStatus  string `json:"sessionStatus"`
+	TurnRunning    bool   `json:"turnRunning"`
+	ProcessRunning bool   `json:"processRunning"`
+	RetryAttempt   int    `json:"retryAttempt"`
+	ContextPercent int    `json:"contextPercent"`
+	PendingCount   int    `json:"pendingCount"`
+	LastError      string `json:"lastError"`
+}
+
 // PlanProblem is one reason the step files are not a valid plan.
 type PlanProblem struct {
 	File    string `json:"file"` // "" for the plan as a whole
@@ -114,8 +176,8 @@ type TaskSummary struct {
 	Name     string `json:"name"`
 	RepoPath string `json:"repoPath"` // "" for a root task
 	Dir      string `json:"dir"`
-	// Stage is prd, tech_spec, plan or implementation, a string for the same
-	// reason as Notice.Reason.
+	// Stage is prd, tech_spec, plan, implementation or pr, a string for the
+	// same reason as Notice.Reason.
 	Stage string `json:"stage"`
 	// Revisiting is a stage reopened by the user, which moves on only when
 	// they say so.
@@ -132,6 +194,7 @@ type TaskSummary struct {
 	HasTechSpec     bool          `json:"hasTechSpec"`
 	Steps           []Step        `json:"steps"`        // never nil
 	CurrentStep     int           `json:"currentStep"`  // the step that runs or runs next; 0 when the task has no steps
+	Repos           []RepoPR      `json:"repos"`        // never nil; empty outside the pull request stage
 	PlanProblems    []PlanProblem `json:"planProblems"` // never nil
 	CanContinue     bool          `json:"canContinue"`
 	ArtifactVersion int           `json:"artifactVersion"`
@@ -216,14 +279,16 @@ type QuestionEntry struct {
 // MarkerEntry is a milestone of the conversation.
 type MarkerEntry struct {
 	// Type is prd_written, prd_updated, tech_spec_written, tech_spec_updated,
-	// plan_written, plan_updated, stage_started, step_started, compacted or
-	// interrupted.
+	// plan_written, plan_updated, pr_review_written, stage_started,
+	// step_started, compacted or interrupted.
 	Type      string `json:"type"`
 	PreTokens int    `json:"preTokens"`
-	// Stage belongs to stage_started alone and Step to step_started alone;
-	// Restarted belongs to both.
+	// Stage belongs to stage_started alone, Step to step_started alone and
+	// Pass to pr_review_written alone; Restarted belongs to the two started
+	// ones.
 	Stage     string `json:"stage"`
 	Step      int    `json:"step"`
+	Pass      int    `json:"pass"`
 	Restarted bool   `json:"restarted"`
 }
 

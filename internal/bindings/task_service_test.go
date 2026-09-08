@@ -54,6 +54,7 @@ func TestCreateTaskAddsTheTaskToTheState(t *testing.T) {
 		Stage:         "prd",
 		SessionStatus: "waiting",
 		Steps:         []bindings.Step{},
+		Repos:         []bindings.RepoPR{},
 		PlanProblems:  []bindings.PlanProblem{},
 		CreatedAt:     got.CreatedAt,
 		UpdatedAt:     got.UpdatedAt,
@@ -552,18 +553,52 @@ func TestStepOperationsReportWhatTheUserGotWrong(t *testing.T) {
 	}
 }
 
+func TestPullRequestOperationsReportWhatTheUserGotWrong(t *testing.T) {
+	t.Parallel()
+
+	f, dir, id := plannedTask(t)
+	f.waitStep(t, id, 1, "awaiting_review")
+	repoPath := filepath.Join(dir, "api")
+
+	// The task is still implementing: it has no repository of the PR stage,
+	// and none of these calls has anything to act on.
+	tests := []struct {
+		name string
+		call func() error
+	}{
+		{"open a pull request", func() error { return f.tasks.OpenPR(id, repoPath, "A title", "A body") }},
+		{"approve a review", func() error { return f.tasks.ApproveRepo(id, repoPath) }},
+		{"review again", func() error { return f.tasks.ReviewAgain(id, repoPath) }},
+		{"discard a draft", func() error { return f.tasks.DiscardDraft(id, repoPath) }},
+		{"retry a repository", func() error { return f.tasks.RetryRepo(id, repoPath) }},
+		{"refresh a pull request", func() error { return f.tasks.RefreshPR(id, repoPath) }},
+		{"open a repository in the editor", func() error { return f.tasks.OpenInEditor(id, repoPath) }},
+		{"open a file of a repository", func() error { return f.tasks.OpenFileInEditor(id, repoPath, "main.go") }},
+	}
+
+	const want = "This repository isn't part of the task."
+	for _, tt := range tests {
+		if err := tt.call(); err == nil || err.Error() != want {
+			t.Errorf("%s: error = %v, want %q", tt.name, err, want)
+		}
+	}
+	if f.logged(t, "binding failed") {
+		t.Error("a mistake the user can correct was logged as a failure")
+	}
+}
+
 func TestOpenInEditorOpensTheWorktreeOfTheStep(t *testing.T) {
 	t.Parallel()
 
 	f, _, id := createdTask(t)
-	if err := f.tasks.OpenInEditor(id); err == nil || err.Error() != "The task has no step to run." {
+	if err := f.tasks.OpenInEditor(id, ""); err == nil || err.Error() != "The task has no step to run." {
 		t.Errorf("OpenInEditor() error = %v, want the missing step notice", err)
 	}
 
 	planned, dir, plannedID := plannedTask(t)
 	planned.waitStep(t, plannedID, 1, "awaiting_review")
 
-	if err := planned.tasks.OpenInEditor(plannedID); err != nil {
+	if err := planned.tasks.OpenInEditor(plannedID, ""); err != nil {
 		t.Fatalf("OpenInEditor(%s) = %v, want nil", plannedID, err)
 	}
 	want := []string{worktree.Path(dir, "api", "login-screen")}
@@ -637,7 +672,7 @@ func TestOpenFileInEditorOpensTheFileInTheWindowOfTheWorktree(t *testing.T) {
 	f, dir, id := plannedTask(t)
 	f.waitReviewed(t, id, 1)
 
-	if err := f.tasks.OpenFileInEditor(id, "hello.txt"); err != nil {
+	if err := f.tasks.OpenFileInEditor(id, "", "hello.txt"); err != nil {
 		t.Fatalf("OpenFileInEditor(%s) = %v, want nil", id, err)
 	}
 	wt := worktree.Path(dir, "api", "login-screen")
@@ -664,7 +699,7 @@ func TestOpenFileInEditorRefusesWhatIsNotOfTheStep(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		err := f.tasks.OpenFileInEditor(id, tt.path)
+		err := f.tasks.OpenFileInEditor(id, "", tt.path)
 		if err == nil || err.Error() != "This file is not in the worktree of the step." {
 			t.Errorf("%s: error = %v, want the outside notice", tt.name, err)
 		}
@@ -681,7 +716,7 @@ func TestOpenFileInEditorNeedsAStepWithAWorktree(t *testing.T) {
 	t.Parallel()
 
 	f, _, id := createdTask(t)
-	err := f.tasks.OpenFileInEditor(id, "hello.txt")
+	err := f.tasks.OpenFileInEditor(id, "", "hello.txt")
 	if err == nil || err.Error() != "The task has no step to run." {
 		t.Errorf("OpenFileInEditor() error = %v, want the missing step notice", err)
 	}
@@ -705,7 +740,7 @@ func TestOpenInEditorWaitsForTheWorktree(t *testing.T) {
 
 	// The worktree is only registered once the preparation gets that far, so
 	// the answer before it does is that there is none yet.
-	if err := f.tasks.OpenInEditor(id); err != nil && err.Error() != "The worktree doesn't exist yet." {
+	if err := f.tasks.OpenInEditor(id, ""); err != nil && err.Error() != "The worktree doesn't exist yet." {
 		t.Errorf("OpenInEditor() error = %v, want the missing worktree notice", err)
 	}
 }

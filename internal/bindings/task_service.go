@@ -11,6 +11,7 @@ import (
 
 	"github.com/guilhermt/myspec/internal/editor"
 	"github.com/guilhermt/myspec/internal/flow"
+	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
@@ -190,19 +191,43 @@ func (s *TaskService) DiscardStep(taskID string, cleanWorktree bool) error {
 	return nil
 }
 
-// OpenInEditor opens the worktree of the current step of a task in the editor.
-func (s *TaskService) OpenInEditor(taskID string) error {
-	step, ok := s.flow.CurrentStep(taskID)
-	if !ok {
-		return s.fail("OpenInEditor", fmt.Errorf("open task %s in the editor: %w", taskID, flow.ErrNoStep))
+// OpenInEditor opens a worktree of a task in the editor: the one of the
+// repository when repoPath names one, the one of the current step otherwise.
+func (s *TaskService) OpenInEditor(taskID, repoPath string) error {
+	worktree, err := s.worktreeOf(taskID, repoPath)
+	if err != nil {
+		return s.fail("OpenInEditor", err)
 	}
-	if step.WorktreePath == "" {
-		return s.fail("OpenInEditor", fmt.Errorf("open task %s in the editor: %w", taskID, flow.ErrNoWorktree))
-	}
-	if err := s.editor(step.WorktreePath); err != nil {
+	if err := s.editor(worktree); err != nil {
 		return s.fail("OpenInEditor", err)
 	}
 	return nil
+}
+
+// worktreeOf is the worktree a call acts on: the one of a repository of the PR
+// stage, or the one of the step that runs.
+func (s *TaskService) worktreeOf(taskID, repoPath string) (string, error) {
+	if repoPath == "" {
+		step, ok := s.flow.CurrentStep(taskID)
+		if !ok {
+			return "", fmt.Errorf("worktree of task %s: %w", taskID, flow.ErrNoStep)
+		}
+		if step.WorktreePath == "" {
+			return "", fmt.Errorf("worktree of task %s: %w", taskID, flow.ErrNoWorktree)
+		}
+		return step.WorktreePath, nil
+	}
+
+	for _, repo := range s.flow.Repos(taskID) {
+		if repo.RepoPath != repoPath {
+			continue
+		}
+		if repo.WorktreePath == "" {
+			return "", fmt.Errorf("worktree of %s: %w", repoPath, flow.ErrNoWorktree)
+		}
+		return repo.WorktreePath, nil
+	}
+	return "", fmt.Errorf("worktree of %s in task %s: %w", repoPath, taskID, flow.ErrNoRepo)
 }
 
 // ApproveStep approves the review of the current step of a task and asks the
@@ -217,24 +242,92 @@ func (s *TaskService) ApproveStep(taskID string) error {
 	return nil
 }
 
-// OpenFileInEditor opens one file of the worktree of the current step in the
-// editor, in the window of that worktree.
-func (s *TaskService) OpenFileInEditor(taskID, path string) error {
-	step, ok := s.flow.CurrentStep(taskID)
-	if !ok {
-		return s.fail("OpenFileInEditor", fmt.Errorf("open a file of task %s: %w", taskID, flow.ErrNoStep))
-	}
-	if step.WorktreePath == "" {
-		return s.fail("OpenFileInEditor", fmt.Errorf("open a file of task %s: %w", taskID, flow.ErrNoWorktree))
+// OpenFileInEditor opens one file of a worktree of a task in the editor, in
+// the window of that worktree. repoPath names the repository of the PR stage;
+// empty, it is the worktree of the current step.
+func (s *TaskService) OpenFileInEditor(taskID, repoPath, path string) error {
+	worktree, err := s.worktreeOf(taskID, repoPath)
+	if err != nil {
+		return s.fail("OpenFileInEditor", err)
 	}
 	// The path comes from the frontend, which only ever has paths git reported
-	// inside the worktree; anything else is not this step's to open.
+	// inside the worktree; anything else is not this worktree's to open.
 	clean := filepath.Clean(path)
 	if filepath.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
 		return s.fail("OpenFileInEditor", fmt.Errorf("open %q of task %s: %w", path, taskID, errPathOutside))
 	}
-	if err := s.editor(step.WorktreePath, filepath.Join(step.WorktreePath, clean)); err != nil {
+	if err := s.editor(worktree, filepath.Join(worktree, clean)); err != nil {
 		return s.fail("OpenFileInEditor", err)
+	}
+	return nil
+}
+
+// OpenPR writes the draft the user approved and asks the agent to open the
+// pull request of a repository from it.
+func (s *TaskService) OpenPR(taskID, repoPath, title, body string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+
+	if err := s.flow.OpenPR(ctx, taskID, repoPath, title, body); err != nil {
+		return s.fail("OpenPR", err)
+	}
+	return nil
+}
+
+// ApproveRepo approves the review of the changes a pass of a pull request
+// review produced and asks the agent to commit and push them.
+func (s *TaskService) ApproveRepo(taskID, repoPath string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+
+	if err := s.flow.ApproveRepo(ctx, taskID, repoPath); err != nil {
+		return s.fail("ApproveRepo", err)
+	}
+	return nil
+}
+
+// ReviewAgain ends the review session of a repository and starts a new pass
+// over its pull request.
+func (s *TaskService) ReviewAgain(taskID, repoPath string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+
+	if err := s.flow.ReviewAgain(ctx, taskID, repoPath); err != nil {
+		return s.fail("ReviewAgain", err)
+	}
+	return nil
+}
+
+// DiscardDraft throws away the draft of a repository and prepares it again.
+func (s *TaskService) DiscardDraft(taskID, repoPath string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+
+	if err := s.flow.DiscardDraft(ctx, taskID, repoPath); err != nil {
+		return s.fail("DiscardDraft", err)
+	}
+	return nil
+}
+
+// RetryRepo prepares a blocked repository of the pull request stage again.
+func (s *TaskService) RetryRepo(taskID, repoPath string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+
+	if err := s.flow.RetryRepo(ctx, taskID, repoPath); err != nil {
+		return s.fail("RetryRepo", err)
+	}
+	return nil
+}
+
+// RefreshPR reads the pull request of a repository again. It returns as soon
+// as the reading is scheduled; what it finds arrives as state.
+func (s *TaskService) RefreshPR(taskID, repoPath string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+
+	if err := s.flow.RefreshPR(ctx, taskID, repoPath); err != nil {
+		return s.fail("RefreshPR", err)
 	}
 	return nil
 }
@@ -382,8 +475,16 @@ var userMessages = []struct {
 	{flow.ErrNoWorktree, "The worktree doesn't exist yet."},
 	{flow.ErrStepNotReady, "Stage every changed file before approving."},
 	{flow.ErrStepBusy, "Wait for the agent to finish."},
+	{flow.ErrNoRepo, "This repository isn't part of the task."},
+	{flow.ErrDraftMissing, "The draft isn't ready yet."},
+	{flow.ErrEmptyDraft, "Write a title and a description before opening the PR."},
+	{flow.ErrPRExists, "The pull request is already open."},
+	{flow.ErrNoPullRequest, "This repository has no pull request yet."},
+	{flow.ErrRepoNotBlocked, "The repository isn't blocked."},
 	{errPathOutside, "This file is not in the worktree of the step."},
 	{editor.ErrNotFound, "VS Code was not found: `code` isn't on the PATH."},
+	{gh.ErrNotFound, "GitHub CLI was not found: `gh` isn't on the PATH."},
+	{gh.ErrNotAuthenticated, "GitHub CLI isn't authenticated: run `gh auth login`."},
 	{git.ErrNotFound, "Git was not found on the PATH."},
 }
 

@@ -66,8 +66,10 @@ export const api = {
     Promise.resolve(),
   ),
   approveStep: vi.fn<(taskId: string) => Promise<void>>(() => Promise.resolve()),
-  openInEditor: vi.fn<(taskId: string) => Promise<void>>(() => Promise.resolve()),
-  openFileInEditor: vi.fn<(taskId: string, path: string) => Promise<void>>(() => Promise.resolve()),
+  openInEditor: vi.fn<(taskId: string, repoPath: string) => Promise<void>>(() => Promise.resolve()),
+  openFileInEditor: vi.fn<(taskId: string, repoPath: string, path: string) => Promise<void>>(() =>
+    Promise.resolve(),
+  ),
   openExternal: vi.fn<(url: string) => Promise<void>>(() => Promise.resolve()),
 };
 
@@ -154,6 +156,7 @@ export function makeTask(overrides: Partial<TaskSummary> = {}): TaskSummary {
     hasTechSpec: false,
     steps: [],
     currentStep: 0,
+    repos: [],
     planProblems: [],
     canContinue: false,
     artifactVersion: 0,
@@ -282,7 +285,14 @@ function payloadOf(kind: EntryKind): Omit<Entry, "id" | "seq" | "turnId" | "kind
     case "marker":
       return {
         ...empty,
-        marker: { type: "prd_written", preTokens: 0, stage: "", step: 0, restarted: false },
+        marker: {
+          type: "prd_written",
+          preTokens: 0,
+          stage: "",
+          step: 0,
+          pass: 0,
+          restarted: false,
+        },
       };
     case "error":
       return {

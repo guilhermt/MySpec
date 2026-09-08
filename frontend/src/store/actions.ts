@@ -140,14 +140,17 @@ export function approveStep(taskId: string): Promise<void> {
   return run(() => api.approveStep(taskId));
 }
 
-/** openInEditor opens the worktree of the current step in the editor of the user. */
-export function openInEditor(taskId: string): Promise<void> {
-  return run(() => api.openInEditor(taskId));
+/**
+ * openInEditor opens a worktree of the task in the editor of the user: the one
+ * of the given repository, or the one of the current step when none is given.
+ */
+export function openInEditor(taskId: string, repoPath = ""): Promise<void> {
+  return run(() => api.openInEditor(taskId, repoPath));
 }
 
-/** openFileInEditor opens one changed file of the step in the editor of the user. */
-export function openFileInEditor(taskId: string, path: string): Promise<void> {
-  return run(() => api.openFileInEditor(taskId, path));
+/** openFileInEditor opens one changed file of a worktree in the editor of the user. */
+export function openFileInEditor(taskId: string, path: string, repoPath = ""): Promise<void> {
+  return run(() => api.openFileInEditor(taskId, repoPath, path));
 }
 
 export function openExternal(url: string): Promise<void> {

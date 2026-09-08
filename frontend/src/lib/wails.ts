@@ -339,9 +339,10 @@ export const api = {
   discardStep: (taskId: string, cleanWorktree: boolean): Promise<void> =>
     TaskService.DiscardStep(taskId, cleanWorktree),
   approveStep: (taskId: string): Promise<void> => TaskService.ApproveStep(taskId),
-  openInEditor: (taskId: string): Promise<void> => TaskService.OpenInEditor(taskId),
-  openFileInEditor: (taskId: string, path: string): Promise<void> =>
-    TaskService.OpenFileInEditor(taskId, path),
+  openInEditor: (taskId: string, repoPath: string): Promise<void> =>
+    TaskService.OpenInEditor(taskId, repoPath),
+  openFileInEditor: (taskId: string, repoPath: string, path: string): Promise<void> =>
+    TaskService.OpenFileInEditor(taskId, repoPath, path),
   openExternal: (url: string): Promise<void> => Browser.OpenURL(url),
 };
 

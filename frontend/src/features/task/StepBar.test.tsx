@@ -43,7 +43,7 @@ describe("StepBar", () => {
 
     await user.click(screen.getByRole("button", { name: "Open in VS Code" }));
 
-    expect(api.openInEditor).toHaveBeenCalledWith("task-1");
+    expect(api.openInEditor).toHaveBeenCalledWith("task-1", "");
   });
 
   it("has nothing to open before the worktree exists", () => {

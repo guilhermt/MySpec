@@ -48,6 +48,7 @@ func FromTasks(
 	tasks []task.Task,
 	artifacts func(id string) task.Artifacts,
 	steps func(id string) []flow.StepState,
+	repos func(id string) []flow.RepoState,
 	summaries map[session.Key]session.Summary,
 ) []TaskSummary {
 	converted := make([]TaskSummary, len(tasks))
@@ -76,6 +77,7 @@ func FromTasks(
 			HasTechSpec:     a.TechSpec,
 			Steps:           fromSteps(states),
 			CurrentStep:     currentStep(states),
+			Repos:           fromRepos(repos(t.ID)),
 			PlanProblems:    fromProblems(a.Plan.Problems),
 			CanContinue:     t.Revisiting && a.Done(t.Stage) && summary.Idle,
 			ArtifactVersion: t.ArtifactVersion,
@@ -88,16 +90,93 @@ func FromTasks(
 }
 
 // taskSessionKey is the session the task screen shows: the one of the stage
-// the task is in, which in the implementation stage is the step that runs.
+// the task is in, which in the implementation stage is the step that runs. The
+// PR stage has none of its own — every conversation there belongs to a
+// repository — and its fields stay empty.
 func taskSessionKey(t task.Task, states []flow.StepState) session.Key {
-	if t.Stage != task.StageImplementation {
+	switch t.Stage {
+	case task.StagePR:
+		return session.Key{TaskID: t.ID}
+	case task.StageImplementation:
+		number := currentStep(states)
+		if number == 0 {
+			return session.Key{TaskID: t.ID}
+		}
+		return session.Key{TaskID: t.ID, Stage: session.StepStage(number)}
+	default:
 		return session.Key{TaskID: t.ID, Stage: string(t.Stage)}
 	}
-	number := currentStep(states)
-	if number == 0 {
-		return session.Key{TaskID: t.ID}
+}
+
+// fromRepos converts the repositories of a task in the PR stage, each with the
+// session of its own, always returning a slice so the frontend never sees null.
+func fromRepos(states []flow.RepoState) []RepoPR {
+	converted := make([]RepoPR, len(states))
+	for i, state := range states {
+		summary := state.Session
+		checkedAt := ""
+		if !state.PR.CheckedAt.IsZero() {
+			checkedAt = state.PR.CheckedAt.Format(time.RFC3339)
+		}
+		converted[i] = RepoPR{
+			Repository:   state.Repository,
+			RepoPath:     state.RepoPath,
+			Slug:         state.Slug,
+			Status:       string(state.Status),
+			Block:        fromPRBlock(state.Block),
+			WorktreePath: state.WorktreePath,
+			Branch:       state.Branch,
+			BaseBranch:   state.BaseBranch,
+
+			Draft:        fromDraft(state.Draft, state.Slug),
+			Reports:      fromReports(state.Reports),
+			Review:       fromReview(state.Review),
+			CommitFailed: state.CommitFailed,
+
+			PRNumber:  state.PR.Number,
+			PRURL:     state.PR.URL,
+			PRState:   string(state.PR.State),
+			CheckedAt: checkedAt,
+
+			SessionStage:   state.SessionStage,
+			SessionStatus:  string(summary.Status),
+			TurnRunning:    summary.TurnRunning,
+			ProcessRunning: summary.ProcessRunning,
+			RetryAttempt:   summary.RetryAttempt,
+			ContextPercent: summary.ContextPercent,
+			PendingCount:   summary.PendingCount,
+			LastError:      summary.LastError,
+		}
 	}
-	return session.Key{TaskID: t.ID, Stage: session.StepStage(number)}
+	return converted
+}
+
+// fromPRBlock converts why the pull request of a repository cannot go on,
+// keeping nil for one that can.
+func fromPRBlock(block *task.PRBlock) *PRBlock {
+	if block == nil {
+		return nil
+	}
+	return &PRBlock{Reason: string(block.Reason), Detail: block.Detail}
+}
+
+// fromDraft converts the draft of a repository, keeping nil until one is
+// written.
+func fromDraft(draft *task.Draft, slug string) *PRDraft {
+	if draft == nil {
+		return nil
+	}
+	return &PRDraft{Title: draft.Title, Body: draft.Body, File: task.DraftFile(slug)}
+}
+
+// fromReports converts the passes of a review, always returning a slice so the
+// frontend never sees null.
+func fromReports(reports []task.ReviewReport) []PRReport {
+	converted := make([]PRReport, len(reports))
+	for i, report := range reports {
+		converted[i] = PRReport{Pass: report.Pass, File: report.File, Clean: report.Clean}
+	}
+	return converted
 }
 
 // fromSteps converts the steps of a plan with their state, always returning a
@@ -258,6 +337,7 @@ func FromEntry(e session.Entry) Entry {
 			PreTokens: e.Marker.PreTokens,
 			Stage:     e.Marker.Stage,
 			Step:      e.Marker.Step,
+			Pass:      e.Marker.Pass,
 			Restarted: e.Marker.Restarted,
 		}
 	}

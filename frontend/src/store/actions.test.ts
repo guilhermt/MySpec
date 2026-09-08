@@ -121,9 +121,9 @@ describe("task actions", () => {
     expect(api.retryStep).toHaveBeenCalledWith("task-1");
     expect(api.cleanAndStartStep).toHaveBeenCalledWith("task-1");
     expect(api.discardStep).toHaveBeenCalledWith("task-1", true);
-    expect(api.openInEditor).toHaveBeenCalledWith("task-1");
+    expect(api.openInEditor).toHaveBeenCalledWith("task-1", "");
     expect(api.approveStep).toHaveBeenCalledWith("task-1");
-    expect(api.openFileInEditor).toHaveBeenCalledWith("task-1", "src/login.ts");
+    expect(api.openFileInEditor).toHaveBeenCalledWith("task-1", "", "src/login.ts");
     expect(useAppStore.getState().error).toBeNull();
   });
 

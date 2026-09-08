@@ -38,7 +38,12 @@ func (t Task) PRDir() string {
 
 // DraftPath is the draft of the pull request of a repository.
 func (t Task) DraftPath(slug string) string {
-	return filepath.Join(t.PRDir(), slug+"-draft.md")
+	return filepath.Join(t.PRDir(), DraftFile(slug))
+}
+
+// DraftFile is the name of the draft of a repository inside the pr folder.
+func DraftFile(slug string) string {
+	return slug + "-draft.md"
 }
 
 // ReviewPath is the report of one pass of the PR review of a repository.
