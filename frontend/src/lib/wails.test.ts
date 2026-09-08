@@ -136,10 +136,12 @@ describe("api", () => {
     await wails.api.cleanAndStartStep("task-1");
     await wails.api.discardStep("task-1", true);
     await wails.api.openInEditor("task-1");
+    await wails.api.approveStep("task-1");
+    await wails.api.openFileInEditor("task-1", "src/login.ts");
 
-    expect(Call.ByID).toHaveBeenCalledTimes(25);
+    expect(Call.ByID).toHaveBeenCalledTimes(27);
     const ids = vi.mocked(Call.ByID).mock.calls.map(([id]) => id);
-    expect(new Set(ids).size).toBe(25);
+    expect(new Set(ids).size).toBe(27);
   });
 
   it("opens a link in the browser of the desktop, never in the webview", async () => {

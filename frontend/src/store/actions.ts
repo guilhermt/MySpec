@@ -133,9 +133,19 @@ export function discardStep(taskId: string, cleanWorktree: boolean): Promise<voi
   return run(() => api.discardStep(taskId, cleanWorktree));
 }
 
+/** approveStep sends the reviewed step to be committed by the agent that wrote it. */
+export function approveStep(taskId: string): Promise<void> {
+  return run(() => api.approveStep(taskId));
+}
+
 /** openInEditor opens the worktree of the current step in the editor of the user. */
 export function openInEditor(taskId: string): Promise<void> {
   return run(() => api.openInEditor(taskId));
+}
+
+/** openFileInEditor opens one changed file of the step in the editor of the user. */
+export function openFileInEditor(taskId: string, path: string): Promise<void> {
+  return run(() => api.openFileInEditor(taskId, path));
 }
 
 export function openExternal(url: string): Promise<void> {

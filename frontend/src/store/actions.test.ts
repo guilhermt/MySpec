@@ -3,6 +3,7 @@ import { api } from "@/lib/wails";
 import {
   answerPermission,
   answerQuestion,
+  approveStep,
   backToStage,
   cleanAndStartStep,
   continueStage,
@@ -14,6 +15,7 @@ import {
   interrupt,
   loadTranscript,
   openExternal,
+  openFileInEditor,
   openFolderDialog,
   openInEditor,
   openPath,
@@ -92,6 +94,8 @@ describe("task actions", () => {
     await cleanAndStartStep("task-1");
     await discardStep("task-1", true);
     await openInEditor("task-1");
+    await approveStep("task-1");
+    await openFileInEditor("task-1", "src/login.ts");
 
     expect(api.deleteTask).toHaveBeenCalledWith("task-1");
     expect(api.sendMessage).toHaveBeenCalledWith("task-1", "go on");
@@ -112,6 +116,8 @@ describe("task actions", () => {
     expect(api.cleanAndStartStep).toHaveBeenCalledWith("task-1");
     expect(api.discardStep).toHaveBeenCalledWith("task-1", true);
     expect(api.openInEditor).toHaveBeenCalledWith("task-1");
+    expect(api.approveStep).toHaveBeenCalledWith("task-1");
+    expect(api.openFileInEditor).toHaveBeenCalledWith("task-1", "src/login.ts");
     expect(useAppStore.getState().error).toBeNull();
   });
 

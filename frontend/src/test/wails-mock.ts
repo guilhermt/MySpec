@@ -55,7 +55,9 @@ export const api = {
   discardStep: vi.fn<(taskId: string, cleanWorktree: boolean) => Promise<void>>(() =>
     Promise.resolve(),
   ),
+  approveStep: vi.fn<(taskId: string) => Promise<void>>(() => Promise.resolve()),
   openInEditor: vi.fn<(taskId: string) => Promise<void>>(() => Promise.resolve()),
+  openFileInEditor: vi.fn<(taskId: string, path: string) => Promise<void>>(() => Promise.resolve()),
   openExternal: vi.fn<(url: string) => Promise<void>>(() => Promise.resolve()),
 };
 
