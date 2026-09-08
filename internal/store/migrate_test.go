@@ -10,12 +10,14 @@ import (
 )
 
 // stagesVersion is the migration that brought the stages after the PRD,
-// commitsVersion the one that gave a step its commits, and latestVersion the
-// version the embedded migrations end at.
+// commitsVersion the one that gave a step its commits, prVersion the one that
+// brought the PR stage, and latestVersion the version the embedded migrations
+// end at.
 const (
 	stagesVersion  = 3
 	commitsVersion = 5
-	latestVersion  = 5
+	prVersion      = 6
+	latestVersion  = 6
 )
 
 // mapFS builds a migrations tree with the given file names.
@@ -214,6 +216,58 @@ func TestMigrateGivesTheStepsOfAnOlderDatabaseEmptyCommits(t *testing.T) {
 	}
 	if start != "" || sha != "" || subject != "" {
 		t.Errorf("commits = %q %q %q, want them empty on a step recorded before the column", start, sha, subject)
+	}
+}
+
+func TestMigrateGivesTheWorktreesOfAnOlderDatabaseNoBaseAndAddsThePRRuns(t *testing.T) {
+	t.Parallel()
+
+	db := openAt(t, prVersion-1)
+	const insertTask = `INSERT INTO tasks
+		(id, workspace_path, name, initial_context, stage, artifacts_dir, created_at, updated_at, revisiting)
+		VALUES ('task-1', '/ws', 'one', 'context', 'implementation', '/data/x',
+			'2026-09-06T10:00:00Z', '2026-09-06T10:00:00Z', 0)`
+	if _, err := db.ExecContext(t.Context(), insertTask); err != nil {
+		t.Fatalf("insert task: %v", err)
+	}
+	const insertWorktree = `INSERT INTO worktrees (task_id, repo_path, path, branch, created_at)
+		VALUES ('task-1', '/ws/api', '/ws/.myspec/worktrees/api/one', 'one', '2026-09-06T10:00:00Z')`
+	if _, err := db.ExecContext(t.Context(), insertWorktree); err != nil {
+		t.Fatalf("insert worktree: %v", err)
+	}
+
+	if err := migrate(t.Context(), db, slog.New(slog.DiscardHandler)); err != nil {
+		t.Fatalf("migrate() = %v, want nil", err)
+	}
+
+	// The rule is applied again for a worktree created before the column, so
+	// an empty base is what it has to read back as.
+	const query = `SELECT base FROM worktrees WHERE task_id = 'task-1'`
+	var base string
+	if err := db.QueryRowContext(t.Context(), query).Scan(&base); err != nil {
+		t.Fatalf("query worktree: %v", err)
+	}
+	if base != "" {
+		t.Errorf("base = %q, want it empty on a worktree registered before the column", base)
+	}
+
+	const insertRun = `INSERT INTO pr_runs (task_id, repo_path, status, created_at, updated_at)
+		VALUES ('task-1', '/ws/api', 'preparing', '2026-09-06T10:00:00Z', '2026-09-06T10:00:00Z')`
+	if _, err := db.ExecContext(t.Context(), insertRun); err != nil {
+		t.Fatalf("insert pr run: %v", err)
+	}
+	const runQuery = `SELECT pr_number, pr_url, pr_state, reviewed_commit, reported_pass
+		FROM pr_runs WHERE task_id = 'task-1'`
+	var (
+		number, pass         int
+		url, state, reviewed string
+	)
+	if err := db.QueryRowContext(t.Context(), runQuery).Scan(&number, &url, &state, &reviewed, &pass); err != nil {
+		t.Fatalf("query pr run: %v", err)
+	}
+	if number != 0 || url != "" || state != "" || reviewed != "" || pass != 0 {
+		t.Errorf("pr run = %d %q %q %q %d, want a row that knows nothing about a pull request yet",
+			number, url, state, reviewed, pass)
 	}
 }
 

@@ -514,3 +514,69 @@ func TestTwoTasksCreateTheirWorktreesInTheSameRepository(t *testing.T) {
 		t.Errorf("registry has %d worktrees, want 2", len(got))
 	}
 }
+
+func TestEnsureRecordsTheBaseTheBranchWasCreatedFrom(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, true)
+
+	wt := f.ensure(t)
+	if wt.Base != "origin/dev" {
+		t.Errorf("Base = %q, want origin/dev", wt.Base)
+	}
+
+	got, err := f.svc.Base(t.Context(), wt)
+	if err != nil {
+		t.Fatalf("Base() = %v, want nil", err)
+	}
+	if got != "origin/dev" {
+		t.Errorf("Base() = %q, want what the worktree was registered with", got)
+	}
+}
+
+func TestBaseAppliesTheRuleAgainForAWorktreeRegisteredBeforeTheColumn(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, false)
+
+	wt := f.ensure(t)
+	wt.Base = ""
+
+	got, err := f.svc.Base(t.Context(), wt)
+	if err != nil {
+		t.Fatalf("Base() = %v, want nil", err)
+	}
+	// The origin of this fixture has no dev, so the rule falls back to main.
+	if got != "origin/main" {
+		t.Errorf("Base() = %q, want origin/main", got)
+	}
+}
+
+func TestBaseFailsForARepositoryWithNoBaseBranchLeft(t *testing.T) {
+	t.Parallel()
+
+	ws := t.TempDir()
+	f := newFixtureOf(t, ws, repoWithoutBase(t, ws))
+
+	wt := worktree.Worktree{TaskID: "task-1", RepoPath: f.repo.Path, Path: f.repo.Path, Branch: taskName}
+	if _, err := f.svc.Base(t.Context(), wt); !errors.Is(err, worktree.ErrNoBaseBranch) {
+		t.Errorf("Base() = %v, want ErrNoBaseBranch", err)
+	}
+}
+
+func TestAheadCountsTheCommitsOfTheWorktreeBranch(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, true)
+
+	wt := f.ensure(t)
+	got, err := f.svc.Ahead(t.Context(), wt, wt.Base)
+	if err != nil {
+		t.Fatalf("Ahead() = %v, want nil", err)
+	}
+	if got != 0 {
+		t.Errorf("Ahead() = %d, want 0 for a branch with nothing on it yet", got)
+	}
+
+	gittest.Commit(t, wt.Path, "one.go", "package one\n", "Add one")
+	if got, err = f.svc.Ahead(t.Context(), wt, wt.Base); err != nil || got != 1 {
+		t.Errorf("Ahead() = %d, %v, want 1, nil after a commit", got, err)
+	}
+}

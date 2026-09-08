@@ -32,6 +32,7 @@ type Worktree struct {
 	RepoPath  string // the repository it was added to, absolute
 	Path      string // absolute
 	Branch    string // the task name
+	Base      string // the ref the branch was created from, e.g. origin/dev
 	CreatedAt time.Time
 }
 

@@ -450,3 +450,35 @@ func TestExcludePathPointsInsideTheGitDirectory(t *testing.T) {
 		t.Errorf("ExcludePath = %q, want %q", got, want)
 	}
 }
+
+func TestCountCommitsCountsWhatABranchHasPastItsBase(t *testing.T) {
+	t.Parallel()
+	runner, dir := repo(t)
+
+	gittest.Run(t, dir, "checkout", "--quiet", "-b", "login-screen", "origin/dev")
+	if got, err := runner.CountCommits(t.Context(), dir, "origin/dev", "login-screen"); err != nil || got != 0 {
+		t.Fatalf("CountCommits() = %d, %v, want 0, nil on a branch that just started", got, err)
+	}
+
+	gittest.Commit(t, dir, "one.go", "package one\n", "Add one")
+	gittest.Commit(t, dir, "two.go", "package two\n", "Add two")
+
+	got, err := runner.CountCommits(t.Context(), dir, "origin/dev", "login-screen")
+	if err != nil {
+		t.Fatalf("CountCommits() = %v, want nil", err)
+	}
+	if got != 2 {
+		t.Errorf("CountCommits() = %d, want the 2 commits of the branch", got)
+	}
+}
+
+func TestCountCommitsReportsARefThatIsNotThere(t *testing.T) {
+	t.Parallel()
+	runner, dir := repo(t)
+
+	_, err := runner.CountCommits(t.Context(), dir, "origin/dev", "no-such-branch")
+	var gitErr *git.Error
+	if !errors.As(err, &gitErr) {
+		t.Errorf("CountCommits() = %v, want *git.Error", err)
+	}
+}
