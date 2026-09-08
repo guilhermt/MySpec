@@ -37,6 +37,7 @@ func readyToApprove(t *testing.T, f *fixture, plan task.Plan, snap review.Snapsh
 	implementing(f, "task-1", plan)
 	f.service.Sync(t.Context())
 	f.waitStep(t, "task-1", 1, flow.StepImplementing)
+	f.waitStepSession(t, "task-1", 1)
 	f.sessions.goIdle("task-1")
 }
 
@@ -67,6 +68,7 @@ func TestAStepIsNotApprovedBeforeItIsWholeRead(t *testing.T) {
 			implementing(f, "task-1", twoStepPlan())
 			f.service.Sync(t.Context())
 			f.waitStep(t, "task-1", 1, flow.StepImplementing)
+			f.waitStepSession(t, "task-1", 1)
 			f.sessions.goIdle("task-1")
 
 			wantErrIs(t, f.service.ApproveStep(t.Context(), "task-1"), flow.ErrStepNotReady)

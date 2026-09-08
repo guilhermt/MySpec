@@ -31,6 +31,7 @@ func awaitingReview(t *testing.T, f *fixture) {
 	implementing(f, "task-1", twoStepPlan())
 	f.service.Sync(t.Context())
 	f.waitStep(t, "task-1", 1, flow.StepImplementing)
+	f.waitStepSession(t, "task-1", 1)
 	f.sessions.goIdle("task-1")
 }
 
@@ -184,6 +185,7 @@ func TestTheWorktreeIsWatchedOnlyWhileItsNumbersMatter(t *testing.T) {
 		return watched && !active
 	})
 
+	f.waitStepSession(t, "task-1", 1)
 	f.sessions.goIdle("task-1")
 	f.service.Check("task-1")
 	waitFor(t, "the review of task-1 to matter", func() bool {

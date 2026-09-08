@@ -42,7 +42,7 @@ func TestAFinishedPlanStartsTheFirstStepInItsWorktree(t *testing.T) {
 	f.waitStep(t, "task-1", 1, flow.StepImplementing)
 
 	f.waitWorktreeCalls(t, "ensure:task-1:api", "status:task-1:task-1")
-	f.wantCalls(t, "close:task-1", "start:task-1:step:1:restarted=false")
+	f.waitCalls(t, "close:task-1", "start:task-1:step:1:restarted=false")
 
 	state := f.stepState(t, "task-1", 1)
 	if want := worktree.Path(workspace, "api", "task-1"); state.WorktreePath != want {
@@ -65,6 +65,7 @@ func TestAnIdleStepSessionIsAwaitingReview(t *testing.T) {
 
 	f.service.Sync(t.Context())
 	f.waitStep(t, "task-1", 1, flow.StepImplementing)
+	f.waitStepSession(t, "task-1", 1)
 
 	f.sessions.goIdle("task-1")
 	if got := f.stepState(t, "task-1", 1).Status; got != flow.StepAwaitingReview {
@@ -166,7 +167,7 @@ func TestSyncStartsAStepTheAppNeverRecorded(t *testing.T) {
 	f.service.Sync(t.Context())
 	f.waitStep(t, "task-1", 1, flow.StepImplementing)
 
-	f.wantCalls(t, "start:task-1:step:1:restarted=false")
+	f.waitCalls(t, "start:task-1:step:1:restarted=false")
 }
 
 func TestSyncResumesAnInterruptedPreparationOnlyOnce(t *testing.T) {
@@ -308,7 +309,7 @@ func TestRetryStepPreparesABlockedStepAgain(t *testing.T) {
 	f.waitStep(t, "task-1", 1, flow.StepImplementing)
 
 	f.waitWorktreeCalls(t, "ensure:task-1:api", "ensure:task-1:api", "status:task-1:task-1")
-	f.wantCalls(t, "start:task-1:step:1:restarted=false")
+	f.waitCalls(t, "start:task-1:step:1:restarted=false")
 }
 
 func TestRetryStepOfAStepThatIsNotBlockedIsRefused(t *testing.T) {
@@ -361,7 +362,7 @@ func TestCleanAndStartStepDiscardsTheChangesAndStarts(t *testing.T) {
 		"ensure:task-1:api", "status:task-1:task-1",
 		"ensure:task-1:api", "clean:task-1:task-1", "status:task-1:task-1",
 	)
-	f.wantCalls(t, "start:task-1:step:1:restarted=false")
+	f.waitCalls(t, "start:task-1:step:1:restarted=false")
 }
 
 func TestCleanAndStartStepOfABlockThatIsNotDirtIsRefused(t *testing.T) {
@@ -385,6 +386,7 @@ func TestDiscardStepStartsTheStepOverInACleanWorktree(t *testing.T) {
 
 	f.service.Sync(t.Context())
 	f.waitStep(t, "task-1", 1, flow.StepImplementing)
+	f.waitStepSession(t, "task-1", 1)
 
 	f.worktrees.setStatus(git.Status{Changes: []git.Change{{X: '?', Y: '?', Path: "scratch.md"}}})
 	if err := f.service.DiscardStep(t.Context(), "task-1", true); err != nil {
@@ -411,6 +413,7 @@ func TestDiscardStepWithoutCleaningLeavesADirtyWorktreeBlocked(t *testing.T) {
 
 	f.service.Sync(t.Context())
 	f.waitStep(t, "task-1", 1, flow.StepImplementing)
+	f.waitStepSession(t, "task-1", 1)
 
 	f.worktrees.setStatus(git.Status{Changes: []git.Change{{X: '?', Y: '?', Path: "scratch.md"}}})
 	if err := f.service.DiscardStep(t.Context(), "task-1", false); err != nil {
@@ -475,6 +478,7 @@ func TestDiscardingThePlanTearsTheStepsDownFirst(t *testing.T) {
 
 	f.service.Sync(t.Context())
 	f.waitStep(t, "task-1", 1, flow.StepImplementing)
+	f.waitStepSession(t, "task-1", 1)
 
 	if err := f.service.Discard(t.Context(), "task-1", task.StagePlan); err != nil {
 		t.Fatalf("Discard: %v", err)
@@ -501,6 +505,7 @@ func TestBackToTheTechSpecTearsTheStepsDownFirst(t *testing.T) {
 
 	f.service.Sync(t.Context())
 	f.waitStep(t, "task-1", 1, flow.StepImplementing)
+	f.waitStepSession(t, "task-1", 1)
 
 	if err := f.service.Back(t.Context(), "task-1", task.StageTechSpec); err != nil {
 		t.Fatalf("Back: %v", err)
@@ -524,6 +529,7 @@ func TestAWorktreeThatCannotBeRemovedKeepsEverythingAndReopensTheSession(t *test
 
 	f.service.Sync(t.Context())
 	f.waitStep(t, "task-1", 1, flow.StepImplementing)
+	f.waitStepSession(t, "task-1", 1)
 
 	errRemove := errors.New("git worktree remove --force /ws: fatal: is dirty")
 	f.worktrees.failRemoveAll(errRemove)
@@ -575,6 +581,7 @@ func TestDeleteTearsTheStepsDownAndRemovesTheTask(t *testing.T) {
 
 	f.service.Sync(t.Context())
 	f.waitStep(t, "task-1", 1, flow.StepImplementing)
+	f.waitStepSession(t, "task-1", 1)
 
 	if err := f.service.Delete(t.Context(), "task-1"); err != nil {
 		t.Fatalf("Delete: %v", err)

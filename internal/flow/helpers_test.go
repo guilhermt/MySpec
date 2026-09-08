@@ -832,6 +832,20 @@ func (f *fixture) waitStep(t *testing.T, id string, number int, status flow.Step
 	})
 }
 
+// waitStepSession polls until the session of a step has been opened. Starting a
+// step records the run before it starts the session, so a test that waits on
+// the status alone can still be ahead of the Start call, and whatever it does
+// to the session then is overwritten by it.
+func (f *fixture) waitStepSession(t *testing.T, id string, number int) {
+	t.Helper()
+
+	stage := session.StepStage(number)
+	waitFor(t, "the session of step "+strconv.Itoa(number)+" of "+id, func() bool {
+		sum, ok := f.sessions.Summary(id)
+		return ok && sum.Stage == stage
+	})
+}
+
 // stepState is the state of a step of a task, failing the test when the plan
 // has no such step.
 func (f *fixture) stepState(t *testing.T, id string, number int) flow.StepState {

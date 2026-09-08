@@ -404,16 +404,7 @@ func TestPRDWrittenStartsTheTechSpec(t *testing.T) {
 		t.Errorf("task = %+v, want the PRD written and no revisit", summary)
 	}
 
-	transcript, err := f.tasks.GetTranscript(id)
-	if err != nil {
-		t.Fatalf("GetTranscript(%s) = %v, want nil", id, err)
-	}
-	if transcript.Stage != "tech_spec" {
-		t.Errorf("stage = %q, want tech_spec", transcript.Stage)
-	}
-	if len(transcript.Entries) == 0 {
-		t.Fatal("the conversation of the tech spec is empty")
-	}
+	transcript := f.waitTranscript(t, id, "tech_spec")
 	marker := transcript.Entries[0].Marker
 	if marker == nil || marker.Type != "stage_started" || marker.Stage != "tech_spec" || marker.Restarted {
 		t.Errorf("first entry = %+v, want the stage_started of the tech spec", transcript.Entries[0])
@@ -490,16 +481,7 @@ func TestTheConversationOfAStepIsItsOwn(t *testing.T) {
 	f, _, id := plannedTask(t)
 	f.waitStep(t, id, 1, "awaiting_review")
 
-	transcript, err := f.tasks.GetTranscript(id)
-	if err != nil {
-		t.Fatalf("GetTranscript(%s) = %v, want nil", id, err)
-	}
-	if transcript.Stage != "step:1" {
-		t.Errorf("stage = %q, want step:1", transcript.Stage)
-	}
-	if len(transcript.Entries) == 0 {
-		t.Fatal("the conversation of the step is empty")
-	}
+	transcript := f.waitTranscript(t, id, "step:1")
 	marker := transcript.Entries[0].Marker
 	if marker == nil || marker.Type != "step_started" || marker.Step != 1 || marker.Restarted {
 		t.Errorf("first entry = %+v, want the first step_started of step 1", transcript.Entries[0])
@@ -862,13 +844,7 @@ func TestDiscardRestartsTheStage(t *testing.T) {
 		t.Errorf("Stat(%s) = %v, want the PRD to be gone", path, err)
 	}
 
-	transcript, err := f.tasks.GetTranscript(id)
-	if err != nil {
-		t.Fatalf("GetTranscript(%s) = %v, want nil", id, err)
-	}
-	if len(transcript.Entries) == 0 {
-		t.Fatal("the conversation of the restarted PRD is empty")
-	}
+	transcript := f.waitTranscript(t, id, "prd")
 	marker := transcript.Entries[0].Marker
 	if marker == nil || marker.Type != "stage_started" || marker.Stage != "prd" || !marker.Restarted {
 		t.Errorf("first entry = %+v, want a restarted stage_started of the PRD", transcript.Entries[0])

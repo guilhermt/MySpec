@@ -429,6 +429,31 @@ func (f *fixture) repoPaths() []string {
 
 // taskOf returns the task with the given id from the current state, failing
 // the test when the state does not hold it.
+// waitTranscript waits until the conversation of a stage of a task has been
+// opened. The stage of the task is recorded before the session behind it writes
+// its first entry, so a test that waits on the stage alone can read the
+// conversation while it is still empty.
+func (f *fixture) waitTranscript(t *testing.T, id, stage string) bindings.Transcript {
+	t.Helper()
+
+	deadline := time.Now().Add(pollTimeout)
+	last := bindings.Transcript{}
+	for time.Now().Before(deadline) {
+		transcript, err := f.tasks.GetTranscript(id)
+		if err != nil {
+			t.Fatalf("GetTranscript(%s) = %v, want nil", id, err)
+		}
+		last = transcript
+		if transcript.Stage == stage && len(transcript.Entries) > 0 {
+			return transcript
+		}
+		time.Sleep(pollStep)
+	}
+	t.Fatalf("conversation of task %s = stage %q with %d entries, want %q with entries",
+		id, last.Stage, len(last.Entries), stage)
+	return bindings.Transcript{}
+}
+
 func (f *fixture) taskOf(t *testing.T, id string) bindings.TaskSummary {
 	t.Helper()
 
