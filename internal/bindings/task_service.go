@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/guilhermt/myspec/internal/editor"
@@ -17,6 +19,10 @@ import (
 // removeTimeout bounds the calls that remove worktrees: they run git, and a
 // removal is far slower than the database work callTimeout was written for.
 const removeTimeout = time.Minute
+
+// errPathOutside is a file the frontend asked for that is not in the worktree
+// of the step.
+var errPathOutside = errors.New("bindings: the path is outside the worktree")
 
 // Editor opens a folder, or a folder and a file, in the user's editor.
 // internal/app passes editor.Open.
@@ -199,6 +205,40 @@ func (s *TaskService) OpenInEditor(taskID string) error {
 	return nil
 }
 
+// ApproveStep approves the review of the current step of a task and asks the
+// agent to commit what is staged.
+func (s *TaskService) ApproveStep(taskID string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+
+	if err := s.flow.ApproveStep(ctx, taskID); err != nil {
+		return s.fail("ApproveStep", err)
+	}
+	return nil
+}
+
+// OpenFileInEditor opens one file of the worktree of the current step in the
+// editor, in the window of that worktree.
+func (s *TaskService) OpenFileInEditor(taskID, path string) error {
+	step, ok := s.flow.CurrentStep(taskID)
+	if !ok {
+		return s.fail("OpenFileInEditor", fmt.Errorf("open a file of task %s: %w", taskID, flow.ErrNoStep))
+	}
+	if step.WorktreePath == "" {
+		return s.fail("OpenFileInEditor", fmt.Errorf("open a file of task %s: %w", taskID, flow.ErrNoWorktree))
+	}
+	// The path comes from the frontend, which only ever has paths git reported
+	// inside the worktree; anything else is not this step's to open.
+	clean := filepath.Clean(path)
+	if filepath.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+		return s.fail("OpenFileInEditor", fmt.Errorf("open %q of task %s: %w", path, taskID, errPathOutside))
+	}
+	if err := s.editor(step.WorktreePath, filepath.Join(step.WorktreePath, clean)); err != nil {
+		return s.fail("OpenFileInEditor", err)
+	}
+	return nil
+}
+
 // SendMessage queues a message for the agent, delivered right away when the
 // session is free.
 func (s *TaskService) SendMessage(taskID, text string) error {
@@ -338,6 +378,9 @@ var userMessages = []struct {
 	{flow.ErrStepNotDirty, "The worktree isn't what blocks the step."},
 	{flow.ErrStepNotStarted, "The step hasn't started yet."},
 	{flow.ErrNoWorktree, "The worktree doesn't exist yet."},
+	{flow.ErrStepNotReady, "Stage every changed file before approving."},
+	{flow.ErrStepBusy, "Wait for the agent to finish."},
+	{errPathOutside, "This file is not in the worktree of the step."},
 	{editor.ErrNotFound, "VS Code was not found: `code` isn't on the PATH."},
 	{git.ErrNotFound, "Git was not found on the PATH."},
 }

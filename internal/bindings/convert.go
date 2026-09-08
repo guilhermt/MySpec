@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/guilhermt/myspec/internal/flow"
+	"github.com/guilhermt/myspec/internal/review"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
 	"github.com/guilhermt/myspec/internal/workspace"
@@ -101,9 +102,33 @@ func fromSteps(states []flow.StepState) []Step {
 			Phase:        string(state.Phase),
 			Block:        fromBlock(state.Block),
 			WorktreePath: state.WorktreePath,
+
+			Review:        fromReview(state.Review),
+			CommitSHA:     state.CommitSHA,
+			CommitSubject: state.CommitSubject,
+			CommitFailed:  state.CommitFailed,
 		}
 	}
 	return converted
+}
+
+// fromReview converts the last reading of the worktree of a step, keeping nil
+// for a step with no reading to show.
+func fromReview(snap *review.Snapshot) *Review {
+	if snap == nil {
+		return nil
+	}
+	files := make([]ReviewFile, len(snap.Files))
+	for i, file := range snap.Files {
+		files[i] = ReviewFile{Path: file.Path, Kind: string(file.Kind), Staged: file.Staged}
+	}
+	return &Review{
+		Files:   files,
+		Staged:  snap.Staged,
+		Total:   snap.Total,
+		Percent: snap.Percent(),
+		Error:   snap.Err,
+	}
 }
 
 // fromBlock converts why a step is blocked, keeping nil for a step that is not.
@@ -114,13 +139,16 @@ func fromBlock(block *task.StepBlock) *StepBlock {
 	return &StepBlock{Reason: string(block.Reason), Detail: block.Detail, Files: block.Files}
 }
 
-// currentStep is the number of the step that runs or runs next, 0 for a task
-// with no steps.
+// currentStep is the number of the step that runs or runs next: the first one
+// that is not done. It is 0 for a task with no steps and for one whose steps
+// are all committed.
 func currentStep(states []flow.StepState) int {
-	if len(states) == 0 {
-		return 0
+	for _, state := range states {
+		if state.Status != flow.StepDone {
+			return state.Step.Number
+		}
 	}
-	return states[0].Step.Number
+	return 0
 }
 
 // fromProblems converts the reasons a plan is not valid, always returning a

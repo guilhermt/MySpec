@@ -348,21 +348,45 @@ func (f *fixture) waitStage(t *testing.T, id, stage string) {
 func (f *fixture) waitStep(t *testing.T, id string, number int, status string) bindings.Step {
 	t.Helper()
 
+	return f.waitStepWhere(t, id, number, "status "+status, func(step bindings.Step) bool {
+		return step.Status == status
+	})
+}
+
+// waitReviewed waits until a step of a task is the user's to review: the agent
+// has stopped and the reading of its worktree has landed with what it wrote.
+// Waiting for the reading is what tells the turn of the step apart from the
+// idle moment before it starts.
+func (f *fixture) waitReviewed(t *testing.T, id string, number int) bindings.Step {
+	t.Helper()
+
+	return f.waitStepWhere(t, id, number, "the reading of its worktree", func(step bindings.Step) bool {
+		return step.Status == "awaiting_review" && step.Review != nil && step.Review.Total > 0
+	})
+}
+
+// waitStepWhere waits until a step of a task is what cond says, failing the
+// test with subject when it never is.
+func (f *fixture) waitStepWhere(
+	t *testing.T, id string, number int, subject string, cond func(bindings.Step) bool,
+) bindings.Step {
+	t.Helper()
+
 	deadline := time.Now().Add(pollTimeout)
-	last := ""
+	last := bindings.Step{}
 	for time.Now().Before(deadline) {
 		for _, step := range f.taskOf(t, id).Steps {
 			if step.Number != number {
 				continue
 			}
-			last = step.Status
-			if last == status {
+			last = step
+			if cond(step) {
 				return step
 			}
 		}
 		time.Sleep(pollStep)
 	}
-	t.Fatalf("status of step %d of task %s = %q, want %q", number, id, last, status)
+	t.Fatalf("step %d of task %s = %+v, want %s", number, id, last, subject)
 	return bindings.Step{}
 }
 

@@ -424,7 +424,7 @@ func TestPlanWrittenReachesImplementation(t *testing.T) {
 	t.Parallel()
 
 	f, dir, id := plannedTask(t)
-	f.waitStep(t, id, 1, "awaiting_review")
+	f.waitReviewed(t, id, 1)
 
 	summary := f.taskOf(t, id)
 	if !summary.HasPRD || !summary.HasTechSpec {
@@ -442,6 +442,11 @@ func TestPlanWrittenReachesImplementation(t *testing.T) {
 		{
 			Number: 1, File: "1-first.md", Title: "First",
 			Repository: "api", RepoPath: repo, Status: "awaiting_review", WorktreePath: wt,
+			// The step wrote hello.txt and nobody has staged it yet.
+			Review: &bindings.Review{
+				Files: []bindings.ReviewFile{{Path: "hello.txt", Kind: "untracked"}},
+				Total: 1,
+			},
 		},
 		{
 			Number: 2, File: "2-second.md", Title: "Second",
@@ -457,7 +462,7 @@ func TestAStepRunsInAWorktreeOfItsRepository(t *testing.T) {
 	t.Parallel()
 
 	f, dir, id := plannedTask(t)
-	step := f.waitStep(t, id, 1, "awaiting_review")
+	step := f.waitReviewed(t, id, 1)
 
 	wt := worktree.Path(dir, "api", "login-screen")
 	if step.WorktreePath != wt {
@@ -505,7 +510,7 @@ func TestDiscardingAStepBlocksOnTheWorkItLeftBehind(t *testing.T) {
 	t.Parallel()
 
 	f, dir, id := plannedTask(t)
-	f.waitStep(t, id, 1, "awaiting_review")
+	f.waitReviewed(t, id, 1)
 
 	// The step wrote hello.txt, so its worktree is dirty and starting over
 	// without cleaning it cannot go through.
@@ -523,7 +528,7 @@ func TestDiscardingAStepBlocksOnTheWorkItLeftBehind(t *testing.T) {
 	if err := f.tasks.CleanAndStartStep(id); err != nil {
 		t.Fatalf("CleanAndStartStep(%s) = %v, want nil", id, err)
 	}
-	f.waitStep(t, id, 1, "awaiting_review")
+	f.waitReviewed(t, id, 1)
 
 	// The new session ran the step file again, in the cleaned worktree.
 	path := filepath.Join(worktree.Path(dir, "api", "login-screen"), "hello.txt")
@@ -582,6 +587,121 @@ func TestOpenInEditorOpensTheWorktreeOfTheStep(t *testing.T) {
 	want := []string{worktree.Path(dir, "api", "login-screen")}
 	if diff := cmp.Diff(want, planned.editor.opened()); diff != "" {
 		t.Errorf("opened folders mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestApprovingAStepSendsTheCommitPromptToTheAgent(t *testing.T) {
+	t.Parallel()
+
+	f, dir, id := plannedTask(t)
+	f.seedPrompt(t, prompts.StageCommit, "Commit what is staged of {{task_name}}.")
+	f.waitReviewed(t, id, 1)
+
+	// The step wrote hello.txt; staging it is the user reading it.
+	wt := worktree.Path(dir, "api", "login-screen")
+	gittest.Run(t, wt, "add", "hello.txt")
+
+	step := f.waitStep(t, id, 1, "ready_to_approve")
+	want := &bindings.Review{
+		Files:   []bindings.ReviewFile{{Path: "hello.txt", Kind: "added", Staged: true}},
+		Staged:  1,
+		Total:   1,
+		Percent: 100,
+	}
+	if diff := cmp.Diff(want, step.Review); diff != "" {
+		t.Errorf("review mismatch (-want +got):\n%s", diff)
+	}
+
+	if err := f.tasks.ApproveStep(id); err != nil {
+		t.Fatalf("ApproveStep(%s) = %v, want nil", id, err)
+	}
+	// The fake agent answers without committing, so the branch stays where it
+	// was and the app hands the step back with the warning.
+	after := f.waitStepWhere(t, id, 1, "the step back with the commit warning", func(step bindings.Step) bool {
+		return step.Status == "ready_to_approve" && step.CommitFailed
+	})
+	if after.Review == nil || after.Review.Percent != 100 {
+		t.Errorf("review = %+v, want the reading that was there before", after.Review)
+	}
+
+	transcript, err := f.tasks.GetTranscript(id)
+	if err != nil {
+		t.Fatalf("GetTranscript(%s) = %v, want nil", id, err)
+	}
+	if !hasAppMessage(transcript.Entries, "Commit what is staged of login-screen.") {
+		t.Error("the commit prompt did not reach the conversation as a message of the app")
+	}
+}
+
+func TestApprovingAStepThatIsNotWholeReadTellsTheUser(t *testing.T) {
+	t.Parallel()
+
+	f, _, id := plannedTask(t)
+	// The step wrote a file nobody has staged: there is nothing to approve.
+	f.waitReviewed(t, id, 1)
+
+	err := f.tasks.ApproveStep(id)
+	if err == nil || err.Error() != "Stage every changed file before approving." {
+		t.Errorf("ApproveStep() error = %v, want the unfinished review notice", err)
+	}
+	if f.logged(t, "binding failed") {
+		t.Error("a mistake the user can correct was logged as a failure")
+	}
+}
+
+func TestOpenFileInEditorOpensTheFileInTheWindowOfTheWorktree(t *testing.T) {
+	t.Parallel()
+
+	f, dir, id := plannedTask(t)
+	f.waitReviewed(t, id, 1)
+
+	if err := f.tasks.OpenFileInEditor(id, "hello.txt"); err != nil {
+		t.Fatalf("OpenFileInEditor(%s) = %v, want nil", id, err)
+	}
+	wt := worktree.Path(dir, "api", "login-screen")
+	want := []string{wt + " " + filepath.Join(wt, "hello.txt")}
+	if diff := cmp.Diff(want, f.editor.opened()); diff != "" {
+		t.Errorf("opened paths mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestOpenFileInEditorRefusesWhatIsNotOfTheStep(t *testing.T) {
+	t.Parallel()
+
+	f, _, id := plannedTask(t)
+	f.waitReviewed(t, id, 1)
+
+	tests := []struct {
+		name string
+		path string
+	}{
+		{"an absolute path", "/etc/passwd"},
+		{"a path that goes up", "../secrets.txt"},
+		{"a path that goes up the long way", "sub/../../secrets.txt"},
+		{"the parent of the worktree", ".."},
+	}
+
+	for _, tt := range tests {
+		err := f.tasks.OpenFileInEditor(id, tt.path)
+		if err == nil || err.Error() != "This file is not in the worktree of the step." {
+			t.Errorf("%s: error = %v, want the outside notice", tt.name, err)
+		}
+	}
+	if opened := f.editor.opened(); len(opened) != 0 {
+		t.Errorf("opened paths = %q, want none", opened)
+	}
+	if f.logged(t, "binding failed") {
+		t.Error("a mistake the user can correct was logged as a failure")
+	}
+}
+
+func TestOpenFileInEditorNeedsAStepWithAWorktree(t *testing.T) {
+	t.Parallel()
+
+	f, _, id := createdTask(t)
+	err := f.tasks.OpenFileInEditor(id, "hello.txt")
+	if err == nil || err.Error() != "The task has no step to run." {
+		t.Errorf("OpenFileInEditor() error = %v, want the missing step notice", err)
 	}
 }
 

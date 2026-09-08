@@ -226,6 +226,42 @@ export interface Repo {
 }
 
 /**
+ * Review is how far the review of a step has got.
+ */
+export interface Review {
+    /**
+     * never nil
+     */
+    "files": ReviewFile[] | null;
+    "staged": number;
+    "total": number;
+    "percent": number;
+
+    /**
+     * what git said when the worktree could not be read
+     */
+    "error": string;
+}
+
+/**
+ * ReviewFile is one changed file of the worktree of a step under review.
+ */
+export interface ReviewFile {
+    "path": string;
+
+    /**
+     * Kind is added, modified, deleted, renamed or untracked, a string for the
+     * same reason as Notice.Reason.
+     */
+    "kind": string;
+
+    /**
+     * nothing of it is left outside the index
+     */
+    "staged": boolean;
+}
+
+/**
  * State is everything the interface renders, produced by Go and never derived
  * on the frontend.
  */
@@ -274,8 +310,9 @@ export interface Step {
     "repoPath": string;
 
     /**
-     * Status is not_started, preparing, blocked, implementing or
-     * awaiting_review, a string for the same reason as Notice.Reason.
+     * Status is not_started, preparing, blocked, implementing, awaiting_review,
+     * in_review, ready_to_approve, nothing_to_commit, review_failed,
+     * committing or done, a string for the same reason as Notice.Reason.
      */
     "status": string;
 
@@ -293,6 +330,26 @@ export interface Step {
      * "" until the worktree exists
      */
     "worktreePath": string;
+
+    /**
+     * the review states and committing only
+     */
+    "review": Review | null;
+
+    /**
+     * done only
+     */
+    "commitSha": string;
+
+    /**
+     * done only
+     */
+    "commitSubject": string;
+
+    /**
+     * the last approval ended without a commit
+     */
+    "commitFailed": boolean;
 }
 
 /**

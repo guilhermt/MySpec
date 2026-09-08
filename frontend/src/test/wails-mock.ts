@@ -162,6 +162,10 @@ export function makeStep(overrides: Partial<Step> = {}): Step {
     phase: "",
     block: null,
     worktreePath: "",
+    review: null,
+    commitSha: "",
+    commitSubject: "",
+    commitFailed: false,
     ...overrides,
   };
 }

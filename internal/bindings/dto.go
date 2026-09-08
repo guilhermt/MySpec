@@ -60,6 +60,24 @@ type StepBlock struct {
 	Files  int    `json:"files"`  // dirty worktree only
 }
 
+// ReviewFile is one changed file of the worktree of a step under review.
+type ReviewFile struct {
+	Path string `json:"path"`
+	// Kind is added, modified, deleted, renamed or untracked, a string for the
+	// same reason as Notice.Reason.
+	Kind   string `json:"kind"`
+	Staged bool   `json:"staged"` // nothing of it is left outside the index
+}
+
+// Review is how far the review of a step has got.
+type Review struct {
+	Files   []ReviewFile `json:"files"` // never nil
+	Staged  int          `json:"staged"`
+	Total   int          `json:"total"`
+	Percent int          `json:"percent"`
+	Error   string       `json:"error"` // what git said when the worktree could not be read
+}
+
 // Step is one step of the plan of a task.
 type Step struct {
 	Number int    `json:"number"`
@@ -69,13 +87,19 @@ type Step struct {
 	// repository of the task matches it.
 	Repository string `json:"repository"`
 	RepoPath   string `json:"repoPath"`
-	// Status is not_started, preparing, blocked, implementing or
-	// awaiting_review, a string for the same reason as Notice.Reason.
+	// Status is not_started, preparing, blocked, implementing, awaiting_review,
+	// in_review, ready_to_approve, nothing_to_commit, review_failed,
+	// committing or done, a string for the same reason as Notice.Reason.
 	Status string `json:"status"`
 	// Phase is fetching, creating or checking while preparing; "" otherwise.
 	Phase        string     `json:"phase"`
 	Block        *StepBlock `json:"block"`        // blocked only
 	WorktreePath string     `json:"worktreePath"` // "" until the worktree exists
+
+	Review        *Review `json:"review"`        // the review states and committing only
+	CommitSHA     string  `json:"commitSha"`     // done only
+	CommitSubject string  `json:"commitSubject"` // done only
+	CommitFailed  bool    `json:"commitFailed"`  // the last approval ended without a commit
 }
 
 // PlanProblem is one reason the step files are not a valid plan.
