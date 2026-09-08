@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/guilhermt/myspec/internal/flow"
+	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/review"
@@ -45,6 +46,7 @@ type memTasks struct {
 	items     []task.Task
 	artifacts map[string]task.Artifacts
 	runs      map[string][]task.StepRun
+	prs       map[string][]task.PRRun
 	calls     []string
 	err       error         // returned by every mutation
 	block     chan struct{} // when set, Inspect waits on it
@@ -52,7 +54,11 @@ type memTasks struct {
 }
 
 func newTasks() *memTasks {
-	return &memTasks{artifacts: map[string]task.Artifacts{}, runs: map[string][]task.StepRun{}}
+	return &memTasks{
+		artifacts: map[string]task.Artifacts{},
+		runs:      map[string][]task.StepRun{},
+		prs:       map[string][]task.PRRun{},
+	}
 }
 
 func (m *memTasks) Get(id string) (task.Task, bool) {
@@ -121,6 +127,8 @@ func (m *memTasks) RemoveArtifacts(_ context.Context, id string, from task.Stage
 		case task.StagePlan:
 			a.Plan = task.Plan{}
 		case task.StageImplementation:
+		case task.StagePR:
+			a.PR = nil
 		}
 	}
 	m.artifacts[id] = a
@@ -137,6 +145,99 @@ func (m *memTasks) Artifacts(id string) (task.Artifacts, bool) {
 
 func (m *memTasks) Repositories(task.Task) []task.Repository {
 	return repos
+}
+
+func (m *memTasks) PRRuns(id string) []task.PRRun {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return slices.Clone(m.prs[id])
+}
+
+func (m *memTasks) SetPRRun(
+	_ context.Context, id, repoPath string, status task.PRStatus, block *task.PRBlock,
+) (task.PRRun, error) {
+	return m.updatePRRun(id, repoPath, "pr:"+string(status), func(run *task.PRRun) {
+		run.Status, run.Block = status, block
+	})
+}
+
+func (m *memTasks) SetPRDetails(_ context.Context, id, repoPath string, pr task.PRDetails) (task.PRRun, error) {
+	return m.updatePRRun(id, repoPath, "prDetails", func(run *task.PRRun) { run.PR = pr })
+}
+
+func (m *memTasks) SetPRReviewed(_ context.Context, id, repoPath, commit string, pass int) (task.PRRun, error) {
+	return m.updatePRRun(id, repoPath, "prReviewed:"+strconv.Itoa(pass), func(run *task.PRRun) {
+		run.ReviewedCommit, run.ReportedPass = commit, pass
+	})
+}
+
+func (m *memTasks) ClearPRRuns(_ context.Context, id string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.calls = append(m.calls, "clearPRs:"+id)
+	if m.err != nil {
+		return m.err
+	}
+	delete(m.prs, id)
+	return nil
+}
+
+// updatePRRun records the state of a repository the way task.Service does:
+// what the call says nothing about is kept.
+func (m *memTasks) updatePRRun(
+	id, repoPath, label string, mutate func(*task.PRRun),
+) (task.PRRun, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.calls = append(m.calls, label+":"+id+":"+filepath.Base(repoPath))
+	if m.err != nil {
+		return task.PRRun{}, m.err
+	}
+
+	runs := m.prs[id]
+	run := task.PRRun{TaskID: id, RepoPath: repoPath}
+	index := slices.IndexFunc(runs, func(r task.PRRun) bool { return r.RepoPath == repoPath })
+	if index >= 0 {
+		run = runs[index]
+	}
+	mutate(&run)
+
+	if index < 0 {
+		// task.Service keeps the runs by repository path, and so does the fake.
+		position, _ := slices.BinarySearchFunc(runs, run, func(a, b task.PRRun) int {
+			return strings.Compare(a.RepoPath, b.RepoPath)
+		})
+		m.prs[id] = slices.Insert(runs, position, run)
+	} else {
+		runs[index] = run
+	}
+	return run, nil
+}
+
+// prRun is what the fake recorded about a repository, if anything.
+func (m *memTasks) prRun(id, repoPath string) (task.PRRun, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	index := slices.IndexFunc(m.prs[id], func(r task.PRRun) bool { return r.RepoPath == repoPath })
+	if index < 0 {
+		return task.PRRun{}, false
+	}
+	return m.prs[id][index], true
+}
+
+// setPRRun seeds the record of a repository, which is how a test says what the
+// app recorded before it closed.
+func (m *memTasks) setPRRun(id string, run task.PRRun) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	run.TaskID = id
+	m.prs[id] = append(m.prs[id], run)
+	slices.SortFunc(m.prs[id], func(a, b task.PRRun) int { return strings.Compare(a.RepoPath, b.RepoPath) })
 }
 
 func (m *memTasks) StepRuns(id string) []task.StepRun {
@@ -327,13 +428,17 @@ func (m *memTasks) indexOf(id string) int {
 type memSessions struct {
 	mu        sync.Mutex
 	summaries map[session.Key]session.Summary
+	infos     map[session.Key]session.TaskInfo
 	calls     []string
 	messages  []string
 	err       error // returned by every call that changes something
 }
 
 func newSessions() *memSessions {
-	return &memSessions{summaries: map[session.Key]session.Summary{}}
+	return &memSessions{
+		summaries: map[session.Key]session.Summary{},
+		infos:     map[session.Key]session.TaskInfo{},
+	}
 }
 
 func (m *memSessions) Open(_ context.Context, t session.TaskInfo) error {
@@ -344,6 +449,7 @@ func (m *memSessions) Open(_ context.Context, t session.TaskInfo) error {
 	if m.err != nil {
 		return m.err
 	}
+	m.infos[t.Key()] = t
 	if _, ok := m.summaries[t.Key()]; !ok {
 		m.summaries[t.Key()] = session.Summary{
 			TaskID: t.ID, Stage: t.Stage, Status: session.StatusWaiting, Idle: true,
@@ -360,6 +466,7 @@ func (m *memSessions) Start(_ context.Context, t session.TaskInfo, restarted boo
 	if m.err != nil {
 		return m.err
 	}
+	m.infos[t.Key()] = t
 	m.summaries[t.Key()] = session.Summary{TaskID: t.ID, Stage: t.Stage, Status: session.StatusWorking}
 	return nil
 }
@@ -493,6 +600,15 @@ func (m *memSessions) setSummary(taskID string, sum session.Summary) {
 	m.summaries[session.Key{TaskID: taskID, Stage: sum.Stage}] = sum
 }
 
+// info is what the last Open or Start said about a session.
+func (m *memSessions) info(k session.Key) (session.TaskInfo, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	t, ok := m.infos[k]
+	return t, ok
+}
+
 // idle is a session at rest, which is what the end of a stage needs.
 func idle(stage task.Stage) session.Summary {
 	return session.Summary{Stage: string(stage), Status: session.StatusWaiting, Idle: true}
@@ -533,6 +649,10 @@ type memWorktrees struct {
 	items     map[string][]worktree.Worktree // by task id
 	calls     []string
 	status    git.Status
+	base      string // the ref every branch is said to come from
+	ahead     int    // how many commits past the base every branch has
+	baseErr   error
+	aheadErr  error
 	subject   string           // the subject every commit reading answers with
 	phases    []worktree.Phase // reported by every Ensure
 	ensureErr error
@@ -548,6 +668,8 @@ func newWorktrees() *memWorktrees {
 		items:   map[string][]worktree.Worktree{},
 		subject: "Do the work of the step",
 		phases:  []worktree.Phase{worktree.PhaseFetching, worktree.PhaseCreating},
+		base:    "origin/dev",
+		ahead:   1,
 	}
 }
 
@@ -560,6 +682,35 @@ func (m *memWorktrees) Get(taskID, repoPath string) (worktree.Worktree, bool) {
 		return worktree.Worktree{}, false
 	}
 	return m.items[taskID][index], true
+}
+
+func (m *memWorktrees) List(taskID string) []worktree.Worktree {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return slices.Clone(m.items[taskID])
+}
+
+func (m *memWorktrees) Base(_ context.Context, wt worktree.Worktree) (string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.calls = append(m.calls, "base:"+wt.TaskID+":"+filepath.Base(wt.RepoPath))
+	if m.baseErr != nil {
+		return "", m.baseErr
+	}
+	return m.base, nil
+}
+
+func (m *memWorktrees) Ahead(_ context.Context, wt worktree.Worktree, base string) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.calls = append(m.calls, "ahead:"+wt.TaskID+":"+filepath.Base(wt.RepoPath)+":"+base)
+	if m.aheadErr != nil {
+		return 0, m.aheadErr
+	}
+	return m.ahead, nil
 }
 
 func (m *memWorktrees) Ensure(
@@ -646,6 +797,22 @@ func (m *memWorktrees) RemoveAll(_ context.Context, taskID string) error {
 	return nil
 }
 
+// setAhead is how many commits past its base every branch is said to have.
+func (m *memWorktrees) setAhead(n int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.ahead = n
+}
+
+// failAhead makes every count of the commits of a branch fail with err.
+func (m *memWorktrees) failAhead(err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.aheadErr = err
+}
+
 // seed registers a worktree the way a previous run of the app left it.
 func (m *memWorktrees) seed(t task.Task, repo task.Repository) worktree.Worktree {
 	m.mu.Lock()
@@ -656,6 +823,7 @@ func (m *memWorktrees) seed(t task.Task, repo task.Repository) worktree.Worktree
 		RepoPath: repo.Path,
 		Path:     worktree.Path(t.WorkspacePath, repo.Rel, t.Name),
 		Branch:   t.Name,
+		Base:     m.base,
 	}
 	m.items[t.ID] = append(m.items[t.ID], wt)
 	return wt
@@ -785,6 +953,72 @@ func (m *memReviews) reviewCalls() []string {
 	return slices.Clone(m.calls)
 }
 
+// memGH is an in-memory flow.GH: it answers with the login and the pull
+// requests a test seeds, and records what it was asked.
+type memGH struct {
+	mu      sync.Mutex
+	calls   []string
+	authErr error
+	prs     map[string]gh.PR // by branch
+	viewErr error            // returned by every reading that finds no seeded PR
+}
+
+func newGH() *memGH {
+	return &memGH{prs: map[string]gh.PR{}, viewErr: gh.ErrNoPR}
+}
+
+func (m *memGH) Auth(context.Context) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.calls = append(m.calls, "auth")
+	return m.authErr
+}
+
+func (m *memGH) ViewPR(_ context.Context, dir, branch string) (gh.PR, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.calls = append(m.calls, "view:"+filepath.Base(filepath.Dir(dir))+":"+branch)
+	if pr, ok := m.prs[branch]; ok {
+		return pr, nil
+	}
+	return gh.PR{}, m.viewErr
+}
+
+// setPR is the pull request every reading of a branch answers with.
+func (m *memGH) setPR(branch string, pr gh.PR) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.prs[branch] = pr
+}
+
+// failAuth makes every login check fail with err.
+func (m *memGH) failAuth(err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.authErr = err
+}
+
+// failView makes every reading of a branch with no seeded pull request fail
+// with err.
+func (m *memGH) failView(err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.viewErr = err
+}
+
+// ghCalls is what gh was asked, in order.
+func (m *memGH) ghCalls() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return slices.Clone(m.calls)
+}
+
 // commitPrompt is what the fake renderer answers with for the commit stage,
 // with the name of the task so that a test can see the placeholders went
 // through.
@@ -797,6 +1031,7 @@ type fixture struct {
 	sessions  *memSessions
 	worktrees *memWorktrees
 	reviews   *memReviews
+	gh        *memGH
 }
 
 func newFixture(t *testing.T) *fixture {
@@ -807,12 +1042,14 @@ func newFixture(t *testing.T) *fixture {
 		sessions:  newSessions(),
 		worktrees: newWorktrees(),
 		reviews:   newReviews(),
+		gh:        newGH(),
 	}
 	f.service = flow.New(flow.Deps{
 		Tasks:     f.tasks,
 		Sessions:  f.sessions,
 		Worktrees: f.worktrees,
 		Review:    f.reviews,
+		GH:        f.gh,
 		RenderPrompt: func(stage prompts.Stage, vars prompts.Vars) (string, error) {
 			if stage != prompts.StageCommit {
 				return "", errors.New("unexpected prompt stage " + string(stage))

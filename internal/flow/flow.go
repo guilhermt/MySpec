@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/review"
@@ -27,6 +28,11 @@ type Tasks interface {
 	SetStage(ctx context.Context, id string, stage task.Stage, revisiting bool) (task.Task, error)
 	RemoveArtifacts(ctx context.Context, id string, from task.Stage) error
 	Repositories(t task.Task) []task.Repository
+	PRRuns(id string) []task.PRRun
+	SetPRRun(ctx context.Context, id, repoPath string, status task.PRStatus, block *task.PRBlock) (task.PRRun, error)
+	SetPRDetails(ctx context.Context, id, repoPath string, pr task.PRDetails) (task.PRRun, error)
+	SetPRReviewed(ctx context.Context, id, repoPath, commit string, pass int) (task.PRRun, error)
+	ClearPRRuns(ctx context.Context, id string) error
 	StepRuns(id string) []task.StepRun
 	SetStepRun(ctx context.Context, id string, number int, status task.StepStatus, block *task.StepBlock) (task.StepRun, error)
 	SetStepStarted(ctx context.Context, id string, number int, startCommit string) (task.StepRun, error)
@@ -57,9 +63,19 @@ type Reviews interface {
 	ForgetTask(taskID string)
 }
 
+// GH is what the flow needs from internal/gh: the readings that say whether a
+// pull request can be opened and whether it already exists.
+type GH interface {
+	Auth(ctx context.Context) error
+	ViewPR(ctx context.Context, dir, branch string) (gh.PR, error)
+}
+
 // Worktrees is what the flow needs from internal/worktree.
 type Worktrees interface {
 	Get(taskID, repoPath string) (worktree.Worktree, bool)
+	List(taskID string) []worktree.Worktree
+	Base(ctx context.Context, wt worktree.Worktree) (string, error)
+	Ahead(ctx context.Context, wt worktree.Worktree, base string) (int, error)
 	Ensure(ctx context.Context, t task.Task, repo task.Repository, onPhase func(worktree.Phase)) (worktree.Worktree, error)
 	Status(ctx context.Context, wt worktree.Worktree) (git.Status, error)
 	Commit(ctx context.Context, wt worktree.Worktree, rev string) (git.Commit, error)
@@ -73,6 +89,7 @@ type Deps struct {
 	Sessions  Sessions
 	Worktrees Worktrees
 	Review    Reviews
+	GH        GH
 	Log       *slog.Logger
 	// RenderPrompt turns a prompt of the data directory into the message the
 	// app sends; the flow uses it for the commit prompt.
@@ -90,6 +107,9 @@ const MaxCorrections = 3
 // flow's own goroutine.
 const evaluateTimeout = 10 * time.Second
 
+// prCheckTimeout bounds one gh command of the PR stage, which talks to GitHub.
+const prCheckTimeout = 30 * time.Second
+
 // The ways the flow refuses to move a task.
 var (
 	ErrNotReady      = errors.New("flow: stage is not finished")
@@ -103,6 +123,7 @@ type Service struct {
 	sessions  Sessions
 	worktrees Worktrees
 	review    Reviews
+	gh        GH
 	log       *slog.Logger
 	onChange  func(taskID string)
 
@@ -124,6 +145,17 @@ type taskLock struct {
 	// is transient on purpose: reopening the app leaves the step ready to
 	// approve, which is what git says.
 	noCommit bool
+
+	// repos is the asynchronous work of the PR stage, one entry per repository
+	// under way; the lock of the task is not held while it runs.
+	repos map[string]*repoWork
+}
+
+// repoWork is the goroutine that talks to git and to gh about one repository
+// of a task in the PR stage.
+type repoWork struct {
+	running bool
+	cancel  context.CancelFunc
 }
 
 // TaskInfo is what the session of a task needs to know about it at the stage

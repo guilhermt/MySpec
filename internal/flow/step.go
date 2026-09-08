@@ -515,8 +515,8 @@ func (s *Service) evaluateStep(ctx context.Context, t task.Task) {
 }
 
 // completeStep records the commit a step produced, closes its session and
-// starts the next one. A task whose last step is committed simply stops here:
-// the PR stage does not exist in this version.
+// starts the next one. A task whose last step is committed moves on to the PR
+// stage.
 func (s *Service) completeStep(
 	ctx context.Context, t task.Task, plan task.Plan, step task.Step, wt worktree.Worktree, head string,
 ) {
@@ -539,6 +539,9 @@ func (s *Service) completeStep(
 	next, ok := nextStep(plan, step.Number)
 	if !ok {
 		s.log.Info("implementation complete", "task", t.ID, "steps", len(plan.Steps))
+		if err := s.beginPR(ctx, t, plan); err != nil {
+			s.log.Error("begin pr stage failed", "task", t.ID, "error", err)
+		}
 		return
 	}
 	if _, err := s.tasks.SetStepRun(ctx, t.ID, next.Number, task.StepPreparing, nil); err != nil {
@@ -777,9 +780,10 @@ func (s *Service) DiscardStep(ctx context.Context, id string, cleanWorktree bool
 	return nil
 }
 
-// abortPrepare cancels the preparation of a task, if there is one. It does not
-// wait: whoever calls it takes the lock of the task next, and that lock is
-// what the preparation holds until it gives up.
+// abortPrepare cancels the preparation of a task and the work of every
+// repository of its PR stage, if there is any. It does not wait: whoever calls
+// it takes the lock of the task next, and that lock is what the preparation
+// holds until it gives up.
 func (s *Service) abortPrepare(id string) {
 	l := s.lockOf(id)
 
@@ -789,6 +793,11 @@ func (s *Service) abortPrepare(id string) {
 	if l.cancel != nil {
 		l.cancel()
 	}
+	for _, w := range l.repos {
+		if w.cancel != nil {
+			w.cancel()
+		}
+	}
 }
 
 // tearDownSteps stops the step session, removes the worktrees and the branches
@@ -796,6 +805,10 @@ func (s *Service) abortPrepare(id string) {
 // and deleting the task have in common, and it fails whole: a worktree git
 // cannot remove leaves everything as it was, with the session open again.
 func (s *Service) tearDownSteps(ctx context.Context, t task.Task) error {
+	// The PR sessions run inside the worktrees of the steps, so they go first.
+	if err := s.tearDownPR(ctx, t); err != nil {
+		return err
+	}
 	runs := s.tasks.StepRuns(t.ID)
 	if len(runs) == 0 {
 		return nil
@@ -879,7 +892,7 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 		return fmt.Errorf("delete task %s: %w", id, task.ErrNotFound)
 	}
 	// A task still being planned has no steps, and no worktrees either.
-	if t.Stage == task.StageImplementation {
+	if t.Stage == task.StageImplementation || t.Stage == task.StagePR {
 		if err := s.tearDownSteps(ctx, t); err != nil {
 			return err
 		}

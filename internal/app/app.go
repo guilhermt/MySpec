@@ -16,6 +16,7 @@ import (
 	"github.com/guilhermt/myspec/internal/bindings"
 	"github.com/guilhermt/myspec/internal/editor"
 	"github.com/guilhermt/myspec/internal/flow"
+	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/platform/logging"
 	"github.com/guilhermt/myspec/internal/platform/xdg"
@@ -141,6 +142,7 @@ func Run(cfg Config) int {
 		return fail(log, "watch artifacts", err)
 	}
 	gitRunner := git.New(git.Deps{Log: log})
+	ghRunner := gh.New(gh.Deps{Log: log})
 	worktrees := worktree.New(worktree.Deps{Git: gitRunner, Store: st.Worktrees, Log: log})
 	reviews, err := review.New(review.Deps{
 		Worktrees: worktrees,
@@ -160,6 +162,7 @@ func Run(cfg Config) int {
 		Sessions:  sessions,
 		Worktrees: worktrees,
 		Review:    reviews,
+		GH:        ghRunner,
 		Log:       log,
 		RenderPrompt: func(stage prompts.Stage, vars prompts.Vars) (string, error) {
 			return prompts.Render(dirs.Data, stage, vars)

@@ -24,10 +24,11 @@ const (
 	StageTechSpec       Stage = "tech_spec"
 	StagePlan           Stage = "plan"
 	StageImplementation Stage = "implementation"
+	StagePR             Stage = "pr"
 )
 
 // Stages lists the stages in workflow order.
-var Stages = []Stage{StagePRD, StageTechSpec, StagePlan, StageImplementation}
+var Stages = []Stage{StagePRD, StageTechSpec, StagePlan, StageImplementation, StagePR}
 
 // ParseStage narrows a stored or received string to a stage.
 func ParseStage(value string) (Stage, error) {
@@ -53,9 +54,11 @@ func (s Stage) Next() (next Stage, ok bool) {
 	return Stages[index+1], true
 }
 
-// HasSession reports whether the stage is driven by a conversation.
+// HasSession reports whether the stage is driven by a conversation of its own.
+// Implementation and PR have conversations too, one per step and one per
+// repository, and neither is the task's.
 func (s Stage) HasSession() bool {
-	return s.Index() >= 0 && s != StageImplementation
+	return s.Index() >= 0 && s != StageImplementation && s != StagePR
 }
 
 // From lists s and every stage after it, in order. An unknown stage lists

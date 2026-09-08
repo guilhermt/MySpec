@@ -288,6 +288,13 @@ func (s *Service) flushPendingLocked(ctx context.Context, r *run, n *notes) bool
 			StepPath:       r.task.StepPath,
 			Repositories:   r.task.Repositories,
 			InitialContext: e.User.Text,
+			Repository:     r.task.Repository,
+			Branch:         r.task.Branch,
+			BaseBranch:     r.task.BaseBranch,
+			DraftPath:      r.task.DraftPath,
+			ReviewPath:     r.task.ReviewPath,
+			PRNumber:       r.task.PRNumber,
+			PRURL:          r.task.PRURL,
 		})
 		if err != nil {
 			_ = s.failStart(ctx, r, n, ErrorStartFailed, "Could not render the prompt: "+err.Error(), err)

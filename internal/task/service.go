@@ -581,6 +581,7 @@ func (s *Service) RemoveArtifacts(ctx context.Context, id string, from Stage) er
 		case StagePlan:
 			err = removePath(t.StepsDir(), true)
 		case StageImplementation:
+		case StagePR:
 			// The drafts and the reports are about the commits the steps
 			// produced; going back to them leaves nothing to open a PR from.
 			err = removePath(t.PRDir(), true)

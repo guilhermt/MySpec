@@ -65,6 +65,16 @@ type TaskInfo struct {
 	Repositories   []string // relative paths, what the prompt lists
 	InitialContext string
 	ArtifactExists bool // the artifact of Prompt is already there; always false for a step
+
+	// The PR sessions of a repository: what the prompt of the pull request and
+	// the prompt of its review are about.
+	Repository string // relative path of the repository this session belongs to
+	Branch     string
+	BaseBranch string
+	DraftPath  string
+	ReviewPath string
+	PRNumber   string
+	PRURL      string
 }
 
 // Key is the session this task and stage are held under.
@@ -77,7 +87,9 @@ func artifactOf(stage prompts.Stage) ArtifactKind {
 		return ArtifactTechSpec
 	case prompts.StagePlan:
 		return ArtifactPlan
-	case prompts.StageStep:
+	case prompts.StageStep, prompts.StagePR, prompts.StagePRReview:
+		// A step file and the PR prompts produce no artifact of the planning:
+		// what they write belongs to a repository, not to the task.
 		return ""
 	default:
 		return ArtifactPRD

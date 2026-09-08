@@ -12,7 +12,7 @@ import (
 func TestStagesAreTheWorkflowOrder(t *testing.T) {
 	t.Parallel()
 
-	want := []task.Stage{task.StagePRD, task.StageTechSpec, task.StagePlan, task.StageImplementation}
+	want := []task.Stage{task.StagePRD, task.StageTechSpec, task.StagePlan, task.StageImplementation, task.StagePR}
 	if !slices.Equal(task.Stages, want) {
 		t.Errorf("Stages = %v, want %v", task.Stages, want)
 	}
@@ -60,7 +60,8 @@ func TestStageNext(t *testing.T) {
 		{task.StagePRD, task.StageTechSpec, true},
 		{task.StageTechSpec, task.StagePlan, true},
 		{task.StagePlan, task.StageImplementation, true},
-		{task.StageImplementation, "", false},
+		{task.StageImplementation, task.StagePR, true},
+		{task.StagePR, "", false},
 		{"nonsense", "", false},
 	}
 
@@ -80,6 +81,7 @@ func TestStageHasSession(t *testing.T) {
 		task.StageTechSpec:       true,
 		task.StagePlan:           true,
 		task.StageImplementation: false,
+		task.StagePR:             false,
 		"nonsense":               false,
 	}
 
@@ -93,7 +95,7 @@ func TestStageHasSession(t *testing.T) {
 func TestStageFrom(t *testing.T) {
 	t.Parallel()
 
-	want := []task.Stage{task.StageTechSpec, task.StagePlan, task.StageImplementation}
+	want := []task.Stage{task.StageTechSpec, task.StagePlan, task.StageImplementation, task.StagePR}
 	if got := task.StageTechSpec.From(); !slices.Equal(got, want) {
 		t.Errorf("StageTechSpec.From() = %v, want %v", got, want)
 	}

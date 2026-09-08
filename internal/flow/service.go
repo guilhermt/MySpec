@@ -16,6 +16,7 @@ func New(deps Deps) *Service {
 		sessions:  deps.Sessions,
 		worktrees: deps.Worktrees,
 		review:    deps.Review,
+		gh:        deps.GH,
 		log:       deps.Log,
 		onChange:  deps.OnChange,
 
@@ -75,6 +76,12 @@ func (s *Service) evaluate(ctx context.Context, id string) {
 	// on the step that runs and the worktree it runs in.
 	if t.Stage == task.StageImplementation {
 		s.evaluateStep(ctx, t)
+		return
+	}
+	// The PR stage has no conversation of its own either: each repository has
+	// one, and what it needs is decided on its pull request.
+	if t.Stage == task.StagePR {
+		s.evaluatePR(t)
 		return
 	}
 	if !t.Stage.HasSession() {
@@ -287,6 +294,8 @@ func (s *Service) Sync(ctx context.Context) {
 			}
 		case t.Stage == task.StageImplementation:
 			s.resumeSteps(ctx, t)
+		case t.Stage == task.StagePR:
+			s.resumePR(ctx, t)
 		}
 	}
 	for _, t := range tasks {
@@ -304,6 +313,11 @@ func (s *Service) Close() {
 	for _, l := range s.locks {
 		if l.cancel != nil {
 			l.cancel()
+		}
+		for _, w := range l.repos {
+			if w.cancel != nil {
+				w.cancel()
+			}
 		}
 	}
 }
