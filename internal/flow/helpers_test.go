@@ -3,6 +3,7 @@ package flow_test
 import (
 	"context"
 	"errors"
+	"maps"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -701,52 +702,71 @@ type memReviews struct {
 	calls   []string
 	snap    review.Snapshot
 	has     bool
-	tracked map[string]bool // task id -> whether its numbers matter now
+	tracked map[review.Key]bool // key -> whether its numbers matter now
 }
 
 func newReviews() *memReviews {
-	return &memReviews{tracked: map[string]bool{}}
+	return &memReviews{tracked: map[review.Key]bool{}}
 }
 
-func (m *memReviews) Track(taskID string, wt worktree.Worktree, active bool) {
+func (m *memReviews) Track(k review.Key, wt worktree.Worktree, active bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.calls = append(m.calls, "track:"+taskID+":"+filepath.Base(wt.Path)+":"+strconv.FormatBool(active))
-	m.tracked[taskID] = active
+	m.calls = append(m.calls, "track:"+reviewLabel(k)+":"+filepath.Base(wt.Path)+":"+strconv.FormatBool(active))
+	m.tracked[k] = active
 }
 
-func (m *memReviews) Refresh(taskID string) (review.Snapshot, bool) {
+func (m *memReviews) Refresh(k review.Key) (review.Snapshot, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.calls = append(m.calls, "refresh:"+taskID)
+	m.calls = append(m.calls, "refresh:"+reviewLabel(k))
 	return m.snap, m.has
 }
 
-func (m *memReviews) Snapshot(_ string) (review.Snapshot, bool) {
+func (m *memReviews) Snapshot(_ review.Key) (review.Snapshot, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	return m.snap, m.has
 }
 
-func (m *memReviews) Forget(taskID string) {
+func (m *memReviews) Forget(k review.Key) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.calls = append(m.calls, "forget:"+taskID)
-	delete(m.tracked, taskID)
+	m.calls = append(m.calls, "forget:"+reviewLabel(k))
+	delete(m.tracked, k)
 }
 
-// activeOf says whether the worktree of a task is watched, and whether its
+func (m *memReviews) ForgetTask(taskID string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.calls = append(m.calls, "forget-task:"+taskID)
+	maps.DeleteFunc(m.tracked, func(k review.Key, _ bool) bool { return k.TaskID == taskID })
+}
+
+// activeOf says whether the worktree of a key is watched, and whether its
 // numbers matter now.
-func (m *memReviews) activeOf(taskID string) (active, watched bool) {
+func (m *memReviews) activeOf(k review.Key) (active, watched bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	active, watched = m.tracked[taskID]
+	active, watched = m.tracked[k]
 	return active, watched
+}
+
+// reviewKey is the key the step of a task in the given repository of the fake
+// workspace is reviewed under.
+func reviewKey(taskID string, repo int) review.Key {
+	return review.Key{TaskID: taskID, RepoPath: repos[repo].Path}
+}
+
+// reviewLabel names a key in the recorded calls, by task and repository.
+func reviewLabel(k review.Key) string {
+	return k.TaskID + ":" + filepath.Base(k.RepoPath)
 }
 
 // setSnapshot makes every reading answer with snap.

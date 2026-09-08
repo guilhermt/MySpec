@@ -183,7 +183,7 @@ func TestAStepIsConcludedWhenItsBranchMovesAndTheNextOneIsPrepared(t *testing.T)
 	if state.CommitSHA != commitSHA || state.CommitSubject != "Do the work of the step" {
 		t.Errorf("commit = %q %q, want the one the step produced", state.CommitSHA, state.CommitSubject)
 	}
-	if !slices.Contains(f.reviews.reviewCalls(), "forget:task-1") {
+	if !slices.Contains(f.reviews.reviewCalls(), "forget:task-1:api") {
 		t.Errorf("review calls = %q, want the worktree of the step forgotten", f.reviews.reviewCalls())
 	}
 
@@ -239,7 +239,7 @@ func TestACommitTurnThatEndsWithoutACommitGivesTheStepBack(t *testing.T) {
 	f.waitStep(t, "task-1", 1, flow.StepReadyToApprove)
 	// The decision is taken on a reading newer than the turn, not on one the
 	// debounce still owes.
-	if !slices.Contains(f.reviews.reviewCalls(), "refresh:task-1") {
+	if !slices.Contains(f.reviews.reviewCalls(), "refresh:task-1:api") {
 		t.Errorf("review calls = %q, want the worktree read again", f.reviews.reviewCalls())
 	}
 	if state := f.stepState(t, "task-1", 1); !state.CommitFailed {

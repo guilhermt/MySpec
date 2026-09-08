@@ -50,10 +50,11 @@ type Sessions interface {
 
 // Reviews is what the flow needs from internal/review.
 type Reviews interface {
-	Track(taskID string, wt worktree.Worktree, active bool)
-	Refresh(taskID string) (review.Snapshot, bool)
-	Snapshot(taskID string) (review.Snapshot, bool)
-	Forget(taskID string)
+	Track(k review.Key, wt worktree.Worktree, active bool)
+	Refresh(k review.Key) (review.Snapshot, bool)
+	Snapshot(k review.Key) (review.Snapshot, bool)
+	Forget(k review.Key)
+	ForgetTask(taskID string)
 }
 
 // Worktrees is what the flow needs from internal/worktree.

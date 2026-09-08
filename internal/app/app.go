@@ -145,9 +145,9 @@ func Run(cfg Config) int {
 	reviews, err := review.New(review.Deps{
 		Worktrees: worktrees,
 		Log:       log,
-		OnChange: func(taskID string) {
+		OnChange: func(k review.Key) {
 			a.publish()
-			a.flow.Check(taskID)
+			a.flow.Check(k.TaskID)
 		},
 	})
 	if err != nil {
