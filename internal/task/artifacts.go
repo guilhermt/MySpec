@@ -8,6 +8,7 @@ const (
 	ArtifactPRD      ArtifactKind = "prd"
 	ArtifactTechSpec ArtifactKind = "tech_spec"
 	ArtifactPlan     ArtifactKind = "plan"
+	ArtifactPR       ArtifactKind = "pr"
 )
 
 // Artifacts is what the folder of a task holds.
@@ -15,6 +16,7 @@ type Artifacts struct {
 	PRD      bool // PRD.md exists with content
 	TechSpec bool // tech-spec.md exists with content
 	Plan     Plan
+	PR       map[string]RepoArtifacts // by repository slug; never nil
 }
 
 // Done reports whether the artifact that ends a stage is there.
@@ -42,6 +44,8 @@ func (a Artifacts) Has(kind ArtifactKind) bool {
 		return a.TechSpec
 	case ArtifactPlan:
 		return a.Plan.Present
+	case ArtifactPR:
+		return len(a.PR) > 0
 	default:
 		return false
 	}

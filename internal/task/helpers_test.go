@@ -85,8 +85,10 @@ type memRepo struct {
 	mu        sync.Mutex
 	items     []task.Task
 	runs      map[string][]task.StepRun // step runs by task id
+	prs       map[string][]task.PRRun   // pr runs by task id
 	listErr   error
 	runsErr   error
+	prRunsErr error
 	insertErr error
 	updateErr error
 	deleteErr error
@@ -228,6 +230,68 @@ func (r *memRepo) DeleteStepRuns(_ context.Context, taskID string) error {
 	}
 	delete(r.runs, taskID)
 	return nil
+}
+
+func (r *memRepo) ListPRRuns(_ context.Context, taskID string) ([]task.PRRun, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.prRunsErr != nil {
+		return nil, r.prRunsErr
+	}
+	return slices.Clone(r.prs[taskID]), nil
+}
+
+func (r *memRepo) UpsertPRRun(_ context.Context, run task.PRRun) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.updateErr != nil {
+		return r.updateErr
+	}
+	if r.prs == nil {
+		r.prs = map[string][]task.PRRun{}
+	}
+	runs := r.prs[run.TaskID]
+	index := slices.IndexFunc(runs, func(stored task.PRRun) bool { return stored.RepoPath == run.RepoPath })
+	if index >= 0 {
+		runs[index] = run
+	} else {
+		runs = append(runs, run)
+		slices.SortFunc(runs, func(a, b task.PRRun) int { return strings.Compare(a.RepoPath, b.RepoPath) })
+	}
+	r.prs[run.TaskID] = runs
+	return nil
+}
+
+func (r *memRepo) DeletePRRuns(_ context.Context, taskID string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.deleteErr != nil {
+		return r.deleteErr
+	}
+	delete(r.prs, taskID)
+	return nil
+}
+
+// seedPRRun stores a pr run directly, bypassing the service.
+func (r *memRepo) seedPRRun(run task.PRRun) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.prs == nil {
+		r.prs = map[string][]task.PRRun{}
+	}
+	r.prs[run.TaskID] = append(r.prs[run.TaskID], run)
+}
+
+// prRuns returns the stored pr runs of a task, by repository path.
+func (r *memRepo) prRuns(taskID string) []task.PRRun {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	return slices.Clone(r.prs[taskID])
 }
 
 // seedRun stores a step run directly, bypassing the service.
