@@ -64,4 +64,34 @@ describe("DraftCard", () => {
 
     expect(screen.getByRole("button", { name: "Open PR" })).toBeDisabled();
   });
+
+  // Asking the agent for a new title is the one update the local edit loses to.
+  it("shows the draft again when the agent rewrites it", () => {
+    const repo = makeRepoPR({ status: "draft_ready", draft: DRAFT });
+    const task = makeTask({ stage: "pr", repos: [repo] });
+    const { rerender } = renderWithStore(<DraftCard taskId={task.id} repo={repo} />, {
+      state: makeState({ tasks: [task] }),
+      ui: { prDrafts: { "task-1|/home/dev/projects/web": { title: "Mine", body: "My body" } } },
+    });
+    expect(screen.getByLabelText("Title")).toHaveValue("Mine");
+
+    const rewritten = { ...repo, draft: { ...DRAFT, title: "Teste" } };
+    rerender(<DraftCard taskId={task.id} repo={rewritten} />);
+
+    expect(screen.getByLabelText("Title")).toHaveValue("Teste");
+  });
+
+  it("keeps what the user is typing while the draft on disk stands still", () => {
+    const repo = makeRepoPR({ status: "draft_ready", draft: DRAFT });
+    const task = makeTask({ stage: "pr", repos: [repo] });
+    const { rerender } = renderWithStore(<DraftCard taskId={task.id} repo={repo} />, {
+      state: makeState({ tasks: [task] }),
+      ui: { prDrafts: { "task-1|/home/dev/projects/web": { title: "Mine", body: "My body" } } },
+    });
+
+    // Anything else about the repository moving on leaves the edit alone.
+    rerender(<DraftCard taskId={task.id} repo={{ ...repo, turnRunning: true }} />);
+
+    expect(screen.getByLabelText("Title")).toHaveValue("Mine");
+  });
 });

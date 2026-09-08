@@ -1,11 +1,12 @@
 import { GitPullRequestArrow } from "lucide-react";
+import { useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { canOpenPR } from "@/features/task/repo-status";
 import type { RepoPR } from "@/lib/wails";
 import { openPR } from "@/store/actions";
-import { useAppStore, usePrDraft } from "@/store/app-store";
+import { repoKey, useAppStore, usePrDraft } from "@/store/app-store";
 
 export interface DraftCardProps {
   taskId: string;
@@ -14,15 +15,32 @@ export interface DraftCardProps {
 
 /**
  * DraftCard is the pull request the agent wrote, as the user edits it. The
- * draft on disk is the starting point; what the user types survives whatever
- * the agent says next, and only opening the pull request sends it.
+ * draft on disk is the starting point; what the user types survives every
+ * update but one, and only opening the pull request sends it.
  */
 export function DraftCard({ taskId, repo }: DraftCardProps) {
   const edited = usePrDraft(taskId, repo.repoPath);
   const setPrDraft = useAppStore((state) => state.setPrDraft);
+  const clearPrDraft = useAppStore((state) => state.clearPrDraft);
 
-  const title = edited?.title ?? repo.draft?.title ?? "";
-  const body = edited?.body ?? repo.draft?.body ?? "";
+  const fileTitle = repo.draft?.title ?? "";
+  const fileBody = repo.draft?.body ?? "";
+  const written = useRef({ key: repoKey(taskId, repo.repoPath), fileTitle, fileBody });
+
+  // The one update the edit of the user does not survive is the agent writing
+  // the draft again: that is what the user asked for, so it wins.
+  useEffect(() => {
+    const key = repoKey(taskId, repo.repoPath);
+    const seen = written.current;
+    written.current = { key, fileTitle, fileBody };
+    if (seen.key !== key || (seen.fileTitle === fileTitle && seen.fileBody === fileBody)) {
+      return;
+    }
+    clearPrDraft(taskId, repo.repoPath);
+  }, [taskId, repo.repoPath, fileTitle, fileBody, clearPrDraft]);
+
+  const title = edited?.title ?? fileTitle;
+  const body = edited?.body ?? fileBody;
   const ready = canOpenPR(repo) && title.trim() !== "" && body.trim() !== "";
 
   const edit = (next: { title?: string; body?: string }) =>
