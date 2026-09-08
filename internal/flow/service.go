@@ -14,6 +14,7 @@ func New(deps Deps) *Service {
 		tasks:     deps.Tasks,
 		sessions:  deps.Sessions,
 		worktrees: deps.Worktrees,
+		review:    deps.Review,
 		log:       deps.Log,
 		onChange:  deps.OnChange,
 		locks:     map[string]*taskLock{},
@@ -64,7 +65,16 @@ func (s *Service) evaluate(ctx context.Context, id string) {
 	}
 
 	t, ok := s.tasks.Get(id)
-	if !ok || !t.Stage.HasSession() {
+	if !ok {
+		return
+	}
+	// Implementation has no conversation of its own: what it needs is decided
+	// on the step that runs and the worktree it runs in.
+	if t.Stage == task.StageImplementation {
+		s.evaluateStep(t)
+		return
+	}
+	if !t.Stage.HasSession() {
 		return
 	}
 	a, err := s.tasks.Inspect(id)

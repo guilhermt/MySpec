@@ -12,6 +12,7 @@ import (
 
 	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/prompts"
+	"github.com/guilhermt/myspec/internal/review"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
 	"github.com/guilhermt/myspec/internal/worktree"
@@ -28,6 +29,7 @@ type Tasks interface {
 	Repositories(t task.Task) []task.Repository
 	StepRuns(id string) []task.StepRun
 	SetStepRun(ctx context.Context, id string, number int, status task.StepStatus, block *task.StepBlock) (task.StepRun, error)
+	SetStepStarted(ctx context.Context, id string, number int, startCommit string) (task.StepRun, error)
 	ClearStepRuns(ctx context.Context, id string) error
 	Delete(ctx context.Context, id string) error
 }
@@ -41,6 +43,14 @@ type Sessions interface {
 	Summary(taskID string) (session.Summary, bool)
 	SendFromApp(ctx context.Context, taskID, text string) error
 	SendCorrection(ctx context.Context, taskID, text string) error
+}
+
+// Reviews is what the flow needs from internal/review.
+type Reviews interface {
+	Track(taskID string, wt worktree.Worktree, active bool)
+	Refresh(taskID string) (review.Snapshot, bool)
+	Snapshot(taskID string) (review.Snapshot, bool)
+	Forget(taskID string)
 }
 
 // Worktrees is what the flow needs from internal/worktree.
@@ -57,6 +67,7 @@ type Deps struct {
 	Tasks     Tasks
 	Sessions  Sessions
 	Worktrees Worktrees
+	Review    Reviews
 	Log       *slog.Logger
 	// OnChange says that the in-memory state of a step changed, which is what
 	// the phases of a preparation are; it may be nil.
@@ -83,6 +94,7 @@ type Service struct {
 	tasks     Tasks
 	sessions  Sessions
 	worktrees Worktrees
+	review    Reviews
 	log       *slog.Logger
 	onChange  func(taskID string)
 

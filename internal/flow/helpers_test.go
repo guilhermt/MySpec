@@ -13,6 +13,7 @@ import (
 
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/git"
+	"github.com/guilhermt/myspec/internal/review"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
 	"github.com/guilhermt/myspec/internal/worktree"
@@ -146,6 +147,18 @@ func (m *memTasks) StepRuns(id string) []task.StepRun {
 func (m *memTasks) SetStepRun(
 	_ context.Context, id string, number int, status task.StepStatus, block *task.StepBlock,
 ) (task.StepRun, error) {
+	return m.updateRun(id, number, status, func(run *task.StepRun) { run.Block = block })
+}
+
+func (m *memTasks) SetStepStarted(_ context.Context, id string, number int, startCommit string) (task.StepRun, error) {
+	return m.updateRun(id, number, task.StepStarted, func(run *task.StepRun) { run.StartCommit = startCommit })
+}
+
+// updateRun records the state of a step the way task.Service does: what the
+// call says nothing about is kept.
+func (m *memTasks) updateRun(
+	id string, number int, status task.StepStatus, mutate func(*task.StepRun),
+) (task.StepRun, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -153,15 +166,38 @@ func (m *memTasks) SetStepRun(
 	if m.err != nil {
 		return task.StepRun{}, m.err
 	}
-	run := task.StepRun{TaskID: id, Number: number, Status: status, Block: block}
+
 	runs := m.runs[id]
+	run := task.StepRun{TaskID: id, Number: number}
 	index := slices.IndexFunc(runs, func(r task.StepRun) bool { return r.Number == number })
+	if index >= 0 {
+		run = runs[index]
+	}
+	run.Status, run.Block = status, nil
+	mutate(&run)
+
 	if index < 0 {
 		m.runs[id] = append(runs, run)
 	} else {
 		runs[index] = run
 	}
 	return run, nil
+}
+
+// setRun seeds the record of a step, which is what a task resumed from the
+// database comes back with.
+func (m *memTasks) setRun(id string, run task.StepRun) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	run.TaskID = id
+	runs := m.runs[id]
+	index := slices.IndexFunc(runs, func(r task.StepRun) bool { return r.Number == run.Number })
+	if index < 0 {
+		m.runs[id] = append(runs, run)
+	} else {
+		runs[index] = run
+	}
 }
 
 func (m *memTasks) ClearStepRuns(_ context.Context, id string) error {
@@ -594,19 +630,101 @@ func (m *memWorktrees) blockEnsure() chan struct{} {
 	return m.block
 }
 
-// fixture is a flow.Service over the three fakes.
+// memReviews is an in-memory flow.Reviews: it hands out the reading a test
+// seeds and records which worktree it was told to watch, and how.
+type memReviews struct {
+	mu      sync.Mutex
+	calls   []string
+	snap    review.Snapshot
+	has     bool
+	tracked map[string]bool // task id -> whether its numbers matter now
+}
+
+func newReviews() *memReviews {
+	return &memReviews{tracked: map[string]bool{}}
+}
+
+func (m *memReviews) Track(taskID string, wt worktree.Worktree, active bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.calls = append(m.calls, "track:"+taskID+":"+filepath.Base(wt.Path)+":"+strconv.FormatBool(active))
+	m.tracked[taskID] = active
+}
+
+func (m *memReviews) Refresh(taskID string) (review.Snapshot, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.calls = append(m.calls, "refresh:"+taskID)
+	return m.snap, m.has
+}
+
+func (m *memReviews) Snapshot(_ string) (review.Snapshot, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return m.snap, m.has
+}
+
+func (m *memReviews) Forget(taskID string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.calls = append(m.calls, "forget:"+taskID)
+	delete(m.tracked, taskID)
+}
+
+// activeOf says whether the worktree of a task is watched, and whether its
+// numbers matter now.
+func (m *memReviews) activeOf(taskID string) (active, watched bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	active, watched = m.tracked[taskID]
+	return active, watched
+}
+
+// setSnapshot makes every reading answer with snap.
+func (m *memReviews) setSnapshot(snap review.Snapshot) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.snap, m.has = snap, true
+}
+
+// reviewCalls is what the review service was asked, in order.
+func (m *memReviews) reviewCalls() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return slices.Clone(m.calls)
+}
+
+// fixture is a flow.Service over the four fakes.
 type fixture struct {
 	service   *flow.Service
 	tasks     *memTasks
 	sessions  *memSessions
 	worktrees *memWorktrees
+	reviews   *memReviews
 }
 
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
 
-	f := &fixture{tasks: newTasks(), sessions: newSessions(), worktrees: newWorktrees()}
-	f.service = flow.New(flow.Deps{Tasks: f.tasks, Sessions: f.sessions, Worktrees: f.worktrees})
+	f := &fixture{
+		tasks:     newTasks(),
+		sessions:  newSessions(),
+		worktrees: newWorktrees(),
+		reviews:   newReviews(),
+	}
+	f.service = flow.New(flow.Deps{
+		Tasks:     f.tasks,
+		Sessions:  f.sessions,
+		Worktrees: f.worktrees,
+		Review:    f.reviews,
+	})
 	t.Cleanup(f.service.Close)
 	return f
 }

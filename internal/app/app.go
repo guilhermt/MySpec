@@ -20,6 +20,7 @@ import (
 	"github.com/guilhermt/myspec/internal/platform/logging"
 	"github.com/guilhermt/myspec/internal/platform/xdg"
 	"github.com/guilhermt/myspec/internal/prompts"
+	"github.com/guilhermt/myspec/internal/review"
 	"github.com/guilhermt/myspec/internal/scan"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/store"
@@ -54,6 +55,7 @@ type App struct {
 	tasks     *task.Service
 	sessions  *session.Service
 	worktrees *worktree.Service
+	review    *review.Service
 	flow      *flow.Service
 
 	mu      sync.Mutex
@@ -140,12 +142,24 @@ func Run(cfg Config) int {
 	}
 	gitRunner := git.New(git.Deps{Log: log})
 	worktrees := worktree.New(worktree.Deps{Git: gitRunner, Store: st.Worktrees, Log: log})
+	reviews, err := review.New(review.Deps{
+		Worktrees: worktrees,
+		Log:       log,
+		OnChange: func(taskID string) {
+			a.publish()
+			a.flow.Check(taskID)
+		},
+	})
+	if err != nil {
+		return fail(log, "watch worktrees", err)
+	}
 	// The session and task callbacks reach the flow through the app, which
 	// holds it before anything can run: no process starts before Bootstrap.
 	flowSvc := flow.New(flow.Deps{
 		Tasks:     tasks,
 		Sessions:  sessions,
 		Worktrees: worktrees,
+		Review:    reviews,
 		Log:       log,
 		OnChange:  func(string) { a.publish() },
 	})
@@ -156,7 +170,7 @@ func Run(cfg Config) int {
 		OnChange: a.onWorkspaceChanged,
 	})
 	a.theme, a.ws, a.tasks, a.sessions, a.flow = themeSvc, wsSvc, tasks, sessions, flowSvc
-	a.worktrees = worktrees
+	a.worktrees, a.review = worktrees, reviews
 
 	if err := wsSvc.Bootstrap(ctx, firstArg(cfg.Args, log), cfg.Cwd); err != nil {
 		return fail(log, "open initial workspace", err)
@@ -255,6 +269,9 @@ func (a *App) shutdown() {
 
 	a.flow.Close()
 	a.sessions.Shutdown(ctx)
+	if err := a.review.Close(); err != nil {
+		a.log.Error("close review watcher failed", "err", err)
+	}
 	if err := a.tasks.Close(); err != nil {
 		a.log.Error("close artifact watcher failed", "err", err)
 	}

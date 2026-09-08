@@ -20,6 +20,7 @@ import (
 	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/git/gittest"
 	"github.com/guilhermt/myspec/internal/prompts"
+	"github.com/guilhermt/myspec/internal/review"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/store"
 	"github.com/guilhermt/myspec/internal/task"
@@ -139,6 +140,7 @@ type fixture struct {
 	taskSvc   *task.Service
 	sessions  *session.Service
 	worktrees *worktree.Service
+	reviews   *review.Service
 	flow      *flow.Service
 	dataDir   string
 	picker    *fakePicker
@@ -225,10 +227,17 @@ func newFixture(t *testing.T) *fixture {
 		Store: st.Worktrees,
 		Log:   log,
 	})
+	f.reviews, err = review.New(review.Deps{Worktrees: f.worktrees, Log: log})
+	if err != nil {
+		t.Fatalf("review.New() = %v, want nil", err)
+	}
+	t.Cleanup(func() { _ = f.reviews.Close() })
+
 	f.flow = flow.New(flow.Deps{
 		Tasks:     f.taskSvc,
 		Sessions:  f.sessions,
 		Worktrees: f.worktrees,
+		Review:    f.reviews,
 		Log:       log,
 		OnChange:  func(string) {},
 	})
