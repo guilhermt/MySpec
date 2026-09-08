@@ -9,9 +9,9 @@ import { StageTrack } from "@/features/task/StageTrack";
 import { StepBar } from "@/features/task/StepBar";
 import { StepPane } from "@/features/task/StepPane";
 import { hasArtifacts } from "@/features/task/status";
-import { currentStepOf, hasStepSession } from "@/features/task/step-status";
+import { currentStepOf, hasStepSession, stepStage } from "@/features/task/step-status";
 import { TaskHeader } from "@/features/task/TaskHeader";
-import { asTaskStage } from "@/lib/wails";
+import { asTaskStage, sessionKey } from "@/lib/wails";
 import { loadTranscript } from "@/store/actions";
 import { useAppStore, useTask } from "@/store/app-store";
 
@@ -61,15 +61,19 @@ export function TaskView({ taskId }: TaskViewProps) {
   // In the implementation stage the conversation is the one of the step, which
   // is there only once the step opened a session of its own.
   const hasConversation = task !== null && (!implementing || hasStepSession(step));
+  // The conversation on screen is the one of the stage the task is in, which in
+  // the implementation stage is the step that runs.
+  const stage = implementing && step !== null ? stepStage(step.number) : (task?.stage ?? "");
 
   // The conversation is fetched once and then kept: leaving the task and coming
   // back costs nothing, and the events keep being applied while it is away. It
   // waits for the task to be in the snapshot, which a brand new one is not yet.
   useEffect(() => {
-    if (hasConversation && useAppStore.getState().transcripts[taskId] === undefined) {
-      void loadTranscript(taskId);
+    const key = sessionKey(taskId, stage);
+    if (hasConversation && useAppStore.getState().transcripts[key] === undefined) {
+      void loadTranscript(taskId, stage);
     }
-  }, [taskId, hasConversation]);
+  }, [taskId, stage, hasConversation]);
 
   // Nothing to read yet, and no size the user chose: stay out of the way.
   useEffect(() => {
@@ -126,9 +130,9 @@ export function TaskView({ taskId }: TaskViewProps) {
             </>
           ) : (
             <>
-              <Conversation taskId={task.id} />
+              <Conversation taskId={task.id} stage={task.stage} />
               <PlanProblemsNotice task={task} />
-              <Composer task={task} />
+              <Composer task={task} stage={task.stage} />
             </>
           )}
         </ResizablePanel>

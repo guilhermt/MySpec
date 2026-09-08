@@ -108,6 +108,17 @@ describe("narrowing", () => {
   });
 });
 
+describe("sessionKey", () => {
+  it("names a conversation by its task and stage", () => {
+    expect(wails.sessionKey("task-1", "prd")).toBe("task-1|prd");
+    expect(wails.sessionKey("task-1", "step:2")).toBe("task-1|step:2");
+  });
+
+  it("tells the stages of one task apart", () => {
+    expect(wails.sessionKey("task-1", "prd")).not.toBe(wails.sessionKey("task-1", "tech_spec"));
+  });
+});
+
 describe("api", () => {
   it("calls one binding per method", async () => {
     await wails.api.getState();
@@ -119,15 +130,15 @@ describe("api", () => {
 
     await wails.api.createTask({ name: "add-login", repoPath: "", initialContext: "a login" });
     await wails.api.deleteTask("task-1");
-    await wails.api.getTranscript("task-1");
-    await wails.api.sendMessage("task-1", "go on");
-    await wails.api.removePending("task-1", "entry-1");
-    await wails.api.interrupt("task-1");
-    await wails.api.pause("task-1");
-    await wails.api.resume("task-1");
-    await wails.api.retry("task-1");
-    await wails.api.answerPermission("task-1", "req-1", "allow", "");
-    await wails.api.answerQuestion("task-1", "req-1", { "Which database?": "SQLite" });
+    await wails.api.getTranscript("task-1", "prd");
+    await wails.api.sendMessage("task-1", "prd", "go on");
+    await wails.api.removePending("task-1", "prd", "entry-1");
+    await wails.api.interrupt("task-1", "prd");
+    await wails.api.pause("task-1", "prd");
+    await wails.api.resume("task-1", "prd");
+    await wails.api.retry("task-1", "prd");
+    await wails.api.answerPermission("task-1", "prd", "req-1", "allow", "");
+    await wails.api.answerQuestion("task-1", "prd", "req-1", { "Which database?": "SQLite" });
     await wails.api.readArtifact("task-1", "PRD.md");
     await wails.api.backToStage("task-1", "prd");
     await wails.api.discardStage("task-1", "tech_spec");

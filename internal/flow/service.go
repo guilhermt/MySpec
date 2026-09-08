@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
 )
 
@@ -86,7 +87,8 @@ func (s *Service) evaluate(ctx context.Context, id string) {
 	}
 	// A task whose session is not open yet has nothing to decide on; Sync opens
 	// them all before it checks anything.
-	sum, ok := s.sessions.Summary(id)
+	key := session.Key{TaskID: id, Stage: string(t.Stage)}
+	sum, ok := s.sessions.Summary(key)
 	if !ok {
 		return
 	}
@@ -98,7 +100,7 @@ func (s *Service) evaluate(ctx context.Context, id string) {
 			return
 		}
 		message := correctionMessage(t.StepsDir(), a.Plan.Problems, s.tasks.Repositories(t))
-		if err := s.sessions.SendCorrection(ctx, id, message); err != nil {
+		if err := s.sessions.SendCorrection(ctx, key, message); err != nil {
 			s.log.Error("send plan correction failed", "task", id, "stage", string(t.Stage), "error", err)
 		}
 		return
@@ -124,7 +126,7 @@ func (s *Service) advance(ctx context.Context, t task.Task) error {
 	}
 
 	// The conversation of a finished stage takes no more messages.
-	if err := s.sessions.Close(ctx, t.ID); err != nil {
+	if err := s.sessions.Close(ctx, session.Key{TaskID: t.ID, Stage: string(t.Stage)}); err != nil {
 		return err
 	}
 	moved, err := s.tasks.SetStage(ctx, t.ID, next, false)
@@ -251,7 +253,7 @@ func (s *Service) Continue(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	sum, ok := s.sessions.Summary(id)
+	sum, ok := s.sessions.Summary(session.Key{TaskID: id, Stage: string(t.Stage)})
 	if !ok || !a.Done(t.Stage) || !sum.Idle {
 		return fmt.Errorf("continue task %s in %s: %w", id, t.Stage, ErrNotReady)
 	}

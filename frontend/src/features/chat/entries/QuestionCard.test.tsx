@@ -30,7 +30,7 @@ const MULTI = question({
 
 describe("QuestionCard", () => {
   it("shows the question with its options", () => {
-    renderWithStore(<QuestionCard taskId="task-1" question={question()} />);
+    renderWithStore(<QuestionCard stage="prd" taskId="task-1" question={question()} />);
 
     expect(screen.getByText("Database")).toBeInTheDocument();
     expect(screen.getByText("Which database?")).toBeInTheDocument();
@@ -40,7 +40,9 @@ describe("QuestionCard", () => {
   });
 
   it("waits for an answer before it can be sent", async () => {
-    const { user } = renderWithStore(<QuestionCard taskId="task-1" question={question()} />);
+    const { user } = renderWithStore(
+      <QuestionCard stage="prd" taskId="task-1" question={question()} />,
+    );
 
     expect(screen.getByRole("button", { name: "Answer" })).toBeDisabled();
 
@@ -50,42 +52,48 @@ describe("QuestionCard", () => {
   });
 
   it("sends the option that was picked", async () => {
-    const { user } = renderWithStore(<QuestionCard taskId="task-1" question={question()} />);
+    const { user } = renderWithStore(
+      <QuestionCard stage="prd" taskId="task-1" question={question()} />,
+    );
 
     await user.click(screen.getByRole("radio", { name: /Postgres/ }));
     await user.click(screen.getByRole("button", { name: "Answer" }));
 
-    expect(api.answerQuestion).toHaveBeenCalledWith("task-1", "req-1", {
+    expect(api.answerQuestion).toHaveBeenCalledWith("task-1", "prd", "req-1", {
       "Which database?": "Postgres",
     });
   });
 
   it("keeps only the last option of a single choice", async () => {
-    const { user } = renderWithStore(<QuestionCard taskId="task-1" question={question()} />);
+    const { user } = renderWithStore(
+      <QuestionCard stage="prd" taskId="task-1" question={question()} />,
+    );
 
     await user.click(screen.getByRole("radio", { name: /SQLite/ }));
     await user.click(screen.getByRole("radio", { name: /Postgres/ }));
     await user.click(screen.getByRole("button", { name: "Answer" }));
 
-    expect(api.answerQuestion).toHaveBeenCalledWith("task-1", "req-1", {
+    expect(api.answerQuestion).toHaveBeenCalledWith("task-1", "prd", "req-1", {
       "Which database?": "Postgres",
     });
   });
 
   it("joins the options of a multiple choice", async () => {
-    const { user } = renderWithStore(<QuestionCard taskId="task-1" question={MULTI} />);
+    const { user } = renderWithStore(<QuestionCard stage="prd" taskId="task-1" question={MULTI} />);
 
     await user.click(screen.getByRole("checkbox", { name: "Lint" }));
     await user.click(screen.getByRole("checkbox", { name: "Types" }));
     await user.click(screen.getByRole("button", { name: "Answer" }));
 
-    expect(api.answerQuestion).toHaveBeenCalledWith("task-1", "req-1", {
+    expect(api.answerQuestion).toHaveBeenCalledWith("task-1", "prd", "req-1", {
       "Which checks?": "Lint, Types",
     });
   });
 
   it("takes an answer of the user's own", async () => {
-    const { user } = renderWithStore(<QuestionCard taskId="task-1" question={question()} />);
+    const { user } = renderWithStore(
+      <QuestionCard stage="prd" taskId="task-1" question={question()} />,
+    );
 
     await user.click(screen.getByRole("radio", { name: "Other…" }));
 
@@ -95,7 +103,7 @@ describe("QuestionCard", () => {
     await user.type(answer, "DuckDB");
     await user.click(screen.getByRole("button", { name: "Answer" }));
 
-    expect(api.answerQuestion).toHaveBeenCalledWith("task-1", "req-1", {
+    expect(api.answerQuestion).toHaveBeenCalledWith("task-1", "prd", "req-1", {
       "Which database?": "DuckDB",
     });
   });
@@ -117,7 +125,7 @@ describe("QuestionCard", () => {
         },
       ],
     });
-    const { user } = renderWithStore(<QuestionCard taskId="task-1" question={both} />);
+    const { user } = renderWithStore(<QuestionCard stage="prd" taskId="task-1" question={both} />);
 
     await user.click(screen.getByRole("radio", { name: "SQLite" }));
     expect(screen.getByRole("button", { name: "Answer" })).toBeDisabled();
@@ -125,7 +133,7 @@ describe("QuestionCard", () => {
     await user.click(screen.getByRole("radio", { name: "Fiber" }));
     await user.click(screen.getByRole("button", { name: "Answer" }));
 
-    expect(api.answerQuestion).toHaveBeenCalledWith("task-1", "req-1", {
+    expect(api.answerQuestion).toHaveBeenCalledWith("task-1", "prd", "req-1", {
       "Which database?": "SQLite",
       "Which server?": "Fiber",
     });
@@ -134,6 +142,7 @@ describe("QuestionCard", () => {
   it("reports the answer once it is given", () => {
     renderWithStore(
       <QuestionCard
+        stage="prd"
         taskId="task-1"
         question={question({ status: "allowed", answers: { "Which database?": "SQLite" } })}
       />,
@@ -144,7 +153,9 @@ describe("QuestionCard", () => {
   });
 
   it("says when the session stopped before an answer", () => {
-    renderWithStore(<QuestionCard taskId="task-1" question={question({ status: "cancelled" })} />);
+    renderWithStore(
+      <QuestionCard stage="prd" taskId="task-1" question={question({ status: "cancelled" })} />,
+    );
 
     expect(screen.getByText("Cancelled before an answer")).toBeInTheDocument();
   });

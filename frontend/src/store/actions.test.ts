@@ -78,14 +78,14 @@ describe("actions", () => {
 describe("task actions", () => {
   it("delegate to the matching binding", async () => {
     await deleteTask("task-1");
-    await sendMessage("task-1", "go on");
-    await removePending("task-1", "entry-1");
-    await interrupt("task-1");
-    await pause("task-1");
-    await resume("task-1");
-    await retry("task-1");
-    await answerPermission("task-1", "req-1", "allow_session", "");
-    await answerQuestion("task-1", "req-1", { "Which database?": "SQLite" });
+    await sendMessage("task-1", "prd", "go on");
+    await removePending("task-1", "prd", "entry-1");
+    await interrupt("task-1", "prd");
+    await pause("task-1", "prd");
+    await resume("task-1", "prd");
+    await retry("task-1", "prd");
+    await answerPermission("task-1", "prd", "req-1", "allow_session", "");
+    await answerQuestion("task-1", "prd", "req-1", { "Which database?": "SQLite" });
     await openExternal("https://anthropic.com");
     await backToStage("task-1", "prd");
     await discardStage("task-1", "tech_spec");
@@ -98,14 +98,20 @@ describe("task actions", () => {
     await openFileInEditor("task-1", "src/login.ts");
 
     expect(api.deleteTask).toHaveBeenCalledWith("task-1");
-    expect(api.sendMessage).toHaveBeenCalledWith("task-1", "go on");
-    expect(api.removePending).toHaveBeenCalledWith("task-1", "entry-1");
-    expect(api.interrupt).toHaveBeenCalledWith("task-1");
-    expect(api.pause).toHaveBeenCalledWith("task-1");
-    expect(api.resume).toHaveBeenCalledWith("task-1");
-    expect(api.retry).toHaveBeenCalledWith("task-1");
-    expect(api.answerPermission).toHaveBeenCalledWith("task-1", "req-1", "allow_session", "");
-    expect(api.answerQuestion).toHaveBeenCalledWith("task-1", "req-1", {
+    expect(api.sendMessage).toHaveBeenCalledWith("task-1", "prd", "go on");
+    expect(api.removePending).toHaveBeenCalledWith("task-1", "prd", "entry-1");
+    expect(api.interrupt).toHaveBeenCalledWith("task-1", "prd");
+    expect(api.pause).toHaveBeenCalledWith("task-1", "prd");
+    expect(api.resume).toHaveBeenCalledWith("task-1", "prd");
+    expect(api.retry).toHaveBeenCalledWith("task-1", "prd");
+    expect(api.answerPermission).toHaveBeenCalledWith(
+      "task-1",
+      "prd",
+      "req-1",
+      "allow_session",
+      "",
+    );
+    expect(api.answerQuestion).toHaveBeenCalledWith("task-1", "prd", "req-1", {
       "Which database?": "SQLite",
     });
     expect(api.openExternal).toHaveBeenCalledWith("https://anthropic.com");
@@ -124,7 +130,7 @@ describe("task actions", () => {
   it("reports a failed task action in the banner", async () => {
     vi.mocked(api.pause).mockRejectedValueOnce(new Error("no session"));
 
-    await pause("task-1");
+    await pause("task-1", "prd");
 
     expect(useAppStore.getState().error).toBe("no session");
   });
@@ -156,11 +162,11 @@ describe("loadTranscript", () => {
       makeTranscript({ taskId: "task-1", entries: [entry] }),
     );
 
-    const loading = loadTranscript("task-1");
-    expect(useAppStore.getState().transcripts["task-1"]?.status).toBe("loading");
+    const loading = loadTranscript("task-1", "prd");
+    expect(useAppStore.getState().transcripts["task-1|prd"]?.status).toBe("loading");
     await loading;
 
-    const transcript = useAppStore.getState().transcripts["task-1"];
+    const transcript = useAppStore.getState().transcripts["task-1|prd"];
     expect(transcript?.status).toBe("ready");
     expect(transcript?.entries).toEqual([entry]);
   });
@@ -168,7 +174,7 @@ describe("loadTranscript", () => {
   it("reports a conversation it could not read", async () => {
     vi.mocked(api.getTranscript).mockRejectedValueOnce(new Error("no such task"));
 
-    await loadTranscript("task-1");
+    await loadTranscript("task-1", "prd");
 
     expect(useAppStore.getState().error).toBe("no such task");
   });

@@ -40,11 +40,12 @@ type Sessions interface {
 	Open(ctx context.Context, t session.TaskInfo) error
 	Start(ctx context.Context, t session.TaskInfo, restarted bool) error
 	Discard(ctx context.Context, taskID string, stages ...string) error
-	Close(ctx context.Context, taskID string) error
-	Resume(ctx context.Context, taskID string) error
-	Summary(taskID string) (session.Summary, bool)
-	SendFromApp(ctx context.Context, taskID, text string) error
-	SendCorrection(ctx context.Context, taskID, text string) error
+	Close(ctx context.Context, k session.Key) error
+	CloseTask(ctx context.Context, taskID string) error
+	Resume(ctx context.Context, k session.Key) error
+	Summary(k session.Key) (session.Summary, bool)
+	SendFromApp(ctx context.Context, k session.Key, text string) error
+	SendCorrection(ctx context.Context, k session.Key, text string) error
 }
 
 // Reviews is what the flow needs from internal/review.

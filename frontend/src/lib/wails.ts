@@ -111,6 +111,11 @@ export type ErrorKind =
 export type PermissionDecision = "allow" | "allow_session" | "deny";
 export type TranscriptEventKind = "entry" | "text" | "remove" | "reset";
 
+/** sessionKey identifies one conversation: a task and the stage it belongs to. */
+export function sessionKey(taskId: string, stage: string): string {
+  return `${taskId}|${stage}`;
+}
+
 export function asThemePreference(value: string): ThemePreference {
   switch (value) {
     case "light":
@@ -299,26 +304,29 @@ export const api = {
 
   createTask: (req: CreateTaskRequest): Promise<string> => TaskService.CreateTask(req),
   deleteTask: (taskId: string): Promise<void> => TaskService.DeleteTask(taskId),
-  getTranscript: (taskId: string): Promise<Transcript> => TaskService.GetTranscript(taskId),
-  sendMessage: (taskId: string, text: string): Promise<void> =>
-    TaskService.SendMessage(taskId, text),
-  removePending: (taskId: string, entryId: string): Promise<void> =>
-    TaskService.RemovePending(taskId, entryId),
-  interrupt: (taskId: string): Promise<void> => TaskService.Interrupt(taskId),
-  pause: (taskId: string): Promise<void> => TaskService.Pause(taskId),
-  resume: (taskId: string): Promise<void> => TaskService.Resume(taskId),
-  retry: (taskId: string): Promise<void> => TaskService.Retry(taskId),
+  getTranscript: (taskId: string, stage: string): Promise<Transcript> =>
+    TaskService.GetTranscript(taskId, stage),
+  sendMessage: (taskId: string, stage: string, text: string): Promise<void> =>
+    TaskService.SendMessage(taskId, stage, text),
+  removePending: (taskId: string, stage: string, entryId: string): Promise<void> =>
+    TaskService.RemovePending(taskId, stage, entryId),
+  interrupt: (taskId: string, stage: string): Promise<void> => TaskService.Interrupt(taskId, stage),
+  pause: (taskId: string, stage: string): Promise<void> => TaskService.Pause(taskId, stage),
+  resume: (taskId: string, stage: string): Promise<void> => TaskService.Resume(taskId, stage),
+  retry: (taskId: string, stage: string): Promise<void> => TaskService.Retry(taskId, stage),
   answerPermission: (
     taskId: string,
+    stage: string,
     requestId: string,
     decision: PermissionDecision,
     message: string,
-  ): Promise<void> => TaskService.AnswerPermission(taskId, requestId, decision, message),
+  ): Promise<void> => TaskService.AnswerPermission(taskId, stage, requestId, decision, message),
   answerQuestion: (
     taskId: string,
+    stage: string,
     requestId: string,
     answers: Record<string, string>,
-  ): Promise<void> => TaskService.AnswerQuestion(taskId, requestId, answers),
+  ): Promise<void> => TaskService.AnswerQuestion(taskId, stage, requestId, answers),
   readArtifact: (taskId: string, name: string): Promise<string> =>
     TaskService.ReadArtifact(taskId, name),
   backToStage: (taskId: string, stage: TaskStage): Promise<void> =>

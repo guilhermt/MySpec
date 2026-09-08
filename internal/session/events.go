@@ -25,16 +25,16 @@ var ansiEscape = regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]`)
 
 // consume feeds the events of one process into the run and reports its exit.
 // It runs on its own goroutine, one per process.
-func (s *Service) consume(taskID string, gen int, p Process) {
+func (s *Service) consume(k Key, gen int, p Process) {
 	for ev := range p.Events() {
-		s.handle(taskID, gen, ev)
+		s.handle(k, gen, ev)
 	}
-	s.processExited(taskID, gen, p.Wait())
+	s.processExited(k, gen, p.Wait())
 }
 
 // handle applies one event to the run. Events of a process that is no longer
 // the current one are dropped.
-func (s *Service) handle(taskID string, gen int, ev claude.Event) {
+func (s *Service) handle(k Key, gen int, ev claude.Event) {
 	ctx, cancel := bgCtx()
 	defer cancel()
 	n := &notes{}
@@ -42,7 +42,7 @@ func (s *Service) handle(taskID string, gen int, ev claude.Event) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	r := s.runs[taskID]
+	r := s.runs[k]
 	if r == nil || r.procGen != gen {
 		return
 	}
@@ -93,7 +93,7 @@ func (s *Service) handleSystem(ctx context.Context, r *run, ev claude.Event, n *
 		// Progress the interface does not show.
 	case "api_retry":
 		r.retryAttempt = ev.APIRetry.Attempt
-		n.state(r.task.ID)
+		n.state(r.key())
 	case "compact_boundary":
 		s.appendLocked(ctx, r, Entry{Kind: KindMarker, Marker: &MarkerEntry{
 			Type:      MarkerCompacted,
@@ -123,7 +123,7 @@ func (s *Service) handleStream(ctx context.Context, r *run, ev *claude.StreamEve
 		t.partial = map[int][]byte{}
 		t.finalized = map[int]bool{}
 		r.rec.ContextTokens = event.Message.Usage.ContextTokens()
-		n.state(r.task.ID)
+		n.state(r.key())
 	case "content_block_start":
 		if event.ContentBlock == nil {
 			return
@@ -300,7 +300,7 @@ func (s *Service) handleControlRequest(ctx context.Context, r *run, ev *claude.C
 		}}
 	}
 	r.permission = s.appendLocked(ctx, r, e, n)
-	n.state(r.task.ID)
+	n.state(r.key())
 }
 
 // decodeQuestions reads the questions of an AskUserQuestion input.
@@ -348,7 +348,7 @@ func (s *Service) handleResult(ctx context.Context, r *run, ev *claude.ResultEve
 	if hadTurn {
 		s.resetTurnLocked(r, n)
 	}
-	n.state(r.task.ID)
+	n.state(r.key())
 	if !s.flushPendingLocked(ctx, r, n) {
 		s.armIdleLocked(r)
 	}
@@ -407,7 +407,7 @@ func (s *Service) resetTurnLocked(r *run, n *notes) {
 	r.interruptReq = ""
 	r.stopTimer(&r.interruptTmr)
 	r.retryAttempt = 0
-	n.state(r.task.ID)
+	n.state(r.key())
 }
 
 // bySeq lists the entries of a map in conversation order.
@@ -422,7 +422,7 @@ func bySeq[K comparable](entries map[K]*Entry) []*Entry {
 
 // processExited records the end of a process: quietly when the session asked
 // for it, as an error otherwise.
-func (s *Service) processExited(taskID string, gen int, exit claude.ExitInfo) {
+func (s *Service) processExited(k Key, gen int, exit claude.ExitInfo) {
 	ctx, cancel := bgCtx()
 	defer cancel()
 	n := &notes{}
@@ -430,7 +430,7 @@ func (s *Service) processExited(taskID string, gen int, exit claude.ExitInfo) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	r := s.runs[taskID]
+	r := s.runs[k]
 	if r == nil || r.procGen != gen {
 		return
 	}
@@ -446,7 +446,7 @@ func (s *Service) processExited(taskID string, gen int, exit claude.ExitInfo) {
 			close(r.stopped)
 			r.stopped = nil
 		}
-		n.state(taskID)
+		n.state(k)
 		return
 	}
 
@@ -469,8 +469,9 @@ func (s *Service) processExited(taskID string, gen int, exit claude.ExitInfo) {
 		Message:   message,
 		Retryable: true,
 	}}, n)
-	s.log.Warn("claude exited unexpectedly", "task", taskID, "code", exit.Code, "signal", exit.Signal)
-	n.state(taskID)
+	s.log.Warn("claude exited unexpectedly",
+		"task", k.TaskID, "stage", k.Stage, "code", exit.Code, "signal", exit.Signal)
+	n.state(k)
 }
 
 // armFlushLocked schedules the delivery of streaming text, unless one is
@@ -479,18 +480,18 @@ func (s *Service) armFlushLocked(r *run) {
 	if r.flushTimer != nil {
 		return
 	}
-	taskID, gen := r.task.ID, r.procGen
-	r.flushTimer = time.AfterFunc(TextFlushInterval, func() { s.flushText(taskID, gen) })
+	key, gen := r.key(), r.procGen
+	r.flushTimer = time.AfterFunc(TextFlushInterval, func() { s.flushText(key, gen) })
 }
 
 // flushText delivers the text accumulated since the last flush.
-func (s *Service) flushText(taskID string, gen int) {
+func (s *Service) flushText(k Key, gen int) {
 	n := &notes{}
 	defer s.flush(n)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	r := s.runs[taskID]
+	r := s.runs[k]
 	if r == nil || r.procGen != gen {
 		return
 	}
@@ -502,7 +503,7 @@ func (s *Service) flushText(taskID string, gen int) {
 // text. The caller holds the mutex.
 func (s *Service) flushTextLocked(r *run, n *notes) {
 	for _, e := range bySeq(dirtyEntries(r)) {
-		n.text(r.task.ID, e.ID, e.Assistant.Text)
+		n.text(r.key(), e.ID, e.Assistant.Text)
 	}
 	clear(r.dirty)
 }

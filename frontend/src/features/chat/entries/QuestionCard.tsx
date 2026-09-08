@@ -39,6 +39,7 @@ function answerOf(choice: Choice): string {
 
 export interface QuestionCardProps {
   taskId: string;
+  stage: string;
   question: QuestionEntry;
 }
 
@@ -46,7 +47,7 @@ export interface QuestionCardProps {
  * QuestionCard is the agent asking the user to decide. Every question has to be
  * answered before the turn goes on.
  */
-export function QuestionCard({ taskId, question }: QuestionCardProps) {
+export function QuestionCard({ taskId, stage, question }: QuestionCardProps) {
   const titleId = useId();
   const groupName = useId();
   const questions = question.questions ?? [];
@@ -64,7 +65,7 @@ export function QuestionCard({ taskId, question }: QuestionCardProps) {
     for (const [index, item] of questions.entries()) {
       answers[item.question] = answerOf(choiceAt(index));
     }
-    void answerQuestion(taskId, question.requestId, answers);
+    void answerQuestion(taskId, stage, question.requestId, answers);
   };
 
   return (

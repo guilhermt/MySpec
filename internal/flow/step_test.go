@@ -42,7 +42,7 @@ func TestAFinishedPlanStartsTheFirstStepInItsWorktree(t *testing.T) {
 	f.waitStep(t, "task-1", 1, flow.StepImplementing)
 
 	f.waitWorktreeCalls(t, "ensure:task-1:api", "status:task-1:task-1")
-	f.waitCalls(t, "close:task-1", "start:task-1:step:1:restarted=false")
+	f.waitCalls(t, "close:task-1:plan", "start:task-1:step:1:restarted=false")
 
 	state := f.stepState(t, "task-1", 1)
 	if want := worktree.Path(workspace, "api", "task-1"); state.WorktreePath != want {
@@ -72,8 +72,17 @@ func TestAnIdleStepSessionIsAwaitingReview(t *testing.T) {
 		t.Errorf("status = %q, want awaiting_review", got)
 	}
 
-	// A session of another key never speaks for the step.
+	// A session of another stage of the same task never speaks for the step.
 	f.sessions.setSummary("task-1", session.Summary{Stage: string(task.StagePlan), Idle: true})
+	if got := f.stepState(t, "task-1", 1).Status; got != flow.StepAwaitingReview {
+		t.Errorf("status = %q, want awaiting_review: the plan session is not the step's", got)
+	}
+
+	// Without a session of its own, the step is simply implementing.
+	stepSession := session.Key{TaskID: "task-1", Stage: session.StepStage(1)}
+	if err := f.sessions.Close(t.Context(), stepSession); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
 	if got := f.stepState(t, "task-1", 1).Status; got != flow.StepImplementing {
 		t.Errorf("status = %q, want implementing", got)
 	}
@@ -486,7 +495,7 @@ func TestDiscardingThePlanTearsTheStepsDownFirst(t *testing.T) {
 
 	f.wantCalls(t,
 		"start:task-1:step:1:restarted=false",
-		"close:task-1",
+		"closeTask:task-1",
 		"discard:task-1:step:1",
 		"discard:task-1:plan",
 		"start:task-1:plan:restarted=true",
@@ -513,7 +522,7 @@ func TestBackToTheTechSpecTearsTheStepsDownFirst(t *testing.T) {
 
 	f.wantCalls(t,
 		"start:task-1:step:1:restarted=false",
-		"close:task-1",
+		"closeTask:task-1",
 		"discard:task-1:step:1",
 		"discard:task-1:plan",
 		"open:task-1:tech_spec",
@@ -538,7 +547,7 @@ func TestAWorktreeThatCannotBeRemovedKeepsEverythingAndReopensTheSession(t *test
 
 	f.wantCalls(t,
 		"start:task-1:step:1:restarted=false",
-		"close:task-1",
+		"closeTask:task-1",
 		"open:task-1:step:1",
 	)
 	if runs := f.tasks.StepRuns("task-1"); len(runs) != 1 {
@@ -589,9 +598,9 @@ func TestDeleteTearsTheStepsDownAndRemovesTheTask(t *testing.T) {
 
 	f.wantCalls(t,
 		"start:task-1:step:1:restarted=false",
-		"close:task-1",
+		"closeTask:task-1",
 		"discard:task-1:step:1",
-		"close:task-1",
+		"closeTask:task-1",
 	)
 	f.waitWorktreeCalls(t, "ensure:task-1:api", "status:task-1:task-1", "removeAll:task-1")
 	if _, ok := f.tasks.Get("task-1"); ok {
@@ -609,7 +618,7 @@ func TestDeleteOfAPlannedTaskTouchesNoWorktree(t *testing.T) {
 		t.Fatalf("Delete: %v", err)
 	}
 
-	f.wantCalls(t, "close:task-1")
+	f.wantCalls(t, "closeTask:task-1")
 	if calls := f.worktrees.recorded(); len(calls) != 0 {
 		t.Errorf("worktree calls = %v, want none", calls)
 	}

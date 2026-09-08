@@ -5,6 +5,7 @@ import { removePending } from "@/store/actions";
 
 export interface PendingMessageProps {
   taskId: string;
+  stage: string;
   entryId: string;
   user: UserEntry;
 }
@@ -13,7 +14,7 @@ export interface PendingMessageProps {
  * PendingMessage is a message the user sent while the agent was busy. It waits
  * in the queue, and it can still be taken back.
  */
-export function PendingMessage({ taskId, entryId, user }: PendingMessageProps) {
+export function PendingMessage({ taskId, stage, entryId, user }: PendingMessageProps) {
   return (
     <div className="flex max-w-[85%] items-center gap-1 self-end">
       <Button
@@ -21,7 +22,7 @@ export function PendingMessage({ taskId, entryId, user }: PendingMessageProps) {
         size="icon-xs"
         aria-label="Remove queued message"
         className="text-muted-foreground"
-        onClick={() => void removePending(taskId, entryId)}
+        onClick={() => void removePending(taskId, stage, entryId)}
       >
         <X />
       </Button>

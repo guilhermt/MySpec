@@ -123,9 +123,9 @@ func Run(cfg Config) int {
 			return prompts.Render(dirs.Data, stage, vars)
 		},
 		Log: log,
-		OnState: func(taskID string) {
+		OnState: func(k session.Key) {
 			a.publish()
-			a.flow.Check(taskID)
+			a.flow.Check(k.TaskID)
 		},
 		OnTranscript: a.emitTranscript,
 	})

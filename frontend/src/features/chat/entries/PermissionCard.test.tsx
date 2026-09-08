@@ -15,7 +15,7 @@ function permission(overrides: Partial<PermissionEntry> = {}): PermissionEntry {
 
 describe("PermissionCard", () => {
   it("shows the tool and what it wants to run", () => {
-    renderWithStore(<PermissionCard taskId="task-1" permission={permission()} />);
+    renderWithStore(<PermissionCard stage="prd" taskId="task-1" permission={permission()} />);
 
     expect(screen.getByRole("group", { name: "Permission needed" })).toBeInTheDocument();
     expect(screen.getByText("Bash")).toBeInTheDocument();
@@ -26,6 +26,7 @@ describe("PermissionCard", () => {
   it("shows the path of a file tool and the raw input of anything else", () => {
     const { unmount } = renderWithStore(
       <PermissionCard
+        stage="prd"
         taskId="task-1"
         permission={permission({ tool: "Write", input: '{"file_path":"src/main.tsx"}' })}
       />,
@@ -36,6 +37,7 @@ describe("PermissionCard", () => {
 
     renderWithStore(
       <PermissionCard
+        stage="prd"
         taskId="task-1"
         permission={permission({ tool: "WebFetch", input: '{"url":"https://example.com"}' })}
       />,
@@ -45,26 +47,38 @@ describe("PermissionCard", () => {
   });
 
   it("allows the tool once", async () => {
-    const { user } = renderWithStore(<PermissionCard taskId="task-1" permission={permission()} />);
+    const { user } = renderWithStore(
+      <PermissionCard stage="prd" taskId="task-1" permission={permission()} />,
+    );
 
     await user.click(screen.getByRole("button", { name: "Allow" }));
 
-    expect(api.answerPermission).toHaveBeenCalledWith("task-1", "req-1", "allow", "");
+    expect(api.answerPermission).toHaveBeenCalledWith("task-1", "prd", "req-1", "allow", "");
   });
 
   it("allows the tool for the whole session", async () => {
-    const { user } = renderWithStore(<PermissionCard taskId="task-1" permission={permission()} />);
+    const { user } = renderWithStore(
+      <PermissionCard stage="prd" taskId="task-1" permission={permission()} />,
+    );
 
     await user.click(screen.getByRole("button", { name: "Allow for this session" }));
 
-    expect(api.answerPermission).toHaveBeenCalledWith("task-1", "req-1", "allow_session", "");
+    expect(api.answerPermission).toHaveBeenCalledWith(
+      "task-1",
+      "prd",
+      "req-1",
+      "allow_session",
+      "",
+    );
   });
 
   it.each([
     ["the CLI suppresses it", { suppressAlwaysAllow: true }],
     ["there is no rule to remember", { suggestions: "" }],
   ])("hides the session answer when %s", (_reason, overrides) => {
-    renderWithStore(<PermissionCard taskId="task-1" permission={permission(overrides)} />);
+    renderWithStore(
+      <PermissionCard stage="prd" taskId="task-1" permission={permission(overrides)} />,
+    );
 
     expect(
       screen.queryByRole("button", { name: "Allow for this session" }),
@@ -72,7 +86,9 @@ describe("PermissionCard", () => {
   });
 
   it("asks what to do instead before denying", async () => {
-    const { user } = renderWithStore(<PermissionCard taskId="task-1" permission={permission()} />);
+    const { user } = renderWithStore(
+      <PermissionCard stage="prd" taskId="task-1" permission={permission()} />,
+    );
 
     await user.click(screen.getByRole("button", { name: "Deny" }));
     expect(api.answerPermission).not.toHaveBeenCalled();
@@ -83,11 +99,19 @@ describe("PermissionCard", () => {
     );
     await user.click(screen.getByRole("button", { name: "Confirm deny" }));
 
-    expect(api.answerPermission).toHaveBeenCalledWith("task-1", "req-1", "deny", "read it first");
+    expect(api.answerPermission).toHaveBeenCalledWith(
+      "task-1",
+      "prd",
+      "req-1",
+      "deny",
+      "read it first",
+    );
   });
 
   it("takes the denial back", async () => {
-    const { user } = renderWithStore(<PermissionCard taskId="task-1" permission={permission()} />);
+    const { user } = renderWithStore(
+      <PermissionCard stage="prd" taskId="task-1" permission={permission()} />,
+    );
 
     await user.click(screen.getByRole("button", { name: "Deny" }));
     await user.click(screen.getByRole("button", { name: "Cancel" }));
@@ -98,14 +122,14 @@ describe("PermissionCard", () => {
 
   it("puts the focus on Allow, unless the CLI wants a deliberate answer", () => {
     const { unmount } = renderWithStore(
-      <PermissionCard taskId="task-1" permission={permission()} />,
+      <PermissionCard stage="prd" taskId="task-1" permission={permission()} />,
     );
 
     expect(screen.getByRole("button", { name: "Allow" })).toHaveFocus();
     unmount();
 
     renderWithStore(
-      <PermissionCard taskId="task-1" permission={permission({ defaultToNo: true })} />,
+      <PermissionCard stage="prd" taskId="task-1" permission={permission({ defaultToNo: true })} />,
     );
 
     expect(screen.getByRole("button", { name: "Allow" })).not.toHaveFocus();
@@ -116,7 +140,9 @@ describe("PermissionCard", () => {
     ["allowed_session", "Allowed for this session"],
     ["cancelled", "Cancelled before an answer"],
   ] as const)("reports the answer that was given: %s", (status, expected) => {
-    renderWithStore(<PermissionCard taskId="task-1" permission={permission({ status })} />);
+    renderWithStore(
+      <PermissionCard stage="prd" taskId="task-1" permission={permission({ status })} />,
+    );
 
     expect(screen.getByText(expected)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Allow" })).not.toBeInTheDocument();
@@ -125,6 +151,7 @@ describe("PermissionCard", () => {
   it("carries the message along with a denial", () => {
     renderWithStore(
       <PermissionCard
+        stage="prd"
         taskId="task-1"
         permission={permission({ status: "denied", denyMessage: "read it first" })}
       />,
@@ -136,6 +163,7 @@ describe("PermissionCard", () => {
   it("explains why the CLI stopped the tool", () => {
     renderWithStore(
       <PermissionCard
+        stage="prd"
         taskId="task-1"
         permission={permission({
           decisionReason: "no rule matched",

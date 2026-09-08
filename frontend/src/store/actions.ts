@@ -54,53 +54,55 @@ export function deleteTask(taskId: string): Promise<void> {
 }
 
 /** loadTranscript fetches a conversation and buffers what arrives meanwhile. */
-export function loadTranscript(taskId: string): Promise<void> {
-  useAppStore.getState().beginTranscript(taskId);
+export function loadTranscript(taskId: string, stage: string): Promise<void> {
+  useAppStore.getState().beginTranscript(taskId, stage);
   return run(async () => {
-    const transcript = await api.getTranscript(taskId);
+    const transcript = await api.getTranscript(taskId, stage);
     useAppStore.getState().setTranscript(transcript);
   });
 }
 
-export function sendMessage(taskId: string, text: string): Promise<void> {
-  return run(() => api.sendMessage(taskId, text));
+export function sendMessage(taskId: string, stage: string, text: string): Promise<void> {
+  return run(() => api.sendMessage(taskId, stage, text));
 }
 
-export function removePending(taskId: string, entryId: string): Promise<void> {
-  return run(() => api.removePending(taskId, entryId));
+export function removePending(taskId: string, stage: string, entryId: string): Promise<void> {
+  return run(() => api.removePending(taskId, stage, entryId));
 }
 
-export function interrupt(taskId: string): Promise<void> {
-  return run(() => api.interrupt(taskId));
+export function interrupt(taskId: string, stage: string): Promise<void> {
+  return run(() => api.interrupt(taskId, stage));
 }
 
-export function pause(taskId: string): Promise<void> {
-  return run(() => api.pause(taskId));
+export function pause(taskId: string, stage: string): Promise<void> {
+  return run(() => api.pause(taskId, stage));
 }
 
-export function resume(taskId: string): Promise<void> {
-  return run(() => api.resume(taskId));
+export function resume(taskId: string, stage: string): Promise<void> {
+  return run(() => api.resume(taskId, stage));
 }
 
-export function retry(taskId: string): Promise<void> {
-  return run(() => api.retry(taskId));
+export function retry(taskId: string, stage: string): Promise<void> {
+  return run(() => api.retry(taskId, stage));
 }
 
 export function answerPermission(
   taskId: string,
+  stage: string,
   requestId: string,
   decision: PermissionDecision,
   message: string,
 ): Promise<void> {
-  return run(() => api.answerPermission(taskId, requestId, decision, message));
+  return run(() => api.answerPermission(taskId, stage, requestId, decision, message));
 }
 
 export function answerQuestion(
   taskId: string,
+  stage: string,
   requestId: string,
   answers: Record<string, string>,
 ): Promise<void> {
-  return run(() => api.answerQuestion(taskId, requestId, answers));
+  return run(() => api.answerQuestion(taskId, stage, requestId, answers));
 }
 
 /** backToStage reopens a stage that is already done. */

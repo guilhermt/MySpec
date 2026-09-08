@@ -461,6 +461,7 @@ export interface Transcript {
  */
 export interface TranscriptEvent {
     "taskId": string;
+    "stage": string;
 
     /**
      * Kind is entry, text, remove or reset.

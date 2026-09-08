@@ -24,7 +24,7 @@ describe("TaskView", () => {
     expect(screen.getByText("add-login")).toBeInTheDocument();
     expect(screen.getByRole("textbox")).toBeInTheDocument();
     await waitFor(() => {
-      expect(api.getTranscript).toHaveBeenCalledWith("task-1");
+      expect(api.getTranscript).toHaveBeenCalledWith("task-1", "prd");
     });
   });
 
@@ -60,7 +60,7 @@ describe("TaskView", () => {
 
     expect(screen.getByRole("textbox")).toBeInTheDocument();
     await waitFor(() => {
-      expect(api.getTranscript).toHaveBeenCalledWith("task-1");
+      expect(api.getTranscript).toHaveBeenCalledWith("task-1", "step:1");
     });
   });
 

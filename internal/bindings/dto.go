@@ -268,6 +268,7 @@ type Transcript struct {
 // TranscriptEvent is one change to the conversation of a task.
 type TranscriptEvent struct {
 	TaskID string `json:"taskId"`
+	Stage  string `json:"stage"`
 	// Kind is entry, text, remove or reset.
 	Kind    string `json:"kind"`
 	Entry   *Entry `json:"entry"`

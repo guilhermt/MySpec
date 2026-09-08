@@ -66,29 +66,43 @@ describe("bootstrap", () => {
     useAppStore.getState().setTranscript(makeTranscript({ taskId: "task-1" }));
     const entry = makeEntry("user", { id: "a", seq: 1 });
 
-    emitTranscript({ taskId: "task-1", kind: "entry", entry, entryId: "", text: "" });
+    emitTranscript({ taskId: "task-1", stage: "prd", kind: "entry", entry, entryId: "", text: "" });
 
-    expect(useAppStore.getState().transcripts["task-1"]?.entries).toEqual([entry]);
+    expect(useAppStore.getState().transcripts["task-1|prd"]?.entries).toEqual([entry]);
   });
 
   it("reads the conversation again when it is reset", async () => {
     await bootstrap(useAppStore);
     useAppStore.getState().setTranscript(makeTranscript({ taskId: "task-1" }));
 
-    emitTranscript({ taskId: "task-1", kind: "reset", entry: null, entryId: "", text: "" });
+    emitTranscript({
+      taskId: "task-1",
+      stage: "prd",
+      kind: "reset",
+      entry: null,
+      entryId: "",
+      text: "",
+    });
     await vi.waitFor(() => {
-      expect(api.getTranscript).toHaveBeenCalledWith("task-1");
+      expect(api.getTranscript).toHaveBeenCalledWith("task-1", "prd");
     });
 
-    expect(useAppStore.getState().transcripts["task-1"]?.status).toBe("ready");
+    expect(useAppStore.getState().transcripts["task-1|prd"]?.status).toBe("ready");
   });
 
   it("leaves a reset alone when the conversation was never loaded", async () => {
     await bootstrap(useAppStore);
 
-    emitTranscript({ taskId: "task-1", kind: "reset", entry: null, entryId: "", text: "" });
+    emitTranscript({
+      taskId: "task-1",
+      stage: "prd",
+      kind: "reset",
+      entry: null,
+      entryId: "",
+      text: "",
+    });
 
     expect(api.getTranscript).not.toHaveBeenCalled();
-    expect(useAppStore.getState().transcripts["task-1"]).toBeUndefined();
+    expect(useAppStore.getState().transcripts["task-1|prd"]).toBeUndefined();
   });
 });

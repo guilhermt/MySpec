@@ -4,7 +4,7 @@ import { Conversation } from "@/features/chat/Conversation";
 import { ImplementationDone } from "@/features/task/ImplementationDone";
 import { ReviewStrip } from "@/features/task/ReviewStrip";
 import { StepBlocked } from "@/features/task/StepBlocked";
-import { currentStepOf, stepPhaseLabel } from "@/features/task/step-status";
+import { currentStepOf, stepPhaseLabel, stepStage } from "@/features/task/step-status";
 import { asStepStatus, type TaskSummary } from "@/lib/wails";
 
 /** Waiting is what the step shows while there is nothing to read yet. */
@@ -53,8 +53,8 @@ export function StepPane({ task }: StepPaneProps) {
       return (
         <>
           <ReviewStrip task={task} step={step} />
-          <Conversation taskId={task.id} />
-          <Composer task={task} />
+          <Conversation taskId={task.id} stage={stepStage(step.number)} />
+          <Composer task={task} stage={stepStage(step.number)} />
         </>
       );
     case "preparing":

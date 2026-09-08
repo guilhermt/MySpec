@@ -86,19 +86,19 @@ func (s *TaskService) DeleteTask(taskID string) error {
 	return nil
 }
 
-// GetTranscript returns the whole conversation of a task. It is how the
-// frontend gets its first one; every later change arrives with
-// EventTranscriptChanged.
-func (s *TaskService) GetTranscript(taskID string) (Transcript, error) {
+// GetTranscript returns the whole conversation of one session of a task, named
+// by its stage. It is how the frontend gets its first one; every later change
+// arrives with EventTranscriptChanged.
+func (s *TaskService) GetTranscript(taskID, stage string) (Transcript, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
-	transcript, err := s.sessions.Transcript(ctx, taskID)
+	transcript, err := s.sessions.Transcript(ctx, session.Key{TaskID: taskID, Stage: stage})
 	// A task past the stages that have a conversation has none, and the
 	// frontend asks for it all the same; its stage answers with an empty one.
 	if errors.Is(err, session.ErrNotFound) {
-		if t, ok := s.tasks.Get(taskID); ok {
-			return Transcript{TaskID: taskID, Stage: string(t.Stage), Entries: []Entry{}, Pending: []Entry{}}, nil
+		if _, ok := s.tasks.Get(taskID); ok {
+			return Transcript{TaskID: taskID, Stage: stage, Entries: []Entry{}, Pending: []Entry{}}, nil
 		}
 	}
 	if err != nil {
@@ -241,66 +241,66 @@ func (s *TaskService) OpenFileInEditor(taskID, path string) error {
 
 // SendMessage queues a message for the agent, delivered right away when the
 // session is free.
-func (s *TaskService) SendMessage(taskID, text string) error {
+func (s *TaskService) SendMessage(taskID, stage, text string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
-	if err := s.sessions.Send(ctx, taskID, text); err != nil {
+	if err := s.sessions.Send(ctx, session.Key{TaskID: taskID, Stage: stage}, text); err != nil {
 		return s.fail("SendMessage", err)
 	}
 	return nil
 }
 
 // RemovePending drops a queued message before it reaches the agent.
-func (s *TaskService) RemovePending(taskID, entryID string) error {
+func (s *TaskService) RemovePending(taskID, stage, entryID string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
-	if err := s.sessions.RemovePending(ctx, taskID, entryID); err != nil {
+	if err := s.sessions.RemovePending(ctx, session.Key{TaskID: taskID, Stage: stage}, entryID); err != nil {
 		return s.fail("RemovePending", err)
 	}
 	return nil
 }
 
 // Interrupt aborts the running turn of a task, leaving the session alive.
-func (s *TaskService) Interrupt(taskID string) error {
+func (s *TaskService) Interrupt(taskID, stage string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
-	if err := s.sessions.Interrupt(ctx, taskID); err != nil {
+	if err := s.sessions.Interrupt(ctx, session.Key{TaskID: taskID, Stage: stage}); err != nil {
 		return s.fail("Interrupt", err)
 	}
 	return nil
 }
 
 // Pause stops the process of a task and holds every message until Resume.
-func (s *TaskService) Pause(taskID string) error {
+func (s *TaskService) Pause(taskID, stage string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
-	if err := s.sessions.Pause(ctx, taskID); err != nil {
+	if err := s.sessions.Pause(ctx, session.Key{TaskID: taskID, Stage: stage}); err != nil {
 		return s.fail("Pause", err)
 	}
 	return nil
 }
 
 // Resume lifts a pause and delivers what was queued meanwhile.
-func (s *TaskService) Resume(taskID string) error {
+func (s *TaskService) Resume(taskID, stage string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
-	if err := s.sessions.Resume(ctx, taskID); err != nil {
+	if err := s.sessions.Resume(ctx, session.Key{TaskID: taskID, Stage: stage}); err != nil {
 		return s.fail("Resume", err)
 	}
 	return nil
 }
 
 // Retry clears the last error of a task and starts its process again.
-func (s *TaskService) Retry(taskID string) error {
+func (s *TaskService) Retry(taskID, stage string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
-	if err := s.sessions.Retry(ctx, taskID); err != nil {
+	if err := s.sessions.Retry(ctx, session.Key{TaskID: taskID, Stage: stage}); err != nil {
 		return s.fail("Retry", err)
 	}
 	return nil
@@ -309,7 +309,7 @@ func (s *TaskService) Retry(taskID string) error {
 // AnswerPermission answers the pending permission request of a task. The
 // decision is allow, allow_session or deny; message is the reason a denial
 // gives the agent.
-func (s *TaskService) AnswerPermission(taskID, requestID, decision, message string) error {
+func (s *TaskService) AnswerPermission(taskID, stage, requestID, decision, message string) error {
 	parsed, err := parseDecision(decision)
 	if err != nil {
 		return s.fail("AnswerPermission", err)
@@ -318,7 +318,8 @@ func (s *TaskService) AnswerPermission(taskID, requestID, decision, message stri
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
-	if err := s.sessions.AnswerPermission(ctx, taskID, requestID, parsed, message); err != nil {
+	key := session.Key{TaskID: taskID, Stage: stage}
+	if err := s.sessions.AnswerPermission(ctx, key, requestID, parsed, message); err != nil {
 		return s.fail("AnswerPermission", err)
 	}
 	return nil
@@ -326,11 +327,12 @@ func (s *TaskService) AnswerPermission(taskID, requestID, decision, message stri
 
 // AnswerQuestion answers the pending structured question of a task, mapping
 // each question text to the chosen label.
-func (s *TaskService) AnswerQuestion(taskID, requestID string, answers map[string]string) error {
+func (s *TaskService) AnswerQuestion(taskID, stage, requestID string, answers map[string]string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
-	if err := s.sessions.AnswerQuestion(ctx, taskID, requestID, answers); err != nil {
+	key := session.Key{TaskID: taskID, Stage: stage}
+	if err := s.sessions.AnswerQuestion(ctx, key, requestID, answers); err != nil {
 		return s.fail("AnswerQuestion", err)
 	}
 	return nil

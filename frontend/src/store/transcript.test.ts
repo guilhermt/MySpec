@@ -13,7 +13,7 @@ function ready(entries: Entry[] = [], pending: Entry[] = []): TranscriptState {
 }
 
 function entryEvent(entry: Entry): TranscriptEvent {
-  return { taskId: "task-1", kind: "entry", entry, entryId: "", text: "" };
+  return { taskId: "task-1", stage: "prd", kind: "entry", entry, entryId: "", text: "" };
 }
 
 describe("applyEvent", () => {
@@ -54,7 +54,14 @@ describe("applyEvent", () => {
     const state = ready([makeEntry("user", { id: "a", seq: 1 })]);
 
     expect(
-      applyEvent(state, { taskId: "task-1", kind: "entry", entry: null, entryId: "", text: "" }),
+      applyEvent(state, {
+        taskId: "task-1",
+        stage: "prd",
+        kind: "entry",
+        entry: null,
+        entryId: "",
+        text: "",
+      }),
     ).toBe(state);
   });
 
@@ -114,6 +121,7 @@ describe("applyEvent", () => {
 
     const next = applyEvent(state, {
       taskId: "task-1",
+      stage: "prd",
       kind: "text",
       entry: null,
       entryId: "a",
@@ -128,6 +136,7 @@ describe("applyEvent", () => {
 
     const next = applyEvent(state, {
       taskId: "task-1",
+      stage: "prd",
       kind: "text",
       entry: null,
       entryId: "gone",
@@ -147,8 +156,15 @@ describe("applyEvent", () => {
     const state = ready([entry], [queued]);
 
     const next = applyEvent(
-      applyEvent(state, { taskId: "task-1", kind: "remove", entry: null, entryId: "a", text: "" }),
-      { taskId: "task-1", kind: "remove", entry: null, entryId: "b", text: "" },
+      applyEvent(state, {
+        taskId: "task-1",
+        stage: "prd",
+        kind: "remove",
+        entry: null,
+        entryId: "a",
+        text: "",
+      }),
+      { taskId: "task-1", stage: "prd", kind: "remove", entry: null, entryId: "b", text: "" },
     );
 
     expect(next.entries).toEqual([]);
@@ -160,11 +176,14 @@ describe("applyEvent", () => {
       status: "ready",
       entries: [makeEntry("user", { id: "a", seq: 1 })],
       pending: [],
-      buffered: [{ taskId: "task-1", kind: "remove", entry: null, entryId: "a", text: "" }],
+      buffered: [
+        { taskId: "task-1", stage: "prd", kind: "remove", entry: null, entryId: "a", text: "" },
+      ],
     };
 
     const next = applyEvent(state, {
       taskId: "task-1",
+      stage: "prd",
       kind: "reset",
       entry: null,
       entryId: "",
@@ -179,7 +198,14 @@ describe("applyEvent", () => {
     const state = ready();
 
     expect(
-      applyEvent(state, { taskId: "task-1", kind: "sideways", entry: null, entryId: "", text: "" }),
+      applyEvent(state, {
+        taskId: "task-1",
+        stage: "prd",
+        kind: "sideways",
+        entry: null,
+        entryId: "",
+        text: "",
+      }),
     ).toBe(state);
   });
 });

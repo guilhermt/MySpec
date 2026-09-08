@@ -7,6 +7,11 @@ export function currentStepOf(task: TaskSummary): Step | null {
   return (task.steps ?? []).find((step) => step.number === task.currentStep) ?? null;
 }
 
+/** stepStage is the session key of a step, the way the Go side names it. */
+export function stepStage(number: number): string {
+  return `step:${number}`;
+}
+
 /** hasStepSession reports whether the step already has a conversation to show. */
 export function hasStepSession(step: Step | null): boolean {
   if (step === null) {

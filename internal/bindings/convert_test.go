@@ -328,3 +328,62 @@ func TestFromEntryCarriesTheStepOfAMarker(t *testing.T) {
 		t.Errorf("marker mismatch (-want +got):\n%s", diff)
 	}
 }
+
+func TestFromTasksPicksTheSessionOfTheStageTheTaskIsIn(t *testing.T) {
+	t.Parallel()
+
+	summaries := map[session.Key]session.Summary{
+		{TaskID: "task-1", Stage: "prd"}:    {Status: session.StatusWorking, PendingCount: 2},
+		{TaskID: "task-2", Stage: "plan"}:   {Status: session.StatusPaused},
+		{TaskID: "task-2", Stage: "step:2"}: {Status: session.StatusNeedsPermission, ContextPercent: 40},
+	}
+	states := []flow.StepState{
+		{Step: task.Step{Number: 1}, Status: flow.StepDone},
+		{Step: task.Step{Number: 2}, Status: flow.StepImplementing},
+	}
+
+	got := bindings.FromTasks(
+		[]task.Task{
+			{ID: "task-1", Stage: task.StagePRD},
+			{ID: "task-2", Stage: task.StageImplementation},
+		},
+		func(string) task.Artifacts { return task.Artifacts{} },
+		func(id string) []flow.StepState {
+			if id == "task-2" {
+				return states
+			}
+			return nil
+		},
+		summaries,
+	)
+	if len(got) != 2 {
+		t.Fatalf("len(FromTasks()) = %d, want 2", len(got))
+	}
+	if got[0].SessionStatus != "working" || got[0].PendingCount != 2 {
+		t.Errorf("task-1 = %+v, want the session of its own stage", got[0])
+	}
+	// The implementing task is shown through the session of the step that
+	// runs, never through the one the planning stage left behind.
+	if got[1].SessionStatus != "needs_permission" || got[1].ContextPercent != 40 {
+		t.Errorf("task-2 = %+v, want the session of step 2", got[1])
+	}
+}
+
+func TestFromTasksLeavesAnImplementingTaskWithoutAStepAtRest(t *testing.T) {
+	t.Parallel()
+
+	summaries := map[session.Key]session.Summary{
+		{TaskID: "task-1", Stage: "step:1"}: {Status: session.StatusWorking},
+	}
+	states := []flow.StepState{{Step: task.Step{Number: 1}, Status: flow.StepDone}}
+
+	got := bindings.FromTasks(
+		[]task.Task{{ID: "task-1", Stage: task.StageImplementation}},
+		func(string) task.Artifacts { return task.Artifacts{} },
+		func(string) []flow.StepState { return states },
+		summaries,
+	)
+	if got[0].SessionStatus != "waiting" {
+		t.Errorf("sessionStatus = %q, want waiting: every step is committed", got[0].SessionStatus)
+	}
+}

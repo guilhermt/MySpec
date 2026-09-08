@@ -325,14 +325,14 @@ func (m *memTasks) indexOf(id string) int {
 // memSessions is an in-memory flow.Sessions recording what it was asked to do.
 type memSessions struct {
 	mu        sync.Mutex
-	summaries map[string]session.Summary
+	summaries map[session.Key]session.Summary
 	calls     []string
 	messages  []string
 	err       error // returned by every call that changes something
 }
 
 func newSessions() *memSessions {
-	return &memSessions{summaries: map[string]session.Summary{}}
+	return &memSessions{summaries: map[session.Key]session.Summary{}}
 }
 
 func (m *memSessions) Open(_ context.Context, t session.TaskInfo) error {
@@ -343,8 +343,10 @@ func (m *memSessions) Open(_ context.Context, t session.TaskInfo) error {
 	if m.err != nil {
 		return m.err
 	}
-	if _, ok := m.summaries[t.ID]; !ok {
-		m.summaries[t.ID] = session.Summary{TaskID: t.ID, Status: session.StatusWaiting, Idle: true}
+	if _, ok := m.summaries[t.Key()]; !ok {
+		m.summaries[t.Key()] = session.Summary{
+			TaskID: t.ID, Stage: t.Stage, Status: session.StatusWaiting, Idle: true,
+		}
 	}
 	return nil
 }
@@ -357,7 +359,7 @@ func (m *memSessions) Start(_ context.Context, t session.TaskInfo, restarted boo
 	if m.err != nil {
 		return m.err
 	}
-	m.summaries[t.ID] = session.Summary{TaskID: t.ID, Stage: t.Stage, Status: session.StatusWorking}
+	m.summaries[t.Key()] = session.Summary{TaskID: t.ID, Stage: t.Stage, Status: session.StatusWorking}
 	return nil
 }
 
@@ -369,84 +371,107 @@ func (m *memSessions) Discard(_ context.Context, taskID string, stages ...string
 	if m.err != nil {
 		return m.err
 	}
-	delete(m.summaries, taskID)
+	for _, stage := range stages {
+		delete(m.summaries, session.Key{TaskID: taskID, Stage: stage})
+	}
 	return nil
 }
 
-func (m *memSessions) Close(_ context.Context, taskID string) error {
+func (m *memSessions) Close(_ context.Context, k session.Key) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.calls = append(m.calls, "close:"+taskID)
+	m.calls = append(m.calls, "close:"+k.TaskID+":"+k.Stage)
 	if m.err != nil {
 		return m.err
 	}
-	delete(m.summaries, taskID)
+	delete(m.summaries, k)
 	return nil
 }
 
-func (m *memSessions) Resume(_ context.Context, taskID string) error {
+func (m *memSessions) CloseTask(_ context.Context, taskID string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.calls = append(m.calls, "resume:"+taskID)
+	m.calls = append(m.calls, "closeTask:"+taskID)
 	if m.err != nil {
 		return m.err
 	}
-	sum, ok := m.summaries[taskID]
+	for k := range m.summaries {
+		if k.TaskID == taskID {
+			delete(m.summaries, k)
+		}
+	}
+	return nil
+}
+
+func (m *memSessions) Resume(_ context.Context, k session.Key) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.calls = append(m.calls, "resume:"+k.TaskID+":"+k.Stage)
+	if m.err != nil {
+		return m.err
+	}
+	sum, ok := m.summaries[k]
 	if !ok {
 		return session.ErrNotFound
 	}
 	sum.Status, sum.Idle = session.StatusWaiting, true
-	m.summaries[taskID] = sum
+	m.summaries[k] = sum
 	return nil
 }
 
-func (m *memSessions) Summary(taskID string) (session.Summary, bool) {
+func (m *memSessions) Summary(k session.Key) (session.Summary, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	sum, ok := m.summaries[taskID]
+	sum, ok := m.summaries[k]
 	return sum, ok
 }
 
-func (m *memSessions) SendFromApp(_ context.Context, taskID, text string) error {
-	return m.send(taskID, text, false)
+func (m *memSessions) SendFromApp(_ context.Context, k session.Key, text string) error {
+	return m.send(k, text, false)
 }
 
-func (m *memSessions) SendCorrection(_ context.Context, taskID, text string) error {
-	return m.send(taskID, text, true)
+func (m *memSessions) SendCorrection(_ context.Context, k session.Key, text string) error {
+	return m.send(k, text, true)
 }
 
 // send records a message of the app, counting it as the service would.
-func (m *memSessions) send(taskID, text string, correction bool) error {
+func (m *memSessions) send(k session.Key, text string, correction bool) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.calls = append(m.calls, "send:"+taskID)
+	m.calls = append(m.calls, "send:"+k.TaskID+":"+k.Stage)
 	if m.err != nil {
 		return m.err
 	}
 	m.messages = append(m.messages, text)
-	sum := m.summaries[taskID]
+	sum := m.summaries[k]
 	if correction {
 		sum.Corrections++
 	}
 	sum.Idle = false
 	sum.Status = session.StatusWorking
-	m.summaries[taskID] = sum
+	m.summaries[k] = sum
 	return nil
 }
 
-// goIdle brings the session of a task to rest, keeping what it has counted.
+// goIdle brings every session of a task to rest, keeping what each has
+// counted.
 func (m *memSessions) goIdle(taskID string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	sum := m.summaries[taskID]
-	sum.Status = session.StatusWaiting
-	sum.Idle = true
-	m.summaries[taskID] = sum
+	for k, sum := range m.summaries {
+		if k.TaskID != taskID {
+			continue
+		}
+		sum.Status = session.StatusWaiting
+		sum.Idle = true
+		m.summaries[k] = sum
+	}
 }
 
 // failWith makes every call that changes something return err.
@@ -457,13 +482,14 @@ func (m *memSessions) failWith(err error) {
 	m.err = err
 }
 
-// setSummary is the session state a test wants the flow to see.
+// setSummary is the session state a test wants the flow to see. The stage of
+// the summary is what names the session.
 func (m *memSessions) setSummary(taskID string, sum session.Summary) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	sum.TaskID = taskID
-	m.summaries[taskID] = sum
+	m.summaries[session.Key{TaskID: taskID, Stage: sum.Stage}] = sum
 }
 
 // idle is a session at rest, which is what the end of a stage needs.
@@ -839,10 +865,10 @@ func (f *fixture) waitStep(t *testing.T, id string, number int, status flow.Step
 func (f *fixture) waitStepSession(t *testing.T, id string, number int) {
 	t.Helper()
 
-	stage := session.StepStage(number)
+	key := session.Key{TaskID: id, Stage: session.StepStage(number)}
 	waitFor(t, "the session of step "+strconv.Itoa(number)+" of "+id, func() bool {
-		sum, ok := f.sessions.Summary(id)
-		return ok && sum.Stage == stage
+		_, ok := f.sessions.Summary(key)
+		return ok
 	})
 }
 

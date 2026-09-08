@@ -17,7 +17,7 @@ describe("UserMessage", () => {
 
 describe("PendingMessage", () => {
   it("marks the message as queued", () => {
-    renderWithStore(<PendingMessage taskId="task-1" entryId="entry-9" user={USER} />);
+    renderWithStore(<PendingMessage stage="prd" taskId="task-1" entryId="entry-9" user={USER} />);
 
     expect(screen.getByText("Add a login screen")).toBeInTheDocument();
     expect(screen.getByText("Queued")).toBeInTheDocument();
@@ -25,11 +25,11 @@ describe("PendingMessage", () => {
 
   it("takes the message back out of the queue", async () => {
     const { user } = renderWithStore(
-      <PendingMessage taskId="task-1" entryId="entry-9" user={USER} />,
+      <PendingMessage stage="prd" taskId="task-1" entryId="entry-9" user={USER} />,
     );
 
     await user.click(screen.getByRole("button", { name: "Remove queued message" }));
 
-    expect(api.removePending).toHaveBeenCalledWith("task-1", "entry-9");
+    expect(api.removePending).toHaveBeenCalledWith("task-1", "prd", "entry-9");
   });
 });

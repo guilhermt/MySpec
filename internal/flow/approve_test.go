@@ -122,7 +122,7 @@ func TestApprovingAStepSendsTheCommitPromptAsAMessageOfTheApp(t *testing.T) {
 	}
 	// The commit prompt is not a correction: it must not count against the
 	// corrections the app allows itself.
-	sum, _ := f.sessions.Summary("task-1")
+	sum, _ := f.sessions.Summary(session.Key{TaskID: "task-1", Stage: session.StepStage(1)})
 	if sum.Corrections != 0 {
 		t.Errorf("corrections = %d, want 0: approving is not a correction", sum.Corrections)
 	}
@@ -158,7 +158,7 @@ func TestApprovingAPausedTaskResumesItFirst(t *testing.T) {
 	}
 
 	calls := f.sessions.recorded()
-	resume, send := slices.Index(calls, "resume:task-1"), slices.Index(calls, "send:task-1")
+	resume, send := slices.Index(calls, "resume:task-1:step:1"), slices.Index(calls, "send:task-1:step:1")
 	if resume < 0 || send < 0 || resume > send {
 		t.Errorf("session calls = %q, want the task resumed before the prompt goes out", calls)
 	}
@@ -218,7 +218,7 @@ func TestTheLastStepOfAPlanIsConcludedWithNothingAfterIt(t *testing.T) {
 		t.Errorf("step runs = %d, want only the one the plan has", len(runs))
 	}
 	// The conversation of a step that is over takes no more messages.
-	if !slices.Contains(f.sessions.recorded(), "close:task-1") {
+	if !slices.Contains(f.sessions.recorded(), "close:task-1:step:1") {
 		t.Errorf("session calls = %q, want the session of the step closed", f.sessions.recorded())
 	}
 }

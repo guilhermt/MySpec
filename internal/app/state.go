@@ -35,8 +35,9 @@ func (a *App) onArtifact(t task.Task, changes []task.Change) {
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
+	key := session.Key{TaskID: t.ID, Stage: string(t.Stage)}
 	for _, c := range changes {
-		a.sessions.MarkArtifact(ctx, t.ID, session.ArtifactKind(c.Kind), c.First)
+		a.sessions.MarkArtifact(ctx, key, session.ArtifactKind(c.Kind), c.First)
 	}
 	a.flow.Check(t.ID)
 }

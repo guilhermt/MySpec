@@ -30,7 +30,7 @@ function Loading() {
   );
 }
 
-function EntryBlock({ taskId, entry }: { taskId: string; entry: Entry }) {
+function EntryBlock({ taskId, stage, entry }: { taskId: string; stage: string; entry: Entry }) {
   if (entry.user !== null) {
     // The stage prompt is the agent's instructions, not a line of the
     // conversation: only what the app says on top of it is worth showing.
@@ -46,28 +46,30 @@ function EntryBlock({ taskId, entry }: { taskId: string; entry: Entry }) {
     return <ActionGroup actions={[entry.action]} />;
   }
   if (entry.permission !== null) {
-    return <PermissionCard taskId={taskId} permission={entry.permission} />;
+    return <PermissionCard taskId={taskId} stage={stage} permission={entry.permission} />;
   }
   if (entry.question !== null) {
-    return <QuestionCard taskId={taskId} question={entry.question} />;
+    return <QuestionCard taskId={taskId} stage={stage} question={entry.question} />;
   }
   if (entry.marker !== null) {
     return <Marker marker={entry.marker} createdAt={entry.createdAt} />;
   }
   if (entry.error !== null) {
-    return <ErrorCard taskId={taskId} error={entry.error} />;
+    return <ErrorCard taskId={taskId} stage={stage} error={entry.error} />;
   }
   return null;
 }
 
 export interface ConversationProps {
   taskId: string;
+  /** stage names the session on screen: a task stage, or step:<n>. */
+  stage: string;
 }
 
 /** Conversation is everything that was said and done, from the top down. */
-export function Conversation({ taskId }: ConversationProps) {
+export function Conversation({ taskId, stage }: ConversationProps) {
   const task = useTask(taskId);
-  const transcript = useTranscript(taskId);
+  const transcript = useTranscript(taskId, stage);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const entries = transcript?.entries ?? NO_ENTRIES;
@@ -94,7 +96,7 @@ export function Conversation({ taskId }: ConversationProps) {
                 item.kind === "actions" ? (
                   <ActionGroup key={item.key} actions={item.items} />
                 ) : (
-                  <EntryBlock key={item.key} taskId={taskId} entry={item.entry} />
+                  <EntryBlock key={item.key} taskId={taskId} stage={stage} entry={item.entry} />
                 ),
               )}
               {pending.map(
@@ -103,6 +105,7 @@ export function Conversation({ taskId }: ConversationProps) {
                     <PendingMessage
                       key={entry.id}
                       taskId={taskId}
+                      stage={stage}
                       entryId={entry.id}
                       user={entry.user}
                     />

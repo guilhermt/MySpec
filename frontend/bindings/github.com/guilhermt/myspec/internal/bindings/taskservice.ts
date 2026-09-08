@@ -19,16 +19,16 @@ import * as $models from "./models.js";
  * decision is allow, allow_session or deny; message is the reason a denial
  * gives the agent.
  */
-export function AnswerPermission(taskID: string, requestID: string, decision: string, message: string): $CancellablePromise<void> {
-    return $Call.ByID(3120946951, taskID, requestID, decision, message);
+export function AnswerPermission(taskID: string, stage: string, requestID: string, decision: string, message: string): $CancellablePromise<void> {
+    return $Call.ByID(3120946951, taskID, stage, requestID, decision, message);
 }
 
 /**
  * AnswerQuestion answers the pending structured question of a task, mapping
  * each question text to the chosen label.
  */
-export function AnswerQuestion(taskID: string, requestID: string, answers: { [_ in string]?: string } | null): $CancellablePromise<void> {
-    return $Call.ByID(1425414620, taskID, requestID, answers);
+export function AnswerQuestion(taskID: string, stage: string, requestID: string, answers: { [_ in string]?: string } | null): $CancellablePromise<void> {
+    return $Call.ByID(1425414620, taskID, stage, requestID, answers);
 }
 
 /**
@@ -97,19 +97,19 @@ export function DiscardStep(taskID: string, cleanWorktree: boolean): $Cancellabl
 }
 
 /**
- * GetTranscript returns the whole conversation of a task. It is how the
- * frontend gets its first one; every later change arrives with
- * EventTranscriptChanged.
+ * GetTranscript returns the whole conversation of one session of a task, named
+ * by its stage. It is how the frontend gets its first one; every later change
+ * arrives with EventTranscriptChanged.
  */
-export function GetTranscript(taskID: string): $CancellablePromise<$models.Transcript> {
-    return $Call.ByID(923740112, taskID);
+export function GetTranscript(taskID: string, stage: string): $CancellablePromise<$models.Transcript> {
+    return $Call.ByID(923740112, taskID, stage);
 }
 
 /**
  * Interrupt aborts the running turn of a task, leaving the session alive.
  */
-export function Interrupt(taskID: string): $CancellablePromise<void> {
-    return $Call.ByID(1759278057, taskID);
+export function Interrupt(taskID: string, stage: string): $CancellablePromise<void> {
+    return $Call.ByID(1759278057, taskID, stage);
 }
 
 /**
@@ -130,8 +130,8 @@ export function OpenInEditor(taskID: string): $CancellablePromise<void> {
 /**
  * Pause stops the process of a task and holds every message until Resume.
  */
-export function Pause(taskID: string): $CancellablePromise<void> {
-    return $Call.ByID(2312621456, taskID);
+export function Pause(taskID: string, stage: string): $CancellablePromise<void> {
+    return $Call.ByID(2312621456, taskID, stage);
 }
 
 /**
@@ -144,22 +144,22 @@ export function ReadArtifact(taskID: string, name: string): $CancellablePromise<
 /**
  * RemovePending drops a queued message before it reaches the agent.
  */
-export function RemovePending(taskID: string, entryID: string): $CancellablePromise<void> {
-    return $Call.ByID(1420869509, taskID, entryID);
+export function RemovePending(taskID: string, stage: string, entryID: string): $CancellablePromise<void> {
+    return $Call.ByID(1420869509, taskID, stage, entryID);
 }
 
 /**
  * Resume lifts a pause and delivers what was queued meanwhile.
  */
-export function Resume(taskID: string): $CancellablePromise<void> {
-    return $Call.ByID(4230167665, taskID);
+export function Resume(taskID: string, stage: string): $CancellablePromise<void> {
+    return $Call.ByID(4230167665, taskID, stage);
 }
 
 /**
  * Retry clears the last error of a task and starts its process again.
  */
-export function Retry(taskID: string): $CancellablePromise<void> {
-    return $Call.ByID(696681228, taskID);
+export function Retry(taskID: string, stage: string): $CancellablePromise<void> {
+    return $Call.ByID(696681228, taskID, stage);
 }
 
 /**
@@ -174,6 +174,6 @@ export function RetryStep(taskID: string): $CancellablePromise<void> {
  * SendMessage queues a message for the agent, delivered right away when the
  * session is free.
  */
-export function SendMessage(taskID: string, text: string): $CancellablePromise<void> {
-    return $Call.ByID(2431074491, taskID, text);
+export function SendMessage(taskID: string, stage: string, text: string): $CancellablePromise<void> {
+    return $Call.ByID(2431074491, taskID, stage, text);
 }

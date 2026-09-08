@@ -45,7 +45,7 @@ describe("TaskHeader", () => {
 
     await user.click(screen.getByRole("button", { name: "Pause" }));
 
-    expect(api.pause).toHaveBeenCalledWith("task-1");
+    expect(api.pause).toHaveBeenCalledWith("task-1", "prd");
   });
 
   it("resumes a paused session", async () => {
@@ -53,7 +53,7 @@ describe("TaskHeader", () => {
 
     await user.click(screen.getByRole("button", { name: "Resume" }));
 
-    expect(api.resume).toHaveBeenCalledWith("task-1");
+    expect(api.resume).toHaveBeenCalledWith("task-1", "prd");
   });
 
   it("has nothing to pause on a session that stopped on an error", () => {

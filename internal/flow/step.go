@@ -80,7 +80,6 @@ type prepareOptions struct {
 func (s *Service) Steps(id string) []StepState {
 	a, _ := s.tasks.Artifacts(id)
 	runs := s.tasks.StepRuns(id)
-	sum, open := s.sessions.Summary(id)
 	phase := s.phaseOf(id)
 	snap, read := s.review.Snapshot(id)
 	// The warning belongs to the step the user is on, which is the first one
@@ -106,7 +105,7 @@ func (s *Service) Steps(id string) []StepState {
 				state.Status = StepImplementing
 				// The progress only means something with the work stopped, so
 				// it is read while the agent is not writing.
-				if open && sum.Stage == session.StepStage(step.Number) && sum.Idle {
+				if sum, open := s.sessions.Summary(stepKey(id, step.Number)); open && sum.Idle {
 					state.Status = reviewStatus(snap, read)
 					state.Review = reading(snap, read)
 				}
@@ -123,6 +122,11 @@ func (s *Service) Steps(id string) []StepState {
 		states = append(states, state)
 	}
 	return states
+}
+
+// stepKey is the session of one step of a task.
+func stepKey(taskID string, number int) session.Key {
+	return session.Key{TaskID: taskID, Stage: session.StepStage(number)}
 }
 
 // reviewStatus turns the last reading of the worktree into the state the step
@@ -467,8 +471,8 @@ func (s *Service) evaluateStep(ctx context.Context, t task.Task) {
 		return
 	}
 
-	sum, open := s.sessions.Summary(t.ID)
-	idle := open && sum.Stage == session.StepStage(step.Number) && sum.Idle
+	sum, open := s.sessions.Summary(stepKey(t.ID, step.Number))
+	idle := open && sum.Idle
 	committing := run.Status == task.StepCommitting
 	s.review.Track(t.ID, wt, idle || committing)
 	if !idle && !committing {
@@ -519,7 +523,7 @@ func (s *Service) completeStep(
 	}
 	s.review.Forget(t.ID)
 	s.setNoCommit(t.ID, false)
-	if err := s.sessions.Close(ctx, t.ID); err != nil {
+	if err := s.sessions.Close(ctx, stepKey(t.ID, step.Number)); err != nil {
 		s.log.Error("close step session failed", "task", t.ID, "step", step.Number, "error", err)
 	}
 
@@ -639,15 +643,16 @@ func (s *Service) ApproveStep(ctx context.Context, id string) error {
 		return fmt.Errorf("approve step %d of task %s: %w", step.Number, id, ErrStepNotReady)
 	}
 
-	sum, open := s.sessions.Summary(id)
+	key := stepKey(id, step.Number)
+	sum, open := s.sessions.Summary(key)
 	if !open {
 		return fmt.Errorf("approve step %d of task %s: %w", step.Number, id, session.ErrNotFound)
 	}
 	if sum.Status == session.StatusPaused {
-		if resumeErr := s.sessions.Resume(ctx, id); resumeErr != nil {
+		if resumeErr := s.sessions.Resume(ctx, key); resumeErr != nil {
 			return resumeErr
 		}
-		sum, open = s.sessions.Summary(id)
+		sum, open = s.sessions.Summary(key)
 		if !open {
 			return fmt.Errorf("approve step %d of task %s: %w", step.Number, id, session.ErrNotFound)
 		}
@@ -664,7 +669,7 @@ func (s *Service) ApproveStep(ctx context.Context, id string) error {
 		return err
 	}
 	s.setNoCommit(id, false)
-	if err := s.sessions.SendFromApp(ctx, id, message); err != nil {
+	if err := s.sessions.SendFromApp(ctx, key, message); err != nil {
 		// The button stays where the user left it: the step is theirs again.
 		if _, setErr := s.tasks.SetStepRun(ctx, id, step.Number, task.StepStarted, nil); setErr != nil {
 			s.log.Error("record started step failed", "task", id, "step", step.Number, "error", setErr)
@@ -790,11 +795,14 @@ func (s *Service) tearDownSteps(ctx context.Context, t task.Task) error {
 
 	// A step session is stopped before the worktree it runs in goes away.
 	stepOpen := false
-	if sum, open := s.sessions.Summary(t.ID); open {
-		_, stepOpen = session.ParseStepStage(sum.Stage)
+	for _, run := range runs {
+		if _, open := s.sessions.Summary(stepKey(t.ID, run.Number)); open {
+			stepOpen = true
+			break
+		}
 	}
 	if stepOpen {
-		if err := s.sessions.Close(ctx, t.ID); err != nil {
+		if err := s.sessions.CloseTask(ctx, t.ID); err != nil {
 			return err
 		}
 	}
@@ -867,7 +875,7 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 			return err
 		}
 	}
-	if err := s.sessions.Close(ctx, id); err != nil {
+	if err := s.sessions.CloseTask(ctx, id); err != nil {
 		return err
 	}
 	if err := s.tasks.Delete(ctx, id); err != nil {

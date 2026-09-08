@@ -211,8 +211,9 @@ func newFixture(t *testing.T) *fixture {
 		Log:     log,
 		Repos:   f.repoPaths,
 		OnArtifact: func(t task.Task, changes []task.Change) {
+			key := session.Key{TaskID: t.ID, Stage: string(t.Stage)}
 			for _, c := range changes {
-				f.sessions.MarkArtifact(context.Background(), t.ID, session.ArtifactKind(c.Kind), c.First)
+				f.sessions.MarkArtifact(context.Background(), key, session.ArtifactKind(c.Kind), c.First)
 			}
 			f.flow.Check(t.ID)
 		},
@@ -254,13 +255,13 @@ func newFixture(t *testing.T) *fixture {
 
 // onState is what internal/app does on every session change: it publishes the
 // state, which the fixture reads on demand, and lets the flow decide.
-func (f *fixture) onState(taskID string) {
-	if summary, ok := f.sessions.Summary(taskID); ok {
+func (f *fixture) onState(k session.Key) {
+	if summary, ok := f.sessions.Summary(k); ok {
 		f.mu.Lock()
-		f.corrections[taskID] = max(f.corrections[taskID], summary.Corrections)
+		f.corrections[k.TaskID] = max(f.corrections[k.TaskID], summary.Corrections)
 		f.mu.Unlock()
 	}
-	f.flow.Check(taskID)
+	f.flow.Check(k.TaskID)
 }
 
 // onTranscript keeps every change of a conversation, the way internal/app
@@ -439,9 +440,9 @@ func (f *fixture) waitTranscript(t *testing.T, id, stage string) bindings.Transc
 	deadline := time.Now().Add(pollTimeout)
 	last := bindings.Transcript{}
 	for time.Now().Before(deadline) {
-		transcript, err := f.tasks.GetTranscript(id)
+		transcript, err := f.tasks.GetTranscript(id, stage)
 		if err != nil {
-			t.Fatalf("GetTranscript(%s) = %v, want nil", id, err)
+			t.Fatalf("GetTranscript(%s, %s) = %v, want nil", id, stage, err)
 		}
 		last = transcript
 		if transcript.Stage == stage && len(transcript.Entries) > 0 {

@@ -128,7 +128,7 @@ func TestGetTranscriptCarriesThePrompt(t *testing.T) {
 
 	f, _, id := createdTask(t)
 
-	transcript, err := f.tasks.GetTranscript(id)
+	transcript, err := f.tasks.GetTranscript(id, "prd")
 	if err != nil {
 		t.Fatalf("GetTranscript(%s) = %v, want nil", id, err)
 	}
@@ -169,7 +169,7 @@ func TestGetTranscriptRejectsAnUnknownTask(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	_, err := f.tasks.GetTranscript("nope")
+	_, err := f.tasks.GetTranscript("nope", "prd")
 	if err == nil {
 		t.Fatal("GetTranscript() = nil, want an error")
 	}
@@ -200,12 +200,12 @@ func TestSendMessageQueuesAnotherTurn(t *testing.T) {
 
 	f, _, id := createdTask(t)
 
-	if err := f.tasks.SendMessage(id, "add a remember me box"); err != nil {
+	if err := f.tasks.SendMessage(id, "prd", "add a remember me box"); err != nil {
 		t.Fatalf("SendMessage(%s) = %v, want nil", id, err)
 	}
 	f.waitForStatus(t, id, "waiting")
 
-	transcript, err := f.tasks.GetTranscript(id)
+	transcript, err := f.tasks.GetTranscript(id, "prd")
 	if err != nil {
 		t.Fatalf("GetTranscript(%s) = %v, want nil", id, err)
 	}
@@ -219,21 +219,21 @@ func TestSendMessageReportsWhatTheUserGotWrong(t *testing.T) {
 
 	f, _, id := createdTask(t)
 
-	if err := f.tasks.SendMessage(id, "  "); err == nil || err.Error() != "Write a message first." {
+	if err := f.tasks.SendMessage(id, "prd", "  "); err == nil || err.Error() != "Write a message first." {
 		t.Errorf("SendMessage() error = %v, want the empty message notice", err)
 	}
 
-	if err := f.tasks.Pause(id); err != nil {
+	if err := f.tasks.Pause(id, "prd"); err != nil {
 		t.Fatalf("Pause(%s) = %v, want nil", id, err)
 	}
 	if status := f.taskOf(t, id).SessionStatus; status != "paused" {
 		t.Errorf("sessionStatus = %q, want paused", status)
 	}
-	if err := f.tasks.SendMessage(id, "hello"); err == nil || err.Error() != "Resume the task to send messages." {
+	if err := f.tasks.SendMessage(id, "prd", "hello"); err == nil || err.Error() != "Resume the task to send messages." {
 		t.Errorf("SendMessage() error = %v, want the paused notice", err)
 	}
 
-	if err := f.tasks.Resume(id); err != nil {
+	if err := f.tasks.Resume(id, "prd"); err != nil {
 		t.Fatalf("Resume(%s) = %v, want nil", id, err)
 	}
 	if status := f.taskOf(t, id).SessionStatus; status == "paused" {
@@ -246,7 +246,7 @@ func TestRemovePendingRejectsAnEntryThatIsNotQueued(t *testing.T) {
 
 	f, _, id := createdTask(t)
 
-	if err := f.tasks.RemovePending(id, "nope"); err == nil {
+	if err := f.tasks.RemovePending(id, "prd", "nope"); err == nil {
 		t.Fatal("RemovePending() = nil, want an error")
 	}
 	if !f.logged(t, "binding failed") {
@@ -261,13 +261,13 @@ func TestInterruptAndRetryLeaveTheSessionUsable(t *testing.T) {
 
 	// Nothing is running, so the interrupt has nothing to abort and says so
 	// by doing nothing at all.
-	if err := f.tasks.Interrupt(id); err != nil {
+	if err := f.tasks.Interrupt(id, "prd"); err != nil {
 		t.Fatalf("Interrupt(%s) = %v, want nil", id, err)
 	}
-	if err := f.tasks.Retry(id); err != nil {
+	if err := f.tasks.Retry(id, "prd"); err != nil {
 		t.Fatalf("Retry(%s) = %v, want nil", id, err)
 	}
-	if err := f.tasks.SendMessage(id, "carry on"); err != nil {
+	if err := f.tasks.SendMessage(id, "prd", "carry on"); err != nil {
 		t.Fatalf("SendMessage(%s) = %v, want nil", id, err)
 	}
 	f.waitForStatus(t, id, "waiting")
@@ -278,7 +278,7 @@ func TestAnswerPermissionRejectsAnUnknownDecision(t *testing.T) {
 
 	f, _, id := createdTask(t)
 
-	err := f.tasks.AnswerPermission(id, "req-1", "maybe", "")
+	err := f.tasks.AnswerPermission(id, "prd", "req-1", "maybe", "")
 	if err == nil {
 		t.Fatal("AnswerPermission() = nil, want an error")
 	}
@@ -292,10 +292,10 @@ func TestAnsweringWithoutAPendingRequestFails(t *testing.T) {
 
 	f, _, id := createdTask(t)
 
-	if err := f.tasks.AnswerPermission(id, "req-1", "allow", ""); err == nil {
+	if err := f.tasks.AnswerPermission(id, "prd", "req-1", "allow", ""); err == nil {
 		t.Error("AnswerPermission() = nil, want an error")
 	}
-	if err := f.tasks.AnswerQuestion(id, "req-1", map[string]string{"Colour?": "Red"}); err == nil {
+	if err := f.tasks.AnswerQuestion(id, "prd", "req-1", map[string]string{"Colour?": "Red"}); err == nil {
 		t.Error("AnswerQuestion() = nil, want an error")
 	}
 }
@@ -606,7 +606,7 @@ func TestApprovingAStepSendsTheCommitPromptToTheAgent(t *testing.T) {
 		t.Errorf("review = %+v, want the reading that was there before", after.Review)
 	}
 
-	transcript, err := f.tasks.GetTranscript(id)
+	transcript, err := f.tasks.GetTranscript(id, "step:1")
 	if err != nil {
 		t.Fatalf("GetTranscript(%s) = %v, want nil", id, err)
 	}
@@ -803,7 +803,7 @@ func TestBackToPRDReopensTheConversation(t *testing.T) {
 	}
 	f.waitContinue(t, id)
 
-	transcript, err := f.tasks.GetTranscript(id)
+	transcript, err := f.tasks.GetTranscript(id, "prd")
 	if err != nil {
 		t.Fatalf("GetTranscript(%s) = %v, want nil", id, err)
 	}

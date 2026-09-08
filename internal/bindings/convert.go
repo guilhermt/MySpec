@@ -48,13 +48,13 @@ func FromTasks(
 	tasks []task.Task,
 	artifacts func(id string) task.Artifacts,
 	steps func(id string) []flow.StepState,
-	summaries map[string]session.Summary,
+	summaries map[session.Key]session.Summary,
 ) []TaskSummary {
 	converted := make([]TaskSummary, len(tasks))
 	for i, t := range tasks {
-		summary := summaries[t.ID]
 		a := artifacts(t.ID)
 		states := steps(t.ID)
+		summary := summaries[taskSessionKey(t, states)]
 		if summary.Status == "" {
 			summary.Status = session.StatusWaiting
 		}
@@ -85,6 +85,19 @@ func FromTasks(
 		}
 	}
 	return converted
+}
+
+// taskSessionKey is the session the task screen shows: the one of the stage
+// the task is in, which in the implementation stage is the step that runs.
+func taskSessionKey(t task.Task, states []flow.StepState) session.Key {
+	if t.Stage != task.StageImplementation {
+		return session.Key{TaskID: t.ID, Stage: string(t.Stage)}
+	}
+	number := currentStep(states)
+	if number == 0 {
+		return session.Key{TaskID: t.ID}
+	}
+	return session.Key{TaskID: t.ID, Stage: session.StepStage(number)}
 }
 
 // fromSteps converts the steps of a plan with their state, always returning a
@@ -177,6 +190,7 @@ func FromTranscript(tr session.Transcript) Transcript {
 func FromTranscriptEvent(ev session.TranscriptEvent) TranscriptEvent {
 	converted := TranscriptEvent{
 		TaskID:  ev.TaskID,
+		Stage:   ev.Stage,
 		Kind:    string(ev.Kind),
 		EntryID: ev.EntryID,
 		Text:    ev.Text,

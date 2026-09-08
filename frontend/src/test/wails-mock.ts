@@ -24,25 +24,35 @@ export const api = {
 
   createTask: vi.fn<(req: CreateTaskRequest) => Promise<string>>(() => Promise.resolve("task-1")),
   deleteTask: vi.fn<(taskId: string) => Promise<void>>(() => Promise.resolve()),
-  getTranscript: vi.fn<(taskId: string) => Promise<Transcript>>((taskId) =>
-    Promise.resolve(makeTranscript({ taskId })),
+  getTranscript: vi.fn<(taskId: string, stage: string) => Promise<Transcript>>((taskId, stage) =>
+    Promise.resolve(makeTranscript({ taskId, stage })),
   ),
-  sendMessage: vi.fn<(taskId: string, text: string) => Promise<void>>(() => Promise.resolve()),
-  removePending: vi.fn<(taskId: string, entryId: string) => Promise<void>>(() => Promise.resolve()),
-  interrupt: vi.fn<(taskId: string) => Promise<void>>(() => Promise.resolve()),
-  pause: vi.fn<(taskId: string) => Promise<void>>(() => Promise.resolve()),
-  resume: vi.fn<(taskId: string) => Promise<void>>(() => Promise.resolve()),
-  retry: vi.fn<(taskId: string) => Promise<void>>(() => Promise.resolve()),
+  sendMessage: vi.fn<(taskId: string, stage: string, text: string) => Promise<void>>(() =>
+    Promise.resolve(),
+  ),
+  removePending: vi.fn<(taskId: string, stage: string, entryId: string) => Promise<void>>(() =>
+    Promise.resolve(),
+  ),
+  interrupt: vi.fn<(taskId: string, stage: string) => Promise<void>>(() => Promise.resolve()),
+  pause: vi.fn<(taskId: string, stage: string) => Promise<void>>(() => Promise.resolve()),
+  resume: vi.fn<(taskId: string, stage: string) => Promise<void>>(() => Promise.resolve()),
+  retry: vi.fn<(taskId: string, stage: string) => Promise<void>>(() => Promise.resolve()),
   answerPermission: vi.fn<
     (
       taskId: string,
+      stage: string,
       requestId: string,
       decision: PermissionDecision,
       message: string,
     ) => Promise<void>
   >(() => Promise.resolve()),
   answerQuestion: vi.fn<
-    (taskId: string, requestId: string, answers: Record<string, string>) => Promise<void>
+    (
+      taskId: string,
+      stage: string,
+      requestId: string,
+      answers: Record<string, string>,
+    ) => Promise<void>
   >(() => Promise.resolve()),
   readArtifact: vi.fn<(taskId: string, name: string) => Promise<string>>(() =>
     Promise.resolve("# PRD\n"),
@@ -317,5 +327,7 @@ export function resetWailsMock(): void {
   onTranscriptChanged.mockClear();
   api.getState.mockImplementation(() => Promise.resolve(makeState()));
   api.createTask.mockImplementation(() => Promise.resolve("task-1"));
-  api.getTranscript.mockImplementation((taskId) => Promise.resolve(makeTranscript({ taskId })));
+  api.getTranscript.mockImplementation((taskId, stage) =>
+    Promise.resolve(makeTranscript({ taskId, stage })),
+  );
 }
