@@ -6,7 +6,7 @@ import {
   taskStatusLabel,
   taskStatusTone,
 } from "@/features/task/status";
-import { makeStep, makeTask } from "@/test/wails-mock";
+import { makeReview, makeStep, makeTask } from "@/test/wails-mock";
 
 describe("task status", () => {
   it.each([
@@ -59,6 +59,43 @@ describe("task status", () => {
 
     expect(taskStatusLabel(task)).toBe("Step 1 of 2 · Implementing");
     expect(taskStatusTone(task)).toBe("working");
+    expect(isAttention(task)).toBe(false);
+  });
+
+  it("carries the progress of the review into the tree", () => {
+    const task = makeTask({
+      stage: "implementation",
+      sessionStatus: "waiting",
+      currentStep: 2,
+      steps: [
+        makeStep({ status: "done", commitSha: "abc1234", commitSubject: "Add the login form" }),
+        makeStep({
+          number: 2,
+          file: "2-wire-the-api.md",
+          status: "in_review",
+          review: makeReview({ staged: 3, total: 5, percent: 60 }),
+        }),
+      ],
+    });
+
+    expect(taskStatusLabel(task)).toBe("Step 2 of 2 · Review 60%");
+    expect(taskStatusTone(task)).toBe("attention");
+    expect(isAttention(task)).toBe(true);
+  });
+
+  it("says the implementation is over once every step is committed", () => {
+    const task = makeTask({
+      stage: "implementation",
+      sessionStatus: "waiting",
+      currentStep: 0,
+      steps: [
+        makeStep({ status: "done" }),
+        makeStep({ number: 2, file: "2-wire-the-api.md", status: "done" }),
+      ],
+    });
+
+    expect(taskStatusLabel(task)).toBe("Implemented");
+    expect(taskStatusTone(task)).toBe("done");
     expect(isAttention(task)).toBe(false);
   });
 

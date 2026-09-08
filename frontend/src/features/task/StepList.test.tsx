@@ -81,6 +81,28 @@ describe("StepList", () => {
     expect(second).not.toHaveAttribute("aria-current");
   });
 
+  it("shows what a committed step delivered", () => {
+    renderWithStore(
+      <StepList
+        steps={[
+          makeStep({
+            status: "done",
+            commitSha: "9f1c2ab3d4e5f60718293a4b5c6d7e8f90123456",
+            commitSubject: "Render the sign-in fields",
+          }),
+          makeStep({ number: 2, file: "2-check-the-token.md", title: "Check the token" }),
+        ]}
+        problems={[]}
+        currentStep={2}
+      />,
+      { state },
+    );
+
+    expect(screen.getByText("9f1c2ab")).toBeInTheDocument();
+    expect(screen.getByText("Render the sign-in fields")).toBeInTheDocument();
+    expect(screen.getByText("Done")).toBeInTheDocument();
+  });
+
   it("says what keeps the step files from being a plan", () => {
     renderWithStore(
       <StepList

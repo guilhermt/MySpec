@@ -4,6 +4,7 @@ import type {
   Entry,
   EntryKind,
   PermissionDecision,
+  Review,
   State,
   Step,
   TaskStage,
@@ -166,6 +167,20 @@ export function makeStep(overrides: Partial<Step> = {}): Step {
     commitSha: "",
     commitSubject: "",
     commitFailed: false,
+    ...overrides,
+  };
+}
+
+export function makeReview(overrides: Partial<Review> = {}): Review {
+  return {
+    files: [
+      { path: "src/LoginForm.tsx", kind: "modified", staged: true },
+      { path: "src/api/login.ts", kind: "added", staged: false },
+    ],
+    staged: 1,
+    total: 2,
+    percent: 50,
+    error: "",
     ...overrides,
   };
 }

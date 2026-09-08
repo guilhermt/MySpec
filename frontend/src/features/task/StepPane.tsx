@@ -39,6 +39,11 @@ export function StepPane({ task }: StepPaneProps) {
       return <StepBlocked task={task} step={step} />;
     case "implementing":
     case "awaiting_review":
+    case "in_review":
+    case "ready_to_approve":
+    case "nothing_to_commit":
+    case "review_failed":
+    case "committing":
       return (
         <>
           <Conversation taskId={task.id} />
@@ -49,5 +54,8 @@ export function StepPane({ task }: StepPaneProps) {
       return <Waiting text={stepPhaseLabel(step.phase)} />;
     case "not_started":
       return <Waiting text="Starting…" />;
+    // The step is committed and the app is already moving on to the next one.
+    case "done":
+      return <Waiting text="Starting the next step…" />;
   }
 }
