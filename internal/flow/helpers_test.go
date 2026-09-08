@@ -351,6 +351,15 @@ func (m *memSessions) Summary(taskID string) (session.Summary, bool) {
 }
 
 func (m *memSessions) SendFromApp(_ context.Context, taskID, text string) error {
+	return m.send(taskID, text, false)
+}
+
+func (m *memSessions) SendCorrection(_ context.Context, taskID, text string) error {
+	return m.send(taskID, text, true)
+}
+
+// send records a message of the app, counting it as the service would.
+func (m *memSessions) send(taskID, text string, correction bool) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -360,7 +369,9 @@ func (m *memSessions) SendFromApp(_ context.Context, taskID, text string) error 
 	}
 	m.messages = append(m.messages, text)
 	sum := m.summaries[taskID]
-	sum.Corrections++
+	if correction {
+		sum.Corrections++
+	}
 	sum.Idle = false
 	sum.Status = session.StatusWorking
 	m.summaries[taskID] = sum

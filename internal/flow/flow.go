@@ -40,6 +40,7 @@ type Sessions interface {
 	Close(ctx context.Context, taskID string) error
 	Summary(taskID string) (session.Summary, bool)
 	SendFromApp(ctx context.Context, taskID, text string) error
+	SendCorrection(ctx context.Context, taskID, text string) error
 }
 
 // Worktrees is what the flow needs from internal/worktree.

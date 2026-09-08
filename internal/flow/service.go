@@ -86,7 +86,7 @@ func (s *Service) evaluate(ctx context.Context, id string) {
 			return
 		}
 		message := correctionMessage(t.StepsDir(), a.Plan.Problems, s.tasks.Repositories(t))
-		if err := s.sessions.SendFromApp(ctx, id, message); err != nil {
+		if err := s.sessions.SendCorrection(ctx, id, message); err != nil {
 			s.log.Error("send plan correction failed", "task", id, "stage", string(t.Stage), "error", err)
 		}
 		return

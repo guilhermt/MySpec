@@ -89,22 +89,22 @@ func (b *syncBuffer) String() string {
 	return b.buf.String()
 }
 
-// fakeEditor stands in for VS Code, recording the folder it was asked to open.
+// fakeEditor stands in for VS Code, recording what it was asked to open.
 type fakeEditor struct {
 	mu    sync.Mutex
 	paths []string
 	err   error
 }
 
-func (e *fakeEditor) open(path string) error {
+func (e *fakeEditor) open(paths ...string) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	e.paths = append(e.paths, path)
+	e.paths = append(e.paths, strings.Join(paths, " "))
 	return e.err
 }
 
-// opened are the folders the editor was asked to open, in order.
+// opened is what the editor was asked to open, in order, one entry per call.
 func (e *fakeEditor) opened() []string {
 	e.mu.Lock()
 	defer e.mu.Unlock()

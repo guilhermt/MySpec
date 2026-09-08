@@ -910,15 +910,45 @@ func TestOpenInAnotherStageClosesTheRunAndResets(t *testing.T) {
 	}
 }
 
-func TestSendFromAppMarksTheMessageAndCountsIt(t *testing.T) {
+func TestSendFromAppMarksTheMessageWithoutCountingIt(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t, "echo")
 	f.start(t, taskInfo(t, "t1"))
 	f.waitIdle(t, "t1")
 
-	if err := f.service.SendFromApp(t.Context(), "t1", "  fix the plan  "); err != nil {
+	if err := f.service.SendFromApp(t.Context(), "t1", "  commit what is staged  "); err != nil {
 		t.Fatalf("SendFromApp() = %v, want nil", err)
+	}
+	f.waitIdle(t, "t1")
+
+	users := f.entriesOf(t, "t1", session.KindUser)
+	if len(users) != 2 {
+		t.Fatalf("user entries = %d, want the prompt and the message of the app", len(users))
+	}
+	want := &session.UserEntry{Text: "commit what is staged", App: true}
+	if diff := cmp.Diff(want, users[1].User); diff != "" {
+		t.Errorf("app entry mismatch (-want +got):\n%s", diff)
+	}
+	// A message of the app is not a correction of what the agent produced.
+	if sum := f.summary(t, "t1"); sum.Corrections != 0 {
+		t.Errorf("Corrections = %d, want none", sum.Corrections)
+	}
+	if rec := f.sessions.get(t, "t1", string(prompts.StagePRD)); rec.Corrections != 0 {
+		t.Errorf("stored corrections = %d, want none", rec.Corrections)
+	}
+	wantErrIs(t, f.service.SendFromApp(t.Context(), "t1", "   "), session.ErrEmptyMessage)
+}
+
+func TestSendCorrectionMarksTheMessageAndCountsIt(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	f.start(t, taskInfo(t, "t1"))
+	f.waitIdle(t, "t1")
+
+	if err := f.service.SendCorrection(t.Context(), "t1", "  fix the plan  "); err != nil {
+		t.Fatalf("SendCorrection() = %v, want nil", err)
 	}
 	f.waitIdle(t, "t1")
 
@@ -928,7 +958,7 @@ func TestSendFromAppMarksTheMessageAndCountsIt(t *testing.T) {
 	}
 	want := &session.UserEntry{Text: "fix the plan", App: true}
 	if diff := cmp.Diff(want, users[1].User); diff != "" {
-		t.Errorf("app entry mismatch (-want +got):\n%s", diff)
+		t.Errorf("correction entry mismatch (-want +got):\n%s", diff)
 	}
 	if sum := f.summary(t, "t1"); sum.Corrections != 1 {
 		t.Errorf("Corrections = %d, want 1", sum.Corrections)
@@ -936,7 +966,7 @@ func TestSendFromAppMarksTheMessageAndCountsIt(t *testing.T) {
 	if rec := f.sessions.get(t, "t1", string(prompts.StagePRD)); rec.Corrections != 1 {
 		t.Errorf("stored corrections = %d, want 1", rec.Corrections)
 	}
-	wantErrIs(t, f.service.SendFromApp(t.Context(), "t1", "   "), session.ErrEmptyMessage)
+	wantErrIs(t, f.service.SendCorrection(t.Context(), "t1", "   "), session.ErrEmptyMessage)
 }
 
 func TestDiscardClosesTheRunAndDropsTheRecords(t *testing.T) {

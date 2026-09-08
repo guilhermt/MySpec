@@ -48,6 +48,32 @@ func TestOpenStartsTheEditorWithoutWaitingForIt(t *testing.T) {
 	}
 }
 
+func TestOpenPassesAFolderAndAFileToTheEditor(t *testing.T) {
+	dir := t.TempDir()
+	record := filepath.Join(dir, "args")
+	fakeCode(t, dir, record)
+
+	if err := editor.Open("/home/dev/code/api", "/home/dev/code/api/main.go"); err != nil {
+		t.Fatalf("Open() = %v, want nil", err)
+	}
+
+	deadline := time.Now().Add(pollTimeout)
+	for {
+		content, err := os.ReadFile(record)
+		if err == nil {
+			want := "/home/dev/code/api\n/home/dev/code/api/main.go\n"
+			if got := string(content); got != want {
+				t.Errorf("editor arguments = %q, want %q", got, want)
+			}
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the editor never wrote %s", record)
+		}
+		time.Sleep(pollStep)
+	}
+}
+
 func TestOpenReportsAnEditorThatIsNotInstalled(t *testing.T) {
 	t.Setenv("PATH", "")
 

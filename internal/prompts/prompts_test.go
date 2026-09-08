@@ -70,6 +70,7 @@ func TestSeedWritesTheDefaultPromptOfEveryStage(t *testing.T) {
 		{prompts.StagePRD, []string{"# PRD Creator", "{{prd_path}}", "{{initial_context}}"}},
 		{prompts.StageTechSpec, []string{"# Technical Specification Creator", "{{tech_spec_path}}", "{{repositories}}"}},
 		{prompts.StagePlan, []string{"# Step Planner", "{{steps_dir}}", "{{repositories}}"}},
+		{prompts.StageCommit, []string{"# Commit", "exactly what is staged", "Co-Authored-By"}},
 	}
 
 	dataDir := t.TempDir()
@@ -211,6 +212,9 @@ func TestRenderTheSeededPromptsKeepNoPlaceholder(t *testing.T) {
 		{prompts.StagePRD, prdVars(), []string{"add-login", "/data/tasks/add-login/PRD.md", "a login screen"}},
 		{prompts.StageTechSpec, everyVar(), []string{"add-login", "/data/tasks/add-login/tech-spec.md", "- `api`\n- `web`"}},
 		{prompts.StagePlan, everyVar(), []string{"add-login", "/data/tasks/add-login/steps", "- `api`\n- `web`"}},
+		// The commit prompt has no placeholder: the agent already knows what it
+		// changed, and the message must say nothing about the planning.
+		{prompts.StageCommit, everyVar(), []string{"# Commit", "Make **one commit**"}},
 	}
 
 	dataDir := t.TempDir()
@@ -239,7 +243,7 @@ func TestRenderTheSeededPromptsOtherThanPRDGetNoInitialContext(t *testing.T) {
 	dataDir := t.TempDir()
 	seed(t, dataDir)
 
-	for _, stage := range []prompts.Stage{prompts.StageTechSpec, prompts.StagePlan} {
+	for _, stage := range []prompts.Stage{prompts.StageTechSpec, prompts.StagePlan, prompts.StageCommit} {
 		got, err := prompts.Render(dataDir, stage, everyVar())
 		if err != nil {
 			t.Fatalf("Render(%s) = %v, want nil", stage, err)
@@ -247,6 +251,25 @@ func TestRenderTheSeededPromptsOtherThanPRDGetNoInitialContext(t *testing.T) {
 
 		if strings.Contains(got, "## Initial context") {
 			t.Errorf("rendered %s prompt carries the initial context section", stage)
+		}
+	}
+}
+
+func TestTheCommitPromptSaysNothingAboutThePlanning(t *testing.T) {
+	t.Parallel()
+
+	dataDir := t.TempDir()
+	seed(t, dataDir)
+
+	got, err := prompts.Render(dataDir, prompts.StageCommit, everyVar())
+	if err != nil {
+		t.Fatalf("Render(commit) = %v, want nil", err)
+	}
+	// Every var of the fixture is planning context, and none of it may reach
+	// the agent through this prompt.
+	for _, unwanted := range []string{"add-login", "/data/tasks/add-login", "`api`"} {
+		if strings.Contains(got, unwanted) {
+			t.Errorf("rendered commit prompt carries %q, want nothing of the planning", unwanted)
 		}
 	}
 }

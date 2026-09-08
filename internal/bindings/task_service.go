@@ -18,8 +18,9 @@ import (
 // removal is far slower than the database work callTimeout was written for.
 const removeTimeout = time.Minute
 
-// Editor opens a folder in the user's editor. internal/app passes editor.Open.
-type Editor func(path string) error
+// Editor opens a folder, or a folder and a file, in the user's editor.
+// internal/app passes editor.Open.
+type Editor func(paths ...string) error
 
 // TaskService is the task, session and flow API the frontend calls.
 type TaskService struct {
