@@ -15,6 +15,8 @@ export interface StoreOptions {
       | "openTaskId"
       | "transcripts"
       | "drafts"
+      | "openRepo"
+      | "prDrafts"
       | "newTaskFor"
     >
   >;
@@ -33,6 +35,8 @@ export function resetAppStore(options: StoreOptions = {}): void {
     openTaskId: options.ui?.openTaskId ?? null,
     transcripts: options.ui?.transcripts ?? {},
     drafts: options.ui?.drafts ?? {},
+    openRepo: options.ui?.openRepo ?? {},
+    prDrafts: options.ui?.prDrafts ?? {},
     newTaskFor: options.ui?.newTaskFor ?? null,
   });
 }

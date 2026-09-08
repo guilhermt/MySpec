@@ -1,14 +1,14 @@
 import { screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 import { ReviewStrip } from "@/features/task/ReviewStrip";
-import { api, type Review, type Step } from "@/lib/wails";
+import { api, type Review } from "@/lib/wails";
 import { renderWithStore } from "@/test/render";
-import { makeReview, makeState, makeStep, makeTask } from "@/test/wails-mock";
+import { makeReview, makeState, makeTask } from "@/test/wails-mock";
 
 const task = makeTask({ stage: "implementation", currentStep: 1 });
 
-function strip(review: Review | null, step: Partial<Step> = {}) {
-  return renderWithStore(<ReviewStrip task={task} step={makeStep({ review, ...step })} />, {
+function strip(review: Review, repoPath = "") {
+  return renderWithStore(<ReviewStrip taskId={task.id} repoPath={repoPath} review={review} />, {
     state: makeState({ tasks: [task] }),
   });
 }
@@ -18,12 +18,6 @@ beforeEach(() => {
 });
 
 describe("ReviewStrip", () => {
-  it("shows nothing while the step has no review", () => {
-    const { container } = strip(null);
-
-    expect(container).toBeEmptyDOMElement();
-  });
-
   it("carries the progress of the review in the bar and in the count", () => {
     strip(makeReview({ staged: 3, total: 5, percent: 60 }));
 

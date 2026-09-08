@@ -28,7 +28,7 @@ function action(turnId: string, target: string, status = "done"): Entry {
 
 describe("Conversation", () => {
   it("shows a placeholder until the conversation is loaded", () => {
-    renderWithStore(<Conversation stage="prd" taskId="task-1" />, {
+    renderWithStore(<Conversation stage="prd" taskId="task-1" session={makeTask()} />, {
       state: withTask(),
       ui: { transcripts: loading() },
     });
@@ -37,7 +37,7 @@ describe("Conversation", () => {
   });
 
   it("shows the conversation of the stage it was given", () => {
-    renderWithStore(<Conversation stage="step:1" taskId="task-1" />, {
+    renderWithStore(<Conversation stage="step:1" taskId="task-1" session={makeTask()} />, {
       state: withTask(),
       ui: { transcripts: ready([makeEntry("user")]) },
     });
@@ -48,7 +48,7 @@ describe("Conversation", () => {
 
   it("draws what was said and what was done, in order", () => {
     const entries = [makeEntry("user"), makeEntry("assistant"), makeEntry("marker")];
-    renderWithStore(<Conversation stage="prd" taskId="task-1" />, {
+    renderWithStore(<Conversation stage="prd" taskId="task-1" session={makeTask()} />, {
       state: withTask(),
       ui: { transcripts: ready(entries) },
     });
@@ -64,7 +64,7 @@ describe("Conversation", () => {
         user: { text: "The plan is not valid yet.", pending: false, prompt: false, app: true },
       }),
     ];
-    renderWithStore(<Conversation stage="prd" taskId="task-1" />, {
+    renderWithStore(<Conversation stage="prd" taskId="task-1" session={makeTask()} />, {
       state: withTask(),
       ui: { transcripts: ready(entries) },
     });
@@ -80,7 +80,7 @@ describe("Conversation", () => {
       }),
       makeEntry("assistant"),
     ];
-    renderWithStore(<Conversation stage="prd" taskId="task-1" />, {
+    renderWithStore(<Conversation stage="prd" taskId="task-1" session={makeTask()} />, {
       state: withTask(),
       ui: { transcripts: ready(entries) },
     });
@@ -95,7 +95,7 @@ describe("Conversation", () => {
         user: { text: "Add a login screen", pending: false, prompt: true, app: false },
       }),
     ];
-    renderWithStore(<Conversation stage="prd" taskId="task-1" />, {
+    renderWithStore(<Conversation stage="prd" taskId="task-1" session={makeTask()} />, {
       state: withTask(),
       ui: { transcripts: ready(entries) },
     });
@@ -105,10 +105,13 @@ describe("Conversation", () => {
 
   it("collapses the actions of a turn into one line", async () => {
     const entries = [action("turn-1", "a.ts"), action("turn-1", "b.ts")];
-    const { user } = renderWithStore(<Conversation stage="prd" taskId="task-1" />, {
-      state: withTask(),
-      ui: { transcripts: ready(entries) },
-    });
+    const { user } = renderWithStore(
+      <Conversation stage="prd" taskId="task-1" session={makeTask()} />,
+      {
+        state: withTask(),
+        ui: { transcripts: ready(entries) },
+      },
+    );
 
     const trigger = screen.getByRole("button", { name: /2 actions/ });
     expect(screen.queryByText("a.ts")).not.toBeInTheDocument();
@@ -125,7 +128,7 @@ describe("Conversation", () => {
         user: { text: "and dark mode", pending: true, prompt: false, app: false },
       }),
     ];
-    renderWithStore(<Conversation stage="prd" taskId="task-1" />, {
+    renderWithStore(<Conversation stage="prd" taskId="task-1" session={makeTask()} />, {
       state: withTask({ pendingCount: 1 }),
       ui: { transcripts: ready([], pending) },
     });
@@ -136,43 +139,71 @@ describe("Conversation", () => {
   });
 
   it("says the agent is thinking when nothing else is happening", () => {
-    renderWithStore(<Conversation stage="prd" taskId="task-1" />, {
-      state: withTask({ sessionStatus: "working", turnRunning: true, processRunning: true }),
-      ui: { transcripts: ready([makeEntry("user")]) },
-    });
+    renderWithStore(
+      <Conversation
+        stage="prd"
+        taskId="task-1"
+        session={makeTask({ sessionStatus: "working", turnRunning: true, processRunning: true })}
+      />,
+      {
+        state: withTask(),
+        ui: { transcripts: ready([makeEntry("user")]) },
+      },
+    );
 
     expect(screen.getByRole("status")).toHaveTextContent("Thinking…");
   });
 
   it("says the session is starting before the process is up", () => {
-    renderWithStore(<Conversation stage="prd" taskId="task-1" />, {
-      state: withTask({ sessionStatus: "working", turnRunning: true }),
-      ui: { transcripts: ready([]) },
-    });
+    renderWithStore(
+      <Conversation
+        stage="prd"
+        taskId="task-1"
+        session={makeTask({ sessionStatus: "working", turnRunning: true })}
+      />,
+      {
+        state: withTask(),
+        ui: { transcripts: ready([]) },
+      },
+    );
 
     expect(screen.getByRole("status")).toHaveTextContent("Starting session…");
   });
 
   it("says which attempt is on when the session is being retried", () => {
-    renderWithStore(<Conversation stage="prd" taskId="task-1" />, {
-      state: withTask({ sessionStatus: "working", turnRunning: true, retryAttempt: 2 }),
-      ui: { transcripts: ready([]) },
-    });
+    renderWithStore(
+      <Conversation
+        stage="prd"
+        taskId="task-1"
+        session={makeTask({ sessionStatus: "working", turnRunning: true, retryAttempt: 2 })}
+      />,
+      {
+        state: withTask(),
+        ui: { transcripts: ready([]) },
+      },
+    );
 
     expect(screen.getByRole("status")).toHaveTextContent("Retrying (attempt 2)…");
   });
 
   it("stays quiet while a tool is running, since the action already says so", () => {
-    renderWithStore(<Conversation stage="prd" taskId="task-1" />, {
-      state: withTask({ sessionStatus: "working", turnRunning: true, processRunning: true }),
-      ui: { transcripts: ready([action("turn-1", "a.ts", "running")]) },
-    });
+    renderWithStore(
+      <Conversation
+        stage="prd"
+        taskId="task-1"
+        session={makeTask({ sessionStatus: "working", turnRunning: true, processRunning: true })}
+      />,
+      {
+        state: withTask(),
+        ui: { transcripts: ready([action("turn-1", "a.ts", "running")]) },
+      },
+    );
 
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
   it("stays quiet between turns", () => {
-    renderWithStore(<Conversation stage="prd" taskId="task-1" />, {
+    renderWithStore(<Conversation stage="prd" taskId="task-1" session={makeTask()} />, {
       state: withTask(),
       ui: { transcripts: ready([makeEntry("assistant")]) },
     });
@@ -181,10 +212,13 @@ describe("Conversation", () => {
   });
 
   it("offers a way back to the end when the reader is further up", async () => {
-    const { container, user } = renderWithStore(<Conversation stage="prd" taskId="task-1" />, {
-      state: withTask(),
-      ui: { transcripts: ready([makeEntry("user")]) },
-    });
+    const { container, user } = renderWithStore(
+      <Conversation stage="prd" taskId="task-1" session={makeTask()} />,
+      {
+        state: withTask(),
+        ui: { transcripts: ready([makeEntry("user")]) },
+      },
+    );
     const scroller = container.querySelector('[data-slot="conversation"]');
     if (scroller === null) {
       throw new Error("the conversation has no scrolling region");

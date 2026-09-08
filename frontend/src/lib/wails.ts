@@ -94,6 +94,14 @@ export type RepoStatus =
   | "done"
   | "skipped";
 
+/** PRBlockReason is why the PR stage of a repository cannot go on. */
+export type PRBlockReason =
+  | "gh_missing"
+  | "gh_unauthenticated"
+  | "gh_failed"
+  | "git_failed"
+  | "no_worktree";
+
 /** PRState is what GitHub last said about a pull request; "" before it is read. */
 export type PRState = "open" | "merged" | "closed" | "";
 export type ReviewFileKind = "added" | "modified" | "deleted" | "renamed" | "untracked";
@@ -213,6 +221,19 @@ export function asRepoStatus(value: string): RepoStatus {
       return value;
     default:
       return "preparing";
+  }
+}
+
+export function asPRBlockReason(value: string): PRBlockReason {
+  switch (value) {
+    case "gh_missing":
+    case "gh_unauthenticated":
+    case "gh_failed":
+    case "git_failed":
+    case "no_worktree":
+      return value;
+    default:
+      return "gh_failed";
   }
 }
 

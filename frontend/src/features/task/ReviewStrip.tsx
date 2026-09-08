@@ -4,13 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { ToneDot } from "@/features/task/StatusDot";
 import { reviewCountLabel } from "@/features/task/step-status";
 import { cn } from "@/lib/utils";
-import {
-  asReviewFileKind,
-  type ReviewFile,
-  type ReviewFileKind,
-  type Step,
-  type TaskSummary,
-} from "@/lib/wails";
+import { asReviewFileKind, type Review, type ReviewFile, type ReviewFileKind } from "@/lib/wails";
 import { openFileInEditor } from "@/store/actions";
 
 const EXPANDED_KEY = "myspec.review.expanded";
@@ -45,7 +39,15 @@ const KIND_LETTER: Record<ReviewFileKind, string> = {
 const FILE_ROW = "flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs";
 
 /** FileRow is one changed file, and the way into it in the editor. */
-function FileRow({ taskId, file }: { taskId: string; file: ReviewFile }) {
+function FileRow({
+  taskId,
+  repoPath,
+  file,
+}: {
+  taskId: string;
+  repoPath: string;
+  file: ReviewFile;
+}) {
   const kind = asReviewFileKind(file.kind);
   const content = (
     <>
@@ -73,7 +75,7 @@ function FileRow({ taskId, file }: { taskId: string; file: ReviewFile }) {
   return (
     <button
       type="button"
-      onClick={() => void openFileInEditor(taskId, file.path)}
+      onClick={() => void openFileInEditor(taskId, file.path, repoPath)}
       className={cn(FILE_ROW, "transition-colors hover:bg-accent")}
     >
       {content}
@@ -82,21 +84,19 @@ function FileRow({ taskId, file }: { taskId: string; file: ReviewFile }) {
 }
 
 export interface ReviewStripProps {
-  task: TaskSummary;
-  step: Step;
+  taskId: string;
+  /** repoPath names the worktree the files live in; "" is the current step. */
+  repoPath: string;
+  review: Review;
 }
 
 /**
- * ReviewStrip is how far the review of the step has got, read from git as the
- * user stages what they have read in the editor.
+ * ReviewStrip is how far a review has got, read from git as the user stages
+ * what they have read in the editor. It serves a step and a pull request
+ * alike: both are reviewed the same way.
  */
-export function ReviewStrip({ task, step }: ReviewStripProps) {
+export function ReviewStrip({ taskId, repoPath, review }: ReviewStripProps) {
   const [expanded, setExpanded] = useState(wasExpanded);
-
-  const review = step.review;
-  if (review === null) {
-    return null;
-  }
 
   if (review.error !== "") {
     return (
@@ -119,7 +119,8 @@ export function ReviewStrip({ task, step }: ReviewStripProps) {
       <div className="shrink-0 border-b px-3 py-2">
         <p className="text-xs text-muted-foreground">
           The agent didn't change anything, so there is nothing to approve. Ask for the change in
-          the conversation, or discard the step.
+          the conversation, or{" "}
+          {repoPath === "" ? "discard the step" : "review the pull request again"}.
         </p>
       </div>
     );
@@ -169,7 +170,7 @@ export function ReviewStrip({ task, step }: ReviewStripProps) {
         <ul className="flex max-h-64 flex-col overflow-y-auto">
           {files.map((file) => (
             <li key={file.path}>
-              <FileRow taskId={task.id} file={file} />
+              <FileRow taskId={taskId} repoPath={repoPath} file={file} />
             </li>
           ))}
         </ul>

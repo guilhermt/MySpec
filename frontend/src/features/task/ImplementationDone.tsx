@@ -7,9 +7,8 @@ export interface ImplementationDoneProps {
 }
 
 /**
- * ImplementationDone closes the implementation: every step is committed, no
- * session is running, and the app says plainly that the PR stage is not here
- * yet instead of leaving the task looking stuck.
+ * ImplementationDone closes the implementation: every step is committed and no
+ * session is running, in the moment before the task moves on to the PR stage.
  */
 export function ImplementationDone({ task }: ImplementationDoneProps) {
   const app = useAppStore((state) => state.app);
@@ -28,8 +27,7 @@ export function ImplementationDone({ task }: ImplementationDoneProps) {
           {repos.length === 0 ? `${count}.` : `${count} in ${repos.join(", ")}.`}
         </p>
         <p className="text-sm text-muted-foreground">
-          The PR stage doesn't exist in this version, so the task stops here. The commits are in the
-          worktree of each repository.
+          The PR stage starts next, one pull request per repository.
         </p>
       </div>
     </div>

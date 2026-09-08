@@ -1,3 +1,4 @@
+import { repoStatusTone } from "@/features/task/repo-status";
 import { currentStepDisplay } from "@/features/task/step-status";
 import { everyRepoHasPR, reposOf } from "@/lib/repos";
 import { stageLabel } from "@/lib/stages";
@@ -66,27 +67,6 @@ function repoPhrase(repo: RepoPR): string {
   }
 }
 
-function repoTone(repo: RepoPR): StatusTone {
-  switch (asRepoStatus(repo.status)) {
-    // Every one of these is the app waiting on the user.
-    case "blocked":
-    case "draft_ready":
-    case "awaiting_decision":
-    case "in_review":
-    case "ready_to_approve":
-      return "attention";
-    case "preparing":
-    case "drafting":
-    case "opening":
-    case "reviewing":
-    case "committing":
-      return "working";
-    case "done":
-    case "skipped":
-      return "done";
-  }
-}
-
 /**
  * prStatusLabel reads the PR stage as one line: which half of it the task is
  * in, what the most urgent repository is doing, and how many repositories are
@@ -152,7 +132,7 @@ export function taskStatusTone(task: TaskSummary): StatusTone {
   }
   if (asTaskStage(task.stage) === "pr") {
     const repo = urgentRepo(reposOf(task));
-    return repo === null ? "idle" : repoTone(repo);
+    return repo === null ? "idle" : repoStatusTone(repo);
   }
   switch (asSessionStatus(task.sessionStatus)) {
     case "paused":

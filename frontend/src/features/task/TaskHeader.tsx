@@ -33,10 +33,11 @@ export function TaskHeader({ task, artifactsOpen, onToggleArtifacts }: TaskHeade
   const paused = status === "paused";
   const Icon = task.repoPath === "" ? House : FolderGit2;
   // The implementation stage holds the session of the step being run, and only
-  // once the step got as far as opening one.
+  // once the step got as far as opening one. The PR stage holds none at all:
+  // its sessions are of the repositories, and the bar of each one pauses it.
   const implementing = asTaskStage(task.stage) === "implementation";
   const step = currentStepOf(task);
-  const running = !implementing || hasStepSession(step);
+  const running = asTaskStage(task.stage) !== "pr" && (!implementing || hasStepSession(step));
   // Pausing acts on the session on screen, which in the implementation stage
   // is the one of the step that runs.
   const stage = implementing && step !== null ? stepStage(step.number) : task.stage;

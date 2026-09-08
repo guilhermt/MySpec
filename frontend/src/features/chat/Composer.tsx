@@ -3,7 +3,8 @@ import type { KeyboardEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { asSessionStatus, type TaskSummary } from "@/lib/wails";
+import type { SessionState } from "@/features/chat/session";
+import { asSessionStatus } from "@/lib/wails";
 import { interrupt, resume, sendMessage } from "@/store/actions";
 import { useAppStore, useDraft } from "@/store/app-store";
 
@@ -20,17 +21,20 @@ function PausedNotice({ taskId, stage }: { taskId: string; stage: string }) {
 }
 
 export interface ComposerProps {
-  task: TaskSummary;
+  taskId: string;
   /** stage names the session the message goes to. */
   stage: string;
+  /** session is the one being written to, which need not be the task's. */
+  session: SessionState;
 }
 
 /**
  * Composer is where the user answers. It stays open while the agent works: the
  * message waits in the queue instead of the user waiting for a free field.
  */
-export function Composer({ task, stage }: ComposerProps) {
-  const draft = useDraft(task.id, stage);
+export function Composer({ taskId, stage, session }: ComposerProps) {
+  const turnRunning = session.turnRunning;
+  const draft = useDraft(taskId, stage);
   const setDraft = useAppStore((state) => state.setDraft);
 
   const send = () => {
@@ -38,8 +42,8 @@ export function Composer({ task, stage }: ComposerProps) {
     if (text === "") {
       return;
     }
-    setDraft(task.id, stage, "");
-    void sendMessage(task.id, stage, text);
+    setDraft(taskId, stage, "");
+    void sendMessage(taskId, stage, text);
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -48,16 +52,16 @@ export function Composer({ task, stage }: ComposerProps) {
       send();
       return;
     }
-    if (event.key === "Escape" && task.turnRunning) {
+    if (event.key === "Escape" && turnRunning) {
       event.preventDefault();
-      void interrupt(task.id, stage);
+      void interrupt(taskId, stage);
     }
   };
 
-  if (asSessionStatus(task.sessionStatus) === "paused") {
+  if (asSessionStatus(session.sessionStatus) === "paused") {
     return (
       <div className="border-t p-3">
-        <PausedNotice taskId={task.id} stage={stage} />
+        <PausedNotice taskId={taskId} stage={stage} />
       </div>
     );
   }
@@ -68,18 +72,18 @@ export function Composer({ task, stage }: ComposerProps) {
         <div className="flex items-end gap-2">
           <Textarea
             value={draft}
-            onChange={(event) => setDraft(task.id, stage, event.target.value)}
+            onChange={(event) => setDraft(taskId, stage, event.target.value)}
             onKeyDown={onKeyDown}
             placeholder="Reply to the agent…"
             className="max-h-60 min-h-10 resize-none"
           />
-          {task.turnRunning ? (
+          {turnRunning ? (
             <>
               <Button
                 variant="outline"
                 size="sm"
                 aria-label="Stop the response"
-                onClick={() => void interrupt(task.id, stage)}
+                onClick={() => void interrupt(taskId, stage)}
               >
                 <Square />
                 Stop
@@ -99,7 +103,7 @@ export function Composer({ task, stage }: ComposerProps) {
         </div>
         <p className="text-xs text-muted-foreground">
           Enter to send · Shift+Enter for a new line
-          {task.turnRunning && " · Esc to stop"}
+          {turnRunning && " · Esc to stop"}
         </p>
       </div>
     </div>

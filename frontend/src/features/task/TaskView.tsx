@@ -5,6 +5,9 @@ import { Composer } from "@/features/chat/Composer";
 import { Conversation } from "@/features/chat/Conversation";
 import { ArtifactPanel } from "@/features/task/ArtifactPanel";
 import { PlanProblemsNotice } from "@/features/task/PlanProblemsNotice";
+import { RepoBar } from "@/features/task/RepoBar";
+import { RepoPane } from "@/features/task/RepoPane";
+import { RepoTabs } from "@/features/task/RepoTabs";
 import { StageTrack } from "@/features/task/StageTrack";
 import { StepBar } from "@/features/task/StepBar";
 import { StepPane } from "@/features/task/StepPane";
@@ -13,7 +16,7 @@ import { currentStepOf, hasStepSession, stepStage } from "@/features/task/step-s
 import { TaskHeader } from "@/features/task/TaskHeader";
 import { asTaskStage, sessionKey } from "@/lib/wails";
 import { loadTranscript } from "@/store/actions";
-import { useAppStore, useTask } from "@/store/app-store";
+import { useAppStore, useOpenRepo, useRepos, useTask } from "@/store/app-store";
 
 const CONVERSATION_PANEL = "conversation";
 const ARTIFACTS_PANEL = "artifacts";
@@ -48,6 +51,8 @@ export interface TaskViewProps {
 /** TaskView is the screen of one task: the conversation and what came out of it. */
 export function TaskView({ taskId }: TaskViewProps) {
   const task = useTask(taskId);
+  const repos = useRepos(taskId);
+  const openRepo = useOpenRepo(taskId);
   const panelRef = usePanelRef();
   const [artifactsOpen, setArtifactsOpen] = useState(false);
   const { defaultLayout, onLayoutChanged } = useDefaultLayout({
@@ -57,13 +62,23 @@ export function TaskView({ taskId }: TaskViewProps) {
 
   const anyArtifact = task !== null && hasArtifacts(task);
   const implementing = task !== null && asTaskStage(task.stage) === "implementation";
+  const opening = task !== null && asTaskStage(task.stage) === "pr";
   const step = task !== null && implementing ? currentStepOf(task) : null;
-  // In the implementation stage the conversation is the one of the step, which
-  // is there only once the step opened a session of its own.
-  const hasConversation = task !== null && (!implementing || hasStepSession(step));
-  // The conversation on screen is the one of the stage the task is in, which in
-  // the implementation stage is the step that runs.
-  const stage = implementing && step !== null ? stepStage(step.number) : (task?.stage ?? "");
+  const repo = repos.find((candidate) => candidate.repoPath === openRepo) ?? null;
+  // The conversation on screen is the one of the stage the task is in: the step
+  // that runs in the implementation stage, the selected repository in the PR
+  // one. Both open a session of their own only once they get that far.
+  const stage = (() => {
+    if (implementing) {
+      return step === null ? "" : stepStage(step.number);
+    }
+    if (opening) {
+      return repo?.sessionStage ?? "";
+    }
+    return task?.stage ?? "";
+  })();
+  const hasConversation =
+    task !== null && (implementing ? hasStepSession(step) : opening ? stage !== "" : true);
 
   // The conversation is fetched once and then kept: leaving the task and coming
   // back costs nothing, and the events keep being applied while it is away. It
@@ -128,11 +143,21 @@ export function TaskView({ taskId }: TaskViewProps) {
               <StepBar task={task} />
               <StepPane task={task} />
             </>
+          ) : opening ? (
+            <>
+              <RepoTabs task={task} />
+              {repo !== null && (
+                <>
+                  <RepoBar taskId={task.id} repo={repo} />
+                  <RepoPane taskId={task.id} repo={repo} />
+                </>
+              )}
+            </>
           ) : (
             <>
-              <Conversation taskId={task.id} stage={task.stage} />
+              <Conversation taskId={task.id} stage={task.stage} session={task} />
               <PlanProblemsNotice task={task} />
-              <Composer task={task} stage={task.stage} />
+              <Composer taskId={task.id} stage={task.stage} session={task} />
             </>
           )}
         </ResizablePanel>

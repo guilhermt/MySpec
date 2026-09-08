@@ -1,14 +1,15 @@
+import type { SessionState } from "@/features/chat/session";
 import { cn } from "@/lib/utils";
-import { asActionStatus, type Entry, type TaskSummary } from "@/lib/wails";
+import { asActionStatus, type Entry } from "@/lib/wails";
 
 const DOTS = ["[animation-delay:0ms]", "[animation-delay:150ms]", "[animation-delay:300ms]"];
 
-function activityText(task: TaskSummary): string {
-  if (task.retryAttempt > 0) {
-    return `Retrying (attempt ${task.retryAttempt})…`;
+function activityText(session: SessionState): string {
+  if (session.retryAttempt > 0) {
+    return `Retrying (attempt ${session.retryAttempt})…`;
   }
   // A turn with no process behind it is a session on its way up.
-  if (!task.processRunning) {
+  if (!session.processRunning) {
     return "Starting session…";
   }
   return "Thinking…";
@@ -30,17 +31,17 @@ function isSilent(last: Entry | undefined): boolean {
 }
 
 export interface ActivityIndicatorProps {
-  task: TaskSummary;
+  session: SessionState;
   /** entries are the conversation so far, to tell work from silence. */
   entries: readonly Entry[];
 }
 
 /** ActivityIndicator is the quiet sign that the agent is busy thinking. */
-export function ActivityIndicator({ task, entries }: ActivityIndicatorProps) {
-  if (!task.turnRunning || !isSilent(entries.at(-1))) {
+export function ActivityIndicator({ session, entries }: ActivityIndicatorProps) {
+  if (!session.turnRunning || !isSilent(entries.at(-1))) {
     return null;
   }
-  const text = activityText(task);
+  const text = activityText(session);
 
   return (
     <p

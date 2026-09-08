@@ -52,9 +52,11 @@ export function StepPane({ task }: StepPaneProps) {
     case "committing":
       return (
         <>
-          <ReviewStrip task={task} step={step} />
-          <Conversation taskId={task.id} stage={stepStage(step.number)} />
-          <Composer task={task} stage={stepStage(step.number)} />
+          {step.review !== null && (
+            <ReviewStrip taskId={task.id} repoPath="" review={step.review} />
+          )}
+          <Conversation taskId={task.id} stage={stepStage(step.number)} session={task} />
+          <Composer taskId={task.id} stage={stepStage(step.number)} session={task} />
         </>
       );
     case "preparing":
