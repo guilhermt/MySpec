@@ -52,6 +52,27 @@ const (
 	PhaseCreating Phase = "creating"
 )
 
+// BranchPolicy says what Close does with the branch of the worktree.
+type BranchPolicy int
+
+const (
+	// DeleteBranch deletes the branch whatever git thinks of it: GitHub
+	// confirmed the merge, or the branch has no commit of its own.
+	DeleteBranch BranchPolicy = iota
+	// DeleteBranchIfMerged deletes the branch only when git sees it in the
+	// base branch, and keeps it otherwise.
+	DeleteBranchIfMerged
+)
+
+// Leftover is what Purge could not take back: the folder of a worktree, its
+// branch, or both, with what git said.
+type Leftover struct {
+	RepoPath string
+	Path     string // "" when the folder went
+	Branch   string // "" when the branch went
+	Error    string
+}
+
 // The reasons Ensure refuses to create a worktree. Each wraps the git error
 // when there is one, so errors.As(err, &gitErr) also works.
 var (
