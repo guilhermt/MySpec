@@ -28,10 +28,12 @@ const settleTimeout = 5 * time.Second
 // Repository, which is a code repository a task touches.
 type Store interface {
 	ListByWorkspace(ctx context.Context, workspacePath string) ([]Task, error)
+	ListArchived(ctx context.Context, workspacePath string) ([]Task, error)
 	Get(ctx context.Context, id string) (Task, error)
 	Insert(ctx context.Context, t Task) error
 	UpdateStage(ctx context.Context, id, stage string, revisiting bool, updatedAt time.Time) error
 	UpdateArtifactVersion(ctx context.Context, id string, version int, updatedAt time.Time) error
+	UpdateArchived(ctx context.Context, id string, archivedAt, updatedAt time.Time) error
 	Delete(ctx context.Context, id string) error
 	ListStepRuns(ctx context.Context, taskID string) ([]StepRun, error)
 	UpsertStepRun(ctx context.Context, run StepRun) error
@@ -70,9 +72,10 @@ type Service struct {
 	mu            sync.Mutex
 	workspacePath string
 	tasks         []Task
-	artifacts     map[string]Artifacts // by task id, what the last inspection saw
-	stepRuns      map[string][]StepRun // by task id, ordered by number
-	prRuns        map[string][]PRRun   // by task id, ordered by repository path
+	archived      []Task               // by archived_at, newest first
+	artifacts     map[string]Artifacts // by task id, archived included, what the last inspection saw
+	stepRuns      map[string][]StepRun // by task id, archived included, ordered by number
+	prRuns        map[string][]PRRun   // by task id, archived included, ordered by repository path
 }
 
 // New builds a Service from deps, with the artifact watcher running.
@@ -108,9 +111,9 @@ func New(deps Deps) (*Service, error) {
 	return s, nil
 }
 
-// Sync loads the tasks of workspacePath, reads their artifact folders and
-// watches them. Calling it again with the same path is a no-op. It does not
-// call OnChange.
+// Sync loads the tasks of workspacePath, archived ones included, reads their
+// artifact folders and watches the ones still in the workspace. Calling it
+// again with the same path is a no-op. It does not call OnChange.
 func (s *Service) Sync(ctx context.Context, workspacePath string) error {
 	s.mu.Lock()
 	same := s.workspacePath == workspacePath
@@ -123,11 +126,18 @@ func (s *Service) Sync(ctx context.Context, workspacePath string) error {
 	if err != nil {
 		return fmt.Errorf("list tasks of %s: %w", workspacePath, err)
 	}
+	archived, err := s.repo.ListArchived(ctx, workspacePath)
+	if err != nil {
+		return fmt.Errorf("list archived tasks of %s: %w", workspacePath, err)
+	}
 
-	artifacts := make(map[string]Artifacts, len(tasks))
-	stepRuns := make(map[string][]StepRun, len(tasks))
-	prRuns := make(map[string][]PRRun, len(tasks))
-	for _, t := range tasks {
+	// The history reads the same artifacts and records as the workspace does,
+	// so both lists fill the maps; only the workspace is watched.
+	loaded := slices.Concat(tasks, archived)
+	artifacts := make(map[string]Artifacts, len(loaded))
+	stepRuns := make(map[string][]StepRun, len(loaded))
+	prRuns := make(map[string][]PRRun, len(loaded))
+	for _, t := range loaded {
 		artifacts[t.ID] = s.inspect(t)
 		runs, err := s.repo.ListStepRuns(ctx, t.ID)
 		if err != nil {
@@ -146,6 +156,7 @@ func (s *Service) Sync(ctx context.Context, workspacePath string) error {
 	previous := s.tasks
 	s.workspacePath = workspacePath
 	s.tasks = tasks
+	s.archived = archived
 	s.artifacts = artifacts
 	s.stepRuns = stepRuns
 	s.prRuns = prRuns
@@ -160,7 +171,8 @@ func (s *Service) Sync(ctx context.Context, workspacePath string) error {
 	return nil
 }
 
-// List returns copies of the loaded tasks in creation order.
+// List returns copies of the loaded tasks in creation order. The archived ones
+// are not among them.
 func (s *Service) List() []Task {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -168,7 +180,17 @@ func (s *Service) List() []Task {
 	return slices.Clone(s.tasks)
 }
 
-// Get returns a loaded task by id.
+// ListArchived returns copies of the archived tasks, the most recently
+// archived first.
+func (s *Service) ListArchived() []Task {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return slices.Clone(s.archived)
+}
+
+// Get returns a task of the workspace by id. An archived task is not one of
+// them; Lookup finds both.
 func (s *Service) Get(id string) (Task, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -178,6 +200,21 @@ func (s *Service) Get(id string) (Task, bool) {
 		return Task{}, false
 	}
 	return s.tasks[index], true
+}
+
+// Lookup returns a loaded task by id, whether it is in the workspace or in the
+// history.
+func (s *Service) Lookup(id string) (Task, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if index := indexOf(s.tasks, id); index >= 0 {
+		return s.tasks[index], true
+	}
+	if index := indexOf(s.archived, id); index >= 0 {
+		return s.archived[index], true
+	}
+	return Task{}, false
 }
 
 // CreateParams is the task the user filled in the form. The node it was
@@ -263,15 +300,47 @@ func (s *Service) Create(ctx context.Context, p CreateParams) (Task, error) {
 	return t, nil
 }
 
-// Delete unwatches, removes the artifact folder and the row. The caller stops
-// the session of the task first.
-func (s *Service) Delete(ctx context.Context, id string) error {
+// Archive takes a task out of the workspace and into the history. Only a task
+// the workspace still holds is archived, and there is no way back.
+func (s *Service) Archive(ctx context.Context, id string) (Task, error) {
 	t, ok := s.Get(id)
+	if !ok {
+		return Task{}, fmt.Errorf("archive task %s: %w", id, ErrNotFound)
+	}
+
+	t.ArchivedAt = s.now().UTC()
+	t.UpdatedAt = t.ArchivedAt
+	if err := s.repo.UpdateArchived(ctx, t.ID, t.ArchivedAt, t.UpdatedAt); err != nil {
+		return Task{}, err
+	}
+	// The artifacts of an archived task are read, never written, so nothing is
+	// left to follow.
+	s.watcher.unwatch(t.ID, t.ArtifactsDir)
+
+	s.mu.Lock()
+	if index := indexOf(s.tasks, id); index >= 0 {
+		s.tasks = slices.Delete(s.tasks, index, index+1)
+	}
+	s.archived = slices.Insert(s.archived, 0, t)
+	s.mu.Unlock()
+
+	s.log.Info("task archived", "task", t.ID, "name", t.Name)
+	s.changed()
+	return t, nil
+}
+
+// Delete unwatches, removes the artifact folder and the row, of a task of the
+// workspace or of one in the history. The caller stops the session of the task
+// first.
+func (s *Service) Delete(ctx context.Context, id string) error {
+	t, ok := s.Lookup(id)
 	if !ok {
 		return fmt.Errorf("delete task %s: %w", id, ErrNotFound)
 	}
 
-	s.watcher.unwatch(t.ID, t.ArtifactsDir)
+	if !t.Archived() {
+		s.watcher.unwatch(t.ID, t.ArtifactsDir)
+	}
 
 	if err := s.repo.Delete(ctx, id); err != nil {
 		return err
@@ -285,6 +354,9 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	s.mu.Lock()
 	if index := indexOf(s.tasks, id); index >= 0 {
 		s.tasks = slices.Delete(s.tasks, index, index+1)
+	}
+	if index := indexOf(s.archived, id); index >= 0 {
+		s.archived = slices.Delete(s.archived, index, index+1)
 	}
 	delete(s.artifacts, id)
 	delete(s.stepRuns, id)
@@ -540,6 +612,17 @@ func (s *Service) SetPRDetails(ctx context.Context, id, repoPath string, pr PRDe
 	})
 }
 
+// SetPRClosed records that the closing of a repository is over, with what it
+// did to the worktree, the branch and the base branch.
+func (s *Service) SetPRClosed(ctx context.Context, id, repoPath string, result CloseResult) (PRRun, error) {
+	return s.updatePRRun(ctx, id, repoPath, func(run *PRRun) {
+		run.Status = PRClosed
+		run.Block = nil
+		copied := result
+		run.Close = &copied
+	})
+}
+
 // SetPRReviewed records the pass a report closed and the commit it covered,
 // which is what makes the next pass wait for a new commit.
 func (s *Service) SetPRReviewed(ctx context.Context, id, repoPath, commit string, pass int) (PRRun, error) {
@@ -612,12 +695,13 @@ func (s *Service) RemoveArtifacts(ctx context.Context, id string, from Stage) er
 
 // ReadArtifact returns the content of an artifact by file name: the PRD, the
 // tech spec, a step file under the steps folder or a draft or a review report
-// under the pr folder. Anything else is ErrNotFound.
+// under the pr folder. Anything else is ErrNotFound. An archived task is read
+// the same way, which is what the history shows.
 func (s *Service) ReadArtifact(id, name string) (string, error) {
 	if !readableArtifact(name) {
 		return "", fmt.Errorf("read artifact %s of task %s: %w", name, id, ErrNotFound)
 	}
-	t, ok := s.Get(id)
+	t, ok := s.Lookup(id)
 	if !ok {
 		return "", fmt.Errorf("read artifact of task %s: %w", id, ErrNotFound)
 	}
@@ -808,8 +892,8 @@ func indexOfPRRun(runs []PRRun, repoPath string) int {
 	return slices.IndexFunc(runs, func(r PRRun) bool { return r.RepoPath == repoPath })
 }
 
-// clonePRRuns copies the runs and the block each one carries, so that what a
-// caller holds never changes under it.
+// clonePRRuns copies the runs and the block and the close result each one
+// carries, so that what a caller holds never changes under it.
 func clonePRRuns(runs []PRRun) []PRRun {
 	if len(runs) == 0 {
 		return nil
@@ -819,6 +903,10 @@ func clonePRRuns(runs []PRRun) []PRRun {
 		if run.Block != nil {
 			block := *run.Block
 			run.Block = &block
+		}
+		if run.Close != nil {
+			result := *run.Close
+			run.Close = &result
 		}
 		out[i] = run
 	}

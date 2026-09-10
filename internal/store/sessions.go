@@ -97,3 +97,14 @@ func (r *SessionsRepo) Delete(ctx context.Context, taskID string, stages ...stri
 	}
 	return nil
 }
+
+// DeleteByTask removes every session of a task, with their transcripts by
+// cascade. A task without sessions is not an error.
+func (r *SessionsRepo) DeleteByTask(ctx context.Context, taskID string) error {
+	const stmt = `DELETE FROM sessions WHERE task_id = ?`
+
+	if _, err := r.db.ExecContext(ctx, stmt, taskID); err != nil {
+		return fmt.Errorf("delete sessions of task %s: %w", taskID, err)
+	}
+	return nil
+}

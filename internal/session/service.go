@@ -845,6 +845,16 @@ func (s *Service) CloseTask(ctx context.Context, taskID string) error {
 	return nil
 }
 
+// DiscardTask stops every session of a task and throws all of them away with
+// their conversations. Used when a task is archived: the history keeps the
+// artifacts, not the talks that produced them.
+func (s *Service) DiscardTask(ctx context.Context, taskID string) error {
+	if err := s.CloseTask(ctx, taskID); err != nil {
+		return err
+	}
+	return s.sessions.DeleteByTask(ctx, taskID)
+}
+
 // Shutdown stops every process gracefully within ctx, and kills what is left
 // when ctx expires.
 func (s *Service) Shutdown(ctx context.Context) {

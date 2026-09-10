@@ -82,16 +82,17 @@ func (b *syncBuffer) String() string {
 
 // memRepo is an in-memory task.Store.
 type memRepo struct {
-	mu        sync.Mutex
-	items     []task.Task
-	runs      map[string][]task.StepRun // step runs by task id
-	prs       map[string][]task.PRRun   // pr runs by task id
-	listErr   error
-	runsErr   error
-	prRunsErr error
-	insertErr error
-	updateErr error
-	deleteErr error
+	mu          sync.Mutex
+	items       []task.Task
+	runs        map[string][]task.StepRun // step runs by task id
+	prs         map[string][]task.PRRun   // pr runs by task id
+	listErr     error
+	archivedErr error
+	runsErr     error
+	prRunsErr   error
+	insertErr   error
+	updateErr   error
+	deleteErr   error
 }
 
 func (r *memRepo) ListByWorkspace(_ context.Context, workspacePath string) ([]task.Task, error) {
@@ -104,13 +105,36 @@ func (r *memRepo) ListByWorkspace(_ context.Context, workspacePath string) ([]ta
 
 	var out []task.Task
 	for _, t := range r.items {
-		if t.WorkspacePath == workspacePath {
+		if t.WorkspacePath == workspacePath && !t.Archived() {
 			out = append(out, t)
 		}
 	}
 	slices.SortStableFunc(out, func(a, b task.Task) int {
 		if !a.CreatedAt.Equal(b.CreatedAt) {
 			return a.CreatedAt.Compare(b.CreatedAt)
+		}
+		return strings.Compare(a.Name, b.Name)
+	})
+	return out, nil
+}
+
+func (r *memRepo) ListArchived(_ context.Context, workspacePath string) ([]task.Task, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.archivedErr != nil {
+		return nil, r.archivedErr
+	}
+
+	var out []task.Task
+	for _, t := range r.items {
+		if t.WorkspacePath == workspacePath && t.Archived() {
+			out = append(out, t)
+		}
+	}
+	slices.SortStableFunc(out, func(a, b task.Task) int {
+		if !a.ArchivedAt.Equal(b.ArchivedAt) {
+			return b.ArchivedAt.Compare(a.ArchivedAt)
 		}
 		return strings.Compare(a.Name, b.Name)
 	})
@@ -172,6 +196,22 @@ func (r *memRepo) UpdateArtifactVersion(_ context.Context, id string, version in
 		return task.ErrNotFound
 	}
 	r.items[index].ArtifactVersion = version
+	r.items[index].UpdatedAt = updatedAt
+	return nil
+}
+
+func (r *memRepo) UpdateArchived(_ context.Context, id string, archivedAt, updatedAt time.Time) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.updateErr != nil {
+		return r.updateErr
+	}
+	index := r.indexOf(id)
+	if index < 0 {
+		return task.ErrNotFound
+	}
+	r.items[index].ArchivedAt = archivedAt
 	r.items[index].UpdatedAt = updatedAt
 	return nil
 }

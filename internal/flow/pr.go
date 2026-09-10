@@ -566,7 +566,7 @@ func (s *Service) evaluatePR(ctx context.Context, t task.Task) {
 			}
 		case task.PRReviewing:
 			s.evaluateReview(ctx, t, run, slug, a.PR[slug])
-		case task.PRPreparing, task.PRBlocked, task.PRDone, task.PRSkipped:
+		case task.PRPreparing, task.PRBlocked, task.PRDone, task.PRClosing, task.PRClosed, task.PRSkipped:
 			// Nothing of these is the user's to review.
 			s.review.Forget(reviewKey(t.ID, run.RepoPath))
 		}
@@ -842,7 +842,7 @@ func (s *Service) resumePR(ctx context.Context, t task.Task) {
 			s.reopenRepoSession(ctx, t, run, repos, false)
 		case task.PRReviewing, task.PRCommitting:
 			s.reopenRepoSession(ctx, t, run, repos, true)
-		case task.PRBlocked, task.PRDone, task.PRSkipped:
+		case task.PRBlocked, task.PRDone, task.PRClosing, task.PRClosed, task.PRSkipped:
 			// Nothing runs for these; the user decides what happens next.
 		}
 	}

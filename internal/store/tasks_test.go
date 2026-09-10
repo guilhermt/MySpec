@@ -86,6 +86,70 @@ func TestTasksListByWorkspaceIsInCreationOrder(t *testing.T) {
 	}
 }
 
+func TestTasksArchivedLeaveTheWorkspaceForTheHistory(t *testing.T) {
+	t.Parallel()
+	s := newStore(t)
+
+	for _, tk := range []task.Task{
+		newTask("task-1", "/ws", "first", fixedTime),
+		newTask("task-2", "/ws", "second", fixedTime),
+		newTask("task-3", "/ws", "third", fixedTime),
+	} {
+		if err := s.Tasks.Insert(t.Context(), tk); err != nil {
+			t.Fatalf("Insert(%s) = %v, want nil", tk.Name, err)
+		}
+	}
+
+	archivedAt := fixedTime.Add(time.Hour)
+	if err := s.Tasks.UpdateArchived(t.Context(), "task-1", archivedAt, archivedAt); err != nil {
+		t.Fatalf("UpdateArchived(task-1) = %v, want nil", err)
+	}
+	later := archivedAt.Add(time.Hour)
+	if err := s.Tasks.UpdateArchived(t.Context(), "task-2", later, later); err != nil {
+		t.Fatalf("UpdateArchived(task-2) = %v, want nil", err)
+	}
+
+	active, err := s.Tasks.ListByWorkspace(t.Context(), "/ws")
+	if err != nil {
+		t.Fatalf("ListByWorkspace() = %v, want nil", err)
+	}
+	if diff := cmp.Diff([]string{"third"}, taskNames(active)); diff != "" {
+		t.Errorf("ListByWorkspace() mismatch (-want +got):\n%s", diff)
+	}
+
+	history, err := s.Tasks.ListArchived(t.Context(), "/ws")
+	if err != nil {
+		t.Fatalf("ListArchived() = %v, want nil", err)
+	}
+	// The most recently archived comes first, which is the order the history
+	// shows.
+	if diff := cmp.Diff([]string{"second", "first"}, taskNames(history)); diff != "" {
+		t.Errorf("ListArchived() mismatch (-want +got):\n%s", diff)
+	}
+
+	// An archived task is still read whole, artifacts and all.
+	got, getErr := s.Tasks.Get(t.Context(), "task-1")
+	if getErr != nil {
+		t.Fatalf("Get() = %v, want nil", getErr)
+	}
+	if !got.Archived() || !got.ArchivedAt.Equal(archivedAt) || !got.UpdatedAt.Equal(archivedAt) {
+		t.Errorf("Get() = archived %t at %v, updated %v, want it archived at %v",
+			got.Archived(), got.ArchivedAt, got.UpdatedAt, archivedAt)
+	}
+	if third, err := s.Tasks.Get(t.Context(), "task-3"); err != nil || third.Archived() {
+		t.Errorf("Get(task-3) = %+v, %v, want a task still in the workspace", third, err)
+	}
+}
+
+// taskNames is the names of a list of tasks, in the order they came in.
+func taskNames(tasks []task.Task) []string {
+	names := make([]string, 0, len(tasks))
+	for _, tk := range tasks {
+		names = append(names, tk.Name)
+	}
+	return names
+}
+
 func TestTasksInsertRejectsARepeatedName(t *testing.T) {
 	t.Parallel()
 	s := newStore(t)

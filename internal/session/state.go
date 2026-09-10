@@ -93,6 +93,7 @@ type SessionRepository interface {
 	Insert(ctx context.Context, rec Record) error
 	Update(ctx context.Context, rec Record) error
 	Delete(ctx context.Context, taskID string, stages ...string) error
+	DeleteByTask(ctx context.Context, taskID string) error
 }
 
 // Status is what the interface shows about a session at a glance.

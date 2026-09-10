@@ -97,6 +97,18 @@ func (r *memSessions) Delete(_ context.Context, taskID string, stages ...string)
 	return nil
 }
 
+func (r *memSessions) DeleteByTask(_ context.Context, taskID string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for k, rec := range r.recs {
+		if rec.TaskID == taskID {
+			delete(r.recs, k)
+		}
+	}
+	return nil
+}
+
 // get returns the stored record of a session key, failing the test when it is
 // gone.
 func (r *memSessions) get(t *testing.T, taskID, stage string) session.Record {
