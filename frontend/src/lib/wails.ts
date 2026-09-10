@@ -2,6 +2,7 @@ import type {
   ActionEntry,
   AssistantEntry,
   CreateTaskRequest,
+  DeleteResult,
   Entry,
   ErrorEntry,
   MarkerEntry,
@@ -37,6 +38,7 @@ export type {
   ActionEntry,
   AssistantEntry,
   CreateTaskRequest,
+  DeleteResult,
   Entry,
   ErrorEntry,
   MarkerEntry,
@@ -381,7 +383,7 @@ export const api = {
   setTheme: (preference: ThemePreference): Promise<void> => SettingsService.SetTheme(preference),
 
   createTask: (req: CreateTaskRequest): Promise<string> => TaskService.CreateTask(req),
-  deleteTask: (taskId: string): Promise<void> => TaskService.DeleteTask(taskId),
+  deleteTask: (taskId: string): Promise<DeleteResult> => TaskService.DeleteTask(taskId),
   getTranscript: (taskId: string, stage: string): Promise<Transcript> =>
     TaskService.GetTranscript(taskId, stage),
   sendMessage: (taskId: string, stage: string, text: string): Promise<void> =>

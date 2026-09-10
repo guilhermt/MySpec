@@ -142,6 +142,7 @@ export function makeState(overrides: Partial<State> = {}): State {
     systemDark: false,
     notice: null,
     tasks: [],
+    history: [],
     ...overrides,
   };
 }
@@ -213,6 +214,10 @@ export function makeRepoPR(overrides: Partial<RepoPR> = {}): RepoPR {
     prUrl: "",
     prState: "",
     checkedAt: "",
+    prBase: "",
+    checkError: "",
+    canClose: false,
+    close: null,
     sessionStage: "pr:web",
     sessionStatus: "waiting",
     turnRunning: false,

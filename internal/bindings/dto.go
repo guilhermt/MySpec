@@ -44,6 +44,9 @@ type State struct {
 	SystemDark bool          `json:"systemDark"`
 	Notice     *Notice       `json:"notice"`
 	Tasks      []TaskSummary `json:"tasks"` // tasks of the open workspace; never nil
+	// History are the archived tasks of the open workspace, newest first; never
+	// nil.
+	History []ArchivedTask `json:"history"`
 }
 
 // EventTranscriptChanged carries one TranscriptEvent every time a conversation
@@ -125,6 +128,29 @@ type PRReport struct {
 	Clean bool   `json:"clean"`
 }
 
+// CloseStep is one part of the closing of a repository.
+type CloseStep struct {
+	// Outcome is done, skipped or failed, a string for the same reason as
+	// Notice.Reason.
+	Outcome string `json:"outcome"`
+	// Reason is missing, not_merged, not_checked_out, dirty, no_upstream,
+	// diverged or up_to_date; skipped only.
+	Reason string `json:"reason"`
+	Detail string `json:"detail"`
+}
+
+// CloseResult is what closing a repository did.
+type CloseResult struct {
+	Worktree     CloseStep `json:"worktree"`
+	Branch       CloseStep `json:"branch"`
+	Base         CloseStep `json:"base"`
+	WorktreePath string    `json:"worktreePath"`
+	BranchName   string    `json:"branchName"`
+	BaseBranch   string    `json:"baseBranch"`
+	BaseCommits  int       `json:"baseCommits"`
+	ClosedAt     string    `json:"closedAt"`
+}
+
 // RepoPR is one repository of a task in the pull request stage, with its own
 // conversation and its own state.
 type RepoPR struct {
@@ -132,8 +158,9 @@ type RepoPR struct {
 	RepoPath   string `json:"repoPath"`
 	Slug       string `json:"slug"`
 	// Status is preparing, blocked, drafting, draft_ready, opening, reviewing,
-	// awaiting_decision, in_review, ready_to_approve, committing, done or
-	// skipped, a string for the same reason as Notice.Reason.
+	// awaiting_decision, in_review, ready_to_approve, committing, done, merged,
+	// pr_closed, closing, closed or skipped, a string for the same reason as
+	// Notice.Reason.
 	Status       string   `json:"status"`
 	Block        *PRBlock `json:"block"` // blocked only
 	WorktreePath string   `json:"worktreePath"`
@@ -152,6 +179,13 @@ type RepoPR struct {
 	PRState  string `json:"prState"` // open, merged or closed; "" when unknown
 	// CheckedAt is when gh last reported the pull request; "" before that.
 	CheckedAt string `json:"checkedAt"`
+	// PRBase is the branch the pull request merges into; "" until read.
+	PRBase string `json:"prBase"`
+	// CheckError is what the last automatic reading said when it failed; ""
+	// otherwise.
+	CheckError string       `json:"checkError"`
+	CanClose   bool         `json:"canClose"` // the user may close the repository now
+	Close      *CloseResult `json:"close"`    // closed only
 
 	SessionStage string `json:"sessionStage"` // "" when the repository has no conversation
 	// SessionStatus is working, waiting, needs_permission, paused or error.
@@ -201,6 +235,93 @@ type TaskSummary struct {
 	LastError       string        `json:"lastError"`
 	CreatedAt       string        `json:"createdAt"`
 	UpdatedAt       string        `json:"updatedAt"`
+}
+
+// ArchivedStep is one step of an archived task, as the plan wrote it.
+type ArchivedStep struct {
+	Number     int    `json:"number"`
+	File       string `json:"file"` // name inside steps/, the artifact is "steps/" + File
+	Title      string `json:"title"`
+	Repository string `json:"repository"`
+}
+
+// ArchivedRepo is one repository an archived task touched, with its pull
+// request.
+type ArchivedRepo struct {
+	Repository string `json:"repository"`
+	RepoPath   string `json:"repoPath"`
+	PRNumber   int    `json:"prNumber"` // 0 when the repository had no pull request
+	PRURL      string `json:"prUrl"`
+	PRState    string `json:"prState"`
+}
+
+// ArchivedTask is a finished task, as the history shows it: its artifacts and
+// what it touched, and nothing that runs.
+type ArchivedTask struct {
+	ID              string         `json:"id"`
+	Name            string         `json:"name"`
+	RepoPath        string         `json:"repoPath"` // "" for a root task
+	HasPRD          bool           `json:"hasPrd"`
+	HasTechSpec     bool           `json:"hasTechSpec"`
+	Steps           []ArchivedStep `json:"steps"` // never nil
+	Repos           []ArchivedRepo `json:"repos"` // never nil
+	ArtifactVersion int            `json:"artifactVersion"`
+	CreatedAt       string         `json:"createdAt"`
+	ArchivedAt      string         `json:"archivedAt"`
+}
+
+// WorktreePreview is one worktree the deletion of a task would remove, and
+// whether it holds work.
+type WorktreePreview struct {
+	Repository string `json:"repository"`
+	RepoPath   string `json:"repoPath"`
+	Path       string `json:"path"`
+	Dirty      bool   `json:"dirty"`
+	Files      int    `json:"files"` // changed files; dirty only
+	Error      string `json:"error"` // what git said when the worktree could not be read
+}
+
+// BranchPreview is one branch the deletion of a task would delete, and whether
+// its commits are safe elsewhere.
+type BranchPreview struct {
+	Repository string `json:"repository"`
+	RepoPath   string `json:"repoPath"`
+	Name       string `json:"name"`
+	Merged     bool   `json:"merged"`
+	Error      string `json:"error"`
+}
+
+// PRPreview is a pull request the app leaves on GitHub when the task goes.
+type PRPreview struct {
+	Repository string `json:"repository"`
+	RepoPath   string `json:"repoPath"`
+	Number     int    `json:"number"`
+	URL        string `json:"url"`
+	// State is open, merged or closed; "" when unknown.
+	State string `json:"state"`
+}
+
+// DeletePreview is what deleting a task would destroy, as the confirmation
+// dialog spells it out.
+type DeletePreview struct {
+	SessionRunning bool              `json:"sessionRunning"`
+	Worktrees      []WorktreePreview `json:"worktrees"` // never nil
+	Branches       []BranchPreview   `json:"branches"`  // never nil
+	PRs            []PRPreview       `json:"prs"`       // never nil
+}
+
+// Leftover is what git could not remove when a task was deleted.
+type Leftover struct {
+	Repository string `json:"repository"`
+	RepoPath   string `json:"repoPath"`
+	Path       string `json:"path"`   // "" when the folder went
+	Branch     string `json:"branch"` // "" when the branch went
+	Error      string `json:"error"`
+}
+
+// DeleteResult is what deleting a task left behind.
+type DeleteResult struct {
+	Leftovers []Leftover `json:"leftovers"` // never nil
 }
 
 // UserEntry is a message sent to the agent: one the user wrote, or one the app

@@ -17,6 +17,65 @@ export interface ActionEntry {
 }
 
 /**
+ * ArchivedRepo is one repository an archived task touched, with its pull
+ * request.
+ */
+export interface ArchivedRepo {
+    "repository": string;
+    "repoPath": string;
+
+    /**
+     * 0 when the repository had no pull request
+     */
+    "prNumber": number;
+    "prUrl": string;
+    "prState": string;
+}
+
+/**
+ * ArchivedStep is one step of an archived task, as the plan wrote it.
+ */
+export interface ArchivedStep {
+    "number": number;
+
+    /**
+     * name inside steps/, the artifact is "steps/" + File
+     */
+    "file": string;
+    "title": string;
+    "repository": string;
+}
+
+/**
+ * ArchivedTask is a finished task, as the history shows it: its artifacts and
+ * what it touched, and nothing that runs.
+ */
+export interface ArchivedTask {
+    "id": string;
+    "name": string;
+
+    /**
+     * "" for a root task
+     */
+    "repoPath": string;
+    "hasPrd": boolean;
+    "hasTechSpec": boolean;
+
+    /**
+     * never nil
+     */
+    "steps": ArchivedStep[] | null;
+
+    /**
+     * never nil
+     */
+    "repos": ArchivedRepo[] | null;
+    "artifactVersion": number;
+    "createdAt": string;
+    "archivedAt": string;
+}
+
+/**
  * AssistantEntry is one content block of an assistant message.
  */
 export interface AssistantEntry {
@@ -25,6 +84,50 @@ export interface AssistantEntry {
     "text": string;
     "complete": boolean;
     "interrupted": boolean;
+}
+
+/**
+ * BranchPreview is one branch the deletion of a task would delete, and whether
+ * its commits are safe elsewhere.
+ */
+export interface BranchPreview {
+    "repository": string;
+    "repoPath": string;
+    "name": string;
+    "merged": boolean;
+    "error": string;
+}
+
+/**
+ * CloseResult is what closing a repository did.
+ */
+export interface CloseResult {
+    "worktree": CloseStep;
+    "branch": CloseStep;
+    "base": CloseStep;
+    "worktreePath": string;
+    "branchName": string;
+    "baseBranch": string;
+    "baseCommits": number;
+    "closedAt": string;
+}
+
+/**
+ * CloseStep is one part of the closing of a repository.
+ */
+export interface CloseStep {
+    /**
+     * Outcome is done, skipped or failed, a string for the same reason as
+     * Notice.Reason.
+     */
+    "outcome": string;
+
+    /**
+     * Reason is missing, not_merged, not_checked_out, dirty, no_upstream,
+     * diverged or up_to_date; skipped only.
+     */
+    "reason": string;
+    "detail": string;
 }
 
 /**
@@ -38,6 +141,39 @@ export interface CreateTaskRequest {
      */
     "repoPath": string;
     "initialContext": string;
+}
+
+/**
+ * DeletePreview is what deleting a task would destroy, as the confirmation
+ * dialog spells it out.
+ */
+export interface DeletePreview {
+    "sessionRunning": boolean;
+
+    /**
+     * never nil
+     */
+    "worktrees": WorktreePreview[] | null;
+
+    /**
+     * never nil
+     */
+    "branches": BranchPreview[] | null;
+
+    /**
+     * never nil
+     */
+    "prs": PRPreview[] | null;
+}
+
+/**
+ * DeleteResult is what deleting a task left behind.
+ */
+export interface DeleteResult {
+    /**
+     * never nil
+     */
+    "leftovers": Leftover[] | null;
 }
 
 /**
@@ -78,6 +214,25 @@ export interface ErrorEntry {
     "kind": string;
     "message": string;
     "retryable": boolean;
+}
+
+/**
+ * Leftover is what git could not remove when a task was deleted.
+ */
+export interface Leftover {
+    "repository": string;
+    "repoPath": string;
+
+    /**
+     * "" when the folder went
+     */
+    "path": string;
+
+    /**
+     * "" when the branch went
+     */
+    "branch": string;
+    "error": string;
 }
 
 /**
@@ -145,6 +300,21 @@ export interface PRDraft {
      * name inside the pr folder, for ReadArtifact
      */
     "file": string;
+}
+
+/**
+ * PRPreview is a pull request the app leaves on GitHub when the task goes.
+ */
+export interface PRPreview {
+    "repository": string;
+    "repoPath": string;
+    "number": number;
+    "url": string;
+
+    /**
+     * State is open, merged or closed; "" when unknown.
+     */
+    "state": string;
 }
 
 /**
@@ -284,8 +454,9 @@ export interface RepoPR {
 
     /**
      * Status is preparing, blocked, drafting, draft_ready, opening, reviewing,
-     * awaiting_decision, in_review, ready_to_approve, committing, done or
-     * skipped, a string for the same reason as Notice.Reason.
+     * awaiting_decision, in_review, ready_to_approve, committing, done, merged,
+     * pr_closed, closing, closed or skipped, a string for the same reason as
+     * Notice.Reason.
      */
     "status": string;
 
@@ -329,6 +500,27 @@ export interface RepoPR {
      * CheckedAt is when gh last reported the pull request; "" before that.
      */
     "checkedAt": string;
+
+    /**
+     * PRBase is the branch the pull request merges into; "" until read.
+     */
+    "prBase": string;
+
+    /**
+     * CheckError is what the last automatic reading said when it failed; ""
+     * otherwise.
+     */
+    "checkError": string;
+
+    /**
+     * the user may close the repository now
+     */
+    "canClose": boolean;
+
+    /**
+     * closed only
+     */
+    "close": CloseResult | null;
 
     /**
      * "" when the repository has no conversation
@@ -410,6 +602,12 @@ export interface State {
      * tasks of the open workspace; never nil
      */
     "tasks": TaskSummary[] | null;
+
+    /**
+     * History are the archived tasks of the open workspace, newest first; never
+     * nil.
+     */
+    "history": ArchivedTask[] | null;
 }
 
 /**
@@ -617,4 +815,25 @@ export interface Workspace {
     "name": string;
     "path": string;
     "repos": Repo[] | null;
+}
+
+/**
+ * WorktreePreview is one worktree the deletion of a task would remove, and
+ * whether it holds work.
+ */
+export interface WorktreePreview {
+    "repository": string;
+    "repoPath": string;
+    "path": string;
+    "dirty": boolean;
+
+    /**
+     * changed files; dirty only
+     */
+    "files": number;
+
+    /**
+     * what git said when the worktree could not be read
+     */
+    "error": string;
 }

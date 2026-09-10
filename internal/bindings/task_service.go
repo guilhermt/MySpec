@@ -75,14 +75,41 @@ func (s *TaskService) CreateTask(req CreateTaskRequest) (string, error) {
 }
 
 // DeleteTask stops the session of a task, removes its worktrees and branches,
-// and removes it with its artifacts. A worktree git cannot remove keeps the
-// task, and the reason reaches the user.
-func (s *TaskService) DeleteTask(taskID string) error {
+// and removes it with its artifacts. What git could not remove comes back for
+// the user to clean up: it never keeps the task.
+func (s *TaskService) DeleteTask(taskID string) (DeleteResult, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), removeTimeout)
 	defer cancel()
 
-	if err := s.flow.Delete(ctx, taskID); err != nil {
-		return s.fail("DeleteTask", err)
+	result, err := s.flow.Delete(ctx, taskID)
+	if err != nil {
+		return DeleteResult{}, s.fail("DeleteTask", err)
+	}
+	return FromDeleteResult(result), nil
+}
+
+// PreviewDelete reads what deleting a task would destroy, which is what the
+// confirmation dialog spells out before the user agrees to it.
+func (s *TaskService) PreviewDelete(taskID string) (DeletePreview, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), removeTimeout)
+	defer cancel()
+
+	preview, err := s.flow.PreviewDelete(ctx, taskID)
+	if err != nil {
+		return DeletePreview{}, s.fail("PreviewDelete", err)
+	}
+	return FromDeletePreview(preview), nil
+}
+
+// CloseRepo takes down the worktree and the branch of a repository whose pull
+// request was merged and updates its base branch. It returns as soon as the
+// work is scheduled; what git does arrives as state.
+func (s *TaskService) CloseRepo(taskID, repoPath string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+
+	if err := s.flow.CloseRepo(ctx, taskID, repoPath); err != nil {
+		return s.fail("CloseRepo", err)
 	}
 	return nil
 }
@@ -481,6 +508,8 @@ var userMessages = []struct {
 	{flow.ErrPRExists, "The pull request is already open."},
 	{flow.ErrNoPullRequest, "This repository has no pull request yet."},
 	{flow.ErrRepoNotBlocked, "The repository isn't blocked."},
+	{flow.ErrRepoNotClosable, "This repository isn't waiting to be closed."},
+	{flow.ErrPRNotMerged, "The pull request hasn't been merged yet."},
 	{errPathOutside, "This file is not in the worktree of the step."},
 	{editor.ErrNotFound, "VS Code was not found: `code` isn't on the PATH."},
 	{gh.ErrNotFound, "GitHub CLI was not found: `gh` isn't on the PATH."},

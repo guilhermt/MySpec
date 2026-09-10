@@ -50,7 +50,9 @@ export function createTask(req: CreateTaskRequest): Promise<string> {
 }
 
 export function deleteTask(taskId: string): Promise<void> {
-  return run(() => api.deleteTask(taskId));
+  return run(async () => {
+    await api.deleteTask(taskId);
+  });
 }
 
 /** loadTranscript fetches a conversation and buffers what arrives meanwhile. */

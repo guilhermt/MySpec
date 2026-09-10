@@ -323,6 +323,255 @@ func stepsOf(t *testing.T, states []flow.StepState) []bindings.Step {
 	return got[0].Steps
 }
 
+func TestFromTasksCarriesWhatClosingARepositoryDid(t *testing.T) {
+	t.Parallel()
+
+	closedAt := time.Date(2026, 9, 8, 18, 30, 0, 0, time.UTC)
+	states := []flow.RepoState{
+		{
+			Repository: "api",
+			RepoPath:   "/home/u/code/api",
+			Slug:       "api",
+			Status:     flow.RepoClosed,
+			PR: task.PRDetails{
+				Number: 7, URL: "https://github.com/acme/api/pull/7", State: task.PRStateMerged, Base: "dev",
+			},
+			Close: &task.CloseResult{
+				Worktree:     task.CloseStep{Outcome: task.OutcomeDone},
+				Branch:       task.CloseStep{Outcome: task.OutcomeSkipped, Reason: task.SkipNotMerged, Detail: "login-screen"},
+				Base:         task.CloseStep{Outcome: task.OutcomeFailed, Detail: "git merge: refusing"},
+				WorktreePath: "/home/u/code/.myspec/worktrees/api/login-screen",
+				BranchName:   "login-screen",
+				BaseBranch:   "dev",
+				BaseCommits:  3,
+				ClosedAt:     closedAt,
+			},
+		},
+		{
+			Repository: "web",
+			RepoPath:   "/home/u/code/web",
+			Slug:       "web",
+			Status:     flow.RepoDone,
+			PR:         task.PRDetails{Number: 8, State: task.PRStateOpen, Base: "dev"},
+			CheckError: "gh pr view: connection refused",
+			CanClose:   true,
+		},
+	}
+
+	got := bindings.FromTasks(
+		[]task.Task{{ID: "task-1", Name: "login-screen", Stage: task.StagePR}},
+		func(string) task.Artifacts { return task.Artifacts{} },
+		func(string) []flow.StepState { return nil },
+		func(string) []flow.RepoState { return states },
+		nil,
+	)
+	if len(got) != 1 {
+		t.Fatalf("len(FromTasks()) = %d, want 1", len(got))
+	}
+
+	want := &bindings.CloseResult{
+		Worktree:     bindings.CloseStep{Outcome: "done"},
+		Branch:       bindings.CloseStep{Outcome: "skipped", Reason: "not_merged", Detail: "login-screen"},
+		Base:         bindings.CloseStep{Outcome: "failed", Detail: "git merge: refusing"},
+		WorktreePath: "/home/u/code/.myspec/worktrees/api/login-screen",
+		BranchName:   "login-screen",
+		BaseBranch:   "dev",
+		BaseCommits:  3,
+		ClosedAt:     "2026-09-08T18:30:00Z",
+	}
+	if diff := cmp.Diff(want, got[0].Repos[0].Close); diff != "" {
+		t.Errorf("close result mismatch (-want +got):\n%s", diff)
+	}
+	if got[0].Repos[0].PRBase != "dev" || got[0].Repos[0].CanClose {
+		t.Errorf("api = %+v, want the base of the pull request and no closing to offer", got[0].Repos[0])
+	}
+	// A repository whose reading failed is offered the closing, with what the
+	// reading said.
+	web := got[0].Repos[1]
+	if web.Close != nil {
+		t.Errorf("close result of web = %+v, want nil on a repository that is not closed", web.Close)
+	}
+	if web.CheckError != "gh pr view: connection refused" || !web.CanClose {
+		t.Errorf("web = %+v, want the failed reading and the closing offered", web)
+	}
+}
+
+func TestFromArchivedCarriesTheDocumentsAndThePullRequests(t *testing.T) {
+	t.Parallel()
+
+	createdAt := time.Date(2026, 9, 1, 9, 0, 0, 0, time.UTC)
+	archivedAt := time.Date(2026, 9, 8, 18, 30, 0, 0, time.UTC)
+	tasks := []task.Task{{
+		ID:              "task-1",
+		Name:            "login-screen",
+		WorkspacePath:   "/home/u/code",
+		ArtifactVersion: 4,
+		CreatedAt:       createdAt,
+		ArchivedAt:      archivedAt,
+	}}
+	artifacts := task.Artifacts{
+		PRD:      true,
+		TechSpec: true,
+		Plan: task.Plan{
+			Present: true,
+			Steps: []task.Step{
+				{Number: 1, File: "1-first.md", Title: "First", Repository: "api", RepoPath: "/home/u/code/api"},
+				{Number: 2, File: "2-second.md", Title: "Second", Repository: "web", RepoPath: "/home/u/code/web"},
+			},
+		},
+	}
+	runs := []task.PRRun{
+		{
+			RepoPath: "/home/u/code/api",
+			Status:   task.PRClosed,
+			PR: task.PRDetails{
+				Number: 7, URL: "https://github.com/acme/api/pull/7", State: task.PRStateMerged,
+			},
+		},
+		{RepoPath: "/home/u/code/web", Status: task.PRClosed},
+	}
+
+	want := []bindings.ArchivedTask{{
+		ID:          "task-1",
+		Name:        "login-screen",
+		HasPRD:      true,
+		HasTechSpec: true,
+		Steps: []bindings.ArchivedStep{
+			{Number: 1, File: "1-first.md", Title: "First", Repository: "api"},
+			{Number: 2, File: "2-second.md", Title: "Second", Repository: "web"},
+		},
+		Repos: []bindings.ArchivedRepo{
+			{
+				Repository: "api",
+				RepoPath:   "/home/u/code/api",
+				PRNumber:   7,
+				PRURL:      "https://github.com/acme/api/pull/7",
+				PRState:    "merged",
+			},
+			{Repository: "web", RepoPath: "/home/u/code/web"},
+		},
+		ArtifactVersion: 4,
+		CreatedAt:       "2026-09-01T09:00:00Z",
+		ArchivedAt:      "2026-09-08T18:30:00Z",
+	}}
+
+	got := bindings.FromArchived(
+		tasks,
+		func(string) task.Artifacts { return artifacts },
+		func(string) []task.PRRun { return runs },
+	)
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("history mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestFromArchivedAllocatesEveryList(t *testing.T) {
+	t.Parallel()
+
+	got := bindings.FromArchived(
+		[]task.Task{{ID: "task-1", Name: "login-screen"}},
+		func(string) task.Artifacts { return task.Artifacts{} },
+		func(string) []task.PRRun { return nil },
+	)
+	if len(got) != 1 {
+		t.Fatalf("len(FromArchived()) = %d, want 1", len(got))
+	}
+	// The frontend maps over both lists without checking for null.
+	if got[0].Steps == nil || got[0].Repos == nil {
+		t.Errorf("archived task = %+v, want empty slices", got[0])
+	}
+}
+
+func TestFromDeletePreviewCarriesWhatWouldBeDestroyed(t *testing.T) {
+	t.Parallel()
+
+	preview := flow.DeletePreview{
+		SessionRunning: true,
+		Worktrees: []flow.WorktreePreview{{
+			Repository: "api",
+			RepoPath:   "/home/u/code/api",
+			Path:       "/home/u/code/.myspec/worktrees/api/login-screen",
+			Dirty:      true,
+			Files:      2,
+		}},
+		Branches: []flow.BranchPreview{{
+			Repository: "api",
+			RepoPath:   "/home/u/code/api",
+			Name:       "login-screen",
+			Error:      "git merge-base: bad revision",
+		}},
+		PRs: []flow.PRPreview{{
+			Repository: "api",
+			RepoPath:   "/home/u/code/api",
+			Number:     7,
+			URL:        "https://github.com/acme/api/pull/7",
+			State:      task.PRStateOpen,
+		}},
+	}
+	want := bindings.DeletePreview{
+		SessionRunning: true,
+		Worktrees: []bindings.WorktreePreview{{
+			Repository: "api",
+			RepoPath:   "/home/u/code/api",
+			Path:       "/home/u/code/.myspec/worktrees/api/login-screen",
+			Dirty:      true,
+			Files:      2,
+		}},
+		Branches: []bindings.BranchPreview{{
+			Repository: "api",
+			RepoPath:   "/home/u/code/api",
+			Name:       "login-screen",
+			Error:      "git merge-base: bad revision",
+		}},
+		PRs: []bindings.PRPreview{{
+			Repository: "api",
+			RepoPath:   "/home/u/code/api",
+			Number:     7,
+			URL:        "https://github.com/acme/api/pull/7",
+			State:      "open",
+		}},
+	}
+
+	if diff := cmp.Diff(want, bindings.FromDeletePreview(preview)); diff != "" {
+		t.Errorf("preview mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestFromDeletePreviewAndResultAllocateEveryList(t *testing.T) {
+	t.Parallel()
+
+	preview := bindings.FromDeletePreview(flow.DeletePreview{})
+	if preview.Worktrees == nil || preview.Branches == nil || preview.PRs == nil {
+		t.Errorf("preview = %+v, want empty slices", preview)
+	}
+	if leftovers := bindings.FromDeleteResult(flow.DeleteResult{}).Leftovers; leftovers == nil {
+		t.Error("leftovers = nil, want an empty slice")
+	}
+}
+
+func TestFromDeleteResultNamesTheRepositoryOfWhatStayed(t *testing.T) {
+	t.Parallel()
+
+	result := flow.DeleteResult{Leftovers: []flow.LeftoverInfo{{
+		Repository: "api",
+		RepoPath:   "/home/u/code/api",
+		Path:       "/home/u/code/.myspec/worktrees/api/login-screen",
+		Branch:     "login-screen",
+		Error:      "git worktree remove: permission denied",
+	}}}
+	want := bindings.DeleteResult{Leftovers: []bindings.Leftover{{
+		Repository: "api",
+		RepoPath:   "/home/u/code/api",
+		Path:       "/home/u/code/.myspec/worktrees/api/login-screen",
+		Branch:     "login-screen",
+		Error:      "git worktree remove: permission denied",
+	}}}
+
+	if diff := cmp.Diff(want, bindings.FromDeleteResult(result)); diff != "" {
+		t.Errorf("result mismatch (-want +got):\n%s", diff)
+	}
+}
+
 func TestFromEntryCarriesTheStepOfAMarker(t *testing.T) {
 	t.Parallel()
 

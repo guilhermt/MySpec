@@ -64,6 +64,15 @@ export function CleanAndStartStep(taskID: string): $CancellablePromise<void> {
 }
 
 /**
+ * CloseRepo takes down the worktree and the branch of a repository whose pull
+ * request was merged and updates its base branch. It returns as soon as the
+ * work is scheduled; what git does arrives as state.
+ */
+export function CloseRepo(taskID: string, repoPath: string): $CancellablePromise<void> {
+    return $Call.ByID(112584678, taskID, repoPath);
+}
+
+/**
  * ContinueStage moves a task that is revisiting a stage on to the next one.
  */
 export function ContinueStage(taskID: string): $CancellablePromise<void> {
@@ -81,10 +90,10 @@ export function CreateTask(req: $models.CreateTaskRequest): $CancellablePromise<
 
 /**
  * DeleteTask stops the session of a task, removes its worktrees and branches,
- * and removes it with its artifacts. A worktree git cannot remove keeps the
- * task, and the reason reaches the user.
+ * and removes it with its artifacts. What git could not remove comes back for
+ * the user to clean up: it never keeps the task.
  */
-export function DeleteTask(taskID: string): $CancellablePromise<void> {
+export function DeleteTask(taskID: string): $CancellablePromise<$models.DeleteResult> {
     return $Call.ByID(797789264, taskID);
 }
 
@@ -157,6 +166,14 @@ export function OpenPR(taskID: string, repoPath: string, title: string, body: st
  */
 export function Pause(taskID: string, stage: string): $CancellablePromise<void> {
     return $Call.ByID(2312621456, taskID, stage);
+}
+
+/**
+ * PreviewDelete reads what deleting a task would destroy, which is what the
+ * confirmation dialog spells out before the user agrees to it.
+ */
+export function PreviewDelete(taskID: string): $CancellablePromise<$models.DeletePreview> {
+    return $Call.ByID(1203630309, taskID);
 }
 
 /**

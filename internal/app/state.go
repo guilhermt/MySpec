@@ -22,6 +22,7 @@ func (a *App) snapshot() bindings.State {
 		Tasks: bindings.FromTasks(
 			a.tasks.List(), a.taskArtifacts, a.flow.Steps, a.flow.Repos, a.sessions.Summaries(),
 		),
+		History: bindings.FromArchived(a.tasks.ListArchived(), a.taskArtifacts, a.tasks.PRRuns),
 	}
 }
 

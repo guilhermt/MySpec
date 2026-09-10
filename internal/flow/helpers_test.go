@@ -794,6 +794,15 @@ func (m *memWorktrees) setCloseResult(result task.CloseResult) {
 	m.closeResult = result
 }
 
+// setLeftovers is what every purge of a task answers with: what git could not
+// take back.
+func (m *memWorktrees) setLeftovers(leftovers []worktree.Leftover) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.leftovers = leftovers
+}
+
 // closings are the closings the flow asked for, in order.
 func (m *memWorktrees) closings() []closeCall {
 	m.mu.Lock()

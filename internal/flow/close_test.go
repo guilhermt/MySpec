@@ -7,6 +7,8 @@ import (
 
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/gh"
+	"github.com/guilhermt/myspec/internal/git"
+	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
 	"github.com/guilhermt/myspec/internal/worktree"
 )
@@ -390,6 +392,137 @@ func TestTheLastRepositoryClosedArchivesTheTask(t *testing.T) {
 	}
 	if runs := f.tasks.PRRuns("task-1"); len(runs) != 2 {
 		t.Errorf("pr runs = %+v, want both kept for the history", runs)
+	}
+}
+
+func TestPreviewingADeletionSaysWhatWouldBeDestroyed(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.worktrees.setStatus(git.Status{Changes: []git.Change{
+		{X: '.', Y: 'M', Path: "main.go"},
+		{X: '?', Y: '?', Path: "scratch.md"},
+	}})
+	awaitingClosing(f, "task-1", twoStepPlan(),
+		task.PRRun{RepoPath: repos[0].Path, Status: task.PRDone, PR: mergedPR()},
+		task.PRRun{RepoPath: repos[1].Path, Status: task.PRDone, PR: openPR()},
+	)
+	f.sessions.setSummary("task-1", session.Summary{
+		Stage: session.PRReviewStage("web"), Status: session.StatusWorking, ProcessRunning: true,
+	})
+
+	preview, err := f.service.PreviewDelete(t.Context(), "task-1")
+	if err != nil {
+		t.Fatalf("PreviewDelete() = %v, want nil", err)
+	}
+
+	if !preview.SessionRunning {
+		t.Error("sessionRunning = false, want the conversation of web counted")
+	}
+	if len(preview.Worktrees) != 2 {
+		t.Fatalf("worktrees = %+v, want both", preview.Worktrees)
+	}
+	if !preview.Worktrees[0].Dirty || preview.Worktrees[0].Files != 2 {
+		t.Errorf("worktree of api = %+v, want dirty with two files", preview.Worktrees[0])
+	}
+	if preview.Worktrees[0].Repository != "api" {
+		t.Errorf("repository = %q, want the relative path", preview.Worktrees[0].Repository)
+	}
+
+	if len(preview.Branches) != 2 {
+		t.Fatalf("branches = %+v, want both", preview.Branches)
+	}
+	// GitHub merged the pull request of api, and that is the answer; only the
+	// branch of web is put to git.
+	if !preview.Branches[0].Merged || preview.Branches[1].Merged {
+		t.Errorf("branches = %+v, want only the merged one marked", preview.Branches)
+	}
+	calls := f.worktrees.recorded()
+	if slices.Contains(calls, "merged:task-1:api:origin/dev") {
+		t.Errorf("worktree calls = %q, want git not asked about a branch GitHub merged", calls)
+	}
+	if !slices.Contains(calls, "merged:task-1:web:origin/dev") {
+		t.Errorf("worktree calls = %q, want the branch with no confirmed merge asked about", calls)
+	}
+
+	if len(preview.PRs) != 2 {
+		t.Errorf("pull requests = %+v, want both, which the app leaves on GitHub", preview.PRs)
+	}
+}
+
+func TestAPreviewLeavesOutWhatIsAlreadyGone(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	awaitingClosing(f, "task-1", twoStepPlan(),
+		task.PRRun{RepoPath: repos[0].Path, Status: task.PRClosed, PR: mergedPR()},
+		task.PRRun{RepoPath: repos[1].Path, Status: task.PRDone, PR: openPR()},
+	)
+
+	preview, err := f.service.PreviewDelete(t.Context(), "task-1")
+	if err != nil {
+		t.Fatalf("PreviewDelete() = %v, want nil", err)
+	}
+	if len(preview.PRs) != 1 || preview.PRs[0].Repository != "web" {
+		t.Errorf("pull requests = %+v, want only the one of the repository still open", preview.PRs)
+	}
+}
+
+func TestPreviewingTheDeletionOfAnArchivedTaskFindsNothingOnDisk(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	awaitingClosing(f, "task-1", plan(), task.PRRun{RepoPath: repos[0].Path, Status: task.PRClosed, PR: mergedPR()})
+	if _, err := f.tasks.Archive(t.Context(), "task-1"); err != nil {
+		t.Fatalf("Archive() = %v, want nil", err)
+	}
+
+	preview, err := f.service.PreviewDelete(t.Context(), "task-1")
+	if err != nil {
+		t.Fatalf("PreviewDelete() = %v, want nil", err)
+	}
+	// The frontend maps over the three lists without checking for null.
+	if preview.Worktrees == nil || preview.Branches == nil || preview.PRs == nil {
+		t.Errorf("preview = %+v, want empty slices", preview)
+	}
+	if len(preview.Worktrees) != 0 || len(preview.Branches) != 0 || len(preview.PRs) != 0 {
+		t.Errorf("preview = %+v, want nothing left to destroy", preview)
+	}
+	if calls := f.worktrees.recorded(); len(calls) != 0 {
+		t.Errorf("worktree calls = %q, want git not read for a task that left the workspace", calls)
+	}
+}
+
+func TestDeleteReportsWhatGitCouldNotRemove(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.worktrees.setLeftovers([]worktree.Leftover{{
+		RepoPath: repos[0].Path,
+		Path:     worktree.Path(workspace, "api", "task-1"),
+		Branch:   "task-1",
+		Error:    "git worktree remove: permission denied; git branch -D: permission denied",
+	}})
+	awaitingClosing(f, "task-1", plan(), task.PRRun{RepoPath: repos[0].Path, Status: task.PRDone, PR: openPR()})
+
+	result, err := f.service.Delete(t.Context(), "task-1")
+	if err != nil {
+		t.Fatalf("Delete() = %v, want nil", err)
+	}
+
+	want := []flow.LeftoverInfo{{
+		Repository: "api",
+		RepoPath:   repos[0].Path,
+		Path:       worktree.Path(workspace, "api", "task-1"),
+		Branch:     "task-1",
+		Error:      "git worktree remove: permission denied; git branch -D: permission denied",
+	}}
+	if !slices.Equal(result.Leftovers, want) {
+		t.Errorf("leftovers = %+v, want %+v", result.Leftovers, want)
+	}
+	// A directory git could not take back never keeps the task in the app.
+	if _, ok := f.tasks.Get("task-1"); ok {
+		t.Error("the task is still there")
 	}
 }
 

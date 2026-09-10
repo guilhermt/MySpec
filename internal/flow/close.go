@@ -138,3 +138,143 @@ func (s *Service) archive(ctx context.Context, t task.Task) {
 	}
 	s.log.Info("task archived", "task", t.ID, "name", t.Name)
 }
+
+// DeletePreview is what deleting a task would destroy, read from git and from
+// the sessions at the moment the user asks.
+type DeletePreview struct {
+	SessionRunning bool // a process of the task is alive and will be stopped
+	Worktrees      []WorktreePreview
+	Branches       []BranchPreview
+	PRs            []PRPreview
+}
+
+// WorktreePreview is one worktree of the task and whether it holds work.
+type WorktreePreview struct {
+	Repository string // relative path, as the steps name it
+	RepoPath   string
+	Path       string
+	Dirty      bool
+	Files      int    // changed files; dirty only
+	Error      string // what git said when the worktree could not be read
+}
+
+// BranchPreview is one branch of the task and whether its commits are safe
+// elsewhere.
+type BranchPreview struct {
+	Repository string
+	RepoPath   string
+	Name       string
+	Merged     bool // GitHub merged the pull request, or git sees the branch in its base
+	Error      string
+}
+
+// PRPreview is a pull request the app leaves on GitHub.
+type PRPreview struct {
+	Repository string
+	RepoPath   string
+	Number     int
+	URL        string
+	State      task.PRState
+}
+
+// DeleteResult is what deleting a task left behind.
+type DeleteResult struct {
+	Leftovers []LeftoverInfo
+}
+
+// LeftoverInfo is a worktree.Leftover with the name of its repository.
+type LeftoverInfo struct {
+	Repository string
+	RepoPath   string
+	Path       string
+	Branch     string
+	Error      string
+}
+
+// PreviewDelete reads what deleting a task would destroy. It holds the lock of
+// the task while it reads git, so that no step starts halfway through.
+func (s *Service) PreviewDelete(ctx context.Context, id string) (DeletePreview, error) {
+	l := s.lockOf(id)
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	t, ok := s.tasks.Lookup(id)
+	if !ok {
+		return DeletePreview{}, fmt.Errorf("preview the deletion of task %s: %w", id, task.ErrNotFound)
+	}
+	// The frontend maps over the three lists without checking for null.
+	preview := DeletePreview{
+		Worktrees: []WorktreePreview{},
+		Branches:  []BranchPreview{},
+		PRs:       []PRPreview{},
+	}
+	if t.Archived() {
+		// An archived task has no worktree, no branch and no conversation left:
+		// the closing of its last repository took them all.
+		return preview, nil
+	}
+
+	for key, sum := range s.sessions.Summaries() {
+		if key.TaskID == id && sum.ProcessRunning {
+			preview.SessionRunning = true
+			break
+		}
+	}
+
+	runs := s.tasks.PRRuns(id)
+	for _, wt := range s.worktrees.List(id) {
+		rel := repoRel(t, wt.RepoPath)
+		status, err := s.worktrees.Status(ctx, wt)
+		preview.Worktrees = append(preview.Worktrees, WorktreePreview{
+			Repository: rel,
+			RepoPath:   wt.RepoPath,
+			Path:       wt.Path,
+			Dirty:      err == nil && !status.Clean(),
+			Files:      len(status.Changes),
+			Error:      errText(err),
+		})
+		preview.Branches = append(preview.Branches, s.branchPreview(ctx, wt, rel, runs))
+	}
+	for _, run := range runs {
+		if run.PR.Number == 0 || run.Status == task.PRClosed {
+			continue
+		}
+		preview.PRs = append(preview.PRs, PRPreview{
+			Repository: repoRel(t, run.RepoPath),
+			RepoPath:   run.RepoPath,
+			Number:     run.PR.Number,
+			URL:        run.PR.URL,
+			State:      run.PR.State,
+		})
+	}
+	return preview, nil
+}
+
+// branchPreview says whether the commits of the branch of a worktree are safe
+// somewhere else. GitHub merging the pull request settles it: a squash or a
+// rebase leaves git no way of seeing the branch in its base.
+func (s *Service) branchPreview(
+	ctx context.Context, wt worktree.Worktree, rel string, runs []task.PRRun,
+) BranchPreview {
+	preview := BranchPreview{Repository: rel, RepoPath: wt.RepoPath, Name: wt.Branch}
+	if index := indexOfPRRun(runs, wt.RepoPath); index >= 0 && runs[index].PR.State == task.PRStateMerged {
+		preview.Merged = true
+		return preview
+	}
+	if wt.Base == "" {
+		// Nothing to compare the branch with; the user is told nothing rather
+		// than told it is merged.
+		return preview
+	}
+	merged, err := s.worktrees.Merged(ctx, wt, wt.Base)
+	preview.Merged, preview.Error = merged, errText(err)
+	return preview
+}
+
+// errText is what an error says, "" when there is none.
+func errText(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
+}
