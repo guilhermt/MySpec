@@ -36,7 +36,11 @@ const (
 	RepoInReview         RepoStatus = "in_review"         // the applied changes are being reviewed
 	RepoReadyToApprove   RepoStatus = "ready_to_approve"
 	RepoCommitting       RepoStatus = "committing"
-	RepoDone             RepoStatus = "done"
+	RepoDone             RepoStatus = "done"      // the review closed clean and the pull request is still open
+	RepoMerged           RepoStatus = "merged"    // the pull request was merged; the repository awaits closing
+	RepoPRClosed         RepoStatus = "pr_closed" // the pull request was closed without a merge
+	RepoClosing          RepoStatus = "closing"
+	RepoClosed           RepoStatus = "closed"
 	RepoSkipped          RepoStatus = "skipped"
 )
 
@@ -56,6 +60,12 @@ type RepoState struct {
 	Reports []task.ReviewReport
 	PR      task.PRDetails
 	Review  *review.Snapshot
+
+	// CheckError is what the last automatic reading of the pull request said
+	// when it failed.
+	CheckError string
+	Close      *task.CloseResult // closed only
+	CanClose   bool              // the user may close the repository now
 
 	// CommitFailed says the last approval of this repository ended without a
 	// commit, the way a step says it.
@@ -112,6 +122,8 @@ func (s *Service) repoState(t task.Task, repo task.Repository, run task.PRRun, a
 		Block:      run.Block,
 		Reports:    art.Reports,
 		PR:         run.PR,
+		CheckError: s.checkError(t.ID, repo.Path),
+		Close:      run.Close,
 	}
 	if art.Draft.Present {
 		draft := art.Draft
@@ -130,7 +142,22 @@ func (s *Service) repoState(t task.Task, repo task.Repository, run task.PRRun, a
 	state.Review = reading(snap, read)
 	state.CommitFailed = s.repoNoCommit(t.ID, repo.Path)
 	state.Status = repoStatus(run, art, state.Session.Idle && state.SessionStage != "", snap, read)
+	state.CanClose = canClose(state.Status, state.CheckError)
 	return state
+}
+
+// canClose says when the closing of a repository is the user's to ask for: the
+// merge was confirmed, the merge could not be checked, or there was never a
+// pull request to merge.
+func canClose(status RepoStatus, checkError string) bool {
+	switch status {
+	case RepoMerged, RepoSkipped:
+		return true
+	case RepoDone:
+		return checkError != ""
+	default:
+		return false
+	}
 }
 
 // repoSessionStage is the session a repository has open at a status, "" for
@@ -141,7 +168,7 @@ func repoSessionStage(status task.PRStatus, slug string) string {
 		return session.PRStage(slug)
 	case task.PRReviewing, task.PRCommitting:
 		return session.PRReviewStage(slug)
-	case task.PRPreparing, task.PRBlocked, task.PRDone, task.PRSkipped:
+	case task.PRPreparing, task.PRBlocked, task.PRDone, task.PRClosing, task.PRClosed, task.PRSkipped:
 		return ""
 	default:
 		return ""
@@ -169,7 +196,20 @@ func repoStatus(run task.PRRun, art task.RepoArtifacts, idle bool, snap review.S
 	case task.PRCommitting:
 		return RepoCommitting
 	case task.PRDone:
-		return RepoDone
+		// The pull request is out of the app's hands: what GitHub says about it
+		// is what the repository is shown as.
+		switch run.PR.State {
+		case task.PRStateMerged:
+			return RepoMerged
+		case task.PRStateClosed:
+			return RepoPRClosed
+		default:
+			return RepoDone
+		}
+	case task.PRClosing:
+		return RepoClosing
+	case task.PRClosed:
+		return RepoClosed
 	case task.PRSkipped:
 		return RepoSkipped
 	default:
@@ -279,6 +319,9 @@ func (s *Service) spawnRepoWork(id, repoPath string, work func(context.Context, 
 		l.repos = map[string]*repoWork{}
 	}
 	if w, ok := l.repos[repoPath]; ok && w.running {
+		// The repository is busy: the work is asked for again by the evaluation
+		// that follows the one under way, which decides on the state it leaves.
+		w.pending = true
 		s.mu.Unlock()
 		return
 	}
@@ -292,7 +335,9 @@ func (s *Service) spawnRepoWork(id, repoPath string, work func(context.Context, 
 	}()
 }
 
-// finishRepoWork forgets the work of a repository and releases its context.
+// finishRepoWork forgets the work of a repository and releases its context. A
+// work refused while this one ran is not lost: the evaluation that follows
+// starts it, now that the repository is free.
 func (s *Service) finishRepoWork(id, repoPath string) {
 	l := s.lockOf(id)
 
@@ -301,8 +346,14 @@ func (s *Service) finishRepoWork(id, repoPath string) {
 	delete(l.repos, repoPath)
 	s.mu.Unlock()
 
-	if w != nil && w.cancel != nil {
+	if w == nil {
+		return
+	}
+	if w.cancel != nil {
 		w.cancel()
+	}
+	if w.pending {
+		s.Check(id)
 	}
 }
 
@@ -360,7 +411,7 @@ func (s *Service) prepareRepo(ctx context.Context, id, repoPath string) {
 	pr, err := s.viewPR(ctx, wt)
 	switch {
 	case err == nil:
-		s.recordPR(id, repoPath, pr)
+		s.recordPR(id, repoPath, pr, false)
 	case errors.Is(err, gh.ErrNoPR):
 		s.startDraft(ctx, t, wt, base, repoPath)
 	default:
@@ -369,7 +420,8 @@ func (s *Service) prepareRepo(ctx context.Context, id, repoPath string) {
 }
 
 // checkPR reads the pull request of a repository again, which is what says
-// that the agent opened it. It runs on the goroutine of the repository.
+// that the agent opened it and, later, that the user merged it. It runs on the
+// goroutine of the repository.
 func (s *Service) checkPR(ctx context.Context, id, repoPath string) {
 	if _, ok := s.prRepoTask(ctx, id); !ok {
 		return
@@ -378,13 +430,27 @@ func (s *Service) checkPR(ctx context.Context, id, repoPath string) {
 	if !ok {
 		return
 	}
+	runs := s.tasks.PRRuns(id)
+	index := indexOfPRRun(runs, repoPath)
+	// A repository whose review closed clean is waiting for the merge: the
+	// reading tells what became of the pull request, not what the app does next.
+	awaiting := index >= 0 && runs[index].Status == task.PRDone
 
 	pr, err := s.viewPR(ctx, wt)
 	if err == nil {
-		s.recordPR(id, repoPath, pr)
+		s.setCheckError(id, repoPath, "")
+		s.recordPR(id, repoPath, pr, awaiting)
 		return
 	}
 	if ctx.Err() != nil {
+		return
+	}
+	if awaiting {
+		// A reading that fails says nothing about the merge, and the user knows
+		// better than the app: the closing is offered with the warning.
+		s.setCheckError(id, repoPath, err.Error())
+		s.log.Warn("read pull request failed", "task", id, "repository", repoPath, "error", err)
+		s.notify(id)
 		return
 	}
 	if !errors.Is(err, gh.ErrNoPR) {
@@ -394,6 +460,14 @@ func (s *Service) checkPR(ctx context.Context, id, repoPath string) {
 		return
 	}
 	s.reopenDraft(id, repoPath)
+}
+
+// notify says that something the app only keeps in memory about a task
+// changed, which is how a failed reading of a pull request reaches the screen.
+func (s *Service) notify(id string) {
+	if s.onChange != nil {
+		s.onChange(id)
+	}
 }
 
 // prRepoTask is the task a repository work belongs to, ok only while the task
@@ -426,8 +500,9 @@ func (s *Service) viewPR(ctx context.Context, wt worktree.Worktree) (gh.PR, erro
 }
 
 // recordPR stores the pull request a reading found and hands the repository to
-// its review.
-func (s *Service) recordPR(id, repoPath string, pr gh.PR) {
+// its review. With detailsOnly, the repository is already past the review and
+// waiting for the merge: only what GitHub says about the pull request changes.
+func (s *Service) recordPR(id, repoPath string, pr gh.PR, detailsOnly bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), evaluateTimeout)
 	defer cancel()
 
@@ -435,10 +510,16 @@ func (s *Service) recordPR(id, repoPath string, pr gh.PR) {
 		Number:    pr.Number,
 		URL:       pr.URL,
 		State:     task.PRState(pr.State),
+		Base:      pr.Base,
 		CheckedAt: time.Now().UTC(),
 	}
 	if _, err := s.tasks.SetPRDetails(ctx, id, repoPath, details); err != nil {
 		s.log.Error("record pull request failed", "task", id, "repository", repoPath, "error", err)
+		return
+	}
+	if detailsOnly {
+		s.log.Info("pull request read", "task", id, "repository", repoPath, "state", string(details.State))
+		s.Check(id)
 		return
 	}
 	if _, err := s.tasks.SetPRRun(ctx, id, repoPath, task.PRReviewing, nil); err != nil {
@@ -547,7 +628,8 @@ func (s *Service) evaluatePR(ctx context.Context, t task.Task) {
 		s.log.Error("inspect artifacts failed", "task", t.ID, "stage", string(t.Stage), "error", err)
 		return
 	}
-	for _, run := range s.tasks.PRRuns(t.ID) {
+	runs := s.tasks.PRRuns(t.ID)
+	for _, run := range runs {
 		slug := task.Slug(repoRel(t, run.RepoPath))
 		switch run.Status {
 		case task.PRDrafting:
@@ -566,10 +648,17 @@ func (s *Service) evaluatePR(ctx context.Context, t task.Task) {
 			}
 		case task.PRReviewing:
 			s.evaluateReview(ctx, t, run, slug, a.PR[slug])
-		case task.PRPreparing, task.PRBlocked, task.PRDone, task.PRClosing, task.PRClosed, task.PRSkipped:
+		case task.PRClosing:
+			// The closing the user asked for, and the one a reading in flight
+			// kept from starting when they asked.
+			s.spawnRepoWork(t.ID, run.RepoPath, s.closeRepoWork)
+		case task.PRPreparing, task.PRBlocked, task.PRDone, task.PRClosed, task.PRSkipped:
 			// Nothing of these is the user's to review.
 			s.review.Forget(reviewKey(t.ID, run.RepoPath))
 		}
+	}
+	if allClosed(runs) {
+		s.archive(ctx, t)
 	}
 }
 
@@ -602,7 +691,7 @@ func (s *Service) evaluateReview(ctx context.Context, t task.Task, run task.PRRu
 		return
 	}
 	if last.Clean {
-		s.closeRepo(ctx, t, run, key)
+		s.finishReview(ctx, t, run, key)
 		return
 	}
 
@@ -682,9 +771,10 @@ func (s *Service) recordReport(
 	return updated, true
 }
 
-// closeRepo ends the pull request of a repository whose last pass found
-// nothing to change.
-func (s *Service) closeRepo(ctx context.Context, t task.Task, run task.PRRun, key session.Key) {
+// finishReview ends the review of the pull request of a repository whose last
+// pass found nothing to change. The repository then waits for the merge, and
+// for the closing the user asks for after it.
+func (s *Service) finishReview(ctx context.Context, t task.Task, run task.PRRun, key session.Key) {
 	if _, err := s.tasks.SetPRRun(ctx, t.ID, run.RepoPath, task.PRDone, nil); err != nil {
 		s.log.Error("record done repository failed", "task", t.ID, "repository", run.RepoPath, "error", err)
 		return
@@ -787,6 +877,35 @@ func (s *Service) setPassAsked(id, repoPath, commit string) {
 	l.passAsked[repoPath] = commit
 }
 
+// checkError is what the last automatic reading of the pull request of a
+// repository said when it failed, "" when the last one worked.
+func (s *Service) checkError(id, repoPath string) string {
+	l := s.lockOf(id)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return l.checkErrors[repoPath]
+}
+
+// setCheckError records why a reading of the pull request of a repository
+// failed, "" once one succeeds.
+func (s *Service) setCheckError(id, repoPath, message string) {
+	l := s.lockOf(id)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if l.checkErrors == nil {
+		l.checkErrors = map[string]string{}
+	}
+	if message == "" {
+		delete(l.checkErrors, repoPath)
+		return
+	}
+	l.checkErrors[repoPath] = message
+}
+
 // setRepoNoCommit records whether the last approval of a repository ended
 // without a commit.
 func (s *Service) setRepoNoCommit(id, repoPath string, v bool) {
@@ -842,7 +961,17 @@ func (s *Service) resumePR(ctx context.Context, t task.Task) {
 			s.reopenRepoSession(ctx, t, run, repos, false)
 		case task.PRReviewing, task.PRCommitting:
 			s.reopenRepoSession(ctx, t, run, repos, true)
-		case task.PRBlocked, task.PRDone, task.PRClosing, task.PRClosed, task.PRSkipped:
+		case task.PRDone:
+			// The merge may have happened while the app was closed.
+			if run.PR.Number > 0 && run.PR.State != task.PRStateMerged && run.PR.State != task.PRStateClosed {
+				s.spawnRepoWork(t.ID, run.RepoPath, s.checkPR)
+			}
+		case task.PRClosing:
+			// The app was closed with git halfway through the closing.
+			s.spawnRepoWork(t.ID, run.RepoPath, s.closeRepoWork)
+		case task.PRClosed:
+			// Nothing runs for a closed repository.
+		case task.PRBlocked, task.PRSkipped:
 			// Nothing runs for these; the user decides what happens next.
 		}
 	}
@@ -954,12 +1083,14 @@ func repoInfo(t task.Task, wt worktree.Worktree, base string, repos []task.Repos
 
 // The ways the flow refuses to act on the pull request of a repository.
 var (
-	ErrNoRepo         = errors.New("flow: repository is not part of the pull request stage")
-	ErrDraftMissing   = errors.New("flow: the draft is not ready")
-	ErrEmptyDraft     = errors.New("flow: the draft needs a title and a description")
-	ErrPRExists       = errors.New("flow: the pull request is already open")
-	ErrNoPullRequest  = errors.New("flow: the repository has no pull request")
-	ErrRepoNotBlocked = errors.New("flow: repository is not blocked")
+	ErrNoRepo          = errors.New("flow: repository is not part of the pull request stage")
+	ErrDraftMissing    = errors.New("flow: the draft is not ready")
+	ErrEmptyDraft      = errors.New("flow: the draft needs a title and a description")
+	ErrPRExists        = errors.New("flow: the pull request is already open")
+	ErrNoPullRequest   = errors.New("flow: the repository has no pull request")
+	ErrRepoNotBlocked  = errors.New("flow: repository is not blocked")
+	ErrRepoNotClosable = errors.New("flow: repository is not waiting to be closed")
+	ErrPRNotMerged     = errors.New("flow: the pull request has not been merged")
 )
 
 // repoOf is the task a user operation acts on with the run of the repository
@@ -1127,7 +1258,10 @@ func (s *Service) ReviewAgain(ctx context.Context, id, repoPath string) error {
 	if err != nil {
 		return err
 	}
-	reviewable := run.Status == task.PRReviewing || run.Status == task.PRDone
+	// A pull request that was closed without a merge, or a repository already
+	// closing, has no review to ask for.
+	reviewable := (run.Status == task.PRReviewing || run.Status == task.PRDone) &&
+		run.PR.State != task.PRStateClosed
 	if !reviewable || run.PR.Number == 0 {
 		return fmt.Errorf("review %s again: %w", repoPath, ErrNoPullRequest)
 	}
@@ -1215,4 +1349,43 @@ func (s *Service) RefreshPR(_ context.Context, id, repoPath string) error {
 	}
 	s.spawnRepoWork(id, repoPath, s.checkPR)
 	return nil
+}
+
+// allClosed reports whether every repository of the PR stage was closed by the
+// user, which is when the task is done with the workspace.
+func allClosed(runs []task.PRRun) bool {
+	if len(runs) == 0 {
+		return false
+	}
+	for _, run := range runs {
+		if run.Status != task.PRClosed {
+			return false
+		}
+	}
+	return true
+}
+
+// PollPRs asks GitHub again about every pull request whose merge the app is
+// waiting for. internal/app calls it on a timer; each reading goes out on the
+// goroutine of its repository and never blocks the caller.
+func (s *Service) PollPRs() {
+	if s.isClosed() {
+		return
+	}
+	for _, t := range s.tasks.List() {
+		if t.Stage != task.StagePR {
+			continue
+		}
+		for _, run := range s.tasks.PRRuns(t.ID) {
+			if run.Status != task.PRDone || run.PR.Number == 0 {
+				continue
+			}
+			if run.PR.State == task.PRStateMerged || run.PR.State == task.PRStateClosed {
+				// A merged pull request has nothing more to say; a closed one is
+				// asked again only when the user says so.
+				continue
+			}
+			s.spawnRepoWork(t.ID, run.RepoPath, s.checkPR)
+		}
+	}
 }
