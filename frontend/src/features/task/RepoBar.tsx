@@ -1,4 +1,5 @@
 import {
+  Archive,
   Check,
   Code,
   ExternalLink,
@@ -20,9 +21,11 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import {
   approveRepoHint,
   canApproveRepo,
+  canCloseRepo,
   canDiscardDraft,
   canOpenPR,
   canReviewAgain,
+  closeHint,
   hasRepoSession,
   prStateLabel,
   repoName,
@@ -34,6 +37,7 @@ import { reviewCountLabel } from "@/features/task/step-status";
 import { asPRState, asRepoStatus, asSessionStatus, type RepoPR } from "@/lib/wails";
 import {
   approveRepo,
+  closeRepo,
   discardDraft,
   openExternal,
   openInEditor,
@@ -47,6 +51,14 @@ import { useAppStore, usePrDraft } from "@/store/app-store";
 
 // The states where the review of the applied changes is what the bar is about.
 const REVIEW_STATES = ["in_review", "ready_to_approve", "committing"];
+
+// The states where the closing of the repository is what is left to do, even
+// when the user cannot ask for it yet.
+const CLOSING_STATES = ["done", "merged", "skipped", "closing"];
+
+// Once the closing starts, the worktree and the pull request stop being things
+// the bar can act on.
+const GONE_STATES = ["closing", "closed"];
 
 /** stateText reads the state of the repository, with the count while reviewing. */
 function stateText(repo: RepoPR): string {
@@ -72,9 +84,13 @@ export function RepoBar({ taskId, repo }: RepoBarProps) {
   const preparing = status === "preparing";
   const committing = status === "committing";
   const reviewing = REVIEW_STATES.includes(status);
+  const closing = status === "closing";
+  const closable = CLOSING_STATES.includes(status);
+  const gone = GONE_STATES.includes(status);
   const paused = hasRepoSession(repo) && asSessionStatus(repo.sessionStatus) === "paused";
-  // The worktree is only there once the implementation created it.
-  const canOpenEditor = repo.worktreePath !== "";
+  // The worktree is only there once the implementation created it, and it is
+  // the first thing the closing takes away.
+  const canOpenEditor = repo.worktreePath !== "" && !gone;
   const prState = prStateLabel(asPRState(repo.prState));
 
   const title = edited?.title ?? repo.draft?.title ?? "";
@@ -90,6 +106,18 @@ export function RepoBar({ taskId, repo }: RepoBarProps) {
     >
       <Code />
       Open in VS Code
+    </Button>
+  );
+
+  const closeButton = (
+    <Button
+      variant={status === "merged" || status === "skipped" ? "default" : "outline"}
+      size="sm"
+      disabled={!canCloseRepo(repo)}
+      onClick={() => void closeRepo(taskId, repo.repoPath)}
+    >
+      {closing ? <LoaderCircle aria-hidden="true" className="animate-spin" /> : <Archive />}
+      {closing ? "Closing…" : "Close repository"}
     </Button>
   );
 
@@ -136,6 +164,11 @@ export function RepoBar({ taskId, repo }: RepoBarProps) {
           </>
         )}
       </span>
+      {status === "done" && repo.checkError !== "" && (
+        <span className="shrink-0 text-xs text-[var(--status-attention)]" title={repo.checkError}>
+          Couldn't confirm the merge
+        </span>
+      )}
       {repo.commitFailed && (
         <span className="shrink-0 text-xs text-muted-foreground">
           The last approval didn't produce a commit.
@@ -165,14 +198,26 @@ export function RepoBar({ taskId, repo }: RepoBarProps) {
           </Tooltip>
         ))}
 
-      {canOpenEditor ? (
-        openButton
-      ) : (
-        <Tooltip>
-          <TooltipTrigger render={<span />}>{openButton}</TooltipTrigger>
-          <TooltipContent>The worktree doesn't exist yet</TooltipContent>
-        </Tooltip>
-      )}
+      {closable &&
+        (canCloseRepo(repo) || closing ? (
+          closeButton
+        ) : (
+          <Tooltip>
+            <TooltipTrigger render={<span />}>{closeButton}</TooltipTrigger>
+            <TooltipContent>{closeHint(repo)}</TooltipContent>
+          </Tooltip>
+        ))}
+
+      {/* The worktree of a closed repository is gone; there is nothing to open. */}
+      {!gone &&
+        (canOpenEditor ? (
+          openButton
+        ) : (
+          <Tooltip>
+            <TooltipTrigger render={<span />}>{openButton}</TooltipTrigger>
+            <TooltipContent>The worktree doesn't exist yet</TooltipContent>
+          </Tooltip>
+        ))}
 
       {hasRepoSession(repo) && (
         <Button
@@ -209,7 +254,7 @@ export function RepoBar({ taskId, repo }: RepoBarProps) {
             Discard draft
           </DropdownMenuItem>
           <DropdownMenuItem
-            disabled={repo.prNumber === 0}
+            disabled={repo.prNumber === 0 || gone}
             onClick={() => void refreshPR(taskId, repo.repoPath)}
           >
             Refresh PR

@@ -535,6 +535,7 @@ func (f *fixture) snapshot() bindings.State {
 		Tasks: bindings.FromTasks(
 			f.taskSvc.List(), f.taskArtifacts, f.flow.Steps, f.flow.Repos, f.sessions.Summaries(),
 		),
+		History: bindings.FromArchived(f.taskSvc.ListArchived(), f.taskArtifacts, f.taskSvc.PRRuns),
 	}
 }
 

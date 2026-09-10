@@ -482,3 +482,135 @@ func TestCountCommitsReportsARefThatIsNotThere(t *testing.T) {
 		t.Errorf("CountCommits() = %v, want *git.Error", err)
 	}
 }
+
+func TestCurrentBranchReadsTheBranchCheckedOut(t *testing.T) {
+	t.Parallel()
+	runner, dir := repo(t)
+
+	got, err := runner.CurrentBranch(t.Context(), dir)
+	if err != nil {
+		t.Fatalf("CurrentBranch() = %v, want nil", err)
+	}
+	if got != "main" {
+		t.Errorf("CurrentBranch() = %q, want %q", got, "main")
+	}
+}
+
+func TestCurrentBranchIsEmptyOnADetachedHead(t *testing.T) {
+	t.Parallel()
+	runner, dir := repo(t)
+	gittest.Run(t, dir, "checkout", "--quiet", "--detach", "HEAD")
+
+	got, err := runner.CurrentBranch(t.Context(), dir)
+	if err != nil {
+		t.Fatalf("CurrentBranch() = %v, want nil on a detached HEAD", err)
+	}
+	if got != "" {
+		t.Errorf("CurrentBranch() = %q, want it empty on a detached HEAD", got)
+	}
+}
+
+func TestCurrentBranchFailsOutsideARepository(t *testing.T) {
+	t.Parallel()
+	runner, _ := repo(t)
+
+	_, err := runner.CurrentBranch(t.Context(), t.TempDir())
+	var gitErr *git.Error
+	if !errors.As(err, &gitErr) {
+		t.Fatalf("CurrentBranch outside a repository = %v, want *git.Error", err)
+	}
+}
+
+func TestUpstreamAnswersForBothKindsOfBranch(t *testing.T) {
+	t.Parallel()
+	runner, dir := repo(t)
+	gittest.Run(t, dir, "branch", "--no-track", "login-screen", "origin/dev")
+
+	got, err := runner.Upstream(t.Context(), dir, "main")
+	if err != nil {
+		t.Fatalf("Upstream(main) = %v, want nil", err)
+	}
+	if want := "origin/main"; got != want {
+		t.Errorf("Upstream(main) = %q, want %q", got, want)
+	}
+
+	got, err = runner.Upstream(t.Context(), dir, "login-screen")
+	if err != nil {
+		t.Fatalf("Upstream(login-screen) = %v, want nil", err)
+	}
+	if got != "" {
+		t.Errorf("Upstream(login-screen) = %q, want it empty for a branch that tracks nothing", got)
+	}
+}
+
+func TestIsAncestorAnswersForABranchInAndOutOfItsBase(t *testing.T) {
+	t.Parallel()
+	runner, dir := repo(t)
+	gittest.Run(t, dir, "checkout", "--quiet", "-b", "login-screen")
+
+	got, err := runner.IsAncestor(t.Context(), dir, "refs/heads/login-screen", "refs/heads/main")
+	if err != nil {
+		t.Fatalf("IsAncestor(login-screen, main) = %v, want nil", err)
+	}
+	if !got {
+		t.Error("IsAncestor(login-screen, main) = false, want true for a branch with no commit of its own")
+	}
+
+	gittest.Commit(t, dir, "one.txt", "one\n", "Add one")
+
+	got, err = runner.IsAncestor(t.Context(), dir, "refs/heads/login-screen", "refs/heads/main")
+	if err != nil {
+		t.Fatalf("IsAncestor(login-screen, main) = %v, want nil", err)
+	}
+	if got {
+		t.Error("IsAncestor(login-screen, main) = true, want false for a branch main does not hold")
+	}
+}
+
+func TestIsAncestorReportsARefThatIsNotThere(t *testing.T) {
+	t.Parallel()
+	runner, dir := repo(t)
+
+	_, err := runner.IsAncestor(t.Context(), dir, "refs/heads/no-such-branch", "refs/heads/main")
+	var gitErr *git.Error
+	if !errors.As(err, &gitErr) {
+		t.Errorf("IsAncestor(no-such-branch, main) = %v, want *git.Error", err)
+	}
+}
+
+func TestMergeFastForwardMovesTheBranchToTheRef(t *testing.T) {
+	t.Parallel()
+	runner, dir := repo(t)
+
+	gittest.Run(t, dir, "checkout", "--quiet", "-b", "ahead")
+	gittest.Commit(t, dir, "one.txt", "one\n", "Add one")
+	want := headOf(t, dir)
+	gittest.Run(t, dir, "checkout", "--quiet", "main")
+
+	if err := runner.MergeFastForward(t.Context(), dir, "ahead"); err != nil {
+		t.Fatalf("MergeFastForward(ahead) = %v, want nil", err)
+	}
+	if got := headOf(t, dir); got != want {
+		t.Errorf("HEAD = %s, want main moved to %s", got, want)
+	}
+}
+
+func TestMergeFastForwardRefusesWhenTheBranchDiverged(t *testing.T) {
+	t.Parallel()
+	runner, dir := repo(t)
+
+	gittest.Run(t, dir, "checkout", "--quiet", "-b", "ahead")
+	gittest.Commit(t, dir, "one.txt", "one\n", "Add one")
+	gittest.Run(t, dir, "checkout", "--quiet", "main")
+	gittest.Commit(t, dir, "two.txt", "two\n", "Add two")
+	want := headOf(t, dir)
+
+	err := runner.MergeFastForward(t.Context(), dir, "ahead")
+	var gitErr *git.Error
+	if !errors.As(err, &gitErr) {
+		t.Fatalf("MergeFastForward(ahead) = %v, want *git.Error", err)
+	}
+	if got := headOf(t, dir); got != want {
+		t.Errorf("HEAD = %s, want main left at %s", got, want)
+	}
+}

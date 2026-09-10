@@ -1,6 +1,7 @@
 package bindings
 
 import (
+	"path/filepath"
 	"time"
 
 	"github.com/guilhermt/myspec/internal/flow"
@@ -133,10 +134,14 @@ func fromRepos(states []flow.RepoState) []RepoPR {
 			Review:       fromReview(state.Review),
 			CommitFailed: state.CommitFailed,
 
-			PRNumber:  state.PR.Number,
-			PRURL:     state.PR.URL,
-			PRState:   string(state.PR.State),
-			CheckedAt: checkedAt,
+			PRNumber:   state.PR.Number,
+			PRURL:      state.PR.URL,
+			PRState:    string(state.PR.State),
+			CheckedAt:  checkedAt,
+			PRBase:     state.PR.Base,
+			CheckError: state.CheckError,
+			CanClose:   state.CanClose,
+			Close:      fromCloseResult(state.Close),
 
 			SessionStage:   state.SessionStage,
 			SessionStatus:  string(summary.Status),
@@ -149,6 +154,156 @@ func fromRepos(states []flow.RepoState) []RepoPR {
 		}
 	}
 	return converted
+}
+
+// fromCloseResult converts what closing a repository did, keeping nil for a
+// repository that is not closed.
+func fromCloseResult(result *task.CloseResult) *CloseResult {
+	if result == nil {
+		return nil
+	}
+	return &CloseResult{
+		Worktree:     fromCloseStep(result.Worktree),
+		Branch:       fromCloseStep(result.Branch),
+		Base:         fromCloseStep(result.Base),
+		WorktreePath: result.WorktreePath,
+		BranchName:   result.BranchName,
+		BaseBranch:   result.BaseBranch,
+		BaseCommits:  result.BaseCommits,
+		ClosedAt:     result.ClosedAt.Format(time.RFC3339),
+	}
+}
+
+// fromCloseStep converts one part of the closing of a repository.
+func fromCloseStep(step task.CloseStep) CloseStep {
+	return CloseStep{Outcome: string(step.Outcome), Reason: step.Reason, Detail: step.Detail}
+}
+
+// FromArchived converts the tasks of the history, each with the artifacts of
+// its folder and the pull requests it left behind. The slices are always
+// allocated so the frontend never sees null.
+func FromArchived(
+	tasks []task.Task,
+	artifacts func(id string) task.Artifacts,
+	prRuns func(id string) []task.PRRun,
+) []ArchivedTask {
+	converted := make([]ArchivedTask, len(tasks))
+	for i, t := range tasks {
+		a := artifacts(t.ID)
+		converted[i] = ArchivedTask{
+			ID:              t.ID,
+			Name:            t.Name,
+			RepoPath:        t.RepoPath,
+			HasPRD:          a.PRD,
+			HasTechSpec:     a.TechSpec,
+			Steps:           fromArchivedSteps(a.Plan.Steps),
+			Repos:           fromArchivedRepos(t, prRuns(t.ID)),
+			ArtifactVersion: t.ArtifactVersion,
+			CreatedAt:       t.CreatedAt.Format(time.RFC3339),
+			ArchivedAt:      t.ArchivedAt.Format(time.RFC3339),
+		}
+	}
+	return converted
+}
+
+// fromArchivedSteps converts the steps of the plan of an archived task, which
+// the history renders and never runs.
+func fromArchivedSteps(steps []task.Step) []ArchivedStep {
+	converted := make([]ArchivedStep, len(steps))
+	for i, step := range steps {
+		converted[i] = ArchivedStep{
+			Number:     step.Number,
+			File:       step.File,
+			Title:      step.Title,
+			Repository: step.Repository,
+		}
+	}
+	return converted
+}
+
+// fromArchivedRepos converts the repositories an archived task touched, with
+// the pull request of each one when there was one.
+func fromArchivedRepos(t task.Task, runs []task.PRRun) []ArchivedRepo {
+	converted := make([]ArchivedRepo, len(runs))
+	for i, run := range runs {
+		converted[i] = ArchivedRepo{
+			Repository: relOf(t, run.RepoPath),
+			RepoPath:   run.RepoPath,
+			PRNumber:   run.PR.Number,
+			PRURL:      run.PR.URL,
+			PRState:    string(run.PR.State),
+		}
+	}
+	return converted
+}
+
+// relOf is the repository as the steps name it: its path relative to the
+// workspace of the task. The history builds its own, because reading a task
+// nothing runs for any more is no business of the flow.
+func relOf(t task.Task, repoPath string) string {
+	rel, err := filepath.Rel(t.WorkspacePath, repoPath)
+	if err != nil {
+		return repoPath
+	}
+	return rel
+}
+
+// FromDeletePreview converts what deleting a task would destroy, allocating the
+// slices so the frontend never sees null.
+func FromDeletePreview(preview flow.DeletePreview) DeletePreview {
+	worktrees := make([]WorktreePreview, len(preview.Worktrees))
+	for i, wt := range preview.Worktrees {
+		worktrees[i] = WorktreePreview{
+			Repository: wt.Repository,
+			RepoPath:   wt.RepoPath,
+			Path:       wt.Path,
+			Dirty:      wt.Dirty,
+			Files:      wt.Files,
+			Error:      wt.Error,
+		}
+	}
+	branches := make([]BranchPreview, len(preview.Branches))
+	for i, branch := range preview.Branches {
+		branches[i] = BranchPreview{
+			Repository: branch.Repository,
+			RepoPath:   branch.RepoPath,
+			Name:       branch.Name,
+			Merged:     branch.Merged,
+			Error:      branch.Error,
+		}
+	}
+	prs := make([]PRPreview, len(preview.PRs))
+	for i, pr := range preview.PRs {
+		prs[i] = PRPreview{
+			Repository: pr.Repository,
+			RepoPath:   pr.RepoPath,
+			Number:     pr.Number,
+			URL:        pr.URL,
+			State:      string(pr.State),
+		}
+	}
+	return DeletePreview{
+		SessionRunning: preview.SessionRunning,
+		Worktrees:      worktrees,
+		Branches:       branches,
+		PRs:            prs,
+	}
+}
+
+// FromDeleteResult converts what a deletion left on disk, always returning a
+// slice so the frontend never sees null.
+func FromDeleteResult(result flow.DeleteResult) DeleteResult {
+	leftovers := make([]Leftover, len(result.Leftovers))
+	for i, left := range result.Leftovers {
+		leftovers[i] = Leftover{
+			Repository: left.Repository,
+			RepoPath:   left.RepoPath,
+			Path:       left.Path,
+			Branch:     left.Branch,
+			Error:      left.Error,
+		}
+	}
+	return DeleteResult{Leftovers: leftovers}
 }
 
 // fromPRBlock converts why the pull request of a repository cannot go on,

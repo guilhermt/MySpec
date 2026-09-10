@@ -21,12 +21,15 @@ const (
 	PRReviewing  PRStatus = "reviewing"  // the PR exists and the review session is running
 	PRCommitting PRStatus = "committing" // the commit prompt was sent, waiting for the commit
 	PRDone       PRStatus = "done"       // a pass closed clean; the repository awaits closing
+	PRClosing    PRStatus = "closing"    // the user asked for the closing; git is at work
+	PRClosed     PRStatus = "closed"     // the worktree is gone; Close says what else happened
 	PRSkipped    PRStatus = "skipped"    // the branch has no commit past its base
 )
 
 // prStatuses lists every status a PR run may carry.
 var prStatuses = []PRStatus{
-	PRPreparing, PRBlocked, PRDrafting, PROpening, PRReviewing, PRCommitting, PRDone, PRSkipped,
+	PRPreparing, PRBlocked, PRDrafting, PROpening, PRReviewing, PRCommitting,
+	PRDone, PRClosing, PRClosed, PRSkipped,
 }
 
 // PRBlockReason says why the PR stage of a repository could not start.
@@ -78,7 +81,53 @@ type PRDetails struct {
 	Number    int
 	URL       string
 	State     PRState // "" until a reading says otherwise
+	Base      string  // the branch the pull request merges into; "" until gh says
 	CheckedAt time.Time
+}
+
+// CloseOutcome is what became of one of the three things closing a
+// repository acts on.
+type CloseOutcome string
+
+// What closing does with the worktree, the branch and the base branch.
+const (
+	OutcomeDone    CloseOutcome = "done"    // removed, deleted or updated
+	OutcomeSkipped CloseOutcome = "skipped" // left alone on purpose; Reason says why
+	OutcomeFailed  CloseOutcome = "failed"  // git refused; Detail says what it said
+)
+
+// The reasons a part of the closing is skipped.
+const (
+	SkipMissing       = "missing"         // the worktree folder, the branch or the base branch is not there
+	SkipNotMerged     = "not_merged"      // git does not see the branch in the base and GitHub did not confirm the merge
+	SkipNotCheckedOut = "not_checked_out" // the base branch is not the one checked out in the repository
+	SkipDirty         = "dirty"           // the repository has uncommitted changes
+	SkipNoUpstream    = "no_upstream"     // the base branch tracks no remote branch
+	SkipDiverged      = "diverged"        // the base branch has commits of its own
+	SkipUpToDate      = "up_to_date"      // the base branch already matches the remote
+)
+
+// CloseStep is one part of the closing of a repository: the worktree, the
+// branch or the base branch.
+type CloseStep struct {
+	Outcome CloseOutcome `json:"outcome"`
+	Reason  string       `json:"reason"` // skipped only
+	// Detail is what git said, the status lines of a dirty repository, or the
+	// path or branch left behind.
+	Detail string `json:"detail"`
+}
+
+// CloseResult is what closing a repository did, as the app shows it forever
+// after.
+type CloseResult struct {
+	Worktree     CloseStep `json:"worktree"`
+	Branch       CloseStep `json:"branch"`
+	Base         CloseStep `json:"base"`
+	WorktreePath string    `json:"worktreePath"`
+	BranchName   string    `json:"branchName"`
+	BaseBranch   string    `json:"baseBranch"`  // the local branch the pull request merged into
+	BaseCommits  int       `json:"baseCommits"` // how many commits the base moved by; done only
+	ClosedAt     time.Time `json:"closedAt"`
 }
 
 // PRRun is what the app recorded about the PR stage of one repository.
@@ -88,6 +137,7 @@ type PRRun struct {
 	Status   PRStatus
 	Block    *PRBlock // blocked only
 	PR       PRDetails
+	Close    *CloseResult // closed only
 
 	// ReviewedCommit is the commit the last written report covered, and
 	// ReportedPass its number: together they are the rule that a new pass only

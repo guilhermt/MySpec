@@ -34,10 +34,11 @@ export function ThemeToggle() {
       }}
       className="w-full"
     >
+      {/* The foot of the sidebar also carries the history, so the options go by
+          their icons and say their name to the screen reader. */}
       {OPTIONS.map(({ value, label, icon: Icon }) => (
-        <ToggleGroupItem key={value} value={value} className="flex-1">
+        <ToggleGroupItem key={value} value={value} aria-label={label} className="flex-1">
           <Icon aria-hidden="true" />
-          {label}
         </ToggleGroupItem>
       ))}
     </ToggleGroup>

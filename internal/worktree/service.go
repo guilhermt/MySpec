@@ -266,6 +266,16 @@ func (s *Service) Ahead(ctx context.Context, wt Worktree, base string) (int, err
 	})
 }
 
+// Merged reports whether the branch of a worktree is already part of base.
+func (s *Service) Merged(ctx context.Context, wt Worktree, base string) (bool, error) {
+	unlock := s.lockRepo(wt.RepoPath)
+	defer unlock()
+
+	return ask(ctx, CommandTimeout, func(ctx context.Context) (bool, error) {
+		return s.git.IsAncestor(ctx, wt.RepoPath, "refs/heads/"+wt.Branch, base)
+	})
+}
+
 // Commit reads a commit of the repository of a worktree.
 func (s *Service) Commit(ctx context.Context, wt Worktree, rev string) (git.Commit, error) {
 	unlock := s.lockRepo(wt.RepoPath)

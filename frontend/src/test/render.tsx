@@ -18,6 +18,11 @@ export interface StoreOptions {
       | "openRepo"
       | "prDrafts"
       | "newTaskFor"
+      | "historyOpen"
+      | "openArchivedId"
+      | "historyQuery"
+      | "archivedNotice"
+      | "leftovers"
     >
   >;
 }
@@ -38,6 +43,11 @@ export function resetAppStore(options: StoreOptions = {}): void {
     openRepo: options.ui?.openRepo ?? {},
     prDrafts: options.ui?.prDrafts ?? {},
     newTaskFor: options.ui?.newTaskFor ?? null,
+    historyOpen: options.ui?.historyOpen ?? false,
+    openArchivedId: options.ui?.openArchivedId ?? null,
+    historyQuery: options.ui?.historyQuery ?? "",
+    archivedNotice: options.ui?.archivedNotice ?? null,
+    leftovers: options.ui?.leftovers ?? null,
   });
 }
 

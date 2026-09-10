@@ -17,6 +17,12 @@ const (
 	// pathNotIgnored is what check-ignore --quiet uses for a path the
 	// repository does not ignore.
 	pathNotIgnored = 1
+	// detachedHead is what symbolic-ref --quiet uses for a HEAD that points at
+	// a commit instead of a branch.
+	detachedHead = 1
+	// notAncestor is what merge-base --is-ancestor uses for a commit that is
+	// not part of the ref.
+	notAncestor = 1
 )
 
 // Fetch updates the remote-tracking branches of remote.
@@ -332,4 +338,48 @@ func (r *Runner) ExcludePath(ctx context.Context, dir string) (string, error) {
 		return out, nil
 	}
 	return filepath.Join(dir, out), nil
+}
+
+// CurrentBranch is the branch checked out at dir, "" on a detached HEAD.
+func (r *Runner) CurrentBranch(ctx context.Context, dir string) (string, error) {
+	out, err := r.Run(ctx, dir, "symbolic-ref", "--short", "--quiet", "HEAD")
+	if err == nil {
+		return out, nil
+	}
+
+	var gitErr *Error
+	// A HEAD that names no branch is an answer, not a failure: the app asks to
+	// find out whether the base branch is the one checked out.
+	if errors.As(err, &gitErr) && gitErr.ExitCode == detachedHead {
+		return "", nil
+	}
+	return "", err
+}
+
+// Upstream is the remote-tracking branch of a local branch, like origin/dev,
+// or "" when the branch tracks nothing.
+func (r *Runner) Upstream(ctx context.Context, dir, branch string) (string, error) {
+	return r.Run(ctx, dir, "for-each-ref", "--format=%(upstream:short)", "refs/heads/"+branch)
+}
+
+// IsAncestor reports whether commit is reachable from ref: whether what
+// commit holds is already part of ref.
+func (r *Runner) IsAncestor(ctx context.Context, dir, commit, ref string) (bool, error) {
+	_, err := r.Run(ctx, dir, "merge-base", "--is-ancestor", commit, ref)
+	if err == nil {
+		return true, nil
+	}
+
+	var gitErr *Error
+	if errors.As(err, &gitErr) && gitErr.ExitCode == notAncestor {
+		return false, nil
+	}
+	return false, err
+}
+
+// MergeFastForward moves the branch checked out at dir to ref, and only when
+// that is a fast-forward: nothing is merged, rebased or rewritten.
+func (r *Runner) MergeFastForward(ctx context.Context, dir, ref string) error {
+	_, err := r.Run(ctx, dir, "merge", "--ff-only", "--quiet", ref)
+	return err
 }

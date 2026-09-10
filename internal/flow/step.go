@@ -878,35 +878,43 @@ func (s *Service) reopenStep(ctx context.Context, t task.Task) {
 	}
 }
 
-// Delete removes a task with its worktrees, its branches and its artifacts. A
-// worktree git cannot remove keeps the task, and the reason reaches the user.
-func (s *Service) Delete(ctx context.Context, id string) error {
+// Delete removes a task for good: its sessions are stopped, its worktrees and
+// branches are removed as far as git allows, and its records and artifacts go.
+// What git could not remove is returned for the user to clean up; it never
+// keeps the task.
+func (s *Service) Delete(ctx context.Context, id string) (DeleteResult, error) {
 	s.abortPrepare(id)
+	s.abortRepoWork(id)
 
 	l := s.lockOf(id)
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	t, ok := s.tasks.Get(id)
+	t, ok := s.tasks.Lookup(id)
 	if !ok {
-		return fmt.Errorf("delete task %s: %w", id, task.ErrNotFound)
+		return DeleteResult{}, fmt.Errorf("delete task %s: %w", id, task.ErrNotFound)
 	}
-	// A task still being planned has no steps, and no worktrees either.
-	if t.Stage == task.StageImplementation || t.Stage == task.StagePR {
-		if err := s.tearDownSteps(ctx, t); err != nil {
-			return err
+	result := DeleteResult{Leftovers: []LeftoverInfo{}}
+	if !t.Archived() {
+		// The sessions run inside the worktrees, so they stop first.
+		if err := s.sessions.CloseTask(ctx, id); err != nil {
+			return DeleteResult{}, err
+		}
+		s.review.ForgetTask(id)
+		for _, left := range s.worktrees.Purge(ctx, id) {
+			result.Leftovers = append(result.Leftovers, LeftoverInfo{
+				Repository: repoRel(t, left.RepoPath), RepoPath: left.RepoPath,
+				Path: left.Path, Branch: left.Branch, Error: left.Error,
+			})
 		}
 	}
-	if err := s.sessions.CloseTask(ctx, id); err != nil {
-		return err
-	}
 	if err := s.tasks.Delete(ctx, id); err != nil {
-		return err
+		return DeleteResult{}, err
 	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	delete(s.locks, id)
-	return nil
+	return result, nil
 }

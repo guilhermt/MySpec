@@ -44,6 +44,7 @@ var repos = []task.Repository{
 type memTasks struct {
 	mu        sync.Mutex
 	items     []task.Task
+	archived  []task.Task // newest first, as the service keeps them
 	artifacts map[string]task.Artifacts
 	runs      map[string][]task.StepRun
 	prs       map[string][]task.PRRun
@@ -72,11 +73,50 @@ func (m *memTasks) Get(id string) (task.Task, bool) {
 	return m.items[index], true
 }
 
+func (m *memTasks) Lookup(id string) (task.Task, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if index := m.indexOf(id); index >= 0 {
+		return m.items[index], true
+	}
+	if index := slices.IndexFunc(m.archived, func(t task.Task) bool { return t.ID == id }); index >= 0 {
+		return m.archived[index], true
+	}
+	return task.Task{}, false
+}
+
 func (m *memTasks) List() []task.Task {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	return slices.Clone(m.items)
+}
+
+func (m *memTasks) ListArchived() []task.Task {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return slices.Clone(m.archived)
+}
+
+func (m *memTasks) Archive(_ context.Context, id string) (task.Task, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.calls = append(m.calls, "archive:"+id)
+	if m.err != nil {
+		return task.Task{}, m.err
+	}
+	index := m.indexOf(id)
+	if index < 0 {
+		return task.Task{}, task.ErrNotFound
+	}
+	t := m.items[index]
+	t.ArchivedAt = time.Now().UTC()
+	m.items = slices.Delete(m.items, index, index+1)
+	m.archived = slices.Insert(m.archived, 0, t)
+	return t, nil
 }
 
 func (m *memTasks) Inspect(id string) (task.Artifacts, error) {
@@ -164,6 +204,13 @@ func (m *memTasks) SetPRRun(
 
 func (m *memTasks) SetPRDetails(_ context.Context, id, repoPath string, pr task.PRDetails) (task.PRRun, error) {
 	return m.updatePRRun(id, repoPath, "prDetails", func(run *task.PRRun) { run.PR = pr })
+}
+
+func (m *memTasks) SetPRClosed(_ context.Context, id, repoPath string, result task.CloseResult) (task.PRRun, error) {
+	return m.updatePRRun(id, repoPath, "prClosed", func(run *task.PRRun) {
+		copied := result
+		run.Status, run.Block, run.Close = task.PRClosed, nil, &copied
+	})
 }
 
 func (m *memTasks) SetPRReviewed(_ context.Context, id, repoPath, commit string, pass int) (task.PRRun, error) {
@@ -331,6 +378,9 @@ func (m *memTasks) Delete(_ context.Context, id string) error {
 	}
 	if index := m.indexOf(id); index >= 0 {
 		m.items = slices.Delete(m.items, index, index+1)
+	}
+	if index := slices.IndexFunc(m.archived, func(t task.Task) bool { return t.ID == id }); index >= 0 {
+		m.archived = slices.Delete(m.archived, index, index+1)
 	}
 	return nil
 }
@@ -524,6 +574,22 @@ func (m *memSessions) CloseTask(_ context.Context, taskID string) error {
 	return nil
 }
 
+func (m *memSessions) DiscardTask(_ context.Context, taskID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.calls = append(m.calls, "discardTask:"+taskID)
+	if m.err != nil {
+		return m.err
+	}
+	for k := range m.summaries {
+		if k.TaskID == taskID {
+			delete(m.summaries, k)
+		}
+	}
+	return nil
+}
+
 func (m *memSessions) Resume(_ context.Context, k session.Key) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -547,6 +613,13 @@ func (m *memSessions) Summary(k session.Key) (session.Summary, bool) {
 
 	sum, ok := m.summaries[k]
 	return sum, ok
+}
+
+func (m *memSessions) Summaries() map[session.Key]session.Summary {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return maps.Clone(m.summaries)
 }
 
 func (m *memSessions) SendFromApp(_ context.Context, k session.Key, text string) error {
@@ -669,8 +742,10 @@ type memWorktrees struct {
 	status    git.Status
 	base      string // the ref every branch is said to come from
 	ahead     int    // how many commits past the base every branch has
+	merged    bool   // whether git sees every branch in the base it is asked about
 	baseErr   error
 	aheadErr  error
+	mergedErr error
 	subject   string           // the subject every commit reading answers with
 	phases    []worktree.Phase // reported by every Ensure
 	ensureErr error
@@ -679,6 +754,20 @@ type memWorktrees struct {
 	cleanErr  error
 	removeErr error
 	block     chan struct{} // when set, Ensure waits on it or on the context
+
+	closeResult task.CloseResult // what every closing answers with
+	closeCalls  []closeCall      // the closings the flow asked for, in order
+	leftovers   []worktree.Leftover
+	purged      []string // the tasks Purge was called for
+}
+
+// closeCall is one closing of a repository, with what the flow decided about
+// the base branch and the branch of the worktree.
+type closeCall struct {
+	taskID   string
+	repoPath string
+	base     string
+	policy   worktree.BranchPolicy
 }
 
 func newWorktrees() *memWorktrees {
@@ -688,7 +777,38 @@ func newWorktrees() *memWorktrees {
 		phases:  []worktree.Phase{worktree.PhaseFetching, worktree.PhaseCreating},
 		base:    "origin/dev",
 		ahead:   1,
+		closeResult: task.CloseResult{
+			Worktree:    task.CloseStep{Outcome: task.OutcomeDone},
+			Branch:      task.CloseStep{Outcome: task.OutcomeDone},
+			Base:        task.CloseStep{Outcome: task.OutcomeDone},
+			BaseCommits: 3,
+		},
 	}
+}
+
+// setCloseResult is what every closing of a repository answers with.
+func (m *memWorktrees) setCloseResult(result task.CloseResult) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.closeResult = result
+}
+
+// setLeftovers is what every purge of a task answers with: what git could not
+// take back.
+func (m *memWorktrees) setLeftovers(leftovers []worktree.Leftover) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.leftovers = leftovers
+}
+
+// closings are the closings the flow asked for, in order.
+func (m *memWorktrees) closings() []closeCall {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return slices.Clone(m.closeCalls)
 }
 
 func (m *memWorktrees) Get(taskID, repoPath string) (worktree.Worktree, bool) {
@@ -801,6 +921,48 @@ func (m *memWorktrees) Clean(_ context.Context, wt worktree.Worktree) error {
 	}
 	m.status = git.Status{}
 	return nil
+}
+
+func (m *memWorktrees) Merged(_ context.Context, wt worktree.Worktree, base string) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.calls = append(m.calls, "merged:"+wt.TaskID+":"+filepath.Base(wt.RepoPath)+":"+base)
+	if m.mergedErr != nil {
+		return false, m.mergedErr
+	}
+	return m.merged, nil
+}
+
+func (m *memWorktrees) Close(
+	_ context.Context, wt worktree.Worktree, base string, policy worktree.BranchPolicy,
+) task.CloseResult {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.calls = append(m.calls, "close:"+wt.TaskID+":"+filepath.Base(wt.RepoPath))
+	m.closeCalls = append(m.closeCalls, closeCall{
+		taskID: wt.TaskID, repoPath: wt.RepoPath, base: base, policy: policy,
+	})
+	// The real service forgets the worktree whatever git did, so the fake does
+	// too: nothing there is the app's any more.
+	index := slices.IndexFunc(m.items[wt.TaskID], func(w worktree.Worktree) bool { return w.RepoPath == wt.RepoPath })
+	if index >= 0 {
+		m.items[wt.TaskID] = slices.Delete(m.items[wt.TaskID], index, index+1)
+	}
+	result := m.closeResult
+	result.WorktreePath, result.BranchName, result.BaseBranch = wt.Path, wt.Branch, base
+	return result
+}
+
+func (m *memWorktrees) Purge(_ context.Context, taskID string) []worktree.Leftover {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.calls = append(m.calls, "purge:"+taskID)
+	m.purged = append(m.purged, taskID)
+	delete(m.items, taskID)
+	return slices.Clone(m.leftovers)
 }
 
 func (m *memWorktrees) RemoveAll(_ context.Context, taskID string) error {

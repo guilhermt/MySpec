@@ -269,6 +269,155 @@ func TestListIsACopy(t *testing.T) {
 	}
 }
 
+func TestArchiveMovesTheTaskToTheHistory(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	created := f.create(t, "add-login", "")
+	writePRD(t, created, "# PRD\n")
+	if _, err := f.service.SetPRRun(t.Context(), created.ID, f.repos[0], task.PRDone, nil); err != nil {
+		t.Fatalf("SetPRRun() = %v, want nil", err)
+	}
+	if _, err := f.service.Inspect(created.ID); err != nil {
+		t.Fatalf("Inspect() = %v, want nil", err)
+	}
+	before := f.changeCount()
+
+	archived, err := f.service.Archive(t.Context(), created.ID)
+	if err != nil {
+		t.Fatalf("Archive() = %v, want nil", err)
+	}
+	if !archived.Archived() || !archived.ArchivedAt.Equal(base) || !archived.UpdatedAt.Equal(base) {
+		t.Errorf("Archive() = archived %t at %v, updated %v, want it archived at %v",
+			archived.Archived(), archived.ArchivedAt, archived.UpdatedAt, base)
+	}
+
+	if got := len(f.service.List()); got != 0 {
+		t.Errorf("List() has %d tasks, want the task out of the workspace", got)
+	}
+	if diff := cmp.Diff([]task.Task{archived}, f.service.ListArchived()); diff != "" {
+		t.Errorf("ListArchived() mismatch (-want +got):\n%s", diff)
+	}
+	if _, ok := f.service.Get(created.ID); ok {
+		t.Error("Get() found an archived task, want only the ones in the workspace")
+	}
+	found, ok := f.service.Lookup(created.ID)
+	if !ok {
+		t.Fatalf("Lookup(%s) not found, want the archived task", created.ID)
+	}
+	if diff := cmp.Diff(archived, found); diff != "" {
+		t.Errorf("Lookup() mismatch (-want +got):\n%s", diff)
+	}
+	if stored := f.repo.get(t, created.ID); !stored.Archived() {
+		t.Errorf("stored task = %+v, want the row archived", stored)
+	}
+
+	// What the history shows stays: the artifacts, the records and the reading
+	// of every file.
+	if a, ok := f.service.Artifacts(created.ID); !ok || !a.PRD {
+		t.Errorf("Artifacts() = %+v, %t, want the PRD of the archived task", a, ok)
+	}
+	if got := len(f.service.PRRuns(created.ID)); got != 1 {
+		t.Errorf("PRRuns() has %d runs, want the record of the repository", got)
+	}
+	content, err := f.service.ReadArtifact(created.ID, task.PRDFile)
+	if err != nil || content != "# PRD\n" {
+		t.Errorf("ReadArtifact() = %q, %v, want the PRD of the archived task", content, err)
+	}
+
+	if got := f.changeCount(); got != before+1 {
+		t.Errorf("OnChange ran %d times, want 1", got-before)
+	}
+	if got := f.logs.count(t, "task archived"); got != 1 {
+		t.Errorf("task archived records = %d, want 1", got)
+	}
+}
+
+func TestArchiveKeepsTheNewestFirst(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	first := f.create(t, "add-login", "")
+	second := f.create(t, "add-logout", "")
+
+	for _, id := range []string{first.ID, second.ID} {
+		if _, err := f.service.Archive(t.Context(), id); err != nil {
+			t.Fatalf("Archive(%s) = %v, want nil", id, err)
+		}
+	}
+
+	history := f.service.ListArchived()
+	if len(history) != 2 {
+		t.Fatalf("ListArchived() = %+v, want both tasks", history)
+	}
+	if history[0].ID != second.ID || history[1].ID != first.ID {
+		t.Errorf("ListArchived() = %q, %q, want the last archived first", history[0].Name, history[1].Name)
+	}
+}
+
+func TestArchiveOnlyTakesATaskOfTheWorkspace(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	created := f.create(t, "add-login", "")
+
+	_, err := f.service.Archive(t.Context(), "nope")
+	wantErrIs(t, err, task.ErrNotFound)
+
+	if _, archiveErr := f.service.Archive(t.Context(), created.ID); archiveErr != nil {
+		t.Fatalf("Archive() = %v, want nil", archiveErr)
+	}
+	// A task is archived once: there is no way back and no second time.
+	_, err = f.service.Archive(t.Context(), created.ID)
+	wantErrIs(t, err, task.ErrNotFound)
+}
+
+func TestArchiveFailsWhenTheRowCannotBeWritten(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	created := f.create(t, "add-login", "")
+	f.repo.updateErr = errors.New("database is locked")
+
+	if _, err := f.service.Archive(t.Context(), created.ID); err == nil {
+		t.Fatal("Archive() = nil, want an error")
+	}
+	if got := len(f.service.List()); got != 1 {
+		t.Errorf("List() has %d tasks, want the task kept in the workspace", got)
+	}
+	if got := len(f.service.ListArchived()); got != 0 {
+		t.Errorf("ListArchived() has %d tasks, want none", got)
+	}
+}
+
+func TestDeleteRemovesAnArchivedTask(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	created := f.create(t, "add-login", "")
+	writePRD(t, created, "# PRD\n")
+	if _, err := f.service.Archive(t.Context(), created.ID); err != nil {
+		t.Fatalf("Archive() = %v, want nil", err)
+	}
+
+	if err := f.service.Delete(t.Context(), created.ID); err != nil {
+		t.Fatalf("Delete() = %v, want nil", err)
+	}
+
+	if got := len(f.service.ListArchived()); got != 0 {
+		t.Errorf("ListArchived() has %d tasks, want none", got)
+	}
+	if _, ok := f.service.Lookup(created.ID); ok {
+		t.Error("Lookup() found the task after Delete")
+	}
+	if exists(created.ArtifactsDir) {
+		t.Errorf("artifacts directory %s still exists", created.ArtifactsDir)
+	}
+	if _, err := f.repo.Get(t.Context(), created.ID); !errors.Is(err, task.ErrNotFound) {
+		t.Errorf("repo.Get() = %v, want ErrNotFound", err)
+	}
+}
+
 func TestDeleteRemovesTheTaskTheRowAndTheFolder(t *testing.T) {
 	t.Parallel()
 
@@ -430,6 +579,50 @@ func TestSyncLoadsTheTasksOfTheWorkspace(t *testing.T) {
 	}
 	if got := f.changeCount(); got != 0 {
 		t.Errorf("OnChange ran %d times, want Sync to be silent", got)
+	}
+}
+
+func TestSyncLoadsTheArchivedTasksOfTheWorkspace(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	created := f.create(t, "add-login", "")
+	writePRD(t, created, "# PRD\n")
+	if _, err := f.service.SetPRRun(t.Context(), created.ID, f.repos[0], task.PRDone, nil); err != nil {
+		t.Fatalf("SetPRRun() = %v, want nil", err)
+	}
+	if _, err := f.service.Archive(t.Context(), created.ID); err != nil {
+		t.Fatalf("Archive() = %v, want nil", err)
+	}
+
+	reopened := newService(t, f)
+	if err := reopened.Sync(t.Context(), f.workspace); err != nil {
+		t.Fatalf("Sync() = %v, want nil", err)
+	}
+
+	if got := len(reopened.List()); got != 0 {
+		t.Errorf("List() has %d tasks, want the archived one out of the workspace", got)
+	}
+	history := reopened.ListArchived()
+	if len(history) != 1 || history[0].ID != created.ID {
+		t.Fatalf("ListArchived() = %+v, want the archived task", history)
+	}
+	if a, ok := reopened.Artifacts(created.ID); !ok || !a.PRD {
+		t.Errorf("Artifacts() = %+v, %t, want the artifacts of the archived task read", a, ok)
+	}
+	if got := len(reopened.PRRuns(created.ID)); got != 1 {
+		t.Errorf("PRRuns() has %d runs, want the record of the repository", got)
+	}
+}
+
+func TestSyncFailsWhenTheArchivedTasksCannotBeListed(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.repo.archivedErr = errors.New("database is locked")
+
+	if err := f.service.Sync(t.Context(), t.TempDir()); err == nil {
+		t.Error("Sync() = nil, want an error")
 	}
 }
 

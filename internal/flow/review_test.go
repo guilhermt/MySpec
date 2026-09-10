@@ -235,7 +235,7 @@ func TestTearingDownTheStepsForgetsTheReview(t *testing.T) {
 	f.service.Sync(t.Context())
 	f.waitStep(t, "task-1", 1, flow.StepImplementing)
 
-	if err := f.service.Delete(t.Context(), "task-1"); err != nil {
+	if _, err := f.service.Delete(t.Context(), "task-1"); err != nil {
 		t.Fatalf("Delete() = %v, want nil", err)
 	}
 	if !slices.Contains(f.reviews.reviewCalls(), "forget-task:task-1") {

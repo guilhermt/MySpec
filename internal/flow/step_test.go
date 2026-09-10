@@ -582,7 +582,7 @@ func TestDiscardingThePlanCancelsAPreparationInFlight(t *testing.T) {
 	f.waitWorktreeCalls(t, "ensure:task-1:api", "removeAll:task-1")
 }
 
-func TestDeleteTearsTheStepsDownAndRemovesTheTask(t *testing.T) {
+func TestDeleteStopsTheSessionsAndPurgesTheWorktrees(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
@@ -592,35 +592,44 @@ func TestDeleteTearsTheStepsDownAndRemovesTheTask(t *testing.T) {
 	f.waitStep(t, "task-1", 1, flow.StepImplementing)
 	f.waitStepSession(t, "task-1", 1)
 
-	if err := f.service.Delete(t.Context(), "task-1"); err != nil {
+	result, err := f.service.Delete(t.Context(), "task-1")
+	if err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
+	if len(result.Leftovers) != 0 {
+		t.Errorf("leftovers = %+v, want none", result.Leftovers)
+	}
 
-	f.wantCalls(t,
-		"start:task-1:step:1:restarted=false",
-		"closeTask:task-1",
-		"discard:task-1:step:1",
-		"closeTask:task-1",
-	)
-	f.waitWorktreeCalls(t, "ensure:task-1:api", "status:task-1:task-1", "removeAll:task-1")
+	// The conversation of the step stops before the worktree it runs in.
+	f.wantCalls(t, "start:task-1:step:1:restarted=false", "closeTask:task-1")
+	f.waitWorktreeCalls(t, "ensure:task-1:api", "status:task-1:task-1", "purge:task-1")
 	if _, ok := f.tasks.Get("task-1"); ok {
 		t.Error("the task is still there")
 	}
 }
 
-func TestDeleteOfAPlannedTaskTouchesNoWorktree(t *testing.T) {
+func TestDeleteOfAnArchivedTaskTouchesNoWorktree(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	f.tasks.add("task-1", task.StagePRD, task.Artifacts{})
+	f.tasks.add("task-1", task.StagePR, task.Artifacts{})
+	if _, err := f.tasks.Archive(t.Context(), "task-1"); err != nil {
+		t.Fatalf("Archive: %v", err)
+	}
 
-	if err := f.service.Delete(t.Context(), "task-1"); err != nil {
+	if _, err := f.service.Delete(t.Context(), "task-1"); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
 
-	f.wantCalls(t, "closeTask:task-1")
+	// The closing of its last repository already took the worktrees and the
+	// conversations; only the records are left to remove.
+	f.wantCalls(t)
 	if calls := f.worktrees.recorded(); len(calls) != 0 {
 		t.Errorf("worktree calls = %v, want none", calls)
 	}
-	wantErrIs(t, f.service.Delete(t.Context(), "nobody"), task.ErrNotFound)
+	if archived := f.tasks.ListArchived(); len(archived) != 0 {
+		t.Errorf("archived = %+v, want the task gone from the history", archived)
+	}
+	_, err := f.service.Delete(t.Context(), "nobody")
+	wantErrIs(t, err, task.ErrNotFound)
 }

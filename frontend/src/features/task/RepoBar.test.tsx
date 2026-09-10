@@ -132,6 +132,60 @@ describe("RepoBar", () => {
     expect(api.refreshPR).toHaveBeenCalledWith("task-1", "/home/dev/projects/web");
   });
 
+  it("offers no closing while the pull request waits for its merge", async () => {
+    const { user } = bar({ status: "done", prNumber: 12, prState: "open" });
+
+    const button = screen.getByRole("button", { name: "Close repository" });
+    expect(button).toBeDisabled();
+
+    await user.hover(button);
+
+    expect(await screen.findByText("The pull request hasn't been merged yet")).toBeInTheDocument();
+  });
+
+  it("closes a merged repository", async () => {
+    const { user } = bar({ status: "merged", canClose: true, prNumber: 12, prState: "merged" });
+
+    await user.click(screen.getByRole("button", { name: "Close repository" }));
+
+    expect(api.closeRepo).toHaveBeenCalledWith("task-1", "/home/dev/projects/web");
+  });
+
+  it("offers the closing of a repository that had nothing to propose", async () => {
+    const { user } = bar({ status: "skipped", canClose: true });
+
+    await user.click(screen.getByRole("button", { name: "Close repository" }));
+
+    expect(api.closeRepo).toHaveBeenCalledWith("task-1", "/home/dev/projects/web");
+  });
+
+  it("says the closing is under way", () => {
+    bar({ status: "closing" });
+
+    expect(screen.getByRole("button", { name: "Closing…" })).toBeDisabled();
+  });
+
+  it("warns when the merge couldn't be confirmed and offers the closing anyway", () => {
+    bar({ status: "done", canClose: true, checkError: "gh: not authenticated", prNumber: 12 });
+
+    expect(screen.getByText("Couldn't confirm the merge")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Close repository" })).toBeEnabled();
+  });
+
+  it("has no worktree to open and no pull request to read once the repository is closed", async () => {
+    const { user } = bar({ status: "closed", prNumber: 12 });
+
+    expect(screen.queryByRole("button", { name: "Open in VS Code" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Close repository" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Repository actions" }));
+
+    expect(await screen.findByRole("menuitem", { name: "Refresh PR" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+  });
+
   it("says when the last approval produced no commit", () => {
     bar({ status: "ready_to_approve", commitFailed: true });
 

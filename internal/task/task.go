@@ -89,9 +89,13 @@ type Task struct {
 	Revisiting      bool
 	ArtifactsDir    string
 	ArtifactVersion int
+	ArchivedAt      time.Time // zero while the task is in the workspace
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
 }
+
+// Archived reports whether the task left the workspace for the history.
+func (t Task) Archived() bool { return !t.ArchivedAt.IsZero() }
 
 // Dir is where the task's sessions run: the repository, or the workspace root.
 func (t Task) Dir() string {

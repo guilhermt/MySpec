@@ -49,8 +49,15 @@ export function createTask(req: CreateTaskRequest): Promise<string> {
   return api.createTask(req);
 }
 
+/** deleteTask removes the task for good and reports what stayed on disk. */
 export function deleteTask(taskId: string): Promise<void> {
-  return run(() => api.deleteTask(taskId));
+  return run(async () => {
+    const result = await api.deleteTask(taskId);
+    const leftovers = result.leftovers ?? [];
+    if (leftovers.length > 0) {
+      useAppStore.getState().setLeftovers(leftovers);
+    }
+  });
 }
 
 /** loadTranscript fetches a conversation and buffers what arrives meanwhile. */
@@ -179,6 +186,11 @@ export function retryRepo(taskId: string, repoPath: string): Promise<void> {
 /** refreshPR asks GitHub again what became of the pull request. */
 export function refreshPR(taskId: string, repoPath: string): Promise<void> {
   return run(() => api.refreshPR(taskId, repoPath));
+}
+
+/** closeRepo removes the worktree of a merged repository and updates its base branch. */
+export function closeRepo(taskId: string, repoPath: string): Promise<void> {
+  return run(() => api.closeRepo(taskId, repoPath));
 }
 
 /**

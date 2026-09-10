@@ -56,7 +56,7 @@ func TestAuthFailsWithoutGhOnThePath(t *testing.T) {
 func TestViewPRReadsThePullRequestOfTheBranch(t *testing.T) {
 	t.Parallel()
 	r, fake := runner(t, map[string]ghtest.Reply{
-		"pr": {Stdout: `{"number":42,"url":"https://github.com/acme/api/pull/42","state":"OPEN"}`},
+		"pr": {Stdout: `{"number":42,"url":"https://github.com/acme/api/pull/42","state":"OPEN","baseRefName":"dev"}`},
 	})
 
 	dir := t.TempDir()
@@ -64,7 +64,7 @@ func TestViewPRReadsThePullRequestOfTheBranch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ViewPR() = %v, want nil", err)
 	}
-	want := gh.PR{Number: 42, URL: "https://github.com/acme/api/pull/42", State: gh.StateOpen}
+	want := gh.PR{Number: 42, URL: "https://github.com/acme/api/pull/42", State: gh.StateOpen, Base: "dev"}
 	if got != want {
 		t.Errorf("ViewPR() = %+v, want %+v", got, want)
 	}
@@ -73,7 +73,7 @@ func TestViewPRReadsThePullRequestOfTheBranch(t *testing.T) {
 	if len(calls) != 1 {
 		t.Fatalf("calls = %+v, want one", calls)
 	}
-	if calls[0].Args != "pr view login-screen --json number,url,state" {
+	if calls[0].Args != "pr view login-screen --json number,url,state,baseRefName" {
 		t.Errorf("args = %q, want the branch and the fields the app reads", calls[0].Args)
 	}
 	if calls[0].Dir != dir {

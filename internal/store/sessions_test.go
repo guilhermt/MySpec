@@ -168,6 +168,41 @@ func TestSessionsDeleteTakesTheStagesAndTheirEntries(t *testing.T) {
 	}
 }
 
+func TestSessionsDeleteByTaskTakesEveryStageAndItsEntries(t *testing.T) {
+	t.Parallel()
+	s := newStore(t)
+
+	taskID, sessionID := seedSession(t, s)
+	if err := s.Sessions.Insert(t.Context(), newSession("sess-2", taskID, task.StageTechSpec)); err != nil {
+		t.Fatalf("Insert() = %v, want nil", err)
+	}
+	if err := s.Entries.Insert(t.Context(), sessionID, newEntry("entry-1", 1, "hello")); err != nil {
+		t.Fatalf("Entries.Insert() = %v, want nil", err)
+	}
+
+	if err := s.Sessions.DeleteByTask(t.Context(), taskID); err != nil {
+		t.Fatalf("DeleteByTask() = %v, want nil", err)
+	}
+
+	for _, stage := range []task.Stage{task.StagePRD, task.StageTechSpec} {
+		if _, err := s.Sessions.Get(t.Context(), taskID, string(stage)); !errors.Is(err, session.ErrNotFound) {
+			t.Errorf("Get(%s) = %v, want session.ErrNotFound", stage, err)
+		}
+	}
+	entries, err := s.Entries.List(t.Context(), sessionID)
+	if err != nil {
+		t.Fatalf("Entries.List() = %v, want nil", err)
+	}
+	if len(entries) != 0 {
+		t.Errorf("Entries.List() returned %d entries, want none", len(entries))
+	}
+
+	// A task without sessions is not an error either.
+	if err := s.Sessions.DeleteByTask(t.Context(), taskID); err != nil {
+		t.Errorf("DeleteByTask() again = %v, want nil", err)
+	}
+}
+
 func TestSessionsDeleteWithoutStagesDoesNothing(t *testing.T) {
 	t.Parallel()
 	s := newStore(t)

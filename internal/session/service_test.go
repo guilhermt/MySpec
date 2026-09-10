@@ -997,6 +997,40 @@ func TestCloseTaskClosesEverySessionOfIt(t *testing.T) {
 	}
 }
 
+func TestDiscardTaskStopsTheSessionsAndThrowsThemAway(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	info := taskInfo(t, "t1")
+	f.start(t, info)
+	f.start(t, atStage(info, prompts.StageTechSpec))
+	f.start(t, taskInfo(t, "t2"))
+	f.waitIdle(t, prd("t1"))
+
+	if err := f.service.DiscardTask(t.Context(), "t1"); err != nil {
+		t.Fatalf("DiscardTask() = %v, want nil", err)
+	}
+
+	if _, ok := f.service.Summary(prd("t1")); ok {
+		t.Error("Summary() found a run, want every session of the task closed")
+	}
+	_, err := f.service.Transcript(t.Context(), prd("t1"))
+	wantErrIs(t, err, session.ErrNotFound)
+	for _, stage := range []prompts.Stage{prompts.StagePRD, prompts.StageTechSpec} {
+		if _, getErr := f.sessions.Get(t.Context(), "t1", string(stage)); !errors.Is(getErr, session.ErrNotFound) {
+			t.Errorf("Get(%s) = %v, want session.ErrNotFound", stage, getErr)
+		}
+	}
+
+	// Only the task that was archived goes; another one keeps its conversation.
+	if _, ok := f.service.Summary(prd("t2")); !ok {
+		t.Error("Summary() lost the session of the other task")
+	}
+	if _, getErr := f.sessions.Get(t.Context(), "t2", string(prompts.StagePRD)); getErr != nil {
+		t.Errorf("Get(t2) = %v, want nil", getErr)
+	}
+}
+
 func TestSendFromAppMarksTheMessageWithoutCountingIt(t *testing.T) {
 	t.Parallel()
 

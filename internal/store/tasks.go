@@ -16,13 +16,28 @@ type TasksRepo struct{ db *sql.DB }
 
 // taskColumns is the column list every task query selects, in scan order.
 const taskColumns = `id, workspace_path, name, repo_path, initial_context, stage, revisiting,
-	artifacts_dir, artifact_version, created_at, updated_at`
+	artifacts_dir, artifact_version, archived_at, created_at, updated_at`
 
-// ListByWorkspace returns the tasks of a workspace in creation order.
+// ListByWorkspace returns the tasks a workspace still holds, in creation
+// order. The archived ones are not among them.
 func (r *TasksRepo) ListByWorkspace(ctx context.Context, workspacePath string) ([]task.Task, error) {
 	const query = `SELECT ` + taskColumns + ` FROM tasks
-		WHERE workspace_path = ? ORDER BY created_at, name`
+		WHERE workspace_path = ? AND archived_at IS NULL ORDER BY created_at, name`
 
+	return r.listTasks(ctx, query, workspacePath)
+}
+
+// ListArchived returns the archived tasks of a workspace, the most recently
+// archived first.
+func (r *TasksRepo) ListArchived(ctx context.Context, workspacePath string) ([]task.Task, error) {
+	const query = `SELECT ` + taskColumns + ` FROM tasks
+		WHERE workspace_path = ? AND archived_at IS NOT NULL ORDER BY archived_at DESC, name`
+
+	return r.listTasks(ctx, query, workspacePath)
+}
+
+// listTasks runs a query of the task columns for one workspace.
+func (r *TasksRepo) listTasks(ctx context.Context, query, workspacePath string) ([]task.Task, error) {
 	rows, err := r.db.QueryContext(ctx, query, workspacePath)
 	if err != nil {
 		return nil, fmt.Errorf("list tasks of %s: %w", workspacePath, err)
@@ -62,7 +77,7 @@ func (r *TasksRepo) Get(ctx context.Context, id string) (task.Task, error) {
 func (r *TasksRepo) Insert(ctx context.Context, t task.Task) error {
 	const taken = `SELECT 1 FROM tasks WHERE workspace_path = ? AND name = ?`
 	const stmt = `INSERT INTO tasks (` + taskColumns + `)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -81,7 +96,8 @@ func (r *TasksRepo) Insert(ctx context.Context, t task.Task) error {
 
 	_, err = tx.ExecContext(ctx, stmt,
 		t.ID, t.WorkspacePath, t.Name, nullString(t.RepoPath), t.InitialContext, string(t.Stage), t.Revisiting,
-		t.ArtifactsDir, t.ArtifactVersion, formatTime(t.CreatedAt), formatTime(t.UpdatedAt))
+		t.ArtifactsDir, t.ArtifactVersion, nullTime(t.ArchivedAt),
+		formatTime(t.CreatedAt), formatTime(t.UpdatedAt))
 	if err != nil {
 		return fmt.Errorf("insert task %s: %w", t.Name, err)
 	}
@@ -111,6 +127,16 @@ func (r *TasksRepo) UpdateArtifactVersion(ctx context.Context, id string, versio
 	return nil
 }
 
+// UpdateArchived records the instant a task left the workspace.
+func (r *TasksRepo) UpdateArchived(ctx context.Context, id string, archivedAt, updatedAt time.Time) error {
+	const stmt = `UPDATE tasks SET archived_at = ?, updated_at = ? WHERE id = ?`
+
+	if _, err := r.db.ExecContext(ctx, stmt, formatTime(archivedAt), formatTime(updatedAt), id); err != nil {
+		return fmt.Errorf("update archived of task %s: %w", id, err)
+	}
+	return nil
+}
+
 // Delete removes a task and, by cascade, its session and transcript.
 func (r *TasksRepo) Delete(ctx context.Context, id string) error {
 	const stmt = `DELETE FROM tasks WHERE id = ?`
@@ -126,10 +152,11 @@ func scanTask(row scanner) (task.Task, error) {
 		t                    task.Task
 		repoPath             sql.NullString
 		stage                string
+		archivedAt           sql.NullString
 		createdAt, updatedAt string
 	)
 	err := row.Scan(&t.ID, &t.WorkspacePath, &t.Name, &repoPath, &t.InitialContext, &stage, &t.Revisiting,
-		&t.ArtifactsDir, &t.ArtifactVersion, &createdAt, &updatedAt)
+		&t.ArtifactsDir, &t.ArtifactVersion, &archivedAt, &createdAt, &updatedAt)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		return task.Task{}, err
@@ -139,6 +166,11 @@ func scanTask(row scanner) (task.Task, error) {
 
 	t.RepoPath = repoPath.String
 	t.Stage = task.Stage(stage)
+	if archivedAt.Valid {
+		if t.ArchivedAt, err = parseTime(archivedAt.String, "task "+t.ID); err != nil {
+			return task.Task{}, err
+		}
+	}
 	if t.CreatedAt, err = parseTime(createdAt, "task "+t.ID); err != nil {
 		return task.Task{}, err
 	}

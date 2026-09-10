@@ -7,6 +7,7 @@ import {
   approveStep,
   backToStage,
   cleanAndStartStep,
+  closeRepo,
   continueStage,
   createTask,
   deleteTask,
@@ -106,8 +107,10 @@ describe("task actions", () => {
     await reviewAgain("task-1", "/repo/web");
     await retryRepo("task-1", "/repo/web");
     await refreshPR("task-1", "/repo/web");
+    await closeRepo("task-1", "/repo/web");
 
     expect(api.deleteTask).toHaveBeenCalledWith("task-1");
+    expect(api.closeRepo).toHaveBeenCalledWith("task-1", "/repo/web");
     expect(api.sendMessage).toHaveBeenCalledWith("task-1", "prd", "go on");
     expect(api.removePending).toHaveBeenCalledWith("task-1", "prd", "entry-1");
     expect(api.interrupt).toHaveBeenCalledWith("task-1", "prd");
@@ -167,6 +170,29 @@ describe("task actions", () => {
 
     expect(useAppStore.getState().error).toBe("the draft is empty");
     expect(useAppStore.getState().prDrafts[repoKey("task-1", "/repo/web")]).toEqual(draft);
+  });
+
+  it("keeps what the deletion could not remove from disk", async () => {
+    const leftover = {
+      repository: "web",
+      repoPath: "/repo/web",
+      path: "/worktrees/add-login-web",
+      branch: "add-login",
+      error: "permission denied",
+    };
+    vi.mocked(api.deleteTask).mockResolvedValueOnce({ leftovers: [leftover] });
+
+    await deleteTask("task-1");
+
+    expect(useAppStore.getState().leftovers).toEqual([leftover]);
+  });
+
+  it("says nothing when the deletion left nothing behind", async () => {
+    vi.mocked(api.deleteTask).mockResolvedValueOnce({ leftovers: null });
+
+    await deleteTask("task-1");
+
+    expect(useAppStore.getState().leftovers).toBeNull();
   });
 
   it("reports a failed task action in the banner", async () => {

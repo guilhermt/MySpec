@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "@/app/App";
 import { api } from "@/lib/wails";
 import { renderWithStore, resetAppStore } from "@/test/render";
-import { makeState, makeTask, subscriberCount } from "@/test/wails-mock";
+import { makeArchivedTask, makeState, makeTask, subscriberCount } from "@/test/wails-mock";
 
 beforeEach(() => {
   resetAppStore();
@@ -94,5 +94,41 @@ describe("App", () => {
 
     expect(await screen.findByRole("heading", { name: "projects" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Delete task" })).not.toBeInTheDocument();
+  });
+
+  it("opens the history over the node panel and comes back to it", async () => {
+    vi.mocked(api.getState).mockResolvedValue(makeState({ history: [makeArchivedTask()] }));
+    const { user } = renderWithStore(<App />);
+    await screen.findByRole("treeitem", { name: "projects Root" });
+
+    await user.click(screen.getByRole("button", { name: /^History/ }));
+
+    expect(screen.getByRole("heading", { name: "History" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "projects" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("treeitem", { name: "projects Root" }));
+
+    expect(screen.getByRole("heading", { name: "projects" })).toBeInTheDocument();
+  });
+
+  it("gives the main area to an archived task, and to a live one over it", async () => {
+    vi.mocked(api.getState).mockResolvedValue(
+      makeState({
+        tasks: [makeTask()],
+        history: [makeArchivedTask({ id: "old", name: "fix-header" })],
+      }),
+    );
+    const { user } = renderWithStore(<App />);
+    await screen.findByRole("treeitem", { name: /add-login/ });
+
+    await user.click(screen.getByRole("button", { name: /^History/ }));
+    await user.click(screen.getByRole("button", { name: /fix-header/ }));
+
+    expect(screen.getByText("Archived")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("treeitem", { name: /add-login/ }));
+
+    expect(screen.queryByText("Archived")).not.toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Artifacts" })).toBeInTheDocument();
   });
 });

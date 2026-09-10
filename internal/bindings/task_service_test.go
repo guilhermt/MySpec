@@ -185,7 +185,7 @@ func TestDeleteTaskRemovesTheTaskAndItsFolder(t *testing.T) {
 	f, dir, id := createdTask(t)
 	artifacts := task.ArtifactsDir(f.dataDir, dir, "login-screen")
 
-	if err := f.tasks.DeleteTask(id); err != nil {
+	if _, err := f.tasks.DeleteTask(id); err != nil {
 		t.Fatalf("DeleteTask(%s) = %v, want nil", id, err)
 	}
 	if tasks := f.workspace.GetState().Tasks; len(tasks) != 0 {
@@ -572,6 +572,7 @@ func TestPullRequestOperationsReportWhatTheUserGotWrong(t *testing.T) {
 		{"discard a draft", func() error { return f.tasks.DiscardDraft(id, repoPath) }},
 		{"retry a repository", func() error { return f.tasks.RetryRepo(id, repoPath) }},
 		{"refresh a pull request", func() error { return f.tasks.RefreshPR(id, repoPath) }},
+		{"close a repository", func() error { return f.tasks.CloseRepo(id, repoPath) }},
 		{"open a repository in the editor", func() error { return f.tasks.OpenInEditor(id, repoPath) }},
 		{"open a file of a repository", func() error { return f.tasks.OpenFileInEditor(id, repoPath, "main.go") }},
 	}
@@ -770,13 +771,51 @@ func TestDeleteTaskRemovesTheWorktrees(t *testing.T) {
 	f.waitStep(t, id, 1, "awaiting_review")
 	wt := worktree.Path(dir, "api", "login-screen")
 
-	if err := f.tasks.DeleteTask(id); err != nil {
+	result, err := f.tasks.DeleteTask(id)
+	if err != nil {
 		t.Fatalf("DeleteTask(%s) = %v, want nil", id, err)
+	}
+	// The frontend maps over what stayed on disk without checking for null.
+	if result.Leftovers == nil {
+		t.Error("leftovers = nil, want an empty slice")
+	}
+	if len(result.Leftovers) != 0 {
+		t.Errorf("leftovers = %+v, want nothing left behind", result.Leftovers)
 	}
 	if tasks := f.workspace.GetState().Tasks; len(tasks) != 0 {
 		t.Errorf("state has %d tasks, want none", len(tasks))
 	}
 	assertWorktreeGone(t, wt, filepath.Join(dir, "api"))
+}
+
+func TestPreviewDeleteSaysWhatTheDeletionWouldDestroy(t *testing.T) {
+	t.Parallel()
+
+	f, dir, id := plannedTask(t)
+	f.waitStep(t, id, 1, "awaiting_review")
+
+	preview, err := f.tasks.PreviewDelete(id)
+	if err != nil {
+		t.Fatalf("PreviewDelete(%s) = %v, want nil", id, err)
+	}
+
+	if !preview.SessionRunning {
+		t.Error("sessionRunning = false, want the conversation of the step counted")
+	}
+	if len(preview.Worktrees) != 1 || preview.Worktrees[0].Path != worktree.Path(dir, "api", "login-screen") {
+		t.Errorf("worktrees = %+v, want the one of the step", preview.Worktrees)
+	}
+	// The step wrote a file the user has not committed yet.
+	if !preview.Worktrees[0].Dirty || preview.Worktrees[0].Files == 0 {
+		t.Errorf("worktree = %+v, want the work it holds counted", preview.Worktrees[0])
+	}
+	if len(preview.Branches) != 1 || preview.Branches[0].Name != "login-screen" {
+		t.Errorf("branches = %+v, want the branch of the task", preview.Branches)
+	}
+	// The task never reached the pull request stage.
+	if len(preview.PRs) != 0 {
+		t.Errorf("pull requests = %+v, want none", preview.PRs)
+	}
 }
 
 // assertWorktreeGone checks that neither the worktree of a task nor its branch

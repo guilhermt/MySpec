@@ -1,15 +1,25 @@
 import type {
   ActionEntry,
+  ArchivedRepo,
+  ArchivedStep,
+  ArchivedTask,
   AssistantEntry,
+  BranchPreview,
+  CloseResult,
+  CloseStep,
   CreateTaskRequest,
+  DeletePreview,
+  DeleteResult,
   Entry,
   ErrorEntry,
+  Leftover,
   MarkerEntry,
   Notice,
   PermissionEntry,
   PlanProblem,
   PRBlock,
   PRDraft,
+  PRPreview,
   PRReport,
   Question,
   QuestionEntry,
@@ -27,6 +37,7 @@ import type {
   TranscriptEvent,
   UserEntry,
   Workspace,
+  WorktreePreview,
 } from "@bindings/models";
 import * as SettingsService from "@bindings/settingsservice";
 import * as TaskService from "@bindings/taskservice";
@@ -35,16 +46,26 @@ import { Browser, Events } from "@wailsio/runtime";
 
 export type {
   ActionEntry,
+  ArchivedRepo,
+  ArchivedStep,
+  ArchivedTask,
   AssistantEntry,
+  BranchPreview,
+  CloseResult,
+  CloseStep,
   CreateTaskRequest,
+  DeletePreview,
+  DeleteResult,
   Entry,
   ErrorEntry,
+  Leftover,
   MarkerEntry,
   Notice,
   PermissionEntry,
   PlanProblem,
   PRBlock,
   PRDraft,
+  PRPreview,
   PRReport,
   Question,
   QuestionEntry,
@@ -62,6 +83,7 @@ export type {
   TranscriptEvent,
   UserEntry,
   Workspace,
+  WorktreePreview,
 };
 
 export type ThemePreference = "system" | "light" | "dark";
@@ -92,7 +114,24 @@ export type RepoStatus =
   | "ready_to_approve"
   | "committing"
   | "done"
+  | "merged"
+  | "pr_closed"
+  | "closing"
+  | "closed"
   | "skipped";
+
+/** CloseOutcome is what became of one part of the closing of a repository. */
+export type CloseOutcome = "done" | "skipped" | "failed";
+
+/** CloseSkipReason is why one part of the closing was left alone. */
+export type CloseSkipReason =
+  | "missing"
+  | "not_merged"
+  | "not_checked_out"
+  | "dirty"
+  | "no_upstream"
+  | "diverged"
+  | "up_to_date";
 
 /** PRBlockReason is why the PR stage of a repository cannot go on. */
 export type PRBlockReason =
@@ -217,10 +256,40 @@ export function asRepoStatus(value: string): RepoStatus {
     case "ready_to_approve":
     case "committing":
     case "done":
+    case "merged":
+    case "pr_closed":
+    case "closing":
+    case "closed":
     case "skipped":
       return value;
     default:
       return "preparing";
+  }
+}
+
+export function asCloseOutcome(value: string): CloseOutcome {
+  switch (value) {
+    case "done":
+    case "skipped":
+    case "failed":
+      return value;
+    default:
+      return "failed";
+  }
+}
+
+export function asCloseSkipReason(value: string): CloseSkipReason {
+  switch (value) {
+    case "missing":
+    case "not_merged":
+    case "not_checked_out":
+    case "dirty":
+    case "no_upstream":
+    case "diverged":
+    case "up_to_date":
+      return value;
+    default:
+      return "missing";
   }
 }
 
@@ -381,7 +450,8 @@ export const api = {
   setTheme: (preference: ThemePreference): Promise<void> => SettingsService.SetTheme(preference),
 
   createTask: (req: CreateTaskRequest): Promise<string> => TaskService.CreateTask(req),
-  deleteTask: (taskId: string): Promise<void> => TaskService.DeleteTask(taskId),
+  deleteTask: (taskId: string): Promise<DeleteResult> => TaskService.DeleteTask(taskId),
+  previewDelete: (taskId: string): Promise<DeletePreview> => TaskService.PreviewDelete(taskId),
   getTranscript: (taskId: string, stage: string): Promise<Transcript> =>
     TaskService.GetTranscript(taskId, stage),
   sendMessage: (taskId: string, stage: string, text: string): Promise<void> =>
@@ -429,6 +499,8 @@ export const api = {
     TaskService.RetryRepo(taskId, repoPath),
   refreshPR: (taskId: string, repoPath: string): Promise<void> =>
     TaskService.RefreshPR(taskId, repoPath),
+  closeRepo: (taskId: string, repoPath: string): Promise<void> =>
+    TaskService.CloseRepo(taskId, repoPath),
   openInEditor: (taskId: string, repoPath: string): Promise<void> =>
     TaskService.OpenInEditor(taskId, repoPath),
   openFileInEditor: (taskId: string, repoPath: string, path: string): Promise<void> =>

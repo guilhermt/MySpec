@@ -183,6 +183,12 @@ func Run(cfg Config) int {
 	}
 	a.watchSystemTheme()
 
+	// The pull requests the app waits for are merged outside it, so it asks
+	// GitHub about them on a timer of its own for as long as it runs.
+	pollCtx, stopPoll := context.WithCancel(context.Background())
+	defer stopPoll()
+	go a.pollPRs(pollCtx)
+
 	wails := application.New(a.options(cfg, wsSvc, themeSvc, tasks, sessions, flowSvc, log))
 	a.setWails(wails)
 	a.openWindow(cfg)

@@ -92,6 +92,50 @@ func TestPRRunsCarryTheBlockOnlyWhenBlocked(t *testing.T) {
 	}
 }
 
+func TestPRRunsKeepTheBaseAndWhatTheClosingDid(t *testing.T) {
+	t.Parallel()
+	s := newStore(t)
+
+	taskID := seedTask(t, s)
+	run := newPRRun(taskID, "/ws/api", task.PRClosed)
+	run.PR = task.PRDetails{
+		Number: 12, URL: "https://github.com/acme/api/pull/12",
+		State: task.PRStateMerged, Base: "dev", CheckedAt: fixedTime.Add(time.Minute),
+	}
+	run.Close = &task.CloseResult{
+		Worktree: task.CloseStep{Outcome: task.OutcomeDone},
+		Branch: task.CloseStep{
+			Outcome: task.OutcomeSkipped, Reason: task.SkipNotMerged, Detail: "add-login",
+		},
+		Base:         task.CloseStep{Outcome: task.OutcomeFailed, Detail: "git: could not fetch origin"},
+		WorktreePath: "/ws/.myspec/worktrees/api/add-login",
+		BranchName:   "add-login",
+		BaseBranch:   "dev",
+		BaseCommits:  3,
+		ClosedAt:     fixedTime.Add(2 * time.Minute),
+	}
+	if err := s.Tasks.UpsertPRRun(t.Context(), run); err != nil {
+		t.Fatalf("UpsertPRRun() = %v, want nil", err)
+	}
+
+	if diff := cmp.Diff([]task.PRRun{run}, listPRRuns(t, s, taskID)); diff != "" {
+		t.Errorf("ListPRRuns() mismatch (-want +got):\n%s", diff)
+	}
+
+	// A repository that never closed carries no result at all.
+	open := newPRRun(taskID, "/ws/web", task.PRDone)
+	if err := s.Tasks.UpsertPRRun(t.Context(), open); err != nil {
+		t.Fatalf("UpsertPRRun(open) = %v, want nil", err)
+	}
+	got := listPRRuns(t, s, taskID)
+	if got[1].Close != nil {
+		t.Errorf("Close = %+v, want nil", got[1].Close)
+	}
+	if got[1].PR.Base != "" {
+		t.Errorf("PR.Base = %q, want empty", got[1].PR.Base)
+	}
+}
+
 func TestPRRunsWithoutAReadingCarryNoInstant(t *testing.T) {
 	t.Parallel()
 	s := newStore(t)

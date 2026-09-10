@@ -1,6 +1,10 @@
 import { vi } from "vitest";
 import type {
+  ArchivedTask,
+  CloseResult,
   CreateTaskRequest,
+  DeletePreview,
+  DeleteResult,
   Entry,
   EntryKind,
   PermissionDecision,
@@ -24,7 +28,12 @@ export const api = {
   setTheme: vi.fn<(preference: ThemePreference) => Promise<void>>(() => Promise.resolve()),
 
   createTask: vi.fn<(req: CreateTaskRequest) => Promise<string>>(() => Promise.resolve("task-1")),
-  deleteTask: vi.fn<(taskId: string) => Promise<void>>(() => Promise.resolve()),
+  deleteTask: vi.fn<(taskId: string) => Promise<DeleteResult>>(() =>
+    Promise.resolve({ leftovers: [] }),
+  ),
+  previewDelete: vi.fn<(taskId: string) => Promise<DeletePreview>>(() =>
+    Promise.resolve(makeDeletePreview()),
+  ),
   getTranscript: vi.fn<(taskId: string, stage: string) => Promise<Transcript>>((taskId, stage) =>
     Promise.resolve(makeTranscript({ taskId, stage })),
   ),
@@ -75,6 +84,7 @@ export const api = {
   discardDraft: vi.fn<(taskId: string, repoPath: string) => Promise<void>>(() => Promise.resolve()),
   retryRepo: vi.fn<(taskId: string, repoPath: string) => Promise<void>>(() => Promise.resolve()),
   refreshPR: vi.fn<(taskId: string, repoPath: string) => Promise<void>>(() => Promise.resolve()),
+  closeRepo: vi.fn<(taskId: string, repoPath: string) => Promise<void>>(() => Promise.resolve()),
   openInEditor: vi.fn<(taskId: string, repoPath: string) => Promise<void>>(() => Promise.resolve()),
   openFileInEditor: vi.fn<(taskId: string, repoPath: string, path: string) => Promise<void>>(() =>
     Promise.resolve(),
@@ -142,6 +152,7 @@ export function makeState(overrides: Partial<State> = {}): State {
     systemDark: false,
     notice: null,
     tasks: [],
+    history: [],
     ...overrides,
   };
 }
@@ -172,6 +183,55 @@ export function makeTask(overrides: Partial<TaskSummary> = {}): TaskSummary {
     lastError: "",
     createdAt: "2026-09-05T10:00:00Z",
     updatedAt: "2026-09-05T10:00:00Z",
+    ...overrides,
+  };
+}
+
+export function makeArchivedTask(overrides: Partial<ArchivedTask> = {}): ArchivedTask {
+  return {
+    id: "task-1",
+    name: "add-login",
+    repoPath: "",
+    hasPrd: true,
+    hasTechSpec: true,
+    steps: [
+      {
+        number: 1,
+        file: "1-add-the-login-form.md",
+        title: "Add the login form",
+        repository: "web",
+      },
+    ],
+    repos: [
+      {
+        repository: "web",
+        repoPath: "/home/dev/projects/web",
+        prNumber: 12,
+        prUrl: "https://github.com/dev/web/pull/12",
+        prState: "merged",
+      },
+    ],
+    artifactVersion: 3,
+    createdAt: "2026-09-05T10:00:00Z",
+    archivedAt: "2026-09-08T10:00:00Z",
+    ...overrides,
+  };
+}
+
+export function makeDeletePreview(overrides: Partial<DeletePreview> = {}): DeletePreview {
+  return { sessionRunning: false, worktrees: [], branches: [], prs: [], ...overrides };
+}
+
+export function makeCloseResult(overrides: Partial<CloseResult> = {}): CloseResult {
+  return {
+    worktree: { outcome: "done", reason: "", detail: "" },
+    branch: { outcome: "done", reason: "", detail: "" },
+    base: { outcome: "done", reason: "", detail: "" },
+    worktreePath: "/home/dev/.local/share/myspec/worktrees/add-login-web",
+    branchName: "add-login",
+    baseBranch: "dev",
+    baseCommits: 3,
+    closedAt: "2026-09-08T10:00:00Z",
     ...overrides,
   };
 }
@@ -213,6 +273,10 @@ export function makeRepoPR(overrides: Partial<RepoPR> = {}): RepoPR {
     prUrl: "",
     prState: "",
     checkedAt: "",
+    prBase: "",
+    checkError: "",
+    canClose: false,
+    close: null,
     sessionStage: "pr:web",
     sessionStatus: "waiting",
     turnRunning: false,

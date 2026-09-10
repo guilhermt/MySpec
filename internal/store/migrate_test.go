@@ -17,7 +17,7 @@ const (
 	stagesVersion  = 3
 	commitsVersion = 5
 	prVersion      = 6
-	latestVersion  = 6
+	latestVersion  = 7
 )
 
 // mapFS builds a migrations tree with the given file names.

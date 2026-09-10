@@ -22,7 +22,10 @@ import (
 // Tasks is what the flow needs from internal/task.
 type Tasks interface {
 	Get(id string) (task.Task, bool)
+	Lookup(id string) (task.Task, bool) // the workspace and the history
 	List() []task.Task
+	ListArchived() []task.Task
+	Archive(ctx context.Context, id string) (task.Task, error)
 	Artifacts(id string) (task.Artifacts, bool) // the last inspection, for snapshots
 	Inspect(id string) (task.Artifacts, error)
 	SetStage(ctx context.Context, id string, stage task.Stage, revisiting bool) (task.Task, error)
@@ -31,6 +34,7 @@ type Tasks interface {
 	PRRuns(id string) []task.PRRun
 	SetPRRun(ctx context.Context, id, repoPath string, status task.PRStatus, block *task.PRBlock) (task.PRRun, error)
 	SetPRDetails(ctx context.Context, id, repoPath string, pr task.PRDetails) (task.PRRun, error)
+	SetPRClosed(ctx context.Context, id, repoPath string, result task.CloseResult) (task.PRRun, error)
 	SetPRReviewed(ctx context.Context, id, repoPath, commit string, pass int) (task.PRRun, error)
 	ClearPRRuns(ctx context.Context, id string) error
 	StepRuns(id string) []task.StepRun
@@ -48,8 +52,10 @@ type Sessions interface {
 	Discard(ctx context.Context, taskID string, stages ...string) error
 	Close(ctx context.Context, k session.Key) error
 	CloseTask(ctx context.Context, taskID string) error
+	DiscardTask(ctx context.Context, taskID string) error
 	Resume(ctx context.Context, k session.Key) error
 	Summary(k session.Key) (session.Summary, bool)
+	Summaries() map[session.Key]session.Summary
 	SendFromApp(ctx context.Context, k session.Key, text string) error
 	SendCorrection(ctx context.Context, k session.Key, text string) error
 	MarkPRReview(ctx context.Context, k session.Key, pass int)
@@ -77,10 +83,13 @@ type Worktrees interface {
 	List(taskID string) []worktree.Worktree
 	Base(ctx context.Context, wt worktree.Worktree) (string, error)
 	Ahead(ctx context.Context, wt worktree.Worktree, base string) (int, error)
+	Merged(ctx context.Context, wt worktree.Worktree, base string) (bool, error)
 	Ensure(ctx context.Context, t task.Task, repo task.Repository, onPhase func(worktree.Phase)) (worktree.Worktree, error)
 	Status(ctx context.Context, wt worktree.Worktree) (git.Status, error)
 	Commit(ctx context.Context, wt worktree.Worktree, rev string) (git.Commit, error)
 	Clean(ctx context.Context, wt worktree.Worktree) error
+	Close(ctx context.Context, wt worktree.Worktree, base string, policy worktree.BranchPolicy) task.CloseResult
+	Purge(ctx context.Context, taskID string) []worktree.Leftover
 	RemoveAll(ctx context.Context, taskID string) error
 }
 
@@ -156,6 +165,10 @@ type taskLock struct {
 	// repoNoCommit says the last approval of a repository ended without a
 	// commit. Like the one of a step, it is transient on purpose.
 	repoNoCommit map[string]bool
+	// checkErrors is what the last reading of the pull request of a repository
+	// awaiting closing said when it failed, by repository; "" or absent when it
+	// succeeded.
+	checkErrors map[string]string
 }
 
 // repoWork is the goroutine that talks to git and to gh about one repository
@@ -163,6 +176,10 @@ type taskLock struct {
 type repoWork struct {
 	running bool
 	cancel  context.CancelFunc
+	// pending says that work was asked for while this one was running and was
+	// refused: the task is evaluated again once this one ends, so that nothing
+	// the app asked for is forgotten.
+	pending bool
 }
 
 // TaskInfo is what the session of a task needs to know about it at the stage

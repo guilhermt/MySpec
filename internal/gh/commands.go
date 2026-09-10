@@ -23,10 +23,11 @@ type PR struct {
 	Number int
 	URL    string
 	State  State
+	Base   string // the branch the pull request merges into, as GitHub names it
 }
 
 // prFields are the fields of a pull request the app asks gh for.
-const prFields = "number,url,state"
+const prFields = "number,url,state,baseRefName"
 
 // noPR is what gh says, in lower case, about a branch with no pull request.
 const noPR = "no pull requests found"
@@ -62,14 +63,15 @@ func (r *Runner) ViewPR(ctx context.Context, dir, branch string) (PR, error) {
 	}
 
 	var body struct {
-		Number int    `json:"number"`
-		URL    string `json:"url"`
-		State  string `json:"state"`
+		Number      int    `json:"number"`
+		URL         string `json:"url"`
+		State       string `json:"state"`
+		BaseRefName string `json:"baseRefName"`
 	}
 	if err := json.Unmarshal([]byte(out), &body); err != nil {
 		return PR{}, fmt.Errorf("gh pr view %s: %w", branch, err)
 	}
-	return PR{Number: body.Number, URL: body.URL, State: stateOf(body.State)}, nil
+	return PR{Number: body.Number, URL: body.URL, State: stateOf(body.State), Base: body.BaseRefName}, nil
 }
 
 // stateOf normalizes the state gh writes in upper case. A value the app does

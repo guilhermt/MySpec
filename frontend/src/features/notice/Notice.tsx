@@ -5,14 +5,15 @@ import { noticeMessage } from "@/features/notice/messages";
 import { cn } from "@/lib/utils";
 import type { NoticeReason } from "@/lib/wails";
 
-interface BannerProps {
+export interface BannerProps {
   title: string;
   children: ReactNode;
   onDismiss: () => void;
   className?: string;
 }
 
-function Banner({ title, children, onDismiss, className }: BannerProps) {
+/** Banner is the shape every notice of the app takes: a title, a body, a way out. */
+export function Banner({ title, children, onDismiss, className }: BannerProps) {
   return (
     <div
       role="status"
@@ -24,7 +25,8 @@ function Banner({ title, children, onDismiss, className }: BannerProps) {
       <TriangleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
       <div className="min-w-0 flex-1">
         <p className="font-medium">{title}</p>
-        <p className="break-words">{children}</p>
+        {/* A div, not a paragraph: a notice may carry a list of its own. */}
+        <div className="break-words">{children}</div>
       </div>
       <Button
         variant="ghost"

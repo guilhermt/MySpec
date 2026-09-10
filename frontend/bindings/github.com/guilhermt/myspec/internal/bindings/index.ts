@@ -12,14 +12,24 @@ export {
 
 export type {
     ActionEntry,
+    ArchivedRepo,
+    ArchivedStep,
+    ArchivedTask,
     AssistantEntry,
+    BranchPreview,
+    CloseResult,
+    CloseStep,
     CreateTaskRequest,
+    DeletePreview,
+    DeleteResult,
     Entry,
     ErrorEntry,
+    Leftover,
     MarkerEntry,
     Notice,
     PRBlock,
     PRDraft,
+    PRPreview,
     PRReport,
     PermissionEntry,
     PlanProblem,
@@ -38,5 +48,6 @@ export type {
     Transcript,
     TranscriptEvent,
     UserEntry,
-    Workspace
+    Workspace,
+    WorktreePreview
 } from "./models.js";

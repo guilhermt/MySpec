@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { defaultRepoPath, everyRepoHasPR, repoAwaitsUser, reposOf } from "@/lib/repos";
+import {
+  closedCount,
+  defaultRepoPath,
+  everyRepoHasPR,
+  everyRepoReviewed,
+  repoAwaitsUser,
+  reposOf,
+} from "@/lib/repos";
 import { makeRepoPR, makeTask } from "@/test/wails-mock";
 
 const API = { repository: "api", repoPath: "/home/dev/projects/api", slug: "api" };
@@ -28,9 +35,17 @@ describe("repoAwaitsUser", () => {
     ["reviewing", false],
     ["committing", false],
     ["done", false],
+    ["merged", true],
+    ["pr_closed", false],
+    ["closing", false],
+    ["closed", false],
     ["skipped", false],
   ])("reads %s", (status, expected) => {
     expect(repoAwaitsUser(makeRepoPR({ status }))).toBe(expected);
+  });
+
+  it("waits for the user when the app could not confirm the merge", () => {
+    expect(repoAwaitsUser(makeRepoPR({ status: "done", canClose: true }))).toBe(true);
   });
 });
 
@@ -73,5 +88,43 @@ describe("everyRepoHasPR", () => {
   it("is false with nothing but skipped repositories, and with none at all", () => {
     expect(everyRepoHasPR([makeRepoPR({ status: "skipped" })])).toBe(false);
     expect(everyRepoHasPR([])).toBe(false);
+  });
+});
+
+describe("everyRepoReviewed", () => {
+  it("is true once every repository is through with its review", () => {
+    const repos = [
+      makeRepoPR({ status: "merged" }),
+      makeRepoPR({ ...API, status: "closed" }),
+      makeRepoPR({ repository: "docs", repoPath: "/home/dev/projects/docs", status: "skipped" }),
+    ];
+
+    expect(everyRepoReviewed(repos)).toBe(true);
+  });
+
+  it.each(["done", "merged", "pr_closed", "closing", "closed", "skipped"])(
+    "counts %s as reviewed",
+    (status) => {
+      expect(everyRepoReviewed([makeRepoPR({ status })])).toBe(true);
+    },
+  );
+
+  it("is false while one repository is still in the review", () => {
+    const repos = [makeRepoPR({ status: "done" }), makeRepoPR({ ...API, status: "in_review" })];
+
+    expect(everyRepoReviewed(repos)).toBe(false);
+  });
+
+  it("is false without repositories", () => {
+    expect(everyRepoReviewed([])).toBe(false);
+  });
+});
+
+describe("closedCount", () => {
+  it("counts the repositories the user has closed", () => {
+    const repos = [makeRepoPR({ status: "closed" }), makeRepoPR({ ...API, status: "merged" })];
+
+    expect(closedCount(repos)).toBe(1);
+    expect(closedCount([])).toBe(0);
   });
 });

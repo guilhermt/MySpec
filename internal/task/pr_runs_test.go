@@ -102,6 +102,57 @@ func TestSetPRRunKeepsThePullRequestItDoesNotChange(t *testing.T) {
 	}
 }
 
+func TestSetPRClosedRecordsWhatTheClosingDid(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	created := f.create(t, "add-login", "")
+	repo := f.repos[0]
+	details := task.PRDetails{
+		Number: 12, URL: "https://github.com/acme/api/pull/12",
+		State: task.PRStateMerged, Base: "dev", CheckedAt: prCheckedAt,
+	}
+	if _, err := f.service.SetPRDetails(t.Context(), created.ID, repo, details); err != nil {
+		t.Fatalf("SetPRDetails() = %v, want nil", err)
+	}
+	if _, err := f.service.SetPRRun(t.Context(), created.ID, repo, task.PRClosing, nil); err != nil {
+		t.Fatalf("SetPRRun(closing) = %v, want nil", err)
+	}
+
+	result := task.CloseResult{
+		Worktree:     task.CloseStep{Outcome: task.OutcomeDone},
+		Branch:       task.CloseStep{Outcome: task.OutcomeDone},
+		Base:         task.CloseStep{Outcome: task.OutcomeSkipped, Reason: task.SkipDirty, Detail: " M main.go"},
+		WorktreePath: "/ws/.myspec/worktrees/api/add-login",
+		BranchName:   "add-login",
+		BaseBranch:   "dev",
+		ClosedAt:     prCheckedAt,
+	}
+	run, err := f.service.SetPRClosed(t.Context(), created.ID, repo, result)
+	if err != nil {
+		t.Fatalf("SetPRClosed() = %v, want nil", err)
+	}
+	want := task.PRRun{
+		TaskID: created.ID, RepoPath: repo, Status: task.PRClosed, PR: details, Close: &result,
+		CreatedAt: base, UpdatedAt: base,
+	}
+	if diff := cmp.Diff(want, run); diff != "" {
+		t.Errorf("SetPRClosed() mismatch (-want +got):\n%s", diff)
+	}
+	if diff := cmp.Diff([]task.PRRun{want}, f.repo.prRuns(created.ID)); diff != "" {
+		t.Errorf("stored runs mismatch (-want +got):\n%s", diff)
+	}
+
+	// What a caller holds is its own, result included.
+	runs := f.service.PRRuns(created.ID)
+	runs[0].Close.Base.Reason = task.SkipDiverged
+	result.BaseBranch = "rewritten by the caller"
+	again := f.service.PRRuns(created.ID)
+	if again[0].Close.Base.Reason != task.SkipDirty || again[0].Close.BaseBranch != "dev" {
+		t.Errorf("Close = %+v, want it untouched by the caller", again[0].Close)
+	}
+}
+
 func TestPRRunsAreKeptByRepository(t *testing.T) {
 	t.Parallel()
 
