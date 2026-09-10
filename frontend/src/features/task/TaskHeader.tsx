@@ -83,7 +83,13 @@ export function TaskHeader({ task, artifactsOpen, onToggleArtifacts }: TaskHeade
         <Trash2 />
       </Button>
 
-      <DeleteTaskDialog task={task} open={deleting} onOpenChange={setDeleting} />
+      <DeleteTaskDialog
+        taskId={task.id}
+        name={task.name}
+        archived={false}
+        open={deleting}
+        onOpenChange={setDeleting}
+      />
     </header>
   );
 }

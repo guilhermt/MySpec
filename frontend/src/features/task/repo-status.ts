@@ -14,7 +14,7 @@ import { asCloseOutcome, asCloseSkipReason, asPRState, asRepoStatus } from "@/li
  * repoName is how a repository reads in the interface. The plan names the
  * repository of the workspace itself ".", which is no name at all.
  */
-export function repoName(app: State | null, repo: RepoPR): string {
+export function repoName(app: State | null, repo: Pick<RepoPR, "repository">): string {
   if (repo.repository !== "." && repo.repository !== "") {
     return repo.repository;
   }

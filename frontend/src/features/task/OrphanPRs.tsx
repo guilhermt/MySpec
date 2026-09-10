@@ -1,7 +1,7 @@
 import { ExternalLink } from "lucide-react";
 import { repoName } from "@/features/task/repo-status";
 import { reposOf } from "@/lib/repos";
-import type { RepoPR, TaskSummary } from "@/lib/wails";
+import type { PRPreview, RepoPR, TaskSummary } from "@/lib/wails";
 import { openExternal } from "@/store/actions";
 import { useAppStore } from "@/store/app-store";
 
@@ -11,16 +11,15 @@ export function openPRsOf(task: TaskSummary): readonly RepoPR[] {
 }
 
 export interface OrphanPRsProps {
-  task: TaskSummary;
+  prs: readonly PRPreview[];
 }
 
 /**
  * OrphanPRs warns about the pull requests an action leaves behind. The app
  * never closes one, so what happens to them on GitHub is the user's to decide.
  */
-export function OrphanPRs({ task }: OrphanPRsProps) {
+export function OrphanPRs({ prs }: OrphanPRsProps) {
   const app = useAppStore((state) => state.app);
-  const prs = openPRsOf(task);
 
   if (prs.length === 0) {
     return null;
@@ -34,15 +33,15 @@ export function OrphanPRs({ task }: OrphanPRsProps) {
           : "These pull requests stay open on GitHub:"}
       </p>
       <ul className="flex flex-col gap-0.5">
-        {prs.map((repo) => (
-          <li key={repo.repoPath}>
+        {prs.map((pr) => (
+          <li key={pr.repoPath}>
             <button
               type="button"
-              onClick={() => void openExternal(repo.prUrl)}
+              onClick={() => void openExternal(pr.url)}
               className="flex items-center gap-1.5 rounded-md transition-colors hover:text-foreground"
             >
-              <span className="tabular-nums">{`#${repo.prNumber}`}</span>
-              <span className="min-w-0 truncate">{repoName(app, repo)}</span>
+              <span className="tabular-nums">{`#${pr.number}`}</span>
+              <span className="min-w-0 truncate">{repoName(app, pr)}</span>
               <ExternalLink aria-hidden="true" className="size-3.5" />
             </button>
           </li>
