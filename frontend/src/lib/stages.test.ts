@@ -89,13 +89,37 @@ describe("stageState", () => {
     const task = makeTask({
       stage: "pr",
       repos: [
-        makeRepoPR({ status: "done", prNumber: 12 }),
+        makeRepoPR({ status: "in_review", prNumber: 12 }),
         makeRepoPR({ repoPath: "/home/dev/projects/api", status: "skipped" }),
       ],
     });
 
     expect(stageState(task, "pr")).toBe("done");
     expect(stageState(task, "pr_review")).toBe("current");
+  });
+
+  it("moves to the closing chip once every review is over", () => {
+    const task = makeTask({
+      stage: "pr",
+      repos: [
+        makeRepoPR({ status: "done", prNumber: 12 }),
+        makeRepoPR({ repoPath: "/home/dev/projects/api", status: "skipped" }),
+      ],
+    });
+
+    expect(stageState(task, "pr")).toBe("done");
+    expect(stageState(task, "pr_review")).toBe("done");
+    expect(stageState(task, "closing")).toBe("current");
+  });
+
+  // A repository that skipped the stage never opened a pull request, so the
+  // task reaches the closing without ever being in the review.
+  it("reaches the closing with nothing but skipped repositories", () => {
+    const task = makeTask({ stage: "pr", repos: [makeRepoPR({ status: "skipped" })] });
+
+    expect(stageState(task, "pr")).toBe("done");
+    expect(stageState(task, "pr_review")).toBe("done");
+    expect(stageState(task, "closing")).toBe("current");
   });
 
   it("stays on the PR chip before the repositories are known", () => {

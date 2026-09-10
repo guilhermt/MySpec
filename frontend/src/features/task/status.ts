@@ -1,6 +1,6 @@
 import { repoStatusTone } from "@/features/task/repo-status";
 import { currentStepDisplay } from "@/features/task/step-status";
-import { everyRepoHasPR, reposOf } from "@/lib/repos";
+import { closedCount, everyRepoHasPR, everyRepoReviewed, reposOf } from "@/lib/repos";
 import { stageLabel } from "@/lib/stages";
 import type { RepoPR, RepoStatus, TaskSummary } from "@/lib/wails";
 import { asRepoStatus, asSessionStatus, asTaskStage } from "@/lib/wails";
@@ -16,13 +16,17 @@ const REPO_PRIORITY: readonly RepoStatus[] = [
   "awaiting_decision",
   "ready_to_approve",
   "in_review",
+  "merged",
   "committing",
   "drafting",
   "reviewing",
   "opening",
+  "closing",
   "preparing",
   "done",
+  "pr_closed",
   "skipped",
+  "closed",
 ];
 
 function repoRank(repo: RepoPR): number {
@@ -62,33 +66,42 @@ function repoPhrase(repo: RepoPR): string {
     case "committing":
       return "committing";
     case "done":
+      return repo.canClose ? "merge unconfirmed" : "waiting for the merge";
+    case "merged":
+      return "merged, ready to close";
+    case "pr_closed":
+      return "PR closed without merge";
+    case "closing":
+      return "closing";
+    case "closed":
+      return "closed";
     case "skipped":
       return "ready to close";
   }
 }
 
 /**
- * prStatusLabel reads the PR stage as one line: which half of it the task is
+ * prStatusLabel reads the PR stage as one line: which third of it the task is
  * in, what the most urgent repository is doing, and how many repositories are
  * with it when the task has more than one.
  */
 function prStatusLabel(task: TaskSummary): string {
   const repos = reposOf(task);
-  const stage = everyRepoHasPR(repos) ? "PR review" : "PR";
+  const closing = everyRepoReviewed(repos);
+  const stage = closing ? "Closing" : everyRepoHasPR(repos) ? "PR review" : "PR";
   const repo = urgentRepo(repos);
   if (repo === null) {
     return stage;
   }
   const phrase = repoPhrase(repo);
-  const status = asRepoStatus(repo.status);
-  // A repository that skipped the stage has no pull request to close, so the
-  // count of the last state is of the ones that do.
-  if (status === "done" || status === "skipped") {
-    const done = repos.filter((other) => asRepoStatus(other.status) === "done").length;
+  // Once the reviews are over, what is left to count is how much of the task
+  // has already left the workspace.
+  if (closing) {
     return repos.length > 1
-      ? `${stage} · ${done} of ${repos.length} ${phrase}`
+      ? `${stage} · ${phrase} (${closedCount(repos)} of ${repos.length} closed)`
       : `${stage} · ${phrase}`;
   }
+  const status = asRepoStatus(repo.status);
   const sharing = repos.filter((other) => asRepoStatus(other.status) === status).length;
   return repos.length > 1
     ? `${stage} · ${phrase} (${sharing} of ${repos.length})`

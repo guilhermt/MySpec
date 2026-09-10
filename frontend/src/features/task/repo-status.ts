@@ -1,6 +1,14 @@
 import type { StatusTone } from "@/features/task/status";
-import type { PRBlockReason, PRState, RepoPR, State } from "@/lib/wails";
-import { asPRState, asRepoStatus } from "@/lib/wails";
+import type {
+  CloseResult,
+  CloseSkipReason,
+  CloseStep,
+  PRBlockReason,
+  PRState,
+  RepoPR,
+  State,
+} from "@/lib/wails";
+import { asCloseOutcome, asCloseSkipReason, asPRState, asRepoStatus } from "@/lib/wails";
 
 /**
  * repoName is how a repository reads in the interface. The plan names the
@@ -37,29 +45,48 @@ export function repoStatusLabel(repo: RepoPR): string {
     case "committing":
       return "Committing";
     case "done":
-      return "Waiting to be closed";
+      return "Waiting for the merge";
+    case "merged":
+      return "Merged · ready to close";
+    case "pr_closed":
+      return "Closed without merge";
+    case "closing":
+      return "Closing";
+    case "closed":
+      return "Closed";
     case "skipped":
-      return "No changes";
+      return "No changes · ready to close";
   }
 }
 
 /** repoStatusTone maps the state of a repository to the colour that carries it. */
 export function repoStatusTone(repo: RepoPR): StatusTone {
-  switch (asRepoStatus(repo.status)) {
+  const status = asRepoStatus(repo.status);
+  // A review that closed clean waits quietly for the merge, unless the app
+  // could not read the pull request and left the closing to the user.
+  if (status === "done" && repo.canClose) {
+    return "attention";
+  }
+  switch (status) {
     // Every one of these is the app waiting on the user.
     case "blocked":
     case "draft_ready":
     case "awaiting_decision":
     case "in_review":
     case "ready_to_approve":
+    case "merged":
       return "attention";
     case "preparing":
     case "drafting":
     case "opening":
     case "reviewing":
     case "committing":
+    case "closing":
       return "working";
     case "done":
+    case "pr_closed":
+      return "idle";
+    case "closed":
     case "skipped":
       return "done";
   }
@@ -111,9 +138,101 @@ export function canReviewAgain(repo: RepoPR): boolean {
     case "in_review":
     case "ready_to_approve":
     case "done":
+    case "merged":
       return true;
     default:
       return false;
+  }
+}
+
+/** canCloseRepo reports whether the closing is the user's to ask for right now. */
+export function canCloseRepo(repo: RepoPR): boolean {
+  return repo.canClose && asRepoStatus(repo.status) !== "closing";
+}
+
+/** closeHint says why the repository can't be closed yet. */
+export function closeHint(repo: RepoPR): string {
+  switch (asRepoStatus(repo.status)) {
+    case "done":
+      return "The pull request hasn't been merged yet";
+    case "pr_closed":
+      return "The pull request was closed without a merge";
+    default:
+      return "";
+  }
+}
+
+/** closeStepLabel reads one part of a close result as a sentence. */
+export function closeStepLabel(part: "worktree" | "branch" | "base", result: CloseResult): string {
+  switch (part) {
+    case "worktree":
+      return worktreeLabel(result.worktree);
+    case "branch":
+      return branchLabel(result.branch, result);
+    case "base":
+      return baseLabel(result.base, result);
+  }
+}
+
+function worktreeLabel(step: CloseStep): string {
+  switch (asCloseOutcome(step.outcome)) {
+    case "done":
+      return "Worktree removed";
+    // The folder is the only thing the worktree part can skip.
+    case "skipped":
+      return "Worktree was already gone";
+    case "failed":
+      return `Worktree couldn't be removed: ${step.detail}`;
+  }
+}
+
+function branchLabel(step: CloseStep, result: CloseResult): string {
+  const name = result.branchName;
+  switch (asCloseOutcome(step.outcome)) {
+    case "done":
+      return `Branch ${name} deleted`;
+    case "skipped":
+      return asCloseSkipReason(step.reason) === "not_merged"
+        ? `Branch ${name} kept: git doesn't see it merged into ${result.baseBranch}`
+        : `Branch ${name} was already gone`;
+    case "failed":
+      return `Branch ${name} couldn't be deleted: ${step.detail}`;
+  }
+}
+
+function baseLabel(step: CloseStep, result: CloseResult): string {
+  const base = result.baseBranch;
+  switch (asCloseOutcome(step.outcome)) {
+    case "done":
+      return `${base} updated by ${result.baseCommits} ${
+        result.baseCommits === 1 ? "commit" : "commits"
+      }`;
+    case "skipped":
+      return `${base} ${baseSkipPhrase(asCloseSkipReason(step.reason))}`;
+    case "failed":
+      return `${base} not updated: ${step.detail}`;
+  }
+}
+
+// What the base branch of a repository was spared for, in the words that
+// follow its name.
+function baseSkipPhrase(reason: CloseSkipReason): string {
+  switch (reason) {
+    case "missing":
+      return "not updated: the branch doesn't exist locally";
+    case "not_checked_out":
+      return "not updated: another branch is checked out";
+    case "dirty":
+      return "not updated: the repository has uncommitted changes";
+    case "no_upstream":
+      return "not updated: it tracks no remote branch";
+    case "diverged":
+      return "not updated: it has commits the remote doesn't";
+    case "up_to_date":
+      return "was already up to date";
+    // Only the branch of the task is ever kept for want of a merge.
+    case "not_merged":
+      return "not updated";
   }
 }
 

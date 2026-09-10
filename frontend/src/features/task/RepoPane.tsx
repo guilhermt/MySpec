@@ -131,7 +131,13 @@ export function RepoPane({ taskId, repo }: RepoPaneProps) {
     case "reviewing":
     case "awaiting_decision":
       return <Chat taskId={taskId} repo={repo} />;
+    // The panels of the closing arrive with the closing itself; until then the
+    // states it adds read as the repository waiting to be closed.
     case "done":
+    case "merged":
+    case "pr_closed":
+    case "closing":
+    case "closed":
       return <RepoClosed taskId={taskId} repo={repo} />;
     case "skipped":
       return (

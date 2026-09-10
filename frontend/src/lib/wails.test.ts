@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   asActionStatus,
   asBlockReason,
+  asCloseOutcome,
+  asCloseSkipReason,
   asEntryKind,
   asErrorKind,
   asMarkerType,
@@ -92,7 +94,21 @@ describe("narrowing", () => {
     expect(asRepoStatus("ready_to_approve")).toBe("ready_to_approve");
     expect(asRepoStatus("committing")).toBe("committing");
     expect(asRepoStatus("done")).toBe("done");
+    expect(asRepoStatus("merged")).toBe("merged");
+    expect(asRepoStatus("pr_closed")).toBe("pr_closed");
+    expect(asRepoStatus("closing")).toBe("closing");
+    expect(asRepoStatus("closed")).toBe("closed");
     expect(asRepoStatus("skipped")).toBe("skipped");
+    expect(asCloseOutcome("done")).toBe("done");
+    expect(asCloseOutcome("skipped")).toBe("skipped");
+    expect(asCloseOutcome("failed")).toBe("failed");
+    expect(asCloseSkipReason("missing")).toBe("missing");
+    expect(asCloseSkipReason("not_merged")).toBe("not_merged");
+    expect(asCloseSkipReason("not_checked_out")).toBe("not_checked_out");
+    expect(asCloseSkipReason("dirty")).toBe("dirty");
+    expect(asCloseSkipReason("no_upstream")).toBe("no_upstream");
+    expect(asCloseSkipReason("diverged")).toBe("diverged");
+    expect(asCloseSkipReason("up_to_date")).toBe("up_to_date");
     expect(asPRState("open")).toBe("open");
     expect(asPRState("merged")).toBe("merged");
     expect(asPRState("closed")).toBe("closed");
@@ -120,6 +136,8 @@ describe("narrowing", () => {
     expect(asMarkerType("branched")).toBe("compacted");
     expect(asStepStatus("rebasing")).toBe("not_started");
     expect(asRepoStatus("rebasing")).toBe("preparing");
+    expect(asCloseOutcome("pending")).toBe("failed");
+    expect(asCloseSkipReason("detached")).toBe("missing");
     // "" is what the app carries before gh has said anything.
     expect(asPRState("draft")).toBe("");
     expect(asPRState("")).toBe("");
@@ -177,10 +195,12 @@ describe("api", () => {
     await wails.api.discardDraft("task-1", "/repo/web");
     await wails.api.retryRepo("task-1", "/repo/web");
     await wails.api.refreshPR("task-1", "/repo/web");
+    await wails.api.closeRepo("task-1", "/repo/web");
+    await wails.api.previewDelete("task-1");
 
-    expect(Call.ByID).toHaveBeenCalledTimes(33);
+    expect(Call.ByID).toHaveBeenCalledTimes(35);
     const ids = vi.mocked(Call.ByID).mock.calls.map(([id]) => id);
-    expect(new Set(ids).size).toBe(33);
+    expect(new Set(ids).size).toBe(35);
   });
 
   it("opens a link in the browser of the desktop, never in the webview", async () => {

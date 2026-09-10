@@ -2,6 +2,8 @@ import { create } from "zustand";
 import { useShallow } from "zustand/react/shallow";
 import { defaultRepoPath, reposOf } from "@/lib/repos";
 import type {
+  ArchivedTask,
+  Leftover,
   Notice,
   Recent,
   RepoPR,
@@ -42,6 +44,15 @@ export interface AppStore {
   /** prDrafts is the pull request the user is editing, by repoKey. */
   prDrafts: Record<string, PrDraft>;
   newTaskFor: NodeId | null;
+  /** historyOpen shows the archived tasks in the main area instead of a node. */
+  historyOpen: boolean;
+  /** openArchivedId is the archived task on screen, when one is. */
+  openArchivedId: string | null;
+  historyQuery: string;
+  /** archivedNotice names the task that just left the workspace, until dismissed. */
+  archivedNotice: ArchivedNotice | null;
+  /** leftovers is what the last deletion could not remove from disk, until dismissed. */
+  leftovers: readonly Leftover[] | null;
 
   applyState: (next: State) => void;
   setError: (message: string | null) => void;
@@ -61,12 +72,26 @@ export interface AppStore {
   selectRepo: (taskId: string, repoPath: string) => void;
   setPrDraft: (taskId: string, repoPath: string, draft: PrDraft) => void;
   clearPrDraft: (taskId: string, repoPath: string) => void;
+
+  openHistory: () => void;
+  closeHistory: () => void;
+  openArchived: (id: string) => void;
+  closeArchived: () => void;
+  setHistoryQuery: (query: string) => void;
+  dismissArchivedNotice: () => void;
+  setLeftovers: (leftovers: readonly Leftover[] | null) => void;
 }
 
 /** PrDraft is the title and the description of a pull request being edited. */
 export interface PrDraft {
   title: string;
   body: string;
+}
+
+/** ArchivedNotice is the task that just left the workspace, as the notice names it. */
+export interface ArchivedNotice {
+  id: string;
+  name: string;
 }
 
 /** repoKey identifies one pull request draft: a task and one of its repositories. */
@@ -80,6 +105,20 @@ function tasksOf(state: State | null): readonly TaskSummary[] {
 
 function findTask(state: State | null, id: string | null): TaskSummary | null {
   return tasksOf(state).find((task) => task.id === id) ?? null;
+}
+
+function historyOf(state: State | null): readonly ArchivedTask[] {
+  return state?.history ?? NO_HISTORY;
+}
+
+// A task that shows up in the history between two snapshots was archived
+// while the user was watching, which is what the notice announces.
+function newlyArchived(
+  previous: readonly ArchivedTask[],
+  next: readonly ArchivedTask[],
+): ArchivedTask | null {
+  const known = new Set(previous.map((entry) => entry.id));
+  return next.find((entry) => !known.has(entry.id)) ?? null;
 }
 
 function nodeOfTask(task: TaskSummary): NodeId {
@@ -132,7 +171,17 @@ function initialTreeUi(): Pick<AppStore, "selectedNodeId" | "expandedNodeIds"> {
 // Nothing of another workspace survives: its tasks are gone from the snapshot.
 function initialTaskUi(): Pick<
   AppStore,
-  "openTaskId" | "transcripts" | "drafts" | "openRepo" | "prDrafts" | "newTaskFor"
+  | "openTaskId"
+  | "transcripts"
+  | "drafts"
+  | "openRepo"
+  | "prDrafts"
+  | "newTaskFor"
+  | "historyOpen"
+  | "openArchivedId"
+  | "historyQuery"
+  | "archivedNotice"
+  | "leftovers"
 > {
   return {
     openTaskId: null,
@@ -141,6 +190,11 @@ function initialTaskUi(): Pick<
     openRepo: {},
     prDrafts: {},
     newTaskFor: null,
+    historyOpen: false,
+    openArchivedId: null,
+    historyQuery: "",
+    archivedNotice: null,
+    leftovers: null,
   };
 }
 
@@ -158,13 +212,25 @@ export const useAppStore = create<AppStore>()((set) => ({
       const selectedNodeId = nodeExists(next, state.selectedNodeId)
         ? state.selectedNodeId
         : ROOT_NODE_ID;
+      const history = historyOf(next);
+      // The first snapshot brings the whole history at once; nothing in it was
+      // archived under the eyes of the user.
+      const archived = state.app === null ? null : newlyArchived(historyOf(state.app), history);
+      const archivedNotice =
+        archived === null ? state.archivedNotice : { id: archived.id, name: archived.name };
+      const openArchivedId =
+        state.openArchivedId !== null && !history.some((entry) => entry.id === state.openArchivedId)
+          ? null
+          : state.openArchivedId;
       const openTaskId = state.openTaskId;
       if (openTaskId === null || findTask(next, openTaskId) !== null) {
-        return { app: next, selectedNodeId };
+        return { app: next, selectedNodeId, archivedNotice, openArchivedId };
       }
       return {
         app: next,
         selectedNodeId,
+        archivedNotice,
+        openArchivedId,
         openTaskId: null,
         transcripts: withoutTaskTranscripts(state.transcripts, openTaskId),
       };
@@ -172,7 +238,8 @@ export const useAppStore = create<AppStore>()((set) => ({
 
   setError: (message) => set({ error: message }),
 
-  selectNode: (id) => set({ selectedNodeId: id }),
+  // Picking a node in the tree is asking for the workspace, not the history.
+  selectNode: (id) => set({ selectedNodeId: id, historyOpen: false, openArchivedId: null }),
 
   toggleNode: (id) =>
     set((state) => ({
@@ -187,11 +254,13 @@ export const useAppStore = create<AppStore>()((set) => ({
     set((state) => {
       const task = findTask(state.app, id);
       if (task === null) {
-        return { openTaskId: id };
+        return { openTaskId: id, historyOpen: false, openArchivedId: null };
       }
       const nodeId = nodeOfTask(task);
       return {
         openTaskId: id,
+        historyOpen: false,
+        openArchivedId: null,
         selectedNodeId: nodeId,
         expandedNodeIds: withExpanded(state.expandedNodeIds, nodeId, true),
       };
@@ -266,10 +335,28 @@ export const useAppStore = create<AppStore>()((set) => ({
       const { [repoKey(taskId, repoPath)]: _dropped, ...rest } = state.prDrafts;
       return { prDrafts: rest };
     }),
+
+  // The history is a place of its own: opening it puts away whatever the main
+  // area was showing.
+  openHistory: () =>
+    set({ historyOpen: true, openTaskId: null, openArchivedId: null, newTaskFor: null }),
+
+  closeHistory: () => set({ historyOpen: false, openArchivedId: null }),
+
+  openArchived: (id) => set({ openArchivedId: id, historyOpen: true, openTaskId: null }),
+
+  closeArchived: () => set({ openArchivedId: null }),
+
+  setHistoryQuery: (query) => set({ historyQuery: query }),
+
+  dismissArchivedNotice: () => set({ archivedNotice: null }),
+
+  setLeftovers: (leftovers) => set({ leftovers }),
 }));
 
 const NO_RECENTS: readonly Recent[] = [];
 const NO_TASKS: readonly TaskSummary[] = [];
+const NO_HISTORY: readonly ArchivedTask[] = [];
 
 export function useWorkspace(): Workspace | null {
   return useAppStore((state) => state.app?.workspace ?? null);
@@ -348,6 +435,50 @@ export function useThemeState(): ThemeState {
       systemDark: state.app?.systemDark ?? false,
     })),
   );
+}
+
+export function useHistory(): readonly ArchivedTask[] {
+  return useAppStore((state) => historyOf(state.app));
+}
+
+export function useArchivedTask(id: string | null): ArchivedTask | null {
+  return useAppStore((state) => historyOf(state.app).find((entry) => entry.id === id) ?? null);
+}
+
+export interface HistoryUi {
+  historyOpen: boolean;
+  openArchivedId: string | null;
+  historyQuery: string;
+}
+
+export function useHistoryUi(): HistoryUi {
+  return useAppStore(
+    useShallow((state) => ({
+      historyOpen: state.historyOpen,
+      openArchivedId: state.openArchivedId,
+      historyQuery: state.historyQuery,
+    })),
+  );
+}
+
+export function useArchivedNotice(): ArchivedNotice | null {
+  return useAppStore((state) => state.archivedNotice);
+}
+
+export function useLeftovers(): readonly Leftover[] | null {
+  return useAppStore((state) => state.leftovers);
+}
+
+/** filterHistory keeps the archived tasks whose name carries what was typed. */
+export function filterHistory(
+  history: readonly ArchivedTask[],
+  query: string,
+): readonly ArchivedTask[] {
+  const term = query.trim().toLowerCase();
+  if (term === "") {
+    return history;
+  }
+  return history.filter((entry) => entry.name.toLowerCase().includes(term));
 }
 
 export interface TreeUi {

@@ -135,12 +135,33 @@ describe("task status in the PR stage", () => {
     ["awaiting_decision", "PR review · decision needed", "attention"],
     ["ready_to_approve", "PR review · ready to approve", "attention"],
     ["committing", "PR review · committing", "working"],
-    ["done", "PR review · ready to close", "done"],
   ] as const)("reads a single repository once the PR is open: %s", (status, label, tone) => {
     const task = prTask(makeRepoPR({ status, prNumber: 12 }));
 
     expect(taskStatusLabel(task)).toBe(label);
     expect(taskStatusTone(task)).toBe(tone);
+  });
+
+  it.each([
+    ["done", "Closing · waiting for the merge", "idle"],
+    ["merged", "Closing · merged, ready to close", "attention"],
+    ["pr_closed", "Closing · PR closed without merge", "idle"],
+    ["closing", "Closing · closing", "working"],
+    ["closed", "Closing · closed", "done"],
+  ] as const)("reads a single repository once its review is over: %s", (status, label, tone) => {
+    const task = prTask(makeRepoPR({ status, prNumber: 12 }));
+
+    expect(taskStatusLabel(task)).toBe(label);
+    expect(taskStatusTone(task)).toBe(tone);
+  });
+
+  it("says so when the merge could not be confirmed", () => {
+    const task = prTask(
+      makeRepoPR({ status: "done", prNumber: 12, canClose: true, checkError: "gh: not found" }),
+    );
+
+    expect(taskStatusLabel(task)).toBe("Closing · merge unconfirmed");
+    expect(isAttention(task)).toBe(true);
   });
 
   it("carries how much of a review is staged", () => {
@@ -182,14 +203,24 @@ describe("task status in the PR stage", () => {
     expect(taskStatusTone(task)).toBe("attention");
   });
 
-  it("counts the pull requests left to close, skipping the ones without", () => {
+  it("counts how much of the task has already left the workspace", () => {
+    const task = prTask(
+      makeRepoPR({ status: "merged", prNumber: 12 }),
+      makeRepoPR({ ...API, status: "closed", prNumber: 13 }),
+    );
+
+    expect(taskStatusLabel(task)).toBe("Closing · merged, ready to close (1 of 2 closed)");
+    expect(taskStatusTone(task)).toBe("attention");
+  });
+
+  it("waits for the merge with nothing closed yet", () => {
     const task = prTask(
       makeRepoPR({ status: "done", prNumber: 12 }),
       makeRepoPR({ ...API, status: "skipped" }),
     );
 
-    expect(taskStatusLabel(task)).toBe("PR review · 1 of 2 ready to close");
-    expect(taskStatusTone(task)).toBe("done");
+    expect(taskStatusLabel(task)).toBe("Closing · waiting for the merge (0 of 2 closed)");
+    expect(taskStatusTone(task)).toBe("idle");
     expect(isAttention(task)).toBe(false);
   });
 

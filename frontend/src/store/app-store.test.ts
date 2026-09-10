@@ -3,12 +3,18 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { RepoPR, TranscriptEvent } from "@/lib/wails";
 import { sessionKey } from "@/lib/wails";
 import {
+  filterHistory,
   ROOT_NODE_ID,
   repoKey,
   repoNodeId,
   useAppStore,
+  useArchivedNotice,
+  useArchivedTask,
   useDraft,
   useError,
+  useHistory,
+  useHistoryUi,
+  useLeftovers,
   useNotice,
   useOpenRepo,
   useOpenTask,
@@ -24,7 +30,14 @@ import {
   useWorkspace,
 } from "@/store/app-store";
 import { resetAppStore } from "@/test/render";
-import { makeEntry, makeRepoPR, makeState, makeTask, makeTranscript } from "@/test/wails-mock";
+import {
+  makeArchivedTask,
+  makeEntry,
+  makeRepoPR,
+  makeState,
+  makeTask,
+  makeTranscript,
+} from "@/test/wails-mock";
 
 const ROOT_TASK = makeTask({ id: "task-root", name: "add-login" });
 const REPO_TASK = makeTask({
@@ -567,5 +580,195 @@ describe("pull request drafts", () => {
 
     expect(useAppStore.getState().openRepo).toEqual({});
     expect(useAppStore.getState().prDrafts).toEqual({});
+  });
+});
+
+const ARCHIVED = makeArchivedTask({ id: "task-root", name: "add-login" });
+const OLDER = makeArchivedTask({ id: "task-old", name: "fix-header" });
+
+describe("history", () => {
+  it("shows the archived tasks of the snapshot", () => {
+    const { result } = renderHook(() => ({
+      history: useHistory(),
+      entry: useArchivedTask(ARCHIVED.id),
+      missing: useArchivedTask("task-gone"),
+    }));
+
+    expect(result.current.history).toEqual([]);
+
+    act(() => {
+      useAppStore.getState().applyState(makeState({ history: [ARCHIVED, OLDER] }));
+    });
+
+    expect(result.current.history).toHaveLength(2);
+    expect(result.current.entry).toEqual(ARCHIVED);
+    expect(result.current.missing).toBeNull();
+  });
+
+  it("falls back to an empty history when the snapshot has none", () => {
+    const { result } = renderHook(() => useHistory());
+
+    act(() => {
+      useAppStore.getState().applyState(makeState({ history: null }));
+    });
+
+    expect(result.current).toEqual([]);
+  });
+
+  it("opens and closes the history and the task inside it", () => {
+    const { result } = renderHook(() => useHistoryUi());
+
+    act(() => {
+      useAppStore.getState().applyState(makeState({ history: [ARCHIVED] }));
+      useAppStore.getState().openTask(ROOT_TASK.id);
+      useAppStore.getState().openHistory();
+    });
+    expect(result.current).toEqual({
+      historyOpen: true,
+      openArchivedId: null,
+      historyQuery: "",
+    });
+    expect(useAppStore.getState().openTaskId).toBeNull();
+
+    act(() => {
+      useAppStore.getState().openArchived(ARCHIVED.id);
+      useAppStore.getState().setHistoryQuery("log");
+    });
+    expect(result.current).toEqual({
+      historyOpen: true,
+      openArchivedId: ARCHIVED.id,
+      historyQuery: "log",
+    });
+
+    act(() => {
+      useAppStore.getState().closeArchived();
+    });
+    expect(result.current.openArchivedId).toBeNull();
+
+    act(() => {
+      useAppStore.getState().closeHistory();
+    });
+    expect(result.current.historyOpen).toBe(false);
+  });
+
+  it("leaves the history when a task or a node is opened", () => {
+    useAppStore.getState().applyState(withTasks());
+    useAppStore.getState().openArchived(ARCHIVED.id);
+
+    useAppStore.getState().openTask(ROOT_TASK.id);
+    expect(useAppStore.getState().historyOpen).toBe(false);
+    expect(useAppStore.getState().openArchivedId).toBeNull();
+
+    useAppStore.getState().openArchived(ARCHIVED.id);
+    useAppStore.getState().selectNode(WEB_NODE);
+
+    expect(useAppStore.getState().historyOpen).toBe(false);
+    expect(useAppStore.getState().openArchivedId).toBeNull();
+  });
+
+  it("closes an archived task that left the history", () => {
+    useAppStore.getState().applyState(makeState({ history: [ARCHIVED] }));
+    useAppStore.getState().openArchived(ARCHIVED.id);
+
+    useAppStore.getState().applyState(makeState({ history: [] }));
+
+    expect(useAppStore.getState().openArchivedId).toBeNull();
+    expect(useAppStore.getState().historyOpen).toBe(true);
+  });
+
+  it("keeps the archived task open while the history still has it", () => {
+    useAppStore.getState().applyState(makeState({ history: [ARCHIVED] }));
+    useAppStore.getState().openArchived(ARCHIVED.id);
+
+    useAppStore.getState().applyState(makeState({ history: [ARCHIVED, OLDER] }));
+
+    expect(useAppStore.getState().openArchivedId).toBe(ARCHIVED.id);
+  });
+});
+
+describe("filterHistory", () => {
+  it("keeps everything without a query", () => {
+    expect(filterHistory([ARCHIVED, OLDER], "")).toHaveLength(2);
+    expect(filterHistory([ARCHIVED, OLDER], "   ")).toHaveLength(2);
+  });
+
+  it("matches part of the name, whatever the case", () => {
+    expect(filterHistory([ARCHIVED, OLDER], "LOG")).toEqual([ARCHIVED]);
+    expect(filterHistory([ARCHIVED, OLDER], " header ")).toEqual([OLDER]);
+  });
+
+  it("answers with nothing when no name matches", () => {
+    expect(filterHistory([ARCHIVED, OLDER], "payments")).toEqual([]);
+  });
+});
+
+describe("notices", () => {
+  it("announces the task that left the workspace", () => {
+    const { result } = renderHook(() => useArchivedNotice());
+
+    act(() => {
+      useAppStore.getState().applyState(withTasks());
+    });
+    expect(result.current).toBeNull();
+
+    act(() => {
+      useAppStore.getState().applyState(makeState({ tasks: [REPO_TASK], history: [ARCHIVED] }));
+    });
+
+    expect(result.current).toEqual({ id: ARCHIVED.id, name: ARCHIVED.name });
+  });
+
+  // The first snapshot brings the whole history; none of it was archived now.
+  it("says nothing about a history that was already there", () => {
+    useAppStore.getState().applyState(makeState({ history: [ARCHIVED, OLDER] }));
+
+    expect(useAppStore.getState().archivedNotice).toBeNull();
+  });
+
+  it("says nothing when the workspace changes", () => {
+    useAppStore.getState().applyState(makeState({ tasks: [ROOT_TASK] }));
+
+    useAppStore.getState().applyState(
+      makeState({
+        workspace: { name: "labs", path: "/home/dev/labs", repos: [] },
+        history: [ARCHIVED],
+      }),
+    );
+
+    expect(useAppStore.getState().archivedNotice).toBeNull();
+  });
+
+  it("keeps the notice while the snapshots go by, until it is dismissed", () => {
+    useAppStore.getState().applyState(withTasks());
+    useAppStore.getState().applyState(makeState({ tasks: [REPO_TASK], history: [ARCHIVED] }));
+
+    useAppStore.getState().applyState(makeState({ tasks: [REPO_TASK], history: [ARCHIVED] }));
+    expect(useAppStore.getState().archivedNotice?.id).toBe(ARCHIVED.id);
+
+    useAppStore.getState().dismissArchivedNotice();
+    expect(useAppStore.getState().archivedNotice).toBeNull();
+  });
+
+  it("holds what the last deletion left on disk", () => {
+    const { result } = renderHook(() => useLeftovers());
+    const leftover = {
+      repository: "web",
+      repoPath: "/home/dev/projects/web",
+      path: "/home/dev/.local/share/myspec/worktrees/add-login-web",
+      branch: "",
+      error: "permission denied",
+    };
+
+    expect(result.current).toBeNull();
+
+    act(() => {
+      useAppStore.getState().setLeftovers([leftover]);
+    });
+    expect(result.current).toEqual([leftover]);
+
+    act(() => {
+      useAppStore.getState().setLeftovers(null);
+    });
+    expect(result.current).toBeNull();
   });
 });
