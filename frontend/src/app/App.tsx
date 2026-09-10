@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { AppShell } from "@/app/AppShell";
 import { bootstrap } from "@/app/bootstrap";
 import { useGlobalShortcuts } from "@/app/useGlobalShortcuts";
+import { ArchivedNotice } from "@/features/notice/ArchivedNotice";
 import { LeftoversNotice } from "@/features/notice/LeftoversNotice";
 import { ErrorNotice } from "@/features/notice/Notice";
 import { useApplyTheme } from "@/features/theme/useApplyTheme";
@@ -47,7 +48,14 @@ export function App() {
           </div>
         </div>
       )}
-      {app.workspace === null ? <WelcomeScreen /> : <AppShell />}
+      {app.workspace === null ? (
+        <WelcomeScreen />
+      ) : (
+        <>
+          <AppShell />
+          <ArchivedNotice />
+        </>
+      )}
     </>
   );
 }

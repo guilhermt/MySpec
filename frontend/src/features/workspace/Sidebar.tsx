@@ -1,4 +1,5 @@
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { HistoryButton } from "@/features/history/HistoryButton";
 import { ThemeToggle } from "@/features/theme/ThemeToggle";
 import { WorkspaceTree } from "@/features/tree/WorkspaceTree";
 import { WorkspaceSwitcher } from "@/features/workspace/WorkspaceSwitcher";
@@ -12,8 +13,11 @@ export function Sidebar() {
       <ScrollArea className="min-h-0 flex-1">
         <WorkspaceTree />
       </ScrollArea>
-      <div className="flex h-11 shrink-0 items-center border-t px-2">
-        <ThemeToggle />
+      <div className="flex h-11 shrink-0 items-center gap-2 border-t px-2">
+        <HistoryButton />
+        <div className="ml-auto">
+          <ThemeToggle />
+        </div>
       </div>
     </div>
   );

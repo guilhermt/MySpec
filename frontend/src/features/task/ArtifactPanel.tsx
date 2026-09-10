@@ -5,9 +5,9 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Markdown } from "@/features/chat/Markdown";
 import { ErrorNotice } from "@/features/notice/Notice";
 import { prReportLabel, repoName } from "@/features/task/repo-status";
+import { StepDocument } from "@/features/task/StepDocument";
 import { StepList } from "@/features/task/StepList";
 import { useArtifact } from "@/features/task/useArtifact";
-import { splitFrontMatter } from "@/lib/front-matter";
 import { reposOf } from "@/lib/repos";
 import { asTaskStage, type RepoPR, type Step, type TaskStage, type TaskSummary } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
@@ -77,23 +77,6 @@ function Empty() {
       <p className="text-sm text-muted-foreground">
         The PRD will appear here as soon as the agent writes it.
       </p>
-    </div>
-  );
-}
-
-/** StepDocument shows a step file with its header read as metadata. */
-function StepDocument({ content }: { content: string }) {
-  const { fields, body } = splitFrontMatter(content);
-  const repository = fields.repository ?? "";
-
-  return (
-    <div className="flex max-w-[760px] flex-col gap-2 select-text">
-      {repository !== "" && (
-        <p className="text-xs text-muted-foreground">
-          Repository · <span className="font-mono">{repository}</span>
-        </p>
-      )}
-      <Markdown>{body}</Markdown>
     </div>
   );
 }

@@ -485,6 +485,7 @@ export interface TreeUi {
   selectedNodeId: NodeId;
   expandedNodeIds: ReadonlySet<NodeId>;
   openTaskId: string | null;
+  historyOpen: boolean;
 }
 
 export function useTreeUi(): TreeUi {
@@ -493,6 +494,7 @@ export function useTreeUi(): TreeUi {
       selectedNodeId: state.selectedNodeId,
       expandedNodeIds: state.expandedNodeIds,
       openTaskId: state.openTaskId,
+      historyOpen: state.historyOpen,
     })),
   );
 }

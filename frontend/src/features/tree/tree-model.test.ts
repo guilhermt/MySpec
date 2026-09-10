@@ -13,6 +13,7 @@ function ui(overrides: Partial<TreeUi> = {}): TreeUi {
     selectedNodeId: ROOT_NODE_ID,
     expandedNodeIds: new Set<NodeId>([ROOT_NODE_ID]),
     openTaskId: null,
+    historyOpen: false,
     ...overrides,
   };
 }
@@ -89,6 +90,14 @@ describe("visibleRows", () => {
     expect(shape(rows.filter((row) => "selected" in row && row.selected))).toEqual([
       "task:add-login:2",
     ]);
+  });
+
+  it("selects no node while the history is open", () => {
+    const state = makeState({ tasks: [ROOT_TASK] });
+
+    const rows = visibleRows(state, ui({ historyOpen: true }));
+
+    expect(rows.filter((row) => "selected" in row && row.selected)).toHaveLength(0);
   });
 
   it("selects the node while no task is open", () => {

@@ -12,6 +12,7 @@ export function WorkspaceTree() {
   const toggleNode = useAppStore((state) => state.toggleNode);
   const openTask = useAppStore((state) => state.openTask);
   const closeTask = useAppStore((state) => state.closeTask);
+  const closeHistory = useAppStore((state) => state.closeHistory);
   const ui = useTreeUi();
   const treeRef = useRef<HTMLDivElement>(null);
 
@@ -23,8 +24,9 @@ export function WorkspaceTree() {
     (id: NodeId) => {
       selectNode(id);
       closeTask();
+      closeHistory();
     },
-    [selectNode, closeTask],
+    [selectNode, closeTask, closeHistory],
   );
 
   const focusItemAt = useCallback((index: number) => {
