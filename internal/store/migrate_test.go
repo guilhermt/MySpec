@@ -12,12 +12,12 @@ import (
 // stagesVersion is the migration that brought the stages after the PRD,
 // commitsVersion the one that gave a step its commits, prVersion the one that
 // brought the PR stage, and latestVersion the version the embedded migrations
-// end at.
+// end at, the one that brought the situations.
 const (
 	stagesVersion  = 3
 	commitsVersion = 5
 	prVersion      = 6
-	latestVersion  = 7
+	latestVersion  = 8
 )
 
 // mapFS builds a migrations tree with the given file names.

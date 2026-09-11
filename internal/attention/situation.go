@@ -60,6 +60,18 @@ func (k Kind) Group() Group {
 	}
 }
 
+// rank orders the groups, the most urgent first.
+func (g Group) rank() int {
+	switch g {
+	case GroupError:
+		return 0
+	case GroupWaiting:
+		return 1
+	default:
+		return 2
+	}
+}
+
 // Form is the shape a situation is in, for the kinds that have more than one.
 // Changing form is going on with the same situation.
 type Form string
