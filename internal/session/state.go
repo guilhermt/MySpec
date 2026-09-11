@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/guilhermt/myspec/internal/models"
 )
 
 // ErrNotFound is returned when a task has no persisted session.
@@ -19,10 +21,14 @@ type Key struct {
 
 // Record is the persisted session row: one per stage of a task.
 type Record struct {
-	ID            string // also the Claude Code session id
-	TaskID        string
-	Stage         string // prd, tech_spec, plan, step:<n>, pr:<slug> or pr_review:<slug>
-	Started       bool   // system/init has arrived at least once for this id
+	ID     string // also the Claude Code session id
+	TaskID string
+	Stage  string // prd, tech_spec, plan, step:<n>, pr:<slug> or pr_review:<slug>
+	// Choice is the model and effort the session runs with from its next message
+	// on. It is born with the one of its stage or step and changes only through
+	// SetChoice.
+	Choice        models.Choice
+	Started       bool // system/init has arrived at least once for this id
 	Paused        bool
 	ContextTokens int
 	ContextWindow int
@@ -114,6 +120,7 @@ type Summary struct {
 	TaskID         string
 	Stage          string // stage of the session behind it
 	Status         Status
+	Choice         models.Choice // what the session runs with from its next message on
 	TurnRunning    bool
 	ProcessRunning bool
 	RetryAttempt   int // last api_retry attempt of the running turn, 0 otherwise

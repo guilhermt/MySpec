@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/guilhermt/myspec/internal/claude"
 	"github.com/guilhermt/myspec/internal/claude/claudetest"
+	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/session"
 )
@@ -1403,4 +1405,212 @@ func TestDiscardOfAStepClosesTheRunAndDropsTheRecord(t *testing.T) {
 	if _, err := f.sessions.Get(t.Context(), "t1", "step:1"); !errors.Is(err, session.ErrNotFound) {
 		t.Errorf("Get() = %v, want session.ErrNotFound", err)
 	}
+}
+
+// setChoice changes the model and effort of a session, failing the test when
+// the service refuses it.
+func (f *fixture) setChoice(t *testing.T, k session.Key, c models.Choice) {
+	t.Helper()
+
+	if err := f.service.SetChoice(t.Context(), k, c); err != nil {
+		t.Fatalf("SetChoice(%v, %+v) = %v, want nil", k, c, err)
+	}
+}
+
+// waitStarts waits until the launcher has started n processes and returns them.
+func (f *fixture) waitStarts(t *testing.T, n int) []claude.Config {
+	t.Helper()
+
+	var starts []claude.Config
+	waitFor(t, fmt.Sprintf("%d started processes", n), func() bool {
+		starts = f.launcher.started()
+		return len(starts) >= n
+	})
+	return starts
+}
+
+func TestStartRunsWithTheModelAndEffortOfTheStage(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	info := taskInfo(t, "t1")
+	f.start(t, info)
+
+	starts := f.launcher.started()
+	if len(starts) != 1 {
+		t.Fatalf("starts = %d, want one", len(starts))
+	}
+	if starts[0].Model != "claude-opus-5" || starts[0].Effort != "high" {
+		t.Errorf("start = %q and %q, want claude-opus-5 and high", starts[0].Model, starts[0].Effort)
+	}
+	if got := f.summary(t, prd("t1")).Choice; got != info.Choice {
+		t.Errorf("Choice = %+v, want %+v", got, info.Choice)
+	}
+}
+
+func TestAChangeOfModelTakesANewProcessOnTheNextMessage(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	f.start(t, taskInfo(t, "t1"))
+	f.waitIdle(t, prd("t1"))
+
+	want := models.Choice{Model: models.Fable51, Effort: models.XHigh}
+	f.setChoice(t, prd("t1"), want)
+	sum := f.summary(t, prd("t1"))
+	if sum.Choice != want || !sum.ProcessRunning {
+		t.Errorf("summary = %+v, want the new choice with the process still up", sum)
+	}
+	if starts := f.launcher.started(); len(starts) != 1 {
+		t.Fatalf("starts = %d, want the process left alone until a message", len(starts))
+	}
+
+	f.send(t, prd("t1"), "with more effort")
+	starts := f.waitStarts(t, 2)
+	f.waitIdle(t, prd("t1"))
+
+	if len(starts) != 2 {
+		t.Fatalf("starts = %d, want a second process", len(starts))
+	}
+	second := starts[1]
+	if second.Model != "claude-fable-5-1" || second.Effort != "xhigh" || !second.Resume {
+		t.Errorf("second start = %+v, want claude-fable-5-1 and xhigh, resumed", second)
+	}
+	assistants := f.entriesOf(t, prd("t1"), session.KindAssistant)
+	if len(assistants) != 2 || assistants[1].Assistant.Text != "with more effort" {
+		t.Errorf("answers = %+v, want the echo of the message on the new process", assistants)
+	}
+	if errs := f.entriesOf(t, prd("t1"), session.KindError); len(errs) != 0 {
+		t.Errorf("errors = %+v, want none: the restart is an expected stop", errs)
+	}
+}
+
+func TestAChangeWithoutAMessageLeavesTheProcessAlone(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	f.start(t, taskInfo(t, "t1"))
+	f.waitIdle(t, prd("t1"))
+
+	f.setChoice(t, prd("t1"), models.Choice{Model: models.Sonnet5, Effort: models.Medium})
+
+	// Nothing is expected to happen, so there is nothing to wait for.
+	time.Sleep(200 * time.Millisecond)
+
+	if starts := f.launcher.started(); len(starts) != 1 {
+		t.Errorf("starts = %d, want the one process a change alone never replaces", len(starts))
+	}
+	if sum := f.summary(t, prd("t1")); !sum.ProcessRunning {
+		t.Errorf("summary = %+v, want the process still running", sum)
+	}
+}
+
+func TestAChangeDuringATurnWaitsForTheTurnToEnd(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "slow")
+	f.start(t, taskInfo(t, "t1"))
+	f.waitStatus(t, prd("t1"), "the turn to run", func(s session.Summary) bool { return s.TurnRunning })
+
+	f.setChoice(t, prd("t1"), models.Choice{Model: models.Sonnet5, Effort: models.Low})
+	f.send(t, prd("t1"), "take this one over")
+	if starts := f.launcher.started(); len(starts) != 1 {
+		t.Fatalf("starts = %d, want the running turn untouched", len(starts))
+	}
+
+	if err := f.service.Interrupt(t.Context(), prd("t1")); err != nil {
+		t.Fatalf("Interrupt() = %v, want nil", err)
+	}
+	starts := f.waitStarts(t, 2)
+	if starts[1].Model != "claude-sonnet-5" || starts[1].Effort != "low" {
+		t.Errorf("second start = %+v, want claude-sonnet-5 and low", starts[1])
+	}
+}
+
+func TestAChangeWhilePausedIsWhatTheResumedProcessRunsWith(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	f.start(t, taskInfo(t, "t1"))
+	f.waitIdle(t, prd("t1"))
+
+	if err := f.service.Pause(t.Context(), prd("t1")); err != nil {
+		t.Fatalf("Pause() = %v, want nil", err)
+	}
+	f.waitStatus(t, prd("t1"), "the process to stop", func(s session.Summary) bool { return !s.ProcessRunning })
+
+	f.setChoice(t, prd("t1"), models.Choice{Model: models.Fable51, Effort: models.Max})
+	if err := f.service.Resume(t.Context(), prd("t1")); err != nil {
+		t.Fatalf("Resume() = %v, want nil", err)
+	}
+	f.send(t, prd("t1"), "back to work")
+	f.waitIdle(t, prd("t1"))
+
+	starts := f.launcher.started()
+	last := starts[len(starts)-1]
+	if last.Model != "claude-fable-5-1" || last.Effort != "max" {
+		t.Errorf("last start = %+v, want claude-fable-5-1 and max", last)
+	}
+}
+
+func TestSetChoiceOfTheSameChoiceChangesNothing(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	info := taskInfo(t, "t1")
+	f.open(t, info)
+
+	before := f.stateCount(prd("t1"))
+	f.setChoice(t, prd("t1"), info.Choice)
+	if got := f.stateCount(prd("t1")); got != before {
+		t.Errorf("OnState calls = %d, want the %d of before the no-op change", got, before)
+	}
+}
+
+func TestOpenKeepsTheChoiceOfAnExistingSession(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	want := models.Choice{Model: models.Sonnet5, Effort: models.Low}
+	rec := session.Record{
+		ID: "sess-1", TaskID: "t1", Stage: "prd", Choice: want, CreatedAt: base, UpdatedAt: base,
+	}
+	if err := f.sessions.Insert(t.Context(), rec); err != nil {
+		t.Fatalf("Insert() = %v, want nil", err)
+	}
+
+	f.open(t, taskInfo(t, "t1"))
+
+	if got := f.summary(t, prd("t1")).Choice; got != want {
+		t.Errorf("Choice = %+v, want the %+v the session was stored with", got, want)
+	}
+}
+
+func TestOpenGivesASessionWithoutAChoiceTheOneOfItsStage(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	rec := session.Record{ID: "sess-1", TaskID: "t1", Stage: "prd", CreatedAt: base, UpdatedAt: base}
+	if err := f.sessions.Insert(t.Context(), rec); err != nil {
+		t.Fatalf("Insert() = %v, want nil", err)
+	}
+
+	info := taskInfo(t, "t1")
+	f.open(t, info)
+
+	if got := f.summary(t, prd("t1")).Choice; got != info.Choice {
+		t.Errorf("Choice = %+v, want the %+v of the stage", got, info.Choice)
+	}
+	if got := f.sessions.get(t, "t1", "prd").Choice; got != info.Choice {
+		t.Errorf("stored choice = %+v, want the %+v of the stage", got, info.Choice)
+	}
+}
+
+func TestSetChoiceOfASessionThatIsNotOpenIsNotFound(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+
+	err := f.service.SetChoice(t.Context(), prd("t1"), models.Choice{Model: models.Opus5, Effort: models.Low})
+	wantErrIs(t, err, session.ErrNotFound)
 }

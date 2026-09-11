@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/session"
 )
 
@@ -16,7 +17,7 @@ type SessionsRepo struct{ db *sql.DB }
 
 // sessionColumns is the column list every session query selects, in scan order.
 const sessionColumns = `id, task_id, stage, started, paused, context_tokens,
-	context_window, corrections, last_error, created_at, updated_at`
+	context_window, corrections, last_error, created_at, updated_at, model, effort`
 
 // Get returns the session of a task in one stage, or session.ErrNotFound.
 func (r *SessionsRepo) Get(ctx context.Context, taskID, stage string) (session.Record, error) {
@@ -26,10 +27,11 @@ func (r *SessionsRepo) Get(ctx context.Context, taskID, stage string) (session.R
 		rec                  session.Record
 		lastError            sql.NullString
 		createdAt, updatedAt string
+		model, effort        string
 	)
 	err := r.db.QueryRowContext(ctx, query, taskID, stage).Scan(&rec.ID, &rec.TaskID, &rec.Stage,
 		&rec.Started, &rec.Paused, &rec.ContextTokens, &rec.ContextWindow, &rec.Corrections,
-		&lastError, &createdAt, &updatedAt)
+		&lastError, &createdAt, &updatedAt, &model, &effort)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		return session.Record{}, fmt.Errorf("get %s session of task %s: %w", stage, taskID, session.ErrNotFound)
@@ -38,6 +40,8 @@ func (r *SessionsRepo) Get(ctx context.Context, taskID, stage string) (session.R
 	}
 
 	rec.LastError = lastError.String
+	// The choice is not validated: only the app writes these columns.
+	rec.Choice = models.Choice{Model: models.Model(model), Effort: models.Effort(effort)}
 	if rec.CreatedAt, err = parseTime(createdAt, "session "+rec.ID); err != nil {
 		return session.Record{}, err
 	}
@@ -50,11 +54,12 @@ func (r *SessionsRepo) Get(ctx context.Context, taskID, stage string) (session.R
 // Insert stores a new session.
 func (r *SessionsRepo) Insert(ctx context.Context, rec session.Record) error {
 	const stmt = `INSERT INTO sessions (` + sessionColumns + `)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	_, err := r.db.ExecContext(ctx, stmt, rec.ID, rec.TaskID, rec.Stage, rec.Started, rec.Paused,
 		rec.ContextTokens, rec.ContextWindow, rec.Corrections, nullString(rec.LastError),
-		formatTime(rec.CreatedAt), formatTime(rec.UpdatedAt))
+		formatTime(rec.CreatedAt), formatTime(rec.UpdatedAt),
+		string(rec.Choice.Model), string(rec.Choice.Effort))
 	if err != nil {
 		return fmt.Errorf("insert session %s: %w", rec.ID, err)
 	}
@@ -64,10 +69,12 @@ func (r *SessionsRepo) Insert(ctx context.Context, rec session.Record) error {
 // Update rewrites every mutable column of a session.
 func (r *SessionsRepo) Update(ctx context.Context, rec session.Record) error {
 	const stmt = `UPDATE sessions SET stage = ?, started = ?, paused = ?, context_tokens = ?,
-		context_window = ?, corrections = ?, last_error = ?, updated_at = ? WHERE id = ?`
+		context_window = ?, corrections = ?, last_error = ?, model = ?, effort = ?, updated_at = ?
+		WHERE id = ?`
 
 	_, err := r.db.ExecContext(ctx, stmt, rec.Stage, rec.Started, rec.Paused, rec.ContextTokens,
-		rec.ContextWindow, rec.Corrections, nullString(rec.LastError), formatTime(rec.UpdatedAt), rec.ID)
+		rec.ContextWindow, rec.Corrections, nullString(rec.LastError),
+		string(rec.Choice.Model), string(rec.Choice.Effort), formatTime(rec.UpdatedAt), rec.ID)
 	if err != nil {
 		return fmt.Errorf("update session %s: %w", rec.ID, err)
 	}

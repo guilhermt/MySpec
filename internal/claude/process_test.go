@@ -42,6 +42,8 @@ func fakeConfig(t *testing.T, scenario string) claude.Config {
 		Binary:    os.Args[0],
 		Dir:       t.TempDir(),
 		SessionID: sessionID,
+		Model:     "claude-opus-5",
+		Effort:    "high",
 		Env: append(os.Environ(),
 			claudetest.EnvFlag+"=1",
 			claudetest.EnvScenario+"="+scenario,
@@ -196,8 +198,10 @@ func TestStartRunsTheCLIWithTheFixedFlags(t *testing.T) {
 		resume bool
 		want   []string
 	}{
-		"a new session":     {want: append(slices.Clone(claude.Args), "--session-id", sessionID)},
-		"a resumed session": {resume: true, want: append(slices.Clone(claude.Args), "--resume", sessionID)},
+		"a new session": {want: append(slices.Clone(claude.Args),
+			"--session-id", sessionID, "--model", "claude-opus-5", "--effort", "high")},
+		"a resumed session": {resume: true, want: append(slices.Clone(claude.Args),
+			"--resume", sessionID, "--model", "claude-opus-5", "--effort", "high")},
 	}
 
 	for name, tc := range tests {
@@ -209,6 +213,8 @@ func TestStartRunsTheCLIWithTheFixedFlags(t *testing.T) {
 				Dir:       t.TempDir(),
 				SessionID: sessionID,
 				Resume:    tc.resume,
+				Model:     "claude-opus-5",
+				Effort:    "high",
 			})
 
 			exit := exitOf(t, p)

@@ -23,6 +23,8 @@ type Config struct {
 	Dir       string   // working directory of the session
 	SessionID string   // UUID chosen by the app
 	Resume    bool     // false: --session-id; true: --resume
+	Model     string   // full name of the model: --model
+	Effort    string   // effort level: --effort
 	Env       []string // nil means the parent environment
 }
 
@@ -83,7 +85,7 @@ func Start(ctx context.Context, cfg Config, log *slog.Logger) (*Process, error) 
 	}
 
 	//nolint:gosec // G204: the binary path comes from Locate or an explicit override
-	cmd := exec.Command(cfg.Binary, slices.Concat(Args, sessionArgs(cfg))...)
+	cmd := exec.Command(cfg.Binary, slices.Concat(Args, sessionArgs(cfg), choiceArgs(cfg))...)
 	cmd.Dir = cfg.Dir
 	cmd.Env = cfg.Env
 	// Its own process group, so Terminate and Kill also reach the shells the
@@ -122,7 +124,8 @@ func Start(ctx context.Context, cfg Config, log *slog.Logger) (*Process, error) 
 	}()
 	go p.reap(ended)
 
-	p.log.Debug("claude started", "pid", cmd.Process.Pid, "dir", cfg.Dir, "resume", cfg.Resume)
+	p.log.Debug("claude started", "pid", cmd.Process.Pid, "dir", cfg.Dir, "resume", cfg.Resume,
+		"model", cfg.Model, "effort", cfg.Effort)
 	return p, nil
 }
 
@@ -307,6 +310,12 @@ func sessionArgs(cfg Config) []string {
 		return []string{"--resume", cfg.SessionID}
 	}
 	return []string{"--session-id", cfg.SessionID}
+}
+
+// choiceArgs name the model and the effort of the process. Both are always on
+// the command line: the defaults of the machine never decide how a session runs.
+func choiceArgs(cfg Config) []string {
+	return []string{"--model", cfg.Model, "--effort", cfg.Effort}
 }
 
 // tailBuffer keeps the last limit bytes written to it, which is all the app

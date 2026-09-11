@@ -15,6 +15,7 @@ import (
 
 	"github.com/guilhermt/myspec/internal/claude"
 	"github.com/guilhermt/myspec/internal/claude/claudetest"
+	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/session"
 )
@@ -439,6 +440,7 @@ func taskInfo(t *testing.T, id string) session.TaskInfo {
 		StepsDir:       filepath.Join(artifacts, "steps"),
 		Repositories:   []string{"api"},
 		InitialContext: "a login screen with email and password",
+		Choice:         models.Choice{Model: models.Opus5, Effort: models.High},
 	}
 }
 
