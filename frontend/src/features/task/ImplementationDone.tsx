@@ -21,7 +21,7 @@ export function ImplementationDone({ task }: ImplementationDoneProps) {
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto p-6">
-      <div className="mx-auto flex max-w-[760px] flex-col gap-2 rounded-lg border p-4">
+      <div className="mx-auto flex max-w-[58.5rem] flex-col gap-2 rounded-lg border p-4">
         <p className="font-medium">Every step is committed</p>
         <p className="text-sm text-muted-foreground">
           {repos.length === 0 ? `${count}.` : `${count} in ${repos.join(", ")}.`}

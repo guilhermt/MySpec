@@ -26,7 +26,7 @@ export function NodePanel() {
 
   return (
     <main className="h-dvh overflow-auto bg-background p-8 text-foreground">
-      <div className="flex w-full max-w-[720px] flex-col">
+      <div className="flex w-full max-w-[55.5rem] flex-col">
         {notice !== null && (
           <Notice
             path={notice.path}
@@ -38,7 +38,7 @@ export function NodePanel() {
         <header className="flex flex-col gap-1 pt-4 first:pt-0">
           <div className="flex items-center gap-2">
             <Icon aria-hidden="true" className="size-6 shrink-0 text-muted-foreground" />
-            <h1 className="text-[20px] font-semibold">{node.label}</h1>
+            <h1 className="text-[1.5rem] font-semibold">{node.label}</h1>
             {node.isRoot && <Badge variant="secondary">Root</Badge>}
             <span className="flex-1" />
             <Button size="sm" onClick={() => openNewTask(node.id)}>

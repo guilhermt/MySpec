@@ -22,7 +22,7 @@ export function PlanProblemsNotice({ task }: PlanProblemsNoticeProps) {
   }
 
   return (
-    <div className="mx-auto w-full max-w-[760px] px-6 pb-3">
+    <div className="mx-auto w-full max-w-[58.5rem] px-6 pb-3">
       <div
         role="alert"
         className="flex flex-col gap-2 rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm"

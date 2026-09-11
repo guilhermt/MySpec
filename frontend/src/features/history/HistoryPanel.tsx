@@ -79,11 +79,11 @@ export function HistoryPanel() {
 
   return (
     <main className="h-dvh overflow-auto bg-background p-8 text-foreground">
-      <div className="flex w-full max-w-[720px] flex-col gap-4">
+      <div className="flex w-full max-w-[55.5rem] flex-col gap-4">
         <header className="flex flex-col gap-1">
           <div className="flex items-center gap-2">
             <Archive aria-hidden="true" className="size-6 shrink-0 text-muted-foreground" />
-            <h1 className="text-[20px] font-semibold">History</h1>
+            <h1 className="text-[1.5rem] font-semibold">History</h1>
           </div>
           <p className="text-sm text-muted-foreground">
             Finished tasks of this workspace, with their documents.

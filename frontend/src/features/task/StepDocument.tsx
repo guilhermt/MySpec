@@ -7,7 +7,7 @@ export function StepDocument({ content }: { content: string }) {
   const repository = fields.repository ?? "";
 
   return (
-    <div className="flex max-w-[760px] flex-col gap-2 select-text">
+    <div className="flex max-w-[58.5rem] flex-col gap-2 select-text">
       {repository !== "" && (
         <p className="text-xs text-muted-foreground">
           Repository · <span className="font-mono">{repository}</span>

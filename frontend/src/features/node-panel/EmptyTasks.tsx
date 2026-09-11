@@ -18,7 +18,7 @@ export function EmptyTasks({ kind, name, onNewTask }: EmptyTasksProps) {
     <div className="flex flex-col items-center gap-2 py-10 text-center">
       <ListTodo aria-hidden="true" className="size-8 text-muted-foreground" />
       <p className="font-medium">{title}</p>
-      <p className="max-w-[420px] text-muted-foreground">{description}</p>
+      <p className="max-w-[32.25rem] text-muted-foreground">{description}</p>
       <Button variant="outline" size="sm" onClick={onNewTask} className="mt-2">
         <Plus />
         New task

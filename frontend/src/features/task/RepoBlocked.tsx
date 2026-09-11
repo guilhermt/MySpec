@@ -20,7 +20,7 @@ export function RepoBlocked({ taskId, repo }: RepoBlockedProps) {
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto p-6">
-      <div className="mx-auto flex max-w-[760px] flex-col gap-4">
+      <div className="mx-auto flex max-w-[58.5rem] flex-col gap-4">
         <div
           role="alert"
           className="flex flex-col gap-2 rounded-lg border border-destructive/40 bg-destructive/10 p-4"

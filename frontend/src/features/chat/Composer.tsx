@@ -10,7 +10,7 @@ import { useAppStore, useDraft } from "@/store/app-store";
 
 function PausedNotice({ taskId, stage }: { taskId: string; stage: string }) {
   return (
-    <div className="mx-auto flex w-full max-w-[760px] items-center justify-between gap-3 rounded-lg border bg-muted p-3">
+    <div className="mx-auto flex w-full max-w-[58.5rem] items-center justify-between gap-3 rounded-lg border bg-muted p-3">
       <p className="text-sm">Paused. Resume to keep talking.</p>
       <Button onClick={() => void resume(taskId, stage)}>
         <Play />
@@ -68,7 +68,7 @@ export function Composer({ taskId, stage, session }: ComposerProps) {
 
   return (
     <div className="border-t p-3">
-      <div className="mx-auto flex w-full max-w-[760px] flex-col gap-1.5">
+      <div className="mx-auto flex w-full max-w-[58.5rem] flex-col gap-1.5">
         <div className="flex items-end gap-2">
           <Textarea
             value={draft}
