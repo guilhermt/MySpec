@@ -11,6 +11,10 @@ Read, before writing anything:
 - `git log {{base_branch}}..HEAD` and the diff of the branch against `{{base_branch}}`, to see what actually changed;
 - the PRD at `{{prd_path}}` and the technical specification at `{{tech_spec_path}}`, to see what the task set out to do.
 
+## Questions
+
+Ask the user anything only they can answer — which base branch to use when `{{base_branch}}` does not exist, or anything else you need to decide — with the `AskUserQuestion` tool, never as plain text at the end of a response. The line that says the draft is ready and the URL of the pull request are not questions: write them as text.
+
 ## Phase 1: Write the draft
 
 Write the draft to `{{draft_path}}`, with this header exactly:

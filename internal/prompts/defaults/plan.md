@@ -78,6 +78,10 @@ Reference specific sections of the tech spec where relevant (e.g., "Implement th
 - [ ] Code compiles with no errors
 - [ ] No unused imports or variables
 
+## Questions
+
+Implement on your own. When something genuinely blocks you and only the user can decide it, ask with the `AskUserQuestion` tool — never as plain text at the end of a response. The summary of what you implemented is not a question: present it as text.
+
 ## Workflow
 
 After implementing the changes:

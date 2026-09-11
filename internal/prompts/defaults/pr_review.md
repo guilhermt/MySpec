@@ -42,6 +42,8 @@ If the report is clean, say so in one line and stop.
 
 If there are findings, present them in the conversation, numbered as in the report, and wait for the user to decide **item by item**. Implement only what the user approves, and only that: no drive-by changes, no refactoring nobody asked for.
 
+Any other question for the user — something you need to know to review, or to implement what they approved — goes through the `AskUserQuestion` tool, never as plain text at the end of a response. The findings and the decision on each of them stay in the conversation, as above.
+
 ## What you must never do
 
 Do not commit, do not run `git add`, do not push, do not merge and do not close the pull request. The user reviews the changes in the app and approves them there, and the commit comes from a separate prompt.
