@@ -1,4 +1,4 @@
-import type { RepoPR, RepoStatus, TaskSummary } from "@/lib/wails";
+import type { RepoPR, RepoStatus, State, TaskSummary } from "@/lib/wails";
 import { asRepoStatus } from "@/lib/wails";
 
 const NO_REPOS: readonly RepoPR[] = [];
@@ -13,6 +13,17 @@ const REVIEWED_STATES: readonly RepoStatus[] = [
   "closed",
   "skipped",
 ];
+
+/**
+ * repoName is how a repository reads in the interface. The plan names the
+ * repository of the workspace itself ".", which is no name at all.
+ */
+export function repoName(app: State | null, repo: Pick<RepoPR, "repository">): string {
+  if (repo.repository !== "." && repo.repository !== "") {
+    return repo.repository;
+  }
+  return app?.workspace?.name ?? "Root";
+}
 
 /** reposOf is every repository of a task in the PR stage, empty outside it. */
 export function reposOf(task: TaskSummary | null): readonly RepoPR[] {

@@ -6,9 +6,10 @@ import { Conversation } from "@/features/chat/Conversation";
 import { DraftCard } from "@/features/task/DraftCard";
 import { RepoBlocked } from "@/features/task/RepoBlocked";
 import { ReviewStrip } from "@/features/task/ReviewStrip";
-import { closeStepLabel, prReportLabel, prStateLabel, repoName } from "@/features/task/repo-status";
+import { closeStepLabel, prReportLabel, prStateLabel } from "@/features/task/repo-status";
 import { ToneDot } from "@/features/task/StatusDot";
 import type { StatusTone } from "@/features/task/status";
+import { repoName } from "@/lib/repos";
 import {
   asCloseOutcome,
   asPRState,

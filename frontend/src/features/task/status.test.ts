@@ -1,34 +1,33 @@
 import { describe, expect, it } from "vitest";
 import {
   hasArtifacts,
-  isAttention,
   taskStageLabel,
   taskStatusLabel,
   taskStatusTone,
 } from "@/features/task/status";
 import type { RepoPR } from "@/lib/wails";
-import { makeRepoPR, makeReview, makeStep, makeTask } from "@/test/wails-mock";
+import { makeRepoPR, makeReview, makeSituation, makeStep, makeTask } from "@/test/wails-mock";
 
 describe("task status", () => {
   it.each([
-    ["working", "Working", "working", false],
-    ["waiting", "Waiting", "attention", true],
-    ["needs_permission", "Permission", "attention", true],
-    ["paused", "Paused", "paused", false],
-    ["error", "Error", "error", true],
-  ])("reads %s", (sessionStatus, label, tone, attention) => {
+    ["working", "Working", "working"],
+    ["waiting", "Waiting", "idle"],
+    ["needs_permission", "Permission", "idle"],
+    ["needs_answer", "Question", "idle"],
+    ["paused", "Paused", "paused"],
+    ["error", "Error", "idle"],
+  ])("reads %s", (sessionStatus, label, tone) => {
     const task = makeTask({ sessionStatus });
 
     expect(taskStatusLabel(task)).toBe(label);
     expect(taskStatusTone(task)).toBe(tone);
-    expect(isAttention(task)).toBe(attention);
   });
 
   it("treats a status it does not know as waiting", () => {
     const task = makeTask({ sessionStatus: "hibernating" });
 
     expect(taskStatusLabel(task)).toBe("Waiting");
-    expect(taskStatusTone(task)).toBe("attention");
+    expect(taskStatusTone(task)).toBe("idle");
   });
 
   it("places the current step in the plan once the implementation starts", () => {
@@ -43,8 +42,7 @@ describe("task status", () => {
     });
 
     expect(taskStatusLabel(task)).toBe("Step 1 of 2 · Awaiting review");
-    expect(taskStatusTone(task)).toBe("attention");
-    expect(isAttention(task)).toBe(true);
+    expect(taskStatusTone(task)).toBe("idle");
   });
 
   it("reads a working step through its session", () => {
@@ -60,7 +58,6 @@ describe("task status", () => {
 
     expect(taskStatusLabel(task)).toBe("Step 1 of 2 · Implementing");
     expect(taskStatusTone(task)).toBe("working");
-    expect(isAttention(task)).toBe(false);
   });
 
   it("carries the progress of the review into the tree", () => {
@@ -80,8 +77,7 @@ describe("task status", () => {
     });
 
     expect(taskStatusLabel(task)).toBe("Step 2 of 2 · Review 60%");
-    expect(taskStatusTone(task)).toBe("attention");
-    expect(isAttention(task)).toBe(true);
+    expect(taskStatusTone(task)).toBe("idle");
   });
 
   it("says the implementation is over once every step is committed", () => {
@@ -97,7 +93,6 @@ describe("task status", () => {
 
     expect(taskStatusLabel(task)).toBe("Implemented");
     expect(taskStatusTone(task)).toBe("done");
-    expect(isAttention(task)).toBe(false);
   });
 
   it("says so when the backend sends no steps", () => {
@@ -119,9 +114,10 @@ const API = { repository: "api", repoPath: "/home/dev/projects/api", slug: "api"
 describe("task status in the PR stage", () => {
   it.each([
     ["preparing", "PR · checking GitHub", "working"],
-    ["blocked", "PR · blocked", "attention"],
+    ["blocked", "PR · blocked", "idle"],
     ["drafting", "PR · writing the draft", "working"],
-    ["draft_ready", "PR · draft to approve", "attention"],
+    ["draft_ready", "PR · draft to approve", "idle"],
+    ["awaiting_reply", "PR · waiting for your reply", "idle"],
     ["opening", "PR · opening the pull request", "working"],
   ] as const)("reads a single repository before the PR exists: %s", (status, label, tone) => {
     const task = prTask(makeRepoPR({ status }));
@@ -132,8 +128,9 @@ describe("task status in the PR stage", () => {
 
   it.each([
     ["reviewing", "PR review · reviewing", "working"],
-    ["awaiting_decision", "PR review · decision needed", "attention"],
-    ["ready_to_approve", "PR review · ready to approve", "attention"],
+    ["awaiting_decision", "PR review · decision needed", "idle"],
+    ["awaiting_reply", "PR review · waiting for your reply", "idle"],
+    ["ready_to_approve", "PR review · ready to approve", "idle"],
     ["committing", "PR review · committing", "working"],
   ] as const)("reads a single repository once the PR is open: %s", (status, label, tone) => {
     const task = prTask(makeRepoPR({ status, prNumber: 12 }));
@@ -144,7 +141,7 @@ describe("task status in the PR stage", () => {
 
   it.each([
     ["done", "Closing · waiting for the merge", "idle"],
-    ["merged", "Closing · merged, ready to close", "attention"],
+    ["merged", "Closing · merged, ready to close", "idle"],
     ["pr_closed", "Closing · PR closed without merge", "idle"],
     ["closing", "Closing · closing", "working"],
     ["closed", "Closing · closed", "done"],
@@ -161,7 +158,7 @@ describe("task status in the PR stage", () => {
     );
 
     expect(taskStatusLabel(task)).toBe("Closing · merge unconfirmed");
-    expect(isAttention(task)).toBe(true);
+    expect(taskStatusTone(task)).toBe("idle");
   });
 
   it("carries how much of a review is staged", () => {
@@ -170,8 +167,7 @@ describe("task status in the PR stage", () => {
     );
 
     expect(taskStatusLabel(task)).toBe("PR review · 60% staged");
-    expect(taskStatusTone(task)).toBe("attention");
-    expect(isAttention(task)).toBe(true);
+    expect(taskStatusTone(task)).toBe("idle");
   });
 
   it("counts the repositories sharing the state it shows", () => {
@@ -190,7 +186,7 @@ describe("task status in the PR stage", () => {
     );
 
     expect(taskStatusLabel(task)).toBe("PR · draft to approve (1 of 2)");
-    expect(taskStatusTone(task)).toBe("attention");
+    expect(taskStatusTone(task)).toBe("idle");
   });
 
   it("puts a block above everything else", () => {
@@ -200,7 +196,21 @@ describe("task status in the PR stage", () => {
     );
 
     expect(taskStatusLabel(task)).toBe("PR · blocked (1 of 2)");
-    expect(taskStatusTone(task)).toBe("attention");
+    expect(taskStatusTone(task)).toBe("idle");
+  });
+
+  it("puts an agent waiting for a reply between the findings and the approval", () => {
+    const replying = prTask(
+      makeRepoPR({ status: "ready_to_approve", prNumber: 12 }),
+      makeRepoPR({ ...API, status: "awaiting_reply", prNumber: 13 }),
+    );
+    const deciding = prTask(
+      makeRepoPR({ status: "awaiting_reply", prNumber: 12 }),
+      makeRepoPR({ ...API, status: "awaiting_decision", prNumber: 13 }),
+    );
+
+    expect(taskStatusLabel(replying)).toBe("PR review · waiting for your reply (1 of 2)");
+    expect(taskStatusLabel(deciding)).toBe("PR review · decision needed (1 of 2)");
   });
 
   it("counts how much of the task has already left the workspace", () => {
@@ -210,7 +220,7 @@ describe("task status in the PR stage", () => {
     );
 
     expect(taskStatusLabel(task)).toBe("Closing · merged, ready to close (1 of 2 closed)");
-    expect(taskStatusTone(task)).toBe("attention");
+    expect(taskStatusTone(task)).toBe("idle");
   });
 
   it("waits for the merge with nothing closed yet", () => {
@@ -221,7 +231,6 @@ describe("task status in the PR stage", () => {
 
     expect(taskStatusLabel(task)).toBe("Closing · waiting for the merge (0 of 2 closed)");
     expect(taskStatusTone(task)).toBe("idle");
-    expect(isAttention(task)).toBe(false);
   });
 
   it("names the stage alone before the repositories are known", () => {
@@ -229,6 +238,59 @@ describe("task status in the PR stage", () => {
 
     expect(taskStatusLabel(task)).toBe("PR");
     expect(taskStatusTone(task)).toBe("idle");
+  });
+});
+
+describe("task status with situations", () => {
+  it("reads the most urgent situation over what the task is doing", () => {
+    const task = makeTask({
+      sessionStatus: "working",
+      situations: [makeSituation({ kind: "question" })],
+    });
+
+    expect(taskStatusLabel(task)).toBe("Question");
+    expect(taskStatusTone(task)).toBe("attention");
+  });
+
+  it("counts the other situations after the most urgent one", () => {
+    const place = { kind: "repo", stage: "", step: 0 };
+    const task = {
+      ...prTask(makeRepoPR({ status: "draft_ready" }), makeRepoPR({ ...API, status: "done" })),
+      situations: [
+        makeSituation({
+          kind: "draft",
+          place: { ...place, repoPath: "/home/dev/projects/web", repository: "web" },
+        }),
+        makeSituation({
+          id: "situation-2",
+          kind: "merge",
+          group: "closing",
+          form: "merge",
+          place: { ...place, repoPath: API.repoPath, repository: API.repository },
+        }),
+      ],
+    };
+
+    expect(taskStatusLabel(task)).toBe("Draft to approve +1");
+    expect(taskStatusTone(task)).toBe("attention");
+  });
+
+  it("takes the colour of an error from the group of the situation", () => {
+    const task = makeTask({
+      stage: "implementation",
+      currentStep: 2,
+      steps: [makeStep({ status: "done" }), makeStep({ number: 2, status: "blocked" })],
+      situations: [
+        makeSituation({
+          kind: "step_blocked",
+          group: "error",
+          place: { kind: "step", stage: "", step: 2, repoPath: "", repository: "" },
+        }),
+      ],
+    });
+
+    expect(taskStatusLabel(task)).toBe("Step 2 blocked");
+    expect(taskStatusTone(task)).toBe("error");
   });
 });
 

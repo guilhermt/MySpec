@@ -28,12 +28,12 @@ import {
   closeHint,
   hasRepoSession,
   prStateLabel,
-  repoName,
   repoStatusLabel,
   repoStatusTone,
 } from "@/features/task/repo-status";
 import { ToneDot } from "@/features/task/StatusDot";
 import { reviewCountLabel } from "@/features/task/step-status";
+import { repoName } from "@/lib/repos";
 import { asPRState, asRepoStatus, asSessionStatus, type RepoPR } from "@/lib/wails";
 import {
   approveRepo,

@@ -2,8 +2,8 @@ import { Archive, ExternalLink } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { formatDates, stepCount } from "@/features/history/history-format";
-import { repoName } from "@/features/task/repo-status";
 import { findNode } from "@/features/tree/tree-model";
+import { repoName } from "@/lib/repos";
 import type { ArchivedRepo, ArchivedTask, State } from "@/lib/wails";
 import { openExternal } from "@/store/actions";
 import {

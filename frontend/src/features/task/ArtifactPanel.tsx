@@ -4,11 +4,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Markdown } from "@/features/chat/Markdown";
 import { ErrorNotice } from "@/features/notice/Notice";
-import { prReportLabel, repoName } from "@/features/task/repo-status";
+import { prReportLabel } from "@/features/task/repo-status";
 import { StepDocument } from "@/features/task/StepDocument";
 import { StepList } from "@/features/task/StepList";
 import { useArtifact } from "@/features/task/useArtifact";
-import { reposOf } from "@/lib/repos";
+import { repoName, reposOf } from "@/lib/repos";
 import { asTaskStage, type RepoPR, type Step, type TaskStage, type TaskSummary } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
 

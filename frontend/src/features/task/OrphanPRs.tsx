@@ -1,6 +1,5 @@
 import { ExternalLink } from "lucide-react";
-import { repoName } from "@/features/task/repo-status";
-import { reposOf } from "@/lib/repos";
+import { repoName, reposOf } from "@/lib/repos";
 import type { PRPreview, RepoPR, TaskSummary } from "@/lib/wails";
 import { openExternal } from "@/store/actions";
 import { useAppStore } from "@/store/app-store";

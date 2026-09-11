@@ -1,6 +1,7 @@
 import { ExternalLink } from "lucide-react";
-import { repoName, repoStatusLabel, repoStatusTone } from "@/features/task/repo-status";
+import { repoStatusLabel, repoStatusTone } from "@/features/task/repo-status";
 import { ToneDot } from "@/features/task/StatusDot";
+import { repoName } from "@/lib/repos";
 import { cn } from "@/lib/utils";
 import type { RepoPR, TaskSummary } from "@/lib/wails";
 import { openExternal } from "@/store/actions";

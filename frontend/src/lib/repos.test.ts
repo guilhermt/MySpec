@@ -5,11 +5,26 @@ import {
   everyRepoHasPR,
   everyRepoReviewed,
   repoAwaitsUser,
+  repoName,
   reposOf,
 } from "@/lib/repos";
-import { makeRepoPR, makeTask } from "@/test/wails-mock";
+import { makeRepoPR, makeState, makeTask } from "@/test/wails-mock";
 
 const API = { repository: "api", repoPath: "/home/dev/projects/api", slug: "api" };
+
+describe("repoName", () => {
+  it("is the path the plan gave the repository", () => {
+    expect(repoName(makeState(), makeRepoPR({ repository: "web" }))).toBe("web");
+  });
+
+  it("is the name of the workspace for the repository that is the workspace", () => {
+    expect(repoName(makeState(), makeRepoPR({ repository: "." }))).toBe("projects");
+  });
+
+  it("falls back to Root without a workspace to name", () => {
+    expect(repoName(null, makeRepoPR({ repository: "." }))).toBe("Root");
+  });
+});
 
 describe("reposOf", () => {
   it("is empty for a task outside the PR stage", () => {
