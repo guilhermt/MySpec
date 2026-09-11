@@ -8,6 +8,7 @@ import {
   canReviewAgain,
   closeHint,
   closeStepLabel,
+  draftAtHand,
   hasRepoSession,
   prBlockHint,
   prBlockTitle,
@@ -66,6 +67,25 @@ describe("what a repository allows", () => {
       canOpenPR(makeRepoPR({ status: "awaiting_reply", draft: DRAFT, turnRunning: true })),
     ).toBe(false);
     expect(canOpenPR(makeRepoPR({ status: "awaiting_reply" }))).toBe(false);
+  });
+
+  it("has the draft at hand only while it is ready or left by an opening that failed", () => {
+    expect(draftAtHand(makeRepoPR({ status: "draft_ready" }))).toBe(true);
+    // The agent is in a turn: the draft is still at hand, only not sendable yet.
+    expect(draftAtHand(makeRepoPR({ status: "draft_ready", turnRunning: true }))).toBe(true);
+    expect(draftAtHand(makeRepoPR({ status: "awaiting_reply", draft: DRAFT }))).toBe(true);
+    expect(draftAtHand(makeRepoPR({ status: "awaiting_reply" }))).toBe(false);
+    expect(draftAtHand(makeRepoPR({ status: "drafting", draft: DRAFT }))).toBe(false);
+    expect(draftAtHand(makeRepoPR({ status: "reviewing", draft: DRAFT, prNumber: 12 }))).toBe(
+      false,
+    );
+  });
+
+  it("keeps the draft a record while the agent waits for a reply over an open pull request", () => {
+    const repo = makeRepoPR({ status: "awaiting_reply", draft: DRAFT, prNumber: 12 });
+
+    expect(draftAtHand(repo)).toBe(false);
+    expect(canOpenPR(repo)).toBe(false);
   });
 
   it("approves only with everything staged", () => {

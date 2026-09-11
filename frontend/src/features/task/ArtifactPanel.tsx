@@ -9,6 +9,7 @@ import { StepDocument } from "@/features/task/StepDocument";
 import { StepList } from "@/features/task/StepList";
 import { useArtifact } from "@/features/task/useArtifact";
 import { repoName, reposOf } from "@/lib/repos";
+import { stepSituation } from "@/lib/situations";
 import { asTaskStage, type RepoPR, type Step, type TaskStage, type TaskSummary } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
 
@@ -194,6 +195,7 @@ export function ArtifactPanel({ task }: ArtifactPanelProps) {
             steps={steps}
             problems={task.planProblems ?? []}
             currentStep={task.currentStep}
+            situation={stepSituation(task, task.currentStep)}
             onOpen={openStepFile}
           />
         ) : view === "pr" ? (

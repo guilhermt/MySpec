@@ -2,9 +2,14 @@ import { screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { StepList } from "@/features/task/StepList";
 import { renderWithStore } from "@/test/render";
-import { makeState, makeStep } from "@/test/wails-mock";
+import { makeSituation, makeState, makeStep } from "@/test/wails-mock";
 
 const state = makeState();
+
+// The dot has no role of its own: it is the hidden element that carries the tone.
+function dotOf(element: HTMLElement): Element | null {
+  return element.querySelector('[aria-hidden="true"]');
+}
 
 describe("StepList", () => {
   it("lists the steps in order, with the name the tree gives the repository", () => {
@@ -79,6 +84,41 @@ describe("StepList", () => {
     const [first, second] = screen.getAllByRole("listitem");
     expect(first).toHaveAttribute("aria-current", "step");
     expect(second).not.toHaveAttribute("aria-current");
+  });
+
+  it("colours the step being run with its situation, and every other step with its state", () => {
+    renderWithStore(
+      <StepList
+        steps={[
+          makeStep({ status: "done" }),
+          makeStep({
+            number: 2,
+            file: "2-check-the-token.md",
+            title: "Check the token",
+            status: "blocked",
+            block: { reason: "dirty_worktree", detail: "", files: 2 },
+          }),
+          makeStep({ number: 3, file: "3-log-out.md", title: "Log out" }),
+        ]}
+        problems={[]}
+        currentStep={2}
+        situation={makeSituation({
+          kind: "step_blocked",
+          group: "error",
+          place: { kind: "step", stage: "", step: 2, repoPath: "", repository: "" },
+        })}
+      />,
+      { state },
+    );
+
+    const [done, blocked, next] = screen.getAllByRole("listitem") as [
+      HTMLElement,
+      HTMLElement,
+      HTMLElement,
+    ];
+    expect(dotOf(blocked)).toHaveClass("bg-destructive");
+    expect(dotOf(done)).toHaveClass("bg-[var(--status-success)]");
+    expect(dotOf(next)).toHaveClass("bg-muted-foreground");
   });
 
   it("shows what a committed step delivered", () => {

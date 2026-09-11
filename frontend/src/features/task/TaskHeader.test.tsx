@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { TaskHeader } from "@/features/task/TaskHeader";
 import { api, type TaskSummary } from "@/lib/wails";
 import { renderWithStore } from "@/test/render";
-import { makeState, makeStep, makeTask } from "@/test/wails-mock";
+import { makeRepoPR, makeSituation, makeState, makeStep, makeTask } from "@/test/wails-mock";
 
 function header(overrides: Partial<TaskSummary> = {}, onToggle = vi.fn()) {
   const task = makeTask(overrides);
@@ -38,6 +38,35 @@ describe("TaskHeader", () => {
     header(overrides);
 
     expect(screen.getByRole("status")).toHaveTextContent(expected);
+  });
+
+  it("reads the most urgent situation of the task and how many others it has, in its tone", () => {
+    const API = "/home/dev/projects/api";
+    const WEB = "/home/dev/projects/web";
+    header({
+      stage: "pr",
+      repos: [
+        makeRepoPR({ repository: "api", repoPath: API, slug: "api", status: "blocked" }),
+        makeRepoPR({ status: "draft_ready" }),
+      ],
+      situations: [
+        makeSituation({
+          id: "api-blocked",
+          kind: "pr_blocked",
+          group: "error",
+          place: { kind: "repo", stage: "", step: 0, repoPath: API, repository: "api" },
+        }),
+        makeSituation({
+          id: "web-draft",
+          kind: "draft",
+          place: { kind: "repo", stage: "", step: 0, repoPath: WEB, repository: "web" },
+        }),
+      ],
+    });
+
+    const status = screen.getByRole("status");
+    expect(status).toHaveTextContent("PR blocked +1");
+    expect(status.querySelector('[aria-hidden="true"]')).toHaveClass("bg-destructive");
   });
 
   it("pauses a running session", async () => {

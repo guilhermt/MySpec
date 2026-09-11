@@ -80,16 +80,27 @@ export function repoStatusTone(repo: RepoPR): StatusTone {
 }
 
 /**
- * canOpenPR reports whether the draft is the user's to send. The text itself
- * still has to say something, which the card checks.
+ * draftAtHand reports whether the draft is the user's to send: a ready draft,
+ * or the one an opening that failed left while the agent waits for a reply, so
+ * that trying again needs no message to the agent first. Once the pull request
+ * exists the draft is only a record, even when the agent waits for a reply
+ * during the review.
+ */
+export function draftAtHand(repo: RepoPR): boolean {
+  const status = asRepoStatus(repo.status);
+  return (
+    status === "draft_ready" ||
+    (status === "awaiting_reply" && repo.draft !== null && repo.prNumber === 0)
+  );
+}
+
+/**
+ * canOpenPR reports whether the draft can be sent right now: it is at hand and
+ * the agent is not in a turn. The text itself still has to say something,
+ * which the card checks.
  */
 export function canOpenPR(repo: RepoPR): boolean {
-  const status = asRepoStatus(repo.status);
-  // An opening that failed leaves the agent waiting for a reply with the draft
-  // still there: trying again needs no message to the agent first.
-  const draftAtHand =
-    status === "draft_ready" || (status === "awaiting_reply" && repo.draft !== null);
-  return draftAtHand && !repo.turnRunning;
+  return draftAtHand(repo) && !repo.turnRunning;
 }
 
 /** canApproveRepo reports whether every changed file is staged and waiting. */

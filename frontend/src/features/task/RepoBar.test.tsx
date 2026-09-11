@@ -1,18 +1,23 @@
 import { screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { RepoBar } from "@/features/task/RepoBar";
-import { api, type RepoPR } from "@/lib/wails";
+import { api, type RepoPR, type Situation } from "@/lib/wails";
 import { renderWithStore } from "@/test/render";
-import { makeRepoPR, makeReview, makeState, makeTask } from "@/test/wails-mock";
+import { makeRepoPR, makeReview, makeSituation, makeState, makeTask } from "@/test/wails-mock";
 
 const DRAFT = { title: "Add the login form", body: "Closes #12", file: "web-draft.md" };
 
-function bar(overrides: Partial<RepoPR> = {}) {
+function bar(overrides: Partial<RepoPR> = {}, situations: Situation[] = []) {
   const repo = makeRepoPR(overrides);
-  const task = makeTask({ stage: "pr", repos: [repo] });
-  return renderWithStore(<RepoBar taskId={task.id} repo={repo} />, {
+  const task = makeTask({ stage: "pr", repos: [repo], situations });
+  return renderWithStore(<RepoBar task={task} repo={repo} />, {
     state: makeState({ tasks: [task] }),
   });
+}
+
+// The dot has no role of its own: it is the hidden element that carries the tone.
+function dotOf(element: HTMLElement): Element | null {
+  return element.querySelector('[aria-hidden="true"]');
 }
 
 describe("RepoBar", () => {
@@ -21,6 +26,31 @@ describe("RepoBar", () => {
 
     expect(screen.getByText("web")).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("Preparing the draft");
+    expect(dotOf(screen.getByRole("status"))).toHaveClass("bg-[var(--status-working)]");
+  });
+
+  it("takes the tone of the situation of the repository", () => {
+    bar({ status: "blocked", block: { reason: "gh_missing", detail: "" } }, [
+      makeSituation({
+        kind: "pr_blocked",
+        group: "error",
+        place: {
+          kind: "repo",
+          stage: "",
+          step: 0,
+          repoPath: "/home/dev/projects/web",
+          repository: "web",
+        },
+      }),
+    ]);
+
+    expect(dotOf(screen.getByRole("status"))).toHaveClass("bg-destructive");
+  });
+
+  it("keeps the tone of the state while the repository has no situation", () => {
+    bar({ status: "blocked", block: { reason: "gh_missing", detail: "" } });
+
+    expect(dotOf(screen.getByRole("status"))).toHaveClass("bg-muted-foreground");
   });
 
   it("spells the review out in files", () => {
@@ -69,6 +99,31 @@ describe("RepoBar", () => {
       DRAFT.body,
     );
   });
+
+  it("opens the pull request again from the draft an opening that failed left", async () => {
+    const { user } = bar({ status: "awaiting_reply", draft: DRAFT });
+
+    await user.click(screen.getByRole("button", { name: "Open PR" }));
+
+    expect(api.openPR).toHaveBeenCalledWith(
+      "task-1",
+      "/home/dev/projects/web",
+      DRAFT.title,
+      DRAFT.body,
+    );
+  });
+
+  it.each([
+    ["before the draft exists", {}],
+    ["once the pull request exists", { draft: DRAFT, prNumber: 12 }],
+  ] as const)(
+    "has no pull request to open while the agent waits for a reply %s",
+    (_, overrides) => {
+      bar({ status: "awaiting_reply", ...overrides });
+
+      expect(screen.queryByRole("button", { name: "Open PR" })).not.toBeInTheDocument();
+    },
+  );
 
   it("approves only with every file staged", async () => {
     bar({ status: "in_review", review: makeReview() });

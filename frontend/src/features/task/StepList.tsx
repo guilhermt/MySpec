@@ -1,9 +1,11 @@
 import { Badge } from "@/components/ui/badge";
 import { ToneDot } from "@/features/task/StatusDot";
+import type { StatusTone } from "@/features/task/status";
 import { stepStatusLabel, stepStatusTone } from "@/features/task/step-status";
 import { findNode } from "@/features/tree/tree-model";
+import { situationTone } from "@/lib/situations";
 import { cn } from "@/lib/utils";
-import type { PlanProblem, State, Step } from "@/lib/wails";
+import type { PlanProblem, Situation, State, Step } from "@/lib/wails";
 import { repoNodeId, useAppStore } from "@/store/app-store";
 
 const ROW = "flex w-full items-center gap-3 rounded-md px-2 py-1.5 text-left text-sm";
@@ -43,8 +45,15 @@ function Problems({ problems }: { problems: readonly PlanProblem[] }) {
   );
 }
 
+interface RowProps {
+  step: Step;
+  app: State | null;
+  current: boolean;
+  tone: StatusTone;
+}
+
 /** Row is one step, in the order the plan gave it. */
-function Row({ step, app, current }: { step: Step; app: State | null; current: boolean }) {
+function Row({ step, app, current, tone }: RowProps) {
   const label = repoLabel(app, step);
 
   return (
@@ -73,7 +82,7 @@ function Row({ step, app, current }: { step: Step; app: State | null; current: b
           !current && "text-muted-foreground",
         )}
       >
-        <ToneDot tone={stepStatusTone(step)} />
+        <ToneDot tone={tone} />
         {stepStatusLabel(step)}
       </span>
     </>
@@ -85,12 +94,20 @@ export interface StepListProps {
   problems: readonly PlanProblem[];
   /** currentStep is the step being run, 0 when none is. */
   currentStep: number;
+  /** situation is what the step being run waits on the user for, null when nothing. */
+  situation?: Situation | null;
   /** onOpen makes each step a way into the file behind it. */
   onOpen?: (step: Step) => void;
 }
 
 /** StepList is the plan of a task: what will be built, in which repository. */
-export function StepList({ steps, problems, currentStep, onOpen }: StepListProps) {
+export function StepList({
+  steps,
+  problems,
+  currentStep,
+  situation = null,
+  onOpen,
+}: StepListProps) {
   const app = useAppStore((state) => state.app);
 
   return (
@@ -100,12 +117,16 @@ export function StepList({ steps, problems, currentStep, onOpen }: StepListProps
         {steps.map((step) => {
           const current = step.number === currentStep;
           const highlight = current && "bg-accent/60 font-medium";
+          // Only the step being run can wait on the user, and then it takes the
+          // colour of its situation; every other step shows its state.
+          const tone =
+            current && situation !== null ? situationTone(situation) : stepStatusTone(step);
 
           return (
             <li key={step.file} aria-current={current ? "step" : undefined}>
               {onOpen === undefined ? (
                 <div className={cn(ROW, highlight)}>
-                  <Row step={step} app={app} current={current} />
+                  <Row step={step} app={app} current={current} tone={tone} />
                 </div>
               ) : (
                 <button
@@ -113,7 +134,7 @@ export function StepList({ steps, problems, currentStep, onOpen }: StepListProps
                   onClick={() => onOpen(step)}
                   className={cn(ROW, "transition-colors hover:bg-accent", highlight)}
                 >
-                  <Row step={step} app={app} current={current} />
+                  <Row step={step} app={app} current={current} tone={tone} />
                 </button>
               )}
             </li>

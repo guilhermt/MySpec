@@ -3,7 +3,12 @@ import { describe, expect, it } from "vitest";
 import { StepBar } from "@/features/task/StepBar";
 import { api, type Step, type TaskSummary } from "@/lib/wails";
 import { renderWithStore } from "@/test/render";
-import { makeReview, makeState, makeStep, makeTask } from "@/test/wails-mock";
+import { makeReview, makeSituation, makeState, makeStep, makeTask } from "@/test/wails-mock";
+
+// The dot has no role of its own: it is the hidden element that carries the tone.
+function dotOf(element: HTMLElement): Element | null {
+  return element.querySelector('[aria-hidden="true"]');
+}
 
 function bar(step: Partial<Step> = {}, overrides: Partial<TaskSummary> = {}) {
   const task = makeTask({
@@ -36,6 +41,31 @@ describe("StepBar", () => {
     bar({ status: "implementing", worktreePath: "/w/api/add-login" }, { sessionStatus: "paused" });
 
     expect(screen.getByRole("status")).toHaveTextContent("Paused");
+    expect(dotOf(screen.getByRole("status"))).toHaveClass("bg-[var(--status-paused)]");
+  });
+
+  it("takes the tone of the situation of a blocked step", () => {
+    bar(
+      { status: "blocked", block: { reason: "dirty_worktree", detail: "", files: 2 } },
+      {
+        situations: [
+          makeSituation({
+            kind: "step_blocked",
+            group: "error",
+            place: { kind: "step", stage: "", step: 1, repoPath: "", repository: "" },
+          }),
+        ],
+      },
+    );
+
+    expect(screen.getByRole("status")).toHaveTextContent("Blocked");
+    expect(dotOf(screen.getByRole("status"))).toHaveClass("bg-destructive");
+  });
+
+  it("keeps the tone of the state while the step has no situation", () => {
+    bar({ status: "blocked", block: { reason: "dirty_worktree", detail: "", files: 2 } });
+
+    expect(dotOf(screen.getByRole("status"))).toHaveClass("bg-muted-foreground");
   });
 
   it("opens the worktree in VS Code", async () => {
