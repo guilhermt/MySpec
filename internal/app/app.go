@@ -108,8 +108,8 @@ func Run(cfg Config) int {
 	}
 	defer func() { _ = st.Close() }()
 
-	if err = prompts.Seed(dirs.Data, log); err != nil {
-		return fail(log, "seed prompts", err)
+	if err = prompts.Prepare(dirs.Data, log); err != nil {
+		return fail(log, "prepare prompts", err)
 	}
 
 	bindings.RegisterEvents()

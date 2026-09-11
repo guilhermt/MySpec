@@ -1,11 +1,10 @@
 // Package prompts owns the session prompts: the defaults embedded in the
-// binary, the copies in use in the data directory and their rendering. The
-// prompt of a step is the step file itself, which the app writes, so it has
-// no default and no copy here.
+// binary, the edits the user made to them in the data directory, and their
+// rendering. The prompt of a step is the step file itself, which the plan
+// writes, so it has no default and no edit here.
 package prompts
 
 import (
-	"bytes"
 	"embed"
 	"errors"
 	"fmt"
@@ -13,6 +12,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -37,6 +37,21 @@ const (
 
 // StageStep is the prompt of a step session: the step file itself.
 const StageStep Stage = "step"
+
+// Editable are the prompts the user reads and edits in the settings, in
+// workflow order. The prompt of a step is a file of the plan, not one of them.
+var Editable = []Stage{StagePRD, StageTechSpec, StagePlan, StageCommit, StagePR, StagePRReview}
+
+// ErrUnknownStage is a prompt the app does not have.
+var ErrUnknownStage = errors.New("prompts: unknown prompt")
+
+// ParseStage narrows a received string to an editable prompt.
+func ParseStage(value string) (Stage, error) {
+	if !slices.Contains(Editable, Stage(value)) {
+		return "", fmt.Errorf("parse prompt %q: %w", value, ErrUnknownStage)
+	}
+	return Stage(value), nil
+}
 
 // dirPerm and filePerm keep the prompts private to the user.
 const (
@@ -63,6 +78,27 @@ const (
 	pushPlaceholder           = "{{push}}"
 )
 
+// placeholderOrder is every placeholder, in the order the settings list them.
+var placeholderOrder = []string{
+	taskNamePlaceholder, artifactsDirPlaceholder, prdPathPlaceholder, techSpecPathPlaceholder,
+	stepsDirPlaceholder, repositoriesPlaceholder, initialContextPlaceholder, repositoryPlaceholder,
+	branchPlaceholder, baseBranchPlaceholder, draftPathPlaceholder, reviewPathPlaceholder,
+	prNumberPlaceholder, prURLPlaceholder, pushPlaceholder,
+}
+
+// Prompt is a prompt as the settings show it.
+type Prompt struct {
+	Stage Stage
+	Text  string
+	// Modified says the user edited the prompt: it no longer follows the
+	// default of the app.
+	Modified bool
+	// Placeholders are the placeholders the default of the prompt uses, in the
+	// order of placeholderOrder. What the user's edit kept of them is not what
+	// they are: the list is about the default.
+	Placeholders []string
+}
+
 // PushInstruction is what the app puts in the commit prompt when the commit
 // belongs to a pull request that already exists.
 const PushInstruction = "After committing, push this branch to `origin`, so the commit reaches the pull request. Push only this branch, and never force-push."
@@ -85,48 +121,135 @@ func pathFor(dataDir string, stage Stage) string {
 	return filepath.Join(Dir(dataDir), string(stage)+".md")
 }
 
-// Seed writes the default prompts into Dir(dataDir). A prompt already there is
-// rewritten when it differs from its default: the app has no way to edit a
-// prompt yet, so the default of this version is the prompt in use.
-func Seed(dataDir string, log *slog.Logger) error {
+// Prepare readies the prompts directory for the edits of the user: it creates
+// it and removes every file that is a copy of its default, which is what the
+// versions before this one wrote there. Without a file, a prompt follows the
+// default of the version that runs.
+func Prepare(dataDir string, log *slog.Logger) error {
 	dir := Dir(dataDir)
 	if err := os.MkdirAll(dir, dirPerm); err != nil {
 		return fmt.Errorf("create prompts directory %s: %w", dir, err)
 	}
 
-	entries, err := fs.ReadDir(defaults, defaultsDir)
-	if err != nil {
-		return fmt.Errorf("read embedded prompts: %w", err)
-	}
-
-	for _, entry := range entries {
-		name := entry.Name()
-		content, err := defaults.ReadFile(defaultsDir + "/" + name)
+	for _, stage := range Editable {
+		edited, ok, err := editedText(dataDir, stage)
 		if err != nil {
-			return fmt.Errorf("read embedded prompt %s: %w", name, err)
+			return err
 		}
-
-		path := filepath.Join(dir, name)
-		current, err := os.ReadFile(path)
-		exists := err == nil
-		switch {
-		case exists && bytes.Equal(current, content):
+		if !ok {
 			continue
-		case !exists && !errors.Is(err, fs.ErrNotExist):
-			return fmt.Errorf("read prompt %s: %w", path, err)
 		}
 
-		if err = os.WriteFile(path, content, filePerm); err != nil {
-			return fmt.Errorf("write prompt %s: %w", path, err)
+		embedded, err := defaultText(stage)
+		if err != nil {
+			return err
 		}
-		stage := strings.TrimSuffix(name, ".md")
-		if exists {
-			log.Info("prompt updated", "stage", stage, "path", path)
-		} else {
-			log.Info("prompt seeded", "stage", stage, "path", path)
+		if edited != embedded {
+			continue
 		}
+
+		path := pathFor(dataDir, stage)
+		if err = os.Remove(path); err != nil {
+			return fmt.Errorf("remove prompt %s: %w", path, err)
+		}
+		log.Info("prompt copy of the default removed", "stage", string(stage), "path", path)
 	}
 	return nil
+}
+
+// Read is a prompt as the user edits it: their edit when there is one, the
+// default otherwise.
+func Read(dataDir string, stage Stage) (Prompt, error) {
+	embedded, err := defaultText(stage)
+	if err != nil {
+		return Prompt{}, err
+	}
+
+	edited, ok, err := editedText(dataDir, stage)
+	if err != nil {
+		return Prompt{}, err
+	}
+
+	prompt := Prompt{Stage: stage, Text: embedded, Modified: ok, Placeholders: []string{}}
+	if ok {
+		prompt.Text = edited
+	}
+	for _, placeholder := range placeholderOrder {
+		if strings.Contains(embedded, placeholder) {
+			prompt.Placeholders = append(prompt.Placeholders, placeholder)
+		}
+	}
+	return prompt, nil
+}
+
+// Save stores the text of a prompt. The text of the default is no edit: the
+// file goes, and the prompt follows the default again.
+func Save(dataDir string, stage Stage, text string) (Prompt, error) {
+	embedded, err := defaultText(stage)
+	if err != nil {
+		return Prompt{}, err
+	}
+
+	path := pathFor(dataDir, stage)
+	if text == embedded {
+		if err = os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return Prompt{}, fmt.Errorf("save prompt %s: %w", path, err)
+		}
+		return Read(dataDir, stage)
+	}
+
+	if err = os.MkdirAll(Dir(dataDir), dirPerm); err != nil {
+		return Prompt{}, fmt.Errorf("save prompt %s: %w", path, err)
+	}
+	if err = os.WriteFile(path, []byte(text), filePerm); err != nil {
+		return Prompt{}, fmt.Errorf("save prompt %s: %w", path, err)
+	}
+	return Read(dataDir, stage)
+}
+
+// Restore throws the edit of a prompt away, so that it follows the default.
+func Restore(dataDir string, stage Stage) (Prompt, error) {
+	path := pathFor(dataDir, stage)
+	if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return Prompt{}, fmt.Errorf("restore prompt %s: %w", path, err)
+	}
+	return Read(dataDir, stage)
+}
+
+// defaultText is the prompt of a stage embedded in the binary.
+func defaultText(stage Stage) (string, error) {
+	content, err := defaults.ReadFile(defaultsDir + "/" + string(stage) + ".md")
+	if err != nil {
+		return "", fmt.Errorf("read embedded prompt %s: %w", stage, err)
+	}
+	return string(content), nil
+}
+
+// editedText is the edit of a prompt in the data directory; ok is false when
+// the user has none.
+func editedText(dataDir string, stage Stage) (text string, ok bool, err error) {
+	path := pathFor(dataDir, stage)
+	content, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return "", false, nil
+		}
+		return "", false, fmt.Errorf("read prompt %s: %w", path, err)
+	}
+	return string(content), true, nil
+}
+
+// source is the text a session of a stage starts with: the edit when there is
+// one, the default otherwise.
+func source(dataDir string, stage Stage) (string, error) {
+	text, ok, err := editedText(dataDir, stage)
+	if err != nil {
+		return "", err
+	}
+	if ok {
+		return text, nil
+	}
+	return defaultText(stage)
 }
 
 // Vars are the placeholders a prompt may use.
@@ -172,11 +295,12 @@ func repositoryList(paths []string) string {
 	return strings.Join(items, "\n")
 }
 
-// Render reads the prompt file for stage and replaces its placeholders. A
-// prompt the user edited may have lost a placeholder, which is not an error;
-// a prompt with an initial context to pass and no placeholder for it gets the
-// context appended, so that what the user wrote is never dropped. StageStep
-// is the exception: the step file is sent verbatim.
+// Render takes the prompt of stage, the edit of the user when there is one and
+// the default otherwise, and replaces its placeholders. A prompt the user
+// edited may have lost a placeholder, which is not an error; a prompt with an
+// initial context to pass and no placeholder for it gets the context appended,
+// so that what the user wrote is never dropped. StageStep is the exception:
+// the step file is sent verbatim.
 func Render(dataDir string, stage Stage, vars Vars) (string, error) {
 	if stage == StageStep {
 		raw, err := os.ReadFile(vars.StepPath)
@@ -186,13 +310,11 @@ func Render(dataDir string, stage Stage, vars Vars) (string, error) {
 		return string(raw), nil
 	}
 
-	path := pathFor(dataDir, stage)
-	raw, err := os.ReadFile(path)
+	text, err := source(dataDir, stage)
 	if err != nil {
-		return "", fmt.Errorf("read prompt %s: %w", path, err)
+		return "", err
 	}
 
-	text := string(raw)
 	rendered := strings.NewReplacer(
 		taskNamePlaceholder, vars.TaskName,
 		artifactsDirPlaceholder, vars.ArtifactsDir,

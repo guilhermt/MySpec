@@ -220,8 +220,8 @@ func newFixture(t *testing.T) *fixture {
 	})
 
 	f.dataDir = t.TempDir()
-	if err = prompts.Seed(f.dataDir, log); err != nil {
-		t.Fatalf("prompts.Seed() = %v, want nil", err)
+	if err = prompts.Prepare(f.dataDir, log); err != nil {
+		t.Fatalf("prompts.Prepare() = %v, want nil", err)
 	}
 	f.sessions = session.New(session.Deps{
 		Sessions: st.Sessions,
