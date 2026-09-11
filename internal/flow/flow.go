@@ -12,6 +12,7 @@ import (
 
 	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/git"
+	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/review"
 	"github.com/guilhermt/myspec/internal/session"
@@ -29,6 +30,8 @@ type Tasks interface {
 	Artifacts(id string) (task.Artifacts, bool) // the last inspection, for snapshots
 	Inspect(id string) (task.Artifacts, error)
 	SetStage(ctx context.Context, id string, stage task.Stage, revisiting bool) (task.Task, error)
+	SetStageModel(ctx context.Context, id string, stage models.Stage, c models.Choice) (task.Task, error)
+	SetStepModel(ctx context.Context, id string, number int, c models.Choice) (task.Task, error)
 	RemoveArtifacts(ctx context.Context, id string, from task.Stage) error
 	Repositories(t task.Task) []task.Repository
 	PRRuns(id string) []task.PRRun
@@ -54,6 +57,7 @@ type Sessions interface {
 	CloseTask(ctx context.Context, taskID string) error
 	DiscardTask(ctx context.Context, taskID string) error
 	Resume(ctx context.Context, k session.Key) error
+	SetChoice(ctx context.Context, k session.Key, c models.Choice) error
 	Summary(k session.Key) (session.Summary, bool)
 	Summaries() map[session.Key]session.Summary
 	SendFromApp(ctx context.Context, k session.Key, text string) error
@@ -188,7 +192,9 @@ type repoWork struct {
 }
 
 // TaskInfo is what the session of a task needs to know about it at the stage
-// the task is in.
+// the task is in. The stages that have a session of their own, prd, tech_spec
+// and plan, go by the same name in internal/task and in internal/models, so
+// the choice of the stage is read with the name the task carries.
 func TaskInfo(t task.Task, a task.Artifacts, repos []task.Repository) session.TaskInfo {
 	rels := make([]string, len(repos))
 	for i, repo := range repos {
@@ -207,5 +213,6 @@ func TaskInfo(t task.Task, a task.Artifacts, repos []task.Repository) session.Ta
 		Repositories:   rels,
 		InitialContext: t.InitialContext,
 		ArtifactExists: a.Done(t.Stage),
+		Choice:         t.Models.Stage(models.Stage(t.Stage)),
 	}
 }

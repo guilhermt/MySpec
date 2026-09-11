@@ -116,6 +116,13 @@ func validateArgs(args []string) error {
 	if (flagValue(args, "--session-id") == "") == (flagValue(args, "--resume") == "") {
 		return errors.New("exactly one of --session-id and --resume is required")
 	}
+	// The app never leaves the model or the effort to the defaults of the
+	// machine, so a command line without them is one it should never produce.
+	for _, flag := range []string{"--model", "--effort"} {
+		if flagValue(args, flag) == "" {
+			return fmt.Errorf("%s is required", flag)
+		}
+	}
 	return nil
 }
 

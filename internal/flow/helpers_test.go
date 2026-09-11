@@ -15,6 +15,7 @@ import (
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/git"
+	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/review"
 	"github.com/guilhermt/myspec/internal/session"
@@ -48,6 +49,7 @@ type memTasks struct {
 	artifacts map[string]task.Artifacts
 	runs      map[string][]task.StepRun
 	prs       map[string][]task.PRRun
+	seeded    map[string]task.Models // the choices a test made for a task, by id
 	calls     []string
 	err       error         // returned by every mutation
 	block     chan struct{} // when set, Inspect waits on it
@@ -59,6 +61,7 @@ func newTasks() *memTasks {
 		artifacts: map[string]task.Artifacts{},
 		runs:      map[string][]task.StepRun{},
 		prs:       map[string][]task.PRRun{},
+		seeded:    map[string]task.Models{},
 	}
 }
 
@@ -147,6 +150,67 @@ func (m *memTasks) SetStage(_ context.Context, id string, stage task.Stage, revi
 	m.items[index].Stage = stage
 	m.items[index].Revisiting = revisiting
 	return m.items[index], nil
+}
+
+func (m *memTasks) SetStageModel(
+	_ context.Context, id string, stage models.Stage, c models.Choice,
+) (task.Task, error) {
+	return m.updateModels(
+		id,
+		"model:"+id+":"+string(stage)+":"+string(c.Model)+":"+string(c.Effort),
+		func(choices *task.Models) { choices.Stages[stage] = c },
+	)
+}
+
+func (m *memTasks) SetStepModel(_ context.Context, id string, number int, c models.Choice) (task.Task, error) {
+	return m.updateModels(
+		id,
+		"stepModel:"+id+":"+strconv.Itoa(number)+":"+string(c.Model)+":"+string(c.Effort),
+		func(choices *task.Models) { choices.Steps[number] = c },
+	)
+}
+
+// updateModels records the models of a task the way task.Service does, on
+// copies of the maps: what the call says nothing about is kept.
+func (m *memTasks) updateModels(id, label string, mutate func(*task.Models)) (task.Task, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.calls = append(m.calls, label)
+	if m.err != nil {
+		return task.Task{}, m.err
+	}
+	index := m.indexOf(id)
+	if index < 0 {
+		return task.Task{}, task.ErrNotFound
+	}
+	choices := task.Models{
+		Stages: maps.Clone(m.items[index].Models.Stages),
+		Steps:  maps.Clone(m.items[index].Models.Steps),
+	}
+	if choices.Stages == nil {
+		choices.Stages = models.Set{}
+	}
+	if choices.Steps == nil {
+		choices.Steps = map[int]models.Choice{}
+	}
+	mutate(&choices)
+	m.items[index].Models = choices
+	return m.items[index], nil
+}
+
+// setModels is the model and effort of the stages and the steps of a task,
+// which is what the user chose before the flow ran. A test may set them before
+// the helper that seeds the task, and then they wait for it: a session has to
+// find its choice there the moment it starts.
+func (m *memTasks) setModels(id string, choices task.Models) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.seeded[id] = choices
+	if index := m.indexOf(id); index >= 0 {
+		m.items[index].Models = choices
+	}
 }
 
 func (m *memTasks) RemoveArtifacts(_ context.Context, id string, from task.Stage) error {
@@ -418,6 +482,7 @@ func (m *memTasks) add(id string, stage task.Stage, a task.Artifacts) task.Task 
 		Name:          id,
 		Stage:         stage,
 		ArtifactsDir:  filepath.Join("/data", id),
+		Models:        m.seeded[id],
 	}
 	m.items = append(m.items, t)
 	m.artifacts[id] = a
@@ -603,6 +668,23 @@ func (m *memSessions) Resume(_ context.Context, k session.Key) error {
 		return session.ErrNotFound
 	}
 	sum.Status, sum.Idle = session.StatusWaiting, true
+	m.summaries[k] = sum
+	return nil
+}
+
+func (m *memSessions) SetChoice(_ context.Context, k session.Key, c models.Choice) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.calls = append(m.calls, "choice:"+k.TaskID+":"+k.Stage+":"+string(c.Model)+":"+string(c.Effort))
+	if m.err != nil {
+		return m.err
+	}
+	sum, ok := m.summaries[k]
+	if !ok {
+		return session.ErrNotFound
+	}
+	sum.Choice = c
 	m.summaries[k] = sum
 	return nil
 }

@@ -229,6 +229,37 @@ func TestStartRunsTheCLIWithTheFixedFlags(t *testing.T) {
 	}
 }
 
+func TestTheFakeRefusesAProcessWithoutAModelOrAnEffort(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		model, effort string
+		want          string
+	}{
+		"no model":  {effort: "high", want: "--model is required"},
+		"no effort": {model: "claude-opus-5", want: "--effort is required"},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			cfg := fakeConfig(t, "echo")
+			cfg.Model, cfg.Effort = tc.model, tc.effort
+			// The fake reads its command line before its input, so the process
+			// ends without a message ever being sent.
+			exit := exitOf(t, start(t, cfg))
+
+			if exit.Code != 64 {
+				t.Errorf("Code = %d, want 64 for a command line the CLI refuses", exit.Code)
+			}
+			if !strings.Contains(exit.Stderr, tc.want) {
+				t.Errorf("Stderr = %q, want it to contain %q", exit.Stderr, tc.want)
+			}
+		})
+	}
+}
+
 func TestStartStreamsAWholeTurn(t *testing.T) {
 	t.Parallel()
 	cfg := fakeConfig(t, "echo")

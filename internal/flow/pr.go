@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/guilhermt/myspec/internal/gh"
+	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/review"
 	"github.com/guilhermt/myspec/internal/session"
@@ -1115,6 +1116,7 @@ func prInfo(t task.Task, wt worktree.Worktree, base, slug string, repos []task.R
 	info := repoInfo(t, wt, base, repos)
 	info.Stage, info.Prompt = session.PRStage(slug), prompts.StagePR
 	info.DraftPath = t.DraftPath(slug)
+	info.Choice = t.Models.Stage(models.PR)
 	return info
 }
 
@@ -1127,6 +1129,7 @@ func prReviewInfo(
 	info.Stage, info.Prompt = session.PRReviewStage(slug), prompts.StagePRReview
 	info.ReviewPath = t.ReviewPath(slug, pass)
 	info.PRNumber, info.PRURL = strconv.Itoa(pr.Number), pr.URL
+	info.Choice = t.Models.Stage(models.PRReview)
 	return info
 }
 
