@@ -1,4 +1,5 @@
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { WaitingSection } from "@/features/attention/WaitingSection";
 import { HistoryButton } from "@/features/history/HistoryButton";
 import { ThemeToggle } from "@/features/theme/ThemeToggle";
 import { WorkspaceTree } from "@/features/tree/WorkspaceTree";
@@ -10,6 +11,7 @@ export function Sidebar() {
       <div className="h-11 shrink-0 border-b">
         <WorkspaceSwitcher />
       </div>
+      <WaitingSection />
       <ScrollArea className="min-h-0 flex-1">
         <WorkspaceTree />
       </ScrollArea>
