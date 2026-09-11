@@ -369,6 +369,37 @@ export interface PermissionEntry {
 }
 
 /**
+ * Place is where in a task a situation is.
+ */
+export interface Place {
+    /**
+     * Kind is stage, step or repo, a string for the same reason as
+     * Notice.Reason.
+     */
+    "kind": string;
+
+    /**
+     * stage only: prd, tech_spec or plan
+     */
+    "stage": string;
+
+    /**
+     * step only
+     */
+    "step": number;
+
+    /**
+     * repo only
+     */
+    "repoPath": string;
+
+    /**
+     * repo only: relative path, as the steps name it
+     */
+    "repository": string;
+}
+
+/**
  * PlanProblem is one reason the step files are not a valid plan.
  */
 export interface PlanProblem {
@@ -453,10 +484,10 @@ export interface RepoPR {
     "slug": string;
 
     /**
-     * Status is preparing, blocked, drafting, draft_ready, opening, reviewing,
-     * awaiting_decision, in_review, ready_to_approve, committing, done, merged,
-     * pr_closed, closing, closed or skipped, a string for the same reason as
-     * Notice.Reason.
+     * Status is preparing, blocked, drafting, draft_ready, awaiting_reply,
+     * opening, reviewing, awaiting_decision, in_review, ready_to_approve,
+     * committing, done, merged, pr_closed, closing, closed or skipped, a string
+     * for the same reason as Notice.Reason.
      */
     "status": string;
 
@@ -528,7 +559,8 @@ export interface RepoPR {
     "sessionStage": string;
 
     /**
-     * SessionStatus is working, waiting, needs_permission, paused or error.
+     * SessionStatus is working, waiting, needs_permission, needs_answer, paused
+     * or error.
      */
     "sessionStatus": string;
     "turnRunning": boolean;
@@ -573,6 +605,59 @@ export interface ReviewFile {
      * nothing of it is left outside the index
      */
     "staged": boolean;
+}
+
+/**
+ * Situation is something a task cannot go on without the user for.
+ */
+export interface Situation {
+    "id": string;
+    "taskId": string;
+
+    /**
+     * Kind is session_error, step_blocked, worktree_unreadable, pr_blocked,
+     * plan_invalid, pr_closed, permission, question, reply, ready_to_continue,
+     * step_review, step_empty, draft, findings, changes_review, merge or
+     * nothing_to_publish, a string for the same reason as Notice.Reason.
+     */
+    "kind": string;
+
+    /**
+     * Group is error, waiting or closing, from the most urgent, a string for
+     * the same reason as Notice.Reason.
+     */
+    "group": string;
+
+    /**
+     * Form is review, staged or approve for step_review and changes_review,
+     * merge or close for merge, and "" for every other kind, a string for the
+     * same reason as Notice.Reason.
+     */
+    "form": string;
+
+    /**
+     * staged form only
+     */
+    "percent": number;
+    "place": Place;
+    "startedAt": string;
+}
+
+/**
+ * SituationOpen asks the interface for the place a notification leads to.
+ */
+export interface SituationOpen {
+    "taskId": string;
+    "place": Place;
+}
+
+/**
+ * SituationStarted is a situation that just started, and whether the window
+ * was in front of the user when it did.
+ */
+export interface SituationStarted {
+    "situation": Situation;
+    "focused": boolean;
 }
 
 /**
@@ -720,7 +805,8 @@ export interface TaskSummary {
     "revisiting": boolean;
 
     /**
-     * SessionStatus is working, waiting, needs_permission, paused or error.
+     * SessionStatus is working, waiting, needs_permission, needs_answer, paused
+     * or error.
      */
     "sessionStatus": string;
     "turnRunning": boolean;
@@ -751,6 +837,11 @@ export interface TaskSummary {
      * never nil
      */
     "planProblems": PlanProblem[] | null;
+
+    /**
+     * what the task waits on the user for, the most urgent first; never nil
+     */
+    "situations": Situation[] | null;
     "canContinue": boolean;
     "artifactVersion": number;
     "lastError": string;

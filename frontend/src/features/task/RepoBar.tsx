@@ -26,15 +26,23 @@ import {
   canOpenPR,
   canReviewAgain,
   closeHint,
+  draftAtHand,
   hasRepoSession,
   prStateLabel,
-  repoName,
   repoStatusLabel,
   repoStatusTone,
 } from "@/features/task/repo-status";
 import { ToneDot } from "@/features/task/StatusDot";
 import { reviewCountLabel } from "@/features/task/step-status";
-import { asPRState, asRepoStatus, asSessionStatus, type RepoPR } from "@/lib/wails";
+import { repoName } from "@/lib/repos";
+import { repoSituation, situationTone } from "@/lib/situations";
+import {
+  asPRState,
+  asRepoStatus,
+  asSessionStatus,
+  type RepoPR,
+  type TaskSummary,
+} from "@/lib/wails";
 import {
   approveRepo,
   closeRepo,
@@ -71,14 +79,18 @@ function stateText(repo: RepoPR): string {
 }
 
 export interface RepoBarProps {
-  taskId: string;
+  task: TaskSummary;
   repo: RepoPR;
 }
 
 /** RepoBar names the repository on screen and holds what can be done to it. */
-export function RepoBar({ taskId, repo }: RepoBarProps) {
+export function RepoBar({ task, repo }: RepoBarProps) {
   const app = useAppStore((state) => state.app);
-  const edited = usePrDraft(taskId, repo.repoPath);
+  const edited = usePrDraft(task.id, repo.repoPath);
+  const situation = repoSituation(task, repo.repoPath);
+  // What waits on the user takes the colour of its situation; without one, the
+  // dot shows what the repository is doing.
+  const tone = situation !== null ? situationTone(situation) : repoStatusTone(repo);
 
   const status = asRepoStatus(repo.status);
   const preparing = status === "preparing";
@@ -102,7 +114,7 @@ export function RepoBar({ taskId, repo }: RepoBarProps) {
       variant="outline"
       size="sm"
       disabled={!canOpenEditor}
-      onClick={() => void openInEditor(taskId, repo.repoPath)}
+      onClick={() => void openInEditor(task.id, repo.repoPath)}
     >
       <Code />
       Open in VS Code
@@ -114,7 +126,7 @@ export function RepoBar({ taskId, repo }: RepoBarProps) {
       variant={status === "merged" || status === "skipped" ? "default" : "outline"}
       size="sm"
       disabled={!canCloseRepo(repo)}
-      onClick={() => void closeRepo(taskId, repo.repoPath)}
+      onClick={() => void closeRepo(task.id, repo.repoPath)}
     >
       {closing ? <LoaderCircle aria-hidden="true" className="animate-spin" /> : <Archive />}
       {closing ? "Closing…" : "Close repository"}
@@ -126,7 +138,7 @@ export function RepoBar({ taskId, repo }: RepoBarProps) {
       variant="default"
       size="sm"
       disabled={!canApproveRepo(repo)}
-      onClick={() => void approveRepo(taskId, repo.repoPath)}
+      onClick={() => void approveRepo(task.id, repo.repoPath)}
     >
       {committing ? <LoaderCircle aria-hidden="true" className="animate-spin" /> : <Check />}
       Approve
@@ -159,7 +171,7 @@ export function RepoBar({ taskId, repo }: RepoBarProps) {
           </>
         ) : (
           <>
-            <ToneDot tone={repoStatusTone(repo)} />
+            <ToneDot tone={tone} />
             {stateText(repo)}
           </>
         )}
@@ -177,11 +189,11 @@ export function RepoBar({ taskId, repo }: RepoBarProps) {
 
       <span className="flex-1" />
 
-      {status === "draft_ready" && (
+      {draftAtHand(repo) && (
         <Button
           size="sm"
           disabled={!readyToOpen}
-          onClick={() => void openPR(taskId, repo.repoPath, title, body)}
+          onClick={() => void openPR(task.id, repo.repoPath, title, body)}
         >
           <GitPullRequestArrow />
           Open PR
@@ -225,7 +237,7 @@ export function RepoBar({ taskId, repo }: RepoBarProps) {
           size="sm"
           disabled={!paused && asSessionStatus(repo.sessionStatus) === "error"}
           onClick={() =>
-            void (paused ? resume(taskId, repo.sessionStage) : pause(taskId, repo.sessionStage))
+            void (paused ? resume(task.id, repo.sessionStage) : pause(task.id, repo.sessionStage))
           }
         >
           {paused ? <Play /> : <Pause />}
@@ -243,19 +255,19 @@ export function RepoBar({ taskId, repo }: RepoBarProps) {
         <DropdownMenuContent className="w-auto min-w-44">
           <DropdownMenuItem
             disabled={!canReviewAgain(repo)}
-            onClick={() => void reviewAgain(taskId, repo.repoPath)}
+            onClick={() => void reviewAgain(task.id, repo.repoPath)}
           >
             Review again
           </DropdownMenuItem>
           <DropdownMenuItem
             disabled={!canDiscardDraft(repo)}
-            onClick={() => void discardDraft(taskId, repo.repoPath)}
+            onClick={() => void discardDraft(task.id, repo.repoPath)}
           >
             Discard draft
           </DropdownMenuItem>
           <DropdownMenuItem
             disabled={repo.prNumber === 0 || gone}
-            onClick={() => void refreshPR(taskId, repo.repoPath)}
+            onClick={() => void refreshPR(task.id, repo.repoPath)}
           >
             Refresh PR
           </DropdownMenuItem>

@@ -1,5 +1,5 @@
-import type { RepoPR, RepoStatus, TaskSummary } from "@/lib/wails";
-import { asRepoStatus } from "@/lib/wails";
+import type { RepoPR, RepoStatus, State, TaskSummary } from "@/lib/wails";
+import { asPlaceKind, asRepoStatus } from "@/lib/wails";
 
 const NO_REPOS: readonly RepoPR[] = [];
 
@@ -14,49 +14,36 @@ const REVIEWED_STATES: readonly RepoStatus[] = [
   "skipped",
 ];
 
+/**
+ * repoName is how a repository reads in the interface. The plan names the
+ * repository of the workspace itself ".", which is no name at all.
+ */
+export function repoName(app: State | null, repo: Pick<RepoPR, "repository">): string {
+  if (repo.repository !== "." && repo.repository !== "") {
+    return repo.repository;
+  }
+  return app?.workspace?.name ?? "Root";
+}
+
 /** reposOf is every repository of a task in the PR stage, empty outside it. */
 export function reposOf(task: TaskSummary | null): readonly RepoPR[] {
   return task?.repos ?? NO_REPOS;
 }
 
 /**
- * repoAwaitsUser reports whether a repository can go no further until the user
- * looks at it.
+ * defaultRepoPath is the tab a task opens on: the repository of its most
+ * urgent situation, or the first of the list.
  */
-export function repoAwaitsUser(repo: RepoPR): boolean {
-  switch (asRepoStatus(repo.status)) {
-    case "blocked":
-    case "draft_ready":
-    case "awaiting_decision":
-    case "in_review":
-    case "ready_to_approve":
-    // A merged pull request waits for nothing but the closing.
-    case "merged":
-      return true;
-    // A review that closed clean waits for the merge, unless the app could not
-    // read the pull request and left the closing to the user.
-    case "done":
-      return repo.canClose;
-    case "preparing":
-    case "drafting":
-    case "opening":
-    case "reviewing":
-    case "committing":
-    case "pr_closed":
-    case "closing":
-    case "closed":
-    case "skipped":
-      return false;
-  }
-}
-
-/**
- * defaultRepoPath is the tab a task opens on: the first repository waiting for
- * the user, or the first of the list.
- */
-export function defaultRepoPath(repos: readonly RepoPR[]): string {
-  const waiting = repos.find(repoAwaitsUser);
-  return waiting?.repoPath ?? repos[0]?.repoPath ?? "";
+export function defaultRepoPath(task: TaskSummary | null): string {
+  const repos = reposOf(task);
+  // The situations come most urgent first; one about a repository the task no
+  // longer lists has no tab to open.
+  const waiting = (task?.situations ?? []).find(
+    (situation) =>
+      asPlaceKind(situation.place.kind) === "repo" &&
+      repos.some((repo) => repo.repoPath === situation.place.repoPath),
+  );
+  return waiting?.place.repoPath ?? repos[0]?.repoPath ?? "";
 }
 
 /**

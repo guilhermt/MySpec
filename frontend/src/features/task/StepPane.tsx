@@ -33,7 +33,7 @@ export function StepPane({ task }: StepPaneProps) {
     }
     return (
       <div className="min-h-0 flex-1 overflow-y-auto p-6">
-        <div className="mx-auto flex max-w-[760px] flex-col gap-4">
+        <div className="mx-auto flex max-w-[58.5rem] flex-col gap-4">
           <p className="text-sm text-muted-foreground italic">No steps were found.</p>
         </div>
       </div>

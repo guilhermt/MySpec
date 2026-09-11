@@ -150,4 +150,56 @@
       @apply max-w-full;
     }
   }
+
+  /* The brief highlight of a new situation: a row or a tab tints, a counter
+     rings. The tone of the situation picks the colour. The duration is
+     FLASH_MS, the time the class stays on the element. */
+  .attention-flash,
+  .attention-flash-ring {
+    --flash-color: var(--status-attention);
+    &[data-tone="error"] {
+      --flash-color: var(--destructive);
+    }
+  }
+  .attention-flash {
+    animation: attention-flash 1600ms var(--ease-standard);
+  }
+  .attention-flash-ring {
+    animation: attention-flash-ring 1600ms var(--ease-standard);
+  }
+}
+
+@keyframes attention-flash {
+  0%,
+  100% {
+    background-color: transparent;
+  }
+  20%,
+  60% {
+    background-color: color-mix(in oklch, var(--flash-color) 22%, transparent);
+  }
+}
+
+@keyframes attention-flash-ring {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+  20%,
+  60% {
+    box-shadow: 0 0 0 3px color-mix(in oklch, var(--flash-color) 45%, transparent);
+  }
+}
+
+/* Without motion the highlight still shows, still for as long, only without
+   moving: the class leaves after FLASH_MS. */
+@media (prefers-reduced-motion: reduce) {
+  .attention-flash {
+    animation: none;
+    background-color: color-mix(in oklch, var(--flash-color) 22%, transparent);
+  }
+  .attention-flash-ring {
+    animation: none;
+    box-shadow: 0 0 0 3px color-mix(in oklch, var(--flash-color) 45%, transparent);
+  }
 }

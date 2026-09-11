@@ -1,10 +1,11 @@
 // Package prompts owns the session prompts: the defaults embedded in the
-// binary, the editable copies in the data directory and their rendering. The
+// binary, the copies in use in the data directory and their rendering. The
 // prompt of a step is the step file itself, which the app writes, so it has
 // no default and no copy here.
 package prompts
 
 import (
+	"bytes"
 	"embed"
 	"errors"
 	"fmt"
@@ -84,8 +85,9 @@ func pathFor(dataDir string, stage Stage) string {
 	return filepath.Join(Dir(dataDir), string(stage)+".md")
 }
 
-// Seed writes every default prompt that does not exist yet into Dir(dataDir).
-// Existing files are never touched.
+// Seed writes the default prompts into Dir(dataDir). A prompt already there is
+// rewritten when it differs from its default: the app has no way to edit a
+// prompt yet, so the default of this version is the prompt in use.
 func Seed(dataDir string, log *slog.Logger) error {
 	dir := Dir(dataDir)
 	if err := os.MkdirAll(dir, dirPerm); err != nil {
@@ -105,24 +107,24 @@ func Seed(dataDir string, log *slog.Logger) error {
 		}
 
 		path := filepath.Join(dir, name)
-		// O_EXCL is what makes "never overwrite" a single atomic step: an
-		// existing file, however it got there, is left alone.
-		file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, filePerm)
-		if errors.Is(err, fs.ErrExist) {
+		current, err := os.ReadFile(path)
+		exists := err == nil
+		switch {
+		case exists && bytes.Equal(current, content):
 			continue
-		}
-		if err != nil {
-			return fmt.Errorf("create prompt %s: %w", path, err)
+		case !exists && !errors.Is(err, fs.ErrNotExist):
+			return fmt.Errorf("read prompt %s: %w", path, err)
 		}
 
-		_, err = file.Write(content)
-		if closeErr := file.Close(); err == nil {
-			err = closeErr
-		}
-		if err != nil {
+		if err = os.WriteFile(path, content, filePerm); err != nil {
 			return fmt.Errorf("write prompt %s: %w", path, err)
 		}
-		log.Info("prompt seeded", "stage", strings.TrimSuffix(name, ".md"), "path", path)
+		stage := strings.TrimSuffix(name, ".md")
+		if exists {
+			log.Info("prompt updated", "stage", stage, "path", path)
+		} else {
+			log.Info("prompt seeded", "stage", stage, "path", path)
+		}
 	}
 	return nil
 }

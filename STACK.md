@@ -19,7 +19,7 @@ Este documento registra a stack técnica escolhida para o produto descrito em [P
 | GitHub | Binário `gh`, somente leitura |
 | Artefatos | Arquivos Markdown no diretório de dados XDG |
 | Estado do app | SQLite via `modernc.org/sqlite`, acessado só pelo Go |
-| Notificações | Service de notificações do Wails |
+| Notificações | Serviço de notificações do desktop (`org.freedesktop.Notifications`) pelo D-Bus, com godbus |
 | Ferramentas | mise, pnpm, Biome, Vitest, golangci-lint, slog, Taskfile |
 
 ## Forma do app: desktop
@@ -166,7 +166,9 @@ Nada de estado vive dentro dos Markdown. O status de um step, que nas skills ori
 
 ## Notificações
 
-O service de notificações do Wails v3 cobre o requisito de avisar o usuário fora do app quando algo passa a depender dele.
+Para avisar o usuário fora do app quando algo passa a depender dele, o produto fala direto com o serviço de notificações do desktop, `org.freedesktop.Notifications`, pelo D-Bus de sessão. O acesso ao barramento é feito com o godbus, o mesmo que o app já usa para ler o tema do sistema no portal do desktop.
+
+O service de notificações do Wails v3 foi a primeira escolha deste documento, trocada em 2026-09-10. No Linux, em `v3.0.0-beta.16`, ele entrega a notificação dispensada pelo usuário (`NotificationClosed` com motivo 2) como um clique, e dispensar uma notificação traria a janela para a frente. Com o serviço direto, clicar chega como `ActionInvoked` e dispensar só tira a notificação da lista.
 
 ## Ferramentas de desenvolvimento
 
@@ -180,6 +182,6 @@ O service de notificações do Wails v3 cobre o requisito de avisar o usuário f
 
 1. WebKitGTK 6.0 sobre GTK4 renderizando corretamente no Hyprland da máquina alvo, com GPU AMD.
 2. Streamdown atendendo ao streaming do chat e ao mermaid; caso contrário, cair para react-markdown, remark-gfm, Shiki e mermaid. Verificado na task 02.
-3. Estabilidade do Wails v3 beta nas funcionalidades usadas: services, eventos, SQLite, notificações.
+3. Estabilidade do Wails v3 beta nas funcionalidades usadas: services, eventos, SQLite.
 4. A flag de opt-out do `--bare` quando ele virar padrão do `-p`.
 5. O canal de controle por stdio continuar disponível nas versões seguintes do CLI (feature-detect por `capabilities`).

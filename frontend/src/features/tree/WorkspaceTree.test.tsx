@@ -4,7 +4,7 @@ import { WorkspaceTree } from "@/features/tree/WorkspaceTree";
 import { onStateChanged } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
-import { emitState, makeState, makeTask } from "@/test/wails-mock";
+import { emitState, makeSituation, makeState, makeTask } from "@/test/wails-mock";
 
 const TASKS = [
   makeTask({ id: "t-root", name: "add-login", repoPath: "" }),
@@ -269,5 +269,118 @@ describe("WorkspaceTree", () => {
     expect(
       within(screen.getByRole("tree", { name: "Workspace" })).getAllByRole("treeitem"),
     ).toHaveLength(3);
+  });
+});
+
+describe("WorkspaceTree situations", () => {
+  const WEB = "/home/dev/projects/web";
+
+  const DRAFT = makeSituation({
+    id: "draft",
+    taskId: "t-root",
+    kind: "draft",
+    startedAt: "2026-09-05T09:00:00Z",
+  });
+  const FINDINGS = makeSituation({
+    id: "findings",
+    taskId: "t-root",
+    kind: "findings",
+    startedAt: "2026-09-05T10:00:00Z",
+  });
+  const WEB_ERROR = makeSituation({
+    id: "web-error",
+    taskId: "t-web",
+    kind: "session_error",
+    group: "error",
+    startedAt: "2026-09-05T11:00:00Z",
+  });
+
+  const SITUATION_TASKS = [
+    makeTask({ id: "t-root", name: "add-login", repoPath: "", situations: [DRAFT, FINDINGS] }),
+    makeTask({ id: "t-web", name: "fix-header", repoPath: WEB, situations: [WEB_ERROR] }),
+  ];
+
+  // The counter has no role of its own; it is the element that carries the tone
+  // around its text.
+  function counterOf(row: HTMLElement, text: string): HTMLElement | null {
+    return within(row).getByText(text).closest<HTMLElement>("[data-tone]");
+  }
+
+  it("reads the most urgent situation of a task and how many others it has", () => {
+    renderWithStore(<WorkspaceTree />, { state: makeState({ tasks: SITUATION_TASKS }) });
+
+    expect(
+      screen.getByRole("treeitem", { name: "add-login Draft to approve +1" }),
+    ).toBeInTheDocument();
+  });
+
+  it("counts what a collapsed repository hides and drops the count once it is expanded", async () => {
+    const { user } = renderWithStore(<WorkspaceTree />, {
+      state: makeState({ tasks: SITUATION_TASKS }),
+    });
+
+    const web = screen.getByRole("treeitem", { name: "web 1 waiting for you" });
+    expect(counterOf(web, "1 waiting for you")).toHaveAttribute("data-tone", "error");
+
+    await user.click(within(web).getByTestId("chevron"));
+
+    expect(screen.getByRole("treeitem", { name: "web" })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.queryByText("1 waiting for you")).not.toBeInTheDocument();
+    expect(screen.getByRole("treeitem", { name: "fix-header Session error" })).toBeInTheDocument();
+  });
+
+  it("counts every situation of the workspace on the collapsed root, in the most urgent tone", () => {
+    renderWithStore(<WorkspaceTree />, {
+      state: makeState({ tasks: SITUATION_TASKS }),
+      ui: { expandedNodeIds: new Set() },
+    });
+
+    const root = screen.getByRole("treeitem", { name: "projects Root 3 waiting for you" });
+    expect(counterOf(root, "3 waiting for you")).toHaveAttribute("data-tone", "error");
+  });
+
+  it("highlights a task that is not open in the tone of its most urgent situation", () => {
+    const blocked = makeSituation({
+      id: "blocked",
+      taskId: "t-root",
+      kind: "pr_blocked",
+      group: "error",
+      startedAt: "2026-09-05T11:00:00Z",
+    });
+    renderWithStore(<WorkspaceTree />, {
+      state: makeState({
+        tasks: [makeTask({ id: "t-root", name: "add-login", situations: [blocked, DRAFT] })],
+      }),
+      ui: { flashing: new Set(["draft"]) },
+    });
+
+    const row = screen.getByRole("treeitem", { name: "add-login PR blocked +1" });
+    expect(row).toHaveClass("attention-flash");
+    expect(row).toHaveAttribute("data-tone", "error");
+  });
+
+  it("does not highlight the open task", () => {
+    renderWithStore(<WorkspaceTree />, {
+      state: makeState({ tasks: SITUATION_TASKS }),
+      ui: { flashing: new Set(["findings"]), openTaskId: "t-root" },
+    });
+
+    const row = screen.getByRole("treeitem", { name: "add-login Draft to approve +1" });
+    expect(row).not.toHaveClass("attention-flash");
+    expect(row).not.toHaveAttribute("data-tone");
+  });
+
+  it("rings the counter of the collapsed node that hides the situation that started", () => {
+    renderWithStore(<WorkspaceTree />, {
+      state: makeState({ tasks: SITUATION_TASKS }),
+      ui: { flashing: new Set(["web-error"]) },
+    });
+
+    const web = screen.getByRole("treeitem", { name: "web 1 waiting for you" });
+    expect(counterOf(web, "1 waiting for you")).toHaveClass("attention-flash-ring");
+    expect(web).not.toHaveClass("attention-flash");
+    expect(screen.getByRole("treeitem", { name: "add-login Draft to approve +1" })).not.toHaveClass(
+      "attention-flash",
+    );
   });
 });

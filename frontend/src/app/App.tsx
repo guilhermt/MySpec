@@ -42,7 +42,7 @@ export function App() {
     <>
       {(error !== null || leftovers !== null) && (
         <div className="fixed inset-x-0 top-0 z-50 flex justify-center p-3">
-          <div className="flex w-full max-w-[560px] flex-col gap-2">
+          <div className="flex w-full max-w-[43rem] flex-col gap-2">
             {error !== null && <ErrorNotice message={error} onDismiss={() => setError(null)} />}
             <LeftoversNotice />
           </div>

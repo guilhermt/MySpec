@@ -148,7 +148,7 @@ export function TaskView({ taskId }: TaskViewProps) {
               <RepoTabs task={task} />
               {repo !== null && (
                 <>
-                  <RepoBar taskId={task.id} repo={repo} />
+                  <RepoBar task={task} repo={repo} />
                   <RepoPane taskId={task.id} repo={repo} />
                 </>
               )}

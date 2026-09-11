@@ -673,6 +673,22 @@ func (m *memSessions) goIdle(taskID string) {
 	}
 }
 
+// goIdleSession brings one session to rest, keeping what it has counted. A
+// session that is not open is left alone, so a test that stops one agent
+// neither reopens a session the flow has closed nor reaches one it opens later.
+func (m *memSessions) goIdleSession(k session.Key) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	sum, ok := m.summaries[k]
+	if !ok {
+		return
+	}
+	sum.Status = session.StatusWaiting
+	sum.Idle = true
+	m.summaries[k] = sum
+}
+
 // failWith makes every call that changes something return err.
 func (m *memSessions) failWith(err error) {
 	m.mu.Lock()

@@ -6,9 +6,15 @@ import { Conversation } from "@/features/chat/Conversation";
 import { DraftCard } from "@/features/task/DraftCard";
 import { RepoBlocked } from "@/features/task/RepoBlocked";
 import { ReviewStrip } from "@/features/task/ReviewStrip";
-import { closeStepLabel, prReportLabel, prStateLabel, repoName } from "@/features/task/repo-status";
+import {
+  closeStepLabel,
+  draftAtHand,
+  prReportLabel,
+  prStateLabel,
+} from "@/features/task/repo-status";
 import { ToneDot } from "@/features/task/StatusDot";
 import type { StatusTone } from "@/features/task/status";
+import { repoName } from "@/lib/repos";
 import {
   asCloseOutcome,
   asPRState,
@@ -39,7 +45,7 @@ function Waiting({ text }: { text: string }) {
 function Note({ title, children }: { title: string; children?: React.ReactNode }) {
   return (
     <div className="min-h-0 flex-1 overflow-y-auto p-6">
-      <div className="mx-auto flex max-w-[760px] flex-col gap-3 rounded-lg border p-4">
+      <div className="mx-auto flex max-w-[58.5rem] flex-col gap-3 rounded-lg border p-4">
         <p className="font-medium">{title}</p>
         {children}
       </div>
@@ -265,6 +271,14 @@ export function RepoPane({ taskId, repo }: RepoPaneProps) {
           {repo.review !== null && (
             <ReviewStrip taskId={taskId} repoPath={repo.repoPath} review={repo.review} />
           )}
+          <Chat taskId={taskId} repo={repo} />
+        </>
+      );
+    case "awaiting_reply":
+      // Only the draft an opening that failed left is still there to send.
+      return (
+        <>
+          {draftAtHand(repo) && <DraftCard taskId={taskId} repo={repo} />}
           <Chat taskId={taskId} repo={repo} />
         </>
       );

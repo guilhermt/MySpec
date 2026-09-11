@@ -31,6 +31,7 @@ type run struct {
 	interruptReq string // request id of the interrupt in flight, "" otherwise
 	interruptTmr *time.Timer
 	retryAttempt int
+	turnFailed   bool // the last turn ended in an error; the next turn clears it
 
 	idleTimer  *time.Timer
 	flushTimer *time.Timer
@@ -116,12 +117,15 @@ func (r *run) summary() Summary {
 		PendingCount:   len(r.pending),
 		Corrections:    r.rec.Corrections,
 		LastError:      r.rec.LastError,
+		TurnFailed:     r.turnFailed,
 	}
 	switch {
 	case r.rec.Paused:
 		sum.Status = StatusPaused
 	case r.rec.LastError != "":
 		sum.Status = StatusError
+	case r.permission != nil && r.permission.Kind == KindQuestion:
+		sum.Status = StatusNeedsAnswer
 	case r.permission != nil:
 		sum.Status = StatusNeedsPermission
 	case r.turn != nil || r.startTimer != nil:
@@ -321,6 +325,7 @@ func (s *Service) flushPendingLocked(ctx context.Context, r *run, n *notes) bool
 	s.updateLocked(ctx, r, e, n)
 
 	r.turn = newTurn(e.ID)
+	r.turnFailed = false
 	r.turnDone = make(chan struct{})
 	r.stopTimer(&r.idleTimer)
 	s.armStartLocked(r)

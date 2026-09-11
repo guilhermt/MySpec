@@ -1,3 +1,4 @@
+import * as AttentionService from "@bindings/attentionservice";
 import type {
   ActionEntry,
   ArchivedRepo,
@@ -16,6 +17,7 @@ import type {
   MarkerEntry,
   Notice,
   PermissionEntry,
+  Place,
   PlanProblem,
   PRBlock,
   PRDraft,
@@ -29,6 +31,9 @@ import type {
   RepoPR,
   Review,
   ReviewFile,
+  Situation,
+  SituationOpen,
+  SituationStarted,
   State,
   Step,
   StepBlock,
@@ -62,6 +67,7 @@ export type {
   MarkerEntry,
   Notice,
   PermissionEntry,
+  Place,
   PlanProblem,
   PRBlock,
   PRDraft,
@@ -75,6 +81,9 @@ export type {
   RepoPR,
   Review,
   ReviewFile,
+  Situation,
+  SituationOpen,
+  SituationStarted,
   State,
   Step,
   StepBlock,
@@ -107,6 +116,7 @@ export type RepoStatus =
   | "blocked"
   | "drafting"
   | "draft_ready"
+  | "awaiting_reply"
   | "opening"
   | "reviewing"
   | "awaiting_decision"
@@ -152,7 +162,13 @@ export type BlockReason =
   | "branch_exists"
   | "git_failed"
   | "no_repository";
-export type SessionStatus = "working" | "waiting" | "needs_permission" | "paused" | "error";
+export type SessionStatus =
+  | "working"
+  | "waiting"
+  | "needs_permission"
+  | "needs_answer"
+  | "paused"
+  | "error";
 export type EntryKind =
   | "user"
   | "assistant"
@@ -182,6 +198,35 @@ export type ErrorKind =
   | "turn_error";
 export type PermissionDecision = "allow" | "allow_session" | "deny";
 export type TranscriptEventKind = "entry" | "text" | "remove" | "reset";
+
+/** SituationKind is what a situation asks of the user. */
+export type SituationKind =
+  | "session_error"
+  | "step_blocked"
+  | "worktree_unreadable"
+  | "pr_blocked"
+  | "plan_invalid"
+  | "pr_closed"
+  | "permission"
+  | "question"
+  | "reply"
+  | "ready_to_continue"
+  | "step_review"
+  | "step_empty"
+  | "draft"
+  | "findings"
+  | "changes_review"
+  | "merge"
+  | "nothing_to_publish";
+
+/** SituationGroup is how urgent a situation is, from the most urgent. */
+export type SituationGroup = "error" | "waiting" | "closing";
+
+/** SituationForm is the shape of the kinds that have more than one. */
+export type SituationForm = "" | "review" | "staged" | "approve" | "merge" | "close";
+
+/** PlaceKind is the part of a task a situation is in. */
+export type PlaceKind = "stage" | "step" | "repo";
 
 /** sessionKey identifies one conversation: a task and the stage it belongs to. */
 export function sessionKey(taskId: string, stage: string): string {
@@ -249,6 +294,7 @@ export function asRepoStatus(value: string): RepoStatus {
     case "blocked":
     case "drafting":
     case "draft_ready":
+    case "awaiting_reply":
     case "opening":
     case "reviewing":
     case "awaiting_decision":
@@ -350,6 +396,7 @@ export function asSessionStatus(value: string): SessionStatus {
     case "working":
     case "waiting":
     case "needs_permission":
+    case "needs_answer":
     case "paused":
     case "error":
       return value;
@@ -441,6 +488,67 @@ export function asTranscriptEventKind(value: string): TranscriptEventKind {
   }
 }
 
+export function asSituationKind(value: string): SituationKind {
+  switch (value) {
+    case "session_error":
+    case "step_blocked":
+    case "worktree_unreadable":
+    case "pr_blocked":
+    case "plan_invalid":
+    case "pr_closed":
+    case "permission":
+    case "question":
+    case "reply":
+    case "ready_to_continue":
+    case "step_review":
+    case "step_empty":
+    case "draft":
+    case "findings":
+    case "changes_review":
+    case "merge":
+    case "nothing_to_publish":
+      return value;
+    default:
+      return "reply";
+  }
+}
+
+export function asSituationGroup(value: string): SituationGroup {
+  switch (value) {
+    case "error":
+    case "waiting":
+    case "closing":
+      return value;
+    default:
+      return "waiting";
+  }
+}
+
+export function asSituationForm(value: string): SituationForm {
+  switch (value) {
+    case "":
+    case "review":
+    case "staged":
+    case "approve":
+    case "merge":
+    case "close":
+      return value;
+    default:
+      return "";
+  }
+}
+
+export function asPlaceKind(value: string): PlaceKind {
+  switch (value) {
+    case "stage":
+    case "step":
+    case "repo":
+      return value;
+    default:
+      return "stage";
+  }
+}
+
 export const api = {
   getState: (): Promise<State> => WorkspaceService.GetState(),
   openPath: (path: string): Promise<void> => WorkspaceService.OpenPath(path),
@@ -506,6 +614,8 @@ export const api = {
   openFileInEditor: (taskId: string, repoPath: string, path: string): Promise<void> =>
     TaskService.OpenFileInEditor(taskId, repoPath, path),
   openExternal: (url: string): Promise<void> => Browser.OpenURL(url),
+
+  viewSituation: (id: string): Promise<void> => AttentionService.ViewSituation(id),
 };
 
 export function onStateChanged(handler: (state: State) => void): () => void {
@@ -514,4 +624,12 @@ export function onStateChanged(handler: (state: State) => void): () => void {
 
 export function onTranscriptChanged(handler: (event: TranscriptEvent) => void): () => void {
   return Events.On("transcript:changed", (event) => handler(event.data));
+}
+
+export function onSituationStarted(handler: (event: SituationStarted) => void): () => void {
+  return Events.On("situation:started", (event) => handler(event.data));
+}
+
+export function onSituationOpen(handler: (event: SituationOpen) => void): () => void {
+  return Events.On("situation:open", (event) => handler(event.data));
 }

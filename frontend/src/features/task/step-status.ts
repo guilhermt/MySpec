@@ -62,29 +62,27 @@ export function stepStatusLabel(step: Step): string {
   }
 }
 
-/** stepStatusTone maps the state of a step to the colour that carries it. */
+/**
+ * stepStatusTone maps the state of a step to the colour that carries it. It
+ * never calls for the user: that colour comes from the situation of the step
+ * alone.
+ */
 export function stepStatusTone(step: Step): StatusTone {
   switch (asStepStatus(step.status)) {
-    case "not_started":
-      return "idle";
     case "preparing":
-      return "working";
-    case "blocked":
-      return "attention";
     case "implementing":
-      return "working";
-    // The agent is done and the user has to look at what it did.
-    case "awaiting_review":
-    case "in_review":
-    case "ready_to_approve":
-    case "nothing_to_commit":
-      return "attention";
-    case "review_failed":
-      return "error";
     case "committing":
       return "working";
     case "done":
       return "done";
+    case "not_started":
+    case "blocked":
+    case "awaiting_review":
+    case "in_review":
+    case "ready_to_approve":
+    case "nothing_to_commit":
+    case "review_failed":
+      return "idle";
   }
 }
 
@@ -120,7 +118,9 @@ export interface StepDisplay {
 
 /**
  * currentStepDisplay combines the step with the session behind it: while
- * implementing, a paused, failed or asking session is what the user sees.
+ * implementing, a paused, failed or asking session is what the user sees. Like
+ * stepStatusTone, it leaves the colour of what waits on the user to the
+ * situations.
  */
 export function currentStepDisplay(task: TaskSummary): StepDisplay {
   const step = currentStepOf(task);
@@ -141,9 +141,11 @@ export function currentStepDisplay(task: TaskSummary): StepDisplay {
     case "paused":
       return { label: "Paused", tone: "paused" };
     case "error":
-      return { label: "Error", tone: "error" };
+      return { label: "Error", tone: "idle" };
     case "needs_permission":
-      return { label: "Permission", tone: "attention" };
+      return { label: "Permission", tone: "idle" };
+    case "needs_answer":
+      return { label: "Question", tone: "idle" };
     case "working":
     case "waiting":
       return { label: "Implementing", tone: "working" };

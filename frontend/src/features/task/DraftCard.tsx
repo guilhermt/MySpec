@@ -48,7 +48,7 @@ export function DraftCard({ taskId, repo }: DraftCardProps) {
 
   return (
     <div className="shrink-0 border-b px-3 py-3">
-      <div className="mx-auto flex w-full max-w-[760px] flex-col gap-3 rounded-lg border p-4">
+      <div className="mx-auto flex w-full max-w-[58.5rem] flex-col gap-3 rounded-lg border p-4">
         <div className="flex items-center justify-between gap-3">
           <p className="font-medium">Pull request draft</p>
           <p className="text-xs text-muted-foreground">

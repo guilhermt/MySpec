@@ -34,11 +34,11 @@ export function WelcomeScreen() {
 
   return (
     <main className="flex h-dvh items-center justify-center bg-background px-6 text-foreground">
-      <div className="flex w-full max-w-[560px] flex-col gap-8">
+      <div className="flex w-full max-w-[43rem] flex-col gap-8">
         <header className="flex flex-col gap-2">
           <div className="flex items-center gap-3">
             <AppMark />
-            <h1 className="text-[28px] font-semibold leading-none">MySpec</h1>
+            <h1 className="text-[2.125rem] font-semibold leading-none">MySpec</h1>
           </div>
           <p className="text-muted-foreground">Your Claude Code workflow, in one place.</p>
         </header>

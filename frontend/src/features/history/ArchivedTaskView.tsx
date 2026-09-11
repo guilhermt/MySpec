@@ -207,7 +207,7 @@ export function ArchivedTaskView({ taskId }: ArchivedTaskViewProps) {
             )}
             {artifact.status === "ready" &&
               (openStep === null ? (
-                <div className="max-w-[760px] select-text">
+                <div className="max-w-[58.5rem] select-text">
                   <Markdown>{artifact.content}</Markdown>
                 </div>
               ) : (

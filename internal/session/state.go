@@ -103,7 +103,8 @@ type Status string
 const (
 	StatusWorking         Status = "working"
 	StatusWaiting         Status = "waiting"
-	StatusNeedsPermission Status = "needs_permission"
+	StatusNeedsPermission Status = "needs_permission" // a permission request waits for an answer
+	StatusNeedsAnswer     Status = "needs_answer"     // a structured question waits for an answer
 	StatusPaused          Status = "paused"
 	StatusError           Status = "error"
 )
@@ -120,6 +121,9 @@ type Summary struct {
 	PendingCount   int
 	Corrections    int
 	LastError      string
+	// TurnFailed says the last turn ended in an error the CLI survived, and no
+	// turn has run since. The session is at rest all the same.
+	TurnFailed bool
 	// Idle is the session at rest: no turn, no pending message, no request, no
 	// pause and no error.
 	Idle bool

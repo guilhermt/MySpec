@@ -8,49 +8,38 @@ import {
   canReviewAgain,
   closeHint,
   closeStepLabel,
+  draftAtHand,
   hasRepoSession,
   prBlockHint,
   prBlockTitle,
   prReportLabel,
   prStateLabel,
-  repoName,
   repoStatusLabel,
   repoStatusTone,
 } from "@/features/task/repo-status";
-import { makeCloseResult, makeRepoPR, makeReview, makeState } from "@/test/wails-mock";
+import { makeCloseResult, makeRepoPR, makeReview } from "@/test/wails-mock";
 
-describe("repoName", () => {
-  it("is the path the plan gave the repository", () => {
-    expect(repoName(makeState(), makeRepoPR({ repository: "web" }))).toBe("web");
-  });
-
-  it("is the name of the workspace for the repository that is the workspace", () => {
-    expect(repoName(makeState(), makeRepoPR({ repository: "." }))).toBe("projects");
-  });
-
-  it("falls back to Root without a workspace to name", () => {
-    expect(repoName(null, makeRepoPR({ repository: "." }))).toBe("Root");
-  });
-});
+const DRAFT = { title: "Add the login form", body: "Adds the form.", file: "web-draft.md" };
 
 describe("repoStatusLabel and repoStatusTone", () => {
   it.each([
     ["preparing", "Checking GitHub", "working"],
-    ["blocked", "Blocked", "attention"],
+    ["blocked", "Blocked", "idle"],
     ["drafting", "Preparing the draft", "working"],
-    ["draft_ready", "Draft waiting for your OK", "attention"],
+    ["draft_ready", "Draft waiting for your OK", "idle"],
+    ["awaiting_reply", "Waiting for your reply", "idle"],
     ["opening", "Opening the pull request", "working"],
     ["reviewing", "Reviewing the pull request", "working"],
-    ["awaiting_decision", "Waiting for your decision", "attention"],
-    ["in_review", "In review", "attention"],
-    ["ready_to_approve", "Ready to approve", "attention"],
+    ["awaiting_decision", "Waiting for your decision", "idle"],
+    ["in_review", "In review", "idle"],
+    ["ready_to_approve", "Ready to approve", "idle"],
     ["committing", "Committing", "working"],
     ["done", "Waiting for the merge", "idle"],
-    ["merged", "Merged · ready to close", "attention"],
+    ["merged", "Merged · ready to close", "idle"],
     ["pr_closed", "Closed without merge", "idle"],
     ["closing", "Closing", "working"],
     ["closed", "Closed", "done"],
-    ["skipped", "No changes · ready to close", "done"],
+    ["skipped", "No changes · ready to close", "idle"],
   ])("reads %s", (status, label, tone) => {
     const repo = makeRepoPR({ status });
 
@@ -58,10 +47,10 @@ describe("repoStatusLabel and repoStatusTone", () => {
     expect(repoStatusTone(repo)).toBe(tone);
   });
 
-  it("calls for the user when the merge could not be confirmed", () => {
+  it("leaves a merge it could not confirm to the situation of the repository", () => {
     const repo = makeRepoPR({ status: "done", canClose: true, checkError: "gh: not found" });
 
-    expect(repoStatusTone(repo)).toBe("attention");
+    expect(repoStatusTone(repo)).toBe("idle");
   });
 });
 
@@ -70,6 +59,33 @@ describe("what a repository allows", () => {
     expect(canOpenPR(makeRepoPR({ status: "draft_ready" }))).toBe(true);
     expect(canOpenPR(makeRepoPR({ status: "draft_ready", turnRunning: true }))).toBe(false);
     expect(canOpenPR(makeRepoPR({ status: "drafting" }))).toBe(false);
+  });
+
+  it("opens the pull request again from the draft an opening that failed left", () => {
+    expect(canOpenPR(makeRepoPR({ status: "awaiting_reply", draft: DRAFT }))).toBe(true);
+    expect(
+      canOpenPR(makeRepoPR({ status: "awaiting_reply", draft: DRAFT, turnRunning: true })),
+    ).toBe(false);
+    expect(canOpenPR(makeRepoPR({ status: "awaiting_reply" }))).toBe(false);
+  });
+
+  it("has the draft at hand only while it is ready or left by an opening that failed", () => {
+    expect(draftAtHand(makeRepoPR({ status: "draft_ready" }))).toBe(true);
+    // The agent is in a turn: the draft is still at hand, only not sendable yet.
+    expect(draftAtHand(makeRepoPR({ status: "draft_ready", turnRunning: true }))).toBe(true);
+    expect(draftAtHand(makeRepoPR({ status: "awaiting_reply", draft: DRAFT }))).toBe(true);
+    expect(draftAtHand(makeRepoPR({ status: "awaiting_reply" }))).toBe(false);
+    expect(draftAtHand(makeRepoPR({ status: "drafting", draft: DRAFT }))).toBe(false);
+    expect(draftAtHand(makeRepoPR({ status: "reviewing", draft: DRAFT, prNumber: 12 }))).toBe(
+      false,
+    );
+  });
+
+  it("keeps the draft a record while the agent waits for a reply over an open pull request", () => {
+    const repo = makeRepoPR({ status: "awaiting_reply", draft: DRAFT, prNumber: 12 });
+
+    expect(draftAtHand(repo)).toBe(false);
+    expect(canOpenPR(repo)).toBe(false);
   });
 
   it("approves only with everything staged", () => {
@@ -83,6 +99,11 @@ describe("what a repository allows", () => {
     expect(canDiscardDraft(makeRepoPR({ status: "reviewing" }))).toBe(false);
   });
 
+  it("throws the draft away while the agent waits for a reply before the pull request", () => {
+    expect(canDiscardDraft(makeRepoPR({ status: "awaiting_reply" }))).toBe(true);
+    expect(canDiscardDraft(makeRepoPR({ status: "awaiting_reply", prNumber: 12 }))).toBe(false);
+  });
+
   it("reviews again from every state the pull request exists in", () => {
     expect(canReviewAgain(makeRepoPR({ status: "awaiting_decision" }))).toBe(true);
     expect(canReviewAgain(makeRepoPR({ status: "done" }))).toBe(true);
@@ -91,6 +112,11 @@ describe("what a repository allows", () => {
     expect(canReviewAgain(makeRepoPR({ status: "pr_closed" }))).toBe(false);
     expect(canReviewAgain(makeRepoPR({ status: "closing" }))).toBe(false);
     expect(canReviewAgain(makeRepoPR({ status: "closed" }))).toBe(false);
+  });
+
+  it("reviews again while the agent waits for a reply over an open pull request", () => {
+    expect(canReviewAgain(makeRepoPR({ status: "awaiting_reply", prNumber: 12 }))).toBe(true);
+    expect(canReviewAgain(makeRepoPR({ status: "awaiting_reply" }))).toBe(false);
   });
 
   it("closes only when the backend says the closing is the user's to ask for", () => {

@@ -1,13 +1,46 @@
-import { screen, waitFor } from "@testing-library/react";
+import { act, createEvent, fireEvent, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "@/app/App";
 import { api } from "@/lib/wails";
+import { useAppStore } from "@/store/app-store";
 import { renderWithStore, resetAppStore } from "@/test/render";
-import { makeArchivedTask, makeState, makeTask, subscriberCount } from "@/test/wails-mock";
+import {
+  makeArchivedTask,
+  makeSituation,
+  makeState,
+  makeTask,
+  subscriberCount,
+} from "@/test/wails-mock";
 
 beforeEach(() => {
   resetAppStore();
 });
+
+// Two tasks wait for the user: add-login at the root for a reply, and
+// fix-header, inside the collapsed web node, for an error that started later.
+function waitingState() {
+  return makeState({
+    tasks: [
+      makeTask({
+        situations: [makeSituation({ id: "s-reply", startedAt: "2026-09-05T10:00:00Z" })],
+      }),
+      makeTask({
+        id: "task-2",
+        name: "fix-header",
+        repoPath: "/home/dev/projects/web",
+        situations: [
+          makeSituation({
+            id: "s-error",
+            taskId: "task-2",
+            kind: "session_error",
+            group: "error",
+            startedAt: "2026-09-05T10:05:00Z",
+          }),
+        ],
+      }),
+    ],
+  });
+}
 
 describe("App", () => {
   it("renders the shell of the open workspace once the first snapshot arrives", async () => {
@@ -54,6 +87,90 @@ describe("App", () => {
     await user.keyboard("{Control>}n{/Control}");
 
     expect(screen.queryByRole("heading", { name: "New task" })).not.toBeInTheDocument();
+  });
+
+  it("opens the first entry waiting for the user on Ctrl+J, leaving the open task out", async () => {
+    vi.mocked(api.getState).mockResolvedValue(waitingState());
+    const { user } = renderWithStore(<App />);
+    await screen.findByRole("treeitem", { name: "projects Root" });
+
+    // The error comes before the reply, though it started later.
+    await user.keyboard("{Control>}j{/Control}");
+
+    expect(await screen.findByRole("treeitem", { name: /fix-header/ })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "Delete task" })).toBeInTheDocument();
+
+    // The task on screen is not an entry any more: the next one is.
+    await user.keyboard("{Control>}j{/Control}");
+
+    expect(screen.getByRole("treeitem", { name: /add-login/ })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+  });
+
+  it("changes nothing on Ctrl+J when nothing waits for the user", async () => {
+    vi.mocked(api.getState).mockResolvedValue(makeState({ tasks: [makeTask()] }));
+    const { user } = renderWithStore(<App />);
+    await screen.findByRole("treeitem", { name: "projects Root" });
+
+    await user.keyboard("{Control>}j{/Control}");
+
+    expect(screen.getByRole("heading", { name: "projects" })).toBeInTheDocument();
+    expect(screen.getByRole("treeitem", { name: /add-login/ })).toHaveAttribute(
+      "aria-selected",
+      "false",
+    );
+  });
+
+  it("opens the first entry on Ctrl+J from the message box of a conversation", async () => {
+    vi.mocked(api.getState).mockResolvedValue(waitingState());
+    const { user } = renderWithStore(<App />);
+
+    await user.click(await screen.findByRole("treeitem", { name: /add-login/ }));
+    const box = await screen.findByPlaceholderText("Reply to the agent…");
+    // Focused directly: jsdom lays nothing out, so a click lands on the resize handle.
+    act(() => box.focus());
+    await user.keyboard("half a message");
+    expect(box).toHaveFocus();
+
+    await user.keyboard("{Control>}j{/Control}");
+
+    expect(await screen.findByRole("treeitem", { name: /fix-header/ })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    // What the user was typing stays with the conversation it was typed in.
+    expect(useAppStore.getState().drafts["task-1|prd"]).toBe("half a message");
+  });
+
+  it("leaves the creation dialog where it is on Ctrl+J", async () => {
+    vi.mocked(api.getState).mockResolvedValue(waitingState());
+    const { user } = renderWithStore(<App />);
+    await screen.findByRole("treeitem", { name: "projects Root" });
+    await user.keyboard("{Control>}n{/Control}");
+    await screen.findByRole("heading", { name: "New task" });
+
+    const shortcut = createEvent.keyDown(window, { key: "j", ctrlKey: true });
+    fireEvent(window, shortcut);
+
+    expect(shortcut.defaultPrevented).toBe(true);
+    expect(screen.getByRole("heading", { name: "New task" })).toBeInTheDocument();
+    expect(useAppStore.getState().openTaskId).toBeNull();
+  });
+
+  it("leaves Ctrl+J alone without a workspace", async () => {
+    vi.mocked(api.getState).mockResolvedValue(makeState({ workspace: null }));
+    renderWithStore(<App />);
+    await screen.findByRole("button", { name: /^Open folder/ });
+
+    const shortcut = createEvent.keyDown(window, { key: "j", ctrlKey: true });
+    fireEvent(window, shortcut);
+
+    expect(shortcut.defaultPrevented).toBe(false);
   });
 
   it("shows a rejected binding and dismisses it", async () => {

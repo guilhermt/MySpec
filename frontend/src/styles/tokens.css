@@ -7,9 +7,10 @@
   --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono Variable", ui-monospace, "JetBrainsMono Nerd Font", monospace;
 
-  --sidebar-width: 280px;
-  --row-height: 28px;
-  --text-base: 13px;
+  /* The root font size scales the whole interface: sizes are in rem. */
+  --text-base: 1rem;
+  --sidebar-width: 21.5rem;
+  --row-height: 2.125rem;
   --leading-base: 1.45;
   --duration-fast: 120ms;
   --duration-base: 150ms;

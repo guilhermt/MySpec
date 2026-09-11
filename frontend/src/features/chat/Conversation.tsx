@@ -89,7 +89,7 @@ export function Conversation({ taskId, stage, session }: ConversationProps) {
   return (
     <div className="relative min-h-0 flex-1">
       <div ref={scrollRef} data-slot="conversation" className="h-full overflow-y-auto">
-        <div className="mx-auto flex w-full max-w-[760px] flex-col gap-4 px-6 py-6">
+        <div className="mx-auto flex w-full max-w-[58.5rem] flex-col gap-4 px-6 py-6">
           {loading ? (
             <Loading />
           ) : (

@@ -1,12 +1,15 @@
 import { create } from "zustand";
 import { useShallow } from "zustand/react/shallow";
 import { defaultRepoPath, reposOf } from "@/lib/repos";
+import { repoSituation, stageSituation, stepSituation } from "@/lib/situations";
 import type {
   ArchivedTask,
   Leftover,
   Notice,
+  Place,
   Recent,
   RepoPR,
+  Situation,
   State,
   TaskSummary,
   ThemePreference,
@@ -14,7 +17,7 @@ import type {
   TranscriptEvent,
   Workspace,
 } from "@/lib/wails";
-import { asThemePreference, sessionKey } from "@/lib/wails";
+import { asPlaceKind, asTaskStage, asThemePreference, sessionKey } from "@/lib/wails";
 import {
   applyEvent,
   emptyTranscript,
@@ -53,6 +56,11 @@ export interface AppStore {
   archivedNotice: ArchivedNotice | null;
   /** leftovers is what the last deletion could not remove from disk, until dismissed. */
   leftovers: readonly Leftover[] | null;
+  /**
+   * flashing are the situations that just started while the user was looking,
+   * by id, for the brief highlight.
+   */
+  flashing: ReadonlySet<string>;
 
   applyState: (next: State) => void;
   setError: (message: string | null) => void;
@@ -80,6 +88,11 @@ export interface AppStore {
   setHistoryQuery: (query: string) => void;
   dismissArchivedNotice: () => void;
   setLeftovers: (leftovers: readonly Leftover[] | null) => void;
+
+  flashSituation: (id: string) => void;
+  unflashSituation: (id: string) => void;
+  /** openPlace opens a task where one of its situations is. */
+  openPlace: (taskId: string, place: Place) => void;
 }
 
 /** PrDraft is the title and the description of a pull request being edited. */
@@ -182,6 +195,7 @@ function initialTaskUi(): Pick<
   | "historyQuery"
   | "archivedNotice"
   | "leftovers"
+  | "flashing"
 > {
   return {
     openTaskId: null,
@@ -195,6 +209,7 @@ function initialTaskUi(): Pick<
     historyQuery: "",
     archivedNotice: null,
     leftovers: null,
+    flashing: new Set<string>(),
   };
 }
 
@@ -352,6 +367,40 @@ export const useAppStore = create<AppStore>()((set) => ({
   dismissArchivedNotice: () => set({ archivedNotice: null }),
 
   setLeftovers: (leftovers) => set({ leftovers }),
+
+  // A new set every time: the selectors hand the set itself to the components,
+  // which only see a change through a new reference.
+  flashSituation: (id) => set((state) => ({ flashing: new Set(state.flashing).add(id) })),
+
+  unflashSituation: (id) =>
+    set((state) => {
+      const flashing = new Set(state.flashing);
+      flashing.delete(id);
+      return { flashing };
+    }),
+
+  // A situation opens where it is: its task, on the tab of its repository when
+  // it is in one. Going there puts away the history and the creation of a task.
+  openPlace: (taskId, place) =>
+    set((state) => {
+      const task = findTask(state.app, taskId);
+      if (task === null) {
+        return {};
+      }
+      const nodeId = nodeOfTask(task);
+      return {
+        openTaskId: taskId,
+        historyOpen: false,
+        openArchivedId: null,
+        newTaskFor: null,
+        selectedNodeId: nodeId,
+        expandedNodeIds: withExpanded(state.expandedNodeIds, nodeId, true),
+        openRepo:
+          asPlaceKind(place.kind) === "repo"
+            ? { ...state.openRepo, [taskId]: place.repoPath }
+            : state.openRepo,
+      };
+    }),
 }));
 
 const NO_RECENTS: readonly Recent[] = [];
@@ -404,19 +453,49 @@ export function useRepos(taskId: string): readonly RepoPR[] {
   return useAppStore((state) => reposOf(findTask(state.app, taskId)));
 }
 
-/**
- * useOpenRepo is the selected repository tab of a task. A selection that no
- * longer names a repository of the task falls back to the default.
- */
+// A selection that no longer names a repository of the task falls back to the
+// default.
+function openRepoOf(state: AppStore, taskId: string): string {
+  const task = findTask(state.app, taskId);
+  const selected = state.openRepo[taskId];
+  if (selected !== undefined && reposOf(task).some((repo) => repo.repoPath === selected)) {
+    return selected;
+  }
+  return defaultRepoPath(task);
+}
+
+/** useOpenRepo is the selected repository tab of a task. */
 export function useOpenRepo(taskId: string): string {
-  return useAppStore((state) => {
-    const repos = reposOf(findTask(state.app, taskId));
-    const selected = state.openRepo[taskId];
-    if (selected !== undefined && repos.some((repo) => repo.repoPath === selected)) {
-      return selected;
-    }
-    return defaultRepoPath(repos);
-  });
+  return useAppStore((state) => openRepoOf(state, taskId));
+}
+
+// The situation of the place the open task shows: the stage it is in, the step
+// that runs, or the repository whose tab is selected.
+function onScreenSituation(state: AppStore): Situation | null {
+  const task = findTask(state.app, state.openTaskId);
+  if (task === null) {
+    return null;
+  }
+  switch (asTaskStage(task.stage)) {
+    case "implementation":
+      return stepSituation(task, task.currentStep);
+    case "pr":
+      return repoSituation(task, openRepoOf(state, task.id));
+    case "prd":
+    case "tech_spec":
+    case "plan":
+      return stageSituation(task);
+  }
+}
+
+/** useOnScreenSituationId is the id of the situation on screen, null when there is none. */
+export function useOnScreenSituationId(): string | null {
+  return useAppStore((state) => onScreenSituation(state)?.id ?? null);
+}
+
+/** useFlashing is the situations whose brief highlight is showing, by id. */
+export function useFlashing(): ReadonlySet<string> {
+  return useAppStore((state) => state.flashing);
 }
 
 export function usePrDraft(taskId: string, repoPath: string): PrDraft | null {
@@ -486,6 +565,7 @@ export interface TreeUi {
   expandedNodeIds: ReadonlySet<NodeId>;
   openTaskId: string | null;
   historyOpen: boolean;
+  flashing: ReadonlySet<string>;
 }
 
 export function useTreeUi(): TreeUi {
@@ -495,6 +575,7 @@ export function useTreeUi(): TreeUi {
       expandedNodeIds: state.expandedNodeIds,
       openTaskId: state.openTaskId,
       historyOpen: state.historyOpen,
+      flashing: state.flashing,
     })),
   );
 }

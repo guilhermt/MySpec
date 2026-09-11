@@ -1,0 +1,188 @@
+package attention
+
+import (
+	"path/filepath"
+	"strconv"
+
+	"github.com/guilhermt/myspec/internal/task"
+)
+
+// stageName is a planning stage as a sentence names it.
+func stageName(stage task.Stage) string {
+	switch stage {
+	case task.StagePRD:
+		return "PRD"
+	case task.StageTechSpec:
+		return "tech spec"
+	case task.StagePlan:
+		return "plan"
+	default:
+		return string(stage)
+	}
+}
+
+// placeName is a place as a sentence names it: the stage, "step 3", or the
+// repository.
+func placeName(t task.Task, place Place) string {
+	switch place.Kind {
+	case PlaceStep:
+		return "step " + strconv.Itoa(place.Step)
+	case PlaceRepo:
+		return repoName(t, place)
+	default:
+		return stageName(place.Stage)
+	}
+}
+
+// repoName is a repository as the task shows it: its path relative to the
+// workspace, or the name of the workspace for the repository at its root.
+func repoName(t task.Task, place Place) string {
+	if place.Repository == "" || place.Repository == "." {
+		return filepath.Base(t.WorkspacePath)
+	}
+	return place.Repository
+}
+
+// sessionBody is the notification of a situation that lives in the
+// conversation of a place: a permission, a question, a reply, or else the error
+// the session stopped with.
+func sessionBody(kind Kind, where string) string {
+	switch kind {
+	case KindPermission:
+		return "Permission requested in " + where + "."
+	case KindQuestion:
+		return "The agent has a question in " + where + "."
+	case KindReply:
+		return "The agent is waiting for your reply in " + where + "."
+	default:
+		return "The session stopped with an error in " + where + "."
+	}
+}
+
+// planInvalidBody is the notification of a plan the automatic corrections did
+// not fix.
+func planInvalidBody() string {
+	return "The plan is still invalid after automatic corrections."
+}
+
+// readyToContinueBody is the notification of a reopened stage whose document
+// is revised.
+func readyToContinueBody(stage task.Stage) string {
+	return "The " + stageName(stage) + " is revised and ready to continue."
+}
+
+// stepBlockedBody is the notification of a step that could not start.
+func stepBlockedBody(n int, reason task.BlockReason) string {
+	return "Step " + strconv.Itoa(n) + " can't start: " + stepBlockPhrase(reason) + "."
+}
+
+// worktreeUnreadableBody is the notification of a step whose worktree cannot
+// be read for its review.
+func worktreeUnreadableBody(n int) string {
+	return "Step " + strconv.Itoa(n) + ": the worktree can't be read."
+}
+
+// stepReviewBody is the notification of a step to review. One that starts
+// ready to approve, because the last approval left no commit, says so.
+func stepReviewBody(n int, form Form, commitFailed bool) string {
+	if form == FormApprove && commitFailed {
+		return "Step " + strconv.Itoa(n) + ": the last approval didn't produce a commit."
+	}
+	return "Step " + strconv.Itoa(n) + " is ready for review."
+}
+
+// stepEmptyBody is the notification of a step the agent finished without a
+// change.
+func stepEmptyBody(n int) string {
+	return "Step " + strconv.Itoa(n) + " finished without changes."
+}
+
+// prBlockedBody is the notification of a repository whose PR stage cannot go
+// on.
+func prBlockedBody(name string, reason task.PRBlockReason) string {
+	return "The pull request of " + name + " is blocked: " + prBlockPhrase(reason) + "."
+}
+
+// prClosedBody is the notification of a pull request closed without a merge.
+func prClosedBody(name string) string {
+	return "The pull request of " + name + " was closed without a merge."
+}
+
+// draftBody is the notification of a pull request draft that awaits the OK.
+func draftBody(name string) string {
+	return "The pull request draft of " + name + " is ready for your OK."
+}
+
+// findingsBody is the notification of a pull request review that found
+// changes.
+func findingsBody(name string) string {
+	return "The review of " + name + " found changes for you to decide."
+}
+
+// changesReviewBody is the notification of the changes a pull request review
+// applied. One that starts ready to approve, because the last approval left no
+// commit, says so.
+func changesReviewBody(name string, form Form, commitFailed bool) string {
+	if form == FormApprove && commitFailed {
+		return name + ": the last approval didn't produce a commit."
+	}
+	return "The changes from the review of " + name + " are ready for review."
+}
+
+// mergeBody is the notification of a pull request whose review closed clean:
+// ready to merge while it is open, ready to close once merged or when the merge
+// could not be confirmed.
+func mergeBody(name string, form Form) string {
+	if form == FormClose {
+		return "The pull request of " + name + " is ready to close."
+	}
+	return "The pull request of " + name + " is ready to merge."
+}
+
+// nothingToPublishBody is the notification of a repository the PR stage found
+// nothing to publish for.
+func nothingToPublishBody(name string) string {
+	return name + " has nothing to publish and is ready to close."
+}
+
+// stepBlockPhrase is why a step could not start, inside a sentence: the title
+// the interface gives the block, in lowercase.
+func stepBlockPhrase(reason task.BlockReason) string {
+	switch reason {
+	case task.BlockDirty:
+		return "the worktree has uncommitted changes"
+	case task.BlockFetchFailed:
+		return "couldn't fetch origin"
+	case task.BlockNoBase:
+		return "no base branch"
+	case task.BlockPathExists:
+		return "the worktree folder already exists"
+	case task.BlockBranchExists:
+		return "the branch already exists"
+	case task.BlockNoRepository:
+		return "the step doesn't name a repository of this task"
+	case task.BlockGitFailed:
+		return "git failed"
+	default:
+		return "git failed"
+	}
+}
+
+// prBlockPhrase is why the PR stage of a repository cannot go on, inside a
+// sentence: the title the interface gives the block, in lowercase.
+func prBlockPhrase(reason task.PRBlockReason) string {
+	switch reason {
+	case task.PRBlockGHMissing:
+		return "the GitHub CLI was not found"
+	case task.PRBlockGHAuth:
+		return "the GitHub CLI isn't authenticated"
+	case task.PRBlockGHFailed:
+		return "the GitHub CLI failed"
+	case task.PRBlockNoWorktree:
+		return "the worktree is gone"
+	case task.PRBlockGitFailed:
+		return "git failed"
+	default:
+		return "git failed"
+	}
+}

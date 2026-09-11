@@ -8,4 +8,6 @@ import "github.com/wailsapp/wails/v3/pkg/application"
 func RegisterEvents() {
 	application.RegisterEvent[State](EventStateChanged)
 	application.RegisterEvent[TranscriptEvent](EventTranscriptChanged)
+	application.RegisterEvent[SituationStarted](EventSituationStarted)
+	application.RegisterEvent[SituationOpen](EventSituationOpen)
 }

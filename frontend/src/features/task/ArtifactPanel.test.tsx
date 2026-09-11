@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ArtifactPanel } from "@/features/task/ArtifactPanel";
 import { api, type TaskSummary } from "@/lib/wails";
 import { renderWithStore } from "@/test/render";
-import { makeRepoPR, makeState, makeStep, makeTask } from "@/test/wails-mock";
+import { makeRepoPR, makeSituation, makeState, makeStep, makeTask } from "@/test/wails-mock";
 
 const state = makeState();
 
@@ -88,6 +88,27 @@ describe("ArtifactPanel", () => {
 
     expect(screen.getByText("Implementing")).toBeInTheDocument();
     expect(screen.getByRole("listitem")).toHaveAttribute("aria-current", "step");
+  });
+
+  it("colours the step being run in the list with its situation", () => {
+    panel({
+      stage: "implementation",
+      steps: [
+        makeStep({ status: "blocked", block: { reason: "git_failed", detail: "", files: 0 } }),
+      ],
+      currentStep: 1,
+      situations: [
+        makeSituation({
+          kind: "step_blocked",
+          group: "error",
+          place: { kind: "step", stage: "", step: 1, repoPath: "", repository: "" },
+        }),
+      ],
+    });
+
+    expect(screen.getByRole("listitem").querySelector('[aria-hidden="true"]')).toHaveClass(
+      "bg-destructive",
+    );
   });
 
   it("reads one step file, with its header shown as metadata", async () => {

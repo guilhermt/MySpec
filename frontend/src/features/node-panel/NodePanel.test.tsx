@@ -4,7 +4,7 @@ import { NodePanel } from "@/features/node-panel/NodePanel";
 import { api } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
-import { makeState, makeTask } from "@/test/wails-mock";
+import { makeSituation, makeState, makeTask } from "@/test/wails-mock";
 
 const TASKS = [
   makeTask({ id: "t-root", name: "add-login", repoPath: "", contextPercent: 42 }),
@@ -62,6 +62,22 @@ describe("NodePanel", () => {
     expect(tasks[0]).toHaveTextContent("PRD");
     expect(tasks[0]).toHaveTextContent("Waiting");
     expect(tasks[0]).toHaveTextContent("42%");
+  });
+
+  it("reads what a task waits on the user for, as its row in the tree does", () => {
+    const task = makeTask({
+      id: "t-root",
+      name: "add-login",
+      situations: [
+        makeSituation({ id: "draft", taskId: "t-root", kind: "draft" }),
+        makeSituation({ id: "findings", taskId: "t-root", kind: "findings" }),
+      ],
+    });
+    renderWithStore(<NodePanel />, { state: makeState({ tasks: [task] }) });
+
+    const [row] = screen.getAllByRole("listitem");
+    expect(row).toHaveTextContent("Draft to approve +1");
+    expect(row?.querySelector('[aria-hidden="true"]')).toHaveClass("bg-[var(--status-attention)]");
   });
 
   it("lists only the tasks of the repository that is selected", () => {

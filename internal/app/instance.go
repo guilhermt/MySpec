@@ -13,17 +13,7 @@ import (
 func (a *App) onSecondInstance(data application.SecondInstanceData) {
 	a.log.Info("second instance", "args", data.Args, "cwd", data.WorkingDir)
 
-	application.InvokeSync(func() {
-		_, window := a.handles()
-		if window == nil {
-			return
-		}
-		if window.IsMinimised() {
-			window.UnMinimise()
-		}
-		window.Show()
-		window.Focus()
-	})
+	a.bringForward()
 
 	arg := firstArg(commandArgs(data.Args), a.log)
 	if arg == "" {

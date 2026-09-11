@@ -173,9 +173,13 @@ func TestAStepIsConcludedWhenItsBranchMovesAndTheNextOneIsPrepared(t *testing.T)
 		t.Fatalf("ApproveStep() = %v, want nil", err)
 	}
 
-	// The agent commits and stops.
+	// The agent commits and stops. Only the session of that step goes idle: the
+	// evaluation Sync queued may still be waiting for the lock the approval
+	// took, and if it runs between the commit and the stop it concludes the step
+	// on the commit alone and opens the session of the next step, which is still
+	// working.
 	f.reviews.setSnapshot(review.Snapshot{Head: commitSHA})
-	f.sessions.goIdle("task-1")
+	f.sessions.goIdleSession(session.Key{TaskID: "task-1", Stage: session.StepStage(1)})
 	f.service.Check("task-1")
 
 	f.waitStep(t, "task-1", 1, flow.StepDone)
@@ -183,9 +187,11 @@ func TestAStepIsConcludedWhenItsBranchMovesAndTheNextOneIsPrepared(t *testing.T)
 	if state.CommitSHA != commitSHA || state.CommitSubject != "Do the work of the step" {
 		t.Errorf("commit = %q %q, want the one the step produced", state.CommitSHA, state.CommitSubject)
 	}
-	if !slices.Contains(f.reviews.reviewCalls(), "forget:task-1:api") {
-		t.Errorf("review calls = %q, want the worktree of the step forgotten", f.reviews.reviewCalls())
-	}
+	// The commit is recorded before the worktree of the step is forgotten, so
+	// the step reads done while the forget can still be on its way.
+	waitFor(t, "the worktree of step 1 to be forgotten", func() bool {
+		return slices.Contains(f.reviews.reviewCalls(), "forget:task-1:api")
+	})
 
 	// The step after it takes over, in the worktree of its own repository.
 	f.waitStep(t, "task-1", 2, flow.StepImplementing)
@@ -217,10 +223,12 @@ func TestTheLastStepOfAPlanIsConcludedWithNothingAfterIt(t *testing.T) {
 	if runs := f.tasks.StepRuns("task-1"); len(runs) != 1 {
 		t.Errorf("step runs = %d, want only the one the plan has", len(runs))
 	}
-	// The conversation of a step that is over takes no more messages.
-	if !slices.Contains(f.sessions.recorded(), "close:task-1:step:1") {
-		t.Errorf("session calls = %q, want the session of the step closed", f.sessions.recorded())
-	}
+	// The conversation of a step that is over takes no more messages. The
+	// commit is recorded before the session is closed, so the step reads done
+	// while the close can still be on its way.
+	waitFor(t, "the session of step 1 to be closed", func() bool {
+		return slices.Contains(f.sessions.recorded(), "close:task-1:step:1")
+	})
 }
 
 func TestACommitTurnThatEndsWithoutACommitGivesTheStepBack(t *testing.T) {
@@ -242,9 +250,11 @@ func TestACommitTurnThatEndsWithoutACommitGivesTheStepBack(t *testing.T) {
 	if !slices.Contains(f.reviews.reviewCalls(), "refresh:task-1:api") {
 		t.Errorf("review calls = %q, want the worktree read again", f.reviews.reviewCalls())
 	}
-	if state := f.stepState(t, "task-1", 1); !state.CommitFailed {
-		t.Error("CommitFailed = false, want the user told the commit did not happen")
-	}
+	// The step is given back before the missing commit is recorded, so it reads
+	// ready to approve while the warning can still be on its way.
+	waitFor(t, "the user to be told the commit did not happen", func() bool {
+		return f.stepState(t, "task-1", 1).CommitFailed
+	})
 
 	// Approving again clears the warning.
 	if err := f.service.ApproveStep(t.Context(), "task-1"); err != nil {

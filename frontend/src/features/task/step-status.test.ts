@@ -60,13 +60,13 @@ describe("step status", () => {
   it.each([
     ["not_started", "Not started", "idle"],
     ["preparing", "Preparing", "working"],
-    ["blocked", "Blocked", "attention"],
+    ["blocked", "Blocked", "idle"],
     ["implementing", "Implementing", "working"],
-    ["awaiting_review", "Awaiting review", "attention"],
-    ["in_review", "In review", "attention"],
-    ["ready_to_approve", "Ready to approve", "attention"],
-    ["nothing_to_commit", "Nothing to approve", "attention"],
-    ["review_failed", "Can't read the worktree", "error"],
+    ["awaiting_review", "Awaiting review", "idle"],
+    ["in_review", "In review", "idle"],
+    ["ready_to_approve", "Ready to approve", "idle"],
+    ["nothing_to_commit", "Nothing to approve", "idle"],
+    ["review_failed", "Can't read the worktree", "idle"],
     ["committing", "Committing", "working"],
     ["done", "Done", "done"],
   ])("reads %s", (status, label, tone) => {
@@ -133,10 +133,10 @@ describe("currentStepDisplay", () => {
   it.each([
     ["not_started", "Not started", "idle"],
     ["preparing", "Preparing", "working"],
-    ["blocked", "Blocked", "attention"],
-    ["awaiting_review", "Awaiting review", "attention"],
-    ["nothing_to_commit", "Nothing to approve", "attention"],
-    ["review_failed", "Can't read the worktree", "error"],
+    ["blocked", "Blocked", "idle"],
+    ["awaiting_review", "Awaiting review", "idle"],
+    ["nothing_to_commit", "Nothing to approve", "idle"],
+    ["review_failed", "Can't read the worktree", "idle"],
     ["committing", "Committing", "working"],
   ])("reads %s from the step alone", (status, label, tone) => {
     const task = implementing({ status }, { sessionStatus: "paused" });
@@ -150,21 +150,22 @@ describe("currentStepDisplay", () => {
   ])("carries the percentage of a step %s", (status, percent) => {
     const task = implementing({ status, review: makeReview({ percent }) });
 
-    expect(currentStepDisplay(task)).toEqual({ label: `Review ${percent}%`, tone: "attention" });
+    expect(currentStepDisplay(task)).toEqual({ label: `Review ${percent}%`, tone: "idle" });
   });
 
   it("reads a review the backend did not send as no progress", () => {
     const task = implementing({ status: "in_review" });
 
-    expect(currentStepDisplay(task)).toEqual({ label: "Review 0%", tone: "attention" });
+    expect(currentStepDisplay(task)).toEqual({ label: "Review 0%", tone: "idle" });
   });
 
   it.each([
     ["working", "Implementing", "working"],
     ["waiting", "Implementing", "working"],
-    ["needs_permission", "Permission", "attention"],
+    ["needs_permission", "Permission", "idle"],
+    ["needs_answer", "Question", "idle"],
     ["paused", "Paused", "paused"],
-    ["error", "Error", "error"],
+    ["error", "Error", "idle"],
   ])("reads an implementing step through a %s session", (sessionStatus, label, tone) => {
     const task = implementing({ status: "implementing" }, { sessionStatus });
 

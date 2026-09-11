@@ -343,6 +343,7 @@ func (s *Service) handleResult(ctx context.Context, r *run, ev *claude.ResultEve
 	if ev.IsError && !aborted {
 		message := cmp.Or(ev.Result, ev.TerminalReason, ev.Subtype)
 		s.appendLocked(ctx, r, Entry{Kind: KindError, Error: &ErrorEntry{Kind: ErrorTurn, Message: message}}, n)
+		r.turnFailed = true
 	}
 
 	if hadTurn {

@@ -13,12 +13,14 @@ import (
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 
+	"github.com/guilhermt/myspec/internal/attention"
 	"github.com/guilhermt/myspec/internal/bindings"
 	"github.com/guilhermt/myspec/internal/editor"
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/platform/logging"
+	"github.com/guilhermt/myspec/internal/platform/notify"
 	"github.com/guilhermt/myspec/internal/platform/xdg"
 	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/review"
@@ -58,6 +60,8 @@ type App struct {
 	worktrees *worktree.Service
 	review    *review.Service
 	flow      *flow.Service
+	attention *attention.Service
+	notifier  *notify.Notifier // nil when the desktop has no notification service
 
 	mu      sync.Mutex
 	wails   *application.App
@@ -111,6 +115,22 @@ func Run(cfg Config) int {
 	bindings.RegisterEvents()
 
 	a := &App{log: log}
+
+	a.notifier = a.startNotifications()
+	// A notifier that could not start is no notifier at all, not a nil one
+	// behind the interface.
+	var notifier attention.Notifier
+	if a.notifier != nil {
+		notifier = a.notifier
+	}
+	a.attention = attention.New(attention.Deps{
+		Store:     st.Situations,
+		Notifier:  notifier,
+		Focused:   a.windowFocused,
+		Log:       log,
+		OnDue:     a.publish,
+		OnStarted: a.emitSituationStarted,
+	})
 
 	themeSvc, err := theme.New(ctx, st.Settings, false, log, a.publish)
 	if err != nil {
@@ -220,9 +240,10 @@ func (a *App) options(
 		Description: "Orchestrates a Claude Code development workflow",
 		Icon:        cfg.Icon,
 		Services: []application.Service{
-			application.NewService(bindings.NewWorkspaceService(ws, a.snapshot, a, log)),
+			application.NewService(bindings.NewWorkspaceService(ws, a.state, a, log)),
 			application.NewService(bindings.NewSettingsService(themeSvc, log)),
 			application.NewService(bindings.NewTaskService(tasks, sessions, flowSvc, editor.Open, log)),
+			application.NewService(bindings.NewAttentionService(a.attention)),
 		},
 		Assets: application.AssetOptions{Handler: application.AssetFileServerFS(cfg.Assets)},
 		Linux:  application.LinuxOptions{ProgramName: "myspec"},
@@ -260,27 +281,38 @@ func (a *App) syncTasks() {
 		a.log.Error("sync tasks failed", "workspace", current.Path, "err", err)
 		return
 	}
-	// The flow reads the registry of worktrees as it resumes the steps, so it
-	// is loaded first; a failure only leaves the steps to block on their own.
 	tasks := a.tasks.List()
 	ids := make([]string, len(tasks))
 	for i, t := range tasks {
 		ids[i] = t.ID
 	}
+	// The baseline of the situations starts before the flow opens the
+	// sessions, so that what already waited on the user is found, not started.
+	if err := a.attention.Sync(ctx, ids); err != nil {
+		a.log.Error("sync situations failed", "workspace", current.Path, "err", err)
+	}
+	// The flow reads the registry of worktrees as it resumes the steps, so it
+	// is loaded first; a failure only leaves the steps to block on their own.
 	if err := a.worktrees.Sync(ctx, ids); err != nil {
 		a.log.Error("sync worktrees failed", "workspace", current.Path, "err", err)
 	}
 	a.flow.Sync(ctx)
 }
 
-// shutdown stops every session and the artifact watcher while the window is
-// still closing, so no CLI process outlives the app.
+// shutdown stops the situations, every session, the notifications and the
+// watchers while the window is still closing, so that no CLI process and no
+// notification outlives the app.
 func (a *App) shutdown() {
 	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 
+	a.attention.Close()
 	a.flow.Close()
 	a.sessions.Shutdown(ctx)
+	// The notifications go with the app: one left behind would lead nowhere.
+	if a.notifier != nil {
+		a.notifier.Close()
+	}
 	if err := a.review.Close(); err != nil {
 		a.log.Error("close review watcher failed", "err", err)
 	}

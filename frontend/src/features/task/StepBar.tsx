@@ -15,6 +15,7 @@ import {
   stepPhaseLabel,
   stepStatusLabel,
 } from "@/features/task/step-status";
+import { situationTone, stepSituation } from "@/lib/situations";
 import { asStepStatus, type Step, type StepStatus, type TaskSummary } from "@/lib/wails";
 import { approveStep, openInEditor } from "@/store/actions";
 import { useAppStore } from "@/store/app-store";
@@ -69,6 +70,10 @@ export function StepBar({ task }: StepBarProps) {
 
   const label = repoLabel(app, step);
   const display = currentStepDisplay(task);
+  const situation = stepSituation(task, step.number);
+  // What waits on the user takes the colour of its situation; without one, the
+  // dot shows the step and its session.
+  const tone = situation !== null ? situationTone(situation) : display.tone;
   const status = asStepStatus(step.status);
   const preparing = status === "preparing";
   const committing = status === "committing";
@@ -119,7 +124,7 @@ export function StepBar({ task }: StepBarProps) {
           </>
         ) : (
           <>
-            <ToneDot tone={display.tone} />
+            <ToneDot tone={tone} />
             {stateText(step, reviewing ? stepStatusLabel(step) : display.label)}
           </>
         )}

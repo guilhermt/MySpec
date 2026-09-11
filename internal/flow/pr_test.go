@@ -299,6 +299,32 @@ func TestADraftThatIsWrittenAwaitsTheOK(t *testing.T) {
 	}
 }
 
+func TestADraftSessionThatStopsWithoutADraftWaitsForAReply(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	inPR(f, "task-1", plan(), task.PRDrafting)
+	f.sessions.setSummary("task-1", session.Summary{Stage: session.PRStage("api"), Status: session.StatusWorking})
+
+	if got := f.repoState(t, "task-1", repos[0].Path).Status; got != flow.RepoDrafting {
+		t.Errorf("status = %q, want drafting while the agent works", got)
+	}
+
+	// The agent stopped with no draft on disk: it asked something, and nothing
+	// moves until the user answers.
+	f.sessions.goIdle("task-1")
+	if got := f.repoState(t, "task-1", repos[0].Path).Status; got != flow.RepoAwaitingReply {
+		t.Errorf("status = %q, want awaiting_reply", got)
+	}
+
+	f.tasks.setArtifacts("task-1", prArtifacts(task.RepoArtifacts{
+		Draft: task.Draft{Present: true, Title: "Add the login screen", Body: "It adds the screen."},
+	}))
+	if got := f.repoState(t, "task-1", repos[0].Path).Status; got != flow.RepoDraftReady {
+		t.Errorf("status = %q, want draft_ready once the draft is there", got)
+	}
+}
+
 func TestAPullRequestThatAlreadyExistsSkipsTheDraft(t *testing.T) {
 	t.Parallel()
 
@@ -347,6 +373,9 @@ func TestAPullRequestThatDidNotOpenGivesTheDraftBack(t *testing.T) {
 
 	f := newFixture(t)
 	inPR(f, "task-1", plan(), task.PROpening)
+	f.tasks.setArtifacts("task-1", prArtifacts(task.RepoArtifacts{
+		Draft: task.Draft{Present: true, Title: "t", Body: "b"},
+	}))
 	f.sessions.setSummary("task-1", session.Summary{
 		Stage: session.PRStage("api"), Status: session.StatusWaiting, Idle: true,
 	})
@@ -356,6 +385,53 @@ func TestAPullRequestThatDidNotOpenGivesTheDraftBack(t *testing.T) {
 		run, ok := f.tasks.prRun("task-1", repos[0].Path)
 		return ok && run.Status == task.PRDrafting
 	})
+	// The agent ended the turn without the pull request it was asked for: the
+	// draft is back, and so is the conversation, which is where it says why.
+	f.waitRepo(t, "task-1", repos[0].Path, flow.RepoAwaitingReply)
+
+	// Once the conversation moves on, what the agent does in that turn decides.
+	f.sessions.setSummary("task-1", session.Summary{
+		Stage: session.PRStage("api"), Status: session.StatusWorking, TurnRunning: true,
+	})
+	f.service.Check("task-1")
+	f.sessions.goIdle("task-1")
+	f.service.Check("task-1")
+	f.waitRepo(t, "task-1", repos[0].Path, flow.RepoDraftReady)
+}
+
+func TestAPullRequestIsLookedForOnceTheTurnThatOpensItIsOver(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	inPR(f, "task-1", plan(), task.PROpening)
+	f.tasks.setArtifacts("task-1", prArtifacts(task.RepoArtifacts{
+		Draft: task.Draft{Present: true, Title: "t", Body: "b"},
+	}))
+	f.sessions.setSummary("task-1", session.Summary{
+		Stage: session.PRStage("api"), Status: session.StatusWorking, TurnRunning: true,
+	})
+
+	// While the agent opens the pull request, GitHub has nothing to say yet, and
+	// the draft is not given back in the middle of the turn. The second
+	// evaluation starts only once the first one is over.
+	before := f.tasks.inspectCount()
+	f.service.Check("task-1")
+	f.waitEvaluations(t, before+1)
+	f.service.Check("task-1")
+	f.waitEvaluations(t, before+2)
+	if calls := f.gh.ghCalls(); len(calls) != 0 {
+		t.Errorf("gh calls = %q, want none while the turn runs", calls)
+	}
+	if got := f.repoState(t, "task-1", repos[0].Path).Status; got != flow.RepoOpening {
+		t.Errorf("status = %q, want opening while the turn runs", got)
+	}
+
+	// The turn ended without the pull request, and the agent waits for a reply.
+	f.sessions.setSummary("task-1", session.Summary{
+		Stage: session.PRStage("api"), Status: session.StatusWaiting, Idle: true,
+	})
+	f.service.Check("task-1")
+	f.waitRepo(t, "task-1", repos[0].Path, flow.RepoAwaitingReply)
 }
 
 func TestResumingThePRStageOpensTheSessionOfEveryRepository(t *testing.T) {
@@ -474,7 +550,7 @@ func TestARepositoryUnderReviewIsShownByItsLastReport(t *testing.T) {
 		want    flow.RepoStatus
 	}{
 		{"the agent is reviewing", nil, false, review.Snapshot{}, false, flow.RepoReviewing},
-		{"no report yet", nil, true, review.Snapshot{}, false, flow.RepoReviewing},
+		{"no report yet", nil, true, review.Snapshot{}, false, flow.RepoAwaitingReply},
 		{"the agent is applying what was approved", reports(1, false), false, reviewed(1, 2), true, flow.RepoReviewing},
 		{"the pass closed clean", reports(2, true), true, review.Snapshot{}, false, flow.RepoDone},
 		{"nothing decided yet", reports(1, false), true, review.Snapshot{}, false, flow.RepoAwaitingDecision},

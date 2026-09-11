@@ -69,10 +69,10 @@ func TestSeedWritesTheDefaultPromptOfEveryStage(t *testing.T) {
 	}{
 		{prompts.StagePRD, []string{"# PRD Creator", "{{prd_path}}", "{{initial_context}}"}},
 		{prompts.StageTechSpec, []string{"# Technical Specification Creator", "{{tech_spec_path}}", "{{repositories}}"}},
-		{prompts.StagePlan, []string{"# Step Planner", "{{steps_dir}}", "{{repositories}}"}},
+		{prompts.StagePlan, []string{"# Step Planner", "{{steps_dir}}", "{{repositories}}", "AskUserQuestion"}},
 		{prompts.StageCommit, []string{"# Commit", "exactly what is staged", "Co-Authored-By", "{{push}}"}},
-		{prompts.StagePR, []string{"# Pull Request", "{{draft_path}}", "{{base_branch}}", "gh pr create"}},
-		{prompts.StagePRReview, []string{"# Pull Request Review", "{{review_path}}", "{{pr_url}}", "status: clean"}},
+		{prompts.StagePR, []string{"# Pull Request", "{{draft_path}}", "{{base_branch}}", "gh pr create", "AskUserQuestion"}},
+		{prompts.StagePRReview, []string{"# Pull Request Review", "{{review_path}}", "{{pr_url}}", "status: clean", "AskUserQuestion"}},
 	}
 
 	dataDir := t.TempDir()
@@ -96,7 +96,7 @@ func TestSeedWritesTheDefaultPromptOfEveryStage(t *testing.T) {
 	}
 }
 
-func TestSeedNeverOverwritesAnExistingPrompt(t *testing.T) {
+func TestSeedRewritesAPromptThatDiffersFromItsDefault(t *testing.T) {
 	t.Parallel()
 
 	dataDir := t.TempDir()
@@ -107,9 +107,13 @@ func TestSeedNeverOverwritesAnExistingPrompt(t *testing.T) {
 
 	seed(t, dataDir)
 
+	// A Seed into an empty directory writes nothing but the defaults.
+	fresh := t.TempDir()
+	seed(t, fresh)
+
 	for _, stage := range []prompts.Stage{prompts.StagePRD, prompts.StageTechSpec, prompts.StagePlan} {
-		if got := read(t, dataDir, stage); got != mine {
-			t.Errorf("%s prompt = %q, want it untouched as %q", stage, got, mine)
+		if got, want := read(t, dataDir, stage), read(t, fresh, stage); got != want {
+			t.Errorf("%s prompt = %q, want it rewritten to its default", stage, got)
 		}
 	}
 }

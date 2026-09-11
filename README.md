@@ -111,12 +111,15 @@ Everything the app keeps lives under `~/.local/share/myspec/`:
 
 - `myspec.db`, the SQLite database with the settings, the workspaces, the tasks
   and every conversation.
-- `prompts/prd.md`, `prompts/tech_spec.md`, `prompts/plan.md` and
-  `prompts/commit.md`, the prompts the app sends: the first three start the
-  session of each planning stage, and the last one is what an approved step is
-  committed with. They are written on first run, meant to be edited, and
-  recreated the next time the app starts if they are deleted. A session already
-  running keeps the prompt it started with.
+- `prompts/prd.md`, `prompts/tech_spec.md`, `prompts/plan.md`,
+  `prompts/commit.md`, `prompts/pr.md` and `prompts/pr_review.md`, the prompts
+  the app sends: the first three start the session of each planning stage,
+  `commit.md` is what an approved step, or the approved changes of a pull
+  request review, is committed with, and `pr.md` and `pr_review.md` start the
+  pull request and pull request review sessions of each repository. Prompts
+  cannot be edited in the app yet, so every time it starts the app writes the
+  defaults of its version, replacing any prompt that differs from them. A
+  session already running keeps the prompt it started with.
 - `workspaces/<name>-<hash>/tasks/<task>/`, the artifacts of each task, in a
   folder per workspace and per task: `PRD.md`, `tech-spec.md` and
   `steps/<number>-<short-description>.md`, one file per step. The hash keeps two

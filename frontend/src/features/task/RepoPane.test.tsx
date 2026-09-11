@@ -49,6 +49,34 @@ describe("RepoPane", () => {
     expect(screen.getByPlaceholderText("Reply to the agent…")).toBeInTheDocument();
   });
 
+  it("keeps the draft above the conversation after an opening that failed", () => {
+    pane({ status: "awaiting_reply", draft: DRAFT });
+
+    expect(screen.getByLabelText("Title")).toHaveValue(DRAFT.title);
+    // Trying again needs no message to the agent first.
+    expect(screen.getByRole("button", { name: "Open PR" })).toBeEnabled();
+    expect(screen.getByPlaceholderText("Reply to the agent…")).toBeInTheDocument();
+  });
+
+  it("is the conversation alone while the agent waits for a reply without a draft", () => {
+    pane({ status: "awaiting_reply" });
+
+    expect(screen.getByPlaceholderText("Reply to the agent…")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Title")).not.toBeInTheDocument();
+  });
+
+  it("is the conversation alone while the agent owes the report of a review pass", () => {
+    pane({
+      status: "awaiting_reply",
+      draft: DRAFT,
+      prNumber: 12,
+      sessionStage: "pr_review:web",
+    });
+
+    expect(screen.getByPlaceholderText("Reply to the agent…")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Title")).not.toBeInTheDocument();
+  });
+
   it("says the pull request is being opened", () => {
     pane({ status: "opening", draft: DRAFT });
 

@@ -1,11 +1,15 @@
 import { repoStatusTone } from "@/features/task/repo-status";
 import { currentStepDisplay } from "@/features/task/step-status";
 import { closedCount, everyRepoHasPR, everyRepoReviewed, reposOf } from "@/lib/repos";
+import { situationTone, summaryLabel } from "@/lib/situations";
 import { stageLabel } from "@/lib/stages";
 import type { RepoPR, RepoStatus, TaskSummary } from "@/lib/wails";
 import { asRepoStatus, asSessionStatus, asTaskStage } from "@/lib/wails";
 
-/** StatusTone is how urgent the status of a task looks. */
+/**
+ * StatusTone is how urgent the status of a task looks. attention and error
+ * come from the situations alone.
+ */
 export type StatusTone = "working" | "attention" | "paused" | "error" | "done" | "idle";
 
 // The states of a repository, from the one that most needs the user down to
@@ -14,6 +18,7 @@ const REPO_PRIORITY: readonly RepoStatus[] = [
   "blocked",
   "draft_ready",
   "awaiting_decision",
+  "awaiting_reply",
   "ready_to_approve",
   "in_review",
   "merged",
@@ -53,6 +58,8 @@ function repoPhrase(repo: RepoPR): string {
       return "writing the draft";
     case "draft_ready":
       return "draft to approve";
+    case "awaiting_reply":
+      return "waiting for your reply";
     case "opening":
       return "opening the pull request";
     case "reviewing":
@@ -110,6 +117,11 @@ function prStatusLabel(task: TaskSummary): string {
 
 /** taskStatusLabel is the one word the tree, the list and the header show. */
 export function taskStatusLabel(task: TaskSummary): string {
+  // What the task waits on the user for comes before anything it is doing.
+  const summary = summaryLabel(task.situations ?? []);
+  if (summary !== null) {
+    return summary;
+  }
   // The implementation stage has no conversation of its own: the current step
   // carries the state, and its number places the task in the plan.
   if (asTaskStage(task.stage) === "implementation") {
@@ -131,6 +143,8 @@ export function taskStatusLabel(task: TaskSummary): string {
       return "Error";
     case "needs_permission":
       return "Permission";
+    case "needs_answer":
+      return "Question";
     case "working":
       return "Working";
     case "waiting":
@@ -138,8 +152,15 @@ export function taskStatusLabel(task: TaskSummary): string {
   }
 }
 
-/** taskStatusTone maps a status to the colour that carries it. */
+/**
+ * taskStatusTone maps a status to the colour that carries it: the one of the
+ * most urgent situation, or, when the task waits for nothing, what it is doing.
+ */
 export function taskStatusTone(task: TaskSummary): StatusTone {
+  const [situation] = task.situations ?? [];
+  if (situation !== undefined) {
+    return situationTone(situation);
+  }
   if (asTaskStage(task.stage) === "implementation") {
     return currentStepDisplay(task).tone;
   }
@@ -150,22 +171,15 @@ export function taskStatusTone(task: TaskSummary): StatusTone {
   switch (asSessionStatus(task.sessionStatus)) {
     case "paused":
       return "paused";
-    case "error":
-      return "error";
-    case "needs_permission":
-      return "attention";
     case "working":
       return "working";
-    // A waiting session is waiting for the user.
+    // A session that is not working calls for the user only through a situation.
     case "waiting":
-      return "attention";
+    case "needs_permission":
+    case "needs_answer":
+    case "error":
+      return "idle";
   }
-}
-
-/** isAttention reports whether a task needs the user before it can go on. */
-export function isAttention(task: TaskSummary): boolean {
-  const tone = taskStatusTone(task);
-  return tone === "attention" || tone === "error";
 }
 
 /** taskStageLabel names the stage a task is in, and says when it is reopened. */

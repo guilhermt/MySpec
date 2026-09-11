@@ -1,3 +1,4 @@
+import { useViewedSituation } from "@/features/attention/useViewedSituation";
 import { ArchivedTaskView } from "@/features/history/ArchivedTaskView";
 import { HistoryPanel } from "@/features/history/HistoryPanel";
 import { NodePanel } from "@/features/node-panel/NodePanel";
@@ -22,6 +23,8 @@ function MainArea() {
 }
 
 export function AppShell() {
+  useViewedSituation();
+
   return (
     <div className="grid h-dvh grid-cols-[var(--sidebar-width)_minmax(0,1fr)]">
       <Sidebar />

@@ -6,20 +6,8 @@ import type {
   PRBlockReason,
   PRState,
   RepoPR,
-  State,
 } from "@/lib/wails";
 import { asCloseOutcome, asCloseSkipReason, asPRState, asRepoStatus } from "@/lib/wails";
-
-/**
- * repoName is how a repository reads in the interface. The plan names the
- * repository of the workspace itself ".", which is no name at all.
- */
-export function repoName(app: State | null, repo: Pick<RepoPR, "repository">): string {
-  if (repo.repository !== "." && repo.repository !== "") {
-    return repo.repository;
-  }
-  return app?.workspace?.name ?? "Root";
-}
 
 /** repoStatusLabel is where a repository stands, in the words of the product. */
 export function repoStatusLabel(repo: RepoPR): string {
@@ -32,6 +20,8 @@ export function repoStatusLabel(repo: RepoPR): string {
       return "Preparing the draft";
     case "draft_ready":
       return "Draft waiting for your OK";
+    case "awaiting_reply":
+      return "Waiting for your reply";
     case "opening":
       return "Opening the pull request";
     case "reviewing":
@@ -59,23 +49,13 @@ export function repoStatusLabel(repo: RepoPR): string {
   }
 }
 
-/** repoStatusTone maps the state of a repository to the colour that carries it. */
+/**
+ * repoStatusTone maps the state of a repository to the colour that carries it.
+ * It never calls for the user: that colour comes from the situation of the
+ * repository alone.
+ */
 export function repoStatusTone(repo: RepoPR): StatusTone {
-  const status = asRepoStatus(repo.status);
-  // A review that closed clean waits quietly for the merge, unless the app
-  // could not read the pull request and left the closing to the user.
-  if (status === "done" && repo.canClose) {
-    return "attention";
-  }
-  switch (status) {
-    // Every one of these is the app waiting on the user.
-    case "blocked":
-    case "draft_ready":
-    case "awaiting_decision":
-    case "in_review":
-    case "ready_to_approve":
-    case "merged":
-      return "attention";
+  switch (asRepoStatus(repo.status)) {
     case "preparing":
     case "drafting":
     case "opening":
@@ -83,21 +63,44 @@ export function repoStatusTone(repo: RepoPR): StatusTone {
     case "committing":
     case "closing":
       return "working";
-    case "done":
-    case "pr_closed":
-      return "idle";
     case "closed":
-    case "skipped":
       return "done";
+    case "blocked":
+    case "draft_ready":
+    case "awaiting_reply":
+    case "awaiting_decision":
+    case "in_review":
+    case "ready_to_approve":
+    case "done":
+    case "merged":
+    case "pr_closed":
+    case "skipped":
+      return "idle";
   }
 }
 
 /**
- * canOpenPR reports whether the draft is the user's to send. The text itself
- * still has to say something, which the card checks.
+ * draftAtHand reports whether the draft is the user's to send: a ready draft,
+ * or the one an opening that failed left while the agent waits for a reply, so
+ * that trying again needs no message to the agent first. Once the pull request
+ * exists the draft is only a record, even when the agent waits for a reply
+ * during the review.
+ */
+export function draftAtHand(repo: RepoPR): boolean {
+  const status = asRepoStatus(repo.status);
+  return (
+    status === "draft_ready" ||
+    (status === "awaiting_reply" && repo.draft !== null && repo.prNumber === 0)
+  );
+}
+
+/**
+ * canOpenPR reports whether the draft can be sent right now: it is at hand and
+ * the agent is not in a turn. The text itself still has to say something,
+ * which the card checks.
  */
 export function canOpenPR(repo: RepoPR): boolean {
-  return asRepoStatus(repo.status) === "draft_ready" && !repo.turnRunning;
+  return draftAtHand(repo) && !repo.turnRunning;
 }
 
 /** canApproveRepo reports whether every changed file is staged and waiting. */
@@ -125,6 +128,10 @@ export function canDiscardDraft(repo: RepoPR): boolean {
     case "drafting":
     case "draft_ready":
       return true;
+    // The agent waits for a reply both before the pull request and during its
+    // review; only the first still has a draft to throw away.
+    case "awaiting_reply":
+      return repo.prNumber === 0;
     default:
       return false;
   }
@@ -140,6 +147,10 @@ export function canReviewAgain(repo: RepoPR): boolean {
     case "done":
     case "merged":
       return true;
+    // A pass that ended without its report can be asked for again, once there
+    // is a pull request to review.
+    case "awaiting_reply":
+      return repo.prNumber > 0;
     default:
       return false;
   }

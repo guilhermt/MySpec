@@ -25,6 +25,10 @@ const (
 // longer than the debounce, so a reading that was going to land already did.
 const settle = 700 * time.Millisecond
 
+// waitTimeout is how long a test waits for something that should happen before
+// it fails.
+const waitTimeout = 5 * time.Second
+
 // counting is the worktree service the review reads through, with the
 // readings counted.
 type counting struct {
@@ -137,7 +141,7 @@ func (f *fixture) waitForKey(
 ) review.Snapshot {
 	t.Helper()
 
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(waitTimeout)
 	for {
 		snap, found := f.svc.Snapshot(k)
 		if found && ok(snap) {
@@ -147,6 +151,30 @@ func (f *fixture) waitForKey(
 			t.Fatalf("the reading never %s, it is %+v", what, snap)
 		}
 		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// waitChange waits until a change of the fixture worktree is reported with a
+// reading that says what the test is waiting for, and returns that reading. The
+// service stores a reading before it reports it, so a test that only polls the
+// snapshot can see the reading and drain the changes while its report is still
+// on the way, and that report then lands on whatever the test watches next.
+func (f *fixture) waitChange(t *testing.T, what string, ok func(review.Snapshot) bool) review.Snapshot {
+	t.Helper()
+
+	deadline := time.After(waitTimeout)
+	for {
+		select {
+		case k := <-f.changes:
+			// The reading behind a report is stored before it, so the snapshot
+			// is at least as new as the change just received.
+			if snap, found := f.svc.Snapshot(f.key); k == f.key && found && ok(snap) {
+				return snap
+			}
+		case <-deadline:
+			snap, _ := f.svc.Snapshot(f.key)
+			t.Fatalf("no change was reported with a reading that %s, it is %+v", what, snap)
+		}
 	}
 }
 
