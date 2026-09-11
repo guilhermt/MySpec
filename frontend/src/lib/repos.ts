@@ -27,6 +27,7 @@ export function repoAwaitsUser(repo: RepoPR): boolean {
   switch (asRepoStatus(repo.status)) {
     case "blocked":
     case "draft_ready":
+    case "awaiting_reply":
     case "awaiting_decision":
     case "in_review":
     case "ready_to_approve":

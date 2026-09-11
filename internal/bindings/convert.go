@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/guilhermt/myspec/internal/attention"
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/review"
 	"github.com/guilhermt/myspec/internal/session"
@@ -43,14 +44,16 @@ func FromNotice(notice *workspace.Notice) *Notice {
 }
 
 // FromTasks converts the tasks of the open workspace, pairing each with the
-// artifacts of its folder, the state of its steps and the summary of its
-// session when there is one.
+// artifacts of its folder, the state of its steps, the summary of its session
+// when there is one and the situations it waits on the user for, by task id. A
+// nil map of situations counts as none for every task.
 func FromTasks(
 	tasks []task.Task,
 	artifacts func(id string) task.Artifacts,
 	steps func(id string) []flow.StepState,
 	repos func(id string) []flow.RepoState,
 	summaries map[session.Key]session.Summary,
+	situations map[string][]attention.Situation,
 ) []TaskSummary {
 	converted := make([]TaskSummary, len(tasks))
 	for i, t := range tasks {
@@ -80,6 +83,7 @@ func FromTasks(
 			CurrentStep:     currentStep(states),
 			Repos:           fromRepos(repos(t.ID)),
 			PlanProblems:    fromProblems(a.Plan.Problems),
+			Situations:      fromSituations(situations[t.ID]),
 			CanContinue:     t.Revisiting && a.Done(t.Stage) && summary.Idle,
 			ArtifactVersion: t.ArtifactVersion,
 			LastError:       summary.LastError,
@@ -404,6 +408,46 @@ func fromProblems(problems []task.PlanProblem) []PlanProblem {
 	converted := make([]PlanProblem, len(problems))
 	for i, problem := range problems {
 		converted[i] = PlanProblem{File: problem.File, Message: problem.Message}
+	}
+	return converted
+}
+
+// FromSituation converts one situation.
+func FromSituation(s attention.Situation) Situation {
+	return Situation{
+		ID:        s.ID,
+		TaskID:    s.TaskID,
+		Kind:      string(s.Kind),
+		Group:     string(s.Kind.Group()),
+		Form:      string(s.Form),
+		Percent:   s.Percent,
+		Place:     FromPlace(s.Place),
+		StartedAt: s.StartedAt.Format(time.RFC3339),
+	}
+}
+
+// FromPlace converts where a situation is.
+func FromPlace(p attention.Place) Place {
+	return Place{
+		Kind:       string(p.Kind),
+		Stage:      string(p.Stage),
+		Step:       p.Step,
+		RepoPath:   p.RepoPath,
+		Repository: p.Repository,
+	}
+}
+
+// FromStarted converts a situation that just started.
+func FromStarted(started attention.Started) SituationStarted {
+	return SituationStarted{Situation: FromSituation(started.Situation), Focused: started.Focused}
+}
+
+// fromSituations converts the situations of a task, always returning a slice
+// so the frontend never sees null.
+func fromSituations(list []attention.Situation) []Situation {
+	converted := make([]Situation, len(list))
+	for i, s := range list {
+		converted[i] = FromSituation(s)
 	}
 	return converted
 }

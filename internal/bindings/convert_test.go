@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
+	"github.com/guilhermt/myspec/internal/attention"
 	"github.com/guilhermt/myspec/internal/bindings"
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/git"
@@ -151,6 +152,7 @@ func TestFromTasksCarriesTheStateOfEachStep(t *testing.T) {
 		func(string) []flow.StepState { return states },
 		noRepos,
 		nil,
+		nil,
 	)
 	if len(got) != 1 {
 		t.Fatalf("len(FromTasks()) = %d, want 1", len(got))
@@ -171,6 +173,7 @@ func TestFromTasksHasNoCurrentStepWithoutAPlan(t *testing.T) {
 		func(string) task.Artifacts { return task.Artifacts{} },
 		func(string) []flow.StepState { return nil },
 		noRepos,
+		nil,
 		nil,
 	)
 	if len(got) != 1 {
@@ -294,6 +297,7 @@ func TestTheCurrentStepIsTheFirstOneThatIsNotDone(t *testing.T) {
 				func(string) []flow.StepState { return states },
 				noRepos,
 				nil,
+				nil,
 			)
 			if got[0].CurrentStep != test.want {
 				t.Errorf("currentStep = %d, want %d", got[0].CurrentStep, test.want)
@@ -315,6 +319,7 @@ func stepsOf(t *testing.T, states []flow.StepState) []bindings.Step {
 		func(string) task.Artifacts { return task.Artifacts{} },
 		func(string) []flow.StepState { return states },
 		noRepos,
+		nil,
 		nil,
 	)
 	if len(got) != 1 {
@@ -363,6 +368,7 @@ func TestFromTasksCarriesWhatClosingARepositoryDid(t *testing.T) {
 		func(string) task.Artifacts { return task.Artifacts{} },
 		func(string) []flow.StepState { return nil },
 		func(string) []flow.RepoState { return states },
+		nil,
 		nil,
 	)
 	if len(got) != 1 {
@@ -612,6 +618,7 @@ func TestFromTasksPicksTheSessionOfTheStageTheTaskIsIn(t *testing.T) {
 		},
 		noRepos,
 		summaries,
+		nil,
 	)
 	if len(got) != 2 {
 		t.Fatalf("len(FromTasks()) = %d, want 2", len(got))
@@ -640,6 +647,7 @@ func TestFromTasksLeavesAnImplementingTaskWithoutAStepAtRest(t *testing.T) {
 		func(string) []flow.StepState { return states },
 		noRepos,
 		summaries,
+		nil,
 	)
 	if got[0].SessionStatus != "waiting" {
 		t.Errorf("sessionStatus = %q, want waiting: every step is committed", got[0].SessionStatus)
@@ -685,6 +693,7 @@ func TestFromTasksCarriesTheRepositoriesOfThePRStage(t *testing.T) {
 		map[session.Key]session.Summary{
 			{TaskID: "task-1", Stage: "pr_review:api"}: {Status: session.StatusWaiting},
 		},
+		nil,
 	)
 	if len(got) != 1 {
 		t.Fatalf("len(FromTasks()) = %d, want 1", len(got))
@@ -730,5 +739,138 @@ func TestFromTasksCarriesTheRepositoriesOfThePRStage(t *testing.T) {
 	// to a repository, and the fields of the task stay empty.
 	if got[0].SessionStatus != "waiting" || got[0].ContextPercent != 0 {
 		t.Errorf("task = %+v, want no session of its own", got[0])
+	}
+}
+
+func TestFromTasksCarriesTheSituationsOfEachTask(t *testing.T) {
+	t.Parallel()
+
+	startedAt := time.Date(2026, 9, 11, 9, 30, 0, 0, time.UTC)
+	situations := map[string][]attention.Situation{
+		"task-1": {{
+			ID:        "s1",
+			TaskID:    "task-1",
+			Place:     attention.Place{Kind: attention.PlaceStage, Stage: task.StageTechSpec},
+			Kind:      attention.KindReply,
+			StartedAt: startedAt,
+		}},
+		"task-2": {
+			{
+				ID:        "s2",
+				TaskID:    "task-2",
+				Place:     attention.Place{Kind: attention.PlaceRepo, RepoPath: "/home/u/code/api", Repository: "api"},
+				Kind:      attention.KindPRBlocked,
+				StartedAt: startedAt.Add(time.Minute),
+			},
+			{
+				ID:        "s3",
+				TaskID:    "task-2",
+				Place:     attention.Place{Kind: attention.PlaceRepo, RepoPath: "/home/u/code/web", Repository: "web"},
+				Kind:      attention.KindChangesReview,
+				Form:      attention.FormStaged,
+				Percent:   50,
+				StartedAt: startedAt,
+			},
+		},
+	}
+
+	got := bindings.FromTasks(
+		[]task.Task{
+			{ID: "task-1", Name: "login-screen", Stage: task.StageTechSpec},
+			{ID: "task-2", Name: "sign-up", Stage: task.StagePR},
+			{ID: "task-3", Name: "dark-mode", Stage: task.StagePRD},
+		},
+		func(string) task.Artifacts { return task.Artifacts{} },
+		func(string) []flow.StepState { return nil },
+		noRepos,
+		nil,
+		situations,
+	)
+	if len(got) != 3 {
+		t.Fatalf("len(FromTasks()) = %d, want 3", len(got))
+	}
+
+	want := [][]bindings.Situation{
+		{{
+			ID:        "s1",
+			TaskID:    "task-1",
+			Kind:      "reply",
+			Group:     "waiting",
+			Place:     bindings.Place{Kind: "stage", Stage: "tech_spec"},
+			StartedAt: "2026-09-11T09:30:00Z",
+		}},
+		{
+			{
+				ID:        "s2",
+				TaskID:    "task-2",
+				Kind:      "pr_blocked",
+				Group:     "error",
+				Place:     bindings.Place{Kind: "repo", RepoPath: "/home/u/code/api", Repository: "api"},
+				StartedAt: "2026-09-11T09:31:00Z",
+			},
+			{
+				ID:        "s3",
+				TaskID:    "task-2",
+				Kind:      "changes_review",
+				Group:     "waiting",
+				Form:      "staged",
+				Percent:   50,
+				Place:     bindings.Place{Kind: "repo", RepoPath: "/home/u/code/web", Repository: "web"},
+				StartedAt: "2026-09-11T09:30:00Z",
+			},
+		},
+		{},
+	}
+	for i, summary := range got {
+		if diff := cmp.Diff(want[i], summary.Situations); diff != "" {
+			t.Errorf("situations of %s mismatch (-want +got):\n%s", summary.ID, diff)
+		}
+	}
+	// The frontend maps over the situations of every task without checking for
+	// null.
+	if got[2].Situations == nil {
+		t.Error("situations of a task without any = nil, want an empty slice")
+	}
+}
+
+func TestFromStartedCarriesTheFocus(t *testing.T) {
+	t.Parallel()
+
+	situation := attention.Situation{
+		ID:        "s1",
+		TaskID:    "task-1",
+		Place:     attention.Place{Kind: attention.PlaceStep, Step: 3},
+		Kind:      attention.KindStepReview,
+		Form:      attention.FormReview,
+		StartedAt: time.Date(2026, 9, 11, 9, 30, 0, 0, time.UTC),
+	}
+	converted := bindings.Situation{
+		ID:        "s1",
+		TaskID:    "task-1",
+		Kind:      "step_review",
+		Group:     "waiting",
+		Form:      "review",
+		Place:     bindings.Place{Kind: "step", Step: 3},
+		StartedAt: "2026-09-11T09:30:00Z",
+	}
+
+	tests := []struct {
+		name    string
+		focused bool
+	}{
+		{"with the window in front", true},
+		{"with the window away", false},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := bindings.FromStarted(attention.Started{Situation: situation, Focused: test.focused})
+			want := bindings.SituationStarted{Situation: converted, Focused: test.focused}
+			if diff := cmp.Diff(want, got); diff != "" {
+				t.Errorf("FromStarted() mismatch (-want +got):\n%s", diff)
+			}
+		})
 	}
 }

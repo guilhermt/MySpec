@@ -32,6 +32,8 @@ export function repoStatusLabel(repo: RepoPR): string {
       return "Preparing the draft";
     case "draft_ready":
       return "Draft waiting for your OK";
+    case "awaiting_reply":
+      return "Waiting for your reply";
     case "opening":
       return "Opening the pull request";
     case "reviewing":
@@ -71,6 +73,7 @@ export function repoStatusTone(repo: RepoPR): StatusTone {
     // Every one of these is the app waiting on the user.
     case "blocked":
     case "draft_ready":
+    case "awaiting_reply":
     case "awaiting_decision":
     case "in_review":
     case "ready_to_approve":

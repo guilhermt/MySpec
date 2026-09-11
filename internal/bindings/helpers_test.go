@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/guilhermt/myspec/internal/attention"
 	"github.com/guilhermt/myspec/internal/bindings"
 	"github.com/guilhermt/myspec/internal/claude"
 	"github.com/guilhermt/myspec/internal/claude/claudetest"
@@ -112,6 +113,39 @@ func (e *fakeEditor) opened() []string {
 
 	return slices.Clone(e.paths)
 }
+
+// fakeSituationStore stands in for the table of situations. It remembers
+// nothing, which is all a service that never loads a workspace needs.
+type fakeSituationStore struct{}
+
+func (fakeSituationStore) ListByTasks(context.Context, []string) ([]attention.Record, error) {
+	return nil, nil
+}
+
+func (fakeSituationStore) Upsert(context.Context, attention.Record) error { return nil }
+
+func (fakeSituationStore) Delete(context.Context, string, string) error { return nil }
+
+// fakeNotifier stands in for the desktop notifications, recording what it is
+// asked: send:<id> and withdraw:<id>.
+type fakeNotifier struct {
+	calls []string
+}
+
+func (n *fakeNotifier) Send(id, _, _ string) {
+	n.calls = append(n.calls, "send:"+id)
+}
+
+func (n *fakeNotifier) Withdraw(id string) {
+	n.calls = append(n.calls, "withdraw:"+id)
+}
+
+// fakeClock is a clock that moves only when the test moves it.
+type fakeClock struct {
+	now time.Time
+}
+
+func (c *fakeClock) Now() time.Time { return c.now }
 
 // fakePicker stands in for the native folder chooser.
 type fakePicker struct {
@@ -533,7 +567,7 @@ func (f *fixture) snapshot() bindings.State {
 		SystemDark: f.theme.SystemDark(),
 		Notice:     bindings.FromNotice(f.ws.Notice()),
 		Tasks: bindings.FromTasks(
-			f.taskSvc.List(), f.taskArtifacts, f.flow.Steps, f.flow.Repos, f.sessions.Summaries(),
+			f.taskSvc.List(), f.taskArtifacts, f.flow.Steps, f.flow.Repos, f.sessions.Summaries(), nil,
 		),
 		History: bindings.FromArchived(f.taskSvc.ListArchived(), f.taskArtifacts, f.taskSvc.PRRuns),
 	}

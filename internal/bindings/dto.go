@@ -157,10 +157,10 @@ type RepoPR struct {
 	Repository string `json:"repository"` // relative path, as the steps name it
 	RepoPath   string `json:"repoPath"`
 	Slug       string `json:"slug"`
-	// Status is preparing, blocked, drafting, draft_ready, opening, reviewing,
-	// awaiting_decision, in_review, ready_to_approve, committing, done, merged,
-	// pr_closed, closing, closed or skipped, a string for the same reason as
-	// Notice.Reason.
+	// Status is preparing, blocked, drafting, draft_ready, awaiting_reply,
+	// opening, reviewing, awaiting_decision, in_review, ready_to_approve,
+	// committing, done, merged, pr_closed, closing, closed or skipped, a string
+	// for the same reason as Notice.Reason.
 	Status       string   `json:"status"`
 	Block        *PRBlock `json:"block"` // blocked only
 	WorktreePath string   `json:"worktreePath"`
@@ -188,7 +188,8 @@ type RepoPR struct {
 	Close      *CloseResult `json:"close"`    // closed only
 
 	SessionStage string `json:"sessionStage"` // "" when the repository has no conversation
-	// SessionStatus is working, waiting, needs_permission, paused or error.
+	// SessionStatus is working, waiting, needs_permission, needs_answer, paused
+	// or error.
 	SessionStatus  string `json:"sessionStatus"`
 	TurnRunning    bool   `json:"turnRunning"`
 	ProcessRunning bool   `json:"processRunning"`
@@ -204,6 +205,59 @@ type PlanProblem struct {
 	Message string `json:"message"`
 }
 
+// Place is where in a task a situation is.
+type Place struct {
+	// Kind is stage, step or repo, a string for the same reason as
+	// Notice.Reason.
+	Kind       string `json:"kind"`
+	Stage      string `json:"stage"`      // stage only: prd, tech_spec or plan
+	Step       int    `json:"step"`       // step only
+	RepoPath   string `json:"repoPath"`   // repo only
+	Repository string `json:"repository"` // repo only: relative path, as the steps name it
+}
+
+// Situation is something a task cannot go on without the user for.
+type Situation struct {
+	ID     string `json:"id"`
+	TaskID string `json:"taskId"`
+	// Kind is session_error, step_blocked, worktree_unreadable, pr_blocked,
+	// plan_invalid, pr_closed, permission, question, reply, ready_to_continue,
+	// step_review, step_empty, draft, findings, changes_review, merge or
+	// nothing_to_publish, a string for the same reason as Notice.Reason.
+	Kind string `json:"kind"`
+	// Group is error, waiting or closing, from the most urgent, a string for
+	// the same reason as Notice.Reason.
+	Group string `json:"group"`
+	// Form is review, staged or approve for step_review and changes_review,
+	// merge or close for merge, and "" for every other kind, a string for the
+	// same reason as Notice.Reason.
+	Form      string `json:"form"`
+	Percent   int    `json:"percent"` // staged form only
+	Place     Place  `json:"place"`
+	StartedAt string `json:"startedAt"`
+}
+
+// EventSituationStarted carries a SituationStarted every time a situation
+// starts after a workspace loaded.
+const EventSituationStarted = "situation:started"
+
+// SituationStarted is a situation that just started, and whether the window
+// was in front of the user when it did.
+type SituationStarted struct {
+	Situation Situation `json:"situation"`
+	Focused   bool      `json:"focused"`
+}
+
+// EventSituationOpen carries a SituationOpen when the user clicks a
+// notification.
+const EventSituationOpen = "situation:open"
+
+// SituationOpen asks the interface for the place a notification leads to.
+type SituationOpen struct {
+	TaskID string `json:"taskId"`
+	Place  Place  `json:"place"`
+}
+
 // TaskSummary is a task of the open workspace with the state of its session.
 type TaskSummary struct {
 	ID       string `json:"id"`
@@ -216,7 +270,8 @@ type TaskSummary struct {
 	// Revisiting is a stage reopened by the user, which moves on only when
 	// they say so.
 	Revisiting bool `json:"revisiting"`
-	// SessionStatus is working, waiting, needs_permission, paused or error.
+	// SessionStatus is working, waiting, needs_permission, needs_answer, paused
+	// or error.
 	SessionStatus   string        `json:"sessionStatus"`
 	TurnRunning     bool          `json:"turnRunning"`
 	ProcessRunning  bool          `json:"processRunning"`
@@ -230,6 +285,7 @@ type TaskSummary struct {
 	CurrentStep     int           `json:"currentStep"`  // the step that runs or runs next; 0 when the task has no steps
 	Repos           []RepoPR      `json:"repos"`        // never nil; empty outside the pull request stage
 	PlanProblems    []PlanProblem `json:"planProblems"` // never nil
+	Situations      []Situation   `json:"situations"`   // what the task waits on the user for, the most urgent first; never nil
 	CanContinue     bool          `json:"canContinue"`
 	ArtifactVersion int           `json:"artifactVersion"`
 	LastError       string        `json:"lastError"`

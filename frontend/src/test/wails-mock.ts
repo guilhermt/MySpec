@@ -10,6 +10,9 @@ import type {
   PermissionDecision,
   RepoPR,
   Review,
+  Situation,
+  SituationOpen,
+  SituationStarted,
   State,
   Step,
   TaskStage,
@@ -90,10 +93,14 @@ export const api = {
     Promise.resolve(),
   ),
   openExternal: vi.fn<(url: string) => Promise<void>>(() => Promise.resolve()),
+
+  viewSituation: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
 };
 
 let stateHandlers: ((state: State) => void)[] = [];
 let transcriptHandlers: ((event: TranscriptEvent) => void)[] = [];
+let situationStartedHandlers: ((event: SituationStarted) => void)[] = [];
+let situationOpenHandlers: ((event: SituationOpen) => void)[] = [];
 
 export const onStateChanged = vi.fn((handler: (state: State) => void): (() => void) => {
   stateHandlers.push(handler);
@@ -111,6 +118,24 @@ export const onTranscriptChanged = vi.fn(
   },
 );
 
+export const onSituationStarted = vi.fn(
+  (handler: (event: SituationStarted) => void): (() => void) => {
+    situationStartedHandlers.push(handler);
+    return () => {
+      situationStartedHandlers = situationStartedHandlers.filter(
+        (registered) => registered !== handler,
+      );
+    };
+  },
+);
+
+export const onSituationOpen = vi.fn((handler: (event: SituationOpen) => void): (() => void) => {
+  situationOpenHandlers.push(handler);
+  return () => {
+    situationOpenHandlers = situationOpenHandlers.filter((registered) => registered !== handler);
+  };
+});
+
 /** emitState delivers a state:changed event to everything currently subscribed. */
 export function emitState(state: State): void {
   for (const handler of [...stateHandlers]) {
@@ -121,6 +146,20 @@ export function emitState(state: State): void {
 /** emitTranscript delivers a transcript:changed event to every subscriber. */
 export function emitTranscript(event: TranscriptEvent): void {
   for (const handler of [...transcriptHandlers]) {
+    handler(event);
+  }
+}
+
+/** emitSituationStarted delivers a situation:started event to every subscriber. */
+export function emitSituationStarted(event: SituationStarted): void {
+  for (const handler of [...situationStartedHandlers]) {
+    handler(event);
+  }
+}
+
+/** emitSituationOpen delivers a situation:open event to every subscriber. */
+export function emitSituationOpen(event: SituationOpen): void {
+  for (const handler of [...situationOpenHandlers]) {
     handler(event);
   }
 }
@@ -178,11 +217,26 @@ export function makeTask(overrides: Partial<TaskSummary> = {}): TaskSummary {
     currentStep: 0,
     repos: [],
     planProblems: [],
+    situations: [],
     canContinue: false,
     artifactVersion: 0,
     lastError: "",
     createdAt: "2026-09-05T10:00:00Z",
     updatedAt: "2026-09-05T10:00:00Z",
+    ...overrides,
+  };
+}
+
+export function makeSituation(overrides: Partial<Situation> = {}): Situation {
+  return {
+    id: "situation-1",
+    taskId: "task-1",
+    kind: "reply",
+    group: "waiting",
+    form: "",
+    percent: 0,
+    place: { kind: "stage", stage: "prd", step: 0, repoPath: "", repository: "" },
+    startedAt: "2026-09-05T10:00:00Z",
     ...overrides,
   };
 }
@@ -432,12 +486,16 @@ export function makeTranscript(overrides: Partial<Transcript> = {}): Transcript 
 export function resetWailsMock(): void {
   stateHandlers = [];
   transcriptHandlers = [];
+  situationStartedHandlers = [];
+  situationOpenHandlers = [];
   entrySeq = 0;
   for (const fn of Object.values(api)) {
     fn.mockClear();
   }
   onStateChanged.mockClear();
   onTranscriptChanged.mockClear();
+  onSituationStarted.mockClear();
+  onSituationOpen.mockClear();
   api.getState.mockImplementation(() => Promise.resolve(makeState()));
   api.createTask.mockImplementation(() => Promise.resolve("task-1"));
   api.getTranscript.mockImplementation((taskId, stage) =>

@@ -53,6 +53,8 @@ function repoPhrase(repo: RepoPR): string {
       return "writing the draft";
     case "draft_ready":
       return "draft to approve";
+    case "awaiting_reply":
+      return "waiting for your reply";
     case "opening":
       return "opening the pull request";
     case "reviewing":
@@ -131,6 +133,8 @@ export function taskStatusLabel(task: TaskSummary): string {
       return "Error";
     case "needs_permission":
       return "Permission";
+    case "needs_answer":
+      return "Question";
     case "working":
       return "Working";
     case "waiting":
@@ -153,6 +157,7 @@ export function taskStatusTone(task: TaskSummary): StatusTone {
     case "error":
       return "error";
     case "needs_permission":
+    case "needs_answer":
       return "attention";
     case "working":
       return "working";

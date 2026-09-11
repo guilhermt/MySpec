@@ -269,6 +269,7 @@ export function RepoPane({ taskId, repo }: RepoPaneProps) {
         </>
       );
     case "drafting":
+    case "awaiting_reply":
     case "reviewing":
     case "awaiting_decision":
       return <Chat taskId={taskId} repo={repo} />;

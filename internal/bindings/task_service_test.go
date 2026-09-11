@@ -56,6 +56,7 @@ func TestCreateTaskAddsTheTaskToTheState(t *testing.T) {
 		Steps:         []bindings.Step{},
 		Repos:         []bindings.RepoPR{},
 		PlanProblems:  []bindings.PlanProblem{},
+		Situations:    []bindings.Situation{},
 		CreatedAt:     got.CreatedAt,
 		UpdatedAt:     got.UpdatedAt,
 	}
@@ -792,7 +793,8 @@ func TestPreviewDeleteSaysWhatTheDeletionWouldDestroy(t *testing.T) {
 	t.Parallel()
 
 	f, dir, id := plannedTask(t)
-	f.waitStep(t, id, 1, "awaiting_review")
+	// The preview reads the worktree, so the step has to have written to it.
+	f.waitReviewed(t, id, 1)
 
 	preview, err := f.tasks.PreviewDelete(id)
 	if err != nil {

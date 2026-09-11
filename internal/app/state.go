@@ -3,7 +3,9 @@ package app
 import (
 	"context"
 
+	"github.com/guilhermt/myspec/internal/attention"
 	"github.com/guilhermt/myspec/internal/bindings"
+	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
 )
@@ -11,8 +13,24 @@ import (
 // appName is the window title with no workspace open, and its suffix with one.
 const appName = "MySpec"
 
-// snapshot builds the state the frontend renders.
+// snapshot builds the state the frontend renders. The situations are derived
+// from the same readings the tasks are converted from, so that every surface
+// agrees with every other. The caller holds publishMu.
 func (a *App) snapshot() bindings.State {
+	tasks := a.tasks.List()
+	summaries := a.sessions.Summaries()
+	artifacts := make(map[string]task.Artifacts, len(tasks))
+	steps := make(map[string][]flow.StepState, len(tasks))
+	repos := make(map[string][]flow.RepoState, len(tasks))
+	found := make([]attention.Found, 0, len(tasks)) // one place waits at a time outside the PR stage
+	for _, t := range tasks {
+		artifacts[t.ID], steps[t.ID], repos[t.ID] = a.taskArtifacts(t.ID), a.flow.Steps(t.ID), a.flow.Repos(t.ID)
+		found = append(found, attention.Derive(attention.Input{
+			Task: t, Artifacts: artifacts[t.ID], Steps: steps[t.ID], Repos: repos[t.ID], Sessions: summaries,
+		})...)
+	}
+	situations := a.attention.Update(found)
+
 	return bindings.State{
 		Workspace:  bindings.FromWorkspace(a.ws.Current()),
 		Recents:    a.recentList(),
@@ -20,10 +38,23 @@ func (a *App) snapshot() bindings.State {
 		SystemDark: a.theme.SystemDark(),
 		Notice:     bindings.FromNotice(a.ws.Notice()),
 		Tasks: bindings.FromTasks(
-			a.tasks.List(), a.taskArtifacts, a.flow.Steps, a.flow.Repos, a.sessions.Summaries(),
+			tasks,
+			func(id string) task.Artifacts { return artifacts[id] },
+			func(id string) []flow.StepState { return steps[id] },
+			func(id string) []flow.RepoState { return repos[id] },
+			summaries, situations,
 		),
 		History: bindings.FromArchived(a.tasks.ListArchived(), a.taskArtifacts, a.tasks.PRRuns),
 	}
+}
+
+// state is the snapshot the frontend asks for. It takes the lock a publish
+// takes, so that two readings never update the situations at once.
+func (a *App) state() bindings.State {
+	a.publishMu.Lock()
+	defer a.publishMu.Unlock()
+
+	return a.snapshot()
 }
 
 // taskArtifacts is what the last inspection of a task's folder found, which is
@@ -52,6 +83,16 @@ func (a *App) emitTranscript(ev session.TranscriptEvent) {
 	wails, _ := a.handles()
 	if wails != nil {
 		wails.Event.Emit(bindings.EventTranscriptChanged, bindings.FromTranscriptEvent(ev))
+	}
+}
+
+// emitSituationStarted tells the frontend a situation started, which is what
+// the brief highlight of a row or a tab needs. The event leaves before the
+// state that brings the situation, and the frontend keeps the highlight by id,
+// so the order does not matter.
+func (a *App) emitSituationStarted(started attention.Started) {
+	if wails, _ := a.handles(); wails != nil {
+		wails.Event.Emit(bindings.EventSituationStarted, bindings.FromStarted(started))
 	}
 }
 

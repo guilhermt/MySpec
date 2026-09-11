@@ -10,16 +10,20 @@ import {
   asMarkerType,
   asNoticeReason,
   asPermissionStatus,
+  asPlaceKind,
   asPRState,
   asRepoStatus,
   asReviewFileKind,
   asSessionStatus,
+  asSituationForm,
+  asSituationGroup,
+  asSituationKind,
   asStepStatus,
   asTaskStage,
   asThemePreference,
   asTranscriptEventKind,
 } from "@/lib/wails";
-import { makeState } from "@/test/wails-mock";
+import { makeSituation, makeState } from "@/test/wails-mock";
 
 // The mock of @/lib/wails replaces the boundary; these cases exercise the real
 // module against a fake runtime.
@@ -63,6 +67,7 @@ describe("narrowing", () => {
     expect(asTaskStage("implementation")).toBe("implementation");
     expect(asTaskStage("pr")).toBe("pr");
     expect(asSessionStatus("needs_permission")).toBe("needs_permission");
+    expect(asSessionStatus("needs_answer")).toBe("needs_answer");
     expect(asEntryKind("permission")).toBe("permission");
     expect(asActionStatus("interrupted")).toBe("interrupted");
     expect(asPermissionStatus("allowed_session")).toBe("allowed_session");
@@ -87,6 +92,7 @@ describe("narrowing", () => {
     expect(asRepoStatus("blocked")).toBe("blocked");
     expect(asRepoStatus("drafting")).toBe("drafting");
     expect(asRepoStatus("draft_ready")).toBe("draft_ready");
+    expect(asRepoStatus("awaiting_reply")).toBe("awaiting_reply");
     expect(asRepoStatus("opening")).toBe("opening");
     expect(asRepoStatus("reviewing")).toBe("reviewing");
     expect(asRepoStatus("awaiting_decision")).toBe("awaiting_decision");
@@ -125,6 +131,35 @@ describe("narrowing", () => {
     expect(asBlockReason("no_repository")).toBe("no_repository");
     expect(asErrorKind("not_logged_in")).toBe("not_logged_in");
     expect(asTranscriptEventKind("text")).toBe("text");
+    expect(asSituationKind("session_error")).toBe("session_error");
+    expect(asSituationKind("step_blocked")).toBe("step_blocked");
+    expect(asSituationKind("worktree_unreadable")).toBe("worktree_unreadable");
+    expect(asSituationKind("pr_blocked")).toBe("pr_blocked");
+    expect(asSituationKind("plan_invalid")).toBe("plan_invalid");
+    expect(asSituationKind("pr_closed")).toBe("pr_closed");
+    expect(asSituationKind("permission")).toBe("permission");
+    expect(asSituationKind("question")).toBe("question");
+    expect(asSituationKind("reply")).toBe("reply");
+    expect(asSituationKind("ready_to_continue")).toBe("ready_to_continue");
+    expect(asSituationKind("step_review")).toBe("step_review");
+    expect(asSituationKind("step_empty")).toBe("step_empty");
+    expect(asSituationKind("draft")).toBe("draft");
+    expect(asSituationKind("findings")).toBe("findings");
+    expect(asSituationKind("changes_review")).toBe("changes_review");
+    expect(asSituationKind("merge")).toBe("merge");
+    expect(asSituationKind("nothing_to_publish")).toBe("nothing_to_publish");
+    expect(asSituationGroup("error")).toBe("error");
+    expect(asSituationGroup("waiting")).toBe("waiting");
+    expect(asSituationGroup("closing")).toBe("closing");
+    expect(asSituationForm("")).toBe("");
+    expect(asSituationForm("review")).toBe("review");
+    expect(asSituationForm("staged")).toBe("staged");
+    expect(asSituationForm("approve")).toBe("approve");
+    expect(asSituationForm("merge")).toBe("merge");
+    expect(asSituationForm("close")).toBe("close");
+    expect(asPlaceKind("stage")).toBe("stage");
+    expect(asPlaceKind("step")).toBe("step");
+    expect(asPlaceKind("repo")).toBe("repo");
   });
 
   it("falls back on a value a newer backend invented", () => {
@@ -145,6 +180,10 @@ describe("narrowing", () => {
     expect(asBlockReason("rebase_in_progress")).toBe("git_failed");
     expect(asErrorKind("out_of_quota")).toBe("turn_error");
     expect(asTranscriptEventKind("patch")).toBe("reset");
+    expect(asSituationKind("reminder")).toBe("reply");
+    expect(asSituationGroup("someday")).toBe("waiting");
+    expect(asSituationForm("rebase")).toBe("");
+    expect(asPlaceKind("workspace")).toBe("stage");
   });
 });
 
@@ -197,10 +236,11 @@ describe("api", () => {
     await wails.api.refreshPR("task-1", "/repo/web");
     await wails.api.closeRepo("task-1", "/repo/web");
     await wails.api.previewDelete("task-1");
+    await wails.api.viewSituation("situation-1");
 
-    expect(Call.ByID).toHaveBeenCalledTimes(35);
+    expect(Call.ByID).toHaveBeenCalledTimes(36);
     const ids = vi.mocked(Call.ByID).mock.calls.map(([id]) => id);
-    expect(new Set(ids).size).toBe(35);
+    expect(new Set(ids).size).toBe(36);
   });
 
   it("opens a link in the browser of the desktop, never in the webview", async () => {
@@ -238,6 +278,40 @@ describe("onStateChanged", () => {
 
     expect(vi.mocked(Events.On).mock.calls[0]?.[0]).toBe("state:changed");
     expect(handler).toHaveBeenCalledWith(state);
+    expect(stop).toBe(unsubscribe);
+  });
+});
+
+describe("onSituationStarted", () => {
+  it("hands the event payload to the handler and returns the unsubscribe", () => {
+    const unsubscribe = vi.fn();
+    vi.mocked(Events.On).mockReturnValueOnce(unsubscribe);
+    const handler = vi.fn();
+    const event = { situation: makeSituation(), focused: false };
+
+    const stop = wails.onSituationStarted(handler);
+    const registered = vi.mocked(Events.On).mock.calls[0]?.[1];
+    registered?.({ name: "situation:started", data: event });
+
+    expect(vi.mocked(Events.On).mock.calls[0]?.[0]).toBe("situation:started");
+    expect(handler).toHaveBeenCalledWith(event);
+    expect(stop).toBe(unsubscribe);
+  });
+});
+
+describe("onSituationOpen", () => {
+  it("hands the event payload to the handler and returns the unsubscribe", () => {
+    const unsubscribe = vi.fn();
+    vi.mocked(Events.On).mockReturnValueOnce(unsubscribe);
+    const handler = vi.fn();
+    const event = { taskId: "task-1", place: makeSituation().place };
+
+    const stop = wails.onSituationOpen(handler);
+    const registered = vi.mocked(Events.On).mock.calls[0]?.[1];
+    registered?.({ name: "situation:open", data: event });
+
+    expect(vi.mocked(Events.On).mock.calls[0]?.[0]).toBe("situation:open");
+    expect(handler).toHaveBeenCalledWith(event);
     expect(stop).toBe(unsubscribe);
   });
 });

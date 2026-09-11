@@ -144,6 +144,8 @@ export function currentStepDisplay(task: TaskSummary): StepDisplay {
       return { label: "Error", tone: "error" };
     case "needs_permission":
       return { label: "Permission", tone: "attention" };
+    case "needs_answer":
+      return { label: "Question", tone: "attention" };
     case "working":
     case "waiting":
       return { label: "Implementing", tone: "working" };
