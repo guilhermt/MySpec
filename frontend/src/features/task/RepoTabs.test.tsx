@@ -1,15 +1,15 @@
 import { screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { RepoTabs } from "@/features/task/RepoTabs";
-import { api, type RepoPR } from "@/lib/wails";
+import { api, type RepoPR, type Situation } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
-import { makeRepoPR, makeState, makeTask } from "@/test/wails-mock";
+import { makeRepoPR, makeSituation, makeState, makeTask } from "@/test/wails-mock";
 
 const API = { repository: "api", repoPath: "/home/dev/projects/api", slug: "api" };
 
-function tabs(repos: RepoPR[]) {
-  const task = makeTask({ stage: "pr", repos });
+function tabs(repos: RepoPR[], situations: Situation[] = []) {
+  const task = makeTask({ stage: "pr", repos, situations });
   return renderWithStore(<RepoTabs task={task} />, { state: makeState({ tasks: [task] }) });
 }
 
@@ -32,7 +32,15 @@ describe("RepoTabs", () => {
   });
 
   it("selects the repository waiting for the user by default", () => {
-    tabs([makeRepoPR({ status: "drafting" }), makeRepoPR({ ...API, status: "draft_ready" })]);
+    tabs(
+      [makeRepoPR({ status: "drafting" }), makeRepoPR({ ...API, status: "draft_ready" })],
+      [
+        makeSituation({
+          kind: "draft",
+          place: { kind: "repo", stage: "", step: 0, repoPath: API.repoPath, repository: "api" },
+        }),
+      ],
+    );
 
     const [web, api] = screen.getAllByRole("tab");
     expect(web).toHaveAttribute("aria-selected", "false");

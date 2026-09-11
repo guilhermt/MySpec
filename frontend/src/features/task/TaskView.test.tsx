@@ -3,9 +3,21 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { TaskView } from "@/features/task/TaskView";
 import { api, type TaskSummary } from "@/lib/wails";
 import { renderWithStore } from "@/test/render";
-import { makeRepoPR, makeState, makeStep, makeTask } from "@/test/wails-mock";
+import { makeRepoPR, makeSituation, makeState, makeStep, makeTask } from "@/test/wails-mock";
 
 const SEEN_KEY = "myspec.artifacts.seen:task-1";
+
+// The draft of api waits for the user, which makes api the tab the task opens on.
+const API_DRAFT = makeSituation({
+  kind: "draft",
+  place: {
+    kind: "repo",
+    stage: "",
+    step: 0,
+    repoPath: "/home/dev/projects/api",
+    repository: "api",
+  },
+});
 
 function view(overrides: Partial<TaskSummary> = {}) {
   return renderWithStore(<TaskView taskId="task-1" />, {
@@ -156,6 +168,7 @@ describe("TaskView", () => {
           draft: { title: "Wire the api", body: "why", file: "api-draft.md" },
         }),
       ],
+      situations: [API_DRAFT],
     });
 
     expect(screen.getAllByRole("tab")).toHaveLength(2);
@@ -179,6 +192,7 @@ describe("TaskView", () => {
           sessionStage: "pr:api",
         }),
       ],
+      situations: [API_DRAFT],
     });
 
     await user.click(screen.getAllByRole("tab")[0] as HTMLElement);

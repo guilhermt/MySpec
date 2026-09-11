@@ -23,6 +23,7 @@ export interface StoreOptions {
       | "historyQuery"
       | "archivedNotice"
       | "leftovers"
+      | "flashing"
     >
   >;
 }
@@ -48,6 +49,7 @@ export function resetAppStore(options: StoreOptions = {}): void {
     historyQuery: options.ui?.historyQuery ?? "",
     archivedNotice: options.ui?.archivedNotice ?? null,
     leftovers: options.ui?.leftovers ?? null,
+    flashing: options.ui?.flashing ?? new Set<string>(),
   });
 }
 

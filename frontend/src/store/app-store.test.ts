@@ -1,6 +1,6 @@
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
-import type { RepoPR, TranscriptEvent } from "@/lib/wails";
+import type { Place, RepoPR, TranscriptEvent } from "@/lib/wails";
 import { sessionKey } from "@/lib/wails";
 import {
   filterHistory,
@@ -12,10 +12,12 @@ import {
   useArchivedTask,
   useDraft,
   useError,
+  useFlashing,
   useHistory,
   useHistoryUi,
   useLeftovers,
   useNotice,
+  useOnScreenSituationId,
   useOpenRepo,
   useOpenTask,
   usePrDraft,
@@ -34,6 +36,7 @@ import {
   makeArchivedTask,
   makeEntry,
   makeRepoPR,
+  makeSituation,
   makeState,
   makeTask,
   makeTranscript,
@@ -453,17 +456,46 @@ function withRepos(...repos: RepoPR[]) {
   return makeState({ tasks: [{ ...ROOT_TASK, stage: "pr", repos }] });
 }
 
+function repoPlace(repo: RepoPR): Place {
+  return {
+    kind: "repo",
+    stage: "",
+    step: 0,
+    repoPath: repo.repoPath,
+    repository: repo.repository,
+  };
+}
+
+// web, the second repository, is the one whose draft waits for the user.
+function withWebWaiting() {
+  return makeState({
+    tasks: [
+      {
+        ...ROOT_TASK,
+        stage: "pr",
+        repos: [API_REPO, { ...WEB_REPO, status: "draft_ready" }],
+        situations: [
+          makeSituation({
+            id: "s-web",
+            taskId: ROOT_TASK.id,
+            kind: "draft",
+            place: repoPlace(WEB_REPO),
+          }),
+        ],
+      },
+    ],
+  });
+}
+
 describe("repository selection", () => {
-  it("opens on the first repository waiting for the user", () => {
+  it("opens on the repository of the most urgent situation", () => {
     const { result } = renderHook(() => ({
       repos: useRepos(ROOT_TASK.id),
       open: useOpenRepo(ROOT_TASK.id),
     }));
 
     act(() => {
-      useAppStore
-        .getState()
-        .applyState(withRepos(API_REPO, { ...WEB_REPO, status: "draft_ready" }));
+      useAppStore.getState().applyState(withWebWaiting());
     });
 
     expect(result.current.repos).toHaveLength(2);
@@ -498,9 +530,7 @@ describe("repository selection", () => {
     const { result } = renderHook(() => useOpenRepo(ROOT_TASK.id));
 
     act(() => {
-      useAppStore
-        .getState()
-        .applyState(withRepos(API_REPO, { ...WEB_REPO, status: "draft_ready" }));
+      useAppStore.getState().applyState(withWebWaiting());
       useAppStore.getState().selectRepo(ROOT_TASK.id, API_REPO.repoPath);
     });
 
@@ -768,6 +798,185 @@ describe("notices", () => {
 
     act(() => {
       useAppStore.getState().setLeftovers(null);
+    });
+    expect(result.current).toBeNull();
+  });
+});
+
+function stagePlace(stage: string): Place {
+  return { kind: "stage", stage, step: 0, repoPath: "", repository: "" };
+}
+
+function stepPlace(step: number): Place {
+  return { kind: "step", stage: "", step, repoPath: "", repository: "" };
+}
+
+describe("open place", () => {
+  it("opens the task of a situation and reveals it in the tree", () => {
+    useAppStore.getState().applyState(withTasks());
+
+    useAppStore.getState().openPlace(REPO_TASK.id, stagePlace("prd"));
+
+    expect(useAppStore.getState().openTaskId).toBe(REPO_TASK.id);
+    expect(useAppStore.getState().selectedNodeId).toBe(WEB_NODE);
+    expect(useAppStore.getState().expandedNodeIds.has(WEB_NODE)).toBe(true);
+    expect(useAppStore.getState().openRepo).toEqual({});
+  });
+
+  it("selects the tab of the repository the situation is in", () => {
+    const { result } = renderHook(() => useOpenRepo(ROOT_TASK.id));
+    act(() => {
+      useAppStore.getState().applyState(withWebWaiting());
+    });
+
+    act(() => {
+      useAppStore.getState().openPlace(ROOT_TASK.id, repoPlace(API_REPO));
+    });
+
+    expect(useAppStore.getState().openTaskId).toBe(ROOT_TASK.id);
+    expect(result.current).toBe(API_REPO.repoPath);
+  });
+
+  it("puts away the history, the archived task and the creation dialog", () => {
+    useAppStore.getState().applyState(withTasks());
+    useAppStore.getState().openArchived(ARCHIVED.id);
+    useAppStore.getState().openNewTask(ROOT_NODE_ID);
+
+    useAppStore.getState().openPlace(ROOT_TASK.id, stagePlace("prd"));
+
+    expect(useAppStore.getState().openTaskId).toBe(ROOT_TASK.id);
+    expect(useAppStore.getState().historyOpen).toBe(false);
+    expect(useAppStore.getState().openArchivedId).toBeNull();
+    expect(useAppStore.getState().newTaskFor).toBeNull();
+  });
+
+  it("ignores a task that is no longer there", () => {
+    useAppStore.getState().applyState(withTasks());
+    useAppStore.getState().openHistory();
+    useAppStore.getState().openNewTask(ROOT_NODE_ID);
+
+    useAppStore.getState().openPlace("task-gone", repoPlace(API_REPO));
+
+    expect(useAppStore.getState().openTaskId).toBeNull();
+    expect(useAppStore.getState().historyOpen).toBe(true);
+    expect(useAppStore.getState().newTaskFor).toBe(ROOT_NODE_ID);
+    expect(useAppStore.getState().openRepo).toEqual({});
+  });
+});
+
+describe("flashing", () => {
+  it("highlights situations and lets each one go on its own, in a new set every time", () => {
+    const { result } = renderHook(() => ({ flashing: useFlashing(), tree: useTreeUi() }));
+    const initial = result.current.flashing;
+    expect(initial.size).toBe(0);
+
+    act(() => {
+      useAppStore.getState().flashSituation("s1");
+      useAppStore.getState().flashSituation("s2");
+    });
+    expect([...result.current.flashing]).toEqual(["s1", "s2"]);
+    expect(result.current.flashing).not.toBe(initial);
+    expect(result.current.tree.flashing).toBe(result.current.flashing);
+
+    const flashed = result.current.flashing;
+    act(() => {
+      useAppStore.getState().unflashSituation("s1");
+    });
+    expect([...result.current.flashing]).toEqual(["s2"]);
+    expect(result.current.flashing).not.toBe(flashed);
+    expect(flashed.has("s1")).toBe(true);
+  });
+
+  it("forgets the highlights when the workspace changes", () => {
+    useAppStore.getState().applyState(withTasks());
+    useAppStore.getState().flashSituation("s1");
+
+    useAppStore
+      .getState()
+      .applyState(makeState({ workspace: { name: "labs", path: "/home/dev/labs", repos: [] } }));
+
+    expect(useAppStore.getState().flashing.size).toBe(0);
+  });
+});
+
+describe("situation on screen", () => {
+  it("is none without an open task", () => {
+    const { result } = renderHook(() => useOnScreenSituationId());
+
+    act(() => {
+      useAppStore
+        .getState()
+        .applyState(makeState({ tasks: [{ ...ROOT_TASK, situations: [makeSituation()] }] }));
+    });
+
+    expect(result.current).toBeNull();
+  });
+
+  it("is the situation of the stage the open task is in", () => {
+    const { result } = renderHook(() => useOnScreenSituationId());
+
+    act(() => {
+      useAppStore.getState().applyState(
+        makeState({
+          tasks: [
+            {
+              ...ROOT_TASK,
+              stage: "tech_spec",
+              situations: [makeSituation({ id: "s-spec", place: stagePlace("tech_spec") })],
+            },
+          ],
+        }),
+      );
+    });
+    expect(result.current).toBeNull();
+
+    act(() => {
+      useAppStore.getState().openTask(ROOT_TASK.id);
+    });
+    expect(result.current).toBe("s-spec");
+  });
+
+  it("is the situation of the step that runs", () => {
+    const { result } = renderHook(() => useOnScreenSituationId());
+
+    act(() => {
+      useAppStore.getState().applyState(
+        makeState({
+          tasks: [
+            {
+              ...ROOT_TASK,
+              stage: "implementation",
+              currentStep: 2,
+              situations: [
+                makeSituation({
+                  id: "s-step",
+                  kind: "step_review",
+                  form: "review",
+                  place: stepPlace(2),
+                }),
+              ],
+            },
+          ],
+        }),
+      );
+      useAppStore.getState().openTask(ROOT_TASK.id);
+    });
+
+    expect(result.current).toBe("s-step");
+  });
+
+  it("is the situation of the selected repository tab, and none on a tab without one", () => {
+    const { result } = renderHook(() => useOnScreenSituationId());
+
+    act(() => {
+      useAppStore.getState().applyState(withWebWaiting());
+      useAppStore.getState().openTask(ROOT_TASK.id);
+    });
+    // The task opens on the tab of its situation.
+    expect(result.current).toBe("s-web");
+
+    act(() => {
+      useAppStore.getState().selectRepo(ROOT_TASK.id, API_REPO.repoPath);
     });
     expect(result.current).toBeNull();
   });

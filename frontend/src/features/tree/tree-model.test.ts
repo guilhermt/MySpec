@@ -14,6 +14,7 @@ function ui(overrides: Partial<TreeUi> = {}): TreeUi {
     expandedNodeIds: new Set<NodeId>([ROOT_NODE_ID]),
     openTaskId: null,
     historyOpen: false,
+    flashing: new Set<string>(),
     ...overrides,
   };
 }
