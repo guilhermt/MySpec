@@ -40,10 +40,13 @@ type State struct {
 	Recents   []Recent   `json:"recents"`   // never nil
 	// Theme is system, light or dark, a string for the same reason as
 	// Notice.Reason.
-	Theme      string        `json:"theme"`
-	SystemDark bool          `json:"systemDark"`
-	Notice     *Notice       `json:"notice"`
-	Tasks      []TaskSummary `json:"tasks"` // tasks of the open workspace; never nil
+	Theme      string `json:"theme"`
+	SystemDark bool   `json:"systemDark"`
+	// ModelDefaults are the choices a new task starts each stage with, in workflow
+	// order; never nil.
+	ModelDefaults []StageModel  `json:"modelDefaults"`
+	Notice        *Notice       `json:"notice"`
+	Tasks         []TaskSummary `json:"tasks"` // tasks of the open workspace; never nil
 	// History are the archived tasks of the open workspace, newest first; never
 	// nil.
 	History []ArchivedTask `json:"history"`
@@ -103,6 +106,11 @@ type Step struct {
 	CommitSHA     string  `json:"commitSha"`     // done only
 	CommitSubject string  `json:"commitSubject"` // done only
 	CommitFailed  bool    `json:"commitFailed"`  // the last approval ended without a commit
+
+	Model         string `json:"model"` // what the step runs with, or will run with
+	Effort        string `json:"effort"`
+	Adjusted      bool   `json:"adjusted"`      // not started, with a choice of its own instead of the one of implementation
+	ModelEditable bool   `json:"modelEditable"` // not started: its choice can still change
 }
 
 // PRBlock is why the pull request stage of a repository cannot go on.
@@ -190,7 +198,11 @@ type RepoPR struct {
 	SessionStage string `json:"sessionStage"` // "" when the repository has no conversation
 	// SessionStatus is working, waiting, needs_permission, needs_answer, paused
 	// or error.
-	SessionStatus  string `json:"sessionStatus"`
+	SessionStatus string `json:"sessionStatus"`
+	// SessionModel and SessionEffort are what the session of the repository runs
+	// with from its next message on; "" without a session.
+	SessionModel   string `json:"sessionModel"`
+	SessionEffort  string `json:"sessionEffort"`
 	TurnRunning    bool   `json:"turnRunning"`
 	ProcessRunning bool   `json:"processRunning"`
 	RetryAttempt   int    `json:"retryAttempt"`
@@ -272,25 +284,30 @@ type TaskSummary struct {
 	Revisiting bool `json:"revisiting"`
 	// SessionStatus is working, waiting, needs_permission, needs_answer, paused
 	// or error.
-	SessionStatus   string        `json:"sessionStatus"`
-	TurnRunning     bool          `json:"turnRunning"`
-	ProcessRunning  bool          `json:"processRunning"`
-	RetryAttempt    int           `json:"retryAttempt"`
-	ContextPercent  int           `json:"contextPercent"`
-	PendingCount    int           `json:"pendingCount"`
-	Corrections     int           `json:"corrections"`
-	HasPRD          bool          `json:"hasPrd"`
-	HasTechSpec     bool          `json:"hasTechSpec"`
-	Steps           []Step        `json:"steps"`        // never nil
-	CurrentStep     int           `json:"currentStep"`  // the step that runs or runs next; 0 when the task has no steps
-	Repos           []RepoPR      `json:"repos"`        // never nil; empty outside the pull request stage
-	PlanProblems    []PlanProblem `json:"planProblems"` // never nil
-	Situations      []Situation   `json:"situations"`   // what the task waits on the user for, the most urgent first; never nil
-	CanContinue     bool          `json:"canContinue"`
-	ArtifactVersion int           `json:"artifactVersion"`
-	LastError       string        `json:"lastError"`
-	CreatedAt       string        `json:"createdAt"`
-	UpdatedAt       string        `json:"updatedAt"`
+	SessionStatus string `json:"sessionStatus"`
+	// SessionModel and SessionEffort are what the session the task screen shows
+	// runs with from its next message on; "" without a session.
+	SessionModel    string           `json:"sessionModel"`
+	SessionEffort   string           `json:"sessionEffort"`
+	TurnRunning     bool             `json:"turnRunning"`
+	ProcessRunning  bool             `json:"processRunning"`
+	RetryAttempt    int              `json:"retryAttempt"`
+	ContextPercent  int              `json:"contextPercent"`
+	PendingCount    int              `json:"pendingCount"`
+	Corrections     int              `json:"corrections"`
+	HasPRD          bool             `json:"hasPrd"`
+	HasTechSpec     bool             `json:"hasTechSpec"`
+	Steps           []Step           `json:"steps"`        // never nil
+	CurrentStep     int              `json:"currentStep"`  // the step that runs or runs next; 0 when the task has no steps
+	Repos           []RepoPR         `json:"repos"`        // never nil; empty outside the pull request stage
+	PlanProblems    []PlanProblem    `json:"planProblems"` // never nil
+	Situations      []Situation      `json:"situations"`   // what the task waits on the user for, the most urgent first; never nil
+	Models          []TaskStageModel `json:"models"`       // every stage, in workflow order; never nil
+	CanContinue     bool             `json:"canContinue"`
+	ArtifactVersion int              `json:"artifactVersion"`
+	LastError       string           `json:"lastError"`
+	CreatedAt       string           `json:"createdAt"`
+	UpdatedAt       string           `json:"updatedAt"`
 }
 
 // ArchivedStep is one step of an archived task, as the plan wrote it.
@@ -518,9 +535,43 @@ type TranscriptEvent struct {
 	Text    string `json:"text"`
 }
 
+// StageModel is the model and effort of one stage.
+type StageModel struct {
+	// Stage is prd, tech_spec, plan, implementation, pr or pr_review, a string
+	// for the same reason as Notice.Reason.
+	Stage  string `json:"stage"`
+	Model  string `json:"model"`  // claude-fable-5-1, claude-opus-5 or claude-sonnet-5
+	Effort string `json:"effort"` // low, medium, high, xhigh or max
+}
+
+// TaskStageModel is the model and effort of one stage of a task, with what the
+// user can still do about it.
+type TaskStageModel struct {
+	Stage    string `json:"stage"` // as StageModel.Stage
+	Model    string `json:"model"`
+	Effort   string `json:"effort"`
+	Editable bool   `json:"editable"` // a session of the stage is still to start
+	Live     bool   `json:"live"`     // a session of the stage runs now: it changes in its conversation
+}
+
+// Prompt is the text a kind of session opens with, as the settings show it.
+type Prompt struct {
+	// Stage is prd, tech_spec, plan, commit, pr or pr_review, a string for the
+	// same reason as Notice.Reason.
+	Stage    string `json:"stage"`
+	Text     string `json:"text"`
+	Modified bool   `json:"modified"` // the user edited it: it no longer follows the default of the app
+	// Placeholders are the placeholders the default of the prompt uses, in the
+	// order the settings list them; never nil.
+	Placeholders []string `json:"placeholders"`
+}
+
 // CreateTaskRequest is the task the user filled in the creation dialog.
 type CreateTaskRequest struct {
 	Name           string `json:"name"`
 	RepoPath       string `json:"repoPath"` // "" for root
 	InitialContext string `json:"initialContext"`
+	// Models are the choices of the creation dialog. A stage left out takes the
+	// default of the app.
+	Models []StageModel `json:"models"`
 }

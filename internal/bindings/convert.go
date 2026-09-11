@@ -6,6 +6,8 @@ import (
 
 	"github.com/guilhermt/myspec/internal/attention"
 	"github.com/guilhermt/myspec/internal/flow"
+	"github.com/guilhermt/myspec/internal/models"
+	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/review"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
@@ -43,6 +45,49 @@ func FromNotice(notice *workspace.Notice) *Notice {
 	return &Notice{Path: notice.Path, Reason: string(notice.Reason)}
 }
 
+// FromModelSet converts the choice of every stage, in workflow order.
+func FromModelSet(set models.Set) []StageModel {
+	converted := make([]StageModel, len(models.Stages))
+	for i, stage := range models.Stages {
+		c := set[stage]
+		converted[i] = StageModel{
+			Stage:  string(stage),
+			Model:  string(c.Model),
+			Effort: string(c.Effort),
+		}
+	}
+	return converted
+}
+
+// fromStageModels converts the models of the stages of a task, always
+// returning a slice so the frontend never sees null.
+func fromStageModels(states []flow.StageModelState) []TaskStageModel {
+	converted := make([]TaskStageModel, len(states))
+	for i, state := range states {
+		converted[i] = TaskStageModel{
+			Stage:    string(state.Stage),
+			Model:    string(state.Choice.Model),
+			Effort:   string(state.Choice.Effort),
+			Editable: state.Editable,
+			Live:     state.Live,
+		}
+	}
+	return converted
+}
+
+// FromPrompt converts a prompt, allocating the placeholders so the frontend
+// never sees null.
+func FromPrompt(p prompts.Prompt) Prompt {
+	placeholders := make([]string, len(p.Placeholders))
+	copy(placeholders, p.Placeholders)
+	return Prompt{
+		Stage:        string(p.Stage),
+		Text:         p.Text,
+		Modified:     p.Modified,
+		Placeholders: placeholders,
+	}
+}
+
 // FromTasks converts the tasks of the open workspace, pairing each with the
 // artifacts of its folder, the state of its steps, the summary of its session
 // when there is one and the situations it waits on the user for, by task id. A
@@ -59,6 +104,7 @@ func FromTasks(
 	for i, t := range tasks {
 		a := artifacts(t.ID)
 		states := steps(t.ID)
+		repoStates := repos(t.ID)
 		summary := summaries[taskSessionKey(t, states)]
 		if summary.Status == "" {
 			summary.Status = session.StatusWaiting
@@ -71,6 +117,8 @@ func FromTasks(
 			Stage:           string(t.Stage),
 			Revisiting:      t.Revisiting,
 			SessionStatus:   string(summary.Status),
+			SessionModel:    string(summary.Choice.Model),
+			SessionEffort:   string(summary.Choice.Effort),
 			TurnRunning:     summary.TurnRunning,
 			ProcessRunning:  summary.ProcessRunning,
 			RetryAttempt:    summary.RetryAttempt,
@@ -81,9 +129,10 @@ func FromTasks(
 			HasTechSpec:     a.TechSpec,
 			Steps:           fromSteps(states),
 			CurrentStep:     currentStep(states),
-			Repos:           fromRepos(repos(t.ID)),
+			Repos:           fromRepos(repoStates),
 			PlanProblems:    fromProblems(a.Plan.Problems),
 			Situations:      fromSituations(situations[t.ID]),
+			Models:          fromStageModels(flow.StageModels(t, states, repoStates)),
 			CanContinue:     t.Revisiting && a.Done(t.Stage) && summary.Idle,
 			ArtifactVersion: t.ArtifactVersion,
 			LastError:       summary.LastError,
@@ -149,6 +198,8 @@ func fromRepos(states []flow.RepoState) []RepoPR {
 
 			SessionStage:   state.SessionStage,
 			SessionStatus:  string(summary.Status),
+			SessionModel:   string(summary.Choice.Model),
+			SessionEffort:  string(summary.Choice.Effort),
 			TurnRunning:    summary.TurnRunning,
 			ProcessRunning: summary.ProcessRunning,
 			RetryAttempt:   summary.RetryAttempt,
@@ -358,6 +409,11 @@ func fromSteps(states []flow.StepState) []Step {
 			CommitSHA:     state.CommitSHA,
 			CommitSubject: state.CommitSubject,
 			CommitFailed:  state.CommitFailed,
+
+			Model:         string(state.Choice.Model),
+			Effort:        string(state.Choice.Effort),
+			Adjusted:      state.Adjusted,
+			ModelEditable: state.ModelEditable(),
 		}
 	}
 	return converted

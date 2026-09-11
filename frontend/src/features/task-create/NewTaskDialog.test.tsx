@@ -88,6 +88,7 @@ describe("NewTaskDialog", () => {
       name: "fix-header",
       repoPath: "/home/dev/projects/web",
       initialContext: "The header overlaps the menu",
+      models: [],
     });
     expect(useAppStore.getState().newTaskFor).toBeNull();
   });

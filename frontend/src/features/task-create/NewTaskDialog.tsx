@@ -69,7 +69,13 @@ function NewTaskForm({ node }: { node: TreeNode }) {
     }
     setCreating(true);
     setError(null);
-    void createTask({ name, repoPath: node.isRoot ? "" : node.path, initialContext: context })
+    // No adjustment of models yet: an empty list takes the defaults of the app.
+    void createTask({
+      name,
+      repoPath: node.isRoot ? "" : node.path,
+      initialContext: context,
+      models: [],
+    })
       .then((id) => {
         closeNewTask();
         openTask(id);

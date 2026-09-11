@@ -208,7 +208,12 @@ describe("createTask", () => {
   it("answers with the id of the new task", async () => {
     vi.mocked(api.createTask).mockResolvedValueOnce("task-9");
 
-    const id = await createTask({ name: "add-login", repoPath: "", initialContext: "a login" });
+    const id = await createTask({
+      name: "add-login",
+      repoPath: "",
+      initialContext: "a login",
+      models: [],
+    });
 
     expect(id).toBe("task-9");
   });
@@ -217,7 +222,7 @@ describe("createTask", () => {
     vi.mocked(api.createTask).mockRejectedValueOnce(new Error("claude is not logged in"));
 
     await expect(
-      createTask({ name: "add-login", repoPath: "", initialContext: "a login" }),
+      createTask({ name: "add-login", repoPath: "", initialContext: "a login", models: [] }),
     ).rejects.toThrow("claude is not logged in");
     expect(useAppStore.getState().error).toBeNull();
   });

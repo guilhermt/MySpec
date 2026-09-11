@@ -7,15 +7,20 @@ import type {
   DeleteResult,
   Entry,
   EntryKind,
+  ModelStage,
   PermissionDecision,
+  Prompt,
+  PromptStage,
   RepoPR,
   Review,
   Situation,
   SituationOpen,
   SituationStarted,
+  StageModel,
   State,
   Step,
   TaskStage,
+  TaskStageModel,
   TaskSummary,
   ThemePreference,
   Transcript,
@@ -29,6 +34,18 @@ export const api = {
   removeRecent: vi.fn<(path: string) => Promise<void>>(() => Promise.resolve()),
   dismissNotice: vi.fn<() => Promise<void>>(() => Promise.resolve()),
   setTheme: vi.fn<(preference: ThemePreference) => Promise<void>>(() => Promise.resolve()),
+  setModelDefault: vi.fn<(stage: ModelStage, model: string, effort: string) => Promise<void>>(() =>
+    Promise.resolve(),
+  ),
+  getPrompt: vi.fn<(stage: PromptStage) => Promise<Prompt>>((stage) =>
+    Promise.resolve(makePrompt({ stage })),
+  ),
+  savePrompt: vi.fn<(stage: PromptStage, text: string) => Promise<Prompt>>((stage, text) =>
+    Promise.resolve(makePrompt({ stage, text, modified: true })),
+  ),
+  restorePrompt: vi.fn<(stage: PromptStage) => Promise<Prompt>>((stage) =>
+    Promise.resolve(makePrompt({ stage })),
+  ),
 
   createTask: vi.fn<(req: CreateTaskRequest) => Promise<string>>(() => Promise.resolve("task-1")),
   deleteTask: vi.fn<(taskId: string) => Promise<DeleteResult>>(() =>
@@ -78,6 +95,15 @@ export const api = {
   discardStep: vi.fn<(taskId: string, cleanWorktree: boolean) => Promise<void>>(() =>
     Promise.resolve(),
   ),
+  setStageModel: vi.fn<
+    (taskId: string, stage: ModelStage, model: string, effort: string) => Promise<void>
+  >(() => Promise.resolve()),
+  setStepModel: vi.fn<
+    (taskId: string, step: number, model: string, effort: string) => Promise<void>
+  >(() => Promise.resolve()),
+  setSessionModel: vi.fn<
+    (taskId: string, stage: string, model: string, effort: string) => Promise<void>
+  >(() => Promise.resolve()),
   approveStep: vi.fn<(taskId: string) => Promise<void>>(() => Promise.resolve()),
   openPR: vi.fn<(taskId: string, repoPath: string, title: string, body: string) => Promise<void>>(
     () => Promise.resolve(),
@@ -189,6 +215,7 @@ export function makeState(overrides: Partial<State> = {}): State {
     ],
     theme: "system",
     systemDark: false,
+    modelDefaults: makeModelDefaults(),
     notice: null,
     tasks: [],
     history: [],
@@ -205,6 +232,8 @@ export function makeTask(overrides: Partial<TaskSummary> = {}): TaskSummary {
     stage: "prd",
     revisiting: false,
     sessionStatus: "waiting",
+    sessionModel: "claude-fable-5-1",
+    sessionEffort: "high",
     turnRunning: false,
     processRunning: false,
     retryAttempt: 0,
@@ -218,6 +247,7 @@ export function makeTask(overrides: Partial<TaskSummary> = {}): TaskSummary {
     repos: [],
     planProblems: [],
     situations: [],
+    models: makeTaskModels(),
     canContinue: false,
     artifactVersion: 0,
     lastError: "",
@@ -305,6 +335,10 @@ export function makeStep(overrides: Partial<Step> = {}): Step {
     commitSha: "",
     commitSubject: "",
     commitFailed: false,
+    model: "claude-opus-5",
+    effort: "high",
+    adjusted: false,
+    modelEditable: true,
     ...overrides,
   };
 }
@@ -333,12 +367,56 @@ export function makeRepoPR(overrides: Partial<RepoPR> = {}): RepoPR {
     close: null,
     sessionStage: "pr:web",
     sessionStatus: "waiting",
+    sessionModel: "claude-opus-5",
+    sessionEffort: "medium",
     turnRunning: false,
     processRunning: false,
     retryAttempt: 0,
     contextPercent: 0,
     pendingCount: 0,
     lastError: "",
+    ...overrides,
+  };
+}
+
+// factoryChoices is the model and the effort the app ships each stage with, in
+// workflow order.
+const factoryChoices: { stage: ModelStage; model: string; effort: string }[] = [
+  { stage: "prd", model: "claude-fable-5-1", effort: "high" },
+  { stage: "tech_spec", model: "claude-fable-5-1", effort: "high" },
+  { stage: "plan", model: "claude-fable-5-1", effort: "high" },
+  { stage: "implementation", model: "claude-opus-5", effort: "high" },
+  { stage: "pr", model: "claude-opus-5", effort: "medium" },
+  { stage: "pr_review", model: "claude-opus-5", effort: "high" },
+];
+
+/** makeModelDefaults are the factory choices of the six stages of the app. */
+export function makeModelDefaults(): StageModel[] {
+  return factoryChoices.map((choice) => ({ ...choice }));
+}
+
+/**
+ * makeTaskModels are the stage models of a task in the PRD, whose session runs
+ * while every other stage is still to start, with what overrides says of each
+ * line.
+ */
+export function makeTaskModels(
+  overrides: Partial<Record<ModelStage, Partial<TaskStageModel>>> = {},
+): TaskStageModel[] {
+  return factoryChoices.map((choice) => ({
+    ...choice,
+    editable: choice.stage !== "prd",
+    live: choice.stage === "prd",
+    ...overrides[choice.stage],
+  }));
+}
+
+export function makePrompt(overrides: Partial<Prompt> = {}): Prompt {
+  return {
+    stage: "prd",
+    text: "# PRD Creator\n\nWrite the PRD of {{task_name}}.\n",
+    modified: false,
+    placeholders: ["{{task_name}}", "{{artifacts_dir}}", "{{prd_path}}", "{{initial_context}}"],
     ...overrides,
   };
 }
@@ -501,4 +579,9 @@ export function resetWailsMock(): void {
   api.getTranscript.mockImplementation((taskId, stage) =>
     Promise.resolve(makeTranscript({ taskId, stage })),
   );
+  api.getPrompt.mockImplementation((stage) => Promise.resolve(makePrompt({ stage })));
+  api.savePrompt.mockImplementation((stage, text) =>
+    Promise.resolve(makePrompt({ stage, text, modified: true })),
+  );
+  api.restorePrompt.mockImplementation((stage) => Promise.resolve(makePrompt({ stage })));
 }

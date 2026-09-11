@@ -121,10 +121,12 @@ Um processo `claude` vivo por sessão ativa, com `--output-format stream-json` e
 
 Um processo por mensagem foi descartado: paga a inicialização do CLI a cada mensagem e não permite interromper no meio de um turno.
 
+Trocar o modelo ou o esforço de uma sessão não mexe no processo que está rodando. Quando a próxima mensagem vai sair e o processo roda com outra escolha, o app o encerra, ocioso, e sobe outro com `--resume` e as flags novas; uma resposta em andamento termina com a escolha anterior. O canal de controle também aceita `apply_flag_settings`, que troca modelo e esforço no processo vivo. Ele ficou de fora porque o `--help` não o documenta e porque exigiria um pedido em voo, com confirmação e timeout, só para poupar a subida de um processo.
+
 ### Flags relevantes
 
 - `--permission-mode auto`, o mesmo modo que o usuário usa hoje.
-- `--model` por etapa, conforme a configuração da task. Comandos como `/model` e `/effort` também funcionam dentro do prompt em modo `-p`.
+- `--model` e `--effort`, sempre explícitos, com o modelo e o esforço que a sessão tem quando o processo sobe. O modelo vai pelo nome completo (`claude-fable-5-1`, `claude-opus-5`, `claude-sonnet-5`), que fixa a versão que a interface mostra; os três têm janela de contexto de 1M nativa.
 - `--permission-prompt-tool stdio`, que faz as escaladas chegarem como `control_request` no stdout e aceita a resposta como `control_response` no stdin, o mesmo canal que o Agent SDK usa.
 - `--session-id` na primeira execução e `--resume` nas seguintes, para o app escolher o id da sessão.
 - `--include-partial-messages` com `--verbose` para receber tokens conforme são gerados.
@@ -159,8 +161,8 @@ A abertura da PR é do agente, pela skill, usando o `gh`. O app usa o mesmo bin�
 
 Dois tipos de dado, cada um com uma única fonte de verdade:
 
-- **Artefatos**: PRD, tech spec, arquivos de step e prompts. Todos Markdown. Vivem como arquivos no diretório de dados do app, seguindo XDG, uma pasta por task. As sessões do Claude Code precisam lê-los por caminho, e como arquivos eles ficam legíveis, diffáveis e inspecionáveis fora do app.
-- **Estado**: tasks, etapa, status de step, ids de sessão, caminhos de worktree, modelo e esforço por etapa, configurações. Vive em SQLite, com o driver `modernc.org/sqlite`, o mesmo que o service de SQLite do Wails usa por dentro, acessado só pelo Go com `database/sql`. O service do Wails existe para expor SQL ao frontend; como o produto é o dono do estado, o SQL fica no Go, tipado e com transações. Consultas como "tudo que depende de mim" ficam baratas e confiáveis.
+- **Artefatos**: PRD, tech spec, arquivos de step e prompts. Todos Markdown. Vivem como arquivos no diretório de dados do app, seguindo XDG, uma pasta por task. As sessões do Claude Code precisam lê-los por caminho, e como arquivos eles ficam legíveis, diffáveis e inspecionáveis fora do app. Os prompts padrão vão embutidos no binário; o diretório de dados guarda só os prompts que o usuário editou, e um prompt sem arquivo segue o padrão da versão que roda.
+- **Estado**: tasks, etapa, status de step, ids de sessão, caminhos de worktree, modelo e esforço de cada etapa, de cada step e de cada sessão, os padrões de modelo e esforço e as demais configurações. Vive em SQLite, com o driver `modernc.org/sqlite`, o mesmo que o service de SQLite do Wails usa por dentro, acessado só pelo Go com `database/sql`. O service do Wails existe para expor SQL ao frontend; como o produto é o dono do estado, o SQL fica no Go, tipado e com transações. Consultas como "tudo que depende de mim" ficam baratas e confiáveis.
 
 Nada de estado vive dentro dos Markdown. O status de um step, que nas skills originais era uma linha no topo do arquivo, é só uma coluna no banco.
 

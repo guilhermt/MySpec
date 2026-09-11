@@ -242,3 +242,27 @@ export function ReviewAgain(taskID: string, repoPath: string): $CancellablePromi
 export function SendMessage(taskID: string, stage: string, text: string): $CancellablePromise<void> {
     return $Call.ByID(2431074491, taskID, stage, text);
 }
+
+/**
+ * SetSessionModel changes the model and effort of a session from its next
+ * message on. The stage names the session: prd, tech_spec, plan, step:<n>,
+ * pr:<slug> or pr_review:<slug>.
+ */
+export function SetSessionModel(taskID: string, stage: string, model: string, effort: string): $CancellablePromise<void> {
+    return $Call.ByID(2320848335, taskID, stage, model, effort);
+}
+
+/**
+ * SetStageModel changes the model and effort of a stage of a task, for the
+ * sessions of it that are still to start.
+ */
+export function SetStageModel(taskID: string, stage: string, model: string, effort: string): $CancellablePromise<void> {
+    return $Call.ByID(2857821909, taskID, stage, model, effort);
+}
+
+/**
+ * SetStepModel changes the model and effort of a step that has not started.
+ */
+export function SetStepModel(taskID: string, step: number, model: string, effort: string): $CancellablePromise<void> {
+    return $Call.ByID(3274288345, taskID, step, model, effort);
+}

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"path/filepath"
 	"strings"
 	"time"
@@ -13,6 +14,8 @@ import (
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/git"
+	"github.com/guilhermt/myspec/internal/models"
+	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
 )
@@ -34,6 +37,7 @@ type TaskService struct {
 	tasks    *task.Service
 	sessions *session.Service
 	flow     *flow.Service
+	defaults *models.Service
 	editor   Editor
 	log      *slog.Logger
 }
@@ -43,10 +47,18 @@ func NewTaskService(
 	tasks *task.Service,
 	sessions *session.Service,
 	flow *flow.Service,
+	defaults *models.Service,
 	editor Editor,
 	log *slog.Logger,
 ) *TaskService {
-	return &TaskService{tasks: tasks, sessions: sessions, flow: flow, editor: editor, log: log}
+	return &TaskService{
+		tasks:    tasks,
+		sessions: sessions,
+		flow:     flow,
+		defaults: defaults,
+		editor:   editor,
+		log:      log,
+	}
 }
 
 // CreateTask creates a task and starts its first stage with the stage prompt.
@@ -56,10 +68,16 @@ func (s *TaskService) CreateTask(req CreateTaskRequest) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
+	set, err := choicesOf(s.defaults.Defaults(), req.Models)
+	if err != nil {
+		return "", s.fail("CreateTask", err)
+	}
+
 	t, err := s.tasks.Create(ctx, task.CreateParams{
 		Name:           req.Name,
 		RepoPath:       req.RepoPath,
 		InitialContext: req.InitialContext,
+		Models:         set,
 	})
 	if err != nil {
 		return "", s.fail("CreateTask", err)
@@ -214,6 +232,61 @@ func (s *TaskService) DiscardStep(taskID string, cleanWorktree bool) error {
 
 	if err := s.flow.DiscardStep(ctx, taskID, cleanWorktree); err != nil {
 		return s.fail("DiscardStep", err)
+	}
+	return nil
+}
+
+// SetStageModel changes the model and effort of a stage of a task, for the
+// sessions of it that are still to start.
+func (s *TaskService) SetStageModel(taskID, stage, model, effort string) error {
+	target, err := models.ParseStage(stage)
+	if err != nil {
+		return s.fail("SetStageModel", err)
+	}
+	c, err := models.ParseChoice(model, effort)
+	if err != nil {
+		return s.fail("SetStageModel", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+
+	if err := s.flow.SetStageModel(ctx, taskID, target, c); err != nil {
+		return s.fail("SetStageModel", err)
+	}
+	return nil
+}
+
+// SetStepModel changes the model and effort of a step that has not started.
+func (s *TaskService) SetStepModel(taskID string, step int, model, effort string) error {
+	c, err := models.ParseChoice(model, effort)
+	if err != nil {
+		return s.fail("SetStepModel", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+
+	if err := s.flow.SetStepModel(ctx, taskID, step, c); err != nil {
+		return s.fail("SetStepModel", err)
+	}
+	return nil
+}
+
+// SetSessionModel changes the model and effort of a session from its next
+// message on. The stage names the session: prd, tech_spec, plan, step:<n>,
+// pr:<slug> or pr_review:<slug>.
+func (s *TaskService) SetSessionModel(taskID, stage, model, effort string) error {
+	c, err := models.ParseChoice(model, effort)
+	if err != nil {
+		return s.fail("SetSessionModel", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+
+	if err := s.flow.SetSessionModel(ctx, taskID, stage, c); err != nil {
+		return s.fail("SetSessionModel", err)
 	}
 	return nil
 }
@@ -477,6 +550,24 @@ func parseDecision(decision string) (session.Decision, error) {
 	}
 }
 
+// choicesOf is the choice of every stage a new task starts with: the defaults,
+// with the stages the creation dialog sent in their place.
+func choicesOf(defaults models.Set, requested []StageModel) (models.Set, error) {
+	set := maps.Clone(defaults)
+	for _, one := range requested {
+		stage, err := models.ParseStage(one.Stage)
+		if err != nil {
+			return nil, err
+		}
+		c, err := models.ParseChoice(one.Model, one.Effort)
+		if err != nil {
+			return nil, err
+		}
+		set[stage] = c
+	}
+	return set, nil
+}
+
 // userMessages are the failures the user caused, with what the interface shows
 // for them.
 var userMessages = []struct {
@@ -488,6 +579,10 @@ var userMessages = []struct {
 	{task.ErrEmptyContext, "Describe what you want to build."},
 	{task.ErrRepoOutside, "This repository is not part of the workspace."},
 	{task.ErrUnknownStage, "Unknown stage."},
+	{models.ErrUnknownModel, "Unknown model."},
+	{models.ErrUnknownEffort, "Unknown effort level."},
+	{models.ErrUnknownStage, "Unknown stage."},
+	{prompts.ErrUnknownStage, "Unknown prompt."},
 	{session.ErrEmptyMessage, "Write a message first."},
 	{session.ErrPaused, "Resume the task to send messages."},
 	{session.ErrNotFound, "This conversation has ended."},
@@ -510,6 +605,8 @@ var userMessages = []struct {
 	{flow.ErrRepoNotBlocked, "The repository isn't blocked."},
 	{flow.ErrRepoNotClosable, "This repository isn't waiting to be closed."},
 	{flow.ErrPRNotMerged, "The pull request hasn't been merged yet."},
+	{flow.ErrModelLocked, "The sessions of this stage have already started."},
+	{flow.ErrStepStarted, "This step has already started."},
 	{errPathOutside, "This file is not in the worktree of the step."},
 	{editor.ErrNotFound, "VS Code was not found: `code` isn't on the PATH."},
 	{gh.ErrNotFound, "GitHub CLI was not found: `gh` isn't on the PATH."},
@@ -517,14 +614,17 @@ var userMessages = []struct {
 	{git.ErrNotFound, "Git was not found on the PATH."},
 }
 
-// fail is what a failed binding call returns: a mistake the user can correct
-// comes back as a sentence for them, anything else is logged and passed on.
-func (s *TaskService) fail(method string, err error) error {
+// failure is what a failed binding call returns: a mistake the user can
+// correct comes back as a sentence for them, anything else is logged and
+// passed on.
+func failure(log *slog.Logger, method string, err error) error {
 	for _, known := range userMessages {
 		if errors.Is(err, known.err) {
 			return errors.New(known.message)
 		}
 	}
-	s.log.Error("binding failed", "method", method, "err", err)
+	log.Error("binding failed", "method", method, "err", err)
 	return err
 }
+
+func (s *TaskService) fail(method string, err error) error { return failure(s.log, method, err) }

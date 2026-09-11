@@ -19,6 +19,7 @@ import (
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/git"
+	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/platform/logging"
 	"github.com/guilhermt/myspec/internal/platform/notify"
 	"github.com/guilhermt/myspec/internal/platform/xdg"
@@ -55,6 +56,7 @@ type App struct {
 	log       *slog.Logger
 	ws        *workspace.Service
 	theme     *theme.Service
+	models    *models.Service
 	tasks     *task.Service
 	sessions  *session.Service
 	worktrees *worktree.Service
@@ -136,6 +138,10 @@ func Run(cfg Config) int {
 	if err != nil {
 		return fail(log, "read settings", err)
 	}
+	modelsSvc, err := models.New(ctx, st.Settings, log, a.publish)
+	if err != nil {
+		return fail(log, "read model defaults", err)
+	}
 	sessions := session.New(session.Deps{
 		Sessions: st.Sessions,
 		Entries:  st.Entries,
@@ -196,7 +202,7 @@ func Run(cfg Config) int {
 		OnChange: a.onWorkspaceChanged,
 	})
 	a.theme, a.ws, a.tasks, a.sessions, a.flow = themeSvc, wsSvc, tasks, sessions, flowSvc
-	a.worktrees, a.review = worktrees, reviews
+	a.worktrees, a.review, a.models = worktrees, reviews, modelsSvc
 
 	if err := wsSvc.Bootstrap(ctx, firstArg(cfg.Args, log), cfg.Cwd); err != nil {
 		return fail(log, "open initial workspace", err)
@@ -209,7 +215,9 @@ func Run(cfg Config) int {
 	defer stopPoll()
 	go a.pollPRs(pollCtx)
 
-	wails := application.New(a.options(cfg, wsSvc, themeSvc, tasks, sessions, flowSvc, log))
+	wails := application.New(
+		a.options(cfg, wsSvc, themeSvc, modelsSvc, tasks, sessions, flowSvc, dirs.Data, log),
+	)
 	a.setWails(wails)
 	a.openWindow(cfg)
 
@@ -230,9 +238,11 @@ func (a *App) options(
 	cfg Config,
 	ws *workspace.Service,
 	themeSvc *theme.Service,
+	modelsSvc *models.Service,
 	tasks *task.Service,
 	sessions *session.Service,
 	flowSvc *flow.Service,
+	dataDir string,
 	log *slog.Logger,
 ) application.Options {
 	return application.Options{
@@ -241,8 +251,10 @@ func (a *App) options(
 		Icon:        cfg.Icon,
 		Services: []application.Service{
 			application.NewService(bindings.NewWorkspaceService(ws, a.state, a, log)),
-			application.NewService(bindings.NewSettingsService(themeSvc, log)),
-			application.NewService(bindings.NewTaskService(tasks, sessions, flowSvc, editor.Open, log)),
+			application.NewService(bindings.NewSettingsService(themeSvc, modelsSvc, dataDir, log)),
+			application.NewService(
+				bindings.NewTaskService(tasks, sessions, flowSvc, modelsSvc, editor.Open, log),
+			),
 			application.NewService(bindings.NewAttentionService(a.attention)),
 		},
 		Assets: application.AssetOptions{Handler: application.AssetFileServerFS(cfg.Assets)},
