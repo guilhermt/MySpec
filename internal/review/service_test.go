@@ -100,9 +100,10 @@ func TestAReadingThatFoundTheSameThingIsNotReported(t *testing.T) {
 	f := newFixture(t)
 	f.track(t)
 
+	// The report of the first write is waited for, not only its reading, so
+	// that nothing of it is left to land while the second write settles.
 	write(t, f.wt.Path, "README.md", "# changed\n")
-	f.waitFor(t, "saw the file", func(s review.Snapshot) bool { return s.Total == 1 })
-	f.drain()
+	f.waitChange(t, "saw the file", func(s review.Snapshot) bool { return s.Total == 1 })
 
 	// The same content again: git says exactly what it said before.
 	write(t, f.wt.Path, "README.md", "# changed\n")
