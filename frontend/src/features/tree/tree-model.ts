@@ -1,4 +1,5 @@
-import type { State, TaskSummary } from "@/lib/wails";
+import { hiddenSituations } from "@/lib/situations";
+import type { Situation, State, TaskSummary } from "@/lib/wails";
 import { type NodeId, ROOT_NODE_ID, repoNodeId, type TreeUi } from "@/store/app-store";
 
 export interface TreeNode {
@@ -13,6 +14,13 @@ export type TreeNodeRow = TreeNode & {
   level: 1 | 2;
   expanded: boolean;
   selected: boolean;
+  /**
+   * hidden are the situations of the tasks the collapsed node hides, most
+   * urgent first. Empty while it is expanded: the task rows show them.
+   */
+  hidden: readonly Situation[];
+  /** flashing tells that one of the hidden situations just started. */
+  flashing: boolean;
 };
 
 export type TreeTaskRow = {
@@ -20,6 +28,8 @@ export type TreeTaskRow = {
   task: TaskSummary;
   level: 2 | 3;
   selected: boolean;
+  /** flashing tells that a situation of the task just started while it is not open. */
+  flashing: boolean;
 };
 
 export type TreeRowModel =
@@ -69,27 +79,46 @@ export function visibleRows(state: State, ui: TreeUi): TreeRowModel[] {
     return [];
   }
 
-  const nodeRow = (node: TreeNode, level: 1 | 2): TreeNodeRow => ({
-    ...node,
-    kind: "node",
-    // A node loses the selection to whatever else the main area is showing: an
-    // open task, or the history.
-    selected: ui.selectedNodeId === node.id && ui.openTaskId === null && !ui.historyOpen,
-    level,
-    expanded: ui.expandedNodeIds.has(node.id),
-  });
+  const isFlashing = (situations: readonly Situation[]) =>
+    situations.some((situation) => ui.flashing.has(situation.id));
+
+  const nodeRow = (node: TreeNode, level: 1 | 2): TreeNodeRow => {
+    const expanded = ui.expandedNodeIds.has(node.id);
+    // A collapsed root hides every task of the workspace, those of the
+    // repositories included, not only its own.
+    const hidden = expanded
+      ? []
+      : hiddenSituations(node.isRoot ? (state.tasks ?? []) : tasksOfNode(state, node));
+    return {
+      ...node,
+      kind: "node",
+      // A node loses the selection to whatever else the main area is showing: an
+      // open task, or the history.
+      selected: ui.selectedNodeId === node.id && ui.openTaskId === null && !ui.historyOpen,
+      level,
+      expanded,
+      hidden,
+      flashing: isFlashing(hidden),
+    };
+  };
 
   const taskRows = (node: TreeNode, level: 2 | 3): TreeRowModel[] => {
     const tasks = tasksOfNode(state, node);
     if (tasks.length === 0) {
       return [{ kind: "empty-tasks", parentId: node.id, level }];
     }
-    return tasks.map((task) => ({
-      kind: "task",
-      task,
-      level,
-      selected: ui.openTaskId === task.id,
-    }));
+    return tasks.map((task): TreeTaskRow => {
+      const selected = ui.openTaskId === task.id;
+      return {
+        kind: "task",
+        task,
+        level,
+        selected,
+        // The open task is where the user already looks; only the others are
+        // worth calling the eye to.
+        flashing: !selected && isFlashing(task.situations ?? []),
+      };
+    });
   };
 
   const rows: TreeRowModel[] = [nodeRow(root, 1)];

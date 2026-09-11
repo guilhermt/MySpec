@@ -3,7 +3,9 @@ import { Badge } from "@/components/ui/badge";
 import { StatusDot } from "@/features/task/StatusDot";
 import { taskStatusLabel } from "@/features/task/status";
 import type { TreeRowModel } from "@/features/tree/tree-model";
+import { type SituationTone, situationTone } from "@/lib/situations";
 import { cn } from "@/lib/utils";
+import type { Situation } from "@/lib/wails";
 import type { NodeId } from "@/store/app-store";
 
 const INDENT: Record<1 | 2 | 3, string> = { 1: "pl-2", 2: "pl-5", 3: "pl-8" };
@@ -13,6 +15,45 @@ const ROW_CLASS =
 
 function selectionClass(selected: boolean): string {
   return selected ? "bg-accent text-accent-foreground" : "hover:bg-accent/50";
+}
+
+// Written out so Tailwind sees every class; the tone is chosen at runtime. The
+// dark theme lightens the destructive red, where white text would lose its
+// contrast, so the number turns dark there as it does on the attention tone.
+const COUNT_TONE: Record<SituationTone, string> = {
+  error: "bg-destructive text-white dark:text-black",
+  attention: "bg-[var(--status-attention)] text-black",
+};
+
+interface HiddenCountProps {
+  situations: readonly Situation[];
+  flashing: boolean;
+}
+
+/**
+ * HiddenCount tells how many situations a collapsed node hides, in the tone of
+ * the most urgent one. The number alone would read as nothing, so a screen
+ * reader hears what it counts.
+ */
+function HiddenCount({ situations, flashing }: HiddenCountProps) {
+  const [first] = situations;
+  if (first === undefined) {
+    return null;
+  }
+  const tone = situationTone(first);
+  return (
+    <span
+      data-tone={tone}
+      className={cn(
+        "ml-auto flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full px-1 text-[11px] leading-none font-semibold tabular-nums",
+        COUNT_TONE[tone],
+        flashing && "attention-flash-ring",
+      )}
+    >
+      <span aria-hidden="true">{situations.length}</span>
+      <span className="sr-only">{`${situations.length} waiting for you`}</span>
+    </span>
+  );
 }
 
 export interface TreeRowProps {
@@ -46,6 +87,10 @@ export function TreeRow({ row, onSelect, onToggle, onOpenTask }: TreeRowProps) {
   }
 
   if (row.kind === "task") {
+    // The highlight takes the tone the dot of the row shows: that of the most
+    // urgent situation of the task.
+    const [urgent] = row.task.situations ?? [];
+    const flashTone = row.flashing && urgent !== undefined ? situationTone(urgent) : undefined;
     return (
       // biome-ignore lint/a11y/useKeyWithClickEvents: the tree owns the keyboard for every row
       <div
@@ -54,7 +99,13 @@ export function TreeRow({ row, onSelect, onToggle, onOpenTask }: TreeRowProps) {
         aria-selected={row.selected}
         tabIndex={row.selected ? 0 : -1}
         onClick={() => onOpenTask(row.task.id)}
-        className={cn(ROW_CLASS, INDENT[row.level], selectionClass(row.selected))}
+        data-tone={flashTone}
+        className={cn(
+          ROW_CLASS,
+          INDENT[row.level],
+          selectionClass(row.selected),
+          row.flashing && "attention-flash",
+        )}
       >
         {/* A leaf has no chevron; the spacer keeps it aligned with the nodes. */}
         <span aria-hidden="true" className="size-4 shrink-0" />
@@ -111,6 +162,12 @@ export function TreeRow({ row, onSelect, onToggle, onOpenTask }: TreeRowProps) {
           <Badge variant="secondary" className="shrink-0">
             Root
           </Badge>
+        </>
+      )}
+      {row.hidden.length > 0 && (
+        <>
+          {/* The space keeps the accessible name of the row readable. */}{" "}
+          <HiddenCount situations={row.hidden} flashing={row.flashing} />
         </>
       )}
     </div>
