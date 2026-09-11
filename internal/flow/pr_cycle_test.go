@@ -200,6 +200,13 @@ func TestACommitOfAReviewStartsTheNextPass(t *testing.T) {
 	if asked != 1 {
 		t.Errorf("the second pass was asked for %d times, want once", asked)
 	}
+
+	// The agent rested with no report of the pass it was asked for: nothing
+	// moves until the user answers it.
+	f.sessions.goIdle("task-1")
+	if got := f.repoState(t, "task-1", repos[0].Path).Status; got != flow.RepoAwaitingReply {
+		t.Errorf("status = %q, want awaiting_reply", got)
+	}
 }
 
 func TestACommitTurnOfAReviewThatCommitsNothingGivesTheRepositoryBack(t *testing.T) {
@@ -385,6 +392,25 @@ func TestReviewingAgainStartsAPassOverTheSamePullRequest(t *testing.T) {
 	if !slices.Contains(f.sessions.recorded(), "discard:task-1:pr_review:api") {
 		t.Errorf("session calls = %q, want the review session discarded", f.sessions.recorded())
 	}
+
+	// The clean report of the first pass does not close the review asked for
+	// again: the agent rested without the report of the new pass.
+	f.sessions.goIdle("task-1")
+	before := f.tasks.inspectCount()
+	f.service.Check("task-1")
+	f.waitEvaluations(t, before+1)
+	if run, _ := f.tasks.prRun("task-1", repos[0].Path); run.Status != task.PRReviewing {
+		t.Errorf("status = %q, want reviewing until the report of the new pass is in", run.Status)
+	}
+	if got := f.repoState(t, "task-1", repos[0].Path).Status; got != flow.RepoAwaitingReply {
+		t.Errorf("status = %q, want awaiting_reply", got)
+	}
+
+	// The clean report of that pass is what closes it.
+	reportsWritten(f, reports(2, true))
+	f.waitPRRun(t, "the repository to be closed again", func(run task.PRRun) bool {
+		return run.Status == task.PRDone && run.ReportedPass == 2
+	})
 }
 
 func TestRetryingABlockedRepositoryPreparesItAgain(t *testing.T) {

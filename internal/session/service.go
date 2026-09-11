@@ -267,6 +267,7 @@ func (s *Service) load(ctx context.Context, t TaskInfo, n *notes) (*run, error) 
 			}
 		}
 	}
+	r.turnFailed = lastTurnFailed(r.entries)
 
 	if t.ArtifactExists && !marked {
 		e := r.newEntry(s, Entry{Kind: KindMarker, Marker: &MarkerEntry{Type: written}})
@@ -300,6 +301,18 @@ func settle(e *Entry) bool {
 		return false
 	}
 	return true
+}
+
+// lastTurnFailed reports whether a conversation a previous run left ends in a
+// failed turn: its last entry that is not a marker is the error of a turn.
+func lastTurnFailed(entries []*Entry) bool {
+	for _, e := range slices.Backward(entries) {
+		if e.Kind == KindMarker {
+			continue
+		}
+		return e.Kind == KindError && e.Error.Kind == ErrorTurn
+	}
+	return false
 }
 
 // Start opens the session of a stage or a step, marks its beginning and

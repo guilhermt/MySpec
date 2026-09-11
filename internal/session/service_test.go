@@ -278,7 +278,7 @@ func TestAnswerQuestion(t *testing.T) {
 	f := newFixture(t, "question")
 	f.start(t, taskInfo(t, "t1"))
 	f.waitStatus(t, prd("t1"), "the question", func(s session.Summary) bool {
-		return s.Status == session.StatusNeedsPermission
+		return s.Status == session.StatusNeedsAnswer
 	})
 
 	questions := f.entriesOf(t, prd("t1"), session.KindQuestion)
@@ -318,6 +318,42 @@ func TestAnswerQuestion(t *testing.T) {
 	}
 	if diff := cmp.Diff(answers, echoed); diff != "" {
 		t.Errorf("echoed answers mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestAFailedTurnIsReportedUntilTheNextOne(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "turn_error")
+	f.start(t, taskInfo(t, "t1"))
+
+	// The CLI survives a failed turn: the session is at rest, and only the
+	// summary says how the turn ended.
+	sum := f.waitStatus(t, prd("t1"), "the failed turn", func(s session.Summary) bool {
+		return s.Idle && s.TurnFailed
+	})
+	if sum.Status != session.StatusWaiting || sum.LastError != "" || !sum.ProcessRunning {
+		t.Errorf("summary = %+v, want waiting on a live process with no session error", sum)
+	}
+	errs := f.entriesOf(t, prd("t1"), session.KindError)
+	if len(errs) != 1 {
+		t.Fatalf("error entries = %d, want the one of the turn", len(errs))
+	}
+	want := &session.ErrorEntry{Kind: session.ErrorTurn, Message: "API Error: overloaded"}
+	if diff := cmp.Diff(want, errs[0].Error); diff != "" {
+		t.Errorf("error entry mismatch (-want +got):\n%s", diff)
+	}
+
+	// The next turn is not the failed one any more, from the moment it starts.
+	f.send(t, prd("t1"), "try again")
+	if sum = f.summary(t, prd("t1")); sum.TurnFailed {
+		t.Errorf("summary = %+v, want TurnFailed false once the next turn runs", sum)
+	}
+	f.waitStatus(t, prd("t1"), "the next turn to end", func(s session.Summary) bool {
+		return s.Idle && !s.TurnFailed
+	})
+	if text := finalText(t, f, prd("t1")); text != "try again" {
+		t.Errorf("final text = %q, want the echo of the message", text)
 	}
 }
 
@@ -614,6 +650,69 @@ func TestOpenReconcilesALeftoverTranscript(t *testing.T) {
 	f.open(t, info)
 	if markers := f.entriesOf(t, prd("t1"), session.KindMarker); len(markers) != 1 {
 		t.Errorf("markers = %d, want 1 after a second Open", len(markers))
+	}
+}
+
+func TestOpenReadsAFailedTurnFromTheTranscript(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		last session.Entry // what follows the failure of the turn
+		want bool
+	}{
+		{
+			name: "a marker after the failure",
+			last: session.Entry{
+				ID: "m1", Seq: 3, TurnID: "u1", Kind: session.KindMarker, CreatedAt: base,
+				Marker: &session.MarkerEntry{Type: session.MarkerPRDWritten},
+			},
+			want: true,
+		},
+		{
+			name: "an answer after the failure",
+			last: session.Entry{
+				ID: "a1", Seq: 3, TurnID: "u1", Kind: session.KindAssistant, CreatedAt: base,
+				Assistant: &session.AssistantEntry{MessageID: "m1", Text: "done", Complete: true},
+			},
+			want: false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			f := newFixture(t, "echo")
+			rec := session.Record{
+				ID: "sess-1", TaskID: "t1", Stage: "prd", Started: true, CreatedAt: base, UpdatedAt: base,
+			}
+			if err := f.sessions.Insert(t.Context(), rec); err != nil {
+				t.Fatalf("Insert() = %v, want nil", err)
+			}
+			f.entries.seed(
+				t, "sess-1",
+				session.Entry{
+					ID: "u1", Seq: 1, TurnID: "u1", Kind: session.KindUser, CreatedAt: base,
+					User: &session.UserEntry{Text: "hello", Prompt: true},
+				},
+				session.Entry{
+					ID: "e1", Seq: 2, TurnID: "u1", Kind: session.KindError, CreatedAt: base,
+					Error: &session.ErrorEntry{Kind: session.ErrorTurn, Message: "API Error: overloaded"},
+				},
+				test.last,
+			)
+
+			f.open(t, taskInfo(t, "t1"))
+
+			sum := f.summary(t, prd("t1"))
+			if sum.TurnFailed != test.want {
+				t.Errorf("TurnFailed = %v, want %v", sum.TurnFailed, test.want)
+			}
+			if !sum.Idle {
+				t.Errorf("summary = %+v, want the session at rest", sum)
+			}
+		})
 	}
 }
 

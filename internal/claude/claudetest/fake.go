@@ -246,6 +246,8 @@ func (f *fake) play(scenario string) int {
 			f.slowTurn()
 		case "writer":
 			f.writerTurn(text)
+		case "turn_error":
+			f.failedTurn(text)
 		case "crash":
 			f.emitInit()
 			_, _ = fmt.Fprintln(os.Stderr, "boom")
@@ -282,6 +284,17 @@ func (f *fake) echoTurn(text string, compact bool) {
 	f.endMessage()
 	f.assistantText(messageID, text)
 	f.result("success", false, text, "completed")
+}
+
+// failedTurn fails the first turn the way an overloaded API fails one, and
+// answers every later one like echo: the CLI lives on after a failed turn.
+func (f *fake) failedTurn(text string) {
+	if f.turns > 1 {
+		f.echoTurn(text, false)
+		return
+	}
+	f.emitInit()
+	f.result("error_during_execution", true, "API Error: overloaded", "")
 }
 
 // The markers that wrap a file a writer message asks for.

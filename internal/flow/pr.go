@@ -1,6 +1,7 @@
 package flow
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -28,8 +29,9 @@ type RepoStatus string
 const (
 	RepoPreparing        RepoStatus = "preparing"
 	RepoBlocked          RepoStatus = "blocked"
-	RepoDrafting         RepoStatus = "drafting"    // the agent is writing the draft
-	RepoDraftReady       RepoStatus = "draft_ready" // the draft awaits the OK
+	RepoDrafting         RepoStatus = "drafting"       // the agent is writing the draft
+	RepoDraftReady       RepoStatus = "draft_ready"    // the draft awaits the OK
+	RepoAwaitingReply    RepoStatus = "awaiting_reply" // the agent stopped short of what the app waits for: a draft, the pull request it was asked to open, or the report of a review pass
 	RepoOpening          RepoStatus = "opening"
 	RepoReviewing        RepoStatus = "reviewing"         // the agent is reviewing
 	RepoAwaitingDecision RepoStatus = "awaiting_decision" // a report with changes, nothing changed yet
@@ -78,6 +80,10 @@ type RepoState struct {
 // noWorktreeDetail is what blocks a repository whose worktree the app no
 // longer knows about.
 const noWorktreeDetail = "the worktree of this repository is gone; discard the plan to start over"
+
+// passAskedWithoutHead is what marks a review pass as asked for when git cannot
+// say which commit it is about.
+const passAskedWithoutHead = "asked"
 
 // Repos is every repository of a task in the PR stage, in the order the steps
 // first named them.
@@ -141,7 +147,12 @@ func (s *Service) repoState(t task.Task, repo task.Repository, run task.PRRun, a
 	snap, read := s.review.Snapshot(reviewKey(t.ID, repo.Path))
 	state.Review = reading(snap, read)
 	state.CommitFailed = s.repoNoCommit(t.ID, repo.Path)
-	state.Status = repoStatus(run, art, state.Session.Idle && state.SessionStage != "", snap, read)
+	facts := repoFacts{
+		idle:       state.Session.Idle && state.SessionStage != "",
+		openFailed: s.openFailed(t.ID, repo.Path),
+		passAsked:  s.passAsked(t.ID, repo.Path) != "",
+	}
+	state.Status = repoStatus(run, art, facts, snap, read)
 	state.CanClose = canClose(state.Status, state.CheckError)
 	return state
 }
@@ -175,24 +186,36 @@ func repoSessionStage(status task.PRStatus, slug string) string {
 	}
 }
 
-// repoStatus turns what the app recorded, the artifacts on disk, the session
-// and the last reading of the worktree into the state a repository is shown
-// in.
-func repoStatus(run task.PRRun, art task.RepoArtifacts, idle bool, snap review.Snapshot, read bool) RepoStatus {
+// repoFacts is what the app knows about a repository beyond its record and its
+// artifacts.
+type repoFacts struct {
+	idle       bool // the session of the repository is open and at rest
+	openFailed bool // the last opening of the pull request ended without one
+	passAsked  bool // a review pass was asked for and its report is not in yet
+}
+
+// repoStatus turns what the app recorded, the artifacts on disk, what else it
+// knows about the repository and the last reading of the worktree into the
+// state a repository is shown in.
+func repoStatus(run task.PRRun, art task.RepoArtifacts, facts repoFacts, snap review.Snapshot, read bool) RepoStatus {
 	switch run.Status {
 	case task.PRPreparing:
 		return RepoPreparing
 	case task.PRBlocked:
 		return RepoBlocked
 	case task.PRDrafting:
-		if !art.Draft.Present || !idle {
+		switch {
+		case !facts.idle:
 			return RepoDrafting
+		case !art.Draft.Present || facts.openFailed:
+			return RepoAwaitingReply
+		default:
+			return RepoDraftReady
 		}
-		return RepoDraftReady
 	case task.PROpening:
 		return RepoOpening
 	case task.PRReviewing:
-		return reviewingStatus(art, idle, snap, read)
+		return reviewingStatus(art, facts, snap, read)
 	case task.PRCommitting:
 		return RepoCommitting
 	case task.PRDone:
@@ -218,12 +241,16 @@ func repoStatus(run task.PRRun, art task.RepoArtifacts, idle bool, snap review.S
 }
 
 // reviewingStatus is what a repository under review is shown as: the pass that
-// runs, the report that closed it, or how far the user got with the changes it
-// asked for.
-func reviewingStatus(art task.RepoArtifacts, idle bool, snap review.Snapshot, read bool) RepoStatus {
-	last, ok := lastReport(art)
-	if !ok || !idle {
+// runs, the report the agent still owes, the report that closed it, or how far
+// the user got with the changes it asked for.
+func reviewingStatus(art task.RepoArtifacts, facts repoFacts, snap review.Snapshot, read bool) RepoStatus {
+	if !facts.idle {
 		return RepoReviewing
+	}
+	last, ok := lastReport(art)
+	if !ok || facts.passAsked {
+		// The agent rested without the report of the pass it was asked for.
+		return RepoAwaitingReply
 	}
 	if last.Clean {
 		// Transient: the evaluation that follows records it.
@@ -566,6 +593,7 @@ func (s *Service) reopenDraft(id, repoPath string) {
 		s.log.Error("record drafting repository failed", "task", id, "repository", repoPath, "error", err)
 		return
 	}
+	s.setOpenFailed(id, repoPath, true)
 	s.log.Warn("pull request was not opened", "task", id, "repository", repoPath)
 	s.Check(id)
 }
@@ -633,13 +661,25 @@ func (s *Service) evaluatePR(ctx context.Context, t task.Task) {
 		slug := task.Slug(repoRel(t, run.RepoPath))
 		switch run.Status {
 		case task.PRDrafting:
+			sum, open := s.sessions.Summary(session.Key{TaskID: t.ID, Stage: session.PRStage(slug)})
+			if open && sum.TurnRunning {
+				// The conversation moved on after an opening that failed: what the
+				// agent does in this turn decides what the repository waits for.
+				s.setOpenFailed(t.ID, run.RepoPath, false)
+			}
 			// An agent that opened the pull request on its own, or an app that
 			// was closed in the middle of it, is found by asking GitHub.
-			if s.repoSessionIdle(t.ID, session.PRStage(slug)) {
+			if open && sum.Idle {
 				s.spawnRepoWork(t.ID, run.RepoPath, s.checkPR)
 			}
 		case task.PROpening:
-			s.spawnRepoWork(t.ID, run.RepoPath, s.checkPR)
+			// GitHub is asked once the turn that opens the pull request is over: a
+			// reading in the middle of it finds nothing yet, and would give the
+			// draft back while the agent is still opening it.
+			sum, open := s.sessions.Summary(session.Key{TaskID: t.ID, Stage: session.PRStage(slug)})
+			if !open || !sum.TurnRunning {
+				s.spawnRepoWork(t.ID, run.RepoPath, s.checkPR)
+			}
 		case task.PRCommitting:
 			if back, done := s.evaluateRepoCommit(ctx, t, run, slug); done {
 				// The commit landed the repository back in its review, and the
@@ -691,6 +731,11 @@ func (s *Service) evaluateReview(ctx context.Context, t task.Task, run task.PRRu
 		return
 	}
 	if last.Clean {
+		if s.passAsked(t.ID, run.RepoPath) != "" {
+			// A pass was asked for after this report: the repository waits for
+			// the report of that one.
+			return
+		}
 		s.finishReview(ctx, t, run, key)
 		return
 	}
@@ -935,11 +980,33 @@ func (s *Service) repoNoCommit(id, repoPath string) bool {
 	return l.repoNoCommit[repoPath]
 }
 
-// repoSessionIdle reports whether the session of a repository is open and at
-// rest.
-func (s *Service) repoSessionIdle(id, stage string) bool {
-	sum, open := s.sessions.Summary(session.Key{TaskID: id, Stage: stage})
-	return open && sum.Idle
+// setOpenFailed records whether the last opening of the pull request of a
+// repository ended without one.
+func (s *Service) setOpenFailed(id, repoPath string, v bool) {
+	l := s.lockOf(id)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if l.openFailed == nil {
+		l.openFailed = map[string]bool{}
+	}
+	if !v {
+		delete(l.openFailed, repoPath)
+		return
+	}
+	l.openFailed[repoPath] = true
+}
+
+// openFailed reports whether the last opening of the pull request of a
+// repository ended without one.
+func (s *Service) openFailed(id, repoPath string) bool {
+	l := s.lockOf(id)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return l.openFailed[repoPath]
 }
 
 // resumePR picks up the repositories of a task in the PR stage where the app
@@ -1025,6 +1092,9 @@ func (s *Service) tearDownPR(ctx context.Context, t task.Task) error {
 	for _, run := range runs {
 		slug := task.Slug(repoRel(t, run.RepoPath))
 		stages = append(stages, session.PRStage(slug), session.PRReviewStage(slug))
+		// A PR stage started again later begins from nothing this one left.
+		s.setOpenFailed(t.ID, run.RepoPath, false)
+		s.setPassAsked(t.ID, run.RepoPath, "")
 	}
 	if err := s.sessions.Discard(ctx, t.ID, stages...); err != nil {
 		return err
@@ -1153,6 +1223,7 @@ func (s *Service) OpenPR(ctx context.Context, id, repoPath, title, body string) 
 	if _, err := s.tasks.SetPRRun(ctx, id, repoPath, task.PROpening, nil); err != nil {
 		return err
 	}
+	s.setOpenFailed(id, repoPath, false)
 	if err := s.sessions.SendFromApp(ctx, key, openMessage(path, base)); err != nil {
 		// The button stays where the user left it: the draft is theirs again.
 		if _, setErr := s.tasks.SetPRRun(ctx, id, repoPath, task.PRDrafting, nil); setErr != nil {
@@ -1273,7 +1344,13 @@ func (s *Service) ReviewAgain(ctx context.Context, id, repoPath string) error {
 	if _, err := s.tasks.SetPRRun(ctx, id, repoPath, task.PRReviewing, nil); err != nil {
 		return err
 	}
-	s.setPassAsked(id, repoPath, "")
+	// The pass asked for here is the one the review waits for: the report the
+	// repository already has, clean or not, decides nothing until that one is in.
+	head := ""
+	if wt, ok := s.worktrees.Get(id, repoPath); ok {
+		head = s.headOf(ctx, wt)
+	}
+	s.setPassAsked(id, repoPath, cmp.Or(head, passAskedWithoutHead))
 	s.setRepoNoCommit(id, repoPath, false)
 	s.log.Info("pr review restarted", "task", id, "repository", repoPath, "pass", run.ReportedPass+1)
 	s.Check(id)
@@ -1310,6 +1387,7 @@ func (s *Service) DiscardDraft(ctx context.Context, id, repoPath string) error {
 	if _, err := s.tasks.SetPRRun(ctx, id, repoPath, task.PRPreparing, nil); err != nil {
 		return err
 	}
+	s.setOpenFailed(id, repoPath, false)
 	s.log.Info("draft discarded", "task", id, "repository", repoPath)
 	s.spawnRepoWork(id, repoPath, s.prepareRepo)
 	return nil

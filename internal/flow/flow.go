@@ -169,6 +169,11 @@ type taskLock struct {
 	// awaiting closing said when it failed, by repository; "" or absent when it
 	// succeeded.
 	checkErrors map[string]string
+	// openFailed says the agent was asked to open the pull request of a
+	// repository and ended its turn without one, by repository. It holds until the
+	// conversation of the repository moves on, and is transient on purpose like
+	// repoNoCommit.
+	openFailed map[string]bool
 }
 
 // repoWork is the goroutine that talks to git and to gh about one repository
