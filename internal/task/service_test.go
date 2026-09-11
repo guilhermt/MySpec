@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
+	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/task"
 )
 
@@ -49,6 +50,30 @@ func TestCreateStoresTheTaskAndItsFolder(t *testing.T) {
 	}
 	if got := f.logs.count(t, "task created"); got != 1 {
 		t.Errorf("task created records = %d, want 1", got)
+	}
+}
+
+func TestCreateKeepsTheModelsOfTheTask(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	want := models.Factory()
+	want[models.PRD] = models.Choice{Model: models.Fable51, Effort: models.XHigh}
+
+	created, err := f.service.Create(t.Context(), task.CreateParams{
+		Name:           "add-login",
+		InitialContext: "a login screen",
+		Models:         want,
+	})
+	if err != nil {
+		t.Fatalf("Create() = %v, want nil", err)
+	}
+
+	if diff := cmp.Diff(want, created.Models.Stages); diff != "" {
+		t.Errorf("Create() stages mismatch (-want +got):\n%s", diff)
+	}
+	if diff := cmp.Diff(want, f.repo.get(t, created.ID).Models.Stages); diff != "" {
+		t.Errorf("stored stages mismatch (-want +got):\n%s", diff)
 	}
 }
 
@@ -811,6 +836,161 @@ func TestSetStageFailsWhenItCannotBeStored(t *testing.T) {
 	}
 	if loaded, _ := f.service.Get(created.ID); loaded.Stage != task.StagePRD {
 		t.Errorf("Stage = %q, want the failed update to change nothing", loaded.Stage)
+	}
+}
+
+func TestSetStageModelStoresTheChoice(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	created := f.create(t, "add-login", "")
+	changes := f.changeCount()
+	want := models.Choice{Model: models.Sonnet5, Effort: models.Low}
+
+	got, err := f.service.SetStageModel(t.Context(), created.ID, models.PR, want)
+	if err != nil {
+		t.Fatalf("SetStageModel() = %v, want nil", err)
+	}
+	if diff := cmp.Diff(want, got.Models.Stage(models.PR)); diff != "" {
+		t.Errorf("SetStageModel() mismatch (-want +got):\n%s", diff)
+	}
+
+	loaded, _ := f.service.Get(created.ID)
+	if diff := cmp.Diff(want, loaded.Models.Stage(models.PR)); diff != "" {
+		t.Errorf("Get() mismatch (-want +got):\n%s", diff)
+	}
+	stored := f.repo.get(t, created.ID)
+	if diff := cmp.Diff(want, stored.Models.Stage(models.PR)); diff != "" {
+		t.Errorf("stored mismatch (-want +got):\n%s", diff)
+	}
+	if !stored.UpdatedAt.Equal(base) {
+		t.Errorf("UpdatedAt = %v, want %v", stored.UpdatedAt, base)
+	}
+	if f.changeCount() <= changes {
+		t.Error("OnChange did not run for the new choice")
+	}
+	if got := f.logs.count(t, "task model set"); got != 1 {
+		t.Errorf("task model set records = %d, want 1", got)
+	}
+}
+
+func TestSetStepModelMakesTheChoiceOfTheStepItsOwn(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	created := f.create(t, "add-login", "")
+	want := models.Choice{Model: models.Opus5, Effort: models.Max}
+
+	got, err := f.service.SetStepModel(t.Context(), created.ID, 2, want)
+	if err != nil {
+		t.Fatalf("SetStepModel() = %v, want nil", err)
+	}
+	if !got.Models.Adjusted(2) {
+		t.Error("Adjusted(2) = false, want the step to carry a choice of its own")
+	}
+	if diff := cmp.Diff(want, got.Models.Step(2)); diff != "" {
+		t.Errorf("Step(2) mismatch (-want +got):\n%s", diff)
+	}
+	if got.Models.Adjusted(1) {
+		t.Error("Adjusted(1) = true, want the other steps to follow implementation")
+	}
+	if records := f.logs.count(t, "task step model set"); records != 1 {
+		t.Errorf("task step model set records = %d, want 1", records)
+	}
+}
+
+func TestSetModelOfAnUnknownTaskIsNotFound(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	choice := models.Choice{Model: models.Opus5, Effort: models.High}
+
+	_, err := f.service.SetStageModel(t.Context(), "nope", models.PRD, choice)
+	wantErrIs(t, err, task.ErrNotFound)
+
+	_, err = f.service.SetStepModel(t.Context(), "nope", 1, choice)
+	wantErrIs(t, err, task.ErrNotFound)
+}
+
+func TestSetModelFailsWhenItCannotBeStored(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	created := f.create(t, "add-login", "")
+	before, _ := f.service.Get(created.ID)
+	f.repo.updateErr = errors.New("database is locked")
+	choice := models.Choice{Model: models.Sonnet5, Effort: models.Low}
+
+	if _, err := f.service.SetStageModel(t.Context(), created.ID, models.PR, choice); err == nil {
+		t.Fatal("SetStageModel() = nil, want an error")
+	}
+	if _, err := f.service.SetStepModel(t.Context(), created.ID, 1, choice); err == nil {
+		t.Fatal("SetStepModel() = nil, want an error")
+	}
+
+	loaded, _ := f.service.Get(created.ID)
+	if diff := cmp.Diff(before.Models, loaded.Models); diff != "" {
+		t.Errorf("models mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestAChangeOfModelLeavesATaskTakenBeforeAlone(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	created := f.create(t, "add-login", "")
+
+	if _, err := f.service.SetStepModel(t.Context(), created.ID, 1,
+		models.Choice{Model: models.Opus5, Effort: models.Max}); err != nil {
+		t.Fatalf("SetStepModel() = %v, want nil", err)
+	}
+
+	if created.Models.Adjusted(1) {
+		t.Error("Adjusted(1) = true, want the task the caller took before the change to be untouched")
+	}
+}
+
+func TestRemovingThePlanForgetsTheModelsOfTheSteps(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		from     task.Stage
+		wantStep bool
+	}{
+		"from the plan": {from: task.StagePlan},
+		"from the PR":   {from: task.StagePR, wantStep: true},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			f := newFixture(t)
+			created := f.create(t, "add-login", "")
+			stage := models.Choice{Model: models.Sonnet5, Effort: models.Low}
+			if _, err := f.service.SetStageModel(t.Context(), created.ID, models.Implementation, stage); err != nil {
+				t.Fatalf("SetStageModel() = %v, want nil", err)
+			}
+			if _, err := f.service.SetStepModel(t.Context(), created.ID, 1,
+				models.Choice{Model: models.Opus5, Effort: models.Max}); err != nil {
+				t.Fatalf("SetStepModel() = %v, want nil", err)
+			}
+
+			if err := f.service.RemoveArtifacts(t.Context(), created.ID, tc.from); err != nil {
+				t.Fatalf("RemoveArtifacts(%q) = %v, want nil", tc.from, err)
+			}
+
+			loaded, _ := f.service.Get(created.ID)
+			stored := f.repo.get(t, created.ID)
+			for label, m := range map[string]task.Models{"service": loaded.Models, "repository": stored.Models} {
+				if got := m.Adjusted(1); got != tc.wantStep {
+					t.Errorf("%s Adjusted(1) = %t, want %t", label, got, tc.wantStep)
+				}
+				if diff := cmp.Diff(stage, m.Stage(models.Implementation)); diff != "" {
+					t.Errorf("%s implementation mismatch (-want +got):\n%s", label, diff)
+				}
+			}
+		})
 	}
 }
 

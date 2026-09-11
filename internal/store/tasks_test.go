@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
+	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
 )
@@ -229,6 +230,37 @@ func TestTasksUpdateArtifactVersion(t *testing.T) {
 	}
 	if got.Stage != task.StagePlan || !got.Revisiting {
 		t.Errorf("Get() = %q revisiting=%t, want the stage left alone", got.Stage, got.Revisiting)
+	}
+}
+
+func TestTasksUpdateModels(t *testing.T) {
+	t.Parallel()
+	s := newStore(t)
+
+	tk := newTask("task-1", "/ws", "one", fixedTime)
+	if err := s.Tasks.Insert(t.Context(), tk); err != nil {
+		t.Fatalf("Insert() = %v, want nil", err)
+	}
+
+	want := task.Models{Stages: models.Factory(), Steps: map[int]models.Choice{
+		3: {Model: models.Opus5, Effort: models.XHigh},
+	}}
+	want.Stages[models.Plan] = models.Choice{Model: models.Sonnet5, Effort: models.Low}
+
+	updatedAt := fixedTime.Add(time.Minute)
+	if err := s.Tasks.UpdateModels(t.Context(), tk.ID, want, updatedAt); err != nil {
+		t.Fatalf("UpdateModels() = %v, want nil", err)
+	}
+
+	got, err := s.Tasks.Get(t.Context(), tk.ID)
+	if err != nil {
+		t.Fatalf("Get() = %v, want nil", err)
+	}
+	if diff := cmp.Diff(want, got.Models); diff != "" {
+		t.Errorf("Get() models mismatch (-want +got):\n%s", diff)
+	}
+	if !got.UpdatedAt.Equal(updatedAt) {
+		t.Errorf("UpdatedAt = %v, want %v", got.UpdatedAt, updatedAt)
 	}
 }
 

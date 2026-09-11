@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/store"
 	"github.com/guilhermt/myspec/internal/task"
@@ -81,6 +82,7 @@ func newTask(id, workspacePath, name string, created time.Time) task.Task {
 		Stage:           task.StagePRD,
 		ArtifactsDir:    "/data/tasks/" + name,
 		ArtifactVersion: 0,
+		Models:          task.Models{Stages: models.Factory()},
 		CreatedAt:       created,
 		UpdatedAt:       created,
 	}

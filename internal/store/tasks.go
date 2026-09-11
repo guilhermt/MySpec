@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -16,7 +17,7 @@ type TasksRepo struct{ db *sql.DB }
 
 // taskColumns is the column list every task query selects, in scan order.
 const taskColumns = `id, workspace_path, name, repo_path, initial_context, stage, revisiting,
-	artifacts_dir, artifact_version, archived_at, created_at, updated_at`
+	artifacts_dir, artifact_version, archived_at, created_at, updated_at, models`
 
 // ListByWorkspace returns the tasks a workspace still holds, in creation
 // order. The archived ones are not among them.
@@ -77,7 +78,12 @@ func (r *TasksRepo) Get(ctx context.Context, id string) (task.Task, error) {
 func (r *TasksRepo) Insert(ctx context.Context, t task.Task) error {
 	const taken = `SELECT 1 FROM tasks WHERE workspace_path = ? AND name = ?`
 	const stmt = `INSERT INTO tasks (` + taskColumns + `)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+
+	encodedModels, err := encodeModels(t.Models)
+	if err != nil {
+		return fmt.Errorf("insert task %s: %w", t.Name, err)
+	}
 
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -97,7 +103,7 @@ func (r *TasksRepo) Insert(ctx context.Context, t task.Task) error {
 	_, err = tx.ExecContext(ctx, stmt,
 		t.ID, t.WorkspacePath, t.Name, nullString(t.RepoPath), t.InitialContext, string(t.Stage), t.Revisiting,
 		t.ArtifactsDir, t.ArtifactVersion, nullTime(t.ArchivedAt),
-		formatTime(t.CreatedAt), formatTime(t.UpdatedAt))
+		formatTime(t.CreatedAt), formatTime(t.UpdatedAt), encodedModels)
 	if err != nil {
 		return fmt.Errorf("insert task %s: %w", t.Name, err)
 	}
@@ -137,6 +143,20 @@ func (r *TasksRepo) UpdateArchived(ctx context.Context, id string, archivedAt, u
 	return nil
 }
 
+// UpdateModels rewrites the model and effort of the stages and steps of a task.
+func (r *TasksRepo) UpdateModels(ctx context.Context, id string, m task.Models, updatedAt time.Time) error {
+	const stmt = `UPDATE tasks SET models = ?, updated_at = ? WHERE id = ?`
+
+	encoded, err := encodeModels(m)
+	if err != nil {
+		return fmt.Errorf("update models of task %s: %w", id, err)
+	}
+	if _, err := r.db.ExecContext(ctx, stmt, encoded, formatTime(updatedAt), id); err != nil {
+		return fmt.Errorf("update models of task %s: %w", id, err)
+	}
+	return nil
+}
+
 // Delete removes a task and, by cascade, its session and transcript.
 func (r *TasksRepo) Delete(ctx context.Context, id string) error {
 	const stmt = `DELETE FROM tasks WHERE id = ?`
@@ -154,9 +174,10 @@ func scanTask(row scanner) (task.Task, error) {
 		stage                string
 		archivedAt           sql.NullString
 		createdAt, updatedAt string
+		encodedModels        string
 	)
 	err := row.Scan(&t.ID, &t.WorkspacePath, &t.Name, &repoPath, &t.InitialContext, &stage, &t.Revisiting,
-		&t.ArtifactsDir, &t.ArtifactVersion, &archivedAt, &createdAt, &updatedAt)
+		&t.ArtifactsDir, &t.ArtifactVersion, &archivedAt, &createdAt, &updatedAt, &encodedModels)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		return task.Task{}, err
@@ -177,5 +198,26 @@ func scanTask(row scanner) (task.Task, error) {
 	if t.UpdatedAt, err = parseTime(updatedAt, "task "+t.ID); err != nil {
 		return task.Task{}, err
 	}
+	if t.Models, err = decodeModels(encodedModels); err != nil {
+		return task.Task{}, fmt.Errorf("read task %s: %w", t.ID, err)
+	}
 	return t, nil
+}
+
+// encodeModels is the JSON of the models of a task.
+func encodeModels(m task.Models) (string, error) {
+	encoded, err := json.Marshal(m)
+	if err != nil {
+		return "", fmt.Errorf("encode models: %w", err)
+	}
+	return string(encoded), nil
+}
+
+// decodeModels reads the JSON back. Every row has one since migration 0009.
+func decodeModels(value string) (task.Models, error) {
+	var m task.Models
+	if err := json.Unmarshal([]byte(value), &m); err != nil {
+		return task.Models{}, fmt.Errorf("decode models: %w", err)
+	}
+	return m, nil
 }

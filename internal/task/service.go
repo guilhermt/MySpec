@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -15,6 +16,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/guilhermt/myspec/internal/models"
 )
 
 // dirPerm keeps the artifact folders private to the user.
@@ -34,6 +37,7 @@ type Store interface {
 	UpdateStage(ctx context.Context, id, stage string, revisiting bool, updatedAt time.Time) error
 	UpdateArtifactVersion(ctx context.Context, id string, version int, updatedAt time.Time) error
 	UpdateArchived(ctx context.Context, id string, archivedAt, updatedAt time.Time) error
+	UpdateModels(ctx context.Context, id string, m Models, updatedAt time.Time) error
 	Delete(ctx context.Context, id string) error
 	ListStepRuns(ctx context.Context, taskID string) ([]StepRun, error)
 	UpsertStepRun(ctx context.Context, run StepRun) error
@@ -223,6 +227,7 @@ type CreateParams struct {
 	Name           string
 	RepoPath       string // "" for root
 	InitialContext string
+	Models         models.Set // a choice for every stage: the defaults with what the user adjusted
 }
 
 // Create validates, creates the artifact folder, persists and watches the task.
@@ -260,6 +265,7 @@ func (s *Service) Create(ctx context.Context, p CreateParams) (Task, error) {
 		InitialContext: initialContext,
 		Stage:          StagePRD,
 		ArtifactsDir:   ArtifactsDir(s.dataDir, workspacePath, name),
+		Models:         Models{Stages: maps.Clone(p.Models)},
 		CreatedAt:      now,
 		UpdatedAt:      now,
 	}
@@ -418,6 +424,66 @@ func (s *Service) SetStage(ctx context.Context, id string, stage Stage, revisiti
 	s.mu.Unlock()
 
 	s.log.Info("task stage set", "task", t.ID, "stage", string(t.Stage), "revisiting", t.Revisiting)
+	s.changed()
+	return t, nil
+}
+
+// SetStageModel records the model and effort a stage of a task runs its
+// sessions with from now on.
+func (s *Service) SetStageModel(ctx context.Context, id string, stage models.Stage, c models.Choice) (Task, error) {
+	t, err := s.updateModels(ctx, id, func(m *Models) {
+		if m.Stages == nil {
+			m.Stages = models.Set{}
+		}
+		m.Stages[stage] = c
+	})
+	if err != nil {
+		return Task{}, err
+	}
+
+	s.log.Info("task model set", "task", id, "stage", string(stage), "model", string(c.Model), "effort", string(c.Effort))
+	return t, nil
+}
+
+// SetStepModel records the model and effort a step runs with, which makes the
+// choice its own.
+func (s *Service) SetStepModel(ctx context.Context, id string, number int, c models.Choice) (Task, error) {
+	t, err := s.updateModels(ctx, id, func(m *Models) {
+		if m.Steps == nil {
+			m.Steps = map[int]models.Choice{}
+		}
+		m.Steps[number] = c
+	})
+	if err != nil {
+		return Task{}, err
+	}
+
+	s.log.Info("task step model set", "task", id, "step", number, "model", string(c.Model), "effort", string(c.Effort))
+	return t, nil
+}
+
+// updateModels rewrites the models of a task on a copy of them, persists it
+// and tells the app.
+func (s *Service) updateModels(ctx context.Context, id string, mutate func(*Models)) (Task, error) {
+	t, ok := s.Get(id)
+	if !ok {
+		return Task{}, fmt.Errorf("set models of task %s: %w", id, ErrNotFound)
+	}
+
+	m := t.Models.clone()
+	mutate(&m)
+	t.Models = m
+	t.UpdatedAt = s.now().UTC()
+	if err := s.repo.UpdateModels(ctx, t.ID, t.Models, t.UpdatedAt); err != nil {
+		return Task{}, err
+	}
+
+	s.mu.Lock()
+	if index := indexOf(s.tasks, id); index >= 0 {
+		s.tasks[index] = t
+	}
+	s.mu.Unlock()
+
 	s.changed()
 	return t, nil
 }
@@ -671,6 +737,15 @@ func (s *Service) RemoveArtifacts(ctx context.Context, id string, from Stage) er
 		}
 		if err != nil {
 			return fmt.Errorf("remove artifacts of task %s: %w", id, err)
+		}
+	}
+
+	// The choices of the steps belong to the step files: a plan written again
+	// starts from the choice of implementation.
+	if from.Index() <= StagePlan.Index() && len(t.Models.Steps) > 0 {
+		t.Models = Models{Stages: t.Models.Stages}
+		if err := s.repo.UpdateModels(ctx, t.ID, t.Models, s.now().UTC()); err != nil {
+			return err
 		}
 	}
 
