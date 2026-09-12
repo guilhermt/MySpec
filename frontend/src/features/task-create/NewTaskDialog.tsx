@@ -1,5 +1,7 @@
+import { ChevronRight } from "lucide-react";
 import { type FormEvent, type KeyboardEvent, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Dialog,
   DialogContent,
@@ -10,7 +12,15 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { ModelPicker } from "@/features/models/ModelPicker";
 import { findNode, type TreeNode } from "@/features/tree/tree-model";
+import {
+  adjustmentSummary,
+  choiceOf,
+  MODEL_STAGES,
+  modelStageLabel,
+  withChoice,
+} from "@/lib/models";
 import {
   isValidTaskName,
   type NameProblem,
@@ -18,10 +28,14 @@ import {
   TASK_NAME_MAX,
   taskNameProblem,
 } from "@/lib/task-name";
+import { cn } from "@/lib/utils";
+import type { StageModel } from "@/lib/wails";
 import { createTask } from "@/store/actions";
 import { useAppStore, useTasks } from "@/store/app-store";
 
 const NAME_HELP = "Lowercase letters, digits and hyphens.";
+
+const NO_MODELS: readonly StageModel[] = [];
 
 const NAME_PROBLEM_TEXT: Record<Exclude<NameProblem, "empty">, string> = {
   invalid: "Use lowercase letters, digits and single hyphens.",
@@ -50,10 +64,16 @@ function NewTaskForm({ node }: { node: TreeNode }) {
   const openTask = useAppStore((state) => state.openTask);
   const taken = useTasks().map((task) => task.name);
 
+  const defaults = useAppStore((state) => state.app?.modelDefaults ?? NO_MODELS);
+
   const [name, setName] = useState("");
   const [context, setContext] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  // The choices start from the defaults the dialog opened with; adjusting them
+  // changes this task only.
+  const [choices, setChoices] = useState<StageModel[]>(() => [...defaults]);
+  const [modelsOpen, setModelsOpen] = useState(false);
 
   const problem = taskNameProblem(name, taken);
   const suggestion = suggestTaskName(name);
@@ -69,12 +89,11 @@ function NewTaskForm({ node }: { node: TreeNode }) {
     }
     setCreating(true);
     setError(null);
-    // No adjustment of models yet: an empty list takes the defaults of the app.
     void createTask({
       name,
       repoPath: node.isRoot ? "" : node.path,
       initialContext: context,
-      models: [],
+      models: choices,
     })
       .then((id) => {
         closeNewTask();
@@ -162,6 +181,49 @@ function NewTaskForm({ node }: { node: TreeNode }) {
               What you want to build, in your own words. High level or detailed.
             </p>
           </div>
+
+          <Collapsible
+            open={modelsOpen}
+            onOpenChange={setModelsOpen}
+            className="flex flex-col gap-1.5"
+          >
+            <CollapsibleTrigger
+              render={
+                <button
+                  type="button"
+                  className="flex h-8 items-center gap-2 rounded-md text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                />
+              }
+            >
+              <ChevronRight
+                aria-hidden="true"
+                className={cn(
+                  "size-4 text-muted-foreground transition-transform duration-[var(--duration-fast)]",
+                  modelsOpen && "rotate-90",
+                )}
+              />
+              <span className="font-medium">Models</span>
+              <span className="min-w-0 truncate text-muted-foreground">
+                {adjustmentSummary(choices, defaults)}
+              </span>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <ul className="flex flex-col divide-y rounded-lg border">
+                {MODEL_STAGES.map((stage) => (
+                  <li key={stage} className="flex h-11 items-center justify-between gap-4 px-3">
+                    <span className="text-sm">{modelStageLabel(stage)}</span>
+                    <ModelPicker
+                      label={modelStageLabel(stage)}
+                      value={choiceOf(choices, stage)}
+                      onChange={(choice) =>
+                        setChoices((current) => withChoice(current, stage, choice))
+                      }
+                    />
+                  </li>
+                ))}
+              </ul>
+            </CollapsibleContent>
+          </Collapsible>
 
           {error !== null && <p className="text-destructive">{error}</p>}
 

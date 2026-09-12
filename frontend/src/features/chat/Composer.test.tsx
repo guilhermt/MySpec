@@ -123,4 +123,39 @@ describe("Composer", () => {
 
     expect(api.resume).toHaveBeenCalledWith("task-1", "prd");
   });
+
+  it("shows what the session runs with under the field", () => {
+    renderWithStore(<Composer stage="prd" taskId="task-1" session={makeTask()} />);
+
+    expect(
+      screen.getByRole("button", { name: "Session model: Fable 5.1 · high" }),
+    ).toHaveTextContent("Fable 5.1 · high");
+  });
+
+  it("changes the model of the session it writes to", async () => {
+    const { user } = renderWithStore(
+      <Composer stage="step:2" taskId="task-1" session={makeTask()} />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Session model: Fable 5.1 · high" }));
+    await user.click(await screen.findByRole("menuitemradio", { name: "Opus 5" }));
+
+    expect(api.setSessionModel).toHaveBeenCalledWith("task-1", "step:2", "claude-opus-5", "high");
+  });
+
+  it("offers the model while the session is paused", () => {
+    const task = makeTask({ sessionStatus: "paused" });
+    renderWithStore(<Composer stage="prd" taskId="task-1" session={task} />);
+
+    expect(
+      screen.getByRole("button", { name: "Session model: Fable 5.1 · high" }),
+    ).toBeInTheDocument();
+  });
+
+  it("has no model to show without a session", () => {
+    const task = makeTask({ sessionModel: "", sessionEffort: "" });
+    renderWithStore(<Composer stage="prd" taskId="task-1" session={task} />);
+
+    expect(screen.queryByRole("button", { name: /Session model:/ })).not.toBeInTheDocument();
+  });
 });

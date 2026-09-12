@@ -111,6 +111,22 @@ describe("ArtifactPanel", () => {
     );
   });
 
+  it("changes the model of a step from the list of steps", async () => {
+    const { user } = panel({
+      stage: "implementation",
+      steps: [
+        makeStep({ status: "done" }),
+        makeStep({ number: 2, file: "2-check-the-token.md", title: "Check the token" }),
+      ],
+      currentStep: 1,
+    });
+
+    await user.click(screen.getByRole("button", { name: "Step 2 model: Opus 5 · high" }));
+    await user.click(await screen.findByRole("menuitemradio", { name: "xhigh" }));
+
+    expect(api.setStepModel).toHaveBeenCalledWith("task-1", 2, "claude-opus-5", "xhigh");
+  });
+
   it("reads one step file, with its header shown as metadata", async () => {
     vi.mocked(api.readArtifact).mockResolvedValue(STEP_FILE);
     const { user } = panel({

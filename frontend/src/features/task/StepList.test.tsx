@@ -59,6 +59,70 @@ describe("StepList", () => {
     expect(onOpen).toHaveBeenCalledWith(step);
   });
 
+  it("lets a step that has not started pick its model", async () => {
+    const onModelChange = vi.fn();
+    const step = makeStep({ number: 2, file: "2-check-the-token.md", title: "Check the token" });
+    const { user } = renderWithStore(
+      <StepList
+        steps={[makeStep({ status: "done" }), step]}
+        problems={[]}
+        currentStep={1}
+        onOpen={vi.fn()}
+        onModelChange={onModelChange}
+      />,
+      { state },
+    );
+
+    await user.click(screen.getByRole("button", { name: "Step 2 model: Opus 5 · high" }));
+    await user.click(await screen.findByRole("menuitemradio", { name: "xhigh" }));
+
+    // The picker hands back the value it was given with the choice changed, and
+    // the value of a step is the step itself.
+    expect(onModelChange).toHaveBeenCalledWith(
+      step,
+      expect.objectContaining({ model: "claude-opus-5", effort: "xhigh" }),
+    );
+  });
+
+  it("sets a step with a choice of its own apart from one that follows Implementation", () => {
+    renderWithStore(
+      <StepList
+        steps={[
+          makeStep({ adjusted: true }),
+          makeStep({ number: 2, file: "2-check-the-token.md", title: "Check the token" }),
+        ]}
+        problems={[]}
+        currentStep={0}
+        onOpen={vi.fn()}
+        onModelChange={vi.fn()}
+      />,
+      { state },
+    );
+
+    expect(screen.getByRole("button", { name: "Step 1 model: Opus 5 · high" })).not.toHaveClass(
+      "text-muted-foreground",
+    );
+    expect(screen.getByRole("button", { name: "Step 2 model: Opus 5 · high" })).toHaveClass(
+      "text-muted-foreground",
+    );
+  });
+
+  it("shows the model of a step that started as a value", () => {
+    renderWithStore(
+      <StepList
+        steps={[makeStep({ status: "implementing", modelEditable: false })]}
+        problems={[]}
+        currentStep={1}
+        onOpen={vi.fn()}
+        onModelChange={vi.fn()}
+      />,
+      { state },
+    );
+
+    expect(screen.getByText("Opus 5 · high")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /model:/ })).not.toBeInTheDocument();
+  });
+
   it("is a plain list when there is nothing to open", () => {
     renderWithStore(<StepList steps={[makeStep()]} problems={[]} currentStep={0} />, { state });
 
