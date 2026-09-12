@@ -23,6 +23,7 @@ import {
   usePrDraft,
   useRecents,
   useRepos,
+  useSettingsUi,
   useTask,
   useTasks,
   useTasksOf,
@@ -979,5 +980,143 @@ describe("situation on screen", () => {
       useAppStore.getState().selectRepo(ROOT_TASK.id, API_REPO.repoPath);
     });
     expect(result.current).toBeNull();
+  });
+});
+
+describe("settings", () => {
+  it("opens the settings in place of a task, the history and an archived task", () => {
+    const { result } = renderHook(() => useSettingsUi());
+
+    act(() => {
+      useAppStore.getState().applyState(withTasks());
+      useAppStore.getState().openTask(ROOT_TASK.id);
+      useAppStore.getState().openArchived(ARCHIVED.id);
+      useAppStore.getState().openNewTask(ROOT_NODE_ID);
+      useAppStore.getState().openSettings();
+    });
+
+    expect(result.current).toEqual({
+      settingsOpen: true,
+      settingsSection: "models",
+      promptEdit: null,
+      pendingLeave: null,
+    });
+    expect(useAppStore.getState().openTaskId).toBeNull();
+    expect(useAppStore.getState().historyOpen).toBe(false);
+    expect(useAppStore.getState().openArchivedId).toBeNull();
+    expect(useAppStore.getState().newTaskFor).toBeNull();
+
+    act(() => {
+      useAppStore.getState().closeSettings();
+    });
+    expect(result.current.settingsOpen).toBe(false);
+  });
+
+  it("gives the main area back to a node, a task, the history or a place that opens", () => {
+    useAppStore.getState().applyState(withTasks());
+
+    for (const navigate of [
+      () => useAppStore.getState().selectNode(WEB_NODE),
+      () => useAppStore.getState().openTask(ROOT_TASK.id),
+      () => useAppStore.getState().openHistory(),
+      () => useAppStore.getState().openArchived(ARCHIVED.id),
+      () => useAppStore.getState().openPlace(ROOT_TASK.id, stagePlace("prd")),
+    ]) {
+      useAppStore.getState().openSettings();
+
+      navigate();
+
+      expect(useAppStore.getState().settingsOpen).toBe(false);
+    }
+  });
+
+  it("keeps the settings open across a change of workspace", () => {
+    useAppStore.getState().applyState(withTasks());
+    useAppStore.getState().openSettings();
+    useAppStore.getState().selectSettingsSection("plan");
+    useAppStore.getState().startPromptEdit("plan", "# Plan");
+
+    useAppStore
+      .getState()
+      .applyState(makeState({ workspace: { name: "labs", path: "/home/dev/labs", repos: [] } }));
+
+    expect(useAppStore.getState().settingsOpen).toBe(true);
+    expect(useAppStore.getState().settingsSection).toBe("plan");
+    expect(useAppStore.getState().promptEdit).toEqual({
+      stage: "plan",
+      original: "# Plan",
+      text: "# Plan",
+    });
+  });
+
+  it("closes the prompt editor without asking when nothing changed", () => {
+    useAppStore.getState().openSettings();
+    useAppStore.getState().startPromptEdit("prd", "# PRD");
+    useAppStore.getState().setPromptEditText("# PRD");
+
+    useAppStore.getState().selectSettingsSection("commit");
+
+    expect(useAppStore.getState().settingsSection).toBe("commit");
+    expect(useAppStore.getState().promptEdit).toBeNull();
+    expect(useAppStore.getState().pendingLeave).toBeNull();
+
+    // With the editor closed there is no text to type into.
+    useAppStore.getState().setPromptEditText("# Commit, edited");
+    expect(useAppStore.getState().promptEdit).toBeNull();
+  });
+
+  it("holds a navigation while the prompt editor has unsaved changes", () => {
+    useAppStore.getState().applyState(withTasks());
+    useAppStore.getState().openSettings();
+    useAppStore.getState().startPromptEdit("prd", "# PRD");
+    useAppStore.getState().setPromptEditText("# PRD, edited");
+
+    useAppStore.getState().openTask(ROOT_TASK.id);
+
+    expect(useAppStore.getState().pendingLeave).not.toBeNull();
+    expect(useAppStore.getState().openTaskId).toBeNull();
+    expect(useAppStore.getState().settingsOpen).toBe(true);
+
+    useAppStore.getState().cancelLeave();
+
+    expect(useAppStore.getState().pendingLeave).toBeNull();
+    expect(useAppStore.getState().openTaskId).toBeNull();
+    expect(useAppStore.getState().settingsOpen).toBe(true);
+    expect(useAppStore.getState().promptEdit?.text).toBe("# PRD, edited");
+
+    useAppStore.getState().openTask(ROOT_TASK.id);
+    useAppStore.getState().confirmLeave();
+
+    expect(useAppStore.getState().openTaskId).toBe(ROOT_TASK.id);
+    expect(useAppStore.getState().settingsOpen).toBe(false);
+    expect(useAppStore.getState().promptEdit).toBeNull();
+    expect(useAppStore.getState().pendingLeave).toBeNull();
+  });
+
+  it("asks before cancelling an edit with changes", () => {
+    useAppStore.getState().openSettings();
+    useAppStore.getState().startPromptEdit("prd", "# PRD");
+    useAppStore.getState().setPromptEditText("# PRD, edited");
+
+    useAppStore.getState().cancelPromptEdit();
+
+    expect(useAppStore.getState().pendingLeave).not.toBeNull();
+    expect(useAppStore.getState().promptEdit?.text).toBe("# PRD, edited");
+
+    useAppStore.getState().confirmLeave();
+
+    expect(useAppStore.getState().promptEdit).toBeNull();
+    expect(useAppStore.getState().settingsOpen).toBe(true);
+  });
+
+  it("closes the editor after a save without asking", () => {
+    useAppStore.getState().openSettings();
+    useAppStore.getState().startPromptEdit("prd", "# PRD");
+    useAppStore.getState().setPromptEditText("# PRD, edited");
+
+    useAppStore.getState().finishPromptEdit();
+
+    expect(useAppStore.getState().promptEdit).toBeNull();
+    expect(useAppStore.getState().pendingLeave).toBeNull();
   });
 });

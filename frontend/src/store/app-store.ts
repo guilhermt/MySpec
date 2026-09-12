@@ -7,6 +7,7 @@ import type {
   Leftover,
   Notice,
   Place,
+  PromptStage,
   Recent,
   RepoPR,
   Situation,
@@ -31,6 +32,16 @@ export const ROOT_NODE_ID = "root" satisfies NodeId;
 
 export function repoNodeId(path: string): NodeId {
   return `repo:${path}`;
+}
+
+/** SettingsSection is what the settings screen shows: the model defaults or one prompt. */
+export type SettingsSection = "models" | PromptStage;
+
+/** PromptEdit is a prompt open in the editor: the text it opened with and the text it has now. */
+export interface PromptEdit {
+  stage: PromptStage;
+  original: string;
+  text: string;
 }
 
 export interface AppStore {
@@ -61,6 +72,13 @@ export interface AppStore {
    * by id, for the brief highlight.
    */
   flashing: ReadonlySet<string>;
+  /** settingsOpen shows the settings in the main area. They belong to the app, not to a workspace. */
+  settingsOpen: boolean;
+  settingsSection: SettingsSection;
+  /** promptEdit is the prompt open in the editor, null when the editor is closed. */
+  promptEdit: PromptEdit | null;
+  /** pendingLeave is the navigation that waits for the user to discard the unsaved edit of a prompt. */
+  pendingLeave: (() => void) | null;
 
   applyState: (next: State) => void;
   setError: (message: string | null) => void;
@@ -93,6 +111,18 @@ export interface AppStore {
   unflashSituation: (id: string) => void;
   /** openPlace opens a task where one of its situations is. */
   openPlace: (taskId: string, place: Place) => void;
+
+  openSettings: () => void;
+  closeSettings: () => void;
+  selectSettingsSection: (section: SettingsSection) => void;
+  startPromptEdit: (stage: PromptStage, text: string) => void;
+  setPromptEditText: (text: string) => void;
+  /** cancelPromptEdit closes the editor, asking first when there are changes. */
+  cancelPromptEdit: () => void;
+  /** finishPromptEdit closes the editor after a save, with nothing left to lose. */
+  finishPromptEdit: () => void;
+  confirmLeave: () => void;
+  cancelLeave: () => void;
 }
 
 /** PrDraft is the title and the description of a pull request being edited. */
@@ -182,6 +212,8 @@ function initialTreeUi(): Pick<AppStore, "selectedNodeId" | "expandedNodeIds"> {
 }
 
 // Nothing of another workspace survives: its tasks are gone from the snapshot.
+// The settings are not here: they belong to the app, so they stay on screen,
+// with whatever prompt is open in the editor, across a change of workspace.
 function initialTaskUi(): Pick<
   AppStore,
   | "openTaskId"
@@ -213,195 +245,281 @@ function initialTaskUi(): Pick<
   };
 }
 
-export const useAppStore = create<AppStore>()((set) => ({
-  app: null,
-  error: null,
-  ...initialTreeUi(),
-  ...initialTaskUi(),
+export const useAppStore = create<AppStore>()((set, get) => {
+  // leave runs a navigation that takes the prompt editor off the screen. With an
+  // unsaved edit, the navigation waits for the user to agree to lose it.
+  const leave = (navigate: () => void) => {
+    const edit = get().promptEdit;
+    if (edit !== null && edit.text !== edit.original) {
+      set({ pendingLeave: navigate });
+      return;
+    }
+    set({ promptEdit: null });
+    navigate();
+  };
 
-  applyState: (next) =>
-    set((state) => {
-      if (next.workspace?.path !== state.app?.workspace?.path) {
-        return { app: next, ...initialTreeUi(), ...initialTaskUi() };
-      }
-      const selectedNodeId = nodeExists(next, state.selectedNodeId)
-        ? state.selectedNodeId
-        : ROOT_NODE_ID;
-      const history = historyOf(next);
-      // The first snapshot brings the whole history at once; nothing in it was
-      // archived under the eyes of the user.
-      const archived = state.app === null ? null : newlyArchived(historyOf(state.app), history);
-      const archivedNotice =
-        archived === null ? state.archivedNotice : { id: archived.id, name: archived.name };
-      const openArchivedId =
-        state.openArchivedId !== null && !history.some((entry) => entry.id === state.openArchivedId)
-          ? null
-          : state.openArchivedId;
-      const openTaskId = state.openTaskId;
-      if (openTaskId === null || findTask(next, openTaskId) !== null) {
-        return { app: next, selectedNodeId, archivedNotice, openArchivedId };
-      }
-      return {
-        app: next,
-        selectedNodeId,
-        archivedNotice,
-        openArchivedId,
-        openTaskId: null,
-        transcripts: withoutTaskTranscripts(state.transcripts, openTaskId),
-      };
-    }),
+  return {
+    app: null,
+    error: null,
+    settingsOpen: false,
+    settingsSection: "models",
+    promptEdit: null,
+    pendingLeave: null,
+    ...initialTreeUi(),
+    ...initialTaskUi(),
 
-  setError: (message) => set({ error: message }),
+    applyState: (next) =>
+      set((state) => {
+        if (next.workspace?.path !== state.app?.workspace?.path) {
+          return { app: next, ...initialTreeUi(), ...initialTaskUi() };
+        }
+        const selectedNodeId = nodeExists(next, state.selectedNodeId)
+          ? state.selectedNodeId
+          : ROOT_NODE_ID;
+        const history = historyOf(next);
+        // The first snapshot brings the whole history at once; nothing in it was
+        // archived under the eyes of the user.
+        const archived = state.app === null ? null : newlyArchived(historyOf(state.app), history);
+        const archivedNotice =
+          archived === null ? state.archivedNotice : { id: archived.id, name: archived.name };
+        const openArchivedId =
+          state.openArchivedId !== null &&
+          !history.some((entry) => entry.id === state.openArchivedId)
+            ? null
+            : state.openArchivedId;
+        const openTaskId = state.openTaskId;
+        if (openTaskId === null || findTask(next, openTaskId) !== null) {
+          return { app: next, selectedNodeId, archivedNotice, openArchivedId };
+        }
+        return {
+          app: next,
+          selectedNodeId,
+          archivedNotice,
+          openArchivedId,
+          openTaskId: null,
+          transcripts: withoutTaskTranscripts(state.transcripts, openTaskId),
+        };
+      }),
 
-  // Picking a node in the tree is asking for the workspace, not the history.
-  selectNode: (id) => set({ selectedNodeId: id, historyOpen: false, openArchivedId: null }),
+    setError: (message) => set({ error: message }),
 
-  toggleNode: (id) =>
-    set((state) => ({
-      expandedNodeIds: withExpanded(state.expandedNodeIds, id, !state.expandedNodeIds.has(id)),
-    })),
+    // Picking a node in the tree is asking for the workspace, not the history or
+    // the settings.
+    selectNode: (id) =>
+      leave(() =>
+        set({
+          selectedNodeId: id,
+          historyOpen: false,
+          openArchivedId: null,
+          settingsOpen: false,
+        }),
+      ),
 
-  setNodeExpanded: (id, expanded) =>
-    set((state) => ({ expandedNodeIds: withExpanded(state.expandedNodeIds, id, expanded) })),
+    toggleNode: (id) =>
+      set((state) => ({
+        expandedNodeIds: withExpanded(state.expandedNodeIds, id, !state.expandedNodeIds.has(id)),
+      })),
 
-  // Opening a task also reveals it in the tree, so the two panes agree.
-  openTask: (id) =>
-    set((state) => {
-      const task = findTask(state.app, id);
-      if (task === null) {
-        return { openTaskId: id, historyOpen: false, openArchivedId: null };
-      }
-      const nodeId = nodeOfTask(task);
-      return {
-        openTaskId: id,
-        historyOpen: false,
-        openArchivedId: null,
-        selectedNodeId: nodeId,
-        expandedNodeIds: withExpanded(state.expandedNodeIds, nodeId, true),
-      };
-    }),
+    setNodeExpanded: (id, expanded) =>
+      set((state) => ({ expandedNodeIds: withExpanded(state.expandedNodeIds, id, expanded) })),
 
-  closeTask: () => set({ openTaskId: null }),
+    // Opening a task also reveals it in the tree, so the two panes agree.
+    openTask: (id) =>
+      leave(() =>
+        set((state) => {
+          const task = findTask(state.app, id);
+          if (task === null) {
+            return {
+              openTaskId: id,
+              historyOpen: false,
+              openArchivedId: null,
+              settingsOpen: false,
+            };
+          }
+          const nodeId = nodeOfTask(task);
+          return {
+            openTaskId: id,
+            historyOpen: false,
+            openArchivedId: null,
+            settingsOpen: false,
+            selectedNodeId: nodeId,
+            expandedNodeIds: withExpanded(state.expandedNodeIds, nodeId, true),
+          };
+        }),
+      ),
 
-  openNewTask: (nodeId) => set({ newTaskFor: nodeId }),
+    closeTask: () => set({ openTaskId: null }),
 
-  closeNewTask: () => set({ newTaskFor: null }),
+    openNewTask: (nodeId) => set({ newTaskFor: nodeId }),
 
-  beginTranscript: (taskId, stage) =>
-    set((state) => {
-      const key = sessionKey(taskId, stage);
-      return {
-        transcripts: {
-          ...state.transcripts,
-          [key]: {
-            ...(state.transcripts[key] ?? emptyTranscript()),
-            status: "loading",
-            buffered: [],
+    closeNewTask: () => set({ newTaskFor: null }),
+
+    beginTranscript: (taskId, stage) =>
+      set((state) => {
+        const key = sessionKey(taskId, stage);
+        return {
+          transcripts: {
+            ...state.transcripts,
+            [key]: {
+              ...(state.transcripts[key] ?? emptyTranscript()),
+              status: "loading",
+              buffered: [],
+            },
           },
-        },
-      };
-    }),
+        };
+      }),
 
-  // What arrived while loading is folded in afterwards, so the events that
-  // raced with GetTranscript are neither lost nor applied out of order.
-  setTranscript: (transcript) =>
-    set((state) => {
-      const key = sessionKey(transcript.taskId, transcript.stage);
-      const buffered = state.transcripts[key]?.buffered ?? [];
-      const loaded = buffered.reduce(applyEvent, fromTranscript(transcript));
-      return { transcripts: { ...state.transcripts, [key]: loaded } };
-    }),
+    // What arrived while loading is folded in afterwards, so the events that
+    // raced with GetTranscript are neither lost nor applied out of order.
+    setTranscript: (transcript) =>
+      set((state) => {
+        const key = sessionKey(transcript.taskId, transcript.stage);
+        const buffered = state.transcripts[key]?.buffered ?? [];
+        const loaded = buffered.reduce(applyEvent, fromTranscript(transcript));
+        return { transcripts: { ...state.transcripts, [key]: loaded } };
+      }),
 
-  applyTranscriptEvent: (event) =>
-    set((state) => {
-      const key = sessionKey(event.taskId, event.stage);
-      const current = state.transcripts[key];
-      if (current === undefined) {
-        return {};
-      }
-      const next =
-        current.status === "loading"
-          ? { ...current, buffered: [...current.buffered, event] }
-          : applyEvent(current, event);
-      if (next === current) {
-        return {};
-      }
-      return { transcripts: { ...state.transcripts, [key]: next } };
-    }),
+    applyTranscriptEvent: (event) =>
+      set((state) => {
+        const key = sessionKey(event.taskId, event.stage);
+        const current = state.transcripts[key];
+        if (current === undefined) {
+          return {};
+        }
+        const next =
+          current.status === "loading"
+            ? { ...current, buffered: [...current.buffered, event] }
+            : applyEvent(current, event);
+        if (next === current) {
+          return {};
+        }
+        return { transcripts: { ...state.transcripts, [key]: next } };
+      }),
 
-  dropTranscript: (taskId, stage) =>
-    set((state) => ({
-      transcripts: withoutTranscript(state.transcripts, sessionKey(taskId, stage)),
-    })),
+    dropTranscript: (taskId, stage) =>
+      set((state) => ({
+        transcripts: withoutTranscript(state.transcripts, sessionKey(taskId, stage)),
+      })),
 
-  setDraft: (taskId, stage, text) =>
-    set((state) => ({ drafts: { ...state.drafts, [sessionKey(taskId, stage)]: text } })),
+    setDraft: (taskId, stage, text) =>
+      set((state) => ({ drafts: { ...state.drafts, [sessionKey(taskId, stage)]: text } })),
 
-  selectRepo: (taskId, repoPath) =>
-    set((state) => ({ openRepo: { ...state.openRepo, [taskId]: repoPath } })),
+    selectRepo: (taskId, repoPath) =>
+      set((state) => ({ openRepo: { ...state.openRepo, [taskId]: repoPath } })),
 
-  // The draft the user is editing outlives what the agent says next; only
-  // opening the pull request, or throwing the draft away, clears it.
-  setPrDraft: (taskId, repoPath, draft) =>
-    set((state) => ({ prDrafts: { ...state.prDrafts, [repoKey(taskId, repoPath)]: draft } })),
+    // The draft the user is editing outlives what the agent says next; only
+    // opening the pull request, or throwing the draft away, clears it.
+    setPrDraft: (taskId, repoPath, draft) =>
+      set((state) => ({ prDrafts: { ...state.prDrafts, [repoKey(taskId, repoPath)]: draft } })),
 
-  clearPrDraft: (taskId, repoPath) =>
-    set((state) => {
-      const { [repoKey(taskId, repoPath)]: _dropped, ...rest } = state.prDrafts;
-      return { prDrafts: rest };
-    }),
+    clearPrDraft: (taskId, repoPath) =>
+      set((state) => {
+        const { [repoKey(taskId, repoPath)]: _dropped, ...rest } = state.prDrafts;
+        return { prDrafts: rest };
+      }),
 
-  // The history is a place of its own: opening it puts away whatever the main
-  // area was showing.
-  openHistory: () =>
-    set({ historyOpen: true, openTaskId: null, openArchivedId: null, newTaskFor: null }),
+    // The history is a place of its own: opening it puts away whatever the main
+    // area was showing.
+    openHistory: () =>
+      leave(() =>
+        set({
+          historyOpen: true,
+          openTaskId: null,
+          openArchivedId: null,
+          newTaskFor: null,
+          settingsOpen: false,
+        }),
+      ),
 
-  closeHistory: () => set({ historyOpen: false, openArchivedId: null }),
+    closeHistory: () => set({ historyOpen: false, openArchivedId: null }),
 
-  openArchived: (id) => set({ openArchivedId: id, historyOpen: true, openTaskId: null }),
+    openArchived: (id) =>
+      leave(() =>
+        set({ openArchivedId: id, historyOpen: true, openTaskId: null, settingsOpen: false }),
+      ),
 
-  closeArchived: () => set({ openArchivedId: null }),
+    closeArchived: () => set({ openArchivedId: null }),
 
-  setHistoryQuery: (query) => set({ historyQuery: query }),
+    setHistoryQuery: (query) => set({ historyQuery: query }),
 
-  dismissArchivedNotice: () => set({ archivedNotice: null }),
+    dismissArchivedNotice: () => set({ archivedNotice: null }),
 
-  setLeftovers: (leftovers) => set({ leftovers }),
+    setLeftovers: (leftovers) => set({ leftovers }),
 
-  // A new set every time: the selectors hand the set itself to the components,
-  // which only see a change through a new reference.
-  flashSituation: (id) => set((state) => ({ flashing: new Set(state.flashing).add(id) })),
+    // A new set every time: the selectors hand the set itself to the components,
+    // which only see a change through a new reference.
+    flashSituation: (id) => set((state) => ({ flashing: new Set(state.flashing).add(id) })),
 
-  unflashSituation: (id) =>
-    set((state) => {
-      const flashing = new Set(state.flashing);
-      flashing.delete(id);
-      return { flashing };
-    }),
+    unflashSituation: (id) =>
+      set((state) => {
+        const flashing = new Set(state.flashing);
+        flashing.delete(id);
+        return { flashing };
+      }),
 
-  // A situation opens where it is: its task, on the tab of its repository when
-  // it is in one. Going there puts away the history and the creation of a task.
-  openPlace: (taskId, place) =>
-    set((state) => {
-      const task = findTask(state.app, taskId);
+    // A situation opens where it is: its task, on the tab of its repository when
+    // it is in one. Going there puts away the history, the settings and the
+    // creation of a task.
+    openPlace: (taskId, place) => {
+      // A situation of a task that is gone navigates nowhere, so it never asks
+      // the user about an unsaved edit either.
+      const task = findTask(get().app, taskId);
       if (task === null) {
-        return {};
+        return;
       }
       const nodeId = nodeOfTask(task);
-      return {
-        openTaskId: taskId,
+      leave(() =>
+        set((state) => ({
+          openTaskId: taskId,
+          historyOpen: false,
+          openArchivedId: null,
+          newTaskFor: null,
+          settingsOpen: false,
+          selectedNodeId: nodeId,
+          expandedNodeIds: withExpanded(state.expandedNodeIds, nodeId, true),
+          openRepo:
+            asPlaceKind(place.kind) === "repo"
+              ? { ...state.openRepo, [taskId]: place.repoPath }
+              : state.openRepo,
+        })),
+      );
+    },
+
+    // The settings are a place of its own, like the history. Opening them takes
+    // no prompt editor off the screen, so they go without the guard.
+    openSettings: () =>
+      set({
+        settingsOpen: true,
+        openTaskId: null,
         historyOpen: false,
         openArchivedId: null,
         newTaskFor: null,
-        selectedNodeId: nodeId,
-        expandedNodeIds: withExpanded(state.expandedNodeIds, nodeId, true),
-        openRepo:
-          asPlaceKind(place.kind) === "repo"
-            ? { ...state.openRepo, [taskId]: place.repoPath }
-            : state.openRepo,
-      };
-    }),
-}));
+      }),
+
+    closeSettings: () => leave(() => set({ settingsOpen: false })),
+
+    selectSettingsSection: (section) => leave(() => set({ settingsSection: section })),
+
+    startPromptEdit: (stage, text) => set({ promptEdit: { stage, original: text, text } }),
+
+    setPromptEditText: (text) =>
+      set((state) =>
+        state.promptEdit === null ? {} : { promptEdit: { ...state.promptEdit, text } },
+      ),
+
+    cancelPromptEdit: () => leave(() => {}),
+
+    finishPromptEdit: () => set({ promptEdit: null }),
+
+    confirmLeave: () => {
+      const navigate = get().pendingLeave;
+      set({ pendingLeave: null, promptEdit: null });
+      navigate?.();
+    },
+
+    cancelLeave: () => set({ pendingLeave: null }),
+  };
+});
 
 const NO_RECENTS: readonly Recent[] = [];
 const NO_TASKS: readonly TaskSummary[] = [];
@@ -540,6 +658,24 @@ export function useHistoryUi(): HistoryUi {
   );
 }
 
+export interface SettingsUi {
+  settingsOpen: boolean;
+  settingsSection: SettingsSection;
+  promptEdit: PromptEdit | null;
+  pendingLeave: (() => void) | null;
+}
+
+export function useSettingsUi(): SettingsUi {
+  return useAppStore(
+    useShallow((state) => ({
+      settingsOpen: state.settingsOpen,
+      settingsSection: state.settingsSection,
+      promptEdit: state.promptEdit,
+      pendingLeave: state.pendingLeave,
+    })),
+  );
+}
+
 export function useArchivedNotice(): ArchivedNotice | null {
   return useAppStore((state) => state.archivedNotice);
 }
@@ -565,6 +701,7 @@ export interface TreeUi {
   expandedNodeIds: ReadonlySet<NodeId>;
   openTaskId: string | null;
   historyOpen: boolean;
+  settingsOpen: boolean;
   flashing: ReadonlySet<string>;
 }
 
@@ -575,6 +712,7 @@ export function useTreeUi(): TreeUi {
       expandedNodeIds: state.expandedNodeIds,
       openTaskId: state.openTaskId,
       historyOpen: state.historyOpen,
+      settingsOpen: state.settingsOpen,
       flashing: state.flashing,
     })),
   );
