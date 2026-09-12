@@ -22,7 +22,7 @@ internal/                todo o código Go
   editor/                abre o VS Code
   theme/                 preferência de tema
   store/                 SQLite e migrations
-  platform/              logging, notify (D-Bus), xdg
+  platform/              logging, notify (D-Bus), chime, dnd, xdg
 frontend/
   src/app/               App, shell, bootstrap e atalhos globais
   src/store/             o store Zustand, as ações e o transcript
@@ -72,6 +72,12 @@ Quatro eventos tipados, registrados em `bindings.RegisterEvents` antes de `appli
 | `transcript:changed` | um `TranscriptEvent`: entrada nova, texto em streaming, remoção ou reset | A cada mudança numa conversa |
 | `situation:started` | a situação e se a janela estava em foco | Uma situação nova começa; dirige o piscar |
 | `situation:open` | task e lugar | Um clique numa notificação pede a abertura |
+
+### Notificações e som
+
+`attention.Service` decide quando uma situação notifica e chama `notify.Notifier`, que fala com o serviço `org.freedesktop.Notifications` numa goroutine própria, na ordem dos pedidos, sem nunca segurar quem chamou. É também o notifier que decide o som: uma notificação faz som quando nenhuma outra fez nos últimos dois segundos, e só se o envio deu certo. Antes dela o notifier lê as capacidades do servidor. Um servidor que anuncia `sound` recebe o caminho do carrilhão na hint `sound-file` e aplica o próprio não perturbe. Para os outros a notificação vai com `suppress-sound`, e o notifier toca o carrilhão por `chime.Player`.
+
+`chime` é dono do som: o WAV embutido no binário, a cópia em `sounds/chime.wav` que `Install` escreve ao iniciar, e o `Player`, que toca um carrilhão por vez numa goroutine própria. O player pergunta a `dnd.Detector`, em até meio segundo, se o desktop está em não perturbe, e depois roda o primeiro player de áudio que funcionar, com cinco segundos de limite. `dnd` pergunta ao shell do Omarchy, ao KDE Plasma, ao dunst e ao swaync; o que não responde não diz nada, e o carrilhão toca. Ao fechar, o app fecha o notifier e depois o player, que mata um som ainda tocando.
 
 ### Fluxo de uma sessão
 

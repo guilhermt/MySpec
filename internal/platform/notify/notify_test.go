@@ -34,21 +34,42 @@ const (
 	closedByCall    uint32 = 3 // CloseNotification closed it
 )
 
+// burstWindow is how long the notifications after one that made a sound stay
+// silent.
+const burstWindow = 2 * time.Second
+
+// The capabilities of a server that plays no sounds, and of one that does.
+var (
+	silentServer   = []string{"actions", "body", "persistence"}
+	soundingServer = []string{"actions", "body", "sound"}
+)
+
 // errServer is what a server that stopped working answers with.
 var errServer = errors.New("org.freedesktop.DBus.Error.NoReply")
 
-// fakeServer is a notify.Server that hands out ids from 1, records its calls,
-// notify:<summary>:<body> and close:<id>, and fails every call with err when it
-// is set.
+// fakeServer is a notify.Server that hands out ids from 1 and records its
+// calls: capabilities, notify:<summary>:<body>, with :sound when it was asked to
+// play the chime, and close:<id>. It fails Notify and CloseNotification with err
+// when it is set, and answers Capabilities with what it announces.
 type fakeServer struct {
-	mu    sync.Mutex
-	next  uint32
-	calls []string
-	err   error
-	hold  chan struct{} // when set, Notify waits on it before anything else
+	mu              sync.Mutex
+	next            uint32
+	calls           []string
+	err             error
+	capabilities    []string
+	capabilitiesErr error
+	hold            chan struct{} // when set, Notify waits on it before anything else
 }
 
-func (s *fakeServer) Notify(summary, body string) (uint32, error) {
+func (s *fakeServer) Capabilities() ([]string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.calls = append(s.calls, "capabilities")
+	return slices.Clone(s.capabilities), s.capabilitiesErr
+}
+
+func (s *fakeServer) Notify(summary, body string, sound bool) (uint32, error) {
 	s.mu.Lock()
 	hold := s.hold
 	s.mu.Unlock()
@@ -60,7 +81,11 @@ func (s *fakeServer) Notify(summary, body string) (uint32, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.calls = append(s.calls, "notify:"+summary+":"+body)
+	call := "notify:" + summary + ":" + body
+	if sound {
+		call += ":sound"
+	}
+	s.calls = append(s.calls, call)
 	if s.err != nil {
 		return 0, s.err
 	}
@@ -76,12 +101,21 @@ func (s *fakeServer) CloseNotification(id uint32) error {
 	return s.err
 }
 
-// failWith makes every later call fail with err.
+// failWith makes every later Notify and CloseNotification fail with err.
 func (s *fakeServer) failWith(err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	s.err = err
+}
+
+// announce makes every later Capabilities answer with capabilities and err.
+func (s *fakeServer) announce(capabilities []string, err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.capabilities = capabilities
+	s.capabilitiesErr = err
 }
 
 // holdNotify makes every later Notify wait until release is called, which is
@@ -101,6 +135,50 @@ func (s *fakeServer) recorded() []string {
 	defer s.mu.Unlock()
 
 	return slices.Clone(s.calls)
+}
+
+// fakeChime is a notify.Chime that counts its rings.
+type fakeChime struct {
+	mu    sync.Mutex
+	rings int
+}
+
+func (c *fakeChime) Ring() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.rings++
+}
+
+// rung returns how many times the chime rang.
+func (c *fakeChime) rung() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	return c.rings
+}
+
+// fakeClock is the clock of the notifier, which moves only when the test
+// advances it.
+type fakeClock struct {
+	mu  sync.Mutex
+	now time.Time
+}
+
+// Now is the time on the clock.
+func (c *fakeClock) Now() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	return c.now
+}
+
+// advance moves the clock forward by d.
+func (c *fakeClock) advance(d time.Duration) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.now = c.now.Add(d)
 }
 
 // syncBuffer collects the log the goroutine of the notifier writes while the
@@ -128,18 +206,58 @@ func (b *syncBuffer) String() string {
 type fixture struct {
 	notifier *notify.Notifier
 	server   *fakeServer
+	chime    *fakeChime // nil when the notifier has no chime
+	clock    *fakeClock
 	logs     *syncBuffer
 
 	mu     sync.Mutex
 	clicks []string // the ids onClick received, in order
 }
 
-// newFixture starts a notifier over a fake server, closed when the test ends.
+// newFixture starts a notifier without a chime over a fake server, closed when
+// the test ends.
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
 
-	f := &fixture{server: &fakeServer{}, logs: &syncBuffer{}}
-	f.notifier = notify.New(f.server, f.click, slog.New(slog.NewJSONHandler(f.logs, nil)))
+	return start(t, bareFixture())
+}
+
+// newChimeFixture starts a notifier with a fake chime over a fake server,
+// closed when the test ends.
+func newChimeFixture(t *testing.T) *fixture {
+	t.Helper()
+
+	f := bareFixture()
+	f.chime = &fakeChime{}
+	return start(t, f)
+}
+
+// bareFixture is a fixture whose notifier is still to start.
+func bareFixture() *fixture {
+	return &fixture{
+		server: &fakeServer{},
+		clock:  &fakeClock{now: time.Date(2026, 9, 12, 10, 0, 0, 0, time.UTC)},
+		logs:   &syncBuffer{},
+	}
+}
+
+// start starts the notifier of f, closed when the test ends.
+func start(t *testing.T, f *fixture) *fixture {
+	t.Helper()
+
+	// A nil *fakeChime behind the interface would still be a chime to the
+	// notifier.
+	var ringer notify.Chime
+	if f.chime != nil {
+		ringer = f.chime
+	}
+	f.notifier = notify.New(notify.Deps{
+		Server:  f.server,
+		OnClick: f.click,
+		Chime:   ringer,
+		Log:     slog.New(slog.NewJSONHandler(f.logs, nil)),
+		Now:     f.clock.Now,
+	})
 	t.Cleanup(f.notifier.Close)
 	return f
 }
@@ -195,6 +313,24 @@ func (f *fixture) wantClicks(t *testing.T, want ...string) {
 
 	if diff := cmp.Diff(want, f.clicked()); diff != "" {
 		t.Errorf("clicks mismatch (-want +got):\n%s", diff)
+	}
+}
+
+// waitRings polls until the chime rang exactly want times.
+func (f *fixture) waitRings(t *testing.T, want int) {
+	t.Helper()
+
+	if !eventually(func() bool { return f.chime.rung() == want }) {
+		t.Fatalf("chime rang %d times, want %d", f.chime.rung(), want)
+	}
+}
+
+// wantRings fails the test unless the chime rang exactly want times.
+func (f *fixture) wantRings(t *testing.T, want int) {
+	t.Helper()
+
+	if got := f.chime.rung(); got != want {
+		t.Errorf("chime rang %d times, want %d", got, want)
 	}
 }
 
@@ -264,6 +400,10 @@ func eventually(cond func() bool) bool {
 // notified is the call a notification of the task with the given body makes
 // to the server.
 func notified(body string) string { return "notify:" + title + ":" + body }
+
+// soundNotified is the call a notification of the task with the given body
+// makes to the server when the server plays the chime.
+func soundNotified(body string) string { return notified(body) + ":sound" }
 
 // signal is a signal of the notification service, as the session bus hands it
 // over.
@@ -576,4 +716,153 @@ func TestAServerThatStopsAnsweringNeverHoldsUpTheCaller(t *testing.T) {
 	if shown+dropped != sent {
 		t.Errorf("%d shown and %d dropped, want %d in all", shown, dropped, sent)
 	}
+}
+
+func TestWithoutAChimeANotificationAsksForSilence(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	body := "Step 2 is ready for review."
+	f.server.announce(soundingServer, nil)
+
+	f.notifier.Send("s1", title, body)
+
+	// Without a chime there is nothing to hand the server, so it is not even
+	// asked what it plays.
+	f.waitCalls(t, notified(body))
+}
+
+func TestTheAppRingsTheChimeWhenTheServerPlaysNoSound(t *testing.T) {
+	t.Parallel()
+	f := newChimeFixture(t)
+	body := "Step 2 is ready for review."
+	f.server.announce(silentServer, nil)
+
+	f.notifier.Send("s1", title, body)
+
+	f.waitCalls(t, "capabilities", notified(body))
+	f.waitRings(t, 1)
+}
+
+func TestAServerThatPlaysSoundsPlaysTheChimeItself(t *testing.T) {
+	t.Parallel()
+	f := newChimeFixture(t)
+	body := "Step 2 is ready for review."
+	f.server.announce(soundingServer, nil)
+
+	f.notifier.Send("s1", title, body)
+	f.waitCalls(t, "capabilities", soundNotified(body))
+
+	// The server applies its own do-not-disturb and preferences: the app never
+	// plays a second copy.
+	f.notifier.Close()
+	f.wantRings(t, 0)
+}
+
+func TestABurstOfNotificationsSoundsOnce(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		capabilities []string
+		sounding     func(body string) string // the call of a notification that makes a sound
+		rings        int
+	}{
+		{"the app rings", silentServer, notified, 2},
+		{"the server plays", soundingServer, soundNotified, 0},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			f := newChimeFixture(t)
+			f.server.announce(test.capabilities, nil)
+			review := "Step 2 is ready for review."
+			permission := "Permission requested in api."
+			question := "The agent has a question in web."
+			draft := "The pull request draft of api is ready for your OK."
+
+			f.notifier.Send("s1", title, review)
+			f.notifier.Send("s2", title, permission)
+			f.waitCalls(t, "capabilities", test.sounding(review), notified(permission))
+
+			// Still within the window of the first: shown, in silence.
+			f.clock.advance(burstWindow - time.Millisecond)
+			f.notifier.Send("s3", title, question)
+			f.waitCalls(t, "capabilities", test.sounding(review), notified(permission), notified(question))
+
+			// The window counts from the notification that made the sound, not
+			// from the last one: this one sounds again.
+			f.clock.advance(time.Millisecond)
+			f.notifier.Send("s4", title, draft)
+			f.waitCalls(t,
+				"capabilities", test.sounding(review), notified(permission), notified(question),
+				"capabilities", test.sounding(draft),
+			)
+
+			f.notifier.Close()
+			f.wantRings(t, test.rings)
+		})
+	}
+}
+
+func TestAFailedSendMakesNoSoundAndOpensNoBurst(t *testing.T) {
+	t.Parallel()
+	f := newChimeFixture(t)
+	review := "Step 2 is ready for review."
+	permission := "Permission requested in api."
+	f.server.announce(silentServer, nil)
+	f.server.failWith(errServer)
+
+	f.notifier.Send("s1", title, review)
+	wantFailure(t, f.waitLogged(t, "send notification failed"), "s1")
+	f.wantRings(t, 0)
+
+	// With the clock where it was, the next notification is still the first to
+	// make a sound.
+	f.server.failWith(nil)
+	f.notifier.Send("s2", title, permission)
+	f.waitCalls(t, "capabilities", notified(review), "capabilities", notified(permission))
+	f.waitRings(t, 1)
+}
+
+func TestUnreadableCapabilitiesLeaveTheChimeToTheApp(t *testing.T) {
+	t.Parallel()
+	f := newChimeFixture(t)
+	body := "Step 2 is ready for review."
+	f.server.announce(nil, errServer)
+
+	f.notifier.Send("s1", title, body)
+
+	rec := f.waitLogged(t, "read notification capabilities failed")
+	want := map[string]any{"level": "WARN", "err": errServer.Error()}
+	got := map[string]any{"level": rec["level"], "err": rec["err"]}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("log record mismatch (-want +got):\n%s", diff)
+	}
+	f.waitCalls(t, "capabilities", notified(body))
+	f.waitRings(t, 1)
+}
+
+func TestOnlyASendMakesASound(t *testing.T) {
+	t.Parallel()
+	f := newChimeFixture(t)
+	review := "Step 2 is ready for review."
+	permission := "Permission requested in api."
+	f.server.announce(silentServer, nil)
+
+	f.notifier.Send("s1", title, review)
+	f.waitRings(t, 1)
+	f.clock.advance(time.Minute)
+
+	f.notifier.HandleSignal(actionInvoked(1, notify.DefaultAction))
+	f.waitClicks(t, "s1")
+	f.notifier.Send("s2", title, permission)
+	f.notifier.Withdraw("s2")
+	f.waitCalls(t, "capabilities", notified(review), "capabilities", notified(permission), "close:2")
+	f.notifier.HandleSignal(notificationClosed(2, closedByCall))
+	f.notifier.Close()
+
+	// The two sends made the only sounds: the click, the withdraw, the close
+	// and Close made none.
+	f.wantRings(t, 2)
 }

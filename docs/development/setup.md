@@ -2,7 +2,7 @@
 
 ## Pré-requisitos
 
-Quatro coisas são instaladas à mão; tudo o mais vem delas.
+Cinco coisas são instaladas à mão; tudo o mais vem delas.
 
 1. **Pacotes do sistema.** As dependências de build do Wails no Linux e a toolchain C que o cgo precisa:
 
@@ -17,6 +17,8 @@ Quatro coisas são instaladas à mão; tudo o mais vem delas.
 3. **Claude Code.** O `claude` no `PATH` ou em `~/.local/bin`, logado uma vez com `claude` num terminal. `MYSPEC_CLAUDE_PATH` fixa outro caminho.
 
 4. **git, gh e VS Code.** `git` no `PATH`, capaz de alcançar o `origin` dos repositórios sem pedir senha: o app roda com `GIT_TERMINAL_PROMPT=0`, e um fetch que peça senha falha em vez de pendurar. `gh` autenticado, para a etapa de PR. `code` no `PATH` é o que **Abrir no VS Code** roda; sem ele o app avisa e o resto funciona.
+
+5. **Um player de áudio.** `pw-play` (PipeWire), `paplay` (PulseAudio) ou `aplay` (alsa-utils) no `PATH`, para o som das notificações. Um desktop com PipeWire ou PulseAudio já traz um deles. Sem nenhum, as notificações aparecem mudas e o log diz por quê.
 
 ## Setup
 

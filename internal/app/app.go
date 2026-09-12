@@ -20,6 +20,7 @@ import (
 	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/models"
+	"github.com/guilhermt/myspec/internal/platform/chime"
 	"github.com/guilhermt/myspec/internal/platform/logging"
 	"github.com/guilhermt/myspec/internal/platform/notify"
 	"github.com/guilhermt/myspec/internal/platform/xdg"
@@ -64,6 +65,7 @@ type App struct {
 	flow      *flow.Service
 	attention *attention.Service
 	notifier  *notify.Notifier // nil when the desktop has no notification service
+	player    *chime.Player    // nil when there is no notifier or the chime could not be installed
 
 	mu      sync.Mutex
 	wails   *application.App
@@ -118,7 +120,12 @@ func Run(cfg Config) int {
 
 	a := &App{log: log}
 
-	a.notifier = a.startNotifications()
+	// Without the chime on disk the notifications are silent; they still show.
+	chimePath, err := chime.Install(dirs.Data)
+	if err != nil {
+		log.Warn("install chime failed", "err", err)
+	}
+	a.notifier = a.startNotifications(chimePath)
 	// A notifier that could not start is no notifier at all, not a nil one
 	// behind the interface.
 	var notifier attention.Notifier
@@ -311,9 +318,9 @@ func (a *App) syncTasks() {
 	a.flow.Sync(ctx)
 }
 
-// shutdown stops the situations, every session, the notifications and the
-// watchers while the window is still closing, so that no CLI process and no
-// notification outlives the app.
+// shutdown stops the situations, every session, the notifications, the chime
+// and the watchers while the window is still closing, so that no CLI process and
+// no notification outlives the app.
 func (a *App) shutdown() {
 	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
@@ -324,6 +331,11 @@ func (a *App) shutdown() {
 	// The notifications go with the app: one left behind would lead nowhere.
 	if a.notifier != nil {
 		a.notifier.Close()
+	}
+	// After the notifier, which is what rings it: a chime still playing is cut
+	// off rather than waited for.
+	if a.player != nil {
+		a.player.Close()
 	}
 	if err := a.review.Close(); err != nil {
 		a.log.Error("close review watcher failed", "err", err)
