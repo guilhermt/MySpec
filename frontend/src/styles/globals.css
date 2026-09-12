@@ -203,3 +203,16 @@
     box-shadow: 0 0 0 3px color-mix(in oklch, var(--flash-color) 45%, transparent);
   }
 }
+
+/* Dialogs are centred with top and left at 50% and a -50% translate. When the
+   width or the height of a dialog is odd, the translate lands on half a pixel,
+   and WebKitGTK composites the dialog there and resamples it, blurring its text
+   and borders. Rounding each value keeps the dialog on whole pixels. Unlayered,
+   so it wins over the utilities of the generated components; globals.test.tsx
+   fails when those components stop matching it. */
+[data-slot="dialog-content"],
+[data-slot="alert-dialog-content"] {
+  top: round(50%, 1px);
+  left: round(50%, 1px);
+  translate: round(-50%, 1px) round(-50%, 1px);
+}
