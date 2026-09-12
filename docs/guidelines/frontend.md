@@ -35,6 +35,7 @@ React 19, TypeScript em modo strict, Vite, Tailwind CSS 4, shadcn/ui sobre Base 
 
 - Tailwind com os tokens de `styles/globals.css` (cores em oklch, temas `:root` e `.dark`) e `styles/tokens.css` (fontes, tamanhos, durações, cores de status). Uma cor nova é um token, não um valor inline.
 - Tamanhos em `rem`; o tamanho da fonte raiz escala a interface inteira.
+- Um elemento posicionado com texto não é centralizado com translate percentual puro (`left-1/2 -translate-x-1/2`): quando a largura ou a altura dá ímpar, o deslocamento cai em meio pixel, e o WebKitGTK compõe o elemento nessa posição e o reamostra, o que borra texto e bordas. Cada valor da centralização é arredondado para o pixel com `round()`, como no `NewMessagesPill`: `left-[round(50%,1px)] translate-x-[round(-50%,1px)]`. Os dialogs do shadcn (`DialogContent`, `AlertDialogContent`) recebem o mesmo arredondamento de uma regra sem camada no fim de `styles/globals.css`, que os seleciona pelo `data-slot`; `styles/globals.test.tsx` falha se os componentes gerados deixarem de corresponder a ela.
 - Biome formata: aspas duplas, ponto e vírgula, vírgula final, largura 100. `task fmt:web` aplica; o hook de pre-commit também.
 - `import type` para tipos; imports ordenados pelo Biome; sem `any`, sem `!` de non-null, sem variáveis ou imports sem uso. `useEffect` com as dependências exaustivas.
 - Um `biome-ignore` exige a regra e a razão.

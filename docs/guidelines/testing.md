@@ -52,7 +52,7 @@ Os pacotes que rodam binários testam contra o binário real ou contra um fake q
 
 - Vitest com Testing Library, `user-event` e jsdom. `describe` com o nome do componente ou módulo, `it` com uma frase: `it("places the step in the plan, with its title and repository")`.
 - Um arquivo de testes ao lado do que testa: `StepBar.test.tsx` ao lado de `StepBar.tsx`, `status.test.ts` ao lado de `status.ts`.
-- A lógica de apresentação em `.ts` é testada como função pura, sem renderizar. Os componentes são testados pelo que o usuário vê e faz: `getByRole`, `getByText`, `user.click`, `user.type`. Consultar classes só para o que não tem outra forma de ser observado, como o tom de um ponto de status.
+- A lógica de apresentação em `.ts` é testada como função pura, sem renderizar. Os componentes são testados pelo que o usuário vê e faz: `getByRole`, `getByText`, `user.click`, `user.type`. Consultar classes só para o que não tem outra forma de ser observado, como o tom de um ponto de status ou a centralização alinhada ao pixel, que o jsdom não calcula.
 - Um comportamento por `it`. Sem snapshots.
 
 ### Setup e dublês
