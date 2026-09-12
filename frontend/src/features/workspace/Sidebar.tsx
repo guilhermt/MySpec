@@ -1,6 +1,7 @@
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { WaitingSection } from "@/features/attention/WaitingSection";
 import { HistoryButton } from "@/features/history/HistoryButton";
+import { SettingsButton } from "@/features/settings/SettingsButton";
 import { ThemeToggle } from "@/features/theme/ThemeToggle";
 import { WorkspaceTree } from "@/features/tree/WorkspaceTree";
 import { WorkspaceSwitcher } from "@/features/workspace/WorkspaceSwitcher";
@@ -17,7 +18,8 @@ export function Sidebar() {
       </ScrollArea>
       <div className="flex h-11 shrink-0 items-center gap-2 border-t px-2">
         <HistoryButton />
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-1">
+          <SettingsButton />
           <ThemeToggle />
         </div>
       </div>

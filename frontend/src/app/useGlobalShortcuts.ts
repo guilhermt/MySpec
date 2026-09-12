@@ -40,6 +40,23 @@ export function useGlobalShortcuts(): void {
           }
           break;
         }
+        case ",": {
+          const store = useAppStore.getState();
+          if ((store.app?.workspace ?? null) === null) {
+            return;
+          }
+          event.preventDefault();
+          // The creation dialog holds what the user is typing; it is not left behind.
+          if (store.newTaskFor !== null) {
+            return;
+          }
+          if (store.settingsOpen) {
+            store.closeSettings();
+          } else {
+            store.openSettings();
+          }
+          break;
+        }
         default:
           break;
       }

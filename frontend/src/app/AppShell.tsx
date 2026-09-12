@@ -2,15 +2,17 @@ import { useViewedSituation } from "@/features/attention/useViewedSituation";
 import { ArchivedTaskView } from "@/features/history/ArchivedTaskView";
 import { HistoryPanel } from "@/features/history/HistoryPanel";
 import { NodePanel } from "@/features/node-panel/NodePanel";
+import { SettingsView } from "@/features/settings/SettingsView";
 import { TaskView } from "@/features/task/TaskView";
 import { NewTaskDialog } from "@/features/task-create/NewTaskDialog";
 import { Sidebar } from "@/features/workspace/Sidebar";
 import { useAppStore } from "@/store/app-store";
 
-/** MainArea is the one screen the app is on: a task, the history, or a node. */
+/** MainArea is the one screen the app is on: a task, the history, the settings, or a node. */
 function MainArea() {
   const openTaskId = useAppStore((state) => state.openTaskId);
   const openArchivedId = useAppStore((state) => state.openArchivedId);
+  const settingsOpen = useAppStore((state) => state.settingsOpen);
   const historyOpen = useAppStore((state) => state.historyOpen);
 
   if (openTaskId !== null) {
@@ -18,6 +20,9 @@ function MainArea() {
   }
   if (openArchivedId !== null) {
     return <ArchivedTaskView taskId={openArchivedId} />;
+  }
+  if (settingsOpen) {
+    return <SettingsView />;
   }
   return historyOpen ? <HistoryPanel /> : <NodePanel />;
 }
