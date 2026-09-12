@@ -2,22 +2,29 @@ package store
 
 import (
 	"database/sql"
+	"encoding/json"
 	"log/slog"
+	"slices"
+	"strings"
 	"testing"
 	"testing/fstest"
 
 	"github.com/google/go-cmp/cmp"
+
+	"github.com/guilhermt/myspec/internal/models"
+	"github.com/guilhermt/myspec/internal/task"
 )
 
 // stagesVersion is the migration that brought the stages after the PRD,
 // commitsVersion the one that gave a step its commits, prVersion the one that
-// brought the PR stage, and latestVersion the version the embedded migrations
-// end at, the one that brought the situations.
+// brought the PR stage, modelsVersion the one that brought the models, and
+// latestVersion the version the embedded migrations end at.
 const (
 	stagesVersion  = 3
 	commitsVersion = 5
 	prVersion      = 6
-	latestVersion  = 8
+	modelsVersion  = 9
+	latestVersion  = 9
 )
 
 // mapFS builds a migrations tree with the given file names.
@@ -268,6 +275,41 @@ func TestMigrateGivesTheWorktreesOfAnOlderDatabaseNoBaseAndAddsThePRRuns(t *test
 	if number != 0 || url != "" || state != "" || reviewed != "" || pass != 0 {
 		t.Errorf("pr run = %d %q %q %q %d, want a row that knows nothing about a pull request yet",
 			number, url, state, reviewed, pass)
+	}
+}
+
+func TestTheModelsMigrationGivesTheFactoryDefaults(t *testing.T) {
+	t.Parallel()
+
+	migrations, err := loadMigrations(migrationsFS)
+	if err != nil {
+		t.Fatalf("loadMigrations() = %v, want nil", err)
+	}
+	index := slices.IndexFunc(migrations, func(candidate migration) bool { return candidate.version == modelsVersion })
+	if index < 0 {
+		t.Fatalf("no migration with version %d", modelsVersion)
+	}
+
+	_, after, found := strings.Cut(migrations[index].sql, "SET models = '")
+	if !found {
+		t.Fatal("the models migration does not set the models of the tasks that exist")
+	}
+	encoded, _, found := strings.Cut(after, "';")
+	if !found {
+		t.Fatal("the models migration does not close the value it sets")
+	}
+
+	var m task.Models
+	if err := json.Unmarshal([]byte(encoded), &m); err != nil {
+		t.Fatalf("json.Unmarshal(%q) = %v, want nil", encoded, err)
+	}
+	// The migration and the factory have to say the same thing, so that a task
+	// that existed before it starts where a new one does.
+	if diff := cmp.Diff(models.Factory(), m.Stages); diff != "" {
+		t.Errorf("stages mismatch (-want +got):\n%s", diff)
+	}
+	if m.Steps != nil {
+		t.Errorf("Steps = %v, want no step with a choice of its own", m.Steps)
 	}
 }
 

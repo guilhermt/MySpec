@@ -141,6 +141,12 @@ export interface CreateTaskRequest {
      */
     "repoPath": string;
     "initialContext": string;
+
+    /**
+     * Models are the choices of the creation dialog. A stage left out takes the
+     * default of the app.
+     */
+    "models": StageModel[] | null;
 }
 
 /**
@@ -411,6 +417,29 @@ export interface PlanProblem {
 }
 
 /**
+ * Prompt is the text a kind of session opens with, as the settings show it.
+ */
+export interface Prompt {
+    /**
+     * Stage is prd, tech_spec, plan, commit, pr or pr_review, a string for the
+     * same reason as Notice.Reason.
+     */
+    "stage": string;
+    "text": string;
+
+    /**
+     * the user edited it: it no longer follows the default of the app
+     */
+    "modified": boolean;
+
+    /**
+     * Placeholders are the placeholders the default of the prompt uses, in the
+     * order the settings list them; never nil.
+     */
+    "placeholders": string[] | null;
+}
+
+/**
  * Question is one of the questions of an AskUserQuestion call.
  */
 export interface Question {
@@ -563,6 +592,13 @@ export interface RepoPR {
      * or error.
      */
     "sessionStatus": string;
+
+    /**
+     * SessionModel and SessionEffort are what the session of the repository runs
+     * with from its next message on; "" without a session.
+     */
+    "sessionModel": string;
+    "sessionEffort": string;
     "turnRunning": boolean;
     "processRunning": boolean;
     "retryAttempt": number;
@@ -661,6 +697,27 @@ export interface SituationStarted {
 }
 
 /**
+ * StageModel is the model and effort of one stage.
+ */
+export interface StageModel {
+    /**
+     * Stage is prd, tech_spec, plan, implementation, pr or pr_review, a string
+     * for the same reason as Notice.Reason.
+     */
+    "stage": string;
+
+    /**
+     * claude-fable-5-1, claude-opus-5 or claude-sonnet-5
+     */
+    "model": string;
+
+    /**
+     * low, medium, high, xhigh or max
+     */
+    "effort": string;
+}
+
+/**
  * State is everything the interface renders, produced by Go and never derived
  * on the frontend.
  */
@@ -681,6 +738,12 @@ export interface State {
      */
     "theme": string;
     "systemDark": boolean;
+
+    /**
+     * ModelDefaults are the choices a new task starts each stage with, in workflow
+     * order; never nil.
+     */
+    "modelDefaults": StageModel[] | null;
     "notice": Notice | null;
 
     /**
@@ -755,6 +818,22 @@ export interface Step {
      * the last approval ended without a commit
      */
     "commitFailed": boolean;
+
+    /**
+     * what the step runs with, or will run with
+     */
+    "model": string;
+    "effort": string;
+
+    /**
+     * not started, with a choice of its own instead of the one of implementation
+     */
+    "adjusted": boolean;
+
+    /**
+     * not started: its choice can still change
+     */
+    "modelEditable": boolean;
 }
 
 /**
@@ -777,6 +856,29 @@ export interface StepBlock {
      * dirty worktree only
      */
     "files": number;
+}
+
+/**
+ * TaskStageModel is the model and effort of one stage of a task, with what the
+ * user can still do about it.
+ */
+export interface TaskStageModel {
+    /**
+     * as StageModel.Stage
+     */
+    "stage": string;
+    "model": string;
+    "effort": string;
+
+    /**
+     * a session of the stage is still to start
+     */
+    "editable": boolean;
+
+    /**
+     * a session of the stage runs now: it changes in its conversation
+     */
+    "live": boolean;
 }
 
 /**
@@ -809,6 +911,13 @@ export interface TaskSummary {
      * or error.
      */
     "sessionStatus": string;
+
+    /**
+     * SessionModel and SessionEffort are what the session the task screen shows
+     * runs with from its next message on; "" without a session.
+     */
+    "sessionModel": string;
+    "sessionEffort": string;
     "turnRunning": boolean;
     "processRunning": boolean;
     "retryAttempt": number;
@@ -842,6 +951,11 @@ export interface TaskSummary {
      * what the task waits on the user for, the most urgent first; never nil
      */
     "situations": Situation[] | null;
+
+    /**
+     * every stage, in workflow order; never nil
+     */
+    "models": TaskStageModel[] | null;
     "canContinue": boolean;
     "artifactVersion": number;
     "lastError": string;

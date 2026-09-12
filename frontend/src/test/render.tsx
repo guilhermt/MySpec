@@ -24,6 +24,10 @@ export interface StoreOptions {
       | "archivedNotice"
       | "leftovers"
       | "flashing"
+      | "settingsOpen"
+      | "settingsSection"
+      | "promptEdit"
+      | "pendingLeave"
     >
   >;
 }
@@ -50,6 +54,10 @@ export function resetAppStore(options: StoreOptions = {}): void {
     archivedNotice: options.ui?.archivedNotice ?? null,
     leftovers: options.ui?.leftovers ?? null,
     flashing: options.ui?.flashing ?? new Set<string>(),
+    settingsOpen: options.ui?.settingsOpen ?? false,
+    settingsSection: options.ui?.settingsSection ?? "models",
+    promptEdit: options.ui?.promptEdit ?? null,
+    pendingLeave: options.ui?.pendingLeave ?? null,
   });
 }
 

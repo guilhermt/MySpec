@@ -22,6 +22,7 @@ function ui(overrides: Partial<TreeUi> = {}): TreeUi {
     expandedNodeIds: new Set<NodeId>([ROOT_NODE_ID]),
     openTaskId: null,
     historyOpen: false,
+    settingsOpen: false,
     flashing: new Set<string>(),
     ...overrides,
   };
@@ -105,6 +106,14 @@ describe("visibleRows", () => {
     const state = makeState({ tasks: [ROOT_TASK] });
 
     const rows = visibleRows(state, ui({ historyOpen: true }));
+
+    expect(rows.filter((row) => "selected" in row && row.selected)).toHaveLength(0);
+  });
+
+  it("selects no node while the settings are open", () => {
+    const state = makeState({ tasks: [ROOT_TASK] });
+
+    const rows = visibleRows(state, ui({ settingsOpen: true }));
 
     expect(rows.filter((row) => "selected" in row && row.selected)).toHaveLength(0);
   });

@@ -108,6 +108,17 @@ describe("TaskHeader", () => {
     expect(screen.getByRole("button", { name: "Pause" })).toBeInTheDocument();
   });
 
+  it("has the models of the task a click away", async () => {
+    const { user } = header();
+
+    await user.click(screen.getByRole("button", { name: "Models" }));
+
+    expect(await screen.findByRole("heading", { name: "Models" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Plan model: Fable 5.1 · high" }),
+    ).toBeInTheDocument();
+  });
+
   it("says the panel is empty until an artifact exists", async () => {
     const onToggle = vi.fn();
     const { user } = header({}, onToggle);

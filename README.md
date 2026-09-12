@@ -113,12 +113,13 @@ Everything the app keeps lives under `~/.local/share/myspec/`:
   and every conversation.
 - `prompts/prd.md`, `prompts/tech_spec.md`, `prompts/plan.md`,
   `prompts/commit.md`, `prompts/pr.md` and `prompts/pr_review.md`, the prompts
-  the app sends: the first three start the session of each planning stage,
-  `commit.md` is what an approved step, or the approved changes of a pull
-  request review, is committed with, and `pr.md` and `pr_review.md` start the
-  pull request and pull request review sessions of each repository. Prompts
-  cannot be edited in the app yet, so every time it starts the app writes the
-  defaults of its version, replacing any prompt that differs from them. A
+  the user edited in the settings: the first three start the session of each
+  planning stage, `commit.md` is what an approved step, or the approved changes
+  of a pull request review, is committed with, and `pr.md` and `pr_review.md`
+  start the pull request and pull request review sessions of each repository.
+  The defaults live in the binary, so a prompt with no file here follows the
+  default of the version that runs, and a file identical to the default is
+  removed when the app starts. The prompt is read when a session begins, so a
   session already running keeps the prompt it started with.
 - `workspaces/<name>-<hash>/tasks/<task>/`, the artifacts of each task, in a
   folder per workspace and per task: `PRD.md`, `tech-spec.md` and
@@ -146,6 +147,12 @@ and reads the event stream back. A process with nothing to do for ten minutes is
 stopped; the next message brings it back with `--resume`, and the agent still
 remembers the conversation.
 
+Every process also gets `--model` and `--effort`, with what the session holds:
+the choice of its stage or step when it was created, or the one the user picked
+in the conversation since. A change in the conversation takes effect on the next
+message, which stops the idle process and starts it again with `--resume` and
+the new flags.
+
 When something looks wrong, the log is at `~/.local/state/myspec/myspec.log`.
 `claude session ready` marks a process that started and answered, with the task
 it belongs to, and `binding failed` marks a call from the interface the Go side
@@ -164,6 +171,13 @@ the commit prompt is sent; `step committed`, with the short sha and the subject
 of the commit; `commit did not happen`, when the commit turn ended without one;
 `implementation complete`, when the last step is committed; and
 `review read failed`, with the path of the worktree and what git said.
+
+The models and the prompts add `model default changed`, `task model set`,
+`task step model set`, `session model set` and `session model changed`, with the
+stage or the step and what it runs with; `claude restarting`, when a change in a
+conversation brings the process back with the new flags; and `prompt saved`,
+`prompt restored` and `prompt copy of the default removed`, with the prompt they
+are about.
 
 ## Stages
 

@@ -203,7 +203,7 @@ As sessões rodam no modo auto do Claude Code, o mesmo que o usuário usa hoje. 
 
 ### Modelo e esforço
 
-Cada tipo de sessão tem um **modelo e um esforço padrão**, configurados no produto. Na criação da task o usuário vê esses padrões e pode ajustar qualquer etapa para aquela task. Os comandos que hoje ele digita no terminal para isso deixam de existir no fluxo: viram configuração.
+Cada tipo de sessão tem um **modelo e um esforço padrão**, configurados no produto. Na criação da task o usuário vê esses padrões e pode ajustar qualquer etapa para aquela task. Os comandos que hoje ele digita no terminal para isso deixam de existir no fluxo: viram configuração. Na lista de steps, cada step que ainda não começou pode ter modelo e esforço próprios. Dentro de uma conversa em andamento, o usuário troca o modelo e o esforço daquela sessão, e a troca vale a partir da mensagem seguinte.
 
 ### Pausar e descartar
 
@@ -219,14 +219,13 @@ O produto detecta o fim de uma etapa pelo aparecimento do artefato dela no armaz
 
 ### Área de prompts
 
-O produto tem uma área dedicada onde o usuário vê e edita o prompt de cada tipo de sessão, renderizado como Markdown. É o equivalente a editar as skills hoje, só que dentro do produto. O usuário itera nos prompts com a mesma liberdade que tem com as skills.
+O produto tem uma área dedicada onde o usuário vê e edita o prompt de cada tipo de sessão, renderizado como Markdown. É o equivalente a editar as skills hoje, só que dentro do produto. O usuário itera nos prompts com a mesma liberdade que tem com as skills. Um prompt editado pode voltar ao padrão a qualquer momento, e um prompt nunca editado acompanha o padrão de cada nova versão.
 
 ### Prompts existentes
 
 - **PRD**: reproduz a skill `gm-prd`.
 - **Tech spec**: reproduz a skill `gm-tech-spec`.
-- **Plano de steps**: reproduz a skill `gm-plan-tasks`, com o campo de repositório em cada step.
-- **Implementação**: o template do arquivo de step, que é o prompt integral da sessão de implementação.
+- **Plano de steps**: reproduz a skill `gm-plan-tasks`, com o campo de repositório em cada step e o template do arquivo de step, que é o prompt integral de cada sessão de implementação.
 - **Commit**: commita as alterações aprovadas com uma mensagem simples e legível. Na etapa de review de PR, também sobe o commit para a PR.
 - **PR**: prepara o rascunho de título e descrição, apresenta ao usuário e, após o OK, abre a PR na branch base configurada, dev por padrão, perguntando quando ela não existe.
 - **Review de PR**: revisa a PR, apresenta as alterações que considera necessárias, implementa as que o usuário aprovar e repete até a revisão fechar limpa.

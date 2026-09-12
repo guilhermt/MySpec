@@ -79,6 +79,22 @@ func prSession(id, slug string) session.Key {
 	return session.Key{TaskID: id, Stage: session.PRStage(slug)}
 }
 
+// waitPRSession polls until the session of the pull request of a repository
+// has been opened, and answers with what it was started with. Drafting is
+// recorded before the session starts, so a test that waits on the status alone
+// can still be ahead of the Start call.
+func (f *fixture) waitPRSession(t *testing.T, id, slug string) session.TaskInfo {
+	t.Helper()
+
+	key := prSession(id, slug)
+	waitFor(t, "the pull request session of "+slug, func() bool {
+		_, ok := f.sessions.info(key)
+		return ok
+	})
+	info, _ := f.sessions.info(key)
+	return info
+}
+
 // startPR brings a task to the commit of the last step of its plan, which is
 // what puts it in the PR stage.
 func startPR(t *testing.T, f *fixture, plan task.Plan) {
@@ -139,10 +155,7 @@ func TestTheLastCommitOfAPlanOpensThePRStageOfEveryRepository(t *testing.T) {
 	}
 
 	// Each repository has a conversation of its own, in its own worktree.
-	info, ok := f.sessions.info(prSession("task-1", "api"))
-	if !ok {
-		t.Fatal("the pr session of api was not started")
-	}
+	info := f.waitPRSession(t, "task-1", "api")
 	if want := worktree.Path(workspace, "api", "task-1"); info.Dir != want {
 		t.Errorf("session dir = %q, want %q", info.Dir, want)
 	}

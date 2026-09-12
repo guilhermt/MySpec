@@ -93,8 +93,12 @@ export function visibleRows(state: State, ui: TreeUi): TreeRowModel[] {
       ...node,
       kind: "node",
       // A node loses the selection to whatever else the main area is showing: an
-      // open task, or the history.
-      selected: ui.selectedNodeId === node.id && ui.openTaskId === null && !ui.historyOpen,
+      // open task, the history, or the settings.
+      selected:
+        ui.selectedNodeId === node.id &&
+        ui.openTaskId === null &&
+        !ui.historyOpen &&
+        !ui.settingsOpen,
       level,
       expanded,
       hidden,

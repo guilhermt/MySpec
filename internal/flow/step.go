@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/guilhermt/myspec/internal/git"
+	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/review"
 	"github.com/guilhermt/myspec/internal/session"
@@ -53,10 +54,17 @@ type StepState struct {
 	WorktreePath string           // "" until the worktree of the repository of the step exists
 	Review       *review.Snapshot // the review states and committing only
 
+	Choice   models.Choice // the model and effort the step runs with, or will run with
+	Adjusted bool          // not started, with a choice of its own instead of the one of implementation
+
 	CommitSHA     string // done only
 	CommitSubject string
 	CommitFailed  bool // the last approval ended without a commit
 }
+
+// ModelEditable reports whether the model and effort of the step can still
+// change: its session has not started.
+func (st StepState) ModelEditable() bool { return st.Status == StepNotStarted }
 
 // The ways the flow refuses to act on a step.
 var (
@@ -78,6 +86,7 @@ type prepareOptions struct {
 
 // Steps is every step of the plan of a task with its state, in order.
 func (s *Service) Steps(id string) []StepState {
+	t, _ := s.tasks.Get(id)
 	a, _ := s.tasks.Artifacts(id)
 	runs := s.tasks.StepRuns(id)
 	phase := s.phaseOf(id)
@@ -121,6 +130,8 @@ func (s *Service) Steps(id string) []StepState {
 		if state.Status != StepDone && noCommit {
 			state.CommitFailed, noCommit = true, false
 		}
+		state.Choice = t.Models.Step(step.Number)
+		state.Adjusted = state.Status == StepNotStarted && t.Models.Adjusted(step.Number)
 		states = append(states, state)
 	}
 	return states
@@ -380,6 +391,16 @@ func (s *Service) prepare(ctx context.Context, id string, opts prepareOptions) {
 		s.log.Error("record started step failed", "task", id, "step", step.Number, "error", err)
 		return
 	}
+	// The step starts with the choice it has now, which from here on is its own:
+	// a later change of implementation is for the steps still to start.
+	if !t.Models.Adjusted(step.Number) {
+		updated, err := s.tasks.SetStepModel(dbCtx, id, step.Number, t.Models.Step(step.Number))
+		if err != nil {
+			s.log.Error("record the model of the step failed", "task", id, "step", step.Number, "error", err)
+			return
+		}
+		t = updated
+	}
 	info := stepInfo(t, step, wt, s.tasks.Repositories(t))
 	if err := s.sessions.Start(dbCtx, info, opts.restarted); err != nil {
 		// The session records a process that fails in the conversation itself.
@@ -580,6 +601,7 @@ func stepInfo(t task.Task, step task.Step, wt worktree.Worktree, repos []task.Re
 		TechSpecPath: t.TechSpecPath(),
 		StepsDir:     t.StepsDir(),
 		Repositories: rels,
+		Choice:       t.Models.Step(step.Number),
 	}
 }
 

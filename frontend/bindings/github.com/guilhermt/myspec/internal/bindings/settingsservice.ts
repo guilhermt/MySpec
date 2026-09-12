@@ -10,6 +10,40 @@
 // @ts-ignore: Unused imports
 import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wailsio/runtime";
 
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as $models from "./models.js";
+
+/**
+ * GetPrompt reads a prompt as the settings show it.
+ */
+export function GetPrompt(stage: string): $CancellablePromise<$models.Prompt> {
+    return $Call.ByID(769625320, stage);
+}
+
+/**
+ * RestorePrompt throws the edit of a prompt away, so that it follows the
+ * default of the app again.
+ */
+export function RestorePrompt(stage: string): $CancellablePromise<$models.Prompt> {
+    return $Call.ByID(3333511018, stage);
+}
+
+/**
+ * SavePrompt stores the text of a prompt. The text of the default is no edit:
+ * the prompt follows the default again.
+ */
+export function SavePrompt(stage: string, text: string): $CancellablePromise<$models.Prompt> {
+    return $Call.ByID(1716218985, stage, text);
+}
+
+/**
+ * SetModelDefault stores the model and effort new tasks start a stage with.
+ */
+export function SetModelDefault(stage: string, model: string, effort: string): $CancellablePromise<void> {
+    return $Call.ByID(606692884, stage, model, effort);
+}
+
 /**
  * SetTheme stores the theme preference: system, light or dark.
  */

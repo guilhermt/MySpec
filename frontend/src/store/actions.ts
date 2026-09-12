@@ -1,6 +1,10 @@
+import type { ModelChoice } from "@/lib/models";
 import type {
   CreateTaskRequest,
+  ModelStage,
   PermissionDecision,
+  Prompt,
+  PromptStage,
   TaskStage,
   ThemePreference,
 } from "@/lib/wails";
@@ -40,10 +44,50 @@ export function setTheme(preference: ThemePreference): Promise<void> {
   return run(() => api.setTheme(preference));
 }
 
+/** setModelDefault changes what the app gives a stage of the tasks created next. */
+export function setModelDefault(stage: ModelStage, choice: ModelChoice): Promise<void> {
+  return run(() => api.setModelDefault(stage, choice.model, choice.effort));
+}
+
+/** setStageModel changes what a stage of a task runs with, before it starts. */
+export function setStageModel(
+  taskId: string,
+  stage: ModelStage,
+  choice: ModelChoice,
+): Promise<void> {
+  return run(() => api.setStageModel(taskId, stage, choice.model, choice.effort));
+}
+
+/** setStepModel gives one step a choice of its own, apart from the implementation. */
+export function setStepModel(taskId: string, step: number, choice: ModelChoice): Promise<void> {
+  return run(() => api.setStepModel(taskId, step, choice.model, choice.effort));
+}
+
+/** setSessionModel changes what a session runs with from its next message on. */
+export function setSessionModel(taskId: string, stage: string, choice: ModelChoice): Promise<void> {
+  return run(() => api.setSessionModel(taskId, stage, choice.model, choice.effort));
+}
+
 /**
- * createTask is the one action that does not swallow its failure: the creation
- * dialog stays open and shows the message next to the form instead of the
- * global banner, so the user can fix the name and try again.
+ * getPrompt, savePrompt and restorePrompt do not swallow their failure: the
+ * prompt screen shows it where the user is, and the editor keeps the text.
+ */
+export function getPrompt(stage: PromptStage): Promise<Prompt> {
+  return api.getPrompt(stage);
+}
+
+export function savePrompt(stage: PromptStage, text: string): Promise<Prompt> {
+  return api.savePrompt(stage, text);
+}
+
+export function restorePrompt(stage: PromptStage): Promise<Prompt> {
+  return api.restorePrompt(stage);
+}
+
+/**
+ * createTask does not swallow its failure either: the creation dialog stays
+ * open and shows the message next to the form instead of the global banner, so
+ * the user can fix the name and try again.
  */
 export function createTask(req: CreateTaskRequest): Promise<string> {
   return api.createTask(req);

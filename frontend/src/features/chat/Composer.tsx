@@ -4,21 +4,10 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { SessionState } from "@/features/chat/session";
+import { ModelPicker } from "@/features/models/ModelPicker";
 import { asSessionStatus } from "@/lib/wails";
-import { interrupt, resume, sendMessage } from "@/store/actions";
+import { interrupt, resume, sendMessage, setSessionModel } from "@/store/actions";
 import { useAppStore, useDraft } from "@/store/app-store";
-
-function PausedNotice({ taskId, stage }: { taskId: string; stage: string }) {
-  return (
-    <div className="mx-auto flex w-full max-w-[58.5rem] items-center justify-between gap-3 rounded-lg border bg-muted p-3">
-      <p className="text-sm">Paused. Resume to keep talking.</p>
-      <Button onClick={() => void resume(taskId, stage)}>
-        <Play />
-        Resume
-      </Button>
-    </div>
-  );
-}
 
 export interface ComposerProps {
   taskId: string;
@@ -26,6 +15,36 @@ export interface ComposerProps {
   stage: string;
   /** session is the one being written to, which need not be the task's. */
   session: SessionState;
+}
+
+/** SessionModel is the model and effort of the session, changed from the next message on. */
+function SessionModel({ taskId, stage, session }: ComposerProps) {
+  if (session.sessionModel === "") {
+    return null;
+  }
+  return (
+    <ModelPicker
+      variant="inline"
+      label="Session"
+      value={{ model: session.sessionModel, effort: session.sessionEffort }}
+      onChange={(choice) => void setSessionModel(taskId, stage, choice)}
+    />
+  );
+}
+
+function PausedNotice({ taskId, stage, session }: ComposerProps) {
+  return (
+    <div className="mx-auto flex w-full max-w-[58.5rem] items-center justify-between gap-3 rounded-lg border bg-muted p-3">
+      <p className="text-sm">Paused. Resume to keep talking.</p>
+      <div className="flex items-center gap-2">
+        <SessionModel taskId={taskId} stage={stage} session={session} />
+        <Button onClick={() => void resume(taskId, stage)}>
+          <Play />
+          Resume
+        </Button>
+      </div>
+    </div>
+  );
 }
 
 /**
@@ -61,7 +80,7 @@ export function Composer({ taskId, stage, session }: ComposerProps) {
   if (asSessionStatus(session.sessionStatus) === "paused") {
     return (
       <div className="border-t p-3">
-        <PausedNotice taskId={taskId} stage={stage} />
+        <PausedNotice taskId={taskId} stage={stage} session={session} />
       </div>
     );
   }
@@ -101,10 +120,13 @@ export function Composer({ taskId, stage, session }: ComposerProps) {
             </Button>
           )}
         </div>
-        <p className="text-xs text-muted-foreground">
-          Enter to send · Shift+Enter for a new line
-          {turnRunning && " · Esc to stop"}
-        </p>
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs text-muted-foreground">
+            Enter to send · Shift+Enter for a new line
+            {turnRunning && " · Esc to stop"}
+          </p>
+          <SessionModel taskId={taskId} stage={stage} session={session} />
+        </div>
       </div>
     </div>
   );

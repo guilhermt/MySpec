@@ -8,10 +8,12 @@ import {
   asEntryKind,
   asErrorKind,
   asMarkerType,
+  asModelStage,
   asNoticeReason,
   asPermissionStatus,
   asPlaceKind,
   asPRState,
+  asPromptStage,
   asRepoStatus,
   asReviewFileKind,
   asSessionStatus,
@@ -66,6 +68,18 @@ describe("narrowing", () => {
     expect(asTaskStage("plan")).toBe("plan");
     expect(asTaskStage("implementation")).toBe("implementation");
     expect(asTaskStage("pr")).toBe("pr");
+    expect(asModelStage("prd")).toBe("prd");
+    expect(asModelStage("tech_spec")).toBe("tech_spec");
+    expect(asModelStage("plan")).toBe("plan");
+    expect(asModelStage("implementation")).toBe("implementation");
+    expect(asModelStage("pr")).toBe("pr");
+    expect(asModelStage("pr_review")).toBe("pr_review");
+    expect(asPromptStage("prd")).toBe("prd");
+    expect(asPromptStage("tech_spec")).toBe("tech_spec");
+    expect(asPromptStage("plan")).toBe("plan");
+    expect(asPromptStage("commit")).toBe("commit");
+    expect(asPromptStage("pr")).toBe("pr");
+    expect(asPromptStage("pr_review")).toBe("pr_review");
     expect(asSessionStatus("needs_permission")).toBe("needs_permission");
     expect(asSessionStatus("needs_answer")).toBe("needs_answer");
     expect(asEntryKind("permission")).toBe("permission");
@@ -164,6 +178,9 @@ describe("narrowing", () => {
 
   it("falls back on a value a newer backend invented", () => {
     expect(asTaskStage("archived")).toBe("prd");
+    // The commit has no model of its own, and a step has no editable prompt.
+    expect(asModelStage("commit")).toBe("prd");
+    expect(asPromptStage("implementation")).toBe("prd");
     expect(asSessionStatus("hibernating")).toBe("waiting");
     expect(asEntryKind("diagram")).toBe("marker");
     expect(asActionStatus("queued")).toBe("done");
@@ -206,8 +223,17 @@ describe("api", () => {
     await wails.api.removeRecent("/home/dev/labs");
     await wails.api.dismissNotice();
     await wails.api.setTheme("dark");
+    await wails.api.setModelDefault("pr", "claude-opus-5", "medium");
+    await wails.api.getPrompt("prd");
+    await wails.api.savePrompt("prd", "# PRD");
+    await wails.api.restorePrompt("prd");
 
-    await wails.api.createTask({ name: "add-login", repoPath: "", initialContext: "a login" });
+    await wails.api.createTask({
+      name: "add-login",
+      repoPath: "",
+      initialContext: "a login",
+      models: [],
+    });
     await wails.api.deleteTask("task-1");
     await wails.api.getTranscript("task-1", "prd");
     await wails.api.sendMessage("task-1", "prd", "go on");
@@ -225,6 +251,9 @@ describe("api", () => {
     await wails.api.retryStep("task-1");
     await wails.api.cleanAndStartStep("task-1");
     await wails.api.discardStep("task-1", true);
+    await wails.api.setStageModel("task-1", "plan", "claude-fable-5-1", "high");
+    await wails.api.setStepModel("task-1", 2, "claude-opus-5", "xhigh");
+    await wails.api.setSessionModel("task-1", "prd", "claude-sonnet-5", "low");
     await wails.api.openInEditor("task-1", "");
     await wails.api.approveStep("task-1");
     await wails.api.openFileInEditor("task-1", "", "src/login.ts");
@@ -238,9 +267,9 @@ describe("api", () => {
     await wails.api.previewDelete("task-1");
     await wails.api.viewSituation("situation-1");
 
-    expect(Call.ByID).toHaveBeenCalledTimes(36);
+    expect(Call.ByID).toHaveBeenCalledTimes(43);
     const ids = vi.mocked(Call.ByID).mock.calls.map(([id]) => id);
-    expect(new Set(ids).size).toBe(36);
+    expect(new Set(ids).size).toBe(43);
   });
 
   it("opens a link in the browser of the desktop, never in the webview", async () => {

@@ -10,6 +10,8 @@ import (
 	"github.com/guilhermt/myspec/internal/bindings"
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/git"
+	"github.com/guilhermt/myspec/internal/models"
+	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/review"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
@@ -132,6 +134,12 @@ func TestFromTasksCarriesTheStateOfEachStep(t *testing.T) {
 			Status: flow.StepPreparing,
 			Phase:  flow.PhaseFetching,
 		},
+		{
+			Step:     task.Step{Number: 3, File: "3-third.md", Title: "Third", Repository: "api", RepoPath: "/home/u/code/api"},
+			Status:   flow.StepNotStarted,
+			Choice:   models.Choice{Model: models.Opus5, Effort: models.XHigh},
+			Adjusted: true,
+		},
 	}
 	want := []bindings.Step{
 		{
@@ -143,6 +151,11 @@ func TestFromTasksCarriesTheStateOfEachStep(t *testing.T) {
 		{
 			Number: 2, File: "2-second.md", Title: "Second",
 			Repository: "api", RepoPath: "/home/u/code/api", Status: "preparing", Phase: "fetching",
+		},
+		{
+			Number: 3, File: "3-third.md", Title: "Third",
+			Repository: "api", RepoPath: "/home/u/code/api", Status: "not_started",
+			Model: "claude-opus-5", Effort: "xhigh", Adjusted: true, ModelEditable: true,
 		},
 	}
 
@@ -674,7 +687,11 @@ func TestFromTasksCarriesTheRepositoriesOfThePRStage(t *testing.T) {
 				Number: 7, URL: "https://github.com/acme/api/pull/7", State: task.PRStateOpen, CheckedAt: checkedAt,
 			},
 			SessionStage: "pr_review:api",
-			Session:      session.Summary{Status: session.StatusWaiting, ContextPercent: 30},
+			Session: session.Summary{
+				Status:         session.StatusWaiting,
+				ContextPercent: 30,
+				Choice:         models.Choice{Model: models.Opus5, Effort: models.Medium},
+			},
 		},
 		{
 			Repository: "web",
@@ -721,6 +738,8 @@ func TestFromTasksCarriesTheRepositoriesOfThePRStage(t *testing.T) {
 			CheckedAt:      "2026-09-05T10:00:00Z",
 			SessionStage:   "pr_review:api",
 			SessionStatus:  "waiting",
+			SessionModel:   "claude-opus-5",
+			SessionEffort:  "medium",
 			ContextPercent: 30,
 		},
 		{
@@ -739,6 +758,99 @@ func TestFromTasksCarriesTheRepositoriesOfThePRStage(t *testing.T) {
 	// to a repository, and the fields of the task stay empty.
 	if got[0].SessionStatus != "waiting" || got[0].ContextPercent != 0 {
 		t.Errorf("task = %+v, want no session of its own", got[0])
+	}
+}
+
+func TestFromTasksCarriesTheModelsOfEveryStage(t *testing.T) {
+	t.Parallel()
+
+	tasks := []task.Task{{
+		ID:    "task-1",
+		Name:  "login-screen",
+		Stage: task.StageTechSpec,
+		Models: task.Models{Stages: models.Set{
+			models.PRD:            {Model: models.Fable51, Effort: models.XHigh},
+			models.TechSpec:       {Model: models.Fable51, Effort: models.High},
+			models.Plan:           {Model: models.Fable51, Effort: models.High},
+			models.Implementation: {Model: models.Opus5, Effort: models.High},
+			models.PR:             {Model: models.Opus5, Effort: models.Medium},
+			models.PRReview:       {Model: models.Sonnet5, Effort: models.Low},
+		}},
+	}}
+
+	got := bindings.FromTasks(
+		tasks,
+		func(string) task.Artifacts { return task.Artifacts{} },
+		func(string) []flow.StepState { return nil },
+		noRepos,
+		map[session.Key]session.Summary{
+			{TaskID: "task-1", Stage: "tech_spec"}: {
+				Status: session.StatusWaiting,
+				Choice: models.Choice{Model: models.Fable51, Effort: models.High},
+			},
+		},
+		nil,
+	)
+	if len(got) != 1 {
+		t.Fatalf("len(FromTasks()) = %d, want 1", len(got))
+	}
+
+	// The task is in the tech spec: its session is the live one, and only the
+	// stages that come after it can still be changed.
+	want := []bindings.TaskStageModel{
+		{Stage: "prd", Model: "claude-fable-5-1", Effort: "xhigh"},
+		{Stage: "tech_spec", Model: "claude-fable-5-1", Effort: "high", Live: true},
+		{Stage: "plan", Model: "claude-fable-5-1", Effort: "high", Editable: true},
+		{Stage: "implementation", Model: "claude-opus-5", Effort: "high", Editable: true},
+		{Stage: "pr", Model: "claude-opus-5", Effort: "medium", Editable: true},
+		{Stage: "pr_review", Model: "claude-sonnet-5", Effort: "low", Editable: true},
+	}
+	if diff := cmp.Diff(want, got[0].Models); diff != "" {
+		t.Errorf("models mismatch (-want +got):\n%s", diff)
+	}
+	if got[0].SessionModel != "claude-fable-5-1" || got[0].SessionEffort != "high" {
+		t.Errorf("session choice = %q %q, want the one of the tech spec session",
+			got[0].SessionModel, got[0].SessionEffort)
+	}
+}
+
+func TestFromModelSetIsInWorkflowOrder(t *testing.T) {
+	t.Parallel()
+
+	want := []bindings.StageModel{
+		{Stage: "prd", Model: "claude-fable-5-1", Effort: "high"},
+		{Stage: "tech_spec", Model: "claude-fable-5-1", Effort: "high"},
+		{Stage: "plan", Model: "claude-fable-5-1", Effort: "high"},
+		{Stage: "implementation", Model: "claude-opus-5", Effort: "high"},
+		{Stage: "pr", Model: "claude-opus-5", Effort: "medium"},
+		{Stage: "pr_review", Model: "claude-opus-5", Effort: "high"},
+	}
+
+	if diff := cmp.Diff(want, bindings.FromModelSet(models.Factory())); diff != "" {
+		t.Errorf("FromModelSet() mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestFromPromptAllocatesThePlaceholders(t *testing.T) {
+	t.Parallel()
+
+	got := bindings.FromPrompt(prompts.Prompt{
+		Stage:    prompts.StageCommit,
+		Text:     "Commit what is staged.",
+		Modified: true,
+	})
+	want := bindings.Prompt{
+		Stage:        "commit",
+		Text:         "Commit what is staged.",
+		Modified:     true,
+		Placeholders: []string{},
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("FromPrompt() mismatch (-want +got):\n%s", diff)
+	}
+	// The frontend maps over the placeholders without checking for null.
+	if got.Placeholders == nil {
+		t.Error("placeholders = nil, want an empty slice")
 	}
 }
 

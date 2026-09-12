@@ -20,6 +20,7 @@ import (
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/git/gittest"
+	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/review"
 	"github.com/guilhermt/myspec/internal/session"
@@ -170,6 +171,7 @@ type fixture struct {
 	tasks     *bindings.TaskService
 	ws        *workspace.Service
 	theme     *theme.Service
+	models    *models.Service
 	store     *store.Store
 	taskSvc   *task.Service
 	sessions  *session.Service
@@ -220,8 +222,8 @@ func newFixture(t *testing.T) *fixture {
 	})
 
 	f.dataDir = t.TempDir()
-	if err = prompts.Seed(f.dataDir, log); err != nil {
-		t.Fatalf("prompts.Seed() = %v, want nil", err)
+	if err = prompts.Prepare(f.dataDir, log); err != nil {
+		t.Fatalf("prompts.Prepare() = %v, want nil", err)
 	}
 	f.sessions = session.New(session.Deps{
 		Sessions: st.Sessions,
@@ -281,9 +283,14 @@ func newFixture(t *testing.T) *fixture {
 	})
 	t.Cleanup(f.flow.Close)
 
+	f.models, err = models.New(t.Context(), st.Settings, log, func() {})
+	if err != nil {
+		t.Fatalf("models.New() = %v, want nil", err)
+	}
+
 	f.workspace = bindings.NewWorkspaceService(f.ws, f.snapshot, f.picker, log)
-	f.settings = bindings.NewSettingsService(f.theme, log)
-	f.tasks = bindings.NewTaskService(f.taskSvc, f.sessions, f.flow, f.editor.open, log)
+	f.settings = bindings.NewSettingsService(f.theme, f.models, f.dataDir, log)
+	f.tasks = bindings.NewTaskService(f.taskSvc, f.sessions, f.flow, f.models, f.editor.open, log)
 	return f
 }
 
@@ -351,7 +358,8 @@ func (f *fixture) fixStep(path, repo string) {
 	}
 }
 
-// seedPrompt replaces the prompt of a stage with one the fake CLI acts on.
+// seedPrompt replaces the prompt of a stage with one the fake CLI acts on, as
+// an edit of the user.
 func (f *fixture) seedPrompt(t *testing.T, stage prompts.Stage, content string) {
 	t.Helper()
 
@@ -561,11 +569,12 @@ func (f *fixture) snapshot() bindings.State {
 		recents = nil
 	}
 	return bindings.State{
-		Workspace:  bindings.FromWorkspace(f.ws.Current()),
-		Recents:    bindings.FromRecents(recents),
-		Theme:      string(f.theme.Preference()),
-		SystemDark: f.theme.SystemDark(),
-		Notice:     bindings.FromNotice(f.ws.Notice()),
+		Workspace:     bindings.FromWorkspace(f.ws.Current()),
+		Recents:       bindings.FromRecents(recents),
+		Theme:         string(f.theme.Preference()),
+		SystemDark:    f.theme.SystemDark(),
+		ModelDefaults: bindings.FromModelSet(f.models.Defaults()),
+		Notice:        bindings.FromNotice(f.ws.Notice()),
 		Tasks: bindings.FromTasks(
 			f.taskSvc.List(), f.taskArtifacts, f.flow.Steps, f.flow.Repos, f.sessions.Summaries(), nil,
 		),

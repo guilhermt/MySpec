@@ -4,7 +4,7 @@ import { NewTaskDialog } from "@/features/task-create/NewTaskDialog";
 import { api, type TaskSummary } from "@/lib/wails";
 import { type NodeId, useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
-import { makeState, makeTask } from "@/test/wails-mock";
+import { makeModelDefaults, makeState, makeTask } from "@/test/wails-mock";
 
 const AT_ROOT: { newTaskFor: NodeId } = { newTaskFor: "root" };
 const AT_WEB: { newTaskFor: NodeId } = { newTaskFor: "repo:/home/dev/projects/web" };
@@ -88,8 +88,81 @@ describe("NewTaskDialog", () => {
       name: "fix-header",
       repoPath: "/home/dev/projects/web",
       initialContext: "The header overlaps the menu",
+      models: makeModelDefaults(),
     });
     expect(useAppStore.getState().newTaskFor).toBeNull();
+  });
+
+  it("folds the models under a summary of the defaults", () => {
+    open();
+
+    expect(screen.getByRole("button", { name: /Models/ })).toHaveTextContent("Defaults");
+    expect(screen.queryByRole("button", { name: /PRD model:/ })).not.toBeInTheDocument();
+  });
+
+  it("sums up what was adjusted", async () => {
+    const { user } = open();
+
+    await user.click(screen.getByRole("button", { name: /Models/ }));
+    await user.click(await screen.findByRole("button", { name: "PRD model: Fable 5.1 · high" }));
+    await user.click(await screen.findByRole("menuitemradio", { name: "xhigh" }));
+
+    expect(screen.getByRole("button", { name: /Models/ })).toHaveTextContent(
+      "PRD: Fable 5.1 · xhigh",
+    );
+    // The menu of the picker is a child popup of the dialog: a click in it
+    // leaves the dialog open.
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("button", { name: "Plan model: Fable 5.1 · high" }));
+    await user.click(await screen.findByRole("menuitemradio", { name: "max" }));
+
+    expect(screen.getByRole("button", { name: /Models/ })).toHaveTextContent(
+      "PRD: Fable 5.1 · xhigh +1",
+    );
+  });
+
+  it("creates the task with the models of the dialog", async () => {
+    const { user } = open();
+
+    await user.click(screen.getByRole("button", { name: /Models/ }));
+    await user.click(await screen.findByRole("button", { name: "PRD model: Fable 5.1 · high" }));
+    await user.click(await screen.findByRole("menuitemradio", { name: "xhigh" }));
+    await user.keyboard("{Escape}");
+
+    await user.type(screen.getByLabelText("Name"), "add-login");
+    await user.type(screen.getByLabelText("Initial context"), "A login screen");
+    await user.click(screen.getByRole("button", { name: "Create" }));
+
+    await waitFor(() => {
+      expect(api.createTask).toHaveBeenCalledOnce();
+    });
+    expect(api.createTask).toHaveBeenCalledWith({
+      name: "add-login",
+      repoPath: "",
+      initialContext: "A login screen",
+      models: makeModelDefaults().map((line) =>
+        line.stage === "prd" ? { ...line, effort: "xhigh" } : line,
+      ),
+    });
+  });
+
+  it("creates from the defaults when nothing was adjusted", async () => {
+    const { user } = open();
+
+    await user.type(screen.getByLabelText("Name"), "add-login");
+    await user.type(screen.getByLabelText("Initial context"), "A login screen");
+    await user.click(screen.getByRole("button", { name: "Create" }));
+
+    await waitFor(() => {
+      expect(api.createTask).toHaveBeenCalledWith({
+        name: "add-login",
+        repoPath: "",
+        initialContext: "A login screen",
+        models: makeModelDefaults(),
+      });
+    });
   });
 
   it("submits from the context field with Ctrl+Enter", async () => {

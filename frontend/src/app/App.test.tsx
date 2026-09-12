@@ -173,6 +173,47 @@ describe("App", () => {
     expect(shortcut.defaultPrevented).toBe(false);
   });
 
+  it("toggles the settings on Ctrl+,", async () => {
+    const { user } = renderWithStore(<App />);
+    await screen.findByRole("treeitem", { name: "projects Root" });
+
+    await user.keyboard("{Control>},{/Control}");
+
+    expect(await screen.findByRole("heading", { name: "Models" })).toBeInTheDocument();
+
+    await user.keyboard("{Control>},{/Control}");
+
+    expect(screen.queryByRole("heading", { name: "Models" })).not.toBeInTheDocument();
+  });
+
+  it("leaves Ctrl+, alone without a workspace", async () => {
+    vi.mocked(api.getState).mockResolvedValue(makeState({ workspace: null }));
+    renderWithStore(<App />);
+    await screen.findByRole("button", { name: /^Open folder/ });
+
+    const shortcut = createEvent.keyDown(window, { key: ",", ctrlKey: true });
+    fireEvent(window, shortcut);
+
+    expect(shortcut.defaultPrevented).toBe(false);
+  });
+
+  it("gives an entry waiting for the user the main area back from the settings", async () => {
+    vi.mocked(api.getState).mockResolvedValue(waitingState());
+    const { user } = renderWithStore(<App />);
+    await screen.findByRole("treeitem", { name: "projects Root" });
+
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+    expect(await screen.findByRole("heading", { name: "Models" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /^add-login,/ }));
+
+    expect(screen.queryByRole("heading", { name: "Models" })).not.toBeInTheDocument();
+    expect(await screen.findByRole("treeitem", { name: /add-login/ })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+  });
+
   it("shows a rejected binding and dismisses it", async () => {
     vi.mocked(api.openFolderDialog).mockRejectedValueOnce(new Error("dialog failed"));
     const { user } = renderWithStore(<App />);

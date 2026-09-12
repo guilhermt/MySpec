@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/guilhermt/myspec/internal/claude"
+	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
 )
 
@@ -21,10 +22,11 @@ type run struct {
 	nextSeq int
 
 	proc       Process
-	procGen    int         // bumped on every start; stale consumers compare and drop out
-	stopping   bool        // we asked the process to stop; its exit is expected
-	eventSeen  bool        // the current process has said something
-	startTimer *time.Timer // fires when a message got no event back in time
+	procGen    int           // bumped on every start; stale consumers compare and drop out
+	stopping   bool          // we asked the process to stop; its exit is expected
+	eventSeen  bool          // the current process has said something
+	startTimer *time.Timer   // fires when a message got no event back in time
+	procChoice models.Choice // the model and effort the current process was started with
 
 	turn         *turn
 	permission   *Entry // pending permission or question
@@ -110,6 +112,7 @@ func (r *run) summary() Summary {
 	sum := Summary{
 		TaskID:         r.task.ID,
 		Stage:          r.rec.Stage,
+		Choice:         r.rec.Choice,
 		TurnRunning:    r.turn != nil,
 		ProcessRunning: r.proc != nil,
 		RetryAttempt:   r.retryAttempt,
@@ -188,12 +191,15 @@ func (s *Service) ensureProcessLocked(ctx context.Context, r *run, n *notes) err
 		Dir:       r.task.Dir,
 		SessionID: r.rec.ID,
 		Resume:    r.rec.Started,
+		Model:     string(r.rec.Choice.Model),
+		Effort:    string(r.rec.Choice.Effort),
 	})
 	if err != nil {
 		return s.failStart(ctx, r, n, ErrorStartFailed, "Could not start Claude Code: "+err.Error(), err)
 	}
 
 	r.proc = p
+	r.procChoice = r.rec.Choice
 	r.procGen++
 	r.stopping = false
 	r.eventSeen = false
@@ -274,6 +280,18 @@ func (s *Service) enqueueLocked(ctx context.Context, r *run, u *UserEntry, n *no
 // message went out. The caller holds the mutex.
 func (s *Service) flushPendingLocked(ctx context.Context, r *run, n *notes) bool {
 	if r.rec.Paused || r.stopping || r.turn != nil || r.permission != nil || len(r.pending) == 0 {
+		return false
+	}
+	if r.proc != nil && r.procChoice != r.rec.Choice {
+		// The process runs with the model and effort the session had when it
+		// started. The message waits for one that runs with the ones it has now;
+		// stopping is set here so that no other flush starts a second restart and
+		// the idle timer leaves the process alone.
+		r.stopping = true
+		s.log.Info("claude restarting",
+			"task", r.task.ID, "stage", r.rec.Stage,
+			"model", string(r.rec.Choice.Model), "effort", string(r.rec.Choice.Effort))
+		go s.restartProcess(r.key(), r.procGen)
 		return false
 	}
 	if err := s.ensureProcessLocked(ctx, r, n); err != nil {
@@ -357,6 +375,24 @@ func (s *Service) idleExpired(k Key, gen int) {
 		return
 	}
 	go s.stopProcess(k, gen, false, defaultGraces)
+}
+
+// restartProcess stops a process whose model or effort is not the session's
+// any more and delivers the first queued message on a new one, which starts
+// with the ones the session has now.
+func (s *Service) restartProcess(k Key, gen int) {
+	s.stopProcess(k, gen, false, defaultGraces)
+
+	ctx, cancel := bgCtx()
+	defer cancel()
+	n := &notes{}
+	defer s.flush(n)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if r := s.runs[k]; r != nil {
+		s.flushPendingLocked(ctx, r, n)
+	}
 }
 
 // stopProcess ends the process of a run and returns once it has exited. With

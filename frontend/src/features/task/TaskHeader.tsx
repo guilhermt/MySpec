@@ -8,6 +8,7 @@ import { DeleteTaskDialog } from "@/features/task/DeleteTaskDialog";
 import { StatusBadge } from "@/features/task/StatusBadge";
 import { hasArtifacts } from "@/features/task/status";
 import { currentStepOf, hasStepSession, stepStage } from "@/features/task/step-status";
+import { TaskModelsButton } from "@/features/task/TaskModels";
 import { findNode } from "@/features/tree/tree-model";
 import { asSessionStatus, asTaskStage, type TaskSummary } from "@/lib/wails";
 import { pause, resume } from "@/store/actions";
@@ -63,6 +64,7 @@ export function TaskHeader({ task, artifactsOpen, onToggleArtifacts }: TaskHeade
           {paused ? "Resume" : "Pause"}
         </Button>
       )}
+      <TaskModelsButton task={task} />
       <Tooltip>
         <TooltipTrigger
           render={<Button variant="ghost" size="icon-sm" />}

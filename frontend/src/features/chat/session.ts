@@ -5,6 +5,9 @@
  */
 export interface SessionState {
   sessionStatus: string;
+  /** sessionModel and sessionEffort are what the session runs with from its next message on; "" without a session. */
+  sessionModel: string;
+  sessionEffort: string;
   turnRunning: boolean;
   processRunning: boolean;
   retryAttempt: number;

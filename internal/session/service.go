@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/guilhermt/myspec/internal/claude"
+	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
 )
 
@@ -65,6 +66,10 @@ type TaskInfo struct {
 	Repositories   []string // relative paths, what the prompt lists
 	InitialContext string
 	ArtifactExists bool // the artifact of Prompt is already there; always false for a step
+
+	// Choice is the model and effort a session created for this task and stage
+	// starts with. A session that already exists keeps its own.
+	Choice models.Choice
 
 	// The PR sessions of a repository: what the prompt of the pull request and
 	// the prompt of its review are about.
@@ -224,12 +229,25 @@ func (s *Service) load(ctx context.Context, t TaskInfo, n *notes) (*run, error) 
 	switch {
 	case errors.Is(err, ErrNotFound):
 		now := s.now().UTC()
-		rec = Record{ID: s.newID(), TaskID: t.ID, Stage: t.Stage, CreatedAt: now, UpdatedAt: now}
+		rec = Record{
+			ID: s.newID(), TaskID: t.ID, Stage: t.Stage, Choice: t.Choice,
+			CreatedAt: now, UpdatedAt: now,
+		}
 		if insertErr := s.sessions.Insert(ctx, rec); insertErr != nil {
 			return nil, insertErr
 		}
 	case err != nil:
 		return nil, err
+	}
+
+	// A session a version before this one created has no model: it takes the one
+	// of its stage, which is what a new one would start with.
+	if rec.Choice.Model == "" {
+		rec.Choice = t.Choice
+		rec.UpdatedAt = s.now().UTC()
+		if updateErr := s.sessions.Update(ctx, rec); updateErr != nil {
+			return nil, updateErr
+		}
 	}
 
 	stored, err := s.entries.List(ctx, rec.ID)
@@ -571,6 +589,32 @@ func (s *Service) Retry(ctx context.Context, k Key) error {
 	if !s.flushPendingLocked(ctx, r, n) {
 		s.armIdleLocked(r)
 	}
+	n.state(k)
+	return nil
+}
+
+// SetChoice changes the model and effort of a session from its next message
+// on. A process that is running keeps the ones it started with until then; a
+// turn in progress ends with them.
+func (s *Service) SetChoice(ctx context.Context, k Key, c models.Choice) error {
+	n := &notes{}
+	defer s.flush(n)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	r, err := s.runOf(k)
+	if err != nil {
+		return err
+	}
+	if r.rec.Choice == c {
+		return nil
+	}
+	r.rec.Choice = c
+	if err := s.persistRecord(ctx, r); err != nil {
+		return err
+	}
+	s.log.Info("session model changed",
+		"task", k.TaskID, "stage", k.Stage, "model", string(c.Model), "effort", string(c.Effort))
 	n.state(k)
 	return nil
 }

@@ -42,6 +42,8 @@ func fakeConfig(t *testing.T, scenario string) claude.Config {
 		Binary:    os.Args[0],
 		Dir:       t.TempDir(),
 		SessionID: sessionID,
+		Model:     "claude-opus-5",
+		Effort:    "high",
 		Env: append(os.Environ(),
 			claudetest.EnvFlag+"=1",
 			claudetest.EnvScenario+"="+scenario,
@@ -196,8 +198,10 @@ func TestStartRunsTheCLIWithTheFixedFlags(t *testing.T) {
 		resume bool
 		want   []string
 	}{
-		"a new session":     {want: append(slices.Clone(claude.Args), "--session-id", sessionID)},
-		"a resumed session": {resume: true, want: append(slices.Clone(claude.Args), "--resume", sessionID)},
+		"a new session": {want: append(slices.Clone(claude.Args),
+			"--session-id", sessionID, "--model", "claude-opus-5", "--effort", "high")},
+		"a resumed session": {resume: true, want: append(slices.Clone(claude.Args),
+			"--resume", sessionID, "--model", "claude-opus-5", "--effort", "high")},
 	}
 
 	for name, tc := range tests {
@@ -209,6 +213,8 @@ func TestStartRunsTheCLIWithTheFixedFlags(t *testing.T) {
 				Dir:       t.TempDir(),
 				SessionID: sessionID,
 				Resume:    tc.resume,
+				Model:     "claude-opus-5",
+				Effort:    "high",
 			})
 
 			exit := exitOf(t, p)
@@ -218,6 +224,37 @@ func TestStartRunsTheCLIWithTheFixedFlags(t *testing.T) {
 			got := strings.Split(strings.TrimRight(exit.Stderr, "\n"), "\n")
 			if diff := cmp.Diff(tc.want, got); diff != "" {
 				t.Errorf("command line mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestTheFakeRefusesAProcessWithoutAModelOrAnEffort(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		model, effort string
+		want          string
+	}{
+		"no model":  {effort: "high", want: "--model is required"},
+		"no effort": {model: "claude-opus-5", want: "--effort is required"},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			cfg := fakeConfig(t, "echo")
+			cfg.Model, cfg.Effort = tc.model, tc.effort
+			// The fake reads its command line before its input, so the process
+			// ends without a message ever being sent.
+			exit := exitOf(t, start(t, cfg))
+
+			if exit.Code != 64 {
+				t.Errorf("Code = %d, want 64 for a command line the CLI refuses", exit.Code)
+			}
+			if !strings.Contains(exit.Stderr, tc.want) {
+				t.Errorf("Stderr = %q, want it to contain %q", exit.Stderr, tc.want)
 			}
 		})
 	}

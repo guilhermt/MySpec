@@ -1,11 +1,15 @@
 package prompts_test
 
 import (
+	"errors"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/google/go-cmp/cmp"
 
 	"github.com/guilhermt/myspec/internal/prompts"
 )
@@ -15,21 +19,21 @@ func discard() *slog.Logger {
 	return slog.New(slog.DiscardHandler)
 }
 
-// promptPath is where Seed writes a stage prompt under a data directory.
+// promptPath is where the edit of a stage prompt lives under a data directory.
 func promptPath(dataDir string, stage prompts.Stage) string {
 	return filepath.Join(prompts.Dir(dataDir), string(stage)+".md")
 }
 
-// seed runs Seed, failing the test when it errors.
-func seed(t *testing.T, dataDir string) {
+// prepare runs Prepare, failing the test when it errors.
+func prepare(t *testing.T, dataDir string) {
 	t.Helper()
 
-	if err := prompts.Seed(dataDir, discard()); err != nil {
-		t.Fatalf("Seed() = %v, want nil", err)
+	if err := prompts.Prepare(dataDir, discard()); err != nil {
+		t.Fatalf("Prepare() = %v, want nil", err)
 	}
 }
 
-// write puts content where Seed would write the prompt of a stage.
+// write puts content where the edit of a stage prompt belongs.
 func write(t *testing.T, dataDir string, stage prompts.Stage, content string) {
 	t.Helper()
 
@@ -41,15 +45,22 @@ func write(t *testing.T, dataDir string, stage prompts.Stage, content string) {
 	}
 }
 
-// read returns the seeded prompt file of a stage.
-func read(t *testing.T, dataDir string, stage prompts.Stage) string {
+// readPrompt returns the prompt of a stage, failing the test when Read errors.
+func readPrompt(t *testing.T, dataDir string, stage prompts.Stage) prompts.Prompt {
 	t.Helper()
 
-	content, err := os.ReadFile(promptPath(dataDir, stage))
+	prompt, err := prompts.Read(dataDir, stage)
 	if err != nil {
-		t.Fatalf("read prompt: %v", err)
+		t.Fatalf("Read(%s) = %v, want nil", stage, err)
 	}
-	return string(content)
+	return prompt
+}
+
+// defaultText is the prompt of a stage as the binary carries it.
+func defaultText(t *testing.T, stage prompts.Stage) string {
+	t.Helper()
+
+	return readPrompt(t, t.TempDir(), stage).Text
 }
 
 func TestDirIsUnderTheDataDirectory(t *testing.T) {
@@ -60,7 +71,7 @@ func TestDirIsUnderTheDataDirectory(t *testing.T) {
 	}
 }
 
-func TestSeedWritesTheDefaultPromptOfEveryStage(t *testing.T) {
+func TestReadGivesTheDefaultOfEveryPrompt(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -76,63 +87,70 @@ func TestSeedWritesTheDefaultPromptOfEveryStage(t *testing.T) {
 	}
 
 	dataDir := t.TempDir()
-	seed(t, dataDir)
 
 	for _, test := range tests {
-		content := read(t, dataDir, test.stage)
+		prompt := readPrompt(t, dataDir, test.stage)
 		for _, want := range test.contains {
-			if !strings.Contains(content, want) {
-				t.Errorf("seeded %s prompt does not contain %q", test.stage, want)
+			if !strings.Contains(prompt.Text, want) {
+				t.Errorf("default %s prompt does not contain %q", test.stage, want)
 			}
 		}
-
-		info, err := os.Stat(promptPath(dataDir, test.stage))
-		if err != nil {
-			t.Fatalf("stat prompt: %v", err)
-		}
-		if got, want := info.Mode().Perm(), os.FileMode(0o600); got != want {
-			t.Errorf("%s prompt mode = %v, want %v", test.stage, got, want)
+		if prompt.Modified {
+			t.Errorf("%s prompt Modified = true, want false", test.stage)
 		}
 	}
 }
 
-func TestSeedRewritesAPromptThatDiffersFromItsDefault(t *testing.T) {
+func TestPrepareKeepsAnEditedPrompt(t *testing.T) {
 	t.Parallel()
 
 	dataDir := t.TempDir()
 	const mine = "my own prompt"
-	for _, stage := range []prompts.Stage{prompts.StagePRD, prompts.StageTechSpec, prompts.StagePlan} {
-		write(t, dataDir, stage, mine)
+	write(t, dataDir, prompts.StagePRD, mine)
+
+	prepare(t, dataDir)
+
+	prompt := readPrompt(t, dataDir, prompts.StagePRD)
+	if prompt.Text != mine {
+		t.Errorf("prd prompt = %q, want %q", prompt.Text, mine)
 	}
-
-	seed(t, dataDir)
-
-	// A Seed into an empty directory writes nothing but the defaults.
-	fresh := t.TempDir()
-	seed(t, fresh)
-
-	for _, stage := range []prompts.Stage{prompts.StagePRD, prompts.StageTechSpec, prompts.StagePlan} {
-		if got, want := read(t, dataDir, stage), read(t, fresh, stage); got != want {
-			t.Errorf("%s prompt = %q, want it rewritten to its default", stage, got)
-		}
+	if !prompt.Modified {
+		t.Error("prd prompt Modified = false, want true")
 	}
 }
 
-func TestSeedIsIdempotent(t *testing.T) {
+func TestPrepareRemovesACopyOfTheDefault(t *testing.T) {
 	t.Parallel()
 
 	dataDir := t.TempDir()
-	seed(t, dataDir)
-	first := read(t, dataDir, prompts.StagePRD)
+	write(t, dataDir, prompts.StagePRD, defaultText(t, prompts.StagePRD))
 
-	seed(t, dataDir)
+	prepare(t, dataDir)
 
-	if got := read(t, dataDir, prompts.StagePRD); got != first {
-		t.Error("the second Seed changed the prompt, want it untouched")
+	if _, err := os.Stat(promptPath(dataDir, prompts.StagePRD)); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("Stat(prd prompt) = %v, want a missing file", err)
+	}
+	if readPrompt(t, dataDir, prompts.StagePRD).Modified {
+		t.Error("prd prompt Modified = true, want false")
 	}
 }
 
-func TestSeedFailsWhenTheDirectoryCannotBeCreated(t *testing.T) {
+func TestPrepareIsIdempotent(t *testing.T) {
+	t.Parallel()
+
+	dataDir := t.TempDir()
+	const mine = "my own prompt"
+	write(t, dataDir, prompts.StagePRD, mine)
+
+	prepare(t, dataDir)
+	prepare(t, dataDir)
+
+	if got := readPrompt(t, dataDir, prompts.StagePRD).Text; got != mine {
+		t.Errorf("prd prompt = %q, want the edit %q", got, mine)
+	}
+}
+
+func TestPrepareFailsWhenTheDirectoryCannotBeCreated(t *testing.T) {
 	t.Parallel()
 
 	dataDir := filepath.Join(t.TempDir(), "data")
@@ -140,8 +158,153 @@ func TestSeedFailsWhenTheDirectoryCannotBeCreated(t *testing.T) {
 		t.Fatalf("write file: %v", err)
 	}
 
-	if err := prompts.Seed(dataDir, discard()); err == nil {
-		t.Error("Seed() = nil, want an error")
+	if err := prompts.Prepare(dataDir, discard()); err == nil {
+		t.Error("Prepare() = nil, want an error")
+	}
+}
+
+func TestSaveKeepsAnEdit(t *testing.T) {
+	t.Parallel()
+
+	dataDir := t.TempDir()
+	const mine = "write the PRD of {{task_name}}"
+
+	prompt, err := prompts.Save(dataDir, prompts.StagePRD, mine)
+	if err != nil {
+		t.Fatalf("Save() = %v, want nil", err)
+	}
+	if prompt.Text != mine {
+		t.Errorf("Save() text = %q, want %q", prompt.Text, mine)
+	}
+	if !prompt.Modified {
+		t.Error("Save() Modified = false, want true")
+	}
+
+	info, err := os.Stat(promptPath(dataDir, prompts.StagePRD))
+	if err != nil {
+		t.Fatalf("stat prompt: %v", err)
+	}
+	if got, want := info.Mode().Perm(), os.FileMode(0o600); got != want {
+		t.Errorf("prd prompt mode = %v, want %v", got, want)
+	}
+
+	got, err := prompts.Render(dataDir, prompts.StagePRD, prompts.Vars{TaskName: "add-login"})
+	if err != nil {
+		t.Fatalf("Render() = %v, want nil", err)
+	}
+	if want := "write the PRD of add-login"; got != want {
+		t.Errorf("Render() = %q, want %q", got, want)
+	}
+}
+
+func TestSaveOfTheDefaultTextIsNoEdit(t *testing.T) {
+	t.Parallel()
+
+	dataDir := t.TempDir()
+	if _, err := prompts.Save(dataDir, prompts.StagePRD, "my own prompt"); err != nil {
+		t.Fatalf("Save() = %v, want nil", err)
+	}
+
+	prompt, err := prompts.Save(dataDir, prompts.StagePRD, defaultText(t, prompts.StagePRD))
+	if err != nil {
+		t.Fatalf("Save() = %v, want nil", err)
+	}
+	if prompt.Modified {
+		t.Error("Save() Modified = true, want false")
+	}
+	if _, err := os.Stat(promptPath(dataDir, prompts.StagePRD)); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("Stat(prd prompt) = %v, want a missing file", err)
+	}
+}
+
+func TestRestoreGoesBackToTheDefault(t *testing.T) {
+	t.Parallel()
+
+	dataDir := t.TempDir()
+	write(t, dataDir, prompts.StagePRD, "my own prompt")
+
+	prompt, err := prompts.Restore(dataDir, prompts.StagePRD)
+	if err != nil {
+		t.Fatalf("Restore() = %v, want nil", err)
+	}
+	if want := defaultText(t, prompts.StagePRD); prompt.Text != want {
+		t.Error("Restore() text is not the default")
+	}
+	if prompt.Modified {
+		t.Error("Restore() Modified = true, want false")
+	}
+	if _, err := os.Stat(promptPath(dataDir, prompts.StagePRD)); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("Stat(prd prompt) = %v, want a missing file", err)
+	}
+}
+
+func TestRestoreWithoutAnEditChangesNothing(t *testing.T) {
+	t.Parallel()
+
+	dataDir := t.TempDir()
+
+	prompt, err := prompts.Restore(dataDir, prompts.StagePRD)
+	if err != nil {
+		t.Fatalf("Restore() = %v, want nil", err)
+	}
+	if want := defaultText(t, prompts.StagePRD); prompt.Text != want {
+		t.Error("Restore() text is not the default")
+	}
+	if prompt.Modified {
+		t.Error("Restore() Modified = true, want false")
+	}
+}
+
+func TestPlaceholdersAreTheOnesTheDefaultUses(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		stage prompts.Stage
+		want  []string
+	}{
+		{prompts.StagePRD, []string{"{{task_name}}", "{{artifacts_dir}}", "{{prd_path}}", "{{initial_context}}"}},
+		{prompts.StageCommit, []string{"{{push}}"}},
+		{prompts.StagePRReview, []string{
+			"{{prd_path}}", "{{tech_spec_path}}", "{{repository}}", "{{branch}}",
+			"{{base_branch}}", "{{review_path}}", "{{pr_number}}", "{{pr_url}}",
+		}},
+	}
+
+	dataDir := t.TempDir()
+
+	for _, test := range tests {
+		got := readPrompt(t, dataDir, test.stage).Placeholders
+		if diff := cmp.Diff(test.want, got); diff != "" {
+			t.Errorf("%s placeholders mismatch (-want +got):\n%s", test.stage, diff)
+		}
+	}
+
+	// The placeholders are those of the default, so an edit that dropped every
+	// one of them still lists the same reference.
+	write(t, dataDir, prompts.StagePRD, "no placeholder at all")
+	want := []string{"{{task_name}}", "{{artifacts_dir}}", "{{prd_path}}", "{{initial_context}}"}
+	if diff := cmp.Diff(want, readPrompt(t, dataDir, prompts.StagePRD).Placeholders); diff != "" {
+		t.Errorf("prd placeholders after an edit mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestParseStage(t *testing.T) {
+	t.Parallel()
+
+	for _, stage := range prompts.Editable {
+		got, err := prompts.ParseStage(string(stage))
+		if err != nil {
+			t.Errorf("ParseStage(%q) = %v, want nil", stage, err)
+		}
+		if got != stage {
+			t.Errorf("ParseStage(%q) = %q, want %q", stage, got, stage)
+		}
+	}
+
+	for _, value := range []string{"step", "implementation"} {
+		if _, err := prompts.ParseStage(value); !errors.Is(err, prompts.ErrUnknownStage) {
+			t.Errorf("ParseStage(%q) = %v, want ErrUnknownStage", value, err)
+		}
 	}
 }
 
@@ -215,7 +378,7 @@ func prdVars() prompts.Vars {
 	return vars
 }
 
-func TestRenderTheSeededPromptsKeepNoPlaceholder(t *testing.T) {
+func TestRenderTheDefaultPromptsKeepNoPlaceholder(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -235,7 +398,6 @@ func TestRenderTheSeededPromptsKeepNoPlaceholder(t *testing.T) {
 	}
 
 	dataDir := t.TempDir()
-	seed(t, dataDir)
 
 	for _, test := range tests {
 		got, err := prompts.Render(dataDir, test.stage, test.vars)
@@ -254,11 +416,10 @@ func TestRenderTheSeededPromptsKeepNoPlaceholder(t *testing.T) {
 	}
 }
 
-func TestRenderTheSeededPromptsOtherThanPRDGetNoInitialContext(t *testing.T) {
+func TestRenderTheDefaultPromptsOtherThanPRDGetNoInitialContext(t *testing.T) {
 	t.Parallel()
 
 	dataDir := t.TempDir()
-	seed(t, dataDir)
 
 	for _, stage := range []prompts.Stage{prompts.StageTechSpec, prompts.StagePlan, prompts.StageCommit, prompts.StagePR, prompts.StagePRReview} {
 		got, err := prompts.Render(dataDir, stage, everyVar())
@@ -276,7 +437,6 @@ func TestTheCommitPromptSaysNothingAboutThePlanning(t *testing.T) {
 	t.Parallel()
 
 	dataDir := t.TempDir()
-	seed(t, dataDir)
 
 	got, err := prompts.Render(dataDir, prompts.StageCommit, everyVar())
 	if err != nil {
@@ -354,10 +514,31 @@ func TestRenderAPromptThatLostTheRepositories(t *testing.T) {
 	}
 }
 
-func TestRenderFailsWhenThePromptIsMissing(t *testing.T) {
+func TestRenderReadsTheEditOfAPrompt(t *testing.T) {
 	t.Parallel()
 
-	if _, err := prompts.Render(t.TempDir(), prompts.StagePRD, prompts.Vars{}); err == nil {
+	dataDir := t.TempDir()
+	write(t, dataDir, prompts.StagePRD, "edited {{task_name}}")
+
+	got, err := prompts.Render(dataDir, prompts.StagePRD, prompts.Vars{TaskName: "add-login"})
+	if err != nil {
+		t.Fatalf("Render() = %v, want nil", err)
+	}
+
+	if want := "edited add-login"; got != want {
+		t.Errorf("Render() = %q, want %q", got, want)
+	}
+}
+
+func TestRenderFailsWhenTheEditCannotBeRead(t *testing.T) {
+	t.Parallel()
+
+	dataDir := t.TempDir()
+	if err := os.MkdirAll(promptPath(dataDir, prompts.StagePRD), 0o700); err != nil {
+		t.Fatalf("create directory: %v", err)
+	}
+
+	if _, err := prompts.Render(dataDir, prompts.StagePRD, prompts.Vars{}); err == nil {
 		t.Error("Render() = nil, want an error")
 	}
 }
@@ -457,11 +638,10 @@ func TestRenderAppendsNoPushSectionWhenTheCommitDoesNotPush(t *testing.T) {
 	}
 }
 
-func TestRenderTheSeededCommitPromptCarriesThePushInstruction(t *testing.T) {
+func TestRenderTheDefaultCommitPromptCarriesThePushInstruction(t *testing.T) {
 	t.Parallel()
 
 	dataDir := t.TempDir()
-	seed(t, dataDir)
 
 	vars := everyVar()
 	vars.Push = true
@@ -479,11 +659,10 @@ func TestRenderTheSeededCommitPromptCarriesThePushInstruction(t *testing.T) {
 	}
 }
 
-func TestRenderTheSeededCommitPromptWithoutPushSaysNothingAboutPushing(t *testing.T) {
+func TestRenderTheDefaultCommitPromptWithoutPushSaysNothingAboutPushing(t *testing.T) {
 	t.Parallel()
 
 	dataDir := t.TempDir()
-	seed(t, dataDir)
 
 	got, err := prompts.Render(dataDir, prompts.StageCommit, everyVar())
 	if err != nil {

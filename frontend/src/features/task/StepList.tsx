@@ -1,8 +1,10 @@
 import { Badge } from "@/components/ui/badge";
+import { ModelPicker, ModelValue } from "@/features/models/ModelPicker";
 import { ToneDot } from "@/features/task/StatusDot";
 import type { StatusTone } from "@/features/task/status";
 import { stepStatusLabel, stepStatusTone } from "@/features/task/step-status";
 import { findNode } from "@/features/tree/tree-model";
+import type { ModelChoice } from "@/lib/models";
 import { situationTone } from "@/lib/situations";
 import { cn } from "@/lib/utils";
 import type { PlanProblem, Situation, State, Step } from "@/lib/wails";
@@ -98,6 +100,31 @@ export interface StepListProps {
   situation?: Situation | null;
   /** onOpen makes each step a way into the file behind it. */
   onOpen?: (step: Step) => void;
+  /** onModelChange makes the model of every step not started a picker. */
+  onModelChange?: (step: Step, choice: ModelChoice) => void;
+}
+
+/** StepModel is the model a step runs with: a picker while the step has not started. */
+function StepModel({
+  step,
+  onModelChange,
+}: {
+  step: Step;
+  onModelChange?: StepListProps["onModelChange"];
+}) {
+  if (onModelChange !== undefined && step.modelEditable) {
+    return (
+      <ModelPicker
+        variant="inline"
+        label={`Step ${step.number}`}
+        value={step}
+        // A step with a choice of its own stands out; one that follows Implementation reads quietly.
+        muted={!step.adjusted}
+        onChange={(choice) => onModelChange(step, choice)}
+      />
+    );
+  }
+  return <ModelValue value={step} className="shrink-0 px-2 text-muted-foreground" />;
 }
 
 /** StepList is the plan of a task: what will be built, in which repository. */
@@ -107,6 +134,7 @@ export function StepList({
   currentStep,
   situation = null,
   onOpen,
+  onModelChange,
 }: StepListProps) {
   const app = useAppStore((state) => state.app);
 
@@ -127,15 +155,21 @@ export function StepList({
               {onOpen === undefined ? (
                 <div className={cn(ROW, highlight)}>
                   <Row step={step} app={app} current={current} tone={tone} />
+                  <StepModel step={step} />
                 </div>
               ) : (
-                <button
-                  type="button"
-                  onClick={() => onOpen(step)}
-                  className={cn(ROW, "transition-colors hover:bg-accent", highlight)}
-                >
-                  <Row step={step} app={app} current={current} tone={tone} />
-                </button>
+                // The row is not one button, because a button cannot hold the
+                // button of the picker.
+                <div className={cn(ROW, "transition-colors hover:bg-accent", highlight)}>
+                  <button
+                    type="button"
+                    onClick={() => onOpen(step)}
+                    className="flex min-w-0 flex-1 items-center gap-3 rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <Row step={step} app={app} current={current} tone={tone} />
+                  </button>
+                  <StepModel step={step} onModelChange={onModelChange} />
+                </div>
               )}
             </li>
           );

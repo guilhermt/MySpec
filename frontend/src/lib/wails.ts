@@ -23,6 +23,7 @@ import type {
   PRDraft,
   PRPreview,
   PRReport,
+  Prompt,
   Question,
   QuestionEntry,
   QuestionOption,
@@ -34,9 +35,11 @@ import type {
   Situation,
   SituationOpen,
   SituationStarted,
+  StageModel,
   State,
   Step,
   StepBlock,
+  TaskStageModel,
   TaskSummary,
   Transcript,
   TranscriptEvent,
@@ -73,6 +76,7 @@ export type {
   PRDraft,
   PRPreview,
   PRReport,
+  Prompt,
   Question,
   QuestionEntry,
   QuestionOption,
@@ -84,9 +88,11 @@ export type {
   Situation,
   SituationOpen,
   SituationStarted,
+  StageModel,
   State,
   Step,
   StepBlock,
+  TaskStageModel,
   TaskSummary,
   Transcript,
   TranscriptEvent,
@@ -98,6 +104,13 @@ export type {
 export type ThemePreference = "system" | "light" | "dark";
 export type NoticeReason = "not_found" | "not_directory" | "not_readable" | "last_recent_missing";
 export type TaskStage = "prd" | "tech_spec" | "plan" | "implementation" | "pr";
+
+/** ModelStage is a stage that carries a model and an effort of its own. */
+export type ModelStage = "prd" | "tech_spec" | "plan" | "implementation" | "pr" | "pr_review";
+
+/** PromptStage names one of the prompts the settings show, in workflow order. */
+export type PromptStage = "prd" | "tech_spec" | "plan" | "commit" | "pr" | "pr_review";
+
 export type StepStatus =
   | "not_started"
   | "preparing"
@@ -263,6 +276,34 @@ export function asTaskStage(value: string): TaskStage {
     case "plan":
     case "implementation":
     case "pr":
+      return value;
+    default:
+      return "prd";
+  }
+}
+
+export function asModelStage(value: string): ModelStage {
+  switch (value) {
+    case "prd":
+    case "tech_spec":
+    case "plan":
+    case "implementation":
+    case "pr":
+    case "pr_review":
+      return value;
+    default:
+      return "prd";
+  }
+}
+
+export function asPromptStage(value: string): PromptStage {
+  switch (value) {
+    case "prd":
+    case "tech_spec":
+    case "plan":
+    case "commit":
+    case "pr":
+    case "pr_review":
       return value;
     default:
       return "prd";
@@ -556,6 +597,12 @@ export const api = {
   removeRecent: (path: string): Promise<void> => WorkspaceService.RemoveRecent(path),
   dismissNotice: (): Promise<void> => WorkspaceService.DismissNotice(),
   setTheme: (preference: ThemePreference): Promise<void> => SettingsService.SetTheme(preference),
+  setModelDefault: (stage: ModelStage, model: string, effort: string): Promise<void> =>
+    SettingsService.SetModelDefault(stage, model, effort),
+  getPrompt: (stage: PromptStage): Promise<Prompt> => SettingsService.GetPrompt(stage),
+  savePrompt: (stage: PromptStage, text: string): Promise<Prompt> =>
+    SettingsService.SavePrompt(stage, text),
+  restorePrompt: (stage: PromptStage): Promise<Prompt> => SettingsService.RestorePrompt(stage),
 
   createTask: (req: CreateTaskRequest): Promise<string> => TaskService.CreateTask(req),
   deleteTask: (taskId: string): Promise<DeleteResult> => TaskService.DeleteTask(taskId),
@@ -594,6 +641,16 @@ export const api = {
   cleanAndStartStep: (taskId: string): Promise<void> => TaskService.CleanAndStartStep(taskId),
   discardStep: (taskId: string, cleanWorktree: boolean): Promise<void> =>
     TaskService.DiscardStep(taskId, cleanWorktree),
+  setStageModel: (
+    taskId: string,
+    stage: ModelStage,
+    model: string,
+    effort: string,
+  ): Promise<void> => TaskService.SetStageModel(taskId, stage, model, effort),
+  setStepModel: (taskId: string, step: number, model: string, effort: string): Promise<void> =>
+    TaskService.SetStepModel(taskId, step, model, effort),
+  setSessionModel: (taskId: string, stage: string, model: string, effort: string): Promise<void> =>
+    TaskService.SetSessionModel(taskId, stage, model, effort),
   approveStep: (taskId: string): Promise<void> => TaskService.ApproveStep(taskId),
   openPR: (taskId: string, repoPath: string, title: string, body: string): Promise<void> =>
     TaskService.OpenPR(taskId, repoPath, title, body),

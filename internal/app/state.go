@@ -36,7 +36,10 @@ func (a *App) snapshot() bindings.State {
 		Recents:    a.recentList(),
 		Theme:      string(a.theme.Preference()),
 		SystemDark: a.theme.SystemDark(),
-		Notice:     bindings.FromNotice(a.ws.Notice()),
+		// ModelDefaults are the app's own, not a workspace's: every workspace
+		// sees the same ones.
+		ModelDefaults: bindings.FromModelSet(a.models.Defaults()),
+		Notice:        bindings.FromNotice(a.ws.Notice()),
 		Tasks: bindings.FromTasks(
 			tasks,
 			func(id string) task.Artifacts { return artifacts[id] },

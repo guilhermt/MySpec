@@ -6,11 +6,13 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 
 	"github.com/guilhermt/myspec/internal/bindings"
 	"github.com/guilhermt/myspec/internal/git/gittest"
+	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/task"
 	"github.com/guilhermt/myspec/internal/worktree"
@@ -41,6 +43,24 @@ func createdTask(t *testing.T) (*fixture, string, string) {
 	return f, dir, id
 }
 
+// startedTaskModels is the model of every stage of a task that has just been
+// created, in workflow order: the PRD session is the live one, and every other
+// stage is still to start.
+func startedTaskModels(set models.Set) []bindings.TaskStageModel {
+	converted := make([]bindings.TaskStageModel, 0, len(models.Stages))
+	for _, stage := range models.Stages {
+		c := set[stage]
+		converted = append(converted, bindings.TaskStageModel{
+			Stage:    string(stage),
+			Model:    string(c.Model),
+			Effort:   string(c.Effort),
+			Editable: stage != models.PRD,
+			Live:     stage == models.PRD,
+		})
+	}
+	return converted
+}
+
 func TestCreateTaskAddsTheTaskToTheState(t *testing.T) {
 	t.Parallel()
 
@@ -53,10 +73,13 @@ func TestCreateTaskAddsTheTaskToTheState(t *testing.T) {
 		Dir:           dir,
 		Stage:         "prd",
 		SessionStatus: "waiting",
+		SessionModel:  "claude-fable-5-1",
+		SessionEffort: "high",
 		Steps:         []bindings.Step{},
 		Repos:         []bindings.RepoPR{},
 		PlanProblems:  []bindings.PlanProblem{},
 		Situations:    []bindings.Situation{},
+		Models:        startedTaskModels(models.Factory()),
 		CreatedAt:     got.CreatedAt,
 		UpdatedAt:     got.UpdatedAt,
 	}
@@ -122,6 +145,201 @@ func TestCreateTaskReportsWhatTheUserGotWrong(t *testing.T) {
 				t.Error("a mistake the user can correct was logged as a failure")
 			}
 		})
+	}
+}
+
+// stageModelOf is the line of a stage in the models of a task, failing the
+// test when the task has none for it.
+func stageModelOf(t *testing.T, summary bindings.TaskSummary, stage string) bindings.TaskStageModel {
+	t.Helper()
+
+	for _, one := range summary.Models {
+		if one.Stage == stage {
+			return one
+		}
+	}
+	t.Fatalf("models of task %s = %+v, want a line for %s", summary.ID, summary.Models, stage)
+	return bindings.TaskStageModel{}
+}
+
+// waitAssistantText waits until the agent answered with text in the
+// conversation of a stage, which is what tells a message that was answered
+// from one that is still on its way.
+func waitAssistantText(t *testing.T, f *fixture, id, stage, text string) {
+	t.Helper()
+
+	deadline := time.Now().Add(pollTimeout)
+	for time.Now().Before(deadline) {
+		transcript, err := f.tasks.GetTranscript(id, stage)
+		if err != nil {
+			t.Fatalf("GetTranscript(%s, %s) = %v, want nil", id, stage, err)
+		}
+		for _, entry := range transcript.Entries {
+			if entry.Kind != "assistant" || entry.Assistant == nil {
+				continue
+			}
+			if strings.Contains(entry.Assistant.Text, text) {
+				return
+			}
+		}
+		time.Sleep(pollStep)
+	}
+	t.Fatalf("the agent never answered %q in %s of task %s", text, stage, id)
+}
+
+func TestCreateTaskStartsThePRDWithTheChoiceOfTheDialog(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.open(t, t.TempDir())
+
+	req := newTask("login-screen")
+	req.Models = []bindings.StageModel{{Stage: "prd", Model: "claude-fable-5-1", Effort: "xhigh"}}
+	id, err := f.tasks.CreateTask(req)
+	if err != nil {
+		t.Fatalf("CreateTask() = %v, want nil", err)
+	}
+	f.waitForStatus(t, id, "waiting")
+
+	set := models.Factory()
+	set[models.PRD] = models.Choice{Model: models.Fable51, Effort: models.XHigh}
+	got := f.taskOf(t, id)
+	if diff := cmp.Diff(startedTaskModels(set), got.Models); diff != "" {
+		t.Errorf("models mismatch (-want +got):\n%s", diff)
+	}
+	if got.SessionModel != "claude-fable-5-1" || got.SessionEffort != "xhigh" {
+		t.Errorf("session choice = %q %q, want the one of the dialog", got.SessionModel, got.SessionEffort)
+	}
+}
+
+func TestCreateTaskStartsFromTheDefaultsOfTheSettings(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.open(t, t.TempDir())
+
+	if err := f.settings.SetModelDefault("implementation", "claude-opus-5", "xhigh"); err != nil {
+		t.Fatalf("SetModelDefault() = %v, want nil", err)
+	}
+
+	id, err := f.tasks.CreateTask(newTask("login-screen"))
+	if err != nil {
+		t.Fatalf("CreateTask() = %v, want nil", err)
+	}
+	f.waitForStatus(t, id, "waiting")
+
+	got := stageModelOf(t, f.taskOf(t, id), "implementation")
+	if got.Model != "claude-opus-5" || got.Effort != "xhigh" {
+		t.Errorf("implementation = %+v, want the default of the settings", got)
+	}
+}
+
+func TestCreateTaskReportsAnUnknownModel(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.open(t, t.TempDir())
+
+	req := newTask("login-screen")
+	req.Models = []bindings.StageModel{{Stage: "prd", Model: "gpt", Effort: "high"}}
+	id, err := f.tasks.CreateTask(req)
+	if err == nil {
+		t.Fatalf("CreateTask() = %q, nil, want an error", id)
+	}
+	if err.Error() != "Unknown model." {
+		t.Errorf("CreateTask() error = %q, want the unknown model notice", err)
+	}
+	if tasks := f.workspace.GetState().Tasks; len(tasks) != 0 {
+		t.Errorf("state has %d tasks, want none", len(tasks))
+	}
+}
+
+func TestSetStageModelChangesAStageStillToStart(t *testing.T) {
+	t.Parallel()
+
+	f, _, id := createdTask(t)
+
+	if err := f.tasks.SetStageModel(id, "plan", "claude-sonnet-5", "low"); err != nil {
+		t.Fatalf("SetStageModel(%s) = %v, want nil", id, err)
+	}
+
+	got := stageModelOf(t, f.taskOf(t, id), "plan")
+	want := bindings.TaskStageModel{
+		Stage: "plan", Model: "claude-sonnet-5", Effort: "low", Editable: true,
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("plan mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestSetStageModelOfAStageThatStartedTellsTheUser(t *testing.T) {
+	t.Parallel()
+
+	f, _, id := createdTask(t)
+
+	// The PRD session starts with the task, so there is never a moment in
+	// which its choice could still be changed from the task.
+	err := f.tasks.SetStageModel(id, "prd", "claude-opus-5", "high")
+	if err == nil {
+		t.Fatal("SetStageModel(prd) = nil, want an error")
+	}
+	if err.Error() != "The sessions of this stage have already started." {
+		t.Errorf("SetStageModel() error = %q, want the locked stage notice", err)
+	}
+	if f.logged(t, "binding failed") {
+		t.Error("a mistake the user can correct was logged as a failure")
+	}
+}
+
+func TestSetStepModelReportsWhatTheUserGotWrong(t *testing.T) {
+	t.Parallel()
+
+	f, _, id := createdTask(t)
+
+	err := f.tasks.SetStepModel(id, 1, "claude-opus-5", "huge")
+	if err == nil || err.Error() != "Unknown effort level." {
+		t.Errorf("SetStepModel() error = %v, want the unknown effort notice", err)
+	}
+
+	// The task has no plan yet, so there is no step to change.
+	err = f.tasks.SetStepModel(id, 1, "claude-opus-5", "max")
+	if err == nil || err.Error() != "The task has no step to run." {
+		t.Errorf("SetStepModel() error = %v, want the missing step notice", err)
+	}
+	if f.logged(t, "binding failed") {
+		t.Error("a mistake the user can correct was logged as a failure")
+	}
+}
+
+func TestSetSessionModelIsWhatTheNextMessageRunsWith(t *testing.T) {
+	t.Parallel()
+
+	f, _, id := createdTask(t)
+
+	if err := f.tasks.SetSessionModel(id, "prd", "claude-opus-5", "max"); err != nil {
+		t.Fatalf("SetSessionModel(%s) = %v, want nil", id, err)
+	}
+
+	got := f.taskOf(t, id)
+	if got.SessionModel != "claude-opus-5" || got.SessionEffort != "max" {
+		t.Errorf("session choice = %q %q, want the one of the conversation",
+			got.SessionModel, got.SessionEffort)
+	}
+	// The change reaches the stage too, so discarding the PRD starts it again
+	// with what the user last picked.
+	stage := stageModelOf(t, got, "prd")
+	if stage.Model != "claude-opus-5" || stage.Effort != "max" {
+		t.Errorf("prd = %+v, want the choice of the conversation", stage)
+	}
+
+	// The next message runs with the new choice, which the session reaches by
+	// stopping the idle process and starting it again with --resume.
+	if err := f.tasks.SendMessage(id, "prd", "add a remember me box"); err != nil {
+		t.Fatalf("SendMessage(%s) = %v, want nil", id, err)
+	}
+	waitAssistantText(t, f, id, "prd", "add a remember me box")
+	if !f.logged(t, "claude restarting") {
+		t.Error("the process was not started again with the new flags")
 	}
 }
 
@@ -440,10 +658,12 @@ func TestPlanWrittenReachesImplementation(t *testing.T) {
 				Files: []bindings.ReviewFile{{Path: "hello.txt", Kind: "untracked"}},
 				Total: 1,
 			},
+			Model: "claude-opus-5", Effort: "high",
 		},
 		{
 			Number: 2, File: "2-second.md", Title: "Second",
 			Repository: "api", RepoPath: repo, Status: "not_started", WorktreePath: wt,
+			Model: "claude-opus-5", Effort: "high", ModelEditable: true,
 		},
 	}
 	if diff := cmp.Diff(want, summary.Steps); diff != "" {

@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
+	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
 )
@@ -86,6 +87,7 @@ func TestSessionsUpdateRewritesEveryMutableColumn(t *testing.T) {
 	want.ContextWindow = 200_000
 	want.Corrections = 2
 	want.LastError = "the process exited"
+	want.Choice = models.Choice{Model: models.Fable51, Effort: models.Max}
 	want.UpdatedAt = fixedTime.Add(time.Minute)
 	if err := s.Sessions.Update(t.Context(), want); err != nil {
 		t.Fatalf("Update() = %v, want nil", err)
