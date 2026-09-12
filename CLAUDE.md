@@ -1,27 +1,28 @@
 # MySpec
 
-MySpec é uma aplicação desktop que automatiza, centraliza e controla um workflow de desenvolvimento conduzido pelo Claude Code: PRD, tech spec, plano de steps, implementação step a step, PR e encerramento. O produto é a camada de orquestração e experiência; a inteligência de cada sessão é o Claude Code.
+MySpec é uma aplicação desktop que conduz um workflow de desenvolvimento com o Claude Code: PRD, tech spec, plano de steps, implementação step a step, pull request, review de pull request e encerramento. O produto é a camada de orquestração e experiência; a inteligência de cada sessão é o Claude Code. Wails v3 com Go no backend, React com TypeScript na interface.
 
-## Documentos de referência
+## Leia antes de planejar ou implementar
 
-Leia estes documentos antes de qualquer planejamento ou implementação. Eles são a fonte de verdade do projeto.
+- [docs/guidelines/README.md](./docs/guidelines/README.md): como trabalhar neste repositório. O que ler, como uma mudança acontece, o que nunca fazer, commits. Com as convenções de [Go](./docs/guidelines/go.md), do [frontend](./docs/guidelines/frontend.md) e dos [testes](./docs/guidelines/testing.md).
+- [docs/product/features.md](./docs/product/features.md): o que o produto faz, como ele é hoje.
+- [docs/architecture/overview.md](./docs/architecture/overview.md): onde cada coisa está no código e como as partes se falam. Com [stack.md](./docs/architecture/stack.md), [sessions.md](./docs/architecture/sessions.md) e [storage.md](./docs/architecture/storage.md).
 
-- [WORKFLOW.md](./WORKFLOW.md): o workflow de desenvolvimento que o produto automatiza, descrito em detalhes, incluindo as skills `gm-prd`, `gm-tech-spec` e `gm-plan-tasks` e o ciclo de review e aprovação.
-- [PRODUCT.md](./PRODUCT.md): a definição do produto. O que ele faz, como faz, que problema resolve, princípios, conceitos, ciclo de vida completo de uma task, controles e requisitos de experiência.
-- [STACK.md](./STACK.md): a stack técnica escolhida, com as razões de cada escolha e as alternativas descartadas.
+O índice completo está em [docs/README.md](./docs/README.md).
 
 ## Vocabulário
 
 - **Task**: a unidade de trabalho que o produto conduz, de qualquer natureza: feature, bug fix, refatoração.
 - **Step**: cada item ordenado dentro de uma task. Um step pertence a um único repositório e vira exatamente um commit.
 
-As skills atuais, descritas em WORKFLOW.md, usam outros nomes para as mesmas coisas: chamam a task de "feature" e os steps de "tasks". PRODUCT.md e STACK.md usam o vocabulário do produto.
-
 ## Convenções
 
 - Interface do produto em inglês. Código, identificadores e commits em inglês. Documentação em português.
-- O texto integral das skills que originam os prompts padrão do produto está em `~/.claude/skills/gm-prd/SKILL.md`, `~/.claude/skills/gm-tech-spec/SKILL.md` e `~/.claude/skills/gm-plan-tasks/SKILL.md`. Quando o produto precisar desse texto como asset, ele entra no repositório a partir desses arquivos.
+- `task check` passa por inteiro antes de uma mudança estar pronta: tidy, lint, typecheck, testes Go e web, vulnerabilidades e bindings.
+- `frontend/src/components/ui` e `frontend/bindings` são gerados e nunca editados à mão. Mudou um service ou um DTO: `task generate`.
 
-## Planejamento
+## Documentação
 
-O planejamento de cada task deste projeto fica em `planning/{task-name}/`, com `PRD.md`, `tech-spec.md` e `tasks/`, produzidos pelas skills descritas em WORKFLOW.md. A pasta `tasks/` contém os steps, no nome que as skills usam.
+Todo trabalho no repositório atualiza a documentação em `docs/` quando o que ela descreve muda: uma feature nova ou um comportamento diferente entra em `docs/product/features.md`, uma decisão de arquitetura ou um pacote novo entra em `docs/architecture/`, uma convenção nova entra em `docs/guidelines/`, um comando ou uma variável nova entra em `docs/development/`. A documentação está sempre atualizada; uma mudança não está pronta enquanto a documentação a contradiz.
+
+A documentação descreve o estado atual do projeto, de forma simples e clara. Ela nunca descreve a alteração: não diz o que mudou, o que era antes nem por que deixou de ser. Ao mudar algo, reescreva o trecho para que ele reflita o projeto como ele é agora, como se sempre tivesse sido assim. A razão de uma escolha é bem-vinda, no presente; o histórico não.
