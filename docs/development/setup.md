@@ -51,6 +51,8 @@ O hook, definido em `lefthook.yml`, é de pre-commit e só formata: Biome nos ar
 
 `main.go` embute `frontend/dist`, que é saída de build e não existe num clone limpo, e `//go:embed` recusa um diretório vazio. As tarefas Go colocam um placeholder lá quando não encontram nada, então `task check` funciona antes do primeiro `task build`, e um build real o substitui.
 
+O som das notificações, `internal/platform/chime/chime.wav`, é versionado e gerado por `go generate ./internal/platform/chime/`, que roda `gen.go`. Só precisa rodar de novo quando o gerador muda.
+
 Um teste só, em Go: `go test -run 'TestNome' ./internal/pacote/`. No frontend: `pnpm vitest run src/features/task/StepBar.test.tsx`, a partir de `frontend/`, ou `pnpm test:watch` para o modo interativo.
 
 ## Instalação
