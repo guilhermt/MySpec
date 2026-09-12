@@ -2,7 +2,7 @@
 
 ## Pré-requisitos
 
-Quatro coisas são instaladas à mão; tudo o mais vem delas.
+Cinco coisas são instaladas à mão; tudo o mais vem delas.
 
 1. **Pacotes do sistema.** As dependências de build do Wails no Linux e a toolchain C que o cgo precisa:
 
@@ -17,6 +17,8 @@ Quatro coisas são instaladas à mão; tudo o mais vem delas.
 3. **Claude Code.** O `claude` no `PATH` ou em `~/.local/bin`, logado uma vez com `claude` num terminal. `MYSPEC_CLAUDE_PATH` fixa outro caminho.
 
 4. **git, gh e VS Code.** `git` no `PATH`, capaz de alcançar o `origin` dos repositórios sem pedir senha: o app roda com `GIT_TERMINAL_PROMPT=0`, e um fetch que peça senha falha em vez de pendurar. `gh` autenticado, para a etapa de PR. `code` no `PATH` é o que **Abrir no VS Code** roda; sem ele o app avisa e o resto funciona.
+
+5. **Um player de áudio.** `pw-play` (PipeWire), `paplay` (PulseAudio) ou `aplay` (alsa-utils) no `PATH`, para o som das notificações. Um desktop com PipeWire ou PulseAudio já traz um deles. Sem nenhum, as notificações aparecem mudas e o log diz por quê.
 
 ## Setup
 
@@ -50,6 +52,8 @@ O hook, definido em `lefthook.yml`, é de pre-commit e só formata: Biome nos ar
 | `task uninstall` | Remove o que `install` colocou; nunca toca os dados do app |
 
 `main.go` embute `frontend/dist`, que é saída de build e não existe num clone limpo, e `//go:embed` recusa um diretório vazio. As tarefas Go colocam um placeholder lá quando não encontram nada, então `task check` funciona antes do primeiro `task build`, e um build real o substitui.
+
+O som das notificações, `internal/platform/chime/chime.wav`, é versionado e gerado por `go generate ./internal/platform/chime/`, que roda `gen.go`. Só precisa rodar de novo quando o gerador muda.
 
 Um teste só, em Go: `go test -run 'TestNome' ./internal/pacote/`. No frontend: `pnpm vitest run src/features/task/StepBar.test.tsx`, a partir de `frontend/`, ou `pnpm test:watch` para o modo interativo.
 

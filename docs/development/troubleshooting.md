@@ -22,6 +22,8 @@ jq -c 'select(.task == "<id>")' ~/.local/state/myspec/myspec.log
 
 **Modelos e prompts.** `model default changed`, `task model set`, `task step model set`, `session model set` e `session model changed`, com a etapa ou o step e a escolha. `prompt saved`, `prompt restored` e `prompt copy of the default removed`, com o prompt.
 
+**Notificações e som.** `send notification failed`, `withdraw notification failed` e `notification dropped` marcam uma notificação que o servidor recusou ou não respondeu. `install chime failed` diz por que o som não foi copiado para o diretório de dados; sem ele as notificações aparecem mudas. `read notification capabilities failed` marca um servidor que não disse se toca sons; o app toca o carrilhão ele mesmo. `play chime failed` traz cada player tentado e o que ele disse. `chime silenced` marca um carrilhão calado pelo não perturbe. Em `debug`: `chime played`, com o player; `chime dropped`, um carrilhão pedido enquanto outro tocava; `do not disturb on` e `do not disturb unknown`, com a fonte que respondeu ou falhou.
+
 ## Problemas conhecidos
 
 - **Uma segunda instância trabalha à toa.** Ao abrir `myspec <pasta>` com o app já aberto, o segundo processo roda todo o seu início, log e banco inclusive, antes de o Wails encontrar o lock e entregar os argumentos. O log ganha um segundo `app starting` de um processo que então sai. Nada é corrompido; o trabalho é desperdiçado.

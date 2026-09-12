@@ -9,6 +9,7 @@ Tudo que o app guarda fica em dois lugares, seguindo a especificação XDG: o di
 ```
 myspec.db                              o banco SQLite
 prompts/<nome>.md                      só os prompts editados pelo usuário
+sounds/chime.wav                       o som das notificações
 workspaces/<nome>-<hash>/tasks/<task>/ os artefatos de cada task
 ```
 
@@ -21,6 +22,10 @@ O schema é versionado por `PRAGMA user_version` e evolui por migrations em `int
 ### Prompts
 
 Os prompts padrão vivem no binário, em `internal/prompts/defaults/`. O diretório `prompts/` guarda apenas os que o usuário editou: `prd.md`, `tech_spec.md`, `plan.md`, `commit.md`, `pr.md` e `pr_review.md`. Um prompt sem arquivo segue o padrão da versão que roda, e um arquivo idêntico ao padrão é removido quando o app inicia, para que um prompt restaurado volte a acompanhar as versões novas. O prompt é lido quando uma sessão começa.
+
+### Som
+
+`sounds/chime.wav` é uma cópia do som embutido no binário, escrita ao iniciar quando falta ou difere, para que um servidor de notificações que toca sons a leia por caminho. Apagá-la é inofensivo: o app a escreve de novo na próxima vez que abrir.
 
 ### Artefatos
 

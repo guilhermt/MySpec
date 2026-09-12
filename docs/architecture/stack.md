@@ -20,6 +20,7 @@ A stack do produto e a razão de cada escolha.
 | Artefatos e prompts | Arquivos Markdown no diretório de dados XDG |
 | Estado do app | SQLite via `modernc.org/sqlite`, acessado só pelo Go |
 | Notificações e tema do sistema | D-Bus com godbus: `org.freedesktop.Notifications` e o portal de configurações |
+| Som das notificações | WAV próprio embutido, tocado por `pw-play`, `paplay` ou `aplay` |
 | Logs | `slog` em JSON no diretório de estado XDG |
 | Ferramentas | mise, Task, pnpm, Biome, Vitest, golangci-lint, gotestsum, govulncheck, go-test-coverage, lefthook |
 
@@ -73,10 +74,19 @@ Nada de estado vive nos Markdown. Ver [storage.md](./storage.md).
 
 ## D-Bus
 
-O app fala direto com o barramento de sessão pelo godbus, que o Wails já traz no grafo de módulos, para duas coisas:
+O app fala direto com o barramento de sessão pelo godbus, que o Wails já traz no grafo de módulos, para três coisas:
 
 - **Notificações**, pelo serviço `org.freedesktop.Notifications`. O service de notificações do Wails v3 entrega, no Linux, uma notificação dispensada pelo usuário como um clique, o que traria a janela para a frente sem o usuário pedir. No serviço direto um clique chega como `ActionInvoked` e dispensar só tira a notificação da lista.
 - **Tema do sistema**, pelo portal `org.freedesktop.portal.Settings`, assinando `SettingChanged`. No backend GTK4 do Wails, `Env.IsDarkMode()` responde falso antes de o loop principal começar e o evento `ThemeChanged` nunca dispara. Ler o portal diretamente também põe a cor certa atrás do webview desde o primeiro frame, porque a leitura acontece antes de a janela ser criada.
+- **Não perturbe**, lendo o estado que o KDE Plasma (propriedade `Inhibited`), o dunst (`org.dunstproject.cmd0.paused`) e o swaync (`GetDnd`) expõem. As leituras vão com `FlagNoAutoStart`, para que perguntar por um daemon instalado mas parado não o inicie ao lado do servidor que está rodando.
+
+## Som das notificações
+
+O som é do app e é o mesmo em todo sistema: `internal/platform/chime/chime.wav`, gerado por `gen.go` a partir de senoides, sem licença de terceiros a acompanhar. É um WAV PCM de 16 bits, mono, 48 kHz, o formato que os três players leem.
+
+Quando o servidor de notificações toca sons, anunciando a capacidade `sound`, como o GNOME Shell, quem toca é ele, com o arquivo do app na hint `sound-file`, e o não perturbe e as preferências de som são os dele. Quando não toca, o app roda um player de áudio do sistema: `pw-play` (PipeWire), `paplay` (PulseAudio, que o PipeWire também serve) e `aplay` (ALSA), nessa ordem, passando ao seguinte quando um falta ou falha. Rodar o player cobre as três pilhas de áudio do Linux sem cgo nem módulo novo, do mesmo jeito que o app já roda `git` e `gh`. Um cliente PulseAudio em Go puro cobriria só a primeira pilha, e o ALSA por cgo manteria um dispositivo de áudio aberto enquanto o app roda.
+
+O não perturbe não tem padrão freedesktop. O app pergunta a quem o expõe: o shell do Omarchy, por `omarchy-shell notifications isDnd`, e o KDE Plasma, o dunst e o swaync, pelo D-Bus. Num sistema que não expõe o estado, o som toca sempre que a notificação é enviada.
 
 ## Ferramentas de desenvolvimento
 
