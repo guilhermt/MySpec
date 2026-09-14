@@ -26,3 +26,5 @@ O índice completo está em [docs/README.md](./docs/README.md).
 Todo trabalho no repositório atualiza a documentação em `docs/` quando o que ela descreve muda: uma feature nova ou um comportamento diferente entra em `docs/product/features.md`, uma decisão de arquitetura ou um pacote novo entra em `docs/architecture/`, uma convenção nova entra em `docs/guidelines/`, um comando ou uma variável nova entra em `docs/development/`. A documentação está sempre atualizada; uma mudança não está pronta enquanto a documentação a contradiz.
 
 A documentação descreve o estado atual do projeto, de forma simples e clara. Ela nunca descreve a alteração: não diz o que mudou, o que era antes nem por que deixou de ser. Ao mudar algo, reescreva o trecho para que ele reflita o projeto como ele é agora, como se sempre tivesse sido assim. A razão de uma escolha é bem-vinda, no presente; o histórico não.
+
+A exceção é `docs/roadmap/`: as ideias de evolução do produto, uma pasta por ideia, com índice em `docs/roadmap/README.md`. É o único lugar que descreve o que o produto ainda não é.

@@ -21,6 +21,10 @@ A documentação é escrita em português; a interface, o código, os identifica
 - [frontend.md](./guidelines/frontend.md): as convenções do frontend.
 - [testing.md](./guidelines/testing.md): como os testes são escritos e rodados nas duas linguagens, os fakes e os limiares.
 
+## Roadmap
+
+- [README.md](./roadmap/README.md): as ideias de evolução do produto, uma pasta por ideia. A única parte da documentação que descreve o que o produto ainda não é.
+
 ## Desenvolvimento
 
 - [setup.md](./development/setup.md): pré-requisitos, setup, comandos, instalação, VS Code e variáveis de ambiente.
