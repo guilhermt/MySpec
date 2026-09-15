@@ -649,6 +649,69 @@ func TestFromArchivedCarriesTheDocumentsAndThePullRequests(t *testing.T) {
 	}
 }
 
+func TestFromTasksCarriesTheModeAndTheOneShotDocument(t *testing.T) {
+	t.Parallel()
+
+	got := bindings.FromTasks(
+		[]task.Task{
+			{ID: "task-1", Name: "login-screen", Mode: task.ModeOneShot, Stage: task.StageOneShot},
+			{ID: "task-2", Name: "sign-up", Mode: task.ModeStructured, Stage: task.StagePRD},
+		},
+		func(id string) task.Artifacts { return task.Artifacts{OneShot: id == "task-1"} },
+		func(string) []flow.StepState { return nil },
+		noRepos,
+		nil,
+		nil,
+	)
+	if len(got) != 2 {
+		t.Fatalf("len(FromTasks()) = %d, want 2", len(got))
+	}
+	if got[0].Mode != "one_shot" || got[0].Stage != "one_shot" || !got[0].HasOneShot {
+		t.Errorf("task-1 = mode %q stage %q hasOneShot %v, want the One-Shot planning with its document",
+			got[0].Mode, got[0].Stage, got[0].HasOneShot)
+	}
+	if got[1].Mode != "structured" || got[1].HasOneShot {
+		t.Errorf("task-2 = mode %q hasOneShot %v, want a Structured task without the document",
+			got[1].Mode, got[1].HasOneShot)
+	}
+}
+
+func TestFromArchivedCarriesTheModeAndTheOneShotDocument(t *testing.T) {
+	t.Parallel()
+
+	// The plan of a One-Shot task is its document, as a single step with the
+	// reports of its review.
+	artifacts := task.Artifacts{
+		OneShot: true,
+		Plan: task.Plan{
+			Present: true,
+			Steps: []task.Step{
+				{Number: 1, File: "one-shot.md", Title: "Login screen", Repository: "api", RepoPath: "/home/u/code/api"},
+			},
+		},
+		StepReports: map[int][]task.ReviewReport{1: {{Pass: 1, File: "1-review-1.md", Clean: true}}},
+	}
+
+	got := bindings.FromArchived(
+		[]task.Task{{ID: "task-1", Name: "login-screen", Mode: task.ModeOneShot}},
+		func(string) task.Artifacts { return artifacts },
+		func(string) []task.PRRun { return nil },
+	)
+	if len(got) != 1 {
+		t.Fatalf("len(FromArchived()) = %d, want 1", len(got))
+	}
+	if got[0].Mode != "one_shot" || !got[0].HasOneShot || got[0].HasPRD || got[0].HasTechSpec {
+		t.Errorf("archived task = %+v, want a One-Shot task with its document alone", got[0])
+	}
+	want := []bindings.ArchivedStep{{
+		Number: 1, File: "one-shot.md", Title: "Login screen", Repository: "api",
+		Reports: []bindings.StepReport{{Pass: 1, File: "1-review-1.md", Clean: true}},
+	}}
+	if diff := cmp.Diff(want, got[0].Steps); diff != "" {
+		t.Errorf("steps mismatch (-want +got):\n%s", diff)
+	}
+}
+
 func TestFromArchivedCarriesTheReportsOfTheSteps(t *testing.T) {
 	t.Parallel()
 

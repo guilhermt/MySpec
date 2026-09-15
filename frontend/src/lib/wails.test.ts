@@ -23,6 +23,7 @@ import {
   asSituationGroup,
   asSituationKind,
   asStepStatus,
+  asTaskMode,
   asTaskStage,
   asThemePreference,
   asTranscriptEventKind,
@@ -66,13 +67,17 @@ describe("asNoticeReason", () => {
 
 describe("narrowing", () => {
   it("keeps the values Go sends", () => {
+    expect(asTaskMode("structured")).toBe("structured");
+    expect(asTaskMode("one_shot")).toBe("one_shot");
     expect(asTaskStage("tech_spec")).toBe("tech_spec");
     expect(asTaskStage("plan")).toBe("plan");
+    expect(asTaskStage("one_shot")).toBe("one_shot");
     expect(asTaskStage("implementation")).toBe("implementation");
     expect(asTaskStage("pr")).toBe("pr");
     expect(asModelStage("prd")).toBe("prd");
     expect(asModelStage("tech_spec")).toBe("tech_spec");
     expect(asModelStage("plan")).toBe("plan");
+    expect(asModelStage("one_shot")).toBe("one_shot");
     expect(asModelStage("implementation")).toBe("implementation");
     expect(asModelStage("step_review")).toBe("step_review");
     expect(asModelStage("pr")).toBe("pr");
@@ -80,6 +85,7 @@ describe("narrowing", () => {
     expect(asPromptStage("prd")).toBe("prd");
     expect(asPromptStage("tech_spec")).toBe("tech_spec");
     expect(asPromptStage("plan")).toBe("plan");
+    expect(asPromptStage("one_shot")).toBe("one_shot");
     expect(asPromptStage("step_review")).toBe("step_review");
     expect(asPromptStage("commit")).toBe("commit");
     expect(asPromptStage("pr")).toBe("pr");
@@ -94,6 +100,8 @@ describe("narrowing", () => {
     expect(asMarkerType("tech_spec_updated")).toBe("tech_spec_updated");
     expect(asMarkerType("plan_written")).toBe("plan_written");
     expect(asMarkerType("plan_updated")).toBe("plan_updated");
+    expect(asMarkerType("one_shot_written")).toBe("one_shot_written");
+    expect(asMarkerType("one_shot_updated")).toBe("one_shot_updated");
     expect(asMarkerType("pr_review_written")).toBe("pr_review_written");
     expect(asMarkerType("step_review_started")).toBe("step_review_started");
     expect(asMarkerType("step_review_written")).toBe("step_review_written");
@@ -193,6 +201,7 @@ describe("narrowing", () => {
   });
 
   it("falls back on a value a newer backend invented", () => {
+    expect(asTaskMode("guided")).toBe("structured");
     expect(asTaskStage("archived")).toBe("prd");
     // The commit has no model of its own, and a step has no editable prompt.
     expect(asModelStage("commit")).toBe("prd");
@@ -251,6 +260,7 @@ describe("api", () => {
       name: "add-login",
       repoPath: "",
       initialContext: "a login",
+      mode: "",
       models: [],
       reviewMode: "",
     });

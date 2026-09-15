@@ -97,6 +97,7 @@ function NewTaskForm({ node }: { node: TreeNode }) {
       name,
       repoPath: node.isRoot ? "" : node.path,
       initialContext: context,
+      mode: "structured",
       models: choices,
       reviewMode,
     })

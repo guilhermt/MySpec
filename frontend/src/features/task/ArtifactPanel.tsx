@@ -39,6 +39,7 @@ const DEFAULT_SELECTION: Record<TaskStage, Selection> = {
   prd: "prd",
   tech_spec: "prd",
   plan: "tech_spec",
+  one_shot: "prd",
   implementation: "steps",
   pr: "pr",
 };

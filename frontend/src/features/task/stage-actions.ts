@@ -24,6 +24,7 @@ const NOUNS: Record<TaskStage, string> = {
   prd: "PRD",
   tech_spec: "tech spec",
   plan: "plan",
+  one_shot: "planning",
   implementation: "implementation",
   pr: "PR",
 };

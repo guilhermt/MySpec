@@ -90,7 +90,7 @@ type Review struct {
 // Step is one step of the plan of a task.
 type Step struct {
 	Number int    `json:"number"`
-	File   string `json:"file"` // name inside steps/, the artifact is "steps/" + File
+	File   string `json:"file"` // name inside steps/, the artifact is "steps/" + File; one-shot.md for the single step of a One-Shot task
 	Title  string `json:"title"`
 	// Repository is the value the file carries; RepoPath is "" when no
 	// repository of the task matches it.
@@ -266,7 +266,7 @@ type Place struct {
 	// Kind is stage, step, step_review or repo, a string for the same reason
 	// as Notice.Reason.
 	Kind       string `json:"kind"`
-	Stage      string `json:"stage"`      // stage only: prd, tech_spec or plan
+	Stage      string `json:"stage"`      // stage only: prd, tech_spec, plan or one_shot
 	Step       int    `json:"step"`       // step and step_review only
 	RepoPath   string `json:"repoPath"`   // repo only
 	Repository string `json:"repository"` // repo only: relative path, as the steps name it
@@ -320,8 +320,11 @@ type TaskSummary struct {
 	Name     string `json:"name"`
 	RepoPath string `json:"repoPath"` // "" for a root task
 	Dir      string `json:"dir"`
-	// Stage is prd, tech_spec, plan, implementation or pr, a string for the
-	// same reason as Notice.Reason.
+	// Mode is structured or one_shot, a string for the same reason as
+	// Notice.Reason.
+	Mode string `json:"mode"`
+	// Stage is prd, tech_spec, plan, one_shot, implementation or pr, a string
+	// for the same reason as Notice.Reason.
 	Stage string `json:"stage"`
 	// Revisiting is a stage reopened by the user, which moves on only when
 	// they say so.
@@ -345,6 +348,7 @@ type TaskSummary struct {
 	Corrections     int              `json:"corrections"`
 	HasPRD          bool             `json:"hasPrd"`
 	HasTechSpec     bool             `json:"hasTechSpec"`
+	HasOneShot      bool             `json:"hasOneShot"`
 	Steps           []Step           `json:"steps"`        // never nil
 	CurrentStep     int              `json:"currentStep"`  // the step that runs or runs next; 0 when the task has no steps
 	Repos           []RepoPR         `json:"repos"`        // never nil; empty outside the pull request stage
@@ -361,7 +365,7 @@ type TaskSummary struct {
 // ArchivedStep is one step of an archived task, as the plan wrote it.
 type ArchivedStep struct {
 	Number     int          `json:"number"`
-	File       string       `json:"file"` // name inside steps/, the artifact is "steps/" + File
+	File       string       `json:"file"` // name inside steps/, the artifact is "steps/" + File; one-shot.md for the single step of a One-Shot task
 	Title      string       `json:"title"`
 	Repository string       `json:"repository"`
 	Reports    []StepReport `json:"reports"` // never nil
@@ -380,11 +384,15 @@ type ArchivedRepo struct {
 // ArchivedTask is a finished task, as the history shows it: its artifacts and
 // what it touched, and nothing that runs.
 type ArchivedTask struct {
-	ID              string         `json:"id"`
-	Name            string         `json:"name"`
-	RepoPath        string         `json:"repoPath"` // "" for a root task
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	RepoPath string `json:"repoPath"` // "" for a root task
+	// Mode is structured or one_shot, a string for the same reason as
+	// Notice.Reason.
+	Mode            string         `json:"mode"`
 	HasPRD          bool           `json:"hasPrd"`
 	HasTechSpec     bool           `json:"hasTechSpec"`
+	HasOneShot      bool           `json:"hasOneShot"`
 	Steps           []ArchivedStep `json:"steps"` // never nil
 	Repos           []ArchivedRepo `json:"repos"` // never nil
 	ArtifactVersion int            `json:"artifactVersion"`
@@ -522,9 +530,9 @@ type QuestionEntry struct {
 // MarkerEntry is a milestone of the conversation.
 type MarkerEntry struct {
 	// Type is prd_written, prd_updated, tech_spec_written, tech_spec_updated,
-	// plan_written, plan_updated, pr_review_written, step_review_started,
-	// step_review_written, stage_started, step_started, compacted or
-	// interrupted.
+	// plan_written, plan_updated, one_shot_written, one_shot_updated,
+	// pr_review_written, step_review_started, step_review_written,
+	// stage_started, step_started, compacted or interrupted.
 	Type      string `json:"type"`
 	PreTokens int    `json:"preTokens"`
 	// Stage belongs to stage_started alone, Step to the markers of a step
@@ -590,8 +598,8 @@ type TranscriptEvent struct {
 
 // StageModel is the model and effort of one stage.
 type StageModel struct {
-	// Stage is prd, tech_spec, plan, implementation, step_review, pr or
-	// pr_review, a string for the same reason as Notice.Reason.
+	// Stage is prd, tech_spec, plan, one_shot, implementation, step_review, pr
+	// or pr_review, a string for the same reason as Notice.Reason.
 	Stage  string `json:"stage"`
 	Model  string `json:"model"`  // claude-fable-5-1, claude-opus-5 or claude-sonnet-5
 	Effort string `json:"effort"` // low, medium, high, xhigh or max
@@ -609,8 +617,8 @@ type TaskStageModel struct {
 
 // Prompt is the text a kind of session opens with, as the settings show it.
 type Prompt struct {
-	// Stage is prd, tech_spec, plan, step_review, commit, pr or pr_review, a
-	// string for the same reason as Notice.Reason.
+	// Stage is prd, tech_spec, plan, one_shot, step_review, commit, pr or
+	// pr_review, a string for the same reason as Notice.Reason.
 	Stage    string `json:"stage"`
 	Text     string `json:"text"`
 	Modified bool   `json:"modified"` // the user edited it: it no longer follows the default of the app
@@ -624,6 +632,7 @@ type CreateTaskRequest struct {
 	Name           string `json:"name"`
 	RepoPath       string `json:"repoPath"` // "" for root
 	InitialContext string `json:"initialContext"`
+	Mode           string `json:"mode"` // structured or one_shot; "" is structured
 	// Models are the choices of the creation dialog. A stage left out takes the
 	// default of the app.
 	Models     []StageModel `json:"models"`

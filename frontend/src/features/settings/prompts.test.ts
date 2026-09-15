@@ -2,11 +2,12 @@ import { describe, expect, it } from "vitest";
 import { PLACEHOLDERS, PROMPTS } from "@/features/settings/prompts";
 
 describe("PROMPTS", () => {
-  it("has the seven prompts in workflow order", () => {
+  it("has the eight prompts in workflow order, with the One-Shot planning after the plan", () => {
     expect(PROMPTS.map((prompt) => prompt.stage)).toEqual([
       "prd",
       "tech_spec",
       "plan",
+      "one_shot",
       "step_review",
       "commit",
       "pr",
@@ -17,8 +18,9 @@ describe("PROMPTS", () => {
 
 describe("PLACEHOLDERS", () => {
   it("says what every placeholder becomes", () => {
-    expect(Object.keys(PLACEHOLDERS)).toHaveLength(17);
+    expect(Object.keys(PLACEHOLDERS)).toHaveLength(18);
     expect(PLACEHOLDERS["{{task_name}}"]?.meaning).toBe("The name of the task");
+    expect(PLACEHOLDERS["{{one_shot_path}}"]?.meaning).toBe("The One-Shot document file");
   });
 
   it("says what the app does only for the three it never drops", () => {

@@ -99,6 +99,7 @@ describe("placeLabel", () => {
     [stagePlace("prd"), "PRD"],
     [stagePlace("tech_spec"), "tech spec"],
     [stagePlace("plan"), "plan"],
+    [stagePlace("one_shot"), "One-Shot planning"],
     [stagePlace("implementation"), "implementation"],
     [stepPlace(4), "step 4"],
     [reviewerPlace(2), "step 2 review"],

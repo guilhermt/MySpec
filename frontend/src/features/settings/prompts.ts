@@ -17,6 +17,12 @@ export const PROMPTS: readonly PromptMeta[] = [
       "Opens the plan session. Holds the template of the step files, which are the prompts of the implementation.",
   },
   {
+    stage: "one_shot",
+    name: "One-Shot planning",
+    description:
+      "Opens the planning session of a One-Shot task. Holds the structure of the One-Shot document, which is the prompt of its implementation.",
+  },
+  {
     stage: "step_review",
     name: "Step review",
     description: "Opens the review session of a step in Agent mode.",
@@ -57,6 +63,7 @@ export const PLACEHOLDERS: Readonly<Record<string, PlaceholderMeta>> = {
   "{{tech_spec_path}}": { meaning: "The tech spec file" },
   "{{steps_dir}}": { meaning: "The folder of the step files" },
   "{{step_path}}": { meaning: "The file of the step under review" },
+  "{{one_shot_path}}": { meaning: "The One-Shot document file" },
   "{{repositories}}": { meaning: "The list of the repositories the task may touch" },
   "{{initial_context}}": {
     meaning: "The initial context written when the task was created",

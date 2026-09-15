@@ -68,10 +68,12 @@ func TestCreateTaskAddsTheTaskToTheState(t *testing.T) {
 	f, dir, id := createdTask(t)
 
 	got := f.taskOf(t, id)
+	// The request carries no mode, so the task is Structured.
 	want := bindings.TaskSummary{
 		ID:                 id,
 		Name:               "login-screen",
 		Dir:                dir,
+		Mode:               "structured",
 		Stage:              "prd",
 		ReviewMode:         "manual",
 		ReviewModeEditable: true,
@@ -131,6 +133,16 @@ func TestCreateTaskReportsWhatTheUserGotWrong(t *testing.T) {
 			req:  bindings.CreateTaskRequest{Name: "checkout", RepoPath: "/elsewhere/api", InitialContext: "a checkout"},
 			want: "This repository is not part of the workspace.",
 		},
+		{
+			name: "unknown mode",
+			req:  bindings.CreateTaskRequest{Name: "checkout", InitialContext: "a checkout", Mode: "quick"},
+			want: "Unknown mode.",
+		},
+		{
+			name: "One-Shot at the root of the workspace",
+			req:  bindings.CreateTaskRequest{Name: "checkout", InitialContext: "a checkout", Mode: "one_shot"},
+			want: "One-Shot tasks are created in a repository.",
+		},
 	}
 
 	for _, tt := range tests {
@@ -148,6 +160,37 @@ func TestCreateTaskReportsWhatTheUserGotWrong(t *testing.T) {
 				t.Error("a mistake the user can correct was logged as a failure")
 			}
 		})
+	}
+}
+
+func TestCreateTaskStartsAOneShotTaskInItsRepository(t *testing.T) {
+	t.Parallel()
+
+	f, dir := repoWorkspace(t)
+	repo := filepath.Join(dir, "api")
+
+	req := newTask("login-screen")
+	req.RepoPath = repo
+	req.Mode = "one_shot"
+	id, err := f.tasks.CreateTask(req)
+	if err != nil {
+		t.Fatalf("CreateTask() = %v, want nil", err)
+	}
+	f.waitForStatus(t, id, "waiting")
+
+	summary := f.taskOf(t, id)
+	if summary.Mode != "one_shot" || summary.Stage != "one_shot" || summary.RepoPath != repo {
+		t.Errorf("task = mode %q stage %q repoPath %q, want the One-Shot planning in %s",
+			summary.Mode, summary.Stage, summary.RepoPath, repo)
+	}
+	if summary.HasOneShot {
+		t.Error("hasOneShot = true, want the document still to be written")
+	}
+
+	// The planning opens with what the user wrote, as the PRD does.
+	transcript := f.waitTranscript(t, id, "one_shot")
+	if !hasUserText(transcript, "a login screen with email and password") {
+		t.Error("the planning did not start with the initial context")
 	}
 }
 

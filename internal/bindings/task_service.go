@@ -76,7 +76,11 @@ func (s *TaskService) CreateTask(req CreateTaskRequest) (string, error) {
 	if err != nil {
 		return "", s.fail("CreateTask", err)
 	}
-	mode, err := reviewModeOf(s.reviewModes.Default(), req.ReviewMode)
+	reviewMode, err := reviewModeOf(s.reviewModes.Default(), req.ReviewMode)
+	if err != nil {
+		return "", s.fail("CreateTask", err)
+	}
+	mode, err := modeOf(req.Mode)
 	if err != nil {
 		return "", s.fail("CreateTask", err)
 	}
@@ -84,9 +88,10 @@ func (s *TaskService) CreateTask(req CreateTaskRequest) (string, error) {
 	t, err := s.tasks.Create(ctx, task.CreateParams{
 		Name:           req.Name,
 		RepoPath:       req.RepoPath,
+		Mode:           mode,
 		InitialContext: req.InitialContext,
 		Models:         set,
-		ReviewMode:     mode,
+		ReviewMode:     reviewMode,
 	})
 	if err != nil {
 		return "", s.fail("CreateTask", err)
@@ -163,7 +168,7 @@ func (s *TaskService) GetTranscript(taskID, stage string) (Transcript, error) {
 }
 
 // BackToStage reopens a finished stage of a task, throwing away what came
-// after it. The stage is prd or tech_spec.
+// after it. The stage is prd, tech_spec or one_shot.
 func (s *TaskService) BackToStage(taskID, stage string) error {
 	target, err := task.ParseStage(stage)
 	if err != nil {
@@ -181,7 +186,7 @@ func (s *TaskService) BackToStage(taskID, stage string) error {
 }
 
 // DiscardStage throws away a stage and everything after it, and starts the
-// stage again. The stage is prd, tech_spec or plan.
+// stage again. The stage is prd, tech_spec, plan or one_shot.
 func (s *TaskService) DiscardStage(taskID, stage string) error {
 	target, err := task.ParseStage(stage)
 	if err != nil {
@@ -283,8 +288,8 @@ func (s *TaskService) SetStepModel(taskID string, step int, model, effort string
 }
 
 // SetSessionModel changes the model and effort of a session from its next
-// message on. The stage names the session: prd, tech_spec, plan, step:<n>,
-// pr:<slug> or pr_review:<slug>.
+// message on. The stage names the session: prd, tech_spec, plan, one_shot,
+// step:<n>, step_review:<n>, pr:<slug> or pr_review:<slug>.
 func (s *TaskService) SetSessionModel(taskID, stage, model, effort string) error {
 	c, err := models.ParseChoice(model, effort)
 	if err != nil {
@@ -631,6 +636,15 @@ func reviewModeOf(fallback reviewmode.Mode, requested string) (reviewmode.Mode, 
 	return reviewmode.ParseMode(requested)
 }
 
+// modeOf is the mode a new task is conducted in: the one the creation dialog
+// sent, or Structured when it sent none.
+func modeOf(requested string) (task.Mode, error) {
+	if requested == "" {
+		return task.ModeStructured, nil
+	}
+	return task.ParseMode(requested)
+}
+
 // userMessages are the failures the user caused, with what the interface shows
 // for them.
 var userMessages = []struct {
@@ -642,6 +656,8 @@ var userMessages = []struct {
 	{task.ErrEmptyContext, "Describe what you want to build."},
 	{task.ErrRepoOutside, "This repository is not part of the workspace."},
 	{task.ErrUnknownStage, "Unknown stage."},
+	{task.ErrUnknownMode, "Unknown mode."},
+	{task.ErrOneShotAtRoot, "One-Shot tasks are created in a repository."},
 	{models.ErrUnknownModel, "Unknown model."},
 	{models.ErrUnknownEffort, "Unknown effort level."},
 	{models.ErrUnknownStage, "Unknown stage."},

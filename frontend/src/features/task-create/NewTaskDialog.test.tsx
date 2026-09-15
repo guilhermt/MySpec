@@ -88,6 +88,7 @@ describe("NewTaskDialog", () => {
       name: "fix-header",
       repoPath: "/home/dev/projects/web",
       initialContext: "The header overlaps the menu",
+      mode: "structured",
       models: makeModelDefaults(),
       reviewMode: "manual",
     });
@@ -143,6 +144,7 @@ describe("NewTaskDialog", () => {
       name: "add-login",
       repoPath: "",
       initialContext: "A login screen",
+      mode: "structured",
       models: makeModelDefaults().map((line) =>
         line.stage === "prd" ? { ...line, effort: "xhigh" } : line,
       ),
@@ -162,6 +164,7 @@ describe("NewTaskDialog", () => {
         name: "add-login",
         repoPath: "",
         initialContext: "A login screen",
+        mode: "structured",
         models: makeModelDefaults(),
         reviewMode: "manual",
       });
@@ -205,6 +208,7 @@ describe("NewTaskDialog", () => {
         name: "add-login",
         repoPath: "",
         initialContext: "A login screen",
+        mode: "structured",
         models: makeModelDefaults(),
         reviewMode: "agent",
       });
