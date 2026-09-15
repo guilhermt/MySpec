@@ -4,6 +4,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Markdown } from "@/features/chat/Markdown";
 import { ErrorNotice } from "@/features/notice/Notice";
+import { OneShotView } from "@/features/task/OneShotView";
 import { prReportLabel } from "@/features/task/repo-status";
 import { StepDocument } from "@/features/task/StepDocument";
 import { StepList } from "@/features/task/StepList";
@@ -11,7 +12,15 @@ import { useArtifact } from "@/features/task/useArtifact";
 import { repoName, reposOf } from "@/lib/repos";
 import { findStepReport, stepReportLabel } from "@/lib/review-modes";
 import { stepSituation } from "@/lib/situations";
-import { asTaskStage, type RepoPR, type Step, type TaskStage, type TaskSummary } from "@/lib/wails";
+import {
+  asTaskMode,
+  asTaskStage,
+  type RepoPR,
+  type Step,
+  type TaskMode,
+  type TaskStage,
+  type TaskSummary,
+} from "@/lib/wails";
 import { setStepModel, setStepReviewMode } from "@/store/actions";
 import { useAppStore } from "@/store/app-store";
 
@@ -26,16 +35,17 @@ type Selection =
   | "prd"
   | "tech_spec"
   | "steps"
+  | "one_shot"
   | "pr"
   | { step: string }
   | { report: string }
   | { pr: string };
 
 /** Tab is a Selection with nothing drilled into. */
-type Tab = "prd" | "tech_spec" | "steps" | "pr";
+type Tab = "prd" | "tech_spec" | "steps" | "one_shot" | "pr";
 
 // The document a stage was given to work from is the one worth having open.
-const DEFAULT_SELECTION: Record<TaskStage, Selection> = {
+const STRUCTURED_SELECTION: Record<TaskStage, Selection> = {
   prd: "prd",
   tech_spec: "prd",
   plan: "tech_spec",
@@ -43,6 +53,17 @@ const DEFAULT_SELECTION: Record<TaskStage, Selection> = {
   implementation: "steps",
   pr: "pr",
 };
+
+/**
+ * defaultSelection is what the panel opens on in a stage: for a One-Shot task,
+ * its document until the pull request.
+ */
+function defaultSelection(mode: TaskMode, stage: TaskStage): Selection {
+  if (mode === "one_shot") {
+    return stage === "pr" ? "pr" : "one_shot";
+  }
+  return STRUCTURED_SELECTION[stage];
+}
 
 function isStep(selection: Selection): selection is { step: string } {
   return typeof selection === "object" && "step" in selection;
@@ -56,6 +77,7 @@ function isPRFile(selection: Selection): selection is { pr: string } {
   return typeof selection === "object" && "pr" in selection;
 }
 
+// The One-Shot document is read by OneShotView, so it names no file here.
 function artifactName(selection: Selection, task: TaskSummary): string | null {
   if (isStep(selection)) {
     return `steps/${selection.step}`;
@@ -140,14 +162,15 @@ export interface ArtifactPanelProps {
 /** ArtifactPanel shows what the task has written, next to the conversation. */
 export function ArtifactPanel({ task }: ArtifactPanelProps) {
   const steps = task.steps ?? [];
+  const mode = asTaskMode(task.mode);
   const stage = asTaskStage(task.stage);
-  const [selection, setSelection] = useState<Selection>(DEFAULT_SELECTION[stage]);
+  const [selection, setSelection] = useState<Selection>(defaultSelection(mode, stage));
   const [dismissed, setDismissed] = useState("");
 
   // A new stage brings a new document to read; the user is free from there on.
   useEffect(() => {
-    setSelection(DEFAULT_SELECTION[stage]);
-  }, [stage]);
+    setSelection(defaultSelection(mode, stage));
+  }, [mode, stage]);
 
   const openStep = isStep(selection)
     ? (steps.find((step) => step.file === selection.step) ?? null)
@@ -173,96 +196,125 @@ export function ArtifactPanel({ task }: ArtifactPanelProps) {
           value={[tab]}
           onValueChange={(next: string[]) => {
             const [value] = next;
-            if (value === "prd" || value === "tech_spec" || value === "steps" || value === "pr") {
+            if (
+              value === "prd" ||
+              value === "tech_spec" ||
+              value === "steps" ||
+              value === "one_shot" ||
+              value === "pr"
+            ) {
               setSelection(value);
             }
           }}
         >
-          <ToggleGroupItem value="prd" disabled={!task.hasPrd}>
-            PRD
-          </ToggleGroupItem>
-          <ToggleGroupItem value="tech_spec" disabled={!task.hasTechSpec}>
-            Tech spec
-          </ToggleGroupItem>
-          <ToggleGroupItem value="steps" disabled={steps.length === 0}>
-            {steps.length > 0 ? `Steps (${steps.length})` : "Steps"}
-          </ToggleGroupItem>
+          {mode === "one_shot" ? (
+            <ToggleGroupItem value="one_shot" disabled={!task.hasOneShot}>
+              One-Shot
+            </ToggleGroupItem>
+          ) : (
+            <>
+              <ToggleGroupItem value="prd" disabled={!task.hasPrd}>
+                PRD
+              </ToggleGroupItem>
+              <ToggleGroupItem value="tech_spec" disabled={!task.hasTechSpec}>
+                Tech spec
+              </ToggleGroupItem>
+              <ToggleGroupItem value="steps" disabled={steps.length === 0}>
+                {steps.length > 0 ? `Steps (${steps.length})` : "Steps"}
+              </ToggleGroupItem>
+            </>
+          )}
           <ToggleGroupItem value="pr" disabled={!anyPR}>
             PR
           </ToggleGroupItem>
         </ToggleGroup>
       </header>
 
-      {openStep !== null && (
-        <div className="flex h-8 shrink-0 items-center gap-2 border-b px-3">
-          <Button variant="ghost" size="sm" onClick={() => setSelection("steps")}>
-            ← Steps
-          </Button>
-          <span className="min-w-0 truncate text-sm font-medium">{openStep.title}</span>
-        </div>
-      )}
+      {view === "one_shot" ? (
+        <OneShotView
+          key={task.id}
+          taskId={task.id}
+          hasDocument={task.hasOneShot}
+          reports={steps[0]?.reports ?? []}
+          artifactVersion={task.artifactVersion}
+          empty="The One-Shot document will appear here as soon as the agent writes it."
+        />
+      ) : (
+        <>
+          {openStep !== null && (
+            <div className="flex h-8 shrink-0 items-center gap-2 border-b px-3">
+              <Button variant="ghost" size="sm" onClick={() => setSelection("steps")}>
+                ← Steps
+              </Button>
+              <span className="min-w-0 truncate text-sm font-medium">{openStep.title}</span>
+            </div>
+          )}
 
-      {openReport !== null && (
-        <div className="flex h-8 shrink-0 items-center gap-2 border-b px-3">
-          <Button variant="ghost" size="sm" onClick={() => setSelection("steps")}>
-            ← Steps
-          </Button>
-          <span className="min-w-0 truncate text-sm font-medium">
-            {`Step ${openReport.step.number} · ${stepReportLabel(openReport.report.pass, openReport.report.clean)}`}
-          </span>
-        </div>
-      )}
+          {openReport !== null && (
+            <div className="flex h-8 shrink-0 items-center gap-2 border-b px-3">
+              <Button variant="ghost" size="sm" onClick={() => setSelection("steps")}>
+                ← Steps
+              </Button>
+              <span className="min-w-0 truncate text-sm font-medium">
+                {`Step ${openReport.step.number} · ${stepReportLabel(openReport.report.pass, openReport.report.clean)}`}
+              </span>
+            </div>
+          )}
 
-      {isPRFile(view) && (
-        <div className="flex h-8 shrink-0 items-center gap-2 border-b px-3">
-          <Button variant="ghost" size="sm" onClick={() => setSelection("pr")}>
-            ← PR
-          </Button>
-          <span className="min-w-0 truncate text-sm font-medium">{view.pr}</span>
-        </div>
-      )}
+          {isPRFile(view) && (
+            <div className="flex h-8 shrink-0 items-center gap-2 border-b px-3">
+              <Button variant="ghost" size="sm" onClick={() => setSelection("pr")}>
+                ← PR
+              </Button>
+              <span className="min-w-0 truncate text-sm font-medium">{view.pr}</span>
+            </div>
+          )}
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-6">
-        {view === "steps" ? (
-          <StepList
-            steps={steps}
-            problems={task.planProblems ?? []}
-            currentStep={task.currentStep}
-            situation={stepSituation(task, task.currentStep)}
-            onOpen={openStepFile}
-            onModelChange={(step, choice) => void setStepModel(task.id, step.number, choice)}
-            onReviewModeChange={(step, mode) => void setStepReviewMode(task.id, step.number, mode)}
-            onOpenReport={(_, report) => setSelection({ report: report.file })}
-          />
-        ) : view === "pr" ? (
-          <PRList task={task} onOpen={(file) => setSelection({ pr: file })} />
-        ) : (
-          <>
-            {artifact.status === "empty" && <Empty />}
-            {artifact.status === "loading" && (
-              <div className="flex flex-col gap-3">
-                {LOADING_WIDTHS.map((width) => (
-                  <Skeleton key={width} className={`h-4 ${width}`} />
-                ))}
-              </div>
-            )}
-            {artifact.status === "error" && artifact.error !== dismissed && (
-              <ErrorNotice
-                message={artifact.error}
-                onDismiss={() => setDismissed(artifact.error)}
+          <div className="min-h-0 flex-1 overflow-y-auto p-6">
+            {view === "steps" ? (
+              <StepList
+                steps={steps}
+                problems={task.planProblems ?? []}
+                currentStep={task.currentStep}
+                situation={stepSituation(task, task.currentStep)}
+                onOpen={openStepFile}
+                onModelChange={(step, choice) => void setStepModel(task.id, step.number, choice)}
+                onReviewModeChange={(step, reviewMode) =>
+                  void setStepReviewMode(task.id, step.number, reviewMode)
+                }
+                onOpenReport={(_, report) => setSelection({ report: report.file })}
               />
+            ) : view === "pr" ? (
+              <PRList task={task} onOpen={(file) => setSelection({ pr: file })} />
+            ) : (
+              <>
+                {artifact.status === "empty" && <Empty />}
+                {artifact.status === "loading" && (
+                  <div className="flex flex-col gap-3">
+                    {LOADING_WIDTHS.map((width) => (
+                      <Skeleton key={width} className={`h-4 ${width}`} />
+                    ))}
+                  </div>
+                )}
+                {artifact.status === "error" && artifact.error !== dismissed && (
+                  <ErrorNotice
+                    message={artifact.error}
+                    onDismiss={() => setDismissed(artifact.error)}
+                  />
+                )}
+                {artifact.status === "ready" &&
+                  (openStep === null ? (
+                    <div className="max-w-[58.5rem] select-text">
+                      <Markdown>{artifact.content}</Markdown>
+                    </div>
+                  ) : (
+                    <StepDocument content={artifact.content} />
+                  ))}
+              </>
             )}
-            {artifact.status === "ready" &&
-              (openStep === null ? (
-                <div className="max-w-[58.5rem] select-text">
-                  <Markdown>{artifact.content}</Markdown>
-                </div>
-              ) : (
-                <StepDocument content={artifact.content} />
-              ))}
-          </>
-        )}
-      </div>
+          </div>
+        </>
+      )}
     </section>
   );
 }

@@ -251,4 +251,101 @@ describe("ArtifactPanel", () => {
 
     expect(screen.getByRole("button", { name: "PR" })).toBeDisabled();
   });
+
+  // A One-Shot task has one document, and its single step lists the reports of its review.
+  const ONE_SHOT = { mode: "one_shot", repoPath: "/home/dev/projects/web" };
+  const REPORT = { pass: 1, file: "1-review-1.md", clean: false };
+
+  function oneShotStep(reports = [REPORT]) {
+    return makeStep({ file: "one-shot.md", reports });
+  }
+
+  it("offers the One-Shot document and the PR, and nothing of the structured flow", () => {
+    panel({ ...ONE_SHOT, stage: "one_shot", hasOneShot: true });
+
+    expect(screen.getByRole("button", { name: "One-Shot" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "PR" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "PRD" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Tech spec" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Steps/ })).not.toBeInTheDocument();
+  });
+
+  it("says where the One-Shot document will appear before the agent writes it", () => {
+    panel({ ...ONE_SHOT, stage: "one_shot" });
+
+    expect(screen.getByRole("button", { name: "One-Shot" })).toBeDisabled();
+    expect(
+      screen.getByText("The One-Shot document will appear here as soon as the agent writes it."),
+    ).toBeInTheDocument();
+    expect(api.readArtifact).not.toHaveBeenCalled();
+  });
+
+  it("renders the One-Shot document once it is written", async () => {
+    vi.mocked(api.readArtifact).mockResolvedValue("# Add login — One-Shot");
+    panel({ ...ONE_SHOT, stage: "one_shot", hasOneShot: true, artifactVersion: 1 });
+
+    expect(await screen.findByTestId("markdown")).toHaveTextContent("# Add login — One-Shot");
+    expect(api.readArtifact).toHaveBeenCalledWith("task-1", "one-shot.md");
+  });
+
+  it("opens a report of the review above the One-Shot document and comes back to it", async () => {
+    vi.mocked(api.readArtifact).mockResolvedValue("# Findings");
+    const { user } = panel({
+      ...ONE_SHOT,
+      stage: "implementation",
+      hasOneShot: true,
+      steps: [oneShotStep()],
+      currentStep: 1,
+      artifactVersion: 3,
+    });
+
+    const reviews = screen.getByRole("navigation", { name: "Reviews" });
+    expect(reviews).toHaveTextContent("Review 1 · changes");
+
+    await user.click(screen.getByRole("button", { name: "Review 1 · changes" }));
+
+    expect(api.readArtifact).toHaveBeenLastCalledWith("task-1", "step-reviews/1-review-1.md");
+    expect(await screen.findByTestId("markdown")).toHaveTextContent("# Findings");
+    expect(screen.getByText("Review 1 · changes")).toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Reviews" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "← One-Shot" }));
+
+    expect(api.readArtifact).toHaveBeenLastCalledWith("task-1", "one-shot.md");
+    expect(screen.getByRole("button", { name: "Review 1 · changes" })).toBeInTheDocument();
+  });
+
+  it("comes back to the One-Shot document when the report it was on is gone", async () => {
+    vi.mocked(api.readArtifact).mockResolvedValue("# Findings");
+    const task = makeTask({
+      ...ONE_SHOT,
+      stage: "implementation",
+      hasOneShot: true,
+      steps: [oneShotStep()],
+      artifactVersion: 3,
+    });
+    const { user, rerender } = renderWithStore(<ArtifactPanel task={task} />, { state });
+    await user.click(screen.getByRole("button", { name: "Review 1 · changes" }));
+    expect(await screen.findByRole("button", { name: "← One-Shot" })).toBeInTheDocument();
+
+    rerender(<ArtifactPanel task={{ ...task, steps: [oneShotStep([])] }} />);
+
+    expect(screen.queryByRole("button", { name: "← One-Shot" })).not.toBeInTheDocument();
+    expect(api.readArtifact).toHaveBeenLastCalledWith("task-1", "one-shot.md");
+  });
+
+  it("opens a One-Shot task in the PR stage on its pull request documents", () => {
+    panel({
+      ...ONE_SHOT,
+      stage: "pr",
+      hasOneShot: true,
+      steps: [oneShotStep([])],
+      repos: [makeRepoPR({ draft: DRAFT })],
+    });
+
+    expect(screen.getByRole("button", { name: "PR" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "One-Shot" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Draft" })).toBeInTheDocument();
+    expect(api.readArtifact).not.toHaveBeenCalled();
+  });
 });

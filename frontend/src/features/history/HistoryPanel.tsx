@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { formatDates, stepCount } from "@/features/history/history-format";
 import { findNode } from "@/features/tree/tree-model";
 import { repoName } from "@/lib/repos";
+import { isOneShot } from "@/lib/task-modes";
 import type { ArchivedRepo, ArchivedTask, State } from "@/lib/wails";
 import { openExternal } from "@/store/actions";
 import {
@@ -135,9 +136,15 @@ export function HistoryPanel() {
                   <span className="min-w-0 flex-1 text-xs text-muted-foreground">
                     <HistoryRepos repos={task.repos ?? []} />
                   </span>
-                  <span className="shrink-0 text-xs text-muted-foreground">
-                    {stepCount((task.steps ?? []).length)}
-                  </span>
+                  {isOneShot(task) ? (
+                    <Badge variant="outline" className="shrink-0">
+                      One-Shot
+                    </Badge>
+                  ) : (
+                    <span className="shrink-0 text-xs text-muted-foreground">
+                      {stepCount((task.steps ?? []).length)}
+                    </span>
+                  )}
                   <span className="shrink-0 text-xs text-muted-foreground">
                     {formatDates(task.createdAt, task.archivedAt)}
                   </span>

@@ -41,6 +41,14 @@ describe("HistoryPanel", () => {
     expect(second).toHaveTextContent("0 steps");
   });
 
+  it("labels a One-Shot task in place of its count of steps", () => {
+    panel([makeArchivedTask({ mode: "one_shot", repoPath: "/home/dev/projects/web" })]);
+
+    const row = screen.getByRole("listitem");
+    expect(row).toHaveTextContent("One-Shot");
+    expect(row).not.toHaveTextContent("1 step");
+  });
+
   it("says when each task began and when it ended", () => {
     panel([LOGIN]);
 

@@ -113,6 +113,75 @@ describe("ArchivedTaskView", () => {
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
+  // A One-Shot task leaves one document behind, and the reports of the review of its single step.
+  const ONE_SHOT: Partial<ArchivedTask> = {
+    mode: "one_shot",
+    repoPath: "/home/dev/projects/web",
+    hasPrd: false,
+    hasTechSpec: false,
+    hasOneShot: true,
+    steps: [
+      {
+        number: 1,
+        file: "one-shot.md",
+        title: "Add login",
+        repository: "web",
+        reports: [{ pass: 1, file: "1-review-1.md", clean: true }],
+      },
+    ],
+  };
+
+  it("labels a One-Shot task, with no count of steps and no tabs", async () => {
+    view(ONE_SHOT);
+
+    expect(await screen.findByText("One-Shot")).toBeInTheDocument();
+    expect(screen.queryByText("1 step")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "PRD" })).not.toBeInTheDocument();
+  });
+
+  it("reads the One-Shot document back from the artifacts", async () => {
+    vi.mocked(api.readArtifact).mockResolvedValue("# Add login — One-Shot");
+
+    view(ONE_SHOT);
+
+    expect(await screen.findByTestId("markdown")).toHaveTextContent("# Add login — One-Shot");
+    expect(api.readArtifact).toHaveBeenCalledWith("task-1", "one-shot.md");
+    expect(api.readArtifact).toHaveBeenCalledTimes(1);
+  });
+
+  it("reads a report of the review of a One-Shot task and comes back to its document", async () => {
+    vi.mocked(api.readArtifact).mockResolvedValue("# Nothing to change");
+    const { user } = view(ONE_SHOT);
+
+    await user.click(screen.getByRole("button", { name: "Review 1 · clean" }));
+
+    expect(api.readArtifact).toHaveBeenLastCalledWith("task-1", "step-reviews/1-review-1.md");
+    expect(await screen.findByTestId("markdown")).toHaveTextContent("# Nothing to change");
+
+    await user.click(screen.getByRole("button", { name: "← One-Shot" }));
+
+    expect(api.readArtifact).toHaveBeenLastCalledWith("task-1", "one-shot.md");
+    expect(screen.getByRole("button", { name: "Review 1 · clean" })).toBeInTheDocument();
+  });
+
+  it("says nothing was written when a One-Shot task has no document", () => {
+    view({ ...ONE_SHOT, hasOneShot: false, steps: [] });
+
+    expect(screen.getByText("Nothing written yet.")).toBeInTheDocument();
+    expect(api.readArtifact).not.toHaveBeenCalled();
+  });
+
+  it("shows a failed read of the One-Shot document and lets it be dismissed", async () => {
+    vi.mocked(api.readArtifact).mockRejectedValue(new Error("read failed"));
+    const { user } = view(ONE_SHOT);
+
+    expect(await screen.findByRole("status")).toHaveTextContent("read failed");
+
+    await user.click(screen.getByRole("button", { name: "Dismiss" }));
+
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
   it("goes back to the history", async () => {
     const { user } = view();
 
