@@ -140,7 +140,7 @@ jobs:
           restore-keys: go-${{ runner.os }}-
       - name: Install wails3
         run: |
-          go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.16
+          go install tool
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
       - run: pnpm install --frozen-lockfile
         working-directory: frontend
