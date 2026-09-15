@@ -17,7 +17,7 @@ tasks:
     summary: Prepares a fresh clone (tools, deps, git hooks)
     cmds:
       - mise install
-      - go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.16
+      - go install tool
       - go mod download
       - task: common:install:frontend:deps
       - lefthook install

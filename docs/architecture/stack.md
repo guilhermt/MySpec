@@ -90,7 +90,7 @@ O não perturbe não tem padrão freedesktop. O app pergunta a quem o expõe: o 
 
 ## Ferramentas de desenvolvimento
 
-- **mise** pina, em `mise.toml`, as versões de Go, Node, pnpm, Task, golangci-lint, gotestsum, lefthook, Biome, govulncheck e go-test-coverage. O CI instala o mesmo arquivo. O CLI `wails3` é instalado por `go install` numa tarefa de setup.
+- **mise** pina, em `mise.toml`, as versões de Go, Node, pnpm, Task, golangci-lint, gotestsum, lefthook, Biome, govulncheck e go-test-coverage. O CI instala o mesmo arquivo. O CLI `wails3` é uma diretiva `tool` do `go.mod`, instalada por `go install tool` no setup e no CI. A versão dele é a mesma da biblioteca Wails que o app importa, então os bindings são gerados pelo CLI que corresponde ao runtime, e o Dependabot atualiza os dois juntos.
 - **Task** orquestra tudo: dev, build, geração de bindings, formatação, lint, typecheck, testes, vulnerabilidades e a checagem completa.
 - **Frontend**: pnpm, Biome para lint e formatação no lugar de ESLint e Prettier, Vitest com Testing Library e jsdom.
 - **Go**: golangci-lint v2 com gofumpt e goimports, gotestsum, cobertura com limiares por arquivo, pacote e total.
