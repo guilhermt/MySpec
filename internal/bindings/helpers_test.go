@@ -23,6 +23,7 @@ import (
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/review"
+	"github.com/guilhermt/myspec/internal/reviewmode"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/store"
 	"github.com/guilhermt/myspec/internal/task"
@@ -166,22 +167,23 @@ func (p *fakePicker) PickFolder(startIn string) (string, bool, error) {
 // fixture wires the services the way internal/app does, over an in-memory
 // database and a scanner that answers with a fixed list.
 type fixture struct {
-	workspace *bindings.WorkspaceService
-	settings  *bindings.SettingsService
-	tasks     *bindings.TaskService
-	ws        *workspace.Service
-	theme     *theme.Service
-	models    *models.Service
-	store     *store.Store
-	taskSvc   *task.Service
-	sessions  *session.Service
-	worktrees *worktree.Service
-	reviews   *review.Service
-	flow      *flow.Service
-	dataDir   string
-	picker    *fakePicker
-	editor    *fakeEditor
-	logs      *syncBuffer
+	workspace   *bindings.WorkspaceService
+	settings    *bindings.SettingsService
+	tasks       *bindings.TaskService
+	ws          *workspace.Service
+	theme       *theme.Service
+	models      *models.Service
+	reviewModes *reviewmode.Service
+	store       *store.Store
+	taskSvc     *task.Service
+	sessions    *session.Service
+	worktrees   *worktree.Service
+	reviews     *review.Service
+	flow        *flow.Service
+	dataDir     string
+	picker      *fakePicker
+	editor      *fakeEditor
+	logs        *syncBuffer
 
 	mu          sync.Mutex
 	repos       []string
@@ -287,10 +289,14 @@ func newFixture(t *testing.T) *fixture {
 	if err != nil {
 		t.Fatalf("models.New() = %v, want nil", err)
 	}
+	f.reviewModes, err = reviewmode.New(t.Context(), st.Settings, log, func() {})
+	if err != nil {
+		t.Fatalf("reviewmode.New() = %v, want nil", err)
+	}
 
 	f.workspace = bindings.NewWorkspaceService(f.ws, f.snapshot, f.picker, log)
-	f.settings = bindings.NewSettingsService(f.theme, f.models, f.dataDir, log)
-	f.tasks = bindings.NewTaskService(f.taskSvc, f.sessions, f.flow, f.models, f.editor.open, log)
+	f.settings = bindings.NewSettingsService(f.theme, f.models, f.reviewModes, f.dataDir, log)
+	f.tasks = bindings.NewTaskService(f.taskSvc, f.sessions, f.flow, f.models, f.reviewModes, f.editor.open, log)
 	return f
 }
 
@@ -569,12 +575,13 @@ func (f *fixture) snapshot() bindings.State {
 		recents = nil
 	}
 	return bindings.State{
-		Workspace:     bindings.FromWorkspace(f.ws.Current()),
-		Recents:       bindings.FromRecents(recents),
-		Theme:         string(f.theme.Preference()),
-		SystemDark:    f.theme.SystemDark(),
-		ModelDefaults: bindings.FromModelSet(f.models.Defaults()),
-		Notice:        bindings.FromNotice(f.ws.Notice()),
+		Workspace:         bindings.FromWorkspace(f.ws.Current()),
+		Recents:           bindings.FromRecents(recents),
+		Theme:             string(f.theme.Preference()),
+		SystemDark:        f.theme.SystemDark(),
+		ModelDefaults:     bindings.FromModelSet(f.models.Defaults()),
+		ReviewModeDefault: string(f.reviewModes.Default()),
+		Notice:            bindings.FromNotice(f.ws.Notice()),
 		Tasks: bindings.FromTasks(
 			f.taskSvc.List(), f.taskArtifacts, f.flow.Steps, f.flow.Repos, f.sessions.Summaries(), nil,
 		),

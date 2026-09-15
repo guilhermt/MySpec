@@ -89,6 +89,7 @@ describe("NewTaskDialog", () => {
       repoPath: "/home/dev/projects/web",
       initialContext: "The header overlaps the menu",
       models: makeModelDefaults(),
+      reviewMode: "",
     });
     expect(useAppStore.getState().newTaskFor).toBeNull();
   });
@@ -145,6 +146,7 @@ describe("NewTaskDialog", () => {
       models: makeModelDefaults().map((line) =>
         line.stage === "prd" ? { ...line, effort: "xhigh" } : line,
       ),
+      reviewMode: "",
     });
   });
 
@@ -161,6 +163,7 @@ describe("NewTaskDialog", () => {
         repoPath: "",
         initialContext: "A login screen",
         models: makeModelDefaults(),
+        reviewMode: "",
       });
     });
   });

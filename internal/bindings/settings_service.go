@@ -6,26 +6,35 @@ import (
 
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
+	"github.com/guilhermt/myspec/internal/reviewmode"
 	"github.com/guilhermt/myspec/internal/theme"
 )
 
 // SettingsService is the settings API the frontend calls.
 type SettingsService struct {
-	theme    *theme.Service
-	defaults *models.Service
-	dataDir  string
-	log      *slog.Logger
+	theme       *theme.Service
+	defaults    *models.Service
+	reviewModes *reviewmode.Service
+	dataDir     string
+	log         *slog.Logger
 }
 
-// NewSettingsService builds the service over the theme domain, the model
-// defaults of the app and the prompts of the data directory.
+// NewSettingsService builds the service over the theme domain, the model and
+// review mode defaults of the app and the prompts of the data directory.
 func NewSettingsService(
 	t *theme.Service,
 	defaults *models.Service,
+	reviewModes *reviewmode.Service,
 	dataDir string,
 	log *slog.Logger,
 ) *SettingsService {
-	return &SettingsService{theme: t, defaults: defaults, dataDir: dataDir, log: log}
+	return &SettingsService{
+		theme:       t,
+		defaults:    defaults,
+		reviewModes: reviewModes,
+		dataDir:     dataDir,
+		log:         log,
+	}
 }
 
 // SetTheme stores the theme preference: system, light or dark.
@@ -62,6 +71,23 @@ func (s *SettingsService) SetModelDefault(stage, model, effort string) error {
 
 	if err := s.defaults.SetDefault(ctx, target, c); err != nil {
 		return s.fail("SetModelDefault", err)
+	}
+	return nil
+}
+
+// SetReviewModeDefault stores who reviews the steps of the tasks created from
+// now on: manual or agent.
+func (s *SettingsService) SetReviewModeDefault(mode string) error {
+	target, err := reviewmode.ParseMode(mode)
+	if err != nil {
+		return s.fail("SetReviewModeDefault", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+
+	if err := s.reviewModes.SetDefault(ctx, target); err != nil {
+		return s.fail("SetReviewModeDefault", err)
 	}
 	return nil
 }

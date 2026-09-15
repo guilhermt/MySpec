@@ -213,6 +213,7 @@ describe("createTask", () => {
       repoPath: "",
       initialContext: "a login",
       models: [],
+      reviewMode: "",
     });
 
     expect(id).toBe("task-9");
@@ -222,7 +223,13 @@ describe("createTask", () => {
     vi.mocked(api.createTask).mockRejectedValueOnce(new Error("claude is not logged in"));
 
     await expect(
-      createTask({ name: "add-login", repoPath: "", initialContext: "a login", models: [] }),
+      createTask({
+        name: "add-login",
+        repoPath: "",
+        initialContext: "a login",
+        models: [],
+        reviewMode: "",
+      }),
     ).rejects.toThrow("claude is not logged in");
     expect(useAppStore.getState().error).toBeNull();
   });

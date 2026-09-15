@@ -39,6 +39,8 @@ import type {
   State,
   Step,
   StepBlock,
+  StepReport,
+  StepReviewer,
   TaskStageModel,
   TaskSummary,
   Transcript,
@@ -92,6 +94,8 @@ export type {
   State,
   Step,
   StepBlock,
+  StepReport,
+  StepReviewer,
   TaskStageModel,
   TaskSummary,
   Transcript,
@@ -240,6 +244,12 @@ export type SituationForm = "" | "review" | "staged" | "approve" | "merge" | "cl
 
 /** PlaceKind is the part of a task a situation is in. */
 export type PlaceKind = "stage" | "step" | "repo";
+
+/** ReviewMode is who reviews the steps: the user, or an agent. */
+export type ReviewMode = "manual" | "agent";
+
+/** ReviewFallback is why a step that started under the agent review is reviewed by the user; "" while its mode holds. */
+export type ReviewFallback = "" | "taken_over" | "rounds_exhausted" | "commit_failed";
 
 /** sessionKey identifies one conversation: a task and the stage it belongs to. */
 export function sessionKey(taskId: string, stage: string): string {
@@ -590,6 +600,28 @@ export function asPlaceKind(value: string): PlaceKind {
   }
 }
 
+export function asReviewMode(value: string): ReviewMode {
+  switch (value) {
+    case "manual":
+    case "agent":
+      return value;
+    default:
+      return "manual";
+  }
+}
+
+export function asReviewFallback(value: string): ReviewFallback {
+  switch (value) {
+    case "":
+    case "taken_over":
+    case "rounds_exhausted":
+    case "commit_failed":
+      return value;
+    default:
+      return "";
+  }
+}
+
 export const api = {
   getState: (): Promise<State> => WorkspaceService.GetState(),
   openPath: (path: string): Promise<void> => WorkspaceService.OpenPath(path),
@@ -599,6 +631,8 @@ export const api = {
   setTheme: (preference: ThemePreference): Promise<void> => SettingsService.SetTheme(preference),
   setModelDefault: (stage: ModelStage, model: string, effort: string): Promise<void> =>
     SettingsService.SetModelDefault(stage, model, effort),
+  setReviewModeDefault: (mode: ReviewMode): Promise<void> =>
+    SettingsService.SetReviewModeDefault(mode),
   getPrompt: (stage: PromptStage): Promise<Prompt> => SettingsService.GetPrompt(stage),
   savePrompt: (stage: PromptStage, text: string): Promise<Prompt> =>
     SettingsService.SavePrompt(stage, text),
@@ -651,6 +685,11 @@ export const api = {
     TaskService.SetStepModel(taskId, step, model, effort),
   setSessionModel: (taskId: string, stage: string, model: string, effort: string): Promise<void> =>
     TaskService.SetSessionModel(taskId, stage, model, effort),
+  setReviewMode: (taskId: string, mode: ReviewMode): Promise<void> =>
+    TaskService.SetReviewMode(taskId, mode),
+  setStepReviewMode: (taskId: string, step: number, mode: ReviewMode): Promise<void> =>
+    TaskService.SetStepReviewMode(taskId, step, mode),
+  reviewStepMyself: (taskId: string): Promise<void> => TaskService.ReviewStepMyself(taskId),
   approveStep: (taskId: string): Promise<void> => TaskService.ApproveStep(taskId),
   openPR: (taskId: string, repoPath: string, title: string, body: string): Promise<void> =>
     TaskService.OpenPR(taskId, repoPath, title, body),

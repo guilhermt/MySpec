@@ -94,6 +94,7 @@ function NewTaskForm({ node }: { node: TreeNode }) {
       repoPath: node.isRoot ? "" : node.path,
       initialContext: context,
       models: choices,
+      reviewMode: "",
     })
       .then((id) => {
         closeNewTask();

@@ -110,34 +110,36 @@ func FromTasks(
 			summary.Status = session.StatusWaiting
 		}
 		converted[i] = TaskSummary{
-			ID:              t.ID,
-			Name:            t.Name,
-			RepoPath:        t.RepoPath,
-			Dir:             t.Dir(),
-			Stage:           string(t.Stage),
-			Revisiting:      t.Revisiting,
-			SessionStatus:   string(summary.Status),
-			SessionModel:    string(summary.Choice.Model),
-			SessionEffort:   string(summary.Choice.Effort),
-			TurnRunning:     summary.TurnRunning,
-			ProcessRunning:  summary.ProcessRunning,
-			RetryAttempt:    summary.RetryAttempt,
-			ContextPercent:  summary.ContextPercent,
-			PendingCount:    summary.PendingCount,
-			Corrections:     summary.Corrections,
-			HasPRD:          a.PRD,
-			HasTechSpec:     a.TechSpec,
-			Steps:           fromSteps(states),
-			CurrentStep:     currentStep(states),
-			Repos:           fromRepos(repoStates),
-			PlanProblems:    fromProblems(a.Plan.Problems),
-			Situations:      fromSituations(situations[t.ID]),
-			Models:          fromStageModels(flow.StageModels(t, states, repoStates)),
-			CanContinue:     t.Revisiting && a.Done(t.Stage) && summary.Idle,
-			ArtifactVersion: t.ArtifactVersion,
-			LastError:       summary.LastError,
-			CreatedAt:       t.CreatedAt.Format(time.RFC3339),
-			UpdatedAt:       t.UpdatedAt.Format(time.RFC3339),
+			ID:                 t.ID,
+			Name:               t.Name,
+			RepoPath:           t.RepoPath,
+			Dir:                t.Dir(),
+			Stage:              string(t.Stage),
+			Revisiting:         t.Revisiting,
+			ReviewMode:         string(t.ReviewModes.Default()),
+			ReviewModeEditable: flow.ReviewModeEditable(t, states),
+			SessionStatus:      string(summary.Status),
+			SessionModel:       string(summary.Choice.Model),
+			SessionEffort:      string(summary.Choice.Effort),
+			TurnRunning:        summary.TurnRunning,
+			ProcessRunning:     summary.ProcessRunning,
+			RetryAttempt:       summary.RetryAttempt,
+			ContextPercent:     summary.ContextPercent,
+			PendingCount:       summary.PendingCount,
+			Corrections:        summary.Corrections,
+			HasPRD:             a.PRD,
+			HasTechSpec:        a.TechSpec,
+			Steps:              fromSteps(states),
+			CurrentStep:        currentStep(states),
+			Repos:              fromRepos(repoStates),
+			PlanProblems:       fromProblems(a.Plan.Problems),
+			Situations:         fromSituations(situations[t.ID]),
+			Models:             fromStageModels(flow.StageModels(t, states, repoStates)),
+			CanContinue:        t.Revisiting && a.Done(t.Stage) && summary.Idle,
+			ArtifactVersion:    t.ArtifactVersion,
+			LastError:          summary.LastError,
+			CreatedAt:          t.CreatedAt.Format(time.RFC3339),
+			UpdatedAt:          t.UpdatedAt.Format(time.RFC3339),
 		}
 	}
 	return converted
@@ -251,7 +253,7 @@ func FromArchived(
 			RepoPath:        t.RepoPath,
 			HasPRD:          a.PRD,
 			HasTechSpec:     a.TechSpec,
-			Steps:           fromArchivedSteps(a.Plan.Steps),
+			Steps:           fromArchivedSteps(a.Plan.Steps, a.StepReports),
 			Repos:           fromArchivedRepos(t, prRuns(t.ID)),
 			ArtifactVersion: t.ArtifactVersion,
 			CreatedAt:       t.CreatedAt.Format(time.RFC3339),
@@ -261,9 +263,9 @@ func FromArchived(
 	return converted
 }
 
-// fromArchivedSteps converts the steps of the plan of an archived task, which
-// the history renders and never runs.
-func fromArchivedSteps(steps []task.Step) []ArchivedStep {
+// fromArchivedSteps converts the steps of the plan of an archived task, with
+// the reports of their agent review, which the history renders and never runs.
+func fromArchivedSteps(steps []task.Step, reports map[int][]task.ReviewReport) []ArchivedStep {
 	converted := make([]ArchivedStep, len(steps))
 	for i, step := range steps {
 		converted[i] = ArchivedStep{
@@ -271,6 +273,7 @@ func fromArchivedSteps(steps []task.Step) []ArchivedStep {
 			File:       step.File,
 			Title:      step.Title,
 			Repository: step.Repository,
+			Reports:    fromStepReports(reports[step.Number]),
 		}
 	}
 	return converted
@@ -414,9 +417,49 @@ func fromSteps(states []flow.StepState) []Step {
 			Effort:        string(state.Choice.Effort),
 			Adjusted:      state.Adjusted,
 			ModelEditable: state.ModelEditable(),
+
+			ReviewMode:         string(state.ReviewMode),
+			ReviewModeAdjusted: state.ModeAdjusted,
+			ReviewModeEditable: state.ModeEditable(),
+			ReviewFallback:     string(state.Fallback),
+			ReviewPass:         state.ReviewPass,
+			ReviewRound:        state.ReviewRound,
+			ReportMissing:      state.ReportMissing,
+			Reports:            fromStepReports(state.Reports),
+			Reviewer:           fromStepReviewer(state.ReviewerStage, state.Reviewer),
 		}
 	}
 	return converted
+}
+
+// fromStepReports converts the passes of the agent review of a step, always
+// returning a slice so the frontend never sees null.
+func fromStepReports(reports []task.ReviewReport) []StepReport {
+	converted := make([]StepReport, len(reports))
+	for i, report := range reports {
+		converted[i] = StepReport{Pass: report.Pass, File: report.File, Clean: report.Clean}
+	}
+	return converted
+}
+
+// fromStepReviewer converts the conversation that reviews a step, keeping nil
+// for a step that has none open.
+func fromStepReviewer(stage string, summary session.Summary) *StepReviewer {
+	if stage == "" {
+		return nil
+	}
+	return &StepReviewer{
+		SessionStage:   stage,
+		SessionStatus:  string(summary.Status),
+		SessionModel:   string(summary.Choice.Model),
+		SessionEffort:  string(summary.Choice.Effort),
+		TurnRunning:    summary.TurnRunning,
+		ProcessRunning: summary.ProcessRunning,
+		RetryAttempt:   summary.RetryAttempt,
+		ContextPercent: summary.ContextPercent,
+		PendingCount:   summary.PendingCount,
+		LastError:      summary.LastError,
+	}
 }
 
 // fromReview converts the last reading of the worktree of a step, keeping nil
@@ -593,6 +636,7 @@ func FromEntry(e session.Entry) Entry {
 			Stage:     e.Marker.Stage,
 			Step:      e.Marker.Step,
 			Pass:      e.Marker.Pass,
+			Clean:     e.Marker.Clean,
 			Restarted: e.Marker.Restarted,
 		}
 	}

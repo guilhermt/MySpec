@@ -44,9 +44,12 @@ type State struct {
 	SystemDark bool   `json:"systemDark"`
 	// ModelDefaults are the choices a new task starts each stage with, in workflow
 	// order; never nil.
-	ModelDefaults []StageModel  `json:"modelDefaults"`
-	Notice        *Notice       `json:"notice"`
-	Tasks         []TaskSummary `json:"tasks"` // tasks of the open workspace; never nil
+	ModelDefaults []StageModel `json:"modelDefaults"`
+	// ReviewModeDefault is manual or agent: who reviews the steps of a new
+	// task, a string for the same reason as Notice.Reason.
+	ReviewModeDefault string        `json:"reviewModeDefault"`
+	Notice            *Notice       `json:"notice"`
+	Tasks             []TaskSummary `json:"tasks"` // tasks of the open workspace; never nil
 	// History are the archived tasks of the open workspace, newest first; never
 	// nil.
 	History []ArchivedTask `json:"history"`
@@ -93,9 +96,10 @@ type Step struct {
 	// repository of the task matches it.
 	Repository string `json:"repository"`
 	RepoPath   string `json:"repoPath"`
-	// Status is not_started, preparing, blocked, implementing, awaiting_review,
-	// in_review, ready_to_approve, nothing_to_commit, review_failed,
-	// committing or done, a string for the same reason as Notice.Reason.
+	// Status is not_started, preparing, blocked, implementing, agent_review,
+	// addressing_review, awaiting_review, in_review, ready_to_approve,
+	// nothing_to_commit, review_failed, committing or done, a string for the
+	// same reason as Notice.Reason.
 	Status string `json:"status"`
 	// Phase is fetching, creating or checking while preparing; "" otherwise.
 	Phase        string     `json:"phase"`
@@ -111,6 +115,46 @@ type Step struct {
 	Effort        string `json:"effort"`
 	Adjusted      bool   `json:"adjusted"`      // not started, with a choice of its own instead of the one of implementation
 	ModelEditable bool   `json:"modelEditable"` // not started: its choice can still change
+
+	// ReviewMode is manual or agent: who reviews the step, the mode it will
+	// start with or the one it is reviewed with, a string for the same reason
+	// as Notice.Reason.
+	ReviewMode         string `json:"reviewMode"`
+	ReviewModeAdjusted bool   `json:"reviewModeAdjusted"` // not started, with a mode of its own instead of the one of the task
+	ReviewModeEditable bool   `json:"reviewModeEditable"` // not started: its mode can still change
+	// ReviewFallback is taken_over, rounds_exhausted or commit_failed: why a
+	// step that started under the agent review is reviewed by the user; ""
+	// while its mode holds.
+	ReviewFallback string        `json:"reviewFallback"`
+	ReviewPass     int           `json:"reviewPass"`    // agent_review only: the pass under way
+	ReviewRound    int           `json:"reviewRound"`   // addressing_review only: the report the implementer addresses
+	ReportMissing  bool          `json:"reportMissing"` // agent_review only: the reviewer rests without the report of the pass
+	Reports        []StepReport  `json:"reports"`       // the reports of the agent review, by pass; never nil
+	Reviewer       *StepReviewer `json:"reviewer"`      // nil while the step has no reviewer conversation open
+}
+
+// StepReport is one pass of the agent review of a step.
+type StepReport struct {
+	Pass  int    `json:"pass"`
+	File  string `json:"file"` // name inside the step-reviews folder, for ReadArtifact
+	Clean bool   `json:"clean"`
+}
+
+// StepReviewer is the conversation that reviews a step, with the state of its
+// session. It has the shape the chat takes from a task and a repository.
+type StepReviewer struct {
+	SessionStage string `json:"sessionStage"` // step_review:<n>
+	// SessionStatus is working, waiting, needs_permission, needs_answer, paused
+	// or error.
+	SessionStatus  string `json:"sessionStatus"`
+	SessionModel   string `json:"sessionModel"`
+	SessionEffort  string `json:"sessionEffort"`
+	TurnRunning    bool   `json:"turnRunning"`
+	ProcessRunning bool   `json:"processRunning"`
+	RetryAttempt   int    `json:"retryAttempt"`
+	ContextPercent int    `json:"contextPercent"`
+	PendingCount   int    `json:"pendingCount"`
+	LastError      string `json:"lastError"`
 }
 
 // PRBlock is why the pull request stage of a repository cannot go on.
@@ -219,11 +263,11 @@ type PlanProblem struct {
 
 // Place is where in a task a situation is.
 type Place struct {
-	// Kind is stage, step or repo, a string for the same reason as
-	// Notice.Reason.
+	// Kind is stage, step, step_review or repo, a string for the same reason
+	// as Notice.Reason.
 	Kind       string `json:"kind"`
 	Stage      string `json:"stage"`      // stage only: prd, tech_spec or plan
-	Step       int    `json:"step"`       // step only
+	Step       int    `json:"step"`       // step and step_review only
 	RepoPath   string `json:"repoPath"`   // repo only
 	Repository string `json:"repository"` // repo only: relative path, as the steps name it
 }
@@ -282,6 +326,10 @@ type TaskSummary struct {
 	// Revisiting is a stage reopened by the user, which moves on only when
 	// they say so.
 	Revisiting bool `json:"revisiting"`
+	// ReviewMode is manual or agent: the mode of the task, which the steps
+	// without a mode of their own take.
+	ReviewMode         string `json:"reviewMode"`
+	ReviewModeEditable bool   `json:"reviewModeEditable"` // a change of the mode still reaches a step
 	// SessionStatus is working, waiting, needs_permission, needs_answer, paused
 	// or error.
 	SessionStatus string `json:"sessionStatus"`
@@ -312,10 +360,11 @@ type TaskSummary struct {
 
 // ArchivedStep is one step of an archived task, as the plan wrote it.
 type ArchivedStep struct {
-	Number     int    `json:"number"`
-	File       string `json:"file"` // name inside steps/, the artifact is "steps/" + File
-	Title      string `json:"title"`
-	Repository string `json:"repository"`
+	Number     int          `json:"number"`
+	File       string       `json:"file"` // name inside steps/, the artifact is "steps/" + File
+	Title      string       `json:"title"`
+	Repository string       `json:"repository"`
+	Reports    []StepReport `json:"reports"` // never nil
 }
 
 // ArchivedRepo is one repository an archived task touched, with its pull
@@ -473,16 +522,20 @@ type QuestionEntry struct {
 // MarkerEntry is a milestone of the conversation.
 type MarkerEntry struct {
 	// Type is prd_written, prd_updated, tech_spec_written, tech_spec_updated,
-	// plan_written, plan_updated, pr_review_written, stage_started,
-	// step_started, compacted or interrupted.
+	// plan_written, plan_updated, pr_review_written, step_review_started,
+	// step_review_written, stage_started, step_started, compacted or
+	// interrupted.
 	Type      string `json:"type"`
 	PreTokens int    `json:"preTokens"`
-	// Stage belongs to stage_started alone, Step to step_started alone and
-	// Pass to pr_review_written alone; Restarted belongs to the two started
-	// ones.
+	// Stage belongs to stage_started alone, Step to the markers of a step
+	// (step_started, step_review_started), Pass to the markers of a review
+	// (pr_review_written, step_review_written) and Clean to
+	// step_review_written alone; Restarted belongs to stage_started and
+	// step_started.
 	Stage     string `json:"stage"`
 	Step      int    `json:"step"`
 	Pass      int    `json:"pass"`
+	Clean     bool   `json:"clean"`
 	Restarted bool   `json:"restarted"`
 }
 
@@ -537,8 +590,8 @@ type TranscriptEvent struct {
 
 // StageModel is the model and effort of one stage.
 type StageModel struct {
-	// Stage is prd, tech_spec, plan, implementation, pr or pr_review, a string
-	// for the same reason as Notice.Reason.
+	// Stage is prd, tech_spec, plan, implementation, step_review, pr or
+	// pr_review, a string for the same reason as Notice.Reason.
 	Stage  string `json:"stage"`
 	Model  string `json:"model"`  // claude-fable-5-1, claude-opus-5 or claude-sonnet-5
 	Effort string `json:"effort"` // low, medium, high, xhigh or max
@@ -556,8 +609,8 @@ type TaskStageModel struct {
 
 // Prompt is the text a kind of session opens with, as the settings show it.
 type Prompt struct {
-	// Stage is prd, tech_spec, plan, commit, pr or pr_review, a string for the
-	// same reason as Notice.Reason.
+	// Stage is prd, tech_spec, plan, step_review, commit, pr or pr_review, a
+	// string for the same reason as Notice.Reason.
 	Stage    string `json:"stage"`
 	Text     string `json:"text"`
 	Modified bool   `json:"modified"` // the user edited it: it no longer follows the default of the app
@@ -573,5 +626,6 @@ type CreateTaskRequest struct {
 	InitialContext string `json:"initialContext"`
 	// Models are the choices of the creation dialog. A stage left out takes the
 	// default of the app.
-	Models []StageModel `json:"models"`
+	Models     []StageModel `json:"models"`
+	ReviewMode string       `json:"reviewMode"` // manual or agent; "" takes the default of the app
 }

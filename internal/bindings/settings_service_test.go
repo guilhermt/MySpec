@@ -8,6 +8,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 
 	"github.com/guilhermt/myspec/internal/bindings"
+	"github.com/guilhermt/myspec/internal/reviewmode"
 	"github.com/guilhermt/myspec/internal/theme"
 )
 
@@ -106,6 +107,36 @@ func TestSetModelDefaultReportsWhatTheUserGotWrong(t *testing.T) {
 				t.Error("a mistake the user can correct was logged as a failure")
 			}
 		})
+	}
+}
+
+func TestSetReviewModeDefaultChangesTheDefaultOfTheState(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+
+	if err := f.settings.SetReviewModeDefault("agent"); err != nil {
+		t.Fatalf("SetReviewModeDefault() = %v, want nil", err)
+	}
+
+	if got := f.workspace.GetState().ReviewModeDefault; got != "agent" {
+		t.Errorf("State.ReviewModeDefault = %q, want %q", got, "agent")
+	}
+}
+
+func TestSetReviewModeDefaultRejectsAnUnknownMode(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+
+	err := f.settings.SetReviewModeDefault("auto")
+	if err == nil || err.Error() != "Unknown review mode." {
+		t.Fatalf("SetReviewModeDefault(auto) error = %v, want the unknown review mode notice", err)
+	}
+
+	if got := f.reviewModes.Default(); got != reviewmode.Manual {
+		t.Errorf("Default() = %q, want %q", got, reviewmode.Manual)
+	}
+	if f.logged(t, "binding failed") {
+		t.Error("a mistake the user can correct was logged as a failure")
 	}
 }
 

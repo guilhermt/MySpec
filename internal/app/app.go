@@ -26,6 +26,7 @@ import (
 	"github.com/guilhermt/myspec/internal/platform/xdg"
 	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/review"
+	"github.com/guilhermt/myspec/internal/reviewmode"
 	"github.com/guilhermt/myspec/internal/scan"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/store"
@@ -54,18 +55,19 @@ const shutdownTimeout = 8 * time.Second
 // App holds the running application: the Wails handles and the domain services
 // they are wired to.
 type App struct {
-	log       *slog.Logger
-	ws        *workspace.Service
-	theme     *theme.Service
-	models    *models.Service
-	tasks     *task.Service
-	sessions  *session.Service
-	worktrees *worktree.Service
-	review    *review.Service
-	flow      *flow.Service
-	attention *attention.Service
-	notifier  *notify.Notifier // nil when the desktop has no notification service
-	player    *chime.Player    // nil when there is no notifier or the chime could not be installed
+	log         *slog.Logger
+	ws          *workspace.Service
+	theme       *theme.Service
+	models      *models.Service
+	reviewModes *reviewmode.Service
+	tasks       *task.Service
+	sessions    *session.Service
+	worktrees   *worktree.Service
+	review      *review.Service
+	flow        *flow.Service
+	attention   *attention.Service
+	notifier    *notify.Notifier // nil when the desktop has no notification service
+	player      *chime.Player    // nil when there is no notifier or the chime could not be installed
 
 	mu      sync.Mutex
 	wails   *application.App
@@ -149,6 +151,10 @@ func Run(cfg Config) int {
 	if err != nil {
 		return fail(log, "read model defaults", err)
 	}
+	reviewModesSvc, err := reviewmode.New(ctx, st.Settings, log, a.publish)
+	if err != nil {
+		return fail(log, "read review mode default", err)
+	}
 	sessions := session.New(session.Deps{
 		Sessions: st.Sessions,
 		Entries:  st.Entries,
@@ -210,6 +216,7 @@ func Run(cfg Config) int {
 	})
 	a.theme, a.ws, a.tasks, a.sessions, a.flow = themeSvc, wsSvc, tasks, sessions, flowSvc
 	a.worktrees, a.review, a.models = worktrees, reviews, modelsSvc
+	a.reviewModes = reviewModesSvc
 
 	if err := wsSvc.Bootstrap(ctx, firstArg(cfg.Args, log), cfg.Cwd); err != nil {
 		return fail(log, "open initial workspace", err)
@@ -223,7 +230,7 @@ func Run(cfg Config) int {
 	go a.pollPRs(pollCtx)
 
 	wails := application.New(
-		a.options(cfg, wsSvc, themeSvc, modelsSvc, tasks, sessions, flowSvc, dirs.Data, log),
+		a.options(cfg, wsSvc, themeSvc, modelsSvc, reviewModesSvc, tasks, sessions, flowSvc, dirs.Data, log),
 	)
 	a.setWails(wails)
 	a.openWindow(cfg)
@@ -246,6 +253,7 @@ func (a *App) options(
 	ws *workspace.Service,
 	themeSvc *theme.Service,
 	modelsSvc *models.Service,
+	reviewModesSvc *reviewmode.Service,
 	tasks *task.Service,
 	sessions *session.Service,
 	flowSvc *flow.Service,
@@ -258,9 +266,11 @@ func (a *App) options(
 		Icon:        cfg.Icon,
 		Services: []application.Service{
 			application.NewService(bindings.NewWorkspaceService(ws, a.state, a, log)),
-			application.NewService(bindings.NewSettingsService(themeSvc, modelsSvc, dataDir, log)),
 			application.NewService(
-				bindings.NewTaskService(tasks, sessions, flowSvc, modelsSvc, editor.Open, log),
+				bindings.NewSettingsService(themeSvc, modelsSvc, reviewModesSvc, dataDir, log),
+			),
+			application.NewService(
+				bindings.NewTaskService(tasks, sessions, flowSvc, modelsSvc, reviewModesSvc, editor.Open, log),
 			),
 			application.NewService(bindings.NewAttentionService(a.attention)),
 		},

@@ -52,6 +52,8 @@ export type {
     State,
     Step,
     StepBlock,
+    StepReport,
+    StepReviewer,
     TaskStageModel,
     TaskSummary,
     Transcript,
