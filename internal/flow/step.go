@@ -517,6 +517,7 @@ func (s *Service) resumeSteps(ctx context.Context, t task.Task) {
 		if err := s.sessions.Open(ctx, stepInfo(t, step, wt, s.tasks.Repositories(t))); err != nil {
 			s.log.Error("open step session failed", "task", t.ID, "step", step.Number, "error", err)
 		}
+		s.openStepReviewer(ctx, t, step, wt, runs[index])
 	case task.StepDone:
 		// currentStep never returns a step that is already committed.
 	}
@@ -577,16 +578,36 @@ func (s *Service) evaluateStep(ctx context.Context, t task.Task) {
 		s.completeStep(ctx, t, a.Plan, step, wt, snap.Head)
 		return
 	}
-	if committing && idle {
-		// The agent finished its turn and the branch is where it was: whatever
-		// it did, it did not commit, and the step goes back to the user.
-		if _, err := s.tasks.SetStepRun(ctx, t.ID, step.Number, task.StepStarted, nil); err != nil {
-			s.log.Error("record started step failed", "task", t.ID, "step", step.Number, "error", err)
+	if committing {
+		if idle {
+			s.commitMissed(ctx, t, step, run)
+		}
+		// A commit turn under way is not the loop's to act on: the report it
+		// followed was already acted on.
+		return
+	}
+	if agentReviewed(t, step.Number, run) {
+		s.evaluateAgentReview(ctx, t, a, step, wt, run, sum, snap)
+	}
+}
+
+// commitMissed gives back a step whose commit turn ended with the branch where
+// it was: whatever the agent did, it did not commit. A step under the agent
+// review goes to the user for good, and that is recorded first, so that a
+// failure never leaves it started under a review that asks for a new pass.
+func (s *Service) commitMissed(ctx context.Context, t task.Task, step task.Step, run task.StepRun) {
+	if agentReviewed(t, step.Number, run) {
+		if err := s.fallBack(ctx, t.ID, step.Number, task.FallbackNoCommit); err != nil {
+			s.log.Error("record step review fallback failed", "task", t.ID, "step", step.Number, "error", err)
 			return
 		}
-		s.setNoCommit(t.ID, true)
-		s.log.Warn("commit did not happen", "task", t.ID, "step", step.Number)
 	}
+	if _, err := s.tasks.SetStepRun(ctx, t.ID, step.Number, task.StepStarted, nil); err != nil {
+		s.log.Error("record started step failed", "task", t.ID, "step", step.Number, "error", err)
+		return
+	}
+	s.setNoCommit(t.ID, true)
+	s.log.Warn("commit did not happen", "task", t.ID, "step", step.Number)
 }
 
 // completeStep records the commit a step produced, closes its session and
@@ -609,6 +630,9 @@ func (s *Service) completeStep(
 	s.setNoCommit(t.ID, false)
 	if err := s.sessions.Close(ctx, stepKey(t.ID, step.Number)); err != nil {
 		s.log.Error("close step session failed", "task", t.ID, "step", step.Number, "error", err)
+	}
+	if err := s.sessions.Close(ctx, stepReviewKey(t.ID, step.Number)); err != nil {
+		s.log.Error("close step review session failed", "task", t.ID, "step", step.Number, "error", err)
 	}
 
 	next, ok := nextStep(plan, step.Number)
@@ -726,6 +750,9 @@ func (s *Service) ApproveStep(ctx context.Context, id string) error {
 	if run == nil || run.Status != task.StepStarted {
 		return fmt.Errorf("approve step %d of task %s: %w", step.Number, id, ErrStepNotStarted)
 	}
+	if agentReviewed(t, step.Number, *run) {
+		return fmt.Errorf("approve step %d of task %s: %w", step.Number, id, ErrAgentReviewing)
+	}
 	snap, read := s.review.Snapshot(reviewKey(id, step.RepoPath))
 	if !read || snap.Err != "" || !snap.Ready() {
 		return fmt.Errorf("approve step %d of task %s: %w", step.Number, id, ErrStepNotReady)
@@ -829,8 +856,9 @@ func (s *Service) CleanAndStartStep(ctx context.Context, id string) error {
 	return nil
 }
 
-// DiscardStep ends the session of a started step, deletes its conversation and
-// starts the step over, optionally cleaning the worktree first.
+// DiscardStep ends the sessions of a started step, deletes the conversations of
+// its implementer and of its reviewer, forgets its agent review and starts the
+// step over, optionally cleaning the worktree first.
 func (s *Service) DiscardStep(ctx context.Context, id string, cleanWorktree bool) error {
 	s.abortPrepare(id)
 
@@ -845,7 +873,10 @@ func (s *Service) DiscardStep(ctx context.Context, id string, cleanWorktree bool
 	if run == nil || run.Status != task.StepStarted {
 		return fmt.Errorf("discard step %d of task %s: %w", step.Number, id, ErrStepNotStarted)
 	}
-	if err := s.sessions.Discard(ctx, id, session.StepStage(step.Number)); err != nil {
+	if err := s.sessions.Discard(ctx, id, session.StepStage(step.Number), session.StepReviewStage(step.Number)); err != nil {
+		return err
+	}
+	if err := s.tasks.ClearStepReview(ctx, id, step.Number); err != nil {
 		return err
 	}
 	if _, err := s.tasks.SetStepRun(ctx, id, step.Number, task.StepPreparing, nil); err != nil {
@@ -891,10 +922,13 @@ func (s *Service) tearDownSteps(ctx context.Context, t task.Task) error {
 	}
 	s.review.ForgetTask(t.ID)
 
-	// A step session is stopped before the worktree it runs in goes away.
+	// The sessions of a step are stopped before the worktree they run in goes
+	// away.
 	stepOpen := false
 	for _, run := range runs {
-		if _, open := s.sessions.Summary(stepKey(t.ID, run.Number)); open {
+		_, implementer := s.sessions.Summary(stepKey(t.ID, run.Number))
+		_, reviewer := s.sessions.Summary(stepReviewKey(t.ID, run.Number))
+		if implementer || reviewer {
 			stepOpen = true
 			break
 		}
@@ -923,12 +957,13 @@ func (s *Service) tearDownSteps(ctx context.Context, t task.Task) error {
 	return nil
 }
 
-// stepStages names the session of every step the app recorded, which is what
-// discarding them takes.
+// stepStages names the sessions of every step the app recorded, the one that
+// implements it and the one that reviews it, which is what discarding them
+// takes.
 func stepStages(runs []task.StepRun) []string {
-	stages := make([]string, len(runs))
-	for i, run := range runs {
-		stages[i] = session.StepStage(run.Number)
+	stages := make([]string, 0, 2*len(runs))
+	for _, run := range runs {
+		stages = append(stages, session.StepStage(run.Number), session.StepReviewStage(run.Number))
 	}
 	return stages
 }
@@ -941,7 +976,8 @@ func (s *Service) reopenStep(ctx context.Context, t task.Task) {
 		s.log.Error("inspect artifacts failed", "task", t.ID, "stage", string(t.Stage), "error", err)
 		return
 	}
-	step, ok := currentStep(a.Plan, s.tasks.StepRuns(t.ID))
+	runs := s.tasks.StepRuns(t.ID)
+	step, ok := currentStep(a.Plan, runs)
 	if !ok {
 		return
 	}
@@ -951,6 +987,9 @@ func (s *Service) reopenStep(ctx context.Context, t task.Task) {
 	}
 	if err := s.sessions.Open(ctx, stepInfo(t, step, wt, s.tasks.Repositories(t))); err != nil {
 		s.log.Error("reopen step session failed", "task", t.ID, "step", step.Number, "error", err)
+	}
+	if index := indexOfRun(runs, step.Number); index >= 0 {
+		s.openStepReviewer(ctx, t, step, wt, runs[index])
 	}
 }
 

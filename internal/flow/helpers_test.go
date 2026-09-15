@@ -269,6 +269,22 @@ func (m *memTasks) updateReviewModes(id, label string, mutate func(*task.ReviewM
 	return m.items[index], nil
 }
 
+// setStepReports adds reports to what the disk holds for a step, which is how a
+// test says the reviewer wrote them. The maps and the slices go out with every
+// copy of the artifacts, so they are replaced rather than changed.
+func (m *memTasks) setStepReports(id string, number int, reports ...task.ReviewReport) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	a := m.artifacts[id]
+	a.StepReports = maps.Clone(a.StepReports)
+	if a.StepReports == nil {
+		a.StepReports = map[int][]task.ReviewReport{}
+	}
+	a.StepReports[number] = append(slices.Clone(a.StepReports[number]), reports...)
+	m.artifacts[id] = a
+}
+
 // setReviewModes is the review mode of a task and of its steps, which is what
 // the user chose before the flow ran. Like setModels, it may come before the
 // helper that seeds the task.
@@ -862,6 +878,14 @@ func (m *memSessions) LastReply(k session.Key) string {
 	defer m.mu.Unlock()
 
 	return m.replies[k]
+}
+
+// setReply is what the agent of a session said last.
+func (m *memSessions) setReply(k session.Key, text string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.replies[k] = text
 }
 
 func (m *memSessions) SendFromApp(_ context.Context, k session.Key, text string) error {
@@ -1476,6 +1500,11 @@ func commitPrompt(name string, push bool) string {
 	return message
 }
 
+// commitAllPrompt is what the fake renderer answers with for the commit stage
+// when the commit takes every change of the worktree, which is the commit the
+// agent review asks for.
+func commitAllPrompt(name string) string { return "Commit every change of " + name }
+
 // reviewPrompt is what the fake renderer answers with for the prompt of a
 // review pass, with the report it is about.
 func reviewPrompt(path string) string { return "Review the pull request into " + path }
@@ -1509,6 +1538,9 @@ func newFixture(t *testing.T) *fixture {
 		RenderPrompt: func(stage prompts.Stage, vars prompts.Vars) (string, error) {
 			switch stage {
 			case prompts.StageCommit:
+				if vars.CommitAll {
+					return commitAllPrompt(vars.TaskName), nil
+				}
 				return commitPrompt(vars.TaskName, vars.Push), nil
 			case prompts.StagePRReview:
 				return reviewPrompt(vars.ReviewPath), nil
@@ -1561,6 +1593,18 @@ func (f *fixture) waitEvaluations(t *testing.T, n int) {
 	waitFor(t, "evaluation number "+strconv.Itoa(n), func() bool { return f.tasks.inspectCount() >= n })
 }
 
+// waitEvaluated waits for an evaluation asked for after the flow had read the
+// disk before times to be over, not only to have begun. An evaluation holds the
+// lock of the task from its reading of the disk to its end, and Continue waits
+// for that lock before it refuses a task that is not revisiting, which is what
+// a test that proves the flow did nothing needs.
+func (f *fixture) waitEvaluated(t *testing.T, id string, before int) {
+	t.Helper()
+
+	f.waitEvaluations(t, before+1)
+	wantErrIs(t, f.service.Continue(t.Context(), id), flow.ErrNotRevisiting)
+}
+
 // waitStep polls until a step of a task reaches a status.
 func (f *fixture) waitStep(t *testing.T, id string, number int, status flow.StepStatus) {
 	t.Helper()
@@ -1587,6 +1631,29 @@ func (f *fixture) waitStepSession(t *testing.T, id string, number int) {
 		_, ok := f.sessions.Summary(key)
 		return ok
 	})
+}
+
+// reviewerKey is the session that reviews a step of a task.
+func reviewerKey(id string, number int) session.Key {
+	return session.Key{TaskID: id, Stage: session.StepReviewStage(number)}
+}
+
+// waitReviewer polls until the session that reviews a step has been opened. The
+// pass is recorded before the reviewer starts, so a test that waits on the
+// status alone can still be ahead of the Start call.
+func (f *fixture) waitReviewer(t *testing.T, id string, number int) {
+	t.Helper()
+
+	waitFor(t, "the reviewer of step "+strconv.Itoa(number)+" of "+id, func() bool {
+		_, ok := f.sessions.Summary(reviewerKey(id, number))
+		return ok
+	})
+}
+
+// stepReport is the report of one pass of the agent review of a step, as the
+// disk holds it.
+func stepReport(number, pass int, clean bool) task.ReviewReport {
+	return task.ReviewReport{Pass: pass, File: task.StepReportFile(number, pass), Clean: clean}
 }
 
 // stepState is the state of a step of a task, failing the test when the plan
