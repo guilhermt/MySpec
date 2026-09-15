@@ -68,20 +68,22 @@ func TestCreateTaskAddsTheTaskToTheState(t *testing.T) {
 
 	got := f.taskOf(t, id)
 	want := bindings.TaskSummary{
-		ID:            id,
-		Name:          "login-screen",
-		Dir:           dir,
-		Stage:         "prd",
-		SessionStatus: "waiting",
-		SessionModel:  "claude-fable-5-1",
-		SessionEffort: "high",
-		Steps:         []bindings.Step{},
-		Repos:         []bindings.RepoPR{},
-		PlanProblems:  []bindings.PlanProblem{},
-		Situations:    []bindings.Situation{},
-		Models:        startedTaskModels(models.Factory()),
-		CreatedAt:     got.CreatedAt,
-		UpdatedAt:     got.UpdatedAt,
+		ID:                 id,
+		Name:               "login-screen",
+		Dir:                dir,
+		Stage:              "prd",
+		ReviewMode:         "manual",
+		ReviewModeEditable: true,
+		SessionStatus:      "waiting",
+		SessionModel:       "claude-fable-5-1",
+		SessionEffort:      "high",
+		Steps:              []bindings.Step{},
+		Repos:              []bindings.RepoPR{},
+		PlanProblems:       []bindings.PlanProblem{},
+		Situations:         []bindings.Situation{},
+		Models:             startedTaskModels(models.Factory()),
+		CreatedAt:          got.CreatedAt,
+		UpdatedAt:          got.UpdatedAt,
 	}
 	// The context percentage depends on the tokens the fake reports, and the
 	// process may still be idling; neither belongs in this comparison.
@@ -251,6 +253,84 @@ func TestCreateTaskReportsAnUnknownModel(t *testing.T) {
 	}
 	if tasks := f.workspace.GetState().Tasks; len(tasks) != 0 {
 		t.Errorf("state has %d tasks, want none", len(tasks))
+	}
+}
+
+func TestCreateTaskStartsFromTheReviewModeOfTheSettings(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.open(t, t.TempDir())
+
+	if err := f.settings.SetReviewModeDefault("agent"); err != nil {
+		t.Fatalf("SetReviewModeDefault() = %v, want nil", err)
+	}
+
+	id, err := f.tasks.CreateTask(newTask("login-screen"))
+	if err != nil {
+		t.Fatalf("CreateTask() = %v, want nil", err)
+	}
+
+	if got := f.taskOf(t, id).ReviewMode; got != "agent" {
+		t.Errorf("reviewMode = %q, want the default of the settings", got)
+	}
+}
+
+func TestCreateTaskKeepsTheReviewModeOfTheDialog(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.open(t, t.TempDir())
+
+	req := newTask("login-screen")
+	req.ReviewMode = "agent"
+	id, err := f.tasks.CreateTask(req)
+	if err != nil {
+		t.Fatalf("CreateTask() = %v, want nil", err)
+	}
+
+	if got := f.taskOf(t, id).ReviewMode; got != "agent" {
+		t.Errorf("reviewMode = %q, want the one of the dialog", got)
+	}
+}
+
+func TestCreateTaskReportsAnUnknownReviewMode(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.open(t, t.TempDir())
+
+	req := newTask("login-screen")
+	req.ReviewMode = "auto"
+	id, err := f.tasks.CreateTask(req)
+	if err == nil {
+		t.Fatalf("CreateTask() = %q, nil, want an error", id)
+	}
+	if err.Error() != "Unknown review mode." {
+		t.Errorf("CreateTask() error = %q, want the unknown review mode notice", err)
+	}
+	if tasks := f.workspace.GetState().Tasks; len(tasks) != 0 {
+		t.Errorf("state has %d tasks, want none", len(tasks))
+	}
+}
+
+func TestSetReviewModeChangesTheModeOfTheState(t *testing.T) {
+	t.Parallel()
+
+	f, _, id := createdTask(t)
+
+	if err := f.tasks.SetReviewMode(id, "agent"); err != nil {
+		t.Fatalf("SetReviewMode() = %v, want nil", err)
+	}
+	if got := f.taskOf(t, id); got.ReviewMode != "agent" || !got.ReviewModeEditable {
+		t.Errorf("task = reviewMode %q editable %v, want agent and still editable", got.ReviewMode, got.ReviewModeEditable)
+	}
+
+	if err := f.tasks.SetReviewMode(id, "auto"); err == nil || err.Error() != "Unknown review mode." {
+		t.Errorf("SetReviewMode(auto) error = %v, want the unknown review mode notice", err)
+	}
+	if f.logged(t, "binding failed") {
+		t.Error("a mistake the user can correct was logged as a failure")
 	}
 }
 
@@ -659,11 +739,13 @@ func TestPlanWrittenReachesImplementation(t *testing.T) {
 				Total: 1,
 			},
 			Model: "claude-opus-5", Effort: "high",
+			ReviewMode: "manual", Reports: []bindings.StepReport{},
 		},
 		{
 			Number: 2, File: "2-second.md", Title: "Second",
 			Repository: "api", RepoPath: repo, Status: "not_started", WorktreePath: wt,
 			Model: "claude-opus-5", Effort: "high", ModelEditable: true,
+			ReviewMode: "manual", ReviewModeEditable: true, Reports: []bindings.StepReport{},
 		},
 	}
 	if diff := cmp.Diff(want, summary.Steps); diff != "" {
@@ -761,6 +843,17 @@ func TestStepOperationsReportWhatTheUserGotWrong(t *testing.T) {
 			name: "clean a step that is not blocked by a dirty worktree",
 			call: func() error { return f.tasks.CleanAndStartStep(id) },
 			want: "The worktree isn't what blocks the step.",
+		},
+		{
+			// The task runs its steps in the mode it was created with, manual.
+			name: "take over the review of a step the agent isn't reviewing",
+			call: func() error { return f.tasks.ReviewStepMyself(id) },
+			want: "The agent isn't reviewing this step.",
+		},
+		{
+			name: "set an unknown review mode on a step",
+			call: func() error { return f.tasks.SetStepReviewMode(id, 1, "auto") },
+			want: "Unknown review mode.",
 		},
 	}
 

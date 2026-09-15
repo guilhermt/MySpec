@@ -5,10 +5,11 @@ type ArtifactKind string
 
 // The artifacts a task produces while it is planned.
 const (
-	ArtifactPRD      ArtifactKind = "prd"
-	ArtifactTechSpec ArtifactKind = "tech_spec"
-	ArtifactPlan     ArtifactKind = "plan"
-	ArtifactPR       ArtifactKind = "pr"
+	ArtifactPRD        ArtifactKind = "prd"
+	ArtifactTechSpec   ArtifactKind = "tech_spec"
+	ArtifactPlan       ArtifactKind = "plan"
+	ArtifactPR         ArtifactKind = "pr"
+	ArtifactStepReview ArtifactKind = "step_review"
 )
 
 // Artifacts is what the folder of a task holds.
@@ -17,6 +18,8 @@ type Artifacts struct {
 	TechSpec bool // tech-spec.md exists with content
 	Plan     Plan
 	PR       map[string]RepoArtifacts // by repository slug; never nil
+
+	StepReports map[int][]ReviewReport // by step number; never nil
 }
 
 // Done reports whether the artifact that ends a stage is there.
@@ -46,6 +49,8 @@ func (a Artifacts) Has(kind ArtifactKind) bool {
 		return a.Plan.Present
 	case ArtifactPR:
 		return len(a.PR) > 0
+	case ArtifactStepReview:
+		return len(a.StepReports) > 0
 	default:
 		return false
 	}

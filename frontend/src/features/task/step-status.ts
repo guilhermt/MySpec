@@ -1,6 +1,8 @@
+import type { SessionState } from "@/features/chat/session";
 import type { StatusTone } from "@/features/task/status";
+import { MAX_REVIEW_ROUNDS } from "@/lib/review-modes";
 import type { BlockReason, Review, Step, TaskSummary } from "@/lib/wails";
-import { asBlockReason, asSessionStatus, asStepStatus } from "@/lib/wails";
+import { asBlockReason, asReviewMode, asSessionStatus, asStepStatus } from "@/lib/wails";
 
 /** currentStepOf is the step that runs or runs next, null when there is none. */
 export function currentStepOf(task: TaskSummary): Step | null {
@@ -19,6 +21,8 @@ export function hasStepSession(step: Step | null): boolean {
   }
   switch (asStepStatus(step.status)) {
     case "implementing":
+    case "agent_review":
+    case "addressing_review":
     case "awaiting_review":
     case "in_review":
     case "ready_to_approve":
@@ -45,6 +49,10 @@ export function stepStatusLabel(step: Step): string {
       return "Blocked";
     case "implementing":
       return "Implementing";
+    case "agent_review":
+      return "Agent review";
+    case "addressing_review":
+      return "Addressing review";
     case "awaiting_review":
       return "Awaiting review";
     case "in_review":
@@ -62,6 +70,18 @@ export function stepStatusLabel(step: Step): string {
   }
 }
 
+/** stepStateLabel is the state of a step as its bar reads it, with the pass and the round of the agent review spelled out. */
+export function stepStateLabel(step: Step): string {
+  switch (asStepStatus(step.status)) {
+    case "agent_review":
+      return `Agent review · pass ${step.reviewPass}`;
+    case "addressing_review":
+      return `Addressing review · round ${step.reviewRound} of ${MAX_REVIEW_ROUNDS}`;
+    default:
+      return stepStatusLabel(step);
+  }
+}
+
 /**
  * stepStatusTone maps the state of a step to the colour that carries it. It
  * never calls for the user: that colour comes from the situation of the step
@@ -71,6 +91,8 @@ export function stepStatusTone(step: Step): StatusTone {
   switch (asStepStatus(step.status)) {
     case "preparing":
     case "implementing":
+    case "agent_review":
+    case "addressing_review":
     case "committing":
       return "working";
     case "done":
@@ -96,6 +118,15 @@ export function canApprove(step: Step): boolean {
   return asStepStatus(step.status) === "ready_to_approve";
 }
 
+/** canReviewMyself reports whether the review of a step can be taken back from the agent: it is under the agent review and not committing. */
+export function canReviewMyself(step: Step): boolean {
+  return (
+    asReviewMode(step.reviewMode) === "agent" &&
+    hasStepSession(step) &&
+    asStepStatus(step.status) !== "committing"
+  );
+}
+
 /** stepPhaseLabel names what the app is doing while the step prepares. */
 export function stepPhaseLabel(phase: string): string {
   switch (phase) {
@@ -116,9 +147,74 @@ export interface StepDisplay {
   tone: StatusTone;
 }
 
+/** LoopSession is the conversation a step waits on: its reviewer during a pass, its implementer otherwise. */
+export interface LoopSession extends SessionState {
+  /** stage names the session: step:<n> or step_review:<n>. */
+  stage: string;
+  contextPercent: number;
+}
+
+/** loopSession is the conversation the current step of a task waits on. */
+export function loopSession(task: TaskSummary, step: Step): LoopSession {
+  if (asStepStatus(step.status) === "agent_review" && step.reviewer !== null) {
+    return { ...step.reviewer, stage: step.reviewer.sessionStage };
+  }
+  return {
+    stage: stepStage(step.number),
+    sessionStatus: task.sessionStatus,
+    sessionModel: task.sessionModel,
+    sessionEffort: task.sessionEffort,
+    turnRunning: task.turnRunning,
+    processRunning: task.processRunning,
+    retryAttempt: task.retryAttempt,
+    contextPercent: task.contextPercent,
+  };
+}
+
+/** conversationDisplay is what one conversation of a step is doing, for its tab. */
+export function conversationDisplay(session: SessionState): StepDisplay {
+  switch (asSessionStatus(session.sessionStatus)) {
+    case "working":
+      return { label: "Working", tone: "working" };
+    case "paused":
+      return { label: "Paused", tone: "paused" };
+    case "error":
+      return { label: "Error", tone: "idle" };
+    case "needs_permission":
+      return { label: "Permission", tone: "idle" };
+    case "needs_answer":
+      return { label: "Question", tone: "idle" };
+    case "waiting":
+      return { label: "Waiting", tone: "idle" };
+  }
+}
+
+// What the conversation a running step waits on says, when that comes before
+// the step: a paused, failed or asking session. null while it simply works or
+// rests, and for a step with no conversation in progress.
+function sessionDisplay(task: TaskSummary, step: Step): StepDisplay | null {
+  const status = asStepStatus(step.status);
+  if (status !== "implementing" && status !== "agent_review" && status !== "addressing_review") {
+    return null;
+  }
+  switch (asSessionStatus(loopSession(task, step).sessionStatus)) {
+    case "paused":
+      return { label: "Paused", tone: "paused" };
+    case "error":
+      return { label: "Error", tone: "idle" };
+    case "needs_permission":
+      return { label: "Permission", tone: "idle" };
+    case "needs_answer":
+      return { label: "Question", tone: "idle" };
+    case "working":
+    case "waiting":
+      return null;
+  }
+}
+
 /**
- * currentStepDisplay combines the step with the session behind it: while
- * implementing, a paused, failed or asking session is what the user sees. Like
+ * currentStepDisplay combines the step with the session behind it: while the
+ * step runs, a paused, failed or asking session is what the user sees. Like
  * stepStatusTone, it leaves the colour of what waits on the user to the
  * situations.
  */
@@ -134,22 +230,12 @@ export function currentStepDisplay(task: TaskSummary): StepDisplay {
   if (status === "in_review" || status === "ready_to_approve") {
     return { label: `Review ${step.review?.percent ?? 0}%`, tone: stepStatusTone(step) };
   }
-  if (status !== "implementing") {
-    return { label: stepStatusLabel(step), tone: stepStatusTone(step) };
-  }
-  switch (asSessionStatus(task.sessionStatus)) {
-    case "paused":
-      return { label: "Paused", tone: "paused" };
-    case "error":
-      return { label: "Error", tone: "idle" };
-    case "needs_permission":
-      return { label: "Permission", tone: "idle" };
-    case "needs_answer":
-      return { label: "Question", tone: "idle" };
-    case "working":
-    case "waiting":
-      return { label: "Implementing", tone: "working" };
-  }
+  return sessionDisplay(task, step) ?? { label: stepStatusLabel(step), tone: stepStatusTone(step) };
+}
+
+/** stepBarDisplay is the state of the current step as its bar reads it: what the conversation it waits on says, when that comes first. */
+export function stepBarDisplay(task: TaskSummary, step: Step): StepDisplay {
+  return sessionDisplay(task, step) ?? { label: stepStateLabel(step), tone: stepStatusTone(step) };
 }
 
 /** blockTitle names why a step could not start. */

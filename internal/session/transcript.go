@@ -136,17 +136,19 @@ type MarkerType string
 
 // The markers the conversation shows between messages.
 const (
-	MarkerPRDWritten      MarkerType = "prd_written"
-	MarkerPRDUpdated      MarkerType = "prd_updated"
-	MarkerTechSpecWritten MarkerType = "tech_spec_written"
-	MarkerTechSpecUpdated MarkerType = "tech_spec_updated"
-	MarkerPlanWritten     MarkerType = "plan_written"
-	MarkerPlanUpdated     MarkerType = "plan_updated"
-	MarkerPRReviewWritten MarkerType = "pr_review_written"
-	MarkerStageStarted    MarkerType = "stage_started"
-	MarkerStepStarted     MarkerType = "step_started"
-	MarkerCompacted       MarkerType = "compacted"
-	MarkerInterrupted     MarkerType = "interrupted"
+	MarkerPRDWritten        MarkerType = "prd_written"
+	MarkerPRDUpdated        MarkerType = "prd_updated"
+	MarkerTechSpecWritten   MarkerType = "tech_spec_written"
+	MarkerTechSpecUpdated   MarkerType = "tech_spec_updated"
+	MarkerPlanWritten       MarkerType = "plan_written"
+	MarkerPlanUpdated       MarkerType = "plan_updated"
+	MarkerPRReviewWritten   MarkerType = "pr_review_written"
+	MarkerStepReviewStarted MarkerType = "step_review_started"
+	MarkerStepReviewWritten MarkerType = "step_review_written"
+	MarkerStageStarted      MarkerType = "stage_started"
+	MarkerStepStarted       MarkerType = "step_started"
+	MarkerCompacted         MarkerType = "compacted"
+	MarkerInterrupted       MarkerType = "interrupted"
 )
 
 // ArtifactKind is the artifact a marker refers to. The values are the ones of
@@ -189,8 +191,9 @@ type MarkerEntry struct {
 	Type      MarkerType `json:"type"`
 	PreTokens int        `json:"preTokens"` // compacted only
 	Stage     string     `json:"stage"`     // stage_started only
-	Step      int        `json:"step"`      // step_started only
-	Pass      int        `json:"pass"`      // pr_review_written only: the pass it closed
+	Step      int        `json:"step"`      // step_started and step_review_started only
+	Pass      int        `json:"pass"`      // pr_review_written and step_review_written only: the pass it closed
+	Clean     bool       `json:"clean"`     // step_review_written only: the pass found nothing to change
 	Restarted bool       `json:"restarted"` // stage_started and step_started only: it was started again
 }
 

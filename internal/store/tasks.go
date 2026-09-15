@@ -17,7 +17,7 @@ type TasksRepo struct{ db *sql.DB }
 
 // taskColumns is the column list every task query selects, in scan order.
 const taskColumns = `id, workspace_path, name, repo_path, initial_context, stage, revisiting,
-	artifacts_dir, artifact_version, archived_at, created_at, updated_at, models`
+	artifacts_dir, artifact_version, archived_at, created_at, updated_at, models, review_modes`
 
 // ListByWorkspace returns the tasks a workspace still holds, in creation
 // order. The archived ones are not among them.
@@ -78,9 +78,13 @@ func (r *TasksRepo) Get(ctx context.Context, id string) (task.Task, error) {
 func (r *TasksRepo) Insert(ctx context.Context, t task.Task) error {
 	const taken = `SELECT 1 FROM tasks WHERE workspace_path = ? AND name = ?`
 	const stmt = `INSERT INTO tasks (` + taskColumns + `)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	encodedModels, err := encodeModels(t.Models)
+	if err != nil {
+		return fmt.Errorf("insert task %s: %w", t.Name, err)
+	}
+	encodedReviewModes, err := encodeReviewModes(t.ReviewModes)
 	if err != nil {
 		return fmt.Errorf("insert task %s: %w", t.Name, err)
 	}
@@ -103,7 +107,7 @@ func (r *TasksRepo) Insert(ctx context.Context, t task.Task) error {
 	_, err = tx.ExecContext(ctx, stmt,
 		t.ID, t.WorkspacePath, t.Name, nullString(t.RepoPath), t.InitialContext, string(t.Stage), t.Revisiting,
 		t.ArtifactsDir, t.ArtifactVersion, nullTime(t.ArchivedAt),
-		formatTime(t.CreatedAt), formatTime(t.UpdatedAt), encodedModels)
+		formatTime(t.CreatedAt), formatTime(t.UpdatedAt), encodedModels, encodedReviewModes)
 	if err != nil {
 		return fmt.Errorf("insert task %s: %w", t.Name, err)
 	}
@@ -157,6 +161,20 @@ func (r *TasksRepo) UpdateModels(ctx context.Context, id string, m task.Models, 
 	return nil
 }
 
+// UpdateReviewModes rewrites who reviews the steps of a task.
+func (r *TasksRepo) UpdateReviewModes(ctx context.Context, id string, m task.ReviewModes, updatedAt time.Time) error {
+	const stmt = `UPDATE tasks SET review_modes = ?, updated_at = ? WHERE id = ?`
+
+	encoded, err := encodeReviewModes(m)
+	if err != nil {
+		return fmt.Errorf("update review modes of task %s: %w", id, err)
+	}
+	if _, err := r.db.ExecContext(ctx, stmt, encoded, formatTime(updatedAt), id); err != nil {
+		return fmt.Errorf("update review modes of task %s: %w", id, err)
+	}
+	return nil
+}
+
 // Delete removes a task and, by cascade, its session and transcript.
 func (r *TasksRepo) Delete(ctx context.Context, id string) error {
 	const stmt = `DELETE FROM tasks WHERE id = ?`
@@ -175,9 +193,11 @@ func scanTask(row scanner) (task.Task, error) {
 		archivedAt           sql.NullString
 		createdAt, updatedAt string
 		encodedModels        string
+		encodedReviewModes   string
 	)
 	err := row.Scan(&t.ID, &t.WorkspacePath, &t.Name, &repoPath, &t.InitialContext, &stage, &t.Revisiting,
-		&t.ArtifactsDir, &t.ArtifactVersion, &archivedAt, &createdAt, &updatedAt, &encodedModels)
+		&t.ArtifactsDir, &t.ArtifactVersion, &archivedAt, &createdAt, &updatedAt, &encodedModels,
+		&encodedReviewModes)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		return task.Task{}, err
@@ -201,6 +221,9 @@ func scanTask(row scanner) (task.Task, error) {
 	if t.Models, err = decodeModels(encodedModels); err != nil {
 		return task.Task{}, fmt.Errorf("read task %s: %w", t.ID, err)
 	}
+	if t.ReviewModes, err = decodeReviewModes(encodedReviewModes); err != nil {
+		return task.Task{}, fmt.Errorf("read task %s: %w", t.ID, err)
+	}
 	return t, nil
 }
 
@@ -218,6 +241,24 @@ func decodeModels(value string) (task.Models, error) {
 	var m task.Models
 	if err := json.Unmarshal([]byte(value), &m); err != nil {
 		return task.Models{}, fmt.Errorf("decode models: %w", err)
+	}
+	return m, nil
+}
+
+// encodeReviewModes is the JSON of the review modes of a task.
+func encodeReviewModes(m task.ReviewModes) (string, error) {
+	encoded, err := json.Marshal(m)
+	if err != nil {
+		return "", fmt.Errorf("encode review modes: %w", err)
+	}
+	return string(encoded), nil
+}
+
+// decodeReviewModes reads the JSON back. Every row has one since migration 0010.
+func decodeReviewModes(value string) (task.ReviewModes, error) {
+	var m task.ReviewModes
+	if err := json.Unmarshal([]byte(value), &m); err != nil {
+		return task.ReviewModes{}, fmt.Errorf("decode review modes: %w", err)
 	}
 	return m, nil
 }

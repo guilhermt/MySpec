@@ -182,6 +182,103 @@ func TestDeriveTheCurrentStep(t *testing.T) {
 			situation(attention.KindQuestion, attention.FormNone, 0, "The agent has a question in step 2."),
 		},
 		{"every step is done", stepInput(flow.StepState{Status: flow.StepDone}), nil},
+		{"agent review under way", stepInput(flow.StepState{Status: flow.StepAgentReview, ReviewPass: 1}, waiting), nil},
+		{"addressing a report", stepInput(flow.StepState{Status: flow.StepAddressingReview, ReviewRound: 1}, working), nil},
+		{
+			"fell to the user after three rounds",
+			stepInput(flow.StepState{
+				Status: flow.StepAwaitingReview, Review: &review.Snapshot{Total: 3}, Fallback: task.FallbackRoundsExhausted,
+			}, waiting),
+			situation(attention.KindStepReview, attention.FormReview, 0, "Step 2: the agent review didn't come clean after three rounds."),
+		},
+		{
+			"fell to the user without the commit",
+			stepInput(flow.StepState{
+				Status: flow.StepAwaitingReview, Review: &review.Snapshot{Total: 3},
+				CommitFailed: true, Fallback: task.FallbackNoCommit,
+			}, waiting),
+			situation(attention.KindStepReview, attention.FormReview, 0, "Step 2: the last approval didn't produce a commit."),
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			if diff := cmp.Diff(test.want, attention.Derive(test.in)); diff != "" {
+				t.Errorf("Derive() mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestDeriveTheReviewerOfTheCurrentStep(t *testing.T) {
+	t.Parallel()
+
+	waiting := summary(session.StatusWaiting, true)
+	failedTurn := waiting
+	failedTurn.TurnFailed = true
+
+	// underReview is step 2 in a pass of the agent review, with its implementer
+	// in the state given and its reviewer in the one given.
+	underReview := func(implementer, reviewer session.Summary, missing bool) attention.Input {
+		return stepInput(flow.StepState{
+			Status: flow.StepAgentReview, ReviewPass: 1, ReportMissing: missing,
+			ReviewerStage: session.StepReviewStage(2), Reviewer: reviewer,
+		}, implementer)
+	}
+	// reviewer is a situation in the conversation that reviews step 2.
+	reviewer := func(kind attention.Kind, body string) attention.Found {
+		return attention.Found{
+			TaskID: taskID, Place: attention.Place{Kind: attention.PlaceStepReview, Step: 2},
+			Kind: kind, Title: taskName, Body: body,
+		}
+	}
+
+	tests := []struct {
+		name string
+		in   attention.Input
+		want []attention.Found
+	}{
+		{"no reviewer", stepInput(flow.StepState{Status: flow.StepImplementing}, summary(session.StatusWorking, false)), nil},
+		{"the reviewer is working", underReview(waiting, summary(session.StatusWorking, false), false), nil},
+		{"the reviewer is paused", underReview(waiting, summary(session.StatusPaused, false), false), nil},
+		{
+			"the reviewer has a question",
+			underReview(waiting, summary(session.StatusNeedsAnswer, false), false),
+			[]attention.Found{reviewer(attention.KindQuestion, "The reviewer of step 2 has a question.")},
+		},
+		{
+			"the reviewer asks for a permission",
+			underReview(waiting, summary(session.StatusNeedsPermission, false), false),
+			[]attention.Found{reviewer(attention.KindPermission, "The reviewer of step 2 asks for a permission.")},
+		},
+		{
+			"the reviewer stopped with an error",
+			underReview(waiting, summary(session.StatusError, false), false),
+			[]attention.Found{reviewer(attention.KindSessionError, "The review of step 2 stopped with an error.")},
+		},
+		{
+			"the last turn of the reviewer failed",
+			underReview(waiting, failedTurn, false),
+			[]attention.Found{reviewer(attention.KindSessionError, "The review of step 2 stopped with an error.")},
+		},
+		{
+			"the pass ended without its report",
+			underReview(waiting, waiting, true),
+			[]attention.Found{reviewer(attention.KindReply, "The reviewer of step 2 stopped without writing its report.")},
+		},
+		{
+			"the implementer and the reviewer both wait",
+			underReview(summary(session.StatusNeedsPermission, false), summary(session.StatusNeedsAnswer, false), false),
+			[]attention.Found{
+				{
+					TaskID: taskID, Place: attention.Place{Kind: attention.PlaceStep, Step: 2},
+					Kind: attention.KindPermission, Title: taskName, Body: "Permission requested in step 2.",
+				},
+				reviewer(attention.KindQuestion, "The reviewer of step 2 has a question."),
+			},
+		},
 	}
 
 	for _, test := range tests {
@@ -435,6 +532,7 @@ func TestPlaceKeysReadBack(t *testing.T) {
 	}{
 		{"stage", attention.Place{Kind: attention.PlaceStage, Stage: task.StageTechSpec}, "stage:tech_spec"},
 		{"step", attention.Place{Kind: attention.PlaceStep, Step: 12}, "step:12"},
+		{"step review", attention.Place{Kind: attention.PlaceStepReview, Step: 3}, "step_review:3"},
 		{
 			"repository with a colon in its path",
 			attention.Place{Kind: attention.PlaceRepo, RepoPath: "/home/u/code/api:v2"},
@@ -459,7 +557,7 @@ func TestPlaceKeysReadBack(t *testing.T) {
 		})
 	}
 
-	for _, key := range []string{"", "stage:", "stage:closing", "step:0", "step:x", "other:1"} {
+	for _, key := range []string{"", "stage:", "stage:closing", "step:0", "step:x", "step_review:0", "step_review:x", "other:1"} {
 		if place, ok := attention.ParsePlace(key); ok {
 			t.Errorf("ParsePlace(%q) = %+v, true; want false", key, place)
 		}

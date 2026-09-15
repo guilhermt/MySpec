@@ -108,6 +108,21 @@ func TestStepsCarryTheCommitsOfTheStep(t *testing.T) {
 	}
 }
 
+func TestStepsCarryTheAgentReviewOfTheStep(t *testing.T) {
+	t.Parallel()
+	s := newStore(t)
+
+	taskID := seedTask(t, s)
+	run := newStepRun(taskID, 1, task.StepStarted)
+	run.ReviewPass, run.ReportedPass, run.Fallback = 4, 3, task.FallbackRoundsExhausted
+	if err := s.Tasks.UpsertStepRun(t.Context(), run); err != nil {
+		t.Fatalf("UpsertStepRun() = %v, want nil", err)
+	}
+	if diff := cmp.Diff([]task.StepRun{run}, listStepRuns(t, s, taskID)); diff != "" {
+		t.Errorf("ListStepRuns() mismatch (-want +got):\n%s", diff)
+	}
+}
+
 func TestStepsAreListedByNumber(t *testing.T) {
 	t.Parallel()
 	s := newStore(t)

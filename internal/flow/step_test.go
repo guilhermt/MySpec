@@ -405,7 +405,7 @@ func TestDiscardStepStartsTheStepOverInACleanWorktree(t *testing.T) {
 
 	f.waitCalls(t,
 		"start:task-1:step:1:restarted=false",
-		"discard:task-1:step:1",
+		"discard:task-1:step:1,step_review:1",
 		"start:task-1:step:1:restarted=true",
 	)
 	f.waitWorktreeCalls(t,
@@ -496,7 +496,7 @@ func TestDiscardingThePlanTearsTheStepsDownFirst(t *testing.T) {
 	f.wantCalls(t,
 		"start:task-1:step:1:restarted=false",
 		"closeTask:task-1",
-		"discard:task-1:step:1",
+		"discard:task-1:step:1,step_review:1",
 		"discard:task-1:plan",
 		"start:task-1:plan:restarted=true",
 	)
@@ -523,7 +523,7 @@ func TestBackToTheTechSpecTearsTheStepsDownFirst(t *testing.T) {
 	f.wantCalls(t,
 		"start:task-1:step:1:restarted=false",
 		"closeTask:task-1",
-		"discard:task-1:step:1",
+		"discard:task-1:step:1,step_review:1",
 		"discard:task-1:plan",
 		"open:task-1:tech_spec",
 	)
@@ -575,7 +575,7 @@ func TestDiscardingThePlanCancelsAPreparationInFlight(t *testing.T) {
 
 	// The cancelled preparation never started the step.
 	f.wantCalls(t,
-		"discard:task-1:step:1",
+		"discard:task-1:step:1,step_review:1",
 		"discard:task-1:plan",
 		"start:task-1:plan:restarted=true",
 	)

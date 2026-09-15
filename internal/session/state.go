@@ -23,7 +23,7 @@ type Key struct {
 type Record struct {
 	ID     string // also the Claude Code session id
 	TaskID string
-	Stage  string // prd, tech_spec, plan, step:<n>, pr:<slug> or pr_review:<slug>
+	Stage  string // prd, tech_spec, plan, step:<n>, step_review:<n>, pr:<slug> or pr_review:<slug>
 	// Choice is the model and effort the session runs with from its next message
 	// on. It is born with the one of its stage or step and changes only through
 	// SetChoice.
@@ -39,11 +39,12 @@ type Record struct {
 }
 
 // The prefixes that open the session key of a stage a task has more than one
-// of: one step, or one repository of the PR stages.
+// of: one step, the reviewer of a step, or one repository of the PR stages.
 const (
-	stepStagePrefix     = "step:"
-	prStagePrefix       = "pr:"
-	prReviewStagePrefix = "pr_review:"
+	stepStagePrefix       = "step:"
+	stepReviewStagePrefix = "step_review:"
+	prStagePrefix         = "pr:"
+	prReviewStagePrefix   = "pr_review:"
 )
 
 // StepStage is the session key of a step, which is what the sessions table
@@ -53,6 +54,24 @@ func StepStage(number int) string { return stepStagePrefix + strconv.Itoa(number
 // ParseStepStage reads the number out of a step session key.
 func ParseStepStage(stage string) (number int, ok bool) {
 	rest, found := strings.CutPrefix(stage, stepStagePrefix)
+	if !found {
+		return 0, false
+	}
+	number, err := strconv.Atoi(rest)
+	if err != nil || number <= 0 {
+		return 0, false
+	}
+	return number, true
+}
+
+// StepReviewStage is the session key of the reviewer of a step, which is what
+// the sessions table records in its stage column.
+func StepReviewStage(number int) string { return stepReviewStagePrefix + strconv.Itoa(number) }
+
+// ParseStepReviewStage reads the number out of the session key of the reviewer
+// of a step.
+func ParseStepReviewStage(stage string) (number int, ok bool) {
+	rest, found := strings.CutPrefix(stage, stepReviewStagePrefix)
 	if !found {
 		return 0, false
 	}

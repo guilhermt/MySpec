@@ -165,8 +165,10 @@ func TestTheLastCommitOfAPlanOpensThePRStageOfEveryRepository(t *testing.T) {
 	if want := "/data/task-1/pr/api-draft.md"; info.DraftPath != want {
 		t.Errorf("draft path = %q, want %q", info.DraftPath, want)
 	}
-	if !slices.Contains(f.sessions.recorded(), "start:task-1:pr:web:restarted=false") {
-		t.Errorf("session calls = %q, want the pr session of web started", f.sessions.recorded())
+	// The status of a repository reaches drafting before its session starts.
+	web := f.waitPRSession(t, "task-1", "web")
+	if want := worktree.Path(workspace, "web", "task-1"); web.Dir != want || web.Repository != "web" {
+		t.Errorf("web session = %+v, want the repository web in its own worktree %q", web, want)
 	}
 	// The review of the steps is over: what is watched now is a pull request.
 	if !slices.Contains(f.reviews.reviewCalls(), "forget-task:task-1") {

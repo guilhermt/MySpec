@@ -91,26 +91,29 @@ type PlaceKind string
 
 // The places a situation can be in.
 const (
-	PlaceStage PlaceKind = "stage" // a planning stage
-	PlaceStep  PlaceKind = "step"  // the current step
-	PlaceRepo  PlaceKind = "repo"  // a repository of the PR stage
+	PlaceStage      PlaceKind = "stage"       // a planning stage
+	PlaceStep       PlaceKind = "step"        // the current step
+	PlaceStepReview PlaceKind = "step_review" // the conversation that reviews the current step
+	PlaceRepo       PlaceKind = "repo"        // a repository of the PR stage
 )
 
 // Place is where in a task a situation is.
 type Place struct {
 	Kind       PlaceKind
 	Stage      task.Stage // PlaceStage only
-	Step       int        // PlaceStep only
+	Step       int        // PlaceStep and PlaceStepReview only
 	RepoPath   string     // PlaceRepo only
 	Repository string     // PlaceRepo only: the path relative to the workspace, as the steps name it
 }
 
 // Key names a place inside its task, the way the store keeps it:
-// stage:<stage>, step:<number> or repo:<absolute path>.
+// stage:<stage>, step:<number>, step_review:<number> or repo:<absolute path>.
 func (p Place) Key() string {
 	switch p.Kind {
 	case PlaceStep:
 		return "step:" + strconv.Itoa(p.Step)
+	case PlaceStepReview:
+		return "step_review:" + strconv.Itoa(p.Step)
 	case PlaceRepo:
 		return "repo:" + p.RepoPath
 	default:
@@ -132,12 +135,12 @@ func ParsePlace(key string) (Place, bool) {
 			return Place{}, false
 		}
 		return Place{Kind: PlaceStage, Stage: stage}, true
-	case "step":
+	case "step", "step_review":
 		number, err := strconv.Atoi(value)
 		if err != nil || number <= 0 {
 			return Place{}, false
 		}
-		return Place{Kind: PlaceStep, Step: number}, true
+		return Place{Kind: PlaceKind(prefix), Step: number}, true
 	case "repo":
 		// The key is cut at its first colon, so a path with colons of its own
 		// comes back whole.

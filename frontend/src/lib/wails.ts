@@ -39,6 +39,8 @@ import type {
   State,
   Step,
   StepBlock,
+  StepReport,
+  StepReviewer,
   TaskStageModel,
   TaskSummary,
   Transcript,
@@ -92,6 +94,8 @@ export type {
   State,
   Step,
   StepBlock,
+  StepReport,
+  StepReviewer,
   TaskStageModel,
   TaskSummary,
   Transcript,
@@ -106,16 +110,32 @@ export type NoticeReason = "not_found" | "not_directory" | "not_readable" | "las
 export type TaskStage = "prd" | "tech_spec" | "plan" | "implementation" | "pr";
 
 /** ModelStage is a stage that carries a model and an effort of its own. */
-export type ModelStage = "prd" | "tech_spec" | "plan" | "implementation" | "pr" | "pr_review";
+export type ModelStage =
+  | "prd"
+  | "tech_spec"
+  | "plan"
+  | "implementation"
+  | "step_review"
+  | "pr"
+  | "pr_review";
 
 /** PromptStage names one of the prompts the settings show, in workflow order. */
-export type PromptStage = "prd" | "tech_spec" | "plan" | "commit" | "pr" | "pr_review";
+export type PromptStage =
+  | "prd"
+  | "tech_spec"
+  | "plan"
+  | "step_review"
+  | "commit"
+  | "pr"
+  | "pr_review";
 
 export type StepStatus =
   | "not_started"
   | "preparing"
   | "blocked"
   | "implementing"
+  | "agent_review"
+  | "addressing_review"
   | "awaiting_review"
   | "in_review"
   | "ready_to_approve"
@@ -199,6 +219,9 @@ export type MarkerType =
   | "tech_spec_updated"
   | "plan_written"
   | "plan_updated"
+  | "pr_review_written"
+  | "step_review_started"
+  | "step_review_written"
   | "stage_started"
   | "step_started"
   | "compacted"
@@ -239,7 +262,13 @@ export type SituationGroup = "error" | "waiting" | "closing";
 export type SituationForm = "" | "review" | "staged" | "approve" | "merge" | "close";
 
 /** PlaceKind is the part of a task a situation is in. */
-export type PlaceKind = "stage" | "step" | "repo";
+export type PlaceKind = "stage" | "step" | "step_review" | "repo";
+
+/** ReviewMode is who reviews the steps: the user, or an agent. */
+export type ReviewMode = "manual" | "agent";
+
+/** ReviewFallback is why a step that started under the agent review is reviewed by the user; "" while its mode holds. */
+export type ReviewFallback = "" | "taken_over" | "rounds_exhausted" | "commit_failed";
 
 /** sessionKey identifies one conversation: a task and the stage it belongs to. */
 export function sessionKey(taskId: string, stage: string): string {
@@ -288,6 +317,7 @@ export function asModelStage(value: string): ModelStage {
     case "tech_spec":
     case "plan":
     case "implementation":
+    case "step_review":
     case "pr":
     case "pr_review":
       return value;
@@ -301,6 +331,7 @@ export function asPromptStage(value: string): PromptStage {
     case "prd":
     case "tech_spec":
     case "plan":
+    case "step_review":
     case "commit":
     case "pr":
     case "pr_review":
@@ -316,6 +347,8 @@ export function asStepStatus(value: string): StepStatus {
     case "preparing":
     case "blocked":
     case "implementing":
+    case "agent_review":
+    case "addressing_review":
     case "awaiting_review":
     case "in_review":
     case "ready_to_approve":
@@ -494,6 +527,9 @@ export function asMarkerType(value: string): MarkerType {
     case "tech_spec_updated":
     case "plan_written":
     case "plan_updated":
+    case "pr_review_written":
+    case "step_review_started":
+    case "step_review_written":
     case "stage_started":
     case "step_started":
     case "compacted":
@@ -583,10 +619,33 @@ export function asPlaceKind(value: string): PlaceKind {
   switch (value) {
     case "stage":
     case "step":
+    case "step_review":
     case "repo":
       return value;
     default:
       return "stage";
+  }
+}
+
+export function asReviewMode(value: string): ReviewMode {
+  switch (value) {
+    case "manual":
+    case "agent":
+      return value;
+    default:
+      return "manual";
+  }
+}
+
+export function asReviewFallback(value: string): ReviewFallback {
+  switch (value) {
+    case "":
+    case "taken_over":
+    case "rounds_exhausted":
+    case "commit_failed":
+      return value;
+    default:
+      return "";
   }
 }
 
@@ -599,6 +658,8 @@ export const api = {
   setTheme: (preference: ThemePreference): Promise<void> => SettingsService.SetTheme(preference),
   setModelDefault: (stage: ModelStage, model: string, effort: string): Promise<void> =>
     SettingsService.SetModelDefault(stage, model, effort),
+  setReviewModeDefault: (mode: ReviewMode): Promise<void> =>
+    SettingsService.SetReviewModeDefault(mode),
   getPrompt: (stage: PromptStage): Promise<Prompt> => SettingsService.GetPrompt(stage),
   savePrompt: (stage: PromptStage, text: string): Promise<Prompt> =>
     SettingsService.SavePrompt(stage, text),
@@ -651,6 +712,11 @@ export const api = {
     TaskService.SetStepModel(taskId, step, model, effort),
   setSessionModel: (taskId: string, stage: string, model: string, effort: string): Promise<void> =>
     TaskService.SetSessionModel(taskId, stage, model, effort),
+  setReviewMode: (taskId: string, mode: ReviewMode): Promise<void> =>
+    TaskService.SetReviewMode(taskId, mode),
+  setStepReviewMode: (taskId: string, step: number, mode: ReviewMode): Promise<void> =>
+    TaskService.SetStepReviewMode(taskId, step, mode),
+  reviewStepMyself: (taskId: string): Promise<void> => TaskService.ReviewStepMyself(taskId),
   approveStep: (taskId: string): Promise<void> => TaskService.ApproveStep(taskId),
   openPR: (taskId: string, repoPath: string, title: string, body: string): Promise<void> =>
     TaskService.OpenPR(taskId, repoPath, title, body),

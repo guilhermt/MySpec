@@ -16,6 +16,7 @@ internal/                todo o código Go
   attention/             as situações que esperam pelo usuário
   prompts/               prompts padrão embutidos e os editados
   models/                modelos, esforços e padrões
+  reviewmode/            quem revisa os steps e o padrão do app
   workspace/             a área de trabalho aberta e as recentes
   scan/                  encontra os repositórios de uma pasta
   git/, gh/              rodam os binários; nada sabem de tasks
@@ -45,9 +46,9 @@ Só dois pacotes conhecem o Wails: `internal/app`, que compõe tudo e abre a jan
 Os pacotes de domínio se organizam em camadas, de baixo para cima:
 
 1. **Plataforma e binários**: `platform/*`, `git`, `gh`, `scan`, `editor`. Cada um sabe rodar uma coisa e nada sobre o produto.
-2. **Estado**: `store`, com um repositório por tabela, e `models`, `theme`, `prompts`.
+2. **Estado**: `store`, com um repositório por tabela, e `models`, `reviewmode`, `theme`, `prompts`.
 3. **Domínio**: `task`, `session`, `worktree`, `review`, `workspace`, `attention`. Cada um é dono de um conceito, guarda o seu estado pelo `store` e reporta o que mudou por callbacks. Nenhum deles decide o que fazer com a mudança.
-4. **Orquestração**: `flow`. Ouve as mudanças de tasks e sessões, decide o que a etapa atual precisa e age: inicia a etapa seguinte, corrige um plano, inicia um step, cria uma worktree, aprova, abre a etapa de PR, encerra um repositório.
+4. **Orquestração**: `flow`. Ouve as mudanças de tasks e sessões, decide o que a etapa atual precisa e age: inicia a etapa seguinte, corrige um plano, inicia um step, conduz o review pelo agente, cria uma worktree, aprova, abre a etapa de PR, encerra um repositório.
 5. **Exposição**: `bindings` converte o domínio em DTOs e recebe as chamadas do frontend; `app` liga tudo e publica o estado.
 
 Dois pares merecem nota. `git` roda o binário e não sabe o que é uma task; `worktree` carrega a política do produto: onde as worktrees ficam, como nascem, quando estão limpas, como vão embora. `gh` espelha `git` e só lê; quem abre pull requests é o agente.
@@ -81,11 +82,11 @@ Quatro eventos tipados, registrados em `bindings.RegisterEvents` antes de `appli
 
 ### Fluxo de uma sessão
 
-`session.Service` é dono da conversa de cada chave `{task, stage}`, onde a stage é `prd`, `tech_spec`, `plan`, `step:<n>`, `pr:<slug>` ou `pr_review:<slug>`. Ele inicia o processo por `claude`, consome o stream de eventos, monta o transcript, persiste as entradas no `store`, deriva o estado (trabalhando, esperando, precisa de permissão, precisa de resposta, pausada, erro) e avisa `flow` e `app` a cada mudança. O detalhe está em [sessions.md](./sessions.md).
+`session.Service` é dono da conversa de cada chave `{task, stage}`, onde a stage é `prd`, `tech_spec`, `plan`, `step:<n>`, `step_review:<n>`, `pr:<slug>` ou `pr_review:<slug>`. Ele inicia o processo por `claude`, consome o stream de eventos, monta o transcript, persiste as entradas no `store`, deriva o estado (trabalhando, esperando, precisa de permissão, precisa de resposta, pausada, erro) e avisa `flow` e `app` a cada mudança. O detalhe está em [sessions.md](./sessions.md).
 
 ### Fluxo de uma etapa
 
-`task.Service` observa o diretório de artefatos de cada task com fsnotify e reporta quando um documento aparece. `flow.Service.Check` recebe esse aviso, e o de cada mudança de sessão, e enfileira uma avaliação por task, coalescendo rajadas. A avaliação lê a task e decide: uma etapa cujo documento existe e cuja sessão está ociosa avança; um plano inválido recebe uma correção; um step concluído dá lugar ao próximo; o último step commitado abre a etapa de PR. Na implementação e na PR a avaliação desce ao step que roda e ao repositório em questão.
+`task.Service` observa o diretório de artefatos de cada task com fsnotify e reporta quando um documento aparece. `flow.Service.Check` recebe esse aviso, e o de cada mudança de sessão, e enfileira uma avaliação por task, coalescendo rajadas. A avaliação lê a task e decide: uma etapa cujo documento existe e cuja sessão está ociosa avança; um plano inválido recebe uma correção; um step concluído dá lugar ao próximo; o último step commitado abre a etapa de PR. Na implementação e na PR a avaliação desce ao step que roda e ao repositório em questão. Num step no modo `Agent`, a avaliação do step conduz o loop entre o implementador e o revisor: pede uma passada, entrega um relatório com mudanças, pede o commit de um relatório limpo ou passa o step ao usuário, como descreve [sessions.md](./sessions.md#o-loop-do-review-de-step).
 
 ### Banco e migrations
 
@@ -99,7 +100,7 @@ Quatro eventos tipados, registrados em `bindings.RegisterEvents` antes de `appli
 
 ### Store
 
-`store/app-store.ts` é o store Zustand: o `State` recebido do Go, os transcripts por chave de sessão, os rascunhos, e o estado de interface que só o frontend conhece (nó selecionado, task aberta, aba de repositório, histórico e configurações abertos, edição de prompt, navegação pendente). Ele exporta hooks seletores (`useTask`, `useTasksOf`, `useTranscript`, `useOpenTask`...) para que cada componente assine só a fatia que usa. O store importa só de `lib/`.
+`store/app-store.ts` é o store Zustand: o `State` recebido do Go, os transcripts por chave de sessão, os rascunhos, e o estado de interface que só o frontend conhece (nó selecionado, task aberta, aba de repositório, aba da conversa do step, histórico e configurações abertos, edição de prompt, navegação pendente). Ele exporta hooks seletores (`useTask`, `useTasksOf`, `useTranscript`, `useOpenTask`...) para que cada componente assine só a fatia que usa. O store importa só de `lib/`.
 
 `store/actions.ts` é o que os componentes chamam para agir: cada ação chama `api`, e um erro vira a mensagem do aviso de erro. Nenhuma ação toca o `State`: o estado novo sempre chega por `state:changed`. Os componentes nunca chamam `api` diretamente.
 
@@ -107,9 +108,9 @@ Quatro eventos tipados, registrados em `bindings.RegisterEvents` antes de `appli
 
 ### Features
 
-Cada diretório de `features/` cobre uma área: `workspace` e `tree` para a barra lateral, `welcome` para a tela sem área de trabalho, `task` e `task-create` para a task, `chat` para as conversas, `attention` para a seção de espera, `history`, `settings`, `models`, `notice` e `theme`. A lógica de apresentação que não depende de React fica em arquivos `.ts` ao lado dos componentes (`status.ts`, `step-status.ts`, `repo-status.ts`, `stage-actions.ts`), testável sem renderizar.
+Cada diretório de `features/` cobre uma área: `workspace` e `tree` para a barra lateral, `welcome` para a tela sem área de trabalho, `task` e `task-create` para a task, `chat` para as conversas, `attention` para a seção de espera, `history`, `settings`, `models`, `review-mode` para o seletor de modo de review, `notice` e `theme`. A lógica de apresentação que não depende de React fica em arquivos `.ts` ao lado dos componentes (`status.ts`, `step-status.ts`, `repo-status.ts`, `stage-actions.ts`), testável sem renderizar.
 
-`lib/` guarda o que o store e as features compartilham: repositórios, situações, etapas, modelos, nomes de task, front matter.
+`lib/` guarda o que o store e as features compartilham: repositórios, situações, etapas, modelos, modos de review, nomes de task, front matter.
 
 ### Estilo
 

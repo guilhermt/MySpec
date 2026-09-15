@@ -89,8 +89,9 @@ type Task struct {
 	Revisiting      bool
 	ArtifactsDir    string
 	ArtifactVersion int
-	Models          Models    // the model and effort of its stages and steps
-	ArchivedAt      time.Time // zero while the task is in the workspace
+	Models          Models      // the model and effort of its stages and steps
+	ReviewModes     ReviewModes // who reviews its steps
+	ArchivedAt      time.Time   // zero while the task is in the workspace
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
 }

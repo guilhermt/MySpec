@@ -16,6 +16,7 @@ import (
 	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
+	"github.com/guilhermt/myspec/internal/reviewmode"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
 )
@@ -34,12 +35,13 @@ type Editor func(paths ...string) error
 
 // TaskService is the task, session and flow API the frontend calls.
 type TaskService struct {
-	tasks    *task.Service
-	sessions *session.Service
-	flow     *flow.Service
-	defaults *models.Service
-	editor   Editor
-	log      *slog.Logger
+	tasks       *task.Service
+	sessions    *session.Service
+	flow        *flow.Service
+	defaults    *models.Service
+	reviewModes *reviewmode.Service
+	editor      Editor
+	log         *slog.Logger
 }
 
 // NewTaskService builds the service over the task, session and flow domains.
@@ -48,16 +50,18 @@ func NewTaskService(
 	sessions *session.Service,
 	flow *flow.Service,
 	defaults *models.Service,
+	reviewModes *reviewmode.Service,
 	editor Editor,
 	log *slog.Logger,
 ) *TaskService {
 	return &TaskService{
-		tasks:    tasks,
-		sessions: sessions,
-		flow:     flow,
-		defaults: defaults,
-		editor:   editor,
-		log:      log,
+		tasks:       tasks,
+		sessions:    sessions,
+		flow:        flow,
+		defaults:    defaults,
+		reviewModes: reviewModes,
+		editor:      editor,
+		log:         log,
 	}
 }
 
@@ -72,12 +76,17 @@ func (s *TaskService) CreateTask(req CreateTaskRequest) (string, error) {
 	if err != nil {
 		return "", s.fail("CreateTask", err)
 	}
+	mode, err := reviewModeOf(s.reviewModes.Default(), req.ReviewMode)
+	if err != nil {
+		return "", s.fail("CreateTask", err)
+	}
 
 	t, err := s.tasks.Create(ctx, task.CreateParams{
 		Name:           req.Name,
 		RepoPath:       req.RepoPath,
 		InitialContext: req.InitialContext,
 		Models:         set,
+		ReviewMode:     mode,
 	})
 	if err != nil {
 		return "", s.fail("CreateTask", err)
@@ -287,6 +296,51 @@ func (s *TaskService) SetSessionModel(taskID, stage, model, effort string) error
 
 	if err := s.flow.SetSessionModel(ctx, taskID, stage, c); err != nil {
 		return s.fail("SetSessionModel", err)
+	}
+	return nil
+}
+
+// SetReviewMode changes who reviews the steps of a task that are still to
+// start and have no mode of their own.
+func (s *TaskService) SetReviewMode(taskID, mode string) error {
+	target, err := reviewmode.ParseMode(mode)
+	if err != nil {
+		return s.fail("SetReviewMode", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+
+	if err := s.flow.SetReviewMode(ctx, taskID, target); err != nil {
+		return s.fail("SetReviewMode", err)
+	}
+	return nil
+}
+
+// SetStepReviewMode changes who reviews a step that has not started.
+func (s *TaskService) SetStepReviewMode(taskID string, step int, mode string) error {
+	target, err := reviewmode.ParseMode(mode)
+	if err != nil {
+		return s.fail("SetStepReviewMode", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+
+	if err := s.flow.SetStepReviewMode(ctx, taskID, step, target); err != nil {
+		return s.fail("SetStepReviewMode", err)
+	}
+	return nil
+}
+
+// ReviewStepMyself takes the review of the current step of a task back from
+// the agent.
+func (s *TaskService) ReviewStepMyself(taskID string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+
+	if err := s.flow.ReviewStepMyself(ctx, taskID); err != nil {
+		return s.fail("ReviewStepMyself", err)
 	}
 	return nil
 }
@@ -568,6 +622,15 @@ func choicesOf(defaults models.Set, requested []StageModel) (models.Set, error) 
 	return set, nil
 }
 
+// reviewModeOf is the mode a new task starts with: the one the creation
+// dialog sent, or the default of the app when it sent none.
+func reviewModeOf(fallback reviewmode.Mode, requested string) (reviewmode.Mode, error) {
+	if requested == "" {
+		return fallback, nil
+	}
+	return reviewmode.ParseMode(requested)
+}
+
 // userMessages are the failures the user caused, with what the interface shows
 // for them.
 var userMessages = []struct {
@@ -583,6 +646,7 @@ var userMessages = []struct {
 	{models.ErrUnknownEffort, "Unknown effort level."},
 	{models.ErrUnknownStage, "Unknown stage."},
 	{prompts.ErrUnknownStage, "Unknown prompt."},
+	{reviewmode.ErrUnknownMode, "Unknown review mode."},
 	{session.ErrEmptyMessage, "Write a message first."},
 	{session.ErrPaused, "Resume the task to send messages."},
 	{session.ErrNotFound, "This conversation has ended."},
@@ -607,6 +671,9 @@ var userMessages = []struct {
 	{flow.ErrPRNotMerged, "The pull request hasn't been merged yet."},
 	{flow.ErrModelLocked, "The sessions of this stage have already started."},
 	{flow.ErrStepStarted, "This step has already started."},
+	{flow.ErrReviewModeLocked, "Every step of this task has already started."},
+	{flow.ErrAgentReviewing, "The agent is reviewing this step. Review it yourself to approve it."},
+	{flow.ErrNoAgentReview, "The agent isn't reviewing this step."},
 	{errPathOutside, "This file is not in the worktree of the step."},
 	{editor.ErrNotFound, "VS Code was not found: `code` isn't on the PATH."},
 	{gh.ErrNotFound, "GitHub CLI was not found: `gh` isn't on the PATH."},

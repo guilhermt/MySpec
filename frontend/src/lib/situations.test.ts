@@ -6,11 +6,13 @@ import {
   namesPlace,
   placeLabel,
   repoSituation,
+  reviewerSituation,
   situationDetail,
   situationLabel,
   situationTone,
   spokenWait,
   stageSituation,
+  stepOrReviewerSituation,
   stepSituation,
   summaryLabel,
   waitingEntries,
@@ -24,6 +26,10 @@ function stagePlace(stage: string): Place {
 
 function stepPlace(step: number): Place {
   return { kind: "step", stage: "", step, repoPath: "", repository: "" };
+}
+
+function reviewerPlace(step: number): Place {
+  return { kind: "step_review", stage: "", step, repoPath: "", repository: "" };
 }
 
 function repoPlace(repository: string): Place {
@@ -95,6 +101,7 @@ describe("placeLabel", () => {
     [stagePlace("plan"), "plan"],
     [stagePlace("implementation"), "implementation"],
     [stepPlace(4), "step 4"],
+    [reviewerPlace(2), "step 2 review"],
     [repoPlace("api"), "api"],
   ])("names the place %#", (place, label) => {
     expect(placeLabel(makeState(), makeSituation({ place }))).toBe(label);
@@ -136,6 +143,12 @@ describe("namesPlace and situationDetail", () => {
 
     expect(situationDetail(makeState(), draft)).toBe("Draft to approve · api");
     expect(situationDetail(makeState(), reply)).toBe("Waiting for reply · tech spec");
+  });
+
+  it("says it is the reviewer of the step that asks", () => {
+    const question = makeSituation({ kind: "question", place: reviewerPlace(2) });
+
+    expect(situationDetail(makeState(), question)).toBe("Question · step 2 review");
   });
 
   it("is the label alone when the label names the place", () => {
@@ -301,6 +314,32 @@ describe("the situation of a place", () => {
     expect(stepSituation(task, 2)?.id).toBe("step");
     expect(stepSituation(task, 3)).toBeNull();
     expect(stepSituation(makeTask({ situations: null }), 2)).toBeNull();
+  });
+
+  it("finds the situation of the reviewer of a step by its number", () => {
+    const reviewer = makeSituation({ id: "reviewer", kind: "question", place: reviewerPlace(2) });
+    const task = makeTask({ situations: [step, reviewer] });
+
+    expect(reviewerSituation(task, 2)?.id).toBe("reviewer");
+    expect(reviewerSituation(task, 3)).toBeNull();
+    expect(stepSituation(task, 2)?.id).toBe("step");
+    expect(reviewerSituation(makeTask({ situations: null }), 2)).toBeNull();
+  });
+
+  it("finds the most urgent situation of a step, in either of its conversations", () => {
+    const reviewer = makeSituation({ id: "reviewer", kind: "question", place: reviewerPlace(2) });
+    const error = makeSituation({
+      id: "error",
+      kind: "session_error",
+      group: "error",
+      place: reviewerPlace(2),
+    });
+
+    expect(stepOrReviewerSituation(makeTask({ situations: [step, reviewer] }), 2)?.id).toBe("step");
+    expect(stepOrReviewerSituation(makeTask({ situations: [error, step] }), 2)?.id).toBe("error");
+    expect(stepOrReviewerSituation(makeTask({ situations: [reviewer] }), 2)?.id).toBe("reviewer");
+    expect(stepOrReviewerSituation(makeTask({ situations: [stage, reviewer] }), 3)).toBeNull();
+    expect(stepOrReviewerSituation(makeTask({ situations: null }), 2)).toBeNull();
   });
 
   it("finds the situation of a repository by its path", () => {

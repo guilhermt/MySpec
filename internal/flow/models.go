@@ -56,6 +56,13 @@ func StageModels(t task.Task, steps []StepState, repos []RepoState) []StageModel
 				(implementing && slices.ContainsFunc(steps, func(st StepState) bool { return st.ModelEditable() }))
 			state.Live = implementing &&
 				slices.ContainsFunc(steps, func(st StepState) bool { return stepHasSession(st.Status) })
+		case models.StepReview:
+			// A reviewer starts with the choice the task has at its first pass, so a
+			// change reaches every step still to be committed.
+			state.Editable = before(task.StageImplementation) ||
+				(implementing && slices.ContainsFunc(steps, func(st StepState) bool { return st.Status != StepDone }))
+			state.Live = implementing &&
+				slices.ContainsFunc(steps, func(st StepState) bool { return st.ReviewerStage != "" })
 		case models.PR:
 			state.Editable = before(task.StagePR) || (inPR && slices.ContainsFunc(repos, draftToStart))
 			state.Live = inPR && slices.ContainsFunc(repos, func(repo RepoState) bool {
@@ -75,8 +82,8 @@ func StageModels(t task.Task, steps []StepState, repos []RepoState) []StageModel
 // stepHasSession reports whether a step got as far as opening its session.
 func stepHasSession(status StepStatus) bool {
 	switch status {
-	case StepImplementing, StepAwaitingReview, StepInReview, StepReadyToApprove,
-		StepNothingToCommit, StepReviewFailed, StepCommitting:
+	case StepImplementing, StepAgentReview, StepAddressingReview, StepAwaitingReview, StepInReview,
+		StepReadyToApprove, StepNothingToCommit, StepReviewFailed, StepCommitting:
 		return true
 	default:
 		return false
@@ -148,7 +155,7 @@ func (s *Service) SetStepModel(ctx context.Context, id string, number int, c mod
 // SetSessionModel changes the model and effort of a live session from its next
 // message on. A session of a planning stage or of a step carries the change to
 // its stage or its step, so that starting it over keeps it; a session of a
-// repository keeps it to itself.
+// reviewer or of a repository keeps it to itself.
 func (s *Service) SetSessionModel(ctx context.Context, id, stage string, c models.Choice) error {
 	l := s.lockOf(id)
 	l.mu.Lock()
@@ -158,15 +165,16 @@ func (s *Service) SetSessionModel(ctx context.Context, id, stage string, c model
 		return err
 	}
 	number, isStep := session.ParseStepStage(stage)
+	_, isReviewer := session.ParseStepReviewStage(stage)
 	_, _, isRepo := session.ParsePRStage(stage)
 	switch {
 	case isStep:
 		if _, err := s.tasks.SetStepModel(ctx, id, number, c); err != nil {
 			return err
 		}
-	case isRepo:
-		// The choice of one repository is not the choice of the stage: the
-		// other repositories of the task keep theirs.
+	case isReviewer, isRepo:
+		// The choice of one reviewer, or of one repository, is not the choice of
+		// the stage: the others keep theirs.
 	default:
 		if _, err := s.tasks.SetStageModel(ctx, id, models.Stage(stage), c); err != nil {
 			return err

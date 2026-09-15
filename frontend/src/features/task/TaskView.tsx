@@ -16,7 +16,7 @@ import { currentStepOf, hasStepSession, stepStage } from "@/features/task/step-s
 import { TaskHeader } from "@/features/task/TaskHeader";
 import { asTaskStage, sessionKey } from "@/lib/wails";
 import { loadTranscript } from "@/store/actions";
-import { useAppStore, useOpenRepo, useRepos, useTask } from "@/store/app-store";
+import { useAppStore, useOpenRepo, useOpenStepTab, useRepos, useTask } from "@/store/app-store";
 
 const CONVERSATION_PANEL = "conversation";
 const ARTIFACTS_PANEL = "artifacts";
@@ -53,6 +53,7 @@ export function TaskView({ taskId }: TaskViewProps) {
   const task = useTask(taskId);
   const repos = useRepos(taskId);
   const openRepo = useOpenRepo(taskId);
+  const stepTab = useOpenStepTab(taskId);
   const panelRef = usePanelRef();
   const [artifactsOpen, setArtifactsOpen] = useState(false);
   const { defaultLayout, onLayoutChanged } = useDefaultLayout({
@@ -65,12 +66,17 @@ export function TaskView({ taskId }: TaskViewProps) {
   const opening = task !== null && asTaskStage(task.stage) === "pr";
   const step = task !== null && implementing ? currentStepOf(task) : null;
   const repo = repos.find((candidate) => candidate.repoPath === openRepo) ?? null;
-  // The conversation on screen is the one of the stage the task is in: the step
-  // that runs in the implementation stage, the selected repository in the PR
-  // one. Both open a session of their own only once they get that far.
+  // The conversation on screen is the one of the stage the task is in: the tab
+  // of the step that runs in the implementation stage, the selected repository
+  // in the PR one. Both open a session of their own only once they get that far.
   const stage = (() => {
     if (implementing) {
-      return step === null ? "" : stepStage(step.number);
+      if (step === null) {
+        return "";
+      }
+      return stepTab === "reviewer" && step.reviewer !== null
+        ? step.reviewer.sessionStage
+        : stepStage(step.number);
     }
     if (opening) {
       return repo?.sessionStage ?? "";

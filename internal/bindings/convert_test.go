@@ -13,6 +13,7 @@ import (
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/review"
+	"github.com/guilhermt/myspec/internal/reviewmode"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
 	"github.com/guilhermt/myspec/internal/workspace"
@@ -147,15 +148,18 @@ func TestFromTasksCarriesTheStateOfEachStep(t *testing.T) {
 			Repository: "api", RepoPath: "/home/u/code/api", Status: "blocked",
 			Block:        &bindings.StepBlock{Reason: "dirty_worktree", Detail: " M main.go", Files: 1},
 			WorktreePath: "/home/u/code/.myspec/worktrees/api/login-screen",
+			Reports:      []bindings.StepReport{},
 		},
 		{
 			Number: 2, File: "2-second.md", Title: "Second",
 			Repository: "api", RepoPath: "/home/u/code/api", Status: "preparing", Phase: "fetching",
+			Reports: []bindings.StepReport{},
 		},
 		{
 			Number: 3, File: "3-third.md", Title: "Third",
 			Repository: "api", RepoPath: "/home/u/code/api", Status: "not_started",
 			Model: "claude-opus-5", Effort: "xhigh", Adjusted: true, ModelEditable: true,
+			ReviewModeEditable: true, Reports: []bindings.StepReport{},
 		},
 	}
 
@@ -175,6 +179,167 @@ func TestFromTasksCarriesTheStateOfEachStep(t *testing.T) {
 	}
 	if got[0].CurrentStep != 1 {
 		t.Errorf("currentStep = %d, want 1", got[0].CurrentStep)
+	}
+}
+
+func TestFromTasksCarriesTheAgentReviewOfAStep(t *testing.T) {
+	t.Parallel()
+
+	states := []flow.StepState{
+		{
+			Step:          task.Step{Number: 1, File: "1-first.md", Title: "First", Repository: "api"},
+			Status:        flow.StepAgentReview,
+			ReviewMode:    reviewmode.Agent,
+			ReviewPass:    2,
+			ReportMissing: true,
+			Reports: []task.ReviewReport{
+				{Pass: 1, File: "1-review-1.md"},
+				{Pass: 2, File: "1-review-2.md", Clean: true},
+			},
+			ReviewerStage: "step_review:1",
+			Reviewer: session.Summary{
+				Status:         session.StatusWorking,
+				Choice:         models.Choice{Model: models.Opus5, Effort: models.High},
+				TurnRunning:    true,
+				ProcessRunning: true,
+				RetryAttempt:   1,
+				ContextPercent: 40,
+				PendingCount:   1,
+				LastError:      "overloaded",
+			},
+		},
+		{
+			Step:     task.Step{Number: 2, File: "2-second.md", Title: "Second", Repository: "api"},
+			Status:   flow.StepNotStarted,
+			Fallback: "",
+		},
+	}
+	want := []bindings.Step{
+		{
+			Number: 1, File: "1-first.md", Title: "First", Repository: "api", Status: "agent_review",
+			ReviewMode:    "agent",
+			ReviewPass:    2,
+			ReportMissing: true,
+			Reports: []bindings.StepReport{
+				{Pass: 1, File: "1-review-1.md"},
+				{Pass: 2, File: "1-review-2.md", Clean: true},
+			},
+			Reviewer: &bindings.StepReviewer{
+				SessionStage:   "step_review:1",
+				SessionStatus:  "working",
+				SessionModel:   "claude-opus-5",
+				SessionEffort:  "high",
+				TurnRunning:    true,
+				ProcessRunning: true,
+				RetryAttempt:   1,
+				ContextPercent: 40,
+				PendingCount:   1,
+				LastError:      "overloaded",
+			},
+		},
+		{
+			Number: 2, File: "2-second.md", Title: "Second", Repository: "api", Status: "not_started",
+			ModelEditable: true, ReviewModeEditable: true,
+			// A step without a reviewer carries none, and an empty list.
+			Reports: []bindings.StepReport{},
+		},
+	}
+
+	got := stepsOf(t, states)
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("steps mismatch (-want +got):\n%s", diff)
+	}
+	if got[1].Reports == nil {
+		t.Error("reports of a step without a review = nil, want an empty slice")
+	}
+}
+
+func TestFromTasksCarriesTheFallbackAndTheRoundOfAStep(t *testing.T) {
+	t.Parallel()
+
+	states := []flow.StepState{
+		{
+			Step:        task.Step{Number: 1, File: "1-first.md", Title: "First"},
+			Status:      flow.StepAddressingReview,
+			ReviewMode:  reviewmode.Agent,
+			ReviewRound: 2,
+		},
+		{
+			Step:       task.Step{Number: 2, File: "2-second.md", Title: "Second"},
+			Status:     flow.StepAwaitingReview,
+			ReviewMode: reviewmode.Manual,
+			Fallback:   task.FallbackRoundsExhausted,
+		},
+		{
+			Step:         task.Step{Number: 3, File: "3-third.md", Title: "Third"},
+			Status:       flow.StepNotStarted,
+			ReviewMode:   reviewmode.Agent,
+			ModeAdjusted: true,
+		},
+	}
+
+	got := stepsOf(t, states)
+	if got[0].ReviewRound != 2 || got[0].ReviewMode != "agent" {
+		t.Errorf("step 1 = round %d mode %q, want round 2 under agent", got[0].ReviewRound, got[0].ReviewMode)
+	}
+	if got[1].ReviewFallback != "rounds_exhausted" || got[1].ReviewMode != "manual" {
+		t.Errorf("step 2 = fallback %q mode %q, want rounds_exhausted under manual",
+			got[1].ReviewFallback, got[1].ReviewMode)
+	}
+	if !got[2].ReviewModeAdjusted || !got[2].ReviewModeEditable {
+		t.Errorf("step 3 = adjusted %v editable %v, want both", got[2].ReviewModeAdjusted, got[2].ReviewModeEditable)
+	}
+}
+
+func TestFromTasksCarriesTheReviewModeOfTheTask(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		task         task.Task
+		wantMode     string
+		wantEditable bool
+	}{
+		{
+			name:         "a task before the plan",
+			task:         task.Task{ID: "task-1", Stage: task.StagePlan, ReviewModes: task.ReviewModes{Task: reviewmode.Agent}},
+			wantMode:     "agent",
+			wantEditable: true,
+		},
+		{
+			name:     "a task in the pull request stage",
+			task:     task.Task{ID: "task-1", Stage: task.StagePR, ReviewModes: task.ReviewModes{Task: reviewmode.Agent}},
+			wantMode: "agent",
+		},
+		{
+			// Only a task built by hand has no mode; the user reviews it.
+			name:         "a task without a mode",
+			task:         task.Task{ID: "task-1", Stage: task.StagePRD},
+			wantMode:     "manual",
+			wantEditable: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := bindings.FromTasks(
+				[]task.Task{tt.task},
+				func(string) task.Artifacts { return task.Artifacts{} },
+				func(string) []flow.StepState { return nil },
+				noRepos,
+				nil,
+				nil,
+			)
+			if len(got) != 1 {
+				t.Fatalf("len(FromTasks()) = %d, want 1", len(got))
+			}
+			if got[0].ReviewMode != tt.wantMode || got[0].ReviewModeEditable != tt.wantEditable {
+				t.Errorf("task = reviewMode %q editable %v, want %q %v",
+					got[0].ReviewMode, got[0].ReviewModeEditable, tt.wantMode, tt.wantEditable)
+			}
+		})
 	}
 }
 
@@ -456,8 +621,8 @@ func TestFromArchivedCarriesTheDocumentsAndThePullRequests(t *testing.T) {
 		HasPRD:      true,
 		HasTechSpec: true,
 		Steps: []bindings.ArchivedStep{
-			{Number: 1, File: "1-first.md", Title: "First", Repository: "api"},
-			{Number: 2, File: "2-second.md", Title: "Second", Repository: "web"},
+			{Number: 1, File: "1-first.md", Title: "First", Repository: "api", Reports: []bindings.StepReport{}},
+			{Number: 2, File: "2-second.md", Title: "Second", Repository: "web", Reports: []bindings.StepReport{}},
 		},
 		Repos: []bindings.ArchivedRepo{
 			{
@@ -481,6 +646,49 @@ func TestFromArchivedCarriesTheDocumentsAndThePullRequests(t *testing.T) {
 	)
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("history mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestFromArchivedCarriesTheReportsOfTheSteps(t *testing.T) {
+	t.Parallel()
+
+	artifacts := task.Artifacts{
+		Plan: task.Plan{
+			Present: true,
+			Steps: []task.Step{
+				{Number: 1, File: "1-first.md", Title: "First", Repository: "api"},
+				{Number: 2, File: "2-second.md", Title: "Second", Repository: "api"},
+			},
+		},
+		StepReports: map[int][]task.ReviewReport{
+			1: {{Pass: 1, File: "1-review-1.md"}, {Pass: 2, File: "1-review-2.md", Clean: true}},
+		},
+	}
+	want := []bindings.ArchivedStep{
+		{
+			Number: 1, File: "1-first.md", Title: "First", Repository: "api",
+			Reports: []bindings.StepReport{
+				{Pass: 1, File: "1-review-1.md"},
+				{Pass: 2, File: "1-review-2.md", Clean: true},
+			},
+		},
+		{Number: 2, File: "2-second.md", Title: "Second", Repository: "api", Reports: []bindings.StepReport{}},
+	}
+
+	got := bindings.FromArchived(
+		[]task.Task{{ID: "task-1", Name: "login-screen"}},
+		func(string) task.Artifacts { return artifacts },
+		func(string) []task.PRRun { return nil },
+	)
+	if len(got) != 1 {
+		t.Fatalf("len(FromArchived()) = %d, want 1", len(got))
+	}
+	if diff := cmp.Diff(want, got[0].Steps); diff != "" {
+		t.Errorf("steps mismatch (-want +got):\n%s", diff)
+	}
+	// The history maps over the reports of every step without checking for null.
+	if got[0].Steps[1].Reports == nil {
+		t.Error("reports of a step without a review = nil, want an empty slice")
 	}
 }
 
@@ -599,6 +807,19 @@ func TestFromEntryCarriesTheStepOfAMarker(t *testing.T) {
 		Marker: &session.MarkerEntry{Type: session.MarkerStepStarted, Step: 2, Restarted: true},
 	})
 	want := &bindings.MarkerEntry{Type: "step_started", Step: 2, Restarted: true}
+	if diff := cmp.Diff(want, got.Marker); diff != "" {
+		t.Errorf("marker mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestFromEntryCarriesTheVerdictOfAStepReviewMarker(t *testing.T) {
+	t.Parallel()
+
+	got := bindings.FromEntry(session.Entry{
+		Kind:   session.KindMarker,
+		Marker: &session.MarkerEntry{Type: session.MarkerStepReviewWritten, Pass: 2, Clean: true},
+	})
+	want := &bindings.MarkerEntry{Type: "step_review_written", Pass: 2, Clean: true}
 	if diff := cmp.Diff(want, got.Marker); diff != "" {
 		t.Errorf("marker mismatch (-want +got):\n%s", diff)
 	}
@@ -773,6 +994,7 @@ func TestFromTasksCarriesTheModelsOfEveryStage(t *testing.T) {
 			models.TechSpec:       {Model: models.Fable51, Effort: models.High},
 			models.Plan:           {Model: models.Fable51, Effort: models.High},
 			models.Implementation: {Model: models.Opus5, Effort: models.High},
+			models.StepReview:     {Model: models.Opus5, Effort: models.High},
 			models.PR:             {Model: models.Opus5, Effort: models.Medium},
 			models.PRReview:       {Model: models.Sonnet5, Effort: models.Low},
 		}},
@@ -802,6 +1024,7 @@ func TestFromTasksCarriesTheModelsOfEveryStage(t *testing.T) {
 		{Stage: "tech_spec", Model: "claude-fable-5-1", Effort: "high", Live: true},
 		{Stage: "plan", Model: "claude-fable-5-1", Effort: "high", Editable: true},
 		{Stage: "implementation", Model: "claude-opus-5", Effort: "high", Editable: true},
+		{Stage: "step_review", Model: "claude-opus-5", Effort: "high", Editable: true},
 		{Stage: "pr", Model: "claude-opus-5", Effort: "medium", Editable: true},
 		{Stage: "pr_review", Model: "claude-sonnet-5", Effort: "low", Editable: true},
 	}
@@ -822,6 +1045,7 @@ func TestFromModelSetIsInWorkflowOrder(t *testing.T) {
 		{Stage: "tech_spec", Model: "claude-fable-5-1", Effort: "high"},
 		{Stage: "plan", Model: "claude-fable-5-1", Effort: "high"},
 		{Stage: "implementation", Model: "claude-opus-5", Effort: "high"},
+		{Stage: "step_review", Model: "claude-opus-5", Effort: "high"},
 		{Stage: "pr", Model: "claude-opus-5", Effort: "medium"},
 		{Stage: "pr_review", Model: "claude-opus-5", Effort: "high"},
 	}

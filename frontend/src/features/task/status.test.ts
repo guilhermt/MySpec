@@ -60,6 +60,21 @@ describe("task status", () => {
     expect(taskStatusTone(task)).toBe("working");
   });
 
+  it.each([
+    ["agent_review", "Step 1 of 2 · Agent review"],
+    ["addressing_review", "Step 1 of 2 · Addressing review"],
+  ])("reads the agent review of the current step into the tree (%s)", (status, label) => {
+    const task = makeTask({
+      stage: "implementation",
+      sessionStatus: "waiting",
+      currentStep: 1,
+      steps: [makeStep({ status }), makeStep({ number: 2, file: "2-wire-the-api.md" })],
+    });
+
+    expect(taskStatusLabel(task)).toBe(label);
+    expect(taskStatusTone(task)).toBe("working");
+  });
+
   it("carries the progress of the review into the tree", () => {
     const task = makeTask({
       stage: "implementation",

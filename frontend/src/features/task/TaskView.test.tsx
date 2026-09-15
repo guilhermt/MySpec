@@ -3,7 +3,14 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { TaskView } from "@/features/task/TaskView";
 import { api, type TaskSummary } from "@/lib/wails";
 import { renderWithStore } from "@/test/render";
-import { makeRepoPR, makeSituation, makeState, makeStep, makeTask } from "@/test/wails-mock";
+import {
+  makeRepoPR,
+  makeSituation,
+  makeState,
+  makeStep,
+  makeStepReviewer,
+  makeTask,
+} from "@/test/wails-mock";
 
 const SEEN_KEY = "myspec.artifacts.seen:task-1";
 
@@ -73,6 +80,32 @@ describe("TaskView", () => {
     expect(screen.getByRole("textbox")).toBeInTheDocument();
     await waitFor(() => {
       expect(api.getTranscript).toHaveBeenCalledWith("task-1", "step:1");
+    });
+  });
+
+  it("fetches the conversation of the reviewer when its tab opens", async () => {
+    const { user } = view({
+      stage: "implementation",
+      steps: [
+        makeStep({
+          status: "agent_review",
+          reviewMode: "agent",
+          reviewPass: 1,
+          worktreePath: "/w/api/add-login",
+          reviewer: makeStepReviewer({ sessionStatus: "working" }),
+        }),
+      ],
+      currentStep: 1,
+    });
+    await waitFor(() => {
+      expect(api.getTranscript).toHaveBeenCalledWith("task-1", "step:1");
+    });
+    expect(api.getTranscript).not.toHaveBeenCalledWith("task-1", "step_review:1");
+
+    await user.click(screen.getByRole("tab", { name: /Reviewer/ }));
+
+    await waitFor(() => {
+      expect(api.getTranscript).toHaveBeenCalledWith("task-1", "step_review:1");
     });
   });
 

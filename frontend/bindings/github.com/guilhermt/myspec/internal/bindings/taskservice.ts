@@ -236,11 +236,27 @@ export function ReviewAgain(taskID: string, repoPath: string): $CancellablePromi
 }
 
 /**
+ * ReviewStepMyself takes the review of the current step of a task back from
+ * the agent.
+ */
+export function ReviewStepMyself(taskID: string): $CancellablePromise<void> {
+    return $Call.ByID(4291051464, taskID);
+}
+
+/**
  * SendMessage queues a message for the agent, delivered right away when the
  * session is free.
  */
 export function SendMessage(taskID: string, stage: string, text: string): $CancellablePromise<void> {
     return $Call.ByID(2431074491, taskID, stage, text);
+}
+
+/**
+ * SetReviewMode changes who reviews the steps of a task that are still to
+ * start and have no mode of their own.
+ */
+export function SetReviewMode(taskID: string, mode: string): $CancellablePromise<void> {
+    return $Call.ByID(3676650109, taskID, mode);
 }
 
 /**
@@ -265,4 +281,11 @@ export function SetStageModel(taskID: string, stage: string, model: string, effo
  */
 export function SetStepModel(taskID: string, step: number, model: string, effort: string): $CancellablePromise<void> {
     return $Call.ByID(3274288345, taskID, step, model, effort);
+}
+
+/**
+ * SetStepReviewMode changes who reviews a step that has not started.
+ */
+export function SetStepReviewMode(taskID: string, step: number, mode: string): $CancellablePromise<void> {
+    return $Call.ByID(617698371, taskID, step, mode);
 }

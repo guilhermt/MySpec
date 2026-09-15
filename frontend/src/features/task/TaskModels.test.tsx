@@ -13,17 +13,25 @@ function models(overrides: Partial<TaskSummary> = {}) {
 }
 
 describe("TaskModelsButton", () => {
-  it("lists the six stages with the models of the task", async () => {
+  it("lists the seven stages with the models of the task", async () => {
     const { user } = models();
 
     await user.click(screen.getByRole("button", { name: "Models" }));
 
     expect(await screen.findByRole("heading", { name: "Models" })).toBeInTheDocument();
-    for (const label of ["PRD", "Tech spec", "Plan", "Implementation", "PR", "PR review"]) {
+    for (const label of [
+      "PRD",
+      "Tech spec",
+      "Plan",
+      "Implementation",
+      "Step review",
+      "PR",
+      "PR review",
+    ]) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
     // Only the PRD has a session running, so it is the one line without a picker.
-    expect(screen.getAllByRole("button", { name: /model:/ })).toHaveLength(5);
+    expect(screen.getAllByRole("button", { name: /model:/ })).toHaveLength(6);
   });
 
   it("changes a stage still to start", async () => {

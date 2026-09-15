@@ -301,23 +301,33 @@ func (s *Service) flushPendingLocked(ctx context.Context, r *run, n *notes) bool
 	e := r.pending[0]
 	text := e.User.Text
 	if e.User.Prompt {
-		rendered, err := s.renderPrompt(r.task.Prompt, prompts.Vars{
-			TaskName:       r.task.Name,
-			ArtifactsDir:   r.task.ArtifactsDir,
-			PRDPath:        r.task.PRDPath,
-			TechSpecPath:   r.task.TechSpecPath,
-			StepsDir:       r.task.StepsDir,
-			StepPath:       r.task.StepPath,
-			Repositories:   r.task.Repositories,
-			InitialContext: e.User.Text,
-			Repository:     r.task.Repository,
-			Branch:         r.task.Branch,
-			BaseBranch:     r.task.BaseBranch,
-			DraftPath:      r.task.DraftPath,
-			ReviewPath:     r.task.ReviewPath,
-			PRNumber:       r.task.PRNumber,
-			PRURL:          r.task.PRURL,
-		})
+		vars := prompts.Vars{
+			TaskName:     r.task.Name,
+			ArtifactsDir: r.task.ArtifactsDir,
+			PRDPath:      r.task.PRDPath,
+			TechSpecPath: r.task.TechSpecPath,
+			StepsDir:     r.task.StepsDir,
+			StepPath:     r.task.StepPath,
+			Repositories: r.task.Repositories,
+			Repository:   r.task.Repository,
+			Branch:       r.task.Branch,
+			BaseBranch:   r.task.BaseBranch,
+			DraftPath:    r.task.DraftPath,
+			ReviewPath:   r.task.ReviewPath,
+			PRNumber:     r.task.PRNumber,
+			PRURL:        r.task.PRURL,
+		}
+		// The text of a prompt entry is what the app appends to the prompt: the
+		// initial context of the PRD, or what the implementer said last.
+		switch r.task.Prompt {
+		case prompts.StagePRD:
+			vars.InitialContext = e.User.Text
+		case prompts.StageStepReview:
+			vars.ImplementerReply = e.User.Text
+		default:
+			// The prompt of every other stage has nothing appended.
+		}
+		rendered, err := s.renderPrompt(r.task.Prompt, vars)
 		if err != nil {
 			_ = s.failStart(ctx, r, n, ErrorStartFailed, "Could not render the prompt: "+err.Error(), err)
 			return false

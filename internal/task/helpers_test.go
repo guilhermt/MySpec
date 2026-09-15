@@ -216,6 +216,22 @@ func (r *memRepo) UpdateModels(_ context.Context, id string, m task.Models, upda
 	return nil
 }
 
+func (r *memRepo) UpdateReviewModes(_ context.Context, id string, m task.ReviewModes, updatedAt time.Time) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.updateErr != nil {
+		return r.updateErr
+	}
+	index := r.indexOf(id)
+	if index < 0 {
+		return task.ErrNotFound
+	}
+	r.items[index].ReviewModes = m
+	r.items[index].UpdatedAt = updatedAt
+	return nil
+}
+
 func (r *memRepo) UpdateArchived(_ context.Context, id string, archivedAt, updatedAt time.Time) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()

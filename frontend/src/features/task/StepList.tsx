@@ -1,13 +1,24 @@
 import { Badge } from "@/components/ui/badge";
 import { ModelPicker, ModelValue } from "@/features/models/ModelPicker";
+import { ReviewModePicker, ReviewModeValue } from "@/features/review-mode/ReviewModePicker";
 import { ToneDot } from "@/features/task/StatusDot";
 import type { StatusTone } from "@/features/task/status";
 import { stepStatusLabel, stepStatusTone } from "@/features/task/step-status";
 import { findNode } from "@/features/tree/tree-model";
 import type { ModelChoice } from "@/lib/models";
+import { stepReportLabel } from "@/lib/review-modes";
 import { situationTone } from "@/lib/situations";
 import { cn } from "@/lib/utils";
-import type { PlanProblem, Situation, State, Step } from "@/lib/wails";
+import {
+  asReviewFallback,
+  asReviewMode,
+  type PlanProblem,
+  type ReviewMode,
+  type Situation,
+  type State,
+  type Step,
+  type StepReport,
+} from "@/lib/wails";
 import { repoNodeId, useAppStore } from "@/store/app-store";
 
 const ROW = "flex w-full items-center gap-3 rounded-md px-2 py-1.5 text-left text-sm";
@@ -28,6 +39,34 @@ export function ProblemList({ problems }: { problems: readonly PlanProblem[] }) 
       {problems.map((problem) => (
         <li key={`${problem.file}:${problem.message}`} className="break-words select-text">
           {`${problem.file === "" ? "(plan)" : problem.file}: ${problem.message}`}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** StepReportList is the reports of the agent review of a step, under its row, each a way into its file. */
+export function StepReportList({
+  reports,
+  onOpen,
+}: {
+  reports: readonly StepReport[];
+  onOpen: (report: StepReport) => void;
+}) {
+  if (reports.length === 0) {
+    return null;
+  }
+  return (
+    <ul className="flex flex-col pl-11">
+      {reports.map((report) => (
+        <li key={report.file}>
+          <button
+            type="button"
+            onClick={() => onOpen(report)}
+            className="flex w-full items-center rounded-md px-2 py-1 text-left text-xs text-muted-foreground transition-colors outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            {stepReportLabel(report.pass, report.clean)}
+          </button>
         </li>
       ))}
     </ul>
@@ -102,6 +141,40 @@ export interface StepListProps {
   onOpen?: (step: Step) => void;
   /** onModelChange makes the model of every step not started a picker. */
   onModelChange?: (step: Step, choice: ModelChoice) => void;
+  /** onReviewModeChange makes the review mode of every step not started a picker. */
+  onReviewModeChange?: (step: Step, mode: ReviewMode) => void;
+  /** onOpenReport makes each report of the agent review a way into its file. */
+  onOpenReport?: (step: Step, report: StepReport) => void;
+}
+
+/** StepReviewMode is who reviews a step: a picker while the step has not started. */
+function StepReviewMode({
+  step,
+  onReviewModeChange,
+}: {
+  step: Step;
+  onReviewModeChange?: StepListProps["onReviewModeChange"];
+}) {
+  if (onReviewModeChange !== undefined && step.reviewModeEditable) {
+    return (
+      <ReviewModePicker
+        variant="inline"
+        label={`Step ${step.number}`}
+        value={asReviewMode(step.reviewMode)}
+        // A step with a mode of its own stands out; one that follows the task reads quietly.
+        muted={!step.reviewModeAdjusted}
+        onChange={(mode) => onReviewModeChange(step, mode)}
+      />
+    );
+  }
+  // A started step shows the mode it was reviewed under, which is Manual once it fell back.
+  return (
+    <ReviewModeValue
+      mode={asReviewMode(step.reviewMode)}
+      fallback={asReviewFallback(step.reviewFallback)}
+      className="shrink-0 px-2 text-muted-foreground"
+    />
+  );
 }
 
 /** StepModel is the model a step runs with: a picker while the step has not started. */
@@ -135,6 +208,8 @@ export function StepList({
   situation = null,
   onOpen,
   onModelChange,
+  onReviewModeChange,
+  onOpenReport,
 }: StepListProps) {
   const app = useAppStore((state) => state.app);
 
@@ -155,6 +230,7 @@ export function StepList({
               {onOpen === undefined ? (
                 <div className={cn(ROW, highlight)}>
                   <Row step={step} app={app} current={current} tone={tone} />
+                  <StepReviewMode step={step} />
                   <StepModel step={step} />
                 </div>
               ) : (
@@ -168,8 +244,15 @@ export function StepList({
                   >
                     <Row step={step} app={app} current={current} tone={tone} />
                   </button>
+                  <StepReviewMode step={step} onReviewModeChange={onReviewModeChange} />
                   <StepModel step={step} onModelChange={onModelChange} />
                 </div>
+              )}
+              {onOpenReport !== undefined && (
+                <StepReportList
+                  reports={step.reports ?? []}
+                  onOpen={(report) => onOpenReport(step, report)}
+                />
               )}
             </li>
           );

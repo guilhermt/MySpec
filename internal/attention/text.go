@@ -83,12 +83,36 @@ func worktreeUnreadableBody(n int) string {
 }
 
 // stepReviewBody is the notification of a step to review. One that starts
-// ready to approve, because the last approval left no commit, says so.
-func stepReviewBody(n int, form Form, commitFailed bool) string {
-	if form == FormApprove && commitFailed {
-		return "Step " + strconv.Itoa(n) + ": the last approval didn't produce a commit."
+// ready to approve, or that went to the user because the commit after a clean
+// agent review did not happen, says the commit did not happen; one the agent
+// review could not bring clean says so.
+func stepReviewBody(n int, form Form, commitFailed bool, fallback task.ReviewFallback) string {
+	step := "Step " + strconv.Itoa(n)
+	switch {
+	case commitFailed && (form == FormApprove || fallback == task.FallbackNoCommit):
+		return step + ": the last approval didn't produce a commit."
+	case fallback == task.FallbackRoundsExhausted:
+		return step + ": the agent review didn't come clean after three rounds."
+	default:
+		return step + " is ready for review."
 	}
-	return "Step " + strconv.Itoa(n) + " is ready for review."
+}
+
+// reviewerBody is the notification of a situation in the conversation that
+// reviews a step: a permission, a question, a pass that ended without its
+// report, or else the error the session stopped with.
+func reviewerBody(kind Kind, n int) string {
+	step := strconv.Itoa(n)
+	switch kind {
+	case KindPermission:
+		return "The reviewer of step " + step + " asks for a permission."
+	case KindQuestion:
+		return "The reviewer of step " + step + " has a question."
+	case KindReply:
+		return "The reviewer of step " + step + " stopped without writing its report."
+	default:
+		return "The review of step " + step + " stopped with an error."
+	}
 }
 
 // stepEmptyBody is the notification of a step the agent finished without a

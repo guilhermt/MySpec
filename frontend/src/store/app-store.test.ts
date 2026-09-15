@@ -1,12 +1,13 @@
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
-import type { Place, RepoPR, TranscriptEvent } from "@/lib/wails";
+import type { Place, RepoPR, Situation, TranscriptEvent } from "@/lib/wails";
 import { sessionKey } from "@/lib/wails";
 import {
   filterHistory,
   ROOT_NODE_ID,
   repoKey,
   repoNodeId,
+  stepTabKey,
   useAppStore,
   useArchivedNotice,
   useArchivedTask,
@@ -19,6 +20,7 @@ import {
   useNotice,
   useOnScreenSituationId,
   useOpenRepo,
+  useOpenStepTab,
   useOpenTask,
   usePrDraft,
   useRecents,
@@ -39,6 +41,8 @@ import {
   makeRepoPR,
   makeSituation,
   makeState,
+  makeStep,
+  makeStepReviewer,
   makeTask,
   makeTranscript,
 } from "@/test/wails-mock";
@@ -272,6 +276,7 @@ describe("open task", () => {
     useAppStore.getState().setTranscript(makeTranscript({ taskId: ROOT_TASK.id }));
     useAppStore.getState().setDraft(ROOT_TASK.id, ROOT_TASK.stage, "half a message");
     useAppStore.getState().openNewTask(ROOT_NODE_ID);
+    useAppStore.getState().selectStepTab(ROOT_TASK.id, 1, "reviewer");
 
     useAppStore
       .getState()
@@ -281,6 +286,7 @@ describe("open task", () => {
     expect(useAppStore.getState().transcripts).toEqual({});
     expect(useAppStore.getState().drafts).toEqual({});
     expect(useAppStore.getState().newTaskFor).toBeNull();
+    expect(useAppStore.getState().openStepTab).toEqual({});
   });
 
   it("remembers which node the creation dialog is open for", () => {
@@ -614,6 +620,78 @@ describe("pull request drafts", () => {
   });
 });
 
+// A task under the agent review of two steps, each with a reviewer unless told otherwise.
+function withSteps(
+  overrides: { currentStep?: number; reviewer?: boolean; situations?: Situation[] } = {},
+) {
+  const reviewer = overrides.reviewer === false ? null : makeStepReviewer();
+  return makeState({
+    tasks: [
+      {
+        ...ROOT_TASK,
+        stage: "implementation",
+        currentStep: overrides.currentStep ?? 1,
+        situations: overrides.situations ?? [],
+        steps: [
+          makeStep({ status: "agent_review", reviewer }),
+          makeStep({ number: 2, file: "2-wire-the-api.md", status: "agent_review", reviewer }),
+        ],
+      },
+    ],
+  });
+}
+
+describe("step tabs", () => {
+  it("opens on the implementer and keeps the tab the user picks", () => {
+    const { result } = renderHook(() => useOpenStepTab(ROOT_TASK.id));
+
+    act(() => {
+      useAppStore.getState().applyState(withSteps());
+    });
+    expect(result.current).toBe("implementer");
+
+    act(() => {
+      useAppStore.getState().selectStepTab(ROOT_TASK.id, 1, "reviewer");
+    });
+    expect(result.current).toBe("reviewer");
+
+    act(() => {
+      useAppStore.getState().applyState(withSteps());
+    });
+    expect(result.current).toBe("reviewer");
+  });
+
+  it("falls back to the implementer while the step has no reviewer", () => {
+    const { result } = renderHook(() => ({
+      open: useOpenStepTab(ROOT_TASK.id),
+      gone: useOpenStepTab("task-gone"),
+    }));
+
+    act(() => {
+      useAppStore.getState().applyState(withSteps({ reviewer: false }));
+      useAppStore.getState().selectStepTab(ROOT_TASK.id, 1, "reviewer");
+      useAppStore.getState().selectStepTab("task-gone", 1, "reviewer");
+    });
+
+    expect(result.current).toEqual({ open: "implementer", gone: "implementer" });
+  });
+
+  it("keeps the tabs of each step apart", () => {
+    const { result } = renderHook(() => useOpenStepTab(ROOT_TASK.id));
+
+    act(() => {
+      useAppStore.getState().applyState(withSteps());
+      useAppStore.getState().selectStepTab(ROOT_TASK.id, 1, "reviewer");
+      useAppStore.getState().applyState(withSteps({ currentStep: 2 }));
+    });
+
+    expect(result.current).toBe("implementer");
+    expect(useAppStore.getState().openStepTab).toEqual({
+      [stepTabKey(ROOT_TASK.id, 1)]: "reviewer",
+    });
+  });
+});
+
 const ARCHIVED = makeArchivedTask({ id: "task-root", name: "add-login" });
 const OLDER = makeArchivedTask({ id: "task-old", name: "fix-header" });
 
@@ -812,6 +890,10 @@ function stepPlace(step: number): Place {
   return { kind: "step", stage: "", step, repoPath: "", repository: "" };
 }
 
+function reviewerPlace(step: number): Place {
+  return { kind: "step_review", stage: "", step, repoPath: "", repository: "" };
+}
+
 describe("open place", () => {
   it("opens the task of a situation and reveals it in the tree", () => {
     useAppStore.getState().applyState(withTasks());
@@ -836,6 +918,34 @@ describe("open place", () => {
 
     expect(useAppStore.getState().openTaskId).toBe(ROOT_TASK.id);
     expect(result.current).toBe(API_REPO.repoPath);
+  });
+
+  it("opens the reviewer tab of the step the situation is in", () => {
+    const { result } = renderHook(() => useOpenStepTab(ROOT_TASK.id));
+    act(() => {
+      useAppStore.getState().applyState(withSteps());
+    });
+
+    act(() => {
+      useAppStore.getState().openPlace(ROOT_TASK.id, reviewerPlace(1));
+    });
+
+    expect(useAppStore.getState().openTaskId).toBe(ROOT_TASK.id);
+    expect(result.current).toBe("reviewer");
+  });
+
+  it("opens the implementer tab for a situation of the step", () => {
+    const { result } = renderHook(() => useOpenStepTab(ROOT_TASK.id));
+    act(() => {
+      useAppStore.getState().applyState(withSteps());
+      useAppStore.getState().selectStepTab(ROOT_TASK.id, 1, "reviewer");
+    });
+
+    act(() => {
+      useAppStore.getState().openPlace(ROOT_TASK.id, stepPlace(1));
+    });
+
+    expect(result.current).toBe("implementer");
   });
 
   it("puts away the history, the archived task and the creation dialog", () => {
@@ -966,6 +1076,25 @@ describe("situation on screen", () => {
     expect(result.current).toBe("s-step");
   });
 
+  it("is the situation of the reviewer while its tab is selected", () => {
+    const { result } = renderHook(() => useOnScreenSituationId());
+    const situations = [
+      makeSituation({ id: "s-step", kind: "permission", place: stepPlace(1) }),
+      makeSituation({ id: "s-reviewer", kind: "question", place: reviewerPlace(1) }),
+    ];
+
+    act(() => {
+      useAppStore.getState().applyState(withSteps({ situations }));
+      useAppStore.getState().openTask(ROOT_TASK.id);
+    });
+    expect(result.current).toBe("s-step");
+
+    act(() => {
+      useAppStore.getState().selectStepTab(ROOT_TASK.id, 1, "reviewer");
+    });
+    expect(result.current).toBe("s-reviewer");
+  });
+
   it("is the situation of the selected repository tab, and none on a tab without one", () => {
     const { result } = renderHook(() => useOnScreenSituationId());
 
@@ -997,7 +1126,7 @@ describe("settings", () => {
 
     expect(result.current).toEqual({
       settingsOpen: true,
-      settingsSection: "models",
+      settingsSection: "defaults",
       promptEdit: null,
       pendingLeave: null,
     });

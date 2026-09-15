@@ -37,11 +37,15 @@ const shutdownTimeout = 10 * time.Second
 // up in it, so the echo of the fake tells whether the rendering happened. A
 // step prompt goes through the real rendering, which reads the step file.
 func renderPrompt(stage prompts.Stage, vars prompts.Vars) (string, error) {
-	if stage == prompts.StageStep {
+	switch stage {
+	case prompts.StageStep:
 		return prompts.Render("", stage, vars)
+	case prompts.StageStepReview:
+		return fmt.Sprintf("Stage %s reviews %s after: %s", stage, vars.StepPath, vars.ImplementerReply), nil
+	default:
+		return fmt.Sprintf("Stage %s of task %s writes %s in %s from: %s",
+			stage, vars.TaskName, vars.PRDPath, vars.ArtifactsDir, vars.InitialContext), nil
 	}
-	return fmt.Sprintf("Stage %s of task %s writes %s in %s from: %s",
-		stage, vars.TaskName, vars.PRDPath, vars.ArtifactsDir, vars.InitialContext), nil
 }
 
 // memSessions is an in-memory session.SessionRepository, one record per stage
@@ -467,6 +471,21 @@ func atStep(t *testing.T, info session.TaskInfo, number int, content string) ses
 	info.Prompt = prompts.StageStep
 	info.Step = number
 	info.StepPath = path
+	return info
+}
+
+// atStepReview is the same task reviewing a step: the session key is the one
+// of the reviewer, which runs in a worktree of its own and hears reply from
+// the implementer.
+func atStepReview(t *testing.T, info session.TaskInfo, number int, reply string) session.TaskInfo {
+	t.Helper()
+
+	info.Dir = t.TempDir()
+	info.Stage = session.StepReviewStage(number)
+	info.Prompt = prompts.StageStepReview
+	info.Step = number
+	info.StepPath = filepath.Join(t.TempDir(), "step.md")
+	info.ImplementerReply = reply
 	return info
 }
 

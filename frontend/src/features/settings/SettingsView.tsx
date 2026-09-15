@@ -1,7 +1,7 @@
-import { Sparkles } from "lucide-react";
+import { SlidersHorizontal } from "lucide-react";
 import { type ReactNode, useId } from "react";
+import { Defaults } from "@/features/settings/Defaults";
 import { DiscardChangesDialog } from "@/features/settings/DiscardChangesDialog";
-import { ModelDefaults } from "@/features/settings/ModelDefaults";
 import { PromptPane } from "@/features/settings/PromptPane";
 import { PROMPTS } from "@/features/settings/prompts";
 import { cn } from "@/lib/utils";
@@ -28,7 +28,7 @@ function NavItem({ section, children }: { section: SettingsSection; children: Re
   );
 }
 
-/** SettingsView is the settings of the app: the model defaults and the prompts. */
+/** SettingsView is the settings of the app: the defaults of a new task and the prompts. */
 export function SettingsView() {
   const { settingsSection } = useSettingsUi();
   const promptsId = useId();
@@ -37,9 +37,9 @@ export function SettingsView() {
     <main className="flex h-dvh min-w-0 bg-background text-foreground">
       <nav aria-label="Settings" className="flex w-56 shrink-0 flex-col gap-0.5 border-r p-2">
         <h1 className="flex h-9 items-center px-2 text-sm font-semibold">Settings</h1>
-        <NavItem section="models">
-          <Sparkles aria-hidden="true" />
-          Models
+        <NavItem section="defaults">
+          <SlidersHorizontal aria-hidden="true" />
+          Defaults
         </NavItem>
         <h2 id={promptsId} className="mt-3 px-2 pb-1 text-xs font-medium text-muted-foreground">
           Prompts
@@ -53,8 +53,8 @@ export function SettingsView() {
         </ul>
       </nav>
       <div className="min-w-0 flex-1">
-        {settingsSection === "models" ? (
-          <ModelDefaults />
+        {settingsSection === "defaults" ? (
+          <Defaults />
         ) : (
           <PromptPane key={settingsSection} stage={settingsSection} />
         )}

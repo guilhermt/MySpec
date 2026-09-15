@@ -13,12 +13,14 @@ import type {
   PromptStage,
   RepoPR,
   Review,
+  ReviewMode,
   Situation,
   SituationOpen,
   SituationStarted,
   StageModel,
   State,
   Step,
+  StepReviewer,
   TaskStage,
   TaskStageModel,
   TaskSummary,
@@ -37,6 +39,7 @@ export const api = {
   setModelDefault: vi.fn<(stage: ModelStage, model: string, effort: string) => Promise<void>>(() =>
     Promise.resolve(),
   ),
+  setReviewModeDefault: vi.fn<(mode: ReviewMode) => Promise<void>>(() => Promise.resolve()),
   getPrompt: vi.fn<(stage: PromptStage) => Promise<Prompt>>((stage) =>
     Promise.resolve(makePrompt({ stage })),
   ),
@@ -104,6 +107,13 @@ export const api = {
   setSessionModel: vi.fn<
     (taskId: string, stage: string, model: string, effort: string) => Promise<void>
   >(() => Promise.resolve()),
+  setReviewMode: vi.fn<(taskId: string, mode: ReviewMode) => Promise<void>>(() =>
+    Promise.resolve(),
+  ),
+  setStepReviewMode: vi.fn<(taskId: string, step: number, mode: ReviewMode) => Promise<void>>(() =>
+    Promise.resolve(),
+  ),
+  reviewStepMyself: vi.fn<(taskId: string) => Promise<void>>(() => Promise.resolve()),
   approveStep: vi.fn<(taskId: string) => Promise<void>>(() => Promise.resolve()),
   openPR: vi.fn<(taskId: string, repoPath: string, title: string, body: string) => Promise<void>>(
     () => Promise.resolve(),
@@ -216,6 +226,7 @@ export function makeState(overrides: Partial<State> = {}): State {
     theme: "system",
     systemDark: false,
     modelDefaults: makeModelDefaults(),
+    reviewModeDefault: "manual",
     notice: null,
     tasks: [],
     history: [],
@@ -231,6 +242,8 @@ export function makeTask(overrides: Partial<TaskSummary> = {}): TaskSummary {
     dir: "/home/dev/.local/share/myspec/workspaces/projects-1a2b3c4d/tasks/add-login",
     stage: "prd",
     revisiting: false,
+    reviewMode: "manual",
+    reviewModeEditable: true,
     sessionStatus: "waiting",
     sessionModel: "claude-fable-5-1",
     sessionEffort: "high",
@@ -284,6 +297,7 @@ export function makeArchivedTask(overrides: Partial<ArchivedTask> = {}): Archive
         file: "1-add-the-login-form.md",
         title: "Add the login form",
         repository: "web",
+        reports: [],
       },
     ],
     repos: [
@@ -339,6 +353,31 @@ export function makeStep(overrides: Partial<Step> = {}): Step {
     effort: "high",
     adjusted: false,
     modelEditable: true,
+    reviewMode: "manual",
+    reviewModeAdjusted: false,
+    reviewModeEditable: true,
+    reviewFallback: "",
+    reviewPass: 0,
+    reviewRound: 0,
+    reportMissing: false,
+    reports: [],
+    reviewer: null,
+    ...overrides,
+  };
+}
+
+export function makeStepReviewer(overrides: Partial<StepReviewer> = {}): StepReviewer {
+  return {
+    sessionStage: "step_review:1",
+    sessionStatus: "waiting",
+    sessionModel: "claude-opus-5",
+    sessionEffort: "high",
+    turnRunning: false,
+    processRunning: false,
+    retryAttempt: 0,
+    contextPercent: 0,
+    pendingCount: 0,
+    lastError: "",
     ...overrides,
   };
 }
@@ -386,19 +425,20 @@ const factoryChoices: { stage: ModelStage; model: string; effort: string }[] = [
   { stage: "tech_spec", model: "claude-fable-5-1", effort: "high" },
   { stage: "plan", model: "claude-fable-5-1", effort: "high" },
   { stage: "implementation", model: "claude-opus-5", effort: "high" },
+  { stage: "step_review", model: "claude-opus-5", effort: "high" },
   { stage: "pr", model: "claude-opus-5", effort: "medium" },
   { stage: "pr_review", model: "claude-opus-5", effort: "high" },
 ];
 
-/** makeModelDefaults are the factory choices of the six stages of the app. */
+/** makeModelDefaults are the factory choices of the seven stages of the app. */
 export function makeModelDefaults(): StageModel[] {
   return factoryChoices.map((choice) => ({ ...choice }));
 }
 
 /**
- * makeTaskModels are the stage models of a task in the PRD, whose session runs
- * while every other stage is still to start, with what overrides says of each
- * line.
+ * makeTaskModels are the models of the seven stages of a task in the PRD, whose
+ * session runs while every other stage is still to start, with what overrides
+ * says of each line.
  */
 export function makeTaskModels(
   overrides: Partial<Record<ModelStage, Partial<TaskStageModel>>> = {},
@@ -526,6 +566,7 @@ function payloadOf(kind: EntryKind): Omit<Entry, "id" | "seq" | "turnId" | "kind
           stage: "",
           step: 0,
           pass: 0,
+          clean: false,
           restarted: false,
         },
       };

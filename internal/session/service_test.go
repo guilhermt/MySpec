@@ -655,6 +655,63 @@ func TestOpenReconcilesALeftoverTranscript(t *testing.T) {
 	}
 }
 
+func TestLastReplyIsTheLastMessageOfTheLastTurn(t *testing.T) {
+	t.Parallel()
+
+	// conversation is a turn the agent ended with a message of two blocks; the
+	// ids carry the task, since every session shares the entry repository.
+	conversation := func(taskID string) []session.Entry {
+		id := func(name string) string { return taskID + "-" + name }
+		return []session.Entry{
+			{
+				ID: id("u1"), Seq: 1, TurnID: id("u1"), Kind: session.KindUser, CreatedAt: base,
+				User: &session.UserEntry{Text: "implement the step"},
+			},
+			{
+				ID: id("a1"), Seq: 2, TurnID: id("u1"), Kind: session.KindAssistant, CreatedAt: base,
+				Assistant: &session.AssistantEntry{MessageID: "m1", Text: "Reading the code", Complete: true},
+			},
+			{
+				ID: id("c1"), Seq: 3, TurnID: id("u1"), Kind: session.KindAction, CreatedAt: base,
+				Action: &session.ActionEntry{ToolUseID: "x", Tool: "Read", Label: "Reading", Status: session.ActionDone},
+			},
+			{
+				ID: id("a2"), Seq: 4, TurnID: id("u1"), Kind: session.KindAssistant, CreatedAt: base,
+				Assistant: &session.AssistantEntry{MessageID: "m2", Text: "Done.", Complete: true},
+			},
+			{
+				ID: id("a3"), Seq: 5, TurnID: id("u1"), Kind: session.KindAssistant, CreatedAt: base,
+				Assistant: &session.AssistantEntry{MessageID: "m2", BlockIndex: 1, Text: "Two findings contested.", Complete: true},
+			},
+		}
+	}
+	// The same conversation, with a message the agent has not answered yet.
+	unanswered := append(conversation("t2"), session.Entry{
+		ID: "t2-u2", Seq: 6, TurnID: "t2-u2", Kind: session.KindUser, CreatedAt: base,
+		User: &session.UserEntry{Text: "one more thing"},
+	})
+
+	f := newFixture(t, "echo")
+	for taskID, entries := range map[string][]session.Entry{"t1": conversation("t1"), "t2": unanswered} {
+		rec := session.Record{ID: "sess-" + taskID, TaskID: taskID, Stage: "prd", Started: true, CreatedAt: base, UpdatedAt: base}
+		if err := f.sessions.Insert(t.Context(), rec); err != nil {
+			t.Fatalf("Insert() = %v, want nil", err)
+		}
+		f.entries.seed(t, rec.ID, entries...)
+		f.open(t, taskInfo(t, taskID))
+	}
+
+	if got, want := f.service.LastReply(prd("t1")), "Done.\n\nTwo findings contested."; got != want {
+		t.Errorf("LastReply() = %q, want %q", got, want)
+	}
+	if got := f.service.LastReply(prd("t2")); got != "" {
+		t.Errorf("LastReply() after an unanswered message = %q, want nothing", got)
+	}
+	if got := f.service.LastReply(prd("missing")); got != "" {
+		t.Errorf("LastReply() of a session that is not open = %q, want nothing", got)
+	}
+}
+
 func TestOpenReadsAFailedTurnFromTheTranscript(t *testing.T) {
 	t.Parallel()
 
@@ -933,6 +990,23 @@ func TestMarkPRReview(t *testing.T) {
 	last := markers[len(markers)-1].Marker
 	if last.Type != session.MarkerPRReviewWritten || last.Pass != 2 {
 		t.Errorf("marker = %+v, want the pass of the review that was written", last)
+	}
+}
+
+func TestMarkStepReview(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	f.start(t, taskInfo(t, "t1"))
+	f.waitIdle(t, prd("t1"))
+
+	f.service.MarkStepReview(t.Context(), prd("t1"), 2, true)
+	f.service.MarkStepReview(t.Context(), prd("missing"), 1, false)
+
+	markers := f.entriesOf(t, prd("t1"), session.KindMarker)
+	want := &session.MarkerEntry{Type: session.MarkerStepReviewWritten, Pass: 2, Clean: true}
+	if diff := cmp.Diff(want, markers[len(markers)-1].Marker); diff != "" {
+		t.Errorf("marker mismatch (-want +got):\n%s", diff)
 	}
 }
 
@@ -1297,6 +1371,27 @@ func TestStepStageIsTheSessionKeyOfAStep(t *testing.T) {
 	}
 }
 
+func TestStepReviewStageIsTheSessionKeyOfTheReviewerOfAStep(t *testing.T) {
+	t.Parallel()
+
+	stage := session.StepReviewStage(3)
+	if stage != "step_review:3" {
+		t.Errorf("StepReviewStage(3) = %q, want %q", stage, "step_review:3")
+	}
+	if number, ok := session.ParseStepReviewStage(stage); number != 3 || !ok {
+		t.Errorf("ParseStepReviewStage(%q) = %d, %v, want 3, true", stage, number, ok)
+	}
+	for _, other := range []string{"step:3", "step_review:0", "step_review:x"} {
+		if number, ok := session.ParseStepReviewStage(other); number != 0 || ok {
+			t.Errorf("ParseStepReviewStage(%q) = %d, %v, want 0, false", other, number, ok)
+		}
+	}
+	// The key of a reviewer is never read as the key of a step.
+	if number, ok := session.ParseStepStage(stage); number != 0 || ok {
+		t.Errorf("ParseStepStage(%q) = %d, %v, want 0, false", stage, number, ok)
+	}
+}
+
 func TestPRStagesAreTheSessionKeysOfARepository(t *testing.T) {
 	t.Parallel()
 
@@ -1364,6 +1459,37 @@ func TestStartOfAStepSendsTheStepFileVerbatim(t *testing.T) {
 	// The CLI runs in the worktree of the step, not in the task directory.
 	if started := f.launcher.started(); len(started) != 1 || started[0].Dir != info.Dir {
 		t.Errorf("started = %+v, want one process in %s", started, info.Dir)
+	}
+}
+
+func TestStartOfAStepReviewSendsThePromptWithTheReplyOfTheImplementer(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	const reply = "I added the store."
+	info := atStepReview(t, taskInfo(t, "t1"), 2, reply)
+	f.start(t, info)
+	f.waitIdle(t, info.Key())
+
+	tr := f.transcript(t, info.Key())
+	if tr.Stage != "step_review:2" {
+		t.Errorf("transcript stage = %q, want %q", tr.Stage, "step_review:2")
+	}
+	if len(tr.Entries) != 3 {
+		t.Fatalf("entries = %d, want the review marker, the prompt and its answer", len(tr.Entries))
+	}
+	wantMarker := &session.MarkerEntry{Type: session.MarkerStepReviewStarted, Step: 2}
+	if diff := cmp.Diff(wantMarker, tr.Entries[0].Marker); diff != "" {
+		t.Errorf("review marker mismatch (-want +got):\n%s", diff)
+	}
+	// What the implementer said reaches the reviewer from the app.
+	wantUser := &session.UserEntry{Text: reply, Prompt: true, App: true}
+	if diff := cmp.Diff(wantUser, tr.Entries[1].User); diff != "" {
+		t.Errorf("user entry mismatch (-want +got):\n%s", diff)
+	}
+	rendered, _ := renderPrompt(prompts.StageStepReview, prompts.Vars{StepPath: info.StepPath, ImplementerReply: reply})
+	if got := tr.Entries[2].Assistant.Text; got != rendered {
+		t.Errorf("prompt sent = %q, want %q", got, rendered)
 	}
 }
 

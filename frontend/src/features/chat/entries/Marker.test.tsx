@@ -17,7 +17,7 @@ describe("Marker", () => {
   ] as const)("names the %s milestone", (type: MarkerType, expected) => {
     renderWithStore(
       <Marker
-        marker={{ type, preTokens: 0, stage: "", step: 0, pass: 0, restarted: false }}
+        marker={{ type, preTokens: 0, stage: "", step: 0, pass: 0, clean: false, restarted: false }}
         createdAt="2026-09-05T10:00:00Z"
       />,
     );
@@ -37,6 +37,7 @@ describe("Marker", () => {
           stage: "tech_spec",
           step: 0,
           pass: 0,
+          clean: false,
           restarted,
         }}
         createdAt="2026-09-05T10:00:00Z"
@@ -52,7 +53,31 @@ describe("Marker", () => {
   ])("names the step a step_started marker opened (restarted: %s)", (restarted, expected) => {
     renderWithStore(
       <Marker
-        marker={{ type: "step_started", preTokens: 0, stage: "", step: 1, pass: 0, restarted }}
+        marker={{
+          type: "step_started",
+          preTokens: 0,
+          stage: "",
+          step: 1,
+          pass: 0,
+          clean: false,
+          restarted,
+        }}
+        createdAt="2026-09-05T10:00:00Z"
+      />,
+    );
+
+    expect(screen.getByText(expected)).toBeInTheDocument();
+  });
+
+  it.each([
+    ["Review pass 2 written", { type: "pr_review_written", step: 0, pass: 2, clean: false }],
+    ["Review of step 3 started", { type: "step_review_started", step: 3, pass: 0, clean: false }],
+    ["Review 1 written · clean", { type: "step_review_written", step: 3, pass: 1, clean: true }],
+    ["Review 2 written · changes", { type: "step_review_written", step: 3, pass: 2, clean: false }],
+  ])("reads %s from a review marker", (expected, fields) => {
+    renderWithStore(
+      <Marker
+        marker={{ preTokens: 0, stage: "", restarted: false, ...fields }}
         createdAt="2026-09-05T10:00:00Z"
       />,
     );
@@ -69,6 +94,7 @@ describe("Marker", () => {
           stage: "",
           step: 0,
           pass: 0,
+          clean: false,
           restarted: false,
         }}
         createdAt="2026-09-05T10:00:00Z"
@@ -81,7 +107,15 @@ describe("Marker", () => {
   it("leaves the time out when there is none to show", () => {
     renderWithStore(
       <Marker
-        marker={{ type: "compacted", preTokens: 0, stage: "", step: 0, pass: 0, restarted: false }}
+        marker={{
+          type: "compacted",
+          preTokens: 0,
+          stage: "",
+          step: 0,
+          pass: 0,
+          clean: false,
+          restarted: false,
+        }}
         createdAt=""
       />,
     );

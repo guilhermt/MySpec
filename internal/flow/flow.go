@@ -15,6 +15,7 @@ import (
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/review"
+	"github.com/guilhermt/myspec/internal/reviewmode"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
 	"github.com/guilhermt/myspec/internal/worktree"
@@ -29,9 +30,12 @@ type Tasks interface {
 	Archive(ctx context.Context, id string) (task.Task, error)
 	Artifacts(id string) (task.Artifacts, bool) // the last inspection, for snapshots
 	Inspect(id string) (task.Artifacts, error)
+	ReadArtifact(id, name string) (string, error)
 	SetStage(ctx context.Context, id string, stage task.Stage, revisiting bool) (task.Task, error)
 	SetStageModel(ctx context.Context, id string, stage models.Stage, c models.Choice) (task.Task, error)
 	SetStepModel(ctx context.Context, id string, number int, c models.Choice) (task.Task, error)
+	SetReviewMode(ctx context.Context, id string, mode reviewmode.Mode) (task.Task, error)
+	SetStepReviewMode(ctx context.Context, id string, number int, mode reviewmode.Mode) (task.Task, error)
 	RemoveArtifacts(ctx context.Context, id string, from task.Stage) error
 	Repositories(t task.Task) []task.Repository
 	PRRuns(id string) []task.PRRun
@@ -44,6 +48,10 @@ type Tasks interface {
 	SetStepRun(ctx context.Context, id string, number int, status task.StepStatus, block *task.StepBlock) (task.StepRun, error)
 	SetStepStarted(ctx context.Context, id string, number int, startCommit string) (task.StepRun, error)
 	SetStepCommitted(ctx context.Context, id string, number int, sha, subject string) (task.StepRun, error)
+	SetStepPass(ctx context.Context, id string, number, pass int) (task.StepRun, error)
+	SetStepReported(ctx context.Context, id string, number, pass int) (task.StepRun, error)
+	SetStepFallback(ctx context.Context, id string, number int, fallback task.ReviewFallback) (task.StepRun, error)
+	ClearStepReview(ctx context.Context, id string, number int) error
 	ClearStepRuns(ctx context.Context, id string) error
 	Delete(ctx context.Context, id string) error
 }
@@ -57,12 +65,15 @@ type Sessions interface {
 	CloseTask(ctx context.Context, taskID string) error
 	DiscardTask(ctx context.Context, taskID string) error
 	Resume(ctx context.Context, k session.Key) error
+	Interrupt(ctx context.Context, k session.Key) error
 	SetChoice(ctx context.Context, k session.Key, c models.Choice) error
 	Summary(k session.Key) (session.Summary, bool)
 	Summaries() map[session.Key]session.Summary
+	LastReply(k session.Key) string
 	SendFromApp(ctx context.Context, k session.Key, text string) error
 	SendCorrection(ctx context.Context, k session.Key, text string) error
 	MarkPRReview(ctx context.Context, k session.Key, pass int)
+	MarkStepReview(ctx context.Context, k session.Key, pass int, clean bool)
 }
 
 // Reviews is what the flow needs from internal/review.

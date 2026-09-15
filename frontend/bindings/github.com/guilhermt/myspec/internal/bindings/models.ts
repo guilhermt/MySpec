@@ -44,6 +44,11 @@ export interface ArchivedStep {
     "file": string;
     "title": string;
     "repository": string;
+
+    /**
+     * never nil
+     */
+    "reports": StepReport[] | null;
 }
 
 /**
@@ -147,6 +152,11 @@ export interface CreateTaskRequest {
      * default of the app.
      */
     "models": StageModel[] | null;
+
+    /**
+     * manual or agent; "" takes the default of the app
+     */
+    "reviewMode": string;
 }
 
 /**
@@ -247,20 +257,24 @@ export interface Leftover {
 export interface MarkerEntry {
     /**
      * Type is prd_written, prd_updated, tech_spec_written, tech_spec_updated,
-     * plan_written, plan_updated, pr_review_written, stage_started,
-     * step_started, compacted or interrupted.
+     * plan_written, plan_updated, pr_review_written, step_review_started,
+     * step_review_written, stage_started, step_started, compacted or
+     * interrupted.
      */
     "type": string;
     "preTokens": number;
 
     /**
-     * Stage belongs to stage_started alone, Step to step_started alone and
-     * Pass to pr_review_written alone; Restarted belongs to the two started
-     * ones.
+     * Stage belongs to stage_started alone, Step to the markers of a step
+     * (step_started, step_review_started), Pass to the markers of a review
+     * (pr_review_written, step_review_written) and Clean to
+     * step_review_written alone; Restarted belongs to stage_started and
+     * step_started.
      */
     "stage": string;
     "step": number;
     "pass": number;
+    "clean": boolean;
     "restarted": boolean;
 }
 
@@ -379,8 +393,8 @@ export interface PermissionEntry {
  */
 export interface Place {
     /**
-     * Kind is stage, step or repo, a string for the same reason as
-     * Notice.Reason.
+     * Kind is stage, step, step_review or repo, a string for the same reason
+     * as Notice.Reason.
      */
     "kind": string;
 
@@ -390,7 +404,7 @@ export interface Place {
     "stage": string;
 
     /**
-     * step only
+     * step and step_review only
      */
     "step": number;
 
@@ -421,8 +435,8 @@ export interface PlanProblem {
  */
 export interface Prompt {
     /**
-     * Stage is prd, tech_spec, plan, commit, pr or pr_review, a string for the
-     * same reason as Notice.Reason.
+     * Stage is prd, tech_spec, plan, step_review, commit, pr or pr_review, a
+     * string for the same reason as Notice.Reason.
      */
     "stage": string;
     "text": string;
@@ -701,8 +715,8 @@ export interface SituationStarted {
  */
 export interface StageModel {
     /**
-     * Stage is prd, tech_spec, plan, implementation, pr or pr_review, a string
-     * for the same reason as Notice.Reason.
+     * Stage is prd, tech_spec, plan, implementation, step_review, pr or
+     * pr_review, a string for the same reason as Notice.Reason.
      */
     "stage": string;
 
@@ -744,6 +758,12 @@ export interface State {
      * order; never nil.
      */
     "modelDefaults": StageModel[] | null;
+
+    /**
+     * ReviewModeDefault is manual or agent: who reviews the steps of a new
+     * task, a string for the same reason as Notice.Reason.
+     */
+    "reviewModeDefault": string;
     "notice": Notice | null;
 
     /**
@@ -778,9 +798,10 @@ export interface Step {
     "repoPath": string;
 
     /**
-     * Status is not_started, preparing, blocked, implementing, awaiting_review,
-     * in_review, ready_to_approve, nothing_to_commit, review_failed,
-     * committing or done, a string for the same reason as Notice.Reason.
+     * Status is not_started, preparing, blocked, implementing, agent_review,
+     * addressing_review, awaiting_review, in_review, ready_to_approve,
+     * nothing_to_commit, review_failed, committing or done, a string for the
+     * same reason as Notice.Reason.
      */
     "status": string;
 
@@ -834,6 +855,55 @@ export interface Step {
      * not started: its choice can still change
      */
     "modelEditable": boolean;
+
+    /**
+     * ReviewMode is manual or agent: who reviews the step, the mode it will
+     * start with or the one it is reviewed with, a string for the same reason
+     * as Notice.Reason.
+     */
+    "reviewMode": string;
+
+    /**
+     * not started, with a mode of its own instead of the one of the task
+     */
+    "reviewModeAdjusted": boolean;
+
+    /**
+     * not started: its mode can still change
+     */
+    "reviewModeEditable": boolean;
+
+    /**
+     * ReviewFallback is taken_over, rounds_exhausted or commit_failed: why a
+     * step that started under the agent review is reviewed by the user; ""
+     * while its mode holds.
+     */
+    "reviewFallback": string;
+
+    /**
+     * agent_review only: the pass under way
+     */
+    "reviewPass": number;
+
+    /**
+     * addressing_review only: the report the implementer addresses
+     */
+    "reviewRound": number;
+
+    /**
+     * agent_review only: the reviewer rests without the report of the pass
+     */
+    "reportMissing": boolean;
+
+    /**
+     * the reports of the agent review, by pass; never nil
+     */
+    "reports": StepReport[] | null;
+
+    /**
+     * nil while the step has no reviewer conversation open
+     */
+    "reviewer": StepReviewer | null;
 }
 
 /**
@@ -856,6 +926,44 @@ export interface StepBlock {
      * dirty worktree only
      */
     "files": number;
+}
+
+/**
+ * StepReport is one pass of the agent review of a step.
+ */
+export interface StepReport {
+    "pass": number;
+
+    /**
+     * name inside the step-reviews folder, for ReadArtifact
+     */
+    "file": string;
+    "clean": boolean;
+}
+
+/**
+ * StepReviewer is the conversation that reviews a step, with the state of its
+ * session. It has the shape the chat takes from a task and a repository.
+ */
+export interface StepReviewer {
+    /**
+     * step_review:<n>
+     */
+    "sessionStage": string;
+
+    /**
+     * SessionStatus is working, waiting, needs_permission, needs_answer, paused
+     * or error.
+     */
+    "sessionStatus": string;
+    "sessionModel": string;
+    "sessionEffort": string;
+    "turnRunning": boolean;
+    "processRunning": boolean;
+    "retryAttempt": number;
+    "contextPercent": number;
+    "pendingCount": number;
+    "lastError": string;
 }
 
 /**
@@ -905,6 +1013,17 @@ export interface TaskSummary {
      * they say so.
      */
     "revisiting": boolean;
+
+    /**
+     * ReviewMode is manual or agent: the mode of the task, which the steps
+     * without a mode of their own take.
+     */
+    "reviewMode": string;
+
+    /**
+     * a change of the mode still reaches a step
+     */
+    "reviewModeEditable": boolean;
 
     /**
      * SessionStatus is working, waiting, needs_permission, needs_answer, paused

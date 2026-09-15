@@ -7,8 +7,9 @@ import { ContextGauge } from "@/features/task/ContextGauge";
 import { DeleteTaskDialog } from "@/features/task/DeleteTaskDialog";
 import { StatusBadge } from "@/features/task/StatusBadge";
 import { hasArtifacts } from "@/features/task/status";
-import { currentStepOf, hasStepSession, stepStage } from "@/features/task/step-status";
+import { currentStepOf, hasStepSession, loopSession } from "@/features/task/step-status";
 import { TaskModelsButton } from "@/features/task/TaskModels";
+import { TaskReviewModeButton } from "@/features/task/TaskReviewMode";
 import { findNode } from "@/features/tree/tree-model";
 import { asSessionStatus, asTaskStage, type TaskSummary } from "@/lib/wails";
 import { pause, resume } from "@/store/actions";
@@ -30,8 +31,6 @@ export function TaskHeader({ task, artifactsOpen, onToggleArtifacts }: TaskHeade
       : (findNode(state.app, repoNodeId(task.repoPath))?.label ?? ""),
   );
 
-  const status = asSessionStatus(task.sessionStatus);
-  const paused = status === "paused";
   const Icon = task.repoPath === "" ? House : FolderGit2;
   // The implementation stage holds the session of the step being run, and only
   // once the step got as far as opening one. The PR stage holds none at all:
@@ -39,9 +38,13 @@ export function TaskHeader({ task, artifactsOpen, onToggleArtifacts }: TaskHeade
   const implementing = asTaskStage(task.stage) === "implementation";
   const step = currentStepOf(task);
   const running = asTaskStage(task.stage) !== "pr" && (!implementing || hasStepSession(step));
-  // Pausing acts on the session on screen, which in the implementation stage
-  // is the one of the step that runs.
-  const stage = implementing && step !== null ? stepStage(step.number) : task.stage;
+  // In the implementation stage the header acts on the conversation the step
+  // waits on: its reviewer during a pass, its implementer otherwise. Pausing it
+  // is what stops the agent review.
+  const loop = implementing && step !== null ? loopSession(task, step) : null;
+  const stage = loop?.stage ?? task.stage;
+  const status = asSessionStatus(loop?.sessionStatus ?? task.sessionStatus);
+  const paused = status === "paused";
 
   return (
     <header className="flex h-11 shrink-0 items-center gap-2 border-b px-3">
@@ -52,7 +55,7 @@ export function TaskHeader({ task, artifactsOpen, onToggleArtifacts }: TaskHeade
 
       <span className="flex-1" />
 
-      <ContextGauge percent={task.contextPercent} />
+      <ContextGauge percent={loop?.contextPercent ?? task.contextPercent} />
       {running && (
         <Button
           variant="ghost"
@@ -64,6 +67,7 @@ export function TaskHeader({ task, artifactsOpen, onToggleArtifacts }: TaskHeade
           {paused ? "Resume" : "Pause"}
         </Button>
       )}
+      <TaskReviewModeButton task={task} />
       <TaskModelsButton task={task} />
       <Tooltip>
         <TooltipTrigger

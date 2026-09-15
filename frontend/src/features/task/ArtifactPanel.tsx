@@ -9,18 +9,27 @@ import { StepDocument } from "@/features/task/StepDocument";
 import { StepList } from "@/features/task/StepList";
 import { useArtifact } from "@/features/task/useArtifact";
 import { repoName, reposOf } from "@/lib/repos";
+import { findStepReport, stepReportLabel } from "@/lib/review-modes";
 import { stepSituation } from "@/lib/situations";
 import { asTaskStage, type RepoPR, type Step, type TaskStage, type TaskSummary } from "@/lib/wails";
-import { setStepModel } from "@/store/actions";
+import { setStepModel, setStepReviewMode } from "@/store/actions";
 import { useAppStore } from "@/store/app-store";
 
 const LOADING_WIDTHS = ["w-1/2", "w-full", "w-3/4"];
 
 /**
  * Selection is the tab the panel is on, or the document it drilled into: a step
- * file, or one of the pull request files.
+ * file, a report of the agent review of a step, or one of the pull request
+ * files.
  */
-type Selection = "prd" | "tech_spec" | "steps" | "pr" | { step: string } | { pr: string };
+type Selection =
+  | "prd"
+  | "tech_spec"
+  | "steps"
+  | "pr"
+  | { step: string }
+  | { report: string }
+  | { pr: string };
 
 /** Tab is a Selection with nothing drilled into. */
 type Tab = "prd" | "tech_spec" | "steps" | "pr";
@@ -38,6 +47,10 @@ function isStep(selection: Selection): selection is { step: string } {
   return typeof selection === "object" && "step" in selection;
 }
 
+function isReport(selection: Selection): selection is { report: string } {
+  return typeof selection === "object" && "report" in selection;
+}
+
 function isPRFile(selection: Selection): selection is { pr: string } {
   return typeof selection === "object" && "pr" in selection;
 }
@@ -45,6 +58,9 @@ function isPRFile(selection: Selection): selection is { pr: string } {
 function artifactName(selection: Selection, task: TaskSummary): string | null {
   if (isStep(selection)) {
     return `steps/${selection.step}`;
+  }
+  if (isReport(selection)) {
+    return `step-reviews/${selection.report}`;
   }
   if (isPRFile(selection)) {
     return `pr/${selection.pr}`;
@@ -135,11 +151,15 @@ export function ArtifactPanel({ task }: ArtifactPanelProps) {
   const openStep = isStep(selection)
     ? (steps.find((step) => step.file === selection.step) ?? null)
     : null;
+  const openReport = isReport(selection) ? findStepReport(steps, selection.report) : null;
   // A document the task no longer has falls back to the list it came from.
-  const view = isStep(selection) && openStep === null ? "steps" : selection;
+  const view =
+    (isStep(selection) && openStep === null) || (isReport(selection) && openReport === null)
+      ? "steps"
+      : selection;
   const artifact = useArtifact(task.id, artifactName(view, task), task.artifactVersion);
   const anyPR = hasPRArtifacts(task);
-  const tab: Tab = isStep(view) ? "steps" : isPRFile(view) ? "pr" : view;
+  const tab: Tab = isStep(view) || isReport(view) ? "steps" : isPRFile(view) ? "pr" : view;
 
   const openStepFile = (step: Step) => setSelection({ step: step.file });
 
@@ -181,6 +201,17 @@ export function ArtifactPanel({ task }: ArtifactPanelProps) {
         </div>
       )}
 
+      {openReport !== null && (
+        <div className="flex h-8 shrink-0 items-center gap-2 border-b px-3">
+          <Button variant="ghost" size="sm" onClick={() => setSelection("steps")}>
+            ← Steps
+          </Button>
+          <span className="min-w-0 truncate text-sm font-medium">
+            {`Step ${openReport.step.number} · ${stepReportLabel(openReport.report.pass, openReport.report.clean)}`}
+          </span>
+        </div>
+      )}
+
       {isPRFile(view) && (
         <div className="flex h-8 shrink-0 items-center gap-2 border-b px-3">
           <Button variant="ghost" size="sm" onClick={() => setSelection("pr")}>
@@ -199,6 +230,8 @@ export function ArtifactPanel({ task }: ArtifactPanelProps) {
             situation={stepSituation(task, task.currentStep)}
             onOpen={openStepFile}
             onModelChange={(step, choice) => void setStepModel(task.id, step.number, choice)}
+            onReviewModeChange={(step, mode) => void setStepReviewMode(task.id, step.number, mode)}
+            onOpenReport={(_, report) => setSelection({ report: report.file })}
           />
         ) : view === "pr" ? (
           <PRList task={task} onOpen={(file) => setSelection({ pr: file })} />

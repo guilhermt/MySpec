@@ -18,11 +18,12 @@ func TestGetStateStartsEmpty(t *testing.T) {
 	got := f.workspace.GetState()
 
 	want := bindings.State{
-		Recents:       []bindings.Recent{},
-		Theme:         "system",
-		ModelDefaults: bindings.FromModelSet(models.Factory()),
-		Tasks:         []bindings.TaskSummary{},
-		History:       []bindings.ArchivedTask{},
+		Recents:           []bindings.Recent{},
+		Theme:             "system",
+		ModelDefaults:     bindings.FromModelSet(models.Factory()),
+		ReviewModeDefault: "manual",
+		Tasks:             []bindings.TaskSummary{},
+		History:           []bindings.ArchivedTask{},
 	}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("GetState() mismatch (-want +got):\n%s", diff)
@@ -47,11 +48,12 @@ func TestOpenPathOpensTheWorkspace(t *testing.T) {
 			Path:  root,
 			Repos: []bindings.Repo{{Name: "api", Path: filepath.Join(root, "api")}},
 		},
-		Recents:       []bindings.Recent{{Name: filepath.Base(root), Path: root}},
-		Theme:         "system",
-		ModelDefaults: bindings.FromModelSet(models.Factory()),
-		Tasks:         []bindings.TaskSummary{},
-		History:       []bindings.ArchivedTask{},
+		Recents:           []bindings.Recent{{Name: filepath.Base(root), Path: root}},
+		Theme:             "system",
+		ModelDefaults:     bindings.FromModelSet(models.Factory()),
+		ReviewModeDefault: "manual",
+		Tasks:             []bindings.TaskSummary{},
+		History:           []bindings.ArchivedTask{},
 	}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("GetState() mismatch (-want +got):\n%s", diff)

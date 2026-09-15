@@ -15,7 +15,9 @@ import {
   asPRState,
   asPromptStage,
   asRepoStatus,
+  asReviewFallback,
   asReviewFileKind,
+  asReviewMode,
   asSessionStatus,
   asSituationForm,
   asSituationGroup,
@@ -72,11 +74,13 @@ describe("narrowing", () => {
     expect(asModelStage("tech_spec")).toBe("tech_spec");
     expect(asModelStage("plan")).toBe("plan");
     expect(asModelStage("implementation")).toBe("implementation");
+    expect(asModelStage("step_review")).toBe("step_review");
     expect(asModelStage("pr")).toBe("pr");
     expect(asModelStage("pr_review")).toBe("pr_review");
     expect(asPromptStage("prd")).toBe("prd");
     expect(asPromptStage("tech_spec")).toBe("tech_spec");
     expect(asPromptStage("plan")).toBe("plan");
+    expect(asPromptStage("step_review")).toBe("step_review");
     expect(asPromptStage("commit")).toBe("commit");
     expect(asPromptStage("pr")).toBe("pr");
     expect(asPromptStage("pr_review")).toBe("pr_review");
@@ -90,11 +94,16 @@ describe("narrowing", () => {
     expect(asMarkerType("tech_spec_updated")).toBe("tech_spec_updated");
     expect(asMarkerType("plan_written")).toBe("plan_written");
     expect(asMarkerType("plan_updated")).toBe("plan_updated");
+    expect(asMarkerType("pr_review_written")).toBe("pr_review_written");
+    expect(asMarkerType("step_review_started")).toBe("step_review_started");
+    expect(asMarkerType("step_review_written")).toBe("step_review_written");
     expect(asMarkerType("stage_started")).toBe("stage_started");
     expect(asMarkerType("step_started")).toBe("step_started");
     expect(asStepStatus("preparing")).toBe("preparing");
     expect(asStepStatus("blocked")).toBe("blocked");
     expect(asStepStatus("implementing")).toBe("implementing");
+    expect(asStepStatus("agent_review")).toBe("agent_review");
+    expect(asStepStatus("addressing_review")).toBe("addressing_review");
     expect(asStepStatus("awaiting_review")).toBe("awaiting_review");
     expect(asStepStatus("in_review")).toBe("in_review");
     expect(asStepStatus("ready_to_approve")).toBe("ready_to_approve");
@@ -173,7 +182,14 @@ describe("narrowing", () => {
     expect(asSituationForm("close")).toBe("close");
     expect(asPlaceKind("stage")).toBe("stage");
     expect(asPlaceKind("step")).toBe("step");
+    expect(asPlaceKind("step_review")).toBe("step_review");
     expect(asPlaceKind("repo")).toBe("repo");
+    expect(asReviewMode("manual")).toBe("manual");
+    expect(asReviewMode("agent")).toBe("agent");
+    expect(asReviewFallback("")).toBe("");
+    expect(asReviewFallback("taken_over")).toBe("taken_over");
+    expect(asReviewFallback("rounds_exhausted")).toBe("rounds_exhausted");
+    expect(asReviewFallback("commit_failed")).toBe("commit_failed");
   });
 
   it("falls back on a value a newer backend invented", () => {
@@ -201,6 +217,8 @@ describe("narrowing", () => {
     expect(asSituationGroup("someday")).toBe("waiting");
     expect(asSituationForm("rebase")).toBe("");
     expect(asPlaceKind("workspace")).toBe("stage");
+    expect(asReviewMode("auto")).toBe("manual");
+    expect(asReviewFallback("paused")).toBe("");
   });
 });
 
@@ -224,6 +242,7 @@ describe("api", () => {
     await wails.api.dismissNotice();
     await wails.api.setTheme("dark");
     await wails.api.setModelDefault("pr", "claude-opus-5", "medium");
+    await wails.api.setReviewModeDefault("agent");
     await wails.api.getPrompt("prd");
     await wails.api.savePrompt("prd", "# PRD");
     await wails.api.restorePrompt("prd");
@@ -233,6 +252,7 @@ describe("api", () => {
       repoPath: "",
       initialContext: "a login",
       models: [],
+      reviewMode: "",
     });
     await wails.api.deleteTask("task-1");
     await wails.api.getTranscript("task-1", "prd");
@@ -254,6 +274,9 @@ describe("api", () => {
     await wails.api.setStageModel("task-1", "plan", "claude-fable-5-1", "high");
     await wails.api.setStepModel("task-1", 2, "claude-opus-5", "xhigh");
     await wails.api.setSessionModel("task-1", "prd", "claude-sonnet-5", "low");
+    await wails.api.setReviewMode("task-1", "agent");
+    await wails.api.setStepReviewMode("task-1", 2, "manual");
+    await wails.api.reviewStepMyself("task-1");
     await wails.api.openInEditor("task-1", "");
     await wails.api.approveStep("task-1");
     await wails.api.openFileInEditor("task-1", "", "src/login.ts");
@@ -267,9 +290,9 @@ describe("api", () => {
     await wails.api.previewDelete("task-1");
     await wails.api.viewSituation("situation-1");
 
-    expect(Call.ByID).toHaveBeenCalledTimes(43);
+    expect(Call.ByID).toHaveBeenCalledTimes(47);
     const ids = vi.mocked(Call.ByID).mock.calls.map(([id]) => id);
-    expect(new Set(ids).size).toBe(43);
+    expect(new Set(ids).size).toBe(47);
   });
 
   it("opens a link in the browser of the desktop, never in the webview", async () => {

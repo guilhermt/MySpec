@@ -8,7 +8,7 @@ import { makePrompt, makeState } from "@/test/wails-mock";
 
 const TEXT = makePrompt().text;
 
-function view(section: SettingsSection = "models") {
+function view(section: SettingsSection = "defaults") {
   return renderWithStore(<SettingsView />, {
     state: makeState(),
     ui: { settingsOpen: true, settingsSection: section },
@@ -37,17 +37,38 @@ async function edited() {
 }
 
 describe("SettingsView", () => {
-  it("lists the models and the six prompts in its navigation, with the one on screen as the current page", () => {
+  it("lists the defaults and the seven prompts in its navigation, with the one on screen as the current page", () => {
     view();
 
     const nav = screen.getByRole("navigation", { name: "Settings" });
-    for (const name of ["Models", "PRD", "Tech spec", "Plan", "Commit", "PR", "PR review"]) {
+    for (const name of [
+      "Defaults",
+      "PRD",
+      "Tech spec",
+      "Plan",
+      "Step review",
+      "Commit",
+      "PR",
+      "PR review",
+    ]) {
       expect(screen.getByRole("button", { name })).toBeInTheDocument();
     }
     expect(nav).toHaveTextContent("Prompts");
-    expect(screen.getByRole("button", { name: "Models" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("button", { name: "Defaults" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
     expect(screen.getByRole("button", { name: "PRD" })).not.toHaveAttribute("aria-current");
-    expect(screen.getByRole("heading", { name: "Models" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Defaults" })).toBeInTheDocument();
+  });
+
+  it("changes the review mode of new tasks at once", async () => {
+    const { user } = view();
+
+    await user.click(screen.getByRole("button", { name: "New tasks review mode: Manual" }));
+    await user.click(await screen.findByRole("menuitemradio", { name: "Agent" }));
+
+    expect(api.setReviewModeDefault).toHaveBeenCalledWith("agent");
   });
 
   it("changes a default at once", async () => {

@@ -191,6 +191,52 @@ func TestSetStepCommittedIsWhatMakesAStepDone(t *testing.T) {
 	}
 }
 
+func TestTheAgentReviewOfAStepKeepsTheRestOfTheRun(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	created := f.create(t, "add-login", "")
+
+	const start = "1111111111111111111111111111111111111111"
+	if _, err := f.service.SetStepStarted(t.Context(), created.ID, 1, start); err != nil {
+		t.Fatalf("SetStepStarted() = %v, want nil", err)
+	}
+	want := task.StepRun{
+		TaskID: created.ID, Number: 1, Status: task.StepStarted,
+		CreatedAt: base, UpdatedAt: base, StartCommit: start,
+	}
+
+	run, err := f.service.SetStepPass(t.Context(), created.ID, 1, 2)
+	if err != nil {
+		t.Fatalf("SetStepPass() = %v, want nil", err)
+	}
+	want.ReviewPass = 2
+	if diff := cmp.Diff(want, run); diff != "" {
+		t.Errorf("SetStepPass() mismatch (-want +got):\n%s", diff)
+	}
+
+	run, err = f.service.SetStepReported(t.Context(), created.ID, 1, 1)
+	if err != nil {
+		t.Fatalf("SetStepReported() = %v, want nil", err)
+	}
+	want.ReportedPass = 1
+	if diff := cmp.Diff(want, run); diff != "" {
+		t.Errorf("SetStepReported() mismatch (-want +got):\n%s", diff)
+	}
+
+	run, err = f.service.SetStepFallback(t.Context(), created.ID, 1, task.FallbackRoundsExhausted)
+	if err != nil {
+		t.Fatalf("SetStepFallback() = %v, want nil", err)
+	}
+	want.Fallback = task.FallbackRoundsExhausted
+	if diff := cmp.Diff(want, run); diff != "" {
+		t.Errorf("SetStepFallback() mismatch (-want +got):\n%s", diff)
+	}
+	if diff := cmp.Diff([]task.StepRun{want}, f.repo.stepRuns(created.ID)); diff != "" {
+		t.Errorf("stored runs mismatch (-want +got):\n%s", diff)
+	}
+}
+
 func TestSetStepStartedAndCommittedRejectAnUnknownTask(t *testing.T) {
 	t.Parallel()
 

@@ -45,6 +45,14 @@ export function SetModelDefault(stage: string, model: string, effort: string): $
 }
 
 /**
+ * SetReviewModeDefault stores who reviews the steps of the tasks created from
+ * now on: manual or agent.
+ */
+export function SetReviewModeDefault(mode: string): $CancellablePromise<void> {
+    return $Call.ByID(2645953726, mode);
+}
+
+/**
  * SetTheme stores the theme preference: system, light or dark.
  */
 export function SetTheme(preference: string): $CancellablePromise<void> {

@@ -85,6 +85,7 @@ func TestFactoryIsTheTableOfThePRD(t *testing.T) {
 		models.TechSpec:       {Model: models.Fable51, Effort: models.High},
 		models.Plan:           {Model: models.Fable51, Effort: models.High},
 		models.Implementation: {Model: models.Opus5, Effort: models.High},
+		models.StepReview:     {Model: models.Opus5, Effort: models.High},
 		models.PR:             {Model: models.Opus5, Effort: models.Medium},
 		models.PRReview:       {Model: models.Opus5, Effort: models.High},
 	}
