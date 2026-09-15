@@ -81,6 +81,9 @@ func TestReadGivesTheDefaultOfEveryPrompt(t *testing.T) {
 		{prompts.StagePRD, []string{"# PRD Creator", "{{prd_path}}", "{{initial_context}}"}},
 		{prompts.StageTechSpec, []string{"# Technical Specification Creator", "{{tech_spec_path}}", "{{repositories}}"}},
 		{prompts.StagePlan, []string{"# Step Planner", "{{steps_dir}}", "{{repositories}}", "AskUserQuestion"}},
+		{prompts.StageOneShot, []string{
+			"# One-Shot Planner", "{{one_shot_path}}", "{{repository}}", "{{initial_context}}", "AskUserQuestion",
+		}},
 		{prompts.StageStepReview, []string{"# Step Review", "{{step_path}}", "{{review_path}}", "git diff HEAD", "status: clean", "AskUserQuestion"}},
 		{prompts.StageCommit, []string{"# Commit", "{{what_to_commit}}", "Co-Authored-By", "{{push}}"}},
 		{prompts.StagePR, []string{"# Pull Request", "{{draft_path}}", "{{base_branch}}", "gh pr create", "AskUserQuestion"}},
@@ -264,6 +267,9 @@ func TestPlaceholdersAreTheOnesTheDefaultUses(t *testing.T) {
 		want  []string
 	}{
 		{prompts.StagePRD, []string{"{{task_name}}", "{{artifacts_dir}}", "{{prd_path}}", "{{initial_context}}"}},
+		{prompts.StageOneShot, []string{
+			"{{task_name}}", "{{artifacts_dir}}", "{{one_shot_path}}", "{{initial_context}}", "{{repository}}",
+		}},
 		{prompts.StageStepReview, []string{
 			"{{prd_path}}", "{{tech_spec_path}}", "{{step_path}}", "{{repository}}", "{{branch}}", "{{review_path}}",
 		}},
@@ -289,6 +295,18 @@ func TestPlaceholdersAreTheOnesTheDefaultUses(t *testing.T) {
 	want := []string{"{{task_name}}", "{{artifacts_dir}}", "{{prd_path}}", "{{initial_context}}"}
 	if diff := cmp.Diff(want, readPrompt(t, dataDir, prompts.StagePRD).Placeholders); diff != "" {
 		t.Errorf("prd placeholders after an edit mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestEditableListsThePromptsInWorkflowOrder(t *testing.T) {
+	t.Parallel()
+
+	want := []prompts.Stage{
+		prompts.StagePRD, prompts.StageTechSpec, prompts.StagePlan, prompts.StageOneShot,
+		prompts.StageStepReview, prompts.StageCommit, prompts.StagePR, prompts.StagePRReview,
+	}
+	if diff := cmp.Diff(want, prompts.Editable); diff != "" {
+		t.Errorf("Editable mismatch (-want +got):\n%s", diff)
 	}
 }
 
@@ -355,9 +373,10 @@ func TestRenderAppendsTheContextWhenThePlaceholderIsGone(t *testing.T) {
 }
 
 // everyVar fills every placeholder a prompt may carry except the initial
-// context, which only the PRD stage passes, the push instruction, which only a
-// commit that belongs to a pull request asks for, and the reply of the
-// implementer, which only a step review passes.
+// context, which only the PRD and One-Shot planning stages pass, the push
+// instruction, which only a commit that belongs to a pull request asks for, the
+// reply of the implementer, which only a step review passes, and the document
+// of a One-Shot task, which a Structured task does not have.
 func everyVar() prompts.Vars {
 	return prompts.Vars{
 		TaskName:     "add-login",
@@ -391,6 +410,29 @@ func stepReviewVars() prompts.Vars {
 	return vars
 }
 
+// oneShotPath is the document of the One-Shot task of the fixtures.
+const oneShotPath = "/data/tasks/add-login/one-shot.md"
+
+// oneShotPlanningVars are the vars the One-Shot planning renders with.
+func oneShotPlanningVars() prompts.Vars {
+	vars := everyVar()
+	vars.OneShotPath = oneShotPath
+	vars.InitialContext = "a login screen"
+	return vars
+}
+
+// oneShotVars are vars of a One-Shot task, with the reply a step reviewer
+// receives.
+func oneShotVars() prompts.Vars {
+	vars := stepReviewVars()
+	vars.OneShotPath = oneShotPath
+	return vars
+}
+
+// oneShotSection is how the section about the document of a One-Shot task
+// opens once rendered.
+const oneShotSection = "\n\n## One-Shot task\n\nThis task was planned in a single document, `" + oneShotPath + "`, instead of"
+
 func TestRenderTheDefaultPromptsKeepNoPlaceholder(t *testing.T) {
 	t.Parallel()
 
@@ -402,6 +444,9 @@ func TestRenderTheDefaultPromptsKeepNoPlaceholder(t *testing.T) {
 		{prompts.StagePRD, prdVars(), []string{"add-login", "/data/tasks/add-login/PRD.md", "a login screen"}},
 		{prompts.StageTechSpec, everyVar(), []string{"add-login", "/data/tasks/add-login/tech-spec.md", "- `api`\n- `web`"}},
 		{prompts.StagePlan, everyVar(), []string{"add-login", "/data/tasks/add-login/steps", "- `api`\n- `web`"}},
+		{prompts.StageOneShot, oneShotPlanningVars(), []string{
+			"add-login", "Write the document to `" + oneShotPath + "`", "runs in `api`", "## Initial context\n\na login screen\n",
+		}},
 		{prompts.StageStepReview, stepReviewVars(), []string{
 			"/data/tasks/add-login/steps/1-add-the-store.md",
 			"/data/tasks/add-login/pr/api-review-1.md",
@@ -822,5 +867,177 @@ func TestRenderAppendsTheReplyOfTheImplementerToAStepReview(t *testing.T) {
 
 	if want := "review /s.md\n\n## The implementer's last response\n\nDone."; got != want {
 		t.Errorf("Render() = %q, want %q", got, want)
+	}
+}
+
+func TestRenderTheDefaultPromptsThatReadTheDocumentsPointToTheOneShotDocument(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		stage prompts.Stage
+		// ending is how the rendered prompt ends: the note of its kind, and for
+		// a step reviewer the reply of the implementer after it.
+		ending string
+	}{
+		{prompts.StageStepReview, "the plan the step follows is that document." +
+			"\n\n## The implementer's last response\n\nI added the store."},
+		{prompts.StagePR, "Never mention it in the pull request, as with any other document of the process."},
+		{prompts.StagePRReview, "a deviation from them is a finding, even when the code works."},
+	}
+
+	dataDir := t.TempDir()
+
+	for _, test := range tests {
+		got, err := prompts.Render(dataDir, test.stage, oneShotVars())
+		if err != nil {
+			t.Fatalf("Render(%s) = %v, want nil", test.stage, err)
+		}
+
+		if strings.Contains(got, "{{") {
+			t.Errorf("rendered %s prompt still carries a placeholder", test.stage)
+		}
+		for _, unwanted := range []string{
+			"/data/tasks/add-login/PRD.md", "/data/tasks/add-login/tech-spec.md", "/data/tasks/add-login/steps/1-add-the-store.md",
+		} {
+			if strings.Contains(got, unwanted) {
+				t.Errorf("rendered %s prompt carries %q, want the One-Shot document in its place", test.stage, unwanted)
+			}
+		}
+		if count := strings.Count(got, oneShotSection); count != 1 {
+			t.Errorf("rendered %s prompt has %d One-Shot sections, want 1", test.stage, count)
+		}
+		if !strings.HasSuffix(got, test.ending) {
+			t.Errorf("rendered %s prompt does not end with %q", test.stage, test.ending)
+		}
+	}
+}
+
+func TestRenderPointsThePathsOfTheDocumentsToTheOneShotDocument(t *testing.T) {
+	t.Parallel()
+
+	dataDir := t.TempDir()
+	write(t, dataDir, prompts.StagePRReview, "prd {{prd_path}} spec {{tech_spec_path}} step {{step_path}} doc {{one_shot_path}}")
+
+	got, err := prompts.Render(dataDir, prompts.StagePRReview, oneShotVars())
+	if err != nil {
+		t.Fatalf("Render() = %v, want nil", err)
+	}
+
+	want := "prd " + oneShotPath + " spec " + oneShotPath + " step " + oneShotPath + " doc " + oneShotPath + oneShotSection
+	if !strings.HasPrefix(got, want) {
+		t.Errorf("Render() = %q, want it to start with %q", got, want)
+	}
+}
+
+func TestRenderOfAStructuredTaskSaysNothingAboutOneShot(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		stage prompts.Stage
+		want  string
+	}{
+		{
+			prompts.StageStepReview,
+			"prd /data/tasks/add-login/PRD.md spec /data/tasks/add-login/tech-spec.md " +
+				"step /data/tasks/add-login/steps/1-add-the-store.md" +
+				"\n\n## The implementer's last response\n\nI added the store.",
+		},
+		{
+			prompts.StagePR,
+			"prd /data/tasks/add-login/PRD.md spec /data/tasks/add-login/tech-spec.md " +
+				"step /data/tasks/add-login/steps/1-add-the-store.md",
+		},
+		{
+			prompts.StagePRReview,
+			"prd /data/tasks/add-login/PRD.md spec /data/tasks/add-login/tech-spec.md " +
+				"step /data/tasks/add-login/steps/1-add-the-store.md",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(string(test.stage), func(t *testing.T) {
+			t.Parallel()
+
+			dataDir := t.TempDir()
+			write(t, dataDir, test.stage, "prd {{prd_path}} spec {{tech_spec_path}} step {{step_path}}")
+
+			got, err := prompts.Render(dataDir, test.stage, stepReviewVars())
+			if err != nil {
+				t.Fatalf("Render() = %v, want nil", err)
+			}
+			if got != test.want {
+				t.Errorf("Render() = %q, want %q", got, test.want)
+			}
+
+			// The default renders no One-Shot section either.
+			rendered, err := prompts.Render(t.TempDir(), test.stage, stepReviewVars())
+			if err != nil {
+				t.Fatalf("Render(default) = %v, want nil", err)
+			}
+			if strings.Contains(rendered, "One-Shot") {
+				t.Errorf("rendered default %s prompt mentions One-Shot in a Structured task", test.stage)
+			}
+		})
+	}
+}
+
+func TestRenderAppendsTheOneShotNoteToAnEditWithoutPlaceholders(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		stage  prompts.Stage
+		ending string
+	}{
+		{prompts.StageStepReview, "\n\n## The implementer's last response\n\nI added the store."},
+		{prompts.StagePR, "document of the process."},
+		{prompts.StagePRReview, "even when the code works."},
+	}
+
+	for _, test := range tests {
+		t.Run(string(test.stage), func(t *testing.T) {
+			t.Parallel()
+
+			dataDir := t.TempDir()
+			write(t, dataDir, test.stage, "review it")
+
+			got, err := prompts.Render(dataDir, test.stage, oneShotVars())
+			if err != nil {
+				t.Fatalf("Render() = %v, want nil", err)
+			}
+			if want := "review it" + oneShotSection; !strings.HasPrefix(got, want) {
+				t.Errorf("Render() = %q, want it to start with %q", got, want)
+			}
+			if !strings.HasSuffix(got, test.ending) {
+				t.Errorf("Render() = %q, want it to end with %q", got, test.ending)
+			}
+		})
+	}
+}
+
+func TestRenderAppendsNoOneShotNoteToThePromptsThatReadNoDocument(t *testing.T) {
+	t.Parallel()
+
+	for _, stage := range []prompts.Stage{prompts.StageCommit, prompts.StageOneShot} {
+		t.Run(string(stage), func(t *testing.T) {
+			t.Parallel()
+
+			got, err := prompts.Render(t.TempDir(), stage, oneShotPlanningVars())
+			if err != nil {
+				t.Fatalf("Render(%s) = %v, want nil", stage, err)
+			}
+			if strings.Contains(got, "## One-Shot task") {
+				t.Errorf("rendered %s prompt carries the One-Shot section", stage)
+			}
+
+			dataDir := t.TempDir()
+			write(t, dataDir, stage, "do it")
+			edited, err := prompts.Render(dataDir, stage, oneShotPlanningVars())
+			if err != nil {
+				t.Fatalf("Render(%s edit) = %v, want nil", stage, err)
+			}
+			if strings.Contains(edited, "## One-Shot task") {
+				t.Errorf("rendered %s edit carries the One-Shot section", stage)
+			}
+		})
 	}
 }
