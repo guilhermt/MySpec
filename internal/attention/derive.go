@@ -27,9 +27,7 @@ func Derive(in Input) []Found {
 			return []Found{found}
 		}
 	case task.StageImplementation:
-		if found, ok := stepSituation(in); ok {
-			return []Found{found}
-		}
+		return stepSituations(in)
 	case task.StagePR:
 		return repoSituations(in)
 	}
@@ -99,15 +97,28 @@ func stageSituation(in Input) (Found, bool) {
 	return newFound(t, place, KindReply, sessionBody(KindReply, placeName(t, place))), true
 }
 
-// stepSituation is the situation of a task in implementation, the one of its
-// current step: the first step that is not done.
-func stepSituation(in Input) (Found, bool) {
-	t := in.Task
+// stepSituations are the situations of a task in implementation, the ones of
+// its current step, the first one that is not done: the step and its reviewer
+// are places of their own, each with one situation at most.
+func stepSituations(in Input) []Found {
 	index := slices.IndexFunc(in.Steps, func(state flow.StepState) bool { return state.Status != flow.StepDone })
 	if index < 0 {
-		return Found{}, false
+		return nil
 	}
 	step := in.Steps[index]
+	var situations []Found
+	if found, ok := stepSituation(in.Task, step, in.Sessions); ok {
+		situations = append(situations, found)
+	}
+	if found, ok := reviewerSituation(in.Task, step); ok {
+		situations = append(situations, found)
+	}
+	return situations
+}
+
+// stepSituation is the situation of the current step of a task in
+// implementation, in the conversation that implements it.
+func stepSituation(t task.Task, step flow.StepState, sessions map[session.Key]session.Summary) (Found, bool) {
 	n := step.Step.Number
 	place := Place{Kind: PlaceStep, Step: n}
 
@@ -118,7 +129,7 @@ func stepSituation(in Input) (Found, bool) {
 		}
 		return newFound(t, place, KindStepBlocked, stepBlockedBody(n, reason)), true
 	}
-	if sum, open := in.Sessions[session.Key{TaskID: t.ID, Stage: session.StepStage(n)}]; open {
+	if sum, open := sessions[session.Key{TaskID: t.ID, Stage: session.StepStage(n)}]; open {
 		if kind, decided := sessionKind(sum); decided {
 			if kind == "" {
 				return Found{}, false
@@ -142,12 +153,32 @@ func stepSituation(in Input) (Found, bool) {
 	default:
 		return Found{}, false
 	}
-	found := newFound(t, place, KindStepReview, stepReviewBody(n, form, step.CommitFailed))
+	found := newFound(t, place, KindStepReview, stepReviewBody(n, form, step.CommitFailed, step.Fallback))
 	found.Form = form
 	if form == FormStaged && step.Review != nil {
 		found.Percent = step.Review.Percent()
 	}
 	return found, true
+}
+
+// reviewerSituation is the situation of the conversation that reviews a step:
+// what its session holds, or the report a pass still owes.
+func reviewerSituation(t task.Task, step flow.StepState) (Found, bool) {
+	if step.ReviewerStage == "" {
+		return Found{}, false
+	}
+	n := step.Step.Number
+	place := Place{Kind: PlaceStepReview, Step: n}
+	if kind, decided := sessionKind(step.Reviewer); decided {
+		if kind == "" {
+			return Found{}, false
+		}
+		return newFound(t, place, kind, reviewerBody(kind, n)), true
+	}
+	if step.ReportMissing {
+		return newFound(t, place, KindReply, reviewerBody(KindReply, n)), true
+	}
+	return Found{}, false
 }
 
 // repoSituations are the situations of a task in the PR stage, one per

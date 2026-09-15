@@ -94,6 +94,22 @@ func TestStageModelsSayWhatCanStillChange(t *testing.T) {
 				models.PRReview:       {Editable: true},
 			},
 		},
+		"implementation with a reviewer at work": {
+			stage: task.StageImplementation,
+			steps: []flow.StepState{
+				stepAt(1, flow.StepDone),
+				{Step: task.Step{Number: 2}, Status: flow.StepAgentReview, ReviewerStage: session.StepReviewStage(2)},
+			},
+			want: map[models.Stage]rule{
+				models.PRD:            {},
+				models.TechSpec:       {},
+				models.Plan:           {},
+				models.Implementation: {Live: true},
+				models.StepReview:     {Editable: true, Live: true},
+				models.PR:             {Editable: true},
+				models.PRReview:       {Editable: true},
+			},
+		},
 		"a pull request being drafted, with a repository still to prepare": {
 			stage: task.StagePR,
 			repos: []flow.RepoState{

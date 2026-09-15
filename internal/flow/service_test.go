@@ -48,9 +48,10 @@ func TestAFinishedPlanReachesImplementationAndStartsAStep(t *testing.T) {
 		"stage:task-1:implementation:revisiting=false",
 		"step:task-1:1:preparing",
 		"step:task-1:1:started",
-		// The task was seeded without models, so the step freezes the factory
-		// choice of implementation.
+		// The task was seeded without models and without a review mode, so the
+		// step freezes the factory choice of implementation and the manual mode.
 		"stepModel:task-1:1:claude-opus-5:high",
+		"stepReviewMode:task-1:1:manual",
 	)
 }
 

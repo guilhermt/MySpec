@@ -18,6 +18,7 @@ import (
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/review"
+	"github.com/guilhermt/myspec/internal/reviewmode"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
 	"github.com/guilhermt/myspec/internal/worktree"
@@ -50,10 +51,12 @@ type memTasks struct {
 	runs      map[string][]task.StepRun
 	prs       map[string][]task.PRRun
 	seeded    map[string]task.Models // the choices a test made for a task, by id
-	calls     []string
-	err       error         // returned by every mutation
-	block     chan struct{} // when set, Inspect waits on it
-	inspects  int
+	// seededModes are the review modes a test made for a task, by id.
+	seededModes map[string]task.ReviewModes
+	calls       []string
+	err         error         // returned by every mutation
+	block       chan struct{} // when set, Inspect waits on it
+	inspects    int
 }
 
 func newTasks() *memTasks {
@@ -62,6 +65,8 @@ func newTasks() *memTasks {
 		runs:      map[string][]task.StepRun{},
 		prs:       map[string][]task.PRRun{},
 		seeded:    map[string]task.Models{},
+
+		seededModes: map[string]task.ReviewModes{},
 	}
 }
 
@@ -133,6 +138,17 @@ func (m *memTasks) Inspect(id string) (task.Artifacts, error) {
 		<-block
 	}
 	return a, nil
+}
+
+func (m *memTasks) ReadArtifact(id, name string) (string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.calls = append(m.calls, "read:"+id+":"+name)
+	if m.err != nil {
+		return "", m.err
+	}
+	return "the report " + name, nil
 }
 
 func (m *memTasks) SetStage(_ context.Context, id string, stage task.Stage, revisiting bool) (task.Task, error) {
@@ -210,6 +226,59 @@ func (m *memTasks) setModels(id string, choices task.Models) {
 	m.seeded[id] = choices
 	if index := m.indexOf(id); index >= 0 {
 		m.items[index].Models = choices
+	}
+}
+
+func (m *memTasks) SetReviewMode(_ context.Context, id string, mode reviewmode.Mode) (task.Task, error) {
+	return m.updateReviewModes(id, "reviewMode:"+id+":"+string(mode), func(modes *task.ReviewModes) {
+		modes.Task = mode
+	})
+}
+
+func (m *memTasks) SetStepReviewMode(_ context.Context, id string, number int, mode reviewmode.Mode) (task.Task, error) {
+	return m.updateReviewModes(
+		id,
+		"stepReviewMode:"+id+":"+strconv.Itoa(number)+":"+string(mode),
+		func(modes *task.ReviewModes) { modes.Steps[number] = mode },
+	)
+}
+
+// updateReviewModes records the review modes of a task the way task.Service
+// does, on a copy of the map: what the call says nothing about is kept.
+func (m *memTasks) updateReviewModes(id, label string, mutate func(*task.ReviewModes)) (task.Task, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.calls = append(m.calls, label)
+	if m.err != nil {
+		return task.Task{}, m.err
+	}
+	index := m.indexOf(id)
+	if index < 0 {
+		return task.Task{}, task.ErrNotFound
+	}
+	modes := task.ReviewModes{
+		Task:  m.items[index].ReviewModes.Task,
+		Steps: maps.Clone(m.items[index].ReviewModes.Steps),
+	}
+	if modes.Steps == nil {
+		modes.Steps = map[int]reviewmode.Mode{}
+	}
+	mutate(&modes)
+	m.items[index].ReviewModes = modes
+	return m.items[index], nil
+}
+
+// setReviewModes is the review mode of a task and of its steps, which is what
+// the user chose before the flow ran. Like setModels, it may come before the
+// helper that seeds the task.
+func (m *memTasks) setReviewModes(id string, modes task.ReviewModes) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.seededModes[id] = modes
+	if index := m.indexOf(id); index >= 0 {
+		m.items[index].ReviewModes = modes
 	}
 }
 
@@ -374,6 +443,79 @@ func (m *memTasks) SetStepCommitted(_ context.Context, id string, number int, sh
 	})
 }
 
+func (m *memTasks) SetStepPass(_ context.Context, id string, number, pass int) (task.StepRun, error) {
+	label := "stepPass:" + id + ":" + strconv.Itoa(number) + ":" + strconv.Itoa(pass)
+	return m.updateReview(id, number, label, func(run *task.StepRun) {
+		run.ReviewPass = pass
+	})
+}
+
+func (m *memTasks) SetStepReported(_ context.Context, id string, number, pass int) (task.StepRun, error) {
+	label := "stepReported:" + id + ":" + strconv.Itoa(number) + ":" + strconv.Itoa(pass)
+	return m.updateReview(id, number, label, func(run *task.StepRun) {
+		run.ReportedPass = pass
+	})
+}
+
+func (m *memTasks) SetStepFallback(
+	_ context.Context, id string, number int, fallback task.ReviewFallback,
+) (task.StepRun, error) {
+	label := "stepFallback:" + id + ":" + strconv.Itoa(number) + ":" + string(fallback)
+	return m.updateReview(id, number, label, func(run *task.StepRun) {
+		run.Fallback = fallback
+	})
+}
+
+func (m *memTasks) ClearStepReview(_ context.Context, id string, number int) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.calls = append(m.calls, "clearStepReview:"+id+":"+strconv.Itoa(number))
+	if m.err != nil {
+		return m.err
+	}
+	if index := slices.IndexFunc(m.runs[id], func(r task.StepRun) bool { return r.Number == number }); index >= 0 {
+		run := &m.runs[id][index]
+		run.ReviewPass, run.ReportedPass, run.Fallback = 0, 0, ""
+	}
+	// The map goes out with every copy of the artifacts, so it is replaced
+	// rather than changed.
+	a := m.artifacts[id]
+	a.StepReports = maps.Clone(a.StepReports)
+	delete(a.StepReports, number)
+	m.artifacts[id] = a
+	return nil
+}
+
+// updateReview records how far the agent review of a step got the way
+// task.Service does: unlike updateRun, it keeps the status of the run.
+func (m *memTasks) updateReview(
+	id string, number int, label string, mutate func(*task.StepRun),
+) (task.StepRun, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.calls = append(m.calls, label)
+	if m.err != nil {
+		return task.StepRun{}, m.err
+	}
+
+	runs := m.runs[id]
+	run := task.StepRun{TaskID: id, Number: number}
+	index := slices.IndexFunc(runs, func(r task.StepRun) bool { return r.Number == number })
+	if index >= 0 {
+		run = runs[index]
+	}
+	mutate(&run)
+
+	if index < 0 {
+		m.runs[id] = append(runs, run)
+	} else {
+		runs[index] = run
+	}
+	return run, nil
+}
+
 // updateRun records the state of a step the way task.Service does: what the
 // call says nothing about is kept.
 func (m *memTasks) updateRun(
@@ -483,6 +625,7 @@ func (m *memTasks) add(id string, stage task.Stage, a task.Artifacts) task.Task 
 		Stage:         stage,
 		ArtifactsDir:  filepath.Join("/data", id),
 		Models:        m.seeded[id],
+		ReviewModes:   m.seededModes[id],
 	}
 	m.items = append(m.items, t)
 	m.artifacts[id] = a
@@ -555,6 +698,7 @@ type memSessions struct {
 	mu        sync.Mutex
 	summaries map[session.Key]session.Summary
 	infos     map[session.Key]session.TaskInfo
+	replies   map[session.Key]string // what the agent of a session said last
 	calls     []string
 	messages  []string
 	err       error // returned by every call that changes something
@@ -564,6 +708,7 @@ func newSessions() *memSessions {
 	return &memSessions{
 		summaries: map[session.Key]session.Summary{},
 		infos:     map[session.Key]session.TaskInfo{},
+		replies:   map[session.Key]string{},
 	}
 }
 
@@ -672,6 +817,14 @@ func (m *memSessions) Resume(_ context.Context, k session.Key) error {
 	return nil
 }
 
+func (m *memSessions) Interrupt(_ context.Context, k session.Key) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.calls = append(m.calls, "interrupt:"+k.TaskID+":"+k.Stage)
+	return m.err
+}
+
 func (m *memSessions) SetChoice(_ context.Context, k session.Key, c models.Choice) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -704,6 +857,13 @@ func (m *memSessions) Summaries() map[session.Key]session.Summary {
 	return maps.Clone(m.summaries)
 }
 
+func (m *memSessions) LastReply(k session.Key) string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return m.replies[k]
+}
+
 func (m *memSessions) SendFromApp(_ context.Context, k session.Key, text string) error {
 	return m.send(k, text, false)
 }
@@ -717,6 +877,14 @@ func (m *memSessions) MarkPRReview(_ context.Context, k session.Key, pass int) {
 	defer m.mu.Unlock()
 
 	m.calls = append(m.calls, "mark:"+k.TaskID+":"+k.Stage+":pass="+strconv.Itoa(pass))
+}
+
+func (m *memSessions) MarkStepReview(_ context.Context, k session.Key, pass int, clean bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.calls = append(m.calls,
+		"markStep:"+k.TaskID+":"+k.Stage+":pass="+strconv.Itoa(pass)+":clean="+strconv.FormatBool(clean))
 }
 
 // send records a message of the app, counting it as the service would.

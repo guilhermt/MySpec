@@ -12,6 +12,7 @@ import (
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/review"
+	"github.com/guilhermt/myspec/internal/reviewmode"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
 	"github.com/guilhermt/myspec/internal/worktree"
@@ -22,17 +23,19 @@ type StepStatus string
 
 // The states a step of a plan is shown in.
 const (
-	StepNotStarted      StepStatus = "not_started"
-	StepPreparing       StepStatus = "preparing"
-	StepBlocked         StepStatus = "blocked"
-	StepImplementing    StepStatus = "implementing"
-	StepAwaitingReview  StepStatus = "awaiting_review"   // idle, nothing staged yet
-	StepInReview        StepStatus = "in_review"         // something staged, something left
-	StepReadyToApprove  StepStatus = "ready_to_approve"  // nothing left outside the index
-	StepNothingToCommit StepStatus = "nothing_to_commit" // the worktree has no change at all
-	StepReviewFailed    StepStatus = "review_failed"     // the worktree could not be read
-	StepCommitting      StepStatus = "committing"
-	StepDone            StepStatus = "done"
+	StepNotStarted       StepStatus = "not_started"
+	StepPreparing        StepStatus = "preparing"
+	StepBlocked          StepStatus = "blocked"
+	StepImplementing     StepStatus = "implementing"
+	StepAgentReview      StepStatus = "agent_review"      // a pass of the agent review is under way
+	StepAddressingReview StepStatus = "addressing_review" // the implementer addresses a report of the agent review
+	StepAwaitingReview   StepStatus = "awaiting_review"   // idle, nothing staged yet
+	StepInReview         StepStatus = "in_review"         // something staged, something left
+	StepReadyToApprove   StepStatus = "ready_to_approve"  // nothing left outside the index
+	StepNothingToCommit  StepStatus = "nothing_to_commit" // the worktree has no change at all
+	StepReviewFailed     StepStatus = "review_failed"     // the worktree could not be read
+	StepCommitting       StepStatus = "committing"
+	StepDone             StepStatus = "done"
 )
 
 // Phase is what the preparation of a step is doing.
@@ -57,6 +60,24 @@ type StepState struct {
 	Choice   models.Choice // the model and effort the step runs with, or will run with
 	Adjusted bool          // not started, with a choice of its own instead of the one of implementation
 
+	// ReviewMode is who reviews the step: the mode it will start with, or the
+	// one it is reviewed with, which is Manual once the review went back to
+	// the user.
+	ReviewMode   reviewmode.Mode
+	ModeAdjusted bool                // not started, with a mode of its own instead of the one of the task
+	Fallback     task.ReviewFallback // why a step that started under the agent review is reviewed by the user
+	ReviewPass   int                 // agent_review only: the pass under way
+	ReviewRound  int                 // addressing_review only: the report the implementer addresses
+	// ReportMissing says the reviewer rests without the report of the pass
+	// under way, which the user sorts out in its conversation; agent_review
+	// only.
+	ReportMissing bool
+	Reports       []task.ReviewReport // the reports of the agent review, by pass
+	// ReviewerStage is the key of the conversation of the reviewer, "" while
+	// the step has none open, and Reviewer is its summary.
+	ReviewerStage string
+	Reviewer      session.Summary
+
 	CommitSHA     string // done only
 	CommitSubject string
 	CommitFailed  bool // the last approval ended without a commit
@@ -65,6 +86,10 @@ type StepState struct {
 // ModelEditable reports whether the model and effort of the step can still
 // change: its session has not started.
 func (st StepState) ModelEditable() bool { return st.Status == StepNotStarted }
+
+// ModeEditable reports whether the review mode of the step can still change:
+// its session has not started.
+func (st StepState) ModeEditable() bool { return st.Status == StepNotStarted }
 
 // The ways the flow refuses to act on a step.
 var (
@@ -96,17 +121,22 @@ func (s *Service) Steps(id string) []StepState {
 
 	states := make([]StepState, 0, len(a.Plan.Steps))
 	for _, step := range a.Plan.Steps {
-		state := StepState{Step: step, Status: StepNotStarted}
+		state := StepState{Step: step, Status: StepNotStarted, Reports: a.StepReports[step.Number]}
 		if step.RepoPath != "" {
 			if wt, ok := s.worktrees.Get(id, step.RepoPath); ok {
 				state.WorktreePath = wt.Path
 			}
+		}
+		if reviewer, open := s.sessions.Summary(stepReviewKey(id, step.Number)); open {
+			state.ReviewerStage, state.Reviewer = session.StepReviewStage(step.Number), reviewer
 		}
 		// The reading belongs to the worktree of the repository of the step,
 		// which is the key it was tracked under.
 		snap, read := s.review.Snapshot(reviewKey(id, step.RepoPath))
 		if index := indexOfRun(runs, step.Number); index >= 0 {
 			run := runs[index]
+			state.Fallback = run.Fallback
+			agent := agentReviewed(t, step.Number, run)
 			switch run.Status {
 			case task.StepPreparing:
 				state.Status, state.Phase = StepPreparing, phase
@@ -116,12 +146,21 @@ func (s *Service) Steps(id string) []StepState {
 				state.Status = StepImplementing
 				// The progress only means something with the work stopped, so
 				// it is read while the agent is not writing.
-				if sum, open := s.sessions.Summary(stepKey(id, step.Number)); open && sum.Idle {
+				sum, open := s.sessions.Summary(stepKey(id, step.Number))
+				idle := open && sum.Idle
+				switch {
+				case agent:
+					agentState(&state, run, idle, snap, read)
+				case idle:
 					state.Status = reviewStatus(snap, read)
 					state.Review = reading(snap, read)
 				}
 			case task.StepCommitting:
-				state.Status, state.Review = StepCommitting, reading(snap, read)
+				state.Status = StepCommitting
+				// Nobody stages under the agent review: there is no progress to show.
+				if !agent {
+					state.Review = reading(snap, read)
+				}
 			case task.StepDone:
 				state.Status = StepDone
 				state.CommitSHA, state.CommitSubject = run.CommitSHA, run.CommitSubject
@@ -132,6 +171,11 @@ func (s *Service) Steps(id string) []StepState {
 		}
 		state.Choice = t.Models.Step(step.Number)
 		state.Adjusted = state.Status == StepNotStarted && t.Models.Adjusted(step.Number)
+		state.ReviewMode = t.ReviewModes.Step(step.Number)
+		if state.Fallback != "" {
+			state.ReviewMode = reviewmode.Manual
+		}
+		state.ModeAdjusted = state.Status == StepNotStarted && t.ReviewModes.Adjusted(step.Number)
 		states = append(states, state)
 	}
 	return states
@@ -397,6 +441,16 @@ func (s *Service) prepare(ctx context.Context, id string, opts prepareOptions) {
 		updated, err := s.tasks.SetStepModel(dbCtx, id, step.Number, t.Models.Step(step.Number))
 		if err != nil {
 			s.log.Error("record the model of the step failed", "task", id, "step", step.Number, "error", err)
+			return
+		}
+		t = updated
+	}
+	// The step starts with the mode it has now, which from here on is its own:
+	// a later change of the mode of the task is for the steps still to start.
+	if !t.ReviewModes.Adjusted(step.Number) {
+		updated, err := s.tasks.SetStepReviewMode(dbCtx, id, step.Number, t.ReviewModes.Step(step.Number))
+		if err != nil {
+			s.log.Error("record the review mode of the step failed", "task", id, "step", step.Number, "error", err)
 			return
 		}
 		t = updated
