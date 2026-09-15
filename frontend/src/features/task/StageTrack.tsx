@@ -11,15 +11,21 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { StageActionDialog } from "@/features/task/StageActionDialog";
 import { nextStage, type StageAction, stageNoun } from "@/features/task/stage-actions";
 import {
-  LIFECYCLE,
   type LifecycleStage,
+  lifecycleOf,
   type StageState,
   stageIndex,
   stageLabel,
   stageState,
 } from "@/lib/stages";
 import { cn } from "@/lib/utils";
-import { asTaskStage, type TaskStage, type TaskSummary } from "@/lib/wails";
+import {
+  asTaskMode,
+  asTaskStage,
+  type TaskMode,
+  type TaskStage,
+  type TaskSummary,
+} from "@/lib/wails";
 import { continueStage } from "@/store/actions";
 
 const CHIP = "inline-flex h-6 shrink-0 items-center gap-1 rounded-md px-2 text-xs";
@@ -46,14 +52,20 @@ function backItem(stage: TaskStage): StageMenuItem {
 }
 
 /**
- * menuItems is what a chip offers: reopening a finished PRD or tech spec, and
- * starting any planning stage over. Every other chip is inert.
+ * menuItems is what a chip offers: reopening a finished PRD, tech spec or
+ * One-Shot planning, and starting any planning stage over. Every other chip is
+ * inert.
  */
-function menuItems(current: TaskStage, id: LifecycleStage): StageMenuItem[] {
+function menuItems(mode: TaskMode, current: TaskStage, id: LifecycleStage): StageMenuItem[] {
+  if (id === "one_shot") {
+    return current === "one_shot"
+      ? [discardItem("one_shot")]
+      : [backItem("one_shot"), discardItem("one_shot")];
+  }
   if (id === "prd" && current !== "prd") {
     return [backItem("prd"), discardItem("prd")];
   }
-  if (id === "tech_spec" && stageIndex(current) > stageIndex("tech_spec")) {
+  if (id === "tech_spec" && stageIndex(mode, current) > stageIndex(mode, "tech_spec")) {
     return [backItem("tech_spec"), discardItem("tech_spec")];
   }
   if (id === "plan" && current === "implementation") {
@@ -143,20 +155,21 @@ export interface StageTrackProps {
 /** StageTrack shows how far the task got, and holds the controls over stages. */
 export function StageTrack({ task }: StageTrackProps) {
   const [pending, setPending] = useState<StageMenuItem | null>(null);
+  const mode = asTaskMode(task.mode);
   const current = asTaskStage(task.stage);
 
   return (
     <div className="flex h-9 shrink-0 items-center border-b px-3">
-      {LIFECYCLE.map((entry, index) => (
-        <Fragment key={entry.id}>
+      {lifecycleOf(mode).map((id, index) => (
+        <Fragment key={id}>
           {index > 0 && (
             <ChevronRight aria-hidden="true" className="size-3 shrink-0 text-muted-foreground/60" />
           )}
           <StageChip
-            id={entry.id}
-            state={stageState(task, entry.id)}
+            id={id}
+            state={stageState(task, id)}
             revisiting={task.revisiting}
-            items={menuItems(current, entry.id)}
+            items={menuItems(mode, current, id)}
             onSelect={setPending}
           />
         </Fragment>

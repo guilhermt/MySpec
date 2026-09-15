@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { NewTaskDialog } from "@/features/task-create/NewTaskDialog";
 import { api, type TaskSummary } from "@/lib/wails";
@@ -211,6 +211,116 @@ describe("NewTaskDialog", () => {
         mode: "structured",
         models: makeModelDefaults(),
         reviewMode: "agent",
+      });
+    });
+  });
+
+  it("opens on the Structured mode and says what it does", () => {
+    open(AT_WEB);
+
+    const modes = screen.getByRole("group", { name: "Mode" });
+    expect(within(modes).getByRole("button", { name: "Structured" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(within(modes).getByRole("button", { name: "One-Shot" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    expect(
+      screen.getByText("A PRD, a tech spec and a plan of steps, each step its own commit."),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("One-Shot tasks are created in a repository."),
+    ).not.toBeInTheDocument();
+  });
+
+  it("switches the hint and the models to the One-Shot mode", async () => {
+    const { user } = open(AT_WEB);
+
+    await user.click(screen.getByRole("button", { name: /Models/ }));
+    await user.click(screen.getByRole("button", { name: "One-Shot" }));
+
+    expect(screen.getByRole("button", { name: "One-Shot" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(
+      screen.getByText(
+        "One planning conversation writes a single document, implemented in one commit.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "One-Shot planning model: Fable 5.1 · high" }),
+    ).toBeInTheDocument();
+    for (const stage of ["PRD", "Tech spec", "Plan"]) {
+      expect(
+        screen.queryByRole("button", { name: `${stage} model: Fable 5.1 · high` }),
+      ).not.toBeInTheDocument();
+    }
+
+    await user.click(screen.getByRole("button", { name: "Structured" }));
+
+    expect(screen.getByRole("button", { name: "PRD model: Fable 5.1 · high" })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /One-Shot planning model:/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps an adjustment to a stage both modes have", async () => {
+    const { user } = open(AT_WEB);
+
+    await user.click(screen.getByRole("button", { name: /Models/ }));
+    await user.click(
+      await screen.findByRole("button", { name: "Implementation model: Opus 5 · high" }),
+    );
+    await user.click(await screen.findByRole("menuitemradio", { name: "xhigh" }));
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("button", { name: "One-Shot" }));
+
+    expect(screen.getByRole("button", { name: /Models/ })).toHaveTextContent(
+      "Implementation: Opus 5 · xhigh",
+    );
+    expect(
+      screen.getByRole("button", { name: "Implementation model: Opus 5 · xhigh" }),
+    ).toBeInTheDocument();
+  });
+
+  it("sums up only the stages of the mode", async () => {
+    const { user } = open(AT_WEB);
+
+    await user.click(screen.getByRole("button", { name: /Models/ }));
+    await user.click(await screen.findByRole("button", { name: "PRD model: Fable 5.1 · high" }));
+    await user.click(await screen.findByRole("menuitemradio", { name: "xhigh" }));
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("button", { name: "One-Shot" }));
+
+    expect(screen.getByRole("button", { name: /Models/ })).toHaveTextContent("Defaults");
+  });
+
+  it("offers no One-Shot at the workspace root, and says why", () => {
+    open();
+
+    expect(screen.getByRole("button", { name: "One-Shot" })).toBeDisabled();
+    expect(screen.getByText("One-Shot tasks are created in a repository.")).toBeVisible();
+  });
+
+  it("creates the task in the mode of the dialog", async () => {
+    const { user } = open(AT_WEB);
+
+    await user.click(screen.getByRole("button", { name: "One-Shot" }));
+    await user.type(screen.getByLabelText("Name"), "fix-header");
+    await user.type(screen.getByLabelText("Initial context"), "The header overlaps the menu");
+    await user.click(screen.getByRole("button", { name: "Create" }));
+
+    await waitFor(() => {
+      expect(api.createTask).toHaveBeenCalledWith({
+        name: "fix-header",
+        repoPath: "/home/dev/projects/web",
+        initialContext: "The header overlaps the menu",
+        mode: "one_shot",
+        models: makeModelDefaults(),
+        reviewMode: "manual",
       });
     });
   });

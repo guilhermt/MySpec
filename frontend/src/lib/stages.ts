@@ -1,31 +1,39 @@
 import { everyRepoHasPR, everyRepoReviewed, reposOf } from "@/lib/repos";
-import type { TaskStage, TaskSummary } from "@/lib/wails";
-import { asTaskStage } from "@/lib/wails";
+import type { TaskMode, TaskStage, TaskSummary } from "@/lib/wails";
+import { asTaskMode, asTaskStage } from "@/lib/wails";
 
-/**
- * LifecycleStage is every stage of a task, including the ones after the plan
- * that the product does not drive yet.
- */
+/** LifecycleStage is every stage of the track of a task, including the thirds of the PR stage. */
 export type LifecycleStage = TaskStage | "pr_review" | "closing";
 
-export const LIFECYCLE: readonly { id: LifecycleStage; label: string }[] = [
-  { id: "prd", label: "PRD" },
-  { id: "tech_spec", label: "Tech spec" },
-  { id: "plan", label: "Plan" },
-  { id: "implementation", label: "Implementation" },
-  { id: "pr", label: "PR" },
-  { id: "pr_review", label: "PR review" },
-  { id: "closing", label: "Closing" },
-];
+const LABELS: Record<LifecycleStage, string> = {
+  prd: "PRD",
+  tech_spec: "Tech spec",
+  plan: "Plan",
+  one_shot: "Planning",
+  implementation: "Implementation",
+  pr: "PR",
+  pr_review: "PR review",
+  closing: "Closing",
+};
 
-/** stageIndex is the position of a stage in the lifecycle. */
-export function stageIndex(id: LifecycleStage): number {
-  return LIFECYCLE.findIndex((stage) => stage.id === id);
+const LIFECYCLES: Record<TaskMode, readonly LifecycleStage[]> = {
+  structured: ["prd", "tech_spec", "plan", "implementation", "pr", "pr_review", "closing"],
+  one_shot: ["one_shot", "implementation", "pr", "pr_review", "closing"],
+};
+
+/** lifecycleOf is the track of a task of a mode, in order. */
+export function lifecycleOf(mode: TaskMode): readonly LifecycleStage[] {
+  return LIFECYCLES[mode];
+}
+
+/** stageIndex is the position of a stage in the track of a mode, -1 outside of it. */
+export function stageIndex(mode: TaskMode, id: LifecycleStage): number {
+  return LIFECYCLES[mode].indexOf(id);
 }
 
 /** stageLabel is the name a stage carries in the interface. */
 export function stageLabel(id: LifecycleStage): string {
-  return LIFECYCLE[stageIndex(id)]?.label ?? "";
+  return LABELS[id];
 }
 
 /** StageState is where a stage sits relative to the one the task is in. */
@@ -47,8 +55,9 @@ export function stageState(task: TaskSummary, id: LifecycleStage): StageState {
     }
     return reviewing || reviewed ? "done" : "current";
   }
-  const current = stageIndex(stage);
-  const index = stageIndex(id);
+  const mode = asTaskMode(task.mode);
+  const current = stageIndex(mode, stage);
+  const index = stageIndex(mode, id);
   if (index < current) {
     return "done";
   }

@@ -326,6 +326,7 @@ describe("hasArtifacts", () => {
     [{}, false],
     [{ hasPrd: true }, true],
     [{ hasTechSpec: true }, true],
+    [{ hasOneShot: true }, true],
     [{ steps: [makeStep()] }, true],
   ])("knows whether the task wrote anything %#", (overrides, expected) => {
     expect(hasArtifacts(makeTask(overrides))).toBe(expected);

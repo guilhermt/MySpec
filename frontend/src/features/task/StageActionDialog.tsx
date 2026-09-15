@@ -13,9 +13,15 @@ import {
   backDescription,
   discardDescription,
   type StageAction,
+  stageActionTitle,
 } from "@/features/task/stage-actions";
-import { stageLabel } from "@/lib/stages";
-import { asTaskStage, type PRPreview, type TaskStage, type TaskSummary } from "@/lib/wails";
+import {
+  asTaskMode,
+  asTaskStage,
+  type PRPreview,
+  type TaskStage,
+  type TaskSummary,
+} from "@/lib/wails";
 import { backToStage, discardStage } from "@/store/actions";
 
 export interface StageActionDialogProps {
@@ -39,6 +45,7 @@ export function StageActionDialog({
   open,
   onOpenChange,
 }: StageActionDialogProps) {
+  const mode = asTaskMode(task.mode);
   const current = asTaskStage(task.stage);
   const back = action === "back";
   // The state of the task already says what the pull requests are; only the
@@ -52,17 +59,16 @@ export function StageActionDialog({
       state: repo.prState,
     }),
   );
-  const title = back
-    ? `Back to the ${stageLabel(stage)}?`
-    : `Discard the ${stageLabel(stage)} and start over?`;
 
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>{title}</AlertDialogTitle>
+          <AlertDialogTitle>{stageActionTitle(action, stage)}</AlertDialogTitle>
           <AlertDialogDescription>
-            {back ? backDescription(stage, current) : discardDescription(stage, current)}
+            {back
+              ? backDescription(mode, stage, current)
+              : discardDescription(mode, stage, current)}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <OrphanPRs prs={prs} />
