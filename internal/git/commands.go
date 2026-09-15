@@ -23,7 +23,13 @@ const (
 	// notAncestor is what merge-base --is-ancestor uses for a commit that is
 	// not part of the ref.
 	notAncestor = 1
+	// noSuchRemote is what remote get-url uses for a remote the repository does
+	// not have.
+	noSuchRemote = 2
 )
+
+// ErrNoRemote reports that the repository has no remote of the name asked for.
+var ErrNoRemote = errors.New("git: no such remote")
 
 // Fetch updates the remote-tracking branches of remote.
 func (r *Runner) Fetch(ctx context.Context, dir, remote string) error {
@@ -360,6 +366,20 @@ func (r *Runner) CurrentBranch(ctx context.Context, dir string) (string, error) 
 // or "" when the branch tracks nothing.
 func (r *Runner) Upstream(ctx context.Context, dir, branch string) (string, error) {
 	return r.Run(ctx, dir, "for-each-ref", "--format=%(upstream:short)", "refs/heads/"+branch)
+}
+
+// RemoteURL is the URL of a remote of the repository at dir, as git resolves
+// it, and ErrNoRemote when the repository has no remote of that name.
+func (r *Runner) RemoteURL(ctx context.Context, dir, name string) (string, error) {
+	out, err := r.Run(ctx, dir, "remote", "get-url", name)
+	if err == nil {
+		return out, nil
+	}
+	var gitErr *Error
+	if errors.As(err, &gitErr) && gitErr.ExitCode == noSuchRemote {
+		return "", fmt.Errorf("%w: %s", ErrNoRemote, name)
+	}
+	return "", err
 }
 
 // IsAncestor reports whether commit is reachable from ref: whether what
