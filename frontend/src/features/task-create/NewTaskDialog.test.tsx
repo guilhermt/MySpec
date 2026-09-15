@@ -89,7 +89,7 @@ describe("NewTaskDialog", () => {
       repoPath: "/home/dev/projects/web",
       initialContext: "The header overlaps the menu",
       models: makeModelDefaults(),
-      reviewMode: "",
+      reviewMode: "manual",
     });
     expect(useAppStore.getState().newTaskFor).toBeNull();
   });
@@ -146,7 +146,7 @@ describe("NewTaskDialog", () => {
       models: makeModelDefaults().map((line) =>
         line.stage === "prd" ? { ...line, effort: "xhigh" } : line,
       ),
-      reviewMode: "",
+      reviewMode: "manual",
     });
   });
 
@@ -163,7 +163,50 @@ describe("NewTaskDialog", () => {
         repoPath: "",
         initialContext: "A login screen",
         models: makeModelDefaults(),
-        reviewMode: "",
+        reviewMode: "manual",
+      });
+    });
+  });
+
+  it("starts from the review mode of the settings and says what it does", () => {
+    renderWithStore(<NewTaskDialog />, {
+      state: makeState({ reviewModeDefault: "agent" }),
+      ui: AT_ROOT,
+    });
+
+    expect(screen.getByRole("button", { name: "Task review mode: Agent" })).toHaveTextContent(
+      "Agent",
+    );
+    expect(
+      screen.getByText(
+        "An agent reviews each step, and the task runs to the pull request on its own.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("creates the task with the review mode of the dialog", async () => {
+    const { user } = open();
+
+    expect(
+      screen.getByText("You review each step in VS Code before its commit."),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Task review mode: Manual" }));
+    await user.click(await screen.findByRole("menuitemradio", { name: "Agent" }));
+    // The menu is a child popup of the dialog: a click in it leaves the dialog open.
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText("Name"), "add-login");
+    await user.type(screen.getByLabelText("Initial context"), "A login screen");
+    await user.click(screen.getByRole("button", { name: "Create" }));
+
+    await waitFor(() => {
+      expect(api.createTask).toHaveBeenCalledWith({
+        name: "add-login",
+        repoPath: "",
+        initialContext: "A login screen",
+        models: makeModelDefaults(),
+        reviewMode: "agent",
       });
     });
   });

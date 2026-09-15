@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ModelPicker } from "@/features/models/ModelPicker";
+import { ReviewModePicker } from "@/features/review-mode/ReviewModePicker";
 import { findNode, type TreeNode } from "@/features/tree/tree-model";
 import {
   adjustmentSummary,
@@ -21,6 +22,7 @@ import {
   modelStageLabel,
   withChoice,
 } from "@/lib/models";
+import { reviewModeHint } from "@/lib/review-modes";
 import {
   isValidTaskName,
   type NameProblem,
@@ -29,7 +31,7 @@ import {
   taskNameProblem,
 } from "@/lib/task-name";
 import { cn } from "@/lib/utils";
-import type { StageModel } from "@/lib/wails";
+import { asReviewMode, type ReviewMode, type StageModel } from "@/lib/wails";
 import { createTask } from "@/store/actions";
 import { useAppStore, useTasks } from "@/store/app-store";
 
@@ -65,6 +67,7 @@ function NewTaskForm({ node }: { node: TreeNode }) {
   const taken = useTasks().map((task) => task.name);
 
   const defaults = useAppStore((state) => state.app?.modelDefaults ?? NO_MODELS);
+  const defaultMode = useAppStore((state) => asReviewMode(state.app?.reviewModeDefault ?? ""));
 
   const [name, setName] = useState("");
   const [context, setContext] = useState("");
@@ -74,6 +77,7 @@ function NewTaskForm({ node }: { node: TreeNode }) {
   // changes this task only.
   const [choices, setChoices] = useState<StageModel[]>(() => [...defaults]);
   const [modelsOpen, setModelsOpen] = useState(false);
+  const [reviewMode, setReviewMode] = useState<ReviewMode>(() => defaultMode);
 
   const problem = taskNameProblem(name, taken);
   const suggestion = suggestTaskName(name);
@@ -94,7 +98,7 @@ function NewTaskForm({ node }: { node: TreeNode }) {
       repoPath: node.isRoot ? "" : node.path,
       initialContext: context,
       models: choices,
-      reviewMode: "",
+      reviewMode,
     })
       .then((id) => {
         closeNewTask();
@@ -181,6 +185,14 @@ function NewTaskForm({ node }: { node: TreeNode }) {
             <p className="text-xs text-muted-foreground">
               What you want to build, in your own words. High level or detailed.
             </p>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label>Review mode</Label>
+            <div>
+              <ReviewModePicker label="Task" value={reviewMode} onChange={setReviewMode} />
+            </div>
+            <p className="text-xs text-muted-foreground">{reviewModeHint(reviewMode)}</p>
           </div>
 
           <Collapsible

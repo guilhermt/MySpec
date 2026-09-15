@@ -9,6 +9,7 @@ import { StatusBadge } from "@/features/task/StatusBadge";
 import { hasArtifacts } from "@/features/task/status";
 import { currentStepOf, hasStepSession, stepStage } from "@/features/task/step-status";
 import { TaskModelsButton } from "@/features/task/TaskModels";
+import { TaskReviewModeButton } from "@/features/task/TaskReviewMode";
 import { findNode } from "@/features/tree/tree-model";
 import { asSessionStatus, asTaskStage, type TaskSummary } from "@/lib/wails";
 import { pause, resume } from "@/store/actions";
@@ -64,6 +65,7 @@ export function TaskHeader({ task, artifactsOpen, onToggleArtifacts }: TaskHeade
           {paused ? "Resume" : "Pause"}
         </Button>
       )}
+      <TaskReviewModeButton task={task} />
       <TaskModelsButton task={task} />
       <Tooltip>
         <TooltipTrigger

@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { StepList } from "@/features/task/StepList";
 import { renderWithStore } from "@/test/render";
@@ -121,6 +121,85 @@ describe("StepList", () => {
 
     expect(screen.getByText("Opus 5 · high")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /model:/ })).not.toBeInTheDocument();
+  });
+
+  it("lets a step that has not started pick its review mode", async () => {
+    const onReviewModeChange = vi.fn();
+    const step = makeStep({ number: 2, file: "2-check-the-token.md", title: "Check the token" });
+    const { user } = renderWithStore(
+      <StepList
+        steps={[makeStep({ status: "done", reviewModeEditable: false }), step]}
+        problems={[]}
+        currentStep={1}
+        onOpen={vi.fn()}
+        onReviewModeChange={onReviewModeChange}
+      />,
+      { state },
+    );
+
+    expect(screen.queryByRole("button", { name: /Step 1 review mode:/ })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Step 2 review mode: Manual" }));
+    await user.click(await screen.findByRole("menuitemradio", { name: "Agent" }));
+
+    expect(onReviewModeChange).toHaveBeenCalledWith(step, "agent");
+  });
+
+  it("sets a step with a mode of its own apart from one that follows the task", () => {
+    renderWithStore(
+      <StepList
+        steps={[
+          makeStep({ reviewMode: "agent", reviewModeAdjusted: true }),
+          makeStep({ number: 2, file: "2-check-the-token.md", title: "Check the token" }),
+        ]}
+        problems={[]}
+        currentStep={0}
+        onOpen={vi.fn()}
+        onReviewModeChange={vi.fn()}
+      />,
+      { state },
+    );
+
+    expect(screen.getByRole("button", { name: "Step 1 review mode: Agent" })).not.toHaveClass(
+      "text-muted-foreground",
+    );
+    expect(screen.getByRole("button", { name: "Step 2 review mode: Manual" })).toHaveClass(
+      "text-muted-foreground",
+    );
+  });
+
+  it("says why a started step was reviewed by the user", () => {
+    renderWithStore(
+      <StepList
+        steps={[
+          makeStep({
+            status: "done",
+            reviewModeEditable: false,
+            reviewFallback: "taken_over",
+          }),
+          makeStep({
+            number: 2,
+            file: "2-check-the-token.md",
+            title: "Check the token",
+            status: "agent_review",
+            reviewMode: "agent",
+            reviewModeEditable: false,
+          }),
+        ]}
+        problems={[]}
+        currentStep={2}
+        onOpen={vi.fn()}
+        onReviewModeChange={vi.fn()}
+      />,
+      { state },
+    );
+
+    const [taken, held] = screen.getAllByRole("listitem") as [HTMLElement, HTMLElement];
+    expect(taken).toHaveTextContent("Manual");
+    expect(within(taken).getByText("Taken over from the agent review")).toBeInTheDocument();
+    expect(held).toHaveTextContent("Agent");
+    expect(within(held).queryByText(/Taken over|didn't/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /review mode:/ })).not.toBeInTheDocument();
   });
 
   it("is a plain list when there is nothing to open", () => {

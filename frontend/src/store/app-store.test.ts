@@ -1126,7 +1126,7 @@ describe("settings", () => {
 
     expect(result.current).toEqual({
       settingsOpen: true,
-      settingsSection: "models",
+      settingsSection: "defaults",
       promptEdit: null,
       pendingLeave: null,
     });

@@ -57,7 +57,7 @@ export function resetAppStore(options: StoreOptions = {}): void {
     leftovers: options.ui?.leftovers ?? null,
     flashing: options.ui?.flashing ?? new Set<string>(),
     settingsOpen: options.ui?.settingsOpen ?? false,
-    settingsSection: options.ui?.settingsSection ?? "models",
+    settingsSection: options.ui?.settingsSection ?? "defaults",
     promptEdit: options.ui?.promptEdit ?? null,
     pendingLeave: options.ui?.pendingLeave ?? null,
   });

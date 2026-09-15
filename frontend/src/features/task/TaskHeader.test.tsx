@@ -119,6 +119,34 @@ describe("TaskHeader", () => {
     ).toBeInTheDocument();
   });
 
+  it("has the review mode of the task a click away", async () => {
+    const { user } = header({ reviewMode: "agent" });
+
+    await user.click(screen.getByRole("button", { name: "Review mode: Agent" }));
+
+    expect(await screen.findByRole("heading", { name: "Review mode" })).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "A change applies to the steps that haven't started and have no choice of their own.",
+      ),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Task review mode: Agent" }));
+    await user.click(await screen.findByRole("menuitemradio", { name: "Manual" }));
+
+    expect(api.setReviewMode).toHaveBeenCalledWith("task-1", "manual");
+    // The menu is a child popup of the panel: a click in it leaves the panel open.
+    expect(screen.getByRole("heading", { name: "Review mode" })).toBeInTheDocument();
+  });
+
+  it("keeps the review mode as it is once every step started", async () => {
+    const { user } = header({ reviewModeEditable: false });
+
+    await user.click(screen.getByRole("button", { name: "Review mode: Manual" }));
+
+    expect(await screen.findByRole("button", { name: "Task review mode: Manual" })).toBeDisabled();
+  });
+
   it("says the panel is empty until an artifact exists", async () => {
     const onToggle = vi.fn();
     const { user } = header({}, onToggle);

@@ -179,11 +179,11 @@ describe("App", () => {
 
     await user.keyboard("{Control>},{/Control}");
 
-    expect(await screen.findByRole("heading", { name: "Models" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Defaults" })).toBeInTheDocument();
 
     await user.keyboard("{Control>},{/Control}");
 
-    expect(screen.queryByRole("heading", { name: "Models" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Defaults" })).not.toBeInTheDocument();
   });
 
   it("leaves Ctrl+, alone without a workspace", async () => {
@@ -203,11 +203,11 @@ describe("App", () => {
     await screen.findByRole("treeitem", { name: "projects Root" });
 
     await user.click(screen.getByRole("button", { name: "Settings" }));
-    expect(await screen.findByRole("heading", { name: "Models" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Defaults" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /^add-login,/ }));
 
-    expect(screen.queryByRole("heading", { name: "Models" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Defaults" })).not.toBeInTheDocument();
     expect(await screen.findByRole("treeitem", { name: /add-login/ })).toHaveAttribute(
       "aria-selected",
       "true",

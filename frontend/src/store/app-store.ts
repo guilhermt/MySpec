@@ -34,8 +34,8 @@ export function repoNodeId(path: string): NodeId {
   return `repo:${path}`;
 }
 
-/** SettingsSection is what the settings screen shows: the model defaults or one prompt. */
-export type SettingsSection = "models" | PromptStage;
+/** SettingsSection is what the settings screen shows: the defaults of a new task or one prompt. */
+export type SettingsSection = "defaults" | PromptStage;
 
 /** StepTab is the conversation of a step on screen: the agent that implements it, or the one that reviews it. */
 export type StepTab = "implementer" | "reviewer";
@@ -292,7 +292,7 @@ export const useAppStore = create<AppStore>()((set, get) => {
     app: null,
     error: null,
     settingsOpen: false,
-    settingsSection: "models",
+    settingsSection: "defaults",
     promptEdit: null,
     pendingLeave: null,
     ...initialTreeUi(),

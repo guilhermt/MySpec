@@ -11,7 +11,7 @@ import { useArtifact } from "@/features/task/useArtifact";
 import { repoName, reposOf } from "@/lib/repos";
 import { stepSituation } from "@/lib/situations";
 import { asTaskStage, type RepoPR, type Step, type TaskStage, type TaskSummary } from "@/lib/wails";
-import { setStepModel } from "@/store/actions";
+import { setStepModel, setStepReviewMode } from "@/store/actions";
 import { useAppStore } from "@/store/app-store";
 
 const LOADING_WIDTHS = ["w-1/2", "w-full", "w-3/4"];
@@ -199,6 +199,7 @@ export function ArtifactPanel({ task }: ArtifactPanelProps) {
             situation={stepSituation(task, task.currentStep)}
             onOpen={openStepFile}
             onModelChange={(step, choice) => void setStepModel(task.id, step.number, choice)}
+            onReviewModeChange={(step, mode) => void setStepReviewMode(task.id, step.number, mode)}
           />
         ) : view === "pr" ? (
           <PRList task={task} onOpen={(file) => setSelection({ pr: file })} />

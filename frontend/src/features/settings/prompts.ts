@@ -17,9 +17,15 @@ export const PROMPTS: readonly PromptMeta[] = [
       "Opens the plan session. Holds the template of the step files, which are the prompts of the implementation.",
   },
   {
+    stage: "step_review",
+    name: "Step review",
+    description: "Opens the review session of a step in Agent mode.",
+  },
+  {
     stage: "commit",
     name: "Commit",
-    description: "Sent after you approve a step, and after you approve the changes of a PR review.",
+    description:
+      "Sent after a step is approved, by you or by the agent review, and after you approve the changes of a PR review.",
   },
   { stage: "pr", name: "PR", description: "Opens the pull request session of each repository." },
   {
@@ -50,6 +56,7 @@ export const PLACEHOLDERS: Readonly<Record<string, PlaceholderMeta>> = {
   "{{prd_path}}": { meaning: "The PRD file" },
   "{{tech_spec_path}}": { meaning: "The tech spec file" },
   "{{steps_dir}}": { meaning: "The folder of the step files" },
+  "{{step_path}}": { meaning: "The file of the step under review" },
   "{{repositories}}": { meaning: "The list of the repositories the task may touch" },
   "{{initial_context}}": {
     meaning: "The initial context written when the task was created",
@@ -62,6 +69,11 @@ export const PLACEHOLDERS: Readonly<Record<string, PlaceholderMeta>> = {
   "{{review_path}}": { meaning: "The file the agent writes the review report to" },
   "{{pr_number}}": { meaning: "The number of the pull request" },
   "{{pr_url}}": { meaning: "The address of the pull request" },
+  "{{what_to_commit}}": {
+    meaning:
+      "What the commit takes: what is staged, or every change of the worktree after an agent review",
+    whenRemoved: "Without it, the instruction is added at the end.",
+  },
   "{{push}}": {
     meaning:
       "The instruction to push the commit when it goes to an open pull request; empty otherwise",
