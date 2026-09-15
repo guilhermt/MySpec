@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
+
 	"github.com/guilhermt/myspec/internal/task"
 )
 
@@ -337,6 +339,89 @@ func TestReadPlanOrdersProblemsByFileWithThePlanLast(t *testing.T) {
 	}
 	if got := messages(plan); !slices.Equal(got, want) {
 		t.Errorf("problems = %v, want %v", got, want)
+	}
+}
+
+// readOneShot writes a One-Shot document into a fresh folder and reads it as
+// the plan of the task add-login.
+func readOneShot(t *testing.T, content string, repos []task.Repository) task.Plan {
+	t.Helper()
+
+	path := filepath.Join(t.TempDir(), task.OneShotFile)
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("write %s: %v", path, err)
+	}
+	return task.OneShotPlan(path, "add-login", repos)
+}
+
+func TestOneShotPlanOfADocumentNotWrittenIsAbsent(t *testing.T) {
+	t.Parallel()
+
+	missing := task.OneShotPlan(filepath.Join(t.TempDir(), task.OneShotFile), "add-login", planRepos())
+	if diff := cmp.Diff(task.Plan{}, missing); diff != "" {
+		t.Errorf("plan of a missing document mismatch (-want +got):\n%s", diff)
+	}
+
+	// An agent creating the file empty has not written it yet.
+	if diff := cmp.Diff(task.Plan{}, readOneShot(t, "", planRepos())); diff != "" {
+		t.Errorf("plan of an empty document mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestOneShotPlanIsOneStepInTheRepositoryOfTheTask(t *testing.T) {
+	t.Parallel()
+
+	plan := readOneShot(t, "# Add the login — One-Shot\n\nThis document is the complete guide.\n", planRepos()[:1])
+
+	want := task.Plan{
+		Present: true,
+		Steps: []task.Step{{
+			Number: 1, File: task.OneShotFile, Title: "Add the login", Repository: "api", RepoPath: "/workspace/api",
+		}},
+	}
+	if diff := cmp.Diff(want, plan); diff != "" {
+		t.Errorf("OneShotPlan() mismatch (-want +got):\n%s", diff)
+	}
+	if !plan.Valid() {
+		t.Error("Valid() = false, want the plan of a written document valid")
+	}
+}
+
+func TestOneShotPlanTitlesTheStepAfterTheDocument(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct{ content, want string }{
+		"a heading with the suffix":    {content: "# Add the login — One-Shot\n", want: "Add the login"},
+		"a heading without the suffix": {content: "# Add the login\n", want: "Add the login"},
+		"no heading":                   {content: "Just a paragraph.\n", want: "add-login"},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			plan := readOneShot(t, tc.content, planRepos()[:1])
+			if len(plan.Steps) != 1 {
+				t.Fatalf("steps = %+v, want one", plan.Steps)
+			}
+			if got := plan.Steps[0].Title; got != tc.want {
+				t.Errorf("Title = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestOneShotPlanOfATaskWithoutARepository(t *testing.T) {
+	t.Parallel()
+
+	plan := readOneShot(t, "# Add the login — One-Shot\n", nil)
+
+	want := task.Plan{
+		Present: true,
+		Steps:   []task.Step{{Number: 1, File: task.OneShotFile, Title: "Add the login"}},
+	}
+	if diff := cmp.Diff(want, plan); diff != "" {
+		t.Errorf("OneShotPlan() mismatch (-want +got):\n%s", diff)
 	}
 }
 

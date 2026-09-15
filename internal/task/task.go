@@ -18,57 +18,34 @@ import (
 // Stage is how far a task has gone in the workflow.
 type Stage string
 
-// The stages a task goes through in this version of the product, in order.
+// The stages a task may be in, in either mode.
 const (
 	StagePRD            Stage = "prd"
 	StageTechSpec       Stage = "tech_spec"
 	StagePlan           Stage = "plan"
+	StageOneShot        Stage = "one_shot"
 	StageImplementation Stage = "implementation"
 	StagePR             Stage = "pr"
 )
 
-// Stages lists the stages in workflow order.
-var Stages = []Stage{StagePRD, StageTechSpec, StagePlan, StageImplementation, StagePR}
+// Stages lists every stage a task may be in; the order of each mode is
+// Mode.Stages.
+var Stages = []Stage{StagePRD, StageTechSpec, StagePlan, StageOneShot, StageImplementation, StagePR}
 
 // ParseStage narrows a stored or received string to a stage.
 func ParseStage(value string) (Stage, error) {
 	stage := Stage(value)
-	if stage.Index() < 0 {
+	if !slices.Contains(Stages, stage) {
 		return "", fmt.Errorf("parse stage %q: %w", value, ErrUnknownStage)
 	}
 	return stage, nil
-}
-
-// Index is the position of the stage in Stages, -1 for an unknown one.
-func (s Stage) Index() int {
-	return slices.Index(Stages, s)
-}
-
-// Next is the stage after s; ok is false for the last one and for an unknown
-// stage.
-func (s Stage) Next() (next Stage, ok bool) {
-	index := s.Index()
-	if index < 0 || index == len(Stages)-1 {
-		return "", false
-	}
-	return Stages[index+1], true
 }
 
 // HasSession reports whether the stage is driven by a conversation of its own.
 // Implementation and PR have conversations too, one per step and one per
 // repository, and neither is the task's.
 func (s Stage) HasSession() bool {
-	return s.Index() >= 0 && s != StageImplementation && s != StagePR
-}
-
-// From lists s and every stage after it, in order. An unknown stage lists
-// nothing.
-func (s Stage) From() []Stage {
-	index := s.Index()
-	if index < 0 {
-		return nil
-	}
-	return slices.Clone(Stages[index:])
+	return slices.Contains(Stages, s) && s != StageImplementation && s != StagePR
 }
 
 // Repository is a repository a task may touch, as the prompts name it and as
@@ -84,6 +61,7 @@ type Task struct {
 	WorkspacePath   string
 	Name            string
 	RepoPath        string // "" for a root task
+	Mode            Mode   // how the task is conducted; chosen at creation, never changed
 	InitialContext  string
 	Stage           Stage
 	Revisiting      bool
@@ -111,6 +89,7 @@ func (t Task) Dir() string {
 const (
 	PRDFile      = "PRD.md"
 	TechSpecFile = "tech-spec.md"
+	OneShotFile  = "one-shot.md"
 	StepsDirName = "steps"
 )
 
@@ -124,19 +103,35 @@ func (t Task) TechSpecPath() string {
 	return filepath.Join(t.ArtifactsDir, TechSpecFile)
 }
 
+// OneShotPath is the artifact that ends the planning of a One-Shot task.
+func (t Task) OneShotPath() string {
+	return filepath.Join(t.ArtifactsDir, OneShotFile)
+}
+
 // StepsDir is the folder the plan stage fills with step files.
 func (t Task) StepsDir() string {
 	return filepath.Join(t.ArtifactsDir, StepsDirName)
 }
 
+// StepPath is the file that is the prompt of a step: the document of a
+// One-Shot task, the step file of a Structured one.
+func (t Task) StepPath(step Step) string {
+	if t.Mode == ModeOneShot {
+		return t.OneShotPath()
+	}
+	return filepath.Join(t.StepsDir(), step.File)
+}
+
 // The ways a task fails to be created or found.
 var (
-	ErrInvalidName  = errors.New("task: invalid name")
-	ErrNameTaken    = errors.New("task: name already used in this workspace")
-	ErrEmptyContext = errors.New("task: initial context is required")
-	ErrNotFound     = errors.New("task: not found")
-	ErrRepoOutside  = errors.New("task: repository is not in the workspace")
-	ErrUnknownStage = errors.New("task: unknown stage")
+	ErrInvalidName   = errors.New("task: invalid name")
+	ErrNameTaken     = errors.New("task: name already used in this workspace")
+	ErrEmptyContext  = errors.New("task: initial context is required")
+	ErrNotFound      = errors.New("task: not found")
+	ErrRepoOutside   = errors.New("task: repository is not in the workspace")
+	ErrUnknownStage  = errors.New("task: unknown stage")
+	ErrUnknownMode   = errors.New("task: unknown mode")
+	ErrOneShotAtRoot = errors.New("task: a One-Shot task is created in a repository")
 )
 
 // NameMaxLen bounds the task name.

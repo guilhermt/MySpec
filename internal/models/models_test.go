@@ -77,6 +77,18 @@ func TestParseStage(t *testing.T) {
 	}
 }
 
+func TestStagesAreInTheOrderOfTheSettings(t *testing.T) {
+	t.Parallel()
+
+	want := []models.Stage{
+		models.PRD, models.TechSpec, models.Plan, models.OneShot,
+		models.Implementation, models.StepReview, models.PR, models.PRReview,
+	}
+	if diff := cmp.Diff(want, models.Stages); diff != "" {
+		t.Errorf("Stages mismatch (-want +got):\n%s", diff)
+	}
+}
+
 func TestFactoryIsTheTableOfThePRD(t *testing.T) {
 	t.Parallel()
 
@@ -84,6 +96,7 @@ func TestFactoryIsTheTableOfThePRD(t *testing.T) {
 		models.PRD:            {Model: models.Fable51, Effort: models.High},
 		models.TechSpec:       {Model: models.Fable51, Effort: models.High},
 		models.Plan:           {Model: models.Fable51, Effort: models.High},
+		models.OneShot:        {Model: models.Fable51, Effort: models.High},
 		models.Implementation: {Model: models.Opus5, Effort: models.High},
 		models.StepReview:     {Model: models.Opus5, Effort: models.High},
 		models.PR:             {Model: models.Opus5, Effort: models.Medium},
@@ -125,5 +138,19 @@ func TestCompleteFillsWhatIsMissingOrInvalid(t *testing.T) {
 	}
 	if diff := cmp.Diff(models.Factory(), models.Complete(nil)); diff != "" {
 		t.Errorf("Complete(nil) mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestCompleteGivesTheOneShotPlanningToDefaultsSavedBeforeIt(t *testing.T) {
+	t.Parallel()
+
+	saved := models.Factory()
+	delete(saved, models.OneShot)
+	saved[models.Plan] = models.Choice{Model: models.Opus5, Effort: models.Max}
+
+	want := models.Factory()
+	want[models.Plan] = models.Choice{Model: models.Opus5, Effort: models.Max}
+	if diff := cmp.Diff(want, models.Complete(saved)); diff != "" {
+		t.Errorf("Complete() mismatch (-want +got):\n%s", diff)
 	}
 }

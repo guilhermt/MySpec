@@ -58,14 +58,16 @@ const (
 	PRD            Stage = "prd"
 	TechSpec       Stage = "tech_spec"
 	Plan           Stage = "plan"
+	OneShot        Stage = "one_shot"
 	Implementation Stage = "implementation"
 	StepReview     Stage = "step_review"
 	PR             Stage = "pr"
 	PRReview       Stage = "pr_review"
 )
 
-// Stages lists the stages in workflow order.
-var Stages = []Stage{PRD, TechSpec, Plan, Implementation, StepReview, PR, PRReview}
+// Stages lists every stage that carries a choice, in the order the settings
+// list them; the stages of a task are task.Mode.ModelStages.
+var Stages = []Stage{PRD, TechSpec, Plan, OneShot, Implementation, StepReview, PR, PRReview}
 
 // Set is a choice for every stage.
 type Set map[Stage]Choice
@@ -102,6 +104,7 @@ func Factory() Set {
 		PRD:            {Model: Fable51, Effort: High},
 		TechSpec:       {Model: Fable51, Effort: High},
 		Plan:           {Model: Fable51, Effort: High},
+		OneShot:        {Model: Fable51, Effort: High},
 		Implementation: {Model: Opus5, Effort: High},
 		StepReview:     {Model: Opus5, Effort: High},
 		PR:             {Model: Opus5, Effort: Medium},

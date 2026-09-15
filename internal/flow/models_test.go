@@ -157,28 +157,107 @@ func TestStageModelsSayWhatCanStillChange(t *testing.T) {
 	}
 }
 
+func TestStageModelsOfAOneShotTaskSayWhatCanStillChange(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		stage task.Stage
+		steps []flow.StepState
+		repos []flow.RepoState
+		want  map[models.Stage]rule
+	}{
+		"the planning, which starts with the task": {
+			stage: task.StageOneShot,
+			want: map[models.Stage]rule{
+				models.OneShot:        {Live: true},
+				models.Implementation: {Editable: true},
+				models.StepReview:     {Editable: true},
+				models.PR:             {Editable: true},
+				models.PRReview:       {Editable: true},
+			},
+		},
+		"implementation with the step still to start": {
+			stage: task.StageImplementation,
+			steps: []flow.StepState{stepAt(1, flow.StepNotStarted)},
+			want: map[models.Stage]rule{
+				models.OneShot:        {},
+				models.Implementation: {Editable: true},
+				models.StepReview:     {Editable: true},
+				models.PR:             {Editable: true},
+				models.PRReview:       {Editable: true},
+			},
+		},
+		"implementation with the step started": {
+			stage: task.StageImplementation,
+			steps: []flow.StepState{stepAt(1, flow.StepImplementing)},
+			want: map[models.Stage]rule{
+				models.OneShot:        {},
+				models.Implementation: {Live: true},
+				models.StepReview:     {Editable: true},
+				models.PR:             {Editable: true},
+				models.PRReview:       {Editable: true},
+			},
+		},
+		"the pull request under review": {
+			stage: task.StagePR,
+			repos: []flow.RepoState{
+				{Slug: "api", Status: flow.RepoReviewing, SessionStage: session.PRReviewStage("api")},
+			},
+			want: map[models.Stage]rule{
+				models.OneShot:        {},
+				models.Implementation: {},
+				models.StepReview:     {},
+				models.PR:             {},
+				models.PRReview:       {Live: true},
+			},
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			tk := task.Task{ID: "task-1", Mode: task.ModeOneShot, Stage: tc.stage}
+			got := rulesOf(flow.StageModels(tk, tc.steps, tc.repos))
+			if diff := cmp.Diff(tc.want, got); diff != "" {
+				t.Errorf("stage models mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
 func TestStageModelsCarryTheChoiceOfTheTask(t *testing.T) {
 	t.Parallel()
 
-	tk := task.Task{ID: "task-1", Stage: task.StagePRD, Models: task.Models{
-		Stages: models.Set{models.PR: {Model: models.Sonnet5, Effort: models.Low}},
-	}}
-	got := flow.StageModels(tk, nil, nil)
-
-	// The stage the task has a choice for brings it; the ones it lacks bring
-	// the factory choice.
-	want := models.Factory()
-	want[models.PR] = models.Choice{Model: models.Sonnet5, Effort: models.Low}
-	if len(got) != len(models.Stages) {
-		t.Fatalf("stages = %d, want the %d of the workflow", len(got), len(models.Stages))
+	tests := map[string]task.Task{
+		"structured": {ID: "task-1", Mode: task.ModeStructured, Stage: task.StagePRD},
+		"one-shot":   {ID: "task-1", Mode: task.ModeOneShot, Stage: task.StageOneShot},
 	}
-	for i, state := range got {
-		if state.Stage != models.Stages[i] {
-			t.Errorf("stage %d = %q, want %q", i, state.Stage, models.Stages[i])
-		}
-		if diff := cmp.Diff(want[state.Stage], state.Choice); diff != "" {
-			t.Errorf("choice of %s mismatch (-want +got):\n%s", state.Stage, diff)
-		}
+
+	for name, tk := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			tk.Models = task.Models{Stages: models.Set{models.PR: {Model: models.Sonnet5, Effort: models.Low}}}
+			got := flow.StageModels(tk, nil, nil)
+
+			// The stage the task has a choice for brings it; the ones it lacks bring
+			// the factory choice.
+			want := models.Factory()
+			want[models.PR] = models.Choice{Model: models.Sonnet5, Effort: models.Low}
+			stages := tk.Mode.ModelStages()
+			if len(got) != len(stages) {
+				t.Fatalf("stages = %d, want the %d of the mode", len(got), len(stages))
+			}
+			for i, state := range got {
+				if state.Stage != stages[i] {
+					t.Errorf("stage %d = %q, want %q", i, state.Stage, stages[i])
+				}
+				if diff := cmp.Diff(want[state.Stage], state.Choice); diff != "" {
+					t.Errorf("choice of %s mismatch (-want +got):\n%s", state.Stage, diff)
+				}
+			}
+		})
 	}
 }
 
@@ -322,6 +401,17 @@ func TestSetStageModelRefusesAStageThatStarted(t *testing.T) {
 	wantErrIs(t, f.service.SetStageModel(t.Context(), "task-1", models.TechSpec, aChoice), flow.ErrModelLocked)
 	wantErrIs(t, f.service.SetStageModel(t.Context(), "task-1", models.PRD, aChoice), flow.ErrModelLocked)
 	wantErrIs(t, f.service.SetStageModel(t.Context(), "nobody", models.PRD, aChoice), task.ErrNotFound)
+	f.wantTaskCalls(t)
+}
+
+func TestSetStageModelRefusesAStageTheModeOfTheTaskDoesNotHave(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.tasks.add("task-1", task.StagePRD, task.Artifacts{})
+
+	err := f.service.SetStageModel(t.Context(), "task-1", models.OneShot, aChoice)
+	wantErrIs(t, err, models.ErrUnknownStage)
 	f.wantTaskCalls(t)
 }
 

@@ -1,6 +1,7 @@
 package task
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"os"
@@ -221,4 +222,30 @@ func headingTitle(body string) (title string, found bool) {
 		return match[1], true
 	}
 	return "", false
+}
+
+// oneShotTitleSuffix closes the title the One-Shot prompt gives the document,
+// which the step does not repeat.
+const oneShotTitleSuffix = " — One-Shot"
+
+// OneShotPlan is the plan of a One-Shot task: one step, the document itself,
+// in the repository of the task. A document not written yet is an absent plan.
+func OneShotPlan(path, name string, repos []Repository) Plan {
+	content, err := os.ReadFile(path)
+	if err != nil || len(content) == 0 {
+		return Plan{}
+	}
+
+	heading, _ := headingTitle(string(content))
+	step := Step{
+		Number: 1,
+		File:   OneShotFile,
+		Title:  cmp.Or(strings.TrimSpace(strings.TrimSuffix(heading, oneShotTitleSuffix)), name),
+	}
+	// A task whose repository left the workspace has none, and the preparation
+	// of the step blocks on that.
+	if len(repos) > 0 {
+		step.Repository, step.RepoPath = repos[0].Rel, repos[0].Path
+	}
+	return Plan{Present: true, Steps: []Step{step}}
 }

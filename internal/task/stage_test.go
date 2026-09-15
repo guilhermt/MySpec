@@ -9,10 +9,12 @@ import (
 	"github.com/guilhermt/myspec/internal/task"
 )
 
-func TestStagesAreTheWorkflowOrder(t *testing.T) {
+func TestStagesListEveryStageOfEitherMode(t *testing.T) {
 	t.Parallel()
 
-	want := []task.Stage{task.StagePRD, task.StageTechSpec, task.StagePlan, task.StageImplementation, task.StagePR}
+	want := []task.Stage{
+		task.StagePRD, task.StageTechSpec, task.StagePlan, task.StageOneShot, task.StageImplementation, task.StagePR,
+	}
 	if !slices.Equal(task.Stages, want) {
 		t.Errorf("Stages = %v, want %v", task.Stages, want)
 	}
@@ -38,41 +40,6 @@ func TestParseStage(t *testing.T) {
 	}
 }
 
-func TestStageIndex(t *testing.T) {
-	t.Parallel()
-
-	if got := task.StagePlan.Index(); got != 2 {
-		t.Errorf("StagePlan.Index() = %d, want 2", got)
-	}
-	if got := task.Stage("nonsense").Index(); got != -1 {
-		t.Errorf("Index() of an unknown stage = %d, want -1", got)
-	}
-}
-
-func TestStageNext(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		stage task.Stage
-		next  task.Stage
-		ok    bool
-	}{
-		{task.StagePRD, task.StageTechSpec, true},
-		{task.StageTechSpec, task.StagePlan, true},
-		{task.StagePlan, task.StageImplementation, true},
-		{task.StageImplementation, task.StagePR, true},
-		{task.StagePR, "", false},
-		{"nonsense", "", false},
-	}
-
-	for _, test := range tests {
-		next, ok := test.stage.Next()
-		if next != test.next || ok != test.ok {
-			t.Errorf("%q.Next() = %q, %t, want %q, %t", test.stage, next, ok, test.next, test.ok)
-		}
-	}
-}
-
 func TestStageHasSession(t *testing.T) {
 	t.Parallel()
 
@@ -80,6 +47,7 @@ func TestStageHasSession(t *testing.T) {
 		task.StagePRD:            true,
 		task.StageTechSpec:       true,
 		task.StagePlan:           true,
+		task.StageOneShot:        true,
 		task.StageImplementation: false,
 		task.StagePR:             false,
 		"nonsense":               false,
@@ -92,18 +60,6 @@ func TestStageHasSession(t *testing.T) {
 	}
 }
 
-func TestStageFrom(t *testing.T) {
-	t.Parallel()
-
-	want := []task.Stage{task.StageTechSpec, task.StagePlan, task.StageImplementation, task.StagePR}
-	if got := task.StageTechSpec.From(); !slices.Equal(got, want) {
-		t.Errorf("StageTechSpec.From() = %v, want %v", got, want)
-	}
-	if got := task.Stage("nonsense").From(); got != nil {
-		t.Errorf("From() of an unknown stage = %v, want nil", got)
-	}
-}
-
 func TestArtifactPaths(t *testing.T) {
 	t.Parallel()
 
@@ -112,12 +68,40 @@ func TestArtifactPaths(t *testing.T) {
 	tests := map[string]string{
 		tk.PRDPath():      filepath.Join(tk.ArtifactsDir, "PRD.md"),
 		tk.TechSpecPath(): filepath.Join(tk.ArtifactsDir, "tech-spec.md"),
+		tk.OneShotPath():  filepath.Join(tk.ArtifactsDir, "one-shot.md"),
 		tk.StepsDir():     filepath.Join(tk.ArtifactsDir, "steps"),
 	}
 	for got, want := range tests {
 		if got != want {
 			t.Errorf("path = %q, want %q", got, want)
 		}
+	}
+}
+
+func TestStepPathIsTheStepFileOrTheOneShotDocument(t *testing.T) {
+	t.Parallel()
+
+	dir := filepath.Join("/data", "tasks", "add-login")
+	step := task.Step{Number: 1, File: "1-add-the-store.md"}
+
+	tests := map[string]struct {
+		mode task.Mode
+		want string
+	}{
+		"structured": {mode: task.ModeStructured, want: filepath.Join(dir, "steps", "1-add-the-store.md")},
+		"no mode":    {mode: "", want: filepath.Join(dir, "steps", "1-add-the-store.md")},
+		"one-shot":   {mode: task.ModeOneShot, want: filepath.Join(dir, "one-shot.md")},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			tk := task.Task{Mode: tc.mode, ArtifactsDir: dir}
+			if got := tk.StepPath(step); got != tc.want {
+				t.Errorf("StepPath() = %q, want %q", got, tc.want)
+			}
+		})
 	}
 }
 
@@ -134,7 +118,14 @@ func TestArtifactsDone(t *testing.T) {
 			artifacts: task.Artifacts{},
 			want: map[task.Stage]bool{
 				task.StagePRD: false, task.StageTechSpec: false,
-				task.StagePlan: false, task.StageImplementation: true,
+				task.StagePlan: false, task.StageOneShot: false, task.StageImplementation: true,
+			},
+		},
+		{
+			name:      "the One-Shot document written",
+			artifacts: task.Artifacts{OneShot: true, Plan: task.Plan{Present: true}},
+			want: map[task.Stage]bool{
+				task.StagePRD: false, task.StageOneShot: true, task.StageImplementation: true,
 			},
 		},
 		{
@@ -183,6 +174,7 @@ func TestArtifactsHas(t *testing.T) {
 	tests := map[task.ArtifactKind]bool{
 		task.ArtifactPRD:      true,
 		task.ArtifactTechSpec: false,
+		task.ArtifactOneShot:  false,
 		task.ArtifactPlan:     true, // present even though it is not valid
 		"nonsense":            false,
 	}
@@ -190,6 +182,10 @@ func TestArtifactsHas(t *testing.T) {
 		if got := artifacts.Has(kind); got != want {
 			t.Errorf("Has(%q) = %t, want %t", kind, got, want)
 		}
+	}
+
+	if !(task.Artifacts{OneShot: true}).Has(task.ArtifactOneShot) {
+		t.Error("Has(one_shot) = false, want true for a written One-Shot document")
 	}
 }
 

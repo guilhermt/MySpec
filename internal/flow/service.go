@@ -127,7 +127,7 @@ func (s *Service) evaluate(ctx context.Context, id string) {
 
 // advance closes a finished stage and starts the one after it.
 func (s *Service) advance(ctx context.Context, t task.Task) error {
-	next, ok := t.Stage.Next()
+	next, ok := t.Mode.Next(t.Stage)
 	if !ok {
 		return nil
 	}
@@ -164,7 +164,8 @@ func (s *Service) start(ctx context.Context, t task.Task, restarted bool) error 
 
 // Back reopens a finished stage of a task, throwing away the conversations and
 // the artifacts of every stage after it. The target is the PRD or the tech
-// spec, and the task waits for Continue from there on.
+// spec of a Structured task, or the planning of a One-Shot task, and the task
+// waits for Continue from there on.
 func (s *Service) Back(ctx context.Context, id string, target task.Stage) error {
 	s.abortPrepare(id)
 
@@ -176,8 +177,7 @@ func (s *Service) Back(ctx context.Context, id string, target task.Stage) error 
 	if !ok {
 		return fmt.Errorf("back to %s: %w", target, task.ErrNotFound)
 	}
-	revisitable := target == task.StagePRD || target == task.StageTechSpec
-	if !revisitable || target.Index() >= t.Stage.Index() {
+	if !revisitable(t.Mode, target) || t.Mode.Index(target) >= t.Mode.Index(t.Stage) {
 		return fmt.Errorf("back to %s from %s: %w", target, t.Stage, ErrInvalidTarget)
 	}
 
@@ -186,8 +186,8 @@ func (s *Service) Back(ctx context.Context, id string, target task.Stage) error 
 	if err := s.tearDownSteps(ctx, t); err != nil {
 		return err
 	}
-	after, _ := target.Next()
-	if err := s.sessions.Discard(ctx, id, sessionStages(after)...); err != nil {
+	after, _ := t.Mode.Next(target)
+	if err := s.sessions.Discard(ctx, id, sessionStages(t.Mode, after)...); err != nil {
 		return err
 	}
 	if err := s.tasks.RemoveArtifacts(ctx, id, after); err != nil {
@@ -206,6 +206,15 @@ func (s *Service) Back(ctx context.Context, id string, target task.Stage) error 
 	return s.sessions.Open(ctx, TaskInfo(reopened, a, s.tasks.Repositories(reopened)))
 }
 
+// revisitable reports whether a task of a mode can go back to a stage: the PRD
+// and the tech spec of a Structured task, the planning of a One-Shot task.
+func revisitable(mode task.Mode, target task.Stage) bool {
+	if mode == task.ModeOneShot {
+		return target == task.StageOneShot
+	}
+	return target == task.StagePRD || target == task.StageTechSpec
+}
+
 // Discard throws away a stage of a task and everything after it, and starts
 // the stage again from scratch.
 func (s *Service) Discard(ctx context.Context, id string, stage task.Stage) error {
@@ -219,14 +228,15 @@ func (s *Service) Discard(ctx context.Context, id string, stage task.Stage) erro
 	if !ok {
 		return fmt.Errorf("discard %s: %w", stage, task.ErrNotFound)
 	}
-	if !stage.HasSession() || stage.Index() > t.Stage.Index() {
+	index := t.Mode.Index(stage)
+	if !stage.HasSession() || index < 0 || index > t.Mode.Index(t.Stage) {
 		return fmt.Errorf("discard %s of a task in %s: %w", stage, t.Stage, ErrInvalidTarget)
 	}
 
 	if err := s.tearDownSteps(ctx, t); err != nil {
 		return err
 	}
-	if err := s.sessions.Discard(ctx, id, sessionStages(stage)...); err != nil {
+	if err := s.sessions.Discard(ctx, id, sessionStages(t.Mode, stage)...); err != nil {
 		return err
 	}
 	if err := s.tasks.RemoveArtifacts(ctx, id, stage); err != nil {
@@ -343,10 +353,10 @@ func (s *Service) lockOf(id string) *taskLock {
 	return l
 }
 
-// sessionStages names the stages from one on that have a conversation, which
-// is what discarding sessions takes.
-func sessionStages(from task.Stage) []string {
-	stages := from.From()
+// sessionStages names the stages of a mode from one on that have a
+// conversation, which is what discarding sessions takes.
+func sessionStages(mode task.Mode, from task.Stage) []string {
+	stages := mode.From(from)
 	names := make([]string, 0, len(stages))
 	for _, stage := range stages {
 		if stage.HasSession() {

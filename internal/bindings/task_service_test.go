@@ -43,12 +43,13 @@ func createdTask(t *testing.T) (*fixture, string, string) {
 	return f, dir, id
 }
 
-// startedTaskModels is the model of every stage of a task that has just been
-// created, in workflow order: the PRD session is the live one, and every other
+// startedTaskModels is the model of every stage of a Structured task that has
+// just been created, in order: the PRD session is the live one, and every other
 // stage is still to start.
 func startedTaskModels(set models.Set) []bindings.TaskStageModel {
-	converted := make([]bindings.TaskStageModel, 0, len(models.Stages))
-	for _, stage := range models.Stages {
+	stages := task.ModeStructured.ModelStages()
+	converted := make([]bindings.TaskStageModel, 0, len(stages))
+	for _, stage := range stages {
 		c := set[stage]
 		converted = append(converted, bindings.TaskStageModel{
 			Stage:    string(stage),

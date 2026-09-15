@@ -306,14 +306,21 @@ func (m *memTasks) RemoveArtifacts(_ context.Context, id string, from task.Stage
 	if m.err != nil {
 		return m.err
 	}
+	var mode task.Mode
+	if index := m.indexOf(id); index >= 0 {
+		mode = m.items[index].Mode
+	}
 	a := m.artifacts[id]
-	for _, stage := range from.From() {
+	for _, stage := range mode.From(from) {
 		switch stage {
 		case task.StagePRD:
 			a.PRD = false
 		case task.StageTechSpec:
 			a.TechSpec = false
 		case task.StagePlan:
+			a.Plan = task.Plan{}
+		case task.StageOneShot:
+			a.OneShot = false
 			a.Plan = task.Plan{}
 		case task.StageImplementation:
 		case task.StagePR:

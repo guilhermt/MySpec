@@ -304,7 +304,7 @@ func (s *Service) ReviewStepMyself(ctx context.Context, id string) error {
 // still reaches a step: the plan is still to come, or a step of it has not
 // started.
 func ReviewModeEditable(t task.Task, steps []StepState) bool {
-	if t.Stage.Index() < task.StageImplementation.Index() {
+	if t.Mode.Index(t.Stage) < t.Mode.Index(task.StageImplementation) {
 		return true
 	}
 	return t.Stage == task.StageImplementation && slices.ContainsFunc(steps, StepState.ModeEditable)

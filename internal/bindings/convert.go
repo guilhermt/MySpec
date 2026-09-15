@@ -45,7 +45,8 @@ func FromNotice(notice *workspace.Notice) *Notice {
 	return &Notice{Path: notice.Path, Reason: string(notice.Reason)}
 }
 
-// FromModelSet converts the choice of every stage, in workflow order.
+// FromModelSet converts the choice of every stage, in the order the settings
+// list them.
 func FromModelSet(set models.Set) []StageModel {
 	converted := make([]StageModel, len(models.Stages))
 	for i, stage := range models.Stages {

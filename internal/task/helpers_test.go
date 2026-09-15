@@ -536,6 +536,30 @@ func (f *fixture) create(t *testing.T, name, repoPath string) task.Task {
 	return created
 }
 
+// createOneShot adds a One-Shot task in the repository of the fixture through
+// the service, failing the test on error.
+func (f *fixture) createOneShot(t *testing.T, name string) task.Task {
+	t.Helper()
+
+	created, err := f.service.Create(t.Context(), task.CreateParams{
+		Name:           name,
+		RepoPath:       f.repos[0],
+		InitialContext: "a login screen",
+		Mode:           task.ModeOneShot,
+	})
+	if err != nil {
+		t.Fatalf("Create(%s) = %v, want nil", name, err)
+	}
+	return created
+}
+
+// writeOneShot writes the One-Shot document of a task, as the agent would.
+func writeOneShot(t *testing.T, tk task.Task, content string) {
+	t.Helper()
+
+	writeFile(t, tk.OneShotPath(), content)
+}
+
 // writePRD writes the PRD of a task, as the agent would.
 func writePRD(t *testing.T, tk task.Task, content string) {
 	t.Helper()

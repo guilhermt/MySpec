@@ -1037,13 +1037,14 @@ func TestFromTasksCarriesTheModelsOfEveryStage(t *testing.T) {
 	}
 }
 
-func TestFromModelSetIsInWorkflowOrder(t *testing.T) {
+func TestFromModelSetIsInTheOrderOfTheSettings(t *testing.T) {
 	t.Parallel()
 
 	want := []bindings.StageModel{
 		{Stage: "prd", Model: "claude-fable-5-1", Effort: "high"},
 		{Stage: "tech_spec", Model: "claude-fable-5-1", Effort: "high"},
 		{Stage: "plan", Model: "claude-fable-5-1", Effort: "high"},
+		{Stage: "one_shot", Model: "claude-fable-5-1", Effort: "high"},
 		{Stage: "implementation", Model: "claude-opus-5", Effort: "high"},
 		{Stage: "step_review", Model: "claude-opus-5", Effort: "high"},
 		{Stage: "pr", Model: "claude-opus-5", Effort: "medium"},

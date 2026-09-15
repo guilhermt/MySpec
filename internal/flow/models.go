@@ -30,21 +30,26 @@ type StageModelState struct {
 	Live bool
 }
 
-// StageModels is the model and effort of every stage of a task, in workflow
+// StageModels is the model and effort of every stage of the mode of a task, in
 // order, read against the steps and the repositories the flow reports for it.
 func StageModels(t task.Task, steps []StepState, repos []RepoState) []StageModelState {
-	before := func(stage task.Stage) bool { return t.Stage.Index() < stage.Index() }
+	before := func(stage task.Stage) bool { return t.Mode.Index(t.Stage) < t.Mode.Index(stage) }
 	implementing := t.Stage == task.StageImplementation
 	inPR := t.Stage == task.StagePR
 
-	states := make([]StageModelState, 0, len(models.Stages))
-	for _, stage := range models.Stages {
+	stages := t.Mode.ModelStages()
+	states := make([]StageModelState, 0, len(stages))
+	for _, stage := range stages {
 		state := StageModelState{Stage: stage, Choice: t.Models.Stage(stage)}
 		switch stage {
 		case models.PRD:
 			// The session of the PRD starts with the task, so there is never a
 			// moment in which the user could change it before it starts.
 			state.Live = t.Stage == task.StagePRD
+		case models.OneShot:
+			// The session of the One-Shot planning starts with the task, so there
+			// is never a moment in which the user could change it before it starts.
+			state.Live = t.Stage == task.StageOneShot
 		case models.TechSpec:
 			state.Editable = before(task.StageTechSpec)
 			state.Live = t.Stage == task.StageTechSpec

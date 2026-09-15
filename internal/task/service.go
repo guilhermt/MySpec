@@ -231,6 +231,7 @@ type CreateParams struct {
 	InitialContext string
 	Models         models.Set      // a choice for every stage: the defaults with what the user adjusted
 	ReviewMode     reviewmode.Mode // the mode of the task: the default, or what the user picked
+	Mode           Mode            // the mode of the task; "" is Structured
 }
 
 // Create validates, creates the artifact folder, persists and watches the task.
@@ -252,6 +253,14 @@ func (s *Service) Create(ctx context.Context, p CreateParams) (Task, error) {
 		}
 	}
 
+	mode := cmp.Or(p.Mode, ModeStructured)
+	if _, err := ParseMode(string(mode)); err != nil {
+		return Task{}, err
+	}
+	if mode == ModeOneShot && repoPath == "" {
+		return Task{}, fmt.Errorf("create task %s: %w", name, ErrOneShotAtRoot)
+	}
+
 	s.mu.Lock()
 	workspacePath := s.workspacePath
 	s.mu.Unlock()
@@ -265,8 +274,9 @@ func (s *Service) Create(ctx context.Context, p CreateParams) (Task, error) {
 		WorkspacePath:  workspacePath,
 		Name:           name,
 		RepoPath:       repoPath,
+		Mode:           mode,
 		InitialContext: initialContext,
-		Stage:          StagePRD,
+		Stage:          mode.Stages()[0],
 		ArtifactsDir:   ArtifactsDir(s.dataDir, workspacePath, name),
 		Models:         Models{Stages: maps.Clone(p.Models)},
 		ReviewModes:    ReviewModes{Task: cmp.Or(p.ReviewMode, reviewmode.Manual)},
@@ -305,7 +315,7 @@ func (s *Service) Create(ctx context.Context, p CreateParams) (Task, error) {
 	s.mu.Unlock()
 
 	s.watch(t)
-	s.log.Info("task created", "task", t.ID, "name", t.Name, "repo", t.RepoPath)
+	s.log.Info("task created", "task", t.ID, "name", t.Name, "repo", t.RepoPath, "mode", string(t.Mode))
 	s.changed()
 	return t, nil
 }
@@ -848,7 +858,7 @@ func (s *Service) RemoveArtifacts(ctx context.Context, id string, from Stage) er
 		return fmt.Errorf("remove artifacts of task %s: %w", id, ErrNotFound)
 	}
 
-	for _, stage := range from.From() {
+	for _, stage := range t.Mode.From(from) {
 		var err error
 		switch stage {
 		case StagePRD:
@@ -857,6 +867,8 @@ func (s *Service) RemoveArtifacts(ctx context.Context, id string, from Stage) er
 			err = removePath(t.TechSpecPath(), false)
 		case StagePlan:
 			err = removePath(t.StepsDir(), true)
+		case StageOneShot:
+			err = removePath(t.OneShotPath(), false)
 		case StageImplementation:
 			// The reports of the agent review belong to the steps, and go with
 			// them.
@@ -871,15 +883,17 @@ func (s *Service) RemoveArtifacts(ctx context.Context, id string, from Stage) er
 		}
 	}
 
-	// The choices of the steps belong to the step files: a plan written again
-	// starts from the model of implementation and from the mode of the task.
-	if from.Index() <= StagePlan.Index() && len(t.Models.Steps) > 0 {
+	// The choices of the steps belong to the planning: a plan or a document
+	// written again starts from the model of implementation and from the mode of
+	// the task.
+	planning := t.Mode.Index(from) < t.Mode.Index(StageImplementation)
+	if planning && len(t.Models.Steps) > 0 {
 		t.Models = Models{Stages: t.Models.Stages}
 		if err := s.repo.UpdateModels(ctx, t.ID, t.Models, s.now().UTC()); err != nil {
 			return err
 		}
 	}
-	if from.Index() <= StagePlan.Index() && len(t.ReviewModes.Steps) > 0 {
+	if planning && len(t.ReviewModes.Steps) > 0 {
 		t.ReviewModes = ReviewModes{Task: t.ReviewModes.Task}
 		if err := s.repo.UpdateReviewModes(ctx, t.ID, t.ReviewModes, s.now().UTC()); err != nil {
 			return err
@@ -906,10 +920,10 @@ func (s *Service) RemoveArtifacts(ctx context.Context, id string, from Stage) er
 }
 
 // ReadArtifact returns the content of an artifact by file name: the PRD, the
-// tech spec, a step file under the steps folder, a draft or a review report
-// under the pr folder, or a report of the agent review of a step under the
-// step-reviews folder. Anything else is ErrNotFound. An archived task is read
-// the same way, which is what the history shows.
+// tech spec, the One-Shot document, a step file under the steps folder, a draft
+// or a review report under the pr folder, or a report of the agent review of a
+// step under the step-reviews folder. Anything else is ErrNotFound. An archived
+// task is read the same way, which is what the history shows.
 func (s *Service) ReadArtifact(id, name string) (string, error) {
 	if !readableArtifact(name) {
 		return "", fmt.Errorf("read artifact %s of task %s: %w", name, id, ErrNotFound)
@@ -934,7 +948,7 @@ func (s *Service) ReadArtifact(id, name string) (string, error) {
 // shows. The files of a folder are matched by their own pattern, which no path
 // can slip through.
 func readableArtifact(name string) bool {
-	if name == PRDFile || name == TechSpecFile {
+	if name == PRDFile || name == TechSpecFile || name == OneShotFile {
 		return true
 	}
 	if step, found := strings.CutPrefix(name, StepsDirName+"/"); found {
@@ -1077,10 +1091,16 @@ func (s *Service) inspect(t Task) Artifacts {
 		slugs = append(slugs, Slug(repo.Rel))
 	}
 
+	plan := ReadPlan(t.StepsDir(), repos)
+	if t.Mode == ModeOneShot {
+		plan = OneShotPlan(t.OneShotPath(), t.Name, repos)
+	}
+
 	return Artifacts{
 		PRD:      s.fileWritten(t.PRDPath()),
 		TechSpec: s.fileWritten(t.TechSpecPath()),
-		Plan:     ReadPlan(t.StepsDir(), repos),
+		OneShot:  s.fileWritten(t.OneShotPath()),
+		Plan:     plan,
 		PR:       ReadPRArtifacts(t.PRDir(), slugs),
 
 		StepReports: ReadStepReports(t.StepReviewsDir()),

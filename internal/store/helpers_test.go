@@ -79,6 +79,7 @@ func newTask(id, workspacePath, name string, created time.Time) task.Task {
 		ID:              id,
 		WorkspacePath:   workspacePath,
 		Name:            name,
+		Mode:            task.ModeStructured,
 		InitialContext:  "context of " + name,
 		Stage:           task.StagePRD,
 		ArtifactsDir:    "/data/tasks/" + name,

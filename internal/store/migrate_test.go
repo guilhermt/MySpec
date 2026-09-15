@@ -20,15 +20,17 @@ import (
 // stagesVersion is the migration that brought the stages after the PRD,
 // commitsVersion the one that gave a step its commits, prVersion the one that
 // brought the PR stage, modelsVersion the one that brought the models,
-// reviewModeVersion the one that brought the review mode, and latestVersion
-// the version the embedded migrations end at.
+// reviewModeVersion the one that brought the review mode, modeVersion the one
+// that brought the mode of a task, and latestVersion the version the embedded
+// migrations end at.
 const (
 	stagesVersion     = 3
 	commitsVersion    = 5
 	prVersion         = 6
 	modelsVersion     = 9
 	reviewModeVersion = 10
-	latestVersion     = 10
+	modeVersion       = 11
+	latestVersion     = 11
 )
 
 // mapFS builds a migrations tree with the given file names.
@@ -309,9 +311,12 @@ func TestTheModelsMigrationGivesTheFactoryDefaults(t *testing.T) {
 	}
 	// The migration and the factory have to say the same thing, so that a task
 	// that existed before it starts where a new one does. The step review came
-	// later, and the migration of the review mode gives it to those tasks.
+	// later, and the migration of the review mode gives it to those tasks; the
+	// One-Shot planning came later still, and only a One-Shot task, created
+	// with it, runs one.
 	want := models.Factory()
 	delete(want, models.StepReview)
+	delete(want, models.OneShot)
 	if diff := cmp.Diff(want, m.Stages); diff != "" {
 		t.Errorf("stages mismatch (-want +got):\n%s", diff)
 	}
@@ -326,6 +331,7 @@ func TestMigrateLeavesTheTasksThatExistToTheUser(t *testing.T) {
 	db := openAt(t, reviewModeVersion-1)
 	before := models.Factory()
 	delete(before, models.StepReview)
+	delete(before, models.OneShot)
 	encoded, err := json.Marshal(task.Models{Stages: before})
 	if err != nil {
 		t.Fatalf("json.Marshal() = %v, want nil", err)
@@ -383,6 +389,31 @@ func TestMigrateLeavesTheTasksThatExistToTheUser(t *testing.T) {
 	}
 	if pass != 0 || reported != 0 || fallback != "" {
 		t.Errorf("agent review = %d %d %q, want a step that never went through one", pass, reported, fallback)
+	}
+}
+
+func TestMigrateMakesTheTasksThatExistStructured(t *testing.T) {
+	t.Parallel()
+
+	db := openAt(t, modeVersion-1)
+	const insertTask = `INSERT INTO tasks
+		(id, workspace_path, name, initial_context, stage, artifacts_dir, created_at, updated_at, revisiting)
+		VALUES ('task-1', '/ws', 'one', 'context', 'plan', '/data/x',
+			'2026-09-06T10:00:00Z', '2026-09-06T10:00:00Z', 0)`
+	if _, err := db.ExecContext(t.Context(), insertTask); err != nil {
+		t.Fatalf("insert task: %v", err)
+	}
+
+	if err := migrate(t.Context(), db, slog.New(slog.DiscardHandler)); err != nil {
+		t.Fatalf("migrate() = %v, want nil", err)
+	}
+
+	var mode string
+	if err := db.QueryRowContext(t.Context(), `SELECT mode FROM tasks WHERE id = 'task-1'`).Scan(&mode); err != nil {
+		t.Fatalf("query task: %v", err)
+	}
+	if mode != string(task.ModeStructured) {
+		t.Errorf("mode = %q, want %q for a task created before the column", mode, task.ModeStructured)
 	}
 }
 
