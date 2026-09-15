@@ -98,3 +98,5 @@ Sem workspace, a barra lateral passa a ser: **Waiting for you** no topo, como ho
 4. **Discussão e cards.** Reaproveita o padrão de rascunho e a criação de sessão que já existem.
 
 As duas últimas frentes têm o mesmo peso para o usuário; a ordem entre elas é só uma sugestão.
+
+A quebra dessa ordem em tasks, com a definição de cada uma, está em [tasks.md](./tasks.md).
