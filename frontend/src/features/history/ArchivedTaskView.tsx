@@ -10,8 +10,10 @@ import { formatDates, stepCount } from "@/features/history/history-format";
 import { ErrorNotice } from "@/features/notice/Notice";
 import { DeleteTaskDialog } from "@/features/task/DeleteTaskDialog";
 import { StepDocument } from "@/features/task/StepDocument";
+import { StepReportList } from "@/features/task/StepList";
 import { useArtifact } from "@/features/task/useArtifact";
 import { findNode } from "@/features/tree/tree-model";
+import { findStepReport, stepReportLabel } from "@/lib/review-modes";
 import type { ArchivedTask } from "@/lib/wails";
 import { repoNodeId, useAppStore, useArchivedTask } from "@/store/app-store";
 
@@ -20,14 +22,21 @@ const LOADING_WIDTHS = ["w-1/2", "w-full", "w-3/4"];
 const STEP_ROW =
   "flex w-full items-center gap-3 rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent";
 
-/** Selection is the tab on screen, or the step file it drilled into. */
-type Selection = "prd" | "tech_spec" | "steps" | { step: string };
+/**
+ * Selection is the tab on screen, or what it drilled into: a step file, or a
+ * report of the agent review of a step.
+ */
+type Selection = "prd" | "tech_spec" | "steps" | { step: string } | { report: string };
 
 /** Tab is a Selection with nothing drilled into. */
 type Tab = "prd" | "tech_spec" | "steps";
 
 function isStep(selection: Selection): selection is { step: string } {
-  return typeof selection === "object";
+  return typeof selection === "object" && "step" in selection;
+}
+
+function isReport(selection: Selection): selection is { report: string } {
+  return typeof selection === "object" && "report" in selection;
 }
 
 // The PRD is where a task began, so it is where reading it back begins too.
@@ -41,6 +50,9 @@ function firstTab(task: ArchivedTask): Tab {
 function artifactName(selection: Selection, task: ArchivedTask): string | null {
   if (isStep(selection)) {
     return `steps/${selection.step}`;
+  }
+  if (isReport(selection)) {
+    return `step-reviews/${selection.report}`;
   }
   if (selection === "prd") {
     return task.hasPrd ? "PRD.md" : null;
@@ -82,9 +94,13 @@ export function ArchivedTaskView({ taskId }: ArchivedTaskViewProps) {
   const openStep = isStep(chosen)
     ? (steps.find((step) => step.file === chosen.step) ?? null)
     : null;
-  // A step the task no longer has falls back to the list it came from.
-  const view: Selection = isStep(chosen) && openStep === null ? "steps" : chosen;
-  const tab: Tab = isStep(view) ? "steps" : view;
+  const openReport = isReport(chosen) ? findStepReport(steps, chosen.report) : null;
+  // A document the task no longer has falls back to the list it came from.
+  const view: Selection =
+    (isStep(chosen) && openStep === null) || (isReport(chosen) && openReport === null)
+      ? "steps"
+      : chosen;
+  const tab: Tab = isStep(view) || isReport(view) ? "steps" : view;
   const artifact = useArtifact(
     taskId,
     task === null ? null : artifactName(view, task),
@@ -164,6 +180,17 @@ export function ArchivedTaskView({ taskId }: ArchivedTaskViewProps) {
         </div>
       )}
 
+      {openReport !== null && (
+        <div className="flex h-8 shrink-0 items-center gap-2 border-b px-3">
+          <Button variant="ghost" size="sm" onClick={() => setSelection("steps")}>
+            ← Steps
+          </Button>
+          <span className="min-w-0 truncate text-sm font-medium">
+            {`Step ${openReport.step.number} · ${stepReportLabel(openReport.report.pass, openReport.report.clean)}`}
+          </span>
+        </div>
+      )}
+
       <div className="min-h-0 flex-1 overflow-y-auto p-6">
         {view === "steps" ? (
           <ol className="flex flex-col">
@@ -184,6 +211,10 @@ export function ArchivedTaskView({ taskId }: ArchivedTaskViewProps) {
                     </Badge>
                   )}
                 </button>
+                <StepReportList
+                  reports={step.reports ?? []}
+                  onOpen={(report) => setSelection({ report: report.file })}
+                />
               </li>
             ))}
           </ol>

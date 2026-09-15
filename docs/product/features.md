@@ -8,7 +8,7 @@ O produto abre uma pasta, como o VS Code faz: por argumento na linha de comando 
 
 Só uma instância do app roda por vez. Abrir uma segunda, com ou sem pasta, entrega o argumento à instância que já existe, que troca a área de trabalho e traz a janela para a frente.
 
-Ao abrir, o produto escaneia a pasta e encontra os repositórios git abaixo dela. A pasta `.myspec`, onde ficam as worktrees, é ignorada, para que uma worktree nunca seja tomada por um repositório. A barra lateral mostra a árvore com dois níveis: a raiz e os repositórios. Cada task aparece no nó em que foi criada, com a etapa em que está, o step em andamento e o que falta, o progresso do review e o que espera pelo usuário. A árvore é navegável pelo teclado.
+Ao abrir, o produto escaneia a pasta e encontra os repositórios git abaixo dela. A pasta `.myspec`, onde ficam as worktrees, é ignorada, para que uma worktree nunca seja tomada por um repositório. A barra lateral mostra a árvore com dois níveis: a raiz e os repositórios. Cada task aparece no nó em que foi criada, com a etapa em que está, o step em andamento e o que falta, o progresso do review, ou **Agent review** e **Addressing review** quando um agente revisa o step, e o que espera pelo usuário. A árvore é navegável pelo teclado.
 
 ## Criação de uma task
 
@@ -16,6 +16,7 @@ Uma task é criada a partir da raiz ou de um repositório (`Ctrl+N` cria no nó 
 
 - o **nome**, em minúsculas, dígitos e hífens simples, com até 64 caracteres, único na área de trabalho. Ele nomeia as worktrees e as branches;
 - o **contexto inicial**: o que quer fazer, em alto nível ou em detalhe. É a primeira mensagem da sessão de PRD;
+- o **modo de review**, `Manual` ou `Agent`, partindo do padrão configurado, com uma linha que diz o que o modo escolhido faz: `You review each step in VS Code before its commit.` ou `An agent reviews each step, and the task runs to the pull request on its own.` Ele vale para todos os steps que o plano escrever;
 - o **modelo e o esforço de cada etapa**, partindo dos padrões configurados. O usuário pode ajustar qualquer etapa para essa task.
 
 Ao confirmar, a sessão de PRD começa com o contexto inicial, e a primeira coisa que o usuário vê é a primeira pergunta do agente. Se a sessão não conseguir começar, a task é desfeita.
@@ -59,21 +60,62 @@ Antes de iniciar um step o produto verifica que a worktree está limpa: nada mod
 
 A sessão de um step abre dentro da worktree, com o arquivo do step como primeira mensagem. O arquivo aponta para o PRD e o tech spec no diretório de artefatos, delimita o escopo e traz o checklist de conclusão. Os steps anteriores já estão commitados na branch.
 
-O agente implementa seguindo o tech spec. Só pergunta quando algo genuinamente o bloqueia, e sempre pela ferramenta de perguntas estruturadas, que o produto mostra como um cartão com opções. Ao terminar, apresenta o resumo do que fez. O step passa a **aguardando review** assim que o agente encerra um turno sem nada pendente. Pedir uma mudança na conversa devolve o step a **implementando**.
+O agente implementa seguindo o tech spec. Só pergunta quando algo genuinamente o bloqueia, e sempre pela ferramenta de perguntas estruturadas, que o produto mostra como um cartão com opções. Ao terminar, apresenta o resumo do que fez. No modo `Manual`, o step passa a **aguardando review** assim que o agente encerra um turno sem nada pendente, e pedir uma mudança na conversa o devolve a **implementando**. No modo `Agent`, o turno encerrado leva o step ao revisor, como diz [Review pelo agente](#review-pelo-agente).
+
+### Modo de review
+
+Cada step é revisado no modo `Manual` ou no modo `Agent`, este mostrado sempre com um ícone de robô. No `Manual`, o usuário revisa o step no editor, dá stage arquivo a arquivo e aprova. No `Agent`, um agente revisor revisa o step com o implementador, e o step é commitado quando o relatório do revisor vem limpo, sem ninguém dar stage.
+
+O modo é escolhido em quatro lugares:
+
+- **Settings**: a página **Defaults** guarda o padrão, `Manual` de fábrica. Uma mudança vale para as tasks criadas depois dela.
+- **Criação da task**: o diálogo parte do padrão, e a escolha vira o modo da task.
+- **Cabeçalho da task**: o botão ao lado de **Models**, com o ícone do modo da task, um robô ou uma pessoa, abre um painel que troca o modo da task. A troca vale para os steps não iniciados sem escolha própria e, antes do plano, para os steps que o plano escrever. Quando nenhum step resta para começar, o seletor fica desabilitado.
+- **Lista de steps**: cada step não iniciado tem um seletor de modo ao lado do modelo, e escolher um modo dá ao step um modo próprio. Um step com modo próprio aparece em destaque; um que segue a task aparece discreto.
+
+O modo de um step congela quando a sessão do step começa. Dali em diante ele só muda de `Agent` para `Manual`, pelas saídas do review pelo agente, e nunca volta. Na lista de steps, um step iniciado ou concluído mostra, sem edição, o modo com que é revisado; um step que passou ao usuário mostra `Manual`, com um tooltip que diz por quê.
 
 ### Review
 
-O review é feito no editor, arquivo por arquivo. **Abrir no VS Code** abre a worktree, e cada arquivo da lista de mudanças abre diretamente ao ser clicado. O usuário dá stage em cada arquivo revisado e faz alterações manuais quando quer.
+No modo `Manual`, o review é feito no editor, arquivo por arquivo. **Abrir no VS Code** abre a worktree, e cada arquivo da lista de mudanças abre diretamente ao ser clicado. O usuário dá stage em cada arquivo revisado e faz alterações manuais quando quer.
 
 Enquanto o step aguarda review o produto observa a worktree, inclusive o diretório do git, para que o stage feito no editor apareça na hora, e lê o `git status` a cada rajada de eventos. Todo arquivo alterado que o git reporta conta, arquivos novos um a um, ignorados nunca. Um arquivo está revisado quando nada dele resta fora do índice; um arquivo parcialmente em stage ainda está pendente. A faixa de review sob a barra do step mostra a barra de progresso, a contagem e a lista de arquivos. O mesmo progresso aparece como percentual na lista de tasks e na árvore. O produto nunca dá stage em nada: o stage é o review, e o review é o portão.
 
 ### Aprovação e commit
 
-**Aprovar** só habilita com 100% em stage; abaixo disso diz o que falta. Também exige a sessão ociosa, sem turno rodando, nada na fila e nenhuma permissão ou pergunta em aberto, e retoma uma sessão pausada por conta própria.
+**Aprovar** existe no modo `Manual` e só habilita com 100% em stage; abaixo disso diz o que falta. Também exige a sessão ociosa, sem turno rodando, nada na fila e nenhuma permissão ou pergunta em aberto, e retoma uma sessão pausada por conta própria.
 
 Aprovar envia o prompt de commit como mensagem do produto na própria conversa do step, para o agente que escreveu o código commitar exatamente o que está em stage, em um commit, com assunto no imperativo e a convenção do repositório. O step fica **concluído** quando um commit aparece na branch além daquele em que começou, venha do turno de commit ou da mão do usuário. Se o turno termina sem commit, o step volta a **pronto para aprovar** e diz isso. Um step em que o agente não mudou nada não pode ser aprovado.
 
-O produto então encerra o processo do step e inicia o próximo, criando a worktree quando o step muda de repositório. **Descartar step** encerra a sessão, apaga a conversa do step e o começa de novo, limpando a worktree a menos que o usuário peça o contrário.
+O produto então encerra os processos do step e do seu revisor e inicia o próximo, criando a worktree quando o step muda de repositório.
+
+### Review pelo agente
+
+No modo `Agent`, quando o implementador encerra um turno sem nada pendente e a worktree tem mudanças, o produto pede uma passada ao revisor, e o step passa a **Agent review**. Um turno que termina sem nenhuma mudança não vai ao revisor: o step fica sem mudanças, esperando pelo usuário, como no modo `Manual`.
+
+O revisor é uma conversa própria do step, aberta na worktree com o prompt de review de step. A primeira passada abre a conversa com o prompt, que aponta para o arquivo do step, o PRD, o tech spec e o arquivo do relatório, seguido da última resposta do implementador. As passadas seguintes acontecem na mesma conversa, numa mensagem do produto com a resposta do implementador e o arquivo do novo relatório. A cada passada o revisor lê na worktree tudo o que o step mudou, arquivos novos incluídos, e confere o escopo, os objetivos e o checklist do step, a aderência ao tech spec e ao PRD, a correção e a qualidade. Ele roda ele mesmo as verificações que o repositório documenta, como lint, typecheck e testes, sem confiar no que o implementador disse. Gosto pessoal nunca é apontamento. O revisor nunca edita arquivos, nunca dá stage, nunca commita e nunca faz push.
+
+Cada passada escreve um relatório numerado, com o status `clean`, quando não há nada a mudar, ou `changes`, quando há qualquer apontamento. O relatório diz o que foi revisado, as verificações rodadas com o resultado, os apontamentos numerados, as divergências do plano que o revisor aceitou, as contestações do implementador com o julgamento de cada uma e as decisões que o usuário tomou. Uma divergência do plano válida é aceita e registrada com a razão; uma inválida vira apontamento. Um apontamento contestado é julgado na passada seguinte, retirado ou mantido. Quando não tem confiança para decidir, o revisor pergunta ao usuário pela ferramenta de perguntas estruturadas e segue a resposta.
+
+O produto age sobre cada relatório:
+
+- **Com mudanças**: entrega o relatório na conversa do implementador, pedindo que trate cada apontamento, corrigindo ou dizendo por que discorda, e que não commite. O step passa a **Addressing review**, e quando o implementador encerra o turno o revisor passa de novo.
+- **Limpo**: envia o prompt de commit na conversa do implementador, para ele commitar tudo o que mudou na worktree, arquivos novos incluídos e ignorados de fora, num único commit. O step passa a **Committing** e fica **concluído** quando o commit aparece na branch; o próximo step começa sozinho.
+- **Com mudanças depois de três rodadas**: uma rodada é um relatório com mudanças entregue ao implementador, e o teto é de três, fixo. A passada que confere o terceiro ajuste é a última: se ainda tem mudanças, o relatório não vai ao implementador e o step passa ao usuário. Um step tem, portanto, no máximo quatro passadas. Uma pergunta do revisor, uma passada sem relatório e uma mensagem do usuário não contam como rodada.
+
+Uma passada que termina sem relatório, ou com um relatório cujo status o produto não consegue ler, deixa o step esperando pelo usuário na conversa do revisor. O produto só pede o commit de um step no modo `Agent` depois de um relatório limpo; um commit feito à mão na branch conclui o step, como no modo `Manual`.
+
+**Review myself** aparece na barra do step no lugar de **Aprovar** enquanto o agente revisa o step, antes do commit, e tira o review do agente sem confirmação. Uma passada em curso é interrompida na hora, sem relatório; um implementador no meio de um turno termina o turno. Toda saída do loop que não termina num commit leva o step para o modo `Manual`, em **aguardando review**, com a worktree como está e os relatórios à vista: **Review myself**, as três rodadas sem relatório limpo, que a barra anuncia com `The agent review didn't come clean after three rounds.`, e o turno de commit que termina sem commit, que ela anuncia com `The last approval didn't produce a commit.`. Dali em diante é o fluxo do modo `Manual`. A conversa do revisor continua visível e aceita mensagens, mas o produto não pede mais passadas nem age sobre relatórios novos.
+
+A barra do step lê `Implementing` antes da primeira passada, `Agent review · pass N` durante uma passada, `Addressing review · round N of 3` enquanto o implementador trata um relatório e `Committing` durante o commit. O estado da conversa em que o step espera, pausada, com erro, pedindo permissão ou perguntando, prevalece sobre o texto. A faixa de review não aparece: ninguém dá stage. **Abrir no VS Code** e **Descartar step** continuam na barra, e o usuário pode mudar arquivos na worktree ou escrever a qualquer das conversas durante o loop; o que ele muda entra na próxima passada e no commit.
+
+A partir da primeira passada, a conversa do step tem as abas **Implementer** e **Reviewer**, cada uma com o ponto de estado da sua sessão e a cor da situação que espera pelo usuário. O produto nunca troca de aba sozinho; abrir uma situação do revisor abre a aba dele. O relatório entregue e o prompt de commit aparecem na conversa do implementador como mensagens do produto, e cada relatório tratado aparece como marcador na conversa do revisor, com o número e o status. No painel de artefatos, os relatórios aparecem sob o seu step, na lista de steps, como `Review 1 · changes`, `Review 2 · clean`, e abrem renderizados.
+
+O loop não anda enquanto qualquer das conversas trabalha, pergunta, está pausada ou com erro: é ali que o step espera. Um erro de sessão tem **Tentar de novo**, e o loop segue quando a sessão volta. Uma task pausada não inicia passadas nem entrega relatórios. Fechar e reabrir o app retoma o loop de onde parou, com o modo de cada step, a rodada, os relatórios e as duas conversas.
+
+### Descartar step
+
+**Descartar step** encerra as sessões do step e do revisor, apaga as duas conversas e os relatórios de review do step e o começa de novo, limpando a worktree a menos que o usuário peça o contrário. O step recomeça com o modo escolhido antes de ele começar e com as rodadas zeradas.
 
 ## Pull request
 
@@ -91,7 +133,7 @@ O produto lê a pull request com o `gh`: número, link, estado e base aparecem n
 
 Aberta a pull request, a sessão de review começa sozinha com o prompt de review de PR. O agente revisa o diff contra o PRD e o tech spec, procurando erros, desvios da especificação e problemas de qualidade, e escreve um relatório numerado num arquivo de artefato, com o status `clean` ou `changes`.
 
-Se o relatório está limpo, o repositório fica **pronto**, aguardando o merge. Se há apontamentos, o produto os mostra e o repositório passa a **aguardando decisão**: o usuário decide na conversa, item a item, o que quer aplicado. O agente aplica só o que foi aprovado. As mudanças então passam pelo mesmo review do produto que um step: stage arquivo a arquivo no editor, progresso em tempo real, **Aprovar** em 100%, e o commit feito pelo agente com o prompt de commit, que nesta etapa também sobe o commit para a pull request. Depois do commit o agente revisa de novo, e o ciclo se repete até um relatório limpo. **Revisar de novo** pede uma passada extra a qualquer momento, e os relatórios de todas as passadas ficam visíveis.
+Se o relatório está limpo, o repositório fica **pronto**, aguardando o merge. Se há apontamentos, o produto os mostra e o repositório passa a **aguardando decisão**: o usuário decide na conversa, item a item, o que quer aplicado. O agente aplica só o que foi aprovado. As mudanças então passam pelo mesmo review do produto que um step no modo `Manual`: stage arquivo a arquivo no editor, progresso em tempo real, **Aprovar** em 100%, e o commit feito pelo agente com o prompt de commit, que nesta etapa também sobe o commit para a pull request. Depois do commit o agente revisa de novo, e o ciclo se repete até um relatório limpo. **Revisar de novo** pede uma passada extra a qualquer momento, e os relatórios de todas as passadas ficam visíveis.
 
 Uma pull request fechada sem merge é sinalizada como tal, e o repositório não pode ser encerrado.
 
@@ -111,7 +153,7 @@ Quando o último repositório é encerrado, a task é arquivada: sai da área de
 
 ## Histórico
 
-O botão **History** no rodapé da barra lateral abre a lista das tasks arquivadas da área de trabalho, da mais recente à mais antiga, com busca por nome. Cada task arquivada mostra os seus artefatos finais renderizados, com PRD, tech spec, steps e, por repositório, a pull request e o resultado do encerramento. As conversas não são guardadas no histórico.
+O botão **History** no rodapé da barra lateral abre a lista das tasks arquivadas da área de trabalho, da mais recente à mais antiga, com busca por nome. Cada task arquivada mostra os seus artefatos finais renderizados, com PRD, tech spec, steps com os relatórios de review de cada step e, por repositório, a pull request e o resultado do encerramento. As conversas não são guardadas no histórico.
 
 ## Apagar uma task
 
@@ -119,13 +161,13 @@ Uma task pode ser apagada em qualquer etapa. Antes de confirmar, o produto mostr
 
 ## Sessões e conversas
 
-Toda sessão é uma conversa dentro do produto, com interface própria. O Claude Code roda por baixo, invisível. A conversa mostra as mensagens do usuário e do agente, as ações que o agente executa agrupadas, os cartões de permissão e de pergunta, marcadores dos eventos da task (documento escrito, etapa iniciada, contexto compactado, resposta interrompida) e os erros. Tudo que o agente escreve é renderizado como Markdown, com diagramas mermaid e realce de código, em streaming.
+Toda sessão é uma conversa dentro do produto, com interface própria. O Claude Code roda por baixo, invisível. A conversa mostra as mensagens do usuário e do agente, as ações que o agente executa agrupadas, os cartões de permissão e de pergunta, marcadores dos eventos da task (documento escrito, etapa iniciada, review iniciado ou escrito, contexto compactado, resposta interrompida) e os erros. Tudo que o agente escreve é renderizado como Markdown, com diagramas mermaid e realce de código, em streaming.
 
-Cada etapa, step e repositório tem a sua conversa. Voltar a uma etapa retoma a conversa dela de onde ficou.
+Cada etapa, step e repositório tem a sua conversa. Um step no modo `Agent` tem também a do revisor, a partir da primeira passada, e as duas ficam nas abas **Implementer** e **Reviewer**. Voltar a uma etapa retoma a conversa dela de onde ficou.
 
 - **Enviar**: mensagens enviadas com o agente ocupado entram numa fila, visível na conversa, e podem ser removidas antes de sair.
 - **Interromper** encerra a resposta em andamento e mantém a sessão viva.
-- **Pausar** para o processo e preserva a conversa; **Retomar** continua de onde parou. Uma sessão ociosa por dez minutos é parada sozinha e retomada de forma transparente na próxima mensagem.
+- **Pausar** para o processo e preserva a conversa; **Retomar** continua de onde parou. Na implementação, **Pause** no cabeçalho age na conversa em que o step espera: a do revisor durante uma passada, a do implementador no resto do tempo. Uma sessão ociosa por dez minutos é parada sozinha e retomada de forma transparente na próxima mensagem.
 - **Tentar de novo** reinicia uma sessão que falhou ao iniciar, cujo processo morreu, ou que não encontrou o `claude` ou um login.
 - **Permissões**: as sessões rodam no modo auto do Claude Code. As escaladas que o modo auto não resolve sozinho aparecem como um cartão na conversa, com a ferramenta e a entrada exata, e aceitam permitir uma vez, permitir pela sessão ou negar com uma mensagem.
 - **Perguntas**: as perguntas estruturadas do agente aparecem como um cartão com as opções, e a resposta volta pelo mesmo canal.
@@ -133,13 +175,13 @@ Cada etapa, step e repositório tem a sua conversa. Voltar a uma etapa retoma a 
 
 ## Depende de mim
 
-Uma task espera pelo usuário quando qualquer destas situações acontece: um erro de sessão, um step bloqueado, uma worktree ilegível, a etapa de PR bloqueada, um plano inválido, uma pull request fechada sem merge, uma escalada de permissão, uma pergunta do agente, uma resposta aquém do que o produto esperava, uma etapa revisitada pronta para continuar, um step aguardando review ou pronto para aprovar, um step sem mudanças, um rascunho aguardando OK, apontamentos de review aguardando decisão, mudanças aplicadas aguardando review, uma pull request pronta para merge, um repositório pronto para encerrar. Uma task pausada não espera por ninguém.
+Uma task espera pelo usuário quando qualquer destas situações acontece: um erro de sessão, um step bloqueado, uma worktree ilegível, a etapa de PR bloqueada, um plano inválido, uma pull request fechada sem merge, uma escalada de permissão, uma pergunta do agente, uma passada do revisor de um step que terminou sem relatório, uma resposta aquém do que o produto esperava, uma etapa revisitada pronta para continuar, um step aguardando review ou pronto para aprovar, um step sem mudanças, um step que passou ao usuário porque o review pelo agente não veio limpo em três rodadas, um rascunho aguardando OK, apontamentos de review aguardando decisão, mudanças aplicadas aguardando review, uma pull request pronta para merge, um repositório pronto para encerrar. Uma task pausada não espera por ninguém. O revisor de um step é um lugar próprio: um erro, uma escalada de permissão ou uma pergunta dele espera pelo usuário na aba **Reviewer**, e pode esperar ao mesmo tempo que uma situação do implementador. Uma task com todos os steps no modo `Agent` só espera pelo usuário, entre o primeiro step e o rascunho da pull request, quando há erro, bloqueio, permissão, pergunta, passada sem relatório ou um step que passou ao usuário; um step commitado pelo review do agente não notifica.
 
 Cada situação diz onde está e o que pede. As situações aparecem:
 
 - na seção **Waiting for you**, fixa no topo da barra lateral, com todas as tasks que esperam, exceto a que está aberta. `Ctrl+J` abre a primeira;
 - na árvore e na lista de tasks, no nó de cada task;
-- na própria task, na trilha de etapas, na barra do step e na aba do repositório.
+- na própria task, na trilha de etapas, na barra do step, nas abas **Implementer** e **Reviewer** e na aba do repositório.
 
 Uma situação que começa enquanto o usuário olha para o produto pisca brevemente onde surgiu, em silêncio. Uma situação que começa com a janela fora de foco gera uma notificação do sistema, que identifica a task e o que ela pede; clicar nela traz a janela e abre o lugar certo. Cada situação notifica uma vez, ao começar. Continuações da mesma espera, como o stage chegar a 100% ou a pull request passar de pronta a mergeada, não notificam.
 
@@ -151,20 +193,22 @@ Não há níveis, silenciamento nem configuração de som: o volume e o não per
 
 O produto oferece três modelos, Fable 5.1, Opus 5 e Sonnet 5, e cinco níveis de esforço, de low a max. Cada combinação é válida.
 
-- **Padrões**: nas configurações, um modelo e um esforço por tipo de sessão: PRD, tech spec, plano, implementação, PR e review de PR. O commit não tem escolha própria, porque roda na sessão do step ou do review.
-- **Por task**: na criação, a task copia os padrões e o usuário ajusta o que quiser. Depois, o popover **Models** no cabeçalho da task troca a escolha das etapas que ainda não começaram.
-- **Por step**: na lista de steps, cada step ainda não iniciado pode ter modelo e esforço próprios. A escolha congela quando a sessão do step começa.
+- **Padrões**: nas configurações, um modelo e um esforço por tipo de sessão: PRD, tech spec, plano, implementação, review de step, PR e review de PR. O commit não tem escolha própria, porque roda na sessão do step ou do review.
+- **Por task**: na criação, a task copia os padrões e o usuário ajusta o que quiser. Depois, o popover **Models** no cabeçalho da task troca a escolha das etapas que ainda não começaram. O review de step segue editável até o último step ser commitado, e a troca vale para os revisores que ainda não começaram; ele aparece mesmo numa task no modo `Manual`, porque um step pode passar a `Agent` antes de começar.
+- **Por step**: na lista de steps, cada step ainda não iniciado pode ter modelo e esforço próprios. A escolha congela quando a sessão do step começa. O revisor não tem escolha por step: ele começa com o review de step que a task tem na primeira passada.
 - **Por sessão**: dentro de uma conversa, o seletor troca o modelo e o esforço daquela sessão a partir da mensagem seguinte. A resposta em andamento termina com a escolha anterior.
 
 ## Prompts
 
-As configurações listam os seis prompts, PRD, tech spec, plano, commit, PR e review de PR, cada um renderizado e editável. Um prompt editado é salvo como arquivo no diretório de dados e sobrevive a atualizações do app; um prompt nunca editado acompanha o padrão de cada versão. **Restaurar** volta ao padrão. O prompt é lido quando uma sessão começa, então uma sessão já em andamento mantém o prompt com que começou. O prompt de um step é o próprio arquivo do step, escrito pelo plano, e por isso não aparece aqui.
+As configurações listam os sete prompts, PRD, tech spec, plano, review de step, commit, PR e review de PR, cada um renderizado e editável. Um prompt editado é salvo como arquivo no diretório de dados e sobrevive a atualizações do app; um prompt nunca editado acompanha o padrão de cada versão. **Restaurar** volta ao padrão. O prompt é lido quando uma sessão começa, então uma sessão já em andamento mantém o prompt com que começou. O prompt de um step é o próprio arquivo do step, escrito pelo plano, e por isso não aparece aqui.
+
+O prompt de review de step sempre termina com a última resposta do implementador, que o produto acrescenta. O prompt de commit diz o que commitar conforme quem revisou: exatamente o que está em stage, no modo `Manual` e no review de pull request, ou tudo o que mudou na worktree, depois de um relatório limpo do revisor. Essa instrução nunca se perde: num prompt editado que removeu o placeholder, ela é acrescentada ao fim. As mensagens que entregam um relatório ao implementador e que pedem uma nova passada ao revisor são textos fixos do produto e não aparecem aqui.
 
 Sair do editor com uma edição não salva pede confirmação.
 
 ## Configurações e aparência
 
-As configurações abrem pelo ícone no rodapé da barra lateral ou por `Ctrl+,`, e pertencem ao app, não à área de trabalho. Elas contêm os padrões de modelo e esforço e os prompts.
+As configurações abrem pelo ícone no rodapé da barra lateral ou por `Ctrl+,`, e pertencem ao app, não à área de trabalho. Elas contêm a página **Defaults**, com o modo de review e os modelos e esforços com que uma task nova começa, e os prompts.
 
 O tema segue o sistema por padrão e pode ser fixado em claro ou escuro pelo botão da barra lateral. Uma troca do tema do sistema com o app aberto é aplicada na hora.
 

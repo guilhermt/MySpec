@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   fallbackReason,
+  findStepReport,
   reviewModeHint,
   reviewModeLabel,
   stepReportLabel,
@@ -45,5 +46,23 @@ describe("stepReportLabel", () => {
     [false, "Review 2 · changes"],
   ])("names a report with its verdict (clean: %s)", (clean, expected) => {
     expect(stepReportLabel(2, clean)).toBe(expected);
+  });
+});
+
+describe("findStepReport", () => {
+  const first = { pass: 1, file: "1-review-1.md", clean: false };
+  const second = { pass: 1, file: "2-review-1.md", clean: true };
+  const steps = [
+    { number: 1, reports: [first] },
+    { number: 2, reports: [second] },
+    { number: 3, reports: null },
+  ];
+
+  it("finds a report with the step that lists it", () => {
+    expect(findStepReport(steps, "2-review-1.md")).toEqual({ step: steps[1], report: second });
+  });
+
+  it("finds nothing once no step lists the report", () => {
+    expect(findStepReport(steps, "1-review-2.md")).toBeNull();
   });
 });

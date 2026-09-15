@@ -10,12 +10,12 @@ A ideia é um segundo modo de conduzir uma task, o One-Shot, que remove essa fri
 
 - **Duas sessões, não uma.** Uma sessão de planejamento que escreve um único documento, e uma sessão de implementação que o executa. Uma sessão só faria o plano nunca existir como artefato antes do código, e o produto perderia o portão entre decidir e fazer e a capacidade de derivar o estado pelos artefatos.
 - **Um único artefato de planejamento.** O documento faz o papel dos três de hoje e é a primeira mensagem da sessão de implementação, como o arquivo de um step é hoje. Precisa bastar sozinho: quem implementa não decide nada.
-- **A implementação é um step único.** A task inteira é um commit e uma pull request, com o mesmo review por stage, a mesma aprovação e o mesmo commit pelo agente que um step tem hoje.
+- **A implementação é um step único.** A task inteira é um commit e uma pull request, com o mesmo modo de review, o mesmo review e o mesmo commit pelo agente que um step tem hoje.
 - **A etapa de PR não muda.** Rascunho, abertura, review de pull request e encerramento são exatamente os de hoje, porque já existem e são baratos.
 - **O modo é escolhido na criação da task e é fixo.** Structured é o padrão; One-Shot é a alternativa. Uma task não troca de modo depois de criada.
 - **Uma task One-Shot nasce sempre num repositório, nunca na raiz.** Ela é um commit e uma pull request, e isso só faz sentido dentro de um repositório só. O que toca dois repositórios é o fluxo estruturado.
-- **Um prompt novo.** O planejamento One-Shot tem prompt próprio, ao lado dos seis que existem, editável e restaurável como eles. Implementação, commit, PR e review de PR usam os prompts que já existem.
-- **Um tipo de sessão novo nos modelos.** O planejamento One-Shot tem padrão próprio de modelo e esforço nas configurações e pode ser ajustado por task, como as outras etapas. Implementação, PR e review de PR usam os padrões que já têm.
+- **Um prompt novo.** O planejamento One-Shot tem prompt próprio, ao lado dos sete que existem, editável e restaurável como eles. Implementação, review de step, commit, PR e review de PR usam os prompts que já existem.
+- **Um tipo de sessão novo nos modelos.** O planejamento One-Shot tem padrão próprio de modelo e esforço nas configurações e pode ser ajustado por task, como as outras etapas. Implementação, review de step, PR e review de PR usam os padrões que já têm.
 - **Perceber que a task cresceu é responsabilidade do usuário.** O agente não avisa quando o trabalho não cabe num commit razoável, e não existe troca de modo no meio: o usuário interrompe, apaga a task e a recria no fluxo estruturado, com o contexto que já entendeu.
 
 ## O modelo
@@ -28,7 +28,7 @@ A ideia é um segundo modo de conduzir uma task, o One-Shot, que remove essa fri
 
 ## Criação
 
-Na criação da task, ao lado do nome, do contexto inicial e dos modelos por etapa, o usuário escolhe o modo. Com One-Shot, a task só pode ser criada num repositório, e as etapas oferecidas para modelo e esforço são o planejamento One-Shot, a implementação, a PR e o review de PR. Ao confirmar, a sessão de planejamento começa com o contexto inicial, e a primeira coisa que o usuário vê é a primeira pergunta do agente.
+Na criação da task, ao lado do nome, do contexto inicial, do modo de review e dos modelos por etapa, o usuário escolhe o modo. Com One-Shot, a task só pode ser criada num repositório, e as etapas oferecidas para modelo e esforço são o planejamento One-Shot, a implementação, o review de step, a PR e o review de PR. Ao confirmar, a sessão de planejamento começa com o contexto inicial, e a primeira coisa que o usuário vê é a primeira pergunta do agente.
 
 ## Planejamento
 
@@ -38,7 +38,7 @@ O documento aparece renderizado no painel de artefatos, como os outros.
 
 ## Implementação
 
-A implementação é um step único, com o documento como primeira mensagem da sessão, aberta na worktree. Tudo o que vale para um step vale aqui: a pré-condição de worktree limpa, o bloqueio com as saídas de hoje, o agente que só pergunta quando está genuinamente bloqueado, o step que passa a aguardar review quando o agente encerra o turno, o review arquivo a arquivo por stage no editor, o progresso em tempo real, **Aprovar** a 100% com a sessão ociosa, o commit pelo agente com o prompt de commit, e o step concluído quando o commit aparece na branch. **Descartar step** reinicia a implementação, como hoje.
+A implementação é um step único, com o documento como primeira mensagem da sessão, aberta na worktree. Tudo o que vale para um step vale aqui: a pré-condição de worktree limpa, o bloqueio com as saídas de hoje, o agente que só pergunta quando está genuinamente bloqueado, o modo de review do step, com o review arquivo a arquivo por stage no editor, o progresso em tempo real e **Aprovar** a 100% com a sessão ociosa no modo Manual, ou o review pelo agente no modo Agent, o commit pelo agente com o prompt de commit, e o step concluído quando o commit aparece na branch. **Descartar step** reinicia a implementação, como hoje.
 
 Com o commit feito, a task entra na etapa de PR.
 
@@ -50,7 +50,7 @@ A trilha de uma task One-Shot tem três etapas: planejamento, implementação e 
 
 - **Depende de mim**: as situações são as mesmas de um step e de uma pull request, com a mesma visibilidade na barra lateral, na árvore e na task, e a mesma notificação.
 - **Histórico**: a task arquivada mostra o documento One-Shot no lugar de PRD, tech spec e steps, e, para o repositório, a pull request e o resultado do encerramento.
-- **Prompts**: as configurações passam a listar sete prompts, com o de planejamento One-Shot.
+- **Prompts**: as configurações passam a listar oito prompts, com o de planejamento One-Shot.
 - **Modelos e esforço**: as configurações passam a ter um padrão para o planejamento One-Shot, e o popover **Models** da task e o seletor por sessão funcionam como hoje.
 
 ## Fora do escopo por enquanto

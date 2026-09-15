@@ -66,6 +66,34 @@ describe("ArchivedTaskView", () => {
     expect(screen.queryByTestId("markdown")).not.toBeInTheDocument();
   });
 
+  it("reads a report of the agent review of a step and comes back to the list", async () => {
+    vi.mocked(api.readArtifact).mockResolvedValue("# Nothing to change");
+    const { user } = view({
+      hasPrd: false,
+      hasTechSpec: false,
+      steps: [
+        {
+          number: 1,
+          file: "1-add-the-login-form.md",
+          title: "Add the login form",
+          repository: "web",
+          reports: [{ pass: 1, file: "1-review-1.md", clean: true }],
+        },
+      ],
+    });
+
+    await user.click(screen.getByRole("button", { name: "Review 1 · clean" }));
+
+    expect(api.readArtifact).toHaveBeenCalledWith("task-1", "step-reviews/1-review-1.md");
+    expect(await screen.findByTestId("markdown")).toHaveTextContent("# Nothing to change");
+    expect(screen.getByText("Step 1 · Review 1 · clean")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "← Steps" }));
+
+    expect(screen.queryByTestId("markdown")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Review 1 · clean" })).toBeInTheDocument();
+  });
+
   it("offers only the documents the task left behind", () => {
     view({ hasTechSpec: false, steps: [] });
 

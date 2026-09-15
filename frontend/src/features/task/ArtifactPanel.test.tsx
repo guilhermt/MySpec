@@ -146,6 +146,38 @@ describe("ArtifactPanel", () => {
     expect(screen.queryByTestId("markdown")).not.toBeInTheDocument();
   });
 
+  it("opens a report of the agent review under its step and comes back to the steps", async () => {
+    vi.mocked(api.readArtifact).mockResolvedValue("# Findings");
+    const { user } = panel({
+      stage: "implementation",
+      steps: [
+        makeStep({
+          status: "addressing_review",
+          reviewMode: "agent",
+          reviewRound: 1,
+          reports: [{ pass: 1, file: "1-review-1.md", clean: false }],
+        }),
+      ],
+      currentStep: 1,
+      artifactVersion: 3,
+    });
+
+    await user.click(screen.getByRole("button", { name: "Review 1 · changes" }));
+
+    expect(api.readArtifact).toHaveBeenCalledWith("task-1", "step-reviews/1-review-1.md");
+    expect(await screen.findByTestId("markdown")).toHaveTextContent("# Findings");
+    expect(screen.getByText("Step 1 · Review 1 · changes")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Steps (1)" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+
+    await user.click(screen.getByRole("button", { name: "← Steps" }));
+
+    expect(screen.queryByTestId("markdown")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Review 1 · changes" })).toBeInTheDocument();
+  });
+
   it("shows a failed read and lets it be dismissed", async () => {
     vi.mocked(api.readArtifact).mockRejectedValue(new Error("read failed"));
     const { user } = panel({ hasPrd: true, artifactVersion: 1 });

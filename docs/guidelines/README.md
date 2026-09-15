@@ -32,7 +32,7 @@ Este é o ponto de entrada para quem vai mudar o código, pessoa ou agente. Ele 
 - Assunto no imperativo, dizendo o que a mudança faz: "Add the review strip to the step bar", não "Added" nem "Adding".
 - Sem prefixo, sem tag, sem emoji, sem ponto final. Corpo só quando diz algo que o assunto não diz, em uma ou duas frases.
 - O assunto descreve a mudança, não o processo: nada de nome de task, número de step, PRD ou tech spec.
-- Commite exatamente o que está em stage. Nunca `git add -A` nem `git commit -a` numa worktree em review: o que está fora do índice foi deixado de fora de propósito.
+- Numa worktree revisada por stage, commite exatamente o que está em stage. Nunca `git add -A` nem `git commit -a` nela: o que está fora do índice foi deixado de fora de propósito. Um step revisado por um agente não tem stage, e o commit leva tudo o que mudou.
 
 ## Pull requests
 

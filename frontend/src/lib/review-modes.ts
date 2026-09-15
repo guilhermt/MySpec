@@ -1,4 +1,4 @@
-import type { ReviewFallback, ReviewMode } from "@/lib/wails";
+import type { ReviewFallback, ReviewMode, StepReport } from "@/lib/wails";
 
 /** REVIEW_MODES are the review modes, in the order the pickers list them. */
 export const REVIEW_MODES: readonly ReviewMode[] = ["manual", "agent"];
@@ -35,4 +35,21 @@ export function fallbackReason(fallback: ReviewFallback): string {
 /** stepReportLabel names a report of the agent review of a step, with its verdict: "Review 2 · clean". */
 export function stepReportLabel(pass: number, clean: boolean): string {
   return `Review ${pass} · ${clean ? "clean" : "changes"}`;
+}
+
+/**
+ * findStepReport is the report of the agent review a file names, with the step that lists it, or
+ * null once no step lists it anymore.
+ */
+export function findStepReport<S extends { reports: StepReport[] | null }>(
+  steps: readonly S[],
+  file: string,
+): { step: S; report: StepReport } | null {
+  for (const step of steps) {
+    const report = (step.reports ?? []).find((candidate) => candidate.file === file);
+    if (report !== undefined) {
+      return { step, report };
+    }
+  }
+  return null;
 }

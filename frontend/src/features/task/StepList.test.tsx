@@ -202,6 +202,34 @@ describe("StepList", () => {
     expect(screen.queryByRole("button", { name: /review mode:/ })).not.toBeInTheDocument();
   });
 
+  it("opens a report of the agent review", async () => {
+    const onOpenReport = vi.fn();
+    const report = { pass: 1, file: "1-review-1.md", clean: false };
+    const step = makeStep({
+      status: "addressing_review",
+      reviewMode: "agent",
+      reviewModeEditable: false,
+      reviewRound: 1,
+      reports: [report, { pass: 2, file: "1-review-2.md", clean: true }],
+    });
+    const { user } = renderWithStore(
+      <StepList
+        steps={[step]}
+        problems={[]}
+        currentStep={1}
+        onOpen={vi.fn()}
+        onOpenReport={onOpenReport}
+      />,
+      { state },
+    );
+
+    expect(screen.getByRole("button", { name: "Review 2 · clean" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Review 1 · changes" }));
+
+    expect(onOpenReport).toHaveBeenCalledWith(step, report);
+  });
+
   it("is a plain list when there is nothing to open", () => {
     renderWithStore(<StepList steps={[makeStep()]} problems={[]} currentStep={0} />, { state });
 
