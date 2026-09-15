@@ -4,9 +4,9 @@ Uma sessão é uma conversa entre o usuário e o Claude Code conduzida pelo prod
 
 ## Um processo por sessão ativa
 
-Uma task roda um processo `claude` por sessão ativa. Nas etapas de planejamento, uma task tem uma sessão ativa por vez: a da etapa em que está. Na implementação, o step que roda tem a sua e, no modo `Agent`, a do seu revisor, e as duas podem estar vivas ao mesmo tempo. Na etapa de PR, cada repositório tem a sua, e várias podem estar vivas ao mesmo tempo. Cada sessão é identificada pela chave `{task, stage}`, com a stage sendo `prd`, `tech_spec`, `plan`, `step:<n>`, `step_review:<n>`, `pr:<slug>` ou `pr_review:<slug>`.
+Uma task roda um processo `claude` por sessão ativa. Nas etapas de planejamento, uma task tem uma sessão ativa por vez: a da etapa em que está, nos dois modos. Na implementação, o step que roda tem a sua e, no modo `Agent`, a do seu revisor, e as duas podem estar vivas ao mesmo tempo. Na etapa de PR, cada repositório tem a sua, e várias podem estar vivas ao mesmo tempo. Cada sessão é identificada pela chave `{task, stage}`, com a stage sendo `prd`, `tech_spec`, `plan`, `one_shot`, `step:<n>`, `step_review:<n>`, `pr:<slug>` ou `pr_review:<slug>`.
 
-Cada sessão guarda a sua conversa. Voltar a uma etapa retoma a sessão dela de onde ficou; avançar abre uma nova. A sessão de um step abre dentro da worktree do repositório, com o arquivo do step como primeira mensagem; a do revisor de um step, as de PR e as de review de PR abrem na mesma worktree com o prompt correspondente.
+Cada sessão guarda a sua conversa. Voltar a uma etapa retoma a sessão dela de onde ficou; avançar abre uma nova. As sessões de planejamento abrem no diretório da task, e a de planejamento One-Shot, sempre no repositório dela. A sessão de um step abre dentro da worktree do repositório, com o arquivo do step como primeira mensagem, ou com o documento One-Shot no step único de uma task One-Shot; a do revisor de um step, as de PR e as de review de PR abrem na mesma worktree com o prompt correspondente.
 
 ## Onde o binário está
 
@@ -48,9 +48,13 @@ Uma linha de saída pode chegar a 16 MiB, porque o resultado de uma ferramenta p
 
 ## Prompts
 
-O prompt de cada tipo de sessão é renderizado no início dela a partir do texto padrão embutido no binário ou do arquivo editado pelo usuário, com os placeholders preenchidos: `{{task_name}}`, `{{prd_path}}`, `{{tech_spec_path}}`, `{{steps_dir}}`, `{{step_path}}`, `{{artifacts_dir}}`, `{{repositories}}`, `{{initial_context}}`, `{{repository}}`, `{{branch}}`, `{{base_branch}}`, `{{draft_path}}`, `{{review_path}}`, `{{pr_number}}`, `{{pr_url}}`, `{{what_to_commit}}` e `{{push}}`. O prompt de commit é enviado como mensagem do app dentro da sessão do step ou do review, para que quem commite seja o agente que escreveu o código.
+O prompt de cada tipo de sessão é renderizado no início dela a partir do texto padrão embutido no binário ou do arquivo editado pelo usuário, com os placeholders preenchidos: `{{task_name}}`, `{{prd_path}}`, `{{tech_spec_path}}`, `{{steps_dir}}`, `{{step_path}}`, `{{one_shot_path}}`, `{{artifacts_dir}}`, `{{repositories}}`, `{{initial_context}}`, `{{repository}}`, `{{branch}}`, `{{base_branch}}`, `{{draft_path}}`, `{{review_path}}`, `{{pr_number}}`, `{{pr_url}}`, `{{what_to_commit}}` e `{{push}}`. O prompt de commit é enviado como mensagem do app dentro da sessão do step ou do review, para que quem commite seja o agente que escreveu o código.
+
+O contexto inicial entra só nos prompts que abrem uma task, o de PRD e o de planejamento One-Shot, e aparece na conversa como a primeira mensagem do usuário; um prompt editado que perdeu `{{initial_context}}` o recebe ao fim. `{{repository}}` é o repositório da sessão, preenchido no revisor de um step e nas sessões da etapa de PR, nos dois modos, e, numa task One-Shot, também no planejamento, que roda no repositório da task.
 
 `{{what_to_commit}}` vira a instrução de commitar exatamente o que está em stage ou, depois de um relatório limpo do revisor, a de commitar tudo o que mudou na worktree com `git add -A`. Como a de `{{push}}`, ela é acrescentada ao fim de um prompt de commit editado que perdeu o placeholder, porque commitar do jeito errado é o erro mais caro do fluxo. O prompt de review de step termina sempre com a última resposta do implementador, que nunca é placeholder: o texto da última mensagem que o implementador escreveu depois da última que recebeu, ou uma frase que diz que ele não escreveu nada. Na conversa do revisor, essa resposta aparece como mensagem do app.
+
+Os prompts de review de step, PR e review de PR servem aos dois modos sem um texto por modo. Numa task One-Shot, `prompts.Vars.OneShotPath` carrega o caminho do documento: `{{prd_path}}`, `{{tech_spec_path}}` e `{{step_path}}` renderizam esse caminho, e `prompts.Render` acrescenta a esses três prompts uma seção `## One-Shot task`, um texto fixo por tipo que diz o que o documento faz no lugar do PRD, do tech spec e do arquivo do step. No review de step ela vem antes da resposta do implementador, que continua sendo o fim do prompt. Numa task Structured, `OneShotPath` é vazio e nada disso acontece. Como a troca e a seção não dependem de o texto ter algum placeholder, um prompt editado funciona nos dois modos.
 
 ## Correções automáticas
 

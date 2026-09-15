@@ -1,6 +1,6 @@
 # Visão geral do produto
 
-MySpec é uma aplicação que conduz um workflow de desenvolvimento feito com o Claude Code: PRD, tech spec, plano de steps, implementação step a step, pull request, review de pull request e encerramento. O Claude Code é a inteligência de cada sessão; o produto é a camada em volta dele, que inicia cada sessão no momento e no lugar certos, guarda os artefatos, sabe em que ponto cada task está, mostra o que espera pelo usuário e permite várias tasks em andamento ao mesmo tempo, numa única janela.
+MySpec é uma aplicação que conduz um workflow de desenvolvimento feito com o Claude Code: PRD, tech spec, plano de steps, implementação step a step, pull request, review de pull request e encerramento, ou, para uma mudança pequena e bem delimitada, um único documento de planejamento implementado num step só antes da mesma pull request. O Claude Code é a inteligência de cada sessão; o produto é a camada em volta dele, que inicia cada sessão no momento e no lugar certos, guarda os artefatos, sabe em que ponto cada task está, mostra o que espera pelo usuário e permite várias tasks em andamento ao mesmo tempo, numa única janela.
 
 O produto não substitui o Claude Code. Ele elimina o trabalho mecânico em volta dele: abrir sessões à mão, lembrar nomes, descobrir onde parou, manter um terminal por sessão, controlar review, aprovação, commit e limpeza de worktrees de fora de qualquer ferramenta.
 
@@ -19,9 +19,10 @@ O produto não substitui o Claude Code. Ele elimina o trabalho mecânico em volt
 - **Área de trabalho (workspace)**: a pasta em que o produto é aberto. Contém os repositórios e é o contexto de tudo o que o produto mostra.
 - **Repositório**: cada repositório git encontrado abaixo da área de trabalho. A própria área de trabalho pode ser um repositório.
 - **Task**: a unidade de trabalho, de qualquer natureza: feature, bug fix, refatoração. Nasce na raiz da área de trabalho, quando toca mais de um repositório, ou dentro de um repositório, quando toca só ele.
-- **Etapa (stage)**: cada fase do ciclo de vida da task: PRD, tech spec, plano, implementação e PR. A etapa de PR contém, por repositório, a abertura da pull request, o review dela e o encerramento.
+- **Modo**: como a task é conduzida, escolhido na criação e fixo. `Structured`, com PRD, tech spec e um plano de steps, é o padrão. `One-Shot` tem uma única etapa de planejamento, que escreve um documento só, implementado em um step, e nasce sempre num repositório. Os dois têm a mesma etapa de PR e o mesmo jeito de trabalhar: lacunas resolvidas antes do código, decisões do usuário, planejamento guardado como artefato.
+- **Etapa (stage)**: cada fase do ciclo de vida da task, definidas pelo modo: PRD, tech spec, plano, implementação e PR numa task Structured; planejamento One-Shot, implementação e PR numa task One-Shot. A etapa de PR contém, por repositório, a abertura da pull request, o review dela e o encerramento.
 - **Sessão**: uma conversa com o Claude Code iniciada pelo produto para conduzir uma etapa, um step, o review de um step ou a pull request de um repositório. Cada uma nasce com o prompt do seu tipo e o contexto da task.
-- **Artefato**: o resultado de uma etapa. PRD, tech spec, arquivos de step, relatórios de review de step, rascunhos de pull request e relatórios de review de pull request. Guardados pelo produto.
+- **Artefato**: o resultado de uma etapa. PRD, tech spec, arquivos de step, documento One-Shot, relatórios de review de step, rascunhos de pull request e relatórios de review de pull request. Guardados pelo produto.
 - **Step**: uma unidade de mudança de código dentro da task. Pertence a um único repositório e vira exatamente um commit.
 - **Modo de review**: quem revisa um step antes do commit. No modo `Manual`, o usuário, que dá stage arquivo a arquivo no editor e aprova; no modo `Agent`, um agente revisor, que revisa o step com o implementador e o deixa ser commitado quando o relatório vem limpo.
 - **Worktree**: a cópia de trabalho de um repositório dedicada a uma task, criada e apagada pelo produto.

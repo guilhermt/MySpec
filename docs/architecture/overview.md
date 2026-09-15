@@ -10,7 +10,7 @@ internal/                todo o código Go
   flow/                  conduz uma task pelas etapas
   session/               a conversa de cada sessão e o processo por trás dela
   claude/                o CLI do Claude Code como subprocesso e o seu protocolo
-  task/                  tasks, artefatos, plano, steps e pull requests
+  task/                  tasks, modos, artefatos, plano, steps e pull requests
   worktree/              as worktrees que o app cria
   review/                observação das worktrees em review
   attention/             as situações que esperam pelo usuário
@@ -82,11 +82,15 @@ Quatro eventos tipados, registrados em `bindings.RegisterEvents` antes de `appli
 
 ### Fluxo de uma sessão
 
-`session.Service` é dono da conversa de cada chave `{task, stage}`, onde a stage é `prd`, `tech_spec`, `plan`, `step:<n>`, `step_review:<n>`, `pr:<slug>` ou `pr_review:<slug>`. Ele inicia o processo por `claude`, consome o stream de eventos, monta o transcript, persiste as entradas no `store`, deriva o estado (trabalhando, esperando, precisa de permissão, precisa de resposta, pausada, erro) e avisa `flow` e `app` a cada mudança. O detalhe está em [sessions.md](./sessions.md).
+`session.Service` é dono da conversa de cada chave `{task, stage}`, onde a stage é `prd`, `tech_spec`, `plan`, `one_shot`, `step:<n>`, `step_review:<n>`, `pr:<slug>` ou `pr_review:<slug>`. Ele inicia o processo por `claude`, consome o stream de eventos, monta o transcript, persiste as entradas no `store`, deriva o estado (trabalhando, esperando, precisa de permissão, precisa de resposta, pausada, erro) e avisa `flow` e `app` a cada mudança. O detalhe está em [sessions.md](./sessions.md).
 
 ### Fluxo de uma etapa
 
 `task.Service` observa o diretório de artefatos de cada task com fsnotify e reporta quando um documento aparece. `flow.Service.Check` recebe esse aviso, e o de cada mudança de sessão, e enfileira uma avaliação por task, coalescendo rajadas. A avaliação lê a task e decide: uma etapa cujo documento existe e cuja sessão está ociosa avança; um plano inválido recebe uma correção; um step concluído dá lugar ao próximo; o último step commitado abre a etapa de PR. Na implementação e na PR a avaliação desce ao step que roda e ao repositório em questão. Num step no modo `Agent`, a avaliação do step conduz o loop entre o implementador e o revisor: pede uma passada, entrega um relatório com mudanças, pede o commit de um relatório limpo ou passa o step ao usuário, como descreve [sessions.md](./sessions.md#o-loop-do-review-de-step).
+
+A ordem das etapas é do modo da task, `task.Mode`, gravado na criação: `prd, tech_spec, plan, implementation, pr` numa task Structured e `one_shot, implementation, pr` numa One-Shot. Avançar, voltar, descartar, apagar os artefatos a partir de uma etapa e listar as escolhas de modelo passam pelos métodos de `Mode`, então cada regra de "antes", "depois" e "a partir de" vale para os dois modos sem ramos próprios. Uma etapa com sessão tem o mesmo nome em `task`, `prompts`, `models` e na chave da sessão, e é por esse nome que `flow` acha o prompt e a escolha de modelo dela.
+
+A implementação de uma task One-Shot não tem caminho próprio em `flow`. A inspeção da task sintetiza, a partir de `one-shot.md`, um plano de um step, o número 1, no repositório da task, e `flow` o conduz como qualquer step: worktree, bloqueios, review manual ou pelo agente, commit, descarte, retomada e abertura da etapa de PR. O único ponto em que ele difere é `Task.StepPath`, que aponta o documento como o prompt do step.
 
 ### Banco e migrations
 
