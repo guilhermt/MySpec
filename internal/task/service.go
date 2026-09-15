@@ -18,6 +18,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/guilhermt/myspec/internal/models"
+	"github.com/guilhermt/myspec/internal/reviewmode"
 )
 
 // dirPerm keeps the artifact folders private to the user.
@@ -38,6 +39,7 @@ type Store interface {
 	UpdateArtifactVersion(ctx context.Context, id string, version int, updatedAt time.Time) error
 	UpdateArchived(ctx context.Context, id string, archivedAt, updatedAt time.Time) error
 	UpdateModels(ctx context.Context, id string, m Models, updatedAt time.Time) error
+	UpdateReviewModes(ctx context.Context, id string, m ReviewModes, updatedAt time.Time) error
 	Delete(ctx context.Context, id string) error
 	ListStepRuns(ctx context.Context, taskID string) ([]StepRun, error)
 	UpsertStepRun(ctx context.Context, run StepRun) error
@@ -227,7 +229,8 @@ type CreateParams struct {
 	Name           string
 	RepoPath       string // "" for root
 	InitialContext string
-	Models         models.Set // a choice for every stage: the defaults with what the user adjusted
+	Models         models.Set      // a choice for every stage: the defaults with what the user adjusted
+	ReviewMode     reviewmode.Mode // the mode of the task: the default, or what the user picked
 }
 
 // Create validates, creates the artifact folder, persists and watches the task.
@@ -266,6 +269,7 @@ func (s *Service) Create(ctx context.Context, p CreateParams) (Task, error) {
 		Stage:          StagePRD,
 		ArtifactsDir:   ArtifactsDir(s.dataDir, workspacePath, name),
 		Models:         Models{Stages: maps.Clone(p.Models)},
+		ReviewModes:    ReviewModes{Task: cmp.Or(p.ReviewMode, reviewmode.Manual)},
 		CreatedAt:      now,
 		UpdatedAt:      now,
 	}
@@ -295,7 +299,7 @@ func (s *Service) Create(ctx context.Context, p CreateParams) (Task, error) {
 
 	s.mu.Lock()
 	s.tasks = append(s.tasks, t)
-	s.artifacts[t.ID] = Artifacts{PR: map[string]RepoArtifacts{}}
+	s.artifacts[t.ID] = Artifacts{PR: map[string]RepoArtifacts{}, StepReports: map[int][]ReviewReport{}}
 	s.stepRuns[t.ID] = nil
 	s.prRuns[t.ID] = nil
 	s.mu.Unlock()
@@ -488,6 +492,63 @@ func (s *Service) updateModels(ctx context.Context, id string, mutate func(*Mode
 	return t, nil
 }
 
+// SetReviewMode records the mode of a task, which the steps without a mode of
+// their own take.
+func (s *Service) SetReviewMode(ctx context.Context, id string, mode reviewmode.Mode) (Task, error) {
+	t, err := s.updateReviewModes(ctx, id, func(m *ReviewModes) {
+		m.Task = mode
+	})
+	if err != nil {
+		return Task{}, err
+	}
+
+	s.log.Info("task review mode set", "task", id, "mode", string(mode))
+	return t, nil
+}
+
+// SetStepReviewMode records the mode a step runs with, which makes the mode
+// its own.
+func (s *Service) SetStepReviewMode(ctx context.Context, id string, number int, mode reviewmode.Mode) (Task, error) {
+	t, err := s.updateReviewModes(ctx, id, func(m *ReviewModes) {
+		if m.Steps == nil {
+			m.Steps = map[int]reviewmode.Mode{}
+		}
+		m.Steps[number] = mode
+	})
+	if err != nil {
+		return Task{}, err
+	}
+
+	s.log.Info("task step review mode set", "task", id, "step", number, "mode", string(mode))
+	return t, nil
+}
+
+// updateReviewModes rewrites the review modes of a task on a copy of them,
+// persists it and tells the app.
+func (s *Service) updateReviewModes(ctx context.Context, id string, mutate func(*ReviewModes)) (Task, error) {
+	t, ok := s.Get(id)
+	if !ok {
+		return Task{}, fmt.Errorf("set review modes of task %s: %w", id, ErrNotFound)
+	}
+
+	m := t.ReviewModes.clone()
+	mutate(&m)
+	t.ReviewModes = m
+	t.UpdatedAt = s.now().UTC()
+	if err := s.repo.UpdateReviewModes(ctx, t.ID, t.ReviewModes, t.UpdatedAt); err != nil {
+		return Task{}, err
+	}
+
+	s.mu.Lock()
+	if index := indexOf(s.tasks, id); index >= 0 {
+		s.tasks[index] = t
+	}
+	s.mu.Unlock()
+
+	s.changed()
+	return t, nil
+}
+
 // StepRuns is what the app recorded about the steps of a task, by number.
 func (s *Service) StepRuns(id string) []StepRun {
 	s.mu.Lock()
@@ -580,6 +641,73 @@ func (s *Service) SetStepCommitted(ctx context.Context, id string, number int, s
 
 	s.log.Info("step committed", "task", id, "step", number, "commit", shortSHA(sha), "subject", subject)
 	return run, nil
+}
+
+// SetStepPass records the pass of the agent review of a step the app asked for.
+func (s *Service) SetStepPass(ctx context.Context, id string, number, pass int) (StepRun, error) {
+	return s.updateStepRun(ctx, id, number, func(run *StepRun) {
+		run.ReviewPass = pass
+	})
+}
+
+// SetStepReported records the pass of the agent review of a step whose report
+// the app acted on.
+func (s *Service) SetStepReported(ctx context.Context, id string, number, pass int) (StepRun, error) {
+	return s.updateStepRun(ctx, id, number, func(run *StepRun) {
+		run.ReportedPass = pass
+	})
+}
+
+// SetStepFallback records why a step that started under the agent review is
+// reviewed by the user from now on.
+func (s *Service) SetStepFallback(ctx context.Context, id string, number int, fallback ReviewFallback) (StepRun, error) {
+	return s.updateStepRun(ctx, id, number, func(run *StepRun) {
+		run.Fallback = fallback
+	})
+}
+
+// ClearStepReview forgets the agent review of a step: the reports it wrote and
+// how far its loop got. It is what starting the step over means for its
+// review.
+func (s *Service) ClearStepReview(ctx context.Context, id string, number int) error {
+	t, ok := s.Get(id)
+	if !ok {
+		return fmt.Errorf("clear the review of step %d of task %s: %w", number, id, ErrNotFound)
+	}
+	if err := removeStepReports(t.StepReviewsDir(), number); err != nil {
+		return fmt.Errorf("clear the review of step %d of task %s: %w", number, id, err)
+	}
+
+	s.mu.Lock()
+	recorded := indexOfRun(s.stepRuns[id], number) >= 0
+	s.mu.Unlock()
+	// A run without a status does not read back, so a step the app never
+	// recorded has nothing to forget.
+	if recorded {
+		if _, err := s.updateStepRun(ctx, id, number, func(run *StepRun) {
+			run.ReviewPass, run.ReportedPass, run.Fallback = 0, 0, ""
+		}); err != nil {
+			return err
+		}
+	}
+
+	a := s.inspect(t)
+	t.ArtifactVersion++
+	t.UpdatedAt = s.now().UTC()
+	if err := s.repo.UpdateArtifactVersion(ctx, t.ID, t.ArtifactVersion, t.UpdatedAt); err != nil {
+		return err
+	}
+
+	s.mu.Lock()
+	if index := indexOf(s.tasks, id); index >= 0 {
+		s.tasks[index] = t
+	}
+	s.artifacts[id] = a
+	s.mu.Unlock()
+
+	s.log.Info("step review cleared", "task", id, "step", number)
+	s.changed()
+	return nil
 }
 
 // ClearStepRuns forgets every step of a task, which is what discarding the
@@ -730,6 +858,9 @@ func (s *Service) RemoveArtifacts(ctx context.Context, id string, from Stage) er
 		case StagePlan:
 			err = removePath(t.StepsDir(), true)
 		case StageImplementation:
+			// The reports of the agent review belong to the steps, and go with
+			// them.
+			err = removePath(t.StepReviewsDir(), true)
 		case StagePR:
 			// The drafts and the reports are about the commits the steps
 			// produced; going back to them leaves nothing to open a PR from.
@@ -741,10 +872,16 @@ func (s *Service) RemoveArtifacts(ctx context.Context, id string, from Stage) er
 	}
 
 	// The choices of the steps belong to the step files: a plan written again
-	// starts from the choice of implementation.
+	// starts from the model of implementation and from the mode of the task.
 	if from.Index() <= StagePlan.Index() && len(t.Models.Steps) > 0 {
 		t.Models = Models{Stages: t.Models.Stages}
 		if err := s.repo.UpdateModels(ctx, t.ID, t.Models, s.now().UTC()); err != nil {
+			return err
+		}
+	}
+	if from.Index() <= StagePlan.Index() && len(t.ReviewModes.Steps) > 0 {
+		t.ReviewModes = ReviewModes{Task: t.ReviewModes.Task}
+		if err := s.repo.UpdateReviewModes(ctx, t.ID, t.ReviewModes, s.now().UTC()); err != nil {
 			return err
 		}
 	}
@@ -769,8 +906,9 @@ func (s *Service) RemoveArtifacts(ctx context.Context, id string, from Stage) er
 }
 
 // ReadArtifact returns the content of an artifact by file name: the PRD, the
-// tech spec, a step file under the steps folder or a draft or a review report
-// under the pr folder. Anything else is ErrNotFound. An archived task is read
+// tech spec, a step file under the steps folder, a draft or a review report
+// under the pr folder, or a report of the agent review of a step under the
+// step-reviews folder. Anything else is ErrNotFound. An archived task is read
 // the same way, which is what the history shows.
 func (s *Service) ReadArtifact(id, name string) (string, error) {
 	if !readableArtifact(name) {
@@ -802,8 +940,34 @@ func readableArtifact(name string) bool {
 	if step, found := strings.CutPrefix(name, StepsDirName+"/"); found {
 		return stepFilePattern.MatchString(step)
 	}
+	if report, found := strings.CutPrefix(name, StepReviewsDirName+"/"); found {
+		return stepReportFilePattern.MatchString(report)
+	}
 	pr, found := strings.CutPrefix(name, PRDirName+"/")
 	return found && prArtifactName(pr)
+}
+
+// removeStepReports deletes the reports of the agent review of one step. A
+// missing folder holds none.
+func removeStepReports(dir string, number int) error {
+	entries, err := os.ReadDir(dir)
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		return nil
+	case err != nil:
+		return fmt.Errorf("read %s: %w", dir, err)
+	}
+
+	for _, entry := range entries {
+		step, _, ok := parseStepReportName(entry.Name())
+		if entry.IsDir() || !ok || step != number {
+			continue
+		}
+		if err := removePath(filepath.Join(dir, entry.Name()), false); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // removePath deletes an artifact that may not be there, which is not a failure.
@@ -918,6 +1082,8 @@ func (s *Service) inspect(t Task) Artifacts {
 		TechSpec: s.fileWritten(t.TechSpecPath()),
 		Plan:     ReadPlan(t.StepsDir(), repos),
 		PR:       ReadPRArtifacts(t.PRDir(), slugs),
+
+		StepReports: ReadStepReports(t.StepReviewsDir()),
 	}
 }
 

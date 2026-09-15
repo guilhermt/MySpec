@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/guilhermt/myspec/internal/models"
+	"github.com/guilhermt/myspec/internal/reviewmode"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/store"
 	"github.com/guilhermt/myspec/internal/task"
@@ -83,6 +84,7 @@ func newTask(id, workspacePath, name string, created time.Time) task.Task {
 		ArtifactsDir:    "/data/tasks/" + name,
 		ArtifactVersion: 0,
 		Models:          task.Models{Stages: models.Factory()},
+		ReviewModes:     task.ReviewModes{Task: reviewmode.Manual},
 		CreatedAt:       created,
 		UpdatedAt:       created,
 	}

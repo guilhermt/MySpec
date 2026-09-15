@@ -10,7 +10,7 @@ import (
 
 // stepColumns is the column list every step query selects, in scan order.
 const stepColumns = `task_id, number, status, block_reason, block_detail, block_files,
-	created_at, updated_at, start_commit, commit_sha, commit_subject`
+	created_at, updated_at, start_commit, commit_sha, commit_subject, review_pass, reported_pass, review_fallback`
 
 // ListStepRuns returns what the app recorded about the steps of a task, by
 // number.
@@ -39,7 +39,7 @@ func (r *TasksRepo) ListStepRuns(ctx context.Context, taskID string) ([]task.Ste
 
 // UpsertStepRun stores the state of a step, rewriting what was there.
 func (r *TasksRepo) UpsertStepRun(ctx context.Context, run task.StepRun) error {
-	const stmt = `INSERT INTO steps (` + stepColumns + `) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	const stmt = `INSERT INTO steps (` + stepColumns + `) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (task_id, number) DO UPDATE SET
 			status = excluded.status,
 			block_reason = excluded.block_reason,
@@ -48,7 +48,10 @@ func (r *TasksRepo) UpsertStepRun(ctx context.Context, run task.StepRun) error {
 			updated_at = excluded.updated_at,
 			start_commit = excluded.start_commit,
 			commit_sha = excluded.commit_sha,
-			commit_subject = excluded.commit_subject`
+			commit_subject = excluded.commit_subject,
+			review_pass = excluded.review_pass,
+			reported_pass = excluded.reported_pass,
+			review_fallback = excluded.review_fallback`
 
 	var block task.StepBlock
 	if run.Block != nil {
@@ -57,7 +60,8 @@ func (r *TasksRepo) UpsertStepRun(ctx context.Context, run task.StepRun) error {
 	_, err := r.db.ExecContext(ctx, stmt, run.TaskID, run.Number, string(run.Status),
 		nullString(string(block.Reason)), nullString(block.Detail), block.Files,
 		formatTime(run.CreatedAt), formatTime(run.UpdatedAt),
-		run.StartCommit, run.CommitSHA, run.CommitSubject)
+		run.StartCommit, run.CommitSHA, run.CommitSubject,
+		run.ReviewPass, run.ReportedPass, string(run.Fallback))
 	if err != nil {
 		return fmt.Errorf("upsert step %d of task %s: %w", run.Number, run.TaskID, err)
 	}
@@ -81,9 +85,11 @@ func scanStepRun(row scanner) (task.StepRun, error) {
 		reason, detail       sql.NullString
 		files                int
 		createdAt, updatedAt string
+		fallback             string
 	)
 	err := row.Scan(&run.TaskID, &run.Number, &status, &reason, &detail, &files, &createdAt, &updatedAt,
-		&run.StartCommit, &run.CommitSHA, &run.CommitSubject)
+		&run.StartCommit, &run.CommitSHA, &run.CommitSubject,
+		&run.ReviewPass, &run.ReportedPass, &fallback)
 	if err != nil {
 		return task.StepRun{}, fmt.Errorf("scan step: %w", err)
 	}
@@ -98,6 +104,9 @@ func scanStepRun(row scanner) (task.StepRun, error) {
 			return task.StepRun{}, fmt.Errorf("read %s: %w", subject, parseErr)
 		}
 		run.Block = &task.StepBlock{Reason: parsed, Detail: detail.String, Files: files}
+	}
+	if run.Fallback, err = task.ParseReviewFallback(fallback); err != nil {
+		return task.StepRun{}, fmt.Errorf("read %s: %w", subject, err)
 	}
 	if run.CreatedAt, err = parseTime(createdAt, subject); err != nil {
 		return task.StepRun{}, err

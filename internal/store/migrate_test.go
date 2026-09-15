@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"log/slog"
+	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -12,19 +13,22 @@ import (
 	"github.com/google/go-cmp/cmp"
 
 	"github.com/guilhermt/myspec/internal/models"
+	"github.com/guilhermt/myspec/internal/reviewmode"
 	"github.com/guilhermt/myspec/internal/task"
 )
 
 // stagesVersion is the migration that brought the stages after the PRD,
 // commitsVersion the one that gave a step its commits, prVersion the one that
-// brought the PR stage, modelsVersion the one that brought the models, and
-// latestVersion the version the embedded migrations end at.
+// brought the PR stage, modelsVersion the one that brought the models,
+// reviewModeVersion the one that brought the review mode, and latestVersion
+// the version the embedded migrations end at.
 const (
-	stagesVersion  = 3
-	commitsVersion = 5
-	prVersion      = 6
-	modelsVersion  = 9
-	latestVersion  = 9
+	stagesVersion     = 3
+	commitsVersion    = 5
+	prVersion         = 6
+	modelsVersion     = 9
+	reviewModeVersion = 10
+	latestVersion     = 10
 )
 
 // mapFS builds a migrations tree with the given file names.
@@ -304,12 +308,81 @@ func TestTheModelsMigrationGivesTheFactoryDefaults(t *testing.T) {
 		t.Fatalf("json.Unmarshal(%q) = %v, want nil", encoded, err)
 	}
 	// The migration and the factory have to say the same thing, so that a task
-	// that existed before it starts where a new one does.
-	if diff := cmp.Diff(models.Factory(), m.Stages); diff != "" {
+	// that existed before it starts where a new one does. The step review came
+	// later, and the migration of the review mode gives it to those tasks.
+	want := models.Factory()
+	delete(want, models.StepReview)
+	if diff := cmp.Diff(want, m.Stages); diff != "" {
 		t.Errorf("stages mismatch (-want +got):\n%s", diff)
 	}
 	if m.Steps != nil {
 		t.Errorf("Steps = %v, want no step with a choice of its own", m.Steps)
+	}
+}
+
+func TestMigrateLeavesTheTasksThatExistToTheUser(t *testing.T) {
+	t.Parallel()
+
+	db := openAt(t, reviewModeVersion-1)
+	before := models.Factory()
+	delete(before, models.StepReview)
+	encoded, err := json.Marshal(task.Models{Stages: before})
+	if err != nil {
+		t.Fatalf("json.Marshal() = %v, want nil", err)
+	}
+	const insertTask = `INSERT INTO tasks
+		(id, workspace_path, name, initial_context, stage, artifacts_dir, created_at, updated_at, revisiting, models)
+		VALUES ('task-1', '/ws', 'one', 'context', 'implementation', '/data/x',
+			'2026-09-06T10:00:00Z', '2026-09-06T10:00:00Z', 0, ?)`
+	if _, err := db.ExecContext(t.Context(), insertTask, string(encoded)); err != nil {
+		t.Fatalf("insert task: %v", err)
+	}
+	const insertStep = `INSERT INTO steps (task_id, number, status, block_files, created_at, updated_at)
+		VALUES ('task-1', 1, 'started', 0, '2026-09-06T10:00:00Z', '2026-09-06T10:00:00Z')`
+	if _, err := db.ExecContext(t.Context(), insertStep); err != nil {
+		t.Fatalf("insert step: %v", err)
+	}
+
+	if err := migrate(t.Context(), db, slog.New(slog.DiscardHandler)); err != nil {
+		t.Fatalf("migrate() = %v, want nil", err)
+	}
+
+	var reviewModes, stored string
+	const taskQuery = `SELECT review_modes, models FROM tasks WHERE id = 'task-1'`
+	if err := db.QueryRowContext(t.Context(), taskQuery).Scan(&reviewModes, &stored); err != nil {
+		t.Fatalf("query task: %v", err)
+	}
+
+	var gotModes task.ReviewModes
+	if err := json.Unmarshal([]byte(reviewModes), &gotModes); err != nil {
+		t.Fatalf("json.Unmarshal(%q) = %v, want nil", reviewModes, err)
+	}
+	if diff := cmp.Diff(task.ReviewModes{Task: reviewmode.Manual}, gotModes); diff != "" {
+		t.Errorf("review modes mismatch (-want +got):\n%s", diff)
+	}
+
+	var gotModels task.Models
+	if err := json.Unmarshal([]byte(stored), &gotModels); err != nil {
+		t.Fatalf("json.Unmarshal(%q) = %v, want nil", stored, err)
+	}
+	// The step review takes the factory choice, and every other stage keeps
+	// the one it had.
+	want := maps.Clone(before)
+	want[models.StepReview] = models.Factory()[models.StepReview]
+	if diff := cmp.Diff(want, gotModels.Stages); diff != "" {
+		t.Errorf("stages mismatch (-want +got):\n%s", diff)
+	}
+
+	const stepQuery = `SELECT review_pass, reported_pass, review_fallback FROM steps WHERE task_id = 'task-1'`
+	var (
+		pass, reported int
+		fallback       string
+	)
+	if err := db.QueryRowContext(t.Context(), stepQuery).Scan(&pass, &reported, &fallback); err != nil {
+		t.Fatalf("query step: %v", err)
+	}
+	if pass != 0 || reported != 0 || fallback != "" {
+		t.Errorf("agent review = %d %d %q, want a step that never went through one", pass, reported, fallback)
 	}
 }
 

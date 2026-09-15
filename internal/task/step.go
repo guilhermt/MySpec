@@ -70,6 +70,15 @@ type StepRun struct {
 	StartCommit   string // the commit the worktree was on when the step started
 	CommitSHA     string // the commit the step produced; set with StepDone
 	CommitSubject string
+
+	// ReviewPass is the last pass of the agent review the app asked for, and
+	// ReportedPass the last pass whose report it acted on: a pass is under way
+	// while the first is ahead of the second.
+	ReviewPass   int
+	ReportedPass int
+	// Fallback is why a step that started under the agent review is reviewed
+	// by the user; "" while its mode holds.
+	Fallback ReviewFallback
 }
 
 // shortSHALen is how many characters of a commit sha the app shows.

@@ -105,6 +105,7 @@ var subFolders = []struct {
 }{
 	{name: StepsDirName, kind: ArtifactPlan},
 	{name: PRDirName, kind: ArtifactPR},
+	{name: StepReviewsDirName, kind: ArtifactStepReview},
 }
 
 // unwatch stops following the folders of a task and drops its pending wait.
@@ -209,7 +210,7 @@ func (w *watcher) kindOf(ev fsnotify.Event, where watched) (ArtifactKind, bool) 
 	if where.kind != "" {
 		// The agent writes the drafts and the reports whole; a hidden file is
 		// an editor of its own passing through.
-		if where.kind == ArtifactPR && strings.HasPrefix(name, ".") {
+		if (where.kind == ArtifactPR || where.kind == ArtifactStepReview) && strings.HasPrefix(name, ".") {
 			return "", false
 		}
 		return where.kind, true
@@ -220,11 +221,8 @@ func (w *watcher) kindOf(ev fsnotify.Event, where watched) (ArtifactKind, bool) 
 		return ArtifactPRD, true
 	case TechSpecFile:
 		return ArtifactTechSpec, true
-	case StepsDirName, PRDirName:
-		kind := ArtifactPlan
-		if name == PRDirName {
-			kind = ArtifactPR
-		}
+	case StepsDirName, PRDirName, StepReviewsDirName:
+		kind := folderKind(name)
 		if ev.Has(fsnotify.Create) {
 			w.addFolder(where.taskID, ev.Name, kind)
 		}
@@ -237,6 +235,16 @@ func (w *watcher) kindOf(ev fsnotify.Event, where watched) (ArtifactKind, bool) 
 	default:
 		return "", false
 	}
+}
+
+// folderKind is the artifact a folder inside the folder of a task holds.
+func folderKind(name string) ArtifactKind {
+	for _, sub := range subFolders {
+		if sub.name == name {
+			return sub.kind
+		}
+	}
+	return ""
 }
 
 // arm restarts the wait of a task with the artifact added to what it saw.

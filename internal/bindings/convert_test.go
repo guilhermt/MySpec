@@ -773,6 +773,7 @@ func TestFromTasksCarriesTheModelsOfEveryStage(t *testing.T) {
 			models.TechSpec:       {Model: models.Fable51, Effort: models.High},
 			models.Plan:           {Model: models.Fable51, Effort: models.High},
 			models.Implementation: {Model: models.Opus5, Effort: models.High},
+			models.StepReview:     {Model: models.Opus5, Effort: models.High},
 			models.PR:             {Model: models.Opus5, Effort: models.Medium},
 			models.PRReview:       {Model: models.Sonnet5, Effort: models.Low},
 		}},
@@ -802,6 +803,7 @@ func TestFromTasksCarriesTheModelsOfEveryStage(t *testing.T) {
 		{Stage: "tech_spec", Model: "claude-fable-5-1", Effort: "high", Live: true},
 		{Stage: "plan", Model: "claude-fable-5-1", Effort: "high", Editable: true},
 		{Stage: "implementation", Model: "claude-opus-5", Effort: "high", Editable: true},
+		{Stage: "step_review", Model: "claude-opus-5", Effort: "high", Editable: true},
 		{Stage: "pr", Model: "claude-opus-5", Effort: "medium", Editable: true},
 		{Stage: "pr_review", Model: "claude-sonnet-5", Effort: "low", Editable: true},
 	}
@@ -822,6 +824,7 @@ func TestFromModelSetIsInWorkflowOrder(t *testing.T) {
 		{Stage: "tech_spec", Model: "claude-fable-5-1", Effort: "high"},
 		{Stage: "plan", Model: "claude-fable-5-1", Effort: "high"},
 		{Stage: "implementation", Model: "claude-opus-5", Effort: "high"},
+		{Stage: "step_review", Model: "claude-opus-5", Effort: "high"},
 		{Stage: "pr", Model: "claude-opus-5", Effort: "medium"},
 		{Stage: "pr_review", Model: "claude-opus-5", Effort: "high"},
 	}

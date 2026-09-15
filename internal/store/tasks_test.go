@@ -8,6 +8,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 
 	"github.com/guilhermt/myspec/internal/models"
+	"github.com/guilhermt/myspec/internal/reviewmode"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
 )
@@ -258,6 +259,33 @@ func TestTasksUpdateModels(t *testing.T) {
 	}
 	if diff := cmp.Diff(want, got.Models); diff != "" {
 		t.Errorf("Get() models mismatch (-want +got):\n%s", diff)
+	}
+	if !got.UpdatedAt.Equal(updatedAt) {
+		t.Errorf("UpdatedAt = %v, want %v", got.UpdatedAt, updatedAt)
+	}
+}
+
+func TestTasksUpdateReviewModes(t *testing.T) {
+	t.Parallel()
+	s := newStore(t)
+
+	tk := newTask("task-1", "/ws", "one", fixedTime)
+	if err := s.Tasks.Insert(t.Context(), tk); err != nil {
+		t.Fatalf("Insert() = %v, want nil", err)
+	}
+
+	want := task.ReviewModes{Task: reviewmode.Agent, Steps: map[int]reviewmode.Mode{2: reviewmode.Manual}}
+	updatedAt := fixedTime.Add(time.Minute)
+	if err := s.Tasks.UpdateReviewModes(t.Context(), tk.ID, want, updatedAt); err != nil {
+		t.Fatalf("UpdateReviewModes() = %v, want nil", err)
+	}
+
+	got, err := s.Tasks.Get(t.Context(), tk.ID)
+	if err != nil {
+		t.Fatalf("Get() = %v, want nil", err)
+	}
+	if diff := cmp.Diff(want, got.ReviewModes); diff != "" {
+		t.Errorf("Get() review modes mismatch (-want +got):\n%s", diff)
 	}
 	if !got.UpdatedAt.Equal(updatedAt) {
 		t.Errorf("UpdatedAt = %v, want %v", got.UpdatedAt, updatedAt)

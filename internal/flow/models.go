@@ -56,6 +56,11 @@ func StageModels(t task.Task, steps []StepState, repos []RepoState) []StageModel
 				(implementing && slices.ContainsFunc(steps, func(st StepState) bool { return st.ModelEditable() }))
 			state.Live = implementing &&
 				slices.ContainsFunc(steps, func(st StepState) bool { return stepHasSession(st.Status) })
+		case models.StepReview:
+			// A reviewer starts with the choice the task has at its first pass, so a
+			// change reaches every step still to be committed.
+			state.Editable = before(task.StageImplementation) ||
+				(implementing && slices.ContainsFunc(steps, func(st StepState) bool { return st.Status != StepDone }))
 		case models.PR:
 			state.Editable = before(task.StagePR) || (inPR && slices.ContainsFunc(repos, draftToStart))
 			state.Live = inPR && slices.ContainsFunc(repos, func(repo RepoState) bool {
