@@ -17,7 +17,7 @@ type TasksRepo struct{ db *sql.DB }
 
 // taskColumns is the column list every task query selects, in scan order.
 const taskColumns = `id, workspace_path, name, repo_path, initial_context, stage, revisiting,
-	artifacts_dir, artifact_version, archived_at, created_at, updated_at, models, review_modes`
+	artifacts_dir, artifact_version, archived_at, created_at, updated_at, models, review_modes, mode`
 
 // ListByWorkspace returns the tasks a workspace still holds, in creation
 // order. The archived ones are not among them.
@@ -78,7 +78,7 @@ func (r *TasksRepo) Get(ctx context.Context, id string) (task.Task, error) {
 func (r *TasksRepo) Insert(ctx context.Context, t task.Task) error {
 	const taken = `SELECT 1 FROM tasks WHERE workspace_path = ? AND name = ?`
 	const stmt = `INSERT INTO tasks (` + taskColumns + `)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	encodedModels, err := encodeModels(t.Models)
 	if err != nil {
@@ -107,7 +107,7 @@ func (r *TasksRepo) Insert(ctx context.Context, t task.Task) error {
 	_, err = tx.ExecContext(ctx, stmt,
 		t.ID, t.WorkspacePath, t.Name, nullString(t.RepoPath), t.InitialContext, string(t.Stage), t.Revisiting,
 		t.ArtifactsDir, t.ArtifactVersion, nullTime(t.ArchivedAt),
-		formatTime(t.CreatedAt), formatTime(t.UpdatedAt), encodedModels, encodedReviewModes)
+		formatTime(t.CreatedAt), formatTime(t.UpdatedAt), encodedModels, encodedReviewModes, string(t.Mode))
 	if err != nil {
 		return fmt.Errorf("insert task %s: %w", t.Name, err)
 	}
@@ -194,10 +194,11 @@ func scanTask(row scanner) (task.Task, error) {
 		createdAt, updatedAt string
 		encodedModels        string
 		encodedReviewModes   string
+		mode                 string
 	)
 	err := row.Scan(&t.ID, &t.WorkspacePath, &t.Name, &repoPath, &t.InitialContext, &stage, &t.Revisiting,
 		&t.ArtifactsDir, &t.ArtifactVersion, &archivedAt, &createdAt, &updatedAt, &encodedModels,
-		&encodedReviewModes)
+		&encodedReviewModes, &mode)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		return task.Task{}, err
@@ -207,6 +208,7 @@ func scanTask(row scanner) (task.Task, error) {
 
 	t.RepoPath = repoPath.String
 	t.Stage = task.Stage(stage)
+	t.Mode = task.Mode(mode)
 	if archivedAt.Valid {
 		if t.ArchivedAt, err = parseTime(archivedAt.String, "task "+t.ID); err != nil {
 			return task.Task{}, err

@@ -1,5 +1,5 @@
 import { ChevronRight } from "lucide-react";
-import { type FormEvent, type KeyboardEvent, useState } from "react";
+import { type FormEvent, type KeyboardEvent, useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
@@ -12,17 +12,19 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { ModelPicker } from "@/features/models/ModelPicker";
 import { ReviewModePicker } from "@/features/review-mode/ReviewModePicker";
 import { findNode, type TreeNode } from "@/features/tree/tree-model";
 import {
   adjustmentSummary,
   choiceOf,
-  MODEL_STAGES,
   modelStageLabel,
+  modelStagesOf,
   withChoice,
 } from "@/lib/models";
 import { reviewModeHint } from "@/lib/review-modes";
+import { ONE_SHOT_AT_ROOT, TASK_MODES, taskModeHint, taskModeLabel } from "@/lib/task-modes";
 import {
   isValidTaskName,
   type NameProblem,
@@ -31,7 +33,7 @@ import {
   taskNameProblem,
 } from "@/lib/task-name";
 import { cn } from "@/lib/utils";
-import { asReviewMode, type ReviewMode, type StageModel } from "@/lib/wails";
+import { asReviewMode, type ReviewMode, type StageModel, type TaskMode } from "@/lib/wails";
 import { createTask } from "@/store/actions";
 import { useAppStore, useTasks } from "@/store/app-store";
 
@@ -78,6 +80,12 @@ function NewTaskForm({ node }: { node: TreeNode }) {
   const [choices, setChoices] = useState<StageModel[]>(() => [...defaults]);
   const [modelsOpen, setModelsOpen] = useState(false);
   const [reviewMode, setReviewMode] = useState<ReviewMode>(() => defaultMode);
+  // Every task starts Structured: One-Shot is a choice made for the task at hand.
+  const [mode, setMode] = useState<TaskMode>("structured");
+  const modeLabelId = useId();
+  // The choices hold every stage, so an adjustment to a stage both modes have
+  // survives a change of mode; the list and its summary show the mode's own.
+  const modelStages = modelStagesOf(mode);
 
   const problem = taskNameProblem(name, taken);
   const suggestion = suggestTaskName(name);
@@ -97,6 +105,7 @@ function NewTaskForm({ node }: { node: TreeNode }) {
       name,
       repoPath: node.isRoot ? "" : node.path,
       initialContext: context,
+      mode,
       models: choices,
       reviewMode,
     })
@@ -188,6 +197,33 @@ function NewTaskForm({ node }: { node: TreeNode }) {
           </div>
 
           <div className="flex flex-col gap-1.5">
+            <Label id={modeLabelId}>Mode</Label>
+            <ToggleGroup
+              aria-labelledby={modeLabelId}
+              size="sm"
+              value={[mode]}
+              onValueChange={(next: string[]) => {
+                const [value] = next;
+                if (value === "structured" || value === "one_shot") {
+                  setMode(value);
+                }
+              }}
+            >
+              {TASK_MODES.map((option) => (
+                <ToggleGroupItem
+                  key={option}
+                  value={option}
+                  disabled={option === "one_shot" && node.isRoot}
+                >
+                  {taskModeLabel(option)}
+                </ToggleGroupItem>
+              ))}
+            </ToggleGroup>
+            <p className="text-xs text-muted-foreground">{taskModeHint(mode)}</p>
+            {node.isRoot && <p className="text-xs text-muted-foreground">{ONE_SHOT_AT_ROOT}</p>}
+          </div>
+
+          <div className="flex flex-col gap-1.5">
             <Label>Review mode</Label>
             <div>
               <ReviewModePicker label="Task" value={reviewMode} onChange={setReviewMode} />
@@ -217,12 +253,12 @@ function NewTaskForm({ node }: { node: TreeNode }) {
               />
               <span className="font-medium">Models</span>
               <span className="min-w-0 truncate text-muted-foreground">
-                {adjustmentSummary(choices, defaults)}
+                {adjustmentSummary(choices, defaults, modelStages)}
               </span>
             </CollapsibleTrigger>
             <CollapsibleContent>
               <ul className="flex flex-col divide-y rounded-lg border">
-                {MODEL_STAGES.map((stage) => (
+                {modelStages.map((stage) => (
                   <li key={stage} className="flex h-11 items-center justify-between gap-4 px-3">
                     <span className="text-sm">{modelStageLabel(stage)}</span>
                     <ModelPicker

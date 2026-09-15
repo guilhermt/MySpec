@@ -224,6 +224,7 @@ describe("createTask", () => {
       name: "add-login",
       repoPath: "",
       initialContext: "a login",
+      mode: "",
       models: [],
       reviewMode: "",
     });
@@ -239,6 +240,7 @@ describe("createTask", () => {
         name: "add-login",
         repoPath: "",
         initialContext: "a login",
+        mode: "",
         models: [],
         reviewMode: "",
       }),

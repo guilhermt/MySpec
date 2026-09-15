@@ -22,7 +22,7 @@ type Input struct {
 // urgent one when more than one condition holds there.
 func Derive(in Input) []Found {
 	switch in.Task.Stage {
-	case task.StagePRD, task.StageTechSpec, task.StagePlan:
+	case task.StagePRD, task.StageTechSpec, task.StagePlan, task.StageOneShot:
 		if found, ok := stageSituation(in); ok {
 			return []Found{found}
 		}

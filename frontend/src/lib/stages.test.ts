@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { LIFECYCLE, stageIndex, stageLabel, stageState } from "@/lib/stages";
+import { lifecycleOf, stageIndex, stageLabel, stageState } from "@/lib/stages";
 import { makeRepoPR, makeTask } from "@/test/wails-mock";
 
-describe("LIFECYCLE", () => {
-  it("runs from the PRD to the closing", () => {
-    expect(LIFECYCLE.map((stage) => stage.id)).toEqual([
+describe("lifecycleOf", () => {
+  it("runs a Structured task from the PRD to the closing", () => {
+    expect(lifecycleOf("structured")).toEqual([
       "prd",
       "tech_spec",
       "plan",
@@ -14,13 +14,31 @@ describe("LIFECYCLE", () => {
       "closing",
     ]);
   });
+
+  it("runs a One-Shot task from its planning to the closing", () => {
+    expect(lifecycleOf("one_shot")).toEqual([
+      "one_shot",
+      "implementation",
+      "pr",
+      "pr_review",
+      "closing",
+    ]);
+  });
 });
 
 describe("stageIndex", () => {
-  it("is the position in the lifecycle", () => {
-    expect(stageIndex("prd")).toBe(0);
-    expect(stageIndex("implementation")).toBe(3);
-    expect(stageIndex("closing")).toBe(6);
+  it("is the position in the track of the mode", () => {
+    expect(stageIndex("structured", "prd")).toBe(0);
+    expect(stageIndex("structured", "implementation")).toBe(3);
+    expect(stageIndex("structured", "closing")).toBe(6);
+    expect(stageIndex("one_shot", "one_shot")).toBe(0);
+    expect(stageIndex("one_shot", "implementation")).toBe(1);
+    expect(stageIndex("one_shot", "closing")).toBe(4);
+  });
+
+  it("places nowhere a stage the mode does not have", () => {
+    expect(stageIndex("structured", "one_shot")).toBe(-1);
+    expect(stageIndex("one_shot", "tech_spec")).toBe(-1);
   });
 });
 
@@ -29,6 +47,7 @@ describe("stageLabel", () => {
     expect(stageLabel("prd")).toBe("PRD");
     expect(stageLabel("tech_spec")).toBe("Tech spec");
     expect(stageLabel("plan")).toBe("Plan");
+    expect(stageLabel("one_shot")).toBe("Planning");
     expect(stageLabel("implementation")).toBe("Implementation");
     expect(stageLabel("pr")).toBe("PR");
     expect(stageLabel("pr_review")).toBe("PR review");
@@ -52,6 +71,19 @@ describe("stageState", () => {
 
   it("falls back to the PRD on a stage it does not know", () => {
     expect(stageState(makeTask({ stage: "archived" }), "prd")).toBe("current");
+  });
+
+  it.each([
+    ["one_shot", "one_shot", "current"],
+    ["one_shot", "implementation", "upcoming"],
+    ["implementation", "one_shot", "done"],
+    ["implementation", "implementation", "current"],
+    ["implementation", "pr", "upcoming"],
+    ["pr", "one_shot", "done"],
+    ["pr", "implementation", "done"],
+    ["pr", "pr", "current"],
+  ] as const)("reads a One-Shot task in %s against %s", (stage, id, expected) => {
+    expect(stageState(makeTask({ mode: "one_shot", stage, repos: [] }), id)).toBe(expected);
   });
 
   // The PR stage covers two chips, and the pull requests decide which of them

@@ -221,6 +221,8 @@ func (w *watcher) kindOf(ev fsnotify.Event, where watched) (ArtifactKind, bool) 
 		return ArtifactPRD, true
 	case TechSpecFile:
 		return ArtifactTechSpec, true
+	case OneShotFile:
+		return ArtifactOneShot, true
 	case StepsDirName, PRDirName, StepReviewsDirName:
 		kind := folderKind(name)
 		if ev.Has(fsnotify.Create) {

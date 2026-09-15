@@ -107,13 +107,16 @@ export type {
 
 export type ThemePreference = "system" | "light" | "dark";
 export type NoticeReason = "not_found" | "not_directory" | "not_readable" | "last_recent_missing";
-export type TaskStage = "prd" | "tech_spec" | "plan" | "implementation" | "pr";
+/** TaskMode is how a task is conducted: the structured flow, or One-Shot. */
+export type TaskMode = "structured" | "one_shot";
+export type TaskStage = "prd" | "tech_spec" | "plan" | "one_shot" | "implementation" | "pr";
 
 /** ModelStage is a stage that carries a model and an effort of its own. */
 export type ModelStage =
   | "prd"
   | "tech_spec"
   | "plan"
+  | "one_shot"
   | "implementation"
   | "step_review"
   | "pr"
@@ -124,6 +127,7 @@ export type PromptStage =
   | "prd"
   | "tech_spec"
   | "plan"
+  | "one_shot"
   | "step_review"
   | "commit"
   | "pr"
@@ -219,6 +223,8 @@ export type MarkerType =
   | "tech_spec_updated"
   | "plan_written"
   | "plan_updated"
+  | "one_shot_written"
+  | "one_shot_updated"
   | "pr_review_written"
   | "step_review_started"
   | "step_review_written"
@@ -298,11 +304,22 @@ export function asNoticeReason(value: string): NoticeReason {
   }
 }
 
+export function asTaskMode(value: string): TaskMode {
+  switch (value) {
+    case "structured":
+    case "one_shot":
+      return value;
+    default:
+      return "structured";
+  }
+}
+
 export function asTaskStage(value: string): TaskStage {
   switch (value) {
     case "prd":
     case "tech_spec":
     case "plan":
+    case "one_shot":
     case "implementation":
     case "pr":
       return value;
@@ -316,6 +333,7 @@ export function asModelStage(value: string): ModelStage {
     case "prd":
     case "tech_spec":
     case "plan":
+    case "one_shot":
     case "implementation":
     case "step_review":
     case "pr":
@@ -331,6 +349,7 @@ export function asPromptStage(value: string): PromptStage {
     case "prd":
     case "tech_spec":
     case "plan":
+    case "one_shot":
     case "step_review":
     case "commit":
     case "pr":
@@ -527,6 +546,8 @@ export function asMarkerType(value: string): MarkerType {
     case "tech_spec_updated":
     case "plan_written":
     case "plan_updated":
+    case "one_shot_written":
+    case "one_shot_updated":
     case "pr_review_written":
     case "step_review_started":
     case "step_review_written":

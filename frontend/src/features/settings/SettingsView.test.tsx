@@ -37,7 +37,7 @@ async function edited() {
 }
 
 describe("SettingsView", () => {
-  it("lists the defaults and the seven prompts in its navigation, with the one on screen as the current page", () => {
+  it("lists the defaults and the eight prompts in its navigation, with the one on screen as the current page", () => {
     view();
 
     const nav = screen.getByRole("navigation", { name: "Settings" });
@@ -46,6 +46,7 @@ describe("SettingsView", () => {
       "PRD",
       "Tech spec",
       "Plan",
+      "One-Shot planning",
       "Step review",
       "Commit",
       "PR",

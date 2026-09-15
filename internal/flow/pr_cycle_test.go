@@ -92,6 +92,35 @@ func TestTheFirstPassOfAReviewIsStartedWithItsReport(t *testing.T) {
 	}
 }
 
+func TestTheReviewOfAOneShotPullRequestReadsTheDocument(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.tasks.setTaskMode("task-1", task.ModeOneShot)
+	document := underReview(t, f).OneShotPath()
+
+	if info, _ := f.sessions.info(reviewKeyOf); info.OneShotPath != document {
+		t.Errorf("document of the review session = %q, want %q", info.OneShotPath, document)
+	}
+
+	// The passes after the first one are asked for by the app, and point to the
+	// same document.
+	reportsWritten(f, reports(1, false))
+	f.waitPRRun(t, "the report of the first pass", func(run task.PRRun) bool { return run.ReportedPass == 1 })
+	f.reviews.setSnapshot(staged(3, 3))
+	f.sessions.goIdle("task-1")
+	if err := f.service.ApproveRepo(t.Context(), "task-1", repos[0].Path); err != nil {
+		t.Fatalf("ApproveRepo() = %v, want nil", err)
+	}
+	f.worktrees.setStatus(git.Status{Head: commitSHA})
+	f.reviews.setSnapshot(review.Snapshot{Head: commitSHA})
+	f.sessions.goIdle("task-1")
+	f.service.Check("task-1")
+
+	want := oneShotReviewPrompt("/data/task-1/pr/api-review-2.md", document)
+	waitFor(t, "the prompt of the second pass", func() bool { return slices.Contains(f.sessions.sent(), want) })
+}
+
 func TestAReportWithFindingsWaitsForTheDecision(t *testing.T) {
 	t.Parallel()
 

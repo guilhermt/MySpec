@@ -655,6 +655,7 @@ function onScreenSituation(state: AppStore): Situation | null {
     case "prd":
     case "tech_spec":
     case "plan":
+    case "one_shot":
       return stageSituation(task);
   }
 }

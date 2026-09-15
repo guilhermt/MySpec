@@ -39,7 +39,7 @@ export interface ArchivedStep {
     "number": number;
 
     /**
-     * name inside steps/, the artifact is "steps/" + File
+     * name inside steps/, the artifact is "steps/" + File; one-shot.md for the single step of a One-Shot task
      */
     "file": string;
     "title": string;
@@ -63,8 +63,15 @@ export interface ArchivedTask {
      * "" for a root task
      */
     "repoPath": string;
+
+    /**
+     * Mode is structured or one_shot, a string for the same reason as
+     * Notice.Reason.
+     */
+    "mode": string;
     "hasPrd": boolean;
     "hasTechSpec": boolean;
+    "hasOneShot": boolean;
 
     /**
      * never nil
@@ -146,6 +153,11 @@ export interface CreateTaskRequest {
      */
     "repoPath": string;
     "initialContext": string;
+
+    /**
+     * structured or one_shot; "" is structured
+     */
+    "mode": string;
 
     /**
      * Models are the choices of the creation dialog. A stage left out takes the
@@ -257,9 +269,9 @@ export interface Leftover {
 export interface MarkerEntry {
     /**
      * Type is prd_written, prd_updated, tech_spec_written, tech_spec_updated,
-     * plan_written, plan_updated, pr_review_written, step_review_started,
-     * step_review_written, stage_started, step_started, compacted or
-     * interrupted.
+     * plan_written, plan_updated, one_shot_written, one_shot_updated,
+     * pr_review_written, step_review_started, step_review_written,
+     * stage_started, step_started, compacted or interrupted.
      */
     "type": string;
     "preTokens": number;
@@ -399,7 +411,7 @@ export interface Place {
     "kind": string;
 
     /**
-     * stage only: prd, tech_spec or plan
+     * stage only: prd, tech_spec, plan or one_shot
      */
     "stage": string;
 
@@ -435,8 +447,8 @@ export interface PlanProblem {
  */
 export interface Prompt {
     /**
-     * Stage is prd, tech_spec, plan, step_review, commit, pr or pr_review, a
-     * string for the same reason as Notice.Reason.
+     * Stage is prd, tech_spec, plan, one_shot, step_review, commit, pr or
+     * pr_review, a string for the same reason as Notice.Reason.
      */
     "stage": string;
     "text": string;
@@ -715,8 +727,8 @@ export interface SituationStarted {
  */
 export interface StageModel {
     /**
-     * Stage is prd, tech_spec, plan, implementation, step_review, pr or
-     * pr_review, a string for the same reason as Notice.Reason.
+     * Stage is prd, tech_spec, plan, one_shot, implementation, step_review, pr
+     * or pr_review, a string for the same reason as Notice.Reason.
      */
     "stage": string;
 
@@ -785,7 +797,7 @@ export interface Step {
     "number": number;
 
     /**
-     * name inside steps/, the artifact is "steps/" + File
+     * name inside steps/, the artifact is "steps/" + File; one-shot.md for the single step of a One-Shot task
      */
     "file": string;
     "title": string;
@@ -1003,8 +1015,14 @@ export interface TaskSummary {
     "dir": string;
 
     /**
-     * Stage is prd, tech_spec, plan, implementation or pr, a string for the
-     * same reason as Notice.Reason.
+     * Mode is structured or one_shot, a string for the same reason as
+     * Notice.Reason.
+     */
+    "mode": string;
+
+    /**
+     * Stage is prd, tech_spec, plan, one_shot, implementation or pr, a string
+     * for the same reason as Notice.Reason.
      */
     "stage": string;
 
@@ -1045,6 +1063,7 @@ export interface TaskSummary {
     "corrections": number;
     "hasPrd": boolean;
     "hasTechSpec": boolean;
+    "hasOneShot": boolean;
 
     /**
      * never nil

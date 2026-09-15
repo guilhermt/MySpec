@@ -133,3 +133,94 @@ describe("StageTrack", () => {
     expect(screen.queryByRole("button", { name: /^Continue/ })).not.toBeInTheDocument();
   });
 });
+
+describe("StageTrack of a One-Shot task", () => {
+  const ONE_SHOT: Partial<TaskSummary> = { mode: "one_shot", stage: "one_shot", repos: [] };
+
+  it("runs from the planning to the closing, with no PRD, tech spec or plan", () => {
+    track(ONE_SHOT);
+
+    for (const label of ["Planning", "Implementation", "PR", "PR review", "Closing"]) {
+      expect(screen.getByText(label)).toBeInTheDocument();
+    }
+    for (const label of ["PRD", "Tech spec", "Plan"]) {
+      expect(screen.queryByText(label)).not.toBeInTheDocument();
+    }
+  });
+
+  it("offers only a restart on the planning the task is in", async () => {
+    const { user } = track(ONE_SHOT);
+
+    const menu = await openMenu(user, "Planning");
+
+    expect(menu).toHaveTextContent("Discard and restart");
+    expect(screen.queryByRole("menuitem", { name: "Back to planning" })).not.toBeInTheDocument();
+  });
+
+  it.each(["implementation", "pr"] as const)(
+    "offers going back to the planning from the %s",
+    async (stage) => {
+      const { user } = track({ ...ONE_SHOT, stage });
+
+      await openMenu(user, "Planning");
+
+      expect(screen.getByRole("menuitem", { name: "Back to planning" })).toBeInTheDocument();
+      expect(screen.getByRole("menuitem", { name: "Discard and restart" })).toBeInTheDocument();
+    },
+  );
+
+  it.each(["implementation", "pr"] as const)(
+    "leaves every chip after the planning inert in the %s",
+    (stage) => {
+      track({ ...ONE_SHOT, stage });
+
+      for (const label of ["Implementation", "PR", "PR review", "Closing"]) {
+        expect(screen.queryByRole("button", { name: label })).not.toBeInTheDocument();
+      }
+    },
+  );
+
+  it("goes back to the planning after the confirmation", async () => {
+    const { user } = track({ ...ONE_SHOT, stage: "implementation" });
+
+    await openMenu(user, "Planning");
+    await user.click(screen.getByRole("menuitem", { name: "Back to planning" }));
+
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog).toHaveTextContent("Back to planning?");
+    expect(dialog).toHaveTextContent(
+      "This deletes the implementation conversations and review reports, and its worktree and branch, with any uncommitted work in them. The One-Shot document and its conversation stay, and the implementation starts again from scratch when you continue.",
+    );
+
+    await user.click(screen.getByRole("button", { name: "Back" }));
+
+    expect(api.backToStage).toHaveBeenCalledWith("task-1", "one_shot");
+  });
+
+  it("restarts the planning after the confirmation", async () => {
+    const { user } = track(ONE_SHOT);
+
+    await openMenu(user, "Planning");
+    await user.click(screen.getByRole("menuitem", { name: "Discard and restart" }));
+
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog).toHaveTextContent("Discard the planning and start over?");
+    expect(dialog).toHaveTextContent(
+      "This deletes the planning conversation and the One-Shot document. A new planning session starts right away.",
+    );
+
+    await user.click(screen.getByRole("button", { name: "Discard" }));
+
+    expect(api.discardStage).toHaveBeenCalledWith("task-1", "one_shot");
+  });
+
+  it("moves a revisited planning on to the implementation", async () => {
+    const { user } = track({ ...ONE_SHOT, revisiting: true, canContinue: true });
+
+    expect(screen.getByRole("button", { name: "Planning · revisiting" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Continue to implementation" }));
+
+    expect(api.continueStage).toHaveBeenCalledWith("task-1");
+  });
+});

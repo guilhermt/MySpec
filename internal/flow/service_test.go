@@ -6,7 +6,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
+
 	"github.com/guilhermt/myspec/internal/flow"
+	"github.com/guilhermt/myspec/internal/models"
+	"github.com/guilhermt/myspec/internal/prompts"
+	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
 )
 
@@ -233,6 +238,103 @@ func TestStartTaskOpensTheFirstStage(t *testing.T) {
 		t.Fatalf("StartTask() = %v, want nil", err)
 	}
 	f.wantCalls(t, "start:task-1:prd:restarted=false")
+
+	// A Structured task has no document of its own to point to, and its planning
+	// belongs to no repository.
+	info, _ := f.sessions.info(session.Key{TaskID: "task-1", Stage: string(task.StagePRD)})
+	if info.OneShotPath != "" || info.Repository != "" {
+		t.Errorf("session = %+v, want no One-Shot document and no repository", info)
+	}
+}
+
+func TestAOneShotTaskStartsItsPlanningInItsRepository(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.tasks.setTaskMode("task-1", task.ModeOneShot)
+	created := f.tasks.add("task-1", task.StageOneShot, task.Artifacts{})
+
+	if err := f.service.StartTask(t.Context(), created); err != nil {
+		t.Fatalf("StartTask() = %v, want nil", err)
+	}
+	f.wantCalls(t, "start:task-1:one_shot:restarted=false")
+
+	info, _ := f.sessions.info(session.Key{TaskID: "task-1", Stage: string(task.StageOneShot)})
+	type planningInfo struct {
+		Prompt      prompts.Stage
+		Dir         string
+		Repository  string
+		OneShotPath string
+		Choice      models.Choice
+	}
+	want := planningInfo{
+		Prompt:      prompts.StageOneShot,
+		Dir:         repos[0].Path,
+		Repository:  "api",
+		OneShotPath: created.OneShotPath(),
+		Choice:      created.Models.Stage(models.OneShot),
+	}
+	got := planningInfo{
+		Prompt: info.Prompt, Dir: info.Dir, Repository: info.Repository, OneShotPath: info.OneShotPath, Choice: info.Choice,
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("planning info mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestContinueTakesARevisitedOneShotPlanningToItsStep(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.tasks.setTaskMode("task-1", task.ModeOneShot)
+	f.tasks.add("task-1", task.StageOneShot, task.Artifacts{OneShot: true, Plan: oneShotPlan()})
+	f.tasks.setRevisiting("task-1", true)
+	f.sessions.setSummary("task-1", idle(task.StageOneShot))
+
+	if err := f.service.Continue(t.Context(), "task-1"); err != nil {
+		t.Fatalf("Continue() = %v, want nil", err)
+	}
+	if got, _ := f.tasks.Get("task-1"); got.Stage != task.StageImplementation {
+		t.Errorf("stage = %q, want implementation", got.Stage)
+	}
+	f.waitCalls(t, "close:task-1:one_shot", "start:task-1:step:1:restarted=false")
+}
+
+func TestBackAndDiscardOfAOneShotTaskReachOnlyItsPlanning(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	implementingOneShot(f, "task-1")
+	f.tasks.setTaskMode("task-2", task.ModeOneShot)
+	f.tasks.add("task-2", task.StageOneShot, task.Artifacts{OneShot: true, Plan: oneShotPlan()})
+	f.tasks.add("task-3", task.StageImplementation, task.Artifacts{PRD: true, TechSpec: true, Plan: plan()})
+
+	wantErrIs(t, f.service.Back(t.Context(), "task-1", task.StagePRD), flow.ErrInvalidTarget)
+	wantErrIs(t, f.service.Back(t.Context(), "task-1", task.StageTechSpec), flow.ErrInvalidTarget)
+	wantErrIs(t, f.service.Discard(t.Context(), "task-1", task.StagePlan), flow.ErrInvalidTarget)
+	// The planning is not behind a task that is still in it.
+	wantErrIs(t, f.service.Back(t.Context(), "task-2", task.StageOneShot), flow.ErrInvalidTarget)
+	// A Structured task has no One-Shot planning.
+	wantErrIs(t, f.service.Back(t.Context(), "task-3", task.StageOneShot), flow.ErrInvalidTarget)
+	wantErrIs(t, f.service.Discard(t.Context(), "task-3", task.StageOneShot), flow.ErrInvalidTarget)
+	f.wantCalls(t)
+}
+
+func TestDiscardOfTheOneShotPlanningStartsItFromScratch(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	implementingOneShot(f, "task-1")
+
+	if err := f.service.Discard(t.Context(), "task-1", task.StageOneShot); err != nil {
+		t.Fatalf("Discard() = %v, want nil", err)
+	}
+
+	f.wantCalls(t, "discard:task-1:one_shot", "start:task-1:one_shot:restarted=true")
+	f.wantTaskCalls(t, "remove:task-1:one_shot", "stage:task-1:one_shot:revisiting=false")
+	if a, _ := f.tasks.Inspect("task-1"); a.OneShot || a.Plan.Present {
+		t.Errorf("artifacts = %+v, want neither the document nor its step", a)
+	}
 }
 
 func TestSyncOpensTheSessionsAndAdvancesWhatIsDone(t *testing.T) {

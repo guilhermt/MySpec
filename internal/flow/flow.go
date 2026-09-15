@@ -203,15 +203,16 @@ type repoWork struct {
 }
 
 // TaskInfo is what the session of a task needs to know about it at the stage
-// the task is in. The stages that have a session of their own, prd, tech_spec
-// and plan, go by the same name in internal/task and in internal/models, so
-// the choice of the stage is read with the name the task carries.
+// the task is in. The stages that have a session of their own, prd, tech_spec,
+// plan and one_shot, go by the same name in internal/task and in
+// internal/models, so the choice of the stage is read with the name the task
+// carries.
 func TaskInfo(t task.Task, a task.Artifacts, repos []task.Repository) session.TaskInfo {
 	rels := make([]string, len(repos))
 	for i, repo := range repos {
 		rels[i] = repo.Rel
 	}
-	return session.TaskInfo{
+	info := session.TaskInfo{
 		ID:             t.ID,
 		Name:           t.Name,
 		Dir:            t.Dir(),
@@ -221,9 +222,23 @@ func TaskInfo(t task.Task, a task.Artifacts, repos []task.Repository) session.Ta
 		PRDPath:        t.PRDPath(),
 		TechSpecPath:   t.TechSpecPath(),
 		StepsDir:       t.StepsDir(),
+		OneShotPath:    oneShotPath(t),
 		Repositories:   rels,
 		InitialContext: t.InitialContext,
 		ArtifactExists: a.Done(t.Stage),
 		Choice:         t.Models.Stage(models.Stage(t.Stage)),
 	}
+	if t.Mode == task.ModeOneShot {
+		info.Repository = repoRel(t, t.RepoPath)
+	}
+	return info
+}
+
+// oneShotPath is the document of a One-Shot task, which the prompts read in
+// place of the PRD, the tech spec and the step file; "" for a Structured task.
+func oneShotPath(t task.Task) string {
+	if t.Mode != task.ModeOneShot {
+		return ""
+	}
+	return t.OneShotPath()
 }

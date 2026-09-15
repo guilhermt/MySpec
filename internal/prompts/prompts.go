@@ -30,6 +30,7 @@ const (
 	StagePRD        Stage = "prd"
 	StageTechSpec   Stage = "tech_spec"
 	StagePlan       Stage = "plan"
+	StageOneShot    Stage = "one_shot"
 	StageStepReview Stage = "step_review"
 	StageCommit     Stage = "commit"
 	StagePR         Stage = "pr"
@@ -41,7 +42,9 @@ const StageStep Stage = "step"
 
 // Editable are the prompts the user reads and edits in the settings, in
 // workflow order. The prompt of a step is a file of the plan, not one of them.
-var Editable = []Stage{StagePRD, StageTechSpec, StagePlan, StageStepReview, StageCommit, StagePR, StagePRReview}
+var Editable = []Stage{
+	StagePRD, StageTechSpec, StagePlan, StageOneShot, StageStepReview, StageCommit, StagePR, StagePRReview,
+}
 
 // ErrUnknownStage is a prompt the app does not have.
 var ErrUnknownStage = errors.New("prompts: unknown prompt")
@@ -68,6 +71,7 @@ const (
 	techSpecPathPlaceholder   = "{{tech_spec_path}}"
 	stepsDirPlaceholder       = "{{steps_dir}}"
 	stepPathPlaceholder       = "{{step_path}}"
+	oneShotPathPlaceholder    = "{{one_shot_path}}"
 	repositoriesPlaceholder   = "{{repositories}}"
 	initialContextPlaceholder = "{{initial_context}}"
 	repositoryPlaceholder     = "{{repository}}"
@@ -84,9 +88,10 @@ const (
 // placeholderOrder is every placeholder, in the order the settings list them.
 var placeholderOrder = []string{
 	taskNamePlaceholder, artifactsDirPlaceholder, prdPathPlaceholder, techSpecPathPlaceholder,
-	stepsDirPlaceholder, stepPathPlaceholder, repositoriesPlaceholder, initialContextPlaceholder,
-	repositoryPlaceholder, branchPlaceholder, baseBranchPlaceholder, draftPathPlaceholder,
-	reviewPathPlaceholder, prNumberPlaceholder, prURLPlaceholder, whatToCommitPlaceholder, pushPlaceholder,
+	stepsDirPlaceholder, stepPathPlaceholder, oneShotPathPlaceholder, repositoriesPlaceholder,
+	initialContextPlaceholder, repositoryPlaceholder, branchPlaceholder, baseBranchPlaceholder,
+	draftPathPlaceholder, reviewPathPlaceholder, prNumberPlaceholder, prURLPlaceholder,
+	whatToCommitPlaceholder, pushPlaceholder,
 }
 
 // Prompt is a prompt as the settings show it.
@@ -129,6 +134,49 @@ const whatToCommitHeading = "\n\n## What to commit\n\n"
 // replyHeading opens the section every step review prompt ends with: what the
 // implementer said last.
 const replyHeading = "\n\n## The implementer's last response\n\n"
+
+// oneShotHeading opens the section Render appends to the prompts that read the
+// documents of a task, when the task is One-Shot.
+const oneShotHeading = "\n\n## One-Shot task\n\n"
+
+// stepReviewOneShotNote is what the prompt of a step reviewer says about the
+// document of a One-Shot task.
+const stepReviewOneShotNote = "This task was planned in a single document, `{{one_shot_path}}`, instead of a PRD, " +
+	"a technical specification and step files, and it is implemented in this one step. Every reference in this " +
+	"prompt to the step file, the product requirements or the technical specification means that document. Its " +
+	"Scope and its Completion checklist are the scope, the objectives and the completion checklist of the step. " +
+	"Its Problem and its Scope play the role of the product requirements, and its Technical decisions and its " +
+	"Change plan play the role of the technical specification: the plan the step follows is that document."
+
+// prOneShotNote is what the prompt of a pull request says about the document
+// of a One-Shot task.
+const prOneShotNote = "This task was planned in a single document, `{{one_shot_path}}`, instead of a PRD and a " +
+	"technical specification. Every reference in this prompt to the PRD or the technical specification means that " +
+	"document: read it to see what the task set out to do. Never mention it in the pull request, as with any other " +
+	"document of the process."
+
+// prReviewOneShotNote is what the prompt of a pull request reviewer says about
+// the document of a One-Shot task.
+const prReviewOneShotNote = "This task was planned in a single document, `{{one_shot_path}}`, instead of a PRD and " +
+	"a technical specification. Every reference in this prompt to the PRD or the technical specification means " +
+	"that document, and it is the criteria. Its Problem and its Scope play the role of the product requirements, " +
+	"and its Technical decisions and its Change plan play the role of the technical specification: a deviation " +
+	"from them is a finding, even when the code works."
+
+// oneShotNote is what a prompt that reads the documents of a task says about
+// the document of a One-Shot task; "" for a prompt that reads none.
+func oneShotNote(stage Stage) string {
+	switch stage {
+	case StageStepReview:
+		return stepReviewOneShotNote
+	case StagePR:
+		return prOneShotNote
+	case StagePRReview:
+		return prReviewOneShotNote
+	default:
+		return ""
+	}
+}
 
 // Dir is the prompts directory inside the data directory.
 func Dir(dataDir string) string {
@@ -279,8 +327,9 @@ type Vars struct {
 	TechSpecPath   string
 	StepsDir       string
 	Repositories   []string // paths relative to the session directory
-	InitialContext string   // PRD only
+	InitialContext string   // PRD and One-Shot planning only
 	StepPath       string   // StageStep: the file whose content is the prompt; StageStepReview: the step under review
+	OneShotPath    string   // One-Shot tasks only: the document, which the prompts point to in place of the PRD, the tech spec and the step file; "" for a Structured task
 
 	Repository string // relative path of the repository of a PR session
 	Branch     string
@@ -332,8 +381,10 @@ func repositoryList(paths []string) string {
 // never dropped with one: the initial context the user wrote, what to commit
 // and the push instruction are appended to a prompt that has no placeholder
 // for them. The prompt of a step reviewer always ends with what the
-// implementer said last. StageStep is the exception: the step file is sent
-// verbatim.
+// implementer said last. In a One-Shot task, the placeholders of the PRD, the
+// tech spec and the step file render the document, and the prompts that read
+// them always end with what the document stands for. StageStep is the
+// exception: the step file is sent verbatim.
 func Render(dataDir string, stage Stage, vars Vars) (string, error) {
 	if stage == StageStep {
 		raw, err := os.ReadFile(vars.StepPath)
@@ -348,13 +399,19 @@ func Render(dataDir string, stage Stage, vars Vars) (string, error) {
 		return "", err
 	}
 
+	prdPath, techSpecPath, stepPath := vars.PRDPath, vars.TechSpecPath, vars.StepPath
+	if vars.OneShotPath != "" {
+		prdPath, techSpecPath, stepPath = vars.OneShotPath, vars.OneShotPath, vars.OneShotPath
+	}
+
 	rendered := strings.NewReplacer(
 		taskNamePlaceholder, vars.TaskName,
 		artifactsDirPlaceholder, vars.ArtifactsDir,
-		prdPathPlaceholder, vars.PRDPath,
-		techSpecPathPlaceholder, vars.TechSpecPath,
+		prdPathPlaceholder, prdPath,
+		techSpecPathPlaceholder, techSpecPath,
 		stepsDirPlaceholder, vars.StepsDir,
-		stepPathPlaceholder, vars.StepPath,
+		stepPathPlaceholder, stepPath,
+		oneShotPathPlaceholder, vars.OneShotPath,
 		repositoriesPlaceholder, repositoryList(vars.Repositories),
 		initialContextPlaceholder, vars.InitialContext,
 		repositoryPlaceholder, vars.Repository,
@@ -376,6 +433,9 @@ func Render(dataDir string, stage Stage, vars Vars) (string, error) {
 	}
 	if !strings.Contains(text, pushPlaceholder) && vars.Push {
 		rendered += pushHeading + PushInstruction
+	}
+	if note := oneShotNote(stage); note != "" && vars.OneShotPath != "" {
+		rendered += oneShotHeading + strings.ReplaceAll(note, oneShotPathPlaceholder, vars.OneShotPath)
 	}
 	// What the implementer said is never a placeholder: the prompt of a
 	// reviewer always ends with it.

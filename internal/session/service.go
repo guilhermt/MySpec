@@ -63,6 +63,7 @@ type TaskInfo struct {
 	PRDPath        string
 	TechSpecPath   string
 	StepsDir       string
+	OneShotPath    string   // One-Shot tasks only: the document the prompts point to; "" for a Structured task
 	Repositories   []string // relative paths, what the prompt lists
 	InitialContext string
 	// ImplementerReply is what the implementer of a step said last, which the
@@ -76,7 +77,7 @@ type TaskInfo struct {
 
 	// The PR sessions of a repository: what the prompt of the pull request and
 	// the prompt of its review are about.
-	Repository string // relative path of the repository this session belongs to
+	Repository string // relative path of the repository this session belongs to: the one of a PR session, or the one a One-Shot planning runs in
 	Branch     string
 	BaseBranch string
 	DraftPath  string
@@ -95,6 +96,8 @@ func artifactOf(stage prompts.Stage) ArtifactKind {
 		return ArtifactTechSpec
 	case prompts.StagePlan:
 		return ArtifactPlan
+	case prompts.StageOneShot:
+		return ArtifactOneShot
 	case prompts.StageStep, prompts.StageStepReview, prompts.StagePR, prompts.StagePRReview:
 		// A step file and the PR prompts produce no artifact of the planning:
 		// what they write belongs to a repository, not to the task.
@@ -362,13 +365,14 @@ func (s *Service) Start(ctx context.Context, t TaskInfo, restarted bool) error {
 	}
 	s.appendLocked(ctx, r, Entry{Kind: KindMarker, Marker: &marker}, n)
 
-	// Only the PRD prompt carries what the user wrote when they created the
-	// task, and only the prompt of a reviewer what the implementer said last;
-	// every other stage reads the artifacts of the ones before it. What the
-	// implementer said reaches the reviewer from the app, and reads as such.
+	// Only the prompts that open a task, the PRD and the One-Shot planning,
+	// carry what the user wrote when they created the task, and only the prompt
+	// of a reviewer what the implementer said last; every other stage reads the
+	// artifacts of the ones before it. What the implementer said reaches the
+	// reviewer from the app, and reads as such.
 	entry := &UserEntry{Prompt: true}
 	switch t.Prompt {
-	case prompts.StagePRD:
+	case prompts.StagePRD, prompts.StageOneShot:
 		entry.Text = t.InitialContext
 	case prompts.StageStepReview:
 		entry.Text, entry.App = t.ImplementerReply, true

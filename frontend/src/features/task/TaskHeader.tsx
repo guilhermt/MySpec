@@ -11,6 +11,7 @@ import { currentStepOf, hasStepSession, loopSession } from "@/features/task/step
 import { TaskModelsButton } from "@/features/task/TaskModels";
 import { TaskReviewModeButton } from "@/features/task/TaskReviewMode";
 import { findNode } from "@/features/tree/tree-model";
+import { isOneShot } from "@/lib/task-modes";
 import { asSessionStatus, asTaskStage, type TaskSummary } from "@/lib/wails";
 import { pause, resume } from "@/store/actions";
 import { repoNodeId, useAppStore } from "@/store/app-store";
@@ -50,6 +51,7 @@ export function TaskHeader({ task, artifactsOpen, onToggleArtifacts }: TaskHeade
     <header className="flex h-11 shrink-0 items-center gap-2 border-b px-3">
       <Icon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
       <span className="min-w-0 truncate font-medium">{task.name}</span>
+      {isOneShot(task) && <Badge variant="outline">One-Shot</Badge>}
       <Badge variant="secondary">{task.repoPath === "" ? "Root" : repoName}</Badge>
       <StatusBadge task={task} />
 

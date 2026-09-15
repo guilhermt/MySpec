@@ -240,6 +240,7 @@ export function makeTask(overrides: Partial<TaskSummary> = {}): TaskSummary {
     name: "add-login",
     repoPath: "",
     dir: "/home/dev/.local/share/myspec/workspaces/projects-1a2b3c4d/tasks/add-login",
+    mode: "structured",
     stage: "prd",
     revisiting: false,
     reviewMode: "manual",
@@ -255,6 +256,7 @@ export function makeTask(overrides: Partial<TaskSummary> = {}): TaskSummary {
     corrections: 0,
     hasPrd: false,
     hasTechSpec: false,
+    hasOneShot: false,
     steps: [],
     currentStep: 0,
     repos: [],
@@ -289,8 +291,10 @@ export function makeArchivedTask(overrides: Partial<ArchivedTask> = {}): Archive
     id: "task-1",
     name: "add-login",
     repoPath: "",
+    mode: "structured",
     hasPrd: true,
     hasTechSpec: true,
+    hasOneShot: false,
     steps: [
       {
         number: 1,
@@ -424,31 +428,34 @@ const factoryChoices: { stage: ModelStage; model: string; effort: string }[] = [
   { stage: "prd", model: "claude-fable-5-1", effort: "high" },
   { stage: "tech_spec", model: "claude-fable-5-1", effort: "high" },
   { stage: "plan", model: "claude-fable-5-1", effort: "high" },
+  { stage: "one_shot", model: "claude-fable-5-1", effort: "high" },
   { stage: "implementation", model: "claude-opus-5", effort: "high" },
   { stage: "step_review", model: "claude-opus-5", effort: "high" },
   { stage: "pr", model: "claude-opus-5", effort: "medium" },
   { stage: "pr_review", model: "claude-opus-5", effort: "high" },
 ];
 
-/** makeModelDefaults are the factory choices of the seven stages of the app. */
+/** makeModelDefaults are the factory choices of the eight stages of the app. */
 export function makeModelDefaults(): StageModel[] {
   return factoryChoices.map((choice) => ({ ...choice }));
 }
 
 /**
- * makeTaskModels are the models of the seven stages of a task in the PRD, whose
- * session runs while every other stage is still to start, with what overrides
- * says of each line.
+ * makeTaskModels are the models of the seven stages of a Structured task in the
+ * PRD, whose session runs while every other stage is still to start, with what
+ * overrides says of each line.
  */
 export function makeTaskModels(
   overrides: Partial<Record<ModelStage, Partial<TaskStageModel>>> = {},
 ): TaskStageModel[] {
-  return factoryChoices.map((choice) => ({
-    ...choice,
-    editable: choice.stage !== "prd",
-    live: choice.stage === "prd",
-    ...overrides[choice.stage],
-  }));
+  return factoryChoices
+    .filter((choice) => choice.stage !== "one_shot")
+    .map((choice) => ({
+      ...choice,
+      editable: choice.stage !== "prd",
+      live: choice.stage === "prd",
+      ...overrides[choice.stage],
+    }));
 }
 
 export function makePrompt(overrides: Partial<Prompt> = {}): Prompt {

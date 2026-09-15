@@ -31,6 +31,7 @@ func TestCreateStoresTheTaskAndItsFolder(t *testing.T) {
 		ID:             "task-1",
 		WorkspacePath:  f.workspace,
 		Name:           "add-login",
+		Mode:           task.ModeStructured,
 		InitialContext: "a login screen",
 		Stage:          task.StagePRD,
 		ArtifactsDir:   task.ArtifactsDir(f.dataDir, f.workspace, "add-login"),
@@ -104,6 +105,59 @@ func TestCreateKeepsTheReviewModeOfTheTask(t *testing.T) {
 	plain := f.create(t, "add-logout", "")
 	if diff := cmp.Diff(task.ReviewModes{Task: reviewmode.Manual}, plain.ReviewModes); diff != "" {
 		t.Errorf("Create() without a mode mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestCreateOneShotInARepositoryStartsInItsPlanning(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	created := f.createOneShot(t, "add-login")
+
+	if created.Mode != task.ModeOneShot || created.Stage != task.StageOneShot {
+		t.Errorf("Create() mode and stage = %q %q, want %q %q",
+			created.Mode, created.Stage, task.ModeOneShot, task.StageOneShot)
+	}
+	stored := f.repo.get(t, created.ID)
+	if stored.Mode != task.ModeOneShot || stored.Stage != task.StageOneShot {
+		t.Errorf("stored mode and stage = %q %q, want %q %q",
+			stored.Mode, stored.Stage, task.ModeOneShot, task.StageOneShot)
+	}
+}
+
+func TestCreateOneShotAtTheRootIsRefused(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	_, err := f.service.Create(t.Context(), task.CreateParams{
+		Name:           "add-login",
+		InitialContext: "a login screen",
+		Mode:           task.ModeOneShot,
+	})
+	wantErrIs(t, err, task.ErrOneShotAtRoot)
+
+	if got := len(f.service.List()); got != 0 {
+		t.Errorf("List() has %d tasks, want 0", got)
+	}
+	if dir := task.ArtifactsDir(f.dataDir, f.workspace, "add-login"); exists(dir) {
+		t.Errorf("artifacts directory %s was created for a refused task", dir)
+	}
+}
+
+func TestCreateRejectsAnUnknownMode(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	_, err := f.service.Create(t.Context(), task.CreateParams{
+		Name:           "add-login",
+		RepoPath:       f.repos[0],
+		InitialContext: "a login screen",
+		Mode:           "freestyle",
+	})
+	wantErrIs(t, err, task.ErrUnknownMode)
+
+	if got := len(f.service.List()); got != 0 {
+		t.Errorf("List() has %d tasks, want 0", got)
 	}
 }
 
@@ -534,10 +588,15 @@ func TestReadArtifactReturnsTheArtifacts(t *testing.T) {
 	writePRD(t, created, "# PRD\n")
 	writeTechSpec(t, created, "# Tech spec\n")
 	writeStep(t, created, "1-add-the-store.md", "api", "Step 1: Add the store")
+	oneShot := f.createOneShot(t, "add-logout")
+	writeOneShot(t, oneShot, "# Add the logout — One-Shot\n")
 
-	tests := map[string]struct{ name, want string }{
+	tests := map[string]struct{ id, name, want string }{
 		"the PRD":       {name: task.PRDFile, want: "# PRD\n"},
 		"the tech spec": {name: task.TechSpecFile, want: "# Tech spec\n"},
+		"the One-Shot document": {
+			id: oneShot.ID, name: task.OneShotFile, want: "# Add the logout — One-Shot\n",
+		},
 		"a step": {
 			name: "steps/1-add-the-store.md",
 			want: "---\nrepository: api\n---\n\n# Step 1: Add the store\n",
@@ -548,7 +607,11 @@ func TestReadArtifactReturnsTheArtifacts(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			got, err := f.service.ReadArtifact(created.ID, tc.name)
+			id := created.ID
+			if tc.id != "" {
+				id = tc.id
+			}
+			got, err := f.service.ReadArtifact(id, tc.name)
 			if err != nil {
 				t.Fatalf("ReadArtifact(%q) = %v, want nil", tc.name, err)
 			}
@@ -1183,6 +1246,76 @@ func TestRemoveArtifactsThrowsAwayTheStageAndTheOnesAfterIt(t *testing.T) {
 				t.Errorf("ArtifactVersion = %d, want 1", stored.ArtifactVersion)
 			}
 		})
+	}
+}
+
+func TestInspectReadsTheOneShotDocumentAsAPlanOfOneStep(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	created := f.createOneShot(t, "add-login")
+	writeOneShot(t, created, "# Add the login — One-Shot\n")
+	// A steps folder is nothing to a One-Shot task.
+	writeStep(t, created, "1-add-the-store.md", "api", "Step 1: Add the store")
+
+	got, err := f.service.Inspect(created.ID)
+	if err != nil {
+		t.Fatalf("Inspect() = %v, want nil", err)
+	}
+
+	if !got.OneShot || got.PRD || got.TechSpec {
+		t.Errorf("Inspect() = %+v, want the One-Shot document alone written", got)
+	}
+	want := task.Plan{
+		Present: true,
+		Steps: []task.Step{{
+			Number: 1, File: task.OneShotFile, Title: "Add the login", Repository: "api", RepoPath: f.repos[0],
+		}},
+	}
+	if diff := cmp.Diff(want, got.Plan); diff != "" {
+		t.Errorf("plan mismatch (-want +got):\n%s", diff)
+	}
+	if !got.Done(task.StageOneShot) {
+		t.Error("Done(one_shot) = false, want the planning done")
+	}
+}
+
+func TestRemoveArtifactsFromTheOneShotPlanningStartsTheStepOver(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	created := f.createOneShot(t, "add-login")
+	writeOneShot(t, created, "# Add the login — One-Shot\n")
+	if err := os.MkdirAll(created.StepReviewsDir(), 0o700); err != nil {
+		t.Fatalf("create step reviews directory: %v", err)
+	}
+	writeFile(t, created.StepReportPath(1, 1), "# Review\n")
+	if _, err := f.service.SetStepModel(t.Context(), created.ID, 1,
+		models.Choice{Model: models.Opus5, Effort: models.Max}); err != nil {
+		t.Fatalf("SetStepModel() = %v, want nil", err)
+	}
+	if _, err := f.service.SetStepReviewMode(t.Context(), created.ID, 1, reviewmode.Agent); err != nil {
+		t.Fatalf("SetStepReviewMode() = %v, want nil", err)
+	}
+
+	if err := f.service.RemoveArtifacts(t.Context(), created.ID, task.StageOneShot); err != nil {
+		t.Fatalf("RemoveArtifacts() = %v, want nil", err)
+	}
+
+	if exists(created.OneShotPath()) {
+		t.Error("the One-Shot document survived")
+	}
+	if exists(created.StepReviewsDir()) {
+		t.Error("the reports of the step survived")
+	}
+	cached, _ := f.service.Artifacts(created.ID)
+	if cached.OneShot || cached.Plan.Present {
+		t.Errorf("Artifacts() = %+v, want neither the document nor its plan", cached)
+	}
+	stored := f.repo.get(t, created.ID)
+	if stored.Models.Adjusted(1) || stored.ReviewModes.Adjusted(1) {
+		t.Errorf("stored models and review modes = %+v %+v, want the choices of the step forgotten",
+			stored.Models, stored.ReviewModes)
 	}
 }
 

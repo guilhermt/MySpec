@@ -19,6 +19,8 @@ const MARKERS: Record<MarkerType, { icon: LucideIcon; text: string }> = {
   tech_spec_updated: { icon: FileText, text: "Tech spec updated" },
   plan_written: { icon: ListChecks, text: "Plan written" },
   plan_updated: { icon: ListChecks, text: "Plan updated" },
+  one_shot_written: { icon: FileCheck, text: "One-Shot document written" },
+  one_shot_updated: { icon: FileText, text: "One-Shot document updated" },
   pr_review_written: { icon: FileCheck, text: "Review written" },
   step_review_started: { icon: Bot, text: "Review started" },
   step_review_written: { icon: FileCheck, text: "Review written" },

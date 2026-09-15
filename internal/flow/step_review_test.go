@@ -375,6 +375,35 @@ func TestTheFirstPassStartsTheReviewerOnceTheImplementerRests(t *testing.T) {
 	}
 }
 
+func TestTheReviewerOfAOneShotStepReadsTheDocument(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.tasks.setReviewModes("task-1", task.ReviewModes{Task: reviewmode.Agent})
+	f.worktrees.setStatus(git.Status{Head: startCommit})
+	f.reviews.setSnapshot(staged(0, 2))
+	tk := implementingOneShot(f, "task-1")
+	f.service.Sync(t.Context())
+	f.waitStep(t, "task-1", 1, flow.StepImplementing)
+	f.waitStepSession(t, "task-1", 1)
+
+	f.sessions.goIdleSession(implementerKey("task-1", 1))
+	f.service.Check("task-1")
+	f.waitReviewer(t, "task-1", 1)
+
+	info, _ := f.sessions.info(reviewerKey("task-1", 1))
+	type reviewerInfo struct {
+		StepPath    string
+		OneShotPath string
+		Repository  string
+	}
+	want := reviewerInfo{StepPath: tk.OneShotPath(), OneShotPath: tk.OneShotPath(), Repository: "api"}
+	got := reviewerInfo{StepPath: info.StepPath, OneShotPath: info.OneShotPath, Repository: info.Repository}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("reviewer info mismatch (-want +got):\n%s", diff)
+	}
+}
+
 func TestTheImplementerWithoutAReplyIsSaidToHaveNone(t *testing.T) {
 	t.Parallel()
 

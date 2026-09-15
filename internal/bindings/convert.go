@@ -45,7 +45,8 @@ func FromNotice(notice *workspace.Notice) *Notice {
 	return &Notice{Path: notice.Path, Reason: string(notice.Reason)}
 }
 
-// FromModelSet converts the choice of every stage, in workflow order.
+// FromModelSet converts the choice of every stage, in the order the settings
+// list them.
 func FromModelSet(set models.Set) []StageModel {
 	converted := make([]StageModel, len(models.Stages))
 	for i, stage := range models.Stages {
@@ -114,6 +115,7 @@ func FromTasks(
 			Name:               t.Name,
 			RepoPath:           t.RepoPath,
 			Dir:                t.Dir(),
+			Mode:               string(t.Mode),
 			Stage:              string(t.Stage),
 			Revisiting:         t.Revisiting,
 			ReviewMode:         string(t.ReviewModes.Default()),
@@ -129,6 +131,7 @@ func FromTasks(
 			Corrections:        summary.Corrections,
 			HasPRD:             a.PRD,
 			HasTechSpec:        a.TechSpec,
+			HasOneShot:         a.OneShot,
 			Steps:              fromSteps(states),
 			CurrentStep:        currentStep(states),
 			Repos:              fromRepos(repoStates),
@@ -251,8 +254,10 @@ func FromArchived(
 			ID:              t.ID,
 			Name:            t.Name,
 			RepoPath:        t.RepoPath,
+			Mode:            string(t.Mode),
 			HasPRD:          a.PRD,
 			HasTechSpec:     a.TechSpec,
+			HasOneShot:      a.OneShot,
 			Steps:           fromArchivedSteps(a.Plan.Steps, a.StepReports),
 			Repos:           fromArchivedRepos(t, prRuns(t.ID)),
 			ArtifactVersion: t.ArtifactVersion,

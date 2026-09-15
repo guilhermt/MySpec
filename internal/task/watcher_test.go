@@ -108,6 +108,27 @@ func TestWatcherReportsTheTechSpec(t *testing.T) {
 	}
 }
 
+func TestWatcherReportsTheOneShotDocument(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	created := f.createOneShot(t, "add-login")
+
+	writeOneShot(t, created, "# Add the login — One-Shot")
+	waitFor(t, "the One-Shot document to be reported", func() bool { return len(f.artifactCalls()) == 1 })
+
+	call := f.artifactCalls()[0]
+	if got := kinds(call); !slices.Equal(got, []task.ArtifactKind{task.ArtifactOneShot}) {
+		t.Fatalf("changes = %v, want the One-Shot document alone", got)
+	}
+	if change, _ := call.change(task.ArtifactOneShot); !change.First {
+		t.Error("First = false, want true for the One-Shot document appearing")
+	}
+	if cached, _ := f.service.Artifacts(created.ID); !cached.OneShot {
+		t.Error("Artifacts().OneShot = false, want the cache refreshed")
+	}
+}
+
 func TestWatcherReportsThePlanOnlyOnceItIsValid(t *testing.T) {
 	t.Parallel()
 

@@ -49,7 +49,7 @@ export function ApproveStep(taskID: string): $CancellablePromise<void> {
 
 /**
  * BackToStage reopens a finished stage of a task, throwing away what came
- * after it. The stage is prd or tech_spec.
+ * after it. The stage is prd, tech_spec or one_shot.
  */
 export function BackToStage(taskID: string, stage: string): $CancellablePromise<void> {
     return $Call.ByID(398771202, taskID, stage);
@@ -106,7 +106,7 @@ export function DiscardDraft(taskID: string, repoPath: string): $CancellableProm
 
 /**
  * DiscardStage throws away a stage and everything after it, and starts the
- * stage again. The stage is prd, tech_spec or plan.
+ * stage again. The stage is prd, tech_spec, plan or one_shot.
  */
 export function DiscardStage(taskID: string, stage: string): $CancellablePromise<void> {
     return $Call.ByID(3069692862, taskID, stage);
@@ -261,8 +261,8 @@ export function SetReviewMode(taskID: string, mode: string): $CancellablePromise
 
 /**
  * SetSessionModel changes the model and effort of a session from its next
- * message on. The stage names the session: prd, tech_spec, plan, step:<n>,
- * pr:<slug> or pr_review:<slug>.
+ * message on. The stage names the session: prd, tech_spec, plan, one_shot,
+ * step:<n>, step_review:<n>, pr:<slug> or pr_review:<slug>.
  */
 export function SetSessionModel(taskID: string, stage: string, model: string, effort: string): $CancellablePromise<void> {
     return $Call.ByID(2320848335, taskID, stage, model, effort);

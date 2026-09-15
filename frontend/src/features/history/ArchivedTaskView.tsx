@@ -9,11 +9,13 @@ import { HistoryRepos } from "@/features/history/HistoryPanel";
 import { formatDates, stepCount } from "@/features/history/history-format";
 import { ErrorNotice } from "@/features/notice/Notice";
 import { DeleteTaskDialog } from "@/features/task/DeleteTaskDialog";
+import { OneShotView } from "@/features/task/OneShotView";
 import { StepDocument } from "@/features/task/StepDocument";
 import { StepReportList } from "@/features/task/StepList";
 import { useArtifact } from "@/features/task/useArtifact";
 import { findNode } from "@/features/tree/tree-model";
 import { findStepReport, stepReportLabel } from "@/lib/review-modes";
+import { isOneShot } from "@/lib/task-modes";
 import type { ArchivedTask } from "@/lib/wails";
 import { repoNodeId, useAppStore, useArchivedTask } from "@/store/app-store";
 
@@ -111,6 +113,8 @@ export function ArchivedTaskView({ taskId }: ArchivedTaskViewProps) {
     return <section className="h-dvh bg-background" />;
   }
 
+  const oneShot = isOneShot(task);
+
   return (
     <section className="flex h-dvh min-w-0 flex-col bg-background">
       <header className="flex h-11 shrink-0 items-center gap-2 border-b px-3">
@@ -118,6 +122,7 @@ export function ArchivedTaskView({ taskId }: ArchivedTaskViewProps) {
           ← History
         </Button>
         <span className="min-w-0 truncate font-medium">{task.name}</span>
+        {oneShot && <Badge variant="outline">One-Shot</Badge>}
         <Badge variant="secondary">{task.repoPath === "" ? "Root" : repoName}</Badge>
         <Badge variant="outline">Archived</Badge>
 
@@ -143,110 +148,123 @@ export function ArchivedTaskView({ taskId }: ArchivedTaskViewProps) {
 
       <div className="flex h-9 shrink-0 items-center gap-3 border-b px-3 text-xs text-muted-foreground">
         <span className="shrink-0">{formatDates(task.createdAt, task.archivedAt)}</span>
-        <span className="shrink-0">{stepCount(steps.length)}</span>
+        {!oneShot && <span className="shrink-0">{stepCount(steps.length)}</span>}
         <HistoryRepos repos={task.repos ?? []} />
       </div>
 
-      <div className="flex h-9 shrink-0 items-center border-b px-3">
-        <ToggleGroup
-          aria-label="Artifacts"
-          size="sm"
-          value={[tab]}
-          onValueChange={(next: string[]) => {
-            const [value] = next;
-            if (value === "prd" || value === "tech_spec" || value === "steps") {
-              setSelection(value);
-            }
-          }}
-        >
-          <ToggleGroupItem value="prd" disabled={!task.hasPrd}>
-            PRD
-          </ToggleGroupItem>
-          <ToggleGroupItem value="tech_spec" disabled={!task.hasTechSpec}>
-            Tech spec
-          </ToggleGroupItem>
-          <ToggleGroupItem value="steps" disabled={steps.length === 0}>
-            {steps.length > 0 ? `Steps (${steps.length})` : "Steps"}
-          </ToggleGroupItem>
-        </ToggleGroup>
-      </div>
+      {oneShot ? (
+        <OneShotView
+          key={task.id}
+          taskId={task.id}
+          hasDocument={task.hasOneShot}
+          reports={steps[0]?.reports ?? []}
+          artifactVersion={task.artifactVersion}
+          empty="Nothing written yet."
+        />
+      ) : (
+        <>
+          <div className="flex h-9 shrink-0 items-center border-b px-3">
+            <ToggleGroup
+              aria-label="Artifacts"
+              size="sm"
+              value={[tab]}
+              onValueChange={(next: string[]) => {
+                const [value] = next;
+                if (value === "prd" || value === "tech_spec" || value === "steps") {
+                  setSelection(value);
+                }
+              }}
+            >
+              <ToggleGroupItem value="prd" disabled={!task.hasPrd}>
+                PRD
+              </ToggleGroupItem>
+              <ToggleGroupItem value="tech_spec" disabled={!task.hasTechSpec}>
+                Tech spec
+              </ToggleGroupItem>
+              <ToggleGroupItem value="steps" disabled={steps.length === 0}>
+                {steps.length > 0 ? `Steps (${steps.length})` : "Steps"}
+              </ToggleGroupItem>
+            </ToggleGroup>
+          </div>
 
-      {openStep !== null && (
-        <div className="flex h-8 shrink-0 items-center gap-2 border-b px-3">
-          <Button variant="ghost" size="sm" onClick={() => setSelection("steps")}>
-            ← Steps
-          </Button>
-          <span className="min-w-0 truncate text-sm font-medium">{openStep.title}</span>
-        </div>
-      )}
+          {openStep !== null && (
+            <div className="flex h-8 shrink-0 items-center gap-2 border-b px-3">
+              <Button variant="ghost" size="sm" onClick={() => setSelection("steps")}>
+                ← Steps
+              </Button>
+              <span className="min-w-0 truncate text-sm font-medium">{openStep.title}</span>
+            </div>
+          )}
 
-      {openReport !== null && (
-        <div className="flex h-8 shrink-0 items-center gap-2 border-b px-3">
-          <Button variant="ghost" size="sm" onClick={() => setSelection("steps")}>
-            ← Steps
-          </Button>
-          <span className="min-w-0 truncate text-sm font-medium">
-            {`Step ${openReport.step.number} · ${stepReportLabel(openReport.report.pass, openReport.report.clean)}`}
-          </span>
-        </div>
-      )}
+          {openReport !== null && (
+            <div className="flex h-8 shrink-0 items-center gap-2 border-b px-3">
+              <Button variant="ghost" size="sm" onClick={() => setSelection("steps")}>
+                ← Steps
+              </Button>
+              <span className="min-w-0 truncate text-sm font-medium">
+                {`Step ${openReport.step.number} · ${stepReportLabel(openReport.report.pass, openReport.report.clean)}`}
+              </span>
+            </div>
+          )}
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-6">
-        {view === "steps" ? (
-          <ol className="flex flex-col">
-            {steps.map((step) => (
-              <li key={step.file}>
-                <button
-                  type="button"
-                  onClick={() => setSelection({ step: step.file })}
-                  className={STEP_ROW}
-                >
-                  <span className="w-6 shrink-0 text-muted-foreground tabular-nums">
-                    {step.number}
-                  </span>
-                  <span className="min-w-0 flex-1 truncate font-medium">{step.title}</span>
-                  {step.repository !== "" && (
-                    <Badge variant="secondary" className="shrink-0">
-                      {step.repository}
-                    </Badge>
-                  )}
-                </button>
-                <StepReportList
-                  reports={step.reports ?? []}
-                  onOpen={(report) => setSelection({ report: report.file })}
-                />
-              </li>
-            ))}
-          </ol>
-        ) : (
-          <>
-            {artifact.status === "empty" && (
-              <p className="text-sm text-muted-foreground italic">Nothing written yet.</p>
-            )}
-            {artifact.status === "loading" && (
-              <div className="flex flex-col gap-3">
-                {LOADING_WIDTHS.map((width) => (
-                  <Skeleton key={width} className={`h-4 ${width}`} />
+          <div className="min-h-0 flex-1 overflow-y-auto p-6">
+            {view === "steps" ? (
+              <ol className="flex flex-col">
+                {steps.map((step) => (
+                  <li key={step.file}>
+                    <button
+                      type="button"
+                      onClick={() => setSelection({ step: step.file })}
+                      className={STEP_ROW}
+                    >
+                      <span className="w-6 shrink-0 text-muted-foreground tabular-nums">
+                        {step.number}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate font-medium">{step.title}</span>
+                      {step.repository !== "" && (
+                        <Badge variant="secondary" className="shrink-0">
+                          {step.repository}
+                        </Badge>
+                      )}
+                    </button>
+                    <StepReportList
+                      reports={step.reports ?? []}
+                      onOpen={(report) => setSelection({ report: report.file })}
+                    />
+                  </li>
                 ))}
-              </div>
+              </ol>
+            ) : (
+              <>
+                {artifact.status === "empty" && (
+                  <p className="text-sm text-muted-foreground italic">Nothing written yet.</p>
+                )}
+                {artifact.status === "loading" && (
+                  <div className="flex flex-col gap-3">
+                    {LOADING_WIDTHS.map((width) => (
+                      <Skeleton key={width} className={`h-4 ${width}`} />
+                    ))}
+                  </div>
+                )}
+                {artifact.status === "error" && artifact.error !== dismissed && (
+                  <ErrorNotice
+                    message={artifact.error}
+                    onDismiss={() => setDismissed(artifact.error)}
+                  />
+                )}
+                {artifact.status === "ready" &&
+                  (openStep === null ? (
+                    <div className="max-w-[58.5rem] select-text">
+                      <Markdown>{artifact.content}</Markdown>
+                    </div>
+                  ) : (
+                    <StepDocument content={artifact.content} />
+                  ))}
+              </>
             )}
-            {artifact.status === "error" && artifact.error !== dismissed && (
-              <ErrorNotice
-                message={artifact.error}
-                onDismiss={() => setDismissed(artifact.error)}
-              />
-            )}
-            {artifact.status === "ready" &&
-              (openStep === null ? (
-                <div className="max-w-[58.5rem] select-text">
-                  <Markdown>{artifact.content}</Markdown>
-                </div>
-              ) : (
-                <StepDocument content={artifact.content} />
-              ))}
-          </>
-        )}
-      </div>
+          </div>
+        </>
+      )}
     </section>
   );
 }

@@ -1,5 +1,5 @@
 import { stageLabel } from "@/lib/stages";
-import type { ModelStage, StageModel } from "@/lib/wails";
+import type { ModelStage, StageModel, TaskMode } from "@/lib/wails";
 
 /** ModelChoice is a model and an effort level, the way every picker holds them. */
 export interface ModelChoice {
@@ -17,8 +17,19 @@ export const MODELS: readonly { id: string; label: string }[] = [
 /** EFFORTS are the effort levels, from the least. */
 export const EFFORTS: readonly string[] = ["low", "medium", "high", "xhigh", "max"];
 
-/** MODEL_STAGES are the stages that carry a choice, in workflow order. */
+/** MODEL_STAGES are every stage that carries a choice, in the order the settings list them. */
 export const MODEL_STAGES: readonly ModelStage[] = [
+  "prd",
+  "tech_spec",
+  "plan",
+  "one_shot",
+  "implementation",
+  "step_review",
+  "pr",
+  "pr_review",
+];
+
+const STRUCTURED_MODEL_STAGES: readonly ModelStage[] = [
   "prd",
   "tech_spec",
   "plan",
@@ -27,6 +38,19 @@ export const MODEL_STAGES: readonly ModelStage[] = [
   "pr",
   "pr_review",
 ];
+
+const ONE_SHOT_MODEL_STAGES: readonly ModelStage[] = [
+  "one_shot",
+  "implementation",
+  "step_review",
+  "pr",
+  "pr_review",
+];
+
+/** modelStagesOf is the stages of a task of a mode that carry a choice, in order. It mirrors task.Mode.ModelStages. */
+export function modelStagesOf(mode: TaskMode): readonly ModelStage[] {
+  return mode === "one_shot" ? ONE_SHOT_MODEL_STAGES : STRUCTURED_MODEL_STAGES;
+}
 
 /** modelLabel is the name of a model; one the app does not know reads as its id. */
 export function modelLabel(model: string): string {
@@ -43,9 +67,20 @@ export function sameChoice(a: ModelChoice, b: ModelChoice): boolean {
   return a.model === b.model && a.effort === b.effort;
 }
 
-/** modelStageLabel is the name of a stage: the one the stage track gives it, or "Step review", which has no chip of its own. */
+/**
+ * modelStageLabel is the name of a stage: the one the stage track gives it, but
+ * "Step review", which has no chip of its own, and "One-Shot planning", which
+ * the track of its task calls just "Planning".
+ */
 export function modelStageLabel(stage: ModelStage): string {
-  return stage === "step_review" ? "Step review" : stageLabel(stage);
+  switch (stage) {
+    case "step_review":
+      return "Step review";
+    case "one_shot":
+      return "One-Shot planning";
+    default:
+      return stageLabel(stage);
+  }
 }
 
 /** choiceOf is the choice of a stage in a list of them; a stage the list lacks reads as empty. */
@@ -66,13 +101,15 @@ export function withChoice(
 /**
  * adjustmentSummary is what the folded Models row of the creation dialog says:
  * "Defaults" with nothing adjusted, or the first adjusted stage with its choice
- * and "+N" for the others, as in "PRD: Fable 5.1 · xhigh +1".
+ * and "+N" for the others, as in "PRD: Fable 5.1 · xhigh +1". Only the stages
+ * it is given count.
  */
 export function adjustmentSummary(
   choices: readonly StageModel[],
   defaults: readonly StageModel[],
+  stages: readonly ModelStage[],
 ): string {
-  const adjusted = MODEL_STAGES.filter(
+  const adjusted = stages.filter(
     (stage) => !sameChoice(choiceOf(choices, stage), choiceOf(defaults, stage)),
   );
   const [first, ...others] = adjusted;

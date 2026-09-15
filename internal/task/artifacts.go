@@ -8,6 +8,7 @@ const (
 	ArtifactPRD        ArtifactKind = "prd"
 	ArtifactTechSpec   ArtifactKind = "tech_spec"
 	ArtifactPlan       ArtifactKind = "plan"
+	ArtifactOneShot    ArtifactKind = "one_shot"
 	ArtifactPR         ArtifactKind = "pr"
 	ArtifactStepReview ArtifactKind = "step_review"
 )
@@ -16,6 +17,7 @@ const (
 type Artifacts struct {
 	PRD      bool // PRD.md exists with content
 	TechSpec bool // tech-spec.md exists with content
+	OneShot  bool // one-shot.md exists with content
 	Plan     Plan
 	PR       map[string]RepoArtifacts // by repository slug; never nil
 
@@ -31,6 +33,8 @@ func (a Artifacts) Done(stage Stage) bool {
 		return a.TechSpec
 	case StagePlan:
 		return a.Plan.Valid()
+	case StageOneShot:
+		return a.OneShot
 	case StageImplementation:
 		return true
 	default:
@@ -47,6 +51,8 @@ func (a Artifacts) Has(kind ArtifactKind) bool {
 		return a.TechSpec
 	case ArtifactPlan:
 		return a.Plan.Present
+	case ArtifactOneShot:
+		return a.OneShot
 	case ArtifactPR:
 		return len(a.PR) > 0
 	case ArtifactStepReview:

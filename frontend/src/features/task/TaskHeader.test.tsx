@@ -35,6 +35,18 @@ describe("TaskHeader", () => {
     expect(screen.getByText("api")).toBeInTheDocument();
   });
 
+  it("labels a One-Shot task", () => {
+    header({ mode: "one_shot", stage: "one_shot", repoPath: "/home/dev/projects/api" });
+
+    expect(screen.getByText("One-Shot")).toBeInTheDocument();
+  });
+
+  it("has no label for a Structured task", () => {
+    header();
+
+    expect(screen.queryByText("One-Shot")).not.toBeInTheDocument();
+  });
+
   it.each([
     [{}, "Waiting"],
     [{ sessionStatus: "working" }, "Working"],
@@ -233,16 +245,18 @@ describe("TaskHeader", () => {
     );
   });
 
-  it.each([[{ hasPrd: true }], [{ hasTechSpec: true }], [{ steps: [makeStep()] }]])(
-    "opens the panel on anything the task wrote %#",
-    async (overrides) => {
-      const { user } = header(overrides);
+  it.each([
+    [{ hasPrd: true }],
+    [{ hasTechSpec: true }],
+    [{ hasOneShot: true }],
+    [{ steps: [makeStep()] }],
+  ])("opens the panel on anything the task wrote %#", async (overrides) => {
+    const { user } = header(overrides);
 
-      await user.hover(screen.getByRole("button", { name: "Artifacts" }));
+    await user.hover(screen.getByRole("button", { name: "Artifacts" }));
 
-      expect(await screen.findByText("Artifacts")).toBeInTheDocument();
-    },
-  );
+    expect(await screen.findByText("Artifacts")).toBeInTheDocument();
+  });
 
   it("deletes the task after the confirmation", async () => {
     const { user } = header();

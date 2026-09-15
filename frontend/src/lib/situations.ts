@@ -83,6 +83,8 @@ function stageName(stage: string): string {
       return "tech spec";
     case "plan":
       return "plan";
+    case "one_shot":
+      return "One-Shot planning";
     default:
       return stage;
   }

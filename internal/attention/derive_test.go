@@ -28,6 +28,9 @@ func TestDeriveAPlanningStage(t *testing.T) {
 	}}
 	revisited := stageInput(task.StageTechSpec, written, waiting)
 	revisited.Task.Revisiting = true
+	document := task.Artifacts{OneShot: true}
+	revisitedOneShot := stageInput(task.StageOneShot, document, waiting)
+	revisitedOneShot.Task.Revisiting = true
 
 	// situation is the one situation of the task, in the stage given.
 	situation := func(stage task.Stage, kind attention.Kind, body string) []attention.Found {
@@ -87,6 +90,22 @@ func TestDeriveAPlanningStage(t *testing.T) {
 			"a question waits",
 			stageInput(task.StagePRD, task.Artifacts{}, summary(session.StatusNeedsAnswer, false)),
 			situation(task.StagePRD, attention.KindQuestion, "The agent has a question in PRD."),
+		},
+		{
+			"the agent waits in the One-Shot planning",
+			stageInput(task.StageOneShot, task.Artifacts{}, waiting),
+			situation(task.StageOneShot, attention.KindReply, "The agent is waiting for your reply in One-Shot planning."),
+		},
+		{
+			"a question waits in the One-Shot planning",
+			stageInput(task.StageOneShot, task.Artifacts{}, summary(session.StatusNeedsAnswer, false)),
+			situation(task.StageOneShot, attention.KindQuestion, "The agent has a question in One-Shot planning."),
+		},
+		{"the One-Shot document is written", stageInput(task.StageOneShot, document, waiting), nil},
+		{
+			"a reopened One-Shot planning has its document",
+			revisitedOneShot,
+			situation(task.StageOneShot, attention.KindReadyToContinue, "The One-Shot document is revised and ready to continue."),
 		},
 	}
 

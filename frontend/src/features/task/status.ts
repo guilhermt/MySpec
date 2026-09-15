@@ -190,5 +190,5 @@ export function taskStageLabel(task: TaskSummary): string {
 
 /** hasArtifacts reports whether the task has written anything to read yet. */
 export function hasArtifacts(task: TaskSummary): boolean {
-  return task.hasPrd || task.hasTechSpec || (task.steps ?? []).length > 0;
+  return task.hasPrd || task.hasTechSpec || task.hasOneShot || (task.steps ?? []).length > 0;
 }

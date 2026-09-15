@@ -50,6 +50,35 @@ func TestTasksInsertKeepsARootTaskWithoutARepository(t *testing.T) {
 	}
 }
 
+func TestTasksKeepTheModeOfATask(t *testing.T) {
+	t.Parallel()
+	s := newStore(t)
+
+	want := newTask("task-1", "/ws", "one", fixedTime)
+	want.RepoPath = "/ws/api"
+	want.Mode = task.ModeOneShot
+	want.Stage = task.StageOneShot
+	if err := s.Tasks.Insert(t.Context(), want); err != nil {
+		t.Fatalf("Insert() = %v, want nil", err)
+	}
+
+	got, err := s.Tasks.Get(t.Context(), want.ID)
+	if err != nil {
+		t.Fatalf("Get() = %v, want nil", err)
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("Get() mismatch (-want +got):\n%s", diff)
+	}
+
+	listed, err := s.Tasks.ListByWorkspace(t.Context(), "/ws")
+	if err != nil {
+		t.Fatalf("ListByWorkspace() = %v, want nil", err)
+	}
+	if diff := cmp.Diff([]task.Task{want}, listed); diff != "" {
+		t.Errorf("ListByWorkspace() mismatch (-want +got):\n%s", diff)
+	}
+}
+
 func TestTasksGetMissingIsNotFound(t *testing.T) {
 	t.Parallel()
 	s := newStore(t)
