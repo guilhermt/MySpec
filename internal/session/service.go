@@ -58,14 +58,17 @@ type TaskInfo struct {
 	ArtifactsDir   string
 	Stage          string        // session key: a task stage, or StepStage(n)
 	Prompt         prompts.Stage // the prompt that opens the session
-	Step           int           // step sessions: the number; 0 otherwise
-	StepPath       string        // step sessions: the file sent as the prompt, verbatim
+	Step           int           // step and step review sessions: the number; 0 otherwise
+	StepPath       string        // step sessions: the file sent as the prompt, verbatim; step review sessions: the step under review
 	PRDPath        string
 	TechSpecPath   string
 	StepsDir       string
 	Repositories   []string // relative paths, what the prompt lists
 	InitialContext string
-	ArtifactExists bool // the artifact of Prompt is already there; always false for a step
+	// ImplementerReply is what the implementer of a step said last, which the
+	// prompt of its reviewer ends with; step review sessions only.
+	ImplementerReply string
+	ArtifactExists   bool // the artifact of Prompt is already there; always false for a step
 
 	// Choice is the model and effort a session created for this task and stage
 	// starts with. A session that already exists keeps its own.
@@ -92,7 +95,7 @@ func artifactOf(stage prompts.Stage) ArtifactKind {
 		return ArtifactTechSpec
 	case prompts.StagePlan:
 		return ArtifactPlan
-	case prompts.StageStep, prompts.StagePR, prompts.StagePRReview:
+	case prompts.StageStep, prompts.StageStepReview, prompts.StagePR, prompts.StagePRReview:
 		// A step file and the PR prompts produce no artifact of the planning:
 		// what they write belongs to a repository, not to the task.
 		return ""
@@ -351,18 +354,28 @@ func (s *Service) Start(ctx context.Context, t TaskInfo, restarted bool) error {
 		return err
 	}
 	marker := MarkerEntry{Type: MarkerStageStarted, Stage: t.Stage, Restarted: restarted}
-	if t.Step > 0 {
+	switch {
+	case t.Prompt == prompts.StageStepReview:
+		marker = MarkerEntry{Type: MarkerStepReviewStarted, Step: t.Step}
+	case t.Step > 0:
 		marker = MarkerEntry{Type: MarkerStepStarted, Step: t.Step, Restarted: restarted}
 	}
 	s.appendLocked(ctx, r, Entry{Kind: KindMarker, Marker: &marker}, n)
 
 	// Only the PRD prompt carries what the user wrote when they created the
-	// task; every later stage reads the artifacts of the ones before it.
-	text := ""
-	if t.Prompt == prompts.StagePRD {
-		text = t.InitialContext
+	// task, and only the prompt of a reviewer what the implementer said last;
+	// every other stage reads the artifacts of the ones before it. What the
+	// implementer said reaches the reviewer from the app, and reads as such.
+	entry := &UserEntry{Prompt: true}
+	switch t.Prompt {
+	case prompts.StagePRD:
+		entry.Text = t.InitialContext
+	case prompts.StageStepReview:
+		entry.Text, entry.App = t.ImplementerReply, true
+	default:
+		// Every other stage starts with an empty prompt entry.
 	}
-	if err := s.enqueueLocked(ctx, r, &UserEntry{Text: text, Prompt: true}, n); err != nil {
+	if err := s.enqueueLocked(ctx, r, entry, n); err != nil {
 		return err
 	}
 	s.flushPendingLocked(ctx, r, n)
@@ -817,6 +830,59 @@ func (s *Service) MarkPRReview(ctx context.Context, k Key, pass int) {
 	}
 	marker := &MarkerEntry{Type: MarkerPRReviewWritten, Pass: pass}
 	s.appendLocked(ctx, r, Entry{Kind: KindMarker, Marker: marker}, n)
+}
+
+// MarkStepReview records that a pass of the agent review of a step was
+// written, with its verdict.
+func (s *Service) MarkStepReview(ctx context.Context, k Key, pass int, clean bool) {
+	n := &notes{}
+	defer s.flush(n)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	r, err := s.runOf(k)
+	if err != nil {
+		return
+	}
+	marker := &MarkerEntry{Type: MarkerStepReviewWritten, Pass: pass, Clean: clean}
+	s.appendLocked(ctx, r, Entry{Kind: KindMarker, Marker: marker}, n)
+}
+
+// LastReply is what the agent of a session said at the end of its last turn:
+// the text of the last message it wrote after the last message it was sent,
+// its blocks joined by a blank line. It is "" for a session that is not open,
+// and for an agent that wrote nothing since.
+func (s *Service) LastReply(k Key) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	r, ok := s.runs[k]
+	if !ok {
+		return ""
+	}
+	var last *Entry
+	for _, e := range slices.Backward(r.entries) {
+		if e.Kind == KindUser {
+			break
+		}
+		if e.Kind == KindAssistant {
+			last = e
+			break
+		}
+	}
+	if last == nil {
+		return ""
+	}
+	var parts []string
+	for _, e := range r.entries {
+		if e.Kind != KindAssistant || e.TurnID != last.TurnID || e.Assistant.MessageID != last.Assistant.MessageID {
+			continue
+		}
+		if text := strings.TrimSpace(e.Assistant.Text); text != "" {
+			parts = append(parts, text)
+		}
+	}
+	return strings.Join(parts, "\n\n")
 }
 
 // Transcript returns a copy of the conversation of a task.

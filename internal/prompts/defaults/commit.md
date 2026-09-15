@@ -1,10 +1,10 @@
 # Commit
 
-The user has just reviewed the work of this step and approved it. Commit it.
+The work of this session was reviewed and approved. Commit it.
 
 ## What to commit
 
-Commit **exactly what is staged**. Never run `git add`, `git commit -a`, `git add -p` or anything else that stages files: what the user wants in this commit is already in the index, and whatever is out of it was left out on purpose.
+{{what_to_commit}}
 
 Make **one commit**. Do not amend, rebase, tag or create branches.
 

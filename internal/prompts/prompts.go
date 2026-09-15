@@ -27,12 +27,13 @@ type Stage string
 
 // The stages that have a prompt, in workflow order.
 const (
-	StagePRD      Stage = "prd"
-	StageTechSpec Stage = "tech_spec"
-	StagePlan     Stage = "plan"
-	StageCommit   Stage = "commit"
-	StagePR       Stage = "pr"
-	StagePRReview Stage = "pr_review"
+	StagePRD        Stage = "prd"
+	StageTechSpec   Stage = "tech_spec"
+	StagePlan       Stage = "plan"
+	StageStepReview Stage = "step_review"
+	StageCommit     Stage = "commit"
+	StagePR         Stage = "pr"
+	StagePRReview   Stage = "pr_review"
 )
 
 // StageStep is the prompt of a step session: the step file itself.
@@ -40,7 +41,7 @@ const StageStep Stage = "step"
 
 // Editable are the prompts the user reads and edits in the settings, in
 // workflow order. The prompt of a step is a file of the plan, not one of them.
-var Editable = []Stage{StagePRD, StageTechSpec, StagePlan, StageCommit, StagePR, StagePRReview}
+var Editable = []Stage{StagePRD, StageTechSpec, StagePlan, StageStepReview, StageCommit, StagePR, StagePRReview}
 
 // ErrUnknownStage is a prompt the app does not have.
 var ErrUnknownStage = errors.New("prompts: unknown prompt")
@@ -66,6 +67,7 @@ const (
 	prdPathPlaceholder        = "{{prd_path}}"
 	techSpecPathPlaceholder   = "{{tech_spec_path}}"
 	stepsDirPlaceholder       = "{{steps_dir}}"
+	stepPathPlaceholder       = "{{step_path}}"
 	repositoriesPlaceholder   = "{{repositories}}"
 	initialContextPlaceholder = "{{initial_context}}"
 	repositoryPlaceholder     = "{{repository}}"
@@ -75,15 +77,16 @@ const (
 	reviewPathPlaceholder     = "{{review_path}}"
 	prNumberPlaceholder       = "{{pr_number}}"
 	prURLPlaceholder          = "{{pr_url}}"
+	whatToCommitPlaceholder   = "{{what_to_commit}}"
 	pushPlaceholder           = "{{push}}"
 )
 
 // placeholderOrder is every placeholder, in the order the settings list them.
 var placeholderOrder = []string{
 	taskNamePlaceholder, artifactsDirPlaceholder, prdPathPlaceholder, techSpecPathPlaceholder,
-	stepsDirPlaceholder, repositoriesPlaceholder, initialContextPlaceholder, repositoryPlaceholder,
-	branchPlaceholder, baseBranchPlaceholder, draftPathPlaceholder, reviewPathPlaceholder,
-	prNumberPlaceholder, prURLPlaceholder, pushPlaceholder,
+	stepsDirPlaceholder, stepPathPlaceholder, repositoriesPlaceholder, initialContextPlaceholder,
+	repositoryPlaceholder, branchPlaceholder, baseBranchPlaceholder, draftPathPlaceholder,
+	reviewPathPlaceholder, prNumberPlaceholder, prURLPlaceholder, whatToCommitPlaceholder, pushPlaceholder,
 }
 
 // Prompt is a prompt as the settings show it.
@@ -103,6 +106,14 @@ type Prompt struct {
 // belongs to a pull request that already exists.
 const PushInstruction = "After committing, push this branch to `origin`, so the commit reaches the pull request. Push only this branch, and never force-push."
 
+// StagedInstruction is what {{what_to_commit}} becomes when the user reviewed
+// the change by staging it.
+const StagedInstruction = "Commit **exactly what is staged**. Never run `git add`, `git commit -a`, `git add -p` or anything else that stages files: what the user wants in this commit is already in the index, and whatever is out of it was left out on purpose."
+
+// AllChangesInstruction is what {{what_to_commit}} becomes when an agent
+// reviewed the change, and nobody staged anything.
+const AllChangesInstruction = "Commit **every change of the worktree**, new files included. Nobody staged anything by hand: stage everything with `git add -A`, then commit. The files the repository ignores stay out, as `git add -A` leaves them."
+
 // contextHeading opens the section Render appends when a prompt has no
 // placeholder for the initial context.
 const contextHeading = "\n\n## Initial context\n\n"
@@ -110,6 +121,14 @@ const contextHeading = "\n\n## Initial context\n\n"
 // pushHeading opens the section Render appends when a prompt has no
 // placeholder for the push instruction.
 const pushHeading = "\n\n## Pushing\n\n"
+
+// whatToCommitHeading opens the section Render appends when a commit prompt
+// has no placeholder for what to commit.
+const whatToCommitHeading = "\n\n## What to commit\n\n"
+
+// replyHeading opens the section every step review prompt ends with: what the
+// implementer said last.
+const replyHeading = "\n\n## The implementer's last response\n\n"
 
 // Dir is the prompts directory inside the data directory.
 func Dir(dataDir string) string {
@@ -261,7 +280,7 @@ type Vars struct {
 	StepsDir       string
 	Repositories   []string // paths relative to the session directory
 	InitialContext string   // PRD only
-	StepPath       string   // StageStep only: the file whose content is the prompt
+	StepPath       string   // StageStep: the file whose content is the prompt; StageStepReview: the step under review
 
 	Repository string // relative path of the repository of a PR session
 	Branch     string
@@ -271,6 +290,9 @@ type Vars struct {
 	PRNumber   string
 	PRURL      string
 	Push       bool // the commit of this session goes up to the pull request
+
+	CommitAll        bool   // the commit takes every change of the worktree, not what is staged
+	ImplementerReply string // StageStepReview only: what the implementer said last, appended to the prompt
 }
 
 // pushInstruction is what {{push}} becomes: the instruction when the commit
@@ -280,6 +302,15 @@ func pushInstruction(push bool) string {
 		return PushInstruction
 	}
 	return ""
+}
+
+// commitInstruction is what {{what_to_commit}} becomes: every change of the
+// worktree after an agent review, what is staged otherwise.
+func commitInstruction(all bool) string {
+	if all {
+		return AllChangesInstruction
+	}
+	return StagedInstruction
 }
 
 // repositoryList renders paths as the Markdown list a prompt shows the agent.
@@ -297,10 +328,12 @@ func repositoryList(paths []string) string {
 
 // Render takes the prompt of stage, the edit of the user when there is one and
 // the default otherwise, and replaces its placeholders. A prompt the user
-// edited may have lost a placeholder, which is not an error; a prompt with an
-// initial context to pass and no placeholder for it gets the context appended,
-// so that what the user wrote is never dropped. StageStep is the exception:
-// the step file is sent verbatim.
+// edited may have lost a placeholder, which is not an error. Three things are
+// never dropped with one: the initial context the user wrote, what to commit
+// and the push instruction are appended to a prompt that has no placeholder
+// for them. The prompt of a step reviewer always ends with what the
+// implementer said last. StageStep is the exception: the step file is sent
+// verbatim.
 func Render(dataDir string, stage Stage, vars Vars) (string, error) {
 	if stage == StageStep {
 		raw, err := os.ReadFile(vars.StepPath)
@@ -321,6 +354,7 @@ func Render(dataDir string, stage Stage, vars Vars) (string, error) {
 		prdPathPlaceholder, vars.PRDPath,
 		techSpecPathPlaceholder, vars.TechSpecPath,
 		stepsDirPlaceholder, vars.StepsDir,
+		stepPathPlaceholder, vars.StepPath,
 		repositoriesPlaceholder, repositoryList(vars.Repositories),
 		initialContextPlaceholder, vars.InitialContext,
 		repositoryPlaceholder, vars.Repository,
@@ -330,14 +364,23 @@ func Render(dataDir string, stage Stage, vars Vars) (string, error) {
 		reviewPathPlaceholder, vars.ReviewPath,
 		prNumberPlaceholder, vars.PRNumber,
 		prURLPlaceholder, vars.PRURL,
+		whatToCommitPlaceholder, commitInstruction(vars.CommitAll),
 		pushPlaceholder, pushInstruction(vars.Push),
 	).Replace(text)
 
 	if !strings.Contains(text, initialContextPlaceholder) && vars.InitialContext != "" {
 		rendered += contextHeading + vars.InitialContext
 	}
+	if stage == StageCommit && !strings.Contains(text, whatToCommitPlaceholder) {
+		rendered += whatToCommitHeading + commitInstruction(vars.CommitAll)
+	}
 	if !strings.Contains(text, pushPlaceholder) && vars.Push {
 		rendered += pushHeading + PushInstruction
+	}
+	// What the implementer said is never a placeholder: the prompt of a
+	// reviewer always ends with it.
+	if stage == StageStepReview {
+		rendered += replyHeading + vars.ImplementerReply
 	}
 	return rendered, nil
 }

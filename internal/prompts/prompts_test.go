@@ -81,7 +81,8 @@ func TestReadGivesTheDefaultOfEveryPrompt(t *testing.T) {
 		{prompts.StagePRD, []string{"# PRD Creator", "{{prd_path}}", "{{initial_context}}"}},
 		{prompts.StageTechSpec, []string{"# Technical Specification Creator", "{{tech_spec_path}}", "{{repositories}}"}},
 		{prompts.StagePlan, []string{"# Step Planner", "{{steps_dir}}", "{{repositories}}", "AskUserQuestion"}},
-		{prompts.StageCommit, []string{"# Commit", "exactly what is staged", "Co-Authored-By", "{{push}}"}},
+		{prompts.StageStepReview, []string{"# Step Review", "{{step_path}}", "{{review_path}}", "git diff HEAD", "status: clean", "AskUserQuestion"}},
+		{prompts.StageCommit, []string{"# Commit", "{{what_to_commit}}", "Co-Authored-By", "{{push}}"}},
 		{prompts.StagePR, []string{"# Pull Request", "{{draft_path}}", "{{base_branch}}", "gh pr create", "AskUserQuestion"}},
 		{prompts.StagePRReview, []string{"# Pull Request Review", "{{review_path}}", "{{pr_url}}", "status: clean", "AskUserQuestion"}},
 	}
@@ -263,7 +264,10 @@ func TestPlaceholdersAreTheOnesTheDefaultUses(t *testing.T) {
 		want  []string
 	}{
 		{prompts.StagePRD, []string{"{{task_name}}", "{{artifacts_dir}}", "{{prd_path}}", "{{initial_context}}"}},
-		{prompts.StageCommit, []string{"{{push}}"}},
+		{prompts.StageStepReview, []string{
+			"{{prd_path}}", "{{tech_spec_path}}", "{{step_path}}", "{{repository}}", "{{branch}}", "{{review_path}}",
+		}},
+		{prompts.StageCommit, []string{"{{what_to_commit}}", "{{push}}"}},
 		{prompts.StagePRReview, []string{
 			"{{prd_path}}", "{{tech_spec_path}}", "{{repository}}", "{{branch}}",
 			"{{base_branch}}", "{{review_path}}", "{{pr_number}}", "{{pr_url}}",
@@ -351,8 +355,9 @@ func TestRenderAppendsTheContextWhenThePlaceholderIsGone(t *testing.T) {
 }
 
 // everyVar fills every placeholder a prompt may carry except the initial
-// context, which only the PRD stage passes, and the push instruction, which
-// only a commit that belongs to a pull request asks for.
+// context, which only the PRD stage passes, the push instruction, which only a
+// commit that belongs to a pull request asks for, and the reply of the
+// implementer, which only a step review passes.
 func everyVar() prompts.Vars {
 	return prompts.Vars{
 		TaskName:     "add-login",
@@ -360,6 +365,7 @@ func everyVar() prompts.Vars {
 		PRDPath:      "/data/tasks/add-login/PRD.md",
 		TechSpecPath: "/data/tasks/add-login/tech-spec.md",
 		StepsDir:     "/data/tasks/add-login/steps",
+		StepPath:     "/data/tasks/add-login/steps/1-add-the-store.md",
 		Repositories: []string{"api", "web"},
 		Repository:   "api",
 		Branch:       "add-login",
@@ -378,6 +384,13 @@ func prdVars() prompts.Vars {
 	return vars
 }
 
+// stepReviewVars are the vars the reviewer of a step renders with.
+func stepReviewVars() prompts.Vars {
+	vars := everyVar()
+	vars.ImplementerReply = "I added the store."
+	return vars
+}
+
 func TestRenderTheDefaultPromptsKeepNoPlaceholder(t *testing.T) {
 	t.Parallel()
 
@@ -389,10 +402,16 @@ func TestRenderTheDefaultPromptsKeepNoPlaceholder(t *testing.T) {
 		{prompts.StagePRD, prdVars(), []string{"add-login", "/data/tasks/add-login/PRD.md", "a login screen"}},
 		{prompts.StageTechSpec, everyVar(), []string{"add-login", "/data/tasks/add-login/tech-spec.md", "- `api`\n- `web`"}},
 		{prompts.StagePlan, everyVar(), []string{"add-login", "/data/tasks/add-login/steps", "- `api`\n- `web`"}},
+		{prompts.StageStepReview, stepReviewVars(), []string{
+			"/data/tasks/add-login/steps/1-add-the-store.md",
+			"/data/tasks/add-login/pr/api-review-1.md",
+			"## The implementer's last response\n\nI added the store.",
+		}},
 		// The commit prompt carries no planning placeholder: the agent already
 		// knows what it changed, and the message must say nothing about the
-		// planning. {{push}} is the only one, and it renders to nothing here.
-		{prompts.StageCommit, everyVar(), []string{"# Commit", "Make **one commit**"}},
+		// planning. {{what_to_commit}} and {{push}} are the only ones, and the
+		// second renders to nothing here.
+		{prompts.StageCommit, everyVar(), []string{"# Commit", prompts.StagedInstruction, "Make **one commit**"}},
 		{prompts.StagePR, everyVar(), []string{"`api`", "origin/dev", "/data/tasks/add-login/pr/api-draft.md"}},
 		{prompts.StagePRReview, everyVar(), []string{"https://github.com/acme/api/pull/42", "`42`", "/data/tasks/add-login/pr/api-review-1.md"}},
 	}
@@ -421,7 +440,9 @@ func TestRenderTheDefaultPromptsOtherThanPRDGetNoInitialContext(t *testing.T) {
 
 	dataDir := t.TempDir()
 
-	for _, stage := range []prompts.Stage{prompts.StageTechSpec, prompts.StagePlan, prompts.StageCommit, prompts.StagePR, prompts.StagePRReview} {
+	for _, stage := range []prompts.Stage{
+		prompts.StageTechSpec, prompts.StagePlan, prompts.StageStepReview, prompts.StageCommit, prompts.StagePR, prompts.StagePRReview,
+	} {
 		got, err := prompts.Render(dataDir, stage, everyVar())
 		if err != nil {
 			t.Fatalf("Render(%s) = %v, want nil", stage, err)
@@ -583,8 +604,8 @@ func TestRenderReplacesThePushPlaceholder(t *testing.T) {
 		push bool
 		want string
 	}{
-		{"pushing", true, "commit it. " + prompts.PushInstruction + " done"},
-		{"not pushing", false, "commit it.  done"},
+		{"pushing", true, "commit " + prompts.StagedInstruction + ". " + prompts.PushInstruction + " done"},
+		{"not pushing", false, "commit " + prompts.StagedInstruction + ".  done"},
 	}
 
 	for _, test := range tests {
@@ -592,7 +613,7 @@ func TestRenderReplacesThePushPlaceholder(t *testing.T) {
 			t.Parallel()
 
 			dataDir := t.TempDir()
-			write(t, dataDir, prompts.StageCommit, "commit it. {{push}} done")
+			write(t, dataDir, prompts.StageCommit, "commit {{what_to_commit}}. {{push}} done")
 
 			got, err := prompts.Render(dataDir, prompts.StageCommit, prompts.Vars{Push: test.push})
 			if err != nil {
@@ -609,14 +630,14 @@ func TestRenderAppendsThePushInstructionWhenThePlaceholderIsGone(t *testing.T) {
 	t.Parallel()
 
 	dataDir := t.TempDir()
-	write(t, dataDir, prompts.StageCommit, "commit what is staged")
+	write(t, dataDir, prompts.StageCommit, "commit {{what_to_commit}}")
 
 	got, err := prompts.Render(dataDir, prompts.StageCommit, prompts.Vars{Push: true})
 	if err != nil {
 		t.Fatalf("Render() = %v, want nil", err)
 	}
 
-	want := "commit what is staged\n\n## Pushing\n\n" + prompts.PushInstruction
+	want := "commit " + prompts.StagedInstruction + "\n\n## Pushing\n\n" + prompts.PushInstruction
 	if got != want {
 		t.Errorf("Render() = %q, want %q", got, want)
 	}
@@ -626,14 +647,14 @@ func TestRenderAppendsNoPushSectionWhenTheCommitDoesNotPush(t *testing.T) {
 	t.Parallel()
 
 	dataDir := t.TempDir()
-	write(t, dataDir, prompts.StageCommit, "commit what is staged")
+	write(t, dataDir, prompts.StageCommit, "commit {{what_to_commit}}")
 
 	got, err := prompts.Render(dataDir, prompts.StageCommit, prompts.Vars{})
 	if err != nil {
 		t.Fatalf("Render() = %v, want nil", err)
 	}
 
-	if want := "commit what is staged"; got != want {
+	if want := "commit " + prompts.StagedInstruction; got != want {
 		t.Errorf("Render() = %q, want %q", got, want)
 	}
 }
@@ -671,5 +692,135 @@ func TestRenderTheDefaultCommitPromptWithoutPushSaysNothingAboutPushing(t *testi
 
 	if strings.Contains(got, prompts.PushInstruction) {
 		t.Error("the rendered commit prompt carries the push instruction, want nothing about pushing")
+	}
+}
+
+func TestRenderReplacesTheWhatToCommitPlaceholder(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		commitAll bool
+		want      string
+	}{
+		{"what is staged", false, "commit " + prompts.StagedInstruction + " done"},
+		{"every change", true, "commit " + prompts.AllChangesInstruction + " done"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			dataDir := t.TempDir()
+			write(t, dataDir, prompts.StageCommit, "commit {{what_to_commit}} done")
+
+			got, err := prompts.Render(dataDir, prompts.StageCommit, prompts.Vars{CommitAll: test.commitAll})
+			if err != nil {
+				t.Fatalf("Render() = %v, want nil", err)
+			}
+			if got != test.want {
+				t.Errorf("Render() = %q, want %q", got, test.want)
+			}
+		})
+	}
+}
+
+func TestRenderAppendsWhatToCommitWhenThePlaceholderIsGone(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		commitAll   bool
+		instruction string
+	}{
+		{"what is staged", false, prompts.StagedInstruction},
+		{"every change", true, prompts.AllChangesInstruction},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			dataDir := t.TempDir()
+			write(t, dataDir, prompts.StageCommit, "commit it")
+
+			got, err := prompts.Render(dataDir, prompts.StageCommit, prompts.Vars{CommitAll: test.commitAll})
+			if err != nil {
+				t.Fatalf("Render() = %v, want nil", err)
+			}
+			if want := "commit it\n\n## What to commit\n\n" + test.instruction; got != want {
+				t.Errorf("Render() = %q, want %q", got, want)
+			}
+		})
+	}
+}
+
+func TestRenderAppendsNoWhatToCommitToAnotherPrompt(t *testing.T) {
+	t.Parallel()
+
+	dataDir := t.TempDir()
+	write(t, dataDir, prompts.StagePR, "open the pull request of {{branch}}")
+
+	got, err := prompts.Render(dataDir, prompts.StagePR, prompts.Vars{Branch: "add-login"})
+	if err != nil {
+		t.Fatalf("Render() = %v, want nil", err)
+	}
+
+	if want := "open the pull request of add-login"; got != want {
+		t.Errorf("Render() = %q, want %q", got, want)
+	}
+}
+
+func TestRenderTheDefaultCommitPromptSaysWhatToCommit(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		commitAll bool
+		want      string
+		unwanted  string
+	}{
+		{"what is staged", false, prompts.StagedInstruction, prompts.AllChangesInstruction},
+		{"every change", true, prompts.AllChangesInstruction, prompts.StagedInstruction},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			vars := everyVar()
+			vars.CommitAll = test.commitAll
+			got, err := prompts.Render(t.TempDir(), prompts.StageCommit, vars)
+			if err != nil {
+				t.Fatalf("Render(commit) = %v, want nil", err)
+			}
+
+			if !strings.Contains(got, test.want) {
+				t.Errorf("the rendered commit prompt does not carry %q", test.want)
+			}
+			if strings.Contains(got, test.unwanted) {
+				t.Errorf("the rendered commit prompt carries %q", test.unwanted)
+			}
+			// The instruction is in place of the placeholder, not appended after it.
+			if count := strings.Count(got, "## What to commit"); count != 1 {
+				t.Errorf("the rendered commit prompt has %d what to commit sections, want 1", count)
+			}
+		})
+	}
+}
+
+func TestRenderAppendsTheReplyOfTheImplementerToAStepReview(t *testing.T) {
+	t.Parallel()
+
+	dataDir := t.TempDir()
+	write(t, dataDir, prompts.StageStepReview, "review {{step_path}}")
+
+	got, err := prompts.Render(dataDir, prompts.StageStepReview, prompts.Vars{StepPath: "/s.md", ImplementerReply: "Done."})
+	if err != nil {
+		t.Fatalf("Render() = %v, want nil", err)
+	}
+
+	if want := "review /s.md\n\n## The implementer's last response\n\nDone."; got != want {
+		t.Errorf("Render() = %q, want %q", got, want)
 	}
 }
