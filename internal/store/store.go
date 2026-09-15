@@ -27,31 +27,33 @@ const dirPerm = 0o700
 
 // Store owns the database connection and the repositories built on it.
 type Store struct {
-	db         *sql.DB
-	Recents    *RecentsRepo
-	Settings   *SettingsRepo
-	Tasks      *TasksRepo
-	Sessions   *SessionsRepo
-	Entries    *EntriesRepo
-	Worktrees  *WorktreesRepo
-	Situations *SituationsRepo
+	db           *sql.DB
+	Recents      *RecentsRepo
+	Repositories *RepositoriesRepo
+	Settings     *SettingsRepo
+	Tasks        *TasksRepo
+	Sessions     *SessionsRepo
+	Entries      *EntriesRepo
+	Worktrees    *WorktreesRepo
+	Situations   *SituationsRepo
 }
 
 // Open opens the database at path, creating its directory and applying the
-// pending migrations.
-func Open(ctx context.Context, path string, log *slog.Logger) (*Store, error) {
+// pending migrations. upgrade carries the tasks of a database that still holds
+// workspaces over; a database without them takes a nil upgrade.
+func Open(ctx context.Context, path string, log *slog.Logger, upgrade Upgrade) (*Store, error) {
 	if err := os.MkdirAll(filepath.Dir(path), dirPerm); err != nil {
 		return nil, fmt.Errorf("create database directory: %w", err)
 	}
-	return open(ctx, "file:"+path+filePragmas, path, log)
+	return open(ctx, "file:"+path+filePragmas, path, log, upgrade)
 }
 
 // OpenMemory opens a private in-memory database. It is meant for tests.
 func OpenMemory(ctx context.Context, log *slog.Logger) (*Store, error) {
-	return open(ctx, memoryDSN, ":memory:", log)
+	return open(ctx, memoryDSN, ":memory:", log, nil)
 }
 
-func open(ctx context.Context, dsn, path string, log *slog.Logger) (*Store, error) {
+func open(ctx context.Context, dsn, path string, log *slog.Logger, upgrade Upgrade) (*Store, error) {
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open database %s: %w", path, err)
@@ -64,7 +66,7 @@ func open(ctx context.Context, dsn, path string, log *slog.Logger) (*Store, erro
 		_ = db.Close()
 		return nil, fmt.Errorf("ping database %s: %w", path, err)
 	}
-	if err = migrate(ctx, db, log); err != nil {
+	if err = migrate(ctx, db, log, upgrade); err != nil {
 		_ = db.Close()
 		return nil, err
 	}
@@ -77,14 +79,15 @@ func open(ctx context.Context, dsn, path string, log *slog.Logger) (*Store, erro
 	log.Info("database opened", "path", path, "schema_version", version)
 
 	return &Store{
-		db:         db,
-		Recents:    &RecentsRepo{db: db},
-		Settings:   &SettingsRepo{db: db},
-		Tasks:      &TasksRepo{db: db},
-		Sessions:   &SessionsRepo{db: db},
-		Entries:    &EntriesRepo{db: db},
-		Worktrees:  &WorktreesRepo{db: db},
-		Situations: &SituationsRepo{db: db},
+		db:           db,
+		Recents:      &RecentsRepo{db: db},
+		Repositories: &RepositoriesRepo{db: db},
+		Settings:     &SettingsRepo{db: db},
+		Tasks:        &TasksRepo{db: db},
+		Sessions:     &SessionsRepo{db: db},
+		Entries:      &EntriesRepo{db: db},
+		Worktrees:    &WorktreesRepo{db: db},
+		Situations:   &SituationsRepo{db: db},
 	}, nil
 }
 

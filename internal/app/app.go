@@ -108,7 +108,7 @@ func Run(cfg Config) int {
 	ctx, cancel := context.WithTimeout(context.Background(), startupTimeout)
 	defer cancel()
 
-	st, err := store.Open(ctx, dirs.DatabasePath(), log)
+	st, err := store.Open(ctx, dirs.DatabasePath(), log, nil)
 	if err != nil {
 		return fail(log, "open database", err)
 	}

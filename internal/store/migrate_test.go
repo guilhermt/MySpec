@@ -1,18 +1,22 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"maps"
 	"slices"
 	"strings"
 	"testing"
 	"testing/fstest"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 
 	"github.com/guilhermt/myspec/internal/models"
+	"github.com/guilhermt/myspec/internal/repository"
 	"github.com/guilhermt/myspec/internal/reviewmode"
 	"github.com/guilhermt/myspec/internal/task"
 )
@@ -30,8 +34,44 @@ const (
 	modelsVersion     = 9
 	reviewModeVersion = 10
 	modeVersion       = 11
-	latestVersion     = 11
+	latestVersion     = 12
 )
+
+// upgradeTime is the instant the repositories of the fake upgrades are stamped
+// with.
+var upgradeTime = time.Date(2026, time.September, 6, 10, 0, 0, 0, time.UTC)
+
+// upgradeRepo is the repository the fake upgrades register.
+var upgradeRepo = repository.Repository{
+	ID:        "repo-1",
+	Owner:     "acme",
+	Name:      "api",
+	Path:      "/code/api",
+	CreatedAt: upgradeTime,
+}
+
+// carryOver is an Upgrade that ties every task to upgradeRepo and leaves the
+// artifacts where they are. It is what the tests of the older migrations need
+// to reach the latest version.
+func carryOver(t *testing.T) Upgrade {
+	t.Helper()
+
+	return func(_ context.Context, legacy []LegacyTask) (UpgradePlan, error) {
+		plan := UpgradePlan{
+			Repositories: []repository.Repository{upgradeRepo},
+			Undo:         func() { t.Error("Undo() called, want the plan to apply") },
+			Done:         func() {},
+		}
+		for _, legacyTask := range legacy {
+			plan.Tasks = append(plan.Tasks, UpgradedTask{
+				ID:           legacyTask.ID,
+				RepositoryID: upgradeRepo.ID,
+				ArtifactsDir: legacyTask.ArtifactsDir,
+			})
+		}
+		return plan, nil
+	}
+}
 
 // mapFS builds a migrations tree with the given file names.
 func mapFS(names ...string) fstest.MapFS {
@@ -169,7 +209,7 @@ func TestMigrateTurnsAFinishedPRDIntoThePRDStage(t *testing.T) {
 		}
 	}
 
-	if err := migrate(t.Context(), db, slog.New(slog.DiscardHandler)); err != nil {
+	if err := migrate(t.Context(), db, slog.New(slog.DiscardHandler), carryOver(t)); err != nil {
 		t.Fatalf("migrate() = %v, want nil", err)
 	}
 
@@ -218,7 +258,7 @@ func TestMigrateGivesTheStepsOfAnOlderDatabaseEmptyCommits(t *testing.T) {
 		t.Fatalf("insert step: %v", err)
 	}
 
-	if err := migrate(t.Context(), db, slog.New(slog.DiscardHandler)); err != nil {
+	if err := migrate(t.Context(), db, slog.New(slog.DiscardHandler), carryOver(t)); err != nil {
 		t.Fatalf("migrate() = %v, want nil", err)
 	}
 
@@ -249,7 +289,7 @@ func TestMigrateGivesTheWorktreesOfAnOlderDatabaseNoBaseAndAddsThePRRuns(t *test
 		t.Fatalf("insert worktree: %v", err)
 	}
 
-	if err := migrate(t.Context(), db, slog.New(slog.DiscardHandler)); err != nil {
+	if err := migrate(t.Context(), db, slog.New(slog.DiscardHandler), carryOver(t)); err != nil {
 		t.Fatalf("migrate() = %v, want nil", err)
 	}
 
@@ -349,7 +389,7 @@ func TestMigrateLeavesTheTasksThatExistToTheUser(t *testing.T) {
 		t.Fatalf("insert step: %v", err)
 	}
 
-	if err := migrate(t.Context(), db, slog.New(slog.DiscardHandler)); err != nil {
+	if err := migrate(t.Context(), db, slog.New(slog.DiscardHandler), carryOver(t)); err != nil {
 		t.Fatalf("migrate() = %v, want nil", err)
 	}
 
@@ -404,7 +444,7 @@ func TestMigrateMakesTheTasksThatExistStructured(t *testing.T) {
 		t.Fatalf("insert task: %v", err)
 	}
 
-	if err := migrate(t.Context(), db, slog.New(slog.DiscardHandler)); err != nil {
+	if err := migrate(t.Context(), db, slog.New(slog.DiscardHandler), carryOver(t)); err != nil {
 		t.Fatalf("migrate() = %v, want nil", err)
 	}
 
@@ -414,6 +454,209 @@ func TestMigrateMakesTheTasksThatExistStructured(t *testing.T) {
 	}
 	if mode != string(task.ModeStructured) {
 		t.Errorf("mode = %q, want %q for a task created before the column", mode, task.ModeStructured)
+	}
+}
+
+// seedLegacyTask inserts a task the way a version with workspaces stored it.
+// An empty repoPath is a task at the root of its workspace, an empty archivedAt
+// a task that is still active.
+func seedLegacyTask(t *testing.T, db *sql.DB, id, name, repoPath, archivedAt string) {
+	t.Helper()
+
+	const insert = `INSERT INTO tasks
+		(id, workspace_path, name, repo_path, initial_context, stage, artifacts_dir, archived_at,
+			created_at, updated_at, revisiting)
+		VALUES (?, '/ws', ?, ?, 'context', 'implementation', ?, ?,
+			'2026-09-06T10:00:00Z', '2026-09-06T10:00:00Z', 0)`
+
+	_, err := db.ExecContext(t.Context(), insert, id, name, nullString(repoPath),
+		"/data/workspaces/ws/"+name, nullString(archivedAt))
+	if err != nil {
+		t.Fatalf("insert task %s: %v", id, err)
+	}
+}
+
+// readRepositories returns the registered repositories, in insertion order.
+func readRepositories(t *testing.T, db *sql.DB) []repository.Repository {
+	t.Helper()
+
+	rows, err := db.QueryContext(t.Context(), `SELECT `+repositoryColumns+` FROM repositories ORDER BY id`)
+	if err != nil {
+		t.Fatalf("query repositories: %v", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var list []repository.Repository
+	for rows.Next() {
+		repo, scanErr := scanRepository(rows)
+		if scanErr != nil {
+			t.Fatalf("scan repository: %v", scanErr)
+		}
+		list = append(list, repo)
+	}
+	if err = rows.Err(); err != nil {
+		t.Fatalf("query repositories: %v", err)
+	}
+	return list
+}
+
+// readTaskRepositories returns the repository and the artifact folder of every
+// task left in the database, by task id.
+func readTaskRepositories(t *testing.T, db *sql.DB) map[string][2]string {
+	t.Helper()
+
+	const query = `SELECT id, repository_id, artifacts_dir FROM tasks ORDER BY id`
+	rows, err := db.QueryContext(t.Context(), query)
+	if err != nil {
+		t.Fatalf("query tasks: %v", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	got := map[string][2]string{}
+	for rows.Next() {
+		var (
+			id, artifactsDir string
+			repositoryID     sql.NullString
+		)
+		if scanErr := rows.Scan(&id, &repositoryID, &artifactsDir); scanErr != nil {
+			t.Fatalf("scan task: %v", scanErr)
+		}
+		got[id] = [2]string{repositoryID.String, artifactsDir}
+	}
+	if err = rows.Err(); err != nil {
+		t.Fatalf("query tasks: %v", err)
+	}
+	return got
+}
+
+func TestTheRepositoriesMigrationTiesEveryTaskToItsRepository(t *testing.T) {
+	t.Parallel()
+
+	db := openAt(t, repositoriesVersion-1)
+	seedLegacyTask(t, db, "task-1", "one", "/ws/api", "")
+	seedLegacyTask(t, db, "task-2", "root", "", "2026-09-07T10:00:00Z")
+
+	const carried = "/data/tasks/acme/api/one"
+	var seen []LegacyTask
+	finished := 0
+	upgrade := func(_ context.Context, legacy []LegacyTask) (UpgradePlan, error) {
+		seen = legacy
+		return UpgradePlan{
+			Repositories: []repository.Repository{upgradeRepo},
+			Tasks:        []UpgradedTask{{ID: "task-1", RepositoryID: upgradeRepo.ID, ArtifactsDir: carried}},
+			Discarded:    []string{"task-2"},
+			Undo:         func() { t.Error("Undo() called, want the plan to apply") },
+			Done:         func() { finished++ },
+		}, nil
+	}
+
+	if err := migrate(t.Context(), db, slog.New(slog.DiscardHandler), upgrade); err != nil {
+		t.Fatalf("migrate() = %v, want nil", err)
+	}
+
+	wantLegacy := []LegacyTask{
+		{
+			ID: "task-1", Name: "one", WorkspacePath: "/ws", RepoPath: "/ws/api",
+			ArtifactsDir: "/data/workspaces/ws/one", CreatedAt: upgradeTime,
+		},
+		{
+			ID: "task-2", Name: "root", WorkspacePath: "/ws",
+			ArtifactsDir: "/data/workspaces/ws/root", CreatedAt: upgradeTime,
+			ArchivedAt: time.Date(2026, time.September, 7, 10, 0, 0, 0, time.UTC),
+		},
+	}
+	if diff := cmp.Diff(wantLegacy, seen); diff != "" {
+		t.Errorf("legacy tasks mismatch (-want +got):\n%s", diff)
+	}
+
+	if diff := cmp.Diff([]repository.Repository{upgradeRepo}, readRepositories(t, db)); diff != "" {
+		t.Errorf("repositories mismatch (-want +got):\n%s", diff)
+	}
+	wantTasks := map[string][2]string{"task-1": {upgradeRepo.ID, carried}}
+	if diff := cmp.Diff(wantTasks, readTaskRepositories(t, db)); diff != "" {
+		t.Errorf("tasks mismatch (-want +got):\n%s", diff)
+	}
+	if finished != 1 {
+		t.Errorf("Done() called %d times, want 1", finished)
+	}
+}
+
+func TestARefusedUpgradeLeavesTheDatabaseAtTheVersionBefore(t *testing.T) {
+	t.Parallel()
+
+	db := openAt(t, repositoriesVersion-1)
+	seedLegacyTask(t, db, "task-1", "one", "/ws/api", "")
+
+	refused := errors.New("upgrade: refused, 1 case to resolve")
+	upgrade := func(context.Context, []LegacyTask) (UpgradePlan, error) {
+		return UpgradePlan{}, refused
+	}
+
+	err := migrate(t.Context(), db, slog.New(slog.DiscardHandler), upgrade)
+	if !errors.Is(err, refused) {
+		t.Fatalf("migrate() = %v, want %v", err, refused)
+	}
+
+	version, err := schemaVersion(t.Context(), db)
+	if err != nil {
+		t.Fatalf("schemaVersion() = %v, want nil", err)
+	}
+	if version != repositoriesVersion-1 {
+		t.Errorf("schemaVersion() = %d, want %d", version, repositoriesVersion-1)
+	}
+
+	// The table the migration creates is not there, so nothing it did survived.
+	const tableQuery = `SELECT count(*) FROM sqlite_master WHERE name = 'repositories'`
+	var tables int
+	if err := db.QueryRowContext(t.Context(), tableQuery).Scan(&tables); err != nil {
+		t.Fatalf("query sqlite_master: %v", err)
+	}
+	if tables != 0 {
+		t.Errorf("the repositories table exists, want a refused migration to write nothing")
+	}
+}
+
+func TestAPlanThatFailsToApplyIsUndone(t *testing.T) {
+	t.Parallel()
+
+	db := openAt(t, repositoriesVersion-1)
+	seedLegacyTask(t, db, "task-1", "one", "/ws/api", "")
+
+	twin := upgradeRepo
+	twin.ID = "repo-2"
+	undone := 0
+	upgrade := func(context.Context, []LegacyTask) (UpgradePlan, error) {
+		return UpgradePlan{
+			Repositories: []repository.Repository{upgradeRepo, twin},
+			Undo:         func() { undone++ },
+			Done:         func() { t.Error("Done() called, want the migration to fail") },
+		}, nil
+	}
+
+	if err := migrate(t.Context(), db, slog.New(slog.DiscardHandler), upgrade); err == nil {
+		t.Fatal("migrate() = nil, want the second repository to be refused")
+	}
+	if undone != 1 {
+		t.Errorf("Undo() called %d times, want 1", undone)
+	}
+
+	version, err := schemaVersion(t.Context(), db)
+	if err != nil {
+		t.Fatalf("schemaVersion() = %v, want nil", err)
+	}
+	if version != repositoriesVersion-1 {
+		t.Errorf("schemaVersion() = %d, want %d", version, repositoriesVersion-1)
+	}
+}
+
+func TestTasksOfAWorkspaceWithoutAnUpgradeFailTheMigration(t *testing.T) {
+	t.Parallel()
+
+	db := openAt(t, repositoriesVersion-1)
+	seedLegacyTask(t, db, "task-1", "one", "/ws/api", "")
+
+	if err := migrate(t.Context(), db, slog.New(slog.DiscardHandler), nil); !errors.Is(err, errUpgradeMissing) {
+		t.Fatalf("migrate() = %v, want errUpgradeMissing", err)
 	}
 }
 
@@ -441,7 +684,7 @@ func openAt(t *testing.T, version int) *sql.DB {
 		if m.version > version {
 			break
 		}
-		if err := apply(t.Context(), db, m); err != nil {
+		if err := apply(t.Context(), db, m, nil); err != nil {
 			t.Fatalf("apply(%s) = %v, want nil", m.file, err)
 		}
 	}

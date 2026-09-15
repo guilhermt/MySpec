@@ -10,7 +10,7 @@ import (
 )
 
 // schemaVersionNow is how many migrations the embedded set holds.
-const schemaVersionNow = 11
+const schemaVersionNow = 12
 
 func TestOpenMemoryAppliesMigrations(t *testing.T) {
 	t.Parallel()
@@ -32,6 +32,9 @@ func TestOpenMemoryCreatesTheTables(t *testing.T) {
 	// A read on each table proves every migration ran.
 	if _, err := s.Recents.List(t.Context()); err != nil {
 		t.Errorf("Recents.List() = %v, want nil", err)
+	}
+	if _, err := s.Repositories.List(t.Context()); err != nil {
+		t.Errorf("Repositories.List() = %v, want nil", err)
 	}
 	if _, _, err := s.Settings.Get(t.Context(), "theme"); err != nil {
 		t.Errorf("Settings.Get() = %v, want nil", err)
@@ -55,7 +58,7 @@ func TestOpenCreatesTheDatabaseDirectory(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "data", "myspec.db")
 	capture := newLogCapture()
 
-	s, err := store.Open(t.Context(), path, capture.log)
+	s, err := store.Open(t.Context(), path, capture.log, nil)
 	if err != nil {
 		t.Fatalf("Open() = %v, want nil", err)
 	}
@@ -75,7 +78,7 @@ func TestOpenTwiceDoesNotReapplyMigrations(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "myspec.db")
 
-	first, err := store.Open(t.Context(), path, newLogCapture().log)
+	first, err := store.Open(t.Context(), path, newLogCapture().log, nil)
 	if err != nil {
 		t.Fatalf("Open() = %v, want nil", err)
 	}
@@ -84,7 +87,7 @@ func TestOpenTwiceDoesNotReapplyMigrations(t *testing.T) {
 	}
 
 	capture := newLogCapture()
-	second, err := store.Open(t.Context(), path, capture.log)
+	second, err := store.Open(t.Context(), path, capture.log, nil)
 	if err != nil {
 		t.Fatalf("Open() = %v, want nil", err)
 	}
@@ -110,7 +113,7 @@ func TestOpenPersistsAcrossReopen(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "myspec.db")
 
-	first, err := store.Open(t.Context(), path, newLogCapture().log)
+	first, err := store.Open(t.Context(), path, newLogCapture().log, nil)
 	if err != nil {
 		t.Fatalf("Open() = %v, want nil", err)
 	}
@@ -121,7 +124,7 @@ func TestOpenPersistsAcrossReopen(t *testing.T) {
 		t.Fatalf("Close() = %v, want nil", err)
 	}
 
-	second, err := store.Open(t.Context(), path, newLogCapture().log)
+	second, err := store.Open(t.Context(), path, newLogCapture().log, nil)
 	if err != nil {
 		t.Fatalf("Open() = %v, want nil", err)
 	}
@@ -147,7 +150,7 @@ func TestOpenFailsWhenTheDirectoryCannotBeCreated(t *testing.T) {
 		t.Fatalf("write file: %v", err)
 	}
 
-	if _, err := store.Open(t.Context(), filepath.Join(blocked, "myspec.db"), newLogCapture().log); err == nil {
+	if _, err := store.Open(t.Context(), filepath.Join(blocked, "myspec.db"), newLogCapture().log, nil); err == nil {
 		t.Fatal("Open() = nil, want error")
 	}
 }
