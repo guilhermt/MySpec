@@ -16,6 +16,8 @@ func stageName(stage task.Stage) string {
 		return "tech spec"
 	case task.StagePlan:
 		return "plan"
+	case task.StageOneShot:
+		return "One-Shot planning"
 	default:
 		return string(stage)
 	}
@@ -68,6 +70,9 @@ func planInvalidBody() string {
 // readyToContinueBody is the notification of a reopened stage whose document
 // is revised.
 func readyToContinueBody(stage task.Stage) string {
+	if stage == task.StageOneShot {
+		return "The One-Shot document is revised and ready to continue."
+	}
 	return "The " + stageName(stage) + " is revised and ready to continue."
 }
 

@@ -53,10 +53,12 @@ type memTasks struct {
 	seeded    map[string]task.Models // the choices a test made for a task, by id
 	// seededModes are the review modes a test made for a task, by id.
 	seededModes map[string]task.ReviewModes
-	calls       []string
-	err         error         // returned by every mutation
-	block       chan struct{} // when set, Inspect waits on it
-	inspects    int
+	// seededTaskModes are the modes a test created a task in, by id.
+	seededTaskModes map[string]task.Mode
+	calls           []string
+	err             error         // returned by every mutation
+	block           chan struct{} // when set, Inspect waits on it
+	inspects        int
 }
 
 func newTasks() *memTasks {
@@ -66,7 +68,8 @@ func newTasks() *memTasks {
 		prs:       map[string][]task.PRRun{},
 		seeded:    map[string]task.Models{},
 
-		seededModes: map[string]task.ReviewModes{},
+		seededModes:     map[string]task.ReviewModes{},
+		seededTaskModes: map[string]task.Mode{},
 	}
 }
 
@@ -298,6 +301,15 @@ func (m *memTasks) setReviewModes(id string, modes task.ReviewModes) {
 	}
 }
 
+// setTaskMode is the mode a task was created in. It comes before the helper
+// that seeds the task, which gives a One-Shot task its repository.
+func (m *memTasks) setTaskMode(id string, mode task.Mode) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.seededTaskModes[id] = mode
+}
+
 func (m *memTasks) RemoveArtifacts(_ context.Context, id string, from task.Stage) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -323,6 +335,7 @@ func (m *memTasks) RemoveArtifacts(_ context.Context, id string, from task.Stage
 			a.OneShot = false
 			a.Plan = task.Plan{}
 		case task.StageImplementation:
+			a.StepReports = nil
 		case task.StagePR:
 			a.PR = nil
 		}
@@ -645,10 +658,16 @@ func (m *memTasks) add(id string, stage task.Stage, a task.Artifacts) task.Task 
 		ID:            id,
 		WorkspacePath: workspace,
 		Name:          id,
+		Mode:          m.seededTaskModes[id],
 		Stage:         stage,
 		ArtifactsDir:  filepath.Join("/data", id),
 		Models:        m.seeded[id],
 		ReviewModes:   m.seededModes[id],
+	}
+	if t.Mode == task.ModeOneShot {
+		// A One-Shot task is created in a repository: the first one of the
+		// workspace.
+		t.RepoPath = repos[0].Path
 	}
 	m.items = append(m.items, t)
 	m.artifacts[id] = a
@@ -1516,6 +1535,12 @@ func commitAllPrompt(name string) string { return "Commit every change of " + na
 // review pass, with the report it is about.
 func reviewPrompt(path string) string { return "Review the pull request into " + path }
 
+// oneShotReviewPrompt is the prompt of a review pass of a One-Shot task, which
+// also names the document of the task.
+func oneShotReviewPrompt(path, document string) string {
+	return reviewPrompt(path) + " against " + document
+}
+
 // fixture is a flow.Service over the four fakes.
 type fixture struct {
 	service   *flow.Service
@@ -1550,6 +1575,9 @@ func newFixture(t *testing.T) *fixture {
 				}
 				return commitPrompt(vars.TaskName, vars.Push), nil
 			case prompts.StagePRReview:
+				if vars.OneShotPath != "" {
+					return oneShotReviewPrompt(vars.ReviewPath, vars.OneShotPath), nil
+				}
 				return reviewPrompt(vars.ReviewPath), nil
 			default:
 				return "", errors.New("unexpected prompt stage " + string(stage))
@@ -1574,6 +1602,17 @@ func brokenPlan() task.Plan {
 		Present:  true,
 		Steps:    []task.Step{{Number: 1, File: "1-first.md", Title: "First", Repository: "cli"}},
 		Problems: []task.PlanProblem{{File: "1-first.md", Message: `repository "cli" is not one of the repositories of this task`}},
+	}
+}
+
+// oneShotPlan is the plan task.Service derives for a One-Shot task: one step,
+// the document itself, in the repository of the task.
+func oneShotPlan() task.Plan {
+	return task.Plan{
+		Present: true,
+		Steps: []task.Step{
+			{Number: 1, File: task.OneShotFile, Title: "Login screen", Repository: "api", RepoPath: repos[0].Path},
+		},
 	}
 }
 

@@ -42,6 +42,9 @@ func renderPrompt(stage prompts.Stage, vars prompts.Vars) (string, error) {
 		return prompts.Render("", stage, vars)
 	case prompts.StageStepReview:
 		return fmt.Sprintf("Stage %s reviews %s after: %s", stage, vars.StepPath, vars.ImplementerReply), nil
+	case prompts.StageOneShot:
+		return fmt.Sprintf("Stage %s of task %s writes %s in %s from: %s",
+			stage, vars.TaskName, vars.OneShotPath, vars.Repository, vars.InitialContext), nil
 	default:
 		return fmt.Sprintf("Stage %s of task %s writes %s in %s from: %s",
 			stage, vars.TaskName, vars.PRDPath, vars.ArtifactsDir, vars.InitialContext), nil
@@ -452,6 +455,15 @@ func taskInfo(t *testing.T, id string) session.TaskInfo {
 func atStage(info session.TaskInfo, stage prompts.Stage) session.TaskInfo {
 	info.Stage = string(stage)
 	info.Prompt = stage
+	return info
+}
+
+// atOneShot is the same task created One-Shot in the repository api, in its
+// planning: the prompt names the document and the repository.
+func atOneShot(info session.TaskInfo) session.TaskInfo {
+	info = atStage(info, prompts.StageOneShot)
+	info.OneShotPath = filepath.Join(info.ArtifactsDir, "one-shot.md")
+	info.Repository = "api"
 	return info
 }
 

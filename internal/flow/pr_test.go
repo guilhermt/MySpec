@@ -176,6 +176,25 @@ func TestTheLastCommitOfAPlanOpensThePRStageOfEveryRepository(t *testing.T) {
 	}
 }
 
+func TestTheCommitOfTheOneShotStepOpensThePRStageOfTheTaskRepository(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.tasks.setTaskMode("task-1", task.ModeOneShot)
+	startPR(t, f, oneShotPlan())
+
+	f.waitRepo(t, "task-1", repos[0].Path, flow.RepoDrafting)
+	if states := f.service.Repos("task-1"); len(states) != 1 || states[0].Repository != "api" {
+		t.Errorf("repositories = %+v, want the one of the task alone", states)
+	}
+	// The pull request is described from the document, which stands for the PRD
+	// and the tech spec.
+	tk, _ := f.tasks.Get("task-1")
+	if info := f.waitPRSession(t, "task-1", "api"); info.OneShotPath != tk.OneShotPath() {
+		t.Errorf("document of the pr session = %q, want %q", info.OneShotPath, tk.OneShotPath())
+	}
+}
+
 func TestABranchWithNoCommitOfItsOwnIsSkipped(t *testing.T) {
 	t.Parallel()
 
@@ -538,6 +557,49 @@ func TestDiscardingThePlanTearsDownThePullRequests(t *testing.T) {
 	removal := slices.Index(f.worktrees.recorded(), "removeAll:task-1")
 	if teardown < 0 || removal < 0 {
 		t.Fatalf("task calls = %q, worktree calls = %q, want both", calls, f.worktrees.recorded())
+	}
+}
+
+func TestBackToTheOneShotPlanningTearsDownThePullRequest(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.tasks.setTaskMode("task-1", task.ModeOneShot)
+	inPR(f, "task-1", oneShotPlan(), task.PRDrafting)
+	f.tasks.setArtifacts("task-1", task.Artifacts{OneShot: true, Plan: oneShotPlan()})
+	f.tasks.setStepRun("task-1", task.StepRun{Number: 1, Status: task.StepDone, CommitSHA: commitSHA})
+	f.tasks.setStepReports("task-1", 1, stepReport(1, 1, true))
+
+	if err := f.service.Back(t.Context(), "task-1", task.StageOneShot); err != nil {
+		t.Fatalf("Back() = %v, want nil", err)
+	}
+
+	if runs := f.tasks.PRRuns("task-1"); len(runs) != 0 {
+		t.Errorf("pr runs = %+v, want none", runs)
+	}
+	if runs := f.tasks.StepRuns("task-1"); len(runs) != 0 {
+		t.Errorf("step runs = %+v, want none", runs)
+	}
+	sessionCalls := f.sessions.recorded()
+	if !slices.Contains(sessionCalls, "discard:task-1:pr:api,pr_review:api") {
+		t.Errorf("session calls = %q, want the pr sessions discarded", sessionCalls)
+	}
+	if last := sessionCalls[len(sessionCalls)-1]; last != "open:task-1:one_shot" {
+		t.Errorf("last session call = %q, want the planning reopened", last)
+	}
+	taskCalls := f.tasks.recorded()
+	for _, want := range []string{
+		"clearPRs:task-1", "remove:task-1:pr", "remove:task-1:implementation", "stage:task-1:one_shot:revisiting=true",
+	} {
+		if !slices.Contains(taskCalls, want) {
+			t.Errorf("task calls = %q, want %q", taskCalls, want)
+		}
+	}
+	if !slices.Contains(f.worktrees.recorded(), "removeAll:task-1") {
+		t.Errorf("worktree calls = %q, want the worktree removed", f.worktrees.recorded())
+	}
+	if a, _ := f.tasks.Inspect("task-1"); !a.OneShot || len(a.StepReports) != 0 {
+		t.Errorf("artifacts = %+v, want the document without the reports of its step", a)
 	}
 }
 

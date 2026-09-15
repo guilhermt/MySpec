@@ -8,6 +8,7 @@ import (
 
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/git"
+	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
 	"github.com/guilhermt/myspec/internal/worktree"
@@ -29,6 +30,37 @@ func twoStepPlan() task.Plan {
 // which is where every step test starts.
 func implementing(f *fixture, id string, plan task.Plan) task.Task {
 	return f.tasks.add(id, task.StageImplementation, task.Artifacts{PRD: true, TechSpec: true, Plan: plan})
+}
+
+// implementingOneShot puts a One-Shot task straight in implementation, with its
+// document written and the single step it is.
+func implementingOneShot(f *fixture, id string) task.Task {
+	f.tasks.setTaskMode(id, task.ModeOneShot)
+	return f.tasks.add(id, task.StageImplementation, task.Artifacts{OneShot: true, Plan: oneShotPlan()})
+}
+
+func TestAFinishedOneShotDocumentStartsItsStepInTheRepository(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.tasks.setTaskMode("task-1", task.ModeOneShot)
+	tk := f.tasks.add("task-1", task.StageOneShot, task.Artifacts{OneShot: true, Plan: oneShotPlan()})
+	f.sessions.setSummary("task-1", idle(task.StageOneShot))
+
+	f.service.Check("task-1")
+	f.waitStep(t, "task-1", 1, flow.StepImplementing)
+
+	f.waitWorktreeCalls(t, "ensure:task-1:api", "status:task-1:task-1")
+	f.waitCalls(t, "close:task-1:one_shot", "start:task-1:step:1:restarted=false")
+
+	// The document is the prompt of the step, as a step file is.
+	info, _ := f.sessions.info(implementerKey("task-1", 1))
+	if info.Prompt != prompts.StageStep || info.StepPath != tk.OneShotPath() || info.OneShotPath != tk.OneShotPath() {
+		t.Errorf("step session = %+v, want the step prompt read from %s", info, tk.OneShotPath())
+	}
+	if want := worktree.Path(workspace, "api", "task-1"); info.Dir != want {
+		t.Errorf("session dir = %q, want %q", info.Dir, want)
+	}
 }
 
 func TestAFinishedPlanStartsTheFirstStepInItsWorktree(t *testing.T) {
@@ -528,6 +560,49 @@ func TestBackToTheTechSpecTearsTheStepsDownFirst(t *testing.T) {
 		"open:task-1:tech_spec",
 	)
 	f.waitWorktreeCalls(t, "ensure:task-1:api", "status:task-1:task-1", "removeAll:task-1")
+}
+
+func TestBackToTheOneShotPlanningTearsItsStepDown(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	implementingOneShot(f, "task-1")
+
+	f.service.Sync(t.Context())
+	f.waitStep(t, "task-1", 1, flow.StepImplementing)
+	f.waitStepSession(t, "task-1", 1)
+	f.tasks.setStepReports("task-1", 1, stepReport(1, 1, false))
+
+	if err := f.service.Back(t.Context(), "task-1", task.StageOneShot); err != nil {
+		t.Fatalf("Back: %v", err)
+	}
+
+	// Implementation and PR have no conversation of the task's own: the ones
+	// that go are the step's.
+	f.wantCalls(t,
+		"start:task-1:step:1:restarted=false",
+		"closeTask:task-1",
+		"discard:task-1:step:1,step_review:1",
+		"discard:task-1:",
+		"open:task-1:one_shot",
+	)
+	f.waitWorktreeCalls(t, "ensure:task-1:api", "status:task-1:task-1", "removeAll:task-1")
+	if runs := f.tasks.StepRuns("task-1"); len(runs) != 0 {
+		t.Errorf("step runs = %+v, want none", runs)
+	}
+	if calls := f.tasks.recorded(); !slices.Contains(calls, "remove:task-1:implementation") {
+		t.Errorf("task calls = %q, want the artifacts of the implementation removed", calls)
+	}
+
+	got, _ := f.tasks.Get("task-1")
+	if got.Stage != task.StageOneShot || !got.Revisiting {
+		t.Errorf("task = %q revisiting=%t, want one_shot revisiting=true", got.Stage, got.Revisiting)
+	}
+	// The document stays, and with it the step it is; the reports of its review
+	// go.
+	if a, _ := f.tasks.Inspect("task-1"); !a.OneShot || !a.Plan.Present || len(a.StepReports) != 0 {
+		t.Errorf("artifacts = %+v, want the document and its step without reports", a)
+	}
 }
 
 func TestAWorktreeThatCannotBeRemovedKeepsEverythingAndReopensTheSession(t *testing.T) {

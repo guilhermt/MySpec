@@ -142,6 +142,8 @@ const (
 	MarkerTechSpecUpdated   MarkerType = "tech_spec_updated"
 	MarkerPlanWritten       MarkerType = "plan_written"
 	MarkerPlanUpdated       MarkerType = "plan_updated"
+	MarkerOneShotWritten    MarkerType = "one_shot_written"
+	MarkerOneShotUpdated    MarkerType = "one_shot_updated"
 	MarkerPRReviewWritten   MarkerType = "pr_review_written"
 	MarkerStepReviewStarted MarkerType = "step_review_started"
 	MarkerStepReviewWritten MarkerType = "step_review_written"
@@ -160,6 +162,7 @@ const (
 	ArtifactPRD      ArtifactKind = "prd"
 	ArtifactTechSpec ArtifactKind = "tech_spec"
 	ArtifactPlan     ArtifactKind = "plan"
+	ArtifactOneShot  ArtifactKind = "one_shot"
 )
 
 // writtenMarker is the marker of an artifact written for the first time.
@@ -169,6 +172,8 @@ func writtenMarker(kind ArtifactKind) MarkerType {
 		return MarkerTechSpecWritten
 	case ArtifactPlan:
 		return MarkerPlanWritten
+	case ArtifactOneShot:
+		return MarkerOneShotWritten
 	default:
 		return MarkerPRDWritten
 	}
@@ -181,6 +186,8 @@ func updatedMarker(kind ArtifactKind) MarkerType {
 		return MarkerTechSpecUpdated
 	case ArtifactPlan:
 		return MarkerPlanUpdated
+	case ArtifactOneShot:
+		return MarkerOneShotUpdated
 	default:
 		return MarkerPRDUpdated
 	}

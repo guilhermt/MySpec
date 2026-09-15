@@ -947,7 +947,10 @@ func TestMarkArtifact(t *testing.T) {
 	f.waitIdle(t, prd("t1"))
 	before := f.stateCount(prd("t1"))
 
-	for _, kind := range []session.ArtifactKind{session.ArtifactPRD, session.ArtifactTechSpec, session.ArtifactPlan} {
+	kinds := []session.ArtifactKind{
+		session.ArtifactPRD, session.ArtifactTechSpec, session.ArtifactPlan, session.ArtifactOneShot,
+	}
+	for _, kind := range kinds {
 		f.service.MarkArtifact(t.Context(), prd("t1"), kind, true)
 		f.service.MarkArtifact(t.Context(), prd("t1"), kind, false)
 	}
@@ -959,6 +962,7 @@ func TestMarkArtifact(t *testing.T) {
 		session.MarkerPRDWritten, session.MarkerPRDUpdated,
 		session.MarkerTechSpecWritten, session.MarkerTechSpecUpdated,
 		session.MarkerPlanWritten, session.MarkerPlanUpdated,
+		session.MarkerOneShotWritten, session.MarkerOneShotUpdated,
 	}
 	got := make([]session.MarkerType, 0, len(markers))
 	for _, m := range markers {
@@ -968,8 +972,8 @@ func TestMarkArtifact(t *testing.T) {
 		t.Errorf("markers mismatch (-want +got):\n%s", diff)
 	}
 	events := f.eventsOf(prd("t1"), session.EventEntry)
-	if last := events[len(events)-1].Entry; last.Kind != session.KindMarker || last.Marker.Type != session.MarkerPlanUpdated {
-		t.Errorf("last event = %+v, want the plan_updated marker", last)
+	if last := events[len(events)-1].Entry; last.Kind != session.KindMarker || last.Marker.Type != session.MarkerOneShotUpdated {
+		t.Errorf("last event = %+v, want the one_shot_updated marker", last)
 	}
 	if after := f.stateCount(prd("t1")); after != before {
 		t.Errorf("OnState ran %d times for a marker, want 0", after-before)
@@ -1042,6 +1046,53 @@ func TestStartOfALaterStageSendsItsPromptWithoutTheInitialContext(t *testing.T) 
 	})
 	if got := tr.Entries[2].Assistant.Text; got != rendered {
 		t.Errorf("prompt sent = %q, want %q", got, rendered)
+	}
+}
+
+func TestStartOfTheOneShotPlanningSendsItsPromptWithTheInitialContext(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	info := atOneShot(taskInfo(t, "t1"))
+	f.start(t, info)
+	f.waitIdle(t, info.Key())
+
+	tr := f.transcript(t, info.Key())
+	if len(tr.Entries) != 3 {
+		t.Fatalf("entries = %d, want the stage marker, the prompt and its answer", len(tr.Entries))
+	}
+	wantMarker := &session.MarkerEntry{Type: session.MarkerStageStarted, Stage: string(prompts.StageOneShot)}
+	if diff := cmp.Diff(wantMarker, tr.Entries[0].Marker); diff != "" {
+		t.Errorf("stage marker mismatch (-want +got):\n%s", diff)
+	}
+	// The planning of a One-Shot task opens the task, as the PRD does: it
+	// carries what the user wrote when they created it.
+	wantUser := &session.UserEntry{Text: info.InitialContext, Prompt: true}
+	if diff := cmp.Diff(wantUser, tr.Entries[1].User); diff != "" {
+		t.Errorf("user entry mismatch (-want +got):\n%s", diff)
+	}
+	rendered, _ := renderPrompt(prompts.StageOneShot, prompts.Vars{
+		TaskName:       info.Name,
+		OneShotPath:    info.OneShotPath,
+		Repository:     info.Repository,
+		InitialContext: info.InitialContext,
+	})
+	if got := tr.Entries[2].Assistant.Text; got != rendered {
+		t.Errorf("prompt sent = %q, want %q", got, rendered)
+	}
+}
+
+func TestOpenOfAOneShotPlanningWithItsDocumentMarksItWritten(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	info := atOneShot(taskInfo(t, "t1"))
+	info.ArtifactExists = true
+	f.open(t, info)
+
+	markers := f.entriesOf(t, info.Key(), session.KindMarker)
+	if len(markers) != 1 || markers[0].Marker.Type != session.MarkerOneShotWritten {
+		t.Errorf("markers = %+v, want the one_shot_written marker alone", markers)
 	}
 }
 

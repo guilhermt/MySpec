@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"slices"
 	"strings"
 
@@ -674,10 +673,11 @@ func stepInfo(t task.Task, step task.Step, wt worktree.Worktree, repos []task.Re
 		Stage:        session.StepStage(step.Number),
 		Prompt:       prompts.StageStep,
 		Step:         step.Number,
-		StepPath:     filepath.Join(t.StepsDir(), step.File),
+		StepPath:     t.StepPath(step),
 		PRDPath:      t.PRDPath(),
 		TechSpecPath: t.TechSpecPath(),
 		StepsDir:     t.StepsDir(),
+		OneShotPath:  oneShotPath(t),
 		Repositories: rels,
 		Choice:       t.Models.Step(step.Number),
 	}
