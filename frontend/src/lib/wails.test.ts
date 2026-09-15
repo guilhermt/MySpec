@@ -74,11 +74,13 @@ describe("narrowing", () => {
     expect(asModelStage("tech_spec")).toBe("tech_spec");
     expect(asModelStage("plan")).toBe("plan");
     expect(asModelStage("implementation")).toBe("implementation");
+    expect(asModelStage("step_review")).toBe("step_review");
     expect(asModelStage("pr")).toBe("pr");
     expect(asModelStage("pr_review")).toBe("pr_review");
     expect(asPromptStage("prd")).toBe("prd");
     expect(asPromptStage("tech_spec")).toBe("tech_spec");
     expect(asPromptStage("plan")).toBe("plan");
+    expect(asPromptStage("step_review")).toBe("step_review");
     expect(asPromptStage("commit")).toBe("commit");
     expect(asPromptStage("pr")).toBe("pr");
     expect(asPromptStage("pr_review")).toBe("pr_review");
@@ -92,11 +94,16 @@ describe("narrowing", () => {
     expect(asMarkerType("tech_spec_updated")).toBe("tech_spec_updated");
     expect(asMarkerType("plan_written")).toBe("plan_written");
     expect(asMarkerType("plan_updated")).toBe("plan_updated");
+    expect(asMarkerType("pr_review_written")).toBe("pr_review_written");
+    expect(asMarkerType("step_review_started")).toBe("step_review_started");
+    expect(asMarkerType("step_review_written")).toBe("step_review_written");
     expect(asMarkerType("stage_started")).toBe("stage_started");
     expect(asMarkerType("step_started")).toBe("step_started");
     expect(asStepStatus("preparing")).toBe("preparing");
     expect(asStepStatus("blocked")).toBe("blocked");
     expect(asStepStatus("implementing")).toBe("implementing");
+    expect(asStepStatus("agent_review")).toBe("agent_review");
+    expect(asStepStatus("addressing_review")).toBe("addressing_review");
     expect(asStepStatus("awaiting_review")).toBe("awaiting_review");
     expect(asStepStatus("in_review")).toBe("in_review");
     expect(asStepStatus("ready_to_approve")).toBe("ready_to_approve");
@@ -175,6 +182,7 @@ describe("narrowing", () => {
     expect(asSituationForm("close")).toBe("close");
     expect(asPlaceKind("stage")).toBe("stage");
     expect(asPlaceKind("step")).toBe("step");
+    expect(asPlaceKind("step_review")).toBe("step_review");
     expect(asPlaceKind("repo")).toBe("repo");
     expect(asReviewMode("manual")).toBe("manual");
     expect(asReviewMode("agent")).toBe("agent");

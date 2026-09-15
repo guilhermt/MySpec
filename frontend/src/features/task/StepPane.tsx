@@ -44,6 +44,8 @@ export function StepPane({ task }: StepPaneProps) {
     case "blocked":
       return <StepBlocked task={task} step={step} />;
     case "implementing":
+    case "agent_review":
+    case "addressing_review":
     case "awaiting_review":
     case "in_review":
     case "ready_to_approve":

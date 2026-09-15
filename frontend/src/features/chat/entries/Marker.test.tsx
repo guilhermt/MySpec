@@ -69,6 +69,22 @@ describe("Marker", () => {
     expect(screen.getByText(expected)).toBeInTheDocument();
   });
 
+  it.each([
+    ["Review pass 2 written", { type: "pr_review_written", step: 0, pass: 2, clean: false }],
+    ["Review of step 3 started", { type: "step_review_started", step: 3, pass: 0, clean: false }],
+    ["Review 1 written · clean", { type: "step_review_written", step: 3, pass: 1, clean: true }],
+    ["Review 2 written · changes", { type: "step_review_written", step: 3, pass: 2, clean: false }],
+  ])("reads %s from a review marker", (expected, fields) => {
+    renderWithStore(
+      <Marker
+        marker={{ preTokens: 0, stage: "", restarted: false, ...fields }}
+        createdAt="2026-09-05T10:00:00Z"
+      />,
+    );
+
+    expect(screen.getByText(expected)).toBeInTheDocument();
+  });
+
   it("shows the time the milestone happened", () => {
     renderWithStore(
       <Marker

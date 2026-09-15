@@ -32,7 +32,11 @@ import {
   retryRepo,
   retryStep,
   reviewAgain,
+  reviewStepMyself,
   sendMessage,
+  setReviewMode,
+  setReviewModeDefault,
+  setStepReviewMode,
   setTheme,
 } from "@/store/actions";
 import { repoKey, useAppStore } from "@/store/app-store";
@@ -50,12 +54,14 @@ describe("actions", () => {
     await removeRecent("/home/dev/labs");
     await dismissNotice();
     await setTheme("dark");
+    await setReviewModeDefault("agent");
 
     expect(api.openPath).toHaveBeenCalledWith("/home/dev/projects");
     expect(api.openFolderDialog).toHaveBeenCalledOnce();
     expect(api.removeRecent).toHaveBeenCalledWith("/home/dev/labs");
     expect(api.dismissNotice).toHaveBeenCalledOnce();
     expect(api.setTheme).toHaveBeenCalledWith("dark");
+    expect(api.setReviewModeDefault).toHaveBeenCalledWith("agent");
     expect(useAppStore.getState().error).toBeNull();
   });
 
@@ -102,6 +108,9 @@ describe("task actions", () => {
     await discardStep("task-1", true);
     await openInEditor("task-1");
     await approveStep("task-1");
+    await setReviewMode("task-1", "agent");
+    await setStepReviewMode("task-1", 2, "manual");
+    await reviewStepMyself("task-1");
     await openFileInEditor("task-1", "src/login.ts");
     await approveRepo("task-1", "/repo/web");
     await reviewAgain("task-1", "/repo/web");
@@ -136,6 +145,9 @@ describe("task actions", () => {
     expect(api.discardStep).toHaveBeenCalledWith("task-1", true);
     expect(api.openInEditor).toHaveBeenCalledWith("task-1", "");
     expect(api.approveStep).toHaveBeenCalledWith("task-1");
+    expect(api.setReviewMode).toHaveBeenCalledWith("task-1", "agent");
+    expect(api.setStepReviewMode).toHaveBeenCalledWith("task-1", 2, "manual");
+    expect(api.reviewStepMyself).toHaveBeenCalledWith("task-1");
     expect(api.openFileInEditor).toHaveBeenCalledWith("task-1", "", "src/login.ts");
     expect(api.approveRepo).toHaveBeenCalledWith("task-1", "/repo/web");
     expect(api.reviewAgain).toHaveBeenCalledWith("task-1", "/repo/web");

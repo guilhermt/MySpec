@@ -19,6 +19,8 @@ export function hasStepSession(step: Step | null): boolean {
   }
   switch (asStepStatus(step.status)) {
     case "implementing":
+    case "agent_review":
+    case "addressing_review":
     case "awaiting_review":
     case "in_review":
     case "ready_to_approve":
@@ -45,6 +47,10 @@ export function stepStatusLabel(step: Step): string {
       return "Blocked";
     case "implementing":
       return "Implementing";
+    case "agent_review":
+      return "Agent review";
+    case "addressing_review":
+      return "Addressing review";
     case "awaiting_review":
       return "Awaiting review";
     case "in_review":
@@ -71,6 +77,8 @@ export function stepStatusTone(step: Step): StatusTone {
   switch (asStepStatus(step.status)) {
     case "preparing":
     case "implementing":
+    case "agent_review":
+    case "addressing_review":
     case "committing":
       return "working";
     case "done":

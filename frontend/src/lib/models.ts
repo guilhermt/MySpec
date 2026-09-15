@@ -23,6 +23,7 @@ export const MODEL_STAGES: readonly ModelStage[] = [
   "tech_spec",
   "plan",
   "implementation",
+  "step_review",
   "pr",
   "pr_review",
 ];
@@ -42,9 +43,9 @@ export function sameChoice(a: ModelChoice, b: ModelChoice): boolean {
   return a.model === b.model && a.effort === b.effort;
 }
 
-/** modelStageLabel is the name of a stage, the same the stage track gives it. */
+/** modelStageLabel is the name of a stage: the one the stage track gives it, or "Step review", which has no chip of its own. */
 export function modelStageLabel(stage: ModelStage): string {
-  return stageLabel(stage);
+  return stage === "step_review" ? "Step review" : stageLabel(stage);
 }
 
 /** choiceOf is the choice of a stage in a list of them; a stage the list lacks reads as empty. */

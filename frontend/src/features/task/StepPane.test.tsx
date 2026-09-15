@@ -31,6 +31,16 @@ describe("StepPane", () => {
     expect(screen.getByRole("textbox")).toBeInTheDocument();
   });
 
+  it.each(["agent_review", "addressing_review"])(
+    "keeps the conversation while the step is in %s",
+    (status) => {
+      pane({ status });
+
+      expect(screen.getByText("Add a login screen")).toBeInTheDocument();
+      expect(screen.getByRole("textbox")).toBeInTheDocument();
+    },
+  );
+
   it("keeps the conversation while the step waits for review", () => {
     pane({ status: "awaiting_review" });
 

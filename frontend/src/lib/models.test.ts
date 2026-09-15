@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { adjustmentSummary, choiceLabel, withChoice } from "@/lib/models";
+import { adjustmentSummary, choiceLabel, modelStageLabel, withChoice } from "@/lib/models";
 import { makeModelDefaults } from "@/test/wails-mock";
 
 describe("choiceLabel", () => {
@@ -11,6 +11,17 @@ describe("choiceLabel", () => {
     expect(choiceLabel({ model: "claude-haiku-4-5", effort: "low" })).toBe(
       "claude-haiku-4-5 · low",
     );
+  });
+});
+
+describe("modelStageLabel", () => {
+  it("names the step review, which the stage track does not have", () => {
+    expect(modelStageLabel("step_review")).toBe("Step review");
+  });
+
+  it("names a stage the way the track does", () => {
+    expect(modelStageLabel("tech_spec")).toBe("Tech spec");
+    expect(modelStageLabel("pr_review")).toBe("PR review");
   });
 });
 

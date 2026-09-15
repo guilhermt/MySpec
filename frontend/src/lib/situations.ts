@@ -88,7 +88,7 @@ function stageName(stage: string): string {
   }
 }
 
-/** placeLabel names where in its task a situation is: the stage, "step 3", or the repository. */
+/** placeLabel names where in its task a situation is: the stage, "step 3", "step 3 review", or the repository. */
 export function placeLabel(app: State | null, situation: Situation): string {
   const { place } = situation;
   switch (asPlaceKind(place.kind)) {
@@ -96,6 +96,8 @@ export function placeLabel(app: State | null, situation: Situation): string {
       return stageName(place.stage);
     case "step":
       return `step ${place.step}`;
+    case "step_review":
+      return `step ${place.step} review`;
     case "repo":
       return repoName(app, place);
   }
@@ -204,6 +206,28 @@ export function stepSituation(task: TaskSummary, number: number): Situation | nu
       (situation) =>
         asPlaceKind(situation.place.kind) === "step" && situation.place.step === number,
     ) ?? null
+  );
+}
+
+/** reviewerSituation is the situation of the conversation that reviews a step of a task, null when it has none. */
+export function reviewerSituation(task: TaskSummary, number: number): Situation | null {
+  return (
+    (task.situations ?? []).find(
+      (situation) =>
+        asPlaceKind(situation.place.kind) === "step_review" && situation.place.step === number,
+    ) ?? null
+  );
+}
+
+/** stepOrReviewerSituation is the most urgent situation of a step, in its own conversation or in the one of its reviewer. */
+export function stepOrReviewerSituation(task: TaskSummary, number: number): Situation | null {
+  // The situations of a task come from the most urgent, so the first one of
+  // either place is the one that matters.
+  return (
+    (task.situations ?? []).find((situation) => {
+      const kind = asPlaceKind(situation.place.kind);
+      return (kind === "step" || kind === "step_review") && situation.place.step === number;
+    }) ?? null
   );
 }
 

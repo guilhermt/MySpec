@@ -5,6 +5,7 @@ import type {
   PermissionDecision,
   Prompt,
   PromptStage,
+  ReviewMode,
   TaskStage,
   ThemePreference,
 } from "@/lib/wails";
@@ -49,6 +50,11 @@ export function setModelDefault(stage: ModelStage, choice: ModelChoice): Promise
   return run(() => api.setModelDefault(stage, choice.model, choice.effort));
 }
 
+/** setReviewModeDefault changes who reviews the steps of the tasks created next. */
+export function setReviewModeDefault(mode: ReviewMode): Promise<void> {
+  return run(() => api.setReviewModeDefault(mode));
+}
+
 /** setStageModel changes what a stage of a task runs with, before it starts. */
 export function setStageModel(
   taskId: string,
@@ -66,6 +72,16 @@ export function setStepModel(taskId: string, step: number, choice: ModelChoice):
 /** setSessionModel changes what a session runs with from its next message on. */
 export function setSessionModel(taskId: string, stage: string, choice: ModelChoice): Promise<void> {
   return run(() => api.setSessionModel(taskId, stage, choice.model, choice.effort));
+}
+
+/** setReviewMode changes who reviews the steps of a task that are still to start. */
+export function setReviewMode(taskId: string, mode: ReviewMode): Promise<void> {
+  return run(() => api.setReviewMode(taskId, mode));
+}
+
+/** setStepReviewMode gives one step a review mode of its own, apart from the task. */
+export function setStepReviewMode(taskId: string, step: number, mode: ReviewMode): Promise<void> {
+  return run(() => api.setStepReviewMode(taskId, step, mode));
 }
 
 /**
@@ -189,6 +205,11 @@ export function discardStep(taskId: string, cleanWorktree: boolean): Promise<voi
 /** approveStep sends the reviewed step to be committed by the agent that wrote it. */
 export function approveStep(taskId: string): Promise<void> {
   return run(() => api.approveStep(taskId));
+}
+
+/** reviewStepMyself takes the review of the current step back from the agent. */
+export function reviewStepMyself(taskId: string): Promise<void> {
+  return run(() => api.reviewStepMyself(taskId));
 }
 
 /** openPR sends the draft the user approved to the agent, which opens the PR. */

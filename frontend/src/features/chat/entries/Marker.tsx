@@ -1,6 +1,7 @@
 import {
   Archive,
   Ban,
+  Bot,
   FileCheck,
   FileText,
   ListChecks,
@@ -18,6 +19,9 @@ const MARKERS: Record<MarkerType, { icon: LucideIcon; text: string }> = {
   tech_spec_updated: { icon: FileText, text: "Tech spec updated" },
   plan_written: { icon: ListChecks, text: "Plan written" },
   plan_updated: { icon: ListChecks, text: "Plan updated" },
+  pr_review_written: { icon: FileCheck, text: "Review written" },
+  step_review_started: { icon: Bot, text: "Review started" },
+  step_review_written: { icon: FileCheck, text: "Review written" },
   stage_started: { icon: Play, text: "Stage started" },
   step_started: { icon: Play, text: "Step started" },
   compacted: { icon: Archive, text: "Context compacted" },
@@ -42,13 +46,24 @@ function stepMarker(marker: MarkerEntry): { icon: LucideIcon; text: string } {
   };
 }
 
-// A stage and a step marker read from the marker itself; the rest are fixed.
+// A stage, a step and a review marker read from the marker itself; the rest are
+// fixed.
 function markerOf(type: MarkerType, marker: MarkerEntry): { icon: LucideIcon; text: string } {
+  const { icon } = MARKERS[type];
   switch (type) {
     case "stage_started":
       return stageMarker(marker);
     case "step_started":
       return stepMarker(marker);
+    case "pr_review_written":
+      return { icon, text: `Review pass ${marker.pass} written` };
+    case "step_review_started":
+      return { icon, text: `Review of step ${marker.step} started` };
+    case "step_review_written":
+      return {
+        icon,
+        text: `Review ${marker.pass} written · ${marker.clean ? "clean" : "changes"}`,
+      };
     default:
       return MARKERS[type];
   }

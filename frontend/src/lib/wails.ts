@@ -110,16 +110,32 @@ export type NoticeReason = "not_found" | "not_directory" | "not_readable" | "las
 export type TaskStage = "prd" | "tech_spec" | "plan" | "implementation" | "pr";
 
 /** ModelStage is a stage that carries a model and an effort of its own. */
-export type ModelStage = "prd" | "tech_spec" | "plan" | "implementation" | "pr" | "pr_review";
+export type ModelStage =
+  | "prd"
+  | "tech_spec"
+  | "plan"
+  | "implementation"
+  | "step_review"
+  | "pr"
+  | "pr_review";
 
 /** PromptStage names one of the prompts the settings show, in workflow order. */
-export type PromptStage = "prd" | "tech_spec" | "plan" | "commit" | "pr" | "pr_review";
+export type PromptStage =
+  | "prd"
+  | "tech_spec"
+  | "plan"
+  | "step_review"
+  | "commit"
+  | "pr"
+  | "pr_review";
 
 export type StepStatus =
   | "not_started"
   | "preparing"
   | "blocked"
   | "implementing"
+  | "agent_review"
+  | "addressing_review"
   | "awaiting_review"
   | "in_review"
   | "ready_to_approve"
@@ -203,6 +219,9 @@ export type MarkerType =
   | "tech_spec_updated"
   | "plan_written"
   | "plan_updated"
+  | "pr_review_written"
+  | "step_review_started"
+  | "step_review_written"
   | "stage_started"
   | "step_started"
   | "compacted"
@@ -243,7 +262,7 @@ export type SituationGroup = "error" | "waiting" | "closing";
 export type SituationForm = "" | "review" | "staged" | "approve" | "merge" | "close";
 
 /** PlaceKind is the part of a task a situation is in. */
-export type PlaceKind = "stage" | "step" | "repo";
+export type PlaceKind = "stage" | "step" | "step_review" | "repo";
 
 /** ReviewMode is who reviews the steps: the user, or an agent. */
 export type ReviewMode = "manual" | "agent";
@@ -298,6 +317,7 @@ export function asModelStage(value: string): ModelStage {
     case "tech_spec":
     case "plan":
     case "implementation":
+    case "step_review":
     case "pr":
     case "pr_review":
       return value;
@@ -311,6 +331,7 @@ export function asPromptStage(value: string): PromptStage {
     case "prd":
     case "tech_spec":
     case "plan":
+    case "step_review":
     case "commit":
     case "pr":
     case "pr_review":
@@ -326,6 +347,8 @@ export function asStepStatus(value: string): StepStatus {
     case "preparing":
     case "blocked":
     case "implementing":
+    case "agent_review":
+    case "addressing_review":
     case "awaiting_review":
     case "in_review":
     case "ready_to_approve":
@@ -504,6 +527,9 @@ export function asMarkerType(value: string): MarkerType {
     case "tech_spec_updated":
     case "plan_written":
     case "plan_updated":
+    case "pr_review_written":
+    case "step_review_started":
+    case "step_review_written":
     case "stage_started":
     case "step_started":
     case "compacted":
@@ -593,6 +619,7 @@ export function asPlaceKind(value: string): PlaceKind {
   switch (value) {
     case "stage":
     case "step":
+    case "step_review":
     case "repo":
       return value;
     default:

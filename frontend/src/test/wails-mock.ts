@@ -425,19 +425,20 @@ const factoryChoices: { stage: ModelStage; model: string; effort: string }[] = [
   { stage: "tech_spec", model: "claude-fable-5-1", effort: "high" },
   { stage: "plan", model: "claude-fable-5-1", effort: "high" },
   { stage: "implementation", model: "claude-opus-5", effort: "high" },
+  { stage: "step_review", model: "claude-opus-5", effort: "high" },
   { stage: "pr", model: "claude-opus-5", effort: "medium" },
   { stage: "pr_review", model: "claude-opus-5", effort: "high" },
 ];
 
-/** makeModelDefaults are the factory choices of the six stages of the app. */
+/** makeModelDefaults are the factory choices of the seven stages of the app. */
 export function makeModelDefaults(): StageModel[] {
   return factoryChoices.map((choice) => ({ ...choice }));
 }
 
 /**
- * makeTaskModels are the stage models of a task in the PRD, whose session runs
- * while every other stage is still to start, with what overrides says of each
- * line.
+ * makeTaskModels are the models of the seven stages of a task in the PRD, whose
+ * session runs while every other stage is still to start, with what overrides
+ * says of each line.
  */
 export function makeTaskModels(
   overrides: Partial<Record<ModelStage, Partial<TaskStageModel>>> = {},

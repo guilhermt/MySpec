@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { useShallow } from "zustand/react/shallow";
 import { defaultRepoPath, reposOf } from "@/lib/repos";
-import { repoSituation, stageSituation, stepSituation } from "@/lib/situations";
+import { repoSituation, reviewerSituation, stageSituation, stepSituation } from "@/lib/situations";
 import type {
   ArchivedTask,
   Leftover,
@@ -37,6 +37,14 @@ export function repoNodeId(path: string): NodeId {
 /** SettingsSection is what the settings screen shows: the model defaults or one prompt. */
 export type SettingsSection = "models" | PromptStage;
 
+/** StepTab is the conversation of a step on screen: the agent that implements it, or the one that reviews it. */
+export type StepTab = "implementer" | "reviewer";
+
+/** stepTabKey identifies the tabs of one step: a task and the number of the step. */
+export function stepTabKey(taskId: string, step: number): string {
+  return `${taskId}|${step}`;
+}
+
 /** PromptEdit is a prompt open in the editor: the text it opened with and the text it has now. */
 export interface PromptEdit {
   stage: PromptStage;
@@ -55,6 +63,8 @@ export interface AppStore {
   drafts: Record<string, string>;
   /** openRepo is the repository tab of a task in the PR stage, by task id. */
   openRepo: Record<string, string>;
+  /** openStepTab is the conversation tab of a step, by stepTabKey. */
+  openStepTab: Record<string, StepTab>;
   /** prDrafts is the pull request the user is editing, by repoKey. */
   prDrafts: Record<string, PrDraft>;
   newTaskFor: NodeId | null;
@@ -96,6 +106,7 @@ export interface AppStore {
   dropTranscript: (taskId: string, stage: string) => void;
   setDraft: (taskId: string, stage: string, text: string) => void;
   selectRepo: (taskId: string, repoPath: string) => void;
+  selectStepTab: (taskId: string, step: number, tab: StepTab) => void;
   setPrDraft: (taskId: string, repoPath: string, draft: PrDraft) => void;
   clearPrDraft: (taskId: string, repoPath: string) => void;
 
@@ -207,6 +218,23 @@ function withoutTaskTranscripts(
   return Object.fromEntries(Object.entries(transcripts).filter(([key]) => !key.startsWith(prefix)));
 }
 
+// The tab a situation of a step asks for; any other place leaves the tabs alone.
+function withStepTab(
+  current: Record<string, StepTab>,
+  taskId: string,
+  place: Place,
+): Record<string, StepTab> {
+  switch (asPlaceKind(place.kind)) {
+    case "step":
+      return { ...current, [stepTabKey(taskId, place.step)]: "implementer" };
+    case "step_review":
+      return { ...current, [stepTabKey(taskId, place.step)]: "reviewer" };
+    case "stage":
+    case "repo":
+      return current;
+  }
+}
+
 function initialTreeUi(): Pick<AppStore, "selectedNodeId" | "expandedNodeIds"> {
   return { selectedNodeId: ROOT_NODE_ID, expandedNodeIds: new Set<NodeId>([ROOT_NODE_ID]) };
 }
@@ -220,6 +248,7 @@ function initialTaskUi(): Pick<
   | "transcripts"
   | "drafts"
   | "openRepo"
+  | "openStepTab"
   | "prDrafts"
   | "newTaskFor"
   | "historyOpen"
@@ -234,6 +263,7 @@ function initialTaskUi(): Pick<
     transcripts: {},
     drafts: {},
     openRepo: {},
+    openStepTab: {},
     prDrafts: {},
     newTaskFor: null,
     historyOpen: false,
@@ -407,6 +437,9 @@ export const useAppStore = create<AppStore>()((set, get) => {
     selectRepo: (taskId, repoPath) =>
       set((state) => ({ openRepo: { ...state.openRepo, [taskId]: repoPath } })),
 
+    selectStepTab: (taskId, step, tab) =>
+      set((state) => ({ openStepTab: { ...state.openStepTab, [stepTabKey(taskId, step)]: tab } })),
+
     // The draft the user is editing outlives what the agent says next; only
     // opening the pull request, or throwing the draft away, clears it.
     setPrDraft: (taskId, repoPath, draft) =>
@@ -458,8 +491,9 @@ export const useAppStore = create<AppStore>()((set, get) => {
       }),
 
     // A situation opens where it is: its task, on the tab of its repository when
-    // it is in one. Going there puts away the history, the settings and the
-    // creation of a task.
+    // it is in one, and on the tab of the conversation of a step when it is in a
+    // step: the situation of a reviewer opens on its tab. Going there puts away
+    // the history, the settings and the creation of a task.
     openPlace: (taskId, place) => {
       // A situation of a task that is gone navigates nowhere, so it never asks
       // the user about an unsaved edit either.
@@ -481,6 +515,7 @@ export const useAppStore = create<AppStore>()((set, get) => {
             asPlaceKind(place.kind) === "repo"
               ? { ...state.openRepo, [taskId]: place.repoPath }
               : state.openRepo,
+          openStepTab: withStepTab(state.openStepTab, taskId, place),
         })),
       );
     },
@@ -587,8 +622,24 @@ export function useOpenRepo(taskId: string): string {
   return useAppStore((state) => openRepoOf(state, taskId));
 }
 
-// The situation of the place the open task shows: the stage it is in, the step
-// that runs, or the repository whose tab is selected.
+// A tab that no longer has a conversation behind it falls back to the implementer.
+function openStepTabOf(state: AppStore, taskId: string): StepTab {
+  const task = findTask(state.app, taskId);
+  const step = (task?.steps ?? []).find((candidate) => candidate.number === task?.currentStep);
+  if (step === undefined || step.reviewer === null) {
+    return "implementer";
+  }
+  return state.openStepTab[stepTabKey(taskId, step.number)] ?? "implementer";
+}
+
+/** useOpenStepTab is the conversation tab of the current step of a task. */
+export function useOpenStepTab(taskId: string): StepTab {
+  return useAppStore((state) => openStepTabOf(state, taskId));
+}
+
+// The situation of the place the open task shows: the stage it is in, the
+// conversation of the step that runs whose tab is selected, or the repository
+// whose tab is selected.
 function onScreenSituation(state: AppStore): Situation | null {
   const task = findTask(state.app, state.openTaskId);
   if (task === null) {
@@ -596,7 +647,9 @@ function onScreenSituation(state: AppStore): Situation | null {
   }
   switch (asTaskStage(task.stage)) {
     case "implementation":
-      return stepSituation(task, task.currentStep);
+      return openStepTabOf(state, task.id) === "reviewer"
+        ? reviewerSituation(task, task.currentStep)
+        : stepSituation(task, task.currentStep);
     case "pr":
       return repoSituation(task, openRepoOf(state, task.id));
     case "prd":

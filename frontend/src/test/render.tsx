@@ -16,6 +16,7 @@ export interface StoreOptions {
       | "transcripts"
       | "drafts"
       | "openRepo"
+      | "openStepTab"
       | "prDrafts"
       | "newTaskFor"
       | "historyOpen"
@@ -46,6 +47,7 @@ export function resetAppStore(options: StoreOptions = {}): void {
     transcripts: options.ui?.transcripts ?? {},
     drafts: options.ui?.drafts ?? {},
     openRepo: options.ui?.openRepo ?? {},
+    openStepTab: options.ui?.openStepTab ?? {},
     prDrafts: options.ui?.prDrafts ?? {},
     newTaskFor: options.ui?.newTaskFor ?? null,
     historyOpen: options.ui?.historyOpen ?? false,
