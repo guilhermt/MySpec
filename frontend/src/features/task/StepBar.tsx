@@ -1,4 +1,4 @@
-import { Check, Code, LoaderCircle, RotateCcw } from "lucide-react";
+import { Check, Code, LoaderCircle, RotateCcw, UserRoundCheck } from "lucide-react";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -8,16 +8,24 @@ import { ToneDot } from "@/features/task/StatusDot";
 import { repoLabel } from "@/features/task/StepList";
 import {
   canApprove,
-  currentStepDisplay,
+  canReviewMyself,
   currentStepOf,
   hasStepSession,
   reviewCountLabel,
+  stepBarDisplay,
   stepPhaseLabel,
   stepStatusLabel,
 } from "@/features/task/step-status";
-import { situationTone, stepSituation } from "@/lib/situations";
-import { asStepStatus, type Step, type StepStatus, type TaskSummary } from "@/lib/wails";
-import { approveStep, openInEditor } from "@/store/actions";
+import { situationTone, stepOrReviewerSituation } from "@/lib/situations";
+import {
+  asReviewFallback,
+  asReviewMode,
+  asStepStatus,
+  type Step,
+  type StepStatus,
+  type TaskSummary,
+} from "@/lib/wails";
+import { approveStep, openInEditor, reviewStepMyself } from "@/store/actions";
 import { useAppStore } from "@/store/app-store";
 
 // The states where the review of the step is what the bar is about.
@@ -69,15 +77,19 @@ export function StepBar({ task }: StepBarProps) {
   }
 
   const label = repoLabel(app, step);
-  const display = currentStepDisplay(task);
-  const situation = stepSituation(task, step.number);
+  const display = stepBarDisplay(task, step);
+  // The step waits on the user in its own conversation or in the one of its
+  // reviewer, whichever tab is on screen.
+  const situation = stepOrReviewerSituation(task, step.number);
   // What waits on the user takes the colour of its situation; without one, the
-  // dot shows the step and its session.
+  // dot shows the step and the conversation it waits on.
   const tone = situation !== null ? situationTone(situation) : display.tone;
   const status = asStepStatus(step.status);
   const preparing = status === "preparing";
   const committing = status === "committing";
   const reviewing = REVIEW_STATES.includes(status);
+  // Under the agent review nobody approves: the agent commits after a clean report.
+  const agent = asReviewMode(step.reviewMode) === "agent";
   // The worktree is only there once it has been created.
   const canOpen = step.worktreePath !== "";
 
@@ -134,10 +146,16 @@ export function StepBar({ task }: StepBarProps) {
           The last approval didn't produce a commit.
         </span>
       )}
+      {asReviewFallback(step.reviewFallback) === "rounds_exhausted" && reviewing && (
+        <span className="shrink-0 text-xs text-muted-foreground">
+          The agent review didn't come clean after three rounds.
+        </span>
+      )}
 
       <span className="flex-1" />
 
-      {(reviewing || committing) &&
+      {!agent &&
+        (reviewing || committing) &&
         (canApprove(step) || committing ? (
           approveButton
         ) : (
@@ -146,6 +164,18 @@ export function StepBar({ task }: StepBarProps) {
             <TooltipContent>{approveHint(status)}</TooltipContent>
           </Tooltip>
         ))}
+      {canReviewMyself(step) && (
+        <Tooltip>
+          <TooltipTrigger
+            render={<Button variant="default" size="sm" />}
+            onClick={() => void reviewStepMyself(task.id)}
+          >
+            <UserRoundCheck />
+            Review myself
+          </TooltipTrigger>
+          <TooltipContent>Stop the agent review and review this step yourself</TooltipContent>
+        </Tooltip>
+      )}
 
       {canOpen ? (
         openButton

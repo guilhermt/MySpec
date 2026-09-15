@@ -3,16 +3,21 @@ import {
   blockHint,
   blockTitle,
   canApprove,
+  canReviewMyself,
+  conversationDisplay,
   currentStepDisplay,
   currentStepOf,
   hasStepSession,
+  loopSession,
   reviewCountLabel,
+  stepBarDisplay,
   stepPhaseLabel,
+  stepStateLabel,
   stepStatusLabel,
   stepStatusTone,
 } from "@/features/task/step-status";
 import type { BlockReason, Step, TaskSummary } from "@/lib/wails";
-import { makeReview, makeStep, makeTask } from "@/test/wails-mock";
+import { makeReview, makeStep, makeStepReviewer, makeTask } from "@/test/wails-mock";
 
 function implementing(step: Partial<Step>, task: Partial<TaskSummary> = {}): TaskSummary {
   return makeTask({
@@ -83,6 +88,163 @@ describe("step status", () => {
   it("treats a status it does not know as not started", () => {
     expect(stepStatusLabel(makeStep({ status: "rebasing" }))).toBe("Not started");
     expect(stepStatusTone(makeStep({ status: "rebasing" }))).toBe("idle");
+  });
+});
+
+describe("stepStateLabel", () => {
+  it("spells out the pass of the agent review", () => {
+    expect(stepStateLabel(makeStep({ status: "agent_review", reviewPass: 2 }))).toBe(
+      "Agent review · pass 2",
+    );
+  });
+
+  it("spells out the round of the report being addressed", () => {
+    expect(stepStateLabel(makeStep({ status: "addressing_review", reviewRound: 1 }))).toBe(
+      "Addressing review · round 1 of 3",
+    );
+  });
+
+  it.each([
+    ["implementing", "Implementing"],
+    ["awaiting_review", "Awaiting review"],
+    ["committing", "Committing"],
+  ])("reads %s as the step does", (status, label) => {
+    expect(stepStateLabel(makeStep({ status }))).toBe(label);
+  });
+});
+
+describe("loopSession", () => {
+  const reviewer = makeStepReviewer({ sessionStatus: "needs_answer", contextPercent: 40 });
+
+  it("is the reviewer during a pass", () => {
+    const task = implementing({ status: "agent_review", reviewer }, { sessionStatus: "waiting" });
+
+    expect(loopSession(task, currentStepOf(task) as Step)).toMatchObject({
+      stage: "step_review:1",
+      sessionStatus: "needs_answer",
+      contextPercent: 40,
+    });
+  });
+
+  it("is the implementer while it addresses a report", () => {
+    const task = implementing(
+      { status: "addressing_review", reviewer },
+      { sessionStatus: "working", contextPercent: 12 },
+    );
+
+    expect(loopSession(task, currentStepOf(task) as Step)).toEqual({
+      stage: "step:1",
+      sessionStatus: "working",
+      sessionModel: "claude-fable-5-1",
+      sessionEffort: "high",
+      turnRunning: false,
+      processRunning: false,
+      retryAttempt: 0,
+      contextPercent: 12,
+    });
+  });
+
+  it("is the implementer during a pass whose reviewer the snapshot does not carry", () => {
+    const task = implementing({ status: "agent_review" }, { sessionStatus: "paused" });
+
+    expect(loopSession(task, currentStepOf(task) as Step)).toMatchObject({
+      stage: "step:1",
+      sessionStatus: "paused",
+    });
+  });
+});
+
+describe("conversationDisplay", () => {
+  it.each([
+    ["working", "Working", "working"],
+    ["waiting", "Waiting", "idle"],
+    ["needs_permission", "Permission", "idle"],
+    ["needs_answer", "Question", "idle"],
+    ["paused", "Paused", "paused"],
+    ["error", "Error", "idle"],
+  ])("reads a %s conversation", (sessionStatus, label, tone) => {
+    expect(conversationDisplay(makeStepReviewer({ sessionStatus }))).toEqual({ label, tone });
+  });
+});
+
+describe("stepBarDisplay", () => {
+  it.each([
+    [{ status: "agent_review", reviewPass: 1 }, "Agent review · pass 1", "working"],
+    [
+      { status: "addressing_review", reviewRound: 2 },
+      "Addressing review · round 2 of 3",
+      "working",
+    ],
+    [{ status: "awaiting_review" }, "Awaiting review", "idle"],
+    [{ status: "committing" }, "Committing", "working"],
+  ] as const)("reads the step while its conversation simply works %#", (step, label, tone) => {
+    const task = implementing(
+      { ...step, reviewer: makeStepReviewer({ sessionStatus: "working" }) },
+      { sessionStatus: "waiting" },
+    );
+
+    expect(stepBarDisplay(task, currentStepOf(task) as Step)).toEqual({ label, tone });
+  });
+
+  it("reads the reviewer when it asks during a pass", () => {
+    const task = implementing(
+      { status: "agent_review", reviewer: makeStepReviewer({ sessionStatus: "needs_answer" }) },
+      { sessionStatus: "paused" },
+    );
+
+    expect(stepBarDisplay(task, currentStepOf(task) as Step)).toEqual({
+      label: "Question",
+      tone: "idle",
+    });
+  });
+
+  it("reads the implementer while it addresses a report", () => {
+    const task = implementing(
+      { status: "addressing_review", reviewer: makeStepReviewer({ sessionStatus: "error" }) },
+      { sessionStatus: "paused" },
+    );
+
+    expect(stepBarDisplay(task, currentStepOf(task) as Step)).toEqual({
+      label: "Paused",
+      tone: "paused",
+    });
+  });
+
+  it("leaves a step that waits for the user to the step", () => {
+    const task = implementing({ status: "awaiting_review" }, { sessionStatus: "needs_answer" });
+
+    expect(stepBarDisplay(task, currentStepOf(task) as Step)).toEqual({
+      label: "Awaiting review",
+      tone: "idle",
+    });
+  });
+});
+
+describe("canReviewMyself", () => {
+  it.each([
+    ["not_started", false],
+    ["preparing", false],
+    ["implementing", true],
+    ["agent_review", true],
+    ["addressing_review", true],
+    ["committing", false],
+    ["done", false],
+  ])("knows whether a step under the agent review in %s can be taken back", (status, expected) => {
+    expect(canReviewMyself(makeStep({ status, reviewMode: "agent" }))).toBe(expected);
+  });
+
+  it("has nothing to take back from a step the user reviews", () => {
+    expect(canReviewMyself(makeStep({ status: "implementing" }))).toBe(false);
+  });
+
+  it("has nothing to take back from a step that went to the user", () => {
+    const step = makeStep({
+      status: "awaiting_review",
+      reviewMode: "manual",
+      reviewFallback: "rounds_exhausted",
+    });
+
+    expect(canReviewMyself(step)).toBe(false);
   });
 });
 
@@ -174,6 +336,24 @@ describe("currentStepDisplay", () => {
     const task = implementing({ status: "implementing" }, { sessionStatus });
 
     expect(currentStepDisplay(task)).toEqual({ label, tone });
+  });
+
+  it.each([
+    ["agent_review", "Agent review"],
+    ["addressing_review", "Addressing review"],
+  ])("reads a step in %s without the pass or the round", (status, label) => {
+    const task = implementing({ status, reviewPass: 2, reviewRound: 1 });
+
+    expect(currentStepDisplay(task)).toEqual({ label, tone: "working" });
+  });
+
+  it("reads the session of the reviewer during a pass", () => {
+    const task = implementing(
+      { status: "agent_review", reviewer: makeStepReviewer({ sessionStatus: "needs_permission" }) },
+      { sessionStatus: "working" },
+    );
+
+    expect(currentStepDisplay(task)).toEqual({ label: "Permission", tone: "idle" });
   });
 });
 

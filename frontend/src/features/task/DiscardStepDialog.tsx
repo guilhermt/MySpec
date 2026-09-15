@@ -27,6 +27,8 @@ export interface DiscardStepDialogProps {
  */
 export function DiscardStepDialog({ task, step, open, onOpenChange }: DiscardStepDialogProps) {
   const [clean, setClean] = useState(true);
+  // The review goes with the step: the conversation of the reviewer and its reports.
+  const reviewed = step.reviewer !== null || (step.reports ?? []).length > 0;
 
   // Every opening starts from the default, whatever the last one settled on.
   useEffect(() => {
@@ -41,8 +43,9 @@ export function DiscardStepDialog({ task, step, open, onOpenChange }: DiscardSte
         <AlertDialogHeader>
           <AlertDialogTitle>{`Discard step ${step.number} and start over?`}</AlertDialogTitle>
           <AlertDialogDescription>
-            This ends the session and deletes the conversation of the step. The step starts again
-            from scratch right away.
+            {reviewed
+              ? "This ends the sessions and deletes the conversations of the step and of its reviewer, with the reports of the agent review. The step starts again from scratch right away."
+              : "This ends the session and deletes the conversation of the step. The step starts again from scratch right away."}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <div className="flex flex-col gap-1.5">

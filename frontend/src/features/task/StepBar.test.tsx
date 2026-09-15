@@ -3,7 +3,14 @@ import { describe, expect, it } from "vitest";
 import { StepBar } from "@/features/task/StepBar";
 import { api, type Step, type TaskSummary } from "@/lib/wails";
 import { renderWithStore } from "@/test/render";
-import { makeReview, makeSituation, makeState, makeStep, makeTask } from "@/test/wails-mock";
+import {
+  makeReview,
+  makeSituation,
+  makeState,
+  makeStep,
+  makeStepReviewer,
+  makeTask,
+} from "@/test/wails-mock";
 
 // The dot has no role of its own: it is the hidden element that carries the tone.
 function dotOf(element: HTMLElement): Element | null {
@@ -175,6 +182,105 @@ describe("StepBar", () => {
     });
 
     expect(screen.getByText("The last approval didn't produce a commit.")).toBeInTheDocument();
+  });
+
+  it.each([
+    [{ status: "agent_review", reviewPass: 2 }, "Agent review · pass 2"],
+    [{ status: "addressing_review", reviewRound: 1 }, "Addressing review · round 1 of 3"],
+  ])("reads the pass and the round of the agent review %#", (step, expected) => {
+    bar({
+      ...step,
+      reviewMode: "agent",
+      worktreePath: "/w/api/add-login",
+      reviewer: makeStepReviewer({ sessionStatus: "working" }),
+    });
+
+    expect(screen.getByRole("status")).toHaveTextContent(expected);
+  });
+
+  it("shows the reviewer when it asks during a pass", () => {
+    bar({
+      status: "agent_review",
+      reviewMode: "agent",
+      reviewPass: 1,
+      worktreePath: "/w/api/add-login",
+      reviewer: makeStepReviewer({ sessionStatus: "needs_answer" }),
+    });
+
+    expect(screen.getByRole("status")).toHaveTextContent("Question");
+  });
+
+  it("offers Review myself in place of Approve under the agent review", async () => {
+    const { user } = bar({
+      status: "addressing_review",
+      reviewMode: "agent",
+      reviewRound: 1,
+      worktreePath: "/w/api/add-login",
+      reviewer: makeStepReviewer(),
+    });
+
+    expect(screen.queryByRole("button", { name: "Approve" })).not.toBeInTheDocument();
+    const takeOver = screen.getByRole("button", { name: "Review myself" });
+    await user.hover(takeOver);
+    expect(
+      await screen.findByText("Stop the agent review and review this step yourself"),
+    ).toBeInTheDocument();
+
+    await user.click(takeOver);
+
+    expect(api.reviewStepMyself).toHaveBeenCalledWith("task-1");
+  });
+
+  it("has no Review myself while the commit is made", () => {
+    bar({
+      status: "committing",
+      reviewMode: "agent",
+      worktreePath: "/w/api/add-login",
+      reviewer: makeStepReviewer(),
+    });
+
+    expect(screen.getByRole("status")).toHaveTextContent("Committing");
+    expect(screen.queryByRole("button", { name: "Review myself" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Approve" })).not.toBeInTheDocument();
+  });
+
+  it("says the agent review didn't come clean after three rounds", () => {
+    bar({
+      status: "awaiting_review",
+      reviewMode: "manual",
+      reviewFallback: "rounds_exhausted",
+      worktreePath: "/w/api/add-login",
+      review: makeReview(),
+      reviewer: makeStepReviewer(),
+    });
+
+    expect(
+      screen.getByText("The agent review didn't come clean after three rounds."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Approve" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Review myself" })).not.toBeInTheDocument();
+  });
+
+  it("takes the tone of a situation of the reviewer", () => {
+    bar(
+      {
+        status: "agent_review",
+        reviewMode: "agent",
+        reviewPass: 1,
+        worktreePath: "/w/api/add-login",
+        reviewer: makeStepReviewer({ sessionStatus: "needs_answer" }),
+      },
+      {
+        situations: [
+          makeSituation({
+            kind: "question",
+            place: { kind: "step_review", stage: "", step: 1, repoPath: "", repository: "" },
+          }),
+        ],
+      },
+    );
+
+    expect(dotOf(screen.getByRole("status"))).toHaveClass("bg-[var(--status-attention)]");
   });
 
   it("shows nothing when the task has no step to run", () => {

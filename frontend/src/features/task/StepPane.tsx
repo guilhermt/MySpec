@@ -4,8 +4,10 @@ import { Conversation } from "@/features/chat/Conversation";
 import { ImplementationDone } from "@/features/task/ImplementationDone";
 import { ReviewStrip } from "@/features/task/ReviewStrip";
 import { StepBlocked } from "@/features/task/StepBlocked";
+import { StepTabs } from "@/features/task/StepTabs";
 import { currentStepOf, stepPhaseLabel, stepStage } from "@/features/task/step-status";
-import { asStepStatus, type TaskSummary } from "@/lib/wails";
+import { asStepStatus, type Step, type TaskSummary } from "@/lib/wails";
+import { useOpenStepTab } from "@/store/app-store";
 
 /** Waiting is what the step shows while there is nothing to read yet. */
 function Waiting({ text }: { text: string }) {
@@ -16,6 +18,27 @@ function Waiting({ text }: { text: string }) {
         {text}
       </p>
     </div>
+  );
+}
+
+/** StepConversation is the conversation of the tab on screen, and the field to answer it. */
+function StepConversation({ task, step }: { task: TaskSummary; step: Step }) {
+  const tab = useOpenStepTab(task.id);
+  const reviewer = tab === "reviewer" ? step.reviewer : null;
+  const stage = reviewer === null ? stepStage(step.number) : reviewer.sessionStage;
+  const session = reviewer ?? task;
+  // A tab is a conversation of its own: the scroll of one never carries over
+  // to the other.
+  return (
+    <>
+      <Conversation
+        key={`conversation:${stage}`}
+        taskId={task.id}
+        stage={stage}
+        session={session}
+      />
+      <Composer key={`composer:${stage}`} taskId={task.id} stage={stage} session={session} />
+    </>
   );
 }
 
@@ -57,8 +80,8 @@ export function StepPane({ task }: StepPaneProps) {
           {step.review !== null && (
             <ReviewStrip taskId={task.id} repoPath="" review={step.review} />
           )}
-          <Conversation taskId={task.id} stage={stepStage(step.number)} session={task} />
-          <Composer taskId={task.id} stage={stepStage(step.number)} session={task} />
+          <StepTabs task={task} step={step} />
+          <StepConversation task={task} step={step} />
         </>
       );
     case "preparing":

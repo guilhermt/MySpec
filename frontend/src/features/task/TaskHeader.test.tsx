@@ -3,7 +3,14 @@ import { describe, expect, it, vi } from "vitest";
 import { TaskHeader } from "@/features/task/TaskHeader";
 import { api, type TaskSummary } from "@/lib/wails";
 import { renderWithStore } from "@/test/render";
-import { makeRepoPR, makeSituation, makeState, makeStep, makeTask } from "@/test/wails-mock";
+import {
+  makeRepoPR,
+  makeSituation,
+  makeState,
+  makeStep,
+  makeStepReviewer,
+  makeTask,
+} from "@/test/wails-mock";
 
 function header(overrides: Partial<TaskSummary> = {}, onToggle = vi.fn()) {
   const task = makeTask(overrides);
@@ -106,6 +113,69 @@ describe("TaskHeader", () => {
     });
 
     expect(screen.getByRole("button", { name: "Pause" })).toBeInTheDocument();
+  });
+
+  it("pauses the reviewer during a pass", async () => {
+    const { user } = header({
+      stage: "implementation",
+      sessionStatus: "waiting",
+      contextPercent: 10,
+      steps: [
+        makeStep({
+          status: "agent_review",
+          reviewMode: "agent",
+          reviewPass: 1,
+          reviewer: makeStepReviewer({ sessionStatus: "working", contextPercent: 72 }),
+        }),
+      ],
+      currentStep: 1,
+    });
+
+    // The gauge reads the context of the conversation the step waits on.
+    expect(screen.getByText("72%")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Pause" }));
+
+    expect(api.pause).toHaveBeenCalledWith("task-1", "step_review:1");
+  });
+
+  it("resumes the reviewer paused during a pass", async () => {
+    const { user } = header({
+      stage: "implementation",
+      steps: [
+        makeStep({
+          status: "agent_review",
+          reviewMode: "agent",
+          reviewPass: 1,
+          reviewer: makeStepReviewer({ sessionStatus: "paused" }),
+        }),
+      ],
+      currentStep: 1,
+    });
+
+    await user.click(screen.getByRole("button", { name: "Resume" }));
+
+    expect(api.resume).toHaveBeenCalledWith("task-1", "step_review:1");
+  });
+
+  it("pauses the implementer while it addresses a report", async () => {
+    const { user } = header({
+      stage: "implementation",
+      sessionStatus: "working",
+      steps: [
+        makeStep({
+          status: "addressing_review",
+          reviewMode: "agent",
+          reviewRound: 1,
+          reviewer: makeStepReviewer({ sessionStatus: "paused" }),
+        }),
+      ],
+      currentStep: 1,
+    });
+
+    await user.click(screen.getByRole("button", { name: "Pause" }));
+
+    expect(api.pause).toHaveBeenCalledWith("task-1", "step:1");
   });
 
   it("has the models of the task a click away", async () => {
