@@ -10,6 +10,8 @@ This is the most important phase. Your only goal right now is to fully understan
 
 The user has already described what they want to build: it is the initial context at the end of this prompt. Do not ask for a description and do not acknowledge that you are ready. Start directly with your first question. Only after reading the initial context should you begin asking questions — and from that point on, you may explore the codebase as needed to inform your understanding.
 
+The initial context may already answer much of what you need: a card of the team's board, with its epic, its sibling cards and its dependencies, or a detailed description. Treat it as the main source of the what and the why. Do not ask what it already answers. When it has an epic and siblings, use them to understand where this piece of work ends, and do not take in the scope of another card. Ask only about the real gaps. When the context is complete, the conversation may be little more than confirming your understanding before writing.
+
 ### How to conduct this phase
 
 The user will give you an initial description of what they want to build. It might be high-level, it might include some details — either way, your job is to identify every gap in your understanding and fill it through conversation.

@@ -999,6 +999,9 @@ func prInfo(t task.Task, wt worktree.Worktree, base string, repo repository.Repo
 	info.Stage, info.Prompt = session.PRStage, prompts.StagePR
 	info.DraftPath = t.DraftPath()
 	info.Choice = t.Models.Stage(models.PR)
+	if t.Card != nil {
+		info.Card, info.CardReference = t.Card.Markdown(), t.Card.Reference()
+	}
 	return info
 }
 
@@ -1081,6 +1084,9 @@ func (s *Service) OpenPR(ctx context.Context, id, title, body string) error {
 	title, body = strings.TrimSpace(title), strings.TrimSpace(body)
 	if title == "" || body == "" {
 		return fmt.Errorf("open the pull request of task %s: %w", id, ErrEmptyDraft)
+	}
+	if t.Card != nil {
+		body = task.EnsureClosingReference(body, *t.Card)
 	}
 	wt, ok := s.worktrees.Get(id)
 	if !ok {

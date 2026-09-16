@@ -715,6 +715,16 @@ func (m *memTasks) useDir(id, dir string) {
 	}
 }
 
+// useCard gives a task the card of the board it was created from.
+func (m *memTasks) useCard(id string, c task.Card) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if index := m.indexOf(id); index >= 0 {
+		m.items[index].Card = &c
+	}
+}
+
 // blockInspect holds every reading of the disk until the returned channel is
 // closed, which is how a test keeps an evaluation running.
 func (m *memTasks) blockInspect() chan struct{} {

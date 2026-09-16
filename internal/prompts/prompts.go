@@ -162,6 +162,16 @@ const prReviewOneShotNote = "This task was planned in a single document, `{{one_
 	"and its Technical decisions and its Change plan play the role of the technical specification: a deviation " +
 	"from them is a finding, even when the code works."
 
+// cardHeading opens the section Render appends to the prompt of a pull request
+// when the task was created from a card.
+const cardHeading = "\n\n## Card\n\n"
+
+// prCardNote is what the prompt of a pull request says about the card of the task.
+const prCardNote = "This task was created from a card of the team's board. Read the card below before writing " +
+	"the description: it says what the change is for, and the description should make sense to someone who " +
+	"reads the card. Start the body of the draft with the line `Closes {{card_reference}}`, alone on its line, " +
+	"so that the pull request is linked to the card. Never mention the board otherwise."
+
 // oneShotNote is what a prompt that reads the documents of a task says about
 // the document of a One-Shot task; "" for a prompt that reads none.
 func oneShotNote(stage Stage) string {
@@ -340,6 +350,9 @@ type Vars struct {
 
 	CommitAll        bool   // the commit takes every change of the worktree, not what is staged
 	ImplementerReply string // StageStepReview only: what the implementer said last, appended to the prompt
+
+	Card          string // PR only: the card of the task as Markdown (task.Card.Markdown); "" for a task without one
+	CardReference string // PR only: owner/name#number of the card
 }
 
 // pushInstruction is what {{push}} becomes: the instruction when the commit
@@ -368,7 +381,8 @@ func commitInstruction(all bool) string {
 // for them. The prompt of a step reviewer always ends with what the
 // implementer said last. In a One-Shot task, the placeholders of the PRD, the
 // tech spec and the step file render the document, and the prompts that read
-// them always end with what the document stands for. StageStep is the
+// them always end with what the document stands for. The prompt of a pull
+// request of a task created from a card ends with the card. StageStep is the
 // exception: the step file is sent verbatim.
 func Render(dataDir string, stage Stage, vars Vars) (string, error) {
 	if stage == StageStep {
@@ -420,6 +434,9 @@ func Render(dataDir string, stage Stage, vars Vars) (string, error) {
 	}
 	if note := oneShotNote(stage); note != "" && vars.OneShotPath != "" {
 		rendered += oneShotHeading + strings.ReplaceAll(note, oneShotPathPlaceholder, vars.OneShotPath)
+	}
+	if stage == StagePR && vars.Card != "" {
+		rendered += cardHeading + strings.ReplaceAll(prCardNote, "{{card_reference}}", vars.CardReference) + "\n\n" + vars.Card
 	}
 	// What the implementer said is never a placeholder: the prompt of a
 	// reviewer always ends with it.

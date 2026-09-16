@@ -1021,3 +1021,66 @@ func TestRenderAppendsNoOneShotNoteToThePromptsThatReadNoDocument(t *testing.T) 
 		})
 	}
 }
+
+// cardVars are the vars the prompt of a pull request of a task created from a
+// card renders with.
+func cardVars() prompts.Vars {
+	vars := everyVar()
+	vars.Card = "### Add the login screen\n\n- Issue: acme/api#12\n- Link: https://github.com/acme/api/issues/12\n\nUsers sign in."
+	vars.CardReference = "acme/api#12"
+	return vars
+}
+
+func TestRenderAppendsTheCardToThePromptOfAPullRequest(t *testing.T) {
+	t.Parallel()
+
+	dataDir := t.TempDir()
+	write(t, dataDir, prompts.StagePR, "open it")
+
+	got, err := prompts.Render(dataDir, prompts.StagePR, cardVars())
+	if err != nil {
+		t.Fatalf("Render() = %v, want nil", err)
+	}
+
+	want := "open it\n\n## Card\n\nThis task was created from a card of the team's board. Read the card below before writing " +
+		"the description: it says what the change is for, and the description should make sense to someone who " +
+		"reads the card. Start the body of the draft with the line `Closes acme/api#12`, alone on its line, " +
+		"so that the pull request is linked to the card. Never mention the board otherwise.\n\n" +
+		"### Add the login screen\n\n- Issue: acme/api#12\n- Link: https://github.com/acme/api/issues/12\n\nUsers sign in."
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("Render() mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestRenderAppendsNoCardWithoutOne(t *testing.T) {
+	t.Parallel()
+
+	dataDir := t.TempDir()
+	write(t, dataDir, prompts.StagePR, "open it")
+
+	got, err := prompts.Render(dataDir, prompts.StagePR, everyVar())
+	if err != nil {
+		t.Fatalf("Render() = %v, want nil", err)
+	}
+	if got != "open it" {
+		t.Errorf("Render() = %q, want %q", got, "open it")
+	}
+}
+
+func TestRenderAppendsTheCardOnlyToThePromptOfAPullRequest(t *testing.T) {
+	t.Parallel()
+
+	for _, stage := range []prompts.Stage{prompts.StagePRReview, prompts.StageCommit, prompts.StageStepReview} {
+		t.Run(string(stage), func(t *testing.T) {
+			t.Parallel()
+
+			got, err := prompts.Render(t.TempDir(), stage, cardVars())
+			if err != nil {
+				t.Fatalf("Render(%s) = %v, want nil", stage, err)
+			}
+			if strings.Contains(got, "## Card") {
+				t.Errorf("rendered %s prompt carries the card section", stage)
+			}
+		})
+	}
+}

@@ -2,8 +2,11 @@ package flow_test
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/guilhermt/myspec/internal/flow"
@@ -554,6 +557,82 @@ func TestAPullRequestUnderReviewIsShownByItsLastReport(t *testing.T) {
 			}
 			if want := session.PRReviewStage; state.SessionStage != want {
 				t.Errorf("session stage = %q, want %q", state.SessionStage, want)
+			}
+		})
+	}
+}
+
+// loginCard is the card of the board a task of the tests was created from.
+func loginCard() task.Card {
+	return task.Card{
+		Owner: "dev", Name: "web", Number: 12, Title: "Add the login screen", Body: "Users sign in.",
+		URL: "https://github.com/dev/web/issues/12", State: task.IssueOpen,
+	}
+}
+
+func TestThePRSessionOfATaskCreatedFromACardCarriesTheCard(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	inPR(f, "task-1", plan(), task.PRDrafting)
+	f.tasks.useCard("task-1", loginCard())
+
+	f.service.Sync(t.Context())
+	info := f.waitPRSession(t, "task-1")
+
+	if info.Card != loginCard().Markdown() || info.CardReference != "dev/web#12" {
+		t.Errorf("session card = %q, reference = %q, want the card of the task", info.Card, info.CardReference)
+	}
+}
+
+func TestThePRSessionOfATaskWithoutACardCarriesNoCard(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	inPR(f, "task-1", plan(), task.PRDrafting)
+
+	f.service.Sync(t.Context())
+	info := f.waitPRSession(t, "task-1")
+
+	if info.Card != "" || info.CardReference != "" {
+		t.Errorf("session card = %q, reference = %q, want none", info.Card, info.CardReference)
+	}
+}
+
+func TestOpeningThePullRequestOfATaskCreatedFromACardClosesTheCard(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		body string
+		want string
+	}{
+		{"a body without the reference gets it", "It adds the screen.", "It adds the screen.\n\nCloses dev/web#12"},
+		{"a body that closes the card is kept", "Fixes #12\n\nIt adds the screen.", "Fixes #12\n\nIt adds the screen."},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			f := newFixture(t)
+			dir := t.TempDir()
+			inPR(f, "task-1", plan(), task.PRDrafting)
+			f.tasks.useDir("task-1", dir)
+			f.tasks.useCard("task-1", loginCard())
+			f.sessions.setSummary("task-1", session.Summary{
+				Stage: session.PRStage, Status: session.StatusWaiting, Idle: true,
+			})
+
+			if err := f.service.OpenPR(t.Context(), "task-1", "Add the login screen", test.body); err != nil {
+				t.Fatalf("OpenPR() = %v, want nil", err)
+			}
+
+			written, err := os.ReadFile(filepath.Join(dir, "pr", "draft.md"))
+			if err != nil {
+				t.Fatalf("read draft: %v", err)
+			}
+			if !strings.HasSuffix(strings.TrimRight(string(written), "\n"), "\n"+test.want) {
+				t.Errorf("draft = %q, want its body to be %q", written, test.want)
 			}
 		})
 	}
