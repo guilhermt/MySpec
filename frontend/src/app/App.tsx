@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { AppShell } from "@/app/AppShell";
 import { bootstrap } from "@/app/bootstrap";
 import { useGlobalShortcuts } from "@/app/useGlobalShortcuts";
+import { MigrationRefused } from "@/features/migration/MigrationRefused";
 import { ArchivedNotice } from "@/features/notice/ArchivedNotice";
 import { LeftoversNotice } from "@/features/notice/LeftoversNotice";
 import { ErrorNotice } from "@/features/notice/Notice";
@@ -36,6 +37,11 @@ export function App() {
 
   if (app === null) {
     return <div className="h-dvh bg-background" />;
+  }
+
+  // A refused migration takes the whole app: nothing else was loaded.
+  if (app.migration !== null) {
+    return <MigrationRefused migration={app.migration} />;
   }
 
   return (

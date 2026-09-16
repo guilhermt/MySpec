@@ -6,6 +6,7 @@ import { useAppStore } from "@/store/app-store";
 import { renderWithStore, resetAppStore } from "@/test/render";
 import {
   makeArchivedTask,
+  makeMigration,
   makeSituation,
   makeState,
   makeTask,
@@ -58,6 +59,19 @@ describe("App", () => {
     renderWithStore(<App />);
 
     expect(await screen.findByRole("button", { name: /^Add repository/ })).toBeInTheDocument();
+  });
+
+  it("renders the migration screen when the data could not be updated", async () => {
+    vi.mocked(api.getState).mockResolvedValue(makeState({ migration: makeMigration() }));
+
+    renderWithStore(<App />);
+
+    expect(
+      await screen.findByRole("heading", { name: "MySpec couldn't be updated" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Repository filter: All repositories" }),
+    ).not.toBeInTheDocument();
   });
 
   it("opens the new task dialog on Ctrl+N", async () => {

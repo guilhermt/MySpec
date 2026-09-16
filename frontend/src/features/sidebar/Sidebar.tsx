@@ -6,6 +6,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { WaitingSection } from "@/features/attention/WaitingSection";
 import { HistoryButton } from "@/features/history/HistoryButton";
 import { SettingsButton } from "@/features/settings/SettingsButton";
+import { MissingClones } from "@/features/sidebar/MissingClones";
 import { RepositoryFilter } from "@/features/sidebar/RepositoryFilter";
 import { TaskList } from "@/features/sidebar/TaskList";
 import { ThemeToggle } from "@/features/theme/ThemeToggle";
@@ -39,6 +40,7 @@ export function Sidebar() {
         <RepositoryFilter variant="sidebar" className="min-w-0 flex-1" />
         <NewTaskButton />
       </div>
+      <MissingClones />
       <ScrollArea className="min-h-0 flex-1">
         <TaskList />
       </ScrollArea>
