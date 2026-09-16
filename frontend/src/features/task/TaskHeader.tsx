@@ -8,6 +8,7 @@ import { DeleteTaskDialog } from "@/features/task/DeleteTaskDialog";
 import { StatusBadge } from "@/features/task/StatusBadge";
 import { hasArtifacts } from "@/features/task/status";
 import { currentStepOf, hasStepSession, loopSession } from "@/features/task/step-status";
+import { TaskCardBadge } from "@/features/task/TaskCardBadge";
 import { TaskModelsButton } from "@/features/task/TaskModels";
 import { TaskReviewModeButton } from "@/features/task/TaskReviewMode";
 import { isOneShot } from "@/lib/task-modes";
@@ -45,6 +46,7 @@ export function TaskHeader({ task, artifactsOpen, onToggleArtifacts }: TaskHeade
       <span className="min-w-0 truncate font-medium">{task.name}</span>
       {isOneShot(task) && <Badge variant="outline">One-Shot</Badge>}
       <Badge variant="secondary">{task.repository}</Badge>
+      {task.card !== null && <TaskCardBadge card={task.card} />}
       <StatusBadge task={task} />
 
       <span className="flex-1" />

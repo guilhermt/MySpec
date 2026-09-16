@@ -10,6 +10,7 @@ import {
   makeStep,
   makeStepReviewer,
   makeTask,
+  makeTaskCard,
 } from "@/test/wails-mock";
 
 function header(overrides: Partial<TaskSummary> = {}, onToggle = vi.fn()) {
@@ -27,6 +28,19 @@ describe("TaskHeader", () => {
     expect(screen.getByText("add-login")).toBeInTheDocument();
     expect(screen.getByText("dev/web")).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("Waiting");
+  });
+
+  it("shows the card the task was created from", () => {
+    header({ card: makeTaskCard() });
+
+    expect(screen.getByRole("button", { name: "#12" })).toBeInTheDocument();
+    expect(screen.getByText("In progress")).toBeInTheDocument();
+  });
+
+  it("shows no card for a task without one", () => {
+    header();
+
+    expect(screen.queryByRole("button", { name: "#12" })).not.toBeInTheDocument();
   });
 
   it("labels a One-Shot task", () => {

@@ -4,7 +4,7 @@ import { ArchivedTaskView } from "@/features/history/ArchivedTaskView";
 import { type ArchivedTask, api } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
-import { makeArchivedTask, makeState } from "@/test/wails-mock";
+import { makeArchivedTask, makeState, makeTaskCard } from "@/test/wails-mock";
 
 const STEP_FILE = "# Step 1: Add the login form\n";
 
@@ -25,6 +25,13 @@ describe("ArchivedTaskView", () => {
     expect(screen.getByText("dev/web")).toBeInTheDocument();
     expect(screen.getByText("1 step")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "#12" })).toBeInTheDocument();
+  });
+
+  it("shows the card the task was created from", async () => {
+    view({ card: makeTaskCard({ number: 40, state: "closed" }) });
+
+    expect(await screen.findByRole("button", { name: "#40" })).toBeInTheDocument();
+    expect(screen.getByText("Issue closed")).toBeInTheDocument();
   });
 
   it("opens on the PRD and reads it back from the artifacts", async () => {
