@@ -208,6 +208,7 @@ type fixture struct {
 	flow         *flow.Service
 	dataDir      string
 	picker       *fakePicker
+	scanRoot     string // the folder the repository scan starts at
 	editor       *fakeEditor
 	logs         *syncBuffer
 
@@ -233,6 +234,7 @@ func newFixture(t *testing.T) *fixture {
 	f := &fixture{
 		store:       st,
 		picker:      &fakePicker{},
+		scanRoot:    t.TempDir(),
 		editor:      &fakeEditor{},
 		logs:        logs,
 		identities:  map[string]repository.Identity{},
@@ -271,6 +273,7 @@ func newFixture(t *testing.T) *fixture {
 		Counts:   func(id string) (int, int) { return f.taskSvc.Counts(id) },
 		Log:      log,
 		NewID:    func() string { return testRepoID },
+		ScanRoot: f.scanRoot,
 	})
 	f.taskSvc, err = task.New(task.Deps{
 		Repo:         st.Tasks,

@@ -644,6 +644,26 @@ export interface Repository {
 }
 
 /**
+ * RepositoryCandidate is a clone of a GitHub repository the scan found under
+ * the home folder.
+ */
+export interface RepositoryCandidate {
+    "owner": string;
+    "name": string;
+
+    /**
+     * owner/name
+     */
+    "fullName": string;
+    "path": string;
+
+    /**
+     * the repository is registered, at this path or another
+     */
+    "registered": boolean;
+}
+
+/**
  * Review is how far the review of a step has got.
  */
 export interface Review {

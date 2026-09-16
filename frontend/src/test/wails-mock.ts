@@ -14,6 +14,7 @@ import type {
   PromptStage,
   PullRequest,
   Repository,
+  RepositoryCandidate,
   Review,
   ReviewMode,
   Situation,
@@ -33,7 +34,9 @@ import type {
 
 export const api = {
   getState: vi.fn<() => Promise<State>>(() => Promise.resolve(makeState())),
-  addRepository: vi.fn<() => Promise<void>>(() => Promise.resolve()),
+  scanRepositories: vi.fn<() => Promise<RepositoryCandidate[]>>(() => Promise.resolve([])),
+  addRepository: vi.fn<(path: string) => Promise<void>>(() => Promise.resolve()),
+  browseRepository: vi.fn<() => Promise<boolean>>(() => Promise.resolve(false)),
   changeRepositoryPath: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
   removeRepository: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
   setRepositoryFilter: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
@@ -233,6 +236,19 @@ export function makeRepository(overrides: Partial<Repository> = {}): Repository 
     missing: false,
     activeTasks: 0,
     archivedTasks: 0,
+    ...overrides,
+  };
+}
+
+export function makeRepositoryCandidate(
+  overrides: Partial<RepositoryCandidate> = {},
+): RepositoryCandidate {
+  return {
+    owner: "dev",
+    name: "web",
+    fullName: "dev/web",
+    path: "/home/dev/projects/web",
+    registered: false,
     ...overrides,
   };
 }
@@ -628,6 +644,8 @@ export function resetWailsMock(): void {
   onSituationStarted.mockClear();
   onSituationOpen.mockClear();
   api.getState.mockImplementation(() => Promise.resolve(makeState()));
+  api.scanRepositories.mockImplementation(() => Promise.resolve([]));
+  api.addRepository.mockImplementation(() => Promise.resolve());
   api.createTask.mockImplementation(() => Promise.resolve("task-1"));
   api.getTranscript.mockImplementation((taskId, stage) =>
     Promise.resolve(makeTranscript({ taskId, stage })),

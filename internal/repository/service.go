@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -43,6 +44,7 @@ type Deps struct {
 	NewID         func() string    // defaults to uuid.NewString
 	OnChange      func()           // after any change; may be nil
 	OnPathChanged func(id string)  // after a path changed, before OnChange; may be nil
+	ScanRoot      string           // the folder the scan starts at, the home folder when empty
 }
 
 // Service owns the registered repositories and what the app last found about
@@ -57,6 +59,7 @@ type Service struct {
 	newID         func() string
 	onChange      func()
 	onPathChanged func(id string)
+	scanRoot      string
 
 	mu      sync.Mutex
 	items   []Repository    // by owner/name, ignoring case
@@ -82,6 +85,14 @@ func New(deps Deps) *Service {
 	if newID == nil {
 		newID = uuid.NewString
 	}
+	scanRoot := deps.ScanRoot
+	if scanRoot == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			home = os.Getenv("HOME")
+		}
+		scanRoot = home
+	}
 	return &Service{
 		store:         deps.Store,
 		settings:      deps.Settings,
@@ -92,6 +103,7 @@ func New(deps Deps) *Service {
 		newID:         newID,
 		onChange:      deps.OnChange,
 		onPathChanged: deps.OnPathChanged,
+		scanRoot:      scanRoot,
 		missing:       map[string]bool{},
 	}
 }

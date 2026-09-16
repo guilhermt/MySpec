@@ -31,6 +31,7 @@ import type {
   QuestionEntry,
   QuestionOption,
   Repository,
+  RepositoryCandidate,
   Review,
   ReviewFile,
   Situation,
@@ -87,6 +88,7 @@ export type {
   QuestionEntry,
   QuestionOption,
   Repository,
+  RepositoryCandidate,
   Review,
   ReviewFile,
   Situation,
@@ -670,7 +672,10 @@ export function asMigrationCaseKind(value: string): MigrationCaseKind {
 
 export const api = {
   getState: (): Promise<State> => StateService.GetState(),
-  addRepository: (): Promise<void> => RepositoryService.AddRepository(),
+  scanRepositories: async (): Promise<RepositoryCandidate[]> =>
+    (await RepositoryService.ScanRepositories()) ?? [],
+  addRepository: (path: string): Promise<void> => RepositoryService.AddRepository(path),
+  browseRepository: (): Promise<boolean> => RepositoryService.BrowseRepository(),
   changeRepositoryPath: (id: string): Promise<void> => RepositoryService.ChangeRepositoryPath(id),
   removeRepository: (id: string): Promise<void> => RepositoryService.RemoveRepository(id),
   setRepositoryFilter: (id: string): Promise<void> => RepositoryService.SetRepositoryFilter(id),

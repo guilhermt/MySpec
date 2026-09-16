@@ -43,7 +43,7 @@ O foco é entregue por `gtk_window_present`, que o Hyprland honra porque `misc:f
 
 ## Diálogo nativo
 
-**Add repository** e **Change path** abrem o seletor do `xdg-desktop-portal-gtk` em modo de pasta, seguindo o esquema de cores do sistema. Cancelar com Escape fecha sem nenhuma mudança de estado nem linha de log.
+**Browse…** no diálogo **Add repository** e **Change path** abrem o seletor do `xdg-desktop-portal-gtk` em modo de pasta, seguindo o esquema de cores do sistema. Cancelar com Escape fecha sem nenhuma mudança de estado nem linha de log.
 
 ## Tema do sistema
 

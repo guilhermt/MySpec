@@ -6,6 +6,7 @@ import type {
   PermissionDecision,
   Prompt,
   PromptStage,
+  RepositoryCandidate,
   ReviewMode,
   TaskStage,
   ThemePreference,
@@ -23,11 +24,20 @@ async function run(operation: () => Promise<void>): Promise<void> {
 }
 
 /**
- * addRepository and changeRepositoryPath do not swallow their failure: the
- * screen that asked shows the refusal where the user is.
+ * scanRepositories, addRepository, browseRepository and changeRepositoryPath do
+ * not swallow their failure: the screen that asked shows the refusal where the
+ * user is.
  */
-export function addRepository(): Promise<void> {
-  return api.addRepository();
+export function scanRepositories(): Promise<RepositoryCandidate[]> {
+  return api.scanRepositories();
+}
+
+export function addRepository(path: string): Promise<void> {
+  return api.addRepository(path);
+}
+
+export function browseRepository(): Promise<boolean> {
+  return api.browseRepository();
 }
 
 export function changeRepositoryPath(id: string): Promise<void> {

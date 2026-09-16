@@ -10,13 +10,25 @@
 // @ts-ignore: Unused imports
 import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wailsio/runtime";
 
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as $models from "./models.js";
+
 /**
- * AddRepository asks for the folder of a clone and registers it. Cancelling
- * changes nothing and is not an error; a folder the app refuses comes back as
- * the sentence the user reads.
+ * AddRepository registers the clone at path. A folder the app refuses comes
+ * back as the sentence the user reads.
  */
-export function AddRepository(): $CancellablePromise<void> {
-    return $Call.ByID(1327201862);
+export function AddRepository(path: string): $CancellablePromise<void> {
+    return $Call.ByID(1327201862, path);
+}
+
+/**
+ * BrowseRepository asks for the folder of a clone with the native chooser and
+ * registers it, reporting whether it did. Cancelling changes nothing and is not
+ * an error; a folder the app refuses comes back as the sentence the user reads.
+ */
+export function BrowseRepository(): $CancellablePromise<boolean> {
+    return $Call.ByID(1465823153);
 }
 
 /**
@@ -31,6 +43,14 @@ export function ChangeRepositoryPath(id: string): $CancellablePromise<void> {
  */
 export function RemoveRepository(id: string): $CancellablePromise<void> {
     return $Call.ByID(605300867, id);
+}
+
+/**
+ * ScanRepositories lists the clones of GitHub repositories under the home
+ * folder, marking the ones whose repository is already registered.
+ */
+export function ScanRepositories(): $CancellablePromise<$models.RepositoryCandidate[] | null> {
+    return $Call.ByID(3621150146);
 }
 
 /**

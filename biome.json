@@ -42,7 +42,11 @@
     "rules": {
       "preset": "recommended",
       "a11y": {
-        "preset": "recommended"
+        "preset": "recommended",
+        "noLabelWithoutControl": {
+          "level": "error",
+          "options": { "inputComponents": ["Checkbox"] }
+        }
       },
       "complexity": {
         "noImportantStyles": "off"

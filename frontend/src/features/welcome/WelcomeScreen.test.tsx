@@ -1,5 +1,5 @@
 import { screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { WelcomeScreen } from "@/features/welcome/WelcomeScreen";
 import { api } from "@/lib/wails";
 import { renderWithStore } from "@/test/render";
@@ -18,25 +18,12 @@ describe("WelcomeScreen", () => {
     expect(screen.getByRole("button", { name: /^Add repository/ })).toBeInTheDocument();
   });
 
-  it("registers the repository of the folder that is chosen", async () => {
+  it("opens the dialog that registers a repository", async () => {
     const { user } = welcome();
 
     await user.click(screen.getByRole("button", { name: /^Add repository/ }));
 
-    expect(api.addRepository).toHaveBeenCalledOnce();
-    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-  });
-
-  it("shows a folder the app refuses, where the user is", async () => {
-    vi.mocked(api.addRepository).mockRejectedValueOnce(
-      new Error("/home/dev/notes is not the root of a git repository."),
-    );
-    const { user } = welcome();
-
-    await user.click(screen.getByRole("button", { name: /^Add repository/ }));
-
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "/home/dev/notes is not the root of a git repository.",
-    );
+    expect(await screen.findByRole("dialog", { name: "Add repository" })).toBeInTheDocument();
+    expect(api.scanRepositories).toHaveBeenCalledOnce();
   });
 });

@@ -12,7 +12,7 @@ jq -c 'select(.task == "<id>")' ~/.local/state/myspec/myspec.log
 
 **Início e sessões.** `app starting` abre cada execução, com a versão, os argumentos e os diretórios. `claude session ready` marca um processo que subiu e respondeu, com a task a que pertence. `binding failed` marca uma chamada da interface que o Go recusou, com o método. `claude restarting` marca um processo trazido de volta com flags novas por uma troca de modelo na conversa.
 
-**Repositórios e migração.** `repository registered`, `repository path changed` e `repository removed`, com o repositório. `repository clone missing` e `repository clone found`, com o caminho do clone. `migration applied`, com a versão do schema. `upgrade planned`, com quantos repositórios foram cadastrados, quantas tasks foram carregadas e quantas foram descartadas. `migration refused`, com a quantidade de casos que impediram a migração. `upgrade undo failed` e `upgrade cleanup failed`, com o caminho e o erro.
+**Repositórios e migração.** `repository registered`, `repository path changed` e `repository removed`, com o repositório. `repository clone missing` e `repository clone found`, com o caminho do clone. `clone not identified`, com o caminho e o erro, para um clone que a varredura encontrou e o git não conseguiu ler. `migration applied`, com a versão do schema. `upgrade planned`, com quantos repositórios foram cadastrados, quantas tasks foram carregadas e quantas foram descartadas. `migration refused`, com a quantidade de casos que impediram a migração. `upgrade undo failed` e `upgrade cleanup failed`, com o caminho e o erro.
 
 **Etapas.** `stage advanced`, `stage revisited` e `stage discarded` marcam cada movimento entre etapas, com a task e as etapas envolvidas.
 

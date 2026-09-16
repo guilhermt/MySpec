@@ -40,6 +40,22 @@ func FromRepositories(
 	return converted
 }
 
+// FromCandidates converts the clones a scan found. It always returns a slice so
+// the frontend never sees null.
+func FromCandidates(list []repository.Candidate) []RepositoryCandidate {
+	converted := make([]RepositoryCandidate, len(list))
+	for i, candidate := range list {
+		converted[i] = RepositoryCandidate{
+			Owner:      candidate.Identity.Owner,
+			Name:       candidate.Identity.Name,
+			FullName:   candidate.Identity.FullName(),
+			Path:       candidate.Path,
+			Registered: candidate.Registered,
+		}
+	}
+	return converted
+}
+
 // FromMigration converts the cases a refused migration listed, so that the
 // screen can say what to resolve and where.
 func FromMigration(refused *upgrade.RefusedError) *Migration {

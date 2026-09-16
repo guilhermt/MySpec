@@ -13,6 +13,9 @@ import (
 // gitCallTimeout bounds a call that reads the origin of a clone.
 const gitCallTimeout = 30 * time.Second
 
+// scanTimeout bounds a scan of the home folder, which reads every clone found.
+const scanTimeout = 2 * time.Minute
+
 // FolderPicker opens the native folder chooser. ok is false when the user
 // cancels.
 type FolderPicker interface {
@@ -33,18 +36,22 @@ func NewRepositoryService(
 	return &RepositoryService{repositories: repositories, picker: picker, log: log}
 }
 
-// AddRepository asks for the folder of a clone and registers it. Cancelling
-// changes nothing and is not an error; a folder the app refuses comes back as
-// the sentence the user reads.
-func (s *RepositoryService) AddRepository() error {
-	path, ok, err := s.picker.PickFolder("Add repository", os.Getenv("HOME"))
-	if err != nil {
-		return s.fail("AddRepository", err)
-	}
-	if !ok {
-		return nil
-	}
+// ScanRepositories lists the clones of GitHub repositories under the home
+// folder, marking the ones whose repository is already registered.
+func (s *RepositoryService) ScanRepositories() ([]RepositoryCandidate, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), scanTimeout)
+	defer cancel()
 
+	candidates, err := s.repositories.Scan(ctx)
+	if err != nil {
+		return nil, s.fail("ScanRepositories", err)
+	}
+	return FromCandidates(candidates), nil
+}
+
+// AddRepository registers the clone at path. A folder the app refuses comes
+// back as the sentence the user reads.
+func (s *RepositoryService) AddRepository(path string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), gitCallTimeout)
 	defer cancel()
 
@@ -52,6 +59,27 @@ func (s *RepositoryService) AddRepository() error {
 		return s.fail("AddRepository", err)
 	}
 	return nil
+}
+
+// BrowseRepository asks for the folder of a clone with the native chooser and
+// registers it, reporting whether it did. Cancelling changes nothing and is not
+// an error; a folder the app refuses comes back as the sentence the user reads.
+func (s *RepositoryService) BrowseRepository() (bool, error) {
+	path, ok, err := s.picker.PickFolder("Add repository", os.Getenv("HOME"))
+	if err != nil {
+		return false, s.fail("BrowseRepository", err)
+	}
+	if !ok {
+		return false, nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), gitCallTimeout)
+	defer cancel()
+
+	if _, err := s.repositories.Add(ctx, path); err != nil {
+		return false, s.fail("BrowseRepository", err)
+	}
+	return true, nil
 }
 
 // ChangeRepositoryPath asks for the new folder of the clone of a repository.
