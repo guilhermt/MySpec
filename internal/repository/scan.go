@@ -32,13 +32,17 @@ type Candidate struct {
 
 // Scan finds the clones of GitHub repositories under the scan root, by
 // owner/name ignoring case, then by path. It fails only when the root itself
-// cannot be read.
+// cannot be read or ctx ends before the scan does.
 func (s *Service) Scan(ctx context.Context) ([]Candidate, error) {
 	roots, err := s.collectRoots(ctx)
 	if err != nil {
 		return nil, err
 	}
 	candidates := s.identifyRoots(ctx, roots)
+	// A scan cut short while identifying would otherwise look complete.
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("scan %s: %w", s.scanRoot, err)
+	}
 
 	s.mu.Lock()
 	for i := range candidates {
@@ -101,7 +105,8 @@ func (s *Service) collectRoots(ctx context.Context) ([]string, error) {
 }
 
 // identifyRoots identifies the clones at roots concurrently. A clone Identify
-// refuses is left out silently; one it fails on is left out with a warning.
+// refuses is left out silently; one it fails on is left out with a warning,
+// unless ctx has ended, which Scan reports instead.
 func (s *Service) identifyRoots(ctx context.Context, roots []string) []Candidate {
 	paths := make(chan string)
 	var (
@@ -115,7 +120,7 @@ func (s *Service) identifyRoots(ctx context.Context, roots []string) []Candidate
 				identity, err := s.identify(ctx, path)
 				if err != nil {
 					var refusal *Refusal
-					if !errors.As(err, &refusal) {
+					if !errors.As(err, &refusal) && ctx.Err() == nil {
 						s.log.Warn("clone not identified", "path", path, "error", err)
 					}
 					continue

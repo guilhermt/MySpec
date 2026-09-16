@@ -21,7 +21,6 @@ import { messageOf } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 import type { RepositoryCandidate } from "@/lib/wails";
 import { addRepository, browseRepository, scanRepositories } from "@/store/actions";
-import { useAppStore } from "@/store/app-store";
 
 export interface AddRepositoryDialogProps {
   open: boolean;
@@ -36,10 +35,6 @@ export function AddRepositoryDialog({ open, onOpenChange }: AddRepositoryDialogP
       {open && <AddRepositoryForm onOpenChange={onOpenChange} />}
     </Dialog>
   );
-}
-
-function registeredCount(): number {
-  return useAppStore.getState().app?.repositories?.length ?? 0;
 }
 
 function AddRepositoryForm({ onOpenChange }: Pick<AddRepositoryDialogProps, "onOpenChange">) {
@@ -112,16 +107,13 @@ function AddRepositoryForm({ onOpenChange }: Pick<AddRepositoryDialogProps, "onO
 
   const browse = async () => {
     setBrowseError(null);
-    const before = registeredCount();
     try {
-      await browseRepository();
+      // A cancelled chooser registers nothing: the dialog stays.
+      if (await browseRepository()) {
+        onOpenChange(false);
+      }
     } catch (failure) {
       setBrowseError(messageOf(failure));
-      return;
-    }
-    // A cancelled chooser resolves without registering anything: the dialog stays.
-    if (registeredCount() > before) {
-      onOpenChange(false);
     }
   };
 

@@ -31,8 +31,9 @@ func TestBrowseRepositoryRegistersTheFolderTheUserChose(t *testing.T) {
 	path := clone(t, f, "web", "dev", "web")
 	f.picker.answer(path, true, nil)
 
-	if err := f.repoService.BrowseRepository(); err != nil {
-		t.Fatalf("BrowseRepository() = %v, want nil", err)
+	registered, err := f.repoService.BrowseRepository()
+	if err != nil || !registered {
+		t.Fatalf("BrowseRepository() = %t, %v, want true, nil", registered, err)
 	}
 
 	got := f.state.GetState().Repositories
@@ -54,8 +55,9 @@ func TestBrowseRepositoryCancelledChangesNothing(t *testing.T) {
 	f := newFixture(t)
 	f.picker.answer("", false, nil)
 
-	if err := f.repoService.BrowseRepository(); err != nil {
-		t.Fatalf("BrowseRepository() = %v, want nil", err)
+	registered, err := f.repoService.BrowseRepository()
+	if err != nil || registered {
+		t.Fatalf("BrowseRepository() = %t, %v, want false, nil", registered, err)
 	}
 	if got := f.state.GetState().Repositories; len(got) != 0 {
 		t.Errorf("repositories = %+v, want none", got)
@@ -68,7 +70,7 @@ func TestBrowseRepositoryRefusesAFolderTheAppCannotTake(t *testing.T) {
 	f := newFixture(t)
 	registered := clone(t, f, "web", "dev", "web")
 	f.picker.answer(registered, true, nil)
-	if err := f.repoService.BrowseRepository(); err != nil {
+	if _, err := f.repoService.BrowseRepository(); err != nil {
 		t.Fatalf("BrowseRepository() = %v, want nil", err)
 	}
 
@@ -94,7 +96,10 @@ func TestBrowseRepositoryRefusesAFolderTheAppCannotTake(t *testing.T) {
 	for _, refusal := range refusals {
 		f.picker.answer(refusal.path, true, nil)
 
-		err := f.repoService.BrowseRepository()
+		registered, err := f.repoService.BrowseRepository()
+		if registered {
+			t.Errorf("%s: BrowseRepository() = true, want false", refusal.name)
+		}
 		if err == nil {
 			t.Fatalf("%s: BrowseRepository() = nil, want the folder refused", refusal.name)
 		}
@@ -172,7 +177,7 @@ func TestChangeRepositoryPathOpensAtTheParentOfTheClone(t *testing.T) {
 	f := newFixture(t)
 	first := clone(t, f, "web", "dev", "web")
 	f.picker.answer(first, true, nil)
-	if err := f.repoService.BrowseRepository(); err != nil {
+	if _, err := f.repoService.BrowseRepository(); err != nil {
 		t.Fatalf("BrowseRepository() = %v, want nil", err)
 	}
 
@@ -200,7 +205,7 @@ func TestChangeRepositoryPathRefusesAnotherRepository(t *testing.T) {
 	f := newFixture(t)
 	first := clone(t, f, "web", "dev", "web")
 	f.picker.answer(first, true, nil)
-	if err := f.repoService.BrowseRepository(); err != nil {
+	if _, err := f.repoService.BrowseRepository(); err != nil {
 		t.Fatalf("BrowseRepository() = %v, want nil", err)
 	}
 

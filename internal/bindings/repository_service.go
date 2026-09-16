@@ -62,24 +62,24 @@ func (s *RepositoryService) AddRepository(path string) error {
 }
 
 // BrowseRepository asks for the folder of a clone with the native chooser and
-// registers it. Cancelling changes nothing and is not an error; a folder the
-// app refuses comes back as the sentence the user reads.
-func (s *RepositoryService) BrowseRepository() error {
+// registers it, reporting whether it did. Cancelling changes nothing and is not
+// an error; a folder the app refuses comes back as the sentence the user reads.
+func (s *RepositoryService) BrowseRepository() (bool, error) {
 	path, ok, err := s.picker.PickFolder("Add repository", os.Getenv("HOME"))
 	if err != nil {
-		return s.fail("BrowseRepository", err)
+		return false, s.fail("BrowseRepository", err)
 	}
 	if !ok {
-		return nil
+		return false, nil
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), gitCallTimeout)
 	defer cancel()
 
 	if _, err := s.repositories.Add(ctx, path); err != nil {
-		return s.fail("BrowseRepository", err)
+		return false, s.fail("BrowseRepository", err)
 	}
-	return nil
+	return true, nil
 }
 
 // ChangeRepositoryPath asks for the new folder of the clone of a repository.

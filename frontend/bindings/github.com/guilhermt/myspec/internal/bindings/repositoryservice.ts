@@ -24,10 +24,10 @@ export function AddRepository(path: string): $CancellablePromise<void> {
 
 /**
  * BrowseRepository asks for the folder of a clone with the native chooser and
- * registers it. Cancelling changes nothing and is not an error; a folder the
- * app refuses comes back as the sentence the user reads.
+ * registers it, reporting whether it did. Cancelling changes nothing and is not
+ * an error; a folder the app refuses comes back as the sentence the user reads.
  */
-export function BrowseRepository(): $CancellablePromise<void> {
+export function BrowseRepository(): $CancellablePromise<boolean> {
     return $Call.ByID(1465823153);
 }
 

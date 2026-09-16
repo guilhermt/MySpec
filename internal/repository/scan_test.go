@@ -1,6 +1,7 @@
 package repository_test
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -158,6 +159,31 @@ func TestTheScanOfAnEmptyFolderIsAnEmptyList(t *testing.T) {
 	got := f.scan(t)
 	if got == nil || len(got) != 0 {
 		t.Errorf("Scan() = %#v, want an empty non-nil slice", got)
+	}
+}
+
+func TestTheScanFailsWhenItIsCutShortWhileIdentifying(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	clone(t, root, "api")
+	clone(t, root, "web")
+	logs := newLogCapture()
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	service := repository.New(repository.Deps{
+		Identify: func(ctx context.Context, _ string) (repository.Identity, error) {
+			cancel()
+			return repository.Identity{}, ctx.Err()
+		},
+		Log:      logs.log,
+		ScanRoot: root,
+	})
+
+	if _, err := service.Scan(ctx); !errors.Is(err, context.Canceled) {
+		t.Errorf("Scan() = %v, want context.Canceled", err)
+	}
+	if got := logs.count(t, "clone not identified"); got != 0 {
+		t.Errorf("clone not identified logged %d times, want none", got)
 	}
 }
 

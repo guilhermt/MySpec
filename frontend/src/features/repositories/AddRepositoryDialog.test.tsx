@@ -2,9 +2,8 @@ import { screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { AddRepositoryDialog } from "@/features/repositories/AddRepositoryDialog";
 import { api, type RepositoryCandidate } from "@/lib/wails";
-import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
-import { makeRepository, makeRepositoryCandidate, makeState } from "@/test/wails-mock";
+import { makeRepositoryCandidate, makeState } from "@/test/wails-mock";
 
 const web = makeRepositoryCandidate();
 const api2 = makeRepositoryCandidate({
@@ -145,12 +144,7 @@ describe("AddRepositoryDialog", () => {
   });
 
   it("closes once the native chooser registered a repository", async () => {
-    vi.mocked(api.browseRepository).mockImplementationOnce(() => {
-      useAppStore.setState({
-        app: makeState({ repositories: [makeRepository(), makeRepository({ id: "repo-2" })] }),
-      });
-      return Promise.resolve();
-    });
+    vi.mocked(api.browseRepository).mockResolvedValueOnce(true);
     const { user, onOpenChange } = dialog();
 
     await user.click(screen.getByRole("button", { name: "Browse…" }));

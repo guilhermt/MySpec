@@ -36,7 +36,7 @@ export function addRepository(path: string): Promise<void> {
   return api.addRepository(path);
 }
 
-export function browseRepository(): Promise<void> {
+export function browseRepository(): Promise<boolean> {
   return api.browseRepository();
 }
 

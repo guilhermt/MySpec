@@ -36,7 +36,7 @@ export const api = {
   getState: vi.fn<() => Promise<State>>(() => Promise.resolve(makeState())),
   scanRepositories: vi.fn<() => Promise<RepositoryCandidate[]>>(() => Promise.resolve([])),
   addRepository: vi.fn<(path: string) => Promise<void>>(() => Promise.resolve()),
-  browseRepository: vi.fn<() => Promise<void>>(() => Promise.resolve()),
+  browseRepository: vi.fn<() => Promise<boolean>>(() => Promise.resolve(false)),
   changeRepositoryPath: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
   removeRepository: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
   setRepositoryFilter: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
