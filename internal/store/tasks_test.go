@@ -347,3 +347,110 @@ func TestTasksDeleteMissingIsNotAnError(t *testing.T) {
 		t.Errorf("Delete() = %v, want nil", err)
 	}
 }
+
+// newCard builds a card of a board, with an epic.
+func newCard(number int) *task.Card {
+	return &task.Card{
+		BoardID: "board-1",
+		Owner:   "Dev",
+		Name:    "Web",
+		Number:  number,
+		Title:   "Add login",
+		Body:    "A login screen.",
+		URL:     "https://github.com/Dev/Web/issues/12",
+		Status:  "Todo",
+		State:   task.IssueOpen,
+		Epic:    &task.CardEpic{Owner: "Dev", Name: "Web", Number: 3, Title: "Auth", URL: "https://github.com/Dev/Web/issues/3"},
+		ReadAt:  fixedTime,
+	}
+}
+
+func TestTasksWithACardRoundTrip(t *testing.T) {
+	t.Parallel()
+	s := newStoreWithRepositories(t)
+
+	withCard := newTask("task-1", webRepo, "one", fixedTime)
+	withCard.Card = newCard(12)
+	withoutEpic := newTask("task-2", webRepo, "two", fixedTime.Add(time.Second))
+	withoutEpic.Card = newCard(13)
+	withoutEpic.Card.Epic = nil
+	withoutEpic.Card.Body = ""
+	withoutEpic.ArchivedAt = fixedTime.Add(time.Minute)
+	for _, tk := range []task.Task{withCard, withoutEpic} {
+		if err := s.Tasks.Insert(t.Context(), tk); err != nil {
+			t.Fatalf("Insert(%s) = %v, want nil", tk.Name, err)
+		}
+	}
+
+	got, err := s.Tasks.Get(t.Context(), withCard.ID)
+	if err != nil {
+		t.Fatalf("Get() = %v, want nil", err)
+	}
+	if diff := cmp.Diff(withCard, got); diff != "" {
+		t.Errorf("Get() mismatch (-want +got):\n%s", diff)
+	}
+	active, err := s.Tasks.ListActive(t.Context())
+	if err != nil {
+		t.Fatalf("ListActive() = %v, want nil", err)
+	}
+	if diff := cmp.Diff([]task.Task{withCard}, active); diff != "" {
+		t.Errorf("ListActive() mismatch (-want +got):\n%s", diff)
+	}
+	archived, err := s.Tasks.ListArchived(t.Context())
+	if err != nil {
+		t.Fatalf("ListArchived() = %v, want nil", err)
+	}
+	if diff := cmp.Diff([]task.Task{withoutEpic}, archived); diff != "" {
+		t.Errorf("ListArchived() mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestTasksWithoutACardHaveNone(t *testing.T) {
+	t.Parallel()
+	s := newStoreWithRepositories(t)
+
+	if err := s.Tasks.Insert(t.Context(), newTask("task-1", webRepo, "one", fixedTime)); err != nil {
+		t.Fatalf("Insert() = %v, want nil", err)
+	}
+
+	got, err := s.Tasks.Get(t.Context(), "task-1")
+	if err != nil {
+		t.Fatalf("Get() = %v, want nil", err)
+	}
+	if got.Card != nil {
+		t.Errorf("Get() card = %+v, want nil", got.Card)
+	}
+}
+
+func TestTasksUpdateCard(t *testing.T) {
+	t.Parallel()
+	s := newStoreWithRepositories(t)
+
+	tk := newTask("task-1", webRepo, "one", fixedTime)
+	tk.Card = newCard(12)
+	if err := s.Tasks.Insert(t.Context(), tk); err != nil {
+		t.Fatalf("Insert() = %v, want nil", err)
+	}
+
+	want := *tk.Card
+	want.Title = "Add login and logout"
+	want.Body = "Both."
+	want.URL = "https://github.com/Dev/Web/issues/12#renamed"
+	want.Status = "Done"
+	want.State = task.IssueClosed
+	want.Epic = nil
+	want.ReadAt = fixedTime.Add(time.Hour)
+	changed := want
+	changed.BoardID, changed.Owner, changed.Name, changed.Number = "board-2", "other", "repo", 99
+	if err := s.Tasks.UpdateCard(t.Context(), tk.ID, changed); err != nil {
+		t.Fatalf("UpdateCard() = %v, want nil", err)
+	}
+
+	got, err := s.Tasks.Get(t.Context(), tk.ID)
+	if err != nil {
+		t.Fatalf("Get() = %v, want nil", err)
+	}
+	if diff := cmp.Diff(&want, got.Card); diff != "" {
+		t.Errorf("Get() card mismatch (-want +got):\n%s", diff)
+	}
+}
