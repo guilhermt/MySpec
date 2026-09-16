@@ -2,6 +2,7 @@ import { Plus } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { AddRepositoryDialog } from "@/features/repositories/AddRepositoryDialog";
+import { CloneFolderField } from "@/features/repositories/CloneFolderField";
 import { RepositoryRow } from "@/features/repositories/RepositoryRow";
 import { useRepositories } from "@/store/app-store";
 
@@ -26,6 +27,7 @@ export function RepositoriesPage() {
             The repositories your tasks belong to, each tied to its local clone.
           </p>
         </header>
+        <CloneFolderField />
         <ul className="flex flex-col divide-y rounded-lg border">
           {repositories.map((repository) => (
             <RepositoryRow key={repository.id} repository={repository} />

@@ -1,5 +1,6 @@
 import { act, renderHook } from "@testing-library/react";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { SIDEBAR_COLLAPSED_KEY } from "@/lib/ui-storage";
 import type { Place, PullRequest, Situation, TranscriptEvent } from "@/lib/wails";
 import { sessionKey } from "@/lib/wails";
 import {
@@ -8,6 +9,8 @@ import {
   useAppStore,
   useArchivedNotice,
   useArchivedTask,
+  useBoard,
+  useBoards,
   useDraft,
   useError,
   useFilteredTasks,
@@ -17,6 +20,7 @@ import {
   useLeftover,
   useMigration,
   useOnScreenSituationId,
+  useOpenBoardId,
   useOpenStepTab,
   useOpenTask,
   usePrDraft,
@@ -24,6 +28,7 @@ import {
   useRepository,
   useRepositoryFilter,
   useSettingsUi,
+  useSidebarCollapsed,
   useTask,
   useTasks,
   useThemeState,
@@ -32,6 +37,7 @@ import {
 import { resetAppStore } from "@/test/render";
 import {
   makeArchivedTask,
+  makeBoard,
   makeEntry,
   makeMigration,
   makePullRequest,
@@ -1084,5 +1090,204 @@ describe("settings", () => {
 
     expect(useAppStore.getState().promptEdit).toBeNull();
     expect(useAppStore.getState().pendingLeave).toBeNull();
+  });
+});
+
+describe("boards", () => {
+  const ROADMAP = makeBoard();
+  const OPS = makeBoard({ id: "board-2", title: "Ops", repositoryIds: [] });
+
+  function withBoards(boards = [ROADMAP, OPS]) {
+    return withTasks({ boards, history: [ARCHIVED] });
+  }
+
+  it("reports the boards of the snapshot", () => {
+    const { result } = renderHook(() => ({
+      boards: useBoards(),
+      ops: useBoard("board-2"),
+      unknown: useBoard("board-9"),
+    }));
+
+    expect(result.current.boards).toEqual([]);
+
+    act(() => {
+      useAppStore.getState().applyState(withBoards());
+    });
+
+    expect(result.current.boards).toEqual([ROADMAP, OPS]);
+    expect(result.current.ops).toBe(OPS);
+    expect(result.current.unknown).toBeNull();
+  });
+
+  it("opens a board view in place of a task, the history and the settings", () => {
+    const { result } = renderHook(() => useOpenBoardId());
+
+    for (const place of [
+      () => useAppStore.getState().openTask(WEB_TASK.id),
+      () => useAppStore.getState().openArchived(ARCHIVED.id),
+      () => useAppStore.getState().openSettings(),
+    ]) {
+      act(() => {
+        useAppStore.getState().applyState(withBoards());
+        place();
+        useAppStore.getState().openBoard("board-2");
+      });
+
+      expect(result.current).toBe("board-2");
+      expect(useAppStore.getState().openTaskId).toBeNull();
+      expect(useAppStore.getState().openArchivedId).toBeNull();
+      expect(useAppStore.getState().historyOpen).toBe(false);
+      expect(useAppStore.getState().settingsOpen).toBe(false);
+    }
+  });
+
+  it("puts the board view away when another place opens", () => {
+    useAppStore.getState().applyState(withBoards());
+
+    for (const navigate of [
+      () => useAppStore.getState().openTask(WEB_TASK.id),
+      () => useAppStore.getState().openHistory(),
+      () => useAppStore.getState().openArchived(ARCHIVED.id),
+      () => useAppStore.getState().openSettings(),
+      () => useAppStore.getState().openPlace(WEB_TASK.id, stagePlace("prd")),
+    ]) {
+      useAppStore.getState().openBoard("board-1");
+
+      navigate();
+
+      expect(useAppStore.getState().openBoardId).toBeNull();
+    }
+  });
+
+  it("waits for the user to discard an unsaved prompt before opening a board", () => {
+    useAppStore.getState().applyState(withBoards());
+    useAppStore.getState().openSettings();
+    useAppStore.getState().startPromptEdit("prd", "# PRD");
+    useAppStore.getState().setPromptEditText("# PRD, edited");
+
+    useAppStore.getState().openBoard("board-1");
+
+    expect(useAppStore.getState().openBoardId).toBeNull();
+
+    useAppStore.getState().confirmLeave();
+
+    expect(useAppStore.getState().openBoardId).toBe("board-1");
+  });
+
+  it("takes the view of a board that is gone off the screen", () => {
+    useAppStore.getState().applyState(withBoards());
+    useAppStore.getState().openBoard("board-2");
+
+    useAppStore.getState().applyState(withBoards([OPS]));
+    expect(useAppStore.getState().openBoardId).toBe("board-2");
+
+    useAppStore.getState().applyState(withBoards([ROADMAP]));
+    expect(useAppStore.getState().openBoardId).toBeNull();
+  });
+
+  it("keeps the screen while a board is registered without any repository", () => {
+    useAppStore.getState().applyState(makeState({ repositories: [], boards: [OPS] }));
+    useAppStore.getState().openBoard("board-2");
+
+    useAppStore.getState().applyState(makeState({ repositories: [], boards: [OPS] }));
+
+    expect(useAppStore.getState().openBoardId).toBe("board-2");
+  });
+
+  it("clears the board view once no board and no repository is registered", () => {
+    useAppStore.getState().applyState(withBoards());
+    useAppStore.getState().openBoard("board-1");
+    useAppStore
+      .getState()
+      .setPendingStart({ boardId: "board-1", key: "dev/web#12", repositoryId: "repo-1" });
+
+    useAppStore.getState().applyState(makeState({ repositories: [], boards: [] }));
+
+    expect(useAppStore.getState().openBoardId).toBeNull();
+    expect(useAppStore.getState().pendingStart).toBeNull();
+  });
+
+  it("opens the creation dialog for a card, and forgets the card on closing", () => {
+    useAppStore.getState().openNewTask({ boardId: "board-1", key: "dev/web#12" });
+
+    expect(useAppStore.getState().newTaskOpen).toBe(true);
+    expect(useAppStore.getState().newTaskCard).toEqual({ boardId: "board-1", key: "dev/web#12" });
+
+    useAppStore.getState().closeNewTask();
+
+    expect(useAppStore.getState().newTaskOpen).toBe(false);
+    expect(useAppStore.getState().newTaskCard).toBeNull();
+
+    useAppStore.getState().openNewTask({ boardId: "board-1", key: "dev/web#12" });
+    useAppStore.getState().openNewTask();
+
+    expect(useAppStore.getState().newTaskCard).toBeNull();
+  });
+
+  it("holds a card waiting for its clone", () => {
+    const pending = { boardId: "board-1", key: "dev/web#12", repositoryId: "repo-1" };
+
+    useAppStore.getState().setPendingStart(pending);
+    expect(useAppStore.getState().pendingStart).toEqual(pending);
+
+    useAppStore.getState().setPendingStart(null);
+    expect(useAppStore.getState().pendingStart).toBeNull();
+  });
+});
+
+describe("sidebar nodes", () => {
+  afterEach(() => {
+    localStorage.clear();
+  });
+
+  it("collapses and expands a node, and keeps what is collapsed", () => {
+    const { result } = renderHook(() => useSidebarCollapsed());
+
+    act(() => {
+      useAppStore.getState().toggleSidebarNode("board-1");
+      useAppStore.getState().toggleSidebarNode("epic-4");
+    });
+
+    expect([...result.current]).toEqual(["board-1", "epic-4"]);
+    expect(JSON.parse(localStorage.getItem(SIDEBAR_COLLAPSED_KEY) ?? "")).toEqual([
+      "board-1",
+      "epic-4",
+    ]);
+
+    act(() => {
+      useAppStore.getState().toggleSidebarNode("board-1");
+    });
+
+    expect([...result.current]).toEqual(["epic-4"]);
+    expect(JSON.parse(localStorage.getItem(SIDEBAR_COLLAPSED_KEY) ?? "")).toEqual(["epic-4"]);
+  });
+
+  it("expands the nodes asked for and leaves the others collapsed", () => {
+    useAppStore.getState().toggleSidebarNode("board-1");
+    useAppStore.getState().toggleSidebarNode("epic-4");
+    useAppStore.getState().toggleSidebarNode("epic-5");
+
+    useAppStore.getState().expandSidebarNodes(["board-1", "epic-5", "epic-9"]);
+
+    expect([...useAppStore.getState().sidebarCollapsed]).toEqual(["epic-4"]);
+    expect(JSON.parse(localStorage.getItem(SIDEBAR_COLLAPSED_KEY) ?? "")).toEqual(["epic-4"]);
+  });
+
+  it("changes nothing when the nodes asked for are already expanded", () => {
+    useAppStore.getState().toggleSidebarNode("epic-4");
+    const before = useAppStore.getState().sidebarCollapsed;
+
+    useAppStore.getState().expandSidebarNodes(["board-1"]);
+
+    expect(useAppStore.getState().sidebarCollapsed).toBe(before);
+  });
+
+  it("starts with the nodes collapsed in the last run", async () => {
+    localStorage.setItem(SIDEBAR_COLLAPSED_KEY, JSON.stringify(["board-1"]));
+    vi.resetModules();
+
+    const fresh = await import("@/store/app-store");
+
+    expect([...fresh.useAppStore.getState().sidebarCollapsed]).toEqual(["board-1"]);
   });
 });

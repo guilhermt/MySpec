@@ -16,6 +16,10 @@ export interface StoreOptions {
       | "openStepTab"
       | "prDrafts"
       | "newTaskOpen"
+      | "newTaskCard"
+      | "pendingStart"
+      | "openBoardId"
+      | "sidebarCollapsed"
       | "lastRepositoryId"
       | "historyOpen"
       | "openArchivedId"
@@ -45,6 +49,10 @@ export function resetAppStore(options: StoreOptions = {}): void {
     openStepTab: options.ui?.openStepTab ?? {},
     prDrafts: options.ui?.prDrafts ?? {},
     newTaskOpen: options.ui?.newTaskOpen ?? false,
+    newTaskCard: options.ui?.newTaskCard ?? null,
+    pendingStart: options.ui?.pendingStart ?? null,
+    openBoardId: options.ui?.openBoardId ?? null,
+    sidebarCollapsed: options.ui?.sidebarCollapsed ?? new Set<string>(),
     lastRepositoryId: options.ui?.lastRepositoryId ?? null,
     historyOpen: options.ui?.historyOpen ?? false,
     openArchivedId: options.ui?.openArchivedId ?? null,

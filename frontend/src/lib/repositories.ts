@@ -56,17 +56,18 @@ export function tasksInFilter<T extends { repositoryId: string }>(
   return tasks.filter((task) => task.repositoryId === filter);
 }
 
-// A repository the dialog can create a task in: registered, with its clone
-// where it is.
+// A repository the dialog can create a task in: registered, cloned, with its
+// clone where it is.
 function usable(app: State, id: string): boolean {
   const repository = findRepository(app, id);
-  return repository !== null && !repository.missing;
+  return repository?.cloned === true && !repository.missing;
 }
 
 /**
  * defaultRepositoryId is the repository the creation dialog opens on: the one of
  * the filter, of the open task, of the last task created, or the first; the
- * first of those that is registered and whose clone is there. "" when none is.
+ * first of those that is registered, cloned, and whose clone is there. "" when
+ * none is.
  */
 export function defaultRepositoryId(
   app: State,

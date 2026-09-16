@@ -1,15 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "@/lib/wails";
 import {
+  addBoard,
   addRepository,
+  addRepositoryToBoard,
   answerPermission,
   answerQuestion,
   approvePR,
   approveStep,
   backToStage,
   browseRepository,
+  cardContext,
   changeRepositoryPath,
+  checkBoardRepository,
+  chooseCloneFolder,
   cleanAndStartStep,
+  cloneRepository,
   closeTask,
   continueStage,
   createTask,
@@ -24,7 +30,13 @@ import {
   openInEditor,
   openPR,
   pause,
+  previewBoard,
+  previewEditBoard,
+  previewRemoveBoard,
+  refreshBoard,
+  refreshCard,
   refreshPR,
+  removeBoard,
   removePending,
   removeRepository,
   resume,
@@ -40,10 +52,16 @@ import {
   setReviewModeDefault,
   setStepReviewMode,
   setTheme,
+  updateBoard,
 } from "@/store/actions";
 import { useAppStore } from "@/store/app-store";
 import { resetAppStore } from "@/test/render";
-import { makeEntry, makeTranscript } from "@/test/wails-mock";
+import {
+  makeBoardPreview,
+  makeBoardRepositoryOption,
+  makeEntry,
+  makeTranscript,
+} from "@/test/wails-mock";
 
 beforeEach(() => {
   resetAppStore();
@@ -106,6 +124,109 @@ describe("scanning, adding and moving a repository", () => {
 
     await expect(addRepository("/home/dev/web")).rejects.toThrow("not a git repository");
     expect(useAppStore.getState().error).toBeNull();
+  });
+});
+
+describe("clone actions", () => {
+  it("clone a repository and answer whether the clone started", async () => {
+    vi.mocked(api.cloneRepository).mockResolvedValueOnce(false);
+
+    expect(await cloneRepository("repo-1")).toBe(false);
+    expect(api.cloneRepository).toHaveBeenCalledWith("repo-1");
+  });
+
+  it("reject a clone that could not start instead of using the banner", async () => {
+    vi.mocked(api.cloneRepository).mockRejectedValueOnce(new Error("Choose a clone folder first."));
+
+    await expect(cloneRepository("repo-1")).rejects.toThrow("Choose a clone folder first.");
+    expect(useAppStore.getState().error).toBeNull();
+  });
+
+  it("report a clone folder that could not be chosen in the banner", async () => {
+    vi.mocked(api.chooseCloneFolder).mockRejectedValueOnce(new Error("no chooser"));
+
+    await chooseCloneFolder();
+
+    expect(api.chooseCloneFolder).toHaveBeenCalledOnce();
+    expect(useAppStore.getState().error).toBe("no chooser");
+  });
+});
+
+// The dialogs and panels of the boards show the refusal where the user is, so
+// these reject instead of filling the banner.
+describe("board actions shown in place", () => {
+  const req = { finalStatuses: ["done"], repositories: [] };
+  const choice = { owner: "dev", name: "api", path: "" };
+
+  it("delegate to the matching binding and answer what it says", async () => {
+    const preview = makeBoardPreview();
+    const option = makeBoardRepositoryOption();
+    vi.mocked(api.previewBoard).mockResolvedValueOnce(preview);
+    vi.mocked(api.previewEditBoard).mockResolvedValueOnce(preview);
+    vi.mocked(api.checkBoardRepository).mockResolvedValueOnce(option);
+
+    expect(await previewBoard("https://github.com/orgs/dev/projects/3")).toBe(preview);
+    expect(await previewEditBoard("board-1")).toBe(preview);
+    expect(await checkBoardRepository("board-1", "dev/web")).toBe(option);
+    await addBoard("https://github.com/orgs/dev/projects/3", req);
+    await updateBoard("board-1", req);
+    await removeBoard("board-1");
+    await refreshCard("board-1", "dev/web#12");
+    await addRepositoryToBoard("board-1", choice);
+
+    expect(api.previewBoard).toHaveBeenCalledWith("https://github.com/orgs/dev/projects/3");
+    expect(api.previewEditBoard).toHaveBeenCalledWith("board-1");
+    expect(api.checkBoardRepository).toHaveBeenCalledWith("board-1", "dev/web");
+    expect(api.addBoard).toHaveBeenCalledWith("https://github.com/orgs/dev/projects/3", req);
+    expect(api.updateBoard).toHaveBeenCalledWith("board-1", req);
+    expect(api.removeBoard).toHaveBeenCalledWith("board-1");
+    expect(api.refreshCard).toHaveBeenCalledWith("board-1", "dev/web#12");
+    expect(api.addRepositoryToBoard).toHaveBeenCalledWith("board-1", choice);
+  });
+
+  it("reject instead of using the banner", async () => {
+    vi.mocked(api.previewBoard).mockRejectedValueOnce(new Error("This board doesn't exist."));
+
+    await expect(previewBoard("https://github.com/orgs/dev/projects/9")).rejects.toThrow(
+      "This board doesn't exist.",
+    );
+    expect(useAppStore.getState().error).toBeNull();
+  });
+});
+
+describe("board actions reported in the banner", () => {
+  it("start a reading of a board", async () => {
+    await refreshBoard("board-1");
+
+    expect(api.refreshBoard).toHaveBeenCalledWith("board-1");
+    expect(useAppStore.getState().error).toBeNull();
+  });
+
+  it("answer what removing a board takes with it", async () => {
+    vi.mocked(api.previewRemoveBoard).mockResolvedValueOnce({ toNoBoard: 2, removed: 1 });
+
+    expect(await previewRemoveBoard("board-1")).toEqual({ toNoBoard: 2, removed: 1 });
+  });
+
+  it("answer null when the removal could not be previewed", async () => {
+    vi.mocked(api.previewRemoveBoard).mockRejectedValueOnce(new Error("board gone"));
+
+    expect(await previewRemoveBoard("board-1")).toBeNull();
+    expect(useAppStore.getState().error).toBe("board gone");
+  });
+
+  it("answer the context of a card", async () => {
+    vi.mocked(api.cardContext).mockResolvedValueOnce("### Card: Add the login screen");
+
+    expect(await cardContext("board-1", "dev/web#12")).toBe("### Card: Add the login screen");
+    expect(api.cardContext).toHaveBeenCalledWith("board-1", "dev/web#12");
+  });
+
+  it("answer an empty context when the card could not be read", async () => {
+    vi.mocked(api.cardContext).mockRejectedValueOnce(new Error("card gone"));
+
+    expect(await cardContext("board-1", "dev/web#12")).toBe("");
+    expect(useAppStore.getState().error).toBe("card gone");
   });
 });
 

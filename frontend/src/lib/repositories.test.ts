@@ -135,6 +135,13 @@ describe("defaultRepositoryId", () => {
     expect(defaultRepositoryId(app, null, "repo-2")).toBe("repo-2");
   });
 
+  it("skips a repository registered without a clone", () => {
+    const uncloned = makeRepository({ cloned: false, path: "" });
+    const app = makeState({ repositories: [uncloned, api], repositoryFilter: "repo-1" });
+
+    expect(defaultRepositoryId(app, null, "repo-2")).toBe("repo-2");
+  });
+
   it("is empty with no repository the dialog can use", () => {
     const app = makeState({ repositories: [makeRepository({ missing: true })] });
 

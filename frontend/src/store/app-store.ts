@@ -1,9 +1,12 @@
 import { create } from "zustand";
 import { useShallow } from "zustand/react/shallow";
+import { findBoard } from "@/lib/boards";
 import { tasksInFilter } from "@/lib/repositories";
 import { prSituation, reviewerSituation, stageSituation, stepSituation } from "@/lib/situations";
+import { readStored, SIDEBAR_COLLAPSED_KEY, writeStored } from "@/lib/ui-storage";
 import type {
   ArchivedTask,
+  Board,
   Leftover,
   Migration,
   Place,
@@ -42,6 +45,17 @@ export interface PromptEdit {
   text: string;
 }
 
+/** CardRef names a card of a board: the board and the key of its issue. */
+export interface CardRef {
+  boardId: string;
+  key: string;
+}
+
+/** PendingStart is a card whose Start task waits for the clone of its repository. */
+export interface PendingStart extends CardRef {
+  repositoryId: string;
+}
+
 export interface AppStore {
   app: State | null;
   error: string | null;
@@ -55,6 +69,14 @@ export interface AppStore {
   prDrafts: Record<string, PrDraft>;
   /** newTaskOpen is the creation dialog being open. */
   newTaskOpen: boolean;
+  /** newTaskCard is the card the creation dialog opens for; null for a task without one. */
+  newTaskCard: CardRef | null;
+  /** pendingStart is a card waiting for its clone to open the creation dialog. */
+  pendingStart: PendingStart | null;
+  /** openBoardId is the board view on screen, when one is. */
+  openBoardId: string | null;
+  /** sidebarCollapsed are the ids of the sidebar nodes the user collapsed; kept across runs. */
+  sidebarCollapsed: ReadonlySet<string>;
   /**
    * lastRepositoryId is the repository of the last task created in this run of
    * the app, which preselects the dialog when nothing before it does.
@@ -87,8 +109,14 @@ export interface AppStore {
 
   openTask: (id: string) => void;
   closeTask: () => void;
-  openNewTask: () => void;
+  /** openNewTask opens the creation dialog, for a card when one is given. */
+  openNewTask: (card?: CardRef) => void;
   closeNewTask: () => void;
+  setPendingStart: (pending: PendingStart | null) => void;
+  openBoard: (id: string) => void;
+  toggleSidebarNode: (id: string) => void;
+  /** expandSidebarNodes opens the given nodes of the sidebar, leaving the others as they are. */
+  expandSidebarNodes: (ids: readonly string[]) => void;
   /** rememberRepository keeps the repository a task was just created in. */
   rememberRepository: (id: string) => void;
   beginTranscript: (taskId: string, stage: string) => void;
@@ -195,6 +223,16 @@ function withStepTab(
   }
 }
 
+function isStringList(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string");
+}
+
+// A new set every time the collapsed nodes change, kept for the next run.
+function storeCollapsed(collapsed: Set<string>): Set<string> {
+  writeStored(SIDEBAR_COLLAPSED_KEY, [...collapsed]);
+  return collapsed;
+}
+
 // What the app shows of the tasks, as it stands with none of them on screen.
 function initialTaskUi(): Pick<
   AppStore,
@@ -204,6 +242,9 @@ function initialTaskUi(): Pick<
   | "openStepTab"
   | "prDrafts"
   | "newTaskOpen"
+  | "newTaskCard"
+  | "pendingStart"
+  | "openBoardId"
   | "lastRepositoryId"
   | "historyOpen"
   | "openArchivedId"
@@ -219,6 +260,9 @@ function initialTaskUi(): Pick<
     openStepTab: {},
     prDrafts: {},
     newTaskOpen: false,
+    newTaskCard: null,
+    pendingStart: null,
+    openBoardId: null,
     lastRepositoryId: null,
     historyOpen: false,
     openArchivedId: null,
@@ -249,13 +293,14 @@ export const useAppStore = create<AppStore>()((set, get) => {
     settingsSection: "defaults",
     promptEdit: null,
     pendingLeave: null,
+    sidebarCollapsed: new Set(readStored(SIDEBAR_COLLAPSED_KEY, [], isStringList)),
     ...initialTaskUi(),
 
     applyState: (next) =>
       set((state) => {
-        // With no repository registered the welcome screen takes the place of
-        // everything the app shows of the tasks.
-        if ((next.repositories ?? []).length === 0) {
+        // With no repository and no board registered the welcome screen takes
+        // the place of everything the app shows of the tasks.
+        if ((next.repositories ?? []).length === 0 && (next.boards ?? []).length === 0) {
           return {
             app: next,
             ...initialTaskUi(),
@@ -282,15 +327,21 @@ export const useAppStore = create<AppStore>()((set, get) => {
           !(next.repositories ?? []).some((repository) => repository.id === state.lastRepositoryId)
             ? null
             : state.lastRepositoryId;
+        // A board that is gone takes its view off the screen.
+        const openBoardId =
+          state.openBoardId !== null && findBoard(next, state.openBoardId) === null
+            ? null
+            : state.openBoardId;
         const openTaskId = state.openTaskId;
         if (openTaskId === null || findTask(next, openTaskId) !== null) {
-          return { app: next, archivedNotice, openArchivedId, lastRepositoryId };
+          return { app: next, archivedNotice, openArchivedId, lastRepositoryId, openBoardId };
         }
         return {
           app: next,
           archivedNotice,
           openArchivedId,
           lastRepositoryId,
+          openBoardId,
           openTaskId: null,
           transcripts: withoutTaskTranscripts(state.transcripts, openTaskId),
         };
@@ -300,14 +351,55 @@ export const useAppStore = create<AppStore>()((set, get) => {
 
     openTask: (id) =>
       leave(() =>
-        set({ openTaskId: id, historyOpen: false, openArchivedId: null, settingsOpen: false }),
+        set({
+          openTaskId: id,
+          historyOpen: false,
+          openArchivedId: null,
+          settingsOpen: false,
+          openBoardId: null,
+        }),
       ),
 
     closeTask: () => set({ openTaskId: null }),
 
-    openNewTask: () => set({ newTaskOpen: true }),
+    openNewTask: (card) => set({ newTaskOpen: true, newTaskCard: card ?? null }),
 
-    closeNewTask: () => set({ newTaskOpen: false }),
+    closeNewTask: () => set({ newTaskOpen: false, newTaskCard: null }),
+
+    setPendingStart: (pending) => set({ pendingStart: pending }),
+
+    // A board view is a place of its own, like the history.
+    openBoard: (id) =>
+      leave(() =>
+        set({
+          openBoardId: id,
+          openTaskId: null,
+          openArchivedId: null,
+          historyOpen: false,
+          settingsOpen: false,
+        }),
+      ),
+
+    toggleSidebarNode: (id) =>
+      set((state) => {
+        const collapsed = new Set(state.sidebarCollapsed);
+        if (!collapsed.delete(id)) {
+          collapsed.add(id);
+        }
+        return { sidebarCollapsed: storeCollapsed(collapsed) };
+      }),
+
+    expandSidebarNodes: (ids) =>
+      set((state) => {
+        if (!ids.some((id) => state.sidebarCollapsed.has(id))) {
+          return {};
+        }
+        const collapsed = new Set(state.sidebarCollapsed);
+        for (const id of ids) {
+          collapsed.delete(id);
+        }
+        return { sidebarCollapsed: storeCollapsed(collapsed) };
+      }),
 
     rememberRepository: (id) => set({ lastRepositoryId: id }),
 
@@ -385,6 +477,7 @@ export const useAppStore = create<AppStore>()((set, get) => {
           openArchivedId: null,
           newTaskOpen: false,
           settingsOpen: false,
+          openBoardId: null,
         }),
       ),
 
@@ -392,7 +485,13 @@ export const useAppStore = create<AppStore>()((set, get) => {
 
     openArchived: (id) =>
       leave(() =>
-        set({ openArchivedId: id, historyOpen: true, openTaskId: null, settingsOpen: false }),
+        set({
+          openArchivedId: id,
+          historyOpen: true,
+          openTaskId: null,
+          settingsOpen: false,
+          openBoardId: null,
+        }),
       ),
 
     closeArchived: () => set({ openArchivedId: null }),
@@ -431,6 +530,7 @@ export const useAppStore = create<AppStore>()((set, get) => {
           openArchivedId: null,
           newTaskOpen: false,
           settingsOpen: false,
+          openBoardId: null,
           openStepTab: withStepTab(state.openStepTab, taskId, place),
         })),
       );
@@ -445,6 +545,7 @@ export const useAppStore = create<AppStore>()((set, get) => {
         historyOpen: false,
         openArchivedId: null,
         newTaskOpen: false,
+        openBoardId: null,
       }),
 
     closeSettings: () => leave(() => set({ settingsOpen: false })),
@@ -475,6 +576,27 @@ export const useAppStore = create<AppStore>()((set, get) => {
 const NO_TASKS: readonly TaskSummary[] = [];
 const NO_HISTORY: readonly ArchivedTask[] = [];
 const NO_REPOSITORIES: readonly Repository[] = [];
+const NO_BOARDS: readonly Board[] = [];
+
+/** useBoards is every registered board, by title. */
+export function useBoards(): readonly Board[] {
+  return useAppStore((state) => state.app?.boards ?? NO_BOARDS);
+}
+
+/** useBoard is a registered board by id, null when none is. */
+export function useBoard(id: string): Board | null {
+  return useAppStore((state) => findBoard(state.app, id));
+}
+
+/** useOpenBoardId is the board whose view is on screen, null when none is. */
+export function useOpenBoardId(): string | null {
+  return useAppStore((state) => state.openBoardId);
+}
+
+/** useSidebarCollapsed is the ids of the sidebar nodes the user collapsed. */
+export function useSidebarCollapsed(): ReadonlySet<string> {
+  return useAppStore((state) => state.sidebarCollapsed);
+}
 
 /** useRepositories is every registered repository, by owner/name. */
 export function useRepositories(): readonly Repository[] {
