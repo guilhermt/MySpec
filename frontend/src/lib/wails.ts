@@ -1,13 +1,29 @@
 import * as AttentionService from "@bindings/attentionservice";
+import * as BoardService from "@bindings/boardservice";
 import type {
   ActionEntry,
   ArchivedPR,
   ArchivedStep,
   ArchivedTask,
   AssistantEntry,
+  Board,
+  BoardCard,
+  BoardFailure,
+  BoardPreview,
+  BoardRemoval,
+  BoardRepositoryChoice,
+  BoardRepositoryOption,
+  BoardStatus,
   BranchPreview,
+  CardAssignee,
+  CardDependency,
+  CardField,
+  CardIssue,
+  CardPullRequest,
+  CardRelated,
   CloseResult,
   CloseStep,
+  CreateTaskCard,
   CreateTaskRequest,
   DeletePreview,
   DeleteResult,
@@ -34,6 +50,7 @@ import type {
   RepositoryCandidate,
   Review,
   ReviewFile,
+  SaveBoardRequest,
   Situation,
   SituationOpen,
   SituationStarted,
@@ -43,6 +60,7 @@ import type {
   StepBlock,
   StepReport,
   StepReviewer,
+  TaskCard,
   TaskStageModel,
   TaskSummary,
   Transcript,
@@ -62,9 +80,24 @@ export type {
   ArchivedStep,
   ArchivedTask,
   AssistantEntry,
+  Board,
+  BoardCard,
+  BoardFailure,
+  BoardPreview,
+  BoardRemoval,
+  BoardRepositoryChoice,
+  BoardRepositoryOption,
+  BoardStatus,
   BranchPreview,
+  CardAssignee,
+  CardDependency,
+  CardField,
+  CardIssue,
+  CardPullRequest,
+  CardRelated,
   CloseResult,
   CloseStep,
+  CreateTaskCard,
   CreateTaskRequest,
   DeletePreview,
   DeleteResult,
@@ -91,6 +124,7 @@ export type {
   RepositoryCandidate,
   Review,
   ReviewFile,
+  SaveBoardRequest,
   Situation,
   SituationOpen,
   SituationStarted,
@@ -100,6 +134,7 @@ export type {
   StepBlock,
   StepReport,
   StepReviewer,
+  TaskCard,
   TaskStageModel,
   TaskSummary,
   Transcript,
@@ -278,6 +313,34 @@ export type ReviewFallback = "" | "taken_over" | "rounds_exhausted" | "commit_fa
 
 /** MigrationCaseKind is what kept a task from being carried over by the migration. */
 export type MigrationCaseKind = "root_task" | "no_origin" | "name_conflict";
+
+/** CardAction is what Start task does for a card. */
+export type CardAction =
+  | "start"
+  | "clone"
+  | "clone_missing"
+  | "add_to_board"
+  | "other_board"
+  | "has_task"
+  | "closed";
+
+/** BoardFailureReason is why the last reading of a board failed. */
+export type BoardFailureReason =
+  | "gh_missing"
+  | "gh_unauthenticated"
+  | "missing_scope"
+  | "not_found"
+  | "rate_limited"
+  | "failed";
+
+/** RepositoryLinkKind is how a repository of a board ties to the app. */
+export type RepositoryLinkKind = "registered" | "clone" | "uncloned" | "other_board";
+
+/** IssueState is whether an issue is open or closed. */
+export type IssueState = "open" | "closed";
+
+/** PullRequestState is what GitHub says of a pull request linked to an issue. */
+export type PullRequestState = "open" | "merged" | "closed";
 
 /** sessionKey identifies one conversation: a task and the stage it belongs to. */
 export function sessionKey(taskId: string, stage: string): string {
@@ -670,6 +733,68 @@ export function asMigrationCaseKind(value: string): MigrationCaseKind {
   }
 }
 
+export function asCardAction(value: string): CardAction {
+  switch (value) {
+    case "start":
+    case "clone":
+    case "clone_missing":
+    case "add_to_board":
+    case "other_board":
+    case "has_task":
+    case "closed":
+      return value;
+    default:
+      return "add_to_board";
+  }
+}
+
+export function asBoardFailureReason(value: string): BoardFailureReason {
+  switch (value) {
+    case "gh_missing":
+    case "gh_unauthenticated":
+    case "missing_scope":
+    case "not_found":
+    case "rate_limited":
+    case "failed":
+      return value;
+    default:
+      return "failed";
+  }
+}
+
+export function asRepositoryLinkKind(value: string): RepositoryLinkKind {
+  switch (value) {
+    case "registered":
+    case "clone":
+    case "uncloned":
+    case "other_board":
+      return value;
+    default:
+      return "uncloned";
+  }
+}
+
+export function asIssueState(value: string): IssueState {
+  switch (value) {
+    case "open":
+    case "closed":
+      return value;
+    default:
+      return "open";
+  }
+}
+
+export function asPullRequestState(value: string): PullRequestState {
+  switch (value) {
+    case "open":
+    case "merged":
+    case "closed":
+      return value;
+    default:
+      return "open";
+  }
+}
+
 export const api = {
   getState: (): Promise<State> => StateService.GetState(),
   scanRepositories: async (): Promise<RepositoryCandidate[]> =>
@@ -679,6 +804,25 @@ export const api = {
   changeRepositoryPath: (id: string): Promise<void> => RepositoryService.ChangeRepositoryPath(id),
   removeRepository: (id: string): Promise<void> => RepositoryService.RemoveRepository(id),
   setRepositoryFilter: (id: string): Promise<void> => RepositoryService.SetRepositoryFilter(id),
+  cloneRepository: (id: string): Promise<boolean> => RepositoryService.CloneRepository(id),
+  chooseCloneFolder: (): Promise<void> => RepositoryService.ChooseCloneFolder(),
+
+  previewBoard: (url: string): Promise<BoardPreview> => BoardService.PreviewBoard(url),
+  previewEditBoard: (id: string): Promise<BoardPreview> => BoardService.PreviewEditBoard(id),
+  checkBoardRepository: (boardId: string, fullName: string): Promise<BoardRepositoryOption> =>
+    BoardService.CheckBoardRepository(boardId, fullName),
+  addBoard: (url: string, req: SaveBoardRequest): Promise<void> => BoardService.AddBoard(url, req),
+  updateBoard: (id: string, req: SaveBoardRequest): Promise<void> =>
+    BoardService.UpdateBoard(id, req),
+  previewRemoveBoard: (id: string): Promise<BoardRemoval> => BoardService.PreviewRemoveBoard(id),
+  removeBoard: (id: string): Promise<void> => BoardService.RemoveBoard(id),
+  refreshBoard: (id: string): Promise<void> => BoardService.RefreshBoard(id),
+  refreshCard: (boardId: string, key: string): Promise<void> =>
+    BoardService.RefreshCard(boardId, key),
+  cardContext: (boardId: string, key: string): Promise<string> =>
+    BoardService.CardContext(boardId, key),
+  addRepositoryToBoard: (boardId: string, choice: BoardRepositoryChoice): Promise<void> =>
+    BoardService.AddRepositoryToBoard(boardId, choice),
   setTheme: (preference: ThemePreference): Promise<void> => SettingsService.SetTheme(preference),
   setModelDefault: (stage: ModelStage, model: string, effort: string): Promise<void> =>
     SettingsService.SetModelDefault(stage, model, effort),

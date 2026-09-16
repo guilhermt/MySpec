@@ -15,9 +15,11 @@ import (
 
 	"github.com/guilhermt/myspec/internal/attention"
 	"github.com/guilhermt/myspec/internal/bindings"
+	"github.com/guilhermt/myspec/internal/board"
 	"github.com/guilhermt/myspec/internal/claude"
 	"github.com/guilhermt/myspec/internal/claude/claudetest"
 	"github.com/guilhermt/myspec/internal/flow"
+	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/git/gittest"
 	"github.com/guilhermt/myspec/internal/models"
@@ -189,6 +191,28 @@ func (p *fakePicker) asked() (title, startIn string, calls int) {
 	return p.title, p.startIn, p.calls
 }
 
+// fakeGitHub stands in for gh api graphql: every query answers the same.
+type fakeGitHub struct {
+	mu   sync.Mutex
+	resp gh.Response
+	err  error
+}
+
+func (g *fakeGitHub) GraphQL(context.Context, string, gh.Vars) (gh.Response, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	return g.resp, g.err
+}
+
+// fail makes every query fail with err from now on.
+func (g *fakeGitHub) fail(err error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	g.resp, g.err = gh.Response{}, err
+}
+
 // fixture wires the services the way internal/app does, over an in-memory
 // database and a folder picker the test answers for.
 type fixture struct {
@@ -196,7 +220,10 @@ type fixture struct {
 	repoService  *bindings.RepositoryService
 	settings     *bindings.SettingsService
 	tasks        *bindings.TaskService
+	boardService *bindings.BoardService
 	repositories *repository.Service
+	boards       *board.Service
+	github       *fakeGitHub
 	theme        *theme.Service
 	models       *models.Service
 	reviewModes  *reviewmode.Service
@@ -234,6 +261,7 @@ func newFixture(t *testing.T) *fixture {
 	f := &fixture{
 		store:       st,
 		picker:      &fakePicker{},
+		github:      &fakeGitHub{},
 		scanRoot:    t.TempDir(),
 		editor:      &fakeEditor{},
 		logs:        logs,
@@ -293,6 +321,15 @@ func newFixture(t *testing.T) *fixture {
 	}
 	t.Cleanup(func() { _ = f.taskSvc.Close() })
 
+	f.boards = board.New(board.Deps{
+		Store:        st.Boards,
+		GitHub:       f.github,
+		Repositories: f.repositories,
+		Identify:     f.identify,
+		Counts:       func(id string) (int, int) { return f.taskSvc.Counts(id) },
+		Log:          log,
+	})
+
 	f.worktrees = worktree.New(worktree.Deps{
 		Git:     git.New(git.Deps{Log: log, Env: gittest.Env(t)}),
 		Store:   st.Worktrees,
@@ -332,8 +369,9 @@ func newFixture(t *testing.T) *fixture {
 	f.repoService = bindings.NewRepositoryService(f.repositories, f.picker, log)
 	f.settings = bindings.NewSettingsService(f.theme, f.models, f.reviewModes, f.dataDir, log)
 	f.tasks = bindings.NewTaskService(
-		f.taskSvc, f.sessions, f.flow, f.models, f.reviewModes, f.repositories, f.editor.open, log,
+		f.taskSvc, f.sessions, f.flow, f.models, f.reviewModes, f.repositories, f.boards, f.editor.open, log,
 	)
+	f.boardService = bindings.NewBoardService(f.boards, f.repositories, log)
 	return f
 }
 
@@ -521,6 +559,9 @@ func (f *fixture) load(t *testing.T) {
 	if err := f.repositories.Sync(t.Context()); err != nil {
 		t.Fatalf("repositories.Sync() = %v, want nil", err)
 	}
+	if err := f.boards.Sync(t.Context()); err != nil {
+		t.Fatalf("boards.Sync() = %v, want nil", err)
+	}
 	if err := f.taskSvc.Sync(t.Context()); err != nil {
 		t.Fatalf("tasks.Sync() = %v, want nil", err)
 	}
@@ -617,7 +658,7 @@ func (f *fixture) taskArtifacts(id string) task.Artifacts {
 func (f *fixture) snapshot() bindings.State {
 	return bindings.State{
 		Repositories: bindings.FromRepositories(
-			f.repositories.List(), f.repositories.Missing, f.taskSvc.Counts,
+			f.repositories.List(), f.repositories.Missing, f.taskSvc.Counts, f.repositories.Cloning,
 		),
 		RepositoryFilter:  f.repositories.Filter(),
 		Theme:             string(f.theme.Preference()),
@@ -631,6 +672,11 @@ func (f *fixture) snapshot() bindings.State {
 		History: bindings.FromArchived(
 			f.taskSvc.ListArchived(), f.taskArtifacts, f.taskSvc.PRRun, f.repositories.Get,
 		),
+		Boards: bindings.FromBoards(
+			f.boards.List(), f.boards.Stored, f.boards.Reading,
+			f.repositories.List(), f.repositories.Missing, f.taskSvc.CardTasks(),
+		),
+		CloneFolder: f.repositories.CloneFolder(),
 	}
 }
 
@@ -651,4 +697,47 @@ func (f *fixture) logged(t *testing.T, msg string) bool {
 		}
 	}
 	return false
+}
+
+// testBoardID is the id of the board registerBoard registers.
+const testBoardID = "board-1"
+
+// registerBoard registers the board acme/3, Roadmap, managing the repository of
+// the fixture when managed is set, with a reading of cards, and loads it.
+func (f *fixture) registerBoard(t *testing.T, managed bool, cards ...board.Card) {
+	t.Helper()
+
+	var links []board.Link
+	if managed {
+		links = []board.Link{{RepositoryID: testRepoID}}
+	}
+	b := board.Board{
+		ID: testBoardID, Owner: "acme", OwnerType: board.OwnerOrganization, Number: 3,
+		Title: "Roadmap", URL: "https://github.com/orgs/acme/projects/3", FinalStatuses: []string{},
+	}
+	if err := f.store.Boards.InsertBoard(t.Context(), b, links); err != nil {
+		t.Fatalf("InsertBoard() = %v, want nil", err)
+	}
+	reading := board.Reading{Title: "Roadmap", Viewer: "dev", Cards: cards}
+	if err := f.store.Boards.SaveReading(t.Context(), testBoardID, "Roadmap", reading, time.Now()); err != nil {
+		t.Fatalf("SaveReading() = %v, want nil", err)
+	}
+	f.load(t)
+}
+
+// webCard is the open card dev/web#number, with an epic.
+func webCard(number int) board.Card {
+	return board.Card{
+		Issue: board.Issue{
+			Owner: "dev", Name: "web", Number: number, Title: "Add the login screen",
+			URL: "https://github.com/dev/web/issues/12", State: task.IssueOpen,
+		},
+		Body:   "Email and password.",
+		Status: "Todo",
+		Epic: &board.Epic{Issue: board.Issue{
+			Owner: "dev", Name: "web", Number: 1, Title: "Auth", URL: "https://github.com/dev/web/issues/1",
+			State: task.IssueOpen,
+		}},
+		ReadAt: time.Date(2026, time.September, 16, 12, 0, 0, 0, time.UTC),
+	}
 }

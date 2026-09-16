@@ -11,6 +11,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 
 	"github.com/guilhermt/myspec/internal/bindings"
+	"github.com/guilhermt/myspec/internal/board"
 	"github.com/guilhermt/myspec/internal/git/gittest"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
@@ -1351,4 +1352,103 @@ func hasAppMessage(entries []bindings.Entry, file string) bool {
 		}
 	}
 	return false
+}
+
+// cardTask is the request for a task created from the card dev/web#number.
+func cardTask(name string, number int) bindings.CreateTaskRequest {
+	return bindings.CreateTaskRequest{
+		Name:           name,
+		InitialContext: "Keep the form short.",
+		Card:           &bindings.CreateTaskCard{BoardID: testBoardID, Key: fmt.Sprintf("dev/web#%d", number)},
+	}
+}
+
+func TestCreateTaskFromACardKeepsTheCardAndTheAssembledContext(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.register(t, t.TempDir())
+	card := webCard(12)
+	f.registerBoard(t, true, card)
+
+	id, err := f.tasks.CreateTask(cardTask("12-add-the-login-screen", 12))
+	if err != nil {
+		t.Fatalf("CreateTask() = %v, want nil", err)
+	}
+	f.waitForStatus(t, id, "waiting")
+
+	created, ok := f.taskSvc.Get(id)
+	if !ok {
+		t.Fatalf("task %s was not created", id)
+	}
+	if want := board.Context(card, "Keep the form short."); created.InitialContext != want {
+		t.Errorf("initial context = %q, want %q", created.InitialContext, want)
+	}
+	wantCard := &bindings.TaskCard{
+		BoardID: testBoardID, Key: "dev/web#12", Repository: "dev/web", Number: 12,
+		Title: "Add the login screen", URL: "https://github.com/dev/web/issues/12", Status: "Todo", State: "open",
+		Epic: &bindings.CardIssue{
+			Key: "dev/web#1", Repository: "dev/web", Number: 1, Title: "Auth", URL: "https://github.com/dev/web/issues/1",
+		},
+	}
+	got := f.taskOf(t, id)
+	if diff := cmp.Diff(wantCard, got.Card); diff != "" {
+		t.Errorf("card mismatch (-want +got):\n%s", diff)
+	}
+	if got.RepositoryID != testRepoID {
+		t.Errorf("repositoryId = %q, want %q", got.RepositoryID, testRepoID)
+	}
+	if boards := f.state.GetState().Boards; len(boards) != 1 || boards[0].Cards[0].Action != "has_task" {
+		t.Errorf("boards = %+v, want the card with its active task", boards)
+	}
+}
+
+func TestCreateTaskRefusesACardTheBoardCannotStart(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		managed bool
+		number  int
+		want    string
+	}{
+		{"a repository the board does not manage", false, 12, "dev/web isn't managed by this board."},
+		{"a card outside the reading", true, 99, "This card isn't in the last reading of the board."},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			f := newFixture(t)
+			f.register(t, t.TempDir())
+			f.registerBoard(t, tt.managed, webCard(12))
+
+			_, err := f.tasks.CreateTask(cardTask("12-add-the-login-screen", tt.number))
+			if err == nil || err.Error() != tt.want {
+				t.Errorf("CreateTask() = %v, want %q", err, tt.want)
+			}
+			if tasks := f.taskSvc.List(); len(tasks) != 0 {
+				t.Errorf("tasks = %+v, want none", tasks)
+			}
+		})
+	}
+}
+
+func TestCreateTaskRefusesASecondActiveTaskForTheCard(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.register(t, t.TempDir())
+	f.registerBoard(t, true, webCard(12))
+
+	id, err := f.tasks.CreateTask(cardTask("first", 12))
+	if err != nil {
+		t.Fatalf("CreateTask(first) = %v, want nil", err)
+	}
+	f.waitForStatus(t, id, "waiting")
+
+	_, err = f.tasks.CreateTask(cardTask("second", 12))
+	if want := "Card #12 already has an active task: first."; err == nil || err.Error() != want {
+		t.Errorf("CreateTask(second) = %v, want %q", err, want)
+	}
 }

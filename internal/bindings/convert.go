@@ -1,9 +1,12 @@
 package bindings
 
 import (
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/guilhermt/myspec/internal/attention"
+	"github.com/guilhermt/myspec/internal/board"
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
@@ -16,25 +19,31 @@ import (
 )
 
 // FromRepositories converts the registered repositories, with what the last
-// check found about each clone and how many tasks it holds. It always returns a
-// slice so the frontend never sees null.
+// check found about each clone, whether a clone of it runs and how many tasks
+// it holds. It always returns a slice so the frontend never sees null.
 func FromRepositories(
 	list []repository.Repository,
 	missing func(id string) bool,
 	counts func(id string) (int, int),
+	cloning func(id string) (bool, string),
 ) []Repository {
 	converted := make([]Repository, len(list))
 	for i, repo := range list {
 		active, archived := counts(repo.ID)
+		running, cloneError := cloning(repo.ID)
 		converted[i] = Repository{
 			ID:            repo.ID,
 			Owner:         repo.Owner,
 			Name:          repo.Name,
 			FullName:      repo.FullName(),
 			Path:          repo.Path,
-			Missing:       missing(repo.ID),
+			Missing:       repo.Cloned() && missing(repo.ID),
 			ActiveTasks:   active,
 			ArchivedTasks: archived,
+			Cloned:        repo.Cloned(),
+			BoardID:       repo.BoardID,
+			Cloning:       running,
+			CloneError:    cloneError,
 		}
 	}
 	return converted
@@ -81,6 +90,7 @@ func RefusedState(refused *upgrade.RefusedError) State {
 	return State{
 		Migration:     FromMigration(refused),
 		Repositories:  []Repository{},
+		Boards:        []Board{},
 		Theme:         string(theme.System),
 		ModelDefaults: []StageModel{},
 		Tasks:         []TaskSummary{},
@@ -167,6 +177,7 @@ func FromTasks(
 			Name:               t.Name,
 			RepositoryID:       t.RepositoryID,
 			Repository:         fullName,
+			Card:               fromTaskCard(t.Card),
 			Mode:               string(t.Mode),
 			Stage:              string(t.Stage),
 			Revisiting:         t.Revisiting,
@@ -313,6 +324,7 @@ func FromArchived(
 			Name:            t.Name,
 			RepositoryID:    t.RepositoryID,
 			Repository:      fullName,
+			Card:            fromTaskCard(t.Card),
 			Mode:            string(t.Mode),
 			HasPRD:          a.PRD,
 			HasTechSpec:     a.TechSpec,
@@ -700,4 +712,326 @@ func fromQuestion(q *session.QuestionEntry) *QuestionEntry {
 		Answers:   q.Answers,
 		Status:    string(q.Status),
 	}
+}
+
+// What Start task does for a card, as BoardCard.Action names it.
+const (
+	actionStart        = "start"
+	actionClone        = "clone"
+	actionCloneMissing = "clone_missing"
+	actionAddToBoard   = "add_to_board"
+	actionOtherBoard   = "other_board"
+	actionHasTask      = "has_task"
+	actionClosed       = "closed"
+)
+
+// FromBoards converts the registered boards with their stored readings, the
+// repositories each one manages and, for every card, the tasks created from it
+// and what Start task does for it. The slices are always allocated so the
+// frontend never sees null.
+func FromBoards(
+	boards []board.Board,
+	stored func(id string) board.Stored,
+	reading func(id string) bool,
+	repositories []repository.Repository,
+	missing func(id string) bool,
+	cardTasks map[string]task.CardTaskIDs,
+) []Board {
+	boardsByID := make(map[string]board.Board, len(boards))
+	for _, b := range boards {
+		boardsByID[b.ID] = b
+	}
+	repositoriesByKey := make(map[string]repository.Repository, len(repositories))
+	for _, repo := range repositories {
+		repositoriesByKey[strings.ToLower(repo.FullName())] = repo
+	}
+
+	converted := make([]Board, len(boards))
+	for i, b := range boards {
+		s := stored(b.ID)
+		repositoryIDs := []string{}
+		for _, repo := range repositories {
+			if repo.BoardID == b.ID {
+				repositoryIDs = append(repositoryIDs, repo.ID)
+			}
+		}
+		converted[i] = Board{
+			ID:            b.ID,
+			Owner:         b.Owner,
+			OwnerType:     string(b.OwnerType),
+			Number:        b.Number,
+			Title:         b.Title,
+			URL:           b.URL,
+			Statuses:      []BoardStatus{},
+			RepositoryIDs: repositoryIDs,
+			Reading:       reading(b.ID),
+			Failure:       fromBoardFailure(s.Failure, s.FailedAt),
+			Cards:         []BoardCard{},
+		}
+		if s.Reading == nil {
+			continue
+		}
+		converted[i].ReadAt = s.ReadAt.Format(time.RFC3339)
+		converted[i].HasStatus = s.Reading.HasStatus
+		converted[i].Viewer = s.Reading.Viewer
+		converted[i].Statuses = fromStatusOptions(s.Reading.Statuses, b.FinalStatuses)
+		cards := make([]BoardCard, len(s.Reading.Cards))
+		for j, card := range s.Reading.Cards {
+			cards[j] = fromBoardCard(b, card, repositoriesByKey, boardsByID, missing, cardTasks)
+		}
+		converted[i].Cards = cards
+	}
+	return converted
+}
+
+// fromBoardFailure converts why the last reading of a board failed, keeping nil
+// for one that did not.
+func fromBoardFailure(f *board.Failure, failedAt time.Time) *BoardFailure {
+	if f == nil {
+		return nil
+	}
+	return &BoardFailure{Reason: string(f.Reason), Message: f.Message(), FailedAt: failedAt.Format(time.RFC3339)}
+}
+
+// fromStatusOptions converts the options of the Status field of a board, final
+// by the ids in finals.
+func fromStatusOptions(options []board.Option, finals []string) []BoardStatus {
+	converted := make([]BoardStatus, len(options))
+	for i, o := range options {
+		converted[i] = BoardStatus{ID: o.ID, Name: o.Name, Final: slices.Contains(finals, o.ID)}
+	}
+	return converted
+}
+
+// fromBoardCard converts one card of the board b, with its registered
+// repository, the tasks created from it and what Start task does for it.
+func fromBoardCard(
+	b board.Board,
+	card board.Card,
+	repositoriesByKey map[string]repository.Repository,
+	boardsByID map[string]board.Board,
+	missing func(id string) bool,
+	cardTasks map[string]task.CardTaskIDs,
+) BoardCard {
+	ids := cardTasks[card.Key()]
+	repo, registered := repositoriesByKey[strings.ToLower(card.FullName())]
+	converted := BoardCard{
+		CardIssue:      fromCardIssue(card.Issue),
+		Body:           card.Body,
+		StatusID:       card.StatusID,
+		Status:         card.Status,
+		Final:          card.State == task.IssueClosed || slices.Contains(b.FinalStatuses, card.StatusID),
+		Assignees:      fromAssignees(card.Assignees),
+		Fields:         fromFields(card.Fields),
+		PullRequests:   fromCardPullRequests(card.PullRequests),
+		Siblings:       fromRelated(card.Siblings),
+		Dependencies:   fromDependencies(card.Dependencies),
+		ReadAt:         card.ReadAt.Format(time.RFC3339),
+		SuggestedName:  board.SuggestName(card.Number, card.Title),
+		ActiveTaskID:   ids.Active,
+		ArchivedTaskID: ids.Archived,
+	}
+	if card.Epic != nil {
+		epic := fromCardIssue(card.Epic.Issue)
+		converted.Epic, converted.EpicBody = &epic, card.Epic.Body
+	}
+	if registered {
+		converted.RepositoryID = repo.ID
+	}
+	converted.Action, converted.OtherBoard = cardAction(
+		b, card, ids.Active, repo, registered, registered && missing(repo.ID), boardsByID,
+	)
+	return converted
+}
+
+// cardAction is what Start task does for a card of the board b, and the title
+// of the board its repository belongs to when that is another one. The first
+// that applies wins: a task of the card, the issue closed, the repository out
+// of the board, no clone, the clone missing.
+func cardAction(
+	b board.Board,
+	card board.Card,
+	activeTaskID string,
+	repo repository.Repository,
+	registered, missing bool,
+	boardsByID map[string]board.Board,
+) (action, otherBoard string) {
+	switch {
+	case activeTaskID != "":
+		return actionHasTask, ""
+	case card.State == task.IssueClosed:
+		return actionClosed, ""
+	case !registered || repo.BoardID == "":
+		return actionAddToBoard, ""
+	case repo.BoardID != b.ID:
+		return actionOtherBoard, boardsByID[repo.BoardID].Title
+	case !repo.Cloned():
+		return actionClone, ""
+	case missing:
+		return actionCloneMissing, ""
+	default:
+		return actionStart, ""
+	}
+}
+
+// fromCardIssue converts an issue a board shows.
+func fromCardIssue(i board.Issue) CardIssue {
+	return CardIssue{
+		Key:        i.Key(),
+		Repository: i.FullName(),
+		Number:     i.Number,
+		Title:      i.Title,
+		URL:        i.URL,
+		State:      string(i.State),
+	}
+}
+
+// fromAssignees converts the assignees of a card, always returning a slice so
+// the frontend never sees null.
+func fromAssignees(assignees []board.Assignee) []CardAssignee {
+	converted := make([]CardAssignee, len(assignees))
+	for i, a := range assignees {
+		converted[i] = CardAssignee{Login: a.Login, AvatarURL: a.AvatarURL}
+	}
+	return converted
+}
+
+// fromFields converts the board fields of a card, always returning a slice so
+// the frontend never sees null.
+func fromFields(fields []board.Field) []CardField {
+	converted := make([]CardField, len(fields))
+	for i, f := range fields {
+		converted[i] = CardField{Name: f.Name, Value: f.Value}
+	}
+	return converted
+}
+
+// fromCardPullRequests converts the pull requests linked to an issue, always
+// returning a slice so the frontend never sees null.
+func fromCardPullRequests(prs []board.PullRequest) []CardPullRequest {
+	converted := make([]CardPullRequest, len(prs))
+	for i, pr := range prs {
+		converted[i] = CardPullRequest{
+			Repository: pr.Owner + "/" + pr.Name,
+			Number:     pr.Number,
+			URL:        pr.URL,
+			State:      string(pr.State),
+		}
+	}
+	return converted
+}
+
+// fromRelated converts the issues next to a card, always returning a slice so
+// the frontend never sees null.
+func fromRelated(related []board.Related) []CardRelated {
+	converted := make([]CardRelated, len(related))
+	for i, r := range related {
+		converted[i] = fromOneRelated(r)
+	}
+	return converted
+}
+
+// fromOneRelated converts one issue next to a card.
+func fromOneRelated(r board.Related) CardRelated {
+	return CardRelated{CardIssue: fromCardIssue(r.Issue), Status: r.Status, OnBoard: r.OnBoard}
+}
+
+// fromDependencies converts the issues a card depends on, always returning
+// slices so the frontend never sees null.
+func fromDependencies(dependencies []board.Dependency) []CardDependency {
+	converted := make([]CardDependency, len(dependencies))
+	for i, d := range dependencies {
+		converted[i] = CardDependency{
+			CardRelated:  fromOneRelated(d.Related),
+			PullRequests: fromCardPullRequests(d.PullRequests),
+			Satisfied:    d.Satisfied,
+		}
+	}
+	return converted
+}
+
+// fromTaskCard converts the card a task was created from, keeping nil for a
+// task without one.
+func fromTaskCard(c *task.Card) *TaskCard {
+	if c == nil {
+		return nil
+	}
+	converted := &TaskCard{
+		BoardID:    c.BoardID,
+		Key:        c.Key(),
+		Repository: c.Owner + "/" + c.Name,
+		Number:     c.Number,
+		Title:      c.Title,
+		URL:        c.URL,
+		Status:     c.Status,
+		State:      string(c.State),
+	}
+	if e := c.Epic; e != nil {
+		converted.Epic = &CardIssue{
+			Key:        e.Key(),
+			Repository: e.Owner + "/" + e.Name,
+			Number:     e.Number,
+			Title:      e.Title,
+			URL:        e.URL,
+		}
+	}
+	return converted
+}
+
+// FromBoardPreview converts what registering or editing a board shows before
+// saving. The slices are always allocated so the frontend never sees null.
+func FromBoardPreview(p board.Preview) BoardPreview {
+	statuses := make([]BoardStatus, len(p.Statuses))
+	for i, o := range p.Statuses {
+		statuses[i] = BoardStatus{ID: o.ID, Name: o.Name, Final: o.Final}
+	}
+	repositories := make([]BoardRepositoryOption, len(p.Repositories))
+	for i, o := range p.Repositories {
+		repositories[i] = FromBoardRepositoryOption(o)
+	}
+	return BoardPreview{
+		URL:          p.URL,
+		Owner:        p.Owner,
+		OwnerType:    string(p.OwnerType),
+		Number:       p.Number,
+		Title:        p.Title,
+		HasStatus:    p.HasStatus,
+		Statuses:     statuses,
+		Repositories: repositories,
+	}
+}
+
+// FromBoardRepositoryOption converts a repository the board dialog offers,
+// allocating the clones so the frontend never sees null.
+func FromBoardRepositoryOption(o board.RepositoryOption) BoardRepositoryOption {
+	clones := make([]string, len(o.Clones))
+	copy(clones, o.Clones)
+	return BoardRepositoryOption{
+		Owner:        o.Identity.Owner,
+		Name:         o.Identity.Name,
+		FullName:     o.Identity.FullName(),
+		Cards:        o.Cards,
+		Checked:      o.Checked,
+		Link:         string(o.Link),
+		RepositoryID: o.RepositoryID,
+		Path:         o.Path,
+		Clones:       clones,
+		OtherBoard:   o.OtherBoard,
+	}
+}
+
+// saveParamsOf converts what the user chose in the board dialog.
+func saveParamsOf(req SaveBoardRequest) board.SaveParams {
+	choices := make([]board.RepositoryChoice, len(req.Repositories))
+	for i, c := range req.Repositories {
+		choices[i] = repositoryChoiceOf(c)
+	}
+	finals := make([]string, len(req.FinalStatuses))
+	copy(finals, req.FinalStatuses)
+	return board.SaveParams{FinalStatuses: finals, Repositories: choices}
+}
+
+// repositoryChoiceOf converts a repository the user checked.
+func repositoryChoiceOf(c BoardRepositoryChoice) board.RepositoryChoice {
+	return board.RepositoryChoice{Owner: c.Owner, Name: c.Name, Path: c.Path}
 }

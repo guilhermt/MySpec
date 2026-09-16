@@ -35,7 +35,7 @@ func (a *App) snapshot() bindings.State {
 
 	return bindings.State{
 		Repositories: bindings.FromRepositories(
-			a.repositories.List(), a.repositories.Missing, a.tasks.Counts,
+			a.repositories.List(), a.repositories.Missing, a.tasks.Counts, a.repositories.Cloning,
 		),
 		RepositoryFilter: a.repositories.Filter(),
 		Theme:            string(a.theme.Preference()),
@@ -55,6 +55,11 @@ func (a *App) snapshot() bindings.State {
 		History: bindings.FromArchived(
 			a.tasks.ListArchived(), a.taskArtifacts, a.tasks.PRRun, a.repositories.Get,
 		),
+		Boards: bindings.FromBoards(
+			a.boards.List(), a.boards.Stored, a.boards.Reading,
+			a.repositories.List(), a.repositories.Missing, a.tasks.CardTasks(),
+		),
+		CloneFolder: a.repositories.CloneFolder(),
 	}
 }
 

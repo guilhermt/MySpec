@@ -88,7 +88,11 @@ func (s *RepositoryService) ChangeRepositoryPath(id string) error {
 	if !ok {
 		return s.fail("ChangeRepositoryPath", repository.ErrNotFound)
 	}
-	path, picked, err := s.picker.PickFolder("Change the path of "+repo.FullName(), filepath.Dir(repo.Path))
+	startIn := os.Getenv("HOME")
+	if repo.Path != "" {
+		startIn = filepath.Dir(repo.Path)
+	}
+	path, picked, err := s.picker.PickFolder("Change the path of "+repo.FullName(), startIn)
 	if err != nil {
 		return s.fail("ChangeRepositoryPath", err)
 	}
@@ -101,6 +105,55 @@ func (s *RepositoryService) ChangeRepositoryPath(id string) error {
 
 	if _, err := s.repositories.ChangePath(ctx, id, path); err != nil {
 		return s.fail("ChangeRepositoryPath", err)
+	}
+	return nil
+}
+
+// CloneRepository clones a repository without a clone into the clone folder,
+// asking for the folder first when none was chosen. started is false when the
+// user cancelled the folder chooser; the clone itself runs in the background.
+func (s *RepositoryService) CloneRepository(id string) (started bool, err error) {
+	ctx, cancel := context.WithTimeout(context.Background(), gitCallTimeout)
+	defer cancel()
+
+	if s.repositories.CloneFolder() == "" {
+		folder, picked, pickErr := s.picker.PickFolder("Choose the clone folder", os.Getenv("HOME"))
+		if pickErr != nil {
+			return false, s.fail("CloneRepository", pickErr)
+		}
+		if !picked {
+			return false, nil
+		}
+		if err := s.repositories.SetCloneFolder(ctx, folder); err != nil {
+			return false, s.fail("CloneRepository", err)
+		}
+	}
+	if err := s.repositories.Clone(ctx, id); err != nil {
+		return false, s.fail("CloneRepository", err)
+	}
+	return true, nil
+}
+
+// ChooseCloneFolder asks for the clone folder with the native chooser.
+// Cancelling changes nothing.
+func (s *RepositoryService) ChooseCloneFolder() error {
+	startIn := s.repositories.CloneFolder()
+	if startIn == "" {
+		startIn = os.Getenv("HOME")
+	}
+	folder, picked, err := s.picker.PickFolder("Choose the clone folder", startIn)
+	if err != nil {
+		return s.fail("ChooseCloneFolder", err)
+	}
+	if !picked {
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+
+	if err := s.repositories.SetCloneFolder(ctx, folder); err != nil {
+		return s.fail("ChooseCloneFolder", err)
 	}
 	return nil
 }

@@ -246,6 +246,7 @@ describe("createTask", () => {
       mode: "",
       models: [],
       reviewMode: "",
+      card: null,
     });
 
     expect(id).toBe("task-9");
@@ -262,6 +263,7 @@ describe("createTask", () => {
         mode: "",
         models: [],
         reviewMode: "",
+        card: null,
       }),
     ).rejects.toThrow("claude is not logged in");
     expect(useAppStore.getState().error).toBeNull();

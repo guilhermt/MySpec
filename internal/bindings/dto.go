@@ -13,9 +13,13 @@ type Repository struct {
 	Name          string `json:"name"`
 	FullName      string `json:"fullName"` // owner/name
 	Path          string `json:"path"`
-	Missing       bool   `json:"missing"` // the clone was not at Path at the last check
+	Missing       bool   `json:"missing"` // the clone was not at Path at the last check; always false while Cloned is false
 	ActiveTasks   int    `json:"activeTasks"`
 	ArchivedTasks int    `json:"archivedTasks"`
+	Cloned        bool   `json:"cloned"`     // tied to a clone; false for a repository registered without one
+	BoardID       string `json:"boardId"`    // "" without a board
+	Cloning       bool   `json:"cloning"`    // a clone runs now
+	CloneError    string `json:"cloneError"` // what gh said when the last clone failed; "" otherwise
 }
 
 // RepositoryCandidate is a clone of a GitHub repository the scan found under
@@ -79,6 +83,10 @@ type State struct {
 	// History are the archived tasks of every repository, newest first; never
 	// nil.
 	History []ArchivedTask `json:"history"`
+	// Boards are the registered boards, by title ignoring case; never nil.
+	Boards []Board `json:"boards"`
+	// CloneFolder is where new clones go; "" until chosen.
+	CloneFolder string `json:"cloneFolder"`
 }
 
 // EventTranscriptChanged carries one TranscriptEvent every time a conversation
@@ -333,10 +341,11 @@ type SituationOpen struct {
 
 // TaskSummary is an active task with the state of its session.
 type TaskSummary struct {
-	ID           string `json:"id"`
-	Name         string `json:"name"`
-	RepositoryID string `json:"repositoryId"`
-	Repository   string `json:"repository"` // owner/name
+	ID           string    `json:"id"`
+	Name         string    `json:"name"`
+	RepositoryID string    `json:"repositoryId"`
+	Repository   string    `json:"repository"` // owner/name
+	Card         *TaskCard `json:"card"`       // nil for a task without one
 	// Mode is structured or one_shot, a string for the same reason as
 	// State.Theme.
 	Mode string `json:"mode"`
@@ -397,10 +406,11 @@ type ArchivedPR struct {
 // ArchivedTask is a finished task, as the history shows it: its artifacts and
 // what it touched, and nothing that runs.
 type ArchivedTask struct {
-	ID           string `json:"id"`
-	Name         string `json:"name"`
-	RepositoryID string `json:"repositoryId"`
-	Repository   string `json:"repository"` // owner/name
+	ID           string    `json:"id"`
+	Name         string    `json:"name"`
+	RepositoryID string    `json:"repositoryId"`
+	Repository   string    `json:"repository"` // owner/name
+	Card         *TaskCard `json:"card"`       // nil for a task without one
 	// Mode is structured or one_shot, a string for the same reason as
 	// State.Theme.
 	Mode            string         `json:"mode"`
@@ -643,4 +653,183 @@ type CreateTaskRequest struct {
 	// default of the app.
 	Models     []StageModel `json:"models"`
 	ReviewMode string       `json:"reviewMode"` // manual or agent; "" takes the default of the app
+	// Card is the card the task is created from; nil for a task without one. With
+	// a card, RepositoryID is ignored, and InitialContext is the text the user
+	// added.
+	Card *CreateTaskCard `json:"card"`
+}
+
+// CreateTaskCard is the card of a board a task is created from.
+type CreateTaskCard struct {
+	BoardID string `json:"boardId"`
+	Key     string `json:"key"`
+}
+
+// BoardStatus is one option of the Status field of a board.
+type BoardStatus struct {
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Final bool   `json:"final"`
+}
+
+// BoardFailure is why the last reading of a board failed.
+type BoardFailure struct {
+	// Reason is gh_missing, gh_unauthenticated, missing_scope, not_found,
+	// rate_limited or failed, a string for the same reason as State.Theme.
+	Reason   string `json:"reason"`
+	Message  string `json:"message"`
+	FailedAt string `json:"failedAt"`
+}
+
+// Board is a registered board with its last reading.
+type Board struct {
+	ID    string `json:"id"`
+	Owner string `json:"owner"`
+	// OwnerType is organization or user, a string for the same reason as
+	// State.Theme.
+	OwnerType     string        `json:"ownerType"`
+	Number        int           `json:"number"`
+	Title         string        `json:"title"`
+	URL           string        `json:"url"`
+	HasStatus     bool          `json:"hasStatus"`
+	Statuses      []BoardStatus `json:"statuses"`      // board order; never nil
+	RepositoryIDs []string      `json:"repositoryIds"` // never nil
+	ReadAt        string        `json:"readAt"`        // "" before a reading succeeded
+	Reading       bool          `json:"reading"`
+	Failure       *BoardFailure `json:"failure"`
+	Viewer        string        `json:"viewer"` // the login of gh at the last reading
+	Cards         []BoardCard   `json:"cards"`  // never nil
+}
+
+// CardIssue is an issue of GitHub a board shows.
+type CardIssue struct {
+	Key        string `json:"key"`
+	Repository string `json:"repository"` // owner/name
+	Number     int    `json:"number"`
+	Title      string `json:"title"`
+	URL        string `json:"url"`
+	State      string `json:"state"` // open or closed
+}
+
+// CardPullRequest is a pull request linked to an issue.
+type CardPullRequest struct {
+	Repository string `json:"repository"`
+	Number     int    `json:"number"`
+	URL        string `json:"url"`
+	State      string `json:"state"` // open, merged or closed
+}
+
+// CardRelated is an issue next to a card: a sibling or a dependency.
+type CardRelated struct {
+	CardIssue
+	Status  string `json:"status"`
+	OnBoard bool   `json:"onBoard"`
+}
+
+// CardDependency is an issue a card depends on, with the pull requests that
+// close it.
+type CardDependency struct {
+	CardRelated
+	PullRequests []CardPullRequest `json:"pullRequests"` // never nil
+	Satisfied    bool              `json:"satisfied"`
+}
+
+// CardField is a board field of a card with its value.
+type CardField struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
+// CardAssignee is a person a card is assigned to.
+type CardAssignee struct {
+	Login     string `json:"login"`
+	AvatarURL string `json:"avatarUrl"`
+}
+
+// BoardCard is one card of a board, with what the user can do with it.
+type BoardCard struct {
+	CardIssue
+	Body           string            `json:"body"`
+	StatusID       string            `json:"statusId"`
+	Status         string            `json:"status"`
+	Final          bool              `json:"final"`        // the status is final, or the issue is closed
+	Assignees      []CardAssignee    `json:"assignees"`    // never nil
+	Fields         []CardField       `json:"fields"`       // never nil
+	PullRequests   []CardPullRequest `json:"pullRequests"` // never nil
+	Epic           *CardIssue        `json:"epic"`
+	EpicBody       string            `json:"epicBody"`
+	Siblings       []CardRelated     `json:"siblings"`     // never nil
+	Dependencies   []CardDependency  `json:"dependencies"` // never nil
+	ReadAt         string            `json:"readAt"`
+	SuggestedName  string            `json:"suggestedName"`
+	RepositoryID   string            `json:"repositoryId"`   // the registered repository of the card; "" when not registered
+	ActiveTaskID   string            `json:"activeTaskId"`   // "" without one
+	ArchivedTaskID string            `json:"archivedTaskId"` // the most recently archived; "" without one
+	// Action is start, clone, clone_missing, add_to_board, other_board,
+	// has_task or closed: what Start task does for the card, a string for the
+	// same reason as State.Theme.
+	Action     string `json:"action"`
+	OtherBoard string `json:"otherBoard"` // other_board: the title of that board
+}
+
+// TaskCard is the card a task was created from.
+type TaskCard struct {
+	BoardID    string     `json:"boardId"`
+	Key        string     `json:"key"`
+	Repository string     `json:"repository"`
+	Number     int        `json:"number"`
+	Title      string     `json:"title"`
+	URL        string     `json:"url"`
+	Status     string     `json:"status"`
+	State      string     `json:"state"`
+	Epic       *CardIssue `json:"epic"` // State of the epic is ""; the task does not keep it
+}
+
+// BoardRepositoryOption is a repository the board dialog offers, with how it
+// would tie to the app.
+type BoardRepositoryOption struct {
+	Owner    string `json:"owner"`
+	Name     string `json:"name"`
+	FullName string `json:"fullName"`
+	Cards    int    `json:"cards"`
+	Checked  bool   `json:"checked"`
+	// Link is registered, clone, uncloned or other_board, a string for the same
+	// reason as State.Theme.
+	Link         string   `json:"link"`
+	RepositoryID string   `json:"repositoryId"`
+	Path         string   `json:"path"`
+	Clones       []string `json:"clones"` // never nil
+	OtherBoard   string   `json:"otherBoard"`
+}
+
+// BoardPreview is what registering or editing a board shows before saving.
+type BoardPreview struct {
+	URL          string                  `json:"url"`
+	Owner        string                  `json:"owner"`
+	OwnerType    string                  `json:"ownerType"`
+	Number       int                     `json:"number"`
+	Title        string                  `json:"title"`
+	HasStatus    bool                    `json:"hasStatus"`
+	Statuses     []BoardStatus           `json:"statuses"`     // never nil
+	Repositories []BoardRepositoryOption `json:"repositories"` // never nil
+}
+
+// BoardRepositoryChoice is a repository the user checked in the board dialog.
+type BoardRepositoryChoice struct {
+	Owner string `json:"owner"`
+	Name  string `json:"name"`
+	Path  string `json:"path"`
+}
+
+// SaveBoardRequest is what the user chose in the board dialog.
+type SaveBoardRequest struct {
+	FinalStatuses []string                `json:"finalStatuses"`
+	Repositories  []BoardRepositoryChoice `json:"repositories"`
+}
+
+// BoardRemoval is what removing a board does to its repositories: how many go
+// to no board and how many are removed.
+type BoardRemoval struct {
+	ToNoBoard int `json:"toNoBoard"`
+	Removed   int `json:"removed"`
 }

@@ -295,3 +295,66 @@ func TestSetRepositoryFilterIsRememberedAndRefusesAnUnknownOne(t *testing.T) {
 		t.Errorf("filter = %q, want every repository", got)
 	}
 }
+
+func TestCloneRepositoryCancelledAtTheFolderChooserChangesNothing(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.register(t, t.TempDir())
+	f.picker.answer("", false, nil)
+
+	started, err := f.repoService.CloneRepository(testRepoID)
+	if err != nil || started {
+		t.Fatalf("CloneRepository() = %t, %v, want false, nil", started, err)
+	}
+	title, startIn, calls := f.picker.asked()
+	if title != "Choose the clone folder" || startIn != os.Getenv("HOME") || calls != 1 {
+		t.Errorf("picker = %q at %q after %d calls, want the clone folder chooser at home once", title, startIn, calls)
+	}
+	if got := f.state.GetState().CloneFolder; got != "" {
+		t.Errorf("cloneFolder = %q, want none", got)
+	}
+}
+
+func TestCloneRepositoryKeepsTheFolderChosenAndRefusesARepositoryWithAClone(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.register(t, t.TempDir())
+	folder := t.TempDir()
+	f.picker.answer(folder, true, nil)
+
+	started, err := f.repoService.CloneRepository(testRepoID)
+	if want := "This repository is already cloned."; started || err == nil || err.Error() != want {
+		t.Errorf("CloneRepository() = %t, %v, want false, %q", started, err, want)
+	}
+	if got := f.state.GetState().CloneFolder; got != folder {
+		t.Errorf("cloneFolder = %q, want %q", got, folder)
+	}
+}
+
+func TestChooseCloneFolderStartsAtTheCurrentFolder(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	first, second := t.TempDir(), t.TempDir()
+
+	f.picker.answer(first, true, nil)
+	if err := f.repoService.ChooseCloneFolder(); err != nil {
+		t.Fatalf("ChooseCloneFolder() = %v, want nil", err)
+	}
+	if _, startIn, _ := f.picker.asked(); startIn != os.Getenv("HOME") {
+		t.Errorf("startIn = %q, want the home directory", startIn)
+	}
+
+	f.picker.answer(second, false, nil)
+	if err := f.repoService.ChooseCloneFolder(); err != nil {
+		t.Fatalf("ChooseCloneFolder() cancelled = %v, want nil", err)
+	}
+	if _, startIn, _ := f.picker.asked(); startIn != first {
+		t.Errorf("startIn = %q, want %q", startIn, first)
+	}
+	if got := f.state.GetState().CloneFolder; got != first {
+		t.Errorf("cloneFolder = %q, want %q", got, first)
+	}
+}

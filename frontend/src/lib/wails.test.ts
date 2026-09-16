@@ -3,10 +3,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   asActionStatus,
   asBlockReason,
+  asBoardFailureReason,
+  asCardAction,
   asCloseOutcome,
   asCloseSkipReason,
   asEntryKind,
   asErrorKind,
+  asIssueState,
   asMarkerType,
   asMigrationCaseKind,
   asModelStage,
@@ -15,6 +18,8 @@ import {
   asPRState,
   asPRStatus,
   asPromptStage,
+  asPullRequestState,
+  asRepositoryLinkKind,
   asReviewFallback,
   asReviewFileKind,
   asReviewMode,
@@ -157,6 +162,33 @@ describe("narrowing", () => {
     expect(asSituationKind("permission")).toBe("permission");
     expect(asSituationKind("question")).toBe("question");
     expect(asSituationKind("reply")).toBe("reply");
+    for (const action of [
+      "start",
+      "clone",
+      "clone_missing",
+      "add_to_board",
+      "other_board",
+      "has_task",
+      "closed",
+    ]) {
+      expect(asCardAction(action)).toBe(action);
+    }
+    for (const reason of [
+      "gh_missing",
+      "gh_unauthenticated",
+      "missing_scope",
+      "not_found",
+      "rate_limited",
+      "failed",
+    ]) {
+      expect(asBoardFailureReason(reason)).toBe(reason);
+    }
+    for (const link of ["registered", "clone", "uncloned", "other_board"]) {
+      expect(asRepositoryLinkKind(link)).toBe(link);
+    }
+    expect(asIssueState("closed")).toBe("closed");
+    expect(asPullRequestState("merged")).toBe("merged");
+    expect(asPullRequestState("closed")).toBe("closed");
     expect(asSituationKind("ready_to_continue")).toBe("ready_to_continue");
     expect(asSituationKind("step_review")).toBe("step_review");
     expect(asSituationKind("step_empty")).toBe("step_empty");
@@ -211,6 +243,11 @@ describe("narrowing", () => {
     expect(asErrorKind("out_of_quota")).toBe("turn_error");
     expect(asTranscriptEventKind("patch")).toBe("reset");
     expect(asSituationKind("reminder")).toBe("reply");
+    expect(asCardAction("archive")).toBe("add_to_board");
+    expect(asBoardFailureReason("timeout")).toBe("failed");
+    expect(asRepositoryLinkKind("fork")).toBe("uncloned");
+    expect(asIssueState("draft")).toBe("open");
+    expect(asPullRequestState("draft")).toBe("open");
     expect(asSituationGroup("someday")).toBe("waiting");
     expect(asSituationForm("rebase")).toBe("");
     expect(asPlaceKind("workspace")).toBe("stage");
@@ -254,6 +291,7 @@ describe("api", () => {
       mode: "",
       models: [],
       reviewMode: "",
+      card: null,
     });
     await wails.api.deleteTask("task-1");
     await wails.api.getTranscript("task-1", "prd");
@@ -290,10 +328,25 @@ describe("api", () => {
     await wails.api.closeTask("task-1");
     await wails.api.previewDelete("task-1");
     await wails.api.viewSituation("situation-1");
+    await wails.api.cloneRepository("repo-1");
+    await wails.api.chooseCloneFolder();
+    const request = { finalStatuses: ["done"], repositories: [] };
+    const choice = { owner: "dev", name: "web", path: "" };
+    await wails.api.previewBoard("https://github.com/orgs/dev/projects/3");
+    await wails.api.previewEditBoard("board-1");
+    await wails.api.checkBoardRepository("board-1", "dev/web");
+    await wails.api.addBoard("https://github.com/orgs/dev/projects/3", request);
+    await wails.api.updateBoard("board-1", request);
+    await wails.api.previewRemoveBoard("board-1");
+    await wails.api.removeBoard("board-1");
+    await wails.api.refreshBoard("board-1");
+    await wails.api.refreshCard("board-1", "dev/web#12");
+    await wails.api.cardContext("board-1", "dev/web#12");
+    await wails.api.addRepositoryToBoard("board-1", choice);
 
-    expect(Call.ByID).toHaveBeenCalledTimes(49);
+    expect(Call.ByID).toHaveBeenCalledTimes(62);
     const ids = vi.mocked(Call.ByID).mock.calls.map(([id]) => id);
-    expect(new Set(ids).size).toBe(49);
+    expect(new Set(ids).size).toBe(62);
   });
 
   it("opens a link in the browser of the desktop, never in the webview", async () => {

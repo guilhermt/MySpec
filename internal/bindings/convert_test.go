@@ -8,6 +8,7 @@ import (
 
 	"github.com/guilhermt/myspec/internal/attention"
 	"github.com/guilhermt/myspec/internal/bindings"
+	"github.com/guilhermt/myspec/internal/board"
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/models"
@@ -1206,6 +1207,7 @@ func TestRefusedStateCarriesTheCasesAndNothingElse(t *testing.T) {
 			},
 		}},
 		Repositories:  []bindings.Repository{},
+		Boards:        []bindings.Board{},
 		Theme:         "system",
 		ModelDefaults: []bindings.StageModel{},
 		Tasks:         []bindings.TaskSummary{},
@@ -1233,5 +1235,338 @@ func TestFromCandidatesCarriesTheIdentityAndWhetherItIsRegistered(t *testing.T) 
 	}
 	if got := bindings.FromCandidates(nil); got == nil {
 		t.Error("FromCandidates(nil) = nil, want an empty slice")
+	}
+}
+
+// readAt is the instant the boards of the conversion tests were read at.
+var readAt = time.Date(2026, time.September, 16, 12, 0, 0, 0, time.UTC)
+
+// roadmap is the board the conversion tests convert, with Done as its final
+// status.
+var roadmap = board.Board{
+	ID:            "board-1",
+	Owner:         "acme",
+	OwnerType:     board.OwnerOrganization,
+	Number:        3,
+	Title:         "Roadmap",
+	URL:           "https://github.com/orgs/acme/projects/3",
+	FinalStatuses: []string{"done"},
+}
+
+// boardCard is an open card of acme/<repo> numbered number, in Todo, with no
+// slice set.
+func boardCard(repo string, number int) board.Card {
+	return board.Card{
+		Issue: board.Issue{
+			Owner: "acme", Name: repo, Number: number, Title: "Add login",
+			URL: "https://github.com/acme/" + repo + "/issues/1", State: task.IssueOpen,
+		},
+		StatusID: "todo",
+		Status:   "Todo",
+		ReadAt:   readAt,
+	}
+}
+
+// convertBoard converts roadmap with a reading of cards, next to the
+// repositories given, the missing clones and the tasks of the cards.
+func convertBoard(
+	cards []board.Card,
+	repositories []repository.Repository,
+	missing map[string]bool,
+	cardTasks map[string]task.CardTaskIDs,
+	others ...board.Board,
+) bindings.Board {
+	reading := &board.Reading{
+		Title:     "Roadmap",
+		Viewer:    "dev",
+		HasStatus: true,
+		Statuses:  []board.Option{{ID: "todo", Name: "Todo"}, {ID: "done", Name: "Done"}},
+		Cards:     cards,
+	}
+	got := bindings.FromBoards(
+		append([]board.Board{roadmap}, others...),
+		func(id string) board.Stored {
+			if id != roadmap.ID {
+				return board.Stored{}
+			}
+			return board.Stored{Reading: reading, ReadAt: readAt}
+		},
+		func(string) bool { return false },
+		repositories,
+		func(id string) bool { return missing[id] },
+		cardTasks,
+	)
+	return got[0]
+}
+
+func TestFromBoardsDecidesWhatStartTaskDoesForEachCard(t *testing.T) {
+	t.Parallel()
+
+	other := board.Board{ID: "board-2", Title: "Platform", FinalStatuses: []string{}}
+	repositories := []repository.Repository{
+		{ID: "r-start", Owner: "acme", Name: "start", Path: "/src/start", BoardID: roadmap.ID},
+		{ID: "r-case", Owner: "ACME", Name: "Case", Path: "/src/case", BoardID: roadmap.ID},
+		{ID: "r-clone", Owner: "acme", Name: "clone", BoardID: roadmap.ID},
+		{ID: "r-missing", Owner: "acme", Name: "missing", Path: "/src/missing", BoardID: roadmap.ID},
+		{ID: "r-free", Owner: "acme", Name: "free", Path: "/src/free"},
+		{ID: "r-other", Owner: "acme", Name: "other", Path: "/src/other", BoardID: other.ID},
+	}
+	closed := boardCard("start", 2)
+	closed.State = task.IssueClosed
+	tests := []struct {
+		name           string
+		card           board.Card
+		wantAction     string
+		wantOtherBoard string
+		wantRepository string
+	}{
+		{"a card with an active task", boardCard("start", 1), "has_task", "", "r-start"},
+		{"a closed issue", closed, "closed", "", "r-start"},
+		{"a repository nobody registered", boardCard("unknown", 3), "add_to_board", "", ""},
+		{"a repository without a board", boardCard("free", 4), "add_to_board", "", "r-free"},
+		{"a repository of another board", boardCard("other", 5), "other_board", "Platform", "r-other"},
+		{"a repository without a clone", boardCard("clone", 6), "clone", "", "r-clone"},
+		{"a clone that is missing", boardCard("missing", 7), "clone_missing", "", "r-missing"},
+		{"a repository ready to work in", boardCard("start", 8), "start", "", "r-start"},
+		{"a repository named in another case", boardCard("case", 9), "start", "", "r-case"},
+	}
+	cards := make([]board.Card, len(tests))
+	for i, tt := range tests {
+		cards[i] = tt.card
+	}
+	got := convertBoard(
+		cards, repositories, map[string]bool{"r-missing": true},
+		map[string]task.CardTaskIDs{"acme/start#1": {Active: "task-1"}}, other,
+	)
+
+	for i, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			card := got.Cards[i]
+			if card.Action != tt.wantAction || card.OtherBoard != tt.wantOtherBoard {
+				t.Errorf("action = %q, %q, want %q, %q", card.Action, card.OtherBoard, tt.wantAction, tt.wantOtherBoard)
+			}
+			if card.RepositoryID != tt.wantRepository {
+				t.Errorf("repositoryId = %q, want %q", card.RepositoryID, tt.wantRepository)
+			}
+		})
+	}
+}
+
+func TestFromBoardsMarksACardFinalByItsStatusOrItsClosedIssue(t *testing.T) {
+	t.Parallel()
+
+	done := boardCard("web", 1)
+	done.StatusID, done.Status = "done", "Done"
+	closed := boardCard("web", 2)
+	closed.State = task.IssueClosed
+	open := boardCard("web", 3)
+
+	got := convertBoard([]board.Card{done, closed, open}, nil, nil, nil)
+
+	finals := []bool{got.Cards[0].Final, got.Cards[1].Final, got.Cards[2].Final}
+	if diff := cmp.Diff([]bool{true, true, false}, finals); diff != "" {
+		t.Errorf("final mismatch (-want +got):\n%s", diff)
+	}
+	wantStatuses := []bindings.BoardStatus{{ID: "todo", Name: "Todo"}, {ID: "done", Name: "Done", Final: true}}
+	if diff := cmp.Diff(wantStatuses, got.Statuses); diff != "" {
+		t.Errorf("statuses mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestFromBoardsCarriesTheCardWithItsRelationsAndTasks(t *testing.T) {
+	t.Parallel()
+
+	card := boardCard("web", 12)
+	card.Title = "Add the login screen"
+	card.Body = "The body."
+	card.Assignees = []board.Assignee{{Login: "dev", AvatarURL: "https://avatars/dev"}}
+	card.Fields = []board.Field{{Name: "Size", Value: "M"}}
+	card.PullRequests = []board.PullRequest{
+		{Owner: "acme", Name: "web", Number: 40, URL: "https://github.com/acme/web/pull/40", State: board.PRMerged},
+	}
+	card.Epic = &board.Epic{
+		Issue: board.Issue{Owner: "acme", Name: "web", Number: 1, Title: "Auth", URL: "https://e", State: task.IssueOpen},
+		Body:  "The epic.",
+	}
+	card.Siblings = []board.Related{{
+		Issue:  board.Issue{Owner: "acme", Name: "web", Number: 13, Title: "Logout", URL: "https://s", State: task.IssueOpen},
+		Status: "Todo", OnBoard: true,
+	}}
+	card.Dependencies = []board.Dependency{{
+		Related: board.Related{
+			Issue: board.Issue{Owner: "acme", Name: "api", Number: 7, Title: "Tokens", URL: "https://d", State: task.IssueClosed},
+		},
+		Satisfied: true,
+	}}
+	repositories := []repository.Repository{
+		{ID: "r-web", Owner: "acme", Name: "web", Path: "/src/web", BoardID: roadmap.ID},
+		{ID: "r-other", Owner: "acme", Name: "api", Path: "/src/api"},
+	}
+
+	got := convertBoard(
+		[]board.Card{card}, repositories, nil,
+		map[string]task.CardTaskIDs{"acme/web#12": {Archived: "task-0"}},
+	)
+
+	want := bindings.Board{
+		ID: "board-1", Owner: "acme", OwnerType: "organization", Number: 3, Title: "Roadmap",
+		URL:       "https://github.com/orgs/acme/projects/3",
+		HasStatus: true,
+		Statuses: []bindings.BoardStatus{
+			{ID: "todo", Name: "Todo"}, {ID: "done", Name: "Done", Final: true},
+		},
+		RepositoryIDs: []string{"r-web"},
+		ReadAt:        "2026-09-16T12:00:00Z",
+		Viewer:        "dev",
+		Cards: []bindings.BoardCard{{
+			CardIssue: bindings.CardIssue{
+				Key: "acme/web#12", Repository: "acme/web", Number: 12, Title: "Add the login screen",
+				URL: "https://github.com/acme/web/issues/1", State: "open",
+			},
+			Body: "The body.", StatusID: "todo", Status: "Todo",
+			Assignees: []bindings.CardAssignee{{Login: "dev", AvatarURL: "https://avatars/dev"}},
+			Fields:    []bindings.CardField{{Name: "Size", Value: "M"}},
+			PullRequests: []bindings.CardPullRequest{
+				{Repository: "acme/web", Number: 40, URL: "https://github.com/acme/web/pull/40", State: "merged"},
+			},
+			Epic: &bindings.CardIssue{
+				Key: "acme/web#1", Repository: "acme/web", Number: 1, Title: "Auth", URL: "https://e", State: "open",
+			},
+			EpicBody: "The epic.",
+			Siblings: []bindings.CardRelated{{
+				CardIssue: bindings.CardIssue{
+					Key: "acme/web#13", Repository: "acme/web", Number: 13, Title: "Logout", URL: "https://s", State: "open",
+				},
+				Status: "Todo", OnBoard: true,
+			}},
+			Dependencies: []bindings.CardDependency{{
+				CardRelated: bindings.CardRelated{CardIssue: bindings.CardIssue{
+					Key: "acme/api#7", Repository: "acme/api", Number: 7, Title: "Tokens", URL: "https://d", State: "closed",
+				}},
+				PullRequests: []bindings.CardPullRequest{},
+				Satisfied:    true,
+			}},
+			ReadAt:         "2026-09-16T12:00:00Z",
+			SuggestedName:  "12-add-the-login-screen",
+			RepositoryID:   "r-web",
+			ArchivedTaskID: "task-0",
+			Action:         "start",
+		}},
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("FromBoards() mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestFromBoardsNeverHandsTheFrontendNull(t *testing.T) {
+	t.Parallel()
+
+	failed := &board.Failure{Reason: board.ReasonNotFound}
+	got := bindings.FromBoards(
+		[]board.Board{roadmap},
+		func(string) board.Stored { return board.Stored{Failure: failed, FailedAt: readAt} },
+		func(string) bool { return true },
+		nil, func(string) bool { return false }, nil,
+	)
+
+	want := []bindings.Board{{
+		ID: "board-1", Owner: "acme", OwnerType: "organization", Number: 3, Title: "Roadmap",
+		URL:           "https://github.com/orgs/acme/projects/3",
+		Statuses:      []bindings.BoardStatus{},
+		RepositoryIDs: []string{},
+		Reading:       true,
+		Failure: &bindings.BoardFailure{
+			Reason:   "not_found",
+			Message:  "The board doesn't exist or this account can't read it.",
+			FailedAt: "2026-09-16T12:00:00Z",
+		},
+		Cards: []bindings.BoardCard{},
+	}}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("FromBoards() without a reading mismatch (-want +got):\n%s", diff)
+	}
+
+	card := convertBoard([]board.Card{boardCard("web", 1)}, nil, nil, nil).Cards[0]
+	if card.Assignees == nil || card.Fields == nil || card.PullRequests == nil ||
+		card.Siblings == nil || card.Dependencies == nil {
+		t.Errorf("card = %+v, want every list allocated", card)
+	}
+	if empty := bindings.FromBoards(nil, nil, nil, nil, nil, nil); empty == nil {
+		t.Error("FromBoards(nil) = nil, want an empty slice")
+	}
+}
+
+func TestFromRepositoriesCarriesTheBoardAndTheCloneOfARepositoryWithoutOne(t *testing.T) {
+	t.Parallel()
+
+	list := []repository.Repository{
+		{ID: "r-1", Owner: "acme", Name: "web", BoardID: "board-1"},
+		{ID: "r-2", Owner: "acme", Name: "api", Path: "/src/api"},
+	}
+	got := bindings.FromRepositories(
+		list,
+		func(string) bool { return true },
+		func(string) (int, int) { return 0, 0 },
+		func(id string) (bool, string) { return id == "r-1", map[string]string{"r-1": "exit status 1"}[id] },
+	)
+
+	want := []bindings.Repository{
+		{
+			ID: "r-1", Owner: "acme", Name: "web", FullName: "acme/web",
+			BoardID: "board-1", Cloning: true, CloneError: "exit status 1",
+		},
+		{
+			ID: "r-2", Owner: "acme", Name: "api", FullName: "acme/api", Path: "/src/api",
+			Missing: true, Cloned: true,
+		},
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("FromRepositories() mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestFromTasksAndFromArchivedCarryTheCardOfTheTask(t *testing.T) {
+	t.Parallel()
+
+	card := &task.Card{
+		BoardID: "board-1", Owner: "Acme", Name: "Web", Number: 12, Title: "Add login",
+		URL: "https://github.com/acme/web/issues/12", Status: "In progress", State: task.IssueOpen,
+		Epic: &task.CardEpic{Owner: "acme", Name: "web", Number: 1, Title: "Auth", URL: "https://e"},
+	}
+	tasks := []task.Task{
+		{ID: "task-1", Name: "with-card", Stage: task.StagePRD, Card: card},
+		{ID: "task-2", Name: "without-card", Stage: task.StagePRD},
+	}
+	want := &bindings.TaskCard{
+		BoardID: "board-1", Key: "acme/web#12", Repository: "Acme/Web", Number: 12, Title: "Add login",
+		URL: "https://github.com/acme/web/issues/12", Status: "In progress", State: "open",
+		Epic: &bindings.CardIssue{Key: "acme/web#1", Repository: "acme/web", Number: 1, Title: "Auth", URL: "https://e"},
+	}
+
+	summaries := bindings.FromTasks(
+		tasks,
+		func(string) task.Artifacts { return task.Artifacts{} },
+		func(string) []flow.StepState { return nil },
+		func(string) (flow.PullRequest, bool) { return flow.PullRequest{}, false },
+		func(string) (repository.Repository, bool) { return repository.Repository{}, false },
+		nil, nil,
+	)
+	archived := bindings.FromArchived(
+		tasks,
+		func(string) task.Artifacts { return task.Artifacts{} },
+		func(string) (task.PRRun, bool) { return task.PRRun{}, false },
+		func(string) (repository.Repository, bool) { return repository.Repository{}, false },
+	)
+
+	if diff := cmp.Diff(want, summaries[0].Card); diff != "" {
+		t.Errorf("summary card mismatch (-want +got):\n%s", diff)
+	}
+	if diff := cmp.Diff(want, archived[0].Card); diff != "" {
+		t.Errorf("archived card mismatch (-want +got):\n%s", diff)
+	}
+	if summaries[1].Card != nil || archived[1].Card != nil {
+		t.Errorf("cards of a task without one = %+v, %+v, want nil", summaries[1].Card, archived[1].Card)
 	}
 }

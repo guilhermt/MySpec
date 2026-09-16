@@ -118,6 +118,7 @@ function NewTaskForm() {
       mode,
       models: choices,
       reviewMode,
+      card: null,
     })
       .then((id) => {
         rememberRepository(repositoryId);
