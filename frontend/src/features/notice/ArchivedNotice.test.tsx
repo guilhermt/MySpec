@@ -11,7 +11,7 @@ afterEach(() => {
 });
 
 describe("ArchivedNotice", () => {
-  it("names the task that left the workspace", () => {
+  it("names the task that was archived", () => {
     renderWithStore(<ArchivedNotice />, { ui: { archivedNotice: NOTICE } });
 
     expect(screen.getByRole("status")).toHaveTextContent("“add-login” was archived.");

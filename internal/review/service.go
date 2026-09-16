@@ -30,7 +30,7 @@ type Deps struct {
 	Log       *slog.Logger
 	// OnChange says a new reading landed and differs from the one before it;
 	// it may be nil.
-	OnChange func(k Key)
+	OnChange func(taskID string)
 }
 
 // Service keeps every worktree under review under watch and holds the last
@@ -38,13 +38,13 @@ type Deps struct {
 type Service struct {
 	worktrees Worktrees
 	log       *slog.Logger
-	onChange  func(k Key)
+	onChange  func(taskID string)
 
 	fs *fsnotify.Watcher
 
 	mu     sync.Mutex
-	items  map[Key]*tracked
-	owners map[string]Key // watched directory -> the key that watches it
+	items  map[string]*tracked
+	owners map[string]string // watched directory -> the task that watches it
 	closed bool
 }
 
@@ -76,25 +76,25 @@ func New(deps Deps) (*Service, error) {
 		log:       log,
 		onChange:  deps.OnChange,
 		fs:        fsw,
-		items:     map[Key]*tracked{},
-		owners:    map[string]Key{},
+		items:     map[string]*tracked{},
+		owners:    map[string]string{},
 	}
 	go s.run()
 	return s, nil
 }
 
-// Track puts the worktree of a key under watch and says whether its numbers
+// Track puts the worktree of a task under watch and says whether its numbers
 // matter now. It is idempotent: a call that changes nothing reads nothing.
-// The first call, and every call that turns a key active or moves it to
+// The first call, and every call that turns a task active or moves it to
 // another worktree, reads the worktree at once.
-func (s *Service) Track(k Key, wt worktree.Worktree, active bool) {
+func (s *Service) Track(taskID string, wt worktree.Worktree, active bool) {
 	s.mu.Lock()
 	if s.closed {
 		s.mu.Unlock()
 		return
 	}
 
-	item, found := s.items[k]
+	item, found := s.items[taskID]
 	moved := found && item.wt.Path != wt.Path
 	if found && !moved && item.active == active {
 		s.mu.Unlock()
@@ -105,11 +105,11 @@ func (s *Service) Track(k Key, wt worktree.Worktree, active bool) {
 	switch {
 	case !found:
 		item = &tracked{wt: wt}
-		s.items[k] = item
+		s.items[taskID] = item
 	case moved:
 		// Another worktree: the one it was reading no longer says anything
 		// about the review, and neither does its reading.
-		dropped = s.releaseLocked(k, item)
+		dropped = s.releaseLocked(taskID, item)
 		item.wt = wt
 		item.snap, item.read = Snapshot{}, false
 	}
@@ -117,21 +117,21 @@ func (s *Service) Track(k Key, wt worktree.Worktree, active bool) {
 	item.active = active
 	s.mu.Unlock()
 
-	s.remove(k, dropped)
+	s.remove(taskID, dropped)
 	if !found || moved {
-		s.watch(k, wt)
+		s.watch(taskID, wt)
 	}
 	if activated {
-		s.read(k)
+		s.read(taskID)
 	}
 }
 
-// Refresh reads the worktree of a key now, ignoring the debounce, and
+// Refresh reads the worktree of a task now, ignoring the debounce, and
 // returns what it found. It is what the flow uses when it has to decide on a
 // reading that is certainly newer than the last event.
-func (s *Service) Refresh(k Key) (Snapshot, bool) {
+func (s *Service) Refresh(taskID string) (Snapshot, bool) {
 	s.mu.Lock()
-	item, ok := s.items[k]
+	item, ok := s.items[taskID]
 	if !ok || s.closed {
 		s.mu.Unlock()
 		return Snapshot{}, false
@@ -139,52 +139,34 @@ func (s *Service) Refresh(k Key) (Snapshot, bool) {
 	s.disarmLocked(item)
 	s.mu.Unlock()
 
-	return s.read(k), true
+	return s.read(taskID), true
 }
 
-// Snapshot is the last reading of the worktree of a key.
-func (s *Service) Snapshot(k Key) (Snapshot, bool) {
+// Snapshot is the last reading of the worktree of a task.
+func (s *Service) Snapshot(taskID string) (Snapshot, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	item, ok := s.items[k]
+	item, ok := s.items[taskID]
 	if !ok || !item.read {
 		return Snapshot{}, false
 	}
 	return clone(item.snap), true
 }
 
-// Forget stops watching the worktree of a key and drops its reading.
-func (s *Service) Forget(k Key) {
+// Forget stops watching the worktree of a task and drops its reading.
+func (s *Service) Forget(taskID string) {
 	s.mu.Lock()
-	item, ok := s.items[k]
+	item, ok := s.items[taskID]
 	if !ok {
 		s.mu.Unlock()
 		return
 	}
-	dropped := s.releaseLocked(k, item)
-	delete(s.items, k)
+	dropped := s.releaseLocked(taskID, item)
+	delete(s.items, taskID)
 	s.mu.Unlock()
 
-	s.remove(k, dropped)
-}
-
-// ForgetTask lets go of every worktree of a task at once. It is what the
-// teardown of a task and the end of its implementation use, with no repository
-// to name.
-func (s *Service) ForgetTask(taskID string) {
-	s.mu.Lock()
-	keys := make([]Key, 0, len(s.items))
-	for k := range s.items {
-		if k.TaskID == taskID {
-			keys = append(keys, k)
-		}
-	}
-	s.mu.Unlock()
-
-	for _, k := range keys {
-		s.Forget(k)
-	}
+	s.remove(taskID, dropped)
 }
 
 // Close stops the watcher and every wait in flight.
@@ -194,8 +176,8 @@ func (s *Service) Close() error {
 	for _, item := range s.items {
 		s.disarmLocked(item)
 	}
-	s.items = map[Key]*tracked{}
-	s.owners = map[string]Key{}
+	s.items = map[string]*tracked{}
+	s.owners = map[string]string{}
 	s.mu.Unlock()
 
 	if err := s.fs.Close(); err != nil {
@@ -204,12 +186,12 @@ func (s *Service) Close() error {
 	return nil
 }
 
-// read runs git status over the worktree of a key, keeps what it found and
+// read runs git status over the worktree of a task, keeps what it found and
 // reports it when it differs from the reading before. A failure is the whole
 // snapshot: the interface says what git said instead of an old number.
-func (s *Service) read(k Key) Snapshot {
+func (s *Service) read(taskID string) Snapshot {
 	s.mu.Lock()
-	item, ok := s.items[k]
+	item, ok := s.items[taskID]
 	if !ok || s.closed {
 		s.mu.Unlock()
 		return Snapshot{}
@@ -223,7 +205,7 @@ func (s *Service) read(k Key) Snapshot {
 	snap := Snapshot{ReadAt: time.Now()}
 	status, err := s.worktrees.Status(ctx, wt)
 	if err != nil {
-		s.log.Warn("review read failed", "task", k.TaskID, "repo", k.RepoPath, "path", wt.Path, "error", err)
+		s.log.Warn("review read failed", "task", taskID, "path", wt.Path, "error", err)
 		snap.Err = err.Error()
 	} else {
 		snap.Head = status.Head
@@ -239,9 +221,9 @@ func (s *Service) read(k Key) Snapshot {
 	}
 
 	s.mu.Lock()
-	item, ok = s.items[k]
+	item, ok = s.items[taskID]
 	if !ok || s.closed || item.wt.Path != wt.Path {
-		// The key was forgotten or moved while git ran: this reading is about
+		// The task was forgotten or moved while git ran: this reading is about
 		// a worktree nobody is watching any more.
 		s.mu.Unlock()
 		return snap
@@ -251,7 +233,7 @@ func (s *Service) read(k Key) Snapshot {
 	s.mu.Unlock()
 
 	if report && s.onChange != nil {
-		s.onChange(k)
+		s.onChange(taskID)
 	}
 	return snap
 }
@@ -277,21 +259,21 @@ func clone(snap Snapshot) Snapshot {
 // the index of a linked worktree lives, and the directories of the files git
 // tracks. An ignored directory has no tracked file, so node_modules and dist
 // stay out with no check of their own.
-func (s *Service) dirsOf(k Key, wt worktree.Worktree) []string {
+func (s *Service) dirsOf(taskID string, wt worktree.Worktree) []string {
 	ctx, cancel := context.WithTimeout(context.Background(), readTimeout)
 	defer cancel()
 
 	var dirs []string
 	gitDir, err := s.worktrees.GitDir(ctx, wt)
 	if err != nil {
-		s.log.Warn("review git directory failed", "task", k.TaskID, "repo", k.RepoPath, "path", wt.Path, "error", err)
+		s.log.Warn("review git directory failed", "task", taskID, "path", wt.Path, "error", err)
 	} else {
 		dirs = append(dirs, gitDir)
 	}
 
 	files, err := s.worktrees.TrackedFiles(ctx, wt)
 	if err != nil {
-		s.log.Warn("review tracked files failed", "task", k.TaskID, "repo", k.RepoPath, "path", wt.Path, "error", err)
+		s.log.Warn("review tracked files failed", "task", taskID, "path", wt.Path, "error", err)
 		return dirs
 	}
 
@@ -308,14 +290,14 @@ func (s *Service) dirsOf(k Key, wt worktree.Worktree) []string {
 	return dirs
 }
 
-// releaseLocked drops the wait of a key and hands back the directories it
+// releaseLocked drops the wait of a task and hands back the directories it
 // owned, for the caller to unwatch outside the mutex.
-func (s *Service) releaseLocked(k Key, item *tracked) []string {
+func (s *Service) releaseLocked(taskID string, item *tracked) []string {
 	s.disarmLocked(item)
 
 	dirs := item.dirs
 	for _, dir := range dirs {
-		if s.owners[dir] == k {
+		if s.owners[dir] == taskID {
 			delete(s.owners, dir)
 		}
 	}
@@ -323,7 +305,7 @@ func (s *Service) releaseLocked(k Key, item *tracked) []string {
 	return dirs
 }
 
-// disarmLocked stops the wait of a key, so that a timer already running down
+// disarmLocked stops the wait of a task, so that a timer already running down
 // finds itself out of date.
 func (s *Service) disarmLocked(item *tracked) {
 	if item.timer != nil {

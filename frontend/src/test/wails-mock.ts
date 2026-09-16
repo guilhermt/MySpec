@@ -7,11 +7,13 @@ import type {
   DeleteResult,
   Entry,
   EntryKind,
+  Migration,
   ModelStage,
   PermissionDecision,
   Prompt,
   PromptStage,
-  RepoPR,
+  PullRequest,
+  Repository,
   Review,
   ReviewMode,
   Situation,
@@ -31,10 +33,10 @@ import type {
 
 export const api = {
   getState: vi.fn<() => Promise<State>>(() => Promise.resolve(makeState())),
-  openPath: vi.fn<(path: string) => Promise<void>>(() => Promise.resolve()),
-  openFolderDialog: vi.fn<() => Promise<void>>(() => Promise.resolve()),
-  removeRecent: vi.fn<(path: string) => Promise<void>>(() => Promise.resolve()),
-  dismissNotice: vi.fn<() => Promise<void>>(() => Promise.resolve()),
+  addRepository: vi.fn<() => Promise<void>>(() => Promise.resolve()),
+  changeRepositoryPath: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
+  removeRepository: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
+  setRepositoryFilter: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
   setTheme: vi.fn<(preference: ThemePreference) => Promise<void>>(() => Promise.resolve()),
   setModelDefault: vi.fn<(stage: ModelStage, model: string, effort: string) => Promise<void>>(() =>
     Promise.resolve(),
@@ -52,7 +54,7 @@ export const api = {
 
   createTask: vi.fn<(req: CreateTaskRequest) => Promise<string>>(() => Promise.resolve("task-1")),
   deleteTask: vi.fn<(taskId: string) => Promise<DeleteResult>>(() =>
-    Promise.resolve({ leftovers: [] }),
+    Promise.resolve({ leftover: null }),
   ),
   previewDelete: vi.fn<(taskId: string) => Promise<DeletePreview>>(() =>
     Promise.resolve(makeDeletePreview()),
@@ -115,19 +117,17 @@ export const api = {
   ),
   reviewStepMyself: vi.fn<(taskId: string) => Promise<void>>(() => Promise.resolve()),
   approveStep: vi.fn<(taskId: string) => Promise<void>>(() => Promise.resolve()),
-  openPR: vi.fn<(taskId: string, repoPath: string, title: string, body: string) => Promise<void>>(
-    () => Promise.resolve(),
-  ),
-  approveRepo: vi.fn<(taskId: string, repoPath: string) => Promise<void>>(() => Promise.resolve()),
-  reviewAgain: vi.fn<(taskId: string, repoPath: string) => Promise<void>>(() => Promise.resolve()),
-  discardDraft: vi.fn<(taskId: string, repoPath: string) => Promise<void>>(() => Promise.resolve()),
-  retryRepo: vi.fn<(taskId: string, repoPath: string) => Promise<void>>(() => Promise.resolve()),
-  refreshPR: vi.fn<(taskId: string, repoPath: string) => Promise<void>>(() => Promise.resolve()),
-  closeRepo: vi.fn<(taskId: string, repoPath: string) => Promise<void>>(() => Promise.resolve()),
-  openInEditor: vi.fn<(taskId: string, repoPath: string) => Promise<void>>(() => Promise.resolve()),
-  openFileInEditor: vi.fn<(taskId: string, repoPath: string, path: string) => Promise<void>>(() =>
+  openPR: vi.fn<(taskId: string, title: string, body: string) => Promise<void>>(() =>
     Promise.resolve(),
   ),
+  approvePR: vi.fn<(taskId: string) => Promise<void>>(() => Promise.resolve()),
+  reviewAgain: vi.fn<(taskId: string) => Promise<void>>(() => Promise.resolve()),
+  discardDraft: vi.fn<(taskId: string) => Promise<void>>(() => Promise.resolve()),
+  retryPR: vi.fn<(taskId: string) => Promise<void>>(() => Promise.resolve()),
+  refreshPR: vi.fn<(taskId: string) => Promise<void>>(() => Promise.resolve()),
+  closeTask: vi.fn<(taskId: string) => Promise<void>>(() => Promise.resolve()),
+  openInEditor: vi.fn<(taskId: string) => Promise<void>>(() => Promise.resolve()),
+  openFileInEditor: vi.fn<(taskId: string, path: string) => Promise<void>>(() => Promise.resolve()),
   openExternal: vi.fn<(url: string) => Promise<void>>(() => Promise.resolve()),
 
   viewSituation: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
@@ -210,26 +210,43 @@ export function transcriptSubscriberCount(): number {
 
 export function makeState(overrides: Partial<State> = {}): State {
   return {
-    workspace: {
-      name: "projects",
-      path: "/home/dev/projects",
-      repos: [
-        { name: "api", path: "/home/dev/projects/api" },
-        { name: "web", path: "/home/dev/projects/web" },
-      ],
-    },
-    recents: [
-      { name: "projects", path: "/home/dev/projects" },
-      { name: "labs", path: "/home/dev/labs" },
-      { name: "scratch", path: "/home/dev/scratch" },
-    ],
+    migration: null,
+    repositories: [makeRepository()],
+    repositoryFilter: "",
     theme: "system",
     systemDark: false,
     modelDefaults: makeModelDefaults(),
     reviewModeDefault: "manual",
-    notice: null,
     tasks: [],
     history: [],
+    ...overrides,
+  };
+}
+
+export function makeRepository(overrides: Partial<Repository> = {}): Repository {
+  return {
+    id: "repo-1",
+    owner: "dev",
+    name: "web",
+    fullName: "dev/web",
+    path: "/home/dev/projects/web",
+    missing: false,
+    activeTasks: 0,
+    archivedTasks: 0,
+    ...overrides,
+  };
+}
+
+export function makeMigration(overrides: Partial<Migration> = {}): Migration {
+  return {
+    cases: [
+      {
+        kind: "root_task",
+        repository: "",
+        detail: "",
+        tasks: [{ name: "add-login", workspace: "/home/dev/projects", path: "" }],
+      },
+    ],
     ...overrides,
   };
 }
@@ -238,8 +255,8 @@ export function makeTask(overrides: Partial<TaskSummary> = {}): TaskSummary {
   return {
     id: "task-1",
     name: "add-login",
-    repoPath: "",
-    dir: "/home/dev/.local/share/myspec/workspaces/projects-1a2b3c4d/tasks/add-login",
+    repositoryId: "repo-1",
+    repository: "dev/web",
     mode: "structured",
     stage: "prd",
     revisiting: false,
@@ -259,7 +276,7 @@ export function makeTask(overrides: Partial<TaskSummary> = {}): TaskSummary {
     hasOneShot: false,
     steps: [],
     currentStep: 0,
-    repos: [],
+    pr: null,
     planProblems: [],
     situations: [],
     models: makeTaskModels(),
@@ -280,7 +297,7 @@ export function makeSituation(overrides: Partial<Situation> = {}): Situation {
     group: "waiting",
     form: "",
     percent: 0,
-    place: { kind: "stage", stage: "prd", step: 0, repoPath: "", repository: "" },
+    place: { kind: "stage", stage: "prd", step: 0 },
     startedAt: "2026-09-05T10:00:00Z",
     ...overrides,
   };
@@ -290,7 +307,8 @@ export function makeArchivedTask(overrides: Partial<ArchivedTask> = {}): Archive
   return {
     id: "task-1",
     name: "add-login",
-    repoPath: "",
+    repositoryId: "repo-1",
+    repository: "dev/web",
     mode: "structured",
     hasPrd: true,
     hasTechSpec: true,
@@ -300,19 +318,10 @@ export function makeArchivedTask(overrides: Partial<ArchivedTask> = {}): Archive
         number: 1,
         file: "1-add-the-login-form.md",
         title: "Add the login form",
-        repository: "web",
         reports: [],
       },
     ],
-    repos: [
-      {
-        repository: "web",
-        repoPath: "/home/dev/projects/web",
-        prNumber: 12,
-        prUrl: "https://github.com/dev/web/pull/12",
-        prState: "merged",
-      },
-    ],
+    pr: { number: 12, url: "https://github.com/dev/web/pull/12", state: "merged" },
     artifactVersion: 3,
     createdAt: "2026-09-05T10:00:00Z",
     archivedAt: "2026-09-08T10:00:00Z",
@@ -321,7 +330,7 @@ export function makeArchivedTask(overrides: Partial<ArchivedTask> = {}): Archive
 }
 
 export function makeDeletePreview(overrides: Partial<DeletePreview> = {}): DeletePreview {
-  return { sessionRunning: false, worktrees: [], branches: [], prs: [], ...overrides };
+  return { sessionRunning: false, worktree: null, branch: null, pr: null, ...overrides };
 }
 
 export function makeCloseResult(overrides: Partial<CloseResult> = {}): CloseResult {
@@ -329,7 +338,7 @@ export function makeCloseResult(overrides: Partial<CloseResult> = {}): CloseResu
     worktree: { outcome: "done", reason: "", detail: "" },
     branch: { outcome: "done", reason: "", detail: "" },
     base: { outcome: "done", reason: "", detail: "" },
-    worktreePath: "/home/dev/.local/share/myspec/worktrees/add-login-web",
+    worktreePath: "/home/dev/.local/share/myspec/worktrees/dev/web/add-login",
     branchName: "add-login",
     baseBranch: "dev",
     baseCommits: 3,
@@ -343,8 +352,6 @@ export function makeStep(overrides: Partial<Step> = {}): Step {
     number: 1,
     file: "1-add-the-login-form.md",
     title: "Add the login form",
-    repository: "web",
-    repoPath: "/home/dev/projects/web",
     status: "not_started",
     phase: "",
     block: null,
@@ -386,14 +393,11 @@ export function makeStepReviewer(overrides: Partial<StepReviewer> = {}): StepRev
   };
 }
 
-export function makeRepoPR(overrides: Partial<RepoPR> = {}): RepoPR {
+export function makePullRequest(overrides: Partial<PullRequest> = {}): PullRequest {
   return {
-    repository: "web",
-    repoPath: "/home/dev/projects/web",
-    slug: "web",
     status: "preparing",
     block: null,
-    worktreePath: "/home/dev/.local/share/myspec/worktrees/add-login-web",
+    worktreePath: "/home/dev/.local/share/myspec/worktrees/dev/web/add-login",
     branch: "add-login",
     baseBranch: "origin/dev",
     draft: null,
@@ -407,8 +411,9 @@ export function makeRepoPR(overrides: Partial<RepoPR> = {}): RepoPR {
     prBase: "",
     checkError: "",
     canClose: false,
+    cloneMissing: false,
     close: null,
-    sessionStage: "pr:web",
+    sessionStage: "pr",
     sessionStatus: "waiting",
     sessionModel: "claude-opus-5",
     sessionEffort: "medium",

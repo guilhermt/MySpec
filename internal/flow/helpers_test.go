@@ -17,6 +17,7 @@ import (
 	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
+	"github.com/guilhermt/myspec/internal/repository"
 	"github.com/guilhermt/myspec/internal/review"
 	"github.com/guilhermt/myspec/internal/reviewmode"
 	"github.com/guilhermt/myspec/internal/session"
@@ -31,14 +32,68 @@ const (
 	pollStep    = 5 * time.Millisecond
 )
 
-// workspace is the root every fake task lives under.
-const workspace = "/workspace"
+// The registered repository every fake task belongs to, and the data directory
+// its worktrees live under.
+const (
+	repoID  = "repo-1"
+	dataDir = "/data"
+)
 
-// repos are the repositories of the fake workspace, as Repositories reports
-// them.
-var repos = []task.Repository{
-	{Rel: "api", Path: filepath.Join(workspace, "api")},
-	{Rel: "web", Path: filepath.Join(workspace, "web")},
+// repo is the registered repository of every fake task.
+var repo = repository.Repository{ID: repoID, Owner: "dev", Name: "web", Path: "/home/dev/web"}
+
+// memRepositories is an in-memory flow.Repositories: one repository, whose
+// clone a test can say is gone.
+type memRepositories struct {
+	mu      sync.Mutex
+	repo    repository.Repository
+	missing bool
+	checks  int
+}
+
+func newRepositories() *memRepositories {
+	return &memRepositories{repo: repo}
+}
+
+func (m *memRepositories) Get(id string) (repository.Repository, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if id != m.repo.ID {
+		return repository.Repository{}, false
+	}
+	return m.repo, true
+}
+
+func (m *memRepositories) Missing(id string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return id == m.repo.ID && m.missing
+}
+
+func (m *memRepositories) Check(id string) (repository.Repository, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.checks++
+	if id != m.repo.ID {
+		return repository.Repository{}, repository.ErrNotFound
+	}
+	if m.missing {
+		return repository.Repository{}, &repository.Refusal{
+			Reason: repository.ReasonCloneMissing, Path: m.repo.Path,
+		}
+	}
+	return m.repo, nil
+}
+
+// setMissing says whether the clone of the repository is there.
+func (m *memRepositories) setMissing(missing bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.missing = missing
 }
 
 // memTasks is an in-memory flow.Tasks that lets a test say what the disk
@@ -49,7 +104,7 @@ type memTasks struct {
 	archived  []task.Task // newest first, as the service keeps them
 	artifacts map[string]task.Artifacts
 	runs      map[string][]task.StepRun
-	prs       map[string][]task.PRRun
+	prs       map[string]task.PRRun
 	seeded    map[string]task.Models // the choices a test made for a task, by id
 	// seededModes are the review modes a test made for a task, by id.
 	seededModes map[string]task.ReviewModes
@@ -65,7 +120,7 @@ func newTasks() *memTasks {
 	return &memTasks{
 		artifacts: map[string]task.Artifacts{},
 		runs:      map[string][]task.StepRun{},
-		prs:       map[string][]task.PRRun{},
+		prs:       map[string]task.PRRun{},
 		seeded:    map[string]task.Models{},
 
 		seededModes:     map[string]task.ReviewModes{},
@@ -337,7 +392,7 @@ func (m *memTasks) RemoveArtifacts(_ context.Context, id string, from task.Stage
 		case task.StageImplementation:
 			a.StepReports = nil
 		case task.StagePR:
-			a.PR = nil
+			a.PR = task.PRArtifacts{}
 		}
 	}
 	m.artifacts[id] = a
@@ -352,47 +407,44 @@ func (m *memTasks) Artifacts(id string) (task.Artifacts, bool) {
 	return a, ok
 }
 
-func (m *memTasks) Repositories(task.Task) []task.Repository {
-	return repos
-}
-
-func (m *memTasks) PRRuns(id string) []task.PRRun {
+func (m *memTasks) PRRun(id string) (task.PRRun, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	return slices.Clone(m.prs[id])
+	run, ok := m.prs[id]
+	return run, ok
 }
 
 func (m *memTasks) SetPRRun(
-	_ context.Context, id, repoPath string, status task.PRStatus, block *task.PRBlock,
+	_ context.Context, id string, status task.PRStatus, block *task.PRBlock,
 ) (task.PRRun, error) {
-	return m.updatePRRun(id, repoPath, "pr:"+string(status), func(run *task.PRRun) {
+	return m.updatePRRun(id, "pr:"+string(status), func(run *task.PRRun) {
 		run.Status, run.Block = status, block
 	})
 }
 
-func (m *memTasks) SetPRDetails(_ context.Context, id, repoPath string, pr task.PRDetails) (task.PRRun, error) {
-	return m.updatePRRun(id, repoPath, "prDetails", func(run *task.PRRun) { run.PR = pr })
+func (m *memTasks) SetPRDetails(_ context.Context, id string, pr task.PRDetails) (task.PRRun, error) {
+	return m.updatePRRun(id, "prDetails", func(run *task.PRRun) { run.PR = pr })
 }
 
-func (m *memTasks) SetPRClosed(_ context.Context, id, repoPath string, result task.CloseResult) (task.PRRun, error) {
-	return m.updatePRRun(id, repoPath, "prClosed", func(run *task.PRRun) {
+func (m *memTasks) SetPRClosed(_ context.Context, id string, result task.CloseResult) (task.PRRun, error) {
+	return m.updatePRRun(id, "prClosed", func(run *task.PRRun) {
 		copied := result
 		run.Status, run.Block, run.Close = task.PRClosed, nil, &copied
 	})
 }
 
-func (m *memTasks) SetPRReviewed(_ context.Context, id, repoPath, commit string, pass int) (task.PRRun, error) {
-	return m.updatePRRun(id, repoPath, "prReviewed:"+strconv.Itoa(pass), func(run *task.PRRun) {
+func (m *memTasks) SetPRReviewed(_ context.Context, id, commit string, pass int) (task.PRRun, error) {
+	return m.updatePRRun(id, "prReviewed:"+strconv.Itoa(pass), func(run *task.PRRun) {
 		run.ReviewedCommit, run.ReportedPass = commit, pass
 	})
 }
 
-func (m *memTasks) ClearPRRuns(_ context.Context, id string) error {
+func (m *memTasks) ClearPRRun(_ context.Context, id string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.calls = append(m.calls, "clearPRs:"+id)
+	m.calls = append(m.calls, "clearPR:"+id)
 	if m.err != nil {
 		return m.err
 	}
@@ -400,60 +452,43 @@ func (m *memTasks) ClearPRRuns(_ context.Context, id string) error {
 	return nil
 }
 
-// updatePRRun records the state of a repository the way task.Service does:
+// updatePRRun records the state of the PR stage the way task.Service does:
 // what the call says nothing about is kept.
-func (m *memTasks) updatePRRun(
-	id, repoPath, label string, mutate func(*task.PRRun),
-) (task.PRRun, error) {
+func (m *memTasks) updatePRRun(id, label string, mutate func(*task.PRRun)) (task.PRRun, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.calls = append(m.calls, label+":"+id+":"+filepath.Base(repoPath))
+	m.calls = append(m.calls, label+":"+id)
 	if m.err != nil {
 		return task.PRRun{}, m.err
 	}
 
-	runs := m.prs[id]
-	run := task.PRRun{TaskID: id, RepoPath: repoPath}
-	index := slices.IndexFunc(runs, func(r task.PRRun) bool { return r.RepoPath == repoPath })
-	if index >= 0 {
-		run = runs[index]
+	run, ok := m.prs[id]
+	if !ok {
+		run = task.PRRun{TaskID: id}
 	}
 	mutate(&run)
-
-	if index < 0 {
-		// task.Service keeps the runs by repository path, and so does the fake.
-		position, _ := slices.BinarySearchFunc(runs, run, func(a, b task.PRRun) int {
-			return strings.Compare(a.RepoPath, b.RepoPath)
-		})
-		m.prs[id] = slices.Insert(runs, position, run)
-	} else {
-		runs[index] = run
-	}
+	m.prs[id] = run
 	return run, nil
 }
 
-// prRun is what the fake recorded about a repository, if anything.
-func (m *memTasks) prRun(id, repoPath string) (task.PRRun, bool) {
+// prRun is what the fake recorded about the PR stage of a task, if anything.
+func (m *memTasks) prRun(id string) (task.PRRun, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	index := slices.IndexFunc(m.prs[id], func(r task.PRRun) bool { return r.RepoPath == repoPath })
-	if index < 0 {
-		return task.PRRun{}, false
-	}
-	return m.prs[id][index], true
+	run, ok := m.prs[id]
+	return run, ok
 }
 
-// setPRRun seeds the record of a repository, which is how a test says what the
+// setPRRun seeds the record of the PR stage, which is how a test says what the
 // app recorded before it closed.
 func (m *memTasks) setPRRun(id string, run task.PRRun) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	run.TaskID = id
-	m.prs[id] = append(m.prs[id], run)
-	slices.SortFunc(m.prs[id], func(a, b task.PRRun) int { return strings.Compare(a.RepoPath, b.RepoPath) })
+	m.prs[id] = run
 }
 
 func (m *memTasks) StepRuns(id string) []task.StepRun {
@@ -655,19 +690,14 @@ func (m *memTasks) add(id string, stage task.Stage, a task.Artifacts) task.Task 
 	defer m.mu.Unlock()
 
 	t := task.Task{
-		ID:            id,
-		WorkspacePath: workspace,
-		Name:          id,
-		Mode:          m.seededTaskModes[id],
-		Stage:         stage,
-		ArtifactsDir:  filepath.Join("/data", id),
-		Models:        m.seeded[id],
-		ReviewModes:   m.seededModes[id],
-	}
-	if t.Mode == task.ModeOneShot {
-		// A One-Shot task is created in a repository: the first one of the
-		// workspace.
-		t.RepoPath = repos[0].Path
+		ID:           id,
+		RepositoryID: repoID,
+		Name:         id,
+		Mode:         m.seededTaskModes[id],
+		Stage:        stage,
+		ArtifactsDir: filepath.Join(dataDir, id),
+		Models:       m.seeded[id],
+		ReviewModes:  m.seededModes[id],
 	}
 	m.items = append(m.items, t)
 	m.artifacts[id] = a
@@ -1053,14 +1083,12 @@ func (m *memTasks) recorded() []string {
 // test seeds, answers with the failures it was told to, and records the calls.
 type memWorktrees struct {
 	mu        sync.Mutex
-	items     map[string][]worktree.Worktree // by task id
+	items     map[string]worktree.Worktree // by task id
 	calls     []string
 	status    git.Status
 	base      string // the ref every branch is said to come from
-	ahead     int    // how many commits past the base every branch has
 	merged    bool   // whether git sees every branch in the base it is asked about
 	baseErr   error
-	aheadErr  error
 	mergedErr error
 	subject   string           // the subject every commit reading answers with
 	phases    []worktree.Phase // reported by every Ensure
@@ -1073,26 +1101,24 @@ type memWorktrees struct {
 
 	closeResult task.CloseResult // what every closing answers with
 	closeCalls  []closeCall      // the closings the flow asked for, in order
-	leftovers   []worktree.Leftover
+	leftover    *worktree.Leftover
 	purged      []string // the tasks Purge was called for
 }
 
-// closeCall is one closing of a repository, with what the flow decided about
-// the base branch and the branch of the worktree.
+// closeCall is one closing of a task, with what the flow decided about the
+// base branch and the branch of the worktree.
 type closeCall struct {
-	taskID   string
-	repoPath string
-	base     string
-	policy   worktree.BranchPolicy
+	taskID string
+	base   string
+	policy worktree.BranchPolicy
 }
 
 func newWorktrees() *memWorktrees {
 	return &memWorktrees{
-		items:   map[string][]worktree.Worktree{},
+		items:   map[string]worktree.Worktree{},
 		subject: "Do the work of the step",
 		phases:  []worktree.Phase{worktree.PhaseFetching, worktree.PhaseCreating},
 		base:    "origin/dev",
-		ahead:   1,
 		closeResult: task.CloseResult{
 			Worktree:    task.CloseStep{Outcome: task.OutcomeDone},
 			Branch:      task.CloseStep{Outcome: task.OutcomeDone},
@@ -1102,7 +1128,7 @@ func newWorktrees() *memWorktrees {
 	}
 }
 
-// setCloseResult is what every closing of a repository answers with.
+// setCloseResult is what every closing of a task answers with.
 func (m *memWorktrees) setCloseResult(result task.CloseResult) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -1110,13 +1136,13 @@ func (m *memWorktrees) setCloseResult(result task.CloseResult) {
 	m.closeResult = result
 }
 
-// setLeftovers is what every purge of a task answers with: what git could not
+// setLeftover is what every purge of a task answers with: what git could not
 // take back.
-func (m *memWorktrees) setLeftovers(leftovers []worktree.Leftover) {
+func (m *memWorktrees) setLeftover(left worktree.Leftover) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.leftovers = leftovers
+	m.leftover = &left
 }
 
 // closings are the closings the flow asked for, in order.
@@ -1127,51 +1153,30 @@ func (m *memWorktrees) closings() []closeCall {
 	return slices.Clone(m.closeCalls)
 }
 
-func (m *memWorktrees) Get(taskID, repoPath string) (worktree.Worktree, bool) {
+func (m *memWorktrees) Get(taskID string) (worktree.Worktree, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	index := slices.IndexFunc(m.items[taskID], func(wt worktree.Worktree) bool { return wt.RepoPath == repoPath })
-	if index < 0 {
-		return worktree.Worktree{}, false
-	}
-	return m.items[taskID][index], true
-}
-
-func (m *memWorktrees) List(taskID string) []worktree.Worktree {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	return slices.Clone(m.items[taskID])
+	wt, ok := m.items[taskID]
+	return wt, ok
 }
 
 func (m *memWorktrees) Base(_ context.Context, wt worktree.Worktree) (string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.calls = append(m.calls, "base:"+wt.TaskID+":"+filepath.Base(wt.RepoPath))
+	m.calls = append(m.calls, "base:"+wt.TaskID)
 	if m.baseErr != nil {
 		return "", m.baseErr
 	}
 	return m.base, nil
 }
 
-func (m *memWorktrees) Ahead(_ context.Context, wt worktree.Worktree, base string) (int, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	m.calls = append(m.calls, "ahead:"+wt.TaskID+":"+filepath.Base(wt.RepoPath)+":"+base)
-	if m.aheadErr != nil {
-		return 0, m.aheadErr
-	}
-	return m.ahead, nil
-}
-
 func (m *memWorktrees) Ensure(
-	ctx context.Context, t task.Task, repo task.Repository, onPhase func(worktree.Phase),
+	ctx context.Context, t task.Task, registered repository.Repository, onPhase func(worktree.Phase),
 ) (worktree.Worktree, error) {
 	m.mu.Lock()
-	m.calls = append(m.calls, "ensure:"+t.ID+":"+repo.Rel)
+	m.calls = append(m.calls, "ensure:"+t.ID+":"+registered.FullName())
 	block, phases, err := m.block, slices.Clone(m.phases), m.ensureErr
 	m.mu.Unlock()
 
@@ -1188,7 +1193,7 @@ func (m *memWorktrees) Ensure(
 	if err != nil {
 		return worktree.Worktree{}, err
 	}
-	if wt, ok := m.Get(t.ID, repo.Path); ok {
+	if wt, ok := m.Get(t.ID); ok {
 		return wt, nil
 	}
 
@@ -1197,11 +1202,11 @@ func (m *memWorktrees) Ensure(
 
 	wt := worktree.Worktree{
 		TaskID:   t.ID,
-		RepoPath: repo.Path,
-		Path:     worktree.Path(t.WorkspacePath, repo.Rel, t.Name),
+		RepoPath: registered.Path,
+		Path:     worktree.Path(dataDir, registered.Owner, registered.Name, t.Name),
 		Branch:   t.Name,
 	}
-	m.items[t.ID] = append(m.items[t.ID], wt)
+	m.items[t.ID] = wt
 	return wt, nil
 }
 
@@ -1243,7 +1248,7 @@ func (m *memWorktrees) Merged(_ context.Context, wt worktree.Worktree, base stri
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.calls = append(m.calls, "merged:"+wt.TaskID+":"+filepath.Base(wt.RepoPath)+":"+base)
+	m.calls = append(m.calls, "merged:"+wt.TaskID+":"+base)
 	if m.mergedErr != nil {
 		return false, m.mergedErr
 	}
@@ -1256,36 +1261,34 @@ func (m *memWorktrees) Close(
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.calls = append(m.calls, "close:"+wt.TaskID+":"+filepath.Base(wt.RepoPath))
-	m.closeCalls = append(m.closeCalls, closeCall{
-		taskID: wt.TaskID, repoPath: wt.RepoPath, base: base, policy: policy,
-	})
+	m.calls = append(m.calls, "close:"+wt.TaskID)
+	m.closeCalls = append(m.closeCalls, closeCall{taskID: wt.TaskID, base: base, policy: policy})
 	// The real service forgets the worktree whatever git did, so the fake does
 	// too: nothing there is the app's any more.
-	index := slices.IndexFunc(m.items[wt.TaskID], func(w worktree.Worktree) bool { return w.RepoPath == wt.RepoPath })
-	if index >= 0 {
-		m.items[wt.TaskID] = slices.Delete(m.items[wt.TaskID], index, index+1)
-	}
+	delete(m.items, wt.TaskID)
 	result := m.closeResult
 	result.WorktreePath, result.BranchName, result.BaseBranch = wt.Path, wt.Branch, base
 	return result
 }
 
-func (m *memWorktrees) Purge(_ context.Context, taskID string) []worktree.Leftover {
+func (m *memWorktrees) Purge(_ context.Context, taskID string) (worktree.Leftover, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	m.calls = append(m.calls, "purge:"+taskID)
 	m.purged = append(m.purged, taskID)
 	delete(m.items, taskID)
-	return slices.Clone(m.leftovers)
+	if m.leftover == nil {
+		return worktree.Leftover{}, false
+	}
+	return *m.leftover, true
 }
 
-func (m *memWorktrees) RemoveAll(_ context.Context, taskID string) error {
+func (m *memWorktrees) Remove(_ context.Context, taskID string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.calls = append(m.calls, "removeAll:"+taskID)
+	m.calls = append(m.calls, "remove:"+taskID)
 	if m.removeErr != nil {
 		return m.removeErr
 	}
@@ -1293,35 +1296,33 @@ func (m *memWorktrees) RemoveAll(_ context.Context, taskID string) error {
 	return nil
 }
 
-// setAhead is how many commits past its base every branch is said to have.
-func (m *memWorktrees) setAhead(n int) {
+// failBase makes every reading of the base of a branch fail with err.
+func (m *memWorktrees) failBase(err error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.ahead = n
-}
-
-// failAhead makes every count of the commits of a branch fail with err.
-func (m *memWorktrees) failAhead(err error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	m.aheadErr = err
+	m.baseErr = err
 }
 
 // seed registers a worktree the way a previous run of the app left it.
-func (m *memWorktrees) seed(t task.Task, repo task.Repository) worktree.Worktree {
+func (m *memWorktrees) seed(t task.Task) worktree.Worktree {
+	return m.seedAt(t, worktree.Path(dataDir, repo.Owner, repo.Name, t.Name))
+}
+
+// seedAt registers a worktree at a path of the test's choosing, which is how a
+// test says whether the folder of the worktree is still on disk.
+func (m *memWorktrees) seedAt(t task.Task, path string) worktree.Worktree {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	wt := worktree.Worktree{
 		TaskID:   t.ID,
 		RepoPath: repo.Path,
-		Path:     worktree.Path(t.WorkspacePath, repo.Rel, t.Name),
+		Path:     path,
 		Branch:   t.Name,
 		Base:     m.base,
 	}
-	m.items[t.ID] = append(m.items[t.ID], wt)
+	m.items[t.ID] = wt
 	return wt
 }
 
@@ -1366,71 +1367,52 @@ type memReviews struct {
 	calls   []string
 	snap    review.Snapshot
 	has     bool
-	tracked map[review.Key]bool // key -> whether its numbers matter now
+	tracked map[string]bool // task id -> whether its numbers matter now
 }
 
 func newReviews() *memReviews {
-	return &memReviews{tracked: map[review.Key]bool{}}
+	return &memReviews{tracked: map[string]bool{}}
 }
 
-func (m *memReviews) Track(k review.Key, wt worktree.Worktree, active bool) {
+func (m *memReviews) Track(taskID string, wt worktree.Worktree, active bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.calls = append(m.calls, "track:"+reviewLabel(k)+":"+filepath.Base(wt.Path)+":"+strconv.FormatBool(active))
-	m.tracked[k] = active
+	m.calls = append(m.calls, "track:"+taskID+":"+filepath.Base(wt.Path)+":"+strconv.FormatBool(active))
+	m.tracked[taskID] = active
 }
 
-func (m *memReviews) Refresh(k review.Key) (review.Snapshot, bool) {
+func (m *memReviews) Refresh(taskID string) (review.Snapshot, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.calls = append(m.calls, "refresh:"+reviewLabel(k))
+	m.calls = append(m.calls, "refresh:"+taskID)
 	return m.snap, m.has
 }
 
-func (m *memReviews) Snapshot(_ review.Key) (review.Snapshot, bool) {
+func (m *memReviews) Snapshot(string) (review.Snapshot, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	return m.snap, m.has
 }
 
-func (m *memReviews) Forget(k review.Key) {
+func (m *memReviews) Forget(taskID string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.calls = append(m.calls, "forget:"+reviewLabel(k))
-	delete(m.tracked, k)
+	m.calls = append(m.calls, "forget:"+taskID)
+	delete(m.tracked, taskID)
 }
 
-func (m *memReviews) ForgetTask(taskID string) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	m.calls = append(m.calls, "forget-task:"+taskID)
-	maps.DeleteFunc(m.tracked, func(k review.Key, _ bool) bool { return k.TaskID == taskID })
-}
-
-// activeOf says whether the worktree of a key is watched, and whether its
+// activeOf says whether the worktree of a task is watched, and whether its
 // numbers matter now.
-func (m *memReviews) activeOf(k review.Key) (active, watched bool) {
+func (m *memReviews) activeOf(taskID string) (active, watched bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	active, watched = m.tracked[k]
+	active, watched = m.tracked[taskID]
 	return active, watched
-}
-
-// reviewKey is the key the step of a task in the given repository of the fake
-// workspace is reviewed under.
-func reviewKey(taskID string, repo int) review.Key {
-	return review.Key{TaskID: taskID, RepoPath: repos[repo].Path}
-}
-
-// reviewLabel names a key in the recorded calls, by task and repository.
-func reviewLabel(k review.Key) string {
-	return k.TaskID + ":" + filepath.Base(k.RepoPath)
 }
 
 // setSnapshot makes every reading answer with snap.
@@ -1543,30 +1525,33 @@ func oneShotReviewPrompt(path, document string) string {
 
 // fixture is a flow.Service over the four fakes.
 type fixture struct {
-	service   *flow.Service
-	tasks     *memTasks
-	sessions  *memSessions
-	worktrees *memWorktrees
-	reviews   *memReviews
-	gh        *memGH
+	service      *flow.Service
+	tasks        *memTasks
+	sessions     *memSessions
+	worktrees    *memWorktrees
+	repositories *memRepositories
+	reviews      *memReviews
+	gh           *memGH
 }
 
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
 
 	f := &fixture{
-		tasks:     newTasks(),
-		sessions:  newSessions(),
-		worktrees: newWorktrees(),
-		reviews:   newReviews(),
-		gh:        newGH(),
+		tasks:        newTasks(),
+		sessions:     newSessions(),
+		worktrees:    newWorktrees(),
+		repositories: newRepositories(),
+		reviews:      newReviews(),
+		gh:           newGH(),
 	}
 	f.service = flow.New(flow.Deps{
-		Tasks:     f.tasks,
-		Sessions:  f.sessions,
-		Worktrees: f.worktrees,
-		Review:    f.reviews,
-		GH:        f.gh,
+		Tasks:        f.tasks,
+		Sessions:     f.sessions,
+		Worktrees:    f.worktrees,
+		Repositories: f.repositories,
+		Review:       f.reviews,
+		GH:           f.gh,
 		RenderPrompt: func(stage prompts.Stage, vars prompts.Vars) (string, error) {
 			switch stage {
 			case prompts.StageCommit:
@@ -1588,31 +1573,29 @@ func newFixture(t *testing.T) *fixture {
 	return f
 }
 
-// plan is a valid plan of one step in the first repository.
+// plan is a valid plan of one step.
 func plan() task.Plan {
 	return task.Plan{
 		Present: true,
-		Steps:   []task.Step{{Number: 1, File: "1-first.md", Title: "First", Repository: "api", RepoPath: repos[0].Path}},
+		Steps:   []task.Step{{Number: 1, File: "1-first.md", Title: "First"}},
 	}
 }
 
-// brokenPlan is a plan whose only step names a repository of no one.
+// brokenPlan is a plan whose only step has no title.
 func brokenPlan() task.Plan {
 	return task.Plan{
 		Present:  true,
-		Steps:    []task.Step{{Number: 1, File: "1-first.md", Title: "First", Repository: "cli"}},
-		Problems: []task.PlanProblem{{File: "1-first.md", Message: `repository "cli" is not one of the repositories of this task`}},
+		Steps:    []task.Step{{Number: 1, File: "1-first.md"}},
+		Problems: []task.PlanProblem{{File: "1-first.md", Message: `missing the title heading ("# Step N: Title")`}},
 	}
 }
 
 // oneShotPlan is the plan task.Service derives for a One-Shot task: one step,
-// the document itself, in the repository of the task.
+// the document itself.
 func oneShotPlan() task.Plan {
 	return task.Plan{
 		Present: true,
-		Steps: []task.Step{
-			{Number: 1, File: task.OneShotFile, Title: "Login screen", Repository: "api", RepoPath: repos[0].Path},
-		},
+		Steps:   []task.Step{{Number: 1, File: task.OneShotFile, Title: "Login screen"}},
 	}
 }
 
@@ -1778,8 +1761,8 @@ func wantErrIs(t *testing.T, err, want error) {
 	}
 }
 
-// failRemoveAll makes every removal of the worktrees of a task fail with err.
-func (m *memWorktrees) failRemoveAll(err error) {
+// failRemove makes every removal of the worktree of a task fail with err.
+func (m *memWorktrees) failRemove(err error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 

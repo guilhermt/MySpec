@@ -14,7 +14,7 @@ type Input struct {
 	Task      task.Task
 	Artifacts task.Artifacts
 	Steps     []flow.StepState
-	Repos     []flow.RepoState
+	PR        *flow.PullRequest // nil outside the PR stage
 	Sessions  map[session.Key]session.Summary
 }
 
@@ -29,7 +29,11 @@ func Derive(in Input) []Found {
 	case task.StageImplementation:
 		return stepSituations(in)
 	case task.StagePR:
-		return repoSituations(in)
+		if in.PR != nil {
+			if found, ok := prSituation(in.Task, *in.PR); ok {
+				return []Found{found}
+			}
+		}
 	}
 	return nil
 }
@@ -74,7 +78,7 @@ func stageSituation(in Input) (Found, bool) {
 		if kind == "" {
 			return Found{}, false
 		}
-		return newFound(t, place, kind, sessionBody(kind, placeName(t, place))), true
+		return newFound(t, place, kind, sessionBody(kind, placeName(place))), true
 	}
 	if !sum.Idle {
 		// The agent is working, or a message waits in the queue for it.
@@ -94,7 +98,7 @@ func stageSituation(in Input) (Found, bool) {
 		}
 		return newFound(t, place, KindReadyToContinue, readyToContinueBody(t.Stage)), true
 	}
-	return newFound(t, place, KindReply, sessionBody(KindReply, placeName(t, place))), true
+	return newFound(t, place, KindReply, sessionBody(KindReply, placeName(place))), true
 }
 
 // stepSituations are the situations of a task in implementation, the ones of
@@ -134,7 +138,7 @@ func stepSituation(t task.Task, step flow.StepState, sessions map[session.Key]se
 			if kind == "" {
 				return Found{}, false
 			}
-			return newFound(t, place, kind, sessionBody(kind, placeName(t, place))), true
+			return newFound(t, place, kind, sessionBody(kind, placeName(place))), true
 		}
 	}
 
@@ -181,26 +185,12 @@ func reviewerSituation(t task.Task, step flow.StepState) (Found, bool) {
 	return Found{}, false
 }
 
-// repoSituations are the situations of a task in the PR stage, one per
-// repository at most, in the order of the repositories.
-func repoSituations(in Input) []Found {
-	var situations []Found
-	for _, repo := range in.Repos {
-		found, ok := repoSituation(in.Task, repo)
-		if !ok {
-			continue
-		}
-		situations = append(situations, found)
-	}
-	return situations
-}
-
-// repoSituation is the situation of one repository of the PR stage.
-func repoSituation(t task.Task, repo flow.RepoState) (Found, bool) {
-	place := Place{Kind: PlaceRepo, RepoPath: repo.RepoPath, Repository: repo.Repository}
-	name := repoName(t, place)
-	if repo.SessionStage != "" {
-		if kind, decided := sessionKind(repo.Session); decided {
+// prSituation is the situation of the pull request of a task in the PR stage.
+func prSituation(t task.Task, pr flow.PullRequest) (Found, bool) {
+	place := Place{Kind: PlacePR}
+	name := placeName(place)
+	if pr.SessionStage != "" {
+		if kind, decided := sessionKind(pr.Session); decided {
 			if kind == "" {
 				return Found{}, false
 			}
@@ -208,48 +198,46 @@ func repoSituation(t task.Task, repo flow.RepoState) (Found, bool) {
 		}
 	}
 
-	switch repo.Status {
-	case flow.RepoBlocked:
+	switch pr.Status {
+	case flow.PRBlocked:
 		var reason task.PRBlockReason
-		if repo.Block != nil {
-			reason = repo.Block.Reason
+		if pr.Block != nil {
+			reason = pr.Block.Reason
 		}
-		return newFound(t, place, KindPRBlocked, prBlockedBody(name, reason)), true
-	case flow.RepoPRClosed:
-		return newFound(t, place, KindPRClosed, prClosedBody(name)), true
-	case flow.RepoAwaitingReply:
+		return newFound(t, place, KindPRBlocked, prBlockedBody(reason)), true
+	case flow.PRClosedUnmerged:
+		return newFound(t, place, KindPRClosed, prClosedBody()), true
+	case flow.PRAwaitingReply:
 		return newFound(t, place, KindReply, sessionBody(KindReply, name)), true
-	case flow.RepoDraftReady:
-		return newFound(t, place, KindDraft, draftBody(name)), true
-	case flow.RepoAwaitingDecision:
-		return newFound(t, place, KindFindings, findingsBody(name)), true
-	case flow.RepoInReview:
+	case flow.PRDraftReady:
+		return newFound(t, place, KindDraft, draftBody()), true
+	case flow.PRAwaitingDecision:
+		return newFound(t, place, KindFindings, findingsBody()), true
+	case flow.PRInReview:
 		form, percent := FormReview, 0
-		if repo.Review != nil && repo.Review.Staged > 0 {
-			form, percent = FormStaged, repo.Review.Percent()
+		if pr.Review != nil && pr.Review.Staged > 0 {
+			form, percent = FormStaged, pr.Review.Percent()
 		}
-		found := newFound(t, place, KindChangesReview, changesReviewBody(name, form, repo.CommitFailed))
+		found := newFound(t, place, KindChangesReview, changesReviewBody(form, pr.CommitFailed))
 		found.Form, found.Percent = form, percent
 		return found, true
-	case flow.RepoReadyToApprove:
-		found := newFound(t, place, KindChangesReview, changesReviewBody(name, FormApprove, repo.CommitFailed))
+	case flow.PRReadyToApprove:
+		found := newFound(t, place, KindChangesReview, changesReviewBody(FormApprove, pr.CommitFailed))
 		found.Form = FormApprove
 		return found, true
-	case flow.RepoDone:
+	case flow.PRDone:
 		form := FormMerge
-		if repo.CanClose {
+		if pr.CanClose {
 			// The merge could not be confirmed, and the closing is offered.
 			form = FormClose
 		}
-		found := newFound(t, place, KindMerge, mergeBody(name, form))
+		found := newFound(t, place, KindMerge, mergeBody(form))
 		found.Form = form
 		return found, true
-	case flow.RepoMerged:
-		found := newFound(t, place, KindMerge, mergeBody(name, FormClose))
+	case flow.PRMerged:
+		found := newFound(t, place, KindMerge, mergeBody(FormClose))
 		found.Form = FormClose
 		return found, true
-	case flow.RepoSkipped:
-		return newFound(t, place, KindNothingToPublish, nothingToPublishBody(name)), true
 	default:
 		return Found{}, false
 	}

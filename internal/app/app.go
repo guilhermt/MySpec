@@ -4,6 +4,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -25,14 +26,14 @@ import (
 	"github.com/guilhermt/myspec/internal/platform/notify"
 	"github.com/guilhermt/myspec/internal/platform/xdg"
 	"github.com/guilhermt/myspec/internal/prompts"
+	"github.com/guilhermt/myspec/internal/repository"
 	"github.com/guilhermt/myspec/internal/review"
 	"github.com/guilhermt/myspec/internal/reviewmode"
-	"github.com/guilhermt/myspec/internal/scan"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/store"
 	"github.com/guilhermt/myspec/internal/task"
 	"github.com/guilhermt/myspec/internal/theme"
-	"github.com/guilhermt/myspec/internal/workspace"
+	"github.com/guilhermt/myspec/internal/upgrade"
 	"github.com/guilhermt/myspec/internal/worktree"
 )
 
@@ -52,27 +53,33 @@ const callTimeout = 5 * time.Second
 // their processes are killed.
 const shutdownTimeout = 8 * time.Second
 
+// What the app is called, to the user and to the system.
+const (
+	appName        = "MySpec" // the title of the window and the name the notifications carry
+	appDescription = "Orchestrates a Claude Code development workflow"
+	programName    = "myspec" // the Linux program and the lock of the single instance
+)
+
 // App holds the running application: the Wails handles and the domain services
 // they are wired to.
 type App struct {
-	log         *slog.Logger
-	ws          *workspace.Service
-	theme       *theme.Service
-	models      *models.Service
-	reviewModes *reviewmode.Service
-	tasks       *task.Service
-	sessions    *session.Service
-	worktrees   *worktree.Service
-	review      *review.Service
-	flow        *flow.Service
-	attention   *attention.Service
-	notifier    *notify.Notifier // nil when the desktop has no notification service
-	player      *chime.Player    // nil when there is no notifier or the chime could not be installed
+	log          *slog.Logger
+	repositories *repository.Service
+	theme        *theme.Service
+	models       *models.Service
+	reviewModes  *reviewmode.Service
+	tasks        *task.Service
+	sessions     *session.Service
+	worktrees    *worktree.Service
+	review       *review.Service
+	flow         *flow.Service
+	attention    *attention.Service
+	notifier     *notify.Notifier // nil when the desktop has no notification service
+	player       *chime.Player    // nil when there is no notifier or the chime could not be installed
 
-	mu      sync.Mutex
-	wails   *application.App
-	window  *application.WebviewWindow
-	recents []bindings.Recent // last list read successfully
+	mu     sync.Mutex
+	wails  *application.App
+	window *application.WebviewWindow
 
 	publishMu sync.Mutex // keeps concurrent publishes from interleaving
 }
@@ -98,7 +105,6 @@ func Run(cfg Config) int {
 		"app starting",
 		"version", cfg.Version,
 		"args", cfg.Args,
-		"cwd", cfg.Cwd,
 		"data_dir", dirs.Data,
 		"state_dir", dirs.State,
 	)
@@ -108,7 +114,20 @@ func Run(cfg Config) int {
 	ctx, cancel := context.WithTimeout(context.Background(), startupTimeout)
 	defer cancel()
 
-	st, err := store.Open(ctx, dirs.DatabasePath(), log)
+	gitRunner := git.New(git.Deps{Log: log})
+	identifier := repository.NewIdentifier(gitRunner)
+
+	st, err := store.Open(ctx, dirs.DatabasePath(), log, upgrade.New(upgrade.Deps{
+		Identify: identifier.Identify,
+		DataDir:  dirs.Data,
+		Log:      log,
+	}))
+	// Data the app cannot carry over leaves the database as the version before
+	// left it, and opens the window on what the user has to resolve.
+	var refused *upgrade.RefusedError
+	if errors.As(err, &refused) {
+		return runRefused(cfg, log, refused)
+	}
 	if err != nil {
 		return fail(log, "open database", err)
 	}
@@ -169,57 +188,62 @@ func Run(cfg Config) int {
 		},
 		OnTranscript: a.emitTranscript,
 	})
+	repositories := repository.New(repository.Deps{
+		Store:         st.Repositories,
+		Settings:      st.Settings,
+		Identify:      identifier.Identify,
+		Counts:        func(id string) (int, int) { return a.tasks.Counts(id) },
+		Log:           log,
+		OnChange:      a.publish,
+		OnPathChanged: a.onRepositoryPathChanged,
+	})
 	tasks, err := task.New(task.Deps{
-		Repo:       st.Tasks,
-		DataDir:    dirs.Data,
-		Log:        log,
-		Repos:      a.repoPaths,
-		OnChange:   a.publish,
-		OnArtifact: a.onArtifact,
+		Repo:         st.Tasks,
+		DataDir:      dirs.Data,
+		Log:          log,
+		Repositories: repositories.Get,
+		OnChange:     a.publish,
+		OnArtifact:   a.onArtifact,
 	})
 	if err != nil {
 		return fail(log, "watch artifacts", err)
 	}
-	gitRunner := git.New(git.Deps{Log: log})
 	ghRunner := gh.New(gh.Deps{Log: log})
-	worktrees := worktree.New(worktree.Deps{Git: gitRunner, Store: st.Worktrees, Log: log})
+	worktrees := worktree.New(worktree.Deps{
+		Git: gitRunner, Store: st.Worktrees, DataDir: dirs.Data, Log: log,
+	})
 	reviews, err := review.New(review.Deps{
 		Worktrees: worktrees,
 		Log:       log,
-		OnChange: func(k review.Key) {
+		OnChange: func(taskID string) {
 			a.publish()
-			a.flow.Check(k.TaskID)
+			a.flow.Check(taskID)
 		},
 	})
 	if err != nil {
 		return fail(log, "watch worktrees", err)
 	}
 	// The session and task callbacks reach the flow through the app, which
-	// holds it before anything can run: no process starts before Bootstrap.
+	// holds it before anything can run: no process starts before load.
 	flowSvc := flow.New(flow.Deps{
-		Tasks:     tasks,
-		Sessions:  sessions,
-		Worktrees: worktrees,
-		Review:    reviews,
-		GH:        ghRunner,
-		Log:       log,
+		Tasks:        tasks,
+		Sessions:     sessions,
+		Worktrees:    worktrees,
+		Repositories: repositories,
+		Review:       reviews,
+		GH:           ghRunner,
+		Log:          log,
 		RenderPrompt: func(stage prompts.Stage, vars prompts.Vars) (string, error) {
 			return prompts.Render(dirs.Data, stage, vars)
 		},
 		OnChange: func(string) { a.publish() },
 	})
-	wsSvc := workspace.New(workspace.Deps{
-		Recents:  st.Recents,
-		Scan:     func(root string) ([]string, error) { return scan.Repos(root, log) },
-		Log:      log,
-		OnChange: a.onWorkspaceChanged,
-	})
-	a.theme, a.ws, a.tasks, a.sessions, a.flow = themeSvc, wsSvc, tasks, sessions, flowSvc
+	a.theme, a.repositories, a.tasks, a.sessions, a.flow = themeSvc, repositories, tasks, sessions, flowSvc
 	a.worktrees, a.review, a.models = worktrees, reviews, modelsSvc
 	a.reviewModes = reviewModesSvc
 
-	if err := wsSvc.Bootstrap(ctx, firstArg(cfg.Args, log), cfg.Cwd); err != nil {
-		return fail(log, "open initial workspace", err)
+	if err := a.load(ctx); err != nil {
+		return fail(log, "load tasks", err)
 	}
 	a.watchSystemTheme()
 
@@ -230,10 +254,10 @@ func Run(cfg Config) int {
 	go a.pollPRs(pollCtx)
 
 	wails := application.New(
-		a.options(cfg, wsSvc, themeSvc, modelsSvc, reviewModesSvc, tasks, sessions, flowSvc, dirs.Data, log),
+		a.options(cfg, repositories, themeSvc, modelsSvc, reviewModesSvc, tasks, sessions, flowSvc, dirs.Data, log),
 	)
 	a.setWails(wails)
-	a.openWindow(cfg)
+	a.openWindow(cfg, themeSvc.Effective())
 
 	runErr := wails.Run()
 	if runErr != nil {
@@ -250,7 +274,7 @@ func Run(cfg Config) int {
 // frontend binds to.
 func (a *App) options(
 	cfg Config,
-	ws *workspace.Service,
+	repositories *repository.Service,
 	themeSvc *theme.Service,
 	modelsSvc *models.Service,
 	reviewModesSvc *reviewmode.Service,
@@ -261,23 +285,24 @@ func (a *App) options(
 	log *slog.Logger,
 ) application.Options {
 	return application.Options{
-		Name:        "MySpec",
-		Description: "Orchestrates a Claude Code development workflow",
+		Name:        appName,
+		Description: appDescription,
 		Icon:        cfg.Icon,
 		Services: []application.Service{
-			application.NewService(bindings.NewWorkspaceService(ws, a.state, a, log)),
+			application.NewService(bindings.NewStateService(a.state)),
+			application.NewService(bindings.NewRepositoryService(repositories, a, log)),
 			application.NewService(
 				bindings.NewSettingsService(themeSvc, modelsSvc, reviewModesSvc, dataDir, log),
 			),
-			application.NewService(
-				bindings.NewTaskService(tasks, sessions, flowSvc, modelsSvc, reviewModesSvc, editor.Open, log),
-			),
+			application.NewService(bindings.NewTaskService(
+				tasks, sessions, flowSvc, modelsSvc, reviewModesSvc, repositories, editor.Open, log,
+			)),
 			application.NewService(bindings.NewAttentionService(a.attention)),
 		},
 		Assets: application.AssetOptions{Handler: application.AssetFileServerFS(cfg.Assets)},
-		Linux:  application.LinuxOptions{ProgramName: "myspec"},
+		Linux:  application.LinuxOptions{ProgramName: programName},
 		SingleInstance: &application.SingleInstanceOptions{
-			UniqueID:               "myspec",
+			UniqueID:               programName,
 			OnSecondInstanceLaunch: a.onSecondInstance,
 		},
 		OnShutdown: a.shutdown,
@@ -286,46 +311,51 @@ func (a *App) options(
 	}
 }
 
-// onWorkspaceChanged brings the tasks in line with the workspace that just
-// changed before the state reaches the frontend.
-func (a *App) onWorkspaceChanged() {
-	a.syncTasks()
-	a.publish()
+// load reads the repositories and the tasks and hands the active tasks to the
+// flow, which opens the session of the stage each one is in and moves on the
+// stages that finished while the app was closed. The situations and the
+// worktrees failing to load only go to the log: the steps block on their own.
+func (a *App) load(ctx context.Context) error {
+	if err := a.repositories.Sync(ctx); err != nil {
+		return fmt.Errorf("sync repositories: %w", err)
+	}
+	if err := a.tasks.Sync(ctx); err != nil {
+		return fmt.Errorf("sync tasks: %w", err)
+	}
+	ids := a.activeTaskIDs()
+	// The baseline of the situations starts before the flow opens the
+	// sessions, so that what already waited on the user is found, not started.
+	if err := a.attention.Sync(ctx, ids); err != nil {
+		a.log.Error("sync situations failed", "err", err)
+	}
+	// The flow reads the registry of worktrees as it resumes the steps, so it
+	// is loaded first.
+	if err := a.worktrees.Sync(ctx, ids); err != nil {
+		a.log.Error("sync worktrees failed", "err", err)
+	}
+	a.flow.Sync(ctx)
+	return nil
 }
 
-// syncTasks loads the tasks of the open workspace and hands them to the flow,
-// which opens the session of the stage each one is in and moves on the stages
-// that finished while the app was closed. A task that cannot be loaded is
-// logged and left out; it never keeps the workspace from opening.
-func (a *App) syncTasks() {
-	current := a.ws.Current()
-	if current == nil {
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
-	defer cancel()
-
-	if err := a.tasks.Sync(ctx, current.Path); err != nil {
-		a.log.Error("sync tasks failed", "workspace", current.Path, "err", err)
-		return
-	}
+// activeTaskIDs are the ids of the active tasks.
+func (a *App) activeTaskIDs() []string {
 	tasks := a.tasks.List()
 	ids := make([]string, len(tasks))
 	for i, t := range tasks {
 		ids[i] = t.ID
 	}
-	// The baseline of the situations starts before the flow opens the
-	// sessions, so that what already waited on the user is found, not started.
-	if err := a.attention.Sync(ctx, ids); err != nil {
-		a.log.Error("sync situations failed", "workspace", current.Path, "err", err)
+	return ids
+}
+
+// onRepositoryPathChanged reloads the worktrees, whose clone moved with the
+// repository.
+func (a *App) onRepositoryPathChanged(string) {
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+
+	if err := a.worktrees.Sync(ctx, a.activeTaskIDs()); err != nil {
+		a.log.Error("sync worktrees failed", "err", err)
 	}
-	// The flow reads the registry of worktrees as it resumes the steps, so it
-	// is loaded first; a failure only leaves the steps to block on their own.
-	if err := a.worktrees.Sync(ctx, ids); err != nil {
-		a.log.Error("sync worktrees failed", "workspace", current.Path, "err", err)
-	}
-	a.flow.Sync(ctx)
 }
 
 // shutdown stops the situations, every session, the notifications, the chime

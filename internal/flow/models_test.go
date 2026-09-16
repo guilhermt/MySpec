@@ -41,7 +41,7 @@ func TestStageModelsSayWhatCanStillChange(t *testing.T) {
 	tests := map[string]struct {
 		stage task.Stage
 		steps []flow.StepState
-		repos []flow.RepoState
+		pr    *flow.PullRequest
 		want  map[models.Stage]rule
 	}{
 		"the prd, which starts with the task": {
@@ -110,28 +110,35 @@ func TestStageModelsSayWhatCanStillChange(t *testing.T) {
 				models.PRReview:       {Editable: true},
 			},
 		},
-		"a pull request being drafted, with a repository still to prepare": {
+		"a pull request still to prepare": {
 			stage: task.StagePR,
-			repos: []flow.RepoState{
-				{Slug: "api", Status: flow.RepoDrafting, SessionStage: session.PRStage("api")},
-				{Slug: "web", Status: flow.RepoPreparing},
-			},
+			pr:    &flow.PullRequest{Status: flow.PRPreparing},
 			want: map[models.Stage]rule{
 				models.PRD:            {},
 				models.TechSpec:       {},
 				models.Plan:           {},
 				models.Implementation: {},
 				models.StepReview:     {},
-				models.PR:             {Editable: true, Live: true},
+				models.PR:             {Editable: true},
 				models.PRReview:       {Editable: true},
 			},
 		},
-		"every pull request under review": {
+		"a pull request being drafted": {
 			stage: task.StagePR,
-			repos: []flow.RepoState{
-				{Slug: "api", Status: flow.RepoReviewing, SessionStage: session.PRReviewStage("api")},
-				{Slug: "web", Status: flow.RepoReviewing, SessionStage: session.PRReviewStage("web")},
+			pr:    &flow.PullRequest{Status: flow.PRDrafting, SessionStage: session.PRStage},
+			want: map[models.Stage]rule{
+				models.PRD:            {},
+				models.TechSpec:       {},
+				models.Plan:           {},
+				models.Implementation: {},
+				models.StepReview:     {},
+				models.PR:             {Live: true},
+				models.PRReview:       {Editable: true},
 			},
+		},
+		"the pull request under review": {
+			stage: task.StagePR,
+			pr:    &flow.PullRequest{Status: flow.PRReviewing, SessionStage: session.PRReviewStage},
 			want: map[models.Stage]rule{
 				models.PRD:            {},
 				models.TechSpec:       {},
@@ -149,7 +156,7 @@ func TestStageModelsSayWhatCanStillChange(t *testing.T) {
 			t.Parallel()
 
 			tk := task.Task{ID: "task-1", Stage: tc.stage}
-			got := rulesOf(flow.StageModels(tk, tc.steps, tc.repos))
+			got := rulesOf(flow.StageModels(tk, tc.steps, tc.pr))
 			if diff := cmp.Diff(tc.want, got); diff != "" {
 				t.Errorf("stage models mismatch (-want +got):\n%s", diff)
 			}
@@ -163,7 +170,7 @@ func TestStageModelsOfAOneShotTaskSayWhatCanStillChange(t *testing.T) {
 	tests := map[string]struct {
 		stage task.Stage
 		steps []flow.StepState
-		repos []flow.RepoState
+		pr    *flow.PullRequest
 		want  map[models.Stage]rule
 	}{
 		"the planning, which starts with the task": {
@@ -200,9 +207,7 @@ func TestStageModelsOfAOneShotTaskSayWhatCanStillChange(t *testing.T) {
 		},
 		"the pull request under review": {
 			stage: task.StagePR,
-			repos: []flow.RepoState{
-				{Slug: "api", Status: flow.RepoReviewing, SessionStage: session.PRReviewStage("api")},
-			},
+			pr:    &flow.PullRequest{Status: flow.PRReviewing, SessionStage: session.PRReviewStage},
 			want: map[models.Stage]rule{
 				models.OneShot:        {},
 				models.Implementation: {},
@@ -218,7 +223,7 @@ func TestStageModelsOfAOneShotTaskSayWhatCanStillChange(t *testing.T) {
 			t.Parallel()
 
 			tk := task.Task{ID: "task-1", Mode: task.ModeOneShot, Stage: tc.stage}
-			got := rulesOf(flow.StageModels(tk, tc.steps, tc.repos))
+			got := rulesOf(flow.StageModels(tk, tc.steps, tc.pr))
 			if diff := cmp.Diff(tc.want, got); diff != "" {
 				t.Errorf("stage models mismatch (-want +got):\n%s", diff)
 			}
@@ -278,7 +283,7 @@ func TestSessionsStartWithTheChoiceOfTheirStage(t *testing.T) {
 		wantChoice(t, f, session.Key{TaskID: "task-1", Stage: string(task.StagePRD)}, want)
 	})
 
-	t.Run("the pull request of a repository", func(t *testing.T) {
+	t.Run("the pull request of a task", func(t *testing.T) {
 		t.Parallel()
 
 		f := newFixture(t)
@@ -286,8 +291,8 @@ func TestSessionsStartWithTheChoiceOfTheirStage(t *testing.T) {
 		f.tasks.setModels("task-1", task.Models{Stages: models.Set{models.PR: want}})
 		startPR(t, f, plan())
 
-		f.waitPRSession(t, "task-1", "api")
-		wantChoice(t, f, prSession("task-1", "api"), want)
+		f.waitPRSession(t, "task-1")
+		wantChoice(t, f, prSession("task-1"), want)
 	})
 
 	t.Run("the review of a pull request", func(t *testing.T) {
@@ -471,8 +476,8 @@ func TestSetSessionModelCarriesTheChangeToTheStageOrTheStep(t *testing.T) {
 			stage:     session.StepStage(1),
 			wantTask:  []string{"stepModel:task-1:1:claude-sonnet-5:low"},
 		},
-		// The choice of one repository is that repository's alone.
-		"a repository": {taskStage: task.StagePR, stage: session.PRStage("api")},
+		// The choice of the pull request is the stage's alone.
+		"the pull request": {taskStage: task.StagePR, stage: session.PRStage},
 	}
 
 	for name, tc := range tests {
@@ -508,15 +513,14 @@ func TestSetSessionModelOfAnEndedConversationChangesNothing(t *testing.T) {
 // aChoice is the model and effort the operations of the flow are asked for.
 var aChoice = models.Choice{Model: models.Sonnet5, Effort: models.Low}
 
-// threeStepPlan is a plan whose steps all live in the first repository of the
-// fake workspace.
+// threeStepPlan is a plan of three steps.
 func threeStepPlan() task.Plan {
 	return task.Plan{
 		Present: true,
 		Steps: []task.Step{
-			{Number: 1, File: "1-first.md", Title: "First", Repository: "api", RepoPath: repos[0].Path},
-			{Number: 2, File: "2-second.md", Title: "Second", Repository: "api", RepoPath: repos[0].Path},
-			{Number: 3, File: "3-third.md", Title: "Third", Repository: "api", RepoPath: repos[0].Path},
+			{Number: 1, File: "1-step.md", Title: "First"},
+			{Number: 2, File: "2-step.md", Title: "Second"},
+			{Number: 3, File: "3-step.md", Title: "Third"},
 		},
 	}
 }

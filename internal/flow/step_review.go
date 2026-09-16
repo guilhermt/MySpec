@@ -9,6 +9,7 @@ import (
 
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
+	"github.com/guilhermt/myspec/internal/repository"
 	"github.com/guilhermt/myspec/internal/review"
 	"github.com/guilhermt/myspec/internal/reviewmode"
 	"github.com/guilhermt/myspec/internal/session"
@@ -85,11 +86,11 @@ func passMessage(reply, path string) string {
 // worktree and the file of the step, the report of the pass it is about to
 // write and what the implementer said last.
 func stepReviewInfo(
-	t task.Task, step task.Step, wt worktree.Worktree, pass int, reply string, repos []task.Repository,
+	t task.Task, step task.Step, wt worktree.Worktree, pass int, reply string, repo repository.Repository,
 ) session.TaskInfo {
-	info := stepInfo(t, step, wt, repos)
+	info := stepInfo(t, step, wt, repo)
 	info.Stage, info.Prompt = session.StepReviewStage(step.Number), prompts.StageStepReview
-	info.Repository, info.Branch = repoRel(t, wt.RepoPath), wt.Branch
+	info.Branch = wt.Branch
 	info.ReviewPath = t.StepReportPath(step.Number, pass)
 	info.ImplementerReply = reply
 	info.Choice = t.Models.Stage(models.StepReview)
@@ -120,11 +121,14 @@ func agentState(state *StepState, run task.StepRun, implementerIdle bool, snap r
 
 // openStepReviewer opens the reviewer of a step that had a pass, on the report
 // of the last pass asked for, next to the implementer the app opens again.
-func (s *Service) openStepReviewer(ctx context.Context, t task.Task, step task.Step, wt worktree.Worktree, run task.StepRun) {
+func (s *Service) openStepReviewer(
+	ctx context.Context, t task.Task, step task.Step, wt worktree.Worktree,
+	run task.StepRun, repo repository.Repository,
+) {
 	if run.ReviewPass == 0 {
 		return
 	}
-	info := stepReviewInfo(t, step, wt, run.ReviewPass, "", s.tasks.Repositories(t))
+	info := stepReviewInfo(t, step, wt, run.ReviewPass, "", repo)
 	if err := s.sessions.Open(ctx, info); err != nil {
 		s.log.Error("open step review session failed", "task", t.ID, "step", step.Number, "error", err)
 	}
@@ -160,13 +164,21 @@ func (s *Service) evaluateAgentReview(
 		// the agent review.
 		return
 	}
-	s.askStepPass(ctx, t, step, wt, run)
+	repo, err := s.repositoryOf(t)
+	if err != nil {
+		s.log.Error("ask step review pass failed", "task", t.ID, "step", step.Number, "error", err)
+		return
+	}
+	s.askStepPass(ctx, t, step, wt, run, repo)
 }
 
 // askStepPass asks the reviewer of a step for the pass after the last report:
 // the first one opens its conversation with the prompt, and every later one is
 // a message of the app in it.
-func (s *Service) askStepPass(ctx context.Context, t task.Task, step task.Step, wt worktree.Worktree, run task.StepRun) {
+func (s *Service) askStepPass(
+	ctx context.Context, t task.Task, step task.Step, wt worktree.Worktree,
+	run task.StepRun, repo repository.Repository,
+) {
 	pass := run.ReportedPass + 1
 	reply := implementerReply(s.sessions.LastReply(stepKey(t.ID, step.Number)))
 	// The pass is recorded before it is asked for, so that no evaluation asks
@@ -177,7 +189,7 @@ func (s *Service) askStepPass(ctx context.Context, t task.Task, step task.Step, 
 	}
 	var err error
 	if run.ReviewPass == 0 {
-		err = s.sessions.Start(ctx, stepReviewInfo(t, step, wt, pass, reply, s.tasks.Repositories(t)), false)
+		err = s.sessions.Start(ctx, stepReviewInfo(t, step, wt, pass, reply, repo), false)
 	} else {
 		message := passMessage(reply, t.StepReportPath(step.Number, pass))
 		err = s.sessions.SendFromApp(ctx, stepReviewKey(t.ID, step.Number), message)
@@ -213,7 +225,7 @@ func (s *Service) actOnStepReport(ctx context.Context, t task.Task, step task.St
 // commitReviewedStep asks the implementer of a step whose report came clean to
 // commit every change of the worktree: nobody staged anything.
 func (s *Service) commitReviewedStep(ctx context.Context, t task.Task, step task.Step, report task.ReviewReport) {
-	vars := commitVars(t, s.tasks.Repositories(t))
+	vars := commitVars(t)
 	vars.CommitAll = true
 	message, err := s.renderPrompt(prompts.StageCommit, vars)
 	if err != nil {

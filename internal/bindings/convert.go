@@ -1,48 +1,75 @@
 package bindings
 
 import (
-	"path/filepath"
 	"time"
 
 	"github.com/guilhermt/myspec/internal/attention"
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
+	"github.com/guilhermt/myspec/internal/repository"
 	"github.com/guilhermt/myspec/internal/review"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
-	"github.com/guilhermt/myspec/internal/workspace"
+	"github.com/guilhermt/myspec/internal/theme"
+	"github.com/guilhermt/myspec/internal/upgrade"
 )
 
-// FromWorkspace converts the open workspace, keeping nil for none.
-func FromWorkspace(ws *workspace.Workspace) *Workspace {
-	if ws == nil {
-		return nil
-	}
-
-	repos := make([]Repo, len(ws.Repos))
-	for i, repo := range ws.Repos {
-		repos[i] = Repo{Name: repo.Name, Path: repo.Path}
-	}
-	return &Workspace{Name: ws.Name, Path: ws.Path, Repos: repos}
-}
-
-// FromRecents converts the recent workspaces, always returning a slice so the
-// frontend never sees null.
-func FromRecents(recents []workspace.Recent) []Recent {
-	converted := make([]Recent, len(recents))
-	for i, rec := range recents {
-		converted[i] = Recent{Name: rec.Name, Path: rec.Path}
+// FromRepositories converts the registered repositories, with what the last
+// check found about each clone and how many tasks it holds. It always returns a
+// slice so the frontend never sees null.
+func FromRepositories(
+	list []repository.Repository,
+	missing func(id string) bool,
+	counts func(id string) (int, int),
+) []Repository {
+	converted := make([]Repository, len(list))
+	for i, repo := range list {
+		active, archived := counts(repo.ID)
+		converted[i] = Repository{
+			ID:            repo.ID,
+			Owner:         repo.Owner,
+			Name:          repo.Name,
+			FullName:      repo.FullName(),
+			Path:          repo.Path,
+			Missing:       missing(repo.ID),
+			ActiveTasks:   active,
+			ArchivedTasks: archived,
+		}
 	}
 	return converted
 }
 
-// FromNotice converts the current notice, keeping nil for none.
-func FromNotice(notice *workspace.Notice) *Notice {
-	if notice == nil {
-		return nil
+// FromMigration converts the cases a refused migration listed, so that the
+// screen can say what to resolve and where.
+func FromMigration(refused *upgrade.RefusedError) *Migration {
+	cases := make([]MigrationCase, len(refused.Cases))
+	for i, c := range refused.Cases {
+		tasks := make([]MigrationTask, len(c.Entries))
+		for j, entry := range c.Entries {
+			tasks[j] = MigrationTask{Name: entry.Task, Workspace: entry.Workspace, Path: entry.Path}
+		}
+		cases[i] = MigrationCase{
+			Kind:       string(c.Kind),
+			Repository: c.Repository,
+			Detail:     c.Detail,
+			Tasks:      tasks,
+		}
 	}
-	return &Notice{Path: notice.Path, Reason: string(notice.Reason)}
+	return &Migration{Cases: cases}
+}
+
+// RefusedState is the whole state of an app whose data could not be migrated:
+// the cases to resolve and nothing of the product, which never opened.
+func RefusedState(refused *upgrade.RefusedError) State {
+	return State{
+		Migration:     FromMigration(refused),
+		Repositories:  []Repository{},
+		Theme:         string(theme.System),
+		ModelDefaults: []StageModel{},
+		Tasks:         []TaskSummary{},
+		History:       []ArchivedTask{},
+	}
 }
 
 // FromModelSet converts the choice of every stage, in the order the settings
@@ -89,15 +116,16 @@ func FromPrompt(p prompts.Prompt) Prompt {
 	}
 }
 
-// FromTasks converts the tasks of the open workspace, pairing each with the
-// artifacts of its folder, the state of its steps, the summary of its session
-// when there is one and the situations it waits on the user for, by task id. A
-// nil map of situations counts as none for every task.
+// FromTasks converts the active tasks, pairing each with the artifacts of its
+// folder, the state of its steps, its pull request, its repository, the summary
+// of its session when there is one and the situations it waits on the user for,
+// by task id. A nil map of situations counts as none for every task.
 func FromTasks(
 	tasks []task.Task,
 	artifacts func(id string) task.Artifacts,
 	steps func(id string) []flow.StepState,
-	repos func(id string) []flow.RepoState,
+	prs func(id string) (flow.PullRequest, bool),
+	repositories func(id string) (repository.Repository, bool),
 	summaries map[session.Key]session.Summary,
 	situations map[string][]attention.Situation,
 ) []TaskSummary {
@@ -105,7 +133,15 @@ func FromTasks(
 	for i, t := range tasks {
 		a := artifacts(t.ID)
 		states := steps(t.ID)
-		repoStates := repos(t.ID)
+		pr, hasPR := prs(t.ID)
+		var prPointer *flow.PullRequest
+		if hasPR {
+			prPointer = &pr
+		}
+		fullName := ""
+		if repo, ok := repositories(t.RepositoryID); ok {
+			fullName = repo.FullName()
+		}
 		summary := summaries[taskSessionKey(t, states)]
 		if summary.Status == "" {
 			summary.Status = session.StatusWaiting
@@ -113,8 +149,8 @@ func FromTasks(
 		converted[i] = TaskSummary{
 			ID:                 t.ID,
 			Name:               t.Name,
-			RepoPath:           t.RepoPath,
-			Dir:                t.Dir(),
+			RepositoryID:       t.RepositoryID,
+			Repository:         fullName,
 			Mode:               string(t.Mode),
 			Stage:              string(t.Stage),
 			Revisiting:         t.Revisiting,
@@ -134,10 +170,10 @@ func FromTasks(
 			HasOneShot:         a.OneShot,
 			Steps:              fromSteps(states),
 			CurrentStep:        currentStep(states),
-			Repos:              fromRepos(repoStates),
+			PR:                 fromPullRequest(prPointer),
 			PlanProblems:       fromProblems(a.Plan.Problems),
 			Situations:         fromSituations(situations[t.ID]),
-			Models:             fromStageModels(flow.StageModels(t, states, repoStates)),
+			Models:             fromStageModels(flow.StageModels(t, states, prPointer)),
 			CanContinue:        t.Revisiting && a.Done(t.Stage) && summary.Idle,
 			ArtifactVersion:    t.ArtifactVersion,
 			LastError:          summary.LastError,
@@ -150,8 +186,8 @@ func FromTasks(
 
 // taskSessionKey is the session the task screen shows: the one of the stage
 // the task is in, which in the implementation stage is the step that runs. The
-// PR stage has none of its own — every conversation there belongs to a
-// repository — and its fields stay empty.
+// PR stage has none of its own — its conversations belong to the pull request —
+// and its fields stay empty.
 func taskSessionKey(t task.Task, states []flow.StepState) session.Key {
 	switch t.Stage {
 	case task.StagePR:
@@ -167,57 +203,54 @@ func taskSessionKey(t task.Task, states []flow.StepState) session.Key {
 	}
 }
 
-// fromRepos converts the repositories of a task in the PR stage, each with the
-// session of its own, always returning a slice so the frontend never sees null.
-func fromRepos(states []flow.RepoState) []RepoPR {
-	converted := make([]RepoPR, len(states))
-	for i, state := range states {
-		summary := state.Session
-		checkedAt := ""
-		if !state.PR.CheckedAt.IsZero() {
-			checkedAt = state.PR.CheckedAt.Format(time.RFC3339)
-		}
-		converted[i] = RepoPR{
-			Repository:   state.Repository,
-			RepoPath:     state.RepoPath,
-			Slug:         state.Slug,
-			Status:       string(state.Status),
-			Block:        fromPRBlock(state.Block),
-			WorktreePath: state.WorktreePath,
-			Branch:       state.Branch,
-			BaseBranch:   state.BaseBranch,
-
-			Draft:        fromDraft(state.Draft, state.Slug),
-			Reports:      fromReports(state.Reports),
-			Review:       fromReview(state.Review),
-			CommitFailed: state.CommitFailed,
-
-			PRNumber:   state.PR.Number,
-			PRURL:      state.PR.URL,
-			PRState:    string(state.PR.State),
-			CheckedAt:  checkedAt,
-			PRBase:     state.PR.Base,
-			CheckError: state.CheckError,
-			CanClose:   state.CanClose,
-			Close:      fromCloseResult(state.Close),
-
-			SessionStage:   state.SessionStage,
-			SessionStatus:  string(summary.Status),
-			SessionModel:   string(summary.Choice.Model),
-			SessionEffort:  string(summary.Choice.Effort),
-			TurnRunning:    summary.TurnRunning,
-			ProcessRunning: summary.ProcessRunning,
-			RetryAttempt:   summary.RetryAttempt,
-			ContextPercent: summary.ContextPercent,
-			PendingCount:   summary.PendingCount,
-			LastError:      summary.LastError,
-		}
+// fromPullRequest converts the PR stage of a task with its conversation,
+// keeping nil for a task that is not in it.
+func fromPullRequest(pr *flow.PullRequest) *PullRequest {
+	if pr == nil {
+		return nil
 	}
-	return converted
+	summary := pr.Session
+	checkedAt := ""
+	if !pr.PR.CheckedAt.IsZero() {
+		checkedAt = pr.PR.CheckedAt.Format(time.RFC3339)
+	}
+	return &PullRequest{
+		Status:       string(pr.Status),
+		Block:        fromPRBlock(pr.Block),
+		WorktreePath: pr.WorktreePath,
+		Branch:       pr.Branch,
+		BaseBranch:   pr.BaseBranch,
+
+		Draft:        fromDraft(pr.Draft),
+		Reports:      fromReports(pr.Reports),
+		Review:       fromReview(pr.Review),
+		CommitFailed: pr.CommitFailed,
+
+		PRNumber:     pr.PR.Number,
+		PRURL:        pr.PR.URL,
+		PRState:      string(pr.PR.State),
+		CheckedAt:    checkedAt,
+		PRBase:       pr.PR.Base,
+		CheckError:   pr.CheckError,
+		CanClose:     pr.CanClose,
+		CloneMissing: pr.CloneMissing,
+		Close:        fromCloseResult(pr.Close),
+
+		SessionStage:   pr.SessionStage,
+		SessionStatus:  string(summary.Status),
+		SessionModel:   string(summary.Choice.Model),
+		SessionEffort:  string(summary.Choice.Effort),
+		TurnRunning:    summary.TurnRunning,
+		ProcessRunning: summary.ProcessRunning,
+		RetryAttempt:   summary.RetryAttempt,
+		ContextPercent: summary.ContextPercent,
+		PendingCount:   summary.PendingCount,
+		LastError:      summary.LastError,
+	}
 }
 
-// fromCloseResult converts what closing a repository did, keeping nil for a
-// repository that is not closed.
+// fromCloseResult converts what closing a task did, keeping nil for a task that
+// is not closed.
 func fromCloseResult(result *task.CloseResult) *CloseResult {
 	if result == nil {
 		return nil
@@ -234,32 +267,42 @@ func fromCloseResult(result *task.CloseResult) *CloseResult {
 	}
 }
 
-// fromCloseStep converts one part of the closing of a repository.
+// fromCloseStep converts one part of the closing of a task.
 func fromCloseStep(step task.CloseStep) CloseStep {
 	return CloseStep{Outcome: string(step.Outcome), Reason: step.Reason, Detail: step.Detail}
 }
 
 // FromArchived converts the tasks of the history, each with the artifacts of
-// its folder and the pull requests it left behind. The slices are always
-// allocated so the frontend never sees null.
+// its folder, its repository and the pull request it left behind. The slices
+// are always allocated so the frontend never sees null.
 func FromArchived(
 	tasks []task.Task,
 	artifacts func(id string) task.Artifacts,
-	prRuns func(id string) []task.PRRun,
+	prRun func(id string) (task.PRRun, bool),
+	repositories func(id string) (repository.Repository, bool),
 ) []ArchivedTask {
 	converted := make([]ArchivedTask, len(tasks))
 	for i, t := range tasks {
 		a := artifacts(t.ID)
+		fullName := ""
+		if repo, ok := repositories(t.RepositoryID); ok {
+			fullName = repo.FullName()
+		}
+		var pr *ArchivedPR
+		if run, ok := prRun(t.ID); ok && run.PR.Number > 0 {
+			pr = &ArchivedPR{Number: run.PR.Number, URL: run.PR.URL, State: string(run.PR.State)}
+		}
 		converted[i] = ArchivedTask{
 			ID:              t.ID,
 			Name:            t.Name,
-			RepoPath:        t.RepoPath,
+			RepositoryID:    t.RepositoryID,
+			Repository:      fullName,
 			Mode:            string(t.Mode),
 			HasPRD:          a.PRD,
 			HasTechSpec:     a.TechSpec,
 			HasOneShot:      a.OneShot,
 			Steps:           fromArchivedSteps(a.Plan.Steps, a.StepReports),
-			Repos:           fromArchivedRepos(t, prRuns(t.ID)),
+			PR:              pr,
 			ArtifactVersion: t.ArtifactVersion,
 			CreatedAt:       t.CreatedAt.Format(time.RFC3339),
 			ArchivedAt:      t.ArchivedAt.Format(time.RFC3339),
@@ -274,103 +317,51 @@ func fromArchivedSteps(steps []task.Step, reports map[int][]task.ReviewReport) [
 	converted := make([]ArchivedStep, len(steps))
 	for i, step := range steps {
 		converted[i] = ArchivedStep{
-			Number:     step.Number,
-			File:       step.File,
-			Title:      step.Title,
-			Repository: step.Repository,
-			Reports:    fromStepReports(reports[step.Number]),
+			Number:  step.Number,
+			File:    step.File,
+			Title:   step.Title,
+			Reports: fromStepReports(reports[step.Number]),
 		}
 	}
 	return converted
 }
 
-// fromArchivedRepos converts the repositories an archived task touched, with
-// the pull request of each one when there was one.
-func fromArchivedRepos(t task.Task, runs []task.PRRun) []ArchivedRepo {
-	converted := make([]ArchivedRepo, len(runs))
-	for i, run := range runs {
-		converted[i] = ArchivedRepo{
-			Repository: relOf(t, run.RepoPath),
-			RepoPath:   run.RepoPath,
-			PRNumber:   run.PR.Number,
-			PRURL:      run.PR.URL,
-			PRState:    string(run.PR.State),
-		}
-	}
-	return converted
-}
-
-// relOf is the repository as the steps name it: its path relative to the
-// workspace of the task. The history builds its own, because reading a task
-// nothing runs for any more is no business of the flow.
-func relOf(t task.Task, repoPath string) string {
-	rel, err := filepath.Rel(t.WorkspacePath, repoPath)
-	if err != nil {
-		return repoPath
-	}
-	return rel
-}
-
-// FromDeletePreview converts what deleting a task would destroy, allocating the
-// slices so the frontend never sees null.
+// FromDeletePreview converts what deleting a task would destroy, keeping nil
+// for what it has none of.
 func FromDeletePreview(preview flow.DeletePreview) DeletePreview {
-	worktrees := make([]WorktreePreview, len(preview.Worktrees))
-	for i, wt := range preview.Worktrees {
-		worktrees[i] = WorktreePreview{
-			Repository: wt.Repository,
-			RepoPath:   wt.RepoPath,
-			Path:       wt.Path,
-			Dirty:      wt.Dirty,
-			Files:      wt.Files,
-			Error:      wt.Error,
+	converted := DeletePreview{SessionRunning: preview.SessionRunning}
+	if wt := preview.Worktree; wt != nil {
+		converted.Worktree = &WorktreePreview{
+			Path:  wt.Path,
+			Dirty: wt.Dirty,
+			Files: wt.Files,
+			Error: wt.Error,
 		}
 	}
-	branches := make([]BranchPreview, len(preview.Branches))
-	for i, branch := range preview.Branches {
-		branches[i] = BranchPreview{
-			Repository: branch.Repository,
-			RepoPath:   branch.RepoPath,
-			Name:       branch.Name,
-			Merged:     branch.Merged,
-			Error:      branch.Error,
-		}
+	if branch := preview.Branch; branch != nil {
+		converted.Branch = &BranchPreview{Name: branch.Name, Merged: branch.Merged, Error: branch.Error}
 	}
-	prs := make([]PRPreview, len(preview.PRs))
-	for i, pr := range preview.PRs {
-		prs[i] = PRPreview{
-			Repository: pr.Repository,
-			RepoPath:   pr.RepoPath,
-			Number:     pr.Number,
-			URL:        pr.URL,
-			State:      string(pr.State),
-		}
+	if pr := preview.PR; pr != nil {
+		converted.PR = &PRPreview{Number: pr.Number, URL: pr.URL, State: string(pr.State)}
 	}
-	return DeletePreview{
-		SessionRunning: preview.SessionRunning,
-		Worktrees:      worktrees,
-		Branches:       branches,
-		PRs:            prs,
-	}
+	return converted
 }
 
-// FromDeleteResult converts what a deletion left on disk, always returning a
-// slice so the frontend never sees null.
+// FromDeleteResult converts what a deletion left on disk, keeping nil when git
+// removed everything.
 func FromDeleteResult(result flow.DeleteResult) DeleteResult {
-	leftovers := make([]Leftover, len(result.Leftovers))
-	for i, left := range result.Leftovers {
-		leftovers[i] = Leftover{
-			Repository: left.Repository,
-			RepoPath:   left.RepoPath,
-			Path:       left.Path,
-			Branch:     left.Branch,
-			Error:      left.Error,
-		}
+	if result.Leftover == nil {
+		return DeleteResult{}
 	}
-	return DeleteResult{Leftovers: leftovers}
+	return DeleteResult{Leftover: &Leftover{
+		Path:   result.Leftover.Path,
+		Branch: result.Leftover.Branch,
+		Error:  result.Leftover.Error,
+	}}
 }
 
-// fromPRBlock converts why the pull request of a repository cannot go on,
-// keeping nil for one that can.
+// fromPRBlock converts why the pull request of a task cannot go on, keeping nil
+// for one that can.
 func fromPRBlock(block *task.PRBlock) *PRBlock {
 	if block == nil {
 		return nil
@@ -378,13 +369,12 @@ func fromPRBlock(block *task.PRBlock) *PRBlock {
 	return &PRBlock{Reason: string(block.Reason), Detail: block.Detail}
 }
 
-// fromDraft converts the draft of a repository, keeping nil until one is
-// written.
-func fromDraft(draft *task.Draft, slug string) *PRDraft {
+// fromDraft converts the draft of a task, keeping nil until one is written.
+func fromDraft(draft *task.Draft) *PRDraft {
 	if draft == nil {
 		return nil
 	}
-	return &PRDraft{Title: draft.Title, Body: draft.Body, File: task.DraftFile(slug)}
+	return &PRDraft{Title: draft.Title, Body: draft.Body, File: task.DraftFile}
 }
 
 // fromReports converts the passes of a review, always returning a slice so the
@@ -406,8 +396,6 @@ func fromSteps(states []flow.StepState) []Step {
 			Number:       state.Step.Number,
 			File:         state.Step.File,
 			Title:        state.Step.Title,
-			Repository:   state.Step.Repository,
-			RepoPath:     state.Step.RepoPath,
 			Status:       string(state.Status),
 			Phase:        string(state.Phase),
 			Block:        fromBlock(state.Block),
@@ -532,13 +520,7 @@ func FromSituation(s attention.Situation) Situation {
 
 // FromPlace converts where a situation is.
 func FromPlace(p attention.Place) Place {
-	return Place{
-		Kind:       string(p.Kind),
-		Stage:      string(p.Stage),
-		Step:       p.Step,
-		RepoPath:   p.RepoPath,
-		Repository: p.Repository,
-	}
+	return Place{Kind: string(p.Kind), Stage: string(p.Stage), Step: p.Step}
 }
 
 // FromStarted converts a situation that just started.

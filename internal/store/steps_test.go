@@ -13,12 +13,17 @@ import (
 // seedTask inserts one task and returns its id.
 func seedTask(t *testing.T, s *store.Store) string {
 	t.Helper()
+	return seedNamedTask(t, s, "task-1", "one")
+}
 
-	const taskID = "task-1"
-	if err := s.Tasks.Insert(t.Context(), newTask(taskID, "/ws", "one", fixedTime)); err != nil {
+// seedNamedTask inserts a task of the web repository and returns its id.
+func seedNamedTask(t *testing.T, s *store.Store, id, name string) string {
+	t.Helper()
+
+	if err := s.Tasks.Insert(t.Context(), newTask(id, webRepo, name, fixedTime)); err != nil {
 		t.Fatalf("Tasks.Insert() = %v, want nil", err)
 	}
-	return taskID
+	return id
 }
 
 // listStepRuns reads the steps of a task, failing the test on error.
@@ -34,7 +39,7 @@ func listStepRuns(t *testing.T, s *store.Store, taskID string) []task.StepRun {
 
 func TestStepsUpsertCreatesAndUpdates(t *testing.T) {
 	t.Parallel()
-	s := newStore(t)
+	s := newStoreWithRepositories(t)
 
 	taskID := seedTask(t, s)
 	run := newStepRun(taskID, 1, task.StepPreparing)
@@ -57,7 +62,7 @@ func TestStepsUpsertCreatesAndUpdates(t *testing.T) {
 
 func TestStepsCarryTheBlockOnlyWhenBlocked(t *testing.T) {
 	t.Parallel()
-	s := newStore(t)
+	s := newStoreWithRepositories(t)
 
 	taskID := seedTask(t, s)
 	blocked := newBlockedStepRun(taskID, 1)
@@ -84,7 +89,7 @@ func TestStepsCarryTheBlockOnlyWhenBlocked(t *testing.T) {
 
 func TestStepsCarryTheCommitsOfTheStep(t *testing.T) {
 	t.Parallel()
-	s := newStore(t)
+	s := newStoreWithRepositories(t)
 
 	taskID := seedTask(t, s)
 	run := newStepRun(taskID, 1, task.StepStarted)
@@ -110,7 +115,7 @@ func TestStepsCarryTheCommitsOfTheStep(t *testing.T) {
 
 func TestStepsCarryTheAgentReviewOfTheStep(t *testing.T) {
 	t.Parallel()
-	s := newStore(t)
+	s := newStoreWithRepositories(t)
 
 	taskID := seedTask(t, s)
 	run := newStepRun(taskID, 1, task.StepStarted)
@@ -125,7 +130,7 @@ func TestStepsCarryTheAgentReviewOfTheStep(t *testing.T) {
 
 func TestStepsAreListedByNumber(t *testing.T) {
 	t.Parallel()
-	s := newStore(t)
+	s := newStoreWithRepositories(t)
 
 	taskID := seedTask(t, s)
 	for _, number := range []int{3, 1, 2} {
@@ -146,7 +151,7 @@ func TestStepsAreListedByNumber(t *testing.T) {
 
 func TestStepsDeleteTakesEveryStepOfTheTask(t *testing.T) {
 	t.Parallel()
-	s := newStore(t)
+	s := newStoreWithRepositories(t)
 
 	taskID := seedTask(t, s)
 	if err := s.Tasks.UpsertStepRun(t.Context(), newStepRun(taskID, 1, task.StepStarted)); err != nil {
@@ -167,7 +172,7 @@ func TestStepsDeleteTakesEveryStepOfTheTask(t *testing.T) {
 
 func TestStepsGoWithTheTask(t *testing.T) {
 	t.Parallel()
-	s := newStore(t)
+	s := newStoreWithRepositories(t)
 
 	taskID := seedTask(t, s)
 	if err := s.Tasks.UpsertStepRun(t.Context(), newStepRun(taskID, 1, task.StepStarted)); err != nil {
@@ -184,7 +189,7 @@ func TestStepsGoWithTheTask(t *testing.T) {
 
 func TestStepsRejectAnUnknownTask(t *testing.T) {
 	t.Parallel()
-	s := newStore(t)
+	s := newStoreWithRepositories(t)
 
 	if err := s.Tasks.UpsertStepRun(t.Context(), newStepRun("nope", 1, task.StepStarted)); err == nil {
 		t.Error("UpsertStepRun() = nil, want error")

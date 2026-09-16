@@ -37,13 +37,13 @@ A barra (`omarchy-shell`, com o widget de janela ativa desligado) e o Alt+Tab (q
 
 ## Instância única
 
-Com o app aberto numa pasta e o desktop noutro workspace do Hyprland, rodar `myspec <outra pasta>` num terminal troca para o workspace do app, foca a janela, substitui a árvore e atualiza o título. Argumentos relativos, `.` incluído, resolvem contra o diretório da segunda invocação. `myspec /nao/existe` mantém a área aberta e mostra o aviso.
+Com o app aberto e o desktop noutro workspace do Hyprland, rodar `myspec` num terminal troca para o workspace do app e foca a janela; um argumento é ignorado.
 
 O foco é entregue por `gtk_window_present`, que o Hyprland honra porque `misc:focus_on_activate` está ligado. Um compositor que recuse pedidos de ativação deixaria a janela onde está; o workspace ainda trocaria.
 
 ## Diálogo nativo
 
-`Ctrl+O` abre o seletor do `xdg-desktop-portal-gtk` em modo de pasta, seguindo o esquema de cores do sistema, tanto na tela de boas-vindas quanto com uma área aberta. Escolher uma pasta a abre; cancelar com Escape fecha sem nenhuma mudança de estado nem linha de log.
+**Add repository** e **Change path** abrem o seletor do `xdg-desktop-portal-gtk` em modo de pasta, seguindo o esquema de cores do sistema. Cancelar com Escape fecha sem nenhuma mudança de estado nem linha de log.
 
 ## Tema do sistema
 

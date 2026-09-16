@@ -190,16 +190,16 @@ func TestAStepIsConcludedWhenItsBranchMovesAndTheNextOneIsPrepared(t *testing.T)
 	// The commit is recorded before the worktree of the step is forgotten, so
 	// the step reads done while the forget can still be on its way.
 	waitFor(t, "the worktree of step 1 to be forgotten", func() bool {
-		return slices.Contains(f.reviews.reviewCalls(), "forget:task-1:api")
+		return slices.Contains(f.reviews.reviewCalls(), "forget:task-1")
 	})
 
 	// The step after it takes over, in the worktree of its own repository.
 	f.waitStep(t, "task-1", 2, flow.StepImplementing)
 	f.waitWorktreeCalls(
 		t,
-		"ensure:task-1:api", "status:task-1:task-1",
+		"ensure:task-1:dev/web", "status:task-1:task-1",
 		"commit:task-1:"+commitSHA,
-		"ensure:task-1:web", "status:task-1:task-1",
+		"ensure:task-1:dev/web", "status:task-1:task-1",
 	)
 }
 
@@ -217,9 +217,6 @@ func TestTheLastStepOfAPlanIsConcludedWithNothingAfterIt(t *testing.T) {
 	f.service.Check("task-1")
 
 	f.waitStep(t, "task-1", 1, flow.StepDone)
-	if current, ok := f.service.CurrentStep("task-1"); ok {
-		t.Errorf("CurrentStep() = %+v, want none: every step is committed", current)
-	}
 	if runs := f.tasks.StepRuns("task-1"); len(runs) != 1 {
 		t.Errorf("step runs = %d, want only the one the plan has", len(runs))
 	}
@@ -247,7 +244,7 @@ func TestACommitTurnThatEndsWithoutACommitGivesTheStepBack(t *testing.T) {
 	f.waitStep(t, "task-1", 1, flow.StepReadyToApprove)
 	// The decision is taken on a reading newer than the turn, not on one the
 	// debounce still owes.
-	if !slices.Contains(f.reviews.reviewCalls(), "refresh:task-1:api") {
+	if !slices.Contains(f.reviews.reviewCalls(), "refresh:task-1") {
 		t.Errorf("review calls = %q, want the worktree read again", f.reviews.reviewCalls())
 	}
 	// The step is given back before the missing commit is recorded, so it reads

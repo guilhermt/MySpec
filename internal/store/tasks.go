@@ -11,37 +11,34 @@ import (
 	"github.com/guilhermt/myspec/internal/task"
 )
 
-// TasksRepo stores the tasks of every workspace. It implements
-// task.Store.
+// TasksRepo stores the tasks. It implements task.Store.
 type TasksRepo struct{ db *sql.DB }
 
 // taskColumns is the column list every task query selects, in scan order.
-const taskColumns = `id, workspace_path, name, repo_path, initial_context, stage, revisiting,
+const taskColumns = `id, repository_id, name, initial_context, stage, revisiting,
 	artifacts_dir, artifact_version, archived_at, created_at, updated_at, models, review_modes, mode`
 
-// ListByWorkspace returns the tasks a workspace still holds, in creation
-// order. The archived ones are not among them.
-func (r *TasksRepo) ListByWorkspace(ctx context.Context, workspacePath string) ([]task.Task, error) {
+// ListActive returns the tasks that were not archived, in creation order.
+func (r *TasksRepo) ListActive(ctx context.Context) ([]task.Task, error) {
 	const query = `SELECT ` + taskColumns + ` FROM tasks
-		WHERE workspace_path = ? AND archived_at IS NULL ORDER BY created_at, name`
+		WHERE archived_at IS NULL ORDER BY created_at, name`
 
-	return r.listTasks(ctx, query, workspacePath)
+	return r.listTasks(ctx, query)
 }
 
-// ListArchived returns the archived tasks of a workspace, the most recently
-// archived first.
-func (r *TasksRepo) ListArchived(ctx context.Context, workspacePath string) ([]task.Task, error) {
+// ListArchived returns the archived tasks, the most recently archived first.
+func (r *TasksRepo) ListArchived(ctx context.Context) ([]task.Task, error) {
 	const query = `SELECT ` + taskColumns + ` FROM tasks
-		WHERE workspace_path = ? AND archived_at IS NOT NULL ORDER BY archived_at DESC, name`
+		WHERE archived_at IS NOT NULL ORDER BY archived_at DESC, name`
 
-	return r.listTasks(ctx, query, workspacePath)
+	return r.listTasks(ctx, query)
 }
 
-// listTasks runs a query of the task columns for one workspace.
-func (r *TasksRepo) listTasks(ctx context.Context, query, workspacePath string) ([]task.Task, error) {
-	rows, err := r.db.QueryContext(ctx, query, workspacePath)
+// listTasks runs a query of the task columns.
+func (r *TasksRepo) listTasks(ctx context.Context, query string) ([]task.Task, error) {
+	rows, err := r.db.QueryContext(ctx, query)
 	if err != nil {
-		return nil, fmt.Errorf("list tasks of %s: %w", workspacePath, err)
+		return nil, fmt.Errorf("list tasks: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -54,7 +51,7 @@ func (r *TasksRepo) listTasks(ctx context.Context, query, workspacePath string) 
 		tasks = append(tasks, t)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list tasks of %s: %w", workspacePath, err)
+		return nil, fmt.Errorf("list tasks: %w", err)
 	}
 	return tasks, nil
 }
@@ -73,12 +70,12 @@ func (r *TasksRepo) Get(ctx context.Context, id string) (task.Task, error) {
 	return t, nil
 }
 
-// Insert stores a new task. It returns task.ErrNameTaken when the workspace
+// Insert stores a new task. It returns task.ErrNameTaken when the repository
 // already has a task with that name.
 func (r *TasksRepo) Insert(ctx context.Context, t task.Task) error {
-	const taken = `SELECT 1 FROM tasks WHERE workspace_path = ? AND name = ?`
+	const taken = `SELECT 1 FROM tasks WHERE repository_id = ? AND name = ?`
 	const stmt = `INSERT INTO tasks (` + taskColumns + `)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	encodedModels, err := encodeModels(t.Models)
 	if err != nil {
@@ -96,7 +93,7 @@ func (r *TasksRepo) Insert(ctx context.Context, t task.Task) error {
 	defer func() { _ = tx.Rollback() }()
 
 	var one int
-	err = tx.QueryRowContext(ctx, taken, t.WorkspacePath, t.Name).Scan(&one)
+	err = tx.QueryRowContext(ctx, taken, t.RepositoryID, t.Name).Scan(&one)
 	switch {
 	case err == nil:
 		return fmt.Errorf("insert task %s: %w", t.Name, task.ErrNameTaken)
@@ -105,7 +102,7 @@ func (r *TasksRepo) Insert(ctx context.Context, t task.Task) error {
 	}
 
 	_, err = tx.ExecContext(ctx, stmt,
-		t.ID, t.WorkspacePath, t.Name, nullString(t.RepoPath), t.InitialContext, string(t.Stage), t.Revisiting,
+		t.ID, t.RepositoryID, t.Name, t.InitialContext, string(t.Stage), t.Revisiting,
 		t.ArtifactsDir, t.ArtifactVersion, nullTime(t.ArchivedAt),
 		formatTime(t.CreatedAt), formatTime(t.UpdatedAt), encodedModels, encodedReviewModes, string(t.Mode))
 	if err != nil {
@@ -137,7 +134,7 @@ func (r *TasksRepo) UpdateArtifactVersion(ctx context.Context, id string, versio
 	return nil
 }
 
-// UpdateArchived records the instant a task left the workspace.
+// UpdateArchived records the instant a task was archived.
 func (r *TasksRepo) UpdateArchived(ctx context.Context, id string, archivedAt, updatedAt time.Time) error {
 	const stmt = `UPDATE tasks SET archived_at = ?, updated_at = ? WHERE id = ?`
 
@@ -188,7 +185,7 @@ func (r *TasksRepo) Delete(ctx context.Context, id string) error {
 func scanTask(row scanner) (task.Task, error) {
 	var (
 		t                    task.Task
-		repoPath             sql.NullString
+		repositoryID         sql.NullString
 		stage                string
 		archivedAt           sql.NullString
 		createdAt, updatedAt string
@@ -196,7 +193,7 @@ func scanTask(row scanner) (task.Task, error) {
 		encodedReviewModes   string
 		mode                 string
 	)
-	err := row.Scan(&t.ID, &t.WorkspacePath, &t.Name, &repoPath, &t.InitialContext, &stage, &t.Revisiting,
+	err := row.Scan(&t.ID, &repositoryID, &t.Name, &t.InitialContext, &stage, &t.Revisiting,
 		&t.ArtifactsDir, &t.ArtifactVersion, &archivedAt, &createdAt, &updatedAt, &encodedModels,
 		&encodedReviewModes, &mode)
 	switch {
@@ -206,7 +203,7 @@ func scanTask(row scanner) (task.Task, error) {
 		return task.Task{}, fmt.Errorf("scan task: %w", err)
 	}
 
-	t.RepoPath = repoPath.String
+	t.RepositoryID = repositoryID.String
 	t.Stage = task.Stage(stage)
 	t.Mode = task.Mode(mode)
 	if archivedAt.Valid {

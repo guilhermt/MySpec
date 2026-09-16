@@ -11,7 +11,7 @@ import (
 	"github.com/guilhermt/myspec/internal/task"
 )
 
-// draftFile is the draft of a repository, as the agent writes it.
+// draftFile is the draft of the pull request, as the agent writes it.
 func draftFile(repository, title, body string) string {
 	return "---\nrepository: " + repository + "\ntitle: " + title + "\n---\n\n" + body
 }
@@ -32,27 +32,6 @@ func writePR(t *testing.T, tk task.Task, name, content string) {
 	writeFile(t, filepath.Join(tk.PRDir(), name), content)
 }
 
-func TestSlugIsTheFileNameFormOfARepository(t *testing.T) {
-	t.Parallel()
-
-	tests := map[string]struct{ rel, want string }{
-		"the workspace root": {rel: ".", want: "_root"},
-		"a repository":       {rel: "api", want: "api"},
-		"a nested one":       {rel: "apps/web", want: "apps__web"},
-		"a deeper one":       {rel: "services/api/core", want: "services__api__core"},
-	}
-
-	for name, tc := range tests {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
-			if got := task.Slug(tc.rel); got != tc.want {
-				t.Errorf("Slug(%q) = %q, want %q", tc.rel, got, tc.want)
-			}
-		})
-	}
-}
-
 func TestPRPaths(t *testing.T) {
 	t.Parallel()
 
@@ -61,10 +40,10 @@ func TestPRPaths(t *testing.T) {
 	if got, want := tk.PRDir(), "/data/add-login/pr"; got != want {
 		t.Errorf("PRDir() = %q, want %q", got, want)
 	}
-	if got, want := tk.DraftPath("apps__web"), "/data/add-login/pr/apps__web-draft.md"; got != want {
+	if got, want := tk.DraftPath(), "/data/add-login/pr/draft.md"; got != want {
 		t.Errorf("DraftPath() = %q, want %q", got, want)
 	}
-	if got, want := tk.ReviewPath("api", 2), "/data/add-login/pr/api-review-2.md"; got != want {
+	if got, want := tk.ReviewPath(2), "/data/add-login/pr/review-2.md"; got != want {
 		t.Errorf("ReviewPath() = %q, want %q", got, want)
 	}
 }
@@ -72,34 +51,29 @@ func TestPRPaths(t *testing.T) {
 func TestReadPRArtifactsOfAMissingFolder(t *testing.T) {
 	t.Parallel()
 
-	got := task.ReadPRArtifacts(filepath.Join(t.TempDir(), "pr"), []string{"api"})
+	got := task.ReadPRArtifacts(filepath.Join(t.TempDir(), "pr"))
 
-	if got == nil {
-		t.Fatal("ReadPRArtifacts() = nil, want an empty map")
-	}
-	if len(got) != 0 {
-		t.Errorf("ReadPRArtifacts() = %+v, want nothing", got)
+	if diff := cmp.Diff(task.PRArtifacts{}, got); diff != "" {
+		t.Errorf("ReadPRArtifacts() mismatch (-want +got):\n%s", diff)
 	}
 }
 
-func TestReadPRArtifactsReadsTheDraftAndTheReports(t *testing.T) {
+func TestReadPRArtifactsFindsTheDraftAndTheReportsOfTheTask(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	created := f.create(t, "add-login", "")
-	writePR(t, created, "api-draft.md", draftFile("api", "Add the store", "What it does.\n"))
-	writePR(t, created, "api-review-2.md", reportFile("api", 2, "clean", "Nothing to change.\n"))
-	writePR(t, created, "api-review-1.md", reportFile("api", 1, "findings", "Two things.\n"))
+	created := f.create(t, "add-login")
+	writePR(t, created, "draft.md", draftFile("dev/web", "Add the store", "What it does.\n"))
+	writePR(t, created, "review-2.md", reportFile("dev/web", 2, "clean", "Nothing to change.\n"))
+	writePR(t, created, "review-1.md", reportFile("dev/web", 1, "findings", "Two things.\n"))
 
-	got := task.ReadPRArtifacts(created.PRDir(), []string{"api"})
+	got := task.ReadPRArtifacts(created.PRDir())
 
-	want := map[string]task.RepoArtifacts{
-		"api": {
-			Draft: task.Draft{Present: true, Title: "Add the store", Body: "What it does."},
-			Reports: []task.ReviewReport{
-				{Pass: 1, File: "api-review-1.md"},
-				{Pass: 2, File: "api-review-2.md", Clean: true},
-			},
+	want := task.PRArtifacts{
+		Draft: task.Draft{Present: true, Title: "Add the store", Body: "What it does."},
+		Reports: []task.ReviewReport{
+			{Pass: 1, File: "review-1.md"},
+			{Pass: 2, File: "review-2.md", Clean: true},
 		},
 	}
 	if diff := cmp.Diff(want, got); diff != "" {
@@ -111,19 +85,18 @@ func TestReadPRArtifactsIgnoresWhatIsNotAnArtifactOfTheTask(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	created := f.create(t, "add-login", "")
-	writePR(t, created, "web-draft.md", draftFile("web", "Of another repository", "Body.\n"))
-	writePR(t, created, ".api-draft.md.swp", "half a write")
+	created := f.create(t, "add-login")
+	writePR(t, created, ".draft.md.swp", "half a write")
 	writePR(t, created, "notes.md", "loose notes")
-	writePR(t, created, "api-review-x.md", reportFile("api", 1, "clean", "Body.\n"))
-	if err := os.MkdirAll(filepath.Join(created.PRDir(), "api-draft.md"), 0o700); err != nil {
+	writePR(t, created, "review-x.md", reportFile("dev/web", 1, "clean", "Body.\n"))
+	if err := os.MkdirAll(filepath.Join(created.PRDir(), "draft.md"), 0o700); err != nil {
 		t.Fatalf("create directory: %v", err)
 	}
 
-	got := task.ReadPRArtifacts(created.PRDir(), []string{"api"})
+	got := task.ReadPRArtifacts(created.PRDir())
 
-	if len(got) != 0 {
-		t.Errorf("ReadPRArtifacts() = %+v, want nothing", got)
+	if diff := cmp.Diff(task.PRArtifacts{}, got); diff != "" {
+		t.Errorf("ReadPRArtifacts() mismatch (-want +got):\n%s", diff)
 	}
 }
 
@@ -131,16 +104,16 @@ func TestReadPRArtifactsRefusesHalfWrittenFiles(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]struct{ name, content string }{
-		"a draft with no header": {name: "api-draft.md", content: "# Add the store\n"},
-		"a draft with no title":  {name: "api-draft.md", content: "---\nrepository: api\n---\n\nBody.\n"},
-		"a draft with no body":   {name: "api-draft.md", content: draftFile("api", "Add the store", "\n \n")},
+		"a draft with no header": {name: "draft.md", content: "# Add the store\n"},
+		"a draft with no title":  {name: "draft.md", content: "---\nrepository: dev/web\n---\n\nBody.\n"},
+		"a draft with no body":   {name: "draft.md", content: draftFile("dev/web", "Add the store", "\n \n")},
 		"a report with no status": {
-			name:    "api-review-1.md",
-			content: "---\nrepository: api\npass: 1\n---\n\nBody.\n",
+			name:    "review-1.md",
+			content: "---\nrepository: dev/web\npass: 1\n---\n\nBody.\n",
 		},
 		"a report whose pass disagrees with its name": {
-			name:    "api-review-1.md",
-			content: reportFile("api", 2, "clean", "Body.\n"),
+			name:    "review-1.md",
+			content: reportFile("dev/web", 2, "clean", "Body.\n"),
 		},
 	}
 
@@ -149,10 +122,10 @@ func TestReadPRArtifactsRefusesHalfWrittenFiles(t *testing.T) {
 			t.Parallel()
 
 			f := newFixture(t)
-			created := f.create(t, "add-login", "")
+			created := f.create(t, "add-login")
 			writePR(t, created, tc.name, tc.content)
 
-			if got := task.ReadPRArtifacts(created.PRDir(), []string{"api"}); len(got) != 0 {
+			if got := task.ReadPRArtifacts(created.PRDir()); got.Draft.Present || len(got.Reports) != 0 {
 				t.Errorf("ReadPRArtifacts() = %+v, want nothing", got)
 			}
 		})
@@ -163,15 +136,15 @@ func TestReadPRArtifactsReadsCleanExactly(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	created := f.create(t, "add-login", "")
-	writePR(t, created, "api-review-1.md", reportFile("api", 1, "Clean", "Body.\n"))
+	created := f.create(t, "add-login")
+	writePR(t, created, "review-1.md", reportFile("dev/web", 1, "Clean", "Body.\n"))
 
-	got := task.ReadPRArtifacts(created.PRDir(), []string{"api"})
+	got := task.ReadPRArtifacts(created.PRDir())
 
-	if len(got["api"].Reports) != 1 {
+	if len(got.Reports) != 1 {
 		t.Fatalf("ReadPRArtifacts() = %+v, want one report", got)
 	}
-	if got["api"].Reports[0].Clean {
+	if got.Reports[0].Clean {
 		t.Error("Clean = true, want false: only a lowercase \"clean\" closes a pass")
 	}
 }
@@ -180,26 +153,27 @@ func TestWriteDraftIsWhatTheReaderReadsBack(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	created := f.create(t, "add-login", "")
-	path := created.DraftPath("apps__web")
+	created := f.create(t, "add-login")
 
-	err := task.WriteDraft(path, "apps/web", "origin/dev", "  Add the review strip\n", "\nWhat it does.\n\n")
+	err := task.WriteDraft(
+		created.DraftPath(), "dev/web", "origin/dev", "  Add the review strip\n", "\nWhat it does.\n\n",
+	)
 	if err != nil {
 		t.Fatalf("WriteDraft() = %v, want nil", err)
 	}
 
-	content, err := os.ReadFile(path)
+	content, err := os.ReadFile(created.DraftPath())
 	if err != nil {
 		t.Fatalf("read the draft = %v, want nil", err)
 	}
-	want := "---\nrepository: apps/web\nbase: origin/dev\ntitle: Add the review strip\n---\n\nWhat it does.\n"
+	want := "---\nrepository: dev/web\nbase: origin/dev\ntitle: Add the review strip\n---\n\nWhat it does.\n"
 	if string(content) != want {
 		t.Errorf("draft = %q, want %q", content, want)
 	}
 
-	got := task.ReadPRArtifacts(created.PRDir(), []string{"apps__web"})
+	got := task.ReadPRArtifacts(created.PRDir())
 	wantDraft := task.Draft{Present: true, Title: "Add the review strip", Body: "What it does."}
-	if diff := cmp.Diff(wantDraft, got["apps__web"].Draft); diff != "" {
+	if diff := cmp.Diff(wantDraft, got.Draft); diff != "" {
 		t.Errorf("Draft mismatch (-want +got):\n%s", diff)
 	}
 }
@@ -208,16 +182,15 @@ func TestWriteDraftKeepsTheTitleOnOneLine(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	created := f.create(t, "add-login", "")
-	path := created.DraftPath("api")
+	created := f.create(t, "add-login")
 
-	if err := task.WriteDraft(path, "api", "origin/main", "Add\nthe store", "Body."); err != nil {
+	if err := task.WriteDraft(created.DraftPath(), "dev/web", "origin/main", "Add\nthe store", "Body."); err != nil {
 		t.Fatalf("WriteDraft() = %v, want nil", err)
 	}
 
-	got := task.ReadPRArtifacts(created.PRDir(), []string{"api"})
-	if want := "Add the store"; got["api"].Draft.Title != want {
-		t.Errorf("Title = %q, want %q", got["api"].Draft.Title, want)
+	got := task.ReadPRArtifacts(created.PRDir())
+	if want := "Add the store"; got.Draft.Title != want {
+		t.Errorf("Title = %q, want %q", got.Draft.Title, want)
 	}
 }
 
@@ -225,9 +198,9 @@ func TestWriteDraftCreatesTheFolder(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	created := f.create(t, "add-login", "")
+	created := f.create(t, "add-login")
 
-	if err := task.WriteDraft(created.DraftPath("api"), "api", "origin/dev", "Title", "Body."); err != nil {
+	if err := task.WriteDraft(created.DraftPath(), "dev/web", "origin/dev", "Title", "Body."); err != nil {
 		t.Fatalf("WriteDraft() = %v, want nil", err)
 	}
 	if !exists(created.PRDir()) {
@@ -239,8 +212,8 @@ func TestInspectReadsThePRFolder(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	created := f.create(t, "add-login", "")
-	writePR(t, created, "api-draft.md", draftFile("api", "Add the store", "What it does.\n"))
+	created := f.create(t, "add-login")
+	writePR(t, created, "draft.md", draftFile("dev/web", "Add the store", "What it does.\n"))
 
 	got, err := f.service.Inspect(created.ID)
 	if err != nil {
@@ -250,23 +223,20 @@ func TestInspectReadsThePRFolder(t *testing.T) {
 	if !got.Has(task.ArtifactPR) {
 		t.Errorf("Has(ArtifactPR) = false, want the draft found: %+v", got.PR)
 	}
-	if title := got.PR["api"].Draft.Title; title != "Add the store" {
+	if title := got.PR.Draft.Title; title != "Add the store" {
 		t.Errorf("Draft.Title = %q, want %q", title, "Add the store")
 	}
 }
 
-func TestArtifactsOfANewTaskHoldAnEmptyPRMap(t *testing.T) {
+func TestArtifactsOfANewTaskHoldNoPRArtifact(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	created := f.create(t, "add-login", "")
+	created := f.create(t, "add-login")
 
 	got, ok := f.service.Artifacts(created.ID)
 	if !ok {
 		t.Fatal("Artifacts() = false, want the task")
-	}
-	if got.PR == nil {
-		t.Error("Artifacts().PR = nil, want an empty map")
 	}
 	if got.Has(task.ArtifactPR) {
 		t.Error("Has(ArtifactPR) = true, want nothing written yet")
@@ -277,9 +247,9 @@ func TestWatcherReportsThePRFolderAsItComesAndGoes(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	created := f.create(t, "add-login", "")
+	created := f.create(t, "add-login")
 
-	writePR(t, created, "api-draft.md", draftFile("api", "Add the store", "What it does.\n"))
+	writePR(t, created, "draft.md", draftFile("dev/web", "Add the store", "What it does.\n"))
 	waitFor(t, "the draft to appear", func() bool {
 		calls := f.artifactCalls()
 		if len(calls) == 0 {
@@ -308,8 +278,8 @@ func TestRemoveArtifactsFromTheImplementationThrowsAwayThePRFolder(t *testing.T)
 	t.Parallel()
 
 	f := newFixture(t)
-	created := f.create(t, "add-login", "")
-	writePR(t, created, "api-draft.md", draftFile("api", "Add the store", "What it does.\n"))
+	created := f.create(t, "add-login")
+	writePR(t, created, "draft.md", draftFile("dev/web", "Add the store", "What it does.\n"))
 
 	if err := f.service.RemoveArtifacts(t.Context(), created.ID, task.StageImplementation); err != nil {
 		t.Fatalf("RemoveArtifacts() = %v, want nil", err)
@@ -327,15 +297,15 @@ func TestReadArtifactReturnsThePRArtifacts(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	created := f.create(t, "add-login", "")
-	draft := draftFile("api", "Add the store", "What it does.\n")
-	report := reportFile("api", 1, "clean", "Nothing to change.\n")
-	writePR(t, created, "api-draft.md", draft)
-	writePR(t, created, "api-review-1.md", report)
+	created := f.create(t, "add-login")
+	draft := draftFile("dev/web", "Add the store", "What it does.\n")
+	report := reportFile("dev/web", 1, "clean", "Nothing to change.\n")
+	writePR(t, created, "draft.md", draft)
+	writePR(t, created, "review-1.md", report)
 
 	tests := map[string]struct{ name, want string }{
-		"a draft":  {name: "pr/api-draft.md", want: draft},
-		"a report": {name: "pr/api-review-1.md", want: report},
+		"a draft":  {name: "pr/draft.md", want: draft},
+		"a report": {name: "pr/review-1.md", want: report},
 	}
 
 	for name, tc := range tests {
@@ -357,13 +327,13 @@ func TestReadArtifactRefusesAnythingButThePRArtifacts(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	created := f.create(t, "add-login", "")
+	created := f.create(t, "add-login")
 
 	names := map[string]string{
 		"a path through the pr folder": "pr/../PRD.md",
-		"a nested path":                "pr/nested/api-draft.md",
+		"a nested path":                "pr/nested/draft.md",
 		"a file that is not a draft":   "pr/notes.md",
-		"a report with no pass":        "pr/api-review-.md",
+		"a report with no pass":        "pr/review-.md",
 		"the folder itself":            task.PRDirName,
 	}
 

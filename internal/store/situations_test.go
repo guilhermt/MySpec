@@ -40,20 +40,20 @@ func newSituation(taskID, place, id string, kind attention.Kind) attention.Recor
 
 func TestSituationsUpsertAndListByTasks(t *testing.T) {
 	t.Parallel()
-	s := newStore(t)
+	s := newStoreWithRepositories(t)
 
 	first := seedTask(t, s)
 	const second = "task-2"
-	if err := s.Tasks.Insert(t.Context(), newTask(second, "/ws", "two", fixedTime)); err != nil {
+	if err := s.Tasks.Insert(t.Context(), newTask(second, webRepo, "two", fixedTime)); err != nil {
 		t.Fatalf("Tasks.Insert(two) = %v, want nil", err)
 	}
 
-	web := newSituation(second, "repo:/ws/web", "situation-3", attention.KindDraft)
-	api := newSituation(second, "repo:/ws/api", "situation-2", attention.KindFindings)
+	step := newSituation(second, "step:2", "situation-3", attention.KindFindings)
+	pr := newSituation(second, "pr", "situation-2", attention.KindDraft)
 	prd := newSituation(first, "stage:prd", "situation-1", attention.KindReply)
-	upsertSituations(t, s, web, api, prd)
+	upsertSituations(t, s, step, pr, prd)
 
-	want := []attention.Record{prd, api, web}
+	want := []attention.Record{prd, pr, step}
 	if diff := cmp.Diff(want, listSituations(t, s, first, second)); diff != "" {
 		t.Errorf("ListByTasks() mismatch (-want +got):\n%s", diff)
 	}
@@ -64,7 +64,7 @@ func TestSituationsUpsertAndListByTasks(t *testing.T) {
 
 func TestSituationsUpsertReplacesTheSituationOfAPlace(t *testing.T) {
 	t.Parallel()
-	s := newStore(t)
+	s := newStoreWithRepositories(t)
 
 	taskID := seedTask(t, s)
 	upsertSituations(t, s, newSituation(taskID, "step:2", "situation-1", attention.KindPermission))
@@ -85,28 +85,28 @@ func TestSituationsUpsertReplacesTheSituationOfAPlace(t *testing.T) {
 
 func TestSituationsDeleteRemovesOnlyItsPlace(t *testing.T) {
 	t.Parallel()
-	s := newStore(t)
+	s := newStoreWithRepositories(t)
 
 	taskID := seedTask(t, s)
-	api := newSituation(taskID, "repo:/ws/api", "situation-1", attention.KindDraft)
-	web := newSituation(taskID, "repo:/ws/web", "situation-2", attention.KindMerge)
-	upsertSituations(t, s, api, web)
+	pr := newSituation(taskID, "pr", "situation-1", attention.KindDraft)
+	step := newSituation(taskID, "step:2", "situation-2", attention.KindMerge)
+	upsertSituations(t, s, pr, step)
 
-	if err := s.Situations.Delete(t.Context(), taskID, api.Place); err != nil {
+	if err := s.Situations.Delete(t.Context(), taskID, pr.Place); err != nil {
 		t.Fatalf("Delete() = %v, want nil", err)
 	}
-	if diff := cmp.Diff([]attention.Record{web}, listSituations(t, s, taskID)); diff != "" {
+	if diff := cmp.Diff([]attention.Record{step}, listSituations(t, s, taskID)); diff != "" {
 		t.Errorf("ListByTasks() after the delete mismatch (-want +got):\n%s", diff)
 	}
 	// A place without a situation is not an error either.
-	if err := s.Situations.Delete(t.Context(), taskID, api.Place); err != nil {
+	if err := s.Situations.Delete(t.Context(), taskID, pr.Place); err != nil {
 		t.Errorf("Delete() again = %v, want nil", err)
 	}
 }
 
 func TestSituationsGoWithTheirTask(t *testing.T) {
 	t.Parallel()
-	s := newStore(t)
+	s := newStoreWithRepositories(t)
 
 	taskID := seedTask(t, s)
 	upsertSituations(t, s, newSituation(taskID, "stage:prd", "situation-1", attention.KindReply))
@@ -121,7 +121,7 @@ func TestSituationsGoWithTheirTask(t *testing.T) {
 
 func TestSituationsListByNoTasksAsksNothing(t *testing.T) {
 	t.Parallel()
-	s := newStore(t)
+	s := newStoreWithRepositories(t)
 
 	if got := listSituations(t, s); got != nil {
 		t.Errorf("ListByTasks() = %v, want nil", got)

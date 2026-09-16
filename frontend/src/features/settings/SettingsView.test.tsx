@@ -37,12 +37,13 @@ async function edited() {
 }
 
 describe("SettingsView", () => {
-  it("lists the defaults and the eight prompts in its navigation, with the one on screen as the current page", () => {
+  it("lists the defaults, the repositories and the eight prompts in its navigation, with the one on screen as the current page", () => {
     view();
 
     const nav = screen.getByRole("navigation", { name: "Settings" });
     for (const name of [
       "Defaults",
+      "Repositories",
       "PRD",
       "Tech spec",
       "Plan",
@@ -61,6 +62,16 @@ describe("SettingsView", () => {
     );
     expect(screen.getByRole("button", { name: "PRD" })).not.toHaveAttribute("aria-current");
     expect(screen.getByRole("heading", { name: "Defaults" })).toBeInTheDocument();
+  });
+
+  it("shows the registered repositories in their own section", async () => {
+    const { user } = view();
+
+    await user.click(screen.getByRole("button", { name: "Repositories" }));
+
+    expect(screen.getByRole("heading", { name: "Repositories" })).toBeInTheDocument();
+    expect(screen.getByText("dev/web")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Defaults" })).not.toBeInTheDocument();
   });
 
   it("changes the review mode of new tasks at once", async () => {

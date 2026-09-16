@@ -1,3 +1,4 @@
+import { messageOf } from "@/lib/errors";
 import type { ModelChoice } from "@/lib/models";
 import type {
   CreateTaskRequest,
@@ -12,10 +13,6 @@ import type {
 import { api } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
 
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
 // No action touches `app`: the new state always arrives through state:changed.
 async function run(operation: () => Promise<void>): Promise<void> {
   try {
@@ -25,20 +22,26 @@ async function run(operation: () => Promise<void>): Promise<void> {
   }
 }
 
-export function openPath(path: string): Promise<void> {
-  return run(() => api.openPath(path));
+/**
+ * addRepository and changeRepositoryPath do not swallow their failure: the
+ * screen that asked shows the refusal where the user is.
+ */
+export function addRepository(): Promise<void> {
+  return api.addRepository();
 }
 
-export function openFolderDialog(): Promise<void> {
-  return run(() => api.openFolderDialog());
+export function changeRepositoryPath(id: string): Promise<void> {
+  return api.changeRepositoryPath(id);
 }
 
-export function removeRecent(path: string): Promise<void> {
-  return run(() => api.removeRecent(path));
+/** removeRepository removes a repository that has no task. */
+export function removeRepository(id: string): Promise<void> {
+  return run(() => api.removeRepository(id));
 }
 
-export function dismissNotice(): Promise<void> {
-  return run(() => api.dismissNotice());
+/** setRepositoryFilter chooses the repository the task list and the history show. */
+export function setRepositoryFilter(id: string): Promise<void> {
+  return run(() => api.setRepositoryFilter(id));
 }
 
 export function setTheme(preference: ThemePreference): Promise<void> {
@@ -113,9 +116,8 @@ export function createTask(req: CreateTaskRequest): Promise<string> {
 export function deleteTask(taskId: string): Promise<void> {
   return run(async () => {
     const result = await api.deleteTask(taskId);
-    const leftovers = result.leftovers ?? [];
-    if (leftovers.length > 0) {
-      useAppStore.getState().setLeftovers(leftovers);
+    if (result.leftover !== null) {
+      useAppStore.getState().setLeftover(result.leftover);
     }
   });
 }
@@ -213,62 +215,54 @@ export function reviewStepMyself(taskId: string): Promise<void> {
 }
 
 /** openPR sends the draft the user approved to the agent, which opens the PR. */
-export function openPR(
-  taskId: string,
-  repoPath: string,
-  title: string,
-  body: string,
-): Promise<void> {
+export function openPR(taskId: string, title: string, body: string): Promise<void> {
   return run(async () => {
-    await api.openPR(taskId, repoPath, title, body);
-    useAppStore.getState().clearPrDraft(taskId, repoPath);
+    await api.openPR(taskId, title, body);
+    useAppStore.getState().clearPrDraft(taskId);
   });
 }
 
-/** approveRepo sends the reviewed pull request to be committed and pushed. */
-export function approveRepo(taskId: string, repoPath: string): Promise<void> {
-  return run(() => api.approveRepo(taskId, repoPath));
+/** approvePR sends the reviewed pull request to be committed and pushed. */
+export function approvePR(taskId: string): Promise<void> {
+  return run(() => api.approvePR(taskId));
 }
 
 /** reviewAgain runs another review pass over an open pull request. */
-export function reviewAgain(taskId: string, repoPath: string): Promise<void> {
-  return run(() => api.reviewAgain(taskId, repoPath));
+export function reviewAgain(taskId: string): Promise<void> {
+  return run(() => api.reviewAgain(taskId));
 }
 
-/** discardDraft throws away the draft of a repository and writes it again. */
-export function discardDraft(taskId: string, repoPath: string): Promise<void> {
+/** discardDraft throws away the draft of the pull request and writes it again. */
+export function discardDraft(taskId: string): Promise<void> {
   return run(async () => {
-    await api.discardDraft(taskId, repoPath);
-    useAppStore.getState().clearPrDraft(taskId, repoPath);
+    await api.discardDraft(taskId);
+    useAppStore.getState().clearPrDraft(taskId);
   });
 }
 
-/** retryRepo starts the PR stage of a blocked repository over. */
-export function retryRepo(taskId: string, repoPath: string): Promise<void> {
-  return run(() => api.retryRepo(taskId, repoPath));
+/** retryPR starts the blocked PR stage of a task over. */
+export function retryPR(taskId: string): Promise<void> {
+  return run(() => api.retryPR(taskId));
 }
 
 /** refreshPR asks GitHub again what became of the pull request. */
-export function refreshPR(taskId: string, repoPath: string): Promise<void> {
-  return run(() => api.refreshPR(taskId, repoPath));
+export function refreshPR(taskId: string): Promise<void> {
+  return run(() => api.refreshPR(taskId));
 }
 
-/** closeRepo removes the worktree of a merged repository and updates its base branch. */
-export function closeRepo(taskId: string, repoPath: string): Promise<void> {
-  return run(() => api.closeRepo(taskId, repoPath));
+/** closeTask removes the worktree of a merged task and updates its base branch. */
+export function closeTask(taskId: string): Promise<void> {
+  return run(() => api.closeTask(taskId));
 }
 
-/**
- * openInEditor opens a worktree of the task in the editor of the user: the one
- * of the given repository, or the one of the current step when none is given.
- */
-export function openInEditor(taskId: string, repoPath = ""): Promise<void> {
-  return run(() => api.openInEditor(taskId, repoPath));
+/** openInEditor opens the worktree of the task in the editor of the user. */
+export function openInEditor(taskId: string): Promise<void> {
+  return run(() => api.openInEditor(taskId));
 }
 
-/** openFileInEditor opens one changed file of a worktree in the editor of the user. */
-export function openFileInEditor(taskId: string, path: string, repoPath = ""): Promise<void> {
-  return run(() => api.openFileInEditor(taskId, repoPath, path));
+/** openFileInEditor opens one changed file of the worktree in the editor of the user. */
+export function openFileInEditor(taskId: string, path: string): Promise<void> {
+  return run(() => api.openFileInEditor(taskId, path));
 }
 
 export function openExternal(url: string): Promise<void> {

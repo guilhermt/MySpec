@@ -22,8 +22,8 @@ const (
 	// Grace is how long an ended situation is remembered: one that comes back
 	// within it is the same one, with its start and without a new notification.
 	Grace = time.Second
-	// Baseline is how long after a workspace loads what is found counts as
-	// found, not as started: nothing notifies, and each place keeps the start
+	// Baseline is how long after the app loads the tasks what is found counts
+	// as found, not as started: nothing notifies, and each place keeps the start
 	// the store remembers for it.
 	Baseline = 3 * time.Second
 )
@@ -80,7 +80,7 @@ type Deps struct {
 	OnStarted func(Started)                          // a situation started after the baseline; may be nil
 }
 
-// Service holds the situations of the open workspace.
+// Service holds the situations of the tasks the app loaded.
 type Service struct {
 	store     Store
 	notifier  Notifier
@@ -93,7 +93,7 @@ type Service struct {
 	onStarted func(Started)
 
 	mu         sync.Mutex
-	loadedAt   time.Time            // when the workspace loaded; zero before any
+	loadedAt   time.Time            // when the app loaded the tasks; zero before any
 	generation int                  // bumped by every update
 	known      map[string]*tracked  // by situation key
 	candidates map[string]candidate // by situation key
@@ -116,13 +116,13 @@ type candidate struct {
 	since time.Time
 }
 
-// notice is a notification the service sent since the workspace loaded.
+// notice is a notification the service sent since the app loaded the tasks.
 type notice struct {
 	target Target
 	shown  bool // not withdrawn yet
 }
 
-// situationKey names a place of a task across the workspace.
+// situationKey names a place of a task across the tasks the app loaded.
 func situationKey(taskID string, place Place) string { return taskID + "|" + place.Key() }
 
 // New builds a Service from deps.
@@ -162,18 +162,17 @@ func New(deps Deps) *Service {
 	return s
 }
 
-// Sync takes the tasks of the workspace that just loaded. What the store
-// remembers about them comes back, every notification of the workspace before
-// is withdrawn, and for Baseline what is found counts as already there. A store
-// that cannot be read is returned as an error, with the workspace taken all the
-// same.
+// Sync takes the tasks the app just loaded. What the store remembers about them
+// comes back, every notification of the tasks before is withdrawn, and for
+// Baseline what is found counts as already there. A store that cannot be read is
+// returned as an error, with the tasks taken all the same.
 func (s *Service) Sync(ctx context.Context, taskIDs []string) error {
 	records, err := s.store.ListByTasks(ctx, taskIDs)
 	if err != nil {
 		// Without the starts the store remembers, but not without a baseline:
-		// holding on to the workspace before would end each of its situations
-		// as gone, deleting their starts, and take every situation already
-		// waiting in this one for a new one.
+		// holding on to the tasks before would end each of their situations as
+		// gone, deleting their starts, and take every situation already waiting
+		// in this one for a new one.
 		records = nil
 	}
 
@@ -204,7 +203,7 @@ func (s *Service) Sync(ctx context.Context, taskIDs []string) error {
 	return err
 }
 
-// Update takes what the tasks of the workspace look like now and answers with
+// Update takes what the tasks the app loaded look like now and answers with
 // the situations that hold, by task id, the most urgent first. It is called for
 // every snapshot, and again whenever OnDue says one is due.
 func (s *Service) Update(found []Found) map[string][]Situation {
@@ -229,8 +228,8 @@ func (s *Service) Update(found []Found) map[string][]Situation {
 			held.seenAt, held.seenGen = now, s.generation
 			delete(s.candidates, key)
 		case baseline:
-			// The workspace just loaded: this was found, not seen starting. It
-			// keeps the start the place had and says nothing.
+			// The app just loaded the tasks: this was found, not seen starting.
+			// It keeps the start the place had and says nothing.
 			startedAt := now
 			if holds {
 				startedAt = held.StartedAt
@@ -279,9 +278,9 @@ func (s *Service) Update(found []Found) map[string][]Situation {
 	}
 	if baseline {
 		// What the baseline kept ends in the first update after it. Sync asks
-		// for that update, but not when one is due sooner, such as a settle
-		// the workspace before left running; nothing else in the baseline asks
-		// for an update, so every update of the baseline asks again.
+		// for that update, but not when one is due sooner, such as a settle the
+		// tasks before left running; nothing else in the baseline asks for an
+		// update, so every update of the baseline asks again.
 		s.scheduleLocked(s.loadedAt.Add(Baseline), now)
 	}
 	holding := s.holdingLocked()

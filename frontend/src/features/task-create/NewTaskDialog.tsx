@@ -15,7 +15,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { ModelPicker } from "@/features/models/ModelPicker";
 import { ReviewModePicker } from "@/features/review-mode/ReviewModePicker";
-import { findNode, type TreeNode } from "@/features/tree/tree-model";
+import { RepositoryPicker } from "@/features/task-create/RepositoryPicker";
+import { messageOf } from "@/lib/errors";
 import {
   adjustmentSummary,
   choiceOf,
@@ -23,8 +24,9 @@ import {
   modelStagesOf,
   withChoice,
 } from "@/lib/models";
+import { defaultRepositoryId, findRepository, takenNames } from "@/lib/repositories";
 import { reviewModeHint } from "@/lib/review-modes";
-import { ONE_SHOT_AT_ROOT, TASK_MODES, taskModeHint, taskModeLabel } from "@/lib/task-modes";
+import { TASK_MODES, taskModeHint, taskModeLabel } from "@/lib/task-modes";
 import {
   isValidTaskName,
   type NameProblem,
@@ -35,42 +37,47 @@ import {
 import { cn } from "@/lib/utils";
 import { asReviewMode, type ReviewMode, type StageModel, type TaskMode } from "@/lib/wails";
 import { createTask } from "@/store/actions";
-import { useAppStore, useTasks } from "@/store/app-store";
+import { useAppStore } from "@/store/app-store";
 
 const NAME_HELP = "Lowercase letters, digits and hyphens.";
 
 const NO_MODELS: readonly StageModel[] = [];
 
-const NAME_PROBLEM_TEXT: Record<Exclude<NameProblem, "empty">, string> = {
+const NAME_PROBLEM_TEXT: Record<Exclude<NameProblem, "empty" | "taken">, string> = {
   invalid: "Use lowercase letters, digits and single hyphens.",
   too_long: `Use at most ${TASK_NAME_MAX} characters.`,
-  taken: "A task with this name already exists in this workspace.",
 };
 
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+/** takenText names the task of the repository that already holds the name. */
+function takenText(name: string, fullName: string): string {
+  return `A task named ${name} already exists in ${fullName}.`;
 }
 
 export function NewTaskDialog() {
   const app = useAppStore((state) => state.app);
-  const newTaskFor = useAppStore((state) => state.newTaskFor);
+  const newTaskOpen = useAppStore((state) => state.newTaskOpen);
 
-  const node = app === null || newTaskFor === null ? null : findNode(app, newTaskFor);
-  if (node === null) {
+  if (!newTaskOpen || app === null) {
     return null;
   }
   // The form lives only while the dialog is open, so it opens empty every time.
-  return <NewTaskForm node={node} />;
+  return <NewTaskForm />;
 }
 
-function NewTaskForm({ node }: { node: TreeNode }) {
+function NewTaskForm() {
+  const app = useAppStore((state) => state.app);
   const closeNewTask = useAppStore((state) => state.closeNewTask);
   const openTask = useAppStore((state) => state.openTask);
-  const taken = useTasks().map((task) => task.name);
+  const rememberRepository = useAppStore((state) => state.rememberRepository);
+  const openTaskId = useAppStore((state) => state.openTaskId);
+  const lastRepositoryId = useAppStore((state) => state.lastRepositoryId);
 
   const defaults = useAppStore((state) => state.app?.modelDefaults ?? NO_MODELS);
   const defaultMode = useAppStore((state) => asReviewMode(state.app?.reviewModeDefault ?? ""));
 
+  const [repositoryId, setRepositoryId] = useState(() =>
+    app === null ? "" : defaultRepositoryId(app, openTaskId, lastRepositoryId),
+  );
   const [name, setName] = useState("");
   const [context, setContext] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -87,13 +94,16 @@ function NewTaskForm({ node }: { node: TreeNode }) {
   // survives a change of mode; the list and its summary show the mode's own.
   const modelStages = modelStagesOf(mode);
 
+  // Without a repository chosen no name is taken yet: the names of the other
+  // repositories are none of this task's business.
+  const taken = app === null || repositoryId === "" ? [] : takenNames(app, repositoryId);
   const problem = taskNameProblem(name, taken);
   const suggestion = suggestTaskName(name);
   const canSuggest =
     (problem === "invalid" || problem === "too_long") &&
     suggestion !== name &&
     isValidTaskName(suggestion);
-  const canCreate = problem === null && context.trim() !== "" && !creating;
+  const canCreate = repositoryId !== "" && problem === null && context.trim() !== "" && !creating;
 
   const create = () => {
     if (!canCreate) {
@@ -103,13 +113,14 @@ function NewTaskForm({ node }: { node: TreeNode }) {
     setError(null);
     void createTask({
       name,
-      repoPath: node.isRoot ? "" : node.path,
+      repositoryId,
       initialContext: context,
       mode,
       models: choices,
       reviewMode,
     })
       .then((id) => {
+        rememberRepository(repositoryId);
         closeNewTask();
         openTask(id);
       })
@@ -143,12 +154,14 @@ function NewTaskForm({ node }: { node: TreeNode }) {
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>New task</DialogTitle>
-          <p className="text-muted-foreground">
-            {node.isRoot ? "At the workspace root" : `In ${node.label}`}
-          </p>
         </DialogHeader>
 
         <form onSubmit={onSubmit} className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1.5">
+            <Label>Repository</Label>
+            <RepositoryPicker value={repositoryId} onChange={setRepositoryId} />
+          </div>
+
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="task-name">Name</Label>
             <Input
@@ -165,7 +178,9 @@ function NewTaskForm({ node }: { node: TreeNode }) {
               <p className="text-xs text-muted-foreground">{NAME_HELP}</p>
             ) : (
               <p className="flex items-center gap-1 text-xs text-destructive">
-                {NAME_PROBLEM_TEXT[problem]}
+                {problem === "taken"
+                  ? takenText(name, findRepository(app, repositoryId)?.fullName ?? "")
+                  : NAME_PROBLEM_TEXT[problem]}
                 {canSuggest && (
                   <Button
                     type="button"
@@ -210,17 +225,12 @@ function NewTaskForm({ node }: { node: TreeNode }) {
               }}
             >
               {TASK_MODES.map((option) => (
-                <ToggleGroupItem
-                  key={option}
-                  value={option}
-                  disabled={option === "one_shot" && node.isRoot}
-                >
+                <ToggleGroupItem key={option} value={option}>
                   {taskModeLabel(option)}
                 </ToggleGroupItem>
               ))}
             </ToggleGroup>
             <p className="text-xs text-muted-foreground">{taskModeHint(mode)}</p>
-            {node.isRoot && <p className="text-xs text-muted-foreground">{ONE_SHOT_AT_ROOT}</p>}
           </div>
 
           <div className="flex flex-col gap-1.5">

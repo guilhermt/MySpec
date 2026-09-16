@@ -3,10 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WaitingSection } from "@/features/attention/WaitingSection";
 import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
-import { makeRepoPR, makeSituation, makeState, makeTask } from "@/test/wails-mock";
+import { makePullRequest, makeSituation, makeState, makeTask } from "@/test/wails-mock";
 
-const API = "/home/dev/projects/api";
-const WEB = "/home/dev/projects/web";
 const NOW = Date.parse("2026-09-05T10:12:00Z");
 
 /** EXIT_MS is how long an entry takes to leave. */
@@ -24,7 +22,7 @@ const TASKS = [
         taskId: "t-review",
         kind: "step_review",
         form: "review",
-        place: { kind: "step", stage: "", step: 3, repoPath: "", repository: "" },
+        place: { kind: "step", stage: "", step: 3 },
         startedAt: "2026-09-05T10:09:00Z",
       }),
     ],
@@ -33,16 +31,13 @@ const TASKS = [
     id: "t-draft",
     name: "add-login",
     stage: "pr",
-    repos: [
-      makeRepoPR({ repository: "web", repoPath: WEB }),
-      makeRepoPR({ repository: "api", repoPath: API, status: "draft_ready" }),
-    ],
+    pr: makePullRequest({ status: "draft_ready" }),
     situations: [
       makeSituation({
         id: "draft",
         taskId: "t-draft",
         kind: "draft",
-        place: { kind: "repo", stage: "", step: 0, repoPath: API, repository: "api" },
+        place: { kind: "pr", stage: "", step: 0 },
         startedAt: "2026-09-05T10:00:00Z",
       }),
     ],
@@ -57,7 +52,7 @@ const TASKS = [
         taskId: "t-blocked",
         kind: "step_blocked",
         group: "error",
-        place: { kind: "step", stage: "", step: 2, repoPath: "", repository: "" },
+        place: { kind: "step", stage: "", step: 2 },
         startedAt: "2026-09-05T10:10:00Z",
       }),
     ],
@@ -124,7 +119,9 @@ describe("WaitingSection", () => {
     expect(within(entryOf("fix-header")).getByText("2m")).toBeInTheDocument();
     expect(within(entryOf("fix-header")).getByText("Step 2 blocked")).toBeInTheDocument();
     expect(within(entryOf("add-login")).getByText("12m")).toBeInTheDocument();
-    expect(within(entryOf("add-login")).getByText("Draft to approve · api")).toBeInTheDocument();
+    expect(
+      within(entryOf("add-login")).getByText("Draft to approve · pull request"),
+    ).toBeInTheDocument();
     expect(within(entryOf("refactor-db")).getByText("3m")).toBeInTheDocument();
     expect(within(entryOf("refactor-db")).getByText("Review step 3")).toBeInTheDocument();
   });
@@ -137,7 +134,7 @@ describe("WaitingSection", () => {
         makeSituation({
           id: "reply",
           taskId: "t-reply",
-          place: { kind: "stage", stage: "tech_spec", step: 0, repoPath: "", repository: "" },
+          place: { kind: "stage", stage: "tech_spec", step: 0 },
           startedAt: "2026-09-05T10:11:30Z",
         }),
       ],
@@ -145,7 +142,7 @@ describe("WaitingSection", () => {
     renderWithStore(<WaitingSection />, { state: makeState({ tasks: [...TASKS, reply] }) });
 
     expect(entryOf("add-login")).toHaveAccessibleName(
-      "add-login, Draft to approve, api, waiting 12 minutes",
+      "add-login, Draft to approve, pull request, waiting 12 minutes",
     );
     expect(entryOf("dark-mode")).toHaveAccessibleName(
       "dark-mode, Waiting for reply, tech spec, waiting just now",
@@ -174,7 +171,7 @@ describe("WaitingSection", () => {
     expect(entryOf("add-login")).toBeInTheDocument();
   });
 
-  it("opens an entry where its situation is, on the tab of its repository, and puts the history away", async () => {
+  it("opens an entry where its situation is, and puts the history away", async () => {
     const { user } = renderWithStore(<WaitingSection />, {
       state: makeState({ tasks: TASKS }),
       ui: { historyOpen: true },
@@ -186,7 +183,6 @@ describe("WaitingSection", () => {
 
     const store = useAppStore.getState();
     expect(store.openTaskId).toBe("t-draft");
-    expect(store.openRepo["t-draft"]).toBe(API);
     expect(store.historyOpen).toBe(false);
   });
 
@@ -231,7 +227,9 @@ describe("WaitingSection", () => {
 
     // Still on screen while it animates out, but neither there for a screen
     // reader nor a stop for the keyboard.
-    expect(screen.getByText("Draft to approve · api").closest("li")).toHaveAttribute("inert");
+    expect(screen.getByText("Draft to approve · pull request").closest("li")).toHaveAttribute(
+      "inert",
+    );
     expect(screen.queryByRole("button", { name: /^add-login,/ })).not.toBeInTheDocument();
     const first = entryOf("fix-header");
     act(() => first.focus());
@@ -240,7 +238,7 @@ describe("WaitingSection", () => {
 
     advance(EXIT_MS);
 
-    expect(screen.queryByText("Draft to approve · api")).not.toBeInTheDocument();
+    expect(screen.queryByText("Draft to approve · pull request")).not.toBeInTheDocument();
   });
 
   it("closes as soon as nothing waits any more, still counting the last entry while it leaves", () => {
@@ -258,14 +256,14 @@ describe("WaitingSection", () => {
     // Closed at once, while what the user saw collapses without reading 0.
     expect(screen.queryByRole("region", { name: "Waiting for you" })).not.toBeInTheDocument();
     expect(title.closest("section")).toHaveAttribute("aria-hidden", "true");
-    expect(screen.getByText("Draft to approve · api")).toBeInTheDocument();
+    expect(screen.getByText("Draft to approve · pull request")).toBeInTheDocument();
     expect(count).toHaveTextContent("1");
 
     advance(EXIT_MS - 1);
     expect(count).toHaveTextContent("1");
 
     advance(1);
-    expect(screen.queryByText("Draft to approve · api")).not.toBeInTheDocument();
+    expect(screen.queryByText("Draft to approve · pull request")).not.toBeInTheDocument();
     expect(title.closest("section")).toHaveAttribute("aria-hidden", "true");
   });
 
@@ -280,7 +278,7 @@ describe("WaitingSection", () => {
     advance(1);
     expect(within(entryOf("add-login")).getByText("13m")).toBeInTheDocument();
     expect(entryOf("add-login")).toHaveAccessibleName(
-      "add-login, Draft to approve, api, waiting 13 minutes",
+      "add-login, Draft to approve, pull request, waiting 13 minutes",
     );
   });
 });

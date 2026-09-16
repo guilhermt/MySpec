@@ -239,11 +239,11 @@ func TestStartTaskOpensTheFirstStage(t *testing.T) {
 	}
 	f.wantCalls(t, "start:task-1:prd:restarted=false")
 
-	// A Structured task has no document of its own to point to, and its planning
-	// belongs to no repository.
+	// A Structured task has no document of its own to point to, and its
+	// planning runs in the clone of its repository.
 	info, _ := f.sessions.info(session.Key{TaskID: "task-1", Stage: string(task.StagePRD)})
-	if info.OneShotPath != "" || info.Repository != "" {
-		t.Errorf("session = %+v, want no One-Shot document and no repository", info)
+	if info.OneShotPath != "" || info.Dir != repo.Path || info.Repository != repo.FullName() {
+		t.Errorf("session = %+v, want no One-Shot document and the clone of %s", info, repo.FullName())
 	}
 }
 
@@ -269,8 +269,8 @@ func TestAOneShotTaskStartsItsPlanningInItsRepository(t *testing.T) {
 	}
 	want := planningInfo{
 		Prompt:      prompts.StageOneShot,
-		Dir:         repos[0].Path,
-		Repository:  "api",
+		Dir:         repo.Path,
+		Repository:  "dev/web",
 		OneShotPath: created.OneShotPath(),
 		Choice:      created.Models.Stage(models.OneShot),
 	}

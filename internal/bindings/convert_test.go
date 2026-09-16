@@ -12,131 +12,36 @@ import (
 	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
+	"github.com/guilhermt/myspec/internal/repository"
 	"github.com/guilhermt/myspec/internal/review"
 	"github.com/guilhermt/myspec/internal/reviewmode"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
-	"github.com/guilhermt/myspec/internal/workspace"
+	"github.com/guilhermt/myspec/internal/upgrade"
 )
-
-func TestFromWorkspace(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name string
-		in   *workspace.Workspace
-		want *bindings.Workspace
-	}{
-		{name: "none", in: nil, want: nil},
-		{
-			name: "no repos",
-			in:   &workspace.Workspace{Name: "code", Path: "/home/u/code"},
-			want: &bindings.Workspace{Name: "code", Path: "/home/u/code", Repos: []bindings.Repo{}},
-		},
-		{
-			name: "with repos",
-			in: &workspace.Workspace{
-				Name:  "code",
-				Path:  "/home/u/code",
-				Repos: []workspace.Repo{{Name: "api", Path: "/home/u/code/api"}},
-			},
-			want: &bindings.Workspace{
-				Name:  "code",
-				Path:  "/home/u/code",
-				Repos: []bindings.Repo{{Name: "api", Path: "/home/u/code/api"}},
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			if diff := cmp.Diff(tt.want, bindings.FromWorkspace(tt.in)); diff != "" {
-				t.Errorf("FromWorkspace() mismatch (-want +got):\n%s", diff)
-			}
-		})
-	}
-}
-
-func TestFromRecentsIsNeverNil(t *testing.T) {
-	t.Parallel()
-
-	got := bindings.FromRecents(nil)
-	if got == nil {
-		t.Fatal("FromRecents(nil) = nil, want an empty slice")
-	}
-	if len(got) != 0 {
-		t.Errorf("len(FromRecents(nil)) = %d, want 0", len(got))
-	}
-}
-
-func TestFromRecentsDropsTheTimestamp(t *testing.T) {
-	t.Parallel()
-
-	in := []workspace.Recent{
-		{Name: "code", Path: "/home/u/code", LastOpenedAt: time.Now()},
-		{Name: "work", Path: "/home/u/work", LastOpenedAt: time.Now()},
-	}
-	want := []bindings.Recent{
-		{Name: "code", Path: "/home/u/code"},
-		{Name: "work", Path: "/home/u/work"},
-	}
-
-	if diff := cmp.Diff(want, bindings.FromRecents(in)); diff != "" {
-		t.Errorf("FromRecents() mismatch (-want +got):\n%s", diff)
-	}
-}
-
-func TestFromNotice(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name string
-		in   *workspace.Notice
-		want *bindings.Notice
-	}{
-		{name: "none", in: nil, want: nil},
-		{
-			name: "missing path",
-			in:   &workspace.Notice{Path: "/gone", Reason: workspace.ReasonNotFound},
-			want: &bindings.Notice{Path: "/gone", Reason: "not_found"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			if diff := cmp.Diff(tt.want, bindings.FromNotice(tt.in)); diff != "" {
-				t.Errorf("FromNotice() mismatch (-want +got):\n%s", diff)
-			}
-		})
-	}
-}
 
 func TestFromTasksCarriesTheStateOfEachStep(t *testing.T) {
 	t.Parallel()
 
-	tasks := []task.Task{{ID: "task-1", Name: "login-screen", WorkspacePath: "/home/u/code", Stage: task.StageImplementation}}
+	tasks := []task.Task{{ID: "task-1", Name: "login-screen", Stage: task.StageImplementation}}
 	states := []flow.StepState{
 		{
-			Step:   task.Step{Number: 1, File: "1-first.md", Title: "First", Repository: "api", RepoPath: "/home/u/code/api"},
+			Step:   task.Step{Number: 1, File: "1-first.md", Title: "First"},
 			Status: flow.StepBlocked,
 			Block: &task.StepBlock{
 				Reason: task.BlockDirty,
 				Detail: " M main.go",
 				Files:  1,
 			},
-			WorktreePath: "/home/u/code/.myspec/worktrees/api/login-screen",
+			WorktreePath: "/data/worktrees/dev/web/login-screen",
 		},
 		{
-			Step:   task.Step{Number: 2, File: "2-second.md", Title: "Second", Repository: "api", RepoPath: "/home/u/code/api"},
+			Step:   task.Step{Number: 2, File: "2-second.md", Title: "Second"},
 			Status: flow.StepPreparing,
 			Phase:  flow.PhaseFetching,
 		},
 		{
-			Step:     task.Step{Number: 3, File: "3-third.md", Title: "Third", Repository: "api", RepoPath: "/home/u/code/api"},
+			Step:     task.Step{Number: 3, File: "3-third.md", Title: "Third"},
 			Status:   flow.StepNotStarted,
 			Choice:   models.Choice{Model: models.Opus5, Effort: models.XHigh},
 			Adjusted: true,
@@ -145,20 +50,20 @@ func TestFromTasksCarriesTheStateOfEachStep(t *testing.T) {
 	want := []bindings.Step{
 		{
 			Number: 1, File: "1-first.md", Title: "First",
-			Repository: "api", RepoPath: "/home/u/code/api", Status: "blocked",
+			Status:       "blocked",
 			Block:        &bindings.StepBlock{Reason: "dirty_worktree", Detail: " M main.go", Files: 1},
-			WorktreePath: "/home/u/code/.myspec/worktrees/api/login-screen",
+			WorktreePath: "/data/worktrees/dev/web/login-screen",
 			Reports:      []bindings.StepReport{},
 		},
 		{
 			Number: 2, File: "2-second.md", Title: "Second",
-			Repository: "api", RepoPath: "/home/u/code/api", Status: "preparing", Phase: "fetching",
+			Status: "preparing", Phase: "fetching",
 			Reports: []bindings.StepReport{},
 		},
 		{
 			Number: 3, File: "3-third.md", Title: "Third",
-			Repository: "api", RepoPath: "/home/u/code/api", Status: "not_started",
-			Model: "claude-opus-5", Effort: "xhigh", Adjusted: true, ModelEditable: true,
+			Status: "not_started",
+			Model:  "claude-opus-5", Effort: "xhigh", Adjusted: true, ModelEditable: true,
 			ReviewModeEditable: true, Reports: []bindings.StepReport{},
 		},
 	}
@@ -167,7 +72,8 @@ func TestFromTasksCarriesTheStateOfEachStep(t *testing.T) {
 		tasks,
 		func(string) task.Artifacts { return task.Artifacts{} },
 		func(string) []flow.StepState { return states },
-		noRepos,
+		noPR,
+		repoOf,
 		nil,
 		nil,
 	)
@@ -187,7 +93,7 @@ func TestFromTasksCarriesTheAgentReviewOfAStep(t *testing.T) {
 
 	states := []flow.StepState{
 		{
-			Step:          task.Step{Number: 1, File: "1-first.md", Title: "First", Repository: "api"},
+			Step:          task.Step{Number: 1, File: "1-first.md", Title: "First"},
 			Status:        flow.StepAgentReview,
 			ReviewMode:    reviewmode.Agent,
 			ReviewPass:    2,
@@ -209,14 +115,14 @@ func TestFromTasksCarriesTheAgentReviewOfAStep(t *testing.T) {
 			},
 		},
 		{
-			Step:     task.Step{Number: 2, File: "2-second.md", Title: "Second", Repository: "api"},
+			Step:     task.Step{Number: 2, File: "2-second.md", Title: "Second"},
 			Status:   flow.StepNotStarted,
 			Fallback: "",
 		},
 	}
 	want := []bindings.Step{
 		{
-			Number: 1, File: "1-first.md", Title: "First", Repository: "api", Status: "agent_review",
+			Number: 1, File: "1-first.md", Title: "First", Status: "agent_review",
 			ReviewMode:    "agent",
 			ReviewPass:    2,
 			ReportMissing: true,
@@ -238,7 +144,7 @@ func TestFromTasksCarriesTheAgentReviewOfAStep(t *testing.T) {
 			},
 		},
 		{
-			Number: 2, File: "2-second.md", Title: "Second", Repository: "api", Status: "not_started",
+			Number: 2, File: "2-second.md", Title: "Second", Status: "not_started",
 			ModelEditable: true, ReviewModeEditable: true,
 			// A step without a reviewer carries none, and an empty list.
 			Reports: []bindings.StepReport{},
@@ -328,7 +234,8 @@ func TestFromTasksCarriesTheReviewModeOfTheTask(t *testing.T) {
 				[]task.Task{tt.task},
 				func(string) task.Artifacts { return task.Artifacts{} },
 				func(string) []flow.StepState { return nil },
-				noRepos,
+				noPR,
+				repoOf,
 				nil,
 				nil,
 			)
@@ -350,7 +257,8 @@ func TestFromTasksHasNoCurrentStepWithoutAPlan(t *testing.T) {
 		[]task.Task{{ID: "task-1", Name: "login-screen", Stage: task.StagePRD}},
 		func(string) task.Artifacts { return task.Artifacts{} },
 		func(string) []flow.StepState { return nil },
-		noRepos,
+		noPR,
+		repoOf,
 		nil,
 		nil,
 	)
@@ -369,7 +277,7 @@ func TestFromTasksCarriesTheReviewOfAStep(t *testing.T) {
 	t.Parallel()
 
 	states := []flow.StepState{{
-		Step:   task.Step{Number: 1, File: "1-first.md", Title: "First", Repository: "api"},
+		Step:   task.Step{Number: 1, File: "1-first.md", Title: "First"},
 		Status: flow.StepInReview,
 		Review: &review.Snapshot{
 			Files: []review.File{
@@ -473,7 +381,8 @@ func TestTheCurrentStepIsTheFirstOneThatIsNotDone(t *testing.T) {
 				[]task.Task{{ID: "task-1", Stage: task.StageImplementation}},
 				func(string) task.Artifacts { return task.Artifacts{} },
 				func(string) []flow.StepState { return states },
-				noRepos,
+				noPR,
+				repoOf,
 				nil,
 				nil,
 			)
@@ -484,8 +393,16 @@ func TestTheCurrentStepIsTheFirstOneThatIsNotDone(t *testing.T) {
 	}
 }
 
-// noRepos is the PR stage of a task that has not reached it.
-func noRepos(string) []flow.RepoState { return nil }
+// noPR is the PR stage of a task that has not reached it.
+func noPR(string) (flow.PullRequest, bool) { return flow.PullRequest{}, false }
+
+// convertRepo is the repository every converted task belongs to.
+var convertRepo = repository.Repository{ID: "repo-1", Owner: "dev", Name: "web", Path: "/home/dev/web"}
+
+// repoOf is the Repositories of the conversions: one registered repository.
+func repoOf(id string) (repository.Repository, bool) {
+	return convertRepo, id == convertRepo.ID
+}
 
 // stepsOf converts the steps of a single implementing task, which is what
 // every step conversion test needs.
@@ -496,7 +413,8 @@ func stepsOf(t *testing.T, states []flow.StepState) []bindings.Step {
 		[]task.Task{{ID: "task-1", Name: "login-screen", Stage: task.StageImplementation}},
 		func(string) task.Artifacts { return task.Artifacts{} },
 		func(string) []flow.StepState { return states },
-		noRepos,
+		noPR,
+		repoOf,
 		nil,
 		nil,
 	)
@@ -506,38 +424,24 @@ func stepsOf(t *testing.T, states []flow.StepState) []bindings.Step {
 	return got[0].Steps
 }
 
-func TestFromTasksCarriesWhatClosingARepositoryDid(t *testing.T) {
+func TestFromTasksCarriesWhatClosingATaskDid(t *testing.T) {
 	t.Parallel()
 
 	closedAt := time.Date(2026, 9, 8, 18, 30, 0, 0, time.UTC)
-	states := []flow.RepoState{
-		{
-			Repository: "api",
-			RepoPath:   "/home/u/code/api",
-			Slug:       "api",
-			Status:     flow.RepoClosed,
-			PR: task.PRDetails{
-				Number: 7, URL: "https://github.com/acme/api/pull/7", State: task.PRStateMerged, Base: "dev",
-			},
-			Close: &task.CloseResult{
-				Worktree:     task.CloseStep{Outcome: task.OutcomeDone},
-				Branch:       task.CloseStep{Outcome: task.OutcomeSkipped, Reason: task.SkipNotMerged, Detail: "login-screen"},
-				Base:         task.CloseStep{Outcome: task.OutcomeFailed, Detail: "git merge: refusing"},
-				WorktreePath: "/home/u/code/.myspec/worktrees/api/login-screen",
-				BranchName:   "login-screen",
-				BaseBranch:   "dev",
-				BaseCommits:  3,
-				ClosedAt:     closedAt,
-			},
+	pr := flow.PullRequest{
+		Status: flow.PRClosed,
+		PR: task.PRDetails{
+			Number: 7, URL: "https://github.com/acme/api/pull/7", State: task.PRStateMerged, Base: "dev",
 		},
-		{
-			Repository: "web",
-			RepoPath:   "/home/u/code/web",
-			Slug:       "web",
-			Status:     flow.RepoDone,
-			PR:         task.PRDetails{Number: 8, State: task.PRStateOpen, Base: "dev"},
-			CheckError: "gh pr view: connection refused",
-			CanClose:   true,
+		Close: &task.CloseResult{
+			Worktree:     task.CloseStep{Outcome: task.OutcomeDone},
+			Branch:       task.CloseStep{Outcome: task.OutcomeSkipped, Reason: task.SkipNotMerged, Detail: "login-screen"},
+			Base:         task.CloseStep{Outcome: task.OutcomeFailed, Detail: "git merge: refusing"},
+			WorktreePath: "/data/worktrees/dev/web/login-screen",
+			BranchName:   "login-screen",
+			BaseBranch:   "dev",
+			BaseCommits:  3,
+			ClosedAt:     closedAt,
 		},
 	}
 
@@ -545,50 +449,77 @@ func TestFromTasksCarriesWhatClosingARepositoryDid(t *testing.T) {
 		[]task.Task{{ID: "task-1", Name: "login-screen", Stage: task.StagePR}},
 		func(string) task.Artifacts { return task.Artifacts{} },
 		func(string) []flow.StepState { return nil },
-		func(string) []flow.RepoState { return states },
+		func(string) (flow.PullRequest, bool) { return pr, true },
+		repoOf,
 		nil,
 		nil,
 	)
-	if len(got) != 1 {
-		t.Fatalf("len(FromTasks()) = %d, want 1", len(got))
+	if len(got) != 1 || got[0].PR == nil {
+		t.Fatalf("FromTasks() = %+v, want one task with its pull request", got)
 	}
 
 	want := &bindings.CloseResult{
 		Worktree:     bindings.CloseStep{Outcome: "done"},
 		Branch:       bindings.CloseStep{Outcome: "skipped", Reason: "not_merged", Detail: "login-screen"},
 		Base:         bindings.CloseStep{Outcome: "failed", Detail: "git merge: refusing"},
-		WorktreePath: "/home/u/code/.myspec/worktrees/api/login-screen",
+		WorktreePath: "/data/worktrees/dev/web/login-screen",
 		BranchName:   "login-screen",
 		BaseBranch:   "dev",
 		BaseCommits:  3,
 		ClosedAt:     "2026-09-08T18:30:00Z",
 	}
-	if diff := cmp.Diff(want, got[0].Repos[0].Close); diff != "" {
+	if diff := cmp.Diff(want, got[0].PR.Close); diff != "" {
 		t.Errorf("close result mismatch (-want +got):\n%s", diff)
 	}
-	if got[0].Repos[0].PRBase != "dev" || got[0].Repos[0].CanClose {
-		t.Errorf("api = %+v, want the base of the pull request and no closing to offer", got[0].Repos[0])
-	}
-	// A repository whose reading failed is offered the closing, with what the
-	// reading said.
-	web := got[0].Repos[1]
-	if web.Close != nil {
-		t.Errorf("close result of web = %+v, want nil on a repository that is not closed", web.Close)
-	}
-	if web.CheckError != "gh pr view: connection refused" || !web.CanClose {
-		t.Errorf("web = %+v, want the failed reading and the closing offered", web)
+	if got[0].PR.PRBase != "dev" || got[0].PR.CanClose {
+		t.Errorf("pull request = %+v, want the base and no closing to offer", got[0].PR)
 	}
 }
 
-func TestFromArchivedCarriesTheDocumentsAndThePullRequests(t *testing.T) {
+func TestFromTasksCarriesAReadingThatFailedAndTheMissingClone(t *testing.T) {
+	t.Parallel()
+
+	pr := flow.PullRequest{
+		Status:       flow.PRDone,
+		PR:           task.PRDetails{Number: 8, State: task.PRStateOpen, Base: "dev"},
+		CheckError:   "gh pr view: connection refused",
+		CanClose:     true,
+		CloneMissing: true,
+	}
+
+	got := bindings.FromTasks(
+		[]task.Task{{ID: "task-1", Name: "login-screen", Stage: task.StagePR}},
+		func(string) task.Artifacts { return task.Artifacts{} },
+		func(string) []flow.StepState { return nil },
+		func(string) (flow.PullRequest, bool) { return pr, true },
+		repoOf,
+		nil,
+		nil,
+	)
+	if len(got) != 1 || got[0].PR == nil {
+		t.Fatalf("FromTasks() = %+v, want one task with its pull request", got)
+	}
+	converted := got[0].PR
+	if converted.Close != nil {
+		t.Errorf("close result = %+v, want nil on a task that is not closed", converted.Close)
+	}
+	if converted.CheckError != "gh pr view: connection refused" || !converted.CanClose {
+		t.Errorf("pull request = %+v, want the failed reading and the closing offered", converted)
+	}
+	if !converted.CloneMissing {
+		t.Error("cloneMissing = false, want the clone reported as gone")
+	}
+}
+
+func TestFromArchivedCarriesTheDocumentsAndThePullRequest(t *testing.T) {
 	t.Parallel()
 
 	createdAt := time.Date(2026, 9, 1, 9, 0, 0, 0, time.UTC)
 	archivedAt := time.Date(2026, 9, 8, 18, 30, 0, 0, time.UTC)
 	tasks := []task.Task{{
 		ID:              "task-1",
+		RepositoryID:    convertRepo.ID,
 		Name:            "login-screen",
-		WorkspacePath:   "/home/u/code",
 		ArtifactVersion: 4,
 		CreatedAt:       createdAt,
 		ArchivedAt:      archivedAt,
@@ -599,40 +530,31 @@ func TestFromArchivedCarriesTheDocumentsAndThePullRequests(t *testing.T) {
 		Plan: task.Plan{
 			Present: true,
 			Steps: []task.Step{
-				{Number: 1, File: "1-first.md", Title: "First", Repository: "api", RepoPath: "/home/u/code/api"},
-				{Number: 2, File: "2-second.md", Title: "Second", Repository: "web", RepoPath: "/home/u/code/web"},
+				{Number: 1, File: "1-first.md", Title: "First"},
+				{Number: 2, File: "2-second.md", Title: "Second"},
 			},
 		},
 	}
-	runs := []task.PRRun{
-		{
-			RepoPath: "/home/u/code/api",
-			Status:   task.PRClosed,
-			PR: task.PRDetails{
-				Number: 7, URL: "https://github.com/acme/api/pull/7", State: task.PRStateMerged,
-			},
+	run := task.PRRun{
+		Status: task.PRClosed,
+		PR: task.PRDetails{
+			Number: 7, URL: "https://github.com/acme/api/pull/7", State: task.PRStateMerged,
 		},
-		{RepoPath: "/home/u/code/web", Status: task.PRClosed},
 	}
 
 	want := []bindings.ArchivedTask{{
-		ID:          "task-1",
-		Name:        "login-screen",
-		HasPRD:      true,
-		HasTechSpec: true,
+		ID:           "task-1",
+		Name:         "login-screen",
+		RepositoryID: convertRepo.ID,
+		Repository:   "dev/web",
+		HasPRD:       true,
+		HasTechSpec:  true,
 		Steps: []bindings.ArchivedStep{
-			{Number: 1, File: "1-first.md", Title: "First", Repository: "api", Reports: []bindings.StepReport{}},
-			{Number: 2, File: "2-second.md", Title: "Second", Repository: "web", Reports: []bindings.StepReport{}},
+			{Number: 1, File: "1-first.md", Title: "First", Reports: []bindings.StepReport{}},
+			{Number: 2, File: "2-second.md", Title: "Second", Reports: []bindings.StepReport{}},
 		},
-		Repos: []bindings.ArchivedRepo{
-			{
-				Repository: "api",
-				RepoPath:   "/home/u/code/api",
-				PRNumber:   7,
-				PRURL:      "https://github.com/acme/api/pull/7",
-				PRState:    "merged",
-			},
-			{Repository: "web", RepoPath: "/home/u/code/web"},
+		PR: &bindings.ArchivedPR{
+			Number: 7, URL: "https://github.com/acme/api/pull/7", State: "merged",
 		},
 		ArtifactVersion: 4,
 		CreatedAt:       "2026-09-01T09:00:00Z",
@@ -642,7 +564,8 @@ func TestFromArchivedCarriesTheDocumentsAndThePullRequests(t *testing.T) {
 	got := bindings.FromArchived(
 		tasks,
 		func(string) task.Artifacts { return artifacts },
-		func(string) []task.PRRun { return runs },
+		func(string) (task.PRRun, bool) { return run, true },
+		repoOf,
 	)
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("history mismatch (-want +got):\n%s", diff)
@@ -659,7 +582,8 @@ func TestFromTasksCarriesTheModeAndTheOneShotDocument(t *testing.T) {
 		},
 		func(id string) task.Artifacts { return task.Artifacts{OneShot: id == "task-1"} },
 		func(string) []flow.StepState { return nil },
-		noRepos,
+		noPR,
+		repoOf,
 		nil,
 		nil,
 	)
@@ -686,7 +610,7 @@ func TestFromArchivedCarriesTheModeAndTheOneShotDocument(t *testing.T) {
 		Plan: task.Plan{
 			Present: true,
 			Steps: []task.Step{
-				{Number: 1, File: "one-shot.md", Title: "Login screen", Repository: "api", RepoPath: "/home/u/code/api"},
+				{Number: 1, File: "one-shot.md", Title: "Login screen"},
 			},
 		},
 		StepReports: map[int][]task.ReviewReport{1: {{Pass: 1, File: "1-review-1.md", Clean: true}}},
@@ -695,7 +619,8 @@ func TestFromArchivedCarriesTheModeAndTheOneShotDocument(t *testing.T) {
 	got := bindings.FromArchived(
 		[]task.Task{{ID: "task-1", Name: "login-screen", Mode: task.ModeOneShot}},
 		func(string) task.Artifacts { return artifacts },
-		func(string) []task.PRRun { return nil },
+		func(string) (task.PRRun, bool) { return task.PRRun{}, false },
+		repoOf,
 	)
 	if len(got) != 1 {
 		t.Fatalf("len(FromArchived()) = %d, want 1", len(got))
@@ -704,7 +629,7 @@ func TestFromArchivedCarriesTheModeAndTheOneShotDocument(t *testing.T) {
 		t.Errorf("archived task = %+v, want a One-Shot task with its document alone", got[0])
 	}
 	want := []bindings.ArchivedStep{{
-		Number: 1, File: "one-shot.md", Title: "Login screen", Repository: "api",
+		Number: 1, File: "one-shot.md", Title: "Login screen",
 		Reports: []bindings.StepReport{{Pass: 1, File: "1-review-1.md", Clean: true}},
 	}}
 	if diff := cmp.Diff(want, got[0].Steps); diff != "" {
@@ -719,8 +644,8 @@ func TestFromArchivedCarriesTheReportsOfTheSteps(t *testing.T) {
 		Plan: task.Plan{
 			Present: true,
 			Steps: []task.Step{
-				{Number: 1, File: "1-first.md", Title: "First", Repository: "api"},
-				{Number: 2, File: "2-second.md", Title: "Second", Repository: "api"},
+				{Number: 1, File: "1-first.md", Title: "First"},
+				{Number: 2, File: "2-second.md", Title: "Second"},
 			},
 		},
 		StepReports: map[int][]task.ReviewReport{
@@ -729,19 +654,20 @@ func TestFromArchivedCarriesTheReportsOfTheSteps(t *testing.T) {
 	}
 	want := []bindings.ArchivedStep{
 		{
-			Number: 1, File: "1-first.md", Title: "First", Repository: "api",
+			Number: 1, File: "1-first.md", Title: "First",
 			Reports: []bindings.StepReport{
 				{Pass: 1, File: "1-review-1.md"},
 				{Pass: 2, File: "1-review-2.md", Clean: true},
 			},
 		},
-		{Number: 2, File: "2-second.md", Title: "Second", Repository: "api", Reports: []bindings.StepReport{}},
+		{Number: 2, File: "2-second.md", Title: "Second", Reports: []bindings.StepReport{}},
 	}
 
 	got := bindings.FromArchived(
 		[]task.Task{{ID: "task-1", Name: "login-screen"}},
 		func(string) task.Artifacts { return artifacts },
-		func(string) []task.PRRun { return nil },
+		func(string) (task.PRRun, bool) { return task.PRRun{}, false },
+		repoOf,
 	)
 	if len(got) != 1 {
 		t.Fatalf("len(FromArchived()) = %d, want 1", len(got))
@@ -761,14 +687,16 @@ func TestFromArchivedAllocatesEveryList(t *testing.T) {
 	got := bindings.FromArchived(
 		[]task.Task{{ID: "task-1", Name: "login-screen"}},
 		func(string) task.Artifacts { return task.Artifacts{} },
-		func(string) []task.PRRun { return nil },
+		func(string) (task.PRRun, bool) { return task.PRRun{}, false },
+		repoOf,
 	)
 	if len(got) != 1 {
 		t.Fatalf("len(FromArchived()) = %d, want 1", len(got))
 	}
-	// The frontend maps over both lists without checking for null.
-	if got[0].Steps == nil || got[0].Repos == nil {
-		t.Errorf("archived task = %+v, want empty slices", got[0])
+	// The frontend maps over the steps without checking for null, and a task
+	// that opened no pull request carries none.
+	if got[0].Steps == nil || got[0].PR != nil {
+		t.Errorf("archived task = %+v, want an empty slice of steps and no pull request", got[0])
 	}
 }
 
@@ -777,49 +705,37 @@ func TestFromDeletePreviewCarriesWhatWouldBeDestroyed(t *testing.T) {
 
 	preview := flow.DeletePreview{
 		SessionRunning: true,
-		Worktrees: []flow.WorktreePreview{{
-			Repository: "api",
-			RepoPath:   "/home/u/code/api",
-			Path:       "/home/u/code/.myspec/worktrees/api/login-screen",
-			Dirty:      true,
-			Files:      2,
-		}},
-		Branches: []flow.BranchPreview{{
-			Repository: "api",
-			RepoPath:   "/home/u/code/api",
-			Name:       "login-screen",
-			Error:      "git merge-base: bad revision",
-		}},
-		PRs: []flow.PRPreview{{
-			Repository: "api",
-			RepoPath:   "/home/u/code/api",
-			Number:     7,
-			URL:        "https://github.com/acme/api/pull/7",
-			State:      task.PRStateOpen,
-		}},
+		Worktree: &flow.WorktreePreview{
+			Path:  "/data/worktrees/dev/web/login-screen",
+			Dirty: true,
+			Files: 2,
+		},
+		Branch: &flow.BranchPreview{
+			Name:  "login-screen",
+			Error: "git merge-base: bad revision",
+		},
+		PR: &flow.PRPreview{
+			Number: 7,
+			URL:    "https://github.com/acme/api/pull/7",
+			State:  task.PRStateOpen,
+		},
 	}
 	want := bindings.DeletePreview{
 		SessionRunning: true,
-		Worktrees: []bindings.WorktreePreview{{
-			Repository: "api",
-			RepoPath:   "/home/u/code/api",
-			Path:       "/home/u/code/.myspec/worktrees/api/login-screen",
-			Dirty:      true,
-			Files:      2,
-		}},
-		Branches: []bindings.BranchPreview{{
-			Repository: "api",
-			RepoPath:   "/home/u/code/api",
-			Name:       "login-screen",
-			Error:      "git merge-base: bad revision",
-		}},
-		PRs: []bindings.PRPreview{{
-			Repository: "api",
-			RepoPath:   "/home/u/code/api",
-			Number:     7,
-			URL:        "https://github.com/acme/api/pull/7",
-			State:      "open",
-		}},
+		Worktree: &bindings.WorktreePreview{
+			Path:  "/data/worktrees/dev/web/login-screen",
+			Dirty: true,
+			Files: 2,
+		},
+		Branch: &bindings.BranchPreview{
+			Name:  "login-screen",
+			Error: "git merge-base: bad revision",
+		},
+		PR: &bindings.PRPreview{
+			Number: 7,
+			URL:    "https://github.com/acme/api/pull/7",
+			State:  "open",
+		},
 	}
 
 	if diff := cmp.Diff(want, bindings.FromDeletePreview(preview)); diff != "" {
@@ -827,35 +743,31 @@ func TestFromDeletePreviewCarriesWhatWouldBeDestroyed(t *testing.T) {
 	}
 }
 
-func TestFromDeletePreviewAndResultAllocateEveryList(t *testing.T) {
+func TestFromDeletePreviewAndResultKeepNilForWhatIsNotThere(t *testing.T) {
 	t.Parallel()
 
 	preview := bindings.FromDeletePreview(flow.DeletePreview{})
-	if preview.Worktrees == nil || preview.Branches == nil || preview.PRs == nil {
-		t.Errorf("preview = %+v, want empty slices", preview)
+	if preview.Worktree != nil || preview.Branch != nil || preview.PR != nil {
+		t.Errorf("preview = %+v, want nothing to destroy", preview)
 	}
-	if leftovers := bindings.FromDeleteResult(flow.DeleteResult{}).Leftovers; leftovers == nil {
-		t.Error("leftovers = nil, want an empty slice")
+	if leftover := bindings.FromDeleteResult(flow.DeleteResult{}).Leftover; leftover != nil {
+		t.Errorf("leftover = %+v, want nil when git removed everything", leftover)
 	}
 }
 
-func TestFromDeleteResultNamesTheRepositoryOfWhatStayed(t *testing.T) {
+func TestFromDeleteResultCarriesWhatStayed(t *testing.T) {
 	t.Parallel()
 
-	result := flow.DeleteResult{Leftovers: []flow.LeftoverInfo{{
-		Repository: "api",
-		RepoPath:   "/home/u/code/api",
-		Path:       "/home/u/code/.myspec/worktrees/api/login-screen",
-		Branch:     "login-screen",
-		Error:      "git worktree remove: permission denied",
-	}}}
-	want := bindings.DeleteResult{Leftovers: []bindings.Leftover{{
-		Repository: "api",
-		RepoPath:   "/home/u/code/api",
-		Path:       "/home/u/code/.myspec/worktrees/api/login-screen",
-		Branch:     "login-screen",
-		Error:      "git worktree remove: permission denied",
-	}}}
+	result := flow.DeleteResult{Leftover: &flow.LeftoverInfo{
+		Path:   "/data/worktrees/dev/web/login-screen",
+		Branch: "login-screen",
+		Error:  "git worktree remove: permission denied",
+	}}
+	want := bindings.DeleteResult{Leftover: &bindings.Leftover{
+		Path:   "/data/worktrees/dev/web/login-screen",
+		Branch: "login-screen",
+		Error:  "git worktree remove: permission denied",
+	}}
 
 	if diff := cmp.Diff(want, bindings.FromDeleteResult(result)); diff != "" {
 		t.Errorf("result mismatch (-want +got):\n%s", diff)
@@ -913,7 +825,8 @@ func TestFromTasksPicksTheSessionOfTheStageTheTaskIsIn(t *testing.T) {
 			}
 			return nil
 		},
-		noRepos,
+		noPR,
+		repoOf,
 		summaries,
 		nil,
 	)
@@ -942,7 +855,8 @@ func TestFromTasksLeavesAnImplementingTaskWithoutAStepAtRest(t *testing.T) {
 		[]task.Task{{ID: "task-1", Stage: task.StageImplementation}},
 		func(string) task.Artifacts { return task.Artifacts{} },
 		func(string) []flow.StepState { return states },
-		noRepos,
+		noPR,
+		repoOf,
 		summaries,
 		nil,
 	)
@@ -951,48 +865,37 @@ func TestFromTasksLeavesAnImplementingTaskWithoutAStepAtRest(t *testing.T) {
 	}
 }
 
-func TestFromTasksCarriesTheRepositoriesOfThePRStage(t *testing.T) {
+func TestFromTasksCarriesThePullRequestOfThePRStage(t *testing.T) {
 	t.Parallel()
 
 	checkedAt := time.Date(2026, 9, 5, 10, 0, 0, 0, time.UTC)
-	states := []flow.RepoState{
-		{
-			Repository:   "api",
-			RepoPath:     "/home/u/code/api",
-			Slug:         "api",
-			Status:       flow.RepoReadyToApprove,
-			WorktreePath: "/home/u/code/.myspec/worktrees/api/login-screen",
-			Branch:       "login-screen",
-			BaseBranch:   "origin/dev",
-			Draft:        &task.Draft{Present: true, Title: "Add the login screen", Body: "It adds the screen."},
-			Reports:      []task.ReviewReport{{Pass: 1, File: "api-review-1.md", Clean: false}},
-			Review:       &review.Snapshot{Staged: 2, Total: 2},
-			PR: task.PRDetails{
-				Number: 7, URL: "https://github.com/acme/api/pull/7", State: task.PRStateOpen, CheckedAt: checkedAt,
-			},
-			SessionStage: "pr_review:api",
-			Session: session.Summary{
-				Status:         session.StatusWaiting,
-				ContextPercent: 30,
-				Choice:         models.Choice{Model: models.Opus5, Effort: models.Medium},
-			},
+	pr := flow.PullRequest{
+		Status:       flow.PRReadyToApprove,
+		WorktreePath: "/data/worktrees/dev/web/login-screen",
+		Branch:       "login-screen",
+		BaseBranch:   "origin/dev",
+		Draft:        &task.Draft{Present: true, Title: "Add the login screen", Body: "It adds the screen."},
+		Reports:      []task.ReviewReport{{Pass: 1, File: "review-1.md", Clean: false}},
+		Review:       &review.Snapshot{Staged: 2, Total: 2},
+		PR: task.PRDetails{
+			Number: 7, URL: "https://github.com/acme/api/pull/7", State: task.PRStateOpen, CheckedAt: checkedAt,
 		},
-		{
-			Repository: "web",
-			RepoPath:   "/home/u/code/web",
-			Slug:       "web",
-			Status:     flow.RepoBlocked,
-			Block:      &task.PRBlock{Reason: task.PRBlockGHAuth, Detail: "gh: not authenticated"},
+		SessionStage: session.PRReviewStage,
+		Session: session.Summary{
+			Status:         session.StatusWaiting,
+			ContextPercent: 30,
+			Choice:         models.Choice{Model: models.Opus5, Effort: models.Medium},
 		},
 	}
 
 	got := bindings.FromTasks(
-		[]task.Task{{ID: "task-1", Name: "login-screen", Stage: task.StagePR}},
+		[]task.Task{{ID: "task-1", RepositoryID: convertRepo.ID, Name: "login-screen", Stage: task.StagePR}},
 		func(string) task.Artifacts { return task.Artifacts{} },
 		func(string) []flow.StepState { return nil },
-		func(string) []flow.RepoState { return states },
+		func(string) (flow.PullRequest, bool) { return pr, true },
+		repoOf,
 		map[session.Key]session.Summary{
-			{TaskID: "task-1", Stage: "pr_review:api"}: {Status: session.StatusWaiting},
+			{TaskID: "task-1", Stage: session.PRReviewStage}: {Status: session.StatusWaiting},
 		},
 		nil,
 	)
@@ -1000,46 +903,36 @@ func TestFromTasksCarriesTheRepositoriesOfThePRStage(t *testing.T) {
 		t.Fatalf("len(FromTasks()) = %d, want 1", len(got))
 	}
 
-	want := []bindings.RepoPR{
-		{
-			Repository:   "api",
-			RepoPath:     "/home/u/code/api",
-			Slug:         "api",
-			Status:       "ready_to_approve",
-			WorktreePath: "/home/u/code/.myspec/worktrees/api/login-screen",
-			Branch:       "login-screen",
-			BaseBranch:   "origin/dev",
-			Draft: &bindings.PRDraft{
-				Title: "Add the login screen", Body: "It adds the screen.", File: "api-draft.md",
-			},
-			Reports: []bindings.PRReport{{Pass: 1, File: "api-review-1.md"}},
-			Review: &bindings.Review{
-				Files: []bindings.ReviewFile{}, Staged: 2, Total: 2, Percent: 100,
-			},
-			PRNumber:       7,
-			PRURL:          "https://github.com/acme/api/pull/7",
-			PRState:        "open",
-			CheckedAt:      "2026-09-05T10:00:00Z",
-			SessionStage:   "pr_review:api",
-			SessionStatus:  "waiting",
-			SessionModel:   "claude-opus-5",
-			SessionEffort:  "medium",
-			ContextPercent: 30,
+	want := &bindings.PullRequest{
+		Status:       "ready_to_approve",
+		WorktreePath: "/data/worktrees/dev/web/login-screen",
+		Branch:       "login-screen",
+		BaseBranch:   "origin/dev",
+		Draft: &bindings.PRDraft{
+			Title: "Add the login screen", Body: "It adds the screen.", File: "draft.md",
 		},
-		{
-			Repository: "web",
-			RepoPath:   "/home/u/code/web",
-			Slug:       "web",
-			Status:     "blocked",
-			Block:      &bindings.PRBlock{Reason: "gh_unauthenticated", Detail: "gh: not authenticated"},
-			Reports:    []bindings.PRReport{},
+		Reports: []bindings.PRReport{{Pass: 1, File: "review-1.md"}},
+		Review: &bindings.Review{
+			Files: []bindings.ReviewFile{}, Staged: 2, Total: 2, Percent: 100,
 		},
+		PRNumber:       7,
+		PRURL:          "https://github.com/acme/api/pull/7",
+		PRState:        "open",
+		CheckedAt:      "2026-09-05T10:00:00Z",
+		SessionStage:   "pr_review",
+		SessionStatus:  "waiting",
+		SessionModel:   "claude-opus-5",
+		SessionEffort:  "medium",
+		ContextPercent: 30,
 	}
-	if diff := cmp.Diff(want, got[0].Repos); diff != "" {
-		t.Errorf("repositories mismatch (-want +got):\n%s", diff)
+	if diff := cmp.Diff(want, got[0].PR); diff != "" {
+		t.Errorf("pull request mismatch (-want +got):\n%s", diff)
 	}
-	// The PR stage has no conversation of its own: every one of them belongs
-	// to a repository, and the fields of the task stay empty.
+	if got[0].Repository != "dev/web" || got[0].RepositoryID != convertRepo.ID {
+		t.Errorf("task = %+v, want the repository it belongs to", got[0])
+	}
+	// The PR stage has no conversation of its own: both of them belong to the
+	// pull request, and the fields of the task stay empty.
 	if got[0].SessionStatus != "waiting" || got[0].ContextPercent != 0 {
 		t.Errorf("task = %+v, want no session of its own", got[0])
 	}
@@ -1067,7 +960,8 @@ func TestFromTasksCarriesTheModelsOfEveryStage(t *testing.T) {
 		tasks,
 		func(string) task.Artifacts { return task.Artifacts{} },
 		func(string) []flow.StepState { return nil },
-		noRepos,
+		noPR,
+		repoOf,
 		map[session.Key]session.Summary{
 			{TaskID: "task-1", Stage: "tech_spec"}: {
 				Status: session.StatusWaiting,
@@ -1158,14 +1052,14 @@ func TestFromTasksCarriesTheSituationsOfEachTask(t *testing.T) {
 			{
 				ID:        "s2",
 				TaskID:    "task-2",
-				Place:     attention.Place{Kind: attention.PlaceRepo, RepoPath: "/home/u/code/api", Repository: "api"},
+				Place:     attention.Place{Kind: attention.PlacePR},
 				Kind:      attention.KindPRBlocked,
 				StartedAt: startedAt.Add(time.Minute),
 			},
 			{
 				ID:        "s3",
 				TaskID:    "task-2",
-				Place:     attention.Place{Kind: attention.PlaceRepo, RepoPath: "/home/u/code/web", Repository: "web"},
+				Place:     attention.Place{Kind: attention.PlacePR},
 				Kind:      attention.KindChangesReview,
 				Form:      attention.FormStaged,
 				Percent:   50,
@@ -1182,7 +1076,8 @@ func TestFromTasksCarriesTheSituationsOfEachTask(t *testing.T) {
 		},
 		func(string) task.Artifacts { return task.Artifacts{} },
 		func(string) []flow.StepState { return nil },
-		noRepos,
+		noPR,
+		repoOf,
 		nil,
 		situations,
 	)
@@ -1205,7 +1100,7 @@ func TestFromTasksCarriesTheSituationsOfEachTask(t *testing.T) {
 				TaskID:    "task-2",
 				Kind:      "pr_blocked",
 				Group:     "error",
-				Place:     bindings.Place{Kind: "repo", RepoPath: "/home/u/code/api", Repository: "api"},
+				Place:     bindings.Place{Kind: "pr"},
 				StartedAt: "2026-09-11T09:31:00Z",
 			},
 			{
@@ -1215,7 +1110,7 @@ func TestFromTasksCarriesTheSituationsOfEachTask(t *testing.T) {
 				Group:     "waiting",
 				Form:      "staged",
 				Percent:   50,
-				Place:     bindings.Place{Kind: "repo", RepoPath: "/home/u/code/web", Repository: "web"},
+				Place:     bindings.Place{Kind: "pr"},
 				StartedAt: "2026-09-11T09:30:00Z",
 			},
 		},
@@ -1272,5 +1167,51 @@ func TestFromStartedCarriesTheFocus(t *testing.T) {
 				t.Errorf("FromStarted() mismatch (-want +got):\n%s", diff)
 			}
 		})
+	}
+}
+
+func TestRefusedStateCarriesTheCasesAndNothingElse(t *testing.T) {
+	t.Parallel()
+
+	refused := &upgrade.RefusedError{Cases: []upgrade.Case{
+		{
+			Kind:    upgrade.CaseRootTask,
+			Entries: []upgrade.Entry{{Task: "whole-product", Workspace: "/home/dev/work"}},
+		},
+		{
+			Kind:       upgrade.CaseNoOrigin,
+			Repository: "/home/dev/work/web",
+			Detail:     "/home/dev/work/web has no origin remote.",
+			Entries: []upgrade.Entry{
+				{Task: "login-screen", Workspace: "/home/dev/work", Path: "/home/dev/work/web"},
+			},
+		},
+	}}
+
+	got := bindings.RefusedState(refused)
+
+	want := bindings.State{
+		Migration: &bindings.Migration{Cases: []bindings.MigrationCase{
+			{
+				Kind:  "root_task",
+				Tasks: []bindings.MigrationTask{{Name: "whole-product", Workspace: "/home/dev/work"}},
+			},
+			{
+				Kind:       "no_origin",
+				Repository: "/home/dev/work/web",
+				Detail:     "/home/dev/work/web has no origin remote.",
+				Tasks: []bindings.MigrationTask{
+					{Name: "login-screen", Workspace: "/home/dev/work", Path: "/home/dev/work/web"},
+				},
+			},
+		}},
+		Repositories:  []bindings.Repository{},
+		Theme:         "system",
+		ModelDefaults: []bindings.StageModel{},
+		Tasks:         []bindings.TaskSummary{},
+		History:       []bindings.ArchivedTask{},
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("RefusedState() mismatch (-want +got):\n%s", diff)
 	}
 }

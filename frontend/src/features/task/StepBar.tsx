@@ -1,11 +1,9 @@
 import { Check, Code, LoaderCircle, RotateCcw, UserRoundCheck } from "lucide-react";
 import { useState } from "react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { DiscardStepDialog } from "@/features/task/DiscardStepDialog";
 import { ToneDot } from "@/features/task/StatusDot";
-import { repoLabel } from "@/features/task/StepList";
 import {
   canApprove,
   canReviewMyself,
@@ -26,7 +24,6 @@ import {
   type TaskSummary,
 } from "@/lib/wails";
 import { approveStep, openInEditor, reviewStepMyself } from "@/store/actions";
-import { useAppStore } from "@/store/app-store";
 
 // The states where the review of the step is what the bar is about.
 const REVIEW_STATES: readonly StepStatus[] = [
@@ -51,8 +48,8 @@ function approveHint(status: StepStatus): string {
 
 /**
  * stateText reads the state of the step, with the count while it is reviewed.
- * The bar spells the progress out in files; the percentage is what the tree and
- * the list of tasks show, where there is no room for the count.
+ * The bar spells the progress out in files; the percentage is what the list of
+ * tasks shows, where there is no room for the count.
  */
 function stateText(step: Step, label: string): string {
   const review = step.review;
@@ -68,7 +65,6 @@ export interface StepBarProps {
 
 /** StepBar names the step being implemented and holds what can be done to it. */
 export function StepBar({ task }: StepBarProps) {
-  const app = useAppStore((state) => state.app);
   const [discarding, setDiscarding] = useState(false);
 
   const step = currentStepOf(task);
@@ -76,7 +72,6 @@ export function StepBar({ task }: StepBarProps) {
     return null;
   }
 
-  const label = repoLabel(app, step);
   const display = stepBarDisplay(task, step);
   // The step waits on the user in its own conversation or in the one of its
   // reviewer, whichever tab is on screen.
@@ -123,7 +118,6 @@ export function StepBar({ task }: StepBarProps) {
         {`Step ${step.number} of ${(task.steps ?? []).length}`}
       </span>
       <span className="min-w-0 truncate font-medium">{step.title}</span>
-      {label !== "" && <Badge variant="secondary">{label}</Badge>}
       <span
         role="status"
         aria-live="polite"

@@ -6,29 +6,15 @@ import { renderWithStore } from "@/test/render";
 import { makeDeletePreview, makeState } from "@/test/wails-mock";
 
 const WORKTREE = {
-  repository: "web",
-  repoPath: "/home/dev/projects/web",
-  path: "/home/dev/.local/share/myspec/worktrees/add-login-web",
+  path: "/home/dev/.local/share/myspec/worktrees/dev/web/add-login",
   dirty: true,
   files: 3,
   error: "",
 };
 
-const BRANCH = {
-  repository: "web",
-  repoPath: "/home/dev/projects/web",
-  name: "add-login",
-  merged: false,
-  error: "",
-};
+const BRANCH = { name: "add-login", merged: false, error: "" };
 
-const PR = {
-  repository: "web",
-  repoPath: "/home/dev/projects/web",
-  number: 12,
-  url: "https://github.com/o/r/pull/12",
-  state: "open",
-};
+const PR = { number: 12, url: "https://github.com/o/r/pull/12", state: "open" };
 
 function dialog(archived = false) {
   return renderWithStore(
@@ -48,9 +34,9 @@ describe("DeleteTaskDialog", () => {
     vi.mocked(api.previewDelete).mockResolvedValue(
       makeDeletePreview({
         sessionRunning: true,
-        worktrees: [WORKTREE],
-        branches: [BRANCH],
-        prs: [PR],
+        worktree: WORKTREE,
+        branch: BRANCH,
+        pr: PR,
       }),
     );
 
@@ -59,29 +45,22 @@ describe("DeleteTaskDialog", () => {
     expect(
       await screen.findByText("The conversation in progress will be interrupted."),
     ).toBeInTheDocument();
-    expect(
-      screen.getByText("1 worktree will be removed · 1 with uncommitted changes"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("The worktree will be removed")).toBeInTheDocument();
+    expect(screen.getByText(WORKTREE.path)).toBeInTheDocument();
     expect(screen.getByText("3 uncommitted")).toBeInTheDocument();
-    expect(screen.getByText("1 branch will be deleted · 1 not merged")).toBeInTheDocument();
+    expect(screen.getByText("add-login")).toBeInTheDocument();
     expect(screen.getByText("not merged")).toBeInTheDocument();
     expect(screen.getByText("This pull request stays open on GitHub:")).toBeInTheDocument();
   });
 
-  it("counts the worktrees and the branches of every repository", async () => {
-    vi.mocked(api.previewDelete).mockResolvedValue(
-      makeDeletePreview({
-        worktrees: [WORKTREE, { ...WORKTREE, repository: "api", repoPath: "/a", dirty: false }],
-        branches: [BRANCH, { ...BRANCH, repoPath: "/a", merged: true }],
-      }),
-    );
+  it("leaves out what the task does not have", async () => {
+    vi.mocked(api.previewDelete).mockResolvedValue(makeDeletePreview({ branch: BRANCH }));
 
     dialog();
 
-    expect(
-      await screen.findByText("2 worktrees will be removed · 1 with uncommitted changes"),
-    ).toBeInTheDocument();
-    expect(screen.getByText("2 branches will be deleted · 1 not merged")).toBeInTheDocument();
+    expect(await screen.findByText("not merged")).toBeInTheDocument();
+    expect(screen.queryByText("The worktree will be removed")).not.toBeInTheDocument();
+    expect(screen.queryByText("This pull request stays open on GitHub:")).not.toBeInTheDocument();
   });
 
   it("reads nothing from git for a task of the history", async () => {

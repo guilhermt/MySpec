@@ -12,17 +12,9 @@ import (
 	"github.com/guilhermt/myspec/internal/task"
 )
 
-// planRepos are the repositories the step files of these tests may name.
-func planRepos() []task.Repository {
-	return []task.Repository{
-		{Rel: "api", Path: "/workspace/api"},
-		{Rel: "web", Path: "/workspace/web"},
-	}
-}
-
 // step is a well-formed step file.
-func step(repository, title string) string {
-	return "---\nrepository: " + repository + "\n---\n\n# " + title + "\n\n## Scope\n\nDo it.\n"
+func step(title string) string {
+	return "# " + title + "\n\n## Scope\n\nDo it.\n"
 }
 
 // writeSteps fills a fresh steps folder with the given files and reads it.
@@ -38,7 +30,7 @@ func readSteps(t *testing.T, files map[string]string) task.Plan {
 			t.Fatalf("write %s: %v", name, err)
 		}
 	}
-	return task.ReadPlan(dir, planRepos())
+	return task.ReadPlan(dir)
 }
 
 // messages lists the problems of a plan as "file: message" pairs, in order.
@@ -69,7 +61,7 @@ func wantProblem(t *testing.T, plan task.Plan, file, substring string) {
 func TestReadPlanOfAMissingFolder(t *testing.T) {
 	t.Parallel()
 
-	plan := task.ReadPlan(filepath.Join(t.TempDir(), "steps"), planRepos())
+	plan := task.ReadPlan(filepath.Join(t.TempDir(), "steps"))
 
 	if plan.Present {
 		t.Error("Present = true, want false for a folder that is not there")
@@ -87,7 +79,7 @@ func TestReadPlanOfAFolderItCannotRead(t *testing.T) {
 		t.Fatalf("write file: %v", err)
 	}
 
-	plan := task.ReadPlan(path, planRepos())
+	plan := task.ReadPlan(path)
 
 	if !plan.Present {
 		t.Error("Present = false, want true so that the problem is shown")
@@ -122,16 +114,16 @@ func TestReadPlanReadsAValidPlan(t *testing.T) {
 	t.Parallel()
 
 	plan := readSteps(t, map[string]string{
-		"1-add-the-store.md": step("api", "Step 1: Add the store"),
-		"2-wire-the-ui.md":   step("web", "Step 2: Wire the UI"),
+		"1-add-the-store.md": step("Step 1: Add the store"),
+		"2-wire-the-ui.md":   step("Step 2: Wire the UI"),
 	})
 
 	if !plan.Valid() {
 		t.Fatalf("Valid() = false, want true; problems = %v", messages(plan))
 	}
 	want := []task.Step{
-		{Number: 1, File: "1-add-the-store.md", Title: "Add the store", Repository: "api", RepoPath: "/workspace/api"},
-		{Number: 2, File: "2-wire-the-ui.md", Title: "Wire the UI", Repository: "web", RepoPath: "/workspace/web"},
+		{Number: 1, File: "1-add-the-store.md", Title: "Add the store"},
+		{Number: 2, File: "2-wire-the-ui.md", Title: "Wire the UI"},
 	}
 	if !slices.Equal(plan.Steps, want) {
 		t.Errorf("steps = %+v, want %+v", plan.Steps, want)
@@ -146,7 +138,7 @@ func TestReadPlanRejectsADirectory(t *testing.T) {
 		t.Fatalf("create folder: %v", err)
 	}
 
-	plan := task.ReadPlan(dir, planRepos())
+	plan := task.ReadPlan(dir)
 
 	wantProblem(t, plan, "drafts", "unexpected directory")
 }
@@ -160,7 +152,7 @@ func TestReadPlanRejectsAName(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			plan := readSteps(t, map[string]string{name: step("api", "Step 1: Add")})
+			plan := readSteps(t, map[string]string{name: step("Step 1: Add")})
 
 			wantProblem(t, plan, name, "unexpected file name")
 		})
@@ -170,7 +162,7 @@ func TestReadPlanRejectsAName(t *testing.T) {
 func TestReadPlanRejectsStepZero(t *testing.T) {
 	t.Parallel()
 
-	plan := readSteps(t, map[string]string{"0-add-the-store.md": step("api", "Step 0: Add")})
+	plan := readSteps(t, map[string]string{"0-add-the-store.md": step("Step 0: Add")})
 
 	wantProblem(t, plan, "0-add-the-store.md", "step numbers start at 1")
 }
@@ -186,43 +178,39 @@ func TestReadPlanRejectsAnEmptyFile(t *testing.T) {
 	}
 }
 
-func TestReadPlanRejectsAFileWithoutHeader(t *testing.T) {
+func TestAStepFileWithoutAHeaderIsAValidStep(t *testing.T) {
 	t.Parallel()
 
 	plan := readSteps(t, map[string]string{"1-add-the-store.md": "# Step 1: Add the store\n"})
 
-	wantProblem(t, plan, "1-add-the-store.md", "missing the metadata header")
+	if !plan.Valid() {
+		t.Fatalf("Valid() = false, want true; problems = %v", messages(plan))
+	}
+	if got := plan.Steps[0].Title; got != "Add the store" {
+		t.Errorf("Title = %q, want %q", got, "Add the store")
+	}
 }
 
-func TestReadPlanRejectsAHeaderWithoutRepository(t *testing.T) {
+func TestAStepFileWithAHeaderIsReadForItsTitleAlone(t *testing.T) {
 	t.Parallel()
 
 	plan := readSteps(t, map[string]string{
-		"1-add-the-store.md": "---\nowner: me\n---\n\n# Step 1: Add the store\n",
+		"1-add-the-store.md": "---\nrepository: api\nowner: me\n---\n\n# Step 1: Add the store\n",
 	})
 
-	wantProblem(t, plan, "1-add-the-store.md", `has no "repository" field`)
-}
-
-func TestReadPlanRejectsARepositoryOutsideTheTask(t *testing.T) {
-	t.Parallel()
-
-	plan := readSteps(t, map[string]string{
-		"1-add-the-store.md": step("infra", "Step 1: Add the store"),
-	})
-
-	wantProblem(t, plan, "1-add-the-store.md", `repository "infra" is not one of the repositories`)
-	if got := plan.Steps[0].RepoPath; got != "" {
-		t.Errorf("RepoPath = %q, want it empty for an unknown repository", got)
+	if !plan.Valid() {
+		t.Fatalf("Valid() = false, want true; problems = %v", messages(plan))
+	}
+	want := []task.Step{{Number: 1, File: "1-add-the-store.md", Title: "Add the store"}}
+	if !slices.Equal(plan.Steps, want) {
+		t.Errorf("steps = %+v, want %+v", plan.Steps, want)
 	}
 }
 
 func TestReadPlanRejectsAFileWithoutTitle(t *testing.T) {
 	t.Parallel()
 
-	plan := readSteps(t, map[string]string{
-		"1-add-the-store.md": "---\nrepository: api\n---\n\nJust a paragraph.\n",
-	})
+	plan := readSteps(t, map[string]string{"1-add-the-store.md": "Just a paragraph.\n"})
 
 	wantProblem(t, plan, "1-add-the-store.md", "missing the title heading")
 }
@@ -231,8 +219,8 @@ func TestReadPlanRejectsRepeatedNumbers(t *testing.T) {
 	t.Parallel()
 
 	plan := readSteps(t, map[string]string{
-		"1-add-the-store.md": step("api", "Step 1: Add the store"),
-		"1-wire-the-ui.md":   step("web", "Step 1: Wire the UI"),
+		"1-add-the-store.md": step("Step 1: Add the store"),
+		"1-wire-the-ui.md":   step("Step 1: Wire the UI"),
 	})
 
 	wantProblem(t, plan, "", "step number 1 is used by more than one file")
@@ -242,12 +230,12 @@ func TestReadPlanRejectsAGapInTheNumbers(t *testing.T) {
 	t.Parallel()
 
 	plan := readSteps(t, map[string]string{
-		"2-wire-the-ui.md":  step("web", "Step 2: Wire the UI"),
-		"5-ship-it.md":      step("api", "Step 5: Ship it"),
-		"9-nine-lives.md":   step("api", "Step 9: Nine lives"),
+		"2-wire-the-ui.md":  step("Step 2: Wire the UI"),
+		"5-ship-it.md":      step("Step 5: Ship it"),
+		"9-nine-lives.md":   step("Step 9: Nine lives"),
 		".hidden-draft.md":  "junk",
-		"10-ten-pin-it.md":  step("api", "Step 10: Ten pin it"),
-		"11-eleven-ways.md": step("api", "Step 11: Eleven ways"),
+		"10-ten-pin-it.md":  step("Step 10: Ten pin it"),
+		"11-eleven-ways.md": step("Step 11: Eleven ways"),
 	})
 
 	want := []string{
@@ -263,35 +251,10 @@ func TestReadPlanRejectsAGapInTheNumbers(t *testing.T) {
 	}
 }
 
-func TestReadPlanReadsAQuotedRepository(t *testing.T) {
-	t.Parallel()
-
-	tests := map[string]string{
-		"quotes":    `"api"`,
-		"apostroph": `'api'`,
-		"backticks": "`api`",
-	}
-
-	for name, value := range tests {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
-			plan := readSteps(t, map[string]string{"1-add-the-store.md": step(value, "Step 1: Add the store")})
-
-			if !plan.Valid() {
-				t.Fatalf("Valid() = false, want true; problems = %v", messages(plan))
-			}
-			if got := plan.Steps[0].Repository; got != "api" {
-				t.Errorf("Repository = %q, want %q", got, "api")
-			}
-		})
-	}
-}
-
 func TestReadPlanReadsATitleWithoutTheStepPrefix(t *testing.T) {
 	t.Parallel()
 
-	plan := readSteps(t, map[string]string{"1-add-the-store.md": step("api", "Add the store")})
+	plan := readSteps(t, map[string]string{"1-add-the-store.md": step("Add the store")})
 
 	if !plan.Valid() {
 		t.Fatalf("Valid() = false, want true; problems = %v", messages(plan))
@@ -305,7 +268,7 @@ func TestReadPlanReadsWindowsLineEndings(t *testing.T) {
 	t.Parallel()
 
 	plan := readSteps(t, map[string]string{
-		"1-add-the-store.md": "---\r\nrepository: api\r\n---\r\n\r\n# Step 1: Add the store\r\n",
+		"1-add-the-store.md": "# Step 1: Add the store\r\n",
 	})
 
 	if !plan.Valid() {
@@ -316,24 +279,16 @@ func TestReadPlanReadsWindowsLineEndings(t *testing.T) {
 	}
 }
 
-func TestReadPlanReadsAnEmptyHeader(t *testing.T) {
-	t.Parallel()
-
-	plan := readSteps(t, map[string]string{"1-add-the-store.md": "---\n---\n\n# Step 1: Add the store\n"})
-
-	wantProblem(t, plan, "1-add-the-store.md", `has no "repository" field`)
-}
-
 func TestReadPlanOrdersProblemsByFileWithThePlanLast(t *testing.T) {
 	t.Parallel()
 
 	plan := readSteps(t, map[string]string{
-		"2-wire-the-ui.md":   "---\nrepository: nope\n---\n\n# Step 2: Wire the UI\n",
-		"3-add-the-store.md": "---\nrepository: api\n---\n\nno heading here\n",
+		"2-wire-the-ui.md":   "no heading here\n",
+		"3-add-the-store.md": "still no heading\n",
 	})
 
 	want := []string{
-		`2-wire-the-ui.md: repository "nope" is not one of the repositories of this task`,
+		`2-wire-the-ui.md: missing the title heading ("# Step N: Title")`,
 		`3-add-the-store.md: missing the title heading ("# Step N: Title")`,
 		": step numbers must be contiguous from 1; number 1 is missing",
 	}
@@ -344,40 +299,38 @@ func TestReadPlanOrdersProblemsByFileWithThePlanLast(t *testing.T) {
 
 // readOneShot writes a One-Shot document into a fresh folder and reads it as
 // the plan of the task add-login.
-func readOneShot(t *testing.T, content string, repos []task.Repository) task.Plan {
+func readOneShot(t *testing.T, content string) task.Plan {
 	t.Helper()
 
 	path := filepath.Join(t.TempDir(), task.OneShotFile)
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatalf("write %s: %v", path, err)
 	}
-	return task.OneShotPlan(path, "add-login", repos)
+	return task.OneShotPlan(path, "add-login")
 }
 
 func TestOneShotPlanOfADocumentNotWrittenIsAbsent(t *testing.T) {
 	t.Parallel()
 
-	missing := task.OneShotPlan(filepath.Join(t.TempDir(), task.OneShotFile), "add-login", planRepos())
+	missing := task.OneShotPlan(filepath.Join(t.TempDir(), task.OneShotFile), "add-login")
 	if diff := cmp.Diff(task.Plan{}, missing); diff != "" {
 		t.Errorf("plan of a missing document mismatch (-want +got):\n%s", diff)
 	}
 
 	// An agent creating the file empty has not written it yet.
-	if diff := cmp.Diff(task.Plan{}, readOneShot(t, "", planRepos())); diff != "" {
+	if diff := cmp.Diff(task.Plan{}, readOneShot(t, "")); diff != "" {
 		t.Errorf("plan of an empty document mismatch (-want +got):\n%s", diff)
 	}
 }
 
-func TestOneShotPlanIsOneStepInTheRepositoryOfTheTask(t *testing.T) {
+func TestOneShotPlanIsTheDocumentAsOneStep(t *testing.T) {
 	t.Parallel()
 
-	plan := readOneShot(t, "# Add the login — One-Shot\n\nThis document is the complete guide.\n", planRepos()[:1])
+	plan := readOneShot(t, "# Add the login — One-Shot\n\nThis document is the complete guide.\n")
 
 	want := task.Plan{
 		Present: true,
-		Steps: []task.Step{{
-			Number: 1, File: task.OneShotFile, Title: "Add the login", Repository: "api", RepoPath: "/workspace/api",
-		}},
+		Steps:   []task.Step{{Number: 1, File: task.OneShotFile, Title: "Add the login"}},
 	}
 	if diff := cmp.Diff(want, plan); diff != "" {
 		t.Errorf("OneShotPlan() mismatch (-want +got):\n%s", diff)
@@ -400,7 +353,7 @@ func TestOneShotPlanTitlesTheStepAfterTheDocument(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			plan := readOneShot(t, tc.content, planRepos()[:1])
+			plan := readOneShot(t, tc.content)
 			if len(plan.Steps) != 1 {
 				t.Fatalf("steps = %+v, want one", plan.Steps)
 			}
@@ -411,26 +364,10 @@ func TestOneShotPlanTitlesTheStepAfterTheDocument(t *testing.T) {
 	}
 }
 
-func TestOneShotPlanOfATaskWithoutARepository(t *testing.T) {
-	t.Parallel()
-
-	plan := readOneShot(t, "# Add the login — One-Shot\n", nil)
-
-	want := task.Plan{
-		Present: true,
-		Steps:   []task.Step{{Number: 1, File: task.OneShotFile, Title: "Add the login"}},
-	}
-	if diff := cmp.Diff(want, plan); diff != "" {
-		t.Errorf("OneShotPlan() mismatch (-want +got):\n%s", diff)
-	}
-}
-
 func TestReadPlanKeepsAStepWithProblems(t *testing.T) {
 	t.Parallel()
 
-	plan := readSteps(t, map[string]string{
-		"1-add-the-store.md": "---\nrepository: nope\n---\n\n# Step 1: Add the store\n",
-	})
+	plan := readSteps(t, map[string]string{"2-add-the-store.md": step("Step 2: Add the store")})
 
 	if len(plan.Steps) != 1 {
 		t.Fatalf("steps = %+v, want the step to be listed anyway", plan.Steps)

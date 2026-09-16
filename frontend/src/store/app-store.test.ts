@@ -1,44 +1,41 @@
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
-import type { Place, RepoPR, Situation, TranscriptEvent } from "@/lib/wails";
+import type { Place, PullRequest, Situation, TranscriptEvent } from "@/lib/wails";
 import { sessionKey } from "@/lib/wails";
 import {
   filterHistory,
-  ROOT_NODE_ID,
-  repoKey,
-  repoNodeId,
   stepTabKey,
   useAppStore,
   useArchivedNotice,
   useArchivedTask,
   useDraft,
   useError,
+  useFilteredTasks,
   useFlashing,
   useHistory,
   useHistoryUi,
-  useLeftovers,
-  useNotice,
+  useLeftover,
+  useMigration,
   useOnScreenSituationId,
-  useOpenRepo,
   useOpenStepTab,
   useOpenTask,
   usePrDraft,
-  useRecents,
-  useRepos,
+  useRepositories,
+  useRepository,
+  useRepositoryFilter,
   useSettingsUi,
   useTask,
   useTasks,
-  useTasksOf,
   useThemeState,
   useTranscript,
-  useTreeUi,
-  useWorkspace,
 } from "@/store/app-store";
 import { resetAppStore } from "@/test/render";
 import {
   makeArchivedTask,
   makeEntry,
-  makeRepoPR,
+  makeMigration,
+  makePullRequest,
+  makeRepository,
   makeSituation,
   makeState,
   makeStep,
@@ -47,24 +44,33 @@ import {
   makeTranscript,
 } from "@/test/wails-mock";
 
-const ROOT_TASK = makeTask({ id: "task-root", name: "add-login" });
-const REPO_TASK = makeTask({
-  id: "task-web",
-  name: "fix-header",
-  repoPath: "/home/dev/projects/web",
+const WEB = makeRepository();
+const API = makeRepository({
+  id: "repo-2",
+  name: "api",
+  fullName: "dev/api",
+  path: "/home/dev/projects/api",
 });
 
-function withTasks() {
-  return makeState({ tasks: [ROOT_TASK, REPO_TASK] });
+const WEB_TASK = makeTask({ id: "task-web", name: "add-login" });
+const API_TASK = makeTask({
+  id: "task-api",
+  name: "fix-header",
+  repositoryId: "repo-2",
+  repository: "dev/api",
+});
+
+function withTasks(overrides = {}) {
+  return makeState({ repositories: [WEB, API], tasks: [WEB_TASK, API_TASK], ...overrides });
 }
 
-// ROOT_KEY is the session of the root task in the stage its fixture is in.
-const ROOT_KEY = sessionKey(ROOT_TASK.id, ROOT_TASK.stage);
+// WEB_KEY is the session of the web task in the stage its fixture is in.
+const WEB_KEY = sessionKey(WEB_TASK.id, WEB_TASK.stage);
 
 function transcriptEvent(overrides: Partial<TranscriptEvent> = {}): TranscriptEvent {
   return {
-    taskId: ROOT_TASK.id,
-    stage: ROOT_TASK.stage,
+    taskId: WEB_TASK.id,
+    stage: WEB_TASK.stage,
     kind: "entry",
     entry: null,
     entryId: "",
@@ -73,148 +79,118 @@ function transcriptEvent(overrides: Partial<TranscriptEvent> = {}): TranscriptEv
   };
 }
 
-const API_NODE = repoNodeId("/home/dev/projects/api");
-const WEB_NODE = repoNodeId("/home/dev/projects/web");
-
 beforeEach(() => {
   resetAppStore();
 });
 
 describe("applyState", () => {
-  it("keeps the tree selection while the workspace path is the same", () => {
-    useAppStore.getState().applyState(makeState());
-    useAppStore.getState().selectNode(WEB_NODE);
-    useAppStore.getState().setNodeExpanded(WEB_NODE, true);
+  it("keeps what is on screen while repositories stay registered", () => {
+    useAppStore.getState().applyState(withTasks());
+    useAppStore.getState().openTask(API_TASK.id);
 
-    useAppStore.getState().applyState(makeState({ systemDark: true }));
+    useAppStore.getState().applyState(withTasks({ systemDark: true }));
 
-    expect(useAppStore.getState().selectedNodeId).toBe(WEB_NODE);
-    expect(useAppStore.getState().expandedNodeIds.has(WEB_NODE)).toBe(true);
+    expect(useAppStore.getState().openTaskId).toBe(API_TASK.id);
   });
 
-  it("resets the tree selection when the workspace path changes", () => {
-    useAppStore.getState().applyState(makeState());
-    useAppStore.getState().selectNode(WEB_NODE);
-    useAppStore.getState().toggleNode(WEB_NODE);
+  // The welcome screen takes the place of everything the app shows of the tasks.
+  it("clears the screen when the last repository is gone", () => {
+    useAppStore.getState().applyState(withTasks());
+    useAppStore.getState().openTask(API_TASK.id);
+    useAppStore.getState().openSettings();
 
-    useAppStore.getState().applyState(
-      makeState({
-        workspace: { name: "labs", path: "/home/dev/labs", repos: [] },
-      }),
-    );
+    useAppStore.getState().applyState(makeState({ repositories: [], tasks: [] }));
 
-    expect(useAppStore.getState().selectedNodeId).toBe(ROOT_NODE_ID);
-    expect([...useAppStore.getState().expandedNodeIds]).toEqual([ROOT_NODE_ID]);
+    expect(useAppStore.getState().openTaskId).toBeNull();
+    expect(useAppStore.getState().settingsOpen).toBe(false);
+    expect(useAppStore.getState().settingsSection).toBe("defaults");
   });
 
-  it("falls back to root when the selected repository is gone", () => {
-    useAppStore.getState().applyState(makeState());
-    useAppStore.getState().selectNode(WEB_NODE);
+  it("forgets the last repository used once it is no longer registered", () => {
+    useAppStore.getState().applyState(withTasks());
+    useAppStore.getState().rememberRepository("repo-2");
 
-    useAppStore.getState().applyState(
-      makeState({
-        workspace: {
-          name: "projects",
-          path: "/home/dev/projects",
-          repos: [{ name: "api", path: "/home/dev/projects/api" }],
-        },
-      }),
-    );
+    useAppStore.getState().applyState(makeState({ repositories: [WEB], tasks: [WEB_TASK] }));
 
-    expect(useAppStore.getState().selectedNodeId).toBe(ROOT_NODE_ID);
+    expect(useAppStore.getState().lastRepositoryId).toBeNull();
   });
 
-  it("keeps a repository selected when it survives the rescan", () => {
-    useAppStore.getState().applyState(makeState());
-    useAppStore.getState().selectNode(API_NODE);
+  it("keeps the last repository used while it is still registered", () => {
+    useAppStore.getState().applyState(withTasks());
+    useAppStore.getState().rememberRepository("repo-2");
 
-    useAppStore.getState().applyState(makeState());
+    useAppStore.getState().applyState(withTasks());
 
-    expect(useAppStore.getState().selectedNodeId).toBe(API_NODE);
-  });
-
-  it("treats a workspace without repositories as having no repository nodes", () => {
-    useAppStore.getState().applyState(makeState());
-    useAppStore.getState().selectNode(API_NODE);
-
-    useAppStore.getState().applyState(
-      makeState({
-        workspace: { name: "projects", path: "/home/dev/projects", repos: null },
-      }),
-    );
-
-    expect(useAppStore.getState().selectedNodeId).toBe(ROOT_NODE_ID);
-  });
-});
-
-describe("tree ui", () => {
-  it("toggles a node on and off", () => {
-    useAppStore.getState().toggleNode(API_NODE);
-    expect(useAppStore.getState().expandedNodeIds.has(API_NODE)).toBe(true);
-
-    useAppStore.getState().toggleNode(API_NODE);
-    expect(useAppStore.getState().expandedNodeIds.has(API_NODE)).toBe(false);
-  });
-
-  it("collapses a node through setNodeExpanded", () => {
-    useAppStore.getState().setNodeExpanded(ROOT_NODE_ID, false);
-    expect(useAppStore.getState().expandedNodeIds.has(ROOT_NODE_ID)).toBe(false);
+    expect(useAppStore.getState().lastRepositoryId).toBe("repo-2");
   });
 });
 
 describe("selectors", () => {
   it("report an empty state before the first snapshot", () => {
     const { result } = renderHook(() => ({
-      workspace: useWorkspace(),
-      recents: useRecents(),
-      notice: useNotice(),
+      repositories: useRepositories(),
+      filter: useRepositoryFilter(),
+      migration: useMigration(),
       error: useError(),
       theme: useThemeState(),
-      tree: useTreeUi(),
     }));
 
-    expect(result.current.workspace).toBeNull();
-    expect(result.current.recents).toEqual([]);
-    expect(result.current.notice).toBeNull();
+    expect(result.current.repositories).toEqual([]);
+    expect(result.current.filter).toBe("");
+    expect(result.current.migration).toBeNull();
     expect(result.current.error).toBeNull();
     expect(result.current.theme).toEqual({ preference: "system", systemDark: false });
-    expect(result.current.tree.selectedNodeId).toBe(ROOT_NODE_ID);
   });
 
   it("report the current snapshot", () => {
     const { result } = renderHook(() => ({
-      workspace: useWorkspace(),
-      recents: useRecents(),
-      notice: useNotice(),
+      repositories: useRepositories(),
+      filter: useRepositoryFilter(),
+      web: useRepository("repo-1"),
+      unknown: useRepository("repo-9"),
+      migration: useMigration(),
       error: useError(),
       theme: useThemeState(),
-      tree: useTreeUi(),
     }));
 
     act(() => {
       useAppStore.getState().applyState(
         makeState({
+          repositories: [WEB, API],
+          repositoryFilter: "repo-2",
           theme: "dark",
           systemDark: true,
-          notice: { path: "/home/dev/gone", reason: "not_found" },
         }),
       );
       useAppStore.getState().setError("binding failed");
     });
 
-    expect(result.current.workspace?.name).toBe("projects");
-    expect(result.current.recents).toHaveLength(3);
-    expect(result.current.notice?.reason).toBe("not_found");
+    expect(result.current.repositories).toHaveLength(2);
+    expect(result.current.filter).toBe("repo-2");
+    expect(result.current.web?.fullName).toBe("dev/web");
+    expect(result.current.unknown).toBeNull();
+    expect(result.current.migration).toBeNull();
     expect(result.current.error).toBe("binding failed");
     expect(result.current.theme).toEqual({ preference: "dark", systemDark: true });
-    expect([...result.current.tree.expandedNodeIds]).toEqual([ROOT_NODE_ID]);
   });
 
-  it("falls back to an empty recent list when the snapshot has none", () => {
-    const { result } = renderHook(() => useRecents());
+  it("reports a migration the app could not carry out", () => {
+    const { result } = renderHook(() => useMigration());
 
     act(() => {
-      useAppStore.getState().applyState(makeState({ recents: null }));
+      useAppStore
+        .getState()
+        .applyState(makeState({ repositories: [], migration: makeMigration() }));
+    });
+
+    expect(result.current?.cases).toHaveLength(1);
+  });
+
+  it("falls back to an empty repository list when the snapshot has none", () => {
+    const { result } = renderHook(() => useRepositories());
+
+    act(() => {
+      useAppStore.getState().applyState(makeState({ repositories: null }));
     });
 
     expect(result.current).toEqual([]);
@@ -222,37 +198,28 @@ describe("selectors", () => {
 });
 
 describe("open task", () => {
-  it("reveals the node of the task it opens", () => {
+  it("opens a task and puts the history and the settings away", () => {
     useAppStore.getState().applyState(withTasks());
+    useAppStore.getState().openHistory();
 
-    useAppStore.getState().openTask(REPO_TASK.id);
+    useAppStore.getState().openTask(API_TASK.id);
 
-    expect(useAppStore.getState().openTaskId).toBe(REPO_TASK.id);
-    expect(useAppStore.getState().selectedNodeId).toBe(WEB_NODE);
-    expect(useAppStore.getState().expandedNodeIds.has(WEB_NODE)).toBe(true);
+    expect(useAppStore.getState().openTaskId).toBe(API_TASK.id);
+    expect(useAppStore.getState().historyOpen).toBe(false);
+    expect(useAppStore.getState().settingsOpen).toBe(false);
   });
 
-  it("selects the root for a task of the workspace root", () => {
-    useAppStore.getState().applyState(withTasks());
-    useAppStore.getState().selectNode(WEB_NODE);
-
-    useAppStore.getState().openTask(ROOT_TASK.id);
-
-    expect(useAppStore.getState().selectedNodeId).toBe(ROOT_NODE_ID);
-  });
-
-  it("opens a task the snapshot does not have yet without touching the tree", () => {
+  it("opens a task the snapshot does not have yet", () => {
     useAppStore.getState().applyState(withTasks());
 
     useAppStore.getState().openTask("task-unknown");
 
     expect(useAppStore.getState().openTaskId).toBe("task-unknown");
-    expect(useAppStore.getState().selectedNodeId).toBe(ROOT_NODE_ID);
   });
 
   it("closes the task", () => {
     useAppStore.getState().applyState(withTasks());
-    useAppStore.getState().openTask(ROOT_TASK.id);
+    useAppStore.getState().openTask(WEB_TASK.id);
 
     useAppStore.getState().closeTask();
 
@@ -261,54 +228,55 @@ describe("open task", () => {
 
   it("closes a task that the snapshot no longer has and drops its transcript", () => {
     useAppStore.getState().applyState(withTasks());
-    useAppStore.getState().openTask(ROOT_TASK.id);
-    useAppStore.getState().setTranscript(makeTranscript({ taskId: ROOT_TASK.id }));
+    useAppStore.getState().openTask(WEB_TASK.id);
+    useAppStore.getState().setTranscript(makeTranscript({ taskId: WEB_TASK.id }));
 
-    useAppStore.getState().applyState(makeState({ tasks: [REPO_TASK] }));
+    useAppStore.getState().applyState(withTasks({ tasks: [API_TASK] }));
 
     expect(useAppStore.getState().openTaskId).toBeNull();
-    expect(useAppStore.getState().transcripts[ROOT_KEY]).toBeUndefined();
+    expect(useAppStore.getState().transcripts[WEB_KEY]).toBeUndefined();
   });
 
-  it("forgets tasks, transcripts and drafts when the workspace changes", () => {
+  it("forgets tasks, transcripts and drafts once no repository is registered", () => {
     useAppStore.getState().applyState(withTasks());
-    useAppStore.getState().openTask(ROOT_TASK.id);
-    useAppStore.getState().setTranscript(makeTranscript({ taskId: ROOT_TASK.id }));
-    useAppStore.getState().setDraft(ROOT_TASK.id, ROOT_TASK.stage, "half a message");
-    useAppStore.getState().openNewTask(ROOT_NODE_ID);
-    useAppStore.getState().selectStepTab(ROOT_TASK.id, 1, "reviewer");
+    useAppStore.getState().openTask(WEB_TASK.id);
+    useAppStore.getState().setTranscript(makeTranscript({ taskId: WEB_TASK.id }));
+    useAppStore.getState().setDraft(WEB_TASK.id, WEB_TASK.stage, "half a message");
+    useAppStore.getState().openNewTask();
+    useAppStore.getState().selectStepTab(WEB_TASK.id, 1, "reviewer");
 
-    useAppStore
-      .getState()
-      .applyState(makeState({ workspace: { name: "labs", path: "/home/dev/labs", repos: [] } }));
+    useAppStore.getState().applyState(makeState({ repositories: [], tasks: [] }));
 
     expect(useAppStore.getState().openTaskId).toBeNull();
     expect(useAppStore.getState().transcripts).toEqual({});
     expect(useAppStore.getState().drafts).toEqual({});
-    expect(useAppStore.getState().newTaskFor).toBeNull();
+    expect(useAppStore.getState().newTaskOpen).toBe(false);
     expect(useAppStore.getState().openStepTab).toEqual({});
   });
 
-  it("remembers which node the creation dialog is open for", () => {
-    useAppStore.getState().openNewTask(WEB_NODE);
-    expect(useAppStore.getState().newTaskFor).toBe(WEB_NODE);
+  it("opens and closes the creation dialog, and remembers the repository used", () => {
+    useAppStore.getState().openNewTask();
+    expect(useAppStore.getState().newTaskOpen).toBe(true);
+
+    useAppStore.getState().rememberRepository("repo-2");
+    expect(useAppStore.getState().lastRepositoryId).toBe("repo-2");
 
     useAppStore.getState().closeNewTask();
-    expect(useAppStore.getState().newTaskFor).toBeNull();
+    expect(useAppStore.getState().newTaskOpen).toBe(false);
   });
 });
 
 describe("transcripts", () => {
   it("buffers what arrives while loading and applies it once loaded", () => {
     const entry = makeEntry("user", { id: "a", seq: 1 });
-    useAppStore.getState().beginTranscript(ROOT_TASK.id, ROOT_TASK.stage);
+    useAppStore.getState().beginTranscript(WEB_TASK.id, WEB_TASK.stage);
 
     useAppStore.getState().applyTranscriptEvent(transcriptEvent({ entry }));
-    expect(useAppStore.getState().transcripts[ROOT_KEY]?.entries).toEqual([]);
+    expect(useAppStore.getState().transcripts[WEB_KEY]?.entries).toEqual([]);
 
-    useAppStore.getState().setTranscript(makeTranscript({ taskId: ROOT_TASK.id }));
+    useAppStore.getState().setTranscript(makeTranscript({ taskId: WEB_TASK.id }));
 
-    const transcript = useAppStore.getState().transcripts[ROOT_KEY];
+    const transcript = useAppStore.getState().transcripts[WEB_KEY];
     expect(transcript?.status).toBe("ready");
     expect(transcript?.entries).toEqual([entry]);
     expect(transcript?.buffered).toEqual([]);
@@ -316,11 +284,11 @@ describe("transcripts", () => {
 
   it("applies an event to a conversation it has already loaded", () => {
     const entry = makeEntry("user", { id: "a", seq: 1 });
-    useAppStore.getState().setTranscript(makeTranscript({ taskId: ROOT_TASK.id }));
+    useAppStore.getState().setTranscript(makeTranscript({ taskId: WEB_TASK.id }));
 
     useAppStore.getState().applyTranscriptEvent(transcriptEvent({ entry }));
 
-    expect(useAppStore.getState().transcripts[ROOT_KEY]?.entries).toEqual([entry]);
+    expect(useAppStore.getState().transcripts[WEB_KEY]?.entries).toEqual([entry]);
   });
 
   it("ignores an event for a task nobody opened", () => {
@@ -330,93 +298,89 @@ describe("transcripts", () => {
   });
 
   it("ignores an event that changes nothing", () => {
-    useAppStore.getState().setTranscript(makeTranscript({ taskId: ROOT_TASK.id }));
-    const before = useAppStore.getState().transcripts[ROOT_KEY];
+    useAppStore.getState().setTranscript(makeTranscript({ taskId: WEB_TASK.id }));
+    const before = useAppStore.getState().transcripts[WEB_KEY];
 
     useAppStore.getState().applyTranscriptEvent(transcriptEvent({ kind: "text", entryId: "gone" }));
 
-    expect(useAppStore.getState().transcripts[ROOT_KEY]).toBe(before);
+    expect(useAppStore.getState().transcripts[WEB_KEY]).toBe(before);
   });
 
   it("keeps the entries it has while reloading", () => {
     const entry = makeEntry("user", { id: "a", seq: 1 });
-    useAppStore
-      .getState()
-      .setTranscript(makeTranscript({ taskId: ROOT_TASK.id, entries: [entry] }));
+    useAppStore.getState().setTranscript(makeTranscript({ taskId: WEB_TASK.id, entries: [entry] }));
 
-    useAppStore.getState().beginTranscript(ROOT_TASK.id, ROOT_TASK.stage);
+    useAppStore.getState().beginTranscript(WEB_TASK.id, WEB_TASK.stage);
 
-    const transcript = useAppStore.getState().transcripts[ROOT_KEY];
+    const transcript = useAppStore.getState().transcripts[WEB_KEY];
     expect(transcript?.status).toBe("loading");
     expect(transcript?.entries).toEqual([entry]);
   });
 
   it("drops a conversation on request", () => {
-    useAppStore.getState().setTranscript(makeTranscript({ taskId: ROOT_TASK.id }));
+    useAppStore.getState().setTranscript(makeTranscript({ taskId: WEB_TASK.id }));
 
-    useAppStore.getState().dropTranscript(ROOT_TASK.id, ROOT_TASK.stage);
+    useAppStore.getState().dropTranscript(WEB_TASK.id, WEB_TASK.stage);
 
-    expect(useAppStore.getState().transcripts[ROOT_KEY]).toBeUndefined();
+    expect(useAppStore.getState().transcripts[WEB_KEY]).toBeUndefined();
   });
 
   it("keeps the conversations of one task apart, one per stage", () => {
     const prd = makeEntry("user", { id: "a", seq: 1 });
     const spec = makeEntry("user", { id: "b", seq: 1 });
-    useAppStore.getState().setTranscript(makeTranscript({ taskId: ROOT_TASK.id, entries: [prd] }));
+    useAppStore.getState().setTranscript(makeTranscript({ taskId: WEB_TASK.id, entries: [prd] }));
     useAppStore
       .getState()
-      .setTranscript(makeTranscript({ taskId: ROOT_TASK.id, stage: "tech_spec", entries: [spec] }));
+      .setTranscript(makeTranscript({ taskId: WEB_TASK.id, stage: "tech_spec", entries: [spec] }));
 
     // An event of one stage never reaches the conversation of the other.
     const entry = makeEntry("assistant", { id: "c", seq: 2 });
     useAppStore.getState().applyTranscriptEvent(transcriptEvent({ stage: "tech_spec", entry }));
 
-    const specKey = sessionKey(ROOT_TASK.id, "tech_spec");
-    expect(useAppStore.getState().transcripts[ROOT_KEY]?.entries).toEqual([prd]);
+    const specKey = sessionKey(WEB_TASK.id, "tech_spec");
+    expect(useAppStore.getState().transcripts[WEB_KEY]?.entries).toEqual([prd]);
     expect(useAppStore.getState().transcripts[specKey]?.entries).toEqual([spec, entry]);
 
     // Dropping one leaves the other alone.
-    useAppStore.getState().dropTranscript(ROOT_TASK.id, "tech_spec");
+    useAppStore.getState().dropTranscript(WEB_TASK.id, "tech_spec");
     expect(useAppStore.getState().transcripts[specKey]).toBeUndefined();
-    expect(useAppStore.getState().transcripts[ROOT_KEY]?.entries).toEqual([prd]);
+    expect(useAppStore.getState().transcripts[WEB_KEY]?.entries).toEqual([prd]);
   });
 
   it("forgets every conversation of a task that left the snapshot", () => {
     useAppStore.getState().applyState(withTasks());
-    useAppStore.getState().openTask(ROOT_TASK.id);
-    useAppStore.getState().setTranscript(makeTranscript({ taskId: ROOT_TASK.id }));
-    useAppStore.getState().setTranscript(makeTranscript({ taskId: ROOT_TASK.id, stage: "plan" }));
-    useAppStore.getState().setTranscript(makeTranscript({ taskId: REPO_TASK.id }));
+    useAppStore.getState().openTask(WEB_TASK.id);
+    useAppStore.getState().setTranscript(makeTranscript({ taskId: WEB_TASK.id }));
+    useAppStore.getState().setTranscript(makeTranscript({ taskId: WEB_TASK.id, stage: "plan" }));
+    useAppStore.getState().setTranscript(makeTranscript({ taskId: API_TASK.id }));
 
-    useAppStore.getState().applyState(makeState({ tasks: [REPO_TASK] }));
+    useAppStore.getState().applyState(makeState({ tasks: [API_TASK] }));
 
     expect(useAppStore.getState().transcripts).toEqual({
-      [sessionKey(REPO_TASK.id, REPO_TASK.stage)]: expect.anything(),
+      [sessionKey(API_TASK.id, API_TASK.stage)]: expect.anything(),
     });
   });
 
   it("keeps one draft per session, not one per task", () => {
-    useAppStore.getState().setDraft(ROOT_TASK.id, ROOT_TASK.stage, "hello");
-    useAppStore.getState().setDraft(REPO_TASK.id, REPO_TASK.stage, "there");
+    useAppStore.getState().setDraft(WEB_TASK.id, WEB_TASK.stage, "hello");
+    useAppStore.getState().setDraft(API_TASK.id, API_TASK.stage, "there");
 
     expect(useAppStore.getState().drafts).toEqual({
-      [ROOT_KEY]: "hello",
-      [sessionKey(REPO_TASK.id, REPO_TASK.stage)]: "there",
+      [WEB_KEY]: "hello",
+      [sessionKey(API_TASK.id, API_TASK.stage)]: "there",
     });
   });
 });
 
 describe("task selectors", () => {
-  it("report the tasks of the snapshot and of each node", () => {
+  it("report the tasks of the snapshot, and the ones the filter shows", () => {
     const { result } = renderHook(() => ({
       tasks: useTasks(),
-      root: useTasksOf(ROOT_NODE_ID),
-      web: useTasksOf(WEB_NODE),
-      api: useTasksOf(API_NODE),
-      task: useTask(REPO_TASK.id),
+      filtered: useFilteredTasks(),
+      task: useTask(API_TASK.id),
       open: useOpenTask(),
-      transcript: useTranscript(ROOT_TASK.id, ROOT_TASK.stage),
-      draft: useDraft(ROOT_TASK.id, ROOT_TASK.stage),
+      transcript: useTranscript(WEB_TASK.id, WEB_TASK.stage),
+      draft: useDraft(WEB_TASK.id, WEB_TASK.stage),
     }));
 
     expect(result.current.tasks).toEqual([]);
@@ -426,19 +390,27 @@ describe("task selectors", () => {
 
     act(() => {
       useAppStore.getState().applyState(withTasks());
-      useAppStore.getState().openTask(ROOT_TASK.id);
-      useAppStore.getState().setDraft(ROOT_TASK.id, ROOT_TASK.stage, "hello");
-      useAppStore.getState().setTranscript(makeTranscript({ taskId: ROOT_TASK.id }));
+      useAppStore.getState().openTask(WEB_TASK.id);
+      useAppStore.getState().setDraft(WEB_TASK.id, WEB_TASK.stage, "hello");
+      useAppStore.getState().setTranscript(makeTranscript({ taskId: WEB_TASK.id }));
     });
 
     expect(result.current.tasks).toHaveLength(2);
-    expect(result.current.root).toEqual([ROOT_TASK]);
-    expect(result.current.web).toEqual([REPO_TASK]);
-    expect(result.current.api).toEqual([]);
-    expect(result.current.task).toEqual(REPO_TASK);
-    expect(result.current.open).toEqual(ROOT_TASK);
+    expect(result.current.filtered).toHaveLength(2);
+    expect(result.current.task).toEqual(API_TASK);
+    expect(result.current.open).toEqual(WEB_TASK);
     expect(result.current.transcript?.status).toBe("ready");
     expect(result.current.draft).toBe("hello");
+  });
+
+  it("keeps only the tasks of the repository of the filter", () => {
+    const { result } = renderHook(() => useFilteredTasks());
+
+    act(() => {
+      useAppStore.getState().applyState(withTasks({ repositoryFilter: "repo-2" }));
+    });
+
+    expect(result.current).toEqual([API_TASK]);
   });
 
   it("falls back to an empty task list when the snapshot has none", () => {
@@ -452,170 +424,59 @@ describe("task selectors", () => {
   });
 });
 
-const API_REPO = makeRepoPR({
-  repository: "api",
-  repoPath: "/home/dev/projects/api",
-  slug: "api",
-});
-const WEB_REPO = makeRepoPR({ status: "drafting" });
+const PR_PLACE: Place = { kind: "pr", stage: "", step: 0 };
 
-function withRepos(...repos: RepoPR[]) {
-  return makeState({ tasks: [{ ...ROOT_TASK, stage: "pr", repos }] });
+function withPR(pr: PullRequest | null, situations: Situation[] = []) {
+  return withTasks({ tasks: [{ ...WEB_TASK, stage: "pr", pr, situations }] });
 }
-
-function repoPlace(repo: RepoPR): Place {
-  return {
-    kind: "repo",
-    stage: "",
-    step: 0,
-    repoPath: repo.repoPath,
-    repository: repo.repository,
-  };
-}
-
-// web, the second repository, is the one whose draft waits for the user.
-function withWebWaiting() {
-  return makeState({
-    tasks: [
-      {
-        ...ROOT_TASK,
-        stage: "pr",
-        repos: [API_REPO, { ...WEB_REPO, status: "draft_ready" }],
-        situations: [
-          makeSituation({
-            id: "s-web",
-            taskId: ROOT_TASK.id,
-            kind: "draft",
-            place: repoPlace(WEB_REPO),
-          }),
-        ],
-      },
-    ],
-  });
-}
-
-describe("repository selection", () => {
-  it("opens on the repository of the most urgent situation", () => {
-    const { result } = renderHook(() => ({
-      repos: useRepos(ROOT_TASK.id),
-      open: useOpenRepo(ROOT_TASK.id),
-    }));
-
-    act(() => {
-      useAppStore.getState().applyState(withWebWaiting());
-    });
-
-    expect(result.current.repos).toHaveLength(2);
-    expect(result.current.open).toBe(WEB_REPO.repoPath);
-  });
-
-  it("opens on the first repository when none waits", () => {
-    const { result } = renderHook(() => useOpenRepo(ROOT_TASK.id));
-
-    act(() => {
-      useAppStore.getState().applyState(withRepos(API_REPO, WEB_REPO));
-    });
-
-    expect(result.current).toBe(API_REPO.repoPath);
-  });
-
-  it("has no repository outside the PR stage", () => {
-    const { result } = renderHook(() => ({
-      repos: useRepos(ROOT_TASK.id),
-      open: useOpenRepo(ROOT_TASK.id),
-    }));
-
-    act(() => {
-      useAppStore.getState().applyState(withTasks());
-    });
-
-    expect(result.current.repos).toEqual([]);
-    expect(result.current.open).toBe("");
-  });
-
-  it("keeps the repository the user picked", () => {
-    const { result } = renderHook(() => useOpenRepo(ROOT_TASK.id));
-
-    act(() => {
-      useAppStore.getState().applyState(withWebWaiting());
-      useAppStore.getState().selectRepo(ROOT_TASK.id, API_REPO.repoPath);
-    });
-
-    expect(result.current).toBe(API_REPO.repoPath);
-  });
-
-  it("falls back to the default when the selection leaves the task", () => {
-    const { result } = renderHook(() => useOpenRepo(ROOT_TASK.id));
-
-    act(() => {
-      useAppStore.getState().applyState(withRepos(API_REPO, WEB_REPO));
-      useAppStore.getState().selectRepo(ROOT_TASK.id, WEB_REPO.repoPath);
-    });
-    expect(result.current).toBe(WEB_REPO.repoPath);
-
-    act(() => {
-      useAppStore.getState().applyState(withRepos(API_REPO));
-    });
-
-    expect(result.current).toBe(API_REPO.repoPath);
-  });
-});
 
 describe("pull request drafts", () => {
   const draft = { title: "Add the login form", body: "Closes #12" };
 
   it("keeps what the user is editing across state updates", () => {
-    const { result } = renderHook(() => usePrDraft(ROOT_TASK.id, WEB_REPO.repoPath));
+    const { result } = renderHook(() => usePrDraft(WEB_TASK.id));
 
     act(() => {
-      useAppStore.getState().applyState(withRepos(WEB_REPO));
-      useAppStore.getState().setPrDraft(ROOT_TASK.id, WEB_REPO.repoPath, draft);
+      useAppStore.getState().applyState(withPR(makePullRequest({ status: "drafting" })));
+      useAppStore.getState().setPrDraft(WEB_TASK.id, draft);
     });
     expect(result.current).toEqual(draft);
 
     act(() => {
-      useAppStore.getState().applyState(withRepos({ ...WEB_REPO, status: "draft_ready" }));
+      useAppStore.getState().applyState(withPR(makePullRequest({ status: "draft_ready" })));
     });
 
     expect(result.current).toEqual(draft);
   });
 
-  it("keys a draft by task and repository", () => {
+  it("keys a draft by task", () => {
     act(() => {
-      useAppStore.getState().setPrDraft(ROOT_TASK.id, WEB_REPO.repoPath, draft);
+      useAppStore.getState().setPrDraft(WEB_TASK.id, draft);
     });
 
-    expect(useAppStore.getState().prDrafts).toEqual({
-      [repoKey(ROOT_TASK.id, WEB_REPO.repoPath)]: draft,
-    });
+    expect(useAppStore.getState().prDrafts).toEqual({ [WEB_TASK.id]: draft });
   });
 
   it("clears one draft and leaves the others", () => {
     act(() => {
-      useAppStore.getState().setPrDraft(ROOT_TASK.id, WEB_REPO.repoPath, draft);
-      useAppStore.getState().setPrDraft(ROOT_TASK.id, API_REPO.repoPath, draft);
-      useAppStore.getState().clearPrDraft(ROOT_TASK.id, WEB_REPO.repoPath);
+      useAppStore.getState().setPrDraft(WEB_TASK.id, draft);
+      useAppStore.getState().setPrDraft(API_TASK.id, draft);
+      useAppStore.getState().clearPrDraft(WEB_TASK.id);
     });
 
-    expect(useAppStore.getState().prDrafts).toEqual({
-      [repoKey(ROOT_TASK.id, API_REPO.repoPath)]: draft,
-    });
+    expect(useAppStore.getState().prDrafts).toEqual({ [API_TASK.id]: draft });
   });
 
-  it("drops the selection and the drafts when the workspace changes", () => {
+  it("drops the drafts once no repository is registered", () => {
     act(() => {
-      useAppStore.getState().applyState(withRepos(API_REPO, WEB_REPO));
-      useAppStore.getState().selectRepo(ROOT_TASK.id, WEB_REPO.repoPath);
-      useAppStore.getState().setPrDraft(ROOT_TASK.id, WEB_REPO.repoPath, draft);
+      useAppStore.getState().applyState(withPR(makePullRequest()));
+      useAppStore.getState().setPrDraft(WEB_TASK.id, draft);
     });
 
     act(() => {
-      useAppStore
-        .getState()
-        .applyState(makeState({ workspace: { name: "labs", path: "/home/dev/labs", repos: [] } }));
+      useAppStore.getState().applyState(makeState({ repositories: [], tasks: [] }));
     });
 
-    expect(useAppStore.getState().openRepo).toEqual({});
     expect(useAppStore.getState().prDrafts).toEqual({});
   });
 });
@@ -625,10 +486,10 @@ function withSteps(
   overrides: { currentStep?: number; reviewer?: boolean; situations?: Situation[] } = {},
 ) {
   const reviewer = overrides.reviewer === false ? null : makeStepReviewer();
-  return makeState({
+  return withTasks({
     tasks: [
       {
-        ...ROOT_TASK,
+        ...WEB_TASK,
         stage: "implementation",
         currentStep: overrides.currentStep ?? 1,
         situations: overrides.situations ?? [],
@@ -643,7 +504,7 @@ function withSteps(
 
 describe("step tabs", () => {
   it("opens on the implementer and keeps the tab the user picks", () => {
-    const { result } = renderHook(() => useOpenStepTab(ROOT_TASK.id));
+    const { result } = renderHook(() => useOpenStepTab(WEB_TASK.id));
 
     act(() => {
       useAppStore.getState().applyState(withSteps());
@@ -651,7 +512,7 @@ describe("step tabs", () => {
     expect(result.current).toBe("implementer");
 
     act(() => {
-      useAppStore.getState().selectStepTab(ROOT_TASK.id, 1, "reviewer");
+      useAppStore.getState().selectStepTab(WEB_TASK.id, 1, "reviewer");
     });
     expect(result.current).toBe("reviewer");
 
@@ -663,13 +524,13 @@ describe("step tabs", () => {
 
   it("falls back to the implementer while the step has no reviewer", () => {
     const { result } = renderHook(() => ({
-      open: useOpenStepTab(ROOT_TASK.id),
+      open: useOpenStepTab(WEB_TASK.id),
       gone: useOpenStepTab("task-gone"),
     }));
 
     act(() => {
       useAppStore.getState().applyState(withSteps({ reviewer: false }));
-      useAppStore.getState().selectStepTab(ROOT_TASK.id, 1, "reviewer");
+      useAppStore.getState().selectStepTab(WEB_TASK.id, 1, "reviewer");
       useAppStore.getState().selectStepTab("task-gone", 1, "reviewer");
     });
 
@@ -677,23 +538,28 @@ describe("step tabs", () => {
   });
 
   it("keeps the tabs of each step apart", () => {
-    const { result } = renderHook(() => useOpenStepTab(ROOT_TASK.id));
+    const { result } = renderHook(() => useOpenStepTab(WEB_TASK.id));
 
     act(() => {
       useAppStore.getState().applyState(withSteps());
-      useAppStore.getState().selectStepTab(ROOT_TASK.id, 1, "reviewer");
+      useAppStore.getState().selectStepTab(WEB_TASK.id, 1, "reviewer");
       useAppStore.getState().applyState(withSteps({ currentStep: 2 }));
     });
 
     expect(result.current).toBe("implementer");
     expect(useAppStore.getState().openStepTab).toEqual({
-      [stepTabKey(ROOT_TASK.id, 1)]: "reviewer",
+      [stepTabKey(WEB_TASK.id, 1)]: "reviewer",
     });
   });
 });
 
-const ARCHIVED = makeArchivedTask({ id: "task-root", name: "add-login" });
-const OLDER = makeArchivedTask({ id: "task-old", name: "fix-header" });
+const ARCHIVED = makeArchivedTask({ id: "task-archived", name: "add-login" });
+const OLDER = makeArchivedTask({
+  id: "task-old",
+  name: "fix-header",
+  repositoryId: "repo-2",
+  repository: "dev/api",
+});
 
 describe("history", () => {
   it("shows the archived tasks of the snapshot", () => {
@@ -706,7 +572,7 @@ describe("history", () => {
     expect(result.current.history).toEqual([]);
 
     act(() => {
-      useAppStore.getState().applyState(makeState({ history: [ARCHIVED, OLDER] }));
+      useAppStore.getState().applyState(withTasks({ history: [ARCHIVED, OLDER] }));
     });
 
     expect(result.current.history).toHaveLength(2);
@@ -718,7 +584,7 @@ describe("history", () => {
     const { result } = renderHook(() => useHistory());
 
     act(() => {
-      useAppStore.getState().applyState(makeState({ history: null }));
+      useAppStore.getState().applyState(withTasks({ history: null }));
     });
 
     expect(result.current).toEqual([]);
@@ -728,8 +594,8 @@ describe("history", () => {
     const { result } = renderHook(() => useHistoryUi());
 
     act(() => {
-      useAppStore.getState().applyState(makeState({ history: [ARCHIVED] }));
-      useAppStore.getState().openTask(ROOT_TASK.id);
+      useAppStore.getState().applyState(withTasks({ history: [ARCHIVED] }));
+      useAppStore.getState().openTask(WEB_TASK.id);
       useAppStore.getState().openHistory();
     });
     expect(result.current).toEqual({
@@ -760,59 +626,59 @@ describe("history", () => {
     expect(result.current.historyOpen).toBe(false);
   });
 
-  it("leaves the history when a task or a node is opened", () => {
-    useAppStore.getState().applyState(withTasks());
+  it("leaves the history when a task is opened", () => {
+    useAppStore.getState().applyState(withTasks({ history: [ARCHIVED] }));
     useAppStore.getState().openArchived(ARCHIVED.id);
 
-    useAppStore.getState().openTask(ROOT_TASK.id);
-    expect(useAppStore.getState().historyOpen).toBe(false);
-    expect(useAppStore.getState().openArchivedId).toBeNull();
-
-    useAppStore.getState().openArchived(ARCHIVED.id);
-    useAppStore.getState().selectNode(WEB_NODE);
+    useAppStore.getState().openTask(WEB_TASK.id);
 
     expect(useAppStore.getState().historyOpen).toBe(false);
     expect(useAppStore.getState().openArchivedId).toBeNull();
   });
 
   it("closes an archived task that left the history", () => {
-    useAppStore.getState().applyState(makeState({ history: [ARCHIVED] }));
+    useAppStore.getState().applyState(withTasks({ history: [ARCHIVED] }));
     useAppStore.getState().openArchived(ARCHIVED.id);
 
-    useAppStore.getState().applyState(makeState({ history: [] }));
+    useAppStore.getState().applyState(withTasks({ history: [] }));
 
     expect(useAppStore.getState().openArchivedId).toBeNull();
     expect(useAppStore.getState().historyOpen).toBe(true);
   });
 
   it("keeps the archived task open while the history still has it", () => {
-    useAppStore.getState().applyState(makeState({ history: [ARCHIVED] }));
+    useAppStore.getState().applyState(withTasks({ history: [ARCHIVED] }));
     useAppStore.getState().openArchived(ARCHIVED.id);
 
-    useAppStore.getState().applyState(makeState({ history: [ARCHIVED, OLDER] }));
+    useAppStore.getState().applyState(withTasks({ history: [ARCHIVED, OLDER] }));
 
     expect(useAppStore.getState().openArchivedId).toBe(ARCHIVED.id);
   });
 });
 
 describe("filterHistory", () => {
-  it("keeps everything without a query", () => {
-    expect(filterHistory([ARCHIVED, OLDER], "")).toHaveLength(2);
-    expect(filterHistory([ARCHIVED, OLDER], "   ")).toHaveLength(2);
+  it("keeps everything without a query and without a filter", () => {
+    expect(filterHistory([ARCHIVED, OLDER], "", "")).toHaveLength(2);
+    expect(filterHistory([ARCHIVED, OLDER], "   ", "")).toHaveLength(2);
   });
 
   it("matches part of the name, whatever the case", () => {
-    expect(filterHistory([ARCHIVED, OLDER], "LOG")).toEqual([ARCHIVED]);
-    expect(filterHistory([ARCHIVED, OLDER], " header ")).toEqual([OLDER]);
+    expect(filterHistory([ARCHIVED, OLDER], "LOG", "")).toEqual([ARCHIVED]);
+    expect(filterHistory([ARCHIVED, OLDER], " header ", "")).toEqual([OLDER]);
+  });
+
+  it("keeps the tasks of the repository of the filter", () => {
+    expect(filterHistory([ARCHIVED, OLDER], "", "repo-2")).toEqual([OLDER]);
+    expect(filterHistory([ARCHIVED, OLDER], "header", "repo-1")).toEqual([]);
   });
 
   it("answers with nothing when no name matches", () => {
-    expect(filterHistory([ARCHIVED, OLDER], "payments")).toEqual([]);
+    expect(filterHistory([ARCHIVED, OLDER], "payments", "")).toEqual([]);
   });
 });
 
 describe("notices", () => {
-  it("announces the task that left the workspace", () => {
+  it("announces the task that was just archived", () => {
     const { result } = renderHook(() => useArchivedNotice());
 
     act(() => {
@@ -821,7 +687,7 @@ describe("notices", () => {
     expect(result.current).toBeNull();
 
     act(() => {
-      useAppStore.getState().applyState(makeState({ tasks: [REPO_TASK], history: [ARCHIVED] }));
+      useAppStore.getState().applyState(withTasks({ tasks: [API_TASK], history: [ARCHIVED] }));
     });
 
     expect(result.current).toEqual({ id: ARCHIVED.id, name: ARCHIVED.name });
@@ -829,29 +695,24 @@ describe("notices", () => {
 
   // The first snapshot brings the whole history; none of it was archived now.
   it("says nothing about a history that was already there", () => {
-    useAppStore.getState().applyState(makeState({ history: [ARCHIVED, OLDER] }));
+    useAppStore.getState().applyState(withTasks({ history: [ARCHIVED, OLDER] }));
 
     expect(useAppStore.getState().archivedNotice).toBeNull();
   });
 
-  it("says nothing when the workspace changes", () => {
-    useAppStore.getState().applyState(makeState({ tasks: [ROOT_TASK] }));
+  it("says nothing once no repository is registered", () => {
+    useAppStore.getState().applyState(withTasks({ tasks: [WEB_TASK] }));
 
-    useAppStore.getState().applyState(
-      makeState({
-        workspace: { name: "labs", path: "/home/dev/labs", repos: [] },
-        history: [ARCHIVED],
-      }),
-    );
+    useAppStore.getState().applyState(makeState({ repositories: [], history: [ARCHIVED] }));
 
     expect(useAppStore.getState().archivedNotice).toBeNull();
   });
 
   it("keeps the notice while the snapshots go by, until it is dismissed", () => {
     useAppStore.getState().applyState(withTasks());
-    useAppStore.getState().applyState(makeState({ tasks: [REPO_TASK], history: [ARCHIVED] }));
+    useAppStore.getState().applyState(withTasks({ tasks: [API_TASK], history: [ARCHIVED] }));
 
-    useAppStore.getState().applyState(makeState({ tasks: [REPO_TASK], history: [ARCHIVED] }));
+    useAppStore.getState().applyState(withTasks({ tasks: [API_TASK], history: [ARCHIVED] }));
     expect(useAppStore.getState().archivedNotice?.id).toBe(ARCHIVED.id);
 
     useAppStore.getState().dismissArchivedNotice();
@@ -859,11 +720,9 @@ describe("notices", () => {
   });
 
   it("holds what the last deletion left on disk", () => {
-    const { result } = renderHook(() => useLeftovers());
+    const { result } = renderHook(() => useLeftover());
     const leftover = {
-      repository: "web",
-      repoPath: "/home/dev/projects/web",
-      path: "/home/dev/.local/share/myspec/worktrees/add-login-web",
+      path: "/home/dev/.local/share/myspec/worktrees/dev/web/add-login",
       branch: "",
       error: "permission denied",
     };
@@ -871,78 +730,61 @@ describe("notices", () => {
     expect(result.current).toBeNull();
 
     act(() => {
-      useAppStore.getState().setLeftovers([leftover]);
+      useAppStore.getState().setLeftover(leftover);
     });
-    expect(result.current).toEqual([leftover]);
+    expect(result.current).toEqual(leftover);
 
     act(() => {
-      useAppStore.getState().setLeftovers(null);
+      useAppStore.getState().setLeftover(null);
     });
     expect(result.current).toBeNull();
   });
 });
 
 function stagePlace(stage: string): Place {
-  return { kind: "stage", stage, step: 0, repoPath: "", repository: "" };
+  return { kind: "stage", stage, step: 0 };
 }
 
 function stepPlace(step: number): Place {
-  return { kind: "step", stage: "", step, repoPath: "", repository: "" };
+  return { kind: "step", stage: "", step };
 }
 
 function reviewerPlace(step: number): Place {
-  return { kind: "step_review", stage: "", step, repoPath: "", repository: "" };
+  return { kind: "step_review", stage: "", step };
 }
 
 describe("open place", () => {
-  it("opens the task of a situation and reveals it in the tree", () => {
+  it("opens the task of a situation", () => {
     useAppStore.getState().applyState(withTasks());
 
-    useAppStore.getState().openPlace(REPO_TASK.id, stagePlace("prd"));
+    useAppStore.getState().openPlace(API_TASK.id, stagePlace("prd"));
 
-    expect(useAppStore.getState().openTaskId).toBe(REPO_TASK.id);
-    expect(useAppStore.getState().selectedNodeId).toBe(WEB_NODE);
-    expect(useAppStore.getState().expandedNodeIds.has(WEB_NODE)).toBe(true);
-    expect(useAppStore.getState().openRepo).toEqual({});
-  });
-
-  it("selects the tab of the repository the situation is in", () => {
-    const { result } = renderHook(() => useOpenRepo(ROOT_TASK.id));
-    act(() => {
-      useAppStore.getState().applyState(withWebWaiting());
-    });
-
-    act(() => {
-      useAppStore.getState().openPlace(ROOT_TASK.id, repoPlace(API_REPO));
-    });
-
-    expect(useAppStore.getState().openTaskId).toBe(ROOT_TASK.id);
-    expect(result.current).toBe(API_REPO.repoPath);
+    expect(useAppStore.getState().openTaskId).toBe(API_TASK.id);
   });
 
   it("opens the reviewer tab of the step the situation is in", () => {
-    const { result } = renderHook(() => useOpenStepTab(ROOT_TASK.id));
+    const { result } = renderHook(() => useOpenStepTab(WEB_TASK.id));
     act(() => {
       useAppStore.getState().applyState(withSteps());
     });
 
     act(() => {
-      useAppStore.getState().openPlace(ROOT_TASK.id, reviewerPlace(1));
+      useAppStore.getState().openPlace(WEB_TASK.id, reviewerPlace(1));
     });
 
-    expect(useAppStore.getState().openTaskId).toBe(ROOT_TASK.id);
+    expect(useAppStore.getState().openTaskId).toBe(WEB_TASK.id);
     expect(result.current).toBe("reviewer");
   });
 
   it("opens the implementer tab for a situation of the step", () => {
-    const { result } = renderHook(() => useOpenStepTab(ROOT_TASK.id));
+    const { result } = renderHook(() => useOpenStepTab(WEB_TASK.id));
     act(() => {
       useAppStore.getState().applyState(withSteps());
-      useAppStore.getState().selectStepTab(ROOT_TASK.id, 1, "reviewer");
+      useAppStore.getState().selectStepTab(WEB_TASK.id, 1, "reviewer");
     });
 
     act(() => {
-      useAppStore.getState().openPlace(ROOT_TASK.id, stepPlace(1));
+      useAppStore.getState().openPlace(WEB_TASK.id, stepPlace(1));
     });
 
     expect(result.current).toBe("implementer");
@@ -951,60 +793,56 @@ describe("open place", () => {
   it("puts away the history, the archived task and the creation dialog", () => {
     useAppStore.getState().applyState(withTasks());
     useAppStore.getState().openArchived(ARCHIVED.id);
-    useAppStore.getState().openNewTask(ROOT_NODE_ID);
+    useAppStore.getState().openNewTask();
 
-    useAppStore.getState().openPlace(ROOT_TASK.id, stagePlace("prd"));
+    useAppStore.getState().openPlace(WEB_TASK.id, stagePlace("prd"));
 
-    expect(useAppStore.getState().openTaskId).toBe(ROOT_TASK.id);
+    expect(useAppStore.getState().openTaskId).toBe(WEB_TASK.id);
     expect(useAppStore.getState().historyOpen).toBe(false);
     expect(useAppStore.getState().openArchivedId).toBeNull();
-    expect(useAppStore.getState().newTaskFor).toBeNull();
+    expect(useAppStore.getState().newTaskOpen).toBe(false);
   });
 
   it("ignores a task that is no longer there", () => {
     useAppStore.getState().applyState(withTasks());
     useAppStore.getState().openHistory();
-    useAppStore.getState().openNewTask(ROOT_NODE_ID);
+    useAppStore.getState().openNewTask();
 
-    useAppStore.getState().openPlace("task-gone", repoPlace(API_REPO));
+    useAppStore.getState().openPlace("task-gone", PR_PLACE);
 
     expect(useAppStore.getState().openTaskId).toBeNull();
     expect(useAppStore.getState().historyOpen).toBe(true);
-    expect(useAppStore.getState().newTaskFor).toBe(ROOT_NODE_ID);
-    expect(useAppStore.getState().openRepo).toEqual({});
+    expect(useAppStore.getState().newTaskOpen).toBe(true);
   });
 });
 
 describe("flashing", () => {
   it("highlights situations and lets each one go on its own, in a new set every time", () => {
-    const { result } = renderHook(() => ({ flashing: useFlashing(), tree: useTreeUi() }));
-    const initial = result.current.flashing;
+    const { result } = renderHook(() => useFlashing());
+    const initial = result.current;
     expect(initial.size).toBe(0);
 
     act(() => {
       useAppStore.getState().flashSituation("s1");
       useAppStore.getState().flashSituation("s2");
     });
-    expect([...result.current.flashing]).toEqual(["s1", "s2"]);
-    expect(result.current.flashing).not.toBe(initial);
-    expect(result.current.tree.flashing).toBe(result.current.flashing);
+    expect([...result.current]).toEqual(["s1", "s2"]);
+    expect(result.current).not.toBe(initial);
 
-    const flashed = result.current.flashing;
+    const flashed = result.current;
     act(() => {
       useAppStore.getState().unflashSituation("s1");
     });
-    expect([...result.current.flashing]).toEqual(["s2"]);
-    expect(result.current.flashing).not.toBe(flashed);
+    expect([...result.current]).toEqual(["s2"]);
+    expect(result.current).not.toBe(flashed);
     expect(flashed.has("s1")).toBe(true);
   });
 
-  it("forgets the highlights when the workspace changes", () => {
+  it("forgets the highlights once no repository is registered", () => {
     useAppStore.getState().applyState(withTasks());
     useAppStore.getState().flashSituation("s1");
 
-    useAppStore
-      .getState()
-      .applyState(makeState({ workspace: { name: "labs", path: "/home/dev/labs", repos: [] } }));
+    useAppStore.getState().applyState(makeState({ repositories: [], tasks: [] }));
 
     expect(useAppStore.getState().flashing.size).toBe(0);
   });
@@ -1017,7 +855,7 @@ describe("situation on screen", () => {
     act(() => {
       useAppStore
         .getState()
-        .applyState(makeState({ tasks: [{ ...ROOT_TASK, situations: [makeSituation()] }] }));
+        .applyState(withTasks({ tasks: [{ ...WEB_TASK, situations: [makeSituation()] }] }));
     });
 
     expect(result.current).toBeNull();
@@ -1028,10 +866,10 @@ describe("situation on screen", () => {
 
     act(() => {
       useAppStore.getState().applyState(
-        makeState({
+        withTasks({
           tasks: [
             {
-              ...ROOT_TASK,
+              ...WEB_TASK,
               stage: "tech_spec",
               situations: [makeSituation({ id: "s-spec", place: stagePlace("tech_spec") })],
             },
@@ -1042,7 +880,7 @@ describe("situation on screen", () => {
     expect(result.current).toBeNull();
 
     act(() => {
-      useAppStore.getState().openTask(ROOT_TASK.id);
+      useAppStore.getState().openTask(WEB_TASK.id);
     });
     expect(result.current).toBe("s-spec");
   });
@@ -1052,10 +890,10 @@ describe("situation on screen", () => {
 
     act(() => {
       useAppStore.getState().applyState(
-        makeState({
+        withTasks({
           tasks: [
             {
-              ...ROOT_TASK,
+              ...WEB_TASK,
               stage: "implementation",
               currentStep: 2,
               situations: [
@@ -1070,7 +908,7 @@ describe("situation on screen", () => {
           ],
         }),
       );
-      useAppStore.getState().openTask(ROOT_TASK.id);
+      useAppStore.getState().openTask(WEB_TASK.id);
     });
 
     expect(result.current).toBe("s-step");
@@ -1085,28 +923,30 @@ describe("situation on screen", () => {
 
     act(() => {
       useAppStore.getState().applyState(withSteps({ situations }));
-      useAppStore.getState().openTask(ROOT_TASK.id);
+      useAppStore.getState().openTask(WEB_TASK.id);
     });
     expect(result.current).toBe("s-step");
 
     act(() => {
-      useAppStore.getState().selectStepTab(ROOT_TASK.id, 1, "reviewer");
+      useAppStore.getState().selectStepTab(WEB_TASK.id, 1, "reviewer");
     });
     expect(result.current).toBe("s-reviewer");
   });
 
-  it("is the situation of the selected repository tab, and none on a tab without one", () => {
+  it("is the situation of the pull request, and none when it has none", () => {
     const { result } = renderHook(() => useOnScreenSituationId());
+    const draft = makeSituation({ id: "s-draft", kind: "draft", place: PR_PLACE });
 
     act(() => {
-      useAppStore.getState().applyState(withWebWaiting());
-      useAppStore.getState().openTask(ROOT_TASK.id);
+      useAppStore
+        .getState()
+        .applyState(withPR(makePullRequest({ status: "draft_ready" }), [draft]));
+      useAppStore.getState().openTask(WEB_TASK.id);
     });
-    // The task opens on the tab of its situation.
-    expect(result.current).toBe("s-web");
+    expect(result.current).toBe("s-draft");
 
     act(() => {
-      useAppStore.getState().selectRepo(ROOT_TASK.id, API_REPO.repoPath);
+      useAppStore.getState().applyState(withPR(makePullRequest({ status: "drafting" })));
     });
     expect(result.current).toBeNull();
   });
@@ -1118,9 +958,9 @@ describe("settings", () => {
 
     act(() => {
       useAppStore.getState().applyState(withTasks());
-      useAppStore.getState().openTask(ROOT_TASK.id);
+      useAppStore.getState().openTask(WEB_TASK.id);
       useAppStore.getState().openArchived(ARCHIVED.id);
-      useAppStore.getState().openNewTask(ROOT_NODE_ID);
+      useAppStore.getState().openNewTask();
       useAppStore.getState().openSettings();
     });
 
@@ -1133,7 +973,7 @@ describe("settings", () => {
     expect(useAppStore.getState().openTaskId).toBeNull();
     expect(useAppStore.getState().historyOpen).toBe(false);
     expect(useAppStore.getState().openArchivedId).toBeNull();
-    expect(useAppStore.getState().newTaskFor).toBeNull();
+    expect(useAppStore.getState().newTaskOpen).toBe(false);
 
     act(() => {
       useAppStore.getState().closeSettings();
@@ -1141,15 +981,14 @@ describe("settings", () => {
     expect(result.current.settingsOpen).toBe(false);
   });
 
-  it("gives the main area back to a node, a task, the history or a place that opens", () => {
+  it("gives the main area back to a task, the history or a place that opens", () => {
     useAppStore.getState().applyState(withTasks());
 
     for (const navigate of [
-      () => useAppStore.getState().selectNode(WEB_NODE),
-      () => useAppStore.getState().openTask(ROOT_TASK.id),
+      () => useAppStore.getState().openTask(WEB_TASK.id),
       () => useAppStore.getState().openHistory(),
       () => useAppStore.getState().openArchived(ARCHIVED.id),
-      () => useAppStore.getState().openPlace(ROOT_TASK.id, stagePlace("prd")),
+      () => useAppStore.getState().openPlace(WEB_TASK.id, stagePlace("prd")),
     ]) {
       useAppStore.getState().openSettings();
 
@@ -1159,15 +998,13 @@ describe("settings", () => {
     }
   });
 
-  it("keeps the settings open across a change of workspace", () => {
+  it("keeps the settings open while the repositories change", () => {
     useAppStore.getState().applyState(withTasks());
     useAppStore.getState().openSettings();
     useAppStore.getState().selectSettingsSection("plan");
     useAppStore.getState().startPromptEdit("plan", "# Plan");
 
-    useAppStore
-      .getState()
-      .applyState(makeState({ workspace: { name: "labs", path: "/home/dev/labs", repos: [] } }));
+    useAppStore.getState().applyState(makeState({ repositories: [WEB], tasks: [WEB_TASK] }));
 
     expect(useAppStore.getState().settingsOpen).toBe(true);
     expect(useAppStore.getState().settingsSection).toBe("plan");
@@ -1200,7 +1037,7 @@ describe("settings", () => {
     useAppStore.getState().startPromptEdit("prd", "# PRD");
     useAppStore.getState().setPromptEditText("# PRD, edited");
 
-    useAppStore.getState().openTask(ROOT_TASK.id);
+    useAppStore.getState().openTask(WEB_TASK.id);
 
     expect(useAppStore.getState().pendingLeave).not.toBeNull();
     expect(useAppStore.getState().openTaskId).toBeNull();
@@ -1213,10 +1050,10 @@ describe("settings", () => {
     expect(useAppStore.getState().settingsOpen).toBe(true);
     expect(useAppStore.getState().promptEdit?.text).toBe("# PRD, edited");
 
-    useAppStore.getState().openTask(ROOT_TASK.id);
+    useAppStore.getState().openTask(WEB_TASK.id);
     useAppStore.getState().confirmLeave();
 
-    expect(useAppStore.getState().openTaskId).toBe(ROOT_TASK.id);
+    expect(useAppStore.getState().openTaskId).toBe(WEB_TASK.id);
     expect(useAppStore.getState().settingsOpen).toBe(false);
     expect(useAppStore.getState().promptEdit).toBeNull();
     expect(useAppStore.getState().pendingLeave).toBeNull();

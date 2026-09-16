@@ -14,11 +14,9 @@ import (
 
 // Step is one step file of a plan.
 type Step struct {
-	Number     int
-	File       string // file name inside steps/
-	Title      string
-	Repository string // the value carried by the header, "" when absent
-	RepoPath   string // absolute path of the matched repository, "" when invalid
+	Number int
+	File   string // file name inside steps/
+	Title  string
 }
 
 // PlanProblem is one reason a plan is not valid.
@@ -55,15 +53,13 @@ const (
 	badNameProblem       = "unexpected file name; step files are named <number>-<short-description>.md"
 	zeroNumberProblem    = "step numbers start at 1"
 	emptyFileProblem     = "the file is empty"
-	noHeaderProblem      = `missing the metadata header; the file must start with a "---" block carrying "repository: <value>"`
-	noRepositoryProblem  = `the metadata header has no "repository" field`
 	missingTitleProblem  = `missing the title heading ("# Step N: Title")`
 	unreadableDirProblem = "cannot read the steps folder: "
 )
 
-// ReadPlan reads the step files of dir against the repositories a step may
-// name. A missing folder is an absent plan, not an error.
-func ReadPlan(dir string, repos []Repository) Plan {
+// ReadPlan reads the step files of dir. A missing folder is an absent plan,
+// not an error.
+func ReadPlan(dir string) Plan {
 	entries, err := os.ReadDir(dir)
 	switch {
 	case errors.Is(err, os.ErrNotExist):
@@ -109,7 +105,7 @@ func ReadPlan(dir string, repos []Repository) Plan {
 			continue
 		}
 
-		step, problems := parseStep(name, number, string(content), repos)
+		step, problems := parseStep(name, number, string(content))
 		plan.Steps = append(plan.Steps, step)
 		plan.Problems = append(plan.Problems, problems...)
 	}
@@ -174,35 +170,17 @@ func numberingProblems(steps []Step) []PlanProblem {
 	return problems
 }
 
-// parseStep reads the header and the title of one step file. A file with
-// problems is still a step, carrying what could be read, so that the list
-// shows what is there.
-func parseStep(name string, number int, content string, repos []Repository) (Step, []PlanProblem) {
+// parseStep reads the title of one step file, skipping a metadata header the
+// agent may have left at the top. A file with problems is still a step,
+// carrying what could be read, so that the list shows what is there.
+func parseStep(name string, number int, content string) (Step, []PlanProblem) {
 	step := Step{Number: number, File: name}
 	var problems []PlanProblem
-	problem := func(message string) {
-		problems = append(problems, PlanProblem{File: name, Message: message})
-	}
 
-	fields, body, ok := splitFrontMatter(content)
-	switch {
-	case !ok:
-		problem(noHeaderProblem)
-	case fields["repository"] == "":
-		problem(noRepositoryProblem)
-	default:
-		step.Repository = fields["repository"]
-		index := slices.IndexFunc(repos, func(r Repository) bool { return r.Rel == step.Repository })
-		if index < 0 {
-			problem(fmt.Sprintf("repository %q is not one of the repositories of this task", step.Repository))
-		} else {
-			step.RepoPath = repos[index].Path
-		}
-	}
-
+	_, body := splitFrontMatter(content)
 	title, found := headingTitle(body)
 	if !found {
-		problem(missingTitleProblem)
+		problems = append(problems, PlanProblem{File: name, Message: missingTitleProblem})
 	}
 	step.Title = title
 	return step, problems
@@ -228,9 +206,9 @@ func headingTitle(body string) (title string, found bool) {
 // which the step does not repeat.
 const oneShotTitleSuffix = " — One-Shot"
 
-// OneShotPlan is the plan of a One-Shot task: one step, the document itself,
-// in the repository of the task. A document not written yet is an absent plan.
-func OneShotPlan(path, name string, repos []Repository) Plan {
+// OneShotPlan is the plan of a One-Shot task: one step, the document itself.
+// A document not written yet is an absent plan.
+func OneShotPlan(path, name string) Plan {
 	content, err := os.ReadFile(path)
 	if err != nil || len(content) == 0 {
 		return Plan{}
@@ -241,11 +219,6 @@ func OneShotPlan(path, name string, repos []Repository) Plan {
 		Number: 1,
 		File:   OneShotFile,
 		Title:  cmp.Or(strings.TrimSpace(strings.TrimSuffix(heading, oneShotTitleSuffix)), name),
-	}
-	// A task whose repository left the workspace has none, and the preparation
-	// of the step blocks on that.
-	if len(repos) > 0 {
-		step.Repository, step.RepoPath = repos[0].Rel, repos[0].Path
 	}
 	return Plan{Present: true, Steps: []Step{step}}
 }

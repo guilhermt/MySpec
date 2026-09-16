@@ -2,28 +2,26 @@ import { type RenderResult, render } from "@testing-library/react";
 import userEvent, { type UserEvent } from "@testing-library/user-event";
 import type { ReactElement } from "react";
 import type { State } from "@/lib/wails";
-import { type AppStore, type NodeId, ROOT_NODE_ID, useAppStore } from "@/store/app-store";
+import { type AppStore, useAppStore } from "@/store/app-store";
 
 export interface StoreOptions {
   state?: State | null;
   ui?: Partial<
     Pick<
       AppStore,
-      | "selectedNodeId"
-      | "expandedNodeIds"
       | "error"
       | "openTaskId"
       | "transcripts"
       | "drafts"
-      | "openRepo"
       | "openStepTab"
       | "prDrafts"
-      | "newTaskFor"
+      | "newTaskOpen"
+      | "lastRepositoryId"
       | "historyOpen"
       | "openArchivedId"
       | "historyQuery"
       | "archivedNotice"
-      | "leftovers"
+      | "leftover"
       | "flashing"
       | "settingsOpen"
       | "settingsSection"
@@ -41,20 +39,18 @@ export function resetAppStore(options: StoreOptions = {}): void {
   useAppStore.setState({
     app: options.state ?? null,
     error: options.ui?.error ?? null,
-    selectedNodeId: options.ui?.selectedNodeId ?? ROOT_NODE_ID,
-    expandedNodeIds: options.ui?.expandedNodeIds ?? new Set<NodeId>([ROOT_NODE_ID]),
     openTaskId: options.ui?.openTaskId ?? null,
     transcripts: options.ui?.transcripts ?? {},
     drafts: options.ui?.drafts ?? {},
-    openRepo: options.ui?.openRepo ?? {},
     openStepTab: options.ui?.openStepTab ?? {},
     prDrafts: options.ui?.prDrafts ?? {},
-    newTaskFor: options.ui?.newTaskFor ?? null,
+    newTaskOpen: options.ui?.newTaskOpen ?? false,
+    lastRepositoryId: options.ui?.lastRepositoryId ?? null,
     historyOpen: options.ui?.historyOpen ?? false,
     openArchivedId: options.ui?.openArchivedId ?? null,
     historyQuery: options.ui?.historyQuery ?? "",
     archivedNotice: options.ui?.archivedNotice ?? null,
-    leftovers: options.ui?.leftovers ?? null,
+    leftover: options.ui?.leftover ?? null,
     flashing: options.ui?.flashing ?? new Set<string>(),
     settingsOpen: options.ui?.settingsOpen ?? false,
     settingsSection: options.ui?.settingsSection ?? "defaults",

@@ -12,7 +12,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorNotice } from "@/features/notice/Notice";
-import { OrphanPRs } from "@/features/task/OrphanPRs";
+import { OrphanPR } from "@/features/task/OrphanPRs";
+import { messageOf } from "@/lib/errors";
 import { api, type DeletePreview } from "@/lib/wails";
 import { deleteTask } from "@/store/actions";
 
@@ -20,7 +21,7 @@ const LOADING_WIDTHS = ["w-full", "w-3/4", "w-1/2"];
 
 // A task in the history has no worktree, no branch and no session left: the
 // deletion only takes the records with it.
-const NOTHING: DeletePreview = { sessionRunning: false, worktrees: [], branches: [], prs: [] };
+const NOTHING: DeletePreview = { sessionRunning: false, worktree: null, branch: null, pr: null };
 
 /** Preview is what the dialog knows about what the deletion would destroy. */
 interface Preview {
@@ -30,15 +31,6 @@ interface Preview {
 }
 
 const LOADING: Preview = { status: "loading", data: null, error: "" };
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
-/** count reads a number of things with the name of the thing, in English. */
-function count(n: number, singular: string, plural: string): string {
-  return `${n} ${n === 1 ? singular : plural}`;
-}
 
 /** Section is one group of what the deletion takes, inside the dialog. */
 function Section({ children }: { children: React.ReactNode }) {
@@ -70,7 +62,7 @@ export function DeleteTaskDialog({
   const [dismissed, setDismissed] = useState("");
 
   // The reading is worth doing when the dialog opens, not before: it goes to
-  // git in every worktree of the task. A late answer to a dialog the user has
+  // git in the worktree of the task. A late answer to a dialog the user has
   // already closed is dropped.
   useEffect(() => {
     if (!open) {
@@ -100,10 +92,6 @@ export function DeleteTaskDialog({
   }, [open, archived, taskId]);
 
   const data = preview.data;
-  const worktrees = data?.worktrees ?? [];
-  const branches = data?.branches ?? [];
-  const dirty = worktrees.filter((worktree) => worktree.dirty).length;
-  const unmerged = branches.filter((branch) => !branch.merged).length;
 
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
@@ -139,51 +127,36 @@ export function DeleteTaskDialog({
               </Section>
             )}
 
-            {worktrees.length > 0 && (
+            {data.worktree !== null && (
               <Section>
-                <p>
-                  {`${count(worktrees.length, "worktree", "worktrees")} will be removed`}
-                  {dirty > 0 && ` · ${dirty} with uncommitted changes`}
+                <p className="flex items-center gap-1.5">
+                  The worktree will be removed
+                  {data.worktree.dirty && (
+                    <Badge variant="secondary">{`${data.worktree.files} uncommitted`}</Badge>
+                  )}
                 </p>
-                <ul className="flex flex-col gap-1">
-                  {worktrees.map((worktree) => (
-                    <li key={worktree.repoPath} className="flex flex-col gap-0.5">
-                      <span className="flex items-center gap-1.5">
-                        <span className="min-w-0 truncate">{worktree.repository}</span>
-                        {worktree.dirty && (
-                          <Badge variant="secondary">{`${worktree.files} uncommitted`}</Badge>
-                        )}
-                      </span>
-                      <span className="font-mono text-xs break-all text-muted-foreground">
-                        {worktree.path}
-                      </span>
-                      {worktree.error !== "" && (
-                        <span className="text-xs text-destructive">{worktree.error}</span>
-                      )}
-                    </li>
-                  ))}
-                </ul>
+                <span className="font-mono text-xs break-all text-muted-foreground">
+                  {data.worktree.path}
+                </span>
+                {data.worktree.error !== "" && (
+                  <span className="text-xs text-destructive">{data.worktree.error}</span>
+                )}
               </Section>
             )}
 
-            {branches.length > 0 && (
+            {data.branch !== null && (
               <Section>
-                <p>
-                  {`${count(branches.length, "branch", "branches")} will be deleted`}
-                  {unmerged > 0 && ` · ${unmerged} not merged`}
+                <p className="flex items-center gap-1.5">
+                  The branch <span className="font-mono">{data.branch.name}</span> will be deleted
+                  {!data.branch.merged && <Badge variant="secondary">not merged</Badge>}
                 </p>
-                <ul className="flex flex-col gap-0.5">
-                  {branches.map((branch) => (
-                    <li key={branch.repoPath} className="flex items-center gap-1.5">
-                      <span className="font-mono text-xs break-all">{branch.name}</span>
-                      {!branch.merged && <Badge variant="secondary">not merged</Badge>}
-                    </li>
-                  ))}
-                </ul>
+                {data.branch.error !== "" && (
+                  <span className="text-xs text-destructive">{data.branch.error}</span>
+                )}
               </Section>
             )}
 
-            <OrphanPRs prs={data.prs ?? []} />
+            <OrphanPR pr={data.pr} />
           </>
         )}
 

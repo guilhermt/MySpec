@@ -18,23 +18,13 @@ import (
 	"github.com/guilhermt/myspec/internal/worktree"
 )
 
-func TestPathPutsAWorktreeUnderTheHiddenFolder(t *testing.T) {
+func TestAWorktreeLivesInTheDataDirectoryUnderItsRepository(t *testing.T) {
 	t.Parallel()
 
-	got := worktree.Path("/ws", "api", taskName)
-	want := filepath.Join("/ws", ".myspec", "worktrees", "api", taskName)
+	got := worktree.Path("/data", "dev", "web", taskName)
+	want := filepath.Join("/data", "worktrees", "dev", "web", taskName)
 	if got != want {
-		t.Errorf("Path(api) = %q, want %q", got, want)
-	}
-}
-
-func TestPathNamesTheWorkspaceRootItself(t *testing.T) {
-	t.Parallel()
-
-	got := worktree.Path("/ws", ".", taskName)
-	want := filepath.Join("/ws", ".myspec", "worktrees", "_root", taskName)
-	if got != want {
-		t.Errorf("Path(.) = %q, want %q", got, want)
+		t.Errorf("Path() = %q, want %q", got, want)
 	}
 }
 
@@ -50,7 +40,7 @@ func TestEnsureCreatesTheWorktreeOfATaskFromDev(t *testing.T) {
 		t.Fatalf("Ensure() = %v, want nil", err)
 	}
 
-	want := worktree.Path(f.ws, "api", taskName)
+	want := worktree.Path(f.dataDir, "dev", "web", taskName)
 	if wt.Path != want {
 		t.Errorf("Path = %q, want %q", wt.Path, want)
 	}
@@ -88,8 +78,7 @@ func TestEnsureFallsBackToMainWithoutADevBranch(t *testing.T) {
 func TestEnsureRefusesWithoutABaseBranch(t *testing.T) {
 	t.Parallel()
 
-	ws := t.TempDir()
-	f := newFixtureOf(t, ws, repoWithoutBase(t, ws))
+	f := newFixtureOf(t, repoWithoutBase(t))
 
 	_, err := f.svc.Ensure(t.Context(), f.task, f.repo, nil)
 	if !errors.Is(err, worktree.ErrNoBaseBranch) {
@@ -104,7 +93,7 @@ func TestEnsureRefusesAPathThatIsAlreadyThere(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, true)
 
-	path := worktree.Path(f.ws, "api", taskName)
+	path := worktree.Path(f.dataDir, "dev", "web", taskName)
 	if err := os.MkdirAll(path, 0o750); err != nil {
 		t.Fatalf("MkdirAll(%s) = %v, want nil", path, err)
 	}
@@ -208,7 +197,7 @@ func TestEnsureRegistersNothingWhenTheContextIsAlreadyDone(t *testing.T) {
 	if got := f.store.all(); len(got) != 0 {
 		t.Errorf("registry has %d worktrees, want none", len(got))
 	}
-	if exists(t, worktree.Path(f.ws, "api", taskName)) {
+	if exists(t, worktree.Path(f.dataDir, "dev", "web", taskName)) {
 		t.Error("the worktree folder is on disk, want nothing left behind")
 	}
 }
@@ -233,36 +222,11 @@ func TestEnsureLeavesNothingBehindWhenTheCreationIsCancelled(t *testing.T) {
 	if got := f.store.all(); len(got) != 0 {
 		t.Errorf("registry has %d worktrees, want none", len(got))
 	}
-	if exists(t, worktree.Path(f.ws, "api", taskName)) {
+	if exists(t, worktree.Path(f.dataDir, "dev", "web", taskName)) {
 		t.Error("the worktree folder is on disk, want nothing left behind")
 	}
 	if branchExists(t, f.repo.Path, taskName) {
 		t.Errorf("branch %s is still there", taskName)
-	}
-}
-
-func TestEnsureTellsARootRepositoryToIgnoreTheWorktrees(t *testing.T) {
-	t.Parallel()
-
-	ws := filepath.Join(t.TempDir(), "root")
-	gittest.Clone(t, gittest.Origin(t, true), ws)
-	f := newFixtureOf(t, ws, task.Repository{Rel: ".", Path: ws})
-
-	wt := f.ensure(t)
-	if want := worktree.Path(ws, ".", taskName); wt.Path != want {
-		t.Errorf("Path = %q, want %q", wt.Path, want)
-	}
-
-	exclude := filepath.Join(ws, ".git", "info", "exclude")
-	if got := strings.Count(read(t, exclude), ".myspec/"); got != 1 {
-		t.Errorf("info/exclude carries %d .myspec/ lines, want 1", got)
-	}
-
-	// A second task in the same repository finds the line already there.
-	f.task = newTask("task-2", ws, "other-task")
-	f.ensure(t)
-	if got := strings.Count(read(t, exclude), ".myspec/"); got != 1 {
-		t.Errorf("info/exclude carries %d .myspec/ lines after a second task, want 1", got)
 	}
 }
 
@@ -401,13 +365,13 @@ func TestCleanThrowsAwayEveryChangeButTheIgnoredFiles(t *testing.T) {
 	}
 }
 
-func TestRemoveAllTakesTheWorktreeAndItsBranch(t *testing.T) {
+func TestRemoveTakesTheWorktreeAndItsBranch(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, true)
 
 	wt := f.ensure(t)
-	if err := f.svc.RemoveAll(t.Context(), f.task.ID); err != nil {
-		t.Fatalf("RemoveAll() = %v, want nil", err)
+	if err := f.svc.Remove(t.Context(), f.task.ID); err != nil {
+		t.Fatalf("Remove() = %v, want nil", err)
 	}
 
 	if exists(t, wt.Path) {
@@ -419,12 +383,12 @@ func TestRemoveAllTakesTheWorktreeAndItsBranch(t *testing.T) {
 	if got := f.store.all(); len(got) != 0 {
 		t.Errorf("registry has %d worktrees, want none", len(got))
 	}
-	if _, ok := f.svc.Get(f.task.ID, f.repo.Path); ok {
+	if _, ok := f.svc.Get(f.task.ID); ok {
 		t.Error("Get() still answers, want the worktree forgotten")
 	}
 }
 
-func TestRemoveAllToleratesAFolderThatIsAlreadyGone(t *testing.T) {
+func TestRemoveToleratesAFolderThatIsAlreadyGone(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, true)
 
@@ -433,20 +397,20 @@ func TestRemoveAllToleratesAFolderThatIsAlreadyGone(t *testing.T) {
 		t.Fatalf("RemoveAll(%s) = %v, want nil", wt.Path, err)
 	}
 
-	if err := f.svc.RemoveAll(t.Context(), f.task.ID); err != nil {
-		t.Fatalf("RemoveAll() = %v, want nil", err)
+	if err := f.svc.Remove(t.Context(), f.task.ID); err != nil {
+		t.Fatalf("Remove() = %v, want nil", err)
 	}
 	if branchExists(t, f.repo.Path, taskName) {
 		t.Errorf("branch %s is still there", taskName)
 	}
 }
 
-func TestRemoveAllOfATaskWithoutWorktreesDoesNothing(t *testing.T) {
+func TestRemoveOfATaskWithoutAWorktreeDoesNothing(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, true)
 
-	if err := f.svc.RemoveAll(t.Context(), "task-without-worktrees"); err != nil {
-		t.Errorf("RemoveAll() = %v, want nil", err)
+	if err := f.svc.Remove(t.Context(), "task-without-a-worktree"); err != nil {
+		t.Errorf("Remove() = %v, want nil", err)
 	}
 }
 
@@ -458,22 +422,20 @@ func TestSyncLoadsTheRegistryOfTheGivenTasks(t *testing.T) {
 	// A service of its own, over the same registry, is what reopening the app
 	// looks like.
 	other := worktree.New(worktree.Deps{
-		Git:   git.New(git.Deps{Env: gittest.Env(t)}),
-		Store: f.store,
+		Git:     git.New(git.Deps{Env: gittest.Env(t)}),
+		Store:   f.store,
+		DataDir: f.dataDir,
 	})
 	if err := other.Sync(t.Context(), []string{f.task.ID}); err != nil {
 		t.Fatalf("Sync() = %v, want nil", err)
 	}
 
-	got, ok := other.Get(f.task.ID, f.repo.Path)
+	got, ok := other.Get(f.task.ID)
 	if !ok {
 		t.Fatal("Get() = false, want the worktree Sync loaded")
 	}
 	if diff := cmp.Diff(wt, got); diff != "" {
 		t.Errorf("Get() mismatch (-want +got):\n%s", diff)
-	}
-	if diff := cmp.Diff([]worktree.Worktree{wt}, other.List(f.task.ID)); diff != "" {
-		t.Errorf("List() mismatch (-want +got):\n%s", diff)
 	}
 }
 
@@ -482,8 +444,8 @@ func TestTwoTasksCreateTheirWorktreesInTheSameRepository(t *testing.T) {
 	f := newFixture(t, true)
 
 	tasks := []task.Task{
-		newTask("task-1", f.ws, "first-task"),
-		newTask("task-2", f.ws, "second-task"),
+		newTask("task-1", "first-task"),
+		newTask("task-2", "second-task"),
 	}
 	var wg sync.WaitGroup
 	errs := make([]error, len(tasks))
@@ -502,7 +464,7 @@ func TestTwoTasksCreateTheirWorktreesInTheSameRepository(t *testing.T) {
 		}
 	}
 	for _, tsk := range tasks {
-		path := worktree.Path(f.ws, "api", tsk.Name)
+		path := worktree.Path(f.dataDir, "dev", "web", tsk.Name)
 		if !exists(t, path) {
 			t.Errorf("%s is not on disk", path)
 		}
@@ -553,8 +515,7 @@ func TestBaseAppliesTheRuleAgainForAWorktreeRegisteredBeforeTheColumn(t *testing
 func TestBaseFailsForARepositoryWithNoBaseBranchLeft(t *testing.T) {
 	t.Parallel()
 
-	ws := t.TempDir()
-	f := newFixtureOf(t, ws, repoWithoutBase(t, ws))
+	f := newFixtureOf(t, repoWithoutBase(t))
 
 	wt := worktree.Worktree{TaskID: "task-1", RepoPath: f.repo.Path, Path: f.repo.Path, Branch: taskName}
 	if _, err := f.svc.Base(t.Context(), wt); !errors.Is(err, worktree.ErrNoBaseBranch) {
@@ -562,21 +523,11 @@ func TestBaseFailsForARepositoryWithNoBaseBranchLeft(t *testing.T) {
 	}
 }
 
-func TestAheadCountsTheCommitsOfTheWorktreeBranch(t *testing.T) {
+func TestGetAnswersNothingForATaskWithoutAWorktree(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, true)
 
-	wt := f.ensure(t)
-	got, err := f.svc.Ahead(t.Context(), wt, wt.Base)
-	if err != nil {
-		t.Fatalf("Ahead() = %v, want nil", err)
-	}
-	if got != 0 {
-		t.Errorf("Ahead() = %d, want 0 for a branch with nothing on it yet", got)
-	}
-
-	gittest.Commit(t, wt.Path, "one.go", "package one\n", "Add one")
-	if got, err = f.svc.Ahead(t.Context(), wt, wt.Base); err != nil || got != 1 {
-		t.Errorf("Ahead() = %d, %v, want 1, nil after a commit", got, err)
+	if _, ok := f.svc.Get("task-without-a-worktree"); ok {
+		t.Error("Get() = true, want nothing for a task with no worktree")
 	}
 }

@@ -17,8 +17,8 @@ internal/                todo o código Go
   prompts/               prompts padrão embutidos e os editados
   models/                modelos, esforços e padrões
   reviewmode/            quem revisa os steps e o padrão do app
-  workspace/             a área de trabalho aberta e as recentes
-  scan/                  encontra os repositórios de uma pasta
+  repository/            os repositórios cadastrados: identidade no GitHub, clone e filtro
+  upgrade/               leva as tasks de um banco com áreas de trabalho para os repositórios
   git/, gh/              rodam os binários; nada sabem de tasks
   editor/                abre o VS Code
   theme/                 preferência de tema
@@ -45,10 +45,10 @@ Só dois pacotes conhecem o Wails: `internal/app`, que compõe tudo e abre a jan
 
 Os pacotes de domínio se organizam em camadas, de baixo para cima:
 
-1. **Plataforma e binários**: `platform/*`, `git`, `gh`, `scan`, `editor`. Cada um sabe rodar uma coisa e nada sobre o produto.
+1. **Plataforma e binários**: `platform/*`, `git`, `gh`, `editor`. Cada um sabe rodar uma coisa e nada sobre o produto.
 2. **Estado**: `store`, com um repositório por tabela, e `models`, `reviewmode`, `theme`, `prompts`.
-3. **Domínio**: `task`, `session`, `worktree`, `review`, `workspace`, `attention`. Cada um é dono de um conceito, guarda o seu estado pelo `store` e reporta o que mudou por callbacks. Nenhum deles decide o que fazer com a mudança.
-4. **Orquestração**: `flow`. Ouve as mudanças de tasks e sessões, decide o que a etapa atual precisa e age: inicia a etapa seguinte, corrige um plano, inicia um step, conduz o review pelo agente, cria uma worktree, aprova, abre a etapa de PR, encerra um repositório.
+3. **Domínio**: `task`, `session`, `worktree`, `review`, `repository`, `attention`. Cada um é dono de um conceito, guarda o seu estado pelo `store` e reporta o que mudou por callbacks. Nenhum deles decide o que fazer com a mudança.
+4. **Orquestração**: `flow`. Ouve as mudanças de tasks e sessões, decide o que a etapa atual precisa e age: inicia a etapa seguinte, corrige um plano, inicia um step, conduz o review pelo agente, cria uma worktree, aprova, abre a etapa de PR, encerra a task.
 5. **Exposição**: `bindings` converte o domínio em DTOs e recebe as chamadas do frontend; `app` liga tudo e publica o estado.
 
 Dois pares merecem nota. `git` roda o binário e não sabe o que é uma task; `worktree` carrega a política do produto: onde as worktrees ficam, como nascem, quando estão limpas, como vão embora. `gh` espelha `git` e só lê; quem abre pull requests é o agente.
@@ -59,7 +59,7 @@ Dois pares merecem nota. `git` roda o binário e não sabe o que é uma task; `w
 
 ### O estado que o frontend vê
 
-`bindings.State` é tudo que a interface renderiza, produzido no Go e nunca derivado no frontend. `app.snapshot` lê as tasks, os resumos das sessões, os artefatos, os steps e os repositórios de cada task, deriva as situações a partir das mesmas leituras, para que todas as superfícies concordem, e converte tudo em DTOs. Cada mudança em qualquer service publica um snapshot inteiro; o frontend substitui o que tem.
+`bindings.State` é tudo que a interface renderiza, produzido no Go e nunca derivado no frontend. `app.snapshot` lê os repositórios cadastrados, as tasks, os resumos das sessões, os artefatos, os steps e a pull request de cada task, deriva as situações a partir das mesmas leituras, para que todas as superfícies concordem, e converte tudo em DTOs. Cada mudança em qualquer service publica um snapshot inteiro; o frontend substitui o que tem.
 
 Os enums dos DTOs viajam como `string`, com um comentário listando os valores, para que os bindings gerados não emitam enums TypeScript; o frontend estreita com funções `asX` em `lib/wails.ts`.
 
@@ -82,19 +82,19 @@ Quatro eventos tipados, registrados em `bindings.RegisterEvents` antes de `appli
 
 ### Fluxo de uma sessão
 
-`session.Service` é dono da conversa de cada chave `{task, stage}`, onde a stage é `prd`, `tech_spec`, `plan`, `one_shot`, `step:<n>`, `step_review:<n>`, `pr:<slug>` ou `pr_review:<slug>`. Ele inicia o processo por `claude`, consome o stream de eventos, monta o transcript, persiste as entradas no `store`, deriva o estado (trabalhando, esperando, precisa de permissão, precisa de resposta, pausada, erro) e avisa `flow` e `app` a cada mudança. O detalhe está em [sessions.md](./sessions.md).
+`session.Service` é dono da conversa de cada chave `{task, stage}`, onde a stage é `prd`, `tech_spec`, `plan`, `one_shot`, `step:<n>`, `step_review:<n>`, `pr` ou `pr_review`. Ele inicia o processo por `claude`, consome o stream de eventos, monta o transcript, persiste as entradas no `store`, deriva o estado (trabalhando, esperando, precisa de permissão, precisa de resposta, pausada, erro) e avisa `flow` e `app` a cada mudança. O detalhe está em [sessions.md](./sessions.md).
 
 ### Fluxo de uma etapa
 
-`task.Service` observa o diretório de artefatos de cada task com fsnotify e reporta quando um documento aparece. `flow.Service.Check` recebe esse aviso, e o de cada mudança de sessão, e enfileira uma avaliação por task, coalescendo rajadas. A avaliação lê a task e decide: uma etapa cujo documento existe e cuja sessão está ociosa avança; um plano inválido recebe uma correção; um step concluído dá lugar ao próximo; o último step commitado abre a etapa de PR. Na implementação e na PR a avaliação desce ao step que roda e ao repositório em questão. Num step no modo `Agent`, a avaliação do step conduz o loop entre o implementador e o revisor: pede uma passada, entrega um relatório com mudanças, pede o commit de um relatório limpo ou passa o step ao usuário, como descreve [sessions.md](./sessions.md#o-loop-do-review-de-step).
+`task.Service` observa o diretório de artefatos de cada task com fsnotify e reporta quando um documento aparece. `flow.Service.Check` recebe esse aviso, e o de cada mudança de sessão, e enfileira uma avaliação por task, coalescendo rajadas. A avaliação lê a task e decide: uma etapa cujo documento existe e cuja sessão está ociosa avança; um plano inválido recebe uma correção; um step concluído dá lugar ao próximo; o último step commitado abre a etapa de PR. Na implementação e na PR a avaliação desce ao step que roda e à pull request da task. Num step no modo `Agent`, a avaliação do step conduz o loop entre o implementador e o revisor: pede uma passada, entrega um relatório com mudanças, pede o commit de um relatório limpo ou passa o step ao usuário, como descreve [sessions.md](./sessions.md#o-loop-do-review-de-step).
 
 A ordem das etapas é do modo da task, `task.Mode`, gravado na criação: `prd, tech_spec, plan, implementation, pr` numa task Structured e `one_shot, implementation, pr` numa One-Shot. Avançar, voltar, descartar, apagar os artefatos a partir de uma etapa e listar as escolhas de modelo passam pelos métodos de `Mode`, então cada regra de "antes", "depois" e "a partir de" vale para os dois modos sem ramos próprios. Uma etapa com sessão tem o mesmo nome em `task`, `prompts`, `models` e na chave da sessão, e é por esse nome que `flow` acha o prompt e a escolha de modelo dela.
 
-A implementação de uma task One-Shot não tem caminho próprio em `flow`. A inspeção da task sintetiza, a partir de `one-shot.md`, um plano de um step, o número 1, no repositório da task, e `flow` o conduz como qualquer step: worktree, bloqueios, review manual ou pelo agente, commit, descarte, retomada e abertura da etapa de PR. O único ponto em que ele difere é `Task.StepPath`, que aponta o documento como o prompt do step.
+A implementação de uma task One-Shot não tem caminho próprio em `flow`. A inspeção da task sintetiza, a partir de `one-shot.md`, um plano de um step, o número 1, e `flow` o conduz como qualquer step: worktree, bloqueios, review manual ou pelo agente, commit, descarte, retomada e abertura da etapa de PR. O único ponto em que ele difere é `Task.StepPath`, que aponta o documento como o prompt do step.
 
 ### Banco e migrations
 
-`store.Open` abre o SQLite com uma conexão só, WAL e foreign keys, e aplica as migrations embutidas em `store/migrations/NNNN_nome.sql`, uma transação por arquivo, guardando a versão em `PRAGMA user_version`. Os testes usam `store.OpenMemory`. Ver [storage.md](./storage.md).
+`store.Open` abre o SQLite com uma conexão só, WAL e foreign keys, e aplica as migrations embutidas em `store/migrations/NNNN_nome.sql`, uma transação por arquivo, guardando a versão em `PRAGMA user_version`. A migration 0012 roda, na sua transação, o `store.Upgrade` que o app injeta, que leva as tasks de um banco com áreas de trabalho para os repositórios cadastrados; ver [storage.md](./storage.md). Os testes usam `store.OpenMemory`, que não passa nenhum.
 
 ## Frontend
 
@@ -104,7 +104,7 @@ A implementação de uma task One-Shot não tem caminho próprio em `flow`. A in
 
 ### Store
 
-`store/app-store.ts` é o store Zustand: o `State` recebido do Go, os transcripts por chave de sessão, os rascunhos, e o estado de interface que só o frontend conhece (nó selecionado, task aberta, aba de repositório, aba da conversa do step, histórico e configurações abertos, edição de prompt, navegação pendente). Ele exporta hooks seletores (`useTask`, `useTasksOf`, `useTranscript`, `useOpenTask`...) para que cada componente assine só a fatia que usa. O store importa só de `lib/`.
+`store/app-store.ts` é o store Zustand: o `State` recebido do Go, os transcripts por chave de sessão, os rascunhos, e o estado de interface que só o frontend conhece (task aberta, diálogo de criação aberto, último repositório usado, aba da conversa do step, histórico e configurações abertos, edição de prompt, navegação pendente). Ele exporta hooks seletores (`useTask`, `useFilteredTasks`, `useTranscript`, `useOpenTask`...) para que cada componente assine só a fatia que usa. O store importa só de `lib/`.
 
 `store/actions.ts` é o que os componentes chamam para agir: cada ação chama `api`, e um erro vira a mensagem do aviso de erro. Nenhuma ação toca o `State`: o estado novo sempre chega por `state:changed`. Os componentes nunca chamam `api` diretamente.
 
@@ -112,9 +112,9 @@ A implementação de uma task One-Shot não tem caminho próprio em `flow`. A in
 
 ### Features
 
-Cada diretório de `features/` cobre uma área: `workspace` e `tree` para a barra lateral, `welcome` para a tela sem área de trabalho, `task` e `task-create` para a task, `chat` para as conversas, `attention` para a seção de espera, `history`, `settings`, `models`, `review-mode` para o seletor de modo de review, `notice` e `theme`. A lógica de apresentação que não depende de React fica em arquivos `.ts` ao lado dos componentes (`status.ts`, `step-status.ts`, `repo-status.ts`, `stage-actions.ts`), testável sem renderizar.
+Cada diretório de `features/` cobre uma área: `sidebar` para a barra lateral, `home` para a área principal sem task aberta, `welcome` para a tela sem repositórios cadastrados, `migration` para a tela de migração recusada, `repositories` para a página de repositórios, `task` e `task-create` para a task, `chat` para as conversas, `attention` para a seção de espera, `history`, `settings`, `models`, `review-mode` para o seletor de modo de review, `notice` e `theme`. A lógica de apresentação que não depende de React fica em arquivos `.ts` ao lado dos componentes (`status.ts`, `step-status.ts`, `pr-status.ts`, `stage-actions.ts`), testável sem renderizar.
 
-`lib/` guarda o que o store e as features compartilham: repositórios, situações, etapas, modelos, modos de review, nomes de task, front matter.
+`lib/` guarda o que o store e as features compartilham: repositórios, pull requests, situações, etapas, modelos, modos de review, nomes de task, front matter.
 
 ### Estilo
 

@@ -40,7 +40,7 @@ func roundTripCases() map[string]session.Entry {
 				Input:               json.RawMessage(`{"command":"echo hi"}`),
 				Suggestions:         json.RawMessage(`[{"type":"addRules"}]`),
 				BlockedPath:         "/tmp/hello.txt",
-				DecisionReason:      "outside the workspace",
+				DecisionReason:      "outside the working directory",
 				SuppressAlwaysAllow: true,
 				DefaultToNo:         true,
 				Status:              session.PermissionDenied,

@@ -119,7 +119,7 @@ func TestInspectReadsTheStepReviewsFolder(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	created := f.create(t, "add-login", "")
+	created := f.create(t, "add-login")
 	if cached, _ := f.service.Artifacts(created.ID); cached.StepReports == nil {
 		t.Error("Artifacts().StepReports = nil, want an empty map for a new task")
 	}
@@ -143,7 +143,7 @@ func TestWatcherReportsTheStepReviewsFolder(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	created := f.create(t, "add-login", "")
+	created := f.create(t, "add-login")
 
 	writeStepReport(t, created, "1-review-1.md", stepReportFile(1, 1, "changes", "1. A test fails.\n"))
 	waitFor(t, "the report to be reported", func() bool {
@@ -164,7 +164,7 @@ func TestReadArtifactReturnsAStepReport(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	created := f.create(t, "add-login", "")
+	created := f.create(t, "add-login")
 	report := stepReportFile(1, 1, "clean", "Nothing to change.\n")
 	writeStepReport(t, created, "1-review-1.md", report)
 
@@ -181,7 +181,7 @@ func TestReadArtifactRefusesAnythingButTheStepReports(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	created := f.create(t, "add-login", "")
+	created := f.create(t, "add-login")
 
 	names := map[string]string{
 		"a path through the folder":   "step-reviews/../PRD.md",
@@ -204,7 +204,7 @@ func TestRemoveArtifactsFromTheImplementationThrowsAwayTheStepReviews(t *testing
 	t.Parallel()
 
 	f := newFixture(t)
-	created := f.create(t, "add-login", "")
+	created := f.create(t, "add-login")
 	writeStepReport(t, created, "1-review-1.md", stepReportFile(1, 1, "clean", "Nothing to change.\n"))
 
 	if err := f.service.RemoveArtifacts(t.Context(), created.ID, task.StageImplementation); err != nil {
@@ -223,7 +223,7 @@ func TestClearStepReviewForgetsTheReviewOfOneStep(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	created := f.create(t, "add-login", "")
+	created := f.create(t, "add-login")
 	writeStepReport(t, created, "1-review-1.md", stepReportFile(1, 1, "changes", "1. A test fails.\n"))
 	writeStepReport(t, created, "1-review-2.md", stepReportFile(1, 2, "changes", "1. A test fails.\n"))
 	writeStepReport(t, created, "12-review-1.md", stepReportFile(12, 1, "clean", "Nothing to change.\n"))

@@ -12,13 +12,14 @@ import (
 // New builds a Service from deps.
 func New(deps Deps) *Service {
 	s := &Service{
-		tasks:     deps.Tasks,
-		sessions:  deps.Sessions,
-		worktrees: deps.Worktrees,
-		review:    deps.Review,
-		gh:        deps.GH,
-		log:       deps.Log,
-		onChange:  deps.OnChange,
+		tasks:        deps.Tasks,
+		sessions:     deps.Sessions,
+		worktrees:    deps.Worktrees,
+		repositories: deps.Repositories,
+		review:       deps.Review,
+		gh:           deps.GH,
+		log:          deps.Log,
+		onChange:     deps.OnChange,
 
 		renderPrompt: deps.RenderPrompt,
 		locks:        map[string]*taskLock{},
@@ -78,8 +79,8 @@ func (s *Service) evaluate(ctx context.Context, id string) {
 		s.evaluateStep(ctx, t)
 		return
 	}
-	// The PR stage has no conversation of its own either: each repository has
-	// one, and what it needs is decided on its pull request.
+	// The PR stage has one conversation of its own at a time, and what it needs
+	// is decided on its pull request.
 	if t.Stage == task.StagePR {
 		s.evaluatePR(ctx, t)
 		return
@@ -106,7 +107,7 @@ func (s *Service) evaluate(ctx context.Context, id string) {
 		if sum.Corrections >= MaxCorrections {
 			return
 		}
-		message := correctionMessage(t.StepsDir(), a.Plan.Problems, s.tasks.Repositories(t))
+		message := correctionMessage(t.StepsDir(), a.Plan.Problems)
 		if err := s.sessions.SendCorrection(ctx, key, message); err != nil {
 			s.log.Error("send plan correction failed", "task", id, "stage", string(t.Stage), "error", err)
 		}
@@ -159,7 +160,11 @@ func (s *Service) start(ctx context.Context, t task.Task, restarted bool) error 
 	if err != nil {
 		return err
 	}
-	return s.sessions.Start(ctx, TaskInfo(t, a, s.tasks.Repositories(t)), restarted)
+	repo, err := s.repositoryOf(t)
+	if err != nil {
+		return err
+	}
+	return s.sessions.Start(ctx, TaskInfo(t, a, repo), restarted)
 }
 
 // Back reopens a finished stage of a task, throwing away the conversations and
@@ -203,7 +208,11 @@ func (s *Service) Back(ctx context.Context, id string, target task.Stage) error 
 	if err != nil {
 		return err
 	}
-	return s.sessions.Open(ctx, TaskInfo(reopened, a, s.tasks.Repositories(reopened)))
+	repo, err := s.repositoryOf(reopened)
+	if err != nil {
+		return err
+	}
+	return s.sessions.Open(ctx, TaskInfo(reopened, a, repo))
 }
 
 // revisitable reports whether a task of a mode can go back to a stage: the PRD
@@ -299,7 +308,12 @@ func (s *Service) Sync(ctx context.Context) {
 				s.log.Error("inspect artifacts failed", "task", t.ID, "stage", string(t.Stage), "error", err)
 				continue
 			}
-			if err := s.sessions.Open(ctx, TaskInfo(t, a, s.tasks.Repositories(t))); err != nil {
+			repo, err := s.repositoryOf(t)
+			if err != nil {
+				s.log.Error("open session failed", "task", t.ID, "stage", string(t.Stage), "error", err)
+				continue
+			}
+			if err := s.sessions.Open(ctx, TaskInfo(t, a, repo)); err != nil {
 				s.log.Error("open session failed", "task", t.ID, "stage", string(t.Stage), "error", err)
 			}
 		case t.Stage == task.StageImplementation:
@@ -324,10 +338,8 @@ func (s *Service) Close() {
 		if l.cancel != nil {
 			l.cancel()
 		}
-		for _, w := range l.repos {
-			if w.cancel != nil {
-				w.cancel()
-			}
+		if l.pr != nil && l.pr.cancel != nil {
+			l.pr.cancel()
 		}
 	}
 }

@@ -1,45 +1,45 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "@/lib/wails";
 import {
+  addRepository,
   answerPermission,
   answerQuestion,
-  approveRepo,
+  approvePR,
   approveStep,
   backToStage,
+  changeRepositoryPath,
   cleanAndStartStep,
-  closeRepo,
+  closeTask,
   continueStage,
   createTask,
   deleteTask,
   discardDraft,
   discardStage,
   discardStep,
-  dismissNotice,
   interrupt,
   loadTranscript,
   openExternal,
   openFileInEditor,
-  openFolderDialog,
   openInEditor,
-  openPath,
   openPR,
   pause,
   refreshPR,
   removePending,
-  removeRecent,
+  removeRepository,
   resume,
   retry,
-  retryRepo,
+  retryPR,
   retryStep,
   reviewAgain,
   reviewStepMyself,
   sendMessage,
+  setRepositoryFilter,
   setReviewMode,
   setReviewModeDefault,
   setStepReviewMode,
   setTheme,
 } from "@/store/actions";
-import { repoKey, useAppStore } from "@/store/app-store";
+import { useAppStore } from "@/store/app-store";
 import { resetAppStore } from "@/test/render";
 import { makeEntry, makeTranscript } from "@/test/wails-mock";
 
@@ -49,42 +49,57 @@ beforeEach(() => {
 
 describe("actions", () => {
   it("delegate to the matching binding", async () => {
-    await openPath("/home/dev/projects");
-    await openFolderDialog();
-    await removeRecent("/home/dev/labs");
-    await dismissNotice();
+    await removeRepository("repo-1");
+    await setRepositoryFilter("repo-2");
     await setTheme("dark");
     await setReviewModeDefault("agent");
 
-    expect(api.openPath).toHaveBeenCalledWith("/home/dev/projects");
-    expect(api.openFolderDialog).toHaveBeenCalledOnce();
-    expect(api.removeRecent).toHaveBeenCalledWith("/home/dev/labs");
-    expect(api.dismissNotice).toHaveBeenCalledOnce();
+    expect(api.removeRepository).toHaveBeenCalledWith("repo-1");
+    expect(api.setRepositoryFilter).toHaveBeenCalledWith("repo-2");
     expect(api.setTheme).toHaveBeenCalledWith("dark");
     expect(api.setReviewModeDefault).toHaveBeenCalledWith("agent");
     expect(useAppStore.getState().error).toBeNull();
   });
 
   it("stores the message of a rejected binding", async () => {
-    vi.mocked(api.openPath).mockRejectedValueOnce(new Error("open failed"));
+    vi.mocked(api.removeRepository).mockRejectedValueOnce(new Error("remove failed"));
 
-    await openPath("/home/dev/gone");
+    await removeRepository("repo-1");
 
-    expect(useAppStore.getState().error).toBe("open failed");
+    expect(useAppStore.getState().error).toBe("remove failed");
   });
 
   it("stores a rejection that is not an Error", async () => {
-    vi.mocked(api.dismissNotice).mockRejectedValueOnce("boom");
+    vi.mocked(api.setRepositoryFilter).mockRejectedValueOnce("boom");
 
-    await dismissNotice();
+    await setRepositoryFilter("repo-1");
 
     expect(useAppStore.getState().error).toBe("boom");
   });
 
   it("leaves the snapshot untouched", async () => {
-    await openPath("/home/dev/projects");
+    await setRepositoryFilter("repo-1");
 
     expect(useAppStore.getState().app).toBeNull();
+  });
+});
+
+// The screen that asked shows the refusal where the user is, so these two
+// reject instead of filling the banner.
+describe("adding and moving a repository", () => {
+  it("delegate to the matching binding", async () => {
+    await addRepository();
+    await changeRepositoryPath("repo-1");
+
+    expect(api.addRepository).toHaveBeenCalledOnce();
+    expect(api.changeRepositoryPath).toHaveBeenCalledWith("repo-1");
+  });
+
+  it("reject instead of using the banner", async () => {
+    vi.mocked(api.addRepository).mockRejectedValueOnce(new Error("not a git repository"));
+
+    await expect(addRepository()).rejects.toThrow("not a git repository");
+    expect(useAppStore.getState().error).toBeNull();
   });
 });
 
@@ -112,14 +127,14 @@ describe("task actions", () => {
     await setStepReviewMode("task-1", 2, "manual");
     await reviewStepMyself("task-1");
     await openFileInEditor("task-1", "src/login.ts");
-    await approveRepo("task-1", "/repo/web");
-    await reviewAgain("task-1", "/repo/web");
-    await retryRepo("task-1", "/repo/web");
-    await refreshPR("task-1", "/repo/web");
-    await closeRepo("task-1", "/repo/web");
+    await approvePR("task-1");
+    await reviewAgain("task-1");
+    await retryPR("task-1");
+    await refreshPR("task-1");
+    await closeTask("task-1");
 
     expect(api.deleteTask).toHaveBeenCalledWith("task-1");
-    expect(api.closeRepo).toHaveBeenCalledWith("task-1", "/repo/web");
+    expect(api.closeTask).toHaveBeenCalledWith("task-1");
     expect(api.sendMessage).toHaveBeenCalledWith("task-1", "prd", "go on");
     expect(api.removePending).toHaveBeenCalledWith("task-1", "prd", "entry-1");
     expect(api.interrupt).toHaveBeenCalledWith("task-1", "prd");
@@ -143,68 +158,66 @@ describe("task actions", () => {
     expect(api.retryStep).toHaveBeenCalledWith("task-1");
     expect(api.cleanAndStartStep).toHaveBeenCalledWith("task-1");
     expect(api.discardStep).toHaveBeenCalledWith("task-1", true);
-    expect(api.openInEditor).toHaveBeenCalledWith("task-1", "");
+    expect(api.openInEditor).toHaveBeenCalledWith("task-1");
     expect(api.approveStep).toHaveBeenCalledWith("task-1");
     expect(api.setReviewMode).toHaveBeenCalledWith("task-1", "agent");
     expect(api.setStepReviewMode).toHaveBeenCalledWith("task-1", 2, "manual");
     expect(api.reviewStepMyself).toHaveBeenCalledWith("task-1");
-    expect(api.openFileInEditor).toHaveBeenCalledWith("task-1", "", "src/login.ts");
-    expect(api.approveRepo).toHaveBeenCalledWith("task-1", "/repo/web");
-    expect(api.reviewAgain).toHaveBeenCalledWith("task-1", "/repo/web");
-    expect(api.retryRepo).toHaveBeenCalledWith("task-1", "/repo/web");
-    expect(api.refreshPR).toHaveBeenCalledWith("task-1", "/repo/web");
+    expect(api.openFileInEditor).toHaveBeenCalledWith("task-1", "src/login.ts");
+    expect(api.approvePR).toHaveBeenCalledWith("task-1");
+    expect(api.reviewAgain).toHaveBeenCalledWith("task-1");
+    expect(api.retryPR).toHaveBeenCalledWith("task-1");
+    expect(api.refreshPR).toHaveBeenCalledWith("task-1");
     expect(useAppStore.getState().error).toBeNull();
   });
 
   // The draft is the text of the user; it goes away once it has been sent, or
   // when the user throws it away.
   it("clear the pull request draft once it is out of the hands of the user", async () => {
-    useAppStore.getState().setPrDraft("task-1", "/repo/web", { title: "Log in", body: "why" });
-    useAppStore.getState().setPrDraft("task-1", "/repo/api", { title: "Log in", body: "why" });
+    useAppStore.getState().setPrDraft("task-1", { title: "Log in", body: "why" });
+    useAppStore.getState().setPrDraft("task-2", { title: "Log in", body: "why" });
 
-    await openPR("task-1", "/repo/web", "Log in", "why");
+    await openPR("task-1", "Log in", "why");
 
-    expect(api.openPR).toHaveBeenCalledWith("task-1", "/repo/web", "Log in", "why");
-    expect(useAppStore.getState().prDrafts[repoKey("task-1", "/repo/web")]).toBeUndefined();
+    expect(api.openPR).toHaveBeenCalledWith("task-1", "Log in", "why");
+    expect(useAppStore.getState().prDrafts["task-1"]).toBeUndefined();
 
-    await discardDraft("task-1", "/repo/api");
+    await discardDraft("task-2");
 
-    expect(api.discardDraft).toHaveBeenCalledWith("task-1", "/repo/api");
-    expect(useAppStore.getState().prDrafts[repoKey("task-1", "/repo/api")]).toBeUndefined();
+    expect(api.discardDraft).toHaveBeenCalledWith("task-2");
+    expect(useAppStore.getState().prDrafts["task-2"]).toBeUndefined();
   });
 
   it("keeps the draft when opening the pull request fails", async () => {
     const draft = { title: "Log in", body: "why" };
-    useAppStore.getState().setPrDraft("task-1", "/repo/web", draft);
+    useAppStore.getState().setPrDraft("task-1", draft);
     vi.mocked(api.openPR).mockRejectedValueOnce(new Error("the draft is empty"));
 
-    await openPR("task-1", "/repo/web", "Log in", "why");
+    await openPR("task-1", "Log in", "why");
 
     expect(useAppStore.getState().error).toBe("the draft is empty");
-    expect(useAppStore.getState().prDrafts[repoKey("task-1", "/repo/web")]).toEqual(draft);
+    expect(useAppStore.getState().prDrafts["task-1"]).toEqual(draft);
   });
 
   it("keeps what the deletion could not remove from disk", async () => {
     const leftover = {
-      repository: "web",
-      repoPath: "/repo/web",
-      path: "/worktrees/add-login-web",
+      path: "/worktrees/dev/web/add-login",
       branch: "add-login",
       error: "permission denied",
     };
-    vi.mocked(api.deleteTask).mockResolvedValueOnce({ leftovers: [leftover] });
+    vi.mocked(api.deleteTask).mockResolvedValueOnce({ leftover });
 
     await deleteTask("task-1");
 
-    expect(useAppStore.getState().leftovers).toEqual([leftover]);
+    expect(useAppStore.getState().leftover).toEqual(leftover);
   });
 
   it("says nothing when the deletion left nothing behind", async () => {
-    vi.mocked(api.deleteTask).mockResolvedValueOnce({ leftovers: null });
+    vi.mocked(api.deleteTask).mockResolvedValueOnce({ leftover: null });
 
     await deleteTask("task-1");
 
-    expect(useAppStore.getState().leftovers).toBeNull();
+    expect(useAppStore.getState().leftover).toBeNull();
   });
 
   it("reports a failed task action in the banner", async () => {
@@ -222,7 +235,7 @@ describe("createTask", () => {
 
     const id = await createTask({
       name: "add-login",
-      repoPath: "",
+      repositoryId: "repo-1",
       initialContext: "a login",
       mode: "",
       models: [],
@@ -238,7 +251,7 @@ describe("createTask", () => {
     await expect(
       createTask({
         name: "add-login",
-        repoPath: "",
+        repositoryId: "repo-1",
         initialContext: "a login",
         mode: "",
         models: [],

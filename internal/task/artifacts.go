@@ -19,7 +19,7 @@ type Artifacts struct {
 	TechSpec bool // tech-spec.md exists with content
 	OneShot  bool // one-shot.md exists with content
 	Plan     Plan
-	PR       map[string]RepoArtifacts // by repository slug; never nil
+	PR       PRArtifacts // what the pr folder holds
 
 	StepReports map[int][]ReviewReport // by step number; never nil
 }
@@ -54,7 +54,7 @@ func (a Artifacts) Has(kind ArtifactKind) bool {
 	case ArtifactOneShot:
 		return a.OneShot
 	case ArtifactPR:
-		return len(a.PR) > 0
+		return a.PR.Draft.Present || len(a.PR.Reports) > 0
 	case ArtifactStepReview:
 		return len(a.StepReports) > 0
 	default:

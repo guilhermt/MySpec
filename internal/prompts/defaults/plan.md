@@ -8,11 +8,7 @@ Read both files:
 - `{{prd_path}}`
 - `{{tech_spec_path}}`
 
-Understand them fully. Then explore the code to understand the current state of the files that will be affected. The repositories this task touches, as paths relative to the working directory, are:
-
-{{repositories}}
-
-Every step belongs to exactly one of them.
+Understand them fully. Then explore the code to understand the current state of the files that will be affected. This task changes `{{repository}}`, whose clone is the working directory of this session; every step changes it.
 
 ## Phase 1: Plan the Step Breakdown
 
@@ -21,7 +17,7 @@ Discuss the step breakdown with the user. Ask questions **one at a time** to res
 Key principles for step division:
 
 - **Code must compile after each step.** Every step must leave the codebase in a valid state — no type errors, no missing imports, no unused variables, no broken builds. This is the primary constraint.
-- **One repository, one commit.** Each step belongs to a single repository, named in its metadata header, and becomes exactly one commit there. Work that spans two repositories is two steps.
+- **One step, one commit.** Each step becomes exactly one commit.
 - **Steps are not features.** A step doesn't need to deliver a complete user-facing capability. It's a unit of code change that compiles cleanly and can be committed on its own.
 - **Follow a natural dependency order.** Typically: database/schema first, then backend/API, then frontend — but adapt to the project. The point is that each step should only depend on work from previous steps, never on future steps.
 - **Right-size the steps.** Too granular creates unnecessary overhead. Too large makes them hard to implement in one pass. Use judgment — a step should be something an agent can implement in a single focused session.
@@ -31,7 +27,7 @@ When you and the user agree on the breakdown, proceed to write the step files.
 
 ## Phase 2: Write Step Files
 
-Write the step files to `{{steps_dir}}`, creating the directory if it doesn't exist. Write nothing else in `{{artifacts_dir}}` and do not create a `planning/` folder in any repository.
+Write the step files to `{{steps_dir}}`, creating the directory if it doesn't exist. Write nothing else in `{{artifacts_dir}}` and do not create a `planning/` folder in the repository.
 
 Write one file per step, numbered in order: `1-short-description.md`, `2-short-description.md`, etc. Use lowercase with hyphens for the description part. Write **all** the files in a single response, once the breakdown is agreed, and end that response by listing them. Do not write some of the files and stop to ask a question.
 
@@ -50,10 +46,6 @@ Each step file will be the **entire prompt** given to a fresh implementation age
 Every step file must follow this structure:
 
 ```markdown
----
-repository: [one of the repositories listed above, exactly as written]
----
-
 # Step [N]: [Step Title]
 
 ## Context
@@ -92,7 +84,7 @@ After implementing the changes:
 4. Repeat step 3 until the user approves.
 ```
 
-The metadata header at the top is read by the tool that runs the steps: `repository` must be one of the repositories listed above, written exactly the same way, and nothing else goes in the header. There is no status line and no commit step: the tool tracks the status and commits after the user approves.
+A step file has no metadata header: it starts with the title. There is no status line and no commit step: the tool tracks the status and commits after the user approves.
 
 Keep step files lean. Their job is to point the agent to the right documents, define the boundaries of the work, and establish the review workflow — nothing more.
 
@@ -105,7 +97,6 @@ Before presenting the step files to the user, verify:
 4. Each step file is self-contained and works as a standalone prompt
 5. No step file duplicates content from the PRD or tech spec — only references it
 6. The file references in each step use the correct paths
-7. Every step file starts with the metadata header and names one of the repositories listed above
 
 After writing all step files, list them for the user with a brief summary of what each step covers.
 

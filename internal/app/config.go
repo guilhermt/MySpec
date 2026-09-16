@@ -8,6 +8,5 @@ type Config struct {
 	Assets  fs.FS    // the built frontend
 	Icon    []byte   // the application icon
 	Args    []string // os.Args[1:]
-	Cwd     string
 	Version string
 }

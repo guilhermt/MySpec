@@ -1,7 +1,7 @@
 import * as AttentionService from "@bindings/attentionservice";
 import type {
   ActionEntry,
-  ArchivedRepo,
+  ArchivedPR,
   ArchivedStep,
   ArchivedTask,
   AssistantEntry,
@@ -15,7 +15,9 @@ import type {
   ErrorEntry,
   Leftover,
   MarkerEntry,
-  Notice,
+  Migration,
+  MigrationCase,
+  MigrationTask,
   PermissionEntry,
   Place,
   PlanProblem,
@@ -24,12 +26,11 @@ import type {
   PRPreview,
   PRReport,
   Prompt,
+  PullRequest,
   Question,
   QuestionEntry,
   QuestionOption,
-  Recent,
-  Repo,
-  RepoPR,
+  Repository,
   Review,
   ReviewFile,
   Situation,
@@ -46,17 +47,17 @@ import type {
   Transcript,
   TranscriptEvent,
   UserEntry,
-  Workspace,
   WorktreePreview,
 } from "@bindings/models";
+import * as RepositoryService from "@bindings/repositoryservice";
 import * as SettingsService from "@bindings/settingsservice";
+import * as StateService from "@bindings/stateservice";
 import * as TaskService from "@bindings/taskservice";
-import * as WorkspaceService from "@bindings/workspaceservice";
 import { Browser, Events } from "@wailsio/runtime";
 
 export type {
   ActionEntry,
-  ArchivedRepo,
+  ArchivedPR,
   ArchivedStep,
   ArchivedTask,
   AssistantEntry,
@@ -70,7 +71,9 @@ export type {
   ErrorEntry,
   Leftover,
   MarkerEntry,
-  Notice,
+  Migration,
+  MigrationCase,
+  MigrationTask,
   PermissionEntry,
   Place,
   PlanProblem,
@@ -79,12 +82,11 @@ export type {
   PRPreview,
   PRReport,
   Prompt,
+  PullRequest,
   Question,
   QuestionEntry,
   QuestionOption,
-  Recent,
-  Repo,
-  RepoPR,
+  Repository,
   Review,
   ReviewFile,
   Situation,
@@ -101,12 +103,10 @@ export type {
   Transcript,
   TranscriptEvent,
   UserEntry,
-  Workspace,
   WorktreePreview,
 };
 
 export type ThemePreference = "system" | "light" | "dark";
-export type NoticeReason = "not_found" | "not_directory" | "not_readable" | "last_recent_missing";
 /** TaskMode is how a task is conducted: the structured flow, or One-Shot. */
 export type TaskMode = "structured" | "one_shot";
 export type TaskStage = "prd" | "tech_spec" | "plan" | "one_shot" | "implementation" | "pr";
@@ -147,8 +147,8 @@ export type StepStatus =
   | "review_failed"
   | "committing"
   | "done";
-/** RepoStatus is where one repository of a task stands in the PR stage. */
-export type RepoStatus =
+/** PRStatus is where the pull request of a task stands in the PR stage. */
+export type PRStatus =
   | "preparing"
   | "blocked"
   | "drafting"
@@ -164,10 +164,9 @@ export type RepoStatus =
   | "merged"
   | "pr_closed"
   | "closing"
-  | "closed"
-  | "skipped";
+  | "closed";
 
-/** CloseOutcome is what became of one part of the closing of a repository. */
+/** CloseOutcome is what became of one part of the closing of a task. */
 export type CloseOutcome = "done" | "skipped" | "failed";
 
 /** CloseSkipReason is why one part of the closing was left alone. */
@@ -180,7 +179,7 @@ export type CloseSkipReason =
   | "diverged"
   | "up_to_date";
 
-/** PRBlockReason is why the PR stage of a repository cannot go on. */
+/** PRBlockReason is why the PR stage of a task cannot go on. */
 export type PRBlockReason =
   | "gh_missing"
   | "gh_unauthenticated"
@@ -198,7 +197,7 @@ export type BlockReason =
   | "path_exists"
   | "branch_exists"
   | "git_failed"
-  | "no_repository";
+  | "clone_missing";
 export type SessionStatus =
   | "working"
   | "waiting"
@@ -258,8 +257,7 @@ export type SituationKind =
   | "draft"
   | "findings"
   | "changes_review"
-  | "merge"
-  | "nothing_to_publish";
+  | "merge";
 
 /** SituationGroup is how urgent a situation is, from the most urgent. */
 export type SituationGroup = "error" | "waiting" | "closing";
@@ -268,13 +266,16 @@ export type SituationGroup = "error" | "waiting" | "closing";
 export type SituationForm = "" | "review" | "staged" | "approve" | "merge" | "close";
 
 /** PlaceKind is the part of a task a situation is in. */
-export type PlaceKind = "stage" | "step" | "step_review" | "repo";
+export type PlaceKind = "stage" | "step" | "step_review" | "pr";
 
 /** ReviewMode is who reviews the steps: the user, or an agent. */
 export type ReviewMode = "manual" | "agent";
 
 /** ReviewFallback is why a step that started under the agent review is reviewed by the user; "" while its mode holds. */
 export type ReviewFallback = "" | "taken_over" | "rounds_exhausted" | "commit_failed";
+
+/** MigrationCaseKind is what kept a task from being carried over by the migration. */
+export type MigrationCaseKind = "root_task" | "no_origin" | "name_conflict";
 
 /** sessionKey identifies one conversation: a task and the stage it belongs to. */
 export function sessionKey(taskId: string, stage: string): string {
@@ -289,18 +290,6 @@ export function asThemePreference(value: string): ThemePreference {
       return value;
     default:
       return "system";
-  }
-}
-
-export function asNoticeReason(value: string): NoticeReason {
-  switch (value) {
-    case "not_found":
-    case "not_directory":
-    case "not_readable":
-    case "last_recent_missing":
-      return value;
-    default:
-      return "not_readable";
   }
 }
 
@@ -381,7 +370,7 @@ export function asStepStatus(value: string): StepStatus {
   }
 }
 
-export function asRepoStatus(value: string): RepoStatus {
+export function asPRStatus(value: string): PRStatus {
   switch (value) {
     case "preparing":
     case "blocked":
@@ -399,7 +388,6 @@ export function asRepoStatus(value: string): RepoStatus {
     case "pr_closed":
     case "closing":
     case "closed":
-    case "skipped":
       return value;
     default:
       return "preparing";
@@ -477,7 +465,7 @@ export function asBlockReason(value: string): BlockReason {
     case "path_exists":
     case "branch_exists":
     case "git_failed":
-    case "no_repository":
+    case "clone_missing":
       return value;
     default:
       return "git_failed";
@@ -604,7 +592,6 @@ export function asSituationKind(value: string): SituationKind {
     case "findings":
     case "changes_review":
     case "merge":
-    case "nothing_to_publish":
       return value;
     default:
       return "reply";
@@ -641,7 +628,7 @@ export function asPlaceKind(value: string): PlaceKind {
     case "stage":
     case "step":
     case "step_review":
-    case "repo":
+    case "pr":
       return value;
     default:
       return "stage";
@@ -670,12 +657,23 @@ export function asReviewFallback(value: string): ReviewFallback {
   }
 }
 
+export function asMigrationCaseKind(value: string): MigrationCaseKind {
+  switch (value) {
+    case "root_task":
+    case "no_origin":
+    case "name_conflict":
+      return value;
+    default:
+      return "root_task";
+  }
+}
+
 export const api = {
-  getState: (): Promise<State> => WorkspaceService.GetState(),
-  openPath: (path: string): Promise<void> => WorkspaceService.OpenPath(path),
-  openFolderDialog: (): Promise<void> => WorkspaceService.OpenFolderDialog(),
-  removeRecent: (path: string): Promise<void> => WorkspaceService.RemoveRecent(path),
-  dismissNotice: (): Promise<void> => WorkspaceService.DismissNotice(),
+  getState: (): Promise<State> => StateService.GetState(),
+  addRepository: (): Promise<void> => RepositoryService.AddRepository(),
+  changeRepositoryPath: (id: string): Promise<void> => RepositoryService.ChangeRepositoryPath(id),
+  removeRepository: (id: string): Promise<void> => RepositoryService.RemoveRepository(id),
+  setRepositoryFilter: (id: string): Promise<void> => RepositoryService.SetRepositoryFilter(id),
   setTheme: (preference: ThemePreference): Promise<void> => SettingsService.SetTheme(preference),
   setModelDefault: (stage: ModelStage, model: string, effort: string): Promise<void> =>
     SettingsService.SetModelDefault(stage, model, effort),
@@ -739,24 +737,17 @@ export const api = {
     TaskService.SetStepReviewMode(taskId, step, mode),
   reviewStepMyself: (taskId: string): Promise<void> => TaskService.ReviewStepMyself(taskId),
   approveStep: (taskId: string): Promise<void> => TaskService.ApproveStep(taskId),
-  openPR: (taskId: string, repoPath: string, title: string, body: string): Promise<void> =>
-    TaskService.OpenPR(taskId, repoPath, title, body),
-  approveRepo: (taskId: string, repoPath: string): Promise<void> =>
-    TaskService.ApproveRepo(taskId, repoPath),
-  reviewAgain: (taskId: string, repoPath: string): Promise<void> =>
-    TaskService.ReviewAgain(taskId, repoPath),
-  discardDraft: (taskId: string, repoPath: string): Promise<void> =>
-    TaskService.DiscardDraft(taskId, repoPath),
-  retryRepo: (taskId: string, repoPath: string): Promise<void> =>
-    TaskService.RetryRepo(taskId, repoPath),
-  refreshPR: (taskId: string, repoPath: string): Promise<void> =>
-    TaskService.RefreshPR(taskId, repoPath),
-  closeRepo: (taskId: string, repoPath: string): Promise<void> =>
-    TaskService.CloseRepo(taskId, repoPath),
-  openInEditor: (taskId: string, repoPath: string): Promise<void> =>
-    TaskService.OpenInEditor(taskId, repoPath),
-  openFileInEditor: (taskId: string, repoPath: string, path: string): Promise<void> =>
-    TaskService.OpenFileInEditor(taskId, repoPath, path),
+  openPR: (taskId: string, title: string, body: string): Promise<void> =>
+    TaskService.OpenPR(taskId, title, body),
+  approvePR: (taskId: string): Promise<void> => TaskService.ApprovePR(taskId),
+  reviewAgain: (taskId: string): Promise<void> => TaskService.ReviewAgain(taskId),
+  discardDraft: (taskId: string): Promise<void> => TaskService.DiscardDraft(taskId),
+  retryPR: (taskId: string): Promise<void> => TaskService.RetryPR(taskId),
+  refreshPR: (taskId: string): Promise<void> => TaskService.RefreshPR(taskId),
+  closeTask: (taskId: string): Promise<void> => TaskService.CloseTask(taskId),
+  openInEditor: (taskId: string): Promise<void> => TaskService.OpenInEditor(taskId),
+  openFileInEditor: (taskId: string, path: string): Promise<void> =>
+    TaskService.OpenFileInEditor(taskId, path),
   openExternal: (url: string): Promise<void> => Browser.OpenURL(url),
 
   viewSituation: (id: string): Promise<void> => AttentionService.ViewSituation(id),

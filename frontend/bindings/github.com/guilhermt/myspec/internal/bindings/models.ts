@@ -17,19 +17,12 @@ export interface ActionEntry {
 }
 
 /**
- * ArchivedRepo is one repository an archived task touched, with its pull
- * request.
+ * ArchivedPR is the pull request an archived task opened.
  */
-export interface ArchivedRepo {
-    "repository": string;
-    "repoPath": string;
-
-    /**
-     * 0 when the repository had no pull request
-     */
-    "prNumber": number;
-    "prUrl": string;
-    "prState": string;
+export interface ArchivedPR {
+    "number": number;
+    "url": string;
+    "state": string;
 }
 
 /**
@@ -43,7 +36,6 @@ export interface ArchivedStep {
      */
     "file": string;
     "title": string;
-    "repository": string;
 
     /**
      * never nil
@@ -58,15 +50,16 @@ export interface ArchivedStep {
 export interface ArchivedTask {
     "id": string;
     "name": string;
+    "repositoryId": string;
 
     /**
-     * "" for a root task
+     * owner/name
      */
-    "repoPath": string;
+    "repository": string;
 
     /**
      * Mode is structured or one_shot, a string for the same reason as
-     * Notice.Reason.
+     * State.Theme.
      */
     "mode": string;
     "hasPrd": boolean;
@@ -79,9 +72,9 @@ export interface ArchivedTask {
     "steps": ArchivedStep[] | null;
 
     /**
-     * never nil
+     * nil when the task opened none
      */
-    "repos": ArchivedRepo[] | null;
+    "pr": ArchivedPR | null;
     "artifactVersion": number;
     "createdAt": string;
     "archivedAt": string;
@@ -99,19 +92,17 @@ export interface AssistantEntry {
 }
 
 /**
- * BranchPreview is one branch the deletion of a task would delete, and whether
+ * BranchPreview is the branch the deletion of a task would delete, and whether
  * its commits are safe elsewhere.
  */
 export interface BranchPreview {
-    "repository": string;
-    "repoPath": string;
     "name": string;
     "merged": boolean;
     "error": string;
 }
 
 /**
- * CloseResult is what closing a repository did.
+ * CloseResult is what closing a task did.
  */
 export interface CloseResult {
     "worktree": CloseStep;
@@ -125,12 +116,12 @@ export interface CloseResult {
 }
 
 /**
- * CloseStep is one part of the closing of a repository.
+ * CloseStep is one part of the closing of a task.
  */
 export interface CloseStep {
     /**
      * Outcome is done, skipped or failed, a string for the same reason as
-     * Notice.Reason.
+     * State.Theme.
      */
     "outcome": string;
 
@@ -147,11 +138,7 @@ export interface CloseStep {
  */
 export interface CreateTaskRequest {
     "name": string;
-
-    /**
-     * "" for root
-     */
-    "repoPath": string;
+    "repositoryId": string;
     "initialContext": string;
 
     /**
@@ -179,19 +166,19 @@ export interface DeletePreview {
     "sessionRunning": boolean;
 
     /**
-     * never nil
+     * nil when there is none
      */
-    "worktrees": WorktreePreview[] | null;
+    "worktree": WorktreePreview | null;
 
     /**
-     * never nil
+     * nil when there is none
      */
-    "branches": BranchPreview[] | null;
+    "branch": BranchPreview | null;
 
     /**
-     * never nil
+     * nil when there is none
      */
-    "prs": PRPreview[] | null;
+    "pr": PRPreview | null;
 }
 
 /**
@@ -199,9 +186,9 @@ export interface DeletePreview {
  */
 export interface DeleteResult {
     /**
-     * never nil
+     * nil when git removed everything
      */
-    "leftovers": Leftover[] | null;
+    "leftover": Leftover | null;
 }
 
 /**
@@ -248,9 +235,6 @@ export interface ErrorEntry {
  * Leftover is what git could not remove when a task was deleted.
  */
 export interface Leftover {
-    "repository": string;
-    "repoPath": string;
-
     /**
      * "" when the folder went
      */
@@ -291,26 +275,61 @@ export interface MarkerEntry {
 }
 
 /**
- * Notice is a path the app refused to open.
+ * Migration is a migration of the data that was refused, with what to resolve.
  */
-export interface Notice {
-    "path": string;
-
+export interface Migration {
     /**
-     * Reason is not_found, not_directory, not_readable or last_recent_missing.
-     * It stays a string so the generated bindings leave the narrowing to the
-     * frontend union types instead of emitting a TypeScript enum.
+     * never nil
      */
-    "reason": string;
+    "cases": MigrationCase[] | null;
 }
 
 /**
- * PRBlock is why the pull request stage of a repository cannot go on.
+ * MigrationCase is one reason the migration was refused.
+ */
+export interface MigrationCase {
+    /**
+     * Kind is root_task, no_origin or name_conflict, a string for the same
+     * reason as State.Theme.
+     */
+    "kind": string;
+
+    /**
+     * no_origin: the path of the clone; name_conflict: owner/name
+     */
+    "repository": string;
+
+    /**
+     * no_origin: why the clone was refused
+     */
+    "detail": string;
+
+    /**
+     * never nil
+     */
+    "tasks": MigrationTask[] | null;
+}
+
+/**
+ * MigrationTask is one task a refused migration is about.
+ */
+export interface MigrationTask {
+    "name": string;
+    "workspace": string;
+
+    /**
+     * the clone; "" for a task at the root of its workspace
+     */
+    "path": string;
+}
+
+/**
+ * PRBlock is why the pull request stage of a task cannot go on.
  */
 export interface PRBlock {
     /**
      * Reason is gh_missing, gh_unauthenticated, gh_failed, git_failed or
-     * no_worktree, a string for the same reason as Notice.Reason.
+     * no_worktree, a string for the same reason as State.Theme.
      */
     "reason": string;
 
@@ -338,8 +357,6 @@ export interface PRDraft {
  * PRPreview is a pull request the app leaves on GitHub when the task goes.
  */
 export interface PRPreview {
-    "repository": string;
-    "repoPath": string;
     "number": number;
     "url": string;
 
@@ -405,8 +422,8 @@ export interface PermissionEntry {
  */
 export interface Place {
     /**
-     * Kind is stage, step, step_review or repo, a string for the same reason
-     * as Notice.Reason.
+     * Kind is stage, step, step_review or pr, a string for the same reason as
+     * State.Theme.
      */
     "kind": string;
 
@@ -419,16 +436,6 @@ export interface Place {
      * step and step_review only
      */
     "step": number;
-
-    /**
-     * repo only
-     */
-    "repoPath": string;
-
-    /**
-     * repo only: relative path, as the steps name it
-     */
-    "repository": string;
 }
 
 /**
@@ -448,7 +455,7 @@ export interface PlanProblem {
 export interface Prompt {
     /**
      * Stage is prd, tech_spec, plan, one_shot, step_review, commit, pr or
-     * pr_review, a string for the same reason as Notice.Reason.
+     * pr_review, a string for the same reason as State.Theme.
      */
     "stage": string;
     "text": string;
@@ -463,6 +470,109 @@ export interface Prompt {
      * order the settings list them; never nil.
      */
     "placeholders": string[] | null;
+}
+
+/**
+ * PullRequest is the PR stage of a task, with its conversation and its state.
+ */
+export interface PullRequest {
+    /**
+     * Status is preparing, blocked, drafting, draft_ready, awaiting_reply,
+     * opening, reviewing, awaiting_decision, in_review, ready_to_approve,
+     * committing, done, merged, pr_closed, closing or closed, a string for the
+     * same reason as State.Theme.
+     */
+    "status": string;
+
+    /**
+     * blocked only
+     */
+    "block": PRBlock | null;
+    "worktreePath": string;
+    "branch": string;
+    "baseBranch": string;
+
+    /**
+     * nil until the draft is written
+     */
+    "draft": PRDraft | null;
+
+    /**
+     * never nil
+     */
+    "reports": PRReport[] | null;
+
+    /**
+     * the review states and committing only
+     */
+    "review": Review | null;
+
+    /**
+     * CommitFailed says the last approval of the review ended without a commit.
+     */
+    "commitFailed": boolean;
+    "prNumber": number;
+    "prUrl": string;
+
+    /**
+     * open, merged or closed; "" when unknown
+     */
+    "prState": string;
+
+    /**
+     * CheckedAt is when gh last reported the pull request; "" before that.
+     */
+    "checkedAt": string;
+
+    /**
+     * PRBase is the branch the pull request merges into; "" until read.
+     */
+    "prBase": string;
+
+    /**
+     * CheckError is what the last automatic reading said when it failed; ""
+     * otherwise.
+     */
+    "checkError": string;
+
+    /**
+     * the user may close the task now
+     */
+    "canClose": boolean;
+
+    /**
+     * CloneMissing says the closing waits for the clone of the repository.
+     */
+    "cloneMissing": boolean;
+
+    /**
+     * closed only
+     */
+    "close": CloseResult | null;
+
+    /**
+     * "" when the stage has no conversation
+     */
+    "sessionStage": string;
+
+    /**
+     * SessionStatus is working, waiting, needs_permission, needs_answer, paused
+     * or error.
+     */
+    "sessionStatus": string;
+
+    /**
+     * SessionModel and SessionEffort are what the session of the stage runs
+     * with from its next message on; "" without a session.
+     */
+    "sessionModel": string;
+    "sessionEffort": string;
+    "turnRunning": boolean;
+    "processRunning": boolean;
+    "retryAttempt": number;
+    "contextPercent": number;
+    "pendingCount": number;
+    "lastError": string;
 }
 
 /**
@@ -511,126 +621,26 @@ export interface QuestionOption {
 }
 
 /**
- * Recent is a workspace the user opened before.
+ * Repository is a registered repository, with what the app knows about its
+ * clone and its tasks.
  */
-export interface Recent {
+export interface Repository {
+    "id": string;
+    "owner": string;
     "name": string;
+
+    /**
+     * owner/name
+     */
+    "fullName": string;
     "path": string;
-}
-
-/**
- * Repo is a git repository inside the open workspace.
- */
-export interface Repo {
-    "name": string;
-    "path": string;
-}
-
-/**
- * RepoPR is one repository of a task in the pull request stage, with its own
- * conversation and its own state.
- */
-export interface RepoPR {
-    /**
-     * relative path, as the steps name it
-     */
-    "repository": string;
-    "repoPath": string;
-    "slug": string;
 
     /**
-     * Status is preparing, blocked, drafting, draft_ready, awaiting_reply,
-     * opening, reviewing, awaiting_decision, in_review, ready_to_approve,
-     * committing, done, merged, pr_closed, closing, closed or skipped, a string
-     * for the same reason as Notice.Reason.
+     * the clone was not at Path at the last check
      */
-    "status": string;
-
-    /**
-     * blocked only
-     */
-    "block": PRBlock | null;
-    "worktreePath": string;
-    "branch": string;
-    "baseBranch": string;
-
-    /**
-     * nil until the draft is written
-     */
-    "draft": PRDraft | null;
-
-    /**
-     * never nil
-     */
-    "reports": PRReport[] | null;
-
-    /**
-     * the review states and committing only
-     */
-    "review": Review | null;
-
-    /**
-     * CommitFailed says the last approval of this repository ended without a
-     * commit.
-     */
-    "commitFailed": boolean;
-    "prNumber": number;
-    "prUrl": string;
-
-    /**
-     * open, merged or closed; "" when unknown
-     */
-    "prState": string;
-
-    /**
-     * CheckedAt is when gh last reported the pull request; "" before that.
-     */
-    "checkedAt": string;
-
-    /**
-     * PRBase is the branch the pull request merges into; "" until read.
-     */
-    "prBase": string;
-
-    /**
-     * CheckError is what the last automatic reading said when it failed; ""
-     * otherwise.
-     */
-    "checkError": string;
-
-    /**
-     * the user may close the repository now
-     */
-    "canClose": boolean;
-
-    /**
-     * closed only
-     */
-    "close": CloseResult | null;
-
-    /**
-     * "" when the repository has no conversation
-     */
-    "sessionStage": string;
-
-    /**
-     * SessionStatus is working, waiting, needs_permission, needs_answer, paused
-     * or error.
-     */
-    "sessionStatus": string;
-
-    /**
-     * SessionModel and SessionEffort are what the session of the repository runs
-     * with from its next message on; "" without a session.
-     */
-    "sessionModel": string;
-    "sessionEffort": string;
-    "turnRunning": boolean;
-    "processRunning": boolean;
-    "retryAttempt": number;
-    "contextPercent": number;
-    "pendingCount": number;
-    "lastError": string;
+    "missing": boolean;
+    "activeTasks": number;
+    "archivedTasks": number;
 }
 
 /**
@@ -659,7 +669,7 @@ export interface ReviewFile {
 
     /**
      * Kind is added, modified, deleted, renamed or untracked, a string for the
-     * same reason as Notice.Reason.
+     * same reason as State.Theme.
      */
     "kind": string;
 
@@ -679,21 +689,21 @@ export interface Situation {
     /**
      * Kind is session_error, step_blocked, worktree_unreadable, pr_blocked,
      * plan_invalid, pr_closed, permission, question, reply, ready_to_continue,
-     * step_review, step_empty, draft, findings, changes_review, merge or
-     * nothing_to_publish, a string for the same reason as Notice.Reason.
+     * step_review, step_empty, draft, findings, changes_review or merge, a
+     * string for the same reason as State.Theme.
      */
     "kind": string;
 
     /**
      * Group is error, waiting or closing, from the most urgent, a string for
-     * the same reason as Notice.Reason.
+     * the same reason as State.Theme.
      */
     "group": string;
 
     /**
      * Form is review, staged or approve for step_review and changes_review,
      * merge or close for merge, and "" for every other kind, a string for the
-     * same reason as Notice.Reason.
+     * same reason as State.Theme.
      */
     "form": string;
 
@@ -728,7 +738,7 @@ export interface SituationStarted {
 export interface StageModel {
     /**
      * Stage is prd, tech_spec, plan, one_shot, implementation, step_review, pr
-     * or pr_review, a string for the same reason as Notice.Reason.
+     * or pr_review, a string for the same reason as State.Theme.
      */
     "stage": string;
 
@@ -749,18 +759,27 @@ export interface StageModel {
  */
 export interface State {
     /**
-     * nil on the welcome screen
+     * Migration is set when the data could not be migrated; every other field
+     * is then empty.
      */
-    "workspace": Workspace | null;
+    "migration": Migration | null;
 
     /**
-     * never nil
+     * Repositories are the registered repositories, by owner/name, ignoring
+     * case; never nil.
      */
-    "recents": Recent[] | null;
+    "repositories": Repository[] | null;
 
     /**
-     * Theme is system, light or dark, a string for the same reason as
-     * Notice.Reason.
+     * RepositoryFilter is the id of the repository the task list and the history
+     * show; "" for all of them.
+     */
+    "repositoryFilter": string;
+
+    /**
+     * Theme is system, light or dark. It stays a string so the generated
+     * bindings leave the narrowing to the frontend union types instead of
+     * emitting a TypeScript enum.
      */
     "theme": string;
     "systemDark": boolean;
@@ -773,18 +792,18 @@ export interface State {
 
     /**
      * ReviewModeDefault is manual or agent: who reviews the steps of a new
-     * task, a string for the same reason as Notice.Reason.
+     * task, a string for the same reason as State.Theme.
      */
     "reviewModeDefault": string;
-    "notice": Notice | null;
 
     /**
-     * tasks of the open workspace; never nil
+     * Tasks are the active tasks of every repository, in creation order; never
+     * nil.
      */
     "tasks": TaskSummary[] | null;
 
     /**
-     * History are the archived tasks of the open workspace, newest first; never
+     * History are the archived tasks of every repository, newest first; never
      * nil.
      */
     "history": ArchivedTask[] | null;
@@ -803,17 +822,10 @@ export interface Step {
     "title": string;
 
     /**
-     * Repository is the value the file carries; RepoPath is "" when no
-     * repository of the task matches it.
-     */
-    "repository": string;
-    "repoPath": string;
-
-    /**
      * Status is not_started, preparing, blocked, implementing, agent_review,
      * addressing_review, awaiting_review, in_review, ready_to_approve,
      * nothing_to_commit, review_failed, committing or done, a string for the
-     * same reason as Notice.Reason.
+     * same reason as State.Theme.
      */
     "status": string;
 
@@ -828,7 +840,7 @@ export interface Step {
     "block": StepBlock | null;
 
     /**
-     * "" until the worktree exists
+     * "" until the worktree of the task exists
      */
     "worktreePath": string;
 
@@ -871,7 +883,7 @@ export interface Step {
     /**
      * ReviewMode is manual or agent: who reviews the step, the mode it will
      * start with or the one it is reviewed with, a string for the same reason
-     * as Notice.Reason.
+     * as State.Theme.
      */
     "reviewMode": string;
 
@@ -924,8 +936,8 @@ export interface Step {
 export interface StepBlock {
     /**
      * Reason is dirty_worktree, fetch_failed, no_base_branch, path_exists,
-     * branch_exists, git_failed or no_repository, a string for the same reason
-     * as Notice.Reason.
+     * branch_exists, git_failed or clone_missing, a string for the same reason
+     * as State.Theme.
      */
     "reason": string;
 
@@ -1002,27 +1014,27 @@ export interface TaskStageModel {
 }
 
 /**
- * TaskSummary is a task of the open workspace with the state of its session.
+ * TaskSummary is an active task with the state of its session.
  */
 export interface TaskSummary {
     "id": string;
     "name": string;
+    "repositoryId": string;
 
     /**
-     * "" for a root task
+     * owner/name
      */
-    "repoPath": string;
-    "dir": string;
+    "repository": string;
 
     /**
      * Mode is structured or one_shot, a string for the same reason as
-     * Notice.Reason.
+     * State.Theme.
      */
     "mode": string;
 
     /**
      * Stage is prd, tech_spec, plan, one_shot, implementation or pr, a string
-     * for the same reason as Notice.Reason.
+     * for the same reason as State.Theme.
      */
     "stage": string;
 
@@ -1076,9 +1088,9 @@ export interface TaskSummary {
     "currentStep": number;
 
     /**
-     * never nil; empty outside the pull request stage
+     * nil outside the pull request stage
      */
-    "repos": RepoPR[] | null;
+    "pr": PullRequest | null;
 
     /**
      * never nil
@@ -1152,21 +1164,10 @@ export interface UserEntry {
 }
 
 /**
- * Workspace is the open folder and the repositories found in it.
- */
-export interface Workspace {
-    "name": string;
-    "path": string;
-    "repos": Repo[] | null;
-}
-
-/**
- * WorktreePreview is one worktree the deletion of a task would remove, and
+ * WorktreePreview is the worktree the deletion of a task would remove, and
  * whether it holds work.
  */
 export interface WorktreePreview {
-    "repository": string;
-    "repoPath": string;
     "path": string;
     "dirty": boolean;
 

@@ -9,23 +9,22 @@ O produto não substitui o Claude Code. Ele elimina o trabalho mecânico em volt
 - **O agente decide, o produto executa o mecânico.** Entender, especificar, dividir, implementar, commitar, descrever e revisar são do Claude Code. Derivar estado, criar e apagar worktrees, abrir a sessão certa no diretório certo, saber qual é o próximo step, medir progresso e disparar a etapa seguinte são do produto. Um agente nunca é usado para fazer o que um comando faz.
 - **O produto é o dono do estado.** Artefatos e progresso vivem no produto, fora dos repositórios. Os repositórios recebem apenas código e commits.
 - **O estado é derivado, nunca declarado.** O produto sabe em que etapa uma task está porque sabe quais artefatos existem, qual step tem commit, quais arquivos estão em stage e qual pull request está aberta. O usuário nunca informa onde parou.
-- **Auto-avanço.** Quando uma etapa termina, a seguinte começa. A única transição acionada pelo usuário é o encerramento de um repositório, porque depende de um merge feito fora do produto.
+- **Auto-avanço.** Quando uma etapa termina, a seguinte começa. A única transição acionada pelo usuário é o encerramento da task, porque depende de um merge feito fora do produto.
 - **"Depende de mim" é um estado de primeira classe.** Tudo que aguarda o usuário é visível de longe, sem abrir a task, e anunciado por notificação quando a janela não está em foco.
 - **O workflow é o mesmo.** Uma pergunta por vez, cada step revisado antes do commit, pelo usuário arquivo a arquivo no editor ou por um agente revisor. O produto conduz o workflow, não o redefine.
 - **A experiência é o produto.** Cada tela, estado e interação é tratado com o mesmo cuidado.
 
 ## Conceitos
 
-- **Área de trabalho (workspace)**: a pasta em que o produto é aberto. Contém os repositórios e é o contexto de tudo o que o produto mostra.
-- **Repositório**: cada repositório git encontrado abaixo da área de trabalho. A própria área de trabalho pode ser um repositório.
-- **Task**: a unidade de trabalho, de qualquer natureza: feature, bug fix, refatoração. Nasce na raiz da área de trabalho, quando toca mais de um repositório, ou dentro de um repositório, quando toca só ele.
-- **Modo**: como a task é conduzida, escolhido na criação e fixo. `Structured`, com PRD, tech spec e um plano de steps, é o padrão. `One-Shot` tem uma única etapa de planejamento, que escreve um documento só, implementado em um step, e nasce sempre num repositório. Os dois têm a mesma etapa de PR e o mesmo jeito de trabalhar: lacunas resolvidas antes do código, decisões do usuário, planejamento guardado como artefato.
-- **Etapa (stage)**: cada fase do ciclo de vida da task, definidas pelo modo: PRD, tech spec, plano, implementação e PR numa task Structured; planejamento One-Shot, implementação e PR numa task One-Shot. A etapa de PR contém, por repositório, a abertura da pull request, o review dela e o encerramento.
-- **Sessão**: uma conversa com o Claude Code iniciada pelo produto para conduzir uma etapa, um step, o review de um step ou a pull request de um repositório. Cada uma nasce com o prompt do seu tipo e o contexto da task.
+- **Repositório**: um repositório do GitHub cadastrado pelo usuário, identificado por `dono/nome` e ligado ao clone local em que o produto trabalha.
+- **Task**: a unidade de trabalho, de qualquer natureza: feature, bug fix, refatoração. Pertence a um único repositório, e tem uma worktree, uma branch e uma pull request.
+- **Modo**: como a task é conduzida, escolhido na criação e fixo. `Structured`, com PRD, tech spec e um plano de steps, é o padrão. `One-Shot` tem uma única etapa de planejamento, que escreve um documento só, implementado em um step. Os dois têm a mesma etapa de PR e o mesmo jeito de trabalhar: lacunas resolvidas antes do código, decisões do usuário, planejamento guardado como artefato.
+- **Etapa (stage)**: cada fase do ciclo de vida da task, definidas pelo modo: PRD, tech spec, plano, implementação e PR numa task Structured; planejamento One-Shot, implementação e PR numa task One-Shot. A etapa de PR contém a abertura da pull request da task, o review dela e o encerramento.
+- **Sessão**: uma conversa com o Claude Code iniciada pelo produto para conduzir uma etapa, um step, o review de um step ou a pull request da task. Cada uma nasce com o prompt do seu tipo e o contexto da task.
 - **Artefato**: o resultado de uma etapa. PRD, tech spec, arquivos de step, documento One-Shot, relatórios de review de step, rascunhos de pull request e relatórios de review de pull request. Guardados pelo produto.
-- **Step**: uma unidade de mudança de código dentro da task. Pertence a um único repositório e vira exatamente um commit.
+- **Step**: uma unidade de mudança de código dentro da task, que vira exatamente um commit.
 - **Modo de review**: quem revisa um step antes do commit. No modo `Manual`, o usuário, que dá stage arquivo a arquivo no editor e aprova; no modo `Agent`, um agente revisor, que revisa o step com o implementador e o deixa ser commitado quando o relatório vem limpo.
-- **Worktree**: a cópia de trabalho de um repositório dedicada a uma task, criada e apagada pelo produto.
+- **Worktree**: a cópia de trabalho do repositório dedicada a uma task, criada pelo produto no diretório de dados e apagada por ele.
 - **Prompt**: o texto que o produto entrega ao Claude Code ao iniciar uma sessão ou ao pedir um commit. Um por tipo, visível e editável nas configurações.
 - **Situação**: qualquer coisa que espera pelo usuário: uma pergunta do agente, um step aguardando review, um rascunho aguardando OK, uma escalada de permissão, um bloqueio.
 - **Histórico**: as tasks arquivadas, com seus artefatos finais.

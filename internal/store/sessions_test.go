@@ -14,7 +14,7 @@ import (
 
 func TestSessionsInsertAndGet(t *testing.T) {
 	t.Parallel()
-	s := newStore(t)
+	s := newStoreWithRepositories(t)
 
 	taskID, sessionID := seedSession(t, s)
 
@@ -29,7 +29,7 @@ func TestSessionsInsertAndGet(t *testing.T) {
 
 func TestSessionsGetMissingIsNotFound(t *testing.T) {
 	t.Parallel()
-	s := newStore(t)
+	s := newStoreWithRepositories(t)
 
 	taskID, _ := seedSession(t, s)
 
@@ -43,7 +43,7 @@ func TestSessionsGetMissingIsNotFound(t *testing.T) {
 
 func TestSessionsOfOneTaskCoexistPerStage(t *testing.T) {
 	t.Parallel()
-	s := newStore(t)
+	s := newStoreWithRepositories(t)
 
 	taskID, _ := seedSession(t, s)
 	techSpec := newSession("sess-2", taskID, task.StageTechSpec)
@@ -65,7 +65,7 @@ func TestSessionsOfOneTaskCoexistPerStage(t *testing.T) {
 
 func TestSessionsRejectTheSameStageTwice(t *testing.T) {
 	t.Parallel()
-	s := newStore(t)
+	s := newStoreWithRepositories(t)
 
 	taskID, _ := seedSession(t, s)
 
@@ -76,7 +76,7 @@ func TestSessionsRejectTheSameStageTwice(t *testing.T) {
 
 func TestSessionsUpdateRewritesEveryMutableColumn(t *testing.T) {
 	t.Parallel()
-	s := newStore(t)
+	s := newStoreWithRepositories(t)
 
 	taskID, sessionID := seedSession(t, s)
 
@@ -104,7 +104,7 @@ func TestSessionsUpdateRewritesEveryMutableColumn(t *testing.T) {
 
 func TestSessionsUpdateClearsTheLastError(t *testing.T) {
 	t.Parallel()
-	s := newStore(t)
+	s := newStoreWithRepositories(t)
 
 	taskID, sessionID := seedSession(t, s)
 
@@ -130,7 +130,7 @@ func TestSessionsUpdateClearsTheLastError(t *testing.T) {
 
 func TestSessionsInsertRejectsAnUnknownTask(t *testing.T) {
 	t.Parallel()
-	s := newStore(t)
+	s := newStoreWithRepositories(t)
 
 	if err := s.Sessions.Insert(t.Context(), newSession("sess-1", "nope", task.StagePRD)); err == nil {
 		t.Error("Insert() = nil, want error")
@@ -139,7 +139,7 @@ func TestSessionsInsertRejectsAnUnknownTask(t *testing.T) {
 
 func TestSessionsDeleteTakesTheStagesAndTheirEntries(t *testing.T) {
 	t.Parallel()
-	s := newStore(t)
+	s := newStoreWithRepositories(t)
 
 	taskID, sessionID := seedSession(t, s)
 	if err := s.Sessions.Insert(t.Context(), newSession("sess-2", taskID, task.StageTechSpec)); err != nil {
@@ -172,7 +172,7 @@ func TestSessionsDeleteTakesTheStagesAndTheirEntries(t *testing.T) {
 
 func TestSessionsDeleteByTaskTakesEveryStageAndItsEntries(t *testing.T) {
 	t.Parallel()
-	s := newStore(t)
+	s := newStoreWithRepositories(t)
 
 	taskID, sessionID := seedSession(t, s)
 	if err := s.Sessions.Insert(t.Context(), newSession("sess-2", taskID, task.StageTechSpec)); err != nil {
@@ -207,7 +207,7 @@ func TestSessionsDeleteByTaskTakesEveryStageAndItsEntries(t *testing.T) {
 
 func TestSessionsDeleteWithoutStagesDoesNothing(t *testing.T) {
 	t.Parallel()
-	s := newStore(t)
+	s := newStoreWithRepositories(t)
 
 	taskID, _ := seedSession(t, s)
 

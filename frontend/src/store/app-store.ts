@@ -1,22 +1,20 @@
 import { create } from "zustand";
 import { useShallow } from "zustand/react/shallow";
-import { defaultRepoPath, reposOf } from "@/lib/repos";
-import { repoSituation, reviewerSituation, stageSituation, stepSituation } from "@/lib/situations";
+import { tasksInFilter } from "@/lib/repositories";
+import { prSituation, reviewerSituation, stageSituation, stepSituation } from "@/lib/situations";
 import type {
   ArchivedTask,
   Leftover,
-  Notice,
+  Migration,
   Place,
   PromptStage,
-  Recent,
-  RepoPR,
+  Repository,
   Situation,
   State,
   TaskSummary,
   ThemePreference,
   Transcript,
   TranscriptEvent,
-  Workspace,
 } from "@/lib/wails";
 import { asPlaceKind, asTaskStage, asThemePreference, sessionKey } from "@/lib/wails";
 import {
@@ -26,16 +24,8 @@ import {
   type TranscriptState,
 } from "@/store/transcript";
 
-export type NodeId = "root" | `repo:${string}`;
-
-export const ROOT_NODE_ID = "root" satisfies NodeId;
-
-export function repoNodeId(path: string): NodeId {
-  return `repo:${path}`;
-}
-
-/** SettingsSection is what the settings screen shows: the defaults of a new task or one prompt. */
-export type SettingsSection = "defaults" | PromptStage;
+/** SettingsSection is what the settings screen shows: the defaults of a new task, the repositories or one prompt. */
+export type SettingsSection = "defaults" | "repositories" | PromptStage;
 
 /** StepTab is the conversation of a step on screen: the agent that implements it, or the one that reviews it. */
 export type StepTab = "implementer" | "reviewer";
@@ -55,34 +45,36 @@ export interface PromptEdit {
 export interface AppStore {
   app: State | null;
   error: string | null;
-  selectedNodeId: NodeId;
-  expandedNodeIds: ReadonlySet<NodeId>;
   openTaskId: string | null;
   /** transcripts and drafts are keyed by sessionKey: a task has one per stage. */
   transcripts: Record<string, TranscriptState>;
   drafts: Record<string, string>;
-  /** openRepo is the repository tab of a task in the PR stage, by task id. */
-  openRepo: Record<string, string>;
   /** openStepTab is the conversation tab of a step, by stepTabKey. */
   openStepTab: Record<string, StepTab>;
-  /** prDrafts is the pull request the user is editing, by repoKey. */
+  /** prDrafts is the pull request the user is editing, by task id. */
   prDrafts: Record<string, PrDraft>;
-  newTaskFor: NodeId | null;
+  /** newTaskOpen is the creation dialog being open. */
+  newTaskOpen: boolean;
+  /**
+   * lastRepositoryId is the repository of the last task created in this run of
+   * the app, which preselects the dialog when nothing before it does.
+   */
+  lastRepositoryId: string | null;
   /** historyOpen shows the archived tasks in the main area instead of a node. */
   historyOpen: boolean;
   /** openArchivedId is the archived task on screen, when one is. */
   openArchivedId: string | null;
   historyQuery: string;
-  /** archivedNotice names the task that just left the workspace, until dismissed. */
+  /** archivedNotice names the task that was just archived, until dismissed. */
   archivedNotice: ArchivedNotice | null;
-  /** leftovers is what the last deletion could not remove from disk, until dismissed. */
-  leftovers: readonly Leftover[] | null;
+  /** leftover is what the last deletion could not remove from disk, until dismissed. */
+  leftover: Leftover | null;
   /**
    * flashing are the situations that just started while the user was looking,
    * by id, for the brief highlight.
    */
   flashing: ReadonlySet<string>;
-  /** settingsOpen shows the settings in the main area. They belong to the app, not to a workspace. */
+  /** settingsOpen shows the settings in the main area. */
   settingsOpen: boolean;
   settingsSection: SettingsSection;
   /** promptEdit is the prompt open in the editor, null when the editor is closed. */
@@ -92,23 +84,21 @@ export interface AppStore {
 
   applyState: (next: State) => void;
   setError: (message: string | null) => void;
-  selectNode: (id: NodeId) => void;
-  toggleNode: (id: NodeId) => void;
-  setNodeExpanded: (id: NodeId, expanded: boolean) => void;
 
   openTask: (id: string) => void;
   closeTask: () => void;
-  openNewTask: (nodeId: NodeId) => void;
+  openNewTask: () => void;
   closeNewTask: () => void;
+  /** rememberRepository keeps the repository a task was just created in. */
+  rememberRepository: (id: string) => void;
   beginTranscript: (taskId: string, stage: string) => void;
   setTranscript: (transcript: Transcript) => void;
   applyTranscriptEvent: (event: TranscriptEvent) => void;
   dropTranscript: (taskId: string, stage: string) => void;
   setDraft: (taskId: string, stage: string, text: string) => void;
-  selectRepo: (taskId: string, repoPath: string) => void;
   selectStepTab: (taskId: string, step: number, tab: StepTab) => void;
-  setPrDraft: (taskId: string, repoPath: string, draft: PrDraft) => void;
-  clearPrDraft: (taskId: string, repoPath: string) => void;
+  setPrDraft: (taskId: string, draft: PrDraft) => void;
+  clearPrDraft: (taskId: string) => void;
 
   openHistory: () => void;
   closeHistory: () => void;
@@ -116,7 +106,7 @@ export interface AppStore {
   closeArchived: () => void;
   setHistoryQuery: (query: string) => void;
   dismissArchivedNotice: () => void;
-  setLeftovers: (leftovers: readonly Leftover[] | null) => void;
+  setLeftover: (leftover: Leftover | null) => void;
 
   flashSituation: (id: string) => void;
   unflashSituation: (id: string) => void;
@@ -142,15 +132,10 @@ export interface PrDraft {
   body: string;
 }
 
-/** ArchivedNotice is the task that just left the workspace, as the notice names it. */
+/** ArchivedNotice is the task that was just archived, as the notice names it. */
 export interface ArchivedNotice {
   id: string;
   name: string;
-}
-
-/** repoKey identifies one pull request draft: a task and one of its repositories. */
-export function repoKey(taskId: string, repoPath: string): string {
-  return `${taskId}|${repoPath}`;
 }
 
 function tasksOf(state: State | null): readonly TaskSummary[] {
@@ -173,31 +158,6 @@ function newlyArchived(
 ): ArchivedTask | null {
   const known = new Set(previous.map((entry) => entry.id));
   return next.find((entry) => !known.has(entry.id)) ?? null;
-}
-
-function nodeOfTask(task: TaskSummary): NodeId {
-  return task.repoPath === "" ? ROOT_NODE_ID : repoNodeId(task.repoPath);
-}
-
-function nodeExists(state: State, id: NodeId): boolean {
-  if (id === ROOT_NODE_ID) {
-    return state.workspace !== null;
-  }
-  return (state.workspace?.repos ?? []).some((repo) => repoNodeId(repo.path) === id);
-}
-
-function withExpanded(
-  current: ReadonlySet<NodeId>,
-  id: NodeId,
-  expanded: boolean,
-): ReadonlySet<NodeId> {
-  const next = new Set(current);
-  if (expanded) {
-    next.add(id);
-  } else {
-    next.delete(id);
-  }
-  return next;
 }
 
 function withoutTranscript(
@@ -230,47 +190,41 @@ function withStepTab(
     case "step_review":
       return { ...current, [stepTabKey(taskId, place.step)]: "reviewer" };
     case "stage":
-    case "repo":
+    case "pr":
       return current;
   }
 }
 
-function initialTreeUi(): Pick<AppStore, "selectedNodeId" | "expandedNodeIds"> {
-  return { selectedNodeId: ROOT_NODE_ID, expandedNodeIds: new Set<NodeId>([ROOT_NODE_ID]) };
-}
-
-// Nothing of another workspace survives: its tasks are gone from the snapshot.
-// The settings are not here: they belong to the app, so they stay on screen,
-// with whatever prompt is open in the editor, across a change of workspace.
+// What the app shows of the tasks, as it stands with none of them on screen.
 function initialTaskUi(): Pick<
   AppStore,
   | "openTaskId"
   | "transcripts"
   | "drafts"
-  | "openRepo"
   | "openStepTab"
   | "prDrafts"
-  | "newTaskFor"
+  | "newTaskOpen"
+  | "lastRepositoryId"
   | "historyOpen"
   | "openArchivedId"
   | "historyQuery"
   | "archivedNotice"
-  | "leftovers"
+  | "leftover"
   | "flashing"
 > {
   return {
     openTaskId: null,
     transcripts: {},
     drafts: {},
-    openRepo: {},
     openStepTab: {},
     prDrafts: {},
-    newTaskFor: null,
+    newTaskOpen: false,
+    lastRepositoryId: null,
     historyOpen: false,
     openArchivedId: null,
     historyQuery: "",
     archivedNotice: null,
-    leftovers: null,
+    leftover: null,
     flashing: new Set<string>(),
   };
 }
@@ -295,17 +249,22 @@ export const useAppStore = create<AppStore>()((set, get) => {
     settingsSection: "defaults",
     promptEdit: null,
     pendingLeave: null,
-    ...initialTreeUi(),
     ...initialTaskUi(),
 
     applyState: (next) =>
       set((state) => {
-        if (next.workspace?.path !== state.app?.workspace?.path) {
-          return { app: next, ...initialTreeUi(), ...initialTaskUi() };
+        // With no repository registered the welcome screen takes the place of
+        // everything the app shows of the tasks.
+        if ((next.repositories ?? []).length === 0) {
+          return {
+            app: next,
+            ...initialTaskUi(),
+            settingsOpen: false,
+            settingsSection: "defaults",
+            promptEdit: null,
+            pendingLeave: null,
+          };
         }
-        const selectedNodeId = nodeExists(next, state.selectedNodeId)
-          ? state.selectedNodeId
-          : ROOT_NODE_ID;
         const history = historyOf(next);
         // The first snapshot brings the whole history at once; nothing in it was
         // archived under the eyes of the user.
@@ -317,15 +276,21 @@ export const useAppStore = create<AppStore>()((set, get) => {
           !history.some((entry) => entry.id === state.openArchivedId)
             ? null
             : state.openArchivedId;
+        // A repository that is gone stops preselecting the creation dialog.
+        const lastRepositoryId =
+          state.lastRepositoryId !== null &&
+          !(next.repositories ?? []).some((repository) => repository.id === state.lastRepositoryId)
+            ? null
+            : state.lastRepositoryId;
         const openTaskId = state.openTaskId;
         if (openTaskId === null || findTask(next, openTaskId) !== null) {
-          return { app: next, selectedNodeId, archivedNotice, openArchivedId };
+          return { app: next, archivedNotice, openArchivedId, lastRepositoryId };
         }
         return {
           app: next,
-          selectedNodeId,
           archivedNotice,
           openArchivedId,
+          lastRepositoryId,
           openTaskId: null,
           transcripts: withoutTaskTranscripts(state.transcripts, openTaskId),
         };
@@ -333,56 +298,18 @@ export const useAppStore = create<AppStore>()((set, get) => {
 
     setError: (message) => set({ error: message }),
 
-    // Picking a node in the tree is asking for the workspace, not the history or
-    // the settings.
-    selectNode: (id) =>
-      leave(() =>
-        set({
-          selectedNodeId: id,
-          historyOpen: false,
-          openArchivedId: null,
-          settingsOpen: false,
-        }),
-      ),
-
-    toggleNode: (id) =>
-      set((state) => ({
-        expandedNodeIds: withExpanded(state.expandedNodeIds, id, !state.expandedNodeIds.has(id)),
-      })),
-
-    setNodeExpanded: (id, expanded) =>
-      set((state) => ({ expandedNodeIds: withExpanded(state.expandedNodeIds, id, expanded) })),
-
-    // Opening a task also reveals it in the tree, so the two panes agree.
     openTask: (id) =>
       leave(() =>
-        set((state) => {
-          const task = findTask(state.app, id);
-          if (task === null) {
-            return {
-              openTaskId: id,
-              historyOpen: false,
-              openArchivedId: null,
-              settingsOpen: false,
-            };
-          }
-          const nodeId = nodeOfTask(task);
-          return {
-            openTaskId: id,
-            historyOpen: false,
-            openArchivedId: null,
-            settingsOpen: false,
-            selectedNodeId: nodeId,
-            expandedNodeIds: withExpanded(state.expandedNodeIds, nodeId, true),
-          };
-        }),
+        set({ openTaskId: id, historyOpen: false, openArchivedId: null, settingsOpen: false }),
       ),
 
     closeTask: () => set({ openTaskId: null }),
 
-    openNewTask: (nodeId) => set({ newTaskFor: nodeId }),
+    openNewTask: () => set({ newTaskOpen: true }),
 
-    closeNewTask: () => set({ newTaskFor: null }),
+    closeNewTask: () => set({ newTaskOpen: false }),
+
+    rememberRepository: (id) => set({ lastRepositoryId: id }),
 
     beginTranscript: (taskId, stage) =>
       set((state) => {
@@ -434,20 +361,17 @@ export const useAppStore = create<AppStore>()((set, get) => {
     setDraft: (taskId, stage, text) =>
       set((state) => ({ drafts: { ...state.drafts, [sessionKey(taskId, stage)]: text } })),
 
-    selectRepo: (taskId, repoPath) =>
-      set((state) => ({ openRepo: { ...state.openRepo, [taskId]: repoPath } })),
-
     selectStepTab: (taskId, step, tab) =>
       set((state) => ({ openStepTab: { ...state.openStepTab, [stepTabKey(taskId, step)]: tab } })),
 
     // The draft the user is editing outlives what the agent says next; only
     // opening the pull request, or throwing the draft away, clears it.
-    setPrDraft: (taskId, repoPath, draft) =>
-      set((state) => ({ prDrafts: { ...state.prDrafts, [repoKey(taskId, repoPath)]: draft } })),
+    setPrDraft: (taskId, draft) =>
+      set((state) => ({ prDrafts: { ...state.prDrafts, [taskId]: draft } })),
 
-    clearPrDraft: (taskId, repoPath) =>
+    clearPrDraft: (taskId) =>
       set((state) => {
-        const { [repoKey(taskId, repoPath)]: _dropped, ...rest } = state.prDrafts;
+        const { [taskId]: _dropped, ...rest } = state.prDrafts;
         return { prDrafts: rest };
       }),
 
@@ -459,7 +383,7 @@ export const useAppStore = create<AppStore>()((set, get) => {
           historyOpen: true,
           openTaskId: null,
           openArchivedId: null,
-          newTaskFor: null,
+          newTaskOpen: false,
           settingsOpen: false,
         }),
       ),
@@ -477,7 +401,7 @@ export const useAppStore = create<AppStore>()((set, get) => {
 
     dismissArchivedNotice: () => set({ archivedNotice: null }),
 
-    setLeftovers: (leftovers) => set({ leftovers }),
+    setLeftover: (leftover) => set({ leftover }),
 
     // A new set every time: the selectors hand the set itself to the components,
     // which only see a change through a new reference.
@@ -490,31 +414,23 @@ export const useAppStore = create<AppStore>()((set, get) => {
         return { flashing };
       }),
 
-    // A situation opens where it is: its task, on the tab of its repository when
-    // it is in one, and on the tab of the conversation of a step when it is in a
-    // step: the situation of a reviewer opens on its tab. Going there puts away
-    // the history, the settings and the creation of a task.
+    // A situation opens where it is: its task, and the tab of the conversation
+    // of a step when it is in a step: the situation of a reviewer opens on its
+    // tab. Going there puts away the history, the settings and the creation of
+    // a task.
     openPlace: (taskId, place) => {
       // A situation of a task that is gone navigates nowhere, so it never asks
       // the user about an unsaved edit either.
-      const task = findTask(get().app, taskId);
-      if (task === null) {
+      if (findTask(get().app, taskId) === null) {
         return;
       }
-      const nodeId = nodeOfTask(task);
       leave(() =>
         set((state) => ({
           openTaskId: taskId,
           historyOpen: false,
           openArchivedId: null,
-          newTaskFor: null,
+          newTaskOpen: false,
           settingsOpen: false,
-          selectedNodeId: nodeId,
-          expandedNodeIds: withExpanded(state.expandedNodeIds, nodeId, true),
-          openRepo:
-            asPlaceKind(place.kind) === "repo"
-              ? { ...state.openRepo, [taskId]: place.repoPath }
-              : state.openRepo,
           openStepTab: withStepTab(state.openStepTab, taskId, place),
         })),
       );
@@ -528,7 +444,7 @@ export const useAppStore = create<AppStore>()((set, get) => {
         openTaskId: null,
         historyOpen: false,
         openArchivedId: null,
-        newTaskFor: null,
+        newTaskOpen: false,
       }),
 
     closeSettings: () => leave(() => set({ settingsOpen: false })),
@@ -556,20 +472,30 @@ export const useAppStore = create<AppStore>()((set, get) => {
   };
 });
 
-const NO_RECENTS: readonly Recent[] = [];
 const NO_TASKS: readonly TaskSummary[] = [];
 const NO_HISTORY: readonly ArchivedTask[] = [];
+const NO_REPOSITORIES: readonly Repository[] = [];
 
-export function useWorkspace(): Workspace | null {
-  return useAppStore((state) => state.app?.workspace ?? null);
+/** useRepositories is every registered repository, by owner/name. */
+export function useRepositories(): readonly Repository[] {
+  return useAppStore((state) => state.app?.repositories ?? NO_REPOSITORIES);
 }
 
-export function useRecents(): readonly Recent[] {
-  return useAppStore((state) => state.app?.recents ?? NO_RECENTS);
+/** useRepositoryFilter is the repository the task list and the history show; "" is all of them. */
+export function useRepositoryFilter(): string {
+  return useAppStore((state) => state.app?.repositoryFilter ?? "");
 }
 
-export function useNotice(): Notice | null {
-  return useAppStore((state) => state.app?.notice ?? null);
+/** useRepository is a registered repository by id, null when none is. */
+export function useRepository(id: string): Repository | null {
+  return useAppStore(
+    (state) => (state.app?.repositories ?? []).find((repository) => repository.id === id) ?? null,
+  );
+}
+
+/** useMigration is the refused migration of the data, null when there is none. */
+export function useMigration(): Migration | null {
+  return useAppStore((state) => state.app?.migration ?? null);
 }
 
 export function useError(): string | null {
@@ -584,9 +510,10 @@ export function useTask(id: string | null): TaskSummary | null {
   return useAppStore((state) => findTask(state.app, id));
 }
 
-export function useTasksOf(nodeId: NodeId): readonly TaskSummary[] {
+/** useFilteredTasks are the active tasks the sidebar list shows, under the filter. */
+export function useFilteredTasks(): readonly TaskSummary[] {
   return useAppStore(
-    useShallow((state) => tasksOf(state.app).filter((task) => nodeOfTask(task) === nodeId)),
+    useShallow((state) => tasksInFilter(tasksOf(state.app), state.app?.repositoryFilter ?? "")),
   );
 }
 
@@ -600,26 +527,6 @@ export function useTranscript(taskId: string, stage: string): TranscriptState | 
 
 export function useDraft(taskId: string, stage: string): string {
   return useAppStore((state) => state.drafts[sessionKey(taskId, stage)] ?? "");
-}
-
-export function useRepos(taskId: string): readonly RepoPR[] {
-  return useAppStore((state) => reposOf(findTask(state.app, taskId)));
-}
-
-// A selection that no longer names a repository of the task falls back to the
-// default.
-function openRepoOf(state: AppStore, taskId: string): string {
-  const task = findTask(state.app, taskId);
-  const selected = state.openRepo[taskId];
-  if (selected !== undefined && reposOf(task).some((repo) => repo.repoPath === selected)) {
-    return selected;
-  }
-  return defaultRepoPath(task);
-}
-
-/** useOpenRepo is the selected repository tab of a task. */
-export function useOpenRepo(taskId: string): string {
-  return useAppStore((state) => openRepoOf(state, taskId));
 }
 
 // A tab that no longer has a conversation behind it falls back to the implementer.
@@ -638,8 +545,8 @@ export function useOpenStepTab(taskId: string): StepTab {
 }
 
 // The situation of the place the open task shows: the stage it is in, the
-// conversation of the step that runs whose tab is selected, or the repository
-// whose tab is selected.
+// conversation of the step that runs whose tab is selected, or the pull
+// request.
 function onScreenSituation(state: AppStore): Situation | null {
   const task = findTask(state.app, state.openTaskId);
   if (task === null) {
@@ -651,7 +558,7 @@ function onScreenSituation(state: AppStore): Situation | null {
         ? reviewerSituation(task, task.currentStep)
         : stepSituation(task, task.currentStep);
     case "pr":
-      return repoSituation(task, openRepoOf(state, task.id));
+      return prSituation(task);
     case "prd":
     case "tech_spec":
     case "plan":
@@ -670,8 +577,8 @@ export function useFlashing(): ReadonlySet<string> {
   return useAppStore((state) => state.flashing);
 }
 
-export function usePrDraft(taskId: string, repoPath: string): PrDraft | null {
-  return useAppStore((state) => state.prDrafts[repoKey(taskId, repoPath)] ?? null);
+export function usePrDraft(taskId: string): PrDraft | null {
+  return useAppStore((state) => state.prDrafts[taskId] ?? null);
 }
 
 export interface ThemeState {
@@ -734,40 +641,20 @@ export function useArchivedNotice(): ArchivedNotice | null {
   return useAppStore((state) => state.archivedNotice);
 }
 
-export function useLeftovers(): readonly Leftover[] | null {
-  return useAppStore((state) => state.leftovers);
+export function useLeftover(): Leftover | null {
+  return useAppStore((state) => state.leftover);
 }
 
-/** filterHistory keeps the archived tasks whose name carries what was typed. */
+/** filterHistory keeps the archived tasks of the filter whose name carries what was typed. */
 export function filterHistory(
   history: readonly ArchivedTask[],
   query: string,
+  filter: string,
 ): readonly ArchivedTask[] {
+  const shown = tasksInFilter(history, filter);
   const term = query.trim().toLowerCase();
   if (term === "") {
-    return history;
+    return shown;
   }
-  return history.filter((entry) => entry.name.toLowerCase().includes(term));
-}
-
-export interface TreeUi {
-  selectedNodeId: NodeId;
-  expandedNodeIds: ReadonlySet<NodeId>;
-  openTaskId: string | null;
-  historyOpen: boolean;
-  settingsOpen: boolean;
-  flashing: ReadonlySet<string>;
-}
-
-export function useTreeUi(): TreeUi {
-  return useAppStore(
-    useShallow((state) => ({
-      selectedNodeId: state.selectedNodeId,
-      expandedNodeIds: state.expandedNodeIds,
-      openTaskId: state.openTaskId,
-      historyOpen: state.historyOpen,
-      settingsOpen: state.settingsOpen,
-      flashing: state.flashing,
-    })),
-  );
+  return shown.filter((entry) => entry.name.toLowerCase().includes(term));
 }

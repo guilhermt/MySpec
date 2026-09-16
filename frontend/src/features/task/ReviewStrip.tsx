@@ -39,15 +39,7 @@ const KIND_LETTER: Record<ReviewFileKind, string> = {
 const FILE_ROW = "flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs";
 
 /** FileRow is one changed file, and the way into it in the editor. */
-function FileRow({
-  taskId,
-  repoPath,
-  file,
-}: {
-  taskId: string;
-  repoPath: string;
-  file: ReviewFile;
-}) {
+function FileRow({ taskId, file }: { taskId: string; file: ReviewFile }) {
   const kind = asReviewFileKind(file.kind);
   const content = (
     <>
@@ -75,7 +67,7 @@ function FileRow({
   return (
     <button
       type="button"
-      onClick={() => void openFileInEditor(taskId, file.path, repoPath)}
+      onClick={() => void openFileInEditor(taskId, file.path)}
       className={cn(FILE_ROW, "transition-colors hover:bg-accent")}
     >
       {content}
@@ -85,8 +77,8 @@ function FileRow({
 
 export interface ReviewStripProps {
   taskId: string;
-  /** repoPath names the worktree the files live in; "" is the current step. */
-  repoPath: string;
+  /** subject is what is being reviewed, which is all the strip needs to know. */
+  subject: "step" | "pr";
   review: Review;
 }
 
@@ -95,7 +87,7 @@ export interface ReviewStripProps {
  * what they have read in the editor. It serves a step and a pull request
  * alike: both are reviewed the same way.
  */
-export function ReviewStrip({ taskId, repoPath, review }: ReviewStripProps) {
+export function ReviewStrip({ taskId, subject, review }: ReviewStripProps) {
   const [expanded, setExpanded] = useState(wasExpanded);
 
   if (review.error !== "") {
@@ -120,7 +112,7 @@ export function ReviewStrip({ taskId, repoPath, review }: ReviewStripProps) {
         <p className="text-xs text-muted-foreground">
           The agent didn't change anything, so there is nothing to approve. Ask for the change in
           the conversation, or{" "}
-          {repoPath === "" ? "discard the step" : "review the pull request again"}.
+          {subject === "step" ? "discard the step" : "review the pull request again"}.
         </p>
       </div>
     );
@@ -170,7 +162,7 @@ export function ReviewStrip({ taskId, repoPath, review }: ReviewStripProps) {
         <ul className="flex max-h-64 flex-col overflow-y-auto">
           {files.map((file) => (
             <li key={file.path}>
-              <FileRow taskId={taskId} repoPath={repoPath} file={file} />
+              <FileRow taskId={taskId} file={file} />
             </li>
           ))}
         </ul>

@@ -130,7 +130,7 @@ func TestDeriveTheCurrentStep(t *testing.T) {
 	// first one that is not done, not the last.
 	followed := stepInput(flow.StepState{Status: flow.StepAwaitingReview, Review: &review.Snapshot{Total: 3}}, waiting)
 	followed.Steps = append(followed.Steps, flow.StepState{
-		Step:   task.Step{Number: 3, File: "3-logout.md", Title: "Logout", Repository: "api", RepoPath: apiPath},
+		Step:   task.Step{Number: 3, File: "3-logout.md", Title: "Logout"},
 		Status: flow.StepNotStarted,
 	})
 
@@ -311,18 +311,15 @@ func TestDeriveTheReviewerOfTheCurrentStep(t *testing.T) {
 	}
 }
 
-func TestDeriveTheRepositoriesOfThePRStage(t *testing.T) {
+func TestDeriveThePullRequestOfThePRStage(t *testing.T) {
 	t.Parallel()
 
-	const webPath = workspace + "/web"
-
 	waiting := summary(session.StatusWaiting, true)
-	apiPlace := attention.Place{Kind: attention.PlaceRepo, RepoPath: apiPath, Repository: "api"}
 
-	// situation is the one situation of the task, in api.
+	// situation is the one situation of the task, at its pull request.
 	situation := func(kind attention.Kind, form attention.Form, percent int, body string) []attention.Found {
 		return []attention.Found{{
-			TaskID: taskID, Place: apiPlace, Kind: kind, Form: form, Percent: percent, Title: taskName, Body: body,
+			TaskID: taskID, Place: prPlace, Kind: kind, Form: form, Percent: percent, Title: taskName, Body: body,
 		}}
 	}
 
@@ -333,154 +330,126 @@ func TestDeriveTheRepositoriesOfThePRStage(t *testing.T) {
 	}{
 		{
 			"blocked",
-			repoInput(flow.RepoState{
-				Repository: "api", RepoPath: apiPath, Status: flow.RepoBlocked,
-				Block: &task.PRBlock{Reason: task.PRBlockGHAuth, Detail: "You are not logged into any GitHub hosts."},
+			prInput(flow.PullRequest{
+				Status: flow.PRBlocked,
+				Block:  &task.PRBlock{Reason: task.PRBlockGHAuth, Detail: "You are not logged into any GitHub hosts."},
 			}),
-			situation(attention.KindPRBlocked, attention.FormNone, 0, "The pull request of api is blocked: the GitHub CLI isn't authenticated."),
+			situation(attention.KindPRBlocked, attention.FormNone, 0,
+				"The pull request is blocked: the GitHub CLI isn't authenticated."),
 		},
 		{
 			"the pull request was closed without a merge",
-			repoInput(flow.RepoState{Repository: "api", RepoPath: apiPath, Status: flow.RepoPRClosed}),
-			situation(attention.KindPRClosed, attention.FormNone, 0, "The pull request of api was closed without a merge."),
+			prInput(flow.PullRequest{Status: flow.PRClosedUnmerged}),
+			situation(attention.KindPRClosed, attention.FormNone, 0, "The pull request was closed without a merge."),
 		},
 		{
 			"the agent stopped short of what the app waits for",
-			repoInput(flow.RepoState{
-				Repository: "api", RepoPath: apiPath, Status: flow.RepoAwaitingReply,
-				SessionStage: session.PRStage("api"), Session: waiting,
+			prInput(flow.PullRequest{
+				Status: flow.PRAwaitingReply, SessionStage: session.PRStage, Session: waiting,
 			}),
-			situation(attention.KindReply, attention.FormNone, 0, "The agent is waiting for your reply in api."),
+			situation(attention.KindReply, attention.FormNone, 0,
+				"The agent is waiting for your reply in the pull request."),
 		},
 		{
 			"a draft to approve",
-			repoInput(flow.RepoState{
-				Repository: "api", RepoPath: apiPath, Status: flow.RepoDraftReady,
-				SessionStage: session.PRStage("api"), Session: waiting,
+			prInput(flow.PullRequest{
+				Status: flow.PRDraftReady, SessionStage: session.PRStage, Session: waiting,
 			}),
-			situation(attention.KindDraft, attention.FormNone, 0, "The pull request draft of api is ready for your OK."),
+			situation(attention.KindDraft, attention.FormNone, 0, "The pull request draft is ready for your OK."),
 		},
 		{
 			"findings to decide",
-			repoInput(flow.RepoState{
-				Repository: "api", RepoPath: apiPath, Status: flow.RepoAwaitingDecision,
-				SessionStage: session.PRReviewStage("api"), Session: waiting,
+			prInput(flow.PullRequest{
+				Status: flow.PRAwaitingDecision, SessionStage: session.PRReviewStage, Session: waiting,
 			}),
-			situation(attention.KindFindings, attention.FormNone, 0, "The review of api found changes for you to decide."),
+			situation(attention.KindFindings, attention.FormNone, 0,
+				"The review of the pull request found changes for you to decide."),
 		},
 		{
 			"changes with nothing staged",
-			repoInput(flow.RepoState{
-				Repository: "api", RepoPath: apiPath, Status: flow.RepoInReview, Review: &review.Snapshot{Total: 2},
-				SessionStage: session.PRReviewStage("api"), Session: waiting,
+			prInput(flow.PullRequest{
+				Status: flow.PRInReview, Review: &review.Snapshot{Total: 2},
+				SessionStage: session.PRReviewStage, Session: waiting,
 			}),
-			situation(attention.KindChangesReview, attention.FormReview, 0, "The changes from the review of api are ready for review."),
+			situation(attention.KindChangesReview, attention.FormReview, 0,
+				"The changes from the review of the pull request are ready for review."),
 		},
 		{
 			"changes with one of two files staged",
-			repoInput(flow.RepoState{
-				Repository: "api", RepoPath: apiPath, Status: flow.RepoInReview, Review: &review.Snapshot{Staged: 1, Total: 2},
-				SessionStage: session.PRReviewStage("api"), Session: waiting,
+			prInput(flow.PullRequest{
+				Status: flow.PRInReview, Review: &review.Snapshot{Staged: 1, Total: 2},
+				SessionStage: session.PRReviewStage, Session: waiting,
 			}),
-			situation(attention.KindChangesReview, attention.FormStaged, 50, "The changes from the review of api are ready for review."),
+			situation(attention.KindChangesReview, attention.FormStaged, 50,
+				"The changes from the review of the pull request are ready for review."),
 		},
 		{
 			"changes ready to approve",
-			repoInput(flow.RepoState{
-				Repository: "api", RepoPath: apiPath, Status: flow.RepoReadyToApprove, Review: &review.Snapshot{Staged: 2, Total: 2},
-				SessionStage: session.PRReviewStage("api"), Session: waiting,
+			prInput(flow.PullRequest{
+				Status: flow.PRReadyToApprove, Review: &review.Snapshot{Staged: 2, Total: 2},
+				SessionStage: session.PRReviewStage, Session: waiting,
 			}),
-			situation(attention.KindChangesReview, attention.FormApprove, 0, "The changes from the review of api are ready for review."),
+			situation(attention.KindChangesReview, attention.FormApprove, 0,
+				"The changes from the review of the pull request are ready for review."),
 		},
 		{
 			"the last approval of the changes left no commit",
-			repoInput(flow.RepoState{
-				Repository: "api", RepoPath: apiPath, Status: flow.RepoReadyToApprove, Review: &review.Snapshot{Staged: 2, Total: 2},
-				CommitFailed: true, SessionStage: session.PRReviewStage("api"), Session: waiting,
+			prInput(flow.PullRequest{
+				Status: flow.PRReadyToApprove, Review: &review.Snapshot{Staged: 2, Total: 2},
+				CommitFailed: true, SessionStage: session.PRReviewStage, Session: waiting,
 			}),
-			situation(attention.KindChangesReview, attention.FormApprove, 0, "api: the last approval didn't produce a commit."),
+			situation(attention.KindChangesReview, attention.FormApprove, 0,
+				"The last approval of the pull request didn't produce a commit."),
 		},
 		{
 			"ready to merge",
-			repoInput(flow.RepoState{Repository: "api", RepoPath: apiPath, Status: flow.RepoDone}),
-			situation(attention.KindMerge, attention.FormMerge, 0, "The pull request of api is ready to merge."),
+			prInput(flow.PullRequest{Status: flow.PRDone}),
+			situation(attention.KindMerge, attention.FormMerge, 0, "The pull request is ready to merge."),
 		},
 		{
 			"the merge could not be confirmed",
-			repoInput(flow.RepoState{
-				Repository: "api", RepoPath: apiPath, Status: flow.RepoDone, CheckError: "gh pr view: timeout", CanClose: true,
-			}),
-			situation(attention.KindMerge, attention.FormClose, 0, "The pull request of api is ready to close."),
+			prInput(flow.PullRequest{Status: flow.PRDone, CheckError: "gh pr view: timeout", CanClose: true}),
+			situation(attention.KindMerge, attention.FormClose, 0, "The pull request is ready to close."),
 		},
 		{
 			"merged",
-			repoInput(flow.RepoState{Repository: "api", RepoPath: apiPath, Status: flow.RepoMerged, CanClose: true}),
-			situation(attention.KindMerge, attention.FormClose, 0, "The pull request of api is ready to close."),
-		},
-		{
-			"nothing to publish",
-			repoInput(flow.RepoState{Repository: "api", RepoPath: apiPath, Status: flow.RepoSkipped, CanClose: true}),
-			situation(attention.KindNothingToPublish, attention.FormNone, 0, "api has nothing to publish and is ready to close."),
+			prInput(flow.PullRequest{Status: flow.PRMerged, CanClose: true}),
+			situation(attention.KindMerge, attention.FormClose, 0, "The pull request is ready to close."),
 		},
 		{
 			"the agent is drafting",
-			repoInput(flow.RepoState{
-				Repository: "api", RepoPath: apiPath, Status: flow.RepoDrafting,
-				SessionStage: session.PRStage("api"), Session: summary(session.StatusWorking, false),
+			prInput(flow.PullRequest{
+				Status: flow.PRDrafting, SessionStage: session.PRStage,
+				Session: summary(session.StatusWorking, false),
 			}),
 			nil,
 		},
-		{"closing", repoInput(flow.RepoState{Repository: "api", RepoPath: apiPath, Status: flow.RepoClosing}), nil},
-		{"closed", repoInput(flow.RepoState{Repository: "api", RepoPath: apiPath, Status: flow.RepoClosed}), nil},
+		{"closing", prInput(flow.PullRequest{Status: flow.PRClosing}), nil},
+		{"closed", prInput(flow.PullRequest{Status: flow.PRClosed}), nil},
 		{
 			"the session of a draft is paused",
-			repoInput(flow.RepoState{
-				Repository: "api", RepoPath: apiPath, Status: flow.RepoDraftReady,
-				SessionStage: session.PRStage("api"), Session: summary(session.StatusPaused, false),
+			prInput(flow.PullRequest{
+				Status: flow.PRDraftReady, SessionStage: session.PRStage,
+				Session: summary(session.StatusPaused, false),
 			}),
 			nil,
 		},
 		{
 			"a permission waits",
-			repoInput(flow.RepoState{
-				Repository: "api", RepoPath: apiPath, Status: flow.RepoDrafting,
-				SessionStage: session.PRStage("api"), Session: summary(session.StatusNeedsPermission, false),
+			prInput(flow.PullRequest{
+				Status: flow.PRDrafting, SessionStage: session.PRStage,
+				Session: summary(session.StatusNeedsPermission, false),
 			}),
-			situation(attention.KindPermission, attention.FormNone, 0, "Permission requested in api."),
+			situation(attention.KindPermission, attention.FormNone, 0,
+				"Permission requested in the pull request."),
 		},
 		{
-			"the repository at the root of the workspace",
-			repoInput(flow.RepoState{
-				Repository: ".", RepoPath: workspace, Status: flow.RepoDraftReady,
-				SessionStage: session.PRStage(task.Slug(".")), Session: waiting,
-			}),
-			[]attention.Found{{
-				TaskID: taskID, Place: attention.Place{Kind: attention.PlaceRepo, RepoPath: workspace, Repository: "."},
-				Kind: attention.KindDraft, Title: taskName, Body: "The pull request draft of code is ready for your OK.",
-			}},
-		},
-		{
-			"two repositories",
-			repoInput(
-				flow.RepoState{
-					Repository: "web", RepoPath: webPath, Status: flow.RepoAwaitingDecision,
-					SessionStage: session.PRReviewStage("web"), Session: waiting,
-				},
-				flow.RepoState{
-					Repository: "api", RepoPath: apiPath, Status: flow.RepoDraftReady,
-					SessionStage: session.PRStage("api"), Session: waiting,
-				},
-			),
-			[]attention.Found{
-				{
-					TaskID: taskID, Place: attention.Place{Kind: attention.PlaceRepo, RepoPath: webPath, Repository: "web"},
-					Kind: attention.KindFindings, Title: taskName, Body: "The review of web found changes for you to decide.",
-				},
-				{
-					TaskID: taskID, Place: apiPlace,
-					Kind: attention.KindDraft, Title: taskName, Body: "The pull request draft of api is ready for your OK.",
-				},
+			"a task in the PR stage before its run exists",
+			attention.Input{
+				Task:     task.Task{ID: taskID, Name: taskName, Stage: task.StagePR},
+				Sessions: map[session.Key]session.Summary{},
 			},
+			nil,
 		},
 	}
 
@@ -495,6 +464,24 @@ func TestDeriveTheRepositoriesOfThePRStage(t *testing.T) {
 	}
 }
 
+func TestParsePlaceReadsThePlaceOfThePullRequest(t *testing.T) {
+	t.Parallel()
+
+	if got := prPlace.Key(); got != "pr" {
+		t.Errorf("Key() = %q, want %q", got, "pr")
+	}
+	got, ok := attention.ParsePlace("pr")
+	if !ok {
+		t.Fatal("ParsePlace(\"pr\") = false, want the place of the pull request")
+	}
+	if diff := cmp.Diff(prPlace, got); diff != "" {
+		t.Errorf("ParsePlace() mismatch (-want +got):\n%s", diff)
+	}
+	if _, ok := attention.ParsePlace("repo:/ws/api"); ok {
+		t.Error("ParsePlace(\"repo:/ws/api\") = true, want a key nothing carries any more refused")
+	}
+}
+
 func TestStepAndPRBlockPhrases(t *testing.T) {
 	t.Parallel()
 
@@ -502,7 +489,7 @@ func TestStepAndPRBlockPhrases(t *testing.T) {
 		return stepInput(flow.StepState{Status: flow.StepBlocked, Block: block})
 	}
 	prBlocked := func(block *task.PRBlock) attention.Input {
-		return repoInput(flow.RepoState{Repository: "api", RepoPath: apiPath, Status: flow.RepoBlocked, Block: block})
+		return prInput(flow.PullRequest{Status: flow.PRBlocked, Block: block})
 	}
 
 	tests := []struct {
@@ -516,14 +503,14 @@ func TestStepAndPRBlockPhrases(t *testing.T) {
 		{"worktree folder exists", stepBlocked(&task.StepBlock{Reason: task.BlockPathExists}), "Step 2 can't start: the worktree folder already exists."},
 		{"branch exists", stepBlocked(&task.StepBlock{Reason: task.BlockBranchExists}), "Step 2 can't start: the branch already exists."},
 		{"git failed for a step", stepBlocked(&task.StepBlock{Reason: task.BlockGitFailed}), "Step 2 can't start: git failed."},
-		{"no repository", stepBlocked(&task.StepBlock{Reason: task.BlockNoRepository}), "Step 2 can't start: the step doesn't name a repository of this task."},
+		{"the clone is missing", stepBlocked(&task.StepBlock{Reason: task.BlockCloneMissing}), "Step 2 can't start: the clone of the repository is missing."},
 		{"a step blocked with no reason", stepBlocked(nil), "Step 2 can't start: git failed."},
-		{"gh missing", prBlocked(&task.PRBlock{Reason: task.PRBlockGHMissing}), "The pull request of api is blocked: the GitHub CLI was not found."},
-		{"gh not authenticated", prBlocked(&task.PRBlock{Reason: task.PRBlockGHAuth}), "The pull request of api is blocked: the GitHub CLI isn't authenticated."},
-		{"gh failed", prBlocked(&task.PRBlock{Reason: task.PRBlockGHFailed}), "The pull request of api is blocked: the GitHub CLI failed."},
-		{"git failed for a pull request", prBlocked(&task.PRBlock{Reason: task.PRBlockGitFailed}), "The pull request of api is blocked: git failed."},
-		{"worktree gone", prBlocked(&task.PRBlock{Reason: task.PRBlockNoWorktree}), "The pull request of api is blocked: the worktree is gone."},
-		{"a pull request blocked with no reason", prBlocked(nil), "The pull request of api is blocked: git failed."},
+		{"gh missing", prBlocked(&task.PRBlock{Reason: task.PRBlockGHMissing}), "The pull request is blocked: the GitHub CLI was not found."},
+		{"gh not authenticated", prBlocked(&task.PRBlock{Reason: task.PRBlockGHAuth}), "The pull request is blocked: the GitHub CLI isn't authenticated."},
+		{"gh failed", prBlocked(&task.PRBlock{Reason: task.PRBlockGHFailed}), "The pull request is blocked: the GitHub CLI failed."},
+		{"git failed for a pull request", prBlocked(&task.PRBlock{Reason: task.PRBlockGitFailed}), "The pull request is blocked: git failed."},
+		{"worktree gone", prBlocked(&task.PRBlock{Reason: task.PRBlockNoWorktree}), "The pull request is blocked: the worktree is gone."},
+		{"a pull request blocked with no reason", prBlocked(nil), "The pull request is blocked: git failed."},
 	}
 
 	for _, test := range tests {
@@ -552,11 +539,7 @@ func TestPlaceKeysReadBack(t *testing.T) {
 		{"stage", attention.Place{Kind: attention.PlaceStage, Stage: task.StageTechSpec}, "stage:tech_spec"},
 		{"step", attention.Place{Kind: attention.PlaceStep, Step: 12}, "step:12"},
 		{"step review", attention.Place{Kind: attention.PlaceStepReview, Step: 3}, "step_review:3"},
-		{
-			"repository with a colon in its path",
-			attention.Place{Kind: attention.PlaceRepo, RepoPath: "/home/u/code/api:v2"},
-			"repo:/home/u/code/api:v2",
-		},
+		{"the pull request", attention.Place{Kind: attention.PlacePR}, "pr"},
 	}
 
 	for _, test := range tests {
@@ -576,7 +559,9 @@ func TestPlaceKeysReadBack(t *testing.T) {
 		})
 	}
 
-	for _, key := range []string{"", "stage:", "stage:closing", "step:0", "step:x", "step_review:0", "step_review:x", "other:1"} {
+	for _, key := range []string{
+		"", "stage:", "stage:closing", "step:0", "step:x", "step_review:0", "step_review:x", "other:1", "repo:/ws/api",
+	} {
 		if place, ok := attention.ParsePlace(key); ok {
 			t.Errorf("ParsePlace(%q) = %+v, true; want false", key, place)
 		}
@@ -604,8 +589,7 @@ func TestKindsBelongToTheirGroup(t *testing.T) {
 		attention.KindFindings:        attention.GroupWaiting,
 		attention.KindChangesReview:   attention.GroupWaiting,
 
-		attention.KindMerge:            attention.GroupClosing,
-		attention.KindNothingToPublish: attention.GroupClosing,
+		attention.KindMerge: attention.GroupClosing,
 	}
 	for kind, want := range groups {
 		if got := kind.Group(); got != want {

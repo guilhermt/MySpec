@@ -1,4 +1,3 @@
-import { repoName } from "@/lib/repos";
 import type { Situation, SituationGroup, State, TaskSummary } from "@/lib/wails";
 import { asPlaceKind, asSituationForm, asSituationGroup, asSituationKind } from "@/lib/wails";
 
@@ -21,8 +20,8 @@ export function situationTone(situation: Situation): SituationTone {
 
 /**
  * situationLabel is what a situation asks of the user, in the few words the
- * tree, the lists and the section have room for. A situation with more than
- * one form reads as the form it is in now.
+ * lists and the section have room for. A situation with more than one form
+ * reads as the form it is in now.
  */
 export function situationLabel(situation: Situation): string {
   const n = situation.place.step;
@@ -69,8 +68,6 @@ export function situationLabel(situation: Situation): string {
       return form === "approve" ? "Approve changes" : "Review changes";
     case "merge":
       return form === "close" ? "Ready to close" : "Ready to merge";
-    case "nothing_to_publish":
-      return "Ready to close";
   }
 }
 
@@ -90,8 +87,8 @@ function stageName(stage: string): string {
   }
 }
 
-/** placeLabel names where in its task a situation is: the stage, "step 3", "step 3 review", or the repository. */
-export function placeLabel(app: State | null, situation: Situation): string {
+/** placeLabel names where in its task a situation is: the stage, "step 3", "step 3 review", or the pull request. */
+export function placeLabel(situation: Situation): string {
   const { place } = situation;
   switch (asPlaceKind(place.kind)) {
     case "stage":
@@ -100,8 +97,8 @@ export function placeLabel(app: State | null, situation: Situation): string {
       return `step ${place.step}`;
     case "step_review":
       return `step ${place.step} review`;
-    case "repo":
-      return repoName(app, place);
+    case "pr":
+      return "pull request";
   }
 }
 
@@ -125,7 +122,6 @@ export function namesPlace(situation: Situation): boolean {
     case "findings":
     case "changes_review":
     case "merge":
-    case "nothing_to_publish":
       return false;
   }
 }
@@ -134,9 +130,9 @@ export function namesPlace(situation: Situation): boolean {
  * situationDetail is a situation in one line: its label, followed by its place
  * when the label does not name it.
  */
-export function situationDetail(app: State | null, situation: Situation): string {
+export function situationDetail(situation: Situation): string {
   const label = situationLabel(situation);
-  return namesPlace(situation) ? label : `${label} · ${placeLabel(app, situation)}`;
+  return namesPlace(situation) ? label : `${label} · ${placeLabel(situation)}`;
 }
 
 /**
@@ -172,7 +168,7 @@ export function compareSituations(a: Situation, b: Situation): number {
 }
 
 /**
- * waitingEntries is everything the workspace waits on the user for, one entry
+ * waitingEntries is everything the active tasks wait on the user for, one entry
  * per situation, most urgent first. The open task is left out: the user is
  * already there.
  */
@@ -186,11 +182,6 @@ export function waitingEntries(app: State | null, openTaskId: string | null): Wa
         a.task.name.localeCompare(b.task.name) ||
         a.situation.id.localeCompare(b.situation.id),
     );
-}
-
-/** hiddenSituations is every situation of the given tasks, most urgent first. */
-export function hiddenSituations(tasks: readonly TaskSummary[]): Situation[] {
-  return tasks.flatMap((task) => task.situations ?? []).sort(compareSituations);
 }
 
 /** stageSituation is the situation of the planning stage of a task, null when it has none. */
@@ -233,13 +224,10 @@ export function stepOrReviewerSituation(task: TaskSummary, number: number): Situ
   );
 }
 
-/** repoSituation is the situation of a repository of a task, null when it has none. */
-export function repoSituation(task: TaskSummary, repoPath: string): Situation | null {
+/** prSituation is the situation of the pull request of a task, null when it has none. */
+export function prSituation(task: TaskSummary): Situation | null {
   return (
-    (task.situations ?? []).find(
-      (situation) =>
-        asPlaceKind(situation.place.kind) === "repo" && situation.place.repoPath === repoPath,
-    ) ?? null
+    (task.situations ?? []).find((situation) => asPlaceKind(situation.place.kind) === "pr") ?? null
   );
 }
 

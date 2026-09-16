@@ -12,11 +12,11 @@ function dotOf(element: HTMLElement): Element | null {
 }
 
 describe("StepList", () => {
-  it("lists the steps in order, with the name the tree gives the repository", () => {
+  it("lists the steps in order, with their titles and states", () => {
     renderWithStore(
       <StepList
         steps={[
-          makeStep({ repository: "apps/web", repoPath: "/home/dev/projects/web" }),
+          makeStep(),
           makeStep({ number: 2, file: "2-check-the-token.md", title: "Check the token" }),
         ]}
         problems={[]}
@@ -27,21 +27,7 @@ describe("StepList", () => {
 
     expect(screen.getByText("Add the login form")).toBeInTheDocument();
     expect(screen.getByText("Check the token")).toBeInTheDocument();
-    expect(screen.getAllByText("web")).toHaveLength(2);
     expect(screen.getAllByText("Not started")).toHaveLength(2);
-  });
-
-  it("shows the value of the file when it names no repository of the task", () => {
-    renderWithStore(
-      <StepList
-        steps={[makeStep({ repository: "mobile", repoPath: "" })]}
-        problems={[]}
-        currentStep={0}
-      />,
-      { state },
-    );
-
-    expect(screen.getByText("mobile")).toHaveClass("text-destructive");
   });
 
   it("opens a step when the list is there to be read", async () => {
@@ -276,7 +262,7 @@ describe("StepList", () => {
         situation={makeSituation({
           kind: "step_blocked",
           group: "error",
-          place: { kind: "step", stage: "", step: 2, repoPath: "", repository: "" },
+          place: { kind: "step", stage: "", step: 2 },
         })}
       />,
       { state },

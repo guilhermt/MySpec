@@ -17,13 +17,6 @@ const reviewDebounce = 200 * time.Millisecond
 // readTimeout bounds one reading, which runs on the watcher's goroutine.
 const readTimeout = 30 * time.Second
 
-// Key identifies one worktree under review: a task and the repository it
-// belongs to.
-type Key struct {
-	TaskID   string
-	RepoPath string
-}
-
 // File is one changed path of a worktree under review.
 type File struct {
 	Path   string

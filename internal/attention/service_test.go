@@ -246,10 +246,9 @@ func TestTheBaselineTakesWhatItFinds(t *testing.T) {
 	f := newService(t, false)
 
 	techSpec := attention.Place{Kind: attention.PlaceStage, Stage: task.StageTechSpec}
-	api := repoPlace("api")
 	f.store.seed(
 		attention.Record{TaskID: "task-1", Place: "stage:tech_spec", ID: "stored-1", Kind: attention.KindReply, StartedAt: yesterday},
-		attention.Record{TaskID: "task-2", Place: api.Key(), ID: "stored-2", Kind: attention.KindMerge, StartedAt: yesterday},
+		attention.Record{TaskID: "task-2", Place: prPlace.Key(), ID: "stored-2", Kind: attention.KindMerge, StartedAt: yesterday},
 		attention.Record{TaskID: "task-3", Place: "step:2", ID: "stored-3", Kind: attention.KindPermission, StartedAt: yesterday},
 		attention.Record{TaskID: "task-4", Place: "stage:prd", ID: "stored-4", Kind: attention.KindReply, StartedAt: yesterday},
 		attention.Record{TaskID: "task-6", Place: "nowhere", ID: "stored-6", Kind: attention.KindReply, StartedAt: yesterday},
@@ -258,7 +257,7 @@ func TestTheBaselineTakesWhatItFinds(t *testing.T) {
 		t.Fatalf("Sync() = %v, want nil", err)
 	}
 
-	merge := found("task-2", api, attention.KindMerge)
+	merge := found("task-2", prPlace, attention.KindMerge)
 	merge.Form = attention.FormClose
 	seen := []attention.Found{
 		found("task-1", techSpec, attention.KindReply),
@@ -271,7 +270,7 @@ func TestTheBaselineTakesWhatItFinds(t *testing.T) {
 	want := map[string][]attention.Situation{
 		"task-1": {{ID: "stored-1", TaskID: "task-1", Place: techSpec, Kind: attention.KindReply, StartedAt: yesterday}},
 		"task-2": {{
-			ID: "stored-2", TaskID: "task-2", Place: api, Kind: attention.KindMerge,
+			ID: "stored-2", TaskID: "task-2", Place: prPlace, Kind: attention.KindMerge,
 			Form: attention.FormClose, StartedAt: yesterday,
 		}},
 		"task-3": {{ID: "s1", TaskID: "task-3", Place: stepPlace, Kind: attention.KindReply, StartedAt: yesterday}},
@@ -315,7 +314,7 @@ func TestTheBaselineEndsWhenAnUpdateWasDueBeforeItsEnd(t *testing.T) {
 		TaskID: "task-2", Place: "stage:prd", ID: "stored", Kind: attention.KindReply, StartedAt: yesterday,
 	})
 
-	// The workspace before has a situation settling when the next one loads.
+	// The tasks before have a situation settling when the next ones load.
 	f.service.Update([]attention.Found{found(taskID, prdPlace, attention.KindReply)})
 	f.advance(attention.Settle / 2)
 	if err := f.service.Sync(t.Context(), []string{"task-2"}); err != nil {
@@ -323,7 +322,7 @@ func TestTheBaselineEndsWhenAnUpdateWasDueBeforeItsEnd(t *testing.T) {
 	}
 	f.service.Update(nil)
 
-	// The settle of the workspace before is due, and brings its update.
+	// The settle of the tasks before is due, and brings its update.
 	f.advance(attention.Settle / 2)
 	f.service.Update(nil)
 
@@ -340,7 +339,7 @@ func TestTheBaselineEndsWhenAnUpdateWasDueBeforeItsEnd(t *testing.T) {
 	wantCalls(t, "store", []string{"delete:task-2:stage:prd"}, f.store.calls)
 }
 
-func TestSyncWithdrawsTheNotificationsOfTheWorkspaceBefore(t *testing.T) {
+func TestSyncWithdrawsTheNotificationsOfTheTasksBefore(t *testing.T) {
 	t.Parallel()
 	f := newService(t, false)
 	f.settle(found(taskID, prdPlace, attention.KindReply), found("task-2", prdPlace, attention.KindQuestion))
@@ -359,7 +358,7 @@ func TestSyncWithdrawsTheNotificationsOfTheWorkspaceBefore(t *testing.T) {
 	}, f.notifier.calls)
 	for _, id := range []string{"s1", "s2"} {
 		if target, ok := f.service.Open(id); ok {
-			t.Errorf("Open(%s) = %+v, true; want the notifications of the workspace before forgotten", id, target)
+			t.Errorf("Open(%s) = %+v, true; want the notifications of the tasks before forgotten", id, target)
 		}
 	}
 }
@@ -368,7 +367,7 @@ func TestASyncThatCannotReadTheStoreStillTakesABaseline(t *testing.T) {
 	t.Parallel()
 	f := newService(t, false)
 
-	// The workspace before holds a situation, notified with the window away.
+	// The tasks before hold a situation, notified with the window away.
 	f.settle(found(taskID, prdPlace, attention.KindReply))
 
 	f.store.err = errors.New("disk I/O error")
@@ -377,7 +376,7 @@ func TestASyncThatCannotReadTheStoreStillTakesABaseline(t *testing.T) {
 	}
 	f.store.err = nil
 
-	// What this workspace already waits for is found, not started.
+	// What the tasks just loaded already wait for is found, not started.
 	loaded := f.clock.now
 	question := []attention.Found{found("task-2", prdPlace, attention.KindQuestion)}
 	want := holding("task-2", attention.Situation{
@@ -391,7 +390,7 @@ func TestASyncThatCannotReadTheStoreStillTakesABaseline(t *testing.T) {
 	}
 
 	// Past the baseline it holds on, and nothing ends the situation of the
-	// workspace before: its row stays as it was.
+	// tasks before: its row stays as it was.
 	f.advance(attention.Baseline)
 	if diff := cmp.Diff(want, f.service.Update(question)); diff != "" {
 		t.Errorf("Update() after the baseline mismatch (-want +got):\n%s", diff)
@@ -400,7 +399,7 @@ func TestASyncThatCannotReadTheStoreStillTakesABaseline(t *testing.T) {
 	wantCalls(t, "notifier", []string{"send:s1:login-screen:reply at stage:prd", "withdraw:s1"}, f.notifier.calls)
 	wantCalls(t, "store", []string{"upsert:task-1:stage:prd:s1", "upsert:task-2:stage:prd:s2"}, f.store.calls)
 	if len(f.started) != 1 || f.started[0].Situation.ID != "s1" {
-		t.Errorf("OnStarted heard %+v, want only s1, which started before the workspace loaded", f.started)
+		t.Errorf("OnStarted heard %+v, want only s1, which started before the tasks loaded", f.started)
 	}
 }
 
@@ -428,14 +427,14 @@ func TestViewWithdrawsAShownNotification(t *testing.T) {
 func TestOpenLeadsToThePlaceOnce(t *testing.T) {
 	t.Parallel()
 	f := newService(t, false)
-	draft := found(taskID, repoPlace("api"), attention.KindDraft)
+	draft := found(taskID, prPlace, attention.KindDraft)
 	f.settle(draft)
 
 	target, ok := f.service.Open("s1")
 	if !ok {
 		t.Fatal("Open(s1) = false, want the place of the situation")
 	}
-	if diff := cmp.Diff(attention.Target{TaskID: taskID, Place: repoPlace("api")}, target); diff != "" {
+	if diff := cmp.Diff(attention.Target{TaskID: taskID, Place: prPlace}, target); diff != "" {
 		t.Errorf("Open(s1) mismatch (-want +got):\n%s", diff)
 	}
 	if target, ok = f.service.Open("s1"); ok {
@@ -443,7 +442,7 @@ func TestOpenLeadsToThePlaceOnce(t *testing.T) {
 	}
 
 	// A situation that ended still leads to its place.
-	findings := found(taskID, repoPlace("web"), attention.KindFindings)
+	findings := found(taskID, stepPlace, attention.KindFindings)
 	f.settle(draft, findings)
 	f.service.Update([]attention.Found{draft})
 	f.advance(attention.Grace)
@@ -453,12 +452,12 @@ func TestOpenLeadsToThePlaceOnce(t *testing.T) {
 	if !ok {
 		t.Fatal("Open(s2) = false, want the place of the situation that ended")
 	}
-	if diff := cmp.Diff(attention.Target{TaskID: taskID, Place: repoPlace("web")}, target); diff != "" {
+	if diff := cmp.Diff(attention.Target{TaskID: taskID, Place: stepPlace}, target); diff != "" {
 		t.Errorf("Open(s2) mismatch (-want +got):\n%s", diff)
 	}
 	wantCalls(t, "notifier", []string{
-		"send:s1:login-screen:draft at repo:/home/u/code/api",
-		"send:s2:login-screen:findings at repo:/home/u/code/web",
+		"send:s1:login-screen:draft at pr",
+		"send:s2:login-screen:findings at step:2",
 		"withdraw:s2",
 	}, f.notifier.calls)
 }
@@ -467,11 +466,14 @@ func TestTheSituationsOfATaskComeMostUrgentFirst(t *testing.T) {
 	t.Parallel()
 	f := newService(t, true)
 
-	merge := found(taskID, repoPlace("a"), attention.KindMerge)
-	findings := found(taskID, repoPlace("b"), attention.KindFindings)
-	blocked := found(taskID, repoPlace("c"), attention.KindPRBlocked)
-	draft := found(taskID, repoPlace("d"), attention.KindDraft)
-	reply := found(taskID, repoPlace("e"), attention.KindReply)
+	stepAt := func(number int) attention.Place {
+		return attention.Place{Kind: attention.PlaceStep, Step: number}
+	}
+	merge := found(taskID, prPlace, attention.KindMerge)
+	findings := found(taskID, stepAt(1), attention.KindFindings)
+	blocked := found(taskID, stepAt(2), attention.KindPRBlocked)
+	draft := found(taskID, stepAt(3), attention.KindDraft)
+	reply := found(taskID, stepAt(4), attention.KindReply)
 	failed := found("task-2", prdPlace, attention.KindSessionError)
 
 	// One start after the other, and the last three at the same instant.

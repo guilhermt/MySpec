@@ -445,7 +445,7 @@ func taskInfo(t *testing.T, id string) session.TaskInfo {
 		PRDPath:        filepath.Join(artifacts, "PRD.md"),
 		TechSpecPath:   filepath.Join(artifacts, "tech-spec.md"),
 		StepsDir:       filepath.Join(artifacts, "steps"),
-		Repositories:   []string{"api"},
+		Repository:     "dev/web",
 		InitialContext: "a login screen with email and password",
 		Choice:         models.Choice{Model: models.Opus5, Effort: models.High},
 	}

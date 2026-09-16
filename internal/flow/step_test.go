@@ -3,6 +3,7 @@ package flow_test
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 	"slices"
 	"testing"
 
@@ -14,14 +15,14 @@ import (
 	"github.com/guilhermt/myspec/internal/worktree"
 )
 
-// twoStepPlan is a plan whose steps live in the two repositories of the fake
-// workspace.
+// twoStepPlan is a plan of two steps, which is what a test that needs a step
+// after the first one uses.
 func twoStepPlan() task.Plan {
 	return task.Plan{
 		Present: true,
 		Steps: []task.Step{
-			{Number: 1, File: "1-first.md", Title: "First", Repository: "api", RepoPath: repos[0].Path},
-			{Number: 2, File: "2-second.md", Title: "Second", Repository: "web", RepoPath: repos[1].Path},
+			{Number: 1, File: "1-first.md", Title: "First"},
+			{Number: 2, File: "2-second.md", Title: "Second"},
 		},
 	}
 }
@@ -50,7 +51,7 @@ func TestAFinishedOneShotDocumentStartsItsStepInTheRepository(t *testing.T) {
 	f.service.Check("task-1")
 	f.waitStep(t, "task-1", 1, flow.StepImplementing)
 
-	f.waitWorktreeCalls(t, "ensure:task-1:api", "status:task-1:task-1")
+	f.waitWorktreeCalls(t, "ensure:task-1:dev/web", "status:task-1:task-1")
 	f.waitCalls(t, "close:task-1:one_shot", "start:task-1:step:1:restarted=false")
 
 	// The document is the prompt of the step, as a step file is.
@@ -58,7 +59,7 @@ func TestAFinishedOneShotDocumentStartsItsStepInTheRepository(t *testing.T) {
 	if info.Prompt != prompts.StageStep || info.StepPath != tk.OneShotPath() || info.OneShotPath != tk.OneShotPath() {
 		t.Errorf("step session = %+v, want the step prompt read from %s", info, tk.OneShotPath())
 	}
-	if want := worktree.Path(workspace, "api", "task-1"); info.Dir != want {
+	if want := worktree.Path(dataDir, "dev", "web", "task-1"); info.Dir != want {
 		t.Errorf("session dir = %q, want %q", info.Dir, want)
 	}
 }
@@ -73,11 +74,11 @@ func TestAFinishedPlanStartsTheFirstStepInItsWorktree(t *testing.T) {
 	f.service.Check("task-1")
 	f.waitStep(t, "task-1", 1, flow.StepImplementing)
 
-	f.waitWorktreeCalls(t, "ensure:task-1:api", "status:task-1:task-1")
+	f.waitWorktreeCalls(t, "ensure:task-1:dev/web", "status:task-1:task-1")
 	f.waitCalls(t, "close:task-1:plan", "start:task-1:step:1:restarted=false")
 
 	state := f.stepState(t, "task-1", 1)
-	if want := worktree.Path(workspace, "api", "task-1"); state.WorktreePath != want {
+	if want := worktree.Path(dataDir, "dev", "web", "task-1"); state.WorktreePath != want {
 		t.Errorf("worktree path = %q, want %q", state.WorktreePath, want)
 	}
 	if state.Phase != "" || state.Block != nil {
@@ -120,19 +121,19 @@ func TestAnIdleStepSessionIsAwaitingReview(t *testing.T) {
 	}
 }
 
-func TestCurrentStepIsTheFirstOfThePlan(t *testing.T) {
+func TestTheWorktreePathIsEmptyUntilTheWorktreeExists(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	implementing(f, "task-1", twoStepPlan())
-	implementing(f, "task-2", task.Plan{Present: true})
+	tk := implementing(f, "task-1", twoStepPlan())
 
-	current, ok := f.service.CurrentStep("task-1")
-	if !ok || current.Step.Number != 1 {
-		t.Errorf("CurrentStep(task-1) = %+v, %v, want step 1", current, ok)
+	if got := f.service.WorktreePath("task-1"); got != "" {
+		t.Errorf("WorktreePath() = %q, want it empty before the worktree", got)
 	}
-	if _, ok := f.service.CurrentStep("task-2"); ok {
-		t.Error("CurrentStep(task-2) = true, want false: the plan has no steps")
+
+	wt := f.worktrees.seed(tk)
+	if got := f.service.WorktreePath("task-1"); got != wt.Path {
+		t.Errorf("WorktreePath() = %q, want %q", got, wt.Path)
 	}
 }
 
@@ -178,25 +179,82 @@ func TestAFetchThatFailsBlocksTheStep(t *testing.T) {
 	}
 }
 
-func TestAStepWithoutARepositoryBlocksBeforeAnyGit(t *testing.T) {
+func TestAFirstStepIsBlockedWhenTheCloneIsMissing(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	implementing(f, "task-1", brokenPlan())
+	f.repositories.setMissing(true)
+	implementing(f, "task-1", twoStepPlan())
 
 	f.service.Sync(t.Context())
 	f.waitStep(t, "task-1", 1, flow.StepBlocked)
 
 	block := f.stepState(t, "task-1", 1).Block
-	if block == nil || block.Reason != task.BlockNoRepository {
-		t.Fatalf("block = %+v, want no repository", block)
+	if block == nil || block.Reason != task.BlockCloneMissing {
+		t.Fatalf("block = %+v, want the clone missing", block)
 	}
-	if want := `repository "cli" is not one of the repositories of this task`; block.Detail != want {
+	if want := "The clone at " + repo.Path + " is missing."; block.Detail != want {
 		t.Errorf("detail = %q, want %q", block.Detail, want)
 	}
 	if calls := f.worktrees.recorded(); len(calls) != 0 {
 		t.Errorf("worktree calls = %v, want none", calls)
 	}
+}
+
+func TestAStepWithAWorktreeRunsWithoutTheClone(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	tk := implementing(f, "task-1", twoStepPlan())
+	f.worktrees.seedAt(tk, t.TempDir())
+	f.repositories.setMissing(true)
+
+	f.service.Sync(t.Context())
+	f.waitStep(t, "task-1", 1, flow.StepImplementing)
+
+	// A worktree that exists goes on being used wherever the clone is.
+	if state := f.stepState(t, "task-1", 1); state.Block != nil {
+		t.Errorf("block = %+v, want none", state.Block)
+	}
+}
+
+func TestAStepWhoseWorktreeFolderIsGoneIsBlockedWhenTheCloneIsMissing(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	tk := implementing(f, "task-1", twoStepPlan())
+	// The user deleted the folder by hand: the worktree is created again, and
+	// that needs the clone.
+	f.worktrees.seedAt(tk, filepath.Join(t.TempDir(), "gone"))
+	f.repositories.setMissing(true)
+
+	f.service.Sync(t.Context())
+	f.waitStep(t, "task-1", 1, flow.StepBlocked)
+
+	block := f.stepState(t, "task-1", 1).Block
+	if block == nil || block.Reason != task.BlockCloneMissing {
+		t.Fatalf("block = %+v, want the clone missing", block)
+	}
+	if want := "The clone at " + repo.Path + " is missing."; block.Detail != want {
+		t.Errorf("detail = %q, want %q", block.Detail, want)
+	}
+}
+
+func TestRetryingAStepBlockedByAMissingCloneStartsItOnceTheCloneIsBack(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.repositories.setMissing(true)
+	implementing(f, "task-1", twoStepPlan())
+
+	f.service.Sync(t.Context())
+	f.waitStep(t, "task-1", 1, flow.StepBlocked)
+
+	f.repositories.setMissing(false)
+	if err := f.service.RetryStep(t.Context(), "task-1"); err != nil {
+		t.Fatalf("RetryStep() = %v, want nil", err)
+	}
+	f.waitStep(t, "task-1", 1, flow.StepImplementing)
 }
 
 func TestSyncStartsAStepTheAppNeverRecorded(t *testing.T) {
@@ -220,11 +278,11 @@ func TestSyncResumesAnInterruptedPreparationOnlyOnce(t *testing.T) {
 	release := f.worktrees.blockEnsure()
 
 	f.service.Sync(t.Context())
-	f.waitWorktreeCalls(t, "ensure:task-1:api")
+	f.waitWorktreeCalls(t, "ensure:task-1:dev/web")
 
 	// The second sync finds a preparation under way and leaves it alone.
 	f.service.Sync(t.Context())
-	f.waitWorktreeCalls(t, "ensure:task-1:api")
+	f.waitWorktreeCalls(t, "ensure:task-1:dev/web")
 
 	close(release)
 	f.waitStep(t, "task-1", 1, flow.StepImplementing)
@@ -252,7 +310,7 @@ func TestSyncReopensTheSessionOfAStartedStep(t *testing.T) {
 	f := newFixture(t)
 	created := implementing(f, "task-1", twoStepPlan())
 	f.tasks.setStepRun("task-1", task.StepRun{Number: 1, Status: task.StepStarted})
-	f.worktrees.seed(created, repos[0])
+	f.worktrees.seed(created)
 
 	f.service.Sync(t.Context())
 
@@ -309,7 +367,7 @@ func TestClosingTheFlowCancelsAPreparation(t *testing.T) {
 	defer close(release)
 
 	f.service.Sync(t.Context())
-	f.waitWorktreeCalls(t, "ensure:task-1:api")
+	f.waitWorktreeCalls(t, "ensure:task-1:dev/web")
 
 	f.service.Close()
 
@@ -319,7 +377,7 @@ func TestClosingTheFlowCancelsAPreparation(t *testing.T) {
 		run, ok := f.tasks.stepRun("task-1", 1)
 		return ok && run.Status == task.StepPreparing && len(f.sessions.recorded()) == 0
 	})
-	if _, ok := f.worktrees.Get("task-1", repos[0].Path); ok {
+	if _, ok := f.worktrees.Get("task-1"); ok {
 		t.Error("the cancelled preparation registered a worktree")
 	}
 }
@@ -349,7 +407,7 @@ func TestRetryStepPreparesABlockedStepAgain(t *testing.T) {
 	}
 	f.waitStep(t, "task-1", 1, flow.StepImplementing)
 
-	f.waitWorktreeCalls(t, "ensure:task-1:api", "ensure:task-1:api", "status:task-1:task-1")
+	f.waitWorktreeCalls(t, "ensure:task-1:dev/web", "ensure:task-1:dev/web", "status:task-1:task-1")
 	f.waitCalls(t, "start:task-1:step:1:restarted=false")
 }
 
@@ -400,8 +458,8 @@ func TestCleanAndStartStepDiscardsTheChangesAndStarts(t *testing.T) {
 	f.waitStep(t, "task-1", 1, flow.StepImplementing)
 
 	f.waitWorktreeCalls(t,
-		"ensure:task-1:api", "status:task-1:task-1",
-		"ensure:task-1:api", "clean:task-1:task-1", "status:task-1:task-1",
+		"ensure:task-1:dev/web", "status:task-1:task-1",
+		"ensure:task-1:dev/web", "clean:task-1:task-1", "status:task-1:task-1",
 	)
 	f.waitCalls(t, "start:task-1:step:1:restarted=false")
 }
@@ -441,8 +499,8 @@ func TestDiscardStepStartsTheStepOverInACleanWorktree(t *testing.T) {
 		"start:task-1:step:1:restarted=true",
 	)
 	f.waitWorktreeCalls(t,
-		"ensure:task-1:api", "status:task-1:task-1",
-		"ensure:task-1:api", "clean:task-1:task-1", "status:task-1:task-1",
+		"ensure:task-1:dev/web", "status:task-1:task-1",
+		"ensure:task-1:dev/web", "clean:task-1:task-1", "status:task-1:task-1",
 	)
 }
 
@@ -490,7 +548,7 @@ func TestDiscardStepCancelsAPreparationInFlight(t *testing.T) {
 	f := newFixture(t)
 	created := implementing(f, "task-1", twoStepPlan())
 	f.tasks.setStepRun("task-1", task.StepRun{Number: 1, Status: task.StepStarted})
-	f.worktrees.seed(created, repos[0])
+	f.worktrees.seed(created)
 
 	f.service.Sync(t.Context())
 	f.waitCalls(t, "open:task-1:step:1")
@@ -501,7 +559,7 @@ func TestDiscardStepCancelsAPreparationInFlight(t *testing.T) {
 	if err := f.service.DiscardStep(t.Context(), "task-1", false); err != nil {
 		t.Fatalf("DiscardStep: %v", err)
 	}
-	f.waitWorktreeCalls(t, "ensure:task-1:api")
+	f.waitWorktreeCalls(t, "ensure:task-1:dev/web")
 
 	// The second discard cancels it; the step is left preparing, not started.
 	wantErrIs(t, f.service.DiscardStep(t.Context(), "task-1", false), flow.ErrStepNotStarted)
@@ -532,7 +590,7 @@ func TestDiscardingThePlanTearsTheStepsDownFirst(t *testing.T) {
 		"discard:task-1:plan",
 		"start:task-1:plan:restarted=true",
 	)
-	f.waitWorktreeCalls(t, "ensure:task-1:api", "status:task-1:task-1", "removeAll:task-1")
+	f.waitWorktreeCalls(t, "ensure:task-1:dev/web", "status:task-1:task-1", "remove:task-1")
 	if runs := f.tasks.StepRuns("task-1"); len(runs) != 0 {
 		t.Errorf("step runs = %+v, want none", runs)
 	}
@@ -559,7 +617,7 @@ func TestBackToTheTechSpecTearsTheStepsDownFirst(t *testing.T) {
 		"discard:task-1:plan",
 		"open:task-1:tech_spec",
 	)
-	f.waitWorktreeCalls(t, "ensure:task-1:api", "status:task-1:task-1", "removeAll:task-1")
+	f.waitWorktreeCalls(t, "ensure:task-1:dev/web", "status:task-1:task-1", "remove:task-1")
 }
 
 func TestBackToTheOneShotPlanningTearsItsStepDown(t *testing.T) {
@@ -586,7 +644,7 @@ func TestBackToTheOneShotPlanningTearsItsStepDown(t *testing.T) {
 		"discard:task-1:",
 		"open:task-1:one_shot",
 	)
-	f.waitWorktreeCalls(t, "ensure:task-1:api", "status:task-1:task-1", "removeAll:task-1")
+	f.waitWorktreeCalls(t, "ensure:task-1:dev/web", "status:task-1:task-1", "remove:task-1")
 	if runs := f.tasks.StepRuns("task-1"); len(runs) != 0 {
 		t.Errorf("step runs = %+v, want none", runs)
 	}
@@ -616,7 +674,7 @@ func TestAWorktreeThatCannotBeRemovedKeepsEverythingAndReopensTheSession(t *test
 	f.waitStepSession(t, "task-1", 1)
 
 	errRemove := errors.New("git worktree remove --force /ws: fatal: is dirty")
-	f.worktrees.failRemoveAll(errRemove)
+	f.worktrees.failRemove(errRemove)
 
 	wantErrIs(t, f.service.Discard(t.Context(), "task-1", task.StagePlan), errRemove)
 
@@ -642,7 +700,7 @@ func TestDiscardingThePlanCancelsAPreparationInFlight(t *testing.T) {
 	defer close(release)
 
 	f.service.Sync(t.Context())
-	f.waitWorktreeCalls(t, "ensure:task-1:api")
+	f.waitWorktreeCalls(t, "ensure:task-1:dev/web")
 
 	if err := f.service.Discard(t.Context(), "task-1", task.StagePlan); err != nil {
 		t.Fatalf("Discard: %v", err)
@@ -654,10 +712,10 @@ func TestDiscardingThePlanCancelsAPreparationInFlight(t *testing.T) {
 		"discard:task-1:plan",
 		"start:task-1:plan:restarted=true",
 	)
-	f.waitWorktreeCalls(t, "ensure:task-1:api", "removeAll:task-1")
+	f.waitWorktreeCalls(t, "ensure:task-1:dev/web", "remove:task-1")
 }
 
-func TestDeleteStopsTheSessionsAndPurgesTheWorktrees(t *testing.T) {
+func TestDeleteStopsTheSessionsAndPurgesTheWorktree(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
@@ -671,13 +729,13 @@ func TestDeleteStopsTheSessionsAndPurgesTheWorktrees(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
-	if len(result.Leftovers) != 0 {
-		t.Errorf("leftovers = %+v, want none", result.Leftovers)
+	if result.Leftover != nil {
+		t.Errorf("leftover = %+v, want none", result.Leftover)
 	}
 
 	// The conversation of the step stops before the worktree it runs in.
 	f.wantCalls(t, "start:task-1:step:1:restarted=false", "closeTask:task-1")
-	f.waitWorktreeCalls(t, "ensure:task-1:api", "status:task-1:task-1", "purge:task-1")
+	f.waitWorktreeCalls(t, "ensure:task-1:dev/web", "status:task-1:task-1", "purge:task-1")
 	if _, ok := f.tasks.Get("task-1"); ok {
 		t.Error("the task is still there")
 	}

@@ -135,7 +135,7 @@ describe("StageTrack", () => {
 });
 
 describe("StageTrack of a One-Shot task", () => {
-  const ONE_SHOT: Partial<TaskSummary> = { mode: "one_shot", stage: "one_shot", repos: [] };
+  const ONE_SHOT: Partial<TaskSummary> = { mode: "one_shot", stage: "one_shot", pr: null };
 
   it("runs from the planning to the closing, with no PRD, tech spec or plan", () => {
     track(ONE_SHOT);

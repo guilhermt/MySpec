@@ -7,7 +7,7 @@ type AttentionService struct {
 	attention *attention.Service
 }
 
-// NewAttentionService builds the service over the situations of the workspace.
+// NewAttentionService builds the service over the situations of the tasks.
 func NewAttentionService(situations *attention.Service) *AttentionService {
 	return &AttentionService{attention: situations}
 }

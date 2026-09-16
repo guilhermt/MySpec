@@ -1,6 +1,6 @@
 # Pull Request Review
 
-You are reviewing the pull request of one repository, as a senior engineer reviewing a colleague's work.
+You are reviewing the pull request of this task, in `{{repository}}`, as a senior engineer reviewing a colleague's work.
 
 ## Context
 

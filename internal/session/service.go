@@ -54,7 +54,7 @@ type Launcher interface {
 type TaskInfo struct {
 	ID             string
 	Name           string
-	Dir            string // working directory of the CLI: the task dir, or the worktree of a step
+	Dir            string // working directory of the CLI: the clone of the repository, or the worktree of the task
 	ArtifactsDir   string
 	Stage          string        // session key: a task stage, or StepStage(n)
 	Prompt         prompts.Stage // the prompt that opens the session
@@ -63,8 +63,7 @@ type TaskInfo struct {
 	PRDPath        string
 	TechSpecPath   string
 	StepsDir       string
-	OneShotPath    string   // One-Shot tasks only: the document the prompts point to; "" for a Structured task
-	Repositories   []string // relative paths, what the prompt lists
+	OneShotPath    string // One-Shot tasks only: the document the prompts point to; "" for a Structured task
 	InitialContext string
 	// ImplementerReply is what the implementer of a step said last, which the
 	// prompt of its reviewer ends with; step review sessions only.
@@ -75,9 +74,9 @@ type TaskInfo struct {
 	// starts with. A session that already exists keeps its own.
 	Choice models.Choice
 
-	// The PR sessions of a repository: what the prompt of the pull request and
-	// the prompt of its review are about.
-	Repository string // relative path of the repository this session belongs to: the one of a PR session, or the one a One-Shot planning runs in
+	// The PR sessions of a task: what the prompt of the pull request and the
+	// prompt of its review are about.
+	Repository string // owner/name of the repository of the task, which every prompt may name
 	Branch     string
 	BaseBranch string
 	DraftPath  string
@@ -100,7 +99,7 @@ func artifactOf(stage prompts.Stage) ArtifactKind {
 		return ArtifactOneShot
 	case prompts.StageStep, prompts.StageStepReview, prompts.StagePR, prompts.StagePRReview:
 		// A step file and the PR prompts produce no artifact of the planning:
-		// what they write belongs to a repository, not to the task.
+		// what they write is the work itself, not a document of a stage.
 		return ""
 	default:
 		return ArtifactPRD
@@ -201,8 +200,8 @@ func New(deps Deps) *Service {
 
 // Open loads or creates the session of a task at the stage it is in and
 // reconciles its transcript. A task may have one session per stage, and each
-// is opened on its own key. It is idempotent and safe to call on every
-// workspace sync.
+// is opened on its own key. It is idempotent and safe to call at the start of
+// the app.
 func (s *Service) Open(ctx context.Context, t TaskInfo) error {
 	n := &notes{}
 	defer s.flush(n)

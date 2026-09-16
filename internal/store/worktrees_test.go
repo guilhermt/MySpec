@@ -23,10 +23,10 @@ func listWorktrees(t *testing.T, s *store.Store, taskIDs ...string) []worktree.W
 
 func TestWorktreesInsertAndListByTask(t *testing.T) {
 	t.Parallel()
-	s := newStore(t)
+	s := newStoreWithRepositories(t)
 
 	taskID := seedTask(t, s)
-	wt := newWorktree(taskID, "/ws/api", "/ws/.myspec/worktrees/api/one", "one")
+	wt := newWorktree(taskID, "/home/dev/web", "/data/worktrees/dev/web/one", "one")
 	if err := s.Worktrees.Insert(t.Context(), wt); err != nil {
 		t.Fatalf("Insert() = %v, want nil", err)
 	}
@@ -38,24 +38,23 @@ func TestWorktreesInsertAndListByTask(t *testing.T) {
 
 func TestWorktreesAreListedForEveryTaskAsked(t *testing.T) {
 	t.Parallel()
-	s := newStore(t)
+	s := newStoreWithRepositories(t)
 
 	first := seedTask(t, s)
 	const second = "task-2"
-	if err := s.Tasks.Insert(t.Context(), newTask(second, "/ws", "two", fixedTime)); err != nil {
+	if err := s.Tasks.Insert(t.Context(), newTask(second, webRepo, "two", fixedTime)); err != nil {
 		t.Fatalf("Tasks.Insert(two) = %v, want nil", err)
 	}
 
-	one := newWorktree(first, "/ws/api", "/ws/.myspec/worktrees/api/one", "one")
-	two := newWorktree(second, "/ws/api", "/ws/.myspec/worktrees/api/two", "two")
-	web := newWorktree(second, "/ws/web", "/ws/.myspec/worktrees/web/two", "two")
-	for _, wt := range []worktree.Worktree{one, two, web} {
+	one := newWorktree(first, "/home/dev/web", "/data/worktrees/dev/web/one", "one")
+	two := newWorktree(second, "/home/dev/web", "/data/worktrees/dev/web/two", "two")
+	for _, wt := range []worktree.Worktree{one, two} {
 		if err := s.Worktrees.Insert(t.Context(), wt); err != nil {
 			t.Fatalf("Insert(%s) = %v, want nil", wt.Path, err)
 		}
 	}
 
-	want := []worktree.Worktree{one, two, web}
+	want := []worktree.Worktree{one, two}
 	if diff := cmp.Diff(want, listWorktrees(t, s, first, second)); diff != "" {
 		t.Errorf("ListByTasks() mismatch (-want +got):\n%s", diff)
 	}
@@ -66,44 +65,41 @@ func TestWorktreesAreListedForEveryTaskAsked(t *testing.T) {
 
 func TestWorktreesListOfNoTaskAsksNothing(t *testing.T) {
 	t.Parallel()
-	s := newStore(t)
+	s := newStoreWithRepositories(t)
 
 	if got := listWorktrees(t, s); got != nil {
 		t.Errorf("ListByTasks() = %v, want nil", got)
 	}
 }
 
-func TestWorktreesDeleteTakesTheOneOfTheRepository(t *testing.T) {
+func TestWorktreesDeleteTakesTheOneOfTheTask(t *testing.T) {
 	t.Parallel()
-	s := newStore(t)
+	s := newStoreWithRepositories(t)
 
 	taskID := seedTask(t, s)
-	api := newWorktree(taskID, "/ws/api", "/ws/.myspec/worktrees/api/one", "one")
-	web := newWorktree(taskID, "/ws/web", "/ws/.myspec/worktrees/web/one", "one")
-	for _, wt := range []worktree.Worktree{api, web} {
-		if err := s.Worktrees.Insert(t.Context(), wt); err != nil {
-			t.Fatalf("Insert(%s) = %v, want nil", wt.Path, err)
-		}
+	wt := newWorktree(taskID, "/home/dev/web", "/data/worktrees/dev/web/one", "one")
+	if err := s.Worktrees.Insert(t.Context(), wt); err != nil {
+		t.Fatalf("Insert(%s) = %v, want nil", wt.Path, err)
 	}
 
-	if err := s.Worktrees.Delete(t.Context(), taskID, "/ws/api"); err != nil {
+	if err := s.Worktrees.Delete(t.Context(), taskID); err != nil {
 		t.Fatalf("Delete() = %v, want nil", err)
 	}
-	if diff := cmp.Diff([]worktree.Worktree{web}, listWorktrees(t, s, taskID)); diff != "" {
-		t.Errorf("ListByTasks() after the delete mismatch (-want +got):\n%s", diff)
+	if got := listWorktrees(t, s, taskID); len(got) != 0 {
+		t.Errorf("ListByTasks() returned %d worktrees, want none", len(got))
 	}
 	// A worktree that is not registered is not an error either.
-	if err := s.Worktrees.Delete(t.Context(), taskID, "/ws/api"); err != nil {
+	if err := s.Worktrees.Delete(t.Context(), taskID); err != nil {
 		t.Errorf("Delete() again = %v, want nil", err)
 	}
 }
 
 func TestWorktreesGoWithTheTask(t *testing.T) {
 	t.Parallel()
-	s := newStore(t)
+	s := newStoreWithRepositories(t)
 
 	taskID := seedTask(t, s)
-	wt := newWorktree(taskID, "/ws/api", "/ws/.myspec/worktrees/api/one", "one")
+	wt := newWorktree(taskID, "/home/dev/web", "/data/worktrees/dev/web/one", "one")
 	if err := s.Worktrees.Insert(t.Context(), wt); err != nil {
 		t.Fatalf("Insert() = %v, want nil", err)
 	}
@@ -118,9 +114,9 @@ func TestWorktreesGoWithTheTask(t *testing.T) {
 
 func TestWorktreesRejectAnUnknownTask(t *testing.T) {
 	t.Parallel()
-	s := newStore(t)
+	s := newStoreWithRepositories(t)
 
-	wt := newWorktree("nope", "/ws/api", "/ws/.myspec/worktrees/api/one", "one")
+	wt := newWorktree("nope", "/home/dev/web", "/data/worktrees/dev/web/one", "one")
 	if err := s.Worktrees.Insert(t.Context(), wt); err == nil {
 		t.Error("Insert() = nil, want error")
 	}

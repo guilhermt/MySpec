@@ -18,12 +18,10 @@ import (
 	"github.com/guilhermt/myspec/internal/task"
 )
 
-// The task every input is about, in a workspace with a repository api.
+// The task every input is about.
 const (
-	taskID    = "task-1"
-	taskName  = "login-screen"
-	workspace = "/home/u/code"
-	apiPath   = workspace + "/api"
+	taskID   = "task-1"
+	taskName = "login-screen"
 )
 
 // summary is a session in a status, at rest or not.
@@ -35,7 +33,7 @@ func summary(status session.Status, idle bool) session.Summary {
 // the session of the stage when one is given.
 func stageInput(stage task.Stage, a task.Artifacts, sum ...session.Summary) attention.Input {
 	in := attention.Input{
-		Task:      task.Task{ID: taskID, Name: taskName, WorkspacePath: workspace, Stage: stage},
+		Task:      task.Task{ID: taskID, Name: taskName, Stage: stage},
 		Artifacts: a,
 		Sessions:  map[session.Key]session.Summary{},
 	}
@@ -49,12 +47,12 @@ func stageInput(stage task.Stage, a task.Artifacts, sum ...session.Summary) atte
 // committed and the second one in the state given, with the session of the
 // second one when one is given.
 func stepInput(second flow.StepState, sum ...session.Summary) attention.Input {
-	second.Step = task.Step{Number: 2, File: "2-login-form.md", Title: "Login form", Repository: "api", RepoPath: apiPath}
+	second.Step = task.Step{Number: 2, File: "2-login-form.md", Title: "Login form"}
 	in := attention.Input{
-		Task: task.Task{ID: taskID, Name: taskName, WorkspacePath: workspace, Stage: task.StageImplementation},
+		Task: task.Task{ID: taskID, Name: taskName, Stage: task.StageImplementation},
 		Steps: []flow.StepState{
 			{
-				Step:   task.Step{Number: 1, File: "1-session-api.md", Title: "Session API", Repository: "api", RepoPath: apiPath},
+				Step:   task.Step{Number: 1, File: "1-session-api.md", Title: "Session API"},
 				Status: flow.StepDone,
 			},
 			second,
@@ -67,11 +65,11 @@ func stepInput(second flow.StepState, sum ...session.Summary) attention.Input {
 	return in
 }
 
-// repoInput is the task in the PR stage with the repositories given, in order.
-func repoInput(repos ...flow.RepoState) attention.Input {
+// prInput is the task in the PR stage with the pull request given.
+func prInput(pr flow.PullRequest) attention.Input {
 	return attention.Input{
-		Task:     task.Task{ID: taskID, Name: taskName, WorkspacePath: workspace, Stage: task.StagePR},
-		Repos:    repos,
+		Task:     task.Task{ID: taskID, Name: taskName, Stage: task.StagePR},
+		PR:       &pr,
 		Sessions: map[session.Key]session.Summary{},
 	}
 }
@@ -83,12 +81,8 @@ var base = time.Date(2026, time.September, 11, 9, 0, 0, 0, time.UTC)
 var (
 	prdPlace  = attention.Place{Kind: attention.PlaceStage, Stage: task.StagePRD}
 	stepPlace = attention.Place{Kind: attention.PlaceStep, Step: 2}
+	prPlace   = attention.Place{Kind: attention.PlacePR}
 )
-
-// repoPlace is the place of a repository of the workspace, by its name.
-func repoPlace(name string) attention.Place {
-	return attention.Place{Kind: attention.PlaceRepo, RepoPath: workspace + "/" + name, Repository: name}
-}
 
 // found is what a derivation sees at a place of the task with the given id: a
 // situation of a kind, with a notification that names both.

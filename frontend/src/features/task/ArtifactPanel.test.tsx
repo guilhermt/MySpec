@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ArtifactPanel } from "@/features/task/ArtifactPanel";
 import { api, type TaskSummary } from "@/lib/wails";
 import { renderWithStore } from "@/test/render";
-import { makeRepoPR, makeSituation, makeState, makeStep, makeTask } from "@/test/wails-mock";
+import { makePullRequest, makeSituation, makeState, makeStep, makeTask } from "@/test/wails-mock";
 
 const state = makeState();
 
@@ -101,7 +101,7 @@ describe("ArtifactPanel", () => {
         makeSituation({
           kind: "step_blocked",
           group: "error",
-          place: { kind: "step", stage: "", step: 1, repoPath: "", repository: "" },
+          place: { kind: "step", stage: "", step: 1 },
         }),
       ],
     });
@@ -127,7 +127,7 @@ describe("ArtifactPanel", () => {
     expect(api.setStepModel).toHaveBeenCalledWith("task-1", 2, "claude-opus-5", "xhigh");
   });
 
-  it("reads one step file, with its header shown as metadata", async () => {
+  it("reads one step file, with the header it carries left out", async () => {
     vi.mocked(api.readArtifact).mockResolvedValue(STEP_FILE);
     const { user } = panel({
       stage: "implementation",
@@ -138,8 +138,9 @@ describe("ArtifactPanel", () => {
     await user.click(screen.getByRole("button", { name: /Add the login form/ }));
 
     expect(api.readArtifact).toHaveBeenCalledWith("task-1", "steps/1-add-the-login-form.md");
-    expect(await screen.findByTestId("markdown")).toHaveTextContent("# Step 1: Add the login form");
-    expect(screen.getByText("web")).toBeInTheDocument();
+    const document = await screen.findByTestId("markdown");
+    expect(document).toHaveTextContent("# Step 1: Add the login form");
+    expect(document).not.toHaveTextContent("repository");
 
     await user.click(screen.getByRole("button", { name: "← Steps" }));
 
@@ -191,37 +192,27 @@ describe("ArtifactPanel", () => {
     });
   });
 
-  // The pull request documents live in the pr folder, grouped by repository.
-  const DRAFT = { title: "Add the login form", body: "Closes #12", file: "web-draft.md" };
+  // The pull request documents live in the pr folder.
+  const DRAFT = { title: "Add the login form", body: "Closes #12", file: "draft.md" };
 
   function prTask() {
     return {
       stage: "pr",
-      repos: [
-        makeRepoPR({
-          draft: DRAFT,
-          reports: [
-            { pass: 1, file: "web-review-1.md", clean: false },
-            { pass: 2, file: "web-review-2.md", clean: true },
-          ],
-        }),
-        makeRepoPR({
-          repository: "api",
-          repoPath: "/home/dev/projects/api",
-          slug: "api",
-          draft: { title: "Wire the api", body: "why", file: "api-draft.md" },
-        }),
-      ],
+      pr: makePullRequest({
+        draft: DRAFT,
+        reports: [
+          { pass: 1, file: "review-1.md", clean: false },
+          { pass: 2, file: "review-2.md", clean: true },
+        ],
+      }),
     };
   }
 
-  it("opens on the PR tab in the PR stage, one section per repository", () => {
+  it("opens on the PR tab in the PR stage, with the documents of the pull request", () => {
     panel(prTask());
 
     expect(screen.getByRole("button", { name: "PR" })).toBeEnabled();
-    expect(screen.getByRole("heading", { name: "web" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "api" })).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "Draft" })).toHaveLength(2);
+    expect(screen.getByRole("button", { name: "Draft" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Pass 1 · changes requested" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Pass 2 · nothing to change" })).toBeInTheDocument();
   });
@@ -230,30 +221,31 @@ describe("ArtifactPanel", () => {
     vi.mocked(api.readArtifact).mockResolvedValue("# Add the login form");
     const { user } = panel(prTask());
 
-    await user.click(screen.getAllByRole("button", { name: "Draft" })[0] as HTMLElement);
+    await user.click(screen.getByRole("button", { name: "Draft" }));
 
     expect(await screen.findByTestId("markdown")).toHaveTextContent("# Add the login form");
-    expect(api.readArtifact).toHaveBeenCalledWith("task-1", "pr/web-draft.md");
+    expect(api.readArtifact).toHaveBeenCalledWith("task-1", "pr/draft.md");
   });
 
   it("comes back from a pull request document to the list", async () => {
     vi.mocked(api.readArtifact).mockResolvedValue("# Add the login form");
     const { user } = panel(prTask());
 
-    await user.click(screen.getAllByRole("button", { name: "Draft" })[0] as HTMLElement);
+    await user.click(screen.getByRole("button", { name: "Draft" }));
     await user.click(await screen.findByRole("button", { name: "← PR" }));
 
-    expect(screen.getByRole("heading", { name: "web" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Draft" })).toBeInTheDocument();
+    expect(screen.queryByTestId("markdown")).not.toBeInTheDocument();
   });
 
   it("has no PR tab before anything of a pull request is written", () => {
-    panel({ stage: "pr", repos: [makeRepoPR({ status: "preparing" })] });
+    panel({ stage: "pr", pr: makePullRequest({ status: "preparing" }) });
 
     expect(screen.getByRole("button", { name: "PR" })).toBeDisabled();
   });
 
   // A One-Shot task has one document, and its single step lists the reports of its review.
-  const ONE_SHOT = { mode: "one_shot", repoPath: "/home/dev/projects/web" };
+  const ONE_SHOT = { mode: "one_shot" };
   const REPORT = { pass: 1, file: "1-review-1.md", clean: false };
 
   function oneShotStep(reports = [REPORT]) {
@@ -340,7 +332,7 @@ describe("ArtifactPanel", () => {
       stage: "pr",
       hasOneShot: true,
       steps: [oneShotStep([])],
-      repos: [makeRepoPR({ draft: DRAFT })],
+      pr: makePullRequest({ draft: DRAFT }),
     });
 
     expect(screen.getByRole("button", { name: "PR" })).toHaveAttribute("aria-pressed", "true");

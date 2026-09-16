@@ -1,6 +1,10 @@
 package app
 
-import "github.com/wailsapp/wails/v3/pkg/application"
+import (
+	"github.com/wailsapp/wails/v3/pkg/application"
+
+	"github.com/guilhermt/myspec/internal/theme"
+)
 
 // The window geometry. The window always starts maximised: on Wayland the
 // compositor owns placement, so no window state is read or saved.
@@ -12,18 +16,18 @@ const (
 )
 
 // openWindow creates the one window the app has.
-func (a *App) openWindow(cfg Config) {
+func (a *App) openWindow(cfg Config, mode theme.Mode) {
 	wails, _ := a.handles()
 
 	window := wails.Window.NewWithOptions(application.WebviewWindowOptions{
 		Name:             "main",
-		Title:            a.title(),
+		Title:            appName,
 		Width:            windowWidth,
 		Height:           windowHeight,
 		MinWidth:         windowMinWidth,
 		MinHeight:        windowMinHeight,
 		StartState:       application.WindowStateMaximised,
-		BackgroundColour: backgroundFor(a.theme.Effective()),
+		BackgroundColour: backgroundFor(mode),
 		URL:              "/",
 		Linux:            application.LinuxWindow{Icon: cfg.Icon},
 	})

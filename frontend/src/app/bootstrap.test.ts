@@ -10,7 +10,7 @@ import {
   emitState,
   emitTranscript,
   makeEntry,
-  makeRepoPR,
+  makePullRequest,
   makeSituation,
   makeState,
   makeTask,
@@ -27,26 +27,12 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-const API_PLACE: Place = {
-  kind: "repo",
-  stage: "",
-  step: 0,
-  repoPath: "/home/dev/projects/api",
-  repository: "api",
-};
+const PR_PLACE: Place = { kind: "pr", stage: "", step: 0 };
 
-// A task in the PR stage with two repositories, web first.
+// A task in the PR stage, writing its draft.
 function inPR() {
   return makeState({
-    tasks: [
-      makeTask({
-        stage: "pr",
-        repos: [
-          makeRepoPR(),
-          makeRepoPR({ repository: "api", repoPath: API_PLACE.repoPath, slug: "api" }),
-        ],
-      }),
-    ],
+    tasks: [makeTask({ stage: "pr", pr: makePullRequest({ status: "drafting" }) })],
   });
 }
 
@@ -82,9 +68,9 @@ describe("bootstrap", () => {
   it("applies a later state:changed event", async () => {
     await bootstrap(useAppStore);
 
-    emitState(makeState({ workspace: null }));
+    emitState(makeState({ repositoryFilter: "repo-1" }));
 
-    expect(useAppStore.getState().app?.workspace).toBeNull();
+    expect(useAppStore.getState().app?.repositoryFilter).toBe("repo-1");
   });
 
   it("stops applying events once unsubscribed", async () => {
@@ -95,11 +81,11 @@ describe("bootstrap", () => {
     expect(subscriberCount()).toBe(0);
     expect(transcriptSubscriberCount()).toBe(0);
 
-    emitState(makeState({ workspace: null }));
+    emitState(makeState({ repositoryFilter: "repo-1" }));
     emitSituationStarted({ situation: makeSituation({ id: "s1" }), focused: true });
-    emitSituationOpen({ taskId: "task-1", place: API_PLACE });
+    emitSituationOpen({ taskId: "task-1", place: PR_PLACE });
 
-    expect(useAppStore.getState().app?.workspace).not.toBeNull();
+    expect(useAppStore.getState().app?.repositoryFilter).toBe("");
     expect(useAppStore.getState().flashing.size).toBe(0);
     expect(useAppStore.getState().openTaskId).toBeNull();
   });
@@ -175,9 +161,8 @@ describe("bootstrap", () => {
     vi.mocked(api.getState).mockResolvedValueOnce(inPR());
     await bootstrap(useAppStore);
 
-    emitSituationOpen({ taskId: "task-1", place: API_PLACE });
+    emitSituationOpen({ taskId: "task-1", place: PR_PLACE });
 
     expect(useAppStore.getState().openTaskId).toBe("task-1");
-    expect(useAppStore.getState().openRepo).toEqual({ "task-1": API_PLACE.repoPath });
   });
 });

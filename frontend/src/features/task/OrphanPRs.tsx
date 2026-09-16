@@ -1,52 +1,42 @@
 import { ExternalLink } from "lucide-react";
-import { repoName, reposOf } from "@/lib/repos";
-import type { PRPreview, RepoPR, TaskSummary } from "@/lib/wails";
+import { prOf } from "@/lib/pull-requests";
+import type { PRPreview, TaskSummary } from "@/lib/wails";
 import { openExternal } from "@/store/actions";
-import { useAppStore } from "@/store/app-store";
 
-/** openPRsOf is every pull request of a task that is still on GitHub. */
-export function openPRsOf(task: TaskSummary): readonly RepoPR[] {
-  return reposOf(task).filter((repo) => repo.prNumber > 0);
+/** openPROf is the pull request of a task that is still on GitHub, null when there is none. */
+export function openPROf(task: TaskSummary): PRPreview | null {
+  const pr = prOf(task);
+  if (pr === null || pr.prNumber === 0) {
+    return null;
+  }
+  return { number: pr.prNumber, url: pr.prUrl, state: pr.prState };
 }
 
-export interface OrphanPRsProps {
-  prs: readonly PRPreview[];
+export interface OrphanPRProps {
+  pr: PRPreview | null;
 }
 
 /**
- * OrphanPRs warns about the pull requests an action leaves behind. The app
- * never closes one, so what happens to them on GitHub is the user's to decide.
+ * OrphanPR warns about the pull request an action leaves behind. The app never
+ * closes one, so what happens to it on GitHub is the user's to decide.
  */
-export function OrphanPRs({ prs }: OrphanPRsProps) {
-  const app = useAppStore((state) => state.app);
-
-  if (prs.length === 0) {
+export function OrphanPR({ pr }: OrphanPRProps) {
+  if (pr === null) {
     return null;
   }
 
   return (
     <div className="flex flex-col gap-1.5 rounded-lg border p-3 text-sm">
-      <p>
-        {prs.length === 1
-          ? "This pull request stays open on GitHub:"
-          : "These pull requests stay open on GitHub:"}
-      </p>
-      <ul className="flex flex-col gap-0.5">
-        {prs.map((pr) => (
-          <li key={pr.repoPath}>
-            <button
-              type="button"
-              onClick={() => void openExternal(pr.url)}
-              className="flex items-center gap-1.5 rounded-md transition-colors hover:text-foreground"
-            >
-              <span className="tabular-nums">{`#${pr.number}`}</span>
-              <span className="min-w-0 truncate">{repoName(app, pr)}</span>
-              <ExternalLink aria-hidden="true" className="size-3.5" />
-            </button>
-          </li>
-        ))}
-      </ul>
-      <p className="text-muted-foreground">Closing them on GitHub is up to you.</p>
+      <p>This pull request stays open on GitHub:</p>
+      <button
+        type="button"
+        onClick={() => void openExternal(pr.url)}
+        className="flex w-fit items-center gap-1.5 rounded-md transition-colors hover:text-foreground"
+      >
+        <span className="tabular-nums">{`#${pr.number}`}</span>
+        <ExternalLink aria-hidden="true" className="size-3.5" />
+      </button>
+      <p className="text-muted-foreground">Closing it on GitHub is up to you.</p>
     </div>
   );
 }

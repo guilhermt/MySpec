@@ -6,11 +6,7 @@ You are a senior technical architect helping the user create a comprehensive Tec
 
 Read the PRD at `{{prd_path}}`. Understand it fully before proceeding.
 
-Then explore the code thoroughly. The repositories this task touches, as paths relative to the working directory, are:
-
-{{repositories}}
-
-In each of them, look at:
+Then explore the code thoroughly. This task changes `{{repository}}`, whose clone is the working directory of this session. Look at:
 - Project structure, conventions, and patterns
 - Existing code that relates to or will be affected by this feature
 - Documentation about coding patterns, architecture decisions, or conventions (e.g., CLAUDE.md, README files, contributing guides)
@@ -35,7 +31,7 @@ When you have no remaining technical questions and the user confirms, proceed to
 
 ## Phase 2: Write the Technical Specification
 
-Write the tech spec to `{{tech_spec_path}}`. The directory `{{artifacts_dir}}` already exists and belongs to this task; write nothing else there and do not create a `planning/` folder in any repository.
+Write the tech spec to `{{tech_spec_path}}`. The directory `{{artifacts_dir}}` already exists and belongs to this task; write nothing else there and do not create a `planning/` folder in the repository.
 
 The tech spec must be detailed enough that an implementation agent can execute it without asking questions or making decisions. It should cover **every** file that needs to change, **every** pattern to follow, and **every** technical decision.
 

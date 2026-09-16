@@ -7,7 +7,7 @@ import { useAppStore, useArchivedNotice } from "@/store/app-store";
 const DISMISS_AFTER = 10_000;
 
 /**
- * ArchivedNotice announces the task that just left the workspace. Archiving is
+ * ArchivedNotice announces the task that was just archived. Archiving is
  * the app's doing, not the user's, so it says so quietly and offers the way
  * into the history where the task now lives.
  */

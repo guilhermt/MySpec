@@ -1,4 +1,4 @@
-import { everyRepoHasPR, everyRepoReviewed, reposOf } from "@/lib/repos";
+import { isOpen, isReviewed, prOf } from "@/lib/pull-requests";
 import type { TaskMode, TaskStage, TaskSummary } from "@/lib/wails";
 import { asTaskMode, asTaskStage } from "@/lib/wails";
 
@@ -41,12 +41,12 @@ export type StageState = "done" | "current" | "upcoming";
 
 export function stageState(task: TaskSummary, id: LifecycleStage): StageState {
   const stage = asTaskStage(task.stage);
-  // The PR stage covers three chips: the pull requests are written first,
-  // reviewed once they are all open, and closed once every review is over.
+  // The PR stage covers three chips: the pull request is written first,
+  // reviewed once it is open, and closed once its review is over.
   if (stage === "pr" && (id === "pr" || id === "pr_review" || id === "closing")) {
-    const repos = reposOf(task);
-    const reviewed = everyRepoReviewed(repos);
-    const reviewing = everyRepoHasPR(repos);
+    const pr = prOf(task);
+    const reviewed = pr !== null && isReviewed(pr);
+    const reviewing = pr !== null && isOpen(pr);
     if (id === "closing") {
       return reviewed ? "current" : "upcoming";
     }

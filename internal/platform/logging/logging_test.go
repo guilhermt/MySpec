@@ -262,9 +262,9 @@ func TestTeeWithAttrsAndGroup(t *testing.T) {
 	t.Parallel()
 	log, primary, secondary := teeBuffers(t, slog.LevelInfo)
 
-	log.With("run", "1").WithGroup("scan").Info("workspace opened", "repos", 3)
+	log.With("run", "1").WithGroup("plan").Info("task created", "steps", 3)
 
-	want := "level=INFO msg=\"workspace opened\" run=1 scan.repos=3\n"
+	want := "level=INFO msg=\"task created\" run=1 plan.steps=3\n"
 	if got := primary.String(); got != want {
 		t.Errorf("primary = %q, want %q", got, want)
 	}

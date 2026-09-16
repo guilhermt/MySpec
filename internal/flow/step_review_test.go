@@ -358,7 +358,7 @@ func TestTheFirstPassStartsTheReviewerOnceTheImplementerRests(t *testing.T) {
 		StepPath:         filepath.Join(tk.StepsDir(), "1-first.md"),
 		ReviewPath:       tk.StepReportPath(1, 1),
 		ImplementerReply: "I added the form.",
-		Repository:       "api",
+		Repository:       "dev/web",
 		Choice:           tk.Models.Stage(models.StepReview),
 	}
 	got := reviewerInfo{
@@ -397,7 +397,7 @@ func TestTheReviewerOfAOneShotStepReadsTheDocument(t *testing.T) {
 		OneShotPath string
 		Repository  string
 	}
-	want := reviewerInfo{StepPath: tk.OneShotPath(), OneShotPath: tk.OneShotPath(), Repository: "api"}
+	want := reviewerInfo{StepPath: tk.OneShotPath(), OneShotPath: tk.OneShotPath(), Repository: "dev/web"}
 	got := reviewerInfo{StepPath: info.StepPath, OneShotPath: info.OneShotPath, Repository: info.Repository}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("reviewer info mismatch (-want +got):\n%s", diff)
@@ -624,7 +624,7 @@ func TestTheLastRoundThatStillAsksForChangesHandsTheStepToTheUser(t *testing.T) 
 	f.tasks.setReviewModes("task-1", task.ReviewModes{Task: reviewmode.Agent})
 	f.reviews.setSnapshot(staged(0, 2))
 	created := implementing(f, "task-1", twoStepPlan())
-	f.worktrees.seed(created, repos[0])
+	f.worktrees.seed(created)
 	f.tasks.setStepRun("task-1", task.StepRun{
 		Number: 1, Status: task.StepStarted, StartCommit: startCommit, ReviewPass: 4, ReportedPass: 3,
 	})
@@ -704,7 +704,7 @@ func TestSyncReopensTheReviewerOfAStepThatHadAPass(t *testing.T) {
 
 		f := newFixture(t)
 		created := implementing(f, "task-1", twoStepPlan())
-		f.worktrees.seed(created, repos[0])
+		f.worktrees.seed(created)
 		f.tasks.setStepRun("task-1", task.StepRun{
 			Number: 1, Status: task.StepStarted, StartCommit: startCommit, ReviewPass: 2, ReportedPass: 1,
 		})
@@ -726,7 +726,7 @@ func TestSyncReopensTheReviewerOfAStepThatHadAPass(t *testing.T) {
 
 		f := newFixture(t)
 		created := implementing(f, "task-1", twoStepPlan())
-		f.worktrees.seed(created, repos[0])
+		f.worktrees.seed(created)
 		f.tasks.setStepRun("task-1", task.StepRun{Number: 1, Status: task.StepStarted, StartCommit: startCommit})
 
 		f.service.Sync(t.Context())
@@ -837,7 +837,7 @@ func TestApprovingAStepUnderAgentReviewIsRefused(t *testing.T) {
 	f.tasks.setReviewModes("task-1", task.ReviewModes{Task: reviewmode.Agent})
 	f.reviews.setSnapshot(staged(3, 3))
 	created := implementing(f, "task-1", twoStepPlan())
-	f.worktrees.seed(created, repos[0])
+	f.worktrees.seed(created)
 	f.tasks.setStepRun("task-1", task.StepRun{Number: 1, Status: task.StepStarted, StartCommit: startCommit})
 	f.sessions.setSummary("task-1", session.Summary{Stage: session.StepStage(1), Status: session.StatusWaiting, Idle: true})
 

@@ -26,7 +26,7 @@ A stack do produto e a razão de cada escolha.
 
 ## Desktop com Wails v3
 
-O produto precisa abrir uma pasta, escanear repositórios, criar worktrees, iniciar processos e enviar notificações do sistema, e o nível de interface pretendido, com Markdown e mermaid, pede um motor web. Wails coloca uma interface web numa janela nativa com o webview do sistema, sem embutir um Chromium como o Electron. Tauri faria o mesmo com Rust; a escolha por Go, natural para gerenciar processos, ler um stream JSON, rodar git e observar arquivos, definiu o Wails.
+O produto precisa ler clones locais, criar worktrees, iniciar processos e enviar notificações do sistema, e o nível de interface pretendido, com Markdown e mermaid, pede um motor web. Wails coloca uma interface web numa janela nativa com o webview do sistema, sem embutir um Chromium como o Electron. Tauri faria o mesmo com Rust; a escolha por Go, natural para gerenciar processos, ler um stream JSON, rodar git e observar arquivos, definiu o Wails.
 
 O v3 é a arquitetura para onde o Wails vai: services com bindings gerados por análise estática, eventos tipados, runtime por métodos e build por Taskfile. Ele ainda é pré-release, e duas partes do seu backend Linux não servem ao produto: o service de notificações e a leitura do tema do sistema. Nos dois casos o app fala com o D-Bus diretamente; ver [D-Bus](#d-bus).
 
@@ -68,7 +68,7 @@ A pull request é aberta pelo agente, com o `gh`, dentro da sessão dele. O app 
 Dois tipos de dado, cada um com uma única fonte de verdade:
 
 - **Artefatos**: PRD, tech spec, arquivos de step, documentos One-Shot, rascunhos de PR, relatórios de review e prompts editados. Markdown no diretório de dados XDG, uma pasta por task. As sessões os leem por caminho, e como arquivos ficam legíveis e diffáveis fora do app.
-- **Estado**: tasks, etapa, status de cada step e de cada repositório, sessões, worktrees, situações, modelos e configurações. SQLite com `modernc.org/sqlite`, acessado só pelo Go com `database/sql`, tipado e com transações.
+- **Estado**: tasks, etapa, status de cada step e da pull request, repositórios cadastrados, sessões, worktrees, situações, modelos e configurações. SQLite com `modernc.org/sqlite`, acessado só pelo Go com `database/sql`, tipado e com transações.
 
 Nada de estado vive nos Markdown. Ver [storage.md](./storage.md).
 

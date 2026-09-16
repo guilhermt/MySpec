@@ -309,7 +309,6 @@ func (s *Service) flushPendingLocked(ctx context.Context, r *run, n *notes) bool
 			StepsDir:     r.task.StepsDir,
 			StepPath:     r.task.StepPath,
 			OneShotPath:  r.task.OneShotPath,
-			Repositories: r.task.Repositories,
 			Repository:   r.task.Repository,
 			Branch:       r.task.Branch,
 			BaseBranch:   r.task.BaseBranch,

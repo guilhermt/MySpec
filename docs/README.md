@@ -5,7 +5,7 @@ A documentação é escrita em português; a interface, o código, os identifica
 ## Produto
 
 - [overview.md](./product/overview.md): o que o MySpec é, os princípios e os conceitos, e o vocabulário usado em todo o projeto.
-- [features.md](./product/features.md): o produto como ele é, na ordem do ciclo de vida de uma task: área de trabalho, criação e os dois modos, Structured e One-Shot, etapas de planejamento de cada modo, implementação com worktrees e review, pull request e review de pull request, encerramento, histórico, sessões, atenção e notificações, modelos, prompts, configurações e atalhos.
+- [features.md](./product/features.md): o produto como ele é, na ordem do ciclo de vida de uma task: repositórios cadastrados, criação e os dois modos, Structured e One-Shot, etapas de planejamento de cada modo, implementação com worktrees e review, pull request e review de pull request, encerramento, histórico, sessões, atenção e notificações, modelos, prompts, configurações e atalhos.
 
 ## Arquitetura
 

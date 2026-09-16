@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/guilhermt/myspec/internal/repository"
 	"github.com/guilhermt/myspec/internal/task"
 )
 
@@ -85,7 +86,7 @@ type memRepo struct {
 	mu          sync.Mutex
 	items       []task.Task
 	runs        map[string][]task.StepRun // step runs by task id
-	prs         map[string][]task.PRRun   // pr runs by task id
+	prs         map[string]task.PRRun     // the pr run of each task
 	listErr     error
 	archivedErr error
 	runsErr     error
@@ -95,7 +96,7 @@ type memRepo struct {
 	deleteErr   error
 }
 
-func (r *memRepo) ListByWorkspace(_ context.Context, workspacePath string) ([]task.Task, error) {
+func (r *memRepo) ListActive(_ context.Context) ([]task.Task, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -105,7 +106,7 @@ func (r *memRepo) ListByWorkspace(_ context.Context, workspacePath string) ([]ta
 
 	var out []task.Task
 	for _, t := range r.items {
-		if t.WorkspacePath == workspacePath && !t.Archived() {
+		if !t.Archived() {
 			out = append(out, t)
 		}
 	}
@@ -118,7 +119,7 @@ func (r *memRepo) ListByWorkspace(_ context.Context, workspacePath string) ([]ta
 	return out, nil
 }
 
-func (r *memRepo) ListArchived(_ context.Context, workspacePath string) ([]task.Task, error) {
+func (r *memRepo) ListArchived(_ context.Context) ([]task.Task, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -128,7 +129,7 @@ func (r *memRepo) ListArchived(_ context.Context, workspacePath string) ([]task.
 
 	var out []task.Task
 	for _, t := range r.items {
-		if t.WorkspacePath == workspacePath && t.Archived() {
+		if t.Archived() {
 			out = append(out, t)
 		}
 	}
@@ -159,7 +160,7 @@ func (r *memRepo) Insert(_ context.Context, t task.Task) error {
 		return r.insertErr
 	}
 	for _, item := range r.items {
-		if item.WorkspacePath == t.WorkspacePath && item.Name == t.Name {
+		if item.RepositoryID == t.RepositoryID && item.Name == t.Name {
 			return task.ErrNameTaken
 		}
 	}
@@ -304,14 +305,15 @@ func (r *memRepo) DeleteStepRuns(_ context.Context, taskID string) error {
 	return nil
 }
 
-func (r *memRepo) ListPRRuns(_ context.Context, taskID string) ([]task.PRRun, error) {
+func (r *memRepo) GetPRRun(_ context.Context, taskID string) (task.PRRun, bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	if r.prRunsErr != nil {
-		return nil, r.prRunsErr
+		return task.PRRun{}, false, r.prRunsErr
 	}
-	return slices.Clone(r.prs[taskID]), nil
+	run, ok := r.prs[taskID]
+	return run, ok, nil
 }
 
 func (r *memRepo) UpsertPRRun(_ context.Context, run task.PRRun) error {
@@ -322,21 +324,13 @@ func (r *memRepo) UpsertPRRun(_ context.Context, run task.PRRun) error {
 		return r.updateErr
 	}
 	if r.prs == nil {
-		r.prs = map[string][]task.PRRun{}
+		r.prs = map[string]task.PRRun{}
 	}
-	runs := r.prs[run.TaskID]
-	index := slices.IndexFunc(runs, func(stored task.PRRun) bool { return stored.RepoPath == run.RepoPath })
-	if index >= 0 {
-		runs[index] = run
-	} else {
-		runs = append(runs, run)
-		slices.SortFunc(runs, func(a, b task.PRRun) int { return strings.Compare(a.RepoPath, b.RepoPath) })
-	}
-	r.prs[run.TaskID] = runs
+	r.prs[run.TaskID] = run
 	return nil
 }
 
-func (r *memRepo) DeletePRRuns(_ context.Context, taskID string) error {
+func (r *memRepo) DeletePRRun(_ context.Context, taskID string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -353,17 +347,18 @@ func (r *memRepo) seedPRRun(run task.PRRun) {
 	defer r.mu.Unlock()
 
 	if r.prs == nil {
-		r.prs = map[string][]task.PRRun{}
+		r.prs = map[string]task.PRRun{}
 	}
-	r.prs[run.TaskID] = append(r.prs[run.TaskID], run)
+	r.prs[run.TaskID] = run
 }
 
-// prRuns returns the stored pr runs of a task, by repository path.
-func (r *memRepo) prRuns(taskID string) []task.PRRun {
+// prRun is the stored pr run of a task.
+func (r *memRepo) prRun(taskID string) (task.PRRun, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	return slices.Clone(r.prs[taskID])
+	run, ok := r.prs[taskID]
+	return run, ok
 }
 
 // seedRun stores a step run directly, bypassing the service.
@@ -425,33 +420,35 @@ func (c artifactCall) change(kind task.ArtifactKind) (task.Change, bool) {
 	return task.Change{}, false
 }
 
+// repoID is the registered repository every fixture task belongs to.
+const repoID = "repo-1"
+
 // fixture is a Service with its collaborators, ready to assert on.
 type fixture struct {
-	service   *task.Service
-	repo      *memRepo
-	logs      logCapture
-	dataDir   string
-	workspace string
-	repos     []string
+	service      *task.Service
+	repo         *memRepo
+	logs         logCapture
+	dataDir      string
+	repositories map[string]repository.Repository
 
 	mu        sync.Mutex
 	changes   int
 	artifacts []artifactCall
 }
 
-// newFixture builds a synced Service over a temporary data directory, with a
-// workspace holding one repository.
+// newFixture builds a synced Service over a temporary data directory, with one
+// registered repository, dev/web.
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
 
 	dataDir := t.TempDir()
-	workspace := t.TempDir()
 	f := &fixture{
-		repo:      &memRepo{},
-		logs:      newLogCapture(),
-		dataDir:   dataDir,
-		workspace: workspace,
-		repos:     []string{filepath.Join(workspace, "api")},
+		repo:    &memRepo{},
+		logs:    newLogCapture(),
+		dataDir: dataDir,
+		repositories: map[string]repository.Repository{
+			repoID: {ID: repoID, Owner: "dev", Name: "web", Path: filepath.Join(t.TempDir(), "web")},
+		},
 	}
 
 	ids := 0
@@ -464,7 +461,10 @@ func newFixture(t *testing.T) *fixture {
 			ids++
 			return "task-" + strconv.Itoa(ids)
 		},
-		Repos:      func() []string { return f.repos },
+		Repositories: func(id string) (repository.Repository, bool) {
+			repo, ok := f.repositories[id]
+			return repo, ok
+		},
 		OnChange:   f.onChange,
 		OnArtifact: f.onArtifact,
 	})
@@ -482,11 +482,11 @@ func newFixture(t *testing.T) *fixture {
 	return f
 }
 
-// sync loads the workspace of the fixture into the service.
+// sync loads the tasks into the service.
 func (f *fixture) sync(t *testing.T) {
 	t.Helper()
 
-	if err := f.service.Sync(t.Context(), f.workspace); err != nil {
+	if err := f.service.Sync(t.Context()); err != nil {
 		t.Fatalf("Sync() = %v, want nil", err)
 	}
 }
@@ -521,13 +521,14 @@ func (f *fixture) artifactCalls() []artifactCall {
 	return slices.Clone(f.artifacts)
 }
 
-// create adds a task through the service, failing the test on error.
-func (f *fixture) create(t *testing.T, name, repoPath string) task.Task {
+// create adds a task of the fixture repository through the service, failing
+// the test on error.
+func (f *fixture) create(t *testing.T, name string) task.Task {
 	t.Helper()
 
 	created, err := f.service.Create(t.Context(), task.CreateParams{
 		Name:           name,
-		RepoPath:       repoPath,
+		RepositoryID:   repoID,
 		InitialContext: "a login screen",
 	})
 	if err != nil {
@@ -536,14 +537,14 @@ func (f *fixture) create(t *testing.T, name, repoPath string) task.Task {
 	return created
 }
 
-// createOneShot adds a One-Shot task in the repository of the fixture through
-// the service, failing the test on error.
+// createOneShot adds a One-Shot task through the service, failing the test on
+// error.
 func (f *fixture) createOneShot(t *testing.T, name string) task.Task {
 	t.Helper()
 
 	created, err := f.service.Create(t.Context(), task.CreateParams{
 		Name:           name,
-		RepoPath:       f.repos[0],
+		RepositoryID:   repoID,
 		InitialContext: "a login screen",
 		Mode:           task.ModeOneShot,
 	})
@@ -574,15 +575,14 @@ func writeTechSpec(t *testing.T, tk task.Task, content string) {
 	writeFile(t, tk.TechSpecPath(), content)
 }
 
-// writeStep writes one step file of the plan of a task, with the front matter
-// the parser asks for.
-func writeStep(t *testing.T, tk task.Task, file, repository, title string) {
+// writeStep writes one step file of the plan of a task.
+func writeStep(t *testing.T, tk task.Task, file, title string) {
 	t.Helper()
 
 	if err := os.MkdirAll(tk.StepsDir(), 0o700); err != nil {
 		t.Fatalf("create steps directory: %v", err)
 	}
-	writeFile(t, filepath.Join(tk.StepsDir(), file), "---\nrepository: "+repository+"\n---\n\n# "+title+"\n")
+	writeFile(t, filepath.Join(tk.StepsDir(), file), "# "+title+"\n")
 }
 
 // writeFile puts content at path, failing the test on error.

@@ -13,55 +13,34 @@ import (
 // PRDirName is the folder of the PR artifacts inside the task folder.
 const PRDirName = "pr"
 
-// rootSlug stands for a repository that is the workspace root itself.
-const rootSlug = "_root"
+// DraftFile is the name of the draft of the pull request inside the pr folder.
+const DraftFile = "draft.md"
 
-// slugSeparator replaces every path separator, so that the slug of a nested
-// repository is still one file name.
-const slugSeparator = "__"
+// reviewFilePattern is the name a report of the PR review may have: its pass.
+var reviewFilePattern = regexp.MustCompile(`^review-(\d+)\.md$`)
 
-// Slug is the file-name form of a repository path relative to the workspace:
-// "." becomes "_root" and every separator becomes "__".
-func Slug(rel string) string {
-	if rel == "." || rel == "" {
-		return rootSlug
-	}
-	rel = filepath.ToSlash(rel)
-	return strings.ReplaceAll(rel, "/", slugSeparator)
-}
+// ReviewFile is the name of the report of one pass of the PR review.
+func ReviewFile(pass int) string { return fmt.Sprintf("review-%d.md", pass) }
 
-// PRDir is the folder the PR stage fills, one draft and one report per pass
-// for each repository of the task.
+// PRDir is the folder the PR stage fills: one draft and one report per pass.
 func (t Task) PRDir() string {
 	return filepath.Join(t.ArtifactsDir, PRDirName)
 }
 
-// DraftPath is the draft of the pull request of a repository.
-func (t Task) DraftPath(slug string) string {
-	return filepath.Join(t.PRDir(), DraftFile(slug))
+// DraftPath is the draft of the pull request of the task.
+func (t Task) DraftPath() string {
+	return filepath.Join(t.PRDir(), DraftFile)
 }
 
-// DraftFile is the name of the draft of a repository inside the pr folder.
-func DraftFile(slug string) string {
-	return slug + "-draft.md"
+// ReviewPath is the report of one pass of the PR review.
+func (t Task) ReviewPath(pass int) string {
+	return filepath.Join(t.PRDir(), ReviewFile(pass))
 }
-
-// ReviewPath is the report of one pass of the PR review of a repository.
-func (t Task) ReviewPath(slug string, pass int) string {
-	return filepath.Join(t.PRDir(), fmt.Sprintf("%s-review-%d.md", slug, pass))
-}
-
-// The names a PR artifact may have. The separators are excluded so that a
-// name coming from the outside can never be a path.
-var (
-	draftFilePattern  = regexp.MustCompile(`^([^/\\]+)-draft\.md$`)
-	reviewFilePattern = regexp.MustCompile(`^([^/\\]+)-review-(\d+)\.md$`)
-)
 
 // cleanStatus is the verdict of a review pass that found nothing to change.
 const cleanStatus = "clean"
 
-// Draft is the pull request draft of one repository.
+// Draft is the pull request draft of a task.
 type Draft struct {
 	Present bool
 	Title   string
@@ -75,16 +54,16 @@ type ReviewReport struct {
 	Clean bool   // the pass closed with nothing to change
 }
 
-// RepoArtifacts is what the pr folder holds for one repository.
-type RepoArtifacts struct {
+// PRArtifacts is what the pr folder holds.
+type PRArtifacts struct {
 	Draft   Draft
 	Reports []ReviewReport // by pass, ascending
 }
 
-// ReadPRArtifacts reads the pr folder against the slugs of the repositories a
-// task touches. A missing folder is no artifact, not an error.
-func ReadPRArtifacts(dir string, slugs []string) map[string]RepoArtifacts {
-	found := map[string]RepoArtifacts{}
+// ReadPRArtifacts reads the pr folder. A missing or unreadable folder holds no
+// artifact.
+func ReadPRArtifacts(dir string) PRArtifacts {
+	var found PRArtifacts
 
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -99,15 +78,9 @@ func ReadPRArtifacts(dir string, slugs []string) map[string]RepoArtifacts {
 			continue
 		}
 
-		if match := draftFilePattern.FindStringSubmatch(name); match != nil {
-			slug := match[1]
-			if !slices.Contains(slugs, slug) {
-				continue
-			}
+		if name == DraftFile {
 			if draft, ok := readDraft(filepath.Join(dir, name)); ok {
-				artifacts := found[slug]
-				artifacts.Draft = draft
-				found[slug] = artifacts
+				found.Draft = draft
 			}
 			continue
 		}
@@ -116,30 +89,21 @@ func ReadPRArtifacts(dir string, slugs []string) map[string]RepoArtifacts {
 		if match == nil {
 			continue
 		}
-		slug := match[1]
-		if !slices.Contains(slugs, slug) {
-			continue
-		}
-		pass, err := strconv.Atoi(match[2])
+		pass, err := strconv.Atoi(match[1])
 		if err != nil || pass <= 0 {
 			continue
 		}
 		if report, ok := readReport(filepath.Join(dir, name), pass); ok {
-			artifacts := found[slug]
-			artifacts.Reports = append(artifacts.Reports, report)
-			found[slug] = artifacts
+			found.Reports = append(found.Reports, report)
 		}
 	}
 
-	for slug, artifacts := range found {
-		slices.SortFunc(artifacts.Reports, func(a, b ReviewReport) int {
-			if a.Pass != b.Pass {
-				return a.Pass - b.Pass
-			}
-			return strings.Compare(a.File, b.File)
-		})
-		found[slug] = artifacts
-	}
+	slices.SortFunc(found.Reports, func(a, b ReviewReport) int {
+		if a.Pass != b.Pass {
+			return a.Pass - b.Pass
+		}
+		return strings.Compare(a.File, b.File)
+	})
 	return found
 }
 
@@ -151,7 +115,7 @@ func readDraft(path string) (Draft, bool) {
 		return Draft{}, false
 	}
 
-	fields, body, _ := splitFrontMatter(string(content))
+	fields, body := splitFrontMatter(string(content))
 	title := strings.TrimSpace(fields["title"])
 	body = strings.TrimSpace(body)
 	if title == "" || body == "" {
@@ -168,7 +132,7 @@ func readReport(path string, pass int) (ReviewReport, bool) {
 		return ReviewReport{}, false
 	}
 
-	fields, _, _ := splitFrontMatter(string(content))
+	fields, _ := splitFrontMatter(string(content))
 	status := strings.TrimSpace(fields["status"])
 	if status == "" {
 		return ReviewReport{}, false
@@ -185,8 +149,8 @@ func readReport(path string, pass int) (ReviewReport, bool) {
 // filePerm keeps an artifact the app writes private to the user.
 const filePerm = 0o600
 
-// WriteDraft rewrites the draft of a repository with the text the user
-// approved, keeping the header fields the app owns.
+// WriteDraft rewrites the draft with the text the user approved, keeping the
+// header fields the app owns.
 func WriteDraft(path, repository, base, title, body string) error {
 	if err := os.MkdirAll(filepath.Dir(path), dirPerm); err != nil {
 		return fmt.Errorf("create pr directory %s: %w", filepath.Dir(path), err)
@@ -214,5 +178,5 @@ func oneLine(value string) string {
 
 // prArtifactName reports whether a name is a PR artifact of the pr folder.
 func prArtifactName(name string) bool {
-	return draftFilePattern.MatchString(name) || reviewFilePattern.MatchString(name)
+	return name == DraftFile || reviewFilePattern.MatchString(name)
 }

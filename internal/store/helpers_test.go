@@ -48,6 +48,13 @@ func (c logCapture) count(t *testing.T, msg string) int {
 	return total
 }
 
+// The repositories every store fixture starts with, so that a task always has
+// one to belong to.
+const (
+	webRepo = "repo-web"
+	apiRepo = "repo-api"
+)
+
 // newStore opens an in-memory store closed at the end of the test.
 func newStore(t *testing.T) *store.Store {
 	t.Helper()
@@ -64,6 +71,17 @@ func newStore(t *testing.T) *store.Store {
 	return s
 }
 
+// newStoreWithRepositories opens a store with two registered repositories, so
+// that a task always has one to belong to.
+func newStoreWithRepositories(t *testing.T) *store.Store {
+	t.Helper()
+
+	s := newStore(t)
+	insertRepository(t, s, newRepository(webRepo, "dev", "web", "/home/dev/web"))
+	insertRepository(t, s, newRepository(apiRepo, "dev", "api", "/home/dev/api"))
+	return s
+}
+
 // writeEmptyFile creates an empty file, used to block a directory path.
 func writeEmptyFile(t *testing.T, path string) error {
 	t.Helper()
@@ -73,11 +91,11 @@ func writeEmptyFile(t *testing.T, path string) error {
 // fixedTime is the instant the repository fixtures are stamped with.
 var fixedTime = time.Date(2026, time.September, 6, 10, 0, 0, 0, time.UTC)
 
-// newTask builds a task of the given workspace, ready to insert.
-func newTask(id, workspacePath, name string, created time.Time) task.Task {
+// newTask builds a task of the given repository, ready to insert.
+func newTask(id, repositoryID, name string, created time.Time) task.Task {
 	return task.Task{
 		ID:              id,
-		WorkspacePath:   workspacePath,
+		RepositoryID:    repositoryID,
 		Name:            name,
 		Mode:            task.ModeStructured,
 		InitialContext:  "context of " + name,
@@ -121,7 +139,7 @@ func newBlockedStepRun(taskID string, number int) task.StepRun {
 	return run
 }
 
-// newWorktree builds the worktree of a task in a repository, ready to insert.
+// newWorktree builds the worktree of a task, ready to insert.
 func newWorktree(taskID, repoPath, path, branch string) worktree.Worktree {
 	return worktree.Worktree{
 		TaskID:    taskID,
@@ -150,7 +168,7 @@ func seedSession(t *testing.T, s *store.Store) (taskID, sessionID string) {
 	t.Helper()
 
 	taskID, sessionID = "task-1", "sess-1"
-	if err := s.Tasks.Insert(t.Context(), newTask(taskID, "/ws", "one", fixedTime)); err != nil {
+	if err := s.Tasks.Insert(t.Context(), newTask(taskID, webRepo, "one", fixedTime)); err != nil {
 		t.Fatalf("Tasks.Insert() = %v, want nil", err)
 	}
 	if err := s.Sessions.Insert(t.Context(), newSession(sessionID, taskID, task.StagePRD)); err != nil {

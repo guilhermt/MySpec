@@ -1,5 +1,6 @@
-// Package worktree owns the worktrees the app creates for its tasks: where
-// they are, how they come to be, whether they are clean, and how they go.
+// Package worktree owns the worktrees the app creates for its tasks, one per
+// task: where they are, how they come to be, whether they are clean, and how
+// they go.
 package worktree
 
 import (
@@ -9,14 +10,10 @@ import (
 	"time"
 )
 
-// The layout of the worktrees inside a workspace.
+// The layout of the worktrees inside the data directory.
 const (
-	Dir          = ".myspec" // hidden, so the workspace scan never lists a worktree as a repository
 	worktreesDir = "worktrees"
-	rootSegment  = "_root"    // stands for a repository that is the workspace root itself
-	excludeLine  = ".myspec/" // what a root repository is told to ignore
 	dirPerm      = 0o750
-	filePerm     = 0o600
 )
 
 // The timeouts of the git commands. A fetch talks to the network; the rest is
@@ -28,8 +25,10 @@ const (
 
 // Worktree is a worktree the app created.
 type Worktree struct {
-	TaskID    string
-	RepoPath  string // the repository it was added to, absolute
+	TaskID string
+	// RepoPath is the clone git runs in for it: where it was added, or where
+	// the repository was moved since.
+	RepoPath  string
 	Path      string // absolute
 	Branch    string // the task name
 	Base      string // the ref the branch was created from, e.g. origin/dev
@@ -40,7 +39,7 @@ type Worktree struct {
 type Store interface {
 	ListByTasks(ctx context.Context, taskIDs []string) ([]Worktree, error)
 	Insert(ctx context.Context, wt Worktree) error
-	Delete(ctx context.Context, taskID, repoPath string) error
+	Delete(ctx context.Context, taskID string) error
 }
 
 // Phase is what Ensure is doing, for the interface to show while it runs.
@@ -67,10 +66,9 @@ const (
 // Leftover is what Purge could not take back: the folder of a worktree, its
 // branch, or both, with what git said.
 type Leftover struct {
-	RepoPath string
-	Path     string // "" when the folder went
-	Branch   string // "" when the branch went
-	Error    string
+	Path   string // "" when the folder went
+	Branch string // "" when the branch went
+	Error  string
 }
 
 // The reasons Ensure refuses to create a worktree. Each wraps the git error
@@ -82,13 +80,8 @@ var (
 	ErrBranchExists = errors.New("worktree: branch already exists")
 )
 
-// Path is where the worktree of a task in a repository lives:
-// {workspace}/.myspec/worktrees/{repo}/{task}, with "_root" standing for the
-// workspace root when it is itself the repository.
-func Path(workspacePath, rel, taskName string) string {
-	segment := rel
-	if rel == "." {
-		segment = rootSegment
-	}
-	return filepath.Join(workspacePath, Dir, worktreesDir, segment, taskName)
+// Path is where the worktree of a task lives: inside the data directory, one
+// folder per repository, as GitHub names it, and one per task.
+func Path(dataDir, owner, name, taskName string) string {
+	return filepath.Join(dataDir, worktreesDir, owner, name, taskName)
 }

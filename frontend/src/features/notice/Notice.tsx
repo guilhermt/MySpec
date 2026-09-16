@@ -1,9 +1,7 @@
 import { TriangleAlert, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
-import { noticeMessage } from "@/features/notice/messages";
 import { cn } from "@/lib/utils";
-import type { NoticeReason } from "@/lib/wails";
 
 export interface BannerProps {
   title: string;
@@ -38,24 +36,6 @@ export function Banner({ title, children, onDismiss, className }: BannerProps) {
         <X />
       </Button>
     </div>
-  );
-}
-
-export interface NoticeProps {
-  path: string;
-  reason: NoticeReason;
-  onDismiss: () => void;
-}
-
-export function Notice({ path, reason, onDismiss }: NoticeProps) {
-  const { before, path: shown, after } = noticeMessage(path, reason);
-
-  return (
-    <Banner title="Couldn't open folder" onDismiss={onDismiss}>
-      {before}
-      <span className="font-mono">{shown}</span>
-      {after}
-    </Banner>
   );
 }
 

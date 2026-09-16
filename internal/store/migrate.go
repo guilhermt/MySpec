@@ -30,8 +30,9 @@ type migration struct {
 }
 
 // migrate applies every migration newer than PRAGMA user_version, one
-// transaction per file.
-func migrate(ctx context.Context, db *sql.DB, log *slog.Logger) error {
+// transaction per file. upgrade carries the tasks of a version with workspaces
+// over, in the transaction of the migration that registers the repositories.
+func migrate(ctx context.Context, db *sql.DB, log *slog.Logger, upgrade Upgrade) error {
 	current, err := schemaVersion(ctx, db)
 	if err != nil {
 		return err
@@ -46,7 +47,7 @@ func migrate(ctx context.Context, db *sql.DB, log *slog.Logger) error {
 		if m.version <= current {
 			continue
 		}
-		if err := apply(ctx, db, m); err != nil {
+		if err := apply(ctx, db, m, upgrade); err != nil {
 			return err
 		}
 		log.Info("migration applied", "version", m.version, "file", m.file)
@@ -55,24 +56,35 @@ func migrate(ctx context.Context, db *sql.DB, log *slog.Logger) error {
 }
 
 // apply runs one migration and bumps the schema version in the same transaction.
-func apply(ctx context.Context, db *sql.DB, m migration) error {
+func apply(ctx context.Context, db *sql.DB, m migration, upgrade Upgrade) error {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin migration %s: %w", m.file, err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	if _, err := tx.ExecContext(ctx, m.sql); err != nil {
+	if _, err = tx.ExecContext(ctx, m.sql); err != nil {
 		return fmt.Errorf("apply migration %s: %w", m.file, err)
 	}
+
+	plan := noPlan()
+	if m.version == repositoriesVersion {
+		if plan, err = upgradeTasks(ctx, tx, upgrade); err != nil {
+			return fmt.Errorf("apply migration %s: %w", m.file, err)
+		}
+	}
+
 	// PRAGMA takes no placeholders, so the version is inlined; it comes from the
 	// file name and is already an int.
-	if _, err := tx.ExecContext(ctx, "PRAGMA user_version = "+strconv.Itoa(m.version)); err != nil {
+	if _, err = tx.ExecContext(ctx, "PRAGMA user_version = "+strconv.Itoa(m.version)); err != nil {
+		plan.Undo()
 		return fmt.Errorf("set schema version %d: %w", m.version, err)
 	}
-	if err := tx.Commit(); err != nil {
+	if err = tx.Commit(); err != nil {
+		plan.Undo()
 		return fmt.Errorf("commit migration %s: %w", m.file, err)
 	}
+	plan.Done()
 	return nil
 }
 

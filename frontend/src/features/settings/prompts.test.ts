@@ -18,7 +18,7 @@ describe("PROMPTS", () => {
 
 describe("PLACEHOLDERS", () => {
   it("says what every placeholder becomes", () => {
-    expect(Object.keys(PLACEHOLDERS)).toHaveLength(18);
+    expect(Object.keys(PLACEHOLDERS)).toHaveLength(17);
     expect(PLACEHOLDERS["{{task_name}}"]?.meaning).toBe("The name of the task");
     expect(PLACEHOLDERS["{{one_shot_path}}"]?.meaning).toBe("The One-Shot document file");
   });

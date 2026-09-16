@@ -32,18 +32,3 @@ func (l claudeLauncher) Start(ctx context.Context, cfg claude.Config) (session.P
 	}
 	return proc, nil
 }
-
-// repoPaths are the repositories of the open workspace, empty when there is
-// none. It is what a task is validated against.
-func (a *App) repoPaths() []string {
-	current := a.ws.Current()
-	if current == nil {
-		return nil
-	}
-
-	paths := make([]string, len(current.Repos))
-	for i, repo := range current.Repos {
-		paths[i] = repo.Path
-	}
-	return paths
-}

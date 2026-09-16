@@ -78,7 +78,7 @@ export function StepPane({ task }: StepPaneProps) {
       return (
         <>
           {step.review !== null && (
-            <ReviewStrip taskId={task.id} repoPath="" review={step.review} />
+            <ReviewStrip taskId={task.id} subject="step" review={step.review} />
           )}
           <StepTabs task={task} step={step} />
           <StepConversation task={task} step={step} />

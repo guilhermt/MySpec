@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Markdown } from "@/features/chat/Markdown";
-import { HistoryRepos } from "@/features/history/HistoryPanel";
+import { HistoryPR } from "@/features/history/HistoryPanel";
 import { formatDates, stepCount } from "@/features/history/history-format";
 import { ErrorNotice } from "@/features/notice/Notice";
 import { DeleteTaskDialog } from "@/features/task/DeleteTaskDialog";
@@ -13,11 +13,10 @@ import { OneShotView } from "@/features/task/OneShotView";
 import { StepDocument } from "@/features/task/StepDocument";
 import { StepReportList } from "@/features/task/StepList";
 import { useArtifact } from "@/features/task/useArtifact";
-import { findNode } from "@/features/tree/tree-model";
 import { findStepReport, stepReportLabel } from "@/lib/review-modes";
 import { isOneShot } from "@/lib/task-modes";
 import type { ArchivedTask } from "@/lib/wails";
-import { repoNodeId, useAppStore, useArchivedTask } from "@/store/app-store";
+import { useAppStore, useArchivedTask } from "@/store/app-store";
 
 const LOADING_WIDTHS = ["w-1/2", "w-full", "w-3/4"];
 
@@ -76,11 +75,6 @@ export interface ArchivedTaskViewProps {
 export function ArchivedTaskView({ taskId }: ArchivedTaskViewProps) {
   const task = useArchivedTask(taskId);
   const closeArchived = useAppStore((state) => state.closeArchived);
-  const repoName = useAppStore((state) =>
-    state.app === null || task === null || task.repoPath === ""
-      ? ""
-      : (findNode(state.app, repoNodeId(task.repoPath))?.label ?? ""),
-  );
   const [selection, setSelection] = useState<Selection | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [dismissed, setDismissed] = useState("");
@@ -123,7 +117,7 @@ export function ArchivedTaskView({ taskId }: ArchivedTaskViewProps) {
         </Button>
         <span className="min-w-0 truncate font-medium">{task.name}</span>
         {oneShot && <Badge variant="outline">One-Shot</Badge>}
-        <Badge variant="secondary">{task.repoPath === "" ? "Root" : repoName}</Badge>
+        <Badge variant="secondary">{task.repository}</Badge>
         <Badge variant="outline">Archived</Badge>
 
         <span className="flex-1" />
@@ -149,7 +143,7 @@ export function ArchivedTaskView({ taskId }: ArchivedTaskViewProps) {
       <div className="flex h-9 shrink-0 items-center gap-3 border-b px-3 text-xs text-muted-foreground">
         <span className="shrink-0">{formatDates(task.createdAt, task.archivedAt)}</span>
         {!oneShot && <span className="shrink-0">{stepCount(steps.length)}</span>}
-        <HistoryRepos repos={task.repos ?? []} />
+        <HistoryPR pr={task.pr} />
       </div>
 
       {oneShot ? (
@@ -221,11 +215,6 @@ export function ArchivedTaskView({ taskId }: ArchivedTaskViewProps) {
                         {step.number}
                       </span>
                       <span className="min-w-0 flex-1 truncate font-medium">{step.title}</span>
-                      {step.repository !== "" && (
-                        <Badge variant="secondary" className="shrink-0">
-                          {step.repository}
-                        </Badge>
-                      )}
                     </button>
                     <StepReportList
                       reports={step.reports ?? []}

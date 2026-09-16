@@ -4,7 +4,7 @@ import { TaskHeader } from "@/features/task/TaskHeader";
 import { api, type TaskSummary } from "@/lib/wails";
 import { renderWithStore } from "@/test/render";
 import {
-  makeRepoPR,
+  makePullRequest,
   makeSituation,
   makeState,
   makeStep,
@@ -21,22 +21,16 @@ function header(overrides: Partial<TaskSummary> = {}, onToggle = vi.fn()) {
 }
 
 describe("TaskHeader", () => {
-  it("names the task and its place", () => {
+  it("names the task and the repository it belongs to", () => {
     header();
 
     expect(screen.getByText("add-login")).toBeInTheDocument();
-    expect(screen.getByText("Root")).toBeInTheDocument();
+    expect(screen.getByText("dev/web")).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("Waiting");
   });
 
-  it("names the repository a task belongs to", () => {
-    header({ repoPath: "/home/dev/projects/api" });
-
-    expect(screen.getByText("api")).toBeInTheDocument();
-  });
-
   it("labels a One-Shot task", () => {
-    header({ mode: "one_shot", stage: "one_shot", repoPath: "/home/dev/projects/api" });
+    header({ mode: "one_shot", stage: "one_shot" });
 
     expect(screen.getByText("One-Shot")).toBeInTheDocument();
   });
@@ -60,26 +54,13 @@ describe("TaskHeader", () => {
   });
 
   it("reads the most urgent situation of the task and how many others it has, in its tone", () => {
-    const API = "/home/dev/projects/api";
-    const WEB = "/home/dev/projects/web";
+    const place = { kind: "pr", stage: "", step: 0 };
     header({
       stage: "pr",
-      repos: [
-        makeRepoPR({ repository: "api", repoPath: API, slug: "api", status: "blocked" }),
-        makeRepoPR({ status: "draft_ready" }),
-      ],
+      pr: makePullRequest({ status: "blocked" }),
       situations: [
-        makeSituation({
-          id: "api-blocked",
-          kind: "pr_blocked",
-          group: "error",
-          place: { kind: "repo", stage: "", step: 0, repoPath: API, repository: "api" },
-        }),
-        makeSituation({
-          id: "web-draft",
-          kind: "draft",
-          place: { kind: "repo", stage: "", step: 0, repoPath: WEB, repository: "web" },
-        }),
+        makeSituation({ id: "pr-blocked", kind: "pr_blocked", group: "error", place }),
+        makeSituation({ id: "pr-draft", kind: "draft", place }),
       ],
     });
 

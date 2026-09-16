@@ -435,22 +435,6 @@ func TestRemoveWorktreeAndDeleteBranchUndoAnAdd(t *testing.T) {
 	}
 }
 
-func TestExcludePathPointsInsideTheGitDirectory(t *testing.T) {
-	t.Parallel()
-	runner, dir := repo(t)
-
-	got, err := runner.ExcludePath(t.Context(), dir)
-	if err != nil {
-		t.Fatalf("ExcludePath = %v, want nil", err)
-	}
-	if !filepath.IsAbs(got) {
-		t.Errorf("ExcludePath = %q, want an absolute path", got)
-	}
-	if want := filepath.Join(dir, ".git", "info", "exclude"); got != want {
-		t.Errorf("ExcludePath = %q, want %q", got, want)
-	}
-}
-
 func TestCountCommitsCountsWhatABranchHasPastItsBase(t *testing.T) {
 	t.Parallel()
 	runner, dir := repo(t)
@@ -540,6 +524,47 @@ func TestUpstreamAnswersForBothKindsOfBranch(t *testing.T) {
 	}
 	if got != "" {
 		t.Errorf("Upstream(login-screen) = %q, want it empty for a branch that tracks nothing", got)
+	}
+}
+
+func TestRemoteURLReadsTheURLAsItWasConfigured(t *testing.T) {
+	t.Parallel()
+	runner, dir := repo(t)
+	const want = "git@github.com:dev/web.git"
+	gittest.Run(t, dir, "remote", "set-url", "origin", want)
+
+	got, err := runner.RemoteURL(t.Context(), dir, "origin")
+	if err != nil {
+		t.Fatalf("RemoteURL(origin) = %v, want nil", err)
+	}
+	if got != want {
+		t.Errorf("RemoteURL(origin) = %q, want %q", got, want)
+	}
+}
+
+func TestRemoteURLReportsARemoteTheRepositoryDoesNotHave(t *testing.T) {
+	t.Parallel()
+	runner, _ := repo(t)
+	dir := t.TempDir()
+	gittest.Run(t, dir, "init", "--quiet")
+
+	_, err := runner.RemoteURL(t.Context(), dir, "origin")
+	if !errors.Is(err, git.ErrNoRemote) {
+		t.Fatalf("RemoteURL(origin) = %v, want git.ErrNoRemote", err)
+	}
+}
+
+func TestRemoteURLFailsOutsideARepository(t *testing.T) {
+	t.Parallel()
+	runner, _ := repo(t)
+
+	_, err := runner.RemoteURL(t.Context(), t.TempDir(), "origin")
+	var gitErr *git.Error
+	if !errors.As(err, &gitErr) {
+		t.Fatalf("RemoteURL outside a repository = %v, want *git.Error", err)
+	}
+	if errors.Is(err, git.ErrNoRemote) {
+		t.Errorf("RemoteURL outside a repository = %v, want a failure other than git.ErrNoRemote", err)
 	}
 }
 

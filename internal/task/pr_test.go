@@ -12,7 +12,7 @@ func TestParsePRStatus(t *testing.T) {
 
 	statuses := []task.PRStatus{
 		task.PRPreparing, task.PRBlocked, task.PRDrafting, task.PROpening,
-		task.PRReviewing, task.PRCommitting, task.PRDone, task.PRSkipped,
+		task.PRReviewing, task.PRCommitting, task.PRDone, task.PRClosing, task.PRClosed,
 	}
 	for _, status := range statuses {
 		got, err := task.ParsePRStatus(string(status))
@@ -24,7 +24,7 @@ func TestParsePRStatus(t *testing.T) {
 		}
 	}
 
-	for _, value := range []string{"", "Preparing", "started", "merged"} {
+	for _, value := range []string{"", "Preparing", "started", "merged", "skipped"} {
 		if _, err := task.ParsePRStatus(value); !errors.Is(err, task.ErrUnknownPRStatus) {
 			t.Errorf("ParsePRStatus(%q) = %v, want ErrUnknownPRStatus", value, err)
 		}
