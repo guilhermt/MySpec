@@ -17,7 +17,7 @@ const LOSSES: Record<TaskMode, readonly string[]> = {
     "the PRD conversation and document",
     "the tech spec conversation and document",
     "the plan conversation and the step files",
-    "the step conversations, and the worktree and branch, with any uncommitted work in them",
+    "the step conversations, the worktree and the branch, with any uncommitted work in them",
   ],
   one_shot: [
     "the planning conversation and the One-Shot document",
