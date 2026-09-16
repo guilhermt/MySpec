@@ -10,8 +10,8 @@ import (
 	"github.com/guilhermt/myspec/internal/task"
 )
 
-// Close takes down the worktree of a repository whose pull request was merged
-// and brings the base branch of the repository up to date. It never stops
+// Close takes down the worktree of a task whose pull request was merged and
+// brings the base branch of the clone up to date. It never stops
 // halfway: each of the three parts records its own outcome, and the record of
 // the worktree goes whatever happened, because nothing here is the app's any
 // more. base is the local branch the pull request merged into.
@@ -24,36 +24,36 @@ func (s *Service) Close(ctx context.Context, wt Worktree, base string, policy Br
 	result.Branch = s.closeBranch(ctx, wt, base, policy)
 	result.Base, result.BaseCommits = s.closeBase(ctx, wt.RepoPath, base)
 
-	if err := s.store.Delete(ctx, wt.TaskID, wt.RepoPath); err != nil {
+	if err := s.store.Delete(ctx, wt.TaskID); err != nil {
 		s.log.Error("delete worktree record failed", "task", wt.TaskID, "path", wt.Path, "error", err)
 	}
 	s.forget(wt)
 	result.ClosedAt = s.now().UTC()
 
 	s.log.Info("worktree closed",
-		"task", wt.TaskID, "repo", wt.RepoPath,
+		"task", wt.TaskID, "path", wt.RepoPath,
 		"worktree", string(result.Worktree.Outcome),
 		"branch", string(result.Branch.Outcome),
 		"base", string(result.Base.Outcome))
 	return result
 }
 
-// Purge removes every worktree of a task with its branch, whatever state they
-// are in, and forgets them all. What git cannot remove is returned, never
-// kept: the task is going away and nothing here is worth stopping it over.
-func (s *Service) Purge(ctx context.Context, taskID string) []Leftover {
-	var leftovers []Leftover
-	for _, wt := range s.List(taskID) {
-		left, kept := s.purge(ctx, wt)
-		if !kept {
-			continue
-		}
-		s.log.Warn("worktree left behind",
-			"task", taskID, "repo", left.RepoPath,
-			"path", left.Path, "branch", left.Branch, "error", left.Error)
-		leftovers = append(leftovers, left)
+// Purge removes the worktree of a task with its branch, whatever state they
+// are in, and forgets them. What git cannot remove is returned, never kept:
+// the task is going away and nothing here is worth stopping it over.
+func (s *Service) Purge(ctx context.Context, taskID string) (Leftover, bool) {
+	wt, ok := s.Get(taskID)
+	if !ok {
+		return Leftover{}, false
 	}
-	return leftovers
+
+	left, kept := s.purge(ctx, wt)
+	if !kept {
+		return Leftover{}, false
+	}
+	s.log.Warn("worktree left behind",
+		"task", taskID, "path", left.Path, "branch", left.Branch, "error", left.Error)
+	return left, true
 }
 
 // closeWorktree removes the folder of a worktree and, whatever came of it,
@@ -235,7 +235,7 @@ func (s *Service) purge(ctx context.Context, wt Worktree) (Leftover, bool) {
 	unlock := s.lockRepo(wt.RepoPath)
 	defer unlock()
 
-	left := Leftover{RepoPath: wt.RepoPath}
+	var left Leftover
 	if _, err := os.Stat(wt.Path); err == nil {
 		if err = do(ctx, CommandTimeout, func(ctx context.Context) error {
 			return s.git.RemoveWorktree(ctx, wt.RepoPath, wt.Path)
@@ -251,7 +251,7 @@ func (s *Service) purge(ctx context.Context, wt Worktree) (Leftover, bool) {
 
 	// The record goes whatever git managed to do: the task is going away, and a
 	// record of a worktree nobody owns would only be in the way.
-	if err := s.store.Delete(ctx, wt.TaskID, wt.RepoPath); err != nil {
+	if err := s.store.Delete(ctx, wt.TaskID); err != nil {
 		s.log.Error("delete worktree record failed", "task", wt.TaskID, "path", wt.Path, "error", err)
 	}
 	s.forget(wt)
@@ -287,7 +287,7 @@ func (s *Service) prune(ctx context.Context, repoPath string) {
 	if err := do(ctx, CommandTimeout, func(ctx context.Context) error {
 		return s.git.PruneWorktrees(ctx, repoPath)
 	}); err != nil {
-		s.log.Warn("worktree prune failed", "repo", repoPath, "error", err)
+		s.log.Warn("worktree prune failed", "path", repoPath, "error", err)
 	}
 }
 
@@ -301,7 +301,7 @@ func skipped(reason string) task.CloseStep {
 	return task.CloseStep{Outcome: task.OutcomeSkipped, Reason: reason}
 }
 
-// join puts two things git said about the same repository in one message.
+// join puts two things git said about the same clone in one message.
 func join(first, second string) string {
 	if first == "" {
 		return second

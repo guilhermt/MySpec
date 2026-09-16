@@ -27,7 +27,7 @@ func TestWatcherReportsThePRDOnceForABurstOfWrites(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	created := f.create(t, "add-login", "")
+	created := f.create(t, "add-login")
 
 	// The agent writes the file in pieces, the way a tool call streams it out.
 	for i := range 5 {
@@ -69,7 +69,7 @@ func TestWatcherReportsARewriteWithoutFirst(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	created := f.create(t, "add-login", "")
+	created := f.create(t, "add-login")
 
 	writePRD(t, created, "# PRD")
 	waitFor(t, "the PRD to appear", func() bool { return len(f.artifactCalls()) == 1 })
@@ -94,7 +94,7 @@ func TestWatcherReportsTheTechSpec(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	created := f.create(t, "add-login", "")
+	created := f.create(t, "add-login")
 
 	writeTechSpec(t, created, "# Tech spec")
 	waitFor(t, "the tech spec to be reported", func() bool { return len(f.artifactCalls()) == 1 })
@@ -133,13 +133,13 @@ func TestWatcherReportsThePlanOnlyOnceItIsValid(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	created := f.create(t, "add-login", "")
+	created := f.create(t, "add-login")
 
-	// A step with no metadata header is a plan with a problem, not a plan.
+	// A step with no title is a plan with a problem, not a plan.
 	if err := os.MkdirAll(created.StepsDir(), 0o700); err != nil {
 		t.Fatalf("create steps directory: %v", err)
 	}
-	writeFile(t, filepath.Join(created.StepsDir(), "1-add-the-store.md"), "# Step 1: Add the store\n")
+	writeFile(t, filepath.Join(created.StepsDir(), "1-add-the-store.md"), "Just a paragraph.\n")
 
 	waitFor(t, "the steps folder to settle", func() bool { return len(f.artifactCalls()) > 0 })
 	time.Sleep(quietFor)
@@ -149,7 +149,7 @@ func TestWatcherReportsThePlanOnlyOnceItIsValid(t *testing.T) {
 		t.Errorf("changes = %v, want no plan for a plan with problems", kinds(calls[len(calls)-1]))
 	}
 
-	writeStep(t, created, "1-add-the-store.md", "api", "Step 1: Add the store")
+	writeStep(t, created, "1-add-the-store.md", "Step 1: Add the store")
 	waitFor(t, "the plan to be reported", func() bool {
 		latest := f.artifactCalls()
 		_, ok := latest[len(latest)-1].change(task.ArtifactPlan)
@@ -167,9 +167,9 @@ func TestWatcherFollowsTheStepsFolderAsItComesAndGoes(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	created := f.create(t, "add-login", "")
+	created := f.create(t, "add-login")
 
-	writeStep(t, created, "1-add-the-store.md", "api", "Step 1: Add the store")
+	writeStep(t, created, "1-add-the-store.md", "Step 1: Add the store")
 	waitFor(t, "the plan to appear", func() bool {
 		calls := f.artifactCalls()
 		if len(calls) == 0 {
@@ -198,7 +198,7 @@ func TestWatcherIgnoresOtherFilesInTheFolder(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	created := f.create(t, "add-login", "")
+	created := f.create(t, "add-login")
 
 	writeFile(t, filepath.Join(created.ArtifactsDir, "notes.md"), "notes")
 	time.Sleep(quietFor)
@@ -212,8 +212,8 @@ func TestWatcherKeepsTheTasksApart(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	first := f.create(t, "add-login", "")
-	second := f.create(t, "fix-signup", "")
+	first := f.create(t, "add-login")
+	second := f.create(t, "fix-signup")
 
 	writePRD(t, first, "# PRD of the first")
 	waitFor(t, "the first PRD to appear", func() bool { return len(f.artifactCalls()) == 1 })
@@ -230,7 +230,7 @@ func TestWatcherStopsAtTheDeletedTask(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	created := f.create(t, "add-login", "")
+	created := f.create(t, "add-login")
 	dir := created.ArtifactsDir
 
 	if err := f.service.Delete(t.Context(), created.ID); err != nil {
@@ -251,7 +251,7 @@ func TestWatcherStaysQuietAfterClose(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	created := f.create(t, "add-login", "")
+	created := f.create(t, "add-login")
 
 	// Closing twice is what the fixture cleanup does next, and it is fine.
 	if err := f.service.Close(); err != nil {

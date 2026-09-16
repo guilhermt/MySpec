@@ -18,6 +18,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/guilhermt/myspec/internal/models"
+	"github.com/guilhermt/myspec/internal/repository"
 	"github.com/guilhermt/myspec/internal/reviewmode"
 )
 
@@ -28,11 +29,10 @@ const dirPerm = 0o700
 // which has no caller to carry a context.
 const settleTimeout = 5 * time.Second
 
-// Store persists the tasks of every workspace. It is named apart from
-// Repository, which is a code repository a task touches.
+// Store persists the tasks.
 type Store interface {
-	ListByWorkspace(ctx context.Context, workspacePath string) ([]Task, error)
-	ListArchived(ctx context.Context, workspacePath string) ([]Task, error)
+	ListActive(ctx context.Context) ([]Task, error)
+	ListArchived(ctx context.Context) ([]Task, error)
 	Get(ctx context.Context, id string) (Task, error)
 	Insert(ctx context.Context, t Task) error
 	UpdateStage(ctx context.Context, id, stage string, revisiting bool, updatedAt time.Time) error
@@ -44,60 +44,61 @@ type Store interface {
 	ListStepRuns(ctx context.Context, taskID string) ([]StepRun, error)
 	UpsertStepRun(ctx context.Context, run StepRun) error
 	DeleteStepRuns(ctx context.Context, taskID string) error
-	ListPRRuns(ctx context.Context, taskID string) ([]PRRun, error)
+	GetPRRun(ctx context.Context, taskID string) (PRRun, bool, error)
 	UpsertPRRun(ctx context.Context, run PRRun) error
-	DeletePRRuns(ctx context.Context, taskID string) error
+	DeletePRRun(ctx context.Context, taskID string) error
 }
 
 // Deps are what Service needs from the outside.
 type Deps struct {
-	Repo       Store
-	DataDir    string
-	Log        *slog.Logger
-	Now        func() time.Time               // defaults to time.Now
-	NewID      func() string                  // defaults to uuid.NewString
-	Repos      func() []string                // repository paths of the open workspace
-	OnChange   func()                         // after any change to the list or a task; may be nil
-	OnArtifact func(t Task, changes []Change) // the artifact folder went quiet; may be nil
+	Repo    Store
+	DataDir string
+	Log     *slog.Logger
+	Now     func() time.Time // defaults to time.Now
+	NewID   func() string    // defaults to uuid.NewString
+	// Repositories is the registered repository of an id. Without it, no
+	// repository exists.
+	Repositories func(id string) (repository.Repository, bool)
+	OnChange     func()                         // after any change to the list or a task; may be nil
+	OnArtifact   func(t Task, changes []Change) // the artifact folder went quiet; may be nil
 }
 
-// Service owns the tasks of the open workspace and what their artifact folders
+// Service owns the tasks, active and archived, and what their artifact folders
 // hold.
 type Service struct {
-	repo       Store
-	dataDir    string
-	log        *slog.Logger
-	now        func() time.Time
-	newID      func() string
-	repos      func() []string
-	onChange   func()
-	onArtifact func(t Task, changes []Change)
+	repo         Store
+	dataDir      string
+	log          *slog.Logger
+	now          func() time.Time
+	newID        func() string
+	repositories func(id string) (repository.Repository, bool)
+	onChange     func()
+	onArtifact   func(t Task, changes []Change)
 
 	watcher *watcher
 
-	mu            sync.Mutex
-	workspacePath string
-	tasks         []Task
-	archived      []Task               // by archived_at, newest first
-	artifacts     map[string]Artifacts // by task id, archived included, what the last inspection saw
-	stepRuns      map[string][]StepRun // by task id, archived included, ordered by number
-	prRuns        map[string][]PRRun   // by task id, archived included, ordered by repository path
+	mu        sync.Mutex
+	tasks     []Task
+	archived  []Task               // by archived_at, newest first
+	artifacts map[string]Artifacts // by task id, archived included, what the last inspection saw
+	stepRuns  map[string][]StepRun // by task id, archived included, ordered by number
+	prRuns    map[string]PRRun     // by task id, archived included; absent before the PR stage
 }
 
 // New builds a Service from deps, with the artifact watcher running.
 func New(deps Deps) (*Service, error) {
 	s := &Service{
-		repo:       deps.Repo,
-		dataDir:    deps.DataDir,
-		log:        deps.Log,
-		now:        deps.Now,
-		newID:      deps.NewID,
-		repos:      deps.Repos,
-		onChange:   deps.OnChange,
-		onArtifact: deps.OnArtifact,
-		artifacts:  map[string]Artifacts{},
-		stepRuns:   map[string][]StepRun{},
-		prRuns:     map[string][]PRRun{},
+		repo:         deps.Repo,
+		dataDir:      deps.DataDir,
+		log:          deps.Log,
+		now:          deps.Now,
+		newID:        deps.NewID,
+		repositories: deps.Repositories,
+		onChange:     deps.OnChange,
+		onArtifact:   deps.OnArtifact,
+		artifacts:    map[string]Artifacts{},
+		stepRuns:     map[string][]StepRun{},
+		prRuns:       map[string]PRRun{},
 	}
 	if s.now == nil {
 		s.now = time.Now
@@ -105,8 +106,8 @@ func New(deps Deps) (*Service, error) {
 	if s.newID == nil {
 		s.newID = uuid.NewString
 	}
-	if s.repos == nil {
-		s.repos = func() []string { return nil }
+	if s.repositories == nil {
+		s.repositories = func(string) (repository.Repository, bool) { return repository.Repository{}, false }
 	}
 
 	w, err := newWatcher(deps.Log, s.artifactSettled)
@@ -117,32 +118,24 @@ func New(deps Deps) (*Service, error) {
 	return s, nil
 }
 
-// Sync loads the tasks of workspacePath, archived ones included, reads their
-// artifact folders and watches the ones still in the workspace. Calling it
-// again with the same path is a no-op. It does not call OnChange.
-func (s *Service) Sync(ctx context.Context, workspacePath string) error {
-	s.mu.Lock()
-	same := s.workspacePath == workspacePath
-	s.mu.Unlock()
-	if same {
-		return nil
+// Sync loads every task, archived ones included, reads their artifact folders
+// and watches the active ones. It does not call OnChange.
+func (s *Service) Sync(ctx context.Context) error {
+	tasks, err := s.repo.ListActive(ctx)
+	if err != nil {
+		return fmt.Errorf("list tasks: %w", err)
+	}
+	archived, err := s.repo.ListArchived(ctx)
+	if err != nil {
+		return fmt.Errorf("list archived tasks: %w", err)
 	}
 
-	tasks, err := s.repo.ListByWorkspace(ctx, workspacePath)
-	if err != nil {
-		return fmt.Errorf("list tasks of %s: %w", workspacePath, err)
-	}
-	archived, err := s.repo.ListArchived(ctx, workspacePath)
-	if err != nil {
-		return fmt.Errorf("list archived tasks of %s: %w", workspacePath, err)
-	}
-
-	// The history reads the same artifacts and records as the workspace does,
-	// so both lists fill the maps; only the workspace is watched.
+	// The history reads the same artifacts and records as the active tasks do,
+	// so both lists fill the maps; only the active ones are watched.
 	loaded := slices.Concat(tasks, archived)
 	artifacts := make(map[string]Artifacts, len(loaded))
 	stepRuns := make(map[string][]StepRun, len(loaded))
-	prRuns := make(map[string][]PRRun, len(loaded))
+	prRuns := make(map[string]PRRun, len(loaded))
 	for _, t := range loaded {
 		artifacts[t.ID] = s.inspect(t)
 		runs, err := s.repo.ListStepRuns(ctx, t.ID)
@@ -151,16 +144,17 @@ func (s *Service) Sync(ctx context.Context, workspacePath string) error {
 		}
 		stepRuns[t.ID] = runs
 
-		prs, err := s.repo.ListPRRuns(ctx, t.ID)
+		run, ok, err := s.repo.GetPRRun(ctx, t.ID)
 		if err != nil {
-			return fmt.Errorf("list pr runs of task %s: %w", t.ID, err)
+			return fmt.Errorf("get pr run of task %s: %w", t.ID, err)
 		}
-		prRuns[t.ID] = prs
+		if ok {
+			prRuns[t.ID] = run
+		}
 	}
 
 	s.mu.Lock()
 	previous := s.tasks
-	s.workspacePath = workspacePath
 	s.tasks = tasks
 	s.archived = archived
 	s.artifacts = artifacts
@@ -195,8 +189,8 @@ func (s *Service) ListArchived() []Task {
 	return slices.Clone(s.archived)
 }
 
-// Get returns a task of the workspace by id. An archived task is not one of
-// them; Lookup finds both.
+// Get returns an active task by id. An archived task is not one of them;
+// Lookup finds both.
 func (s *Service) Get(id string) (Task, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -208,8 +202,7 @@ func (s *Service) Get(id string) (Task, bool) {
 	return s.tasks[index], true
 }
 
-// Lookup returns a loaded task by id, whether it is in the workspace or in the
-// history.
+// Lookup returns a loaded task by id, whether it is active or in the history.
 func (s *Service) Lookup(id string) (Task, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -223,11 +216,10 @@ func (s *Service) Lookup(id string) (Task, bool) {
 	return Task{}, false
 }
 
-// CreateParams is the task the user filled in the form. The node it was
-// started from decides RepoPath; the form cannot change it.
+// CreateParams is the task the user filled in the form.
 type CreateParams struct {
 	Name           string
-	RepoPath       string // "" for root
+	RepositoryID   string
 	InitialContext string
 	Models         models.Set      // a choice for every stage: the defaults with what the user adjusted
 	ReviewMode     reviewmode.Mode // the mode of the task: the default, or what the user picked
@@ -245,39 +237,25 @@ func (s *Service) Create(ctx context.Context, p CreateParams) (Task, error) {
 		return Task{}, ErrEmptyContext
 	}
 
-	var repoPath string
-	if p.RepoPath != "" {
-		repoPath = filepath.Clean(p.RepoPath)
-		if !slices.Contains(s.repos(), repoPath) {
-			return Task{}, fmt.Errorf("create task %s in %s: %w", name, repoPath, ErrRepoOutside)
-		}
-	}
-
 	mode := cmp.Or(p.Mode, ModeStructured)
 	if _, err := ParseMode(string(mode)); err != nil {
 		return Task{}, err
 	}
-	if mode == ModeOneShot && repoPath == "" {
-		return Task{}, fmt.Errorf("create task %s: %w", name, ErrOneShotAtRoot)
-	}
 
-	s.mu.Lock()
-	workspacePath := s.workspacePath
-	s.mu.Unlock()
-	if workspacePath == "" {
-		return Task{}, fmt.Errorf("create task %s: no workspace is open", name)
+	repo, ok := s.repositories(p.RepositoryID)
+	if !ok {
+		return Task{}, fmt.Errorf("create task %s: %w", name, ErrUnknownRepository)
 	}
 
 	now := s.now().UTC()
 	t := Task{
 		ID:             s.newID(),
-		WorkspacePath:  workspacePath,
+		RepositoryID:   repo.ID,
 		Name:           name,
-		RepoPath:       repoPath,
 		Mode:           mode,
 		InitialContext: initialContext,
 		Stage:          mode.Stages()[0],
-		ArtifactsDir:   ArtifactsDir(s.dataDir, workspacePath, name),
+		ArtifactsDir:   ArtifactsDir(s.dataDir, repo.Owner, repo.Name, name),
 		Models:         Models{Stages: maps.Clone(p.Models)},
 		ReviewModes:    ReviewModes{Task: cmp.Or(p.ReviewMode, reviewmode.Manual)},
 		CreatedAt:      now,
@@ -309,19 +287,18 @@ func (s *Service) Create(ctx context.Context, p CreateParams) (Task, error) {
 
 	s.mu.Lock()
 	s.tasks = append(s.tasks, t)
-	s.artifacts[t.ID] = Artifacts{PR: map[string]RepoArtifacts{}, StepReports: map[int][]ReviewReport{}}
+	s.artifacts[t.ID] = Artifacts{StepReports: map[int][]ReviewReport{}}
 	s.stepRuns[t.ID] = nil
-	s.prRuns[t.ID] = nil
 	s.mu.Unlock()
 
 	s.watch(t)
-	s.log.Info("task created", "task", t.ID, "name", t.Name, "repo", t.RepoPath, "mode", string(t.Mode))
+	s.log.Info("task created", "task", t.ID, "name", t.Name, "repository", repo.FullName(), "mode", string(t.Mode))
 	s.changed()
 	return t, nil
 }
 
-// Archive takes a task out of the workspace and into the history. Only a task
-// the workspace still holds is archived, and there is no way back.
+// Archive takes a task out of the active list and into the history. Only an
+// active task is archived, and there is no way back.
 func (s *Service) Archive(ctx context.Context, id string) (Task, error) {
 	t, ok := s.Get(id)
 	if !ok {
@@ -349,9 +326,8 @@ func (s *Service) Archive(ctx context.Context, id string) (Task, error) {
 	return t, nil
 }
 
-// Delete unwatches, removes the artifact folder and the row, of a task of the
-// workspace or of one in the history. The caller stops the session of the task
-// first.
+// Delete unwatches, removes the artifact folder and the row, of an active task
+// or of one in the history. The caller stops the session of the task first.
 func (s *Service) Delete(ctx context.Context, id string) error {
 	t, ok := s.Lookup(id)
 	if !ok {
@@ -736,32 +712,33 @@ func (s *Service) ClearStepRuns(ctx context.Context, id string) error {
 	return nil
 }
 
-// PRRuns is what the app recorded about the PR stage of the repositories of a
-// task, by repository path.
-func (s *Service) PRRuns(id string) []PRRun {
+// PRRun is what the app recorded about the PR stage of a task, false before it.
+func (s *Service) PRRun(id string) (PRRun, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	return clonePRRuns(s.prRuns[id])
+	run, ok := s.prRuns[id]
+	if !ok {
+		return PRRun{}, false
+	}
+	return clonePRRun(run), true
 }
 
-// updatePRRun rewrites the PR run of a repository from what the cache holds,
-// so that a change of status never drops the pull request the run carries.
-func (s *Service) updatePRRun(
-	ctx context.Context, id, repoPath string, mutate func(*PRRun),
-) (PRRun, error) {
+// updatePRRun rewrites the PR run of a task from what the cache holds, so that
+// a change of status never drops the pull request the run carries.
+func (s *Service) updatePRRun(ctx context.Context, id string, mutate func(*PRRun)) (PRRun, error) {
 	if _, ok := s.Get(id); !ok {
-		return PRRun{}, fmt.Errorf("set pr run of %s in task %s: %w", repoPath, id, ErrNotFound)
+		return PRRun{}, fmt.Errorf("set pr run of task %s: %w", id, ErrNotFound)
 	}
 
 	now := s.now().UTC()
-	run := PRRun{TaskID: id, RepoPath: repoPath, CreatedAt: now}
+	run := PRRun{TaskID: id, CreatedAt: now}
 
 	s.mu.Lock()
-	// A repository keeps everything it recorded before, and the instant it was
-	// first recorded at, across every retry.
-	if index := indexOfPRRun(s.prRuns[id], repoPath); index >= 0 {
-		run = s.prRuns[id][index]
+	// A task keeps everything it recorded before, and the instant it was first
+	// recorded at, across every retry.
+	if recorded, ok := s.prRuns[id]; ok {
+		run = recorded
 	}
 	s.mu.Unlock()
 
@@ -773,33 +750,22 @@ func (s *Service) updatePRRun(
 	}
 
 	s.mu.Lock()
-	runs := s.prRuns[id]
-	if index := indexOfPRRun(runs, repoPath); index >= 0 {
-		runs[index] = run
-	} else {
-		position, _ := slices.BinarySearchFunc(runs, run, func(a, b PRRun) int {
-			return strings.Compare(a.RepoPath, b.RepoPath)
-		})
-		runs = slices.Insert(runs, position, run)
-	}
-	s.prRuns[id] = runs
+	s.prRuns[id] = run
 	s.mu.Unlock()
 
 	reason := ""
 	if run.Block != nil {
 		reason = string(run.Block.Reason)
 	}
-	s.log.Info("pr run set", "task", id, "repo", repoPath, "status", string(run.Status), "reason", reason)
+	s.log.Info("pr run set", "task", id, "status", string(run.Status), "reason", reason)
 	s.changed()
 	return run, nil
 }
 
-// SetPRRun records the state of the PR stage of a repository, creating the
-// record on the first call for it. block is nil unless status is PRBlocked.
-func (s *Service) SetPRRun(
-	ctx context.Context, id, repoPath string, status PRStatus, block *PRBlock,
-) (PRRun, error) {
-	return s.updatePRRun(ctx, id, repoPath, func(run *PRRun) {
+// SetPRRun records the state of the PR stage of a task, creating the record on
+// the first call for it. block is nil unless status is PRBlocked.
+func (s *Service) SetPRRun(ctx context.Context, id string, status PRStatus, block *PRBlock) (PRRun, error) {
+	return s.updatePRRun(ctx, id, func(run *PRRun) {
 		run.Status = status
 		run.Block = nil
 		if block != nil {
@@ -809,17 +775,17 @@ func (s *Service) SetPRRun(
 	})
 }
 
-// SetPRDetails records the pull request of a repository as gh reported it.
-func (s *Service) SetPRDetails(ctx context.Context, id, repoPath string, pr PRDetails) (PRRun, error) {
-	return s.updatePRRun(ctx, id, repoPath, func(run *PRRun) {
+// SetPRDetails records the pull request of a task as gh reported it.
+func (s *Service) SetPRDetails(ctx context.Context, id string, pr PRDetails) (PRRun, error) {
+	return s.updatePRRun(ctx, id, func(run *PRRun) {
 		run.PR = pr
 	})
 }
 
-// SetPRClosed records that the closing of a repository is over, with what it
-// did to the worktree, the branch and the base branch.
-func (s *Service) SetPRClosed(ctx context.Context, id, repoPath string, result CloseResult) (PRRun, error) {
-	return s.updatePRRun(ctx, id, repoPath, func(run *PRRun) {
+// SetPRClosed records that the closing of a task is over, with what it did to
+// the worktree, the branch and the base branch.
+func (s *Service) SetPRClosed(ctx context.Context, id string, result CloseResult) (PRRun, error) {
+	return s.updatePRRun(ctx, id, func(run *PRRun) {
 		run.Status = PRClosed
 		run.Block = nil
 		copied := result
@@ -829,15 +795,15 @@ func (s *Service) SetPRClosed(ctx context.Context, id, repoPath string, result C
 
 // SetPRReviewed records the pass a report closed and the commit it covered,
 // which is what makes the next pass wait for a new commit.
-func (s *Service) SetPRReviewed(ctx context.Context, id, repoPath, commit string, pass int) (PRRun, error) {
-	return s.updatePRRun(ctx, id, repoPath, func(run *PRRun) {
+func (s *Service) SetPRReviewed(ctx context.Context, id, commit string, pass int) (PRRun, error) {
+	return s.updatePRRun(ctx, id, func(run *PRRun) {
 		run.ReviewedCommit, run.ReportedPass = commit, pass
 	})
 }
 
-// ClearPRRuns forgets the PR stage of every repository of a task.
-func (s *Service) ClearPRRuns(ctx context.Context, id string) error {
-	if err := s.repo.DeletePRRuns(ctx, id); err != nil {
+// ClearPRRun forgets the PR stage of a task.
+func (s *Service) ClearPRRun(ctx context.Context, id string) error {
+	if err := s.repo.DeletePRRun(ctx, id); err != nil {
 		return err
 	}
 
@@ -845,9 +811,27 @@ func (s *Service) ClearPRRuns(ctx context.Context, id string) error {
 	delete(s.prRuns, id)
 	s.mu.Unlock()
 
-	s.log.Info("pr runs cleared", "task", id)
+	s.log.Info("pr run cleared", "task", id)
 	s.changed()
 	return nil
+}
+
+// Counts is how many active and archived tasks a repository holds.
+func (s *Service) Counts(repositoryID string) (active, archived int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for _, t := range s.tasks {
+		if t.RepositoryID == repositoryID {
+			active++
+		}
+	}
+	for _, t := range s.archived {
+		if t.RepositoryID == repositoryID {
+			archived++
+		}
+	}
+	return active, archived
 }
 
 // RemoveArtifacts throws away the artifact of a stage and of every stage after
@@ -920,10 +904,10 @@ func (s *Service) RemoveArtifacts(ctx context.Context, id string, from Stage) er
 }
 
 // ReadArtifact returns the content of an artifact by file name: the PRD, the
-// tech spec, the One-Shot document, a step file under the steps folder, a draft
-// or a review report under the pr folder, or a report of the agent review of a
-// step under the step-reviews folder. Anything else is ErrNotFound. An archived
-// task is read the same way, which is what the history shows.
+// tech spec, the One-Shot document, a step file under the steps folder,
+// pr/draft.md or pr/review-<n>.md under the pr folder, or a report of the agent
+// review of a step under the step-reviews folder. Anything else is ErrNotFound.
+// An archived task is read the same way, which is what the history shows.
 func (s *Service) ReadArtifact(id, name string) (string, error) {
 	if !readableArtifact(name) {
 		return "", fmt.Errorf("read artifact %s of task %s: %w", name, id, ErrNotFound)
@@ -1057,43 +1041,11 @@ func (s *Service) artifactSettled(id string, kinds []ArtifactKind) {
 	s.changed()
 }
 
-// Repositories are the repositories a task may touch, named as the prompts
-// name them: the repository of a repository task, every repository of the
-// workspace for a root task. A path the workspace does not hold is dropped.
-func (s *Service) Repositories(t Task) []Repository {
-	paths := s.repos()
-	if t.RepoPath != "" {
-		paths = []string{t.RepoPath}
-	}
-
-	repos := make([]Repository, 0, len(paths))
-	for _, path := range paths {
-		rel, err := filepath.Rel(t.WorkspacePath, path)
-		if err != nil {
-			s.log.Warn("repository outside the workspace", "task", t.ID, "path", path, "error", err)
-			continue
-		}
-		if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-			s.log.Warn("repository outside the workspace", "task", t.ID, "path", path)
-			continue
-		}
-		repos = append(repos, Repository{Rel: rel, Path: path})
-	}
-	slices.SortFunc(repos, func(a, b Repository) int { return strings.Compare(a.Rel, b.Rel) })
-	return repos
-}
-
 // inspect reads the artifacts of a task off the disk.
 func (s *Service) inspect(t Task) Artifacts {
-	repos := s.Repositories(t)
-	slugs := make([]string, 0, len(repos))
-	for _, repo := range repos {
-		slugs = append(slugs, Slug(repo.Rel))
-	}
-
-	plan := ReadPlan(t.StepsDir(), repos)
+	plan := ReadPlan(t.StepsDir())
 	if t.Mode == ModeOneShot {
-		plan = OneShotPlan(t.OneShotPath(), t.Name, repos)
+		plan = OneShotPlan(t.OneShotPath(), t.Name)
 	}
 
 	return Artifacts{
@@ -1101,7 +1053,7 @@ func (s *Service) inspect(t Task) Artifacts {
 		TechSpec: s.fileWritten(t.TechSpecPath()),
 		OneShot:  s.fileWritten(t.OneShotPath()),
 		Plan:     plan,
-		PR:       ReadPRArtifacts(t.PRDir(), slugs),
+		PR:       ReadPRArtifacts(t.PRDir()),
 
 		StepReports: ReadStepReports(t.StepReviewsDir()),
 	}
@@ -1147,31 +1099,18 @@ func indexOfRun(runs []StepRun, number int) int {
 	return slices.IndexFunc(runs, func(r StepRun) bool { return r.Number == number })
 }
 
-// indexOfPRRun finds a PR run by repository path, -1 when the list does not
-// hold it.
-func indexOfPRRun(runs []PRRun, repoPath string) int {
-	return slices.IndexFunc(runs, func(r PRRun) bool { return r.RepoPath == repoPath })
-}
-
-// clonePRRuns copies the runs and the block and the close result each one
-// carries, so that what a caller holds never changes under it.
-func clonePRRuns(runs []PRRun) []PRRun {
-	if len(runs) == 0 {
-		return nil
+// clonePRRun copies the block and the close result a run carries, so that what
+// a caller holds never changes under it.
+func clonePRRun(run PRRun) PRRun {
+	if run.Block != nil {
+		block := *run.Block
+		run.Block = &block
 	}
-	out := make([]PRRun, len(runs))
-	for i, run := range runs {
-		if run.Block != nil {
-			block := *run.Block
-			run.Block = &block
-		}
-		if run.Close != nil {
-			result := *run.Close
-			run.Close = &result
-		}
-		out[i] = run
+	if run.Close != nil {
+		result := *run.Close
+		run.Close = &result
 	}
-	return out
+	return run
 }
 
 // cloneStepRuns copies the runs and the block each one carries, so that what

@@ -11,68 +11,67 @@ import (
 	"github.com/guilhermt/myspec/internal/worktree"
 )
 
-// CloseRepo takes a repository whose pull request was merged out of the
-// workspace: its worktree goes, its branch goes, and the base branch of the
-// repository catches up with the remote. The work runs on the goroutine of the
-// repository; the state says when it is over.
-func (s *Service) CloseRepo(ctx context.Context, id, repoPath string) error {
+// CloseTask takes a task whose pull request was merged out of the list: its
+// worktree goes, its branch goes, and the base branch of the clone catches up
+// with the remote. The work runs on the goroutine of the PR stage; the state
+// says when it is over.
+func (s *Service) CloseTask(ctx context.Context, id string) error {
 	l := s.lockOf(id)
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	t, run, err := s.repoOf(id, repoPath)
+	t, run, err := s.prOf(id)
 	if err != nil {
 		return err
 	}
 	switch run.Status {
-	case task.PRSkipped:
-		// There was never a pull request to merge: the branch had no commit of
-		// its own.
 	case task.PRDone:
 		if run.PR.State == task.PRStateClosed {
-			return fmt.Errorf("close %s: %w", repoPath, ErrRepoNotClosable)
+			return fmt.Errorf("close task %s: %w", id, ErrNotClosable)
 		}
-		if run.PR.State != task.PRStateMerged && s.checkError(id, repoPath) == "" {
-			return fmt.Errorf("close %s: %w", repoPath, ErrPRNotMerged)
+		if run.PR.State != task.PRStateMerged && s.checkError(id) == "" {
+			return fmt.Errorf("close task %s: %w", id, ErrPRNotMerged)
 		}
 	default:
-		return fmt.Errorf("close %s: %w", repoPath, ErrRepoNotClosable)
+		return fmt.Errorf("close task %s: %w", id, ErrNotClosable)
 	}
 
-	// The conversations of the repository ran inside the worktree; they stop
-	// before it goes. Their records stay until the task is archived.
-	slug := task.Slug(repoRel(t, repoPath))
-	for _, stage := range []string{session.PRStage(slug), session.PRReviewStage(slug)} {
+	// Closing removes the worktree and the branch and updates the base branch,
+	// all of which happen in the clone.
+	if _, err := s.repositories.Check(t.RepositoryID); err != nil {
+		return err
+	}
+
+	// The conversations of the stage ran inside the worktree; they stop before
+	// it goes. Their records stay until the task is archived.
+	for _, stage := range []string{session.PRStage, session.PRReviewStage} {
 		if err := s.sessions.Close(ctx, session.Key{TaskID: id, Stage: stage}); err != nil {
 			return err
 		}
 	}
-	if _, err := s.tasks.SetPRRun(ctx, id, repoPath, task.PRClosing, nil); err != nil {
+	if _, err := s.tasks.SetPRRun(ctx, id, task.PRClosing, nil); err != nil {
 		return err
 	}
-	s.log.Info("repository closing", "task", id, "repository", repoPath)
-	s.spawnRepoWork(id, repoPath, s.closeRepoWork)
+	s.log.Info("task closing", "task", id)
+	s.spawnPRWork(id, s.closeWork)
 	return nil
 }
 
-// closeRepoWork carries out the closing of a repository and records what it
-// did. It runs on the goroutine of the repository. Once git was told to act,
-// the result is recorded whatever happened to the context: what was removed
-// was removed.
-func (s *Service) closeRepoWork(ctx context.Context, id, repoPath string) {
-	if _, ok := s.prRepoTask(ctx, id); !ok {
+// closeWork carries out the closing of a task and records what it did. It runs
+// on the goroutine of the PR stage. Once git was told to act, the result is
+// recorded whatever happened to the context: what was removed was removed.
+func (s *Service) closeWork(ctx context.Context, id string) {
+	if _, ok := s.prTask(ctx, id); !ok {
 		return
 	}
-	runs := s.tasks.PRRuns(id)
-	index := indexOfPRRun(runs, repoPath)
-	if index < 0 || runs[index].Status != task.PRClosing {
+	run, ok := s.tasks.PRRun(id)
+	if !ok || run.Status != task.PRClosing {
 		return
 	}
-	run := runs[index]
 
 	var result task.CloseResult
-	wt, ok := s.worktrees.Get(id, repoPath)
-	if !ok {
+	wt, hasWorktree := s.worktrees.Get(id)
+	if !hasWorktree {
 		result = closeResultWithoutWorktree(time.Now().UTC())
 	} else {
 		result = s.worktrees.Close(ctx, wt, closeBase(run, wt), closePolicy(run))
@@ -81,12 +80,12 @@ func (s *Service) closeRepoWork(ctx context.Context, id, repoPath string) {
 	dbCtx, cancel := context.WithTimeout(context.Background(), evaluateTimeout)
 	defer cancel()
 
-	if _, err := s.tasks.SetPRClosed(dbCtx, id, repoPath, result); err != nil {
-		s.log.Error("record closed repository failed", "task", id, "repository", repoPath, "error", err)
+	if _, err := s.tasks.SetPRClosed(dbCtx, id, result); err != nil {
+		s.log.Error("record closed task failed", "task", id, "error", err)
 		return
 	}
-	s.review.Forget(reviewKey(id, repoPath))
-	s.log.Info("repository closed", "task", id, "repository", repoPath,
+	s.review.Forget(id)
+	s.log.Info("task closed", "task", id,
 		"worktree", string(result.Worktree.Outcome),
 		"branch", string(result.Branch.Outcome),
 		"base", string(result.Base.Outcome))
@@ -115,19 +114,19 @@ func closePolicy(run task.PRRun) worktree.BranchPolicy {
 	return worktree.DeleteBranchIfMerged
 }
 
-// closeResultWithoutWorktree is the closing of a repository whose worktree the
-// app no longer knows: there is nothing to remove and no base to update.
+// closeResultWithoutWorktree is the closing of a task whose worktree the app no
+// longer knows: there is nothing to remove and no base to update.
 func closeResultWithoutWorktree(at time.Time) task.CloseResult {
 	skipped := task.CloseStep{Outcome: task.OutcomeSkipped, Reason: task.SkipMissing}
 	return task.CloseResult{Worktree: skipped, Branch: skipped, Base: skipped, ClosedAt: at}
 }
 
-// archive takes a task whose every repository was closed out of the workspace.
-// The conversations go with it; the artifacts and the records of the pull
-// requests stay for the history. The caller holds the lock of the task.
+// archive takes a closed task out of the active list. The conversations go with
+// it; the artifacts and the record of the pull request stay for the history.
+// The caller holds the lock of the task.
 func (s *Service) archive(ctx context.Context, t task.Task) {
-	s.abortRepoWork(t.ID)
-	s.review.ForgetTask(t.ID)
+	s.abortPRWork(t.ID)
+	s.review.Forget(t.ID)
 	if err := s.sessions.DiscardTask(ctx, t.ID); err != nil {
 		s.log.Error("discard sessions failed", "task", t.ID, "error", err)
 		return
@@ -142,53 +141,45 @@ func (s *Service) archive(ctx context.Context, t task.Task) {
 // DeletePreview is what deleting a task would destroy, read from git and from
 // the sessions at the moment the user asks.
 type DeletePreview struct {
-	SessionRunning bool // a process of the task is alive and will be stopped
-	Worktrees      []WorktreePreview
-	Branches       []BranchPreview
-	PRs            []PRPreview
+	SessionRunning bool             // a process of the task is alive and will be stopped
+	Worktree       *WorktreePreview // nil when the task has none
+	Branch         *BranchPreview   // nil when the task has no worktree
+	PR             *PRPreview       // nil when no pull request stays on GitHub
 }
 
-// WorktreePreview is one worktree of the task and whether it holds work.
+// WorktreePreview is the worktree of the task and whether it holds work.
 type WorktreePreview struct {
-	Repository string // relative path, as the steps name it
-	RepoPath   string
-	Path       string
-	Dirty      bool
-	Files      int    // changed files; dirty only
-	Error      string // what git said when the worktree could not be read
+	Path  string
+	Dirty bool
+	Files int    // changed files; dirty only
+	Error string // what git said when the worktree could not be read
 }
 
-// BranchPreview is one branch of the task and whether its commits are safe
+// BranchPreview is the branch of the task and whether its commits are safe
 // elsewhere.
 type BranchPreview struct {
-	Repository string
-	RepoPath   string
-	Name       string
-	Merged     bool // GitHub merged the pull request, or git sees the branch in its base
-	Error      string
+	Name   string
+	Merged bool // GitHub merged the pull request, or git sees the branch in its base
+	Error  string
 }
 
 // PRPreview is a pull request the app leaves on GitHub.
 type PRPreview struct {
-	Repository string
-	RepoPath   string
-	Number     int
-	URL        string
-	State      task.PRState
+	Number int
+	URL    string
+	State  task.PRState
 }
 
 // DeleteResult is what deleting a task left behind.
 type DeleteResult struct {
-	Leftovers []LeftoverInfo
+	Leftover *LeftoverInfo // nil when git removed everything
 }
 
-// LeftoverInfo is a worktree.Leftover with the name of its repository.
+// LeftoverInfo is what git could not remove of the worktree of a task.
 type LeftoverInfo struct {
-	Repository string
-	RepoPath   string
-	Path       string
-	Branch     string
-	Error      string
+	Path   string
+	Branch string
+	Error  string
 }
 
 // PreviewDelete reads what deleting a task would destroy. It holds the lock of
@@ -202,15 +193,10 @@ func (s *Service) PreviewDelete(ctx context.Context, id string) (DeletePreview, 
 	if !ok {
 		return DeletePreview{}, fmt.Errorf("preview the deletion of task %s: %w", id, task.ErrNotFound)
 	}
-	// The frontend maps over the three lists without checking for null.
-	preview := DeletePreview{
-		Worktrees: []WorktreePreview{},
-		Branches:  []BranchPreview{},
-		PRs:       []PRPreview{},
-	}
+	var preview DeletePreview
 	if t.Archived() {
 		// An archived task has no worktree, no branch and no conversation left:
-		// the closing of its last repository took them all.
+		// the closing took them all.
 		return preview, nil
 	}
 
@@ -221,31 +207,20 @@ func (s *Service) PreviewDelete(ctx context.Context, id string) (DeletePreview, 
 		}
 	}
 
-	runs := s.tasks.PRRuns(id)
-	for _, wt := range s.worktrees.List(id) {
-		rel := repoRel(t, wt.RepoPath)
+	run, hasRun := s.tasks.PRRun(id)
+	if wt, found := s.worktrees.Get(id); found {
 		status, err := s.worktrees.Status(ctx, wt)
-		preview.Worktrees = append(preview.Worktrees, WorktreePreview{
-			Repository: rel,
-			RepoPath:   wt.RepoPath,
-			Path:       wt.Path,
-			Dirty:      err == nil && !status.Clean(),
-			Files:      len(status.Changes),
-			Error:      errText(err),
-		})
-		preview.Branches = append(preview.Branches, s.branchPreview(ctx, wt, rel, runs))
-	}
-	for _, run := range runs {
-		if run.PR.Number == 0 || run.Status == task.PRClosed {
-			continue
+		preview.Worktree = &WorktreePreview{
+			Path:  wt.Path,
+			Dirty: err == nil && !status.Clean(),
+			Files: len(status.Changes),
+			Error: errText(err),
 		}
-		preview.PRs = append(preview.PRs, PRPreview{
-			Repository: repoRel(t, run.RepoPath),
-			RepoPath:   run.RepoPath,
-			Number:     run.PR.Number,
-			URL:        run.PR.URL,
-			State:      run.PR.State,
-		})
+		branch := s.branchPreview(ctx, wt, run, hasRun)
+		preview.Branch = &branch
+	}
+	if hasRun && run.PR.Number != 0 && run.Status != task.PRClosed {
+		preview.PR = &PRPreview{Number: run.PR.Number, URL: run.PR.URL, State: run.PR.State}
 	}
 	return preview, nil
 }
@@ -254,10 +229,10 @@ func (s *Service) PreviewDelete(ctx context.Context, id string) (DeletePreview, 
 // somewhere else. GitHub merging the pull request settles it: a squash or a
 // rebase leaves git no way of seeing the branch in its base.
 func (s *Service) branchPreview(
-	ctx context.Context, wt worktree.Worktree, rel string, runs []task.PRRun,
+	ctx context.Context, wt worktree.Worktree, run task.PRRun, hasRun bool,
 ) BranchPreview {
-	preview := BranchPreview{Repository: rel, RepoPath: wt.RepoPath, Name: wt.Branch}
-	if index := indexOfPRRun(runs, wt.RepoPath); index >= 0 && runs[index].PR.State == task.PRStateMerged {
+	preview := BranchPreview{Name: wt.Branch}
+	if hasRun && run.PR.State == task.PRStateMerged {
 		preview.Merged = true
 		return preview
 	}

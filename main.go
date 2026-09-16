@@ -15,13 +15,10 @@ var assets embed.FS
 var icon []byte
 
 func main() {
-	cwd, _ := os.Getwd()
-
 	os.Exit(app.Run(app.Config{
 		Assets:  assets,
 		Icon:    icon,
 		Args:    os.Args[1:],
-		Cwd:     cwd,
 		Version: "0.1.0",
 	}))
 }

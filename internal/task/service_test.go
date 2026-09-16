@@ -11,6 +11,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 
 	"github.com/guilhermt/myspec/internal/models"
+	"github.com/guilhermt/myspec/internal/repository"
 	"github.com/guilhermt/myspec/internal/reviewmode"
 	"github.com/guilhermt/myspec/internal/task"
 )
@@ -21,6 +22,7 @@ func TestCreateStoresTheTaskAndItsFolder(t *testing.T) {
 	f := newFixture(t)
 	created, err := f.service.Create(t.Context(), task.CreateParams{
 		Name:           "add-login",
+		RepositoryID:   repoID,
 		InitialContext: "a login screen",
 	})
 	if err != nil {
@@ -29,12 +31,12 @@ func TestCreateStoresTheTaskAndItsFolder(t *testing.T) {
 
 	want := task.Task{
 		ID:             "task-1",
-		WorkspacePath:  f.workspace,
+		RepositoryID:   repoID,
 		Name:           "add-login",
 		Mode:           task.ModeStructured,
 		InitialContext: "a login screen",
 		Stage:          task.StagePRD,
-		ArtifactsDir:   task.ArtifactsDir(f.dataDir, f.workspace, "add-login"),
+		ArtifactsDir:   task.ArtifactsDir(f.dataDir, "dev", "web", "add-login"),
 		ReviewModes:    task.ReviewModes{Task: reviewmode.Manual},
 		CreatedAt:      base,
 		UpdatedAt:      base,
@@ -65,6 +67,7 @@ func TestCreateKeepsTheModelsOfTheTask(t *testing.T) {
 
 	created, err := f.service.Create(t.Context(), task.CreateParams{
 		Name:           "add-login",
+		RepositoryID:   repoID,
 		InitialContext: "a login screen",
 		Models:         want,
 	})
@@ -86,6 +89,7 @@ func TestCreateKeepsTheReviewModeOfTheTask(t *testing.T) {
 	f := newFixture(t)
 	created, err := f.service.Create(t.Context(), task.CreateParams{
 		Name:           "add-login",
+		RepositoryID:   repoID,
 		InitialContext: "a login screen",
 		ReviewMode:     reviewmode.Agent,
 	})
@@ -102,7 +106,7 @@ func TestCreateKeepsTheReviewModeOfTheTask(t *testing.T) {
 	}
 
 	// A task created without a mode is reviewed by the user.
-	plain := f.create(t, "add-logout", "")
+	plain := f.create(t, "add-logout")
 	if diff := cmp.Diff(task.ReviewModes{Task: reviewmode.Manual}, plain.ReviewModes); diff != "" {
 		t.Errorf("Create() without a mode mismatch (-want +got):\n%s", diff)
 	}
@@ -125,22 +129,37 @@ func TestCreateOneShotInARepositoryStartsInItsPlanning(t *testing.T) {
 	}
 }
 
-func TestCreateOneShotAtTheRootIsRefused(t *testing.T) {
+func TestCreateRefusesAnUnknownRepository(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
 	_, err := f.service.Create(t.Context(), task.CreateParams{
 		Name:           "add-login",
+		RepositoryID:   "nobody",
 		InitialContext: "a login screen",
-		Mode:           task.ModeOneShot,
 	})
-	wantErrIs(t, err, task.ErrOneShotAtRoot)
+	wantErrIs(t, err, task.ErrUnknownRepository)
 
 	if got := len(f.service.List()); got != 0 {
 		t.Errorf("List() has %d tasks, want 0", got)
 	}
-	if dir := task.ArtifactsDir(f.dataDir, f.workspace, "add-login"); exists(dir) {
+	if dir := task.ArtifactsDir(f.dataDir, "dev", "web", "add-login"); exists(dir) {
 		t.Errorf("artifacts directory %s was created for a refused task", dir)
+	}
+}
+
+func TestCreatePutsTheArtifactsInTheFolderOfTheRepository(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	created := f.create(t, "add-login")
+
+	want := filepath.Join(f.dataDir, "tasks", "dev", "web", "add-login")
+	if created.ArtifactsDir != want {
+		t.Errorf("ArtifactsDir = %q, want %q", created.ArtifactsDir, want)
+	}
+	if created.RepositoryID != repoID {
+		t.Errorf("RepositoryID = %q, want %q", created.RepositoryID, repoID)
 	}
 }
 
@@ -150,7 +169,7 @@ func TestCreateRejectsAnUnknownMode(t *testing.T) {
 	f := newFixture(t)
 	_, err := f.service.Create(t.Context(), task.CreateParams{
 		Name:           "add-login",
-		RepoPath:       f.repos[0],
+		RepositoryID:   repoID,
 		InitialContext: "a login screen",
 		Mode:           "freestyle",
 	})
@@ -167,6 +186,7 @@ func TestCreateTrimsTheNameAndTheContext(t *testing.T) {
 	f := newFixture(t)
 	created, err := f.service.Create(t.Context(), task.CreateParams{
 		Name:           "  add-login\n",
+		RepositoryID:   repoID,
 		InitialContext: "\n a login screen \n",
 	})
 	if err != nil {
@@ -188,6 +208,7 @@ func TestCreateKeepsTheContextAsTheUserWroteIt(t *testing.T) {
 	const context = "line one\n\n  indented line\nline three"
 	created, err := f.service.Create(t.Context(), task.CreateParams{
 		Name:           "add-login",
+		RepositoryID:   repoID,
 		InitialContext: context,
 	})
 	if err != nil {
@@ -225,41 +246,15 @@ func TestCreateRejectsAnEmptyContext(t *testing.T) {
 	wantErrIs(t, err, task.ErrEmptyContext)
 }
 
-func TestCreateRejectsARepositoryOutsideTheWorkspace(t *testing.T) {
-	t.Parallel()
-
-	f := newFixture(t)
-	_, err := f.service.Create(t.Context(), task.CreateParams{
-		Name:           "add-login",
-		RepoPath:       filepath.Join(f.workspace, "elsewhere"),
-		InitialContext: "a login screen",
-	})
-	wantErrIs(t, err, task.ErrRepoOutside)
-}
-
-func TestCreateAcceptsARepositoryOfTheWorkspace(t *testing.T) {
-	t.Parallel()
-
-	f := newFixture(t)
-	repo := f.repos[0]
-	created := f.create(t, "add-login", repo+string(filepath.Separator))
-
-	if created.RepoPath != repo {
-		t.Errorf("RepoPath = %q, want %q", created.RepoPath, repo)
-	}
-	if got := created.Dir(); got != repo {
-		t.Errorf("Dir() = %q, want %q", got, repo)
-	}
-}
-
 func TestCreateRejectsANameAlreadyUsed(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	first := f.create(t, "add-login", "")
+	first := f.create(t, "add-login")
 
 	_, err := f.service.Create(t.Context(), task.CreateParams{
 		Name:           "add-login",
+		RepositoryID:   repoID,
 		InitialContext: "another login screen",
 	})
 	wantErrIs(t, err, task.ErrNameTaken)
@@ -276,11 +271,12 @@ func TestCreateKeepsTheArtifactsOfTheTaskThatOwnsTheName(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	first := f.create(t, "add-login", "")
+	first := f.create(t, "add-login")
 	writePRD(t, first, "# PRD")
 
 	_, err := f.service.Create(t.Context(), task.CreateParams{
 		Name:           "add-login",
+		RepositoryID:   repoID,
 		InitialContext: "another login screen",
 	})
 	wantErrIs(t, err, task.ErrNameTaken)
@@ -304,7 +300,7 @@ func TestCreateRemovesTheFolderItMadeWhenTheTaskCannotBeStored(t *testing.T) {
 		t.Fatal("Create() = nil, want an error")
 	}
 
-	dir := task.ArtifactsDir(f.dataDir, f.workspace, "add-login")
+	dir := task.ArtifactsDir(f.dataDir, "dev", "web", "add-login")
 	if exists(dir) {
 		t.Errorf("artifacts directory %s survived a failed create", dir)
 	}
@@ -317,18 +313,18 @@ func TestCreateAdoptsAFolderLeftBehindByAnInterruptedCreate(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	dir := task.ArtifactsDir(f.dataDir, f.workspace, "add-login")
+	dir := task.ArtifactsDir(f.dataDir, "dev", "web", "add-login")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatalf("create artifacts directory: %v", err)
 	}
 
-	created := f.create(t, "add-login", "")
+	created := f.create(t, "add-login")
 	if created.ArtifactsDir != dir {
 		t.Errorf("ArtifactsDir = %q, want %q", created.ArtifactsDir, dir)
 	}
 }
 
-func TestCreateFailsWithoutAWorkspace(t *testing.T) {
+func TestCreateFailsWithoutARegisteredRepository(t *testing.T) {
 	t.Parallel()
 
 	service, err := task.New(task.Deps{Repo: &memRepo{}, DataDir: t.TempDir(), Log: newLogCapture().log})
@@ -337,19 +333,20 @@ func TestCreateFailsWithoutAWorkspace(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = service.Close() })
 
-	if _, err := service.Create(t.Context(), task.CreateParams{
+	// Without the Repositories dependency no repository exists at all.
+	_, err = service.Create(t.Context(), task.CreateParams{
 		Name:           "add-login",
+		RepositoryID:   repoID,
 		InitialContext: "a login screen",
-	}); err == nil {
-		t.Error("Create() = nil, want an error")
-	}
+	})
+	wantErrIs(t, err, task.ErrUnknownRepository)
 }
 
 func TestGetReturnsALoadedTask(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	created := f.create(t, "add-login", "")
+	created := f.create(t, "add-login")
 
 	got, ok := f.service.Get(created.ID)
 	if !ok {
@@ -368,7 +365,7 @@ func TestListIsACopy(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	created := f.create(t, "add-login", "")
+	created := f.create(t, "add-login")
 
 	list := f.service.List()
 	list[0].Name = "changed"
@@ -382,9 +379,9 @@ func TestArchiveMovesTheTaskToTheHistory(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	created := f.create(t, "add-login", "")
+	created := f.create(t, "add-login")
 	writePRD(t, created, "# PRD\n")
-	if _, err := f.service.SetPRRun(t.Context(), created.ID, f.repos[0], task.PRDone, nil); err != nil {
+	if _, err := f.service.SetPRRun(t.Context(), created.ID, task.PRDone, nil); err != nil {
 		t.Fatalf("SetPRRun() = %v, want nil", err)
 	}
 	if _, err := f.service.Inspect(created.ID); err != nil {
@@ -402,13 +399,13 @@ func TestArchiveMovesTheTaskToTheHistory(t *testing.T) {
 	}
 
 	if got := len(f.service.List()); got != 0 {
-		t.Errorf("List() has %d tasks, want the task out of the workspace", got)
+		t.Errorf("List() has %d tasks, want the task out of the active list", got)
 	}
 	if diff := cmp.Diff([]task.Task{archived}, f.service.ListArchived()); diff != "" {
 		t.Errorf("ListArchived() mismatch (-want +got):\n%s", diff)
 	}
 	if _, ok := f.service.Get(created.ID); ok {
-		t.Error("Get() found an archived task, want only the ones in the workspace")
+		t.Error("Get() found an archived task, want only the active ones")
 	}
 	found, ok := f.service.Lookup(created.ID)
 	if !ok {
@@ -426,8 +423,8 @@ func TestArchiveMovesTheTaskToTheHistory(t *testing.T) {
 	if a, ok := f.service.Artifacts(created.ID); !ok || !a.PRD {
 		t.Errorf("Artifacts() = %+v, %t, want the PRD of the archived task", a, ok)
 	}
-	if got := len(f.service.PRRuns(created.ID)); got != 1 {
-		t.Errorf("PRRuns() has %d runs, want the record of the repository", got)
+	if _, ok := f.service.PRRun(created.ID); !ok {
+		t.Error("PRRun() = false, want the record of the pull request")
 	}
 	content, err := f.service.ReadArtifact(created.ID, task.PRDFile)
 	if err != nil || content != "# PRD\n" {
@@ -446,8 +443,8 @@ func TestArchiveKeepsTheNewestFirst(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	first := f.create(t, "add-login", "")
-	second := f.create(t, "add-logout", "")
+	first := f.create(t, "add-login")
+	second := f.create(t, "add-logout")
 
 	for _, id := range []string{first.ID, second.ID} {
 		if _, err := f.service.Archive(t.Context(), id); err != nil {
@@ -464,11 +461,11 @@ func TestArchiveKeepsTheNewestFirst(t *testing.T) {
 	}
 }
 
-func TestArchiveOnlyTakesATaskOfTheWorkspace(t *testing.T) {
+func TestArchiveOnlyTakesAnActiveTask(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	created := f.create(t, "add-login", "")
+	created := f.create(t, "add-login")
 
 	_, err := f.service.Archive(t.Context(), "nope")
 	wantErrIs(t, err, task.ErrNotFound)
@@ -485,14 +482,14 @@ func TestArchiveFailsWhenTheRowCannotBeWritten(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	created := f.create(t, "add-login", "")
+	created := f.create(t, "add-login")
 	f.repo.updateErr = errors.New("database is locked")
 
 	if _, err := f.service.Archive(t.Context(), created.ID); err == nil {
 		t.Fatal("Archive() = nil, want an error")
 	}
 	if got := len(f.service.List()); got != 1 {
-		t.Errorf("List() has %d tasks, want the task kept in the workspace", got)
+		t.Errorf("List() has %d tasks, want the task kept in the active list", got)
 	}
 	if got := len(f.service.ListArchived()); got != 0 {
 		t.Errorf("ListArchived() has %d tasks, want none", got)
@@ -503,7 +500,7 @@ func TestDeleteRemovesAnArchivedTask(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	created := f.create(t, "add-login", "")
+	created := f.create(t, "add-login")
 	writePRD(t, created, "# PRD\n")
 	if _, err := f.service.Archive(t.Context(), created.ID); err != nil {
 		t.Fatalf("Archive() = %v, want nil", err)
@@ -531,7 +528,7 @@ func TestDeleteRemovesTheTaskTheRowAndTheFolder(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	created := f.create(t, "add-login", "")
+	created := f.create(t, "add-login")
 	writePRD(t, created, "# PRD")
 
 	if err := f.service.Delete(t.Context(), created.ID); err != nil {
@@ -566,7 +563,7 @@ func TestDeleteFailsWhenTheRowSurvives(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	created := f.create(t, "add-login", "")
+	created := f.create(t, "add-login")
 	f.repo.deleteErr = errors.New("database is locked")
 
 	if err := f.service.Delete(t.Context(), created.ID); err == nil {
@@ -584,10 +581,10 @@ func TestReadArtifactReturnsTheArtifacts(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	created := f.create(t, "add-login", "")
+	created := f.create(t, "add-login")
 	writePRD(t, created, "# PRD\n")
 	writeTechSpec(t, created, "# Tech spec\n")
-	writeStep(t, created, "1-add-the-store.md", "api", "Step 1: Add the store")
+	writeStep(t, created, "1-add-the-store.md", "Step 1: Add the store")
 	oneShot := f.createOneShot(t, "add-logout")
 	writeOneShot(t, oneShot, "# Add the logout — One-Shot\n")
 
@@ -599,7 +596,7 @@ func TestReadArtifactReturnsTheArtifacts(t *testing.T) {
 		},
 		"a step": {
 			name: "steps/1-add-the-store.md",
-			want: "---\nrepository: api\n---\n\n# Step 1: Add the store\n",
+			want: "# Step 1: Add the store\n",
 		},
 	}
 
@@ -626,7 +623,7 @@ func TestReadArtifactRefusesAnythingButTheArtifacts(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	created := f.create(t, "add-login", "")
+	created := f.create(t, "add-login")
 
 	tests := map[string]struct{ id, name string }{
 		"another file":           {id: created.ID, name: "notes.md"},
@@ -650,49 +647,24 @@ func TestReadArtifactRefusesAnythingButTheArtifacts(t *testing.T) {
 	}
 }
 
-func TestSyncLoadsTheTasksOfTheWorkspace(t *testing.T) {
+func TestSyncLoadsEveryActiveTask(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	f.repo.seed(task.Task{
-		ID:            "elsewhere",
-		WorkspacePath: "/other",
-		Name:          "other-task",
-		Stage:         task.StagePRD,
-		ArtifactsDir:  filepath.Join(f.dataDir, "other"),
-		CreatedAt:     base,
-		UpdatedAt:     base,
-	})
 	mine := task.Task{
-		ID:            "mine",
-		WorkspacePath: f.workspace,
-		Name:          "add-login",
-		Stage:         task.StagePRD,
-		ArtifactsDir:  task.ArtifactsDir(f.dataDir, f.workspace, "add-login"),
-		CreatedAt:     base,
-		UpdatedAt:     base,
+		ID:           "mine",
+		RepositoryID: repoID,
+		Name:         "add-login",
+		Stage:        task.StagePRD,
+		ArtifactsDir: task.ArtifactsDir(f.dataDir, "dev", "web", "add-login"),
+		CreatedAt:    base,
+		UpdatedAt:    base,
 	}
 	f.repo.seed(mine)
 
-	service := f.service
-	if err := service.Sync(t.Context(), f.workspace); err != nil {
-		t.Fatalf("Sync() = %v, want nil", err)
-	}
+	f.sync(t)
 
-	// The first Sync of the fixture already claimed this path, so nothing was
-	// reloaded: the second call is the no-op the contract promises.
-	if got := len(service.List()); got != 0 {
-		t.Errorf("List() has %d tasks, want the repeated Sync to be a no-op", got)
-	}
-
-	other := t.TempDir()
-	if err := service.Sync(t.Context(), other); err != nil {
-		t.Fatalf("Sync(other) = %v, want nil", err)
-	}
-	if err := service.Sync(t.Context(), f.workspace); err != nil {
-		t.Fatalf("Sync(back) = %v, want nil", err)
-	}
-	if diff := cmp.Diff([]task.Task{mine}, service.List()); diff != "" {
+	if diff := cmp.Diff([]task.Task{mine}, f.service.List()); diff != "" {
 		t.Errorf("List() mismatch (-want +got):\n%s", diff)
 	}
 	if got := f.changeCount(); got != 0 {
@@ -700,13 +672,13 @@ func TestSyncLoadsTheTasksOfTheWorkspace(t *testing.T) {
 	}
 }
 
-func TestSyncLoadsTheArchivedTasksOfTheWorkspace(t *testing.T) {
+func TestSyncLoadsTheArchivedTasks(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	created := f.create(t, "add-login", "")
+	created := f.create(t, "add-login")
 	writePRD(t, created, "# PRD\n")
-	if _, err := f.service.SetPRRun(t.Context(), created.ID, f.repos[0], task.PRDone, nil); err != nil {
+	if _, err := f.service.SetPRRun(t.Context(), created.ID, task.PRDone, nil); err != nil {
 		t.Fatalf("SetPRRun() = %v, want nil", err)
 	}
 	if _, err := f.service.Archive(t.Context(), created.ID); err != nil {
@@ -714,12 +686,12 @@ func TestSyncLoadsTheArchivedTasksOfTheWorkspace(t *testing.T) {
 	}
 
 	reopened := newService(t, f)
-	if err := reopened.Sync(t.Context(), f.workspace); err != nil {
+	if err := reopened.Sync(t.Context()); err != nil {
 		t.Fatalf("Sync() = %v, want nil", err)
 	}
 
 	if got := len(reopened.List()); got != 0 {
-		t.Errorf("List() has %d tasks, want the archived one out of the workspace", got)
+		t.Errorf("List() has %d tasks, want the archived one out of the list", got)
 	}
 	history := reopened.ListArchived()
 	if len(history) != 1 || history[0].ID != created.ID {
@@ -728,8 +700,8 @@ func TestSyncLoadsTheArchivedTasksOfTheWorkspace(t *testing.T) {
 	if a, ok := reopened.Artifacts(created.ID); !ok || !a.PRD {
 		t.Errorf("Artifacts() = %+v, %t, want the artifacts of the archived task read", a, ok)
 	}
-	if got := len(reopened.PRRuns(created.ID)); got != 1 {
-		t.Errorf("PRRuns() has %d runs, want the record of the repository", got)
+	if _, ok := reopened.PRRun(created.ID); !ok {
+		t.Error("PRRun() = false, want the record of the pull request")
 	}
 }
 
@@ -739,7 +711,7 @@ func TestSyncFailsWhenTheArchivedTasksCannotBeListed(t *testing.T) {
 	f := newFixture(t)
 	f.repo.archivedErr = errors.New("database is locked")
 
-	if err := f.service.Sync(t.Context(), t.TempDir()); err == nil {
+	if err := f.service.Sync(t.Context()); err == nil {
 		t.Error("Sync() = nil, want an error")
 	}
 }
@@ -748,13 +720,13 @@ func TestSyncRecreatesAFolderThatIsGone(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	created := f.create(t, "add-login", "")
+	created := f.create(t, "add-login")
 	if err := os.RemoveAll(created.ArtifactsDir); err != nil {
 		t.Fatalf("remove artifacts directory: %v", err)
 	}
 
 	reopened := newService(t, f)
-	if err := reopened.Sync(t.Context(), f.workspace); err != nil {
+	if err := reopened.Sync(t.Context()); err != nil {
 		t.Fatalf("Sync() = %v, want nil", err)
 	}
 
@@ -769,7 +741,7 @@ func TestSyncFailsWhenTheTasksCannotBeListed(t *testing.T) {
 	f := newFixture(t)
 	f.repo.listErr = errors.New("database is locked")
 
-	if err := f.service.Sync(t.Context(), t.TempDir()); err == nil {
+	if err := f.service.Sync(t.Context()); err == nil {
 		t.Error("Sync() = nil, want an error")
 	}
 }
@@ -780,11 +752,14 @@ func newService(t *testing.T, f *fixture) *task.Service {
 	t.Helper()
 
 	service, err := task.New(task.Deps{
-		Repo:       f.repo,
-		DataDir:    f.dataDir,
-		Log:        f.logs.log,
-		Now:        func() time.Time { return base.Add(time.Hour) },
-		Repos:      func() []string { return f.repos },
+		Repo:    f.repo,
+		DataDir: f.dataDir,
+		Log:     f.logs.log,
+		Now:     func() time.Time { return base.Add(time.Hour) },
+		Repositories: func(id string) (repository.Repository, bool) {
+			repo, ok := f.repositories[id]
+			return repo, ok
+		},
 		OnChange:   f.onChange,
 		OnArtifact: f.onArtifact,
 	})
@@ -803,18 +778,23 @@ func TestNewDefaultsTheIdentityAndTheClock(t *testing.T) {
 	t.Parallel()
 
 	repo := &memRepo{}
-	service, err := task.New(task.Deps{Repo: repo, DataDir: t.TempDir(), Log: newLogCapture().log})
+	registered := repository.Repository{ID: repoID, Owner: "dev", Name: "web", Path: t.TempDir()}
+	service, err := task.New(task.Deps{
+		Repo:    repo,
+		DataDir: t.TempDir(),
+		Log:     newLogCapture().log,
+		Repositories: func(id string) (repository.Repository, bool) {
+			return registered, id == repoID
+		},
+	})
 	if err != nil {
 		t.Fatalf("New() = %v, want nil", err)
 	}
 	t.Cleanup(func() { _ = service.Close() })
 
-	workspace := t.TempDir()
-	if syncErr := service.Sync(t.Context(), workspace); syncErr != nil {
-		t.Fatalf("Sync() = %v, want nil", syncErr)
-	}
 	created, err := service.Create(t.Context(), task.CreateParams{
 		Name:           "add-login",
+		RepositoryID:   repoID,
 		InitialContext: "a login screen",
 	})
 	if err != nil {
@@ -836,7 +816,7 @@ func TestArtifactsReportsWhatTheFolderHolds(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	created := f.create(t, "add-login", "")
+	created := f.create(t, "add-login")
 
 	if got, ok := f.service.Artifacts(created.ID); !ok || got.PRD || got.TechSpec || got.Plan.Present {
 		t.Errorf("Artifacts() = %+v %t, want an empty folder", got, ok)
@@ -847,7 +827,7 @@ func TestArtifactsReportsWhatTheFolderHolds(t *testing.T) {
 
 	writePRD(t, created, "# PRD")
 	writeTechSpec(t, created, "# Tech spec")
-	writeStep(t, created, "1-add-the-store.md", "api", "Step 1: Add the store")
+	writeStep(t, created, "1-add-the-store.md", "Step 1: Add the store")
 
 	got, err := f.service.Inspect(created.ID)
 	if err != nil {
@@ -879,7 +859,7 @@ func TestSetStageStoresTheStageAndTheRevisit(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	created := f.create(t, "add-login", "")
+	created := f.create(t, "add-login")
 	changes := f.changeCount()
 
 	got, err := f.service.SetStage(t.Context(), created.ID, task.StageTechSpec, true)
@@ -908,7 +888,7 @@ func TestSetStageRefusesAnUnknownStageOrTask(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	created := f.create(t, "add-login", "")
+	created := f.create(t, "add-login")
 
 	_, err := f.service.SetStage(t.Context(), created.ID, task.Stage("prd_done"), false)
 	wantErrIs(t, err, task.ErrUnknownStage)
@@ -921,7 +901,7 @@ func TestSetStageFailsWhenItCannotBeStored(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	created := f.create(t, "add-login", "")
+	created := f.create(t, "add-login")
 	f.repo.updateErr = errors.New("database is locked")
 
 	if _, err := f.service.SetStage(t.Context(), created.ID, task.StagePlan, false); err == nil {
@@ -936,7 +916,7 @@ func TestSetStageModelStoresTheChoice(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	created := f.create(t, "add-login", "")
+	created := f.create(t, "add-login")
 	changes := f.changeCount()
 	want := models.Choice{Model: models.Sonnet5, Effort: models.Low}
 
@@ -971,7 +951,7 @@ func TestSetStepModelMakesTheChoiceOfTheStepItsOwn(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	created := f.create(t, "add-login", "")
+	created := f.create(t, "add-login")
 	want := models.Choice{Model: models.Opus5, Effort: models.Max}
 
 	got, err := f.service.SetStepModel(t.Context(), created.ID, 2, want)
@@ -996,7 +976,7 @@ func TestSetReviewModeStoresTheMode(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	created := f.create(t, "add-login", "")
+	created := f.create(t, "add-login")
 	changes := f.changeCount()
 
 	got, err := f.service.SetReviewMode(t.Context(), created.ID, reviewmode.Agent)
@@ -1033,7 +1013,7 @@ func TestSetStepReviewModeMakesTheModeOfTheStepItsOwn(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	created := f.create(t, "add-login", "")
+	created := f.create(t, "add-login")
 
 	got, err := f.service.SetStepReviewMode(t.Context(), created.ID, 2, reviewmode.Agent)
 	if err != nil {
@@ -1079,7 +1059,7 @@ func TestSetModelFailsWhenItCannotBeStored(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	created := f.create(t, "add-login", "")
+	created := f.create(t, "add-login")
 	before, _ := f.service.Get(created.ID)
 	f.repo.updateErr = errors.New("database is locked")
 	choice := models.Choice{Model: models.Sonnet5, Effort: models.Low}
@@ -1101,7 +1081,7 @@ func TestAChangeOfModelLeavesATaskTakenBeforeAlone(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	created := f.create(t, "add-login", "")
+	created := f.create(t, "add-login")
 
 	if _, err := f.service.SetStepModel(t.Context(), created.ID, 1,
 		models.Choice{Model: models.Opus5, Effort: models.Max}); err != nil {
@@ -1129,7 +1109,7 @@ func TestRemovingThePlanForgetsTheModelsOfTheSteps(t *testing.T) {
 			t.Parallel()
 
 			f := newFixture(t)
-			created := f.create(t, "add-login", "")
+			created := f.create(t, "add-login")
 			stage := models.Choice{Model: models.Sonnet5, Effort: models.Low}
 			if _, err := f.service.SetStageModel(t.Context(), created.ID, models.Implementation, stage); err != nil {
 				t.Fatalf("SetStageModel() = %v, want nil", err)
@@ -1173,7 +1153,7 @@ func TestRemovingThePlanForgetsTheModesOfTheSteps(t *testing.T) {
 			t.Parallel()
 
 			f := newFixture(t)
-			created := f.create(t, "add-login", "")
+			created := f.create(t, "add-login")
 			if _, err := f.service.SetReviewMode(t.Context(), created.ID, reviewmode.Agent); err != nil {
 				t.Fatalf("SetReviewMode() = %v, want nil", err)
 			}
@@ -1219,10 +1199,10 @@ func TestRemoveArtifactsThrowsAwayTheStageAndTheOnesAfterIt(t *testing.T) {
 			t.Parallel()
 
 			f := newFixture(t)
-			created := f.create(t, "add-login", "")
+			created := f.create(t, "add-login")
 			writePRD(t, created, "# PRD")
 			writeTechSpec(t, created, "# Tech spec")
-			writeStep(t, created, "1-add-the-store.md", "api", "Step 1: Add the store")
+			writeStep(t, created, "1-add-the-store.md", "Step 1: Add the store")
 
 			if err := f.service.RemoveArtifacts(t.Context(), created.ID, tc.from); err != nil {
 				t.Fatalf("RemoveArtifacts(%q) = %v, want nil", tc.from, err)
@@ -1256,7 +1236,7 @@ func TestInspectReadsTheOneShotDocumentAsAPlanOfOneStep(t *testing.T) {
 	created := f.createOneShot(t, "add-login")
 	writeOneShot(t, created, "# Add the login — One-Shot\n")
 	// A steps folder is nothing to a One-Shot task.
-	writeStep(t, created, "1-add-the-store.md", "api", "Step 1: Add the store")
+	writeStep(t, created, "1-add-the-store.md", "Step 1: Add the store")
 
 	got, err := f.service.Inspect(created.ID)
 	if err != nil {
@@ -1268,9 +1248,7 @@ func TestInspectReadsTheOneShotDocumentAsAPlanOfOneStep(t *testing.T) {
 	}
 	want := task.Plan{
 		Present: true,
-		Steps: []task.Step{{
-			Number: 1, File: task.OneShotFile, Title: "Add the login", Repository: "api", RepoPath: f.repos[0],
-		}},
+		Steps:   []task.Step{{Number: 1, File: task.OneShotFile, Title: "Add the login"}},
 	}
 	if diff := cmp.Diff(want, got.Plan); diff != "" {
 		t.Errorf("plan mismatch (-want +got):\n%s", diff)
@@ -1323,7 +1301,7 @@ func TestRemoveArtifactsOfAFolderAlreadyEmpty(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	created := f.create(t, "add-login", "")
+	created := f.create(t, "add-login")
 
 	if err := f.service.RemoveArtifacts(t.Context(), created.ID, task.StagePRD); err != nil {
 		t.Errorf("RemoveArtifacts() = %v, want nil", err)

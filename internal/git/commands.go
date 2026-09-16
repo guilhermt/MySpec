@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -331,19 +330,6 @@ func (r *Runner) Reset(ctx context.Context, dir string) error {
 func (r *Runner) Clean(ctx context.Context, dir string) error {
 	_, err := r.Run(ctx, dir, "clean", "-fd", "--quiet")
 	return err
-}
-
-// ExcludePath is the absolute path of the info/exclude file of the repository
-// at dir.
-func (r *Runner) ExcludePath(ctx context.Context, dir string) (string, error) {
-	out, err := r.Run(ctx, dir, "rev-parse", "--git-path", "info/exclude")
-	if err != nil {
-		return "", err
-	}
-	if filepath.IsAbs(out) {
-		return out, nil
-	}
-	return filepath.Join(dir, out), nil
 }
 
 // CurrentBranch is the branch checked out at dir, "" on a detached HEAD.

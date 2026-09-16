@@ -1,7 +1,6 @@
 package attention
 
 import (
-	"path/filepath"
 	"strconv"
 
 	"github.com/guilhermt/myspec/internal/task"
@@ -24,25 +23,16 @@ func stageName(stage task.Stage) string {
 }
 
 // placeName is a place as a sentence names it: the stage, "step 3", or the
-// repository.
-func placeName(t task.Task, place Place) string {
+// pull request.
+func placeName(_ task.Task, place Place) string {
 	switch place.Kind {
 	case PlaceStep:
 		return "step " + strconv.Itoa(place.Step)
-	case PlaceRepo:
-		return repoName(t, place)
+	case PlacePR:
+		return "the pull request"
 	default:
 		return stageName(place.Stage)
 	}
-}
-
-// repoName is a repository as the task shows it: its path relative to the
-// workspace, or the name of the workspace for the repository at its root.
-func repoName(t task.Task, place Place) string {
-	if place.Repository == "" || place.Repository == "." {
-		return filepath.Base(t.WorkspacePath)
-	}
-	return place.Repository
 }
 
 // sessionBody is the notification of a situation that lives in the
@@ -126,52 +116,45 @@ func stepEmptyBody(n int) string {
 	return "Step " + strconv.Itoa(n) + " finished without changes."
 }
 
-// prBlockedBody is the notification of a repository whose PR stage cannot go
-// on.
-func prBlockedBody(name string, reason task.PRBlockReason) string {
-	return "The pull request of " + name + " is blocked: " + prBlockPhrase(reason) + "."
+// prBlockedBody is the notification of a PR stage that cannot go on.
+func prBlockedBody(reason task.PRBlockReason) string {
+	return "The pull request is blocked: " + prBlockPhrase(reason) + "."
 }
 
 // prClosedBody is the notification of a pull request closed without a merge.
-func prClosedBody(name string) string {
-	return "The pull request of " + name + " was closed without a merge."
+func prClosedBody() string {
+	return "The pull request was closed without a merge."
 }
 
 // draftBody is the notification of a pull request draft that awaits the OK.
-func draftBody(name string) string {
-	return "The pull request draft of " + name + " is ready for your OK."
+func draftBody() string {
+	return "The pull request draft is ready for your OK."
 }
 
 // findingsBody is the notification of a pull request review that found
 // changes.
-func findingsBody(name string) string {
-	return "The review of " + name + " found changes for you to decide."
+func findingsBody() string {
+	return "The review of the pull request found changes for you to decide."
 }
 
 // changesReviewBody is the notification of the changes a pull request review
 // applied. One that starts ready to approve, because the last approval left no
 // commit, says so.
-func changesReviewBody(name string, form Form, commitFailed bool) string {
+func changesReviewBody(form Form, commitFailed bool) string {
 	if form == FormApprove && commitFailed {
-		return name + ": the last approval didn't produce a commit."
+		return "The last approval of the pull request didn't produce a commit."
 	}
-	return "The changes from the review of " + name + " are ready for review."
+	return "The changes from the review of the pull request are ready for review."
 }
 
 // mergeBody is the notification of a pull request whose review closed clean:
 // ready to merge while it is open, ready to close once merged or when the merge
 // could not be confirmed.
-func mergeBody(name string, form Form) string {
+func mergeBody(form Form) string {
 	if form == FormClose {
-		return "The pull request of " + name + " is ready to close."
+		return "The pull request is ready to close."
 	}
-	return "The pull request of " + name + " is ready to merge."
-}
-
-// nothingToPublishBody is the notification of a repository the PR stage found
-// nothing to publish for.
-func nothingToPublishBody(name string) string {
-	return name + " has nothing to publish and is ready to close."
+	return "The pull request is ready to merge."
 }
 
 // stepBlockPhrase is why a step could not start, inside a sentence: the title
@@ -188,8 +171,8 @@ func stepBlockPhrase(reason task.BlockReason) string {
 		return "the worktree folder already exists"
 	case task.BlockBranchExists:
 		return "the branch already exists"
-	case task.BlockNoRepository:
-		return "the step doesn't name a repository of this task"
+	case task.BlockCloneMissing:
+		return "the clone of the repository is missing"
 	case task.BlockGitFailed:
 		return "git failed"
 	default:
@@ -197,7 +180,7 @@ func stepBlockPhrase(reason task.BlockReason) string {
 	}
 }
 
-// prBlockPhrase is why the PR stage of a repository cannot go on, inside a
+// prBlockPhrase is why the PR stage of a task cannot go on, inside a
 // sentence: the title the interface gives the block, in lowercase.
 func prBlockPhrase(reason task.PRBlockReason) string {
 	switch reason {

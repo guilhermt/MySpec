@@ -1,17 +1,14 @@
-// Package task owns the tasks of a workspace: their identity, their artifact
-// folders and the stage they were told to record. It reports what changed on
-// disk; deciding what to do about it belongs elsewhere.
+// Package task owns the tasks: their identity, the repository they belong to,
+// their artifact folders and the stage they were told to record. It reports
+// what changed on disk; deciding what to do about it belongs elsewhere.
 package task
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"path/filepath"
 	"regexp"
 	"slices"
-	"strings"
 	"time"
 )
 
@@ -42,26 +39,18 @@ func ParseStage(value string) (Stage, error) {
 }
 
 // HasSession reports whether the stage is driven by a conversation of its own.
-// Implementation and PR have conversations too, one per step and one per
-// repository, and neither is the task's.
+// Implementation and PR have conversations too, one per step and one for the
+// pull request, and neither is the task's.
 func (s Stage) HasSession() bool {
 	return slices.Contains(Stages, s) && s != StageImplementation && s != StagePR
 }
 
-// Repository is a repository a task may touch, as the prompts name it and as
-// the app finds it.
-type Repository struct {
-	Rel  string // path relative to the workspace root, the value a step carries
-	Path string // absolute
-}
-
-// Task is a unit of work created in a workspace.
+// Task is a unit of work conducted in one repository.
 type Task struct {
 	ID              string
-	WorkspacePath   string
+	RepositoryID    string // the repository it belongs to; chosen at creation, never changed
 	Name            string
-	RepoPath        string // "" for a root task
-	Mode            Mode   // how the task is conducted; chosen at creation, never changed
+	Mode            Mode // how the task is conducted; chosen at creation, never changed
 	InitialContext  string
 	Stage           Stage
 	Revisiting      bool
@@ -69,21 +58,13 @@ type Task struct {
 	ArtifactVersion int
 	Models          Models      // the model and effort of its stages and steps
 	ReviewModes     ReviewModes // who reviews its steps
-	ArchivedAt      time.Time   // zero while the task is in the workspace
+	ArchivedAt      time.Time   // zero while the task is active
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
 }
 
-// Archived reports whether the task left the workspace for the history.
+// Archived reports whether the task left the list for the history.
 func (t Task) Archived() bool { return !t.ArchivedAt.IsZero() }
-
-// Dir is where the task's sessions run: the repository, or the workspace root.
-func (t Task) Dir() string {
-	if t.RepoPath != "" {
-		return t.RepoPath
-	}
-	return t.WorkspacePath
-}
 
 // The names of the artifacts inside the task folder.
 const (
@@ -124,14 +105,13 @@ func (t Task) StepPath(step Step) string {
 
 // The ways a task fails to be created or found.
 var (
-	ErrInvalidName   = errors.New("task: invalid name")
-	ErrNameTaken     = errors.New("task: name already used in this workspace")
-	ErrEmptyContext  = errors.New("task: initial context is required")
-	ErrNotFound      = errors.New("task: not found")
-	ErrRepoOutside   = errors.New("task: repository is not in the workspace")
-	ErrUnknownStage  = errors.New("task: unknown stage")
-	ErrUnknownMode   = errors.New("task: unknown mode")
-	ErrOneShotAtRoot = errors.New("task: a One-Shot task is created in a repository")
+	ErrInvalidName       = errors.New("task: invalid name")
+	ErrNameTaken         = errors.New("task: name already used in this repository")
+	ErrEmptyContext      = errors.New("task: initial context is required")
+	ErrNotFound          = errors.New("task: not found")
+	ErrUnknownRepository = errors.New("task: unknown repository")
+	ErrUnknownStage      = errors.New("task: unknown stage")
+	ErrUnknownMode       = errors.New("task: unknown mode")
 )
 
 // NameMaxLen bounds the task name.
@@ -148,24 +128,13 @@ func ValidateName(name string) error {
 	return nil
 }
 
-// slugHashLen is how many hex characters of the path digest name the folder.
-const slugHashLen = 8
+// tasksDirName is the folder of the artifacts of every task inside the data
+// directory.
+const tasksDirName = "tasks"
 
-// nonSlug matches every run of characters a folder name may not carry.
-var nonSlug = regexp.MustCompile(`[^a-z0-9]+`)
-
-// WorkspaceSlug names the workspace folder inside the data directory:
-// "<base>-<8 hex of sha256(path)>".
-func WorkspaceSlug(workspacePath string) string {
-	base := strings.Trim(nonSlug.ReplaceAllString(strings.ToLower(filepath.Base(workspacePath)), "-"), "-")
-	if base == "" {
-		base = "workspace"
-	}
-	sum := sha256.Sum256([]byte(workspacePath))
-	return base + "-" + hex.EncodeToString(sum[:])[:slugHashLen]
-}
-
-// ArtifactsDir is where a task's artifacts live.
-func ArtifactsDir(dataDir, workspacePath, name string) string {
-	return filepath.Join(dataDir, "workspaces", WorkspaceSlug(workspacePath), "tasks", name)
+// ArtifactsDir is where the artifacts of a task live: one folder per
+// repository, as GitHub names it, and one per task, so that two repositories
+// never mix tasks of the same name.
+func ArtifactsDir(dataDir, owner, name, taskName string) string {
+	return filepath.Join(dataDir, tasksDirName, owner, name, taskName)
 }

@@ -98,7 +98,7 @@ func readStepReport(path string, number, pass int) (ReviewReport, bool) {
 		return ReviewReport{}, false
 	}
 
-	fields, _, _ := splitFrontMatter(string(content))
+	fields, _ := splitFrontMatter(string(content))
 	status := strings.TrimSpace(fields["status"])
 	if status != cleanStatus && status != changesStatus {
 		return ReviewReport{}, false

@@ -1443,36 +1443,21 @@ func TestStepReviewStageIsTheSessionKeyOfTheReviewerOfAStep(t *testing.T) {
 	}
 }
 
-func TestPRStagesAreTheSessionKeysOfARepository(t *testing.T) {
+func TestThePRStagesAreTheSessionKeysOfTheTask(t *testing.T) {
 	t.Parallel()
 
-	if got := session.PRStage("apps-web"); got != "pr:apps-web" {
-		t.Errorf("PRStage() = %q, want %q", got, "pr:apps-web")
+	if session.PRStage != "pr" {
+		t.Errorf("PRStage = %q, want %q", session.PRStage, "pr")
 	}
-	if got := session.PRReviewStage("apps-web"); got != "pr_review:apps-web" {
-		t.Errorf("PRReviewStage() = %q, want %q", got, "pr_review:apps-web")
+	if session.PRReviewStage != "pr_review" {
+		t.Errorf("PRReviewStage = %q, want %q", session.PRReviewStage, "pr_review")
 	}
-	for _, tc := range []struct {
-		stage  string
-		slug   string
-		review bool
-		ok     bool
-	}{
-		{stage: "pr:api", slug: "api", ok: true},
-		{stage: "pr_review:api", slug: "api", review: true, ok: true},
-		// The review key is read as a review, never as a PR of a repository
-		// called "review:api".
-		{stage: "pr_review:apps-web", slug: "apps-web", review: true, ok: true},
-		{stage: "pr:", ok: false},
-		{stage: "pr_review:", ok: false},
-		{stage: "prd", ok: false},
-		{stage: "step:1", ok: false},
-	} {
-		slug, review, ok := session.ParsePRStage(tc.stage)
-		if slug != tc.slug || review != tc.review || ok != tc.ok {
-			t.Errorf("ParsePRStage(%q) = %q, %v, %v, want %q, %v, %v",
-				tc.stage, slug, review, ok, tc.slug, tc.review, tc.ok)
-		}
+	// Neither key is ever read as the key of a step or of a reviewer.
+	if number, ok := session.ParseStepStage(session.PRStage); number != 0 || ok {
+		t.Errorf("ParseStepStage(%q) = %d, %v, want 0, false", session.PRStage, number, ok)
+	}
+	if number, ok := session.ParseStepReviewStage(session.PRReviewStage); number != 0 || ok {
+		t.Errorf("ParseStepReviewStage(%q) = %d, %v, want 0, false", session.PRReviewStage, number, ok)
 	}
 }
 

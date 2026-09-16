@@ -36,13 +36,15 @@ const (
 	BlockPathExists   BlockReason = "path_exists"
 	BlockBranchExists BlockReason = "branch_exists"
 	BlockGitFailed    BlockReason = "git_failed"
-	BlockNoRepository BlockReason = "no_repository"
+	// BlockCloneMissing is the clone of the repository missing; Detail says
+	// where it was looked for.
+	BlockCloneMissing BlockReason = "clone_missing"
 )
 
 // blockReasons lists every reason a step may be blocked for.
 var blockReasons = []BlockReason{
 	BlockDirty, BlockFetchFailed, BlockNoBase, BlockPathExists,
-	BlockBranchExists, BlockGitFailed, BlockNoRepository,
+	BlockBranchExists, BlockGitFailed, BlockCloneMissing,
 }
 
 // The ways a stored step value fails to be read back.

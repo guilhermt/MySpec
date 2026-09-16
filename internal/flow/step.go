@@ -10,6 +10,7 @@ import (
 	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
+	"github.com/guilhermt/myspec/internal/repository"
 	"github.com/guilhermt/myspec/internal/review"
 	"github.com/guilhermt/myspec/internal/reviewmode"
 	"github.com/guilhermt/myspec/internal/session"
@@ -53,7 +54,7 @@ type StepState struct {
 	Status       StepStatus
 	Phase        Phase            // preparing only
 	Block        *task.StepBlock  // blocked only
-	WorktreePath string           // "" until the worktree of the repository of the step exists
+	WorktreePath string           // "" until the worktree of the task exists
 	Review       *review.Snapshot // the review states and committing only
 
 	Choice   models.Choice // the model and effort the step runs with, or will run with
@@ -121,17 +122,13 @@ func (s *Service) Steps(id string) []StepState {
 	states := make([]StepState, 0, len(a.Plan.Steps))
 	for _, step := range a.Plan.Steps {
 		state := StepState{Step: step, Status: StepNotStarted, Reports: a.StepReports[step.Number]}
-		if step.RepoPath != "" {
-			if wt, ok := s.worktrees.Get(id, step.RepoPath); ok {
-				state.WorktreePath = wt.Path
-			}
+		if wt, ok := s.worktrees.Get(id); ok {
+			state.WorktreePath = wt.Path
 		}
 		if reviewer, open := s.sessions.Summary(stepReviewKey(id, step.Number)); open {
 			state.ReviewerStage, state.Reviewer = session.StepReviewStage(step.Number), reviewer
 		}
-		// The reading belongs to the worktree of the repository of the step,
-		// which is the key it was tracked under.
-		snap, read := s.review.Snapshot(reviewKey(id, step.RepoPath))
+		snap, read := s.review.Snapshot(id)
 		if index := indexOfRun(runs, step.Number); index >= 0 {
 			run := runs[index]
 			state.Fallback = run.Fallback
@@ -185,12 +182,6 @@ func stepKey(taskID string, number int) session.Key {
 	return session.Key{TaskID: taskID, Stage: session.StepStage(number)}
 }
 
-// reviewKey is the worktree a step is reviewed in: the repository it belongs
-// to, inside the task.
-func reviewKey(taskID, repoPath string) review.Key {
-	return review.Key{TaskID: taskID, RepoPath: repoPath}
-}
-
 // reviewStatus turns the last reading of the worktree into the state the step
 // is shown in. Without a reading the step is simply awaiting review: the
 // numbers are on their way.
@@ -220,18 +211,13 @@ func reading(snap review.Snapshot, ok bool) *review.Snapshot {
 	return &snap
 }
 
-// CurrentStep is the step that runs or runs next: the first one that has not
-// been committed.
-func (s *Service) CurrentStep(id string) (StepState, bool) {
-	runs := s.tasks.StepRuns(id)
-	states := s.Steps(id)
-	for _, state := range states {
-		if index := indexOfRun(runs, state.Step.Number); index >= 0 && runs[index].CommitSHA != "" {
-			continue
-		}
-		return state, true
+// WorktreePath is the folder of the worktree of a task, "" while it has none.
+func (s *Service) WorktreePath(id string) string {
+	wt, ok := s.worktrees.Get(id)
+	if !ok {
+		return ""
 	}
-	return StepState{}, false
+	return wt.Path
 }
 
 // currentStep is the step of a plan that runs or runs next: the first one
@@ -386,11 +372,26 @@ func (s *Service) prepare(ctx context.Context, id string, opts prepareOptions) {
 		s.log.Warn("step blocked", "task", id, "step", step.Number, "reason", string(reason))
 	}
 
-	if step.RepoPath == "" {
-		block(task.BlockNoRepository, noRepositoryDetail(step), 0)
+	repo, repoErr := s.repositoryOf(t)
+	if repoErr != nil {
+		block(task.BlockGitFailed, repoErr.Error(), 0)
 		return
 	}
-	repo := task.Repository{Rel: step.Repository, Path: step.RepoPath}
+	// Only a worktree still to create needs the clone: one that exists goes on
+	// being used wherever the clone is.
+	if _, exists := s.worktrees.Get(id); !exists {
+		checked, checkErr := s.repositories.Check(t.RepositoryID)
+		var refusal *repository.Refusal
+		if errors.As(checkErr, &refusal) {
+			block(task.BlockCloneMissing, refusal.Message(), 0)
+			return
+		}
+		if checkErr != nil {
+			block(task.BlockGitFailed, checkErr.Error(), 0)
+			return
+		}
+		repo = checked
+	}
 
 	s.setPhase(id, PhaseFetching)
 	wt, err := s.worktrees.Ensure(ctx, t, repo, func(p worktree.Phase) { s.setPhase(id, Phase(p)) })
@@ -454,7 +455,7 @@ func (s *Service) prepare(ctx context.Context, id string, opts prepareOptions) {
 		}
 		t = updated
 	}
-	info := stepInfo(t, step, wt, s.tasks.Repositories(t))
+	info := stepInfo(t, step, wt, repo)
 	if err := s.sessions.Start(dbCtx, info, opts.restarted); err != nil {
 		// The session records a process that fails in the conversation itself.
 		s.log.Error("start step session failed", "task", id, "step", step.Number, "error", err)
@@ -501,7 +502,7 @@ func (s *Service) resumeSteps(ctx context.Context, t task.Task) {
 	case task.StepStarted, task.StepCommitting:
 		// A step left committing reopens like a started one; what to do about
 		// the commit is for the evaluation that follows.
-		wt, ok := s.worktrees.Get(t.ID, step.RepoPath)
+		wt, ok := s.worktrees.Get(t.ID)
 		if !ok {
 			s.log.Error("the worktree of a started step is missing", "task", t.ID, "step", step.Number)
 			blocked := &task.StepBlock{
@@ -513,10 +514,15 @@ func (s *Service) resumeSteps(ctx context.Context, t task.Task) {
 			}
 			return
 		}
-		if err := s.sessions.Open(ctx, stepInfo(t, step, wt, s.tasks.Repositories(t))); err != nil {
+		repo, repoErr := s.repositoryOf(t)
+		if repoErr != nil {
+			s.log.Error("open step session failed", "task", t.ID, "step", step.Number, "error", repoErr)
+			return
+		}
+		if err := s.sessions.Open(ctx, stepInfo(t, step, wt, repo)); err != nil {
 			s.log.Error("open step session failed", "task", t.ID, "step", step.Number, "error", err)
 		}
-		s.openStepReviewer(ctx, t, step, wt, runs[index])
+		s.openStepReviewer(ctx, t, step, wt, runs[index], repo)
 	case task.StepDone:
 		// currentStep never returns a step that is already committed.
 	}
@@ -535,7 +541,7 @@ func (s *Service) evaluateStep(ctx context.Context, t task.Task) {
 	step, ok := currentStep(a.Plan, runs)
 	if !ok {
 		// Every step is committed: nothing left to watch.
-		s.review.ForgetTask(t.ID)
+		s.review.Forget(t.ID)
 		return
 	}
 	index := indexOfRun(runs, step.Number)
@@ -546,10 +552,10 @@ func (s *Service) evaluateStep(ctx context.Context, t task.Task) {
 	run := runs[index]
 	if run.Status != task.StepStarted && run.Status != task.StepCommitting {
 		// Preparing or blocked: the worktree is not the user's to review.
-		s.review.Forget(reviewKey(t.ID, step.RepoPath))
+		s.review.Forget(t.ID)
 		return
 	}
-	wt, ok := s.worktrees.Get(t.ID, step.RepoPath)
+	wt, ok := s.worktrees.Get(t.ID)
 	if !ok {
 		return
 	}
@@ -557,17 +563,16 @@ func (s *Service) evaluateStep(ctx context.Context, t task.Task) {
 	sum, open := s.sessions.Summary(stepKey(t.ID, step.Number))
 	idle := open && sum.Idle
 	committing := run.Status == task.StepCommitting
-	key := reviewKey(t.ID, step.RepoPath)
-	s.review.Track(key, wt, idle || committing)
+	s.review.Track(t.ID, wt, idle || committing)
 	if !idle && !committing {
 		return
 	}
 
-	snap, read := s.review.Snapshot(key)
+	snap, read := s.review.Snapshot(t.ID)
 	if committing && idle {
 		// The commit turn is over: decide on a reading newer than it, not on
 		// one the debounce still owes.
-		snap, read = s.review.Refresh(key)
+		snap, read = s.review.Refresh(t.ID)
 	}
 	if !read || snap.Err != "" {
 		return
@@ -625,7 +630,7 @@ func (s *Service) completeStep(
 		s.log.Error("record committed step failed", "task", t.ID, "step", step.Number, "error", err)
 		return
 	}
-	s.review.Forget(reviewKey(t.ID, step.RepoPath))
+	s.review.Forget(t.ID)
 	s.setNoCommit(t.ID, false)
 	if err := s.sessions.Close(ctx, stepKey(t.ID, step.Number)); err != nil {
 		s.log.Error("close step session failed", "task", t.ID, "step", step.Number, "error", err)
@@ -637,7 +642,7 @@ func (s *Service) completeStep(
 	next, ok := nextStep(plan, step.Number)
 	if !ok {
 		s.log.Info("implementation complete", "task", t.ID, "steps", len(plan.Steps))
-		if err := s.beginPR(ctx, t, plan); err != nil {
+		if err := s.beginPR(ctx, t); err != nil {
 			s.log.Error("begin pr stage failed", "task", t.ID, "error", err)
 		}
 		return
@@ -660,11 +665,9 @@ func nextStep(plan task.Plan, number int) (task.Step, bool) {
 
 // stepInfo is what the session of a step needs to know: the worktree it runs
 // in, the key it is stored under and the file it is opened with.
-func stepInfo(t task.Task, step task.Step, wt worktree.Worktree, repos []task.Repository) session.TaskInfo {
-	rels := make([]string, len(repos))
-	for i, repo := range repos {
-		rels[i] = repo.Rel
-	}
+func stepInfo(
+	t task.Task, step task.Step, wt worktree.Worktree, repo repository.Repository,
+) session.TaskInfo {
 	return session.TaskInfo{
 		ID:           t.ID,
 		Name:         t.Name,
@@ -678,7 +681,7 @@ func stepInfo(t task.Task, step task.Step, wt worktree.Worktree, repos []task.Re
 		TechSpecPath: t.TechSpecPath(),
 		StepsDir:     t.StepsDir(),
 		OneShotPath:  oneShotPath(t),
-		Repositories: rels,
+		Repository:   repo.FullName(),
 		Choice:       t.Models.Step(step.Number),
 	}
 }
@@ -697,11 +700,6 @@ func reasonOf(err error) task.BlockReason {
 	default:
 		return task.BlockGitFailed
 	}
-}
-
-// noRepositoryDetail says which repository of a step the workspace has none of.
-func noRepositoryDetail(step task.Step) string {
-	return fmt.Sprintf("repository %q is not one of the repositories of this task", step.Repository)
 }
 
 // indexOfRun finds the run of a step by number.
@@ -753,7 +751,7 @@ func (s *Service) ApproveStep(ctx context.Context, id string) error {
 	if agentReviewed(t, step.Number, *run) {
 		return fmt.Errorf("approve step %d of task %s: %w", step.Number, id, ErrAgentReviewing)
 	}
-	snap, read := s.review.Snapshot(reviewKey(id, step.RepoPath))
+	snap, read := s.review.Snapshot(id)
 	if !read || snap.Err != "" || !snap.Ready() {
 		return fmt.Errorf("approve step %d of task %s: %w", step.Number, id, ErrStepNotReady)
 	}
@@ -776,7 +774,7 @@ func (s *Service) ApproveStep(ctx context.Context, id string) error {
 		return fmt.Errorf("approve step %d of task %s: %w", step.Number, id, ErrStepBusy)
 	}
 
-	message, err := s.renderPrompt(prompts.StageCommit, commitVars(t, s.tasks.Repositories(t)))
+	message, err := s.renderPrompt(prompts.StageCommit, commitVars(t))
 	if err != nil {
 		return err
 	}
@@ -796,18 +794,13 @@ func (s *Service) ApproveStep(ctx context.Context, id string) error {
 }
 
 // commitVars are the placeholders the commit prompt may use.
-func commitVars(t task.Task, repos []task.Repository) prompts.Vars {
-	rels := make([]string, len(repos))
-	for i, repo := range repos {
-		rels[i] = repo.Rel
-	}
+func commitVars(t task.Task) prompts.Vars {
 	return prompts.Vars{
 		TaskName:     t.Name,
 		ArtifactsDir: t.ArtifactsDir,
 		PRDPath:      t.PRDPath(),
 		TechSpecPath: t.TechSpecPath(),
 		StepsDir:     t.StepsDir(),
-		Repositories: rels,
 	}
 }
 
@@ -887,10 +880,9 @@ func (s *Service) DiscardStep(ctx context.Context, id string, cleanWorktree bool
 	return nil
 }
 
-// abortPrepare cancels the preparation of a task and the work of every
-// repository of its PR stage, if there is any. It does not wait: whoever calls
-// it takes the lock of the task next, and that lock is what the preparation
-// holds until it gives up.
+// abortPrepare cancels the preparation of a task and the work of its PR stage,
+// if there is any. It does not wait: whoever calls it takes the lock of the task
+// next, and that lock is what the preparation holds until it gives up.
 func (s *Service) abortPrepare(id string) {
 	l := s.lockOf(id)
 
@@ -900,19 +892,17 @@ func (s *Service) abortPrepare(id string) {
 	if l.cancel != nil {
 		l.cancel()
 	}
-	for _, w := range l.repos {
-		if w.cancel != nil {
-			w.cancel()
-		}
+	if l.pr != nil && l.pr.cancel != nil {
+		l.pr.cancel()
 	}
 }
 
-// tearDownSteps stops the step session, removes the worktrees and the branches
-// of a task and forgets its steps. It is what discarding the plan, going back
-// and deleting the task have in common, and it fails whole: a worktree git
-// cannot remove leaves everything as it was, with the session open again.
+// tearDownSteps stops the step session, removes the worktree and the branch of
+// a task and forgets its steps. It is what discarding the plan, going back and
+// deleting the task have in common, and it fails whole: a worktree git cannot
+// remove leaves everything as it was, with the session open again.
 func (s *Service) tearDownSteps(ctx context.Context, t task.Task) error {
-	// The PR sessions run inside the worktrees of the steps, so they go first.
+	// The PR sessions run inside the worktree of the task, so they go first.
 	if err := s.tearDownPR(ctx, t); err != nil {
 		return err
 	}
@@ -920,7 +910,7 @@ func (s *Service) tearDownSteps(ctx context.Context, t task.Task) error {
 	if len(runs) == 0 {
 		return nil
 	}
-	s.review.ForgetTask(t.ID)
+	s.review.Forget(t.ID)
 
 	// The sessions of a step are stopped before the worktree they run in goes
 	// away.
@@ -939,7 +929,7 @@ func (s *Service) tearDownSteps(ctx context.Context, t task.Task) error {
 		}
 	}
 
-	if err := s.worktrees.RemoveAll(ctx, t.ID); err != nil {
+	if err := s.worktrees.Remove(ctx, t.ID); err != nil {
 		// Nothing was removed, so the user is left where they were.
 		if stepOpen {
 			s.reopenStep(ctx, t)
@@ -981,25 +971,30 @@ func (s *Service) reopenStep(ctx context.Context, t task.Task) {
 	if !ok {
 		return
 	}
-	wt, ok := s.worktrees.Get(t.ID, step.RepoPath)
+	wt, ok := s.worktrees.Get(t.ID)
 	if !ok {
 		return
 	}
-	if err := s.sessions.Open(ctx, stepInfo(t, step, wt, s.tasks.Repositories(t))); err != nil {
+	repo, err := s.repositoryOf(t)
+	if err != nil {
+		s.log.Error("reopen step session failed", "task", t.ID, "step", step.Number, "error", err)
+		return
+	}
+	if err := s.sessions.Open(ctx, stepInfo(t, step, wt, repo)); err != nil {
 		s.log.Error("reopen step session failed", "task", t.ID, "step", step.Number, "error", err)
 	}
 	if index := indexOfRun(runs, step.Number); index >= 0 {
-		s.openStepReviewer(ctx, t, step, wt, runs[index])
+		s.openStepReviewer(ctx, t, step, wt, runs[index], repo)
 	}
 }
 
-// Delete removes a task for good: its sessions are stopped, its worktrees and
-// branches are removed as far as git allows, and its records and artifacts go.
+// Delete removes a task for good: its sessions are stopped, its worktree and
+// branch are removed as far as git allows, and its records and artifacts go.
 // What git could not remove is returned for the user to clean up; it never
 // keeps the task.
 func (s *Service) Delete(ctx context.Context, id string) (DeleteResult, error) {
 	s.abortPrepare(id)
-	s.abortRepoWork(id)
+	s.abortPRWork(id)
 
 	l := s.lockOf(id)
 	l.mu.Lock()
@@ -1009,18 +1004,15 @@ func (s *Service) Delete(ctx context.Context, id string) (DeleteResult, error) {
 	if !ok {
 		return DeleteResult{}, fmt.Errorf("delete task %s: %w", id, task.ErrNotFound)
 	}
-	result := DeleteResult{Leftovers: []LeftoverInfo{}}
+	var result DeleteResult
 	if !t.Archived() {
-		// The sessions run inside the worktrees, so they stop first.
+		// The sessions run inside the worktree, so they stop first.
 		if err := s.sessions.CloseTask(ctx, id); err != nil {
 			return DeleteResult{}, err
 		}
-		s.review.ForgetTask(id)
-		for _, left := range s.worktrees.Purge(ctx, id) {
-			result.Leftovers = append(result.Leftovers, LeftoverInfo{
-				Repository: repoRel(t, left.RepoPath), RepoPath: left.RepoPath,
-				Path: left.Path, Branch: left.Branch, Error: left.Error,
-			})
+		s.review.Forget(id)
+		if left, kept := s.worktrees.Purge(ctx, id); kept {
+			result.Leftover = &LeftoverInfo{Path: left.Path, Branch: left.Branch, Error: left.Error}
 		}
 	}
 	if err := s.tasks.Delete(ctx, id); err != nil {

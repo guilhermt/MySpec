@@ -23,7 +23,7 @@ type Key struct {
 type Record struct {
 	ID     string // also the Claude Code session id
 	TaskID string
-	Stage  string // prd, tech_spec, plan, step:<n>, step_review:<n>, pr:<slug> or pr_review:<slug>
+	Stage  string // prd, tech_spec, plan, step:<n>, step_review:<n>, pr or pr_review
 	// Choice is the model and effort the session runs with from its next message
 	// on. It is born with the one of its stage or step and changes only through
 	// SetChoice.
@@ -39,12 +39,17 @@ type Record struct {
 }
 
 // The prefixes that open the session key of a stage a task has more than one
-// of: one step, the reviewer of a step, or one repository of the PR stages.
+// of: one step, or the reviewer of a step.
 const (
 	stepStagePrefix       = "step:"
 	stepReviewStagePrefix = "step_review:"
-	prStagePrefix         = "pr:"
-	prReviewStagePrefix   = "pr_review:"
+)
+
+// The session keys of the PR stage of a task: the conversation that drafts
+// and opens the pull request, and the one that reviews it.
+const (
+	PRStage       = "pr"
+	PRReviewStage = "pr_review"
 )
 
 // StepStage is the session key of a step, which is what the sessions table
@@ -80,34 +85,6 @@ func ParseStepReviewStage(stage string) (number int, ok bool) {
 		return 0, false
 	}
 	return number, true
-}
-
-// PRStage is the session key of the pull request stage of one repository,
-// named by its slug.
-func PRStage(slug string) string { return prStagePrefix + slug }
-
-// PRReviewStage is the session key of the pull request review of one
-// repository, named by its slug.
-func PRReviewStage(slug string) string { return prReviewStagePrefix + slug }
-
-// ParsePRStage reads the repository slug out of a PR session key. review says
-// which of the two stages it is.
-func ParsePRStage(stage string) (slug string, review bool, ok bool) {
-	// The review prefix is tested first: a naive reading of "pr_review:x"
-	// would not see "pr:" anyway, but the order is what makes that a rule.
-	if rest, found := strings.CutPrefix(stage, prReviewStagePrefix); found {
-		if rest == "" {
-			return "", false, false
-		}
-		return rest, true, true
-	}
-	if rest, found := strings.CutPrefix(stage, prStagePrefix); found {
-		if rest == "" {
-			return "", false, false
-		}
-		return rest, false, true
-	}
-	return "", false, false
 }
 
 // SessionRepository persists one Record per stage of a task.

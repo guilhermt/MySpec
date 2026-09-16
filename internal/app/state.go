@@ -10,7 +10,7 @@ import (
 	"github.com/guilhermt/myspec/internal/task"
 )
 
-// appName is the window title with no workspace open, and its suffix with one.
+// appName is the title of the window and the name the notifications carry.
 const appName = "MySpec"
 
 // snapshot builds the state the frontend renders. The situations are derived
@@ -21,34 +21,43 @@ func (a *App) snapshot() bindings.State {
 	summaries := a.sessions.Summaries()
 	artifacts := make(map[string]task.Artifacts, len(tasks))
 	steps := make(map[string][]flow.StepState, len(tasks))
-	repos := make(map[string][]flow.RepoState, len(tasks))
-	found := make([]attention.Found, 0, len(tasks)) // one place waits at a time outside the PR stage
+	prs := make(map[string]flow.PullRequest, len(tasks))
+	found := make([]attention.Found, 0, len(tasks)) // one place waits at a time outside implementation
 	for _, t := range tasks {
-		artifacts[t.ID], steps[t.ID], repos[t.ID] = a.taskArtifacts(t.ID), a.flow.Steps(t.ID), a.flow.Repos(t.ID)
+		artifacts[t.ID], steps[t.ID] = a.taskArtifacts(t.ID), a.flow.Steps(t.ID)
+		var pr *flow.PullRequest
+		if stage, ok := a.flow.PullRequest(t.ID); ok {
+			prs[t.ID] = stage
+			pr = &stage
+		}
 		found = append(found, attention.Derive(attention.Input{
-			Task: t, Artifacts: artifacts[t.ID], Steps: steps[t.ID], Repos: repos[t.ID], Sessions: summaries,
+			Task: t, Artifacts: artifacts[t.ID], Steps: steps[t.ID], PR: pr, Sessions: summaries,
 		})...)
 	}
 	situations := a.attention.Update(found)
 
 	return bindings.State{
-		Workspace:  bindings.FromWorkspace(a.ws.Current()),
-		Recents:    a.recentList(),
-		Theme:      string(a.theme.Preference()),
-		SystemDark: a.theme.SystemDark(),
-		// ModelDefaults and ReviewModeDefault are the app's own, not a
-		// workspace's: every workspace sees the same ones.
+		Repositories: bindings.FromRepositories(
+			a.repositories.List(), a.repositories.Missing, a.tasks.Counts,
+		),
+		RepositoryFilter: a.repositories.Filter(),
+		Theme:            string(a.theme.Preference()),
+		SystemDark:       a.theme.SystemDark(),
+		// ModelDefaults and ReviewModeDefault are the app's own: every
+		// repository sees the same ones.
 		ModelDefaults:     bindings.FromModelSet(a.models.Defaults()),
 		ReviewModeDefault: string(a.reviewModes.Default()),
-		Notice:            bindings.FromNotice(a.ws.Notice()),
 		Tasks: bindings.FromTasks(
 			tasks,
 			func(id string) task.Artifacts { return artifacts[id] },
 			func(id string) []flow.StepState { return steps[id] },
-			func(id string) []flow.RepoState { return repos[id] },
+			func(id string) (flow.PullRequest, bool) { pr, ok := prs[id]; return pr, ok },
+			a.repositories.Get,
 			summaries, situations,
 		),
-		History: bindings.FromArchived(a.tasks.ListArchived(), a.taskArtifacts, a.tasks.PRRuns),
+		History: bindings.FromArchived(
+			a.tasks.ListArchived(), a.taskArtifacts, a.tasks.PRRun, a.repositories.Get,
+		),
 	}
 }
 
@@ -100,59 +109,15 @@ func (a *App) emitSituationStarted(started attention.Started) {
 	}
 }
 
-// publish sends the whole state to the frontend and retitles the window. It
-// runs on every domain change, including the ones a second instance causes, and
-// tolerates being called before the window exists.
+// publish sends the whole state to the frontend. It runs on every domain
+// change and tolerates being called before the window exists.
 func (a *App) publish() {
 	a.publishMu.Lock()
 	defer a.publishMu.Unlock()
 
 	state := a.snapshot()
-	title := a.title()
 
-	wails, window := a.handles()
-	if window != nil {
-		window.SetTitle(title)
-	}
-	if wails != nil {
+	if wails, _ := a.handles(); wails != nil {
 		wails.Event.Emit(bindings.EventStateChanged, state)
 	}
-}
-
-// title names the window after the open workspace.
-func (a *App) title() string {
-	if current := a.ws.Current(); current != nil {
-		return current.Name + " — " + appName
-	}
-	return appName
-}
-
-// recentList reads the recent workspaces, falling back to the last list it read
-// successfully so a database hiccup does not empty the welcome screen.
-func (a *App) recentList() []bindings.Recent {
-	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
-	defer cancel()
-
-	recents, err := a.ws.Recents(ctx)
-	if err != nil {
-		a.log.Error("read recents failed", "err", err)
-		return a.lastRecents()
-	}
-
-	converted := bindings.FromRecents(recents)
-	a.mu.Lock()
-	a.recents = converted
-	a.mu.Unlock()
-	return converted
-}
-
-// lastRecents returns the last recent workspaces read from the database.
-func (a *App) lastRecents() []bindings.Recent {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
-	if a.recents == nil {
-		return []bindings.Recent{}
-	}
-	return a.recents
 }

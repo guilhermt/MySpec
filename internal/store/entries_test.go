@@ -10,7 +10,7 @@ import (
 
 func TestEntriesInsertAndListInSeqOrder(t *testing.T) {
 	t.Parallel()
-	s := newStore(t)
+	s := newStoreWithRepositories(t)
 
 	_, sessionID := seedSession(t, s)
 	for _, e := range []session.Entry{
@@ -34,7 +34,7 @@ func TestEntriesInsertAndListInSeqOrder(t *testing.T) {
 
 func TestEntriesListDecodesEveryKind(t *testing.T) {
 	t.Parallel()
-	s := newStore(t)
+	s := newStoreWithRepositories(t)
 
 	_, sessionID := seedSession(t, s)
 	want := []session.Entry{
@@ -73,7 +73,7 @@ func TestEntriesListDecodesEveryKind(t *testing.T) {
 
 func TestEntriesUpdateRewritesThePayload(t *testing.T) {
 	t.Parallel()
-	s := newStore(t)
+	s := newStoreWithRepositories(t)
 
 	_, sessionID := seedSession(t, s)
 	entry := newEntry("entry-1", 1, "queued")
@@ -100,7 +100,7 @@ func TestEntriesUpdateRewritesThePayload(t *testing.T) {
 
 func TestEntriesDelete(t *testing.T) {
 	t.Parallel()
-	s := newStore(t)
+	s := newStoreWithRepositories(t)
 
 	_, sessionID := seedSession(t, s)
 	if err := s.Entries.Insert(t.Context(), sessionID, newEntry("entry-1", 1, "hello")); err != nil {
@@ -124,7 +124,7 @@ func TestEntriesDelete(t *testing.T) {
 
 func TestEntriesMaxSeq(t *testing.T) {
 	t.Parallel()
-	s := newStore(t)
+	s := newStoreWithRepositories(t)
 
 	_, sessionID := seedSession(t, s)
 	got, err := s.Entries.MaxSeq(t.Context(), sessionID)
@@ -151,7 +151,7 @@ func TestEntriesMaxSeq(t *testing.T) {
 
 func TestEntriesInsertRejectsAnEntryWithoutItsPayload(t *testing.T) {
 	t.Parallel()
-	s := newStore(t)
+	s := newStoreWithRepositories(t)
 
 	_, sessionID := seedSession(t, s)
 	broken := session.Entry{ID: "entry-1", Seq: 1, Kind: session.KindUser, CreatedAt: fixedTime}

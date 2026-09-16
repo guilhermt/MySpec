@@ -10,6 +10,7 @@ import (
 
 	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/git/gittest"
+	"github.com/guilhermt/myspec/internal/repository"
 	"github.com/guilhermt/myspec/internal/task"
 	"github.com/guilhermt/myspec/internal/worktree"
 )
@@ -45,12 +46,12 @@ func (m *memStore) Insert(_ context.Context, wt worktree.Worktree) error {
 	return nil
 }
 
-func (m *memStore) Delete(_ context.Context, taskID, repoPath string) error {
+func (m *memStore) Delete(_ context.Context, taskID string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	m.items = slices.DeleteFunc(m.items, func(wt worktree.Worktree) bool {
-		return wt.TaskID == taskID && wt.RepoPath == repoPath
+		return wt.TaskID == taskID
 	})
 	return nil
 }
@@ -62,41 +63,42 @@ func (m *memStore) all() []worktree.Worktree {
 	return slices.Clone(m.items)
 }
 
-// fixture is a workspace with one repository cloned from an origin, and the
-// service that owns its worktrees.
+// fixture is a registered repository cloned from an origin, and the service
+// that owns the worktrees of its tasks.
 type fixture struct {
-	svc   *worktree.Service
-	store *memStore
-	ws    string
-	repo  task.Repository
-	task  task.Task
+	svc     *worktree.Service
+	store   *memStore
+	dataDir string
+	repo    repository.Repository
+	task    task.Task
 }
 
-// newFixture builds a workspace with an "api" repository, whose origin has a
-// dev branch when dev is true.
+// newFixture builds a "dev/web" repository, whose origin has a dev branch when
+// dev is true.
 func newFixture(t *testing.T, dev bool) fixture {
 	t.Helper()
 
-	ws := t.TempDir()
-	repoPath := gittest.Clone(t, gittest.Origin(t, dev), filepath.Join(ws, "api"))
-	return newFixtureOf(t, ws, task.Repository{Rel: "api", Path: repoPath})
+	clone := gittest.Clone(t, gittest.Origin(t, dev), filepath.Join(t.TempDir(), "web"))
+	return newFixtureOf(t, repository.Repository{ID: "repo-1", Owner: "dev", Name: "web", Path: clone})
 }
 
 // newFixtureOf builds the service over a repository already cloned.
-func newFixtureOf(t *testing.T, ws string, repo task.Repository) fixture {
+func newFixtureOf(t *testing.T, repo repository.Repository) fixture {
 	t.Helper()
 
 	store := &memStore{}
+	dataDir := t.TempDir()
 	svc := worktree.New(worktree.Deps{
-		Git:   git.New(git.Deps{Env: gittest.Env(t)}),
-		Store: store,
+		Git:     git.New(git.Deps{Env: gittest.Env(t)}),
+		Store:   store,
+		DataDir: dataDir,
 	})
-	return fixture{svc: svc, store: store, ws: ws, repo: repo, task: newTask("task-1", ws, taskName)}
+	return fixture{svc: svc, store: store, dataDir: dataDir, repo: repo, task: newTask("task-1", taskName)}
 }
 
-// newTask builds a task of a workspace, the only thing Ensure reads of one.
-func newTask(id, ws, name string) task.Task {
-	return task.Task{ID: id, WorkspacePath: ws, Name: name}
+// newTask builds a task, the only thing Ensure reads of one.
+func newTask(id, name string) task.Task {
+	return task.Task{ID: id, RepositoryID: "repo-1", Name: name}
 }
 
 // ensure creates the worktree of the fixture task, failing the test on error.
@@ -178,9 +180,9 @@ func read(t *testing.T, path string) string {
 	return string(content)
 }
 
-// repoWithoutBase clones into ws a repository whose origin has neither a dev
-// nor a main branch.
-func repoWithoutBase(t *testing.T, ws string) task.Repository {
+// repoWithoutBase clones a repository whose origin has neither a dev nor a
+// main branch.
+func repoWithoutBase(t *testing.T) repository.Repository {
 	t.Helper()
 
 	dir := t.TempDir()
@@ -193,7 +195,7 @@ func repoWithoutBase(t *testing.T, ws string) task.Repository {
 	gittest.Commit(t, seed, "README.md", "# seed\n", "Initial commit")
 	gittest.Run(t, seed, "push", "origin", "trunk")
 
-	path := filepath.Join(ws, "api")
-	gittest.Run(t, ws, "clone", "--branch", "trunk", origin, path)
-	return task.Repository{Rel: "api", Path: path}
+	path := filepath.Join(t.TempDir(), "web")
+	gittest.Run(t, dir, "clone", "--branch", "trunk", origin, path)
+	return repository.Repository{ID: "repo-1", Owner: "dev", Name: "web", Path: path}
 }

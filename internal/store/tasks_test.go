@@ -15,10 +15,9 @@ import (
 
 func TestTasksInsertAndGet(t *testing.T) {
 	t.Parallel()
-	s := newStore(t)
+	s := newStoreWithRepositories(t)
 
-	want := newTask("task-1", "/ws", "one", fixedTime)
-	want.RepoPath = "/ws/api"
+	want := newTask("task-1", webRepo, "one", fixedTime)
 	if err := s.Tasks.Insert(t.Context(), want); err != nil {
 		t.Fatalf("Insert() = %v, want nil", err)
 	}
@@ -32,30 +31,11 @@ func TestTasksInsertAndGet(t *testing.T) {
 	}
 }
 
-func TestTasksInsertKeepsARootTaskWithoutARepository(t *testing.T) {
-	t.Parallel()
-	s := newStore(t)
-
-	want := newTask("task-1", "/ws", "one", fixedTime)
-	if err := s.Tasks.Insert(t.Context(), want); err != nil {
-		t.Fatalf("Insert() = %v, want nil", err)
-	}
-
-	got, err := s.Tasks.Get(t.Context(), want.ID)
-	if err != nil {
-		t.Fatalf("Get() = %v, want nil", err)
-	}
-	if got.RepoPath != "" {
-		t.Errorf("RepoPath = %q, want empty", got.RepoPath)
-	}
-}
-
 func TestTasksKeepTheModeOfATask(t *testing.T) {
 	t.Parallel()
-	s := newStore(t)
+	s := newStoreWithRepositories(t)
 
-	want := newTask("task-1", "/ws", "one", fixedTime)
-	want.RepoPath = "/ws/api"
+	want := newTask("task-1", webRepo, "one", fixedTime)
 	want.Mode = task.ModeOneShot
 	want.Stage = task.StageOneShot
 	if err := s.Tasks.Insert(t.Context(), want); err != nil {
@@ -70,61 +50,61 @@ func TestTasksKeepTheModeOfATask(t *testing.T) {
 		t.Errorf("Get() mismatch (-want +got):\n%s", diff)
 	}
 
-	listed, err := s.Tasks.ListByWorkspace(t.Context(), "/ws")
+	listed, err := s.Tasks.ListActive(t.Context())
 	if err != nil {
-		t.Fatalf("ListByWorkspace() = %v, want nil", err)
+		t.Fatalf("ListActive() = %v, want nil", err)
 	}
 	if diff := cmp.Diff([]task.Task{want}, listed); diff != "" {
-		t.Errorf("ListByWorkspace() mismatch (-want +got):\n%s", diff)
+		t.Errorf("ListActive() mismatch (-want +got):\n%s", diff)
 	}
 }
 
 func TestTasksGetMissingIsNotFound(t *testing.T) {
 	t.Parallel()
-	s := newStore(t)
+	s := newStoreWithRepositories(t)
 
 	if _, err := s.Tasks.Get(t.Context(), "nope"); !errors.Is(err, task.ErrNotFound) {
 		t.Errorf("Get() = %v, want task.ErrNotFound", err)
 	}
 }
 
-func TestTasksListByWorkspaceIsInCreationOrder(t *testing.T) {
+func TestTasksListActiveIsInCreationOrder(t *testing.T) {
 	t.Parallel()
-	s := newStore(t)
+	s := newStoreWithRepositories(t)
 
 	later := fixedTime.Add(time.Hour)
 	for _, tk := range []task.Task{
-		newTask("task-2", "/ws", "second", later),
-		newTask("task-1", "/ws", "first", fixedTime),
-		newTask("task-3", "/other", "elsewhere", fixedTime),
+		newTask("task-2", webRepo, "second", later),
+		newTask("task-1", webRepo, "first", fixedTime),
+		newTask("task-3", apiRepo, "elsewhere", later.Add(time.Hour)),
 	} {
 		if err := s.Tasks.Insert(t.Context(), tk); err != nil {
 			t.Fatalf("Insert(%s) = %v, want nil", tk.Name, err)
 		}
 	}
 
-	tasks, err := s.Tasks.ListByWorkspace(t.Context(), "/ws")
+	tasks, err := s.Tasks.ListActive(t.Context())
 	if err != nil {
-		t.Fatalf("ListByWorkspace() = %v, want nil", err)
+		t.Fatalf("ListActive() = %v, want nil", err)
 	}
 
 	got := make([]string, 0, len(tasks))
 	for _, tk := range tasks {
 		got = append(got, tk.Name)
 	}
-	if diff := cmp.Diff([]string{"first", "second"}, got); diff != "" {
-		t.Errorf("ListByWorkspace() mismatch (-want +got):\n%s", diff)
+	if diff := cmp.Diff([]string{"first", "second", "elsewhere"}, got); diff != "" {
+		t.Errorf("ListActive() mismatch (-want +got):\n%s", diff)
 	}
 }
 
-func TestTasksArchivedLeaveTheWorkspaceForTheHistory(t *testing.T) {
+func TestTasksArchivedLeaveTheListForTheHistory(t *testing.T) {
 	t.Parallel()
-	s := newStore(t)
+	s := newStoreWithRepositories(t)
 
 	for _, tk := range []task.Task{
-		newTask("task-1", "/ws", "first", fixedTime),
-		newTask("task-2", "/ws", "second", fixedTime),
-		newTask("task-3", "/ws", "third", fixedTime),
+		newTask("task-1", webRepo, "first", fixedTime),
+		newTask("task-2", webRepo, "second", fixedTime),
+		newTask("task-3", webRepo, "third", fixedTime),
 	} {
 		if err := s.Tasks.Insert(t.Context(), tk); err != nil {
 			t.Fatalf("Insert(%s) = %v, want nil", tk.Name, err)
@@ -140,15 +120,15 @@ func TestTasksArchivedLeaveTheWorkspaceForTheHistory(t *testing.T) {
 		t.Fatalf("UpdateArchived(task-2) = %v, want nil", err)
 	}
 
-	active, err := s.Tasks.ListByWorkspace(t.Context(), "/ws")
+	active, err := s.Tasks.ListActive(t.Context())
 	if err != nil {
-		t.Fatalf("ListByWorkspace() = %v, want nil", err)
+		t.Fatalf("ListActive() = %v, want nil", err)
 	}
 	if diff := cmp.Diff([]string{"third"}, taskNames(active)); diff != "" {
-		t.Errorf("ListByWorkspace() mismatch (-want +got):\n%s", diff)
+		t.Errorf("ListActive() mismatch (-want +got):\n%s", diff)
 	}
 
-	history, err := s.Tasks.ListArchived(t.Context(), "/ws")
+	history, err := s.Tasks.ListArchived(t.Context())
 	if err != nil {
 		t.Fatalf("ListArchived() = %v, want nil", err)
 	}
@@ -168,7 +148,7 @@ func TestTasksArchivedLeaveTheWorkspaceForTheHistory(t *testing.T) {
 			got.Archived(), got.ArchivedAt, got.UpdatedAt, archivedAt)
 	}
 	if third, err := s.Tasks.Get(t.Context(), "task-3"); err != nil || third.Archived() {
-		t.Errorf("Get(task-3) = %+v, %v, want a task still in the workspace", third, err)
+		t.Errorf("Get(task-3) = %+v, %v, want a task still active", third, err)
 	}
 }
 
@@ -183,35 +163,45 @@ func taskNames(tasks []task.Task) []string {
 
 func TestTasksInsertRejectsARepeatedName(t *testing.T) {
 	t.Parallel()
-	s := newStore(t)
+	s := newStoreWithRepositories(t)
 
-	if err := s.Tasks.Insert(t.Context(), newTask("task-1", "/ws", "one", fixedTime)); err != nil {
+	if err := s.Tasks.Insert(t.Context(), newTask("task-1", webRepo, "one", fixedTime)); err != nil {
 		t.Fatalf("Insert() = %v, want nil", err)
 	}
 
-	err := s.Tasks.Insert(t.Context(), newTask("task-2", "/ws", "one", fixedTime))
+	err := s.Tasks.Insert(t.Context(), newTask("task-2", webRepo, "one", fixedTime))
 	if !errors.Is(err, task.ErrNameTaken) {
 		t.Errorf("Insert() = %v, want task.ErrNameTaken", err)
 	}
 }
 
-func TestTasksInsertAllowsTheSameNameInAnotherWorkspace(t *testing.T) {
+func TestANameIsTakenOnlyInsideItsRepository(t *testing.T) {
 	t.Parallel()
-	s := newStore(t)
+	s := newStoreWithRepositories(t)
 
-	if err := s.Tasks.Insert(t.Context(), newTask("task-1", "/ws", "one", fixedTime)); err != nil {
+	if err := s.Tasks.Insert(t.Context(), newTask("task-1", webRepo, "one", fixedTime)); err != nil {
 		t.Fatalf("Insert() = %v, want nil", err)
 	}
-	if err := s.Tasks.Insert(t.Context(), newTask("task-2", "/other", "one", fixedTime)); err != nil {
-		t.Errorf("Insert() = %v, want nil", err)
+	if err := s.Tasks.Insert(t.Context(), newTask("task-2", apiRepo, "one", fixedTime)); err != nil {
+		t.Errorf("Insert() = %v, want the same name in another repository accepted", err)
+	}
+
+	// An archived task of the repository holds its name all the same.
+	archivedAt := fixedTime.Add(time.Hour)
+	if err := s.Tasks.UpdateArchived(t.Context(), "task-1", archivedAt, archivedAt); err != nil {
+		t.Fatalf("UpdateArchived() = %v, want nil", err)
+	}
+	err := s.Tasks.Insert(t.Context(), newTask("task-3", webRepo, "one", fixedTime))
+	if !errors.Is(err, task.ErrNameTaken) {
+		t.Errorf("Insert() = %v, want task.ErrNameTaken", err)
 	}
 }
 
 func TestTasksUpdateStage(t *testing.T) {
 	t.Parallel()
-	s := newStore(t)
+	s := newStoreWithRepositories(t)
 
-	tk := newTask("task-1", "/ws", "one", fixedTime)
+	tk := newTask("task-1", webRepo, "one", fixedTime)
 	tk.ArtifactVersion = 3
 	if err := s.Tasks.Insert(t.Context(), tk); err != nil {
 		t.Fatalf("Insert() = %v, want nil", err)
@@ -237,9 +227,9 @@ func TestTasksUpdateStage(t *testing.T) {
 
 func TestTasksUpdateArtifactVersion(t *testing.T) {
 	t.Parallel()
-	s := newStore(t)
+	s := newStoreWithRepositories(t)
 
-	tk := newTask("task-1", "/ws", "one", fixedTime)
+	tk := newTask("task-1", webRepo, "one", fixedTime)
 	tk.Stage = task.StagePlan
 	tk.Revisiting = true
 	if err := s.Tasks.Insert(t.Context(), tk); err != nil {
@@ -265,9 +255,9 @@ func TestTasksUpdateArtifactVersion(t *testing.T) {
 
 func TestTasksUpdateModels(t *testing.T) {
 	t.Parallel()
-	s := newStore(t)
+	s := newStoreWithRepositories(t)
 
-	tk := newTask("task-1", "/ws", "one", fixedTime)
+	tk := newTask("task-1", webRepo, "one", fixedTime)
 	if err := s.Tasks.Insert(t.Context(), tk); err != nil {
 		t.Fatalf("Insert() = %v, want nil", err)
 	}
@@ -296,9 +286,9 @@ func TestTasksUpdateModels(t *testing.T) {
 
 func TestTasksUpdateReviewModes(t *testing.T) {
 	t.Parallel()
-	s := newStore(t)
+	s := newStoreWithRepositories(t)
 
-	tk := newTask("task-1", "/ws", "one", fixedTime)
+	tk := newTask("task-1", webRepo, "one", fixedTime)
 	if err := s.Tasks.Insert(t.Context(), tk); err != nil {
 		t.Fatalf("Insert() = %v, want nil", err)
 	}
@@ -323,7 +313,7 @@ func TestTasksUpdateReviewModes(t *testing.T) {
 
 func TestTasksDeleteCascadesToTheSessionAndItsEntries(t *testing.T) {
 	t.Parallel()
-	s := newStore(t)
+	s := newStoreWithRepositories(t)
 
 	taskID, sessionID := seedSession(t, s)
 	if err := s.Entries.Insert(t.Context(), sessionID, newEntry("entry-1", 1, "hello")); err != nil {
@@ -351,7 +341,7 @@ func TestTasksDeleteCascadesToTheSessionAndItsEntries(t *testing.T) {
 
 func TestTasksDeleteMissingIsNotAnError(t *testing.T) {
 	t.Parallel()
-	s := newStore(t)
+	s := newStoreWithRepositories(t)
 
 	if err := s.Tasks.Delete(t.Context(), "nope"); err != nil {
 		t.Errorf("Delete() = %v, want nil", err)

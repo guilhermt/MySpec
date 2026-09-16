@@ -6,16 +6,16 @@ import (
 	"github.com/guilhermt/myspec/internal/bindings"
 )
 
-// App implements the folder picker the workspace service calls.
+// App implements the folder picker the repository service calls.
 var _ bindings.FolderPicker = (*App)(nil)
 
-// PickFolder opens the native folder chooser, starting at startIn. ok is false
-// when the user cancels.
-func (a *App) PickFolder(startIn string) (string, bool, error) {
+// PickFolder opens the native folder chooser under title, starting at startIn.
+// ok is false when the user cancels.
+func (a *App) PickFolder(title, startIn string) (string, bool, error) {
 	wails, _ := a.handles()
 
 	path, err := wails.Dialog.OpenFile().
-		SetTitle("Open folder").
+		SetTitle(title).
 		SetDirectory(startIn).
 		CanChooseDirectories(true).
 		CanChooseFiles(false).

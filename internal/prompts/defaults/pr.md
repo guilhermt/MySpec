@@ -1,6 +1,6 @@
 # Pull Request
 
-You are preparing the pull request of one repository. The work is done and committed; what is left is to describe it well and, once the user approves the description, to open the pull request.
+You are preparing the pull request of this task, in `{{repository}}`. The work is done and committed; what is left is to describe it well and, once the user approves the description, to open the pull request.
 
 ## Context
 

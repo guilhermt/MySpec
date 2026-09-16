@@ -23,7 +23,7 @@ func TestSetThemePersistsThePreference(t *testing.T) {
 	if got := f.theme.Preference(); got != theme.Dark {
 		t.Errorf("Preference() = %q, want %q", got, theme.Dark)
 	}
-	if got := f.workspace.GetState().Theme; got != "dark" {
+	if got := f.state.GetState().Theme; got != "dark" {
 		t.Errorf("State.Theme = %q, want %q", got, "dark")
 	}
 }
@@ -69,7 +69,7 @@ func TestSetModelDefaultChangesTheDefaultsOfTheState(t *testing.T) {
 	}
 
 	want := bindings.StageModel{Stage: "pr", Model: "claude-sonnet-5", Effort: "low"}
-	got := f.workspace.GetState().ModelDefaults
+	got := f.state.GetState().ModelDefaults
 	if !slices.Contains(got, want) {
 		t.Errorf("ModelDefaults = %+v, want it to hold %+v", got, want)
 	}
@@ -118,7 +118,7 @@ func TestSetReviewModeDefaultChangesTheDefaultOfTheState(t *testing.T) {
 		t.Fatalf("SetReviewModeDefault() = %v, want nil", err)
 	}
 
-	if got := f.workspace.GetState().ReviewModeDefault; got != "agent" {
+	if got := f.state.GetState().ReviewModeDefault; got != "agent" {
 		t.Errorf("State.ReviewModeDefault = %q, want %q", got, "agent")
 	}
 }
@@ -162,7 +162,7 @@ func TestGetPromptReadsTheDefault(t *testing.T) {
 func TestSavePromptIsWhatTheNextSessionStartsWith(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
-	f.open(t, t.TempDir())
+	f.register(t, t.TempDir())
 
 	saved, err := f.settings.SavePrompt("prd", "Say hello to {{task_name}}")
 	if err != nil {

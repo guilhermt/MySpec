@@ -22,18 +22,19 @@ import (
 func newTask(name string) bindings.CreateTaskRequest {
 	return bindings.CreateTaskRequest{
 		Name:           name,
+		RepositoryID:   testRepoID,
 		InitialContext: "a login screen with email and password",
 	}
 }
 
-// createdTask opens a workspace, creates one task in it and waits for its
-// session to settle. It returns the fixture, the workspace path and the id.
+// createdTask registers a repository, creates one task in it and waits for its
+// session to settle. It returns the fixture, the clone and the id of the task.
 func createdTask(t *testing.T) (*fixture, string, string) {
 	t.Helper()
 
 	f := newFixture(t)
 	dir := t.TempDir()
-	f.open(t, dir)
+	f.register(t, dir)
 
 	id, err := f.tasks.CreateTask(newTask("login-screen"))
 	if err != nil {
@@ -65,14 +66,15 @@ func startedTaskModels(set models.Set) []bindings.TaskStageModel {
 func TestCreateTaskAddsTheTaskToTheState(t *testing.T) {
 	t.Parallel()
 
-	f, dir, id := createdTask(t)
+	f, _, id := createdTask(t)
 
 	got := f.taskOf(t, id)
 	// The request carries no mode, so the task is Structured.
 	want := bindings.TaskSummary{
 		ID:                 id,
 		Name:               "login-screen",
-		Dir:                dir,
+		RepositoryID:       testRepoID,
+		Repository:         "dev/web",
 		Mode:               "structured",
 		Stage:              "prd",
 		ReviewMode:         "manual",
@@ -81,7 +83,6 @@ func TestCreateTaskAddsTheTaskToTheState(t *testing.T) {
 		SessionModel:       "claude-fable-5-1",
 		SessionEffort:      "high",
 		Steps:              []bindings.Step{},
-		Repos:              []bindings.RepoPR{},
 		PlanProblems:       []bindings.PlanProblem{},
 		Situations:         []bindings.Situation{},
 		Models:             startedTaskModels(models.Factory()),
@@ -102,7 +103,7 @@ func TestCreateTaskReportsWhatTheUserGotWrong(t *testing.T) {
 
 	f := newFixture(t)
 	dir := t.TempDir()
-	f.open(t, dir)
+	f.register(t, dir)
 
 	if _, err := f.tasks.CreateTask(newTask("login-screen")); err != nil {
 		t.Fatalf("CreateTask() = %v, want nil", err)
@@ -119,29 +120,23 @@ func TestCreateTaskReportsWhatTheUserGotWrong(t *testing.T) {
 			want: "Use lowercase letters, digits and single hyphens.",
 		},
 		{
-			name: "name taken",
-			req:  newTask("login-screen"),
-			want: "A task with this name already exists in this workspace.",
-		},
-		{
 			name: "no context",
-			req:  bindings.CreateTaskRequest{Name: "checkout"},
+			req:  bindings.CreateTaskRequest{Name: "checkout", RepositoryID: testRepoID},
 			want: "Describe what you want to build.",
 		},
 		{
-			name: "repository outside the workspace",
-			req:  bindings.CreateTaskRequest{Name: "checkout", RepoPath: "/elsewhere/api", InitialContext: "a checkout"},
-			want: "This repository is not part of the workspace.",
+			name: "a repository nobody registered",
+			req: bindings.CreateTaskRequest{
+				Name: "checkout", RepositoryID: "nobody", InitialContext: "a checkout",
+			},
+			want: "Choose a registered repository.",
 		},
 		{
 			name: "unknown mode",
-			req:  bindings.CreateTaskRequest{Name: "checkout", InitialContext: "a checkout", Mode: "quick"},
+			req: bindings.CreateTaskRequest{
+				Name: "checkout", RepositoryID: testRepoID, InitialContext: "a checkout", Mode: "quick",
+			},
 			want: "Unknown mode.",
-		},
-		{
-			name: "One-Shot at the root of the workspace",
-			req:  bindings.CreateTaskRequest{Name: "checkout", InitialContext: "a checkout", Mode: "one_shot"},
-			want: "One-Shot tasks are created in a repository.",
 		},
 	}
 
@@ -163,14 +158,56 @@ func TestCreateTaskReportsWhatTheUserGotWrong(t *testing.T) {
 	}
 }
 
+func TestCreateTaskSaysTheNameIsTakenInTheRepository(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.register(t, t.TempDir())
+
+	if _, err := f.tasks.CreateTask(newTask("login-screen")); err != nil {
+		t.Fatalf("CreateTask() = %v, want nil", err)
+	}
+
+	_, err := f.tasks.CreateTask(newTask("login-screen"))
+	if err == nil {
+		t.Fatal("CreateTask() = nil, want the name refused")
+	}
+	if want := "A task named login-screen already exists in dev/web."; err.Error() != want {
+		t.Errorf("CreateTask() error = %q, want %q", err, want)
+	}
+	if f.logged(t, "binding failed") {
+		t.Error("a mistake the user can correct was logged as a failure")
+	}
+}
+
+func TestCreateTaskIsRefusedWhenTheCloneIsMissing(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	dir := filepath.Join(t.TempDir(), "web")
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		t.Fatalf("MkdirAll(%s) = %v, want nil", dir, err)
+	}
+	f.register(t, dir)
+	if err := os.RemoveAll(dir); err != nil {
+		t.Fatalf("RemoveAll(%s) = %v, want nil", dir, err)
+	}
+
+	_, err := f.tasks.CreateTask(newTask("login-screen"))
+	if err == nil {
+		t.Fatal("CreateTask() = nil, want the missing clone refused")
+	}
+	if want := "The clone at " + dir + " is missing."; err.Error() != want {
+		t.Errorf("CreateTask() error = %q, want %q", err, want)
+	}
+}
+
 func TestCreateTaskStartsAOneShotTaskInItsRepository(t *testing.T) {
 	t.Parallel()
 
-	f, dir := repoWorkspace(t)
-	repo := filepath.Join(dir, "api")
+	f, dir := registeredClone(t)
 
 	req := newTask("login-screen")
-	req.RepoPath = repo
 	req.Mode = "one_shot"
 	id, err := f.tasks.CreateTask(req)
 	if err != nil {
@@ -179,9 +216,9 @@ func TestCreateTaskStartsAOneShotTaskInItsRepository(t *testing.T) {
 	f.waitForStatus(t, id, "waiting")
 
 	summary := f.taskOf(t, id)
-	if summary.Mode != "one_shot" || summary.Stage != "one_shot" || summary.RepoPath != repo {
-		t.Errorf("task = mode %q stage %q repoPath %q, want the One-Shot planning in %s",
-			summary.Mode, summary.Stage, summary.RepoPath, repo)
+	if summary.Mode != "one_shot" || summary.Stage != "one_shot" || summary.Repository != "dev/web" {
+		t.Errorf("task = mode %q stage %q repository %q, want the One-Shot planning in %s",
+			summary.Mode, summary.Stage, summary.Repository, dir)
 	}
 	if summary.HasOneShot {
 		t.Error("hasOneShot = true, want the document still to be written")
@@ -237,7 +274,7 @@ func TestCreateTaskStartsThePRDWithTheChoiceOfTheDialog(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	f.open(t, t.TempDir())
+	f.register(t, t.TempDir())
 
 	req := newTask("login-screen")
 	req.Models = []bindings.StageModel{{Stage: "prd", Model: "claude-fable-5-1", Effort: "xhigh"}}
@@ -262,7 +299,7 @@ func TestCreateTaskStartsFromTheDefaultsOfTheSettings(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	f.open(t, t.TempDir())
+	f.register(t, t.TempDir())
 
 	if err := f.settings.SetModelDefault("implementation", "claude-opus-5", "xhigh"); err != nil {
 		t.Fatalf("SetModelDefault() = %v, want nil", err)
@@ -284,7 +321,7 @@ func TestCreateTaskReportsAnUnknownModel(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	f.open(t, t.TempDir())
+	f.register(t, t.TempDir())
 
 	req := newTask("login-screen")
 	req.Models = []bindings.StageModel{{Stage: "prd", Model: "gpt", Effort: "high"}}
@@ -295,7 +332,7 @@ func TestCreateTaskReportsAnUnknownModel(t *testing.T) {
 	if err.Error() != "Unknown model." {
 		t.Errorf("CreateTask() error = %q, want the unknown model notice", err)
 	}
-	if tasks := f.workspace.GetState().Tasks; len(tasks) != 0 {
+	if tasks := f.state.GetState().Tasks; len(tasks) != 0 {
 		t.Errorf("state has %d tasks, want none", len(tasks))
 	}
 }
@@ -304,7 +341,7 @@ func TestCreateTaskStartsFromTheReviewModeOfTheSettings(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	f.open(t, t.TempDir())
+	f.register(t, t.TempDir())
 
 	if err := f.settings.SetReviewModeDefault("agent"); err != nil {
 		t.Fatalf("SetReviewModeDefault() = %v, want nil", err)
@@ -324,7 +361,7 @@ func TestCreateTaskKeepsTheReviewModeOfTheDialog(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	f.open(t, t.TempDir())
+	f.register(t, t.TempDir())
 
 	req := newTask("login-screen")
 	req.ReviewMode = "agent"
@@ -342,7 +379,7 @@ func TestCreateTaskReportsAnUnknownReviewMode(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	f.open(t, t.TempDir())
+	f.register(t, t.TempDir())
 
 	req := newTask("login-screen")
 	req.ReviewMode = "auto"
@@ -353,7 +390,7 @@ func TestCreateTaskReportsAnUnknownReviewMode(t *testing.T) {
 	if err.Error() != "Unknown review mode." {
 		t.Errorf("CreateTask() error = %q, want the unknown review mode notice", err)
 	}
-	if tasks := f.workspace.GetState().Tasks; len(tasks) != 0 {
+	if tasks := f.state.GetState().Tasks; len(tasks) != 0 {
 		t.Errorf("state has %d tasks, want none", len(tasks))
 	}
 }
@@ -525,13 +562,13 @@ func TestGetTranscriptRejectsAnUnknownTask(t *testing.T) {
 func TestDeleteTaskRemovesTheTaskAndItsFolder(t *testing.T) {
 	t.Parallel()
 
-	f, dir, id := createdTask(t)
-	artifacts := task.ArtifactsDir(f.dataDir, dir, "login-screen")
+	f, _, id := createdTask(t)
+	artifacts := task.ArtifactsDir(f.dataDir, "dev", "web", "login-screen")
 
 	if _, err := f.tasks.DeleteTask(id); err != nil {
 		t.Fatalf("DeleteTask(%s) = %v, want nil", id, err)
 	}
-	if tasks := f.workspace.GetState().Tasks; len(tasks) != 0 {
+	if tasks := f.state.GetState().Tasks; len(tasks) != 0 {
 		t.Errorf("state has %d tasks, want none", len(tasks))
 	}
 	if _, err := os.Stat(artifacts); !os.IsNotExist(err) {
@@ -647,13 +684,13 @@ func TestAnsweringWithoutAPendingRequestFails(t *testing.T) {
 func TestReadArtifactReturnsThePRD(t *testing.T) {
 	t.Parallel()
 
-	f, dir, id := createdTask(t)
+	f, _, id := createdTask(t)
 
 	if _, err := f.tasks.ReadArtifact(id, "PRD.md"); err == nil {
 		t.Error("ReadArtifact() = nil, want an error before the PRD exists")
 	}
 
-	path := filepath.Join(task.ArtifactsDir(f.dataDir, dir, "login-screen"), "PRD.md")
+	path := filepath.Join(task.ArtifactsDir(f.dataDir, "dev", "web", "login-screen"), "PRD.md")
 	if err := os.WriteFile(path, []byte("# PRD\n"), 0o600); err != nil {
 		t.Fatalf("WriteFile(%s) = %v, want nil", path, err)
 	}
@@ -683,8 +720,8 @@ func writeBlock(path, content string) string {
 }
 
 // stepFile is one step of a plan, as the fake CLI writes it.
-func stepFile(number int, title, repo string) string {
-	return fmt.Sprintf("---\nrepository: %s\n---\n\n# Step %d: %s\n", repo, number, title)
+func stepFile(number int, title string) string {
+	return fmt.Sprintf("# Step %d: %s\n", number, title)
 }
 
 // The prompts that make the fake CLI finish a stage: each writes the artifact
@@ -695,23 +732,19 @@ var (
 	// The first step carries a write block of its own: the file is the prompt
 	// of the step session, so the fake CLI writes hello.txt in the worktree it
 	// runs in.
-	planWriter = writeBlock("{{steps_dir}}/1-first.md", stepFile(1, "First", "api")+writeBlock("hello.txt", "hi")) +
-		writeBlock("{{steps_dir}}/2-second.md", stepFile(2, "Second", "api"))
+	planWriter = writeBlock("{{steps_dir}}/1-first.md", stepFile(1, "First")+writeBlock("hello.txt", "hi")) +
+		writeBlock("{{steps_dir}}/2-second.md", stepFile(2, "Second"))
 )
 
-// repoWorkspace opens a workspace holding one repository, which is what a plan
-// names in its step files.
-func repoWorkspace(t *testing.T) (*fixture, string) {
+// registeredClone registers a repository whose clone is real: the steps of a
+// plan are implemented in worktrees of it, which only git can make.
+func registeredClone(t *testing.T) (*fixture, string) {
 	t.Helper()
 
 	f := newFixture(t)
-	dir := t.TempDir()
-	// api is a real clone: the steps of a plan are implemented in worktrees of
-	// it, which only git can make.
-	gittest.Clone(t, gittest.Origin(t, true), filepath.Join(dir, "api"))
-	f.setScan([]string{filepath.Join(dir, "api")}, nil)
-	f.open(t, dir)
-	return f, dir
+	clone := gittest.Clone(t, gittest.Origin(t, true), filepath.Join(t.TempDir(), "web"))
+	f.register(t, clone)
+	return f, clone
 }
 
 // plannedTask walks a task through the three stages with prompts that write
@@ -719,7 +752,7 @@ func repoWorkspace(t *testing.T) (*fixture, string) {
 func plannedTask(t *testing.T) (*fixture, string, string) {
 	t.Helper()
 
-	f, dir := repoWorkspace(t)
+	f, dir := registeredClone(t)
 	f.seedPrompt(t, prompts.StagePRD, prdWriter)
 	f.seedPrompt(t, prompts.StageTechSpec, techSpecWriter)
 	f.seedPrompt(t, prompts.StagePlan, planWriter)
@@ -735,7 +768,7 @@ func plannedTask(t *testing.T) (*fixture, string, string) {
 func TestPRDWrittenStartsTheTechSpec(t *testing.T) {
 	t.Parallel()
 
-	f, _ := repoWorkspace(t)
+	f, _ := registeredClone(t)
 	f.seedPrompt(t, prompts.StagePRD, prdWriter)
 
 	id, err := f.tasks.CreateTask(newTask("login-screen"))
@@ -758,7 +791,7 @@ func TestPRDWrittenStartsTheTechSpec(t *testing.T) {
 func TestPlanWrittenReachesImplementation(t *testing.T) {
 	t.Parallel()
 
-	f, dir, id := plannedTask(t)
+	f, _, id := plannedTask(t)
 	f.waitReviewed(t, id, 1)
 
 	summary := f.taskOf(t, id)
@@ -771,12 +804,11 @@ func TestPlanWrittenReachesImplementation(t *testing.T) {
 	if summary.CurrentStep != 1 {
 		t.Errorf("currentStep = %d, want 1", summary.CurrentStep)
 	}
-	repo := filepath.Join(dir, "api")
-	wt := worktree.Path(dir, "api", "login-screen")
+	wt := worktree.Path(f.dataDir, "dev", "web", "login-screen")
 	want := []bindings.Step{
 		{
 			Number: 1, File: "1-first.md", Title: "First",
-			Repository: "api", RepoPath: repo, Status: "awaiting_review", WorktreePath: wt,
+			Status: "awaiting_review", WorktreePath: wt,
 			// The step wrote hello.txt and nobody has staged it yet.
 			Review: &bindings.Review{
 				Files: []bindings.ReviewFile{{Path: "hello.txt", Kind: "untracked"}},
@@ -787,7 +819,7 @@ func TestPlanWrittenReachesImplementation(t *testing.T) {
 		},
 		{
 			Number: 2, File: "2-second.md", Title: "Second",
-			Repository: "api", RepoPath: repo, Status: "not_started", WorktreePath: wt,
+			Status: "not_started", WorktreePath: wt,
 			Model: "claude-opus-5", Effort: "high", ModelEditable: true,
 			ReviewMode: "manual", ReviewModeEditable: true, Reports: []bindings.StepReport{},
 		},
@@ -797,20 +829,20 @@ func TestPlanWrittenReachesImplementation(t *testing.T) {
 	}
 }
 
-func TestAStepRunsInAWorktreeOfItsRepository(t *testing.T) {
+func TestAStepRunsInTheWorktreeOfItsTask(t *testing.T) {
 	t.Parallel()
 
-	f, dir, id := plannedTask(t)
+	f, clone, id := plannedTask(t)
 	step := f.waitReviewed(t, id, 1)
 
-	wt := worktree.Path(dir, "api", "login-screen")
+	wt := worktree.Path(f.dataDir, "dev", "web", "login-screen")
 	if step.WorktreePath != wt {
 		t.Errorf("worktreePath = %q, want %q", step.WorktreePath, wt)
 	}
 	if _, err := os.Stat(wt); err != nil {
 		t.Errorf("Stat(%s) = %v, want the worktree to exist", wt, err)
 	}
-	if !hasBranch(t, filepath.Join(dir, "api"), "login-screen") {
+	if !hasBranch(t, clone, "login-screen") {
 		t.Error("the branch of the task does not exist in the repository")
 	}
 	// The session of the step ran in the worktree, so what the agent wrote is
@@ -818,7 +850,7 @@ func TestAStepRunsInAWorktreeOfItsRepository(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(wt, "hello.txt")); err != nil {
 		t.Errorf("Stat(hello.txt in the worktree) = %v, want the file the step wrote", err)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "api", "hello.txt")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(clone, "hello.txt")); !os.IsNotExist(err) {
 		t.Errorf("Stat(hello.txt in the repository) = %v, want the repository untouched", err)
 	}
 }
@@ -839,7 +871,7 @@ func TestTheConversationOfAStepIsItsOwn(t *testing.T) {
 func TestDiscardingAStepBlocksOnTheWorkItLeftBehind(t *testing.T) {
 	t.Parallel()
 
-	f, dir, id := plannedTask(t)
+	f, _, id := plannedTask(t)
 	f.waitReviewed(t, id, 1)
 
 	// The step wrote hello.txt, so its worktree is dirty and starting over
@@ -861,7 +893,7 @@ func TestDiscardingAStepBlocksOnTheWorkItLeftBehind(t *testing.T) {
 	f.waitReviewed(t, id, 1)
 
 	// The new session ran the step file again, in the cleaned worktree.
-	path := filepath.Join(worktree.Path(dir, "api", "login-screen"), "hello.txt")
+	path := filepath.Join(worktree.Path(f.dataDir, "dev", "web", "login-screen"), "hello.txt")
 	if _, err := os.Stat(path); err != nil {
 		t.Errorf("Stat(%s) = %v, want the file written again", path, err)
 	}
@@ -914,28 +946,25 @@ func TestStepOperationsReportWhatTheUserGotWrong(t *testing.T) {
 func TestPullRequestOperationsReportWhatTheUserGotWrong(t *testing.T) {
 	t.Parallel()
 
-	f, dir, id := plannedTask(t)
+	f, _, id := plannedTask(t)
 	f.waitStep(t, id, 1, "awaiting_review")
-	repoPath := filepath.Join(dir, "api")
 
-	// The task is still implementing: it has no repository of the PR stage,
-	// and none of these calls has anything to act on.
+	// The task is still implementing: it is not in the PR stage, and none of
+	// these calls has anything to act on.
 	tests := []struct {
 		name string
 		call func() error
 	}{
-		{"open a pull request", func() error { return f.tasks.OpenPR(id, repoPath, "A title", "A body") }},
-		{"approve a review", func() error { return f.tasks.ApproveRepo(id, repoPath) }},
-		{"review again", func() error { return f.tasks.ReviewAgain(id, repoPath) }},
-		{"discard a draft", func() error { return f.tasks.DiscardDraft(id, repoPath) }},
-		{"retry a repository", func() error { return f.tasks.RetryRepo(id, repoPath) }},
-		{"refresh a pull request", func() error { return f.tasks.RefreshPR(id, repoPath) }},
-		{"close a repository", func() error { return f.tasks.CloseRepo(id, repoPath) }},
-		{"open a repository in the editor", func() error { return f.tasks.OpenInEditor(id, repoPath) }},
-		{"open a file of a repository", func() error { return f.tasks.OpenFileInEditor(id, repoPath, "main.go") }},
+		{"open a pull request", func() error { return f.tasks.OpenPR(id, "A title", "A body") }},
+		{"approve a review", func() error { return f.tasks.ApprovePR(id) }},
+		{"review again", func() error { return f.tasks.ReviewAgain(id) }},
+		{"discard a draft", func() error { return f.tasks.DiscardDraft(id) }},
+		{"retry the stage", func() error { return f.tasks.RetryPR(id) }},
+		{"refresh a pull request", func() error { return f.tasks.RefreshPR(id) }},
+		{"close the task", func() error { return f.tasks.CloseTask(id) }},
 	}
 
-	const want = "This repository isn't part of the task."
+	const want = "The task isn't in the pull request stage."
 	for _, tt := range tests {
 		if err := tt.call(); err == nil || err.Error() != want {
 			t.Errorf("%s: error = %v, want %q", tt.name, err, want)
@@ -946,21 +975,21 @@ func TestPullRequestOperationsReportWhatTheUserGotWrong(t *testing.T) {
 	}
 }
 
-func TestOpenInEditorOpensTheWorktreeOfTheStep(t *testing.T) {
+func TestOpenInEditorOpensTheWorktreeOfTheTask(t *testing.T) {
 	t.Parallel()
 
 	f, _, id := createdTask(t)
-	if err := f.tasks.OpenInEditor(id, ""); err == nil || err.Error() != "The task has no step to run." {
-		t.Errorf("OpenInEditor() error = %v, want the missing step notice", err)
+	if err := f.tasks.OpenInEditor(id); err == nil || err.Error() != "The worktree doesn't exist yet." {
+		t.Errorf("OpenInEditor() error = %v, want the missing worktree notice", err)
 	}
 
-	planned, dir, plannedID := plannedTask(t)
+	planned, _, plannedID := plannedTask(t)
 	planned.waitStep(t, plannedID, 1, "awaiting_review")
 
-	if err := planned.tasks.OpenInEditor(plannedID, ""); err != nil {
+	if err := planned.tasks.OpenInEditor(plannedID); err != nil {
 		t.Fatalf("OpenInEditor(%s) = %v, want nil", plannedID, err)
 	}
-	want := []string{worktree.Path(dir, "api", "login-screen")}
+	want := []string{worktree.Path(planned.dataDir, "dev", "web", "login-screen")}
 	if diff := cmp.Diff(want, planned.editor.opened()); diff != "" {
 		t.Errorf("opened folders mismatch (-want +got):\n%s", diff)
 	}
@@ -969,12 +998,12 @@ func TestOpenInEditorOpensTheWorktreeOfTheStep(t *testing.T) {
 func TestApprovingAStepSendsTheCommitPromptToTheAgent(t *testing.T) {
 	t.Parallel()
 
-	f, dir, id := plannedTask(t)
+	f, _, id := plannedTask(t)
 	f.seedPrompt(t, prompts.StageCommit, "Commit what is staged of {{task_name}}.")
 	f.waitReviewed(t, id, 1)
 
 	// The step wrote hello.txt; staging it is the user reading it.
-	wt := worktree.Path(dir, "api", "login-screen")
+	wt := worktree.Path(f.dataDir, "dev", "web", "login-screen")
 	gittest.Run(t, wt, "add", "hello.txt")
 
 	step := f.waitStep(t, id, 1, "ready_to_approve")
@@ -1028,20 +1057,20 @@ func TestApprovingAStepThatIsNotWholeReadTellsTheUser(t *testing.T) {
 func TestOpenFileInEditorOpensTheFileInTheWindowOfTheWorktree(t *testing.T) {
 	t.Parallel()
 
-	f, dir, id := plannedTask(t)
+	f, _, id := plannedTask(t)
 	f.waitReviewed(t, id, 1)
 
-	if err := f.tasks.OpenFileInEditor(id, "", "hello.txt"); err != nil {
+	if err := f.tasks.OpenFileInEditor(id, "hello.txt"); err != nil {
 		t.Fatalf("OpenFileInEditor(%s) = %v, want nil", id, err)
 	}
-	wt := worktree.Path(dir, "api", "login-screen")
+	wt := worktree.Path(f.dataDir, "dev", "web", "login-screen")
 	want := []string{wt + " " + filepath.Join(wt, "hello.txt")}
 	if diff := cmp.Diff(want, f.editor.opened()); diff != "" {
 		t.Errorf("opened paths mismatch (-want +got):\n%s", diff)
 	}
 }
 
-func TestOpenFileInEditorRefusesWhatIsNotOfTheStep(t *testing.T) {
+func TestOpenFileInEditorRefusesWhatIsNotOfTheTask(t *testing.T) {
 	t.Parallel()
 
 	f, _, id := plannedTask(t)
@@ -1058,8 +1087,8 @@ func TestOpenFileInEditorRefusesWhatIsNotOfTheStep(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		err := f.tasks.OpenFileInEditor(id, "", tt.path)
-		if err == nil || err.Error() != "This file is not in the worktree of the step." {
+		err := f.tasks.OpenFileInEditor(id, tt.path)
+		if err == nil || err.Error() != "This file is not in the worktree of the task." {
 			t.Errorf("%s: error = %v, want the outside notice", tt.name, err)
 		}
 	}
@@ -1071,52 +1100,29 @@ func TestOpenFileInEditorRefusesWhatIsNotOfTheStep(t *testing.T) {
 	}
 }
 
-func TestOpenFileInEditorNeedsAStepWithAWorktree(t *testing.T) {
+func TestOpenFileInEditorNeedsAWorktree(t *testing.T) {
 	t.Parallel()
 
 	f, _, id := createdTask(t)
-	err := f.tasks.OpenFileInEditor(id, "", "hello.txt")
-	if err == nil || err.Error() != "The task has no step to run." {
-		t.Errorf("OpenFileInEditor() error = %v, want the missing step notice", err)
-	}
-}
-
-func TestOpenInEditorWaitsForTheWorktree(t *testing.T) {
-	t.Parallel()
-
-	f, _ := repoWorkspace(t)
-	f.seedPrompt(t, prompts.StagePRD, prdWriter)
-	f.seedPrompt(t, prompts.StageTechSpec, techSpecWriter)
-	// A step of a repository the workspace does not have never gets a
-	// worktree, which is what leaves the editor with nothing to open.
-	f.seedPrompt(t, prompts.StagePlan, writeBlock("{{steps_dir}}/1-first.md", stepFile(1, "First", "api")))
-
-	id, err := f.tasks.CreateTask(newTask("login-screen"))
-	if err != nil {
-		t.Fatalf("CreateTask() = %v, want nil", err)
-	}
-	f.waitStage(t, id, "implementation")
-
-	// The worktree is only registered once the preparation gets that far, so
-	// the answer before it does is that there is none yet.
-	if err := f.tasks.OpenInEditor(id, ""); err != nil && err.Error() != "The worktree doesn't exist yet." {
-		t.Errorf("OpenInEditor() error = %v, want the missing worktree notice", err)
+	err := f.tasks.OpenFileInEditor(id, "hello.txt")
+	if err == nil || err.Error() != "The worktree doesn't exist yet." {
+		t.Errorf("OpenFileInEditor() error = %v, want the missing worktree notice", err)
 	}
 }
 
 func TestDiscardingThePlanRemovesTheWorktrees(t *testing.T) {
 	t.Parallel()
 
-	f, dir, id := plannedTask(t)
+	f, clone, id := plannedTask(t)
 	f.waitStep(t, id, 1, "awaiting_review")
-	wt := worktree.Path(dir, "api", "login-screen")
+	wt := worktree.Path(f.dataDir, "dev", "web", "login-screen")
 
 	if err := f.tasks.DiscardStage(id, "plan"); err != nil {
 		t.Fatalf("DiscardStage(%s, plan) = %v, want nil", id, err)
 	}
 	f.waitStage(t, id, "plan")
 
-	assertWorktreeGone(t, wt, filepath.Join(dir, "api"))
+	assertWorktreeGone(t, wt, clone)
 	if steps := f.taskOf(t, id).Steps; len(steps) != 0 {
 		t.Errorf("steps = %+v, want the plan thrown away", steps)
 	}
@@ -1125,31 +1131,27 @@ func TestDiscardingThePlanRemovesTheWorktrees(t *testing.T) {
 func TestDeleteTaskRemovesTheWorktrees(t *testing.T) {
 	t.Parallel()
 
-	f, dir, id := plannedTask(t)
+	f, clone, id := plannedTask(t)
 	f.waitStep(t, id, 1, "awaiting_review")
-	wt := worktree.Path(dir, "api", "login-screen")
+	wt := worktree.Path(f.dataDir, "dev", "web", "login-screen")
 
 	result, err := f.tasks.DeleteTask(id)
 	if err != nil {
 		t.Fatalf("DeleteTask(%s) = %v, want nil", id, err)
 	}
-	// The frontend maps over what stayed on disk without checking for null.
-	if result.Leftovers == nil {
-		t.Error("leftovers = nil, want an empty slice")
+	if result.Leftover != nil {
+		t.Errorf("leftover = %+v, want nothing left behind", result.Leftover)
 	}
-	if len(result.Leftovers) != 0 {
-		t.Errorf("leftovers = %+v, want nothing left behind", result.Leftovers)
-	}
-	if tasks := f.workspace.GetState().Tasks; len(tasks) != 0 {
+	if tasks := f.state.GetState().Tasks; len(tasks) != 0 {
 		t.Errorf("state has %d tasks, want none", len(tasks))
 	}
-	assertWorktreeGone(t, wt, filepath.Join(dir, "api"))
+	assertWorktreeGone(t, wt, clone)
 }
 
 func TestPreviewDeleteSaysWhatTheDeletionWouldDestroy(t *testing.T) {
 	t.Parallel()
 
-	f, dir, id := plannedTask(t)
+	f, _, id := plannedTask(t)
 	// The preview reads the worktree, so the step has to have written to it.
 	f.waitReviewed(t, id, 1)
 
@@ -1161,19 +1163,20 @@ func TestPreviewDeleteSaysWhatTheDeletionWouldDestroy(t *testing.T) {
 	if !preview.SessionRunning {
 		t.Error("sessionRunning = false, want the conversation of the step counted")
 	}
-	if len(preview.Worktrees) != 1 || preview.Worktrees[0].Path != worktree.Path(dir, "api", "login-screen") {
-		t.Errorf("worktrees = %+v, want the one of the step", preview.Worktrees)
+	want := worktree.Path(f.dataDir, "dev", "web", "login-screen")
+	if preview.Worktree == nil || preview.Worktree.Path != want {
+		t.Errorf("worktree = %+v, want the one of the task", preview.Worktree)
 	}
 	// The step wrote a file the user has not committed yet.
-	if !preview.Worktrees[0].Dirty || preview.Worktrees[0].Files == 0 {
-		t.Errorf("worktree = %+v, want the work it holds counted", preview.Worktrees[0])
+	if !preview.Worktree.Dirty || preview.Worktree.Files == 0 {
+		t.Errorf("worktree = %+v, want the work it holds counted", preview.Worktree)
 	}
-	if len(preview.Branches) != 1 || preview.Branches[0].Name != "login-screen" {
-		t.Errorf("branches = %+v, want the branch of the task", preview.Branches)
+	if preview.Branch == nil || preview.Branch.Name != "login-screen" {
+		t.Errorf("branch = %+v, want the branch of the task", preview.Branch)
 	}
 	// The task never reached the pull request stage.
-	if len(preview.PRs) != 0 {
-		t.Errorf("pull requests = %+v, want none", preview.PRs)
+	if preview.PR != nil {
+		t.Errorf("pull request = %+v, want none", preview.PR)
 	}
 }
 
@@ -1200,11 +1203,11 @@ func hasBranch(t *testing.T, repo, branch string) bool {
 func TestInvalidPlanIsCorrected(t *testing.T) {
 	t.Parallel()
 
-	f, dir := repoWorkspace(t)
+	f, _ := registeredClone(t)
 	f.seedPrompt(t, prompts.StagePRD, prdWriter)
 	f.seedPrompt(t, prompts.StageTechSpec, techSpecWriter)
-	f.seedPrompt(t, prompts.StagePlan, writeBlock("{{steps_dir}}/1-first.md", stepFile(1, "First", "cli")))
-	f.fixStep(filepath.Join(task.ArtifactsDir(f.dataDir, dir, "login-screen"), "steps", "1-first.md"), "api")
+	f.seedPrompt(t, prompts.StagePlan, writeBlock("{{steps_dir}}/1-first.md", "Just a paragraph.\n"))
+	f.fixStep(filepath.Join(task.ArtifactsDir(f.dataDir, "dev", "web", "login-screen"), "steps", "1-first.md"))
 
 	id, err := f.tasks.CreateTask(newTask("login-screen"))
 	if err != nil {
@@ -1223,7 +1226,7 @@ func TestInvalidPlanIsCorrected(t *testing.T) {
 func TestBackToPRDReopensTheConversation(t *testing.T) {
 	t.Parallel()
 
-	f, dir, id := taskWithPRD(t)
+	f, _, id := taskWithPRD(t)
 	f.waitStage(t, id, "tech_spec")
 
 	if err := f.tasks.BackToStage(id, "prd"); err != nil {
@@ -1252,7 +1255,7 @@ func TestBackToPRDReopensTheConversation(t *testing.T) {
 	}
 	f.waitStage(t, id, "tech_spec")
 
-	path := filepath.Join(task.ArtifactsDir(f.dataDir, dir, "login-screen"), "PRD.md")
+	path := filepath.Join(task.ArtifactsDir(f.dataDir, "dev", "web", "login-screen"), "PRD.md")
 	if _, err := os.Stat(path); err != nil {
 		t.Errorf("Stat(%s) = %v, want the PRD to be kept", path, err)
 	}
@@ -1261,7 +1264,7 @@ func TestBackToPRDReopensTheConversation(t *testing.T) {
 func TestDiscardRestartsTheStage(t *testing.T) {
 	t.Parallel()
 
-	f, dir, id := taskWithPRD(t)
+	f, _, id := taskWithPRD(t)
 	f.waitStage(t, id, "tech_spec")
 
 	if err := f.tasks.DiscardStage(id, "prd"); err != nil {
@@ -1272,7 +1275,7 @@ func TestDiscardRestartsTheStage(t *testing.T) {
 	if summary := f.taskOf(t, id); summary.HasPRD || summary.Revisiting {
 		t.Errorf("task = %+v, want the PRD thrown away and no revisit", summary)
 	}
-	path := filepath.Join(task.ArtifactsDir(f.dataDir, dir, "login-screen"), "PRD.md")
+	path := filepath.Join(task.ArtifactsDir(f.dataDir, "dev", "web", "login-screen"), "PRD.md")
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Errorf("Stat(%s) = %v, want the PRD to be gone", path, err)
 	}
@@ -1333,7 +1336,7 @@ func taskWithPRD(t *testing.T) (*fixture, string, string) {
 	t.Helper()
 
 	f, dir, id := createdTask(t)
-	path := filepath.Join(task.ArtifactsDir(f.dataDir, dir, "login-screen"), "PRD.md")
+	path := filepath.Join(task.ArtifactsDir(f.dataDir, "dev", "web", "login-screen"), "PRD.md")
 	if err := os.WriteFile(path, []byte("# PRD\n"), 0o600); err != nil {
 		t.Fatalf("WriteFile(%s) = %v, want nil", path, err)
 	}

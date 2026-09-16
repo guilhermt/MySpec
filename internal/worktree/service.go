@@ -2,18 +2,15 @@ package worktree
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
-	"slices"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/guilhermt/myspec/internal/git"
+	"github.com/guilhermt/myspec/internal/repository"
 	"github.com/guilhermt/myspec/internal/task"
 )
 
@@ -26,22 +23,24 @@ const remote = "origin"
 
 // Deps are what Service needs from the outside.
 type Deps struct {
-	Git   *git.Runner
-	Store Store
-	Log   *slog.Logger
-	Now   func() time.Time // defaults to time.Now
+	Git     *git.Runner
+	Store   Store
+	DataDir string
+	Log     *slog.Logger
+	Now     func() time.Time // defaults to time.Now
 }
 
-// Service is the registry of the worktrees of the open workspace and the
-// policy of their life cycle. Git runs one command at a time per repository.
+// Service is the registry of the worktrees of the tasks and the policy of
+// their life cycle. Git runs one command at a time per repository.
 type Service struct {
-	git   *git.Runner
-	store Store
-	log   *slog.Logger
-	now   func() time.Time
+	git     *git.Runner
+	store   Store
+	dataDir string
+	log     *slog.Logger
+	now     func() time.Time
 
 	mu     sync.Mutex
-	items  map[string][]Worktree  // by task id
+	items  map[string]Worktree    // by task id
 	repoMu map[string]*sync.Mutex // by repository path
 }
 
@@ -56,12 +55,13 @@ func New(deps Deps) *Service {
 		log = slog.New(slog.DiscardHandler)
 	}
 	return &Service{
-		git:    deps.Git,
-		store:  deps.Store,
-		log:    log,
-		now:    now,
-		items:  map[string][]Worktree{},
-		repoMu: map[string]*sync.Mutex{},
+		git:     deps.Git,
+		store:   deps.Store,
+		dataDir: deps.DataDir,
+		log:     log,
+		now:     now,
+		items:   map[string]Worktree{},
+		repoMu:  map[string]*sync.Mutex{},
 	}
 }
 
@@ -73,9 +73,9 @@ func (s *Service) Sync(ctx context.Context, taskIDs []string) error {
 		return fmt.Errorf("list worktrees: %w", err)
 	}
 
-	items := make(map[string][]Worktree, len(taskIDs))
+	items := make(map[string]Worktree, len(taskIDs))
 	for _, wt := range list {
-		items[wt.TaskID] = append(items[wt.TaskID], wt)
+		items[wt.TaskID] = wt
 	}
 
 	s.mu.Lock()
@@ -84,40 +84,26 @@ func (s *Service) Sync(ctx context.Context, taskIDs []string) error {
 	return nil
 }
 
-// Get is the registered worktree of a task in a repository.
-func (s *Service) Get(taskID, repoPath string) (Worktree, bool) {
+// Get is the registered worktree of a task.
+func (s *Service) Get(taskID string) (Worktree, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	for _, wt := range s.items[taskID] {
-		if wt.RepoPath == repoPath {
-			return wt, true
-		}
-	}
-	return Worktree{}, false
+	wt, ok := s.items[taskID]
+	return wt, ok
 }
 
-// List is every registered worktree of a task, by repository path.
-func (s *Service) List(taskID string) []Worktree {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	list := slices.Clone(s.items[taskID])
-	slices.SortFunc(list, func(a, b Worktree) int { return strings.Compare(a.RepoPath, b.RepoPath) })
-	return list
-}
-
-// Ensure returns the worktree of a task in a repository, creating it when the
-// task has none there. onPhase, which may be nil, hears every phase of a
-// creation. It never fetches for a worktree that already exists.
+// Ensure returns the worktree of a task, creating it when the task has none.
+// onPhase, which may be nil, hears every phase of a creation. It never fetches
+// for a worktree that already exists.
 func (s *Service) Ensure(
-	ctx context.Context, t task.Task, repo task.Repository, onPhase func(Phase),
+	ctx context.Context, t task.Task, repo repository.Repository, onPhase func(Phase),
 ) (Worktree, error) {
 	if onPhase == nil {
 		onPhase = func(Phase) {}
 	}
 
-	registered, found := s.Get(t.ID, repo.Path)
+	registered, found := s.Get(t.ID)
 	if found {
 		if _, err := os.Stat(registered.Path); err == nil {
 			return registered, nil
@@ -148,7 +134,7 @@ func (s *Service) Ensure(
 		return Worktree{}, err
 	}
 
-	path := Path(t.WorkspacePath, repo.Rel, t.Name)
+	path := Path(s.dataDir, repo.Owner, repo.Name, t.Name)
 	// Nothing found here is reused or deleted: the app only owns what it made.
 	if _, err = os.Lstat(path); err == nil {
 		return Worktree{}, fmt.Errorf("%w: %s", ErrPathExists, path)
@@ -165,13 +151,6 @@ func (s *Service) Ensure(
 
 	if err = os.MkdirAll(filepath.Dir(path), dirPerm); err != nil {
 		return Worktree{}, fmt.Errorf("create worktree directory: %w", err)
-	}
-	if repo.Rel == "." {
-		// The worktrees of a root repository live inside it, so it is told to
-		// ignore them. It is the only thing the app writes in a user repository.
-		if err = s.exclude(ctx, repo.Path); err != nil {
-			s.log.Warn("exclude update failed", "repo", repo.Path, "error", err)
-		}
 	}
 
 	wt := Worktree{
@@ -198,7 +177,7 @@ func (s *Service) Ensure(
 
 	s.remember(wt)
 	s.log.Info("worktree created",
-		"task", t.Name, "repo", repo.Path, "path", path, "branch", t.Name, "base", base)
+		"task", t.Name, "repository", repo.FullName(), "path", path, "branch", t.Name, "base", base)
 	return wt, nil
 }
 
@@ -256,16 +235,6 @@ func (s *Service) Base(ctx context.Context, wt Worktree) (string, error) {
 	return s.base(ctx, wt.RepoPath)
 }
 
-// Ahead is how many commits the worktree branch has past base.
-func (s *Service) Ahead(ctx context.Context, wt Worktree, base string) (int, error) {
-	unlock := s.lockRepo(wt.RepoPath)
-	defer unlock()
-
-	return ask(ctx, CommandTimeout, func(ctx context.Context) (int, error) {
-		return s.git.CountCommits(ctx, wt.Path, base, wt.Branch)
-	})
-}
-
 // Merged reports whether the branch of a worktree is already part of base.
 func (s *Service) Merged(ctx context.Context, wt Worktree, base string) (bool, error) {
 	unlock := s.lockRepo(wt.RepoPath)
@@ -307,19 +276,14 @@ func (s *Service) Clean(ctx context.Context, wt Worktree) error {
 	return nil
 }
 
-// RemoveAll removes every worktree of a task with its branch. It stops at the
-// first failure, with what git said, leaving the rest untouched.
-func (s *Service) RemoveAll(ctx context.Context, taskID string) error {
-	for _, wt := range s.List(taskID) {
-		if err := s.remove(ctx, wt); err != nil {
-			return err
-		}
+// Remove removes the worktree of a task with its branch, with what git said
+// when it refuses. A task without one has nothing to remove.
+func (s *Service) Remove(ctx context.Context, taskID string) error {
+	wt, ok := s.Get(taskID)
+	if !ok {
+		return nil
 	}
-	return nil
-}
 
-// remove takes one worktree down, under the mutex of its repository.
-func (s *Service) remove(ctx context.Context, wt Worktree) error {
 	unlock := s.lockRepo(wt.RepoPath)
 	defer unlock()
 
@@ -362,7 +326,7 @@ func (s *Service) discard(ctx context.Context, wt Worktree) error {
 		}
 	}
 
-	if err = s.store.Delete(ctx, wt.TaskID, wt.RepoPath); err != nil {
+	if err = s.store.Delete(ctx, wt.TaskID); err != nil {
 		return fmt.Errorf("delete worktree %s: %w", wt.Path, err)
 	}
 	s.forget(wt)
@@ -398,61 +362,18 @@ func (s *Service) base(ctx context.Context, repoPath string) (string, error) {
 	return "", ErrNoBaseBranch
 }
 
-// exclude tells a repository that is itself the workspace root to ignore the
-// folder its worktrees live in, once.
-func (s *Service) exclude(ctx context.Context, repoPath string) error {
-	path, err := ask(ctx, CommandTimeout, func(ctx context.Context) (string, error) {
-		return s.git.ExcludePath(ctx, repoPath)
-	})
-	if err != nil {
-		return err
-	}
-	if err = os.MkdirAll(filepath.Dir(path), dirPerm); err != nil {
-		return fmt.Errorf("create exclude directory: %w", err)
-	}
-
-	content, err := os.ReadFile(path)
-	if err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return fmt.Errorf("read %s: %w", path, err)
-	}
-	for line := range strings.SplitSeq(string(content), "\n") {
-		if strings.TrimSpace(line) == excludeLine {
-			return nil
-		}
-	}
-
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, filePerm)
-	if err != nil {
-		return fmt.Errorf("open %s: %w", path, err)
-	}
-	defer func() { _ = file.Close() }()
-
-	if _, err = file.WriteString("\n# MySpec worktrees\n" + excludeLine + "\n"); err != nil {
-		return fmt.Errorf("write %s: %w", path, err)
-	}
-	return nil
-}
-
 // remember puts a worktree in the cache.
 func (s *Service) remember(wt Worktree) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.items[wt.TaskID] = append(s.items[wt.TaskID], wt)
+	s.items[wt.TaskID] = wt
 }
 
 // forget takes a worktree out of the cache.
 func (s *Service) forget(wt Worktree) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
-	list := slices.DeleteFunc(s.items[wt.TaskID], func(item Worktree) bool {
-		return item.RepoPath == wt.RepoPath
-	})
-	if len(list) == 0 {
-		delete(s.items, wt.TaskID)
-		return
-	}
-	s.items[wt.TaskID] = list
+	delete(s.items, wt.TaskID)
 }
 
 // lockRepo holds the mutex of a repository, so that two tasks never run git in

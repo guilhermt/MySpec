@@ -126,9 +126,8 @@ func TestACommittedStepIsDoneWithItsCommit(t *testing.T) {
 	}
 
 	// The step that runs next is the first one without a commit.
-	current, ok := f.service.CurrentStep("task-1")
-	if !ok || current.Step.Number != 2 {
-		t.Errorf("CurrentStep() = %+v, %v, want step 2", current, ok)
+	if next := f.stepState(t, "task-1", 2); next.Status == flow.StepDone {
+		t.Errorf("step 2 = %+v, want the step that runs next", next)
 	}
 }
 
@@ -181,7 +180,7 @@ func TestTheWorktreeIsWatchedOnlyWhileItsNumbersMatter(t *testing.T) {
 	// only once the agent stops.
 	f.service.Check("task-1")
 	waitFor(t, "the worktree of task-1 to be watched", func() bool {
-		active, watched := f.reviews.activeOf(reviewKey("task-1", 0))
+		active, watched := f.reviews.activeOf("task-1")
 		return watched && !active
 	})
 
@@ -189,7 +188,7 @@ func TestTheWorktreeIsWatchedOnlyWhileItsNumbersMatter(t *testing.T) {
 	f.sessions.goIdle("task-1")
 	f.service.Check("task-1")
 	waitFor(t, "the review of task-1 to matter", func() bool {
-		active, _ := f.reviews.activeOf(reviewKey("task-1", 0))
+		active, _ := f.reviews.activeOf("task-1")
 		return active
 	})
 }
@@ -206,8 +205,8 @@ func TestABlockedStepIsNotTheUsersToReview(t *testing.T) {
 
 	f.service.Check("task-1")
 	waitFor(t, "the review of task-1 to be forgotten", func() bool {
-		_, watched := f.reviews.activeOf(reviewKey("task-1", 0))
-		return !watched && slices.Contains(f.reviews.reviewCalls(), "forget:task-1:api")
+		_, watched := f.reviews.activeOf("task-1")
+		return !watched && slices.Contains(f.reviews.reviewCalls(), "forget:task-1")
 	})
 }
 
@@ -220,11 +219,8 @@ func TestATaskWithEveryStepCommittedIsWatchedNoMore(t *testing.T) {
 
 	f.service.Check("task-1")
 	waitFor(t, "the review of task-1 to be forgotten", func() bool {
-		return slices.Contains(f.reviews.reviewCalls(), "forget-task:task-1")
+		return slices.Contains(f.reviews.reviewCalls(), "forget:task-1")
 	})
-	if _, ok := f.service.CurrentStep("task-1"); ok {
-		t.Error("CurrentStep() found a step, want none: every step is committed")
-	}
 }
 
 func TestTearingDownTheStepsForgetsTheReview(t *testing.T) {
@@ -238,12 +234,12 @@ func TestTearingDownTheStepsForgetsTheReview(t *testing.T) {
 	if _, err := f.service.Delete(t.Context(), "task-1"); err != nil {
 		t.Fatalf("Delete() = %v, want nil", err)
 	}
-	if !slices.Contains(f.reviews.reviewCalls(), "forget-task:task-1") {
+	if !slices.Contains(f.reviews.reviewCalls(), "forget:task-1") {
 		t.Errorf("review calls = %q, want the review forgotten", f.reviews.reviewCalls())
 	}
 }
 
-func TestTheReviewOfAStepIsKeyedByItsRepository(t *testing.T) {
+func TestTheReviewOfAStepIsKeyedByItsTask(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
@@ -252,9 +248,8 @@ func TestTheReviewOfAStepIsKeyedByItsRepository(t *testing.T) {
 		t.Fatalf("ApproveStep() = %v, want nil", err)
 	}
 
-	// The agent commits and the step after it, of another repository, takes
-	// over: what is watched is the worktree of that repository, under a key of
-	// its own.
+	// The agent commits and the step after it takes over: the worktree of the
+	// task goes on being watched, under the id of the task.
 	f.reviews.setSnapshot(review.Snapshot{Head: commitSHA})
 	f.sessions.goIdle("task-1")
 	f.service.Check("task-1")
@@ -262,11 +257,8 @@ func TestTheReviewOfAStepIsKeyedByItsRepository(t *testing.T) {
 	f.waitStepSession(t, "task-1", 2)
 	f.service.Check("task-1")
 
-	waitFor(t, "the worktree of the second repository to be watched", func() bool {
-		_, watched := f.reviews.activeOf(reviewKey("task-1", 1))
+	waitFor(t, "the worktree of the task to be watched again", func() bool {
+		_, watched := f.reviews.activeOf("task-1")
 		return watched
 	})
-	if _, watched := f.reviews.activeOf(reviewKey("task-1", 0)); watched {
-		t.Error("the worktree of the first repository is still watched, want it forgotten with its step")
-	}
 }

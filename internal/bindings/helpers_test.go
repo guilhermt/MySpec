@@ -22,13 +22,13 @@ import (
 	"github.com/guilhermt/myspec/internal/git/gittest"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
+	"github.com/guilhermt/myspec/internal/repository"
 	"github.com/guilhermt/myspec/internal/review"
 	"github.com/guilhermt/myspec/internal/reviewmode"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/store"
 	"github.com/guilhermt/myspec/internal/task"
 	"github.com/guilhermt/myspec/internal/theme"
-	"github.com/guilhermt/myspec/internal/workspace"
 	"github.com/guilhermt/myspec/internal/worktree"
 )
 
@@ -40,6 +40,9 @@ func TestMain(m *testing.M) {
 	}
 	os.Exit(m.Run())
 }
+
+// testRepoID is the id of the repository every fixture registers.
+const testRepoID = "repo-1"
 
 // The bounds a fixture puts on the fake CLI, which runs as another process.
 const (
@@ -117,7 +120,7 @@ func (e *fakeEditor) opened() []string {
 }
 
 // fakeSituationStore stands in for the table of situations. It remembers
-// nothing, which is all a service that never loads a workspace needs.
+// nothing, which is all a service that never loads a task needs.
 type fakeSituationStore struct{}
 
 func (fakeSituationStore) ListByTasks(context.Context, []string) ([]attention.Record, error) {
@@ -151,43 +154,65 @@ func (c *fakeClock) Now() time.Time { return c.now }
 
 // fakePicker stands in for the native folder chooser.
 type fakePicker struct {
+	mu      sync.Mutex
 	path    string
 	ok      bool
 	err     error
+	title   string // what the service put on the dialog
 	startIn string // what the service asked the dialog to open at
 	calls   int
 }
 
-func (p *fakePicker) PickFolder(startIn string) (string, bool, error) {
-	p.startIn = startIn
+func (p *fakePicker) PickFolder(title, startIn string) (string, bool, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	p.title, p.startIn = title, startIn
 	p.calls++
 	return p.path, p.ok, p.err
 }
 
+// answer is what the picker hands back from now on.
+func (p *fakePicker) answer(path string, ok bool, err error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	p.path, p.ok, p.err = path, ok, err
+}
+
+// asked is the title, the starting folder and how many times the picker was
+// opened.
+func (p *fakePicker) asked() (title, startIn string, calls int) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	return p.title, p.startIn, p.calls
+}
+
 // fixture wires the services the way internal/app does, over an in-memory
-// database and a scanner that answers with a fixed list.
+// database and a folder picker the test answers for.
 type fixture struct {
-	workspace   *bindings.WorkspaceService
-	settings    *bindings.SettingsService
-	tasks       *bindings.TaskService
-	ws          *workspace.Service
-	theme       *theme.Service
-	models      *models.Service
-	reviewModes *reviewmode.Service
-	store       *store.Store
-	taskSvc     *task.Service
-	sessions    *session.Service
-	worktrees   *worktree.Service
-	reviews     *review.Service
-	flow        *flow.Service
-	dataDir     string
-	picker      *fakePicker
-	editor      *fakeEditor
-	logs        *syncBuffer
+	state        *bindings.StateService
+	repoService  *bindings.RepositoryService
+	settings     *bindings.SettingsService
+	tasks        *bindings.TaskService
+	repositories *repository.Service
+	theme        *theme.Service
+	models       *models.Service
+	reviewModes  *reviewmode.Service
+	store        *store.Store
+	taskSvc      *task.Service
+	sessions     *session.Service
+	worktrees    *worktree.Service
+	reviews      *review.Service
+	flow         *flow.Service
+	dataDir      string
+	picker       *fakePicker
+	editor       *fakeEditor
+	logs         *syncBuffer
 
 	mu          sync.Mutex
-	repos       []string
-	scanErr     error
+	identities  map[string]repository.Identity // by clone path
 	fakeEnv     []string
 	events      []bindings.TranscriptEvent
 	corrections map[string]int // the most the session of a task ever counted
@@ -210,6 +235,7 @@ func newFixture(t *testing.T) *fixture {
 		picker:      &fakePicker{},
 		editor:      &fakeEditor{},
 		logs:        logs,
+		identities:  map[string]repository.Identity{},
 		corrections: map[string]int{},
 	}
 
@@ -217,11 +243,6 @@ func newFixture(t *testing.T) *fixture {
 	if err != nil {
 		t.Fatalf("theme.New() = %v, want nil", err)
 	}
-	f.ws = workspace.New(workspace.Deps{
-		Recents: st.Recents,
-		Scan:    f.scan,
-		Log:     log,
-	})
 
 	f.dataDir = t.TempDir()
 	if err = prompts.Prepare(f.dataDir, log); err != nil {
@@ -243,11 +264,19 @@ func newFixture(t *testing.T) *fixture {
 		defer cancel()
 		f.sessions.Shutdown(ctx)
 	})
+	f.repositories = repository.New(repository.Deps{
+		Store:    st.Repositories,
+		Settings: st.Settings,
+		Identify: f.identify,
+		Counts:   func(id string) (int, int) { return f.taskSvc.Counts(id) },
+		Log:      log,
+		NewID:    func() string { return testRepoID },
+	})
 	f.taskSvc, err = task.New(task.Deps{
-		Repo:    st.Tasks,
-		DataDir: f.dataDir,
-		Log:     log,
-		Repos:   f.repoPaths,
+		Repo:         st.Tasks,
+		DataDir:      f.dataDir,
+		Log:          log,
+		Repositories: f.repositories.Get,
 		OnArtifact: func(t task.Task, changes []task.Change) {
 			key := session.Key{TaskID: t.ID, Stage: string(t.Stage)}
 			for _, c := range changes {
@@ -262,9 +291,10 @@ func newFixture(t *testing.T) *fixture {
 	t.Cleanup(func() { _ = f.taskSvc.Close() })
 
 	f.worktrees = worktree.New(worktree.Deps{
-		Git:   git.New(git.Deps{Log: log, Env: gittest.Env(t)}),
-		Store: st.Worktrees,
-		Log:   log,
+		Git:     git.New(git.Deps{Log: log, Env: gittest.Env(t)}),
+		Store:   st.Worktrees,
+		DataDir: f.dataDir,
+		Log:     log,
 	})
 	f.reviews, err = review.New(review.Deps{Worktrees: f.worktrees, Log: log})
 	if err != nil {
@@ -273,11 +303,12 @@ func newFixture(t *testing.T) *fixture {
 	t.Cleanup(func() { _ = f.reviews.Close() })
 
 	f.flow = flow.New(flow.Deps{
-		Tasks:     f.taskSvc,
-		Sessions:  f.sessions,
-		Worktrees: f.worktrees,
-		Review:    f.reviews,
-		Log:       log,
+		Tasks:        f.taskSvc,
+		Sessions:     f.sessions,
+		Worktrees:    f.worktrees,
+		Repositories: f.repositories,
+		Review:       f.reviews,
+		Log:          log,
 		RenderPrompt: func(stage prompts.Stage, vars prompts.Vars) (string, error) {
 			return prompts.Render(f.dataDir, stage, vars)
 		},
@@ -294,10 +325,34 @@ func newFixture(t *testing.T) *fixture {
 		t.Fatalf("reviewmode.New() = %v, want nil", err)
 	}
 
-	f.workspace = bindings.NewWorkspaceService(f.ws, f.snapshot, f.picker, log)
+	f.state = bindings.NewStateService(f.snapshot)
+	f.repoService = bindings.NewRepositoryService(f.repositories, f.picker, log)
 	f.settings = bindings.NewSettingsService(f.theme, f.models, f.reviewModes, f.dataDir, log)
-	f.tasks = bindings.NewTaskService(f.taskSvc, f.sessions, f.flow, f.models, f.reviewModes, f.editor.open, log)
+	f.tasks = bindings.NewTaskService(
+		f.taskSvc, f.sessions, f.flow, f.models, f.reviewModes, f.repositories, f.editor.open, log,
+	)
 	return f
+}
+
+// identify is the Identifier of the fixture: a clone the test registered
+// answers with its identity, and anything else is refused as not a clone.
+func (f *fixture) identify(_ context.Context, path string) (repository.Identity, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	identity, ok := f.identities[path]
+	if !ok {
+		return repository.Identity{}, &repository.Refusal{Reason: repository.ReasonNotGitRoot, Path: path}
+	}
+	return identity, nil
+}
+
+// setIdentity says what the clone at path is a clone of.
+func (f *fixture) setIdentity(path string, identity repository.Identity) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.identities[path] = identity
 }
 
 // onState is what internal/app does on every session change: it publishes the
@@ -352,16 +407,13 @@ func (f *fixture) env() []string {
 	return slices.Clone(f.fakeEnv)
 }
 
-// fixStep makes the fake rewrite path as a valid step of repo from its second
-// turn on, which is how a test drives the correction of a plan.
-func (f *fixture) fixStep(path, repo string) {
+// fixStep makes the fake rewrite path as a valid step from its second turn on,
+// which is how a test drives the correction of a plan.
+func (f *fixture) fixStep(path string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	f.fakeEnv = []string{
-		claudetest.EnvWriterFix + "=" + path,
-		claudetest.EnvWriterRepo + "=" + repo,
-	}
+	f.fakeEnv = []string{claudetest.EnvWriterFix + "=" + path}
 }
 
 // seedPrompt replaces the prompt of a stage with one the fake CLI acts on, as
@@ -439,16 +491,35 @@ func (f *fixture) waitStepWhere(
 	return bindings.Step{}
 }
 
-// open opens dir as the workspace and loads its tasks, the way internal/app
-// does on every workspace change.
-func (f *fixture) open(t *testing.T, dir string) {
+// register registers the clone at dir as dev/web and loads what the app loads
+// at startup. It answers with the id of the repository.
+func (f *fixture) register(t *testing.T, dir string) string {
 	t.Helper()
 
-	if err := f.ws.Open(t.Context(), dir); err != nil {
-		t.Fatalf("Open(%s) = %v, want nil", dir, err)
+	// The app checks the clone before it acts on it, so a folder the test did
+	// not clone is given the .git directory that makes it one.
+	if err := os.MkdirAll(filepath.Join(dir, ".git"), 0o750); err != nil {
+		t.Fatalf("MkdirAll(%s) = %v, want nil", dir, err)
 	}
-	if err := f.taskSvc.Sync(t.Context(), dir); err != nil {
-		t.Fatalf("Sync(%s) = %v, want nil", dir, err)
+	f.setIdentity(dir, repository.Identity{Owner: "dev", Name: "web"})
+	repo, err := f.repositories.Add(t.Context(), dir)
+	if err != nil {
+		t.Fatalf("Add(%s) = %v, want nil", dir, err)
+	}
+	f.load(t)
+	return repo.ID
+}
+
+// load reads the repositories and the tasks, the way internal/app does at
+// startup.
+func (f *fixture) load(t *testing.T) {
+	t.Helper()
+
+	if err := f.repositories.Sync(t.Context()); err != nil {
+		t.Fatalf("repositories.Sync() = %v, want nil", err)
+	}
+	if err := f.taskSvc.Sync(t.Context()); err != nil {
+		t.Fatalf("tasks.Sync() = %v, want nil", err)
 	}
 	loaded := f.taskSvc.List()
 	ids := make([]string, len(loaded))
@@ -459,21 +530,6 @@ func (f *fixture) open(t *testing.T, dir string) {
 		t.Fatalf("worktrees.Sync() = %v, want nil", err)
 	}
 	f.flow.Sync(t.Context())
-}
-
-// repoPaths are the repositories of the open workspace, as internal/app gives
-// them to the task service.
-func (f *fixture) repoPaths() []string {
-	current := f.ws.Current()
-	if current == nil {
-		return nil
-	}
-
-	paths := make([]string, len(current.Repos))
-	for i, repo := range current.Repos {
-		paths[i] = repo.Path
-	}
-	return paths
 }
 
 // taskOf returns the task with the given id from the current state, failing
@@ -506,7 +562,7 @@ func (f *fixture) waitTranscript(t *testing.T, id, stage string) bindings.Transc
 func (f *fixture) taskOf(t *testing.T, id string) bindings.TaskSummary {
 	t.Helper()
 
-	for _, summary := range f.workspace.GetState().Tasks {
+	for _, summary := range f.state.GetState().Tasks {
 		if summary.ID == id {
 			return summary
 		}
@@ -547,20 +603,6 @@ func (f *fixture) waitContinue(t *testing.T, id string) {
 	t.Fatalf("task %s never became ready to continue", id)
 }
 
-// scan is the Scanner the workspace service uses.
-func (f *fixture) scan(string) ([]string, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return f.repos, f.scanErr
-}
-
-// setScan makes the next scan answer with repos, or fail with err.
-func (f *fixture) setScan(repos []string, err error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.repos, f.scanErr = repos, err
-}
-
 // taskArtifacts is what the task service last saw in a task's folder, the way
 // internal/app reads it for the snapshot.
 func (f *fixture) taskArtifacts(id string) task.Artifacts {
@@ -570,22 +612,22 @@ func (f *fixture) taskArtifacts(id string) task.Artifacts {
 
 // snapshot is the same state internal/app publishes.
 func (f *fixture) snapshot() bindings.State {
-	recents, err := f.ws.Recents(context.Background())
-	if err != nil {
-		recents = nil
-	}
 	return bindings.State{
-		Workspace:         bindings.FromWorkspace(f.ws.Current()),
-		Recents:           bindings.FromRecents(recents),
+		Repositories: bindings.FromRepositories(
+			f.repositories.List(), f.repositories.Missing, f.taskSvc.Counts,
+		),
+		RepositoryFilter:  f.repositories.Filter(),
 		Theme:             string(f.theme.Preference()),
 		SystemDark:        f.theme.SystemDark(),
 		ModelDefaults:     bindings.FromModelSet(f.models.Defaults()),
 		ReviewModeDefault: string(f.reviewModes.Default()),
-		Notice:            bindings.FromNotice(f.ws.Notice()),
 		Tasks: bindings.FromTasks(
-			f.taskSvc.List(), f.taskArtifacts, f.flow.Steps, f.flow.Repos, f.sessions.Summaries(), nil,
+			f.taskSvc.List(), f.taskArtifacts, f.flow.Steps, f.flow.PullRequest,
+			f.repositories.Get, f.sessions.Summaries(), nil,
 		),
-		History: bindings.FromArchived(f.taskSvc.ListArchived(), f.taskArtifacts, f.taskSvc.PRRuns),
+		History: bindings.FromArchived(
+			f.taskSvc.ListArchived(), f.taskArtifacts, f.taskSvc.PRRun, f.repositories.Get,
+		),
 	}
 }
 

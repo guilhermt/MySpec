@@ -30,19 +30,6 @@ func pushToOrigin(t *testing.T, repoPath, branch, file string) {
 	gittest.Run(t, clone, "push", "origin", branch)
 }
 
-// addRepo clones another repository into the workspace of the fixture and adds
-// the worktree of the fixture task to it.
-func (f fixture) addRepo(t *testing.T, rel string) (task.Repository, worktree.Worktree) {
-	t.Helper()
-
-	repo := task.Repository{Rel: rel, Path: gittest.Clone(t, gittest.Origin(t, true), filepath.Join(f.ws, rel))}
-	wt, err := f.svc.Ensure(t.Context(), f.task, repo, nil)
-	if err != nil {
-		t.Fatalf("Ensure(%s) = %v, want nil", rel, err)
-	}
-	return repo, wt
-}
-
 // lockDir takes the write permission off a directory until the test ends, so
 // that git cannot remove what is inside it.
 func lockDir(t *testing.T, dir string) {
@@ -58,11 +45,11 @@ func lockDir(t *testing.T, dir string) {
 func (f fixture) gone(t *testing.T, wt worktree.Worktree) bool {
 	t.Helper()
 
-	if _, ok := f.svc.Get(wt.TaskID, wt.RepoPath); ok {
+	if _, ok := f.svc.Get(wt.TaskID); ok {
 		return false
 	}
 	for _, item := range f.store.all() {
-		if item.TaskID == wt.TaskID && item.RepoPath == wt.RepoPath {
+		if item.TaskID == wt.TaskID {
 			return false
 		}
 	}
@@ -310,57 +297,53 @@ func TestCloseReportsAFetchItCouldNotDo(t *testing.T) {
 	}
 }
 
-func TestPurgeRemovesEveryWorktreeOfATask(t *testing.T) {
+func TestPurgeRemovesTheWorktreeOfATask(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, true)
-	first := f.ensure(t)
-	web, second := f.addRepo(t, "web")
+	wt := f.ensure(t)
 
-	if left := f.svc.Purge(t.Context(), f.task.ID); left != nil {
+	if left, kept := f.svc.Purge(t.Context(), f.task.ID); kept {
 		t.Errorf("Purge() = %+v, want nothing left behind", left)
 	}
 
-	for _, wt := range []worktree.Worktree{first, second} {
-		if exists(t, wt.Path) {
-			t.Errorf("%s is still on disk, want it gone", wt.Path)
-		}
-		if !f.gone(t, wt) {
-			t.Errorf("the worktree of %s is still registered, want it forgotten", wt.RepoPath)
-		}
+	if exists(t, wt.Path) {
+		t.Errorf("%s is still on disk, want it gone", wt.Path)
 	}
-	if branchExists(t, f.repo.Path, first.Branch) || branchExists(t, web.Path, second.Branch) {
-		t.Error("a branch of the task is still there, want both deleted")
+	if !f.gone(t, wt) {
+		t.Error("the worktree is still registered, want it forgotten")
+	}
+	if branchExists(t, f.repo.Path, wt.Branch) {
+		t.Error("the branch of the task is still there, want it deleted")
+	}
+}
+
+func TestPurgeOfATaskWithoutAWorktreeLeavesNothing(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, true)
+
+	if left, kept := f.svc.Purge(t.Context(), "task-without-a-worktree"); kept {
+		t.Errorf("Purge() = %+v, want nothing left behind", left)
 	}
 }
 
 func TestPurgeReportsTheFolderGitCouldNotRemove(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, true)
-	first := f.ensure(t)
-	web, second := f.addRepo(t, "web")
-	lockDir(t, filepath.Dir(second.Path))
+	wt := f.ensure(t)
+	lockDir(t, filepath.Dir(wt.Path))
 
-	left := f.svc.Purge(t.Context(), f.task.ID)
+	left, kept := f.svc.Purge(t.Context(), f.task.ID)
 
-	if len(left) != 1 {
-		t.Fatalf("Purge() = %+v, want the one worktree that stayed", left)
+	if !kept {
+		t.Fatal("Purge() left nothing behind, want the worktree that stayed")
 	}
-	if left[0].RepoPath != web.Path {
-		t.Errorf("RepoPath = %q, want %q", left[0].RepoPath, web.Path)
+	if left.Path != wt.Path {
+		t.Errorf("Path = %q, want the folder %q", left.Path, wt.Path)
 	}
-	if left[0].Path != second.Path {
-		t.Errorf("Path = %q, want the folder %q", left[0].Path, second.Path)
-	}
-	if left[0].Error == "" {
+	if left.Error == "" {
 		t.Error("Error is empty, want what git said")
 	}
-	if exists(t, first.Path) {
-		t.Errorf("%s is still on disk, want the worktree that could go removed", first.Path)
-	}
-	if !f.gone(t, first) {
-		t.Error("the worktree that could go is still registered, want it forgotten")
-	}
-	if !f.gone(t, second) {
+	if !f.gone(t, wt) {
 		t.Error("the worktree that stayed is still registered, want the record gone anyway")
 	}
 	if len(f.store.all()) != 0 {

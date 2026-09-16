@@ -5,52 +5,43 @@ package bindings
 // EventStateChanged carries a whole State every time anything changes.
 const EventStateChanged = "state:changed"
 
-// Repo is a git repository inside the open workspace.
-type Repo struct {
-	Name string `json:"name"`
-	Path string `json:"path"`
-}
-
-// Workspace is the open folder and the repositories found in it.
-type Workspace struct {
-	Name  string `json:"name"`
-	Path  string `json:"path"`
-	Repos []Repo `json:"repos"`
-}
-
-// Recent is a workspace the user opened before.
-type Recent struct {
-	Name string `json:"name"`
-	Path string `json:"path"`
-}
-
-// Notice is a path the app refused to open.
-type Notice struct {
-	Path string `json:"path"`
-	// Reason is not_found, not_directory, not_readable or last_recent_missing.
-	// It stays a string so the generated bindings leave the narrowing to the
-	// frontend union types instead of emitting a TypeScript enum.
-	Reason string `json:"reason"`
+// Repository is a registered repository, with what the app knows about its
+// clone and its tasks.
+type Repository struct {
+	ID            string `json:"id"`
+	Owner         string `json:"owner"`
+	Name          string `json:"name"`
+	FullName      string `json:"fullName"` // owner/name
+	Path          string `json:"path"`
+	Missing       bool   `json:"missing"` // the clone was not at Path at the last check
+	ActiveTasks   int    `json:"activeTasks"`
+	ArchivedTasks int    `json:"archivedTasks"`
 }
 
 // State is everything the interface renders, produced by Go and never derived
 // on the frontend.
 type State struct {
-	Workspace *Workspace `json:"workspace"` // nil on the welcome screen
-	Recents   []Recent   `json:"recents"`   // never nil
-	// Theme is system, light or dark, a string for the same reason as
-	// Notice.Reason.
+	// Repositories are the registered repositories, by owner/name, ignoring
+	// case; never nil.
+	Repositories []Repository `json:"repositories"`
+	// RepositoryFilter is the id of the repository the task list and the history
+	// show; "" for all of them.
+	RepositoryFilter string `json:"repositoryFilter"`
+	// Theme is system, light or dark. It stays a string so the generated
+	// bindings leave the narrowing to the frontend union types instead of
+	// emitting a TypeScript enum.
 	Theme      string `json:"theme"`
 	SystemDark bool   `json:"systemDark"`
 	// ModelDefaults are the choices a new task starts each stage with, in workflow
 	// order; never nil.
 	ModelDefaults []StageModel `json:"modelDefaults"`
 	// ReviewModeDefault is manual or agent: who reviews the steps of a new
-	// task, a string for the same reason as Notice.Reason.
-	ReviewModeDefault string        `json:"reviewModeDefault"`
-	Notice            *Notice       `json:"notice"`
-	Tasks             []TaskSummary `json:"tasks"` // tasks of the open workspace; never nil
-	// History are the archived tasks of the open workspace, newest first; never
+	// task, a string for the same reason as State.Theme.
+	ReviewModeDefault string `json:"reviewModeDefault"`
+	// Tasks are the active tasks of every repository, in creation order; never
+	// nil.
+	Tasks []TaskSummary `json:"tasks"`
+	// History are the archived tasks of every repository, newest first; never
 	// nil.
 	History []ArchivedTask `json:"history"`
 }
@@ -62,8 +53,8 @@ const EventTranscriptChanged = "transcript:changed"
 // StepBlock is why a step is blocked.
 type StepBlock struct {
 	// Reason is dirty_worktree, fetch_failed, no_base_branch, path_exists,
-	// branch_exists, git_failed or no_repository, a string for the same reason
-	// as Notice.Reason.
+	// branch_exists, git_failed or clone_missing, a string for the same reason
+	// as State.Theme.
 	Reason string `json:"reason"`
 	Detail string `json:"detail"` // what git said, or the status lines of a dirty worktree
 	Files  int    `json:"files"`  // dirty worktree only
@@ -73,7 +64,7 @@ type StepBlock struct {
 type ReviewFile struct {
 	Path string `json:"path"`
 	// Kind is added, modified, deleted, renamed or untracked, a string for the
-	// same reason as Notice.Reason.
+	// same reason as State.Theme.
 	Kind   string `json:"kind"`
 	Staged bool   `json:"staged"` // nothing of it is left outside the index
 }
@@ -92,19 +83,15 @@ type Step struct {
 	Number int    `json:"number"`
 	File   string `json:"file"` // name inside steps/, the artifact is "steps/" + File; one-shot.md for the single step of a One-Shot task
 	Title  string `json:"title"`
-	// Repository is the value the file carries; RepoPath is "" when no
-	// repository of the task matches it.
-	Repository string `json:"repository"`
-	RepoPath   string `json:"repoPath"`
 	// Status is not_started, preparing, blocked, implementing, agent_review,
 	// addressing_review, awaiting_review, in_review, ready_to_approve,
 	// nothing_to_commit, review_failed, committing or done, a string for the
-	// same reason as Notice.Reason.
+	// same reason as State.Theme.
 	Status string `json:"status"`
 	// Phase is fetching, creating or checking while preparing; "" otherwise.
 	Phase        string     `json:"phase"`
 	Block        *StepBlock `json:"block"`        // blocked only
-	WorktreePath string     `json:"worktreePath"` // "" until the worktree exists
+	WorktreePath string     `json:"worktreePath"` // "" until the worktree of the task exists
 
 	Review        *Review `json:"review"`        // the review states and committing only
 	CommitSHA     string  `json:"commitSha"`     // done only
@@ -118,7 +105,7 @@ type Step struct {
 
 	// ReviewMode is manual or agent: who reviews the step, the mode it will
 	// start with or the one it is reviewed with, a string for the same reason
-	// as Notice.Reason.
+	// as State.Theme.
 	ReviewMode         string `json:"reviewMode"`
 	ReviewModeAdjusted bool   `json:"reviewModeAdjusted"` // not started, with a mode of its own instead of the one of the task
 	ReviewModeEditable bool   `json:"reviewModeEditable"` // not started: its mode can still change
@@ -157,10 +144,10 @@ type StepReviewer struct {
 	LastError      string `json:"lastError"`
 }
 
-// PRBlock is why the pull request stage of a repository cannot go on.
+// PRBlock is why the pull request stage of a task cannot go on.
 type PRBlock struct {
 	// Reason is gh_missing, gh_unauthenticated, gh_failed, git_failed or
-	// no_worktree, a string for the same reason as Notice.Reason.
+	// no_worktree, a string for the same reason as State.Theme.
 	Reason string `json:"reason"`
 	Detail string `json:"detail"` // what gh or git said, verbatim
 }
@@ -180,10 +167,10 @@ type PRReport struct {
 	Clean bool   `json:"clean"`
 }
 
-// CloseStep is one part of the closing of a repository.
+// CloseStep is one part of the closing of a task.
 type CloseStep struct {
 	// Outcome is done, skipped or failed, a string for the same reason as
-	// Notice.Reason.
+	// State.Theme.
 	Outcome string `json:"outcome"`
 	// Reason is missing, not_merged, not_checked_out, dirty, no_upstream,
 	// diverged or up_to_date; skipped only.
@@ -191,7 +178,7 @@ type CloseStep struct {
 	Detail string `json:"detail"`
 }
 
-// CloseResult is what closing a repository did.
+// CloseResult is what closing a task did.
 type CloseResult struct {
 	Worktree     CloseStep `json:"worktree"`
 	Branch       CloseStep `json:"branch"`
@@ -203,16 +190,12 @@ type CloseResult struct {
 	ClosedAt     string    `json:"closedAt"`
 }
 
-// RepoPR is one repository of a task in the pull request stage, with its own
-// conversation and its own state.
-type RepoPR struct {
-	Repository string `json:"repository"` // relative path, as the steps name it
-	RepoPath   string `json:"repoPath"`
-	Slug       string `json:"slug"`
+// PullRequest is the PR stage of a task, with its conversation and its state.
+type PullRequest struct {
 	// Status is preparing, blocked, drafting, draft_ready, awaiting_reply,
 	// opening, reviewing, awaiting_decision, in_review, ready_to_approve,
-	// committing, done, merged, pr_closed, closing, closed or skipped, a string
-	// for the same reason as Notice.Reason.
+	// committing, done, merged, pr_closed, closing or closed, a string for the
+	// same reason as State.Theme.
 	Status       string   `json:"status"`
 	Block        *PRBlock `json:"block"` // blocked only
 	WorktreePath string   `json:"worktreePath"`
@@ -222,8 +205,7 @@ type RepoPR struct {
 	Draft   *PRDraft   `json:"draft"`   // nil until the draft is written
 	Reports []PRReport `json:"reports"` // never nil
 	Review  *Review    `json:"review"`  // the review states and committing only
-	// CommitFailed says the last approval of this repository ended without a
-	// commit.
+	// CommitFailed says the last approval of the review ended without a commit.
 	CommitFailed bool `json:"commitFailed"`
 
 	PRNumber int    `json:"prNumber"`
@@ -235,15 +217,17 @@ type RepoPR struct {
 	PRBase string `json:"prBase"`
 	// CheckError is what the last automatic reading said when it failed; ""
 	// otherwise.
-	CheckError string       `json:"checkError"`
-	CanClose   bool         `json:"canClose"` // the user may close the repository now
-	Close      *CloseResult `json:"close"`    // closed only
+	CheckError string `json:"checkError"`
+	CanClose   bool   `json:"canClose"` // the user may close the task now
+	// CloneMissing says the closing waits for the clone of the repository.
+	CloneMissing bool         `json:"cloneMissing"`
+	Close        *CloseResult `json:"close"` // closed only
 
-	SessionStage string `json:"sessionStage"` // "" when the repository has no conversation
+	SessionStage string `json:"sessionStage"` // "" when the stage has no conversation
 	// SessionStatus is working, waiting, needs_permission, needs_answer, paused
 	// or error.
 	SessionStatus string `json:"sessionStatus"`
-	// SessionModel and SessionEffort are what the session of the repository runs
+	// SessionModel and SessionEffort are what the session of the stage runs
 	// with from its next message on; "" without a session.
 	SessionModel   string `json:"sessionModel"`
 	SessionEffort  string `json:"sessionEffort"`
@@ -263,13 +247,11 @@ type PlanProblem struct {
 
 // Place is where in a task a situation is.
 type Place struct {
-	// Kind is stage, step, step_review or repo, a string for the same reason
-	// as Notice.Reason.
-	Kind       string `json:"kind"`
-	Stage      string `json:"stage"`      // stage only: prd, tech_spec, plan or one_shot
-	Step       int    `json:"step"`       // step and step_review only
-	RepoPath   string `json:"repoPath"`   // repo only
-	Repository string `json:"repository"` // repo only: relative path, as the steps name it
+	// Kind is stage, step, step_review or pr, a string for the same reason as
+	// State.Theme.
+	Kind  string `json:"kind"`
+	Stage string `json:"stage"` // stage only: prd, tech_spec, plan or one_shot
+	Step  int    `json:"step"`  // step and step_review only
 }
 
 // Situation is something a task cannot go on without the user for.
@@ -278,15 +260,15 @@ type Situation struct {
 	TaskID string `json:"taskId"`
 	// Kind is session_error, step_blocked, worktree_unreadable, pr_blocked,
 	// plan_invalid, pr_closed, permission, question, reply, ready_to_continue,
-	// step_review, step_empty, draft, findings, changes_review, merge or
-	// nothing_to_publish, a string for the same reason as Notice.Reason.
+	// step_review, step_empty, draft, findings, changes_review or merge, a
+	// string for the same reason as State.Theme.
 	Kind string `json:"kind"`
 	// Group is error, waiting or closing, from the most urgent, a string for
-	// the same reason as Notice.Reason.
+	// the same reason as State.Theme.
 	Group string `json:"group"`
 	// Form is review, staged or approve for step_review and changes_review,
 	// merge or close for merge, and "" for every other kind, a string for the
-	// same reason as Notice.Reason.
+	// same reason as State.Theme.
 	Form      string `json:"form"`
 	Percent   int    `json:"percent"` // staged form only
 	Place     Place  `json:"place"`
@@ -294,7 +276,7 @@ type Situation struct {
 }
 
 // EventSituationStarted carries a SituationStarted every time a situation
-// starts after a workspace loaded.
+// starts after the app loaded the tasks.
 const EventSituationStarted = "situation:started"
 
 // SituationStarted is a situation that just started, and whether the window
@@ -314,17 +296,17 @@ type SituationOpen struct {
 	Place  Place  `json:"place"`
 }
 
-// TaskSummary is a task of the open workspace with the state of its session.
+// TaskSummary is an active task with the state of its session.
 type TaskSummary struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	RepoPath string `json:"repoPath"` // "" for a root task
-	Dir      string `json:"dir"`
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	RepositoryID string `json:"repositoryId"`
+	Repository   string `json:"repository"` // owner/name
 	// Mode is structured or one_shot, a string for the same reason as
-	// Notice.Reason.
+	// State.Theme.
 	Mode string `json:"mode"`
 	// Stage is prd, tech_spec, plan, one_shot, implementation or pr, a string
-	// for the same reason as Notice.Reason.
+	// for the same reason as State.Theme.
 	Stage string `json:"stage"`
 	// Revisiting is a stage reopened by the user, which moves on only when
 	// they say so.
@@ -351,7 +333,7 @@ type TaskSummary struct {
 	HasOneShot      bool             `json:"hasOneShot"`
 	Steps           []Step           `json:"steps"`        // never nil
 	CurrentStep     int              `json:"currentStep"`  // the step that runs or runs next; 0 when the task has no steps
-	Repos           []RepoPR         `json:"repos"`        // never nil; empty outside the pull request stage
+	PR              *PullRequest     `json:"pr"`           // nil outside the pull request stage
 	PlanProblems    []PlanProblem    `json:"planProblems"` // never nil
 	Situations      []Situation      `json:"situations"`   // what the task waits on the user for, the most urgent first; never nil
 	Models          []TaskStageModel `json:"models"`       // every stage, in workflow order; never nil
@@ -364,69 +346,60 @@ type TaskSummary struct {
 
 // ArchivedStep is one step of an archived task, as the plan wrote it.
 type ArchivedStep struct {
-	Number     int          `json:"number"`
-	File       string       `json:"file"` // name inside steps/, the artifact is "steps/" + File; one-shot.md for the single step of a One-Shot task
-	Title      string       `json:"title"`
-	Repository string       `json:"repository"`
-	Reports    []StepReport `json:"reports"` // never nil
+	Number  int          `json:"number"`
+	File    string       `json:"file"` // name inside steps/, the artifact is "steps/" + File; one-shot.md for the single step of a One-Shot task
+	Title   string       `json:"title"`
+	Reports []StepReport `json:"reports"` // never nil
 }
 
-// ArchivedRepo is one repository an archived task touched, with its pull
-// request.
-type ArchivedRepo struct {
-	Repository string `json:"repository"`
-	RepoPath   string `json:"repoPath"`
-	PRNumber   int    `json:"prNumber"` // 0 when the repository had no pull request
-	PRURL      string `json:"prUrl"`
-	PRState    string `json:"prState"`
+// ArchivedPR is the pull request an archived task opened.
+type ArchivedPR struct {
+	Number int    `json:"number"`
+	URL    string `json:"url"`
+	State  string `json:"state"`
 }
 
 // ArchivedTask is a finished task, as the history shows it: its artifacts and
 // what it touched, and nothing that runs.
 type ArchivedTask struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	RepoPath string `json:"repoPath"` // "" for a root task
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	RepositoryID string `json:"repositoryId"`
+	Repository   string `json:"repository"` // owner/name
 	// Mode is structured or one_shot, a string for the same reason as
-	// Notice.Reason.
+	// State.Theme.
 	Mode            string         `json:"mode"`
 	HasPRD          bool           `json:"hasPrd"`
 	HasTechSpec     bool           `json:"hasTechSpec"`
 	HasOneShot      bool           `json:"hasOneShot"`
 	Steps           []ArchivedStep `json:"steps"` // never nil
-	Repos           []ArchivedRepo `json:"repos"` // never nil
+	PR              *ArchivedPR    `json:"pr"`    // nil when the task opened none
 	ArtifactVersion int            `json:"artifactVersion"`
 	CreatedAt       string         `json:"createdAt"`
 	ArchivedAt      string         `json:"archivedAt"`
 }
 
-// WorktreePreview is one worktree the deletion of a task would remove, and
+// WorktreePreview is the worktree the deletion of a task would remove, and
 // whether it holds work.
 type WorktreePreview struct {
-	Repository string `json:"repository"`
-	RepoPath   string `json:"repoPath"`
-	Path       string `json:"path"`
-	Dirty      bool   `json:"dirty"`
-	Files      int    `json:"files"` // changed files; dirty only
-	Error      string `json:"error"` // what git said when the worktree could not be read
+	Path  string `json:"path"`
+	Dirty bool   `json:"dirty"`
+	Files int    `json:"files"` // changed files; dirty only
+	Error string `json:"error"` // what git said when the worktree could not be read
 }
 
-// BranchPreview is one branch the deletion of a task would delete, and whether
+// BranchPreview is the branch the deletion of a task would delete, and whether
 // its commits are safe elsewhere.
 type BranchPreview struct {
-	Repository string `json:"repository"`
-	RepoPath   string `json:"repoPath"`
-	Name       string `json:"name"`
-	Merged     bool   `json:"merged"`
-	Error      string `json:"error"`
+	Name   string `json:"name"`
+	Merged bool   `json:"merged"`
+	Error  string `json:"error"`
 }
 
 // PRPreview is a pull request the app leaves on GitHub when the task goes.
 type PRPreview struct {
-	Repository string `json:"repository"`
-	RepoPath   string `json:"repoPath"`
-	Number     int    `json:"number"`
-	URL        string `json:"url"`
+	Number int    `json:"number"`
+	URL    string `json:"url"`
 	// State is open, merged or closed; "" when unknown.
 	State string `json:"state"`
 }
@@ -434,24 +407,22 @@ type PRPreview struct {
 // DeletePreview is what deleting a task would destroy, as the confirmation
 // dialog spells it out.
 type DeletePreview struct {
-	SessionRunning bool              `json:"sessionRunning"`
-	Worktrees      []WorktreePreview `json:"worktrees"` // never nil
-	Branches       []BranchPreview   `json:"branches"`  // never nil
-	PRs            []PRPreview       `json:"prs"`       // never nil
+	SessionRunning bool             `json:"sessionRunning"`
+	Worktree       *WorktreePreview `json:"worktree"` // nil when there is none
+	Branch         *BranchPreview   `json:"branch"`   // nil when there is none
+	PR             *PRPreview       `json:"pr"`       // nil when there is none
 }
 
 // Leftover is what git could not remove when a task was deleted.
 type Leftover struct {
-	Repository string `json:"repository"`
-	RepoPath   string `json:"repoPath"`
-	Path       string `json:"path"`   // "" when the folder went
-	Branch     string `json:"branch"` // "" when the branch went
-	Error      string `json:"error"`
+	Path   string `json:"path"`   // "" when the folder went
+	Branch string `json:"branch"` // "" when the branch went
+	Error  string `json:"error"`
 }
 
 // DeleteResult is what deleting a task left behind.
 type DeleteResult struct {
-	Leftovers []Leftover `json:"leftovers"` // never nil
+	Leftover *Leftover `json:"leftover"` // nil when git removed everything
 }
 
 // UserEntry is a message sent to the agent: one the user wrote, or one the app
@@ -599,7 +570,7 @@ type TranscriptEvent struct {
 // StageModel is the model and effort of one stage.
 type StageModel struct {
 	// Stage is prd, tech_spec, plan, one_shot, implementation, step_review, pr
-	// or pr_review, a string for the same reason as Notice.Reason.
+	// or pr_review, a string for the same reason as State.Theme.
 	Stage  string `json:"stage"`
 	Model  string `json:"model"`  // claude-fable-5-1, claude-opus-5 or claude-sonnet-5
 	Effort string `json:"effort"` // low, medium, high, xhigh or max
@@ -618,7 +589,7 @@ type TaskStageModel struct {
 // Prompt is the text a kind of session opens with, as the settings show it.
 type Prompt struct {
 	// Stage is prd, tech_spec, plan, one_shot, step_review, commit, pr or
-	// pr_review, a string for the same reason as Notice.Reason.
+	// pr_review, a string for the same reason as State.Theme.
 	Stage    string `json:"stage"`
 	Text     string `json:"text"`
 	Modified bool   `json:"modified"` // the user edited it: it no longer follows the default of the app
@@ -630,7 +601,7 @@ type Prompt struct {
 // CreateTaskRequest is the task the user filled in the creation dialog.
 type CreateTaskRequest struct {
 	Name           string `json:"name"`
-	RepoPath       string `json:"repoPath"` // "" for root
+	RepositoryID   string `json:"repositoryId"`
 	InitialContext string `json:"initialContext"`
 	Mode           string `json:"mode"` // structured or one_shot; "" is structured
 	// Models are the choices of the creation dialog. A stage left out takes the

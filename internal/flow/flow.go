@@ -6,6 +6,7 @@ package flow
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"sync"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
+	"github.com/guilhermt/myspec/internal/repository"
 	"github.com/guilhermt/myspec/internal/review"
 	"github.com/guilhermt/myspec/internal/reviewmode"
 	"github.com/guilhermt/myspec/internal/session"
@@ -24,7 +26,7 @@ import (
 // Tasks is what the flow needs from internal/task.
 type Tasks interface {
 	Get(id string) (task.Task, bool)
-	Lookup(id string) (task.Task, bool) // the workspace and the history
+	Lookup(id string) (task.Task, bool) // active tasks and the history
 	List() []task.Task
 	ListArchived() []task.Task
 	Archive(ctx context.Context, id string) (task.Task, error)
@@ -37,13 +39,12 @@ type Tasks interface {
 	SetReviewMode(ctx context.Context, id string, mode reviewmode.Mode) (task.Task, error)
 	SetStepReviewMode(ctx context.Context, id string, number int, mode reviewmode.Mode) (task.Task, error)
 	RemoveArtifacts(ctx context.Context, id string, from task.Stage) error
-	Repositories(t task.Task) []task.Repository
-	PRRuns(id string) []task.PRRun
-	SetPRRun(ctx context.Context, id, repoPath string, status task.PRStatus, block *task.PRBlock) (task.PRRun, error)
-	SetPRDetails(ctx context.Context, id, repoPath string, pr task.PRDetails) (task.PRRun, error)
-	SetPRClosed(ctx context.Context, id, repoPath string, result task.CloseResult) (task.PRRun, error)
-	SetPRReviewed(ctx context.Context, id, repoPath, commit string, pass int) (task.PRRun, error)
-	ClearPRRuns(ctx context.Context, id string) error
+	PRRun(id string) (task.PRRun, bool)
+	SetPRRun(ctx context.Context, id string, status task.PRStatus, block *task.PRBlock) (task.PRRun, error)
+	SetPRDetails(ctx context.Context, id string, pr task.PRDetails) (task.PRRun, error)
+	SetPRClosed(ctx context.Context, id string, result task.CloseResult) (task.PRRun, error)
+	SetPRReviewed(ctx context.Context, id, commit string, pass int) (task.PRRun, error)
+	ClearPRRun(ctx context.Context, id string) error
 	StepRuns(id string) []task.StepRun
 	SetStepRun(ctx context.Context, id string, number int, status task.StepStatus, block *task.StepBlock) (task.StepRun, error)
 	SetStepStarted(ctx context.Context, id string, number int, startCommit string) (task.StepRun, error)
@@ -76,13 +77,19 @@ type Sessions interface {
 	MarkStepReview(ctx context.Context, k session.Key, pass int, clean bool)
 }
 
+// Repositories is what the flow needs from internal/repository.
+type Repositories interface {
+	Get(id string) (repository.Repository, bool)
+	Missing(id string) bool                         // the last check, for snapshots
+	Check(id string) (repository.Repository, error) // a check now, for what needs the clone
+}
+
 // Reviews is what the flow needs from internal/review.
 type Reviews interface {
-	Track(k review.Key, wt worktree.Worktree, active bool)
-	Refresh(k review.Key) (review.Snapshot, bool)
-	Snapshot(k review.Key) (review.Snapshot, bool)
-	Forget(k review.Key)
-	ForgetTask(taskID string)
+	Track(taskID string, wt worktree.Worktree, active bool)
+	Refresh(taskID string) (review.Snapshot, bool)
+	Snapshot(taskID string) (review.Snapshot, bool)
+	Forget(taskID string)
 }
 
 // GH is what the flow needs from internal/gh: the readings that say whether a
@@ -94,28 +101,29 @@ type GH interface {
 
 // Worktrees is what the flow needs from internal/worktree.
 type Worktrees interface {
-	Get(taskID, repoPath string) (worktree.Worktree, bool)
-	List(taskID string) []worktree.Worktree
+	Get(taskID string) (worktree.Worktree, bool)
 	Base(ctx context.Context, wt worktree.Worktree) (string, error)
-	Ahead(ctx context.Context, wt worktree.Worktree, base string) (int, error)
 	Merged(ctx context.Context, wt worktree.Worktree, base string) (bool, error)
-	Ensure(ctx context.Context, t task.Task, repo task.Repository, onPhase func(worktree.Phase)) (worktree.Worktree, error)
+	Ensure(
+		ctx context.Context, t task.Task, repo repository.Repository, onPhase func(worktree.Phase),
+	) (worktree.Worktree, error)
 	Status(ctx context.Context, wt worktree.Worktree) (git.Status, error)
 	Commit(ctx context.Context, wt worktree.Worktree, rev string) (git.Commit, error)
 	Clean(ctx context.Context, wt worktree.Worktree) error
 	Close(ctx context.Context, wt worktree.Worktree, base string, policy worktree.BranchPolicy) task.CloseResult
-	Purge(ctx context.Context, taskID string) []worktree.Leftover
-	RemoveAll(ctx context.Context, taskID string) error
+	Purge(ctx context.Context, taskID string) (worktree.Leftover, bool)
+	Remove(ctx context.Context, taskID string) error
 }
 
 // Deps are what Service needs from the outside.
 type Deps struct {
-	Tasks     Tasks
-	Sessions  Sessions
-	Worktrees Worktrees
-	Review    Reviews
-	GH        GH
-	Log       *slog.Logger
+	Tasks        Tasks
+	Sessions     Sessions
+	Worktrees    Worktrees
+	Repositories Repositories
+	Review       Reviews
+	GH           GH
+	Log          *slog.Logger
 	// RenderPrompt turns a prompt of the data directory into the message the
 	// app sends; the flow uses it for the commit prompt.
 	RenderPrompt func(stage prompts.Stage, vars prompts.Vars) (string, error)
@@ -142,15 +150,16 @@ var (
 	ErrNotRevisiting = errors.New("flow: task is not revisiting a stage")
 )
 
-// Service is the state machine of every task of the open workspace.
+// Service is the state machine of every active task.
 type Service struct {
-	tasks     Tasks
-	sessions  Sessions
-	worktrees Worktrees
-	review    Reviews
-	gh        GH
-	log       *slog.Logger
-	onChange  func(taskID string)
+	tasks        Tasks
+	sessions     Sessions
+	worktrees    Worktrees
+	repositories Repositories
+	review       Reviews
+	gh           GH
+	log          *slog.Logger
+	onChange     func(taskID string)
 
 	renderPrompt func(stage prompts.Stage, vars prompts.Vars) (string, error)
 
@@ -171,29 +180,26 @@ type taskLock struct {
 	// approve, which is what git says.
 	noCommit bool
 
-	// repos is the asynchronous work of the PR stage, one entry per repository
-	// under way; the lock of the task is not held while it runs.
-	repos map[string]*repoWork
-	// passAsked is the commit the app asked a review pass about, by
-	// repository: one commit asks for one pass.
-	passAsked map[string]string
-	// repoNoCommit says the last approval of a repository ended without a
-	// commit. Like the one of a step, it is transient on purpose.
-	repoNoCommit map[string]bool
-	// checkErrors is what the last reading of the pull request of a repository
-	// awaiting closing said when it failed, by repository; "" or absent when it
-	// succeeded.
-	checkErrors map[string]string
-	// openFailed says the agent was asked to open the pull request of a
-	// repository and ended its turn without one, by repository. It holds until the
-	// conversation of the repository moves on, and is transient on purpose like
-	// repoNoCommit.
-	openFailed map[string]bool
+	// pr is the asynchronous work of the PR stage, while one is under way; the
+	// lock of the task is not held while it runs.
+	pr *prWork
+	// passAsked is the commit the app asked a review pass about: one commit asks
+	// for one pass.
+	passAsked string
+	// prNoCommit says the last approval of the review of the pull request ended
+	// without a commit. Like noCommit, it is transient on purpose.
+	prNoCommit bool
+	// checkError is what the last reading of a pull request awaiting its merge
+	// said when it failed; "" when it succeeded.
+	checkError string
+	// openFailed says the agent was asked to open the pull request and ended its
+	// turn without one. It holds until the conversation moves on.
+	openFailed bool
 }
 
-// repoWork is the goroutine that talks to git and to gh about one repository
-// of a task in the PR stage.
-type repoWork struct {
+// prWork is the goroutine that talks to git and to gh about the PR stage of a
+// task.
+type prWork struct {
 	running bool
 	cancel  context.CancelFunc
 	// pending says that work was asked for while this one was running and was
@@ -207,15 +213,11 @@ type repoWork struct {
 // plan and one_shot, go by the same name in internal/task and in
 // internal/models, so the choice of the stage is read with the name the task
 // carries.
-func TaskInfo(t task.Task, a task.Artifacts, repos []task.Repository) session.TaskInfo {
-	rels := make([]string, len(repos))
-	for i, repo := range repos {
-		rels[i] = repo.Rel
-	}
-	info := session.TaskInfo{
+func TaskInfo(t task.Task, a task.Artifacts, repo repository.Repository) session.TaskInfo {
+	return session.TaskInfo{
 		ID:             t.ID,
 		Name:           t.Name,
-		Dir:            t.Dir(),
+		Dir:            repo.Path,
 		ArtifactsDir:   t.ArtifactsDir,
 		Stage:          string(t.Stage),
 		Prompt:         prompts.Stage(t.Stage),
@@ -223,15 +225,20 @@ func TaskInfo(t task.Task, a task.Artifacts, repos []task.Repository) session.Ta
 		TechSpecPath:   t.TechSpecPath(),
 		StepsDir:       t.StepsDir(),
 		OneShotPath:    oneShotPath(t),
-		Repositories:   rels,
+		Repository:     repo.FullName(),
 		InitialContext: t.InitialContext,
 		ArtifactExists: a.Done(t.Stage),
 		Choice:         t.Models.Stage(models.Stage(t.Stage)),
 	}
-	if t.Mode == task.ModeOneShot {
-		info.Repository = repoRel(t, t.RepoPath)
+}
+
+// repositoryOf is the registered repository of a task.
+func (s *Service) repositoryOf(t task.Task) (repository.Repository, error) {
+	repo, ok := s.repositories.Get(t.RepositoryID)
+	if !ok {
+		return repository.Repository{}, fmt.Errorf("repository of task %s: %w", t.ID, repository.ErrNotFound)
 	}
-	return info
+	return repo, nil
 }
 
 // oneShotPath is the document of a One-Shot task, which the prompts read in

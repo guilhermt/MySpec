@@ -9,8 +9,8 @@ import (
 	"github.com/guilhermt/myspec/internal/worktree"
 )
 
-// WorktreesRepo stores one worktree per repository a task touches. It
-// implements worktree.Store.
+// WorktreesRepo stores the worktree of each task. It implements
+// worktree.Store.
 type WorktreesRepo struct{ db *sql.DB }
 
 // worktreeColumns is the column list every worktree query selects, in scan
@@ -32,7 +32,7 @@ func (r *WorktreesRepo) ListByTasks(ctx context.Context, taskIDs []string) ([]wo
 	// ids themselves travel as arguments.
 	//nolint:gosec // G202: the concatenated text is a placeholder list, not data
 	query := `SELECT ` + worktreeColumns + ` FROM worktrees WHERE task_id IN (?` +
-		strings.Repeat(", ?", len(taskIDs)-1) + `) ORDER BY task_id, repo_path`
+		strings.Repeat(", ?", len(taskIDs)-1) + `) ORDER BY task_id`
 
 	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -66,13 +66,12 @@ func (r *WorktreesRepo) Insert(ctx context.Context, wt worktree.Worktree) error 
 	return nil
 }
 
-// Delete removes the worktree of a task in a repository. A missing row is not
-// an error.
-func (r *WorktreesRepo) Delete(ctx context.Context, taskID, repoPath string) error {
-	const stmt = `DELETE FROM worktrees WHERE task_id = ? AND repo_path = ?`
+// Delete removes the worktree of a task. A missing row is not an error.
+func (r *WorktreesRepo) Delete(ctx context.Context, taskID string) error {
+	const stmt = `DELETE FROM worktrees WHERE task_id = ?`
 
-	if _, err := r.db.ExecContext(ctx, stmt, taskID, repoPath); err != nil {
-		return fmt.Errorf("delete worktree of task %s in %s: %w", taskID, repoPath, err)
+	if _, err := r.db.ExecContext(ctx, stmt, taskID); err != nil {
+		return fmt.Errorf("delete worktree of task %s: %w", taskID, err)
 	}
 	return nil
 }

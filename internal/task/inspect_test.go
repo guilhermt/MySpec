@@ -7,25 +7,21 @@ import (
 	"testing"
 )
 
-// inspectFixture is a Service reading one task folder under a temp workspace.
+// inspectFixture is a Service reading one task folder.
 func inspectFixture(t *testing.T) (*Service, Task) {
 	t.Helper()
 
-	workspace := t.TempDir()
 	tk := Task{
-		ID:            "task-1",
-		WorkspacePath: workspace,
-		Name:          "add-login",
-		ArtifactsDir:  filepath.Join(t.TempDir(), "add-login"),
+		ID:           "task-1",
+		RepositoryID: "repo-1",
+		Name:         "add-login",
+		ArtifactsDir: filepath.Join(t.TempDir(), "add-login"),
 	}
 	if err := os.MkdirAll(tk.ArtifactsDir, dirPerm); err != nil {
 		t.Fatalf("create artifacts directory: %v", err)
 	}
 
-	return &Service{
-		log:   slog.New(slog.DiscardHandler),
-		repos: func() []string { return []string{filepath.Join(workspace, "api")} },
-	}, tk
+	return &Service{log: slog.New(slog.DiscardHandler)}, tk
 }
 
 // writeArtifact puts content at path, failing the test on error.
@@ -58,8 +54,7 @@ func TestInspectReadsTheThreeArtifacts(t *testing.T) {
 	s, tk := inspectFixture(t)
 	writeArtifact(t, tk.PRDPath(), "# PRD\n")
 	writeArtifact(t, tk.TechSpecPath(), "# Tech spec\n")
-	writeArtifact(t, filepath.Join(tk.StepsDir(), "1-add-the-store.md"),
-		"---\nrepository: api\n---\n\n# Step 1: Add the store\n")
+	writeArtifact(t, filepath.Join(tk.StepsDir(), "1-add-the-store.md"), "# Step 1: Add the store\n")
 
 	got := s.inspect(tk)
 
@@ -69,8 +64,8 @@ func TestInspectReadsTheThreeArtifacts(t *testing.T) {
 	if !got.Plan.Valid() {
 		t.Errorf("plan = %+v, want it valid", got.Plan)
 	}
-	if want := filepath.Join(tk.WorkspacePath, "api"); got.Plan.Steps[0].RepoPath != want {
-		t.Errorf("RepoPath = %q, want %q", got.Plan.Steps[0].RepoPath, want)
+	if want := "Add the store"; got.Plan.Steps[0].Title != want {
+		t.Errorf("Title = %q, want %q", got.Plan.Steps[0].Title, want)
 	}
 }
 

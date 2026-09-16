@@ -28,7 +28,6 @@ const dirPerm = 0o700
 // Store owns the database connection and the repositories built on it.
 type Store struct {
 	db           *sql.DB
-	Recents      *RecentsRepo
 	Repositories *RepositoriesRepo
 	Settings     *SettingsRepo
 	Tasks        *TasksRepo
@@ -80,7 +79,6 @@ func open(ctx context.Context, dsn, path string, log *slog.Logger, upgrade Upgra
 
 	return &Store{
 		db:           db,
-		Recents:      &RecentsRepo{db: db},
 		Repositories: &RepositoriesRepo{db: db},
 		Settings:     &SettingsRepo{db: db},
 		Tasks:        &TasksRepo{db: db},

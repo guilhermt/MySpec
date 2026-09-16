@@ -40,11 +40,11 @@ func newSituation(taskID, place, id string, kind attention.Kind) attention.Recor
 
 func TestSituationsUpsertAndListByTasks(t *testing.T) {
 	t.Parallel()
-	s := newStore(t)
+	s := newStoreWithRepositories(t)
 
 	first := seedTask(t, s)
 	const second = "task-2"
-	if err := s.Tasks.Insert(t.Context(), newTask(second, "/ws", "two", fixedTime)); err != nil {
+	if err := s.Tasks.Insert(t.Context(), newTask(second, webRepo, "two", fixedTime)); err != nil {
 		t.Fatalf("Tasks.Insert(two) = %v, want nil", err)
 	}
 
@@ -64,7 +64,7 @@ func TestSituationsUpsertAndListByTasks(t *testing.T) {
 
 func TestSituationsUpsertReplacesTheSituationOfAPlace(t *testing.T) {
 	t.Parallel()
-	s := newStore(t)
+	s := newStoreWithRepositories(t)
 
 	taskID := seedTask(t, s)
 	upsertSituations(t, s, newSituation(taskID, "step:2", "situation-1", attention.KindPermission))
@@ -85,7 +85,7 @@ func TestSituationsUpsertReplacesTheSituationOfAPlace(t *testing.T) {
 
 func TestSituationsDeleteRemovesOnlyItsPlace(t *testing.T) {
 	t.Parallel()
-	s := newStore(t)
+	s := newStoreWithRepositories(t)
 
 	taskID := seedTask(t, s)
 	api := newSituation(taskID, "repo:/ws/api", "situation-1", attention.KindDraft)
@@ -106,7 +106,7 @@ func TestSituationsDeleteRemovesOnlyItsPlace(t *testing.T) {
 
 func TestSituationsGoWithTheirTask(t *testing.T) {
 	t.Parallel()
-	s := newStore(t)
+	s := newStoreWithRepositories(t)
 
 	taskID := seedTask(t, s)
 	upsertSituations(t, s, newSituation(taskID, "stage:prd", "situation-1", attention.KindReply))
@@ -121,7 +121,7 @@ func TestSituationsGoWithTheirTask(t *testing.T) {
 
 func TestSituationsListByNoTasksAsksNothing(t *testing.T) {
 	t.Parallel()
-	s := newStore(t)
+	s := newStoreWithRepositories(t)
 
 	if got := listSituations(t, s); got != nil {
 		t.Errorf("ListByTasks() = %v, want nil", got)

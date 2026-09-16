@@ -54,31 +54,29 @@ func (c *counting) count() int {
 }
 
 // fixture is a repository with one worktree of it, and the review service
-// watching that worktree under the key of the task and the repository.
+// watching that worktree under the id of its task.
 type fixture struct {
 	svc       *review.Service
 	worktrees *counting
 	wt        worktree.Worktree
-	key       review.Key
 	repo      string
-	changes   chan review.Key
+	changes   chan string
 }
 
 // newFixture builds the service over a worktree of a fresh clone.
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
 
-	f := &fixture{changes: make(chan review.Key, 32)}
+	f := &fixture{changes: make(chan string, 32)}
 	f.repo = gittest.Clone(t, gittest.Origin(t, true), filepath.Join(t.TempDir(), "api"))
 	f.wt = f.worktreeOf(t, branch)
-	f.key = review.Key{TaskID: taskID, RepoPath: f.repo}
 	f.worktrees = &counting{Worktrees: worktree.New(worktree.Deps{
 		Git: git.New(git.Deps{Env: gittest.Env(t)}),
 	})}
 
 	svc, err := review.New(review.Deps{
 		Worktrees: f.worktrees,
-		OnChange:  func(k review.Key) { f.changes <- k },
+		OnChange:  func(id string) { f.changes <- id },
 	})
 	if err != nil {
 		t.Fatalf("New() = %v, want nil", err)
@@ -102,26 +100,25 @@ func (f *fixture) worktreeOf(t *testing.T, name string) worktree.Worktree {
 	return worktree.Worktree{TaskID: taskID, RepoPath: f.repo, Path: path, Branch: name}
 }
 
-// otherRepo is a second repository of the same task, with a worktree of its
-// own: what a task that touches two repositories looks like.
-func (f *fixture) otherRepo(t *testing.T, name string) (review.Key, worktree.Worktree) {
+// otherTask is a second task, in a repository and a worktree of its own.
+func (f *fixture) otherTask(t *testing.T, name string) (string, worktree.Worktree) {
 	t.Helper()
 
 	repo := gittest.Clone(t, gittest.Origin(t, true), filepath.Join(t.TempDir(), name))
 	path := filepath.Join(t.TempDir(), name+"-worktree")
 	gittest.Run(t, repo, "worktree", "add", "--no-track", "-b", branch, path, "main")
 
-	key := review.Key{TaskID: taskID, RepoPath: repo}
-	wt := worktree.Worktree{TaskID: taskID, RepoPath: repo, Path: path, Branch: branch}
-	return key, wt
+	id := taskID + "-" + name
+	wt := worktree.Worktree{TaskID: id, RepoPath: repo, Path: path, Branch: branch}
+	return id, wt
 }
 
 // track puts the fixture worktree under watch and waits for the first reading.
 func (f *fixture) track(t *testing.T) {
 	t.Helper()
 
-	f.svc.Track(f.key, f.wt, true)
-	if _, ok := f.svc.Snapshot(f.key); !ok {
+	f.svc.Track(taskID, f.wt, true)
+	if _, ok := f.svc.Snapshot(taskID); !ok {
 		t.Fatal("Snapshot() found nothing, want the reading Track does at once")
 	}
 	f.drain()
@@ -132,18 +129,18 @@ func (f *fixture) track(t *testing.T) {
 func (f *fixture) waitFor(t *testing.T, what string, ok func(review.Snapshot) bool) review.Snapshot {
 	t.Helper()
 
-	return f.waitForKey(t, f.key, what, ok)
+	return f.waitForTask(t, taskID, what, ok)
 }
 
-// waitForKey is waitFor over any key the fixture tracks.
-func (f *fixture) waitForKey(
-	t *testing.T, k review.Key, what string, ok func(review.Snapshot) bool,
+// waitForTask is waitFor over any task the fixture tracks.
+func (f *fixture) waitForTask(
+	t *testing.T, id, what string, ok func(review.Snapshot) bool,
 ) review.Snapshot {
 	t.Helper()
 
 	deadline := time.Now().Add(waitTimeout)
 	for {
-		snap, found := f.svc.Snapshot(k)
+		snap, found := f.svc.Snapshot(id)
 		if found && ok(snap) {
 			return snap
 		}
@@ -165,14 +162,14 @@ func (f *fixture) waitChange(t *testing.T, what string, ok func(review.Snapshot)
 	deadline := time.After(waitTimeout)
 	for {
 		select {
-		case k := <-f.changes:
+		case id := <-f.changes:
 			// The reading behind a report is stored before it, so the snapshot
 			// is at least as new as the change just received.
-			if snap, found := f.svc.Snapshot(f.key); k == f.key && found && ok(snap) {
+			if snap, found := f.svc.Snapshot(taskID); id == taskID && found && ok(snap) {
 				return snap
 			}
 		case <-deadline:
-			snap, _ := f.svc.Snapshot(f.key)
+			snap, _ := f.svc.Snapshot(taskID)
 			t.Fatalf("no change was reported with a reading that %s, it is %+v", what, snap)
 		}
 	}
@@ -183,8 +180,8 @@ func (f *fixture) wantNoChange(t *testing.T) {
 	t.Helper()
 
 	select {
-	case k := <-f.changes:
-		t.Fatalf("OnChange(%+v) was called, want nothing reported", k)
+	case id := <-f.changes:
+		t.Fatalf("OnChange(%q) was called, want nothing reported", id)
 	case <-time.After(settle):
 	}
 }

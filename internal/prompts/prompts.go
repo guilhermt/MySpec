@@ -72,7 +72,6 @@ const (
 	stepsDirPlaceholder       = "{{steps_dir}}"
 	stepPathPlaceholder       = "{{step_path}}"
 	oneShotPathPlaceholder    = "{{one_shot_path}}"
-	repositoriesPlaceholder   = "{{repositories}}"
 	initialContextPlaceholder = "{{initial_context}}"
 	repositoryPlaceholder     = "{{repository}}"
 	branchPlaceholder         = "{{branch}}"
@@ -88,7 +87,7 @@ const (
 // placeholderOrder is every placeholder, in the order the settings list them.
 var placeholderOrder = []string{
 	taskNamePlaceholder, artifactsDirPlaceholder, prdPathPlaceholder, techSpecPathPlaceholder,
-	stepsDirPlaceholder, stepPathPlaceholder, oneShotPathPlaceholder, repositoriesPlaceholder,
+	stepsDirPlaceholder, stepPathPlaceholder, oneShotPathPlaceholder,
 	initialContextPlaceholder, repositoryPlaceholder, branchPlaceholder, baseBranchPlaceholder,
 	draftPathPlaceholder, reviewPathPlaceholder, prNumberPlaceholder, prURLPlaceholder,
 	whatToCommitPlaceholder, pushPlaceholder,
@@ -326,12 +325,11 @@ type Vars struct {
 	PRDPath        string
 	TechSpecPath   string
 	StepsDir       string
-	Repositories   []string // paths relative to the session directory
-	InitialContext string   // PRD and One-Shot planning only
-	StepPath       string   // StageStep: the file whose content is the prompt; StageStepReview: the step under review
-	OneShotPath    string   // One-Shot tasks only: the document, which the prompts point to in place of the PRD, the tech spec and the step file; "" for a Structured task
+	InitialContext string // PRD and One-Shot planning only
+	StepPath       string // StageStep: the file whose content is the prompt; StageStepReview: the step under review
+	OneShotPath    string // One-Shot tasks only: the document, which the prompts point to in place of the PRD, the tech spec and the step file; "" for a Structured task
 
-	Repository string // relative path of the repository of a PR session
+	Repository string // owner/name of the repository of the task
 	Branch     string
 	BaseBranch string
 	DraftPath  string
@@ -360,19 +358,6 @@ func commitInstruction(all bool) string {
 		return AllChangesInstruction
 	}
 	return StagedInstruction
-}
-
-// repositoryList renders paths as the Markdown list a prompt shows the agent.
-func repositoryList(paths []string) string {
-	if len(paths) == 0 {
-		return "- (none)"
-	}
-
-	items := make([]string, len(paths))
-	for i, path := range paths {
-		items[i] = "- `" + path + "`"
-	}
-	return strings.Join(items, "\n")
 }
 
 // Render takes the prompt of stage, the edit of the user when there is one and
@@ -412,7 +397,6 @@ func Render(dataDir string, stage Stage, vars Vars) (string, error) {
 		stepsDirPlaceholder, vars.StepsDir,
 		stepPathPlaceholder, stepPath,
 		oneShotPathPlaceholder, vars.OneShotPath,
-		repositoriesPlaceholder, repositoryList(vars.Repositories),
 		initialContextPlaceholder, vars.InitialContext,
 		repositoryPlaceholder, vars.Repository,
 		branchPlaceholder, vars.Branch,

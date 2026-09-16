@@ -79,8 +79,8 @@ func TestReadGivesTheDefaultOfEveryPrompt(t *testing.T) {
 		contains []string
 	}{
 		{prompts.StagePRD, []string{"# PRD Creator", "{{prd_path}}", "{{initial_context}}"}},
-		{prompts.StageTechSpec, []string{"# Technical Specification Creator", "{{tech_spec_path}}", "{{repositories}}"}},
-		{prompts.StagePlan, []string{"# Step Planner", "{{steps_dir}}", "{{repositories}}", "AskUserQuestion"}},
+		{prompts.StageTechSpec, []string{"# Technical Specification Creator", "{{tech_spec_path}}", "{{repository}}"}},
+		{prompts.StagePlan, []string{"# Step Planner", "{{steps_dir}}", "{{repository}}", "AskUserQuestion"}},
 		{prompts.StageOneShot, []string{
 			"# One-Shot Planner", "{{one_shot_path}}", "{{repository}}", "{{initial_context}}", "AskUserQuestion",
 		}},
@@ -385,12 +385,11 @@ func everyVar() prompts.Vars {
 		TechSpecPath: "/data/tasks/add-login/tech-spec.md",
 		StepsDir:     "/data/tasks/add-login/steps",
 		StepPath:     "/data/tasks/add-login/steps/1-add-the-store.md",
-		Repositories: []string{"api", "web"},
-		Repository:   "api",
+		Repository:   "acme/api",
 		Branch:       "add-login",
 		BaseBranch:   "origin/dev",
-		DraftPath:    "/data/tasks/add-login/pr/api-draft.md",
-		ReviewPath:   "/data/tasks/add-login/pr/api-review-1.md",
+		DraftPath:    "/data/tasks/add-login/pr/draft.md",
+		ReviewPath:   "/data/tasks/add-login/pr/review-1.md",
 		PRNumber:     "42",
 		PRURL:        "https://github.com/acme/api/pull/42",
 	}
@@ -442,14 +441,15 @@ func TestRenderTheDefaultPromptsKeepNoPlaceholder(t *testing.T) {
 		contains []string
 	}{
 		{prompts.StagePRD, prdVars(), []string{"add-login", "/data/tasks/add-login/PRD.md", "a login screen"}},
-		{prompts.StageTechSpec, everyVar(), []string{"add-login", "/data/tasks/add-login/tech-spec.md", "- `api`\n- `web`"}},
-		{prompts.StagePlan, everyVar(), []string{"add-login", "/data/tasks/add-login/steps", "- `api`\n- `web`"}},
+		{prompts.StageTechSpec, everyVar(), []string{"add-login", "/data/tasks/add-login/tech-spec.md", "`acme/api`"}},
+		{prompts.StagePlan, everyVar(), []string{"add-login", "/data/tasks/add-login/steps", "`acme/api`"}},
 		{prompts.StageOneShot, oneShotPlanningVars(), []string{
-			"add-login", "Write the document to `" + oneShotPath + "`", "runs in `api`", "## Initial context\n\na login screen\n",
+			"add-login", "Write the document to `" + oneShotPath + "`", "runs in `acme/api`",
+			"## Initial context\n\na login screen\n",
 		}},
 		{prompts.StageStepReview, stepReviewVars(), []string{
 			"/data/tasks/add-login/steps/1-add-the-store.md",
-			"/data/tasks/add-login/pr/api-review-1.md",
+			"/data/tasks/add-login/pr/review-1.md",
 			"## The implementer's last response\n\nI added the store.",
 		}},
 		// The commit prompt carries no planning placeholder: the agent already
@@ -457,8 +457,10 @@ func TestRenderTheDefaultPromptsKeepNoPlaceholder(t *testing.T) {
 		// planning. {{what_to_commit}} and {{push}} are the only ones, and the
 		// second renders to nothing here.
 		{prompts.StageCommit, everyVar(), []string{"# Commit", prompts.StagedInstruction, "Make **one commit**"}},
-		{prompts.StagePR, everyVar(), []string{"`api`", "origin/dev", "/data/tasks/add-login/pr/api-draft.md"}},
-		{prompts.StagePRReview, everyVar(), []string{"https://github.com/acme/api/pull/42", "`42`", "/data/tasks/add-login/pr/api-review-1.md"}},
+		{prompts.StagePR, everyVar(), []string{"`acme/api`", "origin/dev", "/data/tasks/add-login/pr/draft.md"}},
+		{prompts.StagePRReview, everyVar(), []string{
+			"https://github.com/acme/api/pull/42", "`42`", "/data/tasks/add-login/pr/review-1.md",
+		}},
 	}
 
 	dataDir := t.TempDir()
@@ -517,34 +519,12 @@ func TestTheCommitPromptSaysNothingAboutThePlanning(t *testing.T) {
 	}
 }
 
-func TestRenderTurnsTheRepositoriesIntoAList(t *testing.T) {
+func TestThePlanPromptAsksForNoRepositoryHeader(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name         string
-		repositories []string
-		want         string
-	}{
-		{"none", nil, "repos: - (none)"},
-		{"one", []string{"api"}, "repos: - `api`"},
-		{"many", []string{"api", "web/app"}, "repos: - `api`\n- `web/app`"},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-
-			dataDir := t.TempDir()
-			write(t, dataDir, prompts.StageTechSpec, "repos: {{repositories}}")
-
-			got, err := prompts.Render(dataDir, prompts.StageTechSpec, prompts.Vars{Repositories: test.repositories})
-			if err != nil {
-				t.Fatalf("Render() = %v, want nil", err)
-			}
-			if got != test.want {
-				t.Errorf("Render() = %q, want %q", got, test.want)
-			}
-		})
+	text := readPrompt(t, t.TempDir(), prompts.StagePlan).Text
+	if strings.Contains(text, "repository:") {
+		t.Error("the plan prompt still asks the agent for a repository header")
 	}
 }
 

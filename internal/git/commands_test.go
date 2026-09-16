@@ -435,22 +435,6 @@ func TestRemoveWorktreeAndDeleteBranchUndoAnAdd(t *testing.T) {
 	}
 }
 
-func TestExcludePathPointsInsideTheGitDirectory(t *testing.T) {
-	t.Parallel()
-	runner, dir := repo(t)
-
-	got, err := runner.ExcludePath(t.Context(), dir)
-	if err != nil {
-		t.Fatalf("ExcludePath = %v, want nil", err)
-	}
-	if !filepath.IsAbs(got) {
-		t.Errorf("ExcludePath = %q, want an absolute path", got)
-	}
-	if want := filepath.Join(dir, ".git", "info", "exclude"); got != want {
-		t.Errorf("ExcludePath = %q, want %q", got, want)
-	}
-}
-
 func TestCountCommitsCountsWhatABranchHasPastItsBase(t *testing.T) {
 	t.Parallel()
 	runner, dir := repo(t)

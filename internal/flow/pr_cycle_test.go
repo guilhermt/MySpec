@@ -24,26 +24,26 @@ func openPR() task.PRDetails {
 
 // prArtifacts is what the pr folder of the task holds for the first
 // repository.
-func prArtifacts(art task.RepoArtifacts) task.Artifacts {
+func prArtifacts(art task.PRArtifacts) task.Artifacts {
 	return task.Artifacts{
 		PRD: true, TechSpec: true, Plan: plan(),
-		PR: map[string]task.RepoArtifacts{"api": art},
+		PR: art,
 	}
 }
 
 // reviewKeyOf is the session that reviews the pull request of the first
 // repository.
-var reviewKeyOf = session.Key{TaskID: "task-1", Stage: session.PRReviewStage("api")}
+var reviewKeyOf = session.Key{TaskID: "task-1", Stage: session.PRReviewStage}
 
 // underReview brings the first repository of a task to its review session,
 // with the pull request the app recorded and the branch on startCommit.
 func underReview(t *testing.T, f *fixture) task.Task {
 	t.Helper()
 
-	tk := f.tasks.add("task-1", task.StagePR, prArtifacts(task.RepoArtifacts{}))
-	f.worktrees.seed(tk, repos[0])
+	tk := f.tasks.add("task-1", task.StagePR, prArtifacts(task.PRArtifacts{}))
+	f.worktrees.seed(tk)
 	f.worktrees.setStatus(git.Status{Head: startCommit})
-	f.tasks.setPRRun("task-1", task.PRRun{RepoPath: repos[0].Path, Status: task.PRReviewing, PR: openPR()})
+	f.tasks.setPRRun("task-1", task.PRRun{Status: task.PRReviewing, PR: openPR()})
 
 	f.service.Check("task-1")
 	waitFor(t, "the review session of api", func() bool {
@@ -58,7 +58,7 @@ func (f *fixture) waitPRRun(t *testing.T, subject string, cond func(task.PRRun) 
 	t.Helper()
 
 	waitFor(t, subject, func() bool {
-		run, ok := f.tasks.prRun("task-1", repos[0].Path)
+		run, ok := f.tasks.prRun("task-1")
 		return ok && cond(run)
 	})
 }
@@ -66,7 +66,7 @@ func (f *fixture) waitPRRun(t *testing.T, subject string, cond func(task.PRRun) 
 // reportsWritten puts the reports of a review on disk and lets the agent rest,
 // which is what an evaluation reads them on.
 func reportsWritten(f *fixture, written []task.ReviewReport) {
-	f.tasks.setArtifacts("task-1", prArtifacts(task.RepoArtifacts{Reports: written}))
+	f.tasks.setArtifacts("task-1", prArtifacts(task.PRArtifacts{Reports: written}))
 	f.sessions.goIdle("task-1")
 	f.service.Check("task-1")
 }
@@ -81,13 +81,13 @@ func TestTheFirstPassOfAReviewIsStartedWithItsReport(t *testing.T) {
 	if !ok {
 		t.Fatal("the review session was not started")
 	}
-	if want := "/data/task-1/pr/api-review-1.md"; info.ReviewPath != want {
+	if want := "/data/task-1/pr/review-1.md"; info.ReviewPath != want {
 		t.Errorf("review path = %q, want %q", info.ReviewPath, want)
 	}
 	if info.PRNumber != "7" || info.PRURL != samePR.URL {
 		t.Errorf("session = %+v, want the pull request it reviews", info)
 	}
-	if !slices.Contains(f.sessions.recorded(), "start:task-1:pr_review:api:restarted=false") {
+	if !slices.Contains(f.sessions.recorded(), "start:task-1:pr_review:restarted=false") {
 		t.Errorf("session calls = %q, want the review session started", f.sessions.recorded())
 	}
 }
@@ -109,7 +109,7 @@ func TestTheReviewOfAOneShotPullRequestReadsTheDocument(t *testing.T) {
 	f.waitPRRun(t, "the report of the first pass", func(run task.PRRun) bool { return run.ReportedPass == 1 })
 	f.reviews.setSnapshot(staged(3, 3))
 	f.sessions.goIdle("task-1")
-	if err := f.service.ApproveRepo(t.Context(), "task-1", repos[0].Path); err != nil {
+	if err := f.service.ApprovePR(t.Context(), "task-1"); err != nil {
 		t.Fatalf("ApproveRepo() = %v, want nil", err)
 	}
 	f.worktrees.setStatus(git.Status{Head: commitSHA})
@@ -117,7 +117,7 @@ func TestTheReviewOfAOneShotPullRequestReadsTheDocument(t *testing.T) {
 	f.sessions.goIdle("task-1")
 	f.service.Check("task-1")
 
-	want := oneShotReviewPrompt("/data/task-1/pr/api-review-2.md", document)
+	want := oneShotReviewPrompt("/data/task-1/pr/review-2.md", document)
 	waitFor(t, "the prompt of the second pass", func() bool { return slices.Contains(f.sessions.sent(), want) })
 }
 
@@ -132,7 +132,7 @@ func TestAReportWithFindingsWaitsForTheDecision(t *testing.T) {
 		return run.ReportedPass == 1
 	})
 
-	run, _ := f.tasks.prRun("task-1", repos[0].Path)
+	run, _ := f.tasks.prRun("task-1")
 	if run.ReviewedCommit != startCommit {
 		t.Errorf("reviewed commit = %q, want the one the branch was on", run.ReviewedCommit)
 	}
@@ -140,15 +140,15 @@ func TestAReportWithFindingsWaitsForTheDecision(t *testing.T) {
 		t.Errorf("status = %q, want reviewing: the pass found something to change", run.Status)
 	}
 	// The pass is a milestone of the conversation, like an artifact is.
-	if !slices.Contains(f.sessions.recorded(), "mark:task-1:pr_review:api:pass=1") {
+	if !slices.Contains(f.sessions.recorded(), "mark:task-1:pr_review:pass=1") {
 		t.Errorf("session calls = %q, want the pass marked", f.sessions.recorded())
 	}
 	// The worktree is the user's to review while they decide.
 	waitFor(t, "the worktree of api to be watched", func() bool {
-		active, watched := f.reviews.activeOf(reviewKey("task-1", 0))
+		active, watched := f.reviews.activeOf("task-1")
 		return watched && active
 	})
-	if got := f.repoState(t, "task-1", repos[0].Path).Status; got != flow.RepoAwaitingDecision {
+	if got := f.prState(t, "task-1").Status; got != flow.PRAwaitingDecision {
 		t.Errorf("status = %q, want awaiting_decision", got)
 	}
 }
@@ -163,14 +163,14 @@ func TestApprovingAReviewAsksForACommitThatIsPushed(t *testing.T) {
 	f.reviews.setSnapshot(staged(3, 3))
 	f.sessions.goIdle("task-1")
 
-	if got := f.repoState(t, "task-1", repos[0].Path).Status; got != flow.RepoReadyToApprove {
+	if got := f.prState(t, "task-1").Status; got != flow.PRReadyToApprove {
 		t.Fatalf("status = %q, want ready_to_approve", got)
 	}
-	if err := f.service.ApproveRepo(t.Context(), "task-1", repos[0].Path); err != nil {
+	if err := f.service.ApprovePR(t.Context(), "task-1"); err != nil {
 		t.Fatalf("ApproveRepo() = %v, want nil", err)
 	}
 
-	run, _ := f.tasks.prRun("task-1", repos[0].Path)
+	run, _ := f.tasks.prRun("task-1")
 	if run.Status != task.PRCommitting {
 		t.Errorf("status = %q, want committing", run.Status)
 	}
@@ -178,7 +178,7 @@ func TestApprovingAReviewAsksForACommitThatIsPushed(t *testing.T) {
 	if len(sent) != 1 || !strings.Contains(sent[0], prompts.PushInstruction) {
 		t.Errorf("sent = %q, want the commit prompt with the push instruction", sent)
 	}
-	if !slices.Contains(f.sessions.recorded(), "send:task-1:pr_review:api") {
+	if !slices.Contains(f.sessions.recorded(), "send:task-1:pr_review") {
 		t.Errorf("session calls = %q, want the prompt sent to the review session", f.sessions.recorded())
 	}
 }
@@ -192,7 +192,7 @@ func TestACommitOfAReviewStartsTheNextPass(t *testing.T) {
 	f.waitPRRun(t, "the report of the first pass", func(run task.PRRun) bool { return run.ReportedPass == 1 })
 	f.reviews.setSnapshot(staged(3, 3))
 	f.sessions.goIdle("task-1")
-	if err := f.service.ApproveRepo(t.Context(), "task-1", repos[0].Path); err != nil {
+	if err := f.service.ApprovePR(t.Context(), "task-1"); err != nil {
 		t.Fatalf("ApproveRepo() = %v, want nil", err)
 	}
 
@@ -204,25 +204,25 @@ func TestACommitOfAReviewStartsTheNextPass(t *testing.T) {
 	f.service.Check("task-1")
 
 	waitFor(t, "the prompt of the second pass", func() bool {
-		return slices.Contains(f.sessions.sent(), reviewPrompt("/data/task-1/pr/api-review-2.md"))
+		return slices.Contains(f.sessions.sent(), reviewPrompt("/data/task-1/pr/review-2.md"))
 	})
-	run, _ := f.tasks.prRun("task-1", repos[0].Path)
+	run, _ := f.tasks.prRun("task-1")
 	if run.Status != task.PRReviewing {
 		t.Errorf("status = %q, want reviewing", run.Status)
 	}
-	if state := f.repoState(t, "task-1", repos[0].Path); state.CommitFailed {
+	if state := f.prState(t, "task-1"); state.CommitFailed {
 		t.Error("the approval is reported as having produced no commit")
 	}
 
 	// The same commit never asks for a second pass.
 	f.service.Check("task-1")
 	f.waitEvaluations(t, 1)
-	if got := slices.Index(f.sessions.sent(), reviewPrompt("/data/task-1/pr/api-review-2.md")); got < 0 {
+	if got := slices.Index(f.sessions.sent(), reviewPrompt("/data/task-1/pr/review-2.md")); got < 0 {
 		t.Fatal("the prompt of the second pass is gone")
 	}
 	asked := 0
 	for _, message := range f.sessions.sent() {
-		if message == reviewPrompt("/data/task-1/pr/api-review-2.md") {
+		if message == reviewPrompt("/data/task-1/pr/review-2.md") {
 			asked++
 		}
 	}
@@ -233,7 +233,7 @@ func TestACommitOfAReviewStartsTheNextPass(t *testing.T) {
 	// The agent rested with no report of the pass it was asked for: nothing
 	// moves until the user answers it.
 	f.sessions.goIdle("task-1")
-	if got := f.repoState(t, "task-1", repos[0].Path).Status; got != flow.RepoAwaitingReply {
+	if got := f.prState(t, "task-1").Status; got != flow.PRAwaitingReply {
 		t.Errorf("status = %q, want awaiting_reply", got)
 	}
 }
@@ -247,7 +247,7 @@ func TestACommitTurnOfAReviewThatCommitsNothingGivesTheRepositoryBack(t *testing
 	f.waitPRRun(t, "the report of the first pass", func(run task.PRRun) bool { return run.ReportedPass == 1 })
 	f.reviews.setSnapshot(staged(3, 3))
 	f.sessions.goIdle("task-1")
-	if err := f.service.ApproveRepo(t.Context(), "task-1", repos[0].Path); err != nil {
+	if err := f.service.ApprovePR(t.Context(), "task-1"); err != nil {
 		t.Fatalf("ApproveRepo() = %v, want nil", err)
 	}
 
@@ -256,11 +256,11 @@ func TestACommitTurnOfAReviewThatCommitsNothingGivesTheRepositoryBack(t *testing
 	f.service.Check("task-1")
 
 	waitFor(t, "the repository to come back to its review", func() bool {
-		run, ok := f.tasks.prRun("task-1", repos[0].Path)
+		run, ok := f.tasks.prRun("task-1")
 		return ok && run.Status == task.PRReviewing
 	})
 	waitFor(t, "the warning of the missing commit", func() bool {
-		return f.repoState(t, "task-1", repos[0].Path).CommitFailed
+		return f.prState(t, "task-1").CommitFailed
 	})
 }
 
@@ -272,17 +272,17 @@ func TestACleanReportClosesTheRepository(t *testing.T) {
 	reportsWritten(f, reports(1, true))
 
 	f.waitPRRun(t, "the repository to be closed", func(run task.PRRun) bool { return run.Status == task.PRDone })
-	f.waitRepo(t, "task-1", repos[0].Path, flow.RepoDone)
+	f.waitPR(t, "task-1", flow.PRDone)
 
-	run, _ := f.tasks.prRun("task-1", repos[0].Path)
+	run, _ := f.tasks.prRun("task-1")
 	if run.ReportedPass != 1 {
 		t.Errorf("reported pass = %d, want the first pass recorded", run.ReportedPass)
 	}
 	// The conversation of a repository that is over takes no more messages.
 	waitFor(t, "the review session to be closed", func() bool {
-		return slices.Contains(f.sessions.recorded(), "close:task-1:pr_review:api")
+		return slices.Contains(f.sessions.recorded(), "close:task-1:pr_review")
 	})
-	if _, watched := f.reviews.activeOf(reviewKey("task-1", 0)); watched {
+	if _, watched := f.reviews.activeOf("task-1"); watched {
 		t.Error("the worktree is still watched, want it forgotten")
 	}
 }
@@ -302,7 +302,7 @@ func TestFindingsTheUserDismissesCloseTheRepositoryToo(t *testing.T) {
 	f.waitPRRun(t, "the repository to be closed", func(run task.PRRun) bool {
 		return run.Status == task.PRDone && run.ReportedPass == 2
 	})
-	f.waitRepo(t, "task-1", repos[0].Path, flow.RepoDone)
+	f.waitPR(t, "task-1", flow.PRDone)
 }
 
 func TestOpeningThePullRequestWritesTheDraftTheUserApproved(t *testing.T) {
@@ -312,28 +312,28 @@ func TestOpeningThePullRequestWritesTheDraftTheUserApproved(t *testing.T) {
 	dir := t.TempDir()
 	inPR(f, "task-1", plan(), task.PRDrafting)
 	f.tasks.useDir("task-1", dir)
-	f.tasks.setArtifacts("task-1", prArtifacts(task.RepoArtifacts{
+	f.tasks.setArtifacts("task-1", prArtifacts(task.PRArtifacts{
 		Draft: task.Draft{Present: true, Title: "Add the login screen", Body: "It adds the screen."},
 	}))
 	f.sessions.setSummary("task-1", session.Summary{
-		Stage: session.PRStage("api"), Status: session.StatusWaiting, Idle: true,
+		Stage: session.PRStage, Status: session.StatusWaiting, Idle: true,
 	})
 
-	err := f.service.OpenPR(t.Context(), "task-1", repos[0].Path, "  Add the login screen  ", "It adds the screen.")
+	err := f.service.OpenPR(t.Context(), "task-1", "  Add the login screen  ", "It adds the screen.")
 	if err != nil {
 		t.Fatalf("OpenPR() = %v, want nil", err)
 	}
 
-	run, _ := f.tasks.prRun("task-1", repos[0].Path)
+	run, _ := f.tasks.prRun("task-1")
 	if run.Status != task.PROpening {
 		t.Errorf("status = %q, want opening", run.Status)
 	}
-	path := filepath.Join(dir, "pr", "api-draft.md")
+	path := filepath.Join(dir, "pr", "draft.md")
 	written, readErr := os.ReadFile(path)
 	if readErr != nil {
 		t.Fatalf("read draft: %v", readErr)
 	}
-	for _, want := range []string{"repository: api", "base: origin/dev", "title: Add the login screen", "It adds the screen."} {
+	for _, want := range []string{"repository: dev/web", "base: origin/dev", "title: Add the login screen", "It adds the screen."} {
 		if !strings.Contains(string(written), want) {
 			t.Errorf("draft = %q, want it to contain %q", written, want)
 		}
@@ -351,9 +351,9 @@ func TestOpeningThePullRequestResumesAPausedSession(t *testing.T) {
 	dir := t.TempDir()
 	inPR(f, "task-1", plan(), task.PRDrafting)
 	f.tasks.useDir("task-1", dir)
-	f.sessions.setSummary("task-1", session.Summary{Stage: session.PRStage("api"), Status: session.StatusPaused})
+	f.sessions.setSummary("task-1", session.Summary{Stage: session.PRStage, Status: session.StatusPaused})
 
-	err := f.service.OpenPR(t.Context(), "task-1", repos[0].Path, "Add the login screen", "It adds the screen.")
+	err := f.service.OpenPR(t.Context(), "task-1", "Add the login screen", "It adds the screen.")
 	if err != nil {
 		t.Fatalf("OpenPR() = %v, want nil", err)
 	}
@@ -361,20 +361,20 @@ func TestOpeningThePullRequestResumesAPausedSession(t *testing.T) {
 	// The user should not have to think about processes to open what they
 	// wrote: the session comes back and takes the message.
 	calls := f.sessions.recorded()
-	resume, send := slices.Index(calls, "resume:task-1:pr:api"), slices.Index(calls, "send:task-1:pr:api")
+	resume, send := slices.Index(calls, "resume:task-1:pr"), slices.Index(calls, "send:task-1:pr")
 	if resume < 0 || send < resume {
 		t.Errorf("session calls = %q, want the session resumed before the message", calls)
 	}
 }
 
-func TestDiscardingADraftPreparesTheRepositoryAgain(t *testing.T) {
+func TestDiscardingADraftPreparesTheStageAgain(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
 	dir := t.TempDir()
 	inPR(f, "task-1", plan(), task.PRDrafting)
 	f.tasks.useDir("task-1", dir)
-	path := filepath.Join(dir, "pr", "api-draft.md")
+	path := filepath.Join(dir, "pr", "draft.md")
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		t.Fatalf("create pr directory: %v", err)
 	}
@@ -382,18 +382,18 @@ func TestDiscardingADraftPreparesTheRepositoryAgain(t *testing.T) {
 		t.Fatalf("write draft: %v", err)
 	}
 
-	if err := f.service.DiscardDraft(t.Context(), "task-1", repos[0].Path); err != nil {
+	if err := f.service.DiscardDraft(t.Context(), "task-1"); err != nil {
 		t.Fatalf("DiscardDraft() = %v, want nil", err)
 	}
 
 	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("stat draft = %v, want it gone", err)
 	}
-	if !slices.Contains(f.sessions.recorded(), "discard:task-1:pr:api") {
+	if !slices.Contains(f.sessions.recorded(), "discard:task-1:pr") {
 		t.Errorf("session calls = %q, want the pr session discarded", f.sessions.recorded())
 	}
 	// The repository is prepared again, from the login check on.
-	f.waitRepo(t, "task-1", repos[0].Path, flow.RepoDrafting)
+	f.waitPR(t, "task-1", flow.PRDrafting)
 }
 
 func TestReviewingAgainStartsAPassOverTheSamePullRequest(t *testing.T) {
@@ -406,19 +406,19 @@ func TestReviewingAgainStartsAPassOverTheSamePullRequest(t *testing.T) {
 		return run.Status == task.PRDone && run.ReportedPass == 1
 	})
 
-	if err := f.service.ReviewAgain(t.Context(), "task-1", repos[0].Path); err != nil {
+	if err := f.service.ReviewAgain(t.Context(), "task-1"); err != nil {
 		t.Fatalf("ReviewAgain() = %v, want nil", err)
 	}
 
 	waitFor(t, "the session of the second pass", func() bool {
 		info, ok := f.sessions.info(reviewKeyOf)
-		return ok && info.ReviewPath == "/data/task-1/pr/api-review-2.md"
+		return ok && info.ReviewPath == "/data/task-1/pr/review-2.md"
 	})
 	// The reports already written stay where they are.
-	if state := f.repoState(t, "task-1", repos[0].Path); len(state.Reports) != 1 {
+	if state := f.prState(t, "task-1"); len(state.Reports) != 1 {
 		t.Errorf("reports = %d, want the one already written", len(state.Reports))
 	}
-	if !slices.Contains(f.sessions.recorded(), "discard:task-1:pr_review:api") {
+	if !slices.Contains(f.sessions.recorded(), "discard:task-1:pr_review") {
 		t.Errorf("session calls = %q, want the review session discarded", f.sessions.recorded())
 	}
 
@@ -428,10 +428,10 @@ func TestReviewingAgainStartsAPassOverTheSamePullRequest(t *testing.T) {
 	before := f.tasks.inspectCount()
 	f.service.Check("task-1")
 	f.waitEvaluations(t, before+1)
-	if run, _ := f.tasks.prRun("task-1", repos[0].Path); run.Status != task.PRReviewing {
+	if run, _ := f.tasks.prRun("task-1"); run.Status != task.PRReviewing {
 		t.Errorf("status = %q, want reviewing until the report of the new pass is in", run.Status)
 	}
-	if got := f.repoState(t, "task-1", repos[0].Path).Status; got != flow.RepoAwaitingReply {
+	if got := f.prState(t, "task-1").Status; got != flow.PRAwaitingReply {
 		t.Errorf("status = %q, want awaiting_reply", got)
 	}
 
@@ -449,15 +449,15 @@ func TestRetryingABlockedRepositoryPreparesItAgain(t *testing.T) {
 	f.gh.failAuth(gh.ErrNotAuthenticated)
 	inPR(f, "task-1", plan(), task.PRPreparing)
 	f.service.Sync(t.Context())
-	f.waitRepo(t, "task-1", repos[0].Path, flow.RepoBlocked)
+	f.waitPR(t, "task-1", flow.PRBlocked)
 
 	f.gh.failAuth(nil)
-	if err := f.service.RetryRepo(t.Context(), "task-1", repos[0].Path); err != nil {
+	if err := f.service.RetryPR(t.Context(), "task-1"); err != nil {
 		t.Fatalf("RetryRepo() = %v, want nil", err)
 	}
 
-	f.waitRepo(t, "task-1", repos[0].Path, flow.RepoDrafting)
-	if state := f.repoState(t, "task-1", repos[0].Path); state.Block != nil {
+	f.waitPR(t, "task-1", flow.PRDrafting)
+	if state := f.prState(t, "task-1"); state.Block != nil {
 		t.Errorf("block = %+v, want none", state.Block)
 	}
 }
@@ -469,17 +469,17 @@ func TestRefreshingReadsThePullRequestAgain(t *testing.T) {
 	inPR(f, "task-1", plan(), task.PRDrafting)
 	f.gh.setPR("task-1", samePR)
 
-	if err := f.service.RefreshPR(t.Context(), "task-1", repos[0].Path); err != nil {
+	if err := f.service.RefreshPR(t.Context(), "task-1"); err != nil {
 		t.Fatalf("RefreshPR() = %v, want nil", err)
 	}
 
-	waitFor(t, "the pull request of api to be found", func() bool {
-		run, ok := f.tasks.prRun("task-1", repos[0].Path)
+	waitFor(t, "the pull request to be found", func() bool {
+		run, ok := f.tasks.prRun("task-1")
 		return ok && run.Status == task.PRReviewing
 	})
 }
 
-func TestWhatTheActionsOfARepositoryRefuse(t *testing.T) {
+func TestWhatTheActionsOfThePullRequestRefuse(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -490,16 +490,10 @@ func TestWhatTheActionsOfARepositoryRefuse(t *testing.T) {
 		want   error
 	}{
 		{
-			name:   "a repository the task does not have",
-			status: task.PRDrafting,
-			act:    func(f *fixture) error { return f.service.RetryRepo(t.Context(), "task-1", "/workspace/cli") },
-			want:   flow.ErrNoRepo,
-		},
-		{
 			name:   "opening a pull request that is not drafted",
 			status: task.PRReviewing,
 			act: func(f *fixture) error {
-				return f.service.OpenPR(t.Context(), "task-1", repos[0].Path, "A title", "A body")
+				return f.service.OpenPR(t.Context(), "task-1", "A title", "A body")
 			},
 			want: flow.ErrDraftMissing,
 		},
@@ -507,34 +501,34 @@ func TestWhatTheActionsOfARepositoryRefuse(t *testing.T) {
 			name:   "opening a pull request with no description",
 			status: task.PRDrafting,
 			act: func(f *fixture) error {
-				return f.service.OpenPR(t.Context(), "task-1", repos[0].Path, "A title", "   ")
+				return f.service.OpenPR(t.Context(), "task-1", "A title", "   ")
 			},
 			want: flow.ErrEmptyDraft,
 		},
 		{
-			name:   "approving a repository with no report",
+			name:   "approving a pull request with no report",
 			status: task.PRReviewing,
-			act:    func(f *fixture) error { return f.service.ApproveRepo(t.Context(), "task-1", repos[0].Path) },
+			act:    func(f *fixture) error { return f.service.ApprovePR(t.Context(), "task-1") },
 			want:   flow.ErrStepNotReady,
 		},
 		{
-			name:   "reviewing again a repository with no pull request",
+			name:   "reviewing again a task with no pull request",
 			status: task.PRDrafting,
-			act:    func(f *fixture) error { return f.service.ReviewAgain(t.Context(), "task-1", repos[0].Path) },
+			act:    func(f *fixture) error { return f.service.ReviewAgain(t.Context(), "task-1") },
 			want:   flow.ErrNoPullRequest,
 		},
 		{
 			name:   "discarding the draft of a pull request that exists",
 			status: task.PRDrafting,
 			pr:     openPR(),
-			act:    func(f *fixture) error { return f.service.DiscardDraft(t.Context(), "task-1", repos[0].Path) },
+			act:    func(f *fixture) error { return f.service.DiscardDraft(t.Context(), "task-1") },
 			want:   flow.ErrPRExists,
 		},
 		{
-			name:   "retrying a repository that is not blocked",
+			name:   "retrying a stage that is not blocked",
 			status: task.PRDrafting,
-			act:    func(f *fixture) error { return f.service.RetryRepo(t.Context(), "task-1", repos[0].Path) },
-			want:   flow.ErrRepoNotBlocked,
+			act:    func(f *fixture) error { return f.service.RetryPR(t.Context(), "task-1") },
+			want:   flow.ErrPRNotBlocked,
 		},
 	}
 
@@ -543,11 +537,11 @@ func TestWhatTheActionsOfARepositoryRefuse(t *testing.T) {
 			t.Parallel()
 
 			f := newFixture(t)
-			tk := f.tasks.add("task-1", task.StagePR, prArtifacts(task.RepoArtifacts{}))
-			f.worktrees.seed(tk, repos[0])
-			f.tasks.setPRRun("task-1", task.PRRun{RepoPath: repos[0].Path, Status: test.status, PR: test.pr})
+			tk := f.tasks.add("task-1", task.StagePR, prArtifacts(task.PRArtifacts{}))
+			f.worktrees.seed(tk)
+			f.tasks.setPRRun("task-1", task.PRRun{Status: test.status, PR: test.pr})
 			f.sessions.setSummary("task-1", session.Summary{
-				Stage: session.PRStage("api"), Status: session.StatusWaiting, Idle: true,
+				Stage: session.PRStage, Status: session.StatusWaiting, Idle: true,
 			})
 
 			wantErrIs(t, test.act(f), test.want)
@@ -555,11 +549,11 @@ func TestWhatTheActionsOfARepositoryRefuse(t *testing.T) {
 	}
 }
 
-func TestARepositoryOfATaskThatIsNotOpeningPullRequests(t *testing.T) {
+func TestTheActionsOfATaskThatIsNotInThePRStage(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
 	implementing(f, "task-1", plan())
 
-	wantErrIs(t, f.service.ApproveRepo(t.Context(), "task-1", repos[0].Path), flow.ErrNoRepo)
+	wantErrIs(t, f.service.ApprovePR(t.Context(), "task-1"), flow.ErrNotInPR)
 }

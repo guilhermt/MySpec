@@ -8,13 +8,14 @@ import (
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/git"
+	"github.com/guilhermt/myspec/internal/repository"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
 	"github.com/guilhermt/myspec/internal/worktree"
 )
 
-// mergedPR is the pull request of a repository the user merged on GitHub, with
-// the branch GitHub says it merged into.
+// mergedPR is the pull request the user merged on GitHub, with the branch
+// GitHub says it merged into.
 func mergedPR() task.PRDetails {
 	pr := openPR()
 	pr.State, pr.Base = task.PRStateMerged, "dev"
@@ -28,30 +29,27 @@ func closedPR() task.PRDetails {
 	return pr
 }
 
-// awaitingClosing puts a task in the PR stage with the worktree of every
-// repository of its plan and the record the test wants for each of them.
-func awaitingClosing(f *fixture, id string, plan task.Plan, runs ...task.PRRun) task.Task {
+// awaitingClosing puts a task in the PR stage with its worktree and the record
+// the test wants for its pull request.
+func awaitingClosing(f *fixture, id string, plan task.Plan, run task.PRRun) task.Task {
 	t := f.tasks.add(id, task.StagePR, task.Artifacts{PRD: true, TechSpec: true, Plan: plan})
-	for _, repo := range planRepos(plan) {
-		f.worktrees.seed(t, repo)
-	}
-	for _, run := range runs {
-		f.tasks.setPRRun(id, run)
-	}
+	f.worktrees.seed(t)
+	f.tasks.setPRRun(id, run)
 	return t
 }
 
-// waitPRStatus polls until the app has recorded a status for a repository.
-func (f *fixture) waitPRStatus(t *testing.T, id, repoPath string, status task.PRStatus) {
+// waitPRStatus polls until the app has recorded a status for the pull request
+// of a task.
+func (f *fixture) waitPRStatus(t *testing.T, id string, status task.PRStatus) {
 	t.Helper()
 
-	waitFor(t, "repository "+repoPath+" of "+id+" to be recorded as "+string(status), func() bool {
-		run, ok := f.tasks.prRun(id, repoPath)
+	waitFor(t, "the pull request of "+id+" to be recorded as "+string(status), func() bool {
+		run, ok := f.tasks.prRun(id)
 		return ok && run.Status == status
 	})
 }
 
-func TestClosingARepositoryIsRefusedUntilTheMergeIsConfirmed(t *testing.T) {
+func TestClosingATaskIsRefusedUntilTheMergeIsConfirmed(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -60,10 +58,10 @@ func TestClosingARepositoryIsRefusedUntilTheMergeIsConfirmed(t *testing.T) {
 		pr     task.PRDetails
 		want   error
 	}{
-		{"the review is still running", task.PRReviewing, openPR(), flow.ErrRepoNotClosable},
+		{"the review is still running", task.PRReviewing, openPR(), flow.ErrNotClosable},
 		{"the pull request is still open", task.PRDone, openPR(), flow.ErrPRNotMerged},
-		{"the pull request was closed without a merge", task.PRDone, closedPR(), flow.ErrRepoNotClosable},
-		{"the repository is already closed", task.PRClosed, mergedPR(), flow.ErrRepoNotClosable},
+		{"the pull request was closed without a merge", task.PRDone, closedPR(), flow.ErrNotClosable},
+		{"the task is already closed", task.PRClosed, mergedPR(), flow.ErrNotClosable},
 	}
 
 	for _, test := range tests {
@@ -71,11 +69,11 @@ func TestClosingARepositoryIsRefusedUntilTheMergeIsConfirmed(t *testing.T) {
 			t.Parallel()
 
 			f := newFixture(t)
-			awaitingClosing(f, "task-1", plan(), task.PRRun{RepoPath: repos[0].Path, Status: test.status, PR: test.pr})
+			awaitingClosing(f, "task-1", plan(), task.PRRun{Status: test.status, PR: test.pr})
 
-			wantErrIs(t, f.service.CloseRepo(t.Context(), "task-1", repos[0].Path), test.want)
+			wantErrIs(t, f.service.CloseTask(t.Context(), "task-1"), test.want)
 
-			run, _ := f.tasks.prRun("task-1", repos[0].Path)
+			run, _ := f.tasks.prRun("task-1")
 			if run.Status != test.status {
 				t.Errorf("status = %q, want %q: a refused closing changes nothing", run.Status, test.status)
 			}
@@ -86,28 +84,25 @@ func TestClosingARepositoryIsRefusedUntilTheMergeIsConfirmed(t *testing.T) {
 	}
 }
 
-func TestClosingAMergedRepositoryTakesDownItsWorktreeAndRecordsWhatHappened(t *testing.T) {
+func TestClosingAMergedTaskTakesDownItsWorktreeAndRecordsWhatHappened(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	awaitingClosing(f, "task-1", twoStepPlan(),
-		task.PRRun{RepoPath: repos[0].Path, Status: task.PRDone, PR: mergedPR()},
-		task.PRRun{RepoPath: repos[1].Path, Status: task.PRDone, PR: openPR()},
-	)
+	awaitingClosing(f, "task-1", plan(), task.PRRun{Status: task.PRDone, PR: mergedPR()})
 
-	if err := f.service.CloseRepo(t.Context(), "task-1", repos[0].Path); err != nil {
-		t.Fatalf("CloseRepo() = %v, want nil", err)
+	if err := f.service.CloseTask(t.Context(), "task-1"); err != nil {
+		t.Fatalf("CloseTask() = %v, want nil", err)
 	}
-	f.waitRepo(t, "task-1", repos[0].Path, flow.RepoClosed)
+	f.waitPRStatus(t, "task-1", task.PRClosed)
 
-	// The conversations of the repository stop before the worktree they run in.
+	// The conversations of the stage stop before the worktree they run in.
 	calls := f.sessions.recorded()
-	if !slices.Contains(calls, "close:task-1:pr:api") || !slices.Contains(calls, "close:task-1:pr_review:api") {
-		t.Errorf("session calls = %q, want both conversations of api closed", calls)
+	if !slices.Contains(calls, "close:task-1:pr") || !slices.Contains(calls, "close:task-1:pr_review") {
+		t.Errorf("session calls = %q, want both conversations closed", calls)
 	}
-	// The repository passes through closing, so the user sees git at work.
+	// The task passes through closing, so the user sees git at work.
 	taskCalls := f.tasks.recorded()
-	closing, closed := slices.Index(taskCalls, "pr:closing:task-1:api"), slices.Index(taskCalls, "prClosed:task-1:api")
+	closing, closed := slices.Index(taskCalls, "pr:closing:task-1"), slices.Index(taskCalls, "prClosed:task-1")
 	if closing < 0 || closed < 0 || closing > closed {
 		t.Errorf("task calls = %q, want closing before closed", taskCalls)
 	}
@@ -122,24 +117,71 @@ func TestClosingAMergedRepositoryTakesDownItsWorktreeAndRecordsWhatHappened(t *t
 		t.Errorf("closing = %+v, want the base of the pull request and DeleteBranch", closings[0])
 	}
 
-	state := f.repoState(t, "task-1", repos[0].Path)
-	if state.Close == nil || state.Close.Base.Outcome != task.OutcomeDone || state.Close.BaseCommits != 3 {
-		t.Errorf("close result = %+v, want the one the worktrees answered with", state.Close)
+	run, _ := f.tasks.prRun("task-1")
+	if run.Close == nil || run.Close.Base.Outcome != task.OutcomeDone || run.Close.BaseCommits != 3 {
+		t.Errorf("close result = %+v, want the one the worktrees answered with", run.Close)
 	}
-	if state.CanClose {
-		t.Error("a closed repository is still offered the closing")
+	// The closing archives the task.
+	waitFor(t, "the task to be archived", func() bool {
+		_, ok := f.tasks.Get("task-1")
+		return !ok
+	})
+}
+
+func TestClosingATaskIsRefusedWhileTheCloneIsMissing(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	awaitingClosing(f, "task-1", plan(), task.PRRun{Status: task.PRDone, PR: mergedPR()})
+	f.repositories.setMissing(true)
+
+	var refusal *repository.Refusal
+	err := f.service.CloseTask(t.Context(), "task-1")
+	if !errors.As(err, &refusal) || refusal.Reason != repository.ReasonCloneMissing {
+		t.Fatalf("CloseTask() = %v, want the clone refused as missing", err)
 	}
-	// The other repository is where it was, and the task is still in the
-	// workspace.
-	if got := f.repoState(t, "task-1", repos[1].Path).Status; got != flow.RepoDone {
-		t.Errorf("status of web = %q, want done", got)
+	if calls := f.worktrees.closings(); len(calls) != 0 {
+		t.Errorf("closings = %+v, want none", calls)
 	}
-	if _, ok := f.tasks.Get("task-1"); !ok {
-		t.Error("the task was archived with a repository still open")
+	// The closing is not offered while the clone is gone either.
+	if f.prState(t, "task-1").CanClose {
+		t.Error("CanClose = true, want the closing to wait for the clone")
+	}
+
+	f.repositories.setMissing(false)
+	if err := f.service.CloseTask(t.Context(), "task-1"); err != nil {
+		t.Fatalf("CloseTask() = %v, want nil once the clone is back", err)
+	}
+	f.waitPRStatus(t, "task-1", task.PRClosed)
+}
+
+func TestClosingATaskArchivesIt(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	awaitingClosing(f, "task-1", plan(), task.PRRun{Status: task.PRDone, PR: mergedPR()})
+
+	if err := f.service.CloseTask(t.Context(), "task-1"); err != nil {
+		t.Fatalf("CloseTask() = %v, want nil", err)
+	}
+	waitFor(t, "the task to be archived", func() bool {
+		_, ok := f.tasks.Get("task-1")
+		return !ok
+	})
+
+	// The history keeps the artifacts and the pull request, not the talks.
+	if !slices.Contains(f.sessions.recorded(), "discardTask:task-1") {
+		t.Errorf("session calls = %q, want the conversations discarded", f.sessions.recorded())
+	}
+	if archived := f.tasks.ListArchived(); len(archived) != 1 || archived[0].ID != "task-1" {
+		t.Errorf("archived = %+v, want the task", archived)
+	}
+	if _, ok := f.tasks.prRun("task-1"); !ok {
+		t.Error("the pr run is gone, want it kept for the history")
 	}
 }
 
-func TestWhatGitCouldNotCleanUpDoesNotKeepTheRepositoryOpen(t *testing.T) {
+func TestWhatGitCouldNotCleanUpDoesNotKeepTheTaskOpen(t *testing.T) {
 	t.Parallel()
 
 	left := task.CloseResult{
@@ -149,21 +191,19 @@ func TestWhatGitCouldNotCleanUpDoesNotKeepTheRepositoryOpen(t *testing.T) {
 	}
 	f := newFixture(t)
 	f.worktrees.setCloseResult(left)
-	awaitingClosing(f, "task-1", twoStepPlan(),
-		task.PRRun{RepoPath: repos[0].Path, Status: task.PRDone, PR: mergedPR()},
-		task.PRRun{RepoPath: repos[1].Path, Status: task.PRDone, PR: openPR()},
-	)
+	awaitingClosing(f, "task-1", plan(), task.PRRun{Status: task.PRDone, PR: mergedPR()})
 
-	if err := f.service.CloseRepo(t.Context(), "task-1", repos[0].Path); err != nil {
-		t.Fatalf("CloseRepo() = %v, want nil", err)
+	if err := f.service.CloseTask(t.Context(), "task-1"); err != nil {
+		t.Fatalf("CloseTask() = %v, want nil", err)
 	}
-	f.waitRepo(t, "task-1", repos[0].Path, flow.RepoClosed)
+	f.waitPRStatus(t, "task-1", task.PRClosed)
 
-	// What stayed on disk is shown to the user, never turned into a repository
-	// that cannot be closed.
-	result := f.repoState(t, "task-1", repos[0].Path).Close
+	// What stayed on disk is shown to the user, never turned into a task that
+	// cannot be closed.
+	run, _ := f.tasks.prRun("task-1")
+	result := run.Close
 	if result == nil {
-		t.Fatal("the repository was closed with no result")
+		t.Fatal("the task was closed with no result")
 	}
 	if result.Worktree != left.Worktree || result.Branch != left.Branch || result.Base != left.Base {
 		t.Errorf("close result = %+v, want what the worktrees reported", result)
@@ -175,28 +215,25 @@ func TestAMergeThatCouldNotBeConfirmedStillAllowsTheClosing(t *testing.T) {
 
 	f := newFixture(t)
 	f.gh.failView(errors.New("gh pr view: connection refused"))
-	awaitingClosing(f, "task-1", twoStepPlan(),
-		task.PRRun{RepoPath: repos[0].Path, Status: task.PRDone, PR: openPR()},
-		task.PRRun{RepoPath: repos[1].Path, Status: task.PRClosed},
-	)
+	awaitingClosing(f, "task-1", plan(), task.PRRun{Status: task.PRDone, PR: openPR()})
 
 	f.service.PollPRs()
-	waitFor(t, "the failed reading of api", func() bool {
-		return f.repoState(t, "task-1", repos[0].Path).CheckError != ""
+	waitFor(t, "the failed reading of the pull request", func() bool {
+		return f.prState(t, "task-1").CheckError != ""
 	})
 
-	state := f.repoState(t, "task-1", repos[0].Path)
-	if state.Status != flow.RepoDone || !state.CanClose {
-		t.Errorf("state = %+v, want a repository awaiting the merge the user may close", state)
+	state := f.prState(t, "task-1")
+	if state.Status != flow.PRDone || !state.CanClose {
+		t.Errorf("state = %+v, want a task awaiting the merge the user may close", state)
 	}
 	if state.CheckError != "gh pr view: connection refused" {
 		t.Errorf("check error = %q, want what gh said", state.CheckError)
 	}
 
-	if err := f.service.CloseRepo(t.Context(), "task-1", repos[0].Path); err != nil {
-		t.Fatalf("CloseRepo() = %v, want nil", err)
+	if err := f.service.CloseTask(t.Context(), "task-1"); err != nil {
+		t.Fatalf("CloseTask() = %v, want nil", err)
 	}
-	f.waitPRStatus(t, "task-1", repos[0].Path, task.PRClosed)
+	f.waitPRStatus(t, "task-1", task.PRClosed)
 
 	closings := f.worktrees.closings()
 	if len(closings) != 1 {
@@ -213,27 +250,27 @@ func TestAReadingThatWorksAgainClearsTheWarning(t *testing.T) {
 
 	f := newFixture(t)
 	f.gh.failView(errors.New("gh pr view: connection refused"))
-	awaitingClosing(f, "task-1", plan(), task.PRRun{RepoPath: repos[0].Path, Status: task.PRDone, PR: openPR()})
+	awaitingClosing(f, "task-1", plan(), task.PRRun{Status: task.PRDone, PR: openPR()})
 
 	f.service.PollPRs()
-	waitFor(t, "the failed reading of api", func() bool {
-		return f.repoState(t, "task-1", repos[0].Path).CheckError != ""
+	waitFor(t, "the failed reading of the pull request", func() bool {
+		return f.prState(t, "task-1").CheckError != ""
 	})
 
 	f.gh.setPR("task-1", gh.PR{Number: 7, URL: samePR.URL, State: gh.StateMerged, Base: "main"})
 	f.service.PollPRs()
-	f.waitRepo(t, "task-1", repos[0].Path, flow.RepoMerged)
+	f.waitPR(t, "task-1", flow.PRMerged)
 
-	state := f.repoState(t, "task-1", repos[0].Path)
+	state := f.prState(t, "task-1")
 	if state.CheckError != "" {
 		t.Errorf("check error = %q, want it cleared by a reading that worked", state.CheckError)
 	}
 	if !state.CanClose {
-		t.Error("a merged repository is not offered the closing")
+		t.Error("a merged task is not offered the closing")
 	}
-	// The reading of a repository awaiting the merge says what GitHub thinks of
-	// the pull request; it never sends the repository back to its review.
-	run, _ := f.tasks.prRun("task-1", repos[0].Path)
+	// The reading of a task awaiting the merge says what GitHub thinks of the
+	// pull request; it never sends the task back to its review.
+	run, _ := f.tasks.prRun("task-1")
 	if run.Status != task.PRDone {
 		t.Errorf("status = %q, want done", run.Status)
 	}
@@ -247,43 +284,39 @@ func TestPollingOnlyAsksAboutThePullRequestsWaitingForAMerge(t *testing.T) {
 
 	f := newFixture(t)
 	f.gh.setPR("task-1", gh.PR{Number: 7, URL: samePR.URL, State: gh.StateMerged, Base: "dev"})
-	awaitingClosing(f, "task-1", twoStepPlan(),
-		task.PRRun{RepoPath: repos[0].Path, Status: task.PRDone, PR: openPR()},
-		task.PRRun{RepoPath: repos[1].Path, Status: task.PRDone, PR: mergedPR()},
-	)
-	// A repository still under review is nobody's to poll.
-	awaitingClosing(f, "task-2", plan(), task.PRRun{RepoPath: repos[0].Path, Status: task.PRReviewing, PR: openPR()})
+	awaitingClosing(f, "task-1", plan(), task.PRRun{Status: task.PRDone, PR: openPR()})
+	// A task still under review is nobody's to poll.
+	awaitingClosing(f, "task-2", plan(), task.PRRun{Status: task.PRReviewing, PR: openPR()})
 
 	f.service.PollPRs()
-	f.waitRepo(t, "task-1", repos[0].Path, flow.RepoMerged)
+	f.waitPR(t, "task-1", flow.PRMerged)
 
-	if got := f.gh.ghCalls(); !slices.Equal(got, []string{"view:api:task-1"}) {
+	if got := f.gh.ghCalls(); !slices.Equal(got, []string{"view:web:task-1"}) {
 		t.Errorf("gh calls = %q, want only the pull request waiting for a merge", got)
 	}
 
 	// A merged pull request has nothing more to say.
 	f.service.PollPRs()
 	f.waitEvaluations(t, 1)
-	if got := f.gh.ghCalls(); !slices.Equal(got, []string{"view:api:task-1"}) {
+	if got := f.gh.ghCalls(); !slices.Equal(got, []string{"view:web:task-1"}) {
 		t.Errorf("gh calls = %q, want no reading of a pull request already merged", got)
 	}
 }
 
-func TestWhatARepositoryIsShownAsOnceItsReviewIsOver(t *testing.T) {
+func TestWhatATaskIsShownAsOnceItsReviewIsOver(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name     string
 		run      task.PRRun
-		want     flow.RepoStatus
+		want     flow.PRStatus
 		canClose bool
 	}{
-		{"waiting for the merge", task.PRRun{Status: task.PRDone, PR: openPR()}, flow.RepoDone, false},
-		{"merged", task.PRRun{Status: task.PRDone, PR: mergedPR()}, flow.RepoMerged, true},
-		{"closed without a merge", task.PRRun{Status: task.PRDone, PR: closedPR()}, flow.RepoPRClosed, false},
-		{"nothing to publish", task.PRRun{Status: task.PRSkipped}, flow.RepoSkipped, true},
-		{"git at work", task.PRRun{Status: task.PRClosing, PR: mergedPR()}, flow.RepoClosing, false},
-		{"closed", task.PRRun{Status: task.PRClosed, PR: mergedPR()}, flow.RepoClosed, false},
+		{"waiting for the merge", task.PRRun{Status: task.PRDone, PR: openPR()}, flow.PRDone, false},
+		{"merged", task.PRRun{Status: task.PRDone, PR: mergedPR()}, flow.PRMerged, true},
+		{"closed without a merge", task.PRRun{Status: task.PRDone, PR: closedPR()}, flow.PRClosedUnmerged, false},
+		{"git at work", task.PRRun{Status: task.PRClosing, PR: mergedPR()}, flow.PRClosing, false},
+		{"closed", task.PRRun{Status: task.PRClosed, PR: mergedPR()}, flow.PRClosed, false},
 	}
 
 	for _, test := range tests {
@@ -291,11 +324,9 @@ func TestWhatARepositoryIsShownAsOnceItsReviewIsOver(t *testing.T) {
 			t.Parallel()
 
 			f := newFixture(t)
-			run := test.run
-			run.RepoPath = repos[0].Path
-			awaitingClosing(f, "task-1", plan(), run)
+			awaitingClosing(f, "task-1", plan(), test.run)
 
-			state := f.repoState(t, "task-1", repos[0].Path)
+			state := f.prState(t, "task-1")
 			if state.Status != test.want {
 				t.Errorf("status = %q, want %q", state.Status, test.want)
 			}
@@ -306,92 +337,29 @@ func TestWhatARepositoryIsShownAsOnceItsReviewIsOver(t *testing.T) {
 	}
 }
 
-func TestClosingARepositoryWithNoPullRequestDeletesItsBranch(t *testing.T) {
-	t.Parallel()
-
-	f := newFixture(t)
-	awaitingClosing(f, "task-1", twoStepPlan(),
-		task.PRRun{RepoPath: repos[0].Path, Status: task.PRSkipped},
-		task.PRRun{RepoPath: repos[1].Path, Status: task.PRDone, PR: openPR()},
-	)
-
-	if err := f.service.CloseRepo(t.Context(), "task-1", repos[0].Path); err != nil {
-		t.Fatalf("CloseRepo() = %v, want nil", err)
-	}
-	f.waitRepo(t, "task-1", repos[0].Path, flow.RepoClosed)
-
-	closings := f.worktrees.closings()
-	if len(closings) != 1 {
-		t.Fatalf("closings = %+v, want one", closings)
-	}
-	// Without a pull request, the base is the branch the worktree came from,
-	// and a branch with no commit of its own has nothing to lose.
-	if closings[0].base != "dev" || closings[0].policy != worktree.DeleteBranch {
-		t.Errorf("closing = %+v, want the local base branch and DeleteBranch", closings[0])
-	}
-}
-
-func TestClosingARepositoryWhoseWorktreeIsGoneRecordsNothingLeftToDo(t *testing.T) {
+func TestClosingATaskWhoseWorktreeIsGoneRecordsNothingLeftToDo(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
 	f.tasks.add("task-1", task.StagePR, task.Artifacts{PRD: true, TechSpec: true, Plan: plan()})
 	// The record of the worktree went with a previous closing that only got
 	// halfway; the app was closed with the repository still closing.
-	f.tasks.setPRRun("task-1", task.PRRun{RepoPath: repos[0].Path, Status: task.PRClosing, PR: mergedPR()})
+	f.tasks.setPRRun("task-1", task.PRRun{Status: task.PRClosing, PR: mergedPR()})
 
 	f.service.Sync(t.Context())
-	f.waitPRStatus(t, "task-1", repos[0].Path, task.PRClosed)
+	f.waitPRStatus(t, "task-1", task.PRClosed)
 
 	if calls := f.worktrees.closings(); len(calls) != 0 {
 		t.Errorf("closings = %+v, want none: there is no worktree to close", calls)
 	}
-	run, _ := f.tasks.prRun("task-1", repos[0].Path)
+	run, _ := f.tasks.prRun("task-1")
 	if run.Close == nil {
-		t.Fatal("the repository was closed with no result")
+		t.Fatal("the task was closed with no result")
 	}
 	for _, step := range []task.CloseStep{run.Close.Worktree, run.Close.Branch, run.Close.Base} {
 		if step.Outcome != task.OutcomeSkipped || step.Reason != task.SkipMissing {
 			t.Errorf("step = %+v, want skipped as missing", step)
 		}
-	}
-}
-
-func TestTheLastRepositoryClosedArchivesTheTask(t *testing.T) {
-	t.Parallel()
-
-	f := newFixture(t)
-	awaitingClosing(f, "task-1", twoStepPlan(),
-		task.PRRun{RepoPath: repos[0].Path, Status: task.PRDone, PR: mergedPR()},
-		task.PRRun{RepoPath: repos[1].Path, Status: task.PRDone, PR: mergedPR()},
-	)
-
-	if err := f.service.CloseRepo(t.Context(), "task-1", repos[0].Path); err != nil {
-		t.Fatalf("CloseRepo() = %v, want nil", err)
-	}
-	f.waitRepo(t, "task-1", repos[0].Path, flow.RepoClosed)
-
-	if slices.Contains(f.tasks.recorded(), "archive:task-1") {
-		t.Errorf("task calls = %q, want no archiving with a repository still open", f.tasks.recorded())
-	}
-
-	if err := f.service.CloseRepo(t.Context(), "task-1", repos[1].Path); err != nil {
-		t.Fatalf("CloseRepo() = %v, want nil", err)
-	}
-	waitFor(t, "the task to leave the workspace", func() bool {
-		_, ok := f.tasks.Get("task-1")
-		return !ok
-	})
-
-	// The history keeps the artifacts and the pull requests, not the talks.
-	if !slices.Contains(f.sessions.recorded(), "discardTask:task-1") {
-		t.Errorf("session calls = %q, want the conversations discarded", f.sessions.recorded())
-	}
-	if archived := f.tasks.ListArchived(); len(archived) != 1 || archived[0].ID != "task-1" {
-		t.Errorf("archived = %+v, want the task", archived)
-	}
-	if runs := f.tasks.PRRuns("task-1"); len(runs) != 2 {
-		t.Errorf("pr runs = %+v, want both kept for the history", runs)
 	}
 }
 
@@ -403,12 +371,9 @@ func TestPreviewingADeletionSaysWhatWouldBeDestroyed(t *testing.T) {
 		{X: '.', Y: 'M', Path: "main.go"},
 		{X: '?', Y: '?', Path: "scratch.md"},
 	}})
-	awaitingClosing(f, "task-1", twoStepPlan(),
-		task.PRRun{RepoPath: repos[0].Path, Status: task.PRDone, PR: mergedPR()},
-		task.PRRun{RepoPath: repos[1].Path, Status: task.PRDone, PR: openPR()},
-	)
+	awaitingClosing(f, "task-1", plan(), task.PRRun{Status: task.PRDone, PR: mergedPR()})
 	f.sessions.setSummary("task-1", session.Summary{
-		Stage: session.PRReviewStage("web"), Status: session.StatusWorking, ProcessRunning: true,
+		Stage: session.PRReviewStage, Status: session.StatusWorking, ProcessRunning: true,
 	})
 
 	preview, err := f.service.PreviewDelete(t.Context(), "task-1")
@@ -417,36 +382,36 @@ func TestPreviewingADeletionSaysWhatWouldBeDestroyed(t *testing.T) {
 	}
 
 	if !preview.SessionRunning {
-		t.Error("sessionRunning = false, want the conversation of web counted")
+		t.Error("sessionRunning = false, want the conversation counted")
 	}
-	if len(preview.Worktrees) != 2 {
-		t.Fatalf("worktrees = %+v, want both", preview.Worktrees)
-	}
-	if !preview.Worktrees[0].Dirty || preview.Worktrees[0].Files != 2 {
-		t.Errorf("worktree of api = %+v, want dirty with two files", preview.Worktrees[0])
-	}
-	if preview.Worktrees[0].Repository != "api" {
-		t.Errorf("repository = %q, want the relative path", preview.Worktrees[0].Repository)
+	if preview.Worktree == nil || !preview.Worktree.Dirty || preview.Worktree.Files != 2 {
+		t.Errorf("worktree = %+v, want it dirty with two files", preview.Worktree)
 	}
 
-	if len(preview.Branches) != 2 {
-		t.Fatalf("branches = %+v, want both", preview.Branches)
+	// GitHub merged the pull request, and that is the answer: git is not asked.
+	if preview.Branch == nil || !preview.Branch.Merged {
+		t.Errorf("branch = %+v, want it marked as merged", preview.Branch)
 	}
-	// GitHub merged the pull request of api, and that is the answer; only the
-	// branch of web is put to git.
-	if !preview.Branches[0].Merged || preview.Branches[1].Merged {
-		t.Errorf("branches = %+v, want only the merged one marked", preview.Branches)
-	}
-	calls := f.worktrees.recorded()
-	if slices.Contains(calls, "merged:task-1:api:origin/dev") {
+	if calls := f.worktrees.recorded(); slices.Contains(calls, "merged:task-1:origin/dev") {
 		t.Errorf("worktree calls = %q, want git not asked about a branch GitHub merged", calls)
 	}
-	if !slices.Contains(calls, "merged:task-1:web:origin/dev") {
-		t.Errorf("worktree calls = %q, want the branch with no confirmed merge asked about", calls)
-	}
 
-	if len(preview.PRs) != 2 {
-		t.Errorf("pull requests = %+v, want both, which the app leaves on GitHub", preview.PRs)
+	if preview.PR == nil || preview.PR.Number != 7 {
+		t.Errorf("pull request = %+v, want the one the app leaves on GitHub", preview.PR)
+	}
+}
+
+func TestAPreviewAsksGitAboutABranchWithNoConfirmedMerge(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	awaitingClosing(f, "task-1", plan(), task.PRRun{Status: task.PRDone, PR: openPR()})
+
+	if _, err := f.service.PreviewDelete(t.Context(), "task-1"); err != nil {
+		t.Fatalf("PreviewDelete() = %v, want nil", err)
+	}
+	if calls := f.worktrees.recorded(); !slices.Contains(calls, "merged:task-1:origin/dev") {
+		t.Errorf("worktree calls = %q, want the branch with no confirmed merge asked about", calls)
 	}
 }
 
@@ -454,17 +419,14 @@ func TestAPreviewLeavesOutWhatIsAlreadyGone(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	awaitingClosing(f, "task-1", twoStepPlan(),
-		task.PRRun{RepoPath: repos[0].Path, Status: task.PRClosed, PR: mergedPR()},
-		task.PRRun{RepoPath: repos[1].Path, Status: task.PRDone, PR: openPR()},
-	)
+	awaitingClosing(f, "task-1", plan(), task.PRRun{Status: task.PRClosed, PR: mergedPR()})
 
 	preview, err := f.service.PreviewDelete(t.Context(), "task-1")
 	if err != nil {
 		t.Fatalf("PreviewDelete() = %v, want nil", err)
 	}
-	if len(preview.PRs) != 1 || preview.PRs[0].Repository != "web" {
-		t.Errorf("pull requests = %+v, want only the one of the repository still open", preview.PRs)
+	if preview.PR != nil {
+		t.Errorf("pull request = %+v, want nothing for a task already closed", preview.PR)
 	}
 }
 
@@ -472,7 +434,7 @@ func TestPreviewingTheDeletionOfAnArchivedTaskFindsNothingOnDisk(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	awaitingClosing(f, "task-1", plan(), task.PRRun{RepoPath: repos[0].Path, Status: task.PRClosed, PR: mergedPR()})
+	awaitingClosing(f, "task-1", plan(), task.PRRun{Status: task.PRClosed, PR: mergedPR()})
 	if _, err := f.tasks.Archive(t.Context(), "task-1"); err != nil {
 		t.Fatalf("Archive() = %v, want nil", err)
 	}
@@ -481,15 +443,11 @@ func TestPreviewingTheDeletionOfAnArchivedTaskFindsNothingOnDisk(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PreviewDelete() = %v, want nil", err)
 	}
-	// The frontend maps over the three lists without checking for null.
-	if preview.Worktrees == nil || preview.Branches == nil || preview.PRs == nil {
-		t.Errorf("preview = %+v, want empty slices", preview)
-	}
-	if len(preview.Worktrees) != 0 || len(preview.Branches) != 0 || len(preview.PRs) != 0 {
+	if preview.Worktree != nil || preview.Branch != nil || preview.PR != nil {
 		t.Errorf("preview = %+v, want nothing left to destroy", preview)
 	}
 	if calls := f.worktrees.recorded(); len(calls) != 0 {
-		t.Errorf("worktree calls = %q, want git not read for a task that left the workspace", calls)
+		t.Errorf("worktree calls = %q, want git not read for a task in the history", calls)
 	}
 }
 
@@ -497,28 +455,25 @@ func TestDeleteReportsWhatGitCouldNotRemove(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	f.worktrees.setLeftovers([]worktree.Leftover{{
-		RepoPath: repos[0].Path,
-		Path:     worktree.Path(workspace, "api", "task-1"),
-		Branch:   "task-1",
-		Error:    "git worktree remove: permission denied; git branch -D: permission denied",
-	}})
-	awaitingClosing(f, "task-1", plan(), task.PRRun{RepoPath: repos[0].Path, Status: task.PRDone, PR: openPR()})
+	f.worktrees.setLeftover(worktree.Leftover{
+		Path:   worktree.Path(dataDir, "dev", "web", "task-1"),
+		Branch: "task-1",
+		Error:  "git worktree remove: permission denied; git branch -D: permission denied",
+	})
+	awaitingClosing(f, "task-1", plan(), task.PRRun{Status: task.PRDone, PR: openPR()})
 
 	result, err := f.service.Delete(t.Context(), "task-1")
 	if err != nil {
 		t.Fatalf("Delete() = %v, want nil", err)
 	}
 
-	want := []flow.LeftoverInfo{{
-		Repository: "api",
-		RepoPath:   repos[0].Path,
-		Path:       worktree.Path(workspace, "api", "task-1"),
-		Branch:     "task-1",
-		Error:      "git worktree remove: permission denied; git branch -D: permission denied",
-	}}
-	if !slices.Equal(result.Leftovers, want) {
-		t.Errorf("leftovers = %+v, want %+v", result.Leftovers, want)
+	want := flow.LeftoverInfo{
+		Path:   worktree.Path(dataDir, "dev", "web", "task-1"),
+		Branch: "task-1",
+		Error:  "git worktree remove: permission denied; git branch -D: permission denied",
+	}
+	if result.Leftover == nil || *result.Leftover != want {
+		t.Errorf("leftover = %+v, want %+v", result.Leftover, want)
 	}
 	// A directory git could not take back never keeps the task in the app.
 	if _, ok := f.tasks.Get("task-1"); ok {
@@ -531,21 +486,20 @@ func TestResumingPicksUpAClosingAndAsksAboutAPullRequestWaitingForAMerge(t *test
 
 	f := newFixture(t)
 	f.gh.setPR("task-1", gh.PR{Number: 7, URL: samePR.URL, State: gh.StateOpen, Base: "dev"})
-	awaitingClosing(f, "task-1", twoStepPlan(),
-		task.PRRun{RepoPath: repos[0].Path, Status: task.PRClosing, PR: mergedPR()},
-		task.PRRun{RepoPath: repos[1].Path, Status: task.PRDone, PR: openPR()},
-	)
+	awaitingClosing(f, "task-1", plan(), task.PRRun{Status: task.PRClosing, PR: mergedPR()})
+	// A second task is waiting for its merge, and the app asks GitHub about it.
+	awaitingClosing(f, "task-2", plan(), task.PRRun{Status: task.PRDone, PR: openPR()})
 
 	f.service.Sync(t.Context())
 
 	// The closing git was in the middle of goes on where it stopped.
-	f.waitPRStatus(t, "task-1", repos[0].Path, task.PRClosed)
+	f.waitPRStatus(t, "task-1", task.PRClosed)
 	// The merge may have happened while the app was closed, so the pull request
 	// still waiting for one is read again.
-	waitFor(t, "the reading of the pull request of web", func() bool {
-		return slices.Contains(f.gh.ghCalls(), "view:web:task-1")
+	waitFor(t, "the reading of the pull request of task-2", func() bool {
+		return slices.Contains(f.gh.ghCalls(), "view:web:task-2")
 	})
-	if got := f.gh.ghCalls(); slices.Contains(got, "view:api:task-1") {
-		t.Errorf("gh calls = %q, want nothing asked about the repository being closed", got)
+	if got := f.gh.ghCalls(); slices.Contains(got, "view:web:task-1") {
+		t.Errorf("gh calls = %q, want nothing asked about the task being closed", got)
 	}
 }

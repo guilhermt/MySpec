@@ -45,72 +45,13 @@ func TestValidateName(t *testing.T) {
 	}
 }
 
-func TestWorkspaceSlugIsStable(t *testing.T) {
+func TestArtifactsDirLivesUnderTheRepository(t *testing.T) {
 	t.Parallel()
 
-	first := task.WorkspaceSlug("/home/user/code/my-app")
-	second := task.WorkspaceSlug("/home/user/code/my-app")
-	if first != second {
-		t.Errorf("WorkspaceSlug is not stable: %q then %q", first, second)
-	}
-	if want := "my-app-"; !strings.HasPrefix(first, want) {
-		t.Errorf("WorkspaceSlug() = %q, want prefix %q", first, want)
-	}
-}
-
-func TestWorkspaceSlugSeparatesPathsSharingABase(t *testing.T) {
-	t.Parallel()
-
-	first := task.WorkspaceSlug("/home/user/one/app")
-	second := task.WorkspaceSlug("/home/user/two/app")
-	if first == second {
-		t.Errorf("WorkspaceSlug() = %q for both paths, want different slugs", first)
-	}
-}
-
-func TestWorkspaceSlugNormalizesTheBase(t *testing.T) {
-	t.Parallel()
-
-	tests := map[string]string{
-		"/home/user/My App":  "my-app-",
-		"/home/user/__app__": "app-",
-		"/home/user/ç":       "workspace-",
-		"/":                  "workspace-",
-	}
-
-	for path, prefix := range tests {
-		t.Run(path, func(t *testing.T) {
-			t.Parallel()
-
-			if got := task.WorkspaceSlug(path); !strings.HasPrefix(got, prefix) {
-				t.Errorf("WorkspaceSlug(%q) = %q, want prefix %q", path, got, prefix)
-			}
-		})
-	}
-}
-
-func TestArtifactsDirLivesUnderTheWorkspaceSlug(t *testing.T) {
-	t.Parallel()
-
-	const workspacePath = "/home/user/code/my-app"
-	got := task.ArtifactsDir("/data", workspacePath, "add-login")
-	want := filepath.Join("/data", "workspaces", task.WorkspaceSlug(workspacePath), "tasks", "add-login")
+	got := task.ArtifactsDir("/data", "dev", "web", "add-login")
+	want := filepath.Join("/data", "tasks", "dev", "web", "add-login")
 	if got != want {
 		t.Errorf("ArtifactsDir() = %q, want %q", got, want)
-	}
-}
-
-func TestTaskDirIsTheRepositoryOrTheWorkspaceRoot(t *testing.T) {
-	t.Parallel()
-
-	root := task.Task{WorkspacePath: "/ws"}
-	if got := root.Dir(); got != "/ws" {
-		t.Errorf("Dir() = %q, want %q", got, "/ws")
-	}
-
-	inRepo := task.Task{WorkspacePath: "/ws", RepoPath: "/ws/api"}
-	if got := inRepo.Dir(); got != "/ws/api" {
-		t.Errorf("Dir() = %q, want %q", got, "/ws/api")
 	}
 }
 

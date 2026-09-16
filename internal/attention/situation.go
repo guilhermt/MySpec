@@ -1,7 +1,7 @@
-// Package attention knows what the tasks of the open workspace wait on the
-// user for: it derives the situations from the state of every task, keeps when
-// each one started and ended, and tells the user about a new one when the app
-// is not in front of them.
+// Package attention knows what the active tasks wait on the user for: it
+// derives the situations from the state of every task, keeps when each one
+// started and ended, and tells the user about a new one when the app is not in
+// front of them.
 package attention
 
 import (
@@ -34,8 +34,7 @@ const (
 	KindFindings        Kind = "findings"
 	KindChangesReview   Kind = "changes_review"
 
-	KindMerge            Kind = "merge"
-	KindNothingToPublish Kind = "nothing_to_publish"
+	KindMerge Kind = "merge"
 )
 
 // Group is how urgent a situation is.
@@ -53,7 +52,7 @@ func (k Kind) Group() Group {
 	switch k {
 	case KindSessionError, KindStepBlocked, KindWorktreeUnreadable, KindPRBlocked, KindPlanInvalid, KindPRClosed:
 		return GroupError
-	case KindMerge, KindNothingToPublish:
+	case KindMerge:
 		return GroupClosing
 	default:
 		return GroupWaiting
@@ -94,36 +93,36 @@ const (
 	PlaceStage      PlaceKind = "stage"       // a planning stage
 	PlaceStep       PlaceKind = "step"        // the current step
 	PlaceStepReview PlaceKind = "step_review" // the conversation that reviews the current step
-	PlaceRepo       PlaceKind = "repo"        // a repository of the PR stage
+	PlacePR         PlaceKind = "pr"          // the pull request of the task
 )
 
 // Place is where in a task a situation is.
 type Place struct {
-	Kind       PlaceKind
-	Stage      task.Stage // PlaceStage only
-	Step       int        // PlaceStep and PlaceStepReview only
-	RepoPath   string     // PlaceRepo only
-	Repository string     // PlaceRepo only: the path relative to the workspace, as the steps name it
+	Kind  PlaceKind
+	Stage task.Stage // PlaceStage only
+	Step  int        // PlaceStep and PlaceStepReview only
 }
 
 // Key names a place inside its task, the way the store keeps it:
-// stage:<stage>, step:<number>, step_review:<number> or repo:<absolute path>.
+// stage:<stage>, step:<number>, step_review:<number> or pr.
 func (p Place) Key() string {
 	switch p.Kind {
 	case PlaceStep:
 		return "step:" + strconv.Itoa(p.Step)
 	case PlaceStepReview:
 		return "step_review:" + strconv.Itoa(p.Step)
-	case PlaceRepo:
-		return "repo:" + p.RepoPath
+	case PlacePR:
+		return "pr"
 	default:
 		return "stage:" + string(p.Stage)
 	}
 }
 
-// ParsePlace reads a key back. The relative path of a repository is not in
-// the key; the next derivation brings it.
+// ParsePlace reads a key back.
 func ParsePlace(key string) (Place, bool) {
+	if key == string(PlacePR) {
+		return Place{Kind: PlacePR}, true
+	}
 	prefix, value, found := strings.Cut(key, ":")
 	if !found || value == "" {
 		return Place{}, false
@@ -141,10 +140,6 @@ func ParsePlace(key string) (Place, bool) {
 			return Place{}, false
 		}
 		return Place{Kind: PlaceKind(prefix), Step: number}, true
-	case "repo":
-		// The key is cut at its first colon, so a path with colons of its own
-		// comes back whole.
-		return Place{Kind: PlaceRepo, RepoPath: value}, true
 	default:
 		return Place{}, false
 	}

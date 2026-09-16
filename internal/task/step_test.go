@@ -39,7 +39,7 @@ func TestParseBlockReason(t *testing.T) {
 
 	reasons := []task.BlockReason{
 		task.BlockDirty, task.BlockFetchFailed, task.BlockNoBase, task.BlockPathExists,
-		task.BlockBranchExists, task.BlockGitFailed, task.BlockNoRepository,
+		task.BlockBranchExists, task.BlockGitFailed, task.BlockCloneMissing,
 	}
 	for _, reason := range reasons {
 		got, err := task.ParseBlockReason(string(reason))
@@ -62,7 +62,7 @@ func TestSetStepRunRecordsAndUpdatesAStep(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	created := f.create(t, "add-login", "")
+	created := f.create(t, "add-login")
 	before := f.changeCount()
 
 	run, err := f.service.SetStepRun(t.Context(), created.ID, 1, task.StepPreparing, nil)
@@ -105,7 +105,7 @@ func TestSetStepRunKeepsWhatItDoesNotChange(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	created := f.create(t, "add-login", "")
+	created := f.create(t, "add-login")
 
 	const start = "1111111111111111111111111111111111111111"
 	if _, err := f.service.SetStepStarted(t.Context(), created.ID, 1, start); err != nil {
@@ -130,7 +130,7 @@ func TestSetStepStartedRecordsTheCommitTheStepBeganFrom(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	created := f.create(t, "add-login", "")
+	created := f.create(t, "add-login")
 	before := f.changeCount()
 
 	const start = "1111111111111111111111111111111111111111"
@@ -157,7 +157,7 @@ func TestSetStepCommittedIsWhatMakesAStepDone(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	created := f.create(t, "add-login", "")
+	created := f.create(t, "add-login")
 
 	const (
 		start   = "1111111111111111111111111111111111111111"
@@ -195,7 +195,7 @@ func TestTheAgentReviewOfAStepKeepsTheRestOfTheRun(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	created := f.create(t, "add-login", "")
+	created := f.create(t, "add-login")
 
 	const start = "1111111111111111111111111111111111111111"
 	if _, err := f.service.SetStepStarted(t.Context(), created.ID, 1, start); err != nil {
@@ -253,7 +253,7 @@ func TestSetStepRunKeepsTheStepsInOrder(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	created := f.create(t, "add-login", "")
+	created := f.create(t, "add-login")
 
 	for _, number := range []int{3, 1, 2} {
 		if _, err := f.service.SetStepRun(t.Context(), created.ID, number, task.StepStarted, nil); err != nil {
@@ -284,7 +284,7 @@ func TestStepRunsReturnsCopies(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	created := f.create(t, "add-login", "")
+	created := f.create(t, "add-login")
 	block := &task.StepBlock{Reason: task.BlockFetchFailed, Detail: "could not read from remote"}
 	if _, err := f.service.SetStepRun(t.Context(), created.ID, 1, task.StepBlocked, block); err != nil {
 		t.Fatalf("SetStepRun() = %v, want nil", err)
@@ -308,7 +308,7 @@ func TestClearStepRunsForgetsEveryStep(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	created := f.create(t, "add-login", "")
+	created := f.create(t, "add-login")
 	if _, err := f.service.SetStepRun(t.Context(), created.ID, 1, task.StepStarted, nil); err != nil {
 		t.Fatalf("SetStepRun() = %v, want nil", err)
 	}
@@ -333,7 +333,7 @@ func TestDeletingATaskForgetsItsStepRuns(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	created := f.create(t, "add-login", "")
+	created := f.create(t, "add-login")
 	if _, err := f.service.SetStepRun(t.Context(), created.ID, 1, task.StepStarted, nil); err != nil {
 		t.Fatalf("SetStepRun() = %v, want nil", err)
 	}
@@ -351,30 +351,23 @@ func TestSyncLoadsTheStepRunsOfEveryTask(t *testing.T) {
 
 	f := newFixture(t)
 	seeded := task.Task{
-		ID:            "mine",
-		WorkspacePath: f.workspace,
-		Name:          "add-login",
-		Stage:         task.StageImplementation,
-		ArtifactsDir:  task.ArtifactsDir(f.dataDir, f.workspace, "add-login"),
-		CreatedAt:     base,
-		UpdatedAt:     base,
+		ID:           "mine",
+		RepositoryID: repoID,
+		Name:         "add-login",
+		Stage:        task.StageImplementation,
+		ArtifactsDir: task.ArtifactsDir(f.dataDir, "dev", "web", "add-login"),
+		CreatedAt:    base,
+		UpdatedAt:    base,
 	}
 	f.repo.seed(seeded)
 	run := task.StepRun{
 		TaskID: seeded.ID, Number: 1, Status: task.StepBlocked,
-		Block:     &task.StepBlock{Reason: task.BlockNoRepository, Detail: "steps/1-first.md"},
+		Block:     &task.StepBlock{Reason: task.BlockCloneMissing, Detail: "The clone at /gone is missing."},
 		CreatedAt: base, UpdatedAt: base.Add(time.Minute),
 	}
 	f.repo.seedRun(run)
 
-	// A second workspace and back, because a repeated Sync of the same path is
-	// a no-op.
-	if err := f.service.Sync(t.Context(), t.TempDir()); err != nil {
-		t.Fatalf("Sync(other) = %v, want nil", err)
-	}
-	if err := f.service.Sync(t.Context(), f.workspace); err != nil {
-		t.Fatalf("Sync(back) = %v, want nil", err)
-	}
+	f.sync(t)
 
 	if diff := cmp.Diff([]task.StepRun{run}, f.service.StepRuns(seeded.ID)); diff != "" {
 		t.Errorf("StepRuns() mismatch (-want +got):\n%s", diff)
@@ -386,21 +379,18 @@ func TestSyncFailsWhenTheStepRunsCannotBeRead(t *testing.T) {
 
 	f := newFixture(t)
 	f.repo.seed(task.Task{
-		ID:            "mine",
-		WorkspacePath: f.workspace,
-		Name:          "add-login",
-		Stage:         task.StagePRD,
-		ArtifactsDir:  filepath.Join(f.dataDir, "add-login"),
-		CreatedAt:     base,
-		UpdatedAt:     base,
+		ID:           "mine",
+		RepositoryID: repoID,
+		Name:         "add-login",
+		Stage:        task.StagePRD,
+		ArtifactsDir: filepath.Join(f.dataDir, "add-login"),
+		CreatedAt:    base,
+		UpdatedAt:    base,
 	})
-	if err := f.service.Sync(t.Context(), t.TempDir()); err != nil {
-		t.Fatalf("Sync(other) = %v, want nil", err)
-	}
 
 	boom := errors.New("boom")
 	f.repo.runsErr = boom
-	if err := f.service.Sync(t.Context(), f.workspace); !errors.Is(err, boom) {
+	if err := f.service.Sync(t.Context()); !errors.Is(err, boom) {
 		t.Errorf("Sync() = %v, want the store error", err)
 	}
 }

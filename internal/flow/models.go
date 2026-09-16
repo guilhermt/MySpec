@@ -31,8 +31,8 @@ type StageModelState struct {
 }
 
 // StageModels is the model and effort of every stage of the mode of a task, in
-// order, read against the steps and the repositories the flow reports for it.
-func StageModels(t task.Task, steps []StepState, repos []RepoState) []StageModelState {
+// order, read against the steps and the pull request the flow reports for it.
+func StageModels(t task.Task, steps []StepState, pr *PullRequest) []StageModelState {
 	before := func(stage task.Stage) bool { return t.Mode.Index(t.Stage) < t.Mode.Index(stage) }
 	implementing := t.Stage == task.StageImplementation
 	inPR := t.Stage == task.StagePR
@@ -69,15 +69,11 @@ func StageModels(t task.Task, steps []StepState, repos []RepoState) []StageModel
 			state.Live = implementing &&
 				slices.ContainsFunc(steps, func(st StepState) bool { return st.ReviewerStage != "" })
 		case models.PR:
-			state.Editable = before(task.StagePR) || (inPR && slices.ContainsFunc(repos, draftToStart))
-			state.Live = inPR && slices.ContainsFunc(repos, func(repo RepoState) bool {
-				return repo.SessionStage == session.PRStage(repo.Slug)
-			})
+			state.Editable = before(task.StagePR) || (inPR && pr != nil && draftToStart(*pr))
+			state.Live = inPR && pr != nil && pr.SessionStage == session.PRStage
 		case models.PRReview:
-			state.Editable = before(task.StagePR) || (inPR && slices.ContainsFunc(repos, reviewToStart))
-			state.Live = inPR && slices.ContainsFunc(repos, func(repo RepoState) bool {
-				return repo.SessionStage == session.PRReviewStage(repo.Slug)
-			})
+			state.Editable = before(task.StagePR) || (inPR && pr != nil && reviewToStart(*pr))
+			state.Live = inPR && pr != nil && pr.SessionStage == session.PRReviewStage
 		}
 		states = append(states, state)
 	}
@@ -95,18 +91,17 @@ func stepHasSession(status StepStatus) bool {
 	}
 }
 
-// draftToStart reports whether the pull request session of a repository is
-// still to start.
-func draftToStart(repo RepoState) bool {
-	return (repo.Status == RepoPreparing || repo.Status == RepoBlocked) && repo.PR.Number == 0
+// draftToStart reports whether the pull request session of a task is still to
+// start.
+func draftToStart(pr PullRequest) bool {
+	return (pr.Status == PRPreparing || pr.Status == PRBlocked) && pr.PR.Number == 0
 }
 
-// reviewToStart reports whether the review session of a repository is still
-// to start.
-func reviewToStart(repo RepoState) bool {
-	return repo.Status == RepoPreparing ||
-		repo.Status == RepoBlocked ||
-		repo.SessionStage == session.PRStage(repo.Slug)
+// reviewToStart reports whether the review session of a task is still to start.
+func reviewToStart(pr PullRequest) bool {
+	return pr.Status == PRPreparing ||
+		pr.Status == PRBlocked ||
+		pr.SessionStage == session.PRStage
 }
 
 // SetStageModel changes the model and effort of a stage of a task, for the
@@ -120,7 +115,12 @@ func (s *Service) SetStageModel(ctx context.Context, id string, stage models.Sta
 	if !ok {
 		return fmt.Errorf("set the model of %s: %w", stage, task.ErrNotFound)
 	}
-	states := StageModels(t, s.Steps(id), s.Repos(id))
+	pr, hasPR := s.PullRequest(id)
+	var prPointer *PullRequest
+	if hasPR {
+		prPointer = &pr
+	}
+	states := StageModels(t, s.Steps(id), prPointer)
 	index := slices.IndexFunc(states, func(st StageModelState) bool { return st.Stage == stage })
 	if index < 0 {
 		return fmt.Errorf("set the model of %s in task %s: %w", stage, id, models.ErrUnknownStage)
@@ -160,7 +160,7 @@ func (s *Service) SetStepModel(ctx context.Context, id string, number int, c mod
 // SetSessionModel changes the model and effort of a live session from its next
 // message on. A session of a planning stage or of a step carries the change to
 // its stage or its step, so that starting it over keeps it; a session of a
-// reviewer or of a repository keeps it to itself.
+// reviewer or of the PR stage keeps it to itself.
 func (s *Service) SetSessionModel(ctx context.Context, id, stage string, c models.Choice) error {
 	l := s.lockOf(id)
 	l.mu.Lock()
@@ -171,14 +171,13 @@ func (s *Service) SetSessionModel(ctx context.Context, id, stage string, c model
 	}
 	number, isStep := session.ParseStepStage(stage)
 	_, isReviewer := session.ParseStepReviewStage(stage)
-	_, _, isRepo := session.ParsePRStage(stage)
 	switch {
 	case isStep:
 		if _, err := s.tasks.SetStepModel(ctx, id, number, c); err != nil {
 			return err
 		}
-	case isReviewer, isRepo:
-		// The choice of one reviewer, or of one repository, is not the choice of
+	case isReviewer, stage == session.PRStage, stage == session.PRReviewStage:
+		// The choice of one reviewer, or of the PR stage, is not the choice of
 		// the stage: the others keep theirs.
 	default:
 		if _, err := s.tasks.SetStageModel(ctx, id, models.Stage(stage), c); err != nil {

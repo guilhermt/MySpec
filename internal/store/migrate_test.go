@@ -34,7 +34,7 @@ const (
 	modelsVersion     = 9
 	reviewModeVersion = 10
 	modeVersion       = 11
-	latestVersion     = 12
+	latestVersion     = 13
 )
 
 // upgradeTime is the instant the repositories of the fake upgrades are stamped
@@ -304,8 +304,8 @@ func TestMigrateGivesTheWorktreesOfAnOlderDatabaseNoBaseAndAddsThePRRuns(t *test
 		t.Errorf("base = %q, want it empty on a worktree registered before the column", base)
 	}
 
-	const insertRun = `INSERT INTO pr_runs (task_id, repo_path, status, created_at, updated_at)
-		VALUES ('task-1', '/ws/api', 'preparing', '2026-09-06T10:00:00Z', '2026-09-06T10:00:00Z')`
+	const insertRun = `INSERT INTO pr_runs (task_id, status, created_at, updated_at)
+		VALUES ('task-1', 'preparing', '2026-09-06T10:00:00Z', '2026-09-06T10:00:00Z')`
 	if _, err := db.ExecContext(t.Context(), insertRun); err != nil {
 		t.Fatalf("insert pr run: %v", err)
 	}
@@ -529,12 +529,55 @@ func readTaskRepositories(t *testing.T, db *sql.DB) map[string][2]string {
 	return got
 }
 
+// seedLegacyRecords fills the rows of a task that 0013 rewrites: its step, its
+// sessions, its PR run, its worktree and its situation.
+func seedLegacyRecords(t *testing.T, db *sql.DB, id string) {
+	t.Helper()
+
+	statements := []struct {
+		subject string
+		sql     string
+	}{
+		{"step", `INSERT INTO steps (task_id, number, status, block_reason, block_files, created_at, updated_at)
+			VALUES (?, 1, 'blocked', 'no_repository', 0, '2026-09-06T10:00:00Z', '2026-09-06T10:00:00Z')`},
+		{"pr session", `INSERT INTO sessions (id, task_id, stage, created_at, updated_at)
+			VALUES ('sess-pr', ?, 'pr:web', '2026-09-06T10:00:00Z', '2026-09-06T10:00:00Z')`},
+		{"pr review session", `INSERT INTO sessions (id, task_id, stage, created_at, updated_at)
+			VALUES ('sess-review', ?, 'pr_review:web', '2026-09-06T10:00:00Z', '2026-09-06T10:00:00Z')`},
+		{"pr run", `INSERT INTO pr_runs (task_id, repo_path, status, created_at, updated_at)
+			VALUES (?, '/ws/api', 'skipped', '2026-09-06T10:00:00Z', '2026-09-06T10:00:00Z')`},
+		{"worktree", `INSERT INTO worktrees (task_id, repo_path, path, branch, base, created_at)
+			VALUES (?, '/ws/api', '/ws/.myspec/worktrees/api/one', 'one', 'origin/dev', '2026-09-06T10:00:00Z')`},
+		{"situation", `INSERT INTO situations (task_id, place, id, kind, started_at)
+			VALUES (?, 'repo:/ws/api', 'sit-1', 'merge', '2026-09-06T10:00:00Z')`},
+		{"recent workspace", `INSERT INTO recent_workspaces (path, name, last_opened_at)
+			VALUES ('/ws', 'ws', '2026-09-06T10:00:00Z')`},
+	}
+	for _, statement := range statements {
+		if _, err := db.ExecContext(t.Context(), statement.sql, id); err != nil {
+			t.Fatalf("insert %s: %v", statement.subject, err)
+		}
+	}
+}
+
+// readOne is the single text value a query of the migrated database answers.
+func readOne(t *testing.T, db *sql.DB, query string) string {
+	t.Helper()
+
+	var got string
+	if err := db.QueryRowContext(t.Context(), query).Scan(&got); err != nil {
+		t.Fatalf("query %q: %v", query, err)
+	}
+	return got
+}
+
 func TestTheRepositoriesMigrationTiesEveryTaskToItsRepository(t *testing.T) {
 	t.Parallel()
 
 	db := openAt(t, repositoriesVersion-1)
 	seedLegacyTask(t, db, "task-1", "one", "/ws/api", "")
 	seedLegacyTask(t, db, "task-2", "root", "", "2026-09-07T10:00:00Z")
+	seedLegacyRecords(t, db, "task-1")
 
 	const carried = "/data/tasks/acme/api/one"
 	var seen []LegacyTask
@@ -578,6 +621,39 @@ func TestTheRepositoriesMigrationTiesEveryTaskToItsRepository(t *testing.T) {
 	}
 	if finished != 1 {
 		t.Errorf("Done() called %d times, want 1", finished)
+	}
+
+	// What 0013 does to the rows of the task that was carried over.
+	if got := readOne(t, db, `SELECT stage FROM sessions WHERE id = 'sess-pr'`); got != "pr" {
+		t.Errorf("the pr session is at stage %q, want %q", got, "pr")
+	}
+	if got := readOne(t, db, `SELECT stage FROM sessions WHERE id = 'sess-review'`); got != "pr_review" {
+		t.Errorf("the pr review session is at stage %q, want %q", got, "pr_review")
+	}
+	if got := readOne(t, db, `SELECT place FROM situations WHERE id = 'sit-1'`); got != "pr" {
+		t.Errorf("the situation is at place %q, want %q", got, "pr")
+	}
+	if got := readOne(t, db, `SELECT block_reason FROM steps WHERE task_id = 'task-1'`); got != "git_failed" {
+		t.Errorf("the step is blocked for %q, want %q", got, "git_failed")
+	}
+	// The skipped status has no place left: it reads back as a closed one.
+	if got := readOne(t, db, `SELECT status FROM pr_runs WHERE task_id = 'task-1'`); got != "closed" {
+		t.Errorf("the pr run is %q, want %q", got, "closed")
+	}
+	if got := readOne(t, db, `SELECT path FROM worktrees WHERE task_id = 'task-1'`); got == "" {
+		t.Error("the worktree of the task is gone, want it carried over")
+	}
+	const tableQuery = `SELECT count(*) FROM sqlite_master WHERE name IN ('recent_workspaces')`
+	var tables int
+	if err := db.QueryRowContext(t.Context(), tableQuery).Scan(&tables); err != nil {
+		t.Fatalf("query sqlite_master: %v", err)
+	}
+	if tables != 0 {
+		t.Error("recent_workspaces still exists, want the table dropped")
+	}
+	// A task belongs to one repository, so the columns of the workspace are gone.
+	if _, err := db.ExecContext(t.Context(), `SELECT workspace_path FROM tasks`); err == nil {
+		t.Error("tasks still has workspace_path, want the column dropped")
 	}
 }
 
