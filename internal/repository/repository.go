@@ -12,14 +12,20 @@ import (
 	"time"
 )
 
-// Repository is a GitHub repository the user registered, tied to a local clone.
+// Repository is a GitHub repository the user registered, tied to a local clone
+// once it has one.
 type Repository struct {
 	ID        string
 	Owner     string
 	Name      string
-	Path      string // the root of the clone, absolute and cleaned
+	Path      string // the root of the clone, absolute and cleaned; "" while the repository has no clone
+	BoardID   string // the board that manages it; "" for none
 	CreatedAt time.Time
 }
+
+// Cloned reports whether the repository is tied to a clone. A clone that is
+// no longer there is still a clone: Missing says that.
+func (r Repository) Cloned() bool { return r.Path != "" }
 
 // FullName is the repository as GitHub names it: owner/name.
 func (r Repository) FullName() string { return r.Owner + "/" + r.Name }
@@ -42,8 +48,12 @@ func (i Identity) Same(other Identity) bool {
 	return strings.EqualFold(i.Owner, other.Owner) && strings.EqualFold(i.Name, other.Name)
 }
 
-// ErrNotFound is a repository id nobody registered.
-var ErrNotFound = errors.New("repository: not found")
+// The ways an action on a repository fails that the app tells apart.
+var (
+	ErrNotFound      = errors.New("repository: not found")       // a repository id nobody registered
+	ErrCloned        = errors.New("repository: already cloned")  // a clone asked of a repository that has one
+	ErrNoCloneFolder = errors.New("repository: no clone folder") // a clone asked before the user chose where clones go
+)
 
 // IsClone reports whether path is the root of a git repository: a directory
 // with a .git directory in it. A worktree or a submodule, whose .git is a file,

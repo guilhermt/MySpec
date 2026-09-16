@@ -25,8 +25,8 @@ import (
 // commitsVersion the one that gave a step its commits, prVersion the one that
 // brought the PR stage, modelsVersion the one that brought the models,
 // reviewModeVersion the one that brought the review mode, modeVersion the one
-// that brought the mode of a task, and latestVersion the version the embedded
-// migrations end at.
+// that brought the mode of a task, boardsVersion the one that brought the
+// boards, and latestVersion the version the embedded migrations end at.
 const (
 	stagesVersion     = 3
 	commitsVersion    = 5
@@ -34,7 +34,8 @@ const (
 	modelsVersion     = 9
 	reviewModeVersion = 10
 	modeVersion       = 11
-	latestVersion     = 13
+	boardsVersion     = 14
+	latestVersion     = 14
 )
 
 // upgradeTime is the instant the repositories of the fake upgrades are stamped
@@ -454,6 +455,38 @@ func TestMigrateMakesTheTasksThatExistStructured(t *testing.T) {
 	}
 	if mode != string(task.ModeStructured) {
 		t.Errorf("mode = %q, want %q for a task created before the column", mode, task.ModeStructured)
+	}
+}
+
+func TestTheBoardsMigrationKeepsTheRepositoriesWithoutABoardAndTheTasks(t *testing.T) {
+	t.Parallel()
+
+	db := openAt(t, boardsVersion-1)
+	const insertRepository = `INSERT INTO repositories (id, owner, name, path, created_at)
+		VALUES ('repo-1', 'acme', 'api', '/code/api', '2026-09-06T10:00:00Z')`
+	const insertTask = `INSERT INTO tasks
+		(id, repository_id, name, initial_context, stage, artifacts_dir, created_at, updated_at, revisiting)
+		VALUES ('task-1', 'repo-1', 'one', 'context', 'plan', '/data/x',
+			'2026-09-06T10:00:00Z', '2026-09-06T10:00:00Z', 0)`
+	for _, stmt := range []string{insertRepository, insertTask} {
+		if _, err := db.ExecContext(t.Context(), stmt); err != nil {
+			t.Fatalf("seed: %v", err)
+		}
+	}
+
+	if err := migrate(t.Context(), db, slog.New(slog.DiscardHandler), carryOver(t)); err != nil {
+		t.Fatalf("migrate() = %v, want nil", err)
+	}
+
+	if diff := cmp.Diff([]repository.Repository{upgradeRepo}, readRepositories(t, db)); diff != "" {
+		t.Errorf("repositories mismatch (-want +got):\n%s", diff)
+	}
+	if got := readOne(t, db, `SELECT count(*) FROM repositories WHERE board_id IS NULL`); got != "1" {
+		t.Errorf("repositories without a board = %s, want 1", got)
+	}
+	wantTasks := map[string][2]string{"task-1": {upgradeRepo.ID, "/data/x"}}
+	if diff := cmp.Diff(wantTasks, readTaskRepositories(t, db)); diff != "" {
+		t.Errorf("tasks mismatch (-want +got):\n%s", diff)
 	}
 }
 

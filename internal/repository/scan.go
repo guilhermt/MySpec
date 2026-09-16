@@ -23,7 +23,9 @@ const scanWorkers = 8
 const skippedFolder = "node_modules"
 
 // Candidate is a clone of a GitHub repository the scan found under the root,
-// and whether its repository is already registered, at this path or another.
+// and whether its repository is already registered with a clone, at this path
+// or another. A repository registered without a clone is not: the candidate
+// is offered to be linked to it.
 type Candidate struct {
 	Identity   Identity
 	Path       string
@@ -47,7 +49,7 @@ func (s *Service) Scan(ctx context.Context) ([]Candidate, error) {
 	s.mu.Lock()
 	for i := range candidates {
 		candidates[i].Registered = slices.ContainsFunc(s.items, func(repo Repository) bool {
-			return repo.Identity().Same(candidates[i].Identity)
+			return repo.Cloned() && repo.Identity().Same(candidates[i].Identity)
 		})
 	}
 	s.mu.Unlock()

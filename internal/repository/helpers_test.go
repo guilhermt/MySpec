@@ -24,8 +24,19 @@ import (
 // base is the fixed instant the tests build their timestamps from.
 var base = time.Date(2026, time.September, 15, 12, 0, 0, 0, time.UTC)
 
-// filterSetting is the settings key the service keeps the filter under.
-const filterSetting = "repository_filter"
+// filterSetting is the settings key the service keeps the filter under, and
+// cloneFolderSetting the one it keeps the clone folder under.
+const (
+	filterSetting      = "repository_filter"
+	cloneFolderSetting = "clone_folder"
+)
+
+// pollTimeout and pollStep bound how long a test waits for a clone, which runs
+// in the background.
+const (
+	pollTimeout = 2 * time.Second
+	pollStep    = 10 * time.Millisecond
+)
 
 // logCapture is a logger writing JSON records into a buffer.
 type logCapture struct {
@@ -110,6 +121,21 @@ func (s *memStore) UpdatePath(_ context.Context, id, path string) error {
 	return nil
 }
 
+func (s *memStore) UpdateBoard(_ context.Context, id, boardID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.err != nil {
+		return s.err
+	}
+	for i := range s.items {
+		if s.items[i].ID == id {
+			s.items[i].BoardID = boardID
+		}
+	}
+	return nil
+}
+
 func (s *memStore) Delete(_ context.Context, id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -189,6 +215,36 @@ type answer struct {
 	err      error
 }
 
+// recordClone is a fake Clone. It records every call and holds each clone
+// until release is closed; then it fails with err when set, leaving a
+// half-written folder behind, or writes a clone at the target.
+type recordClone struct {
+	mu      sync.Mutex
+	calls   []string // "owner/name dir"
+	release chan struct{}
+	err     error
+}
+
+func (r *recordClone) clone(_ context.Context, fullName, dir string) error {
+	r.mu.Lock()
+	r.calls = append(r.calls, fullName+" "+dir)
+	r.mu.Unlock()
+
+	<-r.release
+	if err := os.MkdirAll(filepath.Join(dir, ".git"), 0o750); err != nil {
+		return err
+	}
+	return r.err
+}
+
+// taken returns the calls so far.
+func (r *recordClone) taken() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	return slices.Clone(r.calls)
+}
+
 // recorder keeps the callbacks of the service in the order they came.
 type recorder struct {
 	mu     sync.Mutex
@@ -222,6 +278,7 @@ type fixture struct {
 	answers  map[string]answer // by path; a path not in it has no origin
 	counts   map[string][2]int // by id: active and archived tasks
 	scanRoot string            // the folder the scan starts at
+	cloner   *recordClone
 }
 
 func newFixture(t *testing.T) fixture {
@@ -235,6 +292,7 @@ func newFixture(t *testing.T) fixture {
 		answers:  map[string]answer{},
 		counts:   map[string][2]int{},
 		scanRoot: t.TempDir(),
+		cloner:   &recordClone{release: make(chan struct{})},
 	}
 	ids := 0
 	f.service = repository.New(repository.Deps{
@@ -247,6 +305,7 @@ func newFixture(t *testing.T) fixture {
 			}
 			return got.identity, got.err
 		},
+		Clone: f.cloner.clone,
 		Counts: func(id string) (int, int) {
 			counts := f.counts[id]
 			return counts[0], counts[1]
@@ -274,6 +333,36 @@ func (f fixture) register(t *testing.T, path, owner, name string) repository.Rep
 		t.Fatalf("Add(%s) = %v, want nil", path, err)
 	}
 	return repo
+}
+
+// uncloned registers owner/name without a clone, the way a board does, and
+// syncs the service so that it sees it.
+func (f fixture) uncloned(t *testing.T, id, owner, name string) repository.Repository {
+	t.Helper()
+
+	repo := repository.Repository{ID: id, Owner: owner, Name: name, CreatedAt: base}
+	if err := f.store.Insert(t.Context(), repo); err != nil {
+		t.Fatalf("Insert(%s) = %v, want nil", repo.FullName(), err)
+	}
+	if err := f.service.Sync(t.Context()); err != nil {
+		t.Fatalf("Sync() = %v, want nil", err)
+	}
+	return repo
+}
+
+// waitFor polls until cond holds, failing the test with subject when it never
+// does.
+func waitFor(t *testing.T, subject string, cond func() bool) {
+	t.Helper()
+
+	deadline := time.Now().Add(pollTimeout)
+	for time.Now().Before(deadline) {
+		if cond() {
+			return
+		}
+		time.Sleep(pollStep)
+	}
+	t.Fatalf("timed out waiting for %s", subject)
 }
 
 // clone creates a folder under parent that passes for a clone, a directory

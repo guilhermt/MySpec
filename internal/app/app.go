@@ -188,10 +188,12 @@ func Run(cfg Config) int {
 		},
 		OnTranscript: a.emitTranscript,
 	})
+	ghRunner := gh.New(gh.Deps{Log: log})
 	repositories := repository.New(repository.Deps{
 		Store:         st.Repositories,
 		Settings:      st.Settings,
 		Identify:      identifier.Identify,
+		Clone:         ghRunner.Clone,
 		Counts:        func(id string) (int, int) { return a.tasks.Counts(id) },
 		Log:           log,
 		OnChange:      a.publish,
@@ -208,7 +210,6 @@ func Run(cfg Config) int {
 	if err != nil {
 		return fail(log, "watch artifacts", err)
 	}
-	ghRunner := gh.New(gh.Deps{Log: log})
 	worktrees := worktree.New(worktree.Deps{
 		Git: gitRunner, Store: st.Worktrees, DataDir: dirs.Data, Log: log,
 	})
