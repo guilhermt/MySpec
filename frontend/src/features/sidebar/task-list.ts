@@ -7,6 +7,8 @@ export interface TaskRow {
   /** fullName is owner/name; shortName is the name part the row shows. */
   fullName: string;
   shortName: string;
+  /** cardNumber is the issue number of the card of the task, null for a task without one. */
+  cardNumber: number | null;
   /** selected is the task being the open one. */
   selected: boolean;
   /** flashing is a situation of the task having just started while it is not open. */
@@ -23,6 +25,7 @@ export function taskRows(
     task,
     fullName: task.repository,
     shortName: shortName(task.repository),
+    cardNumber: task.card?.number ?? null,
     selected: task.id === openTaskId,
     flashing:
       task.id !== openTaskId &&
