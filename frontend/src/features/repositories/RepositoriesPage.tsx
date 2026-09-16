@@ -2,6 +2,7 @@ import { Plus } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { RepositoryRow } from "@/features/repositories/RepositoryRow";
+import { messageOf } from "@/lib/errors";
 import { addRepository } from "@/store/actions";
 import { useRepositories } from "@/store/app-store";
 
@@ -17,7 +18,7 @@ export function RepositoriesPage() {
     try {
       await addRepository();
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : String(failure));
+      setError(messageOf(failure));
     } finally {
       setAdding(false);
     }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"slices"
 	"strings"
 
@@ -377,9 +378,11 @@ func (s *Service) prepare(ctx context.Context, id string, opts prepareOptions) {
 		block(task.BlockGitFailed, repoErr.Error(), 0)
 		return
 	}
-	// Only a worktree still to create needs the clone: one that exists goes on
-	// being used wherever the clone is.
-	if _, exists := s.worktrees.Get(id); !exists {
+	// Only a worktree the app still has to create needs the clone: a folder that
+	// is there goes on being used wherever the clone is. A record whose folder
+	// the user deleted is discarded by Ensure, which creates it from the clone
+	// again.
+	if existing, exists := s.worktrees.Get(id); !exists || !folderExists(existing.Path) {
 		checked, checkErr := s.repositories.Check(t.RepositoryID)
 		var refusal *repository.Refusal
 		if errors.As(checkErr, &refusal) {
@@ -700,6 +703,13 @@ func reasonOf(err error) task.BlockReason {
 	default:
 		return task.BlockGitFailed
 	}
+}
+
+// folderExists says whether a path is there, as Ensure asks before it uses a
+// worktree it has a record of.
+func folderExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 // indexOfRun finds the run of a step by number.

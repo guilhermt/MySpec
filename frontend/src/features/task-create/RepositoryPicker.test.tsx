@@ -46,7 +46,12 @@ describe("RepositoryPicker", () => {
   });
 
   it("refuses a repository whose clone is missing, and says why", async () => {
-    const gone = makeRepository({ id: "repo-2", fullName: "dev/api", missing: true });
+    const gone = makeRepository({
+      id: "repo-2",
+      fullName: "dev/api",
+      path: "/home/dev/projects/api",
+      missing: true,
+    });
     const onChange = vi.fn();
     const { user } = renderWithStore(<RepositoryPicker value="repo-1" onChange={onChange} />, {
       state: makeState({ repositories: [WEB, gone] }),
@@ -56,6 +61,6 @@ describe("RepositoryPicker", () => {
     const item = await screen.findByRole("menuitemradio", { name: /dev\/api/ });
 
     expect(item).toHaveAttribute("aria-disabled", "true");
-    expect(item).toHaveTextContent("The clone at /home/dev/projects/web is missing.");
+    expect(item).toHaveTextContent("The clone at /home/dev/projects/api is missing.");
   });
 });

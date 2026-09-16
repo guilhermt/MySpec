@@ -1,6 +1,7 @@
 import { TriangleAlert } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { messageOf } from "@/lib/errors";
 import { ALL_REPOSITORIES, cloneMissingText } from "@/lib/repositories";
 import type { Repository } from "@/lib/wails";
 import { changeRepositoryPath } from "@/store/actions";
@@ -15,7 +16,7 @@ function MissingClone({ repository }: { repository: Repository }) {
     try {
       await changeRepositoryPath(repository.id);
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : String(failure));
+      setError(messageOf(failure));
     }
   };
 

@@ -33,11 +33,11 @@ export const PROMPTS: readonly PromptMeta[] = [
     description:
       "Sent after a step is approved, by you or by the agent review, and after you approve the changes of a PR review.",
   },
-  { stage: "pr", name: "PR", description: "Opens the pull request session of each repository." },
+  { stage: "pr", name: "PR", description: "Opens the pull request session of the task." },
   {
     stage: "pr_review",
     name: "PR review",
-    description: "Opens the review session of each pull request.",
+    description: "Opens the review session of the pull request.",
   },
 ];
 
@@ -64,13 +64,12 @@ export const PLACEHOLDERS: Readonly<Record<string, PlaceholderMeta>> = {
   "{{steps_dir}}": { meaning: "The folder of the step files" },
   "{{step_path}}": { meaning: "The file of the step under review" },
   "{{one_shot_path}}": { meaning: "The One-Shot document file" },
-  "{{repositories}}": { meaning: "The list of the repositories the task may touch" },
   "{{initial_context}}": {
     meaning: "The initial context written when the task was created",
     whenRemoved: "Without it, the initial context is added at the end.",
   },
   "{{repository}}": { meaning: "The repository of the session" },
-  "{{branch}}": { meaning: "The branch of the task in this repository" },
+  "{{branch}}": { meaning: "The branch of the task" },
   "{{base_branch}}": { meaning: "The base branch of the worktree and the pull request" },
   "{{draft_path}}": { meaning: "The file the agent writes the pull request draft to" },
   "{{review_path}}": { meaning: "The file the agent writes the review report to" },

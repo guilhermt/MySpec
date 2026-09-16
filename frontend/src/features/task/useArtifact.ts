@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { messageOf } from "@/lib/errors";
 import { api } from "@/lib/wails";
 
 /** ArtifactState is one document of a task as the panel holds it. */
@@ -9,10 +10,6 @@ export interface ArtifactState {
 }
 
 const EMPTY: ArtifactState = { status: "empty", content: "", error: "" };
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
 
 /**
  * useArtifact reads one document of a task, again on every version the watcher

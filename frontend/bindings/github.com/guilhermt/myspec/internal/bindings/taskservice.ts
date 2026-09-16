@@ -89,7 +89,7 @@ export function CreateTask(req: $models.CreateTaskRequest): $CancellablePromise<
 }
 
 /**
- * DeleteTask stops the session of a task, removes its worktrees and branches,
+ * DeleteTask stops the session of a task, removes its worktree and its branch,
  * and removes it with its artifacts. What git could not remove comes back for
  * the user to clean up: it never keeps the task.
  */

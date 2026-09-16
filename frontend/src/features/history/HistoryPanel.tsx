@@ -104,10 +104,10 @@ export function HistoryPanel() {
           <ul className="flex flex-col">
             {shown.map((task) => (
               <li key={task.id}>
-                {/* The row carries the links of the pull requests, so it is a
+                {/* The row carries the links of the pull request, so it is a
                     div playing a button: a button inside a button is not HTML
                     any browser or screen reader agrees on. */}
-                {/* biome-ignore lint/a11y/useSemanticElements: a button would hold the buttons of the pull requests */}
+                {/* biome-ignore lint/a11y/useSemanticElements: a button would hold the buttons of the pull request */}
                 <div
                   role="button"
                   tabIndex={0}

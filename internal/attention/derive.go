@@ -78,7 +78,7 @@ func stageSituation(in Input) (Found, bool) {
 		if kind == "" {
 			return Found{}, false
 		}
-		return newFound(t, place, kind, sessionBody(kind, placeName(t, place))), true
+		return newFound(t, place, kind, sessionBody(kind, placeName(place))), true
 	}
 	if !sum.Idle {
 		// The agent is working, or a message waits in the queue for it.
@@ -98,7 +98,7 @@ func stageSituation(in Input) (Found, bool) {
 		}
 		return newFound(t, place, KindReadyToContinue, readyToContinueBody(t.Stage)), true
 	}
-	return newFound(t, place, KindReply, sessionBody(KindReply, placeName(t, place))), true
+	return newFound(t, place, KindReply, sessionBody(KindReply, placeName(place))), true
 }
 
 // stepSituations are the situations of a task in implementation, the ones of
@@ -138,7 +138,7 @@ func stepSituation(t task.Task, step flow.StepState, sessions map[session.Key]se
 			if kind == "" {
 				return Found{}, false
 			}
-			return newFound(t, place, kind, sessionBody(kind, placeName(t, place))), true
+			return newFound(t, place, kind, sessionBody(kind, placeName(place))), true
 		}
 	}
 
@@ -188,7 +188,7 @@ func reviewerSituation(t task.Task, step flow.StepState) (Found, bool) {
 // prSituation is the situation of the pull request of a task in the PR stage.
 func prSituation(t task.Task, pr flow.PullRequest) (Found, bool) {
 	place := Place{Kind: PlacePR}
-	name := placeName(t, place)
+	name := placeName(place)
 	if pr.SessionStage != "" {
 		if kind, decided := sessionKind(pr.Session); decided {
 			if kind == "" {

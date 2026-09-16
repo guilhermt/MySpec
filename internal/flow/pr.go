@@ -618,17 +618,12 @@ func (s *Service) evaluateReview(ctx context.Context, t task.Task, run task.PRRu
 	if !ok {
 		return
 	}
-	repo, err := s.repositoryOf(t)
-	if err != nil {
-		s.log.Error("open pr review session failed", "task", t.ID, "error", err)
-		return
-	}
 	key := session.Key{TaskID: t.ID, Stage: session.PRReviewStage}
 	sum, open := s.sessions.Summary(key)
 	if !open {
 		// The first pass of the task, and the one a discarded review left
 		// without a conversation.
-		s.startReview(ctx, t, wt, run, repo)
+		s.startReview(ctx, t, wt, run)
 		return
 	}
 
@@ -664,7 +659,7 @@ func (s *Service) evaluateReview(ctx context.Context, t task.Task, run task.PRRu
 	if head == "" || head == run.ReviewedCommit || s.passAsked(t.ID) == head {
 		return
 	}
-	s.askPass(ctx, t, wt, run, repo, key, head)
+	s.askPass(ctx, t, wt, run, key, head)
 }
 
 // evaluatePRCommit decides what became of the commit the app asked for. It
@@ -699,9 +694,12 @@ func (s *Service) evaluatePRCommit(ctx context.Context, t task.Task, run task.PR
 
 // startReview opens the conversation that reviews the pull request of a task
 // and hands it the prompt of the pass it is about to write.
-func (s *Service) startReview(
-	ctx context.Context, t task.Task, wt worktree.Worktree, run task.PRRun, repo repository.Repository,
-) {
+func (s *Service) startReview(ctx context.Context, t task.Task, wt worktree.Worktree, run task.PRRun) {
+	repo, err := s.repositoryOf(t)
+	if err != nil {
+		s.log.Error("start pr review session failed", "task", t.ID, "error", err)
+		return
+	}
 	base := s.baseOf(ctx, wt)
 	pass := run.ReportedPass + 1
 	if err := s.sessions.Start(ctx, prReviewInfo(t, wt, base, repo, run.PR, pass), false); err != nil {
@@ -746,9 +744,13 @@ func (s *Service) finishReview(ctx context.Context, t task.Task, run task.PRRun,
 // askPass asks the review session for a new pass over the commit the approval
 // produced.
 func (s *Service) askPass(
-	ctx context.Context, t task.Task, wt worktree.Worktree, run task.PRRun,
-	repo repository.Repository, key session.Key, head string,
+	ctx context.Context, t task.Task, wt worktree.Worktree, run task.PRRun, key session.Key, head string,
 ) {
+	repo, err := s.repositoryOf(t)
+	if err != nil {
+		s.log.Error("render pr review prompt failed", "task", t.ID, "error", err)
+		return
+	}
 	pass := run.ReportedPass + 1
 	base := s.baseOf(ctx, wt)
 	info := prReviewInfo(t, wt, base, repo, run.PR, pass)

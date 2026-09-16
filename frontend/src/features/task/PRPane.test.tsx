@@ -165,7 +165,9 @@ describe("PRPane", () => {
   });
 
   it("offers no closing while the clone of the repository is missing", () => {
-    pane({ status: "merged", prNumber: 12, cloneMissing: true }, [
+    // The Go side refuses the closing while the clone is missing, however
+    // merged the pull request is.
+    pane({ status: "merged", prNumber: 12, cloneMissing: true, canClose: false }, [
       makeRepository({ missing: true }),
     ]);
 

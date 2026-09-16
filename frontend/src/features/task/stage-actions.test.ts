@@ -41,7 +41,7 @@ describe("stage actions", () => {
       "the PRD conversation and document",
       "the tech spec conversation and document",
       "the plan conversation and the step files",
-      "the step conversations, worktrees and branches, with any uncommitted work in them",
+      "the step conversations, and the worktree and branch, with any uncommitted work in them",
     ]);
   });
 
@@ -66,7 +66,7 @@ describe("stage actions", () => {
 
   it("counts the plan and the worktrees in when the task is already implementing", () => {
     expect(backDescription("structured", "tech_spec", "implementation")).toBe(
-      "This deletes the plan conversation and the step files and the step conversations, worktrees and branches, with any uncommitted work in them. The Tech spec stays, and the next stage starts again from scratch when you continue.",
+      "This deletes the plan conversation and the step files and the step conversations, and the worktree and branch, with any uncommitted work in them. The Tech spec stays, and the next stage starts again from scratch when you continue.",
     );
   });
 
@@ -78,7 +78,7 @@ describe("stage actions", () => {
 
   it("takes the worktrees with the plan once the task is implementing", () => {
     expect(discardDescription("structured", "plan", "implementation")).toBe(
-      "This deletes the plan conversation and the step files and the step conversations, worktrees and branches, with any uncommitted work in them. A new Plan session starts right away.",
+      "This deletes the plan conversation and the step files and the step conversations, and the worktree and branch, with any uncommitted work in them. A new Plan session starts right away.",
     );
   });
 

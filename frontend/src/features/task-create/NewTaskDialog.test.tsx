@@ -62,14 +62,19 @@ describe("NewTaskDialog", () => {
   });
 
   it("offers no repository whose clone is missing", async () => {
-    const gone = makeRepository({ id: "repo-2", fullName: "dev/api", missing: true });
+    const gone = makeRepository({
+      id: "repo-2",
+      fullName: "dev/api",
+      path: "/home/dev/projects/api",
+      missing: true,
+    });
     const { user } = open({ repositories: [WEB, gone] });
 
     await user.click(screen.getByRole("button", { name: "Repository: dev/web" }));
 
     const item = await screen.findByRole("menuitemradio", { name: /dev\/api/ });
     expect(item).toHaveAttribute("aria-disabled", "true");
-    expect(item).toHaveTextContent("The clone at /home/dev/projects/web is missing.");
+    expect(item).toHaveTextContent("The clone at /home/dev/projects/api is missing.");
   });
 
   it("changes the repository the task will belong to", async () => {
@@ -127,7 +132,12 @@ describe("NewTaskDialog", () => {
   // names of the other repositories are none of this task's business yet.
   it("takes any name while no repository is chosen", async () => {
     const gone = makeRepository({ missing: true });
-    const alsoGone = makeRepository({ id: "repo-2", fullName: "dev/api", missing: true });
+    const alsoGone = makeRepository({
+      id: "repo-2",
+      fullName: "dev/api",
+      path: "/home/dev/projects/api",
+      missing: true,
+    });
     const { user } = open({
       repositories: [gone, alsoGone],
       tasks: [makeTask({ name: "add-login" })],

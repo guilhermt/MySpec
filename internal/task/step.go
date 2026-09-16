@@ -36,8 +36,8 @@ const (
 	BlockPathExists   BlockReason = "path_exists"
 	BlockBranchExists BlockReason = "branch_exists"
 	BlockGitFailed    BlockReason = "git_failed"
-	// BlockCloneMissing is the clone of the repository missing; Detail says
-	// where it was looked for.
+	// BlockCloneMissing says the clone of the repository is missing; Detail
+	// says where it was looked for.
 	BlockCloneMissing BlockReason = "clone_missing"
 )
 

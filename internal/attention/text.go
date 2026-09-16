@@ -24,7 +24,7 @@ func stageName(stage task.Stage) string {
 
 // placeName is a place as a sentence names it: the stage, "step 3", or the
 // pull request.
-func placeName(_ task.Task, place Place) string {
+func placeName(place Place) string {
 	switch place.Kind {
 	case PlaceStep:
 		return "step " + strconv.Itoa(place.Step)

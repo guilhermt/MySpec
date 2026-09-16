@@ -2,6 +2,7 @@ package flow_test
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/guilhermt/myspec/internal/flow"
@@ -126,8 +127,8 @@ func TestACommittedStepIsDoneWithItsCommit(t *testing.T) {
 	}
 
 	// The step that runs next is the first one without a commit.
-	if next := f.stepState(t, "task-1", 2); next.Status == flow.StepDone {
-		t.Errorf("step 2 = %+v, want the step that runs next", next)
+	if next := f.stepState(t, "task-1", 2); next.Status != flow.StepNotStarted || next.CommitSHA != "" {
+		t.Errorf("step 2 = %+v, want the step that runs next, with no commit of its own", next)
 	}
 }
 
@@ -257,8 +258,25 @@ func TestTheReviewOfAStepIsKeyedByItsTask(t *testing.T) {
 	f.waitStepSession(t, "task-1", 2)
 	f.service.Check("task-1")
 
-	waitFor(t, "the worktree of the task to be watched again", func() bool {
-		_, watched := f.reviews.activeOf("task-1")
-		return watched
+	waitFor(t, "the worktree of the task to be watched for the second step", func() bool {
+		return tracksOf(f, "task-1") > 1
 	})
+	// Every reading of the worktree is asked for under the id of the task,
+	// whichever step it is for.
+	for _, call := range f.reviews.reviewCalls() {
+		if strings.HasPrefix(call, "track:") && !strings.HasPrefix(call, "track:task-1:") {
+			t.Errorf("review call = %q, want every reading keyed by the task", call)
+		}
+	}
+}
+
+// tracksOf is how many readings of the worktree of a task were asked for.
+func tracksOf(f *fixture, taskID string) int {
+	tracks := 0
+	for _, call := range f.reviews.reviewCalls() {
+		if strings.HasPrefix(call, "track:"+taskID+":") {
+			tracks++
+		}
+	}
+	return tracks
 }

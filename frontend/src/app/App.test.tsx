@@ -222,11 +222,11 @@ describe("App", () => {
   it("shows a rejected binding and dismisses it", async () => {
     vi.mocked(api.setRepositoryFilter).mockRejectedValueOnce(new Error("filter failed"));
     const { user } = renderWithStore(<App />);
-    await screen.findByRole("button", { name: "Repository filter: All repositories" });
 
-    act(() => {
-      useAppStore.getState().setError("filter failed");
-    });
+    await user.click(
+      await screen.findByRole("button", { name: "Repository filter: All repositories" }),
+    );
+    await user.click(await screen.findByRole("menuitemradio", { name: /dev\/web/ }));
 
     expect(await screen.findByRole("status")).toHaveTextContent("filter failed");
 
@@ -266,7 +266,6 @@ describe("App", () => {
   it("opens the history over home and comes back to it", async () => {
     vi.mocked(api.getState).mockResolvedValue(makeState({ history: [makeArchivedTask()] }));
     const { user } = renderWithStore(<App />);
-    await screen.findByRole("listbox", { name: "Tasks" }).catch(() => null);
 
     await user.click(await screen.findByRole("button", { name: /^History/ }));
 

@@ -22,7 +22,7 @@ import (
 	"github.com/guilhermt/myspec/internal/task"
 )
 
-// removeTimeout bounds the calls that remove worktrees: they run git, and a
+// removeTimeout bounds the calls that remove a worktree: they run git, and a
 // removal is far slower than the database work callTimeout was written for.
 const removeTimeout = time.Minute
 
@@ -123,7 +123,7 @@ func (s *TaskService) CreateTask(req CreateTaskRequest) (string, error) {
 	return t.ID, nil
 }
 
-// DeleteTask stops the session of a task, removes its worktrees and branches,
+// DeleteTask stops the session of a task, removes its worktree and its branch,
 // and removes it with its artifacts. What git could not remove comes back for
 // the user to clean up: it never keeps the task.
 func (s *TaskService) DeleteTask(taskID string) (DeleteResult, error) {
@@ -192,7 +192,7 @@ func (s *TaskService) BackToStage(taskID, stage string) error {
 		return s.fail("BackToStage", err)
 	}
 
-	// Going back tears down the worktrees of the steps, which is git work.
+	// Going back tears down the worktree of the task, which is git work.
 	ctx, cancel := context.WithTimeout(context.Background(), removeTimeout)
 	defer cancel()
 
@@ -210,7 +210,7 @@ func (s *TaskService) DiscardStage(taskID, stage string) error {
 		return s.fail("DiscardStage", err)
 	}
 
-	// Discarding tears down the worktrees of the steps, which is git work.
+	// Discarding tears down the worktree of the task, which is git work.
 	ctx, cancel := context.WithTimeout(context.Background(), removeTimeout)
 	defer cancel()
 

@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { RemoveRepositoryDialog } from "@/features/repositories/RemoveRepositoryDialog";
+import { messageOf } from "@/lib/errors";
 import { cloneMissingText, removeBlockedText, taskCount } from "@/lib/repositories";
 import type { Repository } from "@/lib/wails";
 import { changeRepositoryPath } from "@/store/actions";
@@ -22,7 +23,7 @@ export function RepositoryRow({ repository }: RepositoryRowProps) {
     try {
       await changeRepositoryPath(repository.id);
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : String(failure));
+      setError(messageOf(failure));
     }
   };
 

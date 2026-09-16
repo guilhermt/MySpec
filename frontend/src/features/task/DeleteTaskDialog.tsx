@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorNotice } from "@/features/notice/Notice";
 import { OrphanPR } from "@/features/task/OrphanPRs";
+import { messageOf } from "@/lib/errors";
 import { api, type DeletePreview } from "@/lib/wails";
 import { deleteTask } from "@/store/actions";
 
@@ -30,10 +31,6 @@ interface Preview {
 }
 
 const LOADING: Preview = { status: "loading", data: null, error: "" };
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
 
 /** Section is one group of what the deletion takes, inside the dialog. */
 function Section({ children }: { children: React.ReactNode }) {
@@ -65,7 +62,7 @@ export function DeleteTaskDialog({
   const [dismissed, setDismissed] = useState("");
 
   // The reading is worth doing when the dialog opens, not before: it goes to
-  // git in every worktree of the task. A late answer to a dialog the user has
+  // git in the worktree of the task. A late answer to a dialog the user has
   // already closed is dropped.
   useEffect(() => {
     if (!open) {

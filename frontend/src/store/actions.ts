@@ -1,3 +1,4 @@
+import { messageOf } from "@/lib/errors";
 import type { ModelChoice } from "@/lib/models";
 import type {
   CreateTaskRequest,
@@ -11,10 +12,6 @@ import type {
 } from "@/lib/wails";
 import { api } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
 
 // No action touches `app`: the new state always arrives through state:changed.
 async function run(operation: () => Promise<void>): Promise<void> {

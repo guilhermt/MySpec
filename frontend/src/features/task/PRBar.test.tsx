@@ -196,7 +196,14 @@ describe("PRBar", () => {
   });
 
   it("offers no closing while the clone of the repository is missing", async () => {
-    const pr = makePullRequest({ status: "merged", prNumber: 12, cloneMissing: true });
+    // The Go side refuses the closing while the clone is missing, however
+    // merged the pull request is.
+    const pr = makePullRequest({
+      status: "merged",
+      prNumber: 12,
+      cloneMissing: true,
+      canClose: false,
+    });
     const task = makeTask({ stage: "pr", pr });
     const { user } = renderWithStore(<PRBar task={task} pr={pr} />, {
       state: makeState({ repositories: [makeRepository({ missing: true })], tasks: [task] }),

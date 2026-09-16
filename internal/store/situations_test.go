@@ -48,12 +48,12 @@ func TestSituationsUpsertAndListByTasks(t *testing.T) {
 		t.Fatalf("Tasks.Insert(two) = %v, want nil", err)
 	}
 
-	web := newSituation(second, "repo:/ws/web", "situation-3", attention.KindDraft)
-	api := newSituation(second, "repo:/ws/api", "situation-2", attention.KindFindings)
+	step := newSituation(second, "step:2", "situation-3", attention.KindFindings)
+	pr := newSituation(second, "pr", "situation-2", attention.KindDraft)
 	prd := newSituation(first, "stage:prd", "situation-1", attention.KindReply)
-	upsertSituations(t, s, web, api, prd)
+	upsertSituations(t, s, step, pr, prd)
 
-	want := []attention.Record{prd, api, web}
+	want := []attention.Record{prd, pr, step}
 	if diff := cmp.Diff(want, listSituations(t, s, first, second)); diff != "" {
 		t.Errorf("ListByTasks() mismatch (-want +got):\n%s", diff)
 	}
@@ -88,18 +88,18 @@ func TestSituationsDeleteRemovesOnlyItsPlace(t *testing.T) {
 	s := newStoreWithRepositories(t)
 
 	taskID := seedTask(t, s)
-	api := newSituation(taskID, "repo:/ws/api", "situation-1", attention.KindDraft)
-	web := newSituation(taskID, "repo:/ws/web", "situation-2", attention.KindMerge)
-	upsertSituations(t, s, api, web)
+	pr := newSituation(taskID, "pr", "situation-1", attention.KindDraft)
+	step := newSituation(taskID, "step:2", "situation-2", attention.KindMerge)
+	upsertSituations(t, s, pr, step)
 
-	if err := s.Situations.Delete(t.Context(), taskID, api.Place); err != nil {
+	if err := s.Situations.Delete(t.Context(), taskID, pr.Place); err != nil {
 		t.Fatalf("Delete() = %v, want nil", err)
 	}
-	if diff := cmp.Diff([]attention.Record{web}, listSituations(t, s, taskID)); diff != "" {
+	if diff := cmp.Diff([]attention.Record{step}, listSituations(t, s, taskID)); diff != "" {
 		t.Errorf("ListByTasks() after the delete mismatch (-want +got):\n%s", diff)
 	}
 	// A place without a situation is not an error either.
-	if err := s.Situations.Delete(t.Context(), taskID, api.Place); err != nil {
+	if err := s.Situations.Delete(t.Context(), taskID, pr.Place); err != nil {
 		t.Errorf("Delete() again = %v, want nil", err)
 	}
 }

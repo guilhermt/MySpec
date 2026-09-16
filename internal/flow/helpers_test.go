@@ -1306,13 +1306,19 @@ func (m *memWorktrees) failBase(err error) {
 
 // seed registers a worktree the way a previous run of the app left it.
 func (m *memWorktrees) seed(t task.Task) worktree.Worktree {
+	return m.seedAt(t, worktree.Path(dataDir, repo.Owner, repo.Name, t.Name))
+}
+
+// seedAt registers a worktree at a path of the test's choosing, which is how a
+// test says whether the folder of the worktree is still on disk.
+func (m *memWorktrees) seedAt(t task.Task, path string) worktree.Worktree {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	wt := worktree.Worktree{
 		TaskID:   t.ID,
 		RepoPath: repo.Path,
-		Path:     worktree.Path(dataDir, repo.Owner, repo.Name, t.Name),
+		Path:     path,
 		Branch:   t.Name,
 		Base:     m.base,
 	}

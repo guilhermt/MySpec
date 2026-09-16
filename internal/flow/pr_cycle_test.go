@@ -17,13 +17,12 @@ import (
 	"github.com/guilhermt/myspec/internal/task"
 )
 
-// openPR is the pull request every repository under review has.
+// openPR is the pull request a task under review has.
 func openPR() task.PRDetails {
 	return task.PRDetails{Number: 7, URL: samePR.URL, State: task.PRStateOpen}
 }
 
-// prArtifacts is what the pr folder of the task holds for the first
-// repository.
+// prArtifacts is what the pr folder of the task holds.
 func prArtifacts(art task.PRArtifacts) task.Artifacts {
 	return task.Artifacts{
 		PRD: true, TechSpec: true, Plan: plan(),
@@ -31,12 +30,11 @@ func prArtifacts(art task.PRArtifacts) task.Artifacts {
 	}
 }
 
-// reviewKeyOf is the session that reviews the pull request of the first
-// repository.
+// reviewKeyOf is the session that reviews the pull request of the task.
 var reviewKeyOf = session.Key{TaskID: "task-1", Stage: session.PRReviewStage}
 
-// underReview brings the first repository of a task to its review session,
-// with the pull request the app recorded and the branch on startCommit.
+// underReview brings a task to the review session of its pull request, with
+// the pull request the app recorded and the branch on startCommit.
 func underReview(t *testing.T, f *fixture) task.Task {
 	t.Helper()
 
@@ -46,14 +44,14 @@ func underReview(t *testing.T, f *fixture) task.Task {
 	f.tasks.setPRRun("task-1", task.PRRun{Status: task.PRReviewing, PR: openPR()})
 
 	f.service.Check("task-1")
-	waitFor(t, "the review session of api", func() bool {
+	waitFor(t, "the review session of the task", func() bool {
 		_, ok := f.sessions.Summary(reviewKeyOf)
 		return ok
 	})
 	return tk
 }
 
-// waitPRRun polls until the record of a repository satisfies cond.
+// waitPRRun polls until the record of the pull request satisfies cond.
 func (f *fixture) waitPRRun(t *testing.T, subject string, cond func(task.PRRun) bool) {
 	t.Helper()
 
@@ -110,7 +108,7 @@ func TestTheReviewOfAOneShotPullRequestReadsTheDocument(t *testing.T) {
 	f.reviews.setSnapshot(staged(3, 3))
 	f.sessions.goIdle("task-1")
 	if err := f.service.ApprovePR(t.Context(), "task-1"); err != nil {
-		t.Fatalf("ApproveRepo() = %v, want nil", err)
+		t.Fatalf("ApprovePR() = %v, want nil", err)
 	}
 	f.worktrees.setStatus(git.Status{Head: commitSHA})
 	f.reviews.setSnapshot(review.Snapshot{Head: commitSHA})
@@ -167,7 +165,7 @@ func TestApprovingAReviewAsksForACommitThatIsPushed(t *testing.T) {
 		t.Fatalf("status = %q, want ready_to_approve", got)
 	}
 	if err := f.service.ApprovePR(t.Context(), "task-1"); err != nil {
-		t.Fatalf("ApproveRepo() = %v, want nil", err)
+		t.Fatalf("ApprovePR() = %v, want nil", err)
 	}
 
 	run, _ := f.tasks.prRun("task-1")
@@ -193,7 +191,7 @@ func TestACommitOfAReviewStartsTheNextPass(t *testing.T) {
 	f.reviews.setSnapshot(staged(3, 3))
 	f.sessions.goIdle("task-1")
 	if err := f.service.ApprovePR(t.Context(), "task-1"); err != nil {
-		t.Fatalf("ApproveRepo() = %v, want nil", err)
+		t.Fatalf("ApprovePR() = %v, want nil", err)
 	}
 
 	// The agent committed: the branch moved, and the pass that follows is
@@ -238,7 +236,7 @@ func TestACommitOfAReviewStartsTheNextPass(t *testing.T) {
 	}
 }
 
-func TestACommitTurnOfAReviewThatCommitsNothingGivesTheRepositoryBack(t *testing.T) {
+func TestACommitTurnOfAReviewThatCommitsNothingGivesTheTaskBack(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
@@ -248,14 +246,14 @@ func TestACommitTurnOfAReviewThatCommitsNothingGivesTheRepositoryBack(t *testing
 	f.reviews.setSnapshot(staged(3, 3))
 	f.sessions.goIdle("task-1")
 	if err := f.service.ApprovePR(t.Context(), "task-1"); err != nil {
-		t.Fatalf("ApproveRepo() = %v, want nil", err)
+		t.Fatalf("ApprovePR() = %v, want nil", err)
 	}
 
 	// The turn ended with the branch where it was.
 	f.sessions.goIdle("task-1")
 	f.service.Check("task-1")
 
-	waitFor(t, "the repository to come back to its review", func() bool {
+	waitFor(t, "the task to come back to its review", func() bool {
 		run, ok := f.tasks.prRun("task-1")
 		return ok && run.Status == task.PRReviewing
 	})
@@ -264,21 +262,21 @@ func TestACommitTurnOfAReviewThatCommitsNothingGivesTheRepositoryBack(t *testing
 	})
 }
 
-func TestACleanReportClosesTheRepository(t *testing.T) {
+func TestACleanReportClosesThePullRequest(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
 	underReview(t, f)
 	reportsWritten(f, reports(1, true))
 
-	f.waitPRRun(t, "the repository to be closed", func(run task.PRRun) bool { return run.Status == task.PRDone })
+	f.waitPRRun(t, "the pull request to be closed", func(run task.PRRun) bool { return run.Status == task.PRDone })
 	f.waitPR(t, "task-1", flow.PRDone)
 
 	run, _ := f.tasks.prRun("task-1")
 	if run.ReportedPass != 1 {
 		t.Errorf("reported pass = %d, want the first pass recorded", run.ReportedPass)
 	}
-	// The conversation of a repository that is over takes no more messages.
+	// The conversation of a review that is over takes no more messages.
 	waitFor(t, "the review session to be closed", func() bool {
 		return slices.Contains(f.sessions.recorded(), "close:task-1:pr_review")
 	})
@@ -287,7 +285,7 @@ func TestACleanReportClosesTheRepository(t *testing.T) {
 	}
 }
 
-func TestFindingsTheUserDismissesCloseTheRepositoryToo(t *testing.T) {
+func TestFindingsTheUserDismissesCloseThePullRequestToo(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
@@ -299,7 +297,7 @@ func TestFindingsTheUserDismissesCloseTheRepositoryToo(t *testing.T) {
 	// pass that closes clean.
 	reportsWritten(f, reports(2, true))
 
-	f.waitPRRun(t, "the repository to be closed", func(run task.PRRun) bool {
+	f.waitPRRun(t, "the pull request to be closed", func(run task.PRRun) bool {
 		return run.Status == task.PRDone && run.ReportedPass == 2
 	})
 	f.waitPR(t, "task-1", flow.PRDone)
@@ -392,7 +390,7 @@ func TestDiscardingADraftPreparesTheStageAgain(t *testing.T) {
 	if !slices.Contains(f.sessions.recorded(), "discard:task-1:pr") {
 		t.Errorf("session calls = %q, want the pr session discarded", f.sessions.recorded())
 	}
-	// The repository is prepared again, from the login check on.
+	// The PR stage is prepared again, from the login check on.
 	f.waitPR(t, "task-1", flow.PRDrafting)
 }
 
@@ -402,7 +400,7 @@ func TestReviewingAgainStartsAPassOverTheSamePullRequest(t *testing.T) {
 	f := newFixture(t)
 	underReview(t, f)
 	reportsWritten(f, reports(1, true))
-	f.waitPRRun(t, "the repository to be closed", func(run task.PRRun) bool {
+	f.waitPRRun(t, "the pull request to be closed", func(run task.PRRun) bool {
 		return run.Status == task.PRDone && run.ReportedPass == 1
 	})
 
@@ -437,12 +435,12 @@ func TestReviewingAgainStartsAPassOverTheSamePullRequest(t *testing.T) {
 
 	// The clean report of that pass is what closes it.
 	reportsWritten(f, reports(2, true))
-	f.waitPRRun(t, "the repository to be closed again", func(run task.PRRun) bool {
+	f.waitPRRun(t, "the pull request to be closed again", func(run task.PRRun) bool {
 		return run.Status == task.PRDone && run.ReportedPass == 2
 	})
 }
 
-func TestRetryingABlockedRepositoryPreparesItAgain(t *testing.T) {
+func TestRetryingABlockedPullRequestPreparesItAgain(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
@@ -453,7 +451,7 @@ func TestRetryingABlockedRepositoryPreparesItAgain(t *testing.T) {
 
 	f.gh.failAuth(nil)
 	if err := f.service.RetryPR(t.Context(), "task-1"); err != nil {
-		t.Fatalf("RetryRepo() = %v, want nil", err)
+		t.Fatalf("RetryPR() = %v, want nil", err)
 	}
 
 	f.waitPR(t, "task-1", flow.PRDrafting)

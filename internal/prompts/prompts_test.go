@@ -544,7 +544,7 @@ func TestRenderAppendsNoContextSectionWhenThereIsNoContext(t *testing.T) {
 	}
 }
 
-func TestRenderAPromptThatLostTheRepositories(t *testing.T) {
+func TestRenderAPromptThatCarriesOnlySomePlaceholders(t *testing.T) {
 	t.Parallel()
 
 	dataDir := t.TempDir()

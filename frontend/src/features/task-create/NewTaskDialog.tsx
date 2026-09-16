@@ -16,6 +16,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { ModelPicker } from "@/features/models/ModelPicker";
 import { ReviewModePicker } from "@/features/review-mode/ReviewModePicker";
 import { RepositoryPicker } from "@/features/task-create/RepositoryPicker";
+import { messageOf } from "@/lib/errors";
 import {
   adjustmentSummary,
   choiceOf,
@@ -50,10 +51,6 @@ const NAME_PROBLEM_TEXT: Record<Exclude<NameProblem, "empty" | "taken">, string>
 /** takenText names the task of the repository that already holds the name. */
 function takenText(name: string, fullName: string): string {
   return `A task named ${name} already exists in ${fullName}.`;
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 export function NewTaskDialog() {
@@ -93,7 +90,6 @@ function NewTaskForm() {
   // Every task starts Structured: One-Shot is a choice made for the task at hand.
   const [mode, setMode] = useState<TaskMode>("structured");
   const modeLabelId = useId();
-  const repositoryLabelId = useId();
   // The choices hold every stage, so an adjustment to a stage both modes have
   // survives a change of mode; the list and its summary show the mode's own.
   const modelStages = modelStagesOf(mode);
@@ -162,7 +158,7 @@ function NewTaskForm() {
 
         <form onSubmit={onSubmit} className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
-            <Label id={repositoryLabelId}>Repository</Label>
+            <Label>Repository</Label>
             <RepositoryPicker value={repositoryId} onChange={setRepositoryId} />
           </div>
 

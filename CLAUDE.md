@@ -13,7 +13,7 @@ O índice completo está em [docs/README.md](./docs/README.md).
 ## Vocabulário
 
 - **Task**: a unidade de trabalho que o produto conduz, de qualquer natureza: feature, bug fix, refatoração.
-- **Step**: cada item ordenado dentro de uma task. Um step pertence a um único repositório e vira exatamente um commit.
+- **Step**: cada item ordenado dentro de uma task, que vira exatamente um commit.
 
 ## Convenções
 

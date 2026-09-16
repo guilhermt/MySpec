@@ -1,6 +1,7 @@
 import { FolderPlus } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { messageOf } from "@/lib/errors";
 import { addRepository } from "@/store/actions";
 
 /** AppMark is the logo of the app, on the screens that stand in for the product. */
@@ -38,7 +39,7 @@ export function WelcomeScreen() {
     try {
       await addRepository();
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : String(failure));
+      setError(messageOf(failure));
     } finally {
       setAdding(false);
     }

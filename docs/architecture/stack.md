@@ -68,7 +68,7 @@ A pull request é aberta pelo agente, com o `gh`, dentro da sessão dele. O app 
 Dois tipos de dado, cada um com uma única fonte de verdade:
 
 - **Artefatos**: PRD, tech spec, arquivos de step, documentos One-Shot, rascunhos de PR, relatórios de review e prompts editados. Markdown no diretório de dados XDG, uma pasta por task. As sessões os leem por caminho, e como arquivos ficam legíveis e diffáveis fora do app.
-- **Estado**: tasks, etapa, status de cada step e de cada repositório, sessões, worktrees, situações, modelos e configurações. SQLite com `modernc.org/sqlite`, acessado só pelo Go com `database/sql`, tipado e com transações.
+- **Estado**: tasks, etapa, status de cada step e da pull request, repositórios cadastrados, sessões, worktrees, situações, modelos e configurações. SQLite com `modernc.org/sqlite`, acessado só pelo Go com `database/sql`, tipado e com transações.
 
 Nada de estado vive nos Markdown. Ver [storage.md](./storage.md).
 

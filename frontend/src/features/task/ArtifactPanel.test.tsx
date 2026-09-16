@@ -127,7 +127,7 @@ describe("ArtifactPanel", () => {
     expect(api.setStepModel).toHaveBeenCalledWith("task-1", 2, "claude-opus-5", "xhigh");
   });
 
-  it("reads one step file, with its header shown as metadata", async () => {
+  it("reads one step file, with the header it carries left out", async () => {
     vi.mocked(api.readArtifact).mockResolvedValue(STEP_FILE);
     const { user } = panel({
       stage: "implementation",
@@ -138,8 +138,9 @@ describe("ArtifactPanel", () => {
     await user.click(screen.getByRole("button", { name: /Add the login form/ }));
 
     expect(api.readArtifact).toHaveBeenCalledWith("task-1", "steps/1-add-the-login-form.md");
-    expect(await screen.findByTestId("markdown")).toHaveTextContent("# Step 1: Add the login form");
-    expect(screen.getByText("web")).toBeInTheDocument();
+    const document = await screen.findByTestId("markdown");
+    expect(document).toHaveTextContent("# Step 1: Add the login form");
+    expect(document).not.toHaveTextContent("repository");
 
     await user.click(screen.getByRole("button", { name: "← Steps" }));
 

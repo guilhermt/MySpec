@@ -47,7 +47,7 @@ A barra lateral tem, de cima para baixo:
 - a **lista de tasks** ativas, na ordem de criação, filtrada pelo repositório escolhido. Cada task mostra o nome, o nome curto do repositório abaixo, a etapa em que está, o step em andamento e o que falta, o progresso do review, ou **Agent review** e **Addressing review** quando um agente revisa o step, e o que espera pelo usuário. A lista é navegável pelo teclado, com a task sob o foco sendo a que abre;
 - o rodapé com **History**, o tema e as configurações.
 
-Não há nós de navegação: nem raiz, nem repositório, nem pasta. A lista com um filtro que deixa zero tasks diz `No tasks in <nome curto>.`
+A lista é plana: uma linha por task. A lista com um filtro que deixa zero tasks diz `No tasks in <nome curto>.`
 
 ### Dados de uma versão com áreas de trabalho
 

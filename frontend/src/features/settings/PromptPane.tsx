@@ -17,15 +17,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Markdown } from "@/features/chat/Markdown";
 import { ErrorNotice } from "@/features/notice/Notice";
 import { PLACEHOLDERS, promptMeta } from "@/features/settings/prompts";
+import { messageOf } from "@/lib/errors";
 import type { Prompt, PromptStage } from "@/lib/wails";
 import { getPrompt, restorePrompt, savePrompt } from "@/store/actions";
 import { useAppStore, useSettingsUi } from "@/store/app-store";
 
 const LOADING_WIDTHS = ["w-1/2", "w-full", "w-3/4"];
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
 
 /** PromptState is one prompt as the pane holds it. */
 type PromptState =

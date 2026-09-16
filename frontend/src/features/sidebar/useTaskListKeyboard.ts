@@ -51,9 +51,8 @@ export function useTaskListKeyboard(
         case "Enter":
         case " ":
           event.preventDefault();
-          if (selected !== -1) {
-            moveTo(selected);
-          }
+          // With nothing selected the key opens the row the focus starts on.
+          moveTo(selected === -1 ? 0 : selected);
           break;
         default:
           break;

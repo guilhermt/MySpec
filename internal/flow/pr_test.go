@@ -98,7 +98,7 @@ func startPR(t *testing.T, f *fixture, plan task.Plan) {
 	f.waitStage(t, "task-1", task.StagePR)
 }
 
-func TestThePRStageOfATaskHasOneDraftAndOneReview(t *testing.T) {
+func TestThePRStageOfATaskOpensOneDraftConversation(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)

@@ -99,7 +99,7 @@ func artifactOf(stage prompts.Stage) ArtifactKind {
 		return ArtifactOneShot
 	case prompts.StageStep, prompts.StageStepReview, prompts.StagePR, prompts.StagePRReview:
 		// A step file and the PR prompts produce no artifact of the planning:
-		// what they write belongs to a repository, not to the task.
+		// what they write is the work itself, not a document of a stage.
 		return ""
 	default:
 		return ArtifactPRD

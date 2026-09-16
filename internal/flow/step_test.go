@@ -3,6 +3,7 @@ package flow_test
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 	"slices"
 	"testing"
 
@@ -205,7 +206,7 @@ func TestAStepWithAWorktreeRunsWithoutTheClone(t *testing.T) {
 
 	f := newFixture(t)
 	tk := implementing(f, "task-1", twoStepPlan())
-	f.worktrees.seed(tk)
+	f.worktrees.seedAt(tk, t.TempDir())
 	f.repositories.setMissing(true)
 
 	f.service.Sync(t.Context())
@@ -214,6 +215,28 @@ func TestAStepWithAWorktreeRunsWithoutTheClone(t *testing.T) {
 	// A worktree that exists goes on being used wherever the clone is.
 	if state := f.stepState(t, "task-1", 1); state.Block != nil {
 		t.Errorf("block = %+v, want none", state.Block)
+	}
+}
+
+func TestAStepWhoseWorktreeFolderIsGoneIsBlockedWhenTheCloneIsMissing(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	tk := implementing(f, "task-1", twoStepPlan())
+	// The user deleted the folder by hand: the worktree is created again, and
+	// that needs the clone.
+	f.worktrees.seedAt(tk, filepath.Join(t.TempDir(), "gone"))
+	f.repositories.setMissing(true)
+
+	f.service.Sync(t.Context())
+	f.waitStep(t, "task-1", 1, flow.StepBlocked)
+
+	block := f.stepState(t, "task-1", 1).Block
+	if block == nil || block.Reason != task.BlockCloneMissing {
+		t.Fatalf("block = %+v, want the clone missing", block)
+	}
+	if want := "The clone at " + repo.Path + " is missing."; block.Detail != want {
+		t.Errorf("detail = %q, want %q", block.Detail, want)
 	}
 }
 

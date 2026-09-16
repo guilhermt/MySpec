@@ -69,11 +69,36 @@ describe("TaskList", () => {
     expect(useAppStore.getState().openTaskId).toBe("task-2");
   });
 
-  it("opens the focused task with Enter", async () => {
+  it("moves back up the list with ArrowUp, opening what it lands on", async () => {
+    const { user } = list();
+    const [first] = screen.getAllByRole("option");
+    first?.focus();
+
+    await user.keyboard("{End}");
+    expect(useAppStore.getState().openTaskId).toBe("task-2");
+
+    await user.keyboard("{ArrowUp}");
+    expect(useAppStore.getState().openTaskId).toBe("task-1");
+
+    // The list does not wrap around.
+    await user.keyboard("{ArrowUp}");
+    expect(useAppStore.getState().openTaskId).toBe("task-1");
+  });
+
+  it("opens the focused task with Enter when no task is open", async () => {
     const { user } = list();
     screen.getAllByRole("option")[0]?.focus();
 
-    await user.keyboard("{ArrowDown}{Enter}");
+    await user.keyboard("{Enter}");
+
+    expect(useAppStore.getState().openTaskId).toBe("task-1");
+  });
+
+  it("opens the focused task with Space when no task is open", async () => {
+    const { user } = list();
+    screen.getAllByRole("option")[0]?.focus();
+
+    await user.keyboard("{ }");
 
     expect(useAppStore.getState().openTaskId).toBe("task-1");
   });

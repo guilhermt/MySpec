@@ -283,7 +283,7 @@ func TestSessionsStartWithTheChoiceOfTheirStage(t *testing.T) {
 		wantChoice(t, f, session.Key{TaskID: "task-1", Stage: string(task.StagePRD)}, want)
 	})
 
-	t.Run("the pull request of a repository", func(t *testing.T) {
+	t.Run("the pull request of a task", func(t *testing.T) {
 		t.Parallel()
 
 		f := newFixture(t)
@@ -476,8 +476,8 @@ func TestSetSessionModelCarriesTheChangeToTheStageOrTheStep(t *testing.T) {
 			stage:     session.StepStage(1),
 			wantTask:  []string{"stepModel:task-1:1:claude-sonnet-5:low"},
 		},
-		// The choice of one repository is that repository's alone.
-		"a repository": {taskStage: task.StagePR, stage: session.PRStage},
+		// The choice of the pull request is the stage's alone.
+		"the pull request": {taskStage: task.StagePR, stage: session.PRStage},
 	}
 
 	for name, tc := range tests {
