@@ -43,7 +43,7 @@ Uma worktree já criada continua sendo usada normalmente: as sessões rodam nela
 
 ### Tela de boas-vindas e barra lateral
 
-Enquanto nenhum board e nenhum repositório estão cadastrados, o produto mostra a tela de boas-vindas no lugar da task, com o nome do produto, a linha `Register a board or a repository to start creating tasks.` e dois botões: **Add board**, que abre o mesmo diálogo da página **Boards**, e **Add repository**, que abre o mesmo diálogo da página **Repositories**. Ao cadastrar o primeiro board ou o primeiro repositório, a tela dá lugar à visão principal. Com repositórios cadastrados e nenhuma task, a área da task mostra um estado vazio com o atalho para criar a primeira.
+Enquanto nenhum board e nenhum repositório estão cadastrados, o produto mostra a tela de boas-vindas no lugar da task, com o nome do produto, a linha `Register a board or a repository to start creating tasks.` e dois botões: **Add board**, que abre o mesmo diálogo da página **Boards**, e **Add repository**, que abre o mesmo diálogo da página **Repositories**. Ao cadastrar o primeiro board ou o primeiro repositório, a tela dá lugar à visão principal. Sem nenhuma task, a área da task mostra a visão do primeiro board, na ordem por título; sem board, mostra um estado vazio com o atalho para criar a primeira task.
 
 A barra lateral tem, de cima para baixo:
 

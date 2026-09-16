@@ -8,6 +8,7 @@ import {
   makeArchivedTask,
   makeBoard,
   makeMigration,
+  makeRepository,
   makeSituation,
   makeState,
   makeTask,
@@ -324,5 +325,43 @@ describe("App", () => {
 
     expect(screen.queryByText("Archived")).not.toBeInTheDocument();
     expect(await screen.findByRole("button", { name: "Artifacts" })).toBeInTheDocument();
+  });
+
+  it("gives the main area to a board view, and a task back over it", async () => {
+    vi.mocked(api.getState).mockResolvedValue(
+      makeState({ tasks: [makeTask()], boards: [makeBoard({ title: "Platform" })] }),
+    );
+    const { user } = renderWithStore(<App />);
+    await screen.findByRole("option", { name: /^add-login,/ });
+
+    act(() => {
+      useAppStore.getState().openBoard("board-1");
+    });
+
+    expect(screen.getByRole("heading", { level: 1, name: "Platform" })).toBeInTheDocument();
+    expect(screen.queryByText("No task open")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("option", { name: /^add-login,/ }));
+
+    expect(screen.queryByRole("heading", { level: 1, name: "Platform" })).not.toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Delete task" })).toBeInTheDocument();
+  });
+
+  it("opens the creation dialog for a card once its clone is there", async () => {
+    vi.mocked(api.getState).mockResolvedValue(
+      makeState({ repositories: [makeRepository({ cloned: false, cloning: true, path: "" })] }),
+    );
+    renderWithStore(<App />);
+    await screen.findByText("No tasks yet");
+
+    act(() => {
+      useAppStore
+        .getState()
+        .setPendingStart({ boardId: "board-1", key: "dev/web#12", repositoryId: "repo-1" });
+      useAppStore.getState().applyState(makeState({ repositories: [makeRepository()] }));
+    });
+
+    expect(useAppStore.getState().newTaskOpen).toBe(true);
+    expect(useAppStore.getState().pendingStart).toBeNull();
   });
 });

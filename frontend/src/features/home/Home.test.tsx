@@ -1,9 +1,10 @@
 import { screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { Home } from "@/features/home/Home";
+import { api } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
-import { makeState, makeTask } from "@/test/wails-mock";
+import { makeBoard, makeState, makeTask } from "@/test/wails-mock";
 
 describe("Home", () => {
   it("invites the first task when there is none", () => {
@@ -28,5 +29,25 @@ describe("Home", () => {
     await user.click(screen.getByRole("button", { name: /^New task/ }));
 
     expect(useAppStore.getState().newTaskOpen).toBe(true);
+  });
+
+  it("shows the first board while there is no task", () => {
+    renderWithStore(<Home />, {
+      state: makeState({
+        boards: [makeBoard(), makeBoard({ id: "board-2", title: "Support" })],
+      }),
+    });
+
+    expect(screen.getByRole("heading", { level: 1, name: "Roadmap" })).toBeInTheDocument();
+    expect(api.refreshBoard).toHaveBeenCalledWith("board-1");
+    expect(screen.queryByText("No tasks yet")).not.toBeInTheDocument();
+  });
+
+  it("keeps pointing at the list once there are tasks, boards or not", () => {
+    renderWithStore(<Home />, {
+      state: makeState({ boards: [makeBoard()], tasks: [makeTask()] }),
+    });
+
+    expect(screen.getByText("No task open")).toBeInTheDocument();
   });
 });
