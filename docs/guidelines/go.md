@@ -45,7 +45,7 @@ Go 1.27, módulo `github.com/guilhermt/myspec`. O que está aqui é o que o cód
 ## DTOs e bindings
 
 - Um DTO em `internal/bindings/dto.go` para tudo que o frontend vê, com tags `json` em camelCase e um comentário por campo que não se explica sozinho. Slices nunca são `nil` (`// never nil`), porque o frontend os itera.
-- Enums nos DTOs são `string`, com o comentário listando os valores possíveis e a frase "a string for the same reason as Notice.Reason". O frontend estreita com `asX` em `lib/wails.ts`.
+- Enums nos DTOs são `string`, com o comentário listando os valores possíveis e a frase "a string for the same reason as State.Theme". O frontend estreita com `asX` em `lib/wails.ts`.
 - A conversão do domínio para DTO fica em `convert.go`, com um `FromX` por tipo, testado.
 - Um método de service é uma operação do usuário, com timeout, tradução de erro e uma linha de log quando falha. Mudou um service, um DTO ou um evento: `task generate`.
 

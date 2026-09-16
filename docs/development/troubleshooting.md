@@ -12,6 +12,8 @@ jq -c 'select(.task == "<id>")' ~/.local/state/myspec/myspec.log
 
 **Início e sessões.** `app starting` abre cada execução, com a versão, os argumentos e os diretórios. `claude session ready` marca um processo que subiu e respondeu, com a task a que pertence. `binding failed` marca uma chamada da interface que o Go recusou, com o método. `claude restarting` marca um processo trazido de volta com flags novas por uma troca de modelo na conversa.
 
+**Repositórios e migração.** `repository registered`, `repository path changed` e `repository removed`, com o repositório. `repository clone missing` e `repository clone found`, com o caminho do clone. `migration applied`, com a versão do schema. `upgrade planned`, com quantos repositórios foram cadastrados, quantas tasks foram carregadas e quantas foram descartadas. `migration refused`, com a quantidade de casos que impediram a migração. `upgrade undo failed` e `upgrade cleanup failed`, com o caminho e o erro.
+
 **Etapas.** `stage advanced`, `stage revisited` e `stage discarded` marcam cada movimento entre etapas, com a task e as etapas envolvidas.
 
 **Steps e worktrees.** `worktree created`, `worktree cleaned`, `worktree removed` e `worktree recreated`, com a task e o caminho. `step started`, `step retried`, `step cleaned and started`, `step discarded` e `steps torn down`, com a task e o número. `step blocked`, com a razão pela qual o step não pôde começar.
@@ -20,7 +22,7 @@ jq -c 'select(.task == "<id>")' ~/.local/state/myspec/myspec.log
 
 **Review de step pelo agente.** `step review pass asked`, com o step e a passada pedida ao revisor. `step review written`, quando o app tratou o relatório de uma passada, com a passada e o veredito em `clean`. `step review fell back`, quando o step passou ao usuário, com o motivo: `taken_over`, `rounds_exhausted` ou `commit_failed`. `step review cleared`, quando descartar o step apagou os relatórios e o ponto do loop. Um loop parado sem situação à vista costuma deixar um erro: `ask step review pass failed`, `send step review report failed` e `read step review report failed` marcam uma ação que a avaliação seguinte repete; `record step review pass failed`, `record step review report failed` e `record step review fallback failed`, uma gravação que falhou. `record the review mode of the step failed` marca um step que não começou porque o modo com que ele começa não foi gravado. `open step review session failed` e `close step review session failed` marcam a conversa do revisor que não reabriu com o app ou não fechou com o step, e `interrupt step review failed`, uma passada que **Review myself** não interrompeu.
 
-**Pull requests e encerramento.** `repository closing` e `repository closed`, com o resultado de cada parte do encerramento.
+**Pull requests e encerramento.** `task closing` e `task closed`, com o resultado de cada parte do encerramento.
 
 **Modelos e prompts.** `model default changed`, `task model set`, `task step model set`, `session model set` e `session model changed`, com a etapa ou o step e a escolha. `review mode default changed`, `task review mode set` e `task step review mode set`, com o modo. `invalid review mode default` marca um padrão salvo que não é um modo, trocado por `manual`. `prompt saved`, `prompt restored` e `prompt copy of the default removed`, com o prompt.
 
@@ -28,7 +30,7 @@ jq -c 'select(.task == "<id>")' ~/.local/state/myspec/myspec.log
 
 ## Problemas conhecidos
 
-- **Uma segunda instância trabalha à toa.** Ao abrir `myspec <pasta>` com o app já aberto, o segundo processo roda todo o seu início, log e banco inclusive, antes de o Wails encontrar o lock e entregar os argumentos. O log ganha um segundo `app starting` de um processo que então sai. Nada é corrompido; o trabalho é desperdiçado.
+- **Uma segunda instância trabalha à toa.** Ao abrir `myspec` com o app já aberto, o segundo processo roda todo o seu início, log e banco inclusive, antes de o Wails encontrar o lock e passar a vez à instância que já existe. O log ganha um segundo `app starting` de um processo que então sai. Nada é corrompido; o trabalho é desperdiçado.
 - **O banco fica com modo 0644.** O WebKitGTK cria `~/.local/share/myspec/` antes do app, então o `0700` que o app pediria para o diretório não se aplica.
 - **`Overriding existing handler for signal 10` no stderr.** É o WebKit, e é inofensivo.
 - **O teste global de eventos entra em pânico com `-count=2`.** `go test -count=2 ./internal/bindings/` registra os eventos do Wails duas vezes no mesmo processo. Rodar uma vez, como o `task test:go` faz, passa.

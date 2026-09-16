@@ -2,33 +2,79 @@
 
 Este documento descreve o produto como ele é. Segue a ordem do ciclo de vida de uma task e termina com o que atravessa todo o produto: sessões, atenção, modelos, prompts e configurações.
 
-## Área de trabalho
+## Repositórios
 
-O produto abre uma pasta, como o VS Code faz: por argumento na linha de comando (`myspec <pasta>`, com caminhos relativos resolvidos contra o diretório atual), pelo botão da tela de boas-vindas, pelo seletor de pastas nativo (`Ctrl+O`) ou pela lista de áreas de trabalho recentes. A última área aberta é lembrada e reaberta na próxima execução. Uma pasta que não existe, não é um diretório ou não pode ser lida produz um aviso sobre a área de trabalho atual, sem trocá-la.
+O produto conhece os repositórios que o usuário cadastra. Um repositório cadastrado é um repositório do GitHub, identificado por `dono/nome`, ligado ao caminho local de um clone. A identidade vem sempre do remote `origin` do clone: o usuário nunca a digita.
 
-Só uma instância do app roda por vez. Abrir uma segunda, com ou sem pasta, entrega o argumento à instância que já existe, que troca a área de trabalho e traz a janela para a frente.
+Onde o espaço é curto, como na lista de tasks, o produto mostra o nome curto, a parte `nome`, com `dono/nome` no tooltip; onde há espaço, como na página de cadastro e no cabeçalho da task, mostra `dono/nome`.
 
-Ao abrir, o produto escaneia a pasta e encontra os repositórios git abaixo dela. A pasta `.myspec`, onde ficam as worktrees, é ignorada, para que uma worktree nunca seja tomada por um repositório. A barra lateral mostra a árvore com dois níveis: a raiz e os repositórios. Cada task aparece no nó em que foi criada, com a etapa em que está, o step em andamento e o que falta, o progresso do review, ou **Agent review** e **Addressing review** quando um agente revisa o step, e o que espera pelo usuário. A árvore é navegável pelo teclado.
+Só uma instância do app roda por vez. Abrir uma segunda traz para a frente a janela que já existe; um argumento na linha de comando é ignorado.
+
+### Página Repositories
+
+As configurações têm a página **Repositories**, ao lado de **Defaults** e dos prompts. Ela lista os repositórios cadastrados, em ordem alfabética de `dono/nome`, cada um com o `dono/nome`, o caminho local, a contagem de tasks ativas e arquivadas, o aviso de clone inexistente quando é o caso, e as ações **Change path** e **Remove**. Acima da lista fica **Add repository**.
+
+**Add repository** abre o seletor de pastas nativo. Com a pasta escolhida, o produto verifica que ela é a raiz de um repositório git, lê o remote `origin` e confere que `dono/nome` ainda não está cadastrado. O remote precisa ser do `github.com`, em SSH (`git@github.com:dono/nome.git`) ou HTTPS (`https://github.com/dono/nome.git`), com ou sem o sufixo `.git`, porque é o GitHub que dá valor a tudo o que vem depois. Uma recusa aparece na própria página, sem diálogo extra, e nada é cadastrado:
+
+- `<caminho> is not the root of a git repository.`
+- `<caminho> has no origin remote.`
+- `The origin remote of <caminho> is not on GitHub: <url>.`
+- `<dono/nome> is already registered at <caminho cadastrado>.`
+
+**Change path** abre o mesmo seletor e aplica as mesmas verificações, com uma a mais: o `dono/nome` lido da pasta nova tem de ser o do repositório. Uma pasta de outro repositório é recusada com `<caminho> is a clone of <outro dono/nome>, not of <dono/nome>.` Serve para quando o clone foi movido ou refeito em outro lugar. Trocar o caminho não mexe nas worktrees já criadas nem nas tasks: uma task cujo primeiro step ainda não criou a worktree passa a criá-la a partir do clone novo, e um step bloqueado por clone inexistente é destravado por **Tentar de novo**.
+
+**Remove** só é possível com o repositório sem nenhuma task, ativa ou arquivada. Com tasks, a ação fica desabilitada e o produto diz o que impede: `<dono/nome> has N active tasks and M archived tasks. Delete them before removing the repository.` Um repositório sem tasks é removido após confirmação, e nada é apagado no disco: nem o clone nem as worktrees, que não existem sem tasks.
+
+### Clone inexistente
+
+Quando o caminho cadastrado não existe, não é um diretório ou não é mais um repositório git, o repositório aparece na página **Repositories** e na barra lateral com o aviso `The clone at <caminho> is missing.` e a ação de trocar o caminho. As tasks dele continuam visíveis e navegáveis, com suas conversas, artefatos e histórico. Fica bloqueado tudo o que precisa do clone, sempre com essa razão:
+
+- criar uma task nesse repositório: ele aparece no diálogo, desabilitado, com o aviso;
+- criar a worktree da task, no primeiro step: o step fica bloqueado como um step de worktree suja, com o aviso e **Tentar de novo**;
+- o encerramento: **Close task** fica desabilitado, porque remover a worktree e a branch e atualizar a branch base dependem do clone.
+
+Uma worktree já criada continua sendo usada normalmente: as sessões rodam nela, não no clone. O produto verifica o caminho ao iniciar e a cada ação que precisa dele; não observa o disco continuamente.
+
+### Tela de boas-vindas e barra lateral
+
+Enquanto nenhum repositório está cadastrado, o produto mostra a tela de boas-vindas no lugar da task, com o nome do produto, a linha `Register a repository to start creating tasks.` e o botão **Add repository**, que cadastra como a página faz. Ao cadastrar o primeiro repositório, a tela dá lugar à visão principal. Com repositórios cadastrados e nenhuma task, a área da task mostra um estado vazio com o atalho para criar a primeira.
+
+A barra lateral tem, de cima para baixo:
+
+- a seção **Waiting for you**, fixa no topo, com todas as tasks que esperam pelo usuário, exceto a aberta. Ela nunca é filtrada por repositório;
+- o **filtro por repositório**, um seletor com **All repositories** e um item por repositório cadastrado, em ordem alfabética, e o botão de nova task. A escolha do filtro é lembrada entre execuções do app, e um repositório removido volta o filtro para todos;
+- o aviso de clone inexistente de cada repositório que o filtro mostra, com **Change path**;
+- a **lista de tasks** ativas, na ordem de criação, filtrada pelo repositório escolhido. Cada task mostra o nome, o nome curto do repositório abaixo, a etapa em que está, o step em andamento e o que falta, o progresso do review, ou **Agent review** e **Addressing review** quando um agente revisa o step, e o que espera pelo usuário. A lista é navegável pelo teclado, com a task sob o foco sendo a que abre;
+- o rodapé com **History**, o tema e as configurações.
+
+Não há nós de navegação: nem raiz, nem repositório, nem pasta. A lista com um filtro que deixa zero tasks diz `No tasks in <nome curto>.`
+
+### Dados de uma versão com áreas de trabalho
+
+Ao abrir um banco que ainda guarda áreas de trabalho, o produto leva as tasks para repositórios cadastrados antes de mostrar qualquer coisa. Cada task de repositório é ligada ao repositório do seu clone, identificado pelo remote `origin`, e um repositório é cadastrado por identidade, no caminho do clone em que ele trabalhou por último. Os artefatos vão para a pasta nova da task. As tasks arquivadas criadas na raiz de uma área de trabalho são descartadas, porque não pertencem a nenhum repositório.
+
+A migração é tudo ou nada, e três coisas a impedem: uma task ativa na raiz de uma área de trabalho, um clone que não pode ser identificado no GitHub, e duas tasks com o mesmo nome no mesmo repositório. Quando alguma acontece, nada é mudado, e o produto mostra no lugar de tudo a tela **MySpec couldn't be updated**, que lista os casos agrupados por tipo, com as tasks de cada um e o que fazer a respeito na versão anterior. As tasks, os documentos e as worktrees ficam como estavam, e a versão anterior continua abrindo tudo. Resolvidos os casos, abrir esta versão de novo tenta outra vez.
 
 ## Criação de uma task
 
-Uma task é criada a partir da raiz ou de um repositório (`Ctrl+N` cria no nó selecionado). Na criação o usuário informa:
+O botão de nova task e `Ctrl+N` abrem o diálogo de criação de qualquer lugar do produto. Na criação o usuário informa:
 
-- o **nome**, em minúsculas, dígitos e hífens simples, com até 64 caracteres, único na área de trabalho. Ele nomeia as worktrees e as branches;
+- o **repositório**, obrigatório, entre os cadastrados. O seletor vem pré-selecionado com, nesta ordem, o primeiro que existir: o repositório do filtro, quando o filtro não é **All repositories**; o repositório da task aberta; o último repositório usado numa criação; o primeiro da lista. Um repositório com clone inexistente aparece desabilitado, com o aviso;
+- o **nome**, em minúsculas, dígitos e hífens simples, com até 64 caracteres, único no repositório escolhido, tasks arquivadas incluídas, porque ele nomeia a branch e a worktree. Um nome já usado é recusado com `A task named <nome> already exists in <dono/nome>.`; o mesmo nome em outro repositório é permitido;
 - o **contexto inicial**: o que quer fazer, em alto nível ou em detalhe. É a primeira mensagem da primeira sessão de planejamento, a de PRD ou a de planejamento One-Shot;
-- o **modo**, `Structured` ou `One-Shot`, que parte sempre de `Structured`, com uma linha que diz o que o modo escolhido faz: `A PRD, a tech spec and a plan of steps, each step its own commit.` ou `One planning conversation writes a single document, implemented in one commit.` Uma task One-Shot nasce sempre num repositório: no diálogo aberto a partir da raiz, a opção `One-Shot` fica desabilitada, com `One-Shot tasks are created in a repository.` escrito abaixo. O modo nunca muda depois da criação;
+- o **modo**, `Structured` ou `One-Shot`, que parte sempre de `Structured`, com uma linha que diz o que o modo escolhido faz: `A PRD, a tech spec and a plan of steps, each step its own commit.` ou `One planning conversation writes a single document, implemented in one commit.` O modo nunca muda depois da criação;
 - o **modo de review**, `Manual` ou `Agent`, partindo do padrão configurado, com uma linha que diz o que o modo escolhido faz: `You review each step in VS Code before its commit.` ou `An agent reviews each step, and the task runs to the pull request on its own.` Ele vale para todos os steps que o plano escrever, ou para o step único de uma task One-Shot;
 - o **modelo e o esforço de cada etapa** do modo escolhido, partindo dos padrões configurados. O usuário pode ajustar qualquer etapa para essa task. A lista acompanha o modo, e o ajuste de uma etapa que os dois modos têm, como a implementação, se mantém ao trocar de modo; o resumo ao lado de **Models** considera só as etapas do modo escolhido.
 
-Ao confirmar, a primeira sessão de planejamento do modo começa com o contexto inicial, e a primeira coisa que o usuário vê é a primeira pergunta do agente. Se a sessão não conseguir começar, a task é desfeita. O cabeçalho de uma task One-Shot mostra o rótulo `One-Shot` ao lado do nome.
+Ao confirmar, a primeira sessão de planejamento do modo abre no clone do repositório e começa com o contexto inicial, e a primeira coisa que o usuário vê é a primeira pergunta do agente. Se a sessão não conseguir começar, a task é desfeita. O cabeçalho de uma task One-Shot mostra o rótulo `One-Shot` ao lado do nome.
 
 ## Etapas de planejamento
 
-O modo define as etapas de planejamento. Uma task Structured passa por PRD, tech spec e plano; uma task One-Shot, por uma única etapa, o planejamento One-Shot. Cada etapa tem uma conversa própria, aberta no diretório da task: o repositório, para tasks de repositório, ou a raiz da área de trabalho, para tasks de raiz. A etapa termina quando o documento dela aparece no diretório de artefatos e a conversa está ociosa: o agente parou e nada está na fila. O produto então inicia a etapa seguinte sozinho.
+O modo define as etapas de planejamento. Uma task Structured passa por PRD, tech spec e plano; uma task One-Shot, por uma única etapa, o planejamento One-Shot. Cada etapa tem uma conversa própria, aberta no clone do repositório da task. A etapa termina quando o documento dela aparece no diretório de artefatos e a conversa está ociosa: o agente parou e nada está na fila. O produto então inicia a etapa seguinte sozinho.
 
 - **PRD.** O agente segue o prompt de PRD: Q&A sobre o quê e o porquê, uma pergunta por vez, até não restar lacuna. Ao final lista o que entendeu, pede confirmação e escreve `PRD.md`.
-- **Tech spec.** O agente lê o PRD, explora o código dos repositórios da task e conduz o Q&A técnico, apresentando alternativas com trade-offs para o usuário decidir. Escreve `tech-spec.md`.
-- **Plano.** O agente lê os dois documentos, negocia a divisão do trabalho e escreve um arquivo por step em `steps/`. Cada arquivo tem o nome `<número>-<descrição-curta>.md`, começa com um cabeçalho `---` que carrega `repository: <caminho>` com um repositório da task e traz um título `# Step N: Título`. Os números começam em 1, sem lacunas nem repetições.
+- **Tech spec.** O agente lê o PRD, explora o código do repositório da task e conduz o Q&A técnico, apresentando alternativas com trade-offs para o usuário decidir. Escreve `tech-spec.md`.
+- **Plano.** O agente lê os dois documentos, negocia a divisão do trabalho e escreve um arquivo por step em `steps/`. Cada arquivo tem o nome `<número>-<descrição-curta>.md` e traz um título `# Step N: Título`. Os números começam em 1, sem lacunas nem repetições.
 
 O plano é validado antes de a task avançar. Quando os arquivos não formam um plano válido, o produto diz ao agente o que está errado e pede a correção, até três vezes. Depois disso para de corrigir e mostra os problemas acima do compositor, para o usuário resolver na conversa ou descartar o plano.
 
@@ -36,9 +82,9 @@ O PRD, o tech spec e cada step ficam visíveis no painel de artefatos da task, r
 
 ### Planejamento One-Shot
 
-O planejamento de uma task One-Shot é uma conversa aberta no repositório da task, com o prompt de planejamento One-Shot, que junta num só Q&A o quê e o como. O agente lê o contexto inicial, explora o código e a documentação do repositório e resolve as lacunas uma pergunta por vez: comportamento esperado, casos de borda, limites do escopo, abordagem, contratos e padrões a seguir. Quando há mais de um caminho válido, apresenta as alternativas com trade-offs para o usuário decidir. Sem lacunas restantes, lista os pontos principais do que vai mudar e como, pede confirmação e escreve `one-shot.md` no diretório de artefatos.
+O planejamento de uma task One-Shot é uma conversa aberta no clone do repositório da task, com o prompt de planejamento One-Shot, que junta num só Q&A o quê e o como. O agente lê o contexto inicial, explora o código e a documentação do repositório e resolve as lacunas uma pergunta por vez: comportamento esperado, casos de borda, limites do escopo, abordagem, contratos e padrões a seguir. Quando há mais de um caminho válido, apresenta as alternativas com trade-offs para o usuário decidir. Sem lacunas restantes, lista os pontos principais do que vai mudar e como, pede confirmação e escreve `one-shot.md` no diretório de artefatos.
 
-O documento é o prompt inteiro da implementação: um agente novo o recebe sem conversa, sem histórico e sem outro documento. Por isso ele tem o nível de detalhe de um tech spec, com diretrizes, decisões e o plano de mudanças, sem o código pronto. Não tem cabeçalho de metadados, porque o repositório é o da task, e segue nove seções, nesta ordem: o título `# <nome da mudança> — One-Shot`, com a instrução de seguir o documento estritamente, **Problem**, **Scope**, **Technical decisions**, **Change plan**, **Coding standards**, **Completion checklist** e as instruções fixas **Questions** e **Workflow**, as mesmas de um arquivo de step. O produto não valida o conteúdo: a existência do documento basta, como para o PRD e o tech spec.
+O documento é o prompt inteiro da implementação: um agente novo o recebe sem conversa, sem histórico e sem outro documento. Por isso ele tem o nível de detalhe de um tech spec, com diretrizes, decisões e o plano de mudanças, sem o código pronto. Segue nove seções, nesta ordem: o título `# <nome da mudança> — One-Shot`, com a instrução de seguir o documento estritamente, **Problem**, **Scope**, **Technical decisions**, **Change plan**, **Coding standards**, **Completion checklist** e as instruções fixas **Questions** e **Workflow**, as mesmas de um arquivo de step. O produto não valida o conteúdo: a existência do documento basta, como para o PRD e o tech spec.
 
 A etapa termina como as outras, com o documento escrito e a conversa ociosa, e o produto inicia a implementação sozinho. O documento aparece no painel de artefatos, na aba **One-Shot**, renderizado como os outros.
 
@@ -61,13 +107,15 @@ Numa task One-Shot, a implementação é um step único, o próprio documento On
 
 ### Worktrees
 
-Cada step roda numa worktree do seu repositório, criada em `<área de trabalho>/.myspec/worktrees/<repositório>/<task>/` (`_root` quando o repositório é a própria área de trabalho), numa branch com o nome da task. A base é resolvida na criação: o produto roda `git fetch origin` e ramifica de `origin/dev`, ou de `origin/main` quando não há `dev`. O fetch só acontece na criação.
+A task tem uma worktree, criada no primeiro step, em `~/.local/share/myspec/worktrees/<dono>/<nome>/<task>/`, numa branch com o nome da task. Todos os steps rodam nela. A base é resolvida na criação: o produto roda `git fetch origin` e ramifica de `origin/dev`, ou de `origin/main` quando não há `dev`. O fetch só acontece na criação.
 
-O produto é dono das worktrees que criou, e só delas: nunca reutiliza nem apaga um caminho ou uma branch que não criou. Uma worktree e sua branch são removidas quando a task é apagada, quando a task volta a uma etapa de planejamento ou descarta uma, o planejamento One-Shot incluído, e no encerramento do repositório.
+O produto é dono das worktrees que criou, e só delas: nunca reutiliza nem apaga um caminho ou uma branch que não criou. Uma worktree registrada em outro caminho continua sendo usada e removida onde está. Uma worktree e sua branch são removidas quando a task é apagada, quando a task volta a uma etapa de planejamento ou descarta uma, o planejamento One-Shot incluído, e no encerramento da task.
+
+O primeiro step de uma task cujo clone não existe mais fica bloqueado com o aviso do clone, porque a worktree nasce do clone.
 
 ### Pré-condição: worktree limpa
 
-Antes de iniciar um step o produto verifica que a worktree está limpa: nada modificado, em stage, apagado ou não rastreado, ignorados à parte. Uma worktree suja bloqueia o step, com o que foi encontrado e duas saídas: limpar por conta própria e **Tentar de novo**, ou deixar o produto descartar tudo com **Limpar e iniciar**. Um step é bloqueado do mesmo modo quando o fetch falha, quando nenhuma branch base existe, quando o caminho ou a branch já existem, ou quando o repositório do step não é um repositório da task: o arquivo do step nomeia outro, ou, numa task One-Shot, o repositório da task saiu da área de trabalho. A mensagem do git é mostrada como o git a escreveu.
+Antes de iniciar um step o produto verifica que a worktree está limpa: nada modificado, em stage, apagado ou não rastreado, ignorados à parte. Uma worktree suja bloqueia o step, com o que foi encontrado e duas saídas: limpar por conta própria e **Tentar de novo**, ou deixar o produto descartar tudo com **Limpar e iniciar**. Um step é bloqueado do mesmo modo quando o fetch falha, quando nenhuma branch base existe, quando o caminho ou a branch já existem, ou quando o clone do repositório não está mais lá. A mensagem do git é mostrada como o git a escreveu.
 
 ### Sessão do step
 
@@ -92,7 +140,7 @@ O modo de um step congela quando a sessão do step começa. Dali em diante ele s
 
 No modo `Manual`, o review é feito no editor, arquivo por arquivo. **Abrir no VS Code** abre a worktree, e cada arquivo da lista de mudanças abre diretamente ao ser clicado. O usuário dá stage em cada arquivo revisado e faz alterações manuais quando quer.
 
-Enquanto o step aguarda review o produto observa a worktree, inclusive o diretório do git, para que o stage feito no editor apareça na hora, e lê o `git status` a cada rajada de eventos. Todo arquivo alterado que o git reporta conta, arquivos novos um a um, ignorados nunca. Um arquivo está revisado quando nada dele resta fora do índice; um arquivo parcialmente em stage ainda está pendente. A faixa de review sob a barra do step mostra a barra de progresso, a contagem e a lista de arquivos. O mesmo progresso aparece como percentual na lista de tasks e na árvore. O produto nunca dá stage em nada: o stage é o review, e o review é o portão.
+Enquanto o step aguarda review o produto observa a worktree, inclusive o diretório do git, para que o stage feito no editor apareça na hora, e lê o `git status` a cada rajada de eventos. Todo arquivo alterado que o git reporta conta, arquivos novos um a um, ignorados nunca. Um arquivo está revisado quando nada dele resta fora do índice; um arquivo parcialmente em stage ainda está pendente. A faixa de review sob a barra do step mostra a barra de progresso, a contagem e a lista de arquivos. O mesmo progresso aparece como percentual na lista de tasks. O produto nunca dá stage em nada: o stage é o review, e o review é o portão.
 
 ### Aprovação e commit
 
@@ -100,7 +148,7 @@ Enquanto o step aguarda review o produto observa a worktree, inclusive o diretó
 
 Aprovar envia o prompt de commit como mensagem do produto na própria conversa do step, para o agente que escreveu o código commitar exatamente o que está em stage, em um commit, com assunto no imperativo e a convenção do repositório. O step fica **concluído** quando um commit aparece na branch além daquele em que começou, venha do turno de commit ou da mão do usuário. Se o turno termina sem commit, o step volta a **pronto para aprovar** e diz isso. Um step em que o agente não mudou nada não pode ser aprovado.
 
-O produto então encerra os processos do step e do seu revisor e inicia o próximo, criando a worktree quando o step muda de repositório.
+O produto então encerra os processos do step e do seu revisor e inicia o próximo.
 
 ### Review pelo agente
 
@@ -132,51 +180,49 @@ O loop não anda enquanto qualquer das conversas trabalha, pergunta, está pausa
 
 ## Pull request
 
-Com o último step commitado a task entra na etapa de PR, que é por repositório: cada repositório tocado ganha uma aba, com a sua conversa, o seu estado e os seus controles. Um repositório cuja branch não tem commit próprio é marcado como pulado e não gera pull request. Uma task One-Shot tem uma aba só, a do seu repositório.
+Com o último step commitado a task entra na etapa de PR. Ela é uma só, como a task: uma conversa que escreve o rascunho e abre a pull request, uma conversa que a revisa, e uma barra com o estado e os controles. Uma task abre exatamente uma pull request.
 
 ### Rascunho e abertura
 
-A sessão de PR abre na worktree com o prompt de PR. O agente lê os commits e o diff da branch contra a base, o PRD e o tech spec, ou o documento One-Shot numa task One-Shot, e escreve um rascunho de título e descrição num arquivo de artefato. O rascunho aparece no produto, editável, e o repositório passa a **rascunho pronto**, esperando o OK. O usuário pode alterar o título e o corpo antes de aprovar, ou descartar o rascunho para o agente escrever outro.
+A sessão de PR abre na worktree com o prompt de PR. O agente lê os commits e o diff da branch contra a base, o PRD e o tech spec, ou o documento One-Shot numa task One-Shot, e escreve um rascunho de título e descrição num arquivo de artefato. O rascunho aparece no produto, editável, e a task passa a **rascunho pronto**, esperando o OK. O usuário pode alterar o título e o corpo antes de aprovar, ou descartar o rascunho para o agente escrever outro.
 
-Com o OK, o agente sobe a branch e abre a pull request com `gh pr create` contra a branch base, usando o rascunho como ele está naquele momento. A base é a mesma da worktree: `dev`, ou `main` quando não há `dev`. Quando o `gh` não está instalado, não está autenticado ou falha, o repositório fica **bloqueado** com a razão, e **Tentar de novo** repete a partir de onde parou.
+Com o OK, o agente sobe a branch e abre a pull request com `gh pr create` contra a branch base, usando o rascunho como ele está naquele momento. A base é a mesma da worktree: `dev`, ou `main` quando não há `dev`. Quando o `gh` não está instalado, não está autenticado ou falha, a etapa fica **bloqueada** com a razão, e **Tentar de novo** repete a partir de onde parou.
 
-O produto lê a pull request com o `gh`: número, link, estado e base aparecem no repositório, e uma leitura pode ser forçada a qualquer momento. Pull requests aguardando merge são consultadas automaticamente a cada minuto.
+O produto lê a pull request com o `gh`: número, link, estado e base aparecem na barra da pull request, e uma leitura pode ser forçada a qualquer momento. Pull requests aguardando merge são consultadas automaticamente a cada minuto.
 
 ### Review de pull request
 
 Aberta a pull request, a sessão de review começa sozinha com o prompt de review de PR. O agente revisa o diff contra o PRD e o tech spec, procurando erros, desvios da especificação e problemas de qualidade. Numa task One-Shot, o critério é o documento One-Shot: o problema e o escopo fazem o papel do PRD, e as decisões técnicas e o plano de mudanças, o do tech spec. Ao fim, o agente escreve um relatório numerado num arquivo de artefato, com o status `clean` ou `changes`.
 
-Se o relatório está limpo, o repositório fica **pronto**, aguardando o merge. Se há apontamentos, o produto os mostra e o repositório passa a **aguardando decisão**: o usuário decide na conversa, item a item, o que quer aplicado. O agente aplica só o que foi aprovado. As mudanças então passam pelo mesmo review do produto que um step no modo `Manual`: stage arquivo a arquivo no editor, progresso em tempo real, **Aprovar** em 100%, e o commit feito pelo agente com o prompt de commit, que nesta etapa também sobe o commit para a pull request. Depois do commit o agente revisa de novo, e o ciclo se repete até um relatório limpo. **Revisar de novo** pede uma passada extra a qualquer momento, e os relatórios de todas as passadas ficam visíveis.
+Se o relatório está limpo, a task fica **pronta**, aguardando o merge. Se há apontamentos, o produto os mostra e a task passa a **aguardando decisão**: o usuário decide na conversa, item a item, o que quer aplicado. O agente aplica só o que foi aprovado. As mudanças então passam pelo mesmo review do produto que um step no modo `Manual`: stage arquivo a arquivo no editor, progresso em tempo real, **Aprovar** em 100%, e o commit feito pelo agente com o prompt de commit, que nesta etapa também sobe o commit para a pull request. Depois do commit o agente revisa de novo, e o ciclo se repete até um relatório limpo. **Revisar de novo** pede uma passada extra a qualquer momento, e os relatórios de todas as passadas ficam visíveis.
 
-Uma pull request fechada sem merge é sinalizada como tal, e o repositório não pode ser encerrado.
+Uma pull request fechada sem merge é sinalizada como tal, e a task não pode ser encerrada.
 
 ## Encerramento e arquivamento
 
-O encerramento é por repositório e é a única transição que o usuário aciona, porque depende de a pull request ter sido mergeada fora do produto. **Encerrar** habilita quando o `gh` reporta a pull request como mergeada, quando o repositório foi pulado, ou quando a última leitura falhou e o produto não consegue confirmar o merge.
+O encerramento é da task e é a única transição que o usuário aciona, porque depende de a pull request ter sido mergeada fora do produto. **Close task** habilita quando o `gh` reporta a pull request como mergeada, ou quando a última leitura falhou e o produto não consegue confirmar o merge. Com o clone inexistente a ação fica desabilitada, com o aviso.
 
 Ao encerrar, o produto:
 
-1. remove a worktree do repositório;
+1. remove a worktree da task;
 2. apaga a branch da task. Quando o GitHub confirmou o merge, apaga sem perguntar ao git, porque um squash merge nunca aparece como ancestral; quando o merge não pôde ser confirmado, só apaga se o git considerar a branch mergeada;
-3. atualiza a branch base local, se ela estiver em checkout no repositório, limpa, com upstream e atrás da remota sem divergir.
+3. atualiza a branch base local, se ela estiver em checkout no clone, limpa, com upstream e atrás da remota sem divergir.
 
-Cada parte reporta o que fez, o que pulou e por quê, e o que falhou. O resultado fica registrado no repositório. Os demais repositórios da task seguem no estado em que estão.
-
-Quando o último repositório é encerrado, a task é arquivada: sai da área de trabalho e passa a existir só no histórico, com um aviso momentâneo de que saiu.
+Cada parte reporta o que fez, o que pulou e por quê, e o que falhou. Terminado o encerramento, a task é arquivada: sai da lista de tasks e passa a existir só no histórico, com um aviso momentâneo de que saiu, e o resultado do encerramento fica guardado com ela.
 
 ## Histórico
 
-O botão **History** no rodapé da barra lateral abre a lista das tasks arquivadas da área de trabalho, da mais recente à mais antiga, com busca por nome. Cada task arquivada mostra os seus artefatos finais renderizados, com PRD, tech spec, steps com os relatórios de review de cada step e, por repositório, a pull request e o resultado do encerramento. Uma task One-Shot aparece na lista com o rótulo `One-Shot` no lugar da contagem de steps, e mostra o documento One-Shot com os relatórios de review do step no lugar de PRD, tech spec e steps. As conversas não são guardadas no histórico.
+O botão **History** no rodapé da barra lateral abre a lista das tasks arquivadas, da mais recente à mais antiga, com busca por nome e o mesmo filtro por repositório da barra lateral. Cada linha mostra o nome curto do repositório da task. Uma task arquivada mostra os seus artefatos finais renderizados, com PRD, tech spec, steps com os relatórios de review de cada step, a pull request e o resultado do encerramento. Uma task One-Shot aparece na lista com o rótulo `One-Shot` no lugar da contagem de steps, e mostra o documento One-Shot com os relatórios de review do step no lugar de PRD, tech spec e steps. As conversas não são guardadas no histórico.
 
 ## Apagar uma task
 
-Uma task pode ser apagada em qualquer etapa. Antes de confirmar, o produto mostra o que será destruído: as worktrees e as branches que existem, e o que já não está lá. Apagar para o que estiver rodando, remove as worktrees e as branches, apaga os artefatos e remove a task em definitivo. O que o git não conseguiu remover é listado num aviso, para o usuário resolver à mão.
+Uma task pode ser apagada em qualquer etapa. Antes de confirmar, o produto mostra o que será destruído: a worktree e a branch, quando existem, a pull request que fica aberta no GitHub, e o que já não está lá. Apagar para o que estiver rodando, remove a worktree e a branch, apaga os artefatos e remove a task em definitivo. O que o git não conseguiu remover é listado num aviso, para o usuário resolver à mão.
 
 ## Sessões e conversas
 
 Toda sessão é uma conversa dentro do produto, com interface própria. O Claude Code roda por baixo, invisível. A conversa mostra as mensagens do usuário e do agente, as ações que o agente executa agrupadas, os cartões de permissão e de pergunta, marcadores dos eventos da task (documento escrito, etapa iniciada, review iniciado ou escrito, contexto compactado, resposta interrompida) e os erros. Tudo que o agente escreve é renderizado como Markdown, com diagramas mermaid e realce de código, em streaming.
 
-Cada etapa, step e repositório tem a sua conversa. Um step no modo `Agent` tem também a do revisor, a partir da primeira passada, e as duas ficam nas abas **Implementer** e **Reviewer**. Voltar a uma etapa retoma a conversa dela de onde ficou.
+Cada etapa e cada step têm a sua conversa, e a etapa de PR tem a da pull request e a do review dela. Um step no modo `Agent` tem também a do revisor, a partir da primeira passada, e as duas ficam nas abas **Implementer** e **Reviewer**. Voltar a uma etapa retoma a conversa dela de onde ficou.
 
 - **Enviar**: mensagens enviadas com o agente ocupado entram numa fila, visível na conversa, e podem ser removidas antes de sair.
 - **Interromper** encerra a resposta em andamento e mantém a sessão viva.
@@ -188,13 +234,13 @@ Cada etapa, step e repositório tem a sua conversa. Um step no modo `Agent` tem 
 
 ## Depende de mim
 
-Uma task espera pelo usuário quando qualquer destas situações acontece: um erro de sessão, um step bloqueado, uma worktree ilegível, a etapa de PR bloqueada, um plano inválido, uma pull request fechada sem merge, uma escalada de permissão, uma pergunta do agente, uma passada do revisor de um step que terminou sem relatório, uma resposta aquém do que o produto esperava, uma etapa revisitada pronta para continuar, um step aguardando review ou pronto para aprovar, um step sem mudanças, um step que passou ao usuário porque o review pelo agente não veio limpo em três rodadas, um rascunho aguardando OK, apontamentos de review aguardando decisão, mudanças aplicadas aguardando review, uma pull request pronta para merge, um repositório pronto para encerrar. Uma task pausada não espera por ninguém. O revisor de um step é um lugar próprio: um erro, uma escalada de permissão ou uma pergunta dele espera pelo usuário na aba **Reviewer**, e pode esperar ao mesmo tempo que uma situação do implementador. Uma task com todos os steps no modo `Agent` só espera pelo usuário, entre o primeiro step e o rascunho da pull request, quando há erro, bloqueio, permissão, pergunta, passada sem relatório ou um step que passou ao usuário; um step commitado pelo review do agente não notifica.
+Uma task espera pelo usuário quando qualquer destas situações acontece: um erro de sessão, um step bloqueado, uma worktree ilegível, a etapa de PR bloqueada, um plano inválido, uma pull request fechada sem merge, uma escalada de permissão, uma pergunta do agente, uma passada do revisor de um step que terminou sem relatório, uma resposta aquém do que o produto esperava, uma etapa revisitada pronta para continuar, um step aguardando review ou pronto para aprovar, um step sem mudanças, um step que passou ao usuário porque o review pelo agente não veio limpo em três rodadas, um rascunho aguardando OK, apontamentos de review aguardando decisão, mudanças aplicadas aguardando review, uma pull request pronta para merge, uma task pronta para encerrar. Uma task pausada não espera por ninguém. O revisor de um step é um lugar próprio: um erro, uma escalada de permissão ou uma pergunta dele espera pelo usuário na aba **Reviewer**, e pode esperar ao mesmo tempo que uma situação do implementador. Uma task com todos os steps no modo `Agent` só espera pelo usuário, entre o primeiro step e o rascunho da pull request, quando há erro, bloqueio, permissão, pergunta, passada sem relatório ou um step que passou ao usuário; um step commitado pelo review do agente não notifica.
 
 Cada situação diz onde está e o que pede. As situações aparecem:
 
 - na seção **Waiting for you**, fixa no topo da barra lateral, com todas as tasks que esperam, exceto a que está aberta. `Ctrl+J` abre a primeira;
-- na árvore e na lista de tasks, no nó de cada task;
-- na própria task, na trilha de etapas, na barra do step, nas abas **Implementer** e **Reviewer** e na aba do repositório.
+- na lista de tasks, na linha de cada task;
+- na própria task, na trilha de etapas, na barra do step, nas abas **Implementer** e **Reviewer** e na barra da pull request.
 
 Uma situação que começa enquanto o usuário olha para o produto pisca brevemente onde surgiu, em silêncio. Uma situação que começa com a janela fora de foco gera uma notificação do sistema, que identifica a task e o que ela pede; clicar nela traz a janela e abre o lugar certo. Cada situação notifica uma vez, ao começar. Continuações da mesma espera, como o stage chegar a 100% ou a pull request passar de pronta a mergeada, não notificam.
 
@@ -223,7 +269,7 @@ Sair do editor com uma edição não salva pede confirmação.
 
 ## Configurações e aparência
 
-As configurações abrem pelo ícone no rodapé da barra lateral ou por `Ctrl+,`, e pertencem ao app, não à área de trabalho. Elas contêm a página **Defaults**, com o modo de review e os modelos e esforços com que uma task nova começa, e os prompts.
+As configurações abrem pelo ícone no rodapé da barra lateral ou por `Ctrl+,`, e pertencem ao app. Elas contêm a página **Defaults**, com o modo de review e os modelos e esforços com que uma task nova começa, a página **Repositories**, e os prompts.
 
 O tema segue o sistema por padrão e pode ser fixado em claro ou escuro pelo botão da barra lateral. Uma troca do tema do sistema com o app aberto é aplicada na hora.
 
@@ -231,8 +277,7 @@ O tema segue o sistema por padrão e pode ser fixado em claro ou escuro pelo bot
 
 | Atalho | Ação |
 |---|---|
-| `Ctrl+O` | Abrir uma pasta como área de trabalho |
-| `Ctrl+N` | Criar uma task no nó selecionado |
+| `Ctrl+N` | Criar uma task |
 | `Ctrl+J` | Abrir a primeira task que espera pelo usuário |
 | `Ctrl+,` | Abrir ou fechar as configurações |
 
