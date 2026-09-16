@@ -17,6 +17,7 @@ import (
 	"github.com/guilhermt/myspec/internal/reviewmode"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
+	"github.com/guilhermt/myspec/internal/upgrade"
 )
 
 func TestFromTasksCarriesTheStateOfEachStep(t *testing.T) {
@@ -1166,5 +1167,51 @@ func TestFromStartedCarriesTheFocus(t *testing.T) {
 				t.Errorf("FromStarted() mismatch (-want +got):\n%s", diff)
 			}
 		})
+	}
+}
+
+func TestRefusedStateCarriesTheCasesAndNothingElse(t *testing.T) {
+	t.Parallel()
+
+	refused := &upgrade.RefusedError{Cases: []upgrade.Case{
+		{
+			Kind:    upgrade.CaseRootTask,
+			Entries: []upgrade.Entry{{Task: "whole-product", Workspace: "/home/dev/work"}},
+		},
+		{
+			Kind:       upgrade.CaseNoOrigin,
+			Repository: "/home/dev/work/web",
+			Detail:     "/home/dev/work/web has no origin remote.",
+			Entries: []upgrade.Entry{
+				{Task: "login-screen", Workspace: "/home/dev/work", Path: "/home/dev/work/web"},
+			},
+		},
+	}}
+
+	got := bindings.RefusedState(refused)
+
+	want := bindings.State{
+		Migration: &bindings.Migration{Cases: []bindings.MigrationCase{
+			{
+				Kind:  "root_task",
+				Tasks: []bindings.MigrationTask{{Name: "whole-product", Workspace: "/home/dev/work"}},
+			},
+			{
+				Kind:       "no_origin",
+				Repository: "/home/dev/work/web",
+				Detail:     "/home/dev/work/web has no origin remote.",
+				Tasks: []bindings.MigrationTask{
+					{Name: "login-screen", Workspace: "/home/dev/work", Path: "/home/dev/work/web"},
+				},
+			},
+		}},
+		Repositories:  []bindings.Repository{},
+		Theme:         "system",
+		ModelDefaults: []bindings.StageModel{},
+		Tasks:         []bindings.TaskSummary{},
+		History:       []bindings.ArchivedTask{},
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("RefusedState() mismatch (-want +got):\n%s", diff)
 	}
 }

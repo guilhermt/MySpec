@@ -4,6 +4,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -32,6 +33,7 @@ import (
 	"github.com/guilhermt/myspec/internal/store"
 	"github.com/guilhermt/myspec/internal/task"
 	"github.com/guilhermt/myspec/internal/theme"
+	"github.com/guilhermt/myspec/internal/upgrade"
 	"github.com/guilhermt/myspec/internal/worktree"
 )
 
@@ -50,6 +52,13 @@ const callTimeout = 5 * time.Second
 // shutdownTimeout is how long the sessions have to stop gracefully before
 // their processes are killed.
 const shutdownTimeout = 8 * time.Second
+
+// What the app is called, to the user and to the system.
+const (
+	appName        = "MySpec" // the title of the window and the name the notifications carry
+	appDescription = "Orchestrates a Claude Code development workflow"
+	programName    = "myspec" // the Linux program and the lock of the single instance
+)
 
 // App holds the running application: the Wails handles and the domain services
 // they are wired to.
@@ -108,7 +117,17 @@ func Run(cfg Config) int {
 	gitRunner := git.New(git.Deps{Log: log})
 	identifier := repository.NewIdentifier(gitRunner)
 
-	st, err := store.Open(ctx, dirs.DatabasePath(), log, nil)
+	st, err := store.Open(ctx, dirs.DatabasePath(), log, upgrade.New(upgrade.Deps{
+		Identify: identifier.Identify,
+		DataDir:  dirs.Data,
+		Log:      log,
+	}))
+	// Data the app cannot carry over leaves the database as the version before
+	// left it, and opens the window on what the user has to resolve.
+	var refused *upgrade.RefusedError
+	if errors.As(err, &refused) {
+		return runRefused(cfg, log, refused)
+	}
 	if err != nil {
 		return fail(log, "open database", err)
 	}
@@ -266,8 +285,8 @@ func (a *App) options(
 	log *slog.Logger,
 ) application.Options {
 	return application.Options{
-		Name:        "MySpec",
-		Description: "Orchestrates a Claude Code development workflow",
+		Name:        appName,
+		Description: appDescription,
 		Icon:        cfg.Icon,
 		Services: []application.Service{
 			application.NewService(bindings.NewStateService(a.state)),
@@ -281,9 +300,9 @@ func (a *App) options(
 			application.NewService(bindings.NewAttentionService(a.attention)),
 		},
 		Assets: application.AssetOptions{Handler: application.AssetFileServerFS(cfg.Assets)},
-		Linux:  application.LinuxOptions{ProgramName: "myspec"},
+		Linux:  application.LinuxOptions{ProgramName: programName},
 		SingleInstance: &application.SingleInstanceOptions{
-			UniqueID:               "myspec",
+			UniqueID:               programName,
 			OnSecondInstanceLaunch: a.onSecondInstance,
 		},
 		OnShutdown: a.shutdown,

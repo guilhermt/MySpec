@@ -18,9 +18,34 @@ type Repository struct {
 	ArchivedTasks int    `json:"archivedTasks"`
 }
 
+// MigrationTask is one task a refused migration is about.
+type MigrationTask struct {
+	Name      string `json:"name"`
+	Workspace string `json:"workspace"`
+	Path      string `json:"path"` // the clone; "" for a task at the root of its workspace
+}
+
+// MigrationCase is one reason the migration was refused.
+type MigrationCase struct {
+	// Kind is root_task, no_origin or name_conflict, a string for the same
+	// reason as State.Theme.
+	Kind       string          `json:"kind"`
+	Repository string          `json:"repository"` // no_origin: the path of the clone; name_conflict: owner/name
+	Detail     string          `json:"detail"`     // no_origin: why the clone was refused
+	Tasks      []MigrationTask `json:"tasks"`      // never nil
+}
+
+// Migration is a migration of the data that was refused, with what to resolve.
+type Migration struct {
+	Cases []MigrationCase `json:"cases"` // never nil
+}
+
 // State is everything the interface renders, produced by Go and never derived
 // on the frontend.
 type State struct {
+	// Migration is set when the data could not be migrated; every other field
+	// is then empty.
+	Migration *Migration `json:"migration"`
 	// Repositories are the registered repositories, by owner/name, ignoring
 	// case; never nil.
 	Repositories []Repository `json:"repositories"`

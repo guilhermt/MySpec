@@ -10,9 +10,6 @@ import (
 	"github.com/guilhermt/myspec/internal/task"
 )
 
-// appName is the title of the window and the name the notifications carry.
-const appName = "MySpec"
-
 // snapshot builds the state the frontend renders. The situations are derived
 // from the same readings the tasks are converted from, so that every surface
 // agrees with every other. The caller holds publishMu.

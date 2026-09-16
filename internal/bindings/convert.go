@@ -11,6 +11,8 @@ import (
 	"github.com/guilhermt/myspec/internal/review"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
+	"github.com/guilhermt/myspec/internal/theme"
+	"github.com/guilhermt/myspec/internal/upgrade"
 )
 
 // FromRepositories converts the registered repositories, with what the last
@@ -36,6 +38,38 @@ func FromRepositories(
 		}
 	}
 	return converted
+}
+
+// FromMigration converts the cases a refused migration listed, so that the
+// screen can say what to resolve and where.
+func FromMigration(refused *upgrade.RefusedError) *Migration {
+	cases := make([]MigrationCase, len(refused.Cases))
+	for i, c := range refused.Cases {
+		tasks := make([]MigrationTask, len(c.Entries))
+		for j, entry := range c.Entries {
+			tasks[j] = MigrationTask{Name: entry.Task, Workspace: entry.Workspace, Path: entry.Path}
+		}
+		cases[i] = MigrationCase{
+			Kind:       string(c.Kind),
+			Repository: c.Repository,
+			Detail:     c.Detail,
+			Tasks:      tasks,
+		}
+	}
+	return &Migration{Cases: cases}
+}
+
+// RefusedState is the whole state of an app whose data could not be migrated:
+// the cases to resolve and nothing of the product, which never opened.
+func RefusedState(refused *upgrade.RefusedError) State {
+	return State{
+		Migration:     FromMigration(refused),
+		Repositories:  []Repository{},
+		Theme:         string(theme.System),
+		ModelDefaults: []StageModel{},
+		Tasks:         []TaskSummary{},
+		History:       []ArchivedTask{},
+	}
 }
 
 // FromModelSet converts the choice of every stage, in the order the settings
