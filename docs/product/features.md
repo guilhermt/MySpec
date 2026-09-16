@@ -43,7 +43,7 @@ Uma worktree já criada continua sendo usada normalmente: as sessões rodam nela
 
 ### Tela de boas-vindas e barra lateral
 
-Enquanto nenhum repositório está cadastrado, o produto mostra a tela de boas-vindas no lugar da task, com o nome do produto, a linha `Register a repository to start creating tasks.` e o botão **Add repository**, que abre o mesmo diálogo da página. Ao cadastrar o primeiro repositório, a tela dá lugar à visão principal. Com repositórios cadastrados e nenhuma task, a área da task mostra um estado vazio com o atalho para criar a primeira.
+Enquanto nenhum board e nenhum repositório estão cadastrados, o produto mostra a tela de boas-vindas no lugar da task, com o nome do produto, a linha `Register a board or a repository to start creating tasks.` e dois botões: **Add board**, que abre o mesmo diálogo da página **Boards**, e **Add repository**, que abre o mesmo diálogo da página **Repositories**. Ao cadastrar o primeiro board ou o primeiro repositório, a tela dá lugar à visão principal. Com repositórios cadastrados e nenhuma task, a área da task mostra um estado vazio com o atalho para criar a primeira.
 
 A barra lateral tem, de cima para baixo:
 
@@ -275,7 +275,7 @@ Sair do editor com uma edição não salva pede confirmação.
 
 ## Configurações e aparência
 
-As configurações abrem pelo ícone no rodapé da barra lateral ou por `Ctrl+,`, e pertencem ao app. Elas contêm a página **Defaults**, com o modo de review e os modelos e esforços com que uma task nova começa, a página **Repositories**, e os prompts.
+As configurações abrem pelo ícone no rodapé da barra lateral ou por `Ctrl+,`, e pertencem ao app. Elas contêm a página **Defaults**, com o modo de review e os modelos e esforços com que uma task nova começa, a página **Boards**, a página **Repositories**, e os prompts.
 
 O tema segue o sistema por padrão e pode ser fixado em claro ou escuro pelo botão da barra lateral. Uma troca do tema do sistema com o app aberto é aplicada na hora.
 

@@ -6,7 +6,9 @@ import { type AppStore, useAppStore } from "@/store/app-store";
 // refused migration answer to none of them.
 function productOnScreen(store: AppStore): boolean {
   return (
-    store.app !== null && store.app.migration === null && (store.app.repositories ?? []).length > 0
+    store.app !== null &&
+    store.app.migration === null &&
+    ((store.app.repositories ?? []).length > 0 || (store.app.boards ?? []).length > 0)
   );
 }
 

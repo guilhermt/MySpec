@@ -6,6 +6,7 @@ import { useAppStore } from "@/store/app-store";
 import { renderWithStore, resetAppStore } from "@/test/render";
 import {
   makeArchivedTask,
+  makeBoard,
   makeMigration,
   makeSituation,
   makeState,
@@ -59,6 +60,19 @@ describe("App", () => {
     renderWithStore(<App />);
 
     expect(await screen.findByRole("button", { name: /^Add repository/ })).toBeInTheDocument();
+  });
+
+  it("leaves the welcome screen once a board is registered, even without a repository", async () => {
+    vi.mocked(api.getState).mockResolvedValue(
+      makeState({ repositories: [], boards: [makeBoard()] }),
+    );
+
+    renderWithStore(<App />);
+
+    expect(await screen.findByRole("button", { name: "Settings" })).toBeInTheDocument();
+    expect(
+      screen.queryByText("Register a board or a repository to start creating tasks."),
+    ).not.toBeInTheDocument();
   });
 
   it("renders the migration screen when the data could not be updated", async () => {
@@ -189,6 +203,18 @@ describe("App", () => {
     await user.keyboard("{Control>},{/Control}");
 
     expect(screen.queryByRole("heading", { name: "Defaults" })).not.toBeInTheDocument();
+  });
+
+  it("opens the settings on Ctrl+, with a board registered and no repository", async () => {
+    vi.mocked(api.getState).mockResolvedValue(
+      makeState({ repositories: [], boards: [makeBoard()] }),
+    );
+    const { user } = renderWithStore(<App />);
+    await screen.findByRole("button", { name: "Settings" });
+
+    await user.keyboard("{Control>},{/Control}");
+
+    expect(await screen.findByRole("heading", { name: "Defaults" })).toBeInTheDocument();
   });
 
   it("leaves Ctrl+, alone without a registered repository", async () => {

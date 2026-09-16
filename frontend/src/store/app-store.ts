@@ -27,8 +27,8 @@ import {
   type TranscriptState,
 } from "@/store/transcript";
 
-/** SettingsSection is what the settings screen shows: the defaults of a new task, the repositories or one prompt. */
-export type SettingsSection = "defaults" | "repositories" | PromptStage;
+/** SettingsSection is what the settings screen shows: the defaults of a new task, the boards, the repositories or one prompt. */
+export type SettingsSection = "defaults" | "boards" | "repositories" | PromptStage;
 
 /** StepTab is the conversation of a step on screen: the agent that implements it, or the one that reviews it. */
 export type StepTab = "implementer" | "reviewer";

@@ -37,12 +37,13 @@ async function edited() {
 }
 
 describe("SettingsView", () => {
-  it("lists the defaults, the repositories and the eight prompts in its navigation, with the one on screen as the current page", () => {
+  it("lists the defaults, the boards, the repositories and the eight prompts in its navigation, with the one on screen as the current page", () => {
     view();
 
     const nav = screen.getByRole("navigation", { name: "Settings" });
     for (const name of [
       "Defaults",
+      "Boards",
       "Repositories",
       "PRD",
       "Tech spec",
@@ -62,6 +63,16 @@ describe("SettingsView", () => {
     );
     expect(screen.getByRole("button", { name: "PRD" })).not.toHaveAttribute("aria-current");
     expect(screen.getByRole("heading", { name: "Defaults" })).toBeInTheDocument();
+  });
+
+  it("shows the registered boards in their own section", async () => {
+    const { user } = view();
+
+    await user.click(screen.getByRole("button", { name: "Boards" }));
+
+    expect(screen.getByRole("heading", { name: "Boards" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Boards" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("button", { name: "Add board" })).toBeInTheDocument();
   });
 
   it("shows the registered repositories in their own section", async () => {
