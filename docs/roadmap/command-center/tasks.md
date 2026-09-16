@@ -11,14 +11,14 @@ A ideia descrita no [README](./README.md) é grande demais para uma task. Este d
 
 ## Visão geral
 
-| # | Task | Depende de |
-|---|---|---|
-| 1 | [`registered-repositories`](#1-registered-repositories): repositórios no lugar da área de trabalho, tasks de um repositório só | nada |
-| 2 | [`boards`](#2-boards): boards do GitHub Projects e a task a partir de um card | 1 |
-| 3 | [`review-center`](#3-review-center): o centro de review das pull requests | 2 |
-| 4 | [`discussion`](#4-discussion): a discussão que produz cards e épicos | 2 |
+| # | Task | Depende de | Estado |
+|---|---|---|---|
+| 1 | [`registered-repositories`](#1-registered-repositories): repositórios no lugar da área de trabalho, tasks de um repositório só | nada | entregue |
+| 2 | [`boards`](#2-boards): boards do GitHub Projects e a task a partir de um card | 1 | entregue |
+| 3 | [`review-center`](#3-review-center): o centro de review das pull requests | 2 | a fazer |
+| 4 | [`discussion`](#4-discussion): a discussão que produz cards e épicos | 2 | a fazer |
 
-As tasks 3 e 4 são independentes entre si. O nome de cada task é o nome com que ela é criada no produto.
+As tasks entregues estão descritas como o produto é em `docs/product/features.md` e `docs/architecture/`; a definição delas fica aqui como o contexto com que foram criadas. As tasks 3 e 4 são independentes entre si. O nome de cada task é o nome com que ela é criada no produto.
 
 ## O que atravessa todas as tasks
 

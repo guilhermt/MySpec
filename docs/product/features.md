@@ -1,10 +1,109 @@
 # Funcionalidades
 
-Este documento descreve o produto como ele é. Segue a ordem do ciclo de vida de uma task e termina com o que atravessa todo o produto: sessões, atenção, modelos, prompts e configurações.
+Este documento descreve o produto como ele é. Começa pelos boards e pelos repositórios de onde as tasks vêm, segue a ordem do ciclo de vida de uma task e termina com o que atravessa todo o produto: sessões, atenção, modelos, prompts e configurações.
+
+## Boards
+
+O produto conhece os boards do GitHub Projects (v2) que o usuário cadastra, de organização ou de usuário, cada um com os repositórios que administra. Ele lê os cards de cada board e cria tasks a partir deles. Funciona com qualquer board: lê os status e os campos de cada um em vez de assumir uma estrutura.
+
+Tudo o que o produto lê do GitHub passa pelo `gh` já autenticado na máquina, com a conta dele; o produto não tem conta nem token próprios. A única escrita no GitHub que vem de um board é a referência ao card na descrição da pull request.
+
+Um repositório pertence a no máximo um board, e é o board do repositório que define onde as tasks dele aparecem na barra lateral.
+
+### Página Boards
+
+As configurações têm a página **Boards**. Ela lista os boards cadastrados, em ordem alfabética de título, cada um com o título, o dono e o tipo (`Organization` ou `User`), a quantidade de repositórios administrados, o link para o GitHub, a última leitura (`Updated 3 min ago`, `Not read yet` ou a falha da última leitura) e as ações **Edit** e **Remove**. Acima da lista fica **Add board**.
+
+### Cadastrar um board
+
+**Add board** abre um diálogo em etapas. Na primeira, o usuário cola a URL do board: `https://github.com/orgs/<org>/projects/<n>` ou `https://github.com/users/<usuário>/projects/<n>`, com ou sem sufixos como `/views/<n>` e parâmetros de query. O produto lê o board e recusa, com a razão:
+
+- uma URL que não é de um GitHub Projects v2, com `This isn't the URL of a GitHub project.`; um Project clássico é recusado assim;
+- um board já cadastrado, com `<título> is already registered.`;
+- um board que não pode ser lido, com a falha da leitura (ver [Falhas](#falhas)).
+
+Lido o board, o diálogo mostra o título e o dono e segue para as escolhas:
+
+- **Status finais.** O produto identifica o campo de status do board, o campo de seleção única chamado `Status`, e lista as opções na ordem do board, cada uma com a marcação `Final`. Vêm pré-marcadas as opções cujo nome é, sem diferenciar maiúsculas nem acentos, `Done`, `Concluído`, `Closed`, `Completed`, `Fechado` ou `Finalizado`. Um board sem campo de status pula esta etapa.
+- **Repositórios administrados.** O produto sugere os repositórios que aparecem nas issues do board, com a contagem de cards de cada um, todos marcados. O usuário desmarca os que o board não administra e pode acrescentar outros digitando `dono/nome`. Um texto fora dessa forma é recusado com `Type the repository as owner/name.`, e um repositório que não existe ou que a conta não lê, com `<dono/nome> doesn't exist or this account can't read it.`
+
+Cada repositório diz como ficará ligado ao produto:
+
+- `Registered · <caminho>`, ou `Registered · Not cloned`: já cadastrado, usa o cadastro existente;
+- `Clone found · <caminho>`: não cadastrado, com um clone encontrado pela mesma varredura da pasta home de **Add repository**; será cadastrado nesse clone. Com mais de um clone encontrado, o usuário escolhe qual;
+- `Registered without a clone`: não cadastrado e sem clone encontrado; será cadastrado sem clone;
+- `<dono/nome> belongs to the board <título>.`: administrado por outro board; aparece desabilitado.
+
+**Add board** confirma: o board é cadastrado, os repositórios marcados são cadastrados ou ligados a ele, e a primeira leitura dos cards começa.
+
+### Editar e remover um board
+
+**Edit** relê a estrutura do board no GitHub e reabre as mesmas escolhas, confirmadas com **Save**. Os status finais vêm como o board os guarda: opções que deixaram de existir somem e opções novas aparecem desmarcadas. Os repositórios do board vêm marcados, e os outros repositórios das issues aparecem desmarcados. Acrescentar um repositório segue as regras do cadastro. Um repositório desmarcado sai do board: vai para o grupo sem board quando tem clone ou tasks, e sai do produto quando não tem nenhum dos dois. As tasks dele não mudam.
+
+**Remove** pede confirmação e diz o que acontece: `N repositories move to No board and M leave MySpec. Tasks keep their cards, and nothing changes on GitHub or on disk.` Os repositórios do board com clone ou com tasks, ativas ou arquivadas, passam ao grupo sem board; os sem clone e sem tasks saem do produto. As tasks criadas de cards do board continuam guardando o card e funcionando, e passam ao grupo **No board** da barra lateral. Nada é alterado no GitHub nem no disco.
+
+### Leitura dos cards
+
+Um board é lido ao abrir a visão dele, pelo botão de atualizar da visão e logo depois do cadastro. Não há leitura periódica. A última leitura bem-sucedida de cada board fica guardada e sobrevive a reinícios do app, então a visão e a barra lateral nunca esperam o GitHub. Uma leitura em curso não apaga nada: a visão mostra a leitura guardada, o indicador de leitura e depois a leitura nova. Uma leitura que falha mantém a guardada à vista, com a falha.
+
+A leitura traz os itens do board que são issues abertas ou fechadas nos últimos 14 dias; issues fechadas há mais tempo não aparecem, e o histórico do board fica no GitHub. Rascunhos do Projects e pull requests adicionadas ao board são ignorados. Uma leitura traz no máximo 2.000 issues. De cada card:
+
+- título, número, repositório, estado da issue (aberta ou fechada), corpo, link e responsáveis;
+- o status no board e os demais campos preenchidos, dos tipos texto, número, data, seleção única e iteração;
+- as pull requests vinculadas à issue, com o estado de cada uma (`Open`, `Merged` ou `Closed`);
+- o **épico**: a issue pai nativa, quando existe. Sem ela, o produto procura no corpo uma linha de épico da convenção e resolve a referência;
+- os **cards irmãos**: as outras sub-issues do épico e, para um épico da convenção, também os cards do board que apontam para o mesmo épico. Cada irmão tem o status no board ou, fora do board, o estado da issue;
+- as **dependências**: as issues de que o card depende pela relação nativa (bloqueado por) e pelas linhas de dependência da convenção, unidas sem repetição, com o estado, o status no board quando está nele e as pull requests vinculadas.
+
+A convenção no corpo é só lida, nunca escrita. Uma linha de épico começa com `Épico` ou `Epic`, e uma de dependência com `Depende de` ou `Depends on`, em qualquer capitalização, com ou sem marcador de lista (`-`, `*`, `+`), com ou sem negrito e com ou sem os dois-pontos depois do rótulo. Uma referência pode ser a URL da issue (`https://github.com/<dono>/<nome>/issues/<N>`), `dono/nome#N`, `nome#N`, resolvido no dono do board, ou `#N`, resolvido no repositório do card. Uma linha pode ter várias referências separadas por vírgula ou ponto e vírgula, com pontuação em volta; uma parte que não é referência é ignorada. O épico nativo prevalece sobre o da convenção, e só a primeira referência da primeira linha de épico conta.
+
+Cada leitura atualiza o que as tasks ativas do board guardam dos seus cards: título, status, estado da issue e épico. O card de uma task ativa que ficou fora da leitura, por ter sido fechado há mais de 14 dias ou tirado do board, é lido diretamente na mesma leitura.
+
+### Falhas
+
+Uma falha de leitura aparece onde a leitura foi pedida: no diálogo do board, na visão do board, no nó do board na barra lateral e na página **Boards**. Ela nunca espera pelo usuário nem gera notificação, e as tasks do board continuam funcionando. As mensagens:
+
+- `GitHub CLI was not found: gh isn't on the PATH.`
+- `gh is not authenticated. Run gh auth login.`
+- `gh can't read projects. Run gh auth refresh -s read:project.`
+- `The board doesn't exist or this account can't read it.`
+- `GitHub's rate limit was reached. It resets at <hora>.`
+- `Couldn't read from GitHub: <o que o gh disse>`
+
+### Visão do board
+
+A visão do board abre pelo nó do board na barra lateral e ocupa a área principal, no lugar da task. Abri-la relê o board.
+
+- **Cabeçalho:** o título, o link para o GitHub, `Updated <há quanto tempo>`, o indicador de leitura em curso, o botão de atualizar e a falha da última leitura, quando houver.
+- **Barra de filtros:** a busca, que casa com o título, sem diferenciar maiúsculas nem acentos, e com o número, com ou sem `#`; os filtros **Repository**, entre os administrados, **Status**, com `No status`, e **Assignee**; e **Assigned to me**, que filtra pelo usuário autenticado no `gh`. Os filtros combinam entre si, e **Clear filters** limpa todos. Os filtros de cada board são lembrados entre execuções.
+- **Lista de cards** agrupada por status: uma seção por opção do campo de status, na ordem do board, mesmo vazia, e a seção `No status` quando há cards sem status. Um board sem campo de status tem uma seção única, `Cards`. Cada seção mostra o nome e a contagem já filtrada e é recolhível. As seções dos status finais começam recolhidas, e o que o usuário recolhe ou expande é lembrado por board. Dentro de cada seção, as issues abertas vêm antes das fechadas, cada grupo na ordem do board, e uma issue fechada numa seção de status não final aparece esmaecida.
+- **Linha do card:** número, título, título do épico, a task do card, com a etapa e `Waits for you` quando ela espera pelo usuário, `Not cloned` para um card sem task de um repositório sem clone, o nome curto do repositório, com `dono/nome` no tooltip, e os avatares dos responsáveis.
+- **Painel de detalhe**, à direita, com o card selecionado: título, número, repositório, estado da issue, status e link; a ação **Start task**; a task do card, a ativa, que abre ao clicar, ou, sem ela, a mais recente arquivada, que abre no histórico; os campos preenchidos e os responsáveis; o corpo renderizado como Markdown; o épico; os irmãos com o status, e um irmão que está no board seleciona o card dele ao ser clicado; as dependências com o estado, o status e as pull requests, com `Not satisfied` nas não satisfeitas; e as pull requests vinculadas. O painel mantém a seleção ao atualizar a leitura enquanto o card continua nela.
+- **Estados:** um board nunca lido mostra o esqueleto da lista durante a leitura e, se ela falha, a falha com **Try again**. Um board sem cards diz `This board has no issues.`, e filtros que não deixam nenhum card dizem `No cards match the filters.`, com **Clear filters**.
+
+Uma dependência está satisfeita quando a issue dela está fechada ou quando uma pull request vinculada a ela foi mergeada. Uma dependência não satisfeita é só um aviso e nunca bloqueia nada.
+
+A visão é navegável pelo teclado: as setas para cima e para baixo percorrem os cards visíveis, pulando as seções recolhidas; as setas para a esquerda e para a direita recolhem e expandem a seção do card sob o foco; `Enter` abre o detalhe; `Esc` o fecha; `/` foca a busca; `S` aciona **Start task** no card sob o foco.
+
+### Start task
+
+A ação do card depende da situação dele:
+
+| Situação do card | Ação |
+|---|---|
+| Issue aberta, sem task ativa, repositório do board, com clone | **Start task** abre o diálogo de criação a partir do card |
+| Igual, repositório sem clone | **Start task** diz `<dono/nome> isn't cloned yet.` e oferece **Clone and continue**; terminado o clone, o diálogo de criação abre sozinho |
+| Igual, clone inexistente | **Start task** desabilitado, com `The clone at <caminho> is missing.` e **Change path** |
+| Repositório sem board, ou ainda não cadastrado | **Start task** diz `<dono/nome> isn't managed by this board.` e abre **Add <dono/nome> to the board**, que liga o repositório como no cadastro do board; confirmado com **Add to board**, o card segue pelas linhas acima |
+| Repositório de outro board | **Start task** desabilitado, com `<dono/nome> belongs to the board <título>.` |
+| Card com task ativa | Sem **Start task**; o painel mostra a task |
+| Issue fechada | Sem **Start task** |
+
+Um card tem no máximo uma task ativa, e **Start task** volta quando ela é arquivada ou apagada. Um card que está em mais de um board aparece em cada um, mas só o board do repositório dele oferece **Start task**.
 
 ## Repositórios
 
-O produto conhece os repositórios que o usuário cadastra. Um repositório cadastrado é um repositório do GitHub, identificado por `dono/nome`, ligado ao caminho local de um clone. A identidade vem sempre do remote `origin` do clone: o usuário nunca a digita.
+O produto conhece os repositórios que o usuário cadastra. Um repositório cadastrado é um repositório do GitHub, identificado por `dono/nome`, ligado ao caminho local de um clone ou ainda sem clone. Um repositório cadastrado a partir de um clone tem a identidade lida do remote `origin`; um repositório cadastrado por um board, sem clone, tem a identidade lida do GitHub. Cada repositório pertence a um board ou a nenhum.
 
 Onde o espaço é curto, como na lista de tasks, o produto mostra o nome curto, a parte `nome`, com `dono/nome` no tooltip; onde há espaço, como na página de cadastro e no cabeçalho da task, mostra `dono/nome`.
 
@@ -12,9 +111,9 @@ Só uma instância do app roda por vez. Abrir uma segunda traz para a frente a j
 
 ### Página Repositories
 
-As configurações têm a página **Repositories**, ao lado de **Defaults** e dos prompts. Ela lista os repositórios cadastrados, em ordem alfabética de `dono/nome`, cada um com o `dono/nome`, o caminho local, a contagem de tasks ativas e arquivadas, o aviso de clone inexistente quando é o caso, e as ações **Change path** e **Remove**. Acima da lista fica **Add repository**.
+As configurações têm a página **Repositories**. Ela tem o campo **Clone folder** e lista os repositórios cadastrados, em ordem alfabética de `dono/nome`, cada um com o `dono/nome`, `Board: <título>` quando pertence a um board, o caminho local ou `Not cloned`, a contagem de tasks ativas e arquivadas, o aviso de clone inexistente quando é o caso, e as ações **Clone**, para um repositório sem clone, **Change path** e **Remove**. Acima da lista fica **Add repository**.
 
-**Add repository** abre um diálogo do próprio produto, que varre a pasta home até 6 pastas de profundidade, pulando pastas ocultas e `node_modules` e sem nunca descer para dentro de um repositório, de uma worktree ou de um submódulo. O diálogo lista os clones de repositórios do GitHub encontrados, por `dono/nome` e caminho, em ordem alfabética, com um filtro por nome ou caminho. Um clone sem `origin` ou com `origin` fora do GitHub não aparece. Os clones de repositórios já cadastrados aparecem desabilitados, com `Registered`. Cada abertura do diálogo varre de novo.
+**Add repository** abre um diálogo do próprio produto, que varre a pasta home até 6 pastas de profundidade, pulando pastas ocultas e `node_modules` e sem nunca descer para dentro de um repositório, de uma worktree ou de um submódulo. O diálogo lista os clones de repositórios do GitHub encontrados, por `dono/nome` e caminho, em ordem alfabética, com um filtro por nome ou caminho. Um clone sem `origin` ou com `origin` fora do GitHub não aparece. Os clones de repositórios já cadastrados com clone aparecem desabilitados, com `Registered`. O clone de um repositório cadastrado sem clone aparece disponível, e confirmá-lo liga o clone ao cadastro existente. Cada abertura do diálogo varre de novo.
 
 O usuário marca um ou mais clones e confirma com **Add repository**, ou **Add N repositories** com vários marcados. Cada um é cadastrado por vez, na ordem da lista. Com todos cadastrados, o diálogo fecha. Uma recusa aparece sob a linha do clone recusado, que continua marcado, e o diálogo fica aberto, com os que passaram marcados como `Registered`.
 
@@ -29,7 +128,15 @@ Em qualquer dos caminhos, o produto verifica que a pasta é a raiz de um reposit
 
 **Change path** abre o seletor de pastas nativo e aplica as mesmas verificações, com uma a mais: o `dono/nome` lido da pasta nova tem de ser o do repositório. Uma pasta de outro repositório é recusada com `<caminho> is a clone of <outro dono/nome>, not of <dono/nome>.` Serve para quando o clone foi movido ou refeito em outro lugar. Trocar o caminho não mexe nas worktrees já criadas nem nas tasks: uma task cujo primeiro step ainda não criou a worktree passa a criá-la a partir do clone novo, e um step bloqueado por clone inexistente é destravado por **Tentar de novo**.
 
-**Remove** só é possível com o repositório sem nenhuma task, ativa ou arquivada. Com tasks, a ação fica desabilitada e o produto diz o que impede: `<dono/nome> has N active tasks and M archived tasks. Delete them before removing the repository.` Um repositório sem tasks é removido após confirmação, e nada é apagado no disco: nem o clone nem as worktrees, que não existem sem tasks.
+**Remove** só é possível com o repositório sem nenhuma task, ativa ou arquivada. Com tasks, a ação fica desabilitada e o produto diz o que impede: `<dono/nome> has N active tasks and M archived tasks. Delete them before removing the repository.` Um repositório sem tasks é removido após confirmação, e nada é apagado no disco: nem o clone nem as worktrees, que não existem sem tasks. Um repositório removido que pertencia a um board sai também do board.
+
+### Repositório sem clone
+
+Um repositório sem clone é cadastrado por um board: pela sugestão dos cards, por `dono/nome` ou por **Add to board** a partir de um card. Ele não é um clone inexistente, que é o de um caminho cadastrado que não está mais lá. Um repositório sem clone não recebe tasks: no diálogo de criação ele aparece desabilitado, com `Not cloned` e a ação **Clone**.
+
+**Change path** liga a ele um clone existente, com as mesmas verificações de sempre. **Clone** clona o repositório com o `gh` em `<pasta de clones>/<nome>`, onde `<nome>` é a parte `nome` de `dono/nome`. A pasta de clones é o campo **Clone folder** da página **Repositories**, escolhido pelo seletor de pastas nativo por **Choose…**, sem valor padrão. Quando um clone é pedido sem a pasta escolhida, o seletor abre naquele momento, a escolha é guardada e o clone segue; cancelar o seletor cancela o clone.
+
+Se a pasta de destino já existe e é um clone do mesmo repositório, ela é ligada ao cadastro sem clonar de novo. Se é qualquer outra coisa, o clone é recusado com `<caminho> already exists and is not a clone of <dono/nome>.` O clone roda em segundo plano, com `Cloning…` onde foi pedido, e o resto do produto continua utilizável. Uma falha mostra a mensagem do `gh` no repositório e no card que pediram o clone, não deixa nada na pasta de destino, e o repositório continua sem clone. Terminado o clone, o repositório passa a ter o clone, e um **Start task** que esperava por ele continua sozinho.
 
 ### Clone inexistente
 
@@ -50,10 +157,18 @@ A barra lateral tem, de cima para baixo:
 - a seção **Waiting for you**, fixa no topo, com todas as tasks que esperam pelo usuário, exceto a aberta. Ela nunca é filtrada por repositório;
 - o **filtro por repositório**, um seletor com **All repositories** e um item por repositório cadastrado, em ordem alfabética, e o botão de nova task. A escolha do filtro é lembrada entre execuções do app, e um repositório removido volta o filtro para todos;
 - o aviso de clone inexistente de cada repositório que o filtro mostra, com **Change path**;
-- a **lista de tasks** ativas, na ordem de criação, filtrada pelo repositório escolhido. Cada task mostra o nome, o nome curto do repositório abaixo, a etapa em que está, o step em andamento e o que falta, o progresso do review, ou **Agent review** e **Addressing review** quando um agente revisa o step, e o que espera pelo usuário. A lista é navegável pelo teclado, com a task sob o foco sendo a que abre;
+- a **árvore de tasks** ativas, agrupada por board;
 - o rodapé com **History**, o tema e as configurações.
 
-A lista é plana: uma linha por task. A lista com um filtro que deixa zero tasks diz `No tasks in <nome curto>.`
+A árvore tem um nó por board, em ordem alfabética de título, e depois o grupo **No board**:
+
+- o **nó do board** mostra o título e abre a visão do board. Quando a última leitura falhou, ele mostra um ícone de falha, com o motivo no tooltip. Um board sem tasks aparece como nó vazio;
+- dentro do board vem primeiro um **nó por épico** que tem ao menos uma task ativa, com o título do épico, na ordem de criação da primeira task dele, com as tasks dos seus cards dentro. O nó do épico só expande e recolhe. Depois dos épicos vêm as tasks do board sem épico: as de cards sem épico e as tasks sem card dos repositórios do board;
+- o grupo **No board** tem as tasks dos repositórios sem board, inclusive as de cards de um board removido, e aparece só quando tem tasks.
+
+Dentro de cada nó as tasks seguem a ordem de criação. Cada task mostra o nome, o nome curto do repositório abaixo, precedido de `#<número>` numa task criada de um card, a etapa em que está, o step em andamento e o que falta, o progresso do review, ou **Agent review** e **Addressing review** quando um agente revisa o step, e o que espera pelo usuário. Os agrupamentos usam o que as tasks guardam dos seus cards, então a árvore não depende de nenhuma leitura do GitHub.
+
+Cada nó expande e recolhe pela seta ao lado do título, e o que o usuário recolhe é lembrado entre execuções. O board e o épico da task aberta se expandem ao abri-la. A árvore é navegável pelo teclado entre as tasks visíveis, pulando os nós recolhidos, com a task sob o foco sendo a que abre. Com o filtro num repositório, a árvore mostra só o nó do board desse repositório, ou o grupo **No board**, com as tasks do repositório. Um filtro num repositório sem board e sem tasks diz `No tasks in <nome curto>.`
 
 ### Dados de uma versão com áreas de trabalho
 
@@ -65,7 +180,7 @@ A migração é tudo ou nada, e três coisas a impedem: uma task ativa na raiz d
 
 O botão de nova task e `Ctrl+N` abrem o diálogo de criação de qualquer lugar do produto. Na criação o usuário informa:
 
-- o **repositório**, obrigatório, entre os cadastrados. O seletor vem pré-selecionado com, nesta ordem, o primeiro que existir: o repositório do filtro, quando o filtro não é **All repositories**; o repositório da task aberta; o último repositório usado numa criação; o primeiro da lista. Um repositório com clone inexistente aparece desabilitado, com o aviso;
+- o **repositório**, obrigatório, entre os cadastrados. O seletor vem pré-selecionado com, nesta ordem, o primeiro que existir: o repositório do filtro, quando o filtro não é **All repositories**; o repositório da task aberta; o último repositório usado numa criação; o primeiro da lista. Um repositório com clone inexistente aparece desabilitado, com o aviso, e um repositório sem clone aparece desabilitado, com `Not cloned`, ou `Cloning…` enquanto clona, e a ação **Clone** ao lado;
 - o **nome**, em minúsculas, dígitos e hífens simples, com até 64 caracteres, único no repositório escolhido, tasks arquivadas incluídas, porque ele nomeia a branch e a worktree. Um nome já usado é recusado com `A task named <nome> already exists in <dono/nome>.`; o mesmo nome em outro repositório é permitido;
 - o **contexto inicial**: o que quer fazer, em alto nível ou em detalhe. É a primeira mensagem da primeira sessão de planejamento, a de PRD ou a de planejamento One-Shot;
 - o **modo**, `Structured` ou `One-Shot`, que parte sempre de `Structured`, com uma linha que diz o que o modo escolhido faz: `A PRD, a tech spec and a plan of steps, each step its own commit.` ou `One planning conversation writes a single document, implemented in one commit.` O modo nunca muda depois da criação;
@@ -73,6 +188,23 @@ O botão de nova task e `Ctrl+N` abrem o diálogo de criação de qualquer lugar
 - o **modelo e o esforço de cada etapa** do modo escolhido, partindo dos padrões configurados. O usuário pode ajustar qualquer etapa para essa task. A lista acompanha o modo, e o ajuste de uma etapa que os dois modos têm, como a implementação, se mantém ao trocar de modo; o resumo ao lado de **Models** considera só as etapas do modo escolhido.
 
 Ao confirmar, a primeira sessão de planejamento do modo abre no clone do repositório e começa com o contexto inicial, e a primeira coisa que o usuário vê é a primeira pergunta do agente. Se a sessão não conseguir começar, a task é desfeita. O cabeçalho de uma task One-Shot mostra o rótulo `One-Shot` ao lado do nome.
+
+### A partir de um card
+
+**Start task** num card abre o mesmo diálogo, com estas diferenças:
+
+- o topo mostra o card: número, título, repositório e status. O repositório é o do card, sem seletor;
+- o **nome** vem sugerido como `<número>-<slug do título>`, e é editável. O slug é o título em minúsculas, sem acentos, com cada sequência de caracteres fora de `a-z0-9` virando um hífen, sem hífens nas pontas, cortado numa fronteira de palavra para o nome inteiro caber em 64 caracteres. Um nome sugerido que já existe no repositório é recusado como qualquer outro, e o usuário o edita;
+- **Context from the card**, recolhível e somente leitura, mostra o contexto que o produto monta, e o campo `Additional context`, opcional, recebe o que o usuário quiser acrescentar;
+- **Unsatisfied dependencies**, quando o card tem dependências não satisfeitas, lista cada uma com o repositório, o estado, o status e as pull requests com o estado. O aviso nunca bloqueia a criação.
+
+O contexto montado é, em Markdown e com rótulos em inglês, nesta ordem: o card, com título, `dono/nome#número`, link, status, campos preenchidos, responsáveis e o corpo completo; o épico, quando existe, com título, referência, link e corpo completo; os cards irmãos, um por linha, com referência, título e status; as dependências, uma por linha, com referência, título, estado, status e pull requests com o estado; e, sob `Additional context`, o texto do usuário, quando existe. Ele é o contexto inicial da task: a primeira mensagem do PRD ou do planejamento One-Shot.
+
+O contexto usa a leitura guardada do board. Quando a leitura do card tem mais de 5 minutos, o diálogo relê o card, o épico, os irmãos e as dependências ao abrir, com `Refreshing the card…`. Se a releitura falha, o diálogo avisa `Couldn't refresh the card: <motivo>. The task will use the last reading.` e a criação segue com o que estava guardado. Um card que saiu da última leitura enquanto o diálogo abria mostra `This card isn't in the last reading of the board.`
+
+Criar a task de um card que ganhou uma task ativa enquanto o diálogo estava aberto é recusado com `Card #<número> already has an active task: <nome>.`
+
+A task guarda o card: o board, o repositório, o número, o título, o corpo, o link, o status e o estado da issue, e o épico. Cada leitura do board atualiza esses dados nas tasks ativas; uma task arquivada guarda o card como estava ao arquivar. O cabeçalho da task e o da task arquivada no histórico mostram o card: `#<número>`, que abre a issue e tem o título no tooltip, o status da última leitura e `Issue closed` quando a issue foi fechada.
 
 ## Etapas de planejamento
 
@@ -192,6 +324,8 @@ Com o último step commitado a task entra na etapa de PR. Ela é uma só, como a
 
 A sessão de PR abre na worktree com o prompt de PR. O agente lê os commits e o diff da branch contra a base, o PRD e o tech spec, ou o documento One-Shot numa task One-Shot, e escreve um rascunho de título e descrição num arquivo de artefato. O rascunho aparece no produto, editável, e a task passa a **rascunho pronto**, esperando o OK. O usuário pode alterar o título e o corpo antes de aprovar, ou descartar o rascunho para o agente escrever outro.
 
+Numa task criada de um card, o prompt de PR recebe o card, com título, referência, link e corpo, e pede ao agente que escreva a descrição para quem lê o card e que comece o corpo do rascunho com `Closes <dono/nome>#<número>`. Ao abrir a pull request, se a descrição aprovada não fecha o card, o produto acrescenta `Closes <dono/nome>#<número>` ao fim dela. Conta como fechamento uma palavra de fechamento do GitHub (`close`, `closes`, `closed`, `fix`, `fixes`, `fixed`, `resolve`, `resolves` ou `resolved`, sem diferenciar maiúsculas) seguida de `#<número>` ou `<dono/nome>#<número>`. Assim toda pull request de uma task criada de um card fica vinculada ao card, e o board a mostra nele. Uma task sem card abre a pull request sem nada disso.
+
 Com o OK, o agente sobe a branch e abre a pull request com `gh pr create` contra a branch base, usando o rascunho como ele está naquele momento. A base é a mesma da worktree: `dev`, ou `main` quando não há `dev`. Quando o `gh` não está instalado, não está autenticado ou falha, a etapa fica **bloqueada** com a razão, e **Tentar de novo** repete a partir de onde parou.
 
 O produto lê a pull request com o `gh`: número, link, estado e base aparecem na barra da pull request, e uma leitura pode ser forçada a qualquer momento. Pull requests aguardando merge são consultadas automaticamente a cada minuto.
@@ -267,9 +401,11 @@ O produto oferece três modelos, Fable 5.1, Opus 5 e Sonnet 5, e cinco níveis d
 
 As configurações listam os oito prompts, PRD, tech spec, plano, planejamento One-Shot, review de step, commit, PR e review de PR, cada um renderizado e editável. Um prompt editado é salvo como arquivo no diretório de dados e sobrevive a atualizações do app; um prompt nunca editado acompanha o padrão de cada versão. **Restaurar** volta ao padrão. O prompt é lido quando uma sessão começa, então uma sessão já em andamento mantém o prompt com que começou. O prompt de um step é o próprio arquivo do step, escrito pelo plano, ou o documento de uma task One-Shot, escrito pelo planejamento, e por isso não aparece aqui.
 
-Os prompts de review de step, commit, PR e review de PR são um texto por tipo, que serve aos dois modos. Numa task One-Shot, onde os de review de step, PR e review de PR citam o PRD, o tech spec ou o arquivo do step, eles citam o documento One-Shot, e o produto acrescenta a cada um uma seção `One-Shot task`, que diz o papel do documento no lugar dos outros. Ela fecha os prompts de PR e de review de PR; no de review de step, vem antes da última resposta do implementador, que continua sendo o fim do prompt. Um prompt editado recebe o mesmo tratamento, então uma edição vale para os dois modos.
+Os prompts de review de step, commit, PR e review de PR são um texto por tipo, que serve aos dois modos. Numa task One-Shot, onde os de review de step, PR e review de PR citam o PRD, o tech spec ou o arquivo do step, eles citam o documento One-Shot, e o produto acrescenta a cada um uma seção `One-Shot task`, que diz o papel do documento no lugar dos outros. Ela fecha os prompts de PR e de review de PR, seguida só da seção `## Card` no de PR de uma task criada de um card; no de review de step, vem antes da última resposta do implementador, que continua sendo o fim do prompt. Um prompt editado recebe o mesmo tratamento, então uma edição vale para os dois modos.
 
 O prompt de review de step sempre termina com a última resposta do implementador, que o produto acrescenta. O prompt de commit diz o que commitar conforme quem revisou: exatamente o que está em stage, no modo `Manual` e no review de pull request, ou tudo o que mudou na worktree, depois de um relatório limpo do revisor. Essa instrução nunca se perde: num prompt editado que removeu o placeholder, ela é acrescentada ao fim. As mensagens que entregam um relatório ao implementador e que pedem uma nova passada ao revisor são textos fixos do produto e não aparecem aqui.
+
+Os prompts padrão de PRD e de planejamento One-Shot dizem ao agente que o contexto inicial pode já responder boa parte do que ele precisa, como um card do board com o épico, os irmãos e as dependências, ou uma descrição detalhada. O agente o trata como a fonte principal do quê e do porquê, não pergunta o que ele já responde, usa o épico e os irmãos para entender onde o trabalho termina sem invadir o escopo de outro card, e pergunta só pelas lacunas reais. Com um contexto completo, a conversa pode ser pouco mais que confirmar o entendimento. A instrução é a mesma com ou sem card. O prompt de PR de uma task criada de um card termina com uma seção `## Card`, acrescentada pelo produto, com o card e a instrução da referência de fechamento; um prompt editado recebe o mesmo tratamento.
 
 Sair do editor com uma edição não salva pede confirmação.
 
@@ -288,3 +424,16 @@ O tema segue o sistema por padrão e pode ser fixado em claro ou escuro pelo bot
 | `Ctrl+,` | Abrir ou fechar as configurações |
 
 `Cmd` vale no lugar de `Ctrl`. Os atalhos funcionam com o foco em qualquer lugar da janela, inclusive na caixa de mensagem.
+
+Na visão do board:
+
+| Atalho | Ação |
+|---|---|
+| `↑` `↓` | Percorrer os cards visíveis |
+| `←` `→` | Recolher e expandir a seção do card sob o foco |
+| `Enter` | Abrir o detalhe do card sob o foco |
+| `Esc` | Fechar o detalhe |
+| `/` | Focar a busca |
+| `S` | **Start task** no card sob o foco |
+
+As setas, `Enter` e `S` valem com o foco na lista de cards; `/` e `Esc`, em qualquer lugar da visão, `/` fora de um campo de texto.

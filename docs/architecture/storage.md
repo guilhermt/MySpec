@@ -16,7 +16,7 @@ worktrees/<dono>/<nome>/<task>/        a worktree de cada task
 
 ### Banco
 
-`myspec.db` guarda as configurações (tema, padrões de modelo e de modo de review, filtro por repositório), os repositórios cadastrados, as tasks, com o modo, os modos de review e o card do board de que foram criadas, os steps, com o ponto do review pelo agente, as sessões e as entradas das conversas, as worktrees, as pull requests e as situações. É aberto com uma única conexão, WAL, `busy_timeout` de cinco segundos e foreign keys, e só o Go o acessa.
+`myspec.db` guarda as configurações (tema, padrões de modelo e de modo de review, filtro por repositório, pasta de clones em `clone_folder`), os boards cadastrados, com os status finais, a última leitura bem-sucedida de cada um, em JSON, e a falha da última leitura, os repositórios cadastrados, com o board de cada um e um caminho vazio enquanto não têm clone, as tasks, com o modo, os modos de review e o card do board de que foram criadas, sem chave estrangeira para o board, para que a task guarde o card quando o board vai embora, os steps, com o ponto do review pelo agente, as sessões e as entradas das conversas, as worktrees, as pull requests e as situações. É aberto com uma única conexão, WAL, `busy_timeout` de cinco segundos e foreign keys, e só o Go o acessa.
 
 O schema é versionado por `PRAGMA user_version` e evolui por migrations em `internal/store/migrations/`, nomeadas `NNNN_nome.sql` com quatro dígitos, aplicadas em ordem, uma transação por arquivo, ao abrir o banco. Uma migration já aplicada nunca é editada: uma mudança de schema é sempre um arquivo novo. Os estados que a interface mostra são derivados; o banco guarda só o que não pode ser derivado, como ids de sessão, o modo de cada task, escolhas de modelo e de modo de review, a passada que o review pelo agente pediu e a que ele tratou, resultados de encerramento e quando cada situação começou.
 
@@ -53,6 +53,10 @@ Uma task Structured tem `PRD.md`, `tech-spec.md` e `steps/`; uma task One-Shot t
 O review pelo agente escreve em `step-reviews/` um relatório por passada de cada step, com o número do step e o da passada no nome. O step único de uma task One-Shot é o número 1. O relatório abre com um cabeçalho `---` que carrega `step`, `pass` e `status`, `clean` ou `changes`; um relatório com outro status, ou com um cabeçalho que discorda do nome, não conta como passada. Os relatórios ficam fora de `steps/`, que é validada como plano. O app relê a pasta a cada inspeção da task, e é dela que o loop deriva o que fazer. Os relatórios pertencem ao step: vão embora ao descartar o step, ao voltar a uma etapa anterior à implementação e ao descartar o plano ou o planejamento One-Shot.
 
 A etapa de PR escreve em `pr/` o rascunho da pull request da task, `draft.md`, e os relatórios de review dela, um por passada, nomeados `review-<n>.md`. Os artefatos são o que as sessões leem por caminho e o que o painel de artefatos e o histórico mostram. Apagar uma task apaga a pasta.
+
+## Clones
+
+Os clones que o app faz ficam na pasta de clones que o usuário escolheu, em `<pasta de clones>/<nome>`, nunca no diretório de dados. A partir daí são clones como os outros: o app não os apaga nem os move.
 
 ## Worktrees
 

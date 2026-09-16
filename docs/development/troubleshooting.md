@@ -2,7 +2,7 @@
 
 Quando algo parece errado, o log é o primeiro lugar: `~/.local/state/myspec/myspec.log`, em JSON, uma linha por registro. `MYSPEC_LOG_LEVEL=debug` aumenta o detalhe; o binário de desenvolvimento (`task dev`) escreve também no stderr.
 
-Cada mensagem é uma frase fixa, e o que varia vai em atributos: `task`, `stage`, `step`, `repository`, `path`, `error`. Filtrar por `msg` com `jq` ou `grep` é a forma mais rápida de seguir uma task:
+Cada mensagem é uma frase fixa, e o que varia vai em atributos: `task`, `stage`, `step`, `repository`, `board`, `path`, `error`. Filtrar por `msg` com `jq` ou `grep` é a forma mais rápida de seguir uma task:
 
 ```sh
 jq -c 'select(.task == "<id>")' ~/.local/state/myspec/myspec.log
@@ -12,7 +12,9 @@ jq -c 'select(.task == "<id>")' ~/.local/state/myspec/myspec.log
 
 **Início e sessões.** `app starting` abre cada execução, com a versão, os argumentos e os diretórios. `claude session ready` marca um processo que subiu e respondeu, com a task a que pertence. `binding failed` marca uma chamada da interface que o Go recusou, com o método. `claude restarting` marca um processo trazido de volta com flags novas por uma troca de modelo na conversa.
 
-**Repositórios e migração.** `repository registered`, `repository path changed` e `repository removed`, com o repositório. `repository clone missing` e `repository clone found`, com o caminho do clone. `clone not identified`, com o caminho e o erro, para um clone que a varredura encontrou e o git não conseguiu ler. `migration applied`, com a versão do schema. `upgrade planned`, com quantos repositórios foram cadastrados, quantas tasks foram carregadas e quantas foram descartadas. `migration refused`, com a quantidade de casos que impediram a migração. `upgrade undo failed` e `upgrade cleanup failed`, com o caminho e o erro.
+**Repositórios e migração.** `repository registered`, `repository path changed` e `repository removed`, com o repositório. `repository clone missing` e `repository clone found`, com o caminho do clone. `clone not identified`, com o caminho e o erro, para um clone que a varredura encontrou e o git não conseguiu ler. `repository clone started`, com o repositório e a pasta de destino, abre um clone pedido pelo app, que termina em `repository cloned` ou em `repository clone failed`, com o que o `gh` disse. `repository clone linked` marca um clone existente ligado a um repositório cadastrado sem clone, pelo **Add repository** ou por uma pasta de destino que já era o clone. `migration applied`, com a versão do schema. `upgrade planned`, com quantos repositórios foram cadastrados, quantas tasks foram carregadas e quantas foram descartadas. `migration refused`, com a quantidade de casos que impediram a migração. `upgrade undo failed` e `upgrade cleanup failed`, com o caminho e o erro.
+
+**Boards.** `board registered`, `board updated` e `board removed`, com o board, o título, quantos repositórios ele administra e quantos saíram dele. `board repository added`, com o repositório acrescentado a partir de um card. `board read`, com a quantidade de cards e a duração em `duration_ms`, marca uma leitura que deu certo; `board reading failed`, com o erro, uma que falhou, cuja falha a interface mostra. `board reading truncated` marca um board que passou do limite de cards de uma leitura, com o limite. `board reading not saved` marca uma leitura, ou a falha dela, que não foi gravada no banco. `task cards not updated`, com o board e o erro, marca uma leitura cujos cards não chegaram às tasks ativas.
 
 **Etapas.** `stage advanced`, `stage revisited` e `stage discarded` marcam cada movimento entre etapas, com a task e as etapas envolvidas.
 
