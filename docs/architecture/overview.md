@@ -17,7 +17,7 @@ internal/                todo o código Go
   prompts/               prompts padrão embutidos e os editados
   models/                modelos, esforços e padrões
   reviewmode/            quem revisa os steps e o padrão do app
-  repository/            os repositórios cadastrados: identidade no GitHub, clone e filtro
+  repository/            os repositórios cadastrados: identidade no GitHub, clone, filtro e a varredura da home
   upgrade/               leva as tasks de um banco com áreas de trabalho para os repositórios
   git/, gh/              rodam os binários; nada sabem de tasks
   editor/                abre o VS Code

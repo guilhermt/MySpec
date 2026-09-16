@@ -7,6 +7,7 @@ import {
   approvePR,
   approveStep,
   backToStage,
+  browseRepository,
   changeRepositoryPath,
   cleanAndStartStep,
   closeTask,
@@ -32,6 +33,7 @@ import {
   retryStep,
   reviewAgain,
   reviewStepMyself,
+  scanRepositories,
   sendMessage,
   setRepositoryFilter,
   setReviewMode,
@@ -84,21 +86,25 @@ describe("actions", () => {
   });
 });
 
-// The screen that asked shows the refusal where the user is, so these two
+// The screen that asked shows the refusal where the user is, so these
 // reject instead of filling the banner.
-describe("adding and moving a repository", () => {
+describe("scanning, adding and moving a repository", () => {
   it("delegate to the matching binding", async () => {
-    await addRepository();
+    await scanRepositories();
+    await addRepository("/home/dev/web");
+    await browseRepository();
     await changeRepositoryPath("repo-1");
 
-    expect(api.addRepository).toHaveBeenCalledOnce();
+    expect(api.scanRepositories).toHaveBeenCalledOnce();
+    expect(api.addRepository).toHaveBeenCalledWith("/home/dev/web");
+    expect(api.browseRepository).toHaveBeenCalledOnce();
     expect(api.changeRepositoryPath).toHaveBeenCalledWith("repo-1");
   });
 
   it("reject instead of using the banner", async () => {
     vi.mocked(api.addRepository).mockRejectedValueOnce(new Error("not a git repository"));
 
-    await expect(addRepository()).rejects.toThrow("not a git repository");
+    await expect(addRepository("/home/dev/web")).rejects.toThrow("not a git repository");
     expect(useAppStore.getState().error).toBeNull();
   });
 });

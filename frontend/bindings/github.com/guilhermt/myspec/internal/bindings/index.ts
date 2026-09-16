@@ -46,6 +46,7 @@ export type {
     QuestionEntry,
     QuestionOption,
     Repository,
+    RepositoryCandidate,
     Review,
     ReviewFile,
     Situation,

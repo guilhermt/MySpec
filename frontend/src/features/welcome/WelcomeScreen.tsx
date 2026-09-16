@@ -1,8 +1,7 @@
 import { FolderPlus } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { messageOf } from "@/lib/errors";
-import { addRepository } from "@/store/actions";
+import { AddRepositoryDialog } from "@/features/repositories/AddRepositoryDialog";
 
 /** AppMark is the logo of the app, on the screens that stand in for the product. */
 export function AppMark() {
@@ -28,22 +27,9 @@ export function AppMark() {
 }
 
 export function WelcomeScreen() {
-  const [adding, setAdding] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  // A registration that goes through swaps this screen for the product by
+  // A registration through the dialog swaps this screen for the product by
   // itself, through the state.
-  const add = async () => {
-    setAdding(true);
-    setError(null);
-    try {
-      await addRepository();
-    } catch (failure) {
-      setError(messageOf(failure));
-    } finally {
-      setAdding(false);
-    }
-  };
+  const [adding, setAdding] = useState(false);
 
   return (
     <main className="flex h-dvh items-center justify-center bg-background px-6 text-foreground">
@@ -56,17 +42,12 @@ export function WelcomeScreen() {
           <p className="text-muted-foreground">Register a repository to start creating tasks.</p>
         </header>
 
-        <Button onClick={() => void add()} className="w-full" disabled={adding}>
+        <Button onClick={() => setAdding(true)} className="w-full">
           <FolderPlus />
           Add repository
         </Button>
-
-        {error !== null && (
-          <p role="alert" className="text-sm text-destructive">
-            {error}
-          </p>
-        )}
       </div>
+      <AddRepositoryDialog open={adding} onOpenChange={setAdding} />
     </main>
   );
 }

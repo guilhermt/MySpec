@@ -6,6 +6,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
+
+	"github.com/guilhermt/myspec/internal/bindings"
 	"github.com/guilhermt/myspec/internal/repository"
 )
 
@@ -21,15 +24,15 @@ func clone(t *testing.T, f *fixture, name, owner, repo string) string {
 	return path
 }
 
-func TestAddRepositoryRegistersTheFolderTheUserChose(t *testing.T) {
+func TestBrowseRepositoryRegistersTheFolderTheUserChose(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
 	path := clone(t, f, "web", "dev", "web")
 	f.picker.answer(path, true, nil)
 
-	if err := f.repoService.AddRepository(); err != nil {
-		t.Fatalf("AddRepository() = %v, want nil", err)
+	if err := f.repoService.BrowseRepository(); err != nil {
+		t.Fatalf("BrowseRepository() = %v, want nil", err)
 	}
 
 	got := f.state.GetState().Repositories
@@ -45,28 +48,28 @@ func TestAddRepositoryRegistersTheFolderTheUserChose(t *testing.T) {
 	}
 }
 
-func TestAddRepositoryCancelledChangesNothing(t *testing.T) {
+func TestBrowseRepositoryCancelledChangesNothing(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
 	f.picker.answer("", false, nil)
 
-	if err := f.repoService.AddRepository(); err != nil {
-		t.Fatalf("AddRepository() = %v, want nil", err)
+	if err := f.repoService.BrowseRepository(); err != nil {
+		t.Fatalf("BrowseRepository() = %v, want nil", err)
 	}
 	if got := f.state.GetState().Repositories; len(got) != 0 {
 		t.Errorf("repositories = %+v, want none", got)
 	}
 }
 
-func TestAddRepositoryRefusesAFolderTheAppCannotTake(t *testing.T) {
+func TestBrowseRepositoryRefusesAFolderTheAppCannotTake(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
 	registered := clone(t, f, "web", "dev", "web")
 	f.picker.answer(registered, true, nil)
-	if err := f.repoService.AddRepository(); err != nil {
-		t.Fatalf("AddRepository() = %v, want nil", err)
+	if err := f.repoService.BrowseRepository(); err != nil {
+		t.Fatalf("BrowseRepository() = %v, want nil", err)
 	}
 
 	// The refusals share the fixture and run in order, because each one reads
@@ -91,16 +94,75 @@ func TestAddRepositoryRefusesAFolderTheAppCannotTake(t *testing.T) {
 	for _, refusal := range refusals {
 		f.picker.answer(refusal.path, true, nil)
 
-		err := f.repoService.AddRepository()
+		err := f.repoService.BrowseRepository()
 		if err == nil {
-			t.Fatalf("%s: AddRepository() = nil, want the folder refused", refusal.name)
+			t.Fatalf("%s: BrowseRepository() = nil, want the folder refused", refusal.name)
 		}
 		if !strings.Contains(err.Error(), refusal.want) {
-			t.Errorf("%s: AddRepository() error = %q, want it to mention %q", refusal.name, err, refusal.want)
+			t.Errorf("%s: BrowseRepository() error = %q, want it to mention %q", refusal.name, err, refusal.want)
 		}
 		if got := f.state.GetState().Repositories; len(got) != 1 {
 			t.Errorf("%s: repositories = %+v, want only the one registered", refusal.name, got)
 		}
+	}
+}
+
+func TestAddRepositoryRegistersTheCloneAtThePathWithoutThePicker(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	path := clone(t, f, "web", "dev", "web")
+
+	if err := f.repoService.AddRepository(path); err != nil {
+		t.Fatalf("AddRepository() = %v, want nil", err)
+	}
+
+	got := f.state.GetState().Repositories
+	if len(got) != 1 || got[0].FullName != "dev/web" || got[0].Path != path {
+		t.Errorf("repositories = %+v, want dev/web at %s", got, path)
+	}
+	if _, _, calls := f.picker.asked(); calls != 0 {
+		t.Errorf("the picker was opened %d times, want none", calls)
+	}
+}
+
+func TestAddRepositoryRefusesAFolderTheAppCannotTake(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	folder := t.TempDir()
+
+	err := f.repoService.AddRepository(folder)
+	if want := folder + " is not the root of a git repository."; err == nil || err.Error() != want {
+		t.Errorf("AddRepository() error = %v, want %q", err, want)
+	}
+	if got := f.state.GetState().Repositories; len(got) != 0 {
+		t.Errorf("repositories = %+v, want none", got)
+	}
+}
+
+func TestScanRepositoriesListsTheClonesUnderTheHomeFolder(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	web := filepath.Join(f.scanRoot, "web")
+	f.register(t, web)
+	api := filepath.Join(f.scanRoot, "projects", "api")
+	if err := os.MkdirAll(filepath.Join(api, ".git"), 0o750); err != nil {
+		t.Fatalf("MkdirAll(%s) = %v, want nil", api, err)
+	}
+	f.setIdentity(api, repository.Identity{Owner: "dev", Name: "api"})
+
+	got, err := f.repoService.ScanRepositories()
+	if err != nil {
+		t.Fatalf("ScanRepositories() = %v, want nil", err)
+	}
+	want := []bindings.RepositoryCandidate{
+		{Owner: "dev", Name: "api", FullName: "dev/api", Path: api},
+		{Owner: "dev", Name: "web", FullName: "dev/web", Path: web, Registered: true},
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("ScanRepositories() mismatch (-want +got):\n%s", diff)
 	}
 }
 
@@ -110,8 +172,8 @@ func TestChangeRepositoryPathOpensAtTheParentOfTheClone(t *testing.T) {
 	f := newFixture(t)
 	first := clone(t, f, "web", "dev", "web")
 	f.picker.answer(first, true, nil)
-	if err := f.repoService.AddRepository(); err != nil {
-		t.Fatalf("AddRepository() = %v, want nil", err)
+	if err := f.repoService.BrowseRepository(); err != nil {
+		t.Fatalf("BrowseRepository() = %v, want nil", err)
 	}
 
 	moved := clone(t, f, "web-moved", "dev", "web")
@@ -138,8 +200,8 @@ func TestChangeRepositoryPathRefusesAnotherRepository(t *testing.T) {
 	f := newFixture(t)
 	first := clone(t, f, "web", "dev", "web")
 	f.picker.answer(first, true, nil)
-	if err := f.repoService.AddRepository(); err != nil {
-		t.Fatalf("AddRepository() = %v, want nil", err)
+	if err := f.repoService.BrowseRepository(); err != nil {
+		t.Fatalf("BrowseRepository() = %v, want nil", err)
 	}
 
 	other := clone(t, f, "api", "dev", "api")

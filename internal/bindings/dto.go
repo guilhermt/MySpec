@@ -18,6 +18,16 @@ type Repository struct {
 	ArchivedTasks int    `json:"archivedTasks"`
 }
 
+// RepositoryCandidate is a clone of a GitHub repository the scan found under
+// the home folder.
+type RepositoryCandidate struct {
+	Owner      string `json:"owner"`
+	Name       string `json:"name"`
+	FullName   string `json:"fullName"` // owner/name
+	Path       string `json:"path"`
+	Registered bool   `json:"registered"` // the repository is registered, at this path or another
+}
+
 // MigrationTask is one task a refused migration is about.
 type MigrationTask struct {
 	Name      string `json:"name"`

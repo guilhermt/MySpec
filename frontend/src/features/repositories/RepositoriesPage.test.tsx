@@ -33,26 +33,13 @@ describe("RepositoriesPage", () => {
     expect(screen.getByText("The clone at /home/dev/projects/api is missing.")).toBeInTheDocument();
   });
 
-  it("registers another repository", async () => {
+  it("opens the dialog that registers another repository", async () => {
     const { user } = page();
 
     await user.click(screen.getByRole("button", { name: /^Add repository/ }));
 
-    expect(api.addRepository).toHaveBeenCalledOnce();
-    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-  });
-
-  it("shows a folder the app refuses, where the user is", async () => {
-    vi.mocked(api.addRepository).mockRejectedValueOnce(
-      new Error("/home/dev/notes is not the root of a git repository."),
-    );
-    const { user } = page();
-
-    await user.click(screen.getByRole("button", { name: /^Add repository/ }));
-
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "/home/dev/notes is not the root of a git repository.",
-    );
+    expect(await screen.findByRole("dialog", { name: "Add repository" })).toBeInTheDocument();
+    expect(api.scanRepositories).toHaveBeenCalledOnce();
   });
 
   it("points a repository at another clone", async () => {

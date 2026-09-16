@@ -234,7 +234,9 @@ describe("sessionKey", () => {
 describe("api", () => {
   it("calls one binding per method", async () => {
     await wails.api.getState();
-    await wails.api.addRepository();
+    await wails.api.scanRepositories();
+    await wails.api.addRepository("/home/dev/web");
+    await wails.api.browseRepository();
     await wails.api.changeRepositoryPath("repo-1");
     await wails.api.removeRepository("repo-1");
     await wails.api.setRepositoryFilter("repo-1");
@@ -289,9 +291,9 @@ describe("api", () => {
     await wails.api.previewDelete("task-1");
     await wails.api.viewSituation("situation-1");
 
-    expect(Call.ByID).toHaveBeenCalledTimes(47);
+    expect(Call.ByID).toHaveBeenCalledTimes(49);
     const ids = vi.mocked(Call.ByID).mock.calls.map(([id]) => id);
-    expect(new Set(ids).size).toBe(47);
+    expect(new Set(ids).size).toBe(49);
   });
 
   it("opens a link in the browser of the desktop, never in the webview", async () => {

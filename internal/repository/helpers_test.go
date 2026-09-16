@@ -221,6 +221,7 @@ type fixture struct {
 	events   *recorder
 	answers  map[string]answer // by path; a path not in it has no origin
 	counts   map[string][2]int // by id: active and archived tasks
+	scanRoot string            // the folder the scan starts at
 }
 
 func newFixture(t *testing.T) fixture {
@@ -233,6 +234,7 @@ func newFixture(t *testing.T) fixture {
 		events:   &recorder{},
 		answers:  map[string]answer{},
 		counts:   map[string][2]int{},
+		scanRoot: t.TempDir(),
 	}
 	ids := 0
 	f.service = repository.New(repository.Deps{
@@ -257,6 +259,7 @@ func newFixture(t *testing.T) fixture {
 		},
 		OnChange:      func() { f.events.add("change") },
 		OnPathChanged: func(id string) { f.events.add("path changed " + id) },
+		ScanRoot:      f.scanRoot,
 	})
 	return f
 }

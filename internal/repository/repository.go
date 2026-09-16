@@ -1,6 +1,7 @@
 // Package repository owns the repositories the user registered: their identity
 // on GitHub, the clone each one is tied to and whether that clone is still
-// there. What a repository holds, its tasks, belongs to internal/task.
+// there. It also finds the clones under the home folder. What a repository
+// holds, its tasks, belongs to internal/task.
 package repository
 
 import (

@@ -1215,3 +1215,23 @@ func TestRefusedStateCarriesTheCasesAndNothingElse(t *testing.T) {
 		t.Errorf("RefusedState() mismatch (-want +got):\n%s", diff)
 	}
 }
+
+func TestFromCandidatesCarriesTheIdentityAndWhetherItIsRegistered(t *testing.T) {
+	t.Parallel()
+
+	candidates := []repository.Candidate{
+		{Identity: repository.Identity{Owner: "dev", Name: "api"}, Path: "/home/dev/api"},
+		{Identity: repository.Identity{Owner: "dev", Name: "web"}, Path: "/home/dev/web", Registered: true},
+	}
+
+	want := []bindings.RepositoryCandidate{
+		{Owner: "dev", Name: "api", FullName: "dev/api", Path: "/home/dev/api"},
+		{Owner: "dev", Name: "web", FullName: "dev/web", Path: "/home/dev/web", Registered: true},
+	}
+	if diff := cmp.Diff(want, bindings.FromCandidates(candidates)); diff != "" {
+		t.Errorf("FromCandidates() mismatch (-want +got):\n%s", diff)
+	}
+	if got := bindings.FromCandidates(nil); got == nil {
+		t.Error("FromCandidates(nil) = nil, want an empty slice")
+	}
+}

@@ -14,14 +14,20 @@ Só uma instância do app roda por vez. Abrir uma segunda traz para a frente a j
 
 As configurações têm a página **Repositories**, ao lado de **Defaults** e dos prompts. Ela lista os repositórios cadastrados, em ordem alfabética de `dono/nome`, cada um com o `dono/nome`, o caminho local, a contagem de tasks ativas e arquivadas, o aviso de clone inexistente quando é o caso, e as ações **Change path** e **Remove**. Acima da lista fica **Add repository**.
 
-**Add repository** abre o seletor de pastas nativo. Com a pasta escolhida, o produto verifica que ela é a raiz de um repositório git, lê o remote `origin` e confere que `dono/nome` ainda não está cadastrado. O remote precisa ser do `github.com`, em SSH (`git@github.com:dono/nome.git`) ou HTTPS (`https://github.com/dono/nome.git`), com ou sem o sufixo `.git`, porque é o GitHub que dá valor a tudo o que vem depois. Uma recusa aparece na própria página, sem diálogo extra, e nada é cadastrado:
+**Add repository** abre um diálogo do próprio produto, que varre a pasta home até 6 pastas de profundidade, pulando pastas ocultas e `node_modules` e sem nunca descer para dentro de um repositório, de uma worktree ou de um submódulo. O diálogo lista os clones de repositórios do GitHub encontrados, por `dono/nome` e caminho, em ordem alfabética, com um filtro por nome ou caminho. Um clone sem `origin` ou com `origin` fora do GitHub não aparece. Os clones de repositórios já cadastrados aparecem desabilitados, com `Registered`. Cada abertura do diálogo varre de novo.
+
+O usuário marca um ou mais clones e confirma com **Add repository**, ou **Add N repositories** com vários marcados. Cada um é cadastrado por vez, na ordem da lista. Com todos cadastrados, o diálogo fecha. Uma recusa aparece sob a linha do clone recusado, que continua marcado, e o diálogo fica aberto, com os que passaram marcados como `Registered`.
+
+**Browse…**, no mesmo diálogo, abre o seletor de pastas nativo, para um clone fora do alcance da varredura. Cancelar o seletor deixa o diálogo aberto; uma recusa aparece no próprio diálogo.
+
+Em qualquer dos caminhos, o produto verifica que a pasta é a raiz de um repositório git, lê o remote `origin` e confere que `dono/nome` ainda não está cadastrado. O remote precisa ser do `github.com`, em SSH (`git@github.com:dono/nome.git`) ou HTTPS (`https://github.com/dono/nome.git`), com ou sem o sufixo `.git`, porque é o GitHub que dá valor a tudo o que vem depois. Uma pasta recusada não é cadastrada, com uma destas razões:
 
 - `<caminho> is not the root of a git repository.`
 - `<caminho> has no origin remote.`
 - `The origin remote of <caminho> is not on GitHub: <url>.`
 - `<dono/nome> is already registered at <caminho cadastrado>.`
 
-**Change path** abre o mesmo seletor e aplica as mesmas verificações, com uma a mais: o `dono/nome` lido da pasta nova tem de ser o do repositório. Uma pasta de outro repositório é recusada com `<caminho> is a clone of <outro dono/nome>, not of <dono/nome>.` Serve para quando o clone foi movido ou refeito em outro lugar. Trocar o caminho não mexe nas worktrees já criadas nem nas tasks: uma task cujo primeiro step ainda não criou a worktree passa a criá-la a partir do clone novo, e um step bloqueado por clone inexistente é destravado por **Tentar de novo**.
+**Change path** abre o seletor de pastas nativo e aplica as mesmas verificações, com uma a mais: o `dono/nome` lido da pasta nova tem de ser o do repositório. Uma pasta de outro repositório é recusada com `<caminho> is a clone of <outro dono/nome>, not of <dono/nome>.` Serve para quando o clone foi movido ou refeito em outro lugar. Trocar o caminho não mexe nas worktrees já criadas nem nas tasks: uma task cujo primeiro step ainda não criou a worktree passa a criá-la a partir do clone novo, e um step bloqueado por clone inexistente é destravado por **Tentar de novo**.
 
 **Remove** só é possível com o repositório sem nenhuma task, ativa ou arquivada. Com tasks, a ação fica desabilitada e o produto diz o que impede: `<dono/nome> has N active tasks and M archived tasks. Delete them before removing the repository.` Um repositório sem tasks é removido após confirmação, e nada é apagado no disco: nem o clone nem as worktrees, que não existem sem tasks.
 
@@ -37,7 +43,7 @@ Uma worktree já criada continua sendo usada normalmente: as sessões rodam nela
 
 ### Tela de boas-vindas e barra lateral
 
-Enquanto nenhum repositório está cadastrado, o produto mostra a tela de boas-vindas no lugar da task, com o nome do produto, a linha `Register a repository to start creating tasks.` e o botão **Add repository**, que cadastra como a página faz. Ao cadastrar o primeiro repositório, a tela dá lugar à visão principal. Com repositórios cadastrados e nenhuma task, a área da task mostra um estado vazio com o atalho para criar a primeira.
+Enquanto nenhum repositório está cadastrado, o produto mostra a tela de boas-vindas no lugar da task, com o nome do produto, a linha `Register a repository to start creating tasks.` e o botão **Add repository**, que abre o mesmo diálogo da página. Ao cadastrar o primeiro repositório, a tela dá lugar à visão principal. Com repositórios cadastrados e nenhuma task, a área da task mostra um estado vazio com o atalho para criar a primeira.
 
 A barra lateral tem, de cima para baixo:
 
