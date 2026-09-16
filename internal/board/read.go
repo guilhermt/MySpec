@@ -13,6 +13,8 @@ const (
 	closedWindow = 14 * 24 * time.Hour
 	// maxCards is the most issues one reading takes.
 	maxCards = 2000
+	// maxSuggestionItems is the most items the repository suggestion pages through.
+	maxSuggestionItems = 5000
 	// batchSize is how many issues one batch query reads.
 	batchSize = 50
 	// readTimeout bounds a whole reading.
@@ -25,6 +27,9 @@ const (
 	openQuery   = "is:issue is:open"
 	closedQuery = "is:issue is:closed closed:>="
 )
+
+// suggestionQuery is the item query of the repository suggestion.
+const suggestionQuery = "is:issue"
 
 // dateLayout is how the closed query writes its date.
 const dateLayout = "2006-01-02"
@@ -59,17 +64,18 @@ func newAssembly(owner string, st structure, reading *Reading, index map[string]
 	return a
 }
 
-// read reads the board at loc. extra are keys of cards that must be read even
+// read reads the board b. extra are keys of cards that must be read even
 // when they fall outside the reading: the cards of active tasks. It returns
 // them apart from the reading, by key. It fails with a *Failure.
-func (s *Service) read(ctx context.Context, loc Locator, extra []string) (Reading, map[string]Card, error) {
+func (s *Service) read(ctx context.Context, b Board, extra []string) (Reading, map[string]Card, error) {
 	now := s.now()
+	loc := locatorOf(b)
 	st, err := s.readStructure(ctx, loc)
 	if err != nil {
 		return Reading{}, nil, err
 	}
 
-	nodes, err := s.readAllItems(ctx, loc, st.Title, now)
+	nodes, err := s.readAllItems(ctx, loc, b.ID, st.Title, now)
 	if err != nil {
 		return Reading{}, nil, err
 	}
@@ -145,7 +151,8 @@ type itemCard struct {
 
 // readAllItems pages through the open issues, then the ones closed in the
 // closed window, up to maxCards, skipping what is not an issue and repeats.
-func (s *Service) readAllItems(ctx context.Context, loc Locator, title string, now time.Time) ([]itemCard, error) {
+// boardID and title name the board in the log.
+func (s *Service) readAllItems(ctx context.Context, loc Locator, boardID, title string, now time.Time) ([]itemCard, error) {
 	queries := []string{openQuery, closedQuery + now.Add(-closedWindow).Format(dateLayout)}
 	var cards []itemCard
 	seen := map[string]bool{}
@@ -161,7 +168,7 @@ func (s *Service) readAllItems(ctx context.Context, loc Locator, title string, n
 					continue
 				}
 				if len(cards) == maxCards {
-					s.log.Warn("board reading truncated", "board", title, "cards", maxCards)
+					s.log.Warn("board reading truncated", "board", boardID, "title", title, "cards", maxCards)
 					return cards, nil
 				}
 				seen[item.Content.key()] = true

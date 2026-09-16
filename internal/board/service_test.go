@@ -3,6 +3,7 @@ package board_test
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/guilhermt/myspec/internal/board"
 	"github.com/guilhermt/myspec/internal/gh"
+	"github.com/guilhermt/myspec/internal/repository"
 	"github.com/guilhermt/myspec/internal/task"
 )
 
@@ -514,5 +516,264 @@ func TestRefreshCardKeepsAReadingThatFinishedWhileTheCardWasRead(t *testing.T) {
 		if diff := cmp.Diff([]string{"Login screen", "Issue 2", "Issue 3"}, titles); diff != "" {
 			t.Errorf("the %s holds cards (-want +got):\n%s", name, diff)
 		}
+	}
+}
+
+// otherURL is the URL of a board the fixture did not register.
+const otherURL = "https://github.com/orgs/acme/projects/4"
+
+func TestPreviewRefusesWhatItCannotRegister(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		url    string
+		answer reply
+		want   error
+	}{
+		{
+			name: "an invalid URL",
+			url:  "https://github.com/acme/web",
+			want: &board.Refusal{Reason: board.RefusalInvalidURL},
+		},
+		{
+			name:   "a registered board, whatever the case of its owner",
+			url:    "https://github.com/orgs/ACME/projects/3/views/1",
+			answer: structure("Roadmap on GitHub"),
+			want:   &board.Refusal{Reason: board.RefusalRegistered, Title: "Roadmap"},
+		},
+		{
+			name:   "a board that is not found",
+			url:    otherURL,
+			answer: data(node{"viewer": node{"login": "dev"}, "owner": node{"projectV2": nil}}),
+			want:   &board.Failure{Reason: board.ReasonNotFound},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			f := newFixture(t, board.Stored{})
+			f.github.answer(structureMatch, "", tt.answer)
+
+			_, err := f.service.Preview(t.Context(), tt.url)
+
+			if diff := cmp.Diff(tt.want, err); diff != "" {
+				t.Errorf("Preview() error (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestPreviewPreMarksTheFinalStatusesAndSuggestsTheRepositories(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, board.Stored{})
+	concluded := board.Option{ID: "opt-concluded", Name: " Concluído "}
+	f.github.answer(structureMatch, "", structureWith("Platform", todo, done, concluded))
+	f.github.answer(reposMatch, suggestQ,
+		reposPage("page-2", "acme/web", "acme/docs", "Acme/Web", "acme/ops"),
+		reposPage("", "acme/infra", "acme/docs", "acme/web"),
+	)
+	f.repos.items = []repository.Repository{
+		{ID: "repo-web", Owner: "acme", Name: "web", Path: "/src/web"},
+		{ID: "repo-ops", Owner: "acme", Name: "ops", BoardID: boardID},
+	}
+	f.repos.scan = []repository.Candidate{
+		{Identity: repository.Identity{Owner: "acme", Name: "web"}, Path: "/src/web", Registered: true},
+		{Identity: repository.Identity{Owner: "acme", Name: "docs"}, Path: "/src/z/docs"},
+		{Identity: repository.Identity{Owner: "ACME", Name: "docs"}, Path: "/src/a/docs"},
+	}
+
+	got, err := f.service.Preview(t.Context(), otherURL)
+	if err != nil {
+		t.Fatalf("Preview() = %v, want nil", err)
+	}
+
+	want := board.Preview{
+		Locator:   board.Locator{Owner: "acme", OwnerType: board.OwnerOrganization, Number: 4},
+		URL:       "https://github.com/orgs/acme/projects/3",
+		Title:     "Platform",
+		HasStatus: true,
+		Statuses: []board.StatusOption{
+			{Option: todo},
+			{Option: done, Final: true},
+			{Option: concluded, Final: true},
+		},
+		Repositories: []board.RepositoryOption{
+			{
+				Identity: repository.Identity{Owner: "acme", Name: "docs"},
+				Cards:    2,
+				Checked:  true,
+				Link:     board.LinkClone,
+				Path:     "/src/a/docs",
+				Clones:   []string{"/src/a/docs", "/src/z/docs"},
+			},
+			{
+				Identity: repository.Identity{Owner: "acme", Name: "infra"},
+				Cards:    1,
+				Checked:  true,
+				Link:     board.LinkUncloned,
+				Clones:   []string{},
+			},
+			{
+				Identity:     repository.Identity{Owner: "acme", Name: "ops"},
+				Cards:        1,
+				Link:         board.LinkOtherBoard,
+				RepositoryID: "repo-ops",
+				Clones:       []string{},
+				OtherBoard:   "Roadmap",
+			},
+			{
+				Identity:     repository.Identity{Owner: "acme", Name: "web"},
+				Cards:        3,
+				Checked:      true,
+				Link:         board.LinkRegistered,
+				RepositoryID: "repo-web",
+				Path:         "/src/web",
+				Clones:       []string{},
+			},
+		},
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("Preview() (-want +got):\n%s", diff)
+	}
+	if calls := f.github.received(reposMatch); len(calls) != 2 || calls[1].vars["cursor"] != "page-2" {
+		t.Errorf("the suggestion made the calls %+v, want two pages", calls)
+	}
+}
+
+func TestAddRegistersTheBoardWithItsRepositoriesAndReadsIt(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, board.Stored{})
+	f.github.answer(structureMatch, "", structure("Platform"))
+	f.github.answer(itemsMatch, openQ, itemsPage("", item(issueNode("acme/web", 1), statusValue(todo))))
+	f.github.answer(itemsMatch, closedQ, itemsPage(""))
+	f.repos.items = []repository.Repository{{ID: "repo-api", Owner: "acme", Name: "api"}}
+	f.clones["/src/web"] = repository.Identity{Owner: "Acme", Name: "Web"}
+	f.clones["/src/api"] = repository.Identity{Owner: "acme", Name: "api"}
+
+	got, err := f.service.Add(t.Context(), otherURL, board.SaveParams{
+		FinalStatuses: []string{done.ID, "opt-gone"},
+		Repositories: []board.RepositoryChoice{
+			{Owner: "acme", Name: "web", Path: "/src/web/"},
+			{Owner: "acme", Name: "infra"},
+			{Owner: "acme", Name: "api", Path: "/src/api"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Add() = %v, want nil", err)
+	}
+	waitReading(t, f.service, got.ID)
+
+	want := board.Board{
+		ID:            "id-3",
+		Owner:         "acme",
+		OwnerType:     board.OwnerOrganization,
+		Number:        4,
+		Title:         "Platform",
+		URL:           "https://github.com/orgs/acme/projects/3",
+		FinalStatuses: []string{done.ID},
+		CreatedAt:     base,
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("Add() (-want +got):\n%s", diff)
+	}
+	wantLinks := []board.Link{
+		{NewID: "id-1", Owner: "acme", Name: "web", Path: "/src/web", CreatedAt: base},
+		{NewID: "id-2", Owner: "acme", Name: "infra", CreatedAt: base},
+		{RepositoryID: "repo-api", Path: "/src/api"},
+	}
+	if diff := cmp.Diff(wantLinks, f.store.links); diff != "" {
+		t.Errorf("the links stored (-want +got):\n%s", diff)
+	}
+	if boards := f.service.List(); len(boards) != 2 || boards[0].ID != "id-3" {
+		t.Errorf("List() = %+v, want Platform before Roadmap", boards)
+	}
+	if stored := f.service.Stored(got.ID); stored.Reading == nil || len(stored.Reading.Cards) != 1 {
+		t.Errorf("Stored() = %+v, want the reading of the new board", stored)
+	}
+}
+
+func TestAddRefusesAClonePathOfAnotherRepository(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, board.Stored{})
+	f.github.answer(structureMatch, "", structure("Platform"))
+	f.clones["/src/web"] = repository.Identity{Owner: "acme", Name: "api"}
+
+	_, err := f.service.Add(t.Context(), otherURL, board.SaveParams{
+		Repositories: []board.RepositoryChoice{{Owner: "acme", Name: "web", Path: "/src/web"}},
+	})
+
+	want := &repository.Refusal{Reason: repository.ReasonOtherRepository, Path: "/src/web", Other: "acme/api", Repository: "acme/web"}
+	if diff := cmp.Diff(error(want), err); diff != "" {
+		t.Errorf("Add() error (-want +got):\n%s", diff)
+	}
+	if boards := f.service.List(); len(boards) != 1 {
+		t.Errorf("List() = %+v, want only the board registered before", boards)
+	}
+}
+
+func TestUpdateReleasesTheRepositoriesLeftOut(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, board.Stored{})
+	f.github.answer(structureMatch, "", structure("Roadmap v2"))
+	f.repos.items = []repository.Repository{
+		{ID: "repo-web", Owner: "acme", Name: "web", Path: "/src/web", BoardID: boardID},
+		{ID: "repo-api", Owner: "acme", Name: "api", BoardID: boardID},
+		{ID: "repo-docs", Owner: "acme", Name: "docs", BoardID: boardID},
+	}
+	f.tasks["repo-docs"] = 1
+
+	err := f.service.Update(t.Context(), boardID, board.SaveParams{
+		FinalStatuses: []string{done.ID},
+		Repositories:  []board.RepositoryChoice{{Owner: "ACME", Name: "web", Path: "/src/other"}},
+	})
+	if err != nil {
+		t.Fatalf("Update() = %v, want nil", err)
+	}
+
+	wantReleases := []board.Release{
+		{RepositoryID: "repo-api", Remove: true},
+		{RepositoryID: "repo-docs"},
+	}
+	if diff := cmp.Diff(wantReleases, f.store.releases); diff != "" {
+		t.Errorf("the releases stored (-want +got):\n%s", diff)
+	}
+	if diff := cmp.Diff([]board.Link{{RepositoryID: "repo-web"}}, f.store.links); diff != "" {
+		t.Errorf("the links stored (-want +got):\n%s", diff)
+	}
+	if b, _ := f.service.Get(boardID); b.Title != "Roadmap v2" || !slices.Equal(b.FinalStatuses, []string{done.ID}) {
+		t.Errorf("Get() = %+v, want the new title and final statuses", b)
+	}
+}
+
+func TestRemoveReleasesEveryRepositoryOfTheBoard(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, board.Stored{})
+	f.repos.items = []repository.Repository{
+		{ID: "repo-web", Owner: "acme", Name: "web", Path: "/src/web", BoardID: boardID},
+		{ID: "repo-api", Owner: "acme", Name: "api", BoardID: boardID},
+		{ID: "repo-free", Owner: "acme", Name: "free"},
+	}
+
+	toNoBoard, removed, err := f.service.RemovalPreview(boardID)
+	if err != nil || toNoBoard != 1 || removed != 1 {
+		t.Errorf("RemovalPreview() = %d, %d, %v, want 1, 1, nil", toNoBoard, removed, err)
+	}
+	if err := f.service.Remove(t.Context(), boardID); err != nil {
+		t.Fatalf("Remove() = %v, want nil", err)
+	}
+
+	wantReleases := []board.Release{
+		{RepositoryID: "repo-web"},
+		{RepositoryID: "repo-api", Remove: true},
+	}
+	if diff := cmp.Diff(wantReleases, f.store.releases); diff != "" {
+		t.Errorf("the releases stored (-want +got):\n%s", diff)
+	}
+	if _, ok := f.service.Get(boardID); ok {
+		t.Error("Get() found the board removed")
+	}
+	if boards, _ := f.store.ListBoards(t.Context()); len(boards) != 0 {
+		t.Errorf("the store holds %+v, want no board", boards)
 	}
 }

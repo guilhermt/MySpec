@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/guilhermt/myspec/internal/gh"
+	"github.com/guilhermt/myspec/internal/repository"
 	"github.com/guilhermt/myspec/internal/task"
 )
 
@@ -47,6 +48,16 @@ const itemsQuery = `query($owner: String!, $number: Int!, $q: String!, $cursor: 
   owner: %s(login: $owner) { projectV2(number: $number) {
     items(first: 100, after: $cursor, query: $q) { pageInfo { hasNextPage endCursor }
       nodes { ...values content { __typename ... on Issue { ...card } } } } } } }`
+
+// repositoriesQuery reads one page of the repositories of the items of a board
+// that match q. The %s is the owner type.
+const repositoriesQuery = `query($owner: String!, $number: Int!, $q: String!, $cursor: String) {
+  owner: %s(login: $owner) { projectV2(number: $number) {
+    items(first: 100, after: $cursor, query: $q) { pageInfo { hasNextPage endCursor }
+      nodes { content { ... on Issue { repository { nameWithOwner } } } } } } } }`
+
+// repositoryQuery reads the name of a repository as GitHub writes it.
+const repositoryQuery = `query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { nameWithOwner } }`
 
 // batchIssue reads one issue of a batch under an alias: the alias, the owner,
 // the name and the number.
@@ -322,6 +333,105 @@ func (s *Service) readItems(ctx context.Context, loc Locator, q, cursor string) 
 	}
 	items := data.Owner.ProjectV2.Items
 	return itemsPage{Items: items.Nodes, HasNextPage: items.PageInfo.HasNextPage, EndCursor: items.PageInfo.EndCursor}, nil
+}
+
+// suggestion is a repository the items of a board point to, with how many.
+type suggestion struct {
+	Identity repository.Identity
+	Cards    int
+}
+
+// readSuggestions pages through the items of the board at loc, up to
+// maxSuggestionItems, and counts the issues of each repository, ignoring case.
+// They come in the order GitHub first named them. It fails with a *Failure.
+func (s *Service) readSuggestions(ctx context.Context, loc Locator) ([]suggestion, error) {
+	var suggestions []suggestion
+	index := map[string]int{}
+	seen, cursor := 0, ""
+	for seen < maxSuggestionItems {
+		vars := gh.Vars{"owner": loc.Owner, "number": loc.Number, "q": suggestionQuery}
+		if cursor != "" {
+			vars["cursor"] = cursor
+		}
+		resp, err := s.github.GraphQL(ctx, fmt.Sprintf(repositoriesQuery, loc.OwnerType), vars)
+		if err != nil {
+			if hasNotFound(resp.Errors) {
+				return nil, &Failure{Reason: ReasonNotFound}
+			}
+			return nil, failureOf(err)
+		}
+		var data struct {
+			Owner *struct {
+				ProjectV2 *struct {
+					Items struct {
+						PageInfo struct {
+							HasNextPage bool   `json:"hasNextPage"`
+							EndCursor   string `json:"endCursor"`
+						} `json:"pageInfo"`
+						Nodes []struct {
+							Content *struct {
+								Repository repositoryNode `json:"repository"`
+							} `json:"content"`
+						} `json:"nodes"`
+					} `json:"items"`
+				} `json:"projectV2"`
+			} `json:"owner"`
+		}
+		if err := json.Unmarshal(resp.Data, &data); err != nil {
+			return nil, failureOf(fmt.Errorf("decode board repositories: %w", err))
+		}
+		if data.Owner == nil || data.Owner.ProjectV2 == nil {
+			return nil, &Failure{Reason: ReasonNotFound}
+		}
+		items := data.Owner.ProjectV2.Items
+		for _, n := range items.Nodes {
+			if seen == maxSuggestionItems {
+				break
+			}
+			seen++
+			if n.Content == nil || n.Content.Repository.NameWithOwner == "" {
+				continue
+			}
+			owner, name := n.Content.Repository.split()
+			key := strings.ToLower(n.Content.Repository.NameWithOwner)
+			i, ok := index[key]
+			if !ok {
+				i = len(suggestions)
+				index[key] = i
+				suggestions = append(suggestions, suggestion{Identity: repository.Identity{Owner: owner, Name: name}})
+			}
+			suggestions[i].Cards++
+		}
+		if !items.PageInfo.HasNextPage {
+			break
+		}
+		cursor = items.PageInfo.EndCursor
+	}
+	return suggestions, nil
+}
+
+// readRepository reads the repository owner/name as GitHub names it. ok is
+// false when GitHub has no such repository for this account. It fails with a
+// *Failure.
+func (s *Service) readRepository(ctx context.Context, owner, name string) (identity repository.Identity, ok bool, err error) {
+	resp, err := s.github.GraphQL(ctx, repositoryQuery, gh.Vars{"owner": owner, "name": name})
+	if err != nil {
+		if hasNotFound(resp.Errors) {
+			return repository.Identity{}, false, nil
+		}
+		return repository.Identity{}, false, failureOf(err)
+	}
+	var data struct {
+		Repository *repositoryNode `json:"repository"`
+	}
+	if err := json.Unmarshal(resp.Data, &data); err != nil {
+		return repository.Identity{}, false, failureOf(fmt.Errorf("decode repository: %w", err))
+	}
+	if data.Repository == nil || data.Repository.NameWithOwner == "" {
+		return repository.Identity{}, false, nil
+	}
+	o, n := data.Repository.split()
+	return repository.Identity{Owner: o, Name: n}, true, nil
 }
 
 // readBatch reads refs in chunks of batchSize, and returns the issues found by

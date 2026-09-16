@@ -38,7 +38,12 @@ const (
 	structureMatch = "viewer { login }"
 	itemsMatch     = "items(first: 100"
 	batchMatch     = "rateLimit { cost }"
+	reposMatch     = "content { ... on Issue { repository { nameWithOwner } } }"
+	repoMatch      = "repository(owner: $owner, name: $name)"
 )
+
+// suggestQ is the item query of the repository suggestion.
+const suggestQ = "is:issue"
 
 // The item queries of a reading at base.
 const (
@@ -52,7 +57,11 @@ type fixture struct {
 	store     *memStore
 	github    *fakeGitHub
 	reads     *readRecorder
-	taskCards []string // the keys TaskCards answers; set before a refresh
+	repos     *memRepositories
+	taskCards []string                       // the keys TaskCards answers; set before a refresh
+	clones    map[string]repository.Identity // what Identify answers, by path
+	tasks     map[string]int                 // the tasks of each repository, by id
+	ids       int                            // how many ids NewID gave
 }
 
 // newFixture registers the board "Roadmap" with the stored reading given, and
@@ -76,19 +85,40 @@ func newFixture(t *testing.T, stored board.Stored) *fixture {
 		},
 		github: &fakeGitHub{},
 		reads:  &readRecorder{},
+		repos:  &memRepositories{},
+		clones: map[string]repository.Identity{},
+		tasks:  map[string]int{},
 	}
 	f.service = board.New(board.Deps{
 		Store:        f.store,
 		GitHub:       f.github,
-		Repositories: &memRepositories{},
+		Repositories: f.repos,
+		Identify:     f.identify,
+		Counts:       func(id string) (int, int) { return f.tasks[id], 0 },
 		TaskCards:    func(string) []string { return f.taskCards },
 		Now:          func() time.Time { return base },
+		NewID:        f.newID,
 		OnRead:       f.reads.record,
 	})
 	if err := f.service.Sync(t.Context()); err != nil {
 		t.Fatalf("Sync() = %v, want nil", err)
 	}
 	return f
+}
+
+// identify is the identity of the clone at path, as clones holds it.
+func (f *fixture) identify(_ context.Context, path string) (repository.Identity, error) {
+	identity, ok := f.clones[path]
+	if !ok {
+		return repository.Identity{}, &repository.Refusal{Reason: repository.ReasonNotGitRoot, Path: path}
+	}
+	return identity, nil
+}
+
+// newID is id-1, id-2 and so on. Only the calls of the test goroutine use it.
+func (f *fixture) newID() string {
+	f.ids++
+	return "id-" + strconv.Itoa(f.ids)
 }
 
 // refresh refreshes the board and waits for the reading to end.
@@ -137,8 +167,10 @@ type memStore struct {
 	mu       sync.Mutex
 	boards   []board.Board
 	stored   map[string]board.Stored
-	saveErr  error // what SaveReading fails with, when set
-	failures int   // how many failures were saved
+	saveErr  error           // what SaveReading fails with, when set
+	failures int             // how many failures were saved
+	links    []board.Link    // the links of the last write
+	releases []board.Release // the releases of the last write
 }
 
 func (s *memStore) ListBoards(context.Context) ([]board.Board, error) {
@@ -148,19 +180,21 @@ func (s *memStore) ListBoards(context.Context) ([]board.Board, error) {
 	return slices.Clone(s.boards), nil
 }
 
-func (s *memStore) InsertBoard(_ context.Context, b board.Board, _ []board.Link) error {
+func (s *memStore) InsertBoard(_ context.Context, b board.Board, links []board.Link) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	s.links, s.releases = links, nil
 	s.boards = append(s.boards, b)
 	s.stored[b.ID] = board.Stored{}
 	return nil
 }
 
-func (s *memStore) UpdateBoard(_ context.Context, b board.Board, _ []board.Link, _ []board.Release) error {
+func (s *memStore) UpdateBoard(_ context.Context, b board.Board, links []board.Link, releases []board.Release) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	s.links, s.releases = links, releases
 	for i := range s.boards {
 		if s.boards[i].ID == b.ID {
 			s.boards[i] = b
@@ -169,10 +203,11 @@ func (s *memStore) UpdateBoard(_ context.Context, b board.Board, _ []board.Link,
 	return nil
 }
 
-func (s *memStore) DeleteBoard(_ context.Context, id string, _ []board.Release) error {
+func (s *memStore) DeleteBoard(_ context.Context, id string, releases []board.Release) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	s.links, s.releases = nil, releases
 	s.boards = slices.DeleteFunc(s.boards, func(b board.Board) bool { return b.ID == id })
 	delete(s.stored, id)
 	return nil
@@ -372,13 +407,18 @@ var (
 // structure answers the structure query for a board titled title, with a
 // Status field and the fields Priority, Estimate and Labels.
 func structure(title string) reply {
+	return structureWith(title, todo, doing, done)
+}
+
+// structureWith is structure with the options of the Status field given.
+func structureWith(title string, statuses ...board.Option) reply {
 	return data(node{
 		"viewer": node{"login": "dev"},
 		"owner": node{"projectV2": node{
 			"id":    projectID,
 			"title": title,
 			"url":   "https://github.com/orgs/acme/projects/3",
-			"field": node{"id": "field-status", "options": []board.Option{todo, doing, done}},
+			"field": node{"id": "field-status", "options": statuses},
 			"fields": nodes(
 				node{"name": "Title", "dataType": "TITLE"},
 				node{"name": "Status", "dataType": "SINGLE_SELECT"},
@@ -472,6 +512,19 @@ func itemsPage(cursor string, items ...node) reply {
 	return data(node{"owner": node{"projectV2": node{"items": node{
 		"pageInfo": node{"hasNextPage": cursor != "", "endCursor": cursor},
 		"nodes":    nodes(items...)["nodes"],
+	}}}})
+}
+
+// reposPage answers a page of the repository suggestion, one item per
+// repository named; a cursor means there is a next page.
+func reposPage(cursor string, fullNames ...string) reply {
+	items := make([]node, 0, len(fullNames))
+	for _, name := range fullNames {
+		items = append(items, node{"content": node{"repository": node{"nameWithOwner": name}}})
+	}
+	return data(node{"owner": node{"projectV2": node{"items": node{
+		"pageInfo": node{"hasNextPage": cursor != "", "endCursor": cursor},
+		"nodes":    items,
 	}}}})
 }
 
