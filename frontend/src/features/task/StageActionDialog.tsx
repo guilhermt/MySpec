@@ -8,20 +8,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { OrphanPRs, openPRsOf } from "@/features/task/OrphanPRs";
+import { OrphanPR, openPROf } from "@/features/task/OrphanPRs";
 import {
   backDescription,
   discardDescription,
   type StageAction,
   stageActionTitle,
 } from "@/features/task/stage-actions";
-import {
-  asTaskMode,
-  asTaskStage,
-  type PRPreview,
-  type TaskStage,
-  type TaskSummary,
-} from "@/lib/wails";
+import { asTaskMode, asTaskStage, type TaskStage, type TaskSummary } from "@/lib/wails";
 import { backToStage, discardStage } from "@/store/actions";
 
 export interface StageActionDialogProps {
@@ -48,18 +42,6 @@ export function StageActionDialog({
   const mode = asTaskMode(task.mode);
   const current = asTaskStage(task.stage);
   const back = action === "back";
-  // The state of the task already says what the pull requests are; only the
-  // deletion has to read them from git.
-  const prs = openPRsOf(task).map(
-    (repo): PRPreview => ({
-      repository: repo.repository,
-      repoPath: repo.repoPath,
-      number: repo.prNumber,
-      url: repo.prUrl,
-      state: repo.prState,
-    }),
-  );
-
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
@@ -71,7 +53,7 @@ export function StageActionDialog({
               : discardDescription(mode, stage, current)}
           </AlertDialogDescription>
         </AlertDialogHeader>
-        <OrphanPRs prs={prs} />
+        <OrphanPR pr={openPROf(task)} />
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>
           <AlertDialogAction

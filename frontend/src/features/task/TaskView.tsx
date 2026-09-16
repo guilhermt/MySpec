@@ -5,18 +5,18 @@ import { Composer } from "@/features/chat/Composer";
 import { Conversation } from "@/features/chat/Conversation";
 import { ArtifactPanel } from "@/features/task/ArtifactPanel";
 import { PlanProblemsNotice } from "@/features/task/PlanProblemsNotice";
-import { RepoBar } from "@/features/task/RepoBar";
-import { RepoPane } from "@/features/task/RepoPane";
-import { RepoTabs } from "@/features/task/RepoTabs";
+import { PRBar } from "@/features/task/PRBar";
+import { PRPane } from "@/features/task/PRPane";
 import { StageTrack } from "@/features/task/StageTrack";
 import { StepBar } from "@/features/task/StepBar";
 import { StepPane } from "@/features/task/StepPane";
 import { hasArtifacts } from "@/features/task/status";
 import { currentStepOf, hasStepSession, stepStage } from "@/features/task/step-status";
 import { TaskHeader } from "@/features/task/TaskHeader";
+import { prOf } from "@/lib/pull-requests";
 import { asTaskStage, sessionKey } from "@/lib/wails";
 import { loadTranscript } from "@/store/actions";
-import { useAppStore, useOpenRepo, useOpenStepTab, useRepos, useTask } from "@/store/app-store";
+import { useAppStore, useOpenStepTab, useTask } from "@/store/app-store";
 
 const CONVERSATION_PANEL = "conversation";
 const ARTIFACTS_PANEL = "artifacts";
@@ -51,8 +51,6 @@ export interface TaskViewProps {
 /** TaskView is the screen of one task: the conversation and what came out of it. */
 export function TaskView({ taskId }: TaskViewProps) {
   const task = useTask(taskId);
-  const repos = useRepos(taskId);
-  const openRepo = useOpenRepo(taskId);
   const stepTab = useOpenStepTab(taskId);
   const panelRef = usePanelRef();
   const [artifactsOpen, setArtifactsOpen] = useState(false);
@@ -65,10 +63,10 @@ export function TaskView({ taskId }: TaskViewProps) {
   const implementing = task !== null && asTaskStage(task.stage) === "implementation";
   const opening = task !== null && asTaskStage(task.stage) === "pr";
   const step = task !== null && implementing ? currentStepOf(task) : null;
-  const repo = repos.find((candidate) => candidate.repoPath === openRepo) ?? null;
+  const pr = task === null ? null : prOf(task);
   // The conversation on screen is the one of the stage the task is in: the tab
-  // of the step that runs in the implementation stage, the selected repository
-  // in the PR one. Both open a session of their own only once they get that far.
+  // of the step that runs in the implementation stage, the pull request in the
+  // PR one. Both open a session of their own only once they get that far.
   const stage = (() => {
     if (implementing) {
       if (step === null) {
@@ -79,7 +77,7 @@ export function TaskView({ taskId }: TaskViewProps) {
         : stepStage(step.number);
     }
     if (opening) {
-      return repo?.sessionStage ?? "";
+      return pr?.sessionStage ?? "";
     }
     return task?.stage ?? "";
   })();
@@ -150,15 +148,12 @@ export function TaskView({ taskId }: TaskViewProps) {
               <StepPane task={task} />
             </>
           ) : opening ? (
-            <>
-              <RepoTabs task={task} />
-              {repo !== null && (
-                <>
-                  <RepoBar task={task} repo={repo} />
-                  <RepoPane taskId={task.id} repo={repo} />
-                </>
-              )}
-            </>
+            pr !== null && (
+              <>
+                <PRBar task={task} pr={pr} />
+                <PRPane task={task} pr={pr} />
+              </>
+            )
           ) : (
             <>
               <Conversation taskId={task.id} stage={task.stage} session={task} />

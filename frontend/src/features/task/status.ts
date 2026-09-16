@@ -1,10 +1,10 @@
-import { repoStatusTone } from "@/features/task/repo-status";
+import { prStatusTone } from "@/features/task/pr-status";
 import { currentStepDisplay } from "@/features/task/step-status";
-import { closedCount, everyRepoHasPR, everyRepoReviewed, reposOf } from "@/lib/repos";
+import { isOpen, isReviewed, prOf } from "@/lib/pull-requests";
 import { situationTone, summaryLabel } from "@/lib/situations";
 import { stageLabel } from "@/lib/stages";
-import type { RepoPR, RepoStatus, TaskSummary } from "@/lib/wails";
-import { asRepoStatus, asSessionStatus, asTaskStage } from "@/lib/wails";
+import type { PullRequest, TaskSummary } from "@/lib/wails";
+import { asPRStatus, asSessionStatus, asTaskStage } from "@/lib/wails";
 
 /**
  * StatusTone is how urgent the status of a task looks. attention and error
@@ -12,44 +12,9 @@ import { asRepoStatus, asSessionStatus, asTaskStage } from "@/lib/wails";
  */
 export type StatusTone = "working" | "attention" | "paused" | "error" | "done" | "idle";
 
-// The states of a repository, from the one that most needs the user down to
-// the one that needs nothing. The task shows the first of these it can find.
-const REPO_PRIORITY: readonly RepoStatus[] = [
-  "blocked",
-  "draft_ready",
-  "awaiting_decision",
-  "awaiting_reply",
-  "ready_to_approve",
-  "in_review",
-  "merged",
-  "committing",
-  "drafting",
-  "reviewing",
-  "opening",
-  "closing",
-  "preparing",
-  "done",
-  "pr_closed",
-  "skipped",
-  "closed",
-];
-
-function repoRank(repo: RepoPR): number {
-  const rank = REPO_PRIORITY.indexOf(asRepoStatus(repo.status));
-  return rank === -1 ? REPO_PRIORITY.length : rank;
-}
-
-/** urgentRepo is the repository that speaks for the task, null when it has none. */
-function urgentRepo(repos: readonly RepoPR[]): RepoPR | null {
-  return repos.reduce<RepoPR | null>(
-    (chosen, repo) => (chosen === null || repoRank(repo) < repoRank(chosen) ? repo : chosen),
-    null,
-  );
-}
-
-// What the chosen repository is doing, in the few words the tree has room for.
-function repoPhrase(repo: RepoPR): string {
-  switch (asRepoStatus(repo.status)) {
+// What the pull request is doing, in the few words the list has room for.
+function prPhrase(pr: PullRequest): string {
+  switch (asPRStatus(pr.status)) {
     case "preparing":
       return "checking GitHub";
     case "blocked":
@@ -67,13 +32,13 @@ function repoPhrase(repo: RepoPR): string {
     case "awaiting_decision":
       return "decision needed";
     case "in_review":
-      return `${repo.review?.percent ?? 0}% staged`;
+      return `${pr.review?.percent ?? 0}% staged`;
     case "ready_to_approve":
       return "ready to approve";
     case "committing":
       return "committing";
     case "done":
-      return repo.canClose ? "merge unconfirmed" : "waiting for the merge";
+      return pr.canClose ? "merge unconfirmed" : "waiting for the merge";
     case "merged":
       return "merged, ready to close";
     case "pr_closed":
@@ -82,40 +47,21 @@ function repoPhrase(repo: RepoPR): string {
       return "closing";
     case "closed":
       return "closed";
-    case "skipped":
-      return "ready to close";
   }
 }
 
 /**
  * prStatusLabel reads the PR stage as one line: which third of it the task is
- * in, what the most urgent repository is doing, and how many repositories are
- * with it when the task has more than one.
+ * in, and what its pull request is doing.
  */
 function prStatusLabel(task: TaskSummary): string {
-  const repos = reposOf(task);
-  const closing = everyRepoReviewed(repos);
-  const stage = closing ? "Closing" : everyRepoHasPR(repos) ? "PR review" : "PR";
-  const repo = urgentRepo(repos);
-  if (repo === null) {
-    return stage;
-  }
-  const phrase = repoPhrase(repo);
-  // Once the reviews are over, what is left to count is how much of the task
-  // has already left the workspace.
-  if (closing) {
-    return repos.length > 1
-      ? `${stage} · ${phrase} (${closedCount(repos)} of ${repos.length} closed)`
-      : `${stage} · ${phrase}`;
-  }
-  const status = asRepoStatus(repo.status);
-  const sharing = repos.filter((other) => asRepoStatus(other.status) === status).length;
-  return repos.length > 1
-    ? `${stage} · ${phrase} (${sharing} of ${repos.length})`
-    : `${stage} · ${phrase}`;
+  const pr = prOf(task);
+  const stage =
+    pr !== null && isReviewed(pr) ? "Closing" : pr !== null && isOpen(pr) ? "PR review" : "PR";
+  return pr === null ? stage : `${stage} · ${prPhrase(pr)}`;
 }
 
-/** taskStatusLabel is the one word the tree, the list and the header show. */
+/** taskStatusLabel is the one word the list and the header show. */
 export function taskStatusLabel(task: TaskSummary): string {
   // What the task waits on the user for comes before anything it is doing.
   const summary = summaryLabel(task.situations ?? []);
@@ -131,8 +77,8 @@ export function taskStatusLabel(task: TaskSummary): string {
     }
     return `Step ${task.currentStep} of ${(task.steps ?? []).length} · ${label}`;
   }
-  // The PR stage has no conversation of its own either: each repository runs
-  // its own, and the most urgent of them speaks for the task.
+  // The PR stage has no conversation of its own either: the pull request runs
+  // it, and what it is doing speaks for the task.
   if (asTaskStage(task.stage) === "pr") {
     return prStatusLabel(task);
   }
@@ -165,8 +111,8 @@ export function taskStatusTone(task: TaskSummary): StatusTone {
     return currentStepDisplay(task).tone;
   }
   if (asTaskStage(task.stage) === "pr") {
-    const repo = urgentRepo(reposOf(task));
-    return repo === null ? "idle" : repoStatusTone(repo);
+    const pr = prOf(task);
+    return pr === null ? "idle" : prStatusTone(pr);
   }
   switch (asSessionStatus(task.sessionStatus)) {
     case "paused":

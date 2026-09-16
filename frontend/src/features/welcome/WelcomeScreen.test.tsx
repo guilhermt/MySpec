@@ -1,70 +1,42 @@
 import { screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { WelcomeScreen } from "@/features/welcome/WelcomeScreen";
 import { api } from "@/lib/wails";
 import { renderWithStore } from "@/test/render";
 import { makeState } from "@/test/wails-mock";
 
-const WITHOUT_WORKSPACE = { workspace: null } as const;
+function welcome() {
+  return renderWithStore(<WelcomeScreen />, { state: makeState({ repositories: [] }) });
+}
 
 describe("WelcomeScreen", () => {
-  it("offers only the folder action when nothing was opened before", () => {
-    renderWithStore(<WelcomeScreen />, {
-      state: makeState({ ...WITHOUT_WORKSPACE, recents: [] }),
-    });
+  it("says what to do, and offers the only action there is", () => {
+    welcome();
 
-    expect(screen.getByRole("button", { name: /^Open folder/ })).toBeInTheDocument();
-    expect(screen.queryByText("Recent")).not.toBeInTheDocument();
-    expect(screen.queryAllByRole("listitem")).toHaveLength(0);
+    expect(screen.getByRole("heading", { name: "MySpec" })).toBeInTheDocument();
+    expect(screen.getByText("Register a repository to start creating tasks.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Add repository/ })).toBeInTheDocument();
   });
 
-  it("lists the name and the path of every recent workspace", () => {
-    renderWithStore(<WelcomeScreen />, { state: makeState(WITHOUT_WORKSPACE) });
+  it("registers the repository of the folder that is chosen", async () => {
+    const { user } = welcome();
 
-    expect(screen.getAllByRole("listitem")).toHaveLength(3);
-    expect(screen.getByText("labs")).toBeInTheDocument();
-    expect(screen.getByText("~/labs")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^Add repository/ }));
+
+    expect(api.addRepository).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
-  it("opens the recent workspace that is picked", async () => {
-    const { user } = renderWithStore(<WelcomeScreen />, { state: makeState(WITHOUT_WORKSPACE) });
-
-    await user.click(screen.getByRole("button", { name: "labs ~/labs" }));
-
-    expect(api.openPath).toHaveBeenCalledWith("/home/dev/labs");
-  });
-
-  it("removes a recent workspace without opening it", async () => {
-    const { user } = renderWithStore(<WelcomeScreen />, { state: makeState(WITHOUT_WORKSPACE) });
-
-    await user.click(screen.getByRole("button", { name: "Remove labs from recent workspaces" }));
-
-    expect(api.removeRecent).toHaveBeenCalledWith("/home/dev/labs");
-    expect(api.openPath).not.toHaveBeenCalled();
-  });
-
-  it("opens the folder dialog from the primary action", async () => {
-    const { user } = renderWithStore(<WelcomeScreen />, { state: makeState(WITHOUT_WORKSPACE) });
-
-    await user.click(screen.getByRole("button", { name: /^Open folder/ }));
-
-    expect(api.openFolderDialog).toHaveBeenCalledOnce();
-  });
-
-  it("explains a last workspace that is gone", async () => {
-    const { user } = renderWithStore(<WelcomeScreen />, {
-      state: makeState({
-        ...WITHOUT_WORKSPACE,
-        notice: { path: "/home/dev/labs", reason: "last_recent_missing" },
-      }),
-    });
-
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "Your last workspace, /home/dev/labs, is no longer on disk.",
+  it("shows a folder the app refuses, where the user is", async () => {
+    vi.mocked(api.addRepository).mockRejectedValueOnce(
+      new Error("/home/dev/notes is not the root of a git repository."),
     );
+    const { user } = welcome();
 
-    await user.click(screen.getByRole("button", { name: "Dismiss" }));
+    await user.click(screen.getByRole("button", { name: /^Add repository/ }));
 
-    expect(api.dismissNotice).toHaveBeenCalledOnce();
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "/home/dev/notes is not the root of a git repository.",
+    );
   });
 });

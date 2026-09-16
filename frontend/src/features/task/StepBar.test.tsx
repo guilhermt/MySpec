@@ -28,12 +28,11 @@ function bar(step: Partial<Step> = {}, overrides: Partial<TaskSummary> = {}) {
 }
 
 describe("StepBar", () => {
-  it("places the step in the plan, with its title and repository", () => {
+  it("places the step in the plan, with its title", () => {
     bar({ status: "awaiting_review", worktreePath: "/w/api/add-login" });
 
     expect(screen.getByText("Step 1 of 2")).toBeInTheDocument();
     expect(screen.getByText("Add the login form")).toBeInTheDocument();
-    expect(screen.getByText("web")).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("Awaiting review");
   });
 
@@ -59,7 +58,7 @@ describe("StepBar", () => {
           makeSituation({
             kind: "step_blocked",
             group: "error",
-            place: { kind: "step", stage: "", step: 1, repoPath: "", repository: "" },
+            place: { kind: "step", stage: "", step: 1 },
           }),
         ],
       },
@@ -80,7 +79,7 @@ describe("StepBar", () => {
 
     await user.click(screen.getByRole("button", { name: "Open in VS Code" }));
 
-    expect(api.openInEditor).toHaveBeenCalledWith("task-1", "");
+    expect(api.openInEditor).toHaveBeenCalledWith("task-1");
   });
 
   it("has nothing to open before the worktree exists", () => {
@@ -274,7 +273,7 @@ describe("StepBar", () => {
         situations: [
           makeSituation({
             kind: "question",
-            place: { kind: "step_review", stage: "", step: 1, repoPath: "", repository: "" },
+            place: { kind: "step_review", stage: "", step: 1 },
           }),
         ],
       },

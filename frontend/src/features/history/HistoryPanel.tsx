@@ -2,59 +2,41 @@ import { Archive, ExternalLink } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { formatDates, stepCount } from "@/features/history/history-format";
-import { findNode } from "@/features/tree/tree-model";
-import { repoName } from "@/lib/repos";
+import { RepositoryFilter } from "@/features/sidebar/RepositoryFilter";
+import { shortName } from "@/lib/repositories";
 import { isOneShot } from "@/lib/task-modes";
-import type { ArchivedRepo, ArchivedTask, State } from "@/lib/wails";
+import type { ArchivedPR } from "@/lib/wails";
 import { openExternal } from "@/store/actions";
 import {
   filterHistory,
-  repoNodeId,
   useAppStore,
   useHistory,
   useHistoryUi,
+  useRepository,
+  useRepositoryFilter,
 } from "@/store/app-store";
 
 const ROW =
   "flex h-10 w-full items-center gap-2 rounded-md px-2 text-left outline-none transition-colors duration-[var(--duration-fast)] hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset";
 
-/** originLabel names where a task lived: the workspace root or one repository. */
-function originLabel(app: State | null, task: ArchivedTask): string {
-  if (task.repoPath === "") {
-    return "Root";
+/** HistoryPR is the way back to the pull request an archived task opened. */
+export function HistoryPR({ pr }: { pr: ArchivedPR | null }) {
+  if (pr === null) {
+    return null;
   }
-  return app === null ? task.repoPath : (findNode(app, repoNodeId(task.repoPath))?.label ?? "");
-}
-
-/**
- * HistoryRepos names the repositories an archived task touched, each with a way
- * back to its pull request on GitHub.
- */
-export function HistoryRepos({ repos }: { repos: readonly ArchivedRepo[] }) {
-  const app = useAppStore((state) => state.app);
-
   return (
-    <span className="flex min-w-0 items-center gap-2">
-      {repos.map((repo) => (
-        <span key={repo.repoPath} className="flex items-center gap-1">
-          <span className="min-w-0 truncate">{repoName(app, repo)}</span>
-          {repo.prNumber > 0 && (
-            <button
-              type="button"
-              // The row underneath opens the task; this one only opens GitHub.
-              onClick={(event) => {
-                event.stopPropagation();
-                void openExternal(repo.prUrl);
-              }}
-              className="flex items-center gap-0.5 rounded-md tabular-nums transition-colors hover:text-foreground"
-            >
-              {`#${repo.prNumber}`}
-              <ExternalLink aria-hidden="true" className="size-3" />
-            </button>
-          )}
-        </span>
-      ))}
-    </span>
+    <button
+      type="button"
+      // The row underneath opens the task; this one only opens GitHub.
+      onClick={(event) => {
+        event.stopPropagation();
+        void openExternal(pr.url);
+      }}
+      className="flex items-center gap-0.5 rounded-md tabular-nums transition-colors hover:text-foreground"
+    >
+      {`#${pr.number}`}
+      <ExternalLink aria-hidden="true" className="size-3" />
+    </button>
   );
 }
 
@@ -68,15 +50,17 @@ function Empty({ title, hint }: { title: string; hint: string }) {
   );
 }
 
-/** HistoryPanel is the list of the tasks this workspace has finished. */
+/** HistoryPanel is the list of the tasks the app has finished. */
 export function HistoryPanel() {
-  const app = useAppStore((state) => state.app);
   const history = useHistory();
   const { historyQuery } = useHistoryUi();
   const setHistoryQuery = useAppStore((state) => state.setHistoryQuery);
   const openArchived = useAppStore((state) => state.openArchived);
+  const filter = useRepositoryFilter();
+  const filtered = useRepository(filter);
 
-  const shown = filterHistory(history, historyQuery);
+  const shown = filterHistory(history, historyQuery, filter);
+  const query = historyQuery.trim();
 
   return (
     <main className="h-dvh overflow-auto bg-background p-8 text-foreground">
@@ -87,27 +71,33 @@ export function HistoryPanel() {
             <h1 className="text-[1.5rem] font-semibold">History</h1>
           </div>
           <p className="text-sm text-muted-foreground">
-            Finished tasks of this workspace, with their documents.
+            Finished tasks of every repository, with their documents.
           </p>
         </header>
 
-        <Input
-          // The panel exists to be searched, so the field is where typing goes.
-          autoFocus
-          aria-label="Search history"
-          placeholder="Search by name"
-          value={historyQuery}
-          onChange={(event) => setHistoryQuery(event.target.value)}
-        />
+        <div className="flex items-center gap-2">
+          <Input
+            // The panel exists to be searched, so the field is where typing goes.
+            autoFocus
+            aria-label="Search history"
+            placeholder="Search by name"
+            value={historyQuery}
+            onChange={(event) => setHistoryQuery(event.target.value)}
+            className="flex-1"
+          />
+          <RepositoryFilter variant="field" className="w-56" />
+        </div>
 
         {history.length === 0 ? (
+          <Empty title="Nothing archived yet" hint="A task comes here once it's closed." />
+        ) : shown.length === 0 && query === "" && filtered !== null ? (
           <Empty
-            title="Nothing archived yet"
-            hint="A task comes here when its last repository is closed."
+            title={`No archived tasks in ${shortName(filtered.fullName)}`}
+            hint="Choose another repository, or all of them."
           />
         ) : shown.length === 0 ? (
           <Empty
-            title={`No task matches “${historyQuery.trim()}”`}
+            title={`No task matches “${query}”`}
             hint="Try another name, or clear the search."
           />
         ) : (
@@ -132,9 +122,11 @@ export function HistoryPanel() {
                   className={ROW}
                 >
                   <span className="min-w-0 truncate font-medium">{task.name}</span>
-                  <Badge variant="secondary">{originLabel(app, task)}</Badge>
+                  <Badge variant="secondary" title={task.repository}>
+                    {shortName(task.repository)}
+                  </Badge>
                   <span className="min-w-0 flex-1 text-xs text-muted-foreground">
-                    <HistoryRepos repos={task.repos ?? []} />
+                    <HistoryPR pr={task.pr} />
                   </span>
                   {isOneShot(task) ? (
                     <Badge variant="outline" className="shrink-0">

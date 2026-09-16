@@ -1,22 +1,21 @@
 import { RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { prBlockHint, prBlockTitle } from "@/features/task/repo-status";
-import { asPRBlockReason, type RepoPR } from "@/lib/wails";
-import { retryRepo } from "@/store/actions";
+import { prBlockHint, prBlockTitle } from "@/features/task/pr-status";
+import { asPRBlockReason, type PullRequest } from "@/lib/wails";
+import { retryPR } from "@/store/actions";
 
-export interface RepoBlockedProps {
+export interface PRBlockedProps {
   taskId: string;
-  repo: RepoPR;
+  pr: PullRequest;
 }
 
 /**
- * RepoBlocked is why the PR stage of a repository could not go on and how to
- * get out of it. What gh or git said is shown as they said it, never
- * translated.
+ * PRBlocked is why the PR stage of a task could not go on and how to get out
+ * of it. What gh or git said is shown as they said it, never translated.
  */
-export function RepoBlocked({ taskId, repo }: RepoBlockedProps) {
-  const reason = asPRBlockReason(repo.block?.reason ?? "");
-  const detail = repo.block?.detail ?? "";
+export function PRBlocked({ taskId, pr }: PRBlockedProps) {
+  const reason = asPRBlockReason(pr.block?.reason ?? "");
+  const detail = pr.block?.detail ?? "";
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto p-6">
@@ -34,7 +33,7 @@ export function RepoBlocked({ taskId, repo }: RepoBlockedProps) {
           )}
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => void retryRepo(taskId, repo.repoPath)}>
+          <Button variant="outline" size="sm" onClick={() => void retryPR(taskId)}>
             <RotateCcw />
             Try again
           </Button>

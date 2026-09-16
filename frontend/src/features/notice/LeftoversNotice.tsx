@@ -1,5 +1,5 @@
 import { Banner } from "@/features/notice/Notice";
-import { useAppStore, useLeftovers } from "@/store/app-store";
+import { useAppStore, useLeftover } from "@/store/app-store";
 
 /**
  * LeftoversNotice is what the last deletion could not take with it. A task is
@@ -7,30 +7,25 @@ import { useAppStore, useLeftovers } from "@/store/app-store";
  * shown with its path for the user to clean up by hand.
  */
 export function LeftoversNotice() {
-  const leftovers = useLeftovers();
-  const setLeftovers = useAppStore((state) => state.setLeftovers);
+  const leftover = useLeftover();
+  const setLeftover = useAppStore((state) => state.setLeftover);
 
-  if (leftovers === null || leftovers.length === 0) {
+  if (leftover === null) {
     return null;
   }
 
   return (
-    <Banner title="Some files stayed on disk" onDismiss={() => setLeftovers(null)}>
+    <Banner title="Some files stayed on disk" onDismiss={() => setLeftover(null)}>
       <p>The task is gone, but git couldn't remove everything:</p>
-      <ul className="mt-1 flex flex-col gap-1">
-        {leftovers.map((leftover) => (
-          <li key={leftover.repoPath} className="flex flex-col">
-            <span>{leftover.repository}</span>
-            {leftover.path !== "" && (
-              <span className="font-mono text-xs break-all">{leftover.path}</span>
-            )}
-            {leftover.branch !== "" && (
-              <span className="font-mono text-xs break-all">{leftover.branch}</span>
-            )}
-            <span className="text-xs text-muted-foreground">{leftover.error}</span>
-          </li>
-        ))}
-      </ul>
+      <div className="mt-1 flex flex-col">
+        {leftover.path !== "" && (
+          <span className="font-mono text-xs break-all">{leftover.path}</span>
+        )}
+        {leftover.branch !== "" && (
+          <span className="font-mono text-xs break-all">{leftover.branch}</span>
+        )}
+        <span className="text-xs text-muted-foreground">{leftover.error}</span>
+      </div>
     </Banner>
   );
 }

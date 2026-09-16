@@ -1,12 +1,10 @@
+import { FolderPlus } from "lucide-react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Kbd, KbdGroup } from "@/components/ui/kbd";
-import { Notice } from "@/features/notice/Notice";
-import { RecentList } from "@/features/welcome/RecentList";
-import { asNoticeReason } from "@/lib/wails";
-import { dismissNotice, openFolderDialog } from "@/store/actions";
-import { useNotice, useRecents } from "@/store/app-store";
+import { addRepository } from "@/store/actions";
 
-function AppMark() {
+/** AppMark is the logo of the app, on the screens that stand in for the product. */
+export function AppMark() {
   return (
     <svg
       viewBox="0 0 512 512"
@@ -29,8 +27,22 @@ function AppMark() {
 }
 
 export function WelcomeScreen() {
-  const notice = useNotice();
-  const recents = useRecents();
+  const [adding, setAdding] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // A registration that goes through swaps this screen for the product by
+  // itself, through the state.
+  const add = async () => {
+    setAdding(true);
+    setError(null);
+    try {
+      await addRepository();
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : String(failure));
+    } finally {
+      setAdding(false);
+    }
+  };
 
   return (
     <main className="flex h-dvh items-center justify-center bg-background px-6 text-foreground">
@@ -40,30 +52,18 @@ export function WelcomeScreen() {
             <AppMark />
             <h1 className="text-[2.125rem] font-semibold leading-none">MySpec</h1>
           </div>
-          <p className="text-muted-foreground">Your Claude Code workflow, in one place.</p>
+          <p className="text-muted-foreground">Register a repository to start creating tasks.</p>
         </header>
 
-        {notice !== null && (
-          <Notice
-            path={notice.path}
-            reason={asNoticeReason(notice.reason)}
-            onDismiss={() => void dismissNotice()}
-          />
-        )}
-
-        <Button onClick={() => void openFolderDialog()} className="w-full justify-between">
-          Open folder
-          <KbdGroup>
-            <Kbd>Ctrl</Kbd>
-            <Kbd>O</Kbd>
-          </KbdGroup>
+        <Button onClick={() => void add()} className="w-full" disabled={adding}>
+          <FolderPlus />
+          Add repository
         </Button>
 
-        {recents.length > 0 && (
-          <section className="flex flex-col gap-2">
-            <h2 className="text-xs uppercase tracking-wide text-muted-foreground">Recent</h2>
-            <RecentList recents={recents} />
-          </section>
+        {error !== null && (
+          <p role="alert" className="text-sm text-destructive">
+            {error}
+          </p>
         )}
       </div>
     </main>

@@ -5,24 +5,23 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Markdown } from "@/features/chat/Markdown";
 import { ErrorNotice } from "@/features/notice/Notice";
 import { OneShotView } from "@/features/task/OneShotView";
-import { prReportLabel } from "@/features/task/repo-status";
+import { prReportLabel } from "@/features/task/pr-status";
 import { StepDocument } from "@/features/task/StepDocument";
 import { StepList } from "@/features/task/StepList";
 import { useArtifact } from "@/features/task/useArtifact";
-import { repoName, reposOf } from "@/lib/repos";
+import { prOf } from "@/lib/pull-requests";
 import { findStepReport, stepReportLabel } from "@/lib/review-modes";
 import { stepSituation } from "@/lib/situations";
 import {
   asTaskMode,
   asTaskStage,
-  type RepoPR,
+  type PullRequest,
   type Step,
   type TaskMode,
   type TaskStage,
   type TaskSummary,
 } from "@/lib/wails";
 import { setStepModel, setStepReviewMode } from "@/store/actions";
-import { useAppStore } from "@/store/app-store";
 
 const LOADING_WIDTHS = ["w-1/2", "w-full", "w-3/4"];
 
@@ -97,10 +96,10 @@ function artifactName(selection: Selection, task: TaskSummary): string | null {
   return null;
 }
 
-/** prFiles is every pull request document a task has written, per repository. */
-function prFiles(repo: RepoPR): { file: string; label: string }[] {
-  const files = repo.draft === null ? [] : [{ file: repo.draft.file, label: "Draft" }];
-  for (const report of repo.reports ?? []) {
+/** prFiles is every pull request document a task has written. */
+function prFiles(pr: PullRequest): { file: string; label: string }[] {
+  const files = pr.draft === null ? [] : [{ file: pr.draft.file, label: "Draft" }];
+  for (const report of pr.reports ?? []) {
     files.push({ file: report.file, label: prReportLabel(report.pass, report.clean) });
   }
   return files;
@@ -108,7 +107,8 @@ function prFiles(repo: RepoPR): { file: string; label: string }[] {
 
 /** hasPRArtifacts reports whether the PR tab has anything to show. */
 function hasPRArtifacts(task: TaskSummary): boolean {
-  return reposOf(task).some((repo) => prFiles(repo).length > 0);
+  const pr = prOf(task);
+  return pr !== null && prFiles(pr).length > 0;
 }
 
 function Empty() {
@@ -122,36 +122,29 @@ function Empty() {
   );
 }
 
-/** PRList is the pull request documents of a task, grouped by repository. */
+/** PRList is the pull request documents of a task. */
 function PRList({ task, onOpen }: { task: TaskSummary; onOpen: (file: string) => void }) {
-  const app = useAppStore((state) => state.app);
-  const repos = reposOf(task).filter((repo) => prFiles(repo).length > 0);
+  const pr = prOf(task);
+  const files = pr === null ? [] : prFiles(pr);
 
-  if (repos.length === 0) {
+  if (files.length === 0) {
     return <p className="text-sm text-muted-foreground italic">Nothing written yet.</p>;
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      {repos.map((repo) => (
-        <section key={repo.repoPath} className="flex flex-col gap-1">
-          <h3 className="text-xs font-medium text-muted-foreground">{repoName(app, repo)}</h3>
-          <ul className="flex flex-col">
-            {prFiles(repo).map((entry) => (
-              <li key={entry.file}>
-                <button
-                  type="button"
-                  onClick={() => onOpen(entry.file)}
-                  className="flex w-full items-center rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent"
-                >
-                  {entry.label}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </section>
+    <ul className="flex flex-col">
+      {files.map((entry) => (
+        <li key={entry.file}>
+          <button
+            type="button"
+            onClick={() => onOpen(entry.file)}
+            className="flex w-full items-center rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent"
+          >
+            {entry.label}
+          </button>
+        </li>
       ))}
-    </div>
+    </ul>
   );
 }
 

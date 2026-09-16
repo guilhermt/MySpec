@@ -6,7 +6,7 @@ import { renderWithStore } from "@/test/render";
 import { makeArchivedTask, makeState } from "@/test/wails-mock";
 
 describe("HistoryButton", () => {
-  it("counts what the workspace has archived", () => {
+  it("counts the archived tasks", () => {
     renderWithStore(<HistoryButton />, {
       state: makeState({
         history: [makeArchivedTask(), makeArchivedTask({ id: "task-2", name: "fix-header" })],

@@ -11,28 +11,22 @@ describe("ImplementationDone", () => {
       currentStep: 0,
       steps: [
         makeStep({ status: "done" }),
-        makeStep({
-          number: 2,
-          file: "2-wire-the-api.md",
-          status: "done",
-          repository: "api",
-          repoPath: "/home/dev/projects/api",
-        }),
+        makeStep({ number: 2, file: "2-wire-the-api.md", status: "done" }),
       ],
     });
 
     renderWithStore(<ImplementationDone task={task} />, { state: makeState({ tasks: [task] }) });
 
     expect(screen.getByText("Every step is committed")).toBeInTheDocument();
-    expect(screen.getByText("2 steps in web, api.")).toBeInTheDocument();
+    expect(screen.getByText("2 steps in dev/web.")).toBeInTheDocument();
     expect(screen.getByText(/The PR stage starts next/)).toBeInTheDocument();
   });
 
-  it("counts one step as one, and names each repository once", () => {
+  it("counts one step as one", () => {
     const task = makeTask({ stage: "implementation", currentStep: 0, steps: [makeStep()] });
 
     renderWithStore(<ImplementationDone task={task} />, { state: makeState({ tasks: [task] }) });
 
-    expect(screen.getByText("1 step in web.")).toBeInTheDocument();
+    expect(screen.getByText("1 step in dev/web.")).toBeInTheDocument();
   });
 });

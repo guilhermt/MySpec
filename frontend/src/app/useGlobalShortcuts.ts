@@ -1,7 +1,14 @@
 import { useEffect } from "react";
 import { waitingEntries } from "@/lib/situations";
-import { openFolderDialog } from "@/store/actions";
-import { useAppStore } from "@/store/app-store";
+import { type AppStore, useAppStore } from "@/store/app-store";
+
+// The shortcuts belong to the product itself: the welcome screen and the
+// refused migration answer to none of them.
+function productOnScreen(store: AppStore): boolean {
+  return (
+    store.app !== null && store.app.migration === null && (store.app.repositories ?? []).length > 0
+  );
+}
 
 export function useGlobalShortcuts(): void {
   useEffect(() => {
@@ -10,28 +17,23 @@ export function useGlobalShortcuts(): void {
         return;
       }
       switch (event.key.toLowerCase()) {
-        case "o":
-          event.preventDefault();
-          void openFolderDialog();
-          break;
         case "n": {
           const store = useAppStore.getState();
-          // The welcome screen has no node to create a task for.
-          if ((store.app?.workspace ?? null) === null) {
+          if (!productOnScreen(store)) {
             return;
           }
           event.preventDefault();
-          store.openNewTask(store.selectedNodeId);
+          store.openNewTask();
           break;
         }
         case "j": {
           const store = useAppStore.getState();
-          if ((store.app?.workspace ?? null) === null) {
+          if (!productOnScreen(store)) {
             return;
           }
           event.preventDefault();
           // The creation dialog holds what the user is typing; it is not left behind.
-          if (store.newTaskFor !== null) {
+          if (store.newTaskOpen) {
             return;
           }
           const [first] = waitingEntries(store.app, store.openTaskId);
@@ -42,12 +44,12 @@ export function useGlobalShortcuts(): void {
         }
         case ",": {
           const store = useAppStore.getState();
-          if ((store.app?.workspace ?? null) === null) {
+          if (!productOnScreen(store)) {
             return;
           }
           event.preventDefault();
           // The creation dialog holds what the user is typing; it is not left behind.
-          if (store.newTaskFor !== null) {
+          if (store.newTaskOpen) {
             return;
           }
           if (store.settingsOpen) {

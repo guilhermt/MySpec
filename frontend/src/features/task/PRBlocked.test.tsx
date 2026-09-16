@@ -1,22 +1,22 @@
 import { screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { RepoBlocked } from "@/features/task/RepoBlocked";
+import { PRBlocked } from "@/features/task/PRBlocked";
 import { api, type PRBlock } from "@/lib/wails";
 import { renderWithStore } from "@/test/render";
-import { makeRepoPR, makeState, makeTask } from "@/test/wails-mock";
+import { makePullRequest, makeState, makeTask } from "@/test/wails-mock";
 
 function blocked(block: Partial<PRBlock> = {}) {
-  const repo = makeRepoPR({
+  const pr = makePullRequest({
     status: "blocked",
     block: { reason: "gh_unauthenticated", detail: "", ...block },
   });
-  const task = makeTask({ stage: "pr", repos: [repo] });
-  return renderWithStore(<RepoBlocked taskId={task.id} repo={repo} />, {
+  const task = makeTask({ stage: "pr", pr });
+  return renderWithStore(<PRBlocked taskId={task.id} pr={pr} />, {
     state: makeState({ tasks: [task] }),
   });
 }
 
-describe("RepoBlocked", () => {
+describe("PRBlocked", () => {
   it("says what is wrong and what to do about it", () => {
     blocked();
 
@@ -25,7 +25,7 @@ describe("RepoBlocked", () => {
     expect(alert).toHaveTextContent("gh auth login");
   });
 
-  it("names every other reason a repository is blocked", () => {
+  it("names every other reason the stage is blocked", () => {
     blocked({ reason: "gh_missing" });
 
     expect(screen.getByRole("alert")).toHaveTextContent("GitHub CLI was not found");
@@ -37,11 +37,11 @@ describe("RepoBlocked", () => {
     expect(screen.getByText("gh: could not resolve to a Repository").tagName).toBe("PRE");
   });
 
-  it("starts the stage of the repository over", async () => {
+  it("starts the stage over", async () => {
     const { user } = blocked();
 
     await user.click(screen.getByRole("button", { name: "Try again" }));
 
-    expect(api.retryRepo).toHaveBeenCalledWith("task-1", "/home/dev/projects/web");
+    expect(api.retryPR).toHaveBeenCalledWith("task-1");
   });
 });

@@ -32,11 +32,11 @@ export function AnswerQuestion(taskID: string, stage: string, requestID: string,
 }
 
 /**
- * ApproveRepo approves the review of the changes a pass of a pull request
+ * ApprovePR approves the review of the changes a pass of the pull request
  * review produced and asks the agent to commit and push them.
  */
-export function ApproveRepo(taskID: string, repoPath: string): $CancellablePromise<void> {
-    return $Call.ByID(2268711255, taskID, repoPath);
+export function ApprovePR(taskID: string): $CancellablePromise<void> {
+    return $Call.ByID(1918022829, taskID);
 }
 
 /**
@@ -64,12 +64,12 @@ export function CleanAndStartStep(taskID: string): $CancellablePromise<void> {
 }
 
 /**
- * CloseRepo takes down the worktree and the branch of a repository whose pull
- * request was merged and updates its base branch. It returns as soon as the
- * work is scheduled; what git does arrives as state.
+ * CloseTask takes down the worktree and the branch of a task whose pull request
+ * was merged and updates the base branch of its clone. It returns as soon as
+ * the work is scheduled; what git does arrives as state.
  */
-export function CloseRepo(taskID: string, repoPath: string): $CancellablePromise<void> {
-    return $Call.ByID(112584678, taskID, repoPath);
+export function CloseTask(taskID: string): $CancellablePromise<void> {
+    return $Call.ByID(3543739215, taskID);
 }
 
 /**
@@ -98,10 +98,10 @@ export function DeleteTask(taskID: string): $CancellablePromise<$models.DeleteRe
 }
 
 /**
- * DiscardDraft throws away the draft of a repository and prepares it again.
+ * DiscardDraft throws away the draft of a task and prepares the stage again.
  */
-export function DiscardDraft(taskID: string, repoPath: string): $CancellablePromise<void> {
-    return $Call.ByID(2351206339, taskID, repoPath);
+export function DiscardDraft(taskID: string): $CancellablePromise<void> {
+    return $Call.ByID(2351206339, taskID);
 }
 
 /**
@@ -137,28 +137,26 @@ export function Interrupt(taskID: string, stage: string): $CancellablePromise<vo
 }
 
 /**
- * OpenFileInEditor opens one file of a worktree of a task in the editor, in
- * the window of that worktree. repoPath names the repository of the PR stage;
- * empty, it is the worktree of the current step.
+ * OpenFileInEditor opens one file of the worktree of a task in the editor, in
+ * the window of that worktree.
  */
-export function OpenFileInEditor(taskID: string, repoPath: string, path: string): $CancellablePromise<void> {
-    return $Call.ByID(1486307698, taskID, repoPath, path);
+export function OpenFileInEditor(taskID: string, path: string): $CancellablePromise<void> {
+    return $Call.ByID(1486307698, taskID, path);
 }
 
 /**
- * OpenInEditor opens a worktree of a task in the editor: the one of the
- * repository when repoPath names one, the one of the current step otherwise.
+ * OpenInEditor opens the worktree of a task in the editor.
  */
-export function OpenInEditor(taskID: string, repoPath: string): $CancellablePromise<void> {
-    return $Call.ByID(1075572732, taskID, repoPath);
+export function OpenInEditor(taskID: string): $CancellablePromise<void> {
+    return $Call.ByID(1075572732, taskID);
 }
 
 /**
  * OpenPR writes the draft the user approved and asks the agent to open the
- * pull request of a repository from it.
+ * pull request of the task from it.
  */
-export function OpenPR(taskID: string, repoPath: string, title: string, body: string): $CancellablePromise<void> {
-    return $Call.ByID(1566738704, taskID, repoPath, title, body);
+export function OpenPR(taskID: string, title: string, body: string): $CancellablePromise<void> {
+    return $Call.ByID(1566738704, taskID, title, body);
 }
 
 /**
@@ -184,11 +182,11 @@ export function ReadArtifact(taskID: string, name: string): $CancellablePromise<
 }
 
 /**
- * RefreshPR reads the pull request of a repository again. It returns as soon
- * as the reading is scheduled; what it finds arrives as state.
+ * RefreshPR reads the pull request of a task again. It returns as soon as the
+ * reading is scheduled; what it finds arrives as state.
  */
-export function RefreshPR(taskID: string, repoPath: string): $CancellablePromise<void> {
-    return $Call.ByID(3606863055, taskID, repoPath);
+export function RefreshPR(taskID: string): $CancellablePromise<void> {
+    return $Call.ByID(3606863055, taskID);
 }
 
 /**
@@ -213,10 +211,10 @@ export function Retry(taskID: string, stage: string): $CancellablePromise<void> 
 }
 
 /**
- * RetryRepo prepares a blocked repository of the pull request stage again.
+ * RetryPR prepares a blocked pull request stage again.
  */
-export function RetryRepo(taskID: string, repoPath: string): $CancellablePromise<void> {
-    return $Call.ByID(1967264184, taskID, repoPath);
+export function RetryPR(taskID: string): $CancellablePromise<void> {
+    return $Call.ByID(2206023154, taskID);
 }
 
 /**
@@ -228,11 +226,11 @@ export function RetryStep(taskID: string): $CancellablePromise<void> {
 }
 
 /**
- * ReviewAgain ends the review session of a repository and starts a new pass
- * over its pull request.
+ * ReviewAgain ends the review session of a task and starts a new pass over its
+ * pull request.
  */
-export function ReviewAgain(taskID: string, repoPath: string): $CancellablePromise<void> {
-    return $Call.ByID(3401154390, taskID, repoPath);
+export function ReviewAgain(taskID: string): $CancellablePromise<void> {
+    return $Call.ByID(3401154390, taskID);
 }
 
 /**
@@ -262,7 +260,7 @@ export function SetReviewMode(taskID: string, mode: string): $CancellablePromise
 /**
  * SetSessionModel changes the model and effort of a session from its next
  * message on. The stage names the session: prd, tech_spec, plan, one_shot,
- * step:<n>, step_review:<n>, pr:<slug> or pr_review:<slug>.
+ * step:<n>, step_review:<n>, pr or pr_review.
  */
 export function SetSessionModel(taskID: string, stage: string, model: string, effort: string): $CancellablePromise<void> {
     return $Call.ByID(2320848335, taskID, stage, model, effort);

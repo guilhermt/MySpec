@@ -4,8 +4,7 @@ import { TaskView } from "@/features/task/TaskView";
 import { api, type TaskSummary } from "@/lib/wails";
 import { renderWithStore } from "@/test/render";
 import {
-  makeRepoPR,
-  makeSituation,
+  makePullRequest,
   makeState,
   makeStep,
   makeStepReviewer,
@@ -13,18 +12,6 @@ import {
 } from "@/test/wails-mock";
 
 const SEEN_KEY = "myspec.artifacts.seen:task-1";
-
-// The draft of api waits for the user, which makes api the tab the task opens on.
-const API_DRAFT = makeSituation({
-  kind: "draft",
-  place: {
-    kind: "repo",
-    stage: "",
-    step: 0,
-    repoPath: "/home/dev/projects/api",
-    repository: "api",
-  },
-});
 
 function view(overrides: Partial<TaskSummary> = {}) {
   return renderWithStore(<TaskView taskId="task-1" />, {
@@ -187,56 +174,23 @@ describe("TaskView", () => {
     expect(api.getTranscript).not.toHaveBeenCalled();
   });
 
-  it("shows the repositories instead of a conversation of its own in the PR stage", async () => {
+  it("shows the pull request instead of a conversation of its own in the PR stage", async () => {
     view({
       stage: "pr",
-      repos: [
-        makeRepoPR({ status: "drafting" }),
-        makeRepoPR({
-          repository: "api",
-          repoPath: "/home/dev/projects/api",
-          slug: "api",
-          status: "draft_ready",
-          sessionStage: "pr:api",
-          draft: { title: "Wire the api", body: "why", file: "api-draft.md" },
-        }),
-      ],
-      situations: [API_DRAFT],
+      pr: makePullRequest({
+        status: "draft_ready",
+        draft: { title: "Wire the api", body: "why", file: "draft.md" },
+      }),
     });
 
-    expect(screen.getAllByRole("tab")).toHaveLength(2);
-    // The repository waiting for the user is the one the task opens on.
     expect(screen.getByLabelText("Title")).toHaveValue("Wire the api");
     await waitFor(() => {
-      expect(api.getTranscript).toHaveBeenCalledWith("task-1", "pr:api");
+      expect(api.getTranscript).toHaveBeenCalledWith("task-1", "pr");
     });
   });
 
-  it("follows the repository the user picks", async () => {
-    const { user } = view({
-      stage: "pr",
-      repos: [
-        makeRepoPR({ status: "drafting" }),
-        makeRepoPR({
-          repository: "api",
-          repoPath: "/home/dev/projects/api",
-          slug: "api",
-          status: "draft_ready",
-          sessionStage: "pr:api",
-        }),
-      ],
-      situations: [API_DRAFT],
-    });
-
-    await user.click(screen.getAllByRole("tab")[0] as HTMLElement);
-
-    await waitFor(() => {
-      expect(api.getTranscript).toHaveBeenCalledWith("task-1", "pr:web");
-    });
-  });
-
-  it("asks for no conversation while a repository has none", () => {
-    view({ stage: "pr", repos: [makeRepoPR({ status: "preparing", sessionStage: "" })] });
+  it("asks for no conversation while the pull request has none", () => {
+    view({ stage: "pr", pr: makePullRequest({ status: "preparing", sessionStage: "" }) });
 
     expect(screen.getByText("Checking GitHub…")).toBeInTheDocument();
     expect(api.getTranscript).not.toHaveBeenCalled();

@@ -15,7 +15,6 @@ import {
   waitingEntries,
 } from "@/lib/situations";
 import { cn } from "@/lib/utils";
-import type { State } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
 
 /** NOW_INTERVAL_MS is how often the waiting times are read again. */
@@ -28,11 +27,11 @@ const entryKey = (entry: WaitingEntry) => entry.situation.id;
 
 // What a screen reader hears for an entry: the task, what it waits for, where,
 // and for how long. The place is left out when the label already names it.
-function spokenEntry(app: State | null, entry: WaitingEntry, now: number): string {
+function spokenEntry(entry: WaitingEntry, now: number): string {
   const { task, situation } = entry;
   const parts = [task.name, situationLabel(situation)];
   if (!namesPlace(situation)) {
-    parts.push(placeLabel(app, situation));
+    parts.push(placeLabel(situation));
   }
   parts.push(`waiting ${spokenWait(situation.startedAt, now)}`);
   return parts.join(", ");
@@ -67,7 +66,7 @@ function onListKeyDown(event: KeyboardEvent<HTMLUListElement>) {
 }
 
 /**
- * WaitingSection lists everything the workspace waits on the user for, most
+ * WaitingSection lists everything the active tasks wait on the user for, most
  * urgent first, so they can pick where to go. The open task is left out: the
  * user is already there.
  */
@@ -82,7 +81,7 @@ export function WaitingSection() {
   const open = entries.length > 0;
 
   return (
-    // Always mounted, so that it opens and closes by sliding the tree below
+    // Always mounted, so that it opens and closes by sliding the list below
     // instead of making it jump. Closed, nothing in it can be reached.
     <section
       aria-labelledby={titleId}
@@ -130,7 +129,7 @@ export function WaitingSection() {
                       type="button"
                       data-waiting-entry=""
                       tabIndex={leaving ? -1 : 0}
-                      aria-label={spokenEntry(app, entry, now)}
+                      aria-label={spokenEntry(entry, now)}
                       onClick={() => openPlace(entry.task.id, entry.situation.place)}
                       className="flex h-12 w-full flex-col justify-center gap-0.5 rounded-md px-2 text-left outline-none transition-colors duration-[var(--duration-fast)] hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
                     >
@@ -144,7 +143,7 @@ export function WaitingSection() {
                         </span>
                       </span>
                       <span className="truncate pl-4 text-xs text-muted-foreground">
-                        {situationDetail(app, entry.situation)}
+                        {situationDetail(entry.situation)}
                       </span>
                     </button>
                   </div>

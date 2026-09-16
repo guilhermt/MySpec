@@ -4,27 +4,30 @@ import { HistoryPanel } from "@/features/history/HistoryPanel";
 import { api } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
-import { makeArchivedTask, makeState } from "@/test/wails-mock";
+import { makeArchivedTask, makeRepository, makeState } from "@/test/wails-mock";
+
+const WEB = makeRepository();
+const API = makeRepository({
+  id: "repo-2",
+  name: "api",
+  fullName: "dev/api",
+  path: "/home/dev/projects/api",
+});
 
 const LOGIN = makeArchivedTask();
 const HEADER = makeArchivedTask({
   id: "task-2",
   name: "fix-header",
-  repoPath: "/home/dev/projects/web",
+  repositoryId: "repo-2",
+  repository: "dev/api",
   steps: [],
-  repos: [
-    {
-      repository: "web",
-      repoPath: "/home/dev/projects/web",
-      prNumber: 0,
-      prUrl: "",
-      prState: "",
-    },
-  ],
+  pr: null,
 });
 
-function panel(history = [LOGIN, HEADER]) {
-  return renderWithStore(<HistoryPanel />, { state: makeState({ history }) });
+function panel(history = [LOGIN, HEADER], filter = "") {
+  return renderWithStore(<HistoryPanel />, {
+    state: makeState({ repositories: [WEB, API], repositoryFilter: filter, history }),
+  });
 }
 
 describe("HistoryPanel", () => {
@@ -34,15 +37,16 @@ describe("HistoryPanel", () => {
     expect(screen.getByRole("heading", { name: "History" })).toBeInTheDocument();
     const [first, second] = screen.getAllByRole("listitem");
     expect(first).toHaveTextContent("add-login");
-    expect(first).toHaveTextContent("Root");
+    expect(first).toHaveTextContent("web");
+    expect(first).toHaveTextContent("#12");
     expect(first).toHaveTextContent("1 step");
     expect(second).toHaveTextContent("fix-header");
-    expect(second).toHaveTextContent("web");
+    expect(second).toHaveTextContent("api");
     expect(second).toHaveTextContent("0 steps");
   });
 
   it("labels a One-Shot task in place of its count of steps", () => {
-    panel([makeArchivedTask({ mode: "one_shot", repoPath: "/home/dev/projects/web" })]);
+    panel([makeArchivedTask({ mode: "one_shot" })]);
 
     const row = screen.getByRole("listitem");
     expect(row).toHaveTextContent("One-Shot");
@@ -57,7 +61,7 @@ describe("HistoryPanel", () => {
     expect(row).toHaveTextContent(new Date(LOGIN.archivedAt).getFullYear().toString());
   });
 
-  it("opens the pull request of a repository without opening the task", async () => {
+  it("opens the pull request of a task without opening the task", async () => {
     const { user } = panel([LOGIN]);
 
     await user.click(screen.getByRole("button", { name: "#12" }));
@@ -101,12 +105,23 @@ describe("HistoryPanel", () => {
     expect(screen.queryAllByRole("listitem")).toHaveLength(0);
   });
 
+  it("keeps only the tasks of the repository of the filter", () => {
+    panel([LOGIN, HEADER], "repo-2");
+
+    expect(screen.getByRole("listitem")).toHaveTextContent("fix-header");
+  });
+
+  it("says when the repository of the filter has nothing archived", () => {
+    panel([LOGIN], "repo-2");
+
+    expect(screen.getByText("No archived tasks in api")).toBeInTheDocument();
+    expect(screen.getByText("Choose another repository, or all of them.")).toBeInTheDocument();
+  });
+
   it("says when nothing was ever archived", () => {
     panel([]);
 
     expect(screen.getByText("Nothing archived yet")).toBeInTheDocument();
-    expect(
-      screen.getByText("A task comes here when its last repository is closed."),
-    ).toBeInTheDocument();
+    expect(screen.getByText("A task comes here once it's closed.")).toBeInTheDocument();
   });
 });

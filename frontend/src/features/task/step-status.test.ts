@@ -365,7 +365,7 @@ describe("blockTitle", () => {
     ["path_exists", "The worktree folder already exists"],
     ["branch_exists", "The branch already exists"],
     ["git_failed", "Git failed"],
-    ["no_repository", "The step doesn't name a repository of this task"],
+    ["clone_missing", "The clone of the repository is missing"],
   ] as const)("names %s", (reason: BlockReason, expected) => {
     expect(blockTitle(reason)).toBe(expected);
   });
@@ -384,7 +384,10 @@ describe("blockHint", () => {
     ],
     ["path_exists", "Move or delete the folder, then try again."],
     ["git_failed", "Fix what git reports, then try again."],
-    ["no_repository", "Fix the repository header of the step file, then try again."],
+    [
+      "clone_missing",
+      "Change the path of the repository in Settings › Repositories, then try again.",
+    ],
   ])("tells the user what to do about %s", (reason, expected) => {
     expect(blockHint(blockedStep(reason), makeTask())).toBe(expected);
   });

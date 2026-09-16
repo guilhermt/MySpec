@@ -19,33 +19,32 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
-  approveRepoHint,
-  canApproveRepo,
-  canCloseRepo,
+  approvePRHint,
+  canApprovePR,
+  canCloseTask,
   canDiscardDraft,
   canOpenPR,
   canReviewAgain,
   closeHint,
   draftAtHand,
-  hasRepoSession,
+  hasPRSession,
   prStateLabel,
-  repoStatusLabel,
-  repoStatusTone,
-} from "@/features/task/repo-status";
+  prStatusLabel,
+  prStatusTone,
+} from "@/features/task/pr-status";
 import { ToneDot } from "@/features/task/StatusDot";
 import { reviewCountLabel } from "@/features/task/step-status";
-import { repoName } from "@/lib/repos";
-import { repoSituation, situationTone } from "@/lib/situations";
+import { prSituation, situationTone } from "@/lib/situations";
 import {
   asPRState,
-  asRepoStatus,
+  asPRStatus,
   asSessionStatus,
-  type RepoPR,
+  type PullRequest,
   type TaskSummary,
 } from "@/lib/wails";
 import {
-  approveRepo,
-  closeRepo,
+  approvePR,
+  closeTask,
   discardDraft,
   openExternal,
   openInEditor,
@@ -55,66 +54,66 @@ import {
   resume,
   reviewAgain,
 } from "@/store/actions";
-import { useAppStore, usePrDraft } from "@/store/app-store";
+import { usePrDraft, useRepository } from "@/store/app-store";
 
 // The states where the review of the applied changes is what the bar is about.
 const REVIEW_STATES = ["in_review", "ready_to_approve", "committing"];
 
-// The states where the closing of the repository is what is left to do, even
-// when the user cannot ask for it yet.
-const CLOSING_STATES = ["done", "merged", "skipped", "closing"];
+// The states where the closing of the task is what is left to do, even when
+// the user cannot ask for it yet.
+const CLOSING_STATES = ["done", "merged", "closing"];
 
 // Once the closing starts, the worktree and the pull request stop being things
 // the bar can act on.
 const GONE_STATES = ["closing", "closed"];
 
-/** stateText reads the state of the repository, with the count while reviewing. */
-function stateText(repo: RepoPR): string {
-  const label = repoStatusLabel(repo);
-  const review = repo.review;
+/** stateText reads the state of the pull request, with the count while reviewing. */
+function stateText(pr: PullRequest): string {
+  const label = prStatusLabel(pr);
+  const review = pr.review;
   if (review === null || review.error !== "" || review.total === 0) {
     return label;
   }
   return `${label} · ${reviewCountLabel(review)}`;
 }
 
-export interface RepoBarProps {
+export interface PRBarProps {
   task: TaskSummary;
-  repo: RepoPR;
+  pr: PullRequest;
 }
 
-/** RepoBar names the repository on screen and holds what can be done to it. */
-export function RepoBar({ task, repo }: RepoBarProps) {
-  const app = useAppStore((state) => state.app);
-  const edited = usePrDraft(task.id, repo.repoPath);
-  const situation = repoSituation(task, repo.repoPath);
+/** PRBar names the pull request on screen and holds what can be done to it. */
+export function PRBar({ task, pr }: PRBarProps) {
+  const repository = useRepository(task.repositoryId);
+  const edited = usePrDraft(task.id);
+  const situation = prSituation(task);
   // What waits on the user takes the colour of its situation; without one, the
-  // dot shows what the repository is doing.
-  const tone = situation !== null ? situationTone(situation) : repoStatusTone(repo);
+  // dot shows what the pull request is doing.
+  const tone = situation !== null ? situationTone(situation) : prStatusTone(pr);
 
-  const status = asRepoStatus(repo.status);
+  const status = asPRStatus(pr.status);
   const preparing = status === "preparing";
   const committing = status === "committing";
   const reviewing = REVIEW_STATES.includes(status);
   const closing = status === "closing";
   const closable = CLOSING_STATES.includes(status);
   const gone = GONE_STATES.includes(status);
-  const paused = hasRepoSession(repo) && asSessionStatus(repo.sessionStatus) === "paused";
+  const paused = hasPRSession(pr) && asSessionStatus(pr.sessionStatus) === "paused";
   // The worktree is only there once the implementation created it, and it is
   // the first thing the closing takes away.
-  const canOpenEditor = repo.worktreePath !== "" && !gone;
-  const prState = prStateLabel(asPRState(repo.prState));
+  const canOpenEditor = pr.worktreePath !== "" && !gone;
+  const prState = prStateLabel(asPRState(pr.prState));
 
-  const title = edited?.title ?? repo.draft?.title ?? "";
-  const body = edited?.body ?? repo.draft?.body ?? "";
-  const readyToOpen = canOpenPR(repo) && title.trim() !== "" && body.trim() !== "";
+  const title = edited?.title ?? pr.draft?.title ?? "";
+  const body = edited?.body ?? pr.draft?.body ?? "";
+  const readyToOpen = canOpenPR(pr) && title.trim() !== "" && body.trim() !== "";
 
   const openButton = (
     <Button
       variant="outline"
       size="sm"
       disabled={!canOpenEditor}
-      onClick={() => void openInEditor(task.id, repo.repoPath)}
+      onClick={() => void openInEditor(task.id)}
     >
       <Code />
       Open in VS Code
@@ -123,13 +122,13 @@ export function RepoBar({ task, repo }: RepoBarProps) {
 
   const closeButton = (
     <Button
-      variant={status === "merged" || status === "skipped" ? "default" : "outline"}
+      variant={status === "merged" ? "default" : "outline"}
       size="sm"
-      disabled={!canCloseRepo(repo)}
-      onClick={() => void closeRepo(task.id, repo.repoPath)}
+      disabled={!canCloseTask(pr)}
+      onClick={() => void closeTask(task.id)}
     >
       {closing ? <LoaderCircle aria-hidden="true" className="animate-spin" /> : <Archive />}
-      {closing ? "Closing…" : "Close repository"}
+      {closing ? "Closing…" : "Close task"}
     </Button>
   );
 
@@ -137,8 +136,8 @@ export function RepoBar({ task, repo }: RepoBarProps) {
     <Button
       variant="default"
       size="sm"
-      disabled={!canApproveRepo(repo)}
-      onClick={() => void approveRepo(task.id, repo.repoPath)}
+      disabled={!canApprovePR(pr)}
+      onClick={() => void approvePR(task.id)}
     >
       {committing ? <LoaderCircle aria-hidden="true" className="animate-spin" /> : <Check />}
       Approve
@@ -147,17 +146,18 @@ export function RepoBar({ task, repo }: RepoBarProps) {
 
   return (
     <div className="flex h-10 shrink-0 items-center gap-2 border-b px-3">
-      <span className="min-w-0 truncate font-medium">{repoName(app, repo)}</span>
-      {repo.prNumber > 0 && (
+      {pr.prNumber > 0 ? (
         <button
           type="button"
-          onClick={() => void openExternal(repo.prUrl)}
+          onClick={() => void openExternal(pr.prUrl)}
           className="flex shrink-0 items-center gap-1 rounded-md text-xs text-muted-foreground transition-colors hover:text-foreground"
         >
-          {`#${repo.prNumber}`}
+          {`#${pr.prNumber}`}
           {prState !== "" && <Badge variant="secondary">{prState}</Badge>}
           <ExternalLink aria-hidden="true" className="size-3.5" />
         </button>
+      ) : (
+        <span className="font-medium">Pull request</span>
       )}
       <span
         role="status"
@@ -167,21 +167,21 @@ export function RepoBar({ task, repo }: RepoBarProps) {
         {preparing ? (
           <>
             <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" />
-            {repoStatusLabel(repo)}
+            {prStatusLabel(pr)}
           </>
         ) : (
           <>
             <ToneDot tone={tone} />
-            {stateText(repo)}
+            {stateText(pr)}
           </>
         )}
       </span>
-      {status === "done" && repo.checkError !== "" && (
-        <span className="shrink-0 text-xs text-[var(--status-attention)]" title={repo.checkError}>
+      {status === "done" && pr.checkError !== "" && (
+        <span className="shrink-0 text-xs text-[var(--status-attention)]" title={pr.checkError}>
           Couldn't confirm the merge
         </span>
       )}
-      {repo.commitFailed && (
+      {pr.commitFailed && (
         <span className="shrink-0 text-xs text-muted-foreground">
           The last approval didn't produce a commit.
         </span>
@@ -189,38 +189,34 @@ export function RepoBar({ task, repo }: RepoBarProps) {
 
       <span className="flex-1" />
 
-      {draftAtHand(repo) && (
-        <Button
-          size="sm"
-          disabled={!readyToOpen}
-          onClick={() => void openPR(task.id, repo.repoPath, title, body)}
-        >
+      {draftAtHand(pr) && (
+        <Button size="sm" disabled={!readyToOpen} onClick={() => void openPR(task.id, title, body)}>
           <GitPullRequestArrow />
           Open PR
         </Button>
       )}
 
       {reviewing &&
-        (canApproveRepo(repo) || committing ? (
+        (canApprovePR(pr) || committing ? (
           approveButton
         ) : (
           <Tooltip>
             <TooltipTrigger render={<span />}>{approveButton}</TooltipTrigger>
-            <TooltipContent>{approveRepoHint(repo)}</TooltipContent>
+            <TooltipContent>{approvePRHint(pr)}</TooltipContent>
           </Tooltip>
         ))}
 
       {closable &&
-        (canCloseRepo(repo) || closing ? (
+        (canCloseTask(pr) || closing ? (
           closeButton
         ) : (
           <Tooltip>
             <TooltipTrigger render={<span />}>{closeButton}</TooltipTrigger>
-            <TooltipContent>{closeHint(repo)}</TooltipContent>
+            <TooltipContent>{closeHint(pr, repository)}</TooltipContent>
           </Tooltip>
         ))}
 
-      {/* The worktree of a closed repository is gone; there is nothing to open. */}
+      {/* The worktree of a closed task is gone; there is nothing to open. */}
       {!gone &&
         (canOpenEditor ? (
           openButton
@@ -231,13 +227,13 @@ export function RepoBar({ task, repo }: RepoBarProps) {
           </Tooltip>
         ))}
 
-      {hasRepoSession(repo) && (
+      {hasPRSession(pr) && (
         <Button
           variant="ghost"
           size="sm"
-          disabled={!paused && asSessionStatus(repo.sessionStatus) === "error"}
+          disabled={!paused && asSessionStatus(pr.sessionStatus) === "error"}
           onClick={() =>
-            void (paused ? resume(task.id, repo.sessionStage) : pause(task.id, repo.sessionStage))
+            void (paused ? resume(task.id, pr.sessionStage) : pause(task.id, pr.sessionStage))
           }
         >
           {paused ? <Play /> : <Pause />}
@@ -248,26 +244,26 @@ export function RepoBar({ task, repo }: RepoBarProps) {
       <DropdownMenu>
         <DropdownMenuTrigger
           render={<Button variant="ghost" size="icon-sm" />}
-          aria-label="Repository actions"
+          aria-label="Pull request actions"
         >
           <MoreHorizontal />
         </DropdownMenuTrigger>
         <DropdownMenuContent className="w-auto min-w-44">
           <DropdownMenuItem
-            disabled={!canReviewAgain(repo)}
-            onClick={() => void reviewAgain(task.id, repo.repoPath)}
+            disabled={!canReviewAgain(pr)}
+            onClick={() => void reviewAgain(task.id)}
           >
             Review again
           </DropdownMenuItem>
           <DropdownMenuItem
-            disabled={!canDiscardDraft(repo)}
-            onClick={() => void discardDraft(task.id, repo.repoPath)}
+            disabled={!canDiscardDraft(pr)}
+            onClick={() => void discardDraft(task.id)}
           >
             Discard draft
           </DropdownMenuItem>
           <DropdownMenuItem
-            disabled={repo.prNumber === 0 || gone}
-            onClick={() => void refreshPR(task.id, repo.repoPath)}
+            disabled={pr.prNumber === 0 || gone}
+            onClick={() => void refreshPR(task.id)}
           >
             Refresh PR
           </DropdownMenuItem>

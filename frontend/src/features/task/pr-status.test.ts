@@ -1,27 +1,27 @@
 import { describe, expect, it } from "vitest";
 import {
-  approveRepoHint,
-  canApproveRepo,
-  canCloseRepo,
+  approvePRHint,
+  canApprovePR,
+  canCloseTask,
   canDiscardDraft,
   canOpenPR,
   canReviewAgain,
   closeHint,
   closeStepLabel,
   draftAtHand,
-  hasRepoSession,
+  hasPRSession,
   prBlockHint,
   prBlockTitle,
   prReportLabel,
   prStateLabel,
-  repoStatusLabel,
-  repoStatusTone,
-} from "@/features/task/repo-status";
-import { makeCloseResult, makeRepoPR, makeReview } from "@/test/wails-mock";
+  prStatusLabel,
+  prStatusTone,
+} from "@/features/task/pr-status";
+import { makeCloseResult, makePullRequest, makeRepository, makeReview } from "@/test/wails-mock";
 
-const DRAFT = { title: "Add the login form", body: "Adds the form.", file: "web-draft.md" };
+const DRAFT = { title: "Add the login form", body: "Adds the form.", file: "draft.md" };
 
-describe("repoStatusLabel and repoStatusTone", () => {
+describe("prStatusLabel and prStatusTone", () => {
   it.each([
     ["preparing", "Checking GitHub", "working"],
     ["blocked", "Blocked", "idle"],
@@ -39,109 +39,116 @@ describe("repoStatusLabel and repoStatusTone", () => {
     ["pr_closed", "Closed without merge", "idle"],
     ["closing", "Closing", "working"],
     ["closed", "Closed", "done"],
-    ["skipped", "No changes · ready to close", "idle"],
   ])("reads %s", (status, label, tone) => {
-    const repo = makeRepoPR({ status });
+    const pr = makePullRequest({ status });
 
-    expect(repoStatusLabel(repo)).toBe(label);
-    expect(repoStatusTone(repo)).toBe(tone);
+    expect(prStatusLabel(pr)).toBe(label);
+    expect(prStatusTone(pr)).toBe(tone);
   });
 
-  it("leaves a merge it could not confirm to the situation of the repository", () => {
-    const repo = makeRepoPR({ status: "done", canClose: true, checkError: "gh: not found" });
+  it("leaves a merge it could not confirm to the situation of the task", () => {
+    const pr = makePullRequest({ status: "done", canClose: true, checkError: "gh: not found" });
 
-    expect(repoStatusTone(repo)).toBe("idle");
+    expect(prStatusTone(pr)).toBe("idle");
   });
 });
 
-describe("what a repository allows", () => {
+describe("what the pull request allows", () => {
   it("opens the pull request only from a ready draft the agent is not touching", () => {
-    expect(canOpenPR(makeRepoPR({ status: "draft_ready" }))).toBe(true);
-    expect(canOpenPR(makeRepoPR({ status: "draft_ready", turnRunning: true }))).toBe(false);
-    expect(canOpenPR(makeRepoPR({ status: "drafting" }))).toBe(false);
+    expect(canOpenPR(makePullRequest({ status: "draft_ready" }))).toBe(true);
+    expect(canOpenPR(makePullRequest({ status: "draft_ready", turnRunning: true }))).toBe(false);
+    expect(canOpenPR(makePullRequest({ status: "drafting" }))).toBe(false);
   });
 
   it("opens the pull request again from the draft an opening that failed left", () => {
-    expect(canOpenPR(makeRepoPR({ status: "awaiting_reply", draft: DRAFT }))).toBe(true);
+    expect(canOpenPR(makePullRequest({ status: "awaiting_reply", draft: DRAFT }))).toBe(true);
     expect(
-      canOpenPR(makeRepoPR({ status: "awaiting_reply", draft: DRAFT, turnRunning: true })),
+      canOpenPR(makePullRequest({ status: "awaiting_reply", draft: DRAFT, turnRunning: true })),
     ).toBe(false);
-    expect(canOpenPR(makeRepoPR({ status: "awaiting_reply" }))).toBe(false);
+    expect(canOpenPR(makePullRequest({ status: "awaiting_reply" }))).toBe(false);
   });
 
   it("has the draft at hand only while it is ready or left by an opening that failed", () => {
-    expect(draftAtHand(makeRepoPR({ status: "draft_ready" }))).toBe(true);
+    expect(draftAtHand(makePullRequest({ status: "draft_ready" }))).toBe(true);
     // The agent is in a turn: the draft is still at hand, only not sendable yet.
-    expect(draftAtHand(makeRepoPR({ status: "draft_ready", turnRunning: true }))).toBe(true);
-    expect(draftAtHand(makeRepoPR({ status: "awaiting_reply", draft: DRAFT }))).toBe(true);
-    expect(draftAtHand(makeRepoPR({ status: "awaiting_reply" }))).toBe(false);
-    expect(draftAtHand(makeRepoPR({ status: "drafting", draft: DRAFT }))).toBe(false);
-    expect(draftAtHand(makeRepoPR({ status: "reviewing", draft: DRAFT, prNumber: 12 }))).toBe(
+    expect(draftAtHand(makePullRequest({ status: "draft_ready", turnRunning: true }))).toBe(true);
+    expect(draftAtHand(makePullRequest({ status: "awaiting_reply", draft: DRAFT }))).toBe(true);
+    expect(draftAtHand(makePullRequest({ status: "awaiting_reply" }))).toBe(false);
+    expect(draftAtHand(makePullRequest({ status: "drafting", draft: DRAFT }))).toBe(false);
+    expect(draftAtHand(makePullRequest({ status: "reviewing", draft: DRAFT, prNumber: 12 }))).toBe(
       false,
     );
   });
 
   it("keeps the draft a record while the agent waits for a reply over an open pull request", () => {
-    const repo = makeRepoPR({ status: "awaiting_reply", draft: DRAFT, prNumber: 12 });
+    const repo = makePullRequest({ status: "awaiting_reply", draft: DRAFT, prNumber: 12 });
 
     expect(draftAtHand(repo)).toBe(false);
     expect(canOpenPR(repo)).toBe(false);
   });
 
   it("approves only with everything staged", () => {
-    expect(canApproveRepo(makeRepoPR({ status: "ready_to_approve" }))).toBe(true);
-    expect(canApproveRepo(makeRepoPR({ status: "in_review" }))).toBe(false);
+    expect(canApprovePR(makePullRequest({ status: "ready_to_approve" }))).toBe(true);
+    expect(canApprovePR(makePullRequest({ status: "in_review" }))).toBe(false);
   });
 
   it("throws the draft away only while it is still a proposal", () => {
-    expect(canDiscardDraft(makeRepoPR({ status: "drafting" }))).toBe(true);
-    expect(canDiscardDraft(makeRepoPR({ status: "draft_ready" }))).toBe(true);
-    expect(canDiscardDraft(makeRepoPR({ status: "reviewing" }))).toBe(false);
+    expect(canDiscardDraft(makePullRequest({ status: "drafting" }))).toBe(true);
+    expect(canDiscardDraft(makePullRequest({ status: "draft_ready" }))).toBe(true);
+    expect(canDiscardDraft(makePullRequest({ status: "reviewing" }))).toBe(false);
   });
 
   it("throws the draft away while the agent waits for a reply before the pull request", () => {
-    expect(canDiscardDraft(makeRepoPR({ status: "awaiting_reply" }))).toBe(true);
-    expect(canDiscardDraft(makeRepoPR({ status: "awaiting_reply", prNumber: 12 }))).toBe(false);
+    expect(canDiscardDraft(makePullRequest({ status: "awaiting_reply" }))).toBe(true);
+    expect(canDiscardDraft(makePullRequest({ status: "awaiting_reply", prNumber: 12 }))).toBe(
+      false,
+    );
   });
 
   it("reviews again from every state the pull request exists in", () => {
-    expect(canReviewAgain(makeRepoPR({ status: "awaiting_decision" }))).toBe(true);
-    expect(canReviewAgain(makeRepoPR({ status: "done" }))).toBe(true);
-    expect(canReviewAgain(makeRepoPR({ status: "merged" }))).toBe(true);
-    expect(canReviewAgain(makeRepoPR({ status: "draft_ready" }))).toBe(false);
-    expect(canReviewAgain(makeRepoPR({ status: "pr_closed" }))).toBe(false);
-    expect(canReviewAgain(makeRepoPR({ status: "closing" }))).toBe(false);
-    expect(canReviewAgain(makeRepoPR({ status: "closed" }))).toBe(false);
+    expect(canReviewAgain(makePullRequest({ status: "awaiting_decision" }))).toBe(true);
+    expect(canReviewAgain(makePullRequest({ status: "done" }))).toBe(true);
+    expect(canReviewAgain(makePullRequest({ status: "merged" }))).toBe(true);
+    expect(canReviewAgain(makePullRequest({ status: "draft_ready" }))).toBe(false);
+    expect(canReviewAgain(makePullRequest({ status: "pr_closed" }))).toBe(false);
+    expect(canReviewAgain(makePullRequest({ status: "closing" }))).toBe(false);
+    expect(canReviewAgain(makePullRequest({ status: "closed" }))).toBe(false);
   });
 
   it("reviews again while the agent waits for a reply over an open pull request", () => {
-    expect(canReviewAgain(makeRepoPR({ status: "awaiting_reply", prNumber: 12 }))).toBe(true);
-    expect(canReviewAgain(makeRepoPR({ status: "awaiting_reply" }))).toBe(false);
+    expect(canReviewAgain(makePullRequest({ status: "awaiting_reply", prNumber: 12 }))).toBe(true);
+    expect(canReviewAgain(makePullRequest({ status: "awaiting_reply" }))).toBe(false);
   });
 
   it("closes only when the backend says the closing is the user's to ask for", () => {
-    expect(canCloseRepo(makeRepoPR({ status: "merged", canClose: true }))).toBe(true);
-    expect(canCloseRepo(makeRepoPR({ status: "skipped", canClose: true }))).toBe(true);
-    expect(canCloseRepo(makeRepoPR({ status: "done" }))).toBe(false);
+    expect(canCloseTask(makePullRequest({ status: "merged", canClose: true }))).toBe(true);
+    expect(canCloseTask(makePullRequest({ status: "done" }))).toBe(false);
     // The closing is already under way; asking again would do nothing.
-    expect(canCloseRepo(makeRepoPR({ status: "closing", canClose: true }))).toBe(false);
+    expect(canCloseTask(makePullRequest({ status: "closing", canClose: true }))).toBe(false);
   });
 
   it("has a conversation only once a session was opened for it", () => {
-    expect(hasRepoSession(makeRepoPR())).toBe(true);
-    expect(hasRepoSession(makeRepoPR({ sessionStage: "" }))).toBe(false);
+    expect(hasPRSession(makePullRequest())).toBe(true);
+    expect(hasPRSession(makePullRequest({ sessionStage: "" }))).toBe(false);
   });
 });
 
 describe("closeHint", () => {
-  it("says why the repository can't be closed yet", () => {
-    expect(closeHint(makeRepoPR({ status: "done" }))).toBe(
+  it("says why the task can't be closed yet", () => {
+    expect(closeHint(makePullRequest({ status: "done" }), null)).toBe(
       "The pull request hasn't been merged yet",
     );
-    expect(closeHint(makeRepoPR({ status: "pr_closed" }))).toBe(
+    expect(closeHint(makePullRequest({ status: "pr_closed" }), null)).toBe(
       "The pull request was closed without a merge",
     );
-    expect(closeHint(makeRepoPR({ status: "merged" }))).toBe("");
+    expect(closeHint(makePullRequest({ status: "merged" }), null)).toBe("");
+  });
+
+  it("names the clone the closing waits for before anything else", () => {
+    const repository = makeRepository({ missing: true });
+    const pr = makePullRequest({ status: "merged", cloneMissing: true });
+
+    expect(closeHint(pr, repository)).toBe("The clone at /home/dev/projects/web is missing.");
   });
 });
 
@@ -233,7 +240,7 @@ describe("prBlockTitle and prBlockHint", () => {
     ["gh_unauthenticated", "GitHub CLI isn't authenticated", "gh auth login"],
     ["gh_failed", "GitHub CLI failed", "gh reports"],
     ["git_failed", "Git failed", "git reports"],
-    ["no_worktree", "The worktree is gone", "Discard the plan"],
+    ["no_worktree", "The worktree is gone", "worktree of this task"],
   ] as const)("names %s", (reason, title, hint) => {
     expect(prBlockTitle(reason)).toBe(title);
     expect(prBlockHint(reason)).toContain(hint);
@@ -247,10 +254,12 @@ describe("prReportLabel", () => {
   });
 });
 
-describe("approveRepoHint", () => {
+describe("approvePRHint", () => {
   it("says what is missing", () => {
-    expect(approveRepoHint(makeRepoPR({ review: makeReview() }))).toContain("Stage every changed");
-    expect(approveRepoHint(makeRepoPR({ review: makeReview({ error: "boom" }) }))).toBe(
+    expect(approvePRHint(makePullRequest({ review: makeReview() }))).toContain(
+      "Stage every changed",
+    );
+    expect(approvePRHint(makePullRequest({ review: makeReview({ error: "boom" }) }))).toBe(
       "The worktree couldn't be read",
     );
   });

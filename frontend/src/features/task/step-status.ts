@@ -253,8 +253,8 @@ export function blockTitle(reason: BlockReason): string {
       return "The branch already exists";
     case "git_failed":
       return "Git failed";
-    case "no_repository":
-      return "The step doesn't name a repository of this task";
+    case "clone_missing":
+      return "The clone of the repository is missing";
   }
 }
 
@@ -274,7 +274,7 @@ export function blockHint(step: Step, task: TaskSummary): string {
       return `Delete or rename the branch "${task.name}", then try again.`;
     case "git_failed":
       return "Fix what git reports, then try again.";
-    case "no_repository":
-      return "Fix the repository header of the step file, then try again.";
+    case "clone_missing":
+      return "Change the path of the repository in Settings › Repositories, then try again.";
   }
 }

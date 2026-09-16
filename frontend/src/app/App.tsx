@@ -7,7 +7,7 @@ import { LeftoversNotice } from "@/features/notice/LeftoversNotice";
 import { ErrorNotice } from "@/features/notice/Notice";
 import { useApplyTheme } from "@/features/theme/useApplyTheme";
 import { WelcomeScreen } from "@/features/welcome/WelcomeScreen";
-import { useAppStore, useError, useLeftovers } from "@/store/app-store";
+import { useAppStore, useError, useLeftover } from "@/store/app-store";
 
 export function App() {
   useApplyTheme();
@@ -32,7 +32,7 @@ export function App() {
   const app = useAppStore((state) => state.app);
   const setError = useAppStore((state) => state.setError);
   const error = useError();
-  const leftovers = useLeftovers();
+  const leftover = useLeftover();
 
   if (app === null) {
     return <div className="h-dvh bg-background" />;
@@ -40,7 +40,7 @@ export function App() {
 
   return (
     <>
-      {(error !== null || leftovers !== null) && (
+      {(error !== null || leftover !== null) && (
         <div className="fixed inset-x-0 top-0 z-50 flex justify-center p-3">
           <div className="flex w-full max-w-[43rem] flex-col gap-2">
             {error !== null && <ErrorNotice message={error} onDismiss={() => setError(null)} />}
@@ -48,7 +48,7 @@ export function App() {
           </div>
         </div>
       )}
-      {app.workspace === null ? (
+      {(app.repositories ?? []).length === 0 ? (
         <WelcomeScreen />
       ) : (
         <>

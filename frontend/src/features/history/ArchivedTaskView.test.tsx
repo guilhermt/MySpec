@@ -6,7 +6,7 @@ import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
 import { makeArchivedTask, makeState } from "@/test/wails-mock";
 
-const STEP_FILE = "---\nrepository: web\n---\n# Step 1: Add the login form\n";
+const STEP_FILE = "# Step 1: Add the login form\n";
 
 function view(overrides: Partial<ArchivedTask> = {}) {
   const task = makeArchivedTask(overrides);
@@ -22,7 +22,7 @@ describe("ArchivedTaskView", () => {
 
     expect(await screen.findByText("add-login")).toBeInTheDocument();
     expect(screen.getByText("Archived")).toBeInTheDocument();
-    expect(screen.getByText("Root")).toBeInTheDocument();
+    expect(screen.getByText("dev/web")).toBeInTheDocument();
     expect(screen.getByText("1 step")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "#12" })).toBeInTheDocument();
   });
@@ -76,7 +76,6 @@ describe("ArchivedTaskView", () => {
           number: 1,
           file: "1-add-the-login-form.md",
           title: "Add the login form",
-          repository: "web",
           reports: [{ pass: 1, file: "1-review-1.md", clean: true }],
         },
       ],
@@ -116,7 +115,6 @@ describe("ArchivedTaskView", () => {
   // A One-Shot task leaves one document behind, and the reports of the review of its single step.
   const ONE_SHOT: Partial<ArchivedTask> = {
     mode: "one_shot",
-    repoPath: "/home/dev/projects/web",
     hasPrd: false,
     hasTechSpec: false,
     hasOneShot: true,
@@ -125,7 +123,6 @@ describe("ArchivedTaskView", () => {
         number: 1,
         file: "one-shot.md",
         title: "Add login",
-        repository: "web",
         reports: [{ pass: 1, file: "1-review-1.md", clean: true }],
       },
     ],

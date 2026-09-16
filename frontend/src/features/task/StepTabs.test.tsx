@@ -9,7 +9,7 @@ import { makeSituation, makeState, makeStep, makeStepReviewer, makeTask } from "
 const REVIEWER_QUESTION = makeSituation({
   id: "reviewer-question",
   kind: "question",
-  place: { kind: "step_review", stage: "", step: 1, repoPath: "", repository: "" },
+  place: { kind: "step_review", stage: "", step: 1 },
 });
 
 function tabs(
@@ -85,7 +85,7 @@ describe("StepTabs", () => {
           id: "implementer-error",
           kind: "session_error",
           group: "error",
-          place: { kind: "step", stage: "", step: 1, repoPath: "", repository: "" },
+          place: { kind: "step", stage: "", step: 1 },
         }),
       ),
     );

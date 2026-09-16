@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { lifecycleOf, stageIndex, stageLabel, stageState } from "@/lib/stages";
-import { makeRepoPR, makeTask } from "@/test/wails-mock";
+import { makePullRequest, makeTask } from "@/test/wails-mock";
 
 describe("lifecycleOf", () => {
   it("runs a Structured task from the PRD to the closing", () => {
@@ -83,19 +83,13 @@ describe("stageState", () => {
     ["pr", "implementation", "done"],
     ["pr", "pr", "current"],
   ] as const)("reads a One-Shot task in %s against %s", (stage, id, expected) => {
-    expect(stageState(makeTask({ mode: "one_shot", stage, repos: [] }), id)).toBe(expected);
+    expect(stageState(makeTask({ mode: "one_shot", stage, pr: null }), id)).toBe(expected);
   });
 
-  // The PR stage covers two chips, and the pull requests decide which of them
+  // The PR stage covers two chips, and the pull request decides which of them
   // the task is on.
-  it("stays on the PR chip while a pull request is missing", () => {
-    const task = makeTask({
-      stage: "pr",
-      repos: [
-        makeRepoPR({ status: "reviewing", prNumber: 12 }),
-        makeRepoPR({ repoPath: "/home/dev/projects/api", status: "draft_ready" }),
-      ],
-    });
+  it("stays on the PR chip while the pull request is not open", () => {
+    const task = makeTask({ stage: "pr", pr: makePullRequest({ status: "draft_ready" }) });
 
     expect(stageState(task, "implementation")).toBe("done");
     expect(stageState(task, "pr")).toBe("current");
@@ -103,13 +97,10 @@ describe("stageState", () => {
     expect(stageState(task, "closing")).toBe("upcoming");
   });
 
-  it("moves to the PR review chip once every pull request is open", () => {
+  it("moves to the PR review chip once the pull request is open", () => {
     const task = makeTask({
       stage: "pr",
-      repos: [
-        makeRepoPR({ status: "reviewing", prNumber: 12 }),
-        makeRepoPR({ repoPath: "/home/dev/projects/api", status: "in_review", prNumber: 13 }),
-      ],
+      pr: makePullRequest({ status: "in_review", prNumber: 12 }),
     });
 
     expect(stageState(task, "pr")).toBe("done");
@@ -117,45 +108,16 @@ describe("stageState", () => {
     expect(stageState(task, "closing")).toBe("upcoming");
   });
 
-  it("lets a skipped repository through, having no pull request to open", () => {
-    const task = makeTask({
-      stage: "pr",
-      repos: [
-        makeRepoPR({ status: "in_review", prNumber: 12 }),
-        makeRepoPR({ repoPath: "/home/dev/projects/api", status: "skipped" }),
-      ],
-    });
-
-    expect(stageState(task, "pr")).toBe("done");
-    expect(stageState(task, "pr_review")).toBe("current");
-  });
-
-  it("moves to the closing chip once every review is over", () => {
-    const task = makeTask({
-      stage: "pr",
-      repos: [
-        makeRepoPR({ status: "done", prNumber: 12 }),
-        makeRepoPR({ repoPath: "/home/dev/projects/api", status: "skipped" }),
-      ],
-    });
+  it("moves to the closing chip once the review is over", () => {
+    const task = makeTask({ stage: "pr", pr: makePullRequest({ status: "done", prNumber: 12 }) });
 
     expect(stageState(task, "pr")).toBe("done");
     expect(stageState(task, "pr_review")).toBe("done");
     expect(stageState(task, "closing")).toBe("current");
   });
 
-  // A repository that skipped the stage never opened a pull request, so the
-  // task reaches the closing without ever being in the review.
-  it("reaches the closing with nothing but skipped repositories", () => {
-    const task = makeTask({ stage: "pr", repos: [makeRepoPR({ status: "skipped" })] });
-
-    expect(stageState(task, "pr")).toBe("done");
-    expect(stageState(task, "pr_review")).toBe("done");
-    expect(stageState(task, "closing")).toBe("current");
-  });
-
-  it("stays on the PR chip before the repositories are known", () => {
-    const task = makeTask({ stage: "pr", repos: [] });
+  it("stays on the PR chip before the pull request is known", () => {
+    const task = makeTask({ stage: "pr", pr: null });
 
     expect(stageState(task, "pr")).toBe("current");
     expect(stageState(task, "pr_review")).toBe("upcoming");

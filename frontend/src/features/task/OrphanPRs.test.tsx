@@ -1,50 +1,43 @@
 import { screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { OrphanPRs } from "@/features/task/OrphanPRs";
+import { OrphanPR, openPROf } from "@/features/task/OrphanPRs";
 import { api, type PRPreview } from "@/lib/wails";
 import { renderWithStore } from "@/test/render";
-import { makeState } from "@/test/wails-mock";
+import { makePullRequest, makeState, makeTask } from "@/test/wails-mock";
 
-const WEB: PRPreview = {
-  repository: "web",
-  repoPath: "/home/dev/projects/web",
-  number: 12,
-  url: "https://github.com/o/r/pull/12",
-  state: "open",
-};
+const PR: PRPreview = { number: 12, url: "https://github.com/o/r/pull/12", state: "open" };
 
-const API_REPO: PRPreview = {
-  repository: "api",
-  repoPath: "/home/dev/projects/api",
-  number: 13,
-  url: "https://github.com/o/a/pull/13",
-  state: "open",
-};
-
-function warning(prs: PRPreview[]) {
-  return renderWithStore(<OrphanPRs prs={prs} />, { state: makeState() });
+function warning(pr: PRPreview | null) {
+  return renderWithStore(<OrphanPR pr={pr} />, { state: makeState() });
 }
 
-describe("OrphanPRs", () => {
-  it("lists every pull request that stays behind, with its repository", () => {
-    warning([WEB, API_REPO]);
+describe("openPROf", () => {
+  it("is the pull request a task opened", () => {
+    const task = makeTask({
+      stage: "pr",
+      pr: makePullRequest({ prNumber: 12, prUrl: PR.url, prState: "open" }),
+    });
 
-    expect(screen.getByText("These pull requests stay open on GitHub:")).toBeInTheDocument();
-    expect(screen.getByText("#12")).toBeInTheDocument();
-    expect(screen.getByText("web")).toBeInTheDocument();
-    expect(screen.getByText("#13")).toBeInTheDocument();
-    expect(screen.getByText("api")).toBeInTheDocument();
+    expect(openPROf(task)).toEqual(PR);
   });
 
-  it("says closing them is up to the user", () => {
-    warning([WEB]);
+  it("is null without a pull request on GitHub", () => {
+    expect(openPROf(makeTask({ stage: "pr", pr: makePullRequest() }))).toBeNull();
+    expect(openPROf(makeTask())).toBeNull();
+  });
+});
+
+describe("OrphanPR", () => {
+  it("names the pull request that stays behind, and says closing it is up to the user", () => {
+    warning(PR);
 
     expect(screen.getByText("This pull request stays open on GitHub:")).toBeInTheDocument();
-    expect(screen.getByText("Closing them on GitHub is up to you.")).toBeInTheDocument();
+    expect(screen.getByText("#12")).toBeInTheDocument();
+    expect(screen.getByText("Closing it on GitHub is up to you.")).toBeInTheDocument();
   });
 
-  it("opens one in the browser of the desktop", async () => {
-    const { user } = warning([WEB]);
+  it("opens it in the browser of the desktop", async () => {
+    const { user } = warning(PR);
 
     await user.click(screen.getByText("#12"));
 
@@ -52,14 +45,8 @@ describe("OrphanPRs", () => {
   });
 
   it("says nothing without a pull request to leave behind", () => {
-    const { container } = warning([]);
+    const { container } = warning(null);
 
     expect(container).toBeEmptyDOMElement();
-  });
-
-  it("names the workspace itself for the repository of a root task", () => {
-    warning([{ ...WEB, repository: "." }]);
-
-    expect(screen.getByText("projects")).toBeInTheDocument();
   });
 });

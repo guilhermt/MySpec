@@ -1,4 +1,4 @@
-import { FolderGit2, House, PanelRight, Pause, Play, Trash2 } from "lucide-react";
+import { FolderGit2, PanelRight, Pause, Play, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,11 +10,9 @@ import { hasArtifacts } from "@/features/task/status";
 import { currentStepOf, hasStepSession, loopSession } from "@/features/task/step-status";
 import { TaskModelsButton } from "@/features/task/TaskModels";
 import { TaskReviewModeButton } from "@/features/task/TaskReviewMode";
-import { findNode } from "@/features/tree/tree-model";
 import { isOneShot } from "@/lib/task-modes";
 import { asSessionStatus, asTaskStage, type TaskSummary } from "@/lib/wails";
 import { pause, resume } from "@/store/actions";
-import { repoNodeId, useAppStore } from "@/store/app-store";
 
 export interface TaskHeaderProps {
   task: TaskSummary;
@@ -26,16 +24,10 @@ export interface TaskHeaderProps {
 /** TaskHeader names the task and holds everything the user can do to it. */
 export function TaskHeader({ task, artifactsOpen, onToggleArtifacts }: TaskHeaderProps) {
   const [deleting, setDeleting] = useState(false);
-  const repoName = useAppStore((state) =>
-    state.app === null || task.repoPath === ""
-      ? ""
-      : (findNode(state.app, repoNodeId(task.repoPath))?.label ?? ""),
-  );
 
-  const Icon = task.repoPath === "" ? House : FolderGit2;
   // The implementation stage holds the session of the step being run, and only
-  // once the step got as far as opening one. The PR stage holds none at all:
-  // its sessions are of the repositories, and the bar of each one pauses it.
+  // once the step got as far as opening one. The PR stage holds none of its
+  // own: its session is paused from the bar of the pull request.
   const implementing = asTaskStage(task.stage) === "implementation";
   const step = currentStepOf(task);
   const running = asTaskStage(task.stage) !== "pr" && (!implementing || hasStepSession(step));
@@ -49,10 +41,10 @@ export function TaskHeader({ task, artifactsOpen, onToggleArtifacts }: TaskHeade
 
   return (
     <header className="flex h-11 shrink-0 items-center gap-2 border-b px-3">
-      <Icon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
+      <FolderGit2 aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
       <span className="min-w-0 truncate font-medium">{task.name}</span>
       {isOneShot(task) && <Badge variant="outline">One-Shot</Badge>}
-      <Badge variant="secondary">{task.repoPath === "" ? "Root" : repoName}</Badge>
+      <Badge variant="secondary">{task.repository}</Badge>
       <StatusBadge task={task} />
 
       <span className="flex-1" />

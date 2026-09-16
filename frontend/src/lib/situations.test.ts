@@ -2,10 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   compactWait,
   compareSituations,
-  hiddenSituations,
   namesPlace,
   placeLabel,
-  repoSituation,
+  prSituation,
   reviewerSituation,
   situationDetail,
   situationLabel,
@@ -21,26 +20,18 @@ import type { Place } from "@/lib/wails";
 import { makeSituation, makeState, makeTask } from "@/test/wails-mock";
 
 function stagePlace(stage: string): Place {
-  return { kind: "stage", stage, step: 0, repoPath: "", repository: "" };
+  return { kind: "stage", stage, step: 0 };
 }
 
 function stepPlace(step: number): Place {
-  return { kind: "step", stage: "", step, repoPath: "", repository: "" };
+  return { kind: "step", stage: "", step };
 }
 
 function reviewerPlace(step: number): Place {
-  return { kind: "step_review", stage: "", step, repoPath: "", repository: "" };
+  return { kind: "step_review", stage: "", step };
 }
 
-function repoPlace(repository: string): Place {
-  return {
-    kind: "repo",
-    stage: "",
-    step: 0,
-    repoPath: `/home/dev/projects/${repository}`,
-    repository,
-  };
-}
+const PR_PLACE: Place = { kind: "pr", stage: "", step: 0 };
 
 const ids = (situations: readonly { id: string }[]) => situations.map((situation) => situation.id);
 
@@ -77,7 +68,6 @@ describe("situationLabel", () => {
     ["changes_review", "approve", 100, "Approve changes"],
     ["merge", "merge", 0, "Ready to merge"],
     ["merge", "close", 0, "Ready to close"],
-    ["nothing_to_publish", "", 0, "Ready to close"],
   ])("names %s in the %s form", (kind, form, percent, label) => {
     const situation = makeSituation({ kind, form, percent, place: stepPlace(3) });
 
@@ -103,15 +93,9 @@ describe("placeLabel", () => {
     [stagePlace("implementation"), "implementation"],
     [stepPlace(4), "step 4"],
     [reviewerPlace(2), "step 2 review"],
-    [repoPlace("api"), "api"],
+    [PR_PLACE, "pull request"],
   ])("names the place %#", (place, label) => {
-    expect(placeLabel(makeState(), makeSituation({ place }))).toBe(label);
-  });
-
-  it("names the repository of the workspace itself after the workspace", () => {
-    const situation = makeSituation({ place: repoPlace(".") });
-
-    expect(placeLabel(makeState(), situation)).toBe("projects");
+    expect(placeLabel(makeSituation({ place }))).toBe(label);
   });
 });
 
@@ -133,29 +117,28 @@ describe("namesPlace and situationDetail", () => {
     ["findings", false],
     ["changes_review", false],
     ["merge", false],
-    ["nothing_to_publish", false],
   ])("knows whether the label of %s names its place", (kind, expected) => {
     expect(namesPlace(makeSituation({ kind }))).toBe(expected);
   });
 
   it("follows the label with the place when the label does not name it", () => {
-    const draft = makeSituation({ kind: "draft", place: repoPlace("api") });
+    const draft = makeSituation({ kind: "draft", place: PR_PLACE });
     const reply = makeSituation({ kind: "reply", place: stagePlace("tech_spec") });
 
-    expect(situationDetail(makeState(), draft)).toBe("Draft to approve · api");
-    expect(situationDetail(makeState(), reply)).toBe("Waiting for reply · tech spec");
+    expect(situationDetail(draft)).toBe("Draft to approve · pull request");
+    expect(situationDetail(reply)).toBe("Waiting for reply · tech spec");
   });
 
   it("says it is the reviewer of the step that asks", () => {
     const question = makeSituation({ kind: "question", place: reviewerPlace(2) });
 
-    expect(situationDetail(makeState(), question)).toBe("Question · step 2 review");
+    expect(situationDetail(question)).toBe("Question · step 2 review");
   });
 
   it("is the label alone when the label names the place", () => {
     const review = makeSituation({ kind: "step_review", form: "review", place: stepPlace(3) });
 
-    expect(situationDetail(makeState(), review)).toBe("Review step 3");
+    expect(situationDetail(review)).toBe("Review step 3");
   });
 });
 
@@ -210,18 +193,6 @@ describe("the order of the situations", () => {
 
     expect(compareSituations(unreadable, older)).toBe(0);
   });
-
-  it("gathers the situations of the tasks a node hides, most urgent first", () => {
-    const tasks = [
-      makeTask({ id: "task-1", situations: [closing] }),
-      makeTask({ id: "task-2", situations: [error, newer] }),
-      makeTask({ id: "task-3", situations: null }),
-      makeTask({ id: "task-4", situations: [older] }),
-    ];
-
-    expect(ids(hiddenSituations(tasks))).toEqual(["error", "older", "newer", "closing"]);
-    expect(hiddenSituations([])).toEqual([]);
-  });
 });
 
 describe("waitingEntries", () => {
@@ -238,17 +209,17 @@ describe("waitingEntries", () => {
         name: "billing",
         situations: [
           makeSituation({
-            id: "billing-web",
+            id: "billing-draft",
             taskId: "task-2",
             kind: "draft",
-            place: repoPlace("web"),
+            place: PR_PLACE,
             startedAt: started,
           }),
           makeSituation({
-            id: "billing-api",
+            id: "billing-findings",
             taskId: "task-2",
-            kind: "draft",
-            place: repoPlace("api"),
+            kind: "findings",
+            place: PR_PLACE,
             startedAt: started,
           }),
         ],
@@ -270,13 +241,13 @@ describe("waitingEntries", () => {
     ],
   });
 
-  it("lists every situation of the workspace, most urgent first, then by task and id", () => {
+  it("lists every situation of the active tasks, most urgent first, then by task and id", () => {
     const entries = waitingEntries(app, null);
 
     expect(entries.map((entry) => [entry.task.name, entry.situation.id])).toEqual([
       ["add-login", "add-login-blocked"],
-      ["billing", "billing-api"],
-      ["billing", "billing-web"],
+      ["billing", "billing-draft"],
+      ["billing", "billing-findings"],
       ["zeta", "zeta-reply"],
     ]);
   });
@@ -288,7 +259,7 @@ describe("waitingEntries", () => {
     ]);
   });
 
-  it("is empty without a workspace, or without a situation in it", () => {
+  it("is empty without tasks, or without a situation in them", () => {
     expect(waitingEntries(null, null)).toEqual([]);
     expect(waitingEntries(makeState({ tasks: null }), null)).toEqual([]);
     expect(waitingEntries(makeState({ tasks: [makeTask({ situations: null })] }), null)).toEqual(
@@ -300,8 +271,7 @@ describe("waitingEntries", () => {
 describe("the situation of a place", () => {
   const stage = makeSituation({ id: "stage", place: stagePlace("plan") });
   const step = makeSituation({ id: "step", kind: "step_empty", place: stepPlace(2) });
-  const api = makeSituation({ id: "api", kind: "draft", place: repoPlace("api") });
-  const web = makeSituation({ id: "web", kind: "findings", place: repoPlace("web") });
+  const draft = makeSituation({ id: "draft", kind: "draft", place: PR_PLACE });
 
   it("finds the situation of the planning stage", () => {
     expect(stageSituation(makeTask({ situations: [step, stage] }))?.id).toBe("stage");
@@ -343,12 +313,10 @@ describe("the situation of a place", () => {
     expect(stepOrReviewerSituation(makeTask({ situations: null }), 2)).toBeNull();
   });
 
-  it("finds the situation of a repository by its path", () => {
-    const task = makeTask({ situations: [api, web] });
-
-    expect(repoSituation(task, "/home/dev/projects/web")?.id).toBe("web");
-    expect(repoSituation(task, "/home/dev/projects/docs")).toBeNull();
-    expect(repoSituation(makeTask({ situations: null }), "/home/dev/projects/web")).toBeNull();
+  it("finds the situation of the pull request", () => {
+    expect(prSituation(makeTask({ situations: [stage, draft] }))?.id).toBe("draft");
+    expect(prSituation(makeTask({ situations: [stage] }))).toBeNull();
+    expect(prSituation(makeTask({ situations: null }))).toBeNull();
   });
 });
 

@@ -7,8 +7,8 @@ import { makeReview, makeState, makeTask } from "@/test/wails-mock";
 
 const task = makeTask({ stage: "implementation", currentStep: 1 });
 
-function strip(review: Review, repoPath = "") {
-  return renderWithStore(<ReviewStrip taskId={task.id} repoPath={repoPath} review={review} />, {
+function strip(review: Review, subject: "step" | "pr" = "step") {
+  return renderWithStore(<ReviewStrip taskId={task.id} subject={subject} review={review} />, {
     state: makeState({ tasks: [task] }),
   });
 }
@@ -44,7 +44,7 @@ describe("ReviewStrip", () => {
 
     await user.click(screen.getByRole("button", { name: /src\/LoginForm.tsx/ }));
 
-    expect(api.openFileInEditor).toHaveBeenCalledWith("task-1", "", "src/LoginForm.tsx");
+    expect(api.openFileInEditor).toHaveBeenCalledWith("task-1", "src/LoginForm.tsx");
   });
 
   it("has nothing to open for a file that was deleted", () => {
@@ -85,10 +85,18 @@ describe("ReviewStrip", () => {
     expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
   });
 
-  it("says so when the agent changed nothing", () => {
-    strip(makeReview({ files: [], staged: 0, total: 0, percent: 0 }));
+  it("says so when the agent changed nothing, with the way out of the subject", () => {
+    const empty = makeReview({ files: [], staged: 0, total: 0, percent: 0 });
+    const { unmount } = strip(empty);
 
-    expect(screen.getByText(/didn't change anything/)).toBeInTheDocument();
+    expect(screen.getByText(/didn't change anything/)).toHaveTextContent("discard the step");
     expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
+
+    unmount();
+    strip(empty, "pr");
+
+    expect(screen.getByText(/didn't change anything/)).toHaveTextContent(
+      "review the pull request again",
+    );
   });
 });

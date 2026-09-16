@@ -1,36 +1,84 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { NewTaskDialog } from "@/features/task-create/NewTaskDialog";
-import { api, type TaskSummary } from "@/lib/wails";
-import { type NodeId, useAppStore } from "@/store/app-store";
-import { renderWithStore } from "@/test/render";
-import { makeModelDefaults, makeState, makeTask } from "@/test/wails-mock";
+import { api, type State } from "@/lib/wails";
+import { useAppStore } from "@/store/app-store";
+import { renderWithStore, type StoreOptions } from "@/test/render";
+import {
+  makeArchivedTask,
+  makeModelDefaults,
+  makeRepository,
+  makeState,
+  makeTask,
+} from "@/test/wails-mock";
 
-const AT_ROOT: { newTaskFor: NodeId } = { newTaskFor: "root" };
-const AT_WEB: { newTaskFor: NodeId } = { newTaskFor: "repo:/home/dev/projects/web" };
+const WEB = makeRepository();
+const API = makeRepository({
+  id: "repo-2",
+  name: "api",
+  fullName: "dev/api",
+  path: "/home/dev/projects/api",
+});
 
-function open(ui = AT_ROOT, tasks: TaskSummary[] = []) {
-  return renderWithStore(<NewTaskDialog />, { state: makeState({ tasks }), ui });
+function open(state: Partial<State> = {}, ui: StoreOptions["ui"] = {}) {
+  return renderWithStore(<NewTaskDialog />, {
+    state: makeState({ repositories: [WEB, API], ...state }),
+    ui: { newTaskOpen: true, ...ui },
+  });
 }
 
 describe("NewTaskDialog", () => {
-  it("stays closed until a node asks for it", () => {
+  it("stays closed until something asks for it", () => {
     renderWithStore(<NewTaskDialog />, { state: makeState() });
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("says where the task will live", () => {
-    open(AT_WEB);
+  it("opens on the repository of the filter", () => {
+    open({ repositoryFilter: "repo-2" });
 
     expect(screen.getByRole("heading", { name: "New task" })).toBeInTheDocument();
-    expect(screen.getByText("In web")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Repository: dev/api" })).toBeInTheDocument();
   });
 
-  it("says when the task will live in the workspace root", () => {
+  it("opens on the repository of the open task when the filter shows them all", () => {
+    const task = makeTask({ repositoryId: "repo-2", repository: "dev/api" });
+
+    open({ tasks: [task] }, { openTaskId: task.id });
+
+    expect(screen.getByRole("button", { name: "Repository: dev/api" })).toBeInTheDocument();
+  });
+
+  it("opens on the repository of the last task created", () => {
+    open({}, { lastRepositoryId: "repo-2" });
+
+    expect(screen.getByRole("button", { name: "Repository: dev/api" })).toBeInTheDocument();
+  });
+
+  it("opens on the first repository when nothing else says", () => {
     open();
 
-    expect(screen.getByText("At the workspace root")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Repository: dev/web" })).toBeInTheDocument();
+  });
+
+  it("offers no repository whose clone is missing", async () => {
+    const gone = makeRepository({ id: "repo-2", fullName: "dev/api", missing: true });
+    const { user } = open({ repositories: [WEB, gone] });
+
+    await user.click(screen.getByRole("button", { name: "Repository: dev/web" }));
+
+    const item = await screen.findByRole("menuitemradio", { name: /dev\/api/ });
+    expect(item).toHaveAttribute("aria-disabled", "true");
+    expect(item).toHaveTextContent("The clone at /home/dev/projects/web is missing.");
+  });
+
+  it("changes the repository the task will belong to", async () => {
+    const { user } = open();
+
+    await user.click(screen.getByRole("button", { name: "Repository: dev/web" }));
+    await user.click(await screen.findByRole("menuitemradio", { name: "dev/api" }));
+
+    expect(screen.getByRole("button", { name: "Repository: dev/api" })).toBeInTheDocument();
   });
 
   it("offers the normalised name of what was typed", async () => {
@@ -46,15 +94,53 @@ describe("NewTaskDialog", () => {
     expect(screen.getByText("Lowercase letters, digits and hyphens.")).toBeVisible();
   });
 
-  it("refuses a name another task already has", async () => {
-    const { user } = open(AT_ROOT, [makeTask({ name: "add-login" })]);
+  it("refuses a name another task of the repository already has", async () => {
+    const { user } = open({ tasks: [makeTask({ name: "add-login" })] });
 
     await user.type(screen.getByLabelText("Name"), "add-login");
 
-    expect(
-      screen.getByText("A task with this name already exists in this workspace."),
-    ).toBeVisible();
+    expect(screen.getByText("A task named add-login already exists in dev/web.")).toBeVisible();
     expect(screen.getByRole("button", { name: "Create" })).toBeDisabled();
+  });
+
+  it("refuses a name an archived task of the repository already has", async () => {
+    const { user } = open({ history: [makeArchivedTask({ name: "add-login" })] });
+
+    await user.type(screen.getByLabelText("Name"), "add-login");
+
+    expect(screen.getByText("A task named add-login already exists in dev/web.")).toBeVisible();
+  });
+
+  it("takes the same name in another repository", async () => {
+    const { user } = open({ tasks: [makeTask({ name: "add-login" })] });
+
+    await user.type(screen.getByLabelText("Name"), "add-login");
+    await user.click(screen.getByRole("button", { name: "Repository: dev/web" }));
+    await user.click(await screen.findByRole("menuitemradio", { name: "dev/api" }));
+
+    expect(
+      screen.queryByText("A task named add-login already exists in dev/web."),
+    ).not.toBeInTheDocument();
+  });
+
+  // With every clone missing the dialog opens on no repository at all; the
+  // names of the other repositories are none of this task's business yet.
+  it("takes any name while no repository is chosen", async () => {
+    const gone = makeRepository({ missing: true });
+    const alsoGone = makeRepository({ id: "repo-2", fullName: "dev/api", missing: true });
+    const { user } = open({
+      repositories: [gone, alsoGone],
+      tasks: [makeTask({ name: "add-login" })],
+    });
+
+    expect(
+      screen.getByRole("button", { name: "Repository: Choose a repository" }),
+    ).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText("Name"), "add-login");
+
+    expect(screen.getByText("Lowercase letters, digits and hyphens.")).toBeVisible();
+    expect(screen.queryByText(/already exists in/)).not.toBeInTheDocument();
   });
 
   it("keeps Create out of reach until both fields are filled", async () => {
@@ -73,10 +159,12 @@ describe("NewTaskDialog", () => {
     expect(create).toBeEnabled();
   });
 
-  it("creates the task in the repository it was opened for and opens it", async () => {
+  it("creates the task in the repository that was chosen and opens it", async () => {
     vi.mocked(api.createTask).mockResolvedValue("task-9");
-    const { user } = open(AT_WEB);
+    const { user } = open();
 
+    await user.click(screen.getByRole("button", { name: "Repository: dev/web" }));
+    await user.click(await screen.findByRole("menuitemradio", { name: "dev/api" }));
     await user.type(screen.getByLabelText("Name"), "fix-header");
     await user.type(screen.getByLabelText("Initial context"), "The header overlaps the menu");
     await user.click(screen.getByRole("button", { name: "Create" }));
@@ -86,13 +174,14 @@ describe("NewTaskDialog", () => {
     });
     expect(api.createTask).toHaveBeenCalledWith({
       name: "fix-header",
-      repoPath: "/home/dev/projects/web",
+      repositoryId: "repo-2",
       initialContext: "The header overlaps the menu",
       mode: "structured",
       models: makeModelDefaults(),
       reviewMode: "manual",
     });
-    expect(useAppStore.getState().newTaskFor).toBeNull();
+    expect(useAppStore.getState().newTaskOpen).toBe(false);
+    expect(useAppStore.getState().lastRepositoryId).toBe("repo-2");
   });
 
   it("folds the models under a summary of the defaults", () => {
@@ -142,7 +231,7 @@ describe("NewTaskDialog", () => {
     });
     expect(api.createTask).toHaveBeenCalledWith({
       name: "add-login",
-      repoPath: "",
+      repositoryId: "repo-1",
       initialContext: "A login screen",
       mode: "structured",
       models: makeModelDefaults().map((line) =>
@@ -162,7 +251,7 @@ describe("NewTaskDialog", () => {
     await waitFor(() => {
       expect(api.createTask).toHaveBeenCalledWith({
         name: "add-login",
-        repoPath: "",
+        repositoryId: "repo-1",
         initialContext: "A login screen",
         mode: "structured",
         models: makeModelDefaults(),
@@ -172,10 +261,7 @@ describe("NewTaskDialog", () => {
   });
 
   it("starts from the review mode of the settings and says what it does", () => {
-    renderWithStore(<NewTaskDialog />, {
-      state: makeState({ reviewModeDefault: "agent" }),
-      ui: AT_ROOT,
-    });
+    open({ reviewModeDefault: "agent" });
 
     expect(screen.getByRole("button", { name: "Task review mode: Agent" })).toHaveTextContent(
       "Agent",
@@ -206,7 +292,7 @@ describe("NewTaskDialog", () => {
     await waitFor(() => {
       expect(api.createTask).toHaveBeenCalledWith({
         name: "add-login",
-        repoPath: "",
+        repositoryId: "repo-1",
         initialContext: "A login screen",
         mode: "structured",
         models: makeModelDefaults(),
@@ -216,7 +302,7 @@ describe("NewTaskDialog", () => {
   });
 
   it("opens on the Structured mode and says what it does", () => {
-    open(AT_WEB);
+    open();
 
     const modes = screen.getByRole("group", { name: "Mode" });
     expect(within(modes).getByRole("button", { name: "Structured" })).toHaveAttribute(
@@ -230,13 +316,11 @@ describe("NewTaskDialog", () => {
     expect(
       screen.getByText("A PRD, a tech spec and a plan of steps, each step its own commit."),
     ).toBeInTheDocument();
-    expect(
-      screen.queryByText("One-Shot tasks are created in a repository."),
-    ).not.toBeInTheDocument();
+    expect(within(modes).getByRole("button", { name: "One-Shot" })).toBeEnabled();
   });
 
   it("switches the hint and the models to the One-Shot mode", async () => {
-    const { user } = open(AT_WEB);
+    const { user } = open();
 
     await user.click(screen.getByRole("button", { name: /Models/ }));
     await user.click(screen.getByRole("button", { name: "One-Shot" }));
@@ -268,7 +352,7 @@ describe("NewTaskDialog", () => {
   });
 
   it("keeps an adjustment to a stage both modes have", async () => {
-    const { user } = open(AT_WEB);
+    const { user } = open();
 
     await user.click(screen.getByRole("button", { name: /Models/ }));
     await user.click(
@@ -287,7 +371,7 @@ describe("NewTaskDialog", () => {
   });
 
   it("sums up only the stages of the mode", async () => {
-    const { user } = open(AT_WEB);
+    const { user } = open();
 
     await user.click(screen.getByRole("button", { name: /Models/ }));
     await user.click(await screen.findByRole("button", { name: "PRD model: Fable 5.1 · high" }));
@@ -298,15 +382,8 @@ describe("NewTaskDialog", () => {
     expect(screen.getByRole("button", { name: /Models/ })).toHaveTextContent("Defaults");
   });
 
-  it("offers no One-Shot at the workspace root, and says why", () => {
-    open();
-
-    expect(screen.getByRole("button", { name: "One-Shot" })).toBeDisabled();
-    expect(screen.getByText("One-Shot tasks are created in a repository.")).toBeVisible();
-  });
-
   it("creates the task in the mode of the dialog", async () => {
-    const { user } = open(AT_WEB);
+    const { user } = open();
 
     await user.click(screen.getByRole("button", { name: "One-Shot" }));
     await user.type(screen.getByLabelText("Name"), "fix-header");
@@ -316,7 +393,7 @@ describe("NewTaskDialog", () => {
     await waitFor(() => {
       expect(api.createTask).toHaveBeenCalledWith({
         name: "fix-header",
-        repoPath: "/home/dev/projects/web",
+        repositoryId: "repo-1",
         initialContext: "The header overlaps the menu",
         mode: "one_shot",
         models: makeModelDefaults(),
@@ -346,7 +423,7 @@ describe("NewTaskDialog", () => {
     await user.click(screen.getByRole("button", { name: "Create" }));
 
     expect(await screen.findByText("A task with this name already exists.")).toBeVisible();
-    expect(useAppStore.getState().newTaskFor).toBe("root");
+    expect(useAppStore.getState().newTaskOpen).toBe(true);
     expect(screen.getByRole("button", { name: "Create" })).toBeEnabled();
   });
 
@@ -355,7 +432,7 @@ describe("NewTaskDialog", () => {
 
     await user.click(screen.getByRole("button", { name: "Cancel" }));
 
-    expect(useAppStore.getState().newTaskFor).toBeNull();
+    expect(useAppStore.getState().newTaskOpen).toBe(false);
     expect(api.createTask).not.toHaveBeenCalled();
   });
 });

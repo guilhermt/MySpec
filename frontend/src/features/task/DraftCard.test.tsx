@@ -1,16 +1,16 @@
 import { screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { DraftCard } from "@/features/task/DraftCard";
-import { api, type RepoPR } from "@/lib/wails";
+import { api, type PullRequest } from "@/lib/wails";
 import { renderWithStore } from "@/test/render";
-import { makeRepoPR, makeState, makeTask } from "@/test/wails-mock";
+import { makePullRequest, makeState, makeTask } from "@/test/wails-mock";
 
-const DRAFT = { title: "Add the login form", body: "Closes #12", file: "web-draft.md" };
+const DRAFT = { title: "Add the login form", body: "Closes #12", file: "draft.md" };
 
-function card(overrides: Partial<RepoPR> = {}, prDrafts: Record<string, never> | object = {}) {
-  const repo = makeRepoPR({ status: "draft_ready", draft: DRAFT, ...overrides });
-  const task = makeTask({ stage: "pr", repos: [repo] });
-  return renderWithStore(<DraftCard taskId={task.id} repo={repo} />, {
+function card(overrides: Partial<PullRequest> = {}, prDrafts: Record<string, never> | object = {}) {
+  const pr = makePullRequest({ status: "draft_ready", draft: DRAFT, ...overrides });
+  const task = makeTask({ stage: "pr", pr });
+  return renderWithStore(<DraftCard taskId={task.id} pr={pr} />, {
     state: makeState({ tasks: [task] }),
     ui: { prDrafts: prDrafts as never },
   });
@@ -32,7 +32,7 @@ describe("DraftCard", () => {
   });
 
   it("prefers what the user is editing over the file", () => {
-    card({}, { "task-1|/home/dev/projects/web": { title: "Mine", body: "My body" } });
+    card({}, { "task-1": { title: "Mine", body: "My body" } });
 
     expect(screen.getByLabelText("Title")).toHaveValue("Mine");
     expect(screen.getByLabelText("Description")).toHaveValue("My body");
@@ -45,16 +45,11 @@ describe("DraftCard", () => {
     await user.type(screen.getByLabelText("Title"), "Log in");
     await user.click(screen.getByRole("button", { name: "Open PR" }));
 
-    expect(api.openPR).toHaveBeenCalledWith(
-      "task-1",
-      "/home/dev/projects/web",
-      "Log in",
-      DRAFT.body,
-    );
+    expect(api.openPR).toHaveBeenCalledWith("task-1", "Log in", DRAFT.body);
   });
 
   it("opens nothing without a title or a description", async () => {
-    card({}, { "task-1|/home/dev/projects/web": { title: "  ", body: "why" } });
+    card({}, { "task-1": { title: "  ", body: "why" } });
 
     expect(screen.getByRole("button", { name: "Open PR" })).toBeDisabled();
   });
@@ -67,30 +62,30 @@ describe("DraftCard", () => {
 
   // Asking the agent for a new title is the one update the local edit loses to.
   it("shows the draft again when the agent rewrites it", () => {
-    const repo = makeRepoPR({ status: "draft_ready", draft: DRAFT });
-    const task = makeTask({ stage: "pr", repos: [repo] });
-    const { rerender } = renderWithStore(<DraftCard taskId={task.id} repo={repo} />, {
+    const pr = makePullRequest({ status: "draft_ready", draft: DRAFT });
+    const task = makeTask({ stage: "pr", pr });
+    const { rerender } = renderWithStore(<DraftCard taskId={task.id} pr={pr} />, {
       state: makeState({ tasks: [task] }),
-      ui: { prDrafts: { "task-1|/home/dev/projects/web": { title: "Mine", body: "My body" } } },
+      ui: { prDrafts: { "task-1": { title: "Mine", body: "My body" } } },
     });
     expect(screen.getByLabelText("Title")).toHaveValue("Mine");
 
-    const rewritten = { ...repo, draft: { ...DRAFT, title: "Teste" } };
-    rerender(<DraftCard taskId={task.id} repo={rewritten} />);
+    const rewritten = { ...pr, draft: { ...DRAFT, title: "Teste" } };
+    rerender(<DraftCard taskId={task.id} pr={rewritten} />);
 
     expect(screen.getByLabelText("Title")).toHaveValue("Teste");
   });
 
   it("keeps what the user is typing while the draft on disk stands still", () => {
-    const repo = makeRepoPR({ status: "draft_ready", draft: DRAFT });
-    const task = makeTask({ stage: "pr", repos: [repo] });
-    const { rerender } = renderWithStore(<DraftCard taskId={task.id} repo={repo} />, {
+    const pr = makePullRequest({ status: "draft_ready", draft: DRAFT });
+    const task = makeTask({ stage: "pr", pr });
+    const { rerender } = renderWithStore(<DraftCard taskId={task.id} pr={pr} />, {
       state: makeState({ tasks: [task] }),
-      ui: { prDrafts: { "task-1|/home/dev/projects/web": { title: "Mine", body: "My body" } } },
+      ui: { prDrafts: { "task-1": { title: "Mine", body: "My body" } } },
     });
 
-    // Anything else about the repository moving on leaves the edit alone.
-    rerender(<DraftCard taskId={task.id} repo={{ ...repo, turnRunning: true }} />);
+    // Anything else about the pull request moving on leaves the edit alone.
+    rerender(<DraftCard taskId={task.id} pr={{ ...pr, turnRunning: true }} />);
 
     expect(screen.getByLabelText("Title")).toHaveValue("Mine");
   });

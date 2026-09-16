@@ -8,13 +8,13 @@ import {
   asEntryKind,
   asErrorKind,
   asMarkerType,
+  asMigrationCaseKind,
   asModelStage,
-  asNoticeReason,
   asPermissionStatus,
   asPlaceKind,
   asPRState,
+  asPRStatus,
   asPromptStage,
-  asRepoStatus,
   asReviewFallback,
   asReviewFileKind,
   asReviewMode,
@@ -49,19 +49,6 @@ describe("asThemePreference", () => {
 
   it("falls back to system", () => {
     expect(asThemePreference("sepia")).toBe("system");
-  });
-});
-
-describe("asNoticeReason", () => {
-  it("keeps the known reasons", () => {
-    expect(asNoticeReason("not_found")).toBe("not_found");
-    expect(asNoticeReason("not_directory")).toBe("not_directory");
-    expect(asNoticeReason("not_readable")).toBe("not_readable");
-    expect(asNoticeReason("last_recent_missing")).toBe("last_recent_missing");
-  });
-
-  it("falls back to not_readable", () => {
-    expect(asNoticeReason("whatever")).toBe("not_readable");
   });
 });
 
@@ -119,23 +106,22 @@ describe("narrowing", () => {
     expect(asStepStatus("review_failed")).toBe("review_failed");
     expect(asStepStatus("committing")).toBe("committing");
     expect(asStepStatus("done")).toBe("done");
-    expect(asRepoStatus("preparing")).toBe("preparing");
-    expect(asRepoStatus("blocked")).toBe("blocked");
-    expect(asRepoStatus("drafting")).toBe("drafting");
-    expect(asRepoStatus("draft_ready")).toBe("draft_ready");
-    expect(asRepoStatus("awaiting_reply")).toBe("awaiting_reply");
-    expect(asRepoStatus("opening")).toBe("opening");
-    expect(asRepoStatus("reviewing")).toBe("reviewing");
-    expect(asRepoStatus("awaiting_decision")).toBe("awaiting_decision");
-    expect(asRepoStatus("in_review")).toBe("in_review");
-    expect(asRepoStatus("ready_to_approve")).toBe("ready_to_approve");
-    expect(asRepoStatus("committing")).toBe("committing");
-    expect(asRepoStatus("done")).toBe("done");
-    expect(asRepoStatus("merged")).toBe("merged");
-    expect(asRepoStatus("pr_closed")).toBe("pr_closed");
-    expect(asRepoStatus("closing")).toBe("closing");
-    expect(asRepoStatus("closed")).toBe("closed");
-    expect(asRepoStatus("skipped")).toBe("skipped");
+    expect(asPRStatus("preparing")).toBe("preparing");
+    expect(asPRStatus("blocked")).toBe("blocked");
+    expect(asPRStatus("drafting")).toBe("drafting");
+    expect(asPRStatus("draft_ready")).toBe("draft_ready");
+    expect(asPRStatus("awaiting_reply")).toBe("awaiting_reply");
+    expect(asPRStatus("opening")).toBe("opening");
+    expect(asPRStatus("reviewing")).toBe("reviewing");
+    expect(asPRStatus("awaiting_decision")).toBe("awaiting_decision");
+    expect(asPRStatus("in_review")).toBe("in_review");
+    expect(asPRStatus("ready_to_approve")).toBe("ready_to_approve");
+    expect(asPRStatus("committing")).toBe("committing");
+    expect(asPRStatus("done")).toBe("done");
+    expect(asPRStatus("merged")).toBe("merged");
+    expect(asPRStatus("pr_closed")).toBe("pr_closed");
+    expect(asPRStatus("closing")).toBe("closing");
+    expect(asPRStatus("closed")).toBe("closed");
     expect(asCloseOutcome("done")).toBe("done");
     expect(asCloseOutcome("skipped")).toBe("skipped");
     expect(asCloseOutcome("failed")).toBe("failed");
@@ -159,7 +145,7 @@ describe("narrowing", () => {
     expect(asBlockReason("no_base_branch")).toBe("no_base_branch");
     expect(asBlockReason("path_exists")).toBe("path_exists");
     expect(asBlockReason("branch_exists")).toBe("branch_exists");
-    expect(asBlockReason("no_repository")).toBe("no_repository");
+    expect(asBlockReason("clone_missing")).toBe("clone_missing");
     expect(asErrorKind("not_logged_in")).toBe("not_logged_in");
     expect(asTranscriptEventKind("text")).toBe("text");
     expect(asSituationKind("session_error")).toBe("session_error");
@@ -178,7 +164,6 @@ describe("narrowing", () => {
     expect(asSituationKind("findings")).toBe("findings");
     expect(asSituationKind("changes_review")).toBe("changes_review");
     expect(asSituationKind("merge")).toBe("merge");
-    expect(asSituationKind("nothing_to_publish")).toBe("nothing_to_publish");
     expect(asSituationGroup("error")).toBe("error");
     expect(asSituationGroup("waiting")).toBe("waiting");
     expect(asSituationGroup("closing")).toBe("closing");
@@ -191,13 +176,16 @@ describe("narrowing", () => {
     expect(asPlaceKind("stage")).toBe("stage");
     expect(asPlaceKind("step")).toBe("step");
     expect(asPlaceKind("step_review")).toBe("step_review");
-    expect(asPlaceKind("repo")).toBe("repo");
+    expect(asPlaceKind("pr")).toBe("pr");
     expect(asReviewMode("manual")).toBe("manual");
     expect(asReviewMode("agent")).toBe("agent");
     expect(asReviewFallback("")).toBe("");
     expect(asReviewFallback("taken_over")).toBe("taken_over");
     expect(asReviewFallback("rounds_exhausted")).toBe("rounds_exhausted");
     expect(asReviewFallback("commit_failed")).toBe("commit_failed");
+    expect(asMigrationCaseKind("root_task")).toBe("root_task");
+    expect(asMigrationCaseKind("no_origin")).toBe("no_origin");
+    expect(asMigrationCaseKind("name_conflict")).toBe("name_conflict");
   });
 
   it("falls back on a value a newer backend invented", () => {
@@ -212,7 +200,7 @@ describe("narrowing", () => {
     expect(asPermissionStatus("expired")).toBe("cancelled");
     expect(asMarkerType("branched")).toBe("compacted");
     expect(asStepStatus("rebasing")).toBe("not_started");
-    expect(asRepoStatus("rebasing")).toBe("preparing");
+    expect(asPRStatus("rebasing")).toBe("preparing");
     expect(asCloseOutcome("pending")).toBe("failed");
     expect(asCloseSkipReason("detached")).toBe("missing");
     // "" is what the app carries before gh has said anything.
@@ -228,6 +216,7 @@ describe("narrowing", () => {
     expect(asPlaceKind("workspace")).toBe("stage");
     expect(asReviewMode("auto")).toBe("manual");
     expect(asReviewFallback("paused")).toBe("");
+    expect(asMigrationCaseKind("multi_repository")).toBe("root_task");
   });
 });
 
@@ -245,10 +234,10 @@ describe("sessionKey", () => {
 describe("api", () => {
   it("calls one binding per method", async () => {
     await wails.api.getState();
-    await wails.api.openPath("/home/dev/projects");
-    await wails.api.openFolderDialog();
-    await wails.api.removeRecent("/home/dev/labs");
-    await wails.api.dismissNotice();
+    await wails.api.addRepository();
+    await wails.api.changeRepositoryPath("repo-1");
+    await wails.api.removeRepository("repo-1");
+    await wails.api.setRepositoryFilter("repo-1");
     await wails.api.setTheme("dark");
     await wails.api.setModelDefault("pr", "claude-opus-5", "medium");
     await wails.api.setReviewModeDefault("agent");
@@ -258,7 +247,7 @@ describe("api", () => {
 
     await wails.api.createTask({
       name: "add-login",
-      repoPath: "",
+      repositoryId: "repo-1",
       initialContext: "a login",
       mode: "",
       models: [],
@@ -287,16 +276,16 @@ describe("api", () => {
     await wails.api.setReviewMode("task-1", "agent");
     await wails.api.setStepReviewMode("task-1", 2, "manual");
     await wails.api.reviewStepMyself("task-1");
-    await wails.api.openInEditor("task-1", "");
+    await wails.api.openInEditor("task-1");
     await wails.api.approveStep("task-1");
-    await wails.api.openFileInEditor("task-1", "", "src/login.ts");
-    await wails.api.openPR("task-1", "/repo/web", "Log in", "why");
-    await wails.api.approveRepo("task-1", "/repo/web");
-    await wails.api.reviewAgain("task-1", "/repo/web");
-    await wails.api.discardDraft("task-1", "/repo/web");
-    await wails.api.retryRepo("task-1", "/repo/web");
-    await wails.api.refreshPR("task-1", "/repo/web");
-    await wails.api.closeRepo("task-1", "/repo/web");
+    await wails.api.openFileInEditor("task-1", "src/login.ts");
+    await wails.api.openPR("task-1", "Log in", "why");
+    await wails.api.approvePR("task-1");
+    await wails.api.reviewAgain("task-1");
+    await wails.api.discardDraft("task-1");
+    await wails.api.retryPR("task-1");
+    await wails.api.refreshPR("task-1");
+    await wails.api.closeTask("task-1");
     await wails.api.previewDelete("task-1");
     await wails.api.viewSituation("situation-1");
 

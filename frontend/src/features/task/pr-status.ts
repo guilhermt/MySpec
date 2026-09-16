@@ -1,17 +1,19 @@
 import type { StatusTone } from "@/features/task/status";
+import { cloneMissingText } from "@/lib/repositories";
 import type {
   CloseResult,
   CloseSkipReason,
   CloseStep,
   PRBlockReason,
   PRState,
-  RepoPR,
+  PullRequest,
+  Repository,
 } from "@/lib/wails";
-import { asCloseOutcome, asCloseSkipReason, asPRState, asRepoStatus } from "@/lib/wails";
+import { asCloseOutcome, asCloseSkipReason, asPRState, asPRStatus } from "@/lib/wails";
 
-/** repoStatusLabel is where a repository stands, in the words of the product. */
-export function repoStatusLabel(repo: RepoPR): string {
-  switch (asRepoStatus(repo.status)) {
+/** prStatusLabel is where the pull request of a task stands, in the words of the product. */
+export function prStatusLabel(pr: PullRequest): string {
+  switch (asPRStatus(pr.status)) {
     case "preparing":
       return "Checking GitHub";
     case "blocked":
@@ -44,18 +46,16 @@ export function repoStatusLabel(repo: RepoPR): string {
       return "Closing";
     case "closed":
       return "Closed";
-    case "skipped":
-      return "No changes · ready to close";
   }
 }
 
 /**
- * repoStatusTone maps the state of a repository to the colour that carries it.
- * It never calls for the user: that colour comes from the situation of the
- * repository alone.
+ * prStatusTone maps the state of the pull request to the colour that carries
+ * it. It never calls for the user: that colour comes from the situation of the
+ * task alone.
  */
-export function repoStatusTone(repo: RepoPR): StatusTone {
-  switch (asRepoStatus(repo.status)) {
+export function prStatusTone(pr: PullRequest): StatusTone {
+  switch (asPRStatus(pr.status)) {
     case "preparing":
     case "drafting":
     case "opening":
@@ -74,7 +74,6 @@ export function repoStatusTone(repo: RepoPR): StatusTone {
     case "done":
     case "merged":
     case "pr_closed":
-    case "skipped":
       return "idle";
   }
 }
@@ -86,11 +85,11 @@ export function repoStatusTone(repo: RepoPR): StatusTone {
  * exists the draft is only a record, even when the agent waits for a reply
  * during the review.
  */
-export function draftAtHand(repo: RepoPR): boolean {
-  const status = asRepoStatus(repo.status);
+export function draftAtHand(pr: PullRequest): boolean {
+  const status = asPRStatus(pr.status);
   return (
     status === "draft_ready" ||
-    (status === "awaiting_reply" && repo.draft !== null && repo.prNumber === 0)
+    (status === "awaiting_reply" && pr.draft !== null && pr.prNumber === 0)
   );
 }
 
@@ -99,31 +98,31 @@ export function draftAtHand(repo: RepoPR): boolean {
  * the agent is not in a turn. The text itself still has to say something,
  * which the card checks.
  */
-export function canOpenPR(repo: RepoPR): boolean {
-  return draftAtHand(repo) && !repo.turnRunning;
+export function canOpenPR(pr: PullRequest): boolean {
+  return draftAtHand(pr) && !pr.turnRunning;
 }
 
-/** canApproveRepo reports whether every changed file is staged and waiting. */
-export function canApproveRepo(repo: RepoPR): boolean {
-  return asRepoStatus(repo.status) === "ready_to_approve";
+/** canApprovePR reports whether every changed file is staged and waiting. */
+export function canApprovePR(pr: PullRequest): boolean {
+  return asPRStatus(pr.status) === "ready_to_approve";
 }
 
-/** approveRepoHint says what is missing before the pull request can be approved. */
-export function approveRepoHint(repo: RepoPR): string {
-  if (repo.review?.error !== undefined && repo.review.error !== "") {
+/** approvePRHint says what is missing before the pull request can be approved. */
+export function approvePRHint(pr: PullRequest): string {
+  if (pr.review?.error !== undefined && pr.review.error !== "") {
     return "The worktree couldn't be read";
   }
   return "Stage every changed file in VS Code to approve";
 }
 
-/** hasRepoSession reports whether the repository has a conversation to show. */
-export function hasRepoSession(repo: RepoPR): boolean {
-  return repo.sessionStage !== "";
+/** hasPRSession reports whether the PR stage has a conversation to show. */
+export function hasPRSession(pr: PullRequest): boolean {
+  return pr.sessionStage !== "";
 }
 
 /** canDiscardDraft reports whether the draft can still be thrown away. */
-export function canDiscardDraft(repo: RepoPR): boolean {
-  switch (asRepoStatus(repo.status)) {
+export function canDiscardDraft(pr: PullRequest): boolean {
+  switch (asPRStatus(pr.status)) {
     // Once the pull request exists the draft is a record, not a proposal.
     case "drafting":
     case "draft_ready":
@@ -131,15 +130,15 @@ export function canDiscardDraft(repo: RepoPR): boolean {
     // The agent waits for a reply both before the pull request and during its
     // review; only the first still has a draft to throw away.
     case "awaiting_reply":
-      return repo.prNumber === 0;
+      return pr.prNumber === 0;
     default:
       return false;
   }
 }
 
 /** canReviewAgain reports whether another review pass can be asked for. */
-export function canReviewAgain(repo: RepoPR): boolean {
-  switch (asRepoStatus(repo.status)) {
+export function canReviewAgain(pr: PullRequest): boolean {
+  switch (asPRStatus(pr.status)) {
     case "reviewing":
     case "awaiting_decision":
     case "in_review":
@@ -150,20 +149,23 @@ export function canReviewAgain(repo: RepoPR): boolean {
     // A pass that ended without its report can be asked for again, once there
     // is a pull request to review.
     case "awaiting_reply":
-      return repo.prNumber > 0;
+      return pr.prNumber > 0;
     default:
       return false;
   }
 }
 
-/** canCloseRepo reports whether the closing is the user's to ask for right now. */
-export function canCloseRepo(repo: RepoPR): boolean {
-  return repo.canClose && asRepoStatus(repo.status) !== "closing";
+/** canCloseTask reports whether the closing is the user's to ask for right now. */
+export function canCloseTask(pr: PullRequest): boolean {
+  return pr.canClose && asPRStatus(pr.status) !== "closing";
 }
 
-/** closeHint says why the repository can't be closed yet. */
-export function closeHint(repo: RepoPR): string {
-  switch (asRepoStatus(repo.status)) {
+/** closeHint says why the task can't be closed yet. */
+export function closeHint(pr: PullRequest, repository: Repository | null): string {
+  if (pr.cloneMissing && repository !== null) {
+    return cloneMissingText(repository);
+  }
+  switch (asPRStatus(pr.status)) {
     case "done":
       return "The pull request hasn't been merged yet";
     case "pr_closed":
@@ -261,7 +263,7 @@ export function prStateLabel(state: PRState): string {
   }
 }
 
-/** prBlockTitle names why the PR stage of a repository could not go on. */
+/** prBlockTitle names why the PR stage of a task could not go on. */
 export function prBlockTitle(reason: PRBlockReason): string {
   switch (reason) {
     case "gh_missing":
@@ -289,7 +291,7 @@ export function prBlockHint(reason: PRBlockReason): string {
     case "git_failed":
       return "Fix what git reports, then try again.";
     case "no_worktree":
-      return "The app no longer knows the worktree of this repository. Discard the plan to start the implementation over.";
+      return "The app no longer knows the worktree of this task. Discard the plan to start the implementation over.";
   }
 }
 
