@@ -160,7 +160,8 @@ func (s *Service) SetStepModel(ctx context.Context, id string, number int, c mod
 // SetSessionModel changes the model and effort of a live session from its next
 // message on. A session of a planning stage or of a step carries the change to
 // its stage or its step, so that starting it over keeps it; a session of a
-// reviewer or of the PR stage keeps it to itself.
+// reviewer, of the PR stage or of the review of a pull request keeps it to
+// itself.
 func (s *Service) SetSessionModel(ctx context.Context, id, stage string, c models.Choice) error {
 	l := s.lockOf(id)
 	l.mu.Lock()
@@ -176,9 +177,9 @@ func (s *Service) SetSessionModel(ctx context.Context, id, stage string, c model
 		if _, err := s.tasks.SetStepModel(ctx, id, number, c); err != nil {
 			return err
 		}
-	case isReviewer, stage == session.PRStage, stage == session.PRReviewStage:
-		// The choice of one reviewer, or of the PR stage, is not the choice of
-		// the stage: the others keep theirs.
+	case isReviewer, stage == session.PRStage, stage == session.PRReviewStage, stage == session.ReviewStage:
+		// The choice of one reviewer, of the PR stage or of the review of a pull
+		// request is not the choice of a stage: the others keep theirs.
 	default:
 		if _, err := s.tasks.SetStageModel(ctx, id, models.Stage(stage), c); err != nil {
 			return err

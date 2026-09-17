@@ -319,13 +319,20 @@ func (s *Service) flushPendingLocked(ctx context.Context, r *run, n *notes) bool
 
 			Card:          r.task.Card,
 			CardReference: r.task.CardReference,
+
+			ContextPath:  r.task.ContextPath,
+			External:     r.task.External,
+			Publish:      r.task.Publish,
+			Instructions: r.task.Instructions,
 		}
 		// The text of a prompt entry is what the app appends to the prompt: the
-		// initial context of the PRD and of the One-Shot planning, or what the
-		// implementer said last.
+		// initial context of the PRD and of the One-Shot planning, the
+		// instructions of a review pass, or what the implementer said last.
 		switch r.task.Prompt {
 		case prompts.StagePRD, prompts.StageOneShot:
 			vars.InitialContext = e.User.Text
+		case prompts.StagePRReview:
+			vars.PassInstructions = e.User.Text
 		case prompts.StageStepReview:
 			vars.ImplementerReply = e.User.Text
 		default:

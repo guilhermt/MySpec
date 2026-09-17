@@ -637,3 +637,50 @@ func TestOpeningThePullRequestOfATaskCreatedFromACardClosesTheCard(t *testing.T)
 		})
 	}
 }
+
+func TestTheReviewOfThePullRequestOfATaskCarriesTheInstructionsOfItsRepository(t *testing.T) {
+	t.Parallel()
+
+	const instructions = "Never change a published migration."
+	f := newFixture(t)
+	f.repositories.setInstructions(instructions)
+	inPR(f, "task-1", plan(), task.PRReviewing)
+
+	f.service.Sync(t.Context())
+	key := session.Key{TaskID: "task-1", Stage: session.PRReviewStage}
+	waitFor(t, "the review session of the task", func() bool {
+		_, ok := f.sessions.info(key)
+		return ok
+	})
+
+	info, _ := f.sessions.info(key)
+	if info.Instructions != instructions {
+		t.Errorf("session instructions = %q, want %q", info.Instructions, instructions)
+	}
+}
+
+func TestAPassOfTheReviewOfAPullRequestIsAskedWithTheInstructionsOfItsRepository(t *testing.T) {
+	t.Parallel()
+
+	const instructions = "Never change a published migration."
+	f := newFixture(t)
+	f.repositories.setInstructions(instructions)
+	underReview(t, f)
+	reportsWritten(f, reports(1, false))
+	f.waitPRRun(t, "the report of the first pass", func(run task.PRRun) bool { return run.ReportedPass == 1 })
+	f.reviews.setSnapshot(staged(3, 3))
+	f.sessions.goIdle("task-1")
+	if err := f.service.ApprovePR(t.Context(), "task-1"); err != nil {
+		t.Fatalf("ApprovePR() = %v, want nil", err)
+	}
+
+	f.worktrees.setStatus(git.Status{Head: commitSHA})
+	f.reviews.setSnapshot(review.Snapshot{Head: commitSHA})
+	f.sessions.goIdle("task-1")
+	f.service.Check("task-1")
+
+	want := instructedReviewPrompt("/data/task-1/pr/review-2.md", instructions)
+	waitFor(t, "the prompt of the second pass with the instructions", func() bool {
+		return slices.Contains(f.sessions.sent(), want)
+	})
+}

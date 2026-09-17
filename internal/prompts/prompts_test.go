@@ -2,6 +2,7 @@ package prompts_test
 
 import (
 	"errors"
+	"fmt"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -1082,5 +1083,208 @@ func TestRenderAppendsTheCardOnlyToThePromptOfAPullRequest(t *testing.T) {
 				t.Errorf("rendered %s prompt carries the card section", stage)
 			}
 		})
+	}
+}
+
+// externalReviewVars are the vars the review of a pull request that comes from
+// no task renders with.
+func externalReviewVars() prompts.Vars {
+	vars := everyVar()
+	vars.ContextPath = "/data/reviews/pr-42/context.md"
+	vars.External, vars.Publish = true, true
+	return vars
+}
+
+func TestRenderAppendsTheSectionsOfAReviewOfAPullRequestWithoutATaskInOrder(t *testing.T) {
+	t.Parallel()
+
+	dataDir := t.TempDir()
+	write(t, dataDir, prompts.StagePRReview, "review it")
+	vars := externalReviewVars()
+	vars.Instructions = "Never change a published migration."
+	vars.PassInstructions = "Look at the cache."
+
+	got, err := prompts.Render(dataDir, prompts.StagePRReview, vars)
+	if err != nil {
+		t.Fatalf("Render() = %v, want nil", err)
+	}
+
+	headings := []string{
+		"\n\n## Pull request without a task\n\n",
+		"\n\n## Findings format\n\n",
+		"\n\n## Publishing\n\n",
+		"\n\n## Review instructions\n\nNever change a published migration.",
+		"\n\n## Instructions for this pass\n\nLook at the cache.",
+	}
+	at := 0
+	for _, heading := range headings {
+		i := strings.Index(got[at:], heading)
+		if i < 0 {
+			t.Fatalf("Render() = %q, want %q after what comes before it", got, heading)
+		}
+		at += i + len(heading)
+	}
+	if !strings.HasPrefix(got, "review it\n\n## Pull request without a task") {
+		t.Errorf("Render() = %q, want it to start with the prompt and the first section", got)
+	}
+	if !strings.HasSuffix(got, "Look at the cache.") {
+		t.Errorf("Render() = %q, want it to end with the instructions of the pass", got)
+	}
+	if !strings.Contains(got, "`"+vars.ContextPath+"`") {
+		t.Errorf("Render() = %q, want it to name the document %s", got, vars.ContextPath)
+	}
+	if !strings.Contains(got, "the base is `origin/dev`") {
+		t.Errorf("Render() = %q, want it to name the base branch", got)
+	}
+	if strings.Contains(got, "{{") {
+		t.Errorf("Render() = %q, want every placeholder of the sections replaced", got)
+	}
+}
+
+func TestRenderTellsTheReviewOfAPullRequestWhatBecomesOfItsFindings(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		publish      bool
+		want, unwant string
+	}{
+		{"publishing", true, "## Publishing", "## Applying"},
+		{"applying", false, "## Applying", "## Publishing"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			vars := externalReviewVars()
+			vars.Publish = test.publish
+
+			got, err := prompts.Render(t.TempDir(), prompts.StagePRReview, vars)
+			if err != nil {
+				t.Fatalf("Render() = %v, want nil", err)
+			}
+			if !strings.Contains(got, test.want) {
+				t.Errorf("Render() = %q, want the section %q", got, test.want)
+			}
+			if strings.Contains(got, test.unwant) {
+				t.Errorf("Render() = %q, want no section %q", got, test.unwant)
+			}
+		})
+	}
+}
+
+func TestRenderGivesTheReviewOfThePullRequestOfATaskOnlyTheInstructions(t *testing.T) {
+	t.Parallel()
+
+	dataDir := t.TempDir()
+	write(t, dataDir, prompts.StagePRReview, "review it")
+	vars := everyVar()
+	vars.Instructions = "Never change a published migration."
+
+	got, err := prompts.Render(dataDir, prompts.StagePRReview, vars)
+	if err != nil {
+		t.Fatalf("Render() = %v, want nil", err)
+	}
+
+	want := "review it\n\n## Review instructions\n\nNever change a published migration."
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("Render() mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestRenderAppendsNoReviewSectionWithoutOne(t *testing.T) {
+	t.Parallel()
+
+	dataDir := t.TempDir()
+	write(t, dataDir, prompts.StagePRReview, "review it")
+
+	got, err := prompts.Render(dataDir, prompts.StagePRReview, everyVar())
+	if err != nil {
+		t.Fatalf("Render() = %v, want nil", err)
+	}
+	if got != "review it" {
+		t.Errorf("Render() = %q, want %q", got, "review it")
+	}
+}
+
+func TestRenderAppendsTheReviewSectionsOnlyToThePromptOfAReview(t *testing.T) {
+	t.Parallel()
+
+	for _, stage := range []prompts.Stage{prompts.StagePR, prompts.StageCommit, prompts.StageStepReview} {
+		t.Run(string(stage), func(t *testing.T) {
+			t.Parallel()
+
+			vars := externalReviewVars()
+			vars.Instructions = "Never change a published migration."
+			vars.PassInstructions = "Look at the cache."
+
+			got, err := prompts.Render(t.TempDir(), stage, vars)
+			if err != nil {
+				t.Fatalf("Render(%s) = %v, want nil", stage, err)
+			}
+			for _, heading := range []string{
+				"## Pull request without a task", "## Findings format", "## Publishing",
+				"## Review instructions", "## Instructions for this pass",
+			} {
+				if strings.Contains(got, heading) {
+					t.Errorf("rendered %s prompt carries the section %q", stage, heading)
+				}
+			}
+		})
+	}
+}
+
+func TestRenderPointsThePathsOfTheDocumentsToTheContextOfAReview(t *testing.T) {
+	t.Parallel()
+
+	dataDir := t.TempDir()
+	write(t, dataDir, prompts.StagePRReview, "read {{prd_path}} and {{tech_spec_path}}")
+
+	got, err := prompts.Render(dataDir, prompts.StagePRReview, externalReviewVars())
+	if err != nil {
+		t.Fatalf("Render() = %v, want nil", err)
+	}
+
+	path := externalReviewVars().ContextPath
+	if !strings.HasPrefix(got, "read "+path+" and "+path) {
+		t.Errorf("Render() = %q, want both paths to be %s", got, path)
+	}
+}
+
+func TestRenderPushesFromADetachedHeadToTheBranchOfThePullRequest(t *testing.T) {
+	t.Parallel()
+
+	dataDir := t.TempDir()
+	write(t, dataDir, prompts.StageCommit, "commit {{what_to_commit}}. {{push}}")
+
+	got, err := prompts.Render(dataDir, prompts.StageCommit, prompts.Vars{Push: true, PushRef: "fix-the-cache"})
+	if err != nil {
+		t.Fatalf("Render() = %v, want nil", err)
+	}
+
+	want := "commit " + prompts.StagedInstruction + ". " + fmt.Sprintf(prompts.DetachedPushInstruction, "fix-the-cache")
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("Render() mismatch (-want +got):\n%s", diff)
+	}
+	if strings.Contains(got, prompts.PushInstruction) {
+		t.Error("the rendered commit prompt carries the instruction of a branch, want the detached one")
+	}
+}
+
+func TestRenderAppendsTheDetachedPushInstructionWhenThePlaceholderIsGone(t *testing.T) {
+	t.Parallel()
+
+	dataDir := t.TempDir()
+	write(t, dataDir, prompts.StageCommit, "commit {{what_to_commit}}")
+
+	got, err := prompts.Render(dataDir, prompts.StageCommit, prompts.Vars{Push: true, PushRef: "fix-the-cache"})
+	if err != nil {
+		t.Fatalf("Render() = %v, want nil", err)
+	}
+
+	want := "commit " + prompts.StagedInstruction +
+		"\n\n## Pushing\n\n" + fmt.Sprintf(prompts.DetachedPushInstruction, "fix-the-cache")
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("Render() mismatch (-want +got):\n%s", diff)
 	}
 }

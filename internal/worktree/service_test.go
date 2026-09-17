@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -529,5 +530,165 @@ func TestGetAnswersNothingForATaskWithoutAWorktree(t *testing.T) {
 
 	if _, ok := f.svc.Get("task-without-a-worktree"); ok {
 		t.Error("Get() = true, want nothing for a task with no worktree")
+	}
+}
+
+func TestTheWorktreeOfAReviewIsNamedAfterThePullRequest(t *testing.T) {
+	t.Parallel()
+
+	if got := worktree.ReviewDirName(12); got != "pr_12" {
+		t.Errorf("ReviewDirName(12) = %q, want %q", got, "pr_12")
+	}
+}
+
+func TestEnsureDetachedCreatesTheWorktreeAtTheHeadOfThePullRequest(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, true)
+	head := f.pushHead(t, "login.go", "package login\n")
+
+	wt := f.ensureDetached(t)
+
+	want := worktree.Worktree{
+		TaskID:    "review-1",
+		RepoPath:  f.repo.Path,
+		Path:      filepath.Join(f.dataDir, "worktrees", "dev", "web", "pr_"+strconv.Itoa(prNumber)),
+		Base:      "origin/main",
+		CreatedAt: wt.CreatedAt,
+	}
+	if diff := cmp.Diff(want, wt); diff != "" {
+		t.Errorf("EnsureDetached() mismatch (-want +got):\n%s", diff)
+	}
+	if got := headOf(t, wt.Path, "HEAD"); got != head {
+		t.Errorf("HEAD = %s, want the head of the pull request %s", got, head)
+	}
+	if got := gittest.Run(t, wt.Path, "rev-parse", "--abbrev-ref", "HEAD"); got != "HEAD" {
+		t.Errorf("HEAD is on branch %q, want it detached", got)
+	}
+	if branchExists(t, f.repo.Path, headName) {
+		t.Errorf("branch %s was created, want no local branch", headName)
+	}
+	if diff := cmp.Diff([]worktree.Worktree{want}, f.store.all()); diff != "" {
+		t.Errorf("registry mismatch (-want +got):\n%s", diff)
+	}
+	if got, ok := f.svc.Get("review-1"); !ok || got != want {
+		t.Errorf("Get(review-1) = %+v, %t, want %+v, true", got, ok, want)
+	}
+}
+
+func TestEnsureDetachedRefusesAHeadBranchOriginDoesNotHave(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, true)
+
+	_, err := f.svc.EnsureDetached(t.Context(), "review-1", f.repo, worktree.ReviewDirName(prNumber), "gone", "main")
+
+	if !errors.Is(err, worktree.ErrNoHeadBranch) {
+		t.Fatalf("EnsureDetached() = %v, want ErrNoHeadBranch", err)
+	}
+	if got := f.store.all(); len(got) != 0 {
+		t.Errorf("registry has %d worktrees, want none", len(got))
+	}
+}
+
+func TestEnsureDetachedReportsWhatGitSaidWhenTheFetchFails(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, true)
+	f.breakOrigin(t)
+
+	_, err := f.svc.EnsureDetached(t.Context(), "review-1", f.repo, worktree.ReviewDirName(prNumber), headName, "main")
+
+	if !errors.Is(err, worktree.ErrFetchFailed) {
+		t.Fatalf("EnsureDetached() = %v, want ErrFetchFailed", err)
+	}
+}
+
+func TestEnsureDetachedReturnsTheWorktreeItAlreadyHasWithoutFetching(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, true)
+	f.pushHead(t, "login.go", "package login\n")
+	first := f.ensureDetached(t)
+	f.breakOrigin(t)
+
+	second := f.ensureDetached(t)
+
+	if second != first {
+		t.Errorf("EnsureDetached() = %+v, want the worktree it already had %+v", second, first)
+	}
+	if got := f.store.all(); len(got) != 1 {
+		t.Errorf("registry has %d worktrees, want 1", len(got))
+	}
+}
+
+func TestEnsureDetachedRefusesAPathThatIsAlreadyThere(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, true)
+	f.pushHead(t, "login.go", "package login\n")
+	path := filepath.Join(f.dataDir, "worktrees", "dev", "web", worktree.ReviewDirName(prNumber))
+	write(t, path, "keep.txt", "mine\n")
+
+	_, err := f.svc.EnsureDetached(t.Context(), "review-1", f.repo, worktree.ReviewDirName(prNumber), headName, "main")
+
+	if !errors.Is(err, worktree.ErrPathExists) {
+		t.Fatalf("EnsureDetached() = %v, want ErrPathExists", err)
+	}
+	if got := read(t, filepath.Join(path, "keep.txt")); got != "mine\n" {
+		t.Errorf("the folder that was there reads %q, want it untouched", got)
+	}
+}
+
+func TestUpdateDetachedMovesTheWorktreeToTheNewHead(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, true)
+	f.pushHead(t, "login.go", "package login\n")
+	wt := f.ensureDetached(t)
+	head := f.pushHead(t, "login.go", "package login // fixed\n")
+
+	if err := f.svc.UpdateDetached(t.Context(), wt, headName); err != nil {
+		t.Fatalf("UpdateDetached() = %v, want nil", err)
+	}
+
+	if got := headOf(t, wt.Path, "HEAD"); got != head {
+		t.Errorf("HEAD = %s, want the new head %s", got, head)
+	}
+	if got := read(t, filepath.Join(wt.Path, "login.go")); got != "package login // fixed\n" {
+		t.Errorf("login.go reads %q, want the new commit", got)
+	}
+}
+
+func TestUpdateDetachedRefusesAWorktreeWithChanges(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, true)
+	f.pushHead(t, "login.go", "package login\n")
+	wt := f.ensureDetached(t)
+	write(t, wt.Path, "login.go", "package login // by hand\n")
+
+	err := f.svc.UpdateDetached(t.Context(), wt, headName)
+
+	if !errors.Is(err, worktree.ErrDirty) {
+		t.Fatalf("UpdateDetached() = %v, want ErrDirty", err)
+	}
+	if got := read(t, filepath.Join(wt.Path, "login.go")); got != "package login // by hand\n" {
+		t.Errorf("login.go reads %q, want it untouched", got)
+	}
+}
+
+func TestRemoveOfADetachedWorktreeLeavesEveryBranchWhereItIs(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, true)
+	f.pushHead(t, "login.go", "package login\n")
+	wt := f.ensureDetached(t)
+	gittest.Run(t, f.repo.Path, "branch", headName, "origin/"+headName)
+
+	if err := f.svc.Remove(t.Context(), "review-1"); err != nil {
+		t.Fatalf("Remove() = %v, want nil", err)
+	}
+
+	if exists(t, wt.Path) {
+		t.Errorf("%s is still on disk", wt.Path)
+	}
+	if !branchExists(t, f.repo.Path, headName) {
+		t.Errorf("branch %s was deleted, want it left alone", headName)
+	}
+	if got := f.store.all(); len(got) != 0 {
+		t.Errorf("registry has %d worktrees, want none", len(got))
 	}
 }

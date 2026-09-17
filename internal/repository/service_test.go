@@ -265,6 +265,94 @@ func TestRemovingARepositoryWithTasksIsRefused(t *testing.T) {
 	}
 }
 
+func TestRemovingARepositoryWithReviewsIsRefused(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		reviews  [2]int
+		sentence string
+	}{
+		{"one active review", [2]int{1, 0}, "dev/web has 1 active review and 0 archived reviews."},
+		{"one archived review", [2]int{0, 1}, "dev/web has 0 active reviews and 1 archived review."},
+		{"several of each", [2]int{2, 3}, "dev/web has 2 active reviews and 3 archived reviews."},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			f := newFixture(t)
+			repo := f.register(t, filepath.Join(t.TempDir(), "web"), "dev", "web")
+			f.reviews[repo.ID] = tt.reviews
+
+			err := f.service.Remove(t.Context(), repo.ID)
+
+			wantRefusal(t, err,
+				&repository.Refusal{
+					Reason:          repository.ReasonHasReviews,
+					Repository:      "dev/web",
+					ActiveReviews:   tt.reviews[0],
+					ArchivedReviews: tt.reviews[1],
+				},
+				tt.sentence+" Delete them before removing the repository.")
+			if got := len(f.store.all(t)); got != 1 {
+				t.Errorf("stored repositories = %d, want 1", got)
+			}
+		})
+	}
+}
+
+func TestARepositoryWithTasksAndReviewsIsRefusedForItsTasks(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	repo := f.register(t, filepath.Join(t.TempDir(), "web"), "dev", "web")
+	f.counts[repo.ID] = [2]int{1, 0}
+	f.reviews[repo.ID] = [2]int{1, 0}
+
+	err := f.service.Remove(t.Context(), repo.ID)
+
+	var refusal *repository.Refusal
+	if !errors.As(err, &refusal) || refusal.Reason != repository.ReasonHasTasks {
+		t.Fatalf("Remove() = %v, want a refusal for the tasks", err)
+	}
+}
+
+func TestTheReviewInstructionsOfARepositoryAreStoredTrimmed(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	repo := f.register(t, filepath.Join(t.TempDir(), "web"), "dev", "web")
+	f.events.take()
+
+	got, err := f.service.SetReviewInstructions(t.Context(), repo.ID, "  never change a published migration\n")
+	if err != nil {
+		t.Fatalf("SetReviewInstructions(%s) = %v, want nil", repo.ID, err)
+	}
+
+	const want = "never change a published migration"
+	if got.ReviewInstructions != want {
+		t.Errorf("ReviewInstructions = %q, want %q", got.ReviewInstructions, want)
+	}
+	if registered, _ := f.service.Get(repo.ID); registered.ReviewInstructions != want {
+		t.Errorf("Get().ReviewInstructions = %q, want %q", registered.ReviewInstructions, want)
+	}
+	if stored := f.store.all(t)[0].ReviewInstructions; stored != want {
+		t.Errorf("stored ReviewInstructions = %q, want %q", stored, want)
+	}
+	if diff := cmp.Diff([]string{"change"}, f.events.take()); diff != "" {
+		t.Errorf("events mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestReviewInstructionsOfAnUnknownRepositoryAreRefused(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+
+	_, err := f.service.SetReviewInstructions(t.Context(), "nobody", "read the migrations")
+
+	if !errors.Is(err, repository.ErrNotFound) {
+		t.Errorf("SetReviewInstructions(nobody) = %v, want ErrNotFound", err)
+	}
+}
+
 func TestRemovingTheFilteredRepositoryShowsEveryRepositoryAgain(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)

@@ -199,3 +199,45 @@ func repoWithoutBase(t *testing.T) repository.Repository {
 	gittest.Run(t, dir, "clone", "--branch", "trunk", origin, path)
 	return repository.Repository{ID: "repo-1", Owner: "dev", Name: "web", Path: path}
 }
+
+// The pull request every detached fixture reviews: its number and the branch
+// its head is on.
+const (
+	prNumber = 7
+	headName = "feature"
+)
+
+// pushHead puts a branch named headName on the origin of the repository, with
+// a commit of its own, and returns the commit it points at.
+func (f fixture) pushHead(t *testing.T, file, content string) string {
+	t.Helper()
+
+	// A second call carries on from where origin already has the branch, as a
+	// new commit of a pull request does.
+	start := "HEAD"
+	if gittest.Run(t, f.repo.Path, "branch", "-r", "--list", "origin/"+headName) != "" {
+		start = "origin/" + headName
+	}
+	gittest.Run(t, f.repo.Path, "checkout", "-B", headName, start)
+	gittest.Commit(t, f.repo.Path, file, content, "Work on "+headName)
+	gittest.Run(t, f.repo.Path, "push", "origin", headName)
+	head := headOf(t, f.repo.Path, "HEAD")
+	// The clone goes back to main and forgets the branch, so that only origin
+	// has it, as it is for a pull request of somebody else.
+	gittest.Run(t, f.repo.Path, "checkout", "main")
+	gittest.Run(t, f.repo.Path, "branch", "-D", headName)
+	return head
+}
+
+// ensureDetached creates the worktree of the review of the pull request,
+// failing the test on error.
+func (f fixture) ensureDetached(t *testing.T) worktree.Worktree {
+	t.Helper()
+
+	wt, err := f.svc.EnsureDetached(
+		t.Context(), "review-1", f.repo, worktree.ReviewDirName(prNumber), headName, "main")
+	if err != nil {
+		t.Fatalf("EnsureDetached() = %v, want nil", err)
+	}
+	return wt
+}

@@ -36,6 +36,17 @@ func Context(card Card, additional string) string {
 	return strings.Join(sections, "\n\n")
 }
 
+// ReviewContext is the context of the review of a pull request linked to a
+// card: the card and its epic. What the review needs of a card is what the
+// card itself says; the siblings and the dependencies belong to planning.
+func ReviewContext(card Card) string {
+	sections := []string{cardSection(card)}
+	if card.Epic != nil {
+		sections = append(sections, epicSection(*card.Epic))
+	}
+	return strings.Join(sections, "\n\n")
+}
+
 // cardSection is the card with its status, fields, assignees and body.
 func cardSection(card Card) string {
 	lines := []string{

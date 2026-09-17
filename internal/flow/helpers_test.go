@@ -88,6 +88,15 @@ func (m *memRepositories) Check(id string) (repository.Repository, error) {
 	return m.repo, nil
 }
 
+// setInstructions is what the user wrote as the fixed review instructions of
+// the repository.
+func (m *memRepositories) setInstructions(text string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.repo.ReviewInstructions = text
+}
+
 // setMissing says whether the clone of the repository is there.
 func (m *memRepositories) setMissing(missing bool) {
 	m.mu.Lock()
@@ -1527,6 +1536,12 @@ func commitAllPrompt(name string) string { return "Commit every change of " + na
 // review pass, with the report it is about.
 func reviewPrompt(path string) string { return "Review the pull request into " + path }
 
+// instructedReviewPrompt is the prompt of a review pass that carries the fixed
+// review instructions of the repository.
+func instructedReviewPrompt(path, instructions string) string {
+	return reviewPrompt(path) + " following " + instructions
+}
+
 // oneShotReviewPrompt is the prompt of a review pass of a One-Shot task, which
 // also names the document of the task.
 func oneShotReviewPrompt(path, document string) string {
@@ -1570,8 +1585,11 @@ func newFixture(t *testing.T) *fixture {
 				}
 				return commitPrompt(vars.TaskName, vars.Push), nil
 			case prompts.StagePRReview:
-				if vars.OneShotPath != "" {
+				switch {
+				case vars.OneShotPath != "":
 					return oneShotReviewPrompt(vars.ReviewPath, vars.OneShotPath), nil
+				case vars.Instructions != "":
+					return instructedReviewPrompt(vars.ReviewPath, vars.Instructions), nil
 				}
 				return reviewPrompt(vars.ReviewPath), nil
 			default:

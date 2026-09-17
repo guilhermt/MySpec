@@ -1804,3 +1804,40 @@ func TestSetChoiceOfASessionThatIsNotOpenIsNotFound(t *testing.T) {
 	err := f.service.SetChoice(t.Context(), prd("t1"), models.Choice{Model: models.Opus5, Effort: models.Low})
 	wantErrIs(t, err, session.ErrNotFound)
 }
+
+func TestStartOfAReviewOfAPullRequestMarksItAndSendsWhatTheUserWroteForThePass(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	info := atReview(taskInfo(t, "r1"))
+	f.start(t, info)
+	f.waitIdle(t, info.Key())
+
+	tr := f.transcript(t, info.Key())
+	if tr.Stage != session.ReviewStage {
+		t.Errorf("transcript stage = %q, want %q", tr.Stage, session.ReviewStage)
+	}
+	if len(tr.Entries) != 3 {
+		t.Fatalf("entries = %d, want the review marker, the prompt and its answer", len(tr.Entries))
+	}
+	wantMarker := &session.MarkerEntry{Type: session.MarkerReviewStarted}
+	if diff := cmp.Diff(wantMarker, tr.Entries[0].Marker); diff != "" {
+		t.Errorf("marker mismatch (-want +got):\n%s", diff)
+	}
+	// What the user wrote for the pass reads in the conversation as their first
+	// message, as the initial context of a task does.
+	wantUser := &session.UserEntry{Text: info.PassInstructions, Prompt: true}
+	if diff := cmp.Diff(wantUser, tr.Entries[1].User); diff != "" {
+		t.Errorf("user entry mismatch (-want +got):\n%s", diff)
+	}
+	rendered, _ := renderPrompt(prompts.StagePRReview, prompts.Vars{
+		ContextPath:      info.ContextPath,
+		External:         info.External,
+		Publish:          info.Publish,
+		Instructions:     info.Instructions,
+		PassInstructions: info.PassInstructions,
+	})
+	if got := tr.Entries[2].Assistant.Text; got != rendered {
+		t.Errorf("prompt sent = %q, want %q", got, rendered)
+	}
+}

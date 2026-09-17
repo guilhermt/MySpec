@@ -232,6 +232,29 @@ func (s *Service) Card(boardID, key string) (Card, bool) {
 	return reading.Cards[i], true
 }
 
+// CardOfPullRequest is the first card, in the order of List, whose stored
+// reading links it to the pull request owner/name#number, and the board it
+// belongs to.
+func (s *Service) CardOfPullRequest(owner, name string, number int) (boardID string, card Card, ok bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for _, b := range s.boards {
+		reading := s.stored[b.ID].Reading
+		if reading == nil {
+			continue
+		}
+		for _, c := range reading.Cards {
+			for _, pr := range c.PullRequests {
+				if pr.Number == number && strings.EqualFold(pr.Owner, owner) && strings.EqualFold(pr.Name, name) {
+					return b.ID, c, true
+				}
+			}
+		}
+	}
+	return "", Card{}, false
+}
+
 // Context is the initial context of a task created from the card of key, with
 // what the user added.
 func (s *Service) Context(boardID, key, additional string) (string, error) {
