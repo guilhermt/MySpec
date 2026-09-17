@@ -19,6 +19,12 @@ export interface StoreOptions {
       | "newTaskCard"
       | "pendingStart"
       | "openBoardId"
+      | "reviewsOpen"
+      | "openReviewId"
+      | "openArchivedReviewId"
+      | "startReview"
+      | "pendingReview"
+      | "findingDrafts"
       | "sidebarCollapsed"
       | "lastRepositoryId"
       | "historyOpen"
@@ -52,6 +58,12 @@ export function resetAppStore(options: StoreOptions = {}): void {
     newTaskCard: options.ui?.newTaskCard ?? null,
     pendingStart: options.ui?.pendingStart ?? null,
     openBoardId: options.ui?.openBoardId ?? null,
+    reviewsOpen: options.ui?.reviewsOpen ?? false,
+    openReviewId: options.ui?.openReviewId ?? null,
+    openArchivedReviewId: options.ui?.openArchivedReviewId ?? null,
+    startReview: options.ui?.startReview ?? null,
+    pendingReview: options.ui?.pendingReview ?? null,
+    findingDrafts: options.ui?.findingDrafts ?? {},
     sidebarCollapsed: options.ui?.sidebarCollapsed ?? new Set<string>(),
     lastRepositoryId: options.ui?.lastRepositoryId ?? null,
     historyOpen: options.ui?.historyOpen ?? false,

@@ -38,9 +38,9 @@ export function useGlobalShortcuts(): void {
           if (store.newTaskOpen) {
             return;
           }
-          const [first] = waitingEntries(store.app, store.openTaskId);
+          const [first] = waitingEntries(store.app, store.openTaskId ?? store.openReviewId);
           if (first !== undefined) {
-            store.openPlace(first.task.id, first.situation.place);
+            store.openPlace(first.itemId, first.situation.place);
           }
           break;
         }

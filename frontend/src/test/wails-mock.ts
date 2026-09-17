@@ -1,5 +1,6 @@
 import { vi } from "vitest";
 import type {
+  ArchivedReview,
   ArchivedTask,
   Board,
   BoardCard,
@@ -13,21 +14,30 @@ import type {
   DeleteResult,
   Entry,
   EntryKind,
+  FindingDecision,
   Migration,
   ModelStage,
   PermissionDecision,
   Prompt,
   PromptStage,
   PullRequest,
+  PullRequestRow,
   Repository,
   RepositoryCandidate,
   Review,
+  ReviewCenter,
+  ReviewFilters,
+  ReviewFinding,
   ReviewMode,
+  ReviewPass,
+  ReviewSummary,
+  ReviewVerdict,
   SaveBoardRequest,
   Situation,
   SituationOpen,
   SituationStarted,
   StageModel,
+  StartReviewRequest,
   State,
   Step,
   StepReviewer,
@@ -50,6 +60,9 @@ export const api = {
   setRepositoryFilter: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
   cloneRepository: vi.fn<(id: string) => Promise<boolean>>(() => Promise.resolve(true)),
   chooseCloneFolder: vi.fn<() => Promise<void>>(() => Promise.resolve()),
+  setReviewInstructions: vi.fn<(id: string, text: string) => Promise<void>>(() =>
+    Promise.resolve(),
+  ),
 
   previewBoard: vi.fn<(url: string) => Promise<BoardPreview>>(() =>
     Promise.resolve(makeBoardPreview()),
@@ -167,6 +180,39 @@ export const api = {
   openFileInEditor: vi.fn<(taskId: string, path: string) => Promise<void>>(() => Promise.resolve()),
   openExternal: vi.fn<(url: string) => Promise<void>>(() => Promise.resolve()),
 
+  refreshPullRequests: vi.fn<() => Promise<void>>(() => Promise.resolve()),
+  setReviewFilters: vi.fn<(filters: ReviewFilters) => Promise<void>>(() => Promise.resolve()),
+  startReview: vi.fn<(req: StartReviewRequest) => Promise<string>>(() =>
+    Promise.resolve("review-1"),
+  ),
+  askReviewAgain: vi.fn<(id: string, instructions: string) => Promise<void>>(() =>
+    Promise.resolve(),
+  ),
+  decideFinding: vi.fn<
+    (id: string, pass: number, number: number, decision: FindingDecision) => Promise<void>
+  >(() => Promise.resolve()),
+  setFindingText: vi.fn<(id: string, pass: number, number: number, text: string) => Promise<void>>(
+    () => Promise.resolve(),
+  ),
+  setReviewSummary: vi.fn<(id: string, pass: number, text: string) => Promise<void>>(() =>
+    Promise.resolve(),
+  ),
+  publishReview: vi.fn<(id: string, verdict: ReviewVerdict) => Promise<void>>(() =>
+    Promise.resolve(),
+  ),
+  applyReview: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
+  approveReview: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
+  deleteReview: vi.fn<(id: string) => Promise<DeleteResult>>(() =>
+    Promise.resolve({ leftover: null }),
+  ),
+  readReviewArtifact: vi.fn<(id: string, name: string) => Promise<string>>(() =>
+    Promise.resolve("## Findings\n"),
+  ),
+  openReviewInEditor: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
+  openFindingInEditor: vi.fn<(id: string, pass: number, number: number) => Promise<void>>(() =>
+    Promise.resolve(),
+  ),
+
   viewSituation: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
 };
 
@@ -257,24 +303,7 @@ export function makeState(overrides: Partial<State> = {}): State {
     tasks: [],
     history: [],
     boards: [],
-    reviewCenter: {
-      pullRequests: [],
-      failures: [],
-      readAt: "",
-      reading: false,
-      filters: {
-        boardId: "",
-        repositoryId: "",
-        authorsInclude: [],
-        authorsExclude: [],
-        labelsInclude: [],
-        labelsExclude: [],
-        pendingOnly: false,
-      },
-      pendingCount: 0,
-      authors: [],
-      labels: [],
-    },
+    reviewCenter: makeReviewCenter(),
     reviews: [],
     reviewHistory: [],
     cloneFolder: "",
@@ -672,6 +701,152 @@ export function makeReview(overrides: Partial<Review> = {}): Review {
   };
 }
 
+export function makeReviewCenter(overrides: Partial<ReviewCenter> = {}): ReviewCenter {
+  return {
+    pullRequests: [],
+    failures: [],
+    readAt: "",
+    reading: false,
+    filters: makeReviewFilters(),
+    pendingCount: 0,
+    authors: [],
+    labels: [],
+    ...overrides,
+  };
+}
+
+export function makeReviewFilters(overrides: Partial<ReviewFilters> = {}): ReviewFilters {
+  return {
+    boardId: "",
+    repositoryId: "",
+    authorsInclude: [],
+    authorsExclude: [],
+    labelsInclude: [],
+    labelsExclude: [],
+    pendingOnly: false,
+    ...overrides,
+  };
+}
+
+export function makePullRequestRow(overrides: Partial<PullRequestRow> = {}): PullRequestRow {
+  return {
+    key: "dev/web#31",
+    repositoryId: "repo-1",
+    repository: "dev/web",
+    boardId: "",
+    number: 31,
+    title: "Add the login screen",
+    url: "https://github.com/dev/web/pull/31",
+    author: "alice",
+    labels: [],
+    draft: false,
+    own: false,
+    card: null,
+    reviewed: false,
+    newCommits: false,
+    pending: true,
+    filtered: false,
+    taskId: "",
+    reviewId: "",
+    action: "review",
+    updatedAt: "2026-09-16T12:00:00Z",
+    ...overrides,
+  };
+}
+
+export function makeReviewSummary(overrides: Partial<ReviewSummary> = {}): ReviewSummary {
+  return {
+    id: "review-1",
+    repositoryId: "repo-1",
+    repository: "dev/web",
+    number: 31,
+    title: "Add the login screen",
+    author: "alice",
+    url: "https://github.com/dev/web/pull/31",
+    headBranch: "add-login",
+    baseBranch: "dev",
+    own: false,
+    mode: "publish",
+    status: "reviewing",
+    card: null,
+    worktreePath: "/home/dev/.local/share/myspec/worktrees/dev/web/pr_31",
+    passes: [],
+    stalePass: false,
+    checkError: "",
+    publishError: "",
+    unreadableReport: "",
+    commitFailed: false,
+    review: null,
+    verdicts: ["approve", "request_changes", "comment"],
+    canPublish: false,
+    canApply: false,
+    canApprove: false,
+    canReviewAgain: false,
+    sessionStage: "review",
+    sessionStatus: "working",
+    sessionModel: "claude-opus-5",
+    sessionEffort: "high",
+    turnRunning: true,
+    processRunning: true,
+    retryAttempt: 0,
+    contextPercent: 0,
+    pendingCount: 0,
+    lastError: "",
+    situations: [],
+    createdAt: "2026-09-16T12:00:00Z",
+    ...overrides,
+  };
+}
+
+export function makeReviewPass(overrides: Partial<ReviewPass> = {}): ReviewPass {
+  return {
+    pass: 1,
+    file: "review-1.md",
+    recorded: true,
+    clean: false,
+    instructions: "",
+    summary: "Two things to fix.",
+    findings: [makeReviewFinding()],
+    revision: 1,
+    published: false,
+    publishedAt: "",
+    publishedUrl: "",
+    verdict: "",
+    ...overrides,
+  };
+}
+
+export function makeReviewFinding(overrides: Partial<ReviewFinding> = {}): ReviewFinding {
+  return {
+    number: 1,
+    path: "src/login.ts",
+    line: 12,
+    text: "The token is never cleared.",
+    decision: "",
+    placement: "",
+    ...overrides,
+  };
+}
+
+export function makeArchivedReview(overrides: Partial<ArchivedReview> = {}): ArchivedReview {
+  return {
+    id: "review-1",
+    repositoryId: "repo-1",
+    repository: "dev/web",
+    number: 31,
+    title: "Add the login screen",
+    author: "alice",
+    url: "https://github.com/dev/web/pull/31",
+    mode: "publish",
+    outcome: "merged",
+    card: null,
+    passes: [makeReviewPass()],
+    createdAt: "2026-09-16T12:00:00Z",
+    archivedAt: "2026-09-17T12:00:00Z",
+    ...overrides,
+  };
+}
+
 let entrySeq = 0;
 
 // Every entry carries exactly the payload of its kind, like the Go side.
@@ -822,6 +997,9 @@ export function resetWailsMock(): void {
   api.previewRemoveBoard.mockImplementation(() => Promise.resolve({ toNoBoard: 0, removed: 0 }));
   api.cardContext.mockImplementation(() => Promise.resolve("### Card: Add the login screen\n"));
   api.createTask.mockImplementation(() => Promise.resolve("task-1"));
+  api.startReview.mockImplementation(() => Promise.resolve("review-1"));
+  api.deleteReview.mockImplementation(() => Promise.resolve({ leftover: null }));
+  api.readReviewArtifact.mockImplementation(() => Promise.resolve("## Findings\n"));
   api.getTranscript.mockImplementation((taskId, stage) =>
     Promise.resolve(makeTranscript({ taskId, stage })),
   );

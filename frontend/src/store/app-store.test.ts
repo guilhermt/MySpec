@@ -8,11 +8,13 @@ import {
   stepTabKey,
   useAppStore,
   useArchivedNotice,
+  useArchivedReview,
   useArchivedTask,
   useBoard,
   useBoards,
   useDraft,
   useError,
+  useFindingDraft,
   useFlashing,
   useHistory,
   useHistoryUi,
@@ -20,14 +22,21 @@ import {
   useMigration,
   useOnScreenSituationId,
   useOpenBoardId,
+  useOpenReviewId,
   useOpenStepTab,
   useOpenTask,
   usePrDraft,
   useRepositories,
   useRepository,
   useRepositoryFilter,
+  useReview,
+  useReviewCenter,
+  useReviewHistory,
+  useReviews,
+  useReviewsOpen,
   useSettingsUi,
   useSidebarCollapsed,
+  useStartReview,
   useTask,
   useTasks,
   useThemeState,
@@ -35,12 +44,15 @@ import {
 } from "@/store/app-store";
 import { resetAppStore } from "@/test/render";
 import {
+  makeArchivedReview,
   makeArchivedTask,
   makeBoard,
   makeEntry,
   makeMigration,
   makePullRequest,
   makeRepository,
+  makeReviewCenter,
+  makeReviewSummary,
   makeSituation,
   makeState,
   makeStep,
@@ -1276,5 +1288,242 @@ describe("sidebar nodes", () => {
     const fresh = await import("@/store/app-store");
 
     expect([...fresh.useAppStore.getState().sidebarCollapsed]).toEqual(["board-1"]);
+  });
+});
+
+const REVIEW = makeReviewSummary({ id: "review-1" });
+const OTHER_REVIEW = makeReviewSummary({ id: "review-2", number: 32, title: "Fix the header" });
+const ARCHIVED_REVIEW = makeArchivedReview({ id: "review-1" });
+const REVIEW_PLACE: Place = { kind: "review", stage: "", step: 0 };
+
+// REVIEW_KEY is the conversation of a review: a review has the one stage.
+const REVIEW_KEY = sessionKey(REVIEW.id, "review");
+
+function withReviews(overrides = {}) {
+  return withTasks({ reviews: [REVIEW, OTHER_REVIEW], ...overrides });
+}
+
+describe("reviews", () => {
+  it("report the reviews of the snapshot, and nothing before the first one", () => {
+    const { result } = renderHook(() => ({
+      center: useReviewCenter(),
+      reviews: useReviews(),
+      review: useReview(REVIEW.id),
+      missing: useReview("review-gone"),
+      history: useReviewHistory(),
+      archived: useArchivedReview(ARCHIVED_REVIEW.id),
+    }));
+
+    expect(result.current.center.pendingCount).toBe(0);
+    expect(result.current.center.pullRequests).toEqual([]);
+    expect(result.current.reviews).toEqual([]);
+    expect(result.current.review).toBeNull();
+    expect(result.current.history).toEqual([]);
+
+    act(() => {
+      useAppStore.getState().applyState(
+        withReviews({
+          reviewCenter: makeReviewCenter({ pendingCount: 2 }),
+          reviewHistory: [ARCHIVED_REVIEW],
+        }),
+      );
+    });
+
+    expect(result.current.center.pendingCount).toBe(2);
+    expect(result.current.reviews).toHaveLength(2);
+    expect(result.current.review).toEqual(REVIEW);
+    expect(result.current.missing).toBeNull();
+    expect(result.current.archived).toEqual(ARCHIVED_REVIEW);
+  });
+
+  it("falls back to no review when the snapshot carries none", () => {
+    const { result } = renderHook(() => ({
+      reviews: useReviews(),
+      history: useReviewHistory(),
+    }));
+
+    act(() => {
+      useAppStore.getState().applyState(withTasks({ reviews: null, reviewHistory: null }));
+    });
+
+    expect(result.current.reviews).toEqual([]);
+    expect(result.current.history).toEqual([]);
+  });
+
+  it("opens the Reviews view in place of a task and closes it into a review", () => {
+    const { result } = renderHook(() => ({
+      open: useReviewsOpen(),
+      openId: useOpenReviewId(),
+    }));
+
+    act(() => {
+      useAppStore.getState().applyState(withReviews());
+      useAppStore.getState().openTask(WEB_TASK.id);
+      useAppStore.getState().openReviews();
+    });
+    expect(result.current).toEqual({ open: true, openId: null });
+    expect(useAppStore.getState().openTaskId).toBeNull();
+
+    act(() => {
+      useAppStore.getState().openReview(REVIEW.id);
+    });
+    expect(result.current).toEqual({ open: false, openId: REVIEW.id });
+
+    act(() => {
+      useAppStore.getState().closeReview();
+    });
+    expect(result.current).toEqual({ open: true, openId: null });
+  });
+
+  it("opens an archived review inside the history and closes it", () => {
+    act(() => {
+      useAppStore.getState().applyState(withReviews({ reviewHistory: [ARCHIVED_REVIEW] }));
+      useAppStore.getState().openReview(REVIEW.id);
+      useAppStore.getState().openArchivedReview(ARCHIVED_REVIEW.id);
+    });
+    expect(useAppStore.getState().openArchivedReviewId).toBe(ARCHIVED_REVIEW.id);
+    expect(useAppStore.getState().historyOpen).toBe(true);
+    expect(useAppStore.getState().openReviewId).toBeNull();
+
+    act(() => {
+      useAppStore.getState().closeArchivedReview();
+    });
+    expect(useAppStore.getState().openArchivedReviewId).toBeNull();
+  });
+
+  it.each([
+    ["a task", () => useAppStore.getState().openTask(WEB_TASK.id)],
+    ["a board", () => useAppStore.getState().openBoard("board-1")],
+    ["the history", () => useAppStore.getState().openHistory()],
+    ["an archived task", () => useAppStore.getState().openArchived(ARCHIVED.id)],
+    ["the settings", () => useAppStore.getState().openSettings()],
+    ["nothing", () => useAppStore.getState().closeTask()],
+  ])("leaves the review places behind when %s opens", (_name, navigate) => {
+    useAppStore.getState().applyState(withReviews({ history: [ARCHIVED] }));
+    useAppStore.getState().openReview(REVIEW.id);
+
+    navigate();
+
+    expect(useAppStore.getState().openReviewId).toBeNull();
+    expect(useAppStore.getState().reviewsOpen).toBe(false);
+    expect(useAppStore.getState().openArchivedReviewId).toBeNull();
+  });
+
+  it("closes the screen of a review that is gone and drops its conversation", () => {
+    useAppStore.getState().applyState(withReviews());
+    useAppStore.getState().openReview(REVIEW.id);
+    useAppStore.getState().setTranscript(makeTranscript({ taskId: REVIEW.id, stage: "review" }));
+
+    useAppStore.getState().applyState(withReviews({ reviews: [OTHER_REVIEW] }));
+
+    expect(useAppStore.getState().openReviewId).toBeNull();
+    expect(useAppStore.getState().openArchivedReviewId).toBeNull();
+    expect(useAppStore.getState().transcripts[REVIEW_KEY]).toBeUndefined();
+  });
+
+  it("opens the archived review of a review whose pull request was merged", () => {
+    useAppStore.getState().applyState(withReviews());
+    useAppStore.getState().openReview(REVIEW.id);
+
+    useAppStore
+      .getState()
+      .applyState(withReviews({ reviews: [OTHER_REVIEW], reviewHistory: [ARCHIVED_REVIEW] }));
+
+    expect(useAppStore.getState().openReviewId).toBeNull();
+    expect(useAppStore.getState().openArchivedReviewId).toBe(ARCHIVED_REVIEW.id);
+    // Inside the history, so that going back from the archived review lands
+    // where every other archived entity is opened from.
+    expect(useAppStore.getState().historyOpen).toBe(true);
+  });
+
+  it("closes an archived review that is no longer in the history", () => {
+    useAppStore.getState().applyState(withReviews({ reviewHistory: [ARCHIVED_REVIEW] }));
+    useAppStore.getState().openArchivedReview(ARCHIVED_REVIEW.id);
+
+    useAppStore.getState().applyState(withReviews({ reviewHistory: [] }));
+
+    expect(useAppStore.getState().openArchivedReviewId).toBeNull();
+  });
+
+  it("forgets the review screens once no repository is registered", () => {
+    useAppStore.getState().applyState(withReviews());
+    useAppStore.getState().openReview(REVIEW.id);
+
+    useAppStore.getState().applyState(makeState({ repositories: [], tasks: [] }));
+
+    expect(useAppStore.getState().openReviewId).toBeNull();
+    expect(useAppStore.getState().reviewsOpen).toBe(false);
+  });
+
+  it("opens the dialog that starts a review, and keeps the pull request waiting for a clone", () => {
+    const { result } = renderHook(() => useStartReview());
+    const pull = { repositoryId: "repo-1", number: 31 };
+
+    act(() => {
+      useAppStore.getState().openStartReview(pull);
+    });
+    expect(result.current).toEqual(pull);
+
+    act(() => {
+      useAppStore.getState().setPendingReview(pull);
+      useAppStore.getState().closeStartReview();
+    });
+    expect(result.current).toBeNull();
+    expect(useAppStore.getState().pendingReview).toEqual(pull);
+
+    act(() => {
+      useAppStore.getState().setPendingReview(null);
+    });
+    expect(useAppStore.getState().pendingReview).toBeNull();
+  });
+
+  it("keeps the text of a finding the user is editing until it is cleared", () => {
+    const key = `${REVIEW.id}|1|2`;
+    const { result } = renderHook(() => useFindingDraft(key));
+
+    expect(result.current).toBeNull();
+
+    act(() => {
+      useAppStore.getState().setFindingDraft(key, "half a note");
+    });
+    expect(result.current).toBe("half a note");
+
+    act(() => {
+      useAppStore.getState().clearFindingDraft(key);
+    });
+    expect(result.current).toBeNull();
+  });
+
+  it("opens the review a situation is in, and ignores one that is gone", () => {
+    useAppStore.getState().applyState(withReviews());
+
+    useAppStore.getState().openPlace("review-gone", REVIEW_PLACE);
+    expect(useAppStore.getState().openReviewId).toBeNull();
+
+    useAppStore.getState().openPlace(REVIEW.id, REVIEW_PLACE);
+    expect(useAppStore.getState().openReviewId).toBe(REVIEW.id);
+  });
+
+  it("is the situation of the open review on screen", () => {
+    const { result } = renderHook(() => useOnScreenSituationId());
+    const situation = makeSituation({
+      id: "s-report",
+      taskId: REVIEW.id,
+      kind: "review_report",
+      form: "decide",
+      place: REVIEW_PLACE,
+    });
+
+    act(() => {
+      useAppStore
+        .getState()
+        .applyState(withReviews({ reviews: [{ ...REVIEW, situations: [situation] }] }));
+    });
+    expect(result.current).toBeNull();
+
+    act(() => {
+      useAppStore.getState().openReview(REVIEW.id);
+    });
+    expect(result.current).toBe("s-report");
   });
 });

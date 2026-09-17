@@ -14,6 +14,7 @@ describe("Marker", () => {
     ["plan_updated", "Plan updated"],
     ["one_shot_written", "One-Shot document written"],
     ["one_shot_updated", "One-Shot document updated"],
+    ["review_started", "Review started"],
     ["compacted", "Context compacted"],
     ["interrupted", "Interrupted"],
   ] as const)("names the %s milestone", (type: MarkerType, expected) => {

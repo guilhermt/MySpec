@@ -9,6 +9,7 @@ import {
   makeBoard,
   makeMigration,
   makeRepository,
+  makeReviewSummary,
   makeSituation,
   makeState,
   makeTask,
@@ -130,6 +131,33 @@ describe("App", () => {
       "aria-selected",
       "true",
     );
+  });
+
+  it("opens the review a situation is in on Ctrl+J", async () => {
+    vi.mocked(api.getState).mockResolvedValue(
+      makeState({
+        tasks: [makeTask()],
+        reviews: [
+          makeReviewSummary({
+            situations: [
+              makeSituation({
+                id: "s-report",
+                taskId: "review-1",
+                kind: "review_report",
+                form: "decide",
+                place: { kind: "review", stage: "", step: 0 },
+              }),
+            ],
+          }),
+        ],
+      }),
+    );
+    const { user } = renderWithStore(<App />);
+    await screen.findByRole("tree", { name: "Tasks" });
+
+    await user.keyboard("{Control>}j{/Control}");
+
+    expect(useAppStore.getState().openReviewId).toBe("review-1");
   });
 
   it("changes nothing on Ctrl+J when nothing waits for the user", async () => {

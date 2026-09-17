@@ -3,6 +3,7 @@ import * as BoardService from "@bindings/boardservice";
 import type {
   ActionEntry,
   ArchivedPR,
+  ArchivedReview,
   ArchivedStep,
   ArchivedTask,
   AssistantEntry,
@@ -42,19 +43,29 @@ import type {
   PRPreview,
   PRReport,
   Prompt,
+  PullCard,
+  PullLabel,
   PullRequest,
+  PullRequestRow,
+  PullsFailure,
   Question,
   QuestionEntry,
   QuestionOption,
   Repository,
   RepositoryCandidate,
   Review,
+  ReviewCenter,
   ReviewFile,
+  ReviewFilters,
+  ReviewFinding,
+  ReviewPass,
+  ReviewSummary,
   SaveBoardRequest,
   Situation,
   SituationOpen,
   SituationStarted,
   StageModel,
+  StartReviewRequest,
   State,
   Step,
   StepBlock,
@@ -69,6 +80,7 @@ import type {
   WorktreePreview,
 } from "@bindings/models";
 import * as RepositoryService from "@bindings/repositoryservice";
+import * as ReviewService from "@bindings/reviewservice";
 import * as SettingsService from "@bindings/settingsservice";
 import * as StateService from "@bindings/stateservice";
 import * as TaskService from "@bindings/taskservice";
@@ -77,6 +89,7 @@ import { Browser, Events } from "@wailsio/runtime";
 export type {
   ActionEntry,
   ArchivedPR,
+  ArchivedReview,
   ArchivedStep,
   ArchivedTask,
   AssistantEntry,
@@ -116,19 +129,29 @@ export type {
   PRPreview,
   PRReport,
   Prompt,
+  PullCard,
+  PullLabel,
   PullRequest,
+  PullRequestRow,
+  PullsFailure,
   Question,
   QuestionEntry,
   QuestionOption,
   Repository,
   RepositoryCandidate,
   Review,
+  ReviewCenter,
   ReviewFile,
+  ReviewFilters,
+  ReviewFinding,
+  ReviewPass,
+  ReviewSummary,
   SaveBoardRequest,
   Situation,
   SituationOpen,
   SituationStarted,
   StageModel,
+  StartReviewRequest,
   State,
   Step,
   StepBlock,
@@ -264,6 +287,7 @@ export type MarkerType =
   | "pr_review_written"
   | "step_review_started"
   | "step_review_written"
+  | "review_started"
   | "stage_started"
   | "step_started"
   | "compacted"
@@ -294,16 +318,28 @@ export type SituationKind =
   | "draft"
   | "findings"
   | "changes_review"
-  | "merge";
+  | "merge"
+  | "review_report"
+  | "new_commits"
+  | "publish_failed";
 
 /** SituationGroup is how urgent a situation is, from the most urgent. */
 export type SituationGroup = "error" | "waiting" | "closing";
 
 /** SituationForm is the shape of the kinds that have more than one. */
-export type SituationForm = "" | "review" | "staged" | "approve" | "merge" | "close";
+export type SituationForm =
+  | ""
+  | "review"
+  | "staged"
+  | "approve"
+  | "merge"
+  | "close"
+  | "decide"
+  | "publish"
+  | "apply";
 
-/** PlaceKind is the part of a task a situation is in. */
-export type PlaceKind = "stage" | "step" | "step_review" | "pr";
+/** PlaceKind is the part of an item a situation is in: of a task, or a review of its own. */
+export type PlaceKind = "stage" | "step" | "step_review" | "pr" | "review";
 
 /** ReviewMode is who reviews the steps: the user, or an agent. */
 export type ReviewMode = "manual" | "agent";
@@ -341,6 +377,49 @@ export type IssueState = "open" | "closed";
 
 /** PullRequestState is what GitHub says of a pull request linked to an issue. */
 export type PullRequestState = "open" | "merged" | "closed";
+
+/** PullReviewMode is what a review of a pull request does with the findings the user approves: publish them, or fix them. */
+export type PullReviewMode = "publish" | "apply";
+
+/** PullReviewStatus is where a review of a pull request stands. */
+export type PullReviewStatus =
+  | "reviewing"
+  | "awaiting_reply"
+  | "awaiting_decision"
+  | "ready_to_publish"
+  | "publish_failed"
+  | "published"
+  | "new_commits"
+  | "ready_to_apply"
+  | "applying"
+  | "in_review"
+  | "ready_to_approve"
+  | "committing"
+  | "ready_to_merge";
+
+/** ReviewVerdict is what a published review says of the pull request. */
+export type ReviewVerdict = "approve" | "request_changes" | "comment";
+
+/** FindingDecision is what the user decided about a finding; "" while they have not. */
+export type FindingDecision = "" | "approved" | "discarded";
+
+/** FindingPlacement is where a finding went when its pass was published; "" when it was not published. */
+export type FindingPlacement = "" | "inline" | "body";
+
+/** PullRequestAction is what the Reviews view offers for one pull request. */
+export type PullRequestAction =
+  | "review"
+  | "open_review"
+  | "open_task"
+  | "clone"
+  | "clone_missing"
+  | "fork";
+
+/** PullRequestOutcome is what became of the pull request of an archived review. */
+export type PullRequestOutcome = "merged" | "closed";
+
+/** REVIEW_STAGE is the stage of the conversation of a review: a review has one. */
+export const REVIEW_STAGE = "review";
 
 /** sessionKey identifies one conversation: a task and the stage it belongs to. */
 export function sessionKey(taskId: string, stage: string): string {
@@ -604,6 +683,7 @@ export function asMarkerType(value: string): MarkerType {
     case "pr_review_written":
     case "step_review_started":
     case "step_review_written":
+    case "review_started":
     case "stage_started":
     case "step_started":
     case "compacted":
@@ -657,6 +737,9 @@ export function asSituationKind(value: string): SituationKind {
     case "findings":
     case "changes_review":
     case "merge":
+    case "review_report":
+    case "new_commits":
+    case "publish_failed":
       return value;
     default:
       return "reply";
@@ -682,6 +765,9 @@ export function asSituationForm(value: string): SituationForm {
     case "approve":
     case "merge":
     case "close":
+    case "decide":
+    case "publish":
+    case "apply":
       return value;
     default:
       return "";
@@ -694,6 +780,7 @@ export function asPlaceKind(value: string): PlaceKind {
     case "step":
     case "step_review":
     case "pr":
+    case "review":
       return value;
     default:
       return "stage";
@@ -795,6 +882,99 @@ export function asPullRequestState(value: string): PullRequestState {
   }
 }
 
+export function asPullReviewMode(value: string): PullReviewMode {
+  switch (value) {
+    case "publish":
+    case "apply":
+      return value;
+    default:
+      return "publish";
+  }
+}
+
+export function asPullReviewStatus(value: string): PullReviewStatus {
+  switch (value) {
+    case "reviewing":
+    case "awaiting_reply":
+    case "awaiting_decision":
+    case "ready_to_publish":
+    case "publish_failed":
+    case "published":
+    case "new_commits":
+    case "ready_to_apply":
+    case "applying":
+    case "in_review":
+    case "ready_to_approve":
+    case "committing":
+    case "ready_to_merge":
+      return value;
+    default:
+      return "reviewing";
+  }
+}
+
+export function asReviewVerdict(value: string): ReviewVerdict {
+  switch (value) {
+    case "approve":
+    case "request_changes":
+    case "comment":
+      return value;
+    // Comment is the verdict that judges nothing, which is what an unknown one
+    // is worth.
+    default:
+      return "comment";
+  }
+}
+
+export function asFindingDecision(value: string): FindingDecision {
+  switch (value) {
+    case "":
+    case "approved":
+    case "discarded":
+      return value;
+    default:
+      return "";
+  }
+}
+
+export function asFindingPlacement(value: string): FindingPlacement {
+  switch (value) {
+    case "":
+    case "inline":
+    case "body":
+      return value;
+    default:
+      return "";
+  }
+}
+
+export function asPullRequestAction(value: string): PullRequestAction {
+  switch (value) {
+    case "review":
+    case "open_review":
+    case "open_task":
+    case "clone":
+    case "clone_missing":
+    case "fork":
+      return value;
+    // A fork is the action that does nothing, which is the safe answer to an
+    // action the app does not know.
+    default:
+      return "fork";
+  }
+}
+
+export function asPullRequestOutcome(value: string): PullRequestOutcome {
+  switch (value) {
+    case "merged":
+    case "closed":
+      return value;
+    // Closed claims the least of a pull request the app cannot place.
+    default:
+      return "closed";
+  }
+}
+
 export const api = {
   getState: (): Promise<State> => StateService.GetState(),
   scanRepositories: async (): Promise<RepositoryCandidate[]> =>
@@ -806,6 +986,8 @@ export const api = {
   setRepositoryFilter: (id: string): Promise<void> => RepositoryService.SetRepositoryFilter(id),
   cloneRepository: (id: string): Promise<boolean> => RepositoryService.CloneRepository(id),
   chooseCloneFolder: (): Promise<void> => RepositoryService.ChooseCloneFolder(),
+  setReviewInstructions: (id: string, text: string): Promise<void> =>
+    RepositoryService.SetReviewInstructions(id, text),
 
   previewBoard: (url: string): Promise<BoardPreview> => BoardService.PreviewBoard(url),
   previewEditBoard: (id: string): Promise<BoardPreview> => BoardService.PreviewEditBoard(id),
@@ -898,6 +1080,34 @@ export const api = {
   openFileInEditor: (taskId: string, path: string): Promise<void> =>
     TaskService.OpenFileInEditor(taskId, path),
   openExternal: (url: string): Promise<void> => Browser.OpenURL(url),
+
+  refreshPullRequests: (): Promise<void> => ReviewService.RefreshPullRequests(),
+  setReviewFilters: (filters: ReviewFilters): Promise<void> =>
+    ReviewService.SetReviewFilters(filters),
+  startReview: (req: StartReviewRequest): Promise<string> => ReviewService.StartReview(req),
+  // The review of the pull request of a task already answers to reviewAgain.
+  askReviewAgain: (id: string, instructions: string): Promise<void> =>
+    ReviewService.ReviewAgain(id, instructions),
+  decideFinding: (
+    id: string,
+    pass: number,
+    number: number,
+    decision: FindingDecision,
+  ): Promise<void> => ReviewService.DecideFinding(id, pass, number, decision),
+  setFindingText: (id: string, pass: number, number: number, text: string): Promise<void> =>
+    ReviewService.SetFindingText(id, pass, number, text),
+  setReviewSummary: (id: string, pass: number, text: string): Promise<void> =>
+    ReviewService.SetReviewSummary(id, pass, text),
+  publishReview: (id: string, verdict: ReviewVerdict): Promise<void> =>
+    ReviewService.PublishReview(id, verdict),
+  applyReview: (id: string): Promise<void> => ReviewService.ApplyReview(id),
+  approveReview: (id: string): Promise<void> => ReviewService.ApproveReview(id),
+  deleteReview: (id: string): Promise<DeleteResult> => ReviewService.DeleteReview(id),
+  readReviewArtifact: (id: string, name: string): Promise<string> =>
+    ReviewService.ReadReviewArtifact(id, name),
+  openReviewInEditor: (id: string): Promise<void> => ReviewService.OpenReviewInEditor(id),
+  openFindingInEditor: (id: string, pass: number, number: number): Promise<void> =>
+    ReviewService.OpenFindingInEditor(id, pass, number),
 
   viewSituation: (id: string): Promise<void> => AttentionService.ViewSituation(id),
 };

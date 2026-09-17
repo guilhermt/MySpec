@@ -6,13 +6,17 @@ import type {
   BoardRepositoryChoice,
   BoardRepositoryOption,
   CreateTaskRequest,
+  FindingDecision,
   ModelStage,
   PermissionDecision,
   Prompt,
   PromptStage,
   RepositoryCandidate,
+  ReviewFilters,
   ReviewMode,
+  ReviewVerdict,
   SaveBoardRequest,
+  StartReviewRequest,
   TaskStage,
   ThemePreference,
 } from "@/lib/wails";
@@ -365,4 +369,92 @@ export function openFileInEditor(taskId: string, path: string): Promise<void> {
 
 export function openExternal(url: string): Promise<void> {
   return run(() => api.openExternal(url));
+}
+
+/** refreshPullRequests reads the open pull requests again; the result arrives with the state. */
+export function refreshPullRequests(): Promise<void> {
+  return run(() => api.refreshPullRequests());
+}
+
+/** setReviewFilters chooses what the Reviews view shows. */
+export function setReviewFilters(filters: ReviewFilters): Promise<void> {
+  return run(() => api.setReviewFilters(filters));
+}
+
+/**
+ * startReview, askReviewAgain, publishReview and setReviewInstructions do not
+ * swallow their failure: the dialog or the panel that asked shows it where the
+ * user is.
+ */
+export function startReview(req: StartReviewRequest): Promise<string> {
+  return api.startReview(req);
+}
+
+/** askReviewAgain asks the agent for another pass over the pull request as it is now. */
+export function askReviewAgain(id: string, instructions: string): Promise<void> {
+  return api.askReviewAgain(id, instructions);
+}
+
+export function publishReview(id: string, verdict: ReviewVerdict): Promise<void> {
+  return api.publishReview(id, verdict);
+}
+
+/** setReviewInstructions changes what every review of a repository is told to look at. */
+export function setReviewInstructions(id: string, text: string): Promise<void> {
+  return api.setReviewInstructions(id, text);
+}
+
+/** decideFinding records what the user decided about one finding. */
+export function decideFinding(
+  id: string,
+  pass: number,
+  number: number,
+  decision: FindingDecision,
+): Promise<void> {
+  return run(() => api.decideFinding(id, pass, number, decision));
+}
+
+/** saveFindingText records the text of a finding as the user left it. */
+export function saveFindingText(
+  id: string,
+  pass: number,
+  number: number,
+  text: string,
+): Promise<void> {
+  return run(() => api.setFindingText(id, pass, number, text));
+}
+
+/** saveReviewSummary records the summary of a pass as the user left it. */
+export function saveReviewSummary(id: string, pass: number, text: string): Promise<void> {
+  return run(() => api.setReviewSummary(id, pass, text));
+}
+
+/** applyReview asks the agent to fix the findings the user approved. */
+export function applyReview(id: string): Promise<void> {
+  return run(() => api.applyReview(id));
+}
+
+/** approveReview sends the changes the agent made to be committed and pushed. */
+export function approveReview(id: string): Promise<void> {
+  return run(() => api.approveReview(id));
+}
+
+/** openReviewInEditor opens the worktree of a review in the editor of the user. */
+export function openReviewInEditor(id: string): Promise<void> {
+  return run(() => api.openReviewInEditor(id));
+}
+
+/** openFindingInEditor opens the line a finding points at, in the editor of the user. */
+export function openFindingInEditor(id: string, pass: number, number: number): Promise<void> {
+  return run(() => api.openFindingInEditor(id, pass, number));
+}
+
+/** deleteReview removes the review for good and reports what stayed on disk. */
+export function deleteReview(id: string): Promise<void> {
+  return run(async () => {
+    const result = await api.deleteReview(id);
+    if (result.leftover !== null) {
+      useAppStore.getState().setLeftover(result.leftover);
+    }
+  });
 }

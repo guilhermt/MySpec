@@ -2,9 +2,16 @@ import { create } from "zustand";
 import { useShallow } from "zustand/react/shallow";
 import { findBoard } from "@/lib/boards";
 import { tasksInFilter } from "@/lib/repositories";
-import { prSituation, reviewerSituation, stageSituation, stepSituation } from "@/lib/situations";
+import {
+  prSituation,
+  reviewerSituation,
+  reviewSituation,
+  stageSituation,
+  stepSituation,
+} from "@/lib/situations";
 import { readStored, SIDEBAR_COLLAPSED_KEY, writeStored } from "@/lib/ui-storage";
 import type {
+  ArchivedReview,
   ArchivedTask,
   Board,
   Leftover,
@@ -12,6 +19,8 @@ import type {
   Place,
   PromptStage,
   Repository,
+  ReviewCenter,
+  ReviewSummary,
   Situation,
   State,
   TaskSummary,
@@ -56,6 +65,12 @@ export interface PendingStart extends CardRef {
   repositoryId: string;
 }
 
+/** PullRef names one pull request: the repository it belongs to and its number. */
+export interface PullRef {
+  repositoryId: string;
+  number: number;
+}
+
 export interface AppStore {
   app: State | null;
   error: string | null;
@@ -75,6 +90,21 @@ export interface AppStore {
   pendingStart: PendingStart | null;
   /** openBoardId is the board view on screen, when one is. */
   openBoardId: string | null;
+  /** reviewsOpen shows the open pull requests of the registered repositories in the main area. */
+  reviewsOpen: boolean;
+  /** openReviewId is the review on screen, when one is. */
+  openReviewId: string | null;
+  /** openArchivedReviewId is the archived review on screen, when one is. */
+  openArchivedReviewId: string | null;
+  /** startReview is the pull request the dialog that starts a review opens for. */
+  startReview: PullRef | null;
+  /** pendingReview is a pull request waiting for the clone of its repository to open the dialog. */
+  pendingReview: PullRef | null;
+  /**
+   * findingDrafts are the texts of a review the user is editing, by
+   * `${reviewId}|${pass}|${number}` and `${reviewId}|${pass}|summary`.
+   */
+  findingDrafts: Record<string, string>;
   /** sidebarCollapsed are the ids of the sidebar nodes the user collapsed; kept across runs. */
   sidebarCollapsed: ReadonlySet<string>;
   /**
@@ -114,6 +144,18 @@ export interface AppStore {
   closeNewTask: () => void;
   setPendingStart: (pending: PendingStart | null) => void;
   openBoard: (id: string) => void;
+  openReviews: () => void;
+  openReview: (id: string) => void;
+  /** closeReview goes back to the Reviews view, where the review was opened from. */
+  closeReview: () => void;
+  openArchivedReview: (id: string) => void;
+  closeArchivedReview: () => void;
+  /** openStartReview opens the dialog that starts a review of a pull request. */
+  openStartReview: (pull: PullRef) => void;
+  closeStartReview: () => void;
+  setPendingReview: (pending: PullRef | null) => void;
+  setFindingDraft: (key: string, text: string) => void;
+  clearFindingDraft: (key: string) => void;
   toggleSidebarNode: (id: string) => void;
   /** expandSidebarNodes opens the given nodes of the sidebar, leaving the others as they are. */
   expandSidebarNodes: (ids: readonly string[]) => void;
@@ -178,6 +220,22 @@ function historyOf(state: State | null): readonly ArchivedTask[] {
   return state?.history ?? NO_HISTORY;
 }
 
+function reviewsOf(state: State | null): readonly ReviewSummary[] {
+  return state?.reviews ?? NO_REVIEWS;
+}
+
+function findReview(state: State | null, id: string | null): ReviewSummary | null {
+  return reviewsOf(state).find((review) => review.id === id) ?? null;
+}
+
+function reviewHistoryOf(state: State | null): readonly ArchivedReview[] {
+  return state?.reviewHistory ?? NO_REVIEW_HISTORY;
+}
+
+function findArchivedReview(state: State | null, id: string | null): ArchivedReview | null {
+  return reviewHistoryOf(state).find((review) => review.id === id) ?? null;
+}
+
 // A task that shows up in the history between two snapshots was archived
 // while the user was watching, which is what the notice announces.
 function newlyArchived(
@@ -219,6 +277,7 @@ function withStepTab(
       return { ...current, [stepTabKey(taskId, place.step)]: "reviewer" };
     case "stage":
     case "pr":
+    case "review":
       return current;
   }
 }
@@ -233,6 +292,13 @@ function storeCollapsed(collapsed: Set<string>): Set<string> {
   return collapsed;
 }
 
+// The review places every other navigation leaves behind.
+const NO_REVIEW_PLACE = {
+  reviewsOpen: false,
+  openReviewId: null,
+  openArchivedReviewId: null,
+} as const;
+
 // What the app shows of the tasks, as it stands with none of them on screen.
 function initialTaskUi(): Pick<
   AppStore,
@@ -245,6 +311,12 @@ function initialTaskUi(): Pick<
   | "newTaskCard"
   | "pendingStart"
   | "openBoardId"
+  | "reviewsOpen"
+  | "openReviewId"
+  | "openArchivedReviewId"
+  | "startReview"
+  | "pendingReview"
+  | "findingDrafts"
   | "lastRepositoryId"
   | "historyOpen"
   | "openArchivedId"
@@ -263,6 +335,12 @@ function initialTaskUi(): Pick<
     newTaskCard: null,
     pendingStart: null,
     openBoardId: null,
+    reviewsOpen: false,
+    openReviewId: null,
+    openArchivedReviewId: null,
+    startReview: null,
+    pendingReview: null,
+    findingDrafts: {},
     lastRepositoryId: null,
     historyOpen: false,
     openArchivedId: null,
@@ -270,6 +348,36 @@ function initialTaskUi(): Pick<
     archivedNotice: null,
     leftover: null,
     flashing: new Set<string>(),
+  };
+}
+
+/** ReviewPlace is where the two review screens stand in a new snapshot. */
+interface ReviewPlace {
+  openReviewId: string | null;
+  openArchivedReviewId: string | null;
+  historyOpen: boolean;
+}
+
+// A review on screen stays while it is active; an entity that is gone takes its
+// screen with it.
+function reviewPlace(state: AppStore, next: State): ReviewPlace {
+  const archived = findArchivedReview(next, state.openArchivedReviewId)?.id ?? null;
+  const open = state.openReviewId;
+  if (open === null || findReview(next, open) !== null) {
+    return {
+      openReviewId: open,
+      openArchivedReviewId: archived,
+      historyOpen: state.historyOpen,
+    };
+  }
+  // A review whose pull request was merged or closed leaves the screen of an
+  // active review for the archived one, inside the history, where every other
+  // way of opening an archived entity leaves the user.
+  const moved = findArchivedReview(next, open)?.id ?? null;
+  return {
+    openReviewId: null,
+    openArchivedReviewId: moved,
+    historyOpen: moved !== null || state.historyOpen,
   };
 }
 
@@ -332,18 +440,28 @@ export const useAppStore = create<AppStore>()((set, get) => {
           state.openBoardId !== null && findBoard(next, state.openBoardId) === null
             ? null
             : state.openBoardId;
-        const openTaskId = state.openTaskId;
-        if (openTaskId === null || findTask(next, openTaskId) !== null) {
-          return { app: next, archivedNotice, openArchivedId, lastRepositoryId, openBoardId };
-        }
-        return {
+        const place = reviewPlace(state, next);
+        const common = {
           app: next,
           archivedNotice,
           openArchivedId,
           lastRepositoryId,
           openBoardId,
+          ...place,
+        };
+        // A review that is gone takes its conversation with it, like a task.
+        const transcripts =
+          state.openReviewId !== null && place.openReviewId === null
+            ? withoutTaskTranscripts(state.transcripts, state.openReviewId)
+            : state.transcripts;
+        const openTaskId = state.openTaskId;
+        if (openTaskId === null || findTask(next, openTaskId) !== null) {
+          return { ...common, transcripts };
+        }
+        return {
+          ...common,
           openTaskId: null,
-          transcripts: withoutTaskTranscripts(state.transcripts, openTaskId),
+          transcripts: withoutTaskTranscripts(transcripts, openTaskId),
         };
       }),
 
@@ -357,10 +475,11 @@ export const useAppStore = create<AppStore>()((set, get) => {
           openArchivedId: null,
           settingsOpen: false,
           openBoardId: null,
+          ...NO_REVIEW_PLACE,
         }),
       ),
 
-    closeTask: () => set({ openTaskId: null }),
+    closeTask: () => set({ openTaskId: null, ...NO_REVIEW_PLACE }),
 
     openNewTask: (card) => set({ newTaskOpen: true, newTaskCard: card ?? null }),
 
@@ -377,8 +496,71 @@ export const useAppStore = create<AppStore>()((set, get) => {
           openArchivedId: null,
           historyOpen: false,
           settingsOpen: false,
+          ...NO_REVIEW_PLACE,
         }),
       ),
+
+    // The Reviews view is a place of its own, like the history.
+    openReviews: () =>
+      leave(() =>
+        set({
+          reviewsOpen: true,
+          openReviewId: null,
+          openArchivedReviewId: null,
+          openTaskId: null,
+          openArchivedId: null,
+          historyOpen: false,
+          settingsOpen: false,
+          openBoardId: null,
+        }),
+      ),
+
+    openReview: (id) =>
+      leave(() =>
+        set({
+          openReviewId: id,
+          reviewsOpen: false,
+          openArchivedReviewId: null,
+          openTaskId: null,
+          openArchivedId: null,
+          historyOpen: false,
+          settingsOpen: false,
+          openBoardId: null,
+        }),
+      ),
+
+    closeReview: () => set({ openReviewId: null, reviewsOpen: true }),
+
+    openArchivedReview: (id) =>
+      leave(() =>
+        set({
+          openArchivedReviewId: id,
+          historyOpen: true,
+          openReviewId: null,
+          reviewsOpen: false,
+          openTaskId: null,
+          openArchivedId: null,
+          settingsOpen: false,
+          openBoardId: null,
+        }),
+      ),
+
+    closeArchivedReview: () => set({ openArchivedReviewId: null }),
+
+    openStartReview: (pull) => set({ startReview: pull }),
+
+    closeStartReview: () => set({ startReview: null }),
+
+    setPendingReview: (pending) => set({ pendingReview: pending }),
+
+    setFindingDraft: (key, text) =>
+      set((state) => ({ findingDrafts: { ...state.findingDrafts, [key]: text } })),
+
+    clearFindingDraft: (key) =>
+      set((state) => {
+        const { [key]: _dropped, ...rest } = state.findingDrafts;
+        return { findingDrafts: rest };
+      }),
 
     toggleSidebarNode: (id) =>
       set((state) => {
@@ -478,6 +660,7 @@ export const useAppStore = create<AppStore>()((set, get) => {
           newTaskOpen: false,
           settingsOpen: false,
           openBoardId: null,
+          ...NO_REVIEW_PLACE,
         }),
       ),
 
@@ -491,6 +674,7 @@ export const useAppStore = create<AppStore>()((set, get) => {
           openTaskId: null,
           settingsOpen: false,
           openBoardId: null,
+          ...NO_REVIEW_PLACE,
         }),
       ),
 
@@ -513,14 +697,21 @@ export const useAppStore = create<AppStore>()((set, get) => {
         return { flashing };
       }),
 
-    // A situation opens where it is: its task, and the tab of the conversation
-    // of a step when it is in a step: the situation of a reviewer opens on its
-    // tab. Going there puts away the history, the settings and the creation of
-    // a task.
+    // A situation opens where it is: its review, or its task and the tab of the
+    // conversation of a step when it is in a step: the situation of a reviewer
+    // opens on its tab. Going there puts away the history, the settings and the
+    // creation of a task.
     openPlace: (taskId, place) => {
+      const store = get();
+      if (asPlaceKind(place.kind) === "review") {
+        if (findReview(store.app, taskId) !== null) {
+          store.openReview(taskId);
+        }
+        return;
+      }
       // A situation of a task that is gone navigates nowhere, so it never asks
       // the user about an unsaved edit either.
-      if (findTask(get().app, taskId) === null) {
+      if (findTask(store.app, taskId) === null) {
         return;
       }
       leave(() =>
@@ -546,6 +737,7 @@ export const useAppStore = create<AppStore>()((set, get) => {
         openArchivedId: null,
         newTaskOpen: false,
         openBoardId: null,
+        ...NO_REVIEW_PLACE,
       }),
 
     closeSettings: () => leave(() => set({ settingsOpen: false })),
@@ -575,6 +767,28 @@ export const useAppStore = create<AppStore>()((set, get) => {
 
 const NO_TASKS: readonly TaskSummary[] = [];
 const NO_HISTORY: readonly ArchivedTask[] = [];
+const NO_REVIEWS: readonly ReviewSummary[] = [];
+// The Reviews view before the first snapshot: a reading that found nothing and
+// filters that hide nothing.
+const NO_REVIEW_CENTER: ReviewCenter = {
+  pullRequests: [],
+  failures: [],
+  readAt: "",
+  reading: false,
+  filters: {
+    boardId: "",
+    repositoryId: "",
+    authorsInclude: [],
+    authorsExclude: [],
+    labelsInclude: [],
+    labelsExclude: [],
+    pendingOnly: false,
+  },
+  pendingCount: 0,
+  authors: [],
+  labels: [],
+};
+const NO_REVIEW_HISTORY: readonly ArchivedReview[] = [];
 const NO_REPOSITORIES: readonly Repository[] = [];
 const NO_BOARDS: readonly Board[] = [];
 
@@ -659,10 +873,14 @@ export function useOpenStepTab(taskId: string): StepTab {
   return useAppStore((state) => openStepTabOf(state, taskId));
 }
 
-// The situation of the place the open task shows: the stage it is in, the
-// conversation of the step that runs whose tab is selected, or the pull
-// request.
+// The situation of the place on screen: the one of the open review, or, of the
+// open task, the stage it is in, the conversation of the step that runs whose
+// tab is selected, or the pull request.
 function onScreenSituation(state: AppStore): Situation | null {
+  const review = findReview(state.app, state.openReviewId);
+  if (review !== null) {
+    return reviewSituation(review);
+  }
   const task = findTask(state.app, state.openTaskId);
   if (task === null) {
     return null;
@@ -716,6 +934,51 @@ export function useHistory(): readonly ArchivedTask[] {
 
 export function useArchivedTask(id: string | null): ArchivedTask | null {
   return useAppStore((state) => historyOf(state.app).find((entry) => entry.id === id) ?? null);
+}
+
+/** useReviewCenter is the Reviews view: the pull requests of the last reading and the filters. */
+export function useReviewCenter(): ReviewCenter {
+  return useAppStore((state) => state.app?.reviewCenter ?? NO_REVIEW_CENTER);
+}
+
+/** useReviews is every active review, in the order they were started. */
+export function useReviews(): readonly ReviewSummary[] {
+  return useAppStore((state) => reviewsOf(state.app));
+}
+
+/** useReview is an active review by id, null when none is. */
+export function useReview(id: string | null): ReviewSummary | null {
+  return useAppStore((state) => findReview(state.app, id));
+}
+
+/** useOpenReviewId is the review whose screen is open, null when none is. */
+export function useOpenReviewId(): string | null {
+  return useAppStore((state) => state.openReviewId);
+}
+
+/** useReviewsOpen is the Reviews view being the main area. */
+export function useReviewsOpen(): boolean {
+  return useAppStore((state) => state.reviewsOpen);
+}
+
+/** useReviewHistory is every archived review, the most recent first. */
+export function useReviewHistory(): readonly ArchivedReview[] {
+  return useAppStore((state) => reviewHistoryOf(state.app));
+}
+
+/** useArchivedReview is an archived review by id, null when none is. */
+export function useArchivedReview(id: string | null): ArchivedReview | null {
+  return useAppStore((state) => findArchivedReview(state.app, id));
+}
+
+/** useStartReview is the pull request the dialog that starts a review is open for. */
+export function useStartReview(): PullRef | null {
+  return useAppStore((state) => state.startReview);
+}
+
+/** useFindingDraft is the text the user is editing, null when they are editing none. */
+export function useFindingDraft(key: string): string | null {
+  return useAppStore((state) => state.findingDrafts[key] ?? null);
 }
 
 export interface HistoryUi {

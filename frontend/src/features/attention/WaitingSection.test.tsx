@@ -3,7 +3,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WaitingSection } from "@/features/attention/WaitingSection";
 import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
-import { makePullRequest, makeSituation, makeState, makeTask } from "@/test/wails-mock";
+import {
+  makePullRequest,
+  makeReviewSummary,
+  makeSituation,
+  makeState,
+  makeTask,
+} from "@/test/wails-mock";
 
 const NOW = Date.parse("2026-09-05T10:12:00Z");
 
@@ -280,5 +286,30 @@ describe("WaitingSection", () => {
     expect(entryOf("add-login")).toHaveAccessibleName(
       "add-login, Draft to approve, pull request, waiting 13 minutes",
     );
+  });
+
+  it("lists a review beside the tasks and opens it where its situation is", async () => {
+    vi.useRealTimers();
+    const review = makeReviewSummary({
+      situations: [
+        makeSituation({
+          id: "report",
+          taskId: "review-1",
+          kind: "review_report",
+          form: "decide",
+          place: { kind: "review", stage: "", step: 0 },
+          startedAt: "2026-09-05T10:08:00Z",
+        }),
+      ],
+    });
+    const { user } = renderWithStore(<WaitingSection />, {
+      state: makeState({ tasks: TASKS, reviews: [review] }),
+    });
+
+    expect(within(entryOf("web#31")).getByText("Decide findings")).toBeInTheDocument();
+
+    await user.click(entryOf("web#31"));
+
+    expect(useAppStore.getState().openReviewId).toBe("review-1");
   });
 });
