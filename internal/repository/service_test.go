@@ -724,6 +724,33 @@ func TestAFailedCloneKeepsNoPathAndRecordsWhatGHSaid(t *testing.T) {
 	}
 }
 
+func TestRemovingARepositoryWhileItsCloneRunsForgetsTheClone(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	repo := f.uncloned(t, "repo-1", "dev", "web")
+	if err := f.service.SetCloneFolder(t.Context(), t.TempDir()); err != nil {
+		t.Fatalf("SetCloneFolder() = %v, want nil", err)
+	}
+
+	if err := f.service.Clone(t.Context(), repo.ID); err != nil {
+		t.Fatalf("Clone() = %v, want nil", err)
+	}
+	waitFor(t, "the clone to start", func() bool { return len(f.cloner.taken()) == 1 })
+	if err := f.service.Remove(t.Context(), repo.ID); err != nil {
+		t.Fatalf("Remove() = %v, want nil", err)
+	}
+
+	if running, failure := f.service.Cloning(repo.ID); running || failure != "" {
+		t.Errorf("Cloning() = %t, %q, want nothing for a repository that is gone", running, failure)
+	}
+
+	// The clone that outlived the removal ends before the test does; a clone
+	// that ended announces a change.
+	f.events.take()
+	close(f.cloner.release)
+	waitFor(t, "the clone to end", func() bool { return len(f.events.take()) > 0 })
+}
+
 func TestCloningLinksAnExistingCloneOfTheSameRepositoryWithoutCloning(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)

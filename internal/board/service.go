@@ -22,6 +22,10 @@ const (
 	scanTimeout = 2 * time.Minute
 	// scanTTL is how long the scan of a preview serves the repositories typed in.
 	scanTTL = 10 * time.Minute
+	// saveTimeout bounds storing what a reading found or why it failed. The
+	// write stands apart from the reading's own deadline, so a reading that ran
+	// out of time still records what happened.
+	saveTimeout = 10 * time.Second
 )
 
 // finalNames are the status names marked final by default, folded.
@@ -256,7 +260,8 @@ func (s *Service) Refresh(id string) {
 	go s.runRead(b)
 }
 
-// runRead reads b, stores what it found and hands the cards to OnRead.
+// runRead reads b, stores what it found and hands the cards to OnRead. A board
+// removed while its reading ran keeps nothing of it.
 func (s *Service) runRead(b Board) {
 	ctx, cancel := context.WithTimeout(context.Background(), readTimeout)
 	defer cancel()
@@ -264,62 +269,88 @@ func (s *Service) runRead(b Board) {
 	started := s.now()
 	reading, extras, err := s.read(ctx, b, s.taskCards(b.ID))
 	if err == nil {
-		readAt := s.now()
-		s.saveMu.Lock()
-		if saveErr := s.store.SaveReading(ctx, b.ID, reading.Title, reading, readAt); saveErr != nil {
-			s.log.Error("board reading not saved", "board", b.ID, "title", b.Title, "error", saveErr)
-			err = &Failure{Reason: ReasonFailed, Detail: saveErr.Error()}
-			s.saveMu.Unlock()
-		} else {
-			s.mu.Lock()
-			s.stored[b.ID] = Stored{Reading: &reading, ReadAt: readAt}
-			if i := s.index(b.ID); i >= 0 {
-				s.boards[i].Title = reading.Title
-				slices.SortStableFunc(s.boards, compare)
-			}
-			s.mu.Unlock()
-			s.saveMu.Unlock()
-			s.log.Info("board read", "board", b.ID, "title", reading.Title, "cards", len(reading.Cards),
-				"duration_ms", readAt.Sub(started).Milliseconds())
-
-			if s.onRead != nil {
-				cards := make(map[string]Card, len(reading.Cards)+len(extras))
-				for _, c := range reading.Cards {
-					cards[c.Key()] = c
-				}
-				for key, c := range extras {
-					cards[key] = c
-				}
-				s.onRead(b.ID, cards)
-			}
-		}
+		err = s.save(b, reading, extras, started)
 	}
 	if err != nil {
-		s.fail(ctx, b, err)
+		s.fail(b, err)
 	}
 
 	s.mu.Lock()
-	s.reading[b.ID] = false
+	delete(s.reading, b.ID)
 	s.mu.Unlock()
 	s.changed()
 }
 
-// fail records a reading of b that failed with err, keeping the stored reading.
-func (s *Service) fail(ctx context.Context, b Board, err error) {
+// save stores what the reading of b found, started at started, and hands its
+// cards to OnRead. A board no longer registered keeps nothing of it.
+func (s *Service) save(b Board, reading Reading, extras map[string]Card, started time.Time) error {
+	readAt := s.now()
+
+	s.saveMu.Lock()
+	if _, ok := s.Get(b.ID); !ok {
+		s.saveMu.Unlock()
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), saveTimeout)
+	defer cancel()
+
+	if err := s.store.SaveReading(ctx, b.ID, reading.Title, reading, readAt); err != nil {
+		s.saveMu.Unlock()
+		s.log.Error("board reading not saved", "board", b.ID, "title", b.Title, "error", err)
+		return &Failure{Reason: ReasonFailed, Detail: err.Error()}
+	}
+
+	s.mu.Lock()
+	if i := s.index(b.ID); i >= 0 {
+		s.stored[b.ID] = Stored{Reading: &reading, ReadAt: readAt}
+		s.boards[i].Title = reading.Title
+		slices.SortStableFunc(s.boards, compare)
+	}
+	s.mu.Unlock()
+	s.saveMu.Unlock()
+	s.log.Info("board read", "board", b.ID, "title", reading.Title, "cards", len(reading.Cards),
+		"duration_ms", readAt.Sub(started).Milliseconds())
+
+	if s.onRead != nil {
+		cards := make(map[string]Card, len(reading.Cards)+len(extras))
+		for _, c := range reading.Cards {
+			cards[c.Key()] = c
+		}
+		for key, c := range extras {
+			cards[key] = c
+		}
+		s.onRead(b.ID, cards)
+	}
+	return nil
+}
+
+// fail records a reading of b that failed with err, keeping the stored
+// reading. A board no longer registered keeps nothing of it.
+func (s *Service) fail(b Board, err error) {
 	var failure *Failure
 	if !errors.As(err, &failure) {
 		failure = failureOf(err)
 	}
 	failedAt := s.now()
 	s.log.Warn("board reading failed", "board", b.ID, "title", b.Title, "error", err)
+	if _, ok := s.Get(b.ID); !ok {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), saveTimeout)
+	defer cancel()
+
 	if saveErr := s.store.SaveFailure(ctx, b.ID, *failure, failedAt); saveErr != nil {
 		s.log.Error("board reading not saved", "board", b.ID, "title", b.Title, "error", saveErr)
 	}
 
 	s.mu.Lock()
-	stored := s.stored[b.ID]
-	stored.Failure, stored.FailedAt = failure, failedAt
-	s.stored[b.ID] = stored
+	if s.index(b.ID) >= 0 {
+		stored := s.stored[b.ID]
+		stored.Failure, stored.FailedAt = failure, failedAt
+		s.stored[b.ID] = stored
+	}
 	s.mu.Unlock()
 }
 
@@ -353,11 +384,12 @@ func (s *Service) RefreshCard(ctx context.Context, boardID, key string) error {
 
 	now := s.now()
 	card := baseCard(n, n.valuesIn(st.ProjectID), st, now)
+	convention := ReadConvention(card.Body, b.Owner, card.Owner, card.Name)
 	var needs refSet
-	if epic, _ := epicRef(n, ReadConvention(card.Body, b.Owner, card.Owner, card.Name)); epic != nil {
+	if epic, _ := epicRef(n, convention); epic != nil {
 		needs.add(*epic)
 	}
-	for _, dep := range dependencyRefs(n, b.Owner) {
+	for _, dep := range dependencyRefs(n, convention) {
 		if cardIndex(stored.Reading, dep.Key()) < 0 {
 			needs.add(dep)
 		}
@@ -366,7 +398,8 @@ func (s *Service) RefreshCard(ctx context.Context, boardID, key string) error {
 	if err != nil {
 		return err
 	}
-	card = newAssembly(b.Owner, st, stored.Reading, index).assembleCard(card, n)
+	a := newAssembly(st, stored.Reading, conventionsOf(b.Owner, stored.Reading.Cards), index)
+	card = a.assembleCard(card, n, convention)
 
 	// The card goes into the reading stored now, which a Refresh may have
 	// replaced while the card was read.
@@ -788,7 +821,7 @@ func (s *Service) links(ctx context.Context, boardID string, choices []Repositor
 			path = filepath.Clean(path)
 			found, err := s.identify(ctx, path)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("identify clone %s: %w", path, err)
 			}
 			if !found.Same(identity) {
 				return nil, &repository.Refusal{

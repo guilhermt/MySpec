@@ -486,6 +486,10 @@ func (s *Service) Remove(ctx context.Context, id string) error {
 		s.items = slices.Delete(s.items, i, i+1)
 	}
 	delete(s.missing, repo.ID)
+	// A clone of the repository may still be running: what it records when it
+	// ends belongs to a repository that is gone.
+	delete(s.cloning, repo.ID)
+	delete(s.cloneErrors, repo.ID)
 	var filterErr error
 	if s.filter == repo.ID {
 		s.filter = ""

@@ -113,17 +113,23 @@ func (s *RepositoryService) ChangeRepositoryPath(id string) error {
 // asking for the folder first when none was chosen. started is false when the
 // user cancelled the folder chooser; the clone itself runs in the background.
 func (s *RepositoryService) CloneRepository(id string) (started bool, err error) {
-	ctx, cancel := context.WithTimeout(context.Background(), gitCallTimeout)
-	defer cancel()
-
+	folder := ""
 	if s.repositories.CloneFolder() == "" {
-		folder, picked, pickErr := s.picker.PickFolder("Choose the clone folder", os.Getenv("HOME"))
+		chosen, picked, pickErr := s.picker.PickFolder("Choose the clone folder", os.Getenv("HOME"))
 		if pickErr != nil {
 			return false, s.fail("CloneRepository", pickErr)
 		}
 		if !picked {
 			return false, nil
 		}
+		folder = chosen
+	}
+
+	// The timeout starts after the chooser, which waits for the user.
+	ctx, cancel := context.WithTimeout(context.Background(), gitCallTimeout)
+	defer cancel()
+
+	if folder != "" {
 		if err := s.repositories.SetCloneFolder(ctx, folder); err != nil {
 			return false, s.fail("CloneRepository", err)
 		}

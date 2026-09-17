@@ -58,6 +58,7 @@ type fixture struct {
 	github    *fakeGitHub
 	reads     *readRecorder
 	repos     *memRepositories
+	changes   *changeCounter
 	taskCards []string                       // the keys TaskCards answers; set before a refresh
 	clones    map[string]repository.Identity // what Identify answers, by path
 	tasks     map[string]int                 // the tasks of each repository, by id
@@ -83,11 +84,12 @@ func newFixture(t *testing.T, stored board.Stored) *fixture {
 			}},
 			stored: map[string]board.Stored{boardID: stored},
 		},
-		github: &fakeGitHub{},
-		reads:  &readRecorder{},
-		repos:  &memRepositories{},
-		clones: map[string]repository.Identity{},
-		tasks:  map[string]int{},
+		github:  &fakeGitHub{},
+		reads:   &readRecorder{},
+		repos:   &memRepositories{},
+		changes: &changeCounter{},
+		clones:  map[string]repository.Identity{},
+		tasks:   map[string]int{},
 	}
 	f.service = board.New(board.Deps{
 		Store:        f.store,
@@ -98,6 +100,7 @@ func newFixture(t *testing.T, stored board.Stored) *fixture {
 		TaskCards:    func(string) []string { return f.taskCards },
 		Now:          func() time.Time { return base },
 		NewID:        f.newID,
+		OnChange:     f.changes.inc,
 		OnRead:       f.reads.record,
 	})
 	if err := f.service.Sync(t.Context()); err != nil {
@@ -142,6 +145,40 @@ func waitReading(t *testing.T, s *board.Service, id string) {
 	}
 }
 
+// waitChanges waits until OnChange was called n times, which is how a test
+// waits for a reading whose board was removed while it ran.
+func waitChanges(t *testing.T, changes *changeCounter, n int) {
+	t.Helper()
+
+	deadline := time.Now().Add(pollTimeout)
+	for changes.count() < n {
+		if time.Now().After(deadline) {
+			t.Fatalf("OnChange was called %d times within %s, want %d", changes.count(), pollTimeout, n)
+		}
+		time.Sleep(pollStep)
+	}
+}
+
+// changeCounter counts the calls of OnChange.
+type changeCounter struct {
+	mu sync.Mutex
+	n  int
+}
+
+func (c *changeCounter) inc() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.n++
+}
+
+func (c *changeCounter) count() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	return c.n
+}
+
 // readRecorder records the calls of OnRead.
 type readRecorder struct {
 	mu    sync.Mutex
@@ -169,8 +206,26 @@ type memStore struct {
 	stored   map[string]board.Stored
 	saveErr  error           // what SaveReading fails with, when set
 	failures int             // how many failures were saved
+	left     []time.Duration // how long the context of each write had left
 	links    []board.Link    // the links of the last write
 	releases []board.Release // the releases of the last write
+}
+
+// write records the context of a write and refuses one already over, as SQLite
+// does. The caller holds the lock.
+func (s *memStore) write(ctx context.Context) error {
+	if deadline, ok := ctx.Deadline(); ok {
+		s.left = append(s.left, time.Until(deadline))
+	}
+	return ctx.Err()
+}
+
+// writes is how long the context of each write of a reading had left.
+func (s *memStore) writes() []time.Duration {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return slices.Clone(s.left)
 }
 
 func (s *memStore) ListBoards(context.Context) ([]board.Board, error) {
@@ -220,10 +275,13 @@ func (s *memStore) ListReadings(context.Context) (map[string]board.Stored, error
 	return maps.Clone(s.stored), nil
 }
 
-func (s *memStore) SaveReading(_ context.Context, id, title string, r board.Reading, readAt time.Time) error {
+func (s *memStore) SaveReading(ctx context.Context, id, title string, r board.Reading, readAt time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	if err := s.write(ctx); err != nil {
+		return err
+	}
 	if s.saveErr != nil {
 		return s.saveErr
 	}
@@ -236,10 +294,13 @@ func (s *memStore) SaveReading(_ context.Context, id, title string, r board.Read
 	return nil
 }
 
-func (s *memStore) SaveFailure(_ context.Context, id string, f board.Failure, failedAt time.Time) error {
+func (s *memStore) SaveFailure(ctx context.Context, id string, f board.Failure, failedAt time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	if err := s.write(ctx); err != nil {
+		return err
+	}
 	stored := s.stored[id]
 	stored.Failure, stored.FailedAt = &f, failedAt
 	s.stored[id] = stored
@@ -260,6 +321,7 @@ type memRepositories struct {
 	mu    sync.Mutex
 	items []repository.Repository
 	scan  []repository.Candidate
+	syncs int // how many times Sync was called
 }
 
 func (r *memRepositories) List() []repository.Repository {
@@ -280,7 +342,21 @@ func (r *memRepositories) Get(id string) (repository.Repository, bool) {
 	return r.items[i], true
 }
 
-func (r *memRepositories) Sync(context.Context) error { return nil }
+func (r *memRepositories) Sync(context.Context) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.syncs++
+	return nil
+}
+
+// synced is how many times Sync was called.
+func (r *memRepositories) synced() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	return r.syncs
+}
 
 func (r *memRepositories) Scan(context.Context) ([]repository.Candidate, error) {
 	r.mu.Lock()

@@ -1,6 +1,7 @@
 package board_test
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"slices"
@@ -201,6 +202,61 @@ func TestAReadingThatCannotBeSavedIsAFailure(t *testing.T) {
 	}
 	if stored.Reading != nil {
 		t.Errorf("Stored().Reading = %+v, want nil", stored.Reading)
+	}
+}
+
+func TestAReadingThatRanOutOfTimeStillRecordsItsFailure(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, board.Stored{})
+	f.github.answer(structureMatch, "", reply{err: &gh.Error{Args: []string{"api", "graphql"}, Err: context.DeadlineExceeded}})
+
+	f.refresh(t)
+
+	stored := f.service.Stored(boardID)
+	if stored.Failure == nil || stored.Failure.Reason != board.ReasonFailed {
+		t.Errorf("Stored().Failure = %+v, want the reading that ran out of time", stored.Failure)
+	}
+	if got := f.store.get(boardID); got.Failure == nil {
+		t.Errorf("the store holds %+v, want the failure", got)
+	}
+	// The write has a deadline of its own, far shorter than a whole reading:
+	// the reading's own deadline, spent or not, never bounds it.
+	left := f.store.writes()
+	if len(left) != 1 || left[0] > time.Minute {
+		t.Errorf("the writes ran with %v left, want one bounded by the save timeout", left)
+	}
+}
+
+func TestABoardRemovedWhileItsReadingRunsKeepsNothingOfIt(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, board.Stored{})
+	f.github.gate = make(chan struct{})
+	f.github.answer(structureMatch, "", structure("Roadmap"))
+	f.github.answer(itemsMatch, openQ, itemsPage("", item(issueNode("acme/web", 1))))
+	f.github.answer(itemsMatch, closedQ, itemsPage(""))
+
+	f.service.Refresh(boardID)
+	if err := f.service.Remove(t.Context(), boardID); err != nil {
+		t.Fatalf("Remove() = %v, want nil", err)
+	}
+	close(f.github.gate)
+	// The refresh, the removal and the reading that ended announce a change.
+	waitChanges(t, f.changes, 3)
+
+	if got := f.service.Stored(boardID); got.Reading != nil || got.Failure != nil {
+		t.Errorf("Stored() = %+v, want nothing of the board removed", got)
+	}
+	if f.service.Reading(boardID) {
+		t.Error("Reading() = true, want false for the board removed")
+	}
+	if got := f.store.get(boardID); got.Reading != nil || got.Failure != nil {
+		t.Errorf("the store holds %+v, want nothing of the board removed", got)
+	}
+	if left := f.store.writes(); len(left) != 0 {
+		t.Errorf("the store took %d writes, want none for the board removed", len(left))
+	}
+	if reads := f.reads.all(); len(reads) != 0 {
+		t.Errorf("OnRead was called %d times, want none", len(reads))
 	}
 }
 
@@ -638,6 +694,159 @@ func TestPreviewPreMarksTheFinalStatusesAndSuggestsTheRepositories(t *testing.T)
 	}
 	if calls := f.github.received(reposMatch); len(calls) != 2 || calls[1].vars["cursor"] != "page-2" {
 		t.Errorf("the suggestion made the calls %+v, want two pages", calls)
+	}
+}
+
+func TestPreviewEditChecksTheRepositoriesOfTheBoardNextToTheSuggestions(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, board.Stored{})
+	// The board holds a status the project no longer offers.
+	f.store.boards[0].FinalStatuses = []string{done.ID, "opt-gone"}
+	if err := f.service.Sync(t.Context()); err != nil {
+		t.Fatalf("Sync() = %v, want nil", err)
+	}
+	f.github.answer(structureMatch, "", structureWith("Roadmap v2", todo, done, doing))
+	f.github.answer(reposMatch, suggestQ, reposPage("", "acme/web", "acme/docs"))
+	f.repos.items = []repository.Repository{
+		{ID: "repo-web", Owner: "acme", Name: "web", Path: "/src/web", BoardID: boardID},
+		{ID: "repo-api", Owner: "acme", Name: "api", BoardID: boardID},
+		{ID: "repo-free", Owner: "acme", Name: "free", Path: "/src/free"},
+	}
+	f.repos.scan = []repository.Candidate{
+		{Identity: repository.Identity{Owner: "acme", Name: "docs"}, Path: "/src/docs"},
+	}
+
+	got, err := f.service.PreviewEdit(t.Context(), boardID)
+	if err != nil {
+		t.Fatalf("PreviewEdit() = %v, want nil", err)
+	}
+
+	want := board.Preview{
+		Locator:   board.Locator{Owner: "acme", OwnerType: board.OwnerOrganization, Number: 3},
+		URL:       "https://github.com/orgs/acme/projects/3",
+		Title:     "Roadmap v2",
+		HasStatus: true,
+		Statuses: []board.StatusOption{
+			{Option: todo},
+			{Option: done, Final: true},
+			{Option: doing},
+		},
+		Repositories: []board.RepositoryOption{
+			{
+				Identity:     repository.Identity{Owner: "acme", Name: "api"},
+				Checked:      true,
+				Link:         board.LinkRegistered,
+				RepositoryID: "repo-api",
+				Clones:       []string{},
+			},
+			{
+				Identity: repository.Identity{Owner: "acme", Name: "docs"},
+				Cards:    1,
+				Link:     board.LinkClone,
+				Path:     "/src/docs",
+				Clones:   []string{"/src/docs"},
+			},
+			{
+				Identity:     repository.Identity{Owner: "acme", Name: "web"},
+				Cards:        1,
+				Checked:      true,
+				Link:         board.LinkRegistered,
+				RepositoryID: "repo-web",
+				Path:         "/src/web",
+				Clones:       []string{},
+			},
+		},
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("PreviewEdit() (-want +got):\n%s", diff)
+	}
+}
+
+func TestCheckRepositoryAnswersWithTheRepositoryAsGitHubNamesIt(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, board.Stored{})
+	f.github.answer(repoMatch, "", data(node{"repository": node{"nameWithOwner": "Acme/Web"}}))
+	f.repos.scan = []repository.Candidate{
+		{Identity: repository.Identity{Owner: "acme", Name: "web"}, Path: "/src/web"},
+	}
+
+	got, err := f.service.CheckRepository(t.Context(), boardID, " acme/web ")
+	if err != nil {
+		t.Fatalf("CheckRepository() = %v, want nil", err)
+	}
+
+	want := board.RepositoryOption{
+		Identity: repository.Identity{Owner: "Acme", Name: "Web"},
+		Checked:  true,
+		Link:     board.LinkClone,
+		Path:     "/src/web",
+		Clones:   []string{"/src/web"},
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("CheckRepository() (-want +got):\n%s", diff)
+	}
+}
+
+func TestCheckRepositoryRefusesWhatItCannotTieToTheBoard(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		typed  string
+		answer reply
+		want   error
+	}{
+		{
+			name:  "a name without an owner",
+			typed: "web",
+			want:  &board.Refusal{Reason: board.RefusalInvalidRepository},
+		},
+		{
+			name:  "a name with one part too many",
+			typed: "acme/web/api",
+			want:  &board.Refusal{Reason: board.RefusalInvalidRepository},
+		},
+		{
+			name:   "a repository GitHub does not know",
+			typed:  "acme/gone",
+			answer: reply{resp: gh.Response{Errors: []gh.GraphQLError{{Type: "NOT_FOUND"}}}, err: &gh.Error{Err: errors.New("exit status 1")}},
+			want:   &board.Refusal{Reason: board.RefusalUnknownRepository, Repository: "acme/gone"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			f := newFixture(t, board.Stored{})
+			f.github.answer(repoMatch, "", tt.answer)
+
+			_, err := f.service.CheckRepository(t.Context(), boardID, tt.typed)
+
+			if diff := cmp.Diff(tt.want, err); diff != "" {
+				t.Errorf("CheckRepository() error (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestAddRepositoryTiesOneMoreRepositoryToTheBoard(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, board.Stored{})
+	f.repos.items = []repository.Repository{{ID: "repo-web", Owner: "acme", Name: "web"}}
+	f.clones["/src/web"] = repository.Identity{Owner: "acme", Name: "web"}
+
+	choice := board.RepositoryChoice{Owner: "acme", Name: "web", Path: "/src/web"}
+	if err := f.service.AddRepository(t.Context(), boardID, choice); err != nil {
+		t.Fatalf("AddRepository() = %v, want nil", err)
+	}
+
+	if diff := cmp.Diff([]board.Link{{RepositoryID: "repo-web", Path: "/src/web"}}, f.store.links); diff != "" {
+		t.Errorf("the links stored (-want +got):\n%s", diff)
+	}
+	if len(f.store.releases) != 0 {
+		t.Errorf("the releases stored = %+v, want none", f.store.releases)
+	}
+	if got := f.repos.synced(); got != 1 {
+		t.Errorf("Sync was called %d times, want 1", got)
 	}
 }
 

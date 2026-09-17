@@ -37,7 +37,6 @@ const dateLayout = "2006-01-02"
 // assembly is what assembling a card needs besides the card: the board, the
 // reading it belongs to and the issues the batch read.
 type assembly struct {
-	owner     string // the board owner, which resolves the convention
 	structure structure
 	reading   *Reading             // its cards carry what the items or the batch read of them
 	onBoard   map[string]int       // by key: the position of a card in reading.Cards
@@ -45,10 +44,9 @@ type assembly struct {
 	index     map[string]issueNode // by key: the issues the batch read
 }
 
-// newAssembly indexes reading for the cards of the board at owner.
-func newAssembly(owner string, st structure, reading *Reading, index map[string]issueNode) *assembly {
+// newAssembly indexes reading, whose cards conventions follows one by one.
+func newAssembly(st structure, reading *Reading, conventions []Convention, index map[string]issueNode) *assembly {
 	a := &assembly{
-		owner:     owner,
 		structure: st,
 		reading:   reading,
 		onBoard:   map[string]int{},
@@ -57,11 +55,21 @@ func newAssembly(owner string, st structure, reading *Reading, index map[string]
 	}
 	for i, c := range reading.Cards {
 		a.onBoard[c.Key()] = i
-		if epic := ReadConvention(c.Body, owner, c.Owner, c.Name).Epic; epic != nil {
+		if epic := conventions[i].Epic; epic != nil {
 			a.byEpic[epic.Key()] = append(a.byEpic[epic.Key()], i)
 		}
 	}
 	return a
+}
+
+// conventionsOf reads the convention of each card of a board at owner once, so
+// the assembly parses no body twice.
+func conventionsOf(owner string, cards []Card) []Convention {
+	conventions := make([]Convention, len(cards))
+	for i, c := range cards {
+		conventions[i] = ReadConvention(c.Body, owner, c.Owner, c.Name)
+	}
+	return conventions
 }
 
 // read reads the board b. extra are keys of cards that must be read even
@@ -94,13 +102,13 @@ func (s *Service) read(ctx context.Context, b Board, extra []string) (Reading, m
 		onBoard[n.key()] = true
 	}
 
+	conventions := conventionsOf(loc.Owner, reading.Cards)
 	var needs refSet
 	for i, n := range nodes {
-		c := reading.Cards[i]
-		if epic, _ := epicRef(n.issueNode, ReadConvention(c.Body, loc.Owner, c.Owner, c.Name)); epic != nil {
+		if epic, _ := epicRef(n.issueNode, conventions[i]); epic != nil {
 			needs.add(*epic)
 		}
-		for _, dep := range dependencyRefs(n.issueNode, loc.Owner) {
+		for _, dep := range dependencyRefs(n.issueNode, conventions[i]) {
 			if !onBoard[dep.Key()] {
 				needs.add(dep)
 			}
@@ -117,10 +125,10 @@ func (s *Service) read(ctx context.Context, b Board, extra []string) (Reading, m
 		return Reading{}, nil, err
 	}
 
-	a := newAssembly(loc.Owner, st, &reading, index)
+	a := newAssembly(st, &reading, conventions, index)
 	cards := make([]Card, len(nodes))
 	for i, n := range nodes {
-		cards[i] = a.assembleCard(reading.Cards[i], n.issueNode)
+		cards[i] = a.assembleCard(reading.Cards[i], n.issueNode, conventions[i])
 	}
 	reading.Cards = cards
 
@@ -205,11 +213,10 @@ func baseCard(n issueNode, values fieldValuesNode, st structure, now time.Time) 
 	}
 }
 
-// assembleCard completes base, the card of n, with its epic, its siblings and
-// its dependencies.
-func (a *assembly) assembleCard(base Card, n issueNode) Card {
+// assembleCard completes base, the card of n whose body says convention, with
+// its epic, its siblings and its dependencies.
+func (a *assembly) assembleCard(base Card, n issueNode, convention Convention) Card {
 	c := base
-	convention := ReadConvention(n.Body, a.owner, c.Owner, c.Name)
 	parent, fromConvention := epicRef(n, convention)
 	if parent != nil {
 		if epic, ok := a.index[parent.Key()]; ok {
@@ -217,7 +224,7 @@ func (a *assembly) assembleCard(base Card, n issueNode) Card {
 			c.Siblings = a.siblings(c.Key(), parent.Key(), epic, fromConvention)
 		}
 	}
-	for _, r := range dependencyRefs(n, a.owner) {
+	for _, r := range dependencyRefs(n, convention) {
 		if dep, ok := a.dependency(r.Key()); ok {
 			c.Dependencies = append(c.Dependencies, dep)
 		}
@@ -287,16 +294,15 @@ func epicRef(n issueNode, c Convention) (ref *Ref, fromConvention bool) {
 	return c.Epic, c.Epic != nil
 }
 
-// dependencyRefs are the dependencies of an issue: the native ones in order,
-// then those of the convention, without repetition.
-func dependencyRefs(n issueNode, boardOwner string) []Ref {
+// dependencyRefs are the dependencies of an issue whose body says convention:
+// the native ones in order, then those of the convention, without repetition.
+func dependencyRefs(n issueNode, convention Convention) []Ref {
 	var refs refSet
 	for _, b := range n.BlockedBy.Nodes {
 		owner, name := b.Repository.split()
 		refs.add(Ref{Owner: owner, Name: name, Number: b.Number})
 	}
-	owner, name := n.Repository.split()
-	for _, r := range ReadConvention(n.Body, boardOwner, owner, name).Dependencies {
+	for _, r := range convention.Dependencies {
 		refs.add(r)
 	}
 	return refs.refs
