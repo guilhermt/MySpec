@@ -77,3 +77,11 @@ export function ScanRepositories(): $CancellablePromise<$models.RepositoryCandid
 export function SetRepositoryFilter(id: string): $CancellablePromise<void> {
     return $Call.ByID(180387811, id);
 }
+
+/**
+ * SetReviewInstructions records what every pull request review of a repository
+ * is told, on top of what the user writes for a review of its own.
+ */
+export function SetReviewInstructions(id: string, text: string): $CancellablePromise<void> {
+    return $Call.ByID(2808648892, id, text);
+}

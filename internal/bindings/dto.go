@@ -20,6 +20,11 @@ type Repository struct {
 	BoardID       string `json:"boardId"`    // "" without a board
 	Cloning       bool   `json:"cloning"`    // a clone runs now
 	CloneError    string `json:"cloneError"` // what gh said when the last clone failed; "" otherwise
+	// ReviewInstructions are added to every pull request review of the
+	// repository; "" when the user wrote none.
+	ReviewInstructions string `json:"reviewInstructions"`
+	ActiveReviews      int    `json:"activeReviews"`
+	ArchivedReviews    int    `json:"archivedReviews"`
 }
 
 // RepositoryCandidate is a clone of a GitHub repository the scan found under
@@ -85,6 +90,15 @@ type State struct {
 	History []ArchivedTask `json:"history"`
 	// Boards are the registered boards, by title ignoring case; never nil.
 	Boards []Board `json:"boards"`
+	// ReviewCenter is the Reviews view: the open pull requests of the
+	// registered repositories and the filters they are shown through.
+	ReviewCenter ReviewCenter `json:"reviewCenter"`
+	// Reviews are the active reviews of pull requests, in creation order;
+	// never nil.
+	Reviews []ReviewSummary `json:"reviews"`
+	// ReviewHistory are the reviews whose pull request was merged or closed,
+	// newest first; never nil.
+	ReviewHistory []ArchivedReview `json:"reviewHistory"`
 	// CloneFolder is where new clones go; "" until chosen.
 	CloneFolder string `json:"cloneFolder"`
 }
@@ -290,8 +304,8 @@ type PlanProblem struct {
 
 // Place is where in a task a situation is.
 type Place struct {
-	// Kind is stage, step, step_review or pr, a string for the same reason as
-	// State.Theme.
+	// Kind is stage, step, step_review, pr or review, a string for the same
+	// reason as State.Theme.
 	Kind  string `json:"kind"`
 	Stage string `json:"stage"` // stage only: prd, tech_spec, plan or one_shot
 	Step  int    `json:"step"`  // step and step_review only
@@ -303,15 +317,17 @@ type Situation struct {
 	TaskID string `json:"taskId"`
 	// Kind is session_error, step_blocked, worktree_unreadable, pr_blocked,
 	// plan_invalid, pr_closed, permission, question, reply, ready_to_continue,
-	// step_review, step_empty, draft, findings, changes_review or merge, a
-	// string for the same reason as State.Theme.
+	// step_review, step_empty, draft, findings, changes_review, merge,
+	// review_report, new_commits or publish_failed, a string for the same
+	// reason as State.Theme.
 	Kind string `json:"kind"`
 	// Group is error, waiting or closing, from the most urgent, a string for
 	// the same reason as State.Theme.
 	Group string `json:"group"`
 	// Form is review, staged or approve for step_review and changes_review,
-	// merge or close for merge, and "" for every other kind, a string for the
-	// same reason as State.Theme.
+	// merge or close for merge, decide, publish or apply for review_report,
+	// and "" for every other kind, a string for the same reason as
+	// State.Theme.
 	Form      string `json:"form"`
 	Percent   int    `json:"percent"` // staged form only
 	Place     Place  `json:"place"`
@@ -548,7 +564,7 @@ type MarkerEntry struct {
 	// Type is prd_written, prd_updated, tech_spec_written, tech_spec_updated,
 	// plan_written, plan_updated, one_shot_written, one_shot_updated,
 	// pr_review_written, step_review_started, step_review_written,
-	// stage_started, step_started, compacted or interrupted.
+	// review_started, stage_started, step_started, compacted or interrupted.
 	Type      string `json:"type"`
 	PreTokens int    `json:"preTokens"`
 	// Stage belongs to stage_started alone, Step to the markers of a step
@@ -832,4 +848,219 @@ type SaveBoardRequest struct {
 type BoardRemoval struct {
 	ToNoBoard int `json:"toNoBoard"`
 	Removed   int `json:"removed"`
+}
+
+// ReviewCenter is the Reviews view: the open pull requests of every registered
+// repository, as the last reading found them, and the filters the view shows
+// them through.
+type ReviewCenter struct {
+	// PullRequests are the pull requests of the last reading, the pending ones
+	// first and then the most recently updated; never nil.
+	PullRequests []PullRequestRow `json:"pullRequests"`
+	// Failures are the repositories the last reading could not read; never nil.
+	Failures []PullsFailure `json:"failures"`
+	ReadAt   string         `json:"readAt"` // "" before the first reading
+	Reading  bool           `json:"reading"`
+	Filters  ReviewFilters  `json:"filters"`
+	// PendingCount is how many pending pull requests pass the filters.
+	PendingCount int `json:"pendingCount"`
+	// Authors and Labels are what the reading found, of every pull request and
+	// not only the ones the filters keep, in alphabetical order; never nil.
+	Authors []string `json:"authors"`
+	Labels  []string `json:"labels"`
+}
+
+// PullsFailure is why the last reading of one repository failed.
+type PullsFailure struct {
+	RepositoryID string `json:"repositoryId"`
+	Repository   string `json:"repository"` // owner/name
+	Message      string `json:"message"`
+}
+
+// ReviewFilters is what the Reviews view shows. The zero value shows
+// everything.
+type ReviewFilters struct {
+	BoardID string `json:"boardId"` // "" for any; __none__ for the repositories without one
+	// RepositoryID is the repository the view shows; "" for any.
+	RepositoryID   string   `json:"repositoryId"`
+	AuthorsInclude []string `json:"authorsInclude"` // never nil
+	AuthorsExclude []string `json:"authorsExclude"` // never nil
+	LabelsInclude  []string `json:"labelsInclude"`  // never nil
+	LabelsExclude  []string `json:"labelsExclude"`  // never nil
+	PendingOnly    bool     `json:"pendingOnly"`
+}
+
+// PullLabel is a label of a pull request, as GitHub colours it.
+type PullLabel struct {
+	Name  string `json:"name"`
+	Color string `json:"color"`
+}
+
+// PullCard is the card a pull request is linked to.
+type PullCard struct {
+	BoardID string `json:"boardId"`
+	Number  int    `json:"number"`
+	Title   string `json:"title"`
+	URL     string `json:"url"`
+	Status  string `json:"status"` // the Status of the card on its board; "" for none
+}
+
+// PullRequestRow is one open pull request in the Reviews view.
+type PullRequestRow struct {
+	Key          string      `json:"key"` // owner/name#number, in lower case
+	RepositoryID string      `json:"repositoryId"`
+	Repository   string      `json:"repository"` // owner/name
+	BoardID      string      `json:"boardId"`    // "" when the repository has no board
+	Number       int         `json:"number"`
+	Title        string      `json:"title"`
+	URL          string      `json:"url"`
+	Author       string      `json:"author"`
+	Labels       []PullLabel `json:"labels"` // never nil
+	Draft        bool        `json:"draft"`
+	Own          bool        `json:"own"` // the author is the account of gh
+	Card         *PullCard   `json:"card"`
+	// Reviewed says the account of gh submitted a review of it, and NewCommits
+	// that the pull request moved since that review.
+	Reviewed   bool `json:"reviewed"`
+	NewCommits bool `json:"newCommits"`
+	Pending    bool `json:"pending"`  // it waits for the review of the user
+	Filtered   bool `json:"filtered"` // the filters of the view hide it
+	// TaskID is the task of the product the pull request belongs to; "" when it
+	// belongs to none.
+	TaskID string `json:"taskId"`
+	// ReviewID is the active review of the pull request; "" when there is none.
+	ReviewID string `json:"reviewId"`
+	// Action is review, open_review, open_task, clone, clone_missing or fork,
+	// a string for the same reason as State.Theme.
+	Action    string `json:"action"`
+	UpdatedAt string `json:"updatedAt"`
+}
+
+// ReviewFinding is one numbered finding of a pass of a review.
+type ReviewFinding struct {
+	Number int    `json:"number"`
+	Path   string `json:"path"` // the file it is anchored to; "" for a general finding
+	Line   int    `json:"line"` // the line of the new side of the diff; 0 for a general finding
+	Text   string `json:"text"`
+	// Decision is "", approved or discarded, a string for the same reason as
+	// State.Theme.
+	Decision string `json:"decision"`
+	// Placement is "", inline or body: where the finding went when the pass was
+	// published.
+	Placement string `json:"placement"`
+}
+
+// ReviewPass is one pass of the agent over the pull request, with the report it
+// wrote and what the user did with it.
+type ReviewPass struct {
+	Pass         int             `json:"pass"`
+	File         string          `json:"file"` // the report inside the artifact folder: review-<n>.md
+	Recorded     bool            `json:"recorded"`
+	Clean        bool            `json:"clean"`
+	Instructions string          `json:"instructions"` // what the user wrote when asking for the pass
+	Summary      string          `json:"summary"`
+	Findings     []ReviewFinding `json:"findings"` // never nil
+	// Revision is bumped every time the report is read again and differs, which
+	// is what tells the interface to drop the drafts of the user.
+	Revision     int    `json:"revision"`
+	Published    bool   `json:"published"`
+	PublishedAt  string `json:"publishedAt"`  // "" when the pass was not published
+	PublishedURL string `json:"publishedUrl"` // "" when the pass was not published
+	// Verdict is approve, request_changes or comment; "" when the pass was not
+	// published.
+	Verdict string `json:"verdict"`
+}
+
+// ReviewSummary is an active review of a pull request, with the state of its
+// conversation.
+type ReviewSummary struct {
+	ID           string `json:"id"`
+	RepositoryID string `json:"repositoryId"`
+	Repository   string `json:"repository"` // owner/name
+	Number       int    `json:"number"`
+	Title        string `json:"title"`
+	Author       string `json:"author"`
+	URL          string `json:"url"`
+	HeadBranch   string `json:"headBranch"`
+	BaseBranch   string `json:"baseBranch"` // as GitHub names it, without origin/
+	Own          bool   `json:"own"`        // the author is the account of gh
+	// Mode is publish or apply, a string for the same reason as State.Theme.
+	Mode string `json:"mode"`
+	// Status is reviewing, awaiting_reply, awaiting_decision, ready_to_publish,
+	// publish_failed, published, new_commits, ready_to_apply, applying,
+	// in_review, ready_to_approve, committing or ready_to_merge.
+	Status       string       `json:"status"`
+	Card         *PullCard    `json:"card"` // nil when the pull request has no card
+	WorktreePath string       `json:"worktreePath"`
+	Passes       []ReviewPass `json:"passes"` // in pass order; never nil
+	// StalePass says the pull request moved since the pass the user is
+	// deciding on.
+	StalePass bool `json:"stalePass"`
+	// CheckError is what the last automatic reading of the pull request said
+	// when it failed; "" otherwise.
+	CheckError string `json:"checkError"`
+	// PublishError is why the last publication failed; "" otherwise.
+	PublishError string `json:"publishError"`
+	// UnreadableReport is why the report of the pass the app asked for could
+	// not be read; "" otherwise.
+	UnreadableReport string `json:"unreadableReport"`
+	// CommitFailed says the last approval of apply mode ended without a commit.
+	CommitFailed bool `json:"commitFailed"`
+	// Review is the last reading of the worktree; apply mode only.
+	Review *Review `json:"review"`
+	// Verdicts are the verdicts this review can be published with, in the order
+	// the dialog offers them; never nil.
+	Verdicts       []string `json:"verdicts"`
+	CanPublish     bool     `json:"canPublish"`
+	CanApply       bool     `json:"canApply"`
+	CanApprove     bool     `json:"canApprove"`
+	CanReviewAgain bool     `json:"canReviewAgain"`
+
+	SessionStage string `json:"sessionStage"` // review, or "" without a conversation
+	// SessionStatus is working, waiting, needs_permission, needs_answer, paused
+	// or error.
+	SessionStatus string `json:"sessionStatus"`
+	// SessionModel and SessionEffort are what the conversation runs with from
+	// its next message on; "" without a session.
+	SessionModel   string      `json:"sessionModel"`
+	SessionEffort  string      `json:"sessionEffort"`
+	TurnRunning    bool        `json:"turnRunning"`
+	ProcessRunning bool        `json:"processRunning"`
+	RetryAttempt   int         `json:"retryAttempt"`
+	ContextPercent int         `json:"contextPercent"`
+	PendingCount   int         `json:"pendingCount"`
+	LastError      string      `json:"lastError"`
+	Situations     []Situation `json:"situations"` // what the review waits on the user for; never nil
+	CreatedAt      string      `json:"createdAt"`
+}
+
+// ArchivedReview is a review whose pull request was merged or closed, as the
+// history shows it.
+type ArchivedReview struct {
+	ID           string `json:"id"`
+	RepositoryID string `json:"repositoryId"`
+	Repository   string `json:"repository"` // owner/name
+	Number       int    `json:"number"`
+	Title        string `json:"title"`
+	Author       string `json:"author"`
+	URL          string `json:"url"`
+	// Mode is publish or apply, a string for the same reason as State.Theme.
+	Mode string `json:"mode"`
+	// Outcome is merged or closed: what became of the pull request.
+	Outcome    string       `json:"outcome"`
+	Card       *PullCard    `json:"card"` // nil when the pull request had no card
+	Passes     []ReviewPass `json:"passes"`
+	CreatedAt  string       `json:"createdAt"`
+	ArchivedAt string       `json:"archivedAt"`
+}
+
+// StartReviewRequest is what the user chose in the dialog that starts a review.
+type StartReviewRequest struct {
+	RepositoryID string `json:"repositoryId"`
+	Number       int    `json:"number"`
+	Instructions string `json:"instructions"` // what to look at in this pass; "" for none
+	Model        string `json:"model"`
+	Effort       string `json:"effort"`
+	// Mode is publish or apply, a string for the same reason as State.Theme.
+	Mode string `json:"mode"`
 }

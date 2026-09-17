@@ -175,6 +175,18 @@ func (s *RepositoryService) RemoveRepository(id string) error {
 	return nil
 }
 
+// SetReviewInstructions records what every pull request review of a repository
+// is told, on top of what the user writes for a review of its own.
+func (s *RepositoryService) SetReviewInstructions(id, text string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+
+	if _, err := s.repositories.SetReviewInstructions(ctx, id, text); err != nil {
+		return s.fail("SetReviewInstructions", err)
+	}
+	return nil
+}
+
 // SetRepositoryFilter chooses the repository the task list and the history
 // show; "" shows them all.
 func (s *RepositoryService) SetRepositoryFilter(id string) error {

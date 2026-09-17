@@ -6,6 +6,7 @@ import (
 	"github.com/guilhermt/myspec/internal/attention"
 	"github.com/guilhermt/myspec/internal/bindings"
 	"github.com/guilhermt/myspec/internal/flow"
+	"github.com/guilhermt/myspec/internal/reviewflow"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
 )
@@ -31,12 +32,15 @@ func (a *App) snapshot() bindings.State {
 			Task: t, Artifacts: artifacts[t.ID], Steps: steps[t.ID], PR: pr, Sessions: summaries,
 		})...)
 	}
+	reviews, reviewFound := a.reviewStates()
+	found = append(found, reviewFound...)
 	situations := a.attention.Update(found)
 
+	repositories := bindings.FromRepositories(
+		a.repositories.List(), a.repositories.Missing, a.tasks.Counts, a.prReviews.Counts, a.repositories.Cloning,
+	)
 	return bindings.State{
-		Repositories: bindings.FromRepositories(
-			a.repositories.List(), a.repositories.Missing, a.tasks.Counts, a.repositories.Cloning,
-		),
+		Repositories:     repositories,
 		RepositoryFilter: a.repositories.Filter(),
 		Theme:            string(a.theme.Preference()),
 		SystemDark:       a.theme.SystemDark(),
@@ -59,8 +63,39 @@ func (a *App) snapshot() bindings.State {
 			a.boards.List(), a.boards.Stored, a.boards.Reading,
 			a.repositories.List(), a.repositories.Missing, a.tasks.CardTasks(),
 		),
+		ReviewCenter: bindings.FromReviewCenter(
+			a.pulls.Readings(), a.pulls.Reading(), a.pulls.ReadAt(), a.pulls.Viewer(), a.pulls.Filters(),
+			repositories, a.taskPullRequests(), a.prReviews.ActiveOf, a.boards.CardOfPullRequest,
+		),
+		Reviews: bindings.FromReviews(reviews, situations, repositories),
+		ReviewHistory: bindings.FromArchivedReviews(
+			a.prReviews.ListArchived(), a.prReviews.Passes, repositories,
+		),
 		CloneFolder: a.repositories.CloneFolder(),
 	}
+}
+
+// reviewStates is what the app knows about every active review, with the
+// situations each one waits on the user for.
+func (a *App) reviewStates() ([]reviewflow.State, []attention.Found) {
+	list := a.prReviews.List()
+	states := make([]reviewflow.State, 0, len(list))
+	found := make([]attention.Found, 0, len(list)) // a review waits on one thing at a time
+	for _, stored := range list {
+		state, ok := a.reviewFlow.State(stored.ID)
+		if !ok {
+			continue
+		}
+		states = append(states, state)
+		fullName := ""
+		if repo, registered := a.repositories.Get(stored.RepositoryID); registered {
+			fullName = repo.FullName()
+		}
+		found = append(found, attention.DeriveReview(attention.ReviewInput{
+			State: state, Title: stored.Reference(fullName),
+		})...)
+	}
+	return states, found
 }
 
 // state is the snapshot the frontend asks for. It takes the lock a publish

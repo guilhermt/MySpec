@@ -18,7 +18,10 @@ import (
 	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
+	"github.com/guilhermt/myspec/internal/prreview"
+	"github.com/guilhermt/myspec/internal/pulls"
 	"github.com/guilhermt/myspec/internal/repository"
+	"github.com/guilhermt/myspec/internal/reviewflow"
 	"github.com/guilhermt/myspec/internal/reviewmode"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
@@ -46,10 +49,13 @@ type TaskService struct {
 	repositories *repository.Service
 	boards       *board.Service
 	editor       Editor
+	isReview     func(id string) bool
 	log          *slog.Logger
 }
 
 // NewTaskService builds the service over the task, session and flow domains.
+// isReview says that an id is a review of a pull request, the other item whose
+// conversation the frontend asks this service for; without it, only tasks are.
 func NewTaskService(
 	tasks *task.Service,
 	sessions *session.Service,
@@ -59,8 +65,12 @@ func NewTaskService(
 	repositories *repository.Service,
 	boards *board.Service,
 	editor Editor,
+	isReview func(id string) bool,
 	log *slog.Logger,
 ) *TaskService {
+	if isReview == nil {
+		isReview = func(string) bool { return false }
+	}
 	return &TaskService{
 		tasks:        tasks,
 		sessions:     sessions,
@@ -70,6 +80,7 @@ func NewTaskService(
 		repositories: repositories,
 		boards:       boards,
 		editor:       editor,
+		isReview:     isReview,
 		log:          log,
 	}
 }
@@ -216,9 +227,9 @@ func (s *TaskService) CloseTask(taskID string) error {
 	return nil
 }
 
-// GetTranscript returns the whole conversation of one session of a task, named
-// by its stage. It is how the frontend gets its first one; every later change
-// arrives with EventTranscriptChanged.
+// GetTranscript returns the whole conversation of one session of an item,
+// named by its stage. It is how the frontend gets its first one; every later
+// change arrives with EventTranscriptChanged.
 func (s *TaskService) GetTranscript(taskID, stage string) (Transcript, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
@@ -226,8 +237,9 @@ func (s *TaskService) GetTranscript(taskID, stage string) (Transcript, error) {
 	transcript, err := s.sessions.Transcript(ctx, session.Key{TaskID: taskID, Stage: stage})
 	// A task past the stages that have a conversation has none, and the
 	// frontend asks for it all the same; its stage answers with an empty one.
+	// A review whose conversation has not opened yet is the same case.
 	if errors.Is(err, session.ErrNotFound) {
-		if _, ok := s.tasks.Get(taskID); ok {
+		if _, ok := s.tasks.Get(taskID); ok || s.isReview(taskID) {
 			return Transcript{TaskID: taskID, Stage: stage, Entries: []Entry{}, Pending: []Entry{}}, nil
 		}
 	}
@@ -746,6 +758,26 @@ var userMessages = []struct {
 	{flow.ErrAgentReviewing, "The agent is reviewing this step. Review it yourself to approve it."},
 	{flow.ErrNoAgentReview, "The agent isn't reviewing this step."},
 	{errPathOutside, "This file is not in the worktree of the task."},
+	{errNotAnchored, "This finding isn't about a line of the pull request."},
+	{prreview.ErrNotFound, "This review no longer exists."},
+	{prreview.ErrActiveExists, "This pull request already has an active review."},
+	{prreview.ErrNotDeciding, "This pass is not the one being decided."},
+	{prreview.ErrEmptyText, "Write the text of the finding."},
+	{prreview.ErrUnknownMode, "Unknown review mode."},
+	{prreview.ErrUnknownVerdict, "Unknown verdict."},
+	{prreview.ErrUnknownDecision, "Unknown decision."},
+	{prreview.ErrUnknownArtifact, "Unknown artifact."},
+	{reviewflow.ErrPullRequestGone, "This pull request is no longer on GitHub."},
+	{reviewflow.ErrNotOpen, "This pull request isn't open."},
+	{reviewflow.ErrFork, "Pull requests from forks can't be reviewed yet."},
+	{reviewflow.ErrTaskPullRequest, "This pull request belongs to a task: review it there."},
+	{reviewflow.ErrApplyNotOwn, "Only a pull request of your own can be fixed in the app."},
+	{reviewflow.ErrPassRunning, "Wait for the pass under way to finish."},
+	{reviewflow.ErrBusy, "Wait for the agent to finish."},
+	{reviewflow.ErrNotReady, "The review isn't ready for that."},
+	{reviewflow.ErrOwnVerdict, "A pull request of your own can only be commented on."},
+	{reviewflow.ErrEmptyReview, "Write a summary before publishing."},
+	{reviewflow.ErrNoWorktree, "The worktree of the review is gone."},
 	{editor.ErrNotFound, "VS Code was not found: `code` isn't on the PATH."},
 	{gh.ErrNotFound, "GitHub CLI was not found: `gh` isn't on the PATH."},
 	{gh.ErrNotAuthenticated, "GitHub CLI isn't authenticated: run `gh auth login`."},
@@ -771,6 +803,10 @@ func failure(log *slog.Logger, method string, err error) error {
 	var boardFailure *board.Failure
 	if errors.As(err, &boardFailure) {
 		return errors.New(boardFailure.Message())
+	}
+	var pullsFailure *pulls.Failure
+	if errors.As(err, &pullsFailure) {
+		return errors.New(pullsFailure.Message())
 	}
 	var taken *task.CardTakenError
 	if errors.As(err, &taken) {

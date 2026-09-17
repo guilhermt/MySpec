@@ -4,6 +4,7 @@
 import * as AttentionService from "./attentionservice.js";
 import * as BoardService from "./boardservice.js";
 import * as RepositoryService from "./repositoryservice.js";
+import * as ReviewService from "./reviewservice.js";
 import * as SettingsService from "./settingsservice.js";
 import * as StateService from "./stateservice.js";
 import * as TaskService from "./taskservice.js";
@@ -11,6 +12,7 @@ export {
     AttentionService,
     BoardService,
     RepositoryService,
+    ReviewService,
     SettingsService,
     StateService,
     TaskService
@@ -19,6 +21,7 @@ export {
 export type {
     ActionEntry,
     ArchivedPR,
+    ArchivedReview,
     ArchivedStep,
     ArchivedTask,
     AssistantEntry,
@@ -58,19 +61,29 @@ export type {
     Place,
     PlanProblem,
     Prompt,
+    PullCard,
+    PullLabel,
     PullRequest,
+    PullRequestRow,
+    PullsFailure,
     Question,
     QuestionEntry,
     QuestionOption,
     Repository,
     RepositoryCandidate,
     Review,
+    ReviewCenter,
     ReviewFile,
+    ReviewFilters,
+    ReviewFinding,
+    ReviewPass,
+    ReviewSummary,
     SaveBoardRequest,
     Situation,
     SituationOpen,
     SituationStarted,
     StageModel,
+    StartReviewRequest,
     State,
     Step,
     StepBlock,

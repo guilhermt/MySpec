@@ -121,9 +121,9 @@ export function DiscardStep(taskID: string, cleanWorktree: boolean): $Cancellabl
 }
 
 /**
- * GetTranscript returns the whole conversation of one session of a task, named
- * by its stage. It is how the frontend gets its first one; every later change
- * arrives with EventTranscriptChanged.
+ * GetTranscript returns the whole conversation of one session of an item,
+ * named by its stage. It is how the frontend gets its first one; every later
+ * change arrives with EventTranscriptChanged.
  */
 export function GetTranscript(taskID: string, stage: string): $CancellablePromise<$models.Transcript> {
     return $Call.ByID(923740112, taskID, stage);

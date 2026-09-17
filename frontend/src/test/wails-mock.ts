@@ -257,6 +257,26 @@ export function makeState(overrides: Partial<State> = {}): State {
     tasks: [],
     history: [],
     boards: [],
+    reviewCenter: {
+      pullRequests: [],
+      failures: [],
+      readAt: "",
+      reading: false,
+      filters: {
+        boardId: "",
+        repositoryId: "",
+        authorsInclude: [],
+        authorsExclude: [],
+        labelsInclude: [],
+        labelsExclude: [],
+        pendingOnly: false,
+      },
+      pendingCount: 0,
+      authors: [],
+      labels: [],
+    },
+    reviews: [],
+    reviewHistory: [],
     cloneFolder: "",
     ...overrides,
   };
@@ -276,6 +296,9 @@ export function makeRepository(overrides: Partial<Repository> = {}): Repository 
     boardId: "",
     cloning: false,
     cloneError: "",
+    reviewInstructions: "",
+    activeReviews: 0,
+    archivedReviews: 0,
     ...overrides,
   };
 }

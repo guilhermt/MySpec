@@ -358,3 +358,41 @@ func TestChooseCloneFolderStartsAtTheCurrentFolder(t *testing.T) {
 		t.Errorf("cloneFolder = %q, want %q", got, first)
 	}
 }
+
+func TestSetReviewInstructionsReachesEveryReviewOfTheRepository(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	repoID := f.register(t, t.TempDir())
+
+	if err := f.repoService.SetReviewInstructions(repoID, "  Look at the migrations.  "); err != nil {
+		t.Fatalf("SetReviewInstructions() = %v, want nil", err)
+	}
+
+	if got := f.state.GetState().Repositories[0].ReviewInstructions; got != "Look at the migrations." {
+		t.Errorf("reviewInstructions = %q, want the trimmed text", got)
+	}
+	if err := f.repoService.SetReviewInstructions("nobody", "Anything."); err == nil ||
+		err.Error() != "This repository isn't registered." {
+		t.Errorf("SetReviewInstructions(nobody) = %v, want the sentence about an unregistered repository", err)
+	}
+}
+
+func TestARepositoryCountsTheReviewsOfItsPullRequests(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	repoID := f.register(t, t.TempDir())
+	f.seedReview(t, repoID)
+
+	got := f.state.GetState().Repositories[0]
+
+	if got.ActiveReviews != 1 || got.ArchivedReviews != 0 {
+		t.Errorf("repository = %d active and %d archived reviews, want 1 and 0",
+			got.ActiveReviews, got.ArchivedReviews)
+	}
+	if err := f.repoService.RemoveRepository(repoID); err == nil ||
+		!strings.Contains(err.Error(), "1 active review") {
+		t.Errorf("RemoveRepository() = %v, want the refusal about the reviews of the repository", err)
+	}
+}

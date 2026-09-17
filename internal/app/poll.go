@@ -9,19 +9,30 @@ import (
 // whose merge it waits for.
 const prPollInterval = time.Minute
 
-// pollPRs asks the flow to read the pull requests awaiting a merge, until ctx
-// ends. The flow does the asking on goroutines of its own; this only keeps
-// time.
+// pullsRefreshTicks is how many polls go by between two readings of the open
+// pull requests of the registered repositories: they change far more slowly
+// than the pull request of a task the app is waiting on.
+const pullsRefreshTicks = 5
+
+// pollPRs asks the flows to read the pull requests they wait on, and now and
+// then the open pull requests of every repository, until ctx ends. The flows do
+// the asking on goroutines of their own; this only keeps time.
 func (a *App) pollPRs(ctx context.Context) {
 	ticker := time.NewTicker(prPollInterval)
 	defer ticker.Stop()
 
+	ticks := 0
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
 			a.flow.PollPRs()
+			a.reviewFlow.Poll()
+			ticks++
+			if ticks%pullsRefreshTicks == 0 {
+				a.pulls.Refresh()
+			}
 		}
 	}
 }

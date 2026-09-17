@@ -10,8 +10,11 @@ import (
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
+	"github.com/guilhermt/myspec/internal/prreview"
+	"github.com/guilhermt/myspec/internal/pulls"
 	"github.com/guilhermt/myspec/internal/repository"
 	"github.com/guilhermt/myspec/internal/review"
+	"github.com/guilhermt/myspec/internal/reviewflow"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
 	"github.com/guilhermt/myspec/internal/theme"
@@ -20,16 +23,19 @@ import (
 
 // FromRepositories converts the registered repositories, with what the last
 // check found about each clone, whether a clone of it runs and how many tasks
-// it holds. It always returns a slice so the frontend never sees null.
+// and reviews it holds. It always returns a slice so the frontend never sees
+// null.
 func FromRepositories(
 	list []repository.Repository,
 	missing func(id string) bool,
 	counts func(id string) (int, int),
+	reviews func(id string) (int, int),
 	cloning func(id string) (bool, string),
 ) []Repository {
 	converted := make([]Repository, len(list))
 	for i, repo := range list {
 		active, archived := counts(repo.ID)
+		activeReviews, archivedReviews := reviews(repo.ID)
 		running, cloneError := cloning(repo.ID)
 		converted[i] = Repository{
 			ID:            repo.ID,
@@ -44,6 +50,10 @@ func FromRepositories(
 			BoardID:       repo.BoardID,
 			Cloning:       running,
 			CloneError:    cloneError,
+
+			ReviewInstructions: repo.ReviewInstructions,
+			ActiveReviews:      activeReviews,
+			ArchivedReviews:    archivedReviews,
 		}
 	}
 	return converted
@@ -386,6 +396,15 @@ func FromDeleteResult(result flow.DeleteResult) DeleteResult {
 		Branch: result.Leftover.Branch,
 		Error:  result.Leftover.Error,
 	}}
+}
+
+// FromReviewLeftover converts what deleting a review left on disk, keeping nil
+// when git removed everything.
+func FromReviewLeftover(left reviewflow.Leftover) DeleteResult {
+	if left.WorktreePath == "" {
+		return DeleteResult{}
+	}
+	return DeleteResult{Leftover: &Leftover{Path: left.WorktreePath}}
 }
 
 // fromPRBlock converts why the pull request of a task cannot go on, keeping nil
@@ -1034,4 +1053,445 @@ func saveParamsOf(req SaveBoardRequest) board.SaveParams {
 // repositoryChoiceOf converts a repository the user checked.
 func repositoryChoiceOf(c BoardRepositoryChoice) board.RepositoryChoice {
 	return board.RepositoryChoice{Owner: c.Owner, Name: c.Name, Path: c.Path}
+}
+
+// What the button of a pull request of the Reviews view does, as
+// PullRequestRow.Action names it.
+const (
+	actionReview     = "review"
+	actionOpenReview = "open_review"
+	actionOpenTask   = "open_task"
+	actionFork       = "fork"
+)
+
+// FromReviewCenter converts the last reading of the open pull requests of every
+// registered repository into the Reviews view: every row with what the app
+// knows about it, the repositories the reading failed for, and the authors and
+// the labels the filters offer. repos are the converted repositories, taskPRs
+// the pull requests the active tasks of the product own, reviews the active
+// review of a pull request and cardOf the card one is linked to. The slices are
+// always allocated so the frontend never sees null.
+func FromReviewCenter(
+	readings []pulls.RepositoryReading,
+	reading bool,
+	readAt time.Time,
+	viewer string,
+	filters pulls.Filters,
+	repos []Repository,
+	taskPRs []reviewflow.TaskPR,
+	reviews func(repositoryID string, number int) (prreview.Review, bool),
+	cardOf func(owner, name string, number int) (string, board.Card, bool),
+) ReviewCenter {
+	byID := make(map[string]Repository, len(repos))
+	for _, repo := range repos {
+		byID[repo.ID] = repo
+	}
+	center := ReviewCenter{
+		PullRequests: []PullRequestRow{},
+		Failures:     []PullsFailure{},
+		Filters:      FromReviewFilters(filters),
+		Authors:      []string{},
+		Labels:       []string{},
+		Reading:      reading,
+	}
+	if !readAt.IsZero() {
+		center.ReadAt = readAt.Format(time.RFC3339)
+	}
+	sorted := make([]pullRow, 0, len(readings))
+	for _, one := range readings {
+		repo := byID[one.RepositoryID]
+		if one.Failure != nil {
+			center.Failures = append(center.Failures, PullsFailure{
+				RepositoryID: one.RepositoryID,
+				Repository:   repo.FullName,
+				Message:      one.Failure.Message(),
+			})
+		}
+		for _, pr := range one.PullRequests {
+			row := fromPullRequestRow(pr, repo, viewer, filters, taskPRs, reviews, cardOf)
+			if row.Pending && !row.Filtered {
+				center.PendingCount++
+			}
+			center.Authors = addName(center.Authors, pr.Author)
+			for _, label := range pr.Labels {
+				center.Labels = addName(center.Labels, label.Name)
+			}
+			sorted = append(sorted, pullRow{row: row, updated: pr.UpdatedAt})
+		}
+	}
+	sortNames(center.Authors)
+	sortNames(center.Labels)
+	center.PullRequests = orderedRows(sorted)
+	return center
+}
+
+// pullRow is a row of the Reviews view next to the moment the pull request was
+// last updated, which orders the rows before the times become text.
+type pullRow struct {
+	row     PullRequestRow
+	updated time.Time
+}
+
+// orderedRows is the rows as the view lists them: the pending ones first, and
+// then the most recently updated.
+func orderedRows(rows []pullRow) []PullRequestRow {
+	slices.SortStableFunc(rows, func(a, b pullRow) int {
+		if a.row.Pending != b.row.Pending {
+			if a.row.Pending {
+				return -1
+			}
+			return 1
+		}
+		return b.updated.Compare(a.updated)
+	})
+	converted := make([]PullRequestRow, len(rows))
+	for i, one := range rows {
+		converted[i] = one.row
+	}
+	return converted
+}
+
+// fromPullRequestRow converts one open pull request with what the app knows
+// about it: whose it is, whether it waits for the user, whether the filters
+// hide it and what its button does.
+func fromPullRequestRow(
+	pr pulls.PullRequest,
+	repo Repository,
+	viewer string,
+	filters pulls.Filters,
+	taskPRs []reviewflow.TaskPR,
+	reviews func(repositoryID string, number int) (prreview.Review, bool),
+	cardOf func(owner, name string, number int) (string, board.Card, bool),
+) PullRequestRow {
+	labels := make([]PullLabel, len(pr.Labels))
+	for i, label := range pr.Labels {
+		labels[i] = PullLabel{Name: label.Name, Color: label.Color}
+	}
+	row := PullRequestRow{
+		Key:          pr.Key(),
+		RepositoryID: repo.ID,
+		Repository:   repo.FullName,
+		BoardID:      repo.BoardID,
+		Number:       pr.Number,
+		Title:        pr.Title,
+		URL:          pr.URL,
+		Author:       pr.Author,
+		Labels:       labels,
+		Draft:        pr.Draft,
+		Own:          strings.EqualFold(pr.Author, viewer),
+		Card:         fromPullCard(pr, cardOf),
+		Reviewed:     pr.Reviewed,
+		NewCommits:   pr.NewCommits(),
+		TaskID:       taskOfPullRequest(taskPRs, repo.ID, pr.Number),
+		UpdatedAt:    pr.UpdatedAt.Format(time.RFC3339),
+	}
+	if review, ok := reviews(repo.ID, pr.Number); ok {
+		row.ReviewID = review.ID
+	}
+	row.Pending = pulls.Pending(pr, viewer, row.TaskID != "")
+	row.Filtered = !filters.Match(pr, repo.ID, repo.BoardID, row.Pending)
+	row.Action = rowAction(row, pr, repo)
+	return row
+}
+
+// rowAction is what the button of a row does: a pull request the product
+// already has an item for opens it, and one the app cannot review says why.
+func rowAction(row PullRequestRow, pr pulls.PullRequest, repo Repository) string {
+	switch {
+	case row.TaskID != "":
+		return actionOpenTask
+	case row.ReviewID != "":
+		return actionOpenReview
+	case pr.Fork:
+		return actionFork
+	case !repo.Cloned:
+		return actionClone
+	case repo.Missing:
+		return actionCloneMissing
+	default:
+		return actionReview
+	}
+}
+
+// taskOfPullRequest is the task of the product that owns a pull request; ""
+// when it belongs to none.
+func taskOfPullRequest(taskPRs []reviewflow.TaskPR, repositoryID string, number int) string {
+	for _, one := range taskPRs {
+		if one.RepositoryID == repositoryID && one.Number == number {
+			return one.TaskID
+		}
+	}
+	return ""
+}
+
+// fromPullCard converts the card a pull request is linked to, keeping nil for
+// one that is linked to none.
+func fromPullCard(
+	pr pulls.PullRequest, cardOf func(owner, name string, number int) (string, board.Card, bool),
+) *PullCard {
+	boardID, card, ok := cardOf(pr.Owner, pr.Name, pr.Number)
+	if !ok {
+		return nil
+	}
+	return &PullCard{
+		BoardID: boardID,
+		Number:  card.Number,
+		Title:   card.Title,
+		URL:     card.URL,
+		Status:  card.Status,
+	}
+}
+
+// FromReviewFilters converts the filters of the Reviews view, allocating every
+// list so the frontend never sees null.
+func FromReviewFilters(f pulls.Filters) ReviewFilters {
+	return ReviewFilters{
+		BoardID:        f.BoardID,
+		RepositoryID:   f.RepositoryID,
+		AuthorsInclude: names(f.AuthorsInclude),
+		AuthorsExclude: names(f.AuthorsExclude),
+		LabelsInclude:  names(f.LabelsInclude),
+		LabelsExclude:  names(f.LabelsExclude),
+		PendingOnly:    f.PendingOnly,
+	}
+}
+
+// filtersOf converts the filters the frontend sent.
+func filtersOf(f ReviewFilters) pulls.Filters {
+	return pulls.Filters{
+		BoardID:        f.BoardID,
+		RepositoryID:   f.RepositoryID,
+		AuthorsInclude: names(f.AuthorsInclude),
+		AuthorsExclude: names(f.AuthorsExclude),
+		LabelsInclude:  names(f.LabelsInclude),
+		LabelsExclude:  names(f.LabelsExclude),
+		PendingOnly:    f.PendingOnly,
+	}
+}
+
+// names is a copy of a list of names that is never nil.
+func names(list []string) []string {
+	copied := make([]string, len(list))
+	copy(copied, list)
+	return copied
+}
+
+// addName adds a name to a list it is not already in, ignoring case.
+func addName(list []string, value string) []string {
+	if value == "" || slices.ContainsFunc(list, func(w string) bool { return strings.EqualFold(value, w) }) {
+		return list
+	}
+	return append(list, value)
+}
+
+// sortNames orders a list of names alphabetically, ignoring case.
+func sortNames(list []string) {
+	slices.SortFunc(list, func(a, b string) int {
+		return strings.Compare(strings.ToLower(a), strings.ToLower(b))
+	})
+}
+
+// FromReviews converts the active reviews with the situations each one waits on
+// the user for, by review id, and the converted repositories. A nil map of
+// situations counts as none for every review. The slices are always allocated
+// so the frontend never sees null.
+func FromReviews(
+	states []reviewflow.State, situations map[string][]attention.Situation, repos []Repository,
+) []ReviewSummary {
+	byID := make(map[string]Repository, len(repos))
+	for _, repo := range repos {
+		byID[repo.ID] = repo
+	}
+	converted := make([]ReviewSummary, len(states))
+	for i, state := range states {
+		stored := state.Review
+		summary := state.Session
+		if summary.Status == "" {
+			summary.Status = session.StatusWaiting
+		}
+		sessionStage := ""
+		if state.SessionOpen {
+			sessionStage = session.ReviewStage
+		}
+		converted[i] = ReviewSummary{
+			ID:               stored.ID,
+			RepositoryID:     stored.RepositoryID,
+			Repository:       byID[stored.RepositoryID].FullName,
+			Number:           stored.Number,
+			Title:            stored.Title,
+			Author:           stored.Author,
+			URL:              stored.URL,
+			HeadBranch:       stored.HeadBranch,
+			BaseBranch:       stored.BaseBranch,
+			Own:              stored.Own,
+			Mode:             string(stored.Mode),
+			Status:           string(state.Status),
+			Card:             fromReviewCard(stored.Card),
+			WorktreePath:     state.WorktreePath,
+			Passes:           fromPasses(state.Passes),
+			StalePass:        state.StalePass,
+			CheckError:       state.CheckError,
+			PublishError:     stored.PublishError,
+			UnreadableReport: state.UnreadableReport,
+			CommitFailed:     state.CommitFailed,
+			Review:           fromReview(state.Watch),
+			Verdicts:         verdictsOf(stored),
+			CanPublish:       canPublish(state),
+			CanApply:         state.Status == reviewflow.StatusReadyToApply,
+			CanApprove:       state.Status == reviewflow.StatusReadyToApprove,
+			CanReviewAgain:   canReviewAgain(state),
+
+			SessionStage:   sessionStage,
+			SessionStatus:  string(summary.Status),
+			SessionModel:   string(summary.Choice.Model),
+			SessionEffort:  string(summary.Choice.Effort),
+			TurnRunning:    summary.TurnRunning,
+			ProcessRunning: summary.ProcessRunning,
+			RetryAttempt:   summary.RetryAttempt,
+			ContextPercent: summary.ContextPercent,
+			PendingCount:   summary.PendingCount,
+			LastError:      summary.LastError,
+			Situations:     fromSituations(situations[stored.ID]),
+			CreatedAt:      stored.CreatedAt.Format(time.RFC3339),
+		}
+	}
+	return converted
+}
+
+// verdictsOf are the verdicts a review can be published with: a pull request of
+// the user's own can only be commented on.
+func verdictsOf(stored prreview.Review) []string {
+	if stored.Own {
+		return []string{string(prreview.VerdictComment)}
+	}
+	converted := make([]string, len(prreview.Verdicts))
+	for i, verdict := range prreview.Verdicts {
+		converted[i] = string(verdict)
+	}
+	return converted
+}
+
+// canPublish reports whether the review is the user's to publish now: a
+// publication that failed can be tried again as long as nothing is undecided.
+func canPublish(state reviewflow.State) bool {
+	switch state.Status {
+	case reviewflow.StatusReadyToPublish:
+		return true
+	case reviewflow.StatusPublishFailed:
+		return lastRecordedPass(state.Passes).Decided()
+	default:
+		return false
+	}
+}
+
+// canReviewAgain reports whether another pass can be asked for: the report of
+// the pass the app asked for is in, the conversation is not working, and the
+// review is not in the middle of the cycle that applies the findings.
+func canReviewAgain(state reviewflow.State) bool {
+	if state.Review.AskedPass != state.Review.ReportedPass {
+		return false
+	}
+	if !state.Session.Idle && state.Session.Status != session.StatusPaused {
+		return false
+	}
+	switch state.Status {
+	case reviewflow.StatusApplying, reviewflow.StatusInReview,
+		reviewflow.StatusReadyToApprove, reviewflow.StatusCommitting:
+		return false
+	default:
+		return true
+	}
+}
+
+// lastRecordedPass is the pass whose report was recorded last, the zero value
+// when no report was recorded yet.
+func lastRecordedPass(passes []prreview.Pass) prreview.Pass {
+	for _, pass := range slices.Backward(passes) {
+		if pass.Recorded {
+			return pass
+		}
+	}
+	return prreview.Pass{}
+}
+
+// FromArchivedReviews converts the reviews of the history, each with its passes
+// and the repository it belongs to. The slices are always allocated so the
+// frontend never sees null.
+func FromArchivedReviews(
+	list []prreview.Review, passes func(id string) []prreview.Pass, repos []Repository,
+) []ArchivedReview {
+	byID := make(map[string]Repository, len(repos))
+	for _, repo := range repos {
+		byID[repo.ID] = repo
+	}
+	converted := make([]ArchivedReview, len(list))
+	for i, stored := range list {
+		converted[i] = ArchivedReview{
+			ID:           stored.ID,
+			RepositoryID: stored.RepositoryID,
+			Repository:   byID[stored.RepositoryID].FullName,
+			Number:       stored.Number,
+			Title:        stored.Title,
+			Author:       stored.Author,
+			URL:          stored.URL,
+			Mode:         string(stored.Mode),
+			Outcome:      string(stored.PRState),
+			Card:         fromReviewCard(stored.Card),
+			Passes:       fromPasses(passes(stored.ID)),
+			CreatedAt:    stored.CreatedAt.Format(time.RFC3339),
+			ArchivedAt:   stored.ArchivedAt.Format(time.RFC3339),
+		}
+	}
+	return converted
+}
+
+// fromReviewCard converts the card the pull request under review is linked to,
+// keeping nil for one that is linked to none.
+func fromReviewCard(c *prreview.Card) *PullCard {
+	if c == nil {
+		return nil
+	}
+	return &PullCard{BoardID: c.BoardID, Number: c.Number, Title: c.Title, URL: c.URL, Status: c.Status}
+}
+
+// fromPasses converts the passes of a review, always returning a slice so the
+// frontend never sees null.
+func fromPasses(passes []prreview.Pass) []ReviewPass {
+	converted := make([]ReviewPass, len(passes))
+	for i, pass := range passes {
+		converted[i] = ReviewPass{
+			Pass:         pass.Number,
+			File:         prreview.ReportFile(pass.Number),
+			Recorded:     pass.Recorded,
+			Clean:        pass.Clean,
+			Instructions: pass.Instructions,
+			Summary:      pass.Summary,
+			Findings:     fromFindings(pass.Findings),
+			Revision:     pass.Revision,
+			Published:    pass.Published(),
+			Verdict:      string(pass.Verdict),
+			PublishedURL: pass.PublishedURL,
+		}
+		if pass.Published() {
+			converted[i].PublishedAt = pass.PublishedAt.Format(time.RFC3339)
+		}
+	}
+	return converted
+}
+
+// fromFindings converts the findings of a pass, always returning a slice so the
+// frontend never sees null.
+func fromFindings(findings []prreview.Finding) []ReviewFinding {
+	converted := make([]ReviewFinding, len(findings))
+	for i, finding := range findings {
+		converted[i] = ReviewFinding{
+			Number:    finding.Number,
+			Path:      finding.Path,
+			Line:      finding.Line,
+			Text:      finding.Text,
+			Decision:  string(finding.Decision),
+			Placement: string(finding.Placement),
+		}
+	}
+	return converted
 }

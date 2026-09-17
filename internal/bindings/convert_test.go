@@ -1,6 +1,7 @@
 package bindings_test
 
 import (
+	"strconv"
 	"testing"
 	"time"
 
@@ -13,8 +14,11 @@ import (
 	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
+	"github.com/guilhermt/myspec/internal/prreview"
+	"github.com/guilhermt/myspec/internal/pulls"
 	"github.com/guilhermt/myspec/internal/repository"
 	"github.com/guilhermt/myspec/internal/review"
+	"github.com/guilhermt/myspec/internal/reviewflow"
 	"github.com/guilhermt/myspec/internal/reviewmode"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
@@ -1509,6 +1513,7 @@ func TestFromRepositoriesCarriesTheBoardAndTheCloneOfARepositoryWithoutOne(t *te
 		list,
 		func(string) bool { return true },
 		func(string) (int, int) { return 0, 0 },
+		func(string) (int, int) { return 0, 0 },
 		func(id string) (bool, string) { return id == "r-1", map[string]string{"r-1": "exit status 1"}[id] },
 	)
 
@@ -1568,5 +1573,435 @@ func TestFromTasksAndFromArchivedCarryTheCardOfTheTask(t *testing.T) {
 	}
 	if summaries[1].Card != nil || archived[1].Card != nil {
 		t.Errorf("cards of a task without one = %+v, %+v, want nil", summaries[1].Card, archived[1].Card)
+	}
+}
+
+// reviewRepos are the registered repositories the conversions of the Reviews
+// view are given: one cloned, one without a clone and one whose clone is gone.
+var reviewRepos = []bindings.Repository{
+	{ID: "r-1", Owner: "acme", Name: "web", FullName: "acme/web", BoardID: "board-1", Cloned: true},
+	{ID: "r-2", Owner: "acme", Name: "api", FullName: "acme/api"},
+	{ID: "r-3", Owner: "acme", Name: "cli", FullName: "acme/cli", Cloned: true, Missing: true},
+}
+
+// openPR is an open pull request of acme/web, updated minutes after readAt so
+// that the order of the rows is the order of the tests.
+func openPR(number int, author string, minutes int) pulls.PullRequest {
+	return pulls.PullRequest{
+		Owner: "acme", Name: "web", Number: number,
+		Title:     "Add the login screen",
+		URL:       "https://github.com/acme/web/pull/" + strconv.Itoa(number),
+		Author:    author,
+		UpdatedAt: readAt.Add(time.Duration(minutes) * time.Minute),
+	}
+}
+
+// noReview, noCard and noTasks are what a pull request the product knows
+// nothing about is converted with.
+func noReview(string, int) (prreview.Review, bool) { return prreview.Review{}, false }
+
+func noCard(string, string, int) (string, board.Card, bool) { return "", board.Card{}, false }
+
+var noTasks []reviewflow.TaskPR
+
+func TestFromReviewCenterPutsThePendingPullRequestsFirstAndTheRestByTheirUpdate(t *testing.T) {
+	t.Parallel()
+
+	readings := []pulls.RepositoryReading{{
+		RepositoryID: "r-1",
+		PullRequests: []pulls.PullRequest{
+			openPR(1, "dev", 30),   // the viewer's own: never pending
+			openPR(2, "alice", 10), // pending, updated first
+			openPR(3, "bob", 20),   // pending, updated last
+		},
+	}}
+
+	center := bindings.FromReviewCenter(
+		readings, false, readAt, "dev", pulls.Filters{}, reviewRepos, noTasks, noReview, noCard,
+	)
+
+	numbers := make([]int, 0, len(center.PullRequests))
+	for _, row := range center.PullRequests {
+		numbers = append(numbers, row.Number)
+	}
+	if diff := cmp.Diff([]int{3, 2, 1}, numbers); diff != "" {
+		t.Errorf("order of the rows (-want +got):\n%s", diff)
+	}
+	if center.PendingCount != 2 {
+		t.Errorf("pendingCount = %d, want 2", center.PendingCount)
+	}
+	if got := center.ReadAt; got != readAt.Format(time.RFC3339) {
+		t.Errorf("readAt = %q, want the instant of the reading", got)
+	}
+	if own := center.PullRequests[2]; !own.Own || own.Pending {
+		t.Errorf("row of the viewer's own pull request = %+v, want own and not pending", own)
+	}
+}
+
+func TestFromReviewCenterSaysWhatTheButtonOfEachRowDoes(t *testing.T) {
+	t.Parallel()
+
+	fork := openPR(4, "bob", 0)
+	fork.Fork = true
+	uncloned, missing := openPR(5, "bob", 0), openPR(6, "bob", 0)
+	uncloned.Owner, uncloned.Name = "acme", "api"
+	missing.Owner, missing.Name = "acme", "cli"
+	readings := []pulls.RepositoryReading{
+		{RepositoryID: "r-1", PullRequests: []pulls.PullRequest{
+			openPR(1, "bob", 0), openPR(2, "bob", 0), openPR(3, "bob", 0), fork,
+		}},
+		{RepositoryID: "r-2", PullRequests: []pulls.PullRequest{uncloned}},
+		{RepositoryID: "r-3", PullRequests: []pulls.PullRequest{missing}},
+	}
+	tasks := []reviewflow.TaskPR{{TaskID: "task-1", RepositoryID: "r-1", Number: 2}}
+	reviews := func(repositoryID string, number int) (prreview.Review, bool) {
+		if repositoryID == "r-1" && number == 3 {
+			return prreview.Review{ID: "review-1"}, true
+		}
+		return prreview.Review{}, false
+	}
+
+	center := bindings.FromReviewCenter(
+		readings, false, readAt, "dev", pulls.Filters{}, reviewRepos, tasks, reviews, noCard,
+	)
+
+	want := map[int]string{
+		1: "review", 2: "open_task", 3: "open_review", 4: "fork", 5: "clone", 6: "clone_missing",
+	}
+	for _, row := range center.PullRequests {
+		if row.Action != want[row.Number] {
+			t.Errorf("action of #%d = %q, want %q", row.Number, row.Action, want[row.Number])
+		}
+	}
+	for _, row := range center.PullRequests {
+		switch row.Number {
+		case 2:
+			if row.TaskID != "task-1" || row.Pending {
+				t.Errorf("row of the pull request of a task = %+v, want task-1 and not pending", row)
+			}
+		case 3:
+			if row.ReviewID != "review-1" {
+				t.Errorf("reviewId of #3 = %q, want review-1", row.ReviewID)
+			}
+		}
+	}
+}
+
+func TestFromReviewCenterMarksWhatTheFiltersHideAndCountsOnlyWhatIsLeft(t *testing.T) {
+	t.Parallel()
+
+	labelled := openPR(2, "bot", 0)
+	labelled.Labels = []pulls.Label{{Name: "dependencies", Color: "ededed"}}
+	readings := []pulls.RepositoryReading{{
+		RepositoryID: "r-1",
+		PullRequests: []pulls.PullRequest{openPR(1, "alice", 10), labelled},
+	}}
+	filters := pulls.Filters{AuthorsExclude: []string{"bot"}}
+
+	center := bindings.FromReviewCenter(
+		readings, true, time.Time{}, "dev", filters, reviewRepos, noTasks, noReview, noCard,
+	)
+
+	if center.PendingCount != 1 {
+		t.Errorf("pendingCount = %d, want 1: the excluded author does not count", center.PendingCount)
+	}
+	if !center.Reading || center.ReadAt != "" {
+		t.Errorf("center = reading %v at %q, want a reading that never landed", center.Reading, center.ReadAt)
+	}
+	for _, row := range center.PullRequests {
+		if want := row.Number == 2; row.Filtered != want {
+			t.Errorf("filtered of #%d = %v, want %v", row.Number, row.Filtered, want)
+		}
+	}
+	if diff := cmp.Diff([]string{"alice", "bot"}, center.Authors); diff != "" {
+		t.Errorf("authors (-want +got):\n%s", diff)
+	}
+	if diff := cmp.Diff([]string{"dependencies"}, center.Labels); diff != "" {
+		t.Errorf("labels (-want +got):\n%s", diff)
+	}
+	if diff := cmp.Diff(bindings.FromReviewFilters(filters), center.Filters); diff != "" {
+		t.Errorf("filters (-want +got):\n%s", diff)
+	}
+}
+
+func TestFromReviewCenterCarriesTheFailureOfARepositoryAndTheCardOfAPullRequest(t *testing.T) {
+	t.Parallel()
+
+	readings := []pulls.RepositoryReading{
+		{RepositoryID: "r-1", PullRequests: []pulls.PullRequest{openPR(1, "alice", 0)}},
+		{RepositoryID: "r-2", Failure: &pulls.Failure{Reason: pulls.ReasonFailed, Detail: "exit status 1"}},
+	}
+	cardOf := func(owner, name string, number int) (string, board.Card, bool) {
+		if owner != "acme" || name != "web" || number != 1 {
+			return "", board.Card{}, false
+		}
+		return "board-1", board.Card{
+			Issue: board.Issue{
+				Owner: "acme", Name: "web", Number: 12, Title: "Add login",
+				URL: "https://github.com/acme/web/issues/12",
+			},
+			Status: "In progress",
+		}, true
+	}
+
+	center := bindings.FromReviewCenter(
+		readings, false, readAt, "dev", pulls.Filters{}, reviewRepos, noTasks, noReview, cardOf,
+	)
+
+	wantFailures := []bindings.PullsFailure{{
+		RepositoryID: "r-2", Repository: "acme/api", Message: "Couldn't read from GitHub: exit status 1",
+	}}
+	if diff := cmp.Diff(wantFailures, center.Failures); diff != "" {
+		t.Errorf("failures (-want +got):\n%s", diff)
+	}
+	wantCard := &bindings.PullCard{
+		BoardID: "board-1", Number: 12, Title: "Add login",
+		URL: "https://github.com/acme/web/issues/12", Status: "In progress",
+	}
+	if diff := cmp.Diff(wantCard, center.PullRequests[0].Card); diff != "" {
+		t.Errorf("card of the row (-want +got):\n%s", diff)
+	}
+	if row := center.PullRequests[0]; row.Repository != "acme/web" || row.BoardID != "board-1" {
+		t.Errorf("row = %+v, want the repository and the board of acme/web", row)
+	}
+}
+
+func TestFromReviewCenterAllocatesEverythingWithoutAReading(t *testing.T) {
+	t.Parallel()
+
+	center := bindings.FromReviewCenter(
+		nil, false, time.Time{}, "", pulls.Filters{}, nil, nil, noReview, noCard,
+	)
+
+	if center.PullRequests == nil || center.Failures == nil || center.Authors == nil || center.Labels == nil ||
+		center.Filters.AuthorsInclude == nil || center.Filters.LabelsExclude == nil {
+		t.Errorf("center = %+v, want every list allocated", center)
+	}
+}
+
+// reviewState is a review of acme/web#7 in a status, with one recorded pass.
+func reviewState(status reviewflow.Status, pass prreview.Pass) reviewflow.State {
+	stored := prreview.Review{
+		ID: "review-1", RepositoryID: "r-1", Number: 7, Title: "Add the login screen",
+		Author: "alice", URL: "https://github.com/acme/web/pull/7",
+		HeadBranch: "login", BaseBranch: "main", Mode: prreview.ModePublish,
+		AskedPass: pass.Number, ReportedPass: pass.Number, CreatedAt: readAt,
+	}
+	return reviewflow.State{
+		Review: stored, Status: status, Passes: []prreview.Pass{pass},
+		Session: session.Summary{Status: session.StatusWaiting, Idle: true}, SessionOpen: true,
+	}
+}
+
+// recordedPass is a pass with one undecided finding, decided when decision is
+// not the empty one.
+func recordedPass(number int, decision prreview.Decision) prreview.Pass {
+	return prreview.Pass{
+		ReviewID: "review-1", Number: number, Recorded: true, Revision: 1,
+		Summary: "Two things to look at.",
+		Findings: []prreview.Finding{{
+			Number: 1, Path: "main.go", Line: 12, Text: "Handle the error.", Decision: decision,
+		}},
+		CreatedAt: readAt,
+	}
+}
+
+func TestFromReviewsSaysWhatTheUserCanDoWithAReview(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		status  reviewflow.Status
+		pass    prreview.Pass
+		publish bool
+		apply   bool
+		approve bool
+		again   bool
+	}{
+		{
+			name: "ready to publish", status: reviewflow.StatusReadyToPublish,
+			pass: recordedPass(1, prreview.DecisionApproved), publish: true, again: true,
+		},
+		{
+			name: "publish failed with everything decided", status: reviewflow.StatusPublishFailed,
+			pass: recordedPass(1, prreview.DecisionDiscarded), publish: true, again: true,
+		},
+		{
+			name: "publish failed with a finding to decide", status: reviewflow.StatusPublishFailed,
+			pass: recordedPass(1, prreview.DecisionNone), again: true,
+		},
+		{
+			name: "ready to apply", status: reviewflow.StatusReadyToApply,
+			pass: recordedPass(1, prreview.DecisionApproved), apply: true, again: true,
+		},
+		{
+			name: "ready to approve", status: reviewflow.StatusReadyToApprove,
+			pass: recordedPass(1, prreview.DecisionApproved), approve: true,
+		},
+		{
+			name: "applying", status: reviewflow.StatusApplying,
+			pass: recordedPass(1, prreview.DecisionApproved),
+		},
+		{
+			name: "awaiting a decision", status: reviewflow.StatusAwaitingDecision,
+			pass: recordedPass(1, prreview.DecisionNone), again: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := bindings.FromReviews([]reviewflow.State{reviewState(tt.status, tt.pass)}, nil, reviewRepos)[0]
+
+			if got.CanPublish != tt.publish || got.CanApply != tt.apply ||
+				got.CanApprove != tt.approve || got.CanReviewAgain != tt.again {
+				t.Errorf("publish %v, apply %v, approve %v, again %v, want %v, %v, %v, %v",
+					got.CanPublish, got.CanApply, got.CanApprove, got.CanReviewAgain,
+					tt.publish, tt.apply, tt.approve, tt.again)
+			}
+		})
+	}
+}
+
+func TestFromReviewsRefusesAnotherPassWhileThePassAskedForIsStillRunning(t *testing.T) {
+	t.Parallel()
+
+	state := reviewState(reviewflow.StatusAwaitingReply, recordedPass(1, prreview.DecisionNone))
+	state.Review.AskedPass = 2
+
+	if got := bindings.FromReviews([]reviewflow.State{state}, nil, reviewRepos)[0]; got.CanReviewAgain {
+		t.Error("canReviewAgain = true, want false while the report of the pass asked for is missing")
+	}
+
+	working := reviewState(reviewflow.StatusReviewing, recordedPass(1, prreview.DecisionNone))
+	working.Session = session.Summary{Status: session.StatusWorking, TurnRunning: true}
+
+	if got := bindings.FromReviews([]reviewflow.State{working}, nil, reviewRepos)[0]; got.CanReviewAgain {
+		t.Error("canReviewAgain = true, want false while the agent works")
+	}
+
+	paused := reviewState(reviewflow.StatusAwaitingDecision, recordedPass(1, prreview.DecisionNone))
+	paused.Session = session.Summary{Status: session.StatusPaused}
+
+	if got := bindings.FromReviews([]reviewflow.State{paused}, nil, reviewRepos)[0]; !got.CanReviewAgain {
+		t.Error("canReviewAgain = false, want true on a paused conversation")
+	}
+}
+
+func TestFromReviewsCarriesThePassesTheVerdictsAndTheSituationsOfAReview(t *testing.T) {
+	t.Parallel()
+
+	pass := recordedPass(1, prreview.DecisionApproved)
+	pass.Verdict = prreview.VerdictComment
+	pass.PublishedAt = readAt
+	pass.PublishedURL = "https://github.com/acme/web/pull/7#pullrequestreview-1"
+	pass.Findings[0].Placement = prreview.PlacementInline
+	state := reviewState(reviewflow.StatusPublished, pass)
+	state.WorktreePath = "/data/worktrees/acme/web/pr_7"
+	state.Review.Card = &prreview.Card{BoardID: "board-1", Number: 12, Title: "Add login", Status: "Done"}
+	situations := map[string][]attention.Situation{
+		"review-1": {{ID: "s-1", TaskID: "review-1", Kind: attention.KindReviewReport, Form: attention.FormPublish}},
+	}
+
+	got := bindings.FromReviews([]reviewflow.State{state}, situations, reviewRepos)[0]
+
+	wantPass := bindings.ReviewPass{
+		Pass: 1, File: "review-1.md", Recorded: true, Summary: "Two things to look at.",
+		Findings: []bindings.ReviewFinding{{
+			Number: 1, Path: "main.go", Line: 12, Text: "Handle the error.",
+			Decision: "approved", Placement: "inline",
+		}},
+		Revision: 1, Published: true, PublishedAt: readAt.Format(time.RFC3339),
+		PublishedURL: "https://github.com/acme/web/pull/7#pullrequestreview-1", Verdict: "comment",
+	}
+	if diff := cmp.Diff([]bindings.ReviewPass{wantPass}, got.Passes); diff != "" {
+		t.Errorf("passes (-want +got):\n%s", diff)
+	}
+	if diff := cmp.Diff([]string{"approve", "request_changes", "comment"}, got.Verdicts); diff != "" {
+		t.Errorf("verdicts (-want +got):\n%s", diff)
+	}
+	if got.Repository != "acme/web" || got.WorktreePath != "/data/worktrees/acme/web/pr_7" {
+		t.Errorf("review = %+v, want the repository and the worktree of the review", got)
+	}
+	if got.Card == nil || got.Card.Number != 12 {
+		t.Errorf("card = %+v, want the card of the pull request", got.Card)
+	}
+	if len(got.Situations) != 1 || got.Situations[0].ID != "s-1" {
+		t.Errorf("situations = %+v, want the one of the review", got.Situations)
+	}
+	if got.SessionStage != "review" {
+		t.Errorf("sessionStage = %q, want review", got.SessionStage)
+	}
+}
+
+func TestFromReviewsOffersOnlyACommentOnAPullRequestOfTheUsersOwn(t *testing.T) {
+	t.Parallel()
+
+	state := reviewState(reviewflow.StatusReadyToPublish, recordedPass(1, prreview.DecisionApproved))
+	state.Review.Own = true
+	state.Review.Mode = prreview.ModeApply
+	state.SessionOpen = false
+
+	got := bindings.FromReviews([]reviewflow.State{state}, nil, reviewRepos)[0]
+
+	if diff := cmp.Diff([]string{"comment"}, got.Verdicts); diff != "" {
+		t.Errorf("verdicts (-want +got):\n%s", diff)
+	}
+	if got.Mode != "apply" || got.SessionStage != "" {
+		t.Errorf("review = mode %q, stage %q, want apply without a conversation", got.Mode, got.SessionStage)
+	}
+	if empty := bindings.FromReviews(nil, nil, nil); empty == nil {
+		t.Error("FromReviews(nil) = nil, want an empty slice")
+	}
+}
+
+func TestFromArchivedReviewsCarriesWhatBecameOfThePullRequest(t *testing.T) {
+	t.Parallel()
+
+	archived := prreview.Review{
+		ID: "review-1", RepositoryID: "r-1", Number: 7, Title: "Add the login screen",
+		Author: "alice", URL: "https://github.com/acme/web/pull/7", Mode: prreview.ModePublish,
+		PRState: prreview.PRMerged, CreatedAt: readAt, ArchivedAt: readAt.Add(time.Hour),
+	}
+	passes := func(id string) []prreview.Pass {
+		if id != "review-1" {
+			return nil
+		}
+		return []prreview.Pass{recordedPass(1, prreview.DecisionApproved)}
+	}
+
+	got := bindings.FromArchivedReviews([]prreview.Review{archived}, passes, reviewRepos)
+
+	want := []bindings.ArchivedReview{{
+		ID: "review-1", RepositoryID: "r-1", Repository: "acme/web", Number: 7,
+		Title: "Add the login screen", Author: "alice", URL: "https://github.com/acme/web/pull/7",
+		Mode: "publish", Outcome: "merged",
+		Passes: []bindings.ReviewPass{{
+			Pass: 1, File: "review-1.md", Recorded: true, Summary: "Two things to look at.",
+			Findings: []bindings.ReviewFinding{{
+				Number: 1, Path: "main.go", Line: 12, Text: "Handle the error.", Decision: "approved",
+			}},
+			Revision: 1,
+		}},
+		CreatedAt:  readAt.Format(time.RFC3339),
+		ArchivedAt: readAt.Add(time.Hour).Format(time.RFC3339),
+	}}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("FromArchivedReviews() mismatch (-want +got):\n%s", diff)
+	}
+	if empty := bindings.FromArchivedReviews(nil, nil, nil); empty == nil {
+		t.Error("FromArchivedReviews(nil) = nil, want an empty slice")
+	}
+}
+
+func TestFromReviewLeftoverKeepsTheWorktreeGitCouldNotRemove(t *testing.T) {
+	t.Parallel()
+
+	left := bindings.FromReviewLeftover(reviewflow.Leftover{WorktreePath: "/data/worktrees/acme/web/pr_7"})
+	if left.Leftover == nil || left.Leftover.Path != "/data/worktrees/acme/web/pr_7" {
+		t.Errorf("FromReviewLeftover() = %+v, want the path of the worktree", left.Leftover)
+	}
+	if clean := bindings.FromReviewLeftover(reviewflow.Leftover{}); clean.Leftover != nil {
+		t.Errorf("FromReviewLeftover() = %+v, want nil when git removed everything", clean.Leftover)
 	}
 }
