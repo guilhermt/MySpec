@@ -95,6 +95,12 @@ func (e *Error) Unwrap() error { return e.Err }
 // Run runs gh in dir and returns its trimmed stdout. A non-zero exit is an
 // *Error; a cancelled context is an *Error whose Err is the context error.
 func (r *Runner) Run(ctx context.Context, dir string, args ...string) (string, error) {
+	return r.RunInput(ctx, dir, "", args...)
+}
+
+// RunInput is Run with stdin fed to gh, which is how a command takes a body
+// too big for a flag. An empty stdin is no stdin at all.
+func (r *Runner) RunInput(ctx context.Context, dir, stdin string, args ...string) (string, error) {
 	binary, err := r.resolve()
 	if err != nil {
 		return "", err
@@ -106,6 +112,9 @@ func (r *Runner) Run(ctx context.Context, dir string, args ...string) (string, e
 	cmd.Env = r.env
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
+	if stdin != "" {
+		cmd.Stdin = strings.NewReader(stdin)
+	}
 	// Its own process group, so a cancellation also reaches the git or the
 	// credential helper gh opened.
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}

@@ -64,6 +64,19 @@ func (r *Runner) AddWorktree(ctx context.Context, dir, path, branch, base string
 	return err
 }
 
+// AddDetachedWorktree adds a worktree at path on ref, with no branch: the
+// worktree of a review reads a pull request, it never commits to it.
+func (r *Runner) AddDetachedWorktree(ctx context.Context, dir, path, ref string) error {
+	_, err := r.Run(ctx, dir, "worktree", "add", "--detach", path, ref)
+	return err
+}
+
+// CheckoutDetached moves the worktree at dir to ref, with no branch.
+func (r *Runner) CheckoutDetached(ctx context.Context, dir, ref string) error {
+	_, err := r.Run(ctx, dir, "checkout", "--detach", ref)
+	return err
+}
+
 // RemoveWorktree removes the worktree at path, whatever it has inside.
 func (r *Runner) RemoveWorktree(ctx context.Context, dir, path string) error {
 	_, err := r.Run(ctx, dir, "worktree", "remove", "--force", path)

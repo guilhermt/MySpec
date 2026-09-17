@@ -12,6 +12,7 @@ package ghtest
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -24,10 +25,12 @@ import (
 const homeVar = "GHTEST_HOME"
 
 // The files the fake keeps in its directory: what it was asked, the
-// environment of the last run, and one answer per subcommand.
+// environment and the standard input of the last run, and one answer per
+// subcommand.
 const (
 	callsFile = "calls"
 	envFile   = "env"
+	stdinFile = "stdin"
 )
 
 // filePerm is what the fake and New write with: nothing here is executable.
@@ -121,6 +124,20 @@ func (g *GH) Vars(t *testing.T) []string {
 	return lines(string(content))
 }
 
+// Stdin is what the last run of the fake was fed on its standard input.
+func (g *GH) Stdin(t *testing.T) string {
+	t.Helper()
+
+	content, err := os.ReadFile(filepath.Join(g.dir, stdinFile))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return ""
+		}
+		t.Fatalf("ReadFile(%s) = %v, want nil", stdinFile, err)
+	}
+	return string(content)
+}
+
 // answer is the fake gh: it writes down what it was asked and replies with
 // the files New left in home.
 func answer(home string, args []string) int {
@@ -175,6 +192,12 @@ func record(home string, args []string) {
 	}
 	//nolint:gosec // G703: home is the directory New made for this run
 	_ = os.WriteFile(filepath.Join(home, envFile), []byte(strings.Join(os.Environ(), "\n")), filePerm)
+	stdin, err := io.ReadAll(os.Stdin)
+	if err != nil {
+		stdin = nil
+	}
+	//nolint:gosec // G703: home is the directory New made for this run
+	_ = os.WriteFile(filepath.Join(home, stdinFile), stdin, filePerm)
 }
 
 // copyTo writes the content of path to out, which is empty when the file is
