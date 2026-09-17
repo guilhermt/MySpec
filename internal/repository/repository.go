@@ -15,12 +15,15 @@ import (
 // Repository is a GitHub repository the user registered, tied to a local clone
 // once it has one.
 type Repository struct {
-	ID        string
-	Owner     string
-	Name      string
-	Path      string // the root of the clone, absolute and cleaned; "" while the repository has no clone
-	BoardID   string // the board that manages it; "" for none
-	CreatedAt time.Time
+	ID      string
+	Owner   string
+	Name    string
+	Path    string // the root of the clone, absolute and cleaned; "" while the repository has no clone
+	BoardID string // the board that manages it; "" for none
+	// ReviewInstructions is what the user wants said in every review of a pull
+	// request of this repository; "" when they wrote none.
+	ReviewInstructions string
+	CreatedAt          time.Time
 }
 
 // Cloned reports whether the repository is tied to a clone. A clone that is

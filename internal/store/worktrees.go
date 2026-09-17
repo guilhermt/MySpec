@@ -15,7 +15,7 @@ type WorktreesRepo struct{ db *sql.DB }
 
 // worktreeColumns is the column list every worktree query selects, in scan
 // order.
-const worktreeColumns = `task_id, repo_path, path, branch, base, created_at`
+const worktreeColumns = `item_id, repo_path, path, branch, base, created_at`
 
 // ListByTasks returns the worktrees registered for the given tasks. An empty
 // list of tasks asks the database nothing.
@@ -31,8 +31,8 @@ func (r *WorktreesRepo) ListByTasks(ctx context.Context, taskIDs []string) ([]wo
 	// The only thing built into the statement is one placeholder per task; the
 	// ids themselves travel as arguments.
 	//nolint:gosec // G202: the concatenated text is a placeholder list, not data
-	query := `SELECT ` + worktreeColumns + ` FROM worktrees WHERE task_id IN (?` +
-		strings.Repeat(", ?", len(taskIDs)-1) + `) ORDER BY task_id`
+	query := `SELECT ` + worktreeColumns + ` FROM worktrees WHERE item_id IN (?` +
+		strings.Repeat(", ?", len(taskIDs)-1) + `) ORDER BY item_id`
 
 	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -68,7 +68,7 @@ func (r *WorktreesRepo) Insert(ctx context.Context, wt worktree.Worktree) error 
 
 // Delete removes the worktree of a task. A missing row is not an error.
 func (r *WorktreesRepo) Delete(ctx context.Context, taskID string) error {
-	const stmt = `DELETE FROM worktrees WHERE task_id = ?`
+	const stmt = `DELETE FROM worktrees WHERE item_id = ?`
 
 	if _, err := r.db.ExecContext(ctx, stmt, taskID); err != nil {
 		return fmt.Errorf("delete worktree of task %s: %w", taskID, err)

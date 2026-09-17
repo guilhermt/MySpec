@@ -16,12 +16,12 @@ import (
 type SessionsRepo struct{ db *sql.DB }
 
 // sessionColumns is the column list every session query selects, in scan order.
-const sessionColumns = `id, task_id, stage, started, paused, context_tokens,
+const sessionColumns = `id, item_id, stage, started, paused, context_tokens,
 	context_window, corrections, last_error, created_at, updated_at, model, effort`
 
 // Get returns the session of a task in one stage, or session.ErrNotFound.
 func (r *SessionsRepo) Get(ctx context.Context, taskID, stage string) (session.Record, error) {
-	const query = `SELECT ` + sessionColumns + ` FROM sessions WHERE task_id = ? AND stage = ?`
+	const query = `SELECT ` + sessionColumns + ` FROM sessions WHERE item_id = ? AND stage = ?`
 
 	var (
 		rec                  session.Record
@@ -96,7 +96,7 @@ func (r *SessionsRepo) Delete(ctx context.Context, taskID string, stages ...stri
 	// The only thing built into the statement is one placeholder per stage; the
 	// stages themselves travel as arguments.
 	//nolint:gosec // G202: the concatenated text is a placeholder list, not data
-	stmt := `DELETE FROM sessions WHERE task_id = ? AND stage IN (?` +
+	stmt := `DELETE FROM sessions WHERE item_id = ? AND stage IN (?` +
 		strings.Repeat(", ?", len(stages)-1) + `)`
 
 	if _, err := r.db.ExecContext(ctx, stmt, args...); err != nil {
@@ -108,7 +108,7 @@ func (r *SessionsRepo) Delete(ctx context.Context, taskID string, stages ...stri
 // DeleteByTask removes every session of a task, with their transcripts by
 // cascade. A task without sessions is not an error.
 func (r *SessionsRepo) DeleteByTask(ctx context.Context, taskID string) error {
-	const stmt = `DELETE FROM sessions WHERE task_id = ?`
+	const stmt = `DELETE FROM sessions WHERE item_id = ?`
 
 	if _, err := r.db.ExecContext(ctx, stmt, taskID); err != nil {
 		return fmt.Errorf("delete sessions of task %s: %w", taskID, err)

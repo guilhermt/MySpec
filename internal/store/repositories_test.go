@@ -139,6 +139,27 @@ func TestTheBoardOfARepositoryRoundTrips(t *testing.T) {
 	}
 }
 
+func TestTheReviewInstructionsOfARepositoryRoundTrip(t *testing.T) {
+	t.Parallel()
+	s := newStore(t)
+
+	repo := newRepository("repo-1", "acme", "api", "/code/api")
+	insertRepository(t, s, repo)
+	if got := listRepositories(t, s)[0].ReviewInstructions; got != "" {
+		t.Errorf("ReviewInstructions = %q, want it empty on a repository nobody wrote instructions for", got)
+	}
+
+	const instructions = "A migration that was published is never edited."
+	if err := s.Repositories.UpdateReviewInstructions(t.Context(), repo.ID, instructions); err != nil {
+		t.Fatalf("UpdateReviewInstructions() = %v, want nil", err)
+	}
+
+	repo.ReviewInstructions = instructions
+	if diff := cmp.Diff([]repository.Repository{repo}, listRepositories(t, s)); diff != "" {
+		t.Errorf("List() after UpdateReviewInstructions mismatch (-want +got):\n%s", diff)
+	}
+}
+
 func TestARepositoryWithoutACloneHasAnEmptyPath(t *testing.T) {
 	t.Parallel()
 	s := newStore(t)
