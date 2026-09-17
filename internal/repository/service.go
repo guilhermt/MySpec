@@ -431,7 +431,8 @@ func (s *Service) Clone(ctx context.Context, id string) error {
 
 // runClone clones fullName into dir, which did not exist, and links the
 // repository of id to it. A failed clone leaves no dir behind and keeps what
-// gh said for Cloning.
+// gh said for Cloning. A repository removed while its clone ran keeps nothing
+// of it.
 func (s *Service) runClone(id, fullName, dir string) {
 	ctx, cancel := context.WithTimeout(context.Background(), cloneTimeout)
 	defer cancel()
@@ -456,7 +457,7 @@ func (s *Service) runClone(id, fullName, dir string) {
 
 	s.mu.Lock()
 	delete(s.cloning, id)
-	if failure != "" {
+	if failure != "" && s.index(id) >= 0 {
 		s.cloneErrors[id] = failure
 	}
 	s.mu.Unlock()

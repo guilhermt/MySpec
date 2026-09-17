@@ -740,15 +740,14 @@ func TestRemovingARepositoryWhileItsCloneRunsForgetsTheClone(t *testing.T) {
 		t.Fatalf("Remove() = %v, want nil", err)
 	}
 
-	if running, failure := f.service.Cloning(repo.ID); running || failure != "" {
-		t.Errorf("Cloning() = %t, %q, want nothing for a repository that is gone", running, failure)
-	}
-
-	// The clone that outlived the removal ends before the test does; a clone
-	// that ended announces a change.
+	// The clone outlives the removal; a clone that ended announces a change.
 	f.events.take()
 	close(f.cloner.release)
 	waitFor(t, "the clone to end", func() bool { return len(f.events.take()) > 0 })
+
+	if running, failure := f.service.Cloning(repo.ID); running || failure != "" {
+		t.Errorf("Cloning() = %t, %q, want nothing for a repository that is gone", running, failure)
+	}
 }
 
 func TestCloningLinksAnExistingCloneOfTheSameRepositoryWithoutCloning(t *testing.T) {
