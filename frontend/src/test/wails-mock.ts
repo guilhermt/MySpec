@@ -1,6 +1,12 @@
 import { vi } from "vitest";
 import type {
   ArchivedTask,
+  Board,
+  BoardCard,
+  BoardPreview,
+  BoardRemoval,
+  BoardRepositoryChoice,
+  BoardRepositoryOption,
   CloseResult,
   CreateTaskRequest,
   DeletePreview,
@@ -17,6 +23,7 @@ import type {
   RepositoryCandidate,
   Review,
   ReviewMode,
+  SaveBoardRequest,
   Situation,
   SituationOpen,
   SituationStarted,
@@ -24,6 +31,7 @@ import type {
   State,
   Step,
   StepReviewer,
+  TaskCard,
   TaskStage,
   TaskStageModel,
   TaskSummary,
@@ -40,6 +48,32 @@ export const api = {
   changeRepositoryPath: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
   removeRepository: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
   setRepositoryFilter: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
+  cloneRepository: vi.fn<(id: string) => Promise<boolean>>(() => Promise.resolve(true)),
+  chooseCloneFolder: vi.fn<() => Promise<void>>(() => Promise.resolve()),
+
+  previewBoard: vi.fn<(url: string) => Promise<BoardPreview>>(() =>
+    Promise.resolve(makeBoardPreview()),
+  ),
+  previewEditBoard: vi.fn<(id: string) => Promise<BoardPreview>>(() =>
+    Promise.resolve(makeBoardPreview()),
+  ),
+  checkBoardRepository: vi.fn<
+    (boardId: string, fullName: string) => Promise<BoardRepositoryOption>
+  >(() => Promise.resolve(makeBoardRepositoryOption())),
+  addBoard: vi.fn<(url: string, req: SaveBoardRequest) => Promise<void>>(() => Promise.resolve()),
+  updateBoard: vi.fn<(id: string, req: SaveBoardRequest) => Promise<void>>(() => Promise.resolve()),
+  previewRemoveBoard: vi.fn<(id: string) => Promise<BoardRemoval>>(() =>
+    Promise.resolve({ toNoBoard: 0, removed: 0 }),
+  ),
+  removeBoard: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
+  refreshBoard: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
+  refreshCard: vi.fn<(boardId: string, key: string) => Promise<void>>(() => Promise.resolve()),
+  cardContext: vi.fn<(boardId: string, key: string) => Promise<string>>(() =>
+    Promise.resolve("### Card: Add the login screen\n"),
+  ),
+  addRepositoryToBoard: vi.fn<(boardId: string, choice: BoardRepositoryChoice) => Promise<void>>(
+    () => Promise.resolve(),
+  ),
   setTheme: vi.fn<(preference: ThemePreference) => Promise<void>>(() => Promise.resolve()),
   setModelDefault: vi.fn<(stage: ModelStage, model: string, effort: string) => Promise<void>>(() =>
     Promise.resolve(),
@@ -222,6 +256,8 @@ export function makeState(overrides: Partial<State> = {}): State {
     reviewModeDefault: "manual",
     tasks: [],
     history: [],
+    boards: [],
+    cloneFolder: "",
     ...overrides,
   };
 }
@@ -236,6 +272,10 @@ export function makeRepository(overrides: Partial<Repository> = {}): Repository 
     missing: false,
     activeTasks: 0,
     archivedTasks: 0,
+    cloned: true,
+    boardId: "",
+    cloning: false,
+    cloneError: "",
     ...overrides,
   };
 }
@@ -249,6 +289,110 @@ export function makeRepositoryCandidate(
     fullName: "dev/web",
     path: "/home/dev/projects/web",
     registered: false,
+    ...overrides,
+  };
+}
+
+export function makeBoard(overrides: Partial<Board> = {}): Board {
+  return {
+    id: "board-1",
+    owner: "dev",
+    ownerType: "organization",
+    number: 3,
+    title: "Roadmap",
+    url: "https://github.com/orgs/dev/projects/3",
+    hasStatus: true,
+    statuses: [
+      { id: "todo", name: "Todo", final: false },
+      { id: "in-progress", name: "In progress", final: false },
+      { id: "done", name: "Done", final: true },
+    ],
+    repositoryIds: ["repo-1"],
+    readAt: "2026-09-16T12:00:00Z",
+    reading: false,
+    failure: null,
+    viewer: "dev",
+    cards: [],
+    ...overrides,
+  };
+}
+
+export function makeBoardCard(overrides: Partial<BoardCard> = {}): BoardCard {
+  return {
+    key: "dev/web#12",
+    repository: "dev/web",
+    number: 12,
+    title: "Add the login screen",
+    url: "https://github.com/dev/web/issues/12",
+    state: "open",
+    body: "Email and password.",
+    statusId: "todo",
+    status: "Todo",
+    final: false,
+    assignees: [],
+    fields: [],
+    pullRequests: [],
+    epic: null,
+    epicBody: "",
+    siblings: [],
+    dependencies: [],
+    readAt: "2026-09-16T12:00:00Z",
+    suggestedName: "12-add-the-login-screen",
+    repositoryId: "repo-1",
+    activeTaskId: "",
+    archivedTaskId: "",
+    action: "start",
+    otherBoard: "",
+    ...overrides,
+  };
+}
+
+export function makeTaskCard(overrides: Partial<TaskCard> = {}): TaskCard {
+  return {
+    boardId: "board-1",
+    key: "dev/web#12",
+    repository: "dev/web",
+    number: 12,
+    title: "Add the login screen",
+    url: "https://github.com/dev/web/issues/12",
+    status: "In progress",
+    state: "open",
+    epic: null,
+    ...overrides,
+  };
+}
+
+export function makeBoardRepositoryOption(
+  overrides: Partial<BoardRepositoryOption> = {},
+): BoardRepositoryOption {
+  return {
+    owner: "dev",
+    name: "web",
+    fullName: "dev/web",
+    cards: 4,
+    checked: true,
+    link: "registered",
+    repositoryId: "repo-1",
+    path: "/home/dev/projects/web",
+    clones: [],
+    otherBoard: "",
+    ...overrides,
+  };
+}
+
+export function makeBoardPreview(overrides: Partial<BoardPreview> = {}): BoardPreview {
+  return {
+    url: "https://github.com/orgs/dev/projects/3",
+    owner: "dev",
+    ownerType: "organization",
+    number: 3,
+    title: "Roadmap",
+    hasStatus: true,
+    statuses: [
+      { id: "todo", name: "Todo", final: false },
+      { id: "done", name: "Done", final: true },
+    ],
+    repositories: [makeBoardRepositoryOption()],
     ...overrides,
   };
 }
@@ -273,6 +417,7 @@ export function makeTask(overrides: Partial<TaskSummary> = {}): TaskSummary {
     name: "add-login",
     repositoryId: "repo-1",
     repository: "dev/web",
+    card: null,
     mode: "structured",
     stage: "prd",
     revisiting: false,
@@ -325,6 +470,7 @@ export function makeArchivedTask(overrides: Partial<ArchivedTask> = {}): Archive
     name: "add-login",
     repositoryId: "repo-1",
     repository: "dev/web",
+    card: null,
     mode: "structured",
     hasPrd: true,
     hasTechSpec: true,
@@ -646,6 +792,12 @@ export function resetWailsMock(): void {
   api.getState.mockImplementation(() => Promise.resolve(makeState()));
   api.scanRepositories.mockImplementation(() => Promise.resolve([]));
   api.addRepository.mockImplementation(() => Promise.resolve());
+  api.cloneRepository.mockImplementation(() => Promise.resolve(true));
+  api.previewBoard.mockImplementation(() => Promise.resolve(makeBoardPreview()));
+  api.previewEditBoard.mockImplementation(() => Promise.resolve(makeBoardPreview()));
+  api.checkBoardRepository.mockImplementation(() => Promise.resolve(makeBoardRepositoryOption()));
+  api.previewRemoveBoard.mockImplementation(() => Promise.resolve({ toNoBoard: 0, removed: 0 }));
+  api.cardContext.mockImplementation(() => Promise.resolve("### Card: Add the login screen\n"));
   api.createTask.mockImplementation(() => Promise.resolve("task-1"));
   api.getTranscript.mockImplementation((taskId, stage) =>
     Promise.resolve(makeTranscript({ taskId, stage })),

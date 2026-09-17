@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -14,20 +15,30 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/guilhermt/myspec/internal/gh"
 )
 
 // filterSetting is the settings key that remembers the repository filter.
 const filterSetting = "repository_filter"
+
+// cloneFolderSetting is the settings key that remembers the folder new clones
+// go into.
+const cloneFolderSetting = "clone_folder"
+
+// cloneTimeout bounds a clone, which downloads the whole history.
+const cloneTimeout = 30 * time.Minute
 
 // Store persists the registered repositories.
 type Store interface {
 	List(ctx context.Context) ([]Repository, error)
 	Insert(ctx context.Context, repo Repository) error
 	UpdatePath(ctx context.Context, id, path string) error
+	UpdateBoard(ctx context.Context, id, boardID string) error
 	Delete(ctx context.Context, id string) error
 }
 
-// Settings persists the filter; store.SettingsRepo implements it.
+// Settings persists the filter and the clone folder; store.SettingsRepo implements it.
 type Settings interface {
 	Get(ctx context.Context, key string) (string, bool, error)
 	Set(ctx context.Context, key, value string) error
@@ -38,6 +49,7 @@ type Deps struct {
 	Store         Store
 	Settings      Settings
 	Identify      func(ctx context.Context, path string) (Identity, error) // Identifier.Identify
+	Clone         func(ctx context.Context, fullName, dir string) error    // gh.Runner.Clone
 	Counts        func(id string) (active, archived int)                   // the tasks of a repository; may be nil
 	Log           *slog.Logger
 	Now           func() time.Time // defaults to time.Now
@@ -53,6 +65,7 @@ type Service struct {
 	store         Store
 	settings      Settings
 	identify      func(ctx context.Context, path string) (Identity, error)
+	clone         func(ctx context.Context, fullName, dir string) error
 	counts        func(id string) (active, archived int)
 	log           *slog.Logger
 	now           func() time.Time
@@ -61,10 +74,13 @@ type Service struct {
 	onPathChanged func(id string)
 	scanRoot      string
 
-	mu      sync.Mutex
-	items   []Repository    // by owner/name, ignoring case
-	missing map[string]bool // by id: the clone was not there at the last check
-	filter  string          // "" for every repository
+	mu          sync.Mutex
+	items       []Repository      // by owner/name, ignoring case
+	missing     map[string]bool   // by id: the clone was not there at the last check
+	filter      string            // "" for every repository
+	cloning     map[string]bool   // by id: a clone runs now
+	cloneErrors map[string]string // by id: what gh said when the last clone failed
+	cloneFolder string            // "" until chosen
 }
 
 // New builds a Service from deps.
@@ -97,6 +113,7 @@ func New(deps Deps) *Service {
 		store:         deps.Store,
 		settings:      deps.Settings,
 		identify:      deps.Identify,
+		clone:         deps.Clone,
 		counts:        counts,
 		log:           log,
 		now:           now,
@@ -105,11 +122,13 @@ func New(deps Deps) *Service {
 		onPathChanged: deps.OnPathChanged,
 		scanRoot:      scanRoot,
 		missing:       map[string]bool{},
+		cloning:       map[string]bool{},
+		cloneErrors:   map[string]string{},
 	}
 }
 
 // Sync loads the registered repositories, checks every clone and reads the
-// filter. A filter that names no registered repository counts as every
+// filter and the clone folder. A filter that names no registered repository counts as every
 // repository, and is left as it is in the settings. It does not call OnChange.
 func (s *Service) Sync(ctx context.Context) error {
 	items, err := s.store.List(ctx)
@@ -120,12 +139,16 @@ func (s *Service) Sync(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("read setting %s: %w", filterSetting, err)
 	}
+	cloneFolder, _, err := s.settings.Get(ctx, cloneFolderSetting)
+	if err != nil {
+		return fmt.Errorf("read setting %s: %w", cloneFolderSetting, err)
+	}
 
 	slices.SortStableFunc(items, compare)
 	missing := map[string]bool{}
 	known := false
 	for _, repo := range items {
-		if !IsClone(repo.Path) {
+		if repo.Cloned() && !IsClone(repo.Path) {
 			missing[repo.ID] = true
 			s.log.Warn("repository clone missing", "repository", repo.FullName(), "path", repo.Path)
 		}
@@ -136,7 +159,7 @@ func (s *Service) Sync(ctx context.Context) error {
 	}
 
 	s.mu.Lock()
-	s.items, s.missing, s.filter = items, missing, filter
+	s.items, s.missing, s.filter, s.cloneFolder = items, missing, filter, cloneFolder
 	s.mu.Unlock()
 	return nil
 }
@@ -169,12 +192,16 @@ func (s *Service) Missing(id string) bool {
 	return s.missing[id]
 }
 
-// Check looks at the clone of id now. It refuses as clone_missing when the
-// clone is not there, and calls OnChange when that differs from the last check.
+// Check looks at the clone of id now. It refuses as not_cloned when the
+// repository has no clone and as clone_missing when the clone is not there, and
+// calls OnChange when that differs from the last check.
 func (s *Service) Check(id string) (Repository, error) {
 	repo, ok := s.Get(id)
 	if !ok {
 		return Repository{}, fmt.Errorf("check repository %s: %w", id, ErrNotFound)
+	}
+	if !repo.Cloned() {
+		return Repository{}, &Refusal{Reason: ReasonNotCloned, Repository: repo.FullName()}
 	}
 
 	gone := !IsClone(repo.Path)
@@ -206,8 +233,9 @@ func (s *Service) Check(id string) (Repository, error) {
 	return repo, nil
 }
 
-// Add registers the repository the clone at path belongs to. It refuses what
-// Identify refuses, and a repository already registered.
+// Add registers the repository the clone at path belongs to. A repository
+// registered without a clone is tied to path instead. It refuses what Identify
+// refuses, and a repository already registered with a clone.
 func (s *Service) Add(ctx context.Context, path string) (Repository, error) {
 	path = filepath.Clean(path)
 	identity, err := s.identifyAt(ctx, path)
@@ -217,10 +245,20 @@ func (s *Service) Add(ctx context.Context, path string) (Repository, error) {
 
 	s.mu.Lock()
 	for _, registered := range s.items {
-		if registered.Identity().Same(identity) {
-			s.mu.Unlock()
+		if !registered.Identity().Same(identity) {
+			continue
+		}
+		s.mu.Unlock()
+		if registered.Cloned() {
 			return Repository{}, &Refusal{Reason: ReasonRegistered, Repository: registered.FullName(), Path: registered.Path}
 		}
+		repo, err := s.link(ctx, registered.ID, path)
+		if err != nil {
+			return Repository{}, err
+		}
+		s.log.Info("repository clone linked", "repository", repo.FullName(), "path", path)
+		s.changed()
+		return repo, nil
 	}
 	repo := Repository{
 		ID:        s.newID(),
@@ -265,27 +303,166 @@ func (s *Service) ChangePath(ctx context.Context, id, path string) (Repository, 
 		}
 	}
 
+	repo, err = s.link(ctx, id, path)
+	if err != nil {
+		return Repository{}, err
+	}
+	s.log.Info("repository path changed", "repository", repo.FullName(), "path", path)
+	s.changed()
+	return repo, nil
+}
+
+// link ties the repository of id to the clone at path, which the caller made
+// sure is a clone of that repository, and calls OnPathChanged. It does not
+// call OnChange.
+func (s *Service) link(ctx context.Context, id, path string) (Repository, error) {
 	s.mu.Lock()
 	i := s.index(id)
 	if i < 0 {
 		s.mu.Unlock()
-		return Repository{}, fmt.Errorf("change path of repository %s: %w", id, ErrNotFound)
+		return Repository{}, fmt.Errorf("link repository %s: %w", id, ErrNotFound)
 	}
 	if err := s.store.UpdatePath(ctx, id, path); err != nil {
 		s.mu.Unlock()
-		return Repository{}, fmt.Errorf("update path of repository %s: %w", repo.FullName(), err)
+		return Repository{}, fmt.Errorf("update path of repository %s: %w", s.items[i].FullName(), err)
 	}
 	s.items[i].Path = path
-	repo = s.items[i]
+	repo := s.items[i]
 	delete(s.missing, id)
 	s.mu.Unlock()
 
-	s.log.Info("repository path changed", "repository", repo.FullName(), "path", path)
 	if s.onPathChanged != nil {
 		s.onPathChanged(id)
 	}
-	s.changed()
 	return repo, nil
+}
+
+// Cloning reports whether a clone of id runs now, and what the last one that
+// failed said.
+func (s *Service) Cloning(id string) (running bool, failure string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return s.cloning[id], s.cloneErrors[id]
+}
+
+// CloneFolder is the folder new clones go into; "" until the user chose one.
+func (s *Service) CloneFolder() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return s.cloneFolder
+}
+
+// SetCloneFolder remembers the folder new clones go into.
+func (s *Service) SetCloneFolder(ctx context.Context, path string) error {
+	if path != "" {
+		path = filepath.Clean(path)
+	}
+
+	s.mu.Lock()
+	if err := s.settings.Set(ctx, cloneFolderSetting, path); err != nil {
+		s.mu.Unlock()
+		return fmt.Errorf("write setting %s: %w", cloneFolderSetting, err)
+	}
+	s.cloneFolder = path
+	s.mu.Unlock()
+
+	s.changed()
+	return nil
+}
+
+// Clone clones the repository of id into <clone folder>/<name>, in the
+// background: Cloning reports it while it runs and what it said when it
+// failed. A folder there that is already a clone of the repository is linked
+// without cloning; one with anything else is refused as path_taken. It does
+// nothing while a clone of id runs.
+func (s *Service) Clone(ctx context.Context, id string) error {
+	s.mu.Lock()
+	i := s.index(id)
+	if i < 0 {
+		s.mu.Unlock()
+		return fmt.Errorf("clone repository %s: %w", id, ErrNotFound)
+	}
+	repo, running, folder := s.items[i], s.cloning[id], s.cloneFolder
+	s.mu.Unlock()
+
+	switch {
+	case repo.Cloned():
+		return fmt.Errorf("clone repository %s: %w", repo.FullName(), ErrCloned)
+	case running:
+		return nil
+	case folder == "":
+		return fmt.Errorf("clone repository %s: %w", repo.FullName(), ErrNoCloneFolder)
+	}
+
+	dir := filepath.Join(folder, repo.Name)
+	if _, err := os.Lstat(dir); err == nil {
+		identity, identifyErr := s.identify(ctx, dir)
+		if identifyErr != nil || !repo.Identity().Same(identity) {
+			return &Refusal{Reason: ReasonPathTaken, Path: dir, Repository: repo.FullName()}
+		}
+		linked, linkErr := s.link(ctx, id, dir)
+		if linkErr != nil {
+			return linkErr
+		}
+		s.log.Info("repository clone linked", "repository", linked.FullName(), "path", dir)
+		s.changed()
+		return nil
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("clone repository %s: %w", repo.FullName(), err)
+	}
+
+	s.mu.Lock()
+	if s.cloning[id] {
+		s.mu.Unlock()
+		return nil
+	}
+	s.cloning[id] = true
+	delete(s.cloneErrors, id)
+	s.mu.Unlock()
+
+	s.changed()
+	s.log.Info("repository clone started", "repository", repo.FullName(), "path", dir)
+	//nolint:gosec // G118: the clone outlives the call that started it, bounded by cloneTimeout
+	go s.runClone(id, repo.FullName(), dir)
+	return nil
+}
+
+// runClone clones fullName into dir, which did not exist, and links the
+// repository of id to it. A failed clone leaves no dir behind and keeps what
+// gh said for Cloning. A repository removed while its clone ran keeps nothing
+// of it.
+func (s *Service) runClone(id, fullName, dir string) {
+	ctx, cancel := context.WithTimeout(context.Background(), cloneTimeout)
+	defer cancel()
+
+	failure := ""
+	if err := s.clone(ctx, fullName, dir); err != nil {
+		failure = err.Error()
+		var ghErr *gh.Error
+		if errors.As(err, &ghErr) && ghErr.Output != "" {
+			failure = ghErr.Output
+		}
+		if removeErr := os.RemoveAll(dir); removeErr != nil {
+			err = errors.Join(err, removeErr)
+		}
+		s.log.Warn("repository clone failed", "repository", fullName, "path", dir, "error", err)
+	} else if _, err := s.link(ctx, id, dir); err != nil {
+		failure = err.Error()
+		s.log.Warn("repository clone failed", "repository", fullName, "path", dir, "error", err)
+	} else {
+		s.log.Info("repository cloned", "repository", fullName, "path", dir)
+	}
+
+	s.mu.Lock()
+	delete(s.cloning, id)
+	if failure != "" && s.index(id) >= 0 {
+		s.cloneErrors[id] = failure
+	}
+	s.mu.Unlock()
+
+	s.changed()
 }
 
 // Remove forgets the repository of id. It refuses while the repository has
@@ -310,6 +487,10 @@ func (s *Service) Remove(ctx context.Context, id string) error {
 		s.items = slices.Delete(s.items, i, i+1)
 	}
 	delete(s.missing, repo.ID)
+	// A clone of the repository may still be running: what it records when it
+	// ends belongs to a repository that is gone.
+	delete(s.cloning, repo.ID)
+	delete(s.cloneErrors, repo.ID)
 	var filterErr error
 	if s.filter == repo.ID {
 		s.filter = ""

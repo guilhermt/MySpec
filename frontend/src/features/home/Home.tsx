@@ -1,12 +1,21 @@
 import { ListTodo, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
-import { useAppStore, useTasks } from "@/store/app-store";
+import { BoardView } from "@/features/board/BoardView";
+import { useAppStore, useBoards, useTasks } from "@/store/app-store";
 
-/** Home is the main area with no task open: what to do next, and the way to do it. */
+/**
+ * Home is the main area with nothing else open: the first board while there is
+ * no task, otherwise what to do next and the way to do it.
+ */
 export function Home() {
   const openNewTask = useAppStore((state) => state.openNewTask);
   const tasks = useTasks();
+  const [firstBoard] = useBoards();
+
+  if (tasks.length === 0 && firstBoard !== undefined) {
+    return <BoardView boardId={firstBoard.id} />;
+  }
 
   const title = tasks.length === 0 ? "No tasks yet" : "No task open";
   const description =

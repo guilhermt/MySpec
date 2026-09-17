@@ -1,6 +1,7 @@
-import { FolderPlus } from "lucide-react";
+import { FolderPlus, SquareKanban } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { BoardDialog } from "@/features/boards/BoardDialog";
 import { AddRepositoryDialog } from "@/features/repositories/AddRepositoryDialog";
 
 /** AppMark is the logo of the app, on the screens that stand in for the product. */
@@ -30,6 +31,7 @@ export function WelcomeScreen() {
   // A registration through the dialog swaps this screen for the product by
   // itself, through the state.
   const [adding, setAdding] = useState(false);
+  const [addingBoard, setAddingBoard] = useState(false);
 
   return (
     <main className="flex h-dvh items-center justify-center bg-background px-6 text-foreground">
@@ -39,14 +41,23 @@ export function WelcomeScreen() {
             <AppMark />
             <h1 className="text-[2.125rem] font-semibold leading-none">MySpec</h1>
           </div>
-          <p className="text-muted-foreground">Register a repository to start creating tasks.</p>
+          <p className="text-muted-foreground">
+            Register a board or a repository to start creating tasks.
+          </p>
         </header>
 
-        <Button onClick={() => setAdding(true)} className="w-full">
-          <FolderPlus />
-          Add repository
-        </Button>
+        <div className="grid grid-cols-2 gap-3">
+          <Button onClick={() => setAddingBoard(true)}>
+            <SquareKanban />
+            Add board
+          </Button>
+          <Button variant="outline" onClick={() => setAdding(true)}>
+            <FolderPlus />
+            Add repository
+          </Button>
+        </div>
       </div>
+      <BoardDialog mode="add" open={addingBoard} onOpenChange={setAddingBoard} />
       <AddRepositoryDialog open={adding} onOpenChange={setAdding} />
     </main>
   );

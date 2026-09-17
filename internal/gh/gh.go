@@ -1,5 +1,5 @@
-// Package gh runs the gh binary. It only reads: the pull requests are opened
-// by the agent, inside its own session.
+// Package gh runs the gh binary. It reads from GitHub and clones repositories;
+// the pull requests are opened by the agent, inside its own session.
 package gh
 
 import (
@@ -74,6 +74,7 @@ type Error struct {
 	Args     []string // the command line after "gh"
 	Dir      string
 	Output   string // stderr, or stdout when stderr is empty; trimmed
+	Stdout   string // stdout, trimmed; gh api writes the answer of a failure there
 	ExitCode int    // -1 when the process did not exit on its own
 	Err      error  // the exec error, or the context error when it was cancelled
 }
@@ -135,6 +136,7 @@ func (r *Runner) Run(ctx context.Context, dir string, args ...string) (string, e
 			Args:     args,
 			Dir:      dir,
 			Output:   output(stdout.String(), stderr.String()),
+			Stdout:   strings.TrimSpace(stdout.String()),
 			ExitCode: exitCode,
 			Err:      runErr,
 		}

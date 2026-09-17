@@ -23,6 +23,7 @@ func TestGetStateHandsTheFrontendTheSnapshot(t *testing.T) {
 		Name:     "web",
 		FullName: "dev/web",
 		Path:     dir,
+		Cloned:   true,
 	}}
 	if diff := cmp.Diff(want, got.Repositories); diff != "" {
 		t.Errorf("repositories mismatch (-want +got):\n%s", diff)
@@ -31,7 +32,7 @@ func TestGetStateHandsTheFrontendTheSnapshot(t *testing.T) {
 		t.Errorf("filter = %q, want every repository", got.RepositoryFilter)
 	}
 	// The frontend maps over both lists without checking for null.
-	if got.Tasks == nil || got.History == nil {
+	if got.Tasks == nil || got.History == nil || got.Boards == nil {
 		t.Errorf("state = %+v, want empty slices", got)
 	}
 }

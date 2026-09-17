@@ -1,5 +1,6 @@
-import { FolderGit2, SlidersHorizontal } from "lucide-react";
+import { FolderGit2, SlidersHorizontal, SquareKanban } from "lucide-react";
 import { type ReactNode, useId } from "react";
+import { BoardsPage } from "@/features/boards/BoardsPage";
 import { RepositoriesPage } from "@/features/repositories/RepositoriesPage";
 import { Defaults } from "@/features/settings/Defaults";
 import { DiscardChangesDialog } from "@/features/settings/DiscardChangesDialog";
@@ -29,7 +30,7 @@ function NavItem({ section, children }: { section: SettingsSection; children: Re
   );
 }
 
-/** SettingsView is the settings of the app: the defaults of a new task, the repositories and the prompts. */
+/** SettingsView is the settings of the app: the defaults of a new task, the boards, the repositories and the prompts. */
 export function SettingsView() {
   const { settingsSection } = useSettingsUi();
   const promptsId = useId();
@@ -41,6 +42,10 @@ export function SettingsView() {
         <NavItem section="defaults">
           <SlidersHorizontal aria-hidden="true" />
           Defaults
+        </NavItem>
+        <NavItem section="boards">
+          <SquareKanban aria-hidden="true" />
+          Boards
         </NavItem>
         <NavItem section="repositories">
           <FolderGit2 aria-hidden="true" />
@@ -60,6 +65,8 @@ export function SettingsView() {
       <div className="min-w-0 flex-1">
         {settingsSection === "defaults" ? (
           <Defaults />
+        ) : settingsSection === "boards" ? (
+          <BoardsPage />
         ) : settingsSection === "repositories" ? (
           <RepositoriesPage />
         ) : (

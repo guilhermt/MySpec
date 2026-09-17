@@ -68,7 +68,9 @@ func Main(m *testing.M) {
 }
 
 // New prepares a fake gh whose answers are replies, keyed by the gh
-// subcommand they belong to — "auth", "pr".
+// subcommand they belong to — "auth", "pr" — or by the subcommand and what
+// follows it — "api rate_limit" — which tells two runs of the same subcommand
+// apart. The more specific key wins.
 func New(t *testing.T, replies map[string]Reply) *GH {
 	t.Helper()
 
@@ -127,14 +129,15 @@ func answer(home string, args []string) int {
 		return noReplyExit
 	}
 
+	name := replyName(home, args)
 	//nolint:gosec // G703: home and the subcommand are the test's own, not user input
-	code, err := os.ReadFile(filepath.Join(home, args[0]+".code"))
+	code, err := os.ReadFile(filepath.Join(home, name+".code"))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "ghtest: no reply for gh %s\n", strings.Join(args, " "))
 		return noReplyExit
 	}
-	copyTo(os.Stdout, filepath.Join(home, args[0]+".out"))
-	copyTo(os.Stderr, filepath.Join(home, args[0]+".err"))
+	copyTo(os.Stdout, filepath.Join(home, name+".out"))
+	copyTo(os.Stderr, filepath.Join(home, name+".err"))
 
 	exit, err := strconv.Atoi(strings.TrimSpace(string(code)))
 	if err != nil {
@@ -142,6 +145,19 @@ func answer(home string, args []string) int {
 		return noReplyExit
 	}
 	return exit
+}
+
+// replyName is the key of the reply this run answers with: the subcommand and
+// what follows it when the test wrote one, the subcommand alone otherwise.
+func replyName(home string, args []string) string {
+	if len(args) > 1 {
+		specific := args[0] + " " + args[1]
+		//nolint:gosec // G703: home and the subcommand are the test's own, not user input
+		if _, err := os.Stat(filepath.Join(home, specific+".code")); err == nil {
+			return specific
+		}
+	}
+	return args[0]
 }
 
 // record appends the run to the calls of the fake and leaves its environment

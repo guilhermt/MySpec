@@ -54,7 +54,7 @@ export function App() {
           </div>
         </div>
       )}
-      {(app.repositories ?? []).length === 0 ? (
+      {(app.repositories ?? []).length === 0 && (app.boards ?? []).length === 0 ? (
         <WelcomeScreen />
       ) : (
         <>

@@ -22,9 +22,10 @@ O board que orienta a ideia é o [Faturamento](https://github.com/orgs/ICSF-Fatu
 - **Não existe mais workspace.** O produto cadastra boards e, em cada board, os repositórios que ele administra. A visão principal mostra tudo de todos os boards; board e repositório são filtros, não contextos. Se um agrupamento por pasta ainda fizer sentido, ele é no máximo um filtro, nunca uma feature central. As worktrees passam a viver num diretório do produto.
 - **Card é task, e uma task toca um único repositório.** Cada card vira exatamente uma task, e cada task abre exatamente uma pull request. Isso é o 1:1 entre card e pull request que o board já pede. Trabalho que toca mais de um repositório é sempre um épico com um card por repositório. A task de raiz, que hoje atravessa repositórios com um PRD e steps em vários repositórios, deixa de existir.
 - **Épico é contexto e agrupamento, não uma task.** Um épico reúne cards, dá a eles contexto compartilhado e uma ordem. Ele nunca é implementado; os cards são. Um épico pode ser multi-repositório, com um card por repositório, ou de um único repositório, quando o trabalho é grande e vira uma sequência de cards no mesmo lugar. Trabalho multi-repositório sempre precisa de um épico para centralizá-lo, a menos que sejam tasks independentes ligadas só por dependência.
-- **Épico é uma issue com sub-issues**, o recurso nativo do GitHub, e não a convenção no corpo da issue usada hoje.
+- **Épico é uma issue com sub-issues**, o recurso nativo do GitHub, e não a convenção no corpo da issue usada hoje. O produto lê a convenção nos cards que já a usam, junto das relações nativas, e nunca a escreve; é assim que a task `boards` já funciona.
 - **Dependência é uma relação entre cards**, com ou sem épico. Uma sequência de cards não precisa de um épico pai.
 - **Task sem card continua existindo.** Nem todo trabalho merece um card no board: algo pessoal, um experimento, este próprio repositório. Criar uma task diretamente, como hoje, segue possível.
+- **GitHub pelo `gh`.** O produto lê e escreve no GitHub pelo `gh` já autenticado na máquina, com a conta dele, sem conta nem token próprios.
 - **Não automatizar o trivial.** O que leva um clique no GitHub fica no GitHub: estimativa, responsável, datas, status do card. O esforço vai para o que é trabalho de verdade: entender, escrever, revisar.
 
 ## O modelo
@@ -84,11 +85,6 @@ Sem workspace, a barra lateral passa a ser: **Waiting for you** no topo, como ho
 - Responder threads da pull request pelo produto.
 - Preencher estimativa, responsável, datas e os demais campos do board.
 - Bloquear uma task por dependência não mergeada; é só um aviso.
-
-## Em aberto
-
-- Os cards existentes usam a convenção de épico e dependência no corpo. O produto passa a criar épicos como sub-issues; se ele deve ler a convenção antiga nos cards que já existem é uma decisão para o PRD da frente de boards.
-- Como o produto se autentica no GitHub e com qual conta, dado que hoje ele depende do `gh` já autenticado.
 
 ## Ordem sugerida
 

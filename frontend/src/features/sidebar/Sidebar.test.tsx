@@ -16,7 +16,7 @@ describe("Sidebar", () => {
     expect(
       screen.getByRole("button", { name: "Repository filter: All repositories" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: /^add-login,/ })).toBeInTheDocument();
+    expect(screen.getByRole("treeitem", { name: /^add-login,/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^History/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument();
     expect(screen.getByRole("group", { name: "Theme" })).toBeInTheDocument();

@@ -12,6 +12,7 @@ import { DeleteTaskDialog } from "@/features/task/DeleteTaskDialog";
 import { OneShotView } from "@/features/task/OneShotView";
 import { StepDocument } from "@/features/task/StepDocument";
 import { StepReportList } from "@/features/task/StepList";
+import { TaskCardBadge } from "@/features/task/TaskCardBadge";
 import { useArtifact } from "@/features/task/useArtifact";
 import { findStepReport, stepReportLabel } from "@/lib/review-modes";
 import { isOneShot } from "@/lib/task-modes";
@@ -118,6 +119,7 @@ export function ArchivedTaskView({ taskId }: ArchivedTaskViewProps) {
         <span className="min-w-0 truncate font-medium">{task.name}</span>
         {oneShot && <Badge variant="outline">One-Shot</Badge>}
         <Badge variant="secondary">{task.repository}</Badge>
+        {task.card !== null && <TaskCardBadge card={task.card} />}
         <Badge variant="outline">Archived</Badge>
 
         <span className="flex-1" />

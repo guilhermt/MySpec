@@ -40,6 +40,7 @@ type Store interface {
 	UpdateArchived(ctx context.Context, id string, archivedAt, updatedAt time.Time) error
 	UpdateModels(ctx context.Context, id string, m Models, updatedAt time.Time) error
 	UpdateReviewModes(ctx context.Context, id string, m ReviewModes, updatedAt time.Time) error
+	UpdateCard(ctx context.Context, taskID string, c Card) error
 	Delete(ctx context.Context, id string) error
 	ListStepRuns(ctx context.Context, taskID string) ([]StepRun, error)
 	UpsertStepRun(ctx context.Context, run StepRun) error
@@ -224,6 +225,7 @@ type CreateParams struct {
 	Models         models.Set      // a choice for every stage: the defaults with what the user adjusted
 	ReviewMode     reviewmode.Mode // the mode of the task: the default, or what the user picked
 	Mode           Mode            // the mode of the task; "" is Structured
+	Card           *Card           // the card the task is created from; nil for none
 }
 
 // Create validates, creates the artifact folder, persists and watches the task.
@@ -233,7 +235,7 @@ func (s *Service) Create(ctx context.Context, p CreateParams) (Task, error) {
 		return Task{}, err
 	}
 	initialContext := strings.TrimSpace(p.InitialContext)
-	if initialContext == "" {
+	if initialContext == "" && p.Card == nil {
 		return Task{}, ErrEmptyContext
 	}
 
@@ -245,6 +247,12 @@ func (s *Service) Create(ctx context.Context, p CreateParams) (Task, error) {
 	repo, ok := s.repositories(p.RepositoryID)
 	if !ok {
 		return Task{}, fmt.Errorf("create task %s: %w", name, ErrUnknownRepository)
+	}
+
+	if p.Card != nil {
+		if err := s.checkCardFree(*p.Card); err != nil {
+			return Task{}, err
+		}
 	}
 
 	now := s.now().UTC()
@@ -260,6 +268,7 @@ func (s *Service) Create(ctx context.Context, p CreateParams) (Task, error) {
 		ReviewModes:    ReviewModes{Task: cmp.Or(p.ReviewMode, reviewmode.Manual)},
 		CreatedAt:      now,
 		UpdatedAt:      now,
+		Card:           cloneCard(p.Card),
 	}
 
 	// A folder already there belongs to a task with this name, or is what a
@@ -292,9 +301,124 @@ func (s *Service) Create(ctx context.Context, p CreateParams) (Task, error) {
 	s.mu.Unlock()
 
 	s.watch(t)
-	s.log.Info("task created", "task", t.ID, "name", t.Name, "repository", repo.FullName(), "mode", string(t.Mode))
+	cardKey := ""
+	if t.Card != nil {
+		cardKey = t.Card.Key()
+	}
+	s.log.Info("task created", "task", t.ID, "name", t.Name, "repository", repo.FullName(), "mode", string(t.Mode),
+		"card", cardKey)
 	s.changed()
 	return t, nil
+}
+
+// checkCardFree refuses a card that already has an active task.
+func (s *Service) checkCardFree(c Card) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	key := c.Key()
+	for _, t := range s.tasks {
+		if t.Card != nil && t.Card.Key() == key {
+			return &CardTakenError{Number: c.Number, TaskName: t.Name}
+		}
+	}
+	return nil
+}
+
+// UpdateCards records what a reading of the board saw of the cards of its active
+// tasks, keyed by Card.Key. A task whose card is not in updates keeps what it has.
+// Archived tasks keep the card as it was when they were archived.
+func (s *Service) UpdateCards(ctx context.Context, boardID string, updates map[string]CardUpdate) error {
+	s.mu.Lock()
+	var pending []Task
+	for _, t := range s.tasks {
+		if t.Card == nil || t.Card.BoardID != boardID {
+			continue
+		}
+		update, ok := updates[t.Card.Key()]
+		if !ok {
+			continue
+		}
+		card := applyCardUpdate(*t.Card, update)
+		if sameCard(card, *t.Card) {
+			continue
+		}
+		t.Card = &card
+		pending = append(pending, t)
+	}
+	s.mu.Unlock()
+
+	changed := false
+	var err error
+	for _, t := range pending {
+		if err = s.repo.UpdateCard(ctx, t.ID, *t.Card); err != nil {
+			break
+		}
+		s.mu.Lock()
+		if index := indexOf(s.tasks, t.ID); index >= 0 {
+			s.tasks[index].Card = t.Card
+		}
+		s.mu.Unlock()
+		changed = true
+	}
+	if changed {
+		s.changed()
+	}
+	return err
+}
+
+// applyCardUpdate is a card with what a reading saw of it.
+func applyCardUpdate(c Card, u CardUpdate) Card {
+	c.Title = u.Title
+	c.Body = u.Body
+	c.URL = u.URL
+	c.Status = u.Status
+	c.State = u.State
+	c.Epic = cloneEpic(u.Epic)
+	c.ReadAt = u.ReadAt
+	return c
+}
+
+// sameCard reports whether two cards hold the same values.
+func sameCard(a, b Card) bool {
+	sameEpic := a.Epic == nil && b.Epic == nil || a.Epic != nil && b.Epic != nil && *a.Epic == *b.Epic
+	a.Epic, b.Epic = nil, nil
+	sameReadAt := a.ReadAt.Equal(b.ReadAt)
+	a.ReadAt, b.ReadAt = time.Time{}, time.Time{}
+	return sameEpic && sameReadAt && a == b
+}
+
+// CardTaskIDs are the tasks created from one card: the active one and the most
+// recently archived one; "" for none.
+type CardTaskIDs struct{ Active, Archived string }
+
+// CardTasks are the tasks created from a card: for each card key, the active task
+// and the most recently archived one; "" for none.
+func (s *Service) CardTasks() map[string]CardTaskIDs {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	out := map[string]CardTaskIDs{}
+	for _, t := range s.tasks {
+		if t.Card == nil {
+			continue
+		}
+		ids := out[t.Card.Key()]
+		ids.Active = t.ID
+		out[t.Card.Key()] = ids
+	}
+	// The history is newest first, so the first archived task of a card wins.
+	for _, t := range s.archived {
+		if t.Card == nil {
+			continue
+		}
+		ids := out[t.Card.Key()]
+		if ids.Archived == "" {
+			ids.Archived = t.ID
+			out[t.Card.Key()] = ids
+		}
+	}
+	return out
 }
 
 // Archive takes a task out of the active list and into the history. Only an
@@ -1087,6 +1211,26 @@ func (s *Service) changed() {
 	if s.onChange != nil {
 		s.onChange()
 	}
+}
+
+// cloneCard copies a card and its epic, so that what a caller holds never
+// changes under it.
+func cloneCard(c *Card) *Card {
+	if c == nil {
+		return nil
+	}
+	card := *c
+	card.Epic = cloneEpic(c.Epic)
+	return &card
+}
+
+// cloneEpic copies an epic.
+func cloneEpic(e *CardEpic) *CardEpic {
+	if e == nil {
+		return nil
+	}
+	epic := *e
+	return &epic
 }
 
 // indexOf finds a task by id, -1 when the list does not hold it.

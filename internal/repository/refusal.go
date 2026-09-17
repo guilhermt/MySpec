@@ -14,15 +14,17 @@ const (
 	ReasonRegistered      Reason = "already_registered" // owner/name is registered at another path
 	ReasonOtherRepository Reason = "other_repository"   // the new path is a clone of another repository
 	ReasonHasTasks        Reason = "has_tasks"          // the repository still has tasks
+	ReasonNotCloned       Reason = "not_cloned"         // the repository has no clone yet
+	ReasonPathTaken       Reason = "path_taken"         // the clone target exists and is not a clone of the repository
 )
 
 // Refusal is a folder or a repository the app refuses, with everything the
 // sentence the user reads needs.
 type Refusal struct {
 	Reason     Reason
-	Path       string // the folder chosen, or the registered path for clone_missing and already_registered
+	Path       string // the folder chosen, the registered path for clone_missing and already_registered, the clone target for path_taken
 	URL        string // not_github: the origin remote
-	Repository string // already_registered, other_repository, has_tasks: owner/name of the registered repository
+	Repository string // already_registered, other_repository, has_tasks, not_cloned, path_taken: owner/name of the registered repository
 	Other      string // other_repository: owner/name of the folder chosen
 	Active     int    // has_tasks
 	Archived   int    // has_tasks
@@ -48,6 +50,10 @@ func (r *Refusal) Message() string {
 	case ReasonHasTasks:
 		return r.Repository + " has " + tasks(r.Active, "active") + " and " + tasks(r.Archived, "archived") +
 			". Delete them before removing the repository."
+	case ReasonNotCloned:
+		return r.Repository + " isn't cloned yet."
+	case ReasonPathTaken:
+		return r.Path + " already exists and is not a clone of " + r.Repository + "."
 	default:
 		return r.Path + " is refused: " + string(r.Reason) + "."
 	}

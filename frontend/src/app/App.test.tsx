@@ -6,7 +6,9 @@ import { useAppStore } from "@/store/app-store";
 import { renderWithStore, resetAppStore } from "@/test/render";
 import {
   makeArchivedTask,
+  makeBoard,
   makeMigration,
+  makeRepository,
   makeSituation,
   makeState,
   makeTask,
@@ -61,6 +63,19 @@ describe("App", () => {
     expect(await screen.findByRole("button", { name: /^Add repository/ })).toBeInTheDocument();
   });
 
+  it("leaves the welcome screen once a board is registered, even without a repository", async () => {
+    vi.mocked(api.getState).mockResolvedValue(
+      makeState({ repositories: [], boards: [makeBoard()] }),
+    );
+
+    renderWithStore(<App />);
+
+    expect(await screen.findByRole("button", { name: "Settings" })).toBeInTheDocument();
+    expect(
+      screen.queryByText("Register a board or a repository to start creating tasks."),
+    ).not.toBeInTheDocument();
+  });
+
   it("renders the migration screen when the data could not be updated", async () => {
     vi.mocked(api.getState).mockResolvedValue(makeState({ migration: makeMigration() }));
 
@@ -97,12 +112,12 @@ describe("App", () => {
   it("opens the first entry waiting for the user on Ctrl+J, leaving the open task out", async () => {
     vi.mocked(api.getState).mockResolvedValue(waitingState());
     const { user } = renderWithStore(<App />);
-    await screen.findByRole("listbox", { name: "Tasks" });
+    await screen.findByRole("tree", { name: "Tasks" });
 
     // The error comes before the reply, though it started later.
     await user.keyboard("{Control>}j{/Control}");
 
-    expect(await screen.findByRole("option", { name: /^fix-header,/ })).toHaveAttribute(
+    expect(await screen.findByRole("treeitem", { name: /^fix-header,/ })).toHaveAttribute(
       "aria-selected",
       "true",
     );
@@ -111,7 +126,7 @@ describe("App", () => {
     // The task on screen is not an entry any more: the next one is.
     await user.keyboard("{Control>}j{/Control}");
 
-    expect(screen.getByRole("option", { name: /^add-login,/ })).toHaveAttribute(
+    expect(screen.getByRole("treeitem", { name: /^add-login,/ })).toHaveAttribute(
       "aria-selected",
       "true",
     );
@@ -120,12 +135,12 @@ describe("App", () => {
   it("changes nothing on Ctrl+J when nothing waits for the user", async () => {
     vi.mocked(api.getState).mockResolvedValue(makeState({ tasks: [makeTask()] }));
     const { user } = renderWithStore(<App />);
-    await screen.findByRole("listbox", { name: "Tasks" });
+    await screen.findByRole("tree", { name: "Tasks" });
 
     await user.keyboard("{Control>}j{/Control}");
 
     expect(screen.getByText("No task open")).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: /^add-login,/ })).toHaveAttribute(
+    expect(screen.getByRole("treeitem", { name: /^add-login,/ })).toHaveAttribute(
       "aria-selected",
       "false",
     );
@@ -135,7 +150,7 @@ describe("App", () => {
     vi.mocked(api.getState).mockResolvedValue(waitingState());
     const { user } = renderWithStore(<App />);
 
-    await user.click(await screen.findByRole("option", { name: /^add-login,/ }));
+    await user.click(await screen.findByRole("treeitem", { name: /^add-login,/ }));
     const box = await screen.findByPlaceholderText("Reply to the agent…");
     // Focused directly: jsdom lays nothing out, so a click lands on the resize handle.
     act(() => box.focus());
@@ -144,7 +159,7 @@ describe("App", () => {
 
     await user.keyboard("{Control>}j{/Control}");
 
-    expect(await screen.findByRole("option", { name: /^fix-header,/ })).toHaveAttribute(
+    expect(await screen.findByRole("treeitem", { name: /^fix-header,/ })).toHaveAttribute(
       "aria-selected",
       "true",
     );
@@ -155,7 +170,7 @@ describe("App", () => {
   it("leaves the creation dialog where it is on Ctrl+J", async () => {
     vi.mocked(api.getState).mockResolvedValue(waitingState());
     const { user } = renderWithStore(<App />);
-    await screen.findByRole("listbox", { name: "Tasks" });
+    await screen.findByRole("tree", { name: "Tasks" });
     await user.keyboard("{Control>}n{/Control}");
     await screen.findByRole("heading", { name: "New task" });
 
@@ -191,6 +206,18 @@ describe("App", () => {
     expect(screen.queryByRole("heading", { name: "Defaults" })).not.toBeInTheDocument();
   });
 
+  it("opens the settings on Ctrl+, with a board registered and no repository", async () => {
+    vi.mocked(api.getState).mockResolvedValue(
+      makeState({ repositories: [], boards: [makeBoard()] }),
+    );
+    const { user } = renderWithStore(<App />);
+    await screen.findByRole("button", { name: "Settings" });
+
+    await user.keyboard("{Control>},{/Control}");
+
+    expect(await screen.findByRole("heading", { name: "Defaults" })).toBeInTheDocument();
+  });
+
   it("leaves Ctrl+, alone without a registered repository", async () => {
     vi.mocked(api.getState).mockResolvedValue(makeState({ repositories: [] }));
     renderWithStore(<App />);
@@ -205,7 +232,7 @@ describe("App", () => {
   it("gives an entry waiting for the user the main area back from the settings", async () => {
     vi.mocked(api.getState).mockResolvedValue(waitingState());
     const { user } = renderWithStore(<App />);
-    await screen.findByRole("listbox", { name: "Tasks" });
+    await screen.findByRole("tree", { name: "Tasks" });
 
     await user.click(screen.getByRole("button", { name: "Settings" }));
     expect(await screen.findByRole("heading", { name: "Defaults" })).toBeInTheDocument();
@@ -213,7 +240,7 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: /^add-login, Waiting for reply/ }));
 
     expect(screen.queryByRole("heading", { name: "Defaults" })).not.toBeInTheDocument();
-    expect(await screen.findByRole("option", { name: /^add-login,/ })).toHaveAttribute(
+    expect(await screen.findByRole("treeitem", { name: /^add-login,/ })).toHaveAttribute(
       "aria-selected",
       "true",
     );
@@ -250,7 +277,7 @@ describe("App", () => {
     vi.mocked(api.getState).mockResolvedValue(makeState({ tasks: [makeTask()] }));
     const { user } = renderWithStore(<App />);
 
-    await user.click(await screen.findByRole("option", { name: /^add-login,/ }));
+    await user.click(await screen.findByRole("treeitem", { name: /^add-login,/ }));
 
     expect(await screen.findByRole("button", { name: "Delete task" })).toBeInTheDocument();
     expect(screen.queryByText("No task open")).not.toBeInTheDocument();
@@ -287,16 +314,54 @@ describe("App", () => {
       }),
     );
     const { user } = renderWithStore(<App />);
-    await screen.findByRole("option", { name: /^add-login,/ });
+    await screen.findByRole("treeitem", { name: /^add-login,/ });
 
     await user.click(screen.getByRole("button", { name: /^History/ }));
     await user.click(screen.getByRole("button", { name: /fix-header/ }));
 
     expect(screen.getByText("Archived")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("option", { name: /^add-login,/ }));
+    await user.click(screen.getByRole("treeitem", { name: /^add-login,/ }));
 
     expect(screen.queryByText("Archived")).not.toBeInTheDocument();
     expect(await screen.findByRole("button", { name: "Artifacts" })).toBeInTheDocument();
+  });
+
+  it("gives the main area to a board view, and a task back over it", async () => {
+    vi.mocked(api.getState).mockResolvedValue(
+      makeState({ tasks: [makeTask()], boards: [makeBoard({ title: "Platform" })] }),
+    );
+    const { user } = renderWithStore(<App />);
+    await screen.findByRole("treeitem", { name: /^add-login,/ });
+
+    act(() => {
+      useAppStore.getState().openBoard("board-1");
+    });
+
+    expect(screen.getByRole("heading", { level: 1, name: "Platform" })).toBeInTheDocument();
+    expect(screen.queryByText("No task open")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("treeitem", { name: /^add-login,/ }));
+
+    expect(screen.queryByRole("heading", { level: 1, name: "Platform" })).not.toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Delete task" })).toBeInTheDocument();
+  });
+
+  it("opens the creation dialog for a card once its clone is there", async () => {
+    vi.mocked(api.getState).mockResolvedValue(
+      makeState({ repositories: [makeRepository({ cloned: false, cloning: true, path: "" })] }),
+    );
+    renderWithStore(<App />);
+    await screen.findByText("No tasks yet");
+
+    act(() => {
+      useAppStore
+        .getState()
+        .setPendingStart({ boardId: "board-1", key: "dev/web#12", repositoryId: "repo-1" });
+      useAppStore.getState().applyState(makeState({ repositories: [makeRepository()] }));
+    });
+
+    expect(useAppStore.getState().newTaskOpen).toBe(true);
+    expect(useAppStore.getState().pendingStart).toBeNull();
   });
 });

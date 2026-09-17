@@ -3,11 +3,15 @@ import { describe, expect, it, vi } from "vitest";
 import { RepositoriesPage } from "@/features/repositories/RepositoriesPage";
 import { api } from "@/lib/wails";
 import { renderWithStore } from "@/test/render";
-import { makeRepository, makeState } from "@/test/wails-mock";
+import { makeBoard, makeRepository, makeState } from "@/test/wails-mock";
 
-function page(repositories = [makeRepository()]) {
-  return renderWithStore(<RepositoriesPage />, { state: makeState({ repositories }) });
+function page(repositories = [makeRepository()], overrides = {}) {
+  return renderWithStore(<RepositoriesPage />, {
+    state: makeState({ repositories, ...overrides }),
+  });
 }
+
+const UNCLONED = makeRepository({ cloned: false, path: "" });
 
 describe("RepositoriesPage", () => {
   it("lists every repository with its clone and what it holds", () => {
@@ -90,5 +94,65 @@ describe("RepositoriesPage", () => {
     await user.click(within(dialog).getByRole("button", { name: "Remove" }));
 
     expect(api.removeRepository).toHaveBeenCalledWith("repo-1");
+  });
+
+  it("shows the folder new clones go to above the list", () => {
+    page([makeRepository()], { cloneFolder: "/home/dev/clones" });
+
+    expect(screen.getByText("Clone folder")).toBeInTheDocument();
+    expect(screen.getByText("/home/dev/clones")).toBeInTheDocument();
+  });
+
+  it("names the board that manages a repository", () => {
+    page(
+      [
+        makeRepository({ boardId: "board-1" }),
+        makeRepository({ id: "repo-2", name: "api", fullName: "dev/api" }),
+      ],
+      { boards: [makeBoard()] },
+    );
+
+    expect(screen.getAllByText(/^Board:/)).toHaveLength(1);
+    expect(screen.getByText("Board: Roadmap")).toBeInTheDocument();
+  });
+
+  it("offers to clone a repository registered without a clone", async () => {
+    const { user } = page([UNCLONED]);
+
+    expect(screen.getByText("Not cloned")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Change path" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Clone" }));
+
+    expect(api.cloneRepository).toHaveBeenCalledWith("repo-1");
+  });
+
+  it("offers no clone for a repository that has one", () => {
+    page();
+
+    expect(screen.queryByRole("button", { name: "Clone" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Not cloned")).not.toBeInTheDocument();
+  });
+
+  it("shows a clone that runs, and holds the button meanwhile", () => {
+    page([{ ...UNCLONED, cloning: true }]);
+
+    expect(screen.getByRole("status")).toHaveTextContent("Cloning…");
+    expect(screen.getByRole("button", { name: "Clone" })).toBeDisabled();
+  });
+
+  it("shows why the last clone failed", () => {
+    page([{ ...UNCLONED, cloneError: "gh: repository not found" }]);
+
+    expect(screen.getByRole("alert")).toHaveTextContent("gh: repository not found");
+  });
+
+  it("shows a clone the app refuses to start on the row that asked", async () => {
+    vi.mocked(api.cloneRepository).mockRejectedValueOnce(new Error("Choose a clone folder first."));
+    const { user } = page([UNCLONED]);
+
+    await user.click(screen.getByRole("button", { name: "Clone" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Choose a clone folder first.");
   });
 });

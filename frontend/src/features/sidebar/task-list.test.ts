@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { emptyTasksText, taskRows } from "@/features/sidebar/task-list";
-import { makeRepository, makeSituation, makeState, makeTask } from "@/test/wails-mock";
+import {
+  makeRepository,
+  makeSituation,
+  makeState,
+  makeTask,
+  makeTaskCard,
+} from "@/test/wails-mock";
 
 const WEB_TASK = makeTask();
 const API_TASK = makeTask({
@@ -16,6 +22,15 @@ describe("taskRows", () => {
 
     expect(first).toMatchObject({ fullName: "dev/web", shortName: "web", selected: false });
     expect(second).toMatchObject({ fullName: "dev/api", shortName: "api" });
+  });
+
+  it("carries the number of the card of a task, null without one", () => {
+    const carded = makeTask({ card: makeTaskCard({ number: 42 }) });
+
+    expect(taskRows([carded, API_TASK], null, new Set()).map((row) => row.cardNumber)).toEqual([
+      42,
+      null,
+    ]);
   });
 
   it("marks the open task as selected", () => {

@@ -17,7 +17,8 @@ internal/                todo o código Go
   prompts/               prompts padrão embutidos e os editados
   models/                modelos, esforços e padrões
   reviewmode/            quem revisa os steps e o padrão do app
-  repository/            os repositórios cadastrados: identidade no GitHub, clone, filtro e a varredura da home
+  repository/            os repositórios cadastrados: identidade no GitHub, clone, board, filtro, a varredura da home e a clonagem
+  board/                 os boards cadastrados, a leitura dos cards pelo gh e o contexto de uma task criada de um card
   upgrade/               leva as tasks de um banco com áreas de trabalho para os repositórios
   git/, gh/              rodam os binários; nada sabem de tasks
   editor/                abre o VS Code
@@ -47,11 +48,13 @@ Os pacotes de domínio se organizam em camadas, de baixo para cima:
 
 1. **Plataforma e binários**: `platform/*`, `git`, `gh`, `editor`. Cada um sabe rodar uma coisa e nada sobre o produto.
 2. **Estado**: `store`, com um repositório por tabela, e `models`, `reviewmode`, `theme`, `prompts`.
-3. **Domínio**: `task`, `session`, `worktree`, `review`, `repository`, `attention`. Cada um é dono de um conceito, guarda o seu estado pelo `store` e reporta o que mudou por callbacks. Nenhum deles decide o que fazer com a mudança.
+3. **Domínio**: `task`, `session`, `worktree`, `review`, `repository`, `board`, `attention`. Cada um é dono de um conceito, guarda o seu estado pelo `store` e reporta o que mudou por callbacks. Nenhum deles decide o que fazer com a mudança.
 4. **Orquestração**: `flow`. Ouve as mudanças de tasks e sessões, decide o que a etapa atual precisa e age: inicia a etapa seguinte, corrige um plano, inicia um step, conduz o review pelo agente, cria uma worktree, aprova, abre a etapa de PR, encerra a task.
 5. **Exposição**: `bindings` converte o domínio em DTOs e recebe as chamadas do frontend; `app` liga tudo e publica o estado.
 
-Dois pares merecem nota. `git` roda o binário e não sabe o que é uma task; `worktree` carrega a política do produto: onde as worktrees ficam, como nascem, quando estão limpas, como vão embora. `gh` espelha `git` e só lê; quem abre pull requests é o agente.
+Dois pares merecem nota. `git` roda o binário e não sabe o que é uma task; `worktree` carrega a política do produto: onde as worktrees ficam, como nascem, quando estão limpas, como vão embora. `gh` espelha `git`: roda consultas GraphQL, classificando as falhas (sem `gh`, sem autenticação, sem o escopo de projects, limite de taxa), e clona repositórios, sem saber o que é um board; quem abre pull requests é o agente.
+
+`board` é dono dos boards cadastrados e da leitura guardada de cada um. Uma leitura faz uma consulta da estrutura do board, as consultas paginadas dos itens, primeiro as issues abertas e depois as fechadas nos últimos 14 dias, e poucas consultas em lote, com aliases, para os épicos com as sub-issues, as dependências fora da leitura e os cards de tasks ativas que ficaram fora dela; nunca uma chamada por card. A montagem em Go junta a convenção do corpo às relações nativas. `board` também sugere o nome de uma task e monta o contexto de uma task criada de um card, e reporta por `OnChange` e `OnRead` sem decidir nada sobre tasks: é `app` que entrega os cards de cada leitura a `task.Service.UpdateCards`. Toda escrita que muda o board de um repositório acontece na transação do board no `store`, seguida de `repository.Service.Sync`. `repository` clona em segundo plano, com o estado do clone em memória, e guarda a pasta de clones.
 
 ### Composição e injeção
 
@@ -59,7 +62,7 @@ Dois pares merecem nota. `git` roda o binário e não sabe o que é uma task; `w
 
 ### O estado que o frontend vê
 
-`bindings.State` é tudo que a interface renderiza, produzido no Go e nunca derivado no frontend. `app.snapshot` lê os repositórios cadastrados, as tasks, os resumos das sessões, os artefatos, os steps e a pull request de cada task, deriva as situações a partir das mesmas leituras, para que todas as superfícies concordem, e converte tudo em DTOs. Cada mudança em qualquer service publica um snapshot inteiro; o frontend substitui o que tem.
+`bindings.State` é tudo que a interface renderiza, produzido no Go e nunca derivado no frontend. `app.snapshot` lê os boards cadastrados, com a leitura guardada de cada um, os repositórios cadastrados, com o estado do clone, as tasks, com o card de cada uma, os resumos das sessões, os artefatos, os steps e a pull request de cada task, deriva as situações a partir das mesmas leituras, para que todas as superfícies concordem, e converte tudo em DTOs. Cada mudança em qualquer service publica um snapshot inteiro; o frontend substitui o que tem. A leitura inteira de cada board viaja no `State`, porque a janela de leitura a mantém pequena, e o que cada card permite (**Start task**, clonar, acrescentar ao board) é decidido no Go.
 
 Os enums dos DTOs viajam como `string`, com um comentário listando os valores, para que os bindings gerados não emitam enums TypeScript; o frontend estreita com funções `asX` em `lib/wails.ts`.
 
@@ -104,7 +107,7 @@ A implementação de uma task One-Shot não tem caminho próprio em `flow`. A in
 
 ### Store
 
-`store/app-store.ts` é o store Zustand: o `State` recebido do Go, os transcripts por chave de sessão, os rascunhos, e o estado de interface que só o frontend conhece (task aberta, diálogo de criação aberto, último repositório usado, aba da conversa do step, histórico e configurações abertos, edição de prompt, navegação pendente). Ele exporta hooks seletores (`useTask`, `useFilteredTasks`, `useTranscript`, `useOpenTask`...) para que cada componente assine só a fatia que usa. O store importa só de `lib/`.
+`store/app-store.ts` é o store Zustand: o `State` recebido do Go, os transcripts por chave de sessão, os rascunhos, e o estado de interface que só o frontend conhece (task aberta, board aberto, diálogo de criação aberto e o card de onde ele parte, o **Start task** que espera um clone, nós recolhidos da barra lateral, último repositório usado, aba da conversa do step, histórico e configurações abertos, edição de prompt, navegação pendente). Ele exporta hooks seletores (`useTask`, `useOpenBoardId`, `useTranscript`, `useOpenTask`...) para que cada componente assine só a fatia que usa. O store importa só de `lib/`.
 
 `store/actions.ts` é o que os componentes chamam para agir: cada ação chama `api`, e um erro vira a mensagem do aviso de erro. Nenhuma ação toca o `State`: o estado novo sempre chega por `state:changed`. Os componentes nunca chamam `api` diretamente.
 
@@ -112,9 +115,9 @@ A implementação de uma task One-Shot não tem caminho próprio em `flow`. A in
 
 ### Features
 
-Cada diretório de `features/` cobre uma área: `sidebar` para a barra lateral, `home` para a área principal sem task aberta, `welcome` para a tela sem repositórios cadastrados, `migration` para a tela de migração recusada, `repositories` para a página de repositórios, `task` e `task-create` para a task, `chat` para as conversas, `attention` para a seção de espera, `history`, `settings`, `models`, `review-mode` para o seletor de modo de review, `notice` e `theme`. A lógica de apresentação que não depende de React fica em arquivos `.ts` ao lado dos componentes (`status.ts`, `step-status.ts`, `pr-status.ts`, `stage-actions.ts`), testável sem renderizar.
+Cada diretório de `features/` cobre uma área: `sidebar` para a barra lateral e a árvore de tasks, `home` para a área principal sem task aberta, `welcome` para a tela sem boards nem repositórios cadastrados, `board` para a visão de um board, `boards` para a página de boards, `migration` para a tela de migração recusada, `repositories` para a página de repositórios, `task` e `task-create` para a task, `chat` para as conversas, `attention` para a seção de espera, `history`, `settings`, `models`, `review-mode` para o seletor de modo de review, `notice` e `theme`. A lógica de apresentação que não depende de React fica em arquivos `.ts` ao lado dos componentes (`status.ts`, `step-status.ts`, `pr-status.ts`, `stage-actions.ts`), testável sem renderizar.
 
-`lib/` guarda o que o store e as features compartilham: repositórios, pull requests, situações, etapas, modelos, modos de review, nomes de task, front matter.
+`lib/` guarda o que o store e as features compartilham: boards, repositórios, pull requests, situações, etapas, modelos, modos de review, nomes de task, front matter. `lib/ui-storage.ts` guarda no `localStorage` a memória de interface que sobrevive a reinícios e não é estado do produto: os filtros e as seções recolhidas de cada visão de board e os nós recolhidos da barra lateral.
 
 ### Estilo
 

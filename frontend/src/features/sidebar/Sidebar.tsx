@@ -8,7 +8,7 @@ import { HistoryButton } from "@/features/history/HistoryButton";
 import { SettingsButton } from "@/features/settings/SettingsButton";
 import { MissingClones } from "@/features/sidebar/MissingClones";
 import { RepositoryFilter } from "@/features/sidebar/RepositoryFilter";
-import { TaskList } from "@/features/sidebar/TaskList";
+import { SidebarTree } from "@/features/sidebar/SidebarTree";
 import { ThemeToggle } from "@/features/theme/ThemeToggle";
 import { useAppStore } from "@/store/app-store";
 
@@ -42,7 +42,7 @@ export function Sidebar() {
       </div>
       <MissingClones />
       <ScrollArea className="min-h-0 flex-1">
-        <TaskList />
+        <SidebarTree />
       </ScrollArea>
       <div className="flex h-11 shrink-0 items-center gap-2 border-t px-2">
         <HistoryButton />

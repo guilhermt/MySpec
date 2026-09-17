@@ -6,6 +6,8 @@ import { useAppStore } from "@/store/app-store";
 import { renderWithStore, type StoreOptions } from "@/test/render";
 import {
   makeArchivedTask,
+  makeBoard,
+  makeBoardCard,
   makeModelDefaults,
   makeRepository,
   makeState,
@@ -189,6 +191,7 @@ describe("NewTaskDialog", () => {
       mode: "structured",
       models: makeModelDefaults(),
       reviewMode: "manual",
+      card: null,
     });
     expect(useAppStore.getState().newTaskOpen).toBe(false);
     expect(useAppStore.getState().lastRepositoryId).toBe("repo-2");
@@ -248,6 +251,7 @@ describe("NewTaskDialog", () => {
         line.stage === "prd" ? { ...line, effort: "xhigh" } : line,
       ),
       reviewMode: "manual",
+      card: null,
     });
   });
 
@@ -266,6 +270,7 @@ describe("NewTaskDialog", () => {
         mode: "structured",
         models: makeModelDefaults(),
         reviewMode: "manual",
+        card: null,
       });
     });
   });
@@ -307,6 +312,7 @@ describe("NewTaskDialog", () => {
         mode: "structured",
         models: makeModelDefaults(),
         reviewMode: "agent",
+        card: null,
       });
     });
   });
@@ -408,6 +414,7 @@ describe("NewTaskDialog", () => {
         mode: "one_shot",
         models: makeModelDefaults(),
         reviewMode: "manual",
+        card: null,
       });
     });
   });
@@ -444,5 +451,117 @@ describe("NewTaskDialog", () => {
 
     expect(useAppStore.getState().newTaskOpen).toBe(false);
     expect(api.createTask).not.toHaveBeenCalled();
+  });
+
+  describe("from a card", () => {
+    const CARD_REF = { boardId: "board-1", key: "dev/web#12" };
+
+    function openCard(card = makeBoardCard(), state: Partial<State> = {}) {
+      // A fresh reading: the refresh has tests of its own.
+      const fresh = { ...card, readAt: new Date().toISOString() };
+      return open({ boards: [makeBoard({ cards: [fresh] })], ...state }, { newTaskCard: CARD_REF });
+    }
+
+    it("shows the card and fixes the repository to its own", async () => {
+      openCard();
+
+      expect(screen.getByText("Add the login screen")).toBeInTheDocument();
+      expect(screen.getByText("Todo")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /^Repository:/ })).not.toBeInTheDocument();
+      expect(screen.getByLabelText("Name")).toHaveValue("12-add-the-login-screen");
+      expect(screen.getByRole("button", { name: "Context from the card" })).toBeInTheDocument();
+      await waitFor(() => {
+        expect(api.cardContext).toHaveBeenCalledWith("board-1", "dev/web#12");
+      });
+    });
+
+    it("says so when the card is not in the last reading", () => {
+      open({ boards: [makeBoard()] }, { newTaskCard: CARD_REF });
+
+      expect(
+        screen.getByText("This card isn't in the last reading of the board."),
+      ).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Create" })).not.toBeInTheDocument();
+    });
+
+    it("refuses a suggested name the repository already has", () => {
+      openCard(makeBoardCard(), { tasks: [makeTask({ name: "12-add-the-login-screen" })] });
+
+      expect(
+        screen.getByText("A task named 12-add-the-login-screen already exists in dev/web."),
+      ).toBeVisible();
+      expect(screen.getByRole("button", { name: "Create" })).toBeDisabled();
+    });
+
+    it("warns about unsatisfied dependencies without keeping Create out of reach", () => {
+      openCard(
+        makeBoardCard({
+          dependencies: [
+            {
+              key: "dev/api#3",
+              repository: "dev/api",
+              number: 3,
+              title: "Expose the session endpoint",
+              url: "https://github.com/dev/api/issues/3",
+              state: "open",
+              status: "In progress",
+              onBoard: true,
+              pullRequests: [
+                {
+                  repository: "dev/api",
+                  number: 8,
+                  url: "https://github.com/dev/api/pull/8",
+                  state: "open",
+                },
+              ],
+              satisfied: false,
+            },
+          ],
+        }),
+      );
+
+      expect(screen.getByText("Unsatisfied dependencies")).toBeInTheDocument();
+      expect(screen.getByText("#3 Expose the session endpoint")).toBeInTheDocument();
+      expect(
+        screen.getByText("dev/api · Open · In progress · PR dev/api#8 Open"),
+      ).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Create" })).toBeEnabled();
+    });
+
+    it("creates the task from the card with what the user added", async () => {
+      vi.mocked(api.createTask).mockResolvedValue("task-9");
+      const { user } = openCard();
+
+      await user.type(screen.getByLabelText("Additional context"), "Start with the form");
+      await user.click(screen.getByRole("button", { name: "Create" }));
+
+      await waitFor(() => {
+        expect(useAppStore.getState().openTaskId).toBe("task-9");
+      });
+      expect(api.createTask).toHaveBeenCalledWith({
+        name: "12-add-the-login-screen",
+        repositoryId: "repo-1",
+        initialContext: "Start with the form",
+        mode: "structured",
+        models: makeModelDefaults(),
+        reviewMode: "manual",
+        card: CARD_REF,
+      });
+      expect(useAppStore.getState().newTaskCard).toBeNull();
+    });
+
+    it("shows why the card could not become a task", async () => {
+      vi.mocked(api.createTask).mockRejectedValue(
+        new Error("Card #12 already has an active task: login."),
+      );
+      const { user } = openCard();
+
+      await user.click(screen.getByRole("button", { name: "Create" }));
+
+      expect(
+        await screen.findByText("Card #12 already has an active task: login."),
+      ).toBeInTheDocument();
+    });
   });
 });

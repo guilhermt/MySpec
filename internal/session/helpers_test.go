@@ -45,6 +45,9 @@ func renderPrompt(stage prompts.Stage, vars prompts.Vars) (string, error) {
 	case prompts.StageOneShot:
 		return fmt.Sprintf("Stage %s of task %s writes %s in %s from: %s",
 			stage, vars.TaskName, vars.OneShotPath, vars.Repository, vars.InitialContext), nil
+	case prompts.StagePR:
+		return fmt.Sprintf("Stage %s of task %s opens %s from %s, with the card %s: %s",
+			stage, vars.TaskName, vars.Branch, vars.BaseBranch, vars.CardReference, vars.Card), nil
 	default:
 		return fmt.Sprintf("Stage %s of task %s writes %s in %s from: %s",
 			stage, vars.TaskName, vars.PRDPath, vars.ArtifactsDir, vars.InitialContext), nil

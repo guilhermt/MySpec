@@ -83,6 +83,10 @@ type TaskInfo struct {
 	ReviewPath string
 	PRNumber   string
 	PRURL      string
+
+	// PR sessions of a task created from a card.
+	Card          string
+	CardReference string
 }
 
 // Key is the session this task and stage are held under.

@@ -112,3 +112,41 @@ func TestDeleteRemovesARepositoryAndIgnoresAMissingOne(t *testing.T) {
 		t.Errorf("List() = %v, want nothing left", got)
 	}
 }
+
+func TestTheBoardOfARepositoryRoundTrips(t *testing.T) {
+	t.Parallel()
+	s := newStore(t)
+	insertBoard(t, s, newBoard("board-1", "Roadmap", 1))
+
+	managed := newRepository("repo-1", "acme", "api", "/code/api")
+	managed.BoardID = "board-1"
+	insertRepository(t, s, managed)
+	free := newRepository("repo-2", "acme", "web", "/code/web")
+	insertRepository(t, s, free)
+	if diff := cmp.Diff([]repository.Repository{managed, free}, listRepositories(t, s)); diff != "" {
+		t.Errorf("List() mismatch (-want +got):\n%s", diff)
+	}
+
+	if err := s.Repositories.UpdateBoard(t.Context(), managed.ID, ""); err != nil {
+		t.Fatalf("UpdateBoard(none) = %v, want nil", err)
+	}
+	if err := s.Repositories.UpdateBoard(t.Context(), free.ID, "board-1"); err != nil {
+		t.Fatalf("UpdateBoard(board-1) = %v, want nil", err)
+	}
+	managed.BoardID, free.BoardID = "", "board-1"
+	if diff := cmp.Diff([]repository.Repository{managed, free}, listRepositories(t, s)); diff != "" {
+		t.Errorf("List() after UpdateBoard mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestARepositoryWithoutACloneHasAnEmptyPath(t *testing.T) {
+	t.Parallel()
+	s := newStore(t)
+
+	repo := newRepository("repo-1", "acme", "api", "")
+	insertRepository(t, s, repo)
+
+	if diff := cmp.Diff([]repository.Repository{repo}, listRepositories(t, s)); diff != "" {
+		t.Errorf("List() mismatch (-want +got):\n%s", diff)
+	}
+}

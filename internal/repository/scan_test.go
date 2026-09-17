@@ -195,3 +195,15 @@ func TestTheScanFailsWhenTheRootDoesNotExist(t *testing.T) {
 		t.Error("Scan() = nil, want an error")
 	}
 }
+
+func TestTheScanOffersTheCloneOfARepositoryRegisteredWithoutOne(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	f.uncloned(t, "repo-1", "dev", "web")
+	path := f.identified(t, "web", "dev", "web")
+
+	want := []repository.Candidate{{Identity: repository.Identity{Owner: "dev", Name: "web"}, Path: path}}
+	if diff := cmp.Diff(want, f.scan(t)); diff != "" {
+		t.Errorf("Scan() mismatch (-want +got):\n%s", diff)
+	}
+}

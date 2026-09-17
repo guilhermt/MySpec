@@ -39,6 +39,23 @@ export function ChangeRepositoryPath(id: string): $CancellablePromise<void> {
 }
 
 /**
+ * ChooseCloneFolder asks for the clone folder with the native chooser.
+ * Cancelling changes nothing.
+ */
+export function ChooseCloneFolder(): $CancellablePromise<void> {
+    return $Call.ByID(966262007);
+}
+
+/**
+ * CloneRepository clones a repository without a clone into the clone folder,
+ * asking for the folder first when none was chosen. started is false when the
+ * user cancelled the folder chooser; the clone itself runs in the background.
+ */
+export function CloneRepository(id: string): $CancellablePromise<boolean> {
+    return $Call.ByID(1266410364, id);
+}
+
+/**
  * RemoveRepository removes a repository that has no task.
  */
 export function RemoveRepository(id: string): $CancellablePromise<void> {

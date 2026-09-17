@@ -3,10 +3,10 @@ import type { TaskRow } from "@/features/sidebar/task-list";
 import { useAppStore } from "@/store/app-store";
 
 /**
- * useTaskListKeyboard implements the listbox pattern with selection following
- * focus: the row the focus lands on is the task that opens. Rows are addressed
- * by index because the list focuses them through the DOM order of its `option`
- * elements, which is the order of the tasks.
+ * useTaskListKeyboard moves along the visible task rows with selection
+ * following focus: the row the focus lands on is the task that opens. Rows are
+ * addressed by index because the tree focuses them through the DOM order of its
+ * `[data-task-row]` elements, which is the order of the visible rows.
  */
 export function useTaskListKeyboard(
   rows: readonly TaskRow[],

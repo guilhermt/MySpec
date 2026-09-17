@@ -233,6 +233,21 @@ func (r *memRepo) UpdateReviewModes(_ context.Context, id string, m task.ReviewM
 	return nil
 }
 
+func (r *memRepo) UpdateCard(_ context.Context, taskID string, c task.Card) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.updateErr != nil {
+		return r.updateErr
+	}
+	index := r.indexOf(taskID)
+	if index < 0 {
+		return task.ErrNotFound
+	}
+	r.items[index].Card = &c
+	return nil
+}
+
 func (r *memRepo) UpdateArchived(_ context.Context, id string, archivedAt, updatedAt time.Time) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -530,6 +545,38 @@ func (f *fixture) create(t *testing.T, name string) task.Task {
 		Name:           name,
 		RepositoryID:   repoID,
 		InitialContext: "a login screen",
+	})
+	if err != nil {
+		t.Fatalf("Create(%s) = %v, want nil", name, err)
+	}
+	return created
+}
+
+// newCard is a card of the dev/web repository on the board board-1.
+func newCard(number int) task.Card {
+	return task.Card{
+		BoardID: "board-1",
+		Owner:   "Dev",
+		Name:    "Web",
+		Number:  number,
+		Title:   "Add login",
+		Body:    "A login screen.",
+		URL:     "https://github.com/Dev/Web/issues/" + strconv.Itoa(number),
+		Status:  "Todo",
+		State:   task.IssueOpen,
+		ReadAt:  base,
+	}
+}
+
+// createWithCard adds a task created from a card through the service, failing
+// the test on error.
+func (f *fixture) createWithCard(t *testing.T, name string, c task.Card) task.Task {
+	t.Helper()
+
+	created, err := f.service.Create(t.Context(), task.CreateParams{
+		Name:         name,
+		RepositoryID: repoID,
+		Card:         &c,
 	})
 	if err != nil {
 		t.Fatalf("Create(%s) = %v, want nil", name, err)

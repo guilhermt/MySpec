@@ -58,6 +58,11 @@ export interface ArchivedTask {
     "repository": string;
 
     /**
+     * nil for a task without one
+     */
+    "card": TaskCard | null;
+
+    /**
      * Mode is structured or one_shot, a string for the same reason as
      * State.Theme.
      */
@@ -92,6 +97,223 @@ export interface AssistantEntry {
 }
 
 /**
+ * Board is a registered board with its last reading.
+ */
+export interface Board {
+    "id": string;
+    "owner": string;
+
+    /**
+     * OwnerType is organization or user, a string for the same reason as
+     * State.Theme.
+     */
+    "ownerType": string;
+    "number": number;
+    "title": string;
+    "url": string;
+    "hasStatus": boolean;
+
+    /**
+     * board order; never nil
+     */
+    "statuses": BoardStatus[] | null;
+
+    /**
+     * never nil
+     */
+    "repositoryIds": string[] | null;
+
+    /**
+     * "" before a reading succeeded
+     */
+    "readAt": string;
+    "reading": boolean;
+    "failure": BoardFailure | null;
+
+    /**
+     * the login of gh at the last reading
+     */
+    "viewer": string;
+
+    /**
+     * never nil
+     */
+    "cards": BoardCard[] | null;
+}
+
+/**
+ * BoardCard is one card of a board, with what the user can do with it.
+ */
+export interface BoardCard {
+    "key": string;
+
+    /**
+     * owner/name
+     */
+    "repository": string;
+    "number": number;
+    "title": string;
+    "url": string;
+
+    /**
+     * open or closed
+     */
+    "state": string;
+    "body": string;
+    "statusId": string;
+    "status": string;
+
+    /**
+     * the status is final, or the issue is closed
+     */
+    "final": boolean;
+
+    /**
+     * never nil
+     */
+    "assignees": CardAssignee[] | null;
+
+    /**
+     * never nil
+     */
+    "fields": CardField[] | null;
+
+    /**
+     * never nil
+     */
+    "pullRequests": CardPullRequest[] | null;
+    "epic": CardIssue | null;
+    "epicBody": string;
+
+    /**
+     * never nil
+     */
+    "siblings": CardRelated[] | null;
+
+    /**
+     * never nil
+     */
+    "dependencies": CardDependency[] | null;
+    "readAt": string;
+    "suggestedName": string;
+
+    /**
+     * the registered repository of the card; "" when not registered
+     */
+    "repositoryId": string;
+
+    /**
+     * "" without one
+     */
+    "activeTaskId": string;
+
+    /**
+     * the most recently archived; "" without one
+     */
+    "archivedTaskId": string;
+
+    /**
+     * Action is start, clone, clone_missing, add_to_board, other_board,
+     * has_task or closed: what Start task does for the card, a string for the
+     * same reason as State.Theme.
+     */
+    "action": string;
+
+    /**
+     * other_board: the title of that board
+     */
+    "otherBoard": string;
+}
+
+/**
+ * BoardFailure is why the last reading of a board failed.
+ */
+export interface BoardFailure {
+    /**
+     * Reason is gh_missing, gh_unauthenticated, missing_scope, not_found,
+     * rate_limited or failed, a string for the same reason as State.Theme.
+     */
+    "reason": string;
+    "message": string;
+    "failedAt": string;
+}
+
+/**
+ * BoardPreview is what registering or editing a board shows before saving.
+ */
+export interface BoardPreview {
+    "url": string;
+    "owner": string;
+    "ownerType": string;
+    "number": number;
+    "title": string;
+    "hasStatus": boolean;
+
+    /**
+     * never nil
+     */
+    "statuses": BoardStatus[] | null;
+
+    /**
+     * never nil
+     */
+    "repositories": BoardRepositoryOption[] | null;
+}
+
+/**
+ * BoardRemoval is what removing a board does to its repositories: how many go
+ * to no board and how many are removed.
+ */
+export interface BoardRemoval {
+    "toNoBoard": number;
+    "removed": number;
+}
+
+/**
+ * BoardRepositoryChoice is a repository the user checked in the board dialog.
+ */
+export interface BoardRepositoryChoice {
+    "owner": string;
+    "name": string;
+    "path": string;
+}
+
+/**
+ * BoardRepositoryOption is a repository the board dialog offers, with how it
+ * would tie to the app.
+ */
+export interface BoardRepositoryOption {
+    "owner": string;
+    "name": string;
+    "fullName": string;
+    "cards": number;
+    "checked": boolean;
+
+    /**
+     * Link is registered, clone, uncloned or other_board, a string for the same
+     * reason as State.Theme.
+     */
+    "link": string;
+    "repositoryId": string;
+    "path": string;
+
+    /**
+     * never nil
+     */
+    "clones": string[] | null;
+    "otherBoard": string;
+}
+
+/**
+ * BoardStatus is one option of the Status field of a board.
+ */
+export interface BoardStatus {
+    "id": string;
+    "name": string;
+    "final": boolean;
+}
+
+/**
  * BranchPreview is the branch the deletion of a task would delete, and whether
  * its commits are safe elsewhere.
  */
@@ -99,6 +321,107 @@ export interface BranchPreview {
     "name": string;
     "merged": boolean;
     "error": string;
+}
+
+/**
+ * CardAssignee is a person a card is assigned to.
+ */
+export interface CardAssignee {
+    "login": string;
+    "avatarUrl": string;
+}
+
+/**
+ * CardDependency is an issue a card depends on, with the pull requests that
+ * close it.
+ */
+export interface CardDependency {
+    "key": string;
+
+    /**
+     * owner/name
+     */
+    "repository": string;
+    "number": number;
+    "title": string;
+    "url": string;
+
+    /**
+     * open or closed
+     */
+    "state": string;
+    "status": string;
+    "onBoard": boolean;
+
+    /**
+     * never nil
+     */
+    "pullRequests": CardPullRequest[] | null;
+    "satisfied": boolean;
+}
+
+/**
+ * CardField is a board field of a card with its value.
+ */
+export interface CardField {
+    "name": string;
+    "value": string;
+}
+
+/**
+ * CardIssue is an issue of GitHub a board shows.
+ */
+export interface CardIssue {
+    "key": string;
+
+    /**
+     * owner/name
+     */
+    "repository": string;
+    "number": number;
+    "title": string;
+    "url": string;
+
+    /**
+     * open or closed
+     */
+    "state": string;
+}
+
+/**
+ * CardPullRequest is a pull request linked to an issue.
+ */
+export interface CardPullRequest {
+    "repository": string;
+    "number": number;
+    "url": string;
+
+    /**
+     * open, merged or closed
+     */
+    "state": string;
+}
+
+/**
+ * CardRelated is an issue next to a card: a sibling or a dependency.
+ */
+export interface CardRelated {
+    "key": string;
+
+    /**
+     * owner/name
+     */
+    "repository": string;
+    "number": number;
+    "title": string;
+    "url": string;
+
+    /**
+     * open or closed
+     */
+    "state": string;
+    "status": string;
+    "onBoard": boolean;
 }
 
 /**
@@ -134,6 +457,14 @@ export interface CloseStep {
 }
 
 /**
+ * CreateTaskCard is the card of a board a task is created from.
+ */
+export interface CreateTaskCard {
+    "boardId": string;
+    "key": string;
+}
+
+/**
  * CreateTaskRequest is the task the user filled in the creation dialog.
  */
 export interface CreateTaskRequest {
@@ -156,6 +487,13 @@ export interface CreateTaskRequest {
      * manual or agent; "" takes the default of the app
      */
     "reviewMode": string;
+
+    /**
+     * Card is the card the task is created from; nil for a task without one. With
+     * a card, RepositoryID is ignored, and InitialContext is the text the user
+     * added.
+     */
+    "card": CreateTaskCard | null;
 }
 
 /**
@@ -636,11 +974,31 @@ export interface Repository {
     "path": string;
 
     /**
-     * the clone was not at Path at the last check
+     * the clone was not at Path at the last check; always false while Cloned is false
      */
     "missing": boolean;
     "activeTasks": number;
     "archivedTasks": number;
+
+    /**
+     * tied to a clone; false for a repository registered without one
+     */
+    "cloned": boolean;
+
+    /**
+     * "" without a board
+     */
+    "boardId": string;
+
+    /**
+     * a clone runs now
+     */
+    "cloning": boolean;
+
+    /**
+     * what gh said when the last clone failed; "" otherwise
+     */
+    "cloneError": string;
 }
 
 /**
@@ -697,6 +1055,14 @@ export interface ReviewFile {
      * nothing of it is left outside the index
      */
     "staged": boolean;
+}
+
+/**
+ * SaveBoardRequest is what the user chose in the board dialog.
+ */
+export interface SaveBoardRequest {
+    "finalStatuses": string[] | null;
+    "repositories": BoardRepositoryChoice[] | null;
 }
 
 /**
@@ -827,6 +1193,16 @@ export interface State {
      * nil.
      */
     "history": ArchivedTask[] | null;
+
+    /**
+     * Boards are the registered boards, by title ignoring case; never nil.
+     */
+    "boards": Board[] | null;
+
+    /**
+     * CloneFolder is where new clones go; "" until chosen.
+     */
+    "cloneFolder": string;
 }
 
 /**
@@ -1011,6 +1387,25 @@ export interface StepReviewer {
 }
 
 /**
+ * TaskCard is the card a task was created from.
+ */
+export interface TaskCard {
+    "boardId": string;
+    "key": string;
+    "repository": string;
+    "number": number;
+    "title": string;
+    "url": string;
+    "status": string;
+    "state": string;
+
+    /**
+     * State of the epic is ""; the task does not keep it
+     */
+    "epic": CardIssue | null;
+}
+
+/**
  * TaskStageModel is the model and effort of one stage of a task, with what the
  * user can still do about it.
  */
@@ -1045,6 +1440,11 @@ export interface TaskSummary {
      * owner/name
      */
     "repository": string;
+
+    /**
+     * nil for a task without one
+     */
+    "card": TaskCard | null;
 
     /**
      * Mode is structured or one_shot, a string for the same reason as

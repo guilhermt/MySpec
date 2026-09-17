@@ -1,6 +1,10 @@
 import { messageOf } from "@/lib/errors";
 import type { ModelChoice } from "@/lib/models";
 import type {
+  BoardPreview,
+  BoardRemoval,
+  BoardRepositoryChoice,
+  BoardRepositoryOption,
   CreateTaskRequest,
   ModelStage,
   PermissionDecision,
@@ -8,6 +12,7 @@ import type {
   PromptStage,
   RepositoryCandidate,
   ReviewMode,
+  SaveBoardRequest,
   TaskStage,
   ThemePreference,
 } from "@/lib/wails";
@@ -42,6 +47,89 @@ export function browseRepository(): Promise<boolean> {
 
 export function changeRepositoryPath(id: string): Promise<void> {
   return api.changeRepositoryPath(id);
+}
+
+/**
+ * cloneRepository does not swallow its failure either: the row or the card that
+ * asked shows it. It answers false when the user cancelled choosing the clone
+ * folder; the clone itself runs in the background.
+ */
+export function cloneRepository(id: string): Promise<boolean> {
+  return api.cloneRepository(id);
+}
+
+/** chooseCloneFolder asks for the folder new clones go to. */
+export function chooseCloneFolder(): Promise<void> {
+  return run(() => api.chooseCloneFolder());
+}
+
+/**
+ * previewBoard, previewEditBoard, checkBoardRepository, addBoard, updateBoard,
+ * removeBoard, refreshCard and addRepositoryToBoard do not swallow their
+ * failure: the dialog or the panel that asked shows it where the user is.
+ */
+export function previewBoard(url: string): Promise<BoardPreview> {
+  return api.previewBoard(url);
+}
+
+export function previewEditBoard(id: string): Promise<BoardPreview> {
+  return api.previewEditBoard(id);
+}
+
+export function checkBoardRepository(
+  boardId: string,
+  fullName: string,
+): Promise<BoardRepositoryOption> {
+  return api.checkBoardRepository(boardId, fullName);
+}
+
+export function addBoard(url: string, req: SaveBoardRequest): Promise<void> {
+  return api.addBoard(url, req);
+}
+
+export function updateBoard(id: string, req: SaveBoardRequest): Promise<void> {
+  return api.updateBoard(id, req);
+}
+
+export function removeBoard(id: string): Promise<void> {
+  return api.removeBoard(id);
+}
+
+export function refreshCard(boardId: string, key: string): Promise<void> {
+  return api.refreshCard(boardId, key);
+}
+
+export function addRepositoryToBoard(
+  boardId: string,
+  choice: BoardRepositoryChoice,
+): Promise<void> {
+  return api.addRepositoryToBoard(boardId, choice);
+}
+
+/**
+ * previewRemoveBoard says what removing a board takes with it; null when it
+ * could not tell, with the reason in the banner.
+ */
+export async function previewRemoveBoard(id: string): Promise<BoardRemoval | null> {
+  let removal: BoardRemoval | null = null;
+  await run(async () => {
+    removal = await api.previewRemoveBoard(id);
+  });
+  return removal;
+}
+
+/** refreshBoard starts a reading of a board; the result arrives with the state. */
+export function refreshBoard(id: string): Promise<void> {
+  return run(() => api.refreshBoard(id));
+}
+
+/** cardContext is the context a task created from a card starts with; "" when it could not be read. */
+export async function cardContext(boardId: string, key: string): Promise<string> {
+  let context = "";
+  await run(async () => {
+    context = await api.cardContext(boardId, key);
+  });
+  return context;
 }
 
 /** removeRepository removes a repository that has no task. */

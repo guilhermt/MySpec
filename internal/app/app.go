@@ -16,6 +16,7 @@ import (
 
 	"github.com/guilhermt/myspec/internal/attention"
 	"github.com/guilhermt/myspec/internal/bindings"
+	"github.com/guilhermt/myspec/internal/board"
 	"github.com/guilhermt/myspec/internal/editor"
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/gh"
@@ -69,6 +70,7 @@ type App struct {
 	models       *models.Service
 	reviewModes  *reviewmode.Service
 	tasks        *task.Service
+	boards       *board.Service
 	sessions     *session.Service
 	worktrees    *worktree.Service
 	review       *review.Service
@@ -188,10 +190,12 @@ func Run(cfg Config) int {
 		},
 		OnTranscript: a.emitTranscript,
 	})
+	ghRunner := gh.New(gh.Deps{Log: log})
 	repositories := repository.New(repository.Deps{
 		Store:         st.Repositories,
 		Settings:      st.Settings,
 		Identify:      identifier.Identify,
+		Clone:         ghRunner.Clone,
 		Counts:        func(id string) (int, int) { return a.tasks.Counts(id) },
 		Log:           log,
 		OnChange:      a.publish,
@@ -208,7 +212,12 @@ func Run(cfg Config) int {
 	if err != nil {
 		return fail(log, "watch artifacts", err)
 	}
-	ghRunner := gh.New(gh.Deps{Log: log})
+	boards := board.New(board.Deps{
+		Store: st.Boards, GitHub: ghRunner, Repositories: repositories, Identify: identifier.Identify,
+		Counts:    func(id string) (int, int) { return a.tasks.Counts(id) },
+		TaskCards: a.boardTaskCards,
+		Log:       log, OnChange: a.publish, OnRead: a.onBoardRead,
+	})
 	worktrees := worktree.New(worktree.Deps{
 		Git: gitRunner, Store: st.Worktrees, DataDir: dirs.Data, Log: log,
 	})
@@ -240,7 +249,7 @@ func Run(cfg Config) int {
 	})
 	a.theme, a.repositories, a.tasks, a.sessions, a.flow = themeSvc, repositories, tasks, sessions, flowSvc
 	a.worktrees, a.review, a.models = worktrees, reviews, modelsSvc
-	a.reviewModes = reviewModesSvc
+	a.reviewModes, a.boards = reviewModesSvc, boards
 
 	if err := a.load(ctx); err != nil {
 		return fail(log, "load tasks", err)
@@ -254,7 +263,7 @@ func Run(cfg Config) int {
 	go a.pollPRs(pollCtx)
 
 	wails := application.New(
-		a.options(cfg, repositories, themeSvc, modelsSvc, reviewModesSvc, tasks, sessions, flowSvc, dirs.Data, log),
+		a.options(cfg, repositories, boards, themeSvc, modelsSvc, reviewModesSvc, tasks, sessions, flowSvc, dirs.Data, log),
 	)
 	a.setWails(wails)
 	a.openWindow(cfg, themeSvc.Effective())
@@ -275,6 +284,7 @@ func Run(cfg Config) int {
 func (a *App) options(
 	cfg Config,
 	repositories *repository.Service,
+	boards *board.Service,
 	themeSvc *theme.Service,
 	modelsSvc *models.Service,
 	reviewModesSvc *reviewmode.Service,
@@ -295,8 +305,9 @@ func (a *App) options(
 				bindings.NewSettingsService(themeSvc, modelsSvc, reviewModesSvc, dataDir, log),
 			),
 			application.NewService(bindings.NewTaskService(
-				tasks, sessions, flowSvc, modelsSvc, reviewModesSvc, repositories, editor.Open, log,
+				tasks, sessions, flowSvc, modelsSvc, reviewModesSvc, repositories, boards, editor.Open, log,
 			)),
+			application.NewService(bindings.NewBoardService(boards, log)),
 			application.NewService(bindings.NewAttentionService(a.attention)),
 		},
 		Assets: application.AssetOptions{Handler: application.AssetFileServerFS(cfg.Assets)},
@@ -311,13 +322,16 @@ func (a *App) options(
 	}
 }
 
-// load reads the repositories and the tasks and hands the active tasks to the
+// load reads the repositories, the boards and the tasks and hands the active tasks to the
 // flow, which opens the session of the stage each one is in and moves on the
 // stages that finished while the app was closed. The situations and the
 // worktrees failing to load only go to the log: the steps block on their own.
 func (a *App) load(ctx context.Context) error {
 	if err := a.repositories.Sync(ctx); err != nil {
 		return fmt.Errorf("sync repositories: %w", err)
+	}
+	if err := a.boards.Sync(ctx); err != nil {
+		return fmt.Errorf("sync boards: %w", err)
 	}
 	if err := a.tasks.Sync(ctx); err != nil {
 		return fmt.Errorf("sync tasks: %w", err)

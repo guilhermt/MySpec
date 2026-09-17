@@ -58,6 +58,7 @@ type Task struct {
 	ArtifactVersion int
 	Models          Models      // the model and effort of its stages and steps
 	ReviewModes     ReviewModes // who reviews its steps
+	Card            *Card       // the card it was created from; nil for a task without one
 	ArchivedAt      time.Time   // zero while the task is active
 	CreatedAt       time.Time
 	UpdatedAt       time.Time

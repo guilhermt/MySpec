@@ -7,9 +7,11 @@ import (
 	"log/slog"
 	"maps"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/guilhermt/myspec/internal/board"
 	"github.com/guilhermt/myspec/internal/editor"
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/gh"
@@ -42,6 +44,7 @@ type TaskService struct {
 	defaults     *models.Service
 	reviewModes  *reviewmode.Service
 	repositories *repository.Service
+	boards       *board.Service
 	editor       Editor
 	log          *slog.Logger
 }
@@ -54,6 +57,7 @@ func NewTaskService(
 	defaults *models.Service,
 	reviewModes *reviewmode.Service,
 	repositories *repository.Service,
+	boards *board.Service,
 	editor Editor,
 	log *slog.Logger,
 ) *TaskService {
@@ -64,6 +68,7 @@ func NewTaskService(
 		defaults:     defaults,
 		reviewModes:  reviewModes,
 		repositories: repositories,
+		boards:       boards,
 		editor:       editor,
 		log:          log,
 	}
@@ -88,22 +93,50 @@ func (s *TaskService) CreateTask(req CreateTaskRequest) (string, error) {
 	if err != nil {
 		return "", s.fail("CreateTask", err)
 	}
-	repo, ok := s.repositories.Get(req.RepositoryID)
+	repositoryID, initialContext := req.RepositoryID, req.InitialContext
+	var taskCard *task.Card
+	if req.Card != nil {
+		card, found := s.boards.Card(req.Card.BoardID, req.Card.Key)
+		if !found {
+			return "", s.fail("CreateTask", board.ErrCardNotFound)
+		}
+		managed, found := s.managingRepository(req.Card.BoardID, card)
+		if !found {
+			return "", s.fail("CreateTask", &board.Refusal{Reason: board.RefusalNotManaged, Repository: card.FullName()})
+		}
+		repositoryID = managed.ID
+		initialContext = board.Context(card, req.InitialContext)
+		taskCard = &task.Card{
+			BoardID: req.Card.BoardID,
+			Owner:   card.Owner,
+			Name:    card.Name,
+			Number:  card.Number,
+			Title:   card.Title,
+			Body:    card.Body,
+			URL:     card.URL,
+			Status:  card.Status,
+			State:   card.State,
+			Epic:    epicOf(card),
+			ReadAt:  card.ReadAt,
+		}
+	}
+	repo, ok := s.repositories.Get(repositoryID)
 	if !ok {
 		return "", s.fail("CreateTask", task.ErrUnknownRepository)
 	}
 	// The first session of the task runs in the clone.
-	if _, checkErr := s.repositories.Check(req.RepositoryID); checkErr != nil {
+	if _, checkErr := s.repositories.Check(repositoryID); checkErr != nil {
 		return "", s.fail("CreateTask", checkErr)
 	}
 
 	t, err := s.tasks.Create(ctx, task.CreateParams{
 		Name:           req.Name,
-		RepositoryID:   req.RepositoryID,
+		RepositoryID:   repositoryID,
 		Mode:           mode,
-		InitialContext: req.InitialContext,
+		InitialContext: initialContext,
 		Models:         set,
 		ReviewMode:     reviewMode,
+		Card:           taskCard,
 	})
 	if errors.Is(err, task.ErrNameTaken) {
 		// A name the user can see is taken is their mistake, with the repository
@@ -121,6 +154,26 @@ func (s *TaskService) CreateTask(req CreateTaskRequest) (string, error) {
 		return "", s.fail("CreateTask", err)
 	}
 	return t.ID, nil
+}
+
+// managingRepository is the registered repository of a card, when the board of
+// boardID manages it.
+func (s *TaskService) managingRepository(boardID string, card board.Card) (repository.Repository, bool) {
+	for _, repo := range s.repositories.List() {
+		if repo.Identity().Same(repository.Identity{Owner: card.Owner, Name: card.Name}) {
+			return repo, repo.BoardID == boardID
+		}
+	}
+	return repository.Repository{}, false
+}
+
+// epicOf is the epic of a card as the task keeps it, nil without one.
+func epicOf(card board.Card) *task.CardEpic {
+	if card.Epic == nil {
+		return nil
+	}
+	e := card.Epic.Issue
+	return &task.CardEpic{Owner: e.Owner, Name: e.Name, Number: e.Number, Title: e.Title, URL: e.URL}
 }
 
 // DeleteTask stops the session of a task, removes its worktree and its branch,
@@ -656,6 +709,10 @@ var userMessages = []struct {
 	{task.ErrUnknownStage, "Unknown stage."},
 	{task.ErrUnknownMode, "Unknown mode."},
 	{repository.ErrNotFound, "This repository isn't registered."},
+	{repository.ErrCloned, "This repository is already cloned."},
+	{repository.ErrNoCloneFolder, "Choose a clone folder first."},
+	{board.ErrNotFound, "This board isn't registered."},
+	{board.ErrCardNotFound, "This card isn't in the last reading of the board."},
 	{models.ErrUnknownModel, "Unknown model."},
 	{models.ErrUnknownEffort, "Unknown effort level."},
 	{models.ErrUnknownStage, "Unknown stage."},
@@ -704,6 +761,20 @@ func failure(log *slog.Logger, method string, err error) error {
 	var refusal *repository.Refusal
 	if errors.As(err, &refusal) {
 		return errors.New(refusal.Message())
+	}
+	var boardRefusal *board.Refusal
+	if errors.As(err, &boardRefusal) {
+		return errors.New(boardRefusal.Message())
+	}
+	// A reading of GitHub that failed says what to do about it; it is the
+	// user's environment, not a fault of the app.
+	var boardFailure *board.Failure
+	if errors.As(err, &boardFailure) {
+		return errors.New(boardFailure.Message())
+	}
+	var taken *task.CardTakenError
+	if errors.As(err, &taken) {
+		return errors.New("Card #" + strconv.Itoa(taken.Number) + " already has an active task: " + taken.TaskName + ".")
 	}
 	for _, known := range userMessages {
 		if errors.Is(err, known.err) {
