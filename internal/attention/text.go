@@ -22,14 +22,16 @@ func stageName(stage task.Stage) string {
 	}
 }
 
-// placeName is a place as a sentence names it: the stage, "step 3", or the
-// pull request.
+// placeName is a place as a sentence names it: the stage, "step 3", the pull
+// request, or the review of one.
 func placeName(place Place) string {
 	switch place.Kind {
 	case PlaceStep:
 		return "step " + strconv.Itoa(place.Step)
 	case PlacePR:
 		return "the pull request"
+	case PlaceReview:
+		return "the review"
 	default:
 		return stageName(place.Stage)
 	}
@@ -155,6 +157,36 @@ func mergeBody(form Form) string {
 		return "The pull request is ready to close."
 	}
 	return "The pull request is ready to merge."
+}
+
+// reviewReplyBody is the notification of a pass of a review of a pull request
+// that ended without a report the app can act on.
+func reviewReplyBody() string {
+	return "The reviewer stopped without a report the app can read."
+}
+
+// reviewReportBody is the notification of the report of a pass: what it waits
+// for depends on how far the user got with its findings.
+func reviewReportBody(form Form) string {
+	switch form {
+	case FormPublish:
+		return "The review is ready to publish."
+	case FormApply:
+		return "The approved findings are ready to apply."
+	default:
+		return "The review has findings for you to decide."
+	}
+}
+
+// publishFailedBody is the notification of a review GitHub did not take.
+func publishFailedBody() string {
+	return "The review couldn't be published."
+}
+
+// newCommitsBody is the notification of a pull request that moved since the
+// review the user published.
+func newCommitsBody() string {
+	return "The pull request has new commits since your review."
 }
 
 // stepBlockPhrase is why a step could not start, inside a sentence: the title

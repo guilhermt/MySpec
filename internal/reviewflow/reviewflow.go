@@ -119,6 +119,12 @@ var (
 	ErrFork            = errors.New("reviewflow: the pull request comes from a fork")
 	ErrTaskPullRequest = errors.New("reviewflow: the pull request belongs to a task of the product")
 	ErrApplyNotOwn     = errors.New("reviewflow: only a pull request of your own can be fixed in the app")
+	ErrPassRunning     = errors.New("reviewflow: a pass of the review is still running")
+	ErrBusy            = errors.New("reviewflow: the conversation of the review is busy")
+	ErrNotReady        = errors.New("reviewflow: the review is not ready for that")
+	ErrOwnVerdict      = errors.New("reviewflow: a pull request of your own can only be commented on")
+	ErrEmptyReview     = errors.New("reviewflow: write a summary before publishing")
+	ErrNoWorktree      = errors.New("reviewflow: the worktree of the review is gone")
 )
 
 // Service is the state machine of every review of a pull request.
@@ -137,9 +143,10 @@ type Service struct {
 
 	renderPrompt func(stage prompts.Stage, vars prompts.Vars) (string, error)
 
-	mu     sync.Mutex
-	locks  map[string]*reviewLock // by review id
-	closed bool
+	mu      sync.Mutex
+	locks   map[string]*reviewLock // by review id
+	closed  bool
+	polling bool // a reading of the pull requests of the reviews is under way
 }
 
 // reviewLock serializes the work on one review and coalesces its pending

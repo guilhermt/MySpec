@@ -242,14 +242,16 @@ func (m *memSessions) failWith(err error) {
 // of a review in a folder of the test and answers with the failures it was
 // told to.
 type memWorktrees struct {
-	mu        sync.Mutex
-	dataDir   string
-	items     map[string]worktree.Worktree // by item id
-	calls     []string
-	head      string // the commit every reading of a worktree answers with
-	statusErr error
-	ensureErr error
-	updateErr error
+	mu         sync.Mutex
+	dataDir    string
+	items      map[string]worktree.Worktree // by item id
+	calls      []string
+	head       string // the commit every reading of a worktree answers with
+	statusErr  error
+	ensureErr  error
+	updateErr  error
+	updateOnce bool // the update failure is spent on the next call
+	removeErr  error
 }
 
 func newWorktrees(dataDir string) *memWorktrees {
@@ -292,7 +294,11 @@ func (m *memWorktrees) UpdateDetached(_ context.Context, wt worktree.Worktree, h
 	defer m.mu.Unlock()
 
 	m.calls = append(m.calls, "updateDetached:"+wt.TaskID+":"+headBranch)
-	return m.updateErr
+	err := m.updateErr
+	if m.updateOnce {
+		m.updateErr, m.updateOnce = nil, false
+	}
+	return err
 }
 
 func (m *memWorktrees) Status(_ context.Context, wt worktree.Worktree) (git.Status, error) {
@@ -319,6 +325,9 @@ func (m *memWorktrees) Remove(_ context.Context, itemID string) error {
 	defer m.mu.Unlock()
 
 	m.calls = append(m.calls, "remove:"+itemID)
+	if m.removeErr != nil {
+		return m.removeErr
+	}
 	delete(m.items, itemID)
 	return nil
 }
@@ -329,6 +338,23 @@ func (m *memWorktrees) failEnsure(err error) {
 	defer m.mu.Unlock()
 
 	m.ensureErr = err
+}
+
+// failUpdate makes every update of a worktree fail with err; once says the
+// failure is spent on the next call, as a worktree that is cleaned up is.
+func (m *memWorktrees) failUpdate(err error, once bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.updateErr, m.updateOnce = err, once
+}
+
+// failRemove makes every removal of a worktree fail with err.
+func (m *memWorktrees) failRemove(err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.removeErr = err
 }
 
 // failStatus makes every reading of a worktree fail with err.
@@ -489,6 +515,14 @@ func (m *memWatch) Forget(itemID string) {
 
 	m.calls = append(m.calls, "forget:"+itemID)
 	delete(m.tracked, itemID)
+}
+
+// recorded returns the calls the fake took, in order.
+func (m *memWatch) recorded() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return slices.Clone(m.calls)
 }
 
 // setSnapshot makes every reading of a worktree answer with snap.
@@ -1054,6 +1088,14 @@ func (f *fixture) settled(t *testing.T, id string) {
 
 	f.service.Check(id)
 	time.Sleep(settleWait)
+}
+
+// sent is what the conversation of a review was told, in order.
+func (m *memSessions) sent() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return slices.Clone(m.messages)
 }
 
 // changesReport is a report with findings, as the agent writes it.

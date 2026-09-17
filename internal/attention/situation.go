@@ -33,6 +33,10 @@ const (
 	KindDraft           Kind = "draft"
 	KindFindings        Kind = "findings"
 	KindChangesReview   Kind = "changes_review"
+	KindReviewReport    Kind = "review_report"
+	KindNewCommits      Kind = "new_commits"
+
+	KindPublishFailed Kind = "publish_failed"
 
 	KindMerge Kind = "merge"
 )
@@ -50,7 +54,8 @@ const (
 // Group is the group a kind belongs to.
 func (k Kind) Group() Group {
 	switch k {
-	case KindSessionError, KindStepBlocked, KindWorktreeUnreadable, KindPRBlocked, KindPlanInvalid, KindPRClosed:
+	case KindSessionError, KindStepBlocked, KindWorktreeUnreadable, KindPRBlocked, KindPlanInvalid,
+		KindPRClosed, KindPublishFailed:
 		return GroupError
 	case KindMerge:
 		return GroupClosing
@@ -75,7 +80,7 @@ func (g Group) rank() int {
 // Changing form is going on with the same situation.
 type Form string
 
-// The forms of step_review, changes_review and merge.
+// The forms of step_review, changes_review, merge and review_report.
 const (
 	FormNone    Form = ""
 	FormReview  Form = "review"  // nothing staged yet
@@ -83,6 +88,9 @@ const (
 	FormApprove Form = "approve" // every changed file staged
 	FormMerge   Form = "merge"   // the pull request is open
 	FormClose   Form = "close"   // merged, or the merge could not be confirmed
+	FormDecide  Form = "decide"  // the findings of a pass await a decision
+	FormPublish Form = "publish" // the decided findings await publication
+	FormApply   Form = "apply"   // the approved findings await the agent
 )
 
 // PlaceKind says what part of a task a place is.
@@ -94,6 +102,7 @@ const (
 	PlaceStep       PlaceKind = "step"        // the current step
 	PlaceStepReview PlaceKind = "step_review" // the conversation that reviews the current step
 	PlacePR         PlaceKind = "pr"          // the pull request of the task
+	PlaceReview     PlaceKind = "review"      // the review of a pull request, which is an item of its own
 )
 
 // Place is where in a task a situation is.
@@ -103,10 +112,12 @@ type Place struct {
 	Step  int        // PlaceStep and PlaceStepReview only
 }
 
-// Key names a place inside its task, the way the store keeps it:
-// stage:<stage>, step:<number>, step_review:<number> or pr.
+// Key names a place inside its item, the way the store keeps it:
+// stage:<stage>, step:<number>, step_review:<number>, pr or review.
 func (p Place) Key() string {
 	switch p.Kind {
+	case PlaceReview:
+		return string(PlaceReview)
 	case PlaceStep:
 		return "step:" + strconv.Itoa(p.Step)
 	case PlaceStepReview:
@@ -120,8 +131,11 @@ func (p Place) Key() string {
 
 // ParsePlace reads a key back.
 func ParsePlace(key string) (Place, bool) {
-	if key == string(PlacePR) {
+	switch key {
+	case string(PlacePR):
 		return Place{Kind: PlacePR}, true
+	case string(PlaceReview):
+		return Place{Kind: PlaceReview}, true
 	}
 	prefix, value, found := strings.Cut(key, ":")
 	if !found || value == "" {
