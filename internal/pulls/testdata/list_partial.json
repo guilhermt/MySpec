@@ -1,0 +1,66 @@
+{
+  "data": {
+    "r0": {
+      "pullRequests": {
+        "nodes": [
+          {
+            "number": 42,
+            "title": "Cache the board reading",
+            "url": "https://github.com/acme/alpha/pull/42",
+            "isDraft": false,
+            "isCrossRepository": false,
+            "updatedAt": "2026-09-16T11:30:00Z",
+            "headRefName": "cache-board-reading",
+            "headRefOid": "aaa111",
+            "baseRefName": "main",
+            "author": { "login": "mariana" },
+            "labels": { "nodes": [{ "name": "backend", "color": "0e8a16" }] },
+            "reviews": { "nodes": [] }
+          },
+          {
+            "number": 38,
+            "title": "Bump the linter",
+            "url": "https://github.com/acme/alpha/pull/38",
+            "isDraft": true,
+            "isCrossRepository": true,
+            "updatedAt": "2026-09-15T09:00:00Z",
+            "headRefName": "bump-linter",
+            "headRefOid": "bbb222",
+            "baseRefName": "main",
+            "author": { "login": "dependabot" },
+            "labels": { "nodes": [{ "name": "dependencies", "color": "ededed" }] },
+            "reviews": { "nodes": [{ "commit": { "oid": "bbb111" } }] }
+          }
+        ]
+      }
+    },
+    "r1": null,
+    "r2": {
+      "pullRequests": {
+        "nodes": [
+          {
+            "number": 7,
+            "title": "Split the migration",
+            "url": "https://github.com/acme/gamma/pull/7",
+            "isDraft": false,
+            "isCrossRepository": false,
+            "updatedAt": "2026-09-16T08:00:00Z",
+            "headRefName": "split-migration",
+            "headRefOid": "ccc333",
+            "baseRefName": "main",
+            "author": { "login": "guilhermt" },
+            "labels": { "nodes": [] },
+            "reviews": { "nodes": [{ "commit": { "oid": "ccc333" } }] }
+          }
+        ]
+      }
+    }
+  },
+  "errors": [
+    {
+      "type": "NOT_FOUND",
+      "message": "Could not resolve to a Repository with the name 'acme/beta'.",
+      "path": ["r1"]
+    }
+  ]
+}

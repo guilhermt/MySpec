@@ -1,0 +1,43 @@
+{
+  "data": {
+    "p0": {
+      "pullRequest": {
+        "number": 42,
+        "title": "Cache the board reading",
+        "url": "https://github.com/acme/alpha/pull/42",
+        "isDraft": false,
+        "isCrossRepository": false,
+        "updatedAt": "2026-09-16T11:30:00Z",
+        "headRefName": "cache-board-reading",
+        "headRefOid": "aaa111",
+        "baseRefName": "main",
+        "author": { "login": "mariana" },
+        "labels": { "nodes": [] },
+        "reviews": { "nodes": [] },
+        "body": "Reads the board once per minute.",
+        "state": "MERGED",
+        "merged": true
+      }
+    },
+    "p1": {
+      "pullRequest": {
+        "number": 7,
+        "title": "Split the migration",
+        "url": "https://github.com/acme/gamma/pull/7",
+        "isDraft": false,
+        "isCrossRepository": false,
+        "updatedAt": "2026-09-16T08:00:00Z",
+        "headRefName": "split-migration",
+        "headRefOid": "ccc333",
+        "baseRefName": "main",
+        "author": { "login": "guilhermt" },
+        "labels": { "nodes": [] },
+        "reviews": { "nodes": [] },
+        "body": "",
+        "state": "CLOSED",
+        "merged": false
+      }
+    },
+    "p2": null
+  }
+}
