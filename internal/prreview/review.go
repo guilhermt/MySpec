@@ -4,7 +4,13 @@
 // for a pass and when to publish, belongs to internal/reviewflow.
 package prreview
 
-import "time"
+import (
+	"errors"
+	"fmt"
+	"path/filepath"
+	"slices"
+	"time"
+)
 
 // Mode is what the product does with the findings the user approves.
 type Mode string
@@ -135,3 +141,124 @@ type Pass struct {
 	Findings        []Finding
 	CreatedAt       time.Time
 }
+
+// Modes lists the modes in the order the interface offers them.
+var Modes = []Mode{ModePublish, ModeApply}
+
+// ParseMode narrows a stored or received string to a mode.
+func ParseMode(value string) (Mode, error) {
+	if !slices.Contains(Modes, Mode(value)) {
+		return "", fmt.Errorf("parse review mode %q: %w", value, ErrUnknownMode)
+	}
+	return Mode(value), nil
+}
+
+// Verdicts lists the verdicts in the order the interface offers them.
+var Verdicts = []Verdict{VerdictApprove, VerdictRequestChanges, VerdictComment}
+
+// ParseVerdict narrows a stored or received string to a verdict.
+func ParseVerdict(value string) (Verdict, error) {
+	if !slices.Contains(Verdicts, Verdict(value)) {
+		return "", fmt.Errorf("parse verdict %q: %w", value, ErrUnknownVerdict)
+	}
+	return Verdict(value), nil
+}
+
+// decisions lists the decisions a finding is stored with, the undecided one
+// included.
+var decisions = []Decision{DecisionNone, DecisionApproved, DecisionDiscarded}
+
+// ParseDecision narrows a stored or received string to a decision. The empty
+// string is a finding still to decide.
+func ParseDecision(value string) (Decision, error) {
+	if !slices.Contains(decisions, Decision(value)) {
+		return "", fmt.Errorf("parse decision %q: %w", value, ErrUnknownDecision)
+	}
+	return Decision(value), nil
+}
+
+// Archived reports whether the review left the list for the history.
+func (r Review) Archived() bool { return !r.ArchivedAt.IsZero() }
+
+// ReportPath is the report the agent writes for one pass.
+func (r Review) ReportPath(pass int) string {
+	return filepath.Join(r.ArtifactsDir, ReportFile(pass))
+}
+
+// ContextPath is the file that tells the agent which pull request it reviews.
+func (r Review) ContextPath() string {
+	return filepath.Join(r.ArtifactsDir, ContextFile)
+}
+
+// Reference is the pull request as GitHub names it: owner/name#number.
+func (r Review) Reference(fullName string) string {
+	return fmt.Sprintf("%s#%d", fullName, r.Number)
+}
+
+// Anchored reports whether the finding points at a line of the pull request,
+// which is what an inline comment needs.
+func (f Finding) Anchored() bool { return f.Path != "" && f.Line > 0 }
+
+// Published reports whether the pass was sent to GitHub.
+func (p Pass) Published() bool { return !p.PublishedAt.IsZero() }
+
+// Decided reports whether the user decided on every finding of the pass. A
+// pass with no findings is decided.
+func (p Pass) Decided() bool {
+	for _, finding := range p.Findings {
+		if finding.Decision == DecisionNone {
+			return false
+		}
+	}
+	return true
+}
+
+// Approved are the findings the user kept, in the order the report numbered
+// them.
+func (p Pass) Approved() []Finding {
+	var approved []Finding
+	for _, finding := range p.Findings {
+		if finding.Decision == DecisionApproved {
+			approved = append(approved, finding)
+		}
+	}
+	return approved
+}
+
+// reviewsDirName is the folder of the artifacts of every review inside the
+// data directory.
+const reviewsDirName = "reviews"
+
+// idPrefixLen is how much of the id of a review names its folder: enough to
+// tell apart two reviews of the same pull request, short enough to read.
+const idPrefixLen = 8
+
+// ContextFile is the name of the file that describes the pull request under
+// review.
+const ContextFile = "context.md"
+
+// ReportFile is the name of the report of one pass.
+func ReportFile(pass int) string { return fmt.Sprintf("review-%d.md", pass) }
+
+// ArtifactsDir is where the artifacts of a review live: one folder per
+// repository, as GitHub names it, and one per review, so that a pull request
+// reviewed twice never mixes the two.
+func ArtifactsDir(dataDir, owner, name string, number int, id string) string {
+	short := id
+	if len(short) > idPrefixLen {
+		short = short[:idPrefixLen]
+	}
+	return filepath.Join(dataDir, reviewsDirName, owner, name, fmt.Sprintf("pr-%d-%s", number, short))
+}
+
+// The ways an action on a review is refused.
+var (
+	ErrNotFound        = errors.New("prreview: not found")
+	ErrActiveExists    = errors.New("prreview: the pull request already has an active review")
+	ErrNotDeciding     = errors.New("prreview: the pass is not the one being decided")
+	ErrEmptyText       = errors.New("prreview: the text of a finding is required")
+	ErrUnknownMode     = errors.New("prreview: unknown mode")
+	ErrUnknownVerdict  = errors.New("prreview: unknown verdict")
+	ErrUnknownDecision = errors.New("prreview: unknown decision")
+	ErrUnknownArtifact = errors.New("prreview: unknown artifact")
+)

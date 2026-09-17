@@ -334,3 +334,23 @@ func TestDeletingAReviewTakesItsPassesAndFindings(t *testing.T) {
 		t.Errorf("Passes() = %v, want the passes gone with the review", got)
 	}
 }
+
+func TestDeletingAPassTakesItsFindingsAndLeavesTheOtherPasses(t *testing.T) {
+	t.Parallel()
+	s := newStoreWithRepositories(t)
+
+	review := newReview("review-1", webRepo, 7, fixedTime)
+	insertReview(t, s, review)
+	first := newPass(review.ID, 1, newFinding(1, "main.go", 3))
+	second := newPass(review.ID, 2, newFinding(1, "go.mod", 8))
+	seedPass(t, s, first)
+	seedPass(t, s, second)
+
+	if err := s.Reviews.DeletePass(t.Context(), review.ID, second.Number); err != nil {
+		t.Fatalf("DeletePass() = %v, want nil", err)
+	}
+
+	if diff := cmp.Diff([]prreview.Pass{first}, passesOf(t, s, review.ID)); diff != "" {
+		t.Errorf("Passes() mismatch (-want +got):\n%s", diff)
+	}
+}

@@ -10,6 +10,9 @@ import (
 	"github.com/guilhermt/myspec/internal/prreview"
 )
 
+// ReviewsRepo implements the store of prreview.
+var _ prreview.Store = (*ReviewsRepo)(nil)
+
 // ReviewsRepo stores the reviews of pull requests, their passes and the
 // findings of each pass. It implements prreview.Store.
 type ReviewsRepo struct{ db *sql.DB }
@@ -214,6 +217,16 @@ func (r *ReviewsRepo) UpsertPass(ctx context.Context, pass prreview.Pass) error 
 		formatTime(pass.CreatedAt))
 	if err != nil {
 		return fmt.Errorf("upsert pass %d of review %s: %w", pass.Number, pass.ReviewID, err)
+	}
+	return nil
+}
+
+// DeletePass removes a pass of a review and, by cascade, its findings.
+func (r *ReviewsRepo) DeletePass(ctx context.Context, reviewID string, pass int) error {
+	const stmt = `DELETE FROM review_passes WHERE review_id = ? AND pass = ?`
+
+	if _, err := r.db.ExecContext(ctx, stmt, reviewID, pass); err != nil {
+		return fmt.Errorf("delete pass %d of review %s: %w", pass, reviewID, err)
 	}
 	return nil
 }
