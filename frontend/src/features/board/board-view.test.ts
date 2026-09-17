@@ -5,7 +5,7 @@ import {
   defaultCollapsed,
   EMPTY_FILTERS,
   filterCards,
-  isStoredBoardView,
+  isBoardViewMemory,
   NO_STATUS,
   sections,
   unsatisfied,
@@ -127,17 +127,17 @@ describe("defaultCollapsed and visibleCards", () => {
   });
 });
 
-describe("isStoredBoardView", () => {
+describe("isBoardViewMemory", () => {
   it("accepts a stored view, with or without the collapsed sections", () => {
-    expect(isStoredBoardView({ filters: EMPTY_FILTERS, collapsed: ["done"] })).toBe(true);
-    expect(isStoredBoardView({ filters: EMPTY_FILTERS })).toBe(true);
+    expect(isBoardViewMemory({ filters: EMPTY_FILTERS, collapsed: ["done"] })).toBe(true);
+    expect(isBoardViewMemory({ filters: EMPTY_FILTERS })).toBe(true);
   });
 
   it("refuses anything of another shape", () => {
-    expect(isStoredBoardView(null)).toBe(false);
-    expect(isStoredBoardView({ filters: EMPTY_FILTERS, collapsed: [1] })).toBe(false);
-    expect(isStoredBoardView({ filters: EMPTY_FILTERS, collapsed: "done" })).toBe(false);
-    expect(isStoredBoardView({ filters: { query: "" }, collapsed: [] })).toBe(false);
+    expect(isBoardViewMemory(null)).toBe(false);
+    expect(isBoardViewMemory({ filters: EMPTY_FILTERS, collapsed: [1] })).toBe(false);
+    expect(isBoardViewMemory({ filters: EMPTY_FILTERS, collapsed: "done" })).toBe(false);
+    expect(isBoardViewMemory({ filters: { query: "" }, collapsed: [] })).toBe(false);
   });
 });
 

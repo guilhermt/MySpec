@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/guilhermt/myspec/internal/board"
-	"github.com/guilhermt/myspec/internal/repository"
 )
 
 // boardCallTimeout bounds a call that reads GitHub and scans the home folder.
@@ -15,14 +14,13 @@ const boardCallTimeout = 3 * time.Minute
 
 // BoardService is the board API the frontend calls.
 type BoardService struct {
-	boards       *board.Service
-	repositories *repository.Service
-	log          *slog.Logger
+	boards *board.Service
+	log    *slog.Logger
 }
 
-// NewBoardService builds the service over the board and repository domains.
-func NewBoardService(boards *board.Service, repositories *repository.Service, log *slog.Logger) *BoardService {
-	return &BoardService{boards: boards, repositories: repositories, log: log}
+// NewBoardService builds the service over the board domain.
+func NewBoardService(boards *board.Service, log *slog.Logger) *BoardService {
+	return &BoardService{boards: boards, log: log}
 }
 
 // PreviewBoard reads the board at url for registering it: its statuses, with
@@ -96,7 +94,7 @@ func (s *BoardService) PreviewRemoveBoard(id string) (BoardRemoval, error) {
 
 // RemoveBoard removes a board and releases every repository of it.
 func (s *BoardService) RemoveBoard(id string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), gitCallTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
 	if err := s.boards.Remove(ctx, id); err != nil {

@@ -4,7 +4,7 @@ import {
   type BoardViewMemory,
   defaultCollapsed,
   EMPTY_FILTERS,
-  isStoredBoardView,
+  isBoardViewMemory,
 } from "@/features/board/board-view";
 import { findBoard } from "@/lib/boards";
 import { boardViewKey, readStored, writeStored } from "@/lib/ui-storage";
@@ -34,7 +34,7 @@ export function useBoardViewMemory(
   boardId: string,
 ): [BoardViewMemory, Dispatch<SetStateAction<BoardViewMemory>>] {
   const [view, setView] = useState<ViewState>(() => {
-    const stored = readStored(boardViewKey(boardId), { filters: EMPTY_FILTERS }, isStoredBoardView);
+    const stored = readStored(boardViewKey(boardId), { filters: EMPTY_FILTERS }, isBoardViewMemory);
     return { filters: stored.filters, collapsed: stored.collapsed ?? null, selectedKey: null };
   });
   // Subscribing to the board follows its statuses while the default applies.

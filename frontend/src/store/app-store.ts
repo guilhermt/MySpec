@@ -632,13 +632,6 @@ export function useTask(id: string | null): TaskSummary | null {
   return useAppStore((state) => findTask(state.app, id));
 }
 
-/** useFilteredTasks are the active tasks the sidebar list shows, under the filter. */
-export function useFilteredTasks(): readonly TaskSummary[] {
-  return useAppStore(
-    useShallow((state) => tasksInFilter(tasksOf(state.app), state.app?.repositoryFilter ?? "")),
-  );
-}
-
 export function useOpenTask(): TaskSummary | null {
   return useAppStore((state) => findTask(state.app, state.openTaskId));
 }

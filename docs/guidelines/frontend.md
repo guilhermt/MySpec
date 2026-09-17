@@ -11,7 +11,7 @@ React 19, TypeScript em modo strict, Vite, Tailwind CSS 4, shadcn/ui sobre Base 
 ## Store e ações
 
 - `store/app-store.ts` guarda o `State`, os transcripts por chave de sessão e o estado de interface. Cada campo tem um comentário `/** ... */` dizendo o que é. O store importa só de `lib/` e de `store/`.
-- Componentes leem o store por hooks seletores exportados (`useTask`, `useFilteredTasks`, `useOpenTask`...), com `useShallow` quando o seletor devolve um objeto ou array novo. Um componente nunca assina o store inteiro.
+- Componentes leem o store por hooks seletores exportados (`useTask`, `useOpenBoardId`, `useOpenTask`...), com `useShallow` quando o seletor devolve um objeto ou array novo. Um componente nunca assina o store inteiro.
 - Componentes agem por `store/actions.ts`. Cada ação chama `api` dentro de `run`, que transforma um erro na mensagem do aviso. Nenhuma ação toca o `State`: o estado novo chega por `state:changed`.
 - Estado de interface que precisa sobreviver a uma navegação (edição de prompt, navegação pendente) vive no store; o que é local a um componente vive em `useState`.
 

@@ -8,7 +8,7 @@ import { SettingsView } from "@/features/settings/SettingsView";
 import { Sidebar } from "@/features/sidebar/Sidebar";
 import { TaskView } from "@/features/task/TaskView";
 import { NewTaskDialog } from "@/features/task-create/NewTaskDialog";
-import { useAppStore } from "@/store/app-store";
+import { useAppStore, useOpenBoardId } from "@/store/app-store";
 
 /** MainArea is the one screen the app is on: a task, the history, the settings, a board, or home. */
 function MainArea() {
@@ -16,7 +16,7 @@ function MainArea() {
   const openArchivedId = useAppStore((state) => state.openArchivedId);
   const settingsOpen = useAppStore((state) => state.settingsOpen);
   const historyOpen = useAppStore((state) => state.historyOpen);
-  const openBoardId = useAppStore((state) => state.openBoardId);
+  const openBoardId = useOpenBoardId();
 
   if (openTaskId !== null) {
     return <TaskView taskId={openTaskId} />;

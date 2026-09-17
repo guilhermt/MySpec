@@ -371,7 +371,7 @@ func newFixture(t *testing.T) *fixture {
 	f.tasks = bindings.NewTaskService(
 		f.taskSvc, f.sessions, f.flow, f.models, f.reviewModes, f.repositories, f.boards, f.editor.open, log,
 	)
-	f.boardService = bindings.NewBoardService(f.boards, f.repositories, log)
+	f.boardService = bindings.NewBoardService(f.boards, log)
 	return f
 }
 

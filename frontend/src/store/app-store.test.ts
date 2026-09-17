@@ -13,7 +13,6 @@ import {
   useBoards,
   useDraft,
   useError,
-  useFilteredTasks,
   useFlashing,
   useHistory,
   useHistoryUi,
@@ -379,10 +378,9 @@ describe("transcripts", () => {
 });
 
 describe("task selectors", () => {
-  it("report the tasks of the snapshot, and the ones the filter shows", () => {
+  it("report the tasks of the snapshot, the open one, its transcript and its draft", () => {
     const { result } = renderHook(() => ({
       tasks: useTasks(),
-      filtered: useFilteredTasks(),
       task: useTask(API_TASK.id),
       open: useOpenTask(),
       transcript: useTranscript(WEB_TASK.id, WEB_TASK.stage),
@@ -402,21 +400,10 @@ describe("task selectors", () => {
     });
 
     expect(result.current.tasks).toHaveLength(2);
-    expect(result.current.filtered).toHaveLength(2);
     expect(result.current.task).toEqual(API_TASK);
     expect(result.current.open).toEqual(WEB_TASK);
     expect(result.current.transcript?.status).toBe("ready");
     expect(result.current.draft).toBe("hello");
-  });
-
-  it("keeps only the tasks of the repository of the filter", () => {
-    const { result } = renderHook(() => useFilteredTasks());
-
-    act(() => {
-      useAppStore.getState().applyState(withTasks({ repositoryFilter: "repo-2" }));
-    });
-
-    expect(result.current).toEqual([API_TASK]);
   });
 
   it("falls back to an empty task list when the snapshot has none", () => {

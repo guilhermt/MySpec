@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import {
   useAppStore,
   useFlashing,
+  useOpenBoardId,
   useRepositoryFilter,
   useSidebarCollapsed,
 } from "@/store/app-store";
@@ -177,7 +178,7 @@ interface NodeProps {
 /** Node is a board of the tree, or the tasks of no board. */
 function Node({ node, focusableId }: NodeProps) {
   const openBoard = useAppStore((state) => state.openBoard);
-  const openBoardId = useAppStore((state) => state.openBoardId);
+  const openBoardId = useOpenBoardId();
 
   if (node.kind === "no-board") {
     return (

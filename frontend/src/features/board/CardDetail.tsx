@@ -85,28 +85,6 @@ export function CardDetail({ board, card, start, onClose, onSelect }: CardDetail
         </ExternalLink>
       </div>
 
-      <StartTaskAction board={board} card={card} start={start} />
-
-      {task !== null && (
-        <Section title="Task">
-          <Button variant="outline" size="sm" className="w-fit" onClick={() => openTask(task.id)}>
-            {task.name}
-          </Button>
-        </Section>
-      )}
-      {task === null && archived !== null && (
-        <Section title="Task">
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-fit"
-            onClick={() => openArchived(archived.id)}
-          >
-            {`Archived: ${archived.name}`}
-          </Button>
-        </Section>
-      )}
-
       {fields.length > 0 && (
         <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
           {fields.map((field) => (
@@ -204,6 +182,27 @@ export function CardDetail({ board, card, start, onClose, onSelect }: CardDetail
           </ul>
         </Section>
       )}
+
+      {task !== null && (
+        <Section title="Task">
+          <Button variant="outline" size="sm" className="w-fit" onClick={() => openTask(task.id)}>
+            {task.name}
+          </Button>
+        </Section>
+      )}
+      {task === null && archived !== null && (
+        <Section title="Task">
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-fit"
+            onClick={() => openArchived(archived.id)}
+          >
+            {`Archived: ${archived.name}`}
+          </Button>
+        </Section>
+      )}
+      <StartTaskAction board={board} card={card} start={start} />
     </aside>
   );
 }

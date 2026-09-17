@@ -107,6 +107,38 @@ func TestGraphQLReportsTheRateLimitWithAResetWhenGhCannotSayOne(t *testing.T) {
 	}
 }
 
+func TestGraphQLReportsTheRateLimitWithAnHourWhenGhAnswersNoResources(t *testing.T) {
+	t.Parallel()
+	// gh answers api rate_limit with a body that has no resources, so the
+	// reset time falls back to an hour from now.
+	r, fake := runner(t, map[string]ghtest.Reply{
+		"api": {
+			Stdout: `{"data":null,"errors":[{"type":"RATE_LIMITED","message":"API rate limit exceeded"}]}`,
+			Stderr: "gh: API rate limit exceeded",
+			Exit:   1,
+		},
+		"api rate_limit": {Stdout: "{}"},
+	})
+
+	before := time.Now()
+	_, err := r.GraphQL(t.Context(), query, nil)
+
+	var limitErr *gh.RateLimitError
+	if !errors.As(err, &limitErr) {
+		t.Fatalf("GraphQL() = %v, want *RateLimitError", err)
+	}
+	if limitErr.ResetAt.Before(before.Add(time.Hour)) || limitErr.ResetAt.After(time.Now().Add(time.Hour)) {
+		t.Errorf("ResetAt = %v, want an hour from now", limitErr.ResetAt)
+	}
+	want := "gh: GitHub rate limit reached until " + limitErr.ResetAt.Format(time.RFC3339)
+	if limitErr.Error() != want {
+		t.Errorf("Error() = %q, want %q", limitErr.Error(), want)
+	}
+	if calls := fake.Calls(t); len(calls) != 2 || calls[1].Args != "api rate_limit" {
+		t.Errorf("calls = %+v, want the query and then api rate_limit", calls)
+	}
+}
+
 func TestGraphQLPassesTheVarsInSortedOrder(t *testing.T) {
 	t.Parallel()
 	r, fake := runner(t, map[string]ghtest.Reply{"api": {Stdout: `{"data":{}}`}})

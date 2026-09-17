@@ -1,8 +1,6 @@
 package store_test
 
 import (
-	"database/sql"
-	"path/filepath"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -117,17 +115,8 @@ func TestDeleteRemovesARepositoryAndIgnoresAMissingOne(t *testing.T) {
 
 func TestTheBoardOfARepositoryRoundTrips(t *testing.T) {
 	t.Parallel()
-	path := filepath.Join(t.TempDir(), "myspec.db")
-	s, err := store.Open(t.Context(), path, newLogCapture().log, nil)
-	if err != nil {
-		t.Fatalf("Open() = %v, want nil", err)
-	}
-	t.Cleanup(func() {
-		if err := s.Close(); err != nil {
-			t.Errorf("Close() = %v, want nil", err)
-		}
-	})
-	seedBoard(t, path, "board-1")
+	s := newStore(t)
+	insertBoard(t, s, newBoard("board-1", "Roadmap", 1))
 
 	managed := newRepository("repo-1", "acme", "api", "/code/api")
 	managed.BoardID = "board-1"
@@ -159,23 +148,5 @@ func TestARepositoryWithoutACloneHasAnEmptyPath(t *testing.T) {
 
 	if diff := cmp.Diff([]repository.Repository{repo}, listRepositories(t, s)); diff != "" {
 		t.Errorf("List() mismatch (-want +got):\n%s", diff)
-	}
-}
-
-// seedBoard inserts a board with id into the database at path through a
-// connection of its own, since no store method registers boards yet.
-func seedBoard(t *testing.T, path, id string) {
-	t.Helper()
-
-	db, err := sql.Open("sqlite", "file:"+path)
-	if err != nil {
-		t.Fatalf("sql.Open() = %v, want nil", err)
-	}
-	defer func() { _ = db.Close() }()
-	const insert = `INSERT INTO boards (id, owner, owner_type, number, title, url, created_at)
-		VALUES (?, 'acme', 'organization', 1, 'Roadmap', 'https://github.com/orgs/acme/projects/1',
-			'2026-09-06T10:00:00Z')`
-	if _, err := db.ExecContext(t.Context(), insert, id); err != nil {
-		t.Fatalf("insert board %s: %v", id, err)
 	}
 }

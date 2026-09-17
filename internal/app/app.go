@@ -307,7 +307,7 @@ func (a *App) options(
 			application.NewService(bindings.NewTaskService(
 				tasks, sessions, flowSvc, modelsSvc, reviewModesSvc, repositories, boards, editor.Open, log,
 			)),
-			application.NewService(bindings.NewBoardService(boards, repositories, log)),
+			application.NewService(bindings.NewBoardService(boards, log)),
 			application.NewService(bindings.NewAttentionService(a.attention)),
 		},
 		Assets: application.AssetOptions{Handler: application.AssetFileServerFS(cfg.Assets)},

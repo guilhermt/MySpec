@@ -107,14 +107,6 @@ func TestBoardServiceTellsTheUserWhatWentWrong(t *testing.T) {
 			},
 			want: "This board isn't registered.",
 		},
-		{
-			name: "a card outside the reading",
-			call: func(s *bindings.BoardService) error {
-				_, err := s.CardContext("board-9", "acme/web#1")
-				return err
-			},
-			want: "This card isn't in the last reading of the board.",
-		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -133,6 +125,23 @@ func TestBoardServiceTellsTheUserWhatWentWrong(t *testing.T) {
 				t.Error("the mistake was logged, want nothing logged")
 			}
 		})
+	}
+}
+
+func TestCardContextRefusesACardTheReadingDoesNotHold(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.register(t, t.TempDir())
+	f.registerBoard(t, true, webCard(12))
+
+	_, err := f.boardService.CardContext(testBoardID, "dev/web#7")
+
+	if want := "This card isn't in the last reading of the board."; err == nil || err.Error() != want {
+		t.Errorf("CardContext() = %v, want %q", err, want)
+	}
+	if f.logged(t, "binding failed") {
+		t.Error("the mistake was logged, want nothing logged")
 	}
 }
 

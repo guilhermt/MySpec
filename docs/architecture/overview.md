@@ -107,7 +107,7 @@ A implementação de uma task One-Shot não tem caminho próprio em `flow`. A in
 
 ### Store
 
-`store/app-store.ts` é o store Zustand: o `State` recebido do Go, os transcripts por chave de sessão, os rascunhos, e o estado de interface que só o frontend conhece (task aberta, board aberto, diálogo de criação aberto e o card de onde ele parte, o **Start task** que espera um clone, nós recolhidos da barra lateral, último repositório usado, aba da conversa do step, histórico e configurações abertos, edição de prompt, navegação pendente). Ele exporta hooks seletores (`useTask`, `useFilteredTasks`, `useTranscript`, `useOpenTask`...) para que cada componente assine só a fatia que usa. O store importa só de `lib/`.
+`store/app-store.ts` é o store Zustand: o `State` recebido do Go, os transcripts por chave de sessão, os rascunhos, e o estado de interface que só o frontend conhece (task aberta, board aberto, diálogo de criação aberto e o card de onde ele parte, o **Start task** que espera um clone, nós recolhidos da barra lateral, último repositório usado, aba da conversa do step, histórico e configurações abertos, edição de prompt, navegação pendente). Ele exporta hooks seletores (`useTask`, `useOpenBoardId`, `useTranscript`, `useOpenTask`...) para que cada componente assine só a fatia que usa. O store importa só de `lib/`.
 
 `store/actions.ts` é o que os componentes chamam para agir: cada ação chama `api`, e um erro vira a mensagem do aviso de erro. Nenhuma ação toca o `State`: o estado novo sempre chega por `state:changed`. Os componentes nunca chamam `api` diretamente.
 

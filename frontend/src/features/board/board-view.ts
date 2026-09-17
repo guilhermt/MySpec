@@ -53,17 +53,18 @@ function isBoardFilters(value: unknown): value is BoardFilters {
 }
 
 /**
- * StoredBoardView is a board view as kept between runs. collapsed is absent
- * until the user collapses or expands a section: until then the final statuses
- * of the board, which a board never read does not know yet, stay collapsed.
+ * KeptMemory is BoardViewMemory as it is kept between runs. The selected card
+ * is never kept, and collapsed is absent until the user collapses or expands a
+ * section: until then the final statuses of the board, which a board never read
+ * does not know yet, stay collapsed.
  */
-export interface StoredBoardView {
+interface KeptMemory {
   filters: BoardFilters;
   collapsed?: string[];
 }
 
-/** isStoredBoardView tells a stored board view from anything else. */
-export function isStoredBoardView(value: unknown): value is StoredBoardView {
+/** isBoardViewMemory tells what a board view kept between runs from anything else. */
+export function isBoardViewMemory(value: unknown): value is KeptMemory {
   return (
     isRecord(value) &&
     isBoardFilters(value.filters) &&

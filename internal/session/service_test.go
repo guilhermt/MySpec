@@ -1049,6 +1049,34 @@ func TestStartOfALaterStageSendsItsPromptWithoutTheInitialContext(t *testing.T) 
 	}
 }
 
+func TestThePullRequestPromptOfATaskWithACardCarriesTheCard(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	info := atStage(taskInfo(t, "t1"), prompts.StagePR)
+	info.Branch = "login-screen"
+	info.BaseBranch = "main"
+	info.Card = "## Add the login screen\n\nEmail and password."
+	info.CardReference = "dev/web#12"
+	f.start(t, info)
+	f.waitIdle(t, info.Key())
+
+	tr := f.transcript(t, info.Key())
+	if len(tr.Entries) != 3 {
+		t.Fatalf("entries = %d, want the stage marker, the prompt and its answer", len(tr.Entries))
+	}
+	rendered, _ := renderPrompt(prompts.StagePR, prompts.Vars{
+		TaskName:      info.Name,
+		Branch:        info.Branch,
+		BaseBranch:    info.BaseBranch,
+		Card:          info.Card,
+		CardReference: info.CardReference,
+	})
+	if got := tr.Entries[2].Assistant.Text; got != rendered {
+		t.Errorf("prompt sent = %q, want %q", got, rendered)
+	}
+}
+
 func TestStartOfTheOneShotPlanningSendsItsPromptWithTheInitialContext(t *testing.T) {
 	t.Parallel()
 

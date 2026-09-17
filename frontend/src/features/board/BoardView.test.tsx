@@ -7,6 +7,9 @@ import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
 import { makeBoard, makeBoardCard, makeRepository, makeState } from "@/test/wails-mock";
 
+/** PLACEHOLDER_ROWS is how many rows BoardView stands in with, its SKELETON_ROWS. */
+const PLACEHOLDER_ROWS = 8;
+
 const LOGIN = makeBoardCard();
 const HEADER = makeBoardCard({
   key: "dev/web#7",
@@ -57,10 +60,12 @@ describe("BoardView", () => {
   });
 
   it("shows placeholder rows while a board never read is being read", () => {
-    view({ readAt: "", reading: true, cards: [] });
+    const { container } = view({ readAt: "", reading: true, cards: [] });
 
     expect(screen.queryByRole("tree")).not.toBeInTheDocument();
     expect(screen.getByRole("status", { name: "Reading the board" })).toBeInTheDocument();
+    // The placeholder rows stand in for the cards, and are aria-hidden.
+    expect(container.querySelectorAll('[data-slot="skeleton"]')).toHaveLength(PLACEHOLDER_ROWS);
   });
 
   it("shows why a board never read failed, and tries again", async () => {

@@ -24,15 +24,17 @@ export interface StartCard {
 export function useStartCard(board: Board, card: BoardCard | null): StartCard {
   const openNewTask = useAppStore((state) => state.openNewTask);
   const setPendingStart = useAppStore((state) => state.setPendingStart);
-  // The offer belongs to the card it was made for; another card starts with none.
+  // The offer, the clone running and its failure belong to the card they were
+  // made for; another card starts with none of them.
   const [offered, setOffered] = useState<{ key: string; offer: StartOffer } | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [cloning, setCloning] = useState<string | null>(null);
+  const [failed, setFailed] = useState<{ key: string; message: string } | null>(null);
 
   const offerFor = (key: string, offer: StartOffer | null) => {
-    setError(null);
+    setFailed(null);
     setOffered(offer === null ? null : { key, offer });
   };
+  const forCard = (key: string | null) => key !== null && key === card?.key;
 
   return {
     run(target = card ?? undefined) {
@@ -57,22 +59,22 @@ export function useStartCard(board: Board, card: BoardCard | null): StartCard {
       if (card === null) {
         return;
       }
-      setBusy(true);
-      setError(null);
+      setCloning(card.key);
+      setFailed(null);
       try {
         const started = await cloneRepository(card.repositoryId);
         if (started) {
           setPendingStart({ boardId: board.id, key: card.key, repositoryId: card.repositoryId });
         }
       } catch (failure) {
-        setError(messageOf(failure));
+        setFailed({ key: card.key, message: messageOf(failure) });
       } finally {
-        setBusy(false);
+        setCloning(null);
       }
     },
-    busy,
-    error,
-    offer: offered !== null && offered.key === card?.key ? offered.offer : null,
+    busy: forCard(cloning),
+    error: failed !== null && forCard(failed.key) ? failed.message : null,
+    offer: offered !== null && forCard(offered.key) ? offered.offer : null,
     setOffer(offer) {
       if (card !== null) {
         offerFor(card.key, offer);
