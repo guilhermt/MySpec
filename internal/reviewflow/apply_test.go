@@ -20,6 +20,14 @@ const commitHash = "ccc3333"
 func applyDecided(t *testing.T, f *fixture) string {
 	t.Helper()
 
+	return applyDecidedOn(t, f, headHash)
+}
+
+// applyDecidedOn is applyDecided with the pass recorded on commit, "" for a
+// pass whose commit git could not say.
+func applyDecidedOn(t *testing.T, f *fixture, commit string) string {
+	t.Helper()
+
 	f.pulls.seed(ownPR())
 	id := f.startMode(t, prreview.ModeApply, "")
 	f.sessions.goIdle(id)
@@ -27,7 +35,7 @@ func applyDecided(t *testing.T, f *fixture) string {
 		prreview.ParsedFinding{Number: 1, Path: "internal/board/service.go", Line: 12, Text: "The reading is never cached."},
 		prreview.ParsedFinding{Number: 2, Text: "The cache has no test."},
 		prreview.ParsedFinding{Number: 3, Text: "The name of the cache is vague."},
-	), headHash)
+	), commit)
 	f.decide(t, id, 1, 1, prreview.DecisionApproved)
 	f.decide(t, id, 1, 2, prreview.DecisionDiscarded)
 	f.decide(t, id, 1, 3, prreview.DecisionApproved)
@@ -232,6 +240,60 @@ func TestACommitTurnThatLeavesNoCommitGivesTheChangesBack(t *testing.T) {
 	}
 	if !slices.Contains(f.watch.recorded(), "refresh:"+id) {
 		t.Errorf("watch calls = %v, want a fresh reading of the worktree", f.watch.recorded())
+	}
+}
+
+// committingWithoutPassCommit is a review whose changes the user approved,
+// fixing a pass whose commit git could not say.
+func committingWithoutPassCommit(t *testing.T, f *fixture) string {
+	t.Helper()
+
+	id := applyDecidedOn(t, f, "")
+	if err := f.service.Apply(t.Context(), id); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	f.sessions.goIdle(id)
+	f.watch.setSnapshot(review.Snapshot{Head: headHash, Staged: 2, Total: 2})
+	if err := f.service.Approve(t.Context(), id); err != nil {
+		t.Fatalf("approve: %v", err)
+	}
+	return id
+}
+
+func TestACommitTurnThatLeavesNoCommitIsToldWhenThePassRecordedNoCommit(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := committingWithoutPassCommit(t, f)
+	f.sessions.goIdle(id)
+
+	f.evaluated(t, id, func(s reviewflow.State) bool {
+		return s.CommitFailed
+	}, "the commit to be found missing against the head read at the approval")
+
+	state := f.state(t, id)
+	if state.Review.Phase != prreview.PhaseApplying || state.Review.AskedPass != 1 {
+		t.Errorf("review = %+v, want the changes given back and no pass asked for", state.Review)
+	}
+	if passes := f.reviews.Passes(id); passes[0].Applied {
+		t.Errorf("passes = %+v, want the fixes of the first one not counted as applied", passes)
+	}
+}
+
+func TestACommitIsToldAgainstTheHeadReadAtTheApprovalWhenThePassRecordedNoCommit(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := committingWithoutPassCommit(t, f)
+	f.watch.setSnapshot(review.Snapshot{Head: commitHash})
+	f.sessions.goIdle(id)
+
+	f.evaluated(t, id, func(s reviewflow.State) bool {
+		return s.Review.AskedPass == 2
+	}, "the second pass to be asked for")
+
+	if passes := f.reviews.Passes(id); !passes[0].Applied {
+		t.Errorf("passes = %+v, want the first one applied", passes)
 	}
 }
 

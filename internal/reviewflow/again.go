@@ -45,6 +45,11 @@ func (s *Service) ReviewAgain(ctx context.Context, id, instructions string) erro
 	}
 
 	stored, detail := s.reread(ctx, stored, repo)
+	if detail != nil && detail.State != string(prreview.PROpen) {
+		// Merged or closed since the last poll: the poll ends the review, and
+		// a pass asked now would be cut off in the middle of its turn.
+		return fmt.Errorf("review %s again: %w", stored.Reference(repo.FullName()), ErrNotOpen)
+	}
 	if err = s.updateWorktree(ctx, stored, wt); err != nil {
 		return err
 	}

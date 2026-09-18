@@ -98,10 +98,7 @@ func TestAReviewOlderThanTheTipOfTheBranchIsNewCommits(t *testing.T) {
 	f.github.reply(queryList, load(t, "list_partial.json"), nil)
 	f.refresh(t)
 
-	pr, ok := f.service.Find(alphaID, 38)
-	if !ok {
-		t.Fatalf("Find(%s, 38) found nothing", alphaID)
-	}
+	pr := f.pullRequest(t, alphaID, 38)
 	if !pr.NewCommits() {
 		t.Errorf("NewCommits() = false, want true: reviewed at %s, tip at %s", pr.ReviewedCommit, pr.HeadCommit)
 	}

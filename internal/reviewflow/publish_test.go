@@ -1,12 +1,15 @@
 package reviewflow_test
 
 import (
+	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 
 	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/prreview"
+	"github.com/guilhermt/myspec/internal/pulls"
 	"github.com/guilhermt/myspec/internal/reviewflow"
 )
 
@@ -158,10 +161,6 @@ func TestAPublicationThatFailedKeepsEveryDecision(t *testing.T) {
 		t.Fatal("publish review = nil, want the failure of GitHub")
 	}
 
-	stored, _ := f.reviews.Get(id)
-	if stored.PublishError == "" {
-		t.Error("publish error = \"\", want why the publication failed")
-	}
 	pass := f.pass(t, id, 1)
 	if pass.Published() {
 		t.Errorf("pass = %+v, want it left unpublished", pass)
@@ -257,7 +256,65 @@ func TestPublishingAPullRequestThatClosedIsRefused(t *testing.T) {
 
 	wantErrIs(t, f.service.Publish(t.Context(), id, prreview.VerdictComment), reviewflow.ErrNotOpen)
 
-	if stored, _ := f.reviews.Get(id); stored.PublishError == "" {
-		t.Error("publish error = \"\", want the review to say why it could not be published")
+	want := "This pull request isn't open."
+	if stored, _ := f.reviews.Get(id); stored.PublishError != want {
+		t.Errorf("publish error = %q, want %q", stored.PublishError, want)
+	}
+}
+
+func TestAPublicationThatFailedSaysWhatTheUserCanDoAboutIt(t *testing.T) {
+	t.Parallel()
+
+	rejected := &gh.Error{
+		Args:   []string{"api", "--method", "POST", "repos/dev/web/pulls/42/reviews", "--input", "-"},
+		Output: `{"message":"Unprocessable Entity"}`,
+		Err:    errors.New("exit status 1"),
+	}
+	tests := []struct {
+		name string
+		fail func(f *fixture)
+		want string
+	}{
+		{
+			"gh said why",
+			func(f *fixture) { f.gh.createErr = rejected },
+			`Couldn't read from GitHub: {"message":"Unprocessable Entity"}`,
+		},
+		{
+			"gh is not authenticated",
+			func(f *fixture) { f.gh.createErr = fmt.Errorf("create review: %w", gh.ErrNotAuthenticated) },
+			"gh is not authenticated. Run gh auth login.",
+		},
+		{
+			"the diff could not be read",
+			func(f *fixture) { f.gh.diffErr = fmt.Errorf("pr diff: %w", gh.ErrMissingScope) },
+			"gh can't read this repository. Run gh auth refresh -s repo.",
+		},
+		{
+			"the pull request could not be read",
+			func(f *fixture) { f.pulls.failWith(&pulls.Failure{Reason: pulls.ReasonUnauthenticated}) },
+			"gh is not authenticated. Run gh auth login.",
+		},
+		{
+			"the pull request is gone",
+			func(f *fixture) { f.pulls.forget(prNumber) },
+			"This pull request is no longer on GitHub.",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			f := newFixture(t)
+			id := toPublish(t, f)
+			tt.fail(f)
+
+			if err := f.service.Publish(t.Context(), id, prreview.VerdictComment); err == nil {
+				t.Fatal("publish review = nil, want the failure")
+			}
+			if stored, _ := f.reviews.Get(id); stored.PublishError != tt.want {
+				t.Errorf("publish error = %q, want %q", stored.PublishError, tt.want)
+			}
+		})
 	}
 }

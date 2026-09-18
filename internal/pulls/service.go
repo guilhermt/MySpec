@@ -156,7 +156,7 @@ func (s *Service) runRead() {
 	if err != nil {
 		var failure *Failure
 		if !errors.As(err, &failure) {
-			failure = failureOf(err)
+			failure = FailureOf(err)
 		}
 		s.log.Warn("pull requests reading failed", "error", err)
 		found = batchFailure(repos, failure)
@@ -247,20 +247,6 @@ func (s *Service) Readings() []RepositoryReading {
 		}
 	}
 	return readings
-}
-
-// Find is the pull request of number in the repository of repositoryID, as the
-// last reading saw it.
-func (s *Service) Find(repositoryID string, number int) (PullRequest, bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	for _, pr := range s.readings[repositoryID].PullRequests {
-		if pr.Number == number {
-			return pr, true
-		}
-	}
-	return PullRequest{}, false
 }
 
 // ReadDetails reads refs from GitHub now, open or not. A ref GitHub answered

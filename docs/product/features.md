@@ -407,7 +407,7 @@ O card de uma pull request é o card cujas pull requests vinculadas, na leitura 
 - o **modelo** e o **esforço**, partindo do padrão de review de PR das configurações. A escolha vale para o review inteiro e pode ser trocada na conversa, como em qualquer sessão;
 - o **modo**, **Publish** ou **Apply**, só numa pull request do próprio usuário, partindo de **Publish**: `Publish posts the approved findings as a review on GitHub.` ou `Apply has the agent fix the approved findings and push them to the pull request.` Para outro autor o modo é sempre publicar. O modo não muda depois.
 
-Num repositório sem clone, o diálogo diz que ele não está clonado e oferece **Clone and continue**; terminado o clone, o diálogo abre de novo sozinho. **Start review** confirma. O produto relê a pull request e recusa, com a razão, uma que não está mais aberta, que vem de um fork, que é de uma task ativa do produto ou que já tem um review ativo: uma pull request tem no máximo um review ativo.
+Num repositório sem clone, o diálogo diz que ele não está clonado e oferece **Clone and continue**; terminado o clone, o diálogo abre de novo sozinho, ou, se o usuário estiver iniciando o review de outra pull request, assim que esse diálogo fechar. **Start review** confirma. O produto relê a pull request e recusa, com a razão, uma que não está mais aberta, que vem de um fork, que é de uma task ativa do produto ou que já tem um review ativo: uma pull request tem no máximo um review ativo.
 
 Ao confirmar, o produto cria a worktree do review em `~/.local/share/myspec/worktrees/<dono>/<nome>/pr_<número>/`, em detached HEAD no head da pull request, sem branch local, escreve o documento de contexto e abre a conversa de review com o prompt de review de PR. Se a worktree não pode ser criada, o produto diz a razão do git e o review não é criado; qualquer outra falha do início, antes de a conversa abrir, também desfaz o review, com a worktree e a pasta de artefatos. O documento de contexto, `Context` no painel de relatórios, tem o título, a referência, o link, o autor, as branches e a descrição da pull request e, quando ela tem card, o card com o épico. Ele é escrito no início do review e reescrito a cada **Review again**, com a pull request relida do GitHub e o card relido do board. Quando essa leitura falha, e na passada que o produto pede depois de um commit no modo aplicar, o documento fica como a última leitura o escreveu.
 
@@ -435,13 +435,13 @@ O produto publica um review no GitHub, pela conta do `gh`, no head atual da pull
 
 Um relatório sem apontamento aprovado publica só o resumo e o veredito. Sem resumo e sem apontamento, só o veredito de aprovar é publicado; os outros pedem um resumo. O produto nunca publica sem o comando do usuário e nunca publica um apontamento que ele não aprovou.
 
-Uma publicação que falha não perde nada: decisões e edições ficam, o review espera pelo usuário com a razão, e **Publish review** tenta de novo. Publicado, a passada fica somente leitura, com onde cada apontamento foi, `Inline comment`, `In the review body` ou `Not published`, a pull request aparece como revisada na lista e o review fica parado, sem esperar por ninguém, até um commit novo, **Review again** ou o fim da pull request.
+Uma publicação que falha não perde nada: decisões e edições ficam, o review espera pelo usuário com a razão, e **Publish review** tenta de novo. A razão diz o que fazer quando o `gh` falhou, como as falhas da lista de pull requests, e diz quando a pull request fechou ou não está mais no GitHub. Publicado, a passada fica somente leitura, com onde cada apontamento foi, `Inline comment`, `In the review body` ou `Not published`, a pull request aparece como revisada na lista e o review fica parado, sem esperar por ninguém, até um commit novo, **Review again** ou o fim da pull request.
 
 ### Commits novos e novas passadas
 
-Um commit novo na pull request depois do último review publicado é uma situação que espera pelo usuário: aparece no review, na lista, em **Waiting for you**, e notifica. Commits que chegam antes de a passada em curso ser publicada não notificam: o review avisa `New commits since this pass`, e o diálogo de publicação também.
+Um commit novo na pull request depois do último review publicado é uma situação que espera pelo usuário: aparece no review, na lista, em **Waiting for you**, e notifica. Commits que chegam antes de a passada em curso ser publicada não notificam: o review avisa `New commits since this pass`, e o diálogo de publicação também. Quando o git não disse em que commit a passada foi feita, o aviso não aparece, porque nada diz que a pull request andou.
 
-**Review again** pede uma nova passada na mesma conversa, a qualquer momento em que nenhuma passada está em curso, com instruções opcionais. Quando a passada mais recente não foi publicada e tem decisões ou edições, o diálogo avisa que elas serão descartadas. O produto atualiza a worktree para o head atual da pull request, reescreve o documento de contexto com a pull request relida e envia ao agente o arquivo do novo relatório, o commit que a passada anterior cobriu, para ele ler o que mudou desde então, os apontamentos já publicados, para ele dizer quais foram resolvidos, e as instruções. Só o que é novo ou continua valendo vira apontamento. No modo publicar a worktree nunca tem mudanças do produto, e qualquer mudança nela é descartada antes da atualização. No modo aplicar, **Review again** também serve enquanto as correções do agente esperam o review do usuário, para quando o agente não mudou nada ou o usuário desistiu das mudanças: uma worktree que ainda tem mudanças recusa a atualização com a razão do git, e nada se perde. Durante o commit, não.
+**Review again** pede uma nova passada na mesma conversa, a qualquer momento em que nenhuma passada está em curso, com instruções opcionais. Quando a passada mais recente não foi publicada e tem decisões ou edições, o diálogo avisa que elas serão descartadas. O produto atualiza a worktree para o head atual da pull request, reescreve o documento de contexto com a pull request relida e envia ao agente o arquivo do novo relatório, o commit que a passada anterior cobriu, para ele ler o que mudou desde então, os apontamentos já publicados, para ele dizer quais foram resolvidos, e as instruções. Só o que é novo ou continua valendo vira apontamento. Quando a releitura diz que a pull request foi mergeada ou fechada, a passada é recusada antes de a worktree mudar. No modo publicar a worktree nunca tem mudanças do produto, e qualquer mudança nela é descartada antes da atualização. No modo aplicar, **Review again** também serve enquanto as correções do agente esperam o review do usuário, para quando o agente não mudou nada ou o usuário desistiu das mudanças: uma worktree que ainda tem mudanças recusa a atualização com a razão do git, e nada se perde. Durante o commit, não.
 
 ### Corrigir a própria pull request
 
@@ -453,7 +453,7 @@ Numa pull request do próprio usuário que não é de uma task do produto, o mod
 4. o agente commita com o prompt de commit e sobe o commit para a branch da pull request;
 5. o produto pede uma nova passada sozinho, e o ciclo se repete.
 
-Um relatório limpo, ou uma passada em que nada foi aprovado, deixa o review pronto para merge, que o usuário faz no GitHub. Um turno de commit que termina sem commit volta a mudança ao review, com `The last approval didn't produce a commit.` Nada é publicado como review no GitHub nesse modo, e o produto nunca dá stage.
+Um relatório limpo, ou uma passada em que nada foi aprovado, deixa o review pronto para merge, que o usuário faz no GitHub. Um turno de commit que termina sem commit volta a mudança ao review, com `The last approval didn't produce a commit.` O commit é o head da worktree diferente daquele em que a passada foi feita ou, quando o git não o disse, daquele lido no **Approve**. Nada é publicado como review no GitHub nesse modo, e o produto nunca dá stage.
 
 ### O review como item
 
@@ -546,7 +546,7 @@ O tema segue o sistema por padrão e pode ser fixado em claro ou escuro pelo bot
 | `Ctrl+J` | Abrir a primeira task ou o primeiro review que espera pelo usuário |
 | `Ctrl+,` | Abrir ou fechar as configurações |
 
-`Cmd` vale no lugar de `Ctrl`. Os atalhos funcionam com o foco em qualquer lugar da janela, inclusive na caixa de mensagem.
+`Cmd` vale no lugar de `Ctrl`. Os atalhos funcionam com o foco em qualquer lugar da janela, inclusive na caixa de mensagem. Com o diálogo de criação de uma task ou o que inicia um review aberto, os três não fazem nada: o que o usuário digita ali não fica para trás nem é coberto por outro diálogo.
 
 Na visão do board:
 

@@ -182,12 +182,13 @@ func applyStatus(in statusInput) Status {
 }
 
 // stale reports whether the pull request moved since the pass the user is
-// deciding on, which only matters while nothing was published yet.
+// deciding on, which only matters while nothing was published yet. A pass
+// whose commit git could not say is never stale: nothing tells that it moved.
 func stale(stored prreview.Review, last prreview.Pass) bool {
 	if stored.Mode != prreview.ModePublish || !last.Recorded || last.Published() {
 		return false
 	}
-	return stored.HeadCommit != "" && stored.HeadCommit != stored.PassCommit
+	return stored.PassCommit != "" && stored.HeadCommit != "" && stored.HeadCommit != stored.PassCommit
 }
 
 // lastPass is the pass whose report was recorded last, the zero value when no

@@ -78,7 +78,9 @@ export function StartReviewDialog() {
             </DialogFooter>
           </>
         ) : (
-          <StartReviewFields row={row} />
+          // Keyed by the pull request: a dialog opened for another one starts
+          // afresh, without what was typed for the last.
+          <StartReviewFields key={`${row.repositoryId}#${row.number}`} row={row} />
         )}
       </DialogContent>
     </Dialog>

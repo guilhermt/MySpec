@@ -213,6 +213,45 @@ describe("App", () => {
     expect(useAppStore.getState().openTaskId).toBeNull();
   });
 
+  it("leaves the dialog that starts a review where it is on Ctrl+N, Ctrl+J and Ctrl+,", async () => {
+    vi.mocked(api.getState).mockResolvedValue(
+      makeState({
+        ...waitingState(),
+        reviewCenter: makeReviewCenter({ pullRequests: [makePullRequestRow()] }),
+      }),
+    );
+    renderWithStore(<App />);
+    await screen.findByRole("tree", { name: "Tasks" });
+    act(() => {
+      useAppStore.getState().openStartReview({ repositoryId: "repo-1", number: 31 });
+    });
+    await screen.findByRole("heading", { name: "Start review" });
+
+    for (const key of ["n", "j", ","]) {
+      const shortcut = createEvent.keyDown(window, { key, ctrlKey: true });
+      fireEvent(window, shortcut);
+      expect(shortcut.defaultPrevented).toBe(true);
+    }
+
+    expect(screen.getByRole("heading", { name: "Start review" })).toBeInTheDocument();
+    expect(useAppStore.getState().newTaskOpen).toBe(false);
+    expect(useAppStore.getState().openTaskId).toBeNull();
+    expect(useAppStore.getState().settingsOpen).toBe(false);
+  });
+
+  it("keeps the card of the creation dialog on Ctrl+N", async () => {
+    const { user } = renderWithStore(<App />);
+    await screen.findByRole("button", { name: "Repository filter: All repositories" });
+    const card = { boardId: "board-1", key: "dev/web#7" };
+    act(() => {
+      useAppStore.getState().openNewTask(card);
+    });
+
+    await user.keyboard("{Control>}n{/Control}");
+
+    expect(useAppStore.getState().newTaskCard).toEqual(card);
+  });
+
   it("leaves Ctrl+J alone without a registered repository", async () => {
     vi.mocked(api.getState).mockResolvedValue(makeState({ repositories: [] }));
     renderWithStore(<App />);

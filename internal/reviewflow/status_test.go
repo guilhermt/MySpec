@@ -321,6 +321,19 @@ func TestAPassDecidedAfterANewCommitIsStale(t *testing.T) {
 	}
 }
 
+func TestAPassWhoseCommitGitCouldNotSayIsNeverStale(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := f.start(t)
+	f.sessions.goIdle(id)
+	f.record(t, id, changesReport(1, "One thing to fix.", finding(1, "internal/board/service.go", 12)), "")
+
+	if f.state(t, id).StalePass {
+		t.Error("a pass whose commit git could not say is stale")
+	}
+}
+
 func TestAPublishedPassIsNeverStale(t *testing.T) {
 	t.Parallel()
 

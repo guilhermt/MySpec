@@ -73,4 +73,18 @@ describe("ReviewAgainDialog", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("The worktree is gone.");
   });
+
+  it("opens again without the error of the last attempt", async () => {
+    vi.mocked(api.askReviewAgain).mockRejectedValueOnce(new Error("The worktree is gone."));
+    const { user, rerender, onOpenChange } = dialog();
+    await user.click(screen.getByRole("button", { name: "Review again" }));
+    await screen.findByRole("alert");
+    const review = makeReviewSummary({ canReviewAgain: true });
+
+    rerender(<ReviewAgainDialog review={review} open={false} onOpenChange={onOpenChange} />);
+    rerender(<ReviewAgainDialog review={review} open onOpenChange={onOpenChange} />);
+
+    expect(screen.getByRole("heading", { name: "Review again" })).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
 });

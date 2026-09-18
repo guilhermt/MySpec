@@ -107,6 +107,11 @@ func (s *Service) Approve(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
+	if stored.PassCommit == "" {
+		// git could not say which commit the pass covered: whether a commit
+		// went up is told against the head the worktree is on now.
+		s.setCommitBase(id, s.headOf(ctx, wt))
+	}
 	if err = s.setPhase(ctx, id, prreview.PhaseCommitting); err != nil {
 		return err
 	}
@@ -152,7 +157,7 @@ func (s *Service) evaluateCommit(ctx context.Context, stored prreview.Review, wt
 	if !read || snap.Err != "" {
 		return
 	}
-	if snap.Head == "" || snap.Head == stored.PassCommit {
+	if snap.Head == "" || snap.Head == s.commitBaseOf(stored) {
 		if err := s.setPhase(ctx, stored.ID, prreview.PhaseApplying); err != nil {
 			s.log.Error("record review phase failed", "review", stored.ID, "error", err)
 			return
@@ -207,4 +212,29 @@ func (s *Service) setCommitFailed(id string, failed bool) {
 	defer s.mu.Unlock()
 
 	l.commitFailed = failed
+}
+
+// setCommitBase records the commit the worktree was on when the commit of an
+// approval was asked for.
+func (s *Service) setCommitBase(id, head string) {
+	l := s.lockOf(id)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	l.commitBase = head
+}
+
+// commitBaseOf is the commit a commit turn of apply mode started from: the one
+// the pass covered, or the head read at the approval when git could not say.
+func (s *Service) commitBaseOf(stored prreview.Review) string {
+	if stored.PassCommit != "" {
+		return stored.PassCommit
+	}
+	l := s.lockOf(stored.ID)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return l.commitBase
 }

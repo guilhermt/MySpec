@@ -1,6 +1,7 @@
 package reviewflow_test
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -53,8 +54,11 @@ func TestTheReportOfAPassIsRecordedWithTheCommitTheWorktreeIsOn(t *testing.T) {
 	id := asked(t, f)
 	f.writeReport(t, id, 1, reportFile("changes", twoFindings))
 
+	// The conversation is marked just after the report is recorded, so the
+	// wait covers both.
 	f.evaluated(t, id, func(s reviewflow.State) bool {
-		return s.Status == reviewflow.StatusAwaitingDecision
+		return s.Status == reviewflow.StatusAwaitingDecision &&
+			slices.Contains(f.sessions.recorded(), "mark:"+id+":pass=1")
 	}, "the report of the first pass to be recorded")
 
 	pass := f.pass(t, id, 1)

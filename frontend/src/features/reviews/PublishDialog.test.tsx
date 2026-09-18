@@ -67,6 +67,28 @@ describe("PublishDialog", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("GitHub said no.");
   });
 
+  it("opens again without the error of the last attempt", async () => {
+    vi.mocked(api.publishReview).mockRejectedValueOnce(new Error("GitHub said no."));
+    const { user, rerender, onOpenChange, onReviewAgain } = dialog();
+    await user.click(screen.getByRole("button", { name: "Publish" }));
+    await screen.findByRole("alert");
+    const review = makeReviewSummary({ passes: [DECIDED], canPublish: true });
+    const again = (open: boolean) => (
+      <PublishDialog
+        review={review}
+        open={open}
+        onOpenChange={onOpenChange}
+        onReviewAgain={onReviewAgain}
+      />
+    );
+
+    rerender(again(false));
+    rerender(again(true));
+
+    expect(screen.getByRole("heading", { name: "Publish review" })).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
   it("warns about the commits that arrived and offers another pass instead", async () => {
     const { user, onReviewAgain, onOpenChange } = dialog({ stalePass: true });
 

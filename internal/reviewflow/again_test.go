@@ -254,6 +254,33 @@ func TestANewPassIsRefused(t *testing.T) {
 	}
 }
 
+func TestANewPassIsRefusedOnceGitHubSaysThePullRequestMerged(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := decided(t, f)
+	// Merged after the last poll, so the stored review still says open.
+	merged := openPR()
+	merged.State = string(prreview.PRMerged)
+	f.pulls.seed(merged)
+	before := len(f.sessions.sent())
+
+	wantErrIs(t, f.service.ReviewAgain(t.Context(), id, ""), reviewflow.ErrNotOpen)
+
+	for _, call := range f.worktrees.recorded() {
+		if strings.HasPrefix(call, "updateDetached:") || strings.HasPrefix(call, "clean:") {
+			t.Errorf("worktree calls = %v, want the worktree left alone", f.worktrees.recorded())
+			break
+		}
+	}
+	if stored, _ := f.reviews.Get(id); stored.AskedPass != 1 {
+		t.Errorf("review = %+v, want no pass asked for", stored)
+	}
+	if sent := f.sessions.sent(); len(sent) != before {
+		t.Errorf("messages sent = %q, want nothing asked of the agent", sent[before:])
+	}
+}
+
 func TestANewPassOfAReviewNobodyStartedIsRefused(t *testing.T) {
 	t.Parallel()
 

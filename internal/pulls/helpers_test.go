@@ -128,6 +128,20 @@ func (f *fixture) reading(t *testing.T, id string) pulls.RepositoryReading {
 	return pulls.RepositoryReading{}
 }
 
+// pullRequest is the pull request of number in the repository of id, as the
+// last reading saw it.
+func (f *fixture) pullRequest(t *testing.T, id string, number int) pulls.PullRequest {
+	t.Helper()
+
+	for _, pr := range f.reading(t, id).PullRequests {
+		if pr.Number == number {
+			return pr
+		}
+	}
+	t.Fatalf("the reading of %s has no pull request %d", id, number)
+	return pulls.PullRequest{}
+}
+
 // waitReading waits until no reading runs.
 func waitReading(t *testing.T, s *pulls.Service) {
 	t.Helper()

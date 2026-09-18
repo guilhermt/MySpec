@@ -31,8 +31,8 @@ func TestFailureOfClassifiesWhatGhReturned(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			if diff := cmp.Diff(tt.want, *failureOf(tt.err)); diff != "" {
-				t.Errorf("failureOf(%v) (-want +got):\n%s", tt.err, diff)
+			if diff := cmp.Diff(tt.want, *FailureOf(tt.err)); diff != "" {
+				t.Errorf("FailureOf(%v) (-want +got):\n%s", tt.err, diff)
 			}
 		})
 	}

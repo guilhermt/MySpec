@@ -47,8 +47,8 @@ func (f *Failure) Message() string {
 	}
 }
 
-// failureOf classifies what a gh call returned.
-func failureOf(err error) *Failure {
+// FailureOf classifies what a gh call returned.
+func FailureOf(err error) *Failure {
 	var rateErr *gh.RateLimitError
 	var ghErr *gh.Error
 	switch {

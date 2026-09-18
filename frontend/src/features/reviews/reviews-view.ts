@@ -116,3 +116,25 @@ export function isFiltering(filters: ReviewFilters): boolean {
     filters.pendingOnly
   );
 }
+
+function sameList(a: readonly string[] | null, b: readonly string[] | null): boolean {
+  const left = [...(a ?? [])].sort();
+  const right = [...(b ?? [])].sort();
+  return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
+/**
+ * sameFilters reports whether two sets of filters narrow the view the same way.
+ * The order of a list does not count: Go stores the lists sorted.
+ */
+export function sameFilters(a: ReviewFilters, b: ReviewFilters): boolean {
+  return (
+    a.boardId === b.boardId &&
+    a.repositoryId === b.repositoryId &&
+    sameList(a.authorsInclude, b.authorsInclude) &&
+    sameList(a.authorsExclude, b.authorsExclude) &&
+    sameList(a.labelsInclude, b.labelsInclude) &&
+    sameList(a.labelsExclude, b.labelsExclude) &&
+    a.pendingOnly === b.pendingOnly
+  );
+}

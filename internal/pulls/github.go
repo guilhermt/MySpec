@@ -217,7 +217,7 @@ func (s *Service) readViewer(ctx context.Context) (string, error) {
 
 	resp, err := s.github.GraphQL(ctx, viewerQuery, gh.Vars{})
 	if err != nil {
-		return "", failureOf(err)
+		return "", FailureOf(err)
 	}
 	var data struct {
 		Viewer struct {
@@ -225,7 +225,7 @@ func (s *Service) readViewer(ctx context.Context) (string, error) {
 		} `json:"viewer"`
 	}
 	if err := json.Unmarshal(resp.Data, &data); err != nil {
-		return "", failureOf(fmt.Errorf("decode viewer: %w", err))
+		return "", FailureOf(fmt.Errorf("decode viewer: %w", err))
 	}
 	if data.Viewer.Login == "" {
 		return "", &Failure{Reason: ReasonUnauthenticated}
@@ -261,11 +261,11 @@ func (s *Service) readBatch(ctx context.Context, batch []repository.Repository, 
 	resp, err := s.github.GraphQL(ctx, listQuery(len(batch)), vars)
 	if err != nil {
 		s.log.Warn("pull requests reading failed", "repositories", len(batch), "error", err)
-		return batchFailure(batch, failureOf(err))
+		return batchFailure(batch, FailureOf(err))
 	}
 	var data map[string]json.RawMessage
 	if err := json.Unmarshal(resp.Data, &data); err != nil {
-		return batchFailure(batch, failureOf(fmt.Errorf("decode pull requests: %w", err)))
+		return batchFailure(batch, FailureOf(fmt.Errorf("decode pull requests: %w", err)))
 	}
 
 	failures := aliasFailures(resp.Errors, listAlias, len(batch))
@@ -278,7 +278,7 @@ func (s *Service) readBatch(ctx context.Context, batch []repository.Repository, 
 		}
 		prs, err := decodeList(data[alias(listAlias, i)], repo)
 		if err != nil {
-			found[repo.ID] = RepositoryReading{RepositoryID: repo.ID, Failure: failureOf(err)}
+			found[repo.ID] = RepositoryReading{RepositoryID: repo.ID, Failure: FailureOf(err)}
 			continue
 		}
 		found[repo.ID] = RepositoryReading{RepositoryID: repo.ID, PullRequests: prs}
@@ -348,11 +348,11 @@ func (s *Service) readDetails(ctx context.Context, refs []Ref, viewer string) (m
 		}
 		resp, err := s.github.GraphQL(ctx, detailQuery(len(chunk)), vars)
 		if err != nil {
-			return nil, failureOf(err)
+			return nil, FailureOf(err)
 		}
 		var data map[string]json.RawMessage
 		if err := json.Unmarshal(resp.Data, &data); err != nil {
-			return nil, failureOf(fmt.Errorf("decode pull requests: %w", err))
+			return nil, FailureOf(fmt.Errorf("decode pull requests: %w", err))
 		}
 		for i, r := range chunk {
 			raw, ok := data[alias(detailAlias, i)]
@@ -363,7 +363,7 @@ func (s *Service) readDetails(ctx context.Context, refs []Ref, viewer string) (m
 				PullRequest *detailNode `json:"pullRequest"`
 			}
 			if err := json.Unmarshal(raw, &node); err != nil {
-				return nil, failureOf(fmt.Errorf("decode pull request %s/%s#%d: %w", r.Owner, r.Name, r.Number, err))
+				return nil, FailureOf(fmt.Errorf("decode pull request %s/%s#%d: %w", r.Owner, r.Name, r.Number, err))
 			}
 			if node.PullRequest == nil {
 				continue

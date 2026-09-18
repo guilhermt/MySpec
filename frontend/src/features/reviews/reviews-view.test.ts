@@ -5,6 +5,7 @@ import {
   filterState,
   filterSummary,
   isFiltering,
+  sameFilters,
   visibleRows,
 } from "@/features/reviews/reviews-view";
 import {
@@ -101,5 +102,23 @@ describe("isFiltering", () => {
     expect(isFiltering(makeReviewFilters({ repositoryId: "repo-1" }))).toBe(true);
     expect(isFiltering(makeReviewFilters({ labelsInclude: ["bug"] }))).toBe(true);
     expect(isFiltering(makeReviewFilters({ pendingOnly: true }))).toBe(true);
+  });
+});
+
+describe("sameFilters", () => {
+  it("holds for the same choices in another order", () => {
+    const a = makeReviewFilters({ authorsExclude: ["dependabot", "alice"], pendingOnly: true });
+    const b = makeReviewFilters({ authorsExclude: ["alice", "dependabot"], pendingOnly: true });
+
+    expect(sameFilters(a, b)).toBe(true);
+  });
+
+  it("tells apart filters that narrow the view differently", () => {
+    const base = makeReviewFilters({ authorsExclude: ["dependabot"] });
+
+    expect(sameFilters(base, makeReviewFilters({ authorsExclude: [] }))).toBe(false);
+    expect(sameFilters(base, { ...base, labelsInclude: ["bug"] })).toBe(false);
+    expect(sameFilters(base, { ...base, boardId: "board-1" })).toBe(false);
+    expect(sameFilters(base, { ...base, pendingOnly: true })).toBe(false);
   });
 });

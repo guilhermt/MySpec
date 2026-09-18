@@ -128,6 +128,13 @@ var (
 	ErrNoWorktree      = errors.New("reviewflow: the worktree of the review is gone")
 )
 
+// The sentences the user reads when the pull request of a review is gone or
+// closed: a failed publication keeps them, and the bindings answer with them.
+const (
+	GoneMessage    = "This pull request is no longer on GitHub."
+	NotOpenMessage = "This pull request isn't open."
+)
+
 // Service is the state machine of every review of a pull request.
 type Service struct {
 	reviews      *prreview.Service
@@ -165,6 +172,10 @@ type reviewLock struct {
 	// commitFailed says the last approval of apply mode ended without a
 	// commit. Like the flow of a task, it is transient on purpose.
 	commitFailed bool
+	// commitBase is the commit the worktree was on when the last approval
+	// asked for a commit, read then because the pass it fixes recorded none.
+	// A head that moved from it is the commit the agent made.
+	commitBase string
 }
 
 // New builds a Service from deps.

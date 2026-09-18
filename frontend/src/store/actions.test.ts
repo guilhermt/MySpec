@@ -470,6 +470,17 @@ describe("review actions reported in the banner", () => {
     expect(useAppStore.getState().error).toBe("the worktree is dirty");
   });
 
+  it("answer whether the filters were stored", async () => {
+    const filters = makeReviewFilters({ pendingOnly: true });
+
+    expect(await setReviewFilters(filters)).toBe(true);
+
+    vi.mocked(api.setReviewFilters).mockRejectedValueOnce(new Error("disk full"));
+
+    expect(await setReviewFilters(filters)).toBe(false);
+    expect(useAppStore.getState().error).toBe("disk full");
+  });
+
   it("say what the deletion of a review left behind", async () => {
     const leftover = {
       path: "/home/dev/worktrees/dev/web/pr_31",

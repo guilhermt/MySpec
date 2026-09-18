@@ -376,9 +376,17 @@ export function refreshPullRequests(): Promise<void> {
   return run(() => api.refreshPullRequests());
 }
 
-/** setReviewFilters chooses what the Reviews view shows. */
-export function setReviewFilters(filters: ReviewFilters): Promise<void> {
-  return run(() => api.setReviewFilters(filters));
+/**
+ * setReviewFilters chooses what the Reviews view shows. It answers whether Go
+ * stored the filters, so the filter bar lets go of a choice that failed.
+ */
+export async function setReviewFilters(filters: ReviewFilters): Promise<boolean> {
+  let stored = false;
+  await run(async () => {
+    await api.setReviewFilters(filters);
+    stored = true;
+  });
+  return stored;
 }
 
 /**

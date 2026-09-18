@@ -148,14 +148,21 @@ func (s *Service) publishFailed(
 	return fmt.Errorf("publish review %s: %w", ref, cause)
 }
 
-// publishError is why a publication failed, as the user reads it: a failure of
-// gh says what to do about it, anything else says what it said.
+// publishError is why a publication failed, as the user reads it: a pull
+// request that is gone or closed says so, and a failure of gh says what to do
+// about it.
 func publishError(err error) string {
+	switch {
+	case errors.Is(err, ErrPullRequestGone):
+		return GoneMessage
+	case errors.Is(err, ErrNotOpen):
+		return NotOpenMessage
+	}
 	var failure *pulls.Failure
 	if errors.As(err, &failure) {
 		return failure.Message()
 	}
-	return err.Error()
+	return pulls.FailureOf(err).Message()
 }
 
 // inDiff reports whether the line a finding points at is still part of the

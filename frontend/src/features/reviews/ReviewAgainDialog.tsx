@@ -22,6 +22,17 @@ export interface ReviewAgainDialogProps {
 
 /** ReviewAgainDialog asks the agent for another pass over the pull request as it is now. */
 export function ReviewAgainDialog({ review, open, onOpenChange }: ReviewAgainDialogProps) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      {/* The form lives only while the dialog is open, so every opening starts without the last error. */}
+      {open && <ReviewAgainForm review={review} onOpenChange={onOpenChange} />}
+    </Dialog>
+  );
+}
+
+type ReviewAgainFormProps = Omit<ReviewAgainDialogProps, "open">;
+
+function ReviewAgainForm({ review, onOpenChange }: ReviewAgainFormProps) {
   const [instructions, setInstructions] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [asking, setAsking] = useState(false);
@@ -38,7 +49,6 @@ export function ReviewAgainDialog({ review, open, onOpenChange }: ReviewAgainDia
       .then(() => {
         onOpenChange(false);
         setAsking(false);
-        setInstructions("");
       })
       .catch((reason: unknown) => {
         setError(messageOf(reason));
@@ -47,46 +57,44 @@ export function ReviewAgainDialog({ review, open, onOpenChange }: ReviewAgainDia
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Review again</DialogTitle>
-        </DialogHeader>
+    <DialogContent className="sm:max-w-lg">
+      <DialogHeader>
+        <DialogTitle>Review again</DialogTitle>
+      </DialogHeader>
 
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="review-again-instructions">Instructions</Label>
-          <Textarea
-            id="review-again-instructions"
-            rows={4}
-            autoFocus
-            value={instructions}
-            onChange={(event) => setInstructions(event.target.value)}
-            className="max-h-[40dvh] field-sizing-content"
-          />
-          <p className="text-xs text-muted-foreground">What to look at in this pass. Optional.</p>
-        </div>
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="review-again-instructions">Instructions</Label>
+        <Textarea
+          id="review-again-instructions"
+          rows={4}
+          autoFocus
+          value={instructions}
+          onChange={(event) => setInstructions(event.target.value)}
+          className="max-h-[40dvh] field-sizing-content"
+        />
+        <p className="text-xs text-muted-foreground">What to look at in this pass. Optional.</p>
+      </div>
 
-        {discards && pass !== null && (
-          <p className="text-sm text-muted-foreground">
-            {`The decisions and edits of review ${pass.pass} will be discarded.`}
-          </p>
-        )}
+      {discards && pass !== null && (
+        <p className="text-sm text-muted-foreground">
+          {`The decisions and edits of review ${pass.pass} will be discarded.`}
+        </p>
+      )}
 
-        {error !== null && (
-          <p role="alert" className="break-all text-sm text-destructive">
-            {error}
-          </p>
-        )}
+      {error !== null && (
+        <p role="alert" className="break-all text-sm text-destructive">
+          {error}
+        </p>
+      )}
 
-        <DialogFooter>
-          <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button type="button" disabled={asking} onClick={ask}>
-            {asking ? "Asking…" : "Review again"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      <DialogFooter>
+        <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
+          Cancel
+        </Button>
+        <Button type="button" disabled={asking} onClick={ask}>
+          {asking ? "Asking…" : "Review again"}
+        </Button>
+      </DialogFooter>
+    </DialogContent>
   );
 }

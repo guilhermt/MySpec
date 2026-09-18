@@ -115,9 +115,6 @@ func TestARepositoryNoLongerRegisteredLeavesTheReadings(t *testing.T) {
 	if diff := cmp.Diff([]string{alphaID, gammaID}, got); diff != "" {
 		t.Errorf("Readings() (-want +got):\n%s", diff)
 	}
-	if _, ok := f.service.Find(betaID, 1); ok {
-		t.Errorf("Find() still answers for a repository nobody registered")
-	}
 }
 
 func TestEveryReadingTellsTheAppThatSomethingChanged(t *testing.T) {

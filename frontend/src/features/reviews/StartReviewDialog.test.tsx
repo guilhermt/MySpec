@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { StartReviewDialog } from "@/features/reviews/StartReviewDialog";
 import { api, type PullRequestRow, type Repository } from "@/lib/wails";
@@ -96,6 +96,31 @@ describe("StartReviewDialog", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("The worktree couldn't be created.");
     expect(useAppStore.getState().startReview).toEqual(PULL);
+  });
+
+  it("starts afresh when it is opened for another pull request", async () => {
+    vi.mocked(api.startReview).mockResolvedValue("review-1");
+    const state = makeState({
+      repositories: [makeRepository()],
+      reviewCenter: makeReviewCenter({
+        pullRequests: [
+          makePullRequestRow(),
+          makePullRequestRow({ number: 32, title: "Fix the header" }),
+        ],
+      }),
+    });
+    const { user } = renderWithStore(<StartReviewDialog />, {
+      state,
+      ui: { startReview: { repositoryId: "repo-1", number: 32 } },
+    });
+    await user.type(screen.getByLabelText("Instructions"), "Watch the migrations.");
+
+    act(() => {
+      useAppStore.getState().openStartReview(PULL);
+    });
+
+    expect(await screen.findByText("#31 Add the login screen")).toBeInTheDocument();
+    expect(screen.getByLabelText("Instructions")).toHaveValue("");
   });
 
   it("explains a pull request that left the last reading", () => {

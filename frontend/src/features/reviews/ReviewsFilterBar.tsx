@@ -1,8 +1,14 @@
+import { useEffect, useState } from "react";
 import { FilterMenu } from "@/components/FilterMenu";
 import { Button } from "@/components/ui/button";
 import { Toggle } from "@/components/ui/toggle";
 import { MultiFilterMenu } from "@/features/reviews/MultiFilterMenu";
-import { EMPTY_REVIEW_FILTERS, isFiltering, NO_BOARD } from "@/features/reviews/reviews-view";
+import {
+  EMPTY_REVIEW_FILTERS,
+  isFiltering,
+  NO_BOARD,
+  sameFilters,
+} from "@/features/reviews/reviews-view";
 import { shortName } from "@/lib/repositories";
 import type { ReviewCenter, ReviewFilters } from "@/lib/wails";
 import { setReviewFilters } from "@/store/actions";
@@ -19,9 +25,27 @@ export interface ReviewsFilterBarProps {
 export function ReviewsFilterBar({ center }: ReviewsFilterBarProps) {
   const boards = useBoards();
   const repositories = useRepositories();
-  const { filters } = center;
+  // The last choice sent, shown at once until a snapshot carries it: the
+  // menus stay open for several clicks in a row, and each click builds on the
+  // one before it, not on a snapshot that has not caught up yet.
+  const [pending, setPending] = useState<ReviewFilters | null>(null);
+  const filters = pending ?? center.filters;
 
-  const change = (next: ReviewFilters) => void setReviewFilters(next);
+  useEffect(() => {
+    if (pending !== null && sameFilters(pending, center.filters)) {
+      setPending(null);
+    }
+  }, [pending, center.filters]);
+
+  const change = (next: ReviewFilters) => {
+    setPending(next);
+    void setReviewFilters(next).then((stored) => {
+      // A choice Go refused gives the view back to the snapshot, unless another followed it.
+      if (!stored) {
+        setPending((current) => (current === next ? null : current));
+      }
+    });
+  };
   const set = (partial: Partial<ReviewFilters>) => change({ ...filters, ...partial });
 
   const boardOptions = [
