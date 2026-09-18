@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   actionHint,
   actionLabel,
+  anyDecided,
   decidedCount,
   findingLocation,
+  lastRecordedPass,
+  publishCounts,
   reportLabel,
   reviewRowLabel,
   reviewStatusLabel,
@@ -153,5 +156,61 @@ describe("actionHint", () => {
 
   it("holds nothing back from a pull request that can be reviewed", () => {
     expect(actionHint(makePullRequestRow({ action: "review" }), makeState())).toBeNull();
+  });
+});
+
+describe("lastRecordedPass", () => {
+  it("is the last pass whose report the app could read", () => {
+    const review = makeReviewSummary({
+      passes: [
+        makeReviewPass({ pass: 1 }),
+        makeReviewPass({ pass: 2 }),
+        makeReviewPass({ pass: 3, recorded: false }),
+      ],
+    });
+
+    expect(lastRecordedPass(review)?.pass).toBe(2);
+  });
+
+  it("is nothing before a report came in", () => {
+    expect(lastRecordedPass(makeReviewSummary({ passes: [] }))).toBeNull();
+  });
+});
+
+describe("anyDecided", () => {
+  it("knows whether the user has decided on anything of a pass", () => {
+    expect(anyDecided(makeReviewPass())).toBe(false);
+    expect(
+      anyDecided(makeReviewPass({ findings: [makeReviewFinding({ decision: "discarded" })] })),
+    ).toBe(true);
+  });
+});
+
+describe("publishCounts", () => {
+  it("splits the approved findings between the diff and the body", () => {
+    const pass = makeReviewPass({
+      findings: [
+        makeReviewFinding({ number: 1, decision: "approved" }),
+        makeReviewFinding({ number: 2, decision: "approved" }),
+        makeReviewFinding({ number: 3, path: "", line: 0, decision: "approved" }),
+        makeReviewFinding({ number: 4, decision: "discarded" }),
+      ],
+    });
+
+    expect(publishCounts(pass)).toBe("2 inline comments · 1 in the body");
+  });
+
+  it("counts one of each in the singular", () => {
+    const pass = makeReviewPass({
+      findings: [makeReviewFinding({ decision: "approved" })],
+    });
+
+    expect(publishCounts(pass)).toBe("1 inline comment");
+  });
+
+  it("says when only the summary and the verdict go", () => {
+    expect(publishCounts(makeReviewPass({ findings: [] }))).toBe(
+      "The summary and the verdict only",
+    );
   });
 });

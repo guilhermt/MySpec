@@ -92,6 +92,38 @@ export function decidedCount(pass: ReviewPass): number {
   return (pass.findings ?? []).filter((finding) => finding.decision !== "").length;
 }
 
+/**
+ * lastRecordedPass is the pass the screen is about: the last one whose report
+ * the app could read. null before any report came in.
+ */
+export function lastRecordedPass(review: ReviewSummary): ReviewPass | null {
+  const recorded = (review.passes ?? []).filter((pass) => pass.recorded);
+  return recorded[recorded.length - 1] ?? null;
+}
+
+/** anyDecided reports whether the user has already decided on a finding of a pass. */
+export function anyDecided(pass: ReviewPass): boolean {
+  return decidedCount(pass) > 0;
+}
+
+/**
+ * publishCounts is what publishing a pass would send: the approved findings
+ * split between the lines of the diff and the body of the review.
+ */
+export function publishCounts(pass: ReviewPass): string {
+  const approved = (pass.findings ?? []).filter((finding) => finding.decision === "approved");
+  const inline = approved.filter((finding) => finding.path !== "").length;
+  const body = approved.length - inline;
+  const parts: string[] = [];
+  if (inline > 0) {
+    parts.push(inline === 1 ? "1 inline comment" : `${inline} inline comments`);
+  }
+  if (body > 0) {
+    parts.push(body === 1 ? "1 in the body" : `${body} in the body`);
+  }
+  return parts.length === 0 ? "The summary and the verdict only" : parts.join(" · ");
+}
+
 /** findingLocation is where a finding points: a file and a line, or nowhere in the diff. */
 export function findingLocation(finding: ReviewFinding): string {
   return finding.path === "" ? "General" : `${finding.path}:${finding.line}`;

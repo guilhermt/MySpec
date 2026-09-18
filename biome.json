@@ -45,7 +45,7 @@
         "preset": "recommended",
         "noLabelWithoutControl": {
           "level": "error",
-          "options": { "inputComponents": ["Checkbox"] }
+          "options": { "inputComponents": ["Checkbox", "RadioGroupItem"] }
         }
       },
       "complexity": {

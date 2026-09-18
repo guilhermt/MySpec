@@ -416,6 +416,23 @@ describe("App", () => {
     expect(screen.queryByRole("main", { name: "Reviews" })).not.toBeInTheDocument();
   });
 
+  it("gives the main area to the screen of a review", async () => {
+    vi.mocked(api.getState).mockResolvedValue(
+      makeState({ tasks: [makeTask()], reviews: [makeReviewSummary()] }),
+    );
+    renderWithStore(<App />);
+    await screen.findByRole("treeitem", { name: /^add-login,/ });
+
+    act(() => {
+      useAppStore.getState().openReview("review-1");
+    });
+
+    expect(screen.getByText("Add the login screen")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(api.getTranscript).toHaveBeenCalledWith("review-1", "review");
+    });
+  });
+
   it("starts the review of a pull request from anywhere in the app", async () => {
     vi.mocked(api.getState).mockResolvedValue(
       makeState({ reviewCenter: makeReviewCenter({ pullRequests: [makePullRequestRow()] }) }),
