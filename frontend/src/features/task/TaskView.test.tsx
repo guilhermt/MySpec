@@ -195,4 +195,18 @@ describe("TaskView", () => {
     expect(screen.getByText("Checking GitHub…")).toBeInTheDocument();
     expect(api.getTranscript).not.toHaveBeenCalled();
   });
+
+  it("lets nothing but the conversation scroll in its panel", () => {
+    view();
+
+    const panel = screen.getByRole("textbox").closest("[data-panel]");
+    if (panel === null) {
+      throw new Error("the field sits in no panel");
+    }
+    const inner = panel.firstElementChild;
+    if (inner === null) {
+      throw new Error("the panel has no content");
+    }
+    expect(inner).toHaveStyle({ overflow: "clip" });
+  });
 });

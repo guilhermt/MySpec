@@ -68,11 +68,13 @@ export function ReviewView({ reviewId }: ReviewViewProps) {
         onLayoutChanged={onLayoutChanged}
         className="min-h-0 flex-1"
       >
+        {/* The library's panel scrolls by default; only the conversation scrolls here, so it clips. */}
         <ResizablePanel
           id={CONVERSATION_PANEL}
           defaultSize="60%"
           minSize="40%"
           className="flex min-w-0 flex-col"
+          style={{ overflow: "clip" }}
         >
           {showsChanges(review) && review.review !== null && (
             <ReviewStrip taskId={review.id} subject="pr" review={review.review} />

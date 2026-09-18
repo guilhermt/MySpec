@@ -88,7 +88,9 @@ export function Conversation({ taskId, stage, session }: ConversationProps) {
 
   return (
     <div className="relative min-h-0 flex-1">
-      <div ref={scrollRef} data-slot="conversation" className="h-full overflow-y-auto">
+      {/* Positioned, so what is absolutely placed inside the conversation, sr-only
+          included, stays within its scroll instead of reaching the panel around it. */}
+      <div ref={scrollRef} data-slot="conversation" className="relative h-full overflow-y-auto">
         <div className="mx-auto flex w-full max-w-[58.5rem] flex-col gap-4 px-6 py-6">
           {loading ? (
             <Loading />

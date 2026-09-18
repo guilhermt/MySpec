@@ -79,14 +79,14 @@ export function Composer({ taskId, stage, session }: ComposerProps) {
 
   if (asSessionStatus(session.sessionStatus) === "paused") {
     return (
-      <div className="border-t p-3">
+      <div className="shrink-0 border-t p-3">
         <PausedNotice taskId={taskId} stage={stage} session={session} />
       </div>
     );
   }
 
   return (
-    <div className="border-t p-3">
+    <div className="shrink-0 border-t p-3">
       <div className="mx-auto flex w-full max-w-[58.5rem] flex-col gap-1.5">
         <div className="flex items-end gap-2">
           <Textarea

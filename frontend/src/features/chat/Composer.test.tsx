@@ -158,4 +158,24 @@ describe("Composer", () => {
 
     expect(screen.queryByRole("button", { name: /Session model:/ })).not.toBeInTheDocument();
   });
+
+  it("never gives way to the conversation above it", () => {
+    const { unmount } = renderWithStore(
+      <Composer stage="prd" taskId="task-1" session={makeTask()} />,
+    );
+    const composer = screen.getByRole("textbox").closest(".border-t");
+    if (composer === null) {
+      throw new Error("the field sits in no composer");
+    }
+    expect(composer).toHaveClass("shrink-0");
+    unmount();
+
+    const task = makeTask({ sessionStatus: "paused" });
+    renderWithStore(<Composer stage="prd" taskId="task-1" session={task} />);
+    const paused = screen.getByRole("button", { name: "Resume" }).closest(".border-t");
+    if (paused === null) {
+      throw new Error("the resume button sits in no composer");
+    }
+    expect(paused).toHaveClass("shrink-0");
+  });
 });
