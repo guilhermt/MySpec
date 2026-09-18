@@ -8,7 +8,9 @@ import {
   makeArchivedTask,
   makeBoard,
   makeMigration,
+  makePullRequestRow,
   makeRepository,
+  makeReviewCenter,
   makeReviewSummary,
   makeSituation,
   makeState,
@@ -391,5 +393,56 @@ describe("App", () => {
 
     expect(useAppStore.getState().newTaskOpen).toBe(true);
     expect(useAppStore.getState().pendingStart).toBeNull();
+  });
+  it("gives the main area to the Reviews view, and a task back over it", async () => {
+    vi.mocked(api.getState).mockResolvedValue(
+      makeState({
+        tasks: [makeTask()],
+        reviewCenter: makeReviewCenter({ readAt: "2026-09-16T12:00:00Z" }),
+      }),
+    );
+    const { user } = renderWithStore(<App />);
+    await screen.findByRole("treeitem", { name: /^add-login,/ });
+
+    act(() => {
+      useAppStore.getState().openReviews();
+    });
+
+    expect(screen.getByRole("main", { name: "Reviews" })).toBeInTheDocument();
+    expect(api.refreshPullRequests).toHaveBeenCalled();
+
+    await user.click(screen.getByRole("treeitem", { name: /^add-login,/ }));
+
+    expect(screen.queryByRole("main", { name: "Reviews" })).not.toBeInTheDocument();
+  });
+
+  it("starts the review of a pull request from anywhere in the app", async () => {
+    vi.mocked(api.getState).mockResolvedValue(
+      makeState({ reviewCenter: makeReviewCenter({ pullRequests: [makePullRequestRow()] }) }),
+    );
+    renderWithStore(<App />);
+    await screen.findByText("No tasks yet");
+
+    act(() => {
+      useAppStore.getState().openStartReview({ repositoryId: "repo-1", number: 31 });
+    });
+
+    expect(await screen.findByRole("heading", { name: "Start review" })).toBeInTheDocument();
+  });
+
+  it("opens the dialog that starts a review once the clone of its repository is there", async () => {
+    vi.mocked(api.getState).mockResolvedValue(
+      makeState({ repositories: [makeRepository({ cloned: false, cloning: true, path: "" })] }),
+    );
+    renderWithStore(<App />);
+    await screen.findByText("No tasks yet");
+
+    act(() => {
+      useAppStore.getState().setPendingReview({ repositoryId: "repo-1", number: 31 });
+      useAppStore.getState().applyState(makeState({ repositories: [makeRepository()] }));
+    });
+
+    expect(useAppStore.getState().startReview).toEqual({ repositoryId: "repo-1", number: 31 });
+    expect(useAppStore.getState().pendingReview).toBeNull();
   });
 });
