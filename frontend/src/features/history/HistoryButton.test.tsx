@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { HistoryButton } from "@/features/history/HistoryButton";
 import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
-import { makeArchivedTask, makeState } from "@/test/wails-mock";
+import { makeArchivedReview, makeArchivedTask, makeState } from "@/test/wails-mock";
 
 describe("HistoryButton", () => {
   it("counts the archived tasks", () => {
@@ -16,6 +16,14 @@ describe("HistoryButton", () => {
     const button = screen.getByRole("button", { name: /History/ });
     expect(button).toHaveTextContent("2");
     expect(button).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("counts the archived reviews with the tasks", () => {
+    renderWithStore(<HistoryButton />, {
+      state: makeState({ history: [makeArchivedTask()], reviewHistory: [makeArchivedReview()] }),
+    });
+
+    expect(screen.getByRole("button", { name: /History/ })).toHaveTextContent("2");
   });
 
   it("counts nothing with an empty history", () => {

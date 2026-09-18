@@ -22,6 +22,14 @@ describe("Sidebar", () => {
     expect(screen.getByRole("group", { name: "Theme" })).toBeInTheDocument();
   });
 
+  it("puts the node of the reviews above the tasks", () => {
+    sidebar();
+
+    const reviews = screen.getByRole("navigation", { name: "Reviews" });
+    const tasks = screen.getByRole("tree", { name: "Tasks" });
+    expect(reviews.compareDocumentPosition(tasks) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it("opens the creation dialog from New task", async () => {
     const { user } = sidebar();
 

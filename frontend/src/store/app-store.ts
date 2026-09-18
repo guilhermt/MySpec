@@ -1,7 +1,6 @@
 import { create } from "zustand";
 import { useShallow } from "zustand/react/shallow";
 import { findBoard } from "@/lib/boards";
-import { tasksInFilter } from "@/lib/repositories";
 import {
   prSituation,
   reviewerSituation,
@@ -1021,18 +1020,4 @@ export function useArchivedNotice(): ArchivedNotice | null {
 
 export function useLeftover(): Leftover | null {
   return useAppStore((state) => state.leftover);
-}
-
-/** filterHistory keeps the archived tasks of the filter whose name carries what was typed. */
-export function filterHistory(
-  history: readonly ArchivedTask[],
-  query: string,
-  filter: string,
-): readonly ArchivedTask[] {
-  const shown = tasksInFilter(history, filter);
-  const term = query.trim().toLowerCase();
-  if (term === "") {
-    return shown;
-  }
-  return shown.filter((entry) => entry.name.toLowerCase().includes(term));
 }

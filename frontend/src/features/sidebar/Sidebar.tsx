@@ -8,6 +8,7 @@ import { HistoryButton } from "@/features/history/HistoryButton";
 import { SettingsButton } from "@/features/settings/SettingsButton";
 import { MissingClones } from "@/features/sidebar/MissingClones";
 import { RepositoryFilter } from "@/features/sidebar/RepositoryFilter";
+import { ReviewsNode } from "@/features/sidebar/ReviewsNode";
 import { SidebarTree } from "@/features/sidebar/SidebarTree";
 import { ThemeToggle } from "@/features/theme/ThemeToggle";
 import { useAppStore } from "@/store/app-store";
@@ -36,6 +37,7 @@ export function Sidebar() {
   return (
     <div className="flex h-dvh min-w-0 flex-col border-r bg-sidebar text-sidebar-foreground">
       <WaitingSection />
+      <ReviewsNode />
       <div className="flex h-11 shrink-0 items-center gap-1 border-b px-1">
         <RepositoryFilter variant="sidebar" className="min-w-0 flex-1" />
         <NewTaskButton />

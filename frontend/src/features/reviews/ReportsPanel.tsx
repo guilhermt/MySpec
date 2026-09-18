@@ -21,7 +21,7 @@ function isPass(selection: Selection): selection is { pass: number } {
 }
 
 /** Published says what became of a pass that was sent to GitHub. */
-function Published({ pass }: { pass: ReviewPass }) {
+export function Published({ pass }: { pass: ReviewPass }) {
   return (
     <div className="mb-3 flex items-center gap-1.5 text-xs text-muted-foreground">
       <span>{`Published · ${verdictLabel(pass.verdict)} · ${new Date(pass.publishedAt).toLocaleString()}`}</span>

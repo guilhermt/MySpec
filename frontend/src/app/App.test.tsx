@@ -5,6 +5,7 @@ import { api } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
 import { renderWithStore, resetAppStore } from "@/test/render";
 import {
+  makeArchivedReview,
   makeArchivedTask,
   makeBoard,
   makeMigration,
@@ -427,9 +428,27 @@ describe("App", () => {
       useAppStore.getState().openReview("review-1");
     });
 
-    expect(screen.getByText("Add the login screen")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Delete review" })).toBeInTheDocument();
     await waitFor(() => {
       expect(api.getTranscript).toHaveBeenCalledWith("review-1", "review");
+    });
+  });
+
+  it("gives the main area to an archived review, inside the history", async () => {
+    vi.mocked(api.getState).mockResolvedValue(
+      makeState({ tasks: [makeTask()], reviewHistory: [makeArchivedReview()] }),
+    );
+    renderWithStore(<App />);
+    await screen.findByRole("treeitem", { name: /^add-login,/ });
+
+    act(() => {
+      useAppStore.getState().openArchivedReview("review-1");
+    });
+
+    expect(screen.getByRole("button", { name: "← History" })).toBeInTheDocument();
+    expect(screen.getByText("Merged")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(api.readReviewArtifact).toHaveBeenCalledWith("review-1", "review-1.md");
     });
   });
 

@@ -4,7 +4,6 @@ import { SIDEBAR_COLLAPSED_KEY } from "@/lib/ui-storage";
 import type { Place, PullRequest, Situation, TranscriptEvent } from "@/lib/wails";
 import { sessionKey } from "@/lib/wails";
 import {
-  filterHistory,
   stepTabKey,
   useAppStore,
   useArchivedNotice,
@@ -658,27 +657,6 @@ describe("history", () => {
     useAppStore.getState().applyState(withTasks({ history: [ARCHIVED, OLDER] }));
 
     expect(useAppStore.getState().openArchivedId).toBe(ARCHIVED.id);
-  });
-});
-
-describe("filterHistory", () => {
-  it("keeps everything without a query and without a filter", () => {
-    expect(filterHistory([ARCHIVED, OLDER], "", "")).toHaveLength(2);
-    expect(filterHistory([ARCHIVED, OLDER], "   ", "")).toHaveLength(2);
-  });
-
-  it("matches part of the name, whatever the case", () => {
-    expect(filterHistory([ARCHIVED, OLDER], "LOG", "")).toEqual([ARCHIVED]);
-    expect(filterHistory([ARCHIVED, OLDER], " header ", "")).toEqual([OLDER]);
-  });
-
-  it("keeps the tasks of the repository of the filter", () => {
-    expect(filterHistory([ARCHIVED, OLDER], "", "repo-2")).toEqual([OLDER]);
-    expect(filterHistory([ARCHIVED, OLDER], "header", "repo-1")).toEqual([]);
-  });
-
-  it("answers with nothing when no name matches", () => {
-    expect(filterHistory([ARCHIVED, OLDER], "payments", "")).toEqual([]);
   });
 });
 

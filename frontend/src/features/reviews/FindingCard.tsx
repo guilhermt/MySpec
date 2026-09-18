@@ -1,21 +1,9 @@
 import { Textarea } from "@/components/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { findingLocation } from "@/features/reviews/review-status";
+import { findingLocation, placementLabel } from "@/features/reviews/review-status";
 import { textKey, useFindingText } from "@/features/reviews/useFindingText";
-import {
-  asFindingDecision,
-  asFindingPlacement,
-  type FindingPlacement,
-  type ReviewFinding,
-} from "@/lib/wails";
+import { asFindingDecision, type ReviewFinding } from "@/lib/wails";
 import { decideFinding, openFindingInEditor, saveFindingText } from "@/store/actions";
-
-/** PLACEMENT_LABEL says where a finding of a published pass went. */
-const PLACEMENT_LABEL: Record<FindingPlacement, string> = {
-  "": "Not published",
-  inline: "Inline comment",
-  body: "In the review body",
-};
 
 export interface FindingCardProps {
   reviewId: string;
@@ -60,7 +48,7 @@ export function FindingCard({ reviewId, pass, revision, finding, published }: Fi
         <span className="flex-1" />
         {published && (
           <span className="shrink-0 text-xs text-muted-foreground">
-            {PLACEMENT_LABEL[asFindingPlacement(finding.placement)]}
+            {placementLabel(finding.placement)}
           </span>
         )}
       </div>

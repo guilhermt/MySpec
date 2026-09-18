@@ -6,6 +6,8 @@ import {
   decidedCount,
   findingLocation,
   lastRecordedPass,
+  outcomeLabel,
+  placementLabel,
   publishCounts,
   reportLabel,
   reviewRowLabel,
@@ -123,6 +125,27 @@ describe("findingLocation", () => {
 
   it("calls a finding without a line general", () => {
     expect(findingLocation(makeReviewFinding({ path: "", line: 0 }))).toBe("General");
+  });
+});
+
+describe("placementLabel", () => {
+  it.each([
+    ["inline", "Inline comment"],
+    ["body", "In the review body"],
+    ["", "Not published"],
+    ["elsewhere", "Not published"],
+  ])("says where a finding placed %j went", (placement, label) => {
+    expect(placementLabel(placement)).toBe(label);
+  });
+});
+
+describe("outcomeLabel", () => {
+  it.each([
+    ["merged", "Merged"],
+    ["closed", "Closed"],
+    ["", "Closed"],
+  ])("reads the outcome %j", (outcome, label) => {
+    expect(outcomeLabel(outcome)).toBe(label);
   });
 });
 

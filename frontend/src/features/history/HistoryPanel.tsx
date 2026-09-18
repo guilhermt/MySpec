@@ -2,19 +2,14 @@ import { Archive, ExternalLink } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { formatDates, stepCount } from "@/features/history/history-format";
+import { historyEntries } from "@/features/history/history-list";
+import { outcomeLabel } from "@/features/reviews/review-status";
 import { RepositoryFilter } from "@/features/sidebar/RepositoryFilter";
 import { shortName } from "@/lib/repositories";
 import { isOneShot } from "@/lib/task-modes";
-import type { ArchivedPR } from "@/lib/wails";
+import type { ArchivedPR, ArchivedReview, ArchivedTask } from "@/lib/wails";
 import { openExternal } from "@/store/actions";
-import {
-  filterHistory,
-  useAppStore,
-  useHistory,
-  useHistoryUi,
-  useRepository,
-  useRepositoryFilter,
-} from "@/store/app-store";
+import { useAppStore, useHistoryUi, useRepository, useRepositoryFilter } from "@/store/app-store";
 
 const ROW =
   "flex h-10 w-full items-center gap-2 rounded-md px-2 text-left outline-none transition-colors duration-[var(--duration-fast)] hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset";
@@ -50,16 +45,83 @@ function Empty({ title, hint }: { title: string; hint: string }) {
   );
 }
 
-/** HistoryPanel is the list of the tasks the app has finished. */
+/** TaskRow is an archived task of the list, opening it on click. */
+function TaskRow({ task }: { task: ArchivedTask }) {
+  const openArchived = useAppStore((state) => state.openArchived);
+
+  return (
+    // The row carries the links of the pull request, so it is a div playing a
+    // button: a button inside a button is not HTML any browser or screen
+    // reader agrees on.
+    // biome-ignore lint/a11y/useSemanticElements: a button would hold the buttons of the pull request
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={() => openArchived(task.id)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          // Space scrolls the page unless the row claims it.
+          event.preventDefault();
+          openArchived(task.id);
+        }
+      }}
+      className={ROW}
+    >
+      <span className="min-w-0 truncate font-medium">{task.name}</span>
+      <Badge variant="secondary" title={task.repository}>
+        {shortName(task.repository)}
+      </Badge>
+      <span className="min-w-0 flex-1 text-xs text-muted-foreground">
+        <HistoryPR pr={task.pr} />
+      </span>
+      {isOneShot(task) ? (
+        <Badge variant="outline" className="shrink-0">
+          One-Shot
+        </Badge>
+      ) : (
+        <span className="shrink-0 text-xs text-muted-foreground">
+          {stepCount((task.steps ?? []).length)}
+        </span>
+      )}
+      <span className="shrink-0 text-xs text-muted-foreground">
+        {formatDates(task.createdAt, task.archivedAt)}
+      </span>
+    </div>
+  );
+}
+
+/** ReviewRow is an archived review of the list, opening it on click. */
+function ReviewRow({ review }: { review: ArchivedReview }) {
+  const openArchivedReview = useAppStore((state) => state.openArchivedReview);
+
+  return (
+    <button type="button" onClick={() => openArchivedReview(review.id)} className={ROW}>
+      <Badge variant="outline" className="shrink-0">
+        Review
+      </Badge>
+      <span className="min-w-0 truncate font-medium">{`#${review.number} ${review.title}`}</span>
+      <Badge variant="secondary" title={review.repository}>
+        {shortName(review.repository)}
+      </Badge>
+      <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{review.author}</span>
+      <span className="shrink-0 text-xs text-muted-foreground">{outcomeLabel(review.outcome)}</span>
+      <span className="shrink-0 text-xs text-muted-foreground">
+        {formatDates(review.createdAt, review.archivedAt)}
+      </span>
+    </button>
+  );
+}
+
+/** HistoryPanel is the list of the tasks and the reviews the app has finished. */
 export function HistoryPanel() {
-  const history = useHistory();
+  const app = useAppStore((state) => state.app);
   const { historyQuery } = useHistoryUi();
   const setHistoryQuery = useAppStore((state) => state.setHistoryQuery);
-  const openArchived = useAppStore((state) => state.openArchived);
   const filter = useRepositoryFilter();
   const filtered = useRepository(filter);
 
-  const shown = filterHistory(history, historyQuery, filter);
+  const shown = historyEntries(app, historyQuery, filter);
+  const empty = historyEntries(app, "", "").length === 0;
   const query = historyQuery.trim();
 
   return (
@@ -71,7 +133,7 @@ export function HistoryPanel() {
             <h1 className="text-[1.5rem] font-semibold">History</h1>
           </div>
           <p className="text-sm text-muted-foreground">
-            Finished tasks of every repository, with their documents.
+            Finished tasks and reviews of every repository, with their documents.
           </p>
         </header>
 
@@ -80,7 +142,7 @@ export function HistoryPanel() {
             // The panel exists to be searched, so the field is where typing goes.
             autoFocus
             aria-label="Search history"
-            placeholder="Search by name"
+            placeholder="Search by name, title or #number"
             value={historyQuery}
             onChange={(event) => setHistoryQuery(event.target.value)}
             className="flex-1"
@@ -88,59 +150,30 @@ export function HistoryPanel() {
           <RepositoryFilter variant="field" className="w-56" />
         </div>
 
-        {history.length === 0 ? (
-          <Empty title="Nothing archived yet" hint="A task comes here once it's closed." />
+        {empty ? (
+          <Empty
+            title="Nothing archived yet"
+            hint="A task comes here once it's closed, a review once its pull request is merged or closed."
+          />
         ) : shown.length === 0 && query === "" && filtered !== null ? (
           <Empty
-            title={`No archived tasks in ${shortName(filtered.fullName)}`}
+            title={`Nothing archived in ${shortName(filtered.fullName)}`}
             hint="Choose another repository, or all of them."
           />
         ) : shown.length === 0 ? (
           <Empty
-            title={`No task matches “${query}”`}
+            title={`Nothing matches “${query}”`}
             hint="Try another name, or clear the search."
           />
         ) : (
           <ul className="flex flex-col">
-            {shown.map((task) => (
-              <li key={task.id}>
-                {/* The row carries the links of the pull request, so it is a
-                    div playing a button: a button inside a button is not HTML
-                    any browser or screen reader agrees on. */}
-                {/* biome-ignore lint/a11y/useSemanticElements: a button would hold the buttons of the pull request */}
-                <div
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => openArchived(task.id)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      // Space scrolls the page unless the row claims it.
-                      event.preventDefault();
-                      openArchived(task.id);
-                    }
-                  }}
-                  className={ROW}
-                >
-                  <span className="min-w-0 truncate font-medium">{task.name}</span>
-                  <Badge variant="secondary" title={task.repository}>
-                    {shortName(task.repository)}
-                  </Badge>
-                  <span className="min-w-0 flex-1 text-xs text-muted-foreground">
-                    <HistoryPR pr={task.pr} />
-                  </span>
-                  {isOneShot(task) ? (
-                    <Badge variant="outline" className="shrink-0">
-                      One-Shot
-                    </Badge>
-                  ) : (
-                    <span className="shrink-0 text-xs text-muted-foreground">
-                      {stepCount((task.steps ?? []).length)}
-                    </span>
-                  )}
-                  <span className="shrink-0 text-xs text-muted-foreground">
-                    {formatDates(task.createdAt, task.archivedAt)}
-                  </span>
-                </div>
+            {shown.map((entry) => (
+              <li key={entry.id}>
+                {entry.kind === "task" ? (
+                  <TaskRow task={entry.task} />
+                ) : (
+                  <ReviewRow review={entry.review} />
+                )}
               </li>
             ))}
           </ul>

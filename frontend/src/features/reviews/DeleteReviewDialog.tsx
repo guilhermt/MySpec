@@ -9,11 +9,11 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { shortName } from "@/lib/repositories";
-import type { ReviewSummary } from "@/lib/wails";
 import { deleteReview } from "@/store/actions";
 
 export interface DeleteReviewDialogProps {
-  review: ReviewSummary;
+  /** review is the active or archived review to delete. */
+  review: { id: string; repository: string; number: number };
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }

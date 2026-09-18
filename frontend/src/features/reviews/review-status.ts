@@ -2,7 +2,13 @@ import type { StatusTone } from "@/features/task/status";
 import { cloneMissingText, findRepository } from "@/lib/repositories";
 import { summaryLabel } from "@/lib/situations";
 import type { PullRequestRow, ReviewFinding, ReviewPass, ReviewSummary, State } from "@/lib/wails";
-import { asPullRequestAction, asPullReviewStatus, asReviewVerdict } from "@/lib/wails";
+import {
+  asFindingPlacement,
+  asPullRequestAction,
+  asPullRequestOutcome,
+  asPullReviewStatus,
+  asReviewVerdict,
+} from "@/lib/wails";
 
 /** reviewStatusLabel is where a review of a pull request stands, in the words of the product. */
 export function reviewStatusLabel(review: ReviewSummary): string {
@@ -127,6 +133,23 @@ export function publishCounts(pass: ReviewPass): string {
 /** findingLocation is where a finding points: a file and a line, or nowhere in the diff. */
 export function findingLocation(finding: ReviewFinding): string {
   return finding.path === "" ? "General" : `${finding.path}:${finding.line}`;
+}
+
+/** placementLabel says where a finding of a published pass went. */
+export function placementLabel(placement: string): string {
+  switch (asFindingPlacement(placement)) {
+    case "inline":
+      return "Inline comment";
+    case "body":
+      return "In the review body";
+    case "":
+      return "Not published";
+  }
+}
+
+/** outcomeLabel is what became of the pull request of an archived review. */
+export function outcomeLabel(outcome: string): string {
+  return asPullRequestOutcome(outcome) === "merged" ? "Merged" : "Closed";
 }
 
 /** actionLabel is what the button of a pull request row offers. */
