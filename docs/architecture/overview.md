@@ -8,11 +8,14 @@ internal/                todo o código Go
   app/                   compõe o app Wails a partir dos services; sabe de Wails
   bindings/              services expostos ao frontend, DTOs e eventos; sabe de Wails
   flow/                  conduz uma task pelas etapas
+  reviewflow/            conduz os reviews de pull request do centro de review
   session/               a conversa de cada sessão e o processo por trás dela
   claude/                o CLI do Claude Code como subprocesso e o seu protocolo
   task/                  tasks, modos, artefatos, plano, steps e pull requests
   worktree/              as worktrees que o app cria
   review/                observação das worktrees em review
+  prreview/              os reviews de pull request: registro, relatórios, apontamentos, decisões e o que foi publicado
+  pulls/                 a leitura das pull requests abertas dos repositórios cadastrados, os filtros e a regra de pendente
   attention/             as situações que esperam pelo usuário
   prompts/               prompts padrão embutidos e os editados
   models/                modelos, esforços e padrões
@@ -20,6 +23,7 @@ internal/                todo o código Go
   repository/            os repositórios cadastrados: identidade no GitHub, clone, board, filtro, a varredura da home e a clonagem
   board/                 os boards cadastrados, a leitura dos cards pelo gh e o contexto de uma task criada de um card
   upgrade/               leva as tasks de um banco com áreas de trabalho para os repositórios
+  frontmatter/           lê o cabeçalho --- dos documentos que os agentes escrevem
   git/, gh/              rodam os binários; nada sabem de tasks
   editor/                abre o VS Code
   theme/                 preferência de tema
@@ -30,6 +34,7 @@ frontend/
   src/store/             o store Zustand, as ações e o transcript
   src/lib/               a fronteira com o Go (wails.ts) e helpers puros
   src/features/          um diretório por área da interface
+  src/components/        componentes compartilhados entre features que não são do shadcn
   src/components/ui/     componentes shadcn; gerados, nunca editados à mão
   src/styles/            Tailwind, tokens e fontes
   src/test/              setup do Vitest, render com store e mock do Go
@@ -46,15 +51,31 @@ Só dois pacotes conhecem o Wails: `internal/app`, que compõe tudo e abre a jan
 
 Os pacotes de domínio se organizam em camadas, de baixo para cima:
 
-1. **Plataforma e binários**: `platform/*`, `git`, `gh`, `editor`. Cada um sabe rodar uma coisa e nada sobre o produto.
+1. **Plataforma e binários**: `platform/*`, `git`, `gh`, `editor`, `frontmatter`. Cada um sabe fazer uma coisa e nada sobre o produto.
 2. **Estado**: `store`, com um repositório por tabela, e `models`, `reviewmode`, `theme`, `prompts`.
-3. **Domínio**: `task`, `session`, `worktree`, `review`, `repository`, `board`, `attention`. Cada um é dono de um conceito, guarda o seu estado pelo `store` e reporta o que mudou por callbacks. Nenhum deles decide o que fazer com a mudança.
-4. **Orquestração**: `flow`. Ouve as mudanças de tasks e sessões, decide o que a etapa atual precisa e age: inicia a etapa seguinte, corrige um plano, inicia um step, conduz o review pelo agente, cria uma worktree, aprova, abre a etapa de PR, encerra a task.
+3. **Domínio**: `task`, `prreview`, `pulls`, `session`, `worktree`, `review`, `repository`, `board`, `attention`. Cada um é dono de um conceito, guarda o seu estado pelo `store` e reporta o que mudou por callbacks. Nenhum deles decide o que fazer com a mudança.
+4. **Orquestração**: `flow` e `reviewflow`. `flow` ouve as mudanças de tasks e sessões, decide o que a etapa atual precisa e age: inicia a etapa seguinte, corrige um plano, inicia um step, conduz o review pelo agente, cria uma worktree, aprova, abre a etapa de PR, encerra a task. `reviewflow` faz o mesmo para os reviews de pull request: inicia, pede passadas, registra relatórios, publica, aplica, percebe commits novos, encerra e apaga.
 5. **Exposição**: `bindings` converte o domínio em DTOs e recebe as chamadas do frontend; `app` liga tudo e publica o estado.
 
-Dois pares merecem nota. `git` roda o binário e não sabe o que é uma task; `worktree` carrega a política do produto: onde as worktrees ficam, como nascem, quando estão limpas, como vão embora. `gh` espelha `git`: roda consultas GraphQL, classificando as falhas (sem `gh`, sem autenticação, sem o escopo de projects, limite de taxa), e clona repositórios, sem saber o que é um board; quem abre pull requests é o agente.
+Dois pares merecem nota. `git` roda o binário e não sabe o que é uma task; `worktree` carrega a política do produto: onde as worktrees ficam, como nascem, quando estão limpas, como vão embora. `gh` espelha `git`: roda consultas GraphQL, classificando as falhas (sem `gh`, sem autenticação, sem o escopo de projects, limite de taxa), clona repositórios, lê o diff de uma pull request e publica um review, com o JSON no stdin de `gh api`, sem saber o que é um board ou um review; quem abre pull requests é o agente.
 
-`board` é dono dos boards cadastrados e da leitura guardada de cada um. Uma leitura faz uma consulta da estrutura do board, as consultas paginadas dos itens, primeiro as issues abertas e depois as fechadas nos últimos 14 dias, e poucas consultas em lote, com aliases, para os épicos com as sub-issues, as dependências fora da leitura e os cards de tasks ativas que ficaram fora dela; nunca uma chamada por card. A montagem em Go junta a convenção do corpo às relações nativas. `board` também sugere o nome de uma task e monta o contexto de uma task criada de um card, e reporta por `OnChange` e `OnRead` sem decidir nada sobre tasks: é `app` que entrega os cards de cada leitura a `task.Service.UpdateCards`. Toda escrita que muda o board de um repositório acontece na transação do board no `store`, seguida de `repository.Service.Sync`. `repository` clona em segundo plano, com o estado do clone em memória, e guarda a pasta de clones.
+`board` é dono dos boards cadastrados e da leitura guardada de cada um. Uma leitura faz uma consulta da estrutura do board, as consultas paginadas dos itens, primeiro as issues abertas e depois as fechadas nos últimos 14 dias, e poucas consultas em lote, com aliases, para os épicos com as sub-issues, as dependências fora da leitura e os cards de tasks ativas que ficaram fora dela; nunca uma chamada por card. A montagem em Go junta a convenção do corpo às relações nativas. `board` também sugere o nome de uma task e monta o contexto de uma task criada de um card, e reporta por `OnChange` e `OnRead` sem decidir nada sobre tasks: é `app` que entrega os cards de cada leitura a `task.Service.UpdateCards`. Toda escrita que muda o board de um repositório acontece na transação do board no `store`, seguida de `repository.Service.Sync`. `repository` clona em segundo plano, com o estado do clone em memória, e guarda a pasta de clones e as instruções fixas de review de cada repositório.
+
+### Itens
+
+Uma task e um review de pull request são **itens**: coisas que têm conversa, worktree e situações. A tabela-pai `items` dá a eles um id comum, e `sessions`, `worktrees` e `situations` pertencem a um item, não a uma task; ver [storage.md](./storage.md#itens). Os ids são UUIDs, únicos entre tasks e reviews, e no código Go e no frontend o id de um item viaja nos campos `TaskID`/`taskId` que `session.Key`, `worktree.Worktree`, `attention.Found` e os DTOs de situação já têm. `session`, `worktree`, `review` e `attention` não olham para o que o id nomeia; quem sabe se um id é de uma task ou de um review é `flow` ou `reviewflow`. Por isso `app` chama `flow.Check` e `reviewflow.Check` com o mesmo id, e cada um ignora o que não é seu.
+
+Um review não tem etapas: tem uma sessão só, na stage `review`, e uma worktree em detached HEAD no head da pull request, sem branch local, em `worktrees/<dono>/<nome>/pr_<número>/`. `_` não cabe no nome de uma task, então o caminho nunca colide com o de uma task.
+
+### O centro de review
+
+`pulls` lê do GitHub as pull requests abertas dos repositórios cadastrados, com uma consulta GraphQL por lote de 15 repositórios, com aliases, e traz de cada uma o último review enviado pela conta do `gh`, de onde vêm "revisada" e "commits novos". Um erro GraphQL de um alias vira a falha daquele repositório, e os outros do lote valem. A leitura fica só em memória, uma por vez, com as pedidas durante outra coalescidas numa só depois, como a de um board. `app` pede uma leitura ao iniciar e a cada cinco minutos, e o frontend, ao abrir a visão. `pulls` também lê pull requests específicas, abertas ou não, guarda os filtros da visão na setting `review_filters` e decide o que é pendente. Ele não sabe o que é um review.
+
+`prreview` é dono dos reviews como itens: o registro, a pasta de artefatos, o parser do relatório, as decisões, as edições e o que foi publicado, com um cache em memória como o de `task`. O relatório é um arquivo do agente e nunca é reescrito pelo produto; as decisões, os textos editados, o veredito e o lugar em que cada apontamento foi publicado ficam no banco. `RecordReport` reconcilia um relatório reescrito na conversa com o que está guardado: cada apontamento novo herda o texto e a decisão do antigo com o mesmo arquivo, linha e texto original, e uma passada publicada nunca é tocada. `prreview` também lê um unified diff para saber quais linhas do lado novo estão nele e monta o corpo do review publicado.
+
+`reviewflow` tem o desenho de `flow`: um lock por review, `Check` que coalesce avaliações numa goroutine e um estado derivado, `reviewflow.State`, cujo status é uma função pura das colunas do review, da passada mais recente, da sessão e, no modo aplicar, da leitura do watcher. A avaliação lê o relatório da passada pedida quando a sessão fica ociosa; não há watcher de arquivos para reviews, porque o relatório só importa quando o turno termina. `Poll`, chamado a cada minuto junto de `flow.PollPRs`, lê as pull requests dos reviews ativos numa chamada só, grava o head e o estado delas e encerra os reviews cuja pull request foi mergeada ou fechada. Publicar lê o diff atual, rebaixa ao corpo os apontamentos cuja linha saiu do diff e publica pelo `gh`. No modo aplicar, `reviewflow` usa o watcher de `review` e o prompt de commit como `flow` faz na etapa de PR, com o push para `HEAD:refs/heads/<branch da pull request>`, porque a worktree não tem branch local.
+
+`board` responde qual card tem uma pull request vinculada, pela leitura guardada, e monta o contexto do card para o documento de contexto do review. `repository` recusa remover um repositório com reviews, e `board` conta tasks e reviews juntos para decidir se um repositório que sai de um board fica no produto.
 
 ### Composição e injeção
 
@@ -62,7 +83,7 @@ Dois pares merecem nota. `git` roda o binário e não sabe o que é uma task; `w
 
 ### O estado que o frontend vê
 
-`bindings.State` é tudo que a interface renderiza, produzido no Go e nunca derivado no frontend. `app.snapshot` lê os boards cadastrados, com a leitura guardada de cada um, os repositórios cadastrados, com o estado do clone, as tasks, com o card de cada uma, os resumos das sessões, os artefatos, os steps e a pull request de cada task, deriva as situações a partir das mesmas leituras, para que todas as superfícies concordem, e converte tudo em DTOs. Cada mudança em qualquer service publica um snapshot inteiro; o frontend substitui o que tem. A leitura inteira de cada board viaja no `State`, porque a janela de leitura a mantém pequena, e o que cada card permite (**Start task**, clonar, acrescentar ao board) é decidido no Go.
+`bindings.State` é tudo que a interface renderiza, produzido no Go e nunca derivado no frontend. `app.snapshot` lê os boards cadastrados, com a leitura guardada de cada um, os repositórios cadastrados, com o estado do clone e as instruções de review, as tasks, com o card de cada uma, os resumos das sessões, os artefatos, os steps e a pull request de cada task, o estado de cada review ativo, os reviews arquivados e a última leitura das pull requests, deriva as situações das tasks e dos reviews a partir das mesmas leituras, para que todas as superfícies concordem, e converte tudo em DTOs. Cada mudança em qualquer service publica um snapshot inteiro; o frontend substitui o que tem. A leitura inteira de cada board viaja no `State`, porque a janela de leitura a mantém pequena, e o que cada card permite (**Start task**, clonar, acrescentar ao board) é decidido no Go. Do mesmo modo, `State.ReviewCenter` traz as pull requests lidas já com o card, a task ou o review de cada uma, se é pendente, se passa pelos filtros e a ação da linha, e a contagem do nó **Reviews**; `State.Reviews` traz os reviews ativos, com o status, as passadas, os apontamentos, as situações e as ações que cada um permite; `State.ReviewHistory`, os arquivados.
 
 Os enums dos DTOs viajam como `string`, com um comentário listando os valores, para que os bindings gerados não emitam enums TypeScript; o frontend estreita com funções `asX` em `lib/wails.ts`.
 
@@ -75,7 +96,7 @@ Quatro eventos tipados, registrados em `bindings.RegisterEvents` antes de `appli
 | `state:changed` | `State` inteiro | Qualquer mudança em qualquer service |
 | `transcript:changed` | um `TranscriptEvent`: entrada nova, texto em streaming, remoção ou reset | A cada mudança numa conversa |
 | `situation:started` | a situação e se a janela estava em foco | Uma situação nova começa; dirige o piscar |
-| `situation:open` | task e lugar | Um clique numa notificação pede a abertura |
+| `situation:open` | item e lugar | Um clique numa notificação pede a abertura |
 
 ### Notificações e som
 
@@ -85,7 +106,7 @@ Quatro eventos tipados, registrados em `bindings.RegisterEvents` antes de `appli
 
 ### Fluxo de uma sessão
 
-`session.Service` é dono da conversa de cada chave `{task, stage}`, onde a stage é `prd`, `tech_spec`, `plan`, `one_shot`, `step:<n>`, `step_review:<n>`, `pr` ou `pr_review`. Ele inicia o processo por `claude`, consome o stream de eventos, monta o transcript, persiste as entradas no `store`, deriva o estado (trabalhando, esperando, precisa de permissão, precisa de resposta, pausada, erro) e avisa `flow` e `app` a cada mudança. O detalhe está em [sessions.md](./sessions.md).
+`session.Service` é dono da conversa de cada chave `{item, stage}`, onde a stage é `prd`, `tech_spec`, `plan`, `one_shot`, `step:<n>`, `step_review:<n>`, `pr` ou `pr_review` numa task, e `review` num review de pull request. Ele inicia o processo por `claude`, consome o stream de eventos, monta o transcript, persiste as entradas no `store`, deriva o estado (trabalhando, esperando, precisa de permissão, precisa de resposta, pausada, erro) e avisa `flow` e `app` a cada mudança. O detalhe está em [sessions.md](./sessions.md).
 
 ### Fluxo de uma etapa
 
@@ -107,7 +128,7 @@ A implementação de uma task One-Shot não tem caminho próprio em `flow`. A in
 
 ### Store
 
-`store/app-store.ts` é o store Zustand: o `State` recebido do Go, os transcripts por chave de sessão, os rascunhos, e o estado de interface que só o frontend conhece (task aberta, board aberto, diálogo de criação aberto e o card de onde ele parte, o **Start task** que espera um clone, nós recolhidos da barra lateral, último repositório usado, aba da conversa do step, histórico e configurações abertos, edição de prompt, navegação pendente). Ele exporta hooks seletores (`useTask`, `useOpenBoardId`, `useTranscript`, `useOpenTask`...) para que cada componente assine só a fatia que usa. O store importa só de `lib/`.
+`store/app-store.ts` é o store Zustand: o `State` recebido do Go, os transcripts por chave de sessão, os rascunhos, inclusive os dos apontamentos e dos resumos de um review, e o estado de interface que só o frontend conhece (task aberta, board aberto, visão Reviews, review aberto, review arquivado aberto, diálogo de criação aberto e o card de onde ele parte, o **Start task** e o review que esperam um clone, nós recolhidos da barra lateral, último repositório usado, aba da conversa do step, histórico e configurações abertos, edição de prompt, navegação pendente). Ele exporta hooks seletores (`useTask`, `useOpenBoardId`, `useTranscript`, `useOpenTask`...) para que cada componente assine só a fatia que usa. O store importa só de `lib/`.
 
 `store/actions.ts` é o que os componentes chamam para agir: cada ação chama `api`, e um erro vira a mensagem do aviso de erro. Nenhuma ação toca o `State`: o estado novo sempre chega por `state:changed`. Os componentes nunca chamam `api` diretamente.
 
@@ -115,9 +136,9 @@ A implementação de uma task One-Shot não tem caminho próprio em `flow`. A in
 
 ### Features
 
-Cada diretório de `features/` cobre uma área: `sidebar` para a barra lateral e a árvore de tasks, `home` para a área principal sem task aberta, `welcome` para a tela sem boards nem repositórios cadastrados, `board` para a visão de um board, `boards` para a página de boards, `migration` para a tela de migração recusada, `repositories` para a página de repositórios, `task` e `task-create` para a task, `chat` para as conversas, `attention` para a seção de espera, `history`, `settings`, `models`, `review-mode` para o seletor de modo de review, `notice` e `theme`. A lógica de apresentação que não depende de React fica em arquivos `.ts` ao lado dos componentes (`status.ts`, `step-status.ts`, `pr-status.ts`, `stage-actions.ts`), testável sem renderizar.
+Cada diretório de `features/` cobre uma área: `sidebar` para a barra lateral e a árvore de tasks, `home` para a área principal sem task aberta, `welcome` para a tela sem boards nem repositórios cadastrados, `board` para a visão de um board, `boards` para a página de boards, `reviews` para o centro de review, com a visão Reviews, o diálogo de início, a tela de um review e o review arquivado, `migration` para a tela de migração recusada, `repositories` para a página de repositórios, `task` e `task-create` para a task, `chat` para as conversas, `attention` para a seção de espera, `history`, `settings`, `models`, `review-mode` para o seletor de modo de review, `notice` e `theme`. A lógica de apresentação que não depende de React fica em arquivos `.ts` ao lado dos componentes (`status.ts`, `step-status.ts`, `pr-status.ts`, `stage-actions.ts`, `review-status.ts`), testável sem renderizar. Um componente usado por mais de uma feature e que não é do shadcn, como o `FilterMenu` das visões de board e de reviews, fica em `src/components/`, ao lado de `ui/`.
 
-`lib/` guarda o que o store e as features compartilham: boards, repositórios, pull requests, situações, etapas, modelos, modos de review, nomes de task, front matter. `lib/ui-storage.ts` guarda no `localStorage` a memória de interface que sobrevive a reinícios e não é estado do produto: os filtros e as seções recolhidas de cada visão de board e os nós recolhidos da barra lateral.
+`lib/` guarda o que o store e as features compartilham: boards, repositórios, pull requests, situações de tasks e de reviews, etapas, modelos, modos de review, nomes de task, front matter. `lib/ui-storage.ts` guarda no `localStorage` a memória de interface que sobrevive a reinícios e não é estado do produto: os filtros e as seções recolhidas de cada visão de board e os nós recolhidos da barra lateral.
 
 ### Estilo
 
