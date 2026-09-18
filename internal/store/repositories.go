@@ -55,11 +55,13 @@ func (r *RepositoriesRepo) Insert(ctx context.Context, repo repository.Repositor
 }
 
 // UpdatePath points a repository at another clone. The worktrees of its tasks
-// follow it, because git runs them in the clone the repository has now.
+// and of its reviews follow it, because git runs them in the clone the
+// repository has now.
 func (r *RepositoriesRepo) UpdatePath(ctx context.Context, id, path string) error {
 	const stmt = `UPDATE repositories SET path = ? WHERE id = ?`
 	const worktrees = `UPDATE worktrees SET repo_path = ?
-		WHERE item_id IN (SELECT id FROM tasks WHERE repository_id = ?)`
+		WHERE item_id IN (SELECT id FROM tasks WHERE repository_id = ?
+			UNION SELECT id FROM reviews WHERE repository_id = ?)`
 
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -70,7 +72,7 @@ func (r *RepositoriesRepo) UpdatePath(ctx context.Context, id, path string) erro
 	if _, err := tx.ExecContext(ctx, stmt, path, id); err != nil {
 		return fmt.Errorf("update repository path %s: %w", id, err)
 	}
-	if _, err := tx.ExecContext(ctx, worktrees, path, id); err != nil {
+	if _, err := tx.ExecContext(ctx, worktrees, path, id, id); err != nil {
 		return fmt.Errorf("update worktrees of repository %s: %w", id, err)
 	}
 	if err := tx.Commit(); err != nil {

@@ -238,6 +238,30 @@ func TestARewrittenReportKeepsTheDecisionsOfTheFindingsThatStand(t *testing.T) {
 	}
 }
 
+func TestASummaryTheUserEditedSurvivesARewriteThatKeepsTheSummaryOfTheReport(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	review := f.recorded(t, 42, changesReport(1, "One thing.",
+		prreview.ParsedFinding{Number: 1, Text: "A thing."}), "commit-1")
+
+	if err := f.service.SetSummary(t.Context(), review.ID, 1, "One small thing."); err != nil {
+		t.Fatalf("set summary: %v", err)
+	}
+	rewritten := changesReport(1, "One thing.", prreview.ParsedFinding{Number: 1, Text: "Another thing."})
+	if _, _, err := f.service.RecordReport(t.Context(), review.ID, rewritten, "commit-1"); err != nil {
+		t.Fatalf("record report: %v", err)
+	}
+
+	pass := f.pass(t, review.ID, 1)
+	if pass.Revision != 2 {
+		t.Errorf("revision = %d, want the rewrite recorded", pass.Revision)
+	}
+	if pass.Summary != "One small thing." || pass.SummaryOriginal != "One thing." {
+		t.Errorf("summary = %q / %q, want the edited one over the report's", pass.Summary, pass.SummaryOriginal)
+	}
+}
+
 func TestASummaryTheAgentRewroteTakesOverTheOneTheUserLeft(t *testing.T) {
 	t.Parallel()
 
@@ -254,6 +278,63 @@ func TestASummaryTheAgentRewroteTakesOverTheOneTheUserLeft(t *testing.T) {
 	pass := f.pass(t, review.ID, 1)
 	if pass.Summary != "Nothing to change." || pass.SummaryOriginal != "Nothing to change." {
 		t.Errorf("summary = %q / %q, want the rewritten one", pass.Summary, pass.SummaryOriginal)
+	}
+}
+
+func TestAReportThatCouldNotBeStoredLeavesThePassToBeRecordedAgain(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	review := f.asked(t, 42)
+	report := changesReport(1, "One thing.", prreview.ParsedFinding{Number: 1, Text: "A thing."})
+
+	f.store.writeErr = errors.New("database is locked")
+	if _, _, err := f.service.RecordReport(t.Context(), review.ID, report, "commit-1"); err == nil {
+		t.Fatal("record report: want an error")
+	}
+	if f.pass(t, review.ID, 1).Recorded || f.store.storedPass(t, review.ID, 1).Recorded {
+		t.Error("pass recorded, want it left as asked in the cache and in the store")
+	}
+	if f.review(t, review.ID).ReportedPass != 0 || f.store.storedReview(t, review.ID).ReportedPass != 0 {
+		t.Error("reported pass moved, want it left in the cache and in the store")
+	}
+
+	f.store.writeErr = nil
+	_, changed, err := f.service.RecordReport(t.Context(), review.ID, report, "commit-1")
+	if err != nil {
+		t.Fatalf("record report again: %v", err)
+	}
+	if !changed {
+		t.Error("changed = false, want the report recorded on the second try")
+	}
+	if got := f.store.storedReview(t, review.ID); got.ReportedPass != 1 || got.PassCommit != "commit-1" {
+		t.Errorf("stored review = %+v, want pass 1 on commit-1", got)
+	}
+}
+
+func TestAPublicationThatCouldNotBeStoredIsPublishedAgain(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	review := f.recorded(t, 42, cleanReport(1, "All good."), "commit-1")
+
+	f.store.writeErr = errors.New("database is locked")
+	err := f.service.MarkPublished(t.Context(), review.ID, 1, prreview.VerdictComment,
+		"https://github.com/dev/web/pull/42#r1", "commit-1", nil)
+	if err == nil {
+		t.Fatal("mark published: want an error")
+	}
+	if f.pass(t, review.ID, 1).Published() || f.store.storedPass(t, review.ID, 1).Published() {
+		t.Error("pass published, want it left to decide in the cache and in the store")
+	}
+	if f.review(t, review.ID).PublishedPass != 0 || f.store.storedReview(t, review.ID).PublishedPass != 0 {
+		t.Error("published pass moved, want it left in the cache and in the store")
+	}
+
+	f.store.writeErr = nil
+	publish(t, f, review.ID, 1, nil)
+	if got := f.store.storedReview(t, review.ID); got.PublishedPass != 1 || got.PublishedCommit != "commit-1" {
+		t.Errorf("stored review = %+v, want pass 1 published on commit-1", got)
 	}
 }
 
@@ -276,7 +357,7 @@ func TestAPublishedPassIsNeverTouchedAgain(t *testing.T) {
 	}
 }
 
-func TestOnlyTheLastRecordedPassIsDecidedOn(t *testing.T) {
+func TestAPublishedPassIsNoLongerDecidedOn(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)

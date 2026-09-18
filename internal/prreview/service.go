@@ -33,7 +33,9 @@ type Store interface {
 	Passes(ctx context.Context, reviewID string) ([]Pass, error)
 	UpsertPass(ctx context.Context, pass Pass) error
 	DeletePass(ctx context.Context, reviewID string, pass int) error
-	ReplaceFindings(ctx context.Context, reviewID string, pass int, findings []Finding) error
+	// WritePass stores a pass with its findings, and the review it moves when
+	// review is not nil, all or nothing.
+	WritePass(ctx context.Context, pass Pass, review *Review) error
 	UpdateFinding(ctx context.Context, reviewID string, pass int, finding Finding) error
 }
 
@@ -387,10 +389,7 @@ func (s *Service) recordFirst(ctx context.Context, pass Pass, report Report, com
 	pass.Revision = 1
 	pass.Findings = fresh(report.Findings)
 
-	if err := s.writePass(ctx, pass); err != nil {
-		return Pass{}, false, err
-	}
-	if _, err := s.Update(ctx, pass.ReviewID, func(r *Review) {
+	if err := s.writePass(ctx, pass, func(r *Review) {
 		r.ReportedPass, r.PassCommit = pass.Number, commit
 	}); err != nil {
 		return Pass{}, false, err
@@ -398,6 +397,7 @@ func (s *Service) recordFirst(ctx context.Context, pass Pass, report Report, com
 
 	s.log.Info("review report recorded", "review", pass.ReviewID, "pass", pass.Number,
 		"clean", pass.Clean, "findings", len(pass.Findings))
+	s.changed()
 	return pass, true, nil
 }
 
@@ -413,7 +413,7 @@ func (s *Service) recordAgain(ctx context.Context, pass Pass, report Report) (Pa
 	pass.Findings = inherit(pass.Findings, report.Findings)
 	pass.Revision++
 
-	if err := s.writePass(ctx, pass); err != nil {
+	if err := s.writePass(ctx, pass, nil); err != nil {
 		return Pass{}, false, err
 	}
 
@@ -423,15 +423,28 @@ func (s *Service) recordAgain(ctx context.Context, pass Pass, report Report) (Pa
 	return pass, true, nil
 }
 
-// writePass persists a pass with its findings and refreshes the cache.
-func (s *Service) writePass(ctx context.Context, pass Pass) error {
-	if err := s.store.UpsertPass(ctx, pass); err != nil {
-		return err
+// writePass persists a pass with its findings and, when advance is not nil,
+// the review with what advance changes on it, in one write. The cache follows
+// only once the store has all of it, so a failure leaves both as they were.
+func (s *Service) writePass(ctx context.Context, pass Pass, advance func(*Review)) error {
+	var review *Review
+	if advance != nil {
+		current, ok := s.Get(pass.ReviewID)
+		if !ok {
+			return fmt.Errorf("update review %s: %w", pass.ReviewID, ErrNotFound)
+		}
+		current.UpdatedAt = s.now().UTC()
+		advance(&current)
+		review = &current
 	}
-	if err := s.store.ReplaceFindings(ctx, pass.ReviewID, pass.Number, pass.Findings); err != nil {
+
+	if err := s.store.WritePass(ctx, pass, review); err != nil {
 		return err
 	}
 	s.savePass(pass)
+	if review != nil {
+		s.save(*review)
+	}
 	return nil
 }
 
@@ -534,11 +547,7 @@ func (s *Service) MarkPublished(ctx context.Context, id string, pass int, verdic
 	for i := range stored.Findings {
 		stored.Findings[i].Placement = placements[stored.Findings[i].Number]
 	}
-	if err = s.writePass(ctx, stored); err != nil {
-		return err
-	}
-
-	if _, err = s.Update(ctx, id, func(r *Review) {
+	if err = s.writePass(ctx, stored, func(r *Review) {
 		r.PublishedPass = pass
 		r.PublishedCommit, r.HeadCommit = commit, commit
 		r.PublishError = ""
@@ -546,6 +555,7 @@ func (s *Service) MarkPublished(ctx context.Context, id string, pass int, verdic
 		return err
 	}
 	s.log.Info("review published", "review", id, "pass", pass, "verdict", string(published), "url", url)
+	s.changed()
 	return nil
 }
 

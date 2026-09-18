@@ -112,6 +112,12 @@ type scanner interface {
 	Scan(dest ...any) error
 }
 
+// execer is what *sql.DB and *sql.Tx have in common, so a statement is written
+// once and runs alone or inside a transaction.
+type execer interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+}
+
 // formatTime writes an instant the way every timestamp column stores it.
 func formatTime(t time.Time) string {
 	return t.UTC().Format(time.RFC3339Nano)

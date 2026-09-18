@@ -145,12 +145,21 @@ func (s *Service) end(ctx context.Context, stored prreview.Review, state prrevie
 	s.notify(stored.ID)
 }
 
-// Sync brings the reviews the app loaded back to life: each one gets its
-// conversation open again, and the reading of GitHub says what happened while
-// the app was closed.
+// Sync brings the reviews the app loaded back to life: each one with a
+// conversation gets it open again, and the reading of GitHub says what
+// happened while the app was closed. A review without one is left alone:
+// opening it here would create a conversation with no model nobody writes to.
 func (s *Service) Sync(ctx context.Context) {
 	active := s.reviews.List()
 	for _, stored := range active {
+		exists, err := s.sessions.Exists(ctx, sessionKey(stored.ID))
+		if err != nil {
+			s.log.Error("open review session failed", "review", stored.ID, "error", err)
+			continue
+		}
+		if !exists {
+			continue
+		}
 		repo, ok := s.repositories.Get(stored.RepositoryID)
 		if !ok {
 			s.log.Error("open review session failed", "review", stored.ID,

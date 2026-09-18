@@ -4,6 +4,7 @@ import (
 	gocmp "cmp"
 	"errors"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 
@@ -311,11 +312,11 @@ func TestAWorktreeThatCannotBeCreatedLeavesNoReviewBehind(t *testing.T) {
 	}
 }
 
-func TestAConversationThatCannotStartLeavesTheReviewWaitingForTheUser(t *testing.T) {
+func TestAConversationThatCannotStartLeavesNoReviewBehind(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	f.sessions.failWith(errGitHub)
+	f.sessions.failStart(errGitHub)
 
 	id, err := f.service.Start(t.Context(), reviewflow.StartParams{
 		RepositoryID: repoID, Number: prNumber, Mode: prreview.ModePublish,
@@ -324,11 +325,31 @@ func TestAConversationThatCannotStartLeavesTheReviewWaitingForTheUser(t *testing
 	if id != "" {
 		t.Errorf("review id = %q, want none", id)
 	}
-	// The review and its first pass stay: the conversation is where the
-	// failure of a process is recorded, and the user asks for the pass again.
-	stored := f.reviews.List()
-	if len(stored) != 1 || stored[0].AskedPass != 1 {
-		t.Errorf("reviews = %+v, want one review with the first pass asked", stored)
+	// A review left half started could neither start again nor take another
+	// pass: it goes with its conversation and its worktree.
+	if got := f.reviews.List(); len(got) != 0 {
+		t.Errorf("reviews = %+v, want none", got)
+	}
+	if !slices.Contains(f.sessions.recorded(), "discardTask:review-1") {
+		t.Errorf("session calls = %v, want the conversation thrown away", f.sessions.recorded())
+	}
+	if exists, _ := f.sessions.Exists(t.Context(), session.Key{TaskID: "review-1", Stage: session.ReviewStage}); exists {
+		t.Error("the conversation of the review is still recorded")
+	}
+	if _, ok := f.worktrees.Get("review-1"); ok {
+		t.Error("the worktree of the review is still there")
+	}
+	dir := prreview.ArtifactsDir(f.dataDir, "dev", "web", prNumber, "review-1")
+	if _, err = os.Stat(dir); !os.IsNotExist(err) {
+		t.Errorf("the artifacts folder %s is still there", dir)
+	}
+
+	// Nothing is in the way of starting the review again.
+	f.sessions.failStart(nil)
+	if _, err = f.service.Start(t.Context(), reviewflow.StartParams{
+		RepositoryID: repoID, Number: prNumber, Mode: prreview.ModePublish,
+	}); err != nil {
+		t.Fatalf("start review again: %v", err)
 	}
 }
 

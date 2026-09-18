@@ -12,7 +12,7 @@ export const FLASH_MS = 1600;
 export interface WaitingEntry {
   /** itemId is the task or the review the situation is in. */
   itemId: string;
-  /** name is what the line reads: the name of a task, or owner#number of a review. */
+  /** name is what the line reads: the name of a task, or name#number of a review. */
   name: string;
   situation: Situation;
 }

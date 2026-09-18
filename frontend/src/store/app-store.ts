@@ -65,6 +65,13 @@ export interface PendingStart extends CardRef {
 }
 
 /** PullRef names one pull request: the repository it belongs to and its number. */
+/** FindingDraft is a text of a review the user is editing, and the report it was typed against. */
+export interface FindingDraft {
+  text: string;
+  /** revision is the report of the pass the text was typed on; another one makes the draft stale. */
+  revision: number;
+}
+
 export interface PullRef {
   repositoryId: string;
   number: number;
@@ -103,7 +110,7 @@ export interface AppStore {
    * findingDrafts are the texts of a review the user is editing, by
    * `${reviewId}|${pass}|${number}` and `${reviewId}|${pass}|summary`.
    */
-  findingDrafts: Record<string, string>;
+  findingDrafts: Record<string, FindingDraft>;
   /** sidebarCollapsed are the ids of the sidebar nodes the user collapsed; kept across runs. */
   sidebarCollapsed: ReadonlySet<string>;
   /**
@@ -153,7 +160,7 @@ export interface AppStore {
   openStartReview: (pull: PullRef) => void;
   closeStartReview: () => void;
   setPendingReview: (pending: PullRef | null) => void;
-  setFindingDraft: (key: string, text: string) => void;
+  setFindingDraft: (key: string, draft: FindingDraft) => void;
   clearFindingDraft: (key: string) => void;
   toggleSidebarNode: (id: string) => void;
   /** expandSidebarNodes opens the given nodes of the sidebar, leaving the others as they are. */
@@ -552,8 +559,8 @@ export const useAppStore = create<AppStore>()((set, get) => {
 
     setPendingReview: (pending) => set({ pendingReview: pending }),
 
-    setFindingDraft: (key, text) =>
-      set((state) => ({ findingDrafts: { ...state.findingDrafts, [key]: text } })),
+    setFindingDraft: (key, draft) =>
+      set((state) => ({ findingDrafts: { ...state.findingDrafts, [key]: draft } })),
 
     clearFindingDraft: (key) =>
       set((state) => {
@@ -721,6 +728,7 @@ export const useAppStore = create<AppStore>()((set, get) => {
           newTaskOpen: false,
           settingsOpen: false,
           openBoardId: null,
+          ...NO_REVIEW_PLACE,
           openStepTab: withStepTab(state.openStepTab, taskId, place),
         })),
       );
@@ -975,8 +983,11 @@ export function useStartReview(): PullRef | null {
   return useAppStore((state) => state.startReview);
 }
 
-/** useFindingDraft is the text the user is editing, null when they are editing none. */
-export function useFindingDraft(key: string): string | null {
+/**
+ * useFindingDraft is the text the user is editing and the report it was typed
+ * against, null when they are editing none.
+ */
+export function useFindingDraft(key: string): FindingDraft | null {
   return useAppStore((state) => state.findingDrafts[key] ?? null);
 }
 

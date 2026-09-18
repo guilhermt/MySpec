@@ -1371,6 +1371,10 @@ describe("reviews", () => {
 
   it.each([
     ["a task", () => useAppStore.getState().openTask(WEB_TASK.id)],
+    [
+      "the situation of a task",
+      () => useAppStore.getState().openPlace(WEB_TASK.id, stagePlace("prd")),
+    ],
     ["a board", () => useAppStore.getState().openBoard("board-1")],
     ["the history", () => useAppStore.getState().openHistory()],
     ["an archived task", () => useAppStore.getState().openArchived(ARCHIVED.id)],
@@ -1462,9 +1466,9 @@ describe("reviews", () => {
     expect(result.current).toBeNull();
 
     act(() => {
-      useAppStore.getState().setFindingDraft(key, "half a note");
+      useAppStore.getState().setFindingDraft(key, { text: "half a note", revision: 1 });
     });
-    expect(result.current).toBe("half a note");
+    expect(result.current).toEqual({ text: "half a note", revision: 1 });
 
     act(() => {
       useAppStore.getState().clearFindingDraft(key);

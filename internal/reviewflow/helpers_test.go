@@ -58,15 +58,18 @@ type memSessions struct {
 	mu        sync.Mutex
 	summaries map[session.Key]session.Summary
 	infos     map[session.Key]session.TaskInfo
+	stored    map[session.Key]bool // the sessions ever created, open or not
 	calls     []string
 	messages  []string
 	err       error // returned by every call that changes something
+	startErr  error // returned by Start alone
 }
 
 func newSessions() *memSessions {
 	return &memSessions{
 		summaries: map[session.Key]session.Summary{},
 		infos:     map[session.Key]session.TaskInfo{},
+		stored:    map[session.Key]bool{},
 	}
 }
 
@@ -79,6 +82,7 @@ func (m *memSessions) Open(_ context.Context, t session.TaskInfo) error {
 		return m.err
 	}
 	m.infos[t.Key()] = t
+	m.stored[t.Key()] = true
 	if _, ok := m.summaries[t.Key()]; !ok {
 		m.summaries[t.Key()] = session.Summary{
 			TaskID: t.ID, Stage: t.Stage, Status: session.StatusWaiting, Idle: true,
@@ -95,7 +99,14 @@ func (m *memSessions) Start(_ context.Context, t session.TaskInfo, restarted boo
 	if m.err != nil {
 		return m.err
 	}
+	if m.startErr != nil {
+		// The session was created before the start failed, as a store that
+		// fails to queue the prompt leaves it.
+		m.stored[t.Key()] = true
+		return m.startErr
+	}
 	m.infos[t.Key()] = t
+	m.stored[t.Key()] = true
 	m.summaries[t.Key()] = session.Summary{TaskID: t.ID, Stage: t.Stage, Status: session.StatusWorking}
 	return nil
 }
@@ -125,6 +136,11 @@ func (m *memSessions) DiscardTask(_ context.Context, taskID string) error {
 			delete(m.summaries, k)
 		}
 	}
+	for k := range m.stored {
+		if k.TaskID == taskID {
+			delete(m.stored, k)
+		}
+	}
 	return nil
 }
 
@@ -151,6 +167,13 @@ func (m *memSessions) Summary(k session.Key) (session.Summary, bool) {
 
 	sum, ok := m.summaries[k]
 	return sum, ok
+}
+
+func (m *memSessions) Exists(_ context.Context, k session.Key) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return m.stored[k], nil
 }
 
 func (m *memSessions) SendFromApp(_ context.Context, k session.Key, text string) error {
@@ -213,6 +236,17 @@ func (m *memSessions) forget(id string) {
 	delete(m.summaries, session.Key{TaskID: id, Stage: session.ReviewStage})
 }
 
+// lose drops the conversation of a review from memory and from the database,
+// which is a review that never had one.
+func (m *memSessions) lose(id string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	key := session.Key{TaskID: id, Stage: session.ReviewStage}
+	delete(m.summaries, key)
+	delete(m.stored, key)
+}
+
 // info is what the last Open or Start said about the conversation of a review.
 func (m *memSessions) info(id string) (session.TaskInfo, bool) {
 	m.mu.Lock()
@@ -228,6 +262,14 @@ func (m *memSessions) recorded() []string {
 	defer m.mu.Unlock()
 
 	return slices.Clone(m.calls)
+}
+
+// failStart makes every start of a conversation fail with err.
+func (m *memSessions) failStart(err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.startErr = err
 }
 
 // failWith makes every call that changes something return err.
@@ -691,17 +733,29 @@ func (m *memReviewStore) DeletePass(_ context.Context, reviewID string, pass int
 	return nil
 }
 
-func (m *memReviewStore) ReplaceFindings(
-	_ context.Context, reviewID string, pass int, findings []prreview.Finding,
-) error {
+func (m *memReviewStore) WritePass(_ context.Context, pass prreview.Pass, stored *prreview.Review) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	index := slices.IndexFunc(m.passes[reviewID], func(p prreview.Pass) bool { return p.Number == pass })
-	if index < 0 {
-		return os.ErrNotExist
+	if stored != nil {
+		index := m.indexOf(stored.ID)
+		if index < 0 {
+			return os.ErrNotExist
+		}
+		archivedAt := m.reviews[index].ArchivedAt
+		m.reviews[index] = *stored
+		m.reviews[index].ArchivedAt = archivedAt
 	}
-	m.passes[reviewID][index].Findings = slices.Clone(findings)
+	passes := m.passes[pass.ReviewID]
+	pass.Findings = slices.Clone(pass.Findings)
+	index := slices.IndexFunc(passes, func(p prreview.Pass) bool { return p.Number == pass.Number })
+	if index < 0 {
+		passes = append(passes, pass)
+		slices.SortFunc(passes, func(a, b prreview.Pass) int { return a.Number - b.Number })
+	} else {
+		passes[index] = pass
+	}
+	m.passes[pass.ReviewID] = passes
 	return nil
 }
 

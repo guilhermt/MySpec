@@ -2,6 +2,7 @@ package pulls_test
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/pulls"
+	"github.com/guilhermt/myspec/internal/repository"
 )
 
 func TestAReadingKeepsWhatTheBatchCouldReadOfEachRepository(t *testing.T) {
@@ -132,6 +134,50 @@ func TestOneQueryReadsEveryRepositoryUnderItsOwnAlias(t *testing.T) {
 		if !strings.Contains(calls[0].Query, alias) {
 			t.Errorf("the query does not read %q", alias)
 		}
+	}
+}
+
+func TestSixteenRepositoriesAreReadInTwoQueriesEachWithItsOwnAliases(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	repos := make([]repository.Repository, 0, 16)
+	for i := range 16 {
+		repos = append(repos, repository.Repository{
+			ID: fmt.Sprintf("repo-%02d", i+1), Owner: "acme", Name: fmt.Sprintf("app-%02d", i+1), CreatedAt: base,
+		})
+	}
+	f.register(repos)
+	f.github.reply(queryList, load(t, "list_partial.json"), nil)
+	f.refresh(t)
+
+	calls := f.github.made(queryList)
+	if len(calls) != 2 {
+		t.Fatalf("the reading made %d list queries, want two", len(calls))
+	}
+	first := gh.Vars{"viewer": "guilhermt"}
+	for i := range 15 {
+		first[fmt.Sprintf("o%d", i)], first[fmt.Sprintf("n%d", i)] = "acme", fmt.Sprintf("app-%02d", i+1)
+	}
+	if diff := cmp.Diff(first, calls[0].Vars); diff != "" {
+		t.Errorf("the variables of the first query (-want +got):\n%s", diff)
+	}
+	if !strings.Contains(calls[0].Query, "r14: repository") || strings.Contains(calls[0].Query, "r15: repository") {
+		t.Errorf("the first query does not read exactly r0 to r14:\n%s", calls[0].Query)
+	}
+
+	second := gh.Vars{"viewer": "guilhermt", "o0": "acme", "n0": "app-16"}
+	if diff := cmp.Diff(second, calls[1].Vars); diff != "" {
+		t.Errorf("the variables of the second query (-want +got):\n%s", diff)
+	}
+	if !strings.Contains(calls[1].Query, "r0: repository") || strings.Contains(calls[1].Query, "r1: repository") {
+		t.Errorf("the second query does not read r0 alone:\n%s", calls[1].Query)
+	}
+
+	// The second query answers under r0, which is the sixteenth repository.
+	prs := f.reading(t, "repo-16").PullRequests
+	if len(prs) != 2 || prs[0].Key() != "acme/app-16#42" {
+		t.Errorf("the pull requests of acme/app-16 = %v, want the two r0 answered", prs)
 	}
 }
 

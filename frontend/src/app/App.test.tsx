@@ -434,6 +434,40 @@ describe("App", () => {
     });
   });
 
+  it("starts the screen of another review afresh", async () => {
+    vi.mocked(api.getState).mockResolvedValue(
+      makeState({
+        tasks: [makeTask()],
+        reviews: [
+          makeReviewSummary({ canPublish: true }),
+          makeReviewSummary({
+            id: "review-2",
+            number: 32,
+            own: true,
+            verdicts: ["comment"],
+            canPublish: true,
+          }),
+        ],
+      }),
+    );
+    const { user } = renderWithStore(<App />);
+    await screen.findByRole("treeitem", { name: /^add-login,/ });
+
+    act(() => {
+      useAppStore.getState().openReview("review-1");
+    });
+    await user.click(screen.getByRole("button", { name: "Publish review" }));
+    expect(screen.getByRole("radio", { name: "Approve" })).toBeChecked();
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    act(() => {
+      useAppStore.getState().openReview("review-2");
+    });
+    await user.click(screen.getByRole("button", { name: "Publish review" }));
+
+    expect(screen.getByRole("radio", { name: "Comment" })).toBeChecked();
+  });
+
   it("gives the main area to an archived review, inside the history", async () => {
     vi.mocked(api.getState).mockResolvedValue(
       makeState({ tasks: [makeTask()], reviewHistory: [makeArchivedReview()] }),

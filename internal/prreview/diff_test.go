@@ -59,6 +59,32 @@ func TestTwoHunksOfAFileEachStartWhereTheirHeaderSays(t *testing.T) {
 	}
 }
 
+func TestAnAddedLineThatReadsLikeAFileHeaderIsALineOfTheHunk(t *testing.T) {
+	t.Parallel()
+
+	unified := `--- a/counter.c
++++ b/counter.c
+@@ -1,2 +1,4 @@
+ one
++++ counter
++next
+ two
+--- a/main.go
++++ b/main.go
+@@ -3 +3 @@
+-old
++new
+`
+
+	want := map[string]map[int]struct{}{
+		"counter.c": lines(1, 2, 3, 4),
+		"main.go":   lines(3),
+	}
+	if diff := cmp.Diff(want, prreview.RightLines(unified)); diff != "" {
+		t.Errorf("right lines (-want +got):\n%s", diff)
+	}
+}
+
 func TestANewFileIsAllNewSide(t *testing.T) {
 	t.Parallel()
 

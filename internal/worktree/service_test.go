@@ -677,6 +677,7 @@ func TestRemoveOfADetachedWorktreeLeavesEveryBranchWhereItIs(t *testing.T) {
 	f.pushHead(t, "login.go", "package login\n")
 	wt := f.ensureDetached(t)
 	gittest.Run(t, f.repo.Path, "branch", headName, "origin/"+headName)
+	before := f.git.count()
 
 	if err := f.svc.Remove(t.Context(), "review-1"); err != nil {
 		t.Fatalf("Remove() = %v, want nil", err)
@@ -687,6 +688,13 @@ func TestRemoveOfADetachedWorktreeLeavesEveryBranchWhereItIs(t *testing.T) {
 	}
 	if !branchExists(t, f.repo.Path, headName) {
 		t.Errorf("branch %s was deleted, want it left alone", headName)
+	}
+	// A worktree with no branch has none to look for or delete: not even the
+	// refs/heads/ of an empty name.
+	for _, command := range f.git.since(before) {
+		if strings.HasPrefix(command, "branch ") || strings.Contains(command, "refs/heads/") {
+			t.Errorf("Remove() ran git %s, want no command about a branch", command)
+		}
 	}
 	if got := f.store.all(); len(got) != 0 {
 		t.Errorf("registry has %d worktrees, want none", len(got))

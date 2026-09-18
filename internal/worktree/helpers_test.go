@@ -2,9 +2,11 @@ package worktree_test
 
 import (
 	"context"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 
@@ -63,11 +65,52 @@ func (m *memStore) all() []worktree.Worktree {
 	return slices.Clone(m.items)
 }
 
+// gitLog is a log handler that keeps the command line of every git command
+// the service runs, from the record git.Runner logs for each one.
+type gitLog struct {
+	mu       sync.Mutex
+	commands []string
+}
+
+func (g *gitLog) Enabled(context.Context, slog.Level) bool { return true }
+
+func (g *gitLog) Handle(_ context.Context, rec slog.Record) error {
+	rec.Attrs(func(attr slog.Attr) bool {
+		if args, ok := attr.Value.Any().([]string); ok && attr.Key == "args" {
+			g.mu.Lock()
+			g.commands = append(g.commands, strings.Join(args, " "))
+			g.mu.Unlock()
+			return false
+		}
+		return true
+	})
+	return nil
+}
+
+func (g *gitLog) WithAttrs([]slog.Attr) slog.Handler { return g }
+
+func (g *gitLog) WithGroup(string) slog.Handler { return g }
+
+// count is how many commands ran so far.
+func (g *gitLog) count() int {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return len(g.commands)
+}
+
+// since is every command line run after the first n.
+func (g *gitLog) since(n int) []string {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return slices.Clone(g.commands[n:])
+}
+
 // fixture is a registered repository cloned from an origin, and the service
 // that owns the worktrees of its tasks.
 type fixture struct {
 	svc     *worktree.Service
 	store   *memStore
+	git     *gitLog
 	dataDir string
 	repo    repository.Repository
 	task    task.Task
@@ -87,13 +130,16 @@ func newFixtureOf(t *testing.T, repo repository.Repository) fixture {
 	t.Helper()
 
 	store := &memStore{}
+	commands := &gitLog{}
 	dataDir := t.TempDir()
 	svc := worktree.New(worktree.Deps{
-		Git:     git.New(git.Deps{Env: gittest.Env(t)}),
+		Git:     git.New(git.Deps{Log: slog.New(commands), Env: gittest.Env(t)}),
 		Store:   store,
 		DataDir: dataDir,
 	})
-	return fixture{svc: svc, store: store, dataDir: dataDir, repo: repo, task: newTask("task-1", taskName)}
+	return fixture{
+		svc: svc, store: store, git: commands, dataDir: dataDir, repo: repo, task: newTask("task-1", taskName),
+	}
 }
 
 // newTask builds a task, the only thing Ensure reads of one.

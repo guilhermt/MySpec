@@ -229,6 +229,9 @@ func (s *Service) askPass(
 		}
 		return err
 	}
+	// Why the report of a pass before could not be read says nothing about
+	// this one.
+	s.setUnreadable(stored.ID, "")
 
 	s.log.Info("review pass asked", "review", stored.ID, "pass", pass)
 	s.notify(stored.ID)
@@ -239,15 +242,18 @@ func (s *Service) askPass(
 // already seen: the published ones in publish mode, the applied ones in apply
 // mode.
 func (s *Service) sentFindings(stored prreview.Review) []prreview.Finding {
-	var sent []prreview.Finding
+	var recorded []prreview.Pass
 	for _, pass := range s.reviews.Passes(stored.ID) {
-		if !pass.Recorded {
-			continue
+		if pass.Recorded {
+			recorded = append(recorded, pass)
 		}
-		if stored.Mode == prreview.ModeApply {
-			sent = append(sent, pass.Approved()...)
-			continue
-		}
+	}
+	if stored.Mode == prreview.ModeApply {
+		return appliedFindings(stored, recorded)
+	}
+
+	var sent []prreview.Finding
+	for _, pass := range recorded {
 		if !pass.Published() {
 			continue
 		}
@@ -260,11 +266,39 @@ func (s *Service) sentFindings(stored prreview.Review) []prreview.Finding {
 	return sent
 }
 
+// appliedFindings are the approved findings of the passes whose fixes went up
+// in a commit. Fixes the user dropped, and findings approved but never
+// applied, are no part of the pull request.
+func appliedFindings(stored prreview.Review, recorded []prreview.Pass) []prreview.Finding {
+	var applied []prreview.Finding
+	for i, pass := range recorded {
+		if committed(stored, pass, recorded[i+1:]) {
+			applied = append(applied, pass.Approved()...)
+		}
+	}
+	return applied
+}
+
+// committed reports whether the fixes of a pass went up in a commit. The pass
+// being decided on was committed when the pass after it is asked for while the
+// review is committing, which only the commit that went up does. A pass
+// before it was committed when the pass after it covered another commit: a
+// pass that follows dropped or unapplied fixes covers the head of the pull
+// request, which only a commit moves, and the app takes the one that moved it
+// for the commit of the fixes.
+func committed(stored prreview.Review, pass prreview.Pass, later []prreview.Pass) bool {
+	if len(later) == 0 {
+		return stored.Phase == prreview.PhaseCommitting
+	}
+	next := later[0]
+	return next.Number == pass.Number+1 && pass.Commit != "" && next.Commit != "" && next.Commit != pass.Commit
+}
+
 // passRequest is what the message of a new pass says.
 type passRequest struct {
 	ReportPath string
 	Pass       int
-	PassCommit string // the commit the pass before covered
+	PassCommit string // the commit the pass before covered; "" when git could not say
 	BaseBranch string // as the worktree names it: origin/<branch>
 	Mode       prreview.Mode
 	// Findings are the ones of the passes before the author already saw.
@@ -282,8 +316,7 @@ func passMessage(r passRequest) string {
 		strings.Join([]string{
 			"- Write the report of this pass to `" + r.ReportPath + "`, in the same format as before. " +
 				"It is pass " + strconv.Itoa(r.Pass) + ".",
-			"- The previous pass covered commit `" + r.PassCommit + "`: `git diff " + r.PassCommit +
-				"..HEAD` is what changed since then. Read the full diff against `" + r.BaseBranch + "` as well.",
+			diffLine(r.PassCommit, r.BaseBranch),
 			"- Only what is new or still stands is a finding. Say in the summary which of the findings " +
 				"below were resolved.",
 		}, "\n"),
@@ -296,6 +329,18 @@ func passMessage(r passRequest) string {
 		sections = append(sections, "## Instructions for this pass\n"+instructions)
 	}
 	return strings.Join(sections, "\n\n")
+}
+
+// diffLine says what to read of the pull request: what changed since the pass
+// before, when git said which commit it covered, and the full diff against the
+// base either way.
+func diffLine(passCommit, baseBranch string) string {
+	full := "Read the full diff against `" + baseBranch + "`"
+	if passCommit == "" {
+		return "- " + full + "."
+	}
+	return "- The previous pass covered commit `" + passCommit + "`: `git diff " + passCommit +
+		"..HEAD` is what changed since then. " + full + " as well."
 }
 
 // sentHeading opens the findings the author already saw, which is what the

@@ -125,13 +125,14 @@ func (s *Service) Refresh() {
 }
 
 // runReads reads until no refresh is waiting, and calls OnChange after each
-// reading, with the state it left behind.
+// reading, with the state it left behind. A refresh waiting when the service
+// is closed is dropped, since its reading would only fail.
 func (s *Service) runReads() {
 	for {
 		s.runRead()
 
 		s.mu.Lock()
-		again := s.pending
+		again := s.pending && s.ctx.Err() == nil
 		s.pending, s.reading = false, again
 		s.mu.Unlock()
 

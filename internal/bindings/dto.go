@@ -969,6 +969,9 @@ type ReviewPass struct {
 	// Verdict is approve, request_changes or comment; "" when the pass was not
 	// published.
 	Verdict string `json:"verdict"`
+	// Edited is whether the user changed the summary or the text of a finding
+	// from what the report has, which another pass would discard.
+	Edited bool `json:"edited"`
 }
 
 // ReviewSummary is an active review of a pull request, with the state of its

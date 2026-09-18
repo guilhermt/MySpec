@@ -255,8 +255,12 @@ func TestOpeningAFindingAboutThePullRequestAsAWholeIsRefused(t *testing.T) {
 		t.Errorf("OpenFindingInEditor(general) = %v, want the sentence about a finding of no file", err)
 	}
 	if err = f.reviewSvc.OpenFindingInEditor(review.ID, 1, 9); err == nil ||
+		err.Error() != "This finding no longer exists." {
+		t.Errorf("OpenFindingInEditor(unknown finding) = %v, want the sentence about a finding that is gone", err)
+	}
+	if err = f.reviewSvc.OpenFindingInEditor("gone", 1, 1); err == nil ||
 		err.Error() != "This review no longer exists." {
-		t.Errorf("OpenFindingInEditor(unknown) = %v, want the sentence about a review that is gone", err)
+		t.Errorf("OpenFindingInEditor(unknown review) = %v, want the sentence about a review that is gone", err)
 	}
 	if opened := f.editor.opened(); len(opened) != 0 {
 		t.Errorf("the editor was asked to open %v, want nothing", opened)

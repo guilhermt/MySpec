@@ -30,13 +30,13 @@ function MainArea() {
     return <TaskView taskId={openTaskId} />;
   }
   if (openReviewId !== null) {
-    return <ReviewView reviewId={openReviewId} />;
+    return <ReviewView key={openReviewId} reviewId={openReviewId} />;
   }
   if (openArchivedId !== null) {
     return <ArchivedTaskView taskId={openArchivedId} />;
   }
   if (openArchivedReviewId !== null) {
-    return <ArchivedReviewView reviewId={openArchivedReviewId} />;
+    return <ArchivedReviewView key={openArchivedReviewId} reviewId={openArchivedReviewId} />;
   }
   if (settingsOpen) {
     return <SettingsView />;

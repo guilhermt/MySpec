@@ -88,10 +88,18 @@ describe("ReviewBar", () => {
   });
 
   it("opens the worktree in the editor, and says when there is none", async () => {
-    const { user } = bar();
+    const { user, unmount } = bar();
 
     await user.click(screen.getByRole("button", { name: "Open in VS Code" }));
     expect(api.openReviewInEditor).toHaveBeenCalledWith("review-1");
+    unmount();
+
+    bar({ worktreePath: "" });
+    await user.hover(
+      screen.getByRole("button", { name: "Open in VS Code" }).parentElement as HTMLElement,
+    );
+
+    expect(await screen.findByText("The worktree doesn't exist yet")).toBeInTheDocument();
   });
 
   it("disables the editor while the worktree isn't there", () => {

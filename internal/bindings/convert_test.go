@@ -1798,9 +1798,10 @@ func reviewState(status reviewflow.Status, pass prreview.Pass) reviewflow.State 
 func recordedPass(number int, decision prreview.Decision) prreview.Pass {
 	return prreview.Pass{
 		ReviewID: "review-1", Number: number, Recorded: true, Revision: 1,
-		Summary: "Two things to look at.",
+		SummaryOriginal: "Two things to look at.", Summary: "Two things to look at.",
 		Findings: []prreview.Finding{{
-			Number: 1, Path: "main.go", Line: 12, Text: "Handle the error.", Decision: decision,
+			Number: 1, Path: "main.go", Line: 12, Original: "Handle the error.",
+			Text: "Handle the error.", Decision: decision,
 		}},
 		CreatedAt: readAt,
 	}
@@ -1939,6 +1940,37 @@ func TestFromReviewsCarriesThePassesTheVerdictsAndTheSituationsOfAReview(t *test
 	}
 	if got.SessionStage != "review" {
 		t.Errorf("sessionStage = %q, want review", got.SessionStage)
+	}
+}
+
+func TestFromReviewsTellsAPassTheUserEditedFromTheReport(t *testing.T) {
+	t.Parallel()
+
+	summary := recordedPass(1, prreview.DecisionNone)
+	summary.Summary = "One thing to look at."
+	finding := recordedPass(1, prreview.DecisionNone)
+	finding.Findings[0].Text = "Handle the error and log it."
+
+	tests := []struct {
+		name string
+		pass prreview.Pass
+		want bool
+	}{
+		{name: "as the report has it", pass: recordedPass(1, prreview.DecisionNone), want: false},
+		{name: "summary edited", pass: summary, want: true},
+		{name: "finding edited", pass: finding, want: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			state := reviewState(reviewflow.StatusAwaitingDecision, tt.pass)
+			got := bindings.FromReviews([]reviewflow.State{state}, nil, reviewRepos)[0]
+
+			if got.Passes[0].Edited != tt.want {
+				t.Errorf("edited = %v, want %v", got.Passes[0].Edited, tt.want)
+			}
+		})
 	}
 }
 

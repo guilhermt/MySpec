@@ -759,6 +759,7 @@ var userMessages = []struct {
 	{flow.ErrNoAgentReview, "The agent isn't reviewing this step."},
 	{errPathOutside, "This file is not in the worktree of the task."},
 	{errNotAnchored, "This finding isn't about a line of the pull request."},
+	{errFindingNotFound, "This finding no longer exists."},
 	{prreview.ErrNotFound, "This review no longer exists."},
 	{prreview.ErrActiveExists, "This pull request already has an active review."},
 	{prreview.ErrNotDeciding, "This pass is not the one being decided."},

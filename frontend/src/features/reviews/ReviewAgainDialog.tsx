@@ -28,8 +28,8 @@ export function ReviewAgainDialog({ review, open, onOpenChange }: ReviewAgainDia
 
   const pass = lastRecordedPass(review);
   // A pass the user already worked on and never published is what the new one
-  // replaces: what they decided on it goes with it.
-  const discards = pass !== null && !pass.published && anyDecided(pass);
+  // replaces: what they decided and edited on it goes with it.
+  const discards = pass !== null && !pass.published && (anyDecided(pass) || pass.edited);
 
   const ask = () => {
     setAsking(true);
@@ -68,7 +68,7 @@ export function ReviewAgainDialog({ review, open, onOpenChange }: ReviewAgainDia
 
         {discards && pass !== null && (
           <p className="text-sm text-muted-foreground">
-            {`The decisions of review ${pass.pass} will be discarded.`}
+            {`The decisions and edits of review ${pass.pass} will be discarded.`}
           </p>
         )}
 

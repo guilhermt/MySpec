@@ -31,11 +31,36 @@ describe("ReviewAgainDialog", () => {
       passes: [makeReviewPass({ findings: [makeReviewFinding({ decision: "approved" })] })],
     });
 
-    expect(screen.getByText("The decisions of review 1 will be discarded.")).toBeInTheDocument();
+    expect(
+      screen.getByText("The decisions and edits of review 1 will be discarded."),
+    ).toBeInTheDocument();
+  });
+
+  it("warns that the edits of a pass never published go away", () => {
+    dialog({ passes: [makeReviewPass({ edited: true })] });
+
+    expect(
+      screen.getByText("The decisions and edits of review 1 will be discarded."),
+    ).toBeInTheDocument();
+  });
+
+  it("says nothing about a pass nobody worked on", () => {
+    dialog({ passes: [makeReviewPass()] });
+
+    expect(screen.queryByText(/will be discarded/)).not.toBeInTheDocument();
   });
 
   it("says nothing about a pass already published", () => {
-    dialog({ passes: [makeReviewPass({ published: true, verdict: "comment" })] });
+    dialog({
+      passes: [
+        makeReviewPass({
+          published: true,
+          verdict: "comment",
+          edited: true,
+          findings: [makeReviewFinding({ decision: "approved" })],
+        }),
+      ],
+    });
 
     expect(screen.queryByText(/will be discarded/)).not.toBeInTheDocument();
   });

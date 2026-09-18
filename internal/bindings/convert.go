@@ -1468,6 +1468,7 @@ func fromPasses(passes []prreview.Pass) []ReviewPass {
 			Summary:      pass.Summary,
 			Findings:     fromFindings(pass.Findings),
 			Revision:     pass.Revision,
+			Edited:       edited(pass),
 			Published:    pass.Published(),
 			Verdict:      string(pass.Verdict),
 			PublishedURL: pass.PublishedURL,
@@ -1477,6 +1478,20 @@ func fromPasses(passes []prreview.Pass) []ReviewPass {
 		}
 	}
 	return converted
+}
+
+// edited tells whether the user left the summary or the text of a finding
+// different from what the report has.
+func edited(pass prreview.Pass) bool {
+	if pass.Summary != pass.SummaryOriginal {
+		return true
+	}
+	for _, finding := range pass.Findings {
+		if finding.Text != finding.Original {
+			return true
+		}
+	}
+	return false
 }
 
 // fromFindings converts the findings of a pass, always returning a slice so the

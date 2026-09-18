@@ -31,6 +31,7 @@ type Sessions interface {
 	DiscardTask(ctx context.Context, taskID string) error
 	Resume(ctx context.Context, k session.Key) error
 	Summary(k session.Key) (session.Summary, bool)
+	Exists(ctx context.Context, k session.Key) (bool, error)
 	SendFromApp(ctx context.Context, k session.Key, text string) error
 	MarkPRReview(ctx context.Context, k session.Key, pass int)
 }

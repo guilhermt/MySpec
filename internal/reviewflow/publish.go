@@ -29,12 +29,17 @@ func (s *Service) Publish(ctx context.Context, id string, verdict prreview.Verdi
 		return fmt.Errorf("publish review %s: %w", id, err)
 	}
 	ref := stored.Reference(repo.FullName())
-	pass, err := s.publishable(stored, verdict)
+	state, _ := s.State(id)
+	pass, err := s.publishable(state, verdict)
 	if err != nil {
 		return fmt.Errorf("publish review %s: %w", ref, err)
 	}
 
 	input, placements, err := s.reviewInput(ctx, stored, repo, pass, verdict)
+	if errors.Is(err, ErrEmptyReview) {
+		// Nothing failed: there is nothing to publish yet.
+		return fmt.Errorf("publish review %s: %w", ref, err)
+	}
 	if err != nil {
 		return s.publishFailed(ctx, stored, ref, err)
 	}
@@ -54,21 +59,23 @@ func (s *Service) Publish(ctx context.Context, id string, verdict prreview.Verdi
 }
 
 // publishable is the pass a publication would send: the last one recorded,
-// with every finding decided and nothing published yet.
-func (s *Service) publishable(stored prreview.Review, verdict prreview.Verdict) (prreview.Pass, error) {
+// with every finding decided and nothing published yet, of a review at rest.
+// While the agent works, it may be rewriting the very report the user would
+// publish.
+func (s *Service) publishable(state State, verdict prreview.Verdict) (prreview.Pass, error) {
 	if _, err := prreview.ParseVerdict(string(verdict)); err != nil {
 		return prreview.Pass{}, err
 	}
-	if stored.Mode != prreview.ModePublish {
+	if state.Status != StatusReadyToPublish && state.Status != StatusPublishFailed {
 		return prreview.Pass{}, ErrNotReady
 	}
+	stored := state.Review
 	if stored.Own && verdict != prreview.VerdictComment {
 		// GitHub takes no verdict but a comment on a pull request of one's own.
 		return prreview.Pass{}, ErrOwnVerdict
 	}
 	pass, ok := s.passOf(stored.ID, stored.ReportedPass)
-	if !ok || !pass.Recorded || pass.Published() || !pass.Decided() ||
-		stored.AskedPass > stored.ReportedPass {
+	if !ok || !pass.Recorded || pass.Published() || !pass.Decided() {
 		return prreview.Pass{}, ErrNotReady
 	}
 	return pass, nil

@@ -6,6 +6,7 @@ import (
 
 	"github.com/guilhermt/myspec/internal/prreview"
 	"github.com/guilhermt/myspec/internal/reviewflow"
+	"github.com/guilhermt/myspec/internal/session"
 )
 
 // polled reads the pull requests of the reviews and waits for what the
@@ -155,5 +156,22 @@ func TestSyncPointsTheConversationAtThePassItStillOwes(t *testing.T) {
 	stored, _ := f.reviews.Get(id)
 	if info.ReviewPath != stored.ReportPath(1) {
 		t.Errorf("review path = %q, want the report of the pass the agent still owes", info.ReviewPath)
+	}
+}
+
+func TestSyncLeavesAReviewWithoutAConversationAlone(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := decided(t, f)
+	f.sessions.lose(id)
+
+	f.service.Sync(t.Context())
+
+	if slices.Contains(f.sessions.recorded(), "open:"+id) {
+		t.Errorf("session calls = %v, want no conversation created for the review", f.sessions.recorded())
+	}
+	if _, open := f.sessions.Summary(session.Key{TaskID: id, Stage: session.ReviewStage}); open {
+		t.Error("the review has a conversation it never had")
 	}
 }

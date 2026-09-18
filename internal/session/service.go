@@ -950,6 +950,26 @@ func (s *Service) Summaries() map[Key]Summary {
 	return out
 }
 
+// Exists reports whether a session was ever created for a key: open now, or
+// only recorded, as one a previous run of the app left behind is. Unlike Open,
+// it never creates one.
+func (s *Service) Exists(ctx context.Context, k Key) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if _, ok := s.runs[k]; ok {
+		return true, nil
+	}
+	_, err := s.sessions.Get(ctx, k.TaskID, k.Stage)
+	switch {
+	case errors.Is(err, ErrNotFound):
+		return false, nil
+	case err != nil:
+		return false, err
+	}
+	return true, nil
+}
+
 // Close stops the process of one session, quickly, and forgets it. Used when
 // a stage is over or a task is deleted.
 func (s *Service) Close(_ context.Context, k Key) error {

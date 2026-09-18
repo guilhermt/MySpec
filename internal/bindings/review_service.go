@@ -24,6 +24,10 @@ const publishTimeout = time.Minute
 // the pull request.
 var errNotAnchored = errors.New("bindings: the finding is not anchored to a file")
 
+// errFindingNotFound is a finding the user asked to open that is not among
+// the findings of its pass, in a review that still exists.
+var errFindingNotFound = errors.New("bindings: finding not found")
+
 // Worktrees is the registry of worktrees the review service reads the folder
 // of a review from. internal/app passes worktree.Service.
 type Worktrees interface {
@@ -281,9 +285,11 @@ func (s *ReviewService) findingOf(id string, pass, number int) (prreview.Finding
 			return finding, nil
 		}
 	}
-	return prreview.Finding{}, fmt.Errorf(
-		"open finding %d of pass %d of review %s: %w", number, pass, id, prreview.ErrNotFound,
-	)
+	gone := errFindingNotFound
+	if _, ok := s.reviews.Get(id); !ok {
+		gone = prreview.ErrNotFound
+	}
+	return prreview.Finding{}, fmt.Errorf("open finding %d of pass %d of review %s: %w", number, pass, id, gone)
 }
 
 // worktreeOf is the folder of a review on disk.

@@ -1360,6 +1360,12 @@ export interface ReviewPass {
      * published.
      */
     "verdict": string;
+
+    /**
+     * Edited is whether the user changed the summary or the text of a finding
+     * from what the report has, which another pass would discard.
+     */
+    "edited": boolean;
 }
 
 /**

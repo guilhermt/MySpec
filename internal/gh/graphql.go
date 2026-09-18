@@ -72,15 +72,12 @@ func (r *Runner) GraphQL(ctx context.Context, query string, vars Vars) (Response
 		return resp, nil
 	}
 
-	var ghErr *Error
-	if errors.Is(err, ErrNotFound) || !errors.As(err, &ghErr) {
+	if errors.Is(err, ErrNotFound) {
 		return Response{}, err
 	}
-	if errors.Is(ghErr.Err, context.Canceled) || errors.Is(ghErr.Err, context.DeadlineExceeded) {
-		return Response{}, err
-	}
-	if ghErr.ExitCode == exitAuth || strings.Contains(ghErr.Output, "gh auth login") {
-		return Response{}, fmt.Errorf("%w: %w", ErrNotAuthenticated, ghErr)
+	ghErr, settled := answerOf(err)
+	if ghErr == nil {
+		return Response{}, settled
 	}
 
 	var resp Response

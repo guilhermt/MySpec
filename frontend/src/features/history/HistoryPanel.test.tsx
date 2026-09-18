@@ -161,9 +161,14 @@ describe("HistoryPanel", () => {
   });
 
   it("keeps the reviews of the repository of the filter", () => {
-    panel([LOGIN, HEADER], "repo-2", [REVIEW]);
+    const { unmount } = panel([LOGIN, HEADER], "repo-2", [REVIEW]);
 
     expect(screen.getByRole("listitem")).toHaveTextContent("fix-header");
+    unmount();
+
+    panel([HEADER], "repo-1", [REVIEW]);
+
+    expect(screen.getByRole("listitem")).toHaveTextContent("Cache the sessions");
   });
 
   it("opens the review the user picks", async () => {

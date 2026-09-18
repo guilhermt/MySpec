@@ -138,6 +138,13 @@ func TestAReviewWithNothingToSayIsRefused(t *testing.T) {
 	if len(f.gh.inputs) != 0 {
 		t.Errorf("reviews sent = %+v, want nothing sent to GitHub", f.gh.inputs)
 	}
+	// A refusal is no failed publication: the review stays ready to publish.
+	if stored, _ := f.reviews.Get(id); stored.PublishError != "" {
+		t.Errorf("publish error = %q, want none", stored.PublishError)
+	}
+	if got := f.state(t, id).Status; got != reviewflow.StatusReadyToPublish {
+		t.Errorf("status = %q, want the review still ready to publish", got)
+	}
 }
 
 func TestAPublicationThatFailedKeepsEveryDecision(t *testing.T) {
@@ -165,6 +172,25 @@ func TestAPublicationThatFailedKeepsEveryDecision(t *testing.T) {
 	}
 	if f.state(t, id).Status != reviewflow.StatusPublishFailed {
 		t.Errorf("status = %q, want the review waiting for another try", f.state(t, id).Status)
+	}
+}
+
+func TestAPublicationThatFailedIsTriedAgain(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := toPublish(t, f)
+	f.gh.createErr = errGitHub
+	if err := f.service.Publish(t.Context(), id, prreview.VerdictComment); err == nil {
+		t.Fatal("publish review = nil, want the failure of GitHub")
+	}
+	f.gh.createErr = nil
+
+	if err := f.service.Publish(t.Context(), id, prreview.VerdictComment); err != nil {
+		t.Fatalf("publish review again: %v", err)
+	}
+	if got := f.state(t, id).Status; got != reviewflow.StatusPublished {
+		t.Errorf("status = %q, want the review published", got)
 	}
 }
 
@@ -199,6 +225,25 @@ func TestPublishingIsRefusedUntilEveryFindingIsDecided(t *testing.T) {
 	), headHash)
 
 	wantErrIs(t, f.service.Publish(t.Context(), id, prreview.VerdictComment), reviewflow.ErrNotReady)
+}
+
+func TestPublishingIsRefusedWhileTheAgentIsWorking(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := toPublish(t, f)
+	// The user asked in the conversation for the report to be rewritten.
+	f.sessions.goBusy(id)
+
+	wantErrIs(t, f.service.Publish(t.Context(), id, prreview.VerdictComment), reviewflow.ErrNotReady)
+
+	if len(f.gh.inputs) != 0 {
+		t.Errorf("reviews sent = %+v, want nothing sent to GitHub", f.gh.inputs)
+	}
+	f.sessions.goIdle(id)
+	if err := f.service.Publish(t.Context(), id, prreview.VerdictComment); err != nil {
+		t.Fatalf("publish review once the agent rested: %v", err)
+	}
 }
 
 func TestPublishingAPullRequestThatClosedIsRefused(t *testing.T) {

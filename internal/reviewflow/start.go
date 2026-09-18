@@ -84,22 +84,52 @@ func (s *Service) Start(ctx context.Context, p StartParams) (string, error) {
 		return "", err
 	}
 
-	created, err = s.writeContext(ctx, created, repo, detail)
+	started, err := s.firstPass(ctx, created, repo, wt, detail, p)
 	if err != nil {
-		return "", err
-	}
-	if created, err = s.reviews.AskPass(ctx, created.ID, 1, p.Instructions); err != nil {
-		return "", err
-	}
-	if err = s.sessions.Start(ctx, info(created, wt, repo, 1, p.Instructions, p.Choice), false); err != nil {
-		// The session records a process that fails in the conversation itself.
+		s.rollBack(ctx, created.ID)
 		return "", err
 	}
 
-	s.log.Info("review started", "review", created.ID, "repository", repo.FullName(),
-		"number", created.Number, "mode", string(created.Mode))
-	s.notify(created.ID)
-	return created.ID, nil
+	s.log.Info("review started", "review", started.ID, "repository", repo.FullName(),
+		"number", started.Number, "mode", string(started.Mode))
+	s.notify(started.ID)
+	return started.ID, nil
+}
+
+// firstPass writes the document of a new review and opens its conversation on
+// the first pass. A process that fails to start is no error here: the session
+// records it in the conversation, where the user tries again.
+func (s *Service) firstPass(
+	ctx context.Context, created prreview.Review, repo repository.Repository, wt worktree.Worktree,
+	detail pulls.Detail, p StartParams,
+) (prreview.Review, error) {
+	created, err := s.writeContext(ctx, created, repo, detail)
+	if err != nil {
+		return prreview.Review{}, err
+	}
+	if created, err = s.reviews.AskPass(ctx, created.ID, 1, p.Instructions); err != nil {
+		return prreview.Review{}, err
+	}
+	if err = s.sessions.Start(ctx, info(created, wt, repo, 1, p.Instructions, p.Choice), false); err != nil {
+		return prreview.Review{}, err
+	}
+	return created, nil
+}
+
+// rollBack takes away a review whose start failed after its worktree was
+// created, with its conversation and its worktree: a review left half started
+// could neither start again nor take another pass. What fails here only goes
+// to the log, because the failure of the start is what the user reads.
+func (s *Service) rollBack(ctx context.Context, id string) {
+	if err := s.sessions.DiscardTask(ctx, id); err != nil {
+		s.log.Error("discard review session failed", "review", id, "error", err)
+	}
+	if err := s.worktrees.Remove(ctx, id); err != nil {
+		s.log.Warn("remove review worktree failed", "review", id, "error", err)
+	}
+	if err := s.reviews.Delete(ctx, id); err != nil {
+		s.log.Error("delete review failed", "review", id, "error", err)
+	}
 }
 
 // detailOf reads the pull request a review is asked for from GitHub.

@@ -50,6 +50,24 @@ describe("ReportsPanel", () => {
     expect(api.readReviewArtifact).toHaveBeenCalledWith("review-1", "context.md");
   });
 
+  it("reads the context again once another pass is asked for", async () => {
+    const review = makeReviewSummary({ passes: [makeReviewPass()] });
+    const { user, rerender } = renderWithStore(<ReportsPanel review={review} />, {
+      state: makeState({ reviews: [review] }),
+    });
+    await user.click(screen.getByRole("button", { name: "Context" }));
+    expect(api.readReviewArtifact).toHaveBeenCalledOnce();
+
+    const asked = {
+      ...review,
+      passes: [makeReviewPass(), makeReviewPass({ pass: 2, file: "review-2.md", recorded: false })],
+    };
+    rerender(<ReportsPanel review={asked} />);
+
+    expect(api.readReviewArtifact).toHaveBeenCalledTimes(2);
+    expect(api.readReviewArtifact).toHaveBeenLastCalledWith("review-1", "context.md");
+  });
+
   it("says when a pass was published, and opens the review on GitHub", async () => {
     const { user } = panel({
       passes: [

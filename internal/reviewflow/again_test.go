@@ -280,3 +280,65 @@ func TestANewPassOpensAConversationTheAppNoLongerHas(t *testing.T) {
 		t.Errorf("review = %+v, want the second pass asked for", stored)
 	}
 }
+
+func TestANewPassForgetsWhyTheReportOfThePassBeforeWasUnreadable(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := asked(t, f)
+	f.writeReport(t, id, 1, reportFile("changes", twoFindings))
+	f.evaluated(t, id, func(s reviewflow.State) bool {
+		return s.Status == reviewflow.StatusAwaitingDecision
+	}, "the report of the first pass to be recorded")
+	f.writeReport(t, id, 1, reportFile("changes", "I rewrote it and forgot the findings."))
+	f.evaluated(t, id, func(s reviewflow.State) bool {
+		return s.UnreadableReport != ""
+	}, "the reason the rewrite could not be read")
+
+	if err := f.service.ReviewAgain(t.Context(), id, ""); err != nil {
+		t.Fatalf("review again: %v", err)
+	}
+
+	if got := f.state(t, id).UnreadableReport; got != "" {
+		t.Errorf("unreadable report = %q, want nothing said about the second pass", got)
+	}
+}
+
+func TestANewPassSaysWhatChangedOnlyWhenItKnowsTheCommitThePassBeforeCovered(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]struct {
+		commit string
+		want   string
+	}{
+		"commit known": {
+			commit: headHash,
+			want: "- The previous pass covered commit `" + headHash + "`: `git diff " + headHash +
+				"..HEAD` is what changed since then. Read the full diff against `origin/main` as well.\n",
+		},
+		"commit unknown": {
+			commit: "",
+			want:   "\n- Read the full diff against `origin/main`.\n",
+		},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			f := newFixture(t)
+			id := asked(t, f)
+			f.record(t, id, cleanReport(1, "Nothing to change."), c.commit)
+
+			if err := f.service.ReviewAgain(t.Context(), id, ""); err != nil {
+				t.Fatalf("review again: %v", err)
+			}
+			message := lastMessage(t, f)
+			if !strings.Contains(message, c.want) {
+				t.Errorf("message =\n%s\n\nwant it to hold:\n%s", message, c.want)
+			}
+			if c.commit == "" && strings.Contains(message, "git diff") {
+				t.Error("the message points at the diff since a commit nobody knows")
+			}
+		})
+	}
+}

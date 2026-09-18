@@ -378,3 +378,83 @@ func TestANewPassWaitsForTheCommit(t *testing.T) {
 
 	wantErrIs(t, f.service.ReviewAgain(t.Context(), id, ""), reviewflow.ErrPassRunning)
 }
+
+// secondPass is a review whose first pass went through the cycle that fixes
+// the approved findings and whose second pass, on the commit that went up,
+// was recorded with one finding approved.
+func secondPass(t *testing.T, f *fixture) string {
+	t.Helper()
+
+	id := committing(t, f)
+	f.watch.setSnapshot(review.Snapshot{Head: commitHash})
+	f.sessions.goIdle(id)
+	f.evaluated(t, id, func(s reviewflow.State) bool {
+		return s.Review.AskedPass == 2 && s.Review.Phase == prreview.PhaseNone
+	}, "the second pass to be asked for")
+	f.sessions.goIdle(id)
+	f.record(t, id, changesReport(2, "One thing left.",
+		prreview.ParsedFinding{Number: 1, Text: "The cache is never emptied."},
+	), commitHash)
+	f.decide(t, id, 2, 1, prreview.DecisionApproved)
+	return id
+}
+
+func TestOnlyTheFindingsWhoseFixesWentUpAreListedAsApplied(t *testing.T) {
+	t.Parallel()
+
+	appliedFirst := "## Findings already applied\n" +
+		"1. `internal/board/service.go:12` — The reading is never cached.\n" +
+		"2. (general) — The name of the cache is vague.\n\n"
+	cases := map[string]struct {
+		setup func(t *testing.T, f *fixture) string
+		want  string
+	}{
+		"approved but never applied": {
+			setup: applyDecided,
+			want:  "## Findings already applied\nNone.\n\n",
+		},
+		"fixes the user dropped": {
+			setup: func(t *testing.T, f *fixture) string {
+				t.Helper()
+
+				id := fixed(t, f)
+				f.watch.setSnapshot(review.Snapshot{Head: headHash})
+				return id
+			},
+			want: "## Findings already applied\nNone.\n\n",
+		},
+		"a pass never applied, before another": {
+			setup: func(t *testing.T, f *fixture) string {
+				t.Helper()
+
+				id := applyDecided(t, f)
+				if err := f.service.ReviewAgain(t.Context(), id, ""); err != nil {
+					t.Fatalf("review again: %v", err)
+				}
+				f.sessions.goIdle(id)
+				f.record(t, id, cleanReport(2, "Nothing left."), headHash)
+				return id
+			},
+			want: "## Findings already applied\nNone.\n\n",
+		},
+		"fixes committed, and a pass after them not applied": {
+			setup: secondPass,
+			want:  appliedFirst,
+		},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			f := newFixture(t)
+			id := c.setup(t, f)
+
+			if err := f.service.ReviewAgain(t.Context(), id, ""); err != nil {
+				t.Fatalf("review again: %v", err)
+			}
+			if got := lastMessage(t, f); !strings.Contains(got, c.want) {
+				t.Errorf("message =\n%s\n\nwant it to hold:\n%s", got, c.want)
+			}
+		})
+	}
+}

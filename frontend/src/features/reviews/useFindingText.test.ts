@@ -42,7 +42,10 @@ describe("useFindingText", () => {
     });
 
     expect(result.current.value).toBe("Clear the token.");
-    expect(useAppStore.getState().findingDrafts[KEY]).toBe("Clear the token.");
+    expect(useAppStore.getState().findingDrafts[KEY]).toEqual({
+      text: "Clear the token.",
+      revision: 1,
+    });
   });
 
   it("records the text once the typing rests", () => {
@@ -88,17 +91,51 @@ describe("useFindingText", () => {
     expect(save).toHaveBeenCalledOnce();
   });
 
-  it("drops the draft when the agent writes the report again", () => {
-    const { result, rerender } = edit();
+  it("drops the draft and its waiting save when the agent writes the report again", () => {
+    const { result, rerender, save } = edit();
 
     act(() => {
       result.current.onChange("Clear the token.");
     });
 
     rerender({ text: "The session is never closed.", rev: 2 });
+    act(() => {
+      vi.advanceTimersByTime(SAVE_DELAY_MS);
+    });
 
+    expect(save).not.toHaveBeenCalled();
     expect(useAppStore.getState().findingDrafts[KEY]).toBeUndefined();
     expect(result.current.value).toBe("The session is never closed.");
+  });
+
+  it("drops a draft of another report when the field comes back", () => {
+    const first = edit();
+    act(() => {
+      first.result.current.onChange("Clear the token.");
+      first.result.current.onBlur();
+    });
+    first.unmount();
+
+    const { result, save } = edit("The session is never closed.", 2);
+    act(() => {
+      result.current.onBlur();
+    });
+
+    expect(result.current.value).toBe("The session is never closed.");
+    expect(useAppStore.getState().findingDrafts[KEY]).toBeUndefined();
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it("drops the draft once the Go side holds it", () => {
+    const { result, rerender } = edit();
+
+    act(() => {
+      result.current.onChange("Clear the token.");
+    });
+    rerender({ text: "Clear the token.", rev: 1 });
+
+    expect(useAppStore.getState().findingDrafts[KEY]).toBeUndefined();
+    expect(result.current.value).toBe("Clear the token.");
   });
 
   it("keeps the draft while the report stands", () => {
@@ -107,7 +144,7 @@ describe("useFindingText", () => {
     act(() => {
       result.current.onChange("Clear the token.");
     });
-    rerender({ text: "Clear the token.", rev: 1 });
+    rerender({ text: "The token is never cleared.", rev: 1 });
 
     expect(result.current.value).toBe("Clear the token.");
   });

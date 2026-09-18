@@ -25,6 +25,7 @@ type memStore struct {
 	insertErr error
 	updateErr error
 	passErr   error
+	writeErr  error
 	deleteErr error
 }
 
@@ -154,15 +155,32 @@ func (m *memStore) DeletePass(_ context.Context, reviewID string, pass int) erro
 	return nil
 }
 
-func (m *memStore) ReplaceFindings(_ context.Context, reviewID string, pass int, findings []prreview.Finding) error {
+func (m *memStore) WritePass(_ context.Context, pass prreview.Pass, review *prreview.Review) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	index := slices.IndexFunc(m.passes[reviewID], func(p prreview.Pass) bool { return p.Number == pass })
-	if index < 0 {
-		return os.ErrNotExist
+	if m.writeErr != nil {
+		return m.writeErr
 	}
-	m.passes[reviewID][index].Findings = slices.Clone(findings)
+	if review != nil {
+		index := m.indexOf(review.ID)
+		if index < 0 {
+			return os.ErrNotExist
+		}
+		archivedAt := m.reviews[index].ArchivedAt
+		m.reviews[index] = *review
+		m.reviews[index].ArchivedAt = archivedAt
+	}
+	passes := m.passes[pass.ReviewID]
+	pass.Findings = slices.Clone(pass.Findings)
+	index := slices.IndexFunc(passes, func(p prreview.Pass) bool { return p.Number == pass.Number })
+	if index < 0 {
+		passes = append(passes, pass)
+		slices.SortFunc(passes, func(a, b prreview.Pass) int { return a.Number - b.Number })
+	} else {
+		passes[index] = pass
+	}
+	m.passes[pass.ReviewID] = passes
 	return nil
 }
 
@@ -204,6 +222,21 @@ func (m *memStore) storedPass(t *testing.T, reviewID string, number int) prrevie
 	}
 	t.Fatalf("pass %d of review %s is not stored", number, reviewID)
 	return prreview.Pass{}
+}
+
+// storedReview is the review as the store has it, which the tests read to
+// confirm what was persisted.
+func (m *memStore) storedReview(t *testing.T, id string) prreview.Review {
+	t.Helper()
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	index := m.indexOf(id)
+	if index < 0 {
+		t.Fatalf("review %s is not stored", id)
+	}
+	return m.reviews[index]
 }
 
 // fixture is a service with an in-memory store, a temporary data directory and

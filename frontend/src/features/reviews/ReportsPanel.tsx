@@ -55,7 +55,12 @@ export function ReportsPanel({ review }: ReportsPanelProps) {
   // A report the review no longer has falls back to the list it came from.
   const view: Selection = isPass(selection) && open === null ? "list" : selection;
   const name = view === "list" ? null : open === null ? CONTEXT_FILE : open.file;
-  const artifact = useReviewArtifact(review.id, name, open?.revision ?? passes.length);
+  // The context is written again with every pass asked for, before its report.
+  const artifact = useReviewArtifact(
+    review.id,
+    name,
+    open?.revision ?? (review.passes ?? []).length,
+  );
 
   return (
     <section className="flex h-full min-w-0 flex-col bg-background">

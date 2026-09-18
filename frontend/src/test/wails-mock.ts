@@ -812,6 +812,7 @@ export function makeReviewPass(overrides: Partial<ReviewPass> = {}): ReviewPass 
     publishedAt: "",
     publishedUrl: "",
     verdict: "",
+    edited: false,
     ...overrides,
   };
 }

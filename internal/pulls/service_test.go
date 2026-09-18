@@ -37,7 +37,7 @@ func TestARefreshAskedWhileAReadingRunsBecomesOneReadingAfterIt(t *testing.T) {
 	}
 }
 
-func TestTheAccountOfGHIsReadOnceForEveryReading(t *testing.T) {
+func TestTheAccountOfGHIsReadOnceAcrossReadings(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
@@ -146,6 +146,28 @@ func TestAClosedServiceReadsNothingMore(t *testing.T) {
 	}
 	if got := len(f.github.made(queryList)); got != 0 {
 		t.Errorf("the service made %d list queries after Close(), want none", got)
+	}
+}
+
+func TestARefreshWaitingWhenTheServiceClosesIsDropped(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.github.reply(queryList, load(t, "list_partial.json"), nil)
+	f.github.hold()
+
+	f.service.Refresh()
+	waitCalls(t, f.github, queryList, 1)
+	f.service.Refresh()
+	f.service.Close()
+	waitReading(t, f.service)
+
+	if got := len(f.github.made(queryList)); got != 1 {
+		t.Errorf("the service made %d list queries, want only the one that ran before Close()", got)
+	}
+	// One for the reading that started, one for the reading Close() ended.
+	if got := f.changes.count(); got != 2 {
+		t.Errorf("OnChange was called %d times, want twice", got)
 	}
 }
 

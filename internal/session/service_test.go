@@ -921,6 +921,39 @@ func TestCloseForgetsTheTask(t *testing.T) {
 	}
 }
 
+func TestASessionExistsFromItsCreationUntilItIsThrownAway(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	exists := func(when string, want bool) {
+		t.Helper()
+
+		got, err := f.service.Exists(t.Context(), prd("t1"))
+		if err != nil {
+			t.Fatalf("Exists() %s = %v, want nil", when, err)
+		}
+		if got != want {
+			t.Errorf("Exists() %s = %v, want %v", when, got, want)
+		}
+	}
+
+	exists("before anything", false)
+	if _, ok := f.service.Summary(prd("t1")); ok {
+		t.Error("Exists() opened the session")
+	}
+	f.open(t, taskInfo(t, "t1"))
+	exists("once open", true)
+	// A closed session is still recorded, as one a previous run left is.
+	if err := f.service.Close(t.Context(), prd("t1")); err != nil {
+		t.Fatalf("Close() = %v, want nil", err)
+	}
+	exists("once closed", true)
+	if err := f.service.DiscardTask(t.Context(), "t1"); err != nil {
+		t.Fatalf("DiscardTask() = %v, want nil", err)
+	}
+	exists("once thrown away", false)
+}
+
 func TestSendValidation(t *testing.T) {
 	t.Parallel()
 

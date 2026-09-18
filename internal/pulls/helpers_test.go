@@ -99,6 +99,14 @@ func (f *fixture) remove(id string) {
 	f.repos = slices.DeleteFunc(f.repos, func(r repository.Repository) bool { return r.ID == id })
 }
 
+// register replaces the registered repositories with repos.
+func (f *fixture) register(repos []repository.Repository) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.repos = slices.Clone(repos)
+}
+
 // refresh reads the pull requests and waits for the reading to end.
 func (f *fixture) refresh(t *testing.T) {
 	t.Helper()

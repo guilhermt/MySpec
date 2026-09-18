@@ -93,6 +93,11 @@ func (r *ReviewsRepo) Insert(ctx context.Context, review prreview.Review) error 
 // Update rewrites every mutable column of a review but the instant it was
 // archived, which UpdateArchived writes.
 func (r *ReviewsRepo) Update(ctx context.Context, review prreview.Review) error {
+	return updateReview(ctx, r.db, review)
+}
+
+// updateReview runs Update on the database or inside a transaction.
+func updateReview(ctx context.Context, db execer, review prreview.Review) error {
 	const stmt = `UPDATE reviews SET title = ?, author = ?, url = ?, head_branch = ?, base_branch = ?,
 		own = ?, mode = ?, phase = ?, card = ?, asked_pass = ?, reported_pass = ?, pass_commit = ?,
 		published_pass = ?, published_commit = ?, head_commit = ?, pr_state = ?, pr_checked_at = ?,
@@ -103,7 +108,7 @@ func (r *ReviewsRepo) Update(ctx context.Context, review prreview.Review) error 
 	if err != nil {
 		return fmt.Errorf("update review %s: %w", review.ID, err)
 	}
-	_, err = r.db.ExecContext(ctx, stmt, review.Title, review.Author, review.URL,
+	_, err = db.ExecContext(ctx, stmt, review.Title, review.Author, review.URL,
 		review.HeadBranch, review.BaseBranch, review.Own, string(review.Mode), string(review.Phase),
 		card, review.AskedPass, review.ReportedPass, review.PassCommit,
 		review.PublishedPass, review.PublishedCommit, review.HeadCommit,
@@ -195,8 +200,13 @@ func (r *ReviewsRepo) findings(ctx context.Context, reviewID string) (map[int][]
 }
 
 // UpsertPass stores a pass of a review, rewriting what was there. The findings
-// are not part of it: ReplaceFindings writes them.
+// are not part of it: WritePass writes them.
 func (r *ReviewsRepo) UpsertPass(ctx context.Context, pass prreview.Pass) error {
+	return upsertPass(ctx, r.db, pass)
+}
+
+// upsertPass runs UpsertPass on the database or inside a transaction.
+func upsertPass(ctx context.Context, db execer, pass prreview.Pass) error {
 	const stmt = `INSERT INTO review_passes (` + passColumns + `)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (review_id, pass) DO UPDATE SET
@@ -211,7 +221,7 @@ func (r *ReviewsRepo) UpsertPass(ctx context.Context, pass prreview.Pass) error 
 			published_at = excluded.published_at,
 			published_url = excluded.published_url`
 
-	_, err := r.db.ExecContext(ctx, stmt, pass.ReviewID, pass.Number, pass.Instructions,
+	_, err := db.ExecContext(ctx, stmt, pass.ReviewID, pass.Number, pass.Instructions,
 		pass.Recorded, pass.Clean, pass.Commit, pass.SummaryOriginal, pass.Summary, pass.Revision,
 		string(pass.Verdict), nullTime(pass.PublishedAt), pass.PublishedURL,
 		formatTime(pass.CreatedAt))
@@ -231,32 +241,49 @@ func (r *ReviewsRepo) DeletePass(ctx context.Context, reviewID string, pass int)
 	return nil
 }
 
-// ReplaceFindings rewrites the findings of a pass with the ones given, in one
-// transaction.
-func (r *ReviewsRepo) ReplaceFindings(ctx context.Context, reviewID string, pass int, findings []prreview.Finding) error {
+// WritePass stores a pass with its findings, rewriting what was there, and the
+// review it moves when review is not nil, in one transaction: a review never
+// points at a pass the store doesn't have, nor a pass at findings it lost.
+func (r *ReviewsRepo) WritePass(ctx context.Context, pass prreview.Pass, review *prreview.Review) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin write pass %d of review %s: %w", pass.Number, pass.ReviewID, err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if err = upsertPass(ctx, tx, pass); err != nil {
+		return err
+	}
+	if err = replaceFindings(ctx, tx, pass); err != nil {
+		return err
+	}
+	if review != nil {
+		if err = updateReview(ctx, tx, *review); err != nil {
+			return err
+		}
+	}
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("commit write pass %d of review %s: %w", pass.Number, pass.ReviewID, err)
+	}
+	return nil
+}
+
+// replaceFindings rewrites the findings of a pass with the ones it holds.
+func replaceFindings(ctx context.Context, tx *sql.Tx, pass prreview.Pass) error {
 	const clearFindings = `DELETE FROM review_findings WHERE review_id = ? AND pass = ?`
 	const stmt = `INSERT INTO review_findings (` + findingColumns + `)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
-	tx, err := r.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin replace findings of pass %d of review %s: %w", pass, reviewID, err)
+	if _, err := tx.ExecContext(ctx, clearFindings, pass.ReviewID, pass.Number); err != nil {
+		return fmt.Errorf("clear findings of pass %d of review %s: %w", pass.Number, pass.ReviewID, err)
 	}
-	defer func() { _ = tx.Rollback() }()
-
-	if _, err = tx.ExecContext(ctx, clearFindings, reviewID, pass); err != nil {
-		return fmt.Errorf("clear findings of pass %d of review %s: %w", pass, reviewID, err)
-	}
-	for _, finding := range findings {
-		_, err = tx.ExecContext(ctx, stmt, reviewID, pass, finding.Number, finding.Path, finding.Line,
-			finding.Original, finding.Text, string(finding.Decision), string(finding.Placement))
+	for _, finding := range pass.Findings {
+		_, err := tx.ExecContext(ctx, stmt, pass.ReviewID, pass.Number, finding.Number, finding.Path,
+			finding.Line, finding.Original, finding.Text, string(finding.Decision), string(finding.Placement))
 		if err != nil {
 			return fmt.Errorf("insert finding %d of pass %d of review %s: %w",
-				finding.Number, pass, reviewID, err)
+				finding.Number, pass.Number, pass.ReviewID, err)
 		}
-	}
-	if err = tx.Commit(); err != nil {
-		return fmt.Errorf("commit replace findings of pass %d of review %s: %w", pass, reviewID, err)
 	}
 	return nil
 }

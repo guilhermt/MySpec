@@ -148,15 +148,26 @@ func (r *Runner) PRDiff(ctx context.Context, owner, name string, number int) (st
 // authOr turns a gh that refused for lack of a login into
 // ErrNotAuthenticated, and leaves every other failure as it is.
 func authOr(err error) error {
+	_, settled := answerOf(err)
+	return settled
+}
+
+// answerOf reads what every command shares about a failed gh. A failure that
+// is no answer of gh (it did not run, or it was cancelled or timed out) comes
+// back as it is, and a refusal for lack of a login as ErrNotAuthenticated,
+// both with a nil *Error: there is nothing more to read in them. Any other
+// failure is an answer of gh, which comes back as its *Error next to err, for
+// the caller to read further.
+func answerOf(err error) (*Error, error) {
 	var ghErr *Error
 	if !errors.As(err, &ghErr) {
-		return err
+		return nil, err
 	}
 	if errors.Is(ghErr.Err, context.Canceled) || errors.Is(ghErr.Err, context.DeadlineExceeded) {
-		return err
+		return nil, err
 	}
 	if ghErr.ExitCode == exitAuth || strings.Contains(ghErr.Output, "gh auth login") {
-		return fmt.Errorf("%w: %w", ErrNotAuthenticated, ghErr)
+		return nil, fmt.Errorf("%w: %w", ErrNotAuthenticated, ghErr)
 	}
-	return err
+	return ghErr, err
 }

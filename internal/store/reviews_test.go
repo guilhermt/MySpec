@@ -88,11 +88,8 @@ func passesOf(t *testing.T, s *store.Store, reviewID string) []prreview.Pass {
 func seedPass(t *testing.T, s *store.Store, pass prreview.Pass) {
 	t.Helper()
 
-	if err := s.Reviews.UpsertPass(t.Context(), pass); err != nil {
-		t.Fatalf("UpsertPass(%d) = %v, want nil", pass.Number, err)
-	}
-	if err := s.Reviews.ReplaceFindings(t.Context(), pass.ReviewID, pass.Number, pass.Findings); err != nil {
-		t.Fatalf("ReplaceFindings(%d) = %v, want nil", pass.Number, err)
+	if err := s.Reviews.WritePass(t.Context(), pass, nil); err != nil {
+		t.Fatalf("WritePass(%d) = %v, want nil", pass.Number, err)
 	}
 }
 
@@ -270,7 +267,7 @@ func TestUpsertPassRewritesWhatThePassHolds(t *testing.T) {
 	}
 }
 
-func TestReplaceFindingsRewritesTheWholeSetOfAPass(t *testing.T) {
+func TestWritePassRewritesTheWholeSetOfFindingsOfAPass(t *testing.T) {
 	t.Parallel()
 	s := newStoreWithRepositories(t)
 
@@ -280,12 +277,63 @@ func TestReplaceFindingsRewritesTheWholeSetOfAPass(t *testing.T) {
 	seedPass(t, s, pass)
 
 	pass.Findings = []prreview.Finding{newFinding(1, "main.go", 4)}
-	if err := s.Reviews.ReplaceFindings(t.Context(), review.ID, pass.Number, pass.Findings); err != nil {
-		t.Fatalf("ReplaceFindings() = %v, want nil", err)
+	pass.Revision = 2
+	if err := s.Reviews.WritePass(t.Context(), pass, nil); err != nil {
+		t.Fatalf("WritePass() = %v, want nil", err)
 	}
 
 	if diff := cmp.Diff([]prreview.Pass{pass}, passesOf(t, s, review.ID)); diff != "" {
 		t.Errorf("Passes() mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestWritePassMovesTheReviewWithThePass(t *testing.T) {
+	t.Parallel()
+	s := newStoreWithRepositories(t)
+
+	review := newReview("review-1", webRepo, 7, fixedTime)
+	insertReview(t, s, review)
+
+	pass := newPass(review.ID, 1, newFinding(1, "main.go", 3))
+	review.ReportedPass, review.PassCommit = 1, pass.Commit
+	review.UpdatedAt = fixedTime.Add(time.Minute)
+	if err := s.Reviews.WritePass(t.Context(), pass, &review); err != nil {
+		t.Fatalf("WritePass() = %v, want nil", err)
+	}
+
+	if diff := cmp.Diff([]prreview.Pass{pass}, passesOf(t, s, review.ID)); diff != "" {
+		t.Errorf("Passes() mismatch (-want +got):\n%s", diff)
+	}
+	if diff := cmp.Diff([]prreview.Review{review}, listActiveReviews(t, s)); diff != "" {
+		t.Errorf("ListActive() mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestAFailedWritePassLeavesThePassItsFindingsAndTheReviewAsTheyWere(t *testing.T) {
+	t.Parallel()
+	s := newStoreWithRepositories(t)
+
+	review := newReview("review-1", webRepo, 7, fixedTime)
+	insertReview(t, s, review)
+	pass := newPass(review.ID, 1, newFinding(1, "main.go", 3))
+	seedPass(t, s, pass)
+
+	// Two findings with the same number break the write after the pass is
+	// rewritten and before the review is.
+	rewritten := pass
+	rewritten.Revision = 2
+	rewritten.Findings = []prreview.Finding{newFinding(1, "main.go", 4), newFinding(1, "go.mod", 8)}
+	moved := review
+	moved.ReportedPass = 1
+	if err := s.Reviews.WritePass(t.Context(), rewritten, &moved); err == nil {
+		t.Fatal("WritePass() = nil, want the duplicated finding refused")
+	}
+
+	if diff := cmp.Diff([]prreview.Pass{pass}, passesOf(t, s, review.ID)); diff != "" {
+		t.Errorf("Passes() mismatch (-want +got):\n%s", diff)
+	}
+	if diff := cmp.Diff([]prreview.Review{review}, listActiveReviews(t, s)); diff != "" {
+		t.Errorf("ListActive() mismatch (-want +got):\n%s", diff)
 	}
 }
 
