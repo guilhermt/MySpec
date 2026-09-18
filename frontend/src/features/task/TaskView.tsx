@@ -136,11 +136,13 @@ export function TaskView({ taskId }: TaskViewProps) {
         onLayoutChanged={onLayoutChanged}
         className="min-h-0 flex-1"
       >
+        {/* The library's panel scrolls by default; only the conversation scrolls here, so it clips. */}
         <ResizablePanel
           id={CONVERSATION_PANEL}
           defaultSize="60%"
           minSize="40%"
           className="flex min-w-0 flex-col"
+          style={{ overflow: "clip" }}
         >
           {implementing ? (
             <>

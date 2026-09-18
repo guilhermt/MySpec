@@ -241,4 +241,20 @@ describe("Conversation", () => {
     expect(scrollTo).toHaveBeenCalledWith({ top: 1000 });
     expect(screen.queryByRole("button", { name: "New messages" })).not.toBeInTheDocument();
   });
+
+  it("keeps what is positioned inside the conversation within its scroll", () => {
+    const { container } = renderWithStore(
+      <Conversation stage="prd" taskId="task-1" session={makeTask()} />,
+      {
+        state: withTask(),
+        ui: { transcripts: ready([makeEntry("user")]) },
+      },
+    );
+    const scroller = container.querySelector('[data-slot="conversation"]');
+    if (scroller === null) {
+      throw new Error("the conversation has no scrolling region");
+    }
+
+    expect(scroller).toHaveClass("relative");
+  });
 });
