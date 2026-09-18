@@ -7,6 +7,7 @@ import (
 
 	"github.com/guilhermt/myspec/internal/repository"
 	"github.com/guilhermt/myspec/internal/store"
+	"github.com/guilhermt/myspec/internal/worktree"
 )
 
 // newRepository builds a registered repository, ready to insert.
@@ -94,6 +95,34 @@ func TestUpdatePathPointsARepositoryAtAnotherClone(t *testing.T) {
 	}
 }
 
+func TestTheWorktreesOfTheTasksAndReviewsOfARepositoryFollowItToAnotherClone(t *testing.T) {
+	t.Parallel()
+	s := newStoreWithRepositories(t)
+
+	taskID := seedTask(t, s)
+	insertReview(t, s, newReview("review-1", webRepo, 7, fixedTime))
+	insertReview(t, s, newReview("review-2", apiRepo, 8, fixedTime))
+	ofTask := newWorktree(taskID, "/home/dev/web", "/data/worktrees/dev/web/one", "one")
+	ofReview := newWorktree("review-1", "/home/dev/web", "/data/worktrees/dev/web/pr-7", "")
+	ofOther := newWorktree("review-2", "/home/dev/api", "/data/worktrees/dev/api/pr-8", "")
+	for _, wt := range []worktree.Worktree{ofTask, ofReview, ofOther} {
+		if err := s.Worktrees.Insert(t.Context(), wt); err != nil {
+			t.Fatalf("Worktrees.Insert(%s) = %v, want nil", wt.Path, err)
+		}
+	}
+
+	const moved = "/elsewhere/web"
+	if err := s.Repositories.UpdatePath(t.Context(), webRepo, moved); err != nil {
+		t.Fatalf("UpdatePath() = %v, want nil", err)
+	}
+
+	ofTask.RepoPath, ofReview.RepoPath = moved, moved
+	want := []worktree.Worktree{ofReview, ofOther, ofTask}
+	if diff := cmp.Diff(want, listWorktrees(t, s, taskID, "review-1", "review-2")); diff != "" {
+		t.Errorf("ListByTasks() mismatch (-want +got):\n%s", diff)
+	}
+}
+
 func TestDeleteRemovesARepositoryAndIgnoresAMissingOne(t *testing.T) {
 	t.Parallel()
 	s := newStore(t)
@@ -136,6 +165,27 @@ func TestTheBoardOfARepositoryRoundTrips(t *testing.T) {
 	managed.BoardID, free.BoardID = "", "board-1"
 	if diff := cmp.Diff([]repository.Repository{managed, free}, listRepositories(t, s)); diff != "" {
 		t.Errorf("List() after UpdateBoard mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestTheReviewInstructionsOfARepositoryRoundTrip(t *testing.T) {
+	t.Parallel()
+	s := newStore(t)
+
+	repo := newRepository("repo-1", "acme", "api", "/code/api")
+	insertRepository(t, s, repo)
+	if got := listRepositories(t, s)[0].ReviewInstructions; got != "" {
+		t.Errorf("ReviewInstructions = %q, want it empty on a repository nobody wrote instructions for", got)
+	}
+
+	const instructions = "A migration that was published is never edited."
+	if err := s.Repositories.UpdateReviewInstructions(t.Context(), repo.ID, instructions); err != nil {
+		t.Fatalf("UpdateReviewInstructions() = %v, want nil", err)
+	}
+
+	repo.ReviewInstructions = instructions
+	if diff := cmp.Diff([]repository.Repository{repo}, listRepositories(t, s)); diff != "" {
+		t.Errorf("List() after UpdateReviewInstructions mismatch (-want +got):\n%s", diff)
 	}
 }
 

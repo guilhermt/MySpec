@@ -639,3 +639,80 @@ func TestMergeFastForwardRefusesWhenTheBranchDiverged(t *testing.T) {
 		t.Errorf("HEAD = %s, want main left at %s", got, want)
 	}
 }
+
+func TestAddDetachedWorktreeChecksOutTheRefWithNoBranch(t *testing.T) {
+	t.Parallel()
+	runner, dir := repo(t)
+	path := filepath.Join(t.TempDir(), "pr_42")
+
+	if err := runner.AddDetachedWorktree(t.Context(), dir, path, "origin/dev"); err != nil {
+		t.Fatalf("AddDetachedWorktree(origin/dev) = %v, want nil", err)
+	}
+	if got := headOf(t, path); got != headOf(t, dir) {
+		t.Errorf("HEAD = %q, want the commit of origin/dev %q", got, headOf(t, dir))
+	}
+
+	branch, err := runner.CurrentBranch(t.Context(), path)
+	if err != nil {
+		t.Fatalf("CurrentBranch() = %v, want nil", err)
+	}
+	if branch != "" {
+		t.Errorf("CurrentBranch() = %q, want no branch", branch)
+	}
+	if branches := gittest.Run(t, dir, "branch", "--list", "dev"); branches != "" {
+		t.Errorf("branches = %q, want no local branch created", branches)
+	}
+}
+
+func TestAddDetachedWorktreeFailsOnARefThatIsNotThere(t *testing.T) {
+	t.Parallel()
+	runner, dir := repo(t)
+
+	err := runner.AddDetachedWorktree(t.Context(), dir, filepath.Join(t.TempDir(), "pr_42"), "origin/nope")
+	var gitErr *git.Error
+	if !errors.As(err, &gitErr) {
+		t.Fatalf("AddDetachedWorktree(origin/nope) = %v, want *git.Error", err)
+	}
+}
+
+func TestCheckoutDetachedMovesTheWorktreeToTheRef(t *testing.T) {
+	t.Parallel()
+	runner, dir := repo(t)
+	path := filepath.Join(t.TempDir(), "pr_42")
+	if err := runner.AddDetachedWorktree(t.Context(), dir, path, "origin/dev"); err != nil {
+		t.Fatalf("AddDetachedWorktree(origin/dev) = %v, want nil", err)
+	}
+	gittest.Commit(t, dir, "login.go", "package login\n", "Add the login screen")
+	gittest.Run(t, dir, "push", "origin", "main:dev")
+	gittest.Run(t, dir, "fetch", "origin")
+
+	if err := runner.CheckoutDetached(t.Context(), path, "origin/dev"); err != nil {
+		t.Fatalf("CheckoutDetached(origin/dev) = %v, want nil", err)
+	}
+	if got := headOf(t, path); got != headOf(t, dir) {
+		t.Errorf("HEAD = %q, want the new commit of origin/dev %q", got, headOf(t, dir))
+	}
+
+	branch, err := runner.CurrentBranch(t.Context(), path)
+	if err != nil {
+		t.Fatalf("CurrentBranch() = %v, want nil", err)
+	}
+	if branch != "" {
+		t.Errorf("CurrentBranch() = %q, want no branch", branch)
+	}
+}
+
+func TestCheckoutDetachedFailsOnARefThatIsNotThere(t *testing.T) {
+	t.Parallel()
+	runner, dir := repo(t)
+	path := filepath.Join(t.TempDir(), "pr_42")
+	if err := runner.AddDetachedWorktree(t.Context(), dir, path, "origin/dev"); err != nil {
+		t.Fatalf("AddDetachedWorktree(origin/dev) = %v, want nil", err)
+	}
+
+	err := runner.CheckoutDetached(t.Context(), path, "origin/nope")
+	var gitErr *git.Error
+	if !errors.As(err, &gitErr) {
+		t.Fatalf("CheckoutDetached(origin/nope) = %v, want *git.Error", err)
+	}
+}

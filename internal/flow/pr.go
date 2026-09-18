@@ -805,6 +805,7 @@ func prReviewVars(info session.TaskInfo) prompts.Vars {
 		ReviewPath:   info.ReviewPath,
 		PRNumber:     info.PRNumber,
 		PRURL:        info.PRURL,
+		Instructions: info.Instructions,
 	}
 }
 
@@ -1015,6 +1016,9 @@ func prReviewInfo(
 	info.ReviewPath = t.ReviewPath(pass)
 	info.PRNumber, info.PRURL = strconv.Itoa(pr.Number), pr.URL
 	info.Choice = t.Models.Stage(models.PRReview)
+	// The fixed instructions of the repository are read when the pass begins,
+	// so an edit of them reaches the next pass.
+	info.Instructions = repo.ReviewInstructions
 	return info
 }
 

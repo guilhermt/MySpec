@@ -20,6 +20,7 @@ React 19, TypeScript em modo strict, Vite, Tailwind CSS 4, shadcn/ui sobre Base 
 - Um componente por arquivo, exportado por nome, com `export interface XProps` acima. Funções, nunca classes.
 - A lógica de apresentação sem React vai para um arquivo `.ts` ao lado (`status.ts`, `step-status.ts`, `pr-status.ts`, `stage-actions.ts`): recebe DTOs, devolve rótulos, tons e booleanos, e é testada sem renderizar.
 - Os primitivos vêm de `components/ui/`, gerados pelo shadcn e nunca editados. Um comportamento diferente é um wrapper em `features/`.
+- Um componente próprio usado por mais de uma feature, como o `FilterMenu` das visões de board e de reviews, fica em `src/components/`, ao lado de `ui/`, com o teste ao lado. Um componente de uma feature só fica na feature; ele sobe para `src/components/` quando uma segunda feature precisa dele.
 - Ícones do `lucide-react`. Classes com `cn` de `lib/utils`; variantes com `class-variance-authority`.
 - Toda constante de apresentação com mais de um uso é nomeada e comentada (`REVIEW_STATES`, `MAX_CORRECTIONS`, que espelha `flow.MaxCorrections`).
 - Textos da interface em inglês, curtos, com o separador `·` entre partes de uma mesma linha, como modelo e esforço. O usuário é "you"; o agente é "the agent".

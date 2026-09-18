@@ -1,12 +1,14 @@
-// Package worktree owns the worktrees the app creates for its tasks, one per
-// task: where they are, how they come to be, whether they are clean, and how
-// they go.
+// Package worktree owns the worktrees the app creates for its items, one per
+// item: where they are, how they come to be, whether they are clean, and how
+// they go. A task works on a branch of its own; the review of a pull request
+// works on a detached HEAD at the head of that pull request.
 package worktree
 
 import (
 	"context"
 	"errors"
 	"path/filepath"
+	"strconv"
 	"time"
 )
 
@@ -30,14 +32,14 @@ type Worktree struct {
 	// the repository was moved since.
 	RepoPath  string
 	Path      string // absolute
-	Branch    string // the task name
+	Branch    string // the task name; "" for a worktree on a detached HEAD
 	Base      string // the ref the branch was created from, e.g. origin/dev
 	CreatedAt time.Time
 }
 
 // Store persists the registry of worktrees.
 type Store interface {
-	ListByTasks(ctx context.Context, taskIDs []string) ([]Worktree, error)
+	ListByTasks(ctx context.Context, itemIDs []string) ([]Worktree, error)
 	Insert(ctx context.Context, wt Worktree) error
 	Delete(ctx context.Context, taskID string) error
 }
@@ -78,10 +80,18 @@ var (
 	ErrNoBaseBranch = errors.New("worktree: neither origin/dev nor origin/main exists")
 	ErrPathExists   = errors.New("worktree: path already exists")
 	ErrBranchExists = errors.New("worktree: branch already exists")
+	ErrNoHeadBranch = errors.New("worktree: the head branch does not exist on origin")
+	ErrDirty        = errors.New("worktree: the worktree has changes")
 )
 
-// Path is where the worktree of a task lives: inside the data directory, one
-// folder per repository, as GitHub names it, and one per task.
-func Path(dataDir, owner, name, taskName string) string {
-	return filepath.Join(dataDir, worktreesDir, owner, name, taskName)
+// ReviewDirName is the folder the worktree of the review of a pull request
+// lives in. A task name never holds an underscore, so it never collides with
+// the folder of a task.
+func ReviewDirName(number int) string { return "pr_" + strconv.Itoa(number) }
+
+// Path is where the worktree of an item lives: inside the data directory, one
+// folder per repository, as GitHub names it, and one per item: the name of a
+// task, or ReviewDirName for the review of a pull request.
+func Path(dataDir, owner, name, dirName string) string {
+	return filepath.Join(dataDir, worktreesDir, owner, name, dirName)
 }

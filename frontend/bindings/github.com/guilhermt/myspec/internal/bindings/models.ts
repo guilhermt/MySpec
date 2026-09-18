@@ -26,6 +26,42 @@ export interface ArchivedPR {
 }
 
 /**
+ * ArchivedReview is a review whose pull request was merged or closed, as the
+ * history shows it.
+ */
+export interface ArchivedReview {
+    "id": string;
+    "repositoryId": string;
+
+    /**
+     * owner/name
+     */
+    "repository": string;
+    "number": number;
+    "title": string;
+    "author": string;
+    "url": string;
+
+    /**
+     * Mode is publish or apply, a string for the same reason as State.Theme.
+     */
+    "mode": string;
+
+    /**
+     * Outcome is merged or closed: what became of the pull request.
+     */
+    "outcome": string;
+
+    /**
+     * nil when the pull request had no card
+     */
+    "card": PullCard | null;
+    "passes": ReviewPass[] | null;
+    "createdAt": string;
+    "archivedAt": string;
+}
+
+/**
  * ArchivedStep is one step of an archived task, as the plan wrote it.
  */
 export interface ArchivedStep {
@@ -593,7 +629,7 @@ export interface MarkerEntry {
      * Type is prd_written, prd_updated, tech_spec_written, tech_spec_updated,
      * plan_written, plan_updated, one_shot_written, one_shot_updated,
      * pr_review_written, step_review_started, step_review_written,
-     * stage_started, step_started, compacted or interrupted.
+     * review_started, stage_started, step_started, compacted or interrupted.
      */
     "type": string;
     "preTokens": number;
@@ -760,8 +796,8 @@ export interface PermissionEntry {
  */
 export interface Place {
     /**
-     * Kind is stage, step, step_review or pr, a string for the same reason as
-     * State.Theme.
+     * Kind is stage, step, step_review, pr or review, a string for the same
+     * reason as State.Theme.
      */
     "kind": string;
 
@@ -808,6 +844,29 @@ export interface Prompt {
      * order the settings list them; never nil.
      */
     "placeholders": string[] | null;
+}
+
+/**
+ * PullCard is the card a pull request is linked to.
+ */
+export interface PullCard {
+    "boardId": string;
+    "number": number;
+    "title": string;
+    "url": string;
+
+    /**
+     * the Status of the card on its board; "" for none
+     */
+    "status": string;
+}
+
+/**
+ * PullLabel is a label of a pull request, as GitHub colours it.
+ */
+export interface PullLabel {
+    "name": string;
+    "color": string;
 }
 
 /**
@@ -914,6 +973,91 @@ export interface PullRequest {
 }
 
 /**
+ * PullRequestRow is one open pull request in the Reviews view.
+ */
+export interface PullRequestRow {
+    /**
+     * owner/name#number, in lower case
+     */
+    "key": string;
+    "repositoryId": string;
+
+    /**
+     * owner/name
+     */
+    "repository": string;
+
+    /**
+     * "" when the repository has no board
+     */
+    "boardId": string;
+    "number": number;
+    "title": string;
+    "url": string;
+    "author": string;
+
+    /**
+     * never nil
+     */
+    "labels": PullLabel[] | null;
+    "draft": boolean;
+
+    /**
+     * the author is the account of gh
+     */
+    "own": boolean;
+    "card": PullCard | null;
+
+    /**
+     * Reviewed says the account of gh submitted a review of it, and NewCommits
+     * that the pull request moved since that review.
+     */
+    "reviewed": boolean;
+    "newCommits": boolean;
+
+    /**
+     * it waits for the review of the user
+     */
+    "pending": boolean;
+
+    /**
+     * the filters of the view hide it
+     */
+    "filtered": boolean;
+
+    /**
+     * TaskID is the task of the product the pull request belongs to; "" when it
+     * belongs to none.
+     */
+    "taskId": string;
+
+    /**
+     * ReviewID is the active review of the pull request; "" when there is none.
+     */
+    "reviewId": string;
+
+    /**
+     * Action is review, open_review, open_task, clone, clone_missing or fork,
+     * a string for the same reason as State.Theme.
+     */
+    "action": string;
+    "updatedAt": string;
+}
+
+/**
+ * PullsFailure is why the last reading of one repository failed.
+ */
+export interface PullsFailure {
+    "repositoryId": string;
+
+    /**
+     * owner/name
+     */
+    "repository": string;
+    "message": string;
+}
+
+/**
  * Question is one of the questions of an AskUserQuestion call.
  */
 export interface Question {
@@ -999,6 +1143,14 @@ export interface Repository {
      * what gh said when the last clone failed; "" otherwise
      */
     "cloneError": string;
+
+    /**
+     * ReviewInstructions are added to every pull request review of the
+     * repository; "" when the user wrote none.
+     */
+    "reviewInstructions": string;
+    "activeReviews": number;
+    "archivedReviews": number;
 }
 
 /**
@@ -1040,6 +1192,43 @@ export interface Review {
 }
 
 /**
+ * ReviewCenter is the Reviews view: the open pull requests of every registered
+ * repository, as the last reading found them, and the filters the view shows
+ * them through.
+ */
+export interface ReviewCenter {
+    /**
+     * PullRequests are the pull requests of the last reading, the pending ones
+     * first and then the most recently updated; never nil.
+     */
+    "pullRequests": PullRequestRow[] | null;
+
+    /**
+     * Failures are the repositories the last reading could not read; never nil.
+     */
+    "failures": PullsFailure[] | null;
+
+    /**
+     * "" before the first reading
+     */
+    "readAt": string;
+    "reading": boolean;
+    "filters": ReviewFilters;
+
+    /**
+     * PendingCount is how many pending pull requests pass the filters.
+     */
+    "pendingCount": number;
+
+    /**
+     * Authors and Labels are what the reading found, of every pull request and
+     * not only the ones the filters keep, in alphabetical order; never nil.
+     */
+    "authors": string[] | null;
+    "labels": string[] | null;
+}
+
+/**
  * ReviewFile is one changed file of the worktree of a step under review.
  */
 export interface ReviewFile {
@@ -1055,6 +1244,253 @@ export interface ReviewFile {
      * nothing of it is left outside the index
      */
     "staged": boolean;
+}
+
+/**
+ * ReviewFilters is what the Reviews view shows. The zero value shows
+ * everything.
+ */
+export interface ReviewFilters {
+    /**
+     * "" for any; __none__ for the repositories without one
+     */
+    "boardId": string;
+
+    /**
+     * RepositoryID is the repository the view shows; "" for any.
+     */
+    "repositoryId": string;
+
+    /**
+     * never nil
+     */
+    "authorsInclude": string[] | null;
+
+    /**
+     * never nil
+     */
+    "authorsExclude": string[] | null;
+
+    /**
+     * never nil
+     */
+    "labelsInclude": string[] | null;
+
+    /**
+     * never nil
+     */
+    "labelsExclude": string[] | null;
+    "pendingOnly": boolean;
+}
+
+/**
+ * ReviewFinding is one numbered finding of a pass of a review.
+ */
+export interface ReviewFinding {
+    "number": number;
+
+    /**
+     * the file it is anchored to; "" for a general finding
+     */
+    "path": string;
+
+    /**
+     * the line of the new side of the diff; 0 for a general finding
+     */
+    "line": number;
+    "text": string;
+
+    /**
+     * Decision is "", approved or discarded, a string for the same reason as
+     * State.Theme.
+     */
+    "decision": string;
+
+    /**
+     * Placement is "", inline or body: where the finding went when the pass was
+     * published.
+     */
+    "placement": string;
+}
+
+/**
+ * ReviewPass is one pass of the agent over the pull request, with the report it
+ * wrote and what the user did with it.
+ */
+export interface ReviewPass {
+    "pass": number;
+
+    /**
+     * the report inside the artifact folder: review-<n>.md
+     */
+    "file": string;
+    "recorded": boolean;
+    "clean": boolean;
+
+    /**
+     * what the user wrote when asking for the pass
+     */
+    "instructions": string;
+    "summary": string;
+
+    /**
+     * never nil
+     */
+    "findings": ReviewFinding[] | null;
+
+    /**
+     * Revision is bumped every time the report is read again and differs, which
+     * is what tells the interface to drop the drafts of the user.
+     */
+    "revision": number;
+    "published": boolean;
+
+    /**
+     * "" when the pass was not published
+     */
+    "publishedAt": string;
+
+    /**
+     * "" when the pass was not published
+     */
+    "publishedUrl": string;
+
+    /**
+     * Verdict is approve, request_changes or comment; "" when the pass was not
+     * published.
+     */
+    "verdict": string;
+
+    /**
+     * Edited is whether the user changed the summary or the text of a finding
+     * from what the report has, which another pass would discard.
+     */
+    "edited": boolean;
+}
+
+/**
+ * ReviewSummary is an active review of a pull request, with the state of its
+ * conversation.
+ */
+export interface ReviewSummary {
+    "id": string;
+    "repositoryId": string;
+
+    /**
+     * owner/name
+     */
+    "repository": string;
+    "number": number;
+    "title": string;
+    "author": string;
+    "url": string;
+    "headBranch": string;
+
+    /**
+     * as GitHub names it, without origin/
+     */
+    "baseBranch": string;
+
+    /**
+     * the author is the account of gh
+     */
+    "own": boolean;
+
+    /**
+     * Mode is publish or apply, a string for the same reason as State.Theme.
+     */
+    "mode": string;
+
+    /**
+     * Status is reviewing, awaiting_reply, awaiting_decision, ready_to_publish,
+     * publish_failed, published, new_commits, ready_to_apply, applying,
+     * in_review, ready_to_approve, committing or ready_to_merge.
+     */
+    "status": string;
+
+    /**
+     * nil when the pull request has no card
+     */
+    "card": PullCard | null;
+    "worktreePath": string;
+
+    /**
+     * in pass order; never nil
+     */
+    "passes": ReviewPass[] | null;
+
+    /**
+     * StalePass says the pull request moved since the pass the user is
+     * deciding on.
+     */
+    "stalePass": boolean;
+
+    /**
+     * CheckError is what the last automatic reading of the pull request said
+     * when it failed; "" otherwise.
+     */
+    "checkError": string;
+
+    /**
+     * PublishError is why the last publication failed; "" otherwise.
+     */
+    "publishError": string;
+
+    /**
+     * UnreadableReport is why the report of the pass the app asked for could
+     * not be read; "" otherwise.
+     */
+    "unreadableReport": string;
+
+    /**
+     * CommitFailed says the last approval of apply mode ended without a commit.
+     */
+    "commitFailed": boolean;
+
+    /**
+     * Review is the last reading of the worktree; apply mode only.
+     */
+    "review": Review | null;
+
+    /**
+     * Verdicts are the verdicts this review can be published with, in the order
+     * the dialog offers them; never nil.
+     */
+    "verdicts": string[] | null;
+    "canPublish": boolean;
+    "canApply": boolean;
+    "canApprove": boolean;
+    "canReviewAgain": boolean;
+
+    /**
+     * review, or "" without a conversation
+     */
+    "sessionStage": string;
+
+    /**
+     * SessionStatus is working, waiting, needs_permission, needs_answer, paused
+     * or error.
+     */
+    "sessionStatus": string;
+
+    /**
+     * SessionModel and SessionEffort are what the conversation runs with from
+     * its next message on; "" without a session.
+     */
+    "sessionModel": string;
+    "sessionEffort": string;
+    "turnRunning": boolean;
+    "processRunning": boolean;
+    "retryAttempt": number;
+    "contextPercent": number;
+    "pendingCount": number;
+    "lastError": string;
+
+    /**
+     * what the review waits on the user for; never nil
+     */
+    "situations": Situation[] | null;
+    "createdAt": string;
 }
 
 /**
@@ -1075,8 +1511,9 @@ export interface Situation {
     /**
      * Kind is session_error, step_blocked, worktree_unreadable, pr_blocked,
      * plan_invalid, pr_closed, permission, question, reply, ready_to_continue,
-     * step_review, step_empty, draft, findings, changes_review or merge, a
-     * string for the same reason as State.Theme.
+     * step_review, step_empty, draft, findings, changes_review, merge,
+     * review_report, new_commits or publish_failed, a string for the same
+     * reason as State.Theme.
      */
     "kind": string;
 
@@ -1088,8 +1525,9 @@ export interface Situation {
 
     /**
      * Form is review, staged or approve for step_review and changes_review,
-     * merge or close for merge, and "" for every other kind, a string for the
-     * same reason as State.Theme.
+     * merge or close for merge, decide, publish or apply for review_report,
+     * and "" for every other kind, a string for the same reason as
+     * State.Theme.
      */
     "form": string;
 
@@ -1137,6 +1575,26 @@ export interface StageModel {
      * low, medium, high, xhigh or max
      */
     "effort": string;
+}
+
+/**
+ * StartReviewRequest is what the user chose in the dialog that starts a review.
+ */
+export interface StartReviewRequest {
+    "repositoryId": string;
+    "number": number;
+
+    /**
+     * what to look at in this pass; "" for none
+     */
+    "instructions": string;
+    "model": string;
+    "effort": string;
+
+    /**
+     * Mode is publish or apply, a string for the same reason as State.Theme.
+     */
+    "mode": string;
 }
 
 /**
@@ -1198,6 +1656,24 @@ export interface State {
      * Boards are the registered boards, by title ignoring case; never nil.
      */
     "boards": Board[] | null;
+
+    /**
+     * ReviewCenter is the Reviews view: the open pull requests of the
+     * registered repositories and the filters they are shown through.
+     */
+    "reviewCenter": ReviewCenter;
+
+    /**
+     * Reviews are the active reviews of pull requests, in creation order;
+     * never nil.
+     */
+    "reviews": ReviewSummary[] | null;
+
+    /**
+     * ReviewHistory are the reviews whose pull request was merged or closed,
+     * newest first; never nil.
+     */
+    "reviewHistory": ArchivedReview[] | null;
 
     /**
      * CloneFolder is where new clones go; "" until chosen.

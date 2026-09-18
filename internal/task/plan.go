@@ -10,6 +10,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/guilhermt/myspec/internal/frontmatter"
 )
 
 // Step is one step file of a plan.
@@ -177,7 +179,7 @@ func parseStep(name string, number int, content string) (Step, []PlanProblem) {
 	step := Step{Number: number, File: name}
 	var problems []PlanProblem
 
-	_, body := splitFrontMatter(content)
+	_, body := frontmatter.Split(content)
 	title, found := headingTitle(body)
 	if !found {
 		problems = append(problems, PlanProblem{File: name, Message: missingTitleProblem})

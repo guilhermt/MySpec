@@ -136,6 +136,21 @@ func (s *memStore) UpdateBoard(_ context.Context, id, boardID string) error {
 	return nil
 }
 
+func (s *memStore) UpdateReviewInstructions(_ context.Context, id, text string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.err != nil {
+		return s.err
+	}
+	for i := range s.items {
+		if s.items[i].ID == id {
+			s.items[i].ReviewInstructions = text
+		}
+	}
+	return nil
+}
+
 func (s *memStore) Delete(_ context.Context, id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -277,6 +292,7 @@ type fixture struct {
 	events   *recorder
 	answers  map[string]answer // by path; a path not in it has no origin
 	counts   map[string][2]int // by id: active and archived tasks
+	reviews  map[string][2]int // by id: active and archived reviews of pull requests
 	scanRoot string            // the folder the scan starts at
 	cloner   *recordClone
 }
@@ -291,6 +307,7 @@ func newFixture(t *testing.T) fixture {
 		events:   &recorder{},
 		answers:  map[string]answer{},
 		counts:   map[string][2]int{},
+		reviews:  map[string][2]int{},
 		scanRoot: t.TempDir(),
 		cloner:   &recordClone{release: make(chan struct{})},
 	}
@@ -308,6 +325,10 @@ func newFixture(t *testing.T) fixture {
 		Clone: f.cloner.clone,
 		Counts: func(id string) (int, int) {
 			counts := f.counts[id]
+			return counts[0], counts[1]
+		},
+		Reviews: func(id string) (int, int) {
+			counts := f.reviews[id]
 			return counts[0], counts[1]
 		},
 		Log: f.logs.log,

@@ -90,5 +90,7 @@ func fakeCode(t *testing.T, dir, record string) {
 	if err := os.WriteFile(path, []byte(script), 0o700); err != nil {
 		t.Fatalf("WriteFile(%s) = %v, want nil", path, err)
 	}
-	t.Setenv("PATH", dir)
+	// The fake goes first, and the rest of the PATH stays for the sleep the
+	// script runs.
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 }

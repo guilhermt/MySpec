@@ -27,8 +27,11 @@ import (
 	"github.com/guilhermt/myspec/internal/platform/notify"
 	"github.com/guilhermt/myspec/internal/platform/xdg"
 	"github.com/guilhermt/myspec/internal/prompts"
+	"github.com/guilhermt/myspec/internal/prreview"
+	"github.com/guilhermt/myspec/internal/pulls"
 	"github.com/guilhermt/myspec/internal/repository"
 	"github.com/guilhermt/myspec/internal/review"
+	"github.com/guilhermt/myspec/internal/reviewflow"
 	"github.com/guilhermt/myspec/internal/reviewmode"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/store"
@@ -75,6 +78,9 @@ type App struct {
 	worktrees    *worktree.Service
 	review       *review.Service
 	flow         *flow.Service
+	pulls        *pulls.Service
+	prReviews    *prreview.Service
+	reviewFlow   *reviewflow.Service
 	attention    *attention.Service
 	notifier     *notify.Notifier // nil when the desktop has no notification service
 	player       *chime.Player    // nil when there is no notifier or the chime could not be installed
@@ -186,7 +192,10 @@ func Run(cfg Config) int {
 		Log: log,
 		OnState: func(k session.Key) {
 			a.publish()
+			// The id of a session names an item: a task or a review, and only
+			// the one that owns it acts on the change.
 			a.flow.Check(k.TaskID)
+			a.reviewFlow.Check(k.TaskID)
 		},
 		OnTranscript: a.emitTranscript,
 	})
@@ -197,6 +206,7 @@ func Run(cfg Config) int {
 		Identify:      identifier.Identify,
 		Clone:         ghRunner.Clone,
 		Counts:        func(id string) (int, int) { return a.tasks.Counts(id) },
+		Reviews:       func(id string) (int, int) { return a.prReviews.Counts(id) },
 		Log:           log,
 		OnChange:      a.publish,
 		OnPathChanged: a.onRepositoryPathChanged,
@@ -214,7 +224,7 @@ func Run(cfg Config) int {
 	}
 	boards := board.New(board.Deps{
 		Store: st.Boards, GitHub: ghRunner, Repositories: repositories, Identify: identifier.Identify,
-		Counts:    func(id string) (int, int) { return a.tasks.Counts(id) },
+		Counts:    a.itemCounts,
 		TaskCards: a.boardTaskCards,
 		Log:       log, OnChange: a.publish, OnRead: a.onBoardRead,
 	})
@@ -224,9 +234,10 @@ func Run(cfg Config) int {
 	reviews, err := review.New(review.Deps{
 		Worktrees: worktrees,
 		Log:       log,
-		OnChange: func(taskID string) {
+		OnChange: func(itemID string) {
 			a.publish()
-			a.flow.Check(taskID)
+			a.flow.Check(itemID)
+			a.reviewFlow.Check(itemID)
 		},
 	})
 	if err != nil {
@@ -247,9 +258,34 @@ func Run(cfg Config) int {
 		},
 		OnChange: func(string) { a.publish() },
 	})
+	pullRequests := pulls.New(pulls.Deps{
+		GitHub: ghRunner, Repositories: repositories.List, Settings: st.Settings,
+		Log: log, OnChange: a.publish,
+	})
+	prReviews := prreview.New(prreview.Deps{
+		Store: st.Reviews, DataDir: dirs.Data, Repositories: repositories.Get,
+		Log: log, OnChange: a.publish,
+	})
+	reviewFlow := reviewflow.New(reviewflow.Deps{
+		Reviews:      prReviews,
+		Pulls:        pullRequests,
+		Sessions:     sessions,
+		Worktrees:    worktrees,
+		Repositories: repositories,
+		Boards:       boards,
+		Watch:        reviews,
+		GH:           ghRunner,
+		Tasks:        a.taskPullRequests,
+		Log:          log,
+		RenderPrompt: func(stage prompts.Stage, vars prompts.Vars) (string, error) {
+			return prompts.Render(dirs.Data, stage, vars)
+		},
+		OnChange: func(string) { a.publish() },
+	})
 	a.theme, a.repositories, a.tasks, a.sessions, a.flow = themeSvc, repositories, tasks, sessions, flowSvc
 	a.worktrees, a.review, a.models = worktrees, reviews, modelsSvc
 	a.reviewModes, a.boards = reviewModesSvc, boards
+	a.pulls, a.prReviews, a.reviewFlow = pullRequests, prReviews, reviewFlow
 
 	if err := a.load(ctx); err != nil {
 		return fail(log, "load tasks", err)
@@ -305,9 +341,13 @@ func (a *App) options(
 				bindings.NewSettingsService(themeSvc, modelsSvc, reviewModesSvc, dataDir, log),
 			),
 			application.NewService(bindings.NewTaskService(
-				tasks, sessions, flowSvc, modelsSvc, reviewModesSvc, repositories, boards, editor.Open, log,
+				tasks, sessions, flowSvc, modelsSvc, reviewModesSvc, repositories, boards, editor.Open,
+				a.isReview, log,
 			)),
 			application.NewService(bindings.NewBoardService(boards, log)),
+			application.NewService(bindings.NewReviewService(
+				a.reviewFlow, a.prReviews, a.pulls, a.worktrees, editor.Open, log,
+			)),
 			application.NewService(bindings.NewAttentionService(a.attention)),
 		},
 		Assets: application.AssetOptions{Handler: application.AssetFileServerFS(cfg.Assets)},
@@ -322,10 +362,11 @@ func (a *App) options(
 	}
 }
 
-// load reads the repositories, the boards and the tasks and hands the active tasks to the
-// flow, which opens the session of the stage each one is in and moves on the
-// stages that finished while the app was closed. The situations and the
-// worktrees failing to load only go to the log: the steps block on their own.
+// load reads the repositories, the boards, the tasks and the reviews of pull
+// requests, and hands the active items to the flows, which open the session
+// each one is in and move on what finished while the app was closed. The
+// situations and the worktrees failing to load only go to the log: the steps
+// block on their own.
 func (a *App) load(ctx context.Context) error {
 	if err := a.repositories.Sync(ctx); err != nil {
 		return fmt.Errorf("sync repositories: %w", err)
@@ -336,7 +377,13 @@ func (a *App) load(ctx context.Context) error {
 	if err := a.tasks.Sync(ctx); err != nil {
 		return fmt.Errorf("sync tasks: %w", err)
 	}
-	ids := a.activeTaskIDs()
+	if err := a.pulls.Sync(ctx); err != nil {
+		return fmt.Errorf("sync review filters: %w", err)
+	}
+	if err := a.prReviews.Sync(ctx); err != nil {
+		return fmt.Errorf("sync reviews: %w", err)
+	}
+	ids := a.activeItemIDs()
 	// The baseline of the situations starts before the flow opens the
 	// sessions, so that what already waited on the user is found, not started.
 	if err := a.attention.Sync(ctx, ids); err != nil {
@@ -348,17 +395,58 @@ func (a *App) load(ctx context.Context) error {
 		a.log.Error("sync worktrees failed", "err", err)
 	}
 	a.flow.Sync(ctx)
+	a.reviewFlow.Sync(ctx)
+	// The first reading of the pull requests is what the Reviews view opens
+	// on; it runs in the background and reaches the interface with the state.
+	a.pulls.Refresh()
 	return nil
 }
 
-// activeTaskIDs are the ids of the active tasks.
-func (a *App) activeTaskIDs() []string {
+// activeItemIDs are the ids of the items that run: the active tasks and the
+// active reviews of pull requests.
+func (a *App) activeItemIDs() []string {
 	tasks := a.tasks.List()
-	ids := make([]string, len(tasks))
-	for i, t := range tasks {
-		ids[i] = t.ID
+	reviews := a.prReviews.List()
+	ids := make([]string, 0, len(tasks)+len(reviews))
+	for _, t := range tasks {
+		ids = append(ids, t.ID)
+	}
+	for _, r := range reviews {
+		ids = append(ids, r.ID)
 	}
 	return ids
+}
+
+// itemCounts are how many items of a repository are active and archived: its
+// tasks and the reviews of its pull requests together.
+func (a *App) itemCounts(repositoryID string) (active, archived int) {
+	activeTasks, archivedTasks := a.tasks.Counts(repositoryID)
+	activeReviews, archivedReviews := a.prReviews.Counts(repositoryID)
+	return activeTasks + activeReviews, archivedTasks + archivedReviews
+}
+
+// taskPullRequests are the pull requests the active tasks of the product own,
+// which are reviewed in the task and never on their own.
+func (a *App) taskPullRequests() []reviewflow.TaskPR {
+	var prs []reviewflow.TaskPR
+	for _, t := range a.tasks.List() {
+		if t.Stage != task.StagePR {
+			continue
+		}
+		run, ok := a.tasks.PRRun(t.ID)
+		if !ok || run.PR.Number == 0 {
+			continue
+		}
+		prs = append(prs, reviewflow.TaskPR{TaskID: t.ID, RepositoryID: t.RepositoryID, Number: run.PR.Number})
+	}
+	return prs
+}
+
+// isReview says whether an id names a review of a pull request, which is what
+// tells the conversation of a review from the one of a task.
+func (a *App) isReview(id string) bool {
+	_, ok := a.prReviews.Get(id)
+	return ok
 }
 
 // onRepositoryPathChanged reloads the worktrees, whose clone moved with the
@@ -367,7 +455,7 @@ func (a *App) onRepositoryPathChanged(string) {
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
-	if err := a.worktrees.Sync(ctx, a.activeTaskIDs()); err != nil {
+	if err := a.worktrees.Sync(ctx, a.activeItemIDs()); err != nil {
 		a.log.Error("sync worktrees failed", "err", err)
 	}
 }
@@ -381,6 +469,8 @@ func (a *App) shutdown() {
 
 	a.attention.Close()
 	a.flow.Close()
+	a.reviewFlow.Close()
+	a.pulls.Close()
 	a.sessions.Shutdown(ctx)
 	// The notifications go with the app: one left behind would lead nowhere.
 	if a.notifier != nil {

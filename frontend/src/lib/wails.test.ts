@@ -9,6 +9,8 @@ import {
   asCloseSkipReason,
   asEntryKind,
   asErrorKind,
+  asFindingDecision,
+  asFindingPlacement,
   asIssueState,
   asMarkerType,
   asMigrationCaseKind,
@@ -18,11 +20,16 @@ import {
   asPRState,
   asPRStatus,
   asPromptStage,
+  asPullRequestAction,
+  asPullRequestOutcome,
   asPullRequestState,
+  asPullReviewMode,
+  asPullReviewStatus,
   asRepositoryLinkKind,
   asReviewFallback,
   asReviewFileKind,
   asReviewMode,
+  asReviewVerdict,
   asSessionStatus,
   asSituationForm,
   asSituationGroup,
@@ -218,6 +225,47 @@ describe("narrowing", () => {
     expect(asMigrationCaseKind("root_task")).toBe("root_task");
     expect(asMigrationCaseKind("no_origin")).toBe("no_origin");
     expect(asMigrationCaseKind("name_conflict")).toBe("name_conflict");
+    expect(asMarkerType("review_started")).toBe("review_started");
+    expect(asSituationKind("review_report")).toBe("review_report");
+    expect(asSituationKind("new_commits")).toBe("new_commits");
+    expect(asSituationKind("publish_failed")).toBe("publish_failed");
+    expect(asSituationForm("decide")).toBe("decide");
+    expect(asSituationForm("publish")).toBe("publish");
+    expect(asSituationForm("apply")).toBe("apply");
+    expect(asPlaceKind("review")).toBe("review");
+    expect(asPullReviewMode("publish")).toBe("publish");
+    expect(asPullReviewMode("apply")).toBe("apply");
+    for (const status of [
+      "reviewing",
+      "awaiting_reply",
+      "awaiting_decision",
+      "ready_to_publish",
+      "publish_failed",
+      "published",
+      "new_commits",
+      "ready_to_apply",
+      "applying",
+      "in_review",
+      "ready_to_approve",
+      "committing",
+      "ready_to_merge",
+    ]) {
+      expect(asPullReviewStatus(status)).toBe(status);
+    }
+    expect(asReviewVerdict("approve")).toBe("approve");
+    expect(asReviewVerdict("request_changes")).toBe("request_changes");
+    expect(asReviewVerdict("comment")).toBe("comment");
+    expect(asFindingDecision("")).toBe("");
+    expect(asFindingDecision("approved")).toBe("approved");
+    expect(asFindingDecision("discarded")).toBe("discarded");
+    expect(asFindingPlacement("")).toBe("");
+    expect(asFindingPlacement("inline")).toBe("inline");
+    expect(asFindingPlacement("body")).toBe("body");
+    for (const action of ["review", "open_review", "open_task", "clone", "clone_missing", "fork"]) {
+      expect(asPullRequestAction(action)).toBe(action);
+    }
+    expect(asPullRequestOutcome("merged")).toBe("merged");
+    expect(asPullRequestOutcome("closed")).toBe("closed");
   });
 
   it("falls back on a value a newer backend invented", () => {
@@ -254,6 +302,20 @@ describe("narrowing", () => {
     expect(asReviewMode("auto")).toBe("manual");
     expect(asReviewFallback("paused")).toBe("");
     expect(asMigrationCaseKind("multi_repository")).toBe("root_task");
+    expect(asPullReviewMode("suggest")).toBe("publish");
+    expect(asPullReviewStatus("rebasing")).toBe("reviewing");
+    // Comment judges nothing, and a fork is the action that does nothing.
+    expect(asReviewVerdict("reject")).toBe("comment");
+    expect(asPullRequestAction("merge")).toBe("fork");
+    expect(asPullRequestOutcome("open")).toBe("closed");
+    expect(asFindingDecision("deferred")).toBe("");
+    expect(asFindingPlacement("thread")).toBe("");
+  });
+});
+
+describe("REVIEW_STAGE", () => {
+  it("is the stage of the conversation of a review", () => {
+    expect(wails.REVIEW_STAGE).toBe("review");
   });
 });
 
@@ -343,10 +405,40 @@ describe("api", () => {
     await wails.api.refreshCard("board-1", "dev/web#12");
     await wails.api.cardContext("board-1", "dev/web#12");
     await wails.api.addRepositoryToBoard("board-1", choice);
+    await wails.api.setReviewInstructions("repo-1", "Look at the migrations.");
+    await wails.api.refreshPullRequests();
+    await wails.api.setReviewFilters({
+      boardId: "",
+      repositoryId: "repo-1",
+      authorsInclude: [],
+      authorsExclude: ["dependabot"],
+      labelsInclude: [],
+      labelsExclude: [],
+      pendingOnly: true,
+    });
+    await wails.api.startReview({
+      repositoryId: "repo-1",
+      number: 31,
+      instructions: "",
+      model: "claude-opus-5",
+      effort: "high",
+      mode: "publish",
+    });
+    await wails.api.askReviewAgain("review-1", "look at the tests");
+    await wails.api.decideFinding("review-1", 1, 2, "approved");
+    await wails.api.setFindingText("review-1", 1, 2, "The token is never cleared.");
+    await wails.api.setReviewSummary("review-1", 1, "Two things to fix.");
+    await wails.api.publishReview("review-1", "request_changes");
+    await wails.api.applyReview("review-1");
+    await wails.api.approveReview("review-1");
+    await wails.api.deleteReview("review-1");
+    await wails.api.readReviewArtifact("review-1", "review-1.md");
+    await wails.api.openReviewInEditor("review-1");
+    await wails.api.openFindingInEditor("review-1", 1, 2);
 
-    expect(Call.ByID).toHaveBeenCalledTimes(62);
+    expect(Call.ByID).toHaveBeenCalledTimes(77);
     const ids = vi.mocked(Call.ByID).mock.calls.map(([id]) => id);
-    expect(new Set(ids).size).toBe(62);
+    expect(new Set(ids).size).toBe(77);
   });
 
   it("opens a link in the browser of the desktop, never in the webview", async () => {

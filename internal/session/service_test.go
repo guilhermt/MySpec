@@ -921,6 +921,39 @@ func TestCloseForgetsTheTask(t *testing.T) {
 	}
 }
 
+func TestASessionExistsFromItsCreationUntilItIsThrownAway(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	exists := func(when string, want bool) {
+		t.Helper()
+
+		got, err := f.service.Exists(t.Context(), prd("t1"))
+		if err != nil {
+			t.Fatalf("Exists() %s = %v, want nil", when, err)
+		}
+		if got != want {
+			t.Errorf("Exists() %s = %v, want %v", when, got, want)
+		}
+	}
+
+	exists("before anything", false)
+	if _, ok := f.service.Summary(prd("t1")); ok {
+		t.Error("Exists() opened the session")
+	}
+	f.open(t, taskInfo(t, "t1"))
+	exists("once open", true)
+	// A closed session is still recorded, as one a previous run left is.
+	if err := f.service.Close(t.Context(), prd("t1")); err != nil {
+		t.Fatalf("Close() = %v, want nil", err)
+	}
+	exists("once closed", true)
+	if err := f.service.DiscardTask(t.Context(), "t1"); err != nil {
+		t.Fatalf("DiscardTask() = %v, want nil", err)
+	}
+	exists("once thrown away", false)
+}
+
 func TestSendValidation(t *testing.T) {
 	t.Parallel()
 
@@ -1803,4 +1836,41 @@ func TestSetChoiceOfASessionThatIsNotOpenIsNotFound(t *testing.T) {
 
 	err := f.service.SetChoice(t.Context(), prd("t1"), models.Choice{Model: models.Opus5, Effort: models.Low})
 	wantErrIs(t, err, session.ErrNotFound)
+}
+
+func TestStartOfAReviewOfAPullRequestMarksItAndSendsWhatTheUserWroteForThePass(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	info := atReview(taskInfo(t, "r1"))
+	f.start(t, info)
+	f.waitIdle(t, info.Key())
+
+	tr := f.transcript(t, info.Key())
+	if tr.Stage != session.ReviewStage {
+		t.Errorf("transcript stage = %q, want %q", tr.Stage, session.ReviewStage)
+	}
+	if len(tr.Entries) != 3 {
+		t.Fatalf("entries = %d, want the review marker, the prompt and its answer", len(tr.Entries))
+	}
+	wantMarker := &session.MarkerEntry{Type: session.MarkerReviewStarted}
+	if diff := cmp.Diff(wantMarker, tr.Entries[0].Marker); diff != "" {
+		t.Errorf("marker mismatch (-want +got):\n%s", diff)
+	}
+	// What the user wrote for the pass reads in the conversation as their first
+	// message, as the initial context of a task does.
+	wantUser := &session.UserEntry{Text: info.PassInstructions, Prompt: true}
+	if diff := cmp.Diff(wantUser, tr.Entries[1].User); diff != "" {
+		t.Errorf("user entry mismatch (-want +got):\n%s", diff)
+	}
+	rendered, _ := renderPrompt(prompts.StagePRReview, prompts.Vars{
+		ContextPath:      info.ContextPath,
+		External:         info.External,
+		Publish:          info.Publish,
+		Instructions:     info.Instructions,
+		PassInstructions: info.PassInstructions,
+	})
+	if got := tr.Entries[2].Assistant.Text; got != rendered {
+		t.Errorf("prompt sent = %q, want %q", got, rendered)
+	}
 }

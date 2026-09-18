@@ -24,8 +24,11 @@ import (
 	"github.com/guilhermt/myspec/internal/git/gittest"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
+	"github.com/guilhermt/myspec/internal/prreview"
+	"github.com/guilhermt/myspec/internal/pulls"
 	"github.com/guilhermt/myspec/internal/repository"
 	"github.com/guilhermt/myspec/internal/review"
+	"github.com/guilhermt/myspec/internal/reviewflow"
 	"github.com/guilhermt/myspec/internal/reviewmode"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/store"
@@ -213,6 +216,15 @@ func (g *fakeGitHub) fail(err error) {
 	g.resp, g.err = gh.Response{}, err
 }
 
+// reply makes every query answer with data from now on. One document answers
+// them all: a query reads the fields it asked for and ignores the rest.
+func (g *fakeGitHub) reply(data string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	g.resp, g.err = gh.Response{Data: json.RawMessage(data)}, nil
+}
+
 // fixture wires the services the way internal/app does, over an in-memory
 // database and a folder picker the test answers for.
 type fixture struct {
@@ -221,6 +233,7 @@ type fixture struct {
 	settings     *bindings.SettingsService
 	tasks        *bindings.TaskService
 	boardService *bindings.BoardService
+	reviewSvc    *bindings.ReviewService
 	repositories *repository.Service
 	boards       *board.Service
 	github       *fakeGitHub
@@ -233,6 +246,9 @@ type fixture struct {
 	worktrees    *worktree.Service
 	reviews      *review.Service
 	flow         *flow.Service
+	pullRequests *pulls.Service
+	prReviews    *prreview.Service
+	reviewFlow   *reviewflow.Service
 	dataDir      string
 	picker       *fakePicker
 	scanRoot     string // the folder the repository scan starts at
@@ -299,6 +315,7 @@ func newFixture(t *testing.T) *fixture {
 		Settings: st.Settings,
 		Identify: f.identify,
 		Counts:   func(id string) (int, int) { return f.taskSvc.Counts(id) },
+		Reviews:  func(id string) (int, int) { return f.prReviews.Counts(id) },
 		Log:      log,
 		NewID:    func() string { return testRepoID },
 		ScanRoot: f.scanRoot,
@@ -356,6 +373,35 @@ func newFixture(t *testing.T) *fixture {
 	})
 	t.Cleanup(f.flow.Close)
 
+	f.pullRequests = pulls.New(pulls.Deps{
+		GitHub:       f.github,
+		Repositories: f.repositories.List,
+		Settings:     st.Settings,
+		Log:          log,
+	})
+	t.Cleanup(f.pullRequests.Close)
+	f.prReviews = prreview.New(prreview.Deps{
+		Store:        st.Reviews,
+		DataDir:      f.dataDir,
+		Repositories: f.repositories.Get,
+		Log:          log,
+	})
+	f.reviewFlow = reviewflow.New(reviewflow.Deps{
+		Reviews:      f.prReviews,
+		Pulls:        f.pullRequests,
+		Sessions:     f.sessions,
+		Worktrees:    f.worktrees,
+		Repositories: f.repositories,
+		Boards:       f.boards,
+		Watch:        f.reviews,
+		GH:           gh.New(gh.Deps{Log: log}),
+		Log:          log,
+		RenderPrompt: func(stage prompts.Stage, vars prompts.Vars) (string, error) {
+			return prompts.Render(f.dataDir, stage, vars)
+		},
+	})
+	t.Cleanup(f.reviewFlow.Close)
+
 	f.models, err = models.New(t.Context(), st.Settings, log, func() {})
 	if err != nil {
 		t.Fatalf("models.New() = %v, want nil", err)
@@ -369,10 +415,21 @@ func newFixture(t *testing.T) *fixture {
 	f.repoService = bindings.NewRepositoryService(f.repositories, f.picker, log)
 	f.settings = bindings.NewSettingsService(f.theme, f.models, f.reviewModes, f.dataDir, log)
 	f.tasks = bindings.NewTaskService(
-		f.taskSvc, f.sessions, f.flow, f.models, f.reviewModes, f.repositories, f.boards, f.editor.open, log,
+		f.taskSvc, f.sessions, f.flow, f.models, f.reviewModes, f.repositories, f.boards, f.editor.open,
+		f.isReview, log,
 	)
 	f.boardService = bindings.NewBoardService(f.boards, log)
+	f.reviewSvc = bindings.NewReviewService(
+		f.reviewFlow, f.prReviews, f.pullRequests, f.worktrees, f.editor.open, log,
+	)
 	return f
+}
+
+// isReview says whether an id names a review of a pull request, the way
+// internal/app tells the conversation of a review from the one of a task.
+func (f *fixture) isReview(id string) bool {
+	_, ok := f.prReviews.Get(id)
+	return ok
 }
 
 // identify is the Identifier of the fixture: a clone the test registered
@@ -573,6 +630,12 @@ func (f *fixture) load(t *testing.T) {
 	if err := f.worktrees.Sync(t.Context(), ids); err != nil {
 		t.Fatalf("worktrees.Sync() = %v, want nil", err)
 	}
+	if err := f.pullRequests.Sync(t.Context()); err != nil {
+		t.Fatalf("pulls.Sync() = %v, want nil", err)
+	}
+	if err := f.prReviews.Sync(t.Context()); err != nil {
+		t.Fatalf("prreview.Sync() = %v, want nil", err)
+	}
 	f.flow.Sync(t.Context())
 }
 
@@ -656,10 +719,12 @@ func (f *fixture) taskArtifacts(id string) task.Artifacts {
 
 // snapshot is the same state internal/app publishes.
 func (f *fixture) snapshot() bindings.State {
+	repositories := bindings.FromRepositories(
+		f.repositories.List(), f.repositories.Missing, f.taskSvc.Counts, f.prReviews.Counts,
+		f.repositories.Cloning,
+	)
 	return bindings.State{
-		Repositories: bindings.FromRepositories(
-			f.repositories.List(), f.repositories.Missing, f.taskSvc.Counts, f.repositories.Cloning,
-		),
+		Repositories:      repositories,
 		RepositoryFilter:  f.repositories.Filter(),
 		Theme:             string(f.theme.Preference()),
 		SystemDark:        f.theme.SystemDark(),
@@ -676,8 +741,30 @@ func (f *fixture) snapshot() bindings.State {
 			f.boards.List(), f.boards.Stored, f.boards.Reading,
 			f.repositories.List(), f.repositories.Missing, f.taskSvc.CardTasks(),
 		),
+		ReviewCenter: bindings.FromReviewCenter(
+			f.pullRequests.Readings(), f.pullRequests.Reading(), f.pullRequests.ReadAt(),
+			f.pullRequests.Viewer(), f.pullRequests.Filters(), repositories, nil,
+			f.prReviews.ActiveOf, f.boards.CardOfPullRequest,
+		),
+		Reviews: bindings.FromReviews(f.reviewStates(), nil, repositories),
+		ReviewHistory: bindings.FromArchivedReviews(
+			f.prReviews.ListArchived(), f.prReviews.Passes, repositories,
+		),
 		CloneFolder: f.repositories.CloneFolder(),
 	}
+}
+
+// reviewStates is what the app knows about every active review, the way
+// internal/app reads it for the snapshot.
+func (f *fixture) reviewStates() []reviewflow.State {
+	list := f.prReviews.List()
+	states := make([]reviewflow.State, 0, len(list))
+	for _, stored := range list {
+		if state, ok := f.reviewFlow.State(stored.ID); ok {
+			states = append(states, state)
+		}
+	}
+	return states
 }
 
 // logged reports whether a record with the given message was written.
@@ -697,6 +784,92 @@ func (f *fixture) logged(t *testing.T, msg string) bool {
 		}
 	}
 	return false
+}
+
+// seedReview registers a review of dev/web#7 with the report of its first pass
+// recorded, without the conversation and the worktree a real one goes through:
+// what drives a review belongs to internal/reviewflow.
+func (f *fixture) seedReview(t *testing.T, repositoryID string) prreview.Review {
+	t.Helper()
+
+	created, err := f.prReviews.Create(t.Context(), prreview.CreateParams{
+		RepositoryID: repositoryID,
+		Number:       7,
+		Title:        "Add the login screen",
+		Author:       "alice",
+		URL:          "https://github.com/dev/web/pull/7",
+		HeadBranch:   "login",
+		BaseBranch:   "main",
+		HeadCommit:   "abc123",
+		Mode:         prreview.ModePublish,
+	})
+	if err != nil {
+		t.Fatalf("prreview.Create() = %v, want nil", err)
+	}
+	if _, err = f.prReviews.AskPass(t.Context(), created.ID, 1, "Look at the error handling."); err != nil {
+		t.Fatalf("AskPass() = %v, want nil", err)
+	}
+	report := prreview.Report{
+		Pass:    1,
+		Summary: "Two things to look at.",
+		Findings: []prreview.ParsedFinding{
+			{Number: 1, Path: "main.go", Line: 12, Text: "Handle the error."},
+			{Number: 2, Text: "The pull request has no tests."},
+		},
+	}
+	if _, _, err = f.prReviews.RecordReport(t.Context(), created.ID, report, "abc123"); err != nil {
+		t.Fatalf("RecordReport() = %v, want nil", err)
+	}
+	// The report on disk is what the agent wrote and the panel reads back.
+	if err = os.WriteFile(created.ReportPath(1), []byte("# Review 1\n"), 0o600); err != nil {
+		t.Fatalf("WriteFile(%s) = %v, want nil", created.ReportPath(1), err)
+	}
+	return created
+}
+
+// seedWorktree registers a worktree for an item, the way a start would leave
+// it, so that what opens the editor has a folder to open.
+func (f *fixture) seedWorktree(t *testing.T, itemID, path string) {
+	t.Helper()
+
+	wt := worktree.Worktree{TaskID: itemID, RepoPath: f.dataDir, Path: path, CreatedAt: time.Now().UTC()}
+	if err := f.store.Worktrees.Insert(t.Context(), wt); err != nil {
+		t.Fatalf("Insert(worktree) = %v, want nil", err)
+	}
+	if err := f.worktrees.Sync(t.Context(), []string{itemID}); err != nil {
+		t.Fatalf("worktrees.Sync() = %v, want nil", err)
+	}
+}
+
+// reviewOf returns the review with the given id from the current state,
+// failing the test when the state does not hold it.
+func (f *fixture) reviewOf(t *testing.T, id string) bindings.ReviewSummary {
+	t.Helper()
+
+	for _, summary := range f.state.GetState().Reviews {
+		if summary.ID == id {
+			return summary
+		}
+	}
+	t.Fatalf("review %s is not in the state", id)
+	return bindings.ReviewSummary{}
+}
+
+// waitReviewCenter waits until a reading of the pull requests has landed,
+// failing the test when none does in time.
+func (f *fixture) waitReviewCenter(t *testing.T) bindings.ReviewCenter {
+	t.Helper()
+
+	deadline := time.Now().Add(pollTimeout)
+	for time.Now().Before(deadline) {
+		center := f.state.GetState().ReviewCenter
+		if center.ReadAt != "" {
+			return center
+		}
+		time.Sleep(pollStep)
+	}
+	t.Fatal("the pull requests were never read")
+	return bindings.ReviewCenter{}
 }
 
 // testBoardID is the id of the board registerBoard registers.

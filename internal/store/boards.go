@@ -203,11 +203,13 @@ func (r *BoardsRepo) SaveFailure(ctx context.Context, boardID string, f board.Fa
 func applyLinks(ctx context.Context, tx *sql.Tx, boardID string, links []board.Link) error {
 	const link = `UPDATE repositories SET board_id = ? WHERE id = ?`
 	const path = `UPDATE repositories SET path = ? WHERE id = ? AND path = ''`
-	const insert = `INSERT INTO repositories (` + repositoryColumns + `) VALUES (?, ?, ?, ?, ?, ?)`
+	const insert = `INSERT INTO repositories (` + repositoryColumns + `) VALUES (?, ?, ?, ?, ?, ?, ?)`
 
 	for _, l := range links {
 		if l.RepositoryID == "" {
-			_, err := tx.ExecContext(ctx, insert, l.NewID, l.Owner, l.Name, l.Path, boardID, formatTime(l.CreatedAt))
+			// A repository the board registers starts without review instructions.
+			_, err := tx.ExecContext(ctx, insert,
+				l.NewID, l.Owner, l.Name, l.Path, boardID, "", formatTime(l.CreatedAt))
 			if err != nil {
 				return fmt.Errorf("insert repository %s/%s of board %s: %w", l.Owner, l.Name, boardID, err)
 			}

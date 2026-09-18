@@ -87,6 +87,15 @@ type TaskInfo struct {
 	// PR sessions of a task created from a card.
 	Card          string
 	CardReference string
+
+	// The review of a pull request that comes from no task.
+	ContextPath  string // the single document the prompts read in place of the PRD and the tech spec
+	External     bool   // the pull request comes from no task of the product
+	Publish      bool   // external only: the findings are published on GitHub, not applied
+	Instructions string // the fixed review instructions of the repository
+	// PassInstructions is what the user wrote for the pass that opens the
+	// session, which reads in the conversation as their first message.
+	PassInstructions string
 }
 
 // Key is the session this task and stage are held under.
@@ -361,6 +370,10 @@ func (s *Service) Start(ctx context.Context, t TaskInfo, restarted bool) error {
 	}
 	marker := MarkerEntry{Type: MarkerStageStarted, Stage: t.Stage, Restarted: restarted}
 	switch {
+	case t.Stage == ReviewStage:
+		// The review of a pull request has no stage to announce: the item is the
+		// review itself.
+		marker = MarkerEntry{Type: MarkerReviewStarted}
 	case t.Prompt == prompts.StageStepReview:
 		marker = MarkerEntry{Type: MarkerStepReviewStarted, Step: t.Step}
 	case t.Step > 0:
@@ -369,8 +382,9 @@ func (s *Service) Start(ctx context.Context, t TaskInfo, restarted bool) error {
 	s.appendLocked(ctx, r, Entry{Kind: KindMarker, Marker: &marker}, n)
 
 	// Only the prompts that open a task, the PRD and the One-Shot planning,
-	// carry what the user wrote when they created the task, and only the prompt
-	// of a reviewer what the implementer said last; every other stage reads the
+	// carry what the user wrote when they created the task, the prompt of a
+	// review pass what the user wrote for the pass, and the prompt of a
+	// reviewer what the implementer said last; every other stage reads the
 	// artifacts of the ones before it. What the implementer said reaches the
 	// reviewer from the app, and reads as such.
 	entry := &UserEntry{Prompt: true}
@@ -379,6 +393,8 @@ func (s *Service) Start(ctx context.Context, t TaskInfo, restarted bool) error {
 		entry.Text = t.InitialContext
 	case prompts.StageStepReview:
 		entry.Text, entry.App = t.ImplementerReply, true
+	case prompts.StagePRReview:
+		entry.Text = t.PassInstructions
 	default:
 		// Every other stage starts with an empty prompt entry.
 	}
@@ -932,6 +948,26 @@ func (s *Service) Summaries() map[Key]Summary {
 		out[k] = r.summary()
 	}
 	return out
+}
+
+// Exists reports whether a session was ever created for a key: open now, or
+// only recorded, as one a previous run of the app left behind is. Unlike Open,
+// it never creates one.
+func (s *Service) Exists(ctx context.Context, k Key) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if _, ok := s.runs[k]; ok {
+		return true, nil
+	}
+	_, err := s.sessions.Get(ctx, k.TaskID, k.Stage)
+	switch {
+	case errors.Is(err, ErrNotFound):
+		return false, nil
+	case err != nil:
+		return false, err
+	}
+	return true, nil
 }
 
 // Close stops the process of one session, quickly, and forgets it. Used when

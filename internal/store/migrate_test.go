@@ -26,7 +26,8 @@ import (
 // brought the PR stage, modelsVersion the one that brought the models,
 // reviewModeVersion the one that brought the review mode, modeVersion the one
 // that brought the mode of a task, boardsVersion the one that brought the
-// boards, and latestVersion the version the embedded migrations end at.
+// boards, itemsVersion the one that brought the items and the reviews, and
+// latestVersion the version the embedded migrations end at.
 const (
 	stagesVersion     = 3
 	commitsVersion    = 5
@@ -35,7 +36,8 @@ const (
 	reviewModeVersion = 10
 	modeVersion       = 11
 	boardsVersion     = 14
-	latestVersion     = 14
+	itemsVersion      = 15
+	latestVersion     = 16
 )
 
 // upgradeTime is the instant the repositories of the fake upgrades are stamped
@@ -296,7 +298,7 @@ func TestMigrateGivesTheWorktreesOfAnOlderDatabaseNoBaseAndAddsThePRRuns(t *test
 
 	// The rule is applied again for a worktree created before the column, so
 	// an empty base is what it has to read back as.
-	const query = `SELECT base FROM worktrees WHERE task_id = 'task-1'`
+	const query = `SELECT base FROM worktrees WHERE item_id = 'task-1'`
 	var base string
 	if err := db.QueryRowContext(t.Context(), query).Scan(&base); err != nil {
 		t.Fatalf("query worktree: %v", err)
@@ -490,6 +492,178 @@ func TestTheBoardsMigrationKeepsTheRepositoriesWithoutABoardAndTheTasks(t *testi
 	}
 }
 
+func TestTheItemsMigrationCarriesTheTaskAndWhatBelongsToIt(t *testing.T) {
+	t.Parallel()
+
+	db := openAt(t, itemsVersion-1)
+	seedRepositoryAndTask(t, db)
+	seedItemRecords(t, db, "task-1", "task_id")
+
+	if err := migrate(t.Context(), db, slog.New(slog.DiscardHandler), carryOver(t)); err != nil {
+		t.Fatalf("migrate() = %v, want nil", err)
+	}
+
+	if got := readOne(t, db, `SELECT count(*) FROM items WHERE id = 'task-1' AND kind = 'task'`); got != "1" {
+		t.Errorf("items of the task = %s, want 1", got)
+	}
+	if got := readOne(t, db, `SELECT count(*) FROM items`); got != "1" {
+		t.Errorf("items = %s, want one row per task", got)
+	}
+	for _, count := range itemCounts(t, db, "task-1") {
+		if count.got != count.want {
+			t.Errorf("%s = %d, want %d carried over to the item", count.subject, count.got, count.want)
+		}
+	}
+	if got := readOne(t, db, `SELECT stage FROM sessions WHERE id = 'sess-2'`); got != "implementation" {
+		t.Errorf("the stage of the second session = %q, want %q", got, "implementation")
+	}
+}
+
+func TestATaskTakesItsItemAndWhatBelongsToItWhenItGoes(t *testing.T) {
+	t.Parallel()
+
+	db := openAt(t, latestVersion)
+	seedRepositoryAndTask(t, db)
+	seedItemRecords(t, db, "task-1", "item_id")
+
+	if got := readOne(t, db, `SELECT kind FROM items WHERE id = 'task-1'`); got != "task" {
+		t.Errorf("the item of the task is a %q, want a task", got)
+	}
+
+	if _, err := db.ExecContext(t.Context(), `DELETE FROM tasks WHERE id = 'task-1'`); err != nil {
+		t.Fatalf("delete task: %v", err)
+	}
+
+	if got := readOne(t, db, `SELECT count(*) FROM items`); got != "0" {
+		t.Errorf("items left = %s, want the item of the task gone with it", got)
+	}
+	for _, count := range itemCounts(t, db, "task-1") {
+		if count.got != 0 {
+			t.Errorf("%s = %d, want it gone by cascade", count.subject, count.got)
+		}
+	}
+}
+
+func TestAReviewTakesItsItemAndWhatBelongsToItWhenItGoes(t *testing.T) {
+	t.Parallel()
+
+	db := openAt(t, latestVersion)
+	seedRepositoryAndTask(t, db)
+	const insertReview = `INSERT INTO reviews
+		(id, repository_id, number, title, author, url, head_branch, base_branch, mode, artifacts_dir,
+			created_at, updated_at)
+		VALUES ('review-1', 'repo-1', 7, 'Read the boards', 'colleague', 'https://github.com/acme/api/pull/7',
+			'boards', 'main', 'publish', '/data/reviews/acme/api/pr-7-abcdef12',
+			'2026-09-06T10:00:00Z', '2026-09-06T10:00:00Z')`
+	if _, err := db.ExecContext(t.Context(), insertReview); err != nil {
+		t.Fatalf("insert review: %v", err)
+	}
+	seedItemRecords(t, db, "review-1", "item_id")
+
+	if got := readOne(t, db, `SELECT kind FROM items WHERE id = 'review-1'`); got != "review" {
+		t.Errorf("the item of the review is a %q, want a review", got)
+	}
+
+	if _, err := db.ExecContext(t.Context(), `DELETE FROM reviews WHERE id = 'review-1'`); err != nil {
+		t.Fatalf("delete review: %v", err)
+	}
+
+	if got := readOne(t, db, `SELECT count(*) FROM items WHERE id = 'review-1'`); got != "0" {
+		t.Errorf("items of the review = %s, want the item gone with it", got)
+	}
+	for _, count := range itemCounts(t, db, "review-1") {
+		if count.got != 0 {
+			t.Errorf("%s = %d, want it gone by cascade", count.subject, count.got)
+		}
+	}
+}
+
+// seedRepositoryAndTask inserts the repository and the task the tests of the
+// items migration hang everything else on.
+func seedRepositoryAndTask(t *testing.T, db *sql.DB) {
+	t.Helper()
+
+	const insertRepository = `INSERT INTO repositories (id, owner, name, path, created_at)
+		VALUES ('repo-1', 'acme', 'api', '/code/api', '2026-09-06T10:00:00Z')`
+	const insertTask = `INSERT INTO tasks
+		(id, repository_id, name, initial_context, stage, artifacts_dir, created_at, updated_at, revisiting)
+		VALUES ('task-1', 'repo-1', 'one', 'context', 'implementation', '/data/x',
+			'2026-09-06T10:00:00Z', '2026-09-06T10:00:00Z', 0)`
+	for _, stmt := range []string{insertRepository, insertTask} {
+		if _, err := db.ExecContext(t.Context(), stmt); err != nil {
+			t.Fatalf("seed: %v", err)
+		}
+	}
+}
+
+// seedItemRecords fills what belongs to an item: two sessions with an entry
+// each, a worktree and a situation. column is what the owner is called in this
+// version of the schema.
+func seedItemRecords(t *testing.T, db *sql.DB, itemID, column string) {
+	t.Helper()
+
+	statements := []struct {
+		subject string
+		sql     string
+	}{
+		{"first session", `INSERT INTO sessions (id, ` + column + `, stage, created_at, updated_at)
+			VALUES ('sess-1', ?, 'prd', '2026-09-06T10:00:00Z', '2026-09-06T10:00:00Z')`},
+		{"second session", `INSERT INTO sessions (id, ` + column + `, stage, created_at, updated_at)
+			VALUES ('sess-2', ?, 'implementation', '2026-09-06T10:00:00Z', '2026-09-06T10:00:00Z')`},
+		{"first entry", `INSERT INTO transcript_entries (id, session_id, seq, turn_id, kind, payload, created_at)
+			VALUES ('entry-1', 'sess-1', 1, 'turn-1', 'user', '{}', '2026-09-06T10:00:00Z')`},
+		{"second entry", `INSERT INTO transcript_entries (id, session_id, seq, turn_id, kind, payload, created_at)
+			VALUES ('entry-2', 'sess-2', 1, 'turn-2', 'user', '{}', '2026-09-06T10:00:00Z')`},
+		{"worktree", `INSERT INTO worktrees (` + column + `, repo_path, path, branch, base, created_at)
+			VALUES (?, '/code/api', '/data/worktrees/acme/api/one', 'one', 'origin/main', '2026-09-06T10:00:00Z')`},
+		{"situation", `INSERT INTO situations (` + column + `, place, id, kind, started_at)
+			VALUES (?, 'stage:implementation', 'sit-1', 'reply', '2026-09-06T10:00:00Z')`},
+	}
+	for _, statement := range statements {
+		args := []any{}
+		if strings.Contains(statement.sql, "?") {
+			args = append(args, itemID)
+		}
+		if _, err := db.ExecContext(t.Context(), statement.sql, args...); err != nil {
+			t.Fatalf("insert %s: %v", statement.subject, err)
+		}
+	}
+}
+
+// itemCount is how many rows of one table belong to an item, and how many the
+// test wants there.
+type itemCount struct {
+	subject   string
+	got, want int
+}
+
+// itemCounts counts what belongs to an item in the schema the items migration
+// left: its sessions, their entries, its worktree and its situations.
+func itemCounts(t *testing.T, db *sql.DB, itemID string) []itemCount {
+	t.Helper()
+
+	queries := []struct {
+		subject string
+		query   string
+		want    int
+	}{
+		{"sessions", `SELECT count(*) FROM sessions WHERE item_id = ?`, 2},
+		{"entries", `SELECT count(*) FROM transcript_entries
+			WHERE session_id IN (SELECT id FROM sessions WHERE item_id = ?)`, 2},
+		{"worktrees", `SELECT count(*) FROM worktrees WHERE item_id = ?`, 1},
+		{"situations", `SELECT count(*) FROM situations WHERE item_id = ?`, 1},
+	}
+	counts := make([]itemCount, 0, len(queries))
+	for _, q := range queries {
+		var got int
+		if err := db.QueryRowContext(t.Context(), q.query, itemID).Scan(&got); err != nil {
+			t.Fatalf("count %s: %v", q.subject, err)
+		}
+		counts = append(counts, itemCount{subject: q.subject, got: got, want: q.want})
+	}
+	return counts
+}
+
 // seedLegacyTask inserts a task the way a version with workspaces stored it.
 // An empty repoPath is a task at the root of its workspace, an empty archivedAt
 // a task that is still active.
@@ -673,7 +847,7 @@ func TestTheRepositoriesMigrationTiesEveryTaskToItsRepository(t *testing.T) {
 	if got := readOne(t, db, `SELECT status FROM pr_runs WHERE task_id = 'task-1'`); got != "closed" {
 		t.Errorf("the pr run is %q, want %q", got, "closed")
 	}
-	if got := readOne(t, db, `SELECT path FROM worktrees WHERE task_id = 'task-1'`); got == "" {
+	if got := readOne(t, db, `SELECT path FROM worktrees WHERE item_id = 'task-1'`); got == "" {
 		t.Error("the worktree of the task is gone, want it carried over")
 	}
 	const tableQuery = `SELECT count(*) FROM sqlite_master WHERE name IN ('recent_workspaces')`

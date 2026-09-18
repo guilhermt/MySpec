@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -83,4 +84,90 @@ func stateOf(state string) State {
 	default:
 		return State("")
 	}
+}
+
+// ReviewEvent is the verdict a review is published with.
+type ReviewEvent string
+
+// The verdicts GitHub takes for a review.
+const (
+	EventApprove        ReviewEvent = "APPROVE"
+	EventRequestChanges ReviewEvent = "REQUEST_CHANGES"
+	EventComment        ReviewEvent = "COMMENT"
+)
+
+// ReviewComment is one inline comment of a review, on a line of the new side
+// of the diff.
+type ReviewComment struct {
+	Path string `json:"path"`
+	Line int    `json:"line"`
+	Side string `json:"side"` // always "RIGHT"
+	Body string `json:"body"`
+}
+
+// ReviewInput is a review as the GitHub API takes it.
+type ReviewInput struct {
+	CommitID string          `json:"commit_id"`
+	Event    ReviewEvent     `json:"event"`
+	Body     string          `json:"body"`
+	Comments []ReviewComment `json:"comments"` // never nil: an empty list is []
+}
+
+// CreateReview publishes a review on a pull request and answers with its URL.
+// The review travels as JSON on the stdin of gh: a body and its comments are
+// more than a command line takes.
+func (r *Runner) CreateReview(ctx context.Context, owner, name string, number int, in ReviewInput) (string, error) {
+	if in.Comments == nil {
+		in.Comments = []ReviewComment{}
+	}
+	body, err := json.Marshal(in)
+	if err != nil {
+		return "", fmt.Errorf("gh api reviews: %w", err)
+	}
+
+	endpoint := fmt.Sprintf("repos/%s/%s/pulls/%d/reviews", owner, name, number)
+	out, err := r.RunInput(ctx, "", string(body), "api", "--method", "POST", endpoint, "--input", "-")
+	if err != nil {
+		return "", authOr(err)
+	}
+
+	var answer struct {
+		HTMLURL string `json:"html_url"`
+	}
+	if err := json.Unmarshal([]byte(out), &answer); err != nil {
+		return "", fmt.Errorf("gh api %s: %w", endpoint, err)
+	}
+	return answer.HTMLURL, nil
+}
+
+// PRDiff is the unified diff of a pull request as it is now.
+func (r *Runner) PRDiff(ctx context.Context, owner, name string, number int) (string, error) {
+	return r.Run(ctx, "", "pr", "diff", strconv.Itoa(number), "--repo", owner+"/"+name)
+}
+
+// authOr turns a gh that refused for lack of a login into
+// ErrNotAuthenticated, and leaves every other failure as it is.
+func authOr(err error) error {
+	_, settled := answerOf(err)
+	return settled
+}
+
+// answerOf reads what every command shares about a failed gh. A failure that
+// is no answer of gh (it did not run, or it was cancelled or timed out) comes
+// back as it is, and a refusal for lack of a login as ErrNotAuthenticated,
+// both with a nil *Error: there is nothing more to read in them. Any other
+// failure is an answer of gh, which comes back as its *Error next to err, for
+// the caller to read further.
+func answerOf(err error) (*Error, error) {
+	var ghErr *Error
+	if !errors.As(err, &ghErr) {
+		return nil, err
+	}
+	if errors.Is(ghErr.Err, context.Canceled) || errors.Is(ghErr.Err, context.DeadlineExceeded) {
+		return nil, err
+	}
+	if ghErr.ExitCode == exitAuth || strings.Contains(ghErr.Output, "gh auth login") {
+		return nil, fmt.Errorf("%w: %w", ErrNotAuthenticated, ghErr)
+	}
+	return ghErr, err
 }

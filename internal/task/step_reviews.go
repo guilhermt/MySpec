@@ -8,6 +8,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/guilhermt/myspec/internal/frontmatter"
 )
 
 // StepReviewsDirName is the folder of the reports of the agent review of the
@@ -98,7 +100,7 @@ func readStepReport(path string, number, pass int) (ReviewReport, bool) {
 		return ReviewReport{}, false
 	}
 
-	fields, _ := splitFrontMatter(string(content))
+	fields, _ := frontmatter.Split(string(content))
 	status := strings.TrimSpace(fields["status"])
 	if status != cleanStatus && status != changesStatus {
 		return ReviewReport{}, false

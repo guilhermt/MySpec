@@ -6,8 +6,11 @@ import {
   addRepositoryToBoard,
   answerPermission,
   answerQuestion,
+  applyReview,
   approvePR,
+  approveReview,
   approveStep,
+  askReviewAgain,
   backToStage,
   browseRepository,
   cardContext,
@@ -19,6 +22,8 @@ import {
   closeTask,
   continueStage,
   createTask,
+  decideFinding,
+  deleteReview,
   deleteTask,
   discardDraft,
   discardStage,
@@ -27,15 +32,19 @@ import {
   loadTranscript,
   openExternal,
   openFileInEditor,
+  openFindingInEditor,
   openInEditor,
   openPR,
+  openReviewInEditor,
   pause,
   previewBoard,
   previewEditBoard,
   previewRemoveBoard,
+  publishReview,
   refreshBoard,
   refreshCard,
   refreshPR,
+  refreshPullRequests,
   removeBoard,
   removePending,
   removeRepository,
@@ -45,13 +54,18 @@ import {
   retryStep,
   reviewAgain,
   reviewStepMyself,
+  saveFindingText,
+  saveReviewSummary,
   scanRepositories,
   sendMessage,
   setRepositoryFilter,
+  setReviewFilters,
+  setReviewInstructions,
   setReviewMode,
   setReviewModeDefault,
   setStepReviewMode,
   setTheme,
+  startReview,
   updateBoard,
 } from "@/store/actions";
 import { useAppStore } from "@/store/app-store";
@@ -60,6 +74,7 @@ import {
   makeBoardPreview,
   makeBoardRepositoryOption,
   makeEntry,
+  makeReviewFilters,
   makeTranscript,
 } from "@/test/wails-mock";
 
@@ -413,5 +428,110 @@ describe("loadTranscript", () => {
     await loadTranscript("task-1", "prd");
 
     expect(useAppStore.getState().error).toBe("no such task");
+  });
+});
+
+describe("review actions reported in the banner", () => {
+  it("delegate to the matching binding", async () => {
+    const filters = makeReviewFilters({ pendingOnly: true });
+
+    await refreshPullRequests();
+    await setReviewFilters(filters);
+    await decideFinding("review-1", 1, 2, "approved");
+    await saveFindingText("review-1", 1, 2, "The token is never cleared.");
+    await saveReviewSummary("review-1", 1, "Two things to fix.");
+    await applyReview("review-1");
+    await approveReview("review-1");
+    await openReviewInEditor("review-1");
+    await openFindingInEditor("review-1", 1, 2);
+
+    expect(api.refreshPullRequests).toHaveBeenCalledOnce();
+    expect(api.setReviewFilters).toHaveBeenCalledWith(filters);
+    expect(api.decideFinding).toHaveBeenCalledWith("review-1", 1, 2, "approved");
+    expect(api.setFindingText).toHaveBeenCalledWith(
+      "review-1",
+      1,
+      2,
+      "The token is never cleared.",
+    );
+    expect(api.setReviewSummary).toHaveBeenCalledWith("review-1", 1, "Two things to fix.");
+    expect(api.applyReview).toHaveBeenCalledWith("review-1");
+    expect(api.approveReview).toHaveBeenCalledWith("review-1");
+    expect(api.openReviewInEditor).toHaveBeenCalledWith("review-1");
+    expect(api.openFindingInEditor).toHaveBeenCalledWith("review-1", 1, 2);
+    expect(useAppStore.getState().error).toBeNull();
+  });
+
+  it("report a failed review action in the banner", async () => {
+    vi.mocked(api.applyReview).mockRejectedValueOnce(new Error("the worktree is dirty"));
+
+    await applyReview("review-1");
+
+    expect(useAppStore.getState().error).toBe("the worktree is dirty");
+  });
+
+  it("answer whether the filters were stored", async () => {
+    const filters = makeReviewFilters({ pendingOnly: true });
+
+    expect(await setReviewFilters(filters)).toBe(true);
+
+    vi.mocked(api.setReviewFilters).mockRejectedValueOnce(new Error("disk full"));
+
+    expect(await setReviewFilters(filters)).toBe(false);
+    expect(useAppStore.getState().error).toBe("disk full");
+  });
+
+  it("say what the deletion of a review left behind", async () => {
+    const leftover = {
+      path: "/home/dev/worktrees/dev/web/pr_31",
+      branch: "",
+      error: "the worktree is busy",
+    };
+    vi.mocked(api.deleteReview).mockResolvedValueOnce({ leftover });
+
+    await deleteReview("review-1");
+
+    expect(api.deleteReview).toHaveBeenCalledWith("review-1");
+    expect(useAppStore.getState().leftover).toEqual(leftover);
+  });
+
+  it("say nothing when the deletion of a review left nothing behind", async () => {
+    await deleteReview("review-1");
+
+    expect(useAppStore.getState().leftover).toBeNull();
+  });
+});
+
+// The dialog or the panel that asked shows the refusal where the user is, so
+// these reject instead of filling the banner.
+describe("review actions shown in place", () => {
+  const request = {
+    repositoryId: "repo-1",
+    number: 31,
+    instructions: "",
+    model: "claude-opus-5",
+    effort: "high",
+    mode: "publish",
+  };
+
+  it("delegate to the matching binding and answer what it says", async () => {
+    vi.mocked(api.startReview).mockResolvedValueOnce("review-9");
+
+    expect(await startReview(request)).toBe("review-9");
+    await askReviewAgain("review-1", "look at the tests");
+    await publishReview("review-1", "request_changes");
+    await setReviewInstructions("repo-1", "Look at the migrations.");
+
+    expect(api.startReview).toHaveBeenCalledWith(request);
+    expect(api.askReviewAgain).toHaveBeenCalledWith("review-1", "look at the tests");
+    expect(api.publishReview).toHaveBeenCalledWith("review-1", "request_changes");
+    expect(api.setReviewInstructions).toHaveBeenCalledWith("repo-1", "Look at the migrations.");
+  });
+
+  it("reject instead of using the banner", async () => {
+    vi.mocked(api.publishReview).mockRejectedValueOnce(new Error("gh is not authenticated"));
+
+    await expect(publishReview("review-1", "approve")).rejects.toThrow("gh is not authenticated");
+    expect(useAppStore.getState().error).toBeNull();
   });
 });

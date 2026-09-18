@@ -106,9 +106,20 @@ type Prompt struct {
 	Placeholders []string
 }
 
+// contextPathPlaceholder names the context document of a review of a pull
+// request without a task. It is no placeholder of a prompt: it appears only in
+// the notes the app appends, where it is replaced along with
+// baseBranchPlaceholder, which is one and is replaced there a second time.
+const contextPathPlaceholder = "{{context_path}}"
+
 // PushInstruction is what the app puts in the commit prompt when the commit
 // belongs to a pull request that already exists.
 const PushInstruction = "After committing, push this branch to `origin`, so the commit reaches the pull request. Push only this branch, and never force-push."
+
+// DetachedPushInstruction is what the app puts in the commit prompt when the
+// commit belongs to a pull request whose worktree is on a detached HEAD; %s is
+// the branch of the pull request.
+const DetachedPushInstruction = "After committing, push the commit to the pull request with `git push origin HEAD:refs/heads/%s`: this worktree is on a detached HEAD, so there is no local branch to push. Never force-push."
 
 // StagedInstruction is what {{what_to_commit}} becomes when the user reviewed
 // the change by staging it.
@@ -133,6 +144,18 @@ const whatToCommitHeading = "\n\n## What to commit\n\n"
 // replyHeading opens the section every step review prompt ends with: what the
 // implementer said last.
 const replyHeading = "\n\n## The implementer's last response\n\n"
+
+// The headings of the sections the app appends to the prompt of the review of
+// a pull request: what it is when the pull request comes from no task, how the
+// report reads, what happens to the findings, and the instructions.
+const (
+	externalHeading         = "\n\n## Pull request without a task\n\n"
+	findingsFormatHeading   = "\n\n## Findings format\n\n"
+	publishHeading          = "\n\n## Publishing\n\n"
+	applyHeading            = "\n\n## Applying\n\n"
+	instructionsHeading     = "\n\n## Review instructions\n\n"
+	passInstructionsHeading = "\n\n## Instructions for this pass\n\n"
+)
 
 // oneShotHeading opens the section Render appends to the prompts that read the
 // documents of a task, when the task is One-Shot.
@@ -171,6 +194,22 @@ const prCardNote = "This task was created from a card of the team's board. Read 
 	"the description: it says what the change is for, and the description should make sense to someone who " +
 	"reads the card. Start the body of the draft with the line `Closes {{card_reference}}`, alone on its line, " +
 	"so that the pull request is linked to the card. Never mention the board otherwise."
+
+// externalNote is what the prompt of the review of a pull request says when
+// the pull request comes from no task of the product.
+const externalNote = "This pull request does not come from a task of this product: there is no PRD and no technical specification. Every reference in this prompt to the PRD or the technical specification means the single document `{{context_path}}`, which holds the title and the description of the pull request and, when the pull request is linked to a card of the team's board, the card and its epic. That document is the criteria: what the card and the description say the change is for is what the code must do. When the document has no card, review against the description, the instructions below and the conventions the repository documents. The worktree is on a detached HEAD at the head of the pull request; the base is `{{base_branch}}`."
+
+// findingsFormatNote is how the report of such a review has to read, so that
+// the app can list its findings.
+const findingsFormatNote = "The app reads the report, so its body must follow this format exactly, and it replaces what this prompt says above about the body of the report. After the header, write a summary of what you reviewed and what you found, as plain Markdown without any `## Findings` heading in it. When there are findings, follow the summary with a line `## Findings` and then one block per finding:\n\n```markdown\n### 1\nLocation: path/from/the/repository/root.go:123\n\n[what is wrong and what to do about it]\n```\n\n`Location` is either `path:line`, where the line is a line of the **new** version of a file and is part of the diff of the pull request, or the word `general` for a finding with no such line: a missing test, a migration that was not written, a problem in a file the pull request does not touch, a problem on a line the pull request removed. Number the findings from 1. A report with `status: clean` has no `## Findings` section."
+
+// publishNote is what such a review does with its findings when the user
+// publishes them on GitHub.
+const publishNote = "The user decides on each finding in the app, may edit its text, and the app publishes the approved ones on GitHub as a review: each finding with a `path:line` location becomes a comment on that line, and the general ones go in the body after the summary. Write each finding as a comment a colleague reads on the pull request: self-contained, direct and respectful. This replaces what this prompt says above under \"What happens next\": after writing the report, say in one line what you found and stop. Never edit a file of the worktree, never commit and never push. When the user asks in the conversation for a finding to be added, changed or removed, rewrite the report of the current pass in place, keeping the numbers of the findings that did not change."
+
+// applyNote is what such a review does with its findings when the agent
+// applies them in the worktree.
+const applyNote = "The user decides on each finding in the app, and the app then sends you the findings they approved. This replaces the item-by-item decision in the conversation this prompt describes above: after writing the report, say in one line what you found and stop, and implement only what the app sends you as approved. When the user asks in the conversation for a finding to be added, changed or removed before that, rewrite the report of the current pass in place, keeping the numbers of the findings that did not change."
 
 // oneShotNote is what a prompt that reads the documents of a task says about
 // the document of a One-Shot task; "" for a prompt that reads none.
@@ -353,15 +392,35 @@ type Vars struct {
 
 	Card          string // PR only: the card of the task as Markdown (task.Card.Markdown); "" for a task without one
 	CardReference string // PR only: owner/name#number of the card
+
+	// ContextPath is the single document the review of a pull request that
+	// comes from no task reads in place of the PRD and the technical
+	// specification; "" for the review of the pull request of a task.
+	ContextPath  string
+	External     bool   // PR review only: the pull request comes from no task of the product
+	Publish      bool   // external only: the findings are published on GitHub, not applied
+	Instructions string // PR review only: the fixed review instructions of the repository
+	// PassInstructions is what the user wrote for this pass of a review of a
+	// pull request.
+	PassInstructions string
+	// PushRef is the branch a commit of a worktree on a detached HEAD is pushed
+	// to; commit only, with Push.
+	PushRef string
 }
 
 // pushInstruction is what {{push}} becomes: the instruction when the commit
-// belongs to a pull request, nothing when it does not.
-func pushInstruction(push bool) string {
-	if push {
+// belongs to a pull request, the one for a worktree on a detached HEAD when
+// the commit goes up without a local branch, nothing when the commit belongs
+// to no pull request.
+func pushInstruction(push bool, ref string) string {
+	switch {
+	case push && ref != "":
+		return fmt.Sprintf(DetachedPushInstruction, ref)
+	case push:
 		return PushInstruction
+	default:
+		return ""
 	}
-	return ""
 }
 
 // commitInstruction is what {{what_to_commit}} becomes: every change of the
@@ -382,8 +441,10 @@ func commitInstruction(all bool) string {
 // implementer said last. In a One-Shot task, the placeholders of the PRD, the
 // tech spec and the step file render the document, and the prompts that read
 // them always end with what the document stands for. The prompt of a pull
-// request of a task created from a card ends with the card. StageStep is the
-// exception: the step file is sent verbatim.
+// request of a task created from a card ends with the card, and the prompt of
+// the review of a pull request with what the review is about and the
+// instructions it runs with. StageStep is the exception: the step file is sent
+// verbatim.
 func Render(dataDir string, stage Stage, vars Vars) (string, error) {
 	if stage == StageStep {
 		raw, err := os.ReadFile(vars.StepPath)
@@ -401,6 +462,11 @@ func Render(dataDir string, stage Stage, vars Vars) (string, error) {
 	prdPath, techSpecPath, stepPath := vars.PRDPath, vars.TechSpecPath, vars.StepPath
 	if vars.OneShotPath != "" {
 		prdPath, techSpecPath, stepPath = vars.OneShotPath, vars.OneShotPath, vars.OneShotPath
+	}
+	// A review of a pull request that comes from no task reads one document in
+	// place of both; a task never has one, so the two never come together.
+	if vars.ContextPath != "" {
+		prdPath, techSpecPath = vars.ContextPath, vars.ContextPath
 	}
 
 	rendered := strings.NewReplacer(
@@ -420,7 +486,7 @@ func Render(dataDir string, stage Stage, vars Vars) (string, error) {
 		prNumberPlaceholder, vars.PRNumber,
 		prURLPlaceholder, vars.PRURL,
 		whatToCommitPlaceholder, commitInstruction(vars.CommitAll),
-		pushPlaceholder, pushInstruction(vars.Push),
+		pushPlaceholder, pushInstruction(vars.Push, vars.PushRef),
 	).Replace(text)
 
 	if !strings.Contains(text, initialContextPlaceholder) && vars.InitialContext != "" {
@@ -430,7 +496,7 @@ func Render(dataDir string, stage Stage, vars Vars) (string, error) {
 		rendered += whatToCommitHeading + commitInstruction(vars.CommitAll)
 	}
 	if !strings.Contains(text, pushPlaceholder) && vars.Push {
-		rendered += pushHeading + PushInstruction
+		rendered += pushHeading + pushInstruction(vars.Push, vars.PushRef)
 	}
 	if note := oneShotNote(stage); note != "" && vars.OneShotPath != "" {
 		rendered += oneShotHeading + strings.ReplaceAll(note, oneShotPathPlaceholder, vars.OneShotPath)
@@ -438,10 +504,47 @@ func Render(dataDir string, stage Stage, vars Vars) (string, error) {
 	if stage == StagePR && vars.Card != "" {
 		rendered += cardHeading + strings.ReplaceAll(prCardNote, "{{card_reference}}", vars.CardReference) + "\n\n" + vars.Card
 	}
+	if stage == StagePRReview {
+		rendered += reviewSections(vars)
+	}
 	// What the implementer said is never a placeholder: the prompt of a
 	// reviewer always ends with it.
 	if stage == StageStepReview {
 		rendered += replyHeading + vars.ImplementerReply
 	}
 	return rendered, nil
+}
+
+// reviewSections are the sections the app appends to the prompt of the review
+// of a pull request: what the review is about when the pull request comes from
+// no task, and the instructions the pass runs with, which a review of the pull
+// request of a task also has. Like the others, they depend on no placeholder,
+// so an edited prompt receives them too.
+func reviewSections(vars Vars) string {
+	var b strings.Builder
+	if vars.External {
+		b.WriteString(externalHeading + reviewNote(externalNote, vars))
+		b.WriteString(findingsFormatHeading + reviewNote(findingsFormatNote, vars))
+		if vars.Publish {
+			b.WriteString(publishHeading + reviewNote(publishNote, vars))
+		} else {
+			b.WriteString(applyHeading + reviewNote(applyNote, vars))
+		}
+	}
+	if vars.Instructions != "" {
+		b.WriteString(instructionsHeading + vars.Instructions)
+	}
+	if vars.PassInstructions != "" {
+		b.WriteString(passInstructionsHeading + vars.PassInstructions)
+	}
+	return b.String()
+}
+
+// reviewNote is a note of the review of a pull request with what it names of
+// the review in it.
+func reviewNote(note string, vars Vars) string {
+	return strings.NewReplacer(
+		contextPathPlaceholder, vars.ContextPath,
+		baseBranchPlaceholder, vars.BaseBranch,
+	).Replace(note)
 }

@@ -5,10 +5,14 @@ import { api } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
 import { renderWithStore, resetAppStore } from "@/test/render";
 import {
+  makeArchivedReview,
   makeArchivedTask,
   makeBoard,
   makeMigration,
+  makePullRequestRow,
   makeRepository,
+  makeReviewCenter,
+  makeReviewSummary,
   makeSituation,
   makeState,
   makeTask,
@@ -132,6 +136,33 @@ describe("App", () => {
     );
   });
 
+  it("opens the review a situation is in on Ctrl+J", async () => {
+    vi.mocked(api.getState).mockResolvedValue(
+      makeState({
+        tasks: [makeTask()],
+        reviews: [
+          makeReviewSummary({
+            situations: [
+              makeSituation({
+                id: "s-report",
+                taskId: "review-1",
+                kind: "review_report",
+                form: "decide",
+                place: { kind: "review", stage: "", step: 0 },
+              }),
+            ],
+          }),
+        ],
+      }),
+    );
+    const { user } = renderWithStore(<App />);
+    await screen.findByRole("tree", { name: "Tasks" });
+
+    await user.keyboard("{Control>}j{/Control}");
+
+    expect(useAppStore.getState().openReviewId).toBe("review-1");
+  });
+
   it("changes nothing on Ctrl+J when nothing waits for the user", async () => {
     vi.mocked(api.getState).mockResolvedValue(makeState({ tasks: [makeTask()] }));
     const { user } = renderWithStore(<App />);
@@ -180,6 +211,45 @@ describe("App", () => {
     expect(shortcut.defaultPrevented).toBe(true);
     expect(screen.getByRole("heading", { name: "New task" })).toBeInTheDocument();
     expect(useAppStore.getState().openTaskId).toBeNull();
+  });
+
+  it("leaves the dialog that starts a review where it is on Ctrl+N, Ctrl+J and Ctrl+,", async () => {
+    vi.mocked(api.getState).mockResolvedValue(
+      makeState({
+        ...waitingState(),
+        reviewCenter: makeReviewCenter({ pullRequests: [makePullRequestRow()] }),
+      }),
+    );
+    renderWithStore(<App />);
+    await screen.findByRole("tree", { name: "Tasks" });
+    act(() => {
+      useAppStore.getState().openStartReview({ repositoryId: "repo-1", number: 31 });
+    });
+    await screen.findByRole("heading", { name: "Start review" });
+
+    for (const key of ["n", "j", ","]) {
+      const shortcut = createEvent.keyDown(window, { key, ctrlKey: true });
+      fireEvent(window, shortcut);
+      expect(shortcut.defaultPrevented).toBe(true);
+    }
+
+    expect(screen.getByRole("heading", { name: "Start review" })).toBeInTheDocument();
+    expect(useAppStore.getState().newTaskOpen).toBe(false);
+    expect(useAppStore.getState().openTaskId).toBeNull();
+    expect(useAppStore.getState().settingsOpen).toBe(false);
+  });
+
+  it("keeps the card of the creation dialog on Ctrl+N", async () => {
+    const { user } = renderWithStore(<App />);
+    await screen.findByRole("button", { name: "Repository filter: All repositories" });
+    const card = { boardId: "board-1", key: "dev/web#7" };
+    act(() => {
+      useAppStore.getState().openNewTask(card);
+    });
+
+    await user.keyboard("{Control>}n{/Control}");
+
+    expect(useAppStore.getState().newTaskCard).toEqual(card);
   });
 
   it("leaves Ctrl+J alone without a registered repository", async () => {
@@ -363,5 +433,125 @@ describe("App", () => {
 
     expect(useAppStore.getState().newTaskOpen).toBe(true);
     expect(useAppStore.getState().pendingStart).toBeNull();
+  });
+  it("gives the main area to the Reviews view, and a task back over it", async () => {
+    vi.mocked(api.getState).mockResolvedValue(
+      makeState({
+        tasks: [makeTask()],
+        reviewCenter: makeReviewCenter({ readAt: "2026-09-16T12:00:00Z" }),
+      }),
+    );
+    const { user } = renderWithStore(<App />);
+    await screen.findByRole("treeitem", { name: /^add-login,/ });
+
+    act(() => {
+      useAppStore.getState().openReviews();
+    });
+
+    expect(screen.getByRole("main", { name: "Reviews" })).toBeInTheDocument();
+    expect(api.refreshPullRequests).toHaveBeenCalled();
+
+    await user.click(screen.getByRole("treeitem", { name: /^add-login,/ }));
+
+    expect(screen.queryByRole("main", { name: "Reviews" })).not.toBeInTheDocument();
+  });
+
+  it("gives the main area to the screen of a review", async () => {
+    vi.mocked(api.getState).mockResolvedValue(
+      makeState({ tasks: [makeTask()], reviews: [makeReviewSummary()] }),
+    );
+    renderWithStore(<App />);
+    await screen.findByRole("treeitem", { name: /^add-login,/ });
+
+    act(() => {
+      useAppStore.getState().openReview("review-1");
+    });
+
+    expect(screen.getByRole("button", { name: "Delete review" })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(api.getTranscript).toHaveBeenCalledWith("review-1", "review");
+    });
+  });
+
+  it("starts the screen of another review afresh", async () => {
+    vi.mocked(api.getState).mockResolvedValue(
+      makeState({
+        tasks: [makeTask()],
+        reviews: [
+          makeReviewSummary({ canPublish: true }),
+          makeReviewSummary({
+            id: "review-2",
+            number: 32,
+            own: true,
+            verdicts: ["comment"],
+            canPublish: true,
+          }),
+        ],
+      }),
+    );
+    const { user } = renderWithStore(<App />);
+    await screen.findByRole("treeitem", { name: /^add-login,/ });
+
+    act(() => {
+      useAppStore.getState().openReview("review-1");
+    });
+    await user.click(screen.getByRole("button", { name: "Publish review" }));
+    expect(screen.getByRole("radio", { name: "Approve" })).toBeChecked();
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    act(() => {
+      useAppStore.getState().openReview("review-2");
+    });
+    await user.click(screen.getByRole("button", { name: "Publish review" }));
+
+    expect(screen.getByRole("radio", { name: "Comment" })).toBeChecked();
+  });
+
+  it("gives the main area to an archived review, inside the history", async () => {
+    vi.mocked(api.getState).mockResolvedValue(
+      makeState({ tasks: [makeTask()], reviewHistory: [makeArchivedReview()] }),
+    );
+    renderWithStore(<App />);
+    await screen.findByRole("treeitem", { name: /^add-login,/ });
+
+    act(() => {
+      useAppStore.getState().openArchivedReview("review-1");
+    });
+
+    expect(screen.getByRole("button", { name: "← History" })).toBeInTheDocument();
+    expect(screen.getByText("Merged")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(api.readReviewArtifact).toHaveBeenCalledWith("review-1", "review-1.md");
+    });
+  });
+
+  it("starts the review of a pull request from anywhere in the app", async () => {
+    vi.mocked(api.getState).mockResolvedValue(
+      makeState({ reviewCenter: makeReviewCenter({ pullRequests: [makePullRequestRow()] }) }),
+    );
+    renderWithStore(<App />);
+    await screen.findByText("No tasks yet");
+
+    act(() => {
+      useAppStore.getState().openStartReview({ repositoryId: "repo-1", number: 31 });
+    });
+
+    expect(await screen.findByRole("heading", { name: "Start review" })).toBeInTheDocument();
+  });
+
+  it("opens the dialog that starts a review once the clone of its repository is there", async () => {
+    vi.mocked(api.getState).mockResolvedValue(
+      makeState({ repositories: [makeRepository({ cloned: false, cloning: true, path: "" })] }),
+    );
+    renderWithStore(<App />);
+    await screen.findByText("No tasks yet");
+
+    act(() => {
+      useAppStore.getState().setPendingReview({ repositoryId: "repo-1", number: 31 });
+      useAppStore.getState().applyState(makeState({ repositories: [makeRepository()] }));
+    });
+
+    expect(useAppStore.getState().startReview).toEqual({ repositoryId: "repo-1", number: 31 });
+    expect(useAppStore.getState().pendingReview).toBeNull();
   });
 });

@@ -12,6 +12,12 @@ function productOnScreen(store: AppStore): boolean {
   );
 }
 
+// The dialogs that create a task and start a review hold what the user is
+// typing: a shortcut neither leaves them behind nor stacks another over them.
+function typingInDialog(store: AppStore): boolean {
+  return store.newTaskOpen || store.startReview !== null;
+}
+
 export function useGlobalShortcuts(): void {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -25,6 +31,9 @@ export function useGlobalShortcuts(): void {
             return;
           }
           event.preventDefault();
+          if (typingInDialog(store)) {
+            return;
+          }
           store.openNewTask();
           break;
         }
@@ -34,13 +43,12 @@ export function useGlobalShortcuts(): void {
             return;
           }
           event.preventDefault();
-          // The creation dialog holds what the user is typing; it is not left behind.
-          if (store.newTaskOpen) {
+          if (typingInDialog(store)) {
             return;
           }
-          const [first] = waitingEntries(store.app, store.openTaskId);
+          const [first] = waitingEntries(store.app, store.openTaskId ?? store.openReviewId);
           if (first !== undefined) {
-            store.openPlace(first.task.id, first.situation.place);
+            store.openPlace(first.itemId, first.situation.place);
           }
           break;
         }
@@ -50,8 +58,7 @@ export function useGlobalShortcuts(): void {
             return;
           }
           event.preventDefault();
-          // The creation dialog holds what the user is typing; it is not left behind.
-          if (store.newTaskOpen) {
+          if (typingInDialog(store)) {
             return;
           }
           if (store.settingsOpen) {

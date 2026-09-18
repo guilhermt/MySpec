@@ -45,6 +45,9 @@ func renderPrompt(stage prompts.Stage, vars prompts.Vars) (string, error) {
 	case prompts.StageOneShot:
 		return fmt.Sprintf("Stage %s of task %s writes %s in %s from: %s",
 			stage, vars.TaskName, vars.OneShotPath, vars.Repository, vars.InitialContext), nil
+	case prompts.StagePRReview:
+		return fmt.Sprintf("Stage %s reviews %s (external %t, publish %t) with %q and %q",
+			stage, vars.ContextPath, vars.External, vars.Publish, vars.Instructions, vars.PassInstructions), nil
 	case prompts.StagePR:
 		return fmt.Sprintf("Stage %s of task %s opens %s from %s, with the card %s: %s",
 			stage, vars.TaskName, vars.Branch, vars.BaseBranch, vars.CardReference, vars.Card), nil
@@ -458,6 +461,18 @@ func taskInfo(t *testing.T, id string) session.TaskInfo {
 func atStage(info session.TaskInfo, stage prompts.Stage) session.TaskInfo {
 	info.Stage = string(stage)
 	info.Prompt = stage
+	return info
+}
+
+// atReview is the same item as the review of a pull request that comes from no
+// task, in publish mode, with what the user wrote for the first pass.
+func atReview(info session.TaskInfo) session.TaskInfo {
+	info = atStage(info, prompts.StagePRReview)
+	info.Stage = session.ReviewStage
+	info.ContextPath = filepath.Join(info.ArtifactsDir, "context.md")
+	info.External, info.Publish = true, true
+	info.Instructions = "Never change a published migration."
+	info.PassInstructions = "Look at the cache."
 	return info
 }
 

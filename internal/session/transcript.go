@@ -145,6 +145,7 @@ const (
 	MarkerOneShotWritten    MarkerType = "one_shot_written"
 	MarkerOneShotUpdated    MarkerType = "one_shot_updated"
 	MarkerPRReviewWritten   MarkerType = "pr_review_written"
+	MarkerReviewStarted     MarkerType = "review_started"
 	MarkerStepReviewStarted MarkerType = "step_review_started"
 	MarkerStepReviewWritten MarkerType = "step_review_written"
 	MarkerStageStarted      MarkerType = "stage_started"

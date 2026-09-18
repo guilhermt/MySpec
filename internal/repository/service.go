@@ -35,6 +35,7 @@ type Store interface {
 	Insert(ctx context.Context, repo Repository) error
 	UpdatePath(ctx context.Context, id, path string) error
 	UpdateBoard(ctx context.Context, id, boardID string) error
+	UpdateReviewInstructions(ctx context.Context, id, text string) error
 	Delete(ctx context.Context, id string) error
 }
 
@@ -51,6 +52,7 @@ type Deps struct {
 	Identify      func(ctx context.Context, path string) (Identity, error) // Identifier.Identify
 	Clone         func(ctx context.Context, fullName, dir string) error    // gh.Runner.Clone
 	Counts        func(id string) (active, archived int)                   // the tasks of a repository; may be nil
+	Reviews       func(id string) (active, archived int)                   // the reviews of pull requests of a repository; may be nil
 	Log           *slog.Logger
 	Now           func() time.Time // defaults to time.Now
 	NewID         func() string    // defaults to uuid.NewString
@@ -67,6 +69,7 @@ type Service struct {
 	identify      func(ctx context.Context, path string) (Identity, error)
 	clone         func(ctx context.Context, fullName, dir string) error
 	counts        func(id string) (active, archived int)
+	reviews       func(id string) (active, archived int)
 	log           *slog.Logger
 	now           func() time.Time
 	newID         func() string
@@ -93,6 +96,10 @@ func New(deps Deps) *Service {
 	if counts == nil {
 		counts = func(string) (int, int) { return 0, 0 }
 	}
+	reviews := deps.Reviews
+	if reviews == nil {
+		reviews = func(string) (int, int) { return 0, 0 }
+	}
 	now := deps.Now
 	if now == nil {
 		now = time.Now
@@ -115,6 +122,7 @@ func New(deps Deps) *Service {
 		identify:      deps.Identify,
 		clone:         deps.Clone,
 		counts:        counts,
+		reviews:       reviews,
 		log:           log,
 		now:           now,
 		newID:         newID,
@@ -466,7 +474,8 @@ func (s *Service) runClone(id, fullName, dir string) {
 }
 
 // Remove forgets the repository of id. It refuses while the repository has
-// tasks, and a filter on it goes back to every repository.
+// tasks or reviews of pull requests, and a filter on it goes back to every
+// repository.
 func (s *Service) Remove(ctx context.Context, id string) error {
 	repo, ok := s.Get(id)
 	if !ok {
@@ -474,6 +483,14 @@ func (s *Service) Remove(ctx context.Context, id string) error {
 	}
 	if active, archived := s.counts(id); active > 0 || archived > 0 {
 		return &Refusal{Reason: ReasonHasTasks, Repository: repo.FullName(), Active: active, Archived: archived}
+	}
+	if active, archived := s.reviews(id); active > 0 || archived > 0 {
+		return &Refusal{
+			Reason:          ReasonHasReviews,
+			Repository:      repo.FullName(),
+			ActiveReviews:   active,
+			ArchivedReviews: archived,
+		}
 	}
 
 	s.mu.Lock()
@@ -506,6 +523,29 @@ func (s *Service) Remove(ctx context.Context, id string) error {
 	s.log.Info("repository removed", "repository", repo.FullName())
 	s.changed()
 	return nil
+}
+
+// SetReviewInstructions rewrites what the user wants said in every review of a
+// pull request of the repository of id.
+func (s *Service) SetReviewInstructions(ctx context.Context, id, text string) (Repository, error) {
+	text = strings.TrimSpace(text)
+
+	s.mu.Lock()
+	i := s.index(id)
+	if i < 0 {
+		s.mu.Unlock()
+		return Repository{}, fmt.Errorf("set review instructions of repository %s: %w", id, ErrNotFound)
+	}
+	if err := s.store.UpdateReviewInstructions(ctx, id, text); err != nil {
+		s.mu.Unlock()
+		return Repository{}, fmt.Errorf("update review instructions of repository %s: %w", s.items[i].FullName(), err)
+	}
+	s.items[i].ReviewInstructions = text
+	repo := s.items[i]
+	s.mu.Unlock()
+
+	s.changed()
+	return repo, nil
 }
 
 // Filter is the id of the repository the tasks are filtered by, "" for every

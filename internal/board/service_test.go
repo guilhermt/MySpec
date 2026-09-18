@@ -986,3 +986,64 @@ func TestRemoveReleasesEveryRepositoryOfTheBoard(t *testing.T) {
 		t.Errorf("the store holds %+v, want no board", boards)
 	}
 }
+
+func TestCardOfPullRequestFindsTheCardTheReadingLinkedToIt(t *testing.T) {
+	t.Parallel()
+	linked := board.Card{
+		Issue:        cardIssue("acme/web", 1),
+		PullRequests: []board.PullRequest{{Owner: "Acme", Name: "Web", Number: 7, State: board.PROpen}},
+	}
+	other := board.Card{Issue: cardIssue("acme/web", 2), PullRequests: []board.PullRequest{}}
+	reading := &board.Reading{ProjectID: projectID, Cards: []board.Card{other, linked}}
+	f := newFixture(t, board.Stored{Reading: reading, ReadAt: base})
+
+	gotBoard, gotCard, ok := f.service.CardOfPullRequest("acme", "web", 7)
+
+	if !ok {
+		t.Fatal("CardOfPullRequest(acme, web, 7) = false, want the card")
+	}
+	if gotBoard != boardID {
+		t.Errorf("board = %q, want %q", gotBoard, boardID)
+	}
+	if diff := cmp.Diff(linked, gotCard); diff != "" {
+		t.Errorf("card mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestCardOfPullRequestFindsNothingForAPullRequestNoCardLinks(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		owner, repo string
+		number      int
+	}{
+		{"another number", "acme", "web", 8},
+		{"another repository", "acme", "api", 7},
+		{"another owner", "other", "web", 7},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			card := board.Card{
+				Issue:        cardIssue("acme/web", 1),
+				PullRequests: []board.PullRequest{{Owner: "acme", Name: "web", Number: 7, State: board.PROpen}},
+			}
+			reading := &board.Reading{ProjectID: projectID, Cards: []board.Card{card}}
+			f := newFixture(t, board.Stored{Reading: reading, ReadAt: base})
+
+			if id, got, ok := f.service.CardOfPullRequest(tt.owner, tt.repo, tt.number); ok {
+				t.Errorf("CardOfPullRequest() = %q, %+v, true, want false", id, got)
+			}
+		})
+	}
+}
+
+func TestCardOfPullRequestFindsNothingWithoutAStoredReading(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, board.Stored{})
+
+	if id, got, ok := f.service.CardOfPullRequest("acme", "web", 7); ok {
+		t.Errorf("CardOfPullRequest() = %q, %+v, true, want false", id, got)
+	}
+}

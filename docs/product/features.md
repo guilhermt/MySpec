@@ -1,12 +1,12 @@
 # Funcionalidades
 
-Este documento descreve o produto como ele é. Começa pelos boards e pelos repositórios de onde as tasks vêm, segue a ordem do ciclo de vida de uma task e termina com o que atravessa todo o produto: sessões, atenção, modelos, prompts e configurações.
+Este documento descreve o produto como ele é. Começa pelos boards e pelos repositórios de onde as tasks vêm, segue a ordem do ciclo de vida de uma task, passa pelo centro de review, onde o usuário revisa as pull requests de qualquer autor, e termina com o que atravessa todo o produto: sessões, atenção, modelos, prompts e configurações.
 
 ## Boards
 
 O produto conhece os boards do GitHub Projects (v2) que o usuário cadastra, de organização ou de usuário, cada um com os repositórios que administra. Ele lê os cards de cada board e cria tasks a partir deles. Funciona com qualquer board: lê os status e os campos de cada um em vez de assumir uma estrutura.
 
-Tudo o que o produto lê do GitHub passa pelo `gh` já autenticado na máquina, com a conta dele; o produto não tem conta nem token próprios. A única escrita no GitHub que vem de um board é a referência ao card na descrição da pull request.
+Tudo o que o produto lê do GitHub passa pelo `gh` já autenticado na máquina, com a conta dele; o produto não tem conta nem token próprios. A única escrita no GitHub que vem de um board é a referência ao card na descrição da pull request; as outras são a pull request de uma task e o review que o usuário publica pelo [centro de review](#centro-de-review).
 
 Um repositório pertence a no máximo um board, e é o board do repositório que define onde as tasks dele aparecem na barra lateral.
 
@@ -38,9 +38,9 @@ Cada repositório diz como ficará ligado ao produto:
 
 ### Editar e remover um board
 
-**Edit** relê a estrutura do board no GitHub e reabre as mesmas escolhas, confirmadas com **Save**. Os status finais vêm como o board os guarda: opções que deixaram de existir somem e opções novas aparecem desmarcadas. Os repositórios do board vêm marcados, e os outros repositórios das issues aparecem desmarcados. Acrescentar um repositório segue as regras do cadastro. Um repositório desmarcado sai do board: vai para o grupo sem board quando tem clone ou tasks, e sai do produto quando não tem nenhum dos dois. As tasks dele não mudam.
+**Edit** relê a estrutura do board no GitHub e reabre as mesmas escolhas, confirmadas com **Save**. Os status finais vêm como o board os guarda: opções que deixaram de existir somem e opções novas aparecem desmarcadas. Os repositórios do board vêm marcados, e os outros repositórios das issues aparecem desmarcados. Acrescentar um repositório segue as regras do cadastro. Um repositório desmarcado sai do board: vai para o grupo sem board quando tem clone, tasks ou reviews de pull request, e sai do produto quando não tem nada disso. As tasks dele não mudam.
 
-**Remove** pede confirmação e diz o que acontece: `N repositories move to No board and M leave MySpec. Tasks keep their cards, and nothing changes on GitHub or on disk.` Os repositórios do board com clone ou com tasks, ativas ou arquivadas, passam ao grupo sem board; os sem clone e sem tasks saem do produto. As tasks criadas de cards do board continuam guardando o card e funcionando, e passam ao grupo **No board** da barra lateral. Nada é alterado no GitHub nem no disco.
+**Remove** pede confirmação e diz o que acontece: `N repositories move to No board and M leave MySpec. Tasks keep their cards, and nothing changes on GitHub or on disk.` Os repositórios do board com clone, com tasks ou com reviews de pull request, ativos ou arquivados, passam ao grupo sem board; os que não têm nada disso saem do produto. As tasks criadas de cards do board continuam guardando o card e funcionando, e passam ao grupo **No board** da barra lateral. Nada é alterado no GitHub nem no disco.
 
 ### Leitura dos cards
 
@@ -111,7 +111,9 @@ Só uma instância do app roda por vez. Abrir uma segunda traz para a frente a j
 
 ### Página Repositories
 
-As configurações têm a página **Repositories**. Ela tem o campo **Clone folder** e lista os repositórios cadastrados, em ordem alfabética de `dono/nome`, cada um com o `dono/nome`, `Board: <título>` quando pertence a um board, o caminho local ou `Not cloned`, a contagem de tasks ativas e arquivadas, o aviso de clone inexistente quando é o caso, e as ações **Clone**, para um repositório sem clone, **Change path** e **Remove**. Acima da lista fica **Add repository**.
+As configurações têm a página **Repositories**. Ela tem o campo **Clone folder** e lista os repositórios cadastrados, em ordem alfabética de `dono/nome`, cada um com o `dono/nome`, `Board: <título>` quando pertence a um board, o caminho local ou `Not cloned`, a contagem de tasks ativas e arquivadas, seguida da de reviews de pull request quando há algum (`2 active · 5 archived · 1 review`), o aviso de clone inexistente quando é o caso, as instruções de review e as ações **Clone**, para um repositório sem clone, **Change path** e **Remove**. Acima da lista fica **Add repository**.
+
+**Review instructions**, recolhível, guarda as instruções fixas de review do repositório: um texto livre, editado ali e salvo com **Save**, que entra em todo review de pull request do repositório, os do [centro de review](#centro-de-review) e o da pull request de cada task. O título da seção diz `Set` ou `None`. As instruções são lidas quando uma passada de review começa, então uma mudança vale a partir da passada seguinte.
 
 **Add repository** abre um diálogo do próprio produto, que varre a pasta home até 6 pastas de profundidade, pulando pastas ocultas e `node_modules` e sem nunca descer para dentro de um repositório, de uma worktree ou de um submódulo. O diálogo lista os clones de repositórios do GitHub encontrados, por `dono/nome` e caminho, em ordem alfabética, com um filtro por nome ou caminho. Um clone sem `origin` ou com `origin` fora do GitHub não aparece. Os clones de repositórios já cadastrados com clone aparecem desabilitados, com `Registered`. O clone de um repositório cadastrado sem clone aparece disponível, e confirmá-lo liga o clone ao cadastro existente. Cada abertura do diálogo varre de novo.
 
@@ -128,7 +130,7 @@ Em qualquer dos caminhos, o produto verifica que a pasta é a raiz de um reposit
 
 **Change path** abre o seletor de pastas nativo e aplica as mesmas verificações, com uma a mais: o `dono/nome` lido da pasta nova tem de ser o do repositório. Uma pasta de outro repositório é recusada com `<caminho> is a clone of <outro dono/nome>, not of <dono/nome>.` Serve para quando o clone foi movido ou refeito em outro lugar. Trocar o caminho não mexe nas worktrees já criadas nem nas tasks: uma task cujo primeiro step ainda não criou a worktree passa a criá-la a partir do clone novo, e um step bloqueado por clone inexistente é destravado por **Tentar de novo**.
 
-**Remove** só é possível com o repositório sem nenhuma task, ativa ou arquivada. Com tasks, a ação fica desabilitada e o produto diz o que impede: `<dono/nome> has N active tasks and M archived tasks. Delete them before removing the repository.` Um repositório sem tasks é removido após confirmação, e nada é apagado no disco: nem o clone nem as worktrees, que não existem sem tasks. Um repositório removido que pertencia a um board sai também do board.
+**Remove** só é possível com o repositório sem nenhuma task e nenhum review de pull request, ativos ou arquivados. Com algum deles, a ação fica desabilitada e o produto diz o que impede, as tasks primeiro: `<dono/nome> has N active tasks and M archived tasks. Delete them before removing the repository.`, ou `<dono/nome> has N active reviews and M archived reviews. Delete them before removing the repository.` Um repositório sem nenhum dos dois é removido após confirmação, e nada é apagado no disco: nem o clone nem as worktrees, que não existem sem tasks nem reviews. Um repositório removido que pertencia a um board sai também do board.
 
 ### Repositório sem clone
 
@@ -154,7 +156,8 @@ Enquanto nenhum board e nenhum repositório estão cadastrados, o produto mostra
 
 A barra lateral tem, de cima para baixo:
 
-- a seção **Waiting for you**, fixa no topo, com todas as tasks que esperam pelo usuário, exceto a aberta. Ela nunca é filtrada por repositório;
+- a seção **Waiting for you**, fixa no topo, com todas as tasks e todos os reviews de pull request que esperam pelo usuário, exceto o que está aberto. Ela nunca é filtrada por repositório;
+- o nó **Reviews**, que abre a visão do [centro de review](#centro-de-review), com a contagem das pull requests pendentes e, dentro dele, os reviews ativos;
 - o **filtro por repositório**, um seletor com **All repositories** e um item por repositório cadastrado, em ordem alfabética, e o botão de nova task. A escolha do filtro é lembrada entre execuções do app, e um repositório removido volta o filtro para todos;
 - o aviso de clone inexistente de cada repositório que o filtro mostra, com **Change path**;
 - a **árvore de tasks** ativas, agrupada por board;
@@ -336,6 +339,8 @@ Aberta a pull request, a sessão de review começa sozinha com o prompt de revie
 
 Se o relatório está limpo, a task fica **pronta**, aguardando o merge. Se há apontamentos, o produto os mostra e a task passa a **aguardando decisão**: o usuário decide na conversa, item a item, o que quer aplicado. O agente aplica só o que foi aprovado. As mudanças então passam pelo mesmo review do produto que um step no modo `Manual`: stage arquivo a arquivo no editor, progresso em tempo real, **Aprovar** em 100%, e o commit feito pelo agente com o prompt de commit, que nesta etapa também sobe o commit para a pull request. Depois do commit o agente revisa de novo, e o ciclo se repete até um relatório limpo. **Revisar de novo** pede uma passada extra a qualquer momento, e os relatórios de todas as passadas ficam visíveis.
 
+As instruções fixas de review do repositório, quando existem, entram no prompt de cada passada, lidas quando ela começa.
+
 Uma pull request fechada sem merge é sinalizada como tal, e a task não pode ser encerrada.
 
 ## Encerramento e arquivamento
@@ -350,19 +355,133 @@ Ao encerrar, o produto:
 
 Cada parte reporta o que fez, o que pulou e por quê, e o que falhou. Terminado o encerramento, a task é arquivada: sai da lista de tasks e passa a existir só no histórico, com um aviso momentâneo de que saiu, e o resultado do encerramento fica guardado com ela.
 
+## Centro de review
+
+O centro de review mostra num lugar só as pull requests abertas de todos os repositórios cadastrados, de qualquer autor, tenham nascido de uma task do produto ou não, e conduz o review de qualquer uma delas dentro do produto. O agente revisa a pull request com o card, a descrição e as instruções do usuário e escreve um relatório numerado; o usuário decide apontamento a apontamento; o produto publica o review no GitHub, com cada apontamento aprovado como comentário na linha do diff. Numa pull request do próprio usuário, o review pode, em vez de publicar, aplicar as correções.
+
+O review de uma pull request é um item do produto como uma task, sem etapas: tem conversa, relatórios, situações que esperam pelo usuário, lugar na barra lateral, em **Waiting for you** e no histórico.
+
+### Visão Reviews
+
+O nó **Reviews** da barra lateral abre a visão, que ocupa a área principal. Ela lista as pull requests abertas de todos os repositórios cadastrados, com ou sem board, com ou sem clone, as pendentes primeiro e, em cada grupo, as atualizadas mais recentemente primeiro.
+
+- **Cabeçalho:** o título, `Updated <há quanto tempo>`, o indicador `Reading pull requests` durante uma leitura e o botão **Refresh**.
+- **Falhas:** um aviso por repositório que o produto não conseguiu ler, com a razão e o que fazer (ver [Leitura das pull requests](#leitura-das-pull-requests)). As pull requests dos outros repositórios continuam aparecendo.
+- **Barra de filtros:** ver [Filtros](#filtros).
+- **Linha da pull request:** o título e o número, o repositório, o autor, as labels, `Draft` num draft, `Task` numa pull request de uma task do produto, o estado do review no produto quando existe um, `Reviewed` quando o usuário já a revisou e `New commits` quando há commits depois do último review dele, e o card vinculado, `#<número> · <status no board>`, que abre o card no GitHub. Uma pendente é destacada, com um ponto rotulado `Pending`. O ícone **Open on GitHub** abre a pull request.
+- **Ação da linha:** **Review** inicia o review; **Open review** abre o review ativo da pull request; **Open task** abre a task dona da pull request, cujo review acontece na task. Numa pull request cuja branch vem de um fork, a ação fica desabilitada, com `Pull requests from forks can't be reviewed yet.`, e num repositório de clone inexistente, com o aviso do clone.
+- **Estados:** um esqueleto da lista durante a primeira leitura; `Register a repository to see its pull requests.` sem repositórios; `No open pull requests.` sem pull requests abertas; `No pull requests match the filters.`, com **Clear filters**, quando os filtros escondem todas.
+
+#### Pendente de review
+
+Toda pull request aberta espera o review do usuário, pedido no GitHub ou não; o pedido de review do GitHub não é usado. Uma pull request está **pendente** quando o usuário ainda não a revisou ou quando há commits novos desde o último review dele. "Revisada" vem do GitHub: conta qualquer review enviado pela conta do `gh`, publicado pelo produto ou direto no site, e "commits novos" são os que vieram depois do último deles. As pull requests do próprio usuário e as das tasks do produto aparecem na lista, mas nunca são pendentes; o que a pull request de uma task espera do usuário aparece na task.
+
+O nó **Reviews** mostra a contagem das pendentes que passam pelos filtros. Uma pull request pendente sem review iniciado não notifica e não aparece em **Waiting for you**.
+
+### Filtros
+
+A barra de filtros tem **Board**, com os boards e `No board`, **Repository**, **Author** e **Label**, o interruptor **Pending only** e **Clear filters**. Board e repositório escolhem um valor. Autor e label servem sobretudo para tirar da vista, como as pull requests do dependabot: cada valor do menu passa, a cada clique, de sem filtro a excluído, de excluído a incluído e de volta a sem filtro, e o menu mostra o resumo, como `Any`, `−dependabot` ou `+alice −bot`. Uma pull request passa pelo autor quando nenhum autor está incluído ou o dela está, e o dela não está excluído; passa pela label quando nenhuma label está incluída ou ela tem uma das incluídas, e não tem nenhuma excluída. As comparações não diferenciam maiúsculas.
+
+Os filtros são lembrados entre execuções do app e valem para a lista e para a contagem do nó **Reviews**. Eles não escondem os reviews já iniciados, que aparecem sob **Reviews** na barra lateral mesmo com a pull request filtrada.
+
+### Leitura das pull requests
+
+As pull requests abertas são lidas ao abrir o app, ao abrir a visão, por **Refresh**, depois de publicar um review e a cada cinco minutos enquanto o app está aberto. A leitura fica só em memória e a visão mostra a última enquanto a próxima acontece. As pull requests com review ativo são lidas a cada minuto, junto das pull requests das tasks, para que um commit novo, o merge e o fechamento sejam percebidos sem o usuário abrir a visão.
+
+Toda leitura passa pelo `gh` autenticado na máquina. A falha de um repositório aparece na visão, com uma destas mensagens, e não esconde os outros nem afeta as tasks:
+
+- `GitHub CLI was not found: gh isn't on the PATH.`
+- `gh is not authenticated. Run gh auth login.`
+- `gh can't read this repository. Run gh auth refresh -s repo.`
+- `The repository doesn't exist or this account can't read its pull requests.`
+- `GitHub's rate limit was reached. It resets at <hora>.`
+- `Couldn't read from GitHub: <o que o gh disse>`
+
+O card de uma pull request é o card cujas pull requests vinculadas, na leitura guardada dos boards, incluem ela. Uma pull request sem card é uma situação normal.
+
+### Iniciar um review
+
+**Review** abre o diálogo de início, com o resumo da pull request e:
+
+- **Instructions**, opcional: o que o usuário quer que o agente olhe nesta passada;
+- o **modelo** e o **esforço**, partindo do padrão de review de PR das configurações. A escolha vale para o review inteiro e pode ser trocada na conversa, como em qualquer sessão;
+- o **modo**, **Publish** ou **Apply**, só numa pull request do próprio usuário, partindo de **Publish**: `Publish posts the approved findings as a review on GitHub.` ou `Apply has the agent fix the approved findings and push them to the pull request.` Para outro autor o modo é sempre publicar. O modo não muda depois.
+
+Num repositório sem clone, o diálogo diz que ele não está clonado e oferece **Clone and continue**; terminado o clone, o diálogo abre de novo sozinho, ou, se o usuário estiver iniciando o review de outra pull request, assim que esse diálogo fechar. **Start review** confirma. O produto relê a pull request e recusa, com a razão, uma que não está mais aberta, que vem de um fork, que é de uma task ativa do produto ou que já tem um review ativo: uma pull request tem no máximo um review ativo.
+
+Ao confirmar, o produto cria a worktree do review em `~/.local/share/myspec/worktrees/<dono>/<nome>/pr_<número>/`, em detached HEAD no head da pull request, sem branch local, escreve o documento de contexto e abre a conversa de review com o prompt de review de PR. Se a worktree não pode ser criada, o produto diz a razão do git e o review não é criado; qualquer outra falha do início, antes de a conversa abrir, também desfaz o review, com a worktree e a pasta de artefatos. O documento de contexto, `Context` no painel de relatórios, tem o título, a referência, o link, o autor, as branches e a descrição da pull request e, quando ela tem card, o card com o épico. Ele é escrito no início do review e reescrito a cada **Review again**, com a pull request relida do GitHub e o card relido do board. Quando essa leitura falha, e na passada que o produto pede depois de um commit no modo aplicar, o documento fica como a última leitura o escreveu.
+
+O agente revisa o diff contra a base e lê o código na worktree, com o documento de contexto no lugar do PRD e do tech spec, as instruções fixas do repositório e as instruções da passada. Sem card, ele revisa com a descrição, as instruções e as convenções que o repositório documenta; uma pull request sem card nunca é recusada. Ele roda as verificações que o repositório documenta, como no review da pull request de uma task. No modo publicar, nunca edita arquivos, nunca commita e nunca faz push. As instruções da primeira passada aparecem na conversa como a primeira mensagem do usuário, e as de uma passada seguinte, dentro da mensagem do produto que a pede.
+
+### O relatório e a decisão
+
+Cada passada escreve um relatório numerado, com o status `clean` ou `changes`, um resumo e, com `changes`, os apontamentos. Cada apontamento é **ancorado**, num arquivo e numa linha da versão nova que fazem parte do diff, ou **geral**, sem linha no diff: um teste que faltou, uma migration que não foi escrita, um problema num arquivo que a pull request não toca ou numa linha que ela removeu. O produto lê o relatório quando o turno do agente termina. Um relatório que ele não consegue ler é uma passada sem relatório: o review espera pelo usuário, com a razão, e o agente pode reescrevê-lo na conversa.
+
+O painel de apontamentos, acima da conversa, mostra a passada mais recente, com o título do relatório e `N of M decided`, e é recolhível; ele abre sozinho a cada passada ainda não publicada. Dentro dele ficam o resumo editável e um cartão por apontamento, com o número, a localização, o texto editável e **Approve** e **Discard**; clicar na decisão ativa a desfaz. A localização de um apontamento ancorado abre o arquivo no editor, naquela linha, na worktree do review; a de um geral diz `General`. Um relatório limpo mostra só o resumo e `Nothing to change.` Decisões e edições são guardadas enquanto o usuário as faz e sobrevivem ao fechamento do app.
+
+A conversa fica aberta durante a decisão. Um apontamento que o usuário quer incluir, mudar ou retirar é pedido ao agente na conversa; o agente reescreve o relatório da passada e o produto mostra a versão nova, mantendo o texto e a decisão de cada apontamento que não mudou e o resumo editado, quando o original não mudou.
+
+O painel **Reports**, à direita, recolhível, lista `Context` e os relatórios de todas as passadas, como `Review 1 · changes · published` e `Review 2 · clean`, renderizados como Markdown. Um relatório publicado mostra acima dele o veredito, a data e o link do review no GitHub.
+
+### Publicar
+
+**Publish review** habilita com todos os apontamentos decididos, ou com um relatório limpo, e abre o diálogo de publicação: o **Verdict**, entre **Approve**, **Request changes** e **Comment**, e o que vai no review, como `3 inline comments · 1 in the body`. Numa pull request do próprio usuário o único veredito é **Comment**, porque o GitHub não aceita outro. Quando chegaram commits depois da passada, o diálogo avisa que os apontamentos em linhas que saíram do diff vão para o corpo e oferece **Review again instead**.
+
+O produto publica um review no GitHub, pela conta do `gh`, no head atual da pull request:
+
+- cada apontamento ancorado aprovado cuja linha está no diff vira um comentário naquela linha, com o texto como o usuário o deixou;
+- o corpo traz o resumo e, sob **Other findings**, a lista dos apontamentos gerais aprovados, seguidos dos ancorados cuja linha deixou de fazer parte do diff, cada um com `arquivo:linha`;
+- o veredito escolhido.
+
+Um relatório sem apontamento aprovado publica só o resumo e o veredito. Sem resumo e sem apontamento, só o veredito de aprovar é publicado; os outros pedem um resumo. O produto nunca publica sem o comando do usuário e nunca publica um apontamento que ele não aprovou.
+
+Uma publicação que falha não perde nada: decisões e edições ficam, o review espera pelo usuário com a razão, e **Publish review** tenta de novo. A razão diz o que fazer quando o `gh` falhou, como as falhas da lista de pull requests, e diz quando a pull request fechou ou não está mais no GitHub; uma falha do `gh` sem razão conhecida aparece como `Couldn't publish to GitHub: <o que o gh disse>`. Publicado, a passada fica somente leitura, com onde cada apontamento foi, `Inline comment`, `In the review body` ou `Not published`, a pull request aparece como revisada na lista e o review fica parado, sem esperar por ninguém, até um commit novo, **Review again** ou o fim da pull request.
+
+### Commits novos e novas passadas
+
+Um commit novo na pull request depois do último review publicado é uma situação que espera pelo usuário: aparece no review, na lista, em **Waiting for you**, e notifica. Commits que chegam antes de a passada em curso ser publicada não notificam: o review avisa `New commits since this pass`, e o diálogo de publicação também. Quando o git não disse em que commit a passada foi feita, o aviso não aparece, porque nada diz que a pull request andou.
+
+**Review again** pede uma nova passada na mesma conversa, a qualquer momento em que nenhuma passada está em curso, com instruções opcionais. Quando a passada mais recente não foi publicada e tem decisões ou edições, o diálogo avisa que elas serão descartadas. O produto atualiza a worktree para o head atual da pull request, reescreve o documento de contexto com a pull request relida e envia ao agente o arquivo do novo relatório, o commit que a passada anterior cobriu, para ele ler o que mudou desde então, os apontamentos já publicados, para ele dizer quais foram resolvidos, e as instruções. Só o que é novo ou continua valendo vira apontamento. Quando a releitura diz que a pull request foi mergeada ou fechada, a passada é recusada antes de a worktree mudar. No modo publicar a worktree nunca tem mudanças do produto, e qualquer mudança nela é descartada antes da atualização. No modo aplicar, **Review again** também serve enquanto as correções do agente esperam o review do usuário, para quando o agente não mudou nada ou o usuário desistiu das mudanças: uma worktree que ainda tem mudanças recusa a atualização com a razão do git, e nada se perde. Durante o commit, não.
+
+### Corrigir a própria pull request
+
+Numa pull request do próprio usuário que não é de uma task do produto, o modo **Apply** leva o review pelo ciclo do review da pull request de uma task:
+
+1. o agente revisa e escreve o relatório, e o usuário decide apontamento a apontamento, como no modo publicar;
+2. **Apply** envia ao agente os apontamentos aprovados, com o texto como o usuário o deixou, e ele corrige na worktree só isso, sem commitar;
+3. as mudanças passam pelo review do produto: stage arquivo a arquivo no editor, progresso em tempo real, **Approve** em 100%;
+4. o agente commita com o prompt de commit e sobe o commit para a branch da pull request;
+5. o produto pede uma nova passada sozinho, e o ciclo se repete.
+
+Um relatório limpo, ou uma passada em que nada foi aprovado, deixa o review pronto para merge, que o usuário faz no GitHub. Um turno de commit que termina sem commit volta a mudança ao review, com `The last approval didn't produce a commit.` O commit é o head da worktree diferente daquele em que a passada foi feita ou, quando o git não o disse, daquele lido no **Approve**. Nada é publicado como review no GitHub nesse modo, e o produto nunca dá stage.
+
+### O review como item
+
+- **Barra lateral:** cada review ativo aparece sob o nó **Reviews**, em ordem de criação, com `<nome curto>#<número>`, o título, o ponto de estado e, à direita, o que espera pelo usuário ou o estado do review. Os reviews não passam pelo filtro de repositório da barra lateral.
+- **Tela do review:** o cabeçalho com o número, o título, o repositório, o autor, o card vinculado com o status no board, o modo, o medidor de contexto, **Pause** ou **Resume**, o botão do painel de relatórios e **Delete review**; a barra do review com o link da pull request, o estado, os avisos e as ações **Publish review**, ou **Apply** e **Approve** no modo aplicar, **Review again** e **Open in VS Code**, que abre a worktree; o painel de apontamentos e a conversa; o painel de relatórios.
+- **Estados:** `Reviewing`, `Waiting for the report`, `Decide findings`, `Ready to publish`, `Publish failed`, `Published` e `New commits`; no modo aplicar, `Ready to apply`, `Applying`, `In review`, `Ready to approve`, `Committing` e `Ready to merge`. O estado da conversa, pausada, com erro, pedindo permissão ou perguntando, prevalece sobre eles, como na task.
+- **Fim:** o review termina quando a pull request é mergeada ou fechada. A leitura de cada minuto percebe, e o produto encerra a sessão, remove a worktree e leva o review ao histórico, sem ação do usuário e sem notificar. Uma leitura que falha deixa o aviso `Couldn't check GitHub` na barra do review.
+- **Apagar:** **Delete review** apaga o review a qualquer momento, ativo ou arquivado, depois da confirmação `The worktree, the conversation and the reports go away. What was published on GitHub stays.` A pull request volta a ser uma pull request comum na lista e pode ter um review novo. Uma worktree que o git não conseguiu remover é listada num aviso, como ao apagar uma task.
+
 ## Histórico
 
-O botão **History** no rodapé da barra lateral abre a lista das tasks arquivadas, da mais recente à mais antiga, com busca por nome e o mesmo filtro por repositório da barra lateral. Cada linha mostra o nome curto do repositório da task. Uma task arquivada mostra os seus artefatos finais renderizados, com PRD, tech spec, steps com os relatórios de review de cada step, a pull request e o resultado do encerramento. Uma task One-Shot aparece na lista com o rótulo `One-Shot` no lugar da contagem de steps, e mostra o documento One-Shot com os relatórios de review do step no lugar de PRD, tech spec e steps. As conversas não são guardadas no histórico.
+O botão **History** no rodapé da barra lateral abre a lista das tasks arquivadas, da mais recente à mais antiga, com busca por nome e o mesmo filtro por repositório da barra lateral. A contagem do botão soma tasks e reviews. Cada linha mostra o nome curto do repositório da task. A lista inclui os reviews de pull request arquivados, misturados às tasks pela data de arquivamento; ver [Histórico de um review](#histórico-de-um-review). Uma task arquivada mostra os seus artefatos finais renderizados, com PRD, tech spec, steps com os relatórios de review de cada step, a pull request e o resultado do encerramento. Uma task One-Shot aparece na lista com o rótulo `One-Shot` no lugar da contagem de steps, e mostra o documento One-Shot com os relatórios de review do step no lugar de PRD, tech spec e steps. As conversas não são guardadas no histórico.
+
+### Histórico de um review
+
+Um review arquivado aparece na lista com o rótulo `Review`, `#<número>` e o título da pull request, o repositório, o autor, o desfecho, `Merged` ou `Closed`, e as datas. A busca casa com o título e com o número, com ou sem `#`, e o filtro por repositório vale para ele. Aberto, ele mostra a pull request com o link, o desfecho e, para cada passada, o relatório renderizado e, quando publicada, o veredito e cada apontamento publicado com onde foi. **← History** volta à lista, e o review arquivado pode ser apagado dali.
 
 ## Apagar uma task
 
 Uma task pode ser apagada em qualquer etapa. Antes de confirmar, o produto mostra o que será destruído: a worktree e a branch, quando existem, a pull request que fica aberta no GitHub, e o que já não está lá. Apagar para o que estiver rodando, remove a worktree e a branch, apaga os artefatos e remove a task em definitivo. O que o git não conseguiu remover é listado num aviso, para o usuário resolver à mão.
 
+Um review de pull request se apaga pelo seu próprio **Delete review**; ver [O review como item](#o-review-como-item).
+
 ## Sessões e conversas
 
-Toda sessão é uma conversa dentro do produto, com interface própria. O Claude Code roda por baixo, invisível. A conversa mostra as mensagens do usuário e do agente, as ações que o agente executa agrupadas, os cartões de permissão e de pergunta, marcadores dos eventos da task (documento escrito, etapa iniciada, review iniciado ou escrito, contexto compactado, resposta interrompida) e os erros. Tudo que o agente escreve é renderizado como Markdown, com diagramas mermaid e realce de código, em streaming.
+Toda sessão é uma conversa dentro do produto, com interface própria. O Claude Code roda por baixo, invisível. A conversa mostra as mensagens do usuário e do agente, as ações que o agente executa agrupadas, os cartões de permissão e de pergunta, marcadores dos eventos da task ou do review (documento escrito, etapa iniciada, review iniciado ou escrito, contexto compactado, resposta interrompida) e os erros. Tudo que o agente escreve é renderizado como Markdown, com diagramas mermaid e realce de código, em streaming.
 
-Cada etapa e cada step têm a sua conversa, e a etapa de PR tem a da pull request e a do review dela. Um step no modo `Agent` tem também a do revisor, a partir da primeira passada, e as duas ficam nas abas **Implementer** e **Reviewer**. Voltar a uma etapa retoma a conversa dela de onde ficou.
+Cada etapa e cada step têm a sua conversa, e a etapa de PR tem a da pull request e a do review dela. Um step no modo `Agent` tem também a do revisor, a partir da primeira passada, e as duas ficam nas abas **Implementer** e **Reviewer**. Voltar a uma etapa retoma a conversa dela de onde ficou. Um review de pull request tem uma conversa só, de todas as passadas, que reabre com o app e acaba quando o review acaba ou é apagado.
 
 - **Enviar**: mensagens enviadas com o agente ocupado entram numa fila, visível na conversa, e podem ser removidas antes de sair.
 - **Interromper** encerra a resposta em andamento e mantém a sessão viva.
@@ -374,15 +493,17 @@ Cada etapa e cada step têm a sua conversa, e a etapa de PR tem a da pull reques
 
 ## Depende de mim
 
-Uma task espera pelo usuário quando qualquer destas situações acontece: um erro de sessão, um step bloqueado, uma worktree ilegível, a etapa de PR bloqueada, um plano inválido, uma pull request fechada sem merge, uma escalada de permissão, uma pergunta do agente, uma passada do revisor de um step que terminou sem relatório, uma resposta aquém do que o produto esperava, uma etapa revisitada pronta para continuar, um step aguardando review ou pronto para aprovar, um step sem mudanças, um step que passou ao usuário porque o review pelo agente não veio limpo em três rodadas, um rascunho aguardando OK, apontamentos de review aguardando decisão, mudanças aplicadas aguardando review, uma pull request pronta para merge, uma task pronta para encerrar. Uma task pausada não espera por ninguém. O revisor de um step é um lugar próprio: um erro, uma escalada de permissão ou uma pergunta dele espera pelo usuário na aba **Reviewer**, e pode esperar ao mesmo tempo que uma situação do implementador. Uma task com todos os steps no modo `Agent` só espera pelo usuário, entre o primeiro step e o rascunho da pull request, quando há erro, bloqueio, permissão, pergunta, passada sem relatório ou um step que passou ao usuário; um step commitado pelo review do agente não notifica.
+Uma task ou um review de pull request espera pelo usuário. Uma task espera quando qualquer destas situações acontece: um erro de sessão, um step bloqueado, uma worktree ilegível, a etapa de PR bloqueada, um plano inválido, uma pull request fechada sem merge, uma escalada de permissão, uma pergunta do agente, uma passada do revisor de um step que terminou sem relatório, uma resposta aquém do que o produto esperava, uma etapa revisitada pronta para continuar, um step aguardando review ou pronto para aprovar, um step sem mudanças, um step que passou ao usuário porque o review pelo agente não veio limpo em três rodadas, um rascunho aguardando OK, apontamentos de review aguardando decisão, mudanças aplicadas aguardando review, uma pull request pronta para merge, uma task pronta para encerrar. Uma task pausada não espera por ninguém. O revisor de um step é um lugar próprio: um erro, uma escalada de permissão ou uma pergunta dele espera pelo usuário na aba **Reviewer**, e pode esperar ao mesmo tempo que uma situação do implementador. Uma task com todos os steps no modo `Agent` só espera pelo usuário, entre o primeiro step e o rascunho da pull request, quando há erro, bloqueio, permissão, pergunta, passada sem relatório ou um step que passou ao usuário; um step commitado pelo review do agente não notifica.
+
+Um review de pull request espera pelo usuário quando o agente pergunta ou pede permissão, quando a sessão falha, quando a passada termina sem um relatório que o produto consegue ler, quando o relatório tem apontamentos a decidir, quando está pronto para publicar, quando a publicação falha e quando a pull request tem commits novos desde o último review publicado. No modo aplicar, também quando os apontamentos aprovados estão prontos para aplicar, quando as mudanças aguardam review ou estão prontas para aprovar e quando a pull request está pronta para merge. Um review pausado, publicado ou arquivado não espera por ninguém.
 
 Cada situação diz onde está e o que pede. As situações aparecem:
 
-- na seção **Waiting for you**, fixa no topo da barra lateral, com todas as tasks que esperam, exceto a que está aberta. `Ctrl+J` abre a primeira;
-- na lista de tasks, na linha de cada task;
-- na própria task, na trilha de etapas, na barra do step, nas abas **Implementer** e **Reviewer** e na barra da pull request.
+- na seção **Waiting for you**, fixa no topo da barra lateral, com todas as tasks e todos os reviews que esperam, exceto o que está aberto. `Ctrl+J` abre o primeiro;
+- na lista de tasks, na linha de cada task, e sob o nó **Reviews**, na linha de cada review;
+- na própria task, na trilha de etapas, na barra do step, nas abas **Implementer** e **Reviewer** e na barra da pull request, e no próprio review, na barra dele.
 
-Uma situação que começa enquanto o usuário olha para o produto pisca brevemente onde surgiu, em silêncio. Uma situação que começa com a janela fora de foco gera uma notificação do sistema, que identifica a task e o que ela pede; clicar nela traz a janela e abre o lugar certo. Cada situação notifica uma vez, ao começar. Continuações da mesma espera, como o stage chegar a 100% ou a pull request passar de pronta a mergeada, não notificam.
+Uma situação que começa enquanto o usuário olha para o produto pisca brevemente onde surgiu, em silêncio. Uma situação que começa com a janela fora de foco gera uma notificação do sistema, que identifica a task, ou a pull request do review, e o que ela pede; clicar nela traz a janela e abre o lugar certo. Cada situação notifica uma vez, ao começar. Continuações da mesma espera, como o stage chegar a 100% ou a pull request passar de pronta a mergeada, não notificam.
 
 A notificação toca, ao aparecer, o som do MySpec: um carrilhão curto e suave, o mesmo em todo sistema, no volume e na saída de áudio do sistema. Situações que começam juntas são ouvidas uma vez só: uma notificação a menos de dois segundos da última que tocou chega em silêncio, e cada situação continua com a sua notificação. Com o sistema em não perturbe o som não toca, onde o sistema torna esse estado conhecido. Clicar, dispensar ou retirar uma notificação não faz som. Uma notificação que não aparece não toca, e um som que não pode tocar deixa a notificação aparecer muda; nenhum dos dois vira erro na interface.
 
@@ -392,7 +513,7 @@ Não há níveis, silenciamento nem configuração de som: o volume e o não per
 
 O produto oferece três modelos, Fable 5.1, Opus 5 e Sonnet 5, e cinco níveis de esforço, de low a max. Cada combinação é válida.
 
-- **Padrões**: nas configurações, um modelo e um esforço por tipo de sessão: PRD, tech spec, plano, planejamento One-Shot, implementação, review de step, PR e review de PR. O commit não tem escolha própria, porque roda na sessão do step ou do review.
+- **Padrões**: nas configurações, um modelo e um esforço por tipo de sessão: PRD, tech spec, plano, planejamento One-Shot, implementação, review de step, PR e review de PR. O de review de PR é também o ponto de partida do diálogo de início de um review do centro de review. O commit não tem escolha própria, porque roda na sessão do step ou do review.
 - **Por task**: na criação, a task copia os padrões e o usuário ajusta o que quiser. Uma task Structured tem as etapas de PRD, tech spec, plano, implementação, review de step, PR e review de PR; uma One-Shot, as de planejamento One-Shot, implementação, review de step, PR e review de PR. Depois, o popover **Models** no cabeçalho da task lista as etapas do modo dela e troca a escolha das que ainda não começaram. O review de step segue editável até o último step ser commitado, e a troca vale para os revisores que ainda não começaram; ele aparece mesmo numa task no modo `Manual`, porque um step pode passar a `Agent` antes de começar.
 - **Por step**: na lista de steps, cada step ainda não iniciado pode ter modelo e esforço próprios. A escolha congela quando a sessão do step começa. O revisor não tem escolha por step: ele começa com o review de step que a task tem na primeira passada. Uma task One-Shot não tem escolha por step: o step único usa a da implementação.
 - **Por sessão**: dentro de uma conversa, o seletor troca o modelo e o esforço daquela sessão a partir da mensagem seguinte. A resposta em andamento termina com a escolha anterior.
@@ -402,6 +523,8 @@ O produto oferece três modelos, Fable 5.1, Opus 5 e Sonnet 5, e cinco níveis d
 As configurações listam os oito prompts, PRD, tech spec, plano, planejamento One-Shot, review de step, commit, PR e review de PR, cada um renderizado e editável. Um prompt editado é salvo como arquivo no diretório de dados e sobrevive a atualizações do app; um prompt nunca editado acompanha o padrão de cada versão. **Restaurar** volta ao padrão. O prompt é lido quando uma sessão começa, então uma sessão já em andamento mantém o prompt com que começou. O prompt de um step é o próprio arquivo do step, escrito pelo plano, ou o documento de uma task One-Shot, escrito pelo planejamento, e por isso não aparece aqui.
 
 Os prompts de review de step, commit, PR e review de PR são um texto por tipo, que serve aos dois modos. Numa task One-Shot, onde os de review de step, PR e review de PR citam o PRD, o tech spec ou o arquivo do step, eles citam o documento One-Shot, e o produto acrescenta a cada um uma seção `One-Shot task`, que diz o papel do documento no lugar dos outros. Ela fecha os prompts de PR e de review de PR, seguida só da seção `## Card` no de PR de uma task criada de um card; no de review de step, vem antes da última resposta do implementador, que continua sendo o fim do prompt. Um prompt editado recebe o mesmo tratamento, então uma edição vale para os dois modos.
+
+O prompt de review de PR serve também ao review do centro de review, de uma pull request sem task. Nele, o PRD e o tech spec são o documento de contexto do review, e o produto acrescenta ao fim, depois da seção `One-Shot task` quando ela existe, as seções de que cada caso precisa: `Pull request without a task`, que diz o papel do documento de contexto e que a worktree está em detached HEAD; `Findings format`, o formato de relatório que o produto lê, com os apontamentos ancorados em `arquivo:linha` ou gerais; `Publishing` no modo publicar, que proíbe editar, commitar e fazer push, ou `Applying` no modo aplicar, que diz ao agente para implementar só o que o produto enviar como aprovado. Em qualquer review de pull request, o de uma task incluído, vêm por último `Review instructions`, com as instruções fixas do repositório, e `Instructions for this pass`, com as da passada, quando existem. Um prompt editado recebe o mesmo tratamento.
 
 O prompt de review de step sempre termina com a última resposta do implementador, que o produto acrescenta. O prompt de commit diz o que commitar conforme quem revisou: exatamente o que está em stage, no modo `Manual` e no review de pull request, ou tudo o que mudou na worktree, depois de um relatório limpo do revisor. Essa instrução nunca se perde: num prompt editado que removeu o placeholder, ela é acrescentada ao fim. As mensagens que entregam um relatório ao implementador e que pedem uma nova passada ao revisor são textos fixos do produto e não aparecem aqui.
 
@@ -420,10 +543,10 @@ O tema segue o sistema por padrão e pode ser fixado em claro ou escuro pelo bot
 | Atalho | Ação |
 |---|---|
 | `Ctrl+N` | Criar uma task |
-| `Ctrl+J` | Abrir a primeira task que espera pelo usuário |
+| `Ctrl+J` | Abrir a primeira task ou o primeiro review que espera pelo usuário |
 | `Ctrl+,` | Abrir ou fechar as configurações |
 
-`Cmd` vale no lugar de `Ctrl`. Os atalhos funcionam com o foco em qualquer lugar da janela, inclusive na caixa de mensagem.
+`Cmd` vale no lugar de `Ctrl`. Os atalhos funcionam com o foco em qualquer lugar da janela, inclusive na caixa de mensagem. Com o diálogo de criação de uma task ou o que inicia um review aberto, os três não fazem nada: o que o usuário digita ali não fica para trás nem é coberto por outro diálogo.
 
 Na visão do board:
 

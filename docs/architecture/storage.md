@@ -11,14 +11,26 @@ myspec.db                              o banco SQLite
 prompts/<nome>.md                      só os prompts editados pelo usuário
 sounds/chime.wav                       o som das notificações
 tasks/<dono>/<nome>/<task>/            os artefatos de cada task
+reviews/<dono>/<nome>/pr-<n>-<id>/     os artefatos de cada review de pull request
 worktrees/<dono>/<nome>/<task>/        a worktree de cada task
+worktrees/<dono>/<nome>/pr_<n>/        a worktree de cada review de pull request ativo
 ```
 
 ### Banco
 
-`myspec.db` guarda as configurações (tema, padrões de modelo e de modo de review, filtro por repositório, pasta de clones em `clone_folder`), os boards cadastrados, com os status finais, a última leitura bem-sucedida de cada um, em JSON, e a falha da última leitura, os repositórios cadastrados, com o board de cada um e um caminho vazio enquanto não têm clone, as tasks, com o modo, os modos de review e o card do board de que foram criadas, sem chave estrangeira para o board, para que a task guarde o card quando o board vai embora, os steps, com o ponto do review pelo agente, as sessões e as entradas das conversas, as worktrees, as pull requests e as situações. É aberto com uma única conexão, WAL, `busy_timeout` de cinco segundos e foreign keys, e só o Go o acessa.
+`myspec.db` guarda as configurações (tema, padrões de modelo e de modo de review, filtro por repositório, pasta de clones em `clone_folder`, filtros da visão Reviews em `review_filters`, em JSON), os boards cadastrados, com os status finais, a última leitura bem-sucedida de cada um, em JSON, e a falha da última leitura, os repositórios cadastrados, com o board de cada um, um caminho vazio enquanto não têm clone e as instruções fixas de review, as tasks, com o modo, os modos de review e o card do board de que foram criadas, sem chave estrangeira para o board, para que a task guarde o card quando o board vai embora, os steps, com o ponto do review pelo agente, as pull requests das tasks, os reviews de pull request, com as passadas e os apontamentos, os itens, as sessões e as entradas das conversas, as worktrees e as situações. É aberto com uma única conexão, WAL, `busy_timeout` de cinco segundos e foreign keys, e só o Go o acessa.
 
-O schema é versionado por `PRAGMA user_version` e evolui por migrations em `internal/store/migrations/`, nomeadas `NNNN_nome.sql` com quatro dígitos, aplicadas em ordem, uma transação por arquivo, ao abrir o banco. Uma migration já aplicada nunca é editada: uma mudança de schema é sempre um arquivo novo. Os estados que a interface mostra são derivados; o banco guarda só o que não pode ser derivado, como ids de sessão, o modo de cada task, escolhas de modelo e de modo de review, a passada que o review pelo agente pediu e a que ele tratou, resultados de encerramento e quando cada situação começou.
+O schema é versionado por `PRAGMA user_version` e evolui por migrations em `internal/store/migrations/`, nomeadas `NNNN_nome.sql` com quatro dígitos, aplicadas em ordem, uma transação por arquivo, ao abrir o banco. Uma migration já aplicada nunca é editada: uma mudança de schema é sempre um arquivo novo. Os estados que a interface mostra são derivados; o banco guarda só o que não pode ser derivado, como ids de sessão, o modo de cada task, escolhas de modelo e de modo de review, a passada que o review pelo agente pediu e a que ele tratou, resultados de encerramento e quando cada situação começou. A leitura das pull requests abertas não é guardada: ela é refeita em segundos ao abrir o app.
+
+### Itens
+
+Uma task e um review de pull request são itens. A tabela `items` guarda o id e o tipo, `task` ou `review`, de cada um, e é o pai de `sessions`, `worktrees` e `situations`, pela coluna `item_id` com `ON DELETE CASCADE`. Triggers em `tasks` e em `reviews` inserem e apagam a linha de `items` junto com a do item, então apagar uma task ou um review leva as sessões, as entradas das conversas, a worktree e as situações dele sem código próprio.
+
+### Reviews de pull request
+
+`reviews` guarda um review por linha: o repositório, o número, o título, o autor, o link e as branches da pull request, se ela é do próprio usuário, o modo, `publish` ou `apply`, a fase do ciclo de aplicação, o card em JSON, a pasta de artefatos, a última passada pedida e a última gravada, o commit que ela cobriu, a última publicada e o head com que foi publicada, o último head e o estado que o GitHub informou, a falha da última publicação e, num review arquivado, quando foi. Um índice único parcial garante no máximo um review ativo por pull request. `review_passes` guarda cada passada: as instruções, se o relatório foi gravado, se veio limpo, o commit, o resumo original e o editado, a revisão, que avança a cada releitura diferente, no modo aplicar se as correções dos apontamentos aprovados subiram num commit do app, e, depois de publicada, o veredito, a data e o link. Que as correções subiram é gravado quando o app vê o commit, e não deduzido depois do head da pull request, que também anda com commits que o app não fez. `review_findings` guarda os apontamentos de cada passada: o número do relatório, o arquivo e a linha, vazios num apontamento geral, o texto original e o editado, a decisão, `approved` ou `discarded`, e onde foi publicado, `inline` ou `body`.
+
+O relatório no disco é do agente e o produto nunca o reescreve; tudo o que é do usuário ou do produto sobre ele fica nessas tabelas. A passada pedida é gravada, porque uma passada pode esperar dias e reabrir o app não pode perdê-la.
 
 ### Prompts
 
@@ -54,15 +66,26 @@ O review pelo agente escreve em `step-reviews/` um relatório por passada de cad
 
 A etapa de PR escreve em `pr/` o rascunho da pull request da task, `draft.md`, e os relatórios de review dela, um por passada, nomeados `review-<n>.md`. Os artefatos são o que as sessões leem por caminho e o que o painel de artefatos e o histórico mostram. Apagar uma task apaga a pasta.
 
+### Artefatos de um review
+
+Os artefatos de um review de pull request ficam em `reviews/<dono>/<nome>/pr-<número>-<id>/`, com os oito primeiros caracteres do id do review, para que um review novo da mesma pull request, depois de um apagado ou arquivado, tenha a sua pasta. A pasta é criada com `0700` e guarda:
+
+```
+context.md          o documento de contexto, reescrito pelo app a cada leitura da pull request que abre uma passada
+review-<n>.md       o relatório de cada passada, escrito pelo agente
+```
+
+O relatório abre com um cabeçalho `---` com `status`, `clean` ou `changes`, e `pass`, que, quando presente, tem de ser o do nome do arquivo. O corpo é o resumo até uma linha `## Findings`; depois dela, cada apontamento começa numa linha `### <n>`, com números únicos e positivos, seguida de uma linha `Location: <caminho>:<linha>`, com o caminho relativo à raiz do repositório e a linha maior que zero, ou `Location: general`, e do texto, que não pode ser vazio. Um relatório `clean` não tem apontamentos, e um `changes` tem ao menos um. Qualquer desvio torna o relatório ilegível, e a passada fica sem relatório. O arquivo é lido a cada avaliação do review, sem watcher. A pasta sobrevive ao arquivamento, para o histórico, e vai embora quando o review é apagado.
+
 ## Clones
 
 Os clones que o app faz ficam na pasta de clones que o usuário escolheu, em `<pasta de clones>/<nome>`, nunca no diretório de dados. A partir daí são clones como os outros: o app não os apaga nem os move.
 
 ## Worktrees
 
-As worktrees vivem no diretório de dados, em `~/.local/share/myspec/worktrees/<dono>/<nome>/<task>/`, uma por task, longe dos clones que o usuário mantém. O banco registra cada worktree antes de o `git worktree add` rodar, e o app só remove o que registrou.
+As worktrees vivem no diretório de dados, em `~/.local/share/myspec/worktrees/<dono>/<nome>/<task>/`, uma por task, longe dos clones que o usuário mantém. A de um review de pull request fica em `worktrees/<dono>/<nome>/pr_<número>/`, em detached HEAD em `origin/<branch da pull request>`, sem branch local: uma branch local com o nome da branch da pull request falharia quando o usuário a tem em checkout no clone. Cada nova passada busca o remote e move a worktree para o head atual; ela é removida quando o review termina ou é apagado. O banco registra cada worktree antes de o `git worktree add` rodar, e o app só remove o que registrou.
 
-O registro guarda o caminho da worktree e o clone em que o git roda para ela, que é o clone atual do repositório: trocar o caminho do repositório leva junto o das worktrees das suas tasks, porque é lá que a branch vive. Uma worktree registrada em outro caminho continua sendo usada onde está e é removida de lá; o app nunca move uma worktree.
+O registro guarda o caminho da worktree e o clone em que o git roda para ela, que é o clone atual do repositório: trocar o caminho do repositório leva junto o das worktrees das suas tasks e dos seus reviews, porque é lá que a branch vive. Uma worktree registrada em outro caminho continua sendo usada onde está e é removida de lá; o app nunca move uma worktree.
 
 ## Log
 

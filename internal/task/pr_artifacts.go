@@ -8,6 +8,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/guilhermt/myspec/internal/frontmatter"
 )
 
 // PRDirName is the folder of the PR artifacts inside the task folder.
@@ -115,7 +117,7 @@ func readDraft(path string) (Draft, bool) {
 		return Draft{}, false
 	}
 
-	fields, body := splitFrontMatter(string(content))
+	fields, body := frontmatter.Split(string(content))
 	title := strings.TrimSpace(fields["title"])
 	body = strings.TrimSpace(body)
 	if title == "" || body == "" {
@@ -132,7 +134,7 @@ func readReport(path string, pass int) (ReviewReport, bool) {
 		return ReviewReport{}, false
 	}
 
-	fields, _ := splitFrontMatter(string(content))
+	fields, _ := frontmatter.Split(string(content))
 	status := strings.TrimSpace(fields["status"])
 	if status == "" {
 		return ReviewReport{}, false
@@ -157,11 +159,11 @@ func WriteDraft(path, repository, base, title, body string) error {
 	}
 
 	var content strings.Builder
-	content.WriteString(frontMatterFence + "\n")
+	content.WriteString(frontmatter.Fence + "\n")
 	content.WriteString("repository: " + repository + "\n")
 	content.WriteString("base: " + base + "\n")
 	content.WriteString("title: " + oneLine(title) + "\n")
-	content.WriteString(frontMatterFence + "\n\n")
+	content.WriteString(frontmatter.Fence + "\n\n")
 	content.WriteString(strings.TrimSpace(body) + "\n")
 
 	if err := os.WriteFile(path, []byte(content.String()), filePerm); err != nil {

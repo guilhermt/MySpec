@@ -2,9 +2,11 @@ package worktree_test
 
 import (
 	"context"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 
@@ -63,11 +65,52 @@ func (m *memStore) all() []worktree.Worktree {
 	return slices.Clone(m.items)
 }
 
+// gitLog is a log handler that keeps the command line of every git command
+// the service runs, from the record git.Runner logs for each one.
+type gitLog struct {
+	mu       sync.Mutex
+	commands []string
+}
+
+func (g *gitLog) Enabled(context.Context, slog.Level) bool { return true }
+
+func (g *gitLog) Handle(_ context.Context, rec slog.Record) error {
+	rec.Attrs(func(attr slog.Attr) bool {
+		if args, ok := attr.Value.Any().([]string); ok && attr.Key == "args" {
+			g.mu.Lock()
+			g.commands = append(g.commands, strings.Join(args, " "))
+			g.mu.Unlock()
+			return false
+		}
+		return true
+	})
+	return nil
+}
+
+func (g *gitLog) WithAttrs([]slog.Attr) slog.Handler { return g }
+
+func (g *gitLog) WithGroup(string) slog.Handler { return g }
+
+// count is how many commands ran so far.
+func (g *gitLog) count() int {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return len(g.commands)
+}
+
+// since is every command line run after the first n.
+func (g *gitLog) since(n int) []string {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return slices.Clone(g.commands[n:])
+}
+
 // fixture is a registered repository cloned from an origin, and the service
 // that owns the worktrees of its tasks.
 type fixture struct {
 	svc     *worktree.Service
 	store   *memStore
+	git     *gitLog
 	dataDir string
 	repo    repository.Repository
 	task    task.Task
@@ -87,13 +130,16 @@ func newFixtureOf(t *testing.T, repo repository.Repository) fixture {
 	t.Helper()
 
 	store := &memStore{}
+	commands := &gitLog{}
 	dataDir := t.TempDir()
 	svc := worktree.New(worktree.Deps{
-		Git:     git.New(git.Deps{Env: gittest.Env(t)}),
+		Git:     git.New(git.Deps{Log: slog.New(commands), Env: gittest.Env(t)}),
 		Store:   store,
 		DataDir: dataDir,
 	})
-	return fixture{svc: svc, store: store, dataDir: dataDir, repo: repo, task: newTask("task-1", taskName)}
+	return fixture{
+		svc: svc, store: store, git: commands, dataDir: dataDir, repo: repo, task: newTask("task-1", taskName),
+	}
 }
 
 // newTask builds a task, the only thing Ensure reads of one.
@@ -198,4 +244,46 @@ func repoWithoutBase(t *testing.T) repository.Repository {
 	path := filepath.Join(t.TempDir(), "web")
 	gittest.Run(t, dir, "clone", "--branch", "trunk", origin, path)
 	return repository.Repository{ID: "repo-1", Owner: "dev", Name: "web", Path: path}
+}
+
+// The pull request every detached fixture reviews: its number and the branch
+// its head is on.
+const (
+	prNumber = 7
+	headName = "feature"
+)
+
+// pushHead puts a branch named headName on the origin of the repository, with
+// a commit of its own, and returns the commit it points at.
+func (f fixture) pushHead(t *testing.T, file, content string) string {
+	t.Helper()
+
+	// A second call carries on from where origin already has the branch, as a
+	// new commit of a pull request does.
+	start := "HEAD"
+	if gittest.Run(t, f.repo.Path, "branch", "-r", "--list", "origin/"+headName) != "" {
+		start = "origin/" + headName
+	}
+	gittest.Run(t, f.repo.Path, "checkout", "-B", headName, start)
+	gittest.Commit(t, f.repo.Path, file, content, "Work on "+headName)
+	gittest.Run(t, f.repo.Path, "push", "origin", headName)
+	head := headOf(t, f.repo.Path, "HEAD")
+	// The clone goes back to main and forgets the branch, so that only origin
+	// has it, as it is for a pull request of somebody else.
+	gittest.Run(t, f.repo.Path, "checkout", "main")
+	gittest.Run(t, f.repo.Path, "branch", "-D", headName)
+	return head
+}
+
+// ensureDetached creates the worktree of the review of the pull request,
+// failing the test on error.
+func (f fixture) ensureDetached(t *testing.T) worktree.Worktree {
+	t.Helper()
+
+	wt, err := f.svc.EnsureDetached(
+		t.Context(), "review-1", f.repo, worktree.ReviewDirName(prNumber), headName, "main")
+	if err != nil {
+		t.Fatalf("EnsureDetached() = %v, want nil", err)
+	}
+	return wt
 }

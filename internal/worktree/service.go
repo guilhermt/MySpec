@@ -30,7 +30,7 @@ type Deps struct {
 	Now     func() time.Time // defaults to time.Now
 }
 
-// Service is the registry of the worktrees of the tasks and the policy of
+// Service is the registry of the worktrees of the items and the policy of
 // their life cycle. Git runs one command at a time per repository.
 type Service struct {
 	git     *git.Runner
@@ -40,7 +40,7 @@ type Service struct {
 	now     func() time.Time
 
 	mu     sync.Mutex
-	items  map[string]Worktree    // by task id
+	items  map[string]Worktree    // by item id
 	repoMu map[string]*sync.Mutex // by repository path
 }
 
@@ -65,15 +65,15 @@ func New(deps Deps) *Service {
 	}
 }
 
-// Sync loads the worktrees of the given tasks, replacing what was loaded
+// Sync loads the worktrees of the given items, replacing what was loaded
 // before. internal/app calls it right after task.Service.Sync.
-func (s *Service) Sync(ctx context.Context, taskIDs []string) error {
-	list, err := s.store.ListByTasks(ctx, taskIDs)
+func (s *Service) Sync(ctx context.Context, itemIDs []string) error {
+	list, err := s.store.ListByTasks(ctx, itemIDs)
 	if err != nil {
 		return fmt.Errorf("list worktrees: %w", err)
 	}
 
-	items := make(map[string]Worktree, len(taskIDs))
+	items := make(map[string]Worktree, len(itemIDs))
 	for _, wt := range list {
 		items[wt.TaskID] = wt
 	}
@@ -84,12 +84,12 @@ func (s *Service) Sync(ctx context.Context, taskIDs []string) error {
 	return nil
 }
 
-// Get is the registered worktree of a task.
-func (s *Service) Get(taskID string) (Worktree, bool) {
+// Get is the registered worktree of an item.
+func (s *Service) Get(itemID string) (Worktree, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	wt, ok := s.items[taskID]
+	wt, ok := s.items[itemID]
 	return wt, ok
 }
 
@@ -179,6 +179,115 @@ func (s *Service) Ensure(
 	s.log.Info("worktree created",
 		"task", t.Name, "repository", repo.FullName(), "path", path, "branch", t.Name, "base", base)
 	return wt, nil
+}
+
+// EnsureDetached returns the worktree of an item on a detached HEAD at the
+// head of headBranch on origin, creating it when the item has none. It is how
+// the review of a pull request gets a worktree: there is no local branch, so
+// nothing of the pull request is ever pushed by accident.
+func (s *Service) EnsureDetached(
+	ctx context.Context, itemID string, repo repository.Repository, dirName, headBranch, baseBranch string,
+) (Worktree, error) {
+	unlock := s.lockRepo(repo.Path)
+	defer unlock()
+
+	registered, found := s.Get(itemID)
+	if found {
+		if _, err := os.Stat(registered.Path); err == nil {
+			return registered, nil
+		}
+		// The folder is gone: the user deleted it by hand. The worktree is the
+		// app's own, so it takes it back before creating again.
+		if err := s.discard(ctx, registered); err != nil {
+			return Worktree{}, err
+		}
+		s.log.Info("worktree recreated", "item", itemID, "path", registered.Path)
+	}
+
+	if err := do(ctx, FetchTimeout, func(ctx context.Context) error {
+		return s.git.Fetch(ctx, repo.Path, remote)
+	}); err != nil {
+		return Worktree{}, fmt.Errorf("%w: %w", ErrFetchFailed, err)
+	}
+
+	head := remote + "/" + headBranch
+	exists, err := ask(ctx, CommandTimeout, func(ctx context.Context) (bool, error) {
+		return s.git.RefExists(ctx, repo.Path, "refs/remotes/"+head)
+	})
+	if err != nil {
+		return Worktree{}, err
+	}
+	if !exists {
+		return Worktree{}, fmt.Errorf("%w: %s", ErrNoHeadBranch, head)
+	}
+
+	path := Path(s.dataDir, repo.Owner, repo.Name, dirName)
+	// Nothing found here is reused or deleted: the app only owns what it made.
+	if _, err = os.Lstat(path); err == nil {
+		return Worktree{}, fmt.Errorf("%w: %s", ErrPathExists, path)
+	}
+	if err = os.MkdirAll(filepath.Dir(path), dirPerm); err != nil {
+		return Worktree{}, fmt.Errorf("create worktree directory: %w", err)
+	}
+
+	wt := Worktree{
+		TaskID:    itemID,
+		RepoPath:  repo.Path,
+		Path:      path,
+		Base:      remote + "/" + baseBranch,
+		CreatedAt: s.now().UTC(),
+	}
+	// Registered before the command, so that a creation that fails or is
+	// cancelled halfway is still the app's to clean up.
+	if err = s.store.Insert(ctx, wt); err != nil {
+		return Worktree{}, fmt.Errorf("insert worktree %s: %w", path, err)
+	}
+
+	if err = do(ctx, CommandTimeout, func(ctx context.Context) error {
+		return s.git.AddDetachedWorktree(ctx, repo.Path, path, head)
+	}); err != nil {
+		s.rollback(wt)
+		return Worktree{}, err
+	}
+
+	s.remember(wt)
+	s.log.Info("detached worktree created",
+		"item", itemID, "repository", repo.FullName(), "path", path, "head", head, "base", wt.Base)
+	return wt, nil
+}
+
+// UpdateDetached brings a worktree on a detached HEAD to the head of
+// headBranch on origin. A worktree with changes is refused: nothing the app
+// did not put there is thrown away.
+func (s *Service) UpdateDetached(ctx context.Context, wt Worktree, headBranch string) error {
+	unlock := s.lockRepo(wt.RepoPath)
+	defer unlock()
+
+	status, err := ask(ctx, CommandTimeout, func(ctx context.Context) (git.Status, error) {
+		return s.git.Status(ctx, wt.Path)
+	})
+	if err != nil {
+		return err
+	}
+	if !status.Clean() {
+		return fmt.Errorf("%w: %s", ErrDirty, wt.Path)
+	}
+
+	if err = do(ctx, FetchTimeout, func(ctx context.Context) error {
+		return s.git.Fetch(ctx, wt.RepoPath, remote)
+	}); err != nil {
+		return fmt.Errorf("%w: %w", ErrFetchFailed, err)
+	}
+
+	head := remote + "/" + headBranch
+	if err = do(ctx, CommandTimeout, func(ctx context.Context) error {
+		return s.git.CheckoutDetached(ctx, wt.Path, head)
+	}); err != nil {
+		return err
+	}
+
+	s.log.Info("detached worktree updated", "item", wt.TaskID, "path", wt.Path, "head", head)
+	return nil
 }
 
 // Status reads the state of the working tree of a worktree.
@@ -276,10 +385,10 @@ func (s *Service) Clean(ctx context.Context, wt Worktree) error {
 	return nil
 }
 
-// Remove removes the worktree of a task with its branch, with what git said
-// when it refuses. A task without one has nothing to remove.
-func (s *Service) Remove(ctx context.Context, taskID string) error {
-	wt, ok := s.Get(taskID)
+// Remove removes the worktree of an item with its branch, with what git said
+// when it refuses. An item without one has nothing to remove.
+func (s *Service) Remove(ctx context.Context, itemID string) error {
+	wt, ok := s.Get(itemID)
 	if !ok {
 		return nil
 	}
@@ -290,14 +399,14 @@ func (s *Service) Remove(ctx context.Context, taskID string) error {
 	if err := s.discard(ctx, wt); err != nil {
 		return err
 	}
-	s.log.Info("worktree removed", "task", wt.TaskID, "path", wt.Path, "branch", wt.Branch)
+	s.log.Info("worktree removed", "item", wt.TaskID, "path", wt.Path, "branch", wt.Branch)
 	return nil
 }
 
 // discard undoes a worktree the app created: the folder when it is still
-// there, the registration git keeps, the branch and the record. The caller
-// holds the mutex of the repository. The order matters: branch -D fails while
-// the branch is checked out in a worktree.
+// there, the registration git keeps, the branch when it has one, and the
+// record. The caller holds the mutex of the repository. The order matters:
+// branch -D fails while the branch is checked out in a worktree.
 func (s *Service) discard(ctx context.Context, wt Worktree) error {
 	if _, err := os.Stat(wt.Path); err == nil {
 		if err = do(ctx, CommandTimeout, func(ctx context.Context) error {
@@ -312,21 +421,24 @@ func (s *Service) discard(ctx context.Context, wt Worktree) error {
 		return err
 	}
 
-	exists, err := ask(ctx, CommandTimeout, func(ctx context.Context) (bool, error) {
-		return s.git.BranchExists(ctx, wt.RepoPath, wt.Branch)
-	})
-	if err != nil {
-		return err
-	}
-	if exists {
-		if err = do(ctx, CommandTimeout, func(ctx context.Context) error {
-			return s.git.DeleteBranch(ctx, wt.RepoPath, wt.Branch)
-		}); err != nil {
+	// A worktree on a detached HEAD has no branch of its own to take back.
+	if wt.Branch != "" {
+		exists, err := ask(ctx, CommandTimeout, func(ctx context.Context) (bool, error) {
+			return s.git.BranchExists(ctx, wt.RepoPath, wt.Branch)
+		})
+		if err != nil {
 			return err
+		}
+		if exists {
+			if err = do(ctx, CommandTimeout, func(ctx context.Context) error {
+				return s.git.DeleteBranch(ctx, wt.RepoPath, wt.Branch)
+			}); err != nil {
+				return err
+			}
 		}
 	}
 
-	if err = s.store.Delete(ctx, wt.TaskID); err != nil {
+	if err := s.store.Delete(ctx, wt.TaskID); err != nil {
 		return fmt.Errorf("delete worktree %s: %w", wt.Path, err)
 	}
 	s.forget(wt)

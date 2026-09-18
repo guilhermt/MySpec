@@ -6,6 +6,8 @@ import {
   placeLabel,
   prSituation,
   reviewerSituation,
+  reviewName,
+  reviewSituation,
   situationDetail,
   situationLabel,
   situationTone,
@@ -17,7 +19,7 @@ import {
   waitingEntries,
 } from "@/lib/situations";
 import type { Place } from "@/lib/wails";
-import { makeSituation, makeState, makeTask } from "@/test/wails-mock";
+import { makeReviewSummary, makeSituation, makeState, makeTask } from "@/test/wails-mock";
 
 function stagePlace(stage: string): Place {
   return { kind: "stage", stage, step: 0 };
@@ -32,6 +34,7 @@ function reviewerPlace(step: number): Place {
 }
 
 const PR_PLACE: Place = { kind: "pr", stage: "", step: 0 };
+const REVIEW_PLACE: Place = { kind: "review", stage: "", step: 0 };
 
 const ids = (situations: readonly { id: string }[]) => situations.map((situation) => situation.id);
 
@@ -68,6 +71,11 @@ describe("situationLabel", () => {
     ["changes_review", "approve", 100, "Approve changes"],
     ["merge", "merge", 0, "Ready to merge"],
     ["merge", "close", 0, "Ready to close"],
+    ["review_report", "decide", 0, "Decide findings"],
+    ["review_report", "publish", 0, "Publish review"],
+    ["review_report", "apply", 0, "Apply findings"],
+    ["new_commits", "", 0, "New commits"],
+    ["publish_failed", "", 0, "Publish failed"],
   ])("names %s in the %s form", (kind, form, percent, label) => {
     const situation = makeSituation({ kind, form, percent, place: stepPlace(3) });
 
@@ -80,6 +88,9 @@ describe("situationLabel", () => {
     );
     expect(situationLabel(makeSituation({ kind: "changes_review", form: "close" }))).toBe(
       "Review changes",
+    );
+    expect(situationLabel(makeSituation({ kind: "review_report", place: REVIEW_PLACE }))).toBe(
+      "Decide findings",
     );
   });
 });
@@ -94,6 +105,7 @@ describe("placeLabel", () => {
     [stepPlace(4), "step 4"],
     [reviewerPlace(2), "step 2 review"],
     [PR_PLACE, "pull request"],
+    [REVIEW_PLACE, "review"],
   ])("names the place %#", (place, label) => {
     expect(placeLabel(makeSituation({ place }))).toBe(label);
   });
@@ -105,6 +117,9 @@ describe("namesPlace and situationDetail", () => {
     ["step_review", true],
     ["step_empty", true],
     ["plan_invalid", true],
+    ["review_report", true],
+    ["new_commits", true],
+    ["publish_failed", true],
     ["session_error", false],
     ["worktree_unreadable", false],
     ["pr_blocked", false],
@@ -241,10 +256,10 @@ describe("waitingEntries", () => {
     ],
   });
 
-  it("lists every situation of the active tasks, most urgent first, then by task and id", () => {
+  it("lists every situation of the active tasks, most urgent first, then by name and id", () => {
     const entries = waitingEntries(app, null);
 
-    expect(entries.map((entry) => [entry.task.name, entry.situation.id])).toEqual([
+    expect(entries.map((entry) => [entry.name, entry.situation.id])).toEqual([
       ["add-login", "add-login-blocked"],
       ["billing", "billing-draft"],
       ["billing", "billing-findings"],
@@ -259,12 +274,78 @@ describe("waitingEntries", () => {
     ]);
   });
 
-  it("is empty without tasks, or without a situation in them", () => {
+  it("lists the situations of the reviews beside the ones of the tasks", () => {
+    const withReview = makeState({
+      tasks: [
+        makeTask({
+          id: "task-1",
+          name: "billing",
+          situations: [makeSituation({ id: "billing-draft", kind: "draft", place: PR_PLACE })],
+        }),
+      ],
+      reviews: [
+        makeReviewSummary({
+          id: "review-1",
+          situations: [
+            makeSituation({
+              id: "review-failed",
+              taskId: "review-1",
+              kind: "publish_failed",
+              group: "error",
+              place: REVIEW_PLACE,
+            }),
+          ],
+        }),
+      ],
+    });
+
+    expect(waitingEntries(withReview, null)).toEqual([
+      expect.objectContaining({ itemId: "review-1", name: "web#31" }),
+      expect.objectContaining({ itemId: "task-1", name: "billing" }),
+    ]);
+  });
+
+  it("leaves the open review out", () => {
+    const withReview = makeState({
+      reviews: [
+        makeReviewSummary({
+          id: "review-1",
+          situations: [makeSituation({ id: "review-report", place: REVIEW_PLACE })],
+        }),
+      ],
+    });
+
+    expect(waitingEntries(withReview, "review-1")).toEqual([]);
+  });
+
+  it("is empty without tasks or reviews, or without a situation in them", () => {
     expect(waitingEntries(null, null)).toEqual([]);
-    expect(waitingEntries(makeState({ tasks: null }), null)).toEqual([]);
-    expect(waitingEntries(makeState({ tasks: [makeTask({ situations: null })] }), null)).toEqual(
-      [],
-    );
+    expect(waitingEntries(makeState({ tasks: null, reviews: null }), null)).toEqual([]);
+    expect(
+      waitingEntries(
+        makeState({
+          tasks: [makeTask({ situations: null })],
+          reviews: [makeReviewSummary({ situations: null })],
+        }),
+        null,
+      ),
+    ).toEqual([]);
+  });
+});
+
+describe("reviewName", () => {
+  it("names a review by the short name of its repository and its number", () => {
+    expect(reviewName(makeReviewSummary())).toBe("web#31");
+  });
+});
+
+describe("reviewSituation", () => {
+  it("finds the situation of a review", () => {
+    const situation = makeSituation({ id: "report", kind: "review_report", place: REVIEW_PLACE });
+
+    expect(reviewSituation(makeReviewSummary({ situations: [situation] }))?.id).toBe("report");
+    expect(reviewSituation(makeReviewSummary({ situations: [] }))).toBeNull();
+    expect(reviewSituation(makeReviewSummary({ situations: null }))).toBeNull();
   });
 });
 

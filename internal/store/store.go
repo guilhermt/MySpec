@@ -36,6 +36,7 @@ type Store struct {
 	Worktrees    *WorktreesRepo
 	Situations   *SituationsRepo
 	Boards       *BoardsRepo
+	Reviews      *ReviewsRepo
 }
 
 // Open opens the database at path, creating its directory and applying the
@@ -88,6 +89,7 @@ func open(ctx context.Context, dsn, path string, log *slog.Logger, upgrade Upgra
 		Worktrees:    &WorktreesRepo{db: db},
 		Situations:   &SituationsRepo{db: db},
 		Boards:       &BoardsRepo{db: db},
+		Reviews:      &ReviewsRepo{db: db},
 	}, nil
 }
 
@@ -108,6 +110,12 @@ func (s *Store) SchemaVersion(ctx context.Context) (int, error) {
 // is scanned by one function whatever the query returned it.
 type scanner interface {
 	Scan(dest ...any) error
+}
+
+// execer is what *sql.DB and *sql.Tx have in common, so a statement is written
+// once and runs alone or inside a transaction.
+type execer interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 }
 
 // formatTime writes an instant the way every timestamp column stores it.

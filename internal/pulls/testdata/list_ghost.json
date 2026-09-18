@@ -1,0 +1,26 @@
+{
+  "data": {
+    "r0": {
+      "pullRequests": {
+        "nodes": [
+          {
+            "number": 12,
+            "title": "Drop the dead flag",
+            "url": "https://github.com/acme/alpha/pull/12",
+            "isDraft": false,
+            "isCrossRepository": false,
+            "updatedAt": "2026-09-14T10:00:00Z",
+            "headRefName": "drop-dead-flag",
+            "headRefOid": "ddd444",
+            "baseRefName": "main",
+            "author": null,
+            "labels": { "nodes": [] },
+            "reviews": { "nodes": [] }
+          }
+        ]
+      }
+    },
+    "r1": { "pullRequests": { "nodes": [] } },
+    "r2": { "pullRequests": { "nodes": [] } }
+  }
+}

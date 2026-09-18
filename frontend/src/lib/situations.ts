@@ -1,4 +1,5 @@
-import type { Situation, SituationGroup, State, TaskSummary } from "@/lib/wails";
+import { shortName } from "@/lib/repositories";
+import type { ReviewSummary, Situation, SituationGroup, State, TaskSummary } from "@/lib/wails";
 import { asPlaceKind, asSituationForm, asSituationGroup, asSituationKind } from "@/lib/wails";
 
 /** SituationTone is the colour of a situation: an error or block, or a wait. */
@@ -7,9 +8,12 @@ export type SituationTone = "error" | "attention";
 /** FLASH_MS is how long a row, a counter or a tab stays highlighted for a new situation. */
 export const FLASH_MS = 1600;
 
-/** WaitingEntry is one line of "Waiting for you": a situation and its task. */
+/** WaitingEntry is one line of "Waiting for you": a situation and the item it belongs to. */
 export interface WaitingEntry {
-  task: TaskSummary;
+  /** itemId is the task or the review the situation is in. */
+  itemId: string;
+  /** name is what the line reads: the name of a task, or name#number of a review. */
+  name: string;
   situation: Situation;
 }
 
@@ -68,6 +72,16 @@ export function situationLabel(situation: Situation): string {
       return form === "approve" ? "Approve changes" : "Review changes";
     case "merge":
       return form === "close" ? "Ready to close" : "Ready to merge";
+    // A review report is decided on, then published, and in apply mode applied.
+    case "review_report":
+      if (form === "publish") {
+        return "Publish review";
+      }
+      return form === "apply" ? "Apply findings" : "Decide findings";
+    case "new_commits":
+      return "New commits";
+    case "publish_failed":
+      return "Publish failed";
   }
 }
 
@@ -99,6 +113,8 @@ export function placeLabel(situation: Situation): string {
       return `step ${place.step} review`;
     case "pr":
       return "pull request";
+    case "review":
+      return "review";
   }
 }
 
@@ -109,6 +125,9 @@ export function namesPlace(situation: Situation): boolean {
     case "step_review":
     case "step_empty":
     case "plan_invalid":
+    case "review_report":
+    case "new_commits":
+    case "publish_failed":
       return true;
     case "session_error":
     case "worktree_unreadable":
@@ -167,21 +186,41 @@ export function compareSituations(a: Situation, b: Situation): number {
   return Date.parse(a.startedAt) - Date.parse(b.startedAt) || 0;
 }
 
+/** reviewName is what a line of the interface calls a review: name#number. */
+export function reviewName(review: ReviewSummary): string {
+  return `${shortName(review.repository)}#${review.number}`;
+}
+
 /**
- * waitingEntries is everything the active tasks wait on the user for, one entry
- * per situation, most urgent first. The open task is left out: the user is
- * already there.
+ * waitingEntries is everything the active tasks and reviews wait on the user
+ * for, one entry per situation, most urgent first. The item on screen is left
+ * out: the user is already there.
  */
-export function waitingEntries(app: State | null, openTaskId: string | null): WaitingEntry[] {
-  return (app?.tasks ?? [])
-    .filter((task) => task.id !== openTaskId)
-    .flatMap((task) => (task.situations ?? []).map((situation) => ({ task, situation })))
-    .sort(
-      (a, b) =>
-        compareSituations(a.situation, b.situation) ||
-        a.task.name.localeCompare(b.task.name) ||
-        a.situation.id.localeCompare(b.situation.id),
+export function waitingEntries(app: State | null, openItemId: string | null): WaitingEntry[] {
+  const tasks = (app?.tasks ?? [])
+    .filter((task) => task.id !== openItemId)
+    .flatMap((task) =>
+      (task.situations ?? []).map((situation) => ({
+        itemId: task.id,
+        name: task.name,
+        situation,
+      })),
     );
+  const reviews = (app?.reviews ?? [])
+    .filter((review) => review.id !== openItemId)
+    .flatMap((review) =>
+      (review.situations ?? []).map((situation) => ({
+        itemId: review.id,
+        name: reviewName(review),
+        situation,
+      })),
+    );
+  return [...tasks, ...reviews].sort(
+    (a, b) =>
+      compareSituations(a.situation, b.situation) ||
+      a.name.localeCompare(b.name) ||
+      a.situation.id.localeCompare(b.situation.id),
+  );
 }
 
 /** stageSituation is the situation of the planning stage of a task, null when it has none. */
@@ -221,6 +260,14 @@ export function stepOrReviewerSituation(task: TaskSummary, number: number): Situ
       const kind = asPlaceKind(situation.place.kind);
       return (kind === "step" || kind === "step_review") && situation.place.step === number;
     }) ?? null
+  );
+}
+
+/** reviewSituation is the situation of a review of a pull request, null when it has none. */
+export function reviewSituation(review: ReviewSummary): Situation | null {
+  return (
+    (review.situations ?? []).find((situation) => asPlaceKind(situation.place.kind) === "review") ??
+    null
   );
 }
 

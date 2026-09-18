@@ -100,6 +100,59 @@ The account epic.`
 	}
 }
 
+func TestReviewContextIsTheCardAndItsEpicOnly(t *testing.T) {
+	t.Parallel()
+
+	card := board.Card{
+		Issue:  issue("acme", "web", 12, "Login screen", task.IssueOpen),
+		Body:   "Build the login screen.",
+		Status: "In progress",
+		Epic:   &board.Epic{Issue: issue("acme", "web", 3, "Accounts", task.IssueOpen), Body: "The account epic."},
+		Siblings: []board.Related{
+			{Issue: issue("acme", "web", 13, "Logout", task.IssueOpen), Status: "Todo", OnBoard: true},
+		},
+		Dependencies: []board.Dependency{
+			{Related: board.Related{Issue: issue("other", "lib", 5, "Tokens", task.IssueClosed)}},
+		},
+	}
+
+	want := `### Card: Login screen
+
+- Issue: acme/web#12
+- Link: https://github.com/acme/web/issues/12
+- Status: In progress
+
+Build the login screen.
+
+### Epic: Accounts
+
+- Issue: acme/web#3
+- Link: https://github.com/acme/web/issues/3
+
+The account epic.`
+
+	if diff := cmp.Diff(want, board.ReviewContext(card)); diff != "" {
+		t.Errorf("ReviewContext() (-want +got):\n%s", diff)
+	}
+}
+
+func TestReviewContextOfACardWithoutAnEpicIsTheCard(t *testing.T) {
+	t.Parallel()
+
+	card := board.Card{Issue: issue("acme", "web", 12, "Login screen", task.IssueOpen)}
+
+	want := `### Card: Login screen
+
+- Issue: acme/web#12
+- Link: https://github.com/acme/web/issues/12
+
+_The card has no description._`
+
+	if diff := cmp.Diff(want, board.ReviewContext(card)); diff != "" {
+		t.Errorf("ReviewContext() (-want +got):\n%s", diff)
+	}
+}
+
 func issue(owner, name string, number int, title string, state task.IssueState) board.Issue {
 	return board.Issue{
 		Owner:  owner,

@@ -3,7 +3,10 @@ package gh_test
 import (
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
+
+	"github.com/google/go-cmp/cmp"
 
 	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/gh/ghtest"
@@ -150,5 +153,136 @@ func TestViewPRFailsOnOutputThatIsNotTheJSONItAskedFor(t *testing.T) {
 	var syntaxErr *json.SyntaxError
 	if !errors.As(err, &syntaxErr) {
 		t.Errorf("ViewPR() = %v, want the decoding error underneath", err)
+	}
+}
+
+func TestCreateReviewPublishesTheReviewOnItsStandardInput(t *testing.T) {
+	t.Parallel()
+	r, fake := runner(t, map[string]ghtest.Reply{
+		"api": {Stdout: `{"id":1,"html_url":"https://github.com/acme/api/pull/42#pullrequestreview-1"}`},
+	})
+
+	in := gh.ReviewInput{
+		CommitID: "abc123",
+		Event:    gh.EventRequestChanges,
+		Body:     "Two things to change.",
+		Comments: []gh.ReviewComment{{Path: "internal/api/user.go", Line: 12, Side: "RIGHT", Body: "Handle the error."}},
+	}
+	got, err := r.CreateReview(t.Context(), "acme", "api", 42, in)
+	if err != nil {
+		t.Fatalf("CreateReview() = %v, want nil", err)
+	}
+	if want := "https://github.com/acme/api/pull/42#pullrequestreview-1"; got != want {
+		t.Errorf("CreateReview() = %q, want %q", got, want)
+	}
+
+	calls := fake.Calls(t)
+	if len(calls) != 1 {
+		t.Fatalf("calls = %+v, want one", calls)
+	}
+	want := "api --method POST repos/acme/api/pulls/42/reviews --input -"
+	if calls[0].Args != want {
+		t.Errorf("args = %q, want %q", calls[0].Args, want)
+	}
+
+	var sent gh.ReviewInput
+	if err := json.Unmarshal([]byte(fake.Stdin(t)), &sent); err != nil {
+		t.Fatalf("stdin = %q, want the JSON of the review: %v", fake.Stdin(t), err)
+	}
+	if diff := cmp.Diff(in, sent); diff != "" {
+		t.Errorf("stdin (-want +got):\n%s", diff)
+	}
+}
+
+func TestCreateReviewSendsAnEmptyListOfComments(t *testing.T) {
+	t.Parallel()
+	r, fake := runner(t, map[string]ghtest.Reply{"api": {Stdout: `{"html_url":"u"}`}})
+
+	in := gh.ReviewInput{CommitID: "abc123", Event: gh.EventApprove, Body: "Looks good."}
+	if _, err := r.CreateReview(t.Context(), "acme", "api", 42, in); err != nil {
+		t.Fatalf("CreateReview() = %v, want nil", err)
+	}
+	if stdin := fake.Stdin(t); !strings.Contains(stdin, `"comments":[]`) {
+		t.Errorf("stdin = %q, want an empty list of comments", stdin)
+	}
+}
+
+func TestCreateReviewReportsAGhWithNoLogin(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		reply ghtest.Reply
+	}{
+		{"by its exit code", ghtest.Reply{Stderr: "HTTP 401", Exit: 4}},
+		{"by what it said", ghtest.Reply{Stderr: "To get started with GitHub CLI, run: gh auth login", Exit: 1}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			r, _ := runner(t, map[string]ghtest.Reply{"api": test.reply})
+
+			_, err := r.CreateReview(t.Context(), "acme", "api", 42, gh.ReviewInput{})
+			if !errors.Is(err, gh.ErrNotAuthenticated) {
+				t.Errorf("CreateReview() = %v, want ErrNotAuthenticated", err)
+			}
+		})
+	}
+}
+
+func TestCreateReviewReportsAnyOtherFailureAsGhWroteIt(t *testing.T) {
+	t.Parallel()
+	said := "HTTP 422: Line must be part of the diff"
+	r, _ := runner(t, map[string]ghtest.Reply{"api": {Stderr: said, Exit: 1}})
+
+	_, err := r.CreateReview(t.Context(), "acme", "api", 42, gh.ReviewInput{})
+	if errors.Is(err, gh.ErrNotAuthenticated) {
+		t.Fatalf("CreateReview() = %v, want a failure, not a missing login", err)
+	}
+	var ghErr *gh.Error
+	if !errors.As(err, &ghErr) || ghErr.Output != said {
+		t.Errorf("CreateReview() = %v, want the gh error carrying %q", err, said)
+	}
+}
+
+func TestCreateReviewFailsOnOutputThatIsNotTheJSONItAskedFor(t *testing.T) {
+	t.Parallel()
+	r, _ := runner(t, map[string]ghtest.Reply{"api": {Stdout: "not json at all"}})
+
+	_, err := r.CreateReview(t.Context(), "acme", "api", 42, gh.ReviewInput{})
+	var syntaxErr *json.SyntaxError
+	if !errors.As(err, &syntaxErr) {
+		t.Errorf("CreateReview() = %v, want the decoding error underneath", err)
+	}
+}
+
+func TestPRDiffReadsTheDiffOfThePullRequest(t *testing.T) {
+	t.Parallel()
+	diff := "diff --git a/internal/api/user.go b/internal/api/user.go\n@@ -1,3 +1,4 @@\n+package api"
+	r, fake := runner(t, map[string]ghtest.Reply{"pr": {Stdout: diff}})
+
+	got, err := r.PRDiff(t.Context(), "acme", "api", 42)
+	if err != nil {
+		t.Fatalf("PRDiff() = %v, want nil", err)
+	}
+	if got != diff {
+		t.Errorf("PRDiff() = %q, want %q", got, diff)
+	}
+
+	calls := fake.Calls(t)
+	if len(calls) != 1 || calls[0].Args != "pr diff 42 --repo acme/api" {
+		t.Errorf("calls = %+v, want gh pr diff 42 --repo acme/api", calls)
+	}
+}
+
+func TestPRDiffReportsAFailureAsGhWroteIt(t *testing.T) {
+	t.Parallel()
+	said := "no pull requests found"
+	r, _ := runner(t, map[string]ghtest.Reply{"pr": {Stderr: said, Exit: 1}})
+
+	_, err := r.PRDiff(t.Context(), "acme", "api", 42)
+	var ghErr *gh.Error
+	if !errors.As(err, &ghErr) || ghErr.Output != said {
+		t.Errorf("PRDiff() = %v, want the gh error carrying %q", err, said)
 	}
 }

@@ -25,11 +25,11 @@ const EXIT_MS = 150;
 
 const entryKey = (entry: WaitingEntry) => entry.situation.id;
 
-// What a screen reader hears for an entry: the task, what it waits for, where,
-// and for how long. The place is left out when the label already names it.
+// What a screen reader hears for an entry: the task or the review, what it
+// waits for, where, and for how long. The place is left out when the label already names it.
 function spokenEntry(entry: WaitingEntry, now: number): string {
-  const { task, situation } = entry;
-  const parts = [task.name, situationLabel(situation)];
+  const { name, situation } = entry;
+  const parts = [name, situationLabel(situation)];
   if (!namesPlace(situation)) {
     parts.push(placeLabel(situation));
   }
@@ -66,16 +66,18 @@ function onListKeyDown(event: KeyboardEvent<HTMLUListElement>) {
 }
 
 /**
- * WaitingSection lists everything the active tasks wait on the user for, most
- * urgent first, so they can pick where to go. The open task is left out: the
- * user is already there.
+ * WaitingSection lists everything the active tasks and reviews wait on the user
+ * for, most urgent first, so they can pick where to go. The item on screen is
+ * left out: the user is already there.
  */
 export function WaitingSection() {
   const app = useAppStore((state) => state.app);
   const openTaskId = useAppStore((state) => state.openTaskId);
+  const openReviewId = useAppStore((state) => state.openReviewId);
   const openPlace = useAppStore((state) => state.openPlace);
   const titleId = useId();
-  const entries = useMemo(() => waitingEntries(app, openTaskId), [app, openTaskId]);
+  const openItemId = openTaskId ?? openReviewId;
+  const entries = useMemo(() => waitingEntries(app, openItemId), [app, openItemId]);
   const shown = usePresence(entries, entryKey, EXIT_MS);
   const now = useNow(NOW_INTERVAL_MS, entries.length > 0);
   const open = entries.length > 0;
@@ -130,14 +132,12 @@ export function WaitingSection() {
                       data-waiting-entry=""
                       tabIndex={leaving ? -1 : 0}
                       aria-label={spokenEntry(entry, now)}
-                      onClick={() => openPlace(entry.task.id, entry.situation.place)}
+                      onClick={() => openPlace(entry.itemId, entry.situation.place)}
                       className="flex h-12 w-full flex-col justify-center gap-0.5 rounded-md px-2 text-left outline-none transition-colors duration-[var(--duration-fast)] hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
                     >
                       <span className="flex w-full items-center gap-2">
                         <ToneDot tone={situationTone(entry.situation)} />
-                        <span className="min-w-0 flex-1 truncate font-medium">
-                          {entry.task.name}
-                        </span>
+                        <span className="min-w-0 flex-1 truncate font-medium">{entry.name}</span>
                         <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
                           {compactWait(entry.situation.startedAt, now)}
                         </span>

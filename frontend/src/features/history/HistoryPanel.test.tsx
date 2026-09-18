@@ -1,10 +1,10 @@
 import { screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { HistoryPanel } from "@/features/history/HistoryPanel";
-import { api } from "@/lib/wails";
+import { type ArchivedReview, api } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
-import { makeArchivedTask, makeRepository, makeState } from "@/test/wails-mock";
+import { makeArchivedReview, makeArchivedTask, makeRepository, makeState } from "@/test/wails-mock";
 
 const WEB = makeRepository();
 const API = makeRepository({
@@ -24,9 +24,20 @@ const HEADER = makeArchivedTask({
   pr: null,
 });
 
-function panel(history = [LOGIN, HEADER], filter = "") {
+const REVIEW = makeArchivedReview({
+  id: "review-31",
+  title: "Cache the sessions",
+  archivedAt: "2026-09-07T10:00:00Z",
+});
+
+function panel(history = [LOGIN, HEADER], filter = "", reviewHistory: ArchivedReview[] = []) {
   return renderWithStore(<HistoryPanel />, {
-    state: makeState({ repositories: [WEB, API], repositoryFilter: filter, history }),
+    state: makeState({
+      repositories: [WEB, API],
+      repositoryFilter: filter,
+      history,
+      reviewHistory,
+    }),
   });
 }
 
@@ -101,7 +112,7 @@ describe("HistoryPanel", () => {
 
     await user.type(screen.getByRole("textbox", { name: "Search history" }), "nothing");
 
-    expect(screen.getByText("No task matches “nothing”")).toBeInTheDocument();
+    expect(screen.getByText("Nothing matches “nothing”")).toBeInTheDocument();
     expect(screen.queryAllByRole("listitem")).toHaveLength(0);
   });
 
@@ -114,7 +125,7 @@ describe("HistoryPanel", () => {
   it("says when the repository of the filter has nothing archived", () => {
     panel([LOGIN], "repo-2");
 
-    expect(screen.getByText("No archived tasks in api")).toBeInTheDocument();
+    expect(screen.getByText("Nothing archived in api")).toBeInTheDocument();
     expect(screen.getByText("Choose another repository, or all of them.")).toBeInTheDocument();
   });
 
@@ -122,6 +133,50 @@ describe("HistoryPanel", () => {
     panel([]);
 
     expect(screen.getByText("Nothing archived yet")).toBeInTheDocument();
-    expect(screen.getByText("A task comes here once it's closed.")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "A task comes here once it's closed, a review once its pull request is merged or closed.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("lists an archived review among the tasks, by when it ended", () => {
+    panel([LOGIN], "", [REVIEW]);
+
+    const [first, second] = screen.getAllByRole("listitem");
+    expect(first).toHaveTextContent("add-login");
+    expect(second).toHaveTextContent("Review");
+    expect(second).toHaveTextContent("#31 Cache the sessions");
+    expect(second).toHaveTextContent("web");
+    expect(second).toHaveTextContent("alice");
+    expect(second).toHaveTextContent("Merged");
+  });
+
+  it("finds a review by its #number", async () => {
+    const { user } = panel([LOGIN], "", [REVIEW]);
+
+    await user.type(screen.getByRole("textbox", { name: "Search history" }), "#31");
+
+    expect(screen.getByRole("listitem")).toHaveTextContent("Cache the sessions");
+  });
+
+  it("keeps the reviews of the repository of the filter", () => {
+    const { unmount } = panel([LOGIN, HEADER], "repo-2", [REVIEW]);
+
+    expect(screen.getByRole("listitem")).toHaveTextContent("fix-header");
+    unmount();
+
+    panel([HEADER], "repo-1", [REVIEW]);
+
+    expect(screen.getByRole("listitem")).toHaveTextContent("Cache the sessions");
+  });
+
+  it("opens the review the user picks", async () => {
+    const { user } = panel([], "", [REVIEW]);
+
+    await user.click(screen.getByRole("button", { name: /Cache the sessions/ }));
+
+    expect(useAppStore.getState().openArchivedReviewId).toBe("review-31");
+    expect(useAppStore.getState().historyOpen).toBe(true);
   });
 });

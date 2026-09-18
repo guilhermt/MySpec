@@ -15,7 +15,7 @@ type SituationsRepo struct{ db *sql.DB }
 
 // situationColumns is the column list every situation query selects, in scan
 // order.
-const situationColumns = `task_id, place, id, kind, started_at`
+const situationColumns = `item_id, place, id, kind, started_at`
 
 // ListByTasks returns the situations of the given tasks. An empty list of
 // tasks asks the database nothing.
@@ -31,8 +31,8 @@ func (r *SituationsRepo) ListByTasks(ctx context.Context, taskIDs []string) ([]a
 	// The only thing built into the statement is one placeholder per task; the
 	// ids themselves travel as arguments.
 	//nolint:gosec // G202: the concatenated text is a placeholder list, not data
-	query := `SELECT ` + situationColumns + ` FROM situations WHERE task_id IN (?` +
-		strings.Repeat(", ?", len(taskIDs)-1) + `) ORDER BY task_id, place`
+	query := `SELECT ` + situationColumns + ` FROM situations WHERE item_id IN (?` +
+		strings.Repeat(", ?", len(taskIDs)-1) + `) ORDER BY item_id, place`
 
 	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -57,7 +57,7 @@ func (r *SituationsRepo) ListByTasks(ctx context.Context, taskIDs []string) ([]a
 // Upsert stores the situation of a place, replacing the one the place had.
 func (r *SituationsRepo) Upsert(ctx context.Context, rec attention.Record) error {
 	const stmt = `INSERT INTO situations (` + situationColumns + `) VALUES (?, ?, ?, ?, ?)
-		ON CONFLICT (task_id, place) DO UPDATE SET
+		ON CONFLICT (item_id, place) DO UPDATE SET
 			id = excluded.id,
 			kind = excluded.kind,
 			started_at = excluded.started_at`
@@ -71,7 +71,7 @@ func (r *SituationsRepo) Upsert(ctx context.Context, rec attention.Record) error
 
 // Delete removes the situation of a place. A missing row is not an error.
 func (r *SituationsRepo) Delete(ctx context.Context, taskID, place string) error {
-	const stmt = `DELETE FROM situations WHERE task_id = ? AND place = ?`
+	const stmt = `DELETE FROM situations WHERE item_id = ? AND place = ?`
 
 	if _, err := r.db.ExecContext(ctx, stmt, taskID, place); err != nil {
 		return fmt.Errorf("delete situation of %s in task %s: %w", place, taskID, err)
