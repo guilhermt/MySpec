@@ -37,7 +37,7 @@ const (
 	modeVersion       = 11
 	boardsVersion     = 14
 	itemsVersion      = 15
-	latestVersion     = 15
+	latestVersion     = 16
 )
 
 // upgradeTime is the instant the repositories of the fake upgrades are stamped

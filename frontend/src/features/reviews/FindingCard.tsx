@@ -1,7 +1,7 @@
 import { Textarea } from "@/components/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { findingLocation, placementLabel } from "@/features/reviews/review-status";
-import { textKey, useFindingText } from "@/features/reviews/useFindingText";
+import { useFindingText } from "@/features/reviews/useFindingText";
 import { asFindingDecision, type ReviewFinding } from "@/lib/wails";
 import { decideFinding, openFindingInEditor, saveFindingText } from "@/store/actions";
 
@@ -20,7 +20,9 @@ export function FindingCard({ reviewId, pass, revision, finding, published }: Fi
   const anchored = finding.path !== "";
   const decision = asFindingDecision(finding.decision);
   const text = useFindingText(
-    textKey(reviewId, pass, finding.number),
+    reviewId,
+    pass,
+    finding.number,
     finding.text,
     revision,
     (next) => void saveFindingText(reviewId, pass, finding.number, next),

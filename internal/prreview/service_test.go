@@ -338,6 +338,54 @@ func TestAPublicationThatCouldNotBeStoredIsPublishedAgain(t *testing.T) {
 	}
 }
 
+func TestAPassWhoseFixesWentUpIsMarkedAppliedInTheCacheAndInTheStore(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	review := f.recorded(t, 42, changesReport(1, "One thing.",
+		prreview.ParsedFinding{Number: 1, Text: "A thing."}), "commit-1")
+
+	f.store.updateErr = errors.New("database is locked")
+	if err := f.service.MarkApplied(t.Context(), review.ID, 1); err == nil {
+		t.Fatal("mark applied: want an error")
+	}
+	if f.pass(t, review.ID, 1).Applied || f.store.storedPass(t, review.ID, 1).Applied {
+		t.Error("pass applied, want it left as it was in the cache and in the store")
+	}
+
+	f.store.updateErr = nil
+	for range 2 {
+		if err := f.service.MarkApplied(t.Context(), review.ID, 1); err != nil {
+			t.Fatalf("mark applied: %v", err)
+		}
+	}
+	pass := f.pass(t, review.ID, 1)
+	if !pass.Applied || !f.store.storedPass(t, review.ID, 1).Applied {
+		t.Error("pass not applied, want it applied in the cache and in the store")
+	}
+	if len(pass.Findings) != 1 || pass.Summary != "One thing." {
+		t.Errorf("pass = %+v, want the rest of it untouched", pass)
+	}
+}
+
+func TestOnlyARecordedPassIsMarkedApplied(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	review := f.asked(t, 42)
+
+	cases := map[string]error{
+		"asked, not recorded": f.service.MarkApplied(t.Context(), review.ID, 1),
+		"never asked":         f.service.MarkApplied(t.Context(), review.ID, 2),
+		"unknown review":      f.service.MarkApplied(t.Context(), "nobody", 1),
+	}
+	for name, err := range cases {
+		if !errors.Is(err, prreview.ErrNotFound) {
+			t.Errorf("%s: error = %v, want ErrNotFound", name, err)
+		}
+	}
+}
+
 func TestAPublishedPassIsNeverTouchedAgain(t *testing.T) {
 	t.Parallel()
 

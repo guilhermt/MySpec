@@ -249,7 +249,7 @@ func (s *Service) sentFindings(stored prreview.Review) []prreview.Finding {
 		}
 	}
 	if stored.Mode == prreview.ModeApply {
-		return appliedFindings(stored, recorded)
+		return appliedFindings(recorded)
 	}
 
 	var sent []prreview.Finding
@@ -267,31 +267,16 @@ func (s *Service) sentFindings(stored prreview.Review) []prreview.Finding {
 }
 
 // appliedFindings are the approved findings of the passes whose fixes went up
-// in a commit. Fixes the user dropped, and findings approved but never
-// applied, are no part of the pull request.
-func appliedFindings(stored prreview.Review, recorded []prreview.Pass) []prreview.Finding {
+// in a commit of the app. Fixes the user dropped, and findings approved but
+// never applied, are no part of the pull request.
+func appliedFindings(recorded []prreview.Pass) []prreview.Finding {
 	var applied []prreview.Finding
-	for i, pass := range recorded {
-		if committed(stored, pass, recorded[i+1:]) {
+	for _, pass := range recorded {
+		if pass.Applied {
 			applied = append(applied, pass.Approved()...)
 		}
 	}
 	return applied
-}
-
-// committed reports whether the fixes of a pass went up in a commit. The pass
-// being decided on was committed when the pass after it is asked for while the
-// review is committing, which only the commit that went up does. A pass
-// before it was committed when the pass after it covered another commit: a
-// pass that follows dropped or unapplied fixes covers the head of the pull
-// request, which only a commit moves, and the app takes the one that moved it
-// for the commit of the fixes.
-func committed(stored prreview.Review, pass prreview.Pass, later []prreview.Pass) bool {
-	if len(later) == 0 {
-		return stored.Phase == prreview.PhaseCommitting
-	}
-	next := later[0]
-	return next.Number == pass.Number+1 && pass.Commit != "" && next.Commit != "" && next.Commit != pass.Commit
 }
 
 // passRequest is what the message of a new pass says.

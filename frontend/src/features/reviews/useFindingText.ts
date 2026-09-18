@@ -12,6 +12,12 @@ export function textKey(reviewId: string, pass: number, number: number | "summar
   return `${reviewId}|${pass}|${number}`;
 }
 
+/** passRevision is the report a pass of a review stands at now, null when the review no longer has it. */
+function passRevision(reviewId: string, pass: number): number | null {
+  const review = useAppStore.getState().app?.reviews?.find((each) => each.id === reviewId);
+  return review?.passes?.find((each) => each.pass === pass)?.revision ?? null;
+}
+
 /** EditedText is one text of a report as the user is leaving it. */
 export interface EditedText {
   value: string;
@@ -31,17 +37,20 @@ export interface EditedText {
  * already holds is dropped too.
  */
 export function useFindingText(
-  key: string,
+  reviewId: string,
+  pass: number,
+  number: number | "summary",
   stored: string,
   revision: number,
   save: (text: string) => void,
   required = false,
 ): EditedText {
+  const key = textKey(reviewId, pass, number);
   const entry = useFindingDraft(key);
   const setFindingDraft = useAppStore((state) => state.setFindingDraft);
   const clearFindingDraft = useAppStore((state) => state.clearFindingDraft);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pending = useRef("");
+  const pending = useRef({ text: "", revision });
   const draft = entry !== null && entry.revision === revision ? entry.text : null;
   // The save the unmount flushes with is the one of the last render.
   const saveRef = useRef(save);
@@ -73,16 +82,20 @@ export function useFindingText(
 
   // A field removed while focused does not reliably blur: a save still waiting
   // goes out as it unmounts, or the draft on screen would never reach the Go
-  // side.
+  // side. A field removed by the report written again, a finding the new one
+  // no longer has, never sees the new revision in its props: the store tells
+  // whether the text it was typed on still stands.
   useEffect(
     () => () => {
       if (timer.current !== null) {
         clearTimeout(timer.current);
         timer.current = null;
-        saveRef.current(pending.current);
+        if (passRevision(reviewId, pass) === pending.current.revision) {
+          saveRef.current(pending.current.text);
+        }
       }
     },
-    [],
+    [reviewId, pass],
   );
 
   const blank = (text: string) => required && text.trim() === "";
@@ -95,7 +108,7 @@ export function useFindingText(
       if (blank(text)) {
         return;
       }
-      pending.current = text;
+      pending.current = { text, revision };
       timer.current = setTimeout(() => {
         timer.current = null;
         save(text);

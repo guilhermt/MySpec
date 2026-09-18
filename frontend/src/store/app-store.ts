@@ -64,7 +64,6 @@ export interface PendingStart extends CardRef {
   repositoryId: string;
 }
 
-/** PullRef names one pull request: the repository it belongs to and its number. */
 /** FindingDraft is a text of a review the user is editing, and the report it was typed against. */
 export interface FindingDraft {
   text: string;
@@ -72,6 +71,7 @@ export interface FindingDraft {
   revision: number;
 }
 
+/** PullRef names one pull request: the repository it belongs to and its number. */
 export interface PullRef {
   repositoryId: string;
   number: number;

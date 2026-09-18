@@ -251,6 +251,9 @@ func TestACommitThatWentUpAsksForTheNextPass(t *testing.T) {
 	if state.Review.Phase != prreview.PhaseNone || state.CommitFailed {
 		t.Errorf("review = %+v, commit failed = %v, want the cycle over", state.Review, state.CommitFailed)
 	}
+	if passes := f.reviews.Passes(id); !passes[0].Applied || passes[1].Applied {
+		t.Errorf("passes = %+v, want the first one applied and the second one not", passes)
+	}
 	if !slices.Contains(f.watch.recorded(), "forget:"+id) {
 		t.Errorf("watch calls = %v, want the worktree forgotten", f.watch.recorded())
 	}
@@ -385,6 +388,14 @@ func TestANewPassWaitsForTheCommit(t *testing.T) {
 func secondPass(t *testing.T, f *fixture) string {
 	t.Helper()
 
+	return secondPassOn(t, f, commitHash)
+}
+
+// secondPassOn is secondPass with the second pass recorded on the commit
+// given, which is "" when git could not say the head of the worktree.
+func secondPassOn(t *testing.T, f *fixture, commit string) string {
+	t.Helper()
+
 	id := committing(t, f)
 	f.watch.setSnapshot(review.Snapshot{Head: commitHash})
 	f.sessions.goIdle(id)
@@ -394,7 +405,7 @@ func secondPass(t *testing.T, f *fixture) string {
 	f.sessions.goIdle(id)
 	f.record(t, id, changesReport(2, "One thing left.",
 		prreview.ParsedFinding{Number: 1, Text: "The cache is never emptied."},
-	), commitHash)
+	), commit)
 	f.decide(t, id, 2, 1, prreview.DecisionApproved)
 	return id
 }
@@ -440,6 +451,29 @@ func TestOnlyTheFindingsWhoseFixesWentUpAreListedAsApplied(t *testing.T) {
 		"fixes committed, and a pass after them not applied": {
 			setup: secondPass,
 			want:  appliedFirst,
+		},
+		"a commit the user pushed between passes": {
+			setup: func(t *testing.T, f *fixture) string {
+				t.Helper()
+
+				id := applyDecided(t, f)
+				f.worktrees.moveHead(otherHash)
+				if err := f.service.ReviewAgain(t.Context(), id, ""); err != nil {
+					t.Fatalf("review again: %v", err)
+				}
+				f.sessions.goIdle(id)
+				f.record(t, id, cleanReport(2, "Nothing left."), otherHash)
+				return id
+			},
+			want: "## Findings already applied\nNone.\n\n",
+		},
+		"fixes committed, and a pass after them git could not say the head of": {
+			setup: func(t *testing.T, f *fixture) string {
+				t.Helper()
+
+				return secondPassOn(t, f, "")
+			},
+			want: appliedFirst,
 		},
 	}
 	for name, c := range cases {

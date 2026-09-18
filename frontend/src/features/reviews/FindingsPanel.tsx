@@ -4,7 +4,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Textarea } from "@/components/ui/textarea";
 import { FindingCard } from "@/features/reviews/FindingCard";
 import { decidedCount, lastRecordedPass, reportLabel } from "@/features/reviews/review-status";
-import { textKey, useFindingText } from "@/features/reviews/useFindingText";
+import { useFindingText } from "@/features/reviews/useFindingText";
 import { cn } from "@/lib/utils";
 import type { ReviewPass, ReviewSummary } from "@/lib/wails";
 import { saveReviewSummary } from "@/store/actions";
@@ -12,7 +12,9 @@ import { saveReviewSummary } from "@/store/actions";
 /** Summary is the opening words of the report, as the user leaves them. */
 function Summary({ reviewId, pass }: { reviewId: string; pass: ReviewPass }) {
   const text = useFindingText(
-    textKey(reviewId, pass.pass, "summary"),
+    reviewId,
+    pass.pass,
+    "summary",
     pass.summary,
     pass.revision,
     (next) => void saveReviewSummary(reviewId, pass.pass, next),

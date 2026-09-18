@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { textKey, useFindingText } from "@/features/reviews/useFindingText";
 import { useAppStore } from "@/store/app-store";
 import { resetAppStore } from "@/test/render";
+import { makeReviewPass, makeReviewSummary, makeState } from "@/test/wails-mock";
 
 const KEY = textKey("review-1", 1, 2);
 const SAVE_DELAY_MS = 800;
@@ -16,11 +17,18 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+/** standAt has the store hold the pass of the edited text at a report. */
+function standAt(revision: number) {
+  const review = makeReviewSummary({ passes: [makeReviewPass({ revision })] });
+  useAppStore.setState({ app: makeState({ reviews: [review] }) });
+}
+
 function edit(stored = "The token is never cleared.", revision = 1, required = false) {
+  standAt(revision);
   const save = vi.fn();
   const view = renderHook(
     ({ text, rev }: { text: string; rev: number }) =>
-      useFindingText(KEY, text, rev, save, required),
+      useFindingText("review-1", 1, 2, text, rev, save, required),
     { initialProps: { text: stored, rev: revision } },
   );
   return { ...view, save };
@@ -158,6 +166,19 @@ describe("useFindingText", () => {
     unmount();
 
     expect(save).toHaveBeenCalledExactlyOnceWith("Clear the token.");
+  });
+
+  it("sends nothing as the field goes away with the report written again", () => {
+    const { result, save, unmount } = edit();
+
+    act(() => {
+      result.current.onChange("Clear the token.");
+    });
+    // The new report removes the finding: the field goes away with the old revision in its props.
+    standAt(2);
+    unmount();
+
+    expect(save).not.toHaveBeenCalled();
   });
 
   it("sends nothing as the field goes away when everything was already saved", () => {

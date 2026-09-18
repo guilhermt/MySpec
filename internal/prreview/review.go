@@ -138,8 +138,11 @@ type Pass struct {
 	Verdict         Verdict
 	PublishedAt     time.Time
 	PublishedURL    string
-	Findings        []Finding
-	CreatedAt       time.Time
+	// Applied is set once the fixes of the approved findings went up in a
+	// commit the app asked for, in apply mode.
+	Applied   bool
+	Findings  []Finding
+	CreatedAt time.Time
 }
 
 // Modes lists the modes in the order the interface offers them.

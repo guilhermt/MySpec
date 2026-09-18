@@ -258,6 +258,7 @@ func TestUpsertPassRewritesWhatThePassHolds(t *testing.T) {
 	pass.Verdict = prreview.VerdictRequestChanges
 	pass.PublishedAt = published
 	pass.PublishedURL = "https://github.com/dev/web/pull/7#pullrequestreview-1"
+	pass.Applied = true
 	if err := s.Reviews.UpsertPass(t.Context(), pass); err != nil {
 		t.Fatalf("UpsertPass() = %v, want nil", err)
 	}

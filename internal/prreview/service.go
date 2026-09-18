@@ -559,6 +559,31 @@ func (s *Service) MarkPublished(ctx context.Context, id string, pass int, verdic
 	return nil
 }
 
+// MarkApplied records that the fixes of the approved findings of a pass went
+// up in a commit the app asked for. Marking a pass already applied changes
+// nothing.
+func (s *Service) MarkApplied(ctx context.Context, id string, pass int) error {
+	if _, ok := s.Get(id); !ok {
+		return fmt.Errorf("mark pass %d of review %s applied: %w", pass, id, ErrNotFound)
+	}
+	stored, ok := s.pass(id, pass)
+	if !ok || !stored.Recorded {
+		return fmt.Errorf("mark pass %d of review %s applied: %w", pass, id, ErrNotFound)
+	}
+	if stored.Applied {
+		return nil
+	}
+
+	stored.Applied = true
+	if err := s.store.UpsertPass(ctx, stored); err != nil {
+		return err
+	}
+	s.savePass(stored)
+	s.log.Info("review pass applied", "review", id, "pass", pass)
+	s.changed()
+	return nil
+}
+
 // Archive takes a review out of the active list and into the history, with
 // what became of the pull request. There is no way back.
 func (s *Service) Archive(ctx context.Context, id string, state PRState) (Review, error) {

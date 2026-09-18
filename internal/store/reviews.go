@@ -25,7 +25,7 @@ const reviewColumns = `id, repository_id, number, title, author, url, head_branc
 
 // passColumns is the column list every pass query selects, in scan order.
 const passColumns = `review_id, pass, instructions, recorded, clean, commit_sha,
-	summary_original, summary, revision, verdict, published_at, published_url, created_at`
+	summary_original, summary, revision, verdict, published_at, published_url, created_at, applied`
 
 // findingColumns is the column list every finding query selects, in scan order.
 const findingColumns = `review_id, pass, number, path, line, original, text, decision, placement`
@@ -208,7 +208,7 @@ func (r *ReviewsRepo) UpsertPass(ctx context.Context, pass prreview.Pass) error 
 // upsertPass runs UpsertPass on the database or inside a transaction.
 func upsertPass(ctx context.Context, db execer, pass prreview.Pass) error {
 	const stmt = `INSERT INTO review_passes (` + passColumns + `)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (review_id, pass) DO UPDATE SET
 			instructions = excluded.instructions,
 			recorded = excluded.recorded,
@@ -219,12 +219,13 @@ func upsertPass(ctx context.Context, db execer, pass prreview.Pass) error {
 			revision = excluded.revision,
 			verdict = excluded.verdict,
 			published_at = excluded.published_at,
-			published_url = excluded.published_url`
+			published_url = excluded.published_url,
+			applied = excluded.applied`
 
 	_, err := db.ExecContext(ctx, stmt, pass.ReviewID, pass.Number, pass.Instructions,
 		pass.Recorded, pass.Clean, pass.Commit, pass.SummaryOriginal, pass.Summary, pass.Revision,
 		string(pass.Verdict), nullTime(pass.PublishedAt), pass.PublishedURL,
-		formatTime(pass.CreatedAt))
+		formatTime(pass.CreatedAt), pass.Applied)
 	if err != nil {
 		return fmt.Errorf("upsert pass %d of review %s: %w", pass.Number, pass.ReviewID, err)
 	}
@@ -360,7 +361,7 @@ func scanPass(row scanner) (prreview.Pass, error) {
 	)
 	err := row.Scan(&pass.ReviewID, &pass.Number, &pass.Instructions, &pass.Recorded, &pass.Clean,
 		&pass.Commit, &pass.SummaryOriginal, &pass.Summary, &pass.Revision, &verdict, &publishedAt,
-		&pass.PublishedURL, &createdAt)
+		&pass.PublishedURL, &createdAt, &pass.Applied)
 	if err != nil {
 		return prreview.Pass{}, fmt.Errorf("scan pass: %w", err)
 	}

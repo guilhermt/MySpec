@@ -170,11 +170,17 @@ func (s *Service) evaluateCommit(ctx context.Context, stored prreview.Review, wt
 		s.log.Error("ask review pass failed", "review", id, "error", err)
 		return
 	}
+	// The fixes of the pass went up whatever becomes of the next one, and the
+	// next one lists them as applied. The review stays committing until that
+	// pass is asked for, so that the next evaluation tries both again instead
+	// of offering to apply findings that already went up.
+	if err = s.reviews.MarkApplied(ctx, id, stored.ReportedPass); err != nil {
+		s.log.Error("mark review pass applied failed", "review", id, "pass", stored.ReportedPass, "error", err)
+		return
+	}
 	// The worktree is already on the commit that went up, and an evaluation
 	// reads nothing from GitHub: the document of the review stays as the last
-	// reading of the pull request wrote it. The review stays committing until
-	// the pass is asked for, so that the next evaluation tries again instead of
-	// offering to apply findings that already went up.
+	// reading of the pull request wrote it.
 	if err = s.askPass(ctx, stored, repo, nil, ""); err != nil {
 		s.log.Error("ask review pass failed", "review", id, "error", err)
 		return
