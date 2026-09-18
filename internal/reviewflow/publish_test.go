@@ -278,7 +278,7 @@ func TestAPublicationThatFailedSaysWhatTheUserCanDoAboutIt(t *testing.T) {
 		{
 			"gh said why",
 			func(f *fixture) { f.gh.createErr = rejected },
-			`Couldn't read from GitHub: {"message":"Unprocessable Entity"}`,
+			`Couldn't publish to GitHub: {"message":"Unprocessable Entity"}`,
 		},
 		{
 			"gh is not authenticated",

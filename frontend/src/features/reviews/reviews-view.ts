@@ -117,15 +117,23 @@ export function isFiltering(filters: ReviewFilters): boolean {
   );
 }
 
+// storedList is a list as Go stores it, compared without case: trimmed,
+// without blanks, without repeats and sorted.
+function storedList(values: readonly string[] | null): string[] {
+  const list = (values ?? []).map((value) => value.trim().toLowerCase()).filter((v) => v !== "");
+  return [...new Set(list)].sort();
+}
+
 function sameList(a: readonly string[] | null, b: readonly string[] | null): boolean {
-  const left = [...(a ?? [])].sort();
-  const right = [...(b ?? [])].sort();
+  const left = storedList(a);
+  const right = storedList(b);
   return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
 /**
  * sameFilters reports whether two sets of filters narrow the view the same way.
- * The order of a list does not count: Go stores the lists sorted.
+ * The lists are compared as Go stores them: sorted, trimmed, without blanks and
+ * without repeats that only differ in case.
  */
 export function sameFilters(a: ReviewFilters, b: ReviewFilters): boolean {
   return (

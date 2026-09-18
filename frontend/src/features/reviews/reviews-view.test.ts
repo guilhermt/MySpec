@@ -113,6 +113,13 @@ describe("sameFilters", () => {
     expect(sameFilters(a, b)).toBe(true);
   });
 
+  it("holds for a choice Go stores trimmed and without a repeat in another case", () => {
+    const sent = makeReviewFilters({ labelsInclude: ["Bug", "bug", " ui "] });
+    const stored = makeReviewFilters({ labelsInclude: ["Bug", "ui"] });
+
+    expect(sameFilters(sent, stored)).toBe(true);
+  });
+
   it("tells apart filters that narrow the view differently", () => {
     const base = makeReviewFilters({ authorsExclude: ["dependabot"] });
 

@@ -150,7 +150,8 @@ func (s *Service) publishFailed(
 
 // publishError is why a publication failed, as the user reads it: a pull
 // request that is gone or closed says so, and a failure of gh says what to do
-// about it.
+// about it. A failure with no known reason happened while publishing, not
+// while reading.
 func publishError(err error) string {
 	switch {
 	case errors.Is(err, ErrPullRequestGone):
@@ -162,7 +163,11 @@ func publishError(err error) string {
 	if errors.As(err, &failure) {
 		return failure.Message()
 	}
-	return pulls.FailureOf(err).Message()
+	failure = pulls.FailureOf(err)
+	if failure.Reason == pulls.ReasonFailed {
+		return "Couldn't publish to GitHub: " + failure.Detail
+	}
+	return failure.Message()
 }
 
 // inDiff reports whether the line a finding points at is still part of the
