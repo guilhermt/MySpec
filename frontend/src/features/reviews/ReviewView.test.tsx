@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { ReviewView } from "@/features/reviews/ReviewView";
 import { api, type ReviewSummary } from "@/lib/wails";
 import { renderWithStore } from "@/test/render";
-import { makeReviewPass, makeReviewSummary, makeState } from "@/test/wails-mock";
+import { makeReview, makeReviewPass, makeReviewSummary, makeState } from "@/test/wails-mock";
 
 function view(overrides: Partial<ReviewSummary> = {}) {
   return renderWithStore(<ReviewView reviewId="review-1" />, {
@@ -29,6 +29,22 @@ describe("ReviewView", () => {
     // The panel of the findings names the pass, and so does the list of reports.
     expect(screen.getAllByText("Review 1 · changes")).toHaveLength(2);
     expect(screen.getByLabelText("Finding 1")).toBeInTheDocument();
+  });
+
+  it("shows the changes of the agent for the user to stage in apply mode", () => {
+    view({ mode: "apply", status: "in_review", review: makeReview() });
+
+    expect(screen.getByRole("progressbar", { name: "Review progress" })).toHaveAttribute(
+      "aria-valuenow",
+      "50",
+    );
+    expect(screen.getByText("src/LoginForm.tsx")).toBeInTheDocument();
+  });
+
+  it("shows no changes while the findings are still to apply", () => {
+    view({ mode: "apply", status: "ready_to_apply", review: makeReview() });
+
+    expect(screen.queryByRole("progressbar", { name: "Review progress" })).toBeNull();
   });
 
   it("folds the reports panel away from the header", async () => {

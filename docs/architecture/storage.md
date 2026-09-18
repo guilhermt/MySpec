@@ -71,7 +71,7 @@ A etapa de PR escreve em `pr/` o rascunho da pull request da task, `draft.md`, e
 Os artefatos de um review de pull request ficam em `reviews/<dono>/<nome>/pr-<número>-<id>/`, com os oito primeiros caracteres do id do review, para que um review novo da mesma pull request, depois de um apagado ou arquivado, tenha a sua pasta. A pasta é criada com `0700` e guarda:
 
 ```
-context.md          o documento de contexto, reescrito pelo app a cada passada
+context.md          o documento de contexto, reescrito pelo app a cada leitura da pull request que abre uma passada
 review-<n>.md       o relatório de cada passada, escrito pelo agente
 ```
 

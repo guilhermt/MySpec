@@ -357,6 +357,14 @@ func (m *memWorktrees) failRemove(err error) {
 	m.removeErr = err
 }
 
+// moveHead puts the worktree on another commit, as a commit the agent made
+// does.
+func (m *memWorktrees) moveHead(head string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.head = head
+}
+
 // failStatus makes every reading of a worktree fail with err.
 func (m *memWorktrees) failStatus(err error) {
 	m.mu.Lock()
@@ -887,7 +895,8 @@ func newFixture(t *testing.T) *fixture {
 			if stage != prompts.StageCommit {
 				return "", errors.New("unexpected prompt stage " + string(stage))
 			}
-			return "Commit the work of " + vars.TaskName, nil
+			return "Commit the work of " + vars.TaskName + " in " + vars.ArtifactsDir +
+				", push=" + strconv.FormatBool(vars.Push) + " to " + vars.PushRef, nil
 		},
 		OnChange: f.onChange,
 	})

@@ -43,6 +43,22 @@ export function reviewStatusLabel(review: ReviewSummary): string {
 }
 
 /**
+ * showsChanges says whether the screen of a review shows the changes of the
+ * agent for the user to stage: from the moment the agent rests with them until
+ * the commit that takes them is over.
+ */
+export function showsChanges(review: ReviewSummary): boolean {
+  switch (asPullReviewStatus(review.status)) {
+    case "in_review":
+    case "ready_to_approve":
+    case "committing":
+      return true;
+    default:
+      return false;
+  }
+}
+
+/**
  * reviewStatusTone maps the state of a review to the colour that carries it. It
  * never calls for the user: that colour comes from the situations alone.
  */

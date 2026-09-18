@@ -7,6 +7,8 @@ import { FindingsPanel } from "@/features/reviews/FindingsPanel";
 import { ReportsPanel } from "@/features/reviews/ReportsPanel";
 import { ReviewBar } from "@/features/reviews/ReviewBar";
 import { ReviewHeader } from "@/features/reviews/ReviewHeader";
+import { showsChanges } from "@/features/reviews/review-status";
+import { ReviewStrip } from "@/features/task/ReviewStrip";
 import { REVIEW_STAGE, sessionKey } from "@/lib/wails";
 import { loadTranscript } from "@/store/actions";
 import { useAppStore, useReview } from "@/store/app-store";
@@ -72,6 +74,9 @@ export function ReviewView({ reviewId }: ReviewViewProps) {
           minSize="40%"
           className="flex min-w-0 flex-col"
         >
+          {showsChanges(review) && review.review !== null && (
+            <ReviewStrip taskId={review.id} subject="pr" review={review.review} />
+          )}
           <FindingsPanel review={review} />
           <Conversation taskId={review.id} stage={REVIEW_STAGE} session={review} />
           <Composer taskId={review.id} stage={REVIEW_STAGE} session={review} />

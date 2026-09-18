@@ -48,7 +48,35 @@ func (s *Service) ReviewAgain(ctx context.Context, id, instructions string) erro
 	if err = s.updateWorktree(ctx, stored, wt); err != nil {
 		return err
 	}
-	return s.askPass(ctx, stored, repo, detail, instructions)
+	if stored.Phase != prreview.PhaseApplying {
+		return s.askPass(ctx, stored, repo, detail, instructions)
+	}
+	return s.leaveFixes(ctx, stored, repo, wt, detail, instructions)
+}
+
+// leaveFixes asks for another pass over a review whose fixes the user was
+// reviewing: the agent changed nothing, or the user dropped what it changed,
+// which a worktree that updated cleanly says. The cycle of the fixes ends with
+// the pass, and comes back when the pass cannot be asked for.
+func (s *Service) leaveFixes(
+	ctx context.Context, stored prreview.Review, repo repository.Repository, wt worktree.Worktree,
+	detail *pulls.Detail, instructions string,
+) error {
+	if err := s.setPhase(ctx, stored.ID, prreview.PhaseNone); err != nil {
+		return err
+	}
+	s.watch.Forget(stored.ID)
+	stored.Phase = prreview.PhaseNone
+	err := s.askPass(ctx, stored, repo, detail, instructions)
+	if err != nil {
+		if backErr := s.setPhase(ctx, stored.ID, prreview.PhaseApplying); backErr != nil {
+			s.log.Error("record review phase failed", "review", stored.ID, "error", backErr)
+		}
+		s.watch.Track(stored.ID, wt, true)
+		return err
+	}
+	s.setCommitFailed(stored.ID, false)
+	return nil
 }
 
 // againable says whether a review can take another pass now.
@@ -56,7 +84,8 @@ func againable(stored prreview.Review) error {
 	switch {
 	case stored.AskedPass > stored.ReportedPass:
 		return ErrPassRunning
-	case stored.Mode == prreview.ModeApply && stored.Phase != prreview.PhaseNone:
+	case stored.Mode == prreview.ModeApply && stored.Phase == prreview.PhaseCommitting:
+		// The changes the user approved are going up; the pass follows them.
 		return ErrPassRunning
 	case stored.PRState != prreview.PROpen:
 		return ErrNotOpen

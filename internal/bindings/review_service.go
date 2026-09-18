@@ -187,7 +187,6 @@ func (s *ReviewService) ApplyReview(id string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
-	//nolint:staticcheck // SA4023: the apply mode refuses everything until its cycle is written.
 	if err := s.flow.Apply(ctx, id); err != nil {
 		return s.fail("ApplyReview", err)
 	}
@@ -200,7 +199,6 @@ func (s *ReviewService) ApproveReview(id string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
-	//nolint:staticcheck // SA4023: the apply mode refuses everything until its cycle is written.
 	if err := s.flow.Approve(ctx, id); err != nil {
 		return s.fail("ApproveReview", err)
 	}

@@ -13,7 +13,8 @@ import (
 // evaluate keeps a review in step with its conversation: it records the
 // report of the pass it asked for, and reads the report of the pass being
 // decided again, which is how a rewrite the user asked for in the
-// conversation reaches the list of findings.
+// conversation reaches the list of findings. In apply mode it also moves the
+// cycle that fixes the approved findings on.
 func (s *Service) evaluate(ctx context.Context, id string) {
 	if s.isClosed() {
 		return
@@ -30,16 +31,20 @@ func (s *Service) evaluate(ctx context.Context, id string) {
 	// evaluation never opens one.
 	key := sessionKey(id)
 	sum, open := s.sessions.Summary(key)
-	if !open || !sum.Idle {
+	if !open {
 		return
 	}
 
-	if stored.AskedPass > stored.ReportedPass {
-		s.recordAsked(ctx, stored, wt, key)
-		return
+	if sum.Idle {
+		switch {
+		case stored.AskedPass > stored.ReportedPass:
+			s.recordAsked(ctx, stored, wt, key)
+		case stored.ReportedPass > 0:
+			s.rereadPass(ctx, stored)
+		}
 	}
-	if stored.ReportedPass > 0 {
-		s.rereadPass(ctx, stored)
+	if stored.Mode == prreview.ModeApply {
+		s.evaluateApply(ctx, id, wt, sum.Idle)
 	}
 }
 

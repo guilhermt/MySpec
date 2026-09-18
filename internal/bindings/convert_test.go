@@ -1836,7 +1836,15 @@ func TestFromReviewsSaysWhatTheUserCanDoWithAReview(t *testing.T) {
 		},
 		{
 			name: "ready to approve", status: reviewflow.StatusReadyToApprove,
-			pass: recordedPass(1, prreview.DecisionApproved), approve: true,
+			pass: recordedPass(1, prreview.DecisionApproved), approve: true, again: true,
+		},
+		{
+			name: "in review", status: reviewflow.StatusInReview,
+			pass: recordedPass(1, prreview.DecisionApproved), again: true,
+		},
+		{
+			name: "committing", status: reviewflow.StatusCommitting,
+			pass: recordedPass(1, prreview.DecisionApproved),
 		},
 		{
 			name: "applying", status: reviewflow.StatusApplying,

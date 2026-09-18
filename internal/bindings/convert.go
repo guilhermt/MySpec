@@ -1386,7 +1386,8 @@ func canPublish(state reviewflow.State) bool {
 
 // canReviewAgain reports whether another pass can be asked for: the report of
 // the pass the app asked for is in, the conversation is not working, and the
-// review is not in the middle of the cycle that applies the findings.
+// agent is neither fixing the findings nor committing them. Changes waiting for
+// the user's review do not hold a pass back, as on the pull request of a task.
 func canReviewAgain(state reviewflow.State) bool {
 	if state.Review.AskedPass != state.Review.ReportedPass {
 		return false
@@ -1395,8 +1396,7 @@ func canReviewAgain(state reviewflow.State) bool {
 		return false
 	}
 	switch state.Status {
-	case reviewflow.StatusApplying, reviewflow.StatusInReview,
-		reviewflow.StatusReadyToApprove, reviewflow.StatusCommitting:
+	case reviewflow.StatusApplying, reviewflow.StatusCommitting:
 		return false
 	default:
 		return true

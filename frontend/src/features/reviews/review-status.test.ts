@@ -13,6 +13,7 @@ import {
   reviewRowLabel,
   reviewStatusLabel,
   reviewStatusTone,
+  showsChanges,
   verdictLabel,
 } from "@/features/reviews/review-status";
 import type { PullReviewStatus } from "@/lib/wails";
@@ -63,6 +64,19 @@ describe("reviewStatusTone", () => {
   it("stays idle for what waits, which the situations colour", () => {
     expect(reviewStatusTone(makeReviewSummary({ status: "ready_to_publish" }))).toBe("idle");
     expect(reviewStatusTone(makeReviewSummary({ status: "new_commits" }))).toBe("idle");
+  });
+});
+
+describe("showsChanges", () => {
+  it.each<[PullReviewStatus, boolean]>([
+    ["applying", false],
+    ["in_review", true],
+    ["ready_to_approve", true],
+    ["committing", true],
+    ["ready_to_apply", false],
+    ["ready_to_merge", false],
+  ])("is %s → %s", (status, want) => {
+    expect(showsChanges(makeReviewSummary({ status }))).toBe(want);
   });
 });
 
