@@ -284,6 +284,7 @@ function withStepTab(
     case "stage":
     case "pr":
     case "review":
+    case "discussion":
       return current;
   }
 }

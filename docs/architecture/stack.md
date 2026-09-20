@@ -11,6 +11,7 @@ A stack do produto e a razão de cada escolha.
 | Frontend | React 19 com TypeScript em modo strict, Vite |
 | Estilo e componentes | Tailwind CSS 4 e shadcn/ui sobre Base UI, ícones Lucide |
 | Markdown e diagramas | Streamdown, com `@streamdown/code` e `@streamdown/mermaid` |
+| Diferenças de texto | jsdiff (`diff`) |
 | Estado da interface | Zustand |
 | Ponte Go e React | Bindings gerados e eventos tipados do Wails |
 | Claude Code | CLI como subprocesso, um processo vivo por sessão, stream-json nos dois sentidos |

@@ -1,5 +1,6 @@
 import { vi } from "vitest";
 import type {
+  ArchivedDiscussion,
   ArchivedReview,
   ArchivedTask,
   Board,
@@ -12,6 +13,12 @@ import type {
   CreateTaskRequest,
   DeletePreview,
   DeleteResult,
+  DiscussionCard,
+  DiscussionContextRequest,
+  DiscussionSummary,
+  Draft,
+  DraftDecision,
+  DraftRef,
   Entry,
   EntryKind,
   FindingDecision,
@@ -37,6 +44,7 @@ import type {
   SituationOpen,
   SituationStarted,
   StageModel,
+  StartDiscussionRequest,
   StartReviewRequest,
   State,
   Step,
@@ -211,6 +219,44 @@ export const api = {
   openReviewInEditor: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
   openFindingInEditor: vi.fn<(id: string, pass: number, number: number) => Promise<void>>(() =>
     Promise.resolve(),
+  ),
+
+  startDiscussion: vi.fn<(req: StartDiscussionRequest) => Promise<string>>(() =>
+    Promise.resolve("discussion-1"),
+  ),
+  discussionContext: vi.fn<(req: DiscussionContextRequest) => Promise<string>>(() =>
+    Promise.resolve("## Board\n"),
+  ),
+  setDraftText: vi.fn<(id: string, draftId: string, title: string, body: string) => Promise<void>>(
+    () => Promise.resolve(),
+  ),
+  setDraftRepository: vi.fn<(id: string, draftId: string, repositoryId: string) => Promise<void>>(
+    () => Promise.resolve(),
+  ),
+  setDraftModule: vi.fn<(id: string, draftId: string, module: string) => Promise<void>>(() =>
+    Promise.resolve(),
+  ),
+  setDraftEpic: vi.fn<(id: string, draftId: string, ref: string) => Promise<void>>(() =>
+    Promise.resolve(),
+  ),
+  addDraftDependency: vi.fn<(id: string, draftId: string, ref: string) => Promise<void>>(() =>
+    Promise.resolve(),
+  ),
+  removeDraftDependency: vi.fn<(id: string, draftId: string, ref: string) => Promise<void>>(() =>
+    Promise.resolve(),
+  ),
+  decideDraft: vi.fn<(id: string, draftId: string, decision: DraftDecision) => Promise<void>>(() =>
+    Promise.resolve(),
+  ),
+  groupIntoEpic: vi.fn<(id: string, draftIds: string[]) => Promise<string>>(() =>
+    Promise.resolve("draft-epic"),
+  ),
+  publishEpic: vi.fn<(id: string, draftId: string) => Promise<void>>(() => Promise.resolve()),
+  retryPublish: vi.fn<(id: string, draftId: string) => Promise<void>>(() => Promise.resolve()),
+  archiveDiscussion: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
+  deleteDiscussion: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
+  readDiscussionArtifact: vi.fn<(id: string, name: string) => Promise<string>>(() =>
+    Promise.resolve("# Discussion\n"),
   ),
 
   viewSituation: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
@@ -656,9 +702,10 @@ const factoryChoices: { stage: ModelStage; model: string; effort: string }[] = [
   { stage: "step_review", model: "claude-opus-5", effort: "high" },
   { stage: "pr", model: "claude-opus-5", effort: "medium" },
   { stage: "pr_review", model: "claude-opus-5", effort: "high" },
+  { stage: "discussion", model: "claude-fable-5-1", effort: "high" },
 ];
 
-/** makeModelDefaults are the factory choices of the eight stages of the app. */
+/** makeModelDefaults are the factory choices of the nine stages of the app. */
 export function makeModelDefaults(): StageModel[] {
   return factoryChoices.map((choice) => ({ ...choice }));
 }
@@ -671,14 +718,18 @@ export function makeModelDefaults(): StageModel[] {
 export function makeTaskModels(
   overrides: Partial<Record<ModelStage, Partial<TaskStageModel>>> = {},
 ): TaskStageModel[] {
-  return factoryChoices
-    .filter((choice) => choice.stage !== "one_shot")
-    .map((choice) => ({
-      ...choice,
-      editable: choice.stage !== "prd",
-      live: choice.stage === "prd",
-      ...overrides[choice.stage],
-    }));
+  return (
+    factoryChoices
+      // A task has neither the One-Shot planning nor the discussion, which is no
+      // stage of a task at all.
+      .filter((choice) => choice.stage !== "one_shot" && choice.stage !== "discussion")
+      .map((choice) => ({
+        ...choice,
+        editable: choice.stage !== "prd",
+        live: choice.stage === "prd",
+        ...overrides[choice.stage],
+      }))
+  );
 }
 
 export function makePrompt(overrides: Partial<Prompt> = {}): Prompt {
@@ -852,6 +903,113 @@ export function makeArchivedReview(overrides: Partial<ArchivedReview> = {}): Arc
   };
 }
 
+export function makeDiscussion(overrides: Partial<DiscussionSummary> = {}): DiscussionSummary {
+  return {
+    id: "discussion-1",
+    boardId: "board-1",
+    board: "Roadmap",
+    title: "Invoices",
+    text: "Split the invoices screen.",
+    status: "discussing",
+    cards: [makeDiscussionCard()],
+    drafts: [],
+    draftsRead: false,
+    draftsRevision: 0,
+    unreadableDrafts: "",
+    hasDocument: false,
+    documentRevision: 0,
+    moduleField: "Module",
+    moduleOptions: ["Billing", "Invoices"],
+    repositories: [{ id: "repo-1", fullName: "dev/web", cloned: true, missing: false }],
+    canArchive: true,
+    archiveHint: "",
+    sessionStage: "discussion",
+    sessionStatus: "working",
+    sessionModel: "claude-opus-5",
+    sessionEffort: "high",
+    turnRunning: true,
+    processRunning: true,
+    retryAttempt: 0,
+    contextPercent: 0,
+    pendingCount: 0,
+    lastError: "",
+    situations: [],
+    createdAt: "2026-09-16T12:00:00Z",
+    ...overrides,
+  };
+}
+
+export function makeDiscussionCard(overrides: Partial<DiscussionCard> = {}): DiscussionCard {
+  return {
+    key: "dev/web#12",
+    repository: "dev/web",
+    number: 12,
+    title: "Add the login screen",
+    url: "https://github.com/dev/web/issues/12",
+    ...overrides,
+  };
+}
+
+export function makeDraft(overrides: Partial<Draft> = {}): Draft {
+  return {
+    id: "draft-1",
+    position: 1,
+    kind: "new",
+    source: "agent",
+    repository: "dev/web",
+    repositoryId: "repo-1",
+    card: null,
+    title: "Export the invoices",
+    body: "A button that exports the list.",
+    module: "",
+    epic: null,
+    dependencies: [],
+    current: null,
+    decision: "",
+    revision: 1,
+    warnings: [],
+    outcome: "",
+    number: 0,
+    url: "",
+    published: false,
+    publishedAt: "",
+    publishError: "",
+    waits: "",
+    canPublish: false,
+    hint: "",
+    ...overrides,
+  };
+}
+
+export function makeDraftRef(overrides: Partial<DraftRef> = {}): DraftRef {
+  return {
+    draft: "draft-2",
+    key: "",
+    reference: "",
+    title: "Group the invoices",
+    url: "",
+    ...overrides,
+  };
+}
+
+export function makeArchivedDiscussion(
+  overrides: Partial<ArchivedDiscussion> = {},
+): ArchivedDiscussion {
+  return {
+    id: "discussion-1",
+    boardId: "board-1",
+    board: "Roadmap",
+    title: "Invoices",
+    cards: [makeDiscussionCard()],
+    drafts: [makeDraft()],
+    publishedCount: 1,
+    repositoryIds: ["repo-1"],
+    createdAt: "2026-09-16T12:00:00Z",
+    archivedAt: "2026-09-17T12:00:00Z",
+    ...overrides,
+  };
+}
+
 let entrySeq = 0;
 
 // Every entry carries exactly the payload of its kind, like the Go side.
@@ -1003,6 +1161,10 @@ export function resetWailsMock(): void {
   api.cardContext.mockImplementation(() => Promise.resolve("### Card: Add the login screen\n"));
   api.createTask.mockImplementation(() => Promise.resolve("task-1"));
   api.startReview.mockImplementation(() => Promise.resolve("review-1"));
+  api.startDiscussion.mockImplementation(() => Promise.resolve("discussion-1"));
+  api.discussionContext.mockImplementation(() => Promise.resolve("## Board\n"));
+  api.groupIntoEpic.mockImplementation(() => Promise.resolve("draft-epic"));
+  api.readDiscussionArtifact.mockImplementation(() => Promise.resolve("# Discussion\n"));
   api.deleteReview.mockImplementation(() => Promise.resolve({ leftover: null }));
   api.readReviewArtifact.mockImplementation(() => Promise.resolve("## Findings\n"));
   api.getTranscript.mockImplementation((taskId, stage) =>

@@ -27,6 +27,7 @@ export const MODEL_STAGES: readonly ModelStage[] = [
   "step_review",
   "pr",
   "pr_review",
+  "discussion",
 ];
 
 const STRUCTURED_MODEL_STAGES: readonly ModelStage[] = [
@@ -69,8 +70,9 @@ export function sameChoice(a: ModelChoice, b: ModelChoice): boolean {
 
 /**
  * modelStageLabel is the name of a stage: the one the stage track gives it, but
- * "Step review", which has no chip of its own, and "One-Shot planning", which
- * the track of its task calls just "Planning".
+ * "Step review", which has no chip of its own, "One-Shot planning", which the
+ * track of its task calls just "Planning", and "Discussion", which is no stage
+ * of a task at all.
  */
 export function modelStageLabel(stage: ModelStage): string {
   switch (stage) {
@@ -78,6 +80,8 @@ export function modelStageLabel(stage: ModelStage): string {
       return "Step review";
     case "one_shot":
       return "One-Shot planning";
+    case "discussion":
+      return "Discussion";
     default:
       return stageLabel(stage);
   }
