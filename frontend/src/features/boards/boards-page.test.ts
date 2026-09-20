@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ownerText, readingText, removalText } from "@/features/boards/boards-page";
+import { ownerText, readingText, removalText, statusesText } from "@/features/boards/boards-page";
 import { makeBoard } from "@/test/wails-mock";
 
 const NOW = Date.parse("2026-09-16T12:05:00Z");
@@ -27,6 +27,26 @@ describe("readingText", () => {
     });
 
     expect(readingText(board, NOW)).toBe("The board doesn't exist or this account can't read it.");
+  });
+});
+
+describe("statusesText", () => {
+  it("names the final statuses and the one a new card gets", () => {
+    expect(statusesText(makeBoard({ newCardStatus: "todo" }))).toBe(
+      "Final: Done · New cards: Todo",
+    );
+  });
+
+  it("says none for a board with no final status and none for new cards", () => {
+    const board = makeBoard({
+      statuses: [{ id: "todo", name: "Todo", final: false }],
+    });
+
+    expect(statusesText(board)).toBe("Final: none · New cards: none");
+  });
+
+  it("is empty for a board without a Status field", () => {
+    expect(statusesText(makeBoard({ hasStatus: false, statuses: [] }))).toBe("");
   });
 });
 

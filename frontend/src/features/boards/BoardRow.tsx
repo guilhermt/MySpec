@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { useNow } from "@/features/attention/useNow";
 import { BoardDialog } from "@/features/boards/BoardDialog";
 import { pluralize } from "@/features/boards/board-dialog";
-import { ownerText, readingText } from "@/features/boards/boards-page";
+import { ownerText, readingText, statusesText } from "@/features/boards/boards-page";
 import { RemoveBoardDialog } from "@/features/boards/RemoveBoardDialog";
 import { ExternalLink } from "@/features/chat/ExternalLink";
 import type { Board } from "@/lib/wails";
@@ -43,6 +43,9 @@ export function BoardRow({ board }: BoardRowProps) {
       >
         {board.url}
       </ExternalLink>
+      {statusesText(board) !== "" && (
+        <p className="text-xs text-muted-foreground">{statusesText(board)}</p>
+      )}
       {board.failure === null ? (
         <p className="text-xs text-muted-foreground">{readingText(board, now)}</p>
       ) : (

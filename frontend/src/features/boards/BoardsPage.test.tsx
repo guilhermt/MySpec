@@ -17,12 +17,12 @@ describe("BoardsPage", () => {
     expect(screen.getByText("No boards yet.")).toBeInTheDocument();
   });
 
-  it("lists each board with its owner, link, repositories and last reading", () => {
+  it("lists each board with its owner, link, repositories, statuses and last reading", () => {
     vi.useFakeTimers({ now: Date.parse("2026-09-16T12:03:00Z"), shouldAdvanceTime: true });
     page(
       makeState({
         boards: [
-          makeBoard(),
+          makeBoard({ newCardStatus: "todo" }),
           makeBoard({
             id: "board-2",
             title: "Support",
@@ -50,6 +50,7 @@ describe("BoardsPage", () => {
     expect(
       within(roadmap).getByRole("link", { name: "https://github.com/orgs/dev/projects/3" }),
     ).toBeInTheDocument();
+    expect(roadmap).toHaveTextContent("Final: Done · New cards: Todo");
     expect(roadmap).toHaveTextContent("Updated 3 min ago");
     expect(support).toHaveTextContent("ana · User · 0 repositories");
     expect(support).toHaveTextContent(

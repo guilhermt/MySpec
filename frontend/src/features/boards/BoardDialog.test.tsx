@@ -38,7 +38,10 @@ describe("BoardDialog", () => {
     expect(screen.getByRole("checkbox", { name: "Todo Final" })).not.toBeChecked();
     expect(screen.getByRole("checkbox", { name: "Done Final" })).toBeChecked();
 
+    expect(screen.getByRole("radio", { name: "None" })).toBeChecked();
+
     await user.click(screen.getByRole("checkbox", { name: "Todo Final" }));
+    await user.click(screen.getByRole("radio", { name: "Todo" }));
     await user.click(screen.getByRole("button", { name: "Continue" }));
 
     expect(screen.getByRole("checkbox", { name: "dev/web" })).toBeChecked();
@@ -49,7 +52,7 @@ describe("BoardDialog", () => {
 
     expect(api.addBoard).toHaveBeenCalledWith(URL, {
       finalStatuses: ["todo", "done"],
-      newCardStatus: "",
+      newCardStatus: "todo",
       repositories: [{ owner: "dev", name: "web", path: "" }],
     });
     await waitFor(() => {
@@ -86,6 +89,7 @@ describe("BoardDialog", () => {
 
     expect(await screen.findByRole("checkbox", { name: "dev/web" })).toBeInTheDocument();
     expect(screen.queryByText("Final")).not.toBeInTheDocument();
+    expect(screen.queryByText("Status for new cards")).not.toBeInTheDocument();
   });
 
   it("shows how each repository ties, and takes the clone the user picks", async () => {
@@ -188,13 +192,17 @@ describe("BoardDialog", () => {
   });
 
   it("edits a board read again from GitHub and saves it", async () => {
+    vi.mocked(api.previewEditBoard).mockResolvedValue(makeBoardPreview({ newCardStatus: "todo" }));
     const { user, onOpenChange } = dialog({ mode: "edit", boardId: "board-1" });
 
     expect(screen.getByRole("dialog", { name: "Edit board" })).toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: "Board URL" })).not.toBeInTheDocument();
     expect(api.previewEditBoard).toHaveBeenCalledWith("board-1");
 
-    await user.click(await screen.findByRole("button", { name: "Continue" }));
+    // The board keeps the status its new cards are created with.
+    expect(await screen.findByRole("radio", { name: "Todo" })).toBeChecked();
+
+    await user.click(screen.getByRole("button", { name: "Continue" }));
     await user.type(screen.getByRole("textbox", { name: "Add a repository" }), "dev/cli");
     await user.click(screen.getByRole("button", { name: "Add" }));
 
@@ -204,7 +212,7 @@ describe("BoardDialog", () => {
 
     expect(api.updateBoard).toHaveBeenCalledWith("board-1", {
       finalStatuses: ["done"],
-      newCardStatus: "",
+      newCardStatus: "todo",
       repositories: [{ owner: "dev", name: "web", path: "" }],
     });
     await waitFor(() => {
