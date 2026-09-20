@@ -47,7 +47,8 @@ type Reply struct {
 	Exit   int
 }
 
-// Call is one run of the fake gh: where it ran and the command line it got.
+// Call is one run of the fake gh: where it ran and the command line it got,
+// on one line, with the line breaks of a multi-line argument as spaces.
 type Call struct {
 	Dir  string
 	Args string
@@ -187,7 +188,8 @@ func record(home string, args []string) {
 	//nolint:gosec // G703: home is the directory New made for this run
 	calls, err := os.OpenFile(filepath.Join(home, callsFile), os.O_APPEND|os.O_CREATE|os.O_WRONLY, filePerm)
 	if err == nil {
-		fmt.Fprintf(calls, "%s\t%s\n", dir, strings.Join(args, " "))
+		line := strings.ReplaceAll(strings.Join(args, " "), "\n", " ")
+		fmt.Fprintf(calls, "%s\t%s\n", dir, line)
 		_ = calls.Close()
 	}
 	//nolint:gosec // G703: home is the directory New made for this run
