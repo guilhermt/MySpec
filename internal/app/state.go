@@ -5,6 +5,7 @@ import (
 
 	"github.com/guilhermt/myspec/internal/attention"
 	"github.com/guilhermt/myspec/internal/bindings"
+	"github.com/guilhermt/myspec/internal/discussionflow"
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/reviewflow"
 	"github.com/guilhermt/myspec/internal/session"
@@ -34,6 +35,8 @@ func (a *App) snapshot() bindings.State {
 	}
 	reviews, reviewFound := a.reviewStates()
 	found = append(found, reviewFound...)
+	discussions, discussionFound := a.discussionStates()
+	found = append(found, discussionFound...)
 	situations := a.attention.Update(found)
 
 	repositories := bindings.FromRepositories(
@@ -71,6 +74,12 @@ func (a *App) snapshot() bindings.State {
 		ReviewHistory: bindings.FromArchivedReviews(
 			a.prReviews.ListArchived(), a.prReviews.Passes, repositories,
 		),
+		Discussions: bindings.FromDiscussions(
+			discussions, situations, a.boards.Get, a.boards.Stored, repositories, a.repositories.Missing,
+		),
+		DiscussionHistory: bindings.FromArchivedDiscussions(
+			a.discussions.ListArchived(), a.discussions.Drafts, repositories,
+		),
 		CloneFolder: a.repositories.CloneFolder(),
 	}
 }
@@ -93,6 +102,25 @@ func (a *App) reviewStates() ([]reviewflow.State, []attention.Found) {
 		}
 		found = append(found, attention.DeriveReview(attention.ReviewInput{
 			State: state, Title: stored.Reference(fullName),
+		})...)
+	}
+	return states, found
+}
+
+// discussionStates is what the app knows about every active discussion, with
+// the situations each one waits on the user for.
+func (a *App) discussionStates() ([]discussionflow.State, []attention.Found) {
+	list := a.discussions.List()
+	states := make([]discussionflow.State, 0, len(list))
+	found := make([]attention.Found, 0, len(list)) // a discussion waits on one thing at a time
+	for _, stored := range list {
+		state, ok := a.discussionFlow.State(stored.ID)
+		if !ok {
+			continue
+		}
+		states = append(states, state)
+		found = append(found, attention.DeriveDiscussion(attention.DiscussionInput{
+			State: state, Title: stored.Title,
 		})...)
 	}
 	return states, found

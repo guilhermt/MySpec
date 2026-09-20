@@ -633,6 +633,16 @@ export interface DiscussionCard {
 }
 
 /**
+ * DiscussionContextRequest is what the dialog of a discussion shows the
+ * context of, before anything is created.
+ */
+export interface DiscussionContextRequest {
+    "boardId": string;
+    "text": string;
+    "cards": string[] | null;
+}
+
+/**
  * DiscussionRepository is a repository of the board a new card can be created
  * in.
  */
@@ -1978,6 +1988,27 @@ export interface StageModel {
     /**
      * low, medium, high, xhigh or max
      */
+    "effort": string;
+}
+
+/**
+ * StartDiscussionRequest is what the user chose in the dialog that starts a
+ * discussion.
+ */
+export interface StartDiscussionRequest {
+    "boardId": string;
+    "title": string;
+
+    /**
+     * what to discuss; "" for none
+     */
+    "text": string;
+
+    /**
+     * the keys of the cards of the board
+     */
+    "cards": string[] | null;
+    "model": string;
     "effort": string;
 }
 

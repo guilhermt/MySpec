@@ -14,13 +14,23 @@ const boardCallTimeout = 3 * time.Minute
 
 // BoardService is the board API the frontend calls.
 type BoardService struct {
-	boards *board.Service
-	log    *slog.Logger
+	boards    *board.Service
+	documents func(owner, name string, number int) (string, bool)
+	log       *slog.Logger
 }
 
-// NewBoardService builds the service over the board domain.
-func NewBoardService(boards *board.Service, log *slog.Logger) *BoardService {
-	return &BoardService{boards: boards, log: log}
+// NewBoardService builds the service over the board domain. documents is the
+// understanding of the discussion that wrote a card, which the context of the
+// card opens with; without it, no card has one.
+func NewBoardService(
+	boards *board.Service,
+	documents func(owner, name string, number int) (string, bool),
+	log *slog.Logger,
+) *BoardService {
+	if documents == nil {
+		documents = func(string, string, int) (string, bool) { return "", false }
+	}
+	return &BoardService{boards: boards, documents: documents, log: log}
 }
 
 // PreviewBoard reads the board at url for registering it: its statuses, with
@@ -127,7 +137,12 @@ func (s *BoardService) RefreshCard(boardID, key string) error {
 // CardContext is the context a task created from a card starts with, without
 // the text the user adds.
 func (s *BoardService) CardContext(boardID, key string) (string, error) {
-	text, err := s.boards.Context(boardID, key, "", "")
+	card, ok := s.boards.Card(boardID, key)
+	if !ok {
+		return "", s.fail("CardContext", fmt.Errorf("context of card %s: %w", key, board.ErrCardNotFound))
+	}
+	document, _ := s.documents(card.Owner, card.Name, card.Number)
+	text, err := s.boards.Context(boardID, key, document, "")
 	if err != nil {
 		return "", s.fail("CardContext", err)
 	}

@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/guilhermt/myspec/internal/board"
+	"github.com/guilhermt/myspec/internal/discussion"
+	"github.com/guilhermt/myspec/internal/discussionflow"
 	"github.com/guilhermt/myspec/internal/editor"
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/gh"
@@ -41,21 +43,25 @@ type Editor func(paths ...string) error
 
 // TaskService is the task, session and flow API the frontend calls.
 type TaskService struct {
-	tasks        *task.Service
-	sessions     *session.Service
-	flow         *flow.Service
-	defaults     *models.Service
-	reviewModes  *reviewmode.Service
-	repositories *repository.Service
-	boards       *board.Service
-	editor       Editor
-	isReview     func(id string) bool
-	log          *slog.Logger
+	tasks           *task.Service
+	sessions        *session.Service
+	flow            *flow.Service
+	defaults        *models.Service
+	reviewModes     *reviewmode.Service
+	repositories    *repository.Service
+	boards          *board.Service
+	editor          Editor
+	documents       func(owner, name string, number int) (string, bool)
+	hasConversation func(id string) bool
+	log             *slog.Logger
 }
 
 // NewTaskService builds the service over the task, session and flow domains.
-// isReview says that an id is a review of a pull request, the other item whose
-// conversation the frontend asks this service for; without it, only tasks are.
+// hasConversation says that an id is an item of another kind whose
+// conversation the frontend asks this service for, a review of a pull request
+// or a discussion; without it, only tasks have one. documents is the
+// understanding of the discussion that wrote a card, which the task created
+// from it starts with; without it, no card has one.
 func NewTaskService(
 	tasks *task.Service,
 	sessions *session.Service,
@@ -65,23 +71,28 @@ func NewTaskService(
 	repositories *repository.Service,
 	boards *board.Service,
 	editor Editor,
-	isReview func(id string) bool,
+	documents func(owner, name string, number int) (string, bool),
+	hasConversation func(id string) bool,
 	log *slog.Logger,
 ) *TaskService {
-	if isReview == nil {
-		isReview = func(string) bool { return false }
+	if documents == nil {
+		documents = func(string, string, int) (string, bool) { return "", false }
+	}
+	if hasConversation == nil {
+		hasConversation = func(string) bool { return false }
 	}
 	return &TaskService{
-		tasks:        tasks,
-		sessions:     sessions,
-		flow:         flow,
-		defaults:     defaults,
-		reviewModes:  reviewModes,
-		repositories: repositories,
-		boards:       boards,
-		editor:       editor,
-		isReview:     isReview,
-		log:          log,
+		tasks:           tasks,
+		sessions:        sessions,
+		flow:            flow,
+		defaults:        defaults,
+		reviewModes:     reviewModes,
+		repositories:    repositories,
+		boards:          boards,
+		editor:          editor,
+		documents:       documents,
+		hasConversation: hasConversation,
+		log:             log,
 	}
 }
 
@@ -116,7 +127,8 @@ func (s *TaskService) CreateTask(req CreateTaskRequest) (string, error) {
 			return "", s.fail("CreateTask", &board.Refusal{Reason: board.RefusalNotManaged, Repository: card.FullName()})
 		}
 		repositoryID = managed.ID
-		initialContext = board.Context(card, "", req.InitialContext)
+		document, _ := s.documents(card.Owner, card.Name, card.Number)
+		initialContext = board.Context(card, document, req.InitialContext)
 		taskCard = &task.Card{
 			BoardID: req.Card.BoardID,
 			Owner:   card.Owner,
@@ -237,9 +249,10 @@ func (s *TaskService) GetTranscript(taskID, stage string) (Transcript, error) {
 	transcript, err := s.sessions.Transcript(ctx, session.Key{TaskID: taskID, Stage: stage})
 	// A task past the stages that have a conversation has none, and the
 	// frontend asks for it all the same; its stage answers with an empty one.
-	// A review whose conversation has not opened yet is the same case.
+	// A review or a discussion whose conversation has not opened yet is the
+	// same case.
 	if errors.Is(err, session.ErrNotFound) {
-		if _, ok := s.tasks.Get(taskID); ok || s.isReview(taskID) {
+		if _, ok := s.tasks.Get(taskID); ok || s.hasConversation(taskID) {
 			return Transcript{TaskID: taskID, Stage: stage, Entries: []Entry{}, Pending: []Entry{}}, nil
 		}
 	}
@@ -779,6 +792,24 @@ var userMessages = []struct {
 	{reviewflow.ErrOwnVerdict, "A pull request of your own can only be commented on."},
 	{reviewflow.ErrEmptyReview, "Write a summary before publishing."},
 	{reviewflow.ErrNoWorktree, "The worktree of the review is gone."},
+	{discussion.ErrNotFound, "This discussion no longer exists."},
+	{discussion.ErrEmptyTitle, "Write a title."},
+	{discussion.ErrTitleTooLong, "Use at most 120 characters in the title."},
+	{discussion.ErrNothingToDiscuss, "Write what to discuss or select at least one card."},
+	{discussion.ErrUnknownKind, "Unknown draft kind."},
+	{discussion.ErrUnknownDecision, "Unknown decision."},
+	{discussion.ErrUnknownArtifact, "Unknown artifact."},
+	{discussion.ErrDraftNotFound, "This draft is no longer one of the discussion."},
+	{discussion.ErrPublished, "This draft was published and can't change."},
+	{discussion.ErrEmptyText, "Write the title and the body of the draft."},
+	{discussion.ErrNotEpic, "Choose an epic draft or an existing issue."},
+	{discussion.ErrTooFewCards, "Select at least two cards."},
+	{discussion.ErrInvalidRef, "Use a draft of this discussion or owner/name#number."},
+	{discussion.ErrDependencyLinked, "This dependency is already on GitHub."},
+	{discussion.ErrArchived, "This discussion is archived."},
+	{discussionflow.ErrNotReady, "The epic isn't ready to publish."},
+	{discussionflow.ErrPublishing, "Wait for the publication to finish."},
+	{discussionflow.ErrNoReading, "The board hasn't been read yet."},
 	{editor.ErrNotFound, "VS Code was not found: `code` isn't on the PATH."},
 	{gh.ErrNotFound, "GitHub CLI was not found: `gh` isn't on the PATH."},
 	{gh.ErrNotAuthenticated, "GitHub CLI isn't authenticated: run `gh auth login`."},

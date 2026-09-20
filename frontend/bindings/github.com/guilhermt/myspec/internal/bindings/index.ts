@@ -3,6 +3,7 @@
 
 import * as AttentionService from "./attentionservice.js";
 import * as BoardService from "./boardservice.js";
+import * as DiscussionService from "./discussionservice.js";
 import * as RepositoryService from "./repositoryservice.js";
 import * as ReviewService from "./reviewservice.js";
 import * as SettingsService from "./settingsservice.js";
@@ -11,6 +12,7 @@ import * as TaskService from "./taskservice.js";
 export {
     AttentionService,
     BoardService,
+    DiscussionService,
     RepositoryService,
     ReviewService,
     SettingsService,
@@ -48,6 +50,7 @@ export type {
     DeletePreview,
     DeleteResult,
     DiscussionCard,
+    DiscussionContextRequest,
     DiscussionRepository,
     DiscussionSummary,
     Draft,
@@ -91,6 +94,7 @@ export type {
     SituationOpen,
     SituationStarted,
     StageModel,
+    StartDiscussionRequest,
     StartReviewRequest,
     State,
     Step,
