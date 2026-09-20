@@ -44,7 +44,7 @@ export function NewDiscussionDialog() {
   const closeNewDiscussion = useAppStore((state) => state.closeNewDiscussion);
   const board = useBoard(ref?.boardId ?? "");
 
-  if (ref === null || board === null) {
+  if (ref === null) {
     return null;
   }
   return (
@@ -60,13 +60,24 @@ export function NewDiscussionDialog() {
         <DialogHeader>
           <DialogTitle>New discussion</DialogTitle>
         </DialogHeader>
-        {/* Keyed by what the dialog opened for: another board, or another pick
-            of cards, starts afresh, without what was typed for the last. */}
-        <NewDiscussionFields
-          key={`${ref.boardId}|${ref.cardKeys.join(",")}`}
-          board={board}
-          cardKeys={ref.cardKeys}
-        />
+        {board === null ? (
+          <>
+            <p className="text-sm text-muted-foreground">This board is no longer in the app.</p>
+            <DialogFooter>
+              <Button type="button" variant="ghost" onClick={closeNewDiscussion}>
+                Cancel
+              </Button>
+            </DialogFooter>
+          </>
+        ) : (
+          // Keyed by what the dialog opened for: another board, or another
+          // pick of cards, starts afresh, without what was typed for the last.
+          <NewDiscussionFields
+            key={`${ref.boardId}|${ref.cardKeys.join(",")}`}
+            board={board}
+            cardKeys={ref.cardKeys}
+          />
+        )}
       </DialogContent>
     </Dialog>
   );
@@ -238,9 +249,7 @@ function NewDiscussionFields({ board, cardKeys }: NewDiscussionFieldsProps) {
             {starting ? "Starting…" : "Start discussion"}
           </Button>
         </div>
-        {problem === null && nothingToDiscuss && (
-          <p className="text-xs text-muted-foreground">{NOTHING_TO_DISCUSS}</p>
-        )}
+        {nothingToDiscuss && <p className="text-xs text-muted-foreground">{NOTHING_TO_DISCUSS}</p>}
       </DialogFooter>
     </form>
   );

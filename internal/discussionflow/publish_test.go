@@ -9,11 +9,33 @@ import (
 	"github.com/google/go-cmp/cmp"
 
 	"github.com/guilhermt/myspec/internal/discussion"
+	"github.com/guilhermt/myspec/internal/discussionflow"
 )
 
 // errGitHub is what the fake gh answers with when a test asks it to refuse a
 // write.
 var errGitHub = errors.New("gh: the server said no")
+
+// errStore is what the fake store answers with when a test asks it to refuse
+// a write of a draft.
+var errStore = errors.New("store: the write did not happen")
+
+// looseArtifact holds a single card of its own, which one approval sends to
+// GitHub.
+const looseArtifact = `---
+status: drafts
+---
+
+## Draft: invoice-report
+- Kind: new
+- Repository: acme/api
+
+### Title
+Invoice report
+
+### Body
+The report of the invoices.
+`
 
 func TestApprovingACardRewritesTheIssueAndPutsItOnTheBoard(t *testing.T) {
 	t.Parallel()
@@ -292,6 +314,102 @@ func TestACycleIsBrokenByPositionAndTheDependencyItDropsIsAWarning(t *testing.T)
 		t.Errorf("the dependency of the second card is %v, want it recorded", second.Dependencies)
 	}
 }
+
+func TestAStepTheStoreDidNotRecordStopsTheRunAndARetryDoesNotCreateTwice(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := f.start(cardKey)
+	f.record(id, looseArtifact)
+	f.store.failWrites(1, errStore, onTheBoard)
+
+	f.approve(id, "invoice-report")
+
+	failed := f.waitFailed(id, "invoice-report")
+	if failed.PublishError != "Couldn't record the publication: store: the write did not happen" {
+		t.Errorf("the card says %q about the publication the store did not take", failed.PublishError)
+	}
+	if failed.Published.Done() {
+		t.Errorf("the card was published to the last step anyway")
+	}
+
+	if err := f.flow.Retry(t.Context(), id, "invoice-report"); err != nil {
+		t.Fatalf("retry the card: %v", err)
+	}
+
+	f.waitPublished(id, "invoice-report")
+	if got := count(f.gh.made(), "createIssue:R_acme/api:Invoice report"); got != 1 {
+		t.Errorf("the issue was created %d times, want once", got)
+	}
+}
+
+func TestAFailureTheStoreDidNotRecordLeavesTheCardForTheUserToSendAgain(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := f.start(cardKey)
+	f.record(id, looseArtifact)
+	f.store.failWrites(2, errStore, func(d discussion.Draft) bool {
+		return onTheBoard(d) || d.PublishError != ""
+	})
+
+	f.approve(id, "invoice-report")
+	f.waitFor(id, func(s discussionflow.State) bool { return !s.Publishing && len(f.gh.made()) > 0 })
+
+	card := f.draftState(id, "invoice-report").Draft
+	if card.PublishError != "" || card.Published.Done() {
+		t.Fatalf("the card says %q and is published: %t, want neither recorded",
+			card.PublishError, card.Published.Done())
+	}
+
+	// The card is out of the runs, so an evaluation that finds it approved
+	// writes nothing more for it.
+	made := len(f.gh.made())
+	f.write(id, discussion.DocumentFile, "# Invoices\n")
+	f.flow.Check(id)
+	f.waitFor(id, func(s discussionflow.State) bool { return s.HasDocument })
+	if got := len(f.gh.made()); got != made {
+		t.Errorf("the stalled card was sent to GitHub again: %v", f.gh.made())
+	}
+
+	if err := f.flow.Retry(t.Context(), id, "invoice-report"); err != nil {
+		t.Fatalf("retry the card: %v", err)
+	}
+
+	f.waitPublished(id, "invoice-report")
+	if got := count(f.gh.made(), "createIssue:R_acme/api:Invoice report"); got != 1 {
+		t.Errorf("the issue was created %d times, want once", got)
+	}
+}
+
+func TestAModuleTheBoardNoLongerHasIsAWarningTheCardSaysOnce(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := f.start(cardKey)
+	f.record(id, strings.Replace(looseArtifact, "- Repository: acme/api", "- Repository: acme/api\n- Module: Billing", 1))
+	f.boards.forgetModuleOption("Billing")
+	// The last step of the publication is the one the store refuses, so the
+	// retry takes the card up again after the module was settled.
+	f.store.failWrites(1, errStore, func(d discussion.Draft) bool { return d.Published.Done() })
+
+	f.approve(id, "invoice-report")
+
+	f.waitFailed(id, "invoice-report")
+	if err := f.flow.Retry(t.Context(), id, "invoice-report"); err != nil {
+		t.Fatalf("retry the card: %v", err)
+	}
+
+	card := f.waitPublished(id, "invoice-report")
+	want := []string{"The module Billing is no longer an option of the board."}
+	if diff := cmp.Diff(want, card.Warnings); diff != "" {
+		t.Errorf("the card says the wrong thing about its module (-want +got):\n%s", diff)
+	}
+}
+
+// onTheBoard says the write is the one that puts the issue of a draft on the
+// board, which is the step every card takes after its issue exists.
+func onTheBoard(d discussion.Draft) bool { return d.Published.ItemID != "" }
 
 // issueCalls are the writes of a run that are about issues, which is where the
 // order of a publication is read.

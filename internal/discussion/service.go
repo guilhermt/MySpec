@@ -389,7 +389,7 @@ func (s *Service) RemoveDraftDependency(ctx context.Context, id, draftID, value 
 		}
 		index := slices.IndexFunc(d.Dependencies, func(dep Dependency) bool { return dep.Key() == ref.Key() })
 		if index < 0 {
-			return fmt.Errorf("remove dependency %s of draft %s of discussion %s: %w", ref, draftID, id, ErrNotFound)
+			return fmt.Errorf("remove dependency %s of draft %s of discussion %s: %w", ref, draftID, id, ErrInvalidRef)
 		}
 		if d.Dependencies[index].Linked {
 			return fmt.Errorf("remove dependency %s of draft %s of discussion %s: %w",
@@ -514,7 +514,7 @@ func nextUserEpicID(drafts []Draft) string {
 // RecordPublication records what one step of a publication did on GitHub. A
 // published draft is read only to the user, never to the publication.
 func (s *Service) RecordPublication(ctx context.Context, id, draftID string, mutate func(*Draft)) error {
-	return s.writeDraft(ctx, id, draftID, func(d *Draft) error {
+	return s.writeDraft(ctx, id, draftID, false, func(d *Draft) error {
 		mutate(d)
 		return nil
 	})
@@ -522,7 +522,7 @@ func (s *Service) RecordPublication(ctx context.Context, id, draftID string, mut
 
 // SetPublishError records why the publication of a draft failed; "" clears it.
 func (s *Service) SetPublishError(ctx context.Context, id, draftID, reason string) error {
-	return s.writeDraft(ctx, id, draftID, func(d *Draft) error {
+	return s.writeDraft(ctx, id, draftID, false, func(d *Draft) error {
 		d.PublishError = reason
 		return nil
 	})
@@ -579,7 +579,6 @@ func (s *Service) Archive(ctx context.Context, id string) (Discussion, error) {
 	s.archived = slices.Insert(s.archived, 0, d)
 	s.mu.Unlock()
 
-	s.log.Info("discussion archived", "discussion", id, "board", d.BoardID)
 	s.changed()
 	return d, nil
 }
@@ -609,7 +608,6 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	delete(s.drafts, id)
 	s.mu.Unlock()
 
-	s.log.Info("discussion deleted", "discussion", id, "board", d.BoardID)
 	s.changed()
 	return nil
 }
@@ -693,24 +691,24 @@ func (s *Service) editDraft(ctx context.Context, id, draftID string, mutate func
 	if _, err := s.editable(id); err != nil {
 		return err
 	}
-	draft, ok := s.draft(id, draftID)
-	if !ok {
-		return fmt.Errorf("edit draft %s of discussion %s: %w", draftID, id, ErrDraftNotFound)
-	}
-	if draft.Published.Started() {
-		return fmt.Errorf("edit draft %s of discussion %s: %w", draftID, id, ErrPublished)
-	}
-	return s.writeDraft(ctx, id, draftID, mutate)
+	return s.writeDraft(ctx, id, draftID, true, mutate)
 }
 
-// writeDraft rewrites one draft of a discussion, whatever became of it.
-func (s *Service) writeDraft(ctx context.Context, id, draftID string, mutate func(*Draft) error) error {
+// writeDraft rewrites one draft of a discussion, whatever became of it: one
+// reading of the draft decides the refusal and takes the change.
+// refusePublished is an edit of the user, which a published draft refuses.
+func (s *Service) writeDraft(ctx context.Context, id, draftID string, refusePublished bool,
+	mutate func(*Draft) error,
+) error {
 	if _, ok := s.Lookup(id); !ok {
 		return fmt.Errorf("write draft %s of discussion %s: %w", draftID, id, ErrNotFound)
 	}
 	draft, ok := s.draft(id, draftID)
 	if !ok {
 		return fmt.Errorf("write draft %s of discussion %s: %w", draftID, id, ErrDraftNotFound)
+	}
+	if refusePublished && draft.Published.Started() {
+		return fmt.Errorf("write draft %s of discussion %s: %w", draftID, id, ErrPublished)
 	}
 
 	if err := mutate(&draft); err != nil {

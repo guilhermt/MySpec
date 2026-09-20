@@ -54,9 +54,14 @@ type DiscussionContextInput struct {
 
 // DiscussionContext is the initial context of a discussion: the board with its
 // repositories, what the user wrote, and every selected card with its epic,
-// its siblings and its dependencies.
+// its siblings and its dependencies. A discussion without a title opens at the
+// board.
 func DiscussionContext(in DiscussionContextInput) string {
-	sections := []string{"# " + in.Title, boardSection(in)}
+	var sections []string
+	if in.Title != "" {
+		sections = append(sections, "# "+in.Title)
+	}
+	sections = append(sections, boardSection(in))
 	if text := strings.TrimSpace(in.Text); text != "" {
 		sections = append(sections, sectionHeading+"What to discuss\n\n"+text)
 	}

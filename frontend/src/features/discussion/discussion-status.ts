@@ -156,6 +156,42 @@ export function waitsLabel(draft: Draft): string {
   return `Waits for ${draft.waits}`;
 }
 
+/** epicDraftOf is the epic draft a card sits under, null when it sits under none. */
+function epicDraftOf(draft: Draft, drafts: readonly Draft[]): Draft | null {
+  const id = draft.epic?.draft ?? "";
+  if (id === "") {
+    return null;
+  }
+  return drafts.find((each) => each.id === id) ?? null;
+}
+
+/**
+ * isPublishing says a draft is in the run that writes on GitHub now. The Go
+ * side says a publication is under way, not which drafts it carries, so the
+ * answer is the closest the state allows: a draft of its own goes as soon as
+ * it waits for nothing, a card of an epic goes with the run of its epic, and
+ * an epic goes when nothing holds it back.
+ */
+export function isPublishing(draft: Draft, drafts: readonly Draft[], status: string): boolean {
+  if (asDiscussionStatus(status) !== "publishing") {
+    return false;
+  }
+  if (draft.decision !== "approved" || draft.published || draft.outcome !== "") {
+    return false;
+  }
+  if (asDraftKind(draft.kind) === "epic") {
+    return draft.hint === "";
+  }
+  const epic = epicDraftOf(draft, drafts);
+  if (epic === null) {
+    return draft.waits === "";
+  }
+  return (
+    epic.outcome !== "" ||
+    (epic.decision === "approved" && epic.publishError === "" && epic.hint === "")
+  );
+}
+
 /**
  * repositoryOf is the repository of the board a draft is created in, null when
  * the draft points at none the board still has.

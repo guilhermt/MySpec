@@ -10,7 +10,7 @@ const READING_CLOCK_MS = 60_000;
 
 export interface BoardHeaderProps {
   board: Board;
-  /** onNewDiscussion opens a discussion of the board with no card picked. */
+  /** onNewDiscussion opens a discussion of the board with the cards picked, if any. */
   onNewDiscussion: () => void;
 }
 

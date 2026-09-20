@@ -52,7 +52,9 @@ var ErrUnreadable = errors.New("discussion: the drafts can't be read")
 type ParsedDraft struct {
 	ID           string
 	Kind         Kind
-	Card         *Ref // update: the issue it rewrites; nil otherwise
+	Card         *Ref   // update: the issue it rewrites; nil otherwise
+	CardTitle    string // what the board knows about the card, which Validate fills
+	CardURL      string
 	Repository   string
 	Module       string
 	Epic         *Ref // nil without one

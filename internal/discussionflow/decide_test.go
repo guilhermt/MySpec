@@ -101,6 +101,121 @@ Invoice report
 The report of the invoices.
 `
 
+// wideEpicArtifact holds an epic of three cards that depend on nothing, so
+// that one of them leaves it and the epic is still worth publishing.
+const wideEpicArtifact = `---
+status: drafts
+---
+
+## Draft: invoices-epic
+- Kind: epic
+- Repository: acme/web
+
+### Title
+Invoices
+
+### Body
+The invoices of the customer.
+
+## Draft: invoice-schema
+- Kind: new
+- Repository: acme/web
+- Epic: invoices-epic
+
+### Title
+Invoice schema
+
+### Body
+The schema of an invoice.
+
+## Draft: export-invoices
+- Kind: new
+- Repository: acme/web
+- Epic: invoices-epic
+
+### Title
+Export invoices as CSV
+
+### Body
+The user exports the invoices.
+
+## Draft: invoice-report
+- Kind: new
+- Repository: acme/api
+- Epic: invoices-epic
+
+### Title
+Invoice report
+
+### Body
+The report of the invoices.
+`
+
+func TestACardThatLeavesAnEpicTakesTheRequestToPublishItAlong(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := f.start(cardKey)
+	f.record(id, wideEpicArtifact)
+	// The conversation is closed while the user decides, so that the request
+	// to publish the epic waits for the evaluation the test asks for.
+	f.sessions.shut(id)
+	for _, draftID := range []string{"invoices-epic", "invoice-schema", "export-invoices", "invoice-report"} {
+		f.approve(id, draftID)
+	}
+	if err := f.flow.PublishEpic(t.Context(), id, "invoices-epic"); err != nil {
+		t.Fatalf("publish epic: %v", err)
+	}
+
+	if err := f.flow.SetDraftEpic(t.Context(), id, "invoice-report", ""); err != nil {
+		t.Fatalf("set the epic of a card: %v", err)
+	}
+
+	f.sessions.idle(id)
+	f.flow.Check(id)
+	f.waitPublished(id, "invoice-report")
+	if got := count(f.gh.made(), "createIssue:R_acme/web:Invoices"); got != 0 {
+		t.Errorf("the epic was published %d times, want the request forgotten with the card", got)
+	}
+	if f.draftState(id, "invoices-epic").Draft.Published.Started() {
+		t.Errorf("the epic went to GitHub after the card that was asked for left it")
+	}
+}
+
+func TestTheActionsOfTheUserAreRefusedWhileAPublicationIsUnderWay(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := f.start(cardKey)
+	f.record(id, looseArtifact)
+	release := f.gh.holdCreate("Invoice report")
+	t.Cleanup(release)
+
+	f.approve(id, "invoice-report")
+	f.waitFor(id, func(s discussionflow.State) bool { return s.Publishing })
+
+	actions := map[string]func() error{
+		"decide on a draft": func() error {
+			return f.flow.Decide(t.Context(), id, "invoice-report", discussion.DecisionDiscarded)
+		},
+		"set the text of a draft": func() error {
+			return f.flow.SetDraftText(t.Context(), id, "invoice-report", "Another title", "Another body")
+		},
+		"retry a draft":          func() error { return f.flow.Retry(t.Context(), id, "invoice-report") },
+		"archive the discussion": func() error { return f.flow.Archive(t.Context(), id) },
+		"delete the discussion":  func() error { return f.flow.Delete(t.Context(), id) },
+	}
+	for name, action := range actions {
+		if err := action(); !errors.Is(err, discussionflow.ErrPublishing) {
+			t.Errorf("%s while the publication is under way: got %v, want %v",
+				name, err, discussionflow.ErrPublishing)
+		}
+	}
+
+	release()
+	f.waitPublished(id, "invoice-report")
+}
+
 func TestDiscardingEveryDraftBringsTheDiscussionBackToTheConversation(t *testing.T) {
 	t.Parallel()
 

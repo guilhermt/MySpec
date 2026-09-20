@@ -235,6 +235,32 @@ func TestDiscussionContextWithoutCardsOrTextIsTheBoardAlone(t *testing.T) {
 	}
 }
 
+func TestDiscussionContextWithoutATitleOpensAtTheBoard(t *testing.T) {
+	t.Parallel()
+
+	in := board.DiscussionContextInput{
+		BoardTitle:   "Roadmap",
+		BoardURL:     "https://github.com/orgs/acme/projects/3",
+		Repositories: []board.DiscussionRepository{{FullName: "acme/web", Path: "/home/dev/web"}},
+		Text:         "What is missing in accounts?",
+	}
+
+	want := `## Board
+
+- Board: Roadmap
+- Link: https://github.com/orgs/acme/projects/3
+- Repositories:
+  - acme/web: /home/dev/web
+
+## What to discuss
+
+What is missing in accounts?`
+
+	if diff := cmp.Diff(want, board.DiscussionContext(in)); diff != "" {
+		t.Errorf("DiscussionContext() (-want +got):\n%s", diff)
+	}
+}
+
 func TestReviewContextIsTheCardAndItsEpicOnly(t *testing.T) {
 	t.Parallel()
 

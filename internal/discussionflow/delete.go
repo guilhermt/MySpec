@@ -7,6 +7,15 @@ import (
 	"github.com/guilhermt/myspec/internal/discussion"
 )
 
+// ArchiveRefusal says why a discussion cannot be archived yet, in the words
+// the panel shows next to the button.
+type ArchiveRefusal struct{ Hint string }
+
+func (r *ArchiveRefusal) Error() string { return "discussionflow: cannot archive: " + r.Hint }
+
+// Is answers for ErrCannotArchive, so that a refusal is read either way.
+func (r *ArchiveRefusal) Is(target error) bool { return target == ErrCannotArchive }
+
 // Archive takes a discussion out of the list and into the history, with its
 // conversation kept for the user to read. What was approved goes to GitHub
 // first: a discussion with a publication left to make is refused.
@@ -23,7 +32,7 @@ func (s *Service) Archive(ctx context.Context, id string) error {
 		return fmt.Errorf("archive discussion %s: %w", id, discussion.ErrNotFound)
 	}
 	if !state.CanArchive {
-		return fmt.Errorf("archive discussion %s: %w: %s", id, ErrCannotArchive, state.ArchiveHint)
+		return fmt.Errorf("archive discussion %s: %w", id, &ArchiveRefusal{Hint: state.ArchiveHint})
 	}
 
 	if err := s.sessions.Close(ctx, sessionKey(id)); err != nil {
@@ -58,6 +67,7 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 
 	// The conversation runs inside the artifact folder, so it stops first.
 	if err := s.sessions.DiscardTask(ctx, id); err != nil {
+		s.log.Error("discard discussion session failed", "discussion", id, "error", err)
 		return fmt.Errorf("delete discussion %s: %w", id, err)
 	}
 	if err := s.discussions.Delete(ctx, id); err != nil {

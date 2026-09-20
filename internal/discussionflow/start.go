@@ -32,35 +32,20 @@ type StartParams struct {
 // its artifact folder, and starts the conversation. It answers with the id of
 // the discussion.
 func (s *Service) Start(ctx context.Context, p StartParams) (string, error) {
-	b, ok := s.boards.Get(p.BoardID)
-	if !ok {
-		return "", fmt.Errorf("start discussion on board %s: %w", p.BoardID, board.ErrNotFound)
-	}
-	if s.boards.Stored(p.BoardID).Reading == nil && len(p.Cards) > 0 {
-		return "", fmt.Errorf("start discussion on board %s: %w", p.BoardID, ErrNoReading)
-	}
-	repos := s.boardRepositories(p.BoardID)
-	cards, err := s.cardsOf(p.BoardID, p.Cards, repos)
+	b, cards, initial, err := s.contextOf(p.BoardID, p.Title, p.Text, p.Cards)
 	if err != nil {
 		return "", err
 	}
 
 	created, err := s.discussions.Create(ctx, discussion.CreateParams{
-		BoardID:     b.ID,
-		BoardTitle:  b.Title,
-		BoardOwner:  b.Owner,
-		BoardNumber: b.Number,
-		Title:       p.Title,
-		Text:        p.Text,
-		InitialContext: board.DiscussionContext(board.DiscussionContextInput{
-			Title:        strings.TrimSpace(p.Title),
-			BoardTitle:   b.Title,
-			BoardURL:     b.URL,
-			Repositories: contextRepositories(repos),
-			Text:         p.Text,
-			Cards:        cards,
-		}),
-		Cards: inputCards(cards),
+		BoardID:        b.ID,
+		BoardTitle:     b.Title,
+		BoardOwner:     b.Owner,
+		BoardNumber:    b.Number,
+		Title:          p.Title,
+		Text:           p.Text,
+		InitialContext: initial,
+		Cards:          inputCards(cards),
 	})
 	if err != nil {
 		return "", err
@@ -82,6 +67,44 @@ func (s *Service) Start(ctx context.Context, p StartParams) (string, error) {
 	s.log.Info("discussion started", "discussion", created.ID, "board", b.ID, "cards", len(cards))
 	s.notify(created.ID)
 	return created.ID, nil
+}
+
+// Context is the initial context a discussion of these cards would start
+// with, built from the stored reading of the board. It creates nothing.
+// title "" leaves the H1 out.
+func (s *Service) Context(boardID, title, text string, cards []string) (string, error) {
+	_, _, initial, err := s.contextOf(boardID, title, text, cards)
+	return initial, err
+}
+
+// contextOf builds the initial context of a discussion of these cards, with
+// the board and the cards it was built from. A board that is not there, a
+// board never read, a card that is not one of it and a card of a repository
+// the board does not manage are all refused here: the app answers for what it
+// writes.
+func (s *Service) contextOf(boardID, title, text string, keys []string) (board.Board,
+	[]board.Card, string, error,
+) {
+	b, ok := s.boards.Get(boardID)
+	if !ok {
+		return board.Board{}, nil, "", fmt.Errorf("start discussion on board %s: %w", boardID, board.ErrNotFound)
+	}
+	if s.boards.Stored(boardID).Reading == nil && len(keys) > 0 {
+		return board.Board{}, nil, "", fmt.Errorf("start discussion on board %s: %w", boardID, ErrNoReading)
+	}
+	repos := s.boardRepositories(boardID)
+	cards, err := s.cardsOf(boardID, keys, repos)
+	if err != nil {
+		return board.Board{}, nil, "", err
+	}
+	return b, cards, board.DiscussionContext(board.DiscussionContextInput{
+		Title:        strings.TrimSpace(title),
+		BoardTitle:   b.Title,
+		BoardURL:     b.URL,
+		Repositories: contextRepositories(repos),
+		Text:         text,
+		Cards:        cards,
+	}), nil
 }
 
 // cardsOf are the cards of the stored reading the discussion starts from, in

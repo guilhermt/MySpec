@@ -1,5 +1,5 @@
 import { act, renderHook } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 import { useEditedText } from "@/components/useEditedText";
 import { useAppStore } from "@/store/app-store";
 import { resetAppStore } from "@/test/render";
@@ -30,6 +30,31 @@ function edit(stored = "Export the invoices", revision = 1, required = false) {
     { initialProps: { text: stored, rev: revision } },
   );
   return { ...view, save, live };
+}
+
+/**
+ * editing follows one field through two texts: pass-1, the one being typed on,
+ * and pass-2, the one that takes the field over without remounting it. live
+ * holds the revision each text stands at now.
+ */
+function editing(live: Record<string, number>) {
+  const saves: Record<string, Mock<(text: string) => void>> = {
+    "pass-1": vi.fn(),
+    "pass-2": vi.fn(),
+  };
+  const view = renderHook(
+    ({ key, text, rev }: { key: string; text: string; rev: number }) =>
+      useEditedText(
+        key,
+        text,
+        rev,
+        (typed) => saves[key]?.(typed),
+        false,
+        () => live[key] ?? null,
+      ),
+    { initialProps: { key: "pass-1", text: "Export the invoices", rev: 1 } },
+  );
+  return { ...view, saves };
 }
 
 describe("useEditedText", () => {
@@ -126,6 +151,36 @@ describe("useEditedText", () => {
     unmount();
 
     expect(save).toHaveBeenCalledExactlyOnceWith("Export the invoices as CSV");
+  });
+
+  it("sends a save still waiting to the text left behind when the field takes another", () => {
+    const { result, rerender, saves } = editing({ "pass-1": 1, "pass-2": 5 });
+
+    act(() => {
+      result.current.onChange("Export the invoices as CSV");
+    });
+    rerender({ key: "pass-2", text: "Ship the report", rev: 5 });
+    act(() => {
+      vi.advanceTimersByTime(SAVE_DELAY_MS);
+    });
+
+    expect(saves["pass-1"]).toHaveBeenCalledExactlyOnceWith("Export the invoices as CSV");
+    expect(saves["pass-2"]).not.toHaveBeenCalled();
+  });
+
+  it("sends nothing to the text left behind when it was written again", () => {
+    const { result, rerender, saves } = editing({ "pass-1": 3, "pass-2": 5 });
+
+    act(() => {
+      result.current.onChange("Export the invoices as CSV");
+    });
+    rerender({ key: "pass-2", text: "Ship the report", rev: 5 });
+    act(() => {
+      vi.advanceTimersByTime(SAVE_DELAY_MS);
+    });
+
+    expect(saves["pass-1"]).not.toHaveBeenCalled();
+    expect(saves["pass-2"]).not.toHaveBeenCalled();
   });
 
   it("sends nothing as the field goes away with the text written again", () => {

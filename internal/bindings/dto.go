@@ -1117,10 +1117,10 @@ type DraftDependency struct {
 type DraftCurrent struct {
 	Title        string     `json:"title"`
 	Body         string     `json:"body"`
-	Module       string     `json:"module"` // the value of the module field; "" for none
-	Status       string     `json:"status"` // the option of the Status field; "" for none
-	Epic         *DraftRef  `json:"epic"`   // nil without an epic
-	Dependencies []DraftRef `json:"dependencies"`
+	Module       string     `json:"module"`       // the value of the module field; "" for none
+	Status       string     `json:"status"`       // the option of the Status field; "" for none
+	Epic         *DraftRef  `json:"epic"`         // nil without an epic
+	Dependencies []DraftRef `json:"dependencies"` // never nil
 	ReadAt       string     `json:"readAt"`
 }
 

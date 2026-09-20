@@ -73,7 +73,7 @@ func TestEditingAndDecidingTheDraftsOfADiscussionReachesTheState(t *testing.T) {
 	}
 }
 
-func TestDecidingADraftIsRefusedWithADecisionTheAppDoesNotKnow(t *testing.T) {
+func TestMistakesOfTheUserOnADraftGetTheirSentenceAndAreNotLogged(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
@@ -81,16 +81,35 @@ func TestDecidingADraftIsRefusedWithADecisionTheAppDoesNotKnow(t *testing.T) {
 	f.registerBoard(t, true)
 	d := f.seedDiscussion(t, webDraft("export-invoices", "Export the invoices"))
 
-	if err := f.discussionSvc.DecideDraft(d.ID, "export-invoices", "maybe"); err == nil {
-		t.Error("DecideDraft(maybe) = nil, want an unknown decision")
+	err := f.discussionSvc.DecideDraft(d.ID, "export-invoices", "maybe")
+	if want := "Unknown decision."; err == nil || err.Error() != want {
+		t.Errorf("DecideDraft(maybe) = %v, want %q", err, want)
 	}
-	err := f.discussionSvc.SetDraftText(d.ID, "export-invoices", "", "As a CSV.")
+	err = f.discussionSvc.SetDraftText(d.ID, "export-invoices", "", "As a CSV.")
 	if want := "Write the title and the body of the draft."; err == nil || err.Error() != want {
 		t.Errorf("SetDraftText(no title) = %v, want %q", err, want)
 	}
 	if err = f.discussionSvc.SetDraftEpic(d.ID, "export-invoices", "not a reference"); err == nil ||
 		err.Error() != "Use a draft of this discussion or owner/name#number." {
 		t.Errorf("SetDraftEpic(not a reference) = %v, want the sentence about a reference", err)
+	}
+	if f.logged(t, "binding failed") {
+		t.Error("a mistake of the user was logged, want nothing logged")
+	}
+}
+
+func TestADraftIsRefusedARepositoryTheBoardDoesNotManage(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	repoID := f.register(t, t.TempDir())
+	f.registerBoard(t, false)
+	d := f.seedDiscussion(t, webDraft("export-invoices", "Export the invoices"))
+
+	err := f.discussionSvc.SetDraftRepository(d.ID, "export-invoices", repoID)
+
+	if want := "dev/web isn't managed by this board."; err == nil || err.Error() != want {
+		t.Errorf("SetDraftRepository() = %v, want %q", err, want)
 	}
 	if f.logged(t, "binding failed") {
 		t.Error("a mistake of the user was logged, want nothing logged")
@@ -171,6 +190,9 @@ func TestArchivingADiscussionIsRefusedWhileADraftWaitsToBePublished(t *testing.T
 	}
 	if got := f.discussionOf(t, d.ID); got.CanArchive || got.ArchiveHint != "Approved drafts are waiting to be published." {
 		t.Errorf("discussion = %+v, want one that cannot be archived yet", got)
+	}
+	if f.logged(t, "binding failed") {
+		t.Error("a discussion that cannot be archived yet was logged, want nothing logged")
 	}
 }
 
@@ -282,6 +304,29 @@ func TestTheContextOfADiscussionIsTheBoardWithTheSelectedCards(t *testing.T) {
 	})
 	if want := "This card isn't in the last reading of the board."; err == nil || err.Error() != want {
 		t.Errorf("DiscussionContext(unknown card) = %v, want %q", err, want)
+	}
+}
+
+func TestTheContextOfADiscussionOfABoardThatWasNeverReadSaysSo(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.register(t, t.TempDir())
+	b := board.Board{
+		ID: "board-2", Owner: "acme", OwnerType: board.OwnerOrganization, Number: 4,
+		Title: "Later", URL: "https://github.com/orgs/acme/projects/4", FinalStatuses: []string{},
+	}
+	if err := f.store.Boards.InsertBoard(t.Context(), b, nil); err != nil {
+		t.Fatalf("InsertBoard() = %v, want nil", err)
+	}
+	f.load(t)
+
+	_, err := f.discussionSvc.DiscussionContext(bindings.DiscussionContextRequest{
+		BoardID: "board-2", Cards: []string{"dev/web#12"},
+	})
+
+	if want := "The board hasn't been read yet."; err == nil || err.Error() != want {
+		t.Errorf("DiscussionContext() = %v, want %q", err, want)
 	}
 }
 

@@ -179,6 +179,30 @@ func TestCreateIssueReportsAnAnswerWithoutTheIssue(t *testing.T) {
 	}
 }
 
+func TestCreateIssueSaysWhatGitHubRefusedTheMutationWith(t *testing.T) {
+	t.Parallel()
+	r, _ := runner(t, map[string]ghtest.Reply{"api": {
+		Stdout: `{"data":{"createIssue":null},"errors":[{"type":"FORBIDDEN","message":"Resource not accessible by integration"}]}`,
+		Stderr: "gh: Resource not accessible by integration",
+		Exit:   1,
+	}})
+
+	_, err := r.CreateIssue(t.Context(), "R_1", "Export invoices", "body")
+	if err == nil {
+		t.Fatalf("CreateIssue() = nil, want what GitHub refused it with")
+	}
+	if errors.Is(err, gh.ErrNoSuchNode) {
+		t.Errorf("CreateIssue() = %v, want a refusal and not ErrNoSuchNode", err)
+	}
+	var ghErr *gh.Error
+	if !errors.As(err, &ghErr) {
+		t.Fatalf("CreateIssue() = %v, want a *gh.Error", err)
+	}
+	if ghErr.Output != "Resource not accessible by integration" {
+		t.Errorf("Output = %q, want what GitHub said", ghErr.Output)
+	}
+}
+
 func TestUpdateIssueRewritesTheTitleAndTheBody(t *testing.T) {
 	t.Parallel()
 	r, fake := runner(t, map[string]ghtest.Reply{"api": {Stdout: `{"data":{"updateIssue":{"issue":{"id":"I_1"}}}}`}})

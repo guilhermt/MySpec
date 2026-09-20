@@ -20,7 +20,8 @@ func (s *Service) evaluate(ctx context.Context, id string) {
 	if !ok {
 		return
 	}
-	s.stampDocument(s.lockOf(id), stored)
+	l := s.lockOf(id)
+	s.stampDocument(l, stored)
 
 	// The conversation is opened by Start and by Sync: an evaluation never
 	// opens one.
@@ -28,7 +29,10 @@ func (s *Service) evaluate(ctx context.Context, id string) {
 	if !open {
 		return
 	}
-	if sum.Idle {
+	// A run writes the drafts it publishes without the lock of the discussion,
+	// so nothing reads the artifact over it; the check at the end of the run
+	// reads it right after.
+	if sum.Idle && !s.publishing(l) {
 		s.readDrafts(ctx, stored)
 	}
 	s.publishDue(stored)

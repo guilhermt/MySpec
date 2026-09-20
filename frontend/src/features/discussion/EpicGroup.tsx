@@ -7,7 +7,7 @@ import { outcomeLabel } from "@/features/discussion/discussion-status";
 import { messageOf } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 import type { DiscussionSummary } from "@/lib/wails";
-import { publishEpic } from "@/store/actions";
+import { publishEpic, retryPublish } from "@/store/actions";
 
 export interface EpicGroupProps {
   discussion: DiscussionSummary;
@@ -51,7 +51,7 @@ export function EpicGroup({ discussion, group }: EpicGroupProps) {
       )}
       <div className="flex flex-wrap items-center gap-2 px-1">
         {discarded && <span className="text-xs text-muted-foreground">Discarded</span>}
-        {epic.outcome !== "" ? (
+        {epic.outcome !== "" && (
           <span className="flex items-center gap-1.5 text-xs">
             {outcomeLabel(epic)}
             <ExternalLink
@@ -59,27 +59,42 @@ export function EpicGroup({ discussion, group }: EpicGroupProps) {
               className="underline-offset-4 hover:underline"
             >{`${epic.repository}#${epic.number}`}</ExternalLink>
           </span>
-        ) : (
-          <>
+        )}
+        {/* The issue of the epic is recorded as soon as it exists: a failure
+            of a later step of the run stands beside the outcome, and the run
+            is offered again from here. */}
+        {epic.publishError !== "" ? (
+          <span className="flex items-center gap-1.5 text-xs text-destructive">
+            {epic.publishError}
             <Button
               variant="outline"
               size="xs"
-              disabled={!epic.canPublish || publishing}
-              onClick={() => void publish()}
+              onClick={() => void retryPublish(discussion.id, epic.id)}
             >
-              Publish epic
+              Retry the epic
             </Button>
-            {epic.hint !== "" && <span className="text-xs text-muted-foreground">{epic.hint}</span>}
-            {error !== null && (
-              <span
-                role="alert"
-                className="min-w-0 truncate text-xs text-destructive"
-                title={error}
+          </span>
+        ) : (
+          epic.outcome === "" && (
+            <>
+              <Button
+                variant="outline"
+                size="xs"
+                disabled={!epic.canPublish || publishing}
+                onClick={() => void publish()}
               >
-                {error}
-              </span>
-            )}
-          </>
+                Publish epic
+              </Button>
+              {epic.hint !== "" && (
+                <span className="text-xs text-muted-foreground">{epic.hint}</span>
+              )}
+            </>
+          )
+        )}
+        {error !== null && (
+          <span role="alert" className="min-w-0 truncate text-xs text-destructive" title={error}>
+            {error}
+          </span>
         )}
       </div>
     </section>

@@ -166,11 +166,14 @@ func (s *Service) Retry(ctx context.Context, id, draftID string) error {
 		}
 		epic, inEpic := epicRunOf(draft, drafts)
 		if !inEpic {
+			s.unstall(id, draftID)
 			return s.discussions.SetPublishError(ctx, id, draftID, "")
 		}
-		if err := s.discussions.ClearPublishErrors(ctx, id, epicRun(epic, drafts)); err != nil {
+		run := epicRun(epic, drafts)
+		if err := s.discussions.ClearPublishErrors(ctx, id, run); err != nil {
 			return err
 		}
+		s.unstall(id, run...)
 		s.requestEpic(id, epic.ID)
 		return nil
 	})

@@ -50,7 +50,7 @@ export function DeleteDiscussion(id: string): $CancellablePromise<void> {
 /**
  * DiscussionContext is the context a discussion would start with, built from
  * the stored reading of the board. It creates nothing: the dialog shows it
- * while the user is still choosing what to discuss.
+ * while the user is still choosing what to discuss, with no title yet.
  */
 export function DiscussionContext(req: $models.DiscussionContextRequest): $CancellablePromise<string> {
     return $Call.ByID(512760810, req);

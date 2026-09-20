@@ -201,7 +201,7 @@ function BoardScreen({ board }: { board: Board }) {
       onKeyDown={onKeyDown}
       className="flex h-dvh min-w-0 flex-col bg-background"
     >
-      <BoardHeader board={board} onNewDiscussion={() => openDiscuss([])} />
+      <BoardHeader board={board} onNewDiscussion={() => openDiscuss([...checked])} />
       <BoardFilterBar
         board={board}
         filters={memory.filters}

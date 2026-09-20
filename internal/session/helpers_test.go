@@ -476,6 +476,20 @@ func atReview(info session.TaskInfo) session.TaskInfo {
 	return info
 }
 
+// atDiscussion is the same item as a discussion of a board, with the two files
+// the agent writes and the clones of the board it may read.
+func atDiscussion(t *testing.T, info session.TaskInfo) session.TaskInfo {
+	t.Helper()
+
+	info = atStage(info, prompts.StageDiscussion)
+	info.Stage = session.DiscussionStage
+	info.DocumentPath = filepath.Join(info.ArtifactsDir, "discussion.md")
+	info.DraftsPath = filepath.Join(info.ArtifactsDir, "drafts.md")
+	info.Board = "## Board\n\n- Board: Roadmap"
+	info.ExtraDirs = []string{t.TempDir(), t.TempDir()}
+	return info
+}
+
 // atOneShot is the same task created One-Shot in the repository api, in its
 // planning: the prompt names the document and the repository.
 func atOneShot(info session.TaskInfo) session.TaskInfo {

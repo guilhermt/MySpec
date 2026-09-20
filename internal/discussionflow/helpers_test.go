@@ -142,6 +142,15 @@ func (m *memSessions) idle(id string) {
 	m.summaries[k] = session.Summary{TaskID: id, Stage: session.DiscussionStage, Status: session.StatusWaiting, Idle: true}
 }
 
+// shut leaves a discussion without an open conversation, which is a
+// discussion no evaluation reads the drafts of or publishes for.
+func (m *memSessions) shut(id string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	delete(m.summaries, session.Key{TaskID: id, Stage: session.DiscussionStage})
+}
+
 // info is what the conversation of a discussion was last opened with.
 func (m *memSessions) info(id string) session.TaskInfo {
 	m.mu.Lock()
@@ -240,6 +249,18 @@ func (m *memBoards) Refresh(string) {
 	m.refreshs++
 }
 
+// forgetModuleOption takes an option out of the module field of the board, as
+// a board the user changed between the drafts and the publication of them.
+func (m *memBoards) forgetModuleOption(name string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	options := m.stored.Reading.Module.Options
+	m.stored.Reading.Module.Options = slices.DeleteFunc(options, func(o board.Option) bool {
+		return o.Name == name
+	})
+}
+
 // refreshed is how many times the board was asked to be read again.
 func (m *memBoards) refreshed() int {
 	m.mu.Lock()
@@ -249,11 +270,12 @@ func (m *memBoards) refreshed() int {
 }
 
 // memGH is an in-memory discussionflow.GH counting what it was asked to write,
-// with the calls a test asks it to refuse.
+// with the calls a test asks it to refuse or to hold.
 type memGH struct {
 	mu           sync.Mutex
 	calls        []string
-	createErr    map[string]error // by title, and only the first time
+	createErr    map[string]error         // by title, and only the first time
+	held         map[string]chan struct{} // by title: the issues waiting to be created
 	blockedByErr error
 }
 
@@ -267,6 +289,34 @@ func (m *memGH) failCreate(title string, err error) {
 		m.createErr = map[string]error{}
 	}
 	m.createErr[title] = err
+}
+
+// holdCreate keeps the issue of that title from being created until the test
+// lets it go, which is how a test looks at a discussion in the middle of a
+// run. Letting it go twice is letting it go once.
+func (m *memGH) holdCreate(title string) (release func()) {
+	gate := make(chan struct{})
+
+	m.mu.Lock()
+	if m.held == nil {
+		m.held = map[string]chan struct{}{}
+	}
+	m.held[title] = gate
+	m.mu.Unlock()
+
+	var once sync.Once
+	return func() { once.Do(func() { close(gate) }) }
+}
+
+// awaitRelease waits for the test to let the issue of that title be created.
+func (m *memGH) awaitRelease(title string) {
+	m.mu.Lock()
+	gate := m.held[title]
+	m.mu.Unlock()
+
+	if gate != nil {
+		<-gate
+	}
 }
 
 // failBlockedBy makes every dependency GitHub is asked for fail.
@@ -312,6 +362,8 @@ func (m *memGH) LookupRepositories(_ context.Context, repos []string) (map[strin
 }
 
 func (m *memGH) CreateIssue(_ context.Context, repositoryID, title, _ string) (gh.IssueNode, error) {
+	m.awaitRelease(title)
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -658,11 +710,18 @@ func (m *memRepositories) Get(context.Context, string) (string, bool, error) { r
 // Set keeps no setting: no test changes one.
 func (m *memRepositories) Set(context.Context, string, string) error { return nil }
 
-// memStore is an in-memory discussion.Store.
+// memStore is an in-memory discussion.Store, with the writes of a draft a
+// test asks it to refuse.
 type memStore struct {
 	mu          sync.Mutex
 	discussions []discussion.Discussion
 	drafts      map[string][]discussion.Draft
+
+	// writeErr is what the next writes of a draft the test picked answer
+	// with, and writeErrLeft how many of them still do.
+	writeErr     error
+	writeErrLeft int
+	writeErrWhen func(discussion.Draft) bool
 }
 
 func newMemStore() *memStore {
@@ -765,10 +824,32 @@ func (m *memStore) WriteDrafts(_ context.Context, discussionID string, drafts []
 	return m.update(*d)
 }
 
+// failWrites makes the next count writes of a draft the picker says yes to
+// fail, which is how a test looks at a publication the store did not record.
+func (m *memStore) failWrites(count int, err error, when func(discussion.Draft) bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.writeErr, m.writeErrLeft, m.writeErrWhen = err, count, when
+}
+
+// refuses reports whether the write of this draft is one the test asked to
+// fail, and takes it off the count.
+func (m *memStore) refuses(draft discussion.Draft) error {
+	if m.writeErrLeft == 0 || (m.writeErrWhen != nil && !m.writeErrWhen(draft)) {
+		return nil
+	}
+	m.writeErrLeft--
+	return m.writeErr
+}
+
 func (m *memStore) UpdateDraft(_ context.Context, draft discussion.Draft) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	if err := m.refuses(draft); err != nil {
+		return err
+	}
 	drafts := m.drafts[draft.DiscussionID]
 	index := slices.IndexFunc(drafts, func(d discussion.Draft) bool { return d.ID == draft.ID })
 	if index < 0 {

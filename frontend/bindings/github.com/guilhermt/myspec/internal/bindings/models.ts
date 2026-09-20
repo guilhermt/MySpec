@@ -891,6 +891,10 @@ export interface DraftCurrent {
      * nil without an epic
      */
     "epic": DraftRef | null;
+
+    /**
+     * never nil
+     */
     "dependencies": DraftRef[] | null;
     "readAt": string;
 }

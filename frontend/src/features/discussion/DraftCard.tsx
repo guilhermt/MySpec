@@ -20,6 +20,7 @@ import { DependencyList } from "@/features/discussion/DependencyList";
 import { DraftDiff } from "@/features/discussion/DraftDiff";
 import {
   dependencyLabel,
+  isPublishing,
   kindLabel,
   outcomeLabel,
   refKey,
@@ -167,8 +168,7 @@ export function DraftCard({ discussion, draft }: DraftCardProps) {
     (each) => asDraftKind(each.kind) === "epic" && each.id !== draft.id,
   );
   const moduleOptions = discussion.moduleOptions ?? [];
-  const publishing =
-    discussion.status === "publishing" && draft.decision === "approved" && !readOnly;
+  const publishing = isPublishing(draft, discussion.drafts ?? [], discussion.status);
 
   return (
     <article
@@ -190,7 +190,9 @@ export function DraftCard({ discussion, draft }: DraftCardProps) {
           </ExternalLink>
         )}
         <span className="flex-1" />
-        {draft.outcome !== "" ? (
+        {/* The issue is recorded as soon as it exists, so an outcome and a
+            failure of a later step of the same publication stand together. */}
+        {draft.outcome !== "" && (
           <span className="flex items-center gap-1.5 text-xs">
             {outcomeLabel(draft)}
             <ExternalLink
@@ -198,7 +200,8 @@ export function DraftCard({ discussion, draft }: DraftCardProps) {
               className="underline-offset-4 hover:underline"
             >{`${draft.repository}#${draft.number}`}</ExternalLink>
           </span>
-        ) : draft.publishError !== "" ? (
+        )}
+        {draft.publishError !== "" && (
           <span className="flex items-center gap-1.5 text-xs text-destructive">
             {draft.publishError}
             <Button
@@ -209,17 +212,20 @@ export function DraftCard({ discussion, draft }: DraftCardProps) {
               Retry
             </Button>
           </span>
-        ) : draft.waits !== "" ? (
-          <span className="text-xs text-[var(--status-attention)]">{waitsLabel(draft)}</span>
-        ) : publishing ? (
-          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" />
-            Publishing…
-          </span>
-        ) : (
-          isCard &&
-          draft.hint !== "" && <span className="text-xs text-muted-foreground">{draft.hint}</span>
         )}
+        {draft.outcome === "" &&
+          draft.publishError === "" &&
+          (publishing ? (
+            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" />
+              Publishing…
+            </span>
+          ) : draft.waits !== "" ? (
+            <span className="text-xs text-[var(--status-attention)]">{waitsLabel(draft)}</span>
+          ) : (
+            isCard &&
+            draft.hint !== "" && <span className="text-xs text-muted-foreground">{draft.hint}</span>
+          ))}
       </div>
 
       <Field label="Repository">
@@ -256,7 +262,7 @@ export function DraftCard({ discussion, draft }: DraftCardProps) {
       </Field>
 
       {isCard && moduleOptions.length > 0 && (
-        <Field label={discussion.moduleField === "" ? "Module" : discussion.moduleField}>
+        <Field label="Module">
           {readOnly ? (
             <span className="text-sm">{draft.module === "" ? "No module" : draft.module}</span>
           ) : (
@@ -331,11 +337,21 @@ export function DraftCard({ discussion, draft }: DraftCardProps) {
               autoFocus
               onChange={(event) => setEpicIssue(event.target.value)}
               onKeyDown={(event) => {
-                if (event.key === "Enter" && epicIssue.trim() !== "") {
+                if (event.key === "Escape") {
                   event.preventDefault();
-                  void setDraftEpic(discussion.id, draft.id, epicIssue.trim());
+                  event.stopPropagation();
                   setEpicIssue(null);
+                  return;
                 }
+                if (event.key !== "Enter") {
+                  return;
+                }
+                event.preventDefault();
+                // Enter over nothing asks for no epic: the field goes away.
+                if (epicIssue.trim() !== "") {
+                  void setDraftEpic(discussion.id, draft.id, epicIssue.trim());
+                }
+                setEpicIssue(null);
               }}
               className="h-7 text-xs"
             />
@@ -361,7 +377,7 @@ export function DraftCard({ discussion, draft }: DraftCardProps) {
       </Field>
 
       <Field label="Body" htmlFor={readOnly || bodyTab === "changes" ? undefined : bodyId}>
-        {isUpdate && !readOnly && (
+        {isUpdate && (
           <ToggleGroup
             aria-label={`${label} body`}
             size="sm"
@@ -377,10 +393,10 @@ export function DraftCard({ discussion, draft }: DraftCardProps) {
             <ToggleGroupItem value="changes">Changes</ToggleGroupItem>
           </ToggleGroup>
         )}
-        {readOnly ? (
-          <p className="text-sm whitespace-pre-wrap">{body.value}</p>
-        ) : isUpdate && bodyTab === "changes" ? (
+        {isUpdate && bodyTab === "changes" ? (
           <DraftDiff current={current?.body ?? ""} next={body.value} />
+        ) : readOnly ? (
+          <p className="text-sm whitespace-pre-wrap">{body.value}</p>
         ) : (
           <Textarea
             id={bodyId}

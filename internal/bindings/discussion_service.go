@@ -2,11 +2,8 @@ package bindings
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
-	"slices"
-	"strings"
 
 	"github.com/guilhermt/myspec/internal/board"
 	"github.com/guilhermt/myspec/internal/discussion"
@@ -14,10 +11,6 @@ import (
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/repository"
 )
-
-// emptyTitleHeading is what the context of a discussion opens with while the
-// dialog has no title: the preview starts at the board instead.
-const emptyTitleHeading = "# \n\n"
 
 // DiscussionService is the discussion API the frontend calls. The conversation
 // of a discussion goes through TaskService, like the one of a task: the id of
@@ -75,73 +68,13 @@ func (s *DiscussionService) StartDiscussion(req StartDiscussionRequest) (string,
 
 // DiscussionContext is the context a discussion would start with, built from
 // the stored reading of the board. It creates nothing: the dialog shows it
-// while the user is still choosing what to discuss.
+// while the user is still choosing what to discuss, with no title yet.
 func (s *DiscussionService) DiscussionContext(req DiscussionContextRequest) (string, error) {
-	b, ok := s.boards.Get(req.BoardID)
-	if !ok {
-		return "", s.fail("DiscussionContext", fmt.Errorf("context of board %s: %w", req.BoardID, board.ErrNotFound))
-	}
-	repos := s.boardRepositories(req.BoardID)
-	cards, err := s.cardsOf(req.BoardID, req.Cards, repos)
+	text, err := s.flow.Context(req.BoardID, "", req.Text, req.Cards)
 	if err != nil {
 		return "", s.fail("DiscussionContext", err)
 	}
-
-	text := board.DiscussionContext(board.DiscussionContextInput{
-		BoardTitle:   b.Title,
-		BoardURL:     b.URL,
-		Repositories: contextRepositories(repos),
-		Text:         req.Text,
-		Cards:        cards,
-	})
-	return strings.TrimPrefix(text, emptyTitleHeading), nil
-}
-
-// boardRepositories are the repositories a board manages, in alphabetical
-// order of owner/name.
-func (s *DiscussionService) boardRepositories(boardID string) []repository.Repository {
-	var repos []repository.Repository
-	for _, repo := range s.repositories.List() {
-		if repo.BoardID == boardID {
-			repos = append(repos, repo)
-		}
-	}
-	slices.SortFunc(repos, func(a, b repository.Repository) int {
-		return strings.Compare(a.FullName(), b.FullName())
-	})
-	return repos
-}
-
-// contextRepositories are the repositories of the board as the context lists
-// them, with the clone of each one.
-func contextRepositories(repos []repository.Repository) []board.DiscussionRepository {
-	listed := make([]board.DiscussionRepository, 0, len(repos))
-	for _, repo := range repos {
-		listed = append(listed, board.DiscussionRepository{FullName: repo.FullName(), Path: repo.Path})
-	}
-	return listed
-}
-
-// cardsOf are the cards of the stored reading the context is built from, in
-// the order the user picked them. A card of a repository the board does not
-// manage is refused, as it is when the discussion starts.
-func (s *DiscussionService) cardsOf(
-	boardID string, keys []string, repos []repository.Repository,
-) ([]board.Card, error) {
-	cards := make([]board.Card, 0, len(keys))
-	for _, key := range keys {
-		card, ok := s.boards.Card(boardID, key)
-		if !ok {
-			return nil, fmt.Errorf("context of card %s: %w", key, board.ErrCardNotFound)
-		}
-		if !slices.ContainsFunc(repos, func(r repository.Repository) bool {
-			return strings.EqualFold(r.FullName(), card.FullName())
-		}) {
-			return nil, &board.Refusal{Reason: board.RefusalNotManaged, Repository: card.FullName()}
-		}
-		cards = append(cards, card)
-	}
-	return cards, nil
+	return text, nil
 }
 
 // SetDraftText records the title and the body the user left on a draft, which
@@ -164,6 +97,13 @@ func (s *DiscussionService) SetDraftRepository(id, draftID, repositoryID string)
 		return s.fail("SetDraftRepository", fmt.Errorf(
 			"repository %s of draft %s: %w", repositoryID, draftID, repository.ErrNotFound,
 		))
+	}
+	// A card of a discussion is created in a repository of the board it is
+	// about, the same rule the cards it started from answer to.
+	if stored, found := s.discussions.Get(id); found && stored.BoardID != repo.BoardID {
+		return s.fail("SetDraftRepository", &board.Refusal{
+			Reason: board.RefusalNotManaged, Repository: repo.FullName(),
+		})
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
@@ -282,11 +222,6 @@ func (s *DiscussionService) ArchiveDiscussion(id string) error {
 	defer cancel()
 
 	if err := s.flow.Archive(ctx, id); err != nil {
-		// A discussion that cannot be archived yet says why in its own words,
-		// which is the hint the panel shows next to the button.
-		if state, ok := s.flow.State(id); ok && errors.Is(err, discussionflow.ErrCannotArchive) && state.ArchiveHint != "" {
-			return errors.New(state.ArchiveHint)
-		}
 		return s.fail("ArchiveDiscussion", err)
 	}
 	return nil

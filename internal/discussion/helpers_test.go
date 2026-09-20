@@ -260,6 +260,25 @@ func (f *fixture) record(id, content string) bool {
 	return changed
 }
 
+// recordValidated validates an artifact against the board and records it,
+// which is the whole reading the flow does after a turn of the agent.
+func (f *fixture) recordValidated(id, content string) bool {
+	f.t.Helper()
+
+	artifact, err := discussion.ParseArtifact(content)
+	if err != nil {
+		f.t.Fatalf("parse artifact: %v", err)
+	}
+	if err = discussion.Validate(artifact, boardCatalog()); err != nil {
+		f.t.Fatalf("validate artifact: %v", err)
+	}
+	changed, err := f.service.RecordDrafts(f.t.Context(), id, artifact)
+	if err != nil {
+		f.t.Fatalf("record drafts: %v", err)
+	}
+	return changed
+}
+
 // draft is one draft of a discussion by id.
 func (f *fixture) draft(id, draftID string) discussion.Draft {
 	f.t.Helper()

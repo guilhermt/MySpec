@@ -115,6 +115,50 @@ func TestAnArtifactWrittenAgainSettlesTheWarningThatItCouldNotBeRead(t *testing.
 	}
 }
 
+// laterArtifact is the artifact written again with one more card, as the agent
+// writes it while a publication is under way.
+const laterArtifact = looseArtifact + `
+## Draft: invoice-emails
+- Kind: new
+- Repository: acme/api
+
+### Title
+Email the invoices
+
+### Body
+The customer gets the invoice by email.
+`
+
+func TestTheDraftsAreNotReadWhileAPublicationIsWritingThem(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := f.start(cardKey)
+	f.record(id, looseArtifact)
+	release := f.gh.holdCreate("Invoice report")
+	t.Cleanup(release)
+
+	f.approve(id, "invoice-report")
+	f.waitFor(id, func(s discussionflow.State) bool { return s.Publishing })
+
+	// The agent rested with another artifact while the run writes on GitHub.
+	f.write(id, discussion.DraftsFile, laterArtifact)
+	f.write(id, discussion.DocumentFile, "# Invoices\n")
+	f.flow.Check(id)
+	f.waitFor(id, func(s discussionflow.State) bool { return s.HasDocument })
+	if got := len(f.state(id).Drafts); got != 1 {
+		t.Errorf("the discussion has %d drafts, want the ones the run is writing", got)
+	}
+
+	release()
+
+	f.waitPublished(id, "invoice-report")
+	state := f.waitFor(id, func(s discussionflow.State) bool { return len(s.Drafts) == 2 })
+	if !f.draftIn(state, "invoice-report").Published.Done() {
+		t.Errorf("the card the run published was lost when the artifact was read again")
+	}
+}
+
 func TestTheDocumentTheAgentWritesIsNoticedEveryTimeItChanges(t *testing.T) {
 	t.Parallel()
 

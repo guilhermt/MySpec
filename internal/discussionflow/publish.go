@@ -3,7 +3,7 @@ package discussionflow
 import (
 	"context"
 	"errors"
-	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -26,6 +26,7 @@ const (
 	msgNotManagedSuffix  = " is no longer managed by the board."
 	msgNoRepositoryStart = "The repository "
 	msgNoRepositoryEnd   = " doesn't exist or this account can't write to it."
+	msgNotRecorded       = "Couldn't record the publication: "
 )
 
 // publishDue writes on GitHub everything a discussion is ready to write: the
@@ -62,16 +63,18 @@ func (s *Service) publishDue(stored discussion.Discussion) {
 // dueTargets are the drafts of a run: the cards of their own that can go now,
 // and the epics the user asked for that still have something to write. An epic
 // the discussion moved past is no longer the one the user asked to publish, so
-// the request goes.
+// the request goes. A stalled draft is left out of every run.
 func (s *Service) dueTargets(id string, drafts []discussion.Draft) []discussion.Draft {
+	stalled := s.stalledDrafts(id)
+
 	var targets []discussion.Draft
 	for _, draft := range drafts {
-		if looseDue(draft, drafts) {
+		if !stalled[draft.ID] && looseDue(draft, drafts) {
 			targets = append(targets, draft)
 		}
 	}
 	for _, epic := range drafts {
-		if epic.Kind != discussion.KindEpic || !s.epicRequested(id, epic.ID) {
+		if epic.Kind != discussion.KindEpic || stalled[epic.ID] || !s.epicRequested(id, epic.ID) {
 			continue
 		}
 		if !epicDue(epic, drafts) {
@@ -82,12 +85,51 @@ func (s *Service) dueTargets(id string, drafts []discussion.Draft) []discussion.
 			targets = append(targets, epic)
 		}
 		for _, member := range membersOf(epic, drafts) {
+			if stalled[member.ID] {
+				continue
+			}
 			if member.Decision == discussion.DecisionApproved && !member.Published.Done() {
 				targets = append(targets, member)
 			}
 		}
 	}
 	return targets
+}
+
+// stalledDrafts are the drafts of a discussion no run takes: GitHub took a
+// step of their publication and the app could not write down that it did, so
+// only the user says whether it goes again.
+func (s *Service) stalledDrafts(id string) map[string]bool {
+	l := s.lockOf(id)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return maps.Clone(l.stalled)
+}
+
+// stall keeps a draft out of every run, because nothing the app recorded says
+// what its publication already did.
+func (s *Service) stall(id, draftID string) {
+	l := s.lockOf(id)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	l.stalled[draftID] = true
+}
+
+// unstall takes the drafts of a retry back into the runs: sending them again
+// is what the user just asked for.
+func (s *Service) unstall(id string, draftIDs ...string) {
+	l := s.lockOf(id)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for _, draftID := range draftIDs {
+		delete(l.stalled, draftID)
+	}
 }
 
 // looseDue reports whether a card of its own goes to GitHub now: the user
@@ -449,7 +491,12 @@ func (p *publication) module(ctx context.Context, target *discussion.Draft) erro
 	}
 	optionID, ok := p.reading.ModuleOptionID(target.Module)
 	if !ok {
-		return p.warn(ctx, target, "The module "+target.Module+" is no longer an option of the board.")
+		// The module of this card is settled: nothing more will ever be set
+		// for it, so the warning is said once and a later run skips the step.
+		return p.record(ctx, target, func(d *discussion.Draft) {
+			d.Published.ModuleSet = true
+			d.Warnings = append(d.Warnings, "The module "+target.Module+" is no longer an option of the board.")
+		})
 	}
 	err := p.service.gh.SetProjectSingleSelect(ctx, p.projectID(), target.Published.ItemID,
 		p.reading.Module.ID, optionID)
@@ -550,12 +597,6 @@ func (p *publication) done(ctx context.Context, target *discussion.Draft) error 
 	return nil
 }
 
-// warn keeps what the publication has to tell the user about a draft it
-// published anyway.
-func (p *publication) warn(ctx context.Context, target *discussion.Draft, warning string) error {
-	return p.record(ctx, target, func(d *discussion.Draft) { d.Warnings = append(d.Warnings, warning) })
-}
-
 // drop takes a dependency out of the publication, saying why.
 func (p *publication) drop(ctx context.Context, target *discussion.Draft, i int,
 	dropped discussion.Drop, detail, warning string,
@@ -568,36 +609,57 @@ func (p *publication) drop(ctx context.Context, target *discussion.Draft, i int,
 }
 
 // record writes one step of the publication of a draft, so that a run that
-// stops halfway is taken up where it left off.
+// stops halfway is taken up where it left off. The step is what GitHub has
+// whether the app wrote it down or not, so the run reads it that way: a write
+// that failed stops the run right after.
 func (p *publication) record(ctx context.Context, target *discussion.Draft,
 	mutate func(*discussion.Draft),
 ) error {
-	if err := p.service.discussions.RecordPublication(ctx, p.stored.ID, target.ID, mutate); err != nil {
-		return fmt.Errorf("record the publication of draft %s: %w", target.ID, err)
-	}
+	err := p.service.discussions.RecordPublication(ctx, p.stored.ID, target.ID, mutate)
+
 	mutate(target)
 	if i := slices.IndexFunc(p.drafts, func(d discussion.Draft) bool { return d.ID == target.ID }); i >= 0 {
 		p.drafts[i] = *target
+	}
+	if err != nil {
+		return &recordError{draftID: target.ID, err: err}
 	}
 	return nil
 }
 
 // fail records why the publication of a draft stopped, which is what the user
-// retries from.
+// retries from. A failure the app cannot write down leaves the draft stalled:
+// nothing says GitHub already took a step of it, so only the user sends it
+// again.
 func (p *publication) fail(ctx context.Context, target discussion.Draft, err error) {
-	var step *stepError
-	if !errors.As(err, &step) {
-		p.service.log.Error("publish discussion draft failed",
-			"discussion", p.stored.ID, "draft", target.ID, "error", err)
-		return
+	message := p.report(target, err)
+	if setErr := p.service.discussions.SetPublishError(ctx, p.stored.ID, target.ID, message); setErr != nil {
+		p.service.log.Error("record discussion publication failed", "discussion", p.stored.ID,
+			"draft", target.ID, "issue", target.Reference(), "error", setErr)
+		p.service.stall(p.stored.ID, target.ID)
 	}
-	p.service.log.Error("publish discussion draft failed",
-		"discussion", p.stored.ID, "draft", target.ID, "error", step.message)
+}
 
-	if setErr := p.service.discussions.SetPublishError(ctx, p.stored.ID, target.ID, step.message); setErr != nil {
-		p.service.log.Error("record the failure of a discussion draft failed",
-			"discussion", p.stored.ID, "draft", target.ID, "error", setErr)
+// report says in the log why the publication of a draft stopped and answers
+// with the sentence the user reads about it: a step GitHub refused, or a step
+// it took that the app could not write down.
+func (p *publication) report(target discussion.Draft, err error) string {
+	var step *stepError
+	if errors.As(err, &step) {
+		p.service.log.Error("publish discussion draft failed",
+			"discussion", p.stored.ID, "draft", target.ID, "error", step.message)
+		return step.message
 	}
+
+	p.service.log.Error("record discussion publication failed", "discussion", p.stored.ID,
+		"draft", target.ID, "issue", target.Reference(), "error", err)
+	// What the user reads is what the store said, without the step the app
+	// names itself by.
+	var record *recordError
+	if errors.As(err, &record) {
+		err = record.err
+	}
+	return msgNotRecorded + err.Error()
 }
 
 // manages reports whether the board still answers for the repository a draft
@@ -640,6 +702,20 @@ func (e *stepError) Error() string { return "discussionflow: " + e.message }
 
 // newStepError is a failure of a publication the user is told about.
 func newStepError(message string) error { return &stepError{message: message} }
+
+// recordError is a step of a publication GitHub took and the app could not
+// write down, which is what leaves a run with more on GitHub than in the
+// store.
+type recordError struct {
+	draftID string
+	err     error
+}
+
+func (e *recordError) Error() string {
+	return "discussionflow: record the publication of draft " + e.draftID + ": " + e.err.Error()
+}
+
+func (e *recordError) Unwrap() error { return e.err }
 
 // where says which call of gh failed: the scope it needs and the node it could
 // not find are not the same for the board and for an issue.

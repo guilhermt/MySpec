@@ -159,6 +159,11 @@ describe("StartTaskAction", () => {
   });
 
   it("says why Discuss is closed to a card with a task or a closed issue", () => {
+    const { unmount } = action(makeBoardCard({ action: "has_task" }), { boardId: "board-2" });
+    expect(screen.getByRole("button", { name: "Discuss" })).toBeDisabled();
+    expect(screen.getByText("dev/web isn't managed by this board.")).toBeInTheDocument();
+    unmount();
+
     action(makeBoardCard({ action: "closed", state: "closed" }), { boardId: "board-2" });
 
     expect(screen.getByRole("button", { name: "Discuss" })).toBeDisabled();

@@ -176,6 +176,34 @@ func TestAPublishedDraftKeepsEveryThingTheArtifactNowSaysOtherwise(t *testing.T)
 	}
 }
 
+func TestAPublishedDraftKeepsWhatItPointsAtWhenThatDraftLeaves(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	d := f.create()
+	f.record(d.ID, artifactOf(
+		draftOf("epic", "Kind: epic", "Repository: acme/web"),
+		draftOf("one", "Kind: new", "Repository: acme/web", "Epic: epic", "Depends on: two"),
+		draftOf("two", "Kind: new", "Repository: acme/web"),
+	))
+
+	if err := f.service.RecordPublication(t.Context(), d.ID, "one", func(draft *discussion.Draft) {
+		draft.Published.Outcome, draft.Published.Number = discussion.OutcomeCreated, 31
+	}); err != nil {
+		t.Fatalf("record publication: %v", err)
+	}
+
+	f.record(d.ID, artifactOf(draftOf("one", "Kind: new", "Repository: acme/web", "Epic: epic", "Depends on: two")))
+
+	got := f.draft(d.ID, "one")
+	if got.Epic != "epic" || len(got.Dependencies) != 1 {
+		t.Errorf("draft = %+v, want the published draft to keep what it points at", got)
+	}
+	if len(got.Warnings) != 0 {
+		t.Errorf("warnings = %v, want none on a published draft", got.Warnings)
+	}
+}
+
 func TestAReferenceToADraftThatLeftIsDroppedWithAWarning(t *testing.T) {
 	t.Parallel()
 
@@ -262,6 +290,44 @@ func TestAnArtifactWithoutDraftsIsReadEvenWhenItAddsNothing(t *testing.T) {
 	if !stored.DraftsRead || stored.DraftsRevision != 0 {
 		t.Errorf("read = %v, revision = %d, want the artifact read and no revision",
 			stored.DraftsRead, stored.DraftsRevision)
+	}
+}
+
+func TestAnUpdateDraftStoresWhatTheBoardKnowsAboutItsCard(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	d := f.create()
+	f.recordValidated(d.ID, artifactOf(draftOf("one", "Kind: update", "Card: acme/api#12")))
+
+	got := f.draft(d.ID, "one").Card
+	want := &discussion.InputCard{Owner: "acme", Name: "api", Number: 12, Title: "Invoices", URL: cardURL}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("card (-want +got):\n%s", diff)
+	}
+}
+
+func TestACardStoredWithoutItsTitleTakesTheOneTheBoardHas(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	d := f.create()
+	drafts := artifactOf(draftOf("one", "Kind: update", "Card: acme/api#12"))
+
+	f.record(d.ID, drafts)
+	if got := f.draft(d.ID, "one").Card; got.Title != "" || got.URL != "" {
+		t.Fatalf("card = %+v, want one stored before the board answered for it", got)
+	}
+
+	if changed := f.recordValidated(d.ID, drafts); !changed {
+		t.Error("changed = false, want the card of the draft filled")
+	}
+	got := f.draft(d.ID, "one")
+	if got.Card.Title != "Invoices" || got.Card.URL != cardURL {
+		t.Errorf("card = %+v, want the title and the url of the board", got.Card)
+	}
+	if got.Revision != 1 {
+		t.Errorf("revision = %d, want the draft left as the artifact has it", got.Revision)
 	}
 }
 

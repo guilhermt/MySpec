@@ -185,6 +185,19 @@ describe("BoardView", () => {
     expect(useAppStore.getState().newDiscussion).toEqual({ boardId: "board-1", cardKeys: [] });
   });
 
+  it("opens a discussion of the cards picked from the header", async () => {
+    const { user } = view();
+    await user.click(screen.getByRole("checkbox", { name: "Select #12" }));
+    await user.click(screen.getByRole("checkbox", { name: "Select #7" }));
+
+    await user.click(screen.getByRole("button", { name: "New discussion" }));
+
+    expect(useAppStore.getState().newDiscussion).toEqual({
+      boardId: "board-1",
+      cardKeys: ["dev/web#12", "dev/web#7"],
+    });
+  });
+
   it("waits for the first reading to offer a discussion", () => {
     view({ readAt: "", reading: true, cards: [] });
 

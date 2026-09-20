@@ -194,6 +194,11 @@ func TestAnEditIsRefusedWhenItDoesNotFitTheDraft(t *testing.T) {
 			discussion.ErrInvalidRef,
 		},
 		{
+			"a dependency the draft does not have",
+			func() error { return f.service.RemoveDraftDependency(ctx, d.ID, "one", "acme/api#42") },
+			discussion.ErrInvalidRef,
+		},
+		{
 			"a draft that is not there",
 			func() error { return f.service.Decide(ctx, d.ID, "missing", discussion.DecisionApproved) },
 			discussion.ErrDraftNotFound,

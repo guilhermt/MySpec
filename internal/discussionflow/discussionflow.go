@@ -118,6 +118,9 @@ type discussionLock struct {
 	// epicsRequested are the epics the user asked to publish and that have not
 	// finished yet.
 	epicsRequested map[string]bool
+	// stalled are the drafts whose publication GitHub took and the app could
+	// not write down. No run takes them again until the user retries.
+	stalled map[string]bool
 }
 
 // New builds a Service from deps.
@@ -200,7 +203,7 @@ func (s *Service) lockOf(id string) *discussionLock {
 
 	l, ok := s.locks[id]
 	if !ok {
-		l = &discussionLock{epicsRequested: map[string]bool{}}
+		l = &discussionLock{epicsRequested: map[string]bool{}, stalled: map[string]bool{}}
 		s.locks[id] = l
 	}
 	return l

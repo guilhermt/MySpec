@@ -44,6 +44,11 @@ describe("NewDiscussionDialog", () => {
   it("asks for something to discuss when nothing was picked and nothing was written", async () => {
     const { user } = open([]);
 
+    expect(screen.getByLabelText("Title")).toHaveValue("");
+    expect(
+      screen.getByText("Write what to discuss or select at least one card."),
+    ).toBeInTheDocument();
+
     await user.type(screen.getByLabelText("Title"), "Billing");
 
     expect(screen.getByRole("button", { name: "Start discussion" })).toBeDisabled();
@@ -54,6 +59,19 @@ describe("NewDiscussionDialog", () => {
     await user.type(screen.getByLabelText("What to discuss"), "The invoices are late");
 
     expect(screen.getByRole("button", { name: "Start discussion" })).toBeEnabled();
+  });
+
+  it("closes over a board the app no longer has", async () => {
+    const { user } = renderWithStore(<NewDiscussionDialog />, {
+      state: makeState({ boards: [] }),
+      ui: { newDiscussion: { boardId: "board-1", cardKeys: [] } },
+    });
+
+    expect(screen.getByText("This board is no longer in the app.")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(useAppStore.getState().newDiscussion).toBeNull();
   });
 
   it("says a suggested title does not fit", () => {

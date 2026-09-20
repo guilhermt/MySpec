@@ -279,7 +279,9 @@ func (r *Runner) lookup(ctx context.Context, query string) (map[string]json.RawM
 }
 
 // mutate runs a mutation and decodes its data into out. A node GitHub cannot
-// resolve is ErrNoSuchNode with subject, the node the mutation was about.
+// resolve is ErrNoSuchNode with subject, the node the mutation was about. A
+// mutation GitHub refused answers with the data null next to the reason, which
+// is what comes back, because it is what the user needs to read.
 func (r *Runner) mutate(ctx context.Context, mutation string, vars Vars, subject string, out any) error {
 	resp, err := r.GraphQL(ctx, mutation, vars)
 	if HasNotFound(resp.Errors) {
@@ -287,6 +289,9 @@ func (r *Runner) mutate(ctx context.Context, mutation string, vars Vars, subject
 	}
 	if err != nil {
 		return err
+	}
+	if refused := refusalOf(resp.Errors); refused != nil {
+		return fmt.Errorf("gh: mutation on %s: %w", subject, refused)
 	}
 	if len(resp.Data) == 0 || string(resp.Data) == "null" {
 		return fmt.Errorf("%w: %s", ErrNoSuchNode, subject)

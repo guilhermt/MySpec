@@ -114,13 +114,62 @@ func TestParseArtifactRefusesWhatItCannotAct(t *testing.T) {
 	cases := []struct {
 		name    string
 		content string
+		reason  string // the part of the message that says why; "" asks for none
 	}{
-		{"without front matter", "## Draft: one\n- Kind: new\n"},
-		{"with an unknown status", "---\nstatus: ready\n---\n"},
-		{"saying there are no drafts and having one", "---\nstatus: none\n---\n\n## Draft: one\n- Kind: new\n"},
-		{"saying there are drafts and having none", "---\nstatus: drafts\n---\n\nNothing.\n"},
-		{"with an id that is no id", "---\nstatus: drafts\n---\n\n## Draft: Export Invoices\n"},
-		{"with an id reserved for the user", "---\nstatus: drafts\n---\n\n## Draft: user-epic-1\n"},
+		{"without front matter", `## Draft: one
+- Kind: new
+- Repository: acme/web
+
+### Title
+One
+
+### Body
+One.
+`, "no front matter"},
+		{"with an unknown status", "---\nstatus: ready\n---\n", ""},
+		{"saying there are no drafts and having one", `---
+status: none
+---
+
+## Draft: one
+- Kind: new
+- Repository: acme/web
+
+### Title
+One
+
+### Body
+One.
+`, "says there is no draft"},
+		{"saying there are drafts and having none", "---\nstatus: drafts\n---\n\nNothing.\n", ""},
+		{"with an id that is no id", `---
+status: drafts
+---
+
+## Draft: Export Invoices
+- Kind: new
+- Repository: acme/web
+
+### Title
+One
+
+### Body
+One.
+`, "is no draft id"},
+		{"with an id reserved for the user", `---
+status: drafts
+---
+
+## Draft: user-epic-1
+- Kind: new
+- Repository: acme/web
+
+### Title
+One
+
+### Body
+One.
+`, "is reserved"},
 		{"with the same id twice", `---
 status: drafts
 ---
@@ -144,7 +193,7 @@ Two
 
 ### Body
 Two.
-`},
+`, ""},
 		{"with a line that is no field", `---
 status: drafts
 ---
@@ -158,7 +207,7 @@ One
 
 ### Body
 One.
-`},
+`, ""},
 		{"with the same field twice", `---
 status: drafts
 ---
@@ -173,10 +222,10 @@ One
 
 ### Body
 One.
-`},
-		{"without a kind", "---\nstatus: drafts\n---\n\n## Draft: one\n- Repository: acme/web\n\n### Title\nOne\n\n### Body\nOne.\n"},
-		{"with a kind that is no kind", "---\nstatus: drafts\n---\n\n## Draft: one\n- Kind: rewrite\n\n### Title\nOne\n\n### Body\nOne.\n"},
-		{"updating without a card", "---\nstatus: drafts\n---\n\n## Draft: one\n- Kind: update\n\n### Title\nOne\n\n### Body\nOne.\n"},
+`, ""},
+		{"without a kind", "---\nstatus: drafts\n---\n\n## Draft: one\n- Repository: acme/web\n\n### Title\nOne\n\n### Body\nOne.\n", ""},
+		{"with a kind that is no kind", "---\nstatus: drafts\n---\n\n## Draft: one\n- Kind: rewrite\n\n### Title\nOne\n\n### Body\nOne.\n", ""},
+		{"updating without a card", "---\nstatus: drafts\n---\n\n## Draft: one\n- Kind: update\n\n### Title\nOne\n\n### Body\nOne.\n", ""},
 		{"updating with a repository", `---
 status: drafts
 ---
@@ -191,7 +240,7 @@ One
 
 ### Body
 One.
-`},
+`, ""},
 		{"creating with a card", `---
 status: drafts
 ---
@@ -205,8 +254,8 @@ One
 
 ### Body
 One.
-`},
-		{"creating without a repository", "---\nstatus: drafts\n---\n\n## Draft: one\n- Kind: new\n\n### Title\nOne\n\n### Body\nOne.\n"},
+`, ""},
+		{"creating without a repository", "---\nstatus: drafts\n---\n\n## Draft: one\n- Kind: new\n\n### Title\nOne\n\n### Body\nOne.\n", ""},
 		{"with a repository that is no owner/name", `---
 status: drafts
 ---
@@ -220,7 +269,7 @@ One
 
 ### Body
 One.
-`},
+`, ""},
 		{"updating a card that is a draft id", `---
 status: drafts
 ---
@@ -234,7 +283,7 @@ One
 
 ### Body
 One.
-`},
+`, ""},
 		{"with an epic on an epic", `---
 status: drafts
 ---
@@ -249,7 +298,7 @@ One
 
 ### Body
 One.
-`},
+`, ""},
 		{"with a module on an epic", `---
 status: drafts
 ---
@@ -264,7 +313,7 @@ One
 
 ### Body
 One.
-`},
+`, ""},
 		{"with a dependency on an epic", `---
 status: drafts
 ---
@@ -279,7 +328,7 @@ One
 
 ### Body
 One.
-`},
+`, ""},
 		{"with an epic that is no reference", `---
 status: drafts
 ---
@@ -294,7 +343,7 @@ One
 
 ### Body
 One.
-`},
+`, ""},
 		{"with a dependency that is no reference", `---
 status: drafts
 ---
@@ -309,7 +358,7 @@ One
 
 ### Body
 One.
-`},
+`, ""},
 		{"depending on itself", `---
 status: drafts
 ---
@@ -324,9 +373,9 @@ One
 
 ### Body
 One.
-`},
-		{"without the title heading", "---\nstatus: drafts\n---\n\n## Draft: one\n- Kind: new\n- Repository: acme/web\n\n### Body\nOne.\n"},
-		{"without the body heading", "---\nstatus: drafts\n---\n\n## Draft: one\n- Kind: new\n- Repository: acme/web\n\n### Title\nOne\n"},
+`, ""},
+		{"without the title heading", "---\nstatus: drafts\n---\n\n## Draft: one\n- Kind: new\n- Repository: acme/web\n\n### Body\nOne.\n", ""},
+		{"without the body heading", "---\nstatus: drafts\n---\n\n## Draft: one\n- Kind: new\n- Repository: acme/web\n\n### Title\nOne\n", ""},
 		{"with an empty title", `---
 status: drafts
 ---
@@ -339,7 +388,7 @@ status: drafts
 
 ### Body
 One.
-`},
+`, ""},
 		{"with an empty body", `---
 status: drafts
 ---
@@ -353,7 +402,7 @@ One
 
 ### Body
 
-`},
+`, ""},
 		{"with a title longer than the longest", `---
 status: drafts
 ---
@@ -367,15 +416,19 @@ status: drafts
 
 ### Body
 One.
-`},
+`, ""},
 	}
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
 
-			if _, err := discussion.ParseArtifact(c.content); !errors.Is(err, discussion.ErrUnreadable) {
-				t.Errorf("error = %v, want ErrUnreadable", err)
+			_, err := discussion.ParseArtifact(c.content)
+			if !errors.Is(err, discussion.ErrUnreadable) {
+				t.Fatalf("error = %v, want ErrUnreadable", err)
+			}
+			if c.reason != "" && !strings.Contains(err.Error(), c.reason) {
+				t.Errorf("error %q does not say %q", err, c.reason)
 			}
 		})
 	}

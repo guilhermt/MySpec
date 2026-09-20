@@ -281,6 +281,10 @@ describe("App", () => {
       expect(shortcut.defaultPrevented).toBe(true);
     }
 
+    expect(useAppStore.getState().newDiscussion).toEqual({
+      boardId: "board-1",
+      cardKeys: ["dev/web#12"],
+    });
     expect(useAppStore.getState().newTaskOpen).toBe(false);
     expect(useAppStore.getState().openTaskId).toBeNull();
     expect(useAppStore.getState().settingsOpen).toBe(false);

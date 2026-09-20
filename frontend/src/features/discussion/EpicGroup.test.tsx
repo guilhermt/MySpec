@@ -80,6 +80,21 @@ describe("EpicGroup", () => {
     expect(screen.getAllByRole("link", { name: "dev/web#30" }).length).toBeGreaterThan(0);
   });
 
+  it("offers the run again when a step after the issue of the epic failed", async () => {
+    const { user } = group({
+      outcome: "created",
+      number: 30,
+      url: "https://github.com/dev/web/issues/30",
+      publishError: "Couldn't write to GitHub: gh: the board said no",
+    });
+
+    const section = screen.getByRole("region", { name: "Epic Invoices" });
+    expect(section).toHaveTextContent("Couldn't write to GitHub: gh: the board said no");
+    await user.click(within(section).getByRole("button", { name: "Retry the epic" }));
+
+    expect(api.retryPublish).toHaveBeenCalledWith("discussion-1", "epic-1");
+  });
+
   it("marks an epic the user discarded", () => {
     group({ decision: "discarded" });
 

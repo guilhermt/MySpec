@@ -810,6 +810,7 @@ var userMessages = []struct {
 	{discussionflow.ErrNotReady, "The epic isn't ready to publish."},
 	{discussionflow.ErrPublishing, "Wait for the publication to finish."},
 	{discussionflow.ErrNoReading, "The board hasn't been read yet."},
+	{discussionflow.ErrCannotArchive, "This discussion can't be archived yet."},
 	{editor.ErrNotFound, "VS Code was not found: `code` isn't on the PATH."},
 	{gh.ErrNotFound, "GitHub CLI was not found: `gh` isn't on the PATH."},
 	{gh.ErrNotAuthenticated, "GitHub CLI isn't authenticated: run `gh auth login`."},
@@ -839,6 +840,12 @@ func failure(log *slog.Logger, method string, err error) error {
 	var pullsFailure *pulls.Failure
 	if errors.As(err, &pullsFailure) {
 		return errors.New(pullsFailure.Message())
+	}
+	// A discussion that cannot be archived yet says why in its own words, which
+	// is the hint the panel shows next to the button.
+	var archive *discussionflow.ArchiveRefusal
+	if errors.As(err, &archive) {
+		return errors.New(archive.Hint)
 	}
 	var taken *task.CardTakenError
 	if errors.As(err, &taken) {

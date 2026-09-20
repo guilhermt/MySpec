@@ -63,6 +63,41 @@ func TestStartingADiscussionWritesTheInitialContextAndOpensTheConversation(t *te
 	}
 }
 
+func TestTheContextOfADiscussionIsBuiltFromTheBoardWithoutCreatingAnything(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+
+	text, err := f.flow.Context(boardID, "Invoices", "Export invoices", []string{cardKey})
+	if err != nil {
+		t.Fatalf("build the context of a discussion: %v", err)
+	}
+
+	for _, want := range []string{
+		"# Invoices", "## Board", "- Board: Roadmap",
+		"  - acme/api: " + filepath.Join(f.dataDir, "api"),
+		"## What to discuss", "Export invoices", "## Card: Invoices", "- Issue: acme/web#12",
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("the context says nothing about %q:\n%s", want, text)
+		}
+	}
+	if list := f.discussions.List(); len(list) != 0 {
+		t.Errorf("the context created %d discussions", len(list))
+	}
+}
+
+func TestTheContextOfADiscussionIsRefusedForACardThatIsNotOnTheBoard(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+
+	_, err := f.flow.Context(boardID, "Invoices", "", []string{"acme/web#99"})
+	if !errors.Is(err, board.ErrCardNotFound) {
+		t.Fatalf("build the context of a discussion: got %v, want %v", err, board.ErrCardNotFound)
+	}
+}
+
 func TestABoardWithoutAModuleFieldTellsTheAgentThatDraftsTakeNone(t *testing.T) {
 	t.Parallel()
 

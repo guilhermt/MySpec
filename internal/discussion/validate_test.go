@@ -8,12 +8,15 @@ import (
 	"github.com/guilhermt/myspec/internal/discussion"
 )
 
+// cardURL is the url the board has for the card of boardCatalog.
+const cardURL = "https://github.com/acme/api/issues/12"
+
 // boardCatalog is the board the artifacts of the tests are checked against.
 func boardCatalog() discussion.Catalog {
 	return discussion.Catalog{
 		Repositories: []string{"acme/web", "acme/api"},
 		Cards: map[string]discussion.InputCard{
-			"acme/api#12": {Owner: "acme", Name: "api", Number: 12, Title: "Invoices"},
+			"acme/api#12": {Owner: "acme", Name: "api", Number: 12, Title: "Invoices", URL: cardURL},
 		},
 		HasModule:     true,
 		ModuleOptions: []string{"Billing", "Reports"},
@@ -61,6 +64,25 @@ func TestValidateAcceptsAnArtifactTheBoardAnswersFor(t *testing.T) {
 	}
 	if got := artifact.Drafts[1].Module; got != "Billing" {
 		t.Errorf("module = %q, want the name the board has", got)
+	}
+}
+
+func TestValidateGivesAnUpdateDraftWhatTheBoardKnowsAboutItsCard(t *testing.T) {
+	t.Parallel()
+
+	artifact := parse(t, artifactOf(
+		draftOf("one", "Kind: new", "Repository: acme/web"),
+		draftOf("two", "Kind: update", "Card: ACME/API#12"),
+	))
+
+	if err := discussion.Validate(artifact, boardCatalog()); err != nil {
+		t.Fatalf("validate: %v", err)
+	}
+	if got := artifact.Drafts[1]; got.CardTitle != "Invoices" || got.CardURL != cardURL {
+		t.Errorf("card title = %q, url = %q, want the ones of the board", got.CardTitle, got.CardURL)
+	}
+	if got := artifact.Drafts[0]; got.CardTitle != "" || got.CardURL != "" {
+		t.Errorf("card title = %q, url = %q, want none on a new card", got.CardTitle, got.CardURL)
 	}
 }
 

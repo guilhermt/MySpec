@@ -22,13 +22,15 @@ type Catalog struct {
 // the card it rewrites, the module it takes and what it points at. It fails
 // with ErrUnreadable, because a draft the board does not answer for is one the
 // app cannot act on. The canonical name of a module option replaces the one
-// the draft wrote.
+// the draft wrote, and an update draft takes the title and the url the board
+// has for its card.
 func Validate(a Artifact, c Catalog) error {
 	for i := range a.Drafts {
 		draft := &a.Drafts[i]
 		if err := validateRepository(draft, c); err != nil {
 			return err
 		}
+		fillCard(draft, c)
 		if err := validateModule(draft, c); err != nil {
 			return err
 		}
@@ -37,6 +39,17 @@ func Validate(a Artifact, c Catalog) error {
 		}
 	}
 	return nil
+}
+
+// fillCard copies onto an update draft what the board knows about the card it
+// rewrites, which is what the interface links to. The card is there, because
+// validateRepository refuses a draft whose card the board has none of.
+func fillCard(draft *ParsedDraft, c Catalog) {
+	if draft.Kind != KindUpdate {
+		return
+	}
+	card := c.Cards[draft.Card.Key()]
+	draft.CardTitle, draft.CardURL = card.Title, card.URL
 }
 
 // validateRepository checks that the draft writes to a repository of the

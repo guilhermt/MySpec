@@ -49,12 +49,26 @@ func inherit(discussionID string, stored []Draft, parsed ParsedDraft) Draft {
 	}
 
 	previous := cloneDraft(stored[index])
-	if previous.Published.Started() || same(previous, parsed) {
+	if previous.Published.Started() {
+		return previous
+	}
+	if same(previous, parsed) {
+		adoptCard(&previous, parsed)
 		return previous
 	}
 	draft := fresh(discussionID, parsed)
 	draft.Revision = previous.Revision + 1
 	return draft
+}
+
+// adoptCard gives a kept draft the title and the url of its card, which a
+// draft stored before the board answered for them has empty. The artifact says
+// nothing about either, so this is no rewrite of the draft.
+func adoptCard(draft *Draft, parsed ParsedDraft) {
+	if draft.Card == nil || draft.Card.Title != "" || parsed.CardTitle == "" {
+		return
+	}
+	draft.Card.Title, draft.Card.URL = parsed.CardTitle, parsed.CardURL
 }
 
 // fresh is a draft of the artifact nobody edited or decided anything about
@@ -77,7 +91,13 @@ func fresh(discussionID string, parsed ParsedDraft) Draft {
 	owner, name, _ := strings.Cut(parsed.Repository, "/")
 	draft.Owner, draft.Name = owner, name
 	if parsed.Card != nil {
-		draft.Card = &InputCard{Owner: parsed.Card.Owner, Name: parsed.Card.Name, Number: parsed.Card.Number}
+		draft.Card = &InputCard{
+			Owner:  parsed.Card.Owner,
+			Name:   parsed.Card.Name,
+			Number: parsed.Card.Number,
+			Title:  parsed.CardTitle,
+			URL:    parsed.CardURL,
+		}
 		draft.Owner, draft.Name = parsed.Card.Owner, parsed.Card.Name
 	}
 	if parsed.Epic != nil {
@@ -90,7 +110,8 @@ func fresh(discussionID string, parsed ParsedDraft) Draft {
 }
 
 // same reports whether the artifact says about a draft exactly what it said
-// when the draft was stored.
+// when the draft was stored. The title and the url of a card come from the
+// board, never from the artifact, so neither is compared.
 func same(stored Draft, parsed ParsedDraft) bool {
 	if stored.Kind != parsed.Kind || stored.RepositoryOriginal != parsed.Repository ||
 		stored.TitleOriginal != parsed.Title || stored.BodyOriginal != parsed.Body ||
@@ -143,7 +164,8 @@ func refKey(ref *Ref) string {
 }
 
 // normalize drops what a draft points at and the list no longer has, with a
-// warning saying so.
+// warning saying so. A published draft is left alone: what it points at is
+// already on GitHub.
 func normalize(drafts []Draft) {
 	present := map[string]bool{}
 	for _, draft := range drafts {
@@ -152,6 +174,9 @@ func normalize(drafts []Draft) {
 
 	for i := range drafts {
 		draft := &drafts[i]
+		if draft.Published.Started() {
+			continue
+		}
 		if ref, ok := draft.EpicRef(); ok && ref.IsDraft() && !present[ref.Draft] {
 			draft.Epic = ""
 			warn(draft, fmt.Sprintf(epicGoneWarning, ref.Draft))

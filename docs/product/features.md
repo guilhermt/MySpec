@@ -147,7 +147,7 @@ Junto com o documento o agente escreve os rascunhos, num artefato próprio que o
 
 Cada rascunho é **um card novo**, **a atualização de um card existente**, de qualquer card da leitura guardada do board, ou **um épico**. Um rascunho tem título, corpo em Markdown, o repositório, entre os administrados pelo board, o módulo, quando o board tem o campo, as dependências, zero ou mais, cada uma outro rascunho da discussão ou um card existente, e o épico, opcional. Numa atualização o repositório é o do card e não muda.
 
-Cada rascunho tem o seu cartão, editável: título e corpo como texto, repositório, módulo e épico como seletores, dependências como uma lista com acréscimo e remoção. O cartão de uma **atualização** mostra o card como está no GitHub, com o link, e o que o rascunho muda nele: `Current: <valor>` ao lado do título, do módulo e do épico que ficam diferentes, e a aba **Changes** do corpo, com o diff linha a linha, ao lado de **Edit**. O que o card tem agora vem da leitura guardada e, quando ela tem mais de 5 minutos, de uma releitura do card, com `Refreshing the card…`; uma releitura que falha avisa `Couldn't refresh the card: <motivo>. The draft shows the last reading.` Um card fora da última leitura aparece com `This card isn't in the last reading of the board.`
+Cada rascunho tem o seu cartão, editável: título e corpo como texto, repositório, módulo e épico como seletores, dependências como uma lista com acréscimo e remoção. O cartão de uma **atualização** mostra o card como está no GitHub, com o link, e o que o rascunho muda nele: `Current: <valor>` ao lado do título, do módulo e do épico que ficam diferentes, e a aba **Changes** do corpo, com o diff linha a linha, ao lado de **Edit**; as duas abas continuam depois da publicação, somente leitura. O que o card tem agora vem da leitura guardada e, quando ela tem mais de 5 minutos, de uma releitura do card, com `Refreshing the card…`; uma releitura que falha avisa `Couldn't refresh the card: <motivo>. The draft shows the last reading.` Um card fora da última leitura aparece com `This card isn't in the last reading of the board.`
 
 Edições e decisões são guardadas enquanto o usuário as faz e sobrevivem ao fechamento do app. A conversa fica aberta durante a decisão: um rascunho que o usuário quer incluir, mudar ou retirar pode ser pedido ao agente, que reescreve o artefato. O produto mostra a versão nova mantendo o texto e a decisão de cada rascunho que o agente não mudou; um rascunho publicado é somente leitura e o agente não o altera. Um rascunho que sai do artefato leva consigo o épico e as dependências que apontavam para ele, com o aviso no cartão de quem apontava.
 
@@ -176,7 +176,7 @@ Um rascunho que **depende de outro rascunho ainda não publicado** pode ser apro
 
 Um rascunho publicado mostra no cartão `Created` ou `Updated`, a referência `dono/nome#número` com o link e a data. Depois de uma publicação, o produto relê o board, para que a visão e as tasks vejam os cards novos.
 
-Uma publicação que **falha** não perde nada: o rascunho continua aprovado, com a razão no cartão, e a discussão espera pelo usuário. **Retry** repete a corrida, pulando o que já foi feito, e uma publicação de épico que falhou no meio continua de onde parou, sem criar nada duas vezes. As razões:
+Uma publicação que **falha** não perde nada: o rascunho continua aprovado, com a razão no cartão, e a discussão espera pelo usuário. A razão aparece mesmo quando a issue já foi criada e um passo seguinte falhou: ela fica ao lado de `Created` ou `Updated`. **Retry**, no cartão, repete a corrida, pulando o que já foi feito, e **Retry the epic**, no grupo, faz o mesmo pela corrida de um épico; uma publicação de épico que falhou no meio continua de onde parou, sem criar nada duas vezes. As razões:
 
 | Situação | Mensagem |
 |---|---|
@@ -194,7 +194,7 @@ Um rascunho também não publica quando o board nunca foi lido, com `The board h
 
 ### Módulo
 
-O campo de módulo é o campo de seleção única do board chamado `Módulo` ou `Module`, sem diferenciar maiúsculas nem acentos, identificado pelo nome como o campo `Status`. Num board com esse campo, o prompt de discussão recebe as opções dele, o agente escolhe uma por rascunho, e o seletor do cartão oferece as opções e `No module`. Num board sem esse campo, os rascunhos não têm módulo e o cartão não o mostra. O módulo é o único campo além do status que o produto preenche; estimativa, responsável e datas ficam para o GitHub.
+O campo de módulo é o campo de seleção única do board chamado `Módulo` ou `Module`, sem diferenciar maiúsculas nem acentos, identificado pelo nome como o campo `Status`. Num board com esse campo, o prompt de discussão recebe as opções dele, o agente escolhe uma por rascunho, e o seletor do cartão, na linha `Module` seja qual for o nome do campo no board, oferece as opções e `No module`. Num board sem esse campo, os rascunhos não têm módulo e o cartão não o mostra. O módulo é o único campo além do status que o produto preenche; estimativa, responsável e datas ficam para o GitHub.
 
 ### A discussão como item
 

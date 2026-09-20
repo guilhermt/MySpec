@@ -101,6 +101,30 @@ describe("DraftCard", () => {
     expect(api.setDraftEpic).toHaveBeenCalledWith("discussion-1", "draft-1", "dev/web#3");
   });
 
+  it("gives up on the existing issue with Escape or with nothing written", async () => {
+    const { user } = card();
+
+    await user.click(screen.getByRole("button", { name: "Epic: No epic" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Existing issue…" }));
+    await user.type(screen.getByLabelText("Epic issue"), "dev{Escape}");
+
+    expect(screen.queryByLabelText("Epic issue")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Epic: No epic" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Existing issue…" }));
+    await user.type(screen.getByLabelText("Epic issue"), "{Enter}");
+
+    expect(screen.queryByLabelText("Epic issue")).not.toBeInTheDocument();
+    expect(api.setDraftEpic).not.toHaveBeenCalled();
+  });
+
+  it("names the module row of a card the same whatever the board calls the field", () => {
+    card({}, { moduleField: "Área" });
+
+    expect(screen.getByText("Module")).toBeInTheDocument();
+    expect(screen.queryByText("Área")).not.toBeInTheDocument();
+  });
+
   it("says what the card has now when the update leaves it different", () => {
     card({
       kind: "update",
@@ -133,6 +157,28 @@ describe("DraftCard", () => {
     expect(diff).toHaveTextContent("-A button that exports the list.");
   });
 
+  it("keeps what a published update did to the body", async () => {
+    const { user } = card({
+      kind: "update",
+      body: "A button that exports the list as CSV.",
+      current: makeCurrent(),
+      outcome: "updated",
+      number: 12,
+      url: "https://github.com/dev/web/issues/12",
+      published: true,
+      publishedAt: "2026-09-17T12:00:00Z",
+      decision: "approved",
+    });
+
+    expect(screen.queryByLabelText("Body")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Changes" }));
+
+    expect(screen.getByLabelText("Changes to the body")).toHaveTextContent(
+      "+A button that exports the list as CSV.",
+    );
+  });
+
   it("says the card of an update is not in the last reading", () => {
     card({ kind: "update", current: null });
 
@@ -162,6 +208,22 @@ describe("DraftCard", () => {
     const { user } = card({ publishError: "gh: rate limited" });
 
     expect(screen.getByText("gh: rate limited")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+
+    expect(api.retryPublish).toHaveBeenCalledWith("discussion-1", "draft-1");
+  });
+
+  it("offers the publication again when a step after the issue failed", async () => {
+    const { user } = card({
+      outcome: "created",
+      number: 31,
+      url: "https://github.com/dev/web/issues/31",
+      decision: "approved",
+      publishError: "Couldn't write to GitHub: gh: the board said no",
+    });
+
+    expect(screen.getByText("Created")).toBeInTheDocument();
+    expect(screen.getByText("Couldn't write to GitHub: gh: the board said no")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Retry" }));
 
     expect(api.retryPublish).toHaveBeenCalledWith("discussion-1", "draft-1");
