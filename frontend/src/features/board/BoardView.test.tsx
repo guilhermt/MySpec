@@ -177,6 +177,116 @@ describe("BoardView", () => {
     expect(useAppStore.getState().newTaskCard).toEqual({ boardId: "board-1", key: "dev/web#12" });
   });
 
+  it("opens a discussion of the board with no card from the header", async () => {
+    const { user } = view();
+
+    await user.click(screen.getByRole("button", { name: "New discussion" }));
+
+    expect(useAppStore.getState().newDiscussion).toEqual({ boardId: "board-1", cardKeys: [] });
+  });
+
+  it("waits for the first reading to offer a discussion", () => {
+    view({ readAt: "", reading: true, cards: [] });
+
+    expect(screen.getByRole("button", { name: "New discussion" })).toBeDisabled();
+  });
+
+  it("picks cards and discusses them from the selection bar", async () => {
+    const { user } = view();
+
+    await user.click(screen.getByRole("checkbox", { name: "Select #12" }));
+    // The checkbox picks the card without opening its detail.
+    expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("checkbox", { name: "Select #7" }));
+
+    const bar = screen.getByRole("toolbar", { name: "Selection" });
+    expect(within(bar).getByText("2 cards selected")).toBeInTheDocument();
+    await user.click(within(bar).getByRole("button", { name: "Discuss selected" }));
+
+    expect(useAppStore.getState().newDiscussion).toEqual({
+      boardId: "board-1",
+      cardKeys: ["dev/web#12", "dev/web#7"],
+    });
+  });
+
+  it("keeps the selection through the filters and clears it on demand", async () => {
+    const { user } = view();
+    await user.click(screen.getByRole("checkbox", { name: "Select #12" }));
+
+    await user.type(screen.getByRole("textbox", { name: "Search cards" }), "header");
+    expect(screen.getByText("1 card selected")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Clear selection" }));
+    expect(screen.queryByRole("toolbar", { name: "Selection" })).not.toBeInTheDocument();
+  });
+
+  it("discusses the whole selection on D, a card a filter hides included", async () => {
+    const { user } = view();
+    await user.click(screen.getByRole("checkbox", { name: "Select #12" }));
+    await user.type(screen.getByRole("textbox", { name: "Search cards" }), "header");
+
+    screen.getByRole("treeitem", { name: /#7/ }).focus();
+    await user.keyboard("d");
+
+    expect(useAppStore.getState().newDiscussion).toEqual({
+      boardId: "board-1",
+      cardKeys: ["dev/web#12"],
+    });
+  });
+
+  it("leaves the selection behind when another board opens", async () => {
+    const { user, rerender } = view();
+    await user.click(screen.getByRole("checkbox", { name: "Select #12" }));
+    expect(screen.getByRole("toolbar", { name: "Selection" })).toBeInTheDocument();
+
+    act(() => {
+      useAppStore.getState().applyState(
+        makeState({
+          repositories: [makeRepository({ boardId: "board-1" })],
+          boards: [
+            makeBoard({ cards: [LOGIN, HEADER, SHIPPED] }),
+            makeBoard({ id: "board-2", title: "Platform", cards: [LOGIN] }),
+          ],
+        }),
+      );
+    });
+    rerender(<BoardView boardId="board-2" />);
+
+    expect(screen.queryByRole("toolbar", { name: "Selection" })).not.toBeInTheDocument();
+  });
+
+  it("drops from the selection a card gone from the reading", async () => {
+    const { user } = view();
+    await user.click(screen.getByRole("checkbox", { name: "Select #12" }));
+
+    act(() => {
+      useAppStore.getState().applyState(stateWith({ cards: [HEADER] }));
+    });
+
+    expect(screen.queryByRole("toolbar", { name: "Selection" })).not.toBeInTheDocument();
+  });
+
+  it("leaves a card of a repository the board does not manage out of the selection", () => {
+    view({ cards: [makeBoardCard({ key: "dev/api#1", number: 1, repositoryId: "repo-9" })] });
+
+    expect(screen.getByRole("checkbox", { name: "Select #1" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+  });
+
+  it("discusses the focused card on D", async () => {
+    const { user } = view();
+    screen.getByRole("treeitem", { name: /#12/ }).focus();
+
+    await user.keyboard("d");
+
+    expect(useAppStore.getState().newDiscussion).toEqual({
+      boardId: "board-1",
+      cardKeys: ["dev/web#12"],
+    });
+  });
+
   it("refreshes from the header", async () => {
     const { user } = view();
 

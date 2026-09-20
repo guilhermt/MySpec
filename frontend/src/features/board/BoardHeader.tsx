@@ -1,4 +1,4 @@
-import { ExternalLink, LoaderCircle, RefreshCw, TriangleAlert } from "lucide-react";
+import { ExternalLink, LoaderCircle, MessagesSquare, RefreshCw, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNow } from "@/features/attention/useNow";
 import { relativeTime } from "@/lib/boards";
@@ -10,10 +10,12 @@ const READING_CLOCK_MS = 60_000;
 
 export interface BoardHeaderProps {
   board: Board;
+  /** onNewDiscussion opens a discussion of the board with no card picked. */
+  onNewDiscussion: () => void;
 }
 
 /** BoardHeader names the board on screen and tells how its last reading went. */
-export function BoardHeader({ board }: BoardHeaderProps) {
+export function BoardHeader({ board, onNewDiscussion }: BoardHeaderProps) {
   const now = useNow(READING_CLOCK_MS, board.readAt !== "");
 
   return (
@@ -41,6 +43,15 @@ export function BoardHeader({ board }: BoardHeaderProps) {
             className="size-3.5 animate-spin text-muted-foreground"
           />
         )}
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={board.readAt === ""}
+          onClick={onNewDiscussion}
+        >
+          <MessagesSquare aria-hidden="true" />
+          New discussion
+        </Button>
         <Button
           variant="ghost"
           size="icon-sm"

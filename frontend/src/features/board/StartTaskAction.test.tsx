@@ -15,15 +15,20 @@ import {
 
 const BOARD = makeBoard();
 
-function Harness({ card }: { card: BoardCard }) {
+function Harness({ card, onDiscuss }: { card: BoardCard; onDiscuss: () => void }) {
   const start = useStartCard(BOARD, card);
-  return <StartTaskAction board={BOARD} card={card} start={start} />;
+  return <StartTaskAction board={BOARD} card={card} start={start} onDiscuss={onDiscuss} />;
 }
 
 function action(card: BoardCard, repository: Partial<Repository> = {}) {
-  return renderWithStore(<Harness card={card} />, {
-    state: makeState({ repositories: [makeRepository(repository)], boards: [BOARD] }),
+  const onDiscuss = vi.fn();
+  const rendered = renderWithStore(<Harness card={card} onDiscuss={onDiscuss} />, {
+    state: {
+      ...makeState({ boards: [BOARD] }),
+      repositories: [makeRepository({ boardId: BOARD.id, ...repository })],
+    },
   });
+  return { ...rendered, onDiscuss };
 }
 
 describe("StartTaskAction", () => {
@@ -135,12 +140,37 @@ describe("StartTaskAction", () => {
     expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
 
-  it("shows nothing for a card with a task or a closed issue", () => {
+  it("offers only Discuss for a card with a task or a closed issue", () => {
     const { unmount } = action(makeBoardCard({ action: "has_task" }));
-    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("button")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: /^Discuss/ })).toBeEnabled();
     unmount();
 
     action(makeBoardCard({ action: "closed", state: "closed" }));
-    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("button")).toHaveLength(1);
+  });
+
+  it("discusses the card next to Start task", async () => {
+    const { user, onDiscuss } = action(makeBoardCard());
+
+    await user.click(screen.getByRole("button", { name: /^Discuss/ }));
+
+    expect(onDiscuss).toHaveBeenCalledOnce();
+  });
+
+  it("says why Discuss is closed to a card with a task or a closed issue", () => {
+    action(makeBoardCard({ action: "closed", state: "closed" }), { boardId: "board-2" });
+
+    expect(screen.getByRole("button", { name: "Discuss" })).toBeDisabled();
+    expect(screen.getByText("dev/web isn't managed by this board.")).toBeInTheDocument();
+  });
+
+  it("disables Discuss for a repository the board does not manage", () => {
+    action(makeBoardCard({ action: "other_board", otherBoard: "Platform" }), {
+      boardId: "board-2",
+    });
+
+    expect(screen.getByRole("button", { name: "Discuss" })).toBeDisabled();
+    expect(screen.getByText("dev/web belongs to the board Platform.")).toBeInTheDocument();
   });
 });

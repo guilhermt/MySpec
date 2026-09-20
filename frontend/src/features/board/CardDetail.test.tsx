@@ -34,6 +34,7 @@ function startCard(): StartCard {
 function detail(card: BoardCard, state: State = makeState()) {
   const onClose = vi.fn();
   const onSelect = vi.fn();
+  const onDiscuss = vi.fn();
   const start = startCard();
   const rendered = renderWithStore(
     <CardDetail
@@ -42,10 +43,11 @@ function detail(card: BoardCard, state: State = makeState()) {
       start={start}
       onClose={onClose}
       onSelect={onSelect}
+      onDiscuss={onDiscuss}
     />,
-    { state: { ...state, repositories: [makeRepository()] } },
+    { state: { ...state, repositories: [makeRepository({ boardId: "board-1" })] } },
   );
-  return { ...rendered, onClose, onSelect, start };
+  return { ...rendered, onClose, onSelect, onDiscuss, start };
 }
 
 describe("CardDetail", () => {
@@ -183,5 +185,13 @@ describe("CardDetail", () => {
     await user.click(screen.getByRole("button", { name: /^Start task/ }));
 
     expect(start.run).toHaveBeenCalled();
+  });
+
+  it("discusses the card from its button", async () => {
+    const { user, onDiscuss } = detail(makeBoardCard());
+
+    await user.click(screen.getByRole("button", { name: /^Discuss/ }));
+
+    expect(onDiscuss).toHaveBeenCalledOnce();
   });
 });

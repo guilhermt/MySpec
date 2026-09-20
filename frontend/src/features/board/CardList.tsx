@@ -16,6 +16,16 @@ export interface CardListProps {
   onSelect: (key: string) => void;
   /** onStart runs Start task for a card, as the S key asks. */
   onStart: (card: BoardCard) => void;
+  /** checked is the keys of the cards picked for a discussion. */
+  checked: ReadonlySet<string>;
+  /** isCheckable tells whether a card can be picked for a discussion. */
+  isCheckable: (card: BoardCard) => boolean;
+  onToggleChecked: (card: BoardCard) => void;
+  /**
+   * onDiscuss opens a discussion, as the D key asks: of the whole selection,
+   * which only the view knows, or of the given card when nothing is selected.
+   */
+  onDiscuss: (card: BoardCard | null) => void;
 }
 
 /** CardList is the cards of a board view, grouped in collapsible sections by status. */
@@ -26,6 +36,10 @@ export function CardList({
   onToggleSection,
   onSelect,
   onStart,
+  checked,
+  isCheckable,
+  onToggleChecked,
+  onDiscuss,
 }: CardListProps) {
   const treeRef = useRef<HTMLDivElement>(null);
   const [focusedKey, setFocusedKey] = useState<string | null>(null);
@@ -112,6 +126,31 @@ export function CardList({
         event.preventDefault();
         onSelect(card.key);
         break;
+      case " ": {
+        // With the focus on the checkbox itself the key is already its own.
+        if (card === undefined || !event.target.hasAttribute("data-card-key")) {
+          return;
+        }
+        if (!isCheckable(card)) {
+          return;
+        }
+        event.preventDefault();
+        onToggleChecked(card);
+        break;
+      }
+      case "d":
+      case "D": {
+        if (event.ctrlKey || event.metaKey || event.altKey) {
+          return;
+        }
+        // The selection comes first; with none, the card under the focus discusses alone.
+        if (checked.size === 0 && (card === undefined || !isCheckable(card))) {
+          return;
+        }
+        event.preventDefault();
+        onDiscuss(checked.size > 0 ? null : (card ?? null));
+        break;
+      }
       case "s":
       case "S":
         if (
@@ -180,6 +219,9 @@ export function CardList({
                     finalSection={section.final}
                     selected={card.key === selectedKey}
                     focusable={card.key === tabStop}
+                    checked={checked.has(card.key)}
+                    checkable={isCheckable(card)}
+                    onCheckedChange={() => onToggleChecked(card)}
                     onSelect={() => {
                       setFocusedKey(card.key);
                       onSelect(card.key);

@@ -198,3 +198,11 @@ export function actionHint(card: BoardCard, app: State | null): string | null {
       return null;
   }
 }
+
+/**
+ * isCheckable tells whether a card can go into a discussion: it has a
+ * repository, and that repository is one the board manages.
+ */
+export function isCheckable(card: BoardCard, app: State | null, boardId: string): boolean {
+  return card.repositoryId !== "" && findRepository(app, card.repositoryId)?.boardId === boardId;
+}
