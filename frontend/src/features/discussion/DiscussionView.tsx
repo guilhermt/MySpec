@@ -6,6 +6,7 @@ import { Conversation } from "@/features/chat/Conversation";
 import { DiscussionBar } from "@/features/discussion/DiscussionBar";
 import { DiscussionHeader } from "@/features/discussion/DiscussionHeader";
 import { DocumentsPanel } from "@/features/discussion/DocumentsPanel";
+import { DraftsPanel } from "@/features/discussion/DraftsPanel";
 import { DISCUSSION_STAGE, sessionKey } from "@/lib/wails";
 import { loadTranscript } from "@/store/actions";
 import { useAppStore, useDiscussion } from "@/store/app-store";
@@ -77,6 +78,7 @@ export function DiscussionView({ discussionId }: DiscussionViewProps) {
           className="flex min-w-0 flex-col"
           style={{ overflow: "clip" }}
         >
+          <DraftsPanel discussion={discussion} />
           <Conversation taskId={discussion.id} stage={DISCUSSION_STAGE} session={discussion} />
           <Composer taskId={discussion.id} stage={DISCUSSION_STAGE} session={discussion} />
         </ResizablePanel>

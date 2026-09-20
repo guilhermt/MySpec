@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { DiscussionView } from "@/features/discussion/DiscussionView";
 import { api, type DiscussionSummary } from "@/lib/wails";
 import { renderWithStore } from "@/test/render";
-import { makeDiscussion, makeState } from "@/test/wails-mock";
+import { makeDiscussion, makeDraft, makeState } from "@/test/wails-mock";
 
 /**
  * measuredPanels lays the resizable panels out, which jsdom does not: an
@@ -69,6 +69,13 @@ describe("DiscussionView", () => {
     await waitFor(() => {
       expect(api.getTranscript).toHaveBeenCalledWith("discussion-1", "discussion");
     });
+  });
+
+  it("puts the drafts above the conversation", () => {
+    view({ status: "deciding", drafts: [makeDraft()] });
+
+    expect(screen.getByText("Drafts")).toBeInTheDocument();
+    expect(screen.getByRole("article", { name: "Draft Export the invoices" })).toBeInTheDocument();
   });
 
   it("folds the documents panel away from the header", async () => {
