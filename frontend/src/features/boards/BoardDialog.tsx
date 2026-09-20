@@ -233,6 +233,7 @@ function BoardChoices({ title, url, boardId, preview, onOpenChange }: BoardChoic
       finalStatuses: (preview.statuses ?? [])
         .map((status) => status.id)
         .filter((id) => finals.has(id)),
+      newCardStatus: preview.newCardStatus,
       repositories: choicesOf(options, chosenClones),
     };
     try {

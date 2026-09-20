@@ -306,6 +306,8 @@ export function makeState(overrides: Partial<State> = {}): State {
     reviewCenter: makeReviewCenter(),
     reviews: [],
     reviewHistory: [],
+    discussions: [],
+    discussionHistory: [],
     cloneFolder: "",
     ...overrides,
   };
@@ -365,6 +367,7 @@ export function makeBoard(overrides: Partial<Board> = {}): Board {
     failure: null,
     viewer: "dev",
     cards: [],
+    newCardStatus: "",
     ...overrides,
   };
 }
@@ -445,6 +448,7 @@ export function makeBoardPreview(overrides: Partial<BoardPreview> = {}): BoardPr
       { id: "done", name: "Done", final: true },
     ],
     repositories: [makeBoardRepositoryOption()],
+    newCardStatus: "",
     ...overrides,
   };
 }

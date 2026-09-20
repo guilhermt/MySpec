@@ -190,6 +190,7 @@ func TestFromBoardPreviewCarriesTheStatusesAndTheRepositories(t *testing.T) {
 			{Option: board.Option{ID: "todo", Name: "Todo"}},
 			{Option: board.Option{ID: "done", Name: "Done"}, Final: true},
 		},
+		NewCardStatus: "todo",
 		Repositories: []board.RepositoryOption{
 			{
 				Identity: repository.Identity{Owner: "acme", Name: "api"}, Cards: 2, Checked: true,
@@ -207,7 +208,8 @@ func TestFromBoardPreviewCarriesTheStatusesAndTheRepositories(t *testing.T) {
 	want := bindings.BoardPreview{
 		URL: "https://github.com/users/acme/projects/3", Owner: "acme", OwnerType: "user", Number: 3,
 		Title: "Roadmap", HasStatus: true,
-		Statuses: []bindings.BoardStatus{{ID: "todo", Name: "Todo"}, {ID: "done", Name: "Done", Final: true}},
+		Statuses:      []bindings.BoardStatus{{ID: "todo", Name: "Todo"}, {ID: "done", Name: "Done", Final: true}},
+		NewCardStatus: "todo",
 		Repositories: []bindings.BoardRepositoryOption{
 			{
 				Owner: "acme", Name: "api", FullName: "acme/api", Cards: 2, Checked: true, Link: "clone",
@@ -271,5 +273,42 @@ func TestRefreshBoardRecordsAReadingThatFailed(t *testing.T) {
 			t.Fatalf("boards = %+v, want the failed reading recorded", boards)
 		}
 		time.Sleep(pollStep)
+	}
+}
+
+// roadmapStructure is what the fake gh answers the structure query of the
+// board Roadmap with: a Status field with two options.
+const roadmapStructure = `{
+	"viewer": {"login": "dev"},
+	"owner": {"projectV2": {
+		"id": "project-1",
+		"title": "Roadmap",
+		"url": "https://github.com/orgs/acme/projects/3",
+		"field": {"id": "field-status", "options": [
+			{"id": "todo", "name": "Todo"},
+			{"id": "done", "name": "Done"}
+		]},
+		"fields": {"nodes": []}
+	}}
+}`
+
+func TestUpdateBoardSavesTheStatusACardOfADiscussionGets(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.registerBoard(t, true)
+	f.github.reply(roadmapStructure)
+
+	req := bindings.SaveBoardRequest{FinalStatuses: []string{"done"}, NewCardStatus: "todo"}
+	if err := f.boardService.UpdateBoard(testBoardID, req); err != nil {
+		t.Fatalf("UpdateBoard() = %v, want nil", err)
+	}
+
+	boards := f.state.GetState().Boards
+	if len(boards) != 1 || boards[0].NewCardStatus != "todo" {
+		t.Fatalf("boards = %+v, want the status a new card gets", boards)
+	}
+	if b, ok := f.boards.Get(testBoardID); !ok || b.NewCardStatus != "todo" {
+		t.Errorf("board = %+v, want the status recorded", b)
 	}
 }

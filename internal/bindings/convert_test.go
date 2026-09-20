@@ -10,6 +10,8 @@ import (
 	"github.com/guilhermt/myspec/internal/attention"
 	"github.com/guilhermt/myspec/internal/bindings"
 	"github.com/guilhermt/myspec/internal/board"
+	"github.com/guilhermt/myspec/internal/discussion"
+	"github.com/guilhermt/myspec/internal/discussionflow"
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/models"
@@ -2044,5 +2046,352 @@ func TestFromReviewLeftoverKeepsTheWorktreeGitCouldNotRemove(t *testing.T) {
 	}
 	if clean := bindings.FromReviewLeftover(reviewflow.Leftover{}); clean.Leftover != nil {
 		t.Errorf("FromReviewLeftover() = %+v, want nil when git removed everything", clean.Leftover)
+	}
+}
+
+// discussionRepos are the registered repositories the conversions of a
+// discussion are given: two of its board, one of them with its clone gone, and
+// one of another board.
+var discussionRepos = []bindings.Repository{
+	{ID: "r-api", Owner: "acme", Name: "api", FullName: "acme/api", BoardID: "board-1", Cloned: true},
+	{ID: "r-web", Owner: "acme", Name: "web", FullName: "acme/web", BoardID: "board-1", Cloned: true},
+	{ID: "r-cli", Owner: "acme", Name: "cli", FullName: "acme/cli", BoardID: "board-2", Cloned: true},
+}
+
+// discussionMissing is the clone of acme/api, which the last check did not
+// find.
+func discussionMissing(id string) bool { return id == "r-api" }
+
+// discussionReading is the stored reading of the board of the discussion: a
+// module field and the card acme/web#12, with its epic and its dependency.
+func discussionReading() *board.Reading {
+	card := boardCard("web", 12)
+	card.Body = "Email and password."
+	card.Fields = []board.Field{{Name: "Módulo", Value: "Auth"}}
+	card.Epic = &board.Epic{Issue: board.Issue{
+		Owner: "acme", Name: "web", Number: 1, Title: "Auth", URL: "https://e", State: task.IssueOpen,
+	}}
+	card.Dependencies = []board.Dependency{{Related: board.Related{Issue: board.Issue{
+		Owner: "acme", Name: "api", Number: 7, Title: "Tokens", URL: "https://d", State: task.IssueOpen,
+	}}}}
+	tokens := boardCard("api", 7)
+	tokens.Title, tokens.URL = "Tokens", "https://github.com/acme/api/issues/7"
+	return &board.Reading{
+		Title:     "Roadmap",
+		Viewer:    "dev",
+		HasStatus: true,
+		Statuses:  []board.Option{{ID: "todo", Name: "Todo"}, {ID: "done", Name: "Done"}},
+		Module: &board.ModuleField{ID: "field-1", Name: "Módulo", Options: []board.Option{
+			{ID: "auth", Name: "Auth"}, {ID: "billing", Name: "Billing"},
+		}},
+		Cards: []board.Card{card, tokens},
+	}
+}
+
+// inputCard is the card acme/web#12 the discussion started from.
+var inputCard = discussion.InputCard{
+	Owner: "acme", Name: "web", Number: 12, Title: "Add login",
+	URL: "https://github.com/acme/web/issues/1",
+}
+
+// discussionState is a discussion of the board Roadmap in a status, with the
+// drafts given.
+func discussionState(status discussionflow.Status, drafts ...discussionflow.DraftState) discussionflow.State {
+	return discussionflow.State{
+		Discussion: discussion.Discussion{
+			ID: "discussion-1", BoardID: "board-1", BoardTitle: "Roadmap as it was",
+			Title: "The invoices of the quarter", Text: "What to do with them.",
+			Cards: []discussion.InputCard{inputCard}, DraftsRead: true, DraftsRevision: 2,
+			CreatedAt: readAt,
+		},
+		Status:      status,
+		Drafts:      drafts,
+		Session:     session.Summary{Status: session.StatusWaiting, Idle: true},
+		SessionOpen: true,
+		CanArchive:  true,
+	}
+}
+
+// discussionDrafts are the three drafts of the discussion the conversion
+// tests convert: the card of the reading rewritten, a new card of an epic, and
+// the epic the user grouped them into.
+func discussionDrafts() []discussionflow.DraftState {
+	update := discussion.Draft{
+		DiscussionID: "discussion-1", ID: "login", Position: 1,
+		Kind: discussion.KindUpdate, Source: discussion.SourceAgent,
+		Owner: "acme", Name: "web", Card: &inputCard,
+		Title: "Add the login screen", Body: "Email, password and the link.",
+		Module: "Auth",
+		Dependencies: []discussion.Dependency{{
+			Ref: discussion.Ref{Owner: "acme", Name: "api", Number: 7}, Original: true, Linked: true,
+		}},
+		Decision: discussion.DecisionApproved, Revision: 2,
+		Warnings: []string{"The module Billing is not an option of the board."},
+		Published: discussion.Publication{
+			Outcome: discussion.OutcomeUpdated, Number: 12,
+			URL: "https://github.com/acme/web/issues/12", At: readAt,
+		},
+	}
+	export := discussion.Draft{
+		DiscussionID: "discussion-1", ID: "export", Position: 2,
+		Kind: discussion.KindNew, Source: discussion.SourceAgent,
+		Owner: "acme", Name: "api",
+		Title: "Export the invoices", Body: "A CSV of the quarter.",
+		Epic: "the-epic",
+		Dependencies: []discussion.Dependency{{
+			Ref: discussion.Ref{Draft: "login"}, Dropped: discussion.DropDiscarded,
+		}},
+		PublishError: "gh: the issue could not be created",
+	}
+	epic := discussion.Draft{
+		DiscussionID: "discussion-1", ID: "the-epic", Position: 3,
+		Kind: discussion.KindEpic, Source: discussion.SourceUser,
+		Owner: "acme", Name: "cli", Title: "The invoices", Body: "Everything about them.",
+	}
+	return []discussionflow.DraftState{
+		{Draft: update},
+		{Draft: export, Waits: "Add the login screen"},
+		{Draft: epic, Hint: "Approve the epic."},
+	}
+}
+
+// convertDiscussion converts the state with the reading given, the
+// repositories of the tests and the board Roadmap when it is registered.
+func convertDiscussion(
+	state discussionflow.State, reading *board.Reading, registered bool,
+	situations map[string][]attention.Situation,
+) bindings.DiscussionSummary {
+	boards := func(id string) (board.Board, bool) {
+		if !registered || id != "board-1" {
+			return board.Board{}, false
+		}
+		return board.Board{ID: "board-1", Title: "Roadmap"}, true
+	}
+	stored := func(id string) board.Stored {
+		if id != "board-1" {
+			return board.Stored{}
+		}
+		return board.Stored{Reading: reading, ReadAt: readAt}
+	}
+	return bindings.FromDiscussions(
+		[]discussionflow.State{state}, situations, boards, stored, discussionRepos, discussionMissing,
+	)[0]
+}
+
+func TestFromDiscussionsCarriesEveryDraftWithWhatTheReadingKnows(t *testing.T) {
+	t.Parallel()
+
+	state := discussionState(discussionflow.StatusPublishFailed, discussionDrafts()...)
+
+	got := convertDiscussion(state, discussionReading(), true, nil)
+
+	want := []bindings.Draft{
+		{
+			ID: "login", Position: 1, Kind: "update", Source: "agent",
+			Repository: "acme/web", RepositoryID: "r-web",
+			Card: &bindings.DiscussionCard{
+				Key: "acme/web#12", Repository: "acme/web", Number: 12, Title: "Add login",
+				URL: "https://github.com/acme/web/issues/1",
+			},
+			Title: "Add the login screen", Body: "Email, password and the link.", Module: "Auth",
+			Dependencies: []bindings.DraftDependency{{
+				DraftRef: bindings.DraftRef{
+					Key: "acme/api#7", Reference: "acme/api#7", Title: "Tokens",
+					URL: "https://github.com/acme/api/issues/7",
+				},
+				Linked: true,
+			}},
+			Current: &bindings.DraftCurrent{
+				Title: "Add login", Body: "Email and password.", Module: "Auth", Status: "Todo",
+				Epic: &bindings.DraftRef{
+					Key: "acme/web#1", Reference: "acme/web#1", Title: "Auth", URL: "https://e",
+				},
+				Dependencies: []bindings.DraftRef{{
+					Key: "acme/api#7", Reference: "acme/api#7", Title: "Tokens", URL: "https://d",
+				}},
+				ReadAt: readAt.Format(time.RFC3339),
+			},
+			Decision: "approved", Revision: 2,
+			Warnings:    []string{"The module Billing is not an option of the board."},
+			Outcome:     "updated",
+			Number:      12,
+			URL:         "https://github.com/acme/web/issues/12",
+			Published:   true,
+			PublishedAt: readAt.Format(time.RFC3339),
+		},
+		{
+			ID: "export", Position: 2, Kind: "new", Source: "agent",
+			Repository: "acme/api", RepositoryID: "r-api",
+			Title: "Export the invoices", Body: "A CSV of the quarter.",
+			Epic: &bindings.DraftRef{Draft: "the-epic", Title: "The invoices"},
+			Dependencies: []bindings.DraftDependency{{
+				DraftRef: bindings.DraftRef{Draft: "login", Title: "Add the login screen"},
+				Dropped:  "discarded",
+			}},
+			Warnings:     []string{},
+			PublishError: "gh: the issue could not be created",
+			Waits:        "Add the login screen",
+		},
+		{
+			ID: "the-epic", Position: 3, Kind: "epic", Source: "user",
+			Repository: "acme/cli",
+			Title:      "The invoices", Body: "Everything about them.",
+			Dependencies: []bindings.DraftDependency{},
+			Warnings:     []string{},
+			Hint:         "Approve the epic.",
+		},
+	}
+	if diff := cmp.Diff(want, got.Drafts); diff != "" {
+		t.Errorf("drafts (-want +got):\n%s", diff)
+	}
+}
+
+func TestFromDiscussionsCarriesTheBoardTheModuleAndTheSituations(t *testing.T) {
+	t.Parallel()
+
+	state := discussionState(discussionflow.StatusDeciding, discussionDrafts()...)
+	state.HasDocument, state.DocumentRevision = true, 3
+	situations := map[string][]attention.Situation{
+		"discussion-1": {{
+			ID: "s-1", TaskID: "discussion-1", Kind: attention.KindDrafts,
+			Place: attention.Place{Kind: attention.PlaceDiscussion},
+		}},
+	}
+
+	got := convertDiscussion(state, discussionReading(), true, situations)
+
+	want := bindings.DiscussionSummary{
+		ID: "discussion-1", BoardID: "board-1", Board: "Roadmap",
+		Title: "The invoices of the quarter", Text: "What to do with them.",
+		Status: "deciding",
+		Cards: []bindings.DiscussionCard{{
+			Key: "acme/web#12", Repository: "acme/web", Number: 12, Title: "Add login",
+			URL: "https://github.com/acme/web/issues/1",
+		}},
+		Drafts:         got.Drafts,
+		DraftsRead:     true,
+		DraftsRevision: 2,
+		HasDocument:    true, DocumentRevision: 3,
+		ModuleField:   "Módulo",
+		ModuleOptions: []string{"Auth", "Billing"},
+		Repositories: []bindings.DiscussionRepository{
+			{ID: "r-api", FullName: "acme/api", Cloned: true, Missing: true},
+			{ID: "r-web", FullName: "acme/web", Cloned: true},
+		},
+		CanArchive:    true,
+		SessionStage:  "discussion",
+		SessionStatus: "waiting",
+		Situations: []bindings.Situation{{
+			ID: "s-1", TaskID: "discussion-1", Kind: "drafts", Group: "waiting",
+			Place: bindings.Place{Kind: "discussion"}, StartedAt: time.Time{}.Format(time.RFC3339),
+		}},
+		CreatedAt: readAt.Format(time.RFC3339),
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("FromDiscussions() mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestFromDiscussionsLeavesADiscussionOfABoardThatIsGoneWithWhatItRecorded(t *testing.T) {
+	t.Parallel()
+
+	drafts := discussionDrafts()
+	drafts[0].Draft.Card = &discussion.InputCard{Owner: "acme", Name: "web", Number: 99, Title: "Gone"}
+	state := discussionState(discussionflow.StatusDiscussing, drafts...)
+	state.Discussion.BoardID = "board-gone"
+
+	got := convertDiscussion(state, nil, false, nil)
+
+	if got.Board != "Roadmap as it was" {
+		t.Errorf("board = %q, want the title the discussion recorded", got.Board)
+	}
+	if len(got.Repositories) != 0 || got.Repositories == nil {
+		t.Errorf("repositories = %+v, want an empty list", got.Repositories)
+	}
+	if got.ModuleField != "" || len(got.ModuleOptions) != 0 || got.ModuleOptions == nil {
+		t.Errorf("module = %q %+v, want none", got.ModuleField, got.ModuleOptions)
+	}
+	if got.Drafts[0].Current != nil {
+		t.Errorf("current = %+v, want nil for a card that left the reading", got.Drafts[0].Current)
+	}
+	if ref := got.Drafts[0].Dependencies[0].DraftRef; ref.Title != "" || ref.URL != "" {
+		t.Errorf("dependency = %+v, want only the reference without the reading", ref)
+	}
+	if empty := bindings.FromDiscussions(nil, nil, nil, nil, nil, nil); empty == nil {
+		t.Error("FromDiscussions(nil) = nil, want an empty slice")
+	}
+}
+
+func TestFromArchivedDiscussionsCountsWhatWasPublishedAndTheRepositoriesItTouched(t *testing.T) {
+	t.Parallel()
+
+	archived := discussionState(discussionflow.StatusPublished).Discussion
+	archived.ArchivedAt = readAt.Add(time.Hour)
+	stored := []discussion.Draft{discussionDrafts()[0].Draft, discussionDrafts()[1].Draft}
+	stored[1].Published = discussion.Publication{
+		Outcome: discussion.OutcomeCreated, Number: 30,
+		URL: "https://github.com/acme/api/issues/30", At: readAt,
+	}
+	drafts := func(id string) []discussion.Draft {
+		if id != "discussion-1" {
+			return nil
+		}
+		return stored
+	}
+
+	got := bindings.FromArchivedDiscussions([]discussion.Discussion{archived}, drafts, discussionRepos)
+
+	if len(got) != 1 {
+		t.Fatalf("FromArchivedDiscussions() = %+v, want one discussion", got)
+	}
+	if got[0].Board != "Roadmap as it was" || got[0].Title != "The invoices of the quarter" {
+		t.Errorf("discussion = %+v, want the board and the title it recorded", got[0])
+	}
+	if got[0].PublishedCount != 2 {
+		t.Errorf("publishedCount = %d, want 2", got[0].PublishedCount)
+	}
+	if diff := cmp.Diff([]string{"r-web", "r-api"}, got[0].RepositoryIDs); diff != "" {
+		t.Errorf("repositoryIds (-want +got):\n%s", diff)
+	}
+	if got[0].ArchivedAt != readAt.Add(time.Hour).Format(time.RFC3339) {
+		t.Errorf("archivedAt = %q, want the instant it was archived", got[0].ArchivedAt)
+	}
+	if got[0].Drafts[0].Current != nil {
+		t.Errorf("current = %+v, want nil in the history", got[0].Drafts[0].Current)
+	}
+	empty := bindings.FromArchivedDiscussions(
+		[]discussion.Discussion{{ID: "discussion-2"}}, func(string) []discussion.Draft { return nil }, nil,
+	)
+	if empty[0].Cards == nil || empty[0].Drafts == nil || empty[0].RepositoryIDs == nil {
+		t.Errorf("archived = %+v, want every list allocated", empty[0])
+	}
+	if none := bindings.FromArchivedDiscussions(nil, nil, nil); none == nil {
+		t.Error("FromArchivedDiscussions(nil) = nil, want an empty slice")
+	}
+}
+
+func TestFromArchivedDiscussionsKeepsTheRepositoriesOfADiscussionOfABoardThatIsGone(t *testing.T) {
+	t.Parallel()
+
+	archived := discussionState(discussionflow.StatusPublished).Discussion
+	archived.ArchivedAt = readAt.Add(time.Hour)
+	published := discussionDrafts()[1].Draft
+	published.Published = discussion.Publication{
+		Outcome: discussion.OutcomeCreated, Number: 30,
+		URL: "https://github.com/acme/api/issues/30", At: readAt,
+	}
+	drafts := func(string) []discussion.Draft { return []discussion.Draft{published} }
+	// Removing a board releases its repositories: they stay registered
+	// without one.
+	released := make([]bindings.Repository, len(discussionRepos))
+	copy(released, discussionRepos)
+	for i := range released {
+		released[i].BoardID = ""
+	}
+
+	got := bindings.FromArchivedDiscussions([]discussion.Discussion{archived}, drafts, released)
+
+	if diff := cmp.Diff([]string{"r-web", "r-api"}, got[0].RepositoryIDs); diff != "" {
+		t.Errorf("repositoryIds (-want +got):\n%s", diff)
 	}
 }

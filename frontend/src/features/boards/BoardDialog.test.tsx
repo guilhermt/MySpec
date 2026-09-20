@@ -49,6 +49,7 @@ describe("BoardDialog", () => {
 
     expect(api.addBoard).toHaveBeenCalledWith(URL, {
       finalStatuses: ["todo", "done"],
+      newCardStatus: "",
       repositories: [{ owner: "dev", name: "web", path: "" }],
     });
     await waitFor(() => {
@@ -134,6 +135,7 @@ describe("BoardDialog", () => {
 
     expect(api.addBoard).toHaveBeenCalledWith(URL, {
       finalStatuses: [],
+      newCardStatus: "",
       repositories: [{ owner: "dev", name: "api", path: "/work/api" }],
     });
   });
@@ -202,6 +204,7 @@ describe("BoardDialog", () => {
 
     expect(api.updateBoard).toHaveBeenCalledWith("board-1", {
       finalStatuses: ["done"],
+      newCardStatus: "",
       repositories: [{ owner: "dev", name: "web", path: "" }],
     });
     await waitFor(() => {

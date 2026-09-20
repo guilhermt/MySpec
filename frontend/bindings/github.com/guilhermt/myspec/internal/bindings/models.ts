@@ -17,6 +17,43 @@ export interface ActionEntry {
 }
 
 /**
+ * ArchivedDiscussion is a discussion of the history, with what it produced.
+ */
+export interface ArchivedDiscussion {
+    "id": string;
+    "boardId": string;
+
+    /**
+     * the title of the board
+     */
+    "board": string;
+    "title": string;
+
+    /**
+     * never nil
+     */
+    "cards": DiscussionCard[] | null;
+
+    /**
+     * in position order; never nil
+     */
+    "drafts": Draft[] | null;
+
+    /**
+     * PublishedCount is how many drafts went to GitHub.
+     */
+    "publishedCount": number;
+
+    /**
+     * RepositoryIDs are the registered repositories of the cards it started
+     * from and of the cards it published; never nil.
+     */
+    "repositoryIds": string[] | null;
+    "createdAt": string;
+    "archivedAt": string;
+}
+
+/**
  * ArchivedPR is the pull request an archived task opened.
  */
 export interface ArchivedPR {
@@ -175,6 +212,12 @@ export interface Board {
      * never nil
      */
     "cards": BoardCard[] | null;
+
+    /**
+     * NewCardStatus is the option id of the Status field a card created by a
+     * discussion gets; "" for none.
+     */
+    "newCardStatus": string;
 }
 
 /**
@@ -294,6 +337,12 @@ export interface BoardPreview {
      * never nil
      */
     "repositories": BoardRepositoryOption[] | null;
+
+    /**
+     * NewCardStatus is the option a card created by a discussion gets; "" for
+     * none.
+     */
+    "newCardStatus": string;
 }
 
 /**
@@ -566,6 +615,354 @@ export interface DeleteResult {
 }
 
 /**
+ * DiscussionCard is an issue of the board a discussion started from.
+ */
+export interface DiscussionCard {
+    /**
+     * owner/name#number in lower case
+     */
+    "key": string;
+
+    /**
+     * owner/name
+     */
+    "repository": string;
+    "number": number;
+    "title": string;
+    "url": string;
+}
+
+/**
+ * DiscussionRepository is a repository of the board a new card can be created
+ * in.
+ */
+export interface DiscussionRepository {
+    "id": string;
+
+    /**
+     * owner/name
+     */
+    "fullName": string;
+    "cloned": boolean;
+    "missing": boolean;
+}
+
+/**
+ * DiscussionSummary is an active discussion of a demand of a board, as the
+ * interface shows it.
+ */
+export interface DiscussionSummary {
+    "id": string;
+    "boardId": string;
+
+    /**
+     * the title of the board
+     */
+    "board": string;
+    "title": string;
+
+    /**
+     * what the user wrote when creating it; "" for none
+     */
+    "text": string;
+
+    /**
+     * Status is discussing, awaiting_drafts, deciding, publishing,
+     * publish_failed or published, a string for the same reason as State.Theme.
+     */
+    "status": string;
+
+    /**
+     * the cards it started from; never nil
+     */
+    "cards": DiscussionCard[] | null;
+
+    /**
+     * in position order; never nil
+     */
+    "drafts": Draft[] | null;
+
+    /**
+     * DraftsRead says a readable drafts artifact was recorded, and
+     * DraftsRevision changes every time the artifact is read again and differs.
+     */
+    "draftsRead": boolean;
+    "draftsRevision": number;
+
+    /**
+     * UnreadableDrafts is why the drafts artifact could not be read; ""
+     * otherwise.
+     */
+    "unreadableDrafts": string;
+
+    /**
+     * HasDocument says the agent wrote the document of the discussion, and
+     * DocumentRevision changes every time it does.
+     */
+    "hasDocument": boolean;
+    "documentRevision": number;
+
+    /**
+     * ModuleField is the name of the module field of the board; "" without one.
+     */
+    "moduleField": string;
+
+    /**
+     * the names of the options; never nil
+     */
+    "moduleOptions": string[] | null;
+
+    /**
+     * Repositories are the repositories of the board, by owner/name; never nil.
+     */
+    "repositories": DiscussionRepository[] | null;
+
+    /**
+     * CanArchive says the discussion can leave the list for the history, and
+     * ArchiveHint is why it cannot.
+     */
+    "canArchive": boolean;
+    "archiveHint": string;
+
+    /**
+     * discussion, or "" without a conversation
+     */
+    "sessionStage": string;
+
+    /**
+     * SessionStatus is working, waiting, needs_permission, needs_answer, paused
+     * or error.
+     */
+    "sessionStatus": string;
+
+    /**
+     * SessionModel and SessionEffort are what the conversation runs with from
+     * its next message on; "" without a session.
+     */
+    "sessionModel": string;
+    "sessionEffort": string;
+    "turnRunning": boolean;
+    "processRunning": boolean;
+    "retryAttempt": number;
+    "contextPercent": number;
+    "pendingCount": number;
+    "lastError": string;
+
+    /**
+     * what the discussion waits on the user for; never nil
+     */
+    "situations": Situation[] | null;
+    "createdAt": string;
+}
+
+/**
+ * Draft is one card a discussion produced: as the user left it, and what
+ * became of it on GitHub.
+ */
+export interface Draft {
+    "id": string;
+    "position": number;
+
+    /**
+     * Kind is new, update or epic, a string for the same reason as State.Theme.
+     */
+    "kind": string;
+
+    /**
+     * Source is agent or user: who the draft came from.
+     */
+    "source": string;
+
+    /**
+     * Repository is owner/name, and RepositoryID the registered repository of
+     * it; "" when it is not registered or left the board.
+     */
+    "repository": string;
+    "repositoryId": string;
+
+    /**
+     * update only; nil otherwise
+     */
+    "card": DiscussionCard | null;
+    "title": string;
+    "body": string;
+
+    /**
+     * the name of the option; "" for none
+     */
+    "module": string;
+
+    /**
+     * nil without an epic
+     */
+    "epic": DraftRef | null;
+
+    /**
+     * never nil
+     */
+    "dependencies": DraftDependency[] | null;
+
+    /**
+     * update only; nil otherwise
+     */
+    "current": DraftCurrent | null;
+
+    /**
+     * Decision is "", approved or discarded, a string for the same reason as
+     * State.Theme.
+     */
+    "decision": string;
+
+    /**
+     * bumped every time the artifact changes the draft
+     */
+    "revision": number;
+
+    /**
+     * never nil
+     */
+    "warnings": string[] | null;
+
+    /**
+     * Outcome is "", created or updated: what the publication did on GitHub.
+     */
+    "outcome": string;
+    "number": number;
+    "url": string;
+
+    /**
+     * every step of the publication is done
+     */
+    "published": boolean;
+    "publishedAt": string;
+
+    /**
+     * why the last publication failed; "" otherwise
+     */
+    "publishError": string;
+
+    /**
+     * Waits is the title of the draft this one waits for before it is
+     * published; "" when it waits for none.
+     */
+    "waits": string;
+
+    /**
+     * CanPublish says Publish epic is enabled; epics only.
+     */
+    "canPublish": boolean;
+
+    /**
+     * Hint is why an epic can't be published, or why a card of a discarded
+     * epic goes nowhere.
+     */
+    "hint": string;
+}
+
+/**
+ * DraftCurrent is the card an update draft changes, as the stored reading has
+ * it.
+ */
+export interface DraftCurrent {
+    "title": string;
+    "body": string;
+
+    /**
+     * the value of the module field; "" for none
+     */
+    "module": string;
+
+    /**
+     * the option of the Status field; "" for none
+     */
+    "status": string;
+
+    /**
+     * nil without an epic
+     */
+    "epic": DraftRef | null;
+    "dependencies": DraftRef[] | null;
+    "readAt": string;
+}
+
+/**
+ * DraftDependency is a card a draft can only start after, with what became of
+ * it on GitHub.
+ */
+export interface DraftDependency {
+    /**
+     * the id of a draft of the discussion; "" for an issue
+     */
+    "draft": string;
+
+    /**
+     * owner/name#number in lower case; "" for a draft
+     */
+    "key": string;
+
+    /**
+     * owner/name#number as GitHub writes it; "" for a draft
+     */
+    "reference": string;
+
+    /**
+     * the title of the draft, or of the issue when the reading has it
+     */
+    "title": string;
+
+    /**
+     * the issue; "" for a draft or an issue the reading lacks
+     */
+    "url": string;
+
+    /**
+     * GitHub has the relation
+     */
+    "linked": boolean;
+
+    /**
+     * Dropped is "", discarded or unavailable, a string for the same reason as
+     * State.Theme.
+     */
+    "dropped": string;
+
+    /**
+     * unavailable only: what gh said
+     */
+    "detail": string;
+}
+
+/**
+ * DraftRef is what a draft points at: another draft, or an issue on GitHub.
+ */
+export interface DraftRef {
+    /**
+     * the id of a draft of the discussion; "" for an issue
+     */
+    "draft": string;
+
+    /**
+     * owner/name#number in lower case; "" for a draft
+     */
+    "key": string;
+
+    /**
+     * owner/name#number as GitHub writes it; "" for a draft
+     */
+    "reference": string;
+
+    /**
+     * the title of the draft, or of the issue when the reading has it
+     */
+    "title": string;
+
+    /**
+     * the issue; "" for a draft or an issue the reading lacks
+     */
+    "url": string;
+}
+
+/**
  * Entry is one item of a conversation. Exactly one payload is set, the one
  * matching Kind.
  */
@@ -797,8 +1194,8 @@ export interface PermissionEntry {
  */
 export interface Place {
     /**
-     * Kind is stage, step, step_review, pr or review, a string for the same
-     * reason as State.Theme.
+     * Kind is stage, step, step_review, pr, review or discussion, a string for
+     * the same reason as State.Theme.
      */
     "kind": string;
 
@@ -1500,6 +1897,12 @@ export interface ReviewSummary {
 export interface SaveBoardRequest {
     "finalStatuses": string[] | null;
     "repositories": BoardRepositoryChoice[] | null;
+
+    /**
+     * NewCardStatus is the option a card created by a discussion gets; "" for
+     * none.
+     */
+    "newCardStatus": string;
 }
 
 /**
@@ -1513,8 +1916,8 @@ export interface Situation {
      * Kind is session_error, step_blocked, worktree_unreadable, pr_blocked,
      * plan_invalid, pr_closed, permission, question, reply, ready_to_continue,
      * step_review, step_empty, draft, findings, changes_review, merge,
-     * review_report, new_commits or publish_failed, a string for the same
-     * reason as State.Theme.
+     * review_report, new_commits, publish_failed or drafts, a string for the
+     * same reason as State.Theme.
      */
     "kind": string;
 
@@ -1675,6 +2078,17 @@ export interface State {
      * newest first; never nil.
      */
     "reviewHistory": ArchivedReview[] | null;
+
+    /**
+     * Discussions are the active discussions of every board, in creation
+     * order; never nil.
+     */
+    "discussions": DiscussionSummary[] | null;
+
+    /**
+     * DiscussionHistory are the archived discussions, newest first; never nil.
+     */
+    "discussionHistory": ArchivedDiscussion[] | null;
 
     /**
      * CloneFolder is where new clones go; "" until chosen.

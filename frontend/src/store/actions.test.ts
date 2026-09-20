@@ -170,7 +170,7 @@ describe("clone actions", () => {
 // The dialogs and panels of the boards show the refusal where the user is, so
 // these reject instead of filling the banner.
 describe("board actions shown in place", () => {
-  const req = { finalStatuses: ["done"], repositories: [] };
+  const req = { finalStatuses: ["done"], newCardStatus: "todo", repositories: [] };
   const choice = { owner: "dev", name: "api", path: "" };
 
   it("delegate to the matching binding and answer what it says", async () => {

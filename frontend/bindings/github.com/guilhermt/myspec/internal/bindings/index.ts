@@ -20,6 +20,7 @@ export {
 
 export type {
     ActionEntry,
+    ArchivedDiscussion,
     ArchivedPR,
     ArchivedReview,
     ArchivedStep,
@@ -46,6 +47,13 @@ export type {
     CreateTaskRequest,
     DeletePreview,
     DeleteResult,
+    DiscussionCard,
+    DiscussionRepository,
+    DiscussionSummary,
+    Draft,
+    DraftCurrent,
+    DraftDependency,
+    DraftRef,
     Entry,
     ErrorEntry,
     Leftover,

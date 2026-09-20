@@ -23,7 +23,7 @@ func stageName(stage task.Stage) string {
 }
 
 // placeName is a place as a sentence names it: the stage, "step 3", the pull
-// request, or the review of one.
+// request, the review of one, or the discussion.
 func placeName(place Place) string {
 	switch place.Kind {
 	case PlaceStep:
@@ -32,6 +32,8 @@ func placeName(place Place) string {
 		return "the pull request"
 	case PlaceReview:
 		return "the review"
+	case PlaceDiscussion:
+		return "the discussion"
 	default:
 		return stageName(place.Stage)
 	}
@@ -176,6 +178,23 @@ func reviewReportBody(form Form) string {
 	default:
 		return "The review has findings for you to decide."
 	}
+}
+
+// draftsBody is the notification of a discussion whose drafts await the user.
+func draftsBody() string {
+	return "There are drafts to decide in the discussion."
+}
+
+// unreadableDraftsBody is the notification of a discussion whose drafts
+// artifact the app cannot read.
+func unreadableDraftsBody() string {
+	return "The agent wrote drafts the app can't read in the discussion."
+}
+
+// draftsPublishFailedBody is the notification of drafts of a discussion GitHub
+// did not take.
+func draftsPublishFailedBody() string {
+	return "The drafts couldn't be published."
 }
 
 // publishFailedBody is the notification of a review GitHub did not take.

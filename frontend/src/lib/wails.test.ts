@@ -392,7 +392,7 @@ describe("api", () => {
     await wails.api.viewSituation("situation-1");
     await wails.api.cloneRepository("repo-1");
     await wails.api.chooseCloneFolder();
-    const request = { finalStatuses: ["done"], repositories: [] };
+    const request = { finalStatuses: ["done"], newCardStatus: "todo", repositories: [] };
     const choice = { owner: "dev", name: "web", path: "" };
     await wails.api.previewBoard("https://github.com/orgs/dev/projects/3");
     await wails.api.previewEditBoard("board-1");
