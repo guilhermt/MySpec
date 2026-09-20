@@ -1,6 +1,7 @@
 import { useViewedSituation } from "@/features/attention/useViewedSituation";
 import { BoardView } from "@/features/board/BoardView";
 import { usePendingStart } from "@/features/board/usePendingStart";
+import { NewDiscussionDialog } from "@/features/discussion/NewDiscussionDialog";
 import { ArchivedTaskView } from "@/features/history/ArchivedTaskView";
 import { HistoryPanel } from "@/features/history/HistoryPanel";
 import { Home } from "@/features/home/Home";
@@ -61,6 +62,7 @@ export function AppShell() {
       <MainArea />
       <NewTaskDialog />
       <StartReviewDialog />
+      <NewDiscussionDialog />
     </div>
   );
 }
