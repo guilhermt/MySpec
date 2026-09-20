@@ -82,7 +82,7 @@ func TestStagesAreInTheOrderOfTheSettings(t *testing.T) {
 
 	want := []models.Stage{
 		models.PRD, models.TechSpec, models.Plan, models.OneShot,
-		models.Implementation, models.StepReview, models.PR, models.PRReview,
+		models.Implementation, models.StepReview, models.PR, models.PRReview, models.Discussion,
 	}
 	if diff := cmp.Diff(want, models.Stages); diff != "" {
 		t.Errorf("Stages mismatch (-want +got):\n%s", diff)
@@ -101,6 +101,7 @@ func TestFactoryIsTheTableOfThePRD(t *testing.T) {
 		models.StepReview:     {Model: models.Opus5, Effort: models.High},
 		models.PR:             {Model: models.Opus5, Effort: models.Medium},
 		models.PRReview:       {Model: models.Opus5, Effort: models.High},
+		models.Discussion:     {Model: models.Fable51, Effort: models.High},
 	}
 	if diff := cmp.Diff(want, models.Factory()); diff != "" {
 		t.Errorf("Factory() mismatch (-want +got):\n%s", diff)

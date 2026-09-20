@@ -96,6 +96,12 @@ type TaskInfo struct {
 	// PassInstructions is what the user wrote for the pass that opens the
 	// session, which reads in the conversation as their first message.
 	PassInstructions string
+
+	// The discussion sessions.
+	ExtraDirs    []string // the clones the agent may read, passed to the CLI with --add-dir; discussions only
+	DocumentPath string   // the document of the understanding the agent writes
+	DraftsPath   string   // the file of drafts the agent writes and the app reads
+	Board        string   // the section that describes the board of the discussion
 }
 
 // Key is the session this task and stage are held under.
@@ -110,9 +116,9 @@ func artifactOf(stage prompts.Stage) ArtifactKind {
 		return ArtifactPlan
 	case prompts.StageOneShot:
 		return ArtifactOneShot
-	case prompts.StageStep, prompts.StageStepReview, prompts.StagePR, prompts.StagePRReview:
-		// A step file and the PR prompts produce no artifact of the planning:
-		// what they write is the work itself, not a document of a stage.
+	case prompts.StageStep, prompts.StageStepReview, prompts.StagePR, prompts.StagePRReview, prompts.StageDiscussion:
+		// A step file, the PR prompts and a discussion produce no artifact of the
+		// planning: what they write is the work itself, not a document of a stage.
 		return ""
 	default:
 		return ArtifactPRD
@@ -374,6 +380,10 @@ func (s *Service) Start(ctx context.Context, t TaskInfo, restarted bool) error {
 		// The review of a pull request has no stage to announce: the item is the
 		// review itself.
 		marker = MarkerEntry{Type: MarkerReviewStarted}
+	case t.Stage == DiscussionStage:
+		// A discussion has no stage to announce either: the item is the
+		// conversation itself.
+		marker = MarkerEntry{Type: MarkerDiscussionStarted}
 	case t.Prompt == prompts.StageStepReview:
 		marker = MarkerEntry{Type: MarkerStepReviewStarted, Step: t.Step}
 	case t.Step > 0:
@@ -381,15 +391,15 @@ func (s *Service) Start(ctx context.Context, t TaskInfo, restarted bool) error {
 	}
 	s.appendLocked(ctx, r, Entry{Kind: KindMarker, Marker: &marker}, n)
 
-	// Only the prompts that open a task, the PRD and the One-Shot planning,
-	// carry what the user wrote when they created the task, the prompt of a
-	// review pass what the user wrote for the pass, and the prompt of a
-	// reviewer what the implementer said last; every other stage reads the
-	// artifacts of the ones before it. What the implementer said reaches the
-	// reviewer from the app, and reads as such.
+	// Only the prompts that open an item, the PRD and the One-Shot planning of a
+	// task and the discussion, carry what the user wrote when they created it,
+	// the prompt of a review pass what the user wrote for the pass, and the
+	// prompt of a reviewer what the implementer said last; every other stage
+	// reads the artifacts of the ones before it. What the implementer said
+	// reaches the reviewer from the app, and reads as such.
 	entry := &UserEntry{Prompt: true}
 	switch t.Prompt {
-	case prompts.StagePRD, prompts.StageOneShot:
+	case prompts.StagePRD, prompts.StageOneShot, prompts.StageDiscussion:
 		entry.Text = t.InitialContext
 	case prompts.StageStepReview:
 		entry.Text, entry.App = t.ImplementerReply, true

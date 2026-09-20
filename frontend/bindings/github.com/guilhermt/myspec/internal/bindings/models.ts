@@ -629,7 +629,8 @@ export interface MarkerEntry {
      * Type is prd_written, prd_updated, tech_spec_written, tech_spec_updated,
      * plan_written, plan_updated, one_shot_written, one_shot_updated,
      * pr_review_written, step_review_started, step_review_written,
-     * review_started, stage_started, step_started, compacted or interrupted.
+     * review_started, discussion_started, stage_started, step_started,
+     * compacted or interrupted.
      */
     "type": string;
     "preTokens": number;
@@ -828,8 +829,8 @@ export interface PlanProblem {
  */
 export interface Prompt {
     /**
-     * Stage is prd, tech_spec, plan, one_shot, step_review, commit, pr or
-     * pr_review, a string for the same reason as State.Theme.
+     * Stage is prd, tech_spec, plan, one_shot, step_review, commit, pr,
+     * pr_review or discussion, a string for the same reason as State.Theme.
      */
     "stage": string;
     "text": string;
@@ -1561,8 +1562,8 @@ export interface SituationStarted {
  */
 export interface StageModel {
     /**
-     * Stage is prd, tech_spec, plan, one_shot, implementation, step_review, pr
-     * or pr_review, a string for the same reason as State.Theme.
+     * Stage is prd, tech_spec, plan, one_shot, implementation, step_review, pr,
+     * pr_review or discussion, a string for the same reason as State.Theme.
      */
     "stage": string;
 

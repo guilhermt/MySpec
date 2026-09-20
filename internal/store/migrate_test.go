@@ -356,10 +356,12 @@ func TestTheModelsMigrationGivesTheFactoryDefaults(t *testing.T) {
 	// that existed before it starts where a new one does. The step review came
 	// later, and the migration of the review mode gives it to those tasks; the
 	// One-Shot planning came later still, and only a One-Shot task, created
-	// with it, runs one.
+	// with it, runs one. The discussion is no stage of a task: it is an item of
+	// its own.
 	want := models.Factory()
 	delete(want, models.StepReview)
 	delete(want, models.OneShot)
+	delete(want, models.Discussion)
 	if diff := cmp.Diff(want, m.Stages); diff != "" {
 		t.Errorf("stages mismatch (-want +got):\n%s", diff)
 	}

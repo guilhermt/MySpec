@@ -564,7 +564,8 @@ type MarkerEntry struct {
 	// Type is prd_written, prd_updated, tech_spec_written, tech_spec_updated,
 	// plan_written, plan_updated, one_shot_written, one_shot_updated,
 	// pr_review_written, step_review_started, step_review_written,
-	// review_started, stage_started, step_started, compacted or interrupted.
+	// review_started, discussion_started, stage_started, step_started,
+	// compacted or interrupted.
 	Type      string `json:"type"`
 	PreTokens int    `json:"preTokens"`
 	// Stage belongs to stage_started alone, Step to the markers of a step
@@ -630,8 +631,8 @@ type TranscriptEvent struct {
 
 // StageModel is the model and effort of one stage.
 type StageModel struct {
-	// Stage is prd, tech_spec, plan, one_shot, implementation, step_review, pr
-	// or pr_review, a string for the same reason as State.Theme.
+	// Stage is prd, tech_spec, plan, one_shot, implementation, step_review, pr,
+	// pr_review or discussion, a string for the same reason as State.Theme.
 	Stage  string `json:"stage"`
 	Model  string `json:"model"`  // claude-fable-5-1, claude-opus-5 or claude-sonnet-5
 	Effort string `json:"effort"` // low, medium, high, xhigh or max
@@ -649,8 +650,8 @@ type TaskStageModel struct {
 
 // Prompt is the text a kind of session opens with, as the settings show it.
 type Prompt struct {
-	// Stage is prd, tech_spec, plan, one_shot, step_review, commit, pr or
-	// pr_review, a string for the same reason as State.Theme.
+	// Stage is prd, tech_spec, plan, one_shot, step_review, commit, pr,
+	// pr_review or discussion, a string for the same reason as State.Theme.
 	Stage    string `json:"stage"`
 	Text     string `json:"text"`
 	Modified bool   `json:"modified"` // the user edited it: it no longer follows the default of the app

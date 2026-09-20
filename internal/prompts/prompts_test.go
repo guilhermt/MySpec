@@ -89,6 +89,7 @@ func TestReadGivesTheDefaultOfEveryPrompt(t *testing.T) {
 		{prompts.StageCommit, []string{"# Commit", "{{what_to_commit}}", "Co-Authored-By", "{{push}}"}},
 		{prompts.StagePR, []string{"# Pull Request", "{{draft_path}}", "{{base_branch}}", "gh pr create", "AskUserQuestion"}},
 		{prompts.StagePRReview, []string{"# Pull Request Review", "{{review_path}}", "{{pr_url}}", "status: clean", "AskUserQuestion"}},
+		{prompts.StageDiscussion, []string{"# Discussion", "{{document_path}}", "{{drafts_path}}", "AskUserQuestion"}},
 	}
 
 	dataDir := t.TempDir()
@@ -279,6 +280,9 @@ func TestPlaceholdersAreTheOnesTheDefaultUses(t *testing.T) {
 			"{{prd_path}}", "{{tech_spec_path}}", "{{repository}}", "{{branch}}",
 			"{{base_branch}}", "{{review_path}}", "{{pr_number}}", "{{pr_url}}",
 		}},
+		{prompts.StageDiscussion, []string{
+			"{{task_name}}", "{{artifacts_dir}}", "{{initial_context}}", "{{document_path}}", "{{drafts_path}}",
+		}},
 	}
 
 	dataDir := t.TempDir()
@@ -305,6 +309,7 @@ func TestEditableListsThePromptsInWorkflowOrder(t *testing.T) {
 	want := []prompts.Stage{
 		prompts.StagePRD, prompts.StageTechSpec, prompts.StagePlan, prompts.StageOneShot,
 		prompts.StageStepReview, prompts.StageCommit, prompts.StagePR, prompts.StagePRReview,
+		prompts.StageDiscussion,
 	}
 	if diff := cmp.Diff(want, prompts.Editable); diff != "" {
 		t.Errorf("Editable mismatch (-want +got):\n%s", diff)
@@ -429,6 +434,25 @@ func oneShotVars() prompts.Vars {
 	return vars
 }
 
+// The two files the agent of a discussion writes and the board it runs on.
+const (
+	documentPath = "/data/discussions/invoices/discussion.md"
+	draftsPath   = "/data/discussions/invoices/drafts.md"
+	boardSection = "- Board: Platform\n- Repositories: `acme/api`"
+)
+
+// discussionVars are the vars a discussion renders with.
+func discussionVars() prompts.Vars {
+	return prompts.Vars{
+		TaskName:       "invoices",
+		ArtifactsDir:   "/data/discussions/invoices",
+		InitialContext: "the invoices of the month",
+		DocumentPath:   documentPath,
+		DraftsPath:     draftsPath,
+		Board:          boardSection,
+	}
+}
+
 // oneShotSection is how the section about the document of a One-Shot task
 // opens once rendered.
 const oneShotSection = "\n\n## One-Shot task\n\nThis task was planned in a single document, `" + oneShotPath + "`, instead of"
@@ -461,6 +485,10 @@ func TestRenderTheDefaultPromptsKeepNoPlaceholder(t *testing.T) {
 		{prompts.StagePR, everyVar(), []string{"`acme/api`", "origin/dev", "/data/tasks/add-login/pr/draft.md"}},
 		{prompts.StagePRReview, everyVar(), []string{
 			"https://github.com/acme/api/pull/42", "`42`", "/data/tasks/add-login/pr/review-1.md",
+		}},
+		{prompts.StageDiscussion, discussionVars(), []string{
+			"invoices", "/data/discussions/invoices", documentPath, draftsPath,
+			"## Initial context\n\nthe invoices of the month",
 		}},
 	}
 
@@ -1138,6 +1166,91 @@ func TestRenderAppendsTheSectionsOfAReviewOfAPullRequestWithoutATaskInOrder(t *t
 	}
 	if strings.Contains(got, "{{") {
 		t.Errorf("Render() = %q, want every placeholder of the sections replaced", got)
+	}
+}
+
+func TestRenderAppendsTheSectionsOfADiscussionInOrder(t *testing.T) {
+	t.Parallel()
+
+	dataDir := t.TempDir()
+	write(t, dataDir, prompts.StageDiscussion, "discuss it")
+
+	got, err := prompts.Render(dataDir, prompts.StageDiscussion, discussionVars())
+	if err != nil {
+		t.Fatalf("Render() = %v, want nil", err)
+	}
+
+	want := "discuss it\n\n## Initial context\n\nthe invoices of the month\n\n## Board\n\n" + boardSection +
+		"\n\n## Drafts format\n\nThe app reads `" + draftsPath + "`,"
+	if !strings.HasPrefix(got, want) {
+		t.Errorf("Render() = %q, want it to start with %q", got, want)
+	}
+	if strings.Contains(got, "{{") {
+		t.Errorf("Render() = %q, want every placeholder of the sections replaced", got)
+	}
+}
+
+func TestRenderAppendsTheDraftsFormatOfADiscussionWithoutABoard(t *testing.T) {
+	t.Parallel()
+
+	dataDir := t.TempDir()
+	write(t, dataDir, prompts.StageDiscussion, "discuss it")
+	vars := discussionVars()
+	vars.Board = ""
+
+	got, err := prompts.Render(dataDir, prompts.StageDiscussion, vars)
+	if err != nil {
+		t.Fatalf("Render() = %v, want nil", err)
+	}
+
+	if strings.Contains(got, "## Board") {
+		t.Errorf("Render() = %q, want no board section without a board", got)
+	}
+	if !strings.Contains(got, "\n\n## Drafts format\n\n") {
+		t.Errorf("Render() = %q, want the drafts format section all the same", got)
+	}
+}
+
+func TestRenderAppendsTheDiscussionSectionsOnlyToThePromptOfADiscussion(t *testing.T) {
+	t.Parallel()
+
+	dataDir := t.TempDir()
+	vars := everyVar()
+	vars.Board, vars.DraftsPath, vars.DocumentPath = boardSection, draftsPath, documentPath
+
+	for _, stage := range []prompts.Stage{
+		prompts.StagePRD, prompts.StageTechSpec, prompts.StagePlan, prompts.StageOneShot,
+		prompts.StageStepReview, prompts.StageCommit, prompts.StagePR, prompts.StagePRReview,
+	} {
+		got, err := prompts.Render(dataDir, stage, vars)
+		if err != nil {
+			t.Fatalf("Render(%s) = %v, want nil", stage, err)
+		}
+
+		for _, unwanted := range []string{"## Board", "## Drafts format"} {
+			if strings.Contains(got, unwanted) {
+				t.Errorf("rendered %s prompt carries the %q section", stage, unwanted)
+			}
+		}
+	}
+}
+
+func TestRenderTheDefaultDiscussionPromptCarriesTheDraftsFormat(t *testing.T) {
+	t.Parallel()
+
+	got, err := prompts.Render(t.TempDir(), prompts.StageDiscussion, discussionVars())
+	if err != nil {
+		t.Fatalf("Render(discussion) = %v, want nil", err)
+	}
+
+	for _, want := range []string{
+		"\n\n## Board\n\n" + boardSection,
+		"## Draft: <id>",
+		"`Kind` is `new`, `update` or `epic`.",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("rendered discussion prompt does not contain %q", want)
+		}
 	}
 }
 

@@ -26,6 +26,9 @@ type Config struct {
 	Model     string   // full name of the model: --model
 	Effort    string   // effort level: --effort
 	Env       []string // nil means the parent environment
+	// ExtraDirs are directories outside Dir the session may read, each passed
+	// to the CLI with --add-dir.
+	ExtraDirs []string
 }
 
 // Args are the fixed CLI flags every session gets.
@@ -85,7 +88,7 @@ func Start(ctx context.Context, cfg Config, log *slog.Logger) (*Process, error) 
 	}
 
 	//nolint:gosec // G204: the binary path comes from Locate or an explicit override
-	cmd := exec.Command(cfg.Binary, slices.Concat(Args, sessionArgs(cfg), choiceArgs(cfg))...)
+	cmd := exec.Command(cfg.Binary, slices.Concat(Args, sessionArgs(cfg), choiceArgs(cfg), dirArgs(cfg))...)
 	cmd.Dir = cfg.Dir
 	cmd.Env = cfg.Env
 	// Its own process group, so Terminate and Kill also reach the shells the
@@ -316,6 +319,16 @@ func sessionArgs(cfg Config) []string {
 // the command line: the defaults of the machine never decide how a session runs.
 func choiceArgs(cfg Config) []string {
 	return []string{"--model", cfg.Model, "--effort", cfg.Effort}
+}
+
+// dirArgs open the directories outside the working one the session may read,
+// in the order they were given.
+func dirArgs(cfg Config) []string {
+	args := make([]string, 0, 2*len(cfg.ExtraDirs))
+	for _, dir := range cfg.ExtraDirs {
+		args = append(args, "--add-dir", dir)
+	}
+	return args
 }
 
 // tailBuffer keeps the last limit bytes written to it, which is all the app

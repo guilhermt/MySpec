@@ -56,6 +56,10 @@ const (
 // conversation such an item has.
 const ReviewStage = "review"
 
+// DiscussionStage is the session key of a discussion, the only conversation
+// such an item has.
+const DiscussionStage = "discussion"
+
 // StepStage is the session key of a step, which is what the sessions table
 // records in its stage column.
 func StepStage(number int) string { return stepStagePrefix + strconv.Itoa(number) }

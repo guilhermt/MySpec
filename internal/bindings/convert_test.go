@@ -1011,6 +1011,7 @@ func TestFromModelSetIsInTheOrderOfTheSettings(t *testing.T) {
 		{Stage: "step_review", Model: "claude-opus-5", Effort: "high"},
 		{Stage: "pr", Model: "claude-opus-5", Effort: "medium"},
 		{Stage: "pr_review", Model: "claude-opus-5", Effort: "high"},
+		{Stage: "discussion", Model: "claude-fable-5-1", Effort: "high"},
 	}
 
 	if diff := cmp.Diff(want, bindings.FromModelSet(models.Factory())); diff != "" {

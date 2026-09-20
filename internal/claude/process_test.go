@@ -229,6 +229,31 @@ func TestStartRunsTheCLIWithTheFixedFlags(t *testing.T) {
 	}
 }
 
+func TestStartOpensEveryExtraDirectory(t *testing.T) {
+	t.Parallel()
+
+	p := start(t, claude.Config{
+		Binary:    reporterBinary(t),
+		Dir:       t.TempDir(),
+		SessionID: sessionID,
+		Model:     "claude-opus-5",
+		Effort:    "high",
+		ExtraDirs: []string{"/clones/acme/api", "/clones/acme/web"},
+	})
+
+	exit := exitOf(t, p)
+	if exit.Code != 0 {
+		t.Fatalf("exit code = %d, want 0", exit.Code)
+	}
+	want := append(slices.Clone(claude.Args),
+		"--session-id", sessionID, "--model", "claude-opus-5", "--effort", "high",
+		"--add-dir", "/clones/acme/api", "--add-dir", "/clones/acme/web")
+	got := strings.Split(strings.TrimRight(exit.Stderr, "\n"), "\n")
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("command line mismatch (-want +got):\n%s", diff)
+	}
+}
+
 func TestTheFakeRefusesAProcessWithoutAModelOrAnEffort(t *testing.T) {
 	t.Parallel()
 
