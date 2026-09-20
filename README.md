@@ -1,6 +1,6 @@
 # MySpec
 
-Aplicação desktop que conduz um workflow de desenvolvimento com o Claude Code: PRD, tech spec, plano de steps, implementação step a step, pull request, review de pull request e encerramento. O Claude Code é a inteligência de cada sessão; o MySpec inicia cada sessão no momento e no lugar certos, guarda os artefatos, sabe em que ponto cada task está, mostra o que espera pelo usuário e permite várias tasks em andamento ao mesmo tempo, numa única janela.
+Aplicação desktop que conduz um workflow de desenvolvimento com o Claude Code: a discussão de uma demanda de um board, que produz os cards dele, e então PRD, tech spec, plano de steps, implementação step a step, pull request, review de pull request e encerramento. O Claude Code é a inteligência de cada sessão; o MySpec inicia cada sessão no momento e no lugar certos, guarda os artefatos, sabe em que ponto cada task está, mostra o que espera pelo usuário e permite várias tasks em andamento ao mesmo tempo, numa única janela.
 
 Wails v3 com Go no backend, React com TypeScript na interface, Linux.
 

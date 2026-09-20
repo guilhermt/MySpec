@@ -1,18 +1,18 @@
 # Funcionalidades
 
-Este documento descreve o produto como ele é. Começa pelos boards e pelos repositórios de onde as tasks vêm, segue a ordem do ciclo de vida de uma task, passa pelo centro de review, onde o usuário revisa as pull requests de qualquer autor, e termina com o que atravessa todo o produto: sessões, atenção, modelos, prompts e configurações.
+Este documento descreve o produto como ele é. Começa pelos boards, pelas discussões que produzem os cards deles e pelos repositórios de onde as tasks vêm, segue a ordem do ciclo de vida de uma task, passa pelo centro de review, onde o usuário revisa as pull requests de qualquer autor, e termina com o que atravessa todo o produto: sessões, atenção, modelos, prompts e configurações.
 
 ## Boards
 
 O produto conhece os boards do GitHub Projects (v2) que o usuário cadastra, de organização ou de usuário, cada um com os repositórios que administra. Ele lê os cards de cada board e cria tasks a partir deles. Funciona com qualquer board: lê os status e os campos de cada um em vez de assumir uma estrutura.
 
-Tudo o que o produto lê do GitHub passa pelo `gh` já autenticado na máquina, com a conta dele; o produto não tem conta nem token próprios. A única escrita no GitHub que vem de um board é a referência ao card na descrição da pull request; as outras são a pull request de uma task e o review que o usuário publica pelo [centro de review](#centro-de-review).
+Tudo o que o produto lê do GitHub passa pelo `gh` já autenticado na máquina, com a conta dele; o produto não tem conta nem token próprios. As escritas no GitHub que vêm de um board são a referência ao card na descrição da pull request e os cards que uma [discussão](#discussão) publica, depois de o usuário aprovar cada rascunho; as outras são a pull request de uma task e o review que o usuário publica pelo [centro de review](#centro-de-review).
 
 Um repositório pertence a no máximo um board, e é o board do repositório que define onde as tasks dele aparecem na barra lateral.
 
 ### Página Boards
 
-As configurações têm a página **Boards**. Ela lista os boards cadastrados, em ordem alfabética de título, cada um com o título, o dono e o tipo (`Organization` ou `User`), a quantidade de repositórios administrados, o link para o GitHub, a última leitura (`Updated 3 min ago`, `Not read yet` ou a falha da última leitura) e as ações **Edit** e **Remove**. Acima da lista fica **Add board**.
+As configurações têm a página **Boards**. Ela lista os boards cadastrados, em ordem alfabética de título, cada um com o título, o dono e o tipo (`Organization` ou `User`), a quantidade de repositórios administrados, o link para o GitHub, os status do board na linha `Final: <finais> · New cards: <status de cards novos>`, a última leitura (`Updated 3 min ago`, `Not read yet` ou a falha da última leitura) e as ações **Edit** e **Remove**. Acima da lista fica **Add board**.
 
 ### Cadastrar um board
 
@@ -25,6 +25,7 @@ As configurações têm a página **Boards**. Ela lista os boards cadastrados, e
 Lido o board, o diálogo mostra o título e o dono e segue para as escolhas:
 
 - **Status finais.** O produto identifica o campo de status do board, o campo de seleção única chamado `Status`, e lista as opções na ordem do board, cada uma com a marcação `Final`. Vêm pré-marcadas as opções cujo nome é, sem diferenciar maiúsculas nem acentos, `Done`, `Concluído`, `Closed`, `Completed`, `Fechado` ou `Finalizado`. Um board sem campo de status pula esta etapa.
+- **Status for new cards.** Uma opção do campo de status, ou `None`, é o status com que um card criado por uma discussão entra no board. Vem pré-selecionada a primeira opção cujo nome é, sem diferenciar maiúsculas nem acentos, `A Fazer`, `To do`, `Todo` ou `Ready`. Um board sem campo de status não tem a escolha.
 - **Repositórios administrados.** O produto sugere os repositórios que aparecem nas issues do board, com a contagem de cards de cada um, todos marcados. O usuário desmarca os que o board não administra e pode acrescentar outros digitando `dono/nome`. Um texto fora dessa forma é recusado com `Type the repository as owner/name.`, e um repositório que não existe ou que a conta não lê, com `<dono/nome> doesn't exist or this account can't read it.`
 
 Cada repositório diz como ficará ligado ao produto:
@@ -38,7 +39,7 @@ Cada repositório diz como ficará ligado ao produto:
 
 ### Editar e remover um board
 
-**Edit** relê a estrutura do board no GitHub e reabre as mesmas escolhas, confirmadas com **Save**. Os status finais vêm como o board os guarda: opções que deixaram de existir somem e opções novas aparecem desmarcadas. Os repositórios do board vêm marcados, e os outros repositórios das issues aparecem desmarcados. Acrescentar um repositório segue as regras do cadastro. Um repositório desmarcado sai do board: vai para o grupo sem board quando tem clone, tasks ou reviews de pull request, e sai do produto quando não tem nada disso. As tasks dele não mudam.
+**Edit** relê a estrutura do board no GitHub e reabre as mesmas escolhas, confirmadas com **Save**. Os status finais vêm como o board os guarda: opções que deixaram de existir somem e opções novas aparecem desmarcadas. O status de cards novos vem como está e volta a `None` quando a opção deixou de existir. Os repositórios do board vêm marcados, e os outros repositórios das issues aparecem desmarcados. Acrescentar um repositório segue as regras do cadastro. Um repositório desmarcado sai do board: vai para o grupo sem board quando tem clone, tasks ou reviews de pull request, e sai do produto quando não tem nada disso. As tasks dele não mudam.
 
 **Remove** pede confirmação e diz o que acontece: `N repositories move to No board and M leave MySpec. Tasks keep their cards, and nothing changes on GitHub or on disk.` Os repositórios do board com clone, com tasks ou com reviews de pull request, ativos ou arquivados, passam ao grupo sem board; os que não têm nada disso saem do produto. As tasks criadas de cards do board continuam guardando o card e funcionando, e passam ao grupo **No board** da barra lateral. Nada é alterado no GitHub nem no disco.
 
@@ -74,16 +75,17 @@ Uma falha de leitura aparece onde a leitura foi pedida: no diálogo do board, na
 
 A visão do board abre pelo nó do board na barra lateral e ocupa a área principal, no lugar da task. Abri-la relê o board.
 
-- **Cabeçalho:** o título, o link para o GitHub, `Updated <há quanto tempo>`, o indicador de leitura em curso, o botão de atualizar e a falha da última leitura, quando houver.
+- **Cabeçalho:** o título, o link para o GitHub, `Updated <há quanto tempo>`, o indicador de leitura em curso, o botão de atualizar, **New discussion** e a falha da última leitura, quando houver.
 - **Barra de filtros:** a busca, que casa com o título, sem diferenciar maiúsculas nem acentos, e com o número, com ou sem `#`; os filtros **Repository**, entre os administrados, **Status**, com `No status`, e **Assignee**; e **Assigned to me**, que filtra pelo usuário autenticado no `gh`. Os filtros combinam entre si, e **Clear filters** limpa todos. Os filtros de cada board são lembrados entre execuções.
+- **Barra de seleção**, acima da lista, quando há cards selecionados: `N cards selected`, **Discuss selected** e **Clear selection**.
 - **Lista de cards** agrupada por status: uma seção por opção do campo de status, na ordem do board, mesmo vazia, e a seção `No status` quando há cards sem status. Um board sem campo de status tem uma seção única, `Cards`. Cada seção mostra o nome e a contagem já filtrada e é recolhível. As seções dos status finais começam recolhidas, e o que o usuário recolhe ou expande é lembrado por board. Dentro de cada seção, as issues abertas vêm antes das fechadas, cada grupo na ordem do board, e uma issue fechada numa seção de status não final aparece esmaecida.
-- **Linha do card:** número, título, título do épico, a task do card, com a etapa e `Waits for you` quando ela espera pelo usuário, `Not cloned` para um card sem task de um repositório sem clone, o nome curto do repositório, com `dono/nome` no tooltip, e os avatares dos responsáveis.
-- **Painel de detalhe**, à direita, com o card selecionado: título, número, repositório, estado da issue, status e link; a ação **Start task**; a task do card, a ativa, que abre ao clicar, ou, sem ela, a mais recente arquivada, que abre no histórico; os campos preenchidos e os responsáveis; o corpo renderizado como Markdown; o épico; os irmãos com o status, e um irmão que está no board seleciona o card dele ao ser clicado; as dependências com o estado, o status e as pull requests, com `Not satisfied` nas não satisfeitas; e as pull requests vinculadas. O painel mantém a seleção ao atualizar a leitura enquanto o card continua nela.
+- **Linha do card:** a caixa de seleção, nos cards de repositórios administrados pelo board, número, título, título do épico, a task do card, com a etapa e `Waits for you` quando ela espera pelo usuário, `Not cloned` para um card sem task de um repositório sem clone, o nome curto do repositório, com `dono/nome` no tooltip, e os avatares dos responsáveis.
+- **Painel de detalhe**, à direita, com o card selecionado: título, número, repositório, estado da issue, status e link; as ações **Start task** e **Discuss**; a task do card, a ativa, que abre ao clicar, ou, sem ela, a mais recente arquivada, que abre no histórico; os campos preenchidos e os responsáveis; o corpo renderizado como Markdown; o épico; os irmãos com o status, e um irmão que está no board seleciona o card dele ao ser clicado; as dependências com o estado, o status e as pull requests, com `Not satisfied` nas não satisfeitas; e as pull requests vinculadas. O painel mantém a seleção ao atualizar a leitura enquanto o card continua nela.
 - **Estados:** um board nunca lido mostra o esqueleto da lista durante a leitura e, se ela falha, a falha com **Try again**. Um board sem cards diz `This board has no issues.`, e filtros que não deixam nenhum card dizem `No cards match the filters.`, com **Clear filters**.
 
 Uma dependência está satisfeita quando a issue dela está fechada ou quando uma pull request vinculada a ela foi mergeada. Uma dependência não satisfeita é só um aviso e nunca bloqueia nada.
 
-A visão é navegável pelo teclado: as setas para cima e para baixo percorrem os cards visíveis, pulando as seções recolhidas; as setas para a esquerda e para a direita recolhem e expandem a seção do card sob o foco; `Enter` abre o detalhe; `Esc` o fecha; `/` foca a busca; `S` aciona **Start task** no card sob o foco.
+A visão é navegável pelo teclado: as setas para cima e para baixo percorrem os cards visíveis, pulando as seções recolhidas; as setas para a esquerda e para a direita recolhem e expandem a seção do card sob o foco; `Enter` abre o detalhe; `Esc` o fecha; `/` foca a busca; `S` aciona **Start task** no card sob o foco; `Space` alterna a seleção do card sob o foco; `D` abre uma discussão com os cards selecionados ou, sem seleção, com o card sob o foco.
 
 ### Start task
 
@@ -100,6 +102,112 @@ A ação do card depende da situação dele:
 | Issue fechada | Sem **Start task** |
 
 Um card tem no máximo uma task ativa, e **Start task** volta quando ela é arquivada ou apagada. Um card que está em mais de um board aparece em cada um, mas só o board do repositório dele oferece **Start task**.
+
+## Discussão
+
+Uma discussão é uma conversa com o agente para entender uma demanda de um board, que deixa um documento com o entendimento a que se chegou e produz cards no board: cards novos, a atualização de cards que já existem, soltos ou reunidos num épico. Ela é um item do produto, ao lado da task e do review de pull request, mas sem etapas: tem uma conversa só e não tem worktree.
+
+O agente lê o código dos repositórios do board que têm clone e nunca os altera. Toda escrita no GitHub é do produto, depois de o usuário aprovar cada rascunho, e só acrescenta: nunca remove uma dependência, nunca tira um card de um épico, nunca fecha uma issue e nunca muda o status de um card que já existe.
+
+### Criar uma discussão
+
+Uma discussão pertence a um board e nasce da visão dele, de dois lugares: **New discussion**, no cabeçalho, e **Discuss**, no painel de detalhe de um card, que abre o diálogo com aquele card. Com cards selecionados na lista, **New discussion** abre o diálogo com eles, e `D` faz o mesmo pelo teclado, com a seleção ou com o card sob o foco.
+
+O diálogo de criação tem:
+
+- o **board**, fixo, com o título, o dono e o número;
+- o **título**, obrigatório, livre, com até 120 caracteres; um título mais longo é recusado com `Use at most 120 characters.`, e o contador aparece a partir de 100 caracteres. Com um único card selecionado, ele vem sugerido com o título do card; com vários ou nenhum, vem vazio. O título não precisa ser único;
+- **What to discuss**, opcional, com o que o usuário quer discutir;
+- os **cards** selecionados, cada um com número, título e repositório, removíveis ali;
+- **Context**, recolhível e somente leitura, com o contexto inicial que o produto monta;
+- o **modelo e o esforço**, partindo do padrão de discussão das configurações;
+- **Repositories without a clone**, quando o board tem algum, cada um com **Clone**, ou com **Change path** e o aviso quando o clone registrado não existe, e a linha `The conversation reads the code of the cloned repositories.` Clonar não é obrigatório, e um clone em andamento continua depois de o diálogo confirmar.
+
+**Start discussion** confirma. Ele exige um texto ou ao menos um card: sem os dois, o botão fica desabilitado, com `Write what to discuss or select at least one card.` Ao confirmar, o produto monta o contexto inicial, cria a discussão e abre a conversa com o prompt de discussão. Se a conversa não conseguir começar, a discussão é desfeita, como uma task.
+
+O **contexto inicial** é a primeira mensagem da conversa, em Markdown com rótulos em inglês: o título da discussão; o board, com o título, o link e os repositórios administrados, cada um com o caminho do clone ou `Not cloned`; `What to discuss`, com o texto do usuário, quando existe; e cada card selecionado, com título, `dono/nome#número`, link, estado da issue, status, campos preenchidos, responsáveis e corpo completo, seguido do épico, dos cards irmãos e das dependências. Os cards usam a leitura guardada do board; quando ela tem mais de 5 minutos, o diálogo relê os cards ao abrir, com `Refreshing the cards…`, e uma releitura que falha avisa `Couldn't refresh the cards: <motivo>. The discussion will use the last reading.` e segue com o que estava guardado.
+
+### A conversa
+
+A discussão tem uma conversa só, com a interface de qualquer sessão do produto: mensagens, ações do agente, cartões de permissão e de pergunta, marcadores de evento, fila de envio, interromper, pausar e retomar, medidor de contexto e seletor de modelo e esforço. Ela reabre com o app e acaba quando a discussão é arquivada ou apagada.
+
+A conversa roda na pasta de artefatos da discussão e recebe cada clone dos repositórios do board como diretório adicional de leitura. Não há worktree: o agente lê os clones como estão e nunca edita, commita nem faz push neles.
+
+O agente conduz a conversa para entender a demanda, olhando o código quando precisa, e pergunta só as lacunas reais. Enquanto não escreveu os rascunhos, um turno que termina sem pergunta estruturada espera pelo usuário, como a etapa de PRD. Quando o entendimento está fechado, ele escreve o documento e os rascunhos.
+
+### O documento
+
+O documento é um artefato da discussão, escrito pelo agente, com o entendimento: contexto, problema, restrições, o que entra e o que fica de fora. Ele não propõe a solução técnica.
+
+O painel de documentos, à direita, tem **Context**, com o contexto inicial, e **Document**, com o documento, renderizados como Markdown. O painel abre no documento assim que ele existe e mostra sempre a versão atual: o agente pode reescrevê-lo a qualquer momento, a pedido do usuário na conversa.
+
+### Rascunhos de cards
+
+Junto com o documento o agente escreve os rascunhos, num artefato próprio que o produto lê ao fim de cada turno. O painel **Drafts**, acima da conversa, recolhível, abre sozinho quando uma leitura nova chega e mostra `N of M decided`. Um artefato que o produto não consegue ler é tratado como uma passada sem rascunhos: a discussão espera pelo usuário, com a razão na barra, e o agente pode reescrevê-lo na conversa.
+
+Cada rascunho é **um card novo**, **a atualização de um card existente**, de qualquer card da leitura guardada do board, ou **um épico**. Um rascunho tem título, corpo em Markdown, o repositório, entre os administrados pelo board, o módulo, quando o board tem o campo, as dependências, zero ou mais, cada uma outro rascunho da discussão ou um card existente, e o épico, opcional. Numa atualização o repositório é o do card e não muda.
+
+Cada rascunho tem o seu cartão, editável: título e corpo como texto, repositório, módulo e épico como seletores, dependências como uma lista com acréscimo e remoção. O cartão de uma **atualização** mostra o card como está no GitHub, com o link, e o que o rascunho muda nele: `Current: <valor>` ao lado do título, do módulo e do épico que ficam diferentes, e a aba **Changes** do corpo, com o diff linha a linha, ao lado de **Edit**. O que o card tem agora vem da leitura guardada e, quando ela tem mais de 5 minutos, de uma releitura do card, com `Refreshing the card…`; uma releitura que falha avisa `Couldn't refresh the card: <motivo>. The draft shows the last reading.` Um card fora da última leitura aparece com `This card isn't in the last reading of the board.`
+
+Edições e decisões são guardadas enquanto o usuário as faz e sobrevivem ao fechamento do app. A conversa fica aberta durante a decisão: um rascunho que o usuário quer incluir, mudar ou retirar pode ser pedido ao agente, que reescreve o artefato. O produto mostra a versão nova mantendo o texto e a decisão de cada rascunho que o agente não mudou; um rascunho publicado é somente leitura e o agente não o altera. Um rascunho que sai do artefato leva consigo o épico e as dependências que apontavam para ele, com o aviso no cartão de quem apontava.
+
+Uma discussão pode render um único card, misturar novos e atualizações, ou terminar só com o documento, sem rascunho nenhum.
+
+### Épico
+
+Um **rascunho de épico** agrupa dois ou mais rascunhos de card e tem título, corpo e o repositório da issue pai, escolhido entre os do board. O agente pode propor o épico; o usuário pode criar um com **Group into an epic** sobre rascunhos selecionados no painel, e mover rascunhos para dentro e para fora dele pelo seletor **Epic** de cada cartão. O painel mostra o épico como um grupo, com os rascunhos dentro e as ações do próprio épico.
+
+Um rascunho de card também pode apontar para um **épico existente**, por `dono/nome#número`, em **Existing issue…** do seletor. Nesse caso o card é publicado sozinho e vira sub-issue daquele épico, o que permite acrescentar cards a um épico que já existe.
+
+### Aprovar e publicar
+
+Cada rascunho tem **Approve** e **Discard**; clicar na decisão ativa a desfaz, enquanto o rascunho não foi publicado. Um rascunho descartado fica no painel, esmaecido, e nunca é publicado.
+
+**Um rascunho solto**, sem épico ou com épico existente, publica ao ser aprovado:
+
+- um **card novo**: o produto cria a issue no repositório do rascunho, com título e corpo, a adiciona ao board, define o status de cards novos do board e o módulo, registra as dependências e, com épico existente, a torna sub-issue dele;
+- uma **atualização**: o produto atualiza título e corpo da issue, o módulo no board, o épico pela relação nativa e as dependências novas. O status do card não muda.
+
+Um rascunho que **depende de outro rascunho ainda não publicado** pode ser aprovado e fica aguardando: o cartão diz `Waits for <título do rascunho>` e o produto o publica assim que a dependência sair. Um rascunho que depende de um rascunho descartado tem essa dependência removida, com o aviso no cartão, e segue.
+
+**Um épico** publica como unidade. **Publish epic** habilita quando o épico foi aprovado e cada rascunho dele foi aprovado ou descartado, com ao menos dois aprovados; enquanto isso o grupo diz o que falta: `An epic needs at least two cards.`, `Approve or discard every card of the epic.`, `Approve the epic.` ou `Waits for <título do rascunho>`. O produto então cria a issue pai no repositório escolhido, cria cada card aprovado como sub-issue dela, coloca a issue pai e os cards no board, com o status de cards novos e o módulo de cada um, e registra as dependências. Uma atualização dentro de um épico novo atualiza o card e o torna sub-issue da issue pai. A ordem de criação segue as dependências: um card é criado depois dos cards de que depende.
+
+Épico e dependências são registrados pelos recursos nativos do GitHub, issue pai com sub-issues e a relação de bloqueio; o produto nunca escreve a convenção no corpo dos cards. Uma dependência que o GitHub recusa é deixada de lado, com o aviso no cartão, e o card é publicado de todo modo. Um módulo que deixou de ser opção do board também é um aviso, não uma falha.
+
+Um rascunho publicado mostra no cartão `Created` ou `Updated`, a referência `dono/nome#número` com o link e a data. Depois de uma publicação, o produto relê o board, para que a visão e as tasks vejam os cards novos.
+
+Uma publicação que **falha** não perde nada: o rascunho continua aprovado, com a razão no cartão, e a discussão espera pelo usuário. **Retry** repete a corrida, pulando o que já foi feito, e uma publicação de épico que falhou no meio continua de onde parou, sem criar nada duas vezes. As razões:
+
+| Situação | Mensagem |
+|---|---|
+| `gh` fora do PATH | `GitHub CLI was not found: gh isn't on the PATH.` |
+| `gh` sem autenticação | `gh is not authenticated. Run gh auth login.` |
+| Sem escopo para escrever no repositório | `gh can't write to this repository. Run gh auth refresh -s repo.` |
+| Sem escopo para escrever no board | `gh can't write to projects. Run gh auth refresh -s project.` |
+| Board inexistente ou sem escrita | `The board doesn't exist or this account can't write to it.` |
+| Issue inexistente ou ilegível | `The issue <dono/nome#número> doesn't exist or this account can't read it.` |
+| Repositório inexistente ou sem escrita | `The repository <dono/nome> doesn't exist or this account can't write to it.` |
+| Limite de taxa | `GitHub's rate limit was reached. It resets at <hora>.` |
+| Qualquer outra | `Couldn't write to GitHub: <o que o gh disse>` |
+
+Um rascunho também não publica quando o board nunca foi lido, com `The board hasn't been read yet.`, quando o card de uma atualização não é do board, com `The card this update rewrites is not one of the board.`, e quando o repositório do rascunho saiu do board, com `<dono/nome> is no longer managed by the board.`
+
+### Módulo
+
+O campo de módulo é o campo de seleção única do board chamado `Módulo` ou `Module`, sem diferenciar maiúsculas nem acentos, identificado pelo nome como o campo `Status`. Num board com esse campo, o prompt de discussão recebe as opções dele, o agente escolhe uma por rascunho, e o seletor do cartão oferece as opções e `No module`. Num board sem esse campo, os rascunhos não têm módulo e o cartão não o mostra. O módulo é o único campo além do status que o produto preenche; estimativa, responsável e datas ficam para o GitHub.
+
+### A discussão como item
+
+- **Barra lateral:** cada discussão ativa aparece sob o nó do board, depois das tasks dele, em ordem de criação, com o rótulo `Discussion`, o título, o ponto de estado e, à direita, o que espera pelo usuário ou o estado. Ela não aparece sob os nós de épico, e o filtro por repositório não a esconde. Uma discussão de um board removido vai para o grupo **No board**.
+- **Tela da discussão:** o cabeçalho com o rótulo `Discussion`, o título, o board, o estado, o medidor de contexto, **Pause** ou **Resume**, o botão do painel de documentos, **Archive** e **Delete discussion**; a barra da discussão com o estado e os avisos; o painel de rascunhos e a conversa; o painel de documentos.
+- **Estados:** `Discussing`, `Waiting for the drafts`, `Decide drafts`, `Publishing`, `Publish failed` e `Drafts published`. O estado da conversa, pausada, com erro, pedindo permissão ou perguntando, prevalece, como na task.
+- **Waiting for you:** a discussão espera pelo usuário quando o agente pergunta ou pede permissão, quando a sessão falha, quando um turno termina sem resposta ao usuário antes de os rascunhos existirem, quando o artefato de rascunhos não pode ser lido, quando há rascunhos a decidir e quando uma publicação falha. Ela notifica como uma task, uma vez por situação, com o som do produto. Uma discussão pausada ou arquivada não espera por ninguém.
+- **Archive:** o usuário arquiva a discussão a qualquer momento, depois da confirmação `The conversation ends. The document, the drafts and what was published stay in the history.` Rascunhos aprovados aguardando publicação impedem o arquivamento, com `Approved drafts are waiting to be published.`, e uma publicação que falhou, com `A publication failed.` Rascunhos sem decisão são arquivados como `Not published`. Arquivar encerra a sessão.
+- **Delete discussion:** apaga a discussão, ativa ou arquivada, depois da confirmação `The conversation, the document and the drafts go away. What was published on GitHub stays.`
+
+### Contexto da task
+
+Uma task criada de um card que foi criado ou atualizado por uma discussão recebe, no contexto montado pelo produto, uma seção `Discussion`, depois das dependências e antes de `Additional context`, com o documento da discussão mais recente que criou ou atualizou aquele card. A ligação sobrevive ao arquivamento da discussão e some quando ela é apagada. O épico criado por uma discussão aparece na barra lateral como nó sob o board, como os lidos do GitHub, assim que uma task de um dos seus cards existe.
 
 ## Repositórios
 
@@ -156,22 +264,22 @@ Enquanto nenhum board e nenhum repositório estão cadastrados, o produto mostra
 
 A barra lateral tem, de cima para baixo:
 
-- a seção **Waiting for you**, fixa no topo, com todas as tasks e todos os reviews de pull request que esperam pelo usuário, exceto o que está aberto. Ela nunca é filtrada por repositório;
+- a seção **Waiting for you**, fixa no topo, com todas as tasks, todos os reviews de pull request e todas as discussões que esperam pelo usuário, exceto o que está aberto. Ela nunca é filtrada por repositório;
 - o nó **Reviews**, que abre a visão do [centro de review](#centro-de-review), com a contagem das pull requests pendentes e, dentro dele, os reviews ativos;
 - o **filtro por repositório**, um seletor com **All repositories** e um item por repositório cadastrado, em ordem alfabética, e o botão de nova task. A escolha do filtro é lembrada entre execuções do app, e um repositório removido volta o filtro para todos;
 - o aviso de clone inexistente de cada repositório que o filtro mostra, com **Change path**;
-- a **árvore de tasks** ativas, agrupada por board;
+- a **árvore de tasks** e discussões ativas, agrupada por board;
 - o rodapé com **History**, o tema e as configurações.
 
 A árvore tem um nó por board, em ordem alfabética de título, e depois o grupo **No board**:
 
 - o **nó do board** mostra o título e abre a visão do board. Quando a última leitura falhou, ele mostra um ícone de falha, com o motivo no tooltip. Um board sem tasks aparece como nó vazio;
-- dentro do board vem primeiro um **nó por épico** que tem ao menos uma task ativa, com o título do épico, na ordem de criação da primeira task dele, com as tasks dos seus cards dentro. O nó do épico só expande e recolhe. Depois dos épicos vêm as tasks do board sem épico: as de cards sem épico e as tasks sem card dos repositórios do board;
-- o grupo **No board** tem as tasks dos repositórios sem board, inclusive as de cards de um board removido, e aparece só quando tem tasks.
+- dentro do board vem primeiro um **nó por épico** que tem ao menos uma task ativa, com o título do épico, na ordem de criação da primeira task dele, com as tasks dos seus cards dentro. O nó do épico só expande e recolhe. Depois dos épicos vêm as tasks do board sem épico: as de cards sem épico e as tasks sem card dos repositórios do board. Por último vêm as **discussões** ativas do board, cada uma com o rótulo `Discussion`, e elas não aparecem sob os nós de épico;
+- o grupo **No board** tem as tasks dos repositórios sem board, inclusive as de cards de um board removido, e as discussões de um board removido, e aparece só quando tem alguma.
 
 Dentro de cada nó as tasks seguem a ordem de criação. Cada task mostra o nome, o nome curto do repositório abaixo, precedido de `#<número>` numa task criada de um card, a etapa em que está, o step em andamento e o que falta, o progresso do review, ou **Agent review** e **Addressing review** quando um agente revisa o step, e o que espera pelo usuário. Os agrupamentos usam o que as tasks guardam dos seus cards, então a árvore não depende de nenhuma leitura do GitHub.
 
-Cada nó expande e recolhe pela seta ao lado do título, e o que o usuário recolhe é lembrado entre execuções. O board e o épico da task aberta se expandem ao abri-la. A árvore é navegável pelo teclado entre as tasks visíveis, pulando os nós recolhidos, com a task sob o foco sendo a que abre. Com o filtro num repositório, a árvore mostra só o nó do board desse repositório, ou o grupo **No board**, com as tasks do repositório. Um filtro num repositório sem board e sem tasks diz `No tasks in <nome curto>.`
+Cada nó expande e recolhe pela seta ao lado do título, e o que o usuário recolhe é lembrado entre execuções. O board e o épico da task aberta se expandem ao abri-la. A árvore é navegável pelo teclado entre as tasks visíveis, pulando os nós recolhidos, com a task sob o foco sendo a que abre. Com o filtro num repositório, a árvore mostra só o nó do board desse repositório, ou o grupo **No board**, com as tasks do repositório. Uma discussão pertence a um board, não a um repositório, então o filtro nunca a esconde do nó que ele mostra. Um filtro num repositório sem board e sem tasks diz `No tasks in <nome curto>.`
 
 ### Dados de uma versão com áreas de trabalho
 
@@ -201,7 +309,7 @@ Ao confirmar, a primeira sessão de planejamento do modo abre no clone do reposi
 - **Context from the card**, recolhível e somente leitura, mostra o contexto que o produto monta, e o campo `Additional context`, opcional, recebe o que o usuário quiser acrescentar;
 - **Unsatisfied dependencies**, quando o card tem dependências não satisfeitas, lista cada uma com o repositório, o estado, o status e as pull requests com o estado. O aviso nunca bloqueia a criação.
 
-O contexto montado é, em Markdown e com rótulos em inglês, nesta ordem: o card, com título, `dono/nome#número`, link, status, campos preenchidos, responsáveis e o corpo completo; o épico, quando existe, com título, referência, link e corpo completo; os cards irmãos, um por linha, com referência, título e status; as dependências, uma por linha, com referência, título, estado, status e pull requests com o estado; e, sob `Additional context`, o texto do usuário, quando existe. Ele é o contexto inicial da task: a primeira mensagem do PRD ou do planejamento One-Shot.
+O contexto montado é, em Markdown e com rótulos em inglês, nesta ordem: o card, com título, `dono/nome#número`, link, status, campos preenchidos, responsáveis e o corpo completo; o épico, quando existe, com título, referência, link e corpo completo; os cards irmãos, um por linha, com referência, título e status; as dependências, uma por linha, com referência, título, estado, status e pull requests com o estado; sob `Discussion`, o documento da discussão que criou ou atualizou o card, quando ele saiu de uma; e, sob `Additional context`, o texto do usuário, quando existe. Ele é o contexto inicial da task: a primeira mensagem do PRD ou do planejamento One-Shot.
 
 O contexto usa a leitura guardada do board. Quando a leitura do card tem mais de 5 minutos, o diálogo relê o card, o épico, os irmãos e as dependências ao abrir, com `Refreshing the card…`. Se a releitura falha, o diálogo avisa `Couldn't refresh the card: <motivo>. The task will use the last reading.` e a criação segue com o que estava guardado. Um card que saiu da última leitura enquanto o diálogo abria mostra `This card isn't in the last reading of the board.`
 
@@ -465,23 +573,27 @@ Um relatório limpo, ou uma passada em que nada foi aprovado, deixa o review pro
 
 ## Histórico
 
-O botão **History** no rodapé da barra lateral abre a lista das tasks arquivadas, da mais recente à mais antiga, com busca por nome e o mesmo filtro por repositório da barra lateral. A contagem do botão soma tasks e reviews. Cada linha mostra o nome curto do repositório da task. A lista inclui os reviews de pull request arquivados, misturados às tasks pela data de arquivamento; ver [Histórico de um review](#histórico-de-um-review). Uma task arquivada mostra os seus artefatos finais renderizados, com PRD, tech spec, steps com os relatórios de review de cada step, a pull request e o resultado do encerramento. Uma task One-Shot aparece na lista com o rótulo `One-Shot` no lugar da contagem de steps, e mostra o documento One-Shot com os relatórios de review do step no lugar de PRD, tech spec e steps. As conversas não são guardadas no histórico.
+O botão **History** no rodapé da barra lateral abre a lista das tasks arquivadas, da mais recente à mais antiga, com busca por nome e o mesmo filtro por repositório da barra lateral. A contagem do botão soma tasks, reviews e discussões. Cada linha mostra o nome curto do repositório da task. A lista inclui os reviews de pull request e as discussões arquivadas, misturados às tasks pela data de arquivamento; ver [Histórico de um review](#histórico-de-um-review) e [Histórico de uma discussão](#histórico-de-uma-discussão). Uma task arquivada mostra os seus artefatos finais renderizados, com PRD, tech spec, steps com os relatórios de review de cada step, a pull request e o resultado do encerramento. Uma task One-Shot aparece na lista com o rótulo `One-Shot` no lugar da contagem de steps, e mostra o documento One-Shot com os relatórios de review do step no lugar de PRD, tech spec e steps. As conversas de uma task e de um review de pull request não são guardadas no histórico; a de uma discussão é, porque é parte do entendimento.
 
 ### Histórico de um review
 
 Um review arquivado aparece na lista com o rótulo `Review`, `#<número>` e o título da pull request, o repositório, o autor, o desfecho, `Merged` ou `Closed`, e as datas. A busca casa com o título e com o número, com ou sem `#`, e o filtro por repositório vale para ele. Aberto, ele mostra a pull request com o link, o desfecho e, para cada passada, o relatório renderizado e, quando publicada, o veredito e cada apontamento publicado com onde foi. **← History** volta à lista, e o review arquivado pode ser apagado dali.
 
+### Histórico de uma discussão
+
+Uma discussão arquivada aparece na lista com o rótulo `Discussion`, o título, o board, a contagem de cards publicados e as datas. A busca casa com o título, e o filtro por repositório mostra as discussões cujos cards de entrada ou publicados pertencem ao repositório. Aberta, ela mostra o documento renderizado, ou `No document was written.`, os rascunhos com o que cada um virou, `Created`, `Updated` ou `Not published`, com a referência e o link, os épicos com os cards dentro, e a conversa inteira, somente leitura. **← History** volta à lista, e a discussão arquivada pode ser apagada dali.
+
 ## Apagar uma task
 
 Uma task pode ser apagada em qualquer etapa. Antes de confirmar, o produto mostra o que será destruído: a worktree e a branch, quando existem, a pull request que fica aberta no GitHub, e o que já não está lá. Apagar para o que estiver rodando, remove a worktree e a branch, apaga os artefatos e remove a task em definitivo. O que o git não conseguiu remover é listado num aviso, para o usuário resolver à mão.
 
-Um review de pull request se apaga pelo seu próprio **Delete review**; ver [O review como item](#o-review-como-item).
+Um review de pull request se apaga pelo seu próprio **Delete review**; ver [O review como item](#o-review-como-item). Uma discussão, pelo **Delete discussion**; ver [A discussão como item](#a-discussão-como-item).
 
 ## Sessões e conversas
 
 Toda sessão é uma conversa dentro do produto, com interface própria. O Claude Code roda por baixo, invisível. A conversa mostra as mensagens do usuário e do agente, as ações que o agente executa agrupadas, os cartões de permissão e de pergunta, marcadores dos eventos da task ou do review (documento escrito, etapa iniciada, review iniciado ou escrito, contexto compactado, resposta interrompida) e os erros. Tudo que o agente escreve é renderizado como Markdown, com diagramas mermaid e realce de código, em streaming.
 
-Cada etapa e cada step têm a sua conversa, e a etapa de PR tem a da pull request e a do review dela. Um step no modo `Agent` tem também a do revisor, a partir da primeira passada, e as duas ficam nas abas **Implementer** e **Reviewer**. Voltar a uma etapa retoma a conversa dela de onde ficou. Um review de pull request tem uma conversa só, de todas as passadas, que reabre com o app e acaba quando o review acaba ou é apagado.
+Cada etapa e cada step têm a sua conversa, e a etapa de PR tem a da pull request e a do review dela. Um step no modo `Agent` tem também a do revisor, a partir da primeira passada, e as duas ficam nas abas **Implementer** e **Reviewer**. Voltar a uma etapa retoma a conversa dela de onde ficou. Um review de pull request tem uma conversa só, de todas as passadas, que reabre com o app e acaba quando o review acaba ou é apagado. Uma discussão também tem uma conversa só, que reabre com o app, fica guardada no histórico e acaba quando a discussão é arquivada ou apagada.
 
 - **Enviar**: mensagens enviadas com o agente ocupado entram numa fila, visível na conversa, e podem ser removidas antes de sair.
 - **Interromper** encerra a resposta em andamento e mantém a sessão viva.
@@ -493,17 +605,19 @@ Cada etapa e cada step têm a sua conversa, e a etapa de PR tem a da pull reques
 
 ## Depende de mim
 
-Uma task ou um review de pull request espera pelo usuário. Uma task espera quando qualquer destas situações acontece: um erro de sessão, um step bloqueado, uma worktree ilegível, a etapa de PR bloqueada, um plano inválido, uma pull request fechada sem merge, uma escalada de permissão, uma pergunta do agente, uma passada do revisor de um step que terminou sem relatório, uma resposta aquém do que o produto esperava, uma etapa revisitada pronta para continuar, um step aguardando review ou pronto para aprovar, um step sem mudanças, um step que passou ao usuário porque o review pelo agente não veio limpo em três rodadas, um rascunho aguardando OK, apontamentos de review aguardando decisão, mudanças aplicadas aguardando review, uma pull request pronta para merge, uma task pronta para encerrar. Uma task pausada não espera por ninguém. O revisor de um step é um lugar próprio: um erro, uma escalada de permissão ou uma pergunta dele espera pelo usuário na aba **Reviewer**, e pode esperar ao mesmo tempo que uma situação do implementador. Uma task com todos os steps no modo `Agent` só espera pelo usuário, entre o primeiro step e o rascunho da pull request, quando há erro, bloqueio, permissão, pergunta, passada sem relatório ou um step que passou ao usuário; um step commitado pelo review do agente não notifica.
+Uma task, um review de pull request ou uma discussão espera pelo usuário. Uma task espera quando qualquer destas situações acontece: um erro de sessão, um step bloqueado, uma worktree ilegível, a etapa de PR bloqueada, um plano inválido, uma pull request fechada sem merge, uma escalada de permissão, uma pergunta do agente, uma passada do revisor de um step que terminou sem relatório, uma resposta aquém do que o produto esperava, uma etapa revisitada pronta para continuar, um step aguardando review ou pronto para aprovar, um step sem mudanças, um step que passou ao usuário porque o review pelo agente não veio limpo em três rodadas, um rascunho aguardando OK, apontamentos de review aguardando decisão, mudanças aplicadas aguardando review, uma pull request pronta para merge, uma task pronta para encerrar. Uma task pausada não espera por ninguém. O revisor de um step é um lugar próprio: um erro, uma escalada de permissão ou uma pergunta dele espera pelo usuário na aba **Reviewer**, e pode esperar ao mesmo tempo que uma situação do implementador. Uma task com todos os steps no modo `Agent` só espera pelo usuário, entre o primeiro step e o rascunho da pull request, quando há erro, bloqueio, permissão, pergunta, passada sem relatório ou um step que passou ao usuário; um step commitado pelo review do agente não notifica.
 
 Um review de pull request espera pelo usuário quando o agente pergunta ou pede permissão, quando a sessão falha, quando a passada termina sem um relatório que o produto consegue ler, quando o relatório tem apontamentos a decidir, quando está pronto para publicar, quando a publicação falha e quando a pull request tem commits novos desde o último review publicado. No modo aplicar, também quando os apontamentos aprovados estão prontos para aplicar, quando as mudanças aguardam review ou estão prontas para aprovar e quando a pull request está pronta para merge. Um review pausado, publicado ou arquivado não espera por ninguém.
 
+Uma discussão espera pelo usuário quando o agente pergunta ou pede permissão, quando a sessão falha, quando um turno termina sem resposta ao usuário antes de os rascunhos existirem, quando o artefato de rascunhos não pode ser lido, quando há rascunhos a decidir e quando uma publicação falha. Uma discussão pausada ou arquivada não espera por ninguém.
+
 Cada situação diz onde está e o que pede. As situações aparecem:
 
-- na seção **Waiting for you**, fixa no topo da barra lateral, com todas as tasks e todos os reviews que esperam, exceto o que está aberto. `Ctrl+J` abre o primeiro;
-- na lista de tasks, na linha de cada task, e sob o nó **Reviews**, na linha de cada review;
-- na própria task, na trilha de etapas, na barra do step, nas abas **Implementer** e **Reviewer** e na barra da pull request, e no próprio review, na barra dele.
+- na seção **Waiting for you**, fixa no topo da barra lateral, com todas as tasks, todos os reviews e todas as discussões que esperam, exceto o que está aberto. `Ctrl+J` abre o primeiro;
+- na lista de tasks, na linha de cada task, sob o nó **Reviews**, na linha de cada review, e sob o nó do board, na linha de cada discussão;
+- na própria task, na trilha de etapas, na barra do step, nas abas **Implementer** e **Reviewer** e na barra da pull request, no próprio review, na barra dele, e na própria discussão, na barra dela.
 
-Uma situação que começa enquanto o usuário olha para o produto pisca brevemente onde surgiu, em silêncio. Uma situação que começa com a janela fora de foco gera uma notificação do sistema, que identifica a task, ou a pull request do review, e o que ela pede; clicar nela traz a janela e abre o lugar certo. Cada situação notifica uma vez, ao começar. Continuações da mesma espera, como o stage chegar a 100% ou a pull request passar de pronta a mergeada, não notificam.
+Uma situação que começa enquanto o usuário olha para o produto pisca brevemente onde surgiu, em silêncio. Uma situação que começa com a janela fora de foco gera uma notificação do sistema, que identifica a task, a pull request do review ou a discussão, e o que ela pede; clicar nela traz a janela e abre o lugar certo. Cada situação notifica uma vez, ao começar. Continuações da mesma espera, como o stage chegar a 100% ou a pull request passar de pronta a mergeada, não notificam.
 
 A notificação toca, ao aparecer, o som do MySpec: um carrilhão curto e suave, o mesmo em todo sistema, no volume e na saída de áudio do sistema. Situações que começam juntas são ouvidas uma vez só: uma notificação a menos de dois segundos da última que tocou chega em silêncio, e cada situação continua com a sua notificação. Com o sistema em não perturbe o som não toca, onde o sistema torna esse estado conhecido. Clicar, dispensar ou retirar uma notificação não faz som. Uma notificação que não aparece não toca, e um som que não pode tocar deixa a notificação aparecer muda; nenhum dos dois vira erro na interface.
 
@@ -513,20 +627,22 @@ Não há níveis, silenciamento nem configuração de som: o volume e o não per
 
 O produto oferece três modelos, Fable 5.1, Opus 5 e Sonnet 5, e cinco níveis de esforço, de low a max. Cada combinação é válida.
 
-- **Padrões**: nas configurações, um modelo e um esforço por tipo de sessão: PRD, tech spec, plano, planejamento One-Shot, implementação, review de step, PR e review de PR. O de review de PR é também o ponto de partida do diálogo de início de um review do centro de review. O commit não tem escolha própria, porque roda na sessão do step ou do review.
+- **Padrões**: nas configurações, um modelo e um esforço por tipo de sessão: PRD, tech spec, plano, planejamento One-Shot, implementação, review de step, PR, review de PR e discussão. O de review de PR é também o ponto de partida do diálogo de início de um review do centro de review, e o de discussão, do diálogo de criação de uma discussão. O commit não tem escolha própria, porque roda na sessão do step ou do review.
 - **Por task**: na criação, a task copia os padrões e o usuário ajusta o que quiser. Uma task Structured tem as etapas de PRD, tech spec, plano, implementação, review de step, PR e review de PR; uma One-Shot, as de planejamento One-Shot, implementação, review de step, PR e review de PR. Depois, o popover **Models** no cabeçalho da task lista as etapas do modo dela e troca a escolha das que ainda não começaram. O review de step segue editável até o último step ser commitado, e a troca vale para os revisores que ainda não começaram; ele aparece mesmo numa task no modo `Manual`, porque um step pode passar a `Agent` antes de começar.
 - **Por step**: na lista de steps, cada step ainda não iniciado pode ter modelo e esforço próprios. A escolha congela quando a sessão do step começa. O revisor não tem escolha por step: ele começa com o review de step que a task tem na primeira passada. Uma task One-Shot não tem escolha por step: o step único usa a da implementação.
 - **Por sessão**: dentro de uma conversa, o seletor troca o modelo e o esforço daquela sessão a partir da mensagem seguinte. A resposta em andamento termina com a escolha anterior.
 
 ## Prompts
 
-As configurações listam os oito prompts, PRD, tech spec, plano, planejamento One-Shot, review de step, commit, PR e review de PR, cada um renderizado e editável. Um prompt editado é salvo como arquivo no diretório de dados e sobrevive a atualizações do app; um prompt nunca editado acompanha o padrão de cada versão. **Restaurar** volta ao padrão. O prompt é lido quando uma sessão começa, então uma sessão já em andamento mantém o prompt com que começou. O prompt de um step é o próprio arquivo do step, escrito pelo plano, ou o documento de uma task One-Shot, escrito pelo planejamento, e por isso não aparece aqui.
+As configurações listam os nove prompts, PRD, tech spec, plano, planejamento One-Shot, review de step, commit, PR, review de PR e discussão, cada um renderizado e editável. Um prompt editado é salvo como arquivo no diretório de dados e sobrevive a atualizações do app; um prompt nunca editado acompanha o padrão de cada versão. **Restaurar** volta ao padrão. O prompt é lido quando uma sessão começa, então uma sessão já em andamento mantém o prompt com que começou. O prompt de um step é o próprio arquivo do step, escrito pelo plano, ou o documento de uma task One-Shot, escrito pelo planejamento, e por isso não aparece aqui.
 
 Os prompts de review de step, commit, PR e review de PR são um texto por tipo, que serve aos dois modos. Numa task One-Shot, onde os de review de step, PR e review de PR citam o PRD, o tech spec ou o arquivo do step, eles citam o documento One-Shot, e o produto acrescenta a cada um uma seção `One-Shot task`, que diz o papel do documento no lugar dos outros. Ela fecha os prompts de PR e de review de PR, seguida só da seção `## Card` no de PR de uma task criada de um card; no de review de step, vem antes da última resposta do implementador, que continua sendo o fim do prompt. Um prompt editado recebe o mesmo tratamento, então uma edição vale para os dois modos.
 
 O prompt de review de PR serve também ao review do centro de review, de uma pull request sem task. Nele, o PRD e o tech spec são o documento de contexto do review, e o produto acrescenta ao fim, depois da seção `One-Shot task` quando ela existe, as seções de que cada caso precisa: `Pull request without a task`, que diz o papel do documento de contexto e que a worktree está em detached HEAD; `Findings format`, o formato de relatório que o produto lê, com os apontamentos ancorados em `arquivo:linha` ou gerais; `Publishing` no modo publicar, que proíbe editar, commitar e fazer push, ou `Applying` no modo aplicar, que diz ao agente para implementar só o que o produto enviar como aprovado. Em qualquer review de pull request, o de uma task incluído, vêm por último `Review instructions`, com as instruções fixas do repositório, e `Instructions for this pass`, com as da passada, quando existem. Um prompt editado recebe o mesmo tratamento.
 
 O prompt de review de step sempre termina com a última resposta do implementador, que o produto acrescenta. O prompt de commit diz o que commitar conforme quem revisou: exatamente o que está em stage, no modo `Manual` e no review de pull request, ou tudo o que mudou na worktree, depois de um relatório limpo do revisor. Essa instrução nunca se perde: num prompt editado que removeu o placeholder, ela é acrescentada ao fim. As mensagens que entregam um relatório ao implementador e que pedem uma nova passada ao revisor são textos fixos do produto e não aparecem aqui.
+
+O prompt de discussão conduz a conversa de entendimento: ele diz ao agente que ele lê os clones dos repositórios do board e nunca os altera, carrega o estilo dos cards do board, contexto, problema, o que a entrega inclui e o que fica de fora, sem propor a solução, e diz onde escrever o documento e os rascunhos. O produto acrescenta ao fim as seções de que a discussão precisa: `Board`, com o board, os repositórios administrados, o campo de módulo com as opções, quando existe, e o status de cards novos; e `Drafts format`, com o formato exato do artefato de rascunhos que o produto lê. Um prompt editado recebe o mesmo tratamento.
 
 Os prompts padrão de PRD e de planejamento One-Shot dizem ao agente que o contexto inicial pode já responder boa parte do que ele precisa, como um card do board com o épico, os irmãos e as dependências, ou uma descrição detalhada. O agente o trata como a fonte principal do quê e do porquê, não pergunta o que ele já responde, usa o épico e os irmãos para entender onde o trabalho termina sem invadir o escopo de outro card, e pergunta só pelas lacunas reais. Com um contexto completo, a conversa pode ser pouco mais que confirmar o entendimento. A instrução é a mesma com ou sem card. O prompt de PR de uma task criada de um card termina com uma seção `## Card`, acrescentada pelo produto, com o card e a instrução da referência de fechamento; um prompt editado recebe o mesmo tratamento.
 
@@ -543,10 +659,10 @@ O tema segue o sistema por padrão e pode ser fixado em claro ou escuro pelo bot
 | Atalho | Ação |
 |---|---|
 | `Ctrl+N` | Criar uma task |
-| `Ctrl+J` | Abrir a primeira task ou o primeiro review que espera pelo usuário |
+| `Ctrl+J` | Abrir o primeiro item que espera pelo usuário: task, review ou discussão |
 | `Ctrl+,` | Abrir ou fechar as configurações |
 
-`Cmd` vale no lugar de `Ctrl`. Os atalhos funcionam com o foco em qualquer lugar da janela, inclusive na caixa de mensagem. Com o diálogo de criação de uma task ou o que inicia um review aberto, os três não fazem nada: o que o usuário digita ali não fica para trás nem é coberto por outro diálogo.
+`Cmd` vale no lugar de `Ctrl`. Os atalhos funcionam com o foco em qualquer lugar da janela, inclusive na caixa de mensagem. Com o diálogo de criação de uma task, o que inicia um review ou o que cria uma discussão aberto, os três não fazem nada: o que o usuário digita ali não fica para trás nem é coberto por outro diálogo.
 
 Na visão do board:
 
@@ -558,5 +674,7 @@ Na visão do board:
 | `Esc` | Fechar o detalhe |
 | `/` | Focar a busca |
 | `S` | **Start task** no card sob o foco |
+| `Space` | Selecionar ou desmarcar o card sob o foco |
+| `D` | Abrir uma discussão com os cards selecionados, ou com o card sob o foco |
 
-As setas, `Enter` e `S` valem com o foco na lista de cards; `/` e `Esc`, em qualquer lugar da visão, `/` fora de um campo de texto.
+As setas, `Enter`, `S`, `Space` e `D` valem com o foco na lista de cards; `/` e `Esc`, em qualquer lugar da visão, `/` fora de um campo de texto.
