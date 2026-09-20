@@ -12,10 +12,11 @@ function productOnScreen(store: AppStore): boolean {
   );
 }
 
-// The dialogs that create a task and start a review hold what the user is
-// typing: a shortcut neither leaves them behind nor stacks another over them.
+// The dialogs that create a task, start a review and create a discussion hold
+// what the user is typing: a shortcut neither leaves them behind nor stacks
+// another over them.
 function typingInDialog(store: AppStore): boolean {
-  return store.newTaskOpen || store.startReview !== null;
+  return store.newTaskOpen || store.startReview !== null || store.newDiscussion !== null;
 }
 
 export function useGlobalShortcuts(): void {
@@ -46,7 +47,10 @@ export function useGlobalShortcuts(): void {
           if (typingInDialog(store)) {
             return;
           }
-          const [first] = waitingEntries(store.app, store.openTaskId ?? store.openReviewId);
+          const [first] = waitingEntries(
+            store.app,
+            store.openTaskId ?? store.openReviewId ?? store.openDiscussionId,
+          );
           if (first !== undefined) {
             store.openPlace(first.itemId, first.situation.place);
           }

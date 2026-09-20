@@ -43,7 +43,7 @@ describe("useEditedText", () => {
     });
 
     expect(result.current.value).toBe("Export the invoices as CSV");
-    expect(useAppStore.getState().findingDrafts[KEY]).toEqual({
+    expect(useAppStore.getState().textDrafts[KEY]).toEqual({
       text: "Export the invoices as CSV",
       revision: 1,
     });
@@ -101,7 +101,7 @@ describe("useEditedText", () => {
     });
 
     expect(save).not.toHaveBeenCalled();
-    expect(useAppStore.getState().findingDrafts[KEY]).toBeUndefined();
+    expect(useAppStore.getState().textDrafts[KEY]).toBeUndefined();
     expect(result.current.value).toBe("Export the invoices as a spreadsheet");
   });
 
@@ -113,7 +113,7 @@ describe("useEditedText", () => {
     });
     rerender({ text: "Export the invoices as CSV", rev: 1 });
 
-    expect(useAppStore.getState().findingDrafts[KEY]).toBeUndefined();
+    expect(useAppStore.getState().textDrafts[KEY]).toBeUndefined();
     expect(result.current.value).toBe("Export the invoices as CSV");
   });
 
@@ -170,7 +170,7 @@ describe("useEditedText", () => {
     });
 
     expect(save).not.toHaveBeenCalled();
-    expect(useAppStore.getState().findingDrafts[KEY]).toBeUndefined();
+    expect(useAppStore.getState().textDrafts[KEY]).toBeUndefined();
     expect(result.current.value).toBe("Export the invoices");
   });
 

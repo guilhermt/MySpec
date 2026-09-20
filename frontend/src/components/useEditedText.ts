@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from "react";
-import { useAppStore, useFindingDraft } from "@/store/app-store";
+import { useAppStore, useTextDraft } from "@/store/app-store";
 
 /** SAVE_DELAY_MS is how long the typing rests before the text is recorded. */
 const SAVE_DELAY_MS = 800;
@@ -31,9 +31,9 @@ export function useEditedText(
   required: boolean,
   liveRevision: () => number | null,
 ): EditedText {
-  const entry = useFindingDraft(key);
-  const setFindingDraft = useAppStore((state) => state.setFindingDraft);
-  const clearFindingDraft = useAppStore((state) => state.clearFindingDraft);
+  const entry = useTextDraft(key);
+  const setTextDraft = useAppStore((state) => state.setTextDraft);
+  const clearTextDraft = useAppStore((state) => state.clearTextDraft);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pending = useRef({ text: "", revision });
   const draft = entry !== null && entry.revision === revision ? entry.text : null;
@@ -64,9 +64,9 @@ export function useEditedText(
 
   useEffect(() => {
     if (entry !== null && (entry.revision !== revision || entry.text === stored)) {
-      clearFindingDraft(key);
+      clearTextDraft(key);
     }
-  }, [entry, key, revision, stored, clearFindingDraft]);
+  }, [entry, key, revision, stored, clearTextDraft]);
 
   // A field removed while focused does not reliably blur: a save still waiting
   // goes out as it unmounts, or the draft on screen would never reach the Go
@@ -91,7 +91,7 @@ export function useEditedText(
   return {
     value: draft ?? stored,
     onChange: (text: string) => {
-      setFindingDraft(key, { text, revision });
+      setTextDraft(key, { text, revision });
       stop();
       if (blank(text)) {
         return;
@@ -108,7 +108,7 @@ export function useEditedText(
         return;
       }
       if (blank(draft)) {
-        clearFindingDraft(key);
+        clearTextDraft(key);
       } else if (draft !== stored) {
         save(draft);
       }
