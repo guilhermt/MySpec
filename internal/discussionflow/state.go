@@ -183,7 +183,12 @@ func epicReady(epic discussion.Draft, drafts []discussion.Draft) (canPublish boo
 		return false, ""
 	}
 
-	members := membersOf(epic, drafts)
+	return epicSettled(epic, membersOf(epic, drafts), drafts)
+}
+
+// epicSettled says whether every card of an epic is where the run of it needs
+// them, and what is missing while they are not.
+func epicSettled(epic discussion.Draft, members, drafts []discussion.Draft) (canPublish bool, hint string) {
 	approved, undecided := 0, false
 	for _, member := range members {
 		switch member.Decision {

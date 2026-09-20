@@ -240,10 +240,49 @@ func (m *memBoards) Refresh(string) {
 	m.refreshs++
 }
 
-// memGH is an in-memory discussionflow.GH counting what it was asked to write.
+// refreshed is how many times the board was asked to be read again.
+func (m *memBoards) refreshed() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return m.refreshs
+}
+
+// memGH is an in-memory discussionflow.GH counting what it was asked to write,
+// with the calls a test asks it to refuse.
 type memGH struct {
-	mu    sync.Mutex
-	calls []string
+	mu           sync.Mutex
+	calls        []string
+	createErr    map[string]error // by title, and only the first time
+	blockedByErr error
+}
+
+// failCreate makes the next issue of that title fail, as GitHub refusing one
+// halfway through a run does.
+func (m *memGH) failCreate(title string, err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.createErr == nil {
+		m.createErr = map[string]error{}
+	}
+	m.createErr[title] = err
+}
+
+// failBlockedBy makes every dependency GitHub is asked for fail.
+func (m *memGH) failBlockedBy(err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.blockedByErr = err
+}
+
+// made is what the fake was asked to write, in order.
+func (m *memGH) made() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return slices.Clone(m.calls)
 }
 
 func (m *memGH) LookupIssues(_ context.Context, refs []gh.IssueRef) (map[gh.IssueRef]gh.IssueNode, error) {
@@ -276,6 +315,10 @@ func (m *memGH) CreateIssue(_ context.Context, repositoryID, title, _ string) (g
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	if err := m.createErr[title]; err != nil {
+		delete(m.createErr, title)
+		return gh.IssueNode{}, err
+	}
 	m.calls = append(m.calls, "createIssue:"+repositoryID+":"+title)
 	return gh.IssueNode{ID: "I_" + title, Number: len(m.calls), Title: title, RepositoryID: repositoryID}, nil
 }
@@ -316,6 +359,9 @@ func (m *memGH) AddBlockedBy(_ context.Context, issueID, blockingIssueID string)
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	if m.blockedByErr != nil {
+		return m.blockedByErr
+	}
 	m.calls = append(m.calls, "addBlockedBy:"+issueID+":"+blockingIssueID)
 	return nil
 }
@@ -465,6 +511,45 @@ func (f *fixture) decide(id, draftID string, d discussion.Decision) {
 	if err := f.flow.Decide(f.t.Context(), id, draftID, d); err != nil {
 		f.t.Fatalf("decide on draft %s: %v", draftID, err)
 	}
+}
+
+// approve approves a draft, which is what sends it to GitHub.
+func (f *fixture) approve(id, draftID string) {
+	f.t.Helper()
+
+	f.decide(id, draftID, discussion.DecisionApproved)
+}
+
+// waitPublished waits for a draft to be written on GitHub to the last step,
+// with the run that wrote it over.
+func (f *fixture) waitPublished(id, draftID string) discussion.Draft {
+	f.t.Helper()
+
+	f.waitFor(id, func(state discussionflow.State) bool {
+		return !state.Publishing && f.draftIn(state, draftID).Published.Done()
+	})
+	return f.draftState(id, draftID).Draft
+}
+
+// waitFailed waits for the publication of a draft to fail, with the run that
+// tried it over.
+func (f *fixture) waitFailed(id, draftID string) discussion.Draft {
+	f.t.Helper()
+
+	f.waitFor(id, func(state discussionflow.State) bool {
+		return !state.Publishing && f.draftIn(state, draftID).PublishError != ""
+	})
+	return f.draftState(id, draftID).Draft
+}
+
+// draftIn is one draft of a state, empty when the discussion has no such one.
+func (f *fixture) draftIn(state discussionflow.State, draftID string) discussion.Draft {
+	for _, d := range state.Drafts {
+		if d.Draft.ID == draftID {
+			return d.Draft
+		}
+	}
+	return discussion.Draft{}
 }
 
 // waitFor waits for the state of a discussion to say what the test expects,

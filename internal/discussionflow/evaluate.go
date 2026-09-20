@@ -10,8 +10,8 @@ import (
 )
 
 // evaluate keeps a discussion in step with its conversation: it notices the
-// document the agent writes and records the drafts of the artifact once the
-// agent rests.
+// document the agent writes, records the drafts of the artifact once the agent
+// rests, and sends to GitHub what is ready to go.
 func (s *Service) evaluate(ctx context.Context, id string) {
 	if s.isClosed() {
 		return
@@ -31,6 +31,7 @@ func (s *Service) evaluate(ctx context.Context, id string) {
 	if sum.Idle {
 		s.readDrafts(ctx, stored)
 	}
+	s.publishDue(stored)
 }
 
 // stampDocument looks at the document of the discussion: the interface reads
