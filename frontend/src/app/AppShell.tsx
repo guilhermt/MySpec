@@ -1,6 +1,7 @@
 import { useViewedSituation } from "@/features/attention/useViewedSituation";
 import { BoardView } from "@/features/board/BoardView";
 import { usePendingStart } from "@/features/board/usePendingStart";
+import { DiscussionView } from "@/features/discussion/DiscussionView";
 import { NewDiscussionDialog } from "@/features/discussion/NewDiscussionDialog";
 import { ArchivedTaskView } from "@/features/history/ArchivedTaskView";
 import { HistoryPanel } from "@/features/history/HistoryPanel";
@@ -16,10 +17,11 @@ import { TaskView } from "@/features/task/TaskView";
 import { NewTaskDialog } from "@/features/task-create/NewTaskDialog";
 import { useAppStore, useOpenBoardId } from "@/store/app-store";
 
-/** MainArea is the one screen the app is on: a task, a review, an archived one, the history, the settings, a board, or home. */
+/** MainArea is the one screen the app is on: a task, a review, a discussion, an archived one, the history, the settings, a board, or home. */
 function MainArea() {
   const openTaskId = useAppStore((state) => state.openTaskId);
   const openReviewId = useAppStore((state) => state.openReviewId);
+  const openDiscussionId = useAppStore((state) => state.openDiscussionId);
   const openArchivedId = useAppStore((state) => state.openArchivedId);
   const openArchivedReviewId = useAppStore((state) => state.openArchivedReviewId);
   const settingsOpen = useAppStore((state) => state.settingsOpen);
@@ -32,6 +34,9 @@ function MainArea() {
   }
   if (openReviewId !== null) {
     return <ReviewView key={openReviewId} reviewId={openReviewId} />;
+  }
+  if (openDiscussionId !== null) {
+    return <DiscussionView key={openDiscussionId} discussionId={openDiscussionId} />;
   }
   if (openArchivedId !== null) {
     return <ArchivedTaskView taskId={openArchivedId} />;
