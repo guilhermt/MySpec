@@ -10,6 +10,8 @@ import {
   kindLabel,
   looseDrafts,
   outcomeLabel,
+  refKey,
+  refValue,
   repositoryOf,
   waitsLabel,
 } from "@/features/discussion/discussion-status";
@@ -102,6 +104,21 @@ describe("epicGroups and looseDrafts", () => {
 
   it("leaves loose what belongs to no epic of the discussion", () => {
     expect(looseDrafts(drafts)).toEqual([loose, onIssue]);
+  });
+});
+
+describe("refKey and refValue", () => {
+  it("reads two spellings of the same issue as one, and hands the Go side the reference", () => {
+    const written = makeDraftRef({ draft: "", key: "dev/web#9", reference: "Dev/Web#9" });
+    const read = makeDraftRef({ draft: "", key: "dev/web#9", reference: "dev/web#9" });
+
+    expect(refKey(written)).toBe(refKey(read));
+    expect(refValue(written)).toBe("Dev/Web#9");
+  });
+
+  it("names a draft apart from an issue of the same words", () => {
+    expect(refKey(makeDraftRef({ draft: "draft-2" }))).toBe("draft:draft-2");
+    expect(refValue(makeDraftRef({ draft: "draft-2" }))).toBe("draft-2");
   });
 });
 

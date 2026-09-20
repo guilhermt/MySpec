@@ -1,6 +1,12 @@
 import type { StatusTone } from "@/features/task/status";
 import { summaryLabel } from "@/lib/situations";
-import type { DiscussionRepository, DiscussionSummary, Draft, DraftDependency } from "@/lib/wails";
+import type {
+  DiscussionRepository,
+  DiscussionSummary,
+  Draft,
+  DraftDependency,
+  DraftRef,
+} from "@/lib/wails";
 import { asDiscussionStatus, asDraftKind, asDraftOutcome } from "@/lib/wails";
 
 /** EpicGroup is an epic of a discussion with the cards that belong to it. */
@@ -113,8 +119,30 @@ export function looseDrafts(drafts: readonly Draft[]): Draft[] {
   return drafts.filter((draft) => !grouped.has(draft.id));
 }
 
+/**
+ * DependencyRef is what one dependency line reads from: a dependency of a
+ * draft, or one the card already has on GitHub.
+ */
+export type DependencyRef = DraftDependency | DraftRef;
+
+/**
+ * refKey identifies what a reference points at, so that two ways of writing
+ * the same issue are one, as Ref.Key does on the Go side.
+ */
+export function refKey(ref: DependencyRef): string {
+  return ref.draft === "" ? ref.key : `draft:${ref.draft}`;
+}
+
+/**
+ * refValue is the reference the Go side takes a draft or an issue by: the id
+ * of a draft, or the issue as the draft writes it.
+ */
+export function refValue(ref: DependencyRef): string {
+  return ref.draft === "" ? ref.reference : ref.draft;
+}
+
 /** dependencyLabel names what a draft waits for: another draft, or an issue. */
-export function dependencyLabel(dependency: DraftDependency): string {
+export function dependencyLabel(dependency: DependencyRef): string {
   if (dependency.reference === "") {
     return dependency.title === "" ? dependency.draft : dependency.title;
   }
