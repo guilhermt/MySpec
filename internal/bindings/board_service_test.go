@@ -157,7 +157,7 @@ func TestCardContextIsTheContextOfTheCardWithoutAdditionalText(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CardContext() = %v, want nil", err)
 	}
-	if want := board.Context(card, ""); got != want {
+	if want := board.Context(card, "", ""); got != want {
 		t.Errorf("CardContext() = %q, want %q", got, want)
 	}
 }

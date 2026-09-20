@@ -68,7 +68,7 @@ _The epic has no description._
 
 Mind the dark theme.`
 
-	if diff := cmp.Diff(want, board.Context(card, "  Mind the dark theme.\n")); diff != "" {
+	if diff := cmp.Diff(want, board.Context(card, "", "  Mind the dark theme.\n")); diff != "" {
 		t.Errorf("Context() (-want +got):\n%s", diff)
 	}
 }
@@ -95,8 +95,143 @@ _The card has no description._
 
 The account epic.`
 
-	if diff := cmp.Diff(want, board.Context(card, " \n")); diff != "" {
+	if diff := cmp.Diff(want, board.Context(card, "", " \n")); diff != "" {
 		t.Errorf("Context() (-want +got):\n%s", diff)
+	}
+}
+
+func TestContextCarriesTheDocumentOfTheDiscussionTheCardCameFrom(t *testing.T) {
+	t.Parallel()
+
+	card := board.Card{Issue: issue("acme", "web", 12, "Login screen", task.IssueOpen), Body: "Build the login screen."}
+
+	want := `### Card: Login screen
+
+- Issue: acme/web#12
+- Link: https://github.com/acme/web/issues/12
+
+Build the login screen.
+
+### Discussion
+
+What we agreed about accounts.
+
+### Additional context
+
+Mind the dark theme.`
+
+	got := board.Context(card, "\nWhat we agreed about accounts.\n", "Mind the dark theme.")
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("Context() (-want +got):\n%s", diff)
+	}
+}
+
+func TestDiscussionContextIsTheBoardWhatToDiscussAndEveryCard(t *testing.T) {
+	t.Parallel()
+
+	in := board.DiscussionContextInput{
+		Title:      "Accounts",
+		BoardTitle: "Roadmap",
+		BoardURL:   "https://github.com/orgs/acme/projects/3",
+		Repositories: []board.DiscussionRepository{
+			{FullName: "acme/web", Path: "/home/dev/web"},
+			{FullName: "acme/api"},
+		},
+		Text: "  What is missing in accounts?\n",
+		Cards: []board.Card{
+			{
+				Issue:     issue("acme", "web", 12, "Login screen", task.IssueOpen),
+				Body:      "Build the login screen.",
+				Status:    "In progress",
+				Fields:    []board.Field{{Name: "Priority", Value: "High"}},
+				Assignees: []board.Assignee{{Login: "ana"}},
+				Epic:      &board.Epic{Issue: issue("acme", "web", 3, "Accounts", task.IssueOpen), Body: "The account epic."},
+				Siblings: []board.Related{
+					{Issue: issue("acme", "web", 13, "Logout", task.IssueOpen), Status: "Todo", OnBoard: true},
+				},
+				Dependencies: []board.Dependency{
+					{Related: board.Related{Issue: issue("acme", "api", 20, "Auth endpoint", task.IssueOpen), Status: "Review", OnBoard: true}},
+				},
+			},
+			{Issue: issue("acme", "api", 14, "Sessions", task.IssueClosed)},
+		},
+	}
+
+	want := `# Accounts
+
+## Board
+
+- Board: Roadmap
+- Link: https://github.com/orgs/acme/projects/3
+- Repositories:
+  - acme/web: /home/dev/web
+  - acme/api: Not cloned
+
+## What to discuss
+
+What is missing in accounts?
+
+## Card: Login screen
+
+- Issue: acme/web#12
+- Link: https://github.com/acme/web/issues/12
+- State: Open
+- Status: In progress
+- Priority: High
+- Assignees: ana
+
+Build the login screen.
+
+### Epic: Accounts
+
+- Issue: acme/web#3
+- Link: https://github.com/acme/web/issues/3
+
+The account epic.
+
+### Sibling cards
+
+- acme/web#13 Logout · Todo
+
+### Dependencies
+
+- acme/api#20 Auth endpoint · Open · Review · No pull request
+
+## Card: Sessions
+
+- Issue: acme/api#14
+- Link: https://github.com/acme/api/issues/14
+- State: Closed
+
+_The card has no description._`
+
+	if diff := cmp.Diff(want, board.DiscussionContext(in)); diff != "" {
+		t.Errorf("DiscussionContext() (-want +got):\n%s", diff)
+	}
+}
+
+func TestDiscussionContextWithoutCardsOrTextIsTheBoardAlone(t *testing.T) {
+	t.Parallel()
+
+	in := board.DiscussionContextInput{
+		Title:        "Accounts",
+		BoardTitle:   "Roadmap",
+		BoardURL:     "https://github.com/orgs/acme/projects/3",
+		Repositories: []board.DiscussionRepository{{FullName: "acme/web", Path: "/home/dev/web"}},
+		Text:         " \n",
+	}
+
+	want := `# Accounts
+
+## Board
+
+- Board: Roadmap
+- Link: https://github.com/orgs/acme/projects/3
+- Repositories:
+  - acme/web: /home/dev/web`
+
+	if diff := cmp.Diff(want, board.DiscussionContext(in)); diff != "" {
+		t.Errorf("DiscussionContext() (-want +got):\n%s", diff)
 	}
 }
 

@@ -116,7 +116,7 @@ func (s *TaskService) CreateTask(req CreateTaskRequest) (string, error) {
 			return "", s.fail("CreateTask", &board.Refusal{Reason: board.RefusalNotManaged, Repository: card.FullName()})
 		}
 		repositoryID = managed.ID
-		initialContext = board.Context(card, req.InitialContext)
+		initialContext = board.Context(card, "", req.InitialContext)
 		taskCard = &task.Card{
 			BoardID: req.Card.BoardID,
 			Owner:   card.Owner,

@@ -127,7 +127,7 @@ func (s *BoardService) RefreshCard(boardID, key string) error {
 // CardContext is the context a task created from a card starts with, without
 // the text the user adds.
 func (s *BoardService) CardContext(boardID, key string) (string, error) {
-	text, err := s.boards.Context(boardID, key, "")
+	text, err := s.boards.Context(boardID, key, "", "")
 	if err != nil {
 		return "", s.fail("CardContext", err)
 	}

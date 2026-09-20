@@ -520,14 +520,14 @@ func TestContextIsTheContextOfAStoredCard(t *testing.T) {
 	card := board.Card{Issue: cardIssue("acme/web", 1), Body: "Build it."}
 	f := newFixture(t, board.Stored{Reading: &board.Reading{Cards: []board.Card{card}}, ReadAt: base})
 
-	got, err := f.service.Context(boardID, "acme/web#1", "Mind the theme.")
+	got, err := f.service.Context(boardID, "acme/web#1", "What we agreed.", "Mind the theme.")
 	if err != nil {
 		t.Fatalf("Context() = %v, want nil", err)
 	}
-	if want := board.Context(card, "Mind the theme."); got != want {
+	if want := board.Context(card, "What we agreed.", "Mind the theme."); got != want {
 		t.Errorf("Context() = %q, want %q", got, want)
 	}
-	if _, err := f.service.Context(boardID, "acme/web#2", ""); !errors.Is(err, board.ErrCardNotFound) {
+	if _, err := f.service.Context(boardID, "acme/web#2", "", ""); !errors.Is(err, board.ErrCardNotFound) {
 		t.Errorf("Context(acme/web#2) = %v, want ErrCardNotFound", err)
 	}
 }
