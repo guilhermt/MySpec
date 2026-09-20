@@ -473,6 +473,9 @@ func nodes(items ...node) node {
 	return node{"nodes": items}
 }
 
+// statusFieldID is the id of the Status field the structure query answers.
+const statusFieldID = "field-status"
+
 // The options of the Status field of the board.
 var (
 	todo  = board.Option{ID: "opt-todo", Name: "Todo"}
@@ -488,22 +491,38 @@ func structure(title string) reply {
 
 // structureWith is structure with the options of the Status field given.
 func structureWith(title string, statuses ...board.Option) reply {
+	return structureFields(title, statuses,
+		node{"name": "Title", "dataType": "TITLE"},
+		node{"name": "Status", "dataType": "SINGLE_SELECT", "id": statusFieldID},
+		node{"name": "Priority", "dataType": "SINGLE_SELECT", "id": "field-priority"},
+		node{"name": "Estimate", "dataType": "NUMBER"},
+		node{"name": "Labels", "dataType": "LABELS"},
+	)
+}
+
+// structureFields is structure with the options of the Status field and the
+// fields of the board given. Nil statuses is a board without a Status field,
+// which answers no field node at all.
+func structureFields(title string, statuses []board.Option, fields ...node) reply {
+	var field any
+	if statuses != nil {
+		field = node{"id": statusFieldID, "options": statuses}
+	}
 	return data(node{
 		"viewer": node{"login": "dev"},
 		"owner": node{"projectV2": node{
-			"id":    projectID,
-			"title": title,
-			"url":   "https://github.com/orgs/acme/projects/3",
-			"field": node{"id": "field-status", "options": statuses},
-			"fields": nodes(
-				node{"name": "Title", "dataType": "TITLE"},
-				node{"name": "Status", "dataType": "SINGLE_SELECT"},
-				node{"name": "Priority", "dataType": "SINGLE_SELECT"},
-				node{"name": "Estimate", "dataType": "NUMBER"},
-				node{"name": "Labels", "dataType": "LABELS"},
-			),
+			"id":     projectID,
+			"title":  title,
+			"url":    "https://github.com/orgs/acme/projects/3",
+			"field":  field,
+			"fields": nodes(fields...),
 		}},
 	})
+}
+
+// singleSelect is a single select field of a board, with its options.
+func singleSelect(id, name string, options ...board.Option) node {
+	return node{"name": name, "dataType": "SINGLE_SELECT", "id": id, "options": options}
 }
 
 // issueURL is the URL of an issue.

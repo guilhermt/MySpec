@@ -28,6 +28,7 @@ const rateLimitFallback = time.Hour
 const (
 	typeInsufficientScopes = "INSUFFICIENT_SCOPES"
 	typeRateLimited        = "RATE_LIMITED"
+	typeNotFound           = "NOT_FOUND"
 )
 
 // GraphQLError is one entry of the errors GitHub answered with.
@@ -119,6 +120,9 @@ func graphQLArgs(query string, vars Vars) []string {
 	}
 	return args
 }
+
+// HasNotFound reports whether GitHub answered that a part does not exist.
+func HasNotFound(errs []GraphQLError) bool { return hasType(errs, typeNotFound) }
 
 // hasType reports whether any of errs is of type kind.
 func hasType(errs []GraphQLError, kind string) bool {

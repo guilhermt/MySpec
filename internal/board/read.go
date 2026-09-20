@@ -89,12 +89,14 @@ func (s *Service) read(ctx context.Context, b Board, extra []string) (Reading, m
 	}
 
 	reading := Reading{
-		ProjectID: st.ProjectID,
-		Title:     st.Title,
-		Viewer:    st.Viewer,
-		Statuses:  st.Statuses,
-		HasStatus: st.HasStatus,
-		Cards:     make([]Card, 0, len(nodes)),
+		ProjectID:     st.ProjectID,
+		Title:         st.Title,
+		Viewer:        st.Viewer,
+		Statuses:      st.Statuses,
+		HasStatus:     st.HasStatus,
+		StatusFieldID: st.StatusFieldID,
+		Module:        st.Module,
+		Cards:         make([]Card, 0, len(nodes)),
 	}
 	onBoard := map[string]bool{}
 	for _, n := range nodes {

@@ -4,6 +4,8 @@
 package board
 
 import (
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/guilhermt/myspec/internal/task"
@@ -27,6 +29,7 @@ type Board struct {
 	Title         string
 	URL           string
 	FinalStatuses []string // option ids of the Status field; never nil
+	NewCardStatus string   // the option id of the Status field a card created by a discussion gets; "" for none
 	CreatedAt     time.Time
 }
 
@@ -34,6 +37,14 @@ type Board struct {
 type Option struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
+}
+
+// ModuleField is the single select field a discussion fills on a card: the one
+// named Módulo or Module.
+type ModuleField struct {
+	ID      string   `json:"id"`
+	Name    string   `json:"name"`    // as the board names it
+	Options []Option `json:"options"` // board order; never nil
 }
 
 // Issue is an issue as the board view names it.
@@ -118,14 +129,42 @@ type Card struct {
 	ReadAt       time.Time     `json:"readAt"`
 }
 
-// Reading is what the last reading of a board that succeeded found.
+// Reading is what the last reading of a board that succeeded found. A reading
+// stored before the status field id and the module field were read has neither:
+// the next reading fills them in.
 type Reading struct {
-	ProjectID string   `json:"projectId"`
-	Title     string   `json:"title"`
-	Viewer    string   `json:"viewer"`   // the login gh is authenticated as
-	Statuses  []Option `json:"statuses"` // the options of the Status field, in board order; empty without one
-	HasStatus bool     `json:"hasStatus"`
-	Cards     []Card   `json:"cards"` // open ones in board order, then the closed ones in board order
+	ProjectID     string       `json:"projectId"`
+	Title         string       `json:"title"`
+	Viewer        string       `json:"viewer"`   // the login gh is authenticated as
+	Statuses      []Option     `json:"statuses"` // the options of the Status field, in board order; empty without one
+	HasStatus     bool         `json:"hasStatus"`
+	StatusFieldID string       `json:"statusFieldId"` // "" without a Status field
+	Module        *ModuleField `json:"module"`        // nil without a module field
+	Cards         []Card       `json:"cards"`         // open ones in board order, then the closed ones in board order
+}
+
+// ModuleOptionID is the id of the option of the module field named name,
+// ignoring case and accents.
+func (r *Reading) ModuleOptionID(name string) (string, bool) {
+	if r.Module == nil {
+		return "", false
+	}
+	folded := fold(strings.TrimSpace(name))
+	for _, o := range r.Module.Options {
+		if strings.EqualFold(fold(strings.TrimSpace(o.Name)), folded) {
+			return o.ID, true
+		}
+	}
+	return "", false
+}
+
+// StatusOption is the option of the Status field of id.
+func (r *Reading) StatusOption(id string) (Option, bool) {
+	i := slices.IndexFunc(r.Statuses, func(o Option) bool { return o.ID == id })
+	if i < 0 {
+		return Option{}, false
+	}
+	return r.Statuses[i], true
 }
 
 // Stored is a board's reading as the app holds it.
