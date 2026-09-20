@@ -1,10 +1,16 @@
 import { screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { HistoryPanel } from "@/features/history/HistoryPanel";
-import { type ArchivedReview, api } from "@/lib/wails";
+import { type ArchivedDiscussion, type ArchivedReview, api } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
-import { makeArchivedReview, makeArchivedTask, makeRepository, makeState } from "@/test/wails-mock";
+import {
+  makeArchivedDiscussion,
+  makeArchivedReview,
+  makeArchivedTask,
+  makeRepository,
+  makeState,
+} from "@/test/wails-mock";
 
 const WEB = makeRepository();
 const API = makeRepository({
@@ -30,13 +36,25 @@ const REVIEW = makeArchivedReview({
   archivedAt: "2026-09-07T10:00:00Z",
 });
 
-function panel(history = [LOGIN, HEADER], filter = "", reviewHistory: ArchivedReview[] = []) {
+const DISCUSSION = makeArchivedDiscussion({
+  title: "The invoices",
+  publishedCount: 2,
+  archivedAt: "2026-09-06T10:00:00Z",
+});
+
+function panel(
+  history = [LOGIN, HEADER],
+  filter = "",
+  reviewHistory: ArchivedReview[] = [],
+  discussionHistory: ArchivedDiscussion[] = [],
+) {
   return renderWithStore(<HistoryPanel />, {
     state: makeState({
       repositories: [WEB, API],
       repositoryFilter: filter,
       history,
       reviewHistory,
+      discussionHistory,
     }),
   });
 }
@@ -135,7 +153,7 @@ describe("HistoryPanel", () => {
     expect(screen.getByText("Nothing archived yet")).toBeInTheDocument();
     expect(
       screen.getByText(
-        "A task comes here once it's closed, a review once its pull request is merged or closed.",
+        "A task comes here once it's closed, a review once its pull request is merged or closed, a discussion once it's archived.",
       ),
     ).toBeInTheDocument();
   });
@@ -177,6 +195,39 @@ describe("HistoryPanel", () => {
     await user.click(screen.getByRole("button", { name: /Cache the sessions/ }));
 
     expect(useAppStore.getState().openArchivedReviewId).toBe("review-31");
+    expect(useAppStore.getState().historyOpen).toBe(true);
+  });
+
+  it("lists an archived discussion with its board and what it published", () => {
+    panel([], "", [], [DISCUSSION]);
+
+    const row = screen.getByRole("listitem");
+    expect(row).toHaveTextContent("Discussion");
+    expect(row).toHaveTextContent("The invoices");
+    expect(row).toHaveTextContent("Roadmap");
+    expect(row).toHaveTextContent("2 cards published");
+  });
+
+  it("finds a discussion by its title", async () => {
+    const { user } = panel([LOGIN], "", [], [DISCUSSION]);
+
+    await user.type(screen.getByRole("textbox", { name: "Search history" }), "invoices");
+
+    expect(screen.getByRole("listitem")).toHaveTextContent("The invoices");
+  });
+
+  it("keeps the discussions of the repository of the filter", () => {
+    panel([HEADER], "repo-1", [], [DISCUSSION]);
+
+    expect(screen.getByRole("listitem")).toHaveTextContent("The invoices");
+  });
+
+  it("opens the discussion the user picks", async () => {
+    const { user } = panel([], "", [], [DISCUSSION]);
+
+    await user.click(screen.getByRole("button", { name: /The invoices/ }));
+
+    expect(useAppStore.getState().openArchivedDiscussionId).toBe("discussion-1");
     expect(useAppStore.getState().historyOpen).toBe(true);
   });
 });

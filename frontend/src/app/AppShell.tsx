@@ -1,6 +1,7 @@
 import { useViewedSituation } from "@/features/attention/useViewedSituation";
 import { BoardView } from "@/features/board/BoardView";
 import { usePendingStart } from "@/features/board/usePendingStart";
+import { ArchivedDiscussionView } from "@/features/discussion/ArchivedDiscussionView";
 import { DiscussionView } from "@/features/discussion/DiscussionView";
 import { NewDiscussionDialog } from "@/features/discussion/NewDiscussionDialog";
 import { ArchivedTaskView } from "@/features/history/ArchivedTaskView";
@@ -24,6 +25,7 @@ function MainArea() {
   const openDiscussionId = useAppStore((state) => state.openDiscussionId);
   const openArchivedId = useAppStore((state) => state.openArchivedId);
   const openArchivedReviewId = useAppStore((state) => state.openArchivedReviewId);
+  const openArchivedDiscussionId = useAppStore((state) => state.openArchivedDiscussionId);
   const settingsOpen = useAppStore((state) => state.settingsOpen);
   const historyOpen = useAppStore((state) => state.historyOpen);
   const reviewsOpen = useAppStore((state) => state.reviewsOpen);
@@ -43,6 +45,14 @@ function MainArea() {
   }
   if (openArchivedReviewId !== null) {
     return <ArchivedReviewView key={openArchivedReviewId} reviewId={openArchivedReviewId} />;
+  }
+  if (openArchivedDiscussionId !== null) {
+    return (
+      <ArchivedDiscussionView
+        key={openArchivedDiscussionId}
+        discussionId={openArchivedDiscussionId}
+      />
+    );
   }
   if (settingsOpen) {
     return <SettingsView />;
