@@ -16,6 +16,23 @@ const LABELS: Record<LifecycleStage, string> = {
   closing: "Closing",
 };
 
+/** asLifecycleStage narrows a received stage to a stage of the track, null when it is none. */
+export function asLifecycleStage(value: string): LifecycleStage | null {
+  switch (value) {
+    case "prd":
+    case "tech_spec":
+    case "plan":
+    case "one_shot":
+    case "implementation":
+    case "pr":
+    case "pr_review":
+    case "closing":
+      return value;
+    default:
+      return null;
+  }
+}
+
 const LIFECYCLES: Record<TaskMode, readonly LifecycleStage[]> = {
   structured: ["prd", "tech_spec", "plan", "implementation", "pr", "pr_review", "closing"],
   one_shot: ["one_shot", "implementation", "pr", "pr_review", "closing"],

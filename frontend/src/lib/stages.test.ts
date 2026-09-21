@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { lifecycleOf, stageIndex, stageLabel, stageState } from "@/lib/stages";
+import { asLifecycleStage, lifecycleOf, stageIndex, stageLabel, stageState } from "@/lib/stages";
 import { makePullRequest, makeTask } from "@/test/wails-mock";
 
 describe("lifecycleOf", () => {
@@ -52,6 +52,21 @@ describe("stageLabel", () => {
     expect(stageLabel("pr")).toBe("PR");
     expect(stageLabel("pr_review")).toBe("PR review");
     expect(stageLabel("closing")).toBe("Closing");
+  });
+});
+
+describe("asLifecycleStage", () => {
+  it.each(["prd", "tech_spec", "plan", "one_shot", "implementation", "pr", "pr_review", "closing"])(
+    "keeps the %s stage",
+    (stage) => {
+      expect(asLifecycleStage(stage)).toBe(stage);
+    },
+  );
+
+  it("is null for a value that is no stage of the track", () => {
+    expect(asLifecycleStage("step:1")).toBeNull();
+    expect(asLifecycleStage("review")).toBeNull();
+    expect(asLifecycleStage("")).toBeNull();
   });
 });
 
