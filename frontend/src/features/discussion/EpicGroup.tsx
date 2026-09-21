@@ -7,7 +7,7 @@ import { outcomeLabel } from "@/features/discussion/discussion-status";
 import { messageOf } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 import type { DiscussionSummary } from "@/lib/wails";
-import { publishEpic, retryPublish } from "@/store/actions";
+import { publishEpic } from "@/store/actions";
 
 export interface EpicGroupProps {
   discussion: DiscussionSummary;
@@ -60,36 +60,20 @@ export function EpicGroup({ discussion, group }: EpicGroupProps) {
             >{`${epic.repository}#${epic.number}`}</ExternalLink>
           </span>
         )}
-        {/* The issue of the epic is recorded as soon as it exists: a failure
-            of a later step of the run stands beside the outcome, and the run
-            is offered again from here. */}
-        {epic.publishError !== "" ? (
-          <span className="flex items-center gap-1.5 text-xs text-destructive">
-            {epic.publishError}
+        {/* A failure of the run reads on the card of the draft it stopped at,
+            the epic's own card included: the footer only offers the run. */}
+        {epic.outcome === "" && epic.publishError === "" && (
+          <>
             <Button
               variant="outline"
               size="xs"
-              onClick={() => void retryPublish(discussion.id, epic.id)}
+              disabled={!epic.canPublish || publishing}
+              onClick={() => void publish()}
             >
-              Retry the epic
+              Publish epic
             </Button>
-          </span>
-        ) : (
-          epic.outcome === "" && (
-            <>
-              <Button
-                variant="outline"
-                size="xs"
-                disabled={!epic.canPublish || publishing}
-                onClick={() => void publish()}
-              >
-                Publish epic
-              </Button>
-              {epic.hint !== "" && (
-                <span className="text-xs text-muted-foreground">{epic.hint}</span>
-              )}
-            </>
-          )
+            {epic.hint !== "" && <span className="text-xs text-muted-foreground">{epic.hint}</span>}
+          </>
         )}
         {error !== null && (
           <span role="alert" className="min-w-0 truncate text-xs text-destructive" title={error}>

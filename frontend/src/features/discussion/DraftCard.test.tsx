@@ -229,6 +229,18 @@ describe("DraftCard", () => {
     expect(api.retryPublish).toHaveBeenCalledWith("discussion-1", "draft-1");
   });
 
+  it("says it is publishing while the run carries the draft", () => {
+    card({ decision: "approved", publishing: true }, { status: "publishing" });
+
+    expect(screen.getByText("Publishing…")).toBeInTheDocument();
+  });
+
+  it("does not say publishing for an approved epic nobody asked to publish", () => {
+    card({ kind: "epic", decision: "approved", publishing: false }, { status: "publishing" });
+
+    expect(screen.queryByText("Publishing…")).not.toBeInTheDocument();
+  });
+
   it("says what the draft waits for", () => {
     card({ waits: "Invoices", decision: "approved" });
 

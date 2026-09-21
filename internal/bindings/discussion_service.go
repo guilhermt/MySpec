@@ -18,7 +18,6 @@ import (
 type DiscussionService struct {
 	flow         *discussionflow.Service
 	discussions  *discussion.Service
-	boards       *board.Service
 	repositories *repository.Service
 	log          *slog.Logger
 }
@@ -27,14 +26,12 @@ type DiscussionService struct {
 func NewDiscussionService(
 	flow *discussionflow.Service,
 	discussions *discussion.Service,
-	boards *board.Service,
 	repositories *repository.Service,
 	log *slog.Logger,
 ) *DiscussionService {
 	return &DiscussionService{
 		flow:         flow,
 		discussions:  discussions,
-		boards:       boards,
 		repositories: repositories,
 		log:          log,
 	}

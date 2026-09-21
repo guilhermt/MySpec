@@ -176,7 +176,7 @@ Um rascunho que **depende de outro rascunho ainda não publicado** pode ser apro
 
 Um rascunho publicado mostra no cartão `Created` ou `Updated`, a referência `dono/nome#número` com o link e a data. Depois de uma publicação, o produto relê o board, para que a visão e as tasks vejam os cards novos.
 
-Uma publicação que **falha** não perde nada: o rascunho continua aprovado, com a razão no cartão, e a discussão espera pelo usuário. A razão aparece mesmo quando a issue já foi criada e um passo seguinte falhou: ela fica ao lado de `Created` ou `Updated`. **Retry**, no cartão, repete a corrida, pulando o que já foi feito, e **Retry the epic**, no grupo, faz o mesmo pela corrida de um épico; uma publicação de épico que falhou no meio continua de onde parou, sem criar nada duas vezes. As razões:
+Uma publicação que **falha** não perde nada: o rascunho continua aprovado e a discussão espera pelo usuário. A razão e **Retry** ficam no cartão do rascunho em que a corrida parou e, quando quem parou foi o épico, no cartão dele, no topo do grupo. A razão aparece mesmo quando a issue já foi criada e um passo seguinte falhou: ela fica ao lado de `Created` ou `Updated`. **Retry** repete a corrida, pulando o que já foi feito; em qualquer cartão de um épico ele repete a corrida inteira, que continua de onde parou, sem criar nada duas vezes. As razões:
 
 | Situação | Mensagem |
 |---|---|
@@ -188,7 +188,10 @@ Uma publicação que **falha** não perde nada: o rascunho continua aprovado, co
 | Issue inexistente ou ilegível | `The issue <dono/nome#número> doesn't exist or this account can't read it.` |
 | Repositório inexistente ou sem escrita | `The repository <dono/nome> doesn't exist or this account can't write to it.` |
 | Limite de taxa | `GitHub's rate limit was reached. It resets at <hora>.` |
+| Passo que o GitHub aceitou e o app não conseguiu gravar | `Couldn't record the publication: <o que o banco disse>` |
 | Qualquer outra | `Couldn't write to GitHub: <o que o gh disse>` |
+
+No passo que o app não conseguiu gravar, **Retry** grava o que o GitHub já aceitou e continua de onde parou, sem criar a issue de novo.
 
 Um rascunho também não publica quando o board nunca foi lido, com `The board hasn't been read yet.`, quando o card de uma atualização não é do board, com `The card this update rewrites is not one of the board.`, e quando o repositório do rascunho saiu do board, com `<dono/nome> is no longer managed by the board.`
 

@@ -847,6 +847,11 @@ export interface Draft {
     "publishedAt": string;
 
     /**
+     * the draft is in the publication under way
+     */
+    "publishing": boolean;
+
+    /**
      * why the last publication failed; "" otherwise
      */
     "publishError": string;

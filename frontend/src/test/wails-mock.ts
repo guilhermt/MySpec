@@ -974,6 +974,7 @@ export function makeDraft(overrides: Partial<Draft> = {}): Draft {
     published: false,
     publishedAt: "",
     publishError: "",
+    publishing: false,
     waits: "",
     canPublish: false,
     hint: "",

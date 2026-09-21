@@ -37,12 +37,7 @@ func (s *Service) publishDue(stored discussion.Discussion) {
 	if s.isClosed() {
 		return
 	}
-	drafts := s.discussions.Drafts(stored.ID)
-	targets, cycle := orderTargets(s.dueTargets(stored.ID, drafts))
-	if cycle {
-		s.log.Warn("discussion drafts have a dependency cycle", "discussion", stored.ID)
-	}
-	if len(targets) == 0 {
+	if len(s.dueTargets(stored.ID)) == 0 {
 		return
 	}
 
@@ -50,31 +45,34 @@ func (s *Service) publishDue(stored discussion.Discussion) {
 
 	s.mu.Lock()
 	started := !l.publishing
-	l.publishing = true
+	if started {
+		l.publishing = true
+	}
 	s.mu.Unlock()
 
 	if !started {
 		return
 	}
 	s.notify(stored.ID)
-	go s.publishRun(stored, targets)
+	go s.publishRun(stored)
 }
 
 // dueTargets are the drafts of a run: the cards of their own that can go now,
 // and the epics the user asked for that still have something to write. An epic
 // the discussion moved past is no longer the one the user asked to publish, so
-// the request goes. A stalled draft is left out of every run.
-func (s *Service) dueTargets(id string, drafts []discussion.Draft) []discussion.Draft {
-	stalled := s.stalledDrafts(id)
+// the request goes. A draft whose publication only memory holds says so like
+// any other failure, and no run takes it.
+func (s *Service) dueTargets(id string) []discussion.Draft {
+	drafts := s.effectiveDrafts(id, s.discussions.Drafts(id))
 
 	var targets []discussion.Draft
 	for _, draft := range drafts {
-		if !stalled[draft.ID] && looseDue(draft, drafts) {
+		if looseDue(draft, drafts) {
 			targets = append(targets, draft)
 		}
 	}
 	for _, epic := range drafts {
-		if epic.Kind != discussion.KindEpic || stalled[epic.ID] || !s.epicRequested(id, epic.ID) {
+		if epic.Kind != discussion.KindEpic || !s.epicRequested(id, epic.ID) {
 			continue
 		}
 		if !epicDue(epic, drafts) {
@@ -85,7 +83,9 @@ func (s *Service) dueTargets(id string, drafts []discussion.Draft) []discussion.
 			targets = append(targets, epic)
 		}
 		for _, member := range membersOf(epic, drafts) {
-			if stalled[member.ID] {
+			// A card whose epic is already on GitHub is published on its own,
+			// and the loop above answers for it.
+			if standsAlone(member, drafts) {
 				continue
 			}
 			if member.Decision == discussion.DecisionApproved && !member.Published.Done() {
@@ -96,40 +96,46 @@ func (s *Service) dueTargets(id string, drafts []discussion.Draft) []discussion.
 	return targets
 }
 
-// stalledDrafts are the drafts of a discussion no run takes: GitHub took a
-// step of their publication and the app could not write down that it did, so
-// only the user says whether it goes again.
-func (s *Service) stalledDrafts(id string) map[string]bool {
-	l := s.lockOf(id)
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	return maps.Clone(l.stalled)
-}
-
-// stall keeps a draft out of every run, because nothing the app recorded says
-// what its publication already did.
-func (s *Service) stall(id, draftID string) {
-	l := s.lockOf(id)
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	l.stalled[draftID] = true
-}
-
-// unstall takes the drafts of a retry back into the runs: sending them again
-// is what the user just asked for.
-func (s *Service) unstall(id string, draftIDs ...string) {
-	l := s.lockOf(id)
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	for _, draftID := range draftIDs {
-		delete(l.stalled, draftID)
+// runningSet are the drafts of a run by id, which is what the interface reads
+// to say that this draft is the one being written.
+func runningSet(targets []discussion.Draft) map[string]bool {
+	running := make(map[string]bool, len(targets))
+	for _, target := range targets {
+		running[target.ID] = true
 	}
+	return running
+}
+
+// unrecordedDrafts are the publications of a discussion that only memory
+// holds, by draft id.
+func (s *Service) unrecordedDrafts(id string) map[string]unrecorded {
+	l := s.lockOf(id)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return maps.Clone(l.unrecorded)
+}
+
+// keepUnrecorded takes what GitHub did for a draft into memory, because no
+// write of the app held it.
+func (s *Service) keepUnrecorded(id, draftID string, entry unrecorded) {
+	l := s.lockOf(id)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	l.unrecorded[draftID] = entry
+}
+
+// dropUnrecorded forgets what memory held for a draft, once the store has it.
+func (s *Service) dropUnrecorded(id, draftID string) {
+	l := s.lockOf(id)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	delete(l.unrecorded, draftID)
 }
 
 // looseDue reports whether a card of its own goes to GitHub now: the user
@@ -139,8 +145,22 @@ func looseDue(draft discussion.Draft, drafts []discussion.Draft) bool {
 	if draft.PublishError != "" {
 		return false
 	}
-	return draft.Loose() && draft.Decision == discussion.DecisionApproved &&
+	return standsAlone(draft, drafts) && draft.Decision == discussion.DecisionApproved &&
 		!draft.Published.Done() && waits(draft, drafts) == ""
+}
+
+// standsAlone reports whether a card is published on its own: it belongs to no
+// epic draft of the discussion, or to one that is already on GitHub and that
+// it only becomes a sub-issue of.
+func standsAlone(draft discussion.Draft, drafts []discussion.Draft) bool {
+	if !draft.IsCard() {
+		return false
+	}
+	if draft.Loose() {
+		return true
+	}
+	epic, ok := epicDraftOf(draft, drafts)
+	return ok && epic.Kind == discussion.KindEpic && epic.Published.Done()
 }
 
 // epicDue reports whether the run of an epic the user asked for still has
@@ -215,20 +235,32 @@ func writtenFirst(draft discussion.Draft) []string {
 	return before
 }
 
-// publishRun writes the targets on GitHub, one after the other, and leaves the
-// discussion with what it wrote. The context is its own: the evaluation that
-// asked for the run is long over by the time GitHub answers.
-func (s *Service) publishRun(stored discussion.Discussion, targets []discussion.Draft) {
+// publishRun writes on GitHub what the discussion is due to write, one draft
+// after the other, and leaves it with what it wrote. The drafts of the run are
+// read here, with the publication of the discussion already this run's: a run
+// that ended between the evaluation and this one wrote some of them. The
+// context is its own: the evaluation that asked for the run is long over by
+// the time GitHub answers.
+func (s *Service) publishRun(stored discussion.Discussion) {
 	ctx, cancel := context.WithTimeout(context.Background(), publishTimeout)
 	defer cancel()
 
-	p := s.publicationOf(stored)
-	p.write(ctx, targets)
+	targets, cycle := orderTargets(s.dueTargets(stored.ID))
+	if cycle {
+		s.log.Warn("discussion drafts have a dependency cycle", "discussion", stored.ID)
+	}
 
 	l := s.lockOf(stored.ID)
 
 	s.mu.Lock()
-	l.publishing = false
+	l.running = runningSet(targets)
+	s.mu.Unlock()
+
+	p := s.publicationOf(stored)
+	p.write(ctx, targets)
+
+	s.mu.Lock()
+	l.publishing, l.running = false, nil
 	s.mu.Unlock()
 
 	if p.wrote {
@@ -273,10 +305,13 @@ func (s *Service) publicationOf(stored discussion.Discussion) *publication {
 	return p
 }
 
-// write publishes the targets in order. A failure stops the run: the targets
-// after it stay as they are, approved and with nothing to say, and the next
-// run takes them.
+// write publishes the targets in order, and writes nothing when another run
+// left none. A failure stops the run: the targets after it stay as they are,
+// approved and with nothing to say, and the next run takes them.
 func (p *publication) write(ctx context.Context, targets []discussion.Draft) {
+	if len(targets) == 0 {
+		return
+	}
 	if err := p.lookup(ctx, targets); err != nil {
 		p.fail(ctx, targets[0], err)
 		return
@@ -628,16 +663,37 @@ func (p *publication) record(ctx context.Context, target *discussion.Draft,
 }
 
 // fail records why the publication of a draft stopped, which is what the user
-// retries from. A failure the app cannot write down leaves the draft stalled:
-// nothing says GitHub already took a step of it, so only the user sends it
-// again.
+// retries from. A write that does not happen either leaves the publication in
+// memory alone: the state answers with it, and Retry writes it down before
+// sending the draft again. Closing the app before that loses it, and the next
+// run publishes the draft a second time.
 func (p *publication) fail(ctx context.Context, target discussion.Draft, err error) {
 	message := p.report(target, err)
-	if setErr := p.service.discussions.SetPublishError(ctx, p.stored.ID, target.ID, message); setErr != nil {
+	if writeErr := p.recordFailure(ctx, target, err, message); writeErr != nil {
 		p.service.log.Error("record discussion publication failed", "discussion", p.stored.ID,
-			"draft", target.ID, "issue", target.Reference(), "error", setErr)
-		p.service.stall(p.stored.ID, target.ID)
+			"draft", target.ID, "issue", target.Reference(), "error", writeErr)
+		p.service.keepUnrecorded(p.stored.ID, target.ID,
+			unrecorded{Published: target.Published, Error: message})
 	}
+}
+
+// recordFailure writes what the user retries from. A step GitHub took goes to
+// the store with the message in one write, so that what GitHub already has is
+// never lost to the failure of it: the retry takes the run up at the next
+// step instead of creating the issue again.
+func (p *publication) recordFailure(ctx context.Context, target discussion.Draft,
+	err error, message string,
+) error {
+	var record *recordError
+	if !errors.As(err, &record) {
+		return p.service.discussions.SetPublishError(ctx, p.stored.ID, target.ID, message)
+	}
+	published := target.Published
+	return p.service.discussions.RecordPublication(ctx, p.stored.ID, target.ID,
+		func(d *discussion.Draft) {
+			d.Published = published
+			d.PublishError = message
+		})
 }
 
 // report says in the log why the publication of a draft stopped and answers
@@ -651,8 +707,6 @@ func (p *publication) report(target discussion.Draft, err error) string {
 		return step.message
 	}
 
-	p.service.log.Error("record discussion publication failed", "discussion", p.stored.ID,
-		"draft", target.ID, "issue", target.Reference(), "error", err)
 	// What the user reads is what the store said, without the step the app
 	// names itself by.
 	var record *recordError

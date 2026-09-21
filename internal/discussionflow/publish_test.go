@@ -315,13 +315,13 @@ func TestACycleIsBrokenByPositionAndTheDependencyItDropsIsAWarning(t *testing.T)
 	}
 }
 
-func TestAStepTheStoreDidNotRecordStopsTheRunAndARetryDoesNotCreateTwice(t *testing.T) {
+func TestAStepTheStoreDidNotRecordIsKeptWithItsErrorAndARetryTakesTheRunUp(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
 	id := f.start(cardKey)
 	f.record(id, looseArtifact)
-	f.store.failWrites(1, errStore, onTheBoard)
+	f.store.failWrites(1, errStore, onTheIssue)
 
 	f.approve(id, "invoice-report")
 
@@ -329,8 +329,58 @@ func TestAStepTheStoreDidNotRecordStopsTheRunAndARetryDoesNotCreateTwice(t *test
 	if failed.PublishError != "Couldn't record the publication: store: the write did not happen" {
 		t.Errorf("the card says %q about the publication the store did not take", failed.PublishError)
 	}
-	if failed.Published.Done() {
-		t.Errorf("the card was published to the last step anyway")
+	if failed.Published.Outcome != discussion.OutcomeCreated || failed.Published.NodeID == "" {
+		t.Fatalf("the issue GitHub created was not kept with the error: %+v", failed.Published)
+	}
+
+	if err := f.flow.Retry(t.Context(), id, "invoice-report"); err != nil {
+		t.Fatalf("retry the card: %v", err)
+	}
+
+	f.waitPublished(id, "invoice-report")
+	if got := count(f.gh.made(), "createIssue:R_acme/api:Invoice report"); got != 1 {
+		t.Errorf("the issue was created %d times, want once", got)
+	}
+	if !slices.Contains(f.gh.made(), "addProjectItem:PVT_1:I_Invoice report") {
+		t.Errorf("the retry did not take the run up at the step after the issue: %v", f.gh.made())
+	}
+}
+
+func TestAPublicationNoWriteHeldIsRetriedIntoTheStoreBeforeItGoesOn(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := f.start(cardKey)
+	f.record(id, looseArtifact)
+	f.store.failWrites(2, errStore, onTheIssue)
+
+	f.approve(id, "invoice-report")
+	f.waitFor(id, func(s discussionflow.State) bool { return !s.Publishing && len(f.gh.made()) > 0 })
+
+	card := f.draftState(id, "invoice-report").Draft
+	if card.PublishError != "Couldn't record the publication: store: the write did not happen" {
+		t.Fatalf("the card says %q about the publication no write held", card.PublishError)
+	}
+	if card.Published.NodeID == "" {
+		t.Fatalf("the state forgot the issue GitHub created: %+v", card.Published)
+	}
+
+	// The card has a failure of its own, so no run takes it: an evaluation
+	// that finds it writes nothing more for it.
+	made := len(f.gh.made())
+	f.write(id, discussion.DocumentFile, "# Invoices\n")
+	f.flow.Check(id)
+	f.waitFor(id, func(s discussionflow.State) bool { return s.HasDocument })
+	if got := len(f.gh.made()); got != made {
+		t.Errorf("the card was sent to GitHub again: %v", f.gh.made())
+	}
+
+	f.store.failWrites(1, errStore, onTheIssue)
+	if err := f.flow.Retry(t.Context(), id, "invoice-report"); !errors.Is(err, errStore) {
+		t.Fatalf("retry while the store still refuses: got %v, want %v", err, errStore)
+	}
+	if got := f.draftState(id, "invoice-report").Draft; got.Published.NodeID == "" || got.PublishError == "" {
+		t.Fatalf("the retry that failed lost the publication: %+v", got.Published)
 	}
 
 	if err := f.flow.Retry(t.Context(), id, "invoice-report"); err != nil {
@@ -343,42 +393,93 @@ func TestAStepTheStoreDidNotRecordStopsTheRunAndARetryDoesNotCreateTwice(t *test
 	}
 }
 
-func TestAFailureTheStoreDidNotRecordLeavesTheCardForTheUserToSendAgain(t *testing.T) {
+func TestADiscussionWhoseDraftNoWriteHeldCannotBeArchived(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
 	id := f.start(cardKey)
 	f.record(id, looseArtifact)
-	f.store.failWrites(2, errStore, func(d discussion.Draft) bool {
-		return onTheBoard(d) || d.PublishError != ""
-	})
+	f.store.failWrites(2, errStore, onTheIssue)
 
 	f.approve(id, "invoice-report")
-	f.waitFor(id, func(s discussionflow.State) bool { return !s.Publishing && len(f.gh.made()) > 0 })
 
-	card := f.draftState(id, "invoice-report").Draft
-	if card.PublishError != "" || card.Published.Done() {
-		t.Fatalf("the card says %q and is published: %t, want neither recorded",
-			card.PublishError, card.Published.Done())
+	state := f.waitFor(id, func(s discussionflow.State) bool {
+		return s.Status == discussionflow.StatusPublishFailed
+	})
+	if state.CanArchive || state.ArchiveHint != "A publication failed." {
+		t.Errorf("the discussion says %q about the archive and can be archived: %t",
+			state.ArchiveHint, state.CanArchive)
+	}
+}
+
+func TestOnlyTheDraftsOfTheRunUnderWaySayTheyArePublishing(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := f.start(cardKey)
+	f.record(id, wideEpicArtifact)
+	if err := f.flow.SetDraftEpic(t.Context(), id, "invoice-report", ""); err != nil {
+		t.Fatalf("take the card out of the epic: %v", err)
+	}
+	for _, draftID := range []string{"invoices-epic", "invoice-schema", "export-invoices"} {
+		f.approve(id, draftID)
+	}
+	release := f.gh.holdCreate("Invoice report")
+	t.Cleanup(release)
+
+	f.approve(id, "invoice-report")
+	f.waitFor(id, func(s discussionflow.State) bool { return s.Publishing })
+
+	if !f.draftState(id, "invoice-report").Publishing {
+		t.Errorf("the card the run is writing does not say it is publishing")
+	}
+	if epic := f.draftState(id, "invoices-epic"); epic.Publishing || !epic.CanPublish {
+		t.Errorf("the epic nobody asked to publish says it is publishing: %t, ready: %t",
+			epic.Publishing, epic.CanPublish)
+	}
+	for _, draftID := range []string{"invoice-schema", "export-invoices"} {
+		if f.draftState(id, draftID).Publishing {
+			t.Errorf("the card %s, outside the run, says it is publishing", draftID)
+		}
 	}
 
-	// The card is out of the runs, so an evaluation that finds it approved
-	// writes nothing more for it.
-	made := len(f.gh.made())
-	f.write(id, discussion.DocumentFile, "# Invoices\n")
-	f.flow.Check(id)
-	f.waitFor(id, func(s discussionflow.State) bool { return s.HasDocument })
-	if got := len(f.gh.made()); got != made {
-		t.Errorf("the stalled card was sent to GitHub again: %v", f.gh.made())
-	}
-
-	if err := f.flow.Retry(t.Context(), id, "invoice-report"); err != nil {
-		t.Fatalf("retry the card: %v", err)
-	}
-
+	release()
 	f.waitPublished(id, "invoice-report")
-	if got := count(f.gh.made(), "createIssue:R_acme/api:Invoice report"); got != 1 {
-		t.Errorf("the issue was created %d times, want once", got)
+}
+
+func TestACardOfAnEpicAlreadyPublishedGoesOnItsOwnUnderIt(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := f.start(cardKey)
+	f.record(id, wideEpicArtifact)
+	if err := f.flow.SetDraftEpic(t.Context(), id, "invoice-report", ""); err != nil {
+		t.Fatalf("take the card out of the epic: %v", err)
+	}
+	for _, draftID := range []string{"invoices-epic", "invoice-schema", "export-invoices"} {
+		f.approve(id, draftID)
+	}
+	if err := f.flow.PublishEpic(t.Context(), id, "invoices-epic"); err != nil {
+		t.Fatalf("publish epic: %v", err)
+	}
+	epic := f.waitPublished(id, "invoices-epic")
+	f.waitPublished(id, "export-invoices")
+
+	if err := f.flow.SetDraftEpic(t.Context(), id, "invoice-report", "invoices-epic"); err != nil {
+		t.Fatalf("move the card into the published epic: %v", err)
+	}
+	f.approve(id, "invoice-report")
+
+	card := f.waitPublished(id, "invoice-report")
+	if !card.Published.ParentSet {
+		t.Errorf("the card was published outside the epic it belongs to")
+	}
+	want := "addSubIssue:" + epic.Published.NodeID + ":I_Invoice report"
+	if !slices.Contains(f.gh.made(), want) {
+		t.Errorf("the card did not become a sub-issue of the published epic: %v", f.gh.made())
+	}
+	if state := f.state(id); !state.CanArchive {
+		t.Errorf("the discussion says %q and cannot be archived", state.ArchiveHint)
 	}
 }
 
@@ -389,8 +490,8 @@ func TestAModuleTheBoardNoLongerHasIsAWarningTheCardSaysOnce(t *testing.T) {
 	id := f.start(cardKey)
 	f.record(id, strings.Replace(looseArtifact, "- Repository: acme/api", "- Repository: acme/api\n- Module: Billing", 1))
 	f.boards.forgetModuleOption("Billing")
-	// The last step of the publication is the one the store refuses, so the
-	// retry takes the card up again after the module was settled.
+	// The last write of the publication is the one the store refuses, after
+	// the module of the card was settled with its warning.
 	f.store.failWrites(1, errStore, func(d discussion.Draft) bool { return d.Published.Done() })
 
 	f.approve(id, "invoice-report")
@@ -407,9 +508,9 @@ func TestAModuleTheBoardNoLongerHasIsAWarningTheCardSaysOnce(t *testing.T) {
 	}
 }
 
-// onTheBoard says the write is the one that puts the issue of a draft on the
-// board, which is the step every card takes after its issue exists.
-func onTheBoard(d discussion.Draft) bool { return d.Published.ItemID != "" }
+// onTheIssue says the write is the one that records the issue GitHub created
+// for a draft, which a second run must never create again.
+func onTheIssue(d discussion.Draft) bool { return d.Published.Outcome != "" }
 
 // issueCalls are the writes of a run that are about issues, which is where the
 // order of a publication is read.

@@ -1155,6 +1155,7 @@ type Draft struct {
 	URL          string `json:"url"`
 	Published    bool   `json:"published"` // every step of the publication is done
 	PublishedAt  string `json:"publishedAt"`
+	Publishing   bool   `json:"publishing"`   // the draft is in the publication under way
 	PublishError string `json:"publishError"` // why the last publication failed; "" otherwise
 	// Waits is the title of the draft this one waits for before it is
 	// published; "" when it waits for none.

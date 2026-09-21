@@ -113,14 +113,24 @@ type discussionLock struct {
 	// documentRevision is bumped every time the document changes, so that the
 	// interface reads it again.
 	documentRevision int
-	// publishing says a run that writes on GitHub is under way.
+	// publishing says a run that writes on GitHub is under way, and running
+	// are the drafts of it.
 	publishing bool
+	running    map[string]bool
 	// epicsRequested are the epics the user asked to publish and that have not
 	// finished yet.
 	epicsRequested map[string]bool
-	// stalled are the drafts whose publication GitHub took and the app could
-	// not write down. No run takes them again until the user retries.
-	stalled map[string]bool
+	// unrecorded are the publications no write of the app could hold, by draft
+	// id: what the state answers with until a retry writes them down.
+	unrecorded map[string]unrecorded
+}
+
+// unrecorded is what GitHub did for one draft and the store could not keep:
+// the publication as the run left it and the sentence the user reads about it.
+// It lives only in memory, so a restart before the retry loses it.
+type unrecorded struct {
+	Published discussion.Publication
+	Error     string
 }
 
 // New builds a Service from deps.
@@ -203,7 +213,7 @@ func (s *Service) lockOf(id string) *discussionLock {
 
 	l, ok := s.locks[id]
 	if !ok {
-		l = &discussionLock{epicsRequested: map[string]bool{}, stalled: map[string]bool{}}
+		l = &discussionLock{epicsRequested: map[string]bool{}, unrecorded: map[string]unrecorded{}}
 		s.locks[id] = l
 	}
 	return l

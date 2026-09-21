@@ -1,6 +1,7 @@
 package discussionflow
 
 import (
+	"maps"
 	"slices"
 
 	"github.com/guilhermt/myspec/internal/discussion"
@@ -49,6 +50,8 @@ type DraftState struct {
 	// Hint is why an epic can't be published, or why a card of a discarded
 	// epic goes nowhere.
 	Hint string
+	// Publishing says the draft is in the publication under way.
+	Publishing bool
 }
 
 // State is everything the app knows about a discussion: what it recorded, the
@@ -81,7 +84,6 @@ func (s *Service) State(id string) (State, bool) {
 	if !ok {
 		return State{}, false
 	}
-	drafts := s.discussions.Drafts(id)
 	sum, open := s.sessions.Summary(sessionKey(id))
 
 	l := s.lockOf(id)
@@ -89,7 +91,6 @@ func (s *Service) State(id string) (State, bool) {
 	s.mu.Lock()
 	state := State{
 		Discussion:       stored,
-		Drafts:           draftStates(drafts),
 		Session:          sum,
 		SessionOpen:      open,
 		UnreadableDrafts: l.unreadable,
@@ -97,11 +98,34 @@ func (s *Service) State(id string) (State, bool) {
 		DocumentRevision: l.documentRevision,
 		Publishing:       l.publishing,
 	}
+	running := maps.Clone(l.running)
 	s.mu.Unlock()
 
+	drafts := s.effectiveDrafts(id, s.discussions.Drafts(id))
+	state.Drafts = draftStates(drafts, running)
 	state.Status = status(state)
 	state.CanArchive, state.ArchiveHint = canArchive(drafts)
 	return state, true
+}
+
+// effectiveDrafts are the drafts as the app knows them: what it recorded, with
+// what a publication left it unable to record on top. A step GitHub took and
+// no write held lives only in memory, so everything derived from the drafts
+// reads it from there until a retry writes it down.
+func (s *Service) effectiveDrafts(id string, drafts []discussion.Draft) []discussion.Draft {
+	entries := s.unrecordedDrafts(id)
+	if len(entries) == 0 {
+		return drafts
+	}
+	for i := range drafts {
+		entry, ok := entries[drafts[i].ID]
+		if !ok {
+			continue
+		}
+		drafts[i].Published = entry.Published
+		drafts[i].PublishError = entry.Error
+	}
+	return drafts
 }
 
 // status is the state a discussion is shown in. The conversation comes first:
@@ -137,11 +161,12 @@ func pending(d discussion.Draft) bool {
 	return !d.Published.Done() && (d.Decision == discussion.DecisionNone || d.Decision == discussion.DecisionApproved)
 }
 
-// draftStates is every draft with what can be done to it now.
-func draftStates(drafts []discussion.Draft) []DraftState {
+// draftStates is every draft with what can be done to it now, with running
+// saying which of them the publication under way writes.
+func draftStates(drafts []discussion.Draft, running map[string]bool) []DraftState {
 	states := make([]DraftState, 0, len(drafts))
 	for _, draft := range drafts {
-		state := DraftState{Draft: draft}
+		state := DraftState{Draft: draft, Publishing: running[draft.ID]}
 		if draft.Kind == discussion.KindEpic {
 			state.CanPublish, state.Hint = epicReady(draft, drafts)
 		} else {
@@ -159,7 +184,7 @@ func draftStates(drafts []discussion.Draft) []DraftState {
 // published: the first dependency of the discussion that is neither published
 // nor discarded.
 func waits(draft discussion.Draft, drafts []discussion.Draft) string {
-	if !draft.Loose() || draft.Decision != discussion.DecisionApproved || draft.Published.Done() {
+	if !standsAlone(draft, drafts) || draft.Decision != discussion.DecisionApproved || draft.Published.Done() {
 		return ""
 	}
 	for _, dependency := range draft.Dependencies {

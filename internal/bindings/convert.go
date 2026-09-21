@@ -1768,6 +1768,7 @@ func fromDraft(
 		Number:       d.Published.Number,
 		URL:          d.Published.URL,
 		Published:    d.Published.Done(),
+		Publishing:   state.Publishing,
 		PublishError: d.PublishError,
 		Waits:        state.Waits,
 		CanPublish:   state.CanPublish,

@@ -367,7 +367,7 @@ func (a *App) options(
 				a.reviewFlow, a.prReviews, a.pulls, a.worktrees, editor.Open, log,
 			)),
 			application.NewService(bindings.NewDiscussionService(
-				a.discussionFlow, a.discussions, boards, repositories, log,
+				a.discussionFlow, a.discussions, repositories, log,
 			)),
 			application.NewService(bindings.NewAttentionService(a.attention)),
 		},

@@ -166,14 +166,18 @@ func (s *Service) Retry(ctx context.Context, id, draftID string) error {
 		}
 		epic, inEpic := epicRunOf(draft, drafts)
 		if !inEpic {
-			s.unstall(id, draftID)
+			if err := s.writeUnrecorded(ctx, id, draftID); err != nil {
+				return err
+			}
 			return s.discussions.SetPublishError(ctx, id, draftID, "")
 		}
 		run := epicRun(epic, drafts)
+		if err := s.writeUnrecorded(ctx, id, run...); err != nil {
+			return err
+		}
 		if err := s.discussions.ClearPublishErrors(ctx, id, run); err != nil {
 			return err
 		}
-		s.unstall(id, run...)
 		s.requestEpic(id, epic.ID)
 		return nil
 	})
@@ -184,11 +188,38 @@ func (s *Service) Retry(ctx context.Context, id, draftID string) error {
 	return nil
 }
 
+// writeUnrecorded persists what a publication left only in memory, which is
+// what a retry starts from: with it in the store, the run takes the draft up
+// at the step after the one GitHub already took. An entry is forgotten only
+// once the write held it.
+func (s *Service) writeUnrecorded(ctx context.Context, id string, draftIDs ...string) error {
+	entries := s.unrecordedDrafts(id)
+	for _, draftID := range draftIDs {
+		entry, ok := entries[draftID]
+		if !ok {
+			continue
+		}
+		err := s.discussions.RecordPublication(ctx, id, draftID, func(d *discussion.Draft) {
+			d.Published = entry.Published
+			d.PublishError = ""
+		})
+		if err != nil {
+			return err
+		}
+		s.dropUnrecorded(id, draftID)
+	}
+	return nil
+}
+
 // epicRunOf is the epic a draft is published with: the draft itself when it is
-// one, or the epic of a card when that epic is a draft of the discussion.
+// one, or the epic of a card when that epic is a draft of the discussion that
+// goes to GitHub with it.
 func epicRunOf(draft discussion.Draft, drafts []discussion.Draft) (discussion.Draft, bool) {
 	if draft.Kind == discussion.KindEpic {
 		return draft, true
+	}
+	if standsAlone(draft, drafts) {
+		return discussion.Draft{}, false
 	}
 	return epicDraftOf(draft, drafts)
 }

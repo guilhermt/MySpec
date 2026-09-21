@@ -20,7 +20,6 @@ import { DependencyList } from "@/features/discussion/DependencyList";
 import { DraftDiff } from "@/features/discussion/DraftDiff";
 import {
   dependencyLabel,
-  isPublishing,
   kindLabel,
   outcomeLabel,
   refKey,
@@ -168,7 +167,6 @@ export function DraftCard({ discussion, draft }: DraftCardProps) {
     (each) => asDraftKind(each.kind) === "epic" && each.id !== draft.id,
   );
   const moduleOptions = discussion.moduleOptions ?? [];
-  const publishing = isPublishing(draft, discussion.drafts ?? [], discussion.status);
 
   return (
     <article
@@ -215,7 +213,7 @@ export function DraftCard({ discussion, draft }: DraftCardProps) {
         )}
         {draft.outcome === "" &&
           draft.publishError === "" &&
-          (publishing ? (
+          (draft.publishing ? (
             <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" />
               Publishing…

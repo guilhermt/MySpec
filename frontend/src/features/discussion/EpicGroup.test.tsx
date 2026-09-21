@@ -90,7 +90,8 @@ describe("EpicGroup", () => {
 
     const section = screen.getByRole("region", { name: "Epic Invoices" });
     expect(section).toHaveTextContent("Couldn't write to GitHub: gh: the board said no");
-    await user.click(within(section).getByRole("button", { name: "Retry the epic" }));
+    expect(within(section).getAllByRole("button", { name: "Retry" })).toHaveLength(1);
+    await user.click(within(section).getByRole("button", { name: "Retry" }));
 
     expect(api.retryPublish).toHaveBeenCalledWith("discussion-1", "epic-1");
   });

@@ -2246,6 +2246,24 @@ func TestFromDiscussionsCarriesEveryDraftWithWhatTheReadingKnows(t *testing.T) {
 	}
 }
 
+func TestFromDiscussionsMarksTheDraftsOfThePublicationUnderWay(t *testing.T) {
+	t.Parallel()
+
+	states := discussionDrafts()
+	states[1].Publishing = true
+	state := discussionState(discussionflow.StatusPublishing, states...)
+
+	got := convertDiscussion(state, discussionReading(), true, nil)
+
+	publishing := make([]bool, len(got.Drafts))
+	for i, draft := range got.Drafts {
+		publishing[i] = draft.Publishing
+	}
+	if diff := cmp.Diff([]bool{false, true, false}, publishing); diff != "" {
+		t.Errorf("publishing (-want +got):\n%s", diff)
+	}
+}
+
 func TestFromDiscussionsCarriesTheBoardTheModuleAndTheSituations(t *testing.T) {
 	t.Parallel()
 

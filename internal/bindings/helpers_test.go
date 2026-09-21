@@ -475,7 +475,7 @@ func newFixture(t *testing.T) *fixture {
 		f.reviewFlow, f.prReviews, f.pullRequests, f.worktrees, f.editor.open, log,
 	)
 	f.discussionSvc = bindings.NewDiscussionService(
-		f.discussionFlow, f.discussions, f.boards, f.repositories, log,
+		f.discussionFlow, f.discussions, f.repositories, log,
 	)
 	return f
 }

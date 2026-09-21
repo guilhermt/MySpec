@@ -203,6 +203,26 @@ func TestCreateIssueSaysWhatGitHubRefusedTheMutationWith(t *testing.T) {
 	}
 }
 
+func TestAMutationThatWasPerformedNextToAnErrorEntryAnswersWithTheIssue(t *testing.T) {
+	t.Parallel()
+	r, _ := runner(t, map[string]ghtest.Reply{"api": {
+		Stdout: `{"data":{"createIssue":{"issue":{"id":"I_1","number":7,"title":"Export invoices",` +
+			`"url":"https://github.com/acme/web/issues/7","repository":{"id":"R_1"}}}},` +
+			`"errors":[{"type":"SERVICE_UNAVAILABLE","message":"Something went wrong while executing your query."}]}`,
+		Stderr: "gh: Something went wrong while executing your query.",
+		Exit:   1,
+	}})
+
+	got, err := r.CreateIssue(t.Context(), "R_1", "Export invoices", "body")
+	if err != nil {
+		t.Fatalf("CreateIssue() = %v, want nil", err)
+	}
+	want := gh.IssueNode{ID: "I_1", Number: 7, Title: "Export invoices", URL: "https://github.com/acme/web/issues/7", RepositoryID: "R_1"}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("CreateIssue() mismatch (-want +got):\n%s", diff)
+	}
+}
+
 func TestUpdateIssueRewritesTheTitleAndTheBody(t *testing.T) {
 	t.Parallel()
 	r, fake := runner(t, map[string]ghtest.Reply{"api": {Stdout: `{"data":{"updateIssue":{"issue":{"id":"I_1"}}}}`}})

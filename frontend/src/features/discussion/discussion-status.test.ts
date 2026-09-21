@@ -7,7 +7,6 @@ import {
   discussionStatusTone,
   draftsSummary,
   epicGroups,
-  isPublishing,
   kindLabel,
   looseDrafts,
   outcomeLabel,
@@ -154,69 +153,6 @@ describe("dependencyLabel and waitsLabel", () => {
 
   it("says what holds a draft back", () => {
     expect(waitsLabel(makeDraft({ waits: "The epic" }))).toBe("Waits for The epic");
-  });
-});
-
-describe("isPublishing", () => {
-  const loose = makeDraft({ id: "draft-1", decision: "approved" });
-
-  it("says nothing while no run is under way", () => {
-    expect(isPublishing(loose, [loose], "deciding")).toBe(false);
-  });
-
-  it("leaves out a draft the user did not approve, and one already written", () => {
-    const undecided = makeDraft({ id: "draft-1", decision: "" });
-    const written = makeDraft({ id: "draft-1", decision: "approved", outcome: "created" });
-
-    expect(isPublishing(undecided, [undecided], "publishing")).toBe(false);
-    expect(isPublishing(written, [written], "publishing")).toBe(false);
-  });
-
-  it("takes a draft of its own once it waits for nothing", () => {
-    const waiting = makeDraft({ id: "draft-1", decision: "approved", waits: "The epic" });
-
-    expect(isPublishing(loose, [loose], "publishing")).toBe(true);
-    expect(isPublishing(waiting, [waiting], "publishing")).toBe(false);
-  });
-
-  it("takes a card of an epic with the run of its epic", () => {
-    const member = makeDraft({
-      id: "draft-2",
-      decision: "approved",
-      epic: makeDraftRef({ draft: "epic-1", title: "Invoices" }),
-    });
-    const ready = makeDraft({ id: "epic-1", kind: "epic", decision: "approved" });
-    const written = makeDraft({ id: "epic-1", kind: "epic", outcome: "created" });
-    const held = makeDraft({
-      id: "epic-1",
-      kind: "epic",
-      decision: "approved",
-      hint: "Approve or discard every card of the epic.",
-    });
-    const failed = makeDraft({
-      id: "epic-1",
-      kind: "epic",
-      decision: "approved",
-      publishError: "gh: rate limited",
-    });
-
-    expect(isPublishing(member, [ready, member], "publishing")).toBe(true);
-    expect(isPublishing(member, [written, member], "publishing")).toBe(true);
-    expect(isPublishing(member, [held, member], "publishing")).toBe(false);
-    expect(isPublishing(member, [failed, member], "publishing")).toBe(false);
-  });
-
-  it("takes an epic when nothing holds it back", () => {
-    const ready = makeDraft({ id: "epic-1", kind: "epic", decision: "approved" });
-    const held = makeDraft({
-      id: "epic-1",
-      kind: "epic",
-      decision: "approved",
-      hint: "Approve the epic.",
-    });
-
-    expect(isPublishing(ready, [ready], "publishing")).toBe(true);
-    expect(isPublishing(held, [held], "publishing")).toBe(false);
   });
 });
 
