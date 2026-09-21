@@ -17,6 +17,8 @@ function same(left: readonly unknown[], right: readonly unknown[]): boolean {
 
 /** AutoScroll is what the conversation needs to follow, or offer to follow, the end. */
 export interface AutoScroll {
+  /** atBottom is true while the user is reading the end of the conversation. */
+  atBottom: boolean;
   /** hasNew is true when something arrived while the user was reading further up. */
   hasNew: boolean;
   scrollToBottom: () => void;
@@ -24,16 +26,23 @@ export interface AutoScroll {
 
 /**
  * useAutoScroll keeps the end of the conversation in view while the user is
- * already there, and never steals the scroll away from someone reading back:
- * for them the arrival only lights up the pill.
+ * there, whatever makes the conversation grow, and never moves the scroll away
+ * from someone reading further up: for them an arrival only sets hasNew.
  */
 export function useAutoScroll(
   ref: RefObject<HTMLElement | null>,
+  contentRef: RefObject<HTMLElement | null>,
   deps: readonly unknown[],
 ): AutoScroll {
   const [hasNew, setHasNew] = useState(false);
-  const atBottom = useRef(true);
+  const [atBottom, setAtBottom] = useState(true);
+  const atBottomRef = useRef(true);
   const previous = useRef(deps);
+
+  const markAtBottom = useCallback((value: boolean) => {
+    atBottomRef.current = value;
+    setAtBottom(value);
+  }, []);
 
   useEffect(() => {
     const element = ref.current;
@@ -41,14 +50,33 @@ export function useAutoScroll(
       return;
     }
     const onScroll = () => {
-      atBottom.current = atBottomOf(element);
-      if (atBottom.current) {
+      const bottom = atBottomOf(element);
+      markAtBottom(bottom);
+      if (bottom) {
         setHasNew(false);
       }
     };
     element.addEventListener("scroll", onScroll, { passive: true });
     return () => element.removeEventListener("scroll", onScroll);
-  }, [ref]);
+  }, [ref, markAtBottom]);
+
+  // Growth that no dep captures, like Markdown rendering late or the viewport
+  // shrinking under a taller composer, must still keep the reader at the end.
+  useEffect(() => {
+    const element = ref.current;
+    const content = contentRef.current;
+    if (element === null || content === null) {
+      return;
+    }
+    const observer = new ResizeObserver(() => {
+      if (atBottomRef.current) {
+        toBottom(element);
+      }
+    });
+    observer.observe(element);
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, [ref, contentRef]);
 
   const scrollToBottom = useCallback(() => {
     const element = ref.current;
@@ -56,9 +84,9 @@ export function useAutoScroll(
       return;
     }
     toBottom(element);
-    atBottom.current = true;
+    markAtBottom(true);
     setHasNew(false);
-  }, [ref]);
+  }, [ref, markAtBottom]);
 
   // The effect runs on every render and compares the values itself, so the
   // caller can pass the lengths and the streaming text as a plain array.
@@ -71,12 +99,12 @@ export function useAutoScroll(
     if (element === null) {
       return;
     }
-    if (atBottom.current) {
+    if (atBottomRef.current) {
       toBottom(element);
     } else {
       setHasNew(true);
     }
   });
 
-  return { hasNew, scrollToBottom };
+  return { atBottom, hasNew, scrollToBottom };
 }

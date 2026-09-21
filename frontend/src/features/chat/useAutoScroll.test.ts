@@ -40,11 +40,45 @@ function makeScroller(): Scroller {
   };
 }
 
-function mount(element: HTMLElement) {
+function mount(element: HTMLElement, content: HTMLElement = document.createElement("div")) {
   const ref = { current: element };
-  return renderHook(({ deps }: { deps: readonly unknown[] }) => useAutoScroll(ref, deps), {
-    initialProps: { deps: [0] as readonly unknown[] },
-  });
+  const contentRef = { current: content };
+  return renderHook(
+    ({ deps }: { deps: readonly unknown[] }) => useAutoScroll(ref, contentRef, deps),
+    { initialProps: { deps: [0] as readonly unknown[] } },
+  );
+}
+
+/**
+ * observedResizes records what the hook watches, which the global stub never
+ * reports on, and lets the test say when those elements changed size.
+ */
+function observedResizes() {
+  const callbacks: ResizeObserverCallback[] = [];
+  const targets: Element[] = [];
+  const original = globalThis.ResizeObserver;
+  vi.stubGlobal(
+    "ResizeObserver",
+    class implements ResizeObserver {
+      constructor(callback: ResizeObserverCallback) {
+        callbacks.push(callback);
+      }
+      observe(target: Element): void {
+        targets.push(target);
+      }
+      unobserve(): void {}
+      disconnect(): void {}
+    },
+  );
+  const resize = () => {
+    for (const callback of callbacks) {
+      callback([], {} as ResizeObserver);
+    }
+  };
+  const restore = () => {
+    vi.stubGlobal("ResizeObserver", original);
+  };
+  return { targets, resize, restore };
 }
 
 describe("useAutoScroll", () => {
@@ -103,10 +137,81 @@ describe("useAutoScroll", () => {
     expect(result.current.hasNew).toBe(false);
   });
 
+  it("knows whether the reader is at the end", () => {
+    const scroller = makeScroller();
+    const { result } = mount(scroller.element);
+    expect(result.current.atBottom).toBe(true);
+
+    scroller.scrollTop(0);
+    expect(result.current.atBottom).toBe(false);
+
+    scroller.scrollTop(END);
+    expect(result.current.atBottom).toBe(true);
+
+    scroller.scrollTop(0);
+    act(() => {
+      result.current.scrollToBottom();
+    });
+    expect(result.current.atBottom).toBe(true);
+  });
+
+  it("reports nothing new when the reader scrolls up and nothing arrives", () => {
+    const scroller = makeScroller();
+    const { result } = mount(scroller.element);
+
+    scroller.scrollTop(0);
+
+    expect(result.current.hasNew).toBe(false);
+    expect(result.current.atBottom).toBe(false);
+  });
+
+  it("watches the size of the scroller and of the conversation", () => {
+    const { targets, restore } = observedResizes();
+    try {
+      const scroller = makeScroller();
+      const content = document.createElement("div");
+      mount(scroller.element, content);
+
+      expect(targets).toEqual([scroller.element, content]);
+    } finally {
+      restore();
+    }
+  });
+
+  it("keeps the reader at the end when the conversation changes size", () => {
+    const { resize, restore } = observedResizes();
+    try {
+      const scroller = makeScroller();
+      mount(scroller.element);
+
+      act(resize);
+
+      expect(scroller.scrollTo).toHaveBeenCalledWith({ top: HEIGHT });
+    } finally {
+      restore();
+    }
+  });
+
+  it("leaves the scroll alone when the conversation changes size above the reader", () => {
+    const { resize, restore } = observedResizes();
+    try {
+      const scroller = makeScroller();
+      mount(scroller.element);
+
+      scroller.scrollTop(0);
+      act(resize);
+
+      expect(scroller.scrollTo).not.toHaveBeenCalled();
+    } finally {
+      restore();
+    }
+  });
+
   it("does nothing without an element to scroll", () => {
     const ref = { current: null };
+    const contentRef = { current: null };
     const { result, rerender } = renderHook(
-      ({ deps }: { deps: readonly unknown[] }) => useAutoScroll(ref, deps),
+      ({ deps }: { deps: readonly unknown[] }) => useAutoScroll(ref, contentRef, deps),
       { initialProps: { deps: [0] as readonly unknown[] } },
     );
 

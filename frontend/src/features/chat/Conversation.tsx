@@ -11,7 +11,7 @@ import { PermissionCard } from "@/features/chat/entries/PermissionCard";
 import { QuestionCard } from "@/features/chat/entries/QuestionCard";
 import { UserMessage } from "@/features/chat/entries/UserMessage";
 import { groupEntries } from "@/features/chat/group";
-import { NewMessagesPill } from "@/features/chat/NewMessagesPill";
+import { ScrollToBottomButton } from "@/features/chat/ScrollToBottomButton";
 import type { SessionState } from "@/features/chat/session";
 import { useAutoScroll } from "@/features/chat/useAutoScroll";
 import type { Entry } from "@/lib/wails";
@@ -73,25 +73,32 @@ export interface ConversationProps {
 export function Conversation({ taskId, stage, session }: ConversationProps) {
   const transcript = useTranscript(taskId, stage);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
 
   const entries = transcript?.entries ?? NO_ENTRIES;
   const pending = transcript?.pending ?? NO_ENTRIES;
   // The text of the last entry is what grows while the agent writes.
   const streaming = entries.at(-1)?.assistant?.text ?? "";
-  const { hasNew, scrollToBottom } = useAutoScroll(scrollRef, [
+  const { atBottom, hasNew, scrollToBottom } = useAutoScroll(scrollRef, contentRef, [
     entries.length,
     pending.length,
     streaming,
   ]);
   const items = useMemo(() => groupEntries(entries), [entries]);
-  const loading = transcript === null || transcript.status === "loading";
+  // A reload keeps what is on screen, so the scroll has nothing to lose.
+  const loading =
+    transcript === null ||
+    (transcript.status === "loading" && entries.length === 0 && pending.length === 0);
 
   return (
     <div className="relative min-h-0 flex-1">
       {/* Positioned, so what is absolutely placed inside the conversation, sr-only
           included, stays within its scroll instead of reaching the panel around it. */}
       <div ref={scrollRef} data-slot="conversation" className="relative h-full overflow-y-auto">
-        <div className="mx-auto flex w-full max-w-[58.5rem] flex-col gap-4 px-6 py-6">
+        <div
+          ref={contentRef}
+          className="mx-auto flex w-full max-w-[58.5rem] flex-col gap-4 px-6 py-6"
+        >
           {loading ? (
             <Loading />
           ) : (
@@ -120,7 +127,7 @@ export function Conversation({ taskId, stage, session }: ConversationProps) {
           )}
         </div>
       </div>
-      {hasNew && <NewMessagesPill onClick={scrollToBottom} />}
+      {!atBottom && <ScrollToBottomButton hasNew={hasNew} onClick={scrollToBottom} />}
     </div>
   );
 }

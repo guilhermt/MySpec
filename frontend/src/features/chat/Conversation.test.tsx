@@ -15,6 +15,30 @@ function loading(): Record<string, TranscriptState> {
   return { "task-1|prd": { status: "loading", entries: [], pending: [], buffered: [] } };
 }
 
+function reloading(entries: Entry[]): Record<string, TranscriptState> {
+  return { "task-1|prd": { status: "loading", entries, pending: [], buffered: [] } };
+}
+
+/**
+ * scrollUp gives the scroller of the conversation the geometry jsdom does not
+ * lay out, puts the reader at the top and returns the scrollTo it now uses.
+ */
+function scrollUp(container: HTMLElement) {
+  const scroller = container.querySelector('[data-slot="conversation"]');
+  if (scroller === null) {
+    throw new Error("the conversation has no scrolling region");
+  }
+  const scrollTo = vi.fn<(options: ScrollToOptions) => void>();
+  Object.defineProperty(scroller, "scrollHeight", { value: 1000, configurable: true });
+  Object.defineProperty(scroller, "clientHeight", { value: 100, configurable: true });
+  Object.defineProperty(scroller, "scrollTop", { value: 0, configurable: true });
+  Object.defineProperty(scroller, "scrollTo", { value: scrollTo, configurable: true });
+  act(() => {
+    scroller.dispatchEvent(new Event("scroll"));
+  });
+  return scrollTo;
+}
+
 function withTask(overrides: Partial<TaskSummary> = {}) {
   return makeState({ tasks: [makeTask(overrides)] });
 }
@@ -34,6 +58,7 @@ describe("Conversation", () => {
     });
 
     expect(screen.queryByText("Add a login screen")).not.toBeInTheDocument();
+    expect(document.querySelector('[data-slot="skeleton"]')).toBeInTheDocument();
   });
 
   it("shows the conversation of the stage it was given", () => {
@@ -219,16 +244,7 @@ describe("Conversation", () => {
         ui: { transcripts: ready([makeEntry("user")]) },
       },
     );
-    const scroller = container.querySelector('[data-slot="conversation"]');
-    if (scroller === null) {
-      throw new Error("the conversation has no scrolling region");
-    }
-    const scrollTo = vi.fn<(options: ScrollToOptions) => void>();
-    Object.defineProperty(scroller, "scrollHeight", { value: 1000, configurable: true });
-    Object.defineProperty(scroller, "scrollTo", { value: scrollTo, configurable: true });
-    act(() => {
-      scroller.dispatchEvent(new Event("scroll"));
-    });
+    const scrollTo = scrollUp(container);
 
     act(() => {
       useAppStore
@@ -240,6 +256,43 @@ describe("Conversation", () => {
 
     expect(scrollTo).toHaveBeenCalledWith({ top: 1000 });
     expect(screen.queryByRole("button", { name: "New messages" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Scroll to bottom" })).not.toBeInTheDocument();
+  });
+
+  it("offers no way back while the reader is at the end", () => {
+    renderWithStore(<Conversation stage="prd" taskId="task-1" session={makeTask()} />, {
+      state: withTask(),
+      ui: { transcripts: ready([makeEntry("user")]) },
+    });
+
+    expect(screen.queryByRole("button", { name: "Scroll to bottom" })).not.toBeInTheDocument();
+  });
+
+  it("offers a way back to the end even when nothing new arrived", async () => {
+    const { container, user } = renderWithStore(
+      <Conversation stage="prd" taskId="task-1" session={makeTask()} />,
+      {
+        state: withTask(),
+        ui: { transcripts: ready([makeEntry("user")]) },
+      },
+    );
+    const scrollTo = scrollUp(container);
+
+    expect(screen.queryByText("New messages")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Scroll to bottom" }));
+
+    expect(scrollTo).toHaveBeenCalledWith({ top: 1000 });
+    expect(screen.queryByRole("button", { name: "Scroll to bottom" })).not.toBeInTheDocument();
+  });
+
+  it("keeps the conversation on screen while the session is loaded again", () => {
+    renderWithStore(<Conversation stage="prd" taskId="task-1" session={makeTask()} />, {
+      state: withTask(),
+      ui: { transcripts: reloading([makeEntry("user")]) },
+    });
+
+    expect(screen.getByText("Add a login screen")).toBeInTheDocument();
+    expect(document.querySelector('[data-slot="skeleton"]')).not.toBeInTheDocument();
   });
 
   it("keeps what is positioned inside the conversation within its scroll", () => {

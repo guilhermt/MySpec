@@ -158,7 +158,12 @@ export function TaskView({ taskId }: TaskViewProps) {
             )
           ) : (
             <>
-              <Conversation taskId={task.id} stage={task.stage} session={task} />
+              <Conversation
+                key={`conversation:${task.stage}`}
+                taskId={task.id}
+                stage={task.stage}
+                session={task}
+              />
               <PlanProblemsNotice task={task} />
               <Composer taskId={task.id} stage={task.stage} session={task} />
             </>
