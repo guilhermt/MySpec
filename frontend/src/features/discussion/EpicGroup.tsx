@@ -67,7 +67,7 @@ export function EpicGroup({ discussion, group }: EpicGroupProps) {
             <Button
               variant="outline"
               size="xs"
-              disabled={!epic.canPublish || publishing}
+              disabled={!epic.canPublish || epic.publishing || publishing}
               onClick={() => void publish()}
             >
               Publish epic

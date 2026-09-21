@@ -393,6 +393,38 @@ func TestAPublicationNoWriteHeldIsRetriedIntoTheStoreBeforeItGoesOn(t *testing.T
 	}
 }
 
+func TestADependencyOnAPublicationOnlyMemoryHoldsIsRecordedAnyway(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := f.start(cardKey)
+	f.record(id, draftsArtifact)
+	// GitHub took every step of the card the other one depends on: the write
+	// that closes its publication and the write of the failure with it are the
+	// ones the store refuses, so only memory knows it is published.
+	f.store.failWrites(2, errStore, func(d discussion.Draft) bool { return !d.Published.At.IsZero() })
+
+	f.approve(id, "invoice-schema")
+	f.waitFailed(id, "invoice-schema")
+	if got := f.draftState(id, "invoice-schema").Draft; !got.Published.Done() {
+		t.Fatalf("the publication memory holds did not get to the end: %+v", got.Published)
+	}
+
+	f.approve(id, "export-invoices")
+
+	card := f.waitPublished(id, "export-invoices")
+	if len(card.Dependencies) != 1 || !card.Dependencies[0].Linked {
+		t.Fatalf("the dependency of the card is %v, want it recorded on GitHub", card.Dependencies)
+	}
+	want := "addBlockedBy:I_Export invoices as CSV:I_acme/web#12"
+	if !slices.Contains(f.gh.made(), want) {
+		t.Errorf("the dependency of the card did not go to GitHub: %v", f.gh.made())
+	}
+	if len(card.Warnings) != 0 {
+		t.Errorf("the card was warned about a dependency it kept: %v", card.Warnings)
+	}
+}
+
 func TestADiscussionWhoseDraftNoWriteHeldCannotBeArchived(t *testing.T) {
 	t.Parallel()
 
@@ -428,11 +460,12 @@ func TestOnlyTheDraftsOfTheRunUnderWaySayTheyArePublishing(t *testing.T) {
 	t.Cleanup(release)
 
 	f.approve(id, "invoice-report")
-	f.waitFor(id, func(s discussionflow.State) bool { return s.Publishing })
+	// The discussion says it is publishing before the run reads its targets,
+	// so the card the run writes is what says the run is under way.
+	f.waitFor(id, func(s discussionflow.State) bool {
+		return s.Publishing && f.draftStateIn(s, "invoice-report").Publishing
+	})
 
-	if !f.draftState(id, "invoice-report").Publishing {
-		t.Errorf("the card the run is writing does not say it is publishing")
-	}
 	if epic := f.draftState(id, "invoices-epic"); epic.Publishing || !epic.CanPublish {
 		t.Errorf("the epic nobody asked to publish says it is publishing: %t, ready: %t",
 			epic.Publishing, epic.CanPublish)

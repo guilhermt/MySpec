@@ -596,12 +596,18 @@ func (f *fixture) waitFailed(id, draftID string) discussion.Draft {
 
 // draftIn is one draft of a state, empty when the discussion has no such one.
 func (f *fixture) draftIn(state discussionflow.State, draftID string) discussion.Draft {
+	return f.draftStateIn(state, draftID).Draft
+}
+
+// draftStateIn is one draft of a state with what can be done to it, empty when
+// the discussion has no such one.
+func (f *fixture) draftStateIn(state discussionflow.State, draftID string) discussionflow.DraftState {
 	for _, d := range state.Drafts {
 		if d.Draft.ID == draftID {
-			return d.Draft
+			return d
 		}
 	}
-	return discussion.Draft{}
+	return discussionflow.DraftState{}
 }
 
 // waitFor waits for the state of a discussion to say what the test expects,

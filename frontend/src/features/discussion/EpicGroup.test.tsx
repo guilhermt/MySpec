@@ -58,6 +58,12 @@ describe("EpicGroup", () => {
     expect(screen.getByText("Decide every card of the epic first.")).toBeInTheDocument();
   });
 
+  it("holds Publish epic while the run of the epic is under way", () => {
+    group({ canPublish: true, publishing: true });
+
+    expect(screen.getByRole("button", { name: "Publish epic" })).toBeDisabled();
+  });
+
   it("shows the refusal of a publication where the button is", async () => {
     vi.mocked(api.publishEpic).mockRejectedValueOnce(new Error("the epic has a dependency cycle"));
     const { user } = group({ canPublish: true });

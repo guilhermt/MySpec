@@ -117,6 +117,17 @@ func (s *Service) unrecordedDrafts(id string) map[string]unrecorded {
 	return maps.Clone(l.unrecorded)
 }
 
+// hasUnrecorded reports whether memory holds a publication of a discussion
+// that no write of the app could keep.
+func (s *Service) hasUnrecorded(id string) bool {
+	l := s.lockOf(id)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return len(l.unrecorded) > 0
+}
+
 // keepUnrecorded takes what GitHub did for a draft into memory, because no
 // write of the app held it.
 func (s *Service) keepUnrecorded(id, draftID string, entry unrecorded) {
@@ -286,12 +297,14 @@ type publication struct {
 }
 
 // publicationOf is the run of a discussion, with the board it writes cards for
-// as it is now.
+// as it is now. The drafts are the ones the app knows, a publication only
+// memory holds included, so what a target points at is as published for the
+// run as it is for the interface.
 func (s *Service) publicationOf(stored discussion.Discussion) *publication {
 	p := &publication{
 		service: s,
 		stored:  stored,
-		drafts:  s.discussions.Drafts(stored.ID),
+		drafts:  s.effectiveDrafts(stored.ID, s.discussions.Drafts(stored.ID)),
 		repos:   map[string]string{},
 		issues:  map[string]gh.IssueNode{},
 	}
@@ -554,6 +567,9 @@ func (p *publication) parent(ctx context.Context, target *discussion.Draft) erro
 	}
 	var parentID string
 	if ref.IsDraft() {
+		// The first step of a publication records NodeID and the last one At,
+		// so the epic names the issue GitHub created for it from the moment it
+		// exists, whether the publication of the epic got to the end or not.
 		epic, found := draftOf(p.drafts, ref.Draft)
 		if !found || epic.Published.NodeID == "" {
 			return newStepError(msgEpicNotPublished)
@@ -669,12 +685,27 @@ func (p *publication) record(ctx context.Context, target *discussion.Draft,
 // run publishes the draft a second time.
 func (p *publication) fail(ctx context.Context, target discussion.Draft, err error) {
 	message := p.report(target, err)
-	if writeErr := p.recordFailure(ctx, target, err, message); writeErr != nil {
+	writeErr := p.recordFailure(ctx, target, err, message)
+	if writeErr == nil {
+		return
+	}
+	p.reportUnwritten(target, err, writeErr)
+	p.service.keepUnrecorded(p.stored.ID, target.ID,
+		unrecorded{Published: target.Published, Error: message})
+}
+
+// reportUnwritten says in the log which write of a failure did not hold: the
+// one that keeps a step GitHub took, named by the issue it took it on, or the
+// one that keeps the sentence alone of a step GitHub refused.
+func (p *publication) reportUnwritten(target discussion.Draft, err, writeErr error) {
+	var record *recordError
+	if errors.As(err, &record) {
 		p.service.log.Error("record discussion publication failed", "discussion", p.stored.ID,
 			"draft", target.ID, "issue", target.Reference(), "error", writeErr)
-		p.service.keepUnrecorded(p.stored.ID, target.ID,
-			unrecorded{Published: target.Published, Error: message})
+		return
 	}
+	p.service.log.Error("record discussion publish error failed", "discussion", p.stored.ID,
+		"draft", target.ID, "error", writeErr)
 }
 
 // recordFailure writes what the user retries from. A step GitHub took goes to

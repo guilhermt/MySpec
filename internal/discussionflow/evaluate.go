@@ -31,8 +31,11 @@ func (s *Service) evaluate(ctx context.Context, id string) {
 	}
 	// A run writes the drafts it publishes without the lock of the discussion,
 	// so nothing reads the artifact over it; the check at the end of the run
-	// reads it right after.
-	if sum.Idle && !s.publishing(l) {
+	// reads it right after. While memory holds a publication the store could
+	// not, the artifact is not read either, or the reconciliation would
+	// replace or drop the draft under it; the Retry that writes the entry down
+	// calls Check, which reads the artifact then.
+	if sum.Idle && !s.publishing(l) && !s.hasUnrecorded(id) {
 		s.readDrafts(ctx, stored)
 	}
 	s.publishDue(stored)

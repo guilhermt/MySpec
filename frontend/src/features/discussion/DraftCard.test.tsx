@@ -230,13 +230,13 @@ describe("DraftCard", () => {
   });
 
   it("says it is publishing while the run carries the draft", () => {
-    card({ decision: "approved", publishing: true }, { status: "publishing" });
+    card({ decision: "approved", publishing: true });
 
     expect(screen.getByText("Publishing…")).toBeInTheDocument();
   });
 
   it("does not say publishing for an approved epic nobody asked to publish", () => {
-    card({ kind: "epic", decision: "approved", publishing: false }, { status: "publishing" });
+    card({ kind: "epic", decision: "approved", publishing: false });
 
     expect(screen.queryByText("Publishing…")).not.toBeInTheDocument();
   });

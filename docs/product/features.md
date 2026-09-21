@@ -174,9 +174,9 @@ Um rascunho que **depende de outro rascunho ainda não publicado** pode ser apro
 
 Épico e dependências são registrados pelos recursos nativos do GitHub, issue pai com sub-issues e a relação de bloqueio; o produto nunca escreve a convenção no corpo dos cards. Uma dependência que o GitHub recusa é deixada de lado, com o aviso no cartão, e o card é publicado de todo modo. Um módulo que deixou de ser opção do board também é um aviso, não uma falha.
 
-Um rascunho publicado mostra no cartão `Created` ou `Updated`, a referência `dono/nome#número` com o link e a data. Depois de uma publicação, o produto relê o board, para que a visão e as tasks vejam os cards novos.
+Enquanto a corrida escreve um rascunho, o cartão dele diz `Publishing…`; os rascunhos que a corrida não carrega continuam dizendo o que esperam. Um rascunho publicado mostra no cartão `Created` ou `Updated`, a referência `dono/nome#número` com o link e a data. Depois de uma publicação, o produto relê o board, para que a visão e as tasks vejam os cards novos.
 
-Uma publicação que **falha** não perde nada: o rascunho continua aprovado e a discussão espera pelo usuário. A razão e **Retry** ficam no cartão do rascunho em que a corrida parou e, quando quem parou foi o épico, no cartão dele, no topo do grupo. A razão aparece mesmo quando a issue já foi criada e um passo seguinte falhou: ela fica ao lado de `Created` ou `Updated`. **Retry** repete a corrida, pulando o que já foi feito; em qualquer cartão de um épico ele repete a corrida inteira, que continua de onde parou, sem criar nada duas vezes. As razões:
+Uma publicação que **falha** não perde nada: o rascunho continua aprovado e a discussão espera pelo usuário. A razão e **Retry** ficam no cartão em que a corrida parou, o do épico inclusive, no topo do grupo. A razão aparece mesmo quando a issue já foi criada e um passo seguinte falhou: ela fica ao lado de `Created` ou `Updated`. **Retry** repete a corrida pulando o que já foi feito, e o **Retry** do cartão em que a corrida de um épico parou repete a corrida inteira do épico, que continua de onde parou, sem criar nada duas vezes. As razões:
 
 | Situação | Mensagem |
 |---|---|
