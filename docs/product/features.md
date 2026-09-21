@@ -596,6 +596,8 @@ Um review de pull request se apaga pelo seu próprio **Delete review**; ver [O r
 
 Toda sessão é uma conversa dentro do produto, com interface própria. O Claude Code roda por baixo, invisível. A conversa mostra as mensagens do usuário e do agente, as ações que o agente executa agrupadas, os cartões de permissão e de pergunta, marcadores dos eventos da task ou do review (documento escrito, etapa iniciada, review iniciado ou escrito, contexto compactado, resposta interrompida) e os erros. Tudo que o agente escreve é renderizado como Markdown, com diagramas mermaid e realce de código, em streaming.
 
+A conversa nunca rola para cima sozinha. Enquanto o usuário está no fim, ela acompanha o que chega e o texto que cresce; ela abre no fim, e recarregar a sessão mantém o que está na tela. Quando o usuário está mais acima, um botão com uma seta para baixo leva de volta ao fim: ele mostra `New messages` quando algo chegou nesse meio tempo e some quando o usuário chega ao fim.
+
 Cada etapa e cada step têm a sua conversa, e a etapa de PR tem a da pull request e a do review dela. Um step no modo `Agent` tem também a do revisor, a partir da primeira passada, e as duas ficam nas abas **Implementer** e **Reviewer**. Voltar a uma etapa retoma a conversa dela de onde ficou. Um review de pull request tem uma conversa só, de todas as passadas, que reabre com o app e acaba quando o review acaba ou é apagado. Uma discussão também tem uma conversa só, que reabre com o app, fica guardada no histórico e acaba quando a discussão é arquivada ou apagada.
 
 - **Enviar**: mensagens enviadas com o agente ocupado entram numa fila, visível na conversa, e podem ser removidas antes de sair.

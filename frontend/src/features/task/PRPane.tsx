@@ -226,7 +226,12 @@ function ClosedSummary({ pr }: { pr: PullRequest }) {
 function Chat({ taskId, pr }: { taskId: string; pr: PullRequest }) {
   return (
     <>
-      <Conversation taskId={taskId} stage={pr.sessionStage} session={pr} />
+      <Conversation
+        key={`conversation:${pr.sessionStage}`}
+        taskId={taskId}
+        stage={pr.sessionStage}
+        session={pr}
+      />
       <Composer taskId={taskId} stage={pr.sessionStage} session={pr} />
     </>
   );

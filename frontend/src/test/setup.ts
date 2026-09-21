@@ -43,6 +43,14 @@ Object.defineProperty(Element.prototype, "getAnimations", {
   configurable: true,
 });
 
+// jsdom implements no scrolling, and the conversation scrolls to its end
+// whenever an observer reports that it changed size.
+Object.defineProperty(Element.prototype, "scrollTo", {
+  value: () => {},
+  writable: true,
+  configurable: true,
+});
+
 // Only the boundary is replaced; the pure helpers of lib/wails stay real.
 vi.mock("@/lib/wails", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/wails")>()),
