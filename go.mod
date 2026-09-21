@@ -8,7 +8,7 @@ require (
 	github.com/godbus/dbus/v5 v5.2.2
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
-	github.com/wailsapp/wails/v3 v3.0.0-beta.18
+	github.com/wailsapp/wails/v3 v3.0.0-beta.23
 	golang.org/x/text v0.42.0
 	modernc.org/sqlite v1.59.0
 )
@@ -82,7 +82,6 @@ require (
 	github.com/jaypipes/ghw v0.21.3 // indirect
 	github.com/jaypipes/pcidb v1.1.1 // indirect
 	github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99 // indirect
-	github.com/jchv/go-winloader v0.0.0-20250406163304-c1995be93bd1 // indirect
 	github.com/joho/godotenv v1.5.1 // indirect
 	github.com/kevinburke/ssh_config v1.4.0 // indirect
 	github.com/klauspost/compress v1.18.3 // indirect
