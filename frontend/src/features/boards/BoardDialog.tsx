@@ -10,6 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { choicesOf, chosenCloneOf, withOption } from "@/features/boards/board-dialog";
 import { RepositoryLinkRow } from "@/features/boards/RepositoryLinkRow";
 import { messageOf } from "@/lib/errors";
@@ -191,6 +192,7 @@ function BoardChoices({ title, url, boardId, preview, onOpenChange }: BoardChoic
     () =>
       new Set((preview.statuses ?? []).filter((status) => status.final).map((status) => status.id)),
   );
+  const [newCardStatus, setNewCardStatus] = useState(preview.newCardStatus);
   const [options, setOptions] = useState<BoardRepositoryOption[]>(preview.repositories ?? []);
   const [chosenClones, setChosenClones] = useState<Record<string, string>>({});
   const [typed, setTyped] = useState("");
@@ -199,6 +201,7 @@ function BoardChoices({ title, url, boardId, preview, onOpenChange }: BoardChoic
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const statusId = useId();
+  const newCardId = useId();
 
   const toggleFinal = (id: string, checked: boolean) => {
     setFinals((current) => {
@@ -233,6 +236,7 @@ function BoardChoices({ title, url, boardId, preview, onOpenChange }: BoardChoic
       finalStatuses: (preview.statuses ?? [])
         .map((status) => status.id)
         .filter((id) => finals.has(id)),
+      newCardStatus: preview.hasStatus ? newCardStatus : "",
       repositories: choicesOf(options, chosenClones),
     };
     try {
@@ -280,6 +284,28 @@ function BoardChoices({ title, url, boardId, preview, onOpenChange }: BoardChoic
             </li>
           ))}
         </ul>
+        <div className="flex flex-col gap-2">
+          <p id={newCardId} className="text-sm font-medium">
+            Status for new cards
+          </p>
+          <RadioGroup
+            aria-labelledby={newCardId}
+            value={newCardStatus}
+            onValueChange={(value) => setNewCardStatus(String(value))}
+            className="flex flex-wrap gap-x-6 gap-y-2"
+          >
+            <label className="flex cursor-pointer items-center gap-2 text-sm">
+              <RadioGroupItem value="" aria-labelledby={`${newCardId}-none`} />
+              <span id={`${newCardId}-none`}>None</span>
+            </label>
+            {(preview.statuses ?? []).map((status, index) => (
+              <label key={status.id} className="flex cursor-pointer items-center gap-2 text-sm">
+                <RadioGroupItem value={status.id} aria-labelledby={`${newCardId}-${index}`} />
+                <span id={`${newCardId}-${index}`}>{status.name}</span>
+              </label>
+            ))}
+          </RadioGroup>
+        </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel

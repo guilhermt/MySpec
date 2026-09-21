@@ -32,11 +32,11 @@ describe("modelStagesOf", () => {
     ]);
   });
 
-  it("leaves every stage of the settings to one mode or both", () => {
+  it("leaves every stage of the settings to one mode or both, but the discussion", () => {
     const stages = new Set([...modelStagesOf("structured"), ...modelStagesOf("one_shot")]);
 
-    expect(MODEL_STAGES.filter((stage) => !stages.has(stage))).toEqual([]);
-    expect(stages.size).toBe(MODEL_STAGES.length);
+    expect(MODEL_STAGES.filter((stage) => !stages.has(stage))).toEqual(["discussion"]);
+    expect(stages.size).toBe(MODEL_STAGES.length - 1);
   });
 });
 
@@ -59,6 +59,10 @@ describe("modelStageLabel", () => {
 
   it("names the One-Shot planning apart from the planning of the track", () => {
     expect(modelStageLabel("one_shot")).toBe("One-Shot planning");
+  });
+
+  it("names the discussion, which is no stage of a task", () => {
+    expect(modelStageLabel("discussion")).toBe("Discussion");
   });
 
   it("names a stage the way the track does", () => {

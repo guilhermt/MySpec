@@ -50,7 +50,7 @@ describe("useFindingText", () => {
     });
 
     expect(result.current.value).toBe("Clear the token.");
-    expect(useAppStore.getState().findingDrafts[KEY]).toEqual({
+    expect(useAppStore.getState().textDrafts[KEY]).toEqual({
       text: "Clear the token.",
       revision: 1,
     });
@@ -112,7 +112,7 @@ describe("useFindingText", () => {
     });
 
     expect(save).not.toHaveBeenCalled();
-    expect(useAppStore.getState().findingDrafts[KEY]).toBeUndefined();
+    expect(useAppStore.getState().textDrafts[KEY]).toBeUndefined();
     expect(result.current.value).toBe("The session is never closed.");
   });
 
@@ -130,7 +130,7 @@ describe("useFindingText", () => {
     });
 
     expect(result.current.value).toBe("The session is never closed.");
-    expect(useAppStore.getState().findingDrafts[KEY]).toBeUndefined();
+    expect(useAppStore.getState().textDrafts[KEY]).toBeUndefined();
     expect(save).not.toHaveBeenCalled();
   });
 
@@ -142,7 +142,7 @@ describe("useFindingText", () => {
     });
     rerender({ text: "Clear the token.", rev: 1 });
 
-    expect(useAppStore.getState().findingDrafts[KEY]).toBeUndefined();
+    expect(useAppStore.getState().textDrafts[KEY]).toBeUndefined();
     expect(result.current.value).toBe("Clear the token.");
   });
 
@@ -220,7 +220,7 @@ describe("useFindingText", () => {
     });
 
     expect(save).not.toHaveBeenCalled();
-    expect(useAppStore.getState().findingDrafts[KEY]).toBeUndefined();
+    expect(useAppStore.getState().textDrafts[KEY]).toBeUndefined();
     expect(result.current.value).toBe("The token is never cleared.");
   });
 

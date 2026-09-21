@@ -19,6 +19,8 @@ export interface CardDetailProps {
   onClose: () => void;
   /** onSelect opens another card of the board in the detail. */
   onSelect: (key: string) => void;
+  /** onDiscuss opens a discussion of this card alone. */
+  onDiscuss: () => void;
 }
 
 const LINK_CLASS = "underline-offset-4 hover:underline";
@@ -49,7 +51,7 @@ function PullRequestLink({ pr }: { pr: CardPullRequest }) {
 }
 
 /** CardDetail is everything the last reading found about one card, and Start task for it. */
-export function CardDetail({ board, card, start, onClose, onSelect }: CardDetailProps) {
+export function CardDetail({ board, card, start, onClose, onSelect, onDiscuss }: CardDetailProps) {
   const openTask = useAppStore((state) => state.openTask);
   const openArchived = useAppStore((state) => state.openArchived);
   const task = useTask(card.activeTaskId === "" ? null : card.activeTaskId);
@@ -202,7 +204,7 @@ export function CardDetail({ board, card, start, onClose, onSelect }: CardDetail
           </Button>
         </Section>
       )}
-      <StartTaskAction board={board} card={card} start={start} />
+      <StartTaskAction board={board} card={card} start={start} onDiscuss={onDiscuss} />
     </aside>
   );
 }

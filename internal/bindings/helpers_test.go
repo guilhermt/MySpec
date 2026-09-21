@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -18,6 +20,8 @@ import (
 	"github.com/guilhermt/myspec/internal/board"
 	"github.com/guilhermt/myspec/internal/claude"
 	"github.com/guilhermt/myspec/internal/claude/claudetest"
+	"github.com/guilhermt/myspec/internal/discussion"
+	"github.com/guilhermt/myspec/internal/discussionflow"
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/git"
@@ -225,35 +229,72 @@ func (g *fakeGitHub) reply(data string) {
 	g.resp, g.err = gh.Response{Data: json.RawMessage(data)}, nil
 }
 
+// offlineGH stands in for the writes of the app on GitHub: a test of the
+// bindings never reaches it, and one that does fails here instead of running
+// gh.
+type offlineGH struct{}
+
+// errOffline is what every write of offlineGH answers.
+var errOffline = errors.New("bindings_test: GitHub is not reachable in a test")
+
+func (offlineGH) LookupIssues(context.Context, []gh.IssueRef) (map[gh.IssueRef]gh.IssueNode, error) {
+	return nil, errOffline
+}
+
+func (offlineGH) LookupRepositories(context.Context, []string) (map[string]string, error) {
+	return nil, errOffline
+}
+
+func (offlineGH) CreateIssue(context.Context, string, string, string) (gh.IssueNode, error) {
+	return gh.IssueNode{}, errOffline
+}
+
+func (offlineGH) UpdateIssue(context.Context, string, string, string) error { return errOffline }
+
+func (offlineGH) AddProjectItem(context.Context, string, string) (string, error) {
+	return "", errOffline
+}
+
+func (offlineGH) SetProjectSingleSelect(context.Context, string, string, string, string) error {
+	return errOffline
+}
+
+func (offlineGH) AddSubIssue(context.Context, string, string) error { return errOffline }
+
+func (offlineGH) AddBlockedBy(context.Context, string, string) error { return errOffline }
+
 // fixture wires the services the way internal/app does, over an in-memory
 // database and a folder picker the test answers for.
 type fixture struct {
-	state        *bindings.StateService
-	repoService  *bindings.RepositoryService
-	settings     *bindings.SettingsService
-	tasks        *bindings.TaskService
-	boardService *bindings.BoardService
-	reviewSvc    *bindings.ReviewService
-	repositories *repository.Service
-	boards       *board.Service
-	github       *fakeGitHub
-	theme        *theme.Service
-	models       *models.Service
-	reviewModes  *reviewmode.Service
-	store        *store.Store
-	taskSvc      *task.Service
-	sessions     *session.Service
-	worktrees    *worktree.Service
-	reviews      *review.Service
-	flow         *flow.Service
-	pullRequests *pulls.Service
-	prReviews    *prreview.Service
-	reviewFlow   *reviewflow.Service
-	dataDir      string
-	picker       *fakePicker
-	scanRoot     string // the folder the repository scan starts at
-	editor       *fakeEditor
-	logs         *syncBuffer
+	state          *bindings.StateService
+	repoService    *bindings.RepositoryService
+	settings       *bindings.SettingsService
+	tasks          *bindings.TaskService
+	boardService   *bindings.BoardService
+	reviewSvc      *bindings.ReviewService
+	discussionSvc  *bindings.DiscussionService
+	repositories   *repository.Service
+	boards         *board.Service
+	github         *fakeGitHub
+	theme          *theme.Service
+	models         *models.Service
+	reviewModes    *reviewmode.Service
+	store          *store.Store
+	taskSvc        *task.Service
+	sessions       *session.Service
+	worktrees      *worktree.Service
+	reviews        *review.Service
+	flow           *flow.Service
+	pullRequests   *pulls.Service
+	prReviews      *prreview.Service
+	reviewFlow     *reviewflow.Service
+	discussions    *discussion.Service
+	discussionFlow *discussionflow.Service
+	dataDir        string
+	picker         *fakePicker
+	scanRoot       string // the folder the repository scan starts at
+	editor         *fakeEditor
+	logs           *syncBuffer
 
 	mu          sync.Mutex
 	identities  map[string]repository.Identity // by clone path
@@ -402,6 +443,17 @@ func newFixture(t *testing.T) *fixture {
 	})
 	t.Cleanup(f.reviewFlow.Close)
 
+	f.discussions = discussion.New(discussion.Deps{Store: st.Discussions, DataDir: f.dataDir, Log: log})
+	f.discussionFlow = discussionflow.New(discussionflow.Deps{
+		Discussions:  f.discussions,
+		Sessions:     f.sessions,
+		Boards:       f.boards,
+		Repositories: f.repositories,
+		GH:           offlineGH{},
+		Log:          log,
+	})
+	t.Cleanup(f.discussionFlow.Close)
+
 	f.models, err = models.New(t.Context(), st.Settings, log, func() {})
 	if err != nil {
 		t.Fatalf("models.New() = %v, want nil", err)
@@ -416,19 +468,26 @@ func newFixture(t *testing.T) *fixture {
 	f.settings = bindings.NewSettingsService(f.theme, f.models, f.reviewModes, f.dataDir, log)
 	f.tasks = bindings.NewTaskService(
 		f.taskSvc, f.sessions, f.flow, f.models, f.reviewModes, f.repositories, f.boards, f.editor.open,
-		f.isReview, log,
+		f.discussions.DocumentOfCard, f.hasConversation, log,
 	)
-	f.boardService = bindings.NewBoardService(f.boards, log)
+	f.boardService = bindings.NewBoardService(f.boards, f.discussions.DocumentOfCard, log)
 	f.reviewSvc = bindings.NewReviewService(
 		f.reviewFlow, f.prReviews, f.pullRequests, f.worktrees, f.editor.open, log,
+	)
+	f.discussionSvc = bindings.NewDiscussionService(
+		f.discussionFlow, f.discussions, f.repositories, log,
 	)
 	return f
 }
 
-// isReview says whether an id names a review of a pull request, the way
-// internal/app tells the conversation of a review from the one of a task.
-func (f *fixture) isReview(id string) bool {
-	_, ok := f.prReviews.Get(id)
+// hasConversation says whether an id names a review of a pull request or a
+// discussion, the way internal/app tells those conversations from the one of a
+// task.
+func (f *fixture) hasConversation(id string) bool {
+	if _, ok := f.prReviews.Get(id); ok {
+		return true
+	}
+	_, ok := f.discussions.Lookup(id)
 	return ok
 }
 
@@ -636,6 +695,9 @@ func (f *fixture) load(t *testing.T) {
 	if err := f.prReviews.Sync(t.Context()); err != nil {
 		t.Fatalf("prreview.Sync() = %v, want nil", err)
 	}
+	if err := f.discussions.Sync(t.Context()); err != nil {
+		t.Fatalf("discussion.Sync() = %v, want nil", err)
+	}
 	f.flow.Sync(t.Context())
 }
 
@@ -750,6 +812,12 @@ func (f *fixture) snapshot() bindings.State {
 		ReviewHistory: bindings.FromArchivedReviews(
 			f.prReviews.ListArchived(), f.prReviews.Passes, repositories,
 		),
+		Discussions: bindings.FromDiscussions(
+			f.discussionStates(), nil, f.boards.Get, f.boards.Stored, repositories, f.repositories.Missing,
+		),
+		DiscussionHistory: bindings.FromArchivedDiscussions(
+			f.discussions.ListArchived(), f.discussions.Drafts, repositories,
+		),
 		CloneFolder: f.repositories.CloneFolder(),
 	}
 }
@@ -765,6 +833,33 @@ func (f *fixture) reviewStates() []reviewflow.State {
 		}
 	}
 	return states
+}
+
+// discussionStates is what the app knows about every active discussion, the
+// way internal/app reads it for the snapshot.
+func (f *fixture) discussionStates() []discussionflow.State {
+	list := f.discussions.List()
+	states := make([]discussionflow.State, 0, len(list))
+	for _, stored := range list {
+		if state, ok := f.discussionFlow.State(stored.ID); ok {
+			states = append(states, state)
+		}
+	}
+	return states
+}
+
+// discussionOf returns the discussion with the given id from the current
+// state, failing the test when the state does not hold it.
+func (f *fixture) discussionOf(t *testing.T, id string) bindings.DiscussionSummary {
+	t.Helper()
+
+	for _, summary := range f.state.GetState().Discussions {
+		if summary.ID == id {
+			return summary
+		}
+	}
+	t.Fatalf("discussion %s is not in the state", id)
+	return bindings.DiscussionSummary{}
 }
 
 // logged reports whether a record with the given message was written.
@@ -825,6 +920,84 @@ func (f *fixture) seedReview(t *testing.T, repositoryID string) prreview.Review 
 		t.Fatalf("WriteFile(%s) = %v, want nil", created.ReportPath(1), err)
 	}
 	return created
+}
+
+// seedDiscussion records a discussion of the board of the fixture with the
+// drafts the agent would have written, without the conversation a real one
+// goes through: what drives a discussion belongs to internal/discussionflow.
+func (f *fixture) seedDiscussion(t *testing.T, drafts ...discussion.ParsedDraft) discussion.Discussion {
+	t.Helper()
+
+	created, err := f.discussions.Create(t.Context(), discussion.CreateParams{
+		BoardID:        testBoardID,
+		BoardTitle:     "Roadmap",
+		BoardOwner:     "acme",
+		BoardNumber:    3,
+		Title:          "Invoices",
+		Text:           "The invoices of the month.",
+		InitialContext: "# Invoices\n",
+	})
+	if err != nil {
+		t.Fatalf("discussion.Create() = %v, want nil", err)
+	}
+	if len(drafts) > 0 {
+		artifact := discussion.Artifact{Drafts: drafts}
+		if _, err = f.discussions.RecordDrafts(t.Context(), created.ID, artifact); err != nil {
+			t.Fatalf("RecordDrafts() = %v, want nil", err)
+		}
+	}
+	return created
+}
+
+// webDraft is a new card of dev/web as the agent wrote it.
+func webDraft(id, title string) discussion.ParsedDraft {
+	return discussion.ParsedDraft{
+		ID:         id,
+		Kind:       discussion.KindNew,
+		Repository: "dev/web",
+		Title:      title,
+		Body:       "What the card asks for.",
+	}
+}
+
+// discussionDocument is the understanding a seeded discussion reached, which
+// a card it published carries into the task created from it.
+const discussionDocument = "# Invoices\n\nThe invoices of the month.\n"
+
+// seedPublication records that a draft of a discussion created an issue of
+// dev/web, with the document the discussion reached on disk, which is what a
+// task created from that card starts with.
+func (f *fixture) seedPublication(t *testing.T, d discussion.Discussion, draftID string, number int) {
+	t.Helper()
+
+	err := f.discussions.RecordPublication(t.Context(), d.ID, draftID, func(draft *discussion.Draft) {
+		draft.Published = discussion.Publication{
+			Outcome: discussion.OutcomeCreated,
+			Number:  number,
+			URL:     "https://github.com/dev/web/issues/" + strconv.Itoa(number),
+			At:      time.Now().UTC(),
+		}
+	})
+	if err != nil {
+		t.Fatalf("RecordPublication() = %v, want nil", err)
+	}
+	if err = os.WriteFile(d.DocumentPath(), []byte(discussionDocument), 0o600); err != nil {
+		t.Fatalf("WriteFile(%s) = %v, want nil", d.DocumentPath(), err)
+	}
+}
+
+// draftOf returns the draft with the given id of a discussion of the state,
+// failing the test when it is not there.
+func (f *fixture) draftOf(t *testing.T, id, draftID string) bindings.Draft {
+	t.Helper()
+
+	for _, draft := range f.discussionOf(t, id).Drafts {
+		if draft.ID == draftID {
+			return draft
+		}
+	}
+	t.Fatalf("draft %s of discussion %s is not in the state", draftID, id)
+	return bindings.Draft{}
 }
 
 // seedWorktree registers a worktree for an item, the way a start would leave

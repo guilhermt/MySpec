@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   compactWait,
   compareSituations,
+  discussionSituation,
   namesPlace,
   placeLabel,
   prSituation,
@@ -19,7 +20,13 @@ import {
   waitingEntries,
 } from "@/lib/situations";
 import type { Place } from "@/lib/wails";
-import { makeReviewSummary, makeSituation, makeState, makeTask } from "@/test/wails-mock";
+import {
+  makeDiscussion,
+  makeReviewSummary,
+  makeSituation,
+  makeState,
+  makeTask,
+} from "@/test/wails-mock";
 
 function stagePlace(stage: string): Place {
   return { kind: "stage", stage, step: 0 };
@@ -35,6 +42,7 @@ function reviewerPlace(step: number): Place {
 
 const PR_PLACE: Place = { kind: "pr", stage: "", step: 0 };
 const REVIEW_PLACE: Place = { kind: "review", stage: "", step: 0 };
+const DISCUSSION_PLACE: Place = { kind: "discussion", stage: "", step: 0 };
 
 const ids = (situations: readonly { id: string }[]) => situations.map((situation) => situation.id);
 
@@ -75,6 +83,7 @@ describe("situationLabel", () => {
     ["review_report", "publish", 0, "Publish review"],
     ["review_report", "apply", 0, "Apply findings"],
     ["new_commits", "", 0, "New commits"],
+    ["drafts", "", 0, "Decide drafts"],
     ["publish_failed", "", 0, "Publish failed"],
   ])("names %s in the %s form", (kind, form, percent, label) => {
     const situation = makeSituation({ kind, form, percent, place: stepPlace(3) });
@@ -106,6 +115,7 @@ describe("placeLabel", () => {
     [reviewerPlace(2), "step 2 review"],
     [PR_PLACE, "pull request"],
     [REVIEW_PLACE, "review"],
+    [DISCUSSION_PLACE, "discussion"],
   ])("names the place %#", (place, label) => {
     expect(placeLabel(makeSituation({ place }))).toBe(label);
   });
@@ -132,6 +142,7 @@ describe("namesPlace and situationDetail", () => {
     ["findings", false],
     ["changes_review", false],
     ["merge", false],
+    ["drafts", false],
   ])("knows whether the label of %s names its place", (kind, expected) => {
     expect(namesPlace(makeSituation({ kind }))).toBe(expected);
   });
@@ -305,6 +316,49 @@ describe("waitingEntries", () => {
     ]);
   });
 
+  it("lists the situations of the discussions by the title of each", () => {
+    const withDiscussion = makeState({
+      tasks: [
+        makeTask({
+          id: "task-1",
+          name: "billing",
+          situations: [makeSituation({ id: "billing-draft", kind: "draft", place: PR_PLACE })],
+        }),
+      ],
+      discussions: [
+        makeDiscussion({
+          id: "discussion-1",
+          title: "Invoices",
+          situations: [
+            makeSituation({
+              id: "invoices-drafts",
+              taskId: "discussion-1",
+              kind: "drafts",
+              place: DISCUSSION_PLACE,
+            }),
+          ],
+        }),
+      ],
+    });
+
+    expect(waitingEntries(withDiscussion, null)).toEqual([
+      expect.objectContaining({ itemId: "task-1", name: "billing" }),
+      expect.objectContaining({ itemId: "discussion-1", name: "Invoices" }),
+    ]);
+  });
+
+  it("leaves the open discussion out", () => {
+    const withDiscussion = makeState({
+      discussions: [
+        makeDiscussion({
+          situations: [makeSituation({ id: "invoices-drafts", place: DISCUSSION_PLACE })],
+        }),
+      ],
+    });
+
+    expect(waitingEntries(withDiscussion, "discussion-1")).toEqual([]);
+  });
+
   it("leaves the open review out", () => {
     const withReview = makeState({
       reviews: [
@@ -318,14 +372,17 @@ describe("waitingEntries", () => {
     expect(waitingEntries(withReview, "review-1")).toEqual([]);
   });
 
-  it("is empty without tasks or reviews, or without a situation in them", () => {
+  it("is empty without items, or without a situation in them", () => {
     expect(waitingEntries(null, null)).toEqual([]);
-    expect(waitingEntries(makeState({ tasks: null, reviews: null }), null)).toEqual([]);
+    expect(
+      waitingEntries(makeState({ tasks: null, reviews: null, discussions: null }), null),
+    ).toEqual([]);
     expect(
       waitingEntries(
         makeState({
           tasks: [makeTask({ situations: null })],
           reviews: [makeReviewSummary({ situations: null })],
+          discussions: [makeDiscussion({ situations: null })],
         }),
         null,
       ),
@@ -346,6 +403,16 @@ describe("reviewSituation", () => {
     expect(reviewSituation(makeReviewSummary({ situations: [situation] }))?.id).toBe("report");
     expect(reviewSituation(makeReviewSummary({ situations: [] }))).toBeNull();
     expect(reviewSituation(makeReviewSummary({ situations: null }))).toBeNull();
+  });
+});
+
+describe("discussionSituation", () => {
+  it("finds the situation of a discussion", () => {
+    const situation = makeSituation({ id: "drafts", kind: "drafts", place: DISCUSSION_PLACE });
+
+    expect(discussionSituation(makeDiscussion({ situations: [situation] }))?.id).toBe("drafts");
+    expect(discussionSituation(makeDiscussion({ situations: [] }))).toBeNull();
+    expect(discussionSituation(makeDiscussion({ situations: null }))).toBeNull();
   });
 });
 

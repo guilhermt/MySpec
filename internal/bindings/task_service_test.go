@@ -1381,7 +1381,7 @@ func TestCreateTaskFromACardKeepsTheCardAndTheAssembledContext(t *testing.T) {
 	if !ok {
 		t.Fatalf("task %s was not created", id)
 	}
-	if want := board.Context(card, "Keep the form short."); created.InitialContext != want {
+	if want := board.Context(card, "", "Keep the form short."); created.InitialContext != want {
 		t.Errorf("initial context = %q, want %q", created.InitialContext, want)
 	}
 	wantCard := &bindings.TaskCard{

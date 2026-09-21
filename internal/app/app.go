@@ -17,6 +17,8 @@ import (
 	"github.com/guilhermt/myspec/internal/attention"
 	"github.com/guilhermt/myspec/internal/bindings"
 	"github.com/guilhermt/myspec/internal/board"
+	"github.com/guilhermt/myspec/internal/discussion"
+	"github.com/guilhermt/myspec/internal/discussionflow"
 	"github.com/guilhermt/myspec/internal/editor"
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/gh"
@@ -67,23 +69,25 @@ const (
 // App holds the running application: the Wails handles and the domain services
 // they are wired to.
 type App struct {
-	log          *slog.Logger
-	repositories *repository.Service
-	theme        *theme.Service
-	models       *models.Service
-	reviewModes  *reviewmode.Service
-	tasks        *task.Service
-	boards       *board.Service
-	sessions     *session.Service
-	worktrees    *worktree.Service
-	review       *review.Service
-	flow         *flow.Service
-	pulls        *pulls.Service
-	prReviews    *prreview.Service
-	reviewFlow   *reviewflow.Service
-	attention    *attention.Service
-	notifier     *notify.Notifier // nil when the desktop has no notification service
-	player       *chime.Player    // nil when there is no notifier or the chime could not be installed
+	log            *slog.Logger
+	repositories   *repository.Service
+	theme          *theme.Service
+	models         *models.Service
+	reviewModes    *reviewmode.Service
+	tasks          *task.Service
+	boards         *board.Service
+	sessions       *session.Service
+	worktrees      *worktree.Service
+	review         *review.Service
+	flow           *flow.Service
+	pulls          *pulls.Service
+	prReviews      *prreview.Service
+	reviewFlow     *reviewflow.Service
+	discussions    *discussion.Service
+	discussionFlow *discussionflow.Service
+	attention      *attention.Service
+	notifier       *notify.Notifier // nil when the desktop has no notification service
+	player         *chime.Player    // nil when there is no notifier or the chime could not be installed
 
 	mu     sync.Mutex
 	wails  *application.App
@@ -192,10 +196,11 @@ func Run(cfg Config) int {
 		Log: log,
 		OnState: func(k session.Key) {
 			a.publish()
-			// The id of a session names an item: a task or a review, and only
-			// the one that owns it acts on the change.
+			// The id of a session names an item: a task, a review or a
+			// discussion, and only the one that owns it acts on the change.
 			a.flow.Check(k.TaskID)
 			a.reviewFlow.Check(k.TaskID)
+			a.discussionFlow.Check(k.TaskID)
 		},
 		OnTranscript: a.emitTranscript,
 	})
@@ -282,10 +287,23 @@ func Run(cfg Config) int {
 		},
 		OnChange: func(string) { a.publish() },
 	})
+	discussions := discussion.New(discussion.Deps{
+		Store: st.Discussions, DataDir: dirs.Data, Log: log, OnChange: a.publish,
+	})
+	discussionFlow := discussionflow.New(discussionflow.Deps{
+		Discussions:  discussions,
+		Sessions:     sessions,
+		Boards:       boards,
+		Repositories: repositories,
+		GH:           ghRunner,
+		Log:          log,
+		OnChange:     func(string) { a.publish() },
+	})
 	a.theme, a.repositories, a.tasks, a.sessions, a.flow = themeSvc, repositories, tasks, sessions, flowSvc
 	a.worktrees, a.review, a.models = worktrees, reviews, modelsSvc
 	a.reviewModes, a.boards = reviewModesSvc, boards
 	a.pulls, a.prReviews, a.reviewFlow = pullRequests, prReviews, reviewFlow
+	a.discussions, a.discussionFlow = discussions, discussionFlow
 
 	if err := a.load(ctx); err != nil {
 		return fail(log, "load tasks", err)
@@ -342,11 +360,14 @@ func (a *App) options(
 			),
 			application.NewService(bindings.NewTaskService(
 				tasks, sessions, flowSvc, modelsSvc, reviewModesSvc, repositories, boards, editor.Open,
-				a.isReview, log,
+				a.discussions.DocumentOfCard, a.hasConversation, log,
 			)),
-			application.NewService(bindings.NewBoardService(boards, log)),
+			application.NewService(bindings.NewBoardService(boards, a.discussions.DocumentOfCard, log)),
 			application.NewService(bindings.NewReviewService(
 				a.reviewFlow, a.prReviews, a.pulls, a.worktrees, editor.Open, log,
+			)),
+			application.NewService(bindings.NewDiscussionService(
+				a.discussionFlow, a.discussions, repositories, log,
 			)),
 			application.NewService(bindings.NewAttentionService(a.attention)),
 		},
@@ -383,6 +404,9 @@ func (a *App) load(ctx context.Context) error {
 	if err := a.prReviews.Sync(ctx); err != nil {
 		return fmt.Errorf("sync reviews: %w", err)
 	}
+	if err := a.discussions.Sync(ctx); err != nil {
+		return fmt.Errorf("sync discussions: %w", err)
+	}
 	ids := a.activeItemIDs()
 	// The baseline of the situations starts before the flow opens the
 	// sessions, so that what already waited on the user is found, not started.
@@ -396,23 +420,28 @@ func (a *App) load(ctx context.Context) error {
 	}
 	a.flow.Sync(ctx)
 	a.reviewFlow.Sync(ctx)
+	a.discussionFlow.Sync(ctx)
 	// The first reading of the pull requests is what the Reviews view opens
 	// on; it runs in the background and reaches the interface with the state.
 	a.pulls.Refresh()
 	return nil
 }
 
-// activeItemIDs are the ids of the items that run: the active tasks and the
-// active reviews of pull requests.
+// activeItemIDs are the ids of the items that run: the active tasks, the
+// active reviews of pull requests and the active discussions.
 func (a *App) activeItemIDs() []string {
 	tasks := a.tasks.List()
 	reviews := a.prReviews.List()
-	ids := make([]string, 0, len(tasks)+len(reviews))
+	discussions := a.discussions.List()
+	ids := make([]string, 0, len(tasks)+len(reviews)+len(discussions))
 	for _, t := range tasks {
 		ids = append(ids, t.ID)
 	}
 	for _, r := range reviews {
 		ids = append(ids, r.ID)
+	}
+	for _, d := range discussions {
+		ids = append(ids, d.ID)
 	}
 	return ids
 }
@@ -442,10 +471,14 @@ func (a *App) taskPullRequests() []reviewflow.TaskPR {
 	return prs
 }
 
-// isReview says whether an id names a review of a pull request, which is what
-// tells the conversation of a review from the one of a task.
-func (a *App) isReview(id string) bool {
-	_, ok := a.prReviews.Get(id)
+// hasConversation says whether an id names an item of another kind with a
+// conversation of its own: a review of a pull request or a discussion, active
+// or archived. It is what tells those conversations from the one of a task.
+func (a *App) hasConversation(id string) bool {
+	if _, ok := a.prReviews.Get(id); ok {
+		return true
+	}
+	_, ok := a.discussions.Lookup(id)
 	return ok
 }
 
@@ -470,6 +503,7 @@ func (a *App) shutdown() {
 	a.attention.Close()
 	a.flow.Close()
 	a.reviewFlow.Close()
+	a.discussionFlow.Close()
 	a.pulls.Close()
 	a.sessions.Shutdown(ctx)
 	// The notifications go with the app: one left behind would lead nowhere.

@@ -4,7 +4,14 @@ import { SidebarTree } from "@/features/sidebar/SidebarTree";
 import type { State } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
 import { renderWithStore, type StoreOptions } from "@/test/render";
-import { makeBoard, makeRepository, makeState, makeTask, makeTaskCard } from "@/test/wails-mock";
+import {
+  makeBoard,
+  makeDiscussion,
+  makeRepository,
+  makeState,
+  makeTask,
+  makeTaskCard,
+} from "@/test/wails-mock";
 
 const BOARD = makeBoard({ id: "board-1", title: "Roadmap", repositoryIds: ["repo-1"] });
 
@@ -38,6 +45,8 @@ const EPIC_TASK = makeTask({
     },
   }),
 });
+
+const DISCUSSION = makeDiscussion({ id: "discussion-1", title: "Invoices", boardId: "board-1" });
 
 function tree(overrides: Partial<State> = {}, ui: StoreOptions["ui"] = {}) {
   return renderWithStore(<SidebarTree />, {
@@ -140,6 +149,54 @@ describe("SidebarTree", () => {
     await user.click(screen.getByRole("treeitem", { name: /^fix-header,/ }));
 
     expect(useAppStore.getState().openTaskId).toBe("task-2");
+  });
+
+  it("puts a discussion under its board, with what it waits for", () => {
+    tree({ discussions: [DISCUSSION] });
+
+    const board = screen.getByRole("treeitem", { name: "Roadmap" });
+    const row = within(board).getByRole("treeitem", { name: "Invoices, discussion, Discussing" });
+    expect(row).toHaveTextContent("Discussion");
+  });
+
+  it("puts a discussion whose board is gone under no board", () => {
+    tree({ discussions: [makeDiscussion({ boardId: "board-gone", title: "Billing" })] });
+
+    const noBoard = screen.getByRole("treeitem", { name: "No board" });
+    expect(
+      within(noBoard).getByRole("treeitem", { name: /^Billing, discussion,/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("opens the discussion that is clicked", async () => {
+    const { user } = tree({ discussions: [DISCUSSION] });
+
+    await user.click(screen.getByRole("treeitem", { name: /^Invoices, discussion,/ }));
+
+    expect(useAppStore.getState().openDiscussionId).toBe("discussion-1");
+  });
+
+  it("moves from the tasks onto the discussions with the arrows", async () => {
+    const { user } = tree({ tasks: [WEB_TASK], discussions: [DISCUSSION] });
+    screen.getAllByRole("treeitem", { name: /,/ })[0]?.focus();
+
+    await user.keyboard("{End}");
+
+    expect(useAppStore.getState().openDiscussionId).toBe("discussion-1");
+    expect(useAppStore.getState().openTaskId).toBeNull();
+    expect(screen.getByRole("treeitem", { name: /^Invoices, discussion,/ })).toHaveFocus();
+
+    await user.keyboard("{ArrowUp}");
+
+    expect(useAppStore.getState().openTaskId).toBe("task-1");
+  });
+
+  it("expands the board of a discussion that opens", () => {
+    tree({ discussions: [DISCUSSION] }, { sidebarCollapsed: new Set(["board:board-1"]) });
+
+    act(() => useAppStore.getState().openDiscussion("discussion-1"));
+
+    expect(screen.getByRole("treeitem", { name: /^Invoices, discussion,/ })).toBeInTheDocument();
   });
 
   it("moves along the visible rows with the arrows, opening what it lands on", async () => {

@@ -28,6 +28,7 @@ const rateLimitFallback = time.Hour
 const (
 	typeInsufficientScopes = "INSUFFICIENT_SCOPES"
 	typeRateLimited        = "RATE_LIMITED"
+	typeNotFound           = "NOT_FOUND"
 )
 
 // GraphQLError is one entry of the errors GitHub answered with.
@@ -118,6 +119,26 @@ func graphQLArgs(query string, vars Vars) []string {
 		}
 	}
 	return args
+}
+
+// HasNotFound reports whether GitHub answered that a part does not exist.
+func HasNotFound(errs []GraphQLError) bool { return hasType(errs, typeNotFound) }
+
+// refusalOf is what GitHub refused a call with: the errors it answered that
+// are not NOT_FOUND, as an *Error, so the user reads what GitHub wrote. It is
+// nil when the answer carries no such error.
+func refusalOf(errs []GraphQLError) *Error {
+	messages := make([]string, 0, len(errs))
+	for _, e := range errs {
+		if e.Type == typeNotFound || e.Message == "" {
+			continue
+		}
+		messages = append(messages, e.Message)
+	}
+	if len(messages) == 0 {
+		return nil
+	}
+	return &Error{Args: []string{"api", "graphql"}, Output: strings.Join(messages, "; ")}
 }
 
 // hasType reports whether any of errs is of type kind.

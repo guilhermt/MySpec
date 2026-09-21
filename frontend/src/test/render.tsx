@@ -24,7 +24,10 @@ export interface StoreOptions {
       | "openArchivedReviewId"
       | "startReview"
       | "pendingReview"
-      | "findingDrafts"
+      | "openDiscussionId"
+      | "openArchivedDiscussionId"
+      | "newDiscussion"
+      | "textDrafts"
       | "sidebarCollapsed"
       | "lastRepositoryId"
       | "historyOpen"
@@ -63,7 +66,10 @@ export function resetAppStore(options: StoreOptions = {}): void {
     openArchivedReviewId: options.ui?.openArchivedReviewId ?? null,
     startReview: options.ui?.startReview ?? null,
     pendingReview: options.ui?.pendingReview ?? null,
-    findingDrafts: options.ui?.findingDrafts ?? {},
+    openDiscussionId: options.ui?.openDiscussionId ?? null,
+    openArchivedDiscussionId: options.ui?.openArchivedDiscussionId ?? null,
+    newDiscussion: options.ui?.newDiscussion ?? null,
+    textDrafts: options.ui?.textDrafts ?? {},
     sidebarCollapsed: options.ui?.sidebarCollapsed ?? new Set<string>(),
     lastRepositoryId: options.ui?.lastRepositoryId ?? null,
     historyOpen: options.ui?.historyOpen ?? false,

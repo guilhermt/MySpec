@@ -34,11 +34,12 @@ func TestRefreshStoresTheReadingAndHandsTheCardsToOnRead(t *testing.T) {
 	f.refresh(t)
 
 	want := board.Reading{
-		ProjectID: projectID,
-		Title:     "Roadmap v2",
-		Viewer:    "dev",
-		Statuses:  []board.Option{todo, doing, done},
-		HasStatus: true,
+		ProjectID:     projectID,
+		Title:         "Roadmap v2",
+		Viewer:        "dev",
+		Statuses:      []board.Option{todo, doing, done},
+		HasStatus:     true,
+		StatusFieldID: statusFieldID,
 		Cards: []board.Card{
 			{
 				Issue:        cardIssue("acme/web", 1),
@@ -519,14 +520,14 @@ func TestContextIsTheContextOfAStoredCard(t *testing.T) {
 	card := board.Card{Issue: cardIssue("acme/web", 1), Body: "Build it."}
 	f := newFixture(t, board.Stored{Reading: &board.Reading{Cards: []board.Card{card}}, ReadAt: base})
 
-	got, err := f.service.Context(boardID, "acme/web#1", "Mind the theme.")
+	got, err := f.service.Context(boardID, "acme/web#1", "What we agreed.", "Mind the theme.")
 	if err != nil {
 		t.Fatalf("Context() = %v, want nil", err)
 	}
-	if want := board.Context(card, "Mind the theme."); got != want {
+	if want := board.Context(card, "What we agreed.", "Mind the theme."); got != want {
 		t.Errorf("Context() = %q, want %q", got, want)
 	}
-	if _, err := f.service.Context(boardID, "acme/web#2", ""); !errors.Is(err, board.ErrCardNotFound) {
+	if _, err := f.service.Context(boardID, "acme/web#2", "", ""); !errors.Is(err, board.ErrCardNotFound) {
 		t.Errorf("Context(acme/web#2) = %v, want ErrCardNotFound", err)
 	}
 }
@@ -654,6 +655,7 @@ func TestPreviewPreMarksTheFinalStatusesAndSuggestsTheRepositories(t *testing.T)
 			{Option: done, Final: true},
 			{Option: concluded, Final: true},
 		},
+		NewCardStatus: todo.ID,
 		Repositories: []board.RepositoryOption{
 			{
 				Identity: repository.Identity{Owner: "acme", Name: "docs"},
@@ -759,6 +761,127 @@ func TestPreviewEditChecksTheRepositoriesOfTheBoardNextToTheSuggestions(t *testi
 	}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("PreviewEdit() (-want +got):\n%s", diff)
+	}
+}
+
+func TestPreviewPreSelectsTheFirstStatusThatSaysWhereWorkStarts(t *testing.T) {
+	t.Parallel()
+	backlog := board.Option{ID: "opt-backlog", Name: "Backlog"}
+	toDo := board.Option{ID: "opt-a-fazer", Name: " A Fazer "}
+	ready := board.Option{ID: "opt-ready", Name: "Ready"}
+	tests := []struct {
+		name     string
+		statuses []board.Option
+		want     string
+	}{
+		{name: "the first name that says it", statuses: []board.Option{backlog, toDo, ready}, want: toDo.ID},
+		{name: "no name says it", statuses: []board.Option{backlog, doing, done}, want: ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			f := newFixture(t, board.Stored{})
+			f.github.answer(structureMatch, "", structureWith("Platform", tt.statuses...))
+			f.github.answer(reposMatch, suggestQ, reposPage(""))
+
+			got, err := f.service.Preview(t.Context(), otherURL)
+			if err != nil {
+				t.Fatalf("Preview() = %v, want nil", err)
+			}
+			if got.NewCardStatus != tt.want {
+				t.Errorf("Preview().NewCardStatus = %q, want %q", got.NewCardStatus, tt.want)
+			}
+		})
+	}
+}
+
+func TestPreviewEditKeepsTheStatusOfNewCardsAndForgetsOneTheBoardNoLongerOffers(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name  string
+		board string
+		want  string
+	}{
+		{name: "still an option", board: todo.ID, want: todo.ID},
+		{name: "gone from the board", board: "opt-gone", want: ""},
+		{name: "none", want: ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			f := newFixture(t, board.Stored{})
+			f.store.boards[0].NewCardStatus = tt.board
+			if err := f.service.Sync(t.Context()); err != nil {
+				t.Fatalf("Sync() = %v, want nil", err)
+			}
+			f.github.answer(structureMatch, "", structure("Roadmap"))
+			f.github.answer(reposMatch, suggestQ, reposPage(""))
+
+			got, err := f.service.PreviewEdit(t.Context(), boardID)
+			if err != nil {
+				t.Fatalf("PreviewEdit() = %v, want nil", err)
+			}
+			if got.NewCardStatus != tt.want {
+				t.Errorf("PreviewEdit().NewCardStatus = %q, want %q", got.NewCardStatus, tt.want)
+			}
+		})
+	}
+}
+
+func TestAddStoresTheStatusNewCardsGetAndDropsOneTheBoardDoesNotOffer(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name   string
+		chosen string
+		want   string
+	}{
+		{name: "an option of the board", chosen: todo.ID, want: todo.ID},
+		{name: "no option of the board", chosen: "opt-gone", want: ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			f := newFixture(t, board.Stored{})
+			f.github.answer(structureMatch, "", structure("Platform"))
+			f.github.answer(itemsMatch, openQ, itemsPage(""))
+			f.github.answer(itemsMatch, closedQ, itemsPage(""))
+
+			got, err := f.service.Add(t.Context(), otherURL, board.SaveParams{NewCardStatus: tt.chosen})
+			if err != nil {
+				t.Fatalf("Add() = %v, want nil", err)
+			}
+			waitReading(t, f.service, got.ID)
+
+			if got.NewCardStatus != tt.want {
+				t.Errorf("Add().NewCardStatus = %q, want %q", got.NewCardStatus, tt.want)
+			}
+			if b, _ := f.service.Get(got.ID); b.NewCardStatus != tt.want {
+				t.Errorf("Get().NewCardStatus = %q, want %q", b.NewCardStatus, tt.want)
+			}
+		})
+	}
+}
+
+func TestUpdateStoresTheStatusNewCardsGet(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, board.Stored{})
+	f.github.answer(structureMatch, "", structure("Roadmap"), structure("Roadmap"))
+
+	if err := f.service.Update(t.Context(), boardID, board.SaveParams{NewCardStatus: doing.ID}); err != nil {
+		t.Fatalf("Update() = %v, want nil", err)
+	}
+	if b, _ := f.service.Get(boardID); b.NewCardStatus != doing.ID {
+		t.Errorf("Get().NewCardStatus = %q, want %q", b.NewCardStatus, doing.ID)
+	}
+
+	if err := f.service.Update(t.Context(), boardID, board.SaveParams{NewCardStatus: "opt-gone"}); err != nil {
+		t.Fatalf("Update() = %v, want nil", err)
+	}
+	if b, _ := f.service.Get(boardID); b.NewCardStatus != "" {
+		t.Errorf("Get().NewCardStatus = %q, want none", b.NewCardStatus)
+	}
+	if b := f.store.boards[0]; b.NewCardStatus != "" {
+		t.Errorf("the board stored keeps %q, want none", b.NewCardStatus)
 	}
 }
 

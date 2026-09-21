@@ -7,6 +7,12 @@ import {
   asCardAction,
   asCloseOutcome,
   asCloseSkipReason,
+  asDependencyDrop,
+  asDiscussionStatus,
+  asDraftDecision,
+  asDraftKind,
+  asDraftOutcome,
+  asDraftSource,
   asEntryKind,
   asErrorKind,
   asFindingDecision,
@@ -266,6 +272,35 @@ describe("narrowing", () => {
     }
     expect(asPullRequestOutcome("merged")).toBe("merged");
     expect(asPullRequestOutcome("closed")).toBe("closed");
+    expect(asModelStage("discussion")).toBe("discussion");
+    expect(asPromptStage("discussion")).toBe("discussion");
+    expect(asMarkerType("discussion_started")).toBe("discussion_started");
+    expect(asSituationKind("drafts")).toBe("drafts");
+    expect(asPlaceKind("discussion")).toBe("discussion");
+    for (const status of [
+      "discussing",
+      "awaiting_drafts",
+      "deciding",
+      "publishing",
+      "publish_failed",
+      "published",
+    ]) {
+      expect(asDiscussionStatus(status)).toBe(status);
+    }
+    for (const kind of ["new", "update", "epic"]) {
+      expect(asDraftKind(kind)).toBe(kind);
+    }
+    expect(asDraftSource("agent")).toBe("agent");
+    expect(asDraftSource("user")).toBe("user");
+    for (const decision of ["", "approved", "discarded"]) {
+      expect(asDraftDecision(decision)).toBe(decision);
+    }
+    for (const outcome of ["", "created", "updated"]) {
+      expect(asDraftOutcome(outcome)).toBe(outcome);
+    }
+    for (const dropped of ["", "discarded", "unavailable"]) {
+      expect(asDependencyDrop(dropped)).toBe(dropped);
+    }
   });
 
   it("falls back on a value a newer backend invented", () => {
@@ -310,12 +345,24 @@ describe("narrowing", () => {
     expect(asPullRequestOutcome("open")).toBe("closed");
     expect(asFindingDecision("deferred")).toBe("");
     expect(asFindingPlacement("thread")).toBe("");
+    expect(asDiscussionStatus("archived")).toBe("discussing");
+    expect(asDraftKind("close")).toBe("new");
+    expect(asDraftSource("board")).toBe("agent");
+    expect(asDraftDecision("deferred")).toBe("");
+    expect(asDraftOutcome("closed")).toBe("");
+    expect(asDependencyDrop("cycle")).toBe("");
   });
 });
 
 describe("REVIEW_STAGE", () => {
   it("is the stage of the conversation of a review", () => {
     expect(wails.REVIEW_STAGE).toBe("review");
+  });
+});
+
+describe("DISCUSSION_STAGE", () => {
+  it("is the stage of the conversation of a discussion", () => {
+    expect(wails.DISCUSSION_STAGE).toBe("discussion");
   });
 });
 
@@ -392,7 +439,7 @@ describe("api", () => {
     await wails.api.viewSituation("situation-1");
     await wails.api.cloneRepository("repo-1");
     await wails.api.chooseCloneFolder();
-    const request = { finalStatuses: ["done"], repositories: [] };
+    const request = { finalStatuses: ["done"], newCardStatus: "todo", repositories: [] };
     const choice = { owner: "dev", name: "web", path: "" };
     await wails.api.previewBoard("https://github.com/orgs/dev/projects/3");
     await wails.api.previewEditBoard("board-1");
@@ -435,10 +482,36 @@ describe("api", () => {
     await wails.api.readReviewArtifact("review-1", "review-1.md");
     await wails.api.openReviewInEditor("review-1");
     await wails.api.openFindingInEditor("review-1", 1, 2);
+    await wails.api.startDiscussion({
+      boardId: "board-1",
+      title: "Invoices",
+      text: "Split the invoices screen.",
+      cards: ["dev/web#12"],
+      model: "claude-fable-5-1",
+      effort: "high",
+    });
+    await wails.api.discussionContext({
+      boardId: "board-1",
+      text: "Split the invoices screen.",
+      cards: ["dev/web#12"],
+    });
+    await wails.api.setDraftText("discussion-1", "draft-1", "Export", "A button.");
+    await wails.api.setDraftRepository("discussion-1", "draft-1", "repo-1");
+    await wails.api.setDraftModule("discussion-1", "draft-1", "Billing");
+    await wails.api.setDraftEpic("discussion-1", "draft-1", "draft-2");
+    await wails.api.addDraftDependency("discussion-1", "draft-1", "dev/web#12");
+    await wails.api.removeDraftDependency("discussion-1", "draft-1", "dev/web#12");
+    await wails.api.decideDraft("discussion-1", "draft-1", "approved");
+    await wails.api.groupIntoEpic("discussion-1", ["draft-1", "draft-2"]);
+    await wails.api.publishEpic("discussion-1", "draft-epic");
+    await wails.api.retryPublish("discussion-1", "draft-1");
+    await wails.api.archiveDiscussion("discussion-1");
+    await wails.api.deleteDiscussion("discussion-1");
+    await wails.api.readDiscussionArtifact("discussion-1", "discussion.md");
 
-    expect(Call.ByID).toHaveBeenCalledTimes(77);
+    expect(Call.ByID).toHaveBeenCalledTimes(92);
     const ids = vi.mocked(Call.ByID).mock.calls.map(([id]) => id);
-    expect(new Set(ids).size).toBe(77);
+    expect(new Set(ids).size).toBe(92);
   });
 
   it("opens a link in the browser of the desktop, never in the webview", async () => {

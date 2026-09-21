@@ -35,6 +35,7 @@ const (
 	KindChangesReview   Kind = "changes_review"
 	KindReviewReport    Kind = "review_report"
 	KindNewCommits      Kind = "new_commits"
+	KindDrafts          Kind = "drafts"
 
 	KindPublishFailed Kind = "publish_failed"
 
@@ -103,6 +104,7 @@ const (
 	PlaceStepReview PlaceKind = "step_review" // the conversation that reviews the current step
 	PlacePR         PlaceKind = "pr"          // the pull request of the task
 	PlaceReview     PlaceKind = "review"      // the review of a pull request, which is an item of its own
+	PlaceDiscussion PlaceKind = "discussion"  // the discussion of a demand of a board, which is an item of its own
 )
 
 // Place is where in a task a situation is.
@@ -113,11 +115,14 @@ type Place struct {
 }
 
 // Key names a place inside its item, the way the store keeps it:
-// stage:<stage>, step:<number>, step_review:<number>, pr or review.
+// stage:<stage>, step:<number>, step_review:<number>, pr, review or
+// discussion.
 func (p Place) Key() string {
 	switch p.Kind {
 	case PlaceReview:
 		return string(PlaceReview)
+	case PlaceDiscussion:
+		return string(PlaceDiscussion)
 	case PlaceStep:
 		return "step:" + strconv.Itoa(p.Step)
 	case PlaceStepReview:
@@ -136,6 +141,8 @@ func ParsePlace(key string) (Place, bool) {
 		return Place{Kind: PlacePR}, true
 	case string(PlaceReview):
 		return Place{Kind: PlaceReview}, true
+	case string(PlaceDiscussion):
+		return Place{Kind: PlaceDiscussion}, true
 	}
 	prefix, value, found := strings.Cut(key, ":")
 	if !found || value == "" {

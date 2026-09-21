@@ -1,7 +1,9 @@
 import * as AttentionService from "@bindings/attentionservice";
 import * as BoardService from "@bindings/boardservice";
+import * as DiscussionService from "@bindings/discussionservice";
 import type {
   ActionEntry,
+  ArchivedDiscussion,
   ArchivedPR,
   ArchivedReview,
   ArchivedStep,
@@ -28,6 +30,14 @@ import type {
   CreateTaskRequest,
   DeletePreview,
   DeleteResult,
+  DiscussionCard,
+  DiscussionContextRequest,
+  DiscussionRepository,
+  DiscussionSummary,
+  Draft,
+  DraftCurrent,
+  DraftDependency,
+  DraftRef,
   Entry,
   ErrorEntry,
   Leftover,
@@ -65,6 +75,7 @@ import type {
   SituationOpen,
   SituationStarted,
   StageModel,
+  StartDiscussionRequest,
   StartReviewRequest,
   State,
   Step,
@@ -88,6 +99,7 @@ import { Browser, Events } from "@wailsio/runtime";
 
 export type {
   ActionEntry,
+  ArchivedDiscussion,
   ArchivedPR,
   ArchivedReview,
   ArchivedStep,
@@ -114,6 +126,14 @@ export type {
   CreateTaskRequest,
   DeletePreview,
   DeleteResult,
+  DiscussionCard,
+  DiscussionContextRequest,
+  DiscussionRepository,
+  DiscussionSummary,
+  Draft,
+  DraftCurrent,
+  DraftDependency,
+  DraftRef,
   Entry,
   ErrorEntry,
   Leftover,
@@ -151,6 +171,7 @@ export type {
   SituationOpen,
   SituationStarted,
   StageModel,
+  StartDiscussionRequest,
   StartReviewRequest,
   State,
   Step,
@@ -180,7 +201,8 @@ export type ModelStage =
   | "implementation"
   | "step_review"
   | "pr"
-  | "pr_review";
+  | "pr_review"
+  | "discussion";
 
 /** PromptStage names one of the prompts the settings show, in workflow order. */
 export type PromptStage =
@@ -191,7 +213,8 @@ export type PromptStage =
   | "step_review"
   | "commit"
   | "pr"
-  | "pr_review";
+  | "pr_review"
+  | "discussion";
 
 export type StepStatus =
   | "not_started"
@@ -288,6 +311,7 @@ export type MarkerType =
   | "step_review_started"
   | "step_review_written"
   | "review_started"
+  | "discussion_started"
   | "stage_started"
   | "step_started"
   | "compacted"
@@ -321,6 +345,7 @@ export type SituationKind =
   | "merge"
   | "review_report"
   | "new_commits"
+  | "drafts"
   | "publish_failed";
 
 /** SituationGroup is how urgent a situation is, from the most urgent. */
@@ -338,8 +363,8 @@ export type SituationForm =
   | "publish"
   | "apply";
 
-/** PlaceKind is the part of an item a situation is in: of a task, or a review of its own. */
-export type PlaceKind = "stage" | "step" | "step_review" | "pr" | "review";
+/** PlaceKind is the part of an item a situation is in: of a task, or a review or a discussion of its own. */
+export type PlaceKind = "stage" | "step" | "step_review" | "pr" | "review" | "discussion";
 
 /** ReviewMode is who reviews the steps: the user, or an agent. */
 export type ReviewMode = "manual" | "agent";
@@ -418,8 +443,35 @@ export type PullRequestAction =
 /** PullRequestOutcome is what became of the pull request of an archived review. */
 export type PullRequestOutcome = "merged" | "closed";
 
+/** DiscussionStatus is where a discussion of a demand of a board stands. */
+export type DiscussionStatus =
+  | "discussing"
+  | "awaiting_drafts"
+  | "deciding"
+  | "publishing"
+  | "publish_failed"
+  | "published";
+
+/** DraftKind is what a draft does on GitHub: a new card, an update of one, or an epic over them. */
+export type DraftKind = "new" | "update" | "epic";
+
+/** DraftSource is who the draft came from: the agent, or the user. */
+export type DraftSource = "agent" | "user";
+
+/** DraftDecision is what the user decided about a draft; "" while they have not. */
+export type DraftDecision = "" | "approved" | "discarded";
+
+/** DraftOutcome is what the publication of a draft did on GitHub; "" when it published nothing. */
+export type DraftOutcome = "" | "created" | "updated";
+
+/** DependencyDrop is why a dependency of a draft went nowhere; "" while it holds. */
+export type DependencyDrop = "" | "discarded" | "unavailable";
+
 /** REVIEW_STAGE is the stage of the conversation of a review: a review has one. */
 export const REVIEW_STAGE = "review";
+
+/** DISCUSSION_STAGE is the stage of the conversation of a discussion: a discussion has one. */
+export const DISCUSSION_STAGE = "discussion";
 
 /** sessionKey identifies one conversation: a task and the stage it belongs to. */
 export function sessionKey(taskId: string, stage: string): string {
@@ -471,6 +523,7 @@ export function asModelStage(value: string): ModelStage {
     case "step_review":
     case "pr":
     case "pr_review":
+    case "discussion":
       return value;
     default:
       return "prd";
@@ -487,6 +540,7 @@ export function asPromptStage(value: string): PromptStage {
     case "commit":
     case "pr":
     case "pr_review":
+    case "discussion":
       return value;
     default:
       return "prd";
@@ -684,6 +738,7 @@ export function asMarkerType(value: string): MarkerType {
     case "step_review_started":
     case "step_review_written":
     case "review_started":
+    case "discussion_started":
     case "stage_started":
     case "step_started":
     case "compacted":
@@ -739,6 +794,7 @@ export function asSituationKind(value: string): SituationKind {
     case "merge":
     case "review_report":
     case "new_commits":
+    case "drafts":
     case "publish_failed":
       return value;
     default:
@@ -781,6 +837,7 @@ export function asPlaceKind(value: string): PlaceKind {
     case "step_review":
     case "pr":
     case "review":
+    case "discussion":
       return value;
     default:
       return "stage";
@@ -975,6 +1032,74 @@ export function asPullRequestOutcome(value: string): PullRequestOutcome {
   }
 }
 
+export function asDiscussionStatus(value: string): DiscussionStatus {
+  switch (value) {
+    case "discussing":
+    case "awaiting_drafts":
+    case "deciding":
+    case "publishing":
+    case "publish_failed":
+    case "published":
+      return value;
+    default:
+      return "discussing";
+  }
+}
+
+export function asDraftKind(value: string): DraftKind {
+  switch (value) {
+    case "new":
+    case "update":
+    case "epic":
+      return value;
+    default:
+      return "new";
+  }
+}
+
+export function asDraftSource(value: string): DraftSource {
+  switch (value) {
+    case "agent":
+    case "user":
+      return value;
+    default:
+      return "agent";
+  }
+}
+
+export function asDraftDecision(value: string): DraftDecision {
+  switch (value) {
+    case "":
+    case "approved":
+    case "discarded":
+      return value;
+    default:
+      return "";
+  }
+}
+
+export function asDraftOutcome(value: string): DraftOutcome {
+  switch (value) {
+    case "":
+    case "created":
+    case "updated":
+      return value;
+    default:
+      return "";
+  }
+}
+
+export function asDependencyDrop(value: string): DependencyDrop {
+  switch (value) {
+    case "":
+    case "discarded":
+    case "unavailable":
+      return value;
+    default:
+      return "";
+  }
+}
+
 export const api = {
   getState: (): Promise<State> => StateService.GetState(),
   scanRepositories: async (): Promise<RepositoryCandidate[]> =>
@@ -1108,6 +1233,35 @@ export const api = {
   openReviewInEditor: (id: string): Promise<void> => ReviewService.OpenReviewInEditor(id),
   openFindingInEditor: (id: string, pass: number, number: number): Promise<void> =>
     ReviewService.OpenFindingInEditor(id, pass, number),
+
+  startDiscussion: (req: StartDiscussionRequest): Promise<string> =>
+    DiscussionService.StartDiscussion(req),
+  discussionContext: (req: DiscussionContextRequest): Promise<string> =>
+    DiscussionService.DiscussionContext(req),
+  setDraftText: (id: string, draftId: string, title: string, body: string): Promise<void> =>
+    DiscussionService.SetDraftText(id, draftId, title, body),
+  setDraftRepository: (id: string, draftId: string, repositoryId: string): Promise<void> =>
+    DiscussionService.SetDraftRepository(id, draftId, repositoryId),
+  setDraftModule: (id: string, draftId: string, module: string): Promise<void> =>
+    DiscussionService.SetDraftModule(id, draftId, module),
+  setDraftEpic: (id: string, draftId: string, ref: string): Promise<void> =>
+    DiscussionService.SetDraftEpic(id, draftId, ref),
+  addDraftDependency: (id: string, draftId: string, ref: string): Promise<void> =>
+    DiscussionService.AddDraftDependency(id, draftId, ref),
+  removeDraftDependency: (id: string, draftId: string, ref: string): Promise<void> =>
+    DiscussionService.RemoveDraftDependency(id, draftId, ref),
+  decideDraft: (id: string, draftId: string, decision: DraftDecision): Promise<void> =>
+    DiscussionService.DecideDraft(id, draftId, decision),
+  groupIntoEpic: (id: string, draftIds: string[]): Promise<string> =>
+    DiscussionService.GroupIntoEpic(id, draftIds),
+  publishEpic: (id: string, draftId: string): Promise<void> =>
+    DiscussionService.PublishEpic(id, draftId),
+  retryPublish: (id: string, draftId: string): Promise<void> =>
+    DiscussionService.RetryPublish(id, draftId),
+  archiveDiscussion: (id: string): Promise<void> => DiscussionService.ArchiveDiscussion(id),
+  deleteDiscussion: (id: string): Promise<void> => DiscussionService.DeleteDiscussion(id),
+  readDiscussionArtifact: (id: string, name: string): Promise<string> =>
+    DiscussionService.ReadDiscussionArtifact(id, name),
 
   viewSituation: (id: string): Promise<void> => AttentionService.ViewSituation(id),
 };

@@ -8,6 +8,7 @@ import {
   makeArchivedReview,
   makeArchivedTask,
   makeBoard,
+  makeDiscussion,
   makeMigration,
   makePullRequestRow,
   makeRepository,
@@ -234,6 +235,56 @@ describe("App", () => {
     }
 
     expect(screen.getByRole("heading", { name: "Start review" })).toBeInTheDocument();
+    expect(useAppStore.getState().newTaskOpen).toBe(false);
+    expect(useAppStore.getState().openTaskId).toBeNull();
+    expect(useAppStore.getState().settingsOpen).toBe(false);
+  });
+
+  it("opens the discussion a situation is in on Ctrl+J", async () => {
+    vi.mocked(api.getState).mockResolvedValue(
+      makeState({
+        tasks: [makeTask()],
+        discussions: [
+          makeDiscussion({
+            situations: [
+              makeSituation({
+                id: "s-drafts",
+                taskId: "discussion-1",
+                kind: "drafts",
+                form: "decide",
+                place: { kind: "discussion", stage: "", step: 0 },
+              }),
+            ],
+          }),
+        ],
+      }),
+    );
+    const { user } = renderWithStore(<App />);
+    await screen.findByRole("tree", { name: "Tasks" });
+
+    await user.keyboard("{Control>}j{/Control}");
+
+    expect(useAppStore.getState().openDiscussionId).toBe("discussion-1");
+  });
+
+  it("leaves the dialog that creates a discussion where it is on Ctrl+N, Ctrl+J and Ctrl+,", async () => {
+    vi.mocked(api.getState).mockResolvedValue(waitingState());
+    renderWithStore(<App />);
+    await screen.findByRole("tree", { name: "Tasks" });
+    act(() => {
+      useAppStore.getState().openNewDiscussion({ boardId: "board-1", cardKeys: ["dev/web#12"] });
+    });
+
+    for (const key of ["n", "j", ","]) {
+      const shortcut = createEvent.keyDown(window, { key, ctrlKey: true });
+      fireEvent(window, shortcut);
+      expect(shortcut.defaultPrevented).toBe(true);
+    }
+
+    expect(useAppStore.getState().newDiscussion).toEqual({
+      boardId: "board-1",
+      cardKeys: ["dev/web#12"],
+    });
     expect(useAppStore.getState().newTaskOpen).toBe(false);
     expect(useAppStore.getState().openTaskId).toBeNull();
     expect(useAppStore.getState().settingsOpen).toBe(false);

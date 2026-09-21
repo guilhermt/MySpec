@@ -23,4 +23,4 @@ O `README.md` de uma ideia é escrito como visão de produto, em português, sem
 
 ## Ideias
 
-- [command-center/](./command-center/README.md): o produto como centro de comando do trabalho de um tech lead: boards do GitHub Projects no lugar do workspace, discussões que geram cards e épicos, cards como entrada das tasks e um centro de review de todas as pull requests dos repositórios.
+Nenhuma ideia em aberto.

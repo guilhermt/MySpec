@@ -1,5 +1,5 @@
 import { TriangleAlert } from "lucide-react";
-import { type KeyboardEvent, useEffect, useRef } from "react";
+import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -9,18 +9,23 @@ import {
   type BoardFilters,
   EMPTY_FILTERS,
   filterCards,
+  isCheckable,
   sections,
 } from "@/features/board/board-view";
 import { CardDetail } from "@/features/board/CardDetail";
 import { CardList } from "@/features/board/CardList";
+import { SelectionBar } from "@/features/board/SelectionBar";
 import { useBoardViewMemory } from "@/features/board/useBoardViewMemory";
 import { useStartCard } from "@/features/board/useStartCard";
 import type { Board, BoardCard } from "@/lib/wails";
 import { refreshBoard } from "@/store/actions";
-import { useBoard } from "@/store/app-store";
+import { useAppStore, useBoard } from "@/store/app-store";
 
 /** SKELETON_ROWS is how many placeholder rows stand for the cards of a board never read. */
 const SKELETON_ROWS = 8;
+
+/** NO_CARDS stands for a board whose reading brought no cards, always the same array. */
+const NO_CARDS: BoardCard[] = [];
 
 const LIST_PANEL = "board-cards";
 const DETAIL_PANEL = "board-card-detail";
@@ -54,10 +59,14 @@ function isTyping(target: EventTarget): boolean {
 
 function BoardScreen({ board }: { board: Board }) {
   const [memory, setMemory] = useBoardViewMemory(board.id);
+  const app = useAppStore((state) => state.app);
   const searchRef = useRef<HTMLInputElement>(null);
-  const cards = board.cards ?? [];
+  // The cards picked for a discussion are local to the view: they go when it does.
+  const [checked, setChecked] = useState<ReadonlySet<string>>(new Set());
+  const cards = board.cards ?? NO_CARDS;
   const selected = cards.find((card) => card.key === memory.selectedKey) ?? null;
   const start = useStartCard(board, selected);
+  const openNewDiscussion = useAppStore((state) => state.openNewDiscussion);
 
   // A card gone from the reading takes the selection with it.
   useEffect(() => {
@@ -65,6 +74,14 @@ function BoardScreen({ board }: { board: Board }) {
       setMemory((current) => ({ ...current, selectedKey: null }));
     }
   }, [memory.selectedKey, selected, setMemory]);
+
+  // A card gone from the reading also leaves the selection.
+  useEffect(() => {
+    setChecked((current) => {
+      const kept = [...current].filter((key) => cards.some((card) => card.key === key));
+      return kept.length === current.size ? current : new Set(kept);
+    });
+  }, [cards]);
 
   const collapsed = new Set(memory.collapsed);
   const filtered = filterCards(board, memory.filters);
@@ -83,6 +100,17 @@ function BoardScreen({ board }: { board: Board }) {
     select(card.key);
     start.run(card);
   };
+  const toggleChecked = (card: BoardCard) =>
+    setChecked((current) => {
+      const next = new Set(current);
+      if (!next.delete(card.key)) {
+        next.add(card.key);
+      }
+      return next;
+    });
+  const clearChecked = () => setChecked(new Set());
+  const checkable = (card: BoardCard) => isCheckable(card, app, board.id);
+  const openDiscuss = (cardKeys: string[]) => openNewDiscussion({ boardId: board.id, cardKeys });
 
   const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     // Dialogs render in a portal: their keys are not the view's.
@@ -142,6 +170,10 @@ function BoardScreen({ board }: { board: Board }) {
             onToggleSection={toggleSection}
             onSelect={select}
             onStart={startCard}
+            checked={checked}
+            isCheckable={checkable}
+            onToggleChecked={toggleChecked}
+            onDiscuss={(card) => openDiscuss(card === null ? [...checked] : [card.key])}
           />
         </ResizablePanel>
         {selected !== null && (
@@ -154,6 +186,7 @@ function BoardScreen({ board }: { board: Board }) {
                 start={start}
                 onClose={() => select(null)}
                 onSelect={select}
+                onDiscuss={() => openDiscuss([selected.key])}
               />
             </ResizablePanel>
           </>
@@ -168,13 +201,20 @@ function BoardScreen({ board }: { board: Board }) {
       onKeyDown={onKeyDown}
       className="flex h-dvh min-w-0 flex-col bg-background"
     >
-      <BoardHeader board={board} />
+      <BoardHeader board={board} onNewDiscussion={() => openDiscuss([...checked])} />
       <BoardFilterBar
         board={board}
         filters={memory.filters}
         onChange={setFilters}
         searchRef={searchRef}
       />
+      {checked.size > 0 && (
+        <SelectionBar
+          count={checked.size}
+          onDiscuss={() => openDiscuss([...checked])}
+          onClear={clearChecked}
+        />
+      )}
       <div className="flex min-h-0 flex-1 flex-col">{content}</div>
     </main>
   );

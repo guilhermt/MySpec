@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "@/lib/wails";
 import {
   addBoard,
+  addDraftDependency,
   addRepository,
   addRepositoryToBoard,
   answerPermission,
@@ -10,6 +11,7 @@ import {
   approvePR,
   approveReview,
   approveStep,
+  archiveDiscussion,
   askReviewAgain,
   backToStage,
   browseRepository,
@@ -22,12 +24,16 @@ import {
   closeTask,
   continueStage,
   createTask,
+  decideDraft,
   decideFinding,
+  deleteDiscussion,
   deleteReview,
   deleteTask,
   discardDraft,
   discardStage,
   discardStep,
+  discussionContext,
+  groupIntoEpic,
   interrupt,
   loadTranscript,
   openExternal,
@@ -40,24 +46,31 @@ import {
   previewBoard,
   previewEditBoard,
   previewRemoveBoard,
+  publishEpic,
   publishReview,
   refreshBoard,
   refreshCard,
   refreshPR,
   refreshPullRequests,
   removeBoard,
+  removeDraftDependency,
   removePending,
   removeRepository,
   resume,
   retry,
   retryPR,
+  retryPublish,
   retryStep,
   reviewAgain,
   reviewStepMyself,
+  saveDraftText,
   saveFindingText,
   saveReviewSummary,
   scanRepositories,
   sendMessage,
+  setDraftEpic,
+  setDraftModule,
+  setDraftRepository,
   setRepositoryFilter,
   setReviewFilters,
   setReviewInstructions,
@@ -65,6 +78,7 @@ import {
   setReviewModeDefault,
   setStepReviewMode,
   setTheme,
+  startDiscussion,
   startReview,
   updateBoard,
 } from "@/store/actions";
@@ -170,7 +184,7 @@ describe("clone actions", () => {
 // The dialogs and panels of the boards show the refusal where the user is, so
 // these reject instead of filling the banner.
 describe("board actions shown in place", () => {
-  const req = { finalStatuses: ["done"], repositories: [] };
+  const req = { finalStatuses: ["done"], newCardStatus: "todo", repositories: [] };
   const choice = { owner: "dev", name: "api", path: "" };
 
   it("delegate to the matching binding and answer what it says", async () => {
@@ -532,6 +546,100 @@ describe("review actions shown in place", () => {
     vi.mocked(api.publishReview).mockRejectedValueOnce(new Error("gh is not authenticated"));
 
     await expect(publishReview("review-1", "approve")).rejects.toThrow("gh is not authenticated");
+    expect(useAppStore.getState().error).toBeNull();
+  });
+});
+
+describe("discussion actions reported in the banner", () => {
+  it("delegate to the matching binding", async () => {
+    await saveDraftText("discussion-1", "draft-1", "Export the invoices", "A button.");
+    await setDraftRepository("discussion-1", "draft-1", "repo-2");
+    await setDraftModule("discussion-1", "draft-1", "Billing");
+    await setDraftEpic("discussion-1", "draft-1", "draft-2");
+    await removeDraftDependency("discussion-1", "draft-1", "draft-3");
+    await decideDraft("discussion-1", "draft-1", "approved");
+    await retryPublish("discussion-1", "draft-1");
+    await archiveDiscussion("discussion-1");
+    await deleteDiscussion("discussion-1");
+
+    expect(api.setDraftText).toHaveBeenCalledWith(
+      "discussion-1",
+      "draft-1",
+      "Export the invoices",
+      "A button.",
+    );
+    expect(api.setDraftRepository).toHaveBeenCalledWith("discussion-1", "draft-1", "repo-2");
+    expect(api.setDraftModule).toHaveBeenCalledWith("discussion-1", "draft-1", "Billing");
+    expect(api.setDraftEpic).toHaveBeenCalledWith("discussion-1", "draft-1", "draft-2");
+    expect(api.removeDraftDependency).toHaveBeenCalledWith("discussion-1", "draft-1", "draft-3");
+    expect(api.decideDraft).toHaveBeenCalledWith("discussion-1", "draft-1", "approved");
+    expect(api.retryPublish).toHaveBeenCalledWith("discussion-1", "draft-1");
+    expect(api.archiveDiscussion).toHaveBeenCalledWith("discussion-1");
+    expect(api.deleteDiscussion).toHaveBeenCalledWith("discussion-1");
+    expect(useAppStore.getState().error).toBeNull();
+  });
+
+  it("report a failed discussion action in the banner", async () => {
+    vi.mocked(api.archiveDiscussion).mockRejectedValueOnce(
+      new Error("a draft is still publishing"),
+    );
+
+    await archiveDiscussion("discussion-1");
+
+    expect(useAppStore.getState().error).toBe("a draft is still publishing");
+  });
+
+  it("answer the id of the epic the drafts were grouped into", async () => {
+    vi.mocked(api.groupIntoEpic).mockResolvedValueOnce("draft-epic");
+
+    expect(await groupIntoEpic("discussion-1", ["draft-1", "draft-2"])).toBe("draft-epic");
+    expect(api.groupIntoEpic).toHaveBeenCalledWith("discussion-1", ["draft-1", "draft-2"]);
+  });
+
+  it("answer an empty id when the drafts could not be grouped", async () => {
+    vi.mocked(api.groupIntoEpic).mockRejectedValueOnce(new Error("a draft is published"));
+
+    expect(await groupIntoEpic("discussion-1", ["draft-1"])).toBe("");
+    expect(useAppStore.getState().error).toBe("a draft is published");
+  });
+});
+
+// The dialog and the cards of the drafts show the refusal where the user is, so
+// these reject instead of filling the banner.
+describe("discussion actions shown in place", () => {
+  const request = {
+    boardId: "board-1",
+    title: "Invoices",
+    text: "Split the invoices screen.",
+    cards: ["dev/web#12"],
+    model: "claude-opus-5",
+    effort: "high",
+  };
+
+  it("delegate to the matching binding and answer what it says", async () => {
+    vi.mocked(api.startDiscussion).mockResolvedValueOnce("discussion-9");
+    vi.mocked(api.discussionContext).mockResolvedValueOnce("## Board\nRoadmap");
+    const context = { boardId: "board-1", text: "Split it.", cards: ["dev/web#12"] };
+
+    expect(await startDiscussion(request)).toBe("discussion-9");
+    expect(await discussionContext(context)).toBe("## Board\nRoadmap");
+    await addDraftDependency("discussion-1", "draft-1", "draft-2");
+    await publishEpic("discussion-1", "draft-epic");
+
+    expect(api.startDiscussion).toHaveBeenCalledWith(request);
+    expect(api.discussionContext).toHaveBeenCalledWith(context);
+    expect(api.addDraftDependency).toHaveBeenCalledWith("discussion-1", "draft-1", "draft-2");
+    expect(api.publishEpic).toHaveBeenCalledWith("discussion-1", "draft-epic");
+  });
+
+  it("reject instead of using the banner", async () => {
+    vi.mocked(api.startDiscussion).mockRejectedValueOnce(new Error("This board has no clone."));
+    vi.mocked(api.addDraftDependency).mockRejectedValueOnce(new Error("This draft doesn't exist."));
+
+    await expect(startDiscussion(request)).rejects.toThrow("This board has no clone.");
+    await expect(addDraftDependency("discussion-1", "draft-1", "draft-9")).rejects.toThrow(
+      "This draft doesn't exist.",
+    );
     expect(useAppStore.getState().error).toBeNull();
   });
 });

@@ -6,21 +6,26 @@ import { sessionKey } from "@/lib/wails";
 import {
   stepTabKey,
   useAppStore,
+  useArchivedDiscussion,
   useArchivedNotice,
   useArchivedReview,
   useArchivedTask,
   useBoard,
   useBoards,
+  useDiscussion,
+  useDiscussionHistory,
+  useDiscussions,
   useDraft,
   useError,
-  useFindingDraft,
   useFlashing,
   useHistory,
   useHistoryUi,
   useLeftover,
   useMigration,
+  useNewDiscussion,
   useOnScreenSituationId,
   useOpenBoardId,
+  useOpenDiscussionId,
   useOpenReviewId,
   useOpenStepTab,
   useOpenTask,
@@ -38,14 +43,17 @@ import {
   useStartReview,
   useTask,
   useTasks,
+  useTextDraft,
   useThemeState,
   useTranscript,
 } from "@/store/app-store";
 import { resetAppStore } from "@/test/render";
 import {
+  makeArchivedDiscussion,
   makeArchivedReview,
   makeArchivedTask,
   makeBoard,
+  makeDiscussion,
   makeEntry,
   makeMigration,
   makePullRequest,
@@ -1461,17 +1469,17 @@ describe("reviews", () => {
 
   it("keeps the text of a finding the user is editing until it is cleared", () => {
     const key = `${REVIEW.id}|1|2`;
-    const { result } = renderHook(() => useFindingDraft(key));
+    const { result } = renderHook(() => useTextDraft(key));
 
     expect(result.current).toBeNull();
 
     act(() => {
-      useAppStore.getState().setFindingDraft(key, { text: "half a note", revision: 1 });
+      useAppStore.getState().setTextDraft(key, { text: "half a note", revision: 1 });
     });
     expect(result.current).toEqual({ text: "half a note", revision: 1 });
 
     act(() => {
-      useAppStore.getState().clearFindingDraft(key);
+      useAppStore.getState().clearTextDraft(key);
     });
     expect(result.current).toBeNull();
   });
@@ -1507,5 +1515,234 @@ describe("reviews", () => {
       useAppStore.getState().openReview(REVIEW.id);
     });
     expect(result.current).toBe("s-report");
+  });
+});
+
+const BOARD = makeBoard();
+const DISCUSSION = makeDiscussion({ id: "discussion-1" });
+const OTHER_DISCUSSION = makeDiscussion({ id: "discussion-2", title: "Billing" });
+const ARCHIVED_DISCUSSION = makeArchivedDiscussion({ id: "discussion-1" });
+const DISCUSSION_PLACE: Place = { kind: "discussion", stage: "", step: 0 };
+
+// DISCUSSION_KEY is the conversation of a discussion: a discussion has the one stage.
+const DISCUSSION_KEY = sessionKey(DISCUSSION.id, "discussion");
+
+function withDiscussions(overrides = {}) {
+  return withTasks({
+    boards: [BOARD],
+    discussions: [DISCUSSION, OTHER_DISCUSSION],
+    ...overrides,
+  });
+}
+
+describe("discussions", () => {
+  it("report the discussions of the snapshot, and nothing before the first one", () => {
+    const { result } = renderHook(() => ({
+      discussions: useDiscussions(),
+      discussion: useDiscussion(DISCUSSION.id),
+      missing: useDiscussion("discussion-gone"),
+      history: useDiscussionHistory(),
+      archived: useArchivedDiscussion(ARCHIVED_DISCUSSION.id),
+    }));
+
+    expect(result.current.discussions).toEqual([]);
+    expect(result.current.discussion).toBeNull();
+    expect(result.current.history).toEqual([]);
+
+    act(() => {
+      useAppStore
+        .getState()
+        .applyState(withDiscussions({ discussionHistory: [ARCHIVED_DISCUSSION] }));
+    });
+
+    expect(result.current.discussions).toEqual([DISCUSSION, OTHER_DISCUSSION]);
+    expect(result.current.discussion).toEqual(DISCUSSION);
+    expect(result.current.missing).toBeNull();
+    expect(result.current.archived).toEqual(ARCHIVED_DISCUSSION);
+  });
+
+  it("falls back to no discussion when the snapshot carries none", () => {
+    const { result } = renderHook(() => ({
+      discussions: useDiscussions(),
+      history: useDiscussionHistory(),
+    }));
+
+    act(() => {
+      useAppStore.getState().applyState(withTasks({ discussions: null, discussionHistory: null }));
+    });
+
+    expect(result.current.discussions).toEqual([]);
+    expect(result.current.history).toEqual([]);
+  });
+
+  it("opens a discussion in place of a task and closes it into the view of its board", () => {
+    const { result } = renderHook(() => ({
+      openId: useOpenDiscussionId(),
+      boardId: useOpenBoardId(),
+    }));
+
+    act(() => {
+      useAppStore.getState().applyState(withDiscussions());
+      useAppStore.getState().openTask(WEB_TASK.id);
+      useAppStore.getState().openDiscussion(DISCUSSION.id);
+    });
+    expect(result.current).toEqual({ openId: DISCUSSION.id, boardId: null });
+    expect(useAppStore.getState().openTaskId).toBeNull();
+
+    act(() => {
+      useAppStore.getState().closeDiscussion();
+    });
+    expect(result.current).toEqual({ openId: null, boardId: BOARD.id });
+  });
+
+  it("closes a discussion whose board is gone into the home", () => {
+    useAppStore.getState().applyState(withDiscussions({ boards: [] }));
+    useAppStore.getState().openDiscussion(DISCUSSION.id);
+
+    useAppStore.getState().closeDiscussion();
+
+    expect(useAppStore.getState().openDiscussionId).toBeNull();
+    expect(useAppStore.getState().openBoardId).toBeNull();
+  });
+
+  it("opens an archived discussion inside the history and closes it", () => {
+    act(() => {
+      useAppStore
+        .getState()
+        .applyState(withDiscussions({ discussionHistory: [ARCHIVED_DISCUSSION] }));
+      useAppStore.getState().openDiscussion(DISCUSSION.id);
+      useAppStore.getState().openArchivedDiscussion(ARCHIVED_DISCUSSION.id);
+    });
+    expect(useAppStore.getState().openArchivedDiscussionId).toBe(ARCHIVED_DISCUSSION.id);
+    expect(useAppStore.getState().historyOpen).toBe(true);
+    expect(useAppStore.getState().openDiscussionId).toBeNull();
+
+    act(() => {
+      useAppStore.getState().closeArchivedDiscussion();
+    });
+    expect(useAppStore.getState().openArchivedDiscussionId).toBeNull();
+  });
+
+  it.each([
+    ["a task", () => useAppStore.getState().openTask(WEB_TASK.id)],
+    [
+      "the situation of a task",
+      () => useAppStore.getState().openPlace(WEB_TASK.id, stagePlace("prd")),
+    ],
+    ["a board", () => useAppStore.getState().openBoard(BOARD.id)],
+    ["the history", () => useAppStore.getState().openHistory()],
+    ["an archived task", () => useAppStore.getState().openArchived(ARCHIVED.id)],
+    ["the settings", () => useAppStore.getState().openSettings()],
+    ["the Reviews view", () => useAppStore.getState().openReviews()],
+    ["nothing", () => useAppStore.getState().closeTask()],
+  ])("leaves the discussion screens behind when %s opens", (_name, navigate) => {
+    useAppStore.getState().applyState(withDiscussions({ history: [ARCHIVED] }));
+    useAppStore.getState().openDiscussion(DISCUSSION.id);
+
+    navigate();
+
+    expect(useAppStore.getState().openDiscussionId).toBeNull();
+    expect(useAppStore.getState().openArchivedDiscussionId).toBeNull();
+  });
+
+  it("closes the screen of a discussion that is gone and drops its conversation", () => {
+    useAppStore.getState().applyState(withDiscussions());
+    useAppStore.getState().openDiscussion(DISCUSSION.id);
+    useAppStore
+      .getState()
+      .setTranscript(makeTranscript({ taskId: DISCUSSION.id, stage: "discussion" }));
+
+    useAppStore.getState().applyState(withDiscussions({ discussions: [OTHER_DISCUSSION] }));
+
+    expect(useAppStore.getState().openDiscussionId).toBeNull();
+    expect(useAppStore.getState().openArchivedDiscussionId).toBeNull();
+    expect(useAppStore.getState().transcripts[DISCUSSION_KEY]).toBeUndefined();
+  });
+
+  it("opens the archived discussion of one that was archived", () => {
+    useAppStore.getState().applyState(withDiscussions());
+    useAppStore.getState().openDiscussion(DISCUSSION.id);
+
+    useAppStore.getState().applyState(
+      withDiscussions({
+        discussions: [OTHER_DISCUSSION],
+        discussionHistory: [ARCHIVED_DISCUSSION],
+      }),
+    );
+
+    expect(useAppStore.getState().openDiscussionId).toBeNull();
+    expect(useAppStore.getState().openArchivedDiscussionId).toBe(ARCHIVED_DISCUSSION.id);
+    expect(useAppStore.getState().historyOpen).toBe(true);
+  });
+
+  it("closes an archived discussion that is no longer in the history", () => {
+    useAppStore
+      .getState()
+      .applyState(withDiscussions({ discussionHistory: [ARCHIVED_DISCUSSION] }));
+    useAppStore.getState().openArchivedDiscussion(ARCHIVED_DISCUSSION.id);
+
+    useAppStore.getState().applyState(withDiscussions({ discussionHistory: [] }));
+
+    expect(useAppStore.getState().openArchivedDiscussionId).toBeNull();
+  });
+
+  it("forgets the discussion screens once no repository and no board is registered", () => {
+    useAppStore.getState().applyState(withDiscussions());
+    useAppStore.getState().openDiscussion(DISCUSSION.id);
+
+    useAppStore.getState().applyState(makeState({ repositories: [], tasks: [] }));
+
+    expect(useAppStore.getState().openDiscussionId).toBeNull();
+    expect(useAppStore.getState().openArchivedDiscussionId).toBeNull();
+  });
+
+  it("opens and closes the dialog that creates a discussion", () => {
+    const { result } = renderHook(() => useNewDiscussion());
+    const ref = { boardId: BOARD.id, cardKeys: ["dev/web#12"] };
+
+    expect(result.current).toBeNull();
+
+    act(() => {
+      useAppStore.getState().openNewDiscussion(ref);
+    });
+    expect(result.current).toEqual(ref);
+
+    act(() => {
+      useAppStore.getState().closeNewDiscussion();
+    });
+    expect(result.current).toBeNull();
+  });
+
+  it("opens the discussion a situation is in, and ignores one that is gone", () => {
+    useAppStore.getState().applyState(withDiscussions());
+
+    useAppStore.getState().openPlace("discussion-gone", DISCUSSION_PLACE);
+    expect(useAppStore.getState().openDiscussionId).toBeNull();
+
+    useAppStore.getState().openPlace(DISCUSSION.id, DISCUSSION_PLACE);
+    expect(useAppStore.getState().openDiscussionId).toBe(DISCUSSION.id);
+  });
+
+  it("is the situation of the open discussion on screen", () => {
+    const { result } = renderHook(() => useOnScreenSituationId());
+    const situation = makeSituation({
+      id: "s-drafts",
+      taskId: DISCUSSION.id,
+      kind: "drafts",
+      form: "decide",
+      place: DISCUSSION_PLACE,
+    });
+
+    act(() => {
+      useAppStore
+        .getState()
+        .applyState(withDiscussions({ discussions: [{ ...DISCUSSION, situations: [situation] }] }));
+    });
+    expect(result.current).toBeNull();
+
+    act(() => {
+      useAppStore.getState().openDiscussion(DISCUSSION.id);
+    });
+    expect(result.current).toBe("s-drafts");
   });
 });

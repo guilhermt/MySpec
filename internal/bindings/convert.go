@@ -2,11 +2,14 @@ package bindings
 
 import (
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/guilhermt/myspec/internal/attention"
 	"github.com/guilhermt/myspec/internal/board"
+	"github.com/guilhermt/myspec/internal/discussion"
+	"github.com/guilhermt/myspec/internal/discussionflow"
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
@@ -258,7 +261,7 @@ func fromPullRequest(pr *flow.PullRequest) *PullRequest {
 		Branch:       pr.Branch,
 		BaseBranch:   pr.BaseBranch,
 
-		Draft:        fromDraft(pr.Draft),
+		Draft:        fromPRDraft(pr.Draft),
 		Reports:      fromReports(pr.Reports),
 		Review:       fromReview(pr.Review),
 		CommitFailed: pr.CommitFailed,
@@ -416,8 +419,9 @@ func fromPRBlock(block *task.PRBlock) *PRBlock {
 	return &PRBlock{Reason: string(block.Reason), Detail: block.Detail}
 }
 
-// fromDraft converts the draft of a task, keeping nil until one is written.
-func fromDraft(draft *task.Draft) *PRDraft {
+// fromPRDraft converts the pull request draft of a task, keeping nil until one
+// is written.
+func fromPRDraft(draft *task.Draft) *PRDraft {
 	if draft == nil {
 		return nil
 	}
@@ -786,6 +790,7 @@ func FromBoards(
 			Reading:       reading(b.ID),
 			Failure:       fromBoardFailure(s.Failure, s.FailedAt),
 			Cards:         []BoardCard{},
+			NewCardStatus: b.NewCardStatus,
 		}
 		if s.Reading == nil {
 			continue
@@ -1009,14 +1014,15 @@ func FromBoardPreview(p board.Preview) BoardPreview {
 		repositories[i] = FromBoardRepositoryOption(o)
 	}
 	return BoardPreview{
-		URL:          p.URL,
-		Owner:        p.Owner,
-		OwnerType:    string(p.OwnerType),
-		Number:       p.Number,
-		Title:        p.Title,
-		HasStatus:    p.HasStatus,
-		Statuses:     statuses,
-		Repositories: repositories,
+		URL:           p.URL,
+		Owner:         p.Owner,
+		OwnerType:     string(p.OwnerType),
+		Number:        p.Number,
+		Title:         p.Title,
+		HasStatus:     p.HasStatus,
+		Statuses:      statuses,
+		NewCardStatus: p.NewCardStatus,
+		Repositories:  repositories,
 	}
 }
 
@@ -1047,7 +1053,11 @@ func saveParamsOf(req SaveBoardRequest) board.SaveParams {
 	}
 	finals := make([]string, len(req.FinalStatuses))
 	copy(finals, req.FinalStatuses)
-	return board.SaveParams{FinalStatuses: finals, Repositories: choices}
+	return board.SaveParams{
+		FinalStatuses: finals,
+		NewCardStatus: req.NewCardStatus,
+		Repositories:  choices,
+	}
 }
 
 // repositoryChoiceOf converts a repository the user checked.
@@ -1509,4 +1519,404 @@ func fromFindings(findings []prreview.Finding) []ReviewFinding {
 		}
 	}
 	return converted
+}
+
+// FromDiscussions converts the active discussions with the situations each one
+// waits on the user for, by discussion id, the board each one belongs to and
+// its last reading, and the converted repositories. A nil map of situations
+// counts as none for every discussion. The slices are always allocated so the
+// frontend never sees null.
+func FromDiscussions(
+	states []discussionflow.State,
+	situations map[string][]attention.Situation,
+	boards func(id string) (board.Board, bool),
+	stored func(id string) board.Stored,
+	repos []Repository,
+	missing func(id string) bool,
+) []DiscussionSummary {
+	converted := make([]DiscussionSummary, len(states))
+	for i, state := range states {
+		d := state.Discussion
+		reading := stored(d.BoardID).Reading
+		byKey := repositoriesOfBoard(repos, d.BoardID)
+		summary := state.Session
+		if summary.Status == "" {
+			summary.Status = session.StatusWaiting
+		}
+		sessionStage := ""
+		if state.SessionOpen {
+			sessionStage = session.DiscussionStage
+		}
+		drafts := make([]discussion.Draft, len(state.Drafts))
+		for j, draft := range state.Drafts {
+			drafts[j] = draft.Draft
+		}
+		converted[i] = DiscussionSummary{
+			ID:               d.ID,
+			BoardID:          d.BoardID,
+			Board:            boardTitleOf(d, boards),
+			Title:            d.Title,
+			Text:             d.Text,
+			Status:           string(state.Status),
+			Cards:            fromDiscussionCards(d.Cards),
+			Drafts:           fromDrafts(state.Drafts, drafts, reading, byKey),
+			DraftsRead:       d.DraftsRead,
+			DraftsRevision:   d.DraftsRevision,
+			UnreadableDrafts: state.UnreadableDrafts,
+			HasDocument:      state.HasDocument,
+			DocumentRevision: state.DocumentRevision,
+			ModuleField:      moduleFieldName(reading),
+			ModuleOptions:    moduleOptionNames(reading),
+			Repositories:     fromDiscussionRepositories(repos, d.BoardID, missing),
+			CanArchive:       state.CanArchive,
+			ArchiveHint:      state.ArchiveHint,
+
+			SessionStage:   sessionStage,
+			SessionStatus:  string(summary.Status),
+			SessionModel:   string(summary.Choice.Model),
+			SessionEffort:  string(summary.Choice.Effort),
+			TurnRunning:    summary.TurnRunning,
+			ProcessRunning: summary.ProcessRunning,
+			RetryAttempt:   summary.RetryAttempt,
+			ContextPercent: summary.ContextPercent,
+			PendingCount:   summary.PendingCount,
+			LastError:      summary.LastError,
+			Situations:     fromSituations(situations[d.ID]),
+			CreatedAt:      d.CreatedAt.Format(time.RFC3339),
+		}
+	}
+	return converted
+}
+
+// FromArchivedDiscussions converts the discussions of the history, each with
+// the drafts it produced and the registered repositories it touched. The
+// slices are always allocated so the frontend never sees null.
+func FromArchivedDiscussions(
+	list []discussion.Discussion, drafts func(id string) []discussion.Draft, repos []Repository,
+) []ArchivedDiscussion {
+	converted := make([]ArchivedDiscussion, len(list))
+	for i, d := range list {
+		stored := drafts(d.ID)
+		byKey := repositoriesOfBoard(repos, d.BoardID)
+		states := make([]discussionflow.DraftState, len(stored))
+		for j, draft := range stored {
+			states[j] = discussionflow.DraftState{Draft: draft}
+		}
+		published := 0
+		for _, draft := range stored {
+			if draft.Published.Done() {
+				published++
+			}
+		}
+		converted[i] = ArchivedDiscussion{
+			ID:             d.ID,
+			BoardID:        d.BoardID,
+			Board:          d.BoardTitle,
+			Title:          d.Title,
+			Cards:          fromDiscussionCards(d.Cards),
+			Drafts:         fromDrafts(states, stored, nil, byKey),
+			PublishedCount: published,
+			RepositoryIDs:  repositoryIDsOf(d, stored, repositoriesByFullName(repos)),
+			CreatedAt:      d.CreatedAt.Format(time.RFC3339),
+			ArchivedAt:     d.ArchivedAt.Format(time.RFC3339),
+		}
+	}
+	return converted
+}
+
+// boardTitleOf names the board of a discussion: as it is now, or as the
+// discussion recorded it when the board is no longer registered.
+func boardTitleOf(d discussion.Discussion, boards func(id string) (board.Board, bool)) string {
+	if b, ok := boards(d.BoardID); ok {
+		return b.Title
+	}
+	return d.BoardTitle
+}
+
+// repositoriesOfBoard are the converted repositories of a board, by
+// owner/name in lower case.
+func repositoriesOfBoard(repos []Repository, boardID string) map[string]Repository {
+	byKey := make(map[string]Repository)
+	for _, repo := range repos {
+		if repo.BoardID == boardID {
+			byKey[strings.ToLower(repo.FullName)] = repo
+		}
+	}
+	return byKey
+}
+
+// repositoriesByFullName are every registered repository by owner/name in
+// lower case, whatever board it belongs to.
+func repositoriesByFullName(repos []Repository) map[string]Repository {
+	byKey := make(map[string]Repository, len(repos))
+	for _, repo := range repos {
+		byKey[strings.ToLower(repo.FullName)] = repo
+	}
+	return byKey
+}
+
+// fromDiscussionRepositories converts the repositories a new card of a
+// discussion can be created in: the registered repositories of its board, in
+// the order they come in. A board that was removed has none.
+func fromDiscussionRepositories(repos []Repository, boardID string, missing func(id string) bool) []DiscussionRepository {
+	converted := []DiscussionRepository{}
+	for _, repo := range repos {
+		if repo.BoardID != boardID {
+			continue
+		}
+		converted = append(converted, DiscussionRepository{
+			ID:       repo.ID,
+			FullName: repo.FullName,
+			Cloned:   repo.Cloned,
+			Missing:  repo.Cloned && missing(repo.ID),
+		})
+	}
+	return converted
+}
+
+// repositoryIDsOf are the registered repositories an archived discussion
+// touched: the ones of the cards it started from and the ones its drafts were
+// published in, each one once. They are looked up by identity, so a discussion
+// of a board that was removed keeps the repositories the history filters by.
+func repositoryIDsOf(d discussion.Discussion, drafts []discussion.Draft, byKey map[string]Repository) []string {
+	ids := []string{}
+	add := func(fullName string) {
+		repo, ok := byKey[strings.ToLower(fullName)]
+		if !ok || slices.Contains(ids, repo.ID) {
+			return
+		}
+		ids = append(ids, repo.ID)
+	}
+	for _, card := range d.Cards {
+		add(card.Owner + "/" + card.Name)
+	}
+	for _, draft := range drafts {
+		if draft.Published.Done() {
+			add(draft.FullName())
+		}
+	}
+	return ids
+}
+
+// moduleFieldName is the name of the module field of the board; "" without a
+// reading or without one.
+func moduleFieldName(reading *board.Reading) string {
+	if reading == nil || reading.Module == nil {
+		return ""
+	}
+	return reading.Module.Name
+}
+
+// moduleOptionNames are the options of the module field of the board, always
+// allocated so the frontend never sees null.
+func moduleOptionNames(reading *board.Reading) []string {
+	if reading == nil || reading.Module == nil {
+		return []string{}
+	}
+	names := make([]string, len(reading.Module.Options))
+	for i, o := range reading.Module.Options {
+		names[i] = o.Name
+	}
+	return names
+}
+
+// fromDrafts converts the drafts of a discussion, in position order, always
+// returning a slice so the frontend never sees null.
+func fromDrafts(
+	states []discussionflow.DraftState,
+	drafts []discussion.Draft,
+	reading *board.Reading,
+	byKey map[string]Repository,
+) []Draft {
+	converted := make([]Draft, len(states))
+	for i, state := range states {
+		converted[i] = fromDraft(state, drafts, reading, byKey)
+	}
+	return converted
+}
+
+// fromDraft converts one draft with what can be done to it now, the card an
+// update changes as the stored reading has it, and the registered repository
+// its issue goes to.
+func fromDraft(
+	state discussionflow.DraftState,
+	drafts []discussion.Draft,
+	reading *board.Reading,
+	byKey map[string]Repository,
+) Draft {
+	d := state.Draft
+	warnings := make([]string, len(d.Warnings))
+	copy(warnings, d.Warnings)
+	converted := Draft{
+		ID:           d.ID,
+		Position:     d.Position,
+		Kind:         string(d.Kind),
+		Source:       string(d.Source),
+		Repository:   d.FullName(),
+		RepositoryID: byKey[strings.ToLower(d.FullName())].ID,
+		Card:         fromDraftCard(d.Card),
+		Title:        d.Title,
+		Body:         d.Body,
+		Module:       d.Module,
+		Epic:         draftRefOf(d.Epic, drafts, reading),
+		Dependencies: fromDraftDependencies(d.Dependencies, drafts, reading),
+		Current:      fromDraftCurrent(d, reading),
+		Decision:     string(d.Decision),
+		Revision:     d.Revision,
+		Warnings:     warnings,
+		Outcome:      string(d.Published.Outcome),
+		Number:       d.Published.Number,
+		URL:          d.Published.URL,
+		Published:    d.Published.Done(),
+		Publishing:   state.Publishing,
+		PublishError: d.PublishError,
+		Waits:        state.Waits,
+		CanPublish:   state.CanPublish,
+		Hint:         state.Hint,
+	}
+	if d.Published.Done() {
+		converted.PublishedAt = d.Published.At.Format(time.RFC3339)
+	}
+	return converted
+}
+
+// fromDraftCard converts the card an update draft changes, keeping nil for a
+// draft that changes none.
+func fromDraftCard(c *discussion.InputCard) *DiscussionCard {
+	if c == nil {
+		return nil
+	}
+	converted := fromDiscussionCard(*c)
+	return &converted
+}
+
+// fromDiscussionCards converts the cards a discussion started from, always
+// returning a slice so the frontend never sees null.
+func fromDiscussionCards(cards []discussion.InputCard) []DiscussionCard {
+	converted := make([]DiscussionCard, len(cards))
+	for i, card := range cards {
+		converted[i] = fromDiscussionCard(card)
+	}
+	return converted
+}
+
+// fromDiscussionCard converts one card of the board a discussion holds.
+func fromDiscussionCard(c discussion.InputCard) DiscussionCard {
+	return DiscussionCard{
+		Key:        c.Key(),
+		Repository: c.Owner + "/" + c.Name,
+		Number:     c.Number,
+		Title:      c.Title,
+		URL:        c.URL,
+	}
+}
+
+// fromDraftDependencies converts the dependencies of a draft, always returning
+// a slice so the frontend never sees null.
+func fromDraftDependencies(
+	dependencies []discussion.Dependency, drafts []discussion.Draft, reading *board.Reading,
+) []DraftDependency {
+	converted := make([]DraftDependency, len(dependencies))
+	for i, dependency := range dependencies {
+		converted[i] = DraftDependency{
+			DraftRef: refOf(dependency.Ref, drafts, reading),
+			Linked:   dependency.Linked,
+			Dropped:  string(dependency.Dropped),
+			Detail:   dependency.Detail,
+		}
+	}
+	return converted
+}
+
+// draftRefOf converts what a draft points at, as the draft writes it, keeping
+// nil for one that points at nothing.
+func draftRefOf(value string, drafts []discussion.Draft, reading *board.Reading) *DraftRef {
+	ref, ok := discussion.ParseRef(value)
+	if !ok {
+		return nil
+	}
+	converted := refOf(ref, drafts, reading)
+	return &converted
+}
+
+// refOf converts a reference: a draft of the discussion by its title, or an
+// issue with what the stored reading knows about it.
+func refOf(ref discussion.Ref, drafts []discussion.Draft, reading *board.Reading) DraftRef {
+	if ref.IsDraft() {
+		converted := DraftRef{Draft: ref.Draft}
+		i := slices.IndexFunc(drafts, func(d discussion.Draft) bool { return d.ID == ref.Draft })
+		if i >= 0 {
+			converted.Title = drafts[i].Title
+		}
+		return converted
+	}
+	converted := DraftRef{Key: ref.Key(), Reference: ref.String()}
+	if card, ok := cardOfReading(reading, ref.Key()); ok {
+		converted.Title, converted.URL = card.Title, card.URL
+	}
+	return converted
+}
+
+// issueRefOf converts an issue the stored reading names next to a card.
+func issueRefOf(issue board.Issue) DraftRef {
+	return DraftRef{
+		Key:       issue.Key(),
+		Reference: issue.FullName() + "#" + strconv.Itoa(issue.Number),
+		Title:     issue.Title,
+		URL:       issue.URL,
+	}
+}
+
+// fromDraftCurrent converts the card an update draft changes, as the stored
+// reading has it, keeping nil for every other draft and for a card that left
+// the reading.
+func fromDraftCurrent(d discussion.Draft, reading *board.Reading) *DraftCurrent {
+	if d.Kind != discussion.KindUpdate || d.Card == nil {
+		return nil
+	}
+	card, ok := cardOfReading(reading, d.Card.Key())
+	if !ok {
+		return nil
+	}
+	current := DraftCurrent{
+		Title:        card.Title,
+		Body:         card.Body,
+		Module:       moduleValueOf(card, reading),
+		Status:       card.Status,
+		Dependencies: []DraftRef{},
+		ReadAt:       card.ReadAt.Format(time.RFC3339),
+	}
+	if card.Epic != nil {
+		epic := issueRefOf(card.Epic.Issue)
+		current.Epic = &epic
+	}
+	for _, dependency := range card.Dependencies {
+		current.Dependencies = append(current.Dependencies, issueRefOf(dependency.Issue))
+	}
+	return &current
+}
+
+// moduleValueOf is the module of a card of the reading: the value of the field
+// the board names as its module field.
+func moduleValueOf(card board.Card, reading *board.Reading) string {
+	if reading == nil || reading.Module == nil {
+		return ""
+	}
+	i := slices.IndexFunc(card.Fields, func(f board.Field) bool { return f.Name == reading.Module.Name })
+	if i < 0 {
+		return ""
+	}
+	return card.Fields[i].Value
+}
+
+// cardOfReading is the card of the stored reading of key.
+func cardOfReading(reading *board.Reading, key string) (board.Card, bool) {
+	if reading == nil {
+		return board.Card{}, false
+	}
+	i := slices.IndexFunc(reading.Cards, func(c board.Card) bool { return c.Key() == key })
+	if i < 0 {
+		return board.Card{}, false
+	}
+	return reading.Cards[i], true
 }

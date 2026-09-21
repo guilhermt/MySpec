@@ -36,11 +36,13 @@ fragment card on Issue { ...brief body
 `
 
 // structureQuery reads the title, the Status field and the fields of a board,
-// and the viewer. The %s is the owner type.
+// with the options of the single select ones, and the viewer. The %s is the
+// owner type.
 const structureQuery = `query($owner: String!, $number: Int!) { viewer { login }
   owner: %s(login: $owner) { projectV2(number: $number) { id title url
     field(name: "Status") { ... on ProjectV2SingleSelectField { id options { id name } } }
-    fields(first: 50) { nodes { ... on ProjectV2FieldCommon { name dataType } } } } } }`
+    fields(first: 50) { nodes { ... on ProjectV2FieldCommon { name dataType }
+      ... on ProjectV2SingleSelectField { id options { id name } } } } } } }`
 
 // itemsQuery reads one page of the items of a board that match q. The %s is
 // the owner type.
@@ -68,8 +70,8 @@ const batchIssue = `%s: repository(owner: %s, name: %s) { issue(number: %d) { ..
 
 // The GraphQL names the reading tells apart.
 const (
-	typeNotFound      = "NOT_FOUND"
 	typeIssue         = "Issue"
+	singleSelectType  = "SINGLE_SELECT"
 	statusField       = "Status"
 	typeSingleSelect  = "ProjectV2ItemFieldSingleSelectValue"
 	typeTextValue     = "ProjectV2ItemFieldTextValue"
@@ -83,13 +85,15 @@ var valueDataTypes = []string{"TEXT", "NUMBER", "DATE", "SINGLE_SELECT", "ITERAT
 
 // structure is what the structure query found of a board.
 type structure struct {
-	ProjectID   string
-	Title       string
-	URL         string
-	Viewer      string
-	Statuses    []Option        // board order; never nil
-	HasStatus   bool            // the Status field is a single select with options
-	ValueFields map[string]bool // the names of the fields whose values a card shows
+	ProjectID     string
+	Title         string
+	URL           string
+	Viewer        string
+	Statuses      []Option        // board order; never nil
+	HasStatus     bool            // the Status field is a single select with options
+	StatusFieldID string          // "" without a Status field
+	Module        *ModuleField    // nil without a module field
+	ValueFields   map[string]bool // the names of the fields whose values a card shows
 }
 
 type repositoryNode struct {
@@ -245,7 +249,7 @@ func (s *Service) readStructure(ctx context.Context, loc Locator) (structure, er
 		"number": loc.Number,
 	})
 	if err != nil {
-		if hasNotFound(resp.Errors) {
+		if gh.HasNotFound(resp.Errors) {
 			return structure{}, &Failure{Reason: ReasonNotFound}
 		}
 		return structure{}, failureOf(err)
@@ -260,12 +264,15 @@ func (s *Service) readStructure(ctx context.Context, loc Locator) (structure, er
 				Title string `json:"title"`
 				URL   string `json:"url"`
 				Field *struct {
+					ID      string   `json:"id"`
 					Options []Option `json:"options"`
 				} `json:"field"`
 				Fields struct {
 					Nodes []struct {
-						Name     string `json:"name"`
-						DataType string `json:"dataType"`
+						Name     string   `json:"name"`
+						DataType string   `json:"dataType"`
+						ID       string   `json:"id"`
+						Options  []Option `json:"options"`
 					} `json:"nodes"`
 				} `json:"fields"`
 			} `json:"projectV2"`
@@ -289,11 +296,20 @@ func (s *Service) readStructure(ctx context.Context, loc Locator) (structure, er
 	if project.Field != nil && len(project.Field.Options) > 0 {
 		st.Statuses = project.Field.Options
 		st.HasStatus = true
+		st.StatusFieldID = project.Field.ID
 	}
 	for _, f := range project.Fields.Nodes {
 		if f.Name != statusField && slices.Contains(valueDataTypes, f.DataType) {
 			st.ValueFields[f.Name] = true
 		}
+		if st.Module != nil || f.DataType != singleSelectType || !slices.Contains(moduleNames, fold(strings.TrimSpace(f.Name))) {
+			continue
+		}
+		options := f.Options
+		if options == nil {
+			options = []Option{}
+		}
+		st.Module = &ModuleField{ID: f.ID, Name: f.Name, Options: options}
 	}
 	return st, nil
 }
@@ -307,7 +323,7 @@ func (s *Service) readItems(ctx context.Context, loc Locator, q, cursor string) 
 	}
 	resp, err := s.github.GraphQL(ctx, fmt.Sprintf(itemsQuery, loc.OwnerType)+fragments, vars)
 	if err != nil {
-		if hasNotFound(resp.Errors) {
+		if gh.HasNotFound(resp.Errors) {
 			return itemsPage{}, &Failure{Reason: ReasonNotFound}
 		}
 		return itemsPage{}, failureOf(err)
@@ -355,7 +371,7 @@ func (s *Service) readSuggestions(ctx context.Context, loc Locator) ([]suggestio
 		}
 		resp, err := s.github.GraphQL(ctx, fmt.Sprintf(repositoriesQuery, loc.OwnerType), vars)
 		if err != nil {
-			if hasNotFound(resp.Errors) {
+			if gh.HasNotFound(resp.Errors) {
 				return nil, &Failure{Reason: ReasonNotFound}
 			}
 			return nil, failureOf(err)
@@ -416,7 +432,7 @@ func (s *Service) readSuggestions(ctx context.Context, loc Locator) ([]suggestio
 func (s *Service) readRepository(ctx context.Context, owner, name string) (identity repository.Identity, ok bool, err error) {
 	resp, err := s.github.GraphQL(ctx, repositoryQuery, gh.Vars{"owner": owner, "name": name})
 	if err != nil {
-		if hasNotFound(resp.Errors) {
+		if gh.HasNotFound(resp.Errors) {
 			return repository.Identity{}, false, nil
 		}
 		return repository.Identity{}, false, failureOf(err)
@@ -481,11 +497,6 @@ func batchQuery(refs []Ref) string {
 
 // alias is the alias of the i-th issue of a batch.
 func alias(i int) string { return "i" + strconv.Itoa(i) }
-
-// hasNotFound reports whether GitHub answered that a part does not exist.
-func hasNotFound(errs []gh.GraphQLError) bool {
-	return slices.ContainsFunc(errs, func(e gh.GraphQLError) bool { return e.Type == typeNotFound })
-}
 
 // fieldsOf is the values of the value fields of st, in GitHub's order, and the
 // option of the Status field; never nil.

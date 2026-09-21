@@ -1,16 +1,19 @@
 import { ChevronRight, TriangleAlert } from "lucide-react";
 import { type KeyboardEvent, type ReactNode, useCallback, useEffect, useRef } from "react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { discussionRowLabel, discussionStatusTone } from "@/features/discussion/discussion-status";
 import {
+  type DiscussionRow,
   type EpicNode,
-  nodesOfTask,
+  nodesOfItem,
+  rowId,
   type SidebarNode,
   sidebarTree,
-  visibleTaskRows,
+  visibleRows,
 } from "@/features/sidebar/sidebar-tree";
 import { emptyTasksText, type TaskRow } from "@/features/sidebar/task-list";
 import { useTaskListKeyboard } from "@/features/sidebar/useTaskListKeyboard";
-import { StatusDot } from "@/features/task/StatusDot";
+import { StatusDot, ToneDot } from "@/features/task/StatusDot";
 import { taskStatusLabel } from "@/features/task/status";
 import { situationTone } from "@/lib/situations";
 import { cn } from "@/lib/utils";
@@ -18,6 +21,7 @@ import {
   useAppStore,
   useFlashing,
   useOpenBoardId,
+  useOpenDiscussionId,
   useRepositoryFilter,
   useSidebarCollapsed,
 } from "@/store/app-store";
@@ -67,6 +71,48 @@ function TaskRowItem({ row, focusable }: TaskRowItemProps) {
         {row.cardNumber !== null && `#${row.cardNumber} `}
         {row.shortName}
       </span>
+    </div>
+  );
+}
+
+interface DiscussionRowItemProps {
+  row: DiscussionRow;
+  focusable: boolean;
+}
+
+/** DiscussionRowItem is one discussion of the tree, opening it on click. */
+function DiscussionRowItem({ row, focusable }: DiscussionRowItemProps) {
+  const openDiscussion = useAppStore((state) => state.openDiscussion);
+  const { discussion } = row;
+  // The dot and the highlight take the tone of the most urgent situation.
+  const [urgent] = discussion.situations ?? [];
+  const tone = urgent !== undefined ? situationTone(urgent) : discussionStatusTone(discussion);
+  const label = discussionRowLabel(discussion);
+
+  return (
+    // biome-ignore lint/a11y/useKeyWithClickEvents: the tree owns the keyboard for every row
+    <div
+      role="treeitem"
+      data-task-row=""
+      aria-selected={row.selected}
+      aria-label={`${discussion.title}, discussion, ${label}`}
+      tabIndex={focusable ? 0 : -1}
+      onClick={() => openDiscussion(discussion.id)}
+      data-tone={row.flashing ? tone : undefined}
+      className={cn(
+        ROW_CLASS,
+        row.selected ? "bg-accent text-accent-foreground" : "hover:bg-accent/50",
+        row.flashing && "attention-flash",
+      )}
+    >
+      <span className="flex items-center gap-1">
+        <ToneDot tone={tone} className="mx-0.5" />
+        <span className="min-w-0 flex-1 truncate">{discussion.title}</span>
+        <span className={cn("shrink-0 text-xs", !row.selected && "text-muted-foreground")}>
+          {label}
+        </span>
+      </span>
+      <span className="truncate pl-4 text-xs text-muted-foreground">Discussion</span>
     </div>
   );
 }
@@ -140,6 +186,22 @@ function Rows({ rows, focusableId }: RowsProps) {
   ));
 }
 
+interface DiscussionRowsProps {
+  rows: readonly DiscussionRow[];
+  focusableId: string | undefined;
+}
+
+/** DiscussionRows is the discussion rows of a node, after its tasks. */
+function DiscussionRows({ rows, focusableId }: DiscussionRowsProps) {
+  return rows.map((row) => (
+    <DiscussionRowItem
+      key={row.discussion.id}
+      row={row}
+      focusable={row.discussion.id === focusableId}
+    />
+  ));
+}
+
 interface EpicProps {
   epic: EpicNode;
   focusableId: string | undefined;
@@ -175,7 +237,7 @@ interface NodeProps {
   focusableId: string | undefined;
 }
 
-/** Node is a board of the tree, or the tasks of no board. */
+/** Node is a board of the tree, or the items of no board. */
 function Node({ node, focusableId }: NodeProps) {
   const openBoard = useAppStore((state) => state.openBoard);
   const openBoardId = useOpenBoardId();
@@ -189,6 +251,7 @@ function Node({ node, focusableId }: NodeProps) {
       >
         <Group>
           <Rows rows={node.tasks} focusableId={focusableId} />
+          <DiscussionRows rows={node.discussions} focusableId={focusableId} />
         </Group>
       </TreeNode>
     );
@@ -233,28 +296,33 @@ function Node({ node, focusableId }: NodeProps) {
           <Epic key={epic.id} epic={epic} focusableId={focusableId} />
         ))}
         <Rows rows={node.tasks} focusableId={focusableId} />
+        <DiscussionRows rows={node.discussions} focusableId={focusableId} />
       </Group>
     </TreeNode>
   );
 }
 
 /**
- * SidebarTree is the active tasks of the filter grouped by board and epic, in
- * the order they were created.
+ * SidebarTree is the active items of the filter grouped by board and epic, in
+ * the order they were created, with the discussions of a node after its tasks.
  */
 export function SidebarTree() {
   const app = useAppStore((state) => state.app);
   const openTaskId = useAppStore((state) => state.openTaskId);
+  const openDiscussionId = useOpenDiscussionId();
   const expandSidebarNodes = useAppStore((state) => state.expandSidebarNodes);
   const collapsed = useSidebarCollapsed();
   const flashing = useFlashing();
   const filter = useRepositoryFilter();
   const treeRef = useRef<HTMLDivElement>(null);
 
-  const nodes = app === null ? [] : sidebarTree(app, filter, openTaskId, flashing);
-  const rows = visibleTaskRows(nodes, collapsed);
+  // The tree opens one item at a time: the open task, or the open discussion.
+  const openItemId = openTaskId ?? openDiscussionId;
+  const nodes = app === null ? [] : sidebarTree(app, filter, openItemId, flashing);
+  const rows = visibleRows(nodes, collapsed);
   // The selected row takes the focus in; with none selected the first one does.
-  const focusableId = (rows.find((row) => row.selected) ?? rows[0])?.task.id;
+  const selectedRow = rows.find((row) => row.selected) ?? rows[0];
+  const focusableId = selectedRow === undefined ? undefined : rowId(selectedRow);
 
   const focusRowAt = useCallback((index: number) => {
     treeRef.current?.querySelectorAll<HTMLElement>("[data-task-row]").item(index)?.focus();
@@ -262,14 +330,15 @@ export function SidebarTree() {
 
   const onRowsKeyDown = useTaskListKeyboard(rows, focusRowAt);
 
-  // A task that opens shows in the tree, with its nodes expanded: when it opens,
-  // or when it joins the state after opening. Collapsing a node changes neither.
-  const openNodes = openTaskId === null ? [] : nodesOfTask(nodes, openTaskId);
+  // An item that opens shows in the tree, with its nodes expanded: when it
+  // opens, or when it joins the state after opening. Collapsing a node changes
+  // neither.
+  const openNodes = openItemId === null ? [] : nodesOfItem(nodes, openItemId);
   const openNodesKey = openNodes.join("\n");
   // biome-ignore lint/correctness/useExhaustiveDependencies: openNodesKey stands for openNodes
   useEffect(() => {
     expandSidebarNodes(openNodes);
-  }, [openTaskId, openNodesKey, expandSidebarNodes]);
+  }, [openItemId, openNodesKey, expandSidebarNodes]);
 
   if (app === null) {
     return null;

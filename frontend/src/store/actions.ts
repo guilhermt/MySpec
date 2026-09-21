@@ -6,6 +6,8 @@ import type {
   BoardRepositoryChoice,
   BoardRepositoryOption,
   CreateTaskRequest,
+  DiscussionContextRequest,
+  DraftDecision,
   FindingDecision,
   ModelStage,
   PermissionDecision,
@@ -16,6 +18,7 @@ import type {
   ReviewMode,
   ReviewVerdict,
   SaveBoardRequest,
+  StartDiscussionRequest,
   StartReviewRequest,
   TaskStage,
   ThemePreference,
@@ -465,4 +468,95 @@ export function deleteReview(id: string): Promise<void> {
       useAppStore.getState().setLeftover(result.leftover);
     }
   });
+}
+
+/**
+ * startDiscussion and discussionContext do not swallow their failure: the
+ * dialog that creates a discussion shows it next to the form.
+ */
+export function startDiscussion(req: StartDiscussionRequest): Promise<string> {
+  return api.startDiscussion(req);
+}
+
+export function discussionContext(req: DiscussionContextRequest): Promise<string> {
+  return api.discussionContext(req);
+}
+
+/** saveDraftText records the title and the body of a draft as the user left them. */
+export function saveDraftText(
+  id: string,
+  draftId: string,
+  title: string,
+  body: string,
+): Promise<void> {
+  return run(() => api.setDraftText(id, draftId, title, body));
+}
+
+/** setDraftRepository chooses the repository a draft is published to. */
+export function setDraftRepository(
+  id: string,
+  draftId: string,
+  repositoryId: string,
+): Promise<void> {
+  return run(() => api.setDraftRepository(id, draftId, repositoryId));
+}
+
+/** setDraftModule chooses the module of the card a draft writes. */
+export function setDraftModule(id: string, draftId: string, module: string): Promise<void> {
+  return run(() => api.setDraftModule(id, draftId, module));
+}
+
+/** setDraftEpic puts a draft under an epic, another draft or an issue of GitHub; "" takes it out. */
+export function setDraftEpic(id: string, draftId: string, ref: string): Promise<void> {
+  return run(() => api.setDraftEpic(id, draftId, ref));
+}
+
+/**
+ * addDraftDependency does not swallow its failure: the card of the draft shows
+ * the refusal next to the field.
+ */
+export function addDraftDependency(id: string, draftId: string, ref: string): Promise<void> {
+  return api.addDraftDependency(id, draftId, ref);
+}
+
+/** removeDraftDependency takes one dependency off a draft. */
+export function removeDraftDependency(id: string, draftId: string, ref: string): Promise<void> {
+  return run(() => api.removeDraftDependency(id, draftId, ref));
+}
+
+/** decideDraft records what the user decided about one draft. */
+export function decideDraft(id: string, draftId: string, decision: DraftDecision): Promise<void> {
+  return run(() => api.decideDraft(id, draftId, decision));
+}
+
+/** groupIntoEpic puts the drafts under a new epic and answers its id; "" when it failed. */
+export async function groupIntoEpic(id: string, draftIds: string[]): Promise<string> {
+  let epicId = "";
+  await run(async () => {
+    epicId = await api.groupIntoEpic(id, draftIds);
+  });
+  return epicId;
+}
+
+/**
+ * publishEpic does not swallow its failure either: the card of the epic shows
+ * the refusal where the user is.
+ */
+export function publishEpic(id: string, draftId: string): Promise<void> {
+  return api.publishEpic(id, draftId);
+}
+
+/** retryPublish publishes a draft again, after a failure. */
+export function retryPublish(id: string, draftId: string): Promise<void> {
+  return run(() => api.retryPublish(id, draftId));
+}
+
+/** archiveDiscussion ends the conversation and sends the discussion to the history. */
+export function archiveDiscussion(id: string): Promise<void> {
+  return run(() => api.archiveDiscussion(id));
+}
+
+/** deleteDiscussion removes the discussion for good. */
+export function deleteDiscussion(id: string): Promise<void> {
+  return run(() => api.deleteDiscussion(id));
 }

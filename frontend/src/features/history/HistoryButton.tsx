@@ -2,11 +2,17 @@ import { Archive } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { useAppStore, useHistory, useHistoryUi, useReviewHistory } from "@/store/app-store";
+import {
+  useAppStore,
+  useDiscussionHistory,
+  useHistory,
+  useHistoryUi,
+  useReviewHistory,
+} from "@/store/app-store";
 
-/** HistoryButton is the way into the archived tasks and reviews, at the foot of the sidebar. */
+/** HistoryButton is the way into the archived tasks, reviews and discussions, at the foot of the sidebar. */
 export function HistoryButton() {
-  const count = useHistory().length + useReviewHistory().length;
+  const count = useHistory().length + useReviewHistory().length + useDiscussionHistory().length;
   const { historyOpen } = useHistoryUi();
   const openHistory = useAppStore((state) => state.openHistory);
 

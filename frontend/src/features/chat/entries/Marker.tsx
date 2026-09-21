@@ -6,6 +6,7 @@ import {
   FileText,
   ListChecks,
   type LucideIcon,
+  MessagesSquare,
   Play,
   RotateCcw,
 } from "lucide-react";
@@ -25,6 +26,7 @@ const MARKERS: Record<MarkerType, { icon: LucideIcon; text: string }> = {
   step_review_started: { icon: Bot, text: "Review started" },
   step_review_written: { icon: FileCheck, text: "Review written" },
   review_started: { icon: Bot, text: "Review started" },
+  discussion_started: { icon: MessagesSquare, text: "Discussion started" },
   stage_started: { icon: Play, text: "Stage started" },
   step_started: { icon: Play, text: "Step started" },
   compacted: { icon: Archive, text: "Context compacted" },

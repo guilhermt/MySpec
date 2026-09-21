@@ -541,6 +541,7 @@ func TestPlaceKeysReadBack(t *testing.T) {
 		{"step review", attention.Place{Kind: attention.PlaceStepReview, Step: 3}, "step_review:3"},
 		{"the pull request", attention.Place{Kind: attention.PlacePR}, "pr"},
 		{"the review of a pull request", attention.Place{Kind: attention.PlaceReview}, "review"},
+		{"the discussion of a demand", attention.Place{Kind: attention.PlaceDiscussion}, "discussion"},
 	}
 
 	for _, test := range tests {
@@ -592,6 +593,7 @@ func TestKindsBelongToTheirGroup(t *testing.T) {
 		attention.KindChangesReview:   attention.GroupWaiting,
 		attention.KindReviewReport:    attention.GroupWaiting,
 		attention.KindNewCommits:      attention.GroupWaiting,
+		attention.KindDrafts:          attention.GroupWaiting,
 
 		attention.KindMerge: attention.GroupClosing,
 	}

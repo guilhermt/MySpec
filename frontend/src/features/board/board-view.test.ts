@@ -6,6 +6,7 @@ import {
   EMPTY_FILTERS,
   filterCards,
   isBoardViewMemory,
+  isCheckable,
   NO_STATUS,
   sections,
   unsatisfied,
@@ -189,5 +190,19 @@ describe("actionHint", () => {
     for (const action of ["start", "has_task", "closed"]) {
       expect(actionHint(makeBoardCard({ action }), app)).toBeNull();
     }
+  });
+});
+
+describe("isCheckable", () => {
+  const app = makeState({ repositories: [makeRepository({ boardId: "board-1" })] });
+
+  it("takes a card whose repository the board manages", () => {
+    expect(isCheckable(makeBoardCard(), app, "board-1")).toBe(true);
+  });
+
+  it("leaves out a card of another board, or of no repository at all", () => {
+    expect(isCheckable(makeBoardCard(), app, "board-2")).toBe(false);
+    expect(isCheckable(makeBoardCard({ repositoryId: "" }), app, "board-1")).toBe(false);
+    expect(isCheckable(makeBoardCard({ repositoryId: "repo-9" }), app, "board-1")).toBe(false);
   });
 });

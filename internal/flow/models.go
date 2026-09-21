@@ -74,6 +74,9 @@ func StageModels(t task.Task, steps []StepState, pr *PullRequest) []StageModelSt
 		case models.PRReview:
 			state.Editable = before(task.StagePR) || (inPR && pr != nil && reviewToStart(*pr))
 			state.Live = inPR && pr != nil && pr.SessionStage == session.PRReviewStage
+		case models.Discussion:
+			// The discussion is an item of its own, so it is no stage of a mode
+			// and never reaches this loop.
 		}
 		states = append(states, state)
 	}

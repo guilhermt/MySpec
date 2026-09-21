@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { historyEntries } from "@/features/history/history-list";
-import { makeArchivedReview, makeArchivedTask, makeState } from "@/test/wails-mock";
+import {
+  makeArchivedDiscussion,
+  makeArchivedReview,
+  makeArchivedTask,
+  makeState,
+} from "@/test/wails-mock";
 
 const LOGIN = makeArchivedTask({
   id: "task-login",
@@ -20,20 +25,30 @@ const REVIEW = makeArchivedReview({
   title: "Cache the sessions",
   archivedAt: "2026-09-05T10:00:00Z",
 });
-const APP = makeState({ history: [LOGIN, HEADER], reviewHistory: [REVIEW] });
+const DISCUSSION = makeArchivedDiscussion({
+  id: "discussion-1",
+  title: "The invoices",
+  repositoryIds: ["repo-2"],
+  archivedAt: "2026-09-06T10:00:00Z",
+});
+const APP = makeState({
+  history: [LOGIN, HEADER],
+  reviewHistory: [REVIEW],
+  discussionHistory: [DISCUSSION],
+});
 
 function ids(query: string, filter: string): string[] {
   return historyEntries(APP, query, filter).map((entry) => entry.id);
 }
 
 describe("historyEntries", () => {
-  it("joins the tasks and the reviews, the last to end first", () => {
-    expect(ids("", "")).toEqual(["task-login", "review-31", "task-header"]);
-    expect(ids("   ", "")).toEqual(["task-login", "review-31", "task-header"]);
+  it("joins the tasks, the reviews and the discussions, the last to end first", () => {
+    expect(ids("", "")).toEqual(["task-login", "discussion-1", "review-31", "task-header"]);
+    expect(ids("   ", "")).toEqual(["task-login", "discussion-1", "review-31", "task-header"]);
   });
 
-  it("tells a task from a review", () => {
-    const [task, review] = historyEntries(APP, "", "");
+  it("tells a task from a review and from a discussion", () => {
+    const [task, discussion, review] = historyEntries(APP, "", "");
 
     expect(task).toEqual({ kind: "task", id: LOGIN.id, archivedAt: LOGIN.archivedAt, task: LOGIN });
     expect(review).toEqual({
@@ -42,6 +57,16 @@ describe("historyEntries", () => {
       archivedAt: REVIEW.archivedAt,
       review: REVIEW,
     });
+    expect(discussion).toEqual({
+      kind: "discussion",
+      id: DISCUSSION.id,
+      archivedAt: DISCUSSION.archivedAt,
+      discussion: DISCUSSION,
+    });
+  });
+
+  it("matches the title of a discussion", () => {
+    expect(ids("invoices", "")).toEqual(["discussion-1"]);
   });
 
   it("matches part of the name of a task, whatever the case", () => {
@@ -55,9 +80,9 @@ describe("historyEntries", () => {
     expect(ids("31", "")).toEqual(["review-31"]);
   });
 
-  it("keeps the tasks and the reviews of the repository of the filter", () => {
+  it("keeps the tasks, the reviews and the discussions of the repository of the filter", () => {
     expect(ids("", "repo-1")).toEqual(["task-login", "review-31"]);
-    expect(ids("", "repo-2")).toEqual(["task-header"]);
+    expect(ids("", "repo-2")).toEqual(["discussion-1", "task-header"]);
     expect(ids("sessions", "repo-2")).toEqual([]);
   });
 

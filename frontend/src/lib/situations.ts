@@ -1,5 +1,12 @@
 import { shortName } from "@/lib/repositories";
-import type { ReviewSummary, Situation, SituationGroup, State, TaskSummary } from "@/lib/wails";
+import type {
+  DiscussionSummary,
+  ReviewSummary,
+  Situation,
+  SituationGroup,
+  State,
+  TaskSummary,
+} from "@/lib/wails";
 import { asPlaceKind, asSituationForm, asSituationGroup, asSituationKind } from "@/lib/wails";
 
 /** SituationTone is the colour of a situation: an error or block, or a wait. */
@@ -10,9 +17,9 @@ export const FLASH_MS = 1600;
 
 /** WaitingEntry is one line of "Waiting for you": a situation and the item it belongs to. */
 export interface WaitingEntry {
-  /** itemId is the task or the review the situation is in. */
+  /** itemId is the task, the review or the discussion the situation is in. */
   itemId: string;
-  /** name is what the line reads: the name of a task, or name#number of a review. */
+  /** name is what the line reads: the name of a task, name#number of a review, or the title of a discussion. */
   name: string;
   situation: Situation;
 }
@@ -80,6 +87,8 @@ export function situationLabel(situation: Situation): string {
       return form === "apply" ? "Apply findings" : "Decide findings";
     case "new_commits":
       return "New commits";
+    case "drafts":
+      return "Decide drafts";
     case "publish_failed":
       return "Publish failed";
   }
@@ -115,6 +124,8 @@ export function placeLabel(situation: Situation): string {
       return "pull request";
     case "review":
       return "review";
+    case "discussion":
+      return "discussion";
   }
 }
 
@@ -141,6 +152,7 @@ export function namesPlace(situation: Situation): boolean {
     case "findings":
     case "changes_review":
     case "merge":
+    case "drafts":
       return false;
   }
 }
@@ -192,9 +204,9 @@ export function reviewName(review: ReviewSummary): string {
 }
 
 /**
- * waitingEntries is everything the active tasks and reviews wait on the user
- * for, one entry per situation, most urgent first. The item on screen is left
- * out: the user is already there.
+ * waitingEntries is everything the active tasks, reviews and discussions wait
+ * on the user for, one entry per situation, most urgent first. The item on
+ * screen is left out: the user is already there.
  */
 export function waitingEntries(app: State | null, openItemId: string | null): WaitingEntry[] {
   const tasks = (app?.tasks ?? [])
@@ -215,7 +227,16 @@ export function waitingEntries(app: State | null, openItemId: string | null): Wa
         situation,
       })),
     );
-  return [...tasks, ...reviews].sort(
+  const discussions = (app?.discussions ?? [])
+    .filter((discussion) => discussion.id !== openItemId)
+    .flatMap((discussion) =>
+      (discussion.situations ?? []).map((situation) => ({
+        itemId: discussion.id,
+        name: discussion.title,
+        situation,
+      })),
+    );
+  return [...tasks, ...reviews, ...discussions].sort(
     (a, b) =>
       compareSituations(a.situation, b.situation) ||
       a.name.localeCompare(b.name) ||
@@ -268,6 +289,15 @@ export function reviewSituation(review: ReviewSummary): Situation | null {
   return (
     (review.situations ?? []).find((situation) => asPlaceKind(situation.place.kind) === "review") ??
     null
+  );
+}
+
+/** discussionSituation is the situation of a discussion of a demand of a board, null when it has none. */
+export function discussionSituation(discussion: DiscussionSummary): Situation | null {
+  return (
+    (discussion.situations ?? []).find(
+      (situation) => asPlaceKind(situation.place.kind) === "discussion",
+    ) ?? null
   );
 }
 

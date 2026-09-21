@@ -35,6 +35,7 @@ const (
 	StageCommit     Stage = "commit"
 	StagePR         Stage = "pr"
 	StagePRReview   Stage = "pr_review"
+	StageDiscussion Stage = "discussion"
 )
 
 // StageStep is the prompt of a step session: the step file itself.
@@ -44,6 +45,7 @@ const StageStep Stage = "step"
 // workflow order. The prompt of a step is a file of the plan, not one of them.
 var Editable = []Stage{
 	StagePRD, StageTechSpec, StagePlan, StageOneShot, StageStepReview, StageCommit, StagePR, StagePRReview,
+	StageDiscussion,
 }
 
 // ErrUnknownStage is a prompt the app does not have.
@@ -82,6 +84,8 @@ const (
 	prURLPlaceholder          = "{{pr_url}}"
 	whatToCommitPlaceholder   = "{{what_to_commit}}"
 	pushPlaceholder           = "{{push}}"
+	documentPathPlaceholder   = "{{document_path}}"
+	draftsPathPlaceholder     = "{{drafts_path}}"
 )
 
 // placeholderOrder is every placeholder, in the order the settings list them.
@@ -90,7 +94,7 @@ var placeholderOrder = []string{
 	stepsDirPlaceholder, stepPathPlaceholder, oneShotPathPlaceholder,
 	initialContextPlaceholder, repositoryPlaceholder, branchPlaceholder, baseBranchPlaceholder,
 	draftPathPlaceholder, reviewPathPlaceholder, prNumberPlaceholder, prURLPlaceholder,
-	whatToCommitPlaceholder, pushPlaceholder,
+	whatToCommitPlaceholder, pushPlaceholder, documentPathPlaceholder, draftsPathPlaceholder,
 }
 
 // Prompt is a prompt as the settings show it.
@@ -156,6 +160,17 @@ const (
 	instructionsHeading     = "\n\n## Review instructions\n\n"
 	passInstructionsHeading = "\n\n## Instructions for this pass\n\n"
 )
+
+// The headings of the sections the app appends to the prompt of a discussion:
+// the board it runs on and the format the file of drafts has to follow.
+const (
+	boardHeading        = "\n\n## Board\n\n"
+	draftsFormatHeading = "\n\n## Drafts format\n\n"
+)
+
+// draftsFormatNote is how the file of drafts of a discussion has to read, so
+// that the app can read every draft of it.
+const draftsFormatNote = "The app reads `{{drafts_path}}`, so it must follow this format exactly. The file opens with a header, then one block per draft:\n\n```markdown\n---\nstatus: drafts\n---\n\n## Draft: export-invoices\n- Kind: new\n- Repository: owner/name\n- Module: Billing\n- Epic: invoices-epic\n- Depends on: invoice-schema, owner/name#42\n\n### Title\nExport invoices as CSV\n\n### Body\n[the body of the card, as Markdown, until the next \"## Draft:\" line]\n```\n\n- `status` is `drafts` when the file has at least one draft, and `none` when the discussion ends without a card; a file with `status: none` has no draft blocks.\n- Each block opens with `## Draft: <id>`. The id is yours: lowercase letters, digits and hyphens, unique in the file, and stable across rewrites: a draft that keeps its id keeps what the user edited and decided.\n- `Kind` is `new`, `update` or `epic`.\n  - `new` and `epic` take `Repository: owner/name`, one of the repositories the board manages.\n  - `update` takes `Card: owner/name#number`, a card of the board, and no `Repository`.\n  - `epic` takes no `Module`, no `Epic` and no `Depends on`.\n- `Module` is the name of one option of the module field of the board, only when the board has one. Optional.\n- `Epic` is the id of an `epic` draft of this file, or `owner/name#number` of an issue that exists. Optional.\n- `Depends on` lists the ids of `new` or `update` drafts of this file and `owner/name#number` of existing cards, separated by commas. Optional. A draft never depends on itself.\n- `### Title` is followed by the title on one line. `### Body` is followed by the body, which runs until the next `## Draft:` line or the end of the file. Both are required. The body must not contain a line that reads exactly `### Title`, `### Body` or starts with `## Draft:`.\n\nAny deviation makes the file unreadable, and the app tells the user so; rewrite it in place to fix it."
 
 // oneShotHeading opens the section Render appends to the prompts that read the
 // documents of a task, when the task is One-Shot.
@@ -374,7 +389,7 @@ type Vars struct {
 	PRDPath        string
 	TechSpecPath   string
 	StepsDir       string
-	InitialContext string // PRD and One-Shot planning only
+	InitialContext string // PRD, One-Shot planning and discussion only
 	StepPath       string // StageStep: the file whose content is the prompt; StageStepReview: the step under review
 	OneShotPath    string // One-Shot tasks only: the document, which the prompts point to in place of the PRD, the tech spec and the step file; "" for a Structured task
 
@@ -403,6 +418,12 @@ type Vars struct {
 	// PassInstructions is what the user wrote for this pass of a review of a
 	// pull request.
 	PassInstructions string
+	// The discussion sessions: the two files the agent writes and the board the
+	// discussion runs on.
+	DocumentPath string
+	DraftsPath   string
+	Board        string // the section that describes the board, appended to the prompt
+
 	// PushRef is the branch a commit of a worktree on a detached HEAD is pushed
 	// to; commit only, with Push.
 	PushRef string
@@ -487,10 +508,15 @@ func Render(dataDir string, stage Stage, vars Vars) (string, error) {
 		prURLPlaceholder, vars.PRURL,
 		whatToCommitPlaceholder, commitInstruction(vars.CommitAll),
 		pushPlaceholder, pushInstruction(vars.Push, vars.PushRef),
+		documentPathPlaceholder, vars.DocumentPath,
+		draftsPathPlaceholder, vars.DraftsPath,
 	).Replace(text)
 
 	if !strings.Contains(text, initialContextPlaceholder) && vars.InitialContext != "" {
 		rendered += contextHeading + vars.InitialContext
+	}
+	if stage == StageDiscussion {
+		rendered += discussionSections(vars)
 	}
 	if stage == StageCommit && !strings.Contains(text, whatToCommitPlaceholder) {
 		rendered += whatToCommitHeading + commitInstruction(vars.CommitAll)
@@ -513,6 +539,22 @@ func Render(dataDir string, stage Stage, vars Vars) (string, error) {
 		rendered += replyHeading + vars.ImplementerReply
 	}
 	return rendered, nil
+}
+
+// discussionSections are the sections the app appends to the prompt of a
+// discussion: the board it runs on, when there is one, and the format the file
+// of drafts has to follow, always. Like the others, they depend on no
+// placeholder, so an edited prompt receives them too.
+func discussionSections(vars Vars) string {
+	var b strings.Builder
+	if vars.Board != "" {
+		b.WriteString(boardHeading + vars.Board)
+	}
+	b.WriteString(draftsFormatHeading + strings.NewReplacer(
+		draftsPathPlaceholder, vars.DraftsPath,
+		documentPathPlaceholder, vars.DocumentPath,
+	).Replace(draftsFormatNote))
+	return b.String()
 }
 
 // reviewSections are the sections the app appends to the prompt of the review

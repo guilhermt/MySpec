@@ -193,6 +193,7 @@ func (s *Service) ensureProcessLocked(ctx context.Context, r *run, n *notes) err
 		Resume:    r.rec.Started,
 		Model:     string(r.rec.Choice.Model),
 		Effort:    string(r.rec.Choice.Effort),
+		ExtraDirs: r.task.ExtraDirs,
 	})
 	if err != nil {
 		return s.failStart(ctx, r, n, ErrorStartFailed, "Could not start Claude Code: "+err.Error(), err)
@@ -324,12 +325,17 @@ func (s *Service) flushPendingLocked(ctx context.Context, r *run, n *notes) bool
 			External:     r.task.External,
 			Publish:      r.task.Publish,
 			Instructions: r.task.Instructions,
+
+			DocumentPath: r.task.DocumentPath,
+			DraftsPath:   r.task.DraftsPath,
+			Board:        r.task.Board,
 		}
 		// The text of a prompt entry is what the app appends to the prompt: the
-		// initial context of the PRD and of the One-Shot planning, the
-		// instructions of a review pass, or what the implementer said last.
+		// initial context of the PRD, of the One-Shot planning and of a
+		// discussion, the instructions of a review pass, or what the implementer
+		// said last.
 		switch r.task.Prompt {
-		case prompts.StagePRD, prompts.StageOneShot:
+		case prompts.StagePRD, prompts.StageOneShot, prompts.StageDiscussion:
 			vars.InitialContext = e.User.Text
 		case prompts.StagePRReview:
 			vars.PassInstructions = e.User.Text

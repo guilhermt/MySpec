@@ -12,19 +12,20 @@ prompts/<nome>.md                      só os prompts editados pelo usuário
 sounds/chime.wav                       o som das notificações
 tasks/<dono>/<nome>/<task>/            os artefatos de cada task
 reviews/<dono>/<nome>/pr-<n>-<id>/     os artefatos de cada review de pull request
+discussions/<dono do board>/<n>/<id>/  os artefatos de cada discussão
 worktrees/<dono>/<nome>/<task>/        a worktree de cada task
 worktrees/<dono>/<nome>/pr_<n>/        a worktree de cada review de pull request ativo
 ```
 
 ### Banco
 
-`myspec.db` guarda as configurações (tema, padrões de modelo e de modo de review, filtro por repositório, pasta de clones em `clone_folder`, filtros da visão Reviews em `review_filters`, em JSON), os boards cadastrados, com os status finais, a última leitura bem-sucedida de cada um, em JSON, e a falha da última leitura, os repositórios cadastrados, com o board de cada um, um caminho vazio enquanto não têm clone e as instruções fixas de review, as tasks, com o modo, os modos de review e o card do board de que foram criadas, sem chave estrangeira para o board, para que a task guarde o card quando o board vai embora, os steps, com o ponto do review pelo agente, as pull requests das tasks, os reviews de pull request, com as passadas e os apontamentos, os itens, as sessões e as entradas das conversas, as worktrees e as situações. É aberto com uma única conexão, WAL, `busy_timeout` de cinco segundos e foreign keys, e só o Go o acessa.
+`myspec.db` guarda as configurações (tema, padrões de modelo e de modo de review, filtro por repositório, pasta de clones em `clone_folder`, filtros da visão Reviews em `review_filters`, em JSON), os boards cadastrados, com os status finais, o status com que os cards novos de uma discussão entram no board em `new_card_status`, a última leitura bem-sucedida de cada um, em JSON, e a falha da última leitura, os repositórios cadastrados, com o board de cada um, um caminho vazio enquanto não têm clone e as instruções fixas de review, as tasks, com o modo, os modos de review e o card do board de que foram criadas, sem chave estrangeira para o board, para que a task guarde o card quando o board vai embora, os steps, com o ponto do review pelo agente, as pull requests das tasks, os reviews de pull request, com as passadas e os apontamentos, as discussões, com os cards de entrada, os rascunhos e as dependências deles, os itens, as sessões e as entradas das conversas, as worktrees e as situações. É aberto com uma única conexão, WAL, `busy_timeout` de cinco segundos e foreign keys, e só o Go o acessa.
 
 O schema é versionado por `PRAGMA user_version` e evolui por migrations em `internal/store/migrations/`, nomeadas `NNNN_nome.sql` com quatro dígitos, aplicadas em ordem, uma transação por arquivo, ao abrir o banco. Uma migration já aplicada nunca é editada: uma mudança de schema é sempre um arquivo novo. Os estados que a interface mostra são derivados; o banco guarda só o que não pode ser derivado, como ids de sessão, o modo de cada task, escolhas de modelo e de modo de review, a passada que o review pelo agente pediu e a que ele tratou, resultados de encerramento e quando cada situação começou. A leitura das pull requests abertas não é guardada: ela é refeita em segundos ao abrir o app.
 
 ### Itens
 
-Uma task e um review de pull request são itens. A tabela `items` guarda o id e o tipo, `task` ou `review`, de cada um, e é o pai de `sessions`, `worktrees` e `situations`, pela coluna `item_id` com `ON DELETE CASCADE`. Triggers em `tasks` e em `reviews` inserem e apagam a linha de `items` junto com a do item, então apagar uma task ou um review leva as sessões, as entradas das conversas, a worktree e as situações dele sem código próprio.
+Uma task, um review de pull request e uma discussão são itens. A tabela `items` guarda o id e o tipo, `task`, `review` ou `discussion`, de cada um, e é o pai de `sessions`, `worktrees` e `situations`, pela coluna `item_id` com `ON DELETE CASCADE`. Triggers em `tasks`, em `reviews` e em `discussions` inserem e apagam a linha de `items` junto com a do item, então apagar um deles leva as sessões, as entradas das conversas, a worktree e as situações dele sem código próprio.
 
 ### Reviews de pull request
 
@@ -32,9 +33,17 @@ Uma task e um review de pull request são itens. A tabela `items` guarda o id e 
 
 O relatório no disco é do agente e o produto nunca o reescreve; tudo o que é do usuário ou do produto sobre ele fica nessas tabelas. A passada pedida é gravada, porque uma passada pode esperar dias e reabrir o app não pode perdê-la.
 
+### Discussões
+
+`discussions` guarda uma discussão por linha: o board, sem chave estrangeira, e o título dele como estava na criação, para que a discussão sobreviva ao board e continue no histórico, o título, o texto que o usuário escreveu, o contexto inicial, a pasta de artefatos, se um artefato de rascunhos legível já foi gravado, a revisão da leitura dele, que avança a cada leitura diferente, e, numa discussão arquivada, quando foi. `discussion_cards` guarda os cards de entrada, em ordem, com repositório, número, título e link.
+
+`discussion_drafts` guarda um rascunho por linha, pelo id que o artefato lhe dá, ou `user-epic-<n>` num épico criado pelo usuário: a posição, o tipo, `new`, `update` ou `epic`, a origem, `agent` ou `user`, o repositório da issue, o card que uma atualização reescreve, e, em pares, o que o artefato diz e o que o usuário deixou, para o título, o corpo, o módulo e o épico. Guarda ainda a decisão, `approved` ou `discarded`, a revisão, que avança a cada vez que o artefato muda aquele rascunho, os avisos em JSON, a razão da última publicação que falhou, e o que foi publicado: o desfecho, `created` ou `updated`, o número, o link e o node id da issue, o item dela no board, se o status, o módulo e a issue pai já foram definidos, e quando a publicação terminou. `discussion_dependencies` guarda as dependências de cada rascunho, em ordem, cada uma um id de rascunho ou `dono/nome#número`, com se o artefato a nomeia ou o usuário a acrescentou, se o GitHub já tem a relação de bloqueio e por que ela foi deixada de lado, `discarded` ou `unavailable`, com o que o `gh` disse.
+
+O artefato no disco é do agente e o produto nunca o reescreve; tudo o que é do usuário ou do produto sobre ele fica nessas tabelas. Os passos de uma publicação são gravados um a um, porque é assim que **Retry** continua de onde parou sem criar nada duas vezes.
+
 ### Prompts
 
-Os prompts padrão vivem no binário, em `internal/prompts/defaults/`. O diretório `prompts/` guarda apenas os que o usuário editou: `prd.md`, `tech_spec.md`, `plan.md`, `one_shot.md`, `step_review.md`, `commit.md`, `pr.md` e `pr_review.md`. Um prompt sem arquivo segue o padrão da versão que roda, e um arquivo idêntico ao padrão é removido quando o app inicia, para que um prompt restaurado volte a acompanhar as versões novas. O prompt é lido quando uma sessão começa.
+Os prompts padrão vivem no binário, em `internal/prompts/defaults/`. O diretório `prompts/` guarda apenas os que o usuário editou: `prd.md`, `tech_spec.md`, `plan.md`, `one_shot.md`, `step_review.md`, `commit.md`, `pr.md`, `pr_review.md` e `discussion.md`. Um prompt sem arquivo segue o padrão da versão que roda, e um arquivo idêntico ao padrão é removido quando o app inicia, para que um prompt restaurado volte a acompanhar as versões novas. O prompt é lido quando uma sessão começa.
 
 ### Som
 
@@ -76,6 +85,18 @@ review-<n>.md       o relatório de cada passada, escrito pelo agente
 ```
 
 O relatório abre com um cabeçalho `---` com `status`, `clean` ou `changes`, e `pass`, que, quando presente, tem de ser o do nome do arquivo. O corpo é o resumo até uma linha `## Findings`; depois dela, cada apontamento começa numa linha `### <n>`, com números únicos e positivos, seguida de uma linha `Location: <caminho>:<linha>`, com o caminho relativo à raiz do repositório e a linha maior que zero, ou `Location: general`, e do texto, que não pode ser vazio. Um relatório `clean` não tem apontamentos, e um `changes` tem ao menos um. Qualquer desvio torna o relatório ilegível, e a passada fica sem relatório. O arquivo é lido a cada avaliação do review, sem watcher. A pasta sobrevive ao arquivamento, para o histórico, e vai embora quando o review é apagado.
+
+### Artefatos de uma discussão
+
+Os artefatos de uma discussão ficam em `discussions/<dono do board>/<número do board>/<id>/`, com os oito primeiros caracteres do id da discussão, para que duas discussões do mesmo board tenham cada uma a sua pasta. A pasta é criada com `0700` e guarda:
+
+```
+context.md          o contexto inicial, escrito pelo app quando a discussão nasce
+discussion.md       o documento do entendimento, escrito pelo agente
+drafts.md           os rascunhos de card, escritos pelo agente
+```
+
+A sessão da discussão roda nessa pasta, e é por isso que o agente escreve os dois documentos sem pedir permissão. O documento não tem formato exigido: o app só percebe, pela data e pelo tamanho do arquivo, que ele existe e que mudou, e o painel o mostra renderizado. `drafts.md` abre com um cabeçalho `---` com `status`, `drafts` ou `none`, e tem um bloco por rascunho, aberto por `## Draft: <id>`, com as linhas `Kind`, `Repository` ou `Card`, `Module`, `Epic` e `Depends on`, e as seções `### Title` e `### Body`, que vai até o próximo bloco. Qualquer desvio torna o arquivo ilegível, e a discussão diz a razão ao usuário. O arquivo é lido a cada vez que a conversa fica ociosa, sem watcher. A pasta sobrevive ao arquivamento, para o histórico, e vai embora quando a discussão é apagada.
 
 ## Clones
 

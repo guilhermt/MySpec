@@ -1838,6 +1838,51 @@ func TestSetChoiceOfASessionThatIsNotOpenIsNotFound(t *testing.T) {
 	wantErrIs(t, err, session.ErrNotFound)
 }
 
+func TestStartOfADiscussionMarksItSendsTheInitialContextAndOpensTheClones(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	info := atDiscussion(t, taskInfo(t, "d1"))
+	f.start(t, info)
+	f.waitIdle(t, info.Key())
+
+	tr := f.transcript(t, info.Key())
+	if tr.Stage != session.DiscussionStage {
+		t.Errorf("transcript stage = %q, want %q", tr.Stage, session.DiscussionStage)
+	}
+	if len(tr.Entries) != 3 {
+		t.Fatalf("entries = %d, want the discussion marker, the prompt and its answer", len(tr.Entries))
+	}
+	wantMarker := &session.MarkerEntry{Type: session.MarkerDiscussionStarted}
+	if diff := cmp.Diff(wantMarker, tr.Entries[0].Marker); diff != "" {
+		t.Errorf("marker mismatch (-want +got):\n%s", diff)
+	}
+	// The initial context of the discussion reads in the conversation as the
+	// first message of the user, as the one of a task does.
+	wantUser := &session.UserEntry{Text: info.InitialContext, Prompt: true}
+	if diff := cmp.Diff(wantUser, tr.Entries[1].User); diff != "" {
+		t.Errorf("user entry mismatch (-want +got):\n%s", diff)
+	}
+	rendered, _ := renderPrompt(prompts.StageDiscussion, prompts.Vars{
+		TaskName:       info.Name,
+		ArtifactsDir:   info.ArtifactsDir,
+		PRDPath:        info.PRDPath,
+		InitialContext: info.InitialContext,
+	})
+	if got := tr.Entries[2].Assistant.Text; got != rendered {
+		t.Errorf("prompt sent = %q, want %q", got, rendered)
+	}
+	started := f.launcher.started()
+	if len(started) != 1 {
+		t.Fatalf("starts = %d, want the one of the discussion", len(started))
+	}
+	// The agent reads the code of the board in the clones, which reach the CLI
+	// as --add-dir.
+	if diff := cmp.Diff(info.ExtraDirs, started[0].ExtraDirs); diff != "" {
+		t.Errorf("clones opened mismatch (-want +got):\n%s", diff)
+	}
+}
+
 func TestStartOfAReviewOfAPullRequestMarksItAndSendsWhatTheUserWroteForThePass(t *testing.T) {
 	t.Parallel()
 

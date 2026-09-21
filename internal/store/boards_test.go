@@ -71,6 +71,7 @@ func TestBoardsInsertWithNewAndExistingLinks(t *testing.T) {
 
 	b := newBoard("board-1", "Roadmap", 1)
 	b.FinalStatuses = []string{"opt-done"}
+	b.NewCardStatus = "opt-todo"
 	insertBoard(t, s, b,
 		board.Link{RepositoryID: webRepo, Path: "/elsewhere/web"},
 		board.Link{RepositoryID: uncloned.ID, Path: "/home/dev/docs"},
@@ -105,6 +106,7 @@ func TestBoardsUpdateAppliesReleasesAndLinks(t *testing.T) {
 
 	insertRepository(t, s, newRepository("repo-docs", "acme", "docs", ""))
 	b := newBoard("board-1", "Roadmap", 1)
+	b.NewCardStatus = "opt-todo"
 	insertBoard(t, s, b,
 		board.Link{RepositoryID: webRepo},
 		board.Link{RepositoryID: "repo-docs"},
@@ -112,6 +114,7 @@ func TestBoardsUpdateAppliesReleasesAndLinks(t *testing.T) {
 
 	b.Title = "Roadmap 2026"
 	b.FinalStatuses = []string{"opt-done", "opt-closed"}
+	b.NewCardStatus = "opt-ready"
 	err := s.Boards.UpdateBoard(t.Context(), b,
 		[]board.Link{{RepositoryID: apiRepo}},
 		[]board.Release{{RepositoryID: webRepo}, {RepositoryID: "repo-docs", Remove: true}},

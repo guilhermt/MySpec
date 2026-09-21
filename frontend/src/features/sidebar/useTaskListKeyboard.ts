@@ -1,18 +1,20 @@
 import { type KeyboardEvent, useCallback } from "react";
-import type { TaskRow } from "@/features/sidebar/task-list";
+import type { SidebarRow } from "@/features/sidebar/sidebar-tree";
 import { useAppStore } from "@/store/app-store";
 
 /**
- * useTaskListKeyboard moves along the visible task rows with selection
- * following focus: the row the focus lands on is the task that opens. Rows are
- * addressed by index because the tree focuses them through the DOM order of its
- * `[data-task-row]` elements, which is the order of the visible rows.
+ * useTaskListKeyboard moves along the visible rows with selection following
+ * focus: the row the focus lands on is the task or the discussion that opens.
+ * Rows are addressed by index because the tree focuses them through the DOM
+ * order of its `[data-task-row]` elements, which is the order of the visible
+ * rows.
  */
 export function useTaskListKeyboard(
-  rows: readonly TaskRow[],
+  rows: readonly SidebarRow[],
   focusRowAt: (index: number) => void,
 ): (event: KeyboardEvent<HTMLElement>) => void {
   const openTask = useAppStore((state) => state.openTask);
+  const openDiscussion = useAppStore((state) => state.openDiscussion);
 
   return useCallback(
     (event: KeyboardEvent<HTMLElement>) => {
@@ -26,7 +28,11 @@ export function useTaskListKeyboard(
         if (row === undefined) {
           return;
         }
-        openTask(row.task.id);
+        if (row.kind === "task") {
+          openTask(row.task.id);
+        } else {
+          openDiscussion(row.discussion.id);
+        }
         focusRowAt(target);
       };
 
@@ -58,6 +64,6 @@ export function useTaskListKeyboard(
           break;
       }
     },
-    [rows, focusRowAt, openTask],
+    [rows, focusRowAt, openTask, openDiscussion],
   );
 }

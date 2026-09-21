@@ -31,6 +31,12 @@ const (
 // finalNames are the status names marked final by default, folded.
 var finalNames = []string{"done", "concluido", "closed", "completed", "fechado", "finalizado"}
 
+// newCardNames are the status names a new card gets by default, folded.
+var newCardNames = []string{"a fazer", "to do", "todo", "ready"}
+
+// moduleNames are the names of the module field of a board, folded.
+var moduleNames = []string{"modulo", "module"}
+
 // Store persists the registered boards, the last reading of each and the
 // repositories each one manages.
 type Store interface {
@@ -38,8 +44,8 @@ type Store interface {
 	ListBoards(ctx context.Context) ([]Board, error)
 	// InsertBoard registers a board with an empty reading and applies the links.
 	InsertBoard(ctx context.Context, b Board, links []Link) error
-	// UpdateBoard stores the title and the final statuses, applies the releases,
-	// then the links.
+	// UpdateBoard stores the title, the final statuses and the status of new
+	// cards, applies the releases, then the links.
 	UpdateBoard(ctx context.Context, b Board, links []Link, releases []Release) error
 	// DeleteBoard applies the releases, then removes the board and its reading.
 	DeleteBoard(ctx context.Context, id string, releases []Release) error
@@ -256,13 +262,13 @@ func (s *Service) CardOfPullRequest(owner, name string, number int) (boardID str
 }
 
 // Context is the initial context of a task created from the card of key, with
-// what the user added.
-func (s *Service) Context(boardID, key, additional string) (string, error) {
+// the document of the discussion the card came from and what the user added.
+func (s *Service) Context(boardID, key, discussion, additional string) (string, error) {
 	card, ok := s.Card(boardID, key)
 	if !ok {
 		return "", fmt.Errorf("context of card %s: %w", key, ErrCardNotFound)
 	}
-	return Context(card, additional), nil
+	return Context(card, discussion, additional), nil
 }
 
 // Refresh reads the board of id again, in the background: Reading reports it
@@ -490,11 +496,12 @@ type StatusOption struct {
 // Preview is what registering or editing a board shows before saving.
 type Preview struct {
 	Locator
-	URL          string
-	Title        string
-	HasStatus    bool
-	Statuses     []StatusOption     // board order
-	Repositories []RepositoryOption // by owner/name ignoring case
+	URL           string
+	Title         string
+	HasStatus     bool
+	Statuses      []StatusOption     // board order
+	NewCardStatus string             // the option a new card gets; "" for none
+	Repositories  []RepositoryOption // by owner/name ignoring case
 }
 
 // RepositoryChoice is a repository the user checked.
@@ -506,6 +513,7 @@ type RepositoryChoice struct {
 // SaveParams is what the user chose for a board.
 type SaveParams struct {
 	FinalStatuses []string
+	NewCardStatus string             // the option a new card gets; "" for none
 	Repositories  []RepositoryChoice // the checked ones
 }
 
@@ -528,6 +536,7 @@ func (s *Service) Preview(ctx context.Context, rawURL string) (Preview, error) {
 	for i, o := range st.Statuses {
 		p.Statuses[i].Final = finalByDefault(o.Name)
 	}
+	p.NewCardStatus = newCardByDefault(st.Statuses)
 	for _, sg := range suggestions {
 		p.Repositories = append(p.Repositories, s.option(sg.Identity, sg.Cards, true, ""))
 	}
@@ -560,6 +569,7 @@ func (s *Service) PreviewEdit(ctx context.Context, id string) (Preview, error) {
 	for i, o := range st.Statuses {
 		p.Statuses[i].Final = slices.Contains(b.FinalStatuses, o.ID)
 	}
+	p.NewCardStatus = newCardStatus(b.NewCardStatus, st)
 	cards := map[string]int{}
 	for _, sg := range suggestions {
 		cards[strings.ToLower(sg.Identity.FullName())] = sg.Cards
@@ -625,6 +635,7 @@ func (s *Service) Add(ctx context.Context, rawURL string, p SaveParams) (Board, 
 		Title:         st.Title,
 		URL:           st.URL,
 		FinalStatuses: finalStatuses(p.FinalStatuses, st),
+		NewCardStatus: newCardStatus(p.NewCardStatus, st),
 		CreatedAt:     s.now(),
 	}
 	if err := s.store.InsertBoard(ctx, b, links); err != nil {
@@ -670,6 +681,7 @@ func (s *Service) Update(ctx context.Context, id string, p SaveParams) error {
 
 	b.Title = st.Title
 	b.FinalStatuses = finalStatuses(p.FinalStatuses, st)
+	b.NewCardStatus = newCardStatus(p.NewCardStatus, st)
 	if err := s.store.UpdateBoard(ctx, b, links, releases); err != nil {
 		return fmt.Errorf("update board %s: %w", b.Title, err)
 	}
@@ -680,6 +692,7 @@ func (s *Service) Update(ctx context.Context, id string, p SaveParams) error {
 	s.mu.Lock()
 	if i := s.index(id); i >= 0 {
 		s.boards[i].Title, s.boards[i].FinalStatuses = b.Title, b.FinalStatuses
+		s.boards[i].NewCardStatus = b.NewCardStatus
 		slices.SortStableFunc(s.boards, compare)
 	}
 	s.mu.Unlock()
@@ -921,6 +934,26 @@ func finalStatuses(ids []string, st structure) []string {
 		}
 	}
 	return final
+}
+
+// newCardStatus is id when it is an option of st, "" otherwise.
+func newCardStatus(id string, st structure) string {
+	if slices.ContainsFunc(st.Statuses, func(o Option) bool { return o.ID == id }) {
+		return id
+	}
+	return ""
+}
+
+// newCardByDefault is the option a new card gets unless the user says
+// otherwise: the first status whose name says it is where work starts, "" when
+// no status does.
+func newCardByDefault(statuses []Option) string {
+	for _, o := range statuses {
+		if slices.Contains(newCardNames, fold(strings.TrimSpace(o.Name))) {
+			return o.ID
+		}
+	}
+	return ""
 }
 
 // finalByDefault reports whether a status of this name is final unless the user

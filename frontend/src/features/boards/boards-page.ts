@@ -17,6 +17,21 @@ export function readingText(board: Board, now: number): string {
   return `Updated ${relativeTime(board.readAt, now)}`;
 }
 
+/**
+ * statusesText is what the statuses of a board do: which ones end the work on a
+ * card, and which one a card created by a discussion gets. A board without a
+ * Status field has none of it.
+ */
+export function statusesText(board: Board): string {
+  const statuses = board.statuses ?? [];
+  if (statuses.length === 0) {
+    return "";
+  }
+  const finals = statuses.filter((status) => status.final).map((status) => status.name);
+  const newCard = statuses.find((status) => status.id === board.newCardStatus);
+  return `Final: ${finals.length === 0 ? "none" : finals.join(", ")} · New cards: ${newCard?.name ?? "none"}`;
+}
+
 /** removalText says what removing a board does to its repositories and to the rest. */
 export function removalText(removal: BoardRemoval): string {
   const moving =

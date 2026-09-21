@@ -99,6 +99,11 @@ type State struct {
 	// ReviewHistory are the reviews whose pull request was merged or closed,
 	// newest first; never nil.
 	ReviewHistory []ArchivedReview `json:"reviewHistory"`
+	// Discussions are the active discussions of every board, in creation
+	// order; never nil.
+	Discussions []DiscussionSummary `json:"discussions"`
+	// DiscussionHistory are the archived discussions, newest first; never nil.
+	DiscussionHistory []ArchivedDiscussion `json:"discussionHistory"`
 	// CloneFolder is where new clones go; "" until chosen.
 	CloneFolder string `json:"cloneFolder"`
 }
@@ -304,8 +309,8 @@ type PlanProblem struct {
 
 // Place is where in a task a situation is.
 type Place struct {
-	// Kind is stage, step, step_review, pr or review, a string for the same
-	// reason as State.Theme.
+	// Kind is stage, step, step_review, pr, review or discussion, a string for
+	// the same reason as State.Theme.
 	Kind  string `json:"kind"`
 	Stage string `json:"stage"` // stage only: prd, tech_spec, plan or one_shot
 	Step  int    `json:"step"`  // step and step_review only
@@ -318,8 +323,8 @@ type Situation struct {
 	// Kind is session_error, step_blocked, worktree_unreadable, pr_blocked,
 	// plan_invalid, pr_closed, permission, question, reply, ready_to_continue,
 	// step_review, step_empty, draft, findings, changes_review, merge,
-	// review_report, new_commits or publish_failed, a string for the same
-	// reason as State.Theme.
+	// review_report, new_commits, publish_failed or drafts, a string for the
+	// same reason as State.Theme.
 	Kind string `json:"kind"`
 	// Group is error, waiting or closing, from the most urgent, a string for
 	// the same reason as State.Theme.
@@ -564,7 +569,8 @@ type MarkerEntry struct {
 	// Type is prd_written, prd_updated, tech_spec_written, tech_spec_updated,
 	// plan_written, plan_updated, one_shot_written, one_shot_updated,
 	// pr_review_written, step_review_started, step_review_written,
-	// review_started, stage_started, step_started, compacted or interrupted.
+	// review_started, discussion_started, stage_started, step_started,
+	// compacted or interrupted.
 	Type      string `json:"type"`
 	PreTokens int    `json:"preTokens"`
 	// Stage belongs to stage_started alone, Step to the markers of a step
@@ -630,8 +636,8 @@ type TranscriptEvent struct {
 
 // StageModel is the model and effort of one stage.
 type StageModel struct {
-	// Stage is prd, tech_spec, plan, one_shot, implementation, step_review, pr
-	// or pr_review, a string for the same reason as State.Theme.
+	// Stage is prd, tech_spec, plan, one_shot, implementation, step_review, pr,
+	// pr_review or discussion, a string for the same reason as State.Theme.
 	Stage  string `json:"stage"`
 	Model  string `json:"model"`  // claude-fable-5-1, claude-opus-5 or claude-sonnet-5
 	Effort string `json:"effort"` // low, medium, high, xhigh or max
@@ -649,8 +655,8 @@ type TaskStageModel struct {
 
 // Prompt is the text a kind of session opens with, as the settings show it.
 type Prompt struct {
-	// Stage is prd, tech_spec, plan, one_shot, step_review, commit, pr or
-	// pr_review, a string for the same reason as State.Theme.
+	// Stage is prd, tech_spec, plan, one_shot, step_review, commit, pr,
+	// pr_review or discussion, a string for the same reason as State.Theme.
 	Stage    string `json:"stage"`
 	Text     string `json:"text"`
 	Modified bool   `json:"modified"` // the user edited it: it no longer follows the default of the app
@@ -715,6 +721,9 @@ type Board struct {
 	Failure       *BoardFailure `json:"failure"`
 	Viewer        string        `json:"viewer"` // the login of gh at the last reading
 	Cards         []BoardCard   `json:"cards"`  // never nil
+	// NewCardStatus is the option id of the Status field a card created by a
+	// discussion gets; "" for none.
+	NewCardStatus string `json:"newCardStatus"`
 }
 
 // CardIssue is an issue of GitHub a board shows.
@@ -828,6 +837,9 @@ type BoardPreview struct {
 	HasStatus    bool                    `json:"hasStatus"`
 	Statuses     []BoardStatus           `json:"statuses"`     // never nil
 	Repositories []BoardRepositoryOption `json:"repositories"` // never nil
+	// NewCardStatus is the option a card created by a discussion gets; "" for
+	// none.
+	NewCardStatus string `json:"newCardStatus"`
 }
 
 // BoardRepositoryChoice is a repository the user checked in the board dialog.
@@ -841,6 +853,9 @@ type BoardRepositoryChoice struct {
 type SaveBoardRequest struct {
 	FinalStatuses []string                `json:"finalStatuses"`
 	Repositories  []BoardRepositoryChoice `json:"repositories"`
+	// NewCardStatus is the option a card created by a discussion gets; "" for
+	// none.
+	NewCardStatus string `json:"newCardStatus"`
 }
 
 // BoardRemoval is what removing a board does to its repositories: how many go
@@ -1066,4 +1081,185 @@ type StartReviewRequest struct {
 	Effort       string `json:"effort"`
 	// Mode is publish or apply, a string for the same reason as State.Theme.
 	Mode string `json:"mode"`
+}
+
+// DiscussionCard is an issue of the board a discussion started from.
+type DiscussionCard struct {
+	Key        string `json:"key"`        // owner/name#number in lower case
+	Repository string `json:"repository"` // owner/name
+	Number     int    `json:"number"`
+	Title      string `json:"title"`
+	URL        string `json:"url"`
+}
+
+// DraftRef is what a draft points at: another draft, or an issue on GitHub.
+type DraftRef struct {
+	Draft     string `json:"draft"`     // the id of a draft of the discussion; "" for an issue
+	Key       string `json:"key"`       // owner/name#number in lower case; "" for a draft
+	Reference string `json:"reference"` // owner/name#number as GitHub writes it; "" for a draft
+	Title     string `json:"title"`     // the title of the draft, or of the issue when the reading has it
+	URL       string `json:"url"`       // the issue; "" for a draft or an issue the reading lacks
+}
+
+// DraftDependency is a card a draft can only start after, with what became of
+// it on GitHub.
+type DraftDependency struct {
+	DraftRef
+	Linked bool `json:"linked"` // GitHub has the relation
+	// Dropped is "", discarded or unavailable, a string for the same reason as
+	// State.Theme.
+	Dropped string `json:"dropped"`
+	Detail  string `json:"detail"` // unavailable only: what gh said
+}
+
+// DraftCurrent is the card an update draft changes, as the stored reading has
+// it.
+type DraftCurrent struct {
+	Title        string     `json:"title"`
+	Body         string     `json:"body"`
+	Module       string     `json:"module"`       // the value of the module field; "" for none
+	Status       string     `json:"status"`       // the option of the Status field; "" for none
+	Epic         *DraftRef  `json:"epic"`         // nil without an epic
+	Dependencies []DraftRef `json:"dependencies"` // never nil
+	ReadAt       string     `json:"readAt"`
+}
+
+// Draft is one card a discussion produced: as the user left it, and what
+// became of it on GitHub.
+type Draft struct {
+	ID       string `json:"id"`
+	Position int    `json:"position"`
+	// Kind is new, update or epic, a string for the same reason as State.Theme.
+	Kind string `json:"kind"`
+	// Source is agent or user: who the draft came from.
+	Source string `json:"source"`
+	// Repository is owner/name, and RepositoryID the registered repository of
+	// it; "" when it is not registered or left the board.
+	Repository   string            `json:"repository"`
+	RepositoryID string            `json:"repositoryId"`
+	Card         *DiscussionCard   `json:"card"` // update only; nil otherwise
+	Title        string            `json:"title"`
+	Body         string            `json:"body"`
+	Module       string            `json:"module"`       // the name of the option; "" for none
+	Epic         *DraftRef         `json:"epic"`         // nil without an epic
+	Dependencies []DraftDependency `json:"dependencies"` // never nil
+	Current      *DraftCurrent     `json:"current"`      // update only; nil otherwise
+	// Decision is "", approved or discarded, a string for the same reason as
+	// State.Theme.
+	Decision string   `json:"decision"`
+	Revision int      `json:"revision"` // bumped every time the artifact changes the draft
+	Warnings []string `json:"warnings"` // never nil
+	// Outcome is "", created or updated: what the publication did on GitHub.
+	Outcome      string `json:"outcome"`
+	Number       int    `json:"number"`
+	URL          string `json:"url"`
+	Published    bool   `json:"published"` // every step of the publication is done
+	PublishedAt  string `json:"publishedAt"`
+	Publishing   bool   `json:"publishing"`   // the draft is in the publication under way
+	PublishError string `json:"publishError"` // why the last publication failed; "" otherwise
+	// Waits is the title of the draft this one waits for before it is
+	// published; "" when it waits for none.
+	Waits string `json:"waits"`
+	// CanPublish says Publish epic is enabled; epics only.
+	CanPublish bool `json:"canPublish"`
+	// Hint is why an epic can't be published, or why a card of a discarded
+	// epic goes nowhere.
+	Hint string `json:"hint"`
+}
+
+// DiscussionRepository is a repository of the board a new card can be created
+// in.
+type DiscussionRepository struct {
+	ID       string `json:"id"`
+	FullName string `json:"fullName"` // owner/name
+	Cloned   bool   `json:"cloned"`
+	Missing  bool   `json:"missing"`
+}
+
+// DiscussionSummary is an active discussion of a demand of a board, as the
+// interface shows it.
+type DiscussionSummary struct {
+	ID      string `json:"id"`
+	BoardID string `json:"boardId"`
+	Board   string `json:"board"` // the title of the board
+	Title   string `json:"title"`
+	Text    string `json:"text"` // what the user wrote when creating it; "" for none
+	// Status is discussing, awaiting_drafts, deciding, publishing,
+	// publish_failed or published, a string for the same reason as State.Theme.
+	Status string           `json:"status"`
+	Cards  []DiscussionCard `json:"cards"`  // the cards it started from; never nil
+	Drafts []Draft          `json:"drafts"` // in position order; never nil
+	// DraftsRead says a readable drafts artifact was recorded, and
+	// DraftsRevision changes every time the artifact is read again and differs.
+	DraftsRead     bool `json:"draftsRead"`
+	DraftsRevision int  `json:"draftsRevision"`
+	// UnreadableDrafts is why the drafts artifact could not be read; ""
+	// otherwise.
+	UnreadableDrafts string `json:"unreadableDrafts"`
+	// HasDocument says the agent wrote the document of the discussion, and
+	// DocumentRevision changes every time it does.
+	HasDocument      bool `json:"hasDocument"`
+	DocumentRevision int  `json:"documentRevision"`
+	// ModuleField is the name of the module field of the board; "" without one.
+	ModuleField   string   `json:"moduleField"`
+	ModuleOptions []string `json:"moduleOptions"` // the names of the options; never nil
+	// Repositories are the repositories of the board, by owner/name; never nil.
+	Repositories []DiscussionRepository `json:"repositories"`
+	// CanArchive says the discussion can leave the list for the history, and
+	// ArchiveHint is why it cannot.
+	CanArchive  bool   `json:"canArchive"`
+	ArchiveHint string `json:"archiveHint"`
+
+	SessionStage string `json:"sessionStage"` // discussion, or "" without a conversation
+	// SessionStatus is working, waiting, needs_permission, needs_answer, paused
+	// or error.
+	SessionStatus string `json:"sessionStatus"`
+	// SessionModel and SessionEffort are what the conversation runs with from
+	// its next message on; "" without a session.
+	SessionModel   string      `json:"sessionModel"`
+	SessionEffort  string      `json:"sessionEffort"`
+	TurnRunning    bool        `json:"turnRunning"`
+	ProcessRunning bool        `json:"processRunning"`
+	RetryAttempt   int         `json:"retryAttempt"`
+	ContextPercent int         `json:"contextPercent"`
+	PendingCount   int         `json:"pendingCount"`
+	LastError      string      `json:"lastError"`
+	Situations     []Situation `json:"situations"` // what the discussion waits on the user for; never nil
+	CreatedAt      string      `json:"createdAt"`
+}
+
+// ArchivedDiscussion is a discussion of the history, with what it produced.
+type ArchivedDiscussion struct {
+	ID      string           `json:"id"`
+	BoardID string           `json:"boardId"`
+	Board   string           `json:"board"` // the title of the board
+	Title   string           `json:"title"`
+	Cards   []DiscussionCard `json:"cards"`  // never nil
+	Drafts  []Draft          `json:"drafts"` // in position order; never nil
+	// PublishedCount is how many drafts went to GitHub.
+	PublishedCount int `json:"publishedCount"`
+	// RepositoryIDs are the registered repositories of the cards it started
+	// from and of the cards it published; never nil.
+	RepositoryIDs []string `json:"repositoryIds"`
+	CreatedAt     string   `json:"createdAt"`
+	ArchivedAt    string   `json:"archivedAt"`
+}
+
+// StartDiscussionRequest is what the user chose in the dialog that starts a
+// discussion.
+type StartDiscussionRequest struct {
+	BoardID string   `json:"boardId"`
+	Title   string   `json:"title"`
+	Text    string   `json:"text"`  // what to discuss; "" for none
+	Cards   []string `json:"cards"` // the keys of the cards of the board
+	Model   string   `json:"model"`
+	Effort  string   `json:"effort"`
+}
+
+// DiscussionContextRequest is what the dialog of a discussion shows the
+// context of, before anything is created.
+type DiscussionContextRequest struct {
+	BoardID string   `json:"boardId"`
+	Text    string   `json:"text"`
+	Cards   []string `json:"cards"`
 }

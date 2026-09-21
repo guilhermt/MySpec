@@ -1,13 +1,14 @@
 import { Archive, ExternalLink } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { pluralize } from "@/features/boards/board-dialog";
 import { formatDates, stepCount } from "@/features/history/history-format";
 import { historyEntries } from "@/features/history/history-list";
 import { outcomeLabel } from "@/features/reviews/review-status";
 import { RepositoryFilter } from "@/features/sidebar/RepositoryFilter";
 import { shortName } from "@/lib/repositories";
 import { isOneShot } from "@/lib/task-modes";
-import type { ArchivedPR, ArchivedReview, ArchivedTask } from "@/lib/wails";
+import type { ArchivedDiscussion, ArchivedPR, ArchivedReview, ArchivedTask } from "@/lib/wails";
 import { openExternal } from "@/store/actions";
 import { useAppStore, useHistoryUi, useRepository, useRepositoryFilter } from "@/store/app-store";
 
@@ -112,7 +113,28 @@ function ReviewRow({ review }: { review: ArchivedReview }) {
   );
 }
 
-/** HistoryPanel is the list of the tasks and the reviews the app has finished. */
+/** DiscussionRow is an archived discussion of the list, opening it on click. */
+function DiscussionRow({ discussion }: { discussion: ArchivedDiscussion }) {
+  const openArchivedDiscussion = useAppStore((state) => state.openArchivedDiscussion);
+
+  return (
+    <button type="button" onClick={() => openArchivedDiscussion(discussion.id)} className={ROW}>
+      <Badge variant="outline" className="shrink-0">
+        Discussion
+      </Badge>
+      <span className="min-w-0 truncate font-medium">{discussion.title}</span>
+      <Badge variant="secondary">{discussion.board}</Badge>
+      <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+        {`${pluralize(discussion.publishedCount, "card")} published`}
+      </span>
+      <span className="shrink-0 text-xs text-muted-foreground">
+        {formatDates(discussion.createdAt, discussion.archivedAt)}
+      </span>
+    </button>
+  );
+}
+
+/** HistoryPanel is the list of the tasks, the reviews and the discussions the app has finished. */
 export function HistoryPanel() {
   const app = useAppStore((state) => state.app);
   const { historyQuery } = useHistoryUi();
@@ -133,7 +155,7 @@ export function HistoryPanel() {
             <h1 className="text-[1.5rem] font-semibold">History</h1>
           </div>
           <p className="text-sm text-muted-foreground">
-            Finished tasks and reviews of every repository, with their documents.
+            Finished tasks, reviews and discussions of every repository, with their documents.
           </p>
         </header>
 
@@ -153,7 +175,7 @@ export function HistoryPanel() {
         {empty ? (
           <Empty
             title="Nothing archived yet"
-            hint="A task comes here once it's closed, a review once its pull request is merged or closed."
+            hint="A task comes here once it's closed, a review once its pull request is merged or closed, a discussion once it's archived."
           />
         ) : shown.length === 0 && query === "" && filtered !== null ? (
           <Empty
@@ -171,8 +193,10 @@ export function HistoryPanel() {
               <li key={entry.id}>
                 {entry.kind === "task" ? (
                   <TaskRow task={entry.task} />
-                ) : (
+                ) : entry.kind === "review" ? (
                   <ReviewRow review={entry.review} />
+                ) : (
+                  <DiscussionRow discussion={entry.discussion} />
                 )}
               </li>
             ))}

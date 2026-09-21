@@ -3,6 +3,7 @@ import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { sections } from "@/features/board/board-view";
 import { CardList } from "@/features/board/CardList";
+import type { BoardCard } from "@/lib/wails";
 import { renderWithStore } from "@/test/render";
 import { makeBoard, makeBoardCard, makeState } from "@/test/wails-mock";
 
@@ -24,12 +25,14 @@ const DONE = makeBoardCard({
 });
 const BOARD = makeBoard({ cards: [FIRST, SECOND, THIRD, DONE] });
 
-function list() {
+function list(checkable: (card: BoardCard) => boolean = () => true) {
   const onSelect = vi.fn();
   const onStart = vi.fn();
+  const onDiscuss = vi.fn();
 
   function Harness() {
     const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set(["done"]));
+    const [checked, setChecked] = useState<ReadonlySet<string>>(new Set());
     return (
       <CardList
         sections={sections(BOARD, BOARD.cards ?? [])}
@@ -44,11 +47,26 @@ function list() {
         }}
         onSelect={onSelect}
         onStart={onStart}
+        checked={checked}
+        isCheckable={checkable}
+        onToggleChecked={(card) => {
+          const next = new Set(checked);
+          if (!next.delete(card.key)) {
+            next.add(card.key);
+          }
+          setChecked(next);
+        }}
+        onDiscuss={onDiscuss}
       />
     );
   }
 
-  return { ...renderWithStore(<Harness />, { state: makeState() }), onSelect, onStart };
+  return {
+    ...renderWithStore(<Harness />, { state: makeState() }),
+    onSelect,
+    onStart,
+    onDiscuss,
+  };
 }
 
 function row(number: number) {
@@ -124,6 +142,42 @@ describe("CardList", () => {
 
     await user.keyboard("S");
     expect(onStart).toHaveBeenCalledExactlyOnceWith(FIRST);
+  });
+
+  it("picks the focused card with Space, and leaves an uncheckable one alone", async () => {
+    const { user } = list((card) => card.key !== SECOND.key);
+    row(1).focus();
+
+    await user.keyboard(" ");
+    expect(screen.getByRole("checkbox", { name: "Select #1" })).toBeChecked();
+
+    row(2).focus();
+    await user.keyboard(" ");
+    expect(screen.getByRole("checkbox", { name: "Select #2" })).not.toBeChecked();
+  });
+
+  it("discusses the selected cards on D, and the focused one with no selection", async () => {
+    const { user, onDiscuss } = list((card) => card.key !== SECOND.key);
+    row(3).focus();
+
+    await user.keyboard("d");
+    expect(onDiscuss).toHaveBeenCalledExactlyOnceWith(THIRD);
+
+    // With a selection the view resolves it whole, cards a filter hides included.
+    row(1).focus();
+    await user.keyboard(" ");
+    row(2).focus();
+    await user.keyboard("D");
+    expect(onDiscuss).toHaveBeenLastCalledWith(null);
+  });
+
+  it("leaves D alone on a card of another board with nothing selected", async () => {
+    const { user, onDiscuss } = list(() => false);
+    row(1).focus();
+
+    await user.keyboard("d");
+
+    expect(onDiscuss).not.toHaveBeenCalled();
   });
 
   it("shows the count of each section and marks its state", () => {
