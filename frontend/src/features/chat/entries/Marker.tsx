@@ -10,8 +10,8 @@ import {
   Play,
   RotateCcw,
 } from "lucide-react";
-import { stageLabel } from "@/lib/stages";
-import { asMarkerType, asTaskStage, type MarkerEntry, type MarkerType } from "@/lib/wails";
+import { asLifecycleStage, stageLabel } from "@/lib/stages";
+import { asMarkerType, type MarkerEntry, type MarkerType } from "@/lib/wails";
 
 const MARKERS: Record<MarkerType, { icon: LucideIcon; text: string }> = {
   prd_written: { icon: FileCheck, text: "PRD written" },
@@ -33,12 +33,14 @@ const MARKERS: Record<MarkerType, { icon: LucideIcon; text: string }> = {
   interrupted: { icon: Ban, text: "Interrupted" },
 };
 
-// A stage marker names the stage it opened, and says whether the user asked
-// for it again.
+// A stage marker names the stage it opened, generically when the app does not
+// know it, and says whether the user asked for it again.
 function stageMarker(marker: MarkerEntry): { icon: LucideIcon; text: string } {
+  const stage = asLifecycleStage(marker.stage);
+  const name = stage !== null ? stageLabel(stage) : "Stage";
   return {
     icon: marker.restarted ? RotateCcw : Play,
-    text: `${stageLabel(asTaskStage(marker.stage))} ${marker.restarted ? "restarted" : "started"}`,
+    text: `${name} ${marker.restarted ? "restarted" : "started"}`,
   };
 }
 

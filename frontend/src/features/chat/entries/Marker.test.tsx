@@ -30,26 +30,34 @@ describe("Marker", () => {
   });
 
   it.each([
-    [false, "Tech spec started"],
-    [true, "Tech spec restarted"],
-  ])("names the stage a stage_started marker opened (restarted: %s)", (restarted, expected) => {
-    renderWithStore(
-      <Marker
-        marker={{
-          type: "stage_started",
-          preTokens: 0,
-          stage: "tech_spec",
-          step: 0,
-          pass: 0,
-          clean: false,
-          restarted,
-        }}
-        createdAt="2026-09-05T10:00:00Z"
-      />,
-    );
+    ["tech_spec", false, "Tech spec started"],
+    ["tech_spec", true, "Tech spec restarted"],
+    ["pr_review", false, "PR review started"],
+    ["pr", false, "PR started"],
+    ["one_shot", false, "Planning started"],
+    ["unknown", false, "Stage started"],
+    ["unknown", true, "Stage restarted"],
+  ])(
+    "names the %s stage a stage_started marker opened (restarted: %s)",
+    (stage, restarted, expected) => {
+      renderWithStore(
+        <Marker
+          marker={{
+            type: "stage_started",
+            preTokens: 0,
+            stage,
+            step: 0,
+            pass: 0,
+            clean: false,
+            restarted,
+          }}
+          createdAt="2026-09-05T10:00:00Z"
+        />,
+      );
 
-    expect(screen.getByText(expected)).toBeInTheDocument();
-  });
+      expect(screen.getByText(expected)).toBeInTheDocument();
+    },
+  );
 
   it.each([
     [false, "Step 1 started"],
