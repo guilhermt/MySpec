@@ -1900,6 +1900,30 @@ func TestFromReviewsRefusesAnotherPassWhileThePassAskedForIsStillRunning(t *test
 	}
 }
 
+func TestFromReviewsOffersABlockedPassAgainWithItsReason(t *testing.T) {
+	t.Parallel()
+
+	blocked := reviewState(reviewflow.StatusPassBlocked, recordedPass(1, prreview.DecisionNone))
+	blocked.Review.AskedPass = 2
+	blocked.PassBlocked = "gh is not logged in"
+
+	got := bindings.FromReviews([]reviewflow.State{blocked}, nil, reviewRepos)[0]
+	if !got.CanReviewAgain {
+		t.Error("canReviewAgain = false, want true on a blocked pass")
+	}
+	if got.PassBlocked != "gh is not logged in" {
+		t.Errorf("passBlocked = %q, want the reason the pass could not start", got.PassBlocked)
+	}
+
+	waiting := reviewState(reviewflow.StatusWaitingChecks, recordedPass(1, prreview.DecisionNone))
+	waiting.Review.AskedPass = 2
+
+	if got := bindings.FromReviews([]reviewflow.State{waiting}, nil, reviewRepos)[0]; got.CanReviewAgain || got.PassBlocked != "" {
+		t.Errorf("canReviewAgain %v, passBlocked %q, want false and none while the pass waits for the checks",
+			got.CanReviewAgain, got.PassBlocked)
+	}
+}
+
 func TestFromReviewsCarriesThePassesTheVerdictsAndTheSituationsOfAReview(t *testing.T) {
 	t.Parallel()
 

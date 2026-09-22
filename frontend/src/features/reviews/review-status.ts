@@ -15,6 +15,10 @@ export function reviewStatusLabel(review: ReviewSummary): string {
   switch (asPullReviewStatus(review.status)) {
     case "reviewing":
       return "Reviewing";
+    case "waiting_checks":
+      return "Waiting for checks";
+    case "pass_blocked":
+      return "Pass blocked";
     case "awaiting_reply":
       return "Waiting for the report";
     case "awaiting_decision":
@@ -65,11 +69,14 @@ export function showsChanges(review: ReviewSummary): boolean {
 export function reviewStatusTone(review: ReviewSummary): StatusTone {
   switch (asPullReviewStatus(review.status)) {
     case "reviewing":
+    case "waiting_checks":
     case "applying":
     case "committing":
       return "working";
     case "published":
       return "done";
+    // The situation of a blocked pass is what paints it.
+    case "pass_blocked":
     case "awaiting_reply":
     case "awaiting_decision":
     case "ready_to_publish":

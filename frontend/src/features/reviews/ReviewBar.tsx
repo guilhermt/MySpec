@@ -71,6 +71,11 @@ export function ReviewBar({ review }: ReviewBarProps) {
           {review.publishError}
         </span>
       )}
+      {review.passBlocked !== "" && (
+        <span className="min-w-0 truncate text-xs text-destructive" title={review.passBlocked}>
+          {review.passBlocked}
+        </span>
+      )}
       {review.unreadableReport !== "" && (
         <span
           className="min-w-0 truncate text-xs text-[var(--status-attention)]"

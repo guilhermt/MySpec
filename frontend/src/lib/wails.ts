@@ -239,6 +239,7 @@ export type PRStatus =
   | "awaiting_reply"
   | "opening"
   | "reviewing"
+  | "waiting_checks"
   | "awaiting_decision"
   | "in_review"
   | "ready_to_approve"
@@ -346,7 +347,8 @@ export type SituationKind =
   | "review_report"
   | "new_commits"
   | "drafts"
-  | "publish_failed";
+  | "publish_failed"
+  | "pass_blocked";
 
 /** SituationGroup is how urgent a situation is, from the most urgent. */
 export type SituationGroup = "error" | "waiting" | "closing";
@@ -409,6 +411,8 @@ export type PullReviewMode = "publish" | "apply";
 /** PullReviewStatus is where a review of a pull request stands. */
 export type PullReviewStatus =
   | "reviewing"
+  | "waiting_checks"
+  | "pass_blocked"
   | "awaiting_reply"
   | "awaiting_decision"
   | "ready_to_publish"
@@ -577,6 +581,7 @@ export function asPRStatus(value: string): PRStatus {
     case "awaiting_reply":
     case "opening":
     case "reviewing":
+    case "waiting_checks":
     case "awaiting_decision":
     case "in_review":
     case "ready_to_approve":
@@ -796,6 +801,7 @@ export function asSituationKind(value: string): SituationKind {
     case "new_commits":
     case "drafts":
     case "publish_failed":
+    case "pass_blocked":
       return value;
     default:
       return "reply";
@@ -952,6 +958,8 @@ export function asPullReviewMode(value: string): PullReviewMode {
 export function asPullReviewStatus(value: string): PullReviewStatus {
   switch (value) {
     case "reviewing":
+    case "waiting_checks":
+    case "pass_blocked":
     case "awaiting_reply":
     case "awaiting_decision":
     case "ready_to_publish":

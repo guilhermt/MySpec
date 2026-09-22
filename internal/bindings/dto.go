@@ -255,9 +255,9 @@ type CloseResult struct {
 // PullRequest is the PR stage of a task, with its conversation and its state.
 type PullRequest struct {
 	// Status is preparing, blocked, drafting, draft_ready, awaiting_reply,
-	// opening, reviewing, awaiting_decision, in_review, ready_to_approve,
-	// committing, done, merged, pr_closed, closing or closed, a string for the
-	// same reason as State.Theme.
+	// opening, reviewing, waiting_checks, awaiting_decision, in_review,
+	// ready_to_approve, committing, done, merged, pr_closed, closing or closed,
+	// a string for the same reason as State.Theme.
 	Status       string   `json:"status"`
 	Block        *PRBlock `json:"block"` // blocked only
 	WorktreePath string   `json:"worktreePath"`
@@ -323,8 +323,8 @@ type Situation struct {
 	// Kind is session_error, step_blocked, worktree_unreadable, pr_blocked,
 	// plan_invalid, pr_closed, permission, question, reply, ready_to_continue,
 	// step_review, step_empty, draft, findings, changes_review, merge,
-	// review_report, new_commits, publish_failed or drafts, a string for the
-	// same reason as State.Theme.
+	// review_report, new_commits, publish_failed, pass_blocked or drafts, a
+	// string for the same reason as State.Theme.
 	Kind string `json:"kind"`
 	// Group is error, waiting or closing, from the most urgent, a string for
 	// the same reason as State.Theme.
@@ -1004,9 +1004,10 @@ type ReviewSummary struct {
 	Own          bool   `json:"own"`        // the author is the account of gh
 	// Mode is publish or apply, a string for the same reason as State.Theme.
 	Mode string `json:"mode"`
-	// Status is reviewing, awaiting_reply, awaiting_decision, ready_to_publish,
-	// publish_failed, published, new_commits, ready_to_apply, applying,
-	// in_review, ready_to_approve, committing or ready_to_merge.
+	// Status is reviewing, waiting_checks, pass_blocked, awaiting_reply,
+	// awaiting_decision, ready_to_publish, publish_failed, published,
+	// new_commits, ready_to_apply, applying, in_review, ready_to_approve,
+	// committing or ready_to_merge.
 	Status       string       `json:"status"`
 	Card         *PullCard    `json:"card"` // nil when the pull request has no card
 	WorktreePath string       `json:"worktreePath"`
@@ -1019,6 +1020,7 @@ type ReviewSummary struct {
 	CheckError string `json:"checkError"`
 	// PublishError is why the last publication failed; "" otherwise.
 	PublishError string `json:"publishError"`
+	PassBlocked  string `json:"passBlocked"` // why the pass the app asked for could not start; "" otherwise
 	// UnreadableReport is why the report of the pass the app asked for could
 	// not be read; "" otherwise.
 	UnreadableReport string `json:"unreadableReport"`

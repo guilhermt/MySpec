@@ -91,6 +91,8 @@ export function situationLabel(situation: Situation): string {
       return "Decide drafts";
     case "publish_failed":
       return "Publish failed";
+    case "pass_blocked":
+      return "Pass blocked";
   }
 }
 
@@ -139,6 +141,7 @@ export function namesPlace(situation: Situation): boolean {
     case "review_report":
     case "new_commits":
     case "publish_failed":
+    case "pass_blocked":
       return true;
     case "session_error":
     case "worktree_unreadable":

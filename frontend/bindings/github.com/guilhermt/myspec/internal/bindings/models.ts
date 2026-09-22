@@ -1292,9 +1292,9 @@ export interface PullLabel {
 export interface PullRequest {
     /**
      * Status is preparing, blocked, drafting, draft_ready, awaiting_reply,
-     * opening, reviewing, awaiting_decision, in_review, ready_to_approve,
-     * committing, done, merged, pr_closed, closing or closed, a string for the
-     * same reason as State.Theme.
+     * opening, reviewing, waiting_checks, awaiting_decision, in_review,
+     * ready_to_approve, committing, done, merged, pr_closed, closing or closed,
+     * a string for the same reason as State.Theme.
      */
     "status": string;
 
@@ -1819,9 +1819,10 @@ export interface ReviewSummary {
     "mode": string;
 
     /**
-     * Status is reviewing, awaiting_reply, awaiting_decision, ready_to_publish,
-     * publish_failed, published, new_commits, ready_to_apply, applying,
-     * in_review, ready_to_approve, committing or ready_to_merge.
+     * Status is reviewing, waiting_checks, pass_blocked, awaiting_reply,
+     * awaiting_decision, ready_to_publish, publish_failed, published,
+     * new_commits, ready_to_apply, applying, in_review, ready_to_approve,
+     * committing or ready_to_merge.
      */
     "status": string;
 
@@ -1852,6 +1853,11 @@ export interface ReviewSummary {
      * PublishError is why the last publication failed; "" otherwise.
      */
     "publishError": string;
+
+    /**
+     * why the pass the app asked for could not start; "" otherwise
+     */
+    "passBlocked": string;
 
     /**
      * UnreadableReport is why the report of the pass the app asked for could
@@ -1935,8 +1941,8 @@ export interface Situation {
      * Kind is session_error, step_blocked, worktree_unreadable, pr_blocked,
      * plan_invalid, pr_closed, permission, question, reply, ready_to_continue,
      * step_review, step_empty, draft, findings, changes_review, merge,
-     * review_report, new_commits, publish_failed or drafts, a string for the
-     * same reason as State.Theme.
+     * review_report, new_commits, publish_failed, pass_blocked or drafts, a
+     * string for the same reason as State.Theme.
      */
     "kind": string;
 
