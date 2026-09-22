@@ -7,7 +7,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/models"
+	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/prreview"
 	"github.com/guilhermt/myspec/internal/pulls"
 	"github.com/guilhermt/myspec/internal/repository"
@@ -20,9 +22,11 @@ import (
 const noFindings = "None."
 
 // ReviewAgain asks the agent for another pass over the pull request as it is
-// now, in the same conversation: the worktree is brought to the head of the
-// pull request, the document of the review is written again, and the message
-// says what changed and which findings were already sent to the author.
+// now, in the same conversation: the pull request is read again, the worktree
+// is brought to its head, the document of the review is written again, and
+// the message says what changed and which findings were already sent to the
+// author. The pass waits for the checks of the head while they are pending;
+// a pass that could not start is asked for again the same way.
 func (s *Service) ReviewAgain(ctx context.Context, id, instructions string) error {
 	l := s.lockOf(id)
 	l.mu.Lock()
@@ -32,29 +36,34 @@ func (s *Service) ReviewAgain(ctx context.Context, id, instructions string) erro
 	if err != nil {
 		return fmt.Errorf("review %s again: %w", id, err)
 	}
-	if err = againable(stored); err != nil {
-		return fmt.Errorf("review %s again: %w", stored.Reference(repo.FullName()), err)
+	ref := stored.Reference(repo.FullName())
+	if err = againable(stored, s.passBlockedOf(id)); err != nil {
+		return fmt.Errorf("review %s again: %w", ref, err)
 	}
 
 	sum, err := s.readySession(ctx, stored, repo, wt)
 	if err != nil {
-		return fmt.Errorf("review %s again: %w", stored.Reference(repo.FullName()), err)
+		return fmt.Errorf("review %s again: %w", ref, err)
 	}
 	if !sum.Idle {
-		return fmt.Errorf("review %s again: %w", stored.Reference(repo.FullName()), ErrBusy)
+		return fmt.Errorf("review %s again: %w", ref, ErrBusy)
 	}
 
-	stored, detail := s.reread(ctx, stored, repo)
-	if detail != nil && detail.State != string(prreview.PROpen) {
+	stored, detail, err := s.reread(ctx, stored, repo)
+	if err != nil {
+		return fmt.Errorf("review %s again: %w", ref, err)
+	}
+	if detail.State != string(prreview.PROpen) {
 		// Merged or closed since the last poll: the poll ends the review, and
 		// a pass asked now would be cut off in the middle of its turn.
-		return fmt.Errorf("review %s again: %w", stored.Reference(repo.FullName()), ErrNotOpen)
+		return fmt.Errorf("review %s again: %w", ref, ErrNotOpen)
 	}
 	if err = s.updateWorktree(ctx, stored, wt); err != nil {
 		return err
 	}
 	if stored.Phase != prreview.PhaseApplying {
-		return s.askPass(ctx, stored, repo, detail, instructions)
+		_, err = s.requestPass(ctx, stored, repo, wt, detail, instructions, false)
+		return err
 	}
 	return s.leaveFixes(ctx, stored, repo, wt, detail, instructions)
 }
@@ -65,15 +74,14 @@ func (s *Service) ReviewAgain(ctx context.Context, id, instructions string) erro
 // the pass, and comes back when the pass cannot be asked for.
 func (s *Service) leaveFixes(
 	ctx context.Context, stored prreview.Review, repo repository.Repository, wt worktree.Worktree,
-	detail *pulls.Detail, instructions string,
+	detail pulls.Detail, instructions string,
 ) error {
 	if err := s.setPhase(ctx, stored.ID, prreview.PhaseNone); err != nil {
 		return err
 	}
 	s.watch.Forget(stored.ID)
 	stored.Phase = prreview.PhaseNone
-	err := s.askPass(ctx, stored, repo, detail, instructions)
-	if err != nil {
+	if _, err := s.requestPass(ctx, stored, repo, wt, detail, instructions, false); err != nil {
 		if backErr := s.setPhase(ctx, stored.ID, prreview.PhaseApplying); backErr != nil {
 			s.log.Error("record review phase failed", "review", stored.ID, "error", backErr)
 		}
@@ -84,8 +92,12 @@ func (s *Service) leaveFixes(
 	return nil
 }
 
-// againable says whether a review can take another pass now.
-func againable(stored prreview.Review) error {
+// againable says whether a review can take another pass now. A pass that
+// could not start is asked for again by the same action.
+func againable(stored prreview.Review, passBlocked string) error {
+	if stored.Phase == prreview.PhaseWaitingChecks && passBlocked != "" {
+		return nil
+	}
 	switch {
 	case stored.AskedPass > stored.ReportedPass:
 		return ErrPassRunning
@@ -128,7 +140,7 @@ func (s *Service) readySession(
 		// The conversation keeps the model it was started with, so the choice
 		// of a review that is reopened is the stored one.
 		pass := stored.ReportedPass + 1
-		if err := s.sessions.Open(ctx, info(stored, wt, repo, pass, "", models.Choice{})); err != nil {
+		if err := s.sessions.Open(ctx, info(stored, wt, repo, pass, "", models.Choice{}, nil)); err != nil {
 			return session.Summary{}, err
 		}
 		if sum, open = s.sessions.Summary(key); !open {
@@ -149,20 +161,18 @@ func (s *Service) readySession(
 }
 
 // reread asks GitHub about the pull request again, so that a pass starts on
-// the head and the title it has now. A reading that fails never holds a pass
-// back: the review goes on with what it already knew, and answers with no
-// pull request, because only GitHub has the description the document needs.
+// the head and the title it has now. A pass never starts without the reading:
+// it is what says the state of the checks, and only GitHub has the
+// description the document needs.
 func (s *Service) reread(
 	ctx context.Context, stored prreview.Review, repo repository.Repository,
-) (prreview.Review, *pulls.Detail) {
+) (prreview.Review, pulls.Detail, error) {
 	detail, err := s.detailOf(ctx, repo, stored.Number)
 	if err != nil {
-		s.log.Warn("read pull request failed", "review", stored.ID,
-			"repository", repo.FullName(), "error", err)
-		return stored, nil
+		return stored, pulls.Detail{}, err
 	}
 	if detail.HeadCommit == stored.HeadCommit && detail.Title == stored.Title {
-		return stored, &detail
+		return stored, detail, nil
 	}
 
 	updated, err := s.reviews.Update(ctx, stored.ID, func(r *prreview.Review) {
@@ -170,9 +180,9 @@ func (s *Service) reread(
 	})
 	if err != nil {
 		s.log.Error("update review failed", "review", stored.ID, "error", err)
-		return stored, &detail
+		return stored, detail, nil
 	}
-	return updated, &detail
+	return updated, detail, nil
 }
 
 // updateWorktree brings the worktree of a review to the head of the pull
@@ -190,48 +200,90 @@ func (s *Service) updateWorktree(ctx context.Context, stored prreview.Review, wt
 	return s.worktrees.UpdateDetached(ctx, wt, stored.HeadBranch)
 }
 
-// askPass writes the document of the review again and asks the conversation
-// for the next pass. It is what ReviewAgain ends with, and what apply mode
-// asks for once a commit went up. Without a reading of the pull request the
-// document is left alone: the one on disk is the last one written from GitHub,
-// and rewriting it would drop the description of the pull request.
-func (s *Service) askPass(
-	ctx context.Context, stored prreview.Review, repo repository.Repository,
-	detail *pulls.Detail, instructions string,
-) error {
-	var err error
-	if detail != nil {
-		if stored, err = s.writeContext(ctx, stored, repo, *detail); err != nil {
-			return err
-		}
+// requestPass writes the document of the review again and asks for the next
+// pass, which starts at once when the checks of the head are settled and waits
+// for them otherwise; the poll goes on with the wait. afterPush says the head
+// is a commit the app just pushed, whose checks GitHub may not list yet. It is
+// how Start, ReviewAgain and a pass that could not start ask for a pass.
+func (s *Service) requestPass(
+	ctx context.Context, stored prreview.Review, repo repository.Repository, wt worktree.Worktree,
+	detail pulls.Detail, instructions string, afterPush bool,
+) (prreview.Review, error) {
+	stored, err := s.writeContext(ctx, stored, repo, detail)
+	if err != nil {
+		return prreview.Review{}, err
 	}
-
 	pass := stored.ReportedPass + 1
-	message := passMessage(passRequest{
-		ReportPath:       stored.ReportPath(pass),
-		Pass:             pass,
-		PassCommit:       stored.PassCommit,
-		BaseBranch:       remoteRef(stored.BaseBranch),
-		Mode:             stored.Mode,
-		Findings:         s.sentFindings(stored),
-		Instructions:     repo.ReviewInstructions,
-		PassInstructions: instructions,
-	})
 	if stored, err = s.reviews.AskPass(ctx, stored.ID, pass, instructions); err != nil {
-		return err
+		return prreview.Review{}, err
 	}
 	if stored.PublishError != "" {
-		if _, err = s.reviews.Update(ctx, stored.ID, func(r *prreview.Review) { r.PublishError = "" }); err != nil {
-			return err
+		if stored, err = s.reviews.Update(ctx, stored.ID, func(r *prreview.Review) { r.PublishError = "" }); err != nil {
+			return prreview.Review{}, err
 		}
 	}
 
-	if err = s.sessions.SendFromApp(ctx, sessionKey(stored.ID), message); err != nil {
-		// The pass never reached the agent, so the review goes back to the
-		// pass the user was on.
-		if backErr := s.reviews.UnaskPass(ctx, stored.ID, pass); backErr != nil {
-			s.log.Error("unask review pass failed", "review", stored.ID, "pass", pass, "error", backErr)
+	// Why a pass before could not start, or its report could not be read,
+	// says nothing about this one.
+	l := s.lockOf(stored.ID)
+	s.mu.Lock()
+	l.passBlocked, l.unreadable = "", ""
+	l.wait = checksWait{afterPush: afterPush}
+	settled := l.wait.settled(detail.Checks)
+	s.mu.Unlock()
+
+	if !settled {
+		if err = s.setPhase(ctx, stored.ID, prreview.PhaseWaitingChecks); err != nil {
+			s.unaskPass(ctx, stored.ID, pass)
+			return prreview.Review{}, err
 		}
+		stored.Phase = prreview.PhaseWaitingChecks
+		s.log.Info("review pass waiting for checks", "review", stored.ID, "pass", pass)
+		s.notify(stored.ID)
+		return stored, nil
+	}
+
+	if err = s.sendPass(ctx, stored, repo, wt, detail.Checks); err != nil {
+		return prreview.Review{}, err
+	}
+	if stored.Phase == prreview.PhaseWaitingChecks {
+		if err = s.setPhase(ctx, stored.ID, prreview.PhaseNone); err != nil {
+			return prreview.Review{}, err
+		}
+		stored.Phase = prreview.PhaseNone
+	}
+	return stored, nil
+}
+
+// sendPass sends the pass the app asked for to the conversation of the
+// review, with what GitHub said about the checks: the first pass starts the
+// conversation Start created, and each later one is a message in it. A pass
+// that never reached the agent goes back to the pass the user was on, unless
+// it waited for the checks: then it stays asked for, blocked until the user
+// asks for it again.
+func (s *Service) sendPass(
+	ctx context.Context, stored prreview.Review, repo repository.Repository, wt worktree.Worktree,
+	checks gh.PRChecks,
+) error {
+	pass := stored.ReportedPass + 1
+	asked, _ := s.passOf(stored.ID, pass)
+
+	var err error
+	if stored.ReportedPass == 0 {
+		// The conversation keeps the model it was created with.
+		err = s.sessions.Start(ctx, info(stored, wt, repo, pass, asked.Instructions, models.Choice{}, &checks), false)
+	} else {
+		err = s.sendLaterPass(ctx, stored, repo, wt, pass, asked.Instructions, checks)
+	}
+	if err != nil {
+		if stored.Phase == prreview.PhaseWaitingChecks {
+			s.log.Error("ask review pass failed", "review", stored.ID, "pass", pass, "error", err)
+			if s.setPassBlocked(stored.ID, err.Error()) {
+				s.notify(stored.ID)
+			}
+			return err
+		}
+		s.unaskPass(ctx, stored.ID, pass)
 		return err
 	}
 	// Why the report of a pass before could not be read says nothing about
@@ -241,6 +293,38 @@ func (s *Service) askPass(
 	s.log.Info("review pass asked", "review", stored.ID, "pass", pass)
 	s.notify(stored.ID)
 	return nil
+}
+
+// sendLaterPass says to the conversation of a review what it needs for a pass
+// after the first: what changed, what the author already saw and what GitHub
+// said about the checks.
+func (s *Service) sendLaterPass(
+	ctx context.Context, stored prreview.Review, repo repository.Repository, wt worktree.Worktree,
+	pass int, instructions string, checks gh.PRChecks,
+) error {
+	if _, err := s.readySession(ctx, stored, repo, wt); err != nil {
+		return err
+	}
+	message := passMessage(passRequest{
+		ReportPath:       stored.ReportPath(pass),
+		Pass:             pass,
+		PassCommit:       stored.PassCommit,
+		BaseBranch:       remoteRef(stored.BaseBranch),
+		Mode:             stored.Mode,
+		Findings:         s.sentFindings(stored),
+		Checks:           &checks,
+		Instructions:     repo.ReviewInstructions,
+		PassInstructions: instructions,
+	})
+	return s.sessions.SendFromApp(ctx, sessionKey(stored.ID), message)
+}
+
+// unaskPass takes back a pass that never reached the agent, so that the review
+// goes back to the pass the user was on.
+func (s *Service) unaskPass(ctx context.Context, id string, pass int) {
+	if err := s.reviews.UnaskPass(ctx, id, pass); err != nil {
+		s.log.Error("unask review pass failed", "review", id, "pass", pass, "error", err)
+	}
 }
 
 // sentFindings are the findings of the passes before that the author has
@@ -292,7 +376,10 @@ type passRequest struct {
 	BaseBranch string // as the worktree names it: origin/<branch>
 	Mode       prreview.Mode
 	// Findings are the ones of the passes before the author already saw.
-	Findings         []prreview.Finding
+	Findings []prreview.Finding
+	// Checks is what GitHub said about the checks of the head and the merge
+	// before the pass.
+	Checks           *gh.PRChecks
 	Instructions     string // the standing instructions of the repository
 	PassInstructions string // what the user wrote for this pass
 }
@@ -311,6 +398,7 @@ func passMessage(r passRequest) string {
 				"below were resolved.",
 		}, "\n"),
 		sentHeading(r.Mode) + "\n" + findingList(r.Findings),
+		"## GitHub status\n" + prompts.PRChecksSection(r.Checks, r.BaseBranch),
 	}
 	if instructions := strings.TrimSpace(r.Instructions); instructions != "" {
 		sections = append(sections, "## Review instructions\n"+instructions)

@@ -176,6 +176,14 @@ type reviewLock struct {
 	// asked for a commit, read then because the pass it fixes recorded none.
 	// A head that moved from it is the commit the agent made.
 	commitBase string
+	// wait is the wait for checks under way, in memory: whether it follows a
+	// commit the app pushed, which tolerates one reading without checks, and
+	// how many readings without checks it saw.
+	wait checksWait
+	// passBlocked is why the pass the app asked for could not start: the
+	// reading of GitHub failed, or the worktree could not be updated. "" while
+	// nothing blocks it. Kept in memory: Review again reads again.
+	passBlocked string
 }
 
 // New builds a Service from deps.

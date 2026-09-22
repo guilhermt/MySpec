@@ -202,6 +202,12 @@ func publishFailedBody() string {
 	return "The review couldn't be published."
 }
 
+// passBlockedBody is the notification of a pass of a review that could not
+// start.
+func passBlockedBody() string {
+	return "The next pass of the review couldn't start."
+}
+
 // newCommitsBody is the notification of a pull request that moved since the
 // review the user published.
 func newCommitsBody() string {

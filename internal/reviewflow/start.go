@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/guilhermt/myspec/internal/board"
+	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/prreview"
@@ -33,7 +34,8 @@ type StartParams struct {
 // Start reviews a pull request: it reads the pull request, creates the
 // review with its worktree on a detached HEAD, writes the document that tells
 // the agent what it is reviewing, and opens the conversation on the first
-// pass. It answers with the id of the review.
+// pass, which waits for the checks of the head while they are pending. It
+// answers with the id of the review.
 func (s *Service) Start(ctx context.Context, p StartParams) (string, error) {
 	repo, err := s.repositories.Check(p.RepositoryID)
 	if err != nil {
@@ -96,24 +98,20 @@ func (s *Service) Start(ctx context.Context, p StartParams) (string, error) {
 	return started.ID, nil
 }
 
-// firstPass writes the document of a new review and opens its conversation on
-// the first pass. A process that fails to start is no error here: the session
-// records it in the conversation, where the user tries again.
+// firstPass creates the conversation of a new review, with the model the user
+// chose, and asks for the first pass, which starts at once or waits for the
+// checks of the head. The conversation is created before it starts so that the
+// choice outlives a restart during the wait. A process that fails to start is
+// no error here: the session records it in the conversation, where the user
+// tries again.
 func (s *Service) firstPass(
 	ctx context.Context, created prreview.Review, repo repository.Repository, wt worktree.Worktree,
 	detail pulls.Detail, p StartParams,
 ) (prreview.Review, error) {
-	created, err := s.writeContext(ctx, created, repo, detail)
-	if err != nil {
+	if err := s.sessions.Open(ctx, info(created, wt, repo, 1, p.Instructions, p.Choice, nil)); err != nil {
 		return prreview.Review{}, err
 	}
-	if created, err = s.reviews.AskPass(ctx, created.ID, 1, p.Instructions); err != nil {
-		return prreview.Review{}, err
-	}
-	if err = s.sessions.Start(ctx, info(created, wt, repo, 1, p.Instructions, p.Choice), false); err != nil {
-		return prreview.Review{}, err
-	}
-	return created, nil
+	return s.requestPass(ctx, created, repo, wt, detail, p.Instructions, false)
 }
 
 // rollBack takes away a review whose start failed after its worktree was
@@ -243,11 +241,12 @@ func contextDoc(detail pulls.Detail, fullName, cardSection string) string {
 }
 
 // info is what the conversation of a review needs to know about it: the
-// worktree it runs in, the document it reviews against and the report of the
-// pass it is about to write.
+// worktree it runs in, the document it reviews against, the report of the
+// pass it is about to write and what GitHub said about the checks before it,
+// nil when the app has no reading for the pass.
 func info(
 	stored prreview.Review, wt worktree.Worktree, repo repository.Repository,
-	pass int, passInstructions string, choice models.Choice,
+	pass int, passInstructions string, choice models.Choice, checks *gh.PRChecks,
 ) session.TaskInfo {
 	return session.TaskInfo{
 		ID:               stored.ID,
@@ -268,6 +267,8 @@ func info(
 		Instructions:     repo.ReviewInstructions,
 		PassInstructions: passInstructions,
 		Choice:           choice,
+		Checks:           checks,
+		MergeBase:        remoteRef(stored.BaseBranch),
 	}
 }
 

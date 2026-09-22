@@ -44,6 +44,8 @@ func DeriveReview(in ReviewInput) []Found {
 		found.Body = reviewReportBody(FormApply)
 	case reviewflow.StatusPublishFailed:
 		found.Kind, found.Body = KindPublishFailed, publishFailedBody()
+	case reviewflow.StatusPassBlocked:
+		found.Kind, found.Body = KindPassBlocked, passBlockedBody()
 	case reviewflow.StatusNewCommits:
 		found.Kind, found.Body = KindNewCommits, newCommitsBody()
 	case reviewflow.StatusInReview:
@@ -60,7 +62,8 @@ func DeriveReview(in ReviewInput) []Found {
 		found.Kind, found.Form = KindMerge, FormMerge
 		found.Body = mergeBody(FormMerge)
 	default:
-		// Reviewing, applying, committing and published wait for nobody.
+		// Reviewing, waiting for checks, applying, committing and published
+		// wait for nobody.
 		return nil
 	}
 	return []Found{found}

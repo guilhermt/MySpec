@@ -590,6 +590,7 @@ func TestKindsBelongToTheirGroup(t *testing.T) {
 		attention.KindPlanInvalid:        attention.GroupError,
 		attention.KindPRClosed:           attention.GroupError,
 		attention.KindPublishFailed:      attention.GroupError,
+		attention.KindPassBlocked:        attention.GroupError,
 
 		attention.KindPermission:      attention.GroupWaiting,
 		attention.KindQuestion:        attention.GroupWaiting,

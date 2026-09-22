@@ -71,6 +71,7 @@ func TestDeriveTheSituationOfAReview(t *testing.T) {
 		{"the review was published", reviewInput(reviewflow.StatusPublished, waiting), nil},
 		{"the agent is applying", reviewInput(reviewflow.StatusApplying, working), nil},
 		{"the agent is committing", reviewInput(reviewflow.StatusCommitting, working), nil},
+		{"the pass waits for the checks", reviewInput(reviewflow.StatusWaitingChecks, waiting), nil},
 		{
 			"the agent asks for a permission",
 			reviewInput(reviewflow.StatusReviewing, summary(session.StatusNeedsPermission, false)),
@@ -110,6 +111,11 @@ func TestDeriveTheSituationOfAReview(t *testing.T) {
 			"the publication failed",
 			reviewInput(reviewflow.StatusPublishFailed, waiting),
 			reviewSituation(attention.KindPublishFailed, attention.FormNone, "The review couldn't be published."),
+		},
+		{
+			"the pass could not start",
+			reviewInput(reviewflow.StatusPassBlocked, waiting),
+			reviewSituation(attention.KindPassBlocked, attention.FormNone, "The next pass of the review couldn't start."),
 		},
 		{
 			"the pull request has new commits",

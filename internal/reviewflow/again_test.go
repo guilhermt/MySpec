@@ -69,6 +69,10 @@ func TestANewPassUpdatesTheWorktreeAndAsksForTheNextReport(t *testing.T) {
 ## Findings already published
 None.
 
+## GitHub status
+- Checks: the pull request has no checks.
+- Base: the branch merges clean into `+"`main`"+`.
+
 ## Review instructions
 never change a published migration
 
@@ -160,29 +164,6 @@ func TestANewPassReadsTheHeadThePullRequestHasNow(t *testing.T) {
 	stored, _ := f.reviews.Get(id)
 	if stored.HeadCommit != otherHash || stored.Title != moved.Title {
 		t.Errorf("review = %+v, want the head and the title GitHub has now", stored)
-	}
-}
-
-func TestANewPassGoesOnWhenGitHubCannotBeReached(t *testing.T) {
-	t.Parallel()
-
-	f := newFixture(t)
-	id := decided(t, f)
-	f.pulls.failWith(errGitHub)
-
-	if err := f.service.ReviewAgain(t.Context(), id, ""); err != nil {
-		t.Fatalf("review again: %v", err)
-	}
-
-	if stored, _ := f.reviews.Get(id); stored.AskedPass != 2 {
-		t.Errorf("review = %+v, want the pass asked for all the same", stored)
-	}
-	document, err := f.reviews.ReadArtifact(id, prreview.ContextFile)
-	if err != nil {
-		t.Fatalf("read the document of the review: %v", err)
-	}
-	if !strings.Contains(document, "Keeps the last reading of a board in memory.") {
-		t.Errorf("document =\n%s\n\nwant the description of the pull request kept: only GitHub has it", document)
 	}
 }
 

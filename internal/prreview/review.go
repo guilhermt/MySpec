@@ -21,15 +21,17 @@ const (
 	ModeApply   Mode = "apply"   // the agent applies them in the worktree
 )
 
-// Phase is where a review in apply mode is in the cycle that applies the
-// findings.
+// Phase is where a review is in the cycle of a pass: waiting for the checks
+// of the head before one, and, in apply mode, applying the findings or
+// committing the fixes.
 type Phase string
 
-// The phases of a review in apply mode; a review in publish mode has none.
+// The phases of a review.
 const (
-	PhaseNone       Phase = ""
-	PhaseApplying   Phase = "applying"
-	PhaseCommitting Phase = "committing"
+	PhaseNone          Phase = ""
+	PhaseWaitingChecks Phase = "waiting_checks" // both modes: a pass was asked for and waits for GitHub
+	PhaseApplying      Phase = "applying"       // apply only
+	PhaseCommitting    Phase = "committing"     // apply only
 )
 
 // PRState is what became of the pull request under review.
@@ -95,7 +97,7 @@ type Review struct {
 	BaseBranch      string // as GitHub names it, without origin/
 	Own             bool   // the author is the gh account
 	Mode            Mode
-	Phase           Phase
+	Phase           Phase // where the review is in the cycle of a pass; PhaseNone while the findings are the user's
 	Card            *Card // nil when the pull request has no card
 	ArtifactsDir    string
 	AskedPass       int    // the last pass the app asked for

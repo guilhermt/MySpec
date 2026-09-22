@@ -81,7 +81,7 @@ func TestTheReportOfAPassIsRecordedWithTheCommitTheWorktreeIsOn(t *testing.T) {
 	if stored, _ := f.reviews.Get(id); stored.ReportedPass != 1 || stored.PassCommit != headHash {
 		t.Errorf("review = %+v, want the first pass reported", stored)
 	}
-	if diff := cmp.Diff([]string{"mark:" + id + ":pass=1"}, f.sessions.recorded()[1:]); diff != "" {
+	if diff := cmp.Diff([]string{"mark:" + id + ":pass=1"}, f.sessions.recorded()[2:]); diff != "" {
 		t.Errorf("session calls (-want +got):\n%s", diff)
 	}
 }
@@ -122,7 +122,7 @@ func TestAReportTheAppCannotReadLeavesTheReviewWaitingWithTheReason(t *testing.T
 	if f.pass(t, id, 1).Recorded {
 		t.Error("a report the app cannot read was recorded")
 	}
-	if diff := cmp.Diff([]string{id, id}, f.changed()); diff != "" {
+	if diff := cmp.Diff([]string{id, id, id}, f.changed()); diff != "" {
 		t.Errorf("announced changes (-want +got):\n%s", diff)
 	}
 }

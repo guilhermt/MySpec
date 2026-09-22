@@ -81,6 +81,10 @@ func (m *memSessions) Open(_ context.Context, t session.TaskInfo) error {
 	if m.err != nil {
 		return m.err
 	}
+	if created, ok := m.infos[t.Key()]; ok && m.stored[t.Key()] {
+		// A conversation keeps the model it was created with.
+		t.Choice = created.Choice
+	}
 	m.infos[t.Key()] = t
 	m.stored[t.Key()] = true
 	if _, ok := m.summaries[t.Key()]; !ok {
@@ -104,6 +108,10 @@ func (m *memSessions) Start(_ context.Context, t session.TaskInfo, restarted boo
 		// fails to queue the prompt leaves it.
 		m.stored[t.Key()] = true
 		return m.startErr
+	}
+	if created, ok := m.infos[t.Key()]; ok && m.stored[t.Key()] {
+		// A conversation keeps the model it was created with.
+		t.Choice = created.Choice
 	}
 	m.infos[t.Key()] = t
 	m.stored[t.Key()] = true
@@ -431,6 +439,7 @@ type memPulls struct {
 	details   map[pulls.Ref]pulls.Detail
 	err       error
 	refreshes int
+	reads     int // the readings of GitHub that went out
 }
 
 func newPulls() *memPulls {
@@ -448,6 +457,7 @@ func (m *memPulls) ReadDetails(_ context.Context, refs []pulls.Ref) (map[pulls.R
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	m.reads++
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -473,6 +483,14 @@ func (m *memPulls) seed(detail pulls.Detail) {
 	defer m.mu.Unlock()
 
 	m.details[pulls.Ref{Owner: detail.Owner, Name: detail.Name, Number: detail.Number}] = detail
+}
+
+// readings is how many readings of GitHub went out.
+func (m *memPulls) readings() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return m.reads
 }
 
 // forget drops a pull request, which is one GitHub answers nothing for.
@@ -935,7 +953,17 @@ func newFixture(t *testing.T) *fixture {
 		Now:          f.now,
 		NewID:        f.newID,
 	})
-	f.service = reviewflow.New(reviewflow.Deps{
+	f.service = f.newService(t)
+	f.pulls.seed(openPR())
+	return f
+}
+
+// newService builds a reviewflow.Service over the fakes of the fixture, which
+// is how a test brings the app up again after a restart.
+func (f *fixture) newService(t *testing.T) *reviewflow.Service {
+	t.Helper()
+
+	service := reviewflow.New(reviewflow.Deps{
 		Reviews:      f.reviews,
 		Pulls:        f.pulls,
 		Sessions:     f.sessions,
@@ -954,9 +982,8 @@ func newFixture(t *testing.T) *fixture {
 		},
 		OnChange: f.onChange,
 	})
-	t.Cleanup(f.service.Close)
-	f.pulls.seed(openPR())
-	return f
+	t.Cleanup(service.Close)
+	return service
 }
 
 // now walks the clock a second at a time, so that every write is later than
@@ -1023,10 +1050,29 @@ func openPR() pulls.Detail {
 			HeadCommit: headHash,
 			BaseBranch: "main",
 		},
-		Body:  "Keeps the last reading of a board in memory.",
-		State: "open",
+		Body:   "Keeps the last reading of a board in memory.",
+		State:  "open",
+		Checks: gh.PRChecks{Checks: []gh.Check{}, Mergeable: gh.MergeableClean},
 	}
 }
+
+// checkURL is the link of the check of the pull request of the tests.
+const checkURL = "https://github.com/dev/web/actions/runs/7/job/9"
+
+// withChecks is a pull request whose head has the checks given, and merges
+// into the base as mergeable says.
+func withChecks(detail pulls.Detail, mergeable gh.Mergeable, checks ...gh.Check) pulls.Detail {
+	detail.Checks = gh.PRChecks{Checks: append([]gh.Check{}, checks...), Mergeable: mergeable}
+	return detail
+}
+
+// The checks the tests read: one that passed, one that failed and one still
+// running.
+var (
+	passedCheck  = gh.Check{Name: "test", URL: checkURL, Conclusion: "success"}
+	failedCheck  = gh.Check{Name: "lint", URL: checkURL, Conclusion: "failure"}
+	pendingCheck = gh.Check{Name: "test", URL: checkURL, Pending: true}
+)
 
 // ownPR is the same pull request, opened by the user themselves, which is the
 // only one apply mode is offered for.
