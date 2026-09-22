@@ -25,12 +25,11 @@ type PR struct {
 	URL    string
 	State  State
 	Base   string // the branch the pull request merges into, as GitHub names it
-	Head   string // the commit the head of the pull request is on
 	Checks PRChecks
 }
 
 // prFields are the fields of a pull request the app asks gh for.
-const prFields = "number,url,state,baseRefName,headRefOid,mergeable,statusCheckRollup"
+const prFields = "number,url,state,baseRefName,mergeable,statusCheckRollup"
 
 // noPR is what gh says, in lower case, about a branch with no pull request.
 const noPR = "no pull requests found"
@@ -70,7 +69,6 @@ func (r *Runner) ViewPR(ctx context.Context, dir, branch string) (PR, error) {
 		URL               string      `json:"url"`
 		State             string      `json:"state"`
 		BaseRefName       string      `json:"baseRefName"`
-		HeadRefOid        string      `json:"headRefOid"`
 		Mergeable         string      `json:"mergeable"`
 		StatusCheckRollup []CheckNode `json:"statusCheckRollup"`
 	}
@@ -82,7 +80,6 @@ func (r *Runner) ViewPR(ctx context.Context, dir, branch string) (PR, error) {
 		URL:    body.URL,
 		State:  stateOf(body.State),
 		Base:   body.BaseRefName,
-		Head:   body.HeadRefOid,
 		Checks: ParseChecks(body.StatusCheckRollup, body.Mergeable),
 	}, nil
 }

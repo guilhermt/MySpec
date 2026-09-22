@@ -60,7 +60,7 @@ func TestViewPRReadsThePullRequestOfTheBranch(t *testing.T) {
 	t.Parallel()
 	r, fake := runner(t, map[string]ghtest.Reply{
 		"pr": {Stdout: `{"number":42,"url":"https://github.com/acme/api/pull/42","state":"OPEN","baseRefName":"dev",` +
-			`"headRefOid":"abc123","mergeable":"MERGEABLE","statusCheckRollup":[` +
+			`"mergeable":"MERGEABLE","statusCheckRollup":[` +
 			`{"__typename":"CheckRun","name":"test","status":"COMPLETED","conclusion":"SUCCESS","detailsUrl":"https://github.com/acme/api/actions/runs/1"},` +
 			`{"__typename":"StatusContext","context":"ci/deploy","state":"PENDING","targetUrl":"https://ci.example.com/2"}]}`},
 	})
@@ -75,7 +75,6 @@ func TestViewPRReadsThePullRequestOfTheBranch(t *testing.T) {
 		URL:    "https://github.com/acme/api/pull/42",
 		State:  gh.StateOpen,
 		Base:   "dev",
-		Head:   "abc123",
 		Checks: gh.PRChecks{
 			Checks: []gh.Check{
 				{Name: "test", URL: "https://github.com/acme/api/actions/runs/1", Conclusion: "success"},
@@ -92,7 +91,7 @@ func TestViewPRReadsThePullRequestOfTheBranch(t *testing.T) {
 	if len(calls) != 1 {
 		t.Fatalf("calls = %+v, want one", calls)
 	}
-	if calls[0].Args != "pr view login-screen --json number,url,state,baseRefName,headRefOid,mergeable,statusCheckRollup" {
+	if calls[0].Args != "pr view login-screen --json number,url,state,baseRefName,mergeable,statusCheckRollup" {
 		t.Errorf("args = %q, want the branch and the fields the app reads", calls[0].Args)
 	}
 	if calls[0].Dir != dir {
