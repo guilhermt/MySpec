@@ -859,6 +859,17 @@ func (m *memSessions) Close(_ context.Context, k session.Key) error {
 	return nil
 }
 
+func (m *memSessions) Exists(_ context.Context, k session.Key) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.err != nil {
+		return false, m.err
+	}
+	_, ok := m.summaries[k]
+	return ok, nil
+}
+
 func (m *memSessions) CloseTask(_ context.Context, taskID string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -1089,6 +1100,21 @@ func (m *memSessions) sent() []string {
 	defer m.mu.Unlock()
 
 	return slices.Clone(m.messages)
+}
+
+// sentCount is how many messages of the app carried text, which a prompt of a
+// review pass does ahead of the sections the app appends to it.
+func (m *memSessions) sentCount(text string) int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	n := 0
+	for _, message := range m.messages {
+		if strings.Contains(message, text) {
+			n++
+		}
+	}
+	return n
 }
 
 func (m *memTasks) recorded() []string {
@@ -1483,12 +1509,48 @@ func (m *memGH) ViewPR(_ context.Context, dir, branch string) (gh.PR, error) {
 	return gh.PR{}, m.viewErr
 }
 
-// setPR is the pull request every reading of a branch answers with.
+// setPR is the pull request every reading of a branch answers with. A pull
+// request seeded without a merge state has checks that settle a wait at once:
+// one check that passed, and a branch that merges clean.
 func (m *memGH) setPR(branch string, pr gh.PR) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	if pr.Checks.Mergeable == "" {
+		pr.Checks = passedChecks()
+	}
 	m.prs[branch] = pr
+}
+
+// forgetPR makes the readings of a branch find no pull request again.
+func (m *memGH) forgetPR(branch string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	delete(m.prs, branch)
+}
+
+// viewCount is how many times the pull request of a branch was read.
+func (m *memGH) viewCount(branch string) int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	n := 0
+	for _, call := range m.calls {
+		if strings.HasPrefix(call, "view:") && strings.HasSuffix(call, ":"+branch) {
+			n++
+		}
+	}
+	return n
+}
+
+// passedChecks is a reading of GitHub that lets a pass start at once: one check
+// that passed, and a branch that merges clean.
+func passedChecks() gh.PRChecks {
+	return gh.PRChecks{
+		Checks:    []gh.Check{{Name: "test", URL: "https://github.com/acme/api/runs/1", Conclusion: "success"}},
+		Mergeable: gh.MergeableClean,
+	}
 }
 
 // failAuth makes every login check fail with err.
@@ -1548,6 +1610,12 @@ func oneShotReviewPrompt(path, document string) string {
 	return reviewPrompt(path) + " against " + document
 }
 
+// githubStatus is the section the fake renderer ends the prompt of a review
+// pass with, like the real one.
+func githubStatus(checks *gh.PRChecks, mergeBase string) string {
+	return "\n\n## GitHub status\n\n" + prompts.PRChecksSection(checks, mergeBase)
+}
+
 // fixture is a flow.Service over the four fakes.
 type fixture struct {
 	service      *flow.Service
@@ -1585,13 +1653,14 @@ func newFixture(t *testing.T) *fixture {
 				}
 				return commitPrompt(vars.TaskName, vars.Push), nil
 			case prompts.StagePRReview:
+				status := githubStatus(vars.Checks, vars.MergeBase)
 				switch {
 				case vars.OneShotPath != "":
-					return oneShotReviewPrompt(vars.ReviewPath, vars.OneShotPath), nil
+					return oneShotReviewPrompt(vars.ReviewPath, vars.OneShotPath) + status, nil
 				case vars.Instructions != "":
-					return instructedReviewPrompt(vars.ReviewPath, vars.Instructions), nil
+					return instructedReviewPrompt(vars.ReviewPath, vars.Instructions) + status, nil
 				}
-				return reviewPrompt(vars.ReviewPath), nil
+				return reviewPrompt(vars.ReviewPath) + status, nil
 			default:
 				return "", errors.New("unexpected prompt stage " + string(stage))
 			}

@@ -12,7 +12,7 @@ func TestParsePRStatus(t *testing.T) {
 
 	statuses := []task.PRStatus{
 		task.PRPreparing, task.PRBlocked, task.PRDrafting, task.PROpening,
-		task.PRReviewing, task.PRCommitting, task.PRDone, task.PRClosing, task.PRClosed,
+		task.PRReviewing, task.PRWaitingChecks, task.PRCommitting, task.PRDone, task.PRClosing, task.PRClosed,
 	}
 	for _, status := range statuses {
 		got, err := task.ParsePRStatus(string(status))

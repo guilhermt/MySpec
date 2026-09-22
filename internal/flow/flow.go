@@ -63,6 +63,7 @@ type Sessions interface {
 	Start(ctx context.Context, t session.TaskInfo, restarted bool) error
 	Discard(ctx context.Context, taskID string, stages ...string) error
 	Close(ctx context.Context, k session.Key) error
+	Exists(ctx context.Context, k session.Key) (bool, error)
 	CloseTask(ctx context.Context, taskID string) error
 	DiscardTask(ctx context.Context, taskID string) error
 	Resume(ctx context.Context, k session.Key) error
@@ -195,6 +196,13 @@ type taskLock struct {
 	// openFailed says the agent was asked to open the pull request and ended its
 	// turn without one. It holds until the conversation moves on.
 	openFailed bool
+	// checks is the reading of GitHub that settled the last wait for checks,
+	// held until the pass it belongs to is asked for; nil otherwise.
+	checks *gh.PRChecks
+	// checksWait is the wait for checks under way: whether it follows a push
+	// of the app, which tolerates one reading without checks, and how many
+	// readings without checks it saw.
+	checksWait checksWait
 }
 
 // prWork is the goroutine that talks to git and to gh about the PR stage of a

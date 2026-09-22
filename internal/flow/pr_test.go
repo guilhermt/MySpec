@@ -562,6 +562,42 @@ func TestAPullRequestUnderReviewIsShownByItsLastReport(t *testing.T) {
 	}
 }
 
+func TestStatusesOfTheWait(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		withSession bool
+	}{
+		{"before the first pass", false},
+		{"with the conversation of the review", true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			f := newFixture(t)
+			inPR(f, "task-1", plan(), task.PRWaitingChecks)
+			f.tasks.setArtifacts("task-1", prArtifacts(task.PRArtifacts{Reports: reports(1, false)}))
+			wantStage := ""
+			if test.withSession {
+				f.sessions.setSummary("task-1", session.Summary{
+					Stage: session.PRReviewStage, Status: session.StatusWaiting, Idle: true,
+				})
+				wantStage = session.PRReviewStage
+			}
+
+			state := f.prState(t, "task-1")
+			if state.Status != flow.PRWaitingChecks {
+				t.Errorf("status = %q, want waiting_checks", state.Status)
+			}
+			if state.SessionStage != wantStage {
+				t.Errorf("session stage = %q, want %q", state.SessionStage, wantStage)
+			}
+		})
+	}
+}
+
 // loginCard is the card of the board a task of the tests was created from.
 func loginCard() task.Card {
 	return task.Card{
@@ -681,6 +717,6 @@ func TestAPassOfTheReviewOfAPullRequestIsAskedWithTheInstructionsOfItsRepository
 
 	want := instructedReviewPrompt("/data/task-1/pr/review-2.md", instructions)
 	waitFor(t, "the prompt of the second pass with the instructions", func() bool {
-		return slices.Contains(f.sessions.sent(), want)
+		return f.sessions.sentCount(want) > 0
 	})
 }

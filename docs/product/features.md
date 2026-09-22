@@ -442,15 +442,21 @@ Numa task criada de um card, o prompt de PR recebe o card, com título, referên
 
 Com o OK, o agente sobe a branch e abre a pull request com `gh pr create` contra a branch base, usando o rascunho como ele está naquele momento. A base é a mesma da worktree: `dev`, ou `main` quando não há `dev`. Quando o `gh` não está instalado, não está autenticado ou falha, a etapa fica **bloqueada** com a razão, e **Tentar de novo** repete a partir de onde parou.
 
-O produto lê a pull request com o `gh`: número, link, estado e base aparecem na barra da pull request, e uma leitura pode ser forçada a qualquer momento. Pull requests aguardando merge são consultadas automaticamente a cada minuto.
+O produto lê a pull request com o `gh`: número, link, estado e base aparecem na barra da pull request, e uma leitura pode ser forçada a qualquer momento. Pull requests aguardando merge, ou cuja passada de review espera os checks, são consultadas automaticamente a cada minuto.
 
 ### Review de pull request
 
-Aberta a pull request, a sessão de review começa sozinha com o prompt de review de PR. O agente revisa o diff contra o PRD e o tech spec, procurando erros, desvios da especificação e problemas de qualidade. Numa task One-Shot, o critério é o documento One-Shot: o problema e o escopo fazem o papel do PRD, e as decisões técnicas e o plano de mudanças, o do tech spec. Ao fim, o agente escreve um relatório numerado num arquivo de artefato, com o status `clean` ou `changes`.
+Aberta a pull request, o produto lê no GitHub os checks do head e se a branch merge limpa na base, e a sessão de review começa sozinha com o prompt de review de PR, que recebe o que ele leu. O agente revisa o diff contra o PRD e o tech spec, procurando erros, desvios da especificação e problemas de qualidade. Numa task One-Shot, o critério é o documento One-Shot: o problema e o escopo fazem o papel do PRD, e as decisões técnicas e o plano de mudanças, o do tech spec. Ao fim, o agente escreve um relatório numerado num arquivo de artefato, com o status `clean` ou `changes`.
 
 Se o relatório está limpo, a task fica **pronta**, aguardando o merge. Se há apontamentos, o produto os mostra e a task passa a **aguardando decisão**: o usuário decide na conversa, item a item, o que quer aplicado. O agente aplica só o que foi aprovado. As mudanças então passam pelo mesmo review do produto que um step no modo `Manual`: stage arquivo a arquivo no editor, progresso em tempo real, **Aprovar** em 100%, e o commit feito pelo agente com o prompt de commit, que nesta etapa também sobe o commit para a pull request. Depois do commit o agente revisa de novo, e o ciclo se repete até um relatório limpo. **Revisar de novo** pede uma passada extra a qualquer momento, e os relatórios de todas as passadas ficam visíveis.
 
 As instruções fixas de review do repositório, quando existem, entram no prompt de cada passada, lidas quando ela começa.
+
+Toda passada começa por essa leitura do GitHub: a primeira, a que segue cada commit e a de **Revisar de novo**. Enquanto algum check está pendente, ou o GitHub ainda não calculou se há conflito, a passada não começa: a task fica em `Waiting for checks`, com a conversa do review à vista quando ela já existe, e o produto relê a pull request a cada minuto, ou quando o usuário força uma leitura. Logo depois de um push do produto, uma leitura sem nenhum check é relida uma vez antes de valer como "sem checks", porque o GitHub leva alguns segundos para registrar os checks de um head novo. A espera sobrevive ao fechamento do app e continua com uma leitura ao reabrir.
+
+Um check que falhou e um conflito com a base são apontamentos do relatório, como qualquer outro: o agente investiga a causa da falha com o `gh`, e o resumo diz o que o produto leu. Um conflito aprovado é resolvido fazendo merge da base na branch, nunca rebase; os arquivos resolvidos passam pelo review do produto como qualquer mudança, e o commit da rodada é o merge commit.
+
+Uma leitura que falha deixa a etapa **bloqueada** com o que o `gh` disse, e **Tentar de novo** repete a partir de onde parou. Uma pull request mergeada ou fechada durante a espera encerra o review: a task passa a aguardar o encerramento, ou é sinalizada como fechada sem merge.
 
 Uma pull request fechada sem merge é sinalizada como tal, e a task não pode ser encerrada.
 

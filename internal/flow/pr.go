@@ -33,6 +33,7 @@ const (
 	PRAwaitingReply    PRStatus = "awaiting_reply" // the agent stopped short of what the app waits for: a draft, the pull request it was asked to open, or the report of a review pass
 	PROpening          PRStatus = "opening"
 	PRReviewing        PRStatus = "reviewing"         // the agent is reviewing
+	PRWaitingChecks    PRStatus = "waiting_checks"    // the pass waits for the checks of the head to finish
 	PRAwaitingDecision PRStatus = "awaiting_decision" // a report with changes, nothing changed yet
 	PRInReview         PRStatus = "in_review"         // the applied changes are being reviewed
 	PRReadyToApprove   PRStatus = "ready_to_approve"
@@ -153,7 +154,9 @@ func prSessionStage(status task.PRStatus) string {
 	switch status {
 	case task.PRDrafting, task.PROpening:
 		return session.PRStage
-	case task.PRReviewing, task.PRCommitting:
+	case task.PRReviewing, task.PRWaitingChecks, task.PRCommitting:
+		// The conversation of the review, when there is one, stays in sight
+		// while the next pass waits for the checks.
 		return session.PRReviewStage
 	case task.PRPreparing, task.PRBlocked, task.PRDone, task.PRClosing, task.PRClosed:
 		return ""
@@ -192,6 +195,8 @@ func prStatus(run task.PRRun, art task.PRArtifacts, facts prFacts, snap review.S
 		return PROpening
 	case task.PRReviewing:
 		return reviewingStatus(art, facts, snap, read)
+	case task.PRWaitingChecks:
+		return PRWaitingChecks
 	case task.PRCommitting:
 		return PRCommitting
 	case task.PRDone:
@@ -450,13 +455,7 @@ func (s *Service) recordPR(id string, pr gh.PR, detailsOnly bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), evaluateTimeout)
 	defer cancel()
 
-	details := task.PRDetails{
-		Number:    pr.Number,
-		URL:       pr.URL,
-		State:     task.PRState(pr.State),
-		Base:      pr.Base,
-		CheckedAt: time.Now().UTC(),
-	}
+	details := prDetails(pr)
 	if _, err := s.tasks.SetPRDetails(ctx, id, details); err != nil {
 		s.log.Error("record pull request failed", "task", id, "error", err)
 		return
@@ -472,6 +471,17 @@ func (s *Service) recordPR(id string, pr gh.PR, detailsOnly bool) {
 	}
 	s.log.Info("pull request found", "task", id, "number", pr.Number)
 	s.Check(id)
+}
+
+// prDetails is what the app records of a reading of a pull request.
+func prDetails(pr gh.PR) task.PRDetails {
+	return task.PRDetails{
+		Number:    pr.Number,
+		URL:       pr.URL,
+		State:     task.PRState(pr.State),
+		Base:      pr.Base,
+		CheckedAt: time.Now().UTC(),
+	}
 }
 
 // startDraft opens the session that writes the draft of a task that has no pull
@@ -597,6 +607,13 @@ func (s *Service) evaluatePR(ctx context.Context, t task.Task) {
 		}
 	case task.PRReviewing:
 		s.evaluateReview(ctx, t, run, a.PR)
+	case task.PRWaitingChecks:
+		// The readings of GitHub, on the goroutine of the stage and on the poll,
+		// are what move this state. The first one is asked for again when the
+		// stage was busy as the wait began, so that it does not wait for the poll.
+		if s.checksUnread(t.ID) {
+			s.spawnPRWork(t.ID, s.readChecks)
+		}
 	case task.PRClosing:
 		// The closing the user asked for, and the one a reading in flight kept
 		// from starting when they asked.
@@ -621,9 +638,15 @@ func (s *Service) evaluateReview(ctx context.Context, t task.Task, run task.PRRu
 	key := session.Key{TaskID: t.ID, Stage: session.PRReviewStage}
 	sum, open := s.sessions.Summary(key)
 	if !open {
-		// The first pass of the task, and the one a discarded review left
-		// without a conversation.
-		s.startReview(ctx, t, wt, run)
+		// The first pass of the task, and the one a review asked again starts:
+		// both wait for the checks first.
+		if checks := s.takeChecks(t.ID); checks != nil {
+			s.startReview(ctx, t, wt, run, checks)
+		} else {
+			// A wait that could not be recorded is begun again by the evaluation
+			// that follows, which finds the task still without a conversation.
+			_ = s.beginChecksWait(ctx, t.ID, true)
+		}
 		return
 	}
 
@@ -659,7 +682,16 @@ func (s *Service) evaluateReview(ctx context.Context, t task.Task, run task.PRRu
 	if head == "" || head == run.ReviewedCommit || s.passAsked(t.ID) == head {
 		return
 	}
-	s.askPass(ctx, t, wt, run, key, head)
+	// The pass follows a commit the app pushed: it waits for the checks of the
+	// new head first.
+	checks := s.takeChecks(t.ID)
+	if checks == nil {
+		// A wait that could not be recorded is begun again by the evaluation
+		// that follows, which finds the new head still without its pass.
+		_ = s.beginChecksWait(ctx, t.ID, true)
+		return
+	}
+	s.askPass(ctx, t, wt, run, key, head, checks)
 }
 
 // evaluatePRCommit decides what became of the commit the app asked for. It
@@ -693,8 +725,11 @@ func (s *Service) evaluatePRCommit(ctx context.Context, t task.Task, run task.PR
 }
 
 // startReview opens the conversation that reviews the pull request of a task
-// and hands it the prompt of the pass it is about to write.
-func (s *Service) startReview(ctx context.Context, t task.Task, wt worktree.Worktree, run task.PRRun) {
+// and hands it the prompt of the pass it is about to write, with what the app
+// read from GitHub before it.
+func (s *Service) startReview(
+	ctx context.Context, t task.Task, wt worktree.Worktree, run task.PRRun, checks *gh.PRChecks,
+) {
 	repo, err := s.repositoryOf(t)
 	if err != nil {
 		s.log.Error("start pr review session failed", "task", t.ID, "error", err)
@@ -702,7 +737,11 @@ func (s *Service) startReview(ctx context.Context, t task.Task, wt worktree.Work
 	}
 	base := s.baseOf(ctx, wt)
 	pass := run.ReportedPass + 1
-	if err := s.sessions.Start(ctx, prReviewInfo(t, wt, base, repo, run.PR, pass), false); err != nil {
+	// The pass that opens the conversation is a pass asked for: a report the
+	// task already has decides nothing until this one writes its own.
+	s.setPassAsked(t.ID, cmp.Or(s.headOf(ctx, wt), passAskedWithoutHead))
+	if err := s.sessions.Start(ctx, prReviewInfo(t, wt, base, repo, run.PR, pass, checks), false); err != nil {
+		s.setPassAsked(t.ID, "")
 		// The session records a process that fails in the conversation itself.
 		s.log.Error("start pr review session failed", "task", t.ID, "error", err)
 		return
@@ -745,6 +784,7 @@ func (s *Service) finishReview(ctx context.Context, t task.Task, run task.PRRun,
 // produced.
 func (s *Service) askPass(
 	ctx context.Context, t task.Task, wt worktree.Worktree, run task.PRRun, key session.Key, head string,
+	checks *gh.PRChecks,
 ) {
 	repo, err := s.repositoryOf(t)
 	if err != nil {
@@ -753,7 +793,7 @@ func (s *Service) askPass(
 	}
 	pass := run.ReportedPass + 1
 	base := s.baseOf(ctx, wt)
-	info := prReviewInfo(t, wt, base, repo, run.PR, pass)
+	info := prReviewInfo(t, wt, base, repo, run.PR, pass, checks)
 	message, err := s.renderPrompt(prompts.StagePRReview, prReviewVars(info))
 	if err != nil {
 		s.log.Error("render pr review prompt failed", "task", t.ID, "error", err)
@@ -806,6 +846,8 @@ func prReviewVars(info session.TaskInfo) prompts.Vars {
 		PRNumber:     info.PRNumber,
 		PRURL:        info.PRURL,
 		Instructions: info.Instructions,
+		Checks:       info.Checks,
+		MergeBase:    info.MergeBase,
 	}
 }
 
@@ -916,6 +958,8 @@ func (s *Service) resumePR(ctx context.Context, t task.Task) {
 		s.reopenPRSession(ctx, t, run, false)
 	case task.PRReviewing, task.PRCommitting:
 		s.reopenPRSession(ctx, t, run, true)
+	case task.PRWaitingChecks:
+		s.resumeChecksWait(ctx, t, run)
 	case task.PRDone:
 		// The merge may have happened while the app was closed.
 		if run.PR.Number > 0 && run.PR.State != task.PRStateMerged && run.PR.State != task.PRStateClosed {
@@ -948,7 +992,9 @@ func (s *Service) reopenPRSession(ctx context.Context, t task.Task, run task.PRR
 
 	info := prInfo(t, wt, base, repo)
 	if isReview {
-		info = prReviewInfo(t, wt, base, repo, run.PR, run.ReportedPass+1)
+		// Reopening renders no prompt: what the app read from GitHub belongs to
+		// the pass that starts.
+		info = prReviewInfo(t, wt, base, repo, run.PR, run.ReportedPass+1, nil)
 	}
 	if err := s.sessions.Open(ctx, info); err != nil {
 		s.log.Error("open pr session failed", "task", t.ID, "error", err)
@@ -979,6 +1025,7 @@ func (s *Service) tearDownPR(ctx context.Context, t task.Task) error {
 	// A PR stage started again later begins from nothing this one left.
 	s.setOpenFailed(t.ID, false)
 	s.setPassAsked(t.ID, "")
+	s.forgetChecks(t.ID)
 
 	if err := s.sessions.Discard(ctx, t.ID, session.PRStage, session.PRReviewStage); err != nil {
 		return err
@@ -1007,9 +1054,11 @@ func prInfo(t task.Task, wt worktree.Worktree, base string, repo repository.Repo
 }
 
 // prReviewInfo is what the session that reviews the pull request needs to know,
-// with the report of the pass it is about to write.
+// with the report of the pass it is about to write and what the app read from
+// GitHub before it, nil when it read nothing.
 func prReviewInfo(
 	t task.Task, wt worktree.Worktree, base string, repo repository.Repository, pr task.PRDetails, pass int,
+	checks *gh.PRChecks,
 ) session.TaskInfo {
 	info := prSessionInfo(t, wt, base, repo)
 	info.Stage, info.Prompt = session.PRReviewStage, prompts.StagePRReview
@@ -1019,6 +1068,8 @@ func prReviewInfo(
 	// The fixed instructions of the repository are read when the pass begins,
 	// so an edit of them reaches the next pass.
 	info.Instructions = repo.ReviewInstructions
+	info.Checks = checks
+	info.MergeBase = "origin/" + base
 	return info
 }
 
@@ -1234,9 +1285,6 @@ func (s *Service) ReviewAgain(ctx context.Context, id string) error {
 	if err := s.sessions.Discard(ctx, id, session.PRReviewStage); err != nil {
 		return err
 	}
-	if _, err := s.tasks.SetPRRun(ctx, id, task.PRReviewing, nil); err != nil {
-		return err
-	}
 	// The pass asked for here is the one the review waits for: the report the
 	// task already has, clean or not, decides nothing until that one is in.
 	head := ""
@@ -1246,7 +1294,12 @@ func (s *Service) ReviewAgain(ctx context.Context, id string) error {
 	s.setPassAsked(id, cmp.Or(head, passAskedWithoutHead))
 	s.setPRNoCommit(id, false)
 	s.log.Info("pr review restarted", "task", id, "pass", run.ReportedPass+1)
-	s.Check(id)
+	// Nothing was pushed: a reading without checks is believed at once.
+	if err := s.beginChecksWait(ctx, id, false); err != nil {
+		// The pass was not asked for after all, and nothing else would ask for it.
+		s.setPassAsked(id, "")
+		return fmt.Errorf("review task %s again: %w", id, err)
+	}
 	return nil
 }
 
@@ -1314,16 +1367,22 @@ func (s *Service) RefreshPR(_ context.Context, id string) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	if _, _, err := s.prOf(id); err != nil {
+	_, run, err := s.prOf(id)
+	if err != nil {
 		return err
+	}
+	if run.Status == task.PRWaitingChecks {
+		s.spawnPRWork(id, s.readChecks)
+		return nil
 	}
 	s.spawnPRWork(id, s.checkPR)
 	return nil
 }
 
-// PollPRs asks GitHub again about every pull request whose merge the app is
-// waiting for. internal/app calls it on a timer; each reading goes out on the
-// goroutine of its task and never blocks the caller.
+// PollPRs asks GitHub again about every pull request whose checks a pass is
+// waiting for, and every one whose merge the app is waiting for. internal/app
+// calls it on a timer; each reading goes out on the goroutine of its task and
+// never blocks the caller.
 func (s *Service) PollPRs() {
 	if s.isClosed() {
 		return
@@ -1333,14 +1392,21 @@ func (s *Service) PollPRs() {
 			continue
 		}
 		run, ok := s.tasks.PRRun(t.ID)
-		if !ok || run.Status != task.PRDone || run.PR.Number == 0 {
+		if !ok {
 			continue
 		}
-		if run.PR.State == task.PRStateMerged || run.PR.State == task.PRStateClosed {
-			// A merged pull request has nothing more to say; a closed one is
-			// asked again only when the user says so.
-			continue
+		switch run.Status {
+		case task.PRWaitingChecks:
+			s.spawnPRWork(t.ID, s.readChecks)
+		case task.PRDone:
+			if run.PR.Number == 0 || run.PR.State == task.PRStateMerged || run.PR.State == task.PRStateClosed {
+				// A merged pull request has nothing more to say; a closed one is
+				// asked again only when the user says so.
+				continue
+			}
+			s.spawnPRWork(t.ID, s.checkPR)
+		default:
+			// Nothing else is read on a timer.
 		}
-		s.spawnPRWork(t.ID, s.checkPR)
 	}
 }

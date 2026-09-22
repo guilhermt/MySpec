@@ -42,6 +42,7 @@ func underReview(t *testing.T, f *fixture) task.Task {
 	f.worktrees.seed(tk)
 	f.worktrees.setStatus(git.Status{Head: startCommit})
 	f.tasks.setPRRun("task-1", task.PRRun{Status: task.PRReviewing, PR: openPR()})
+	f.gh.setPR("task-1", samePR)
 
 	f.service.Check("task-1")
 	waitFor(t, "the review session of the task", func() bool {
@@ -116,7 +117,7 @@ func TestTheReviewOfAOneShotPullRequestReadsTheDocument(t *testing.T) {
 	f.service.Check("task-1")
 
 	want := oneShotReviewPrompt("/data/task-1/pr/review-2.md", document)
-	waitFor(t, "the prompt of the second pass", func() bool { return slices.Contains(f.sessions.sent(), want) })
+	waitFor(t, "the prompt of the second pass", func() bool { return f.sessions.sentCount(want) > 0 })
 }
 
 func TestAReportWithFindingsWaitsForTheDecision(t *testing.T) {
@@ -202,7 +203,7 @@ func TestACommitOfAReviewStartsTheNextPass(t *testing.T) {
 	f.service.Check("task-1")
 
 	waitFor(t, "the prompt of the second pass", func() bool {
-		return slices.Contains(f.sessions.sent(), reviewPrompt("/data/task-1/pr/review-2.md"))
+		return f.sessions.sentCount(reviewPrompt("/data/task-1/pr/review-2.md")) > 0
 	})
 	run, _ := f.tasks.prRun("task-1")
 	if run.Status != task.PRReviewing {
@@ -215,16 +216,7 @@ func TestACommitOfAReviewStartsTheNextPass(t *testing.T) {
 	// The same commit never asks for a second pass.
 	f.service.Check("task-1")
 	f.waitEvaluations(t, 1)
-	if got := slices.Index(f.sessions.sent(), reviewPrompt("/data/task-1/pr/review-2.md")); got < 0 {
-		t.Fatal("the prompt of the second pass is gone")
-	}
-	asked := 0
-	for _, message := range f.sessions.sent() {
-		if message == reviewPrompt("/data/task-1/pr/review-2.md") {
-			asked++
-		}
-	}
-	if asked != 1 {
+	if asked := f.sessions.sentCount(reviewPrompt("/data/task-1/pr/review-2.md")); asked != 1 {
 		t.Errorf("the second pass was asked for %d times, want once", asked)
 	}
 
