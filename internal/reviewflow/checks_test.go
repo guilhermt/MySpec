@@ -385,4 +385,11 @@ func TestARestartDuringTheWaitOfApplyModeLeavesTheWorktreeUnwatched(t *testing.T
 	}) {
 		t.Errorf("watch calls = %v, want the worktree left unwatched during the wait", f.watch.recorded()[before:])
 	}
+
+	// The tolerance for a reading without checks dies with the app: the first
+	// reading of the poll starts the pass, and the test waits for it so that
+	// the pass writes nothing after the test ends.
+	f.polled(t, id, func(s reviewflow.State) bool {
+		return s.Review.Phase == prreview.PhaseNone
+	}, "the second pass to start after the restart")
 }
