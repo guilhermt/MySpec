@@ -63,8 +63,13 @@ const listRepository = `%s: repository(owner: $%s, name: $%s) {
 `
 
 // detailRepository reads one pull request of a batch: the alias, the owner
-// variable, the name variable and the number variable.
-const detailRepository = `%s: repository(owner: $%s, name: $%s) { pullRequest(number: $%s) { ...pr body state merged } }
+// variable, the name variable and the number variable. Beyond the list, it
+// reads whether the branch merges clean and the checks of the last commit.
+const detailRepository = `%s: repository(owner: $%s, name: $%s) { pullRequest(number: $%s) { ...pr body state merged mergeable
+  commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: 100) { nodes {
+    __typename ... on CheckRun { name status conclusion detailsUrl } ... on StatusContext { context state targetUrl }
+  } } } } } }
+} }
 `
 
 // The names of the variables of the i-th repository of a batch.
@@ -194,6 +199,20 @@ type detailNode struct {
 	Body   string `json:"body"`
 	State  string `json:"state"`
 	Merged bool   `json:"merged"`
+
+	Mergeable string `json:"mergeable"`
+	Commits   struct {
+		Nodes []struct {
+			Commit struct {
+				// StatusCheckRollup is null for a commit with no checks.
+				StatusCheckRollup *struct {
+					Contexts struct {
+						Nodes []gh.CheckNode `json:"nodes"`
+					} `json:"contexts"`
+				} `json:"statusCheckRollup"`
+			} `json:"commit"`
+		} `json:"nodes"`
+	} `json:"commits"`
 }
 
 // detail is the node as a Detail of the repository owner/name.
@@ -202,7 +221,25 @@ func (n detailNode) detail(owner, name string) Detail {
 	if n.Merged {
 		state = "merged"
 	}
-	return Detail{PullRequest: n.pullRequest(owner, name), Body: n.Body, State: state}
+	return Detail{
+		PullRequest: n.pullRequest(owner, name),
+		Body:        n.Body,
+		State:       state,
+		Checks:      gh.ParseChecks(n.checkNodes(), n.Mergeable),
+	}
+}
+
+// checkNodes are the checks of the last commit; nil when the pull request has
+// no commit or the commit no checks.
+func (n detailNode) checkNodes() []gh.CheckNode {
+	if len(n.Commits.Nodes) == 0 {
+		return nil
+	}
+	rollup := n.Commits.Nodes[0].Commit.StatusCheckRollup
+	if rollup == nil {
+		return nil
+	}
+	return rollup.Contexts.Nodes
 }
 
 // readViewer is the account gh is authenticated as, read once and kept. It
