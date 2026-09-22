@@ -38,6 +38,14 @@ describe("PRBar", () => {
     expect(dotOf(screen.getByRole("status"))).toHaveClass("bg-[var(--status-working)]");
   });
 
+  it("spins while the pass waits for the checks of the pull request", () => {
+    bar({ status: "waiting_checks", prNumber: 12 });
+
+    const status = screen.getByRole("status");
+    expect(status).toHaveTextContent("Waiting for checks");
+    expect(status.querySelector(".animate-spin")).not.toBeNull();
+  });
+
   it("takes the tone of the situation of the pull request", () => {
     bar({ status: "blocked", block: { reason: "gh_missing", detail: "" } }, [
       makeSituation({ kind: "pr_blocked", group: "error", place: PR_PLACE }),

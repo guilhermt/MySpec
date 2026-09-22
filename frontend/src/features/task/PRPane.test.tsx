@@ -97,6 +97,21 @@ describe("PRPane", () => {
     expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
   });
 
+  it("waits for the checks before the first pass has a conversation", () => {
+    pane({ status: "waiting_checks", prNumber: 12, sessionStage: "" });
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Waiting for the checks of the pull request…",
+    );
+    expect(screen.queryByPlaceholderText("Reply to the agent…")).not.toBeInTheDocument();
+  });
+
+  it("keeps the conversation while a later pass waits for the checks", () => {
+    pane({ status: "waiting_checks", prNumber: 12, sessionStage: "pr_review" });
+
+    expect(screen.getByPlaceholderText("Reply to the agent…")).toBeInTheDocument();
+  });
+
   it("puts the review strip above the conversation once changes are applied", () => {
     pane({
       status: "in_review",

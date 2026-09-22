@@ -30,6 +30,7 @@ describe("prStatusLabel and prStatusTone", () => {
     ["awaiting_reply", "Waiting for your reply", "idle"],
     ["opening", "Opening the pull request", "working"],
     ["reviewing", "Reviewing the pull request", "working"],
+    ["waiting_checks", "Waiting for checks", "working"],
     ["awaiting_decision", "Waiting for your decision", "idle"],
     ["in_review", "In review", "idle"],
     ["ready_to_approve", "Ready to approve", "idle"],
@@ -96,6 +97,7 @@ describe("what the pull request allows", () => {
     expect(canDiscardDraft(makePullRequest({ status: "drafting" }))).toBe(true);
     expect(canDiscardDraft(makePullRequest({ status: "draft_ready" }))).toBe(true);
     expect(canDiscardDraft(makePullRequest({ status: "reviewing" }))).toBe(false);
+    expect(canDiscardDraft(makePullRequest({ status: "waiting_checks" }))).toBe(false);
   });
 
   it("throws the draft away while the agent waits for a reply before the pull request", () => {
@@ -110,6 +112,7 @@ describe("what the pull request allows", () => {
     expect(canReviewAgain(makePullRequest({ status: "done" }))).toBe(true);
     expect(canReviewAgain(makePullRequest({ status: "merged" }))).toBe(true);
     expect(canReviewAgain(makePullRequest({ status: "draft_ready" }))).toBe(false);
+    expect(canReviewAgain(makePullRequest({ status: "waiting_checks", prNumber: 12 }))).toBe(false);
     expect(canReviewAgain(makePullRequest({ status: "pr_closed" }))).toBe(false);
     expect(canReviewAgain(makePullRequest({ status: "closing" }))).toBe(false);
     expect(canReviewAgain(makePullRequest({ status: "closed" }))).toBe(false);

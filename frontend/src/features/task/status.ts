@@ -29,6 +29,8 @@ function prPhrase(pr: PullRequest): string {
       return "opening the pull request";
     case "reviewing":
       return "reviewing";
+    case "waiting_checks":
+      return "waiting for checks";
     case "awaiting_decision":
       return "decision needed";
     case "in_review":

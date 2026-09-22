@@ -424,6 +424,15 @@ func TestDeriveThePullRequestOfThePRStage(t *testing.T) {
 			}),
 			nil,
 		},
+		{"waiting for the checks", prInput(flow.PullRequest{Status: flow.PRWaitingChecks}), nil},
+		{
+			"waiting for the checks with the conversation at rest",
+			prInput(flow.PullRequest{
+				Status: flow.PRWaitingChecks, SessionStage: session.PRReviewStage,
+				Session: summary(session.StatusWaiting, true),
+			}),
+			nil,
+		},
 		{"closing", prInput(flow.PullRequest{Status: flow.PRClosing}), nil},
 		{"closed", prInput(flow.PullRequest{Status: flow.PRClosed}), nil},
 		{
@@ -581,6 +590,7 @@ func TestKindsBelongToTheirGroup(t *testing.T) {
 		attention.KindPlanInvalid:        attention.GroupError,
 		attention.KindPRClosed:           attention.GroupError,
 		attention.KindPublishFailed:      attention.GroupError,
+		attention.KindPassBlocked:        attention.GroupError,
 
 		attention.KindPermission:      attention.GroupWaiting,
 		attention.KindQuestion:        attention.GroupWaiting,

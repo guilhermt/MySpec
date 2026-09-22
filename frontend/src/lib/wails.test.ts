@@ -131,6 +131,7 @@ describe("narrowing", () => {
     expect(asPRStatus("awaiting_reply")).toBe("awaiting_reply");
     expect(asPRStatus("opening")).toBe("opening");
     expect(asPRStatus("reviewing")).toBe("reviewing");
+    expect(asPRStatus("waiting_checks")).toBe("waiting_checks");
     expect(asPRStatus("awaiting_decision")).toBe("awaiting_decision");
     expect(asPRStatus("in_review")).toBe("in_review");
     expect(asPRStatus("ready_to_approve")).toBe("ready_to_approve");
@@ -235,6 +236,7 @@ describe("narrowing", () => {
     expect(asSituationKind("review_report")).toBe("review_report");
     expect(asSituationKind("new_commits")).toBe("new_commits");
     expect(asSituationKind("publish_failed")).toBe("publish_failed");
+    expect(asSituationKind("pass_blocked")).toBe("pass_blocked");
     expect(asSituationForm("decide")).toBe("decide");
     expect(asSituationForm("publish")).toBe("publish");
     expect(asSituationForm("apply")).toBe("apply");
@@ -243,6 +245,8 @@ describe("narrowing", () => {
     expect(asPullReviewMode("apply")).toBe("apply");
     for (const status of [
       "reviewing",
+      "waiting_checks",
+      "pass_blocked",
       "awaiting_reply",
       "awaiting_decision",
       "ready_to_publish",

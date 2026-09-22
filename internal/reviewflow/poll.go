@@ -2,6 +2,7 @@ package reviewflow
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/guilhermt/myspec/internal/models"
@@ -75,9 +76,17 @@ func (s *Service) poll(ctx context.Context) {
 	details, err := s.pulls.ReadDetails(ctx, refs)
 	if err != nil {
 		s.log.Warn("read pull requests of reviews failed", "error", err)
+		message := err.Error()
+		if failure := (*pulls.Failure)(nil); errors.As(err, &failure) {
+			message = failure.Message()
+		}
 		for _, stored := range of {
 			if s.setCheckError(stored.ID, err.Error()) {
 				s.notify(stored.ID)
+			}
+			if stored.Phase == prreview.PhaseWaitingChecks {
+				// A pass that waits on a reading that fails waits for the user.
+				s.blockPass(stored.ID, message)
 			}
 		}
 		return
@@ -91,8 +100,8 @@ func (s *Service) poll(ctx context.Context) {
 	}
 }
 
-// settle records what GitHub said about one pull request, and ends the review
-// when the pull request is over.
+// settle records what GitHub said about one pull request, ends the review when
+// the pull request is over, and goes on with a pass that waits for the checks.
 func (s *Service) settle(ctx context.Context, id string, detail pulls.Detail) {
 	l := s.lockOf(id)
 	l.mu.Lock()
@@ -123,6 +132,9 @@ func (s *Service) settle(ctx context.Context, id string, detail pulls.Detail) {
 	}
 	if changed {
 		s.notify(id)
+	}
+	if stored.Phase == prreview.PhaseWaitingChecks && s.passBlockedOf(id) == "" {
+		s.continueWait(ctx, stored, detail)
 	}
 }
 
@@ -177,12 +189,13 @@ func (s *Service) Sync(ctx context.Context) {
 			// The pass the agent still owes a report for is the one it writes.
 			pass = stored.ReportedPass + 1
 		}
-		if err := s.sessions.Open(ctx, info(stored, wt, repo, pass, "", models.Choice{})); err != nil {
+		if err := s.sessions.Open(ctx, info(stored, wt, repo, pass, "", models.Choice{}, nil)); err != nil {
 			s.log.Error("open review session failed", "review", stored.ID, "error", err)
 			continue
 		}
-		if stored.Mode == prreview.ModeApply && stored.Phase != prreview.PhaseNone {
-			// The evaluation that follows says whether the numbers matter now.
+		if stored.Phase == prreview.PhaseApplying || stored.Phase == prreview.PhaseCommitting {
+			// Only the cycle of the fixes reads the worktree; the evaluation that
+			// follows says whether the numbers matter now.
 			s.watch.Track(stored.ID, wt, false)
 		}
 	}

@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/guilhermt/myspec/internal/claude"
+	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
 )
@@ -96,6 +97,11 @@ type TaskInfo struct {
 	// PassInstructions is what the user wrote for the pass that opens the
 	// session, which reads in the conversation as their first message.
 	PassInstructions string
+	// Checks is what the app read from GitHub before the pass that opens the
+	// session, and MergeBase the origin/<base> ref an approved conflict is
+	// resolved by merging; PR review sessions only.
+	Checks    *gh.PRChecks
+	MergeBase string
 
 	// The discussion sessions.
 	ExtraDirs    []string // the clones the agent may read, passed to the CLI with --add-dir; discussions only

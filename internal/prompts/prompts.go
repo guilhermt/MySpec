@@ -14,6 +14,8 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/guilhermt/myspec/internal/gh"
 )
 
 //go:embed defaults/*.md
@@ -116,6 +118,11 @@ type Prompt struct {
 // baseBranchPlaceholder, which is one and is replaced there a second time.
 const contextPathPlaceholder = "{{context_path}}"
 
+// mergeBasePlaceholder names the remote-tracking ref of the base in the notes
+// of the review of a pull request. Like contextPathPlaceholder, it is no
+// placeholder of a prompt.
+const mergeBasePlaceholder = "{{merge_base}}"
+
 // PushInstruction is what the app puts in the commit prompt when the commit
 // belongs to a pull request that already exists.
 const PushInstruction = "After committing, push this branch to `origin`, so the commit reaches the pull request. Push only this branch, and never force-push."
@@ -151,12 +158,15 @@ const replyHeading = "\n\n## The implementer's last response\n\n"
 
 // The headings of the sections the app appends to the prompt of the review of
 // a pull request: what it is when the pull request comes from no task, how the
-// report reads, what happens to the findings, and the instructions.
+// report reads, what happens to the findings, what the app read from GitHub,
+// and the instructions.
 const (
 	externalHeading         = "\n\n## Pull request without a task\n\n"
 	findingsFormatHeading   = "\n\n## Findings format\n\n"
 	publishHeading          = "\n\n## Publishing\n\n"
 	applyHeading            = "\n\n## Applying\n\n"
+	checksHeading           = "\n\n## GitHub checks and conflicts\n\n"
+	githubStatusHeading     = "\n\n## GitHub status\n\n"
 	instructionsHeading     = "\n\n## Review instructions\n\n"
 	passInstructionsHeading = "\n\n## Instructions for this pass\n\n"
 )
@@ -225,6 +235,58 @@ const publishNote = "The user decides on each finding in the app, may edit its t
 // applyNote is what such a review does with its findings when the agent
 // applies them in the worktree.
 const applyNote = "The user decides on each finding in the app, and the app then sends you the findings they approved. This replaces the item-by-item decision in the conversation this prompt describes above: after writing the report, say in one line what you found and stop, and implement only what the app sends you as approved. When the user asks in the conversation for a finding to be added, changed or removed before that, rewrite the report of the current pass in place, keeping the numbers of the findings that did not change."
+
+// checksNote is what the review of a pull request does with the checks of its
+// head and a conflict with its base, which the app reads before each pass.
+const checksNote = "Before this pass the app read on GitHub the checks of the head of the pull request and whether the branch merges clean into the base; the `## GitHub status` section, at the end of this prompt or of the message that asks for the pass, says what it found. That is part of what you review: a check that failed and a conflict with the base are findings of the report like any other, and the report is `changes` whenever there is one of them.\n\n" +
+	"- For each check that failed, investigate the cause with the `gh` of this session: `gh pr checks {{pr_number}}` lists the checks with their links; for a check of GitHub Actions, `gh run view <run id> --log-failed` prints the steps that failed, with the run id that is in the link; a check of another system may have only its link. Relate the cause to the code of the pull request.\n" +
+	"- Write one finding per check that failed, or one per cause when several failed for the same one, saying which check failed, with its link, and what caused the failure: the test that broke, the lint error, the command that did not finish. The finding is anchored on a line of the new version that is part of the diff when the cause is there, such as the broken test or the line the linter pointed at, and general when it is not, such as a test the pull request does not touch that started failing or a failure of the infrastructure of the check. When the cause cannot be found, such as a log you cannot reach, the finding is general and says so: the check, its link and that the cause was not found.\n" +
+	"- When the branch has conflicts with the base, write a single general finding saying that the branch has conflicts with `{{base_branch}}` and, when you can tell, the files in conflict: `git merge-tree --write-tree HEAD {{merge_base}}` lists them without touching the worktree. Never run `git merge` to find out.\n" +
+	"- In the summary, where it says what you reviewed, record what the app read: that the checks passed, that the pull request has no checks, or which ones failed, and whether the branch merges clean. A clean report then makes it clear that the checks and the conflict were considered.\n" +
+	"- When a finding about a check is approved, fix its cause like any finding. When the finding about the conflict is approved, resolve it by merging the base into the branch, never by rebasing: `git fetch origin`, then `git merge {{merge_base}}`; resolve the conflicts in the files and leave the merge in progress, without `git add` on the resolved files and without committing: the user reviews and stages them in the app, and the commit, which comes from another prompt, concludes the merge. Resolve the conflict before the other findings approved in the same round, so that you fix them on the merged code. The rule of this prompt never to merge is about merging the pull request; merging the base into its branch to resolve an approved conflict is the exception."
+
+// noChecksReading is the status section of a pass the app read nothing from
+// GitHub for.
+const noChecksReading = "The app has no reading of GitHub for this pass. Read it yourself before reviewing: `gh pr view {{pr_number}} --json statusCheckRollup,mergeable` says the checks and whether the branch merges clean, and everything above about checks and conflicts holds."
+
+// PRChecksSection is the body of the section that says what the app read from
+// GitHub before a pass of the review of a pull request: the checks that failed
+// and whether the branch merges clean into the base, mergeBase being
+// origin/<base>. It names no pending check: a pass starts only without them.
+// With no reading, it asks the agent to read GitHub itself.
+func PRChecksSection(checks *gh.PRChecks, mergeBase string) string {
+	if checks == nil {
+		return noChecksReading
+	}
+
+	var b strings.Builder
+	failed := checks.Failed()
+	switch {
+	case len(checks.Checks) == 0:
+		b.WriteString("- Checks: the pull request has no checks.\n")
+	case len(failed) == 0 && len(checks.Checks) == 1:
+		b.WriteString("- Checks: 1 check passed.\n")
+	case len(failed) == 0:
+		fmt.Fprintf(&b, "- Checks: all %d checks passed.\n", len(checks.Checks))
+	default:
+		fmt.Fprintf(&b, "- Checks: %d of %d failed:\n", len(failed), len(checks.Checks))
+		for _, check := range failed {
+			fmt.Fprintf(&b, "  - `%s` — %s", check.Name, check.Conclusion)
+			if check.URL != "" {
+				b.WriteString(" — " + check.URL)
+			}
+			b.WriteString("\n")
+		}
+	}
+
+	base := strings.TrimPrefix(mergeBase, "origin/")
+	if checks.Conflicting() {
+		fmt.Fprintf(&b, "- Base: the branch has conflicts with `%s`; an approved conflict is resolved by merging `%s` into the branch, never by rebasing.", base, mergeBase)
+	} else {
+		fmt.Fprintf(&b, "- Base: the branch merges clean into `%s`.", base)
+	}
+	return b.String()
+}
 
 // oneShotNote is what a prompt that reads the documents of a task says about
 // the document of a One-Shot task; "" for a prompt that reads none.
@@ -415,6 +477,14 @@ type Vars struct {
 	External     bool   // PR review only: the pull request comes from no task of the product
 	Publish      bool   // external only: the findings are published on GitHub, not applied
 	Instructions string // PR review only: the fixed review instructions of the repository
+	// Checks is what the app read from GitHub about the head of the pull
+	// request before the pass: its checks and whether it merges clean. PR
+	// review only; nil when the app has no reading for the pass, which the
+	// status section then says.
+	Checks *gh.PRChecks
+	// MergeBase is the remote-tracking ref of the base, origin/<base>, that an
+	// approved conflict is resolved by merging; PR review only.
+	MergeBase string
 	// PassInstructions is what the user wrote for this pass of a review of a
 	// pull request.
 	PassInstructions string
@@ -463,8 +533,9 @@ func commitInstruction(all bool) string {
 // tech spec and the step file render the document, and the prompts that read
 // them always end with what the document stands for. The prompt of a pull
 // request of a task created from a card ends with the card, and the prompt of
-// the review of a pull request with what the review is about and the
-// instructions it runs with. StageStep is the exception: the step file is sent
+// the review of a pull request with what the review is about, what the app
+// read of its checks and conflicts on GitHub and the instructions it runs
+// with. StageStep is the exception: the step file is sent
 // verbatim.
 func Render(dataDir string, stage Stage, vars Vars) (string, error) {
 	if stage == StageStep {
@@ -559,9 +630,10 @@ func discussionSections(vars Vars) string {
 
 // reviewSections are the sections the app appends to the prompt of the review
 // of a pull request: what the review is about when the pull request comes from
-// no task, and the instructions the pass runs with, which a review of the pull
-// request of a task also has. Like the others, they depend on no placeholder,
-// so an edited prompt receives them too.
+// no task, then, always, what to do about the checks and conflicts and what
+// the app read of them on GitHub, and the instructions the pass runs with.
+// Like the others, they depend on no placeholder, so an edited prompt receives
+// them too.
 func reviewSections(vars Vars) string {
 	var b strings.Builder
 	if vars.External {
@@ -573,6 +645,8 @@ func reviewSections(vars Vars) string {
 			b.WriteString(applyHeading + reviewNote(applyNote, vars))
 		}
 	}
+	b.WriteString(checksHeading + reviewNote(checksNote, vars))
+	b.WriteString(githubStatusHeading + reviewNote(PRChecksSection(vars.Checks, vars.MergeBase), vars))
 	if vars.Instructions != "" {
 		b.WriteString(instructionsHeading + vars.Instructions)
 	}
@@ -588,5 +662,7 @@ func reviewNote(note string, vars Vars) string {
 	return strings.NewReplacer(
 		contextPathPlaceholder, vars.ContextPath,
 		baseBranchPlaceholder, vars.BaseBranch,
+		prNumberPlaceholder, vars.PRNumber,
+		mergeBasePlaceholder, vars.MergeBase,
 	).Replace(note)
 }

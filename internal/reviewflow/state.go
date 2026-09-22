@@ -27,6 +27,8 @@ const (
 	StatusReadyToApprove   Status = "ready_to_approve" // apply: every changed file is staged
 	StatusCommitting       Status = "committing"       // apply: the agent is committing
 	StatusReadyToMerge     Status = "ready_to_merge"   // apply: nothing is left to fix
+	StatusWaitingChecks    Status = "waiting_checks"   // a pass was asked for and waits for the checks of the head
+	StatusPassBlocked      Status = "pass_blocked"     // the pass could not start: GitHub could not be read, or the worktree updated
 )
 
 // State is everything the app knows about a review: what it recorded, what
@@ -52,6 +54,9 @@ type State struct {
 	// CommitFailed says the last approval of apply mode ended without a
 	// commit.
 	CommitFailed bool
+	// PassBlocked is why the pass the app asked for could not start; "" when
+	// nothing blocks it.
+	PassBlocked string
 }
 
 // State is everything the app knows about an active review, false for an id
@@ -75,6 +80,7 @@ func (s *Service) State(id string) (State, bool) {
 		CheckError:       l.checkError,
 		UnreadableReport: l.unreadable,
 		CommitFailed:     l.commitFailed,
+		PassBlocked:      l.passBlocked,
 	}
 	s.mu.Unlock()
 
@@ -92,6 +98,7 @@ func (s *Service) State(id string) (State, bool) {
 	state.Status = status(statusInput{
 		Review: stored, Last: last,
 		Session: sum, SessionOpen: open, Watch: snap, Watched: watched,
+		PassBlocked: state.PassBlocked,
 	})
 	state.StalePass = stale(stored, last)
 	return state, true
@@ -104,7 +111,8 @@ type statusInput struct {
 	Session     session.Summary
 	SessionOpen bool
 	Watch       review.Snapshot
-	Watched     bool // the watcher has a reading of the worktree
+	Watched     bool   // the watcher has a reading of the worktree
+	PassBlocked string // why the pass the app asked for could not start
 }
 
 // status is the state a review is shown in. The conversation comes first:
@@ -119,6 +127,13 @@ func status(in statusInput) Status {
 		default:
 			return StatusReviewing
 		}
+	}
+	if in.Review.Phase == prreview.PhaseWaitingChecks {
+		// The pass was asked for and has not reached the agent yet.
+		if in.PassBlocked != "" {
+			return StatusPassBlocked
+		}
+		return StatusWaitingChecks
 	}
 	if in.Review.AskedPass > in.Review.ReportedPass {
 		// The agent rested without the report of the pass it was asked for.

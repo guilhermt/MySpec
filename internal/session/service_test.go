@@ -13,6 +13,7 @@ import (
 
 	"github.com/guilhermt/myspec/internal/claude"
 	"github.com/guilhermt/myspec/internal/claude/claudetest"
+	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/session"
@@ -1917,5 +1918,28 @@ func TestStartOfAReviewOfAPullRequestMarksItAndSendsWhatTheUserWroteForThePass(t
 	})
 	if got := tr.Entries[2].Assistant.Text; got != rendered {
 		t.Errorf("prompt sent = %q, want %q", got, rendered)
+	}
+}
+
+func TestStartOfAReviewOfAPullRequestSendsWhatTheAppReadFromGitHub(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	info := atReview(taskInfo(t, "r1"))
+	info.MergeBase = "origin/main"
+	info.Checks = &gh.PRChecks{
+		Checks:    []gh.Check{{Name: "test", URL: "https://ci.example.com/2", Conclusion: "failure"}},
+		Mergeable: gh.MergeableConflicting,
+	}
+	f.start(t, info)
+	f.waitIdle(t, info.Key())
+
+	tr := f.transcript(t, info.Key())
+	if len(tr.Entries) != 3 {
+		t.Fatalf("entries = %d, want the review marker, the prompt and its answer", len(tr.Entries))
+	}
+	want := "\n\n## GitHub status\n\n" + prompts.PRChecksSection(info.Checks, info.MergeBase)
+	if got := tr.Entries[2].Assistant.Text; !strings.Contains(got, want) {
+		t.Errorf("prompt sent = %q, want it to contain %q", got, want)
 	}
 }

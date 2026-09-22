@@ -37,6 +37,24 @@ describe("ReviewBar", () => {
     expect(screen.getByText("The last approval didn't produce a commit.")).toBeInTheDocument();
   });
 
+  it("says why the pass could not start, and offers it again", () => {
+    bar({
+      status: "pass_blocked",
+      passBlocked: "GitHub CLI isn't authenticated.",
+      canReviewAgain: true,
+    });
+
+    expect(screen.getByRole("status")).toHaveTextContent("Pass blocked");
+    expect(screen.getByText("GitHub CLI isn't authenticated.")).toHaveClass("text-destructive");
+    expect(screen.getByRole("button", { name: "Review again" })).toBeEnabled();
+  });
+
+  it("names the wait for the checks of the pull request", () => {
+    bar({ status: "waiting_checks" });
+
+    expect(screen.getByRole("status")).toHaveTextContent("Waiting for checks");
+  });
+
   it("publishes only once everything is decided", async () => {
     const { user } = bar({
       status: "ready_to_publish",

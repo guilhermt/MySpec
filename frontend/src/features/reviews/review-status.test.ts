@@ -30,6 +30,8 @@ import {
 describe("reviewStatusLabel", () => {
   const cases: [PullReviewStatus, string][] = [
     ["reviewing", "Reviewing"],
+    ["waiting_checks", "Waiting for checks"],
+    ["pass_blocked", "Pass blocked"],
     ["awaiting_reply", "Waiting for the report"],
     ["awaiting_decision", "Decide findings"],
     ["ready_to_publish", "Ready to publish"],
@@ -55,6 +57,7 @@ describe("reviewStatusTone", () => {
   it("works while the agent runs", () => {
     expect(reviewStatusTone(makeReviewSummary({ status: "reviewing" }))).toBe("working");
     expect(reviewStatusTone(makeReviewSummary({ status: "committing" }))).toBe("working");
+    expect(reviewStatusTone(makeReviewSummary({ status: "waiting_checks" }))).toBe("working");
   });
 
   it("is done once the review is published", () => {
@@ -64,6 +67,7 @@ describe("reviewStatusTone", () => {
   it("stays idle for what waits, which the situations colour", () => {
     expect(reviewStatusTone(makeReviewSummary({ status: "ready_to_publish" }))).toBe("idle");
     expect(reviewStatusTone(makeReviewSummary({ status: "new_commits" }))).toBe("idle");
+    expect(reviewStatusTone(makeReviewSummary({ status: "pass_blocked" }))).toBe("idle");
   });
 });
 
@@ -75,6 +79,8 @@ describe("showsChanges", () => {
     ["committing", true],
     ["ready_to_apply", false],
     ["ready_to_merge", false],
+    ["waiting_checks", false],
+    ["pass_blocked", false],
   ])("is %s → %s", (status, want) => {
     expect(showsChanges(makeReviewSummary({ status }))).toBe(want);
   });

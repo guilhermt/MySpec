@@ -1342,6 +1342,7 @@ func FromReviews(
 			StalePass:        state.StalePass,
 			CheckError:       state.CheckError,
 			PublishError:     stored.PublishError,
+			PassBlocked:      state.PassBlocked,
 			UnreadableReport: state.UnreadableReport,
 			CommitFailed:     state.CommitFailed,
 			Review:           fromReview(state.Watch),
@@ -1399,6 +1400,9 @@ func canPublish(state reviewflow.State) bool {
 // agent is neither fixing the findings nor committing them. Changes waiting for
 // the user's review do not hold a pass back, as on the pull request of a task.
 func canReviewAgain(state reviewflow.State) bool {
+	if state.Status == reviewflow.StatusPassBlocked {
+		return true
+	}
 	if state.Review.AskedPass != state.Review.ReportedPass {
 		return false
 	}

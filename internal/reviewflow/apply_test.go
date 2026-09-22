@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/prreview"
 	"github.com/guilhermt/myspec/internal/review"
 	"github.com/guilhermt/myspec/internal/reviewflow"
@@ -308,6 +309,10 @@ func TestACommitThatWentUpAsksForTheNextPass(t *testing.T) {
 	f.evaluated(t, id, func(s reviewflow.State) bool {
 		return s.Review.AskedPass == 2
 	}, "the second pass to be asked for")
+	f.pulls.seed(withChecks(ownPR(), gh.MergeableClean, passedCheck))
+	f.polled(t, id, func(s reviewflow.State) bool {
+		return s.Review.Phase == prreview.PhaseNone
+	}, "the second pass to start once the checks passed")
 
 	state := f.state(t, id)
 	if state.Review.Phase != prreview.PhaseNone || state.CommitFailed {
@@ -319,15 +324,11 @@ func TestACommitThatWentUpAsksForTheNextPass(t *testing.T) {
 	if !slices.Contains(f.watch.recorded(), "forget:"+id) {
 		t.Errorf("watch calls = %v, want the worktree forgotten", f.watch.recorded())
 	}
-	if slices.ContainsFunc(f.worktrees.recorded(), func(c string) bool {
-		return strings.HasPrefix(c, "updateDetached:")
-	}) {
-		t.Errorf("worktree calls = %v, want the worktree left on the commit that went up", f.worktrees.recorded())
-	}
 
 	want := "## Findings already applied\n" +
 		"1. `internal/board/service.go:12` — The reading is never cached.\n" +
 		"2. (general) — The name of the cache is vague.\n\n" +
+		"## GitHub status\n- Checks: 1 check passed.\n- Base: the branch merges clean into `main`.\n\n" +
 		"## Review instructions\nnever change a published migration"
 	if got := lastMessage(t, f); !strings.HasPrefix(got, "Review the pull request again") ||
 		!strings.HasSuffix(got, want) {
@@ -345,6 +346,10 @@ func TestACleanReportLeavesTheReviewReadyToMerge(t *testing.T) {
 	f.evaluated(t, id, func(s reviewflow.State) bool {
 		return s.Review.AskedPass == 2
 	}, "the second pass to be asked for")
+	f.pulls.seed(withChecks(ownPR(), gh.MergeableClean, passedCheck))
+	f.polled(t, id, func(s reviewflow.State) bool {
+		return s.Review.Phase == prreview.PhaseNone
+	}, "the second pass to start once the checks passed")
 
 	f.worktrees.moveHead(commitHash)
 	f.sessions.goIdle(id)
@@ -357,26 +362,38 @@ func TestACleanReportLeavesTheReviewReadyToMerge(t *testing.T) {
 	wantErrIs(t, f.service.Apply(t.Context(), id), reviewflow.ErrNotReady)
 }
 
-func TestAPassThatCannotBeAskedAfterACommitIsAskedAgain(t *testing.T) {
+func TestAPassThatCannotBeSentAfterACommitIsBlockedUntilAskedAgain(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
 	id := committing(t, f)
 	f.watch.setSnapshot(review.Snapshot{Head: commitHash})
 	f.sessions.goIdle(id)
-	f.sessions.failWith(errGitHub)
+	f.evaluated(t, id, func(s reviewflow.State) bool {
+		return s.Status == reviewflow.StatusWaitingChecks
+	}, "the second pass to wait for the checks")
 
-	f.settled(t, id)
-	state := f.state(t, id)
-	if state.Status != reviewflow.StatusCommitting || state.Review.AskedPass != 1 {
-		t.Errorf("status = %q, asked pass = %d, want the review still committing on pass 1",
-			state.Status, state.Review.AskedPass)
+	f.sessions.failWith(errGitHub)
+	f.pulls.seed(withChecks(ownPR(), gh.MergeableClean, passedCheck))
+	f.polled(t, id, func(s reviewflow.State) bool {
+		return s.Status == reviewflow.StatusPassBlocked
+	}, "the pass that never reached the agent to be blocked")
+	if state := f.state(t, id); state.Review.AskedPass != 2 || state.PassBlocked == "" {
+		t.Errorf("review = %+v, blocked = %q, want the second pass still asked for, with the reason",
+			state.Review, state.PassBlocked)
 	}
 
 	f.sessions.failWith(nil)
-	f.evaluated(t, id, func(s reviewflow.State) bool {
-		return s.Review.AskedPass == 2 && s.Review.Phase == prreview.PhaseNone
-	}, "the second pass to be asked for on the next evaluation")
+	if err := f.service.ReviewAgain(t.Context(), id, ""); err != nil {
+		t.Fatalf("review again: %v", err)
+	}
+	state := f.state(t, id)
+	if state.Review.AskedPass != 2 || state.Review.Phase != prreview.PhaseNone || state.PassBlocked != "" {
+		t.Errorf("review = %+v, blocked = %q, want the second pass sent", state.Review, state.PassBlocked)
+	}
+	if got := lastMessage(t, f); !strings.Contains(got, "It is pass 2.") {
+		t.Errorf("message =\n%s\n\nwant the second pass", got)
+	}
 }
 
 func TestANewPassDropsFixesTheUserDidNotKeep(t *testing.T) {
@@ -462,8 +479,12 @@ func secondPassOn(t *testing.T, f *fixture, commit string) string {
 	f.watch.setSnapshot(review.Snapshot{Head: commitHash})
 	f.sessions.goIdle(id)
 	f.evaluated(t, id, func(s reviewflow.State) bool {
-		return s.Review.AskedPass == 2 && s.Review.Phase == prreview.PhaseNone
+		return s.Review.AskedPass == 2
 	}, "the second pass to be asked for")
+	f.pulls.seed(withChecks(ownPR(), gh.MergeableClean, passedCheck))
+	f.polled(t, id, func(s reviewflow.State) bool {
+		return s.Review.Phase == prreview.PhaseNone
+	}, "the second pass to start once the checks passed")
 	f.sessions.goIdle(id)
 	f.record(t, id, changesReport(2, "One thing left.",
 		prreview.ParsedFinding{Number: 1, Text: "The cache is never emptied."},

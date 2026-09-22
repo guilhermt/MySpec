@@ -6,6 +6,7 @@ package pulls
 import (
 	"time"
 
+	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/task"
 )
 
@@ -47,8 +48,9 @@ func (p PullRequest) NewCommits() bool { return p.Reviewed && p.ReviewedCommit !
 // Detail is one pull request read on its own, open or not.
 type Detail struct {
 	PullRequest
-	Body  string
-	State string // "open" | "merged" | "closed"
+	Body   string
+	State  string      // "open" | "merged" | "closed"
+	Checks gh.PRChecks // what GitHub says about the head: its checks and whether it merges clean
 }
 
 // Ref names a pull request to read.

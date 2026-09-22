@@ -8,6 +8,8 @@ The work of this session was reviewed and approved. Commit it.
 
 Make **one commit**. Do not amend, rebase, tag or create branches.
 
+If the worktree has a merge in progress (`git rev-parse -q --verify MERGE_HEAD` succeeds), the commit concludes that merge: run `git commit --no-edit`, which keeps the message git prepared for it, and write no message of your own. Everything else here still holds: what to commit, one commit, and the push.
+
 ## The message
 
 Read the recent history first, with `git log --oneline -20`, and follow the conventions of the repository: language, capitalisation, and prefixes if it uses them.

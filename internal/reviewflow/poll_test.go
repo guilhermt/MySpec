@@ -9,13 +9,15 @@ import (
 	"github.com/guilhermt/myspec/internal/session"
 )
 
-// polled reads the pull requests of the reviews and waits for what the
-// reading settles.
+// polled reads the pull requests of the reviews until cond holds of what the
+// readings settle. It reads again and again because a round of polling is
+// skipped while another one is in flight, and a wait for the checks may take
+// more than one reading.
 func (f *fixture) polled(t *testing.T, id string, cond func(reviewflow.State) bool, subject string) {
 	t.Helper()
 
-	f.service.Poll()
 	waitFor(t, subject, func() bool {
+		f.service.Poll()
 		state, ok := f.service.State(id)
 		return ok && cond(state)
 	})
@@ -165,10 +167,11 @@ func TestSyncLeavesAReviewWithoutAConversationAlone(t *testing.T) {
 	f := newFixture(t)
 	id := decided(t, f)
 	f.sessions.lose(id)
+	before := len(f.sessions.recorded())
 
 	f.service.Sync(t.Context())
 
-	if slices.Contains(f.sessions.recorded(), "open:"+id) {
+	if slices.Contains(f.sessions.recorded()[before:], "open:"+id) {
 		t.Errorf("session calls = %v, want no conversation created for the review", f.sessions.recorded())
 	}
 	if _, open := f.sessions.Summary(session.Key{TaskID: id, Stage: session.ReviewStage}); open {

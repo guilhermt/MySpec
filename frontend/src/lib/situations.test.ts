@@ -85,6 +85,7 @@ describe("situationLabel", () => {
     ["new_commits", "", 0, "New commits"],
     ["drafts", "", 0, "Decide drafts"],
     ["publish_failed", "", 0, "Publish failed"],
+    ["pass_blocked", "", 0, "Pass blocked"],
   ])("names %s in the %s form", (kind, form, percent, label) => {
     const situation = makeSituation({ kind, form, percent, place: stepPlace(3) });
 
@@ -130,6 +131,7 @@ describe("namesPlace and situationDetail", () => {
     ["review_report", true],
     ["new_commits", true],
     ["publish_failed", true],
+    ["pass_blocked", true],
     ["session_error", false],
     ["worktree_unreadable", false],
     ["pr_blocked", false],

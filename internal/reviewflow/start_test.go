@@ -11,6 +11,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 
 	"github.com/guilhermt/myspec/internal/board"
+	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/prreview"
@@ -59,10 +60,11 @@ func TestStartingAReviewOpensTheConversationOnTheFirstPass(t *testing.T) {
 	if diff := cmp.Diff(want, f.worktrees.recorded()); diff != "" {
 		t.Errorf("worktree calls (-want +got):\n%s", diff)
 	}
-	if diff := cmp.Diff([]string{"start:" + id + ":restarted=false"}, f.sessions.recorded()); diff != "" {
+	want = []string{"open:" + id, "start:" + id + ":restarted=false"}
+	if diff := cmp.Diff(want, f.sessions.recorded()); diff != "" {
 		t.Errorf("session calls (-want +got):\n%s", diff)
 	}
-	if diff := cmp.Diff([]string{id}, f.changed()); diff != "" {
+	if diff := cmp.Diff([]string{id, id}, f.changed()); diff != "" {
 		t.Errorf("announced changes (-want +got):\n%s", diff)
 	}
 }
@@ -98,6 +100,8 @@ func TestTheConversationOfAReviewReviewsTheWorktreeAgainstTheContextDocument(t *
 		Instructions:     "never change a published migration",
 		PassInstructions: "look at the tests",
 		Choice:           models.Choice{Model: models.Opus5, Effort: models.High},
+		Checks:           &gh.PRChecks{Checks: []gh.Check{}, Mergeable: gh.MergeableClean},
+		MergeBase:        "origin/main",
 	}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("session info (-want +got):\n%s", diff)

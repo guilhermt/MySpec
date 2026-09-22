@@ -325,6 +325,8 @@ func (s *Service) flushPendingLocked(ctx context.Context, r *run, n *notes) bool
 			External:     r.task.External,
 			Publish:      r.task.Publish,
 			Instructions: r.task.Instructions,
+			Checks:       r.task.Checks,
+			MergeBase:    r.task.MergeBase,
 
 			DocumentPath: r.task.DocumentPath,
 			DraftsPath:   r.task.DraftsPath,

@@ -3,6 +3,7 @@ package reviewflow_test
 import (
 	"testing"
 
+	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/prreview"
 	"github.com/guilhermt/myspec/internal/review"
 	"github.com/guilhermt/myspec/internal/reviewflow"
@@ -275,6 +276,38 @@ func TestTheStatusOfAReviewIsWhatItsPassAndItsConversationSay(t *testing.T) {
 				return id
 			},
 			want: reviewflow.StatusCommitting,
+		},
+		{
+			name: "a pass that waits for the checks is waiting for them",
+			setup: func(t *testing.T, f *fixture) string {
+				t.Helper()
+				f.pulls.seed(withChecks(openPR(), gh.MergeableClean, pendingCheck))
+				return f.start(t)
+			},
+			want: reviewflow.StatusWaitingChecks,
+		},
+		{
+			name: "a conversation in the middle of a turn during the wait is reviewing",
+			setup: func(t *testing.T, f *fixture) string {
+				t.Helper()
+				f.pulls.seed(withChecks(openPR(), gh.MergeableClean, pendingCheck))
+				id := f.start(t)
+				f.sessions.goBusy(id)
+				return id
+			},
+			want: reviewflow.StatusReviewing,
+		},
+		{
+			name: "a pass whose wait could not read GitHub is blocked",
+			setup: func(t *testing.T, f *fixture) string {
+				t.Helper()
+				f.pulls.seed(withChecks(openPR(), gh.MergeableClean, pendingCheck))
+				id := f.start(t)
+				f.pulls.failWith(errGitHub)
+				f.polled(t, id, func(s reviewflow.State) bool { return s.PassBlocked != "" }, "the pass to be blocked")
+				return id
+			},
+			want: reviewflow.StatusPassBlocked,
 		},
 	}
 

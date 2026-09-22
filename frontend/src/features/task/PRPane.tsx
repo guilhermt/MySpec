@@ -10,6 +10,7 @@ import {
   closeHint,
   closeStepLabel,
   draftAtHand,
+  hasPRSession,
   prReportLabel,
   prStateLabel,
 } from "@/features/task/pr-status";
@@ -289,6 +290,12 @@ export function PRPane({ task, pr }: PRPaneProps) {
     case "reviewing":
     case "awaiting_decision":
       return <Chat taskId={task.id} pr={pr} />;
+    case "waiting_checks":
+      return hasPRSession(pr) ? (
+        <Chat taskId={task.id} pr={pr} />
+      ) : (
+        <Waiting text="Waiting for the checks of the pull request…" />
+      );
     case "done":
       return <AwaitingMerge taskId={task.id} pr={pr} />;
     case "merged":

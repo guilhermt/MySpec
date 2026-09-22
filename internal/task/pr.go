@@ -14,20 +14,21 @@ type PRStatus string
 
 // How far the app got with the PR stage of a task.
 const (
-	PRPreparing  PRStatus = "preparing"  // gh and commit checks under way
-	PRBlocked    PRStatus = "blocked"    // the stage could not start; Block says why
-	PRDrafting   PRStatus = "drafting"   // the PR session is open, writing or waiting for the OK
-	PROpening    PRStatus = "opening"    // the user approved the draft; the agent is opening the PR
-	PRReviewing  PRStatus = "reviewing"  // the PR exists and the review session is running
-	PRCommitting PRStatus = "committing" // the commit prompt was sent, waiting for the commit
-	PRDone       PRStatus = "done"       // a pass closed clean; the task awaits closing
-	PRClosing    PRStatus = "closing"    // the user asked for the closing; git is at work
-	PRClosed     PRStatus = "closed"     // the worktree is gone; Close says what else happened
+	PRPreparing     PRStatus = "preparing"      // gh and commit checks under way
+	PRBlocked       PRStatus = "blocked"        // the stage could not start; Block says why
+	PRDrafting      PRStatus = "drafting"       // the PR session is open, writing or waiting for the OK
+	PROpening       PRStatus = "opening"        // the user approved the draft; the agent is opening the PR
+	PRReviewing     PRStatus = "reviewing"      // the PR exists and the review session is running
+	PRWaitingChecks PRStatus = "waiting_checks" // the review waits for the checks of the head and the merge state before a pass
+	PRCommitting    PRStatus = "committing"     // the commit prompt was sent, waiting for the commit
+	PRDone          PRStatus = "done"           // a pass closed clean; the task awaits closing
+	PRClosing       PRStatus = "closing"        // the user asked for the closing; git is at work
+	PRClosed        PRStatus = "closed"         // the worktree is gone; Close says what else happened
 )
 
 // prStatuses lists every status a PR run may carry.
 var prStatuses = []PRStatus{
-	PRPreparing, PRBlocked, PRDrafting, PROpening, PRReviewing, PRCommitting,
+	PRPreparing, PRBlocked, PRDrafting, PROpening, PRReviewing, PRWaitingChecks, PRCommitting,
 	PRDone, PRClosing, PRClosed,
 }
 

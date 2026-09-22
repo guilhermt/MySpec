@@ -207,6 +207,44 @@ func TestReadDetailsAnswersTheStateOfEachPullRequestItFound(t *testing.T) {
 	}
 }
 
+func TestReadDetailsReadsTheChecksAndTheMergeState(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.github.reply(queryDetail, load(t, "detail.json"), nil)
+
+	refs := []pulls.Ref{
+		{Owner: "acme", Name: "alpha", Number: 42},
+		{Owner: "acme", Name: "gamma", Number: 7},
+	}
+	found, err := f.service.ReadDetails(t.Context(), refs)
+	if err != nil {
+		t.Fatalf("ReadDetails() = %v, want nil", err)
+	}
+
+	want := gh.PRChecks{
+		Checks: []gh.Check{
+			{Name: "test", URL: "https://github.com/acme/alpha/actions/runs/1/job/2", Conclusion: "success"},
+			{Name: "ci/deploy", URL: "https://ci.example.com/deploy/3", Conclusion: "failure"},
+		},
+		Mergeable: gh.MergeableClean,
+	}
+	if diff := cmp.Diff(want, found[refs[0]].Checks); diff != "" {
+		t.Errorf("the checks of acme/alpha#42 mismatch (-want +got):\n%s", diff)
+	}
+	want = gh.PRChecks{Checks: []gh.Check{}, Mergeable: gh.MergeableConflicting}
+	if diff := cmp.Diff(want, found[refs[1]].Checks); diff != "" {
+		t.Errorf("the checks of acme/gamma#7 mismatch (-want +got):\n%s", diff)
+	}
+
+	query := f.github.made(queryDetail)[0].Query
+	for _, field := range []string{"mergeable", "statusCheckRollup", "... on CheckRun", "... on StatusContext"} {
+		if !strings.Contains(query, field) {
+			t.Errorf("the detail query does not ask for %q", field)
+		}
+	}
+}
+
 func TestReadDetailsOfNothingAsksGitHubNothing(t *testing.T) {
 	t.Parallel()
 

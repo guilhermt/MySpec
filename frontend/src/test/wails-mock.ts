@@ -829,6 +829,7 @@ export function makeReviewSummary(overrides: Partial<ReviewSummary> = {}): Revie
     stalePass: false,
     checkError: "",
     publishError: "",
+    passBlocked: "",
     unreadableReport: "",
     commitFailed: false,
     review: null,

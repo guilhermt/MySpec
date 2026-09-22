@@ -140,6 +140,7 @@ describe("task status in the PR stage", () => {
 
   it.each([
     ["reviewing", "PR review · reviewing", "working"],
+    ["waiting_checks", "PR review · waiting for checks", "working"],
     ["awaiting_decision", "PR review · decision needed", "idle"],
     ["awaiting_reply", "PR review · waiting for your reply", "idle"],
     ["ready_to_approve", "PR review · ready to approve", "idle"],

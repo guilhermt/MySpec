@@ -38,6 +38,7 @@ const (
 	KindDrafts          Kind = "drafts"
 
 	KindPublishFailed Kind = "publish_failed"
+	KindPassBlocked   Kind = "pass_blocked"
 
 	KindMerge Kind = "merge"
 )
@@ -56,7 +57,7 @@ const (
 func (k Kind) Group() Group {
 	switch k {
 	case KindSessionError, KindStepBlocked, KindWorktreeUnreadable, KindPRBlocked, KindPlanInvalid,
-		KindPRClosed, KindPublishFailed:
+		KindPRClosed, KindPublishFailed, KindPassBlocked:
 		return GroupError
 	case KindMerge:
 		return GroupClosing

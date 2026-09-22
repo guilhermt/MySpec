@@ -143,8 +143,9 @@ func (s *Service) evaluateApply(ctx context.Context, id string, wt worktree.Work
 		if idle {
 			s.evaluateCommit(ctx, stored, wt)
 		}
-	case prreview.PhaseNone:
-		// The findings are the user's to decide on, or the pass is running.
+	case prreview.PhaseNone, prreview.PhaseWaitingChecks:
+		// The findings are the user's to decide on, the pass is running, or
+		// it waits for the checks, which the poll moves on.
 	}
 }
 
@@ -170,35 +171,37 @@ func (s *Service) evaluateCommit(ctx context.Context, stored prreview.Review, wt
 	}
 
 	id := stored.ID
-	stored, repo, _, err := s.active(id)
-	if err != nil {
-		s.log.Error("ask review pass failed", "review", id, "error", err)
-		return
-	}
 	// The fixes of the pass went up whatever becomes of the next one, and the
 	// next one lists them as applied. The review stays committing until that
 	// pass is asked for, so that the next evaluation tries both again instead
 	// of offering to apply findings that already went up.
-	if err = s.reviews.MarkApplied(ctx, id, stored.ReportedPass); err != nil {
+	if err := s.reviews.MarkApplied(ctx, id, stored.ReportedPass); err != nil {
 		s.log.Error("mark review pass applied failed", "review", id, "pass", stored.ReportedPass, "error", err)
 		return
 	}
-	// The worktree is already on the commit that went up, and an evaluation
-	// reads nothing from GitHub: the document of the review stays as the last
-	// reading of the pull request wrote it.
-	if err = s.askPass(ctx, stored, repo, nil, ""); err != nil {
+	// The next pass waits for the checks of the commit that went up. An
+	// evaluation reads nothing from GitHub: the poll brings the reading, and
+	// the pass starts from it.
+	if _, err := s.reviews.AskPass(ctx, id, stored.ReportedPass+1, ""); err != nil {
 		s.log.Error("ask review pass failed", "review", id, "error", err)
 		return
 	}
-	s.log.Info("review commit pushed", "review", id, "commit", snap.Head)
-	if err = s.setPhase(ctx, id, prreview.PhaseNone); err != nil {
+	l := s.lockOf(id)
+	s.mu.Lock()
+	l.wait = checksWait{afterPush: true}
+	l.passBlocked = ""
+	s.mu.Unlock()
+	if err := s.setPhase(ctx, id, prreview.PhaseWaitingChecks); err != nil {
 		s.log.Error("record review phase failed", "review", id, "error", err)
+		return
 	}
 	s.watch.Forget(id)
+	s.log.Info("review commit pushed", "review", id, "commit", snap.Head)
 	s.notify(id)
+	s.Poll()
 }
 
-// setPhase records where a review in apply mode is in its cycle.
+// setPhase records where a review is in the cycle of a pass.
 func (s *Service) setPhase(ctx context.Context, id string, phase prreview.Phase) error {
 	_, err := s.reviews.Update(ctx, id, func(r *prreview.Review) { r.Phase = phase })
 	return err

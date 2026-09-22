@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
+	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/prompts"
 )
 
@@ -453,6 +454,11 @@ func discussionVars() prompts.Vars {
 	}
 }
 
+// noReadingEnding is how the prompt of the review of a pull request ends when
+// it has no instructions and the app read nothing from GitHub for the pass.
+const noReadingEnding = "`gh pr view 42 --json statusCheckRollup,mergeable` says the checks and whether the branch " +
+	"merges clean, and everything above about checks and conflicts holds."
+
 // oneShotSection is how the section about the document of a One-Shot task
 // opens once rendered.
 const oneShotSection = "\n\n## One-Shot task\n\nThis task was planned in a single document, `" + oneShotPath + "`, instead of"
@@ -884,14 +890,15 @@ func TestRenderTheDefaultPromptsThatReadTheDocumentsPointToTheOneShotDocument(t 
 
 	tests := []struct {
 		stage prompts.Stage
-		// ending is how the rendered prompt ends: the note of its kind, and for
-		// a step reviewer the reply of the implementer after it.
+		// ending is how the rendered prompt ends: the note of its kind, for a
+		// step reviewer the reply of the implementer after it, and for a pull
+		// request reviewer the GitHub sections after it.
 		ending string
 	}{
 		{prompts.StageStepReview, "the plan the step follows is that document." +
 			"\n\n## The implementer's last response\n\nI added the store."},
 		{prompts.StagePR, "Never mention it in the pull request, as with any other document of the process."},
-		{prompts.StagePRReview, "a deviation from them is a finding, even when the code works."},
+		{prompts.StagePRReview, noReadingEnding},
 	}
 
 	dataDir := t.TempDir()
@@ -974,6 +981,9 @@ func TestRenderOfAStructuredTaskSaysNothingAboutOneShot(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Render() = %v, want nil", err)
 			}
+			// The review of a pull request ends with the GitHub sections, which
+			// other tests cover.
+			got, _, _ = strings.Cut(got, "\n\n## GitHub checks and conflicts")
 			if got != test.want {
 				t.Errorf("Render() = %q, want %q", got, test.want)
 			}
@@ -999,7 +1009,7 @@ func TestRenderAppendsTheOneShotNoteToAnEditWithoutPlaceholders(t *testing.T) {
 	}{
 		{prompts.StageStepReview, "\n\n## The implementer's last response\n\nI added the store."},
 		{prompts.StagePR, "document of the process."},
-		{prompts.StagePRReview, "even when the code works."},
+		{prompts.StagePRReview, noReadingEnding},
 	}
 
 	for _, test := range tests {
@@ -1286,7 +1296,7 @@ func TestRenderTellsTheReviewOfAPullRequestWhatBecomesOfItsFindings(t *testing.T
 	}
 }
 
-func TestRenderGivesTheReviewOfThePullRequestOfATaskOnlyTheInstructions(t *testing.T) {
+func TestRenderGivesTheReviewOfThePullRequestOfATaskTheGitHubSectionsAndTheInstructions(t *testing.T) {
 	t.Parallel()
 
 	dataDir := t.TempDir()
@@ -1299,13 +1309,20 @@ func TestRenderGivesTheReviewOfThePullRequestOfATaskOnlyTheInstructions(t *testi
 		t.Fatalf("Render() = %v, want nil", err)
 	}
 
-	want := "review it\n\n## Review instructions\n\nNever change a published migration."
-	if diff := cmp.Diff(want, got); diff != "" {
-		t.Errorf("Render() mismatch (-want +got):\n%s", diff)
+	if want := "review it\n\n## GitHub checks and conflicts\n\n"; !strings.HasPrefix(got, want) {
+		t.Errorf("Render() = %q, want it to start with %q", got, want)
+	}
+	if want := noReadingEnding + "\n\n## Review instructions\n\nNever change a published migration."; !strings.HasSuffix(got, want) {
+		t.Errorf("Render() = %q, want it to end with %q", got, want)
+	}
+	for _, unwanted := range []string{"## Pull request without a task", "## Findings format", "## Publishing", "## Applying"} {
+		if strings.Contains(got, unwanted) {
+			t.Errorf("Render() = %q, want no section %q in the review of a task", got, unwanted)
+		}
 	}
 }
 
-func TestRenderAppendsNoReviewSectionWithoutOne(t *testing.T) {
+func TestRenderAppendsOnlyTheGitHubSectionsToAReviewWithoutInstructions(t *testing.T) {
 	t.Parallel()
 
 	dataDir := t.TempDir()
@@ -1315,8 +1332,14 @@ func TestRenderAppendsNoReviewSectionWithoutOne(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Render() = %v, want nil", err)
 	}
-	if got != "review it" {
-		t.Errorf("Render() = %q, want %q", got, "review it")
+	if want := "review it\n\n## GitHub checks and conflicts\n\n"; !strings.HasPrefix(got, want) {
+		t.Errorf("Render() = %q, want it to start with %q", got, want)
+	}
+	if !strings.HasSuffix(got, noReadingEnding) {
+		t.Errorf("Render() = %q, want it to end with %q", got, noReadingEnding)
+	}
+	if count := strings.Count(got, "\n\n## "); count != 2 {
+		t.Errorf("Render() has %d sections, want the 2 GitHub sections", count)
 	}
 }
 
@@ -1338,12 +1361,169 @@ func TestRenderAppendsTheReviewSectionsOnlyToThePromptOfAReview(t *testing.T) {
 			for _, heading := range []string{
 				"## Pull request without a task", "## Findings format", "## Publishing",
 				"## Review instructions", "## Instructions for this pass",
+				"## GitHub checks and conflicts", "## GitHub status",
 			} {
 				if strings.Contains(got, heading) {
 					t.Errorf("rendered %s prompt carries the section %q", stage, heading)
 				}
 			}
 		})
+	}
+}
+
+// checksVars are the vars the review of the pull request of a task renders
+// with after the app read a failing check and a conflict on GitHub.
+func checksVars() prompts.Vars {
+	vars := everyVar()
+	vars.MergeBase = "origin/main"
+	vars.Checks = &gh.PRChecks{
+		Checks: []gh.Check{
+			{Name: "build", URL: "https://github.com/acme/api/actions/runs/7/job/1", Conclusion: "success"},
+			{Name: "test", URL: "https://github.com/acme/api/actions/runs/7/job/2", Conclusion: "failure"},
+		},
+		Mergeable: gh.MergeableConflicting,
+	}
+	return vars
+}
+
+func TestRenderAppendsTheGitHubStatusToAPullRequestReview(t *testing.T) {
+	t.Parallel()
+
+	dataDir := t.TempDir()
+	write(t, dataDir, prompts.StagePRReview, "review it")
+
+	got, err := prompts.Render(dataDir, prompts.StagePRReview, checksVars())
+	if err != nil {
+		t.Fatalf("Render() = %v, want nil", err)
+	}
+
+	for _, want := range []string{
+		"\n\n## GitHub checks and conflicts\n\n",
+		"`gh pr checks 42`",
+		"`git merge-tree --write-tree HEAD origin/main`",
+		"`git merge origin/main`",
+		"\n\n## GitHub status\n\n- Checks: 1 of 2 failed:\n",
+		"  - `test` — failure — https://github.com/acme/api/actions/runs/7/job/2\n",
+		"- Base: the branch has conflicts with `main`; an approved conflict is resolved by merging `origin/main` into the branch, never by rebasing.",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("Render() = %q, want it to contain %q", got, want)
+		}
+	}
+	if strings.Contains(got, "`build`") {
+		t.Errorf("Render() = %q, want no check that passed in the status", got)
+	}
+	if strings.Contains(got, "{{") {
+		t.Errorf("Render() = %q, want every placeholder of the sections replaced", got)
+	}
+}
+
+func TestRenderSaysWhenThereIsNoReadingOfGitHub(t *testing.T) {
+	t.Parallel()
+
+	dataDir := t.TempDir()
+	write(t, dataDir, prompts.StagePRReview, "review it")
+
+	got, err := prompts.Render(dataDir, prompts.StagePRReview, everyVar())
+	if err != nil {
+		t.Fatalf("Render() = %v, want nil", err)
+	}
+
+	want := "\n\n## GitHub status\n\nThe app has no reading of GitHub for this pass. Read it yourself before reviewing: " +
+		noReadingEnding
+	if !strings.HasSuffix(got, want) {
+		t.Errorf("Render() = %q, want it to end with %q", got, want)
+	}
+}
+
+func TestRenderAppendsTheGitHubStatusAfterThePublishingNote(t *testing.T) {
+	t.Parallel()
+
+	dataDir := t.TempDir()
+	write(t, dataDir, prompts.StagePRReview, "review it")
+	vars := externalReviewVars()
+	vars.Instructions = "Never change a published migration."
+	vars.Checks, vars.MergeBase = checksVars().Checks, "origin/dev"
+
+	got, err := prompts.Render(dataDir, prompts.StagePRReview, vars)
+	if err != nil {
+		t.Fatalf("Render() = %v, want nil", err)
+	}
+
+	at := 0
+	for _, heading := range []string{
+		"\n\n## Publishing\n\n",
+		"\n\n## GitHub checks and conflicts\n\n",
+		"\n\n## GitHub status\n\n",
+		"\n\n## Review instructions\n\n",
+	} {
+		i := strings.Index(got[at:], heading)
+		if i < 0 {
+			t.Fatalf("Render() = %q, want %q after what comes before it", got, heading)
+		}
+		at += i + len(heading)
+	}
+}
+
+func TestPRChecksSectionReadsEachOutcome(t *testing.T) {
+	t.Parallel()
+
+	passed := gh.Check{Name: "build", URL: "https://ci.example.com/1", Conclusion: "success"}
+	tests := []struct {
+		name   string
+		checks gh.PRChecks
+		want   string
+	}{
+		{
+			"no checks",
+			gh.PRChecks{Checks: []gh.Check{}, Mergeable: gh.MergeableClean},
+			"- Checks: the pull request has no checks.\n- Base: the branch merges clean into `main`.",
+		},
+		{
+			"one passed",
+			gh.PRChecks{Checks: []gh.Check{passed}, Mergeable: gh.MergeableClean},
+			"- Checks: 1 check passed.\n- Base: the branch merges clean into `main`.",
+		},
+		{
+			"all passed",
+			gh.PRChecks{Checks: []gh.Check{passed, {Name: "lint", Conclusion: "skipped"}}, Mergeable: gh.MergeableClean},
+			"- Checks: all 2 checks passed.\n- Base: the branch merges clean into `main`.",
+		},
+		{
+			"one failed without a link",
+			gh.PRChecks{Checks: []gh.Check{passed, {Name: "deploy", Conclusion: "cancelled"}}, Mergeable: gh.MergeableClean},
+			"- Checks: 1 of 2 failed:\n  - `deploy` — cancelled\n- Base: the branch merges clean into `main`.",
+		},
+		{
+			"conflict",
+			gh.PRChecks{Checks: []gh.Check{passed}, Mergeable: gh.MergeableConflicting},
+			"- Checks: 1 check passed.\n- Base: the branch has conflicts with `main`; an approved conflict is " +
+				"resolved by merging `origin/main` into the branch, never by rebasing.",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := prompts.PRChecksSection(&test.checks, "origin/main")
+			if diff := cmp.Diff(test.want, got); diff != "" {
+				t.Errorf("PRChecksSection() mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestTheDefaultCommitPromptConcludesAMergeInProgress(t *testing.T) {
+	t.Parallel()
+
+	got, err := prompts.Render(t.TempDir(), prompts.StageCommit, everyVar())
+	if err != nil {
+		t.Fatalf("Render(commit) = %v, want nil", err)
+	}
+	for _, want := range []string{"MERGE_HEAD", "`git commit --no-edit`"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("rendered commit prompt does not contain %q", want)
+		}
 	}
 }
 

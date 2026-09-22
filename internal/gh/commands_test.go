@@ -59,7 +59,10 @@ func TestAuthFailsWithoutGhOnThePath(t *testing.T) {
 func TestViewPRReadsThePullRequestOfTheBranch(t *testing.T) {
 	t.Parallel()
 	r, fake := runner(t, map[string]ghtest.Reply{
-		"pr": {Stdout: `{"number":42,"url":"https://github.com/acme/api/pull/42","state":"OPEN","baseRefName":"dev"}`},
+		"pr": {Stdout: `{"number":42,"url":"https://github.com/acme/api/pull/42","state":"OPEN","baseRefName":"dev",` +
+			`"mergeable":"MERGEABLE","statusCheckRollup":[` +
+			`{"__typename":"CheckRun","name":"test","status":"COMPLETED","conclusion":"SUCCESS","detailsUrl":"https://github.com/acme/api/actions/runs/1"},` +
+			`{"__typename":"StatusContext","context":"ci/deploy","state":"PENDING","targetUrl":"https://ci.example.com/2"}]}`},
 	})
 
 	dir := t.TempDir()
@@ -67,16 +70,28 @@ func TestViewPRReadsThePullRequestOfTheBranch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ViewPR() = %v, want nil", err)
 	}
-	want := gh.PR{Number: 42, URL: "https://github.com/acme/api/pull/42", State: gh.StateOpen, Base: "dev"}
-	if got != want {
-		t.Errorf("ViewPR() = %+v, want %+v", got, want)
+	want := gh.PR{
+		Number: 42,
+		URL:    "https://github.com/acme/api/pull/42",
+		State:  gh.StateOpen,
+		Base:   "dev",
+		Checks: gh.PRChecks{
+			Checks: []gh.Check{
+				{Name: "test", URL: "https://github.com/acme/api/actions/runs/1", Conclusion: "success"},
+				{Name: "ci/deploy", URL: "https://ci.example.com/2", Pending: true},
+			},
+			Mergeable: gh.MergeableClean,
+		},
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("ViewPR() mismatch (-want +got):\n%s", diff)
 	}
 
 	calls := fake.Calls(t)
 	if len(calls) != 1 {
 		t.Fatalf("calls = %+v, want one", calls)
 	}
-	if calls[0].Args != "pr view login-screen --json number,url,state,baseRefName" {
+	if calls[0].Args != "pr view login-screen --json number,url,state,baseRefName,mergeable,statusCheckRollup" {
 		t.Errorf("args = %q, want the branch and the fields the app reads", calls[0].Args)
 	}
 	if calls[0].Dir != dir {

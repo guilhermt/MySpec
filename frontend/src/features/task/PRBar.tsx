@@ -92,7 +92,7 @@ export function PRBar({ task, pr }: PRBarProps) {
   const tone = situation !== null ? situationTone(situation) : prStatusTone(pr);
 
   const status = asPRStatus(pr.status);
-  const preparing = status === "preparing";
+  const spinning = status === "preparing" || status === "waiting_checks";
   const committing = status === "committing";
   const reviewing = REVIEW_STATES.includes(status);
   const closing = status === "closing";
@@ -164,7 +164,7 @@ export function PRBar({ task, pr }: PRBarProps) {
         aria-live="polite"
         className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground"
       >
-        {preparing ? (
+        {spinning ? (
           <>
             <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" />
             {prStatusLabel(pr)}
