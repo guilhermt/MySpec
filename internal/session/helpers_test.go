@@ -46,8 +46,12 @@ func renderPrompt(stage prompts.Stage, vars prompts.Vars) (string, error) {
 		return fmt.Sprintf("Stage %s of task %s writes %s in %s from: %s",
 			stage, vars.TaskName, vars.OneShotPath, vars.Repository, vars.InitialContext), nil
 	case prompts.StagePRReview:
-		return fmt.Sprintf("Stage %s reviews %s (external %t, publish %t) with %q and %q",
-			stage, vars.ContextPath, vars.External, vars.Publish, vars.Instructions, vars.PassInstructions), nil
+		rendered := fmt.Sprintf("Stage %s reviews %s (external %t, publish %t) with %q and %q",
+			stage, vars.ContextPath, vars.External, vars.Publish, vars.Instructions, vars.PassInstructions)
+		if vars.Checks != nil {
+			rendered += "\n\n## GitHub status\n\n" + prompts.PRChecksSection(vars.Checks, vars.MergeBase)
+		}
+		return rendered, nil
 	case prompts.StagePR:
 		return fmt.Sprintf("Stage %s of task %s opens %s from %s, with the card %s: %s",
 			stage, vars.TaskName, vars.Branch, vars.BaseBranch, vars.CardReference, vars.Card), nil
