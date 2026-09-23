@@ -1098,7 +1098,7 @@ func (f *fixture) startMode(t *testing.T, mode prreview.Mode, instructions strin
 		RepositoryID: repoID,
 		Number:       prNumber,
 		Instructions: instructions,
-		Choice:       models.Choice{Model: models.Opus5, Effort: models.High},
+		Choice:       models.Choice{Model: models.Opus55, Effort: models.High},
 		Mode:         mode,
 	})
 	if err != nil {

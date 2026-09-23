@@ -113,7 +113,7 @@ func TestNewReadsTheSavedDefaults(t *testing.T) {
 	t.Parallel()
 
 	want := models.Factory()
-	want[models.Implementation] = models.Choice{Model: models.Opus5, Effort: models.XHigh}
+	want[models.Implementation] = models.Choice{Model: models.Opus55, Effort: models.XHigh}
 
 	service, _ := newService(t, newSettings(savedDefaults(t, want)))
 	if diff := cmp.Diff(want, service.Defaults()); diff != "" {

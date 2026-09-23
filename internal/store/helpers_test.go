@@ -115,7 +115,7 @@ func newSession(id, taskID string, stage task.Stage) session.Record {
 		ID:        id,
 		TaskID:    taskID,
 		Stage:     string(stage),
-		Choice:    models.Choice{Model: models.Opus5, Effort: models.High},
+		Choice:    models.Choice{Model: models.Opus55, Effort: models.High},
 		CreatedAt: fixedTime,
 		UpdatedAt: fixedTime,
 	}

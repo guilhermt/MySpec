@@ -9,49 +9,42 @@ import (
 	"github.com/guilhermt/myspec/internal/models"
 )
 
-func TestParseChoiceAcceptsEveryModelAndEffort(t *testing.T) {
-	t.Parallel()
-
-	for _, model := range models.Models {
-		for _, effort := range models.Efforts {
-			t.Run(string(model)+" "+string(effort), func(t *testing.T) {
-				t.Parallel()
-
-				got, err := models.ParseChoice(string(model), string(effort))
-				if err != nil {
-					t.Fatalf("ParseChoice(%q, %q) = %v, want nil", model, effort, err)
-				}
-				want := models.Choice{Model: model, Effort: effort}
-				if diff := cmp.Diff(want, got); diff != "" {
-					t.Errorf("ParseChoice() mismatch (-want +got):\n%s", diff)
-				}
-				if !got.Valid() {
-					t.Error("Valid() = false, want a parsed choice to be valid")
-				}
-			})
-		}
-	}
-}
-
-func TestParseChoiceRejectsWhatTheAppDoesNotOffer(t *testing.T) {
+func TestParseChoiceKeepsWhatItIsGiven(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]struct {
 		model, effort string
-		want          error
 	}{
-		"unknown model":  {model: "claude-haiku-4-5", effort: "high", want: models.ErrUnknownModel},
-		"unknown effort": {model: "claude-opus-5", effort: "ultra", want: models.ErrUnknownEffort},
-		// The model is checked first, so an empty pair fails on it.
-		"neither": {model: "", effort: "", want: models.ErrUnknownModel},
+		"a model of the catalog":    {model: "claude-opus-5-5[1m]", effort: "high"},
+		"a model that takes none":   {model: "claude-haiku-4-5-20251001", effort: ""},
+		"neither one nor the other": {model: "gpt", effort: "ultra"},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			if _, err := models.ParseChoice(tc.model, tc.effort); !errors.Is(err, tc.want) {
-				t.Errorf("ParseChoice(%q, %q) = %v, want %v", tc.model, tc.effort, err, tc.want)
+			got, err := models.ParseChoice(tc.model, tc.effort)
+			if err != nil {
+				t.Fatalf("ParseChoice(%q, %q) = %v, want nil", tc.model, tc.effort, err)
+			}
+			want := models.Choice{Model: models.Model(tc.model), Effort: models.Effort(tc.effort)}
+			if diff := cmp.Diff(want, got); diff != "" {
+				t.Errorf("ParseChoice() mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestParseChoiceRejectsAnEmptyModel(t *testing.T) {
+	t.Parallel()
+
+	for _, effort := range []string{"high", ""} {
+		t.Run("effort "+effort, func(t *testing.T) {
+			t.Parallel()
+
+			if _, err := models.ParseChoice("", effort); !errors.Is(err, models.ErrEmptyModel) {
+				t.Errorf("ParseChoice(%q, %q) = %v, want models.ErrEmptyModel", "", effort, err)
 			}
 		})
 	}
@@ -97,10 +90,10 @@ func TestFactoryIsTheTableOfThePRD(t *testing.T) {
 		models.TechSpec:       {Model: models.Fable51, Effort: models.High},
 		models.Plan:           {Model: models.Fable51, Effort: models.High},
 		models.OneShot:        {Model: models.Fable51, Effort: models.High},
-		models.Implementation: {Model: models.Opus5, Effort: models.High},
-		models.StepReview:     {Model: models.Opus5, Effort: models.High},
-		models.PR:             {Model: models.Opus5, Effort: models.Medium},
-		models.PRReview:       {Model: models.Opus5, Effort: models.High},
+		models.Implementation: {Model: models.Opus55, Effort: models.High},
+		models.StepReview:     {Model: models.Opus55, Effort: models.High},
+		models.PR:             {Model: models.Opus55, Effort: models.Medium},
+		models.PRReview:       {Model: models.Opus55, Effort: models.High},
 		models.Discussion:     {Model: models.Fable51, Effort: models.High},
 	}
 	if diff := cmp.Diff(want, models.Factory()); diff != "" {
@@ -116,23 +109,27 @@ func TestFactoryIsTheTableOfThePRD(t *testing.T) {
 	}
 }
 
-func TestCompleteFillsWhatIsMissingOrInvalid(t *testing.T) {
+func TestCompleteFillsWhatIsMissingOrEmpty(t *testing.T) {
 	t.Parallel()
 
 	set := models.Set{
-		models.PRD:  {Model: models.Opus5, Effort: models.Max},
-		models.Plan: {Model: "gpt", Effort: models.High},
+		models.PRD:      {Model: models.Opus55, Effort: models.Max},
+		models.Plan:     {Model: "gpt", Effort: models.High},
+		models.TechSpec: {Model: "", Effort: models.High},
 	}
 	want := models.Factory()
-	want[models.PRD] = models.Choice{Model: models.Opus5, Effort: models.Max}
+	want[models.PRD] = models.Choice{Model: models.Opus55, Effort: models.Max}
+	// A model the catalog does not know is not an empty one: it is kept.
+	want[models.Plan] = models.Choice{Model: "gpt", Effort: models.High}
 
 	if diff := cmp.Diff(want, models.Complete(set)); diff != "" {
 		t.Errorf("Complete() mismatch (-want +got):\n%s", diff)
 	}
 
 	argument := models.Set{
-		models.PRD:  {Model: models.Opus5, Effort: models.Max},
-		models.Plan: {Model: "gpt", Effort: models.High},
+		models.PRD:      {Model: models.Opus55, Effort: models.Max},
+		models.Plan:     {Model: "gpt", Effort: models.High},
+		models.TechSpec: {Model: "", Effort: models.High},
 	}
 	if diff := cmp.Diff(argument, set); diff != "" {
 		t.Errorf("Complete() changed its argument (-want +got):\n%s", diff)
@@ -147,10 +144,10 @@ func TestCompleteGivesTheOneShotPlanningToDefaultsSavedBeforeIt(t *testing.T) {
 
 	saved := models.Factory()
 	delete(saved, models.OneShot)
-	saved[models.Plan] = models.Choice{Model: models.Opus5, Effort: models.Max}
+	saved[models.Plan] = models.Choice{Model: models.Opus55, Effort: models.Max}
 
 	want := models.Factory()
-	want[models.Plan] = models.Choice{Model: models.Opus5, Effort: models.Max}
+	want[models.Plan] = models.Choice{Model: models.Opus55, Effort: models.Max}
 	if diff := cmp.Diff(want, models.Complete(saved)); diff != "" {
 		t.Errorf("Complete() mismatch (-want +got):\n%s", diff)
 	}

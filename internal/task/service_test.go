@@ -952,7 +952,7 @@ func TestSetStepModelMakesTheChoiceOfTheStepItsOwn(t *testing.T) {
 
 	f := newFixture(t)
 	created := f.create(t, "add-login")
-	want := models.Choice{Model: models.Opus5, Effort: models.Max}
+	want := models.Choice{Model: models.Opus55, Effort: models.Max}
 
 	got, err := f.service.SetStepModel(t.Context(), created.ID, 2, want)
 	if err != nil {
@@ -1046,7 +1046,7 @@ func TestSetModelOfAnUnknownTaskIsNotFound(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	choice := models.Choice{Model: models.Opus5, Effort: models.High}
+	choice := models.Choice{Model: models.Opus55, Effort: models.High}
 
 	_, err := f.service.SetStageModel(t.Context(), "nope", models.PRD, choice)
 	wantErrIs(t, err, task.ErrNotFound)
@@ -1084,7 +1084,7 @@ func TestAChangeOfModelLeavesATaskTakenBeforeAlone(t *testing.T) {
 	created := f.create(t, "add-login")
 
 	if _, err := f.service.SetStepModel(t.Context(), created.ID, 1,
-		models.Choice{Model: models.Opus5, Effort: models.Max}); err != nil {
+		models.Choice{Model: models.Opus55, Effort: models.Max}); err != nil {
 		t.Fatalf("SetStepModel() = %v, want nil", err)
 	}
 
@@ -1115,7 +1115,7 @@ func TestRemovingThePlanForgetsTheModelsOfTheSteps(t *testing.T) {
 				t.Fatalf("SetStageModel() = %v, want nil", err)
 			}
 			if _, err := f.service.SetStepModel(t.Context(), created.ID, 1,
-				models.Choice{Model: models.Opus5, Effort: models.Max}); err != nil {
+				models.Choice{Model: models.Opus55, Effort: models.Max}); err != nil {
 				t.Fatalf("SetStepModel() = %v, want nil", err)
 			}
 
@@ -1269,7 +1269,7 @@ func TestRemoveArtifactsFromTheOneShotPlanningStartsTheStepOver(t *testing.T) {
 	}
 	writeFile(t, created.StepReportPath(1, 1), "# Review\n")
 	if _, err := f.service.SetStepModel(t.Context(), created.ID, 1,
-		models.Choice{Model: models.Opus5, Effort: models.Max}); err != nil {
+		models.Choice{Model: models.Opus55, Effort: models.Max}); err != nil {
 		t.Fatalf("SetStepModel() = %v, want nil", err)
 	}
 	if _, err := f.service.SetStepReviewMode(t.Context(), created.ID, 1, reviewmode.Agent); err != nil {

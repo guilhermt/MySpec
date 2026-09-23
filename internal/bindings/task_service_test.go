@@ -318,23 +318,45 @@ func TestCreateTaskStartsFromTheDefaultsOfTheSettings(t *testing.T) {
 	}
 }
 
-func TestCreateTaskReportsAnUnknownModel(t *testing.T) {
+func TestCreateTaskReportsAnEmptyModel(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
 	f.register(t, t.TempDir())
 
 	req := newTask("login-screen")
-	req.Models = []bindings.StageModel{{Stage: "prd", Model: "gpt", Effort: "high"}}
+	req.Models = []bindings.StageModel{{Stage: "prd", Model: "", Effort: "high"}}
 	id, err := f.tasks.CreateTask(req)
 	if err == nil {
 		t.Fatalf("CreateTask() = %q, nil, want an error", id)
 	}
-	if err.Error() != "Unknown model." {
-		t.Errorf("CreateTask() error = %q, want the unknown model notice", err)
+	if err.Error() != "Choose a model." {
+		t.Errorf("CreateTask() error = %q, want the notice about the model", err)
 	}
 	if tasks := f.state.GetState().Tasks; len(tasks) != 0 {
 		t.Errorf("state has %d tasks, want none", len(tasks))
+	}
+}
+
+func TestCreateTaskKeepsAModelTheCatalogDoesNotHave(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.register(t, t.TempDir())
+
+	// A model saved before, or one the installed CLI stopped offering, is
+	// nobody's mistake: it is kept as it is, effort included.
+	req := newTask("login-screen")
+	req.Models = []bindings.StageModel{{Stage: "prd", Model: "gpt", Effort: ""}}
+	id, err := f.tasks.CreateTask(req)
+	if err != nil {
+		t.Fatalf("CreateTask() = %v, want nil", err)
+	}
+	f.waitForStatus(t, id, "waiting")
+
+	got := stageModelOf(t, f.taskOf(t, id), "prd")
+	if got.Model != "gpt" || got.Effort != "" {
+		t.Errorf("prd = %+v, want the choice as it was given", got)
 	}
 }
 
@@ -458,9 +480,9 @@ func TestSetStepModelReportsWhatTheUserGotWrong(t *testing.T) {
 
 	f, _, id := createdTask(t)
 
-	err := f.tasks.SetStepModel(id, 1, "claude-opus-5", "huge")
-	if err == nil || err.Error() != "Unknown effort level." {
-		t.Errorf("SetStepModel() error = %v, want the unknown effort notice", err)
+	err := f.tasks.SetStepModel(id, 1, "", "high")
+	if err == nil || err.Error() != "Choose a model." {
+		t.Errorf("SetStepModel() error = %v, want the notice about the model", err)
 	}
 
 	// The task has no plan yet, so there is no step to change.
@@ -815,13 +837,13 @@ func TestPlanWrittenReachesImplementation(t *testing.T) {
 				Files: []bindings.ReviewFile{{Path: "hello.txt", Kind: "untracked"}},
 				Total: 1,
 			},
-			Model: "claude-opus-5", Effort: "high",
+			Model: "claude-opus-5-5[1m]", Effort: "high",
 			ReviewMode: "manual", Reports: []bindings.StepReport{},
 		},
 		{
 			Number: 2, File: "2-second.md", Title: "Second",
 			Status: "not_started", WorktreePath: wt,
-			Model: "claude-opus-5", Effort: "high", ModelEditable: true,
+			Model: "claude-opus-5-5[1m]", Effort: "high", ModelEditable: true,
 			ReviewMode: "manual", ReviewModeEditable: true, Reports: []bindings.StepReport{},
 		},
 	}

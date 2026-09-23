@@ -99,7 +99,7 @@ func TestTheConversationOfAReviewReviewsTheWorktreeAgainstTheContextDocument(t *
 		Publish:          true,
 		Instructions:     "never change a published migration",
 		PassInstructions: "look at the tests",
-		Choice:           models.Choice{Model: models.Opus5, Effort: models.High},
+		Choice:           models.Choice{Model: models.Opus55, Effort: models.High},
 		Checks:           &gh.PRChecks{Checks: []gh.Check{}, Mergeable: gh.MergeableClean},
 		MergeBase:        "origin/main",
 	}

@@ -1664,8 +1664,8 @@ func TestStartRunsWithTheModelAndEffortOfTheStage(t *testing.T) {
 	if len(starts) != 1 {
 		t.Fatalf("starts = %d, want one", len(starts))
 	}
-	if starts[0].Model != "claude-opus-5" || starts[0].Effort != "high" {
-		t.Errorf("start = %q and %q, want claude-opus-5 and high", starts[0].Model, starts[0].Effort)
+	if starts[0].Model != "claude-opus-5-5[1m]" || starts[0].Effort != "high" {
+		t.Errorf("start = %q and %q, want claude-opus-5-5[1m] and high", starts[0].Model, starts[0].Effort)
 	}
 	if got := f.summary(t, prd("t1")).Choice; got != info.Choice {
 		t.Errorf("Choice = %+v, want %+v", got, info.Choice)
@@ -1835,7 +1835,7 @@ func TestSetChoiceOfASessionThatIsNotOpenIsNotFound(t *testing.T) {
 
 	f := newFixture(t, "echo")
 
-	err := f.service.SetChoice(t.Context(), prd("t1"), models.Choice{Model: models.Opus5, Effort: models.Low})
+	err := f.service.SetChoice(t.Context(), prd("t1"), models.Choice{Model: models.Opus55, Effort: models.Low})
 	wantErrIs(t, err, session.ErrNotFound)
 }
 

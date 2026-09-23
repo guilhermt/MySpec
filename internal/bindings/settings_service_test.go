@@ -89,7 +89,7 @@ func TestSetModelDefaultReportsWhatTheUserGotWrong(t *testing.T) {
 		// The commit has no choice of its own: it runs in the session that
 		// sends it.
 		{name: "stage with no choice", stage: "commit", model: "claude-opus-5", effort: "high", want: "Unknown stage."},
-		{name: "unknown model", stage: "prd", model: "gpt", effort: "high", want: "Unknown model."},
+		{name: "no model", stage: "prd", model: "", effort: "high", want: "Choose a model."},
 	}
 
 	for _, tt := range tests {
