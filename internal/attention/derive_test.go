@@ -7,6 +7,7 @@ import (
 
 	"github.com/guilhermt/myspec/internal/attention"
 	"github.com/guilhermt/myspec/internal/flow"
+	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/review"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
@@ -412,6 +413,48 @@ func TestDeriveThePullRequestOfThePRStage(t *testing.T) {
 			situation(attention.KindMerge, attention.FormClose, 0, "The pull request is ready to close."),
 		},
 		{
+			"a check failed after the review",
+			prInput(flow.PullRequest{
+				Status: flow.PRTrouble, PR: task.PRDetails{Base: "main"},
+				Trouble: gh.Trouble{FailedChecks: []string{"ci"}},
+			}),
+			situation(attention.KindPRTrouble, attention.FormChecks, 0, "A check failed after the review: ci."),
+		},
+		{
+			"a conflict with the base GitHub names",
+			prInput(flow.PullRequest{
+				Status: flow.PRTrouble, PR: task.PRDetails{Base: "main"}, BaseBranch: "origin/develop",
+				Trouble: gh.Trouble{FailedChecks: []string{}, Conflict: true},
+			}),
+			situation(attention.KindPRTrouble, attention.FormConflict, 0,
+				"The pull request has a conflict with main."),
+		},
+		{
+			"a conflict with the base of the worktree before gh names one",
+			prInput(flow.PullRequest{
+				Status: flow.PRTrouble, BaseBranch: "origin/develop", Trouble: gh.Trouble{Conflict: true},
+			}),
+			situation(attention.KindPRTrouble, attention.FormConflict, 0,
+				"The pull request has a conflict with develop."),
+		},
+		{
+			"checks failed and a conflict",
+			prInput(flow.PullRequest{
+				Status: flow.PRTrouble, PR: task.PRDetails{Base: "main"},
+				Trouble: gh.Trouble{FailedChecks: []string{"ci", "lint"}, Conflict: true},
+			}),
+			situation(attention.KindPRTrouble, attention.FormChecksConflict, 0,
+				"Checks failed after the review: ci, lint. The pull request has a conflict with main."),
+		},
+		{
+			"the conversation of a pull request in trouble is paused",
+			prInput(flow.PullRequest{
+				Status: flow.PRTrouble, Trouble: gh.Trouble{Conflict: true},
+				SessionStage: session.PRReviewStage, Session: summary(session.StatusPaused, false),
+			}),
+			nil,
+		},
+		{
 			"merged",
 			prInput(flow.PullRequest{Status: flow.PRMerged, CanClose: true}),
 			situation(attention.KindMerge, attention.FormClose, 0, "The pull request is ready to close."),
@@ -537,6 +580,49 @@ func TestStepAndPRBlockPhrases(t *testing.T) {
 	}
 }
 
+func TestTroubleBodies(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		trouble gh.Trouble
+		base    string
+		body    string
+	}{
+		{"one check", gh.Trouble{FailedChecks: []string{"ci"}}, "main", "A check failed after the review: ci."},
+		{
+			"several checks",
+			gh.Trouble{FailedChecks: []string{"build", "ci", "lint"}},
+			"main",
+			"Checks failed after the review: build, ci, lint.",
+		},
+		{"a conflict", gh.Trouble{Conflict: true}, "main", "The pull request has a conflict with main."},
+		{"a conflict with no base known", gh.Trouble{Conflict: true}, "", "The pull request has a conflict with its base."},
+		{
+			"a check and a conflict",
+			gh.Trouble{FailedChecks: []string{"ci"}, Conflict: true},
+			"",
+			"A check failed after the review: ci. The pull request has a conflict with its base.",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := attention.Derive(prInput(flow.PullRequest{
+				Status: flow.PRTrouble, PR: task.PRDetails{Base: test.base}, Trouble: test.trouble,
+			}))
+			if len(got) != 1 {
+				t.Fatalf("Derive() = %v, want one situation", got)
+			}
+			if got[0].Body != test.body {
+				t.Errorf("body = %q, want %q", got[0].Body, test.body)
+			}
+		})
+	}
+}
+
 func TestPlaceKeysReadBack(t *testing.T) {
 	t.Parallel()
 
@@ -604,6 +690,7 @@ func TestKindsBelongToTheirGroup(t *testing.T) {
 		attention.KindReviewReport:    attention.GroupWaiting,
 		attention.KindNewCommits:      attention.GroupWaiting,
 		attention.KindDrafts:          attention.GroupWaiting,
+		attention.KindPRTrouble:       attention.GroupWaiting,
 
 		attention.KindMerge: attention.GroupClosing,
 	}

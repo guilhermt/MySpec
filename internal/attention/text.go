@@ -2,7 +2,9 @@ package attention
 
 import (
 	"strconv"
+	"strings"
 
+	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/task"
 )
 
@@ -212,6 +214,39 @@ func passBlockedBody() string {
 // review the user published.
 func newCommitsBody() string {
 	return "The pull request has new commits since your review."
+}
+
+// troubleForm is the form of a pull request in trouble: failed checks, a
+// conflict, or both.
+func troubleForm(t gh.Trouble) Form {
+	switch {
+	case len(t.FailedChecks) > 0 && t.Conflict:
+		return FormChecksConflict
+	case t.Conflict:
+		return FormConflict
+	default:
+		return FormChecks
+	}
+}
+
+// troubleBody is the notification of a pull request that stopped being ready
+// after its review: which checks failed, and the conflict with its base.
+func troubleBody(t gh.Trouble, base string) string {
+	var sentences []string
+	switch len(t.FailedChecks) {
+	case 0:
+	case 1:
+		sentences = append(sentences, "A check failed after the review: "+t.FailedChecks[0]+".")
+	default:
+		sentences = append(sentences, "Checks failed after the review: "+strings.Join(t.FailedChecks, ", ")+".")
+	}
+	if t.Conflict {
+		if base == "" {
+			base = "its base"
+		}
+		sentences = append(sentences, "The pull request has a conflict with "+base+".")
+	}
+	return strings.Join(sentences, " ")
 }
 
 // stepBlockPhrase is why a step could not start, inside a sentence: the title

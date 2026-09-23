@@ -6,6 +6,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 
 	"github.com/guilhermt/myspec/internal/attention"
+	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/prreview"
 	"github.com/guilhermt/myspec/internal/review"
 	"github.com/guilhermt/myspec/internal/reviewflow"
@@ -60,6 +61,17 @@ func TestDeriveTheSituationOfAReview(t *testing.T) {
 	unstaged.State.Watch = &review.Snapshot{Total: 4}
 	noCommit := reviewInput(reviewflow.StatusReadyToApprove)
 	noCommit.State.CommitFailed = true
+
+	// troubled is a review in trouble in a mode, with a failed check and a
+	// conflict with its base.
+	troubled := func(mode prreview.Mode) attention.ReviewInput {
+		in := reviewInput(reviewflow.StatusTrouble, waiting)
+		in.State.Review.Mode, in.State.Review.BaseBranch = mode, "main"
+		in.State.Review.Trouble = gh.Trouble{FailedChecks: []string{"ci"}, Conflict: true}
+		return in
+	}
+	conflicted := reviewInput(reviewflow.StatusTrouble, waiting)
+	conflicted.State.Review.Trouble = gh.Trouble{Conflict: true}
 
 	tests := []struct {
 		name string
@@ -139,6 +151,24 @@ func TestDeriveTheSituationOfAReview(t *testing.T) {
 			noCommit,
 			reviewSituation(attention.KindChangesReview, attention.FormApprove,
 				"The last approval of the pull request didn't produce a commit."),
+		},
+		{
+			"a published review whose pull request is in trouble",
+			troubled(prreview.ModePublish),
+			reviewSituation(attention.KindPRTrouble, attention.FormChecksConflict,
+				"A check failed after the review: ci. The pull request has a conflict with main."),
+		},
+		{
+			"a review whose applied changes are in trouble",
+			troubled(prreview.ModeApply),
+			reviewSituation(attention.KindPRTrouble, attention.FormChecksConflict,
+				"A check failed after the review: ci. The pull request has a conflict with main."),
+		},
+		{
+			"a pull request in trouble with a conflict only",
+			conflicted,
+			reviewSituation(attention.KindPRTrouble, attention.FormConflict,
+				"The pull request has a conflict with its base."),
 		},
 		{
 			"the pull request is ready to merge",

@@ -1,7 +1,9 @@
 package attention
 
 import (
+	"cmp"
 	"slices"
+	"strings"
 
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/session"
@@ -224,6 +226,11 @@ func prSituation(t task.Task, pr flow.PullRequest) (Found, bool) {
 	case flow.PRReadyToApprove:
 		found := newFound(t, place, KindChangesReview, changesReviewBody(FormApprove, pr.CommitFailed))
 		found.Form = FormApprove
+		return found, true
+	case flow.PRTrouble:
+		base := cmp.Or(pr.PR.Base, strings.TrimPrefix(pr.BaseBranch, "origin/"))
+		found := newFound(t, place, KindPRTrouble, troubleBody(pr.Trouble, base))
+		found.Form = troubleForm(pr.Trouble)
 		return found, true
 	case flow.PRDone:
 		form := FormMerge

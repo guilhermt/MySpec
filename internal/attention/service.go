@@ -122,6 +122,11 @@ type notice struct {
 	shown  bool // not withdrawn yet
 }
 
+// quietReturn says whether a situation that replaces another at the same
+// place is a return to where the place was, which nobody is told about: a
+// pull request whose trouble went away is ready to merge again.
+func quietReturn(from, to Kind) bool { return from == KindPRTrouble && to == KindMerge }
+
 // situationKey names a place of a task across the tasks the app loaded.
 func situationKey(taskID string, place Place) string { return taskID + "|" + place.Key() }
 
@@ -247,11 +252,17 @@ func (s *Service) Update(found []Found) map[string][]Situation {
 				continue
 			}
 			delete(s.candidates, key)
+			// held is still the situation that ends here: this loop runs before
+			// the one that ends what was not seen, and a settle and a grace that
+			// start together run out together.
+			quiet := holds && quietReturn(held.Kind, f.Kind)
 			if holds {
 				s.endLocked(ctx, key, held)
 			}
 			situation := s.commitLocked(ctx, key, f, c.since, now)
-			started = append(started, s.announceLocked(situation, f))
+			if !quiet {
+				started = append(started, s.announceLocked(situation, f))
+			}
 		}
 	}
 	for key := range s.candidates {
