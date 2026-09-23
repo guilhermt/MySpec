@@ -49,7 +49,7 @@ import {
   type TaskMode,
 } from "@/lib/wails";
 import { createTask } from "@/store/actions";
-import { useAppStore } from "@/store/app-store";
+import { useAppStore, useModelCatalog } from "@/store/app-store";
 
 const NAME_HELP = "Lowercase letters, digits and hyphens.";
 
@@ -142,6 +142,7 @@ function NewTaskFields({ origin }: NewTaskFieldsProps) {
   const lastRepositoryId = useAppStore((state) => state.lastRepositoryId);
 
   const defaults = useAppStore((state) => state.app?.modelDefaults ?? NO_MODELS);
+  const catalog = useModelCatalog();
   const defaultMode = useAppStore((state) => asReviewMode(state.app?.reviewModeDefault ?? ""));
 
   const [chosenRepositoryId, setChosenRepositoryId] = useState(() =>
@@ -363,7 +364,7 @@ function NewTaskFields({ origin }: NewTaskFieldsProps) {
           />
           <span className="font-medium">Models</span>
           <span className="min-w-0 truncate text-muted-foreground">
-            {adjustmentSummary(choices, defaults, modelStages)}
+            {adjustmentSummary(catalog, choices, defaults, modelStages)}
           </span>
         </CollapsibleTrigger>
         <CollapsibleContent>

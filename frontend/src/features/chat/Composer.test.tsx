@@ -4,7 +4,7 @@ import { Composer } from "@/features/chat/Composer";
 import { api } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
-import { makeTask } from "@/test/wails-mock";
+import { makeState, makeTask } from "@/test/wails-mock";
 
 const DRAFT = { "task-1|prd": "ship it" };
 
@@ -125,7 +125,9 @@ describe("Composer", () => {
   });
 
   it("shows what the session runs with under the field", () => {
-    renderWithStore(<Composer stage="prd" taskId="task-1" session={makeTask()} />);
+    renderWithStore(<Composer stage="prd" taskId="task-1" session={makeTask()} />, {
+      state: makeState(),
+    });
 
     expect(
       screen.getByRole("button", { name: "Session model: Fable 5.1 · high" }),
@@ -135,17 +137,27 @@ describe("Composer", () => {
   it("changes the model of the session it writes to", async () => {
     const { user } = renderWithStore(
       <Composer stage="step:2" taskId="task-1" session={makeTask()} />,
+      {
+        state: makeState(),
+      },
     );
 
     await user.click(screen.getByRole("button", { name: "Session model: Fable 5.1 · high" }));
-    await user.click(await screen.findByRole("menuitemradio", { name: "Opus 5" }));
+    await user.click(await screen.findByRole("menuitemradio", { name: "Opus 5.5 (1M)" }));
 
-    expect(api.setSessionModel).toHaveBeenCalledWith("task-1", "step:2", "claude-opus-5", "high");
+    expect(api.setSessionModel).toHaveBeenCalledWith(
+      "task-1",
+      "step:2",
+      "claude-opus-5-5[1m]",
+      "high",
+    );
   });
 
   it("offers the model while the session is paused", () => {
     const task = makeTask({ sessionStatus: "paused" });
-    renderWithStore(<Composer stage="prd" taskId="task-1" session={task} />);
+    renderWithStore(<Composer stage="prd" taskId="task-1" session={task} />, {
+      state: makeState(),
+    });
 
     expect(
       screen.getByRole("button", { name: "Session model: Fable 5.1 · high" }),

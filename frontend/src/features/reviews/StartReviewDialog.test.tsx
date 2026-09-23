@@ -34,7 +34,7 @@ describe("StartReviewDialog", () => {
       repositoryId: "repo-1",
       number: 31,
       instructions: "",
-      model: "claude-opus-5",
+      model: "claude-opus-5-5[1m]",
       effort: "high",
       mode: "publish",
     });

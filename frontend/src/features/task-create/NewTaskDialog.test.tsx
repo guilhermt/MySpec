@@ -372,17 +372,17 @@ describe("NewTaskDialog", () => {
 
     await user.click(screen.getByRole("button", { name: /Models/ }));
     await user.click(
-      await screen.findByRole("button", { name: "Implementation model: Opus 5 · high" }),
+      await screen.findByRole("button", { name: "Implementation model: Opus 5.5 (1M) · high" }),
     );
     await user.click(await screen.findByRole("menuitemradio", { name: "xhigh" }));
     await user.keyboard("{Escape}");
     await user.click(screen.getByRole("button", { name: "One-Shot" }));
 
     expect(screen.getByRole("button", { name: /Models/ })).toHaveTextContent(
-      "Implementation: Opus 5 · xhigh",
+      "Implementation: Opus 5.5 (1M) · xhigh",
     );
     expect(
-      screen.getByRole("button", { name: "Implementation model: Opus 5 · xhigh" }),
+      screen.getByRole("button", { name: "Implementation model: Opus 5.5 (1M) · xhigh" }),
     ).toBeInTheDocument();
   });
 

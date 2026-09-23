@@ -1,21 +1,18 @@
 import { stageLabel } from "@/lib/stages";
-import type { ModelStage, StageModel, TaskMode } from "@/lib/wails";
+import type {
+  CatalogFailure,
+  CatalogModel,
+  ModelCatalog,
+  ModelStage,
+  StageModel,
+  TaskMode,
+} from "@/lib/wails";
 
 /** ModelChoice is a model and an effort level, the way every picker holds them. */
 export interface ModelChoice {
   model: string;
   effort: string;
 }
-
-/** MODELS are the models the app offers, in the order the pickers list them. */
-export const MODELS: readonly { id: string; label: string }[] = [
-  { id: "claude-fable-5-1", label: "Fable 5.1" },
-  { id: "claude-opus-5", label: "Opus 5" },
-  { id: "claude-sonnet-5", label: "Sonnet 5" },
-];
-
-/** EFFORTS are the effort levels, from the least. */
-export const EFFORTS: readonly string[] = ["low", "medium", "high", "xhigh", "max"];
 
 /** MODEL_STAGES are every stage that carries a choice, in the order the settings list them. */
 export const MODEL_STAGES: readonly ModelStage[] = [
@@ -53,14 +50,94 @@ export function modelStagesOf(mode: TaskMode): readonly ModelStage[] {
   return mode === "one_shot" ? ONE_SHOT_MODEL_STAGES : STRUCTURED_MODEL_STAGES;
 }
 
-/** modelLabel is the name of a model; one the app does not know reads as its id. */
+/** MODEL_IDENTIFIER is the shape of a model identifier a readable name comes from: family, version digits, an optional context suffix. */
+const MODEL_IDENTIFIER = /^claude-([a-z]+)-(\d+(?:-\d+)*)(\[1m\])?$/;
+
+/** DATE_SUFFIX_DIGITS is the length of the date a model identifier may end with. */
+const DATE_SUFFIX_DIGITS = 8;
+
+/**
+ * modelLabel is the readable name of a model, derived from its identifier: the
+ * family capitalized, the version digits joined with dots, a date suffix
+ * dropped, and a [1m] suffix shown as (1M). "claude-opus-5-5[1m]" reads
+ * "Opus 5.5 (1M)"; "claude-haiku-4-5-20251001" reads "Haiku 4.5". An
+ * identifier of another shape reads as it is.
+ */
 export function modelLabel(model: string): string {
-  return MODELS.find((entry) => entry.id === model)?.label ?? model;
+  const match = MODEL_IDENTIFIER.exec(model);
+  if (match === null) {
+    return model;
+  }
+  const [, family = "", version = "", wide] = match;
+  const parts = version.split("-");
+  if (parts.length > 1 && (parts[parts.length - 1] ?? "").length === DATE_SUFFIX_DIGITS) {
+    parts.pop();
+  }
+  const name = `${family.charAt(0).toUpperCase()}${family.slice(1)} ${parts.join(".")}`;
+  return wide === undefined ? name : `${name} (1M)`;
 }
 
-/** choiceLabel is a choice as the whole interface writes it: "Opus 5 · high". */
-export function choiceLabel(choice: ModelChoice): string {
-  return `${modelLabel(choice.model)} · ${choice.effort}`;
+/** catalogModels are the models a catalog offers, empty for one the reading never filled. */
+export function catalogModels(catalog: ModelCatalog): readonly CatalogModel[] {
+  return catalog.models ?? [];
+}
+
+/** modelEfforts are the effort levels an entry of the catalog accepts, empty for a model that takes none. */
+function modelEfforts(entry: CatalogModel): readonly string[] {
+  return entry.efforts ?? [];
+}
+
+/** catalogModel is the entry of a model in the catalog, undefined for one it lacks. */
+export function catalogModel(catalog: ModelCatalog, model: string): CatalogModel | undefined {
+  return catalogModels(catalog).find((entry) => entry.name === model);
+}
+
+/**
+ * takesEffort says whether a choice of this model carries an effort: false only
+ * for a model the catalog knows and that lists no effort level. A model the
+ * catalog lacks keeps its effort, so that nothing of a saved choice is hidden.
+ */
+export function takesEffort(catalog: ModelCatalog, model: string): boolean {
+  const entry = catalogModel(catalog, model);
+  return entry === undefined || modelEfforts(entry).length > 0;
+}
+
+/**
+ * choiceUnavailable says whether the catalog lacks what a choice names: its
+ * model, or its effort among the levels of its model. A model that takes no
+ * effort is available whatever effort the choice holds. With an empty catalog
+ * every choice is unavailable.
+ */
+export function choiceUnavailable(catalog: ModelCatalog, choice: ModelChoice): boolean {
+  const entry = catalogModel(catalog, choice.model);
+  if (entry === undefined) {
+    return true;
+  }
+  const efforts = modelEfforts(entry);
+  return efforts.length > 0 && !efforts.includes(choice.effort);
+}
+
+/** choiceLabel is a choice as the whole interface writes it: "Opus 5.5 (1M) · high", or the name alone for a model that takes no effort or a choice without one. */
+export function choiceLabel(catalog: ModelCatalog, choice: ModelChoice): string {
+  const name = modelLabel(choice.model);
+  if (!takesEffort(catalog, choice.model) || choice.effort === "") {
+    return name;
+  }
+  return `${name} · ${choice.effort}`;
+}
+
+/** catalogFailureMessage says why the pickers have nothing to offer; "" when they have. */
+export function catalogFailureMessage(failure: CatalogFailure): string {
+  switch (failure) {
+    case "not_found":
+      return "Claude Code was not found. Install it or point MYSPEC_CLAUDE_PATH at the executable.";
+    case "unsupported":
+      return "The installed Claude Code doesn't list its models. Update it and reopen the app.";
+    case "failed":
+      return "Reading the models of Claude Code failed. Reopen the app to try again.";
+    default:
+      return "";
+  }
 }
 
 /** sameChoice reports whether two choices name the same model and effort. */
@@ -109,6 +186,7 @@ export function withChoice(
  * it is given count.
  */
 export function adjustmentSummary(
+  catalog: ModelCatalog,
   choices: readonly StageModel[],
   defaults: readonly StageModel[],
   stages: readonly ModelStage[],
@@ -120,6 +198,6 @@ export function adjustmentSummary(
   if (first === undefined) {
     return "Defaults";
   }
-  const summary = `${modelStageLabel(first)}: ${choiceLabel(choiceOf(choices, first))}`;
+  const summary = `${modelStageLabel(first)}: ${choiceLabel(catalog, choiceOf(choices, first))}`;
   return others.length === 0 ? summary : `${summary} +${others.length}`;
 }

@@ -97,10 +97,10 @@ describe("SettingsView", () => {
   it("changes a default at once", async () => {
     const { user } = view();
 
-    await user.click(screen.getByRole("button", { name: "PR model: Opus 5 · medium" }));
+    await user.click(screen.getByRole("button", { name: "PR model: Opus 5.5 (1M) · medium" }));
     await user.click(await screen.findByRole("menuitemradio", { name: "low" }));
 
-    expect(api.setModelDefault).toHaveBeenCalledWith("pr", "claude-opus-5", "low");
+    expect(api.setModelDefault).toHaveBeenCalledWith("pr", "claude-opus-5-5[1m]", "low");
   });
 
   it("shows a prompt rendered, marked as modified and restorable only when it is", async () => {

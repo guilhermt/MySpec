@@ -398,7 +398,7 @@ describe("api", () => {
     await wails.api.removeRepository("repo-1");
     await wails.api.setRepositoryFilter("repo-1");
     await wails.api.setTheme("dark");
-    await wails.api.setModelDefault("pr", "claude-opus-5", "medium");
+    await wails.api.setModelDefault("pr", "claude-opus-5-5[1m]", "medium");
     await wails.api.setReviewModeDefault("agent");
     await wails.api.getPrompt("prd");
     await wails.api.savePrompt("prd", "# PRD");
@@ -431,7 +431,7 @@ describe("api", () => {
     await wails.api.cleanAndStartStep("task-1");
     await wails.api.discardStep("task-1", true);
     await wails.api.setStageModel("task-1", "plan", "claude-fable-5-1", "high");
-    await wails.api.setStepModel("task-1", 2, "claude-opus-5", "xhigh");
+    await wails.api.setStepModel("task-1", 2, "claude-opus-5-5[1m]", "xhigh");
     await wails.api.setSessionModel("task-1", "prd", "claude-sonnet-5", "low");
     await wails.api.setReviewMode("task-1", "agent");
     await wails.api.setStepReviewMode("task-1", 2, "manual");
@@ -478,7 +478,7 @@ describe("api", () => {
       repositoryId: "repo-1",
       number: 31,
       instructions: "",
-      model: "claude-opus-5",
+      model: "claude-opus-5-5[1m]",
       effort: "high",
       mode: "publish",
     });
