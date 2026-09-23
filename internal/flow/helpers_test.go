@@ -449,6 +449,16 @@ func (m *memTasks) SetPRReviewed(_ context.Context, id, commit string, pass int)
 	})
 }
 
+func (m *memTasks) SetPRBaseline(_ context.Context, id string, baseline gh.Trouble) (task.PRRun, error) {
+	return m.updatePRRun(id, "prBaseline", func(run *task.PRRun) {
+		run.TroubleBaseline, run.Trouble = baseline, gh.Trouble{}
+	})
+}
+
+func (m *memTasks) SetPRTrouble(_ context.Context, id string, trouble gh.Trouble) (task.PRRun, error) {
+	return m.updatePRRun(id, "prTrouble", func(run *task.PRRun) { run.Trouble = trouble })
+}
+
 func (m *memTasks) ClearPRRun(_ context.Context, id string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

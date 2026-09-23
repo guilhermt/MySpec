@@ -372,3 +372,146 @@ func TestRefreshRereadsTheChecksDuringTheWait(t *testing.T) {
 		return f.reviewOpen()
 	})
 }
+
+// failing is a reading of a pull request whose checks named failed and whose
+// merge state is mergeable.
+func failing(mergeable gh.Mergeable, names ...string) gh.PRChecks {
+	checks := make([]gh.Check, 0, len(names))
+	for _, name := range names {
+		checks = append(checks, gh.Check{Name: name, Conclusion: "failure"})
+	}
+	return gh.PRChecks{Checks: checks, Mergeable: mergeable}
+}
+
+func TestAPassRecordsTheTroubleOfTheReadingItStartsFrom(t *testing.T) {
+	t.Parallel()
+
+	t.Run("the first pass", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture(t)
+		foundPR(f, failing(gh.MergeableConflicting, "lint"))
+		f.tasks.setPRRun("task-1", task.PRRun{
+			Status: task.PRReviewing, PR: openPR(), Trouble: gh.Trouble{FailedChecks: []string{"old"}},
+		})
+
+		f.service.Check("task-1")
+		want := gh.Trouble{FailedChecks: []string{"lint"}, Conflict: true}
+		f.waitPRRun(t, "the baseline of the first pass", func(run task.PRRun) bool {
+			return run.TroubleBaseline.Equal(want)
+		})
+		if run, _ := f.tasks.prRun("task-1"); run.Trouble.Any() {
+			t.Errorf("trouble = %+v, want none", run.Trouble)
+		}
+	})
+
+	t.Run("the pass after a commit", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture(t)
+		underReview(t, f)
+		reportsWritten(f, reports(1, false))
+		f.waitPRRun(t, "the report of the first pass", func(run task.PRRun) bool { return run.ReportedPass == 1 })
+		f.reviews.setSnapshot(staged(3, 3))
+		f.sessions.goIdle("task-1")
+		if err := f.service.ApprovePR(t.Context(), "task-1"); err != nil {
+			t.Fatalf("ApprovePR() = %v, want nil", err)
+		}
+
+		f.gh.setPR("task-1", withChecks(failing(gh.MergeableClean, "test")))
+		f.worktrees.setStatus(git.Status{Head: commitSHA})
+		f.reviews.setSnapshot(review.Snapshot{Head: commitSHA})
+		f.sessions.goIdle("task-1")
+		f.service.Check("task-1")
+
+		want := gh.Trouble{FailedChecks: []string{"test"}}
+		f.waitPRRun(t, "the baseline of the second pass", func(run task.PRRun) bool {
+			return run.TroubleBaseline.Equal(want)
+		})
+		if f.sessions.sentCount(reviewPrompt("/data/task-1/pr/review-2.md")) != 1 {
+			t.Error("the second pass was not asked for")
+		}
+	})
+}
+
+// awaitingMerge puts the task after a clean review, with the baseline and the
+// trouble recorded and gh reading its pull request with checks.
+func awaitingMerge(f *fixture, state gh.State, baseline, trouble gh.Trouble, checks gh.PRChecks) {
+	awaitingClosing(f, "task-1", plan(), task.PRRun{
+		Status: task.PRDone, PR: openPR(), TroubleBaseline: baseline, Trouble: trouble,
+	})
+	pr := withChecks(checks)
+	pr.State = state
+	f.gh.setPR("task-1", pr)
+}
+
+func TestAReadingOfAPullRequestWaitingForTheMergeRecordsWhatWentWrongSinceTheReview(t *testing.T) {
+	t.Parallel()
+
+	lint := gh.Trouble{FailedChecks: []string{"lint"}}
+	pendingLint := gh.PRChecks{Checks: []gh.Check{{Name: "lint", Pending: true}}, Mergeable: gh.MergeableClean}
+	tests := []struct {
+		name     string
+		state    gh.State
+		baseline gh.Trouble
+		trouble  gh.Trouble
+		checks   gh.PRChecks
+		want     gh.Trouble
+		status   flow.PRStatus
+	}{
+		{"a check that fails", gh.StateOpen, gh.Trouble{}, gh.Trouble{}, failing(gh.MergeableClean, "lint"), lint, flow.PRTrouble},
+		{"a check that already failed", gh.StateOpen, lint, gh.Trouble{}, failing(gh.MergeableClean, "lint"), gh.Trouble{}, flow.PRDone},
+		{"a check pending again", gh.StateOpen, gh.Trouble{}, lint, pendingLint, lint, flow.PRTrouble},
+		{"the trouble gone", gh.StateOpen, gh.Trouble{}, lint, passedChecks(), gh.Trouble{}, flow.PRDone},
+		{"a merged pull request", gh.StateMerged, gh.Trouble{}, gh.Trouble{}, failing(gh.MergeableClean, "lint"), gh.Trouble{}, flow.PRMerged},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			f := newFixture(t)
+			awaitingMerge(f, test.state, test.baseline, test.trouble, test.checks)
+
+			f.service.PollPRs()
+			f.waitEvaluations(t, 1)
+			run, _ := f.tasks.prRun("task-1")
+			if !run.Trouble.Equal(test.want) {
+				t.Errorf("trouble = %+v, want %+v", run.Trouble, test.want)
+			}
+			if got := f.prState(t, "task-1").Status; got != test.status {
+				t.Errorf("status = %q, want %q", got, test.status)
+			}
+		})
+	}
+}
+
+func TestANewTroubleIsRecordedOnlyWhenItChanges(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	awaitingMerge(f, gh.StateOpen, gh.Trouble{}, gh.Trouble{FailedChecks: []string{"lint"}},
+		failing(gh.MergeableClean, "lint"))
+
+	f.service.PollPRs()
+	f.waitEvaluations(t, 1)
+	if calls := f.tasks.recorded(); slices.Contains(calls, "prTrouble:task-1") {
+		t.Errorf("task calls = %q, want the same trouble not recorded again", calls)
+	}
+}
+
+func TestAReadingThatFailsKeepsTheTrouble(t *testing.T) {
+	t.Parallel()
+
+	trouble := gh.Trouble{FailedChecks: []string{"lint"}, Conflict: true}
+	f := newFixture(t)
+	awaitingClosing(f, "task-1", plan(), task.PRRun{Status: task.PRDone, PR: openPR(), Trouble: trouble})
+	f.gh.failView(errors.New("gh pr view: connection refused"))
+
+	f.service.PollPRs()
+	waitFor(t, "the failed reading of the pull request", func() bool {
+		return f.prState(t, "task-1").CheckError != ""
+	})
+	if run, _ := f.tasks.prRun("task-1"); !run.Trouble.Equal(trouble) {
+		t.Errorf("trouble = %+v, want %+v", run.Trouble, trouble)
+	}
+}

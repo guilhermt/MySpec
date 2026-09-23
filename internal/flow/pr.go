@@ -39,6 +39,7 @@ const (
 	PRReadyToApprove   PRStatus = "ready_to_approve"
 	PRCommitting       PRStatus = "committing"
 	PRDone             PRStatus = "done"      // the review closed clean and the pull request is still open
+	PRTrouble          PRStatus = "trouble"   // the review closed clean, and a check failed or a conflict with the base came up since
 	PRMerged           PRStatus = "merged"    // the pull request was merged; the task awaits closing
 	PRClosedUnmerged   PRStatus = "pr_closed" // the pull request was closed without a merge
 	PRClosing          PRStatus = "closing"
@@ -57,6 +58,9 @@ type PullRequest struct {
 	Reports []task.ReviewReport
 	PR      task.PRDetails
 	Review  *review.Snapshot
+	// Trouble is what went wrong with the pull request since its last review
+	// pass; meaningful in PRTrouble.
+	Trouble gh.Trouble
 
 	// CheckError is what the last automatic reading of the pull request said
 	// when it failed.
@@ -105,6 +109,7 @@ func (s *Service) prState(t task.Task, run task.PRRun, art task.PRArtifacts) Pul
 		Block:        run.Block,
 		Reports:      art.Reports,
 		PR:           run.PR,
+		Trouble:      run.Trouble,
 		CheckError:   s.checkError(t.ID),
 		Close:        run.Close,
 		CloneMissing: s.repositories.Missing(t.RepositoryID),
@@ -141,7 +146,7 @@ func canClose(status PRStatus, checkError string) bool {
 	switch status {
 	case PRMerged:
 		return true
-	case PRDone:
+	case PRDone, PRTrouble:
 		return checkError != ""
 	default:
 		return false
@@ -208,6 +213,9 @@ func prStatus(run task.PRRun, art task.PRArtifacts, facts prFacts, snap review.S
 		case task.PRStateClosed:
 			return PRClosedUnmerged
 		default:
+			if run.Trouble.Any() {
+				return PRTrouble
+			}
 			return PRDone
 		}
 	case task.PRClosing:
@@ -456,11 +464,15 @@ func (s *Service) recordPR(id string, pr gh.PR, detailsOnly bool) {
 	defer cancel()
 
 	details := prDetails(pr)
-	if _, err := s.tasks.SetPRDetails(ctx, id, details); err != nil {
+	run, err := s.tasks.SetPRDetails(ctx, id, details)
+	if err != nil {
 		s.log.Error("record pull request failed", "task", id, "error", err)
 		return
 	}
 	if detailsOnly {
+		if details.State == task.PRStateOpen {
+			s.recordTrouble(ctx, id, run, pr.Checks)
+		}
 		s.log.Info("pull request read", "task", id, "state", string(details.State))
 		s.Check(id)
 		return
@@ -746,6 +758,7 @@ func (s *Service) startReview(
 		s.log.Error("start pr review session failed", "task", t.ID, "error", err)
 		return
 	}
+	s.recordBaseline(ctx, t.ID, checks)
 	s.log.Info("pr review started", "task", t.ID, "pass", pass)
 }
 
@@ -807,6 +820,7 @@ func (s *Service) askPass(
 		s.log.Error("send pr review prompt failed", "task", t.ID, "error", err)
 		return
 	}
+	s.recordBaseline(ctx, t.ID, checks)
 	s.log.Info("pr review pass asked", "task", t.ID, "pass", pass)
 }
 

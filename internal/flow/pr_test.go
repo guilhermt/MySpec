@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
+
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/git"
@@ -719,4 +721,60 @@ func TestAPassOfTheReviewOfAPullRequestIsAskedWithTheInstructionsOfItsRepository
 	waitFor(t, "the prompt of the second pass with the instructions", func() bool {
 		return f.sessions.sentCount(want) > 0
 	})
+}
+
+func TestATaskWaitingForTheMergeIsShownWithWhatWentWrongSinceItsReview(t *testing.T) {
+	t.Parallel()
+
+	trouble := gh.Trouble{FailedChecks: []string{"lint"}, Conflict: true}
+	merged := openPR()
+	merged.State = task.PRStateMerged
+	tests := []struct {
+		name string
+		run  task.PRRun
+		want flow.PRStatus
+	}{
+		{"open with trouble", task.PRRun{Status: task.PRDone, PR: openPR(), Trouble: trouble}, flow.PRTrouble},
+		{"open without trouble", task.PRRun{Status: task.PRDone, PR: openPR()}, flow.PRDone},
+		{"merged with trouble", task.PRRun{Status: task.PRDone, PR: merged, Trouble: trouble}, flow.PRMerged},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			f := newFixture(t)
+			inPR(f, "task-1", plan(), task.PRDone)
+			f.tasks.setPRRun("task-1", test.run)
+
+			state := f.prState(t, "task-1")
+			if state.Status != test.want {
+				t.Errorf("status = %q, want %q", state.Status, test.want)
+			}
+			if diff := cmp.Diff(test.run.Trouble, state.Trouble); diff != "" {
+				t.Errorf("trouble (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestATaskWithTroubleIsOfferedTheClosingOnlyWhenTheReadingFails(t *testing.T) {
+	t.Parallel()
+
+	trouble := gh.Trouble{FailedChecks: []string{"lint"}}
+	f := newFixture(t)
+	inPR(f, "task-1", plan(), task.PRDone)
+	f.tasks.setPRRun("task-1", task.PRRun{Status: task.PRDone, PR: openPR(), Trouble: trouble})
+	if f.prState(t, "task-1").CanClose {
+		t.Error("CanClose = true, want the closing to wait for the merge")
+	}
+
+	f.gh.failView(errors.New("gh pr view: connection refused"))
+	f.service.PollPRs()
+	waitFor(t, "the failed reading of the pull request", func() bool {
+		return f.prState(t, "task-1").CheckError != ""
+	})
+	state := f.prState(t, "task-1")
+	if state.Status != flow.PRTrouble || !state.CanClose {
+		t.Errorf("state = %+v, want a task with trouble the user may close", state)
+	}
 }
