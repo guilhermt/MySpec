@@ -23,6 +23,7 @@ import type {
   EntryKind,
   FindingDecision,
   Migration,
+  ModelCatalog,
   ModelStage,
   PermissionDecision,
   Prompt,
@@ -345,6 +346,7 @@ export function makeState(overrides: Partial<State> = {}): State {
     theme: "system",
     systemDark: false,
     modelDefaults: makeModelDefaults(),
+    modelCatalog: makeModelCatalog(),
     reviewModeDefault: "manual",
     tasks: [],
     history: [],
@@ -704,6 +706,24 @@ const factoryChoices: { stage: ModelStage; model: string; effort: string }[] = [
   { stage: "pr_review", model: "claude-opus-5", effort: "high" },
   { stage: "discussion", model: "claude-fable-5-1", effort: "high" },
 ];
+
+/**
+ * makeModelCatalog is what the installed Claude Code offers: the models of the
+ * reference machine, the last of which takes no effort.
+ */
+export function makeModelCatalog(overrides: Partial<ModelCatalog> = {}): ModelCatalog {
+  const efforts = ["low", "medium", "high", "xhigh", "max"];
+  return {
+    models: [
+      { name: "claude-opus-5-5[1m]", efforts: [...efforts] },
+      { name: "claude-fable-5-1", efforts: [...efforts] },
+      { name: "claude-sonnet-5", efforts: [...efforts] },
+      { name: "claude-haiku-4-5-20251001", efforts: [] },
+    ],
+    failure: "",
+    ...overrides,
+  };
+}
 
 /** makeModelDefaults are the factory choices of the nine stages of the app. */
 export function makeModelDefaults(): StageModel[] {

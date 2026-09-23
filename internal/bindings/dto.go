@@ -79,6 +79,9 @@ type State struct {
 	// ModelDefaults are the choices a new task starts each stage with, in workflow
 	// order; never nil.
 	ModelDefaults []StageModel `json:"modelDefaults"`
+	// ModelCatalog is what the installed Claude Code offers, which every picker
+	// lists.
+	ModelCatalog ModelCatalog `json:"modelCatalog"`
 	// ReviewModeDefault is manual or agent: who reviews the steps of a new
 	// task, a string for the same reason as State.Theme.
 	ReviewModeDefault string `json:"reviewModeDefault"`
@@ -639,8 +642,27 @@ type StageModel struct {
 	// Stage is prd, tech_spec, plan, one_shot, implementation, step_review, pr,
 	// pr_review or discussion, a string for the same reason as State.Theme.
 	Stage  string `json:"stage"`
-	Model  string `json:"model"`  // claude-fable-5-1, claude-opus-5 or claude-sonnet-5
-	Effort string `json:"effort"` // low, medium, high, xhigh or max
+	Model  string `json:"model"`  // the full name of the model, as the catalog gives it
+	Effort string `json:"effort"` // an effort level of the model, or "" for a model that takes none
+}
+
+// ModelCatalog is what the installed Claude Code offers: the models the
+// pickers list and the effort levels of each. It is read once per app run and
+// kept from the last successful reading of this machine.
+type ModelCatalog struct {
+	// Models are the models the pickers offer, in the order the CLI lists
+	// them; never nil. Empty while no reading ever succeeded on this machine.
+	Models []CatalogModel `json:"models"`
+	// Failure is why there is no catalog: not_found, unsupported or failed; ""
+	// while the reading runs and whenever there is a catalog, a string for the
+	// same reason as State.Theme.
+	Failure string `json:"failure"`
+}
+
+// CatalogModel is one model of the catalog.
+type CatalogModel struct {
+	Name    string   `json:"name"`    // the full name, as --model takes it: claude-opus-5-5[1m]
+	Efforts []string `json:"efforts"` // the effort levels it accepts, from the least; never nil; empty for a model that takes none
 }
 
 // TaskStageModel is the model and effort of one stage of a task, with what the

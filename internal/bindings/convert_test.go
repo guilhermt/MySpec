@@ -10,6 +10,7 @@ import (
 	"github.com/guilhermt/myspec/internal/attention"
 	"github.com/guilhermt/myspec/internal/bindings"
 	"github.com/guilhermt/myspec/internal/board"
+	"github.com/guilhermt/myspec/internal/claude/claudetest"
 	"github.com/guilhermt/myspec/internal/discussion"
 	"github.com/guilhermt/myspec/internal/discussionflow"
 	"github.com/guilhermt/myspec/internal/flow"
@@ -1021,6 +1022,34 @@ func TestFromModelSetIsInTheOrderOfTheSettings(t *testing.T) {
 	}
 }
 
+func TestFromCatalogConvertsEveryModelWithItsEfforts(t *testing.T) {
+	t.Parallel()
+
+	catalog := models.CatalogFrom(claudetest.Catalog)
+
+	want := bindings.ModelCatalog{Models: []bindings.CatalogModel{
+		{Name: "claude-opus-5-5[1m]", Efforts: []string{"low", "medium", "high", "xhigh", "max"}},
+		{Name: "claude-fable-5-1", Efforts: []string{"low", "medium", "high", "xhigh", "max"}},
+		{Name: "claude-sonnet-5", Efforts: []string{"low", "medium", "high", "xhigh", "max"}},
+		{Name: "claude-haiku-4-5-20251001", Efforts: []string{}},
+	}}
+
+	if diff := cmp.Diff(want, bindings.FromCatalog(catalog, "")); diff != "" {
+		t.Errorf("FromCatalog() mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestFromCatalogOfNothingIsEmptyAndNotNil(t *testing.T) {
+	t.Parallel()
+
+	got := bindings.FromCatalog(models.Catalog{}, models.CatalogNotFound)
+
+	want := bindings.ModelCatalog{Models: []bindings.CatalogModel{}, Failure: "not_found"}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("FromCatalog() mismatch (-want +got):\n%s", diff)
+	}
+}
+
 func TestFromPromptAllocatesThePlaceholders(t *testing.T) {
 	t.Parallel()
 
@@ -1217,6 +1246,7 @@ func TestRefusedStateCarriesTheCasesAndNothingElse(t *testing.T) {
 		Boards:        []bindings.Board{},
 		Theme:         "system",
 		ModelDefaults: []bindings.StageModel{},
+		ModelCatalog:  bindings.ModelCatalog{Models: []bindings.CatalogModel{}},
 		Tasks:         []bindings.TaskSummary{},
 		History:       []bindings.ArchivedTask{},
 	}

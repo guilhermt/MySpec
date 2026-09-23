@@ -189,7 +189,7 @@ func Run(cfg Config) int {
 	sessions := session.New(session.Deps{
 		Sessions: st.Sessions,
 		Entries:  st.Entries,
-		Launcher: claudeLauncher{log: log},
+		Launcher: claudeLauncher{log: log, effort: modelsSvc.ProcessEffort},
 		RenderPrompt: func(stage prompts.Stage, vars prompts.Vars) (string, error) {
 			return prompts.Render(dirs.Data, stage, vars)
 		},
@@ -308,6 +308,10 @@ func Run(cfg Config) int {
 	if err := a.load(ctx); err != nil {
 		return fail(log, "load tasks", err)
 	}
+	// The catalog of models comes from the CLI on the machine and must not hold
+	// the window: it is read in the background and reaches the interface with
+	// the state.
+	go a.discoverModels(dirs.Data)
 	a.watchSystemTheme()
 
 	// The pull requests the app waits for are merged outside it, so it asks
