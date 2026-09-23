@@ -80,7 +80,7 @@ func TestStartWaitsForPendingChecks(t *testing.T) {
 		t.Errorf("status = %q, want %q", got, reviewflow.StatusWaitingChecks)
 	}
 	info, ok := f.sessions.info(id)
-	want := models.Choice{Model: models.Opus5, Effort: models.High}
+	want := models.Choice{Model: models.Opus55, Effort: models.High}
 	if !ok || info.Choice != want {
 		t.Errorf("conversation = %+v, want it created with the model the user chose", info)
 	}
@@ -356,7 +356,7 @@ func TestAWaitSurvivesARestart(t *testing.T) {
 	}, "the first pass to start after the restart")
 
 	info, _ := f.sessions.info(id)
-	want := models.Choice{Model: models.Opus5, Effort: models.High}
+	want := models.Choice{Model: models.Opus55, Effort: models.High}
 	if diff := cmp.Diff(want, info.Choice); diff != "" || !started(f, id) {
 		t.Errorf("started = %v, choice (-want +got):\n%s", started(f, id), diff)
 	}

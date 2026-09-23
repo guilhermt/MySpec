@@ -256,12 +256,12 @@ func TestStartingADiscussionIsRefusedBeforeItSaysAnything(t *testing.T) {
 	f.registerBoard(t, true, webCard(12))
 
 	req := bindings.StartDiscussionRequest{BoardID: testBoardID, Title: "Invoices", Text: "Bill them."}
-	req.Model, req.Effort = "gpt", "high"
-	if _, err := f.discussionSvc.StartDiscussion(req); err == nil || err.Error() != "Unknown model." {
-		t.Errorf("StartDiscussion(gpt) = %v, want the sentence about an unknown model", err)
+	req.Model, req.Effort = "", "high"
+	if _, err := f.discussionSvc.StartDiscussion(req); err == nil || err.Error() != "Choose a model." {
+		t.Errorf("StartDiscussion(no model) = %v, want the sentence about the model", err)
 	}
 
-	req.Model, req.Effort = "claude-opus-5", "high"
+	req.Model, req.Effort = "claude-opus-5-5[1m]", "high"
 	req.Title = ""
 	if _, err := f.discussionSvc.StartDiscussion(req); err == nil || err.Error() != "Write a title." {
 		t.Errorf("StartDiscussion(no title) = %v, want the sentence about the title", err)

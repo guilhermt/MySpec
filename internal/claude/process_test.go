@@ -254,34 +254,42 @@ func TestStartOpensEveryExtraDirectory(t *testing.T) {
 	}
 }
 
-func TestTheFakeRefusesAProcessWithoutAModelOrAnEffort(t *testing.T) {
+func TestStartLeavesTheEffortOutForAModelThatTakesNone(t *testing.T) {
 	t.Parallel()
 
-	tests := map[string]struct {
-		model, effort string
-		want          string
-	}{
-		"no model":  {effort: "high", want: "--model is required"},
-		"no effort": {model: "claude-opus-5", want: "--effort is required"},
+	p := start(t, claude.Config{
+		Binary:    reporterBinary(t),
+		Dir:       t.TempDir(),
+		SessionID: sessionID,
+		Model:     "claude-haiku-4-5-20251001",
+	})
+
+	exit := exitOf(t, p)
+	if exit.Code != 0 {
+		t.Fatalf("exit code = %d, want 0", exit.Code)
 	}
+	want := append(slices.Clone(claude.Args),
+		"--session-id", sessionID, "--model", "claude-haiku-4-5-20251001")
+	got := strings.Split(strings.TrimRight(exit.Stderr, "\n"), "\n")
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("command line mismatch (-want +got):\n%s", diff)
+	}
+}
 
-	for name, tc := range tests {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
+func TestTheFakeRefusesAProcessWithoutAModel(t *testing.T) {
+	t.Parallel()
 
-			cfg := fakeConfig(t, "echo")
-			cfg.Model, cfg.Effort = tc.model, tc.effort
-			// The fake reads its command line before its input, so the process
-			// ends without a message ever being sent.
-			exit := exitOf(t, start(t, cfg))
+	cfg := fakeConfig(t, "echo")
+	cfg.Model = ""
+	// The fake reads its command line before its input, so the process ends
+	// without a message ever being sent.
+	exit := exitOf(t, start(t, cfg))
 
-			if exit.Code != 64 {
-				t.Errorf("Code = %d, want 64 for a command line the CLI refuses", exit.Code)
-			}
-			if !strings.Contains(exit.Stderr, tc.want) {
-				t.Errorf("Stderr = %q, want it to contain %q", exit.Stderr, tc.want)
-			}
-		})
+	if exit.Code != 64 {
+		t.Errorf("Code = %d, want 64 for a command line the CLI refuses", exit.Code)
+	}
+	if want := "--model is required"; !strings.Contains(exit.Stderr, want) {
+		t.Errorf("Stderr = %q, want it to contain %q", exit.Stderr, want)
 	}
 }
 

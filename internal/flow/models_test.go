@@ -311,7 +311,7 @@ func TestAStepStartsWithTheChoiceOfImplementationAndKeepsIt(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	want := models.Choice{Model: models.Opus5, Effort: models.XHigh}
+	want := models.Choice{Model: models.Opus55, Effort: models.XHigh}
 	f.tasks.setModels("task-1", task.Models{Stages: models.Set{models.Implementation: want}})
 	f.tasks.add("task-1", task.StagePlan, task.Artifacts{PRD: true, TechSpec: true, Plan: twoStepPlan()})
 	f.sessions.setSummary("task-1", idle(task.StagePlan))
@@ -323,7 +323,7 @@ func TestAStepStartsWithTheChoiceOfImplementationAndKeepsIt(t *testing.T) {
 	wantChoice(t, f, session.Key{TaskID: "task-1", Stage: session.StepStage(1)}, want)
 	// The choice is written on the step, so that a later change of
 	// implementation no longer reaches it.
-	if calls := f.tasks.recorded(); !slices.Contains(calls, "stepModel:task-1:1:claude-opus-5:xhigh") {
+	if calls := f.tasks.recorded(); !slices.Contains(calls, "stepModel:task-1:1:claude-opus-5-5[1m]:xhigh") {
 		t.Errorf("task calls = %v, want the model of step 1 recorded", calls)
 	}
 }
@@ -355,7 +355,7 @@ func TestStepsCarryTheirChoice(t *testing.T) {
 	f := newFixture(t)
 	frozen := models.Choice{Model: models.Sonnet5, Effort: models.XHigh}
 	adjusted := models.Choice{Model: models.Fable51, Effort: models.Max}
-	ofStage := models.Choice{Model: models.Opus5, Effort: models.High}
+	ofStage := models.Choice{Model: models.Opus55, Effort: models.High}
 	f.tasks.setModels("task-1", task.Models{
 		Stages: models.Set{models.Implementation: ofStage},
 		Steps:  map[int]models.Choice{1: frozen, 2: adjusted},

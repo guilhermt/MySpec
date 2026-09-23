@@ -9,6 +9,7 @@ import type {
   BoardRemoval,
   BoardRepositoryChoice,
   BoardRepositoryOption,
+  CatalogModel,
   CloseResult,
   CreateTaskRequest,
   DeletePreview,
@@ -23,6 +24,7 @@ import type {
   EntryKind,
   FindingDecision,
   Migration,
+  ModelCatalog,
   ModelStage,
   PermissionDecision,
   Prompt,
@@ -345,6 +347,7 @@ export function makeState(overrides: Partial<State> = {}): State {
     theme: "system",
     systemDark: false,
     modelDefaults: makeModelDefaults(),
+    modelCatalog: makeModelCatalog(),
     reviewModeDefault: "manual",
     tasks: [],
     history: [],
@@ -624,7 +627,7 @@ export function makeStep(overrides: Partial<Step> = {}): Step {
     commitSha: "",
     commitSubject: "",
     commitFailed: false,
-    model: "claude-opus-5",
+    model: "claude-opus-5-5[1m]",
     effort: "high",
     adjusted: false,
     modelEditable: true,
@@ -645,7 +648,7 @@ export function makeStepReviewer(overrides: Partial<StepReviewer> = {}): StepRev
   return {
     sessionStage: "step_review:1",
     sessionStatus: "waiting",
-    sessionModel: "claude-opus-5",
+    sessionModel: "claude-opus-5-5[1m]",
     sessionEffort: "high",
     turnRunning: false,
     processRunning: false,
@@ -679,7 +682,7 @@ export function makePullRequest(overrides: Partial<PullRequest> = {}): PullReque
     close: null,
     sessionStage: "pr",
     sessionStatus: "waiting",
-    sessionModel: "claude-opus-5",
+    sessionModel: "claude-opus-5-5[1m]",
     sessionEffort: "medium",
     turnRunning: false,
     processRunning: false,
@@ -698,12 +701,34 @@ const factoryChoices: { stage: ModelStage; model: string; effort: string }[] = [
   { stage: "tech_spec", model: "claude-fable-5-1", effort: "high" },
   { stage: "plan", model: "claude-fable-5-1", effort: "high" },
   { stage: "one_shot", model: "claude-fable-5-1", effort: "high" },
-  { stage: "implementation", model: "claude-opus-5", effort: "high" },
-  { stage: "step_review", model: "claude-opus-5", effort: "high" },
-  { stage: "pr", model: "claude-opus-5", effort: "medium" },
-  { stage: "pr_review", model: "claude-opus-5", effort: "high" },
+  { stage: "implementation", model: "claude-opus-5-5[1m]", effort: "high" },
+  { stage: "step_review", model: "claude-opus-5-5[1m]", effort: "high" },
+  { stage: "pr", model: "claude-opus-5-5[1m]", effort: "medium" },
+  { stage: "pr_review", model: "claude-opus-5-5[1m]", effort: "high" },
   { stage: "discussion", model: "claude-fable-5-1", effort: "high" },
 ];
+
+/** REFERENCE_EFFORTS are the five levels the reference CLI lists for the models that take one. */
+const REFERENCE_EFFORTS = ["low", "medium", "high", "xhigh", "max"];
+
+/** makeCatalogModel is one model of the catalog, with every effort unless told otherwise. */
+export function makeCatalogModel(overrides: Partial<CatalogModel> = {}): CatalogModel {
+  return { name: "claude-sonnet-5", efforts: [...REFERENCE_EFFORTS], ...overrides };
+}
+
+/** makeModelCatalog is the catalog of the reference machine: Opus 5.5 (1M), Fable 5.1, Sonnet 5 and Haiku 4.5, which takes no effort. */
+export function makeModelCatalog(overrides: Partial<ModelCatalog> = {}): ModelCatalog {
+  return {
+    models: [
+      makeCatalogModel({ name: "claude-opus-5-5[1m]" }),
+      makeCatalogModel({ name: "claude-fable-5-1" }),
+      makeCatalogModel({ name: "claude-sonnet-5" }),
+      makeCatalogModel({ name: "claude-haiku-4-5-20251001", efforts: [] }),
+    ],
+    failure: "",
+    ...overrides,
+  };
+}
 
 /** makeModelDefaults are the factory choices of the nine stages of the app. */
 export function makeModelDefaults(): StageModel[] {
@@ -840,7 +865,7 @@ export function makeReviewSummary(overrides: Partial<ReviewSummary> = {}): Revie
     canReviewAgain: false,
     sessionStage: "review",
     sessionStatus: "working",
-    sessionModel: "claude-opus-5",
+    sessionModel: "claude-opus-5-5[1m]",
     sessionEffort: "high",
     turnRunning: true,
     processRunning: true,
@@ -926,7 +951,7 @@ export function makeDiscussion(overrides: Partial<DiscussionSummary> = {}): Disc
     archiveHint: "",
     sessionStage: "discussion",
     sessionStatus: "working",
-    sessionModel: "claude-opus-5",
+    sessionModel: "claude-opus-5-5[1m]",
     sessionEffort: "high",
     turnRunning: true,
     processRunning: true,

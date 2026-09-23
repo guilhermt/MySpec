@@ -327,7 +327,7 @@ func TestMigrateGivesTheWorktreesOfAnOlderDatabaseNoBaseAndAddsThePRRuns(t *test
 	}
 }
 
-func TestTheModelsMigrationGivesTheFactoryDefaults(t *testing.T) {
+func TestTheModelsMigrationGivesTheDefaultsOfItsRelease(t *testing.T) {
 	t.Parallel()
 
 	migrations, err := loadMigrations(migrationsFS)
@@ -352,16 +352,20 @@ func TestTheModelsMigrationGivesTheFactoryDefaults(t *testing.T) {
 	if err := json.Unmarshal([]byte(encoded), &m); err != nil {
 		t.Fatalf("json.Unmarshal(%q) = %v, want nil", encoded, err)
 	}
-	// The migration and the factory have to say the same thing, so that a task
-	// that existed before it starts where a new one does. The step review came
-	// later, and the migration of the review mode gives it to those tasks; the
-	// One-Shot planning came later still, and only a One-Shot task, created
-	// with it, runs one. The discussion is no stage of a task: it is an item of
-	// its own.
-	want := models.Factory()
-	delete(want, models.StepReview)
-	delete(want, models.OneShot)
-	delete(want, models.Discussion)
+	// The migration writes the choices of the release that shipped it, frozen:
+	// a task that existed before it starts where a new one did then, and the
+	// user changes what it holds from there. The step review came later, and
+	// the migration of the review mode gives it to those tasks; the One-Shot
+	// planning came later still, and only a One-Shot task, created with it,
+	// runs one. The discussion is no stage of a task: it is an item of its own.
+	want := models.Set{
+		models.PRD:            {Model: models.Fable51, Effort: models.High},
+		models.TechSpec:       {Model: models.Fable51, Effort: models.High},
+		models.Plan:           {Model: models.Fable51, Effort: models.High},
+		models.Implementation: {Model: "claude-opus-5", Effort: models.High},
+		models.PR:             {Model: "claude-opus-5", Effort: models.Medium},
+		models.PRReview:       {Model: "claude-opus-5", Effort: models.High},
+	}
 	if diff := cmp.Diff(want, m.Stages); diff != "" {
 		t.Errorf("stages mismatch (-want +got):\n%s", diff)
 	}
@@ -416,10 +420,10 @@ func TestMigrateLeavesTheTasksThatExistToTheUser(t *testing.T) {
 	if err := json.Unmarshal([]byte(stored), &gotModels); err != nil {
 		t.Fatalf("json.Unmarshal(%q) = %v, want nil", stored, err)
 	}
-	// The step review takes the factory choice, and every other stage keeps
-	// the one it had.
+	// The step review takes the choice the migration froze, and every other
+	// stage keeps the one it had.
 	want := maps.Clone(before)
-	want[models.StepReview] = models.Factory()[models.StepReview]
+	want[models.StepReview] = models.Choice{Model: "claude-opus-5", Effort: models.High}
 	if diff := cmp.Diff(want, gotModels.Stages); diff != "" {
 		t.Errorf("stages mismatch (-want +got):\n%s", diff)
 	}

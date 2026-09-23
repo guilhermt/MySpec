@@ -457,7 +457,7 @@ func taskInfo(t *testing.T, id string) session.TaskInfo {
 		StepsDir:       filepath.Join(artifacts, "steps"),
 		Repository:     "dev/web",
 		InitialContext: "a login screen with email and password",
-		Choice:         models.Choice{Model: models.Opus5, Effort: models.High},
+		Choice:         models.Choice{Model: models.Opus55, Effort: models.High},
 	}
 }
 

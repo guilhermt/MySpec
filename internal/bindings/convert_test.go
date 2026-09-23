@@ -10,6 +10,7 @@ import (
 	"github.com/guilhermt/myspec/internal/attention"
 	"github.com/guilhermt/myspec/internal/bindings"
 	"github.com/guilhermt/myspec/internal/board"
+	"github.com/guilhermt/myspec/internal/claude/claudetest"
 	"github.com/guilhermt/myspec/internal/discussion"
 	"github.com/guilhermt/myspec/internal/discussionflow"
 	"github.com/guilhermt/myspec/internal/flow"
@@ -50,7 +51,7 @@ func TestFromTasksCarriesTheStateOfEachStep(t *testing.T) {
 		{
 			Step:     task.Step{Number: 3, File: "3-third.md", Title: "Third"},
 			Status:   flow.StepNotStarted,
-			Choice:   models.Choice{Model: models.Opus5, Effort: models.XHigh},
+			Choice:   models.Choice{Model: models.Opus55, Effort: models.XHigh},
 			Adjusted: true,
 		},
 	}
@@ -70,7 +71,7 @@ func TestFromTasksCarriesTheStateOfEachStep(t *testing.T) {
 		{
 			Number: 3, File: "3-third.md", Title: "Third",
 			Status: "not_started",
-			Model:  "claude-opus-5", Effort: "xhigh", Adjusted: true, ModelEditable: true,
+			Model:  "claude-opus-5-5[1m]", Effort: "xhigh", Adjusted: true, ModelEditable: true,
 			ReviewModeEditable: true, Reports: []bindings.StepReport{},
 		},
 	}
@@ -112,7 +113,7 @@ func TestFromTasksCarriesTheAgentReviewOfAStep(t *testing.T) {
 			ReviewerStage: "step_review:1",
 			Reviewer: session.Summary{
 				Status:         session.StatusWorking,
-				Choice:         models.Choice{Model: models.Opus5, Effort: models.High},
+				Choice:         models.Choice{Model: models.Opus55, Effort: models.High},
 				TurnRunning:    true,
 				ProcessRunning: true,
 				RetryAttempt:   1,
@@ -140,7 +141,7 @@ func TestFromTasksCarriesTheAgentReviewOfAStep(t *testing.T) {
 			Reviewer: &bindings.StepReviewer{
 				SessionStage:   "step_review:1",
 				SessionStatus:  "working",
-				SessionModel:   "claude-opus-5",
+				SessionModel:   "claude-opus-5-5[1m]",
 				SessionEffort:  "high",
 				TurnRunning:    true,
 				ProcessRunning: true,
@@ -891,7 +892,7 @@ func TestFromTasksCarriesThePullRequestOfThePRStage(t *testing.T) {
 		Session: session.Summary{
 			Status:         session.StatusWaiting,
 			ContextPercent: 30,
-			Choice:         models.Choice{Model: models.Opus5, Effort: models.Medium},
+			Choice:         models.Choice{Model: models.Opus55, Effort: models.Medium},
 		},
 	}
 
@@ -928,7 +929,7 @@ func TestFromTasksCarriesThePullRequestOfThePRStage(t *testing.T) {
 		CheckedAt:      "2026-09-05T10:00:00Z",
 		SessionStage:   "pr_review",
 		SessionStatus:  "waiting",
-		SessionModel:   "claude-opus-5",
+		SessionModel:   "claude-opus-5-5[1m]",
 		SessionEffort:  "medium",
 		ContextPercent: 30,
 	}
@@ -956,9 +957,9 @@ func TestFromTasksCarriesTheModelsOfEveryStage(t *testing.T) {
 			models.PRD:            {Model: models.Fable51, Effort: models.XHigh},
 			models.TechSpec:       {Model: models.Fable51, Effort: models.High},
 			models.Plan:           {Model: models.Fable51, Effort: models.High},
-			models.Implementation: {Model: models.Opus5, Effort: models.High},
-			models.StepReview:     {Model: models.Opus5, Effort: models.High},
-			models.PR:             {Model: models.Opus5, Effort: models.Medium},
+			models.Implementation: {Model: models.Opus55, Effort: models.High},
+			models.StepReview:     {Model: models.Opus55, Effort: models.High},
+			models.PR:             {Model: models.Opus55, Effort: models.Medium},
 			models.PRReview:       {Model: models.Sonnet5, Effort: models.Low},
 		}},
 	}}
@@ -987,9 +988,9 @@ func TestFromTasksCarriesTheModelsOfEveryStage(t *testing.T) {
 		{Stage: "prd", Model: "claude-fable-5-1", Effort: "xhigh"},
 		{Stage: "tech_spec", Model: "claude-fable-5-1", Effort: "high", Live: true},
 		{Stage: "plan", Model: "claude-fable-5-1", Effort: "high", Editable: true},
-		{Stage: "implementation", Model: "claude-opus-5", Effort: "high", Editable: true},
-		{Stage: "step_review", Model: "claude-opus-5", Effort: "high", Editable: true},
-		{Stage: "pr", Model: "claude-opus-5", Effort: "medium", Editable: true},
+		{Stage: "implementation", Model: "claude-opus-5-5[1m]", Effort: "high", Editable: true},
+		{Stage: "step_review", Model: "claude-opus-5-5[1m]", Effort: "high", Editable: true},
+		{Stage: "pr", Model: "claude-opus-5-5[1m]", Effort: "medium", Editable: true},
 		{Stage: "pr_review", Model: "claude-sonnet-5", Effort: "low", Editable: true},
 	}
 	if diff := cmp.Diff(want, got[0].Models); diff != "" {
@@ -1009,15 +1010,43 @@ func TestFromModelSetIsInTheOrderOfTheSettings(t *testing.T) {
 		{Stage: "tech_spec", Model: "claude-fable-5-1", Effort: "high"},
 		{Stage: "plan", Model: "claude-fable-5-1", Effort: "high"},
 		{Stage: "one_shot", Model: "claude-fable-5-1", Effort: "high"},
-		{Stage: "implementation", Model: "claude-opus-5", Effort: "high"},
-		{Stage: "step_review", Model: "claude-opus-5", Effort: "high"},
-		{Stage: "pr", Model: "claude-opus-5", Effort: "medium"},
-		{Stage: "pr_review", Model: "claude-opus-5", Effort: "high"},
+		{Stage: "implementation", Model: "claude-opus-5-5[1m]", Effort: "high"},
+		{Stage: "step_review", Model: "claude-opus-5-5[1m]", Effort: "high"},
+		{Stage: "pr", Model: "claude-opus-5-5[1m]", Effort: "medium"},
+		{Stage: "pr_review", Model: "claude-opus-5-5[1m]", Effort: "high"},
 		{Stage: "discussion", Model: "claude-fable-5-1", Effort: "high"},
 	}
 
 	if diff := cmp.Diff(want, bindings.FromModelSet(models.Factory())); diff != "" {
 		t.Errorf("FromModelSet() mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestFromCatalogConvertsEveryModelWithItsEfforts(t *testing.T) {
+	t.Parallel()
+
+	catalog := models.CatalogFrom(claudetest.Catalog)
+
+	want := bindings.ModelCatalog{Models: []bindings.CatalogModel{
+		{Name: "claude-opus-5-5[1m]", Efforts: []string{"low", "medium", "high", "xhigh", "max"}},
+		{Name: "claude-fable-5-1", Efforts: []string{"low", "medium", "high", "xhigh", "max"}},
+		{Name: "claude-sonnet-5", Efforts: []string{"low", "medium", "high", "xhigh", "max"}},
+		{Name: "claude-haiku-4-5-20251001", Efforts: []string{}},
+	}}
+
+	if diff := cmp.Diff(want, bindings.FromCatalog(catalog, "")); diff != "" {
+		t.Errorf("FromCatalog() mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestFromCatalogOfNothingIsEmptyAndNotNil(t *testing.T) {
+	t.Parallel()
+
+	got := bindings.FromCatalog(models.Catalog{}, models.CatalogNotFound)
+
+	want := bindings.ModelCatalog{Models: []bindings.CatalogModel{}, Failure: "not_found"}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("FromCatalog() mismatch (-want +got):\n%s", diff)
 	}
 }
 
@@ -1217,6 +1246,7 @@ func TestRefusedStateCarriesTheCasesAndNothingElse(t *testing.T) {
 		Boards:        []bindings.Board{},
 		Theme:         "system",
 		ModelDefaults: []bindings.StageModel{},
+		ModelCatalog:  bindings.ModelCatalog{Models: []bindings.CatalogModel{}},
 		Tasks:         []bindings.TaskSummary{},
 		History:       []bindings.ArchivedTask{},
 	}

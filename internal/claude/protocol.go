@@ -307,16 +307,16 @@ func UserMessage(text string) []byte {
 	})
 }
 
-// interruptBody is the request field of an interrupt control request.
-type interruptBody struct {
+// controlRequestBody is the request field of a control request the app makes.
+type controlRequestBody struct {
 	Subtype string `json:"subtype"`
 }
 
 // controlRequestLine is a whole control request line written to the CLI.
 type controlRequestLine struct {
-	Type      string        `json:"type"`
-	RequestID string        `json:"request_id"`
-	Request   interruptBody `json:"request"`
+	Type      string             `json:"type"`
+	RequestID string             `json:"request_id"`
+	Request   controlRequestBody `json:"request"`
 }
 
 // InterruptRequest asks the CLI to abort the running turn.
@@ -324,8 +324,31 @@ func InterruptRequest(requestID string) []byte {
 	return mustMarshal("interrupt request", controlRequestLine{
 		Type:      "control_request",
 		RequestID: requestID,
-		Request:   interruptBody{Subtype: "interrupt"},
+		Request:   controlRequestBody{Subtype: "interrupt"},
 	})
+}
+
+// ListModelsRequest asks the CLI for the catalog of models it offers.
+func ListModelsRequest(requestID string) []byte {
+	return mustMarshal("list_models request", controlRequestLine{
+		Type:      "control_request",
+		RequestID: requestID,
+		Request:   controlRequestBody{Subtype: "list_models"},
+	})
+}
+
+// ModelEntry is one model of the catalog the CLI reports with list_models.
+type ModelEntry struct {
+	Value                 string   `json:"value"`                 // the alias: default, opus[1m], sonnet, haiku
+	ResolvedModel         string   `json:"resolvedModel"`         // the full name the alias resolves to: claude-opus-5-5[1m]
+	SupportsEffort        bool     `json:"supportsEffort"`        // absent, so false, for a model that takes no effort
+	SupportedEffortLevels []string `json:"supportedEffortLevels"` // nil for a model that takes no effort
+	Disabled              bool     `json:"disabled"`
+}
+
+// listModelsResponse is the response field of a successful list_models answer.
+type listModelsResponse struct {
+	Models []ModelEntry `json:"models"`
 }
 
 // PermissionResponse is the answer to a can_use_tool request.

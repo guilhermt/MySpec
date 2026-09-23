@@ -26,7 +26,7 @@ func TestTheModelOfAStageFallsBackToTheFactory(t *testing.T) {
 func TestTheModelOfAStepIsItsOwnOrTheOneOfImplementation(t *testing.T) {
 	t.Parallel()
 
-	own := models.Choice{Model: models.Opus5, Effort: models.Max}
+	own := models.Choice{Model: models.Opus55, Effort: models.Max}
 	implementation := models.Choice{Model: models.Sonnet5, Effort: models.Medium}
 	m := task.Models{
 		Stages: models.Set{models.Implementation: implementation},

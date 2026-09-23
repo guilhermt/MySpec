@@ -263,7 +263,7 @@ func TestTasksUpdateModels(t *testing.T) {
 	}
 
 	want := task.Models{Stages: models.Factory(), Steps: map[int]models.Choice{
-		3: {Model: models.Opus5, Effort: models.XHigh},
+		3: {Model: models.Opus55, Effort: models.XHigh},
 	}}
 	want.Stages[models.Plan] = models.Choice{Model: models.Sonnet5, Effort: models.Low}
 

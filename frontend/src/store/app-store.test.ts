@@ -22,6 +22,7 @@ import {
   useHistoryUi,
   useLeftover,
   useMigration,
+  useModelCatalog,
   useNewDiscussion,
   useOnScreenSituationId,
   useOpenBoardId,
@@ -56,6 +57,7 @@ import {
   makeDiscussion,
   makeEntry,
   makeMigration,
+  makeModelCatalog,
   makePullRequest,
   makeRepository,
   makeReviewCenter,
@@ -155,6 +157,7 @@ describe("selectors", () => {
       repositories: useRepositories(),
       filter: useRepositoryFilter(),
       migration: useMigration(),
+      catalog: useModelCatalog(),
       error: useError(),
       theme: useThemeState(),
     }));
@@ -162,6 +165,7 @@ describe("selectors", () => {
     expect(result.current.repositories).toEqual([]);
     expect(result.current.filter).toBe("");
     expect(result.current.migration).toBeNull();
+    expect(result.current.catalog).toEqual({ models: [], failure: "" });
     expect(result.current.error).toBeNull();
     expect(result.current.theme).toEqual({ preference: "system", systemDark: false });
   });
@@ -173,6 +177,7 @@ describe("selectors", () => {
       web: useRepository("repo-1"),
       unknown: useRepository("repo-9"),
       migration: useMigration(),
+      catalog: useModelCatalog(),
       error: useError(),
       theme: useThemeState(),
     }));
@@ -194,6 +199,7 @@ describe("selectors", () => {
     expect(result.current.web?.fullName).toBe("dev/web");
     expect(result.current.unknown).toBeNull();
     expect(result.current.migration).toBeNull();
+    expect(result.current.catalog).toEqual(makeModelCatalog());
     expect(result.current.error).toBe("binding failed");
     expect(result.current.theme).toEqual({ preference: "dark", systemDark: true });
   });

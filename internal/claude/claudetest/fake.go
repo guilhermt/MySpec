@@ -13,7 +13,10 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"time"
+
+	"github.com/guilhermt/myspec/internal/claude"
 )
 
 // The environment variables that turn a test binary into the fake CLI and pick
@@ -30,7 +33,25 @@ const (
 	EnvWriterFix = "MYSPEC_FAKE_WRITER_FIX"
 	// EnvWriterRepo is the repository the rewritten step file carries.
 	EnvWriterRepo = "MYSPEC_FAKE_WRITER_REPO"
+	// EnvCatalog picks what the fake answers to list_models: "" for Catalog,
+	// "unsupported" for the error an older CLI gives, "silent" for no answer.
+	EnvCatalog = "MYSPEC_FAKE_CATALOG"
 )
+
+// The effort levels every model of Catalog that takes one accepts.
+var catalogEfforts = []string{"low", "medium", "high", "xhigh", "max"}
+
+// Catalog is what the fake answers to list_models: the catalog of the
+// reference machine, with the default alias and a disabled entry, so that the
+// rules that pick what the app offers have something to leave out.
+var Catalog = []claude.ModelEntry{
+	{Value: "default", ResolvedModel: "claude-opus-5-5[1m]", SupportsEffort: true, SupportedEffortLevels: catalogEfforts},
+	{Value: "opus[1m]", ResolvedModel: "claude-opus-5-5[1m]", SupportsEffort: true, SupportedEffortLevels: catalogEfforts},
+	{Value: "claude-fable-5-1[1m]", ResolvedModel: "claude-fable-5-1", SupportsEffort: true, SupportedEffortLevels: catalogEfforts},
+	{Value: "sonnet", ResolvedModel: "claude-sonnet-5", SupportsEffort: true, SupportedEffortLevels: catalogEfforts},
+	{Value: "haiku", ResolvedModel: "claude-haiku-4-5-20251001"},
+	{Value: "legacy", ResolvedModel: "claude-opus-5", SupportsEffort: true, SupportedEffortLevels: catalogEfforts, Disabled: true},
+}
 
 // The exit codes the fake uses.
 const (
@@ -113,15 +134,20 @@ func validateArgs(args []string) error {
 			return fmt.Errorf("%s is %q, want %q", flag[0], got, flag[1])
 		}
 	}
-	if (flagValue(args, "--session-id") == "") == (flagValue(args, "--resume") == "") {
-		return errors.New("exactly one of --session-id and --resume is required")
+	// A session always names its model, by id for a new one and by resume for
+	// an existing one; a catalog process names no session and no model. The
+	// effort is on the command line only for a model that takes one.
+	session, resume := flagValue(args, "--session-id"), flagValue(args, "--resume")
+	if session != "" && resume != "" {
+		return errors.New("at most one of --session-id and --resume is allowed")
 	}
-	// The app never leaves the model or the effort to the defaults of the
-	// machine, so a command line without them is one it should never produce.
-	for _, flag := range []string{"--model", "--effort"} {
-		if flagValue(args, flag) == "" {
-			return fmt.Errorf("%s is required", flag)
+	if session != "" || resume != "" {
+		if flagValue(args, "--model") == "" {
+			return errors.New("--model is required")
 		}
+	}
+	if slices.Contains(args, "--effort") && flagValue(args, "--effort") == "" {
+		return errors.New("--effort is empty")
 	}
 	return nil
 }
@@ -161,6 +187,7 @@ type permission struct {
 // fake is one run of the fake CLI.
 type fake struct {
 	encoder    *json.Encoder
+	outMu      sync.Mutex
 	sessionID  string
 	users      chan string
 	responses  chan response
@@ -223,14 +250,44 @@ func (f *fake) read(input *os.File) {
 			}
 			f.users <- strings.Join(text, "")
 		case "control_request":
-			if line.Request.Subtype == "interrupt" {
+			switch line.Request.Subtype {
+			case "interrupt":
 				f.interrupts <- line.RequestID
+			case "list_models":
+				f.answerListModels(line.RequestID)
 			}
 		case "control_response":
 			f.responses <- response{requestID: line.Response.RequestID, body: line.Response.Response}
 		default:
 			fail("unexpected input line type %q", line.Type)
 		}
+	}
+}
+
+// answerListModels answers the catalog request the way EnvCatalog asks it to:
+// with the catalog, with the error an older CLI gives, or with nothing.
+func (f *fake) answerListModels(requestID string) {
+	switch os.Getenv(EnvCatalog) {
+	case "unsupported":
+		f.emitRaw(map[string]any{
+			"type": "control_response",
+			"response": map[string]any{
+				"subtype":    "error",
+				"request_id": requestID,
+				"error":      "Unsupported control request subtype: list_models",
+			},
+		})
+	case "silent":
+		// Answers nothing at all, so the reading waits until its deadline.
+	default:
+		f.emitRaw(map[string]any{
+			"type": "control_response",
+			"response": map[string]any{
+				"subtype":    "success",
+				"request_id": requestID,
+				"response":   map[string]any{"models": Catalog},
+			},
+		})
 	}
 }
 
@@ -755,8 +812,12 @@ func (f *fake) emit(line map[string]any) {
 	f.emitRaw(line)
 }
 
-// emitRaw writes one line exactly as given.
+// emitRaw writes one line exactly as given, serialised against the read
+// goroutine, which answers control requests of its own.
 func (f *fake) emitRaw(line map[string]any) {
+	f.outMu.Lock()
+	defer f.outMu.Unlock()
+
 	if err := f.encoder.Encode(line); err != nil {
 		fail("encode line: %v", err)
 	}

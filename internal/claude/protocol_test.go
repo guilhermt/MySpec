@@ -769,6 +769,16 @@ func TestInterruptRequestIsWhatTheCLIExpects(t *testing.T) {
 	}
 }
 
+func TestListModelsRequestIsWhatTheCLIExpects(t *testing.T) {
+	t.Parallel()
+
+	line := claude.ListModelsRequest("x")
+	want := `{"type":"control_request","request_id":"x","request":{"subtype":"list_models"}}`
+	if string(line) != want {
+		t.Errorf("ListModelsRequest() = %s, want %s", line, want)
+	}
+}
+
 func TestControlResponseAllows(t *testing.T) {
 	t.Parallel()
 

@@ -49,7 +49,10 @@ func (a *App) snapshot() bindings.State {
 		SystemDark:       a.theme.SystemDark(),
 		// ModelDefaults and ReviewModeDefault are the app's own: every
 		// repository sees the same ones.
-		ModelDefaults:     bindings.FromModelSet(a.models.Defaults()),
+		ModelDefaults: bindings.FromModelSet(a.models.Defaults()),
+		// ModelCatalog is what the installed CLI offers; like the defaults, it
+		// is the app's own.
+		ModelCatalog:      bindings.FromCatalog(a.models.Catalog(), a.models.CatalogFailure()),
 		ReviewModeDefault: string(a.reviewModes.Default()),
 		Tasks: bindings.FromTasks(
 			tasks,

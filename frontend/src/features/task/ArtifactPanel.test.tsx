@@ -121,10 +121,10 @@ describe("ArtifactPanel", () => {
       currentStep: 1,
     });
 
-    await user.click(screen.getByRole("button", { name: "Step 2 model: Opus 5 · high" }));
+    await user.click(screen.getByRole("button", { name: "Step 2 model: Opus 5.5 (1M) · high" }));
     await user.click(await screen.findByRole("menuitemradio", { name: "xhigh" }));
 
-    expect(api.setStepModel).toHaveBeenCalledWith("task-1", 2, "claude-opus-5", "xhigh");
+    expect(api.setStepModel).toHaveBeenCalledWith("task-1", 2, "claude-opus-5-5[1m]", "xhigh");
   });
 
   it("reads one step file, with the header it carries left out", async () => {

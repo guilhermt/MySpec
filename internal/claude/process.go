@@ -24,7 +24,7 @@ type Config struct {
 	SessionID string   // UUID chosen by the app
 	Resume    bool     // false: --session-id; true: --resume
 	Model     string   // full name of the model: --model
-	Effort    string   // effort level: --effort
+	Effort    string   // effort level: --effort; "" for a model that takes none
 	Env       []string // nil means the parent environment
 	// ExtraDirs are directories outside Dir the session may read, each passed
 	// to the CLI with --add-dir.
@@ -315,10 +315,16 @@ func sessionArgs(cfg Config) []string {
 	return []string{"--session-id", cfg.SessionID}
 }
 
-// choiceArgs name the model and the effort of the process. Both are always on
-// the command line: the defaults of the machine never decide how a session runs.
+// choiceArgs name the model and the effort of the process. The model is always
+// on the command line: the defaults of the machine never decide how a session
+// runs. The effort is passed when the session has one; a model that takes no
+// effort runs without the flag.
 func choiceArgs(cfg Config) []string {
-	return []string{"--model", cfg.Model, "--effort", cfg.Effort}
+	args := []string{"--model", cfg.Model}
+	if cfg.Effort != "" {
+		args = append(args, "--effort", cfg.Effort)
+	}
+	return args
 }
 
 // dirArgs open the directories outside the working one the session may read,

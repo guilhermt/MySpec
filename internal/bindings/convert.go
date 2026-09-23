@@ -106,6 +106,7 @@ func RefusedState(refused *upgrade.RefusedError) State {
 		Boards:        []Board{},
 		Theme:         string(theme.System),
 		ModelDefaults: []StageModel{},
+		ModelCatalog:  ModelCatalog{Models: []CatalogModel{}},
 		Tasks:         []TaskSummary{},
 		History:       []ArchivedTask{},
 	}
@@ -124,6 +125,19 @@ func FromModelSet(set models.Set) []StageModel {
 		}
 	}
 	return converted
+}
+
+// FromCatalog converts the catalog and why there is none, when there is none.
+func FromCatalog(catalog models.Catalog, failure models.CatalogFailure) ModelCatalog {
+	converted := make([]CatalogModel, len(catalog.Models))
+	for i, m := range catalog.Models {
+		efforts := make([]string, len(m.Efforts))
+		for j, e := range m.Efforts {
+			efforts[j] = string(e)
+		}
+		converted[i] = CatalogModel{Name: string(m.Name), Efforts: efforts}
+	}
+	return ModelCatalog{Models: converted, Failure: string(failure)}
 }
 
 // fromStageModels converts the models of the stages of a task, always

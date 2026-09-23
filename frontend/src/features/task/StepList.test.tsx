@@ -59,14 +59,14 @@ describe("StepList", () => {
       { state },
     );
 
-    await user.click(screen.getByRole("button", { name: "Step 2 model: Opus 5 · high" }));
+    await user.click(screen.getByRole("button", { name: "Step 2 model: Opus 5.5 (1M) · high" }));
     await user.click(await screen.findByRole("menuitemradio", { name: "xhigh" }));
 
     // The picker hands back the value it was given with the choice changed, and
     // the value of a step is the step itself.
     expect(onModelChange).toHaveBeenCalledWith(
       step,
-      expect.objectContaining({ model: "claude-opus-5", effort: "xhigh" }),
+      expect.objectContaining({ model: "claude-opus-5-5[1m]", effort: "xhigh" }),
     );
   });
 
@@ -85,10 +85,10 @@ describe("StepList", () => {
       { state },
     );
 
-    expect(screen.getByRole("button", { name: "Step 1 model: Opus 5 · high" })).not.toHaveClass(
-      "text-muted-foreground",
-    );
-    expect(screen.getByRole("button", { name: "Step 2 model: Opus 5 · high" })).toHaveClass(
+    expect(
+      screen.getByRole("button", { name: "Step 1 model: Opus 5.5 (1M) · high" }),
+    ).not.toHaveClass("text-muted-foreground");
+    expect(screen.getByRole("button", { name: "Step 2 model: Opus 5.5 (1M) · high" })).toHaveClass(
       "text-muted-foreground",
     );
   });
@@ -105,8 +105,24 @@ describe("StepList", () => {
       { state },
     );
 
-    expect(screen.getByText("Opus 5 · high")).toBeInTheDocument();
+    expect(screen.getByText("Opus 5.5 (1M) · high")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /model:/ })).not.toBeInTheDocument();
+  });
+
+  it("marks a step whose model the catalog lacks", () => {
+    renderWithStore(
+      <StepList
+        steps={[makeStep({ status: "implementing", modelEditable: false, model: "claude-opus-5" })]}
+        problems={[]}
+        currentStep={1}
+        onOpen={vi.fn()}
+        onModelChange={vi.fn()}
+      />,
+      { state },
+    );
+
+    expect(screen.getByText("Opus 5 · high")).toBeInTheDocument();
+    expect(screen.getByText("unavailable")).toBeInTheDocument();
   });
 
   it("lets a step that has not started pick its review mode", async () => {

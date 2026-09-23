@@ -177,18 +177,18 @@ func TestPublishingAReviewIsRefusedUntilItIsReady(t *testing.T) {
 	}
 }
 
-func TestStartingAReviewIsRefusedWithAModelTheAppDoesNotKnow(t *testing.T) {
+func TestStartingAReviewIsRefusedWithoutAModel(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
 	repoID := f.register(t, t.TempDir())
 
-	req := bindings.StartReviewRequest{RepositoryID: repoID, Number: 7, Model: "gpt", Effort: "high", Mode: "publish"}
-	if _, err := f.reviewSvc.StartReview(req); err == nil || err.Error() != "Unknown model." {
-		t.Errorf("StartReview(gpt) = %v, want the sentence about an unknown model", err)
+	req := bindings.StartReviewRequest{RepositoryID: repoID, Number: 7, Model: "", Effort: "high", Mode: "publish"}
+	if _, err := f.reviewSvc.StartReview(req); err == nil || err.Error() != "Choose a model." {
+		t.Errorf("StartReview(no model) = %v, want the sentence about the model", err)
 	}
 
-	req = bindings.StartReviewRequest{RepositoryID: repoID, Number: 7, Model: "claude-opus-5", Effort: "high", Mode: "ship"}
+	req = bindings.StartReviewRequest{RepositoryID: repoID, Number: 7, Model: "claude-opus-5-5[1m]", Effort: "high", Mode: "ship"}
 	if _, err := f.reviewSvc.StartReview(req); err == nil || err.Error() != "Unknown review mode." {
 		t.Errorf("StartReview(ship) = %v, want the sentence about an unknown mode", err)
 	}

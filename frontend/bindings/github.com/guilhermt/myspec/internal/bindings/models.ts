@@ -510,6 +510,21 @@ export interface CardRelated {
 }
 
 /**
+ * CatalogModel is one model of the catalog.
+ */
+export interface CatalogModel {
+    /**
+     * the full name, as --model takes it: claude-opus-5-5[1m]
+     */
+    "name": string;
+
+    /**
+     * the effort levels it accepts, from the least; never nil; empty for a model that takes none
+     */
+    "efforts": string[] | null;
+}
+
+/**
  * CloseResult is what closing a task did.
  */
 export interface CloseResult {
@@ -1112,6 +1127,26 @@ export interface MigrationTask {
      * the clone; "" for a task at the root of its workspace
      */
     "path": string;
+}
+
+/**
+ * ModelCatalog is what the installed Claude Code offers: the models the
+ * pickers list and the effort levels of each. It is read once per app run and
+ * kept from the last successful reading of this machine.
+ */
+export interface ModelCatalog {
+    /**
+     * Models are the models the pickers offer, in the order the CLI lists
+     * them; never nil. Empty while no reading ever succeeded on this machine.
+     */
+    "models": CatalogModel[] | null;
+
+    /**
+     * Failure is why there is no catalog: not_found, unsupported or failed; ""
+     * while the reading runs and whenever there is a catalog, a string for the
+     * same reason as State.Theme.
+     */
+    "failure": string;
 }
 
 /**
@@ -1996,12 +2031,12 @@ export interface StageModel {
     "stage": string;
 
     /**
-     * claude-fable-5-1, claude-opus-5 or claude-sonnet-5
+     * the full name of the model, as the catalog gives it
      */
     "model": string;
 
     /**
-     * low, medium, high, xhigh or max
+     * an effort level of the model, or "" for a model that takes none
      */
     "effort": string;
 }
@@ -2083,6 +2118,12 @@ export interface State {
      * order; never nil.
      */
     "modelDefaults": StageModel[] | null;
+
+    /**
+     * ModelCatalog is what the installed Claude Code offers, which every picker
+     * lists.
+     */
+    "modelCatalog": ModelCatalog;
 
     /**
      * ReviewModeDefault is manual or agent: who reviews the steps of a new
