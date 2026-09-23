@@ -75,6 +75,49 @@ func (s *Service) continueWait(ctx context.Context, stored prreview.Review, deta
 	s.notify(id)
 }
 
+// recordBaseline keeps what the reading a pass starts from shows wrong: what
+// the readings that follow the pass are measured against.
+func (s *Service) recordBaseline(ctx context.Context, id string, checks gh.PRChecks) {
+	_, err := s.reviews.Update(ctx, id, func(r *prreview.Review) {
+		r.TroubleBaseline, r.Trouble = checks.Trouble(), gh.Trouble{}
+	})
+	if err != nil {
+		s.log.Error("record review baseline failed", "review", id, "error", err)
+	}
+}
+
+// recordTrouble measures a reading of a pull request whose review rests,
+// published or ready to merge, against the reading its last pass started
+// from, and records what went wrong since when that changed. A review
+// anywhere else is left alone: its next pass reads GitHub anew.
+func (s *Service) recordTrouble(
+	ctx context.Context, stored prreview.Review, checks gh.PRChecks,
+) (prreview.Review, bool) {
+	state, ok := s.State(stored.ID)
+	if !ok || !watchesTrouble(state.Status) {
+		return stored, false
+	}
+	next := gh.NextTrouble(stored.TroubleBaseline, stored.Trouble, checks)
+	if next.Equal(stored.Trouble) {
+		return stored, false
+	}
+	updated, err := s.reviews.Update(ctx, stored.ID, func(r *prreview.Review) { r.Trouble = next })
+	if err != nil {
+		s.log.Error("record review trouble failed", "review", stored.ID, "error", err)
+		return stored, false
+	}
+	s.log.Info("review trouble", "review", stored.ID,
+		"failed", len(next.FailedChecks), "conflicting", next.Conflict)
+	return updated, true
+}
+
+// watchesTrouble says whether a review rests where what goes wrong with its
+// pull request is the user's to know: published, ready to merge, or already
+// in trouble.
+func watchesTrouble(status Status) bool {
+	return status == StatusPublished || status == StatusReadyToMerge || status == StatusTrouble
+}
+
 // blockPass records why the pass a review waits for could not start, which
 // stops the wait until the user asks for the pass again.
 func (s *Service) blockPass(id, reason string) {

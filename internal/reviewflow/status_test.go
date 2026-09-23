@@ -16,6 +16,21 @@ func finding(number int, path string, line int) prreview.ParsedFinding {
 	}
 }
 
+// lintFailed is what went wrong with the pull request since the last pass:
+// the lint check failed.
+var lintFailed = gh.Trouble{FailedChecks: []string{"lint"}}
+
+// cleanApply is a review in apply mode whose first pass found nothing to fix.
+func cleanApply(t *testing.T, f *fixture) string {
+	t.Helper()
+
+	f.pulls.seed(ownPR())
+	id := f.startMode(t, prreview.ModeApply, "")
+	f.sessions.goIdle(id)
+	f.record(t, id, cleanReport(1, "Nothing to change."), headHash)
+	return id
+}
+
 // deciding is a review in publish mode whose first pass holds two findings,
 // with the conversation at rest: what the user decides on.
 func deciding(t *testing.T, f *fixture) string {
@@ -165,6 +180,28 @@ func TestTheStatusOfAReviewIsWhatItsPassAndItsConversationSay(t *testing.T) {
 			want: reviewflow.StatusNewCommits,
 		},
 		{
+			name: "a published review whose pull request went wrong since is in trouble",
+			setup: func(t *testing.T, f *fixture) string {
+				t.Helper()
+				id := published(t, f)
+				f.update(t, id, func(r *prreview.Review) { r.Trouble = lintFailed })
+				return id
+			},
+			want: reviewflow.StatusTrouble,
+		},
+		{
+			name: "new commits come before the trouble of a published review",
+			setup: func(t *testing.T, f *fixture) string {
+				t.Helper()
+				id := published(t, f)
+				f.update(t, id, func(r *prreview.Review) {
+					r.HeadCommit, r.Trouble = otherHash, gh.Trouble{Conflict: true}
+				})
+				return id
+			},
+			want: reviewflow.StatusNewCommits,
+		},
+		{
 			name: "a publication that failed waits for the user",
 			setup: func(t *testing.T, f *fixture) string {
 				t.Helper()
@@ -177,16 +214,19 @@ func TestTheStatusOfAReviewIsWhatItsPassAndItsConversationSay(t *testing.T) {
 			want: reviewflow.StatusPublishFailed,
 		},
 		{
-			name: "a clean report of apply mode leaves the pull request ready to merge",
+			name:  "a clean report of apply mode leaves the pull request ready to merge",
+			setup: cleanApply,
+			want:  reviewflow.StatusReadyToMerge,
+		},
+		{
+			name: "a clean report of apply mode whose pull request went wrong since is in trouble",
 			setup: func(t *testing.T, f *fixture) string {
 				t.Helper()
-				f.pulls.seed(ownPR())
-				id := f.startMode(t, prreview.ModeApply, "")
-				f.sessions.goIdle(id)
-				f.record(t, id, cleanReport(1, "Nothing to change."), headHash)
+				id := cleanApply(t, f)
+				f.update(t, id, func(r *prreview.Review) { r.Trouble = lintFailed })
 				return id
 			},
-			want: reviewflow.StatusReadyToMerge,
+			want: reviewflow.StatusTrouble,
 		},
 		{
 			name:  "a report of apply mode nobody decided on awaits the decision",
@@ -202,6 +242,17 @@ func TestTheStatusOfAReviewIsWhatItsPassAndItsConversationSay(t *testing.T) {
 				return id
 			},
 			want: reviewflow.StatusReadyToMerge,
+		},
+		{
+			name: "a report of apply mode with every finding discarded is in trouble when the pull request went wrong",
+			setup: func(t *testing.T, f *fixture) string {
+				t.Helper()
+				id := applying(t, f)
+				f.decide(t, id, 1, 1, prreview.DecisionDiscarded)
+				f.update(t, id, func(r *prreview.Review) { r.Trouble = gh.Trouble{Conflict: true} })
+				return id
+			},
+			want: reviewflow.StatusTrouble,
 		},
 		{
 			name: "an approved finding of apply mode is ready to apply",

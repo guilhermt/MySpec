@@ -3,8 +3,11 @@ package reviewflow_test
 import (
 	"slices"
 	"testing"
+	"time"
 
+	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/prreview"
+	"github.com/guilhermt/myspec/internal/pulls"
 	"github.com/guilhermt/myspec/internal/reviewflow"
 	"github.com/guilhermt/myspec/internal/session"
 )
@@ -21,6 +24,143 @@ func (f *fixture) polled(t *testing.T, id string, cond func(reviewflow.State) bo
 		state, ok := f.service.State(id)
 		return ok && cond(state)
 	})
+}
+
+// pollOnce reads the pull requests of the reviews once more and gives what
+// the reading settles the time to run, for a test that checks nothing
+// changed.
+func (f *fixture) pollOnce(t *testing.T) {
+	t.Helper()
+
+	before := f.pulls.readings()
+	waitFor(t, "a reading of GitHub", func() bool {
+		f.service.Poll()
+		return f.pulls.readings() > before
+	})
+	time.Sleep(settleWait)
+}
+
+// troubled polls until the review is in trouble.
+func (f *fixture) troubled(t *testing.T, id string) {
+	t.Helper()
+
+	f.polled(t, id, func(s reviewflow.State) bool {
+		return s.Status == reviewflow.StatusTrouble
+	}, "the review to be in trouble")
+}
+
+func TestAPollRecordsWhatWentWrongWithAPullRequestWhoseReviewRests(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]struct {
+		setup func(*testing.T, *fixture) string
+		pr    func() pulls.Detail
+	}{
+		"a published review":   {setup: published, pr: openPR},
+		"a ready to merge one": {setup: cleanApply, pr: ownPR},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			f := newFixture(t)
+			id := c.setup(t, f)
+			f.pulls.seed(withChecks(c.pr(), gh.MergeableConflicting, passedCheck, failedCheck))
+
+			f.troubled(t, id)
+
+			want := gh.Trouble{FailedChecks: []string{"lint"}, Conflict: true}
+			if got := f.state(t, id).Review.Trouble; !got.Equal(want) {
+				t.Errorf("trouble = %+v, want %+v", got, want)
+			}
+			if !slices.Contains(f.changed(), id) {
+				t.Error("the app was not told the review changed")
+			}
+		})
+	}
+}
+
+func TestAPollLeavesTheTroubleOfAReviewThatIsNotRestingAlone(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]struct {
+		setup func(*testing.T, *fixture) string
+		want  reviewflow.Status
+	}{
+		"a review deciding its findings": {setup: deciding, want: reviewflow.StatusAwaitingDecision},
+		"a review waiting for the checks": {
+			setup: func(t *testing.T, f *fixture) string {
+				t.Helper()
+				f.pulls.seed(withChecks(openPR(), gh.MergeableClean, pendingCheck))
+				return f.start(t)
+			},
+			want: reviewflow.StatusWaitingChecks,
+		},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			f := newFixture(t)
+			id := c.setup(t, f)
+			f.pulls.seed(withChecks(openPR(), gh.MergeableConflicting, failedCheck, pendingCheck))
+
+			f.pollOnce(t)
+
+			state := f.state(t, id)
+			if state.Status != c.want || state.Review.Trouble.Any() {
+				t.Errorf("status = %q, trouble = %+v, want %q and no trouble",
+					state.Status, state.Review.Trouble, c.want)
+			}
+		})
+	}
+}
+
+func TestAPendingCheckKeepsTheTroubleUntilThePullRequestIsFine(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := published(t, f)
+	f.pulls.seed(withChecks(openPR(), gh.MergeableConflicting, failedCheck))
+	f.troubled(t, id)
+
+	rerun := gh.Check{Name: failedCheck.Name, URL: checkURL, Pending: true}
+	f.pulls.seed(withChecks(openPR(), gh.MergeableUnknown, rerun))
+	f.pollOnce(t)
+
+	want := gh.Trouble{FailedChecks: []string{"lint"}, Conflict: true}
+	if state := f.state(t, id); state.Status != reviewflow.StatusTrouble || !state.Review.Trouble.Equal(want) {
+		t.Errorf("status = %q, trouble = %+v, want the trouble kept while the check runs",
+			state.Status, state.Review.Trouble)
+	}
+
+	f.pulls.seed(withChecks(openPR(), gh.MergeableClean, gh.Check{Name: "lint", URL: checkURL, Conclusion: "success"}))
+	f.polled(t, id, func(s reviewflow.State) bool {
+		return s.Status == reviewflow.StatusPublished
+	}, "the review to rest published again")
+
+	if got := f.state(t, id).Review.Trouble; got.Any() {
+		t.Errorf("trouble = %+v, want none", got)
+	}
+}
+
+func TestAPollThatFailsLeavesTheTroubleAsItWas(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := published(t, f)
+	f.pulls.seed(withChecks(openPR(), gh.MergeableClean, failedCheck))
+	f.troubled(t, id)
+
+	f.pulls.failWith(errGitHub)
+	f.polled(t, id, func(s reviewflow.State) bool {
+		return s.CheckError != ""
+	}, "the failed reading to reach the review")
+
+	state := f.state(t, id)
+	if state.Status != reviewflow.StatusTrouble || !state.Review.Trouble.Equal(lintFailed) {
+		t.Errorf("status = %q, trouble = %+v, want the trouble kept", state.Status, state.Review.Trouble)
+	}
 }
 
 func TestACommitOnAPublishedPullRequestBringsTheReviewBackToTheUser(t *testing.T) {
