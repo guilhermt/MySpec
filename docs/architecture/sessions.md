@@ -21,7 +21,7 @@ Todo processo sobe com as flags fixas:
    --include-partial-messages --permission-mode auto --permission-prompt-tool stdio
 ```
 
-mais `--add-dir <caminho>` por clone que a sessão pode ler, o que só uma discussão usa, `--session-id <id>` na primeira execução e `--resume <id>` nas seguintes, para que o app escolha o id, e sempre `--model` e `--effort`, com o que a sessão carrega: a escolha da etapa, do step ou, para o revisor de um step, a do review de step da task quando foi criada, ou a que o usuário fez na conversa desde então. O modelo vai pelo nome completo (`claude-fable-5-1`, `claude-opus-5`, `claude-sonnet-5`).
+mais `--add-dir <caminho>` por clone que a sessão pode ler, o que só uma discussão usa, `--session-id <id>` na primeira execução e `--resume <id>` nas seguintes, para que o app escolha o id, e `--model`, com o que a sessão carrega: a escolha da etapa, do step ou, para o revisor de um step, a do review de step da task quando foi criada, ou a que o usuário fez na conversa desde então. O modelo vai pelo nome completo que o catálogo dá, com o sufixo `[1m]` quando ele existe, nunca por um alias. `--effort` só acompanha um modelo que o catálogo diz aceitar esforço: para um modelo sem esforço a flag não vai, e o esforço da escolha fica guardado, intacto. Um modelo que o catálogo não tem leva o esforço que a escolha guarda, e o CLI decide.
 
 O modo `-p` sem `--bare` usa as credenciais do login interativo, ou seja, a assinatura do usuário. É o que permite não ter API key.
 
@@ -36,6 +36,14 @@ O mesmo canal carrega o controle:
 - **Interrupção**: um `control_request` de `interrupt` escrito no stdin encerra o turno; o CLI responde com um `result` abortado e segue vivo.
 
 Uma linha de saída pode chegar a 16 MiB, porque o resultado de uma ferramenta pode ser grande. Os últimos 4 KiB do stderr são guardados para explicar uma saída inesperada.
+
+## Catálogo de modelos
+
+O que os seletores oferecem vem do próprio Claude Code instalado. O app o pergunta num processo só dele, com as mesmas flags fixas e o diretório de dados como diretório de trabalho, para que o CLI nunca leia um projeto do usuário: escreve no stdin um `control_request` de `list_models`, lê do stdout o `control_response` daquele pedido, fecha o stdin, e o processo termina. A leitura acontece uma vez por execução do app, em segundo plano depois que os dados carregaram, com 20 segundos de limite; a janela nunca espera por ela.
+
+De cada entrada da resposta o app guarda o nome completo resolvido do modelo e os níveis de esforço que ele aceita, nenhum para um modelo sem esforço. O alias, o nome de exibição e a descrição não são usados. A ordem é a do CLI, com uma opção por modelo resolvido: de duas entradas que resolvem para o mesmo modelo vale a primeira, a entrada de alias `default` é pulada, porque duplica outra, e as que o CLI marca como desabilitadas ficam de fora.
+
+Uma leitura bem-sucedida substitui o catálogo em memória e é gravada como a última leitura daquela máquina. Uma leitura que falha não mexe em nenhum dos dois: guarda só a razão, que a interface mostra enquanto não houver catálogo nenhum. Falha o binário que não foi encontrado, o processo que errou ou estourou o tempo, a resposta que não se entende e a que não traz modelo nenhum; um CLI antigo demais responde um erro ao pedido, e é lido como `unsupported`.
 
 ## Ciclo de vida do processo
 
