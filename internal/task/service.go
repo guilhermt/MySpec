@@ -17,6 +17,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/repository"
 	"github.com/guilhermt/myspec/internal/reviewmode"
@@ -925,6 +926,22 @@ func (s *Service) SetPRReviewed(ctx context.Context, id, commit string, pass int
 	})
 }
 
+// SetPRBaseline records what the reading a review pass starts from shows
+// wrong, and forgets the trouble measured against the baseline before it.
+func (s *Service) SetPRBaseline(ctx context.Context, id string, baseline gh.Trouble) (PRRun, error) {
+	return s.updatePRRun(ctx, id, func(run *PRRun) {
+		run.TroubleBaseline, run.Trouble = baseline, gh.Trouble{}
+	})
+}
+
+// SetPRTrouble records what went wrong with the pull request since its last
+// review pass.
+func (s *Service) SetPRTrouble(ctx context.Context, id string, trouble gh.Trouble) (PRRun, error) {
+	return s.updatePRRun(ctx, id, func(run *PRRun) {
+		run.Trouble = trouble
+	})
+}
+
 // ClearPRRun forgets the PR stage of a task.
 func (s *Service) ClearPRRun(ctx context.Context, id string) error {
 	if err := s.repo.DeletePRRun(ctx, id); err != nil {
@@ -1243,8 +1260,8 @@ func indexOfRun(runs []StepRun, number int) int {
 	return slices.IndexFunc(runs, func(r StepRun) bool { return r.Number == number })
 }
 
-// clonePRRun copies the block and the close result a run carries, so that what
-// a caller holds never changes under it.
+// clonePRRun copies the block, the close result and the troubles a run
+// carries, so that what a caller holds never changes under it.
 func clonePRRun(run PRRun) PRRun {
 	if run.Block != nil {
 		block := *run.Block
@@ -1254,6 +1271,8 @@ func clonePRRun(run PRRun) PRRun {
 		result := *run.Close
 		run.Close = &result
 	}
+	run.TroubleBaseline.FailedChecks = slices.Clone(run.TroubleBaseline.FailedChecks)
+	run.Trouble.FailedChecks = slices.Clone(run.Trouble.FailedChecks)
 	return run
 }
 

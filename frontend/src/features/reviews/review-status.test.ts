@@ -51,6 +51,16 @@ describe("reviewStatusLabel", () => {
       expect(reviewStatusLabel(makeReviewSummary({ status }))).toBe(label);
     });
   }
+
+  it("reads trouble as the checks that failed and the conflict with the base", () => {
+    const review = makeReviewSummary({
+      status: "trouble",
+      baseBranch: "main",
+      trouble: { failedChecks: ["ci"], conflict: true },
+    });
+
+    expect(reviewStatusLabel(review)).toBe("Checks failed: ci · conflict with main");
+  });
 });
 
 describe("reviewStatusTone", () => {
@@ -68,6 +78,7 @@ describe("reviewStatusTone", () => {
     expect(reviewStatusTone(makeReviewSummary({ status: "ready_to_publish" }))).toBe("idle");
     expect(reviewStatusTone(makeReviewSummary({ status: "new_commits" }))).toBe("idle");
     expect(reviewStatusTone(makeReviewSummary({ status: "pass_blocked" }))).toBe("idle");
+    expect(reviewStatusTone(makeReviewSummary({ status: "trouble" }))).toBe("idle");
   });
 });
 

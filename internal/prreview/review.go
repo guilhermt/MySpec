@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"slices"
 	"time"
+
+	"github.com/guilhermt/myspec/internal/gh"
 )
 
 // Mode is what the product does with the findings the user approves.
@@ -109,9 +111,16 @@ type Review struct {
 	PRState         PRState
 	PRCheckedAt     time.Time
 	PublishError    string // why the last publication failed; "" otherwise
-	ArchivedAt      time.Time
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
+
+	// TroubleBaseline is what the reading the last pass started from showed
+	// wrong, and Trouble what went wrong since, while the review rested
+	// published or ready to merge.
+	TroubleBaseline gh.Trouble
+	Trouble         gh.Trouble
+
+	ArchivedAt time.Time
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
 }
 
 // Finding is one numbered finding of a pass.

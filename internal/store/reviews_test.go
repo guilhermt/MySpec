@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
+	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/prreview"
 	"github.com/guilhermt/myspec/internal/store"
 )
@@ -126,6 +127,32 @@ func TestTheCardOfAReviewRoundTrips(t *testing.T) {
 	}
 }
 
+func TestTheTroubleOfAReviewRoundTrips(t *testing.T) {
+	t.Parallel()
+	s := newStoreWithRepositories(t)
+
+	want := newReview("review-1", webRepo, 7, fixedTime)
+	want.TroubleBaseline = gh.Trouble{FailedChecks: []string{"lint"}}
+	want.Trouble = gh.Trouble{FailedChecks: []string{"build", "test"}, Conflict: true}
+	insertReview(t, s, want)
+
+	if diff := cmp.Diff([]prreview.Review{want}, listActiveReviews(t, s)); diff != "" {
+		t.Errorf("ListActive() mismatch (-want +got):\n%s", diff)
+	}
+
+	// A trouble with nothing wrong is stored as nothing and read back as the
+	// zero value.
+	want.TroubleBaseline = gh.Trouble{FailedChecks: []string{}}
+	want.Trouble = gh.Trouble{}
+	if err := s.Reviews.Update(t.Context(), want); err != nil {
+		t.Fatalf("Update() = %v, want nil", err)
+	}
+	want.TroubleBaseline = gh.Trouble{}
+	if diff := cmp.Diff([]prreview.Review{want}, listActiveReviews(t, s)); diff != "" {
+		t.Errorf("ListActive() after clearing mismatch (-want +got):\n%s", diff)
+	}
+}
+
 func TestReviewsListActiveIsInCreationOrder(t *testing.T) {
 	t.Parallel()
 	s := newStoreWithRepositories(t)
@@ -205,6 +232,8 @@ func TestUpdateRewritesTheMutableColumnsOfAReviewAndLeavesItArchived(t *testing.
 	want.PRState = prreview.PRMerged
 	want.PRCheckedAt = checked
 	want.PublishError = "gh: not authenticated"
+	want.TroubleBaseline = gh.Trouble{Conflict: true}
+	want.Trouble = gh.Trouble{FailedChecks: []string{"test"}}
 	want.UpdatedAt = checked
 	if err := s.Reviews.Update(t.Context(), want); err != nil {
 		t.Fatalf("Update() = %v, want nil", err)

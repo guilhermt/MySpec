@@ -130,6 +130,9 @@ func (s *Service) settle(ctx context.Context, id string, detail pulls.Detail) {
 		s.end(ctx, stored, state)
 		return
 	}
+	if updated, moved := s.recordTrouble(ctx, stored, detail.Checks); moved {
+		stored, changed = updated, true
+	}
 	if changed {
 		s.notify(id)
 	}

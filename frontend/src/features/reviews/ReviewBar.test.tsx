@@ -55,6 +55,18 @@ describe("ReviewBar", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Waiting for checks");
   });
 
+  it("names the checks that failed and the conflict after the review", () => {
+    bar({
+      status: "trouble",
+      baseBranch: "main",
+      trouble: { failedChecks: ["ci", "lint"], conflict: true },
+    });
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Checks failed: ci, lint · conflict with main",
+    );
+  });
+
   it("publishes only once everything is decided", async () => {
     const { user } = bar({
       status: "ready_to_publish",

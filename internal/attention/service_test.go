@@ -241,6 +241,107 @@ func TestAnotherKindAtThePlaceIsANewSituation(t *testing.T) {
 	}, f.store.calls)
 }
 
+// withForm is a situation found in a form.
+func withForm(f attention.Found, form attention.Form) attention.Found {
+	f.Form = form
+	return f
+}
+
+func TestAPullRequestInTroubleThatChangesFormIsTheSameSituation(t *testing.T) {
+	t.Parallel()
+	f := newService(t, false)
+	trouble := found(taskID, prPlace, attention.KindPRTrouble)
+	f.settle(withForm(trouble, attention.FormChecks))
+
+	f.advance(time.Minute)
+	want := holding(taskID, attention.Situation{
+		ID: "s1", TaskID: taskID, Place: prPlace, Kind: attention.KindPRTrouble,
+		Form: attention.FormChecksConflict, StartedAt: base,
+	})
+	got := f.service.Update([]attention.Found{withForm(trouble, attention.FormChecksConflict)})
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("Update() with a conflict too mismatch (-want +got):\n%s", diff)
+	}
+
+	wantCalls(t, "notifier", []string{"send:s1:login-screen:pr_trouble at pr"}, f.notifier.calls)
+	wantCalls(t, "store", []string{"upsert:task-1:pr:s1"}, f.store.calls)
+}
+
+func TestAPullRequestReadyToMergeThatGetsInTroubleNotifies(t *testing.T) {
+	t.Parallel()
+	f := newService(t, false)
+	f.settle(withForm(found(taskID, prPlace, attention.KindMerge), attention.FormMerge))
+
+	f.advance(time.Minute)
+	troubled := f.clock.now
+	want := holding(taskID, attention.Situation{
+		ID: "s2", TaskID: taskID, Place: prPlace, Kind: attention.KindPRTrouble,
+		Form: attention.FormConflict, StartedAt: troubled,
+	})
+	got := f.settle(withForm(found(taskID, prPlace, attention.KindPRTrouble), attention.FormConflict))
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("Update() once the trouble settled mismatch (-want +got):\n%s", diff)
+	}
+
+	wantCalls(t, "notifier", []string{
+		"send:s1:login-screen:merge at pr",
+		"withdraw:s1",
+		"send:s2:login-screen:pr_trouble at pr",
+	}, f.notifier.calls)
+	if len(f.started) != 2 || f.started[1].Situation.Kind != attention.KindPRTrouble {
+		t.Errorf("OnStarted = %v, want the merge and then the trouble", f.started)
+	}
+}
+
+func TestAPullRequestBackFromTroubleIsReadyToMergeQuietly(t *testing.T) {
+	t.Parallel()
+	f := newService(t, false)
+	f.settle(withForm(found(taskID, prPlace, attention.KindPRTrouble), attention.FormChecks))
+
+	// The trouble goes away and the merge settles in the same instant the
+	// grace of the trouble runs out.
+	f.advance(time.Minute)
+	fixed := f.clock.now
+	want := holding(taskID, attention.Situation{
+		ID: "s2", TaskID: taskID, Place: prPlace, Kind: attention.KindMerge,
+		Form: attention.FormMerge, StartedAt: fixed,
+	})
+	got := f.settle(withForm(found(taskID, prPlace, attention.KindMerge), attention.FormMerge))
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("Update() once the merge settled mismatch (-want +got):\n%s", diff)
+	}
+
+	wantCalls(t, "notifier", []string{"send:s1:login-screen:pr_trouble at pr", "withdraw:s1"}, f.notifier.calls)
+	wantCalls(t, "store", []string{
+		"upsert:task-1:pr:s1",
+		"delete:task-1:pr",
+		"upsert:task-1:pr:s2",
+	}, f.store.calls)
+	if len(f.started) != 1 || f.started[0].Situation.Kind != attention.KindPRTrouble {
+		t.Errorf("OnStarted = %v, want the trouble only", f.started)
+	}
+}
+
+func TestAReviewBackToPublishedEndsItsTroubleWithNothingNew(t *testing.T) {
+	t.Parallel()
+	f := newService(t, false)
+	reviewPlace := attention.Place{Kind: attention.PlaceReview}
+	f.settle(withForm(found(reviewID, reviewPlace, attention.KindPRTrouble), attention.FormChecks))
+
+	f.advance(time.Minute)
+	f.service.Update(nil)
+	f.advance(attention.Grace)
+	if got := f.service.Update(nil); len(got) != 0 {
+		t.Errorf("Update() once the trouble ended = %v, want nothing", got)
+	}
+
+	wantCalls(t, "notifier", []string{"send:s1:login-screen:pr_trouble at review", "withdraw:s1"}, f.notifier.calls)
+	wantCalls(t, "store", []string{"upsert:review-1:review:s1", "delete:review-1:review"}, f.store.calls)
+	if len(f.started) != 1 {
+		t.Errorf("OnStarted = %v, want the trouble only", f.started)
+	}
+}
+
 func TestTheBaselineTakesWhatItFinds(t *testing.T) {
 	t.Parallel()
 	f := newService(t, false)

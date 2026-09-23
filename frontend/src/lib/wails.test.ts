@@ -138,6 +138,7 @@ describe("narrowing", () => {
     expect(asPRStatus("ready_to_approve")).toBe("ready_to_approve");
     expect(asPRStatus("committing")).toBe("committing");
     expect(asPRStatus("done")).toBe("done");
+    expect(asPRStatus("trouble")).toBe("trouble");
     expect(asPRStatus("merged")).toBe("merged");
     expect(asPRStatus("pr_closed")).toBe("pr_closed");
     expect(asPRStatus("closing")).toBe("closing");
@@ -238,9 +239,13 @@ describe("narrowing", () => {
     expect(asSituationKind("new_commits")).toBe("new_commits");
     expect(asSituationKind("publish_failed")).toBe("publish_failed");
     expect(asSituationKind("pass_blocked")).toBe("pass_blocked");
+    expect(asSituationKind("pr_trouble")).toBe("pr_trouble");
     expect(asSituationForm("decide")).toBe("decide");
     expect(asSituationForm("publish")).toBe("publish");
     expect(asSituationForm("apply")).toBe("apply");
+    expect(asSituationForm("checks")).toBe("checks");
+    expect(asSituationForm("conflict")).toBe("conflict");
+    expect(asSituationForm("checks_conflict")).toBe("checks_conflict");
     expect(asPlaceKind("review")).toBe("review");
     expect(asPullReviewMode("publish")).toBe("publish");
     expect(asPullReviewMode("apply")).toBe("apply");
@@ -260,6 +265,7 @@ describe("narrowing", () => {
       "ready_to_approve",
       "committing",
       "ready_to_merge",
+      "trouble",
     ]) {
       expect(asPullReviewStatus(status)).toBe(status);
     }

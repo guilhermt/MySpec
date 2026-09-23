@@ -188,3 +188,27 @@ func (s *Service) forgetChecks(id string) {
 	l.checks = nil
 	l.checksWait = checksWait{}
 }
+
+// recordBaseline keeps what the reading a review pass starts from shows
+// wrong: what the readings that follow the pass are measured against.
+func (s *Service) recordBaseline(ctx context.Context, id string, checks *gh.PRChecks) {
+	if _, err := s.tasks.SetPRBaseline(ctx, id, checks.Trouble()); err != nil {
+		s.log.Error("record pull request baseline failed", "task", id, "error", err)
+	}
+}
+
+// recordTrouble measures a reading of a pull request that waits for the merge
+// against the reading its last review pass started from, and records what
+// went wrong since when that changed.
+func (s *Service) recordTrouble(ctx context.Context, id string, run task.PRRun, checks gh.PRChecks) {
+	next := gh.NextTrouble(run.TroubleBaseline, run.Trouble, checks)
+	if next.Equal(run.Trouble) {
+		return
+	}
+	if _, err := s.tasks.SetPRTrouble(ctx, id, next); err != nil {
+		s.log.Error("record pull request trouble failed", "task", id, "error", err)
+		return
+	}
+	s.log.Info("pull request trouble", "task", id,
+		"failed", len(next.FailedChecks), "conflicting", next.Conflict)
+}

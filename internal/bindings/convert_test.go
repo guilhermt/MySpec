@@ -14,6 +14,7 @@ import (
 	"github.com/guilhermt/myspec/internal/discussion"
 	"github.com/guilhermt/myspec/internal/discussionflow"
 	"github.com/guilhermt/myspec/internal/flow"
+	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
@@ -927,6 +928,7 @@ func TestFromTasksCarriesThePullRequestOfThePRStage(t *testing.T) {
 		PRURL:          "https://github.com/acme/api/pull/7",
 		PRState:        "open",
 		CheckedAt:      "2026-09-05T10:00:00Z",
+		Trouble:        bindings.PRTrouble{FailedChecks: []string{}},
 		SessionStage:   "pr_review",
 		SessionStatus:  "waiting",
 		SessionModel:   "claude-opus-5-5[1m]",
@@ -2465,5 +2467,61 @@ func TestFromArchivedDiscussionsKeepsTheRepositoriesOfADiscussionOfABoardThatIsG
 
 	if diff := cmp.Diff([]string{"r-web", "r-api"}, got[0].RepositoryIDs); diff != "" {
 		t.Errorf("repositoryIds (-want +got):\n%s", diff)
+	}
+}
+
+func TestFromTasksCarriesWhatWentWrongWithThePullRequestSinceItsReview(t *testing.T) {
+	t.Parallel()
+
+	troubled := flow.PullRequest{
+		Status:  flow.PRTrouble,
+		PR:      task.PRDetails{Number: 8, State: task.PRStateOpen, Base: "main"},
+		Trouble: gh.Trouble{FailedChecks: []string{"ci", "lint"}, Conflict: true},
+	}
+	ready := flow.PullRequest{
+		Status: flow.PRDone,
+		PR:     task.PRDetails{Number: 9, State: task.PRStateOpen, Base: "main"},
+	}
+	byTask := map[string]flow.PullRequest{"task-1": troubled, "task-2": ready}
+
+	got := bindings.FromTasks(
+		[]task.Task{
+			{ID: "task-1", Name: "login-screen", Stage: task.StagePR},
+			{ID: "task-2", Name: "signup-screen", Stage: task.StagePR},
+		},
+		func(string) task.Artifacts { return task.Artifacts{} },
+		func(string) []flow.StepState { return nil },
+		func(id string) (flow.PullRequest, bool) { pr, ok := byTask[id]; return pr, ok },
+		repoOf,
+		nil,
+		nil,
+	)
+	if len(got) != 2 || got[0].PR == nil || got[1].PR == nil {
+		t.Fatalf("FromTasks() = %+v, want two tasks with their pull requests", got)
+	}
+	want := bindings.PRTrouble{FailedChecks: []string{"ci", "lint"}, Conflict: true}
+	if diff := cmp.Diff(want, got[0].PR.Trouble); diff != "" {
+		t.Errorf("trouble mismatch (-want +got):\n%s", diff)
+	}
+	if clean := got[1].PR.Trouble; clean.FailedChecks == nil || len(clean.FailedChecks) != 0 || clean.Conflict {
+		t.Errorf("trouble = %#v, want an empty list and no conflict", clean)
+	}
+}
+
+func TestFromReviewsCarriesWhatWentWrongWithThePullRequestSinceItsLastPass(t *testing.T) {
+	t.Parallel()
+
+	troubled := reviewState(reviewflow.StatusTrouble, recordedPass(1, prreview.DecisionApproved))
+	troubled.Review.Trouble = gh.Trouble{FailedChecks: []string{"ci"}, Conflict: true}
+	ready := reviewState(reviewflow.StatusPublished, recordedPass(1, prreview.DecisionApproved))
+
+	got := bindings.FromReviews([]reviewflow.State{troubled, ready}, nil, reviewRepos)
+
+	want := bindings.PRTrouble{FailedChecks: []string{"ci"}, Conflict: true}
+	if diff := cmp.Diff(want, got[0].Trouble); diff != "" {
+		t.Errorf("trouble mismatch (-want +got):\n%s", diff)
+	}
+	if clean := got[1].Trouble; clean.FailedChecks == nil || len(clean.FailedChecks) != 0 || clean.Conflict {
+		t.Errorf("trouble = %#v, want an empty list and no conflict", clean)
 	}
 }

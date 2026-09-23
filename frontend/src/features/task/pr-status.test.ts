@@ -10,6 +10,7 @@ import {
   closeStepLabel,
   draftAtHand,
   hasPRSession,
+  prBaseName,
   prBlockHint,
   prBlockTitle,
   prReportLabel,
@@ -45,6 +46,17 @@ describe("prStatusLabel and prStatusTone", () => {
 
     expect(prStatusLabel(pr)).toBe(label);
     expect(prStatusTone(pr)).toBe(tone);
+  });
+
+  it("reads what went wrong after the review, with the base of the pull request", () => {
+    const pr = makePullRequest({
+      status: "trouble",
+      prBase: "main",
+      trouble: { failedChecks: ["ci", "lint"], conflict: true },
+    });
+
+    expect(prStatusLabel(pr)).toBe("Checks failed: ci, lint · conflict with main");
+    expect(prStatusTone(pr)).toBe("idle");
   });
 
   it("leaves a merge it could not confirm to the situation of the task", () => {
@@ -110,6 +122,7 @@ describe("what the pull request allows", () => {
   it("reviews again from every state the pull request exists in", () => {
     expect(canReviewAgain(makePullRequest({ status: "awaiting_decision" }))).toBe(true);
     expect(canReviewAgain(makePullRequest({ status: "done" }))).toBe(true);
+    expect(canReviewAgain(makePullRequest({ status: "trouble" }))).toBe(true);
     expect(canReviewAgain(makePullRequest({ status: "merged" }))).toBe(true);
     expect(canReviewAgain(makePullRequest({ status: "draft_ready" }))).toBe(false);
     expect(canReviewAgain(makePullRequest({ status: "waiting_checks", prNumber: 12 }))).toBe(false);
@@ -141,6 +154,9 @@ describe("closeHint", () => {
     expect(closeHint(makePullRequest({ status: "done" }), null)).toBe(
       "The pull request hasn't been merged yet",
     );
+    expect(closeHint(makePullRequest({ status: "trouble" }), null)).toBe(
+      "The pull request hasn't been merged yet",
+    );
     expect(closeHint(makePullRequest({ status: "pr_closed" }), null)).toBe(
       "The pull request was closed without a merge",
     );
@@ -152,6 +168,13 @@ describe("closeHint", () => {
     const pr = makePullRequest({ status: "merged", cloneMissing: true });
 
     expect(closeHint(pr, repository)).toBe("The clone at /home/dev/projects/web is missing.");
+  });
+});
+
+describe("prBaseName", () => {
+  it("is the base GitHub says, or else the base of the worktree", () => {
+    expect(prBaseName(makePullRequest({ prBase: "main", baseBranch: "origin/dev" }))).toBe("main");
+    expect(prBaseName(makePullRequest({ prBase: "", baseBranch: "origin/dev" }))).toBe("dev");
   });
 });
 

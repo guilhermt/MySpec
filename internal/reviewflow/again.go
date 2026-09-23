@@ -289,6 +289,7 @@ func (s *Service) sendPass(
 	// Why the report of a pass before could not be read says nothing about
 	// this one.
 	s.setUnreadable(stored.ID, "")
+	s.recordBaseline(ctx, stored.ID, checks)
 
 	s.log.Info("review pass asked", "review", stored.ID, "pass", pass)
 	s.notify(stored.ID)

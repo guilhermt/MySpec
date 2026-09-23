@@ -35,6 +35,7 @@ const (
 	KindChangesReview   Kind = "changes_review"
 	KindReviewReport    Kind = "review_report"
 	KindNewCommits      Kind = "new_commits"
+	KindPRTrouble       Kind = "pr_trouble"
 	KindDrafts          Kind = "drafts"
 
 	KindPublishFailed Kind = "publish_failed"
@@ -82,7 +83,7 @@ func (g Group) rank() int {
 // Changing form is going on with the same situation.
 type Form string
 
-// The forms of step_review, changes_review, merge and review_report.
+// The forms of step_review, changes_review, merge, review_report and pr_trouble.
 const (
 	FormNone    Form = ""
 	FormReview  Form = "review"  // nothing staged yet
@@ -93,6 +94,10 @@ const (
 	FormDecide  Form = "decide"  // the findings of a pass await a decision
 	FormPublish Form = "publish" // the decided findings await publication
 	FormApply   Form = "apply"   // the approved findings await the agent
+
+	FormChecks         Form = "checks"          // a check failed after the review
+	FormConflict       Form = "conflict"        // the pull request has a conflict with its base
+	FormChecksConflict Form = "checks_conflict" // both
 )
 
 // PlaceKind says what part of a task a place is.

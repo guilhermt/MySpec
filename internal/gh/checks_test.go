@@ -171,3 +171,182 @@ func TestPRChecksListTheFailedInOrderAndTheConflict(t *testing.T) {
 		t.Error("Failed() = nil, want an empty list")
 	}
 }
+
+func TestTroubleNamesTheFailedChecksSortedOnceAndTheConflict(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		checks gh.PRChecks
+		want   gh.Trouble
+	}{
+		{
+			name: "failed checks repeated and out of order",
+			checks: gh.PRChecks{
+				Checks: []gh.Check{
+					{Name: "test", Conclusion: "failure"},
+					{Name: "build", Conclusion: "success"},
+					{Name: "lint", Conclusion: "cancelled"},
+					{Name: "test", Conclusion: "timed_out"},
+					{Name: "deploy", Pending: true},
+				},
+				Mergeable: gh.MergeableClean,
+			},
+			want: gh.Trouble{FailedChecks: []string{"lint", "test"}},
+		},
+		{
+			name:   "a conflict and no failed checks",
+			checks: gh.PRChecks{Checks: []gh.Check{{Name: "test", Conclusion: "success"}}, Mergeable: gh.MergeableConflicting},
+			want:   gh.Trouble{FailedChecks: []string{}, Conflict: true},
+		},
+		{
+			name:   "nothing wrong",
+			checks: gh.PRChecks{Checks: []gh.Check{}, Mergeable: gh.MergeableUnknown},
+			want:   gh.Trouble{FailedChecks: []string{}},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			got := test.checks.Trouble()
+			if diff := cmp.Diff(test.want, got); diff != "" {
+				t.Errorf("Trouble() mismatch (-want +got):\n%s", diff)
+			}
+			if got.FailedChecks == nil {
+				t.Error("FailedChecks = nil, want a list")
+			}
+		})
+	}
+}
+
+func TestNextTroubleIsWhatWentWrongSinceTheBaseline(t *testing.T) {
+	t.Parallel()
+
+	failed := func(name string) gh.Check { return gh.Check{Name: name, Conclusion: "failure"} }
+	passed := func(name string) gh.Check { return gh.Check{Name: name, Conclusion: "success"} }
+	pending := func(name string) gh.Check { return gh.Check{Name: name, Pending: true} }
+	tests := []struct {
+		name     string
+		baseline gh.Trouble
+		open     gh.Trouble
+		reading  gh.PRChecks
+		want     gh.Trouble
+	}{
+		{
+			name:    "a check that failed since",
+			reading: gh.PRChecks{Checks: []gh.Check{passed("build"), failed("test")}, Mergeable: gh.MergeableClean},
+			want:    gh.Trouble{FailedChecks: []string{"test"}},
+		},
+		{
+			name:     "a check that already failed in the baseline",
+			baseline: gh.Trouble{FailedChecks: []string{"test"}},
+			reading:  gh.PRChecks{Checks: []gh.Check{failed("test")}, Mergeable: gh.MergeableClean},
+			want:     gh.Trouble{FailedChecks: []string{}},
+		},
+		{
+			name:    "a pending check that was open keeps it",
+			open:    gh.Trouble{FailedChecks: []string{"test"}},
+			reading: gh.PRChecks{Checks: []gh.Check{pending("test")}, Mergeable: gh.MergeableClean},
+			want:    gh.Trouble{FailedChecks: []string{"test"}},
+		},
+		{
+			name:    "a pending check that was not open stays out",
+			reading: gh.PRChecks{Checks: []gh.Check{pending("test")}, Mergeable: gh.MergeableClean},
+			want:    gh.Trouble{FailedChecks: []string{}},
+		},
+		{
+			name:    "an open check that passed leaves",
+			open:    gh.Trouble{FailedChecks: []string{"lint", "test"}},
+			reading: gh.PRChecks{Checks: []gh.Check{passed("test"), failed("lint")}, Mergeable: gh.MergeableClean},
+			want:    gh.Trouble{FailedChecks: []string{"lint"}},
+		},
+		{
+			name:    "an open check gone from the reading leaves",
+			open:    gh.Trouble{FailedChecks: []string{"test"}},
+			reading: gh.PRChecks{Checks: []gh.Check{}, Mergeable: gh.MergeableClean},
+			want:    gh.Trouble{FailedChecks: []string{}},
+		},
+		{
+			name:    "a conflict that came up since",
+			reading: gh.PRChecks{Checks: []gh.Check{}, Mergeable: gh.MergeableConflicting},
+			want:    gh.Trouble{FailedChecks: []string{}, Conflict: true},
+		},
+		{
+			name:     "a conflict already in the baseline",
+			baseline: gh.Trouble{Conflict: true},
+			reading:  gh.PRChecks{Checks: []gh.Check{}, Mergeable: gh.MergeableConflicting},
+			want:     gh.Trouble{FailedChecks: []string{}},
+		},
+		{
+			name:    "a merge not computed keeps the open conflict",
+			open:    gh.Trouble{Conflict: true},
+			reading: gh.PRChecks{Checks: []gh.Check{}, Mergeable: gh.MergeableUnknown},
+			want:    gh.Trouble{FailedChecks: []string{}, Conflict: true},
+		},
+		{
+			name:    "a clean merge clears the open conflict",
+			open:    gh.Trouble{Conflict: true},
+			reading: gh.PRChecks{Checks: []gh.Check{}, Mergeable: gh.MergeableClean},
+			want:    gh.Trouble{FailedChecks: []string{}},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			got := gh.NextTrouble(test.baseline, test.open, test.reading)
+			if diff := cmp.Diff(test.want, got); diff != "" {
+				t.Errorf("NextTrouble() mismatch (-want +got):\n%s", diff)
+			}
+			if got.FailedChecks == nil {
+				t.Error("FailedChecks = nil, want a list")
+			}
+		})
+	}
+}
+
+func TestTroubleIsAnyFailedCheckOrAConflict(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		trouble gh.Trouble
+		want    bool
+	}{
+		{"nothing", gh.Trouble{}, false},
+		{"an empty list", gh.Trouble{FailedChecks: []string{}}, false},
+		{"a failed check", gh.Trouble{FailedChecks: []string{"test"}}, true},
+		{"a conflict", gh.Trouble{Conflict: true}, true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			if got := test.trouble.Any(); got != test.want {
+				t.Errorf("Any() = %v, want %v", got, test.want)
+			}
+		})
+	}
+}
+
+func TestTroublesAreEqualWithTheSameChecksAndConflict(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		a, b gh.Trouble
+		want bool
+	}{
+		{"a nil list and an empty one", gh.Trouble{}, gh.Trouble{FailedChecks: []string{}}, true},
+		{"the same checks", gh.Trouble{FailedChecks: []string{"lint", "test"}}, gh.Trouble{FailedChecks: []string{"lint", "test"}}, true},
+		{"different checks", gh.Trouble{FailedChecks: []string{"lint"}}, gh.Trouble{FailedChecks: []string{"test"}}, false},
+		{"a check more", gh.Trouble{FailedChecks: []string{"lint"}}, gh.Trouble{FailedChecks: []string{"lint", "test"}}, false},
+		{"a different conflict", gh.Trouble{Conflict: true}, gh.Trouble{}, false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			if got := test.a.Equal(test.b); got != test.want {
+				t.Errorf("Equal() = %v, want %v", got, test.want)
+			}
+		})
+	}
+}

@@ -1,4 +1,5 @@
 import type { StatusTone } from "@/features/task/status";
+import { troubleText } from "@/lib/pull-requests";
 import { cloneMissingText } from "@/lib/repositories";
 import type {
   CloseResult,
@@ -40,6 +41,8 @@ export function prStatusLabel(pr: PullRequest): string {
       return "Committing";
     case "done":
       return "Waiting for the merge";
+    case "trouble":
+      return troubleText(pr.trouble, prBaseName(pr));
     case "merged":
       return "Merged · ready to close";
     case "pr_closed":
@@ -75,10 +78,16 @@ export function prStatusTone(pr: PullRequest): StatusTone {
     case "in_review":
     case "ready_to_approve":
     case "done":
+    case "trouble":
     case "merged":
     case "pr_closed":
       return "idle";
   }
+}
+
+/** prBaseName is the branch the pull request merges into: what GitHub says, or else the base of the worktree. */
+export function prBaseName(pr: PullRequest): string {
+  return pr.prBase !== "" ? pr.prBase : pr.baseBranch.replace(/^origin\//, "");
 }
 
 /**
@@ -147,6 +156,7 @@ export function canReviewAgain(pr: PullRequest): boolean {
     case "in_review":
     case "ready_to_approve":
     case "done":
+    case "trouble":
     case "merged":
       return true;
     // A pass that ended without its report can be asked for again, once there
@@ -170,6 +180,7 @@ export function closeHint(pr: PullRequest, repository: Repository | null): strin
   }
   switch (asPRStatus(pr.status)) {
     case "done":
+    case "trouble":
       return "The pull request hasn't been merged yet";
     case "pr_closed":
       return "The pull request was closed without a merge";

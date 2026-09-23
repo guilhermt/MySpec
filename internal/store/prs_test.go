@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
+	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/store"
 	"github.com/guilhermt/myspec/internal/task"
 )
@@ -136,6 +137,37 @@ func TestPRRunKeepsTheBaseAndWhatTheClosingDid(t *testing.T) {
 	}
 	if got.PR.Base != "" {
 		t.Errorf("PR.Base = %q, want empty", got.PR.Base)
+	}
+}
+
+func TestPRRunKeepsItsTroubleAndTheBaselineItIsMeasuredAgainst(t *testing.T) {
+	t.Parallel()
+	s := newStoreWithRepositories(t)
+
+	taskID := seedTask(t, s)
+	run := newPRRun(taskID, task.PRDone)
+	run.TroubleBaseline = gh.Trouble{FailedChecks: []string{"lint"}}
+	run.Trouble = gh.Trouble{FailedChecks: []string{"build", "test"}, Conflict: true}
+	if err := s.Tasks.UpsertPRRun(t.Context(), run); err != nil {
+		t.Fatalf("UpsertPRRun() = %v, want nil", err)
+	}
+	if diff := cmp.Diff(run, getPRRun(t, s, taskID)); diff != "" {
+		t.Errorf("GetPRRun() mismatch (-want +got):\n%s", diff)
+	}
+
+	// A trouble with nothing wrong is stored as nothing and read back as the
+	// zero value.
+	run.TroubleBaseline = gh.Trouble{FailedChecks: []string{}}
+	run.Trouble = gh.Trouble{}
+	if err := s.Tasks.UpsertPRRun(t.Context(), run); err != nil {
+		t.Fatalf("UpsertPRRun() again = %v, want nil", err)
+	}
+	got := getPRRun(t, s, taskID)
+	if diff := cmp.Diff(gh.Trouble{}, got.TroubleBaseline); diff != "" {
+		t.Errorf("TroubleBaseline mismatch (-want +got):\n%s", diff)
+	}
+	if diff := cmp.Diff(gh.Trouble{}, got.Trouble); diff != "" {
+		t.Errorf("Trouble mismatch (-want +got):\n%s", diff)
 	}
 }
 

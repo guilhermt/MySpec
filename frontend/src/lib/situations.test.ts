@@ -86,6 +86,9 @@ describe("situationLabel", () => {
     ["drafts", "", 0, "Decide drafts"],
     ["publish_failed", "", 0, "Publish failed"],
     ["pass_blocked", "", 0, "Pass blocked"],
+    ["pr_trouble", "checks", 0, "Checks failed"],
+    ["pr_trouble", "conflict", 0, "Conflict with base"],
+    ["pr_trouble", "checks_conflict", 0, "Checks failed · conflict"],
   ])("names %s in the %s form", (kind, form, percent, label) => {
     const situation = makeSituation({ kind, form, percent, place: stepPlace(3) });
 
@@ -144,6 +147,7 @@ describe("namesPlace and situationDetail", () => {
     ["findings", false],
     ["changes_review", false],
     ["merge", false],
+    ["pr_trouble", false],
     ["drafts", false],
   ])("knows whether the label of %s names its place", (kind, expected) => {
     expect(namesPlace(makeSituation({ kind }))).toBe(expected);

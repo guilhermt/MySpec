@@ -54,6 +54,7 @@ import type {
   PRDraft,
   PRPreview,
   PRReport,
+  PRTrouble,
   Prompt,
   PullCard,
   PullLabel,
@@ -152,6 +153,7 @@ export type {
   PRDraft,
   PRPreview,
   PRReport,
+  PRTrouble,
   Prompt,
   PullCard,
   PullLabel,
@@ -252,6 +254,7 @@ export type PRStatus =
   | "ready_to_approve"
   | "committing"
   | "done"
+  | "trouble"
   | "merged"
   | "pr_closed"
   | "closing"
@@ -353,6 +356,7 @@ export type SituationKind =
   | "merge"
   | "review_report"
   | "new_commits"
+  | "pr_trouble"
   | "drafts"
   | "publish_failed"
   | "pass_blocked";
@@ -370,7 +374,10 @@ export type SituationForm =
   | "close"
   | "decide"
   | "publish"
-  | "apply";
+  | "apply"
+  | "checks"
+  | "conflict"
+  | "checks_conflict";
 
 /** PlaceKind is the part of an item a situation is in: of a task, or a review or a discussion of its own. */
 export type PlaceKind = "stage" | "step" | "step_review" | "pr" | "review" | "discussion";
@@ -431,7 +438,8 @@ export type PullReviewStatus =
   | "in_review"
   | "ready_to_approve"
   | "committing"
-  | "ready_to_merge";
+  | "ready_to_merge"
+  | "trouble";
 
 /** ReviewVerdict is what a published review says of the pull request. */
 export type ReviewVerdict = "approve" | "request_changes" | "comment";
@@ -605,6 +613,7 @@ export function asPRStatus(value: string): PRStatus {
     case "ready_to_approve":
     case "committing":
     case "done":
+    case "trouble":
     case "merged":
     case "pr_closed":
     case "closing":
@@ -817,6 +826,7 @@ export function asSituationKind(value: string): SituationKind {
     case "merge":
     case "review_report":
     case "new_commits":
+    case "pr_trouble":
     case "drafts":
     case "publish_failed":
     case "pass_blocked":
@@ -848,6 +858,9 @@ export function asSituationForm(value: string): SituationForm {
     case "decide":
     case "publish":
     case "apply":
+    case "checks":
+    case "conflict":
+    case "checks_conflict":
       return value;
     default:
       return "";
@@ -990,6 +1003,7 @@ export function asPullReviewStatus(value: string): PullReviewStatus {
     case "ready_to_approve":
     case "committing":
     case "ready_to_merge":
+    case "trouble":
       return value;
     default:
       return "reviewing";

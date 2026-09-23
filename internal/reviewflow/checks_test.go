@@ -393,3 +393,32 @@ func TestARestartDuringTheWaitOfApplyModeLeavesTheWorktreeUnwatched(t *testing.T
 		return s.Review.Phase == prreview.PhaseNone
 	}, "the second pass to start after the restart")
 }
+
+func TestAPassKeepsWhatTheReadingItStartsFromShowsWrong(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.pulls.seed(withChecks(openPR(), gh.MergeableConflicting, passedCheck, failedCheck))
+	id := f.start(t)
+
+	stored, _ := f.reviews.Get(id)
+	want := gh.Trouble{FailedChecks: []string{"lint"}, Conflict: true}
+	if !stored.TroubleBaseline.Equal(want) || stored.Trouble.Any() {
+		t.Errorf("baseline = %+v, trouble = %+v, want the reading of the first pass and no trouble",
+			stored.TroubleBaseline, stored.Trouble)
+	}
+
+	f.sessions.goIdle(id)
+	f.record(t, id, cleanReport(1, "Nothing to change."), headHash)
+	f.update(t, id, func(r *prreview.Review) { r.Trouble = gh.Trouble{FailedChecks: []string{"test"}} })
+	f.pulls.seed(withChecks(openPR(), gh.MergeableClean, passedCheck))
+	if err := f.service.ReviewAgain(t.Context(), id, ""); err != nil {
+		t.Fatalf("review again: %v", err)
+	}
+
+	stored, _ = f.reviews.Get(id)
+	if stored.TroubleBaseline.Any() || stored.Trouble.Any() {
+		t.Errorf("baseline = %+v, trouble = %+v, want the clean reading of the second pass and no trouble",
+			stored.TroubleBaseline, stored.Trouble)
+	}
+}

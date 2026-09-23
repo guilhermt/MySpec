@@ -93,6 +93,11 @@ export function situationLabel(situation: Situation): string {
       return "Publish failed";
     case "pass_blocked":
       return "Pass blocked";
+    case "pr_trouble":
+      if (form === "checks_conflict") {
+        return "Checks failed · conflict";
+      }
+      return form === "conflict" ? "Conflict with base" : "Checks failed";
   }
 }
 
@@ -155,6 +160,7 @@ export function namesPlace(situation: Situation): boolean {
     case "findings":
     case "changes_review":
     case "merge":
+    case "pr_trouble":
     case "drafts":
       return false;
   }

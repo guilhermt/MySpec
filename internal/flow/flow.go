@@ -44,6 +44,8 @@ type Tasks interface {
 	SetPRDetails(ctx context.Context, id string, pr task.PRDetails) (task.PRRun, error)
 	SetPRClosed(ctx context.Context, id string, result task.CloseResult) (task.PRRun, error)
 	SetPRReviewed(ctx context.Context, id, commit string, pass int) (task.PRRun, error)
+	SetPRBaseline(ctx context.Context, id string, baseline gh.Trouble) (task.PRRun, error)
+	SetPRTrouble(ctx context.Context, id string, trouble gh.Trouble) (task.PRRun, error)
 	ClearPRRun(ctx context.Context, id string) error
 	StepRuns(id string) []task.StepRun
 	SetStepRun(ctx context.Context, id string, number int, status task.StepStatus, block *task.StepBlock) (task.StepRun, error)

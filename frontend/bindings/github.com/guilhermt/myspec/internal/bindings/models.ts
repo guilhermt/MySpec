@@ -1206,6 +1206,18 @@ export interface PRReport {
 }
 
 /**
+ * PRTrouble is what went wrong with a pull request after its review: the
+ * checks that failed, by name, and a conflict with its base.
+ */
+export interface PRTrouble {
+    /**
+     * never nil
+     */
+    "failedChecks": string[] | null;
+    "conflict": boolean;
+}
+
+/**
  * PermissionEntry is a tool the agent asked to use. Input and Suggestions carry
  * raw JSON as a string, because the bindings generator has no stable type for
  * json.RawMessage; the frontend parses them.
@@ -1328,8 +1340,8 @@ export interface PullRequest {
     /**
      * Status is preparing, blocked, drafting, draft_ready, awaiting_reply,
      * opening, reviewing, waiting_checks, awaiting_decision, in_review,
-     * ready_to_approve, committing, done, merged, pr_closed, closing or closed,
-     * a string for the same reason as State.Theme.
+     * ready_to_approve, committing, done, trouble, merged, pr_closed, closing or
+     * closed, a string for the same reason as State.Theme.
      */
     "status": string;
 
@@ -1383,6 +1395,12 @@ export interface PullRequest {
      * otherwise.
      */
     "checkError": string;
+
+    /**
+     * Trouble is what went wrong since the last review pass; meaningful in
+     * trouble.
+     */
+    "trouble": PRTrouble;
 
     /**
      * the user may close the task now
@@ -1857,7 +1875,7 @@ export interface ReviewSummary {
      * Status is reviewing, waiting_checks, pass_blocked, awaiting_reply,
      * awaiting_decision, ready_to_publish, publish_failed, published,
      * new_commits, ready_to_apply, applying, in_review, ready_to_approve,
-     * committing or ready_to_merge.
+     * committing, ready_to_merge or trouble.
      */
     "status": string;
 
@@ -1883,6 +1901,12 @@ export interface ReviewSummary {
      * when it failed; "" otherwise.
      */
     "checkError": string;
+
+    /**
+     * Trouble is what went wrong since the last review pass; meaningful in
+     * trouble.
+     */
+    "trouble": PRTrouble;
 
     /**
      * PublishError is why the last publication failed; "" otherwise.

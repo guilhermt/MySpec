@@ -21,7 +21,7 @@ type ReviewsRepo struct{ db *sql.DB }
 const reviewColumns = `id, repository_id, number, title, author, url, head_branch, base_branch,
 	own, mode, phase, card, artifacts_dir, asked_pass, reported_pass, pass_commit,
 	published_pass, published_commit, head_commit, pr_state, pr_checked_at, publish_error,
-	archived_at, created_at, updated_at`
+	trouble_baseline, trouble, archived_at, created_at, updated_at`
 
 // passColumns is the column list every pass query selects, in scan order.
 const passColumns = `review_id, pass, instructions, recorded, clean, commit_sha,
@@ -71,9 +71,13 @@ func (r *ReviewsRepo) listReviews(ctx context.Context, query string) ([]prreview
 // Insert stores a new review.
 func (r *ReviewsRepo) Insert(ctx context.Context, review prreview.Review) error {
 	const stmt = `INSERT INTO reviews (` + reviewColumns + `)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	card, err := encodeCard(review.Card)
+	if err != nil {
+		return fmt.Errorf("insert review %s: %w", review.ID, err)
+	}
+	baseline, trouble, err := encodeTroubles(review)
 	if err != nil {
 		return fmt.Errorf("insert review %s: %w", review.ID, err)
 	}
@@ -83,7 +87,7 @@ func (r *ReviewsRepo) Insert(ctx context.Context, review prreview.Review) error 
 		review.AskedPass, review.ReportedPass, review.PassCommit,
 		review.PublishedPass, review.PublishedCommit, review.HeadCommit,
 		string(review.PRState), nullTime(review.PRCheckedAt), review.PublishError,
-		nullTime(review.ArchivedAt), formatTime(review.CreatedAt), formatTime(review.UpdatedAt))
+		baseline, trouble, nullTime(review.ArchivedAt), formatTime(review.CreatedAt), formatTime(review.UpdatedAt))
 	if err != nil {
 		return fmt.Errorf("insert review %s: %w", review.ID, err)
 	}
@@ -101,10 +105,14 @@ func updateReview(ctx context.Context, db execer, review prreview.Review) error 
 	const stmt = `UPDATE reviews SET title = ?, author = ?, url = ?, head_branch = ?, base_branch = ?,
 		own = ?, mode = ?, phase = ?, card = ?, asked_pass = ?, reported_pass = ?, pass_commit = ?,
 		published_pass = ?, published_commit = ?, head_commit = ?, pr_state = ?, pr_checked_at = ?,
-		publish_error = ?, updated_at = ?
+		publish_error = ?, trouble_baseline = ?, trouble = ?, updated_at = ?
 		WHERE id = ?`
 
 	card, err := encodeCard(review.Card)
+	if err != nil {
+		return fmt.Errorf("update review %s: %w", review.ID, err)
+	}
+	baseline, trouble, err := encodeTroubles(review)
 	if err != nil {
 		return fmt.Errorf("update review %s: %w", review.ID, err)
 	}
@@ -113,7 +121,7 @@ func updateReview(ctx context.Context, db execer, review prreview.Review) error 
 		card, review.AskedPass, review.ReportedPass, review.PassCommit,
 		review.PublishedPass, review.PublishedCommit, review.HeadCommit,
 		string(review.PRState), nullTime(review.PRCheckedAt), review.PublishError,
-		formatTime(review.UpdatedAt), review.ID)
+		baseline, trouble, formatTime(review.UpdatedAt), review.ID)
 	if err != nil {
 		return fmt.Errorf("update review %s: %w", review.ID, err)
 	}
@@ -311,6 +319,7 @@ func scanReview(row scanner) (prreview.Review, error) {
 		review               prreview.Review
 		mode, phase, state   string
 		card                 string
+		baseline, trouble    string
 		checkedAt            sql.NullString
 		archivedAt           sql.NullString
 		createdAt, updatedAt string
@@ -319,7 +328,7 @@ func scanReview(row scanner) (prreview.Review, error) {
 		&review.URL, &review.HeadBranch, &review.BaseBranch, &review.Own, &mode, &phase, &card,
 		&review.ArtifactsDir, &review.AskedPass, &review.ReportedPass, &review.PassCommit,
 		&review.PublishedPass, &review.PublishedCommit, &review.HeadCommit, &state, &checkedAt,
-		&review.PublishError, &archivedAt, &createdAt, &updatedAt)
+		&review.PublishError, &baseline, &trouble, &archivedAt, &createdAt, &updatedAt)
 	if err != nil {
 		return prreview.Review{}, fmt.Errorf("scan review: %w", err)
 	}
@@ -330,6 +339,12 @@ func scanReview(row scanner) (prreview.Review, error) {
 
 	subject := "review " + review.ID
 	if review.Card, err = decodeCard(card); err != nil {
+		return prreview.Review{}, fmt.Errorf("read %s: %w", subject, err)
+	}
+	if review.TroubleBaseline, err = decodeTrouble(baseline); err != nil {
+		return prreview.Review{}, fmt.Errorf("read %s: %w", subject, err)
+	}
+	if review.Trouble, err = decodeTrouble(trouble); err != nil {
 		return prreview.Review{}, fmt.Errorf("read %s: %w", subject, err)
 	}
 	if checkedAt.Valid {
@@ -397,6 +412,17 @@ func scanFinding(row scanner) (int, prreview.Finding, error) {
 	finding.Decision = prreview.Decision(decision)
 	finding.Placement = prreview.Placement(placement)
 	return pass, finding, nil
+}
+
+// encodeTroubles is the JSON of the baseline and the trouble of a review.
+func encodeTroubles(review prreview.Review) (baseline, trouble string, err error) {
+	if baseline, err = encodeTrouble(review.TroubleBaseline); err != nil {
+		return "", "", err
+	}
+	if trouble, err = encodeTrouble(review.Trouble); err != nil {
+		return "", "", err
+	}
+	return baseline, trouble, nil
 }
 
 // encodeCard is the JSON of the card of a review, "" for none.

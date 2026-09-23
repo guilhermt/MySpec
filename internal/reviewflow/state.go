@@ -27,6 +27,7 @@ const (
 	StatusReadyToApprove   Status = "ready_to_approve" // apply: every changed file is staged
 	StatusCommitting       Status = "committing"       // apply: the agent is committing
 	StatusReadyToMerge     Status = "ready_to_merge"   // apply: nothing is left to fix
+	StatusTrouble          Status = "trouble"          // published or ready to merge, and a check failed or a conflict with the base came up since
 	StatusWaitingChecks    Status = "waiting_checks"   // a pass was asked for and waits for the checks of the head
 	StatusPassBlocked      Status = "pass_blocked"     // the pass could not start: GitHub could not be read, or the worktree updated
 )
@@ -160,6 +161,9 @@ func publishStatus(stored prreview.Review, last prreview.Pass) Status {
 		if stored.HeadCommit != "" && stored.HeadCommit != stored.PublishedCommit {
 			return StatusNewCommits
 		}
+		if stored.Trouble.Any() {
+			return StatusTrouble
+		}
 		return StatusPublished
 	case !last.Decided():
 		return StatusAwaitingDecision
@@ -184,16 +188,25 @@ func applyStatus(in statusInput) Status {
 	default:
 		switch {
 		case in.Last.Clean:
-			return StatusReadyToMerge
+			return readyToMerge(in.Review)
 		case !in.Last.Decided():
 			return StatusAwaitingDecision
 		case len(in.Last.Approved()) == 0:
 			// Every finding was discarded: there is nothing to fix.
-			return StatusReadyToMerge
+			return readyToMerge(in.Review)
 		default:
 			return StatusReadyToApply
 		}
 	}
+}
+
+// readyToMerge is a review of apply mode with nothing left to fix: ready to
+// merge, unless something went wrong with the pull request since the pass.
+func readyToMerge(stored prreview.Review) Status {
+	if stored.Trouble.Any() {
+		return StatusTrouble
+	}
+	return StatusReadyToMerge
 }
 
 // stale reports whether the pull request moved since the pass the user is

@@ -61,6 +61,9 @@ func DeriveReview(in ReviewInput) []Found {
 	case reviewflow.StatusReadyToMerge:
 		found.Kind, found.Form = KindMerge, FormMerge
 		found.Body = mergeBody(FormMerge)
+	case reviewflow.StatusTrouble:
+		found.Kind, found.Form = KindPRTrouble, troubleForm(state.Review.Trouble)
+		found.Body = troubleBody(state.Review.Trouble, state.Review.BaseBranch)
 	default:
 		// Reviewing, waiting for checks, applying, committing and published
 		// wait for nobody.

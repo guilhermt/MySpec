@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
+	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/task"
 )
 
@@ -186,6 +187,97 @@ func TestPRRunReturnsACopy(t *testing.T) {
 	}
 }
 
+func TestSetPRBaselineForgetsTheTroubleMeasuredBeforeIt(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	created := f.create(t, "add-login")
+	if _, err := f.service.SetPRRun(t.Context(), created.ID, task.PRDone, nil); err != nil {
+		t.Fatalf("SetPRRun() = %v, want nil", err)
+	}
+	if _, err := f.service.SetPRTrouble(t.Context(), created.ID, gh.Trouble{Conflict: true}); err != nil {
+		t.Fatalf("SetPRTrouble() = %v, want nil", err)
+	}
+
+	baseline := gh.Trouble{FailedChecks: []string{"lint"}}
+	run, err := f.service.SetPRBaseline(t.Context(), created.ID, baseline)
+	if err != nil {
+		t.Fatalf("SetPRBaseline() = %v, want nil", err)
+	}
+	want := task.PRRun{
+		TaskID: created.ID, Status: task.PRDone, TroubleBaseline: baseline,
+		CreatedAt: base, UpdatedAt: base,
+	}
+	if diff := cmp.Diff(want, run); diff != "" {
+		t.Errorf("SetPRBaseline() mismatch (-want +got):\n%s", diff)
+	}
+	if diff := cmp.Diff(want, storedPRRun(t, f, created.ID)); diff != "" {
+		t.Errorf("stored run mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestSetPRTroubleRecordsItAndKeepsTheRestOfTheRun(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	created := f.create(t, "add-login")
+	details := task.PRDetails{
+		Number: 12, URL: "https://github.com/acme/api/pull/12",
+		State: task.PRStateOpen, CheckedAt: prCheckedAt,
+	}
+	if _, err := f.service.SetPRDetails(t.Context(), created.ID, details); err != nil {
+		t.Fatalf("SetPRDetails() = %v, want nil", err)
+	}
+	if _, err := f.service.SetPRReviewed(t.Context(), created.ID, "abc1234", 2); err != nil {
+		t.Fatalf("SetPRReviewed() = %v, want nil", err)
+	}
+	baseline := gh.Trouble{FailedChecks: []string{"lint"}}
+	if _, err := f.service.SetPRBaseline(t.Context(), created.ID, baseline); err != nil {
+		t.Fatalf("SetPRBaseline() = %v, want nil", err)
+	}
+
+	trouble := gh.Trouble{FailedChecks: []string{"test"}, Conflict: true}
+	run, err := f.service.SetPRTrouble(t.Context(), created.ID, trouble)
+	if err != nil {
+		t.Fatalf("SetPRTrouble() = %v, want nil", err)
+	}
+	want := task.PRRun{
+		TaskID: created.ID, PR: details, ReviewedCommit: "abc1234", ReportedPass: 2,
+		TroubleBaseline: baseline, Trouble: trouble, CreatedAt: base, UpdatedAt: base,
+	}
+	if diff := cmp.Diff(want, run); diff != "" {
+		t.Errorf("SetPRTrouble() mismatch (-want +got):\n%s", diff)
+	}
+	if diff := cmp.Diff(want, storedPRRun(t, f, created.ID)); diff != "" {
+		t.Errorf("stored run mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestPRRunReturnsItsOwnListsOfFailedChecks(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	created := f.create(t, "add-login")
+	if _, err := f.service.SetPRBaseline(t.Context(), created.ID, gh.Trouble{FailedChecks: []string{"lint"}}); err != nil {
+		t.Fatalf("SetPRBaseline() = %v, want nil", err)
+	}
+	if _, err := f.service.SetPRTrouble(t.Context(), created.ID, gh.Trouble{FailedChecks: []string{"test"}}); err != nil {
+		t.Fatalf("SetPRTrouble() = %v, want nil", err)
+	}
+
+	held, _ := f.service.PRRun(created.ID)
+	held.TroubleBaseline.FailedChecks[0] = "rewritten"
+	held.Trouble.FailedChecks[0] = "rewritten"
+
+	again, _ := f.service.PRRun(created.ID)
+	if diff := cmp.Diff([]string{"lint"}, again.TroubleBaseline.FailedChecks); diff != "" {
+		t.Errorf("TroubleBaseline.FailedChecks mismatch (-want +got):\n%s", diff)
+	}
+	if diff := cmp.Diff([]string{"test"}, again.Trouble.FailedChecks); diff != "" {
+		t.Errorf("Trouble.FailedChecks mismatch (-want +got):\n%s", diff)
+	}
+}
+
 func TestPRRunAnswersNothingBeforeTheStage(t *testing.T) {
 	t.Parallel()
 
@@ -209,6 +301,12 @@ func TestSetPRRunRejectsAnUnknownTask(t *testing.T) {
 	wantErrIs(t, err, task.ErrNotFound)
 
 	_, err = f.service.SetPRReviewed(t.Context(), "nope", "abc1234", 1)
+	wantErrIs(t, err, task.ErrNotFound)
+
+	_, err = f.service.SetPRBaseline(t.Context(), "nope", gh.Trouble{})
+	wantErrIs(t, err, task.ErrNotFound)
+
+	_, err = f.service.SetPRTrouble(t.Context(), "nope", gh.Trouble{})
 	wantErrIs(t, err, task.ErrNotFound)
 }
 

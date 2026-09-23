@@ -1,6 +1,6 @@
 import { prStatusTone } from "@/features/task/pr-status";
 import { currentStepDisplay } from "@/features/task/step-status";
-import { isOpen, isReviewed, prOf } from "@/lib/pull-requests";
+import { isOpen, isReviewed, prOf, troubleLabel } from "@/lib/pull-requests";
 import { situationTone, summaryLabel } from "@/lib/situations";
 import { stageLabel } from "@/lib/stages";
 import type { PullRequest, TaskSummary } from "@/lib/wails";
@@ -41,6 +41,8 @@ function prPhrase(pr: PullRequest): string {
       return "committing";
     case "done":
       return pr.canClose ? "merge unconfirmed" : "waiting for the merge";
+    case "trouble":
+      return troubleLabel(pr.trouble).toLowerCase();
     case "merged":
       return "merged, ready to close";
     case "pr_closed":

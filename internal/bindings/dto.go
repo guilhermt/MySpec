@@ -259,8 +259,8 @@ type CloseResult struct {
 type PullRequest struct {
 	// Status is preparing, blocked, drafting, draft_ready, awaiting_reply,
 	// opening, reviewing, waiting_checks, awaiting_decision, in_review,
-	// ready_to_approve, committing, done, merged, pr_closed, closing or closed,
-	// a string for the same reason as State.Theme.
+	// ready_to_approve, committing, done, trouble, merged, pr_closed, closing or
+	// closed, a string for the same reason as State.Theme.
 	Status       string   `json:"status"`
 	Block        *PRBlock `json:"block"` // blocked only
 	WorktreePath string   `json:"worktreePath"`
@@ -283,7 +283,10 @@ type PullRequest struct {
 	// CheckError is what the last automatic reading said when it failed; ""
 	// otherwise.
 	CheckError string `json:"checkError"`
-	CanClose   bool   `json:"canClose"` // the user may close the task now
+	// Trouble is what went wrong since the last review pass; meaningful in
+	// trouble.
+	Trouble  PRTrouble `json:"trouble"`
+	CanClose bool      `json:"canClose"` // the user may close the task now
 	// CloneMissing says the closing waits for the clone of the repository.
 	CloneMissing bool         `json:"cloneMissing"`
 	Close        *CloseResult `json:"close"` // closed only
@@ -302,6 +305,13 @@ type PullRequest struct {
 	ContextPercent int    `json:"contextPercent"`
 	PendingCount   int    `json:"pendingCount"`
 	LastError      string `json:"lastError"`
+}
+
+// PRTrouble is what went wrong with a pull request after its review: the
+// checks that failed, by name, and a conflict with its base.
+type PRTrouble struct {
+	FailedChecks []string `json:"failedChecks"` // never nil
+	Conflict     bool     `json:"conflict"`
 }
 
 // PlanProblem is one reason the step files are not a valid plan.
@@ -1029,7 +1039,7 @@ type ReviewSummary struct {
 	// Status is reviewing, waiting_checks, pass_blocked, awaiting_reply,
 	// awaiting_decision, ready_to_publish, publish_failed, published,
 	// new_commits, ready_to_apply, applying, in_review, ready_to_approve,
-	// committing or ready_to_merge.
+	// committing, ready_to_merge or trouble.
 	Status       string       `json:"status"`
 	Card         *PullCard    `json:"card"` // nil when the pull request has no card
 	WorktreePath string       `json:"worktreePath"`
@@ -1040,6 +1050,9 @@ type ReviewSummary struct {
 	// CheckError is what the last automatic reading of the pull request said
 	// when it failed; "" otherwise.
 	CheckError string `json:"checkError"`
+	// Trouble is what went wrong since the last review pass; meaningful in
+	// trouble.
+	Trouble PRTrouble `json:"trouble"`
 	// PublishError is why the last publication failed; "" otherwise.
 	PublishError string `json:"publishError"`
 	PassBlocked  string `json:"passBlocked"` // why the pass the app asked for could not start; "" otherwise

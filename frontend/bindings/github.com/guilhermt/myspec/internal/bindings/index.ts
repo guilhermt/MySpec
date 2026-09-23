@@ -70,6 +70,7 @@ export type {
     PRDraft,
     PRPreview,
     PRReport,
+    PRTrouble,
     PermissionEntry,
     Place,
     PlanProblem,
