@@ -5,6 +5,7 @@ import {
   asBlockReason,
   asBoardFailureReason,
   asCardAction,
+  asCatalogFailure,
   asCloseOutcome,
   asCloseSkipReason,
   asDependencyDrop,
@@ -305,6 +306,9 @@ describe("narrowing", () => {
     for (const dropped of ["", "discarded", "unavailable"]) {
       expect(asDependencyDrop(dropped)).toBe(dropped);
     }
+    for (const failure of ["not_found", "unsupported", "failed"]) {
+      expect(asCatalogFailure(failure)).toBe(failure);
+    }
   });
 
   it("falls back on a value a newer backend invented", () => {
@@ -355,6 +359,9 @@ describe("narrowing", () => {
     expect(asDraftDecision("deferred")).toBe("");
     expect(asDraftOutcome("closed")).toBe("");
     expect(asDependencyDrop("cycle")).toBe("");
+    // "" is what the app carries while the reading of the catalog runs.
+    expect(asCatalogFailure("")).toBe("");
+    expect(asCatalogFailure("timeout")).toBe("");
   });
 });
 

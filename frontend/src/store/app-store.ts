@@ -18,6 +18,7 @@ import type {
   DiscussionSummary,
   Leftover,
   Migration,
+  ModelCatalog,
   Place,
   PromptStage,
   Repository,
@@ -957,6 +958,9 @@ const NO_DISCUSSION_HISTORY: readonly ArchivedDiscussion[] = [];
 const NO_REPOSITORIES: readonly Repository[] = [];
 const NO_BOARDS: readonly Board[] = [];
 
+/** NO_CATALOG is what the pickers offer before the state arrives: nothing, for no known reason. */
+const NO_CATALOG: ModelCatalog = { models: [], failure: "" };
+
 /** useBoards is every registered board, by title. */
 export function useBoards(): readonly Board[] {
   return useAppStore((state) => state.app?.boards ?? NO_BOARDS);
@@ -997,6 +1001,11 @@ export function useRepository(id: string): Repository | null {
 /** useMigration is the refused migration of the data, null when there is none. */
 export function useMigration(): Migration | null {
   return useAppStore((state) => state.app?.migration ?? null);
+}
+
+/** useModelCatalog is what the installed Claude Code offers, as the state carries it. */
+export function useModelCatalog(): ModelCatalog {
+  return useAppStore((state) => state.app?.modelCatalog ?? NO_CATALOG);
 }
 
 export function useError(): string | null {

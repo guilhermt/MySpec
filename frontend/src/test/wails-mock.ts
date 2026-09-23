@@ -9,6 +9,7 @@ import type {
   BoardRemoval,
   BoardRepositoryChoice,
   BoardRepositoryOption,
+  CatalogModel,
   CloseResult,
   CreateTaskRequest,
   DeletePreview,
@@ -707,18 +708,22 @@ const factoryChoices: { stage: ModelStage; model: string; effort: string }[] = [
   { stage: "discussion", model: "claude-fable-5-1", effort: "high" },
 ];
 
-/**
- * makeModelCatalog is what the installed Claude Code offers: the models of the
- * reference machine, the last of which takes no effort.
- */
+/** REFERENCE_EFFORTS are the five levels the reference CLI lists for the models that take one. */
+const REFERENCE_EFFORTS = ["low", "medium", "high", "xhigh", "max"];
+
+/** makeCatalogModel is one model of the catalog, with every effort unless told otherwise. */
+export function makeCatalogModel(overrides: Partial<CatalogModel> = {}): CatalogModel {
+  return { name: "claude-sonnet-5", efforts: [...REFERENCE_EFFORTS], ...overrides };
+}
+
+/** makeModelCatalog is the catalog of the reference machine: Opus 5.5 (1M), Fable 5.1, Sonnet 5 and Haiku 4.5, which takes no effort. */
 export function makeModelCatalog(overrides: Partial<ModelCatalog> = {}): ModelCatalog {
-  const efforts = ["low", "medium", "high", "xhigh", "max"];
   return {
     models: [
-      { name: "claude-opus-5-5[1m]", efforts: [...efforts] },
-      { name: "claude-fable-5-1", efforts: [...efforts] },
-      { name: "claude-sonnet-5", efforts: [...efforts] },
-      { name: "claude-haiku-4-5-20251001", efforts: [] },
+      makeCatalogModel({ name: "claude-opus-5-5[1m]" }),
+      makeCatalogModel({ name: "claude-fable-5-1" }),
+      makeCatalogModel({ name: "claude-sonnet-5" }),
+      makeCatalogModel({ name: "claude-haiku-4-5-20251001", efforts: [] }),
     ],
     failure: "",
     ...overrides,

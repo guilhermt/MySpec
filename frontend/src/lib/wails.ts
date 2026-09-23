@@ -208,6 +208,9 @@ export type ModelStage =
   | "pr_review"
   | "discussion";
 
+/** CatalogFailure is why the app has no catalog of models: "" when it has one or is still reading. */
+export type CatalogFailure = "" | "not_found" | "unsupported" | "failed";
+
 /** PromptStage names one of the prompts the settings show, in workflow order. */
 export type PromptStage =
   | "prd"
@@ -535,6 +538,17 @@ export function asModelStage(value: string): ModelStage {
       return value;
     default:
       return "prd";
+  }
+}
+
+export function asCatalogFailure(value: string): CatalogFailure {
+  switch (value) {
+    case "not_found":
+    case "unsupported":
+    case "failed":
+      return value;
+    default:
+      return "";
   }
 }
 
