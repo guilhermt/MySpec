@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"slices"
 	"time"
+
+	"github.com/guilhermt/myspec/internal/gh"
 )
 
 // PRStatus is how far the app got with the PR stage of a task, as it records
@@ -142,6 +144,12 @@ type PRRun struct {
 	// happens after a new commit.
 	ReviewedCommit string
 	ReportedPass   int
+
+	// TroubleBaseline is what the reading the last review pass started from
+	// showed wrong, and Trouble what went wrong since, while the task waited
+	// for the merge.
+	TroubleBaseline gh.Trouble
+	Trouble         gh.Trouble
 
 	CreatedAt time.Time
 	UpdatedAt time.Time

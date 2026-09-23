@@ -13,7 +13,7 @@ import (
 // prColumns is the column list every PR run query selects, in scan order.
 const prColumns = `task_id, status, block_reason, block_detail,
 	pr_number, pr_url, pr_state, pr_checked_at, pr_base, reviewed_commit, reported_pass,
-	close_result, created_at, updated_at`
+	close_result, trouble_baseline, trouble, created_at, updated_at`
 
 // GetPRRun returns what the app recorded about the PR stage of a task. ok is
 // false before the stage.
@@ -33,7 +33,7 @@ func (r *TasksRepo) GetPRRun(ctx context.Context, taskID string) (task.PRRun, bo
 // UpsertPRRun stores the state of the PR stage of a task, rewriting what was
 // there.
 func (r *TasksRepo) UpsertPRRun(ctx context.Context, run task.PRRun) error {
-	const stmt = `INSERT INTO pr_runs (` + prColumns + `) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	const stmt = `INSERT INTO pr_runs (` + prColumns + `) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (task_id) DO UPDATE SET
 			status = excluded.status,
 			block_reason = excluded.block_reason,
@@ -46,6 +46,8 @@ func (r *TasksRepo) UpsertPRRun(ctx context.Context, run task.PRRun) error {
 			reviewed_commit = excluded.reviewed_commit,
 			reported_pass = excluded.reported_pass,
 			close_result = excluded.close_result,
+			trouble_baseline = excluded.trouble_baseline,
+			trouble = excluded.trouble,
 			updated_at = excluded.updated_at`
 
 	var block task.PRBlock
@@ -56,10 +58,18 @@ func (r *TasksRepo) UpsertPRRun(ctx context.Context, run task.PRRun) error {
 	if err != nil {
 		return fmt.Errorf("upsert pr run of task %s: %w", run.TaskID, err)
 	}
+	baseline, err := encodeTrouble(run.TroubleBaseline)
+	if err != nil {
+		return fmt.Errorf("upsert pr run of task %s: %w", run.TaskID, err)
+	}
+	trouble, err := encodeTrouble(run.Trouble)
+	if err != nil {
+		return fmt.Errorf("upsert pr run of task %s: %w", run.TaskID, err)
+	}
 	_, err = r.db.ExecContext(ctx, stmt, run.TaskID, string(run.Status),
 		nullString(string(block.Reason)), nullString(block.Detail),
 		run.PR.Number, run.PR.URL, string(run.PR.State), nullTime(run.PR.CheckedAt), run.PR.Base,
-		run.ReviewedCommit, run.ReportedPass, closeResult,
+		run.ReviewedCommit, run.ReportedPass, closeResult, baseline, trouble,
 		formatTime(run.CreatedAt), formatTime(run.UpdatedAt))
 	if err != nil {
 		return fmt.Errorf("upsert pr run of task %s: %w", run.TaskID, err)
@@ -84,11 +94,12 @@ func scanPRRun(row scanner) (task.PRRun, error) {
 		reason, detail       sql.NullString
 		checkedAt            sql.NullString
 		closeResult          string
+		baseline, trouble    string
 		createdAt, updatedAt string
 	)
 	err := row.Scan(&run.TaskID, &status, &reason, &detail,
 		&run.PR.Number, &run.PR.URL, &state, &checkedAt, &run.PR.Base,
-		&run.ReviewedCommit, &run.ReportedPass, &closeResult, &createdAt, &updatedAt)
+		&run.ReviewedCommit, &run.ReportedPass, &closeResult, &baseline, &trouble, &createdAt, &updatedAt)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		return task.PRRun{}, err
@@ -101,6 +112,12 @@ func scanPRRun(row scanner) (task.PRRun, error) {
 		return task.PRRun{}, fmt.Errorf("read %s: %w", subject, err)
 	}
 	if run.Close, err = decodeCloseResult(closeResult); err != nil {
+		return task.PRRun{}, fmt.Errorf("read %s: %w", subject, err)
+	}
+	if run.TroubleBaseline, err = decodeTrouble(baseline); err != nil {
+		return task.PRRun{}, fmt.Errorf("read %s: %w", subject, err)
+	}
+	if run.Trouble, err = decodeTrouble(trouble); err != nil {
 		return task.PRRun{}, fmt.Errorf("read %s: %w", subject, err)
 	}
 	if run.PR.State, err = task.ParsePRState(state); err != nil {

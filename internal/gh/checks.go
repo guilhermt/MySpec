@@ -126,3 +126,65 @@ func (c PRChecks) Failed() []Check {
 func (c PRChecks) Conflicting() bool {
 	return c.Mergeable == MergeableConflicting
 }
+
+// Trouble is what keeps a pull request from being ready to merge: the checks
+// of its head that failed, by name, and a conflict with its base.
+type Trouble struct {
+	FailedChecks []string `json:"failedChecks"` // sorted, without repeats
+	Conflict     bool     `json:"conflict"`
+}
+
+// Any reports whether there is any trouble at all.
+func (t Trouble) Any() bool { return len(t.FailedChecks) > 0 || t.Conflict }
+
+// Equal reports whether two troubles name the same checks and the same
+// conflict. A nil list and an empty one are equal.
+func (t Trouble) Equal(other Trouble) bool {
+	return t.Conflict == other.Conflict && slices.Equal(t.FailedChecks, other.FailedChecks)
+}
+
+// Trouble is what a reading shows wrong: every check that failed and the
+// conflict with the base.
+func (c PRChecks) Trouble() Trouble {
+	failed := c.Failed()
+	names := make([]string, 0, len(failed))
+	for _, check := range failed {
+		names = append(names, check.Name)
+	}
+	return Trouble{FailedChecks: sortedNames(names), Conflict: c.Conflicting()}
+}
+
+// NextTrouble is the trouble a pull request has after a reading, measured
+// against baseline, the trouble of the reading its last review pass started
+// from; open is the trouble it had before this reading. A check that failed
+// and was not failing in the baseline is trouble; a check still pending keeps
+// what it was in open; a merge GitHub has not computed keeps the conflict of
+// open, and a conflict is trouble only when the baseline had none.
+func NextTrouble(baseline, open Trouble, reading PRChecks) Trouble {
+	names := []string{}
+	for _, check := range reading.Checks {
+		isNew := check.Failed() && !slices.Contains(baseline.FailedChecks, check.Name)
+		stillOpen := check.Pending && slices.Contains(open.FailedChecks, check.Name)
+		if isNew || stillOpen {
+			names = append(names, check.Name)
+		}
+	}
+
+	var conflict bool
+	switch reading.Mergeable {
+	case MergeableConflicting:
+		conflict = !baseline.Conflict
+	case MergeableClean:
+		conflict = false
+	case MergeableUnknown:
+		conflict = open.Conflict
+	}
+	return Trouble{FailedChecks: sortedNames(names), Conflict: conflict}
+}
+
+// sortedNames sorts the names of checks and drops the repeats, as a trouble
+// keeps them.
+func sortedNames(names []string) []string {
+	slices.Sort(names)
+	return slices.Compact(names)
+}
