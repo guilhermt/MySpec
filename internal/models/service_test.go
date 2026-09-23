@@ -1,15 +1,20 @@
 package models_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 
+	"github.com/guilhermt/myspec/internal/claude"
+	"github.com/guilhermt/myspec/internal/claude/claudetest"
 	"github.com/guilhermt/myspec/internal/models"
 )
 
@@ -50,12 +55,38 @@ func (s *memSettings) Set(_ context.Context, key, value string) error {
 func newService(t *testing.T, settings *memSettings) (*models.Service, *int) {
 	t.Helper()
 
+	service, changes, _ := newLoggedService(t, settings)
+	return service, changes
+}
+
+// newLoggedService builds a Service over settings, counting the notifications
+// and capturing the log, for the tests that read a line of it.
+func newLoggedService(t *testing.T, settings *memSettings) (*models.Service, *int, *bytes.Buffer) {
+	t.Helper()
+
+	logs := &bytes.Buffer{}
 	changes := 0
-	service, err := models.New(t.Context(), settings, slog.New(slog.DiscardHandler), func() { changes++ })
+	service, err := models.New(t.Context(), settings, slog.New(slog.NewJSONHandler(logs, nil)), func() { changes++ })
 	if err != nil {
 		t.Fatalf("New() = %v, want nil", err)
 	}
-	return service, &changes
+	return service, &changes, logs
+}
+
+// savedCatalog is the settings value of a catalog, as the service stores it.
+func savedCatalog(t *testing.T, catalog models.Catalog) string {
+	t.Helper()
+
+	encoded, err := json.Marshal(catalog)
+	if err != nil {
+		t.Fatalf("json.Marshal() = %v, want nil", err)
+	}
+	return string(encoded)
+}
+
+// reading is a Reader answering the same thing every time.
+func reading(entries []claude.ModelEntry, err error) models.Reader {
+	return func(context.Context) ([]claude.ModelEntry, error) { return entries, err }
 }
 
 // savedDefaults is the settings value of a set, as the service stores it.
@@ -141,5 +172,149 @@ func TestSetDefaultKeepsTheDefaultsWhenTheSaveFails(t *testing.T) {
 	}
 	if *changes != 0 {
 		t.Errorf("onChange ran %d times, want the failed save to notify nobody", *changes)
+	}
+}
+
+func TestNewWithoutASavedCatalogHoldsAnEmptyOne(t *testing.T) {
+	t.Parallel()
+
+	service, _ := newService(t, newSettings(nil))
+	if got := service.Catalog().Models; got == nil || len(got) != 0 {
+		t.Errorf("Catalog().Models = %#v, want an empty slice", got)
+	}
+	if got := service.CatalogFailure(); got != "" {
+		t.Errorf("CatalogFailure() = %q, want the reading of this run to say nothing yet", got)
+	}
+}
+
+func TestNewReadsTheSavedCatalog(t *testing.T) {
+	t.Parallel()
+
+	want := models.CatalogFrom(claudetest.Catalog)
+	service, _ := newService(t, newSettings(map[string]string{"model_catalog": savedCatalog(t, want)}))
+	if diff := cmp.Diff(want, service.Catalog()); diff != "" {
+		t.Errorf("Catalog() mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestNewFallsBackOnACatalogThatIsNotOne(t *testing.T) {
+	t.Parallel()
+
+	service, _ := newService(t, newSettings(map[string]string{"model_catalog": "nope"}))
+	if got := service.Catalog().Models; got == nil || len(got) != 0 {
+		t.Errorf("Catalog().Models = %#v, want an empty slice", got)
+	}
+}
+
+func TestDiscoverReplacesAndPersistsTheCatalog(t *testing.T) {
+	t.Parallel()
+
+	settings := newSettings(nil)
+	service, changes := newService(t, settings)
+
+	service.Discover(t.Context(), reading(claudetest.Catalog, nil))
+
+	want := models.CatalogFrom(claudetest.Catalog)
+	if diff := cmp.Diff(want, service.Catalog()); diff != "" {
+		t.Errorf("Catalog() mismatch (-want +got):\n%s", diff)
+	}
+	saved, _, _ := settings.Get(t.Context(), "model_catalog")
+	if diff := cmp.Diff(savedCatalog(t, want), saved); diff != "" {
+		t.Errorf("saved catalog mismatch (-want +got):\n%s", diff)
+	}
+	if got := service.CatalogFailure(); got != "" {
+		t.Errorf("CatalogFailure() = %q, want nothing after a reading that worked", got)
+	}
+	if *changes != 1 {
+		t.Errorf("onChange ran %d times, want 1", *changes)
+	}
+}
+
+func TestDiscoverKeepsTheCatalogWhenTheReadingFails(t *testing.T) {
+	t.Parallel()
+
+	want := models.CatalogFrom(claudetest.Catalog)
+	saved := savedCatalog(t, want)
+	settings := newSettings(map[string]string{"model_catalog": saved})
+	service, changes := newService(t, settings)
+
+	service.Discover(t.Context(), reading(nil, fmt.Errorf("x: %w", claude.ErrCatalogUnsupported)))
+
+	if diff := cmp.Diff(want, service.Catalog()); diff != "" {
+		t.Errorf("Catalog() mismatch (-want +got):\n%s", diff)
+	}
+	if got, _, _ := settings.Get(t.Context(), "model_catalog"); got != saved {
+		t.Errorf("saved catalog = %q, want the failed reading to save nothing", got)
+	}
+	if got := service.CatalogFailure(); got != "" {
+		t.Errorf("CatalogFailure() = %q, want nothing while there is a catalog", got)
+	}
+	if *changes != 1 {
+		t.Errorf("onChange ran %d times, want 1", *changes)
+	}
+}
+
+func TestDiscoverReportsWhyThereIsNoCatalog(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name    string
+		read    models.Reader
+		failure models.CatalogFailure
+	}{
+		{"without a CLI", reading(nil, fmt.Errorf("x: %w", claude.ErrNotFound)), models.CatalogNotFound},
+		{"with a CLI that does not know the request", reading(nil, fmt.Errorf("x: %w", claude.ErrCatalogUnsupported)), models.CatalogUnsupported},
+		{"with a reading that errored", reading(nil, errors.New("boom")), models.CatalogFailed},
+		{"with a CLI that offered no model", reading([]claude.ModelEntry{{Value: "default", ResolvedModel: "claude-sonnet-5"}}, nil), models.CatalogFailed},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			service, changes := newService(t, newSettings(nil))
+			service.Discover(t.Context(), tc.read)
+
+			if got := service.CatalogFailure(); got != tc.failure {
+				t.Errorf("CatalogFailure() = %q, want %q", got, tc.failure)
+			}
+			if got := service.Catalog().Models; len(got) != 0 {
+				t.Errorf("Catalog().Models = %#v, want none", got)
+			}
+			if *changes != 1 {
+				t.Errorf("onChange ran %d times, want 1", *changes)
+			}
+		})
+	}
+}
+
+func TestDiscoverKeepsTheCatalogWhenTheSaveFails(t *testing.T) {
+	t.Parallel()
+
+	settings := newSettings(nil)
+	service, _, logs := newLoggedService(t, settings)
+	settings.err = errors.New("database is locked")
+
+	service.Discover(t.Context(), reading(claudetest.Catalog, nil))
+
+	if diff := cmp.Diff(models.CatalogFrom(claudetest.Catalog), service.Catalog()); diff != "" {
+		t.Errorf("Catalog() mismatch (-want +got):\n%s", diff)
+	}
+	if !strings.Contains(logs.String(), "save model catalog failed") {
+		t.Errorf("log = %q, want it to report the failed save", logs.String())
+	}
+}
+
+func TestCatalogIsACopy(t *testing.T) {
+	t.Parallel()
+
+	service, _ := newService(t, newSettings(nil))
+	service.Discover(t.Context(), reading(claudetest.Catalog, nil))
+
+	got := service.Catalog()
+	got.Models[0].Name = "gpt"
+	got.Models[0].Efforts[0] = "ultra"
+
+	if diff := cmp.Diff(models.CatalogFrom(claudetest.Catalog), service.Catalog()); diff != "" {
+		t.Errorf("Catalog() mismatch (-want +got):\n%s", diff)
 	}
 }
