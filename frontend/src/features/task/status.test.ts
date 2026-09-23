@@ -179,6 +179,19 @@ describe("task status in the PR stage", () => {
     expect(taskStatusTone(task)).toBe("idle");
   });
 
+  it("goes back to the review when the pull request stops being ready after it", () => {
+    const task = prTask(
+      makePullRequest({
+        status: "trouble",
+        prNumber: 12,
+        trouble: { failedChecks: ["ci"], conflict: false },
+      }),
+    );
+
+    expect(taskStatusLabel(task)).toBe("PR review · checks failed");
+    expect(taskStatusTone(task)).toBe("idle");
+  });
+
   it("carries how much of a review is staged", () => {
     const task = prTask(
       makePullRequest({ status: "in_review", prNumber: 12, review: makeReview({ percent: 60 }) }),

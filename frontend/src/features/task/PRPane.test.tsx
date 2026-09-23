@@ -158,6 +158,42 @@ describe("PRPane", () => {
     ).toBeInTheDocument();
   });
 
+  it("lists what went wrong after the review and offers another pass", async () => {
+    const { user } = pane({
+      status: "trouble",
+      prNumber: 12,
+      prState: "open",
+      prBase: "main",
+      trouble: { failedChecks: ["ci", "lint"], conflict: true },
+    });
+
+    expect(screen.getByText("The pull request is no longer ready to merge")).toBeInTheDocument();
+    expect(screen.getByText("Check failed: ci")).toBeInTheDocument();
+    expect(screen.getByText("Check failed: lint")).toBeInTheDocument();
+    expect(screen.getByText("Conflict with main")).toBeInTheDocument();
+    expect(
+      screen.getByText("Review again reads GitHub and turns this into findings of a new pass."),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Review again" }));
+    await user.click(screen.getByRole("button", { name: "Refresh PR" }));
+
+    expect(api.reviewAgain).toHaveBeenCalledWith("task-1");
+    expect(api.refreshPR).toHaveBeenCalledWith("task-1");
+  });
+
+  it("names the base of the worktree when the conflict is all that went wrong", () => {
+    pane({
+      status: "trouble",
+      prNumber: 12,
+      baseBranch: "origin/dev",
+      trouble: { failedChecks: [], conflict: true },
+    });
+
+    expect(screen.getByText("Conflict with dev")).toBeInTheDocument();
+    expect(screen.queryByText(/Check failed/)).not.toBeInTheDocument();
+  });
+
   it("closes a merged task and says what that does", async () => {
     const { user } = pane({
       status: "merged",

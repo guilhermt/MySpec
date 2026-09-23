@@ -1,4 +1,5 @@
 import type { StatusTone } from "@/features/task/status";
+import { troubleText } from "@/lib/pull-requests";
 import { cloneMissingText, findRepository } from "@/lib/repositories";
 import { summaryLabel } from "@/lib/situations";
 import type { PullRequestRow, ReviewFinding, ReviewPass, ReviewSummary, State } from "@/lib/wails";
@@ -43,6 +44,8 @@ export function reviewStatusLabel(review: ReviewSummary): string {
       return "Committing";
     case "ready_to_merge":
       return "Ready to merge";
+    case "trouble":
+      return troubleText(review.trouble, review.baseBranch);
   }
 }
 
@@ -86,6 +89,7 @@ export function reviewStatusTone(review: ReviewSummary): StatusTone {
     case "in_review":
     case "ready_to_approve":
     case "ready_to_merge":
+    case "trouble":
       return "idle";
   }
 }

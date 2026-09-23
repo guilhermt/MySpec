@@ -11,6 +11,7 @@ import {
   closeStepLabel,
   draftAtHand,
   hasPRSession,
+  prBaseName,
   prReportLabel,
   prStateLabel,
 } from "@/features/task/pr-status";
@@ -113,12 +114,47 @@ function AwaitingMerge({ taskId, pr }: { taskId: string; pr: PullRequest }) {
   );
 }
 
+/** Troubled is a pull request that stopped being ready after its review: a check failed or a conflict with its base came up. */
+function Troubled({ taskId, pr }: { taskId: string; pr: PullRequest }) {
+  const checks = pr.trouble.failedChecks ?? [];
+
+  return (
+    <Note title="The pull request is no longer ready to merge">
+      <ul className="flex flex-col gap-0.5 text-sm text-muted-foreground">
+        {checks.map((name) => (
+          <li key={name}>{`Check failed: ${name}`}</li>
+        ))}
+        {pr.trouble.conflict && <li>{`Conflict with ${prBaseName(pr)}`}</li>}
+      </ul>
+      <p className="text-sm text-muted-foreground">
+        Review again reads GitHub and turns this into findings of a new pass.
+      </p>
+      {pr.checkError !== "" && (
+        <p className="text-sm text-muted-foreground">
+          {`The merge couldn't be confirmed: ${pr.checkError}. If you merged it, close the task anyway.`}
+        </p>
+      )}
+      <PRLink pr={pr} />
+      <div className="flex gap-2">
+        <Button variant="outline" size="sm" onClick={() => void reviewAgain(taskId)}>
+          <RotateCcw />
+          Review again
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => void refreshPR(taskId)}>
+          <RefreshCw />
+          Refresh PR
+        </Button>
+      </div>
+    </Note>
+  );
+}
+
 /** Merged is a pull request that landed, with only the closing left. */
 function Merged({ task, pr }: { task: TaskSummary; pr: PullRequest }) {
   const repository = useRepository(task.repositoryId);
   // The base of the pull request is what was really merged into; before GitHub
   // says, the base the worktree was branched from is the best the app knows.
-  const base = pr.prBase !== "" ? pr.prBase : pr.baseBranch.replace(/^origin\//, "");
+  const base = prBaseName(pr);
   const hint = closeHint(pr, repository);
 
   return (
@@ -298,6 +334,8 @@ export function PRPane({ task, pr }: PRPaneProps) {
       );
     case "done":
       return <AwaitingMerge taskId={task.id} pr={pr} />;
+    case "trouble":
+      return <Troubled taskId={task.id} pr={pr} />;
     case "merged":
       return <Merged task={task} pr={pr} />;
     case "pr_closed":

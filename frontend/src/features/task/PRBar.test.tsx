@@ -195,6 +195,26 @@ describe("PRBar", () => {
     expect(await screen.findByText("The pull request hasn't been merged yet")).toBeInTheDocument();
   });
 
+  it("names what went wrong after the review and keeps the closing in sight", async () => {
+    const { user } = bar({
+      status: "trouble",
+      prNumber: 12,
+      prState: "open",
+      prBase: "main",
+      trouble: { failedChecks: ["ci", "lint"], conflict: true },
+    });
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Checks failed: ci, lint · conflict with main",
+    );
+    const button = screen.getByRole("button", { name: "Close task" });
+    expect(button).toBeDisabled();
+
+    await user.hover(button);
+
+    expect(await screen.findByText("The pull request hasn't been merged yet")).toBeInTheDocument();
+  });
+
   it("closes a task whose pull request was merged", async () => {
     const { user } = bar({ status: "merged", canClose: true, prNumber: 12, prState: "merged" });
 
@@ -235,6 +255,19 @@ describe("PRBar", () => {
 
   it("warns when the merge couldn't be confirmed and offers the closing anyway", () => {
     bar({ status: "done", canClose: true, checkError: "gh: not authenticated", prNumber: 12 });
+
+    expect(screen.getByText("Couldn't confirm the merge")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Close task" })).toBeEnabled();
+  });
+
+  it("warns when a troubled pull request couldn't be read and offers the closing anyway", () => {
+    bar({
+      status: "trouble",
+      canClose: true,
+      checkError: "gh: not authenticated",
+      prNumber: 12,
+      trouble: { failedChecks: ["ci"], conflict: false },
+    });
 
     expect(screen.getByText("Couldn't confirm the merge")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Close task" })).toBeEnabled();

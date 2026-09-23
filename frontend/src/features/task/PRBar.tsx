@@ -61,7 +61,7 @@ const REVIEW_STATES = ["in_review", "ready_to_approve", "committing"];
 
 // The states where the closing of the task is what is left to do, even when
 // the user cannot ask for it yet.
-const CLOSING_STATES = ["done", "merged", "closing"];
+const CLOSING_STATES = ["done", "trouble", "merged", "closing"];
 
 // Once the closing starts, the worktree and the pull request stop being things
 // the bar can act on.
@@ -176,7 +176,7 @@ export function PRBar({ task, pr }: PRBarProps) {
           </>
         )}
       </span>
-      {status === "done" && pr.checkError !== "" && (
+      {(status === "done" || status === "trouble") && pr.checkError !== "" && (
         <span className="shrink-0 text-xs text-[var(--status-attention)]" title={pr.checkError}>
           Couldn't confirm the merge
         </span>

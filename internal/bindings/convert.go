@@ -11,6 +11,7 @@ import (
 	"github.com/guilhermt/myspec/internal/discussion"
 	"github.com/guilhermt/myspec/internal/discussionflow"
 	"github.com/guilhermt/myspec/internal/flow"
+	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/prreview"
@@ -286,6 +287,7 @@ func fromPullRequest(pr *flow.PullRequest) *PullRequest {
 		CheckedAt:    checkedAt,
 		PRBase:       pr.PR.Base,
 		CheckError:   pr.CheckError,
+		Trouble:      fromTrouble(pr.Trouble),
 		CanClose:     pr.CanClose,
 		CloneMissing: pr.CloneMissing,
 		Close:        fromCloseResult(pr.Close),
@@ -301,6 +303,14 @@ func fromPullRequest(pr *flow.PullRequest) *PullRequest {
 		PendingCount:   summary.PendingCount,
 		LastError:      summary.LastError,
 	}
+}
+
+// fromTrouble converts what went wrong with a pull request, never with a nil
+// list.
+func fromTrouble(t gh.Trouble) PRTrouble {
+	failed := make([]string, len(t.FailedChecks))
+	copy(failed, t.FailedChecks)
+	return PRTrouble{FailedChecks: failed, Conflict: t.Conflict}
 }
 
 // fromCloseResult converts what closing a task did, keeping nil for a task that
@@ -1355,6 +1365,7 @@ func FromReviews(
 			Passes:           fromPasses(state.Passes),
 			StalePass:        state.StalePass,
 			CheckError:       state.CheckError,
+			Trouble:          fromTrouble(stored.Trouble),
 			PublishError:     stored.PublishError,
 			PassBlocked:      state.PassBlocked,
 			UnreadableReport: state.UnreadableReport,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isOpen, isReviewed, prOf } from "@/lib/pull-requests";
+import { isOpen, isReviewed, prOf, troubleLabel, troubleText } from "@/lib/pull-requests";
 import { makePullRequest, makeTask } from "@/test/wails-mock";
 
 describe("prOf", () => {
@@ -23,7 +23,7 @@ describe("isReviewed", () => {
     },
   );
 
-  it.each(["preparing", "drafting", "draft_ready", "in_review", "ready_to_approve"])(
+  it.each(["preparing", "drafting", "draft_ready", "in_review", "ready_to_approve", "trouble"])(
     "still has the review of a %s pull request ahead",
     (status) => {
       expect(isReviewed(makePullRequest({ status }))).toBe(false);
@@ -35,5 +35,31 @@ describe("isOpen", () => {
   it("is open once GitHub gave it a number", () => {
     expect(isOpen(makePullRequest({ prNumber: 12 }))).toBe(true);
     expect(isOpen(makePullRequest())).toBe(false);
+  });
+});
+
+describe("troubleLabel", () => {
+  it("names what went wrong in a few words", () => {
+    expect(troubleLabel({ failedChecks: ["ci", "lint"], conflict: true })).toBe(
+      "Checks failed · conflict",
+    );
+    expect(troubleLabel({ failedChecks: [], conflict: true })).toBe("Conflict with base");
+    expect(troubleLabel({ failedChecks: ["ci"], conflict: false })).toBe("Checks failed");
+  });
+});
+
+describe("troubleText", () => {
+  it("names the checks that failed and the base the pull request conflicts with", () => {
+    expect(troubleText({ failedChecks: ["ci", "lint"], conflict: true }, "main")).toBe(
+      "Checks failed: ci, lint · conflict with main",
+    );
+    expect(troubleText({ failedChecks: ["ci"], conflict: false }, "main")).toBe(
+      "Checks failed: ci",
+    );
+    expect(troubleText({ failedChecks: [], conflict: true }, "main")).toBe("Conflict with main");
+  });
+
+  it("calls the base the base when its name is unknown", () => {
+    expect(troubleText({ failedChecks: null, conflict: true }, "")).toBe("Conflict with the base");
   });
 });
