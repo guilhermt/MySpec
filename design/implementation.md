@@ -1,0 +1,214 @@
+# Plano de implementação
+
+A frente de redesenho vira uma sequência de tasks do MySpec, conduzidas no próprio app em modo Structured. Este documento é a entrada do PRD de cada task, não o PRD: ele diz a ordem, o escopo, o que cada uma implementa de `changes.md` e expõe de `backend.md`, o tamanho e o critério de pronto. O PRD de cada task refina o escopo; o tech spec toma as decisões técnicas; o plano de steps as executa, um commit por step.
+
+Fontes, na ordem de precedência quando divergem: `screens/*.md` › `system/components.md` › `system/tokens.css` › `structure.md` e `principles.md` › o mock da rodada. Cada documento de tela diz onde ele e o mock divergem, e vale o documento.
+
+Tamanhos: **P** até 4 steps, **M** de 5 a 8, **G** de 9 a 14. Um step é um commit que deixa `task check` verde.
+
+## 1. Princípios da implementação
+
+| Princípio | Como vale |
+|---|---|
+| **Uma task por vez, na ordem** | A sequência da seção 2. Uma task só começa quando a anterior está mergeada em `main`. Uma dependência está sempre numa task anterior |
+| **A fundação primeiro** | As duas primeiras tasks entregam os tokens, as fontes, o tema, os componentes base, o shell com a árvore, a navegação com histórico, os painéis e a barra do pedido. Toda tela seguinte só compõe o que elas criaram |
+| **O app sempre usável** | Cada task substitui uma área inteira (o topo da task, a conversa, o board, Reviews…). O que não cabe na task fica com a forma antiga inteira, retematizada pelos tokens, até a task dele. Não há flag de "interface nova", não há meio-caminho visível por dias, não há duas versões de uma mesma área. A convivência aceita é a das telas antigas pintadas pelos tokens novos entre a task 1 e a 12 |
+| **Frontend e backend na mesma task** | Uma task atravessa as camadas do domínio para fora (`guidelines/README.md`): migration e `store`, domínio, `flow`, `bindings` e DTOs, `task generate`, `lib/wails.ts` e `test/wails-mock.ts`, store e ações, componentes. Os dados de custo **pequeno** de `backend.md` entram na task da tela que os pede. Os dois de custo **médio** (M1, M2) são tasks próprias; a razão está na seção 2 |
+| **Documentação em cada task** | O último step de cada task atualiza `docs/`: `docs/product/features.md` ganha o comportamento novo, reescrito no presente, nas seções que a coluna Referência de `changes.md` aponta para cada linha implementada; `docs/architecture/design-system.md`, criado na task 1, descreve o design system como ele é (a fonte dos tokens, a ponte com o shadcn, os wrappers, o tema, as regras do WebKitGTK) e ganha cada família de componente quando a task a cria; `docs/architecture/overview.md` (seções Features e Estilo) e `docs/guidelines/frontend.md` (seções Componentes e Estilo) mudam na task 1 e na 2; `docs/development/target-machine.md` registra o que foi verificado na máquina alvo. A documentação nunca descreve a alteração |
+| **Os mocks e `design/` são a fonte de verdade** | O implementador reproduz o mock com os componentes do system e não decide design. O que o mock não cobre está no documento da tela ou em `components.md`; o que nenhum dos dois cobre é uma pergunta do PRD para o usuário, e a resposta entra em `decisions.md` pela frente de design, nunca por um commit da task. Os mocks são servidos com `python3 -m http.server 8090 -d design/lab` durante a implementação, para comparar lado a lado nos dois modos e nas larguras de `structure.md` §6 |
+| **`frontend/src/components/ui` continua gerado e nunca editado** | O system convive com o shadcn em três camadas. (1) Uma **ponte em `globals.css`** remapeia as variáveis que os componentes gerados leem (`--primary`, `--background`, `--card`, `--popover`, `--muted`, `--ring`, `--destructive`, `--sidebar*`) para os tokens do system (`--brand`, `--surface-1`, `--surface-2`, `--surface-3`, `--surface-0`, `--focus`, `--state-error`, `--surface-sidebar`…), então os primitivos herdam o tema sem edição. (2) Os **wrappers** do system ficam em `frontend/src/components/system/`, um por componente de `components.md` (Button, Chip, TimeChip, StateGlyph, Spinner, Tooltip, Kbd, Field/Input/Textarea/Search, Menu/Listbox, Checkbox, Radio, SegmentedControl, Dialog, Collapsible, ScrollArea, Skeleton, Link, EmptyState, SunkenLine, NoticeStrip, CodeBlock, Avatar…), e fixam as variantes, os tamanhos e os estados com os tokens; é uma pasta nova ao lado de `ui/`, e `frontend.md` passa a dizer que um componente do system mora ali e que **as features importam só de `components/system/`, nunca de `components/ui/`**. (3) Um primitivo cujo estado não se sobrescreve por classe (o anel de foco por dentro em vez de por fora, um hover que não segue `--brand-hover`) é substituído por um componente próprio no wrapper; `components.md` diz que "a task de implementação confirma a escolha de cada um", e o tech spec da task 1 registra a escolha por componente. A task 12 fecha a porta com uma verificação (teste ou script de lint) de que nenhuma feature importa de `components/ui/` |
+| **Os tokens de `design/system/tokens.css` substituem os de `globals.css` e `tokens.css`** | É a decisão técnica que o primeiro tech spec toma, e a recomendação é **substituir**: `frontend/src/styles/tokens.css` deixa de existir como cópia de valores e passa a ser o arquivo do design, importado de uma fonte só (`@import "../../../design/system/tokens.css"` com `server.fs.allow` apontando a raiz do repositório no Vite; se o dev server ou o build recusarem, uma cópia sincronizada por `task generate` com um teste em `globals.test.tsx` que falha quando os dois divergem). `globals.css` fica com o Tailwind, os `@source`, a variante `dark` sobre `[data-theme="dark"]`, a ponte do shadcn, a ponte `@theme inline` que aponta os namespaces do Tailwind (`--color-*`, `--font-*`, `--radius-*`, `--shadow-*`, `--ease-*`) para os tokens, e as regras sem camada do WebKitGTK. A paleta antiga (o índigo de `--primary`, os cinzas neutros, `--status-*`, Inter e JetBrains Mono, `--duration-base: 150ms`) é apagada. Três colisões de nome que o tech spec resolve: `--border` (cor no shadcn, largura no system: a ponte passa a mapear `--color-border` direto para `--line-2`), `--radius-*` (a escala do Tailwind e a do system têm os mesmos nomes: a ponte inline referencia os tokens, e `rounded-lg` passa a valer `--radius-lg` do system) e `--sidebar-width` (o system a define com `clamp`; a antiga sai). O tema deixa a classe `.dark` e passa a `data-theme` no `documentElement`, como o arquivo de tokens pede; o bloco `@media (prefers-color-scheme)` do arquivo fica inerte porque o app sempre grava `data-theme` |
+| **Os testes migram com a tela** | Cada task reescreve os testes dos componentes que substitui e apaga os dos que remove, no mesmo step do componente, para a cobertura (80/80/70 no frontend, 60/70/80 no Go) nunca cair entre steps. A lógica de apresentação continua em `.ts` puros (`sidebar-tree.ts`, `status.ts`, `review-status.ts`…), testados sem renderizar; as regras novas (gravidade e ordem do `Ctrl+J`, a posição curta de cada linha, a cadeia de publicação, o veredito sugerido) nascem assim. Os componentes são testados por `getByRole` com o nome acessível inteiro que os documentos de tela ditam, o que também prova a acessibilidade |
+
+## 2. A sequência de tasks
+
+| # | Task | Tamanho | Steps | Backend |
+|---|---|---|---|---|
+| 1 | Fundação I: tokens, fontes, tema e componentes base | M | 6–8 | nenhum |
+| 2 | Fundação II: shell, árvore, navegação com histórico, painéis e barra do pedido | G | 10–14 | P1, P2 |
+| 3 | Tela da task I: cabeçalho, stepper, abas, painéis e menu | G | 9–12 | P4, P12, P13 |
+| 4 | Tela da task II: a conversa, a barra do pedido e o compositor | G | 10–14 | P3 (task), P5–P11 |
+| 5 | Home, board e criação de task | G | 9–12 | P22, P23 |
+| 6 | Centro de review e tela de um review | G | 10–13 | P14–P21 |
+| 7 | Apontamentos estruturados na PR da task | M | 6–8 | **M1**, P19 (task) |
+| 8 | Publicação em cadeia | M | 5–7 | **M2**, P26 |
+| 9 | A discussão | G | 9–12 | P3 (discussão), P24, P25 |
+| 10 | Settings, boas-vindas, início e migração | G | 9–12 | P31, P32, P34–P36 |
+| 11 | History, arquivados, diálogos da task, avisos, toasts e notificações | M | 7–9 | P27–P30, P33, P37 |
+| 12 | Consistência e remoção do design antigo | M | 5–8 | nenhum |
+
+Onde a ordem difere da sugestão e por quê: a fundação e a tela da task são duas tasks cada, porque cada metade já é G e cada metade deixa o app inteiro e usável (o shell novo com as telas antigas dentro; o topo novo da task sobre a conversa antiga). **M1** é a task 7, depois do centro de review, porque o apontamento e o cartão de decisão são um componente só, e ele nasce na task 6, onde o produto já tem apontamentos estruturados (`features/reviews/FindingCard.tsx`); fazer M1 dentro da tela da task a tornaria a maior task da frente e obrigaria a construir o componente antes do lugar dele. **M2** é a task 8, própria e antes da discussão, porque é uma regra de workflow testável só em Go, contra o GitHub real, e a tela da discussão (task 9) não se desenha sem ela; separada, a regra é validada numa discussão de verdade antes de a tela mudar, com uma adaptação mínima do painel atual que mantém o app usável.
+
+### 1. Fundação I: tokens, fontes, tema e componentes base
+
+- **Objetivo:** o app inteiro passa a pintar com `design/system/tokens.css`, Fira Sans e Fira Code e o tema por `data-theme`, e ganha os componentes base do system como wrappers, sem mudar nenhuma tela.
+- **Escopo:** `styles/globals.css`, `styles/tokens.css`, `styles/fonts.css` (`@fontsource/fira-sans` 400/500/600/700 e `@fontsource-variable/fira-code`; Inter e JetBrains Mono saem do `package.json`), `features/theme/useApplyTheme.ts` (`data-theme`), a ponte do shadcn, o tema do Streamdown (registro de leitura, bloco de código com os quatro matizes), e `components/system/` com os Fundamentos e os Controles de `components.md`: glifo de estado, spinner e brilho, ícones (um por significado), tooltip, etiqueta/tag/placeholder/tecla, avatar, link, botão (as seis variantes, a tecla `.k`, o desabilitado tracejado com a razão), chip, chip de tempo, campos, select/menu/listbox, caixa de seleção, rádio, controle segmentado, collapsible, scroll area, esqueleto, estado vazio de página, faixa de aviso, linha afundada, diálogo (mínimo, largo, em passos, destrutivo), bloco de código, medidor de contexto.
+- **De `screens/` e dos mocks:** nada de tela. `lab/08-visual-final/specimen.html` e os `components.html` das rodadas 10 a 14, só nos componentes base. `principles.md` inteiro.
+- **`changes.md`:** nenhuma linha: é só forma.
+- **`backend.md`:** nenhum.
+- **Fora:** qualquer tela, a árvore, a navegação, os componentes do item aberto e das listas.
+- **Dependências:** a decisão do usuário sobre os tokens (seção 4).
+- **Tamanho:** M, 6–8 steps.
+- **Pronto:** um `@import` só traz os tokens e `globals.test.tsx` prova a paridade e as regras de pixel inteiro; nenhum `oklch(` nem cor de estado fora de `tokens.css`; Fira nos dois registros, verificada na máquina alvo com capturas claro e escuro (o primeiro step da task, ver riscos); cada wrapper com teste dos estados comuns (hover, foco, desabilitado tracejado com `aria-describedby`, carregando com `aria-busy`); `task check` verde; `docs/architecture/design-system.md` criado e indexado em `docs/README.md`; `frontend.md` e `overview.md` atualizados.
+
+### 2. Fundação II: shell, árvore, navegação com histórico, painéis e barra do pedido
+
+- **Objetivo:** a lateral vira a árvore de `structure.md` §2 e a área principal ganha lugares com histórico, cabeçalho de lugar, painéis auxiliares, a barra do pedido e a página do item que saiu, com as telas atuais dentro.
+- **Escopo:** `features/sidebar` inteiro (topo com **+ New ▾** e `«`, filtro, árvore com a linha de três linhas, glifos de tipo e de estado, meta em hover/foco/aberta, `Ctrl J` na linha, nós recolhidos com o resumo por gravidade, aviso de clone como `treeitem`, faixa recolhida de 60 px, indicador `↓ N more below`, rodapé com **History** e contagem, tema em ciclo e **Settings**); o store: um modelo de lugar (`place`) e a pilha do histórico, persistidos (F1), no lugar de `openTaskId`, `openReviewId`, `settingsOpen`, `historyOpen`, `reviewsOpen`…, com os seletores atuais (`useOpenTask`, `useOpenBoardId`) derivados do lugar para as features antigas não mudarem todas de uma vez; `←`/`→`, `Alt+←/→`, breadcrumb que dobra, fechar Settings volta ao lugar anterior; `Ctrl+J` por gravidade e idade (F2) e a chegada por notificação (`situation:open`); a piscada de 280 ms duas vezes no véu da gravidade e a região `aria-live` do app; `components/system/`: cabeçalho de lugar, painel auxiliar com a regra coluna-ou-cobertura em pixel inteiro e o grupo de painéis, barra do pedido nas quatro formas, página do item que saiu (a forma genérica), aviso do app com o rótulo da ação (F19), região de toasts. `WaitingSection` sai (S1).
+- **De `screens/` e dos mocks:** `structure.md` §1, §2, §3 (a barra do pedido e os painéis), §5, §6, §7; a árvore de `lab/08-visual-final/index.html` e `lab/10-screen-task-minimal/b.html`; o modelo de `lab/03-structure-final`.
+- **`changes.md`:** S1, S2, S3, S4, S5, S6, S7 (a forma genérica; os conteúdos por tipo vêm nas tasks 4, 6, 9 e 11), S8 (o componente), S9 (o mecanismo), X16.
+- **`backend.md`:** P1 (ação em curso, `turnStartedAt` e a conversa que trabalha no resumo de cada item), P2 (`sessionStatus` de cada sessão); F1, F2, F19.
+- **Fora:** o conteúdo de qualquer lugar; a Home nova (task 5); os textos das notificações (task 11).
+- **Dependências:** task 1.
+- **Tamanho:** G, 10–14 steps.
+- **Pronto:** a árvore com Reviews, boards, épicos, No board e todos os estados da linha, com o nome acessível inteiro; `sidebar-tree.ts` com a gravidade, a ordem do `Ctrl+J` e o resumo dos nós testados como funções puras; `←`/`→` com o destino no tooltip; Settings fecha para onde estava; painéis fechados por padrão, um por vez, `Esc` fecha; a barra do pedido renderiza as quatro formas e o `role="status"`; um item que sai com a tela aberta mostra a página; nada quebra de 1100 a 2600 px, com a lateral em `clamp`; `features.md` §Depende de mim, §Tela de boas-vindas e barra lateral, §Atalhos e §Encerramento e arquivamento reescritos.
+
+### 3. Tela da task I: cabeçalho, stepper, abas, painéis e menu
+
+- **Objetivo:** o topo do item da task vira o stepper compacto com as abas mínimas, os painéis `Details`, `Artifacts` e `Card` e o `⋯`, sobre a conversa atual.
+- **Escopo:** `features/task`: `TaskHeader` novo (breadcrumb, título, stepper com a pílula, medidor, **Pause**/**Resume** sem diálogo, grupo de painéis, `⋯` agrupado), `Stepper` e `Pill` em `components/system/`, `AgentTabs` (`tablist`, ←→, a palavra na aba de fora), `DetailsPanel` (steps com os seletores de modo e modelo e os relatórios, planning, pull request com os checks pelo nome, os fatos da task, **Review mode** e **Models** como botões), `ArtifactsPanel` só com documentos, `CardPanel`, os popovers Review mode e Models, a conversa anterior aberta de `Details` (somente leitura, a faixa no lugar do compositor, `Esc` volta), os limites de largura de `task.md` §3 por container query. Saem `StageTrack`, `StepBar`, `PRBar`, `ReviewStrip`, `StepTabs`, a lista de steps de `ArtifactPanel`, `TaskModels` e `TaskReviewMode` do cabeçalho.
+- **De `screens/` e dos mocks:** `task.md` §2, §3, §4, §5, §10, §12, §13; `lab/10-screen-task-minimal/b.html` (o topo das nove cenas) e `components.html`.
+- **`changes.md`:** T1, T2 (as ferramentas para o `⋯`; o cartão de arquivos é da task 4), T3, T4, T5, T6, T7, T17, X15 (a pausa sem diálogo; o marco é da task 4).
+- **`backend.md`:** P4 (desde quando pausada), P12 (hora do commit de cada step), P13 (os checks pelo nome, em `Details`); F3, F4, F5.
+- **Fora:** as entradas da conversa, a barra do pedido ligada às situações, o compositor (task 4); o cartão de apontamentos da PR (task 7).
+- **Dependências:** task 2.
+- **Tamanho:** G, 9–12 steps.
+- **Pronto:** o topo das nove cenas (`?scene=`) reproduzido nos dois modos; a pílula diz só o glifo e a posição enquanto há barra; na metade do monitor o stepper nomeia a atual e as futuras; `stage-actions.ts` migrado aos itens do `⋯`, cada destrutivo abrindo o diálogo que diz o que se perde; a conversa anterior nunca aceita mensagem; `features.md` §Voltar e descartar, §Review, §Rascunho e abertura, §Modo de review, §Modelos e esforço, §Sessões e conversas reescritos.
+
+### 4. Tela da task II: a conversa, a barra do pedido e o compositor
+
+- **Objetivo:** a conversa do lugar atual ganha as entradas decididas, e a barra do pedido e o compositor passam a ser o único lugar da ação.
+- **Escopo:** `features/chat` inteiro: fala do agente com avatar, mensagem do usuário sem destinatário, mensagem na fila com **Remove**, grupo de ações dobrado (resumo por tipo, últimas seis, `Show N earlier actions`, o vivo com a ação em curso, o subagente aninhado, a ação rotulada pela descrição com duração e código de saída), a mensagem do produto como marco, os marcos em linha de todos os tipos com o conteúdo no lugar e **Open in Artifacts**, cartão de pergunta e de permissão (anel âmbar, teclas 1–9, o foco na primeira opção), pergunta em texto com o fio âmbar e a resposta rápida no compositor (F6), bloco de erro sem botão, atividade, cartão de review `Manual` com os arquivos, bloco dos checks do GitHub e o vazio do PR review (T15), volta ao fim com a ação em curso; a barra do pedido ligada a cada situação de `task.md` §7 (**Retry reviewer**, **Go to reviewer**, **Show**, **Next to decide**, **Approve** tracejado com o que falta, **Close task**); o compositor com os placeholders, as pastilhas, o seletor de modelo, **Send**/**Stop** e a regra da primária; a virtualização acima de algumas centenas de entradas, como último step, cortável para a task 12.
+- **De `screens/` e dos mocks:** `task.md` §6, §7, §8, §11, §12; as nove cenas de `lab/10-screen-task-minimal/b.html`; `lab/09-screen-task/components.html` (resposta rápida, arquivo mudado, checks, volta ao fim).
+- **`changes.md`:** T2 (o cartão de arquivos e o progresso na barra), T7 (o resto), T8, T9, T10, T11, T12, T13, T14, T15, S8 e S9 na task.
+- **`backend.md`:** P3 (**Retry** da sessão certa: o revisor), P5 (`description` do Bash), P6 (duração e código de saída), P7 (`parent_tool_use_id`), P8 (tipo da mensagem do produto), P9 (instrução inicial), P10 (os marcos da task e `Paused by you`), P11 (apontamentos por relatório de step); F5, F6.
+- **Fora:** o cartão de apontamentos da PR (task 7); os cartões do review e da discussão.
+- **Dependências:** task 3.
+- **Tamanho:** G, 10–14 steps.
+- **Pronto:** as nove cenas inteiras; numa sessão real, 90% das ações rotuladas pela descrição; a conversa abre no fim e nunca sobe sozinha; `Retry reviewer` reinicia o revisor; `group.ts` e `transcript.ts` com os campos novos testados; `sessions.md` atualizado com o que o transcript passa a guardar; `features.md` §Sessões e conversas, §Etapas de planejamento, §Review pelo agente, §Review de pull request reescritos.
+
+### 5. Home, board e criação de task
+
+- **Objetivo:** a Home vira o lugar de retomar e começar, a visão do board agrupa por status com o card em painel, e o diálogo de criação fica mínimo.
+- **Escopo:** `features/home` (**Continue**, **Start**, **Boards** com as linhas de bloqueio, os atalhos, `Nothing in progress`); o campo **Board** no diálogo de discussão aberto da Home (o resto do diálogo é da task 9); `features/board`: cabeçalho (idade da leitura, **Refresh**, **New discussion** `N`, `⋯`), barra de filtros com a busca `/`, **Assigned to me**, os chips e o menu **Filter**, as seções por status (finais recolhidas, vazias sem chevron), a linha do card em grade de colunas com a segunda linha abaixo de 1040 px e as teclas no foco, o modo de seleção com a barra neutra, o painel do card (`--panel-card-width`, as ações por caso, o bloco da task, os campos, o corpo, as relações), a faixa da falha de leitura, o card fora da leitura, os vazios; `features/task-create`: o diálogo largo com o card afundado, **Name** em mono com as validações, a linha do contexto com **Show** e **Add to it**, **Mode** e **Review mode** segmentados, o resumo de modelos que abre a lista, os erros no rodapé. `components/system/` ganha linha de lista, cabeçalho de seção, barra de filtros, barra da seleção, painel da lista, bloco do item, aviso de dependência, lista de relações, **Continue** e linha de início.
+- **De `screens/` e dos mocks:** `board.md` inteiro; `lab/11-screen-board/a.html` (treze cenas e `?home=none`) e `components.html`, com os ajustes que o documento lista no alto.
+- **`changes.md`:** B1–B12.
+- **`backend.md`:** P22 (`In discussion` de um card criado ou atualizado por uma discussão), P23 (as partes do contexto montado; o tech spec decide entre expor no Go ou derivar do `BoardCard`); F7–F13.
+- **Fora:** o diálogo de discussão inteiro (task 9); Settings › Boards (task 10).
+- **Dependências:** task 2 (lugares, painel); task 4 não é necessária.
+- **Tamanho:** G, 9–12 steps.
+- **Pronto:** as treze cenas nos dois modos; `S`, `D`, `N`, `Space`, `/` e as setas como em `board.md` §7; filtros e seções recolhidas lembrados por board; a 1250 px com o painel aberto a linha desce para duas; uma leitura nunca apaga a lista; `features.md` §Visão do board, §Start task, §Leitura dos cards, §Falhas, §Criação de uma task, §A partir de um card, §Criar uma discussão, §Tela de boas-vindas reescritos.
+
+### 6. Centro de review e tela de um review
+
+- **Objetivo:** Reviews vira a lista por seções com a PR em painel, e o review vira a tela da task sem stepper, com os apontamentos como cartão na conversa e a publicação em diálogo.
+- **Escopo:** `features/reviews`: a lista (`Pending`, `In review`, `Reviewed`, `Yours and your tasks`), a linha da PR, o menu **Filter** com os itens de três estados, o painel da PR com a ação por caso, os checks pelo nome, os fatos, **Your review** e a descrição, a faixa por repositório, os vazios; o diálogo de início (a espera dos checks, **Add instructions**, o modo atrás de um clique); a tela do review (pílula, `⋯`, `Details`, `Reports`, os marcos de `review.md` §5, a espera dos checks, a passada, o passe limpo sem cartão); `components/system/`: **Finding** (título, localização com GitHub `O` e VS Code `Ctrl+E`, texto renderizado, decisão pressionada, **Edit** `E`, todos os estados) e **DecisionCard** (cartão neutro com roving tabindex, `A`/`D` avançando, `Alt+↓/↑`), a barra de decisão como forma da barra do pedido; o diálogo de publicação (veredito sem marcação, `Suggested`, a linha do que vai ao GitHub, o resumo opcional, as três regras do GitHub, foco em **Cancel**); **Review again** com a nota; `Couldn't check GitHub` como faixa; o modo Apply; a página do review que saiu. Saem `FindingsPanel`, `ReviewBar`, `PullCardBadge`, `MultiFilterMenu`.
+- **De `screens/` e dos mocks:** `review.md` inteiro; `lab/12-screen-review/a.html` (onze cenas e as flags) e `components.html`.
+- **`changes.md`:** R1–R17, S10 no review.
+- **`backend.md`:** P14 (checks e conflito lidos antes de cada passada), P15 (checks de uma PR sem review), P16 (`body` da PR), P17 (o seu último review), P18 (commits novos), P19 (o título de cada apontamento, no `prreview/report.go`), P20 (`checkError` com quando), P21 (`failedAt`), P10 (os marcos do review), P12 (quem fez o merge); F14, F15.
+- **Fora:** a PR da task (task 7).
+- **Dependências:** task 4 (a conversa), task 5 (linha de lista, seção, painel da lista, barra de filtros).
+- **Tamanho:** G, 10–13 steps.
+- **Pronto:** as onze cenas com `?own`, `?stale`, `?apply` e `?checkerr`; `A` e `D` avançam ao próximo por decidir e `Ctrl+Enter` abre a publicação com o foco na barra ou no cartão; numa PR própria só `Comment`; um passe limpo vai direto a `Ready to publish`; `features.md` §Centro de review inteiro e §O review como item reescritos.
+
+### 7. Apontamentos estruturados na PR da task
+
+- **Objetivo:** o review da PR da task usa o relatório e a decisão do centro de review, decidido no cartão da conversa, com **Apply approved** enviando só os aprovados.
+- **Escopo:** backend: o prompt de review de PR da task pede o formato `### N · título` com a localização; o parser de `prreview/report.go` é compartilhado (extraído para um pacote ou reutilizado por `flow`); uma migration nova guarda a decisão e o texto editado por apontamento da PR da task; `flow/pr.go` passa a esperar as decisões e a enviar os aprovados; o DTO da pull request da task traz os apontamentos com as decisões; `TaskService` ganha decidir, editar e aplicar; a situação `findings` da task traz o progresso; o texto da notificação `Findings` (`rest.md` §11, `muda`). Frontend: o **DecisionCard** e o **Finding** da task 6 na conversa da task, depois do marco `Review 1 written`; a barra `Decide findings · PR review · pass N` com **Next to decide** e **Apply approved** tracejado; o marco `You decided`; `Review 1 revised` quando o agente reescreve. Compatibilidade: uma task cuja PR já tem passadas em texto continua em texto até a próxima passada; o tech spec fixa a regra.
+- **De `screens/` e dos mocks:** `task.md` §9 com as sete mudanças de `review.md` §20; a cena `findings` de `lab/10-screen-task-minimal/b.html`.
+- **`changes.md`:** T16.
+- **`backend.md`:** **M1**, P11 (se sobrou da task 4), P19 no lado da task.
+- **Fora:** nada.
+- **Dependências:** tasks 4 e 6.
+- **Tamanho:** M, 6–8 steps.
+- **Pronto:** o ciclo real numa task: passada com apontamentos, decisão no cartão, **Apply approved**, `changes_review`, commit, passada nova; `flow` com testes de tabela para as decisões; `features.md` §Review de pull request reescrito; `sessions.md` com o prompt novo.
+
+### 8. Publicação em cadeia
+
+- **Objetivo:** aprovar publica; o épico e os dependentes publicam sozinhos quando a condição fecha; **Publish epic** sai.
+- **Escopo:** backend: `discussionflow/decide.go` e `publish.go` tratam o épico como dependência na corrida de cada decisão; a regra do épico (aprovado, todos os cards decididos, ao menos dois aprovados); o card de um épico descartado não publica e não segura o arquivamento; `PublishEpic` sai do `DiscussionService`, dos bindings e de `actions.ts`; `attention/derive_discussion.go` ganha `Epic can't publish`, `Epic discarded` e `Ready to archive` (a última notifica uma vez) e `text.go` os corpos novos; o `Decide drafts` de pé com tudo decidido some. Frontend mínimo, para o app ficar usável até a task 9: o `DraftsPanel` atual perde o botão **Publish epic** e mostra por rascunho `Approved · waits for the epic` e o estado da cadeia; a `DiscussionBar` atual mostra as três situações novas.
+- **De `screens/` e dos mocks:** `discussion.md` §6 e §8 (só as regras); nenhum mock.
+- **`changes.md`:** D3, D5, D13.
+- **`backend.md`:** **M2**, P26.
+- **Fora:** a tela da discussão (task 9).
+- **Dependências:** nenhuma técnica; na ordem, depois da task 7.
+- **Tamanho:** M, 5–7 steps.
+- **Pronto:** testes Go da cadeia (o épico com dois aprovados publica ao último gesto; com um não publica e a situação aparece; o descarte do último card solta a cadeia; **Retry** continua sem criar duas vezes); uma discussão real publica um épico com dois cards no GitHub; `features.md` §Aprovar e publicar, §Épico, §A discussão como item, §Depende de mim reescritos.
+
+### 9. A discussão
+
+- **Objetivo:** a discussão vira a tela do review com a pílula `Discussing` ou `Round N`, os rascunhos como cartão dobrado na conversa e a rodada como marcos.
+- **Escopo:** `features/discussion`: o diálogo de nova discussão (o bloco do board, **Title** com contador, **What to discuss**, os cards com `×`, a linha do contexto, o aviso de clone, **Model**); o cabeçalho com a pílula e o `⋯` (**Open <board>**, **Group drafts into an epic…**, **Archive…** com a razão, **Delete discussion…**); `Details` e `Documents` fechados; os marcos de `discussion.md` §4, a rodada que dobra; o cartão dos rascunhos (o épico como grupo, o rascunho dobrado de duas linhas, o aberto campo a campo, `Depends on` pelos títulos, os avisos, **Body**/**Changes** com o diff neutro, a linha do que o gesto publica, a decisão com o estado ao lado, a proteção de 900 ms e da tecla repetida, o foco que fica quando publica, **Edit** no lugar com o `listbox` de dependências, **Retry** no rascunho); a barra do pedido de §8; as pastilhas do compositor; os diálogos de arquivar, apagar e agrupar; a página da discussão que saiu. Saem `DraftsPanel`, `DiscussionBar`, `EpicGroup`, `DraftCard` antigo.
+- **De `screens/` e dos mocks:** `discussion.md` inteiro; `lab/13-screen-discussion/b.html` (treze cenas e as flags) e `components.html`; o controle segmentado segue a regra de `components.md`, não o mock.
+- **`changes.md`:** D1, D2, D4, D6, D7, D8, D9, D10, D11, D12, D14, S10 na discussão.
+- **`backend.md`:** P3 (**Retry** da sessão da discussão), P10 (os marcos da discussão), P24 (a versão anterior dos rascunhos revisados), P25 (o número da rodada), P23 na discussão; F16, F17, F18.
+- **Fora:** nada.
+- **Dependências:** tasks 8, 6 e 4.
+- **Tamanho:** G, 9–12 steps.
+- **Pronto:** as treze cenas com as flags; `A` segurado é ignorado; um gesto que publica mantém o foco e mostra `Publishing…` e `Created`; a rodada anterior dobra num marco quando a seguinte chega; `features.md` §Discussão inteiro reescrito.
+
+### 10. Settings, boas-vindas, início e migração
+
+- **Objetivo:** Settings vira o lugar com quatro páginas, e o início do app, as boas-vindas e a migração recusada ganham as formas decididas.
+- **Escopo:** `features/settings`: a navegação com `◇ N`, **Defaults** (o modo de review em `radiogroup`, os modelos por grupo com a marca da fábrica, os estados do catálogo, a falha ao salvar na linha); `features/boards` como a página **Boards** (a linha, a falha afundada, o diálogo em passos com **Back**, a tabela de status, a consequência por repositório desmarcado, o **Remove** por destino); `features/repositories` como a página **Repositories** (**Needs a clone** primeiro, grupos por board, o `⋯` da linha, as instruções de review no lugar, a pasta de clones no pé, o vazio, **Add repository** com os disponíveis primeiro, **Remove repository**); **Prompts** como lista com `Default`/`Edited`, a página do prompt com os placeholders como etiqueta, o editor com a coluna de placeholders e `Ctrl S`, **Reset to default…**, `Discard your changes?`; a página de aparência sai; `features/welcome` com **This machine** só quando falta algo; o início (`Starting MySpec…` com os passos, o passo lento, a falha com **Try again**); `features/migration` com **Copy the list**.
+- **De `screens/` e dos mocks:** `rest.md` §2, §5, §6, §7; as cenas de Settings, boas-vindas, início e migração de `lab/14-screen-rest/index.html` e `components.html`.
+- **`changes.md`:** X1–X9, X17, X18, X19.
+- **`backend.md`:** P31, P32, P34, P35, P36.
+- **Fora:** History, arquivados, diálogos da task, avisos e notificações (task 11).
+- **Dependências:** task 2.
+- **Tamanho:** G, 9–12 steps.
+- **Pronto:** as cenas de `lab/14` dessas telas nos dois modos; `Ctrl+,` nas boas-vindas; `Esc` fecha Settings para o lugar anterior; abaixo de 820 px a navegação vira uma linha; `features.md` §Configurações e aparência, §Modelos e esforço, §Boards (páginas e cadastro), §Repositórios, §Prompts, §Tela de boas-vindas, §Dados de uma versão com áreas de trabalho reescritos.
+
+### 11. History, arquivados, diálogos da task, avisos, toasts e notificações
+
+- **Objetivo:** History vira a lista por dia com o filtro da lateral, os arquivados mostram o resultado, os diálogos destrutivos dizem o que será perdido, e o aviso do app, os toasts e as notificações ganham os textos decididos.
+- **Escopo:** `features/history`: a lista por dia com a busca, o chip do filtro da lateral, a contagem, 90 dias e os mais antigos sob demanda, a linha recém-arquivada destacada; a task arquivada (os fatos, o resultado do encerramento, as abas com **Pull request**), o review e a discussão arquivados, **Delete…** que volta ao History; `features/task`: **Delete task** com a prévia lida do git, **Discard step** com a contagem, **Back to** e **Discard and restart** com o que a etapa de PR criou; a página da task apagada com o que ficou no disco e o comando; os toasts de task, review e discussão (F20, X12); o aviso do app só para ações sem lugar próprio; `attention/text.go` com os 55 textos e o título do review com o título da PR. Saem `LeftoversNotice`, `ArchivedNotice` antigo.
+- **De `screens/` e dos mocks:** `rest.md` §3, §4, §8, §9, §10, §11; as cenas restantes de `lab/14-screen-rest/index.html`.
+- **`changes.md`:** X10–X16, X20, S7 nos casos da task.
+- **`backend.md`:** P27 (`CloseResult` no `ArchivedTask`), P28 (rascunho e relatórios da PR no arquivado), P29 (o que o apagamento deixou, ligado ao item), P30 (arquivos não commitados e commits fora da base), P33 (History por partes), P37 (os textos das notificações).
+- **Fora:** nada.
+- **Dependências:** tasks 4, 6, 9 e 10.
+- **Tamanho:** M, 7–9 steps.
+- **Pronto:** as cenas de History, arquivados e diálogos; `text_test.go` cobre os 55 textos; a página da task apagada mostra o comando com **Copy**; `features.md` §Histórico, §Apagar uma task, §Voltar e descartar, §Descartar step, §Encerramento e arquivamento, §Depende de mim reescritos.
+
+### 12. Consistência e remoção do design antigo
+
+- **Objetivo:** o app inteiro passa pelo passe do crítico contra o system, e o que sobrou do design antigo sai.
+- **Escopo:** o PRD desta task é o relatório do passe de consistência da frente (fase 5, o `design-critic` sobre o app rodando, nas larguras de `structure.md` §6 e nos dois modos); a remoção do que restou (`--status-*`, `.dark`, os keyframes antigos de `attention-flash`, `react-resizable-panels` se nada mais o usa, os pacotes de Inter e JetBrains Mono, componentes e testes órfãos); as verificações que fecham a porta: nenhuma feature importa de `components/ui/`, nenhum `oklch(` fora de `tokens.css`, nenhuma classe de cor do shadcn (`bg-primary`, `text-muted-foreground`) fora da ponte; a varredura de largura (capturas a 1100, 1250, 1450, 2000 e 2560 px), de `prefers-reduced-motion` e de nomes acessíveis; a virtualização da conversa e do board se ficaram para trás; a pauta de polimento de `lab/08-visual-final/critique.md` §7 que ainda valer; `docs/` inteiro consistente (`features.md`, `overview.md`, `design-system.md`, `frontend.md`, `target-machine.md`).
+- **`changes.md`:** o que a crítica apontar como não cumprido.
+- **`backend.md`:** nenhum.
+- **Dependências:** todas.
+- **Tamanho:** M, 5–8 steps.
+- **Pronto:** o crítico não aponta inconsistência contra `principles.md` e `components.md`; `task check` verde com as verificações novas; a frente de design registra o fim da fase 5 em `design/README.md`.
+
+## 3. Riscos
+
+| Risco | Como é tratado |
+|---|---|
+| **WebKitGTK: fontes sem suavização** | O primeiro step da task 1 é uma prova: Fira Sans e Fira Code embutidas, o app rodando na máquina alvo, capturas claro e escuro dos dois registros a 100% de escala. `-webkit-font-smoothing` não age no Linux; o que age é o fontconfig e o hinting da fonte, então a task prefere as estáticas com hinting (`@fontsource/fira-sans`) à variável, testa `font-synthesis: none` e `text-rendering` e registra o resultado em `target-machine.md`. Se Fira não renderiza bem, a task para e o usuário decide entre outra fonte e a do sistema; a decisão entra em `decisions.md` e `tokens.css` muda antes de qualquer wrapper |
+| **WebKitGTK: meio pixel** | Já está nos tokens (rem sobre 16 px, glifos pares, `round()` nas larguras de lateral e painel). A task 1 estende `globals.test.tsx` às regras de centralização e às larguras arredondadas, a task 2 aplica `round(down, …, 1px)` na lateral, nos painéis e na coluna centrada, e as tasks de tela usam limites de container query em px inteiros. A task 12 confere com capturas ampliadas |
+| **O tamanho da task da conversa** | Dividida em duas (3 e 4), cada uma G e cada uma deixando o app usável. Na task 4, os campos do transcript (P5–P10) entram primeiro, em steps só de Go com os fakes do `claudetest`, e a interface depois, um step por família de entrada; a virtualização é o último step e pode ir para a task 12. Se o plano da task 4 passar de 14 steps, o tech spec corta os cartões (`Manual`, permissão, pergunta) para uma task 4b antes de cortar qualquer outra coisa |
+| **A migração dos testes existentes com limiar** | 156 arquivos de teste hoje. Cada task apaga os testes dos componentes que remove e escreve os dos que cria no mesmo step, então a cobertura não cai entre steps; `task check` é o critério de cada step. A lógica que não muda de regra (`status.ts`, `pr-status.ts`, `review-status.ts`) fica com os testes que tem. Um limiar que cair por um componente grande sem teste ainda é sinal de step mal cortado, não razão para baixar o limiar |
+| **A coexistência com o shadcn** | A ponte de variáveis, os wrappers em `components/system/` e a regra de importação (seção 1). Um primitivo que não obedece ao system por classe é substituído no wrapper, e o tech spec da task 1 registra a escolha por componente. Um `shadcn add` futuro não quebra nada porque nenhuma feature depende das classes dele |
+| **O refactor da navegação no store** | A task 2 troca os muitos `openXId`/booleans por um lugar e uma pilha; para não tocar todas as features de uma vez, os seletores atuais ficam como derivados do lugar, e cada task de tela os substitui pelo lugar quando reescreve a feature. `app-store.test.ts` prova a equivalência dos seletores antes e depois |
+| **Os dois backends médios** | Tasks próprias (7 e 8), testadas em Go contra o `ghtest` e o `claudetest` e validadas no GitHub real antes das telas que dependem delas |
+| **Compatibilidade de dados em curso** | Uma task, um review ou uma discussão ativos durante a atualização continuam funcionando: relatórios em texto continuam em texto até a próxima passada (task 7); rascunhos já decididos entram na regra da cadeia sem republicar (task 8); a pilha do histórico começa vazia (task 2). Cada tech spec dessas tasks tem uma seção de compatibilidade |
+
+## 4. O que o usuário confirma antes de começar
+
+**As mudanças de comportamento mais sensíveis de `changes.md`:**
+
+| # | Mudança | Task |
+|---|---|---|
+| S1 | **Waiting for you** sai da lateral; a árvore, os glifos, o tempo e `Ctrl+J` são o "depende de mim" | 2 |
+| T1, T4, T6 | O stepper não tem ação; **Back to…**, **Discard…**, **Review mode**, **Models**, **Review myself**, **Open PR** vão para o `⋯`; as conversas anteriores só abrem de `Details`, somente leitura | 3 |
+| B3 | O cabeçalho do board não tem **Start task**: uma task começa só de um card, pelo painel ou por `S` | 5 |
+| R11, R12 | O passe limpo não tem cartão; o veredito não vem marcado, só sugerido | 6 |
+| T16 (M1) | O review da PR da task passa a apontamentos estruturados, decididos em cartão, com **Apply approved**; o prompt muda | 7 |
+| D3, D4 (M2) | **Publish epic** sai; aprovar publica na hora e a cadeia publica sozinha quando a condição fecha; sem diálogo de confirmação, o desfazer é fechar a issue no GitHub | 8 |
+
+Também sensíveis, mas de menor risco: X1 e X2 (Settings com quatro páginas, sem aparência; o tema só no rodapé), X10 (History como lista só, 90 dias), B5 (a seleção de cards como modo).
+
+**A decisão sobre os tokens:** substituir os de `globals.css` e `tokens.css` pelos de `design/system/tokens.css`, importados de uma fonte só, com a ponte do shadcn e o tema por `data-theme`, como a seção 1 recomenda; a alternativa é manter duas paletas e mapear, o que a frente descarta porque cria uma segunda fonte de verdade.
+
+**A ordem:** as duas divisões (fundação em 1 e 2; tela da task em 3 e 4) e as duas tasks de backend médio como tasks próprias (7 e 8).

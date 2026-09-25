@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Compare</title>
+<style>
+  :root { color-scheme: light dark; }
+  html, body { margin: 0; height: 100%; background: #111; color: #ddd; font: 13px system-ui, sans-serif; }
+  header { display: flex; gap: 16px; align-items: center; padding: 6px 12px; background: #1b1b1b; border-bottom: 1px solid #333; }
+  header span { opacity: .7; }
+  main { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 1px; background: #333; height: calc(100% - 31px); }
+  iframe { border: 0; width: 100%; height: 100%; background: #fff; }
+  .empty { display: grid; place-items: center; height: 100%; opacity: .6; }
+</style>
+</head>
+<body>
+<header id="bar"></header>
+<main id="frames"></main>
+<script>
+  const params = new URLSearchParams(location.search);
+  const bar = document.getElementById("bar");
+  const frames = document.getElementById("frames");
+  const entries = [...params.entries()];
+  if (entries.length === 0) {
+    frames.innerHTML = '<div class="empty">Open as compare.html?a=round/a.html&amp;b=round/b.html</div>';
+  }
+  for (const [name, src] of entries) {
+    const label = document.createElement("span");
+    label.textContent = `${name.toUpperCase()}: ${src}`;
+    bar.append(label);
+    const frame = document.createElement("iframe");
+    frame.src = src;
+    frame.title = name;
+    frames.append(frame);
+  }
+</script>
+</body>
+</html>

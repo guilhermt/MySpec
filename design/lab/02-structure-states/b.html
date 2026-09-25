@@ -1,0 +1,1537 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>b · Rich line</title>
+<style>
+/* Wireframe base: grayscale, system font, no final typography. */
+:root {
+  --bg: #f5f5f5;
+  --surface: #ffffff;
+  --sunken: #eeeeee;
+  --hover: #e8e8e8;
+  --selected: #dedede;
+  --line: #dcdcdc;
+  --line-2: #c4c4c4;
+  --deco: #a8a8a8;
+  --ink: #121212;
+  --ink-2: #3a3a3a;
+  --ink-3: #555555;
+  --ink-4: #6e6e6e;
+  --strong: #161616;
+  --on-strong: #ffffff;
+  --fs-xs: 11px;
+  --fs-s: 12px;
+  --fs-m: 13px;
+  --fs-l: 15px;
+  --fs-xl: 19px;
+  --r: 4px;
+  --measure: 800px;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: var(--bg); color: var(--ink);
+  font: 13px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  overflow: hidden;
+}
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-align: left; }
+:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+.mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; }
+.muted { color: var(--ink-3); }
+.faint { color: var(--ink-4); }
+.strong { font-weight: 650; }
+.grow { flex: 1 1 auto; min-width: 0; }
+.row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.trunc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.sep { width: 1px; align-self: stretch; background: var(--line); margin: 8px 2px; flex: none; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.num { font-variant-numeric: tabular-nums; }
+kbd {
+  font: 10px/1 ui-monospace, monospace; color: var(--ink-3);
+  border: 1px solid var(--line-2); border-bottom-width: 2px; border-radius: 3px;
+  padding: 2px 4px; background: var(--surface); white-space: nowrap;
+}
+
+/* Buttons */
+.btn {
+  display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 9px;
+  border: 1px solid var(--line-2); border-radius: var(--r); background: var(--surface);
+  font-size: var(--fs-s); white-space: nowrap; color: var(--ink-2); flex: none;
+}
+.btn:hover { background: var(--hover); }
+.btn.primary { background: var(--strong); color: var(--on-strong); border-color: var(--strong); }
+.btn.ghost { border-color: transparent; background: transparent; }
+.btn.ghost:hover { background: var(--hover); }
+.btn.on { background: var(--selected); border-color: var(--line-2); color: var(--ink); }
+.btn.sm { height: 22px; padding: 0 7px; font-size: var(--fs-xs); }
+.iconbtn { width: 26px; justify-content: center; padding: 0; }
+.btn.sm.iconbtn { width: 22px; }
+/* Disabled reads as disabled: dashed, faint, no fill, and the reason sits next to it. */
+.btn:disabled, .btn.primary:disabled {
+  background: transparent; border-style: dashed; border-color: var(--line-2); color: var(--ink-4); cursor: not-allowed;
+}
+.btn.ghost:disabled { border-color: transparent; }
+.why { font-size: var(--fs-xs); color: var(--ink-3); white-space: nowrap; }
+
+/* Status glyphs: shape + label, never shape alone. */
+.st { display: inline-block; width: 9px; height: 9px; flex: none; border-radius: 50%; }
+.st.error { border-radius: 1px; background: var(--strong); transform: rotate(45deg) scale(.88); }
+.st.wait { background: var(--strong); }
+.st.close { border: 2.5px solid var(--strong); }
+.st.run { border: 2px solid var(--ink-2); background: conic-gradient(var(--ink-2) 0 25%, transparent 0); animation: spin 1.4s linear infinite; }
+.st.gh { border: 1.5px dashed var(--ink-3); }
+.st.idle { border: 1.5px solid var(--ink-4); }
+.st.paused { border-radius: 0; width: 8px; background: linear-gradient(90deg, var(--ink-3) 0 34%, transparent 34% 66%, var(--ink-3) 66%); }
+.st.done { border-radius: 0; width: 9px; height: 5px; border-left: 2px solid var(--ink-3); border-bottom: 2px solid var(--ink-3); transform: rotate(-45deg) translate(1px, -1px); }
+.st.warn { border-radius: 1px; border: 1.5px solid var(--ink-2); transform: rotate(45deg) scale(.8); }
+.st.todo { border: 1px solid var(--deco); }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes shimmer { 0% { opacity: .55; } 50% { opacity: 1; } 100% { opacity: .55; } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+
+/* Type glyph: placeholder for the type icon. */
+.ty {
+  display: inline-grid; place-items: center; flex: none; width: 17px; height: 17px;
+  border: 1px solid var(--ink-3); border-radius: 3px; font-size: 9px; font-weight: 700; color: var(--ink-2);
+}
+.ty.review { border-radius: 50%; }
+.ty.discussion { border-style: dashed; }
+
+/* Times. Waiting for you: a filled chip. Agent turn: plain text after a small spinner. */
+.tw {
+  display: inline-flex; align-items: center; height: 18px; padding: 0 6px; border-radius: 9px; flex: none;
+  background: var(--strong); color: var(--on-strong); font-size: var(--fs-xs); font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.tw.close { background: transparent; color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--strong); }
+.tt { display: inline-flex; align-items: center; gap: 4px; font-size: var(--fs-xs); color: var(--ink-3); font-variant-numeric: tabular-nums; white-space: nowrap; flex: none; }
+.tt .st { width: 7px; height: 7px; border-width: 1.5px; }
+
+/* Context meter, compact */
+.ctx { display: inline-flex; align-items: center; gap: 4px; font-size: var(--fs-xs); color: var(--ink-3); white-space: nowrap; font-variant-numeric: tabular-nums; flex: none; }
+.ctx i { display: inline-block; width: 22px; height: 5px; border: 1px solid var(--ink-4); border-radius: 2px; position: relative; overflow: hidden; }
+.ctx i::after { content: ""; position: absolute; inset: 0 auto 0 0; width: var(--p); background: var(--ink-3); }
+
+/* Stage track: done stages are buttons (back to a stage). */
+.track { display: flex; align-items: center; gap: 2px; font-size: var(--fs-s); color: var(--ink-3); min-width: 0; overflow: hidden; }
+.track .stg { padding: 2px 7px; border-radius: 3px; white-space: nowrap; display: inline-flex; gap: 5px; align-items: center; height: 24px; }
+.track button.stg:hover { background: var(--hover); color: var(--ink); }
+.track .stg.done { color: var(--ink-2); }
+.track .stg.done::before { content: "✓"; font-size: 10px; }
+.track .stg.cur { background: var(--selected); color: var(--ink); font-weight: 650; }
+.track .stg.cur .sub { font-weight: 400; color: var(--ink-2); }
+.track .gt { color: var(--deco); font-size: 10px; }
+
+/* Bars attached to an item */
+.bar {
+  display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 5px 16px; flex-wrap: wrap;
+  border-bottom: 1px solid var(--line); background: var(--surface); min-width: 0; flex: none;
+}
+.bar .lbl { font-weight: 650; white-space: nowrap; }
+.bar .state { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.bar .acts { display: flex; gap: 6px; align-items: center; margin-left: auto; flex-wrap: wrap; justify-content: flex-end; }
+.bar.note { min-height: 34px; background: var(--bg); font-size: var(--fs-s); }
+.tabs { display: flex; gap: 2px; padding: 0 16px; border-bottom: 1px solid var(--line); background: var(--surface); flex: none; }
+.tabs .tab { display: inline-flex; gap: 6px; align-items: center; padding: 8px 10px 7px; border-bottom: 2px solid transparent; color: var(--ink-3); font-size: var(--fs-s); white-space: nowrap; }
+.tabs .tab.on { border-bottom-color: var(--ink); color: var(--ink); font-weight: 650; }
+.tabs .tab .tw, .tabs .tab .tt { font-weight: 650; }
+
+/* Conversation */
+.convo { flex: 1 1 auto; overflow: auto; min-height: 0; }
+.convo-in { max-width: var(--measure); margin: 0 auto; padding: 20px 24px 28px; display: flex; flex-direction: column; gap: 14px; }
+.e-marker { display: flex; align-items: center; gap: 10px; font-size: var(--fs-xs); color: var(--ink-3); }
+.e-marker::before, .e-marker::after { content: ""; height: 1px; background: var(--line); flex: 1; }
+.e-user { align-self: flex-end; max-width: 78%; background: var(--sunken); border-radius: 8px; padding: 8px 12px; }
+.e-app { border-left: 2px solid var(--line-2); padding: 2px 0 2px 12px; color: var(--ink-2); }
+.e-app .who, .e-agent .who { font-size: var(--fs-xs); color: var(--ink-3); margin-bottom: 2px; }
+.e-agent p { margin: 0 0 6px; }
+.e-agent code, .e-app code, .finding code, .notice code { font-family: ui-monospace, monospace; font-size: 12px; background: var(--sunken); padding: 0 3px; border-radius: 2px; }
+.e-actions { border: 1px solid var(--line); border-radius: 6px; background: var(--surface); font-size: var(--fs-s); }
+.e-actions summary { display: flex; gap: 8px; align-items: center; padding: 6px 10px; cursor: pointer; list-style: none; color: var(--ink-2); }
+.e-actions summary::-webkit-details-marker { display: none; }
+.e-actions ul { list-style: none; margin: 0; padding: 4px 10px 8px 28px; border-top: 1px solid var(--line); }
+.e-actions li { display: flex; gap: 8px; padding: 2px 0; color: var(--ink-2); }
+.e-actions li .k { width: 44px; color: var(--ink-3); flex: none; }
+.e-activity { display: flex; gap: 8px; align-items: center; font-size: var(--fs-s); color: var(--ink-2); }
+.e-status { border: 1px dashed var(--line-2); border-radius: 6px; padding: 10px 12px; font-size: var(--fs-s); }
+.e-block { border: 2px solid var(--strong); border-radius: 8px; padding: 12px 14px; background: var(--surface); }
+.e-block pre { margin: 8px 0; padding: 8px 10px; background: var(--sunken); border-radius: 4px; font: 12px/1.5 ui-monospace, monospace; overflow: auto; }
+.card-q { border: 2px solid var(--strong); border-radius: 8px; background: var(--surface); padding: 12px 14px; }
+.card-q .hd { display: flex; gap: 8px; align-items: center; font-size: var(--fs-xs); color: var(--ink-2); margin-bottom: 6px; }
+.card-q .q { font-weight: 650; font-size: var(--fs-l); margin-bottom: 8px; }
+.card-q .opt { display: flex; gap: 10px; padding: 7px 8px; border: 1px solid var(--line); border-radius: 5px; margin-top: 6px; width: 100%; }
+.card-q .opt:hover { background: var(--hover); }
+.card-q .opt .n { font: 11px ui-monospace, monospace; border: 1px solid var(--line-2); border-radius: 3px; padding: 0 4px; height: 17px; flex: none; }
+.card-q .opt small { display: block; color: var(--ink-3); }
+.card-q pre { margin: 6px 0 8px; padding: 8px 10px; background: var(--sunken); border-radius: 4px; font: 12px/1.5 ui-monospace, monospace; white-space: pre-wrap; }
+.card-q .btns { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* Composer */
+.composer { border-top: 1px solid var(--line); background: var(--surface); padding: 10px 24px 12px; flex: none; }
+.composer-in { max-width: var(--measure); margin: 0 auto; }
+.composer .box { border: 1px solid var(--line-2); border-radius: 8px; padding: 8px 10px; min-height: 58px; color: var(--ink-4); display: flex; flex-direction: column; justify-content: space-between; gap: 8px; }
+.composer .box .row { color: var(--ink-3); font-size: var(--fs-xs); }
+
+/* Findings */
+.finding { border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; background: var(--surface); font-size: var(--fs-s); }
+.finding .loc { color: var(--ink-3); font: 11px ui-monospace, monospace; }
+.finding.undecided { border-color: var(--ink-2); }
+.finding.decided { color: var(--ink-3); }
+.finding.focus { box-shadow: 0 0 0 2px var(--ink); }
+.finding .dec { display: flex; gap: 6px; margin-top: 6px; }
+.progress { height: 4px; background: var(--sunken); border-radius: 2px; overflow: hidden; }
+.progress i { display: block; height: 100%; background: var(--ink-2); width: var(--p); }
+
+/* Places: lists */
+.place { display: flex; flex-direction: column; min-height: 0; height: 100%; background: var(--surface); flex: 1; }
+.place-hd { display: flex; align-items: center; gap: 10px; padding: 0 20px; min-height: 48px; border-bottom: 1px solid var(--line); flex: none; flex-wrap: wrap; }
+.place-hd h1 { font-size: var(--fs-l); margin: 0; }
+.filters { display: flex; gap: 6px; padding: 8px 20px; border-bottom: 1px solid var(--line); flex-wrap: wrap; flex: none; }
+.chip { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 8px; border: 1px solid var(--line-2); border-radius: 12px; font-size: var(--fs-xs); color: var(--ink-2); background: var(--surface); }
+.chip.on { background: var(--selected); color: var(--ink); }
+.place-body { overflow: auto; flex: 1; min-height: 0; }
+.sec-hd { display: flex; gap: 8px; align-items: center; padding: 10px 20px 4px; font-size: var(--fs-xs); color: var(--ink-3); font-weight: 650; text-transform: uppercase; letter-spacing: .04em; }
+.lrow { display: flex; align-items: center; gap: 10px; padding: 7px 20px; border-bottom: 1px solid var(--sunken); min-width: 0; width: 100%; }
+.lrow:hover { background: var(--hover); }
+.lrow.hl { background: var(--selected); }
+.tag { display: inline-flex; align-items: center; gap: 4px; font-size: var(--fs-xs); border: 1px solid var(--line-2); border-radius: 3px; padding: 0 5px; height: 18px; color: var(--ink-2); white-space: nowrap; }
+.tag.strong { border-color: var(--strong); color: var(--ink); font-weight: 650; }
+.notice { margin: 10px 20px 0; border: 1px dashed var(--ink-3); border-radius: 5px; padding: 7px 10px; font-size: var(--fs-s); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+/* Documents and skeleton text */
+.doc { padding: 16px 20px; overflow: auto; flex: 1; min-height: 0; }
+.doc h2 { font-size: var(--fs-l); margin: 0 0 8px; }
+.doc h3 { font-size: var(--fs-m); margin: 14px 0 6px; }
+.ln { height: 8px; background: var(--sunken); border-radius: 2px; margin: 7px 0; }
+.sk { background: var(--sunken); border-radius: 3px; height: 10px; animation: shimmer 1.6s ease-in-out infinite; }
+
+/* Aux panel */
+.aux { display: flex; flex-direction: column; background: var(--surface); min-height: 0; height: 100%; }
+.aux-hd { display: flex; align-items: center; gap: 6px; padding: 0 8px 0 14px; height: 44px; border-bottom: 1px solid var(--line); flex: none; }
+.vtrack { list-style: none; margin: 0; padding: 0; font-size: var(--fs-s); }
+.vtrack li { display: flex; gap: 8px; align-items: baseline; padding: 3px 0; color: var(--ink-3); }
+.vtrack li.done { color: var(--ink-2); }
+.vtrack li.cur { color: var(--ink); }
+.vtrack .mk { width: 12px; flex: none; text-align: center; font-size: 10px; display: inline-grid; place-items: center; }
+
+/* Popover and menu */
+.pop {
+  position: fixed; z-index: 60; background: var(--surface); border: 1px solid var(--line-2); border-radius: 6px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, .16); min-width: 240px; max-width: 380px; padding: 6px; font-size: var(--fs-s);
+}
+.pop .ph { padding: 4px 8px 6px; font-size: var(--fs-xs); color: var(--ink-3); font-weight: 650; text-transform: uppercase; letter-spacing: .04em; }
+.pop .mi { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px; border-radius: 4px; min-width: 0; }
+.pop .mi:hover, .pop .mi:focus-visible { background: var(--hover); }
+.pop .mi small { display: block; color: var(--ink-3); }
+.pop .mi:disabled { color: var(--ink-4); cursor: not-allowed; background: none; }
+.pop hr { border: 0; border-top: 1px solid var(--line); margin: 4px 0; }
+.pop .kv { display: flex; gap: 8px; padding: 4px 8px; align-items: center; }
+
+/* Item that left while open */
+.gone { max-width: 600px; margin: 9vh auto 0; padding: 0 24px; display: flex; flex-direction: column; gap: 14px; }
+.gone h1 { font-size: var(--fs-xl); margin: 0; }
+.gone .res { border: 1px solid var(--line); border-radius: 6px; padding: 8px 12px; background: var(--bg); }
+.gone .res div { display: flex; gap: 8px; align-items: center; padding: 3px 0; font-size: var(--fs-s); }
+.gone .next { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* Start page */
+.start { overflow: auto; flex: 1; }
+.start-in { max-width: 760px; margin: 0 auto; padding: 48px 24px; display: flex; flex-direction: column; gap: 26px; }
+.start h1 { font-size: var(--fs-xl); margin: 0; }
+.start h2 { font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: .05em; color: var(--ink-3); margin: 0 0 8px; }
+.cont { display: flex; align-items: center; gap: 12px; border: 1px solid var(--line-2); border-radius: 8px; padding: 12px 14px; width: 100%; }
+.cont:hover { background: var(--hover); }
+.acts3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; }
+.act { border: 1px solid var(--line); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 4px; }
+.act:hover { background: var(--hover); }
+.act kbd { align-self: flex-start; }
+.act .t { font-weight: 650; display: flex; gap: 8px; align-items: center; }
+.boards .lrow { padding-left: 0; padding-right: 0; }
+.keys { display: flex; gap: 18px; flex-wrap: wrap; color: var(--ink-3); font-size: var(--fs-s); }
+
+/* Shell common to both variants */
+.app { display: grid; grid-template-columns: var(--sb) minmax(0, 1fr); height: 100vh; }
+.app.sb-collapsed { --sb: 60px; }
+.sb { display: flex; flex-direction: column; border-right: 1px solid var(--line); background: var(--bg); min-height: 0; min-width: 0; container: sb / inline-size; }
+.sb-top { display: flex; align-items: center; gap: 6px; height: 44px; padding: 0 8px 0 14px; flex: none; }
+.sb-top .brand { font-weight: 700; letter-spacing: -.01em; }
+.sb-filter { padding: 0 8px 6px; flex: none; }
+.sb-filter select { width: 100%; height: 26px; border: 1px solid var(--line-2); border-radius: var(--r); background: var(--surface); font: inherit; font-size: var(--fs-s); color: var(--ink-2); padding: 0 6px; }
+.sb-tree { flex: 1; overflow: auto; padding: 2px 6px 10px; }
+.sb-foot { display: flex; align-items: center; gap: 4px; height: 44px; padding: 0 8px; border-top: 1px solid var(--line); flex: none; }
+.sb-foot .cnt { font-size: var(--fs-xs); color: var(--ink-3); }
+.sb-empty { padding: 8px 10px; color: var(--ink-3); font-size: var(--fs-s); }
+[role="treeitem"]:focus-visible { outline-offset: -2px; }
+
+/* Collapsed sidebar: a strip that keeps kind, severity and time as text */
+.strip { display: none; flex-direction: column; align-items: center; gap: 2px; padding: 6px 0; flex: 1; overflow: auto; }
+.strip .tile { position: relative; width: 50px; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 5px 0 4px; border-radius: 5px; }
+.strip .tile:hover, .strip .tile.sel { background: var(--selected); }
+.strip .tile .gl { position: relative; }
+.strip .tile .gl .st { position: absolute; right: -5px; bottom: -3px; box-shadow: 0 0 0 2px var(--bg); }
+.strip .tile .tx { font-size: 10px; line-height: 14px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.strip .tile .tx.w { background: var(--strong); color: var(--on-strong); border-radius: 7px; padding: 0 4px; }
+.strip .tile .tx.c { box-shadow: inset 0 0 0 1.5px var(--strong); border-radius: 7px; padding: 0 4px; }
+.strip .tile .tx.m { font-weight: 400; color: var(--ink-3); }
+.strip .grp { width: 34px; border-top: 1px solid var(--line); margin: 5px 0 2px; position: relative; display: flex; justify-content: center; }
+.strip .grp .st { position: absolute; top: -5px; background: var(--bg); box-shadow: 0 0 0 2px var(--bg); }
+.app.sb-collapsed .sb-filter, .app.sb-collapsed .sb-tree, .app.sb-collapsed .sb-top .brand, .app.sb-collapsed .sb-top .newbtn, .app.sb-collapsed .sb-foot .wide { display: none; }
+.app.sb-collapsed .strip { display: flex; }
+.app.sb-collapsed .sb-top { padding: 0; justify-content: center; }
+.app.sb-collapsed .sb-foot { flex-direction: column; height: auto; padding: 6px 0; }
+
+/* Main */
+.main { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--surface); position: relative; container: main / inline-size; }
+.hdr { display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 10px 0 8px; border-bottom: 1px solid var(--line); flex: none; min-width: 0; }
+.crumbs { display: flex; align-items: center; gap: 6px; min-width: 0; flex: 1; font-size: var(--fs-s); color: var(--ink-3); }
+.crumbs .here { color: var(--ink); font-size: var(--fs-l); font-weight: 650; }
+.crumbs button:hover { text-decoration: underline; }
+.crumbs .up { white-space: nowrap; }
+.hdr .tools { display: flex; align-items: center; gap: 4px; flex: none; }
+.trackbar { display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 0 16px; border-bottom: 1px solid var(--line); flex: none; }
+.body { flex: 1; display: flex; min-height: 0; position: relative; }
+.colconvo { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.drawer { width: clamp(380px, 26vw, 560px); border-left: 1px solid var(--line); flex: none; background: var(--surface); }
+.drawer.overlay { position: absolute; right: 0; top: 0; bottom: 0; box-shadow: -8px 0 24px rgba(0, 0, 0, .12); z-index: 5; max-width: calc(100% - 40px); }
+.nw { display: none; }
+@container main (max-width: 1020px) {
+  .hdr .opt { display: none; }
+  .hdr .nw { display: inline-flex; }
+  .bar .long { display: none; }
+}
+@container main (max-width: 900px) {
+  .crumbs .up { display: none; }
+  .crumbs .meta { display: none; }
+}
+
+/* Loading skeleton */
+.skrow { display: grid; gap: 6px; padding: 8px 10px; }
+
+/* Mock-only chrome: dashed, clearly not part of the UI */
+.mock { position: fixed; z-index: 90; font: 11px/1.3 ui-monospace, monospace; color: #333; background: #fffef4; border: 1px dashed #888; border-radius: 4px; }
+.mock-w { left: 50%; transform: translateX(-50%); bottom: 4px; padding: 4px 7px; pointer-events: none; }
+.mock-notes-btn { right: 8px; bottom: 8px; padding: 4px 8px; cursor: pointer; }
+.mock-scenes { left: calc(var(--sbw, 0px) + 8px); bottom: 30px; padding: 4px 6px; display: none; gap: 3px; flex-wrap: wrap; align-items: center; max-width: min(760px, 60vw); }
+.mock-scenes.open { display: flex; }
+.mock-scenes a { color: #333; text-decoration: none; padding: 1px 5px; border-radius: 3px; }
+.mock-scenes a:hover { background: #eee8c8; }
+.mock-scenes a.on { background: #333; color: #fffef4; }
+.mock-scenes b { margin: 0 3px 0 6px; font-weight: 700; }
+.mock-scenes-btn { left: calc(var(--sbw, 0px) + 8px); bottom: 8px; padding: 4px 8px; cursor: pointer; }
+.mock-notes { right: 8px; bottom: 36px; width: min(560px, calc(100vw - 16px)); max-height: 72vh; overflow: auto; padding: 12px 14px; font: 12px/1.5 system-ui, sans-serif; display: none; }
+.mock-notes.open { display: block; }
+.mock-notes h2 { font-size: 13px; margin: 0 0 6px; }
+.mock-notes h3 { font-size: 12px; margin: 10px 0 4px; }
+.mock-notes ul { margin: 0; padding-left: 16px; }
+.mock-notes table { border-collapse: collapse; }
+.mock-notes td { padding: 2px 8px 2px 0; vertical-align: middle; }
+.toast { position: fixed; left: 50%; top: 12px; transform: translateX(-50%); z-index: 95; background: var(--strong); color: var(--on-strong); padding: 6px 12px; border-radius: 4px; font-size: var(--fs-s); display: none; max-width: 80vw; }
+.toast.show { display: block; }
+
+/* ===== b · Rich line ===== */
+.app { --sb: clamp(300px, 18.5vw, 400px); }
+
+.node { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; min-height: 30px; padding: 4px 6px 4px calc(4px + var(--d, 0) * 14px); border-radius: 4px; color: var(--ink-2); font-size: var(--fs-s); font-weight: 650; cursor: pointer; margin-top: 4px; }
+.node:hover { background: var(--hover); }
+.node .chev { width: 14px; color: var(--ink-3); font-size: 10px; text-align: center; flex: none; }
+.node .nt { flex: 1; min-width: 0; }
+.node.epic { font-weight: 500; color: var(--ink-3); min-height: 26px; margin-top: 0; }
+.node.sel { background: var(--selected); color: var(--ink); }
+.node .x { font-weight: 400; font-size: var(--fs-xs); color: var(--ink-3); display: inline-flex; gap: 4px; align-items: center; flex: none; }
+.node .x.full { flex-basis: 100%; padding-left: 20px; flex-wrap: wrap; }
+/* Collapsed node: the counts in words, on their own line */
+.node .sumline { flex-basis: 100%; padding-left: 20px; display: flex; flex-wrap: wrap; gap: 2px 10px; font-weight: 400; font-size: var(--fs-xs); color: var(--ink-2); }
+.node .sumline span { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.node .sumline .w1 { font-weight: 650; color: var(--ink); }
+
+/* The row: everything the brief asks for, wrapping instead of truncating. */
+.it { display: grid; gap: 3px; width: 100%; padding: 7px 8px 8px calc(10px + var(--d, 0) * 14px); border-radius: 6px; margin: 2px 0; cursor: pointer; border: 1px solid transparent; }
+.it:hover { background: var(--hover); }
+.it.sel { background: var(--selected); }
+.it.you { border-color: var(--line-2); background: var(--surface); }
+.it.you:hover { background: var(--hover); }
+.it.you.sel { background: var(--selected); border-color: var(--ink-3); }
+.it .r1 { display: flex; align-items: flex-start; gap: 7px; min-width: 0; }
+.it .r1 .nm { flex: 1; min-width: 0; font-weight: 600; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.it .r1 .meta { font-size: var(--fs-xs); color: var(--ink-4); white-space: nowrap; flex: none; padding-top: 1px; }
+.it .r2, .it .r4 { display: flex; align-items: center; gap: 6px; min-width: 0; padding-left: 24px; flex-wrap: wrap; }
+.it .r2 { font-size: var(--fs-s); color: var(--ink); }
+.it .r2 .lbl { flex: 1 1 auto; min-width: 0; }
+.it .r2 .tw, .it .r2 .tt { margin-left: auto; }
+.it .r3 { list-style: none; margin: 0; padding: 0 0 0 38px; font-size: var(--fs-xs); color: var(--ink-2); display: grid; gap: 2px; }
+.it .r3 li { display: flex; gap: 6px; align-items: center; min-width: 0; }
+.it .r3 li .grow { overflow-wrap: anywhere; }
+.it .r3 .st { width: 7px; height: 7px; }
+.it .r3 .mono { font-size: 11px; color: var(--ink-3); overflow-wrap: anywhere; }
+.it .r4 { font-size: var(--fs-xs); color: var(--ink-3); flex-wrap: nowrap; align-items: baseline; }
+.it .r4 .pips { align-self: center; }
+.it .r4 .pos { flex: 1 1 0; min-width: 0; }
+.it .r2 { flex-wrap: nowrap; align-items: flex-start; }
+.it .r2 > .st { margin-top: 4px; }
+.it .r2 .lbl { flex: 1 1 0; }
+.it .r4 .jk { margin-left: auto; }
+.pips { display: inline-flex; gap: 2px; align-items: center; flex: none; }
+.pips i { width: 9px; height: 4px; border-radius: 1px; background: var(--sunken); box-shadow: inset 0 0 0 1px var(--line-2); }
+.pips i.d { background: var(--ink-3); box-shadow: none; }
+.pips i.c { background: var(--ink); box-shadow: none; width: 13px; }
+.short { display: none; }
+@container sb (max-width: 330px) {
+  .it .long { display: none; }
+  .it .short { display: inline; }
+}
+.nrow { display: grid; gap: 4px; margin: 2px 0 4px calc(10px + var(--d, 0) * 14px); padding: 7px 8px; border: 1px dashed var(--ink-3); border-radius: 6px; font-size: var(--fs-xs); color: var(--ink-2); }
+.nrow .row { gap: 6px; }
+
+/* Decision bar above the composer, for what this item asks */
+.decbar { border-top: 1px solid var(--line); background: var(--bg); padding: 8px 24px; flex: none; }
+.decbar-in { max-width: var(--measure); margin: 0 auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: var(--fs-s); }
+.decbar .progress { width: 90px; }
+.e-findings { display: flex; flex-direction: column; gap: 6px; border-left: 2px solid var(--ink-2); padding-left: 12px; }
+.e-findings .fh { display: flex; gap: 8px; align-items: center; font-size: var(--fs-xs); color: var(--ink-3); }
+
+/* Anchored side panel: Details, or an aux panel, one at a time */
+.side { width: clamp(340px, 18vw, 440px); border-left: 1px solid var(--line); flex: none; background: var(--surface); display: flex; flex-direction: column; min-height: 0; }
+.side.overlay { position: absolute; right: 0; top: 0; bottom: 0; box-shadow: -8px 0 24px rgba(0, 0, 0, .12); z-index: 5; max-width: calc(100% - 40px); width: 380px; }
+.det { overflow: auto; flex: 1; min-height: 0; padding: 4px 16px 20px; }
+.det h3 { font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: .05em; color: var(--ink-3); margin: 16px 0 6px; }
+.det .kv { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 6px; padding: 3px 0; font-size: var(--fs-s); align-items: baseline; }
+.det .kv > span:first-child { color: var(--ink-3); }
+.det .kv .mono { overflow-wrap: anywhere; font-size: 11px; }
+.det .vtrack .steps { list-style: none; margin: 4px 0 6px 0; padding: 0; }
+.det .vtrack .steps li { padding: 3px 0; align-items: flex-start; }
+.det .ctl { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 2px; }
+.det .chk { display: flex; gap: 8px; align-items: center; padding: 2px 0; font-size: var(--fs-s); }
+.det .fidx { display: grid; grid-template-columns: repeat(auto-fill, minmax(34px, 1fr)); gap: 4px; }
+.det .fidx button { height: 26px; border: 1px solid var(--line-2); border-radius: 4px; font-size: var(--fs-xs); text-align: center; }
+.det .fidx button.open { border-color: var(--ink); font-weight: 650; }
+.det .fidx button.dec { color: var(--ink-4); border-style: dashed; }
+
+</style>
+</head>
+<body data-variant="b">
+<div id="app" class="app"></div>
+<div id="pop" class="pop" role="menu" hidden></div>
+<div class="toast" id="toast" role="status"></div>
+<script>
+// ================= Common to both variants =================
+const Q = new URLSearchParams(location.search);
+const SCENES = ["item", "home", "loading", "reading", "archived", "empty", "welcome"];
+const SCENE = SCENES.includes(Q.get("scene")) ? Q.get("scene") : "item";
+
+// ---------- Fake data ----------
+const REPOS = {
+  api: { full: "acme/api", board: "plat", path: "~/code/api" },
+  web: { full: "acme/web", board: "plat", path: "~/code/web" },
+  ios: { full: "acme/ios", board: "mob", path: "~/code/ios" },
+  android: { full: "acme/android", board: "mob", notCloned: true },
+  infra: { full: "acme/infra", board: null, path: "~/code/infra", missing: true },
+};
+const BOARDS = {
+  plat: { id: "plat", title: "Platform Roadmap", repos: ["api", "web"], open: 23, readAt: "2m ago" },
+  mob: { id: "mob", title: "Mobile App", repos: ["ios", "android"], open: 11, readAt: "18m ago", failure: "GitHub API rate limit", failedAt: "18m ago" },
+};
+const PENDING_PRS = 4;
+const HISTORY_COUNT = 23;
+const SEV = { error: 0, wait: 1, close: 2 };
+const TONE_WORD = { error: "error", wait: "waiting for you", close: "ready to close", run: "agent working", gh: "waiting on GitHub", paused: "paused", idle: "idle" };
+
+const ITEMS = {
+  t1: {
+    id: "t1", kind: "task", name: "Rate limit per API key", board: "plat", epic: "API hardening", repo: "api", card: 412,
+    flow: "Structured", reviewMode: "Agent", stage: "Implementation", chipSub: "Step 3 of 7",
+    step: { n: 3, of: 7, title: "Token bucket middleware", state: "Agent review · pass 1" },
+    pos: "Step 3 of 7 · Agent review · pass 1", posShort: "Step 3/7",
+    sits: [
+      { sev: "wait", label: "Question", place: "Reviewer", since: "18m", long: "18 minutes", min: 18 },
+      { sev: "wait", label: "Permission", place: "Implementer", since: "4m", long: "4 minutes", min: 4 },
+    ],
+    ctx: 44, model: "Opus · high", branch: "rate-limit-per-api-key", created: "Sep 22 · 16:05", updated: "4m ago", stepsLeft: 4,
+  },
+  t7: {
+    id: "t7", kind: "task", name: "Rotate API keys without downtime", board: "plat", epic: "API hardening", repo: "api", card: 441,
+    flow: "Structured", reviewMode: "Agent", stage: "Implementation", chipSub: "Step 2 of 5",
+    step: { n: 2, of: 5, title: "Dual-key validation window", state: "Agent review · pass 2" },
+    pos: "Step 2 of 5 · Agent review · pass 2", posShort: "Step 2/5 · pass 2", posMin: "2/5",
+    run: { who: "Reviewer", turn: "3m", long: "3m 20s", act: "Running go test ./internal/keys/...", actShort: "go test keys" },
+    ctx: 57, model: "Sonnet · high", branch: "rotate-api-keys", created: "Sep 23 · 09:12", updated: "now", stepsLeft: 3,
+  },
+  t3: {
+    id: "t3", kind: "task", name: "Retry failed billing webhooks", board: "plat", epic: null, repo: "api", card: 430,
+    flow: "Structured", reviewMode: "Agent", stage: "Tech spec", chipSub: "question",
+    pos: "Tech spec", posShort: "Tech spec",
+    sits: [{ sev: "wait", label: "Question", place: "Tech spec", since: "12m", long: "12 minutes", min: 12 }],
+    ctx: 22, model: "Opus · high", branch: "retry-failed-billing-webhooks", created: "Sep 23 · 10:31", updated: "12m ago",
+  },
+  d1: {
+    id: "d1", kind: "discussion", name: "Usage-based pricing tiers", board: "plat", cards: [455, 461],
+    pos: "Discussing", posShort: "Discussing", posMin: "",
+    run: { who: "Agent", turn: "1m", long: "1m 05s", act: "Reading web/src/billing/plans.ts", actShort: "plans.ts" },
+    ctx: 17, model: "Opus · high", created: "Sep 23 · 14:10",
+  },
+  t2: {
+    id: "t2", kind: "task", name: "Offline sync for drafts", board: "mob", epic: null, repo: "ios", card: 88,
+    flow: "One-Shot", reviewMode: "Agent", stage: "PR review", chipSub: "waiting for checks", pr: 1284,
+    pos: "PR review · waiting for checks", posShort: "PR review · checks 3/5",
+    gh: { passed: 3, total: 5, checkedAt: "40s ago", checks: [["lint", "pass", "1m 12s"], ["unit-tests", "pass", "4m 40s"], ["danger", "pass", "22s"], ["build-ios", "running", "6m so far"], ["ui-tests", "queued", ""]] },
+    ctx: 12, model: "Sonnet · medium", branch: "offline-sync-for-drafts", created: "Sep 23 · 08:40", updated: "40s ago",
+  },
+  t4: {
+    id: "t4", kind: "task", name: "Haptics on complete", board: "mob", epic: null, repo: "ios", card: 95,
+    flow: "Structured", reviewMode: "Agent", stage: "Closing", chipSub: "ready to close", pr: 1279,
+    pos: "PR #1279 merged", posShort: "Merged",
+    sits: [{ sev: "close", label: "Ready to close", place: "Pull request", since: "2h", long: "2 hours", min: 120 }],
+    ctx: 9, model: "Opus · high", branch: "haptics-on-complete", created: "Sep 22 · 11:20", updated: "2h ago",
+  },
+  t5: {
+    id: "t5", kind: "task", name: "Widget for today's tasks", board: "mob", epic: null, repo: "ios", card: 93,
+    flow: "Structured", reviewMode: "Manual", stage: "Implementation", chipSub: "Step 2 of 4",
+    step: { n: 2, of: 4, title: "Timeline provider", state: "Blocked" },
+    pos: "Step 2 of 4", posShort: "Step 2/4",
+    sits: [{ sev: "error", label: "Step 2 blocked", place: "worktree not clean", since: "41m", long: "41 minutes", min: 41 }],
+    ctx: 31, model: "Opus · medium", branch: "widget-for-todays-tasks", created: "Sep 22 · 15:02", updated: "41m ago", stepsLeft: 2,
+  },
+  t6: {
+    id: "t6", kind: "task", name: "Terraform 1.9 upgrade", board: null, epic: null, repo: "infra", card: null,
+    flow: "Structured", reviewMode: "Agent", stage: "PRD", chipSub: "paused", paused: true,
+    pos: "Paused · PRD", posShort: "Paused · PRD",
+    ctx: 8, model: "Opus · high", branch: "terraform-1-9-upgrade", created: "Sep 22 · 17:40", updated: "yesterday",
+  },
+  r1: {
+    id: "r1", kind: "review", name: "Migrate settings page to react-hook-form", repo: "web", pr: 2291, author: "lnakamura", rmode: "Publish",
+    pos: "Pass 1 · 9 findings", posShort: "Pass 1",
+    sits: [{ sev: "wait", label: "Decide findings", place: "5 of 9 decided", since: "34m", long: "34 minutes", min: 34 }],
+    ctx: 51, model: "Opus · high", card: 447, cardTitle: "Settings page: SSO section", created: "Sep 23 · 09:12",
+  },
+  r2: {
+    id: "r2", kind: "review", name: "Crash on share sheet when offline", repo: "ios", pr: 312, author: "mkato", rmode: "Publish",
+    pos: "Published · changes requested", posShort: "Published", idle: true,
+    ctx: 28, model: "Opus · high", card: 90, cardTitle: "Crash on share sheet when offline", created: "Sep 23 · 11:02",
+  },
+};
+
+// The tree, in the product's order: Reviews, each board (epics first, then tasks, then discussions), then No board.
+const TREE_BASE = [
+  { id: "reviews", label: "Reviews", place: "reviews", items: ["r1", "r2"] },
+  { id: "plat", label: "Platform Roadmap", place: "board:plat", board: "plat", epics: [{ id: "ep-api", label: "API hardening", items: ["t1", "t7"] }], items: ["t3", "d1"] },
+  { id: "mob", label: "Mobile App", place: "board:mob", board: "mob", items: ["t2", "t4", "t5"] },
+  { id: "nob", label: "No board", items: ["t6"], notices: ["infra"] },
+];
+
+// Scene tweaks to the data
+const ARCHIVED_ID = SCENE === "archived" ? (ITEMS[Q.get("open")] ? Q.get("open") : "t4") : null;
+const GONE = new Set(SCENE === "archived" ? [ARCHIVED_ID] : SCENE === "empty" || SCENE === "welcome" ? Object.keys(ITEMS) : []);
+const READING = SCENE === "reading";
+
+// ---------- Derived ----------
+const sortSits = (s) => [...(s || [])].sort((a, b) => SEV[a.sev] - SEV[b.sev] || b.min - a.min);
+function tone(i) {
+  if (i.sits && i.sits.length) return sortSits(i.sits)[0].sev;
+  if (i.run) return "run";
+  if (i.gh) return "gh";
+  if (i.paused) return "paused";
+  return "idle";
+}
+const needsYou = (i) => !!(i.sits && i.sits.length);
+const topSit = (i) => sortSits(i.sits)[0];
+const oldest = (i) => [...i.sits].sort((a, b) => b.min - a.min)[0];
+function urgencyOrder() {
+  return Object.values(ITEMS).filter((i) => !GONE.has(i.id) && needsYou(i))
+    .sort((a, b) => SEV[topSit(a).sev] - SEV[topSit(b).sev] || oldest(b).min - oldest(a).min).map((i) => i.id);
+}
+const boardOf = (id) => BOARDS[id];
+function meta(i) {
+  if (i.kind === "task") return i.card ? `${i.repo}#${i.card}` : i.repo;
+  if (i.kind === "review") return `${i.repo}#${i.pr}`;
+  return `#${i.cards.join(" #")}`;
+}
+function sitText(s) { return `${s.label} · ${s.place}`; }
+function ariaFor(i) {
+  const parts = [`${i.kind} ${i.name}`];
+  if (needsYou(i)) parts.push(sortSits(i.sits).map((s) => `${TONE_WORD[s.sev]}: ${sitText(s)}, for ${s.long}`).join("; "));
+  else parts.push(TONE_WORD[tone(i)] + ", " + i.pos);
+  if (i.run) parts.push(`${i.run.who} working for ${i.run.long}: ${i.run.act}`, `context ${i.ctx}% used`);
+  return parts.join(". ");
+}
+function counts(items) {
+  const c = { error: 0, wait: 0, close: 0, run: 0, gh: 0, paused: 0, idle: 0 };
+  items.forEach((i) => { c[tone(i)]++; });
+  return c;
+}
+
+// ---------- Atoms ----------
+const st = (t, label) => `<span class="st ${t}" ${label ? `role="img" aria-label="${label}"` : 'aria-hidden="true"'}></span>`;
+const TY = { task: "T", review: "R", discussion: "D" };
+const ty = (kind) => `<span class="ty ${kind}" aria-hidden="true" title="${kind}">${TY[kind]}</span>`;
+const kbd = (k) => `<kbd>${k}</kbd>`;
+const ctxm = (p) => `<span class="ctx" title="Context window ${p}% used"><i style="--p:${p}%"></i>${p}%</span>`;
+const tw = (s) => `<span class="tw ${s.sev === "close" ? "close" : ""}" title="Waiting for you for ${s.long}"><span class="sr">waiting for you </span>${s.since}</span>`;
+const tt = (r) => `<span class="tt" title="Agent working on this turn for ${r.long}">${st("run")}<span class="sr">agent working </span>${r.turn}</span>`;
+const lines = (n, widths = [96, 88, 92, 70]) => Array.from({ length: n }, (_, k) => `<div class="ln" style="width:${widths[k % widths.length]}%"></div>`).join("");
+function toast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.classList.add("show");
+  clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove("show"), 2600);
+}
+
+// ---------- Stages ----------
+const STAGES = {
+  Structured: ["PRD", "Tech spec", "Plan", "Implementation", "PR", "PR review", "Closing"],
+  "One-Shot": ["Planning", "Implementation", "PR", "PR review", "Closing"],
+};
+const PLANNING = ["PRD", "Tech spec", "Plan", "Planning"];
+function track(i) {
+  const s = STAGES[i.flow], cur = s.indexOf(i.stage);
+  return `<nav class="track" aria-label="Stages">${s.map((n, k) => {
+    if (k === cur) {
+      const t = tone(i);
+      const back = PLANNING.includes(n);
+      const inner = `${st(t)}${n}<span class="sub">· ${i.chipSub}</span>`;
+      return back ? `<button class="stg cur" aria-current="step" data-pop="stage:${n}" aria-haspopup="menu" title="${n}: discard and restart">${inner}</button>`
+        : `<span class="stg cur" aria-current="step">${inner}</span>`;
+    }
+    if (k < cur && PLANNING.includes(n)) return `<button class="stg done" data-pop="stage:${n}" aria-haspopup="menu" title="Back to ${n}…">${n}</button>`;
+    return `<span class="stg ${k < cur ? "done" : ""}">${n}</span>`;
+  }).join('<span class="gt" aria-hidden="true">›</span>')}</nav>`;
+}
+function losesFor(i, stage) {
+  const s = STAGES[i.flow], k = s.indexOf(stage), later = s.slice(k + 1, s.indexOf(i.stage) + 1);
+  const bits = [];
+  if (later.includes("Tech spec")) bits.push("the tech spec");
+  if (later.includes("Plan")) bits.push(i.step ? `the ${i.step.of} step files` : "the plan");
+  if (later.includes("Implementation") || i.stage === "Implementation") bits.push("the worktree and branch <code>" + i.branch + "</code>", "the commits of the steps", "the review reports");
+  if (later.includes("PR")) bits.push("the pull request draft");
+  bits.push("their conversations");
+  return bits.join(", ");
+}
+function stagePop(i, stage) {
+  const cur = STAGES[i.flow].indexOf(i.stage), k = STAGES[i.flow].indexOf(stage);
+  if (k === cur) {
+    return `<div class="ph">${stage}</div><button class="mi" data-act="toast:Confirmation lists what is lost, then a new ${stage} session starts"><span>Discard and restart ${stage}…<small>Deletes this stage's conversation and document and starts over now.</small></span></button>`;
+  }
+  let h = `<div class="ph">${stage} · done</div><button class="mi" data-act="toast:Confirmation lists exactly what is lost"><span>Back to ${stage}…<small>Reopens ${stage} to revise it. Deletes ${losesFor(i, stage)}. The task waits for Continue.</small></span></button>`;
+  if (i.flow === "One-Shot") h += `<button class="mi" data-act="toast:Confirmation lists what is lost"><span>Discard and restart…<small>Also deletes the planning conversation and the document.</small></span></button>`;
+  h += `<button class="mi" data-act="aux:Artifacts"><span>Open the ${stage === "Plan" ? "steps" : stage} in Artifacts</span></button>`;
+  return h;
+}
+function modelsPop(i) {
+  const rows = i.flow === "One-Shot" ? ["One-Shot planning", "Implementation", "Step review", "PR", "PR review"] : ["PRD", "Tech spec", "Plan", "Implementation", "Step review", "PR", "PR review"];
+  const curIdx = { PRD: 0, "Tech spec": 1, Plan: 2, Planning: 0, Implementation: i.flow === "One-Shot" ? 1 : 3, "PR review": i.flow === "One-Shot" ? 4 : 6, Closing: 99 }[i.stage] ?? 0;
+  return `<div class="ph">Models · ${i.flow}</div>` + rows.map((r, k) => {
+    const started = r === "Step review" ? i.stage === "Closing" || i.stage === "PR review" : k <= curIdx;
+    return `<div class="kv"><span class="grow">${r}</span>${started ? `<span class="faint">${i.model} · started</span>` : `<button class="btn sm">${r === "Step review" ? "Sonnet · high" : "Opus · high"} ▾</button>`}</div>`;
+  }).join("") + `<hr><div class="kv faint" style="font-size:11px">A stage that started keeps its model. Per step: in the steps list.</div>`;
+}
+function rmodePop(i) {
+  const none = !i.stepsLeft;
+  return `<div class="ph">Review mode of the task</div>
+    <button class="mi" ${none ? "disabled" : ""}><span>${i.reviewMode === "Agent" ? "●" : "○"}</span><span>Agent<small>A reviewer agent reviews each step; a clean report commits it.</small></span></button>
+    <button class="mi" ${none ? "disabled" : ""}><span>${i.reviewMode === "Manual" ? "●" : "○"}</span><span>Manual<small>You review in the editor, stage every file and approve.</small></span></button>
+    <hr><div class="kv faint" style="font-size:11px">${none ? "No step is left to start." : `Applies to the ${i.stepsLeft} steps not started that have no mode of their own.`}</div>`;
+}
+
+// ---------- Item bars ----------
+function sitChip(s) { return `<span class="state">${st(s.sev)}<span class="strong">${sitText(s)}</span>${tw(s)}</span>`; }
+function stepBar(i) {
+  const s = i.step;
+  let state, acts;
+  if (i.id === "t5") {
+    state = sitChip(i.sits[0]);
+    acts = `<button class="btn sm primary">Try again</button><button class="btn sm">Clean and start</button><button class="btn sm"><span class="long">Open in </span>VS Code</button>`;
+  } else {
+    state = `<span class="state">${i.run ? st("run") : st("idle")}<span>${s.state}</span></span>` + (i.sits ? `<span class="state strong">${st("wait")}<span>Waiting for you in ${i.sits.length === 2 ? "both conversations" : "a conversation"}</span></span>` : "");
+    acts = `<button class="btn sm">Review myself</button><button class="btn sm"><span class="long">Open in </span>VS Code</button><button class="btn sm ghost">Discard step</button>`;
+  }
+  return `<div class="bar" aria-label="Step ${s.n}"><span class="lbl">Step ${s.n} of ${s.of}</span><span class="trunc muted" style="max-width:260px">${s.title}</span>${state}<span class="acts">${acts}</span></div>`;
+}
+function stepTabs(i) {
+  const cur = S.tab[i.id] || "Implementer";
+  const tab = (name, inner) => `<button class="tab ${cur === name ? "on" : ""}" role="tab" aria-selected="${cur === name}" data-act="tab:${name}">${inner}</button>`;
+  const sub = (t) => `<span class="muted" style="font-weight:400">${t}</span>`;
+  if (i.id === "t1") {
+    return `<div class="tabs" role="tablist" aria-label="Conversations of step 3">${tab("Implementer", `${st("wait")}Implementer ${sub("Permission")} ${tw(i.sits[1])}`)}${tab("Reviewer", `${st("wait")}Reviewer ${sub("Question · pass 1")} ${tw(i.sits[0])}`)}</div>`;
+  }
+  if (i.id === "t7") {
+    return `<div class="tabs" role="tablist" aria-label="Conversations of step 2">${tab("Implementer", `${st("idle")}Implementer ${sub("waits for the pass")}`)}${tab("Reviewer", `${st("run")}Reviewer ${sub("pass 2")} ${tt(i.run)}`)}</div>`;
+  }
+  return "";
+}
+function prBar(i) {
+  if (i.id === "t2") {
+    const g = i.gh;
+    return `<div class="bar"><span class="lbl">PR #${i.pr}</span><span class="state">${st("gh")}<span>Waiting for checks · ${g.passed} of ${g.total} passed</span></span>
+      <span class="faint" style="font-size:11px">checked ${g.checkedAt}</span><span class="acts"><button class="btn sm ghost">Refresh PR</button><button class="btn sm">Open PR</button><button class="btn sm"><span class="long">Open in </span>VS Code</button></span></div>`;
+  }
+  return `<div class="bar"><span class="lbl">PR #${i.pr}</span><span class="tag">Merged</span>${sitChip(i.sits[0])}
+    <span class="acts"><button class="btn sm primary" data-act="close-task">Close task</button><button class="btn sm">Open PR</button></span></div>`;
+}
+function planningBar(i) {
+  if (i.id === "t6") {
+    return `<div class="bar"><span class="lbl">PRD</span><span class="state">${st("paused")}<span class="strong">Paused</span></span><span class="faint">since yesterday 18:02 · nothing waits for you</span>
+      <span class="acts"><button class="btn sm primary">Resume</button></span></div>
+      <div class="bar note">${st("warn")}<span><strong>The clone at <code>~/code/infra</code> is missing.</strong> The first step can't create its worktree and the task can't close until it's back.</span><span class="acts"><button class="btn sm">Change path</button></span></div>`;
+  }
+  return `<div class="bar"><span class="lbl">Tech spec</span>${sitChip(i.sits[0])}<span class="faint">1 of 2 decisions</span></div>`;
+}
+function reviewBar(i) {
+  if (i.id === "r2") {
+    return `<div class="bar"><span class="lbl">${i.repo}#${i.pr}</span><span class="muted">by ${i.author} · ${i.rmode}</span><span class="state">${st("idle")}<span>Published · changes requested · 11:31</span></span>
+      <span class="acts"><button class="btn sm">Review again</button><button class="btn sm">Open PR</button></span></div>`;
+  }
+  return `<div class="bar"><span class="lbl">${i.repo}#${i.pr}</span><span class="muted">by ${i.author} · ${i.rmode}</span>${sitChip(i.sits[0])}
+    <span class="acts"><span class="why">4 left to decide</span><button class="btn sm" disabled aria-describedby="why-pub">Publish review</button><span class="sr" id="why-pub">Decide the 4 open findings first</span><button class="btn sm">Review again</button><button class="btn sm"><span class="long">Open in </span>VS Code</button></span></div>`;
+}
+function discussionBar(i) {
+  return `<div class="bar"><span class="lbl">Discussion</span><span class="muted">Platform Roadmap · #455, #461</span><span class="state">${st("run")}<span>Discussing</span></span>
+    <span class="faint" style="font-size:11px">Drafts appear when the understanding closes</span></div>`;
+}
+function itemBars(i) {
+  let h = "";
+  if (i.kind === "task") h += `<div class="trackbar">${track(i)}</div>`;
+  if (i.step) h += stepBar(i) + stepTabs(i);
+  else if (i.stage === "PR review" || i.stage === "Closing") h += prBar(i);
+  else if (i.kind === "task") h += planningBar(i);
+  if (i.kind === "review") h += reviewBar(i);
+  if (i.kind === "discussion") h += discussionBar(i);
+  return h;
+}
+
+// ---------- Conversations ----------
+function actions(n, list, summary, running) {
+  return `<details class="e-actions" ${running ? "open" : ""}><summary>${running ? st("run") : `<span class="faint">▸</span>`}
+    <span class="strong" style="font-weight:600">${n} actions</span><span class="trunc muted">${summary}</span></summary>
+    <ul>${list.map(([k, t, s]) => `<li><span class="k">${k}</span><span class="mono trunc grow">${t}</span><span class="faint">${s || "done"}</span></li>`).join("")}</ul></details>`;
+}
+const M = (t, time) => `<div class="e-marker">${t}${time ? ` · ${time}` : ""}</div>`;
+const APP = (t) => `<div class="e-app"><div class="who">MySpec · sent to the agent</div>${t}</div>`;
+const AG = (t, who = "Agent") => `<div class="e-agent"><div class="who">${who}</div>${t}</div>`;
+const US = (t) => `<div class="e-user">${t}</div>`;
+const ACT = (t) => `<div class="e-activity" role="status">${st("run")}<span>${t}</span></div>`;
+function qcard(head, q, opts) {
+  return `<div class="card-q" role="group" aria-label="Question from the agent"><div class="hd">${st("wait")}<span class="strong">${head}</span></div>
+    <div class="q">${q}</div>${opts.map(([n, t, s]) => `<button class="opt"><span class="n">${n}</span><span>${t}${s ? `<small>${s}</small>` : ""}</span></button>`).join("")}</div>`;
+}
+
+const FINDINGS = [
+  ["web/src/settings/ProfileForm.tsx:88", "The form resets its values when the save fails, so the user loses the edit.", "Approved"],
+  ["web/src/settings/TimezoneSelect.tsx:41", "The controlled value is lost on re-render; the select shows the default again.", "Approved"],
+  ["web/src/settings/useSettingsForm.ts:17", "<code>defaultValues</code> is recreated on every render and resets dirty state.", "Approved"],
+  ["web/src/settings/ProfileForm.tsx:132", "The submit button is not disabled while the save is in flight.", "Discarded"],
+  ["General", "No tests cover the new resolver.", "Discarded"],
+  ["web/src/settings/NotificationsForm.tsx:112", "Unused <code>watch</code> subscription re-renders the whole form.", ""],
+  ["web/src/settings/schema.ts:9", "The email regex duplicates the one in <code>lib/validation</code>.", ""],
+  ["web/src/settings/ProfileForm.tsx:140", "<code>aria-describedby</code> points to an id that is never rendered.", ""],
+  ["web/src/settings/index.tsx:3", "The barrel import pulls the whole form library into the settings chunk.", ""],
+];
+function findingCard([loc, text, dec], k, { compactDecided } = {}) {
+  if (dec && compactDecided) {
+    return `<div class="finding decided" id="f${k + 1}"><div class="row"><span class="strong" style="font-size:11px">${k + 1}</span><span class="loc trunc grow">${loc}</span><span class="tag">${dec}</span><button class="btn sm ghost">Change</button></div></div>`;
+  }
+  return `<div class="finding ${dec ? "decided" : "undecided"} ${S.focusFinding === k + 1 ? "focus" : ""}" id="f${k + 1}" tabindex="-1">
+    <div class="row"><span class="strong" style="font-size:11px">${k + 1}</span><span class="loc trunc grow">${loc}</span>${dec ? `<span class="tag">${dec}</span>` : `<span class="tag strong">To decide</span>`}</div>
+    <div>${text}</div>${dec ? "" : `<div class="dec"><button class="btn sm">Approve</button><button class="btn sm ghost">Discard</button><button class="btn sm ghost">Edit</button></div>`}</div>`;
+}
+
+function conversation(i, opts = {}) {
+  let e = "";
+  const tab = S.tab[i.id] || "Implementer";
+  if (i.id === "t1" && tab === "Implementer") {
+    e = M("Step 3 started · Token bucket middleware", "13:48") +
+      APP("Implement step 3 as described in <code>steps/03-token-bucket.md</code>. Steps 1 and 2 are committed.") +
+      AG("<p>I'll add the bucket to <code>internal/ratelimit</code> and wire it into the API key middleware. The config from step 1 already exposes <code>burst</code> and <code>refill_per_second</code>.</p>", "Implementer") +
+      actions(9, [["Read", "internal/ratelimit/config.go"], ["Read", "internal/http/middleware/auth.go"], ["Write", "internal/ratelimit/bucket.go"], ["Edit", "internal/http/middleware/auth.go"], ["Bash", "go test ./internal/ratelimit/...", "error"], ["Edit", "internal/ratelimit/bucket.go"], ["Bash", "go test ./internal/ratelimit/..."]], "Write bucket.go · Edit auth.go · 1 error, then tests pass", false) +
+      AG("<p>Done: token bucket with <code>float64</code> tokens, wired into the key middleware; the tests pass. Nothing pending on my side.</p>", "Implementer") +
+      M("Agent review · pass 1 started", "14:11") +
+      US("While the reviewer runs: apply the new migration to the local database so I can try it.") +
+      AG("<p>I'll run the local migration target.</p>", "Implementer") +
+      `<div class="card-q" role="group" aria-label="Permission request"><div class="hd">${st("wait")}<span class="strong">Permission · waiting for you · 4m</span><span class="grow"></span><span class="faint">Bash</span></div>
+        <pre>make migrate-local DATABASE_URL=postgres://localhost:5432/api_dev</pre>
+        <div class="btns"><button class="btn sm primary">Allow once ${kbd("1")}</button><button class="btn sm">Allow for this session ${kbd("2")}</button><button class="btn sm ghost">Deny with a message… ${kbd("3")}</button></div></div>`;
+  } else if (i.id === "t1") {
+    e = M("Agent review · pass 1 started", "14:11") +
+      APP("Review step 3 against <code>steps/03-token-bucket.md</code>, the PRD and the tech spec. Write the report to <code>reviews/step-03/review-1.md</code>. The implementer's last answer follows.") +
+      actions(12, [["Read", "internal/ratelimit/bucket.go"], ["Read", "internal/http/middleware/auth.go"], ["Bash", "go test ./..."], ["Bash", "golangci-lint run"]], "Read bucket.go, auth.go · go test ./... · golangci-lint run", false) +
+      AG("<p>Tests and lint pass. The code follows the spec, except for one case the spec doesn't settle, and I can't judge it alone:</p>", "Reviewer") +
+      qcard("Question · waiting for you · 18m", "Should a request with an unknown API key be rate limited before the auth check?", [
+        ["1", "Yes, by client IP with the anonymous plan", "Protects the key lookup from floods; adds a second bucket keyed by IP."],
+        ["2", "No, reject it with 401 first", "Matches the spec literally; the lookup cache takes the load."],
+        ["…", "Other…"]]);
+  } else if (i.id === "t7" && tab === "Implementer") {
+    e = M("Step 2 started · Dual-key validation window", "13:20") +
+      APP("Implement step 2 as described in <code>steps/02-dual-key-window.md</code>. Step 1 is committed.") +
+      actions(11, [["Read", "internal/keys/store.go"], ["Write", "internal/keys/rotation.go"], ["Bash", "go test ./internal/keys/..."]], "Write rotation.go · Edit store.go · tests pass", false) +
+      AG("<p>Both keys validate during the window; the old one expires after <code>rotation_grace</code>.</p>", "Implementer") +
+      M("Review 1 written · changes", "14:02") +
+      APP("Review 1 found 2 changes. Address each one, fixing it or saying why you disagree, and don't commit.") +
+      AG("<p>Fixed both: the window now uses the server clock, and the expired key returns 401 with <code>key_rotated</code>.</p>", "Implementer") +
+      M("Agent review · pass 2 started", "14:33");
+  } else if (i.id === "t7") {
+    e = M("Agent review · pass 2 started", "14:33") +
+      APP("The implementer addressed review 1. Their answer follows. Write the report to <code>reviews/step-02/review-2.md</code>.") +
+      AG("<p>Re-reading the two changes from review 1 and running the checks the repository documents.</p>", "Reviewer") +
+      actions(6, [["Read", "internal/keys/rotation.go"], ["Read", "internal/keys/rotation_test.go"], ["Bash", "golangci-lint run ./internal/keys/..."], ["Bash", "go test ./internal/keys/...", "running"]], "Running go test ./internal/keys/...", true) +
+      ACT("Working · 3m 20s · Running go test ./internal/keys/...");
+  } else if (i.id === "t2") {
+    e = M("Implementation done · 1 commit", "11:28") + M("PR stage started", "11:31") +
+      AG("<p>Draft written: <strong>Offline sync for drafts</strong>. Queues edits in a local store while offline and replays them in order on reconnect. Closes acme/ios#88.</p>") +
+      M("Draft approved", "11:39") + M("Pull request #1284 opened", "11:40") +
+      `<div class="e-status" role="status"><div class="row">${st("gh")}<span class="strong">Waiting for the checks of the pull request…</span><span class="grow"></span><span class="faint">checked 40s ago</span></div>
+      <div class="muted" style="margin-top:6px">${i.gh.checks.map(([n, s]) => s === "pass" ? `✓ ${n}` : s === "running" ? `<span class="strong">${n} running</span>` : `${n} queued`).join(" · ")}</div>
+      <div class="faint" style="margin-top:4px">The review of the pull request starts when the checks finish.</div></div>`;
+  } else if (i.id === "t4") {
+    e = M("Review 1 written · changes", "10:58") + AG("<p>Two findings: the haptic fires twice on fast taps, and the setting isn't read on cold start.</p>") +
+      US("Apply both.") + M("Changes committed · 5c1e0a2", "11:40") + M("Review 2 written · clean", "12:10") +
+      AG("<p>Clean. Both findings are fixed in <code>5c1e0a2</code>; checks pass.</p>") +
+      `<div class="e-status" role="status"><div class="row">${st("close")}<span class="strong">PR #1279 was merged on GitHub · 12:36</span></div>
+      <div class="muted" style="margin-top:6px">Close task removes the worktree, deletes the branch <code>haptics-on-complete</code> and updates <code>dev</code>. Then the task goes to History.</div></div>`;
+  } else if (i.id === "t5") {
+    e = M("Step 1 committed · 9d2f1b7 · Widget extension target", "13:40") + M("Step 2 · can't start", "13:55") +
+      `<div class="e-block" role="alert"><div class="row">${st("error")}<span class="strong">Step 2 can't start: the worktree is not clean.</span><span class="grow"></span><span class="faint">41m</span></div>
+      <pre>$ git status --porcelain
+ M WidgetKit/TimelineProvider.swift
+?? WidgetKit/Preview Content/</pre>
+      <div class="muted">Clean it yourself and try again, or let MySpec discard everything and start the step.</div>
+      <div class="row" style="margin-top:8px"><button class="btn sm primary">Try again</button><button class="btn sm">Clean and start</button><button class="btn sm ghost">Open in VS Code</button></div></div>`;
+  } else if (i.id === "t6") {
+    e = M("PRD started", "Sep 22 · 17:40") +
+      US("Upgrade Terraform to 1.9 across the three stacks (network, data, apps). Keep the state files where they are.") +
+      AG("<p>I read the three stacks and the CI workflow. Two things decide the scope: whether the provider pins move with the upgrade, and whether <code>moved</code> blocks replace the manual state moves in <code>scripts/</code>.</p><p>First: should the AWS provider move from 4.x to 5.x in the same task?</p>") +
+      M("Paused", "Sep 22 · 18:02") +
+      `<div class="e-status">${st("paused")} <span class="strong">The session is paused.</span> <span class="muted">Resume continues where it stopped; the agent's question above is still open.</span></div>`;
+  } else if (i.id === "t3") {
+    e = M("PRD written", "10:52") + M("Tech spec started", "10:53") +
+      AG("<p>I read the PRD and the webhook worker in <code>internal/billing/webhooks</code>. Two decisions shape the spec; the first one:</p>") +
+      qcard("Question · waiting for you · 12m · 1 of 2", "How should failed webhooks be retried?", [
+        ["1", "Exponential backoff inside the worker, up to 8 attempts", "Keeps it in one place; pending retries die with a deploy."],
+        ["2", "A retry table polled by a scheduler", "Survives restarts; one more table and one more job."],
+        ["3", "Rely on the provider's redelivery", "No code; no control over timing or visibility."],
+        ["…", "Other…"]]);
+  } else if (i.id === "r1") {
+    e = M("Review started · pass 1 · Publish", "09:12") +
+      actions(14, [["Bash", "gh pr diff 2291"], ["Read", "web/src/settings/ProfileForm.tsx"], ["Read", "web/src/settings/TimezoneSelect.tsx"], ["Grep", "useForm("]], "Read ProfileForm.tsx, TimezoneSelect.tsx, …", false) +
+      M("Review 1 written · changes · 9 findings", "09:31") +
+      AG("<p>9 findings. Two are regressions (the form resets on a failed save; the timezone select loses its value); the rest are consistency and cleanup.</p>") +
+      (opts.inlineFindings || "") +
+      US("Finding 4 is intentional, the old page did the same. Discard it, and 5 too: tests come in a follow-up.") +
+      AG("<p>Discarded 4 and 5. Four findings are still open.</p>");
+  } else if (i.id === "r2") {
+    e = M("Review started · pass 1 · Publish", "11:02") +
+      actions(9, [["Bash", "gh pr diff 312"], ["Read", "Share/ShareSheetController.swift"]], "Read ShareSheetController.swift, OfflineQueue.swift", false) +
+      M("Review 1 written · changes · 3 findings", "11:20") +
+      AG("<p>3 findings: the share sheet is presented from a background queue, the offline check races the reachability callback, and a force unwrap on the attachment URL.</p>") +
+      US("Approve all three and publish as request changes.") +
+      M("Review published · Request changes · 3 comments", "11:31") +
+      `<div class="e-status">${st("idle")} <span class="muted">The session stopped after 10 minutes idle. It resumes on your next message. New commits on the pull request will ask for you.</span></div>`;
+  } else if (i.id === "d1") {
+    e = M("Discussion started · #455, #461", "14:10") +
+      US("We want to move from seat pricing to usage tiers. #455 and #461 are the start; I'm not sure the metering we need exists.") +
+      AG("<p>Before asking anything, I'm reading how plans and metering work today in acme/web and acme/api.</p>") +
+      actions(5, [["Read", "api/internal/billing/plan.go"], ["Grep", "usage_events"], ["Read", "web/src/billing/Plans.tsx"], ["Read", "web/src/billing/plans.ts", "running"]], "Reading web/src/billing/plans.ts", true) +
+      ACT("Working · 1m 05s · Reading web/src/billing/plans.ts");
+  }
+  return `<div class="convo" tabindex="-1" id="convo"><div class="convo-in">${e}</div></div>`;
+}
+function composer(i) {
+  const running = !!i.run;
+  const tab = S.tab[i.id];
+  const ph = i.id === "t3" ? "Answer with 1–3, or write your own…" : i.id === "t1" ? `Reply to the ${(tab || "Implementer").toLowerCase()}…` : "Reply to the agent…";
+  return `<div class="composer"><div class="composer-in"><div class="box" role="textbox" aria-label="Reply to the agent" tabindex="0">
+    <span>${ph}</span>
+    <div class="row"><span class="btn sm ghost">${i.model} ▾</span><span class="grow"></span>
+    ${running ? `<span>Sent while the agent works, a message waits in the queue</span><button class="btn sm">■ Stop</button>` : `<button class="btn sm primary">Send</button>`}</div></div></div></div>`;
+}
+
+// ---------- Aux panels (closed by default) ----------
+const AUX = { task: ["Artifacts", "Card"], review: ["Reports"], discussion: ["Documents"] };
+function stepsOf(i) {
+  if (i.id === "t1") return [["Rate limit config schema", "done", "a3f9c21 · Review 1 · clean"], ["Key lookup cache", "done", "7be0d44 · Review 1 changes · Review 2 clean"], ["Token bucket middleware", "cur", "Agent review · pass 1"], ["429 response and Retry-After", "", "Not started"], ["Per-plan limits admin endpoint", "", "Not started"], ["Metrics for throttled requests", "", "Not started"], ["Docs and changelog", "", "Not started"]];
+  if (i.id === "t7") return [["Keys table with expiry", "done", "e41a0c9 · Review 1 · clean"], ["Dual-key validation window", "cur", "Agent review · pass 2"], ["Rotate endpoint", "", "Not started"], ["Audit events", "", "Not started"], ["Docs", "", "Not started"]];
+  if (i.id === "t5") return [["Widget extension target", "done", "9d2f1b7 · approved"], ["Timeline provider", "cur", "Blocked · worktree not clean"], ["Deep link to the task", "", "Not started"], ["Snapshot tests", "", "Not started"]];
+  return [];
+}
+function auxContent(i, which, close) {
+  const hd = (tabs, cur) => `<div class="aux-hd">${tabs.map((t) => `<button class="btn sm ${t === cur ? "on" : "ghost"}">${t}</button>`).join("")}<span class="grow"></span>${close}</div>`;
+  if (which === "Artifacts") {
+    const t = i.flow === "One-Shot" ? ["One-Shot", "PR"] : ["PRD", "Tech spec", `Steps (${i.step ? i.step.of : 0})`, "PR"];
+    const steps = stepsOf(i);
+    return hd(t, steps.length ? t[2] : t[0]) + `<div class="doc">${steps.length ? `<h2>Steps</h2><ol class="vtrack">${steps.map(([n, c, m], k) => `<li class="${c}"><span class="mk">${c === "done" ? "✓" : c === "cur" ? st(tone(i) === "run" ? "run" : tone(i)) : k + 1}</span><span class="grow"><span class="trunc" style="display:block">${n}</span><span class="faint" style="font-size:11px">${k + 1} · ${m}</span></span>${c ? "" : `<span class="btn sm ghost">Opus · high ▾</span><span class="btn sm ghost">${i.reviewMode} ▾</span>`}</li>`).join("")}</ol>` : i.kind === "task" && ["PRD"].includes(i.stage) ? `<div class="muted">No artifacts yet. The PRD appears here when the agent writes it.</div>` : `<h2>${i.name}</h2>${lines(4)}<h3>Context</h3>${lines(5)}<h3>Decisions</h3>${lines(6)}`}</div>`;
+  }
+  if (which === "Card") {
+    if (!i.card) return hd(["Card"], "Card") + `<div class="doc"><div class="muted">This task was created without a card.</div></div>`;
+    return hd(["Card"], "Card") + `<div class="doc"><h2>#${i.card} ${i.name}</h2><div class="row" style="flex-wrap:wrap;margin-bottom:8px"><span class="tag">In progress</span><span class="tag">${i.epic || "No epic"}</span><span class="tag">acme/${i.repo}</span></div>${lines(6)}<h3>Dependencies</h3><div class="muted">#405 API keys table · satisfied</div><h3>Siblings</h3><div class="muted">#438 Audit log export · #441 Rotate API keys</div></div>`;
+  }
+  if (which === "Reports") return hd(["Context", "Review 1"], "Review 1") + `<div class="doc"><h2>Review 1 · changes</h2><div class="muted" style="margin-bottom:8px">${i.id === "r1" ? 9 : 3} findings · written ${i.id === "r1" ? "09:31" : "11:20"}</div>${lines(8)}</div>`;
+  return hd(["Context", "Document"], "Context") + `<div class="doc"><h2>Context</h2><div class="muted">#455 Usage metering events · #461 Pricing page tiers</div>${lines(9)}<div class="muted" style="margin-top:10px">No document yet. It appears when the agent writes it.</div></div>`;
+}
+
+// ---------- Places ----------
+function boardView(id) {
+  const b = boardOf(id);
+  const row = (n, t, ep, extra = "") => `<div class="lrow"><input type="checkbox" aria-label="Select #${n}"><span class="mono muted" style="width:44px">#${n}</span><span class="trunc grow">${t}</span>${ep ? `<span class="tag">${ep}</span>` : ""}${extra}</div>`;
+  const taskTag = (tid) => { const i = ITEMS[tid]; if (GONE.has(tid)) return ""; return `<button class="tag ${needsYou(i) ? "strong" : ""}" data-go="item:${tid}">${st(tone(i))} Task · ${needsYou(i) ? "Waits for you" : i.posShort}</button>`; };
+  const plat = `
+    <div class="sec-hd">▾ In progress · 5</div>
+    ${row(412, "Rate limit per API key", "API hardening", taskTag("t1"))}
+    ${row(441, "Rotate API keys without downtime", "API hardening", taskTag("t7"))}
+    ${row(430, "Retry failed billing webhooks", "", taskTag("t3"))}
+    ${row(455, "Usage metering events", "Pricing", `<span class="tag">In discussion</span>`)}
+    ${row(461, "Pricing page tiers", "Pricing", `<span class="tag">In discussion</span>`)}
+    <div class="sec-hd">▾ Ready · 4</div>
+    ${row(438, "Audit log export", "API hardening")}${row(447, "Settings page: SSO section", "")}${row(449, "Deprecate v1 webhooks", "")}${row(452, "Paginate /invoices", "")}
+    <div class="sec-hd">▾ Backlog · 14</div>
+    ${row(459, "Per-tenant feature flags", "")}${row(463, "Export usage as CSV", "Pricing")}${row(466, "Slow query on /projects list", "")}
+    <div class="lrow muted" style="padding-left:74px">11 more</div>
+    <div class="sec-hd">▸ Done · 38</div>`;
+  const mob = `<div class="notice">${st("warn")}<span><strong>Couldn't read the board.</strong> GitHub API rate limit · 18m ago. Showing the last reading.</span><span class="grow"></span><button class="btn sm">Try again</button></div>
+    <div class="sec-hd">▾ In progress · 4</div>${row(88, "Offline sync for drafts", "", taskTag("t2"))}${row(93, "Widget for today's tasks", "", taskTag("t5"))}${row(95, "Haptics on complete", "", taskTag("t4") || `<span class="tag">Task archived</span>`)}${row(90, "Crash on share sheet when offline", "")}
+    <div class="sec-hd">▾ Ready · 3</div>${row(97, "iPad split view", "")}${row(99, "Settings sync via iCloud", "")}${row(101, "Android: offline banner", "", `<span class="tag">acme/android · not cloned</span><button class="btn sm">Clone</button>`)}`;
+  const status = READING ? `<span class="row" style="gap:5px">${st("gh")}<span class="muted" style="font-size:12px">Reading the board… showing the last reading</span></span>`
+    : b.failure ? `<span class="row" style="gap:5px">${st("warn")}<span class="muted" style="font-size:12px">Read failed ${b.failedAt}</span></span>` : `<span class="muted" style="font-size:12px">Updated ${b.readAt}</span>`;
+  return `<section class="place" aria-label="Board ${b.title}">
+    <div class="place-hd">${status}<span class="grow"></span><button class="btn sm ghost">Refresh</button><button class="btn sm">New discussion ${kbd("D")}</button><button class="btn sm primary">Start task ${kbd("S")}</button></div>
+    <div class="filters"><span class="chip">Search ${kbd("/")}</span><span class="chip">Repository ▾</span><span class="chip">Status ▾</span><span class="chip">Assignee ▾</span><span class="chip">Assigned to me</span></div>
+    <div class="place-body">${id === "plat" ? plat : mob}</div></section>`;
+}
+function reviewsView() {
+  const r = (t, n, a, extra, act, go) => `<div class="lrow">${extra.includes("strong") ? st("wait") : `<span style="width:9px"></span>`}<span class="grow"><span class="trunc" style="display:block">${t}</span><span class="muted" style="font-size:11px">${n} · ${a}</span></span>${extra}<button class="btn sm" ${go ? `data-go="${go}"` : ""}>${act}</button></div>`;
+  return `<section class="place" aria-label="Reviews"><div class="place-hd">${READING ? `<span class="row" style="gap:5px">${st("gh")}<span class="muted" style="font-size:12px">Reading pull requests…</span></span>` : `<span class="muted" style="font-size:12px">4 pending · Updated 1m ago</span>`}<span class="grow"></span><button class="btn sm ghost">Refresh</button></div>
+    <div class="filters"><span class="chip">Board ▾</span><span class="chip">Repository ▾</span><span class="chip">Author ▾</span><span class="chip">Label ▾</span><span class="chip on">Pending only</span></div>
+    <div class="place-body">
+    <div class="sec-hd">In review · ${GONE.has("r1") ? 0 : 1 + (GONE.has("r2") ? 0 : 1)}</div>
+    ${GONE.has("r1") ? "" : r("Migrate settings page to react-hook-form", "web#2291", "lnakamura", `<span class="tag strong">${st("wait")} Decide findings</span>`, "Open review", "item:r1")}
+    ${GONE.has("r2") ? "" : r("Crash on share sheet when offline", "ios#312", "mkato", `<span class="tag">Published</span>`, "Open review", "item:r2")}
+    <div class="sec-hd">Pending · 4</div>
+    ${r("Add dark mode tokens to email templates", "web#2297", "rferraz", `<span class="tag">Pending</span><span class="tag">ui</span>`, "Review")}
+    ${r("Bump pgx to v5.6", "api#1033", "dependabot", `<span class="tag">Pending</span><span class="tag">deps</span>`, "Review")}
+    ${r("Onboarding checklist v2", "web#2301", "lnakamura", `<span class="tag">Pending</span><span class="tag">New commits</span>`, "Review")}
+    ${r("Paginate /invoices", "api#1037", "tsouza", `<span class="tag">Pending</span><span class="tag">#452 · Ready</span>`, "Review")}
+    <div class="sec-hd">Yours</div>
+    ${r("Offline sync for drafts", "ios#1284", "you", `<span class="tag">Task</span>`, "Open task", "item:t2")}
+    </div></section>`;
+}
+function historyView() {
+  const r = (k, t, m, d, hl) => `<div class="lrow ${hl ? "hl" : ""}">${ty(k)}<span class="grow trunc">${t}</span><span class="muted" style="font-size:12px">${m}</span><span class="faint" style="width:80px;text-align:right">${d}</span></div>`;
+  const fresh = ARCHIVED_ID === "t4" ? r("task", "Haptics on complete", "ios · 3 steps · PR #1279 merged", "today 14:32", true)
+    : ARCHIVED_ID === "r2" ? r("review", "Crash on share sheet when offline · ios#312", "Merged · Request changes", "today 14:32", true) : "";
+  return `<section class="place" aria-label="History"><div class="place-hd"><span class="muted" style="font-size:12px">${HISTORY_COUNT + (ARCHIVED_ID ? 1 : 0)} archived</span><span class="grow"></span><span class="chip">Search by name, title or #number</span><span class="chip">All repositories ▾</span></div>
+    <div class="place-body">${fresh}${r("task", "API key scopes", "api · 6 steps · PR #1021 merged", "Sep 22")}${r("review", "Fix flaky checkout test · web#2280", "Merged · Approved", "Sep 22")}${r("discussion", "Audit trail for admin actions", "Platform Roadmap · 4 cards published", "Sep 20")}${r("task", "Share sheet redesign", "ios · One-Shot · PR #1270 merged", "Sep 19")}${r("task", "Invoice PDF footer", "api · 3 steps · PR #1012 merged", "Sep 18")}<div class="lrow muted">18 more</div></div></section>`;
+}
+function settingsView() {
+  const nav = ["Defaults", "Boards", "Repositories"].map((p) => `<button class="lrow ${p === "Defaults" ? "strong" : ""}" style="border:0;${p === "Defaults" ? "background:var(--selected)" : ""}">${p}${p === "Repositories" ? `<span class="grow"></span>${st("warn")}<span class="faint" style="font-size:11px">1 clone missing</span>` : ""}</button>`).join("") +
+    `<div class="sec-hd">Prompts</div>` + ["PRD", "Tech spec", "Plan", "One-Shot planning", "Step review", "Commit", "Pull request", "PR review", "Discussion"].map((p) => `<button class="lrow" style="border:0;padding-top:4px;padding-bottom:4px">${p}</button>`).join("");
+  const body = `<div class="doc"><h2>Defaults</h2><div class="muted" style="margin-bottom:10px">What a new task starts with.</div>
+    <div class="lrow" style="padding-left:0"><span class="grow">Review mode</span><span class="btn sm">Agent ▾</span></div>
+    ${["PRD", "Tech spec", "Plan", "One-Shot planning", "Implementation", "Step review", "Pull request", "PR review", "Discussion"].map((s) => `<div class="lrow" style="padding-left:0"><span class="grow">${s}</span><span class="btn sm">Opus · high ▾</span></div>`).join("")}</div>`;
+  return `<section class="place" aria-label="Settings"><div style="display:flex;flex:1;min-height:0"><nav style="width:220px;border-right:1px solid var(--line);overflow:auto;padding:6px 0;flex:none">${nav}</nav>
+    <div style="flex:1;display:flex;flex-direction:column;min-width:0">${body}</div></div></section>`;
+}
+
+// ---------- Navigation state ----------
+const firstOpen = ITEMS[Q.get("open")] ? Q.get("open") : "t1";
+const S = {
+  cur: { t: "item", id: firstOpen },
+  back: [{ t: "board", id: "plat" }],
+  fwd: [], aux: null, pop: null, collapsed: {}, last: firstOpen, filter: "all",
+  tab: { t1: "Reviewer", t7: "Reviewer" }, treeFocus: null, focusFinding: null, revealRow: true,
+};
+if (Q.get("aux")) S.aux = Q.get("aux");
+if (SCENE === "home" || SCENE === "reading") { S.cur = { t: "start" }; S.back = []; S.last = "t1"; }
+if (SCENE === "empty") { S.cur = { t: "start" }; S.back = []; S.last = null; }
+if (SCENE === "archived") { S.cur = { t: "gone", id: ARCHIVED_ID }; S.back = [{ t: "board", id: ITEMS[ARCHIVED_ID].board || "plat" }]; S.last = null; }
+const app = document.getElementById("app");
+if (Q.get("sb") === "collapsed") app.classList.add("sb-collapsed");
+const key = (p) => p.t + (p.id ? ":" + p.id : "");
+const parse = (s) => { const [t, id] = s.split(":"); return { t, id }; };
+const title = (p) => p.t === "item" || p.t === "gone" ? ITEMS[p.id].name : p.t === "board" ? boardOf(p.id).title : p.t === "start" ? "Home" : p.t[0].toUpperCase() + p.t.slice(1);
+
+function go(p, { replace } = {}) {
+  if (key(p) === key(S.cur)) return;
+  if (!replace) { S.back.push(S.cur); S.fwd = []; }
+  S.cur = p; S.aux = null; S.pop = null; S.focusFinding = null;
+  if (p.t === "item") { S.last = p.id; revealInTree(p.id); S.revealRow = true; }
+  render();
+}
+function back() { if (!S.back.length) return; S.fwd.push(S.cur); S.cur = S.back.pop(); S.aux = null; S.pop = null; render(); }
+function fwd() { if (!S.fwd.length) return; S.back.push(S.cur); S.cur = S.fwd.pop(); S.aux = null; S.pop = null; render(); }
+function nextJ() {
+  const curId = S.cur.t === "item" ? S.cur.id : null;
+  return urgencyOrder().find((id) => id !== curId) || null;
+}
+function openJ() {
+  const n = nextJ(); if (!n) { toast("Nothing else waits for you"); return; }
+  const i = ITEMS[n];
+  if (n === "t1") S.tab.t1 = "Reviewer"; // opens the place of its oldest situation
+  go({ t: "item", id: n });
+}
+function revealInTree(id) {
+  TREE_BASE.forEach((n) => {
+    if ((n.items || []).includes(id)) S.collapsed[n.id] = false;
+    (n.epics || []).forEach((e) => { if (e.items.includes(id)) { S.collapsed[n.id] = false; S.collapsed[e.id] = false; } });
+  });
+}
+
+// ---------- Tree (shared scaffolding; rows come from the variant) ----------
+function visibleTree() {
+  const f = S.filter;
+  const keep = (id) => !GONE.has(id) && (f === "all" || ITEMS[id].kind !== "task" || ITEMS[id].repo === f);
+  return TREE_BASE.map((n) => {
+    if (f !== "all" && n.id !== "reviews") {
+      const repoBoard = REPOS[f].board;
+      if (n.board && n.board !== repoBoard) return null;
+      if (!n.board && repoBoard) return null;
+    }
+    const epics = (n.epics || []).map((e) => ({ ...e, items: e.items.filter(keep) })).filter((e) => e.items.length);
+    const items = (n.items || []).filter(keep);
+    const notices = (n.notices || []).filter((r) => f === "all" || r === f);
+    if (n.id === "nob" && !items.length && !epics.length && !notices.length) return null;
+    return { ...n, epics, items, notices, all: [...epics.flatMap((e) => e.items), ...items].map((id) => ITEMS[id]) };
+  }).filter(Boolean);
+}
+function nodeRow(n, level, summaryHtml, extra) {
+  const c = !!S.collapsed[n.id];
+  const sel = n.place && key(S.cur) === n.place;
+  return `<div class="node ${n.epic ? "epic" : ""} ${sel ? "sel" : ""}" role="treeitem" aria-level="${level}" aria-expanded="${!c}" tabindex="-1" data-tid="node:${n.id}" ${n.place ? `data-open="${n.place}"` : ""} style="--d:${level - 1}">
+    <button class="chev" tabindex="-1" data-act="fold:${n.id}" aria-hidden="true">${c ? "▸" : "▾"}</button>
+    <span class="nt trunc">${n.label}</span>${c ? summaryHtml : ""}${extra || ""}</div>`;
+}
+function treeHtml() {
+  if (SCENE === "welcome") return `<div class="sb-empty">Nothing registered yet.</div>`;
+  const vt = visibleTree();
+  let h = "";
+  vt.forEach((n) => {
+    const c = S.collapsed[n.id];
+    h += nodeRow(n, 1, V.nodeSummary(n.all, n), V.nodeExtra(n));
+    if (c) return;
+    n.notices.forEach((r) => { h += V.notice(r); });
+    n.epics.forEach((e) => {
+      const ec = S.collapsed[e.id];
+      h += nodeRow({ ...e, epic: true }, 2, V.nodeSummary(e.items.map((id) => ITEMS[id]), e), "");
+      if (!ec) e.items.forEach((id) => { h += V.row(ITEMS[id], 3); });
+    });
+    n.items.forEach((id) => { h += V.row(ITEMS[id], 2); });
+    if (n.board && !n.all.length) h += `<div class="sb-empty" style="padding-left:30px">No active tasks. ${S.filter === "all" ? "" : ""}</div>`;
+  });
+  if (S.filter !== "all" && !vt.some((n) => n.id !== "reviews" && n.all.some((i) => i.kind === "task"))) {
+    h += `<div class="sb-empty">No tasks in ${S.filter}.</div>`;
+  }
+  return h;
+}
+function stripHtml() {
+  const vt = visibleTree();
+  return vt.map((n) => {
+    const warn = n.board && boardOf(n.board).failure ? st("warn", `${n.label}: last read failed`) : n.notices.length ? st("warn", "a clone is missing") : "";
+    const tiles = n.all.map((i) => {
+      const t = tone(i);
+      let tx;
+      if (needsYou(i)) { const o = oldest(i); tx = `<span class="tx ${t === "close" ? "c" : "w"}">${o.since}</span>`; }
+      else if (i.run) tx = `<span class="tx m">${i.run.turn}</span>`;
+      else tx = `<span class="tx m">${t === "gh" ? "checks" : t === "paused" ? "paused" : "idle"}</span>`;
+      const more = i.sits && i.sits.length > 1 ? `<span class="sr">, ${i.sits.length} situations</span>` : "";
+      return `<button class="tile ${S.cur.id === i.id && S.cur.t === "item" ? "sel" : ""}" data-go="item:${i.id}" aria-label="${ariaFor(i)}" title="${i.name} · ${needsYou(i) ? sortSits(i.sits).map(sitText).join(" + ") : i.pos}"><span class="gl">${ty(i.kind)}${st(t)}</span>${tx}${more}</button>`;
+    }).join("");
+    return `<div class="grp" title="${n.label}">${warn}</div>${tiles}`;
+  }).join("");
+}
+function sidebar() {
+  const repos = Object.entries(REPOS).map(([id, r]) => `<option value="${id}" ${S.filter === id ? "selected" : ""}>${r.full}${r.missing ? " · clone missing" : r.notCloned ? " · not cloned" : ""}</option>`).join("");
+  return `<aside class="sb" aria-label="Work">
+    <div class="sb-top"><span class="brand grow">MySpec</span><button class="btn sm newbtn" data-pop="new" aria-haspopup="menu" title="New task (Ctrl+N), review or discussion">+ New ▾</button>
+      <button class="btn ghost iconbtn" data-act="sb" title="${app.classList.contains("sb-collapsed") ? "Expand" : "Collapse"} the sidebar" aria-label="${app.classList.contains("sb-collapsed") ? "Expand" : "Collapse"} the sidebar">${app.classList.contains("sb-collapsed") ? "»" : "«"}</button></div>
+    ${SCENE === "welcome" ? "" : `<div class="sb-filter"><select aria-label="Repository filter" data-act="filter"><option value="all">All repositories</option>${repos}</select></div>`}
+    <div class="sb-tree" id="tree" role="tree" aria-label="Active items">${treeHtml()}</div>
+    <div class="strip" role="navigation" aria-label="Active items, collapsed">${stripHtml()}</div>
+    <div class="sb-foot"><button class="btn ghost sm" data-go="history" title="History">History <span class="cnt wide">${HISTORY_COUNT + (ARCHIVED_ID ? 1 : 0)}</span></button><span class="grow wide"></span>
+      <button class="btn ghost sm iconbtn wide" title="Theme: System" aria-label="Theme: System">◐</button><button class="btn ghost sm" data-go="settings" title="Settings (Ctrl+,)" aria-label="Settings">⚙<span class="wide"> Settings</span></button></div>
+  </aside>`;
+}
+
+// ---------- Header ----------
+function crumbs(p) {
+  const nav = `<button class="btn ghost iconbtn" data-act="back" ${S.back.length ? "" : "disabled"} title="${S.back.length ? "Back to " + title(S.back[S.back.length - 1]) + " (Alt+←)" : "Nothing to go back to"}" aria-label="Back">←</button>
+    <button class="btn ghost iconbtn" data-act="fwd" ${S.fwd.length ? "" : "disabled"} title="Forward (Alt+→)" aria-label="Forward">→</button>`;
+  if (p.t !== "item" && p.t !== "gone") return nav + `<div class="crumbs"><span class="here">${title(p)}</span></div>`;
+  const i = ITEMS[p.id];
+  const trail = i.kind === "review" ? [["Reviews", "reviews"]] : i.board ? [[boardOf(i.board).title, "board:" + i.board], ...(i.epic ? [[i.epic, ""]] : [])] : [["No board", ""]];
+  return nav + `<nav class="crumbs" aria-label="Breadcrumb"><span class="up row" style="gap:6px">${trail.map(([l, g]) => g ? `<button data-go="${g}">${l}</button>` : `<span>${l}</span>`).join("<span>›</span>")}<span>›</span></span>
+    ${ty(i.kind)}<span class="here trunc">${i.name}</span><span class="faint mono meta" style="font-size:11px">${i.kind === "task" ? REPOS[i.repo].full + (i.card ? "#" + i.card : "") : i.kind === "review" ? `${REPOS[i.repo].full}#${i.pr} · ${i.author}` : meta(i)}</span>${i.flow === "One-Shot" ? `<span class="tag">One-Shot</span>` : ""}${p.t === "gone" ? `<span class="tag strong">${i.kind === "review" ? "Ended" : "Archived"}</span>` : ""}</nav>`;
+}
+
+// ---------- Start, loading, welcome, gone ----------
+function startView() {
+  const l = S.last && !GONE.has(S.last) ? ITEMS[S.last] : null;
+  const readingNote = READING ? `<div class="row muted" role="status">${st("gh")}<span>Reading GitHub: 2 boards and the pull requests of 5 repositories. What's on the left is from this machine and already current.</span></div>` : "";
+  return `<div class="hdr">${crumbs(S.cur)}</div><div class="start"><div class="start-in">
+    <div><h1>${SCENE === "empty" ? "Nothing in progress" : "Nothing open"}</h1><div class="muted">${SCENE === "empty" ? "No task, review or discussion is active. Start one from a card, a pull request or a few cards of a board." : "Pick an item on the left, or start something. What needs you is marked in the tree."}</div></div>
+    ${readingNote}
+    ${l ? `<div><h2>Continue</h2><button class="cont" id="continue" data-go="item:${l.id}">${ty(l.kind)}<span class="grow"><span class="strong">${l.name}</span><br><span class="muted">${needsYou(l) ? sortSits(l.sits).map(sitText).join(" + ") : l.pos} · ${meta(l)}</span></span>${kbd("Enter")}</button></div>` : ""}
+    <div><h2>Start</h2><div class="acts3">
+      <button class="act" data-pop="new"><span class="t">${ty("task")} New task</span><span class="muted">From a card or from scratch</span>${kbd("Ctrl N")}</button>
+      <button class="act" data-go="reviews"><span class="t">${ty("review")} Review a pull request</span><span class="muted">${READING ? "Reading pull requests…" : "4 pending in 3 repositories"}</span></button>
+      <button class="act" data-go="board:plat"><span class="t">${ty("discussion")} New discussion</span><span class="muted">From cards of a board</span></button></div></div>
+    <div class="boards"><h2>Boards and repositories</h2>
+      <button class="lrow" data-go="board:plat"><span class="grow strong">Platform Roadmap</span><span class="muted">${READING ? "reading…" : "23 open cards · read 2m ago"} · api, web</span></button>
+      <button class="lrow" data-go="board:mob"><span class="grow strong">Mobile App</span><span class="row">${READING ? `<span class="muted">reading…</span>` : `${st("warn")}<span class="muted">Read failed 18m ago</span>`}<span class="muted">· ios, android (not cloned)</span></span></button>
+      <div class="lrow"><span class="grow strong">acme/infra</span><span class="row">${st("warn")}<span class="muted">The clone at ~/code/infra is missing</span><button class="btn sm">Change path</button></span></div></div>
+    <div class="keys"><span>${kbd("Ctrl J")} next item that needs you</span><span>${kbd("Alt ←")} back</span><span>${kbd("Ctrl ,")} settings</span><span>${kbd("↑↓←→")} in the tree</span></div>
+  </div></div>`;
+}
+function welcomeView() {
+  return `<div class="hdr"><div class="crumbs"><span class="here">Welcome</span></div></div><div class="start"><div class="start-in" style="max-width:520px;padding-top:14vh">
+    <div><h1>MySpec</h1><div class="muted" style="margin-top:6px">Register a board or a repository to start creating tasks.</div></div>
+    <div class="row"><button class="btn primary">Add board</button><button class="btn">Add repository</button></div>
+    <div class="faint">A board brings its repositories; a repository can live without a board. Both stay editable in Settings.</div></div></div>`;
+}
+function goneView() {
+  const i = ITEMS[S.cur.id];
+  const prev = S.back[S.back.length - 1];
+  const n = urgencyOrder()[0];
+  const nextBtn = n ? `<button class="btn" data-act="j">Next that needs you: ${ITEMS[n].name} ${kbd("Ctrl J")}</button>` : "";
+  let head, body;
+  if (i.kind === "review") {
+    head = `The review of ${i.repo}#${i.pr} ended`;
+    body = `<div class="muted">The pull request was merged on GitHub at 14:32. MySpec closed the session, removed the worktree and moved the review to History, with its reports and what was published. This doesn't notify.</div>`;
+  } else {
+    head = `${i.name} was closed and archived`;
+    body = `<div class="muted">Closed at 14:32 from this screen. The task is in History with its artifacts and the result of the closing.</div>
+      <div class="res" role="list" aria-label="Closing result">
+        <div role="listitem">${st("done")}<span>Worktree removed</span></div>
+        <div role="listitem">${st("done")}<span>Branch <code>haptics-on-complete</code> deleted · merge confirmed on GitHub</span></div>
+        <div role="listitem">${st("done")}<span><code>dev</code> updated · 3 new commits</span></div></div>`;
+  }
+  return `<div class="hdr">${crumbs(S.cur)}</div><div class="start"><div class="gone" role="status">
+    <div class="row">${ty(i.kind)}<h1>${head}</h1></div>${body}
+    <div class="next"><button class="btn primary" data-go="history">Open in History</button>${prev ? `<button class="btn" data-act="back">Back to ${title(prev)} ${kbd("Alt ←")}</button>` : ""}${nextBtn}</div>
+    <div class="faint" style="font-size:12px">The same page appears when an open item is deleted from another place, or leaves the state in any other way: never an empty screen.</div></div></div>`;
+}
+function loadingApp() {
+  const skr = (w1, w2, d = 0) => `<div class="skrow" style="padding-left:${10 + d * 14}px"><div class="sk" style="width:${w1}%"></div><div class="sk" style="width:${w2}%;height:8px"></div></div>`;
+  app.innerHTML = `<aside class="sb" aria-label="Work" aria-busy="true"><div class="sb-top"><span class="brand grow">MySpec</span><button class="btn sm" disabled>+ New ▾</button></div>
+    <div class="sb-filter"><div class="sk" style="height:26px"></div></div>
+    <div class="sb-tree"><div class="sk" style="width:40%;margin:10px 8px"></div>${skr(70, 45, 1)}${skr(62, 50, 1)}<div class="sk" style="width:55%;margin:12px 8px"></div>${skr(80, 40, 1)}${skr(66, 52, 1)}${skr(74, 38, 1)}<div class="sk" style="width:48%;margin:12px 8px"></div>${skr(58, 44, 1)}</div>
+    <div class="sb-foot"><span class="faint" style="font-size:11px">History · Settings</span></div></aside>
+    <main class="main" id="main" aria-busy="true"><div class="hdr"><div class="sk" style="width:260px;margin-left:8px"></div></div>
+    <div class="start"><div class="start-in" style="max-width:520px;padding-top:16vh;gap:10px" role="status">
+      <div class="row">${st("run")}<span class="strong">Starting MySpec…</span></div>
+      <div class="muted">Opening the local database and the sessions of your tasks, reviews and discussions. GitHub is read after this, without blocking.</div>
+      <div class="faint" style="font-size:12px">If this takes more than a few seconds, the step that is slow is named here, never a blank window.</div></div></div></main>`;
+}
+
+// ---------- Popovers ----------
+function newPop() {
+  return `<div class="ph">Start</div>
+    <button class="mi" data-act="toast:New task dialog (Ctrl+N)"><span>${ty("task")}</span><span>New task…<small>From scratch. From a card: Start task on the board.</small></span>${kbd("Ctrl N")}</button>
+    <button class="mi" data-go="reviews"><span>${ty("review")}</span><span>Review a pull request<small>${PENDING_PRS} pending</small></span></button>
+    <button class="mi" data-go="board:plat"><span>${ty("discussion")}</span><span>New discussion<small>Pick cards on a board</small></span></button>`;
+}
+function renderPop() {
+  const el = document.getElementById("pop");
+  if (!S.pop) { el.hidden = true; el.innerHTML = ""; return; }
+  const i = S.cur.t === "item" ? ITEMS[S.cur.id] : null;
+  const [k, arg] = S.pop.kind.split(":");
+  let h = "";
+  if (k === "new") h = newPop();
+  else if (k === "stage") h = stagePop(i, arg);
+  else if (k === "models") h = modelsPop(i);
+  else if (k === "rmode") h = rmodePop(i);
+  else if (k === "more") h = V.moreMenu(i);
+  else if (V.pop) h = V.pop(k, arg, i);
+  el.innerHTML = h; el.hidden = false;
+  const r = S.pop.rect, w = el.offsetWidth, hgt = el.offsetHeight;
+  let left = Math.round(Math.min(r.left, innerWidth - w - 8)), top = Math.round(r.bottom + 4);
+  if (top + hgt > innerHeight - 8) top = Math.round(Math.max(8, r.top - hgt - 4));
+  el.style.left = Math.max(8, left) + "px"; el.style.top = top + "px";
+  const f = el.querySelector("button:not(:disabled)"); if (f) f.focus();
+}
+
+// ---------- Render ----------
+function mainView() {
+  const p = S.cur;
+  if (SCENE === "welcome") return welcomeView();
+  if (p.t === "item") return V.itemView(ITEMS[p.id]);
+  if (p.t === "gone") return goneView();
+  if (p.t === "start") return startView();
+  const hdr = `<div class="hdr">${crumbs(p)}${p.t === "settings" ? `<div class="tools"><button class="btn sm" data-act="back">Close ${kbd("Esc")}</button></div>` : ""}</div>`;
+  let body = "";
+  if (p.t === "board") body = boardView(p.id);
+  if (p.t === "reviews") body = reviewsView();
+  if (p.t === "history") body = historyView();
+  if (p.t === "settings") body = settingsView();
+  return hdr + `<div class="body" style="flex-direction:column">${body}</div>`;
+}
+function render() {
+  if (SCENE === "loading") { loadingApp(); return; }
+  const ae = document.activeElement;
+  const fk = ae && ae.dataset ? (ae.dataset.tid ? "tid:" + ae.dataset.tid : ae.dataset.go ? "go:" + ae.dataset.go : ae.dataset.act ? "act:" + ae.dataset.act : null) : null;
+  app.innerHTML = sidebar() + `<main class="main" id="main">${mainView()}</main>`;
+  // Roving tabindex in the tree: the focused node, else the open item, else the first row.
+  const tree = document.getElementById("tree");
+  if (tree) {
+    const rows = [...tree.querySelectorAll('[role="treeitem"]')];
+    const pick = rows.find((r) => r.dataset.tid === S.treeFocus) || rows.find((r) => r.dataset.tid === "item:" + S.cur.id) || rows[0];
+    if (pick) pick.tabIndex = 0;
+  }
+  if (fk) {
+    const [kind, v] = [fk.slice(0, fk.indexOf(":")), fk.slice(fk.indexOf(":") + 1)];
+    const sel = kind === "tid" ? `[data-tid="${v}"]` : kind === "go" ? `[data-go="${v}"]` : `[data-act="${v}"]`;
+    const el = app.querySelector(sel); if (el) el.focus();
+  }
+  const cont = document.getElementById("continue");
+  if (cont && S.cur.t === "start" && (!fk || fk === "go:item:" + S.last)) cont.focus();
+  // The open item's row is scrolled into view in the tree when it opens.
+  if (S.revealRow) { const r = app.querySelector('#tree [aria-current="page"]'); if (r) r.scrollIntoView({ block: "nearest" }); S.revealRow = false; }
+  // The conversation opens at its end, as in the product.
+  const cv = document.getElementById("convo");
+  if (cv && !S.focusFinding) cv.scrollTop = cv.scrollHeight;
+  if (V.afterRender) V.afterRender();
+  renderPop();
+  const mw = document.getElementById("main");
+  document.documentElement.style.setProperty("--sbw", (innerWidth - (mw ? mw.offsetWidth : 0)) + "px");
+}
+
+// ---------- Events ----------
+app.addEventListener("click", (e) => {
+  const pop = e.target.closest("[data-pop]"), g = e.target.closest("[data-go]"), a = e.target.closest("[data-act]");
+  if (pop) {
+    const kind = pop.dataset.pop;
+    S.pop = S.pop && S.pop.kind === kind ? null : { kind, rect: pop.getBoundingClientRect() };
+    renderPop(); return;
+  }
+  if (a && a.tagName !== "SELECT") {
+    const v = a.dataset.act;
+    if (handleAct(v, a)) return;
+  }
+  if (g) { S.pop = null; if (g.dataset.go === "settings" && S.cur.t === "settings") return back(); go(parse(g.dataset.go)); return; }
+  const tn = e.target.closest('[role="treeitem"]');
+  if (tn && tn.dataset.open) { S.treeFocus = tn.dataset.tid; go(parse(tn.dataset.open)); }
+});
+document.getElementById("pop").addEventListener("click", (e) => {
+  const g = e.target.closest("[data-go]"), a = e.target.closest("[data-act]");
+  if (a) { const v = a.dataset.act; if (!v.startsWith("pop:")) S.pop = null; handleAct(v, a); renderPop(); return; }
+  if (g) { S.pop = null; go(parse(g.dataset.go)); }
+});
+document.addEventListener("mousedown", (e) => {
+  if (S.pop && !e.target.closest("#pop") && !e.target.closest("[data-pop]")) { S.pop = null; renderPop(); }
+});
+app.addEventListener("change", (e) => {
+  if (e.target.dataset.act === "filter") { S.filter = e.target.value; render(); }
+});
+function handleAct(v, el) {
+  if (v === "back") { back(); return true; }
+  if (v === "fwd") { fwd(); return true; }
+  if (v === "j") { openJ(); return true; }
+  if (v === "sb") { app.classList.toggle("sb-collapsed"); render(); return true; }
+  if (v === "close-task") { location.search = "?scene=archived&open=t4"; return true; }
+  if (v.startsWith("toast:")) { toast(v.slice(6)); return true; }
+  if (v.startsWith("pop:")) { S.pop = { kind: v.slice(4), rect: S.pop ? S.pop.rect : el.getBoundingClientRect() }; renderPop(); return true; }
+  if (v.startsWith("fold:")) { const k = v.slice(5); S.collapsed[k] = !S.collapsed[k]; S.treeFocus = "node:" + k; render(); return true; }
+  if (v.startsWith("aux:")) { const k = v.slice(4); S.aux = S.aux === k ? null : k; S.pop = null; render(); return true; }
+  if (v.startsWith("tab:")) { S.tab[S.cur.id] = v.slice(4); render(); return true; }
+  if (V.act && V.act(v, el)) return true;
+  return false;
+}
+function treeKeys(e) {
+  const tree = document.getElementById("tree");
+  if (!tree || !tree.contains(document.activeElement)) return false;
+  const rows = [...tree.querySelectorAll('[role="treeitem"]')];
+  const cur = document.activeElement.closest('[role="treeitem"]');
+  const k = rows.indexOf(cur);
+  if (k < 0) return false;
+  const focus = (r) => { if (!r) return; rows.forEach((x) => (x.tabIndex = -1)); r.tabIndex = 0; S.treeFocus = r.dataset.tid; r.focus(); };
+  const level = (r) => +r.getAttribute("aria-level");
+  const isNode = cur.dataset.tid.startsWith("node:");
+  const expanded = cur.getAttribute("aria-expanded") === "true";
+  switch (e.key) {
+    case "ArrowDown": e.preventDefault(); focus(rows[Math.min(rows.length - 1, k + 1)]); return true;
+    case "ArrowUp": e.preventDefault(); focus(rows[Math.max(0, k - 1)]); return true;
+    case "Home": e.preventDefault(); focus(rows[0]); return true;
+    case "End": e.preventDefault(); focus(rows[rows.length - 1]); return true;
+    case "ArrowRight":
+      e.preventDefault();
+      if (isNode && !expanded) { S.collapsed[cur.dataset.tid.slice(5)] = false; S.treeFocus = cur.dataset.tid; render(); }
+      else if (isNode) focus(rows[k + 1]);
+      return true;
+    case "ArrowLeft": {
+      e.preventDefault();
+      if (isNode && expanded) { S.collapsed[cur.dataset.tid.slice(5)] = true; S.treeFocus = cur.dataset.tid; render(); return true; }
+      for (let j = k - 1; j >= 0; j--) if (level(rows[j]) < level(cur)) { focus(rows[j]); break; }
+      return true;
+    }
+    case "Enter": case " ": {
+      e.preventDefault();
+      if (cur.dataset.go) go(parse(cur.dataset.go));
+      else if (cur.dataset.open) go(parse(cur.dataset.open));
+      else if (isNode) { S.collapsed[cur.dataset.tid.slice(5)] = expanded; render(); }
+      return true;
+    }
+  }
+  return false;
+}
+addEventListener("keydown", (e) => {
+  const mod = e.ctrlKey || e.metaKey;
+  if (mod && e.key.toLowerCase() === "j") { e.preventDefault(); openJ(); return; }
+  if (mod && e.key === ",") { e.preventDefault(); S.cur.t === "settings" ? back() : go({ t: "settings" }); return; }
+  if (mod && e.key.toLowerCase() === "n") { e.preventDefault(); toast("New task dialog · Ctrl+N"); return; }
+  if (e.altKey && e.key === "ArrowLeft") { e.preventDefault(); back(); return; }
+  if (e.altKey && e.key === "ArrowRight") { e.preventDefault(); fwd(); return; }
+  if (e.key === "Escape") {
+    if (S.pop) { S.pop = null; renderPop(); return; }
+    if (V.escape && V.escape()) return;
+    if (S.aux) { S.aux = null; render(); return; }
+    if (S.cur.t === "settings") back();
+    return;
+  }
+  if (V.keydown && V.keydown(e)) return;
+  treeKeys(e);
+});
+let rz; addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(() => { S.pop = null; render(); }, 80); });
+
+// ---------- Mock chrome ----------
+function mockChrome(notesHtml) {
+  const here = new URLSearchParams(location.search);
+  const link = (params, label, on) => `<a href="?${params}" class="${on ? "on" : ""}">${label}</a>`;
+  const sc = SCENES.map((s) => link(s === "item" ? `open=${here.get("open") || "t1"}` : `scene=${s}`, s, SCENE === s)).join("");
+  const opens = Object.keys(ITEMS).map((id) => link(`open=${id}`, id, SCENE === "item" && firstOpen === id)).join("");
+  document.body.insertAdjacentHTML("beforeend", `<div class="mock mock-w" id="mockw" aria-hidden="true"></div>
+    <button class="mock mock-scenes-btn" id="scbtn" aria-expanded="false">Scenes ▴</button>
+    <div class="mock mock-scenes" id="scenes"><b>scene</b>${sc}<b>open</b>${opens}<b>also</b>${link("scene=archived&open=r2", "archived r2", SCENE === "archived" && ARCHIVED_ID === "r2")}${link("open=r1&sb=collapsed", "strip", Q.get("sb") === "collapsed")}</div>
+    <button class="mock mock-notes-btn" id="notesbtn" aria-expanded="false">Notes</button>
+    <div class="mock mock-notes" id="notes" role="dialog" aria-label="Notes about this mock">${notesHtml}</div>`);
+  const w = document.getElementById("mockw");
+  const upd = () => { const m = document.getElementById("main"); w.textContent = `${innerWidth}px · main ${m ? m.offsetWidth : "–"}px · ${innerWidth < 1500 ? "narrow" : innerWidth < 1900 ? "medium" : "wide"} · mock`; };
+  addEventListener("resize", () => setTimeout(upd, 120)); upd();
+  const tog = (b, p) => { b.onclick = () => { p.classList.toggle("open"); b.setAttribute("aria-expanded", p.classList.contains("open")); }; };
+  tog(document.getElementById("notesbtn"), document.getElementById("notes"));
+  tog(document.getElementById("scbtn"), document.getElementById("scenes"));
+  if (Q.get("scenes") === "1") document.getElementById("scbtn").click();
+}
+const LEGEND = `<h3>Status glyphs (grayscale stand-ins for color), always next to a text label</h3><table>
+<tr><td>${st("error")}</td><td>error: needs you, most urgent</td><td>${st("run")}</td><td>agent working</td></tr>
+<tr><td>${st("wait")}</td><td>waiting for you</td><td>${st("gh")}</td><td>waiting on GitHub (checks)</td></tr>
+<tr><td>${st("close")}</td><td>ready to merge or close</td><td>${st("paused")}</td><td>paused (stopped by you)</td></tr>
+<tr><td>${st("warn")}</td><td>outside any item: board read failed, clone missing</td><td>${st("idle")}</td><td>idle: nothing runs, nothing waits</td></tr></table>
+<p style="margin:6px 0 0">Times: ${tw({ sev: "wait", since: "34m", long: "34 minutes" })} filled chip = waiting for you (outlined for closing) · ${tt({ turn: "3m", long: "3m" })} = the agent's current turn. Type: ${ty("task")} task · ${ty("review")} PR review · ${ty("discussion")} discussion.</p>
+<p style="margin:6px 0 0"><b>Scenes ▴</b> (bottom left) switches between the states that don't fit one frame: <code>?scene=home|loading|reading|archived|empty|welcome</code>, and <code>?open=t1…r2</code> opens an item.</p>`;
+
+// ================= b · Rich line =================
+const V = {};
+S.detailsClosed = false;
+
+function pips(i) {
+  const s = STAGES[i.flow], cur = s.indexOf(i.stage);
+  return `<span class="pips" aria-hidden="true">${s.map((_, k) => `<i class="${k < cur ? "d" : k === cur ? "c" : ""}"></i>`).join("")}</span>`;
+}
+function position(i) {
+  if (i.kind === "review") return `Pass 1 · ${i.rmode} · by ${i.author}`;
+  if (i.kind === "discussion") return `Discussing · 2 cards · reads api, web`;
+  let p = i.stage;
+  if (i.step) p += ` · Step ${i.step.n} of ${i.step.of}` + (i.run ? ` · ${i.step.state}` : i.id === "t5" ? " · Manual review" : ` · ${i.step.state}`);
+  if (i.id === "t2") p = "PR #1284";
+  if (i.id === "t4") p = "Closing · PR #1279";
+  return `${p}${i.flow === "One-Shot" ? " · One-Shot" : ""}`;
+}
+
+V.row = (i, level) => {
+  const sel = S.cur.t === "item" && S.cur.id === i.id;
+  const t = tone(i);
+  let r2 = "", r3 = "";
+  if (needsYou(i)) {
+    const ss = sortSits(i.sits);
+    if (ss.length > 1) {
+      r2 = `${st(t)}<span class="lbl strong">Waiting for you · ${ss.length} places</span>${tw(oldest(i))}`;
+      r3 = `<ul class="r3">${ss.map((s) => `<li>${st(s.sev)}<span class="grow">${sitText(s)}</span><span class="num">${s.since}</span></li>`).join("")}</ul>`;
+    } else {
+      r2 = `${st(t)}<span class="lbl strong">${sitText(ss[0])}</span>${tw(ss[0])}`;
+      if (i.id === "r1") r3 = `<ul class="r3"><li><span class="progress grow" style="--p:55%;max-width:120px"><i></i></span><span>Publish waits for 4 more</span></li></ul>`;
+    }
+  } else if (i.run) {
+    r2 = `${st("run")}<span class="lbl">Working · ${i.run.who}</span>${tt(i.run)}`;
+    r3 = `<ul class="r3"><li><span class="mono grow"><span class="long">${i.run.act}</span><span class="short">${i.run.act.replace(/\S+\/(?=[^/\s]+$)/, "…/")}</span></span></li><li>${ctxm(i.ctx)}<span class="faint">context</span></li></ul>`;
+  } else if (t === "gh") {
+    r2 = `${st("gh")}<span class="lbl">${READING ? "PR review · checking GitHub" : `PR review · waiting for checks · ${i.gh.passed} of ${i.gh.total}`}</span><span class="faint" style="font-size:11px;margin-left:auto">checked ${i.gh.checkedAt}</span>`;
+    r3 = `<ul class="r3"><li><span class="grow">${i.gh.checks.map(([n, s]) => s === "pass" ? `✓ ${n}` : s === "running" ? `<strong>${n} running</strong>` : `${n} queued`).join(" · ")}</span></li></ul>`;
+  } else if (t === "paused") {
+    r2 = `${st("paused")}<span class="lbl">Paused</span><span class="faint" style="font-size:11px;margin-left:auto">since yesterday</span>`;
+    if (REPOS[i.repo].missing) r3 = `<ul class="r3"><li>${st("warn")}<span class="grow">Clone missing: the first step and closing are blocked</span></li></ul>`;
+  } else {
+    r2 = `${st("idle")}<span class="lbl">${i.pos}</span><span class="faint" style="font-size:11px;margin-left:auto">idle</span>`;
+  }
+  const j = nextJ() === i.id ? `<span class="jk" title="Ctrl+J opens this next">${kbd("Ctrl J")}</span>` : "";
+  return `<div class="it ${sel ? "sel" : ""} ${needsYou(i) ? "you" : ""}" role="treeitem" aria-level="${level}" tabindex="-1" style="--d:${level - 1}" data-tid="item:${i.id}" data-go="item:${i.id}" ${sel ? 'aria-current="page" aria-selected="true"' : ""} aria-label="${ariaFor(i)}">
+    <div class="r1">${ty(i.kind)}<span class="nm">${i.name}</span><span class="meta">${meta(i)}</span></div>
+    <div class="r2">${r2}</div>${r3}
+    <div class="r4">${i.kind === "task" ? pips(i) : ""}<span class="pos">${position(i)}</span>${j}</div></div>`;
+};
+
+V.nodeSummary = (items) => {
+  const c = counts(items);
+  const order = ["error", "wait", "close", "run", "gh", "paused", "idle"];
+  const words = { error: (n) => `${n} error${n > 1 ? "s" : ""}`, wait: (n) => `${n} waiting for you`, close: (n) => `${n} to close`, run: (n) => `${n} working`, gh: (n) => `${n} on GitHub`, paused: (n) => `${n} paused`, idle: (n) => `${n} idle` };
+  const present = order.filter((k) => c[k]);
+  if (!present.length) return "";
+  return `<span class="sumline">${present.map((k, n) => `<span class="${n === 0 ? "w1" : ""}">${st(k)}${words[k](c[k])}</span>`).join("")}</span>`;
+};
+V.nodeExtra = (n) => {
+  if (n.id === "reviews") return READING ? `<span class="x">${st("gh")}reading pull requests…</span>` : `<span class="x">${PENDING_PRS} pending</span>`;
+  if (n.board) {
+    const b = boardOf(n.board);
+    if (READING) return `<span class="x">${st("gh")}reading…</span>`;
+    if (b.failure) return `<span class="x full">${st("warn")}Last read failed ${b.failedAt} · ${b.failure} <button class="btn sm ghost" data-act="toast:Reading the board again">Try again</button></span>`;
+    return `<span class="x">read ${b.readAt}</span>`;
+  }
+  return "";
+};
+V.notice = (r) => `<div class="nrow" style="--d:1" role="note"><div class="row">${st("warn")}<strong>acme/${r}</strong><span class="grow"></span><button class="btn sm">Change path</button></div>
+  <div>The clone at <code>${REPOS[r].path}</code> is missing. New tasks, the first step and closing wait for it.</div></div>`;
+
+// ---------- Main ----------
+function sideOf() {
+  const wide = innerWidth >= 1900;
+  return S.aux || (wide && !S.detailsClosed ? "Details" : null);
+}
+function toolsB(i) {
+  const side = sideOf();
+  const aux = ["Details", ...AUX[i.kind]].map((a) => `<button class="btn sm ${side === a ? "on" : "ghost"}" data-act="side:${a}" aria-pressed="${side === a}">${a}</button>`).join("");
+  return `<div class="tools">${ctxm(i.ctx)}<button class="btn sm ghost">${i.paused ? "Resume" : "Pause"}</button><span class="sep"></span>${aux}
+    <button class="btn sm ghost iconbtn" data-pop="more" aria-haspopup="menu" title="More" aria-label="More actions">⋯</button></div>`;
+}
+V.moreMenu = (i) => {
+  if (i.kind === "review") return `<div class="ph">Review</div><button class="mi" data-act="toast:Confirmation: the worktree, the conversation and the reports go away">Delete review…</button>`;
+  if (i.kind === "discussion") return `<div class="ph">Discussion</div><button class="mi" data-act="toast:Confirmation: the conversation ends; the document and drafts stay in History">Archive…</button><button class="mi" data-act="toast:Confirmation before deleting">Delete discussion…</button>`;
+  const s = STAGES[i.flow], cur = s.indexOf(i.stage);
+  let h = `<div class="ph">Task</div>
+    <button class="mi" data-act="side-focus:det-rmode"><span class="grow">Review mode<small>${i.reviewMode} · in Details</small></span></button>
+    <button class="mi" data-act="side-focus:det-models"><span class="grow">Models<small>Per stage · in Details</small></span></button><hr>`;
+  s.slice(0, cur).filter((n) => PLANNING.includes(n)).forEach((n) => { h += `<button class="mi" data-act="pop:stage:${n}"><span class="grow">Back to ${n}…</span>▸</button>`; });
+  if (PLANNING.includes(i.stage)) h += `<button class="mi" data-act="pop:stage:${i.stage}"><span class="grow">Discard and restart ${i.stage}…</span>▸</button>`;
+  if (i.step) h += `<button class="mi" data-act="toast:Confirmation: ends both sessions, deletes the conversations and reports of step ${i.step.n}">Discard step ${i.step.n}…</button>`;
+  return h + `<hr><button class="mi" data-act="toast:The preview lists the worktree, branch and pull request before deleting">Delete task…</button>`;
+};
+
+// Details: progress with nested steps, checks by name, facts of the item (editable where the product allows).
+function detProgress(i) {
+  const s = STAGES[i.flow], cur = s.indexOf(i.stage);
+  const steps = stepsOf(i);
+  const extra = { PRD: "PRD.md", "Tech spec": "tech-spec.md", Plan: i.step ? `${i.step.of} steps` : "", Planning: "one-shot.md", Implementation: i.flow === "One-Shot" ? "1 commit · 3c9a1e2" : "", PR: i.pr ? `#${i.pr} opened` : "" };
+  return `<h3>Progress</h3><ol class="vtrack" aria-label="Stages">${s.map((n, k) => {
+    const cls = k < cur ? "done" : k === cur ? "cur" : "";
+    const mk = k < cur ? "✓" : k === cur ? st(tone(i)) : "○";
+    let sub = k < cur ? extra[n] || "" : k === cur ? i.chipSub : "";
+    let nested = "";
+    if (n === "Implementation" && steps.length) {
+      nested = `<ol class="steps">${steps.map(([t, c, m], j) => {
+        const sm = c === "done" ? "✓" : c === "cur" ? st(tone(i)) : `<span class="faint">${j + 1}</span>`;
+        const ctl = c ? "" : `<div class="ctl"><button class="btn sm ghost">Opus · high ▾</button><button class="btn sm ghost">${i.reviewMode} ▾</button></div>`;
+        const sit = c === "cur" && i.sits ? `<div class="strong" style="font-size:11px">${sortSits(i.sits).map(sitText).join(" + ")}</div>` : "";
+        return `<li class="${c}"><span class="mk">${sm}</span><span class="grow"><span style="display:block">${j + 1} · ${t}</span><span class="faint" style="font-size:11px">${m}</span>${sit}${ctl}</span></li>`;
+      }).join("")}</ol>`;
+    }
+    const back = k < cur && PLANNING.includes(n) ? `<button class="btn sm ghost" data-pop="stage:${n}">Back…</button>` : "";
+    return `<li class="${cls}"><span class="mk">${mk}</span><span class="grow"><span class="row" style="gap:6px"><span class="${k === cur ? "strong" : ""}">${n}</span><span class="faint" style="font-size:11px">${sub}</span><span class="grow"></span>${back}</span>${nested}</span></li>`;
+  }).join("")}</ol>`;
+}
+function detChecks(list, head) {
+  const g = { pass: "✓", running: st("run"), queued: st("todo"), fail: st("error") };
+  return `<h3>${head}</h3>${list.map(([n, s, d]) => `<div class="chk"><span class="mk" style="width:12px;display:inline-grid;place-items:center">${g[s]}</span><span class="grow ${s === "running" ? "strong" : ""}">${n}</span><span class="faint" style="font-size:11px">${s === "pass" ? "passed" : s}${d ? " · " + d : ""}</span></div>`).join("")}`;
+}
+const kv = (k, v, id) => `<div class="kv" ${id ? `id="${id}"` : ""}><span>${k}</span><span>${v}</span></div>`;
+function detailsPanel(i) {
+  let h = "";
+  if (i.kind === "task") {
+    h += detProgress(i);
+    if (i.id === "t2") h += detChecks(i.gh.checks, `Checks · ${i.gh.passed} of ${i.gh.total} · checked ${i.gh.checkedAt}`) + `<div class="faint" style="font-size:11px;margin-top:4px">The review pass starts when every check finishes.</div>`;
+    if (i.id === "t4") h += detChecks([["lint", "pass", ""], ["unit-tests", "pass", ""], ["build-ios", "pass", ""], ["ui-tests", "pass", ""]], "Checks · all passed");
+    h += `<h3>Task</h3>` + kv("Repository", `${REPOS[i.repo].full}${REPOS[i.repo].missing ? ` <span class="row" style="display:inline-flex;gap:4px">${st("warn")}<span>clone missing</span></span>` : ""}`) +
+      kv("Card", i.card ? `#${i.card} · In progress <button class="btn sm ghost" data-act="side:Card">Open</button>` : `<span class="faint">none, created from scratch</span>`) +
+      (i.epic ? kv("Epic", i.epic) : "") + kv("Mode", i.flow) +
+      kv("Branch", `<span class="mono">${i.branch}</span> → dev`) +
+      (i.stage === "Implementation" || i.pr ? kv("Worktree", `<span class="mono">~/.local/share/myspec/worktrees/acme/${i.repo}/${i.branch}</span>`) : "") +
+      kv("Review mode", `<button class="btn sm" data-pop="rmode">${i.reviewMode} ▾</button> <span class="faint" style="font-size:11px">${i.stepsLeft ? `${i.stepsLeft} steps not started` : "no step left to start"}</span>`, "det-rmode") +
+      kv("Models", `<button class="btn sm" data-pop="models">${i.flow === "One-Shot" ? 5 : 7} stages ▾</button> <span class="faint" style="font-size:11px">now: ${i.model}</span>`, "det-models") +
+      kv("Created", `${i.created} · updated ${i.updated}`);
+  } else if (i.kind === "review") {
+    h += `<h3>Pull request</h3>` + kv("Number", `${REPOS[i.repo].full}#${i.pr} <button class="btn sm ghost">Open ↗</button>`) + kv("Author", i.author) +
+      kv("Branch", `<span class="mono">${i.id === "r1" ? "settings-rhf" : "fix-share-offline"}</span> → main`) + kv("Card", `#${i.card} ${i.cardTitle} · In progress`) + kv("Labels", i.id === "r1" ? "ui · refactor" : "bug") + kv("Mode", i.rmode) + kv("Started", i.created);
+    h += detChecks([["lint", "pass", ""], ["typecheck", "pass", ""], ["unit", "pass", ""], ["e2e", "pass", ""]], "Checks at pass 1 · all passed");
+    h += `<h3>Passes</h3>` + kv("Pass 1", i.id === "r1" ? "changes · 9 findings · 09:31" : "changes · 3 findings · published 11:31");
+    if (i.id === "r1") h += `<h3>Findings · 5 of 9 decided</h3><div class="fidx">${FINDINGS.map((f, k) => `<button class="${f[2] ? "dec" : "open"}" data-act="finding:${k + 1}" title="${f[0]} · ${f[2] || "to decide"}">${k + 1}</button>`).join("")}</div>`;
+  } else {
+    h += `<h3>Discussion</h3>` + kv("Board", "Platform Roadmap") + kv("Cards in", "#455 Usage metering events<br>#461 Pricing page tiers") + kv("Reads", "acme/api, acme/web (clones, read only)") + kv("Document", `<span class="faint">not written yet</span>`) + kv("Drafts", `<span class="faint">none yet</span>`) + kv("Started", i.created);
+  }
+  return h;
+}
+function decisionBar(i) {
+  if (i.id === "r1") {
+    return `<div class="decbar" role="region" aria-label="Findings to decide"><div class="decbar-in">${st("wait")}<span class="strong">4 findings to decide</span><span class="progress"><i style="--p:55%"></i></span><span class="muted num">5 of 9</span>
+      <button class="btn sm" data-act="prev-finding" title="Previous to decide (Alt+↑)">↑</button><button class="btn sm" data-act="next-finding" title="Next to decide (Alt+↓)">Next ↓ ${kbd("Alt ↓")}</button>
+      <span class="grow"></span><span class="why">Decide 4 more to publish</span><button class="btn sm" disabled>Publish review</button></div></div>`;
+  }
+  if (i.id === "t1") {
+    const other = (S.tab.t1 || "Implementer") === "Reviewer" ? ["Implementer", i.sits[1]] : ["Reviewer", i.sits[0]];
+    return `<div class="decbar" role="region" aria-label="Also waiting for you"><div class="decbar-in">${st("wait")}<span class="strong">Also waiting in ${other[0]}</span><span class="muted">${other[1].label}</span>${tw(other[1])}<span class="grow"></span><button class="btn sm" data-act="tab:${other[0]}">Open ${other[0]}</button></div></div>`;
+  }
+  return "";
+}
+function inlineFindings() {
+  return `<div class="e-findings" role="group" aria-label="Findings of review 1"><div class="fh"><span class="strong">Review 1 · 9 findings</span><span>· decide each one here</span></div>${FINDINGS.map((f, k) => findingCard(f, k, { compactDecided: true })).join("")}</div>`;
+}
+
+V.itemView = (i) => {
+  const wide = innerWidth >= 1900;
+  const side = sideOf();
+  const close = `<button class="btn ghost sm iconbtn" data-act="side:${side}" title="Close (Esc)" aria-label="Close panel">✕</button>`;
+  let panel = "";
+  if (side === "Details") panel = `<div class="aux-hd"><span class="strong">Details</span><span class="grow"></span>${wide ? `<span class="faint" style="font-size:11px">stays open on wide windows</span>` : ""}${close}</div><div class="det">${detailsPanel(i)}</div>`;
+  else if (side) panel = `<div class="aux">${auxContent(i, side, close)}</div>`;
+  const sideHtml = side ? `<aside class="side ${wide ? "" : "overlay"}" aria-label="${side}">${panel}</aside>` : "";
+  return `<div class="hdr">${crumbs(S.cur)}${toolsB(i)}</div>${itemBars(i)}
+    <div class="body"><div class="colconvo">${conversation(i, i.id === "r1" ? { inlineFindings: inlineFindings() } : {})}${decisionBar(i)}${composer(i)}</div>${sideHtml}</div>`;
+};
+
+function moveFinding(dir) {
+  const open = FINDINGS.map((f, k) => (f[2] ? null : k + 1)).filter(Boolean);
+  let k = open.indexOf(S.focusFinding);
+  k = k < 0 ? (dir > 0 ? 0 : open.length - 1) : (k + dir + open.length) % open.length;
+  S.focusFinding = open[k]; render();
+  const f = document.getElementById("f" + S.focusFinding); if (f) { f.scrollIntoView({ block: "center" }); f.focus(); }
+}
+V.act = (v) => {
+  if (v.startsWith("side:")) {
+    const k = v.slice(5), wide = innerWidth >= 1900, cur = sideOf();
+    if (cur === k) { S.aux = null; if (wide) S.detailsClosed = true; }
+    else { S.aux = k === "Details" ? null : k; if (k === "Details") { S.detailsClosed = false; if (!wide) S.aux = "Details"; } }
+    S.pop = null; render(); return true;
+  }
+  if (v.startsWith("side-focus:")) {
+    S.detailsClosed = false; if (innerWidth < 1900) S.aux = "Details"; else S.aux = null;
+    render(); const el = document.getElementById(v.slice(11)); if (el) { el.scrollIntoView({ block: "center" }); const b = el.querySelector("button"); if (b) b.focus(); }
+    return true;
+  }
+  if (v === "next-finding") { moveFinding(1); return true; }
+  if (v === "prev-finding") { moveFinding(-1); return true; }
+  if (v.startsWith("finding:")) { S.focusFinding = +v.slice(8); render(); const f = document.getElementById("f" + S.focusFinding); if (f) { f.scrollIntoView({ block: "center" }); f.focus(); } return true; }
+  return false;
+};
+V.escape = () => {
+  const side = sideOf();
+  if (side && (innerWidth < 1900 || S.aux)) { S.aux = null; render(); return true; }
+  return false;
+};
+V.keydown = (e) => {
+  if (e.altKey && (e.key === "ArrowDown" || e.key === "ArrowUp") && S.cur.t === "item" && S.cur.id === "r1") { e.preventDefault(); moveFinding(e.key === "ArrowDown" ? 1 : -1); return true; }
+  return false;
+};
+
+render();
+mockChrome(`<h2>b · Rich line</h2>
+<ul>
+<li><b>Row</b>: everything §5 of the brief asks for, at any width, wrapping instead of truncating. Name (2 lines max) and repo#card; the status line with severity, what it asks and the time in words-and-shape (filled chip = waiting for you; spinner + minutes = the agent's turn); then one line per situation when there is more than one, or the current action and the context meter, or the checks by name; then where the item is (stage pips, step, pass).</li>
+<li>Rows that need you are framed; the others are flat.</li>
+<li><b>Collapsed node</b>: the counts in words on their own line (<code>1 error · 1 to close · 1 on GitHub</code>).</li>
+<li><b>Item</b>: stage track, step bar, tabs and the conversation as in a. What the item asks sits in a <b>decision bar above the composer</b> (findings: next/prev with Alt+↓/↑, Publish with its reason; a second situation: jump to the other conversation). Findings are decided inside the conversation, at the report.</li>
+<li><b>Details panel</b>: progress with the steps nested (and their model and mode), checks by name, facts of the item, Review mode and Models. Anchored and open from 1900px, closable (remembered); below 1900px it opens over the conversation from the header. Artifacts, Card, Reports and Documents use the same slot.</li>
+<li><b>Keys</b>: Ctrl+J, Alt+← →, Ctrl+, · tree ↑↓ ←→ Enter · Alt+↓/↑ between open findings.</li>
+</ul>${LEGEND}`);
+
+</script>
+</body>
+</html>
