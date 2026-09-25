@@ -170,7 +170,7 @@ A pílula é uma parada de Tab com o estado inteiro no nome acessível (`Progres
 
 ## 5. A conversa
 
-É a conversa da task (`screens/task.md` §6), com o revisor como a voz do agente (avatar em anel). Entram, na ordem:
+É a conversa da task (`screens/task.md` §6), com o revisor como a voz do agente (a palavra `Reviewer` como autor, sem avatar). Entram, na ordem:
 
 - o marco `Review started · Opus 5.5 (1M) · high · Publish`;
 - as instruções da primeira passada, como a primeira mensagem do usuário;

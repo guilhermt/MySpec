@@ -50,7 +50,9 @@
   --weight-name: 400; --weight-name-waiting: 600;
   --tracking-caps: 0.07em;
 
-  /* Measure: the conversation column and the reading line inside it. */
+  /* Measure: the conversation column, where every entry, the ask bar and the composer share the same edges; a page
+     column (Settings, a centred page); the reading line of a short block of text (Home, an empty state, a notice). */
+  --measure-conversation: 60rem;
   --measure: 50rem;
   --measure-read: 42rem;
 
@@ -69,7 +71,7 @@
   --size-control: 2rem; --size-control-sm: 1.75rem; --size-control-xs: 1.375rem;
   --size-chip: 1.75rem; --size-time-chip: 1.125rem; --size-kbd: 1.125rem; --size-kbd-sm: 1rem;
   --size-head: 3rem; --size-progress: 2.5rem; --size-node: 1.75rem; --size-tab: 1.75rem; --size-ask: 2.75rem;
-  --size-composer-min: 3.5rem; --size-mark: 1.5rem; --size-avatar: 1.5rem; --size-more-below: 1.75rem;
+  --size-composer-min: 3.5rem; --size-mark: 1.5rem; --size-more-below: 1.75rem;
   --size-menu-min: 14rem; --size-dialog: 30rem; --size-toast: 22rem; --size-tooltip-max: 20rem;
 
   /* Icons and status glyphs. Glyphs are even so they center on a whole pixel. */
@@ -311,7 +313,7 @@
   --brand-tint-press: color-mix(in srgb, var(--brand) var(--mix-tint-press), var(--surface-2));
   --brand-tint-plane: color-mix(in srgb, var(--brand) var(--mix-tint), var(--surface-1));
 
-  /* Identity details: the segments still to do, the agent marker's ring, the key hint on a primary button, the focus halo. */
+  /* Identity details: the segments still to do, the ring of the current stage's pill, the key hint on a primary button, the focus halo. */
   --brand-seg-todo: color-mix(in srgb, var(--brand) var(--mix-seg), var(--surface-1));
   --brand-marker-ring: color-mix(in srgb, var(--brand) var(--mix-marker), transparent);
   --brand-key-ring: color-mix(in srgb, var(--brand-on) var(--mix-key), transparent);

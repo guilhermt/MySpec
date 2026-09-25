@@ -2,6 +2,14 @@
 
 Uma entrada por decisão, da mais recente para a mais antiga. Cada uma diz a data, o que foi decidido, o que foi descartado e a razão em uma ou duas frases. Uma decisão revista ganha uma entrada nova que aponta a antiga; a antiga não é apagada.
 
+## 2026-09-25 · Conversa: largura única de 960 px
+
+Escolhida a variação A da rodada `lab/16-conversation-wide`: a conversa é uma coluna centrada de 960 px em que tudo tem a mesma borda esquerda e direita: a fala do agente (texto na página, sem cartão), a mensagem do usuário (fundo próprio, mesma largura), os blocos de comando, o código, as tabelas, os cartões de pergunta e permissão, os apontamentos, os marcos, a barra do pedido e o compositor. Corpo em 15 px. Sem hora visível (só em hover), sem avatar, sem linha do tempo; o autor é uma palavra pequena; ações como bloco de comando no estilo dos terminais (rótulo pela descrição, comando apagado, saída dobrada, falha com a cauda aberta); código longo cortado em 20 linhas com `Show all`; pergunta e permissão são os únicos blocos com contorno; o azul deixa de marcar o agente na conversa. Descartadas: B (fluida até 1120 px com 16 px) e a linha de leitura mais estreita que os blocos (rejeitada pelo usuário: "umas coisas menores que outras"). A rodada 15 fica como a origem (a C era a base).
+
+## 2026-09-25 · Conversa: cartões leves como base, coluna mais larga, sem linha do tempo
+
+Da rodada `lab/15-conversation`, a variação C (cartões leves) é a base: cada fala num cartão de superfície sutil, ações e marcos em linhas entre os cartões. Descartadas A (documento com margem de autor e hora) e B (linha do tempo com fio), que o usuário achou poluídas e com o conteúdo principal descentralizado. Pedidos para a rodada seguinte: aproveitar melhor o espaço com uma coluna de leitura mais larga; algo limpo e fácil de usar; sem dar importância a coisas pouco relevantes, como o horário de cada mensagem ou uma linha do tempo própria; referências pesquisadas, inclusive de terminais.
+
 ## 2026-09-25 · Plano de implementação e mudanças sensíveis confirmados
 
 O usuário confirmou `implementation.md`: a sequência de doze tasks, as duas divisões (fundação em 1 e 2; tela da task em 3 e 4), os dois backends médios como tasks próprias (7 e 8), a substituição dos tokens do frontend pelos de `design/system/tokens.css` com a ponte para o shadcn e o tema por `data-theme`, e as seis mudanças de comportamento mais sensíveis de `changes.md` (S1; T1, T4, T6; B3; R11, R12; T16; D3, D4). Antes da task 4, uma rodada dedicada às entradas da conversa (`lab/15-conversation`) refina o que a tela da task decidiu, sem reabrir a estrutura da tela.

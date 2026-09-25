@@ -16,6 +16,7 @@ Fica fora: custo em tokens e dólares, e duração de task, etapa e step (`decis
 |---|---|---|---|---|
 | M1 | **Apontamentos estruturados no review da PR da task**: o relatório no formato do centro de review (título, localização, texto), a decisão guardada por apontamento e **Apply approved** enviando só os aprovados. O prompt de review de PR muda para a task | O cartão de decisão da PR da task (`changes.md` T16) | Task | `screens/task.md` §9, §15; `screens/review.md` §20 |
 | M2 | **Publicação em cadeia**: o épico publica quando está aprovado e todos os cards dele estão decididos, com ao menos dois aprovados; o card espera o épico e as dependências; a corrida publica a cadeia a cada decisão; `PublishEpic` sai | O modelo de publicação da discussão (`changes.md` D3) | Discussão | `screens/discussion.md` §6, §16; `discussionflow/publish.go`, `decide.go` |
+| M3 | **A saída de cada comando**: `stdout` e `stderr` (a cauda) e o número de linhas, guardados no payload da ação. A alternativa barata guarda as últimas 40 linhas e a contagem, sem **Show all**; mostrar tudo pede guardar a saída inteira, até 16 MiB por linha (a saída de um Bash tem mediana de 24 linhas, p90 de 251, máximo de 1.202) | A saída dobrada do comando e a cauda aberta de uma falha (`changes.md` T20) | Task, Review, Discussão | `screens/task.md` §6, §15; o `tool_use_result` chega a cada ação e é descartado (`internal/session/transcript.go`, `events.go`; `research/conversation.md` §1.3) |
 
 ## Backend pequeno
 
@@ -26,7 +27,7 @@ Fica fora: custo em tokens e dólares, e duração de task, etapa e step (`decis
 | P1 | A ação em curso (rótulo e alvo), `turnStartedAt` e a conversa que trabalha, no resumo de cada item | As linhas 2 e 3 da árvore de um item não aberto; o relógio do agente | Shell | `decisions.md` 2026-09-23; `structure.md` §2 |
 | P2 | O `sessionStatus` de cada sessão do item, não só da exibida | O glifo e a palavra de cada aba; a barra que aponta a outra conversa; o erro sem situação na aba | Task, Shell | `screens/task.md` §15 |
 | P3 | **Retry** da sessão certa: o revisor de um step e a sessão de uma discussão | **Retry reviewer**; **Retry** na discussão | Task, Discussão | `screens/task.md` §15 (`app-store.ts` segue só o implementador); `screens/discussion.md` §16 |
-| P4 | Desde quando uma sessão está pausada | O marco `Paused by you · 14:52`, o tooltip da pílula | Rest, Task | `screens/rest.md` §10, §15 |
+| P4 | Desde quando uma sessão está pausada | A hora do marco `Paused by you` (no hover), o tooltip da pílula | Rest, Task | `screens/rest.md` §10, §15 |
 
 **A conversa**
 
@@ -39,7 +40,11 @@ Fica fora: custo em tokens e dólares, e duração de task, etapa e step (`decis
 | P9 | A instrução com que a sessão começou, no tech spec, no plano, na PR e no review da PR (o prompt vai vazio) | `Started with …` | Task | `screens/task.md` §15 |
 | P10 | **Tipos novos de marco**. Task: rascunho aprovado, apontamentos decididos, mudanças aprovadas, commit, PR aberta, merge, checks lidos antes da passada. Review: decisões, publicação (`Published pass 1 · …`), envio ao agente, commits novos. Discussão: contexto, documento escrito, rascunhos escritos, revisados (com quantos mudaram) e ilegíveis, a rodada de publicação que se atualiza e `Publication stopped`. Todos: `Paused by you` | Os marcos da conversa | Task, Review, Discussão, Rest | `screens/task.md` §15; `screens/review.md` §19; `screens/discussion.md` §16; o backend já sabe `documentRevision`, `draftsRevision`, `revision`, `publishedAt`, `unreadableDrafts` |
 | P11 | O número de apontamentos de cada relatório de step | `Review 1 written · changes · 2 findings` | Task | `screens/task.md` §15; `Step.reports[]` só tem a passada e `clean` |
-| P12 | A hora do commit de cada step, e quem fez o merge e quando | `Committed c19f02e · 18:31`, `Merged by lnakamura`, a página do review que saiu | Task, Review | `screens/task.md` §15; `screens/review.md` §19; o git e o `gh` já sabem |
+| P12 | A hora do commit de cada step, e quem fez o merge e quando | A hora de `Committed c19f02e` (no hover e em `Details`), `Merged by lnakamura`, a página do review que saiu | Task, Review | `screens/task.md` §15; `screens/review.md` §19; o git e o `gh` já sabem |
+| P38 | `attempt`, `max_retries`, `retry_delay_ms` e o erro do evento `api_retry` | A atividade `Retrying · attempt 3 of 10 · the API is overloaded · next try in 8 s` e o marco `Retried on its own` depois que passa | Task, Review, Discussão | `screens/task.md` §6, §15; o evento chega e é ignorado (`internal/claude/protocol.go`); o marco é um tipo novo |
+| P39 | Quem interrompeu uma fala | `Interrupted by you`, distinto de uma queda da sessão | Task, Review, Discussão | `screens/task.md` §6, §15; o produto sabe quando o usuário chamou **Stop**; um campo no marcador `interrupted` |
+| P40 | A hora da resposta de uma pergunta estruturada | O tooltip e o nome acessível da pergunta respondida | Task, Review, Discussão | `screens/task.md` §6, §15; a permissão tem `answeredAt`, e a pergunta não |
+| P41 | A porcentagem de contexto no momento da compactação | `Context compacted · at 81%` | Task, Review, Discussão | `screens/task.md` §6, §15; `preTokens` já chega no marcador; falta a janela de contexto no momento |
 
 **Pull requests e GitHub**
 
@@ -110,6 +115,7 @@ Fica fora: custo em tokens e dólares, e duração de task, etapa e step (`decis
 | F18 | O título de cada dependência | `Depends on` | Discussão | `screens/discussion.md` §16; `DraftRef` já tem `title` |
 | F19 | A ação que falhou | O rótulo do aviso do app | Rest | `screens/rest.md` §15; cada chamada de `run()` recebe o nome da ação |
 | F20 | O arquivamento de um review e de uma discussão sem a tela aberta | O toast | Rest | `screens/rest.md` §15; `reviewHistory` e `discussionHistory` já chegam |
+| F21 | A hora de cada entrada da conversa e o número de entradas novas desde que o usuário saiu do fim | A hora no hover e no nome acessível; `New messages 2` | Task, Review, Discussão | `screens/task.md` §6, §15; toda entrada tem `createdAt` |
 
 ## Contagem
 

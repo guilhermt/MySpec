@@ -1,0 +1,86 @@
+/* =====================================================================
+   A · Document. A margin of --dm-w for who and when, the text column for
+   what. Rhythm: --space-6 between what you read, --space-3 around a
+   folded line of actions, --space-8 above a rule.
+   ===================================================================== */
+.doc { --dm-w: calc(var(--space-16) + var(--space-6)); }
+.doc .dr { display: grid; grid-template-columns: var(--dm-w) minmax(0, 1fr); column-gap: var(--space-4); border-radius: var(--radius-sm); }
+.doc > * + *, .dfold-in > * + * { margin-top: var(--space-6); }
+.doc > .d-ac, .dfold-in > .d-ac, .doc > .d-ac + *, .dfold-in > .d-ac + * { margin-top: var(--space-3); }
+.doc > .dr-fold, .doc > .d-mk, .dfold-in > .d-mk { margin-top: var(--space-6); }
+.doc > .d-mk + .d-mk, .dfold-in > .d-mk + .d-mk { margin-top: var(--space-1); }
+.doc > :first-child, .dfold-in > :first-child { margin-top: 0; }
+.doc > .dr-fold + .dr-fold { margin-top: var(--space-3); }
+
+/* ---------- The margin: the speaker's marker and name, then the time ---------- */
+.doc .dm { display: grid; grid-template-columns: var(--glyph) minmax(0, 1fr); column-gap: var(--space-1-5); align-content: start; align-items: center; font-size: var(--text-micro); line-height: var(--leading-micro); padding-top: calc((var(--size-control-xs) - var(--leading-micro)) / 2); min-width: 0; }
+.doc .dmk { grid-column: 1; width: var(--glyph); height: var(--glyph); border-radius: var(--radius-pill); background: var(--brand); }
+.doc .dmk.rev { background: transparent; box-shadow: inset 0 0 0 var(--border-2) var(--brand-ring); }
+.doc .dmk .st { display: block; }
+.doc .dn { grid-column: 2; color: var(--ink-2); font-weight: var(--weight-medium); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.doc .dt { grid-column: 2; color: var(--ink-4); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.doc .d-sp .dm { padding-top: calc((var(--leading-read) - var(--leading-micro)) / 2); }
+.doc .d-req .dm { padding-top: calc(var(--space-4) + (var(--leading-title) - var(--leading-micro)) / 2); }
+.doc .d-err .dm { padding-top: calc(var(--space-2-5) + (var(--leading-body) - var(--leading-micro)) / 2); }
+.doc .d-us .dm { display: none; }
+.doc .dx { min-width: 0; }
+.doc [data-nav]:focus-visible, .doc [data-nav].is-focus { outline: var(--focus-width) solid var(--focus); outline-offset: var(--space-2); }
+
+/* ---------- Your message: on the right, on a rule, no balloon ---------- */
+.doc .d-us { grid-template-columns: minmax(0, 1fr); }
+.doc .d-us .dx { display: flex; flex-direction: column; align-items: flex-end; gap: var(--space-1); padding-left: calc(var(--dm-w) + var(--space-4)); }
+.doc .dumeta { display: inline-flex; align-items: center; gap: var(--space-2); font-size: var(--text-micro); line-height: var(--leading-micro); color: var(--ink-4); font-variant-numeric: tabular-nums; }
+.doc .dutext { max-width: calc(var(--measure-read) - var(--space-16) * 2); padding-right: var(--space-3); box-shadow: inset calc(var(--border-2) * -1) 0 0 var(--line-3); font-size: var(--text-body); line-height: var(--leading-body); color: var(--ink-1); text-wrap: pretty; }
+.doc .d-us.queued .dutext { box-shadow: none; border-right: var(--border-2) dashed var(--line-3); color: var(--ink-2); }
+.doc .d-us.queued .dq { color: var(--ink-3); }
+
+/* ---------- A folded line of actions; open, the sunken block of the system ---------- */
+.doc .da { border-radius: var(--radius-md); }
+.doc .da > summary { display: flex; align-items: center; gap: var(--space-2); max-width: 100%; width: fit-content; min-height: var(--size-control-xs); padding: 0 var(--space-2) 0 var(--space-1); margin-left: calc(var(--space-1) * -1); border-radius: var(--radius-sm); list-style: none; cursor: pointer; font-size: var(--text-meta); line-height: var(--leading-meta); color: var(--ink-3); transition: background var(--duration-fast) var(--ease-standard); }
+.doc .da > summary::-webkit-details-marker { display: none; }
+.doc .da > summary:hover { background: var(--veil-hover); }
+.doc .da > summary:active { background: var(--veil-press); }
+.doc .da > summary .chev { flex: none; width: var(--icon-xs); height: var(--icon-xs); color: var(--ink-4); transition: transform var(--duration-fast) var(--ease-standard); }
+.doc .da[open] > summary .chev { transform: rotate(90deg); }
+.doc .dan { color: var(--ink-3); font-weight: var(--weight-medium); white-space: nowrap; flex: none; }
+.doc .da .roll { color: var(--ink-4); }
+.doc .da .roll .bad { color: var(--state-error); }
+.doc .dad { color: var(--ink-4); font-size: var(--text-micro); line-height: var(--leading-micro); font-variant-numeric: tabular-nums; white-space: nowrap; flex: none; }
+.doc .dre { display: inline-flex; align-items: center; gap: var(--space-1); color: var(--ink-3); font-size: var(--text-micro); line-height: var(--leading-micro); white-space: nowrap; flex: none; }
+.doc .dre svg { width: var(--icon-xs); height: var(--icon-xs); color: var(--ink-4); }
+.doc .dre::before { content: "·"; color: var(--ink-4); margin-right: var(--space-0-5); }
+.doc .d-ac.live .dan { color: var(--ink-2); }
+.doc .da[open] { background: var(--surface-0); padding-bottom: var(--space-2); }
+.doc .da[open] > summary { width: 100%; margin: 0; padding: 0 var(--space-3); border-radius: var(--radius-md) var(--radius-md) 0 0; }
+.doc .da[open] > .arows { padding: var(--space-1) var(--space-3) 0 calc(var(--space-3) + var(--icon-xs) + var(--space-2)); }
+
+/* ---------- A milestone: the discreet line of components.md, no rule across the reading ---------- */
+.doc .dk { display: flex; flex-wrap: wrap; align-items: center; column-gap: var(--space-2); row-gap: 0; min-height: var(--size-control-xs); font-size: var(--text-meta); line-height: var(--leading-meta); min-width: 0; }
+.doc .dk > .dki { flex: none; width: var(--icon-sm); height: var(--icon-sm); color: var(--ink-4); }
+.doc .dkt { color: var(--ink-2); }
+.doc .dkn { color: var(--ink-3); }
+.doc .dk > .chev { flex: none; width: var(--icon-xs); height: var(--icon-xs); color: var(--ink-4); transition: transform var(--duration-fast) var(--ease-standard); }
+.doc .dkd > summary, .doc .dr-fold > summary { list-style: none; cursor: pointer; }
+.doc .dkd > summary::-webkit-details-marker, .doc .dr-fold > summary::-webkit-details-marker { display: none; }
+.doc .dkd > summary { width: fit-content; max-width: 100%; padding: 0 var(--space-2) 0 var(--space-1); margin-left: calc(var(--space-1) * -1); border-radius: var(--radius-sm); transition: background var(--duration-fast) var(--ease-standard); }
+.doc .dkd > summary:hover { background: var(--veil-hover); }
+.doc .dkd > summary:active { background: var(--veil-press); }
+.doc .dkd[open] > summary .chev, .doc .dr-fold[open] > summary .chev { transform: rotate(90deg); }
+.doc .d-mk.gone .dkt { color: var(--ink-3); }
+
+/* A fold: a stretch of the past behind the same line. The range sits in the margin; the label never cuts. */
+.doc .dr-fold > summary { border-radius: var(--radius-sm); transition: background var(--duration-fast) var(--ease-standard); }
+.doc .dr-fold > summary .dk { padding: 0 var(--space-2) 0 var(--space-1); margin-left: calc(var(--space-1) * -1); border-radius: var(--radius-sm); width: fit-content; max-width: 100%; }
+.doc .dr-fold > summary:hover .dk { background: var(--veil-hover); }
+.doc .dr-fold > summary:active .dk { background: var(--veil-press); }
+.doc .dm.range { padding-top: 0; }
+.doc .dm.range .dt { grid-column: 2; }
+.doc .dfs { color: var(--ink-3); font-size: var(--text-micro); line-height: var(--leading-micro); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.doc .dfs::before { content: "· "; color: var(--ink-4); }
+.doc .dfold-in { margin: var(--space-6) 0 var(--space-2); }
+
+/* ---------- Activity and the request's margin ---------- */
+.doc .dact { display: inline-flex; align-items: center; gap: var(--space-2); min-height: var(--size-control-xs); font-size: var(--text-meta); line-height: var(--leading-meta); color: var(--ink-3); }
+.doc .dact b { color: var(--ink-1); font-weight: var(--weight-medium); }
+
+@media (prefers-reduced-motion: reduce) { .doc .da > summary .chev, .doc .dk > .chev { transition: none; } }

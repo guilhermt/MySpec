@@ -1,0 +1,85 @@
+/* =====================================================================
+   C · Light cards. A speech is a card of --surface-2 with the rim of
+   --shadow-xs; a request is a card with the wait ring and --shadow-card.
+   Actions and milestones are compact lines between the cards, aligned
+   with the text inside them. Rhythm: --space-3 between entries.
+   ===================================================================== */
+.cards { --c-pad: var(--space-4); gap: var(--space-3); }
+.cards [data-nav]:focus-visible, .cards [data-nav].is-focus { outline: var(--focus-width) solid var(--focus); outline-offset: var(--focus-offset); }
+
+/* ---------- The speech card ---------- */
+.cards .cc { background: var(--surface-2); box-shadow: var(--shadow-xs); border-radius: var(--radius-lg); padding: var(--space-3) var(--c-pad) var(--c-pad); min-width: 0; }
+.cards .cch { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-2); font-size: var(--text-meta); line-height: var(--leading-meta); min-width: 0; }
+.cards .cav { flex: none; display: inline-grid; place-items: center; width: var(--size-avatar); height: var(--size-avatar); border-radius: var(--radius-pill); background: var(--brand-tint-plane); box-shadow: inset 0 0 0 var(--border) var(--brand-marker-ring); color: var(--brand-ink); }
+.cards .cav.rev { background: transparent; box-shadow: inset 0 0 0 var(--border) var(--brand-ring); }
+.cards .cav svg { width: var(--icon-sm); height: var(--icon-sm); }
+.cards .ccn { color: var(--ink-2); font-weight: var(--weight-medium); white-space: nowrap; }
+.cards .cct { color: var(--ink-4); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cards .ccb { min-width: 0; }
+
+/* A collapsed speech: one line, skimmed by its first words. */
+.cards .cc.min { padding: 0 var(--space-3); cursor: pointer; transition: background var(--duration-fast) var(--ease-standard); }
+.cards .cc.min:hover { background: var(--surface-2-hover); }
+.cards .cc.min:active { background: var(--surface-2-press); }
+.cards .cc.min > .cch { height: var(--size-control); margin: 0; }
+.cards .cc.min .cav { width: var(--icon); height: var(--icon); box-shadow: none; background: transparent; }
+.cards .cc.min .ccp { flex: 1 1 auto; min-width: 0; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cards .cc.min .cx { flex: none; width: var(--icon-sm); height: var(--icon-sm); color: var(--ink-4); }
+.cards .cc.min > .ccb { display: none; }
+.cards .cc.min.is-open { padding-bottom: var(--c-pad); }
+.cards .cc.min.is-open > .ccb { display: block; }
+.cards .cc.min.is-open .ccp { visibility: hidden; }
+
+/* ---------- Your message: a card of your surface, on the right ---------- */
+.cards .cu { align-self: flex-end; max-width: calc(var(--measure-read) - var(--space-16)); background: var(--surface-user); border-radius: var(--radius-lg); padding: var(--space-2) var(--space-3) var(--space-2-5); }
+.cards .cuh { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-micro); line-height: var(--leading-micro); margin-bottom: var(--space-0-5); }
+.cards .cuh .ccn { font-size: var(--text-micro); }
+.cards .cut { font-size: var(--text-body); line-height: var(--leading-body); color: var(--ink-1); text-wrap: pretty; }
+.cards .cu.queued { background: transparent; box-shadow: inset 0 0 0 var(--border) var(--line-2); }
+.cards .cu.queued .cut { color: var(--ink-2); }
+.cards .cu.min { padding: 0 var(--space-3); }
+.cards .cu.min .cuh { height: var(--size-control); margin: 0; font-size: var(--text-meta); line-height: var(--leading-meta); }
+.cards .cu.min .ccp { color: var(--ink-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------- Lines between the cards: actions and milestones ---------- */
+.cards .cact > summary, .cards .cmk { display: flex; align-items: center; gap: var(--space-2); min-height: var(--size-control-sm); padding: 0 var(--space-2); margin: 0 calc(var(--c-pad) - var(--space-2)); border-radius: var(--radius-sm); font-size: var(--text-meta); line-height: var(--leading-meta); color: var(--ink-3); min-width: 0; }
+.cards .cact > summary, .cards .cmkd > summary { list-style: none; cursor: pointer; transition: background var(--duration-fast) var(--ease-standard); }
+.cards .cact > summary::-webkit-details-marker, .cards .cmkd > summary::-webkit-details-marker { display: none; }
+.cards .cact > summary:hover, .cards .cmkd > summary:hover { background: var(--veil-hover); }
+.cards .cact > summary:active, .cards .cmkd > summary:active { background: var(--veil-press); }
+.cards .cact > summary .chev { flex: none; width: var(--icon-xs); height: var(--icon-xs); color: var(--ink-4); transition: transform var(--duration-fast) var(--ease-standard); }
+.cards .cact[open] > summary .chev, .cards .cmkd[open] > summary .chev { transform: rotate(90deg); }
+.cards .can { color: var(--ink-3); font-weight: var(--weight-medium); white-space: nowrap; flex: none; }
+.cards .cact .roll { color: var(--ink-4); }
+.cards .cact .roll .bad { color: var(--state-error); }
+.cards .cact.live .can { color: var(--ink-2); }
+.cards .cad { margin-left: auto; color: var(--ink-4); font-size: var(--text-micro); line-height: var(--leading-micro); white-space: nowrap; font-variant-numeric: tabular-nums; flex: none; }
+.cards .cat { color: var(--ink-4); font-size: var(--text-micro); line-height: var(--leading-micro); white-space: nowrap; font-variant-numeric: tabular-nums; flex: none; min-width: calc(var(--space-8) + var(--space-2)); text-align: right; }
+.cards .cmk .cat { margin-left: auto; }
+.cards .cact[open] > .cab { margin: var(--space-1) 0 0; padding: var(--space-1-5) var(--space-3) var(--space-2) calc(var(--space-3) + var(--icon-xs) + var(--space-2)); background: var(--surface-0); border-radius: var(--radius-md); }
+.cards .cmk > svg:first-child { flex: none; width: var(--icon-sm); height: var(--icon-sm); color: var(--ink-4); }
+.cards .cmk > .chev { flex: none; width: var(--icon-xs); height: var(--icon-xs); color: var(--ink-4); transition: transform var(--duration-fast) var(--ease-standard); }
+.cards .cmt { color: var(--ink-2); font-weight: var(--weight-medium); white-space: nowrap; }
+.cards .cmk.product .cmt { font-weight: var(--weight-regular); }
+.cards .cmn { color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.cards .cmkd > .mbody { margin: var(--space-1) 0 var(--space-1); }
+.cards .cmk.retry > svg:first-child { color: var(--ink-3); }
+
+/* ---------- Requests: the wait ring; the head says who and when, without a band ---------- */
+.cards .crq { min-width: 0; border-radius: var(--radius-lg); }
+.cards .crq .cch.rq { margin-bottom: 0; }
+.cards .crq .card.cv-req .bd { gap: var(--space-3); }
+
+/* ---------- A stretch of the past ---------- */
+.cards .cfold { display: flex; flex-direction: column; gap: var(--space-1); }
+.cards .cfold + .cfold { margin-top: var(--space-2); }
+.cards .cfs { margin-left: auto; color: var(--ink-3); font-size: var(--text-micro); line-height: var(--leading-micro); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.cards .cfold-in { display: flex; flex-direction: column; gap: var(--space-1); }
+.cards .cfold-in > .cu.min { max-width: 100%; align-self: stretch; margin-left: var(--space-16); }
+
+/* ---------- Activity ---------- */
+.cards .cacty { display: flex; align-items: center; gap: var(--space-2); min-height: var(--size-control-sm); padding: 0 var(--space-2); margin: 0 calc(var(--c-pad) - var(--space-2)); font-size: var(--text-meta); line-height: var(--leading-meta); color: var(--ink-3); }
+.cards .cacty b { color: var(--ink-1); font-weight: var(--weight-medium); }
+.cards .cacty .cat { margin-left: auto; }
+
+@media (prefers-reduced-motion: reduce) { .cards .cact > summary .chev, .cards .cc.min { transition: none; } }

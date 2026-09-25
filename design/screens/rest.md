@@ -496,7 +496,7 @@ Uma task arquivada usa o texto da seção 4, sem prévia.
 **Pause, sem diálogo.** Pausar é reversível e age na hora. Não há confirmação.
 
 - **O cabeçalho:** **Resume** no lugar de **Pause**, e a pílula neutra com `paused` e `Paused since 14:52` no tooltip. O medidor de contexto vira `—`.
-- **A conversa:** o marco `Paused by you · the reviewer's pass 2 stopped; Resume or a message starts it again · 14:52` diz desde quando.
+- **A conversa:** o marco `Paused by you · the reviewer's pass 2 stopped; Resume or a message starts it again` diz desde quando no tooltip, nunca no texto.
 - **As abas:** só a conversa que trabalhava fica pausada (a aba Reviewer). O implementador fica ocioso.
 - **A barra e o compositor:** nenhuma barra do pedido, e o compositor diz `Sending resumes the task…`.
 - **A árvore:** o glifo de duas barras e `Paused · Step 3/7`.

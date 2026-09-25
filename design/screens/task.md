@@ -1,6 +1,11 @@
 # A tela da task
 
-Fase 4, decidido em 2026-09-24. Referência visual: `lab/10-screen-task-minimal/b.html` (as nove cenas, `?scene=`) e `lab/10-screen-task-minimal/components.html` (cada componente novo em todos os estados, nos dois modos).
+Fase 4, decidido em 2026-09-24; a conversa, em 2026-09-25. Referências visuais:
+
+- o topo, o stepper, as abas, os painéis e o `⋯`: `lab/10-screen-task-minimal/b.html` (as nove cenas, `?scene=`) e `lab/10-screen-task-minimal/components.html`;
+- a conversa, a barra do pedido e o compositor: `lab/16-conversation-wide/a.html` (sete cenas, `?scene=`) e `lab/16-conversation-wide/components.html`, na variação a.
+
+Cada componente está em todos os estados, nos dois modos.
 
 É a tela em que o usuário acompanha e conduz uma task, em todas as etapas: planejamento, implementação nos modos `Agent` e `Manual`, pull request, review da PR e encerramento. Ela segue `structure.md` (o shell, a árvore, os painéis, a largura contínua), `principles.md` e `system/`. Onde este documento e `structure.md` §3 divergem, vale este documento: ele é a forma decidida do topo do item, do progresso e dos agentes, que a estrutura deixou em aberto.
 
@@ -20,7 +25,7 @@ A área principal, de cima para baixo:
 
 - **o cabeçalho**, uma faixa de `--size-head`, com um fio embaixo;
 - **as abas `Implementer` e `Reviewer`**, só enquanto o step tem os dois agentes (seção 5);
-- **a conversa**, que rola, na medida `--measure`, centrada, com esmaecidos de `--space-4` sob o cabeçalho e sob as abas;
+- **a conversa**, que rola, numa coluna de `--measure-conversation` (60rem, 960 px), centrada em pixel inteiro, com esmaecidos de `--space-4` sob o cabeçalho e sob as abas. Numa área principal mais estreita, a coluna ocupa a área menos `--space-6` de cada lado. Tudo na conversa tem a largura da coluna, com a mesma borda esquerda e a mesma borda direita; as abas, a barra do pedido e o compositor também;
 - **a barra do pedido**, quando existe;
 - **o compositor**, quando existe (seção 8).
 
@@ -103,7 +108,7 @@ A etapa atual tem `aria-current="step"`.
 
 **Quando existem.** Só num step no modo `Agent`, a partir da primeira passada do revisor, até o commit. Antes disso, num step `Manual`, no planejamento e na PR, a conversa é uma só e não há abas.
 
-**Forma.** Duas abas de texto, alinhadas à esquerda na medida da conversa, sobre um fio `--line-1`, sem fundo. Cada uma tem o glifo da sua sessão (`--glyph-sm`) e o nome. A escolhida fica em `--ink-1`, peso 600, sublinhada por `--border-2` em `--brand`. A outra fica em `--ink-3`. A aba de fora diz a palavra só quando espera ou falhou: `Implementer · waits` em `--state-wait`, `Reviewer · error` em `--state-error`. O que ela pede (`Permission, 4 minutes`) fica no tooltip e no nome acessível.
+**Forma.** Duas abas de texto, alinhadas à esquerda na coluna da conversa, sobre um fio `--line-1`, sem fundo. Cada uma tem o glifo da sua sessão (`--glyph-sm`) e o nome. A escolhida fica em `--ink-1`, peso 600, sublinhada por `--border-2` em `--brand`. A outra fica em `--ink-3`. A aba de fora diz a palavra só quando espera ou falhou: `Implementer · waits` em `--state-wait`, `Reviewer · error` em `--state-error`. O que ela pede (`Permission, 4 minutes`) fica no tooltip e no nome acessível.
 
 **Qual abre.** A conversa de quem tem a vez. Com os dois esperando, abre a do pedido mais antigo, que é o mesmo que o chip da árvore mostra. O produto nunca troca de aba sozinho depois disso.
 
@@ -117,35 +122,52 @@ A etapa atual tem `aria-current="step"`.
 
 ## 6. A conversa
 
-Uma coluna de leitura na medida da conversa, com `--space-6` entre as entradas e `--space-6` a `--space-8` no topo. Abre no fim, acompanha o que chega enquanto o usuário está no fim e nunca sobe sozinha.
+Uma coluna só: a fala, a sua mensagem, os grupos de ações, o código, as tabelas, os cartões, os apontamentos, o erro e os marcos têm a mesma borda esquerda e a mesma borda direita, e nenhum texto fica numa medida mais estreita que os blocos ao lado. `--space-3` entre as entradas, `--space-6` no topo. A conversa abre no fim, acompanha o que chega enquanto o usuário está no fim e nunca sobe sozinha.
+
+**Sem hora à vista.** Nenhuma entrada mostra a hora. Ela aparece com hover e foco: ao lado de quem fala, no fim de um marco, no fim da linha de um grupo e no tooltip da pergunta respondida. Está sempre no nome acessível. Nenhum texto de marco leva a hora.
+
+**Quem fala** é uma palavra, sem avatar e sem cor de marca (`system/components.md`, Quem fala): `Implementer`, `Reviewer`, `PRD agent` numa faixa sobre o texto, escrita quando a voz muda, e `You` na sua mensagem.
 
 | Entrada | Como aparece |
 |---|---|
-| **Fala do agente** | Linha de quem fala: avatar de `--size-avatar` (implementador cheio, revisor em anel), o nome e a hora. Abaixo, o Markdown em `--text-read`, com código, tabelas e mermaid. Sem o rótulo de papel (`· pass 2`) |
-| **Mensagem do usuário** | À direita, em `--surface-user`, com `You` e a hora. Sem o destinatário: ele é a conversa na tela |
-| **Mensagem na fila** | À direita, contornada, com `Queued for the implementer · sends when the turn ends` e **Remove**. Sai da fila quando o turno acaba |
-| **Grupo de ações** | Dobrado por padrão, como uma linha sem fundo: o ícone do resultado, `14 actions`, o resumo por tipo (`Read 8 · Searched 4 · git 2`, com `· 2 failed, then passed` em vermelho quando falhou), a duração à direita e o chevron. Aberto, ganha o bloco `--surface-0`, mostra as últimas seis ações e `Show N earlier actions` |
-| **Ação** | Rotulada pela descrição que o agente escreveu (`Run the rate limit tests`), com o comando depois, em mono e apagado, e o status ou a duração à direita (`exit 1 · 8.2 s`) |
-| **Grupo vivo** | Dobrado como os outros. O resumo é a ação em curso, com spinner: `11 actions · Run the refill and eviction tests go test ./internal/ratelimit/…` |
-| **Subagente** | Uma linha do grupo, `Delegated · Find why e2e / rate-limit-burst failed`, que abre as ações do subagente recuadas sob um fio, com o próprio resumo (`44 actions · Read 21 · Searched 14 · GitHub 9`) |
-| **Mensagem do produto** | Um marco de uma linha: `MySpec → Implementer · Review 1 · 2 findings · round 1 of 3 · 14:19`. O conteúdo em Markdown abre no lugar, com um clique no chevron |
-| **Marcadores** | Uma linha discreta à esquerda, na coluna do texto: ícone de `--icon-sm` em `--ink-4`, o texto em `--ink-2` com o complemento em `--ink-3`, e a hora. São eles: `Started with steps/03-token-bucket.md`, `Written PRD.md`, `Review 1 written · changes · 2 findings`, `Committed c19f02e …`, `Opened #1284`, `Merged #1284 into dev · by lnakamura`, `Checks read before pass 1 · 4 of 5 passed…`, `Context compacted`, `Interrupted`, e as decisões do usuário (`You approved the draft`, `You decided · 3 approved, 1 discarded`, `You approved the changes · 3 files staged`). Os que têm conteúdo (documento, relatório, instrução inicial, card de entrada) abrem no lugar, e o conteúdo tem **Open in Artifacts** ao pé |
-| **Pergunta estruturada** | Cartão `--surface-2` com `--shadow-card` e anel `--state-wait-line`, sem faixa de cabeçalho: a barra diz que é uma pergunta e de quem. Dentro vêm a pergunta em 18/24, as opções numeradas (tecla, título e trade-off) e `Other…`. Respondida, ganha uma faixa neutra com o visto, a pergunta e a resposta |
+| **Fala do agente** | Texto na página, sem cartão e sem fundo, em `--text-body`/`--leading-body` (15/22) e `--ink-1`. Tem a faixa de quem fala e o Markdown: cabeçalhos, listas, tabelas, mermaid e código, todos na largura da coluna |
+| **Streaming** | A fala cresce e termina num cursor parado; o spinner fica antes da palavra de quem fala |
+| **Interrompida** | `Interrupted by you`, uma linha sob a fala parada por **Stop**. Uma queda da sessão é o bloco de erro |
+| **Mensagem do usuário** | Na largura da coluna, em `--surface-user`: `You` e o texto. Sem o destinatário: ele é a conversa na tela. Enviando: `Sending…`. Não enviada: `Not sent · the session stopped` e **Send again** |
+| **Mensagem na fila** | A mesma forma, em `--surface-0`, com `Queued · sends when the turn ends` e **Remove**. Sai da fila quando o turno acaba |
+| **Grupo de ações** | Dobrado por padrão, como uma linha sem fundo: o chevron, `14 actions`, o resumo por tipo (`Read 8 · Searched 4 · git 2`, com `· 1 failed` em vermelho quando falhou, ou `· 1 failed, then passed` em tinta quando se recuperou) e a duração à direita. Aberto, ganha o bloco `--surface-0`, com as últimas seis ações e `Show N earlier actions` |
+| **Comando** | Cada ação de um grupo aberto é uma linha: a descrição que o agente escreveu (`Run the rate limit tests`), o comando depois, em mono e apagado, e a duração ou o código de saída à direita (`exit 1 · 8.2 s`). A saída fica dobrada atrás do chevron: a cauda do que o comando imprimiu, com `31 more lines above` e **Show all 36 lines**. Um comando que falhou tem a saída aberta, com o trilho vermelho. Um comando sem saída não tem dobra |
+| **Grupo vivo** | Dobrado como os outros. O resumo é a ação em curso, com spinner: `11 actions ◌ Run the refill and eviction tests go test ./internal/ratelimit/…` |
+| **Subagente** | Um comando do grupo, `Delegated · Find why e2e / rate-limit-burst failed`, que abre os comandos do subagente recuados sob um fio, com o próprio resumo (`44 actions · Read 21 · Searched 14 · GitHub 9`) |
+| **Mensagem do produto** | Um marco de uma linha com o ícone do produto: `MySpec → Implementer · Review 1 · 2 findings · round 1 of 3`. O conteúdo em Markdown abre no lugar, com um clique no chevron |
+| **Marcadores** | Uma linha discreta, na borda da coluna: o chevron no sulco quando abre, o ícone de `--icon-sm` em `--ink-4`, o texto em `--ink-2` e o complemento em `--ink-3`. São eles: `Started with steps/03-token-bucket.md`, `Written PRD.md`, `Review 1 written · changes · 2 findings`, `Committed c19f02e`, `Opened #1284`, `Merged #1284 into dev · by lnakamura`, `Checks read before pass 1 · 4 of 5 passed…`, `Context compacted · at 81%`, `Paused by you`, e as decisões do usuário (`You approved the draft`, `You decided · 3 approved, 1 discarded`, `You approved the changes · 3 files staged`). Os que têm conteúdo (documento, relatório, instrução inicial, card de entrada) abrem no lugar, e o conteúdo tem **Open in Artifacts** ao pé |
+| **Retry automático** | Enquanto a API recusa: a atividade `Retrying · attempt 3 of 10 · the API is overloaded · next try in 8 s`, com spinner, sem cor de alarme. Depois que passa, fica o marco `Retried on its own · the API was overloaded · 2 attempts` |
+| **Dobra de trecho** | Numa sessão longa, cada trecho anterior à rodada atual dobra numa linha com o ícone do histórico: `5 speeches · 71 actions  from the start · steps/06-throttle-metrics.md`, `4 speeches · 44 actions  from Review 1 · 3 findings · round 1 of 3`. Aberta, mostra as entradas como eram. O trecho vai de uma mensagem do produto que abre uma rodada à próxima |
+| **Código longo** | Acima de 24 linhas, o bloco mostra as 20 primeiras, com **Show all 46 lines** num rodapé; aberto, **Show less** |
+| **Pergunta estruturada** | Cartão na largura da coluna, `--surface-2` com `--shadow-card` e anel `--state-wait-line`, sem faixa de cabeçalho: a barra diz que é uma pergunta e de quem. Dentro vêm a pergunta em 18/24, as opções numeradas (tecla, título e trade-off) e `Other…`. Respondida, vira um bloco chapado em `--surface-0`, sem anel, com o visto, a pergunta e a resposta, e a hora da resposta no tooltip |
 | **Pergunta em texto** | No planejamento, a pergunta no fim da fala do agente ganha um fio `--state-wait-ring` à esquerda do parágrafo. O compositor oferece a resposta rápida (seção 8) |
-| **Permissão** | Cartão como o da pergunta: a descrição, o comando uma vez em mono, a nota, e **Allow** `1`, **Allow for this session** `2` e **Deny…** `3`. **Allow** é a única primária da tela |
-| **Erro** | Bloco `--surface-0` com o trilho `--error-rail` vermelho. Tem a explicação e o detalhe em mono (`exit status 1 · claude --resume …`, o `git status`), sem título e sem botão: a barra diz o título e tem **Retry** da sessão |
-| **Atividade** | `Starting session…`, `Thinking…`, `Retrying (attempt 2)…`, com spinner, no fim |
-| **Cartão de review `Manual`** | Neutro (`--surface-2`, `--shadow-xs`), com o cabeçalho `Changed files · 7` e um arquivo por linha: o glifo, o tipo (`M`, `A`, `D`), o caminho (que abre no VS Code) e `staged`, `1 hunk left` ou `not staged`. O progresso fica na barra |
+| **Permissão** | Cartão como o da pergunta: a descrição, o comando uma vez em mono, a nota, e **Allow** `1`, **Allow for this session** `2` e **Deny…** `3`. **Allow** é a única primária da tela. Pergunta e permissão são os únicos blocos da conversa com contorno |
+| **Erro** | Bloco `--surface-0` na largura da coluna, com o trilho `--error-rail` vermelho. Tem a explicação e o detalhe em mono (`exit status 1 · claude --resume …`, o `git status`), sem título, sem hora e sem botão: a barra diz o título e tem **Retry** da sessão |
+| **Atividade** | `Starting session…`, `Thinking…`, `Retrying · attempt 3 of 10 · …`, com spinner, no fim |
+| **Cartão de review `Manual`** | Neutro (`--surface-2`, `--shadow-xs`), na largura da coluna, com o cabeçalho `Changed files · 7` e um arquivo por linha: o glifo, o tipo (`M`, `A`, `D`), o caminho (que abre no VS Code) e `staged`, `1 hunk left` ou `not staged`. O progresso fica na barra |
 | **Cartão de apontamentos** | Seção 9 |
 | **Estado vazio** | Um lugar sem conversa ainda. No PR review antes da primeira passada aparece `The review starts when the checks finish.`, com o que falta, e o bloco dos checks pelo nome (`build passed 1m 52s`, `e2e / rate-limit-burst running 4m 12s`, `preview-deploy queued`) com `checked 40s ago` |
 
-**A volta ao fim.** Fora do fim, um botão flutuante acima da barra do pedido volta ao fim. Ele diz `New messages` quando algo chegou e leva a ação em curso: `↓ New messages · ◌ Implementer go test ./internal/ratelimit/... -race`. Some no fim.
+**A volta ao fim.** Fora do fim, um botão flutuante acima da barra do pedido volta ao fim. Ele diz `New messages` com o número do que chegou desde que o usuário saiu do fim, e quem trabalha: `↓ New messages 2 | ◌ Implementer writing`. Some no fim.
 
 **Um cartão ou uma barra que nasce** com a tela aberta pisca duas vezes no véu da sua gravidade e é anunciado (`role="status"`).
 
+**O teclado na conversa.** A conversa é um `feed` de `article`s e uma parada de Tab: a entrada atual e os controles dela.
+
+- `↑` e `↓`, Page Up e Page Down andam por toda entrada que se opera (fala, mensagem, grupo, comando de um grupo aberto, subagente, marco que abre, dobra, pedido, erro). Home e End vão à primeira e à última.
+- `→` abre e `←` dobra um grupo, um comando, um marco ou uma dobra.
+- No cartão de pergunta, `1`–`9` escolhem a opção, as setas andam dentro do `radiogroup` sem sair do cartão, `Enter` envia e **Other…** leva ao compositor.
+- Na permissão, `1`–`3` respondem, com o foco na entrada ou num botão.
+- `Esc` devolve o foco ao compositor.
+
 ## 7. A barra do pedido
 
-Fica acima do compositor, na medida da conversa, com `--size-ask` de altura mínima. Existe só enquanto o item pede algo. É o único lugar da ação que resolve, fora as exceções de `structure.md` §3.
+Fica acima do compositor, na coluna da conversa, com a mesma borda esquerda e direita das entradas, e `--size-ask` de altura mínima. Existe só enquanto o item pede algo. É o único lugar da ação que resolve, fora as exceções de `structure.md` §3.
 - **À esquerda:** o glifo, o rótulo em 700, o lugar e o chip de tempo.
 - **No meio:** o progresso, quando há. Não repete a razão que o bloco de erro já diz.
 - **À direita:** as ações.
@@ -189,7 +211,7 @@ A barra é `role="region"` com nome, e o texto de estado é `role="status"`. Um 
 
 **Quando existe.** Sempre que a conversa na tela existe. Sem sessão ainda, ele sai, e o vazio ou o bloco de erro dizem por quê. É o caso do PR review antes da primeira passada e do step bloqueado antes de abrir. Numa conversa em que o produto não age mais (o revisor depois de **Review myself**), ele continua aceitando mensagens.
 
-**Anatomia.** A caixa `--surface-input` com borda `--line-3`, na medida da conversa. O rodapé tem:
+**Anatomia.** A caixa `--surface-input` com borda `--line-3`, na coluna da conversa, com a mesma borda esquerda e direita das entradas e da barra do pedido. O rodapé tem:
 - à esquerda, o seletor de modelo e esforço da sessão (`Opus · high ▾`), que vale a partir da próxima mensagem. Um modelo sem esforço mostra só o nome, e uma escolha que o catálogo não tem mais aparece com `◇` e a razão;
 - à direita, **Send**, ou, com o agente trabalhando, `◌ Working · 3m 40s` e **Stop**.
 
@@ -304,7 +326,7 @@ A task de referência é `Rate limit per API key`, Structured, modo `Agent`, com
 | **Aguardando o usuário** | A barra do pedido, o glifo âmbar na pílula e na aba de fora, o cartão com o anel âmbar. A barra e o cartão novos piscam no véu e são anunciados |
 | **Agente trabalhando** | O spinner na pílula e na aba, `working` na pílula sem barra, o grupo vivo com a ação no resumo, **Stop** e `Working · 3m 40s` no compositor. Esperar os checks é o GitHub trabalhando: círculo tracejado e `checks 3/5`, sem barra |
 | **Pausado e ocioso** | Pausada: **Resume** no cabeçalho, a pílula neutra com `paused`, nenhuma barra do pedido, e o compositor diz `Sending resumes the task…`. Ociosa (parada sozinha depois de 10 minutos): o glifo ocioso na aba, e a próxima mensagem retoma sem aviso |
-| **Muitos itens** | Uma sessão longa fica legível pelos grupos dobrados, pelo `Show N earlier actions` e pelas mensagens do produto em uma linha. A conversa é virtualizada acima de algumas centenas de entradas. Uma task com muitos steps muda só a posição (`12/18`); `Details` rola |
+| **Muitos itens** | Uma sessão longa fica legível pelos grupos dobrados (o vivo também), pelo `Show N earlier actions`, pelas mensagens do produto em uma linha, pelas dobras de trecho e pelo código cortado em 20 linhas. A conversa é virtualizada acima de algumas centenas de entradas. Uma task com muitos steps muda só a posição (`12/18`); `Details` rola |
 | **Item que sumiu** | A task encerrada ou apagada com a tela aberta: a área principal diz `This task was closed and archived.` com **Open in History**, ou `This task was deleted.`, e a árvore já não a mostra |
 
 ## 13. Atalhos
@@ -314,17 +336,20 @@ A task de referência é `Rate limit per API key`, Structured, modo `Agent`, com
 | `Alt+←`, `Alt+→` | Qualquer lugar | Volta e avança no histórico |
 | `Ctrl+J` | Qualquer lugar | Abre o próximo item que espera, com o foco no que ele pede |
 | `←` `→` | Abas `Implementer` e `Reviewer` | Trocam de aba |
-| `1`–`9` | Cartão de pergunta ou de permissão | Responde |
+| `↑` `↓`, Page Up, Page Down, Home, End | Conversa | Andam pelas entradas que se operam |
+| `→` `←` | Grupo, comando, marco ou dobra em foco na conversa | Abre, dobra |
+| `1`–`9` | Cartão de pergunta, ou a entrada dele | Escolhe a opção; `Enter` envia |
+| `1`–`3` | Cartão de permissão, ou a entrada dele | **Allow**, **Allow for this session**, **Deny…** |
 | `A`, `D` | Apontamento em foco | Aprova, descarta |
 | `Alt+↓`, `Alt+↑` | Com apontamentos a decidir | Próximo e anterior por decidir |
 | `Enter`, `Shift+Enter` | Compositor | Envia, quebra a linha |
 | `Ctrl+E` | Item com worktree | **Open in VS Code**. Atalho novo, escrito no item do `⋯` |
 | `↑` `↓` `Enter` | `⋯`, popovers, `listbox` | Percorrem e escolhem |
-| `Esc` | Qualquer lugar | Fecha o `listbox`, o popover, o `⋯` e o painel, e sai de uma conversa anterior, nesta ordem |
+| `Esc` | Qualquer lugar | Fecha o `listbox`, o popover, o `⋯` e o painel, e sai de uma conversa anterior, nesta ordem. Com o foco na conversa, devolve o foco ao compositor |
 
 `Ctrl+E`, `←` `→` nas abas e `Esc` para sair de uma conversa anterior são novos e entram em `structure.md` §5. Os demais já estão lá.
 
-A ordem de Tab é: cabeçalho (navegação, breadcrumb, stepper, ferramentas), abas, conversa, barra do pedido, compositor, painel.
+A ordem de Tab é: cabeçalho (navegação, breadcrumb, stepper, ferramentas), abas, conversa, barra do pedido, compositor, painel. Cada região é uma parada: na conversa, a entrada atual e os controles dela; num `radiogroup` e num cartão de apontamentos, o item em foco. As setas fazem o resto.
 
 ## 14. Os componentes que entram em `system/components.md`
 
@@ -335,7 +360,11 @@ O coordenador consolida. Os estados de cada um estão em `components.html`.
 - **Abas de agente**, a forma mínima da **Aba**: texto com o glifo, sublinhado na escolhida, palavra na aba de fora quando espera ou falhou.
 - **Marco em linha**, a forma do **Marcador**: uma linha à esquerda, sem fios, que abre o conteúdo no lugar. Cobre o documento, o relatório, a instrução inicial, o card de entrada, o commit, a abertura e o merge da PR e as decisões do usuário.
 - **Mensagem do produto** como marco, com o destinatário e o conteúdo em Markdown a um clique.
-- **Grupo de ações**: dobrado é uma linha sem fundo, e aberto é o bloco afundado. Tem o rótulo pela descrição, o resumo por tipo, `Show N earlier actions` e o **subagente aninhado**.
+- **Grupo de ações**: dobrado é uma linha sem fundo, e aberto é o bloco afundado. Tem o resumo por tipo, `Show N earlier actions` e o **subagente aninhado**.
+- **Comando**: a ação rotulada pela descrição, com o comando apagado, a duração ou o código de saída, e a saída dobrada.
+- **Dobra de trecho**, para as sessões longas.
+- **Código cortado**: o bloco de código acima de 24 linhas.
+- **Quem fala**: a palavra do autor, que substitui o avatar.
 - **Resposta rápida**, as pastilhas no compositor.
 - **Cartão neutro**: um cartão sem ação própria (os arquivos de um step `Manual`, os apontamentos), cuja barra é tingida.
 - **Apontamento** e **cartão de decisão**, compartilhados com o centro de review.
@@ -349,9 +378,11 @@ O coordenador consolida. Os estados de cada um estão em `components.html`.
 - **Volta ao fim** com a ação em curso.
 - **Painel auxiliar**, com a regra de coluna ou cobertura em pixel inteiro.
 
-**Retirados:** a **Etapa** como chip da trilha, a barra do step, a faixa de review e o destinatário do compositor.
+**Retirados:** a **Etapa** como chip da trilha, a barra do step, a faixa de review, o destinatário do compositor, o avatar e a hora visível de cada entrada.
 
 **Regras que mudam**
+- A conversa tem uma largura só, a da coluna, para tudo o que está nela, a barra do pedido e o compositor.
+- Nenhuma hora à vista na conversa; ela aparece com hover e foco.
 - Sem sessão, o compositor sai em vez de ficar desabilitado.
 - **`→`** aparece só com destino.
 - O glifo de tipo e a referência saem do cabeçalho.
@@ -375,6 +406,12 @@ O coordenador consolida. Os estados de cada um estão em `components.html`.
 | Ler a conversa de um lugar que não é o atual | As conversas anteriores em `Details` | Só frontend: `GetTranscript(item, stage)` já existe por lugar |
 | Os checks pelo nome durante `Waiting for checks` | O vazio do PR review e `Details` | Pequeno |
 | Marcos das decisões do usuário (rascunho aprovado, apontamentos decididos, mudanças aprovadas) | `You approved the draft`, `You decided…` | Pequeno: tipos novos de marcador |
-| A hora do commit de cada step e quem fez o merge | `Committed c19f02e · 18:31`, `Merged by lnakamura` | Pequeno: o git e o `gh` já sabem |
+| A hora do commit de cada step e quem fez o merge | `Committed c19f02e` (a hora com hover e em `Details`), `Merged by lnakamura` | Pequeno: o git e o `gh` já sabem |
+| A saída de cada comando (`stdout`, `stderr`, a cauda) e o número de linhas | A saída dobrada do comando, a cauda aberta de uma falha, `N more lines above` | **Médio.** O `tool_use_result` chega a cada ação e é descartado. O barato é guardar as últimas 40 linhas e a contagem, sem **Show all**; mostrar tudo pede guardar a saída inteira (até 16 MiB por linha) |
+| `attempt`, `max_retries`, `retry_delay_ms` e o erro do `api_retry` | `Retrying · attempt 3 of 10 · … · next try in 8 s` e o marco `Retried on its own` | Pequeno: o evento chega e é ignorado; o marco é um tipo novo |
+| Quem interrompeu | `Interrupted by you`, distinto de uma queda | Pequeno: um campo no marcador `interrupted` |
+| A hora da resposta de uma pergunta estruturada | O tooltip da pergunta respondida | Pequeno: a permissão tem `answeredAt`, e a pergunta não |
+| A porcentagem de contexto na compactação | `Context compacted · at 81%` | Pequeno: `preTokens` já chega; falta a janela de contexto no momento |
+| A hora de cada entrada e o número de entradas novas fora do fim | O hover, o nome acessível e `New messages 2` | Só frontend: toda entrada tem `createdAt` |
 | As opções de uma pergunta em texto | A resposta rápida | Nenhum: heurística do frontend sobre `a)` e `1.` no último parágrafo |
 | **Apontamentos estruturados no review da PR da task, com a decisão guardada e Apply approved** | O cartão de decisão da seção 9 | **Médio, e muda uma feature.** O review da PR da task passa a usar o formato de relatório e a decisão do centro de review, e o prompt de review de PR muda. Hoje a decisão é em texto na conversa |

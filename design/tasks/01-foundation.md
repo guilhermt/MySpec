@@ -40,7 +40,7 @@ O app inteiro passa a pintar com `design/system/tokens.css`, em Fira Sans e Fira
 3. **Ponte do shadcn** em `globals.css`: as variáveis que os primitivos leem apontam para os tokens do system (tabela da §5.1).
 4. **Ponte do Tailwind** (`@theme inline`): os namespaces `--color-*`, `--font-*`, `--radius-*`, `--shadow-*` e `--ease-*` resolvem para os tokens.
 5. **Tema** por `data-theme`: o script de `index.html` (7–17), `features/theme/useApplyTheme.ts` (16), a variante `dark` do Tailwind (`globals.css:10`) e os testes de `ThemeToggle.test.tsx` (41, 51).
-6. **Streamdown** (`features/chat/Markdown.tsx`): o registro de leitura (16/26 px em `--measure-read`, `--ink-1`) e o bloco de código com os quatro matizes `--code-*` no lugar de `github-light`/`github-dark` (19).
+6. **Streamdown** (`features/chat/Markdown.tsx`): o registro de leitura (15/22 px na coluna de `--measure-conversation`, `--ink-1`) e o bloco de código com os quatro matizes `--code-*` no lugar de `github-light`/`github-dark` (19).
 7. **Regras do WebKitGTK** sem camada em `globals.css`, com teste: a centralização em pixel inteiro e os tokens em pixel inteiro.
 8. **`src/components/system/`** com os wrappers, um arquivo e um teste por componente: glifo de estado; spinner e brilho; ícones (um por significado); tooltip; etiqueta, tag, placeholder e tecla; avatar; link; botão (primário, secundário, fantasma, perigoso, **New**, ícone; a tecla `.k`; desabilitado tracejado com a razão; carregando); chip; chip de tempo; input, textarea e busca; select, menu e listbox; caixa de seleção; rádio; controle segmentado; collapsible; scroll area com a barra de rolagem; esqueleto; estado vazio de página; faixa de aviso; linha afundada; diálogo (mínimo, largo, em passos, destrutivo); bloco de código; medidor de contexto.
 9. **Documentação** da §7.
@@ -178,7 +178,7 @@ Os arquivos de produção que importam cada primitivo, contados por `grep` em `s
 | `toggle` | 2 (board, reviews) | Chip que alterna | Não |
 | `separator` | 0 | Separador | Sem uso hoje |
 
-Sem primitivo, próprios: glifo de estado, spinner e brilho, ícone, avatar, link, chip de tempo, estado vazio, faixa de aviso, linha afundada, bloco de código (o do Streamdown, tematizado), medidor de contexto. O `features/task/ContextGauge.tsx` atual fica até a task 3, e fica âmbar ao encher (`ContextGauge.tsx:13`), o que `components.md:561` proíbe no novo.
+Sem primitivo, próprios: glifo de estado, spinner e brilho, ícone, link, chip de tempo, estado vazio, faixa de aviso, linha afundada, bloco de código (o do Streamdown, tematizado), medidor de contexto. O `features/task/ContextGauge.tsx` atual fica até a task 3, e fica âmbar ao encher (`ContextGauge.tsx:13`), o que `components.md:561` proíbe no novo.
 
 Em `src/components/` ficam também `FilterMenu.tsx` e `useEditedText.ts`, que não mudam nesta task.
 

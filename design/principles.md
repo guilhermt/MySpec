@@ -22,12 +22,11 @@ Ele tem estes papéis, e só estes:
 - a linha aberta: véu, anel e glifo de tipo;
 - os links;
 - a etapa atual e os seus segmentos;
-- o marcador do agente, cheio no implementador e anel no revisor;
 - a marca `Ctrl J`;
 - um controle pressionado ou escolhido: painel aberto, opção, chip;
 - o medidor de contexto.
 
-O agente trabalhando é tinta neutra em movimento.
+Quem fala na conversa não é marcado pelo azul: o agente é uma palavra em tinta neutra, e a aba diz qual dos dois agentes de um step está na tela. O agente trabalhando é tinta neutra em movimento.
 
 Há uma ação primária por tela, e ela é a que resolve o que a tela pede. O **Send** do compositor fica primário com texto só quando nada mais na tela espera uma resposta. Com um cartão de pergunta ou de permissão na tela, a primária é a do cartão, e o **Send** fica secundário mesmo com texto.
 
@@ -37,9 +36,9 @@ Há uma ação primária por tela, e ela é a que resolve o que a tela pede. O *
 
 O cromo é compacto e a conversa é leitura.
 
-A lateral, as barras e os controles usam rótulos de uma linha, de 12 a 14 px, com entrelinha justa. A fala do agente usa 16 px em 26 px, numa medida de 42rem. O mesmo produto tem uma mesa de comando densa e um texto confortável para ler por horas.
+A lateral, as barras e os controles usam rótulos de uma linha, de 12 a 14 px, com entrelinha justa. A fala do agente usa 15 px em 22 px, sem cartão, na coluna da conversa de 60rem, a mesma largura de tudo o que está nela. O mesmo produto tem uma mesa de comando densa e um texto confortável para ler por horas.
 
-*Exemplo:* a linha 2 de uma linha da árvore tem 13/18 px, em `--ink-3`. A resposta do revisor tem 16/26 px, em `--ink-1`.
+*Exemplo:* a linha 2 de uma linha da árvore tem 13/18 px, em `--ink-3`. A resposta do revisor tem 15/22 px, em `--ink-1`, com a borda esquerda e a direita do código, dos cartões e do compositor.
 
 ## 4. Hierarquia por peso e tom antes de cor
 

@@ -1,0 +1,8 @@
+/* =====================================================================
+   b · A fluid column: side margins of 5% of the conversation's width
+   (never under --space-6), up to --measure-conversation-max (1120 px).
+   Everything in the conversation has its edges, as in a. The speech is
+   set in the reading size, with the reading leading (16/26).
+   ===================================================================== */
+.m .colconvo { container: conv / inline-size; --measure: calc(round(down, min(var(--measure-conversation-max), 100cqi - 2 * max(var(--space-6), var(--conversation-margin))), 2px) + var(--space-6) * 2); }
+.wb { --w-text: var(--text-read); --w-leading: var(--leading-read); }
