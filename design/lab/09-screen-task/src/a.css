@@ -1,0 +1,73 @@
+/* =====================================================================
+   A · Conversation with milestones. The task is one stream, from the card
+   to the merge. Stages and steps are chapters; the past folds to one line;
+   the right margin holds the milestones when there is room.
+   ===================================================================== */
+.colconvo { container: convo / inline-size; }
+.convo-in { gap: var(--space-4); }
+
+/* A folded chapter: one line with what it produced. */
+.chap { display: flex; flex-direction: column; gap: var(--space-5); scroll-margin-top: var(--space-2); }
+.chap.done { gap: 0; }
+.chap-sum { display: grid; grid-template-columns: var(--size-avatar) minmax(0, 1fr) auto; column-gap: var(--space-2-5); align-items: center; width: 100%; min-height: var(--size-control); padding: var(--space-1) var(--space-2); margin: 0 calc(var(--space-2) * -1); border-radius: var(--radius-md); font-size: var(--text-meta); line-height: var(--leading-meta); color: var(--ink-2); transition: background var(--duration-fast) var(--ease-standard); }
+.chap-sum:hover, .chap-sum.is-hover { background: var(--veil-hover); }
+.chap-sum:active, .chap-sum.is-active { background: var(--veil-press); }
+.chap-sum .ci { width: var(--size-avatar); height: var(--size-avatar); display: inline-grid; place-items: center; color: var(--ink-3); }
+.chap-sum .ci svg { width: var(--icon-sm); height: var(--icon-sm); }
+.chap-sum .tx { display: flex; align-items: baseline; gap: var(--space-2); min-width: 0; white-space: nowrap; }
+.chap-sum .nm { color: var(--ink-1); font-weight: var(--weight-medium); flex: none; }
+.chap-sum .sub { color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.chap-sum .sha { font-family: var(--font-mono); font-size: var(--text-micro); color: var(--ink-2); font-variant-ligatures: none; }
+.chap-sum .r { display: inline-flex; gap: var(--space-2); align-items: center; color: var(--ink-4); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.chap-sum .r svg { width: var(--icon-xs); height: var(--icon-xs); transition: transform var(--duration-fast) var(--ease-standard); }
+.chap-sum[aria-expanded="true"] .r svg { transform: rotate(90deg); }
+.chap-sum.is-disabled { cursor: default; } .chap-sum.is-disabled .nm { color: var(--ink-3); }
+.chap-sum.is-loading { cursor: progress; }
+.chap-sum.is-error .sub { color: var(--state-error); }
+.chap.done .chap-body { display: flex; flex-direction: column; gap: var(--space-5); padding: var(--space-3) 0 var(--space-4); }
+.folded { display: flex; flex-direction: column; gap: 0; padding-bottom: var(--space-2); box-shadow: 0 var(--border) 0 var(--line-1); }
+.folded-h { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-4) 0 var(--space-1); font-size: var(--text-micro); line-height: var(--leading-micro); color: var(--ink-3); }
+.folded-h .grow { height: var(--border); background: transparent; }
+
+/* The chapter that is now: its header sticks while you read it. */
+.chap-h { position: sticky; top: 0; z-index: var(--z-sticky); background: var(--surface-1); margin: 0 calc(var(--space-6) * -1); padding: var(--space-3) var(--space-6) var(--space-2); display: flex; flex-direction: column; gap: var(--space-1-5); box-shadow: 0 var(--border) 0 var(--line-1); }
+.chap-h .l1 { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.chap-h .l1 .ttl { display: flex; align-items: baseline; gap: var(--space-2); min-width: 0; font-size: var(--text-ui); line-height: var(--leading-ui); }
+.chap-h .l1 .ttl b { font-weight: var(--weight-strong); color: var(--ink-1); white-space: nowrap; }
+.chap-h .l1 .ttl span { color: var(--ink-2); }
+.chap-h .l1 .tools { margin-left: auto; display: flex; gap: var(--space-1); flex: none; }
+.chap-h .l2 { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
+.chap-h .l2 { flex-wrap: wrap; row-gap: var(--space-1); }
+.chap-h .l2 .beats { flex: 0 1 auto; margin-left: calc(var(--space-1-5) * -1); flex-wrap: nowrap; }
+.chap-h .l2 .switch { margin-left: auto; }
+.chap-h .switch .sw { height: var(--size-control-xs); padding: 0 var(--space-2); font-size: var(--text-meta); line-height: var(--leading-meta); }
+@container convo (max-width: 1200px) { .chap-h .l1 .tools .lbl-long { display: none; } .chap-h .mbtn .lbl-long { display: none; } .beat:not(.cur) .cap { display: none; } }
+
+/* The milestones in the right margin, when the margin can hold them. */
+.outline { position: absolute; top: var(--space-4); left: calc(round(down, 50%, 1px) + var(--measure) / 2 + var(--space-4)); width: calc(var(--space-16) * 3.5); max-height: calc(100% - var(--space-8)); overflow: auto; display: none; flex-direction: column; gap: var(--space-0-5); font-size: var(--text-meta); line-height: var(--leading-meta); z-index: var(--z-sticky); }
+@container convo (min-width: 1400px) { .outline { display: flex; } .chap-h .mbtn { display: none; } }
+.outline .cap, .pop .cap { font-size: var(--text-caps); line-height: var(--leading-caps); font-weight: var(--weight-bold); letter-spacing: var(--tracking-caps); text-transform: uppercase; color: var(--ink-3); padding: 0 var(--space-2) var(--space-1-5); }
+.oi { display: grid; grid-template-columns: var(--icon) minmax(0, 1fr) auto; column-gap: var(--space-2); align-items: center; min-height: var(--size-control-xs); padding: var(--space-0-5) var(--space-2); border-radius: var(--radius-sm); color: var(--ink-2); position: relative; width: 100%; transition: background var(--duration-fast) var(--ease-standard); }
+.oi:hover, .oi.is-hover { background: var(--veil-hover); color: var(--ink-1); }
+.oi:active, .oi.is-active { background: var(--veil-press); }
+.oi .c1 { display: grid; place-items: center; }
+.oi .c1 svg { width: var(--icon-xs); height: var(--icon-xs); color: var(--ink-3); }
+.oi .lb { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.oi .t { color: var(--ink-4); font-size: var(--text-micro); line-height: var(--leading-micro); font-variant-numeric: tabular-nums; }
+.oi.cur { color: var(--brand-ink); font-weight: var(--weight-strong); }
+.oi.cur .c1 .st { background: var(--brand); box-shadow: none; }
+.oi.next { color: var(--ink-3); }
+.oi.kid { padding-left: var(--space-6); font-size: var(--text-micro); line-height: var(--leading-micro); min-height: var(--size-kbd); }
+.oi.kid .st { width: var(--glyph-sm); height: var(--glyph-sm); }
+.oi.inview::before { content: ""; position: absolute; left: calc(var(--space-1) * -1); top: var(--space-1); bottom: var(--space-1); width: var(--border-2); border-radius: var(--radius-pill); background: var(--brand-ring); }
+.oi:disabled, .oi.is-disabled { color: var(--ink-4); cursor: default; background: transparent; }
+.outline .keys { margin-top: var(--space-3); padding: 0 var(--space-2); font-size: var(--text-micro); line-height: var(--leading-micro); color: var(--ink-3); display: flex; gap: var(--space-1-5); align-items: center; }
+.pop.milestones { width: calc(var(--space-16) * 4.5); max-height: calc(100vh - var(--space-16) * 2); overflow: auto; display: flex; flex-direction: column; gap: var(--space-0-5); font-size: var(--text-meta); line-height: var(--leading-meta); }
+
+/* Hidden by the voice filter. */
+.lane[hidden], .fl-hide { display: none !important; }
+.oi .os { grid-column: 2 / 4; font-size: var(--text-micro); line-height: var(--leading-micro); color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: var(--weight-regular); }
+.oi.cur .os { color: var(--ink-3); }
+.outline { gap: var(--space-1); width: calc(var(--space-16) * 4); }
+.empty-place { display: flex; flex-direction: column; gap: var(--space-2); align-items: flex-start; padding: var(--space-4) 0; color: var(--ink-3); font-size: var(--text-body); line-height: var(--leading-body); }
+.empty-place b { color: var(--ink-1); font-weight: var(--weight-strong); }

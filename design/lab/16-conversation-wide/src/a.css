@@ -1,0 +1,8 @@
+/* =====================================================================
+   a · A centred column of --measure-conversation (960 px). Everything in
+   the conversation has its edges: the speech, your message, the actions,
+   code, tables, the requests, the milestones, the ask bar and the
+   composer. The speech is set in the body size (15/22).
+   ===================================================================== */
+.m { --measure: calc(var(--measure-conversation) + var(--space-6) * 2); }
+.wa { --w-text: var(--text-body); --w-leading: var(--leading-body); }
