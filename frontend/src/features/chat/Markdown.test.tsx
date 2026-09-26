@@ -17,6 +17,26 @@ describe("Markdown", () => {
 
     expect(screen.getByTestId("markdown")).toHaveTextContent("Half a sen");
   });
+
+  it("reads in the reading register, on the measure of the conversation", () => {
+    renderWithStore(<Markdown>Some text</Markdown>);
+
+    expect(screen.getByTestId("markdown")).toHaveClass(
+      "text-(length:--text-body)",
+      "leading-(--leading-body)",
+      "text-ink-1",
+      "max-w-(--measure-conversation)",
+    );
+  });
+
+  it("highlights code with the system's pair of code themes", () => {
+    renderWithStore(<Markdown>Some text</Markdown>);
+
+    expect(screen.getByTestId("markdown")).toHaveAttribute(
+      "data-shiki-theme",
+      "myspec-light myspec-dark",
+    );
+  });
 });
 
 describe("ExternalLink", () => {

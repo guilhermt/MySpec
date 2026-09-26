@@ -14,10 +14,29 @@ vi.mock("@wailsio/runtime", () => ({
 }));
 
 // Shiki and mermaid need a browser to load their grammars and draw; under jsdom
-// only the text of the Markdown matters, so the renderer is reduced to it.
+// only the text, the classes and the code themes of the Markdown matter, so the
+// renderer is reduced to them.
 vi.mock("streamdown", () => ({
-  Streamdown: ({ children }: { children: string }) =>
-    createElement("div", { "data-testid": "markdown" }, children),
+  Streamdown: ({
+    children,
+    className,
+    shikiTheme,
+  }: {
+    children: string;
+    className?: string;
+    shikiTheme?: readonly (string | { name?: string })[];
+  }) =>
+    createElement(
+      "div",
+      {
+        "data-testid": "markdown",
+        className,
+        "data-shiki-theme": shikiTheme
+          ?.map((theme) => (typeof theme === "string" ? theme : theme.name))
+          .join(" "),
+      },
+      children,
+    ),
 }));
 vi.mock("@streamdown/code", () => ({ code: {} }));
 vi.mock("@streamdown/mermaid", () => ({ createMermaidPlugin: () => ({}) }));

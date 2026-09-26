@@ -263,9 +263,6 @@
   /* Streamdown brings its own classes with the theme variables; only the sizes
      that make a conversation read well are adjusted here. */
   .markdown {
-    & pre {
-      @apply text-xs;
-    }
     & :is(h1, h2, h3) {
       @apply font-semibold tracking-tight;
     }
@@ -371,6 +368,64 @@
   top: round(50%, 1px);
   left: round(50%, 1px);
   translate: round(-50%, 1px) round(-50%, 1px);
+}
+
+/* The chrome of Streamdown's code, drawn with the tokens. Unlayered, because
+   Streamdown styles these elements with utilities, and a rule in
+   @layer components would lose to them. The header keeps Streamdown's height
+   (h-8): its actions are placed against it (-mt-10). */
+.markdown [data-streamdown="inline-code"] {
+  padding: var(--code-pad-y) var(--code-pad-x);
+  border-radius: var(--radius-xs);
+  background: var(--surface-0);
+  color: var(--ink-1);
+  font-size: var(--text-code-read);
+  line-height: inherit;
+}
+.markdown [data-streamdown="code-block"] {
+  gap: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--surface-0);
+  box-shadow: inset 0 0 0 var(--border) var(--line-1);
+  overflow: hidden;
+}
+.markdown [data-streamdown="code-block-header"] {
+  padding-inline: var(--space-3);
+  color: var(--ink-3);
+  font-size: var(--text-micro);
+  line-height: var(--leading-micro);
+  box-shadow: inset 0 calc(var(--border) * -1) 0 var(--line-1);
+}
+.markdown [data-streamdown="code-block-actions"] {
+  border: 0;
+  background: transparent;
+  backdrop-filter: none;
+}
+.markdown [data-streamdown="code-block-copy-button"] {
+  border-radius: var(--radius-sm);
+  color: var(--ink-3);
+  transition:
+    background-color var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard);
+}
+.markdown [data-streamdown="code-block-copy-button"]:hover {
+  background: var(--veil-hover);
+  color: var(--ink-1);
+}
+.markdown [data-streamdown="code-block-copy-button"]:focus-visible {
+  outline: var(--focus-width) solid var(--focus);
+  outline-offset: var(--focus-offset);
+}
+.markdown [data-streamdown="code-block-body"] {
+  padding: var(--space-2) var(--space-3) var(--space-3);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-family: var(--font-mono);
+  font-size: var(--text-code);
+  line-height: var(--leading-code);
 }
 
 /* Every icon draws with the stroke of the system, on every screen. */
