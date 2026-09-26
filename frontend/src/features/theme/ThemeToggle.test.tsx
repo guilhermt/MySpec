@@ -38,7 +38,7 @@ describe("useApplyTheme", () => {
 
     renderHook(() => useApplyTheme());
 
-    expect(document.documentElement).toHaveClass("dark");
+    expect(document.documentElement).toHaveAttribute("data-theme", "dark");
     expect(document.documentElement.style.colorScheme).toBe("dark");
     expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe("dark");
   });
@@ -48,7 +48,7 @@ describe("useApplyTheme", () => {
 
     renderHook(() => useApplyTheme());
 
-    expect(document.documentElement).not.toHaveClass("dark");
+    expect(document.documentElement).toHaveAttribute("data-theme", "light");
     expect(document.documentElement.style.colorScheme).toBe("light");
     expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe("light");
   });

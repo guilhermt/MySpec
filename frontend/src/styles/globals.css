@@ -1,4 +1,7 @@
 @import "tailwindcss";
+/* The tokens live in the design system and are imported from there, the single
+   source of every value the interface paints or measures. */
+@import "../../../design/system/tokens.css";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
@@ -7,129 +10,252 @@
 @source "../../node_modules/@streamdown/code/dist/*.js";
 @source "../../node_modules/@streamdown/mermaid/dist/*.js";
 
-@custom-variant dark (&:is(.dark *));
+/* The theme is the data-theme attribute on the document element. */
+@custom-variant dark (&:is([data-theme="dark"] *));
 
 @theme inline {
-  --font-heading: var(--font-sans);
-  --font-sans: "Inter Variable", sans-serif;
-  --color-sidebar-ring: var(--sidebar-ring);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar: var(--sidebar);
-  --color-chart-5: var(--chart-5);
-  --color-chart-4: var(--chart-4);
-  --color-chart-3: var(--chart-3);
-  --color-chart-2: var(--chart-2);
-  --color-chart-1: var(--chart-1);
-  --color-ring: var(--ring);
-  --color-input: var(--input);
-  --color-border: var(--border);
-  --color-destructive: var(--destructive);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-accent: var(--accent);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-muted: var(--muted);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-secondary: var(--secondary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-primary: var(--primary);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-popover: var(--popover);
-  --color-card-foreground: var(--card-foreground);
-  --color-card: var(--card);
-  --color-foreground: var(--foreground);
+  /* The colours the generated components read, through the bridge below. */
   --color-background: var(--background);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--line-2);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* One family for chrome and headings; font-mono already reads the system's --font-mono. */
+  --font-sans: var(--font-ui);
+  --font-heading: var(--font-ui);
+
+  /* The utilities of the system, one per token and named after it. A line
+     --x: var(--x) only registers the name as a utility: the unlayered
+     declaration of tokens.css wins over the one in this layer. shadow-xs needs
+     it, because without it Tailwind inlines its own default value. */
+  --color-surface-0: var(--surface-0);
+  --color-surface-1: var(--surface-1);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-surface-input: var(--surface-input);
+  --color-surface-user: var(--surface-user);
+  --color-surface-sidebar: var(--surface-sidebar);
+  --color-sidebar-input: var(--sidebar-input);
+  --color-sidebar-line: var(--sidebar-line);
+  --color-sidebar-control: var(--sidebar-control);
+  --color-sidebar-guide: var(--sidebar-guide);
+  --color-line-1: var(--line-1);
+  --color-line-2: var(--line-2);
+  --color-line-3: var(--line-3);
+  --color-line-deco: var(--line-deco);
+  --color-ink-1: var(--ink-1);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-ink-4: var(--ink-4);
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-brand-active: var(--brand-active);
+  --color-brand-on: var(--brand-on);
+  --color-brand-ink: var(--brand-ink);
+  --color-brand-ring: var(--brand-ring);
+  --color-brand-track: var(--brand-track);
+  --color-brand-veil: var(--brand-veil);
+  --color-brand-tint: var(--brand-tint);
+  --color-brand-tint-hover: var(--brand-tint-hover);
+  --color-brand-tint-press: var(--brand-tint-press);
+  --color-brand-tint-plane: var(--brand-tint-plane);
+  --color-brand-seg-todo: var(--brand-seg-todo);
+  --color-brand-marker-ring: var(--brand-marker-ring);
+  --color-brand-key-ring: var(--brand-key-ring);
+  --color-veil-hover: var(--veil-hover);
+  --color-veil-press: var(--veil-press);
+  --color-surface-2-hover: var(--surface-2-hover);
+  --color-surface-2-press: var(--surface-2-press);
+  --color-focus: var(--focus);
+  --color-focus-halo: var(--focus-halo);
+  --color-state-error: var(--state-error);
+  --color-state-error-hover: var(--state-error-hover);
+  --color-state-error-press: var(--state-error-press);
+  --color-state-error-veil: var(--state-error-veil);
+  --color-state-error-on: var(--state-error-on);
+  --color-state-wait: var(--state-wait);
+  --color-state-wait-glyph: var(--state-wait-glyph);
+  --color-state-wait-ring: var(--state-wait-ring);
+  --color-state-wait-veil: var(--state-wait-veil);
+  --color-state-wait-line: var(--state-wait-line);
+  --color-state-wait-chip: var(--state-wait-chip);
+  --color-state-wait-chip-ink: var(--state-wait-chip-ink);
+  --color-state-close: var(--state-close);
+  --color-state-work: var(--state-work);
+  --color-state-work-track: var(--state-work-track);
+  --color-state-github: var(--state-github);
+  --color-state-paused: var(--state-paused);
+  --color-state-idle: var(--state-idle);
+  --color-state-notice: var(--state-notice);
+  --color-tooltip-surface: var(--tooltip-surface);
+  --color-tooltip-ink: var(--tooltip-ink);
+  --color-tooltip-ink-2: var(--tooltip-ink-2);
+  --color-scrim: var(--scrim);
+
+  --shadow-xs: var(--shadow-xs);
+  --shadow-button: var(--shadow-button);
+  --shadow-primary: var(--shadow-primary);
+  --shadow-card: var(--shadow-card);
+  --shadow-float: var(--shadow-float);
+  --shadow-overlay: var(--shadow-overlay);
+  --shadow-mark: var(--shadow-mark);
+
+  --ease-standard: var(--ease-standard);
+  --ease-enter: var(--ease-enter);
+  --ease-exit: var(--ease-exit);
 }
 
-:root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.457 0.24 277.023);
-  --primary-foreground: oklch(0.962 0.018 272.314);
-  --secondary: oklch(0.967 0.001 286.375);
-  --secondary-foreground: oklch(0.21 0.006 285.885);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.511 0.262 276.966);
-  --sidebar-primary-foreground: oklch(0.962 0.018 272.314);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+/* The bridge: the variables the generated components read, with no value of
+   their own, each pointing at a token. Declared on every scope, like the
+   derived tokens, so a subtree with its own data-theme resolves them against
+   its own colours. */
+:root,
+[data-theme] {
+  --background: var(--surface-1);
+  --foreground: var(--ink-1);
+  --card: var(--surface-2);
+  --card-foreground: var(--ink-1);
+  --popover: var(--surface-3);
+  --popover-foreground: var(--ink-1);
+  --primary: var(--brand);
+  --primary-foreground: var(--brand-on);
+  --secondary: var(--surface-2);
+  --secondary-foreground: var(--ink-1);
+  --muted: var(--surface-0);
+  --muted-foreground: var(--ink-3);
+  --accent: var(--veil-hover);
+  --accent-foreground: var(--ink-1);
+  --destructive: var(--state-error);
+  --input: var(--line-3);
+  --ring: var(--focus);
+  --sidebar: var(--surface-sidebar);
+  --sidebar-foreground: var(--ink-1);
+  --sidebar-primary: var(--brand);
+  --sidebar-primary-foreground: var(--brand-on);
+  --sidebar-accent: var(--veil-hover);
+  --sidebar-accent-foreground: var(--ink-1);
+  --sidebar-border: var(--sidebar-line);
+  --sidebar-ring: var(--focus);
+
+  /* Session status, for the screens that still read it; each is a state of the system. */
+  --status-working: var(--state-work);
+  --status-attention: var(--state-wait);
+  --status-success: var(--state-close);
+  --status-paused: var(--state-paused);
 }
 
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.398 0.195 277.366);
-  --primary-foreground: oklch(0.962 0.018 272.314);
-  --secondary: oklch(0.274 0.006 286.033);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.585 0.233 277.117);
-  --sidebar-primary-foreground: oklch(0.962 0.018 272.314);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+/* Focus sits outside, with a gap (principles.md 9). */
+@utility focus-ring {
+  outline: var(--focus-width) solid var(--focus);
+  outline-offset: var(--focus-offset);
+}
+/* A field shows focus on its border, with the halo. */
+@utility field-focus {
+  outline: none;
+  border-color: var(--focus);
+  box-shadow: 0 0 0 var(--halo) var(--focus-halo);
+}
+/* A field in error: the border and the inner rail. */
+@utility field-error {
+  border-color: var(--state-error);
+  box-shadow: inset var(--error-rail) 0 0 var(--state-error);
+}
+/* Disabled in every variant: dashed control line, faint ink, no body, no shadow. */
+@utility dashed-disabled {
+  border-style: dashed;
+  border-color: var(--line-3);
+  background: transparent;
+  color: var(--ink-4);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+/* The one loop of the spinner. Without motion it stops as a three-quarter ring. */
+@utility spin-glyph {
+  animation: glyph-spin var(--duration-spin) linear infinite;
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+    border-top-color: var(--spin-arc);
+    border-right-color: var(--spin-arc);
+    border-left-color: var(--spin-arc);
+  }
+}
+/* A reading without a result: the shimmer runs over text, a fill, or the meter track; without motion, flat. */
+@utility shimmer-text {
+  background:
+    linear-gradient(90deg, var(--ink-3) 40%, var(--ink-1) 50%, var(--ink-3) 60%) 0 0 / 300% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  animation: shimmer var(--duration-shimmer) linear infinite;
+  @media (prefers-reduced-motion: reduce) {
+    background: none;
+    color: var(--ink-3);
+    animation: none;
+  }
+}
+@utility shimmer-fill {
+  background:
+    linear-gradient(90deg, var(--surface-0) 40%, var(--line-1) 50%, var(--surface-0) 60%) 0 0 / 300%
+    100%;
+  animation: shimmer var(--duration-shimmer) linear infinite;
+  @media (prefers-reduced-motion: reduce) {
+    background: var(--surface-0);
+    animation: none;
+  }
+}
+@utility shimmer-track {
+  background:
+    linear-gradient(90deg, var(--brand-track) 40%, var(--brand-ring) 50%, var(--brand-track) 60%) 0
+    0 / 300% 100%;
+  animation: shimmer var(--duration-shimmer) linear infinite;
+  @media (prefers-reduced-motion: reduce) {
+    background: var(--brand-track);
+    animation: none;
+  }
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
-  body {
-    @apply bg-background text-foreground;
-  }
+  /* Every weight and the italic in use are loaded, so nothing is synthesised. */
   html {
     @apply font-sans;
+    font-synthesis: none;
+  }
+  /* The interface register on the browser's 16px root: sizes are rem. */
+  body {
+    @apply bg-background text-foreground;
+    font-size: var(--text-ui);
+    line-height: var(--leading-ui);
+    overscroll-behavior: none;
+    user-select: none;
+  }
+  /* The system writes mono without ligatures, and Fira Code ligates by default. */
+  :where(code, kbd, pre, samp, .font-mono) {
+    font-variant-ligatures: none;
   }
 }
 
@@ -137,9 +263,6 @@
   /* Streamdown brings its own classes with the theme variables; only the sizes
      that make a conversation read well are adjusted here. */
   .markdown {
-    & pre {
-      @apply text-xs;
-    }
     & :is(h1, h2, h3) {
       @apply font-semibold tracking-tight;
     }
@@ -191,6 +314,21 @@
   }
 }
 
+@keyframes glyph-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}
+
 /* Without motion the highlight still shows, still for as long, only without
    moving: the class leaves after FLASH_MS. */
 @media (prefers-reduced-motion: reduce) {
@@ -204,15 +342,100 @@
   }
 }
 
-/* Dialogs are centred with top and left at 50% and a -50% translate. When the
-   width or the height of a dialog is odd, the translate lands on half a pixel,
-   and WebKitGTK composites the dialog there and resamples it, blurring its text
-   and borders. Rounding each value keeps the dialog on whole pixels. Unlayered,
-   so it wins over the utilities of the generated components; globals.test.tsx
-   fails when those components stop matching it. */
+/* Without motion every transition and animation lands at once. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0ms !important;
+    animation-duration: 0ms !important;
+  }
+}
+
+/* Selected text takes the identity, mixed as a marker. */
+::selection {
+  background: color-mix(in srgb, var(--brand) var(--mix-marker), transparent);
+}
+
+/* Dialogs open 8vh from the top and grow downwards, so opening a section never
+   moves the title. The left edge is rounded to the pixel: when the width is odd
+   the -50% translate lands on half a pixel, and WebKitGTK composites the dialog
+   there and resamples it, blurring its text and borders. Unlayered, so it wins
+   over the utilities of the generated components; globals.test.tsx fails when
+   those components stop matching it. */
 [data-slot="dialog-content"],
 [data-slot="alert-dialog-content"] {
-  top: round(50%, 1px);
+  top: round(8vh, 1px);
   left: round(50%, 1px);
-  translate: round(-50%, 1px) round(-50%, 1px);
+  translate: round(-50%, 1px) 0;
+}
+
+/* The veil under a dialog is the scrim of the system, without blur. */
+[data-slot="dialog-overlay"],
+[data-slot="alert-dialog-overlay"] {
+  background: var(--scrim);
+  backdrop-filter: none;
+}
+
+/* The chrome of Streamdown's code, drawn with the tokens. Unlayered, because
+   Streamdown styles these elements with utilities, and a rule in
+   @layer components would lose to them. The header keeps Streamdown's height
+   (h-8): its actions are placed against it (-mt-10). */
+.markdown [data-streamdown="inline-code"] {
+  padding: var(--code-pad-y) var(--code-pad-x);
+  border-radius: var(--radius-xs);
+  background: var(--surface-0);
+  color: var(--ink-1);
+  font-size: var(--text-code-read);
+  line-height: inherit;
+}
+.markdown [data-streamdown="code-block"] {
+  gap: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--surface-0);
+  box-shadow: inset 0 0 0 var(--border) var(--line-1);
+  overflow: hidden;
+}
+.markdown [data-streamdown="code-block-header"] {
+  padding-inline: var(--space-3);
+  color: var(--ink-3);
+  font-size: var(--text-micro);
+  line-height: var(--leading-micro);
+  box-shadow: inset 0 calc(var(--border) * -1) 0 var(--line-1);
+}
+.markdown [data-streamdown="code-block-actions"] {
+  border: 0;
+  background: transparent;
+  backdrop-filter: none;
+}
+.markdown [data-streamdown="code-block-copy-button"] {
+  border-radius: var(--radius-sm);
+  color: var(--ink-3);
+  transition:
+    background-color var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard);
+}
+.markdown [data-streamdown="code-block-copy-button"]:hover {
+  background: var(--veil-hover);
+  color: var(--ink-1);
+}
+.markdown [data-streamdown="code-block-copy-button"]:focus-visible {
+  outline: var(--focus-width) solid var(--focus);
+  outline-offset: var(--focus-offset);
+}
+.markdown [data-streamdown="code-block-body"] {
+  padding: var(--space-2) var(--space-3) var(--space-3);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-family: var(--font-mono);
+  font-size: var(--text-code);
+  line-height: var(--leading-code);
+}
+
+/* Every icon draws with the stroke of the system, on every screen. */
+svg.lucide {
+  stroke-width: var(--icon-stroke);
 }

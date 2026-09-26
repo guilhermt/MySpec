@@ -1,0 +1,31 @@
+import { cva } from "class-variance-authority";
+import type { ReactNode } from "react";
+import { Kbd as UiKbd } from "@/components/ui/kbd";
+import { cn } from "@/lib/utils";
+
+export interface KbdProps {
+  variant?: "default" | "on-primary" | "jump";
+  size?: "md" | "sm";
+  children: ReactNode;
+  className?: string;
+}
+
+const kbd = cva(
+  "min-w-0 gap-0 rounded-xs border border-line-2 border-b-(length:--border-2) bg-surface-2 px-1 font-mono text-(length:--text-micro) leading-(--leading-micro) font-normal text-ink-3",
+  {
+    variants: {
+      variant: {
+        default: "",
+        "on-primary":
+          "border-0 bg-transparent text-brand-on shadow-[inset_0_0_0_var(--border)_var(--brand-key-ring)]",
+        jump: "border-brand-ring bg-brand-tint text-brand-ink",
+      },
+      size: { md: "h-(--size-kbd)", sm: "h-(--size-kbd-sm)" },
+    },
+  },
+);
+
+/** Kbd is a key of a shortcut, on a surface, on the primary button, or as the jump key. */
+export function Kbd({ variant = "default", size = "md", children, className }: KbdProps) {
+  return <UiKbd className={cn(kbd({ variant, size }), className)}>{children}</UiKbd>;
+}

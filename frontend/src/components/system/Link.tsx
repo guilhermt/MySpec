@@ -1,0 +1,51 @@
+import type { AnchorHTMLAttributes } from "react";
+import { cn } from "@/lib/utils";
+import { Icon } from "./Icon";
+import { ICONS } from "./icons";
+import { Spinner } from "./Spinner";
+
+export interface LinkProps extends Omit<AnchorHTMLAttributes<HTMLAnchorElement>, "className"> {
+  external?: boolean;
+  unavailable?: boolean;
+  loading?: boolean;
+  loadingLabel?: string;
+  error?: string;
+  className?: string;
+}
+
+/** Link is a text link; the caller owns the click, since nothing navigates inside the webview. */
+export function Link({
+  external,
+  unavailable,
+  loading,
+  loadingLabel,
+  error,
+  className,
+  children,
+  ...props
+}: LinkProps) {
+  if (unavailable) return <span className={cn("text-ink-4", className)}>{children}</span>;
+  if (loading) {
+    return (
+      <span aria-busy="true" className={cn("inline-flex items-center gap-1.5", className)}>
+        <Spinner tone="current" />
+        {loadingLabel}
+      </span>
+    );
+  }
+  return (
+    <>
+      <a
+        className={cn(
+          "inline-flex items-center gap-0.5 rounded-xs text-brand-ink underline decoration-[color-mix(in_srgb,currentColor_var(--mix-link-line),transparent)] decoration-(length:--border) underline-offset-(--link-offset) hover:decoration-current focus-visible:focus-ring active:text-brand-active",
+          className,
+        )}
+        {...props}
+      >
+        {children}
+        {external && <Icon icon={ICONS.external} size="xs" />}
+      </a>
+      {error !== undefined && <span className="ml-1.5 text-state-error">✕ {error}</span>}
+    </>
+  );
+}

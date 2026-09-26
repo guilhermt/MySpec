@@ -2,6 +2,7 @@ import { code } from "@streamdown/code";
 import { createMermaidPlugin } from "@streamdown/mermaid";
 import { useMemo } from "react";
 import { Streamdown } from "streamdown";
+import { CODE_THEMES } from "@/features/chat/code-theme";
 import { ExternalLink } from "@/features/chat/ExternalLink";
 import { useEffectiveMode } from "@/features/theme/useApplyTheme";
 import { cn } from "@/lib/utils";
@@ -15,8 +16,6 @@ const CONTROLS = {
 
 // The safety modal warns before leaving the page; links never navigate here.
 const LINK_SAFETY = { enabled: false } as const;
-
-const SHIKI_THEME = ["github-light", "github-dark"] as const;
 
 const COMPONENTS = { a: ExternalLink } as const;
 
@@ -33,7 +32,7 @@ export function Markdown({ children, streaming = false, className }: MarkdownPro
     () => ({
       code,
       mermaid: createMermaidPlugin({
-        config: { theme: dark ? "dark" : "neutral", fontFamily: "var(--font-sans)" },
+        config: { theme: dark ? "dark" : "neutral", fontFamily: "var(--font-ui)" },
       }),
     }),
     [dark],
@@ -41,12 +40,15 @@ export function Markdown({ children, streaming = false, className }: MarkdownPro
 
   return (
     <Streamdown
-      className={cn("markdown", className)}
+      className={cn(
+        "markdown text-(length:--text-body) leading-(--leading-body) text-ink-1 max-w-(--measure-conversation)",
+        className,
+      )}
       mode={streaming ? "streaming" : "static"}
       isAnimating={streaming}
       {...(streaming ? { caret: "block" as const } : {})}
       plugins={plugins}
-      shikiTheme={[...SHIKI_THEME]}
+      shikiTheme={[...CODE_THEMES]}
       controls={CONTROLS}
       linkSafety={LINK_SAFETY}
       components={COMPONENTS}

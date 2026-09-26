@@ -13,7 +13,7 @@ export function useApplyTheme(): void {
   const mode = useEffectiveMode();
 
   useEffect(() => {
-    document.documentElement.classList.toggle("dark", mode === "dark");
+    document.documentElement.dataset.theme = mode;
     document.documentElement.style.colorScheme = mode;
     try {
       // Remembered only so the next launch paints the right colours before React

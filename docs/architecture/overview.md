@@ -38,7 +38,8 @@ frontend/
   src/features/          um diretório por área da interface
   src/components/        componentes compartilhados entre features que não são do shadcn
   src/components/ui/     componentes shadcn; gerados, nunca editados à mão
-  src/styles/            Tailwind, tokens e fontes
+  src/components/system/   componentes do design system, os wrappers dos primitivos e os próprios
+  src/styles/            Tailwind, a ponte dos tokens do design system e fontes
   src/test/              setup do Vitest, render com store e mock do Go
   bindings/              gerados por `task generate`; nunca editados à mão
 build/                   config do Wails, ícones e entrada .desktop
@@ -150,13 +151,13 @@ A implementação de uma task One-Shot não tem caminho próprio em `flow`. A in
 
 ### Features
 
-Cada diretório de `features/` cobre uma área: `sidebar` para a barra lateral e a árvore de tasks, `home` para a área principal sem task aberta, `welcome` para a tela sem boards nem repositórios cadastrados, `board` para a visão de um board, `boards` para a página de boards, `reviews` para o centro de review, com a visão Reviews, o diálogo de início, a tela de um review e o review arquivado, `discussion` para a discussão, com o diálogo de criação, a tela, o painel de rascunhos, o painel de documentos e a discussão arquivada, `migration` para a tela de migração recusada, `repositories` para a página de repositórios, `task` e `task-create` para a task, `chat` para as conversas, `attention` para a seção de espera, `history`, `settings`, `models`, `review-mode` para o seletor de modo de review, `notice` e `theme`. A lógica de apresentação que não depende de React fica em arquivos `.ts` ao lado dos componentes (`status.ts`, `step-status.ts`, `pr-status.ts`, `stage-actions.ts`, `review-status.ts`, `discussion-status.ts`), testável sem renderizar. Um componente usado por mais de uma feature e que não é do shadcn, como o `FilterMenu` das visões de board e de reviews, fica em `src/components/`, ao lado de `ui/`; é lá que está `useEditedText`, o hook que segura um texto do Go enquanto o usuário o edita, compartilhado entre os apontamentos de um review e os rascunhos de uma discussão.
+Cada diretório de `features/` cobre uma área: `sidebar` para a barra lateral e a árvore de tasks, `home` para a área principal sem task aberta, `welcome` para a tela sem boards nem repositórios cadastrados, `board` para a visão de um board, `boards` para a página de boards, `reviews` para o centro de review, com a visão Reviews, o diálogo de início, a tela de um review e o review arquivado, `discussion` para a discussão, com o diálogo de criação, a tela, o painel de rascunhos, o painel de documentos e a discussão arquivada, `migration` para a tela de migração recusada, `repositories` para a página de repositórios, `task` e `task-create` para a task, `chat` para as conversas, `attention` para a seção de espera, `history`, `settings`, `models`, `review-mode` para o seletor de modo de review, `notice` e `theme`, que aplica o tema pelo `data-theme`. A lógica de apresentação que não depende de React fica em arquivos `.ts` ao lado dos componentes (`status.ts`, `step-status.ts`, `pr-status.ts`, `stage-actions.ts`, `review-status.ts`, `discussion-status.ts`), testável sem renderizar. Um componente usado por mais de uma feature e que não é do shadcn, como o `FilterMenu` das visões de board e de reviews, fica em `src/components/`, ao lado de `ui/`; é lá que está `useEditedText`, o hook que segura um texto do Go enquanto o usuário o edita, compartilhado entre os apontamentos de um review e os rascunhos de uma discussão.
 
 `lib/` guarda o que o store e as features compartilham: boards, repositórios, pull requests, situações de tasks, de reviews e de discussões, etapas, modelos, modos de review, nomes de task, front matter, o diff do corpo de um rascunho. `lib/ui-storage.ts` guarda no `localStorage` a memória de interface que sobrevive a reinícios e não é estado do produto: os filtros e as seções recolhidas de cada visão de board e os nós recolhidos da barra lateral.
 
 ### Estilo
 
-`styles/globals.css` importa o Tailwind, o tw-animate-css e o CSS do shadcn, define as variáveis de cor em oklch para os temas claro e escuro e, fora de qualquer camada, arredonda para o pixel a centralização dos dialogs do shadcn, que o WebKitGTK borraria quando ela cai em meio pixel. `styles/tokens.css` define fontes, tamanhos, durações, curvas e as cores de status de sessão. Os componentes usam classes do Tailwind e os tokens; uma cor nunca é o único portador de um estado, todo ponto colorido tem um rótulo.
+`styles/globals.css` importa os tokens de `design/system/tokens.css`, a fonte única de cores, fontes, tamanhos, durações e curvas nos dois temas, faz a ponte deles com as variáveis que o shadcn lê e os registra como utilitários do Tailwind; as regras sem camada no fim do arquivo mantêm no pixel inteiro o que o WebKitGTK borraria. Os componentes do produto são os de `components/system/`, e uma cor nunca é o único portador de um estado: todo ponto colorido tem um rótulo. Os detalhes estão em [design-system.md](./design-system.md).
 
 ## Build
 
