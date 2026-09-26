@@ -25,6 +25,7 @@ Estados comuns a todo componente interativo, salvo quando a seção diz outra co
 | Disabled | Borda tracejada em `--line-3`, tinta `--ink-4`, sem sombra, em toda variante, o fantasma incluído. A razão fica ao lado ou no tooltip, ligada por `aria-describedby` |
 | Loading | O spinner do sistema em `currentColor` e o verbo no gerúndio (`Approving…`), `aria-busy="true"`, cursor `progress`. Uma leitura sem resultado usa o brilho, nunca o spinner |
 | Error | Tinta `--state-error` sobre `--state-error-veil`, o verbo de nova tentativa (`Try again`, `Retry`). O que bloqueia sem ser erro é `◇` em tinta neutra, nunca vermelho |
+| Error com foco | Os dois portadores convivem: o campo em erro mantém a borda `--state-error` e o trilho interno, e o foco acrescenta só o halo `--focus-halo` por fora; o anel `--focus` não substitui a borda de erro |
 
 ## Primitivos
 
