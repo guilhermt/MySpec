@@ -20,21 +20,17 @@ describe("Input", () => {
     expect(screen.getByRole("textbox", { name: "Branch" })).toHaveValue("main");
   });
 
-  it("has the hover and the focus of the system", async () => {
+  it("takes the focus", async () => {
     const { user } = renderWithStore(<Input aria-label="Branch" />);
     await user.tab();
     const input = screen.getByRole("textbox", { name: "Branch" });
     expect(input).toHaveFocus();
-    expect(input).toHaveClass("hover:border-ink-3", "focus-visible:field-focus");
-    expect(input).not.toHaveClass("focus-visible:ring-3", "md:text-sm");
   });
 
-  it("is dashed while disabled", () => {
+  it("is disabled", () => {
     renderWithStore(<Input aria-label="Branch" disabled />);
     const input = screen.getByRole("textbox", { name: "Branch" });
     expect(input).toBeDisabled();
-    expect(input).toHaveClass("disabled:dashed-disabled");
-    expect(input).not.toHaveClass("disabled:opacity-50");
   });
 
   it("is busy while loading", () => {

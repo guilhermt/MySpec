@@ -68,7 +68,7 @@ tasks:
   typecheck:
     dir: frontend
     cmds:
-      - pnpm tsc --noEmit -p tsconfig.json
+      - pnpm typecheck
 
   test:
     deps: [test:go, test:web]
@@ -81,9 +81,11 @@ tasks:
       - go-test-coverage --config .testcoverage.yml
 
   test:web:
+    summary: Runs the jsdom suite with coverage, then the computed-style suite in Chromium
     dir: frontend
     cmds:
-      - pnpm vitest run --coverage
+      - pnpm test:coverage
+      - pnpm test:painted
 
   vuln:
     deps: [embed:stub]

@@ -60,20 +60,10 @@ describe("SegmentedControl", () => {
     expect(screen.getByRole("button", { name: "After" })).toHaveFocus();
   });
 
-  it("tints the chosen option", () => {
-    renderWithStore(<Subject />);
-    expect(screen.getByRole("radio", { name: "Chat" })).toHaveClass("data-checked:bg-brand-tint");
-  });
-
-  it("has the hover and the focus of the system", async () => {
+  it("takes the focus on the chosen option", async () => {
     const { user } = renderWithStore(<Subject />);
     await user.tab();
-    const chat = screen.getByRole("radio", { name: "Chat" });
-    expect(chat).toHaveFocus();
-    expect(chat).toHaveClass(
-      "not-data-readonly:not-data-checked:hover:bg-veil-hover",
-      "focus-visible:focus-ring",
-    );
+    expect(screen.getByRole("radio", { name: "Chat" })).toHaveFocus();
   });
 
   it("ignores the change while disabled and tells the reason", async () => {
@@ -92,7 +82,6 @@ describe("SegmentedControl", () => {
     const group = screen.getByRole("radiogroup", { name: "View" });
     expect(group).toHaveAttribute("aria-disabled", "true");
     expect(group).toHaveAccessibleDescription("No changes yet");
-    expect(group).toHaveClass("dashed-disabled");
     const changes = screen.getByRole("radio", { name: "Changes +4 −1" });
     expect(changes).toHaveAttribute("data-readonly");
     await user.click(changes);

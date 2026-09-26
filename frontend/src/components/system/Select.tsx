@@ -40,9 +40,12 @@ export interface SelectProps {
   disabledReason?: string;
 }
 
-/** SELECT_TRIGGER is the look of a field that opens a list, shared with Listbox. */
+/**
+ * SELECT_TRIGGER is the look of a field that opens a list, shared with Listbox. Disabled rides on
+ * aria-disabled, whose variant outweighs the plain classes; focused, it keeps the focus border and halo.
+ */
 export const SELECT_TRIGGER =
-  "flex h-(--size-control) w-full items-center justify-between gap-2 rounded-sm border border-line-3 bg-surface-input px-2.5 text-(length:--text-ui) leading-(--leading-ui) text-ink-1 transition-[border-color,box-shadow] duration-(--duration-fast) ease-standard hover:border-ink-3 aria-expanded:border-focus focus-visible:field-focus";
+  "flex h-(--size-control) w-full items-center justify-between gap-2 rounded-sm border border-line-3 bg-surface-input px-2.5 text-(length:--text-ui) leading-(--leading-ui) text-ink-1 transition-[border-color,box-shadow] duration-(--duration-fast) ease-standard hover:border-ink-3 aria-expanded:border-focus focus-visible:field-focus aria-disabled:dashed-disabled aria-disabled:focus-visible:field-focus";
 
 /** UNAVAILABLE marks a choice that is no longer offered. */
 const UNAVAILABLE = "◇";
@@ -71,11 +74,7 @@ export function Select({
       aria-label={`${label}: ${chosen?.label ?? placeholder}`}
       {...(disabled ? { "aria-disabled": true } : {})}
       {...(withReason ? { "aria-describedby": reasonId } : {})}
-      className={cn(
-        SELECT_TRIGGER,
-        size === "sm" && "h-(--size-control-sm)",
-        disabled && "dashed-disabled",
-      )}
+      className={cn(SELECT_TRIGGER, size === "sm" && "h-(--size-control-sm)")}
     >
       <span className="truncate">
         {chosen?.unavailable && `${UNAVAILABLE} `}

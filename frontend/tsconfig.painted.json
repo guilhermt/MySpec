@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.json",
+  "include": ["src/**/*.painted.test.tsx", "src/test/painted.ts", "src/test/painted-setup.ts"],
+  "exclude": []
+}

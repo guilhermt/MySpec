@@ -79,11 +79,9 @@ describe("Listbox", () => {
     expect(screen.getByRole("combobox", { name: "Base branch: main" })).toHaveFocus();
   });
 
-  it("has the hover and the focus of the system", async () => {
+  it("takes the focus", async () => {
     const { user } = renderWithStore(<Subject />);
     await user.tab();
-    const trigger = screen.getByRole("combobox", { name: "Base branch: main" });
-    expect(trigger).toHaveFocus();
-    expect(trigger).toHaveClass("hover:border-ink-3", "focus-visible:field-focus");
+    expect(screen.getByRole("combobox", { name: "Base branch: main" })).toHaveFocus();
   });
 });

@@ -1,6 +1,6 @@
 # Frontend
 
-React 19, TypeScript em modo strict, Vite, Tailwind CSS 4, shadcn/ui sobre Base UI, Zustand. Biome aplica a parte mecânica com `biome.json`; `tsc` aplica os tipos com `tsconfig.json`, que liga `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes` e `verbatimModuleSyntax`.
+React 19, TypeScript em modo strict, Vite, Tailwind CSS 4, shadcn/ui sobre Base UI, Zustand. Biome aplica a parte mecânica com `biome.json`; `tsc` aplica os tipos com `tsconfig.json`, que liga `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes` e `verbatimModuleSyntax`, e com `tsconfig.painted.json`, que o estende para a suíte de estilo computado ([testing.md](./testing.md)).
 
 ## Fronteira com o Go
 

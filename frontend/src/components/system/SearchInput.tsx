@@ -34,7 +34,7 @@ export function SearchInput({
     <div
       role="search"
       className={cn(
-        "flex h-(--size-control-sm) items-center gap-1.5 rounded-sm border border-line-3 bg-surface-input pr-1 pl-2 transition-[border-color,box-shadow] duration-(--duration-fast) ease-standard hover:border-ink-3 focus-within:field-focus",
+        "flex h-(--size-control-sm) items-center gap-1.5 rounded-sm border border-line-3 bg-surface-input pr-1 pl-2 transition-[border-color,box-shadow] duration-(--duration-fast) ease-standard not-focus-within:hover:border-ink-3 focus-within:field-focus",
         className,
       )}
     >

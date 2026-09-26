@@ -9,9 +9,14 @@ export interface InputProps extends Omit<ComponentProps<typeof UIInput>, "classN
   className?: string;
 }
 
-/** FIELD holds the look the input and the textarea share, over the classes of the ui primitives. */
+/**
+ * FIELD holds the look the input and the textarea share, over the classes of the ui primitives.
+ * Each state of the primitive is neutralized in the variant it is written in, dark: included: the
+ * plain and dark: backgrounds are replaced, and the field-focus and field-error box-shadows are
+ * important, because every ring class of the primitive rewrites the whole box-shadow after them.
+ */
 export const FIELD =
-  "rounded-sm border border-line-3 bg-surface-input px-2.5 text-ink-1 placeholder:text-ink-4 transition-[border-color,box-shadow] duration-(--duration-fast) ease-standard hover:border-ink-3 focus-visible:ring-0 focus-visible:field-focus aria-invalid:ring-0 aria-invalid:field-error disabled:opacity-100 disabled:dashed-disabled";
+  "rounded-sm border border-line-3 bg-surface-input dark:bg-surface-input px-2.5 text-ink-1 placeholder:text-ink-4 transition-[border-color,box-shadow] duration-(--duration-fast) ease-standard hover:border-ink-3 focus-visible:field-focus! aria-invalid:border-state-error dark:aria-invalid:border-state-error aria-invalid:field-error! disabled:opacity-100 disabled:bg-transparent dark:disabled:bg-transparent disabled:dashed-disabled!";
 
 /** Input is the one-line text field, wired to the Field around it. */
 export function Input({ mono, loading, className, ...props }: InputProps) {

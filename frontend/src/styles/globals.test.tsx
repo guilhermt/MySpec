@@ -156,7 +156,11 @@ describe("globals.css", () => {
     const src = join(STYLES, "..");
     const files = readdirSync(src, { recursive: true, encoding: "utf8" }).filter(
       (path) =>
-        /\.(css|tsx?)$/.test(path) && !path.startsWith("components/ui/") && !/\.test\./.test(path),
+        /\.(css|tsx?)$/.test(path) &&
+        !path.startsWith("components/ui/") &&
+        // The test helpers name computed values to compare with, and paint nothing.
+        !path.startsWith("test/") &&
+        !/\.test\./.test(path),
     );
     const painted = files.filter((path) => {
       const text = readFileSync(join(src, path), "utf8");

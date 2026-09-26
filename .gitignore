@@ -2,6 +2,7 @@
 bin
 coverage
 frontend/coverage
+frontend/.vitest
 frontend/dist
 frontend/node_modules
 .tools

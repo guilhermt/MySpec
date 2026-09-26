@@ -25,7 +25,6 @@ describe("Dialog", () => {
     renderWithStore(<Subject />);
     const dialog = screen.getByRole("dialog", { name: "New task" });
     expect(dialog).toHaveAttribute("aria-modal", "true");
-    expect(dialog).toHaveClass("max-w-(--size-dialog)");
   });
 
   it("is an alert dialog with alert", () => {
@@ -66,7 +65,7 @@ describe("Dialog", () => {
 
   it("shows the subtitle", () => {
     renderWithStore(<Subject subtitle="Step 2 of 3" />);
-    expect(screen.getByText("Step 2 of 3")).toHaveClass("text-ink-3");
+    expect(screen.getByText("Step 2 of 3")).toBeInTheDocument();
   });
 
   it("describes the disabled confirmation with the reason of the footer", () => {
@@ -89,12 +88,5 @@ describe("Dialog", () => {
     );
     expect(screen.getByRole("alert")).toHaveTextContent("The branch already exists");
     expect(screen.getByRole("button", { name: "Back" }).parentElement).toHaveClass("mr-auto");
-  });
-
-  it("widens with the wide size", () => {
-    renderWithStore(<Subject size="wide" />);
-    expect(screen.getByRole("dialog", { name: "New task" })).toHaveClass(
-      "max-w-(--size-dialog-wide)",
-    );
   });
 });

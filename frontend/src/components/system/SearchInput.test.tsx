@@ -51,13 +51,9 @@ describe("SearchInput", () => {
     expect(onArrowDown).toHaveBeenCalledOnce();
   });
 
-  it("has the hover and the focus of the system", async () => {
+  it("takes the focus", async () => {
     const { user } = renderWithStore(<Subject />);
     await user.tab();
     expect(screen.getByRole("searchbox", { name: "Search tasks" })).toHaveFocus();
-    expect(screen.getByRole("search")).toHaveClass(
-      "hover:border-ink-3",
-      "focus-within:field-focus",
-    );
   });
 });

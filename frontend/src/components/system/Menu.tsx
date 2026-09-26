@@ -21,13 +21,16 @@ export function MenuTrigger(props: ComponentProps<typeof DropdownMenuTrigger>) {
 
 export interface MenuContentProps extends ComponentProps<typeof DropdownMenuContent> {}
 
-/** MenuContent is the floating surface of the menu. */
+/**
+ * MenuContent is the floating surface of the menu. The shadow is written shadow-(--shadow-float),
+ * the form cn reads as a shadow, so it replaces the shadow-md of the primitive instead of joining it.
+ */
 export function MenuContent({ className, ...props }: MenuContentProps) {
   return (
     <DropdownMenuContent
       {...props}
       className={cn(
-        "flex min-w-(--size-menu-min) flex-col gap-0.5 rounded-lg bg-surface-3 p-1 text-(length:--text-ui) leading-(--leading-ui) text-ink-1 shadow-float ring-0 duration-(--duration-base)",
+        "flex min-w-(--size-menu-min) flex-col gap-0.5 rounded-lg bg-surface-3 p-1 text-(length:--text-ui) leading-(--leading-ui) text-ink-1 shadow-(--shadow-float) ring-0 duration-(--duration-base)",
         className,
       )}
     />
@@ -82,7 +85,7 @@ export function MenuItem({
       className={cn(
         MENU_ITEM,
         destructive &&
-          "text-state-error data-[variant=destructive]:text-state-error data-[variant=destructive]:focus:bg-state-error-veil data-[variant=destructive]:focus:text-state-error data-[variant=destructive]:*:[svg]:text-state-error",
+          "text-state-error data-[variant=destructive]:text-state-error data-[variant=destructive]:focus:bg-state-error-veil dark:data-[variant=destructive]:focus:bg-state-error-veil data-[variant=destructive]:focus:text-state-error data-[variant=destructive]:*:[svg]:text-state-error",
       )}
     >
       {icon !== undefined && <Icon icon={icon} size="md" tone="muted" />}

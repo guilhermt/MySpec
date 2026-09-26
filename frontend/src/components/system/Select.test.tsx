@@ -93,12 +93,10 @@ describe("Select", () => {
     expect(screen.queryByRole("menuitemradio")).not.toBeInTheDocument();
   });
 
-  it("has the hover and the focus of the system", async () => {
+  it("takes the focus", async () => {
     const { user } = renderWithStore(<Subject />);
     await user.tab();
-    const trigger = screen.getByRole("button", { name: "Model: Opus" });
-    expect(trigger).toHaveFocus();
-    expect(trigger).toHaveClass("hover:border-ink-3", "focus-visible:field-focus");
+    expect(screen.getByRole("button", { name: "Model: Opus" })).toHaveFocus();
   });
 
   it("does not open while disabled and tells the reason", async () => {
@@ -106,7 +104,6 @@ describe("Select", () => {
     const trigger = screen.getByRole("button", { name: "Model: Opus" });
     expect(trigger).toHaveAttribute("aria-disabled", "true");
     expect(trigger).toHaveAccessibleDescription("The session is running");
-    expect(trigger).toHaveClass("dashed-disabled");
     await user.click(trigger);
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });

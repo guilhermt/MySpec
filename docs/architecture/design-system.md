@@ -92,7 +92,7 @@ O código da conversa é destacado pelo Streamdown com o shiki. `features/chat/c
 
 Os componentes do design system moram em `frontend/src/components/system/`, um por arquivo, importados pelo arquivo (`@/components/system/Button`), sem barril. Cada um tem o seu teste ao lado.
 
-Um componente **embrulha** o primitivo de `components/ui/` quando os estados do system se alcançam pela `className` do elemento que os carrega; as classes do primitivo que contradizem o system são neutralizadas explicitamente, e o `cn` as troca. Ele é **próprio sobre o Base UI** quando uma parte que o system estiliza não é exposta, ou quando o papel ARIA muda.
+Um componente **embrulha** o primitivo de `components/ui/` quando os estados do system se alcançam pela `className` do elemento que os carrega; as classes do primitivo que contradizem o system são neutralizadas explicitamente, variante por variante, `dark:` incluída, e o `cn` as troca. Onde o `cn` não reconhece a troca, a classe do system vence pela cascata: a sombra sobre um primitivo que traz a sua é escrita `shadow-(--shadow-float)`, que o `cn` lê como sombra; o foco e o erro de um campo (`field-focus!`, `field-error!`) são importantes, porque todo anel do primitivo reescreve o `box-shadow` inteiro; e o desabilitado de um gatilho próprio vem de `aria-disabled:`, cuja variante pesa mais que as classes simples. Ele é **próprio sobre o Base UI** quando uma parte que o system estiliza não é exposta, ou quando o papel ARIA muda.
 
 | Componente | Arquivo | Base | Razão |
 |---|---|---|---|
@@ -120,7 +120,8 @@ As convenções de todo componente:
 - exports por nome, `export interface XProps` acima do componente e um comentário `/** */` de uma linha em cada export;
 - classes com `cn`, e variantes com `cva` quando há duas ou mais dimensões. Uma `className` do chamador serve só para layout e é mesclada por último;
 - os estados comuns: hover em `hover:bg-veil-hover` ou no degrau `-hover`, foco em `focus-visible:focus-ring` (`field-focus` nos campos), pressionado em `active:bg-veil-press`, escolhido em `--brand-tint` com `aria-pressed` ou `aria-checked`, desabilitado em `dashed-disabled`, erro em `text-state-error` sobre `bg-state-error-veil`;
-- o teste renderiza com `renderWithStore`, busca por papel e nome acessível completo, prova um comportamento por `it` e não usa snapshots.
+- o teste renderiza com `renderWithStore`, busca por papel e nome acessível completo, prova um comportamento por `it` e não usa snapshots;
+- o que ele pinta é provado na suíte de estilo computado, em `X.painted.test.tsx` ao lado, no Chromium, com o CSS real e nos dois temas ([testing.md](../guidelines/testing.md)). Todo componente que embrulha um primitivo de `components/ui/` tem a sua, e os próprios que têm estado de cor também.
 
 **Desabilitado com a razão.** Todo controle interativo aceita `disabled` e `disabledReason`. Desabilitado, ele continua focável, com `aria-disabled="true"`, ignora a ativação e aponta por `aria-describedby` para um `<span>` com a razão, logo depois dele. `reasonId` substitui o `<span>` quando a razão está noutro lugar, como o rodapé de um diálogo ou uma `SunkenLine`. No `IconButton` a razão vai no tooltip.
 

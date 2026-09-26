@@ -60,7 +60,7 @@ export function Listbox({
           className="isolate z-(--z-overlay) outline-none"
         >
           <Combobox.Popup className="flex max-h-(--available-height) min-w-(--size-menu-min) flex-col gap-0.5 overflow-y-auto rounded-lg bg-surface-3 p-1 text-(length:--text-ui) leading-(--leading-ui) text-ink-1 shadow-float outline-none">
-            <div className="flex h-(--size-control-sm) items-center gap-1.5 rounded-sm border border-line-3 bg-surface-input pr-1 pl-2 hover:border-ink-3 focus-within:field-focus">
+            <div className="flex h-(--size-control-sm) items-center gap-1.5 rounded-sm border border-line-3 bg-surface-input pr-1 pl-2 not-focus-within:hover:border-ink-3 focus-within:field-focus">
               <Icon icon={Search} size="sm" tone="muted" />
               <Combobox.Input
                 aria-label={searchLabel}

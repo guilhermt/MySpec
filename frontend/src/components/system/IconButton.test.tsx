@@ -7,8 +7,7 @@ import { IconButton } from "./IconButton";
 describe("IconButton", () => {
   it("is named by its label", () => {
     renderWithStore(<IconButton label="Settings" icon={Settings} />);
-    const button = screen.getByRole("button", { name: "Settings" });
-    expect(button).toHaveClass("w-(--size-control)", "bg-transparent");
+    expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument();
   });
 
   it("shows the name and the key in the tooltip on focus", async () => {
@@ -21,19 +20,10 @@ describe("IconButton", () => {
     expect(tooltip).toHaveTextContent("Ctrl ,");
   });
 
-  it("has the hover of the system", () => {
-    renderWithStore(<IconButton label="Settings" icon={Settings} />);
-    expect(screen.getByRole("button", { name: "Settings" })).toHaveClass(
-      "not-aria-disabled:not-aria-pressed:hover:bg-veil-hover",
-    );
-  });
-
-  it("takes the focus with the focus ring", async () => {
+  it("takes the focus", async () => {
     const { user } = renderWithStore(<IconButton label="Settings" icon={Settings} />);
     await user.tab();
-    const button = screen.getByRole("button", { name: "Settings" });
-    expect(button).toHaveFocus();
-    expect(button).toHaveClass("focus-visible:focus-ring");
+    expect(screen.getByRole("button", { name: "Settings" })).toHaveFocus();
   });
 
   it("tells the disabled reason in the description and the tooltip", async () => {
@@ -50,7 +40,6 @@ describe("IconButton", () => {
     const button = screen.getByRole("button", { name: "Settings" });
     expect(button).toHaveAttribute("aria-disabled", "true");
     expect(button).toHaveAccessibleDescription("A session is running");
-    expect(button).toHaveClass("aria-disabled:dashed-disabled");
     await user.tab();
     expect(await screen.findByRole("tooltip")).toHaveTextContent("Settings · A session is running");
     await user.click(button);

@@ -8,16 +8,17 @@ Os testes são o que permite mudar o produto com confiança, e os limiares de co
 |---|---|
 | `task test` | Tudo: Go e frontend, com cobertura |
 | `task test:go` | gotestsum com `-race -shuffle=on -count=1`, cobertura e o limiar de `.testcoverage.yml` |
-| `task test:web` | Vitest com cobertura e os limiares de `vitest.config.ts` |
+| `task test:web` | Vitest: a suíte do jsdom com cobertura e os limiares de `vitest.config.ts`, depois a de estilo computado no Chromium |
 | `go test -run 'TestNome' ./internal/pacote/` | Um teste Go |
 | `pnpm vitest run <arquivo>` (em `frontend/`) | Um arquivo de testes do frontend |
-| `pnpm test:watch` (em `frontend/`) | Vitest interativo |
+| `pnpm test:watch` (em `frontend/`) | Vitest interativo, na suíte do jsdom |
+| `pnpm test:painted` (em `frontend/`) | Só a suíte de estilo computado |
 
 Os testes Go rodam com o detector de corrida e em ordem embaralhada. Um teste que passa só numa ordem ou só sem `-race` está errado.
 
 ## Limiares
 
-Go: 60% por arquivo, 70% por pacote, 80% no total, excluindo `internal/app`, `main.go` e os pacotes de fakes. Frontend: 80% de linhas, funções e statements e 70% de branches, excluindo `components/ui`, `test/` e `main.tsx`. O CI comenta a cobertura e a diferença em relação a `main` em cada pull request.
+Go: 60% por arquivo, 70% por pacote, 80% no total, excluindo `internal/app`, `main.go` e os pacotes de fakes. Frontend: 80% de linhas, funções e statements e 70% de branches, excluindo `components/ui`, `test/` e `main.tsx`, medidos só na suíte do jsdom. O CI comenta a cobertura e a diferença em relação a `main` em cada pull request.
 
 ## Testes em Go
 
@@ -54,6 +55,16 @@ Os pacotes que rodam binários testam contra o binário real ou contra um fake q
 - Um arquivo de testes ao lado do que testa: `StepBar.test.tsx` ao lado de `StepBar.tsx`, `status.test.ts` ao lado de `status.ts`.
 - A lógica de apresentação em `.ts` é testada como função pura, sem renderizar. Os componentes são testados pelo que o usuário vê e faz: `getByRole`, `getByText`, `user.click`, `user.type`. Consultar classes só para o que não tem outra forma de ser observado, como o tom de um ponto de status ou a centralização alinhada ao pixel, que o jsdom não calcula.
 - Um comportamento por `it`. Sem snapshots.
+
+### Estilo computado
+
+O jsdom roda sem CSS, então um teste nele não vê a cascata: uma classe presente na lista pode perder para uma do primitivo de `components/ui/` ou para uma variante `dark:`. O que um componente pinta é provado por uma segunda suíte, os arquivos `*.painted.test.tsx`, que o Vitest roda no modo navegador, no Chromium do Playwright, com o CSS real (`styles/fonts.css` e `styles/globals.css`). O projeto `painted` de `vitest.config.ts` a define, e `src/test/painted-setup.ts` carrega o CSS, zera as transições (o teste lê o estado em que o controle assenta) e limpa o tema entre os testes. Os tipos dela são checados à parte, por `tsconfig.painted.json`, porque os matchers do modo navegador estreitariam os do jest-dom da suíte do jsdom.
+
+- Vai para ela o teste de uma cor, de uma borda, de uma sombra, de um anel de foco ou de uma medida: todo estado de cor dos componentes de `components/system/`. O teste de comportamento e de acessibilidade continua no jsdom, e o do jsdom não consulta as classes de cor que esta suíte cobre.
+- Cada arquivo roda os seus testes nos dois temas, `describe.each(THEMES)`, e `setTheme` põe o `data-theme` no `documentElement`, como o app.
+- O estado vem de verdade: hover e foco pelo `userEvent` de `vitest/browser`, desabilitado, erro e carregando pelas props.
+- O esperado é o token resolvido no mesmo tema: `token("--surface-input")` e `resolve("0 0 0 var(--halo) var(--focus-halo)", "box-shadow")` passam o valor por um elemento de sonda no documento, que o devolve na mesma notação do `getComputedStyle`. `paintOf(elemento, esperado)` lê do elemento as mesmas entradas do esperado, e a comparação é `expect(paintOf(el, want)).toEqual(want)`; a sombra é lida sem as camadas vazias que o Tailwind compõe.
+- A cobertura vem só do jsdom; a suíte de estilo computado prova a cascata, não linhas.
 
 ### Setup e dublês
 
