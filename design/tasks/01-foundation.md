@@ -73,7 +73,7 @@ O app inteiro passa a pintar com `design/system/tokens.css`, em Fira Sans e Fira
 
 ### O tech spec toma
 
-**Import direto ou cópia sincronizada.** A recomendação é `@import "../../../design/system/tokens.css"`. A alternativa, se o dev server ou o build recusarem, é uma cópia gerada por `task generate` e um teste que falha quando as duas divergem (`implementation.md:20`). Fatos que pesam na escolha:
+**Import direto ou cópia sincronizada.** A escolha é o import direto `@import "../../../design/system/tokens.css"`. A alternativa, se o dev server ou o build recusarem, é uma cópia gerada por `task generate` e um teste que falha quando as duas divergem (`implementation.md:20`). Fatos que pesam na escolha:
 
 - `task check` não roda `vite build`, e o Vitest roda com `css: false` (`vitest.config.ts:10`). Um `@import` quebrado só aparece em `task build`, que o CI roda no job Build (`.github/workflows/ci.yml`, `task build`). Por isso o teste de paridade lê os arquivos como texto, como `globals.test.tsx:33` já faz.
 - `build:frontend` só observa `frontend/**/*` (`build/Taskfile.yml:37–39`). Com o import direto, uma mudança só em `design/system/tokens.css` não reconstrói o frontend: o arquivo entra em `sources`.
@@ -84,7 +84,7 @@ O app inteiro passa a pintar com `design/system/tokens.css`, em Fira Sans e Fira
 
 **As três colisões de nome** (`implementation.md:20`), e as que o levantamento achou a mais:
 
-| Nome | Conflito | Encaminhamento recomendado |
+| Nome | Conflito | Encaminhamento decidido |
 |---|---|---|
 | `--border` | Cor no shadcn (`globals.css:30, 71, 106`, e `* { @apply border-border }` em 126); largura (1px) no system (`tokens.css:65`) | A ponte mapeia `--color-border` direto para `--line-2`, e `--border` fica sendo o 1px do system |
 | `--radius-*` | A escala do shadcn (`globals.css:46–52`, múltiplos de `--radius: 0.625rem`), a padrão do Tailwind e a do system (`tokens.css:62`) têm os mesmos nomes `xs`…`xl` | Tirar `--radius-*` do `@theme inline`: a declaração sem camada do system vence a do tema do Tailwind, que fica em `@layer theme`, e `rounded-lg` passa a valer 12 px (hoje 10). `2xl`, `3xl` e `4xl` não têm par no system: são usados em `rounded-2xl` (2 vezes nas features) e `rounded-4xl` (1 vez em `ui/`) |
@@ -93,15 +93,20 @@ O app inteiro passa a pintar com `design/system/tokens.css`, em Fira Sans e Fira
 | `--shadow-xs` | É utilitário padrão do Tailwind e também token do system, com o fio `--rim` (`tokens.css:217`) | Vence o do system. Nenhum primitivo usa `shadow-xs` hoje; o wrapper que o usar recebe o do system |
 | `--duration-base` | 150 ms hoje (`styles/tokens.css:15`), 180 ms no system (`tokens.css:116`) | Vale o system. Quatro usos nas features mudam de ritmo sozinhos |
 
-**Outras decisões do tech spec**, cada uma com o fato que a pede:
+**Decisões de design já tomadas** (a frente de design decide; o PRD e o tech spec não perguntam sobre elas):
 
-- **`--status-*`.** `implementation.md:20` diz que a paleta antiga sai na task 1, com `--status-*` incluído; `implementation.md:177` lista `--status-*` entre o que a task 12 remove. Hoje são 43 usos em 24 arquivos de produção (§5.3), e 8 testes consultam essas classes. Recomendado: na task 1, `--status-*` viram aliases sem valor próprio, na ponte, para `--state-*`. Assim nenhum `oklch(` fica fora de `tokens.css`, nenhuma tela muda, e a task 12 apaga os aliases.
-- **Diálogo.** O system põe todo diálogo a `8vh` do topo, crescendo para baixo (`components.md:716`). A regra sem camada `globals.css:213–218` fixa `top: round(50%, 1px)` e `translate: … round(-50%, 1px)` por `data-slot`, e vence qualquer classe do wrapper. Duas saídas: reescrever a regra para todos os diálogos, os antigos inclusive, ou escopá-la ao wrapper do system. `globals.test.tsx:10–17` fixa o texto da regra e muda junto. O véu dos primitivos é `bg-black/10` com `backdrop-blur-xs` (`ui/dialog.tsx:34`, `ui/alert-dialog.tsx:31`); o system pede `--scrim`, sem desfoque.
-- **Tons de `--muted-foreground` e `--accent`.** Juntos pintam 250 textos (`text-muted-foreground`) e 29 fundos (`bg-accent`) nas telas antigas. A recomendação é `--ink-3` e `--veil-hover`; a alternativa para o texto é `--ink-2`.
-- **Texto padrão do `body`.** A raiz fica em 16 px, porque é a base do rem. Hoje o `html` tem 1rem sobre 1.45 (`styles/tokens.css:31–33`). O system não diz qual registro é o padrão do `body`.
-- **Tema do código.** O `shikiTheme` do Streamdown aceita um objeto de tema, não só um nome (`ThemeInput = BundledTheme | ThemeRegistrationAny`, em `node_modules/@streamdown/code/dist/index.d.ts:3`). Um tema claro e um escuro com as cores `var(--code-*)` tiram o hexadecimal do shiki. O Streamdown troca o par pela variante `dark:` (`dark:text-[var(--shiki-dark…)]`), que passa a seguir `data-theme`. O cromo do bloco é estilizado pelos atributos `data-streamdown="code-block"`, `"code-block-header"`, `"code-block-copy-button"` e `"inline-code"`.
-- **Fira Code estática ou variável.** `implementation.md:45` escolhe `@fontsource-variable/fira-code`, e o risco da linha 188 prefere as estáticas com hinting. A prova do step 1 compara as duas no mono de 12 e 13 px.
-- **Traço dos ícones.** O Lucide desenha com traço 2, e o system pede `--icon-stroke: 1.5` (`tokens.css:76`). A escolha é entre uma regra global para o `svg.lucide`, que muda todas as telas de uma vez, e o traço só no wrapper de ícone.
+- **`--status-*`.** Na task 1 viram aliases sem valor próprio, na ponte, para os `--state-*` do system (`--status-working` → `--state-work`, `--status-waiting` → `--state-wait`, `--status-error` → `--state-error`, `--status-closing` → `--state-close`, e assim por diante, um a um). Nenhum `oklch(` fica fora de `tokens.css`, nenhuma tela muda, e a task 12 apaga os aliases.
+- **Diálogo.** A regra sem camada de `globals.css:213–218` é reescrita para todos os diálogos, os antigos inclusive: `8vh` do topo, crescendo para baixo, com o `left` arredondado ao pixel como hoje; `globals.test.tsx:10–17` muda junto. O véu passa a `--scrim`, sem desfoque, por uma regra sem camada que seleciona o `data-slot` do overlay dos primitivos, sem editar `ui/`.
+- **`--muted-foreground` e `--accent`.** `--ink-3` e `--veil-hover`. É o papel que o system dá a texto secundário e a hover; a hierarquia das telas antigas fica igual à nova.
+- **Texto padrão do `body`.** O registro de interface: `--text-ui` sobre `--leading-ui` (14/20 px), `--ink-1`, sobre a raiz de 16 px. O registro de leitura (`--text-body` sobre `--leading-body`, 15/22 px) é aplicado pela conversa e pelos documentos renderizados, não pelo `body`.
+- **Tema do código.** Um tema claro e um escuro passados ao `shikiTheme` do Streamdown como objeto, com as cores em `var(--code-*)`, para nenhum hexadecimal ficar fora de `tokens.css`; o par segue `data-theme`. O cromo do bloco (`data-streamdown="code-block"`, `"code-block-header"`, `"code-block-copy-button"`, `"inline-code"`) é estilizado pelos tokens.
+- **Fira Code estática.** As estáticas com hinting de `@fontsource/fira-code` (400 e 500), como a Fira Sans; a variável só entra se a prova do step 1 mostrar renderização igual a 12 e 13 px no WebKitGTK, e o tech spec registra o resultado.
+- **Traço dos ícones.** Uma regra global para `svg.lucide` com `stroke-width: var(--icon-stroke)` (1.5), que muda todas as telas de uma vez, coerente com a retematização; o wrapper de ícone só fixa tamanho e cor.
+
+**Decisões técnicas que o tech spec toma**, com o fato que as pede:
+
+- **Import direto ou cópia sincronizada** (§3): o tech spec verifica se o dev server e o build aceitam `@import "../../../design/system/tokens.css"`, e só recorre à cópia gerada por `task generate` com o teste de paridade se recusarem.
+- **Quais primitivos do shadcn viram componente próprio** no wrapper (§5.2), um a um, pela regra de `implementation.md:19` (3).
 - **`biome.json:48`.** `noLabelWithoutControl` conhece `Checkbox` e `RadioGroupItem`. Os nomes dos wrappers de caixa e rádio entram ali.
 
 ## 5. Inventário atual
@@ -120,7 +125,7 @@ As variáveis do shadcn (`globals.css:55–122`) ficam como ponte e perdem o val
 | `--primary-foreground` | 63 | `--brand-on` | |
 | `--secondary`, `--secondary-foreground` | 64–65 | `--surface-2`, `--ink-1` | `ui/button.tsx:14` mistura `--secondary` com `--foreground` no hover |
 | `--muted` | 66 | `--surface-0` | Afundado. Esqueleto, `bg-muted` |
-| `--muted-foreground` | 67 | `--ink-3` (ou `--ink-2`, §4) | 250 usos nas features |
+| `--muted-foreground` | 67 | `--ink-3` | 250 usos nas features |
 | `--accent`, `--accent-foreground` | 68–69 | `--veil-hover`, `--ink-1` | Realce de item e hover fantasma |
 | `--destructive` | 70, 105 | `--state-error` | |
 | `--border` | 71, 106 | `--color-border: var(--line-2)` | Colisão (§4) |
