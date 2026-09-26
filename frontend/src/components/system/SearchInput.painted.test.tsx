@@ -1,12 +1,18 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
-import { paintOf, resolve, setTheme, THEMES, token } from "@/test/painted";
-import { SearchInput } from "./SearchInput";
+import { paintOf, resolve, setTheme, THEMES, TRANSPARENT, token } from "@/test/painted";
+import { SearchInput, type SearchInputProps } from "./SearchInput";
 
-function Subject() {
+function Subject(props: Partial<SearchInputProps>) {
   return (
-    <SearchInput label="Search tasks" placeholder="Search" value="" onValueChange={() => {}} />
+    <SearchInput
+      label="Search tasks"
+      placeholder="Search"
+      value=""
+      onValueChange={() => {}}
+      {...props}
+    />
   );
 }
 
@@ -40,5 +46,20 @@ describe.each(THEMES)("SearchInput in the %s theme", (theme) => {
       shadow: resolve("0 0 0 var(--halo) var(--focus-halo)", "box-shadow"),
     };
     expect(paintOf(screen.getByRole("search"), want)).toEqual(want);
+  });
+
+  it("is dashed, without a body and in faint ink when disabled", async () => {
+    setTheme(theme);
+    render(<Subject disabled disabledReason="No cards yet" value="auth" />);
+    await userEvent.hover(screen.getByRole("searchbox", { name: "Search tasks" }));
+    const want = {
+      background: TRANSPARENT,
+      border: token("--line-3"),
+      borderStyle: "dashed",
+    };
+    expect(paintOf(screen.getByRole("search"), want)).toEqual(want);
+    expect(paintOf(screen.getByRole("searchbox", { name: "Search tasks" }), { color: "" })).toEqual(
+      { color: token("--ink-4") },
+    );
   });
 });

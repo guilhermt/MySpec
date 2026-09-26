@@ -12,7 +12,10 @@ export interface TooltipProps {
 /** TOOLTIP_DELAY_MS mirrors --delay-tooltip of tokens.css: the pause before a tooltip opens on hover. */
 export const TOOLTIP_DELAY_MS = 500;
 
-/** Tooltip names a control on hover after the pause, at once on keyboard focus, and closes on scroll. */
+/**
+ * Tooltip names a control on hover after the pause, at once on keyboard focus, and closes on scroll.
+ * A focus that is not visible, like the one a dialog opened with the pointer places, opens nothing.
+ */
 export function Tooltip({ content, shortcut, sub, side, children }: TooltipProps) {
   const [open, setOpen] = useState(false);
 
@@ -24,7 +27,13 @@ export function Tooltip({ content, shortcut, sub, side, children }: TooltipProps
   }, [open]);
 
   return (
-    <BaseTooltip.Root open={open} onOpenChange={setOpen}>
+    <BaseTooltip.Root
+      open={open}
+      onOpenChange={(next, details) => {
+        if (next && details.reason === "trigger-focus" && !focusVisible(details.event)) return;
+        setOpen(next);
+      }}
+    >
       <BaseTooltip.Trigger render={children} delay={TOOLTIP_DELAY_MS} />
       <BaseTooltip.Portal>
         {/* sideOffset 6 is --space-1-5. */}
@@ -45,4 +54,9 @@ export function Tooltip({ content, shortcut, sub, side, children }: TooltipProps
       </BaseTooltip.Portal>
     </BaseTooltip.Root>
   );
+}
+
+/** focusVisible tells whether the focus an event brought matches :focus-visible, keyboard focus. */
+function focusVisible(event: Event): boolean {
+  return event.target instanceof Element && event.target.matches(":focus-visible");
 }

@@ -3,7 +3,9 @@ import { useRef } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { renderWithStore } from "@/test/render";
 import { Button } from "./Button";
-import { Dialog, DialogBody, DialogFooter, type DialogProps } from "./Dialog";
+import { Dialog, DialogBody, DialogCancel, DialogFooter, type DialogProps } from "./Dialog";
+import { Field } from "./Field";
+import { Input } from "./Input";
 
 function Subject(props: Partial<DialogProps>) {
   const cancel = useRef<HTMLButtonElement>(null);
@@ -61,6 +63,52 @@ describe("Dialog", () => {
   it("puts the focus on the initial element", async () => {
     renderWithStore(<Subject />);
     await waitFor(() => expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus());
+  });
+
+  it("opens an alert on its Cancel, which closes it", async () => {
+    const onOpenChange = vi.fn();
+    const { user } = renderWithStore(
+      <Dialog open onOpenChange={onOpenChange} title="Delete task?" alert>
+        <DialogBody>The worktree is removed.</DialogBody>
+        <DialogFooter>
+          <DialogCancel />
+          <Button variant="danger">Delete</Button>
+        </DialogFooter>
+      </Dialog>,
+    );
+    const cancel = screen.getByRole("button", { name: "Cancel" });
+    await waitFor(() => expect(cancel).toHaveFocus());
+    await user.click(cancel);
+    expect(onOpenChange).toHaveBeenCalledWith(false, expect.anything());
+  });
+
+  it("opens any other dialog on the first field of its body", async () => {
+    renderWithStore(
+      <Dialog open onOpenChange={() => {}} title="New task">
+        <DialogBody>
+          <Field label="Title">
+            <Input />
+          </Field>
+          <Field label="Branch">
+            <Input />
+          </Field>
+        </DialogBody>
+        <DialogFooter>
+          <DialogCancel />
+        </DialogFooter>
+      </Dialog>,
+    );
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Title" })).toHaveFocus());
+  });
+
+  it("opens on the dialog itself when the body has no field, never on the close button", async () => {
+    renderWithStore(
+      <Dialog open onOpenChange={() => {}} title="What changed">
+        <DialogBody>Three steps were added.</DialogBody>
+      </Dialog>,
+    );
+    await waitFor(() => expect(screen.getByRole("dialog", { name: "What changed" })).toHaveFocus());
+    expect(screen.getByRole("button", { name: "Close" })).not.toHaveFocus();
   });
 
   it("shows the subtitle", () => {

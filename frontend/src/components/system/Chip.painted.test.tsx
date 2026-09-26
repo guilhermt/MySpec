@@ -1,7 +1,15 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
-import { dashedDisabled, focusRing, paintOf, setTheme, THEMES, token } from "@/test/painted";
+import {
+  dashedDisabled,
+  focusRing,
+  paintOf,
+  resolve,
+  setTheme,
+  THEMES,
+  token,
+} from "@/test/painted";
 import { Chip } from "./Chip";
 
 describe.each(THEMES)("Chip in the %s theme", (theme) => {
@@ -84,5 +92,52 @@ describe.each(THEMES)("Chip in the %s theme", (theme) => {
     await userEvent.hover(chip);
     const want = dashedDisabled();
     expect(paintOf(chip, want)).toEqual(want);
+  });
+
+  it("measures the two sizes, the small one in the micro type", () => {
+    setTheme(theme);
+    render(
+      <>
+        <Chip kind="toggle">Medium</Chip>
+        <Chip kind="toggle" size="sm">
+          Small
+        </Chip>
+      </>,
+    );
+    expect(paintOf(screen.getByRole("button", { name: "Medium" }), { height: "" })).toEqual({
+      height: "28px",
+    });
+    const small = { height: "22px", fontSize: resolve("var(--text-micro)", "font-size") };
+    expect(paintOf(screen.getByRole("button", { name: "Small" }), small)).toEqual(small);
+  });
+
+  it("paints the error in the error ink on its veil, also under the pointer", async () => {
+    setTheme(theme);
+    render(
+      <Chip kind="menu" error>
+        Opus 4
+      </Chip>,
+    );
+    const chip = screen.getByRole("button", { name: "Opus 4" });
+    const want = {
+      background: token("--state-error-veil"),
+      color: token("--state-error"),
+      border: token("--state-error"),
+      shadow: "none",
+    };
+    expect(paintOf(chip, want)).toEqual(want);
+    await userEvent.hover(chip);
+    expect(paintOf(chip, want)).toEqual(want);
+  });
+
+  it("shimmers the saved choice while the catalog is read", () => {
+    setTheme(theme);
+    render(
+      <Chip kind="menu" reading>
+        Opus · high
+      </Chip>,
+    );
+    const choice = screen.getByText("Opus · high");
+    expect(getComputedStyle(choice).animationName).toBe("shimmer");
   });
 });

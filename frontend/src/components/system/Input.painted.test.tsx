@@ -80,5 +80,19 @@ describe.each(THEMES)("text fields in the %s theme", (theme) => {
         color: token("--ink-4"),
       });
     });
+
+    it("keeps the dashed line and shows the focus when disabled and focused", async () => {
+      setTheme(theme);
+      render(
+        <Field label="Name">
+          <Control disabled disabledReason="The task already exists" />
+        </Field>,
+      );
+      await userEvent.tab();
+      expectPaint({
+        ...field(TRANSPARENT, token("--focus"), halo(), "dashed"),
+        color: token("--ink-4"),
+      });
+    });
   });
 });

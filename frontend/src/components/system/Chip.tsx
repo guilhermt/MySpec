@@ -5,6 +5,7 @@ import { Toggle as UIToggle } from "@/components/ui/toggle";
 import { cn } from "@/lib/utils";
 import { Icon } from "./Icon";
 import { IconButton } from "./IconButton";
+import { Shimmer } from "./Shimmer";
 import { Spinner } from "./Spinner";
 import { StateGlyph } from "./StateGlyph";
 import { Tooltip } from "./Tooltip";
@@ -15,11 +16,13 @@ export interface ChipProps
   children: ReactNode;
   pressed?: boolean;
   onPressedChange?: (pressed: boolean) => void;
-  size?: "md" | "sm" | "xs";
+  size?: "md" | "sm";
   own?: boolean;
   defaultNote?: string;
   loading?: boolean;
   loadingLabel?: string;
+  reading?: boolean;
+  error?: boolean;
   unavailableReason?: string;
   onRemove?: () => void;
   removeLabel?: string;
@@ -34,11 +37,20 @@ const BASE =
 
 const SIZES = {
   md: "",
-  sm: "h-(--size-control-sm)",
-  xs: "h-(--size-control-xs) px-2 text-(length:--text-micro) leading-(--leading-micro)",
+  sm: "h-(--size-chip-sm) px-2 text-(length:--text-micro) leading-(--leading-micro)",
 } as const;
 
-/** Chip is a pill that toggles a filter or opens a menu of choices. */
+/**
+ * ERROR is the error state, on data-error: the variant outweighs the plain classes of BASE, and the
+ * hover is restated at the weight of the hover of BASE, so the error keeps its veil under the pointer.
+ */
+const ERROR =
+  "data-error:border-state-error data-error:bg-state-error-veil data-error:text-state-error not-aria-disabled:not-aria-pressed:not-aria-expanded:data-error:hover:bg-state-error-veil not-aria-disabled:not-aria-pressed:not-aria-expanded:data-error:hover:text-state-error";
+
+/**
+ * Chip is a pill that toggles a filter or opens a menu of choices. Saving, it shows the spinner and
+ * the gerund; reading the catalog, the saved choice shimmers; in error, the error ink on its veil.
+ */
 export function Chip({
   kind,
   children,
@@ -49,6 +61,8 @@ export function Chip({
   defaultNote,
   loading,
   loadingLabel,
+  reading,
+  error,
   unavailableReason,
   onRemove,
   removeLabel,
@@ -74,13 +88,15 @@ export function Chip({
   const attributes = {
     ...props,
     ...(disabled ? { "aria-disabled": true } : {}),
-    ...(loading ? { "aria-busy": true } : {}),
+    ...(loading || reading ? { "aria-busy": true } : {}),
+    ...(error ? { "data-error": "" } : {}),
     ...(withReason ? { "aria-describedby": reasonId } : {}),
     onClick: handleClick,
     className: cn(
       BASE,
       SIZES[size],
       own && "text-ink-1 border-line-3",
+      ERROR,
       loading && "cursor-progress",
       className,
     ),
@@ -94,7 +110,7 @@ export function Chip({
   ) : (
     <>
       {unavailable && <StateGlyph state="blocked" size="sm" />}
-      {children}
+      {reading ? <Shimmer>{children}</Shimmer> : children}
       {unavailable && " · unavailable"}
       {kind === "menu" && <Icon icon={ChevronDown} size="xs" />}
     </>

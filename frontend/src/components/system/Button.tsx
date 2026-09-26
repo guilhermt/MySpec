@@ -7,7 +7,7 @@ import { Icon } from "./Icon";
 import { Kbd } from "./Kbd";
 import { Spinner } from "./Spinner";
 
-export interface ButtonProps
+export interface ButtonBaseProps
   extends Omit<ComponentProps<typeof UIButton>, "variant" | "size" | "className"> {
   variant?: "primary" | "secondary" | "ghost" | "danger" | "new";
   size?: "md" | "sm" | "xs";
@@ -15,12 +15,20 @@ export interface ButtonProps
   shortcut?: string;
   pressed?: boolean;
   error?: boolean;
-  loading?: boolean;
-  loadingLabel?: string;
   disabledReason?: string;
   reasonId?: string;
   className?: string;
 }
+
+/**
+ * ButtonLoading makes the gerund required on a button that can load: loading, the gerund replaces
+ * the label, and without it the button would have no name.
+ */
+export type ButtonLoading =
+  | { loading?: false | undefined; loadingLabel?: undefined }
+  | { loading: boolean; loadingLabel: string };
+
+export type ButtonProps = ButtonBaseProps & ButtonLoading;
 
 /**
  * button holds the variants of .btn in the specimen. Each plain hover: resets the ui hover, and the

@@ -106,7 +106,7 @@ describe("Chip", () => {
   it("is busy while loading and ignores the click", async () => {
     const onClick = vi.fn();
     const { user } = renderWithStore(
-      <Chip kind="menu" size="xs" loading loadingLabel="Saving…" onClick={onClick}>
+      <Chip kind="menu" size="sm" loading loadingLabel="Saving…" onClick={onClick}>
         Model
       </Chip>,
     );
@@ -114,5 +114,16 @@ describe("Chip", () => {
     expect(chip).toHaveAttribute("aria-busy", "true");
     await user.click(chip);
     expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it("keeps the saved choice as its name while the catalog is read, without a spinner", () => {
+    renderWithStore(
+      <Chip kind="menu" reading>
+        Opus · high
+      </Chip>,
+    );
+    const chip = screen.getByRole("button", { name: "Opus · high" });
+    expect(chip).toHaveAttribute("aria-busy", "true");
+    expect(chip.querySelector("[data-tone]")).toBeNull();
   });
 });

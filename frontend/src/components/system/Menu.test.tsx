@@ -61,7 +61,15 @@ describe("Menu", () => {
   it("shows its items when opened", async () => {
     await open();
     expect(screen.getByRole("menuitem", { name: "Edit in the editor Ctrl+E" })).toBeInTheDocument();
-    expect(screen.getByText("Task")).toHaveTextContent("Task 2 open");
+    // The label is aria-hidden, read once through aria-labelledby, which jsdom does not follow to a
+    // hidden node; the browser suite finds the group by its name.
+    const group = screen.getByRole("group");
+    expect(document.getElementById(group.getAttribute("aria-labelledby") ?? "")).toHaveTextContent(
+      "Task 2 open",
+    );
+    expect(group).toContainElement(
+      screen.getByRole("menuitem", { name: "Edit in the editor Ctrl+E" }),
+    );
   });
 
   it("closes on Escape and gives the focus back to the trigger", async () => {

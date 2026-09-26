@@ -1,28 +1,30 @@
 import type { ComponentProps } from "react";
 import { Textarea as UITextarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { useFieldControl } from "./Field";
+import { type ControlStateProps, useControlState } from "./Field";
 import { FIELD } from "./Input";
 
-export interface TextareaProps extends Omit<ComponentProps<typeof UITextarea>, "className"> {
+export interface TextareaProps
+  extends Omit<ComponentProps<typeof UITextarea>, "className" | "disabled">,
+    ControlStateProps {
   mono?: boolean;
-  loading?: boolean;
   className?: string;
 }
 
 /** Textarea is the multi-line text field, wired to the Field around it. */
-export function Textarea({ mono, loading, className, ...props }: TextareaProps) {
-  const field = useFieldControl();
-  return (
+export function Textarea({
+  mono,
+  disabled,
+  disabledReason,
+  loading,
+  loadingLabel,
+  className,
+  ...props
+}: TextareaProps) {
+  const { attributes, wrap } = useControlState({ disabled, disabledReason, loading, loadingLabel });
+  return wrap(
     <UITextarea
-      {...(field !== null
-        ? {
-            id: field.controlId,
-            ...(field.describedBy !== undefined ? { "aria-describedby": field.describedBy } : {}),
-            ...(field.invalid ? { "aria-invalid": true } : {}),
-          }
-        : {})}
-      {...(loading ? { "aria-busy": true } : {})}
+      {...attributes}
       {...props}
       className={cn(
         FIELD,
@@ -31,6 +33,6 @@ export function Textarea({ mono, loading, className, ...props }: TextareaProps) 
         loading && "text-ink-3 cursor-progress",
         className,
       )}
-    />
+    />,
   );
 }

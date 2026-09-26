@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { renderWithStore } from "@/test/render";
@@ -83,5 +83,60 @@ describe("Listbox", () => {
     const { user } = renderWithStore(<Subject />);
     await user.tab();
     expect(screen.getByRole("combobox", { name: "Base branch: main" })).toHaveFocus();
+  });
+
+  it("does not open while disabled and tells the reason", async () => {
+    const { user } = renderWithStore(<Subject disabled disabledReason="The session is running" />);
+    const trigger = screen.getByRole("combobox", { name: "Base branch: main" });
+    expect(trigger).toHaveAttribute("aria-disabled", "true");
+    expect(trigger).toHaveAccessibleDescription("The session is running");
+    await user.tab();
+    expect(trigger).toHaveFocus();
+    await user.click(trigger);
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+  });
+
+  it("shimmers the saved choice while the catalog is read", () => {
+    renderWithStore(<Subject loading />);
+    const trigger = screen.getByRole("combobox", { name: "Base branch: main" });
+    expect(trigger).toHaveAttribute("aria-busy", "true");
+    expect(within(trigger).getByText("main")).toBeInTheDocument();
+  });
+
+  it("stands a message in for the list, as a status or as an alert with Try again", async () => {
+    const onRetry = vi.fn();
+    const { user } = renderWithStore(
+      <Subject message={{ text: "Could not list the branches", tone: "error", onRetry }} />,
+    );
+    await user.click(screen.getByRole("combobox", { name: "Base branch: main" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Could not list the branches");
+    expect(screen.queryByRole("option")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+    expect(onRetry).toHaveBeenCalledOnce();
+  });
+
+  it("says a neutral message as a status", async () => {
+    const { user } = renderWithStore(<Subject message={{ text: "Reading the branches…" }} />);
+    await user.click(screen.getByRole("combobox", { name: "Base branch: main" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Reading the branches…");
+  });
+
+  it("marks a choice no longer offered without letting it be chosen", async () => {
+    const onValueChange = vi.fn();
+    const { user } = await open({
+      items: [...ITEMS, { value: "old", label: "old", unavailable: true }],
+      onValueChange,
+    });
+    const old = screen.getByRole("option", { name: "◇ old · unavailable" });
+    expect(old).toHaveAttribute("aria-disabled", "true");
+    await user.click(old);
+    expect(onValueChange).not.toHaveBeenCalled();
+  });
+
+  it("keeps a saved choice that is no longer offered, marked", () => {
+    renderWithStore(
+      <Subject items={[...ITEMS, { value: "old", label: "old", unavailable: true }]} value="old" />,
+    );
+    expect(screen.getByRole("combobox", { name: "Base branch: old" })).toHaveTextContent("◇ old");
   });
 });

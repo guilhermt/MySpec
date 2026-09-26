@@ -56,4 +56,25 @@ describe("SearchInput", () => {
     await user.tab();
     expect(screen.getByRole("searchbox", { name: "Search tasks" })).toHaveFocus();
   });
+
+  it("stays focusable and read-only while disabled, and tells the reason", async () => {
+    const onValueChange = vi.fn();
+    const { user } = renderWithStore(
+      <Subject disabled disabledReason="No cards yet" onValueChange={onValueChange} />,
+    );
+    const box = screen.getByRole("searchbox", { name: "Search tasks" });
+    expect(box).toHaveAttribute("aria-disabled", "true");
+    expect(box).toHaveAccessibleDescription("No cards yet");
+    await user.tab();
+    expect(box).toHaveFocus();
+    await user.type(box, "x");
+    expect(onValueChange).not.toHaveBeenCalled();
+  });
+
+  it("is busy while loading, with the spinner and the gerund", () => {
+    renderWithStore(<Subject loading loadingLabel="Reading the cards…" />);
+    const box = screen.getByRole("searchbox", { name: "Search tasks" });
+    expect(box).toHaveAttribute("aria-busy", "true");
+    expect(box).toHaveAccessibleDescription("Reading the cards…");
+  });
 });

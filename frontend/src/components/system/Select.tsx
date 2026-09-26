@@ -21,6 +21,13 @@ export interface SelectOption {
   unavailable?: boolean;
 }
 
+/** ListMessage stands in for the choices of a Select or a Listbox while they load or when they fail. */
+export interface ListMessage {
+  text: string;
+  tone?: "neutral" | "error";
+  onRetry?: () => void;
+}
+
 export interface SelectGroup {
   label: string;
   note?: string;
@@ -34,7 +41,7 @@ export interface SelectProps {
   groups?: readonly SelectGroup[];
   onValueChange: (value: string) => void;
   placeholder?: string;
-  message?: { text: string; tone?: "neutral" | "error" };
+  message?: ListMessage;
   size?: "md" | "sm";
   disabled?: boolean;
   disabledReason?: string;
@@ -48,7 +55,7 @@ export const SELECT_TRIGGER =
   "flex h-(--size-control) w-full items-center justify-between gap-2 rounded-sm border border-line-3 bg-surface-input px-2.5 text-(length:--text-ui) leading-(--leading-ui) text-ink-1 transition-[border-color,box-shadow] duration-(--duration-fast) ease-standard hover:border-ink-3 aria-expanded:border-focus focus-visible:field-focus aria-disabled:dashed-disabled aria-disabled:focus-visible:field-focus";
 
 /** UNAVAILABLE marks a choice that is no longer offered. */
-const UNAVAILABLE = "◇";
+export const UNAVAILABLE = "◇";
 
 /** Select is a field that opens a menu of choices, one of them checked. */
 export function Select({
@@ -101,7 +108,12 @@ export function Select({
       )}
       <MenuContent>
         {message !== undefined ? (
-          <MenuMessage tone={message.tone ?? "neutral"}>{message.text}</MenuMessage>
+          <MenuMessage
+            tone={message.tone ?? "neutral"}
+            {...(message.onRetry !== undefined ? { onRetry: message.onRetry } : {})}
+          >
+            {message.text}
+          </MenuMessage>
         ) : (
           <BaseMenu.RadioGroup value={value} onValueChange={(next: string) => onValueChange(next)}>
             {options?.map((option) => (

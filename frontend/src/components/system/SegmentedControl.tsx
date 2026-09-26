@@ -22,7 +22,10 @@ export interface SegmentedControlProps<T extends string> {
   disabledReason?: string;
 }
 
-/** SegmentedControl picks one of up to three views; one Tab stop, and the arrows move the choice. */
+/**
+ * SegmentedControl picks one of up to three views; one Tab stop, and the arrows move the choice.
+ * Disabled, the track is dashed and every segment faint; the chosen one keeps its ring to tell which.
+ */
 export function SegmentedControl<T extends string>({
   label,
   value,
@@ -57,7 +60,7 @@ export function SegmentedControl<T extends string>({
           key={option.value}
           value={option.value}
           className={cn(
-            "inline-flex h-(--size-control-xs) items-center gap-1.5 rounded-xs px-2.5 text-(length:--text-meta) leading-(--leading-meta) text-ink-2 transition-colors duration-(--duration-fast) ease-standard not-data-readonly:not-data-checked:hover:bg-veil-hover not-data-readonly:not-data-checked:hover:text-ink-1 focus-visible:focus-ring data-checked:bg-brand-tint data-checked:text-ink-1 data-checked:font-medium data-checked:shadow-[inset_0_0_0_var(--border)_var(--brand-ring)]",
+            "inline-flex h-(--size-control-xs) items-center gap-1.5 rounded-xs px-2.5 text-(length:--text-meta) leading-(--leading-meta) text-ink-2 transition-colors duration-(--duration-fast) ease-standard not-data-readonly:not-data-checked:hover:bg-veil-hover not-data-readonly:not-data-checked:hover:text-ink-1 focus-visible:focus-ring data-checked:bg-brand-tint data-checked:text-ink-1 data-checked:font-medium data-checked:shadow-[inset_0_0_0_var(--border)_var(--brand-ring)] data-readonly:text-ink-4 data-readonly:data-checked:bg-transparent data-readonly:data-checked:text-ink-4",
             size === "sm" && "h-(--size-control-sm)",
           )}
         >

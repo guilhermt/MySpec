@@ -4,7 +4,9 @@ import { Icon } from "./Icon";
 import { ICONS } from "./icons";
 import { Spinner } from "./Spinner";
 
-export interface LinkProps extends Omit<AnchorHTMLAttributes<HTMLAnchorElement>, "className"> {
+export interface LinkProps
+  extends Omit<AnchorHTMLAttributes<HTMLAnchorElement>, "className" | "href"> {
+  href: string;
   external?: boolean;
   unavailable?: boolean;
   loading?: boolean;
@@ -13,7 +15,10 @@ export interface LinkProps extends Omit<AnchorHTMLAttributes<HTMLAnchorElement>,
   className?: string;
 }
 
-/** Link is a text link; the caller owns the click, since nothing navigates inside the webview. */
+/**
+ * Link is a text link to a destination; the caller owns the click, since nothing navigates inside
+ * the webview. An action without a destination is a Button.
+ */
 export function Link({
   external,
   unavailable,
@@ -45,7 +50,11 @@ export function Link({
         {children}
         {external && <Icon icon={ICONS.external} size="xs" />}
       </a>
-      {error !== undefined && <span className="ml-1.5 text-state-error">✕ {error}</span>}
+      {error !== undefined && (
+        <span className="ml-1.5 text-state-error">
+          <span aria-hidden="true">✕</span> {error}
+        </span>
+      )}
     </>
   );
 }

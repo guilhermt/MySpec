@@ -27,17 +27,47 @@ describe("Textarea", () => {
     expect(input).toHaveFocus();
   });
 
-  it("is disabled", () => {
-    renderWithStore(<Textarea aria-label="Description" disabled />);
-    const input = screen.getByRole("textbox", { name: "Description" });
-    expect(input).toBeDisabled();
+  it("stays focusable and read-only while disabled, with the reason after the help", async () => {
+    const { user } = renderWithStore(
+      <Field label="Description" help="Where the work starts">
+        <Textarea disabled disabledReason="The task already exists" defaultValue="main" />
+      </Field>,
+    );
+    const field = screen.getByRole("textbox", { name: "Description" });
+    expect(field).toHaveAttribute("aria-disabled", "true");
+    expect(field).toHaveAccessibleDescription("Where the work starts The task already exists");
+    await user.tab();
+    expect(field).toHaveFocus();
+    await user.type(field, "x");
+    expect(field).toHaveValue("main");
   });
 
-  it("is busy while loading", () => {
-    renderWithStore(<Textarea aria-label="Description" loading />);
-    expect(screen.getByRole("textbox", { name: "Description" })).toHaveAttribute(
-      "aria-busy",
-      "true",
+  it("carries its reason next to it outside a field", () => {
+    renderWithStore(
+      <Textarea aria-label="Description" disabled disabledReason="The task already exists" />,
+    );
+    expect(screen.getByRole("textbox", { name: "Description" })).toHaveAccessibleDescription(
+      "The task already exists",
+    );
+  });
+
+  it("is busy while loading, with the spinner and the gerund on the help line", () => {
+    renderWithStore(
+      <Field label="Description" help="Where the work starts">
+        <Textarea loading loadingLabel="Checking the name…" />
+      </Field>,
+    );
+    const field = screen.getByRole("textbox", { name: "Description" });
+    expect(field).toHaveAttribute("aria-busy", "true");
+    expect(field).toHaveAccessibleDescription("Checking the name… Where the work starts");
+  });
+
+  it("carries its gerund next to it outside a field", () => {
+    renderWithStore(
+      <Textarea aria-label="Description" loading loadingLabel="Checking the name…" />,
+    );
+    expect(screen.getByRole("textbox", { name: "Description" })).toHaveAccessibleDescription(
+      "Checking the name…",
     );
   });
 

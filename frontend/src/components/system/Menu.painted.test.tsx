@@ -1,18 +1,21 @@
 import { render, screen } from "@testing-library/react";
 import { Trash2 } from "lucide-react";
 import { describe, expect, it } from "vitest";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { paintOf, resolve, setTheme, THEMES, TRANSPARENT, token } from "@/test/painted";
 import { Button } from "./Button";
-import { Menu, MenuContent, MenuItem, MenuTrigger } from "./Menu";
+import { Menu, MenuContent, MenuGroup, MenuGroupLabel, MenuItem, MenuTrigger } from "./Menu";
 
 function Subject() {
   return (
     <Menu>
       <MenuTrigger render={<Button />}>Actions</MenuTrigger>
       <MenuContent>
-        <MenuItem>Edit</MenuItem>
-        <MenuItem disabledReason="The step is running">Archive</MenuItem>
+        <MenuGroup>
+          <MenuGroupLabel note="2 open">Task</MenuGroupLabel>
+          <MenuItem>Edit</MenuItem>
+          <MenuItem disabledReason="The step is running">Archive</MenuItem>
+        </MenuGroup>
         <MenuItem icon={Trash2} destructive>
           Delete
         </MenuItem>
@@ -67,5 +70,12 @@ describe.each(THEMES)("Menu in the %s theme", (theme) => {
     const item = screen.getByRole("menuitem", { name: "Archive · The step is running" });
     expect(paintOf(item, { color: "" })).toEqual({ color: token("--ink-4") });
     expect(getComputedStyle(item).opacity).toBe("1");
+  });
+});
+
+describe("Menu in the browser", () => {
+  it("names a group by its label", async () => {
+    await open();
+    await expect.element(page.getByRole("group", { name: "Task 2 open" })).toBeInTheDocument();
   });
 });

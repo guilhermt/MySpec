@@ -1,11 +1,12 @@
 import { Search, X } from "lucide-react";
 import { useRef } from "react";
 import { cn } from "@/lib/utils";
+import { type ControlStateProps, useControlState } from "./Field";
 import { Icon } from "./Icon";
 import { IconButton } from "./IconButton";
 import { Kbd } from "./Kbd";
 
-export interface SearchInputProps {
+export interface SearchInputProps extends ControlStateProps {
   label: string;
   value: string;
   onValueChange: (value: string) => void;
@@ -25,22 +26,29 @@ export function SearchInput({
   shortcut = "/",
   onEscape,
   onArrowDown,
+  disabled,
+  disabledReason,
+  loading,
+  loadingLabel,
   className,
 }: SearchInputProps) {
   const input = useRef<HTMLInputElement>(null);
+  const { attributes, wrap } = useControlState({ disabled, disabledReason, loading, loadingLabel });
 
-  return (
+  return wrap(
     // biome-ignore lint/a11y/useSemanticElements: jsdom gives the <search> element no role, so the landmark is declared.
     <div
       role="search"
+      {...(disabled ? { "data-disabled": "" } : {})}
       className={cn(
-        "flex h-(--size-control-sm) items-center gap-1.5 rounded-sm border border-line-3 bg-surface-input pr-1 pl-2 transition-[border-color,box-shadow] duration-(--duration-fast) ease-standard not-focus-within:hover:border-ink-3 focus-within:field-focus",
+        "flex h-(--size-control-sm) items-center gap-1.5 rounded-sm border border-line-3 bg-surface-input pr-1 pl-2 transition-[border-color,box-shadow] duration-(--duration-fast) ease-standard not-data-disabled:not-focus-within:hover:border-ink-3 focus-within:field-focus data-disabled:dashed-disabled data-disabled:focus-within:field-focus",
         className,
       )}
     >
       <Icon icon={Search} size="sm" tone="muted" />
       <input
         ref={input}
+        {...attributes}
         type="search"
         aria-label={label}
         value={value}
@@ -50,7 +58,7 @@ export function SearchInput({
           if (event.key === "Escape") onEscape?.();
           if (event.key === "ArrowDown") onArrowDown?.();
         }}
-        className="min-w-0 flex-1 border-0 bg-transparent text-(length:--text-meta) leading-(--leading-meta) text-ink-1 placeholder:text-ink-4 outline-none"
+        className="min-w-0 flex-1 border-0 bg-transparent read-only:cursor-not-allowed text-(length:--text-meta) leading-(--leading-meta) text-ink-1 aria-disabled:text-ink-4 placeholder:text-ink-4 outline-none"
       />
       {value === "" ? (
         <Kbd size="sm">{shortcut}</Kbd>
@@ -59,12 +67,13 @@ export function SearchInput({
           label="Clear search"
           icon={X}
           size="xs"
+          {...(disabled ? { disabled } : {})}
           onClick={() => {
             onValueChange("");
             input.current?.focus();
           }}
         />
       )}
-    </div>
+    </div>,
   );
 }

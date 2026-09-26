@@ -1,8 +1,10 @@
 import { render, screen } from "@testing-library/react";
+import { useState } from "react";
 import { describe, expect, it } from "vitest";
+import { userEvent } from "vitest/browser";
 import { paintOf, resolve, setTheme, THEMES, token } from "@/test/painted";
 import { Button } from "./Button";
-import { Dialog, DialogBody, DialogFooter, type DialogProps } from "./Dialog";
+import { Dialog, DialogBody, DialogCancel, DialogFooter, type DialogProps } from "./Dialog";
 
 function Subject(props: Partial<DialogProps>) {
   return (
@@ -63,5 +65,44 @@ describe.each(THEMES)("Dialog in the %s theme", (theme) => {
       expect(paintOf(backdrop, { background: "" })).toEqual({ background: token("--scrim") });
       expect(getComputedStyle(backdrop).backdropFilter).toBe("none");
     }
+  });
+});
+
+/** Opened is an alert dialog behind the button that opens it. */
+function Opened() {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Button onClick={() => setOpen(true)}>Delete…</Button>
+      <Dialog open={open} onOpenChange={setOpen} title="Delete the task" alert>
+        <DialogBody>The worktree is removed.</DialogBody>
+        <DialogFooter>
+          <DialogCancel />
+          <Button variant="danger">Delete</Button>
+        </DialogFooter>
+      </Dialog>
+    </>
+  );
+}
+
+describe("Dialog in the browser", () => {
+  it("opens an alert with the pointer on Cancel, with no tooltip", async () => {
+    render(<Opened />);
+    await userEvent.click(screen.getByRole("button", { name: "Delete…" }));
+    const cancel = await screen.findByRole("button", { name: "Cancel" });
+    await expect.poll(() => document.activeElement).toBe(cancel);
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+  });
+
+  it("names the close button in a tooltip when the keyboard reaches it", async () => {
+    render(<Opened />);
+    await userEvent.click(screen.getByRole("button", { name: "Delete…" }));
+    const cancel = await screen.findByRole("button", { name: "Cancel" });
+    await expect.poll(() => document.activeElement).toBe(cancel);
+    // The focus is held in the dialog: from the last button, Tab wraps to the close button.
+    await userEvent.tab();
+    await userEvent.tab();
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Close" }));
+    await expect.poll(() => screen.queryByRole("tooltip")?.textContent).toBe("CloseEsc");
   });
 });

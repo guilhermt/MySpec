@@ -54,4 +54,22 @@ describe.each(THEMES)("SegmentedControl in the %s theme", (theme) => {
     const want = focusRing();
     expect(paintOf(screen.getByRole("radio", { name: "Chat" }), want)).toEqual(want);
   });
+
+  it("writes every segment faint when disabled, the chosen one with its ring and no hover", async () => {
+    setTheme(theme);
+    render(<Subject disabled disabledReason="No changes yet" />);
+    const group = screen.getByRole("radiogroup", { name: "View" });
+    const track = { background: TRANSPARENT, border: token("--line-3"), borderStyle: "dashed" };
+    expect(paintOf(group, track)).toEqual(track);
+    const chosen = {
+      background: TRANSPARENT,
+      color: token("--ink-4"),
+      shadow: resolve("inset 0 0 0 var(--border) var(--brand-ring)", "box-shadow"),
+    };
+    expect(paintOf(screen.getByRole("radio", { name: "Chat" }), chosen)).toEqual(chosen);
+    const other = screen.getByRole("radio", { name: "Changes" });
+    await userEvent.hover(other);
+    const faint = { background: TRANSPARENT, color: token("--ink-4") };
+    expect(paintOf(other, faint)).toEqual(faint);
+  });
 });

@@ -64,6 +64,12 @@ describe("Button", () => {
     expect(onClick).not.toHaveBeenCalled();
   });
 
+  it("requires the gerund to load, by its type", () => {
+    // @ts-expect-error: a loading button without its gerund would have no name.
+    const unnamed = <Button loading>Approve</Button>;
+    expect(unnamed.props.loading).toBe(true);
+  });
+
   it("calls the handler when clicked", async () => {
     const onClick = vi.fn();
     const { user } = renderWithStore(<Button onClick={onClick}>Approve</Button>);
