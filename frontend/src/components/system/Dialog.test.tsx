@@ -53,6 +53,8 @@ describe("Dialog", () => {
   it("confirms on Ctrl+Enter", async () => {
     const onConfirm = vi.fn();
     const { user } = renderWithStore(<Subject onConfirm={onConfirm} />);
+    // The keys reach the dialog only once the initial focus has landed inside it.
+    await waitFor(() => expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus());
     await user.keyboard("{Control>}{Enter}{/Control}");
     expect(onConfirm).toHaveBeenCalledOnce();
   });

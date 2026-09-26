@@ -111,9 +111,10 @@ export function Button({
           {children}
           {shortcut !== undefined && (
             <span aria-hidden="true">
+              {/* The key of the action has no border and no body; on a solid button it keeps the ring of on-primary. */}
               <Kbd
                 variant={solid ? "on-primary" : "default"}
-                className="h-auto border-0 bg-transparent px-0 shadow-none"
+                className={cn("h-auto", !solid && "border-0 bg-transparent px-0 shadow-none")}
               >
                 {shortcut}
               </Kbd>

@@ -130,6 +130,26 @@ describe("Button", () => {
     expect(screen.getByRole("button", { name: "Publish review…" })).toHaveTextContent("Ctrl ↵");
   });
 
+  it("rings the key on a solid button and bares it elsewhere", () => {
+    renderWithStore(
+      <>
+        <Button variant="primary" shortcut="Enter">
+          Approve
+        </Button>
+        <Button shortcut="Esc">Cancel</Button>
+      </>,
+    );
+    const ringed = screen.getByRole("button", { name: "Approve" }).querySelector("kbd");
+    expect(ringed).toHaveClass(
+      "text-brand-on",
+      "shadow-[inset_0_0_0_var(--border)_var(--brand-key-ring)]",
+      "px-1",
+    );
+    expect(ringed).not.toHaveClass("shadow-none");
+    const bare = screen.getByRole("button", { name: "Cancel" }).querySelector("kbd");
+    expect(bare).toHaveClass("border-0", "bg-transparent", "px-0", "shadow-none");
+  });
+
   it("marks the pressed ghost", () => {
     renderWithStore(
       <Button variant="ghost" pressed>
