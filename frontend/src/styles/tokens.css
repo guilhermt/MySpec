@@ -22,7 +22,7 @@
   --status-paused: var(--muted-foreground);
 }
 
-.dark {
+[data-theme="dark"] {
   --status-attention: oklch(0.8 0.15 75);
   --status-success: oklch(0.72 0.15 150);
 }

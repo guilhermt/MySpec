@@ -11,7 +11,7 @@
         if (mode !== "light" && mode !== "dark") {
           mode = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
         }
-        if (mode === "dark") document.documentElement.classList.add("dark");
+        document.documentElement.dataset.theme = mode;
         document.documentElement.style.colorScheme = mode;
       })();
     </script>
