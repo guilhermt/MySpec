@@ -114,7 +114,7 @@ describe.each(THEMES)("Chip in the %s theme", (theme) => {
   it("paints the error in the error ink on its veil, also under the pointer", async () => {
     setTheme(theme);
     render(
-      <Chip kind="menu" error>
+      <Chip kind="menu" errorReason="Opus 4 is no longer offered">
         Opus 4
       </Chip>,
     );

@@ -80,7 +80,7 @@ export function Field({ label, complement, help, error, count, children, classNa
     <div className={cn("flex min-w-0 flex-col gap-1", className)}>
       <Label
         htmlFor={controlId}
-        className="text-(length:--text-meta) leading-(--leading-meta) font-medium text-ink-2"
+        className="block text-(length:--text-meta) leading-(--leading-meta) font-medium text-ink-2"
       >
         {label}
         {complement !== undefined && " "}
@@ -175,16 +175,19 @@ export function useControlState({
     ...(loading ? { "aria-busy": true } : {}),
   };
 
+  // Outside a Field the wrap is always there, so the control keeps its place in the tree, its focus
+  // and its value when the line comes and goes; without a line it lays nothing out (display: contents).
   const wrap = (control: ReactElement) => {
-    if (!own) return control;
+    if (field !== null) return control;
     return (
-      <span className="inline-flex items-center gap-2">
+      <span className={own ? "inline-flex items-center gap-2" : "contents"}>
         {control}
-        {gerund !== undefined ? (
+        {gerund !== undefined && (
           <span className={LINE}>
             <Loading id={ownId} label={gerund} />
           </span>
-        ) : (
+        )}
+        {gerund === undefined && reason !== undefined && (
           <span id={ownId} className={cn("text-ink-3", LINE)}>
             {reason}
           </span>

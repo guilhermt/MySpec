@@ -12,7 +12,7 @@
 
 Juntos cobrem o mesmo terreno que `task check`, então um `task check` verde na máquina é o melhor preditor de um pipeline verde.
 
-A toolchain vem de `mise.toml` pelo `jdx/mise-action`, o que mantém o CI e a máquina nas mesmas versões. Os jobs `Go` e `Build` instalam `libgtk-4-dev` e `libwebkitgtk-6.0-dev`, que o cgo precisa e a imagem do runner não traz; o `Frontend` instala o Chromium do Playwright com as bibliotecas de sistema dele, para a suíte de estilo computado. O store do pnpm, o cache de módulos e o cache de build do Go são preservados entre execuções.
+A toolchain vem de `mise.toml` pelo `jdx/mise-action`, o que mantém o CI e a máquina nas mesmas versões. Os jobs `Go` e `Build` instalam `libgtk-4-dev` e `libwebkitgtk-6.0-dev`, que o cgo precisa e a imagem do runner não traz; o `Frontend` instala o Chromium do Playwright com as bibliotecas de sistema dele, para a suíte de estilo computado, com o `~/.cache/ms-playwright` em cache pela versão do `playwright`. O store do pnpm, o cache de módulos e o cache de build do Go são preservados entre execuções.
 
 ## Cobertura nas pull requests
 

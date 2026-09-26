@@ -2,7 +2,7 @@ import { screen } from "@testing-library/react";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { renderWithStore } from "@/test/render";
-import { Chip } from "./Chip";
+import { Chip, type ChipProps } from "./Chip";
 
 function Toggling() {
   const [pressed, setPressed] = useState(false);
@@ -127,13 +127,23 @@ describe("Chip", () => {
     expect(chip.querySelector("[data-tone]")).toBeNull();
   });
 
-  it("keeps its name in the error state", () => {
-    renderWithStore(
-      <Chip kind="menu" error>
+  it("tells the error with its glyph, and the reason in its description and tooltip", async () => {
+    const { user } = renderWithStore(
+      <Chip kind="menu" errorReason="Opus 4 is no longer offered">
         Opus 4
       </Chip>,
     );
-    expect(screen.getByRole("button", { name: "Opus 4" })).toHaveAttribute("data-error");
+    const chip = screen.getByRole("button", { name: "Opus 4" });
+    expect(chip).toHaveAccessibleDescription("Opus 4 is no longer offered");
+    expect(chip.querySelector('[data-state="error"]')).not.toBeNull();
+    await user.tab();
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Opus 4 is no longer offered");
+  });
+
+  it("requires the gerund to load, by its type", () => {
+    // @ts-expect-error: a loading chip without its gerund would have no name.
+    const unnamed: ChipProps = { kind: "menu", loading: true, children: "Opus" };
+    expect(unnamed.loading).toBe(true);
   });
 
   it("names its remove button Remove by default", () => {

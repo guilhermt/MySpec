@@ -20,7 +20,14 @@ tasks:
       - go install tool
       - go mod download
       - task: common:install:frontend:deps
+      - task: playwright:install
       - lefthook install
+
+  playwright:install:
+    summary: Installs the Chromium of Playwright the computed-style suite runs in; a no-op when it is there
+    dir: frontend
+    cmds:
+      - pnpm exec playwright install --only-shell chromium
 
   dev:
     summary: Runs the app in development mode with Vite HMR

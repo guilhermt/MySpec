@@ -42,6 +42,23 @@ describe("Tooltip", () => {
     expect(await screen.findByRole("tooltip")).toHaveTextContent("Approve");
   });
 
+  it("stays closed on a focus that is not visible, like the one a pointer leaves a dialog with", async () => {
+    const { user } = renderWithStore(
+      <>
+        <button type="button">Open the dialog</button>
+        <Subject />
+      </>,
+    );
+    await user.click(screen.getByRole("button", { name: "Open the dialog" }));
+    act(() => screen.getByRole("button", { name: "Approve step" }).focus());
+    expect(screen.getByRole("button", { name: "Approve step" })).toHaveFocus();
+    // Give a tooltip the time it would take to open on focus.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+    expect(screen.queryByRole("tooltip")).toBeNull();
+  });
+
   it("closes on Escape", async () => {
     const { user } = renderWithStore(<Subject />);
     await user.tab();

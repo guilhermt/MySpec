@@ -3,6 +3,7 @@ import { type ComponentProps, type MouseEvent, type ReactNode, useId } from "rea
 import { Button as UIButton } from "@/components/ui/button";
 import { Toggle as UIToggle } from "@/components/ui/toggle";
 import { cn } from "@/lib/utils";
+import type { ButtonLoading } from "./Button";
 import { Icon } from "./Icon";
 import { IconButton } from "./IconButton";
 import { Shimmer } from "./Shimmer";
@@ -10,7 +11,7 @@ import { Spinner } from "./Spinner";
 import { StateGlyph } from "./StateGlyph";
 import { Tooltip } from "./Tooltip";
 
-export interface ChipProps
+export interface ChipBaseProps
   extends Omit<ComponentProps<"button">, "children" | "className" | "disabled" | "value"> {
   kind: "toggle" | "menu";
   children: ReactNode;
@@ -19,10 +20,8 @@ export interface ChipProps
   size?: "md" | "sm";
   own?: boolean;
   defaultNote?: string;
-  loading?: boolean;
-  loadingLabel?: string;
   reading?: boolean;
-  error?: boolean;
+  errorReason?: string;
   unavailableReason?: string;
   onRemove?: () => void;
   removeLabel?: string;
@@ -30,6 +29,9 @@ export interface ChipProps
   disabledReason?: string;
   className?: string;
 }
+
+/** ChipProps require the gerund on a chip that can load, as ButtonLoading does on a button. */
+export type ChipProps = ChipBaseProps & ButtonLoading;
 
 // Hover stays off the chosen or open chip. The plain hover:, rounded-lg and the pressed backgrounds neutralize the ui toggle and button.
 const BASE =
@@ -49,7 +51,8 @@ const ERROR =
 
 /**
  * Chip is a pill that toggles a filter or opens a menu of choices. Saving, it shows the spinner and
- * the gerund; reading the catalog, the saved choice shimmers; in error, the error ink on its veil.
+ * the gerund; reading the catalog, the saved choice shimmers; in error, the error glyph and the
+ * error ink on its veil, with the reason in the tooltip and in the description.
  */
 export function Chip({
   kind,
@@ -62,7 +65,7 @@ export function Chip({
   loading,
   loadingLabel,
   reading,
-  error,
+  errorReason,
   unavailableReason,
   onRemove,
   removeLabel,
@@ -73,6 +76,8 @@ export function Chip({
   ...props
 }: ChipProps) {
   const reasonId = useId();
+  const errorId = useId();
+  const error = errorReason !== undefined;
   const withReason = disabled === true && disabledReason !== undefined;
   const inert = disabled === true || loading === true;
   const unavailable = unavailableReason !== undefined;
@@ -90,7 +95,13 @@ export function Chip({
     ...(disabled ? { "aria-disabled": true } : {}),
     ...(loading || reading ? { "aria-busy": true } : {}),
     ...(error ? { "data-error": "" } : {}),
-    ...(withReason ? { "aria-describedby": reasonId } : {}),
+    ...(withReason || error
+      ? {
+          "aria-describedby": [withReason ? reasonId : "", error ? errorId : ""]
+            .filter(Boolean)
+            .join(" "),
+        }
+      : {}),
     onClick: handleClick,
     className: cn(
       BASE,
@@ -109,6 +120,7 @@ export function Chip({
     </>
   ) : (
     <>
+      {error && <StateGlyph state="error" size="sm" />}
       {unavailable && <StateGlyph state="blocked" size="sm" />}
       {reading ? <Shimmer>{children}</Shimmer> : children}
       {unavailable && " · unavailable"}
@@ -133,8 +145,19 @@ export function Chip({
       </UIButton>
     );
 
-  const note = unavailableReason ?? (own ? defaultNote : undefined);
+  const note = errorReason ?? unavailableReason ?? (own ? defaultNote : undefined);
   if (note !== undefined) chip = <Tooltip content={note}>{chip}</Tooltip>;
+  if (error) {
+    // The tooltip is never the only carrier: the reason is also the description of the chip.
+    chip = (
+      <>
+        {chip}
+        <span id={errorId} className="sr-only">
+          {errorReason}
+        </span>
+      </>
+    );
+  }
 
   if (onRemove !== undefined) {
     chip = (

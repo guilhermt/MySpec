@@ -64,7 +64,9 @@ describe("Select", () => {
 
   it("marks an unavailable choice on the trigger", () => {
     renderWithStore(<Subject value="legacy" />);
-    expect(screen.getByRole("button", { name: "Model: Legacy" })).toHaveTextContent("◇ Legacy");
+    expect(screen.getByRole("button", { name: "Model: Legacy · unavailable" })).toHaveTextContent(
+      "◇ Legacy · unavailable",
+    );
   });
 
   it("shows its choices in groups", async () => {
@@ -123,5 +125,12 @@ describe("Select", () => {
     await user.click(screen.getByRole("button", { name: "Model: Opus" }));
     await user.click(await screen.findByRole("button", { name: "Try again" }));
     expect(onRetry).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the saved choice as its name while the choices are read", () => {
+    renderWithStore(<Subject loading />);
+    const trigger = screen.getByRole("button", { name: "Model: Opus" });
+    expect(trigger).toHaveAttribute("aria-busy", "true");
+    expect(trigger).toHaveTextContent("Opus");
   });
 });

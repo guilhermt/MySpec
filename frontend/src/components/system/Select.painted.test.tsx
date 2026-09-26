@@ -9,13 +9,14 @@ const OPTIONS = [
   { value: "sonnet", label: "Sonnet" },
 ];
 
-function Subject({ disabled }: { disabled?: boolean }) {
+function Subject({ disabled, loading }: { disabled?: boolean; loading?: boolean }) {
   return (
     <Select
       label="Model"
       value="opus"
       options={OPTIONS}
       onValueChange={() => {}}
+      {...(loading ? { loading } : {})}
       {...(disabled ? { disabled, disabledReason: "The session is running" } : {})}
     />
   );
@@ -87,5 +88,12 @@ describe.each(THEMES)("Select in the %s theme", (theme) => {
       borderStyle: "dashed",
     };
     expect(paintOf(screen.getByRole("button", { name: "Model: Opus" }), want)).toEqual(want);
+  });
+
+  it("shimmers the saved choice while the choices are read", () => {
+    setTheme(theme);
+    render(<Subject loading />);
+    const choice = screen.getByText("Opus");
+    expect(getComputedStyle(choice).animationName).toBe("shimmer");
   });
 });

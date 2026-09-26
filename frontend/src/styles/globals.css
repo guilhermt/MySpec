@@ -281,7 +281,7 @@
      FLASH_MS, the time the class stays on the element. */
   .attention-flash,
   .attention-flash-ring {
-    --flash-color: var(--status-attention);
+    --flash-color: var(--status-attention-fill);
     &[data-tone="error"] {
       --flash-color: var(--destructive);
     }

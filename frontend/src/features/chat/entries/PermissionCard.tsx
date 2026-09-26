@@ -94,7 +94,7 @@ export function PermissionCard({ taskId, stage, permission }: PermissionCardProp
     <fieldset
       aria-labelledby={titleId}
       className={cn(
-        "flex min-w-0 flex-col gap-3 rounded-lg border border-l-4 border-l-[var(--status-attention)] bg-card p-4",
+        "flex min-w-0 flex-col gap-3 rounded-lg border border-l-4 border-l-[var(--status-attention-fill)] bg-card p-4",
         !pending && "opacity-80",
       )}
     >

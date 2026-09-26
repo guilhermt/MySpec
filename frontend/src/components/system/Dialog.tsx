@@ -137,9 +137,12 @@ function DialogHeading({
 /** CANCEL finds the DialogCancel of a dialog, where an alert opens. */
 const CANCEL = "[data-dialog-cancel]";
 
-/** FIELD finds the first field of a dialog body that takes the focus, where the others open. */
+/**
+ * FIELD finds the first field of a dialog body that takes the focus, where the others open. A
+ * disabled field of the system stays focusable with aria-disabled, so both kinds are left out.
+ */
 const FIELD =
-  "[data-dialog-body] :is(input:not([type=hidden]), textarea, select, [role=combobox]):not(:disabled)";
+  '[data-dialog-body] :is(input:not([type=hidden]), textarea, select, [role=combobox]):not(:disabled):not([aria-disabled="true"])';
 
 export interface DialogBodyProps {
   children: ReactNode;

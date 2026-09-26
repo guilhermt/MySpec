@@ -27,13 +27,13 @@ mise install   # instala o Task e o resto da toolchain pinada
 task setup
 ```
 
-A suíte de estilo computado do frontend roda no Chromium do Playwright, que o `pnpm install` não baixa. Uma vez por máquina, e de novo quando o `playwright` do `package.json` muda de versão:
+A suíte de estilo computado do frontend roda no Chromium do Playwright, que o `pnpm install` não baixa. O `task setup` o instala, e rodá-lo de novo depois que o `playwright` do `package.json` muda de versão baixa o Chromium correspondente. À mão, é:
 
 ```sh
 cd frontend && pnpm exec playwright install --only-shell chromium
 ```
 
-`mise install` vem primeiro porque o próprio `task` é uma das ferramentas pinadas. `task setup` roda `mise install` de novo, instala o CLI `wails3` declarado no `go.mod` com `go install tool`, baixa os módulos Go, instala as dependências do frontend com pnpm e instala os hooks do git. Rodar duas vezes é inofensivo; é o comando que mantém um clone atualizado.
+`mise install` vem primeiro porque o próprio `task` é uma das ferramentas pinadas. `task setup` roda `mise install` de novo, instala o CLI `wails3` declarado no `go.mod` com `go install tool`, baixa os módulos Go, instala as dependências do frontend com pnpm, o Chromium do Playwright e os hooks do git. Rodar duas vezes é inofensivo; é o comando que mantém um clone atualizado.
 
 O hook, definido em `lefthook.yml`, é de pre-commit e só formata: Biome nos arquivos do frontend em stage e `golangci-lint fmt` nos arquivos Go em stage, colocando de volta em stage o que corrigiu. Lint, typecheck e testes ficam para `task check` e para o CI, para que um commit nunca seja travado por uma verificação lenta.
 
@@ -41,7 +41,8 @@ O hook, definido em `lefthook.yml`, é de pre-commit e só formata: Biome nos ar
 
 | Comando | O que faz |
 |---|---|
-| `task setup` | Prepara um clone: ferramentas, dependências, hooks |
+| `task setup` | Prepara um clone: ferramentas, dependências, o Chromium do Playwright, hooks |
+| `task playwright:install` | Instala o Chromium do Playwright da suíte de estilo computado; nada faz quando ele já está lá |
 | `task dev` | Roda o app em modo de desenvolvimento, com HMR do Vite |
 | `task build` | Build de produção em `bin/myspec` |
 | `task run` | Roda `bin/myspec` |

@@ -101,6 +101,22 @@ describe("Dialog", () => {
     await waitFor(() => expect(screen.getByRole("textbox", { name: "Title" })).toHaveFocus());
   });
 
+  it("skips a disabled field, which stays focusable, for the first one that takes input", async () => {
+    renderWithStore(
+      <Dialog open onOpenChange={() => {}} title="New task">
+        <DialogBody>
+          <Field label="Repository">
+            <Input disabled disabledReason="Fixed by the board" />
+          </Field>
+          <Field label="Title">
+            <Input />
+          </Field>
+        </DialogBody>
+      </Dialog>,
+    );
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Title" })).toHaveFocus());
+  });
+
   it("opens on the dialog itself when the body has no field, never on the close button", async () => {
     renderWithStore(
       <Dialog open onOpenChange={() => {}} title="What changed">

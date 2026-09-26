@@ -5,8 +5,7 @@ import { cn } from "@/lib/utils";
 import { Icon } from "./Icon";
 import { ICONS } from "./icons";
 import { MENU_ITEM, MenuMessage } from "./Menu";
-import { type ListMessage, SELECT_TRIGGER, UNAVAILABLE } from "./Select";
-import { Shimmer } from "./Shimmer";
+import { ChosenText, choiceName, type ListMessage, SELECT_TRIGGER, UNAVAILABLE } from "./Select";
 
 export interface ListboxItem {
   value: string;
@@ -52,12 +51,10 @@ export function Listbox({
   const reasonId = useId();
   const withReason = disabled === true && disabledReason !== undefined;
   const chosen = items.find((item) => item.value === value) ?? null;
-  const shown =
-    chosen === null ? null : `${chosen.unavailable ? `${UNAVAILABLE} ` : ""}${chosen.label}`;
 
   const trigger = (
     <Combobox.Trigger
-      aria-label={`${label}: ${chosen?.label ?? placeholder}`}
+      aria-label={`${label}: ${chosen !== null ? choiceName(chosen) : placeholder}`}
       {...(disabled ? { "aria-disabled": true } : {})}
       {...(withReason ? { "aria-describedby": reasonId } : {})}
       {...(loading ? { "aria-busy": true } : {})}
@@ -65,12 +62,10 @@ export function Listbox({
     >
       <span className="truncate">
         <Combobox.Value>
-          {shown === null ? (
+          {chosen === null ? (
             <span className="text-ink-4">{placeholder}</span>
-          ) : loading ? (
-            <Shimmer>{shown}</Shimmer>
           ) : (
-            shown
+            <ChosenText choice={chosen} loading={loading === true} />
           )}
         </Combobox.Value>
       </span>

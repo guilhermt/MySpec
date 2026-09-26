@@ -148,6 +148,8 @@ describe("Listbox", () => {
     renderWithStore(
       <Subject items={[...ITEMS, { value: "old", label: "old", unavailable: true }]} value="old" />,
     );
-    expect(screen.getByRole("combobox", { name: "Base branch: old" })).toHaveTextContent("◇ old");
+    expect(
+      screen.getByRole("combobox", { name: "Base branch: old · unavailable" }),
+    ).toHaveTextContent("◇ old · unavailable");
   });
 });
