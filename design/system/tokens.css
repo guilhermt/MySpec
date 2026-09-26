@@ -69,7 +69,7 @@
 
   /* Control and chrome sizes. */
   --size-control: 2rem; --size-control-sm: 1.75rem; --size-control-xs: 1.375rem;
-  --size-chip: 1.75rem; --size-time-chip: 1.125rem; --size-kbd: 1.125rem; --size-kbd-sm: 1rem;
+  --size-chip: 1.75rem; --size-chip-sm: var(--size-control-xs); --size-time-chip: 1.125rem; --size-kbd: 1.125rem; --size-kbd-sm: 1rem;
   --size-head: 3rem; --size-progress: 2.5rem; --size-node: 1.75rem; --size-tab: 1.75rem; --size-ask: 2.75rem;
   --size-composer-min: 3.5rem; --size-mark: 1.5rem; --size-more-below: 1.75rem;
   --size-menu-min: 14rem; --size-dialog: 30rem; --size-toast: 22rem; --size-tooltip-max: 20rem;

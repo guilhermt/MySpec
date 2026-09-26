@@ -371,7 +371,7 @@ O coordenador consolida. Os estados de cada um estão em `components.html`.
 - **Arquivo mudado**, a linha do cartão de review.
 - **Checks do GitHub**, o bloco com os checks pelo nome.
 - **Estado vazio de um lugar**.
-- **Popover Review mode**, **Popover Models** e o **seletor de modo e de modelo de um step** (o chip `xs`, com a escolha própria em tinta).
+- **Popover Review mode**, **Popover Models** e o **seletor de modo e de modelo de um step** (o chip `sm`, com a escolha própria em tinta).
 - **Linha de conversa anterior** em `Details` e a **faixa da conversa anterior** no lugar do compositor.
 - **Menu do item** (`⋯`), com o conteúdo desta tela.
 - **Barra do pedido**: a forma "a outra conversa espera", com **Go to…**, e a forma de encerramento.

@@ -58,7 +58,8 @@ Cada componente embrulha um primitivo gerado em `frontend/src/components/ui` (nu
 | Anatomia | Forma de `--glyph` (10 px; `--glyph-sm` em abas, pílula e listas), par, centrada na coluna de ícone |
 | Variantes | Erro: losango cheio (raio `--radius-glyph`). Espera: disco cheio com contorno. Encerramento: anel de 2 px. Trabalhando: anel com arco, girando. GitHub: círculo tracejado. Pausado: duas barras. Ocioso: círculo de 1 px. Bloqueio sem situação: losango contornado `◇`. Não iniciado: círculo em `--line-deco` |
 | Estados | Só o spinner se move |
-| Tokens | `--state-error`, `--state-wait-glyph`, `--state-wait-ring`, `--state-close`, `--state-work`, `--state-work-track`, `--state-github`, `--state-paused`, `--state-idle`, `--state-notice`, `--glyph`, `--glyph-sm`, `--glyph-diamond`, `--glyph-bar`, `--duration-spin` |
+| Cor da espera | Todo preenchimento que diz espera (o disco, um ponto, um véu tingido) usa `--state-wait-glyph`; todo texto que diz espera usa `--state-wait` |
+| Tokens | `--state-error`, `--state-wait`, `--state-wait-glyph`, `--state-wait-ring`, `--state-close`, `--state-work`, `--state-work-track`, `--state-github`, `--state-paused`, `--state-idle`, `--state-notice`, `--glyph`, `--glyph-sm`, `--glyph-diamond`, `--glyph-bar`, `--duration-spin` |
 | Acessibilidade | `role="img"` com o nome do estado e o tempo, ou `aria-hidden` quando o texto ao lado já diz tudo |
 | Faça | Use sempre com uma palavra ao lado ou no nome acessível |
 | Não faça | Não use a identidade num glifo. Não anime um estado terminal |
@@ -90,6 +91,7 @@ Cada componente embrulha um primitivo gerado em `frontend/src/components/ui` (nu
 |---|---|
 | Anatomia | Fina, sem trilho: o polegar em `--line-2`, raio `--radius-pill`, com `--border-2` de folga transparente; `--space-2-5` de largura |
 | Estados | Hover no polegar: `--line-3` |
+| Foco | A área que rola com o foco do teclado tem o anel de foco por dentro (`inset`), para não ser cortado pelo `overflow`; as entradas dentro dela têm o anel comum |
 | Faça | Deixe a rolagem nativa: a área que rola é `scroll-area` |
 | Não faça | Não esconda a barra de uma área que rola |
 
@@ -123,7 +125,7 @@ Cada componente embrulha um primitivo gerado em `frontend/src/components/ui` (nu
 | Variantes | **O agente**: o nome da conversa na tela (`Implementer`, `Reviewer`, `PRD agent`), escrito quando a voz muda (no início, depois de uma mensagem sua, de uma mensagem do produto ou de uma dobra de trecho). As ações e os eventos da sessão não mudam a voz. Numa fala seguida, a palavra aparece só com hover e foco. Na escrita, o spinner vem antes da palavra. **Você**: `You`, na cabeça da sua mensagem. O produto não fala: a mensagem dele é um marco |
 | Regra | A faixa existe em toda fala, com a palavra visível ou não, para o texto nunca se mover. A palavra é neutra: o azul não marca quem fala |
 | Faça | Deixe a aba dizer qual dos dois agentes de um step está na tela |
-| Não faça | Não mostre a hora sem hover ou foco |
+| Não faça | Não mostre a hora sem hover ou foco. Não use avatar: o produto não tem componente de avatar |
 
 ### Link
 
@@ -164,11 +166,11 @@ Cada componente embrulha um primitivo gerado em `frontend/src/components/ui` (nu
 
 | | |
 |---|---|
-| Anatomia | Pílula de `--size-chip` (28; `-sm` e `-xs` em linhas densas), rótulo em 13 px e peso 500, chevron quando abre |
+| Anatomia | Pílula de `--size-chip` (28 px), rótulo em 13 px e peso 500, chevron quando abre. Em linhas densas, o chip `sm`: `--size-chip-sm` (22 px) com o rótulo em `--text-micro` |
 | Variantes | **Seletor de modelo e esforço** (`Opus · high ▾`), no compositor e nas linhas de modelo. **Filter**, que abre o menu de filtros. **Chip que alterna** (`Assigned to me`, `aria-pressed`). **Filtro ativo**: escolhido, com `×` que é botão; um filtro órfão leva `◇` e a razão no tooltip |
 | Escolha própria e padrão | Num seletor que segue um padrão (a task, **Defaults**, a fábrica), a escolha própria fica em `--ink-1`, peso 500, borda `--line-3`, com o padrão no tooltip (`Factory default: Fable 5.1 · high`); a que segue fica quieta (`--ink-2` numa linha de modelo, `--ink-3` no seletor de um step) |
 | Estados | Todos os comuns. Aberto ou escolhido: `--brand-tint` com anel `--brand-ring`. Salvando: spinner e `Saving…`. Lendo o catálogo: a escolha salva com brilho. Indisponível: `◇`, `· unavailable` e a razão no tooltip, sem trocar a escolha |
-| Tokens | `--surface-2`, `--line-2`, `--line-3`, `--brand-tint`, `--brand-ring`, `--radius-pill`, `--size-chip` |
+| Tokens | `--surface-2`, `--line-2`, `--line-3`, `--brand-tint`, `--brand-ring`, `--radius-pill`, `--size-chip`, `--size-chip-sm`, `--text-meta`, `--text-micro` |
 | Teclado | `Enter` e `Space` abrem o menu; `aria-expanded`. O `×` de um filtro é uma parada própria |
 | Faça | Use para uma escolha que muda o contexto do lugar |
 | Não faça | Não use chip para status. Status é glifo e chip de tempo |
@@ -279,7 +281,7 @@ Cada componente embrulha um primitivo gerado em `frontend/src/components/ui` (nu
 
 | | |
 |---|---|
-| Anatomia | Na linha de um step não iniciado em `Details`: dois chips `xs`, o de modo (robô e `Agent`, ou pessoa e `Manual`) e o de modelo (`Sonnet · high`), e **Follow the task** quando o step tem escolha própria |
+| Anatomia | Na linha de um step não iniciado em `Details`: dois chips `sm`, o de modo (robô e `Agent`, ou pessoa e `Manual`) e o de modelo (`Sonnet · high`), e **Follow the task** quando o step tem escolha própria |
 | Estados | Segue a task (`--ink-3`), própria (`--ink-1`, 500), hover, foco, aberto, iniciado (sem edição, o modo com que é revisado; `Manual` com o tooltip que diz por quê quando passou ao usuário), salvando, indisponível (`◇`) |
 
 ## Shell
@@ -385,7 +387,7 @@ Cada componente embrulha um primitivo gerado em `frontend/src/components/ui` (nu
 
 | | |
 |---|---|
-| Anatomia | No lugar da lista ou do conteúdo, centrado na medida: o título em `--text-ui` 600, o texto em `--ink-3` (o que aparece ali e quando), e a ação que o resolve (**New discussion**, **Read now**, **Clear filters**) |
+| Anatomia | No lugar da lista ou do conteúdo, alinhado à esquerda na medida da lista, como nos mocks: o título em `--text-ui` 600, o texto em `--ink-3` (o que aparece ali e quando), e a ação que o resolve (**New discussion**, **Read now**, **Clear filters**) |
 | Variantes | Vazio de verdade (`This board has no issues.`, `No open pull requests.`); filtro sem resultado (`No cards match the filters.`, o que foi pedido, **Clear filters**, com a barra de filtros à vista); nunca lido e falhou (`Couldn't read the board`, a mensagem, **Try again**); Home sem item (`Nothing in progress`) |
 | Faça | Diga o que faria algo aparecer |
 | Não faça | Não repita a ação que já está à vista na página |
@@ -573,13 +575,14 @@ A conversa é uma coluna centrada de `--measure-conversation` (60rem, 960 px), e
 
 | | |
 |---|---|
-| Anatomia | Afundado, raio `--radius-md`, fio interno, na largura da coluna; cabeçalho com a linguagem, o caminho em mono (quando existe) e **Copy**; o código em 13/20 |
+| Anatomia | Afundado, raio `--radius-md`, fio interno, na largura da coluna; cabeçalho com a linguagem, o caminho em mono e o intervalo de linhas (cada um quando existe) e **Copy**; o código em 13/20, sem números de linha |
+| Tinta | O código é todo em peso 400, sem itálico nem negrito: os quatro matizes `--code-*` e o comentário em `--code-comment` separam os tipos de token só pela cor |
 | Código longo | Acima de 24 linhas, o bloco mostra as 20 primeiras e um rodapé de fio com **Show all 46 lines** e `26 more`; aberto, **Show less**. Continua rolando na horizontal |
 | Estados de Copy | Hover, foco, copiado (visto e `Copied`), erro (`Can't copy · select the text`) |
 | Estados de Show all | Padrão, hover, foco, aberto |
 | Tokens | `--surface-0`, `--line-1`, `--code-keyword`, `--code-string`, `--code-function`, `--code-number`, `--code-comment`, `--text-code` |
 | Acessibilidade | Rola na horizontal dentro do bloco; os botões têm nome; **Show all** tem `aria-expanded` |
-| Não faça | Não quebre linhas de código para caber |
+| Não faça | Não quebre linhas de código para caber. Não numere as linhas. Não use peso nem itálico para destacar um token |
 
 ### Medidor de contexto
 
