@@ -4,8 +4,8 @@
  * variables are overridden in :root instead, which the utilities read anyway.
  */
 :root {
-  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "JetBrains Mono Variable", ui-monospace, "JetBrainsMono Nerd Font", monospace;
+  --font-sans: "Fira Sans", system-ui, sans-serif;
+  --font-mono: "Fira Code", ui-monospace, monospace;
 
   /* The root font size scales the whole interface: sizes are in rem. */
   --text-base: 1rem;
@@ -31,8 +31,12 @@ html {
   font-family: var(--font-sans);
   font-size: var(--text-base);
   line-height: var(--leading-base);
-  font-feature-settings: "cv11", "ss01"; /* Inter: forms that read better in UI */
-  -webkit-font-smoothing: antialiased;
+  font-synthesis: none;
+}
+
+/* The system writes mono without ligatures, and Fira Code ligates by default. */
+:where(code, kbd, pre, samp, .font-mono) {
+  font-variant-ligatures: none;
 }
 
 body {
