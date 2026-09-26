@@ -184,6 +184,14 @@
   border-color: var(--state-error);
   box-shadow: inset var(--error-rail) 0 0 var(--state-error);
 }
+/* A field in error that takes the focus keeps the error border and the rail and adds the halo outside. */
+@utility field-error-focus {
+  outline: none;
+  border-color: var(--state-error);
+  box-shadow:
+    inset var(--error-rail) 0 0 var(--state-error),
+    0 0 0 var(--halo) var(--focus-halo);
+}
 /* Disabled in every variant: dashed control line, faint ink, no body, no shadow. */
 @utility dashed-disabled {
   border-style: dashed;

@@ -23,6 +23,11 @@ function expectPaint(want: Paint) {
 
 const halo = () => resolve("0 0 0 var(--halo) var(--focus-halo)", "box-shadow");
 const rail = () => resolve("inset var(--error-rail) 0 0 var(--state-error)", "box-shadow");
+const railAndHalo = () =>
+  resolve(
+    "inset var(--error-rail) 0 0 var(--state-error), 0 0 0 var(--halo) var(--focus-halo)",
+    "box-shadow",
+  );
 
 describe.each(THEMES)("text fields in the %s theme", (theme) => {
   describe.each(FIELDS)("$name", ({ Control }) => {
@@ -57,7 +62,7 @@ describe.each(THEMES)("text fields in the %s theme", (theme) => {
       expectPaint(field(token("--surface-input"), token("--state-error"), rail()));
     });
 
-    it("keeps the error border and the rail while focused", async () => {
+    it("keeps the error border and the rail while focused, and adds the halo outside", async () => {
       setTheme(theme);
       render(
         <Field label="Name" error="Spaces aren't allowed">
@@ -65,7 +70,7 @@ describe.each(THEMES)("text fields in the %s theme", (theme) => {
         </Field>,
       );
       await userEvent.click(screen.getByRole("textbox", { name: "Name" }));
-      expectPaint(field(token("--surface-input"), token("--state-error"), rail()));
+      expectPaint(field(token("--surface-input"), token("--state-error"), railAndHalo()));
     });
 
     it("is dashed, without a body and in faint ink when disabled", () => {

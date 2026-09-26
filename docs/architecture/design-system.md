@@ -66,7 +66,7 @@ As classes dos componentes seguem uma convenção, sem nenhum valor solto:
 Os `@utility` de `globals.css` são as regras compostas que se repetem nos componentes:
 
 - `focus-ring`: o anel de foco por fora, com folga;
-- `field-focus` e `field-error`: a borda e o halo de um campo em foco, a borda e o trilho interno de um campo com erro;
+- `field-focus`, `field-error` e `field-error-focus`: a borda e o halo de um campo em foco; a borda e o trilho interno de um campo com erro; e, num campo em erro com foco, a borda de erro e o trilho com o halo por fora, porque os dois portadores convivem;
 - `dashed-disabled`: o desabilitado de toda variante, com a linha tracejada e a tinta apagada;
 - `spin-glyph`: o giro do spinner, que sem movimento para como um anel de três quartos;
 - `shimmer-text`, `shimmer-fill` e `shimmer-track`: o brilho de uma leitura sem resultado sobre texto, preenchimento ou trilho do medidor, chapado sem movimento.
@@ -129,15 +129,13 @@ As convenções de todo componente:
 
 **Carregando.** `loading` com `loadingLabel` (o gerúndio, `Approving…`): o controle mostra o `Spinner` e o gerúndio, tem `aria-busy="true"`, continua focável e ignora a ativação. No botão, o gerúndio toma o lugar do rótulo, e o tipo de `ButtonProps` exige `loadingLabel` sempre que `loading` pode ser verdadeiro; no botão de ícone, o spinner toma o lugar do ícone e o nome continua o rótulo. Carregam assim o botão, o botão de ícone, o chip (com o mesmo `ButtonLoading`, que exige o gerúndio), o link e a caixa de seleção (o spinner no lugar da caixa). No input, no textarea e na busca, o controle fica com `aria-busy` e o spinner com o gerúndio vão na linha de ajuda do `Field`, ou ao lado do controle fora de um. Uma leitura sem resultado brilha em vez de girar: o chip com `reading`, e o select e o listbox com `loading`, mostram a escolha salva com o `Shimmer` e ficam com `aria-busy`. O select, o listbox e o menu trocam os itens pela `MenuMessage`, neutra (`status`) ou de erro (`alert`), com **Try again** quando o chamador dá `onRetry`. O rádio e o controle segmentado não carregam.
 
-**Diálogo.** Sem `initialFocus`, um diálogo `alert` abre com o foco no `DialogCancel`, o **Cancel** secundário do rodapé, que o fecha; os outros abrem no primeiro campo do `DialogBody` e, sem campo, no próprio diálogo. O `×` nunca é o foco inicial. `initialFocus` fica para a exceção explícita.
+**Diálogo.** Sem `initialFocus`, um diálogo `alert` abre com o foco no `DialogCancel`, o **Cancel** secundário do rodapé, que o fecha; os outros abrem no primeiro campo do `DialogBody` que recebe texto (um campo desabilitado, `:disabled` ou `aria-disabled`, fica de fora) e, sem campo, no próprio diálogo. O `×` nunca é o foco inicial. `initialFocus` fica para a exceção explícita.
 
 **Tooltip.** Abre depois da pausa no hover e na hora num foco de teclado, o que casa com `:focus-visible`. Um foco que não é visível, como o que um diálogo aberto com o ponteiro põe no **Cancel**, não abre tooltip: o Base UI já o recusa no navegador, e o `Tooltip` o recusa também, para não depender disso.
 
 **Escolha indisponível.** Uma escolha que o catálogo não tem mais aparece no gatilho do select e do listbox como `◇ old · unavailable`, e o nome do gatilho diz o mesmo (`Base branch: old · unavailable`): o `◇` não é o único portador.
 
 **Campo fora de um `Field`.** O controle fica sempre dentro do mesmo invólucro, `display: contents` sem linha, e a razão ou o gerúndio aparecem dentro dele: o `<input>` nunca é remontado, e o foco e o valor sobrevivem ao carregando que liga e desliga enquanto se digita.
-
-**Diálogo, foco inicial.** O primeiro campo é o primeiro que recebe texto: um campo desabilitado, `:disabled` ou `aria-disabled`, fica de fora.
 
 **Chip.** Dois tamanhos: `md`, de `--size-chip`, e `sm`, de `--size-chip-sm` com o rótulo em `--text-micro`, para as linhas densas. Em erro (`errorReason`), o losango de erro antes do rótulo e a tinta `--state-error` sobre `--state-error-veil` com a borda `--state-error`, também sob o ponteiro; a razão vai no tooltip e na descrição acessível, e a cor nunca é o único portador.
 
