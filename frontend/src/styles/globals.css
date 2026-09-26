@@ -159,9 +159,11 @@
   --sidebar-border: var(--sidebar-line);
   --sidebar-ring: var(--focus);
 
-  /* Session status, for the screens that still read it; each is a state of the system. */
+  /* Session status, for the screens that still read it; each is a state of the system. The wait is
+     text in --state-wait and a fill in --state-wait-glyph (components.md, Cor da espera). */
   --status-working: var(--state-work);
   --status-attention: var(--state-wait);
+  --status-attention-fill: var(--state-wait-glyph);
   --status-success: var(--state-close);
   --status-paused: var(--state-paused);
 }

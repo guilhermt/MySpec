@@ -4,7 +4,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderWithStore } from "@/test/render";
-import { TOOLTIP_DELAY_MS, Tooltip } from "./Tooltip";
+import { TOOLTIP_DELAY_MS, TOOLTIP_OFFSET_PX, Tooltip } from "./Tooltip";
 
 const TOKENS = readFileSync(
   join(import.meta.dirname, "../../../../design/system/tokens.css"),
@@ -66,5 +66,9 @@ describe("Tooltip", () => {
 
   it("keeps the delay of tokens.css", () => {
     expect(TOKENS).toContain(`--delay-tooltip: ${TOOLTIP_DELAY_MS}ms`);
+  });
+
+  it("keeps the gap of tokens.css", () => {
+    expect(TOKENS).toContain(`--space-1-5: ${TOOLTIP_OFFSET_PX / 16}rem`);
   });
 });

@@ -21,10 +21,12 @@ vi.mock("streamdown", () => ({
     children,
     className,
     shikiTheme,
+    lineNumbers,
   }: {
     children: string;
     className?: string;
     shikiTheme?: readonly (string | { name?: string })[];
+    lineNumbers?: boolean;
   }) =>
     createElement(
       "div",
@@ -34,6 +36,7 @@ vi.mock("streamdown", () => ({
         "data-shiki-theme": shikiTheme
           ?.map((theme) => (typeof theme === "string" ? theme : theme.name))
           .join(" "),
+        "data-line-numbers": String(lineNumbers ?? true),
       },
       children,
     ),

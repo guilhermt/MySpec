@@ -126,4 +126,22 @@ describe("Chip", () => {
     expect(chip).toHaveAttribute("aria-busy", "true");
     expect(chip.querySelector("[data-tone]")).toBeNull();
   });
+
+  it("keeps its name in the error state", () => {
+    renderWithStore(
+      <Chip kind="menu" error>
+        Opus 4
+      </Chip>,
+    );
+    expect(screen.getByRole("button", { name: "Opus 4" })).toHaveAttribute("data-error");
+  });
+
+  it("names its remove button Remove by default", () => {
+    renderWithStore(
+      <Chip kind="toggle" pressed onRemove={() => {}}>
+        Open
+      </Chip>,
+    );
+    expect(screen.getByRole("button", { name: "Remove" })).toBeInTheDocument();
+  });
 });

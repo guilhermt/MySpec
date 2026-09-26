@@ -29,6 +29,9 @@ export interface ListboxProps {
   disabledReason?: string;
 }
 
+/** LIST_OFFSET_PX mirrors --space-1 of tokens.css: the gap between a list and its trigger, as in the menus. */
+export const LIST_OFFSET_PX = 4;
+
 /**
  * Listbox is a long choice with a search at the top of its list. While the catalog is read, the
  * saved choice shimmers; a message stands in for the list when it cannot be shown.
@@ -98,10 +101,9 @@ export function Listbox({
         trigger
       )}
       <Combobox.Portal>
-        {/* sideOffset 4 is --space-1, as the menus have it. */}
         <Combobox.Positioner
           align="start"
-          sideOffset={4}
+          sideOffset={LIST_OFFSET_PX}
           className="isolate z-(--z-overlay) outline-none"
         >
           <Combobox.Popup className="flex max-h-(--available-height) min-w-(--size-menu-min) flex-col gap-0.5 overflow-y-auto rounded-lg bg-surface-3 p-1 text-(length:--text-ui) leading-(--leading-ui) text-ink-1 shadow-float outline-none">

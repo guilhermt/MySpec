@@ -44,6 +44,7 @@ export function RadioGroup({
         if (!disabled) onValueChange(next as string);
       }}
       {...(disabled ? { readOnly: true, "aria-disabled": true } : {})}
+      {...(invalid ? { "aria-invalid": true } : {})}
       {...(withReason ? { "aria-describedby": reasonId } : {})}
       className={cn(
         orientation === "vertical" ? "flex flex-col gap-1" : "flex flex-row gap-4",

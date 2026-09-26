@@ -1,7 +1,8 @@
 import { Checkbox as BaseCheckbox } from "@base-ui/react/checkbox";
-import { Check } from "lucide-react";
 import { type ReactNode, useId } from "react";
 import { cn } from "@/lib/utils";
+import { Icon } from "./Icon";
+import { ICONS } from "./icons";
 import { Spinner } from "./Spinner";
 
 export interface CheckboxProps {
@@ -59,7 +60,7 @@ export function Checkbox({
           )}
         >
           <BaseCheckbox.Indicator>
-            <Check className="size-(--icon-xs) text-brand-on" />
+            <Icon icon={ICONS.done} size="xs" className="text-brand-on" />
           </BaseCheckbox.Indicator>
         </span>
       )}

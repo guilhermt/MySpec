@@ -49,6 +49,7 @@ export function Markdown({ children, streaming = false, className }: MarkdownPro
       {...(streaming ? { caret: "block" as const } : {})}
       plugins={plugins}
       shikiTheme={[...CODE_THEMES]}
+      lineNumbers={false}
       controls={CONTROLS}
       linkSafety={LINK_SAFETY}
       components={COMPONENTS}

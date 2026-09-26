@@ -1,8 +1,9 @@
 import { Menu as BaseMenu } from "@base-ui/react/menu";
-import { Check, ChevronDown } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { Fragment, useId } from "react";
 import { cn } from "@/lib/utils";
 import { Icon } from "./Icon";
+import { ICONS } from "./icons";
 import {
   MENU_ITEM,
   Menu,
@@ -154,7 +155,7 @@ function SelectItem({ option }: { option: SelectOption }) {
         keepMounted
         className="size-(--icon) text-brand-ink data-unchecked:invisible"
       >
-        <Check className="size-(--icon)" />
+        <Icon icon={ICONS.done} />
       </BaseMenu.RadioItemIndicator>
       <span>
         {option.unavailable && `${UNAVAILABLE} `}

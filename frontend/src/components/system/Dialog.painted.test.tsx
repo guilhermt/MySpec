@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { describe, expect, it } from "vitest";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { paintOf, resolve, setTheme, THEMES, token } from "@/test/painted";
 import { Button } from "./Button";
 import { Dialog, DialogBody, DialogCancel, DialogFooter, type DialogProps } from "./Dialog";
@@ -44,6 +44,19 @@ describe.each(THEMES)("Dialog in the %s theme", (theme) => {
     render(<Subject size="wide" />);
     const sheet = screen.getByRole("dialog", { name: "Delete the task" });
     expect(`${sheet.offsetWidth}px`).toBe(resolve("var(--size-dialog-wide)", "width"));
+  });
+
+  it("keeps --space-8 free in a narrow window", async () => {
+    setTheme(theme);
+    await page.viewport(400, 700);
+    try {
+      render(<Subject />);
+      const sheet = screen.getByRole("dialog", { name: "Delete the task" });
+      const free = Number.parseFloat(resolve("var(--space-8)", "width"));
+      expect(sheet.offsetWidth).toBe(window.innerWidth - free);
+    } finally {
+      await page.viewport(1280, 800);
+    }
   });
 
   it("sinks the footer", () => {

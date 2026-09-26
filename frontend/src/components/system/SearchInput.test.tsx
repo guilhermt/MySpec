@@ -25,6 +25,13 @@ describe("SearchInput", () => {
     expect(within(search).getByText("/")).toBeInTheDocument();
   });
 
+  it("is a text field that offers search on the keyboard, without the native cancel", () => {
+    renderWithStore(<Subject />);
+    const box = screen.getByRole("searchbox", { name: "Search tasks" });
+    expect(box).toHaveAttribute("type", "text");
+    expect(box).toHaveAttribute("enterkeyhint", "search");
+  });
+
   it("reports what is typed", async () => {
     const onValueChange = vi.fn();
     const { user } = renderWithStore(<Subject value="" onValueChange={onValueChange} />);
@@ -76,5 +83,13 @@ describe("SearchInput", () => {
     const box = screen.getByRole("searchbox", { name: "Search tasks" });
     expect(box).toHaveAttribute("aria-busy", "true");
     expect(box).toHaveAccessibleDescription("Reading the cards…");
+  });
+
+  it("disables the clear button with the field", () => {
+    renderWithStore(<Subject value="auth" disabled disabledReason="No cards yet" />);
+    expect(screen.getByRole("button", { name: "Clear search" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
   });
 });

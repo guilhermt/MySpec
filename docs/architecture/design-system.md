@@ -15,7 +15,7 @@ O tema é o atributo `data-theme` do `documentElement`, `light` ou `dark`:
 - um script em `frontend/index.html` o escreve antes do primeiro render, a partir da preferência salva e do esquema do sistema, para a interface nunca piscar no tema errado;
 - `features/theme/useApplyTheme.ts` o mantém em dia quando a preferência ou o esquema do sistema mudam;
 - a variante `dark:` do Tailwind é `&:is([data-theme="dark"] *)`;
-- `backgroundFor`, em `internal/app/theme.go`, pinta atrás do webview o `--surface-1` de cada tema, em sRGB, e o primeiro frame da janela já tem a cor certa.
+- `backgroundFor`, em `internal/app/theme.go`, pinta atrás do webview o `--surface-1` de cada tema, em sRGB, e o primeiro frame da janela já tem a cor certa. `internal/app/theme_test.go` lê o `--surface-1` dos dois temas em `tokens.css`, o converte de OKLCH para sRGB e falha quando `backgroundFor` deixa de corresponder.
 
 ## Ponte do shadcn
 
@@ -37,7 +37,7 @@ Os primitivos de `components/ui/` leem as variáveis do shadcn (`--background`, 
 
 O `--border` do shadcn não é declarado: `--border` é a espessura de `1px` do system, e a cor das bordas é o utilitário `--color-border`, que aponta para `--line-2`.
 
-As cores de status de sessão (`--status-working`, `--status-attention`, `--status-success`, `--status-paused`) são aliases de `--state-work`, `--state-wait`, `--state-close` e `--state-paused`, para as telas que ainda as leem.
+As cores de status de sessão (`--status-working`, `--status-attention`, `--status-success`, `--status-paused`) são aliases de `--state-work`, `--state-wait`, `--state-close` e `--state-paused`, para as telas que ainda as leem. A espera tem dois: `--status-attention` é o texto, em `--state-wait`, e `--status-attention-fill` é o preenchimento (o ponto de status, o véu de uma linha pendente), em `--state-wait-glyph`, a regra Cor da espera de `components.md`.
 
 ## Utilitários
 
@@ -60,7 +60,8 @@ As classes dos componentes seguem uma convenção, sem nenhum valor solto:
 - raio: `rounded-xs…xl` ou `rounded-(--radius-pill)`;
 - peso: `font-normal`, `font-medium`, `font-semibold` e `font-bold`;
 - espaço: a escala numérica do Tailwind, que é a do system, só nos degraus que ele tem (0.5, 1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 12 e 16);
-- camada: `z-(--z-tooltip)`.
+- camada: `z-(--z-tooltip)`;
+- distância de um popup do Base UI, que é um número em JS: uma constante com o nome do token que ela espelha, testada contra `tokens.css` como o `TOOLTIP_DELAY_MS` (`TOOLTIP_OFFSET_PX` é `--space-1-5`, `LIST_OFFSET_PX` é `--space-1`).
 
 Os `@utility` de `globals.css` são as regras compostas que se repetem nos componentes:
 
@@ -82,11 +83,12 @@ O WebKitGTK compõe um elemento em meio pixel e o reamostra, o que borra texto e
 - toda largura que depende da janela é arredondada com `round()`, como a lateral e o preenchimento do medidor de contexto;
 - os diálogos abrem a `8vh` do topo e crescem para baixo, com o `left` e o translate horizontal arredondados, por uma regra sem camada que os seleciona pelo `data-slot`; o teste falha quando os componentes gerados deixam de corresponder a ela;
 - o véu atrás de um diálogo é o `--scrim`, sem desfoque;
+- a busca é um campo `type="text"` com `role="searchbox"` e `enterKeyHint="search"`, porque num `type="search"` o WebKit desenha o botão de cancelar dele ao lado do `×` do system;
 - todo ícone do Lucide (`svg.lucide`) desenha com o traço `--icon-stroke` do system.
 
 ## Código
 
-O código da conversa é destacado pelo Streamdown com o shiki. `features/chat/code-theme.ts` define um par de temas, claro e escuro, cujas cores são `var(--code-*)`: o destaque segue o tema sem trocar de tema no shiki. O cromo do bloco de código (cabeçalho, botão de copiar, corpo) e do código inline é pintado em `globals.css` pelos atributos `data-streamdown`. O mermaid usa os temas dele, `neutral` no claro e `dark` no escuro, com a fonte da interface.
+O código da conversa é destacado pelo Streamdown com o shiki. `features/chat/code-theme.ts` define um par de temas, claro e escuro, cujas cores são `var(--code-*)`: o destaque segue o tema sem trocar de tema no shiki. Nenhum escopo do tema tem `fontStyle`: o código é todo em peso 400, sem itálico nem negrito, e só o matiz separa os tipos de token. O `Markdown` passa `lineNumbers={false}`, e o código não tem números de linha. O cromo do bloco de código (cabeçalho, botão de copiar, corpo) e do código inline é pintado em `globals.css` pelos atributos `data-streamdown`. O mermaid usa os temas dele, `neutral` no claro e `dark` no escuro, com a fonte da interface.
 
 ## Componentes
 
@@ -135,6 +137,8 @@ As convenções de todo componente:
 
 **Scroll area.** O anel de foco é o único desenhado por dentro, no viewport, porque por fora ele seria cortado pelo que envolve a área.
 
-**Ícones.** `icons.ts` é o mapa de significado para ícone (`ICONS`): cada significado tem um ícone só, o mesmo no produto inteiro. `Icon` o desenha num tamanho e num tom do system.
+**Ícones.** `icons.ts` é o mapa de significado para ícone (`ICONS`): cada significado tem um ícone só, o mesmo no produto inteiro. `Icon` o desenha num tamanho e num tom do system. Um componente de `components/system/` nunca importa do `lucide-react` um ícone que o mapa tem (o visto é `ICONS.done`), e `Icon.test.tsx` falha quando um importa.
+
+**Chip de tempo.** O leitor de tela ouve o tempo por extenso, depois do estado (`waiting for you, 18 minutes`); o tempo curto é só visual, `aria-hidden`, e o tooltip dá o por extenso ao ponteiro.
 
 **Medidor de contexto.** `ContextMeter` é um `meter` com `aria-valuenow` arredondado, que nunca muda de cor ao encher. Sem leitura, ele brilha e mostra `…`; pausado, mostra `—`; nos dois casos `aria-valuetext` diz o estado ao leitor de tela.

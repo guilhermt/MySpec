@@ -1,4 +1,5 @@
 import { screen } from "@testing-library/react";
+import { Bot } from "lucide-react";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { renderWithStore } from "@/test/render";
@@ -96,5 +97,23 @@ describe("SegmentedControl", () => {
         <SegmentedControl label="Too many" value="a" options={four} onValueChange={() => {}} />,
       ),
     ).toThrow("at most 3 options");
+  });
+
+  it("hides the icon of an option from its name", () => {
+    renderWithStore(
+      <SegmentedControl
+        label="Review mode"
+        value="agent"
+        options={[
+          { value: "agent", label: "Agent", icon: Bot },
+          { value: "manual", label: "Manual" },
+        ]}
+        onValueChange={() => {}}
+      />,
+    );
+    expect(screen.getByRole("radio", { name: "Agent" }).querySelector("svg")).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
   });
 });

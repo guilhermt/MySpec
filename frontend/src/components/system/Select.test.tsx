@@ -107,4 +107,21 @@ describe("Select", () => {
     await user.click(trigger);
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
+
+  it("shows the placeholder without a choice", () => {
+    renderWithStore(<Subject value="" placeholder="Choose a model" size="sm" />);
+    expect(screen.getByRole("button", { name: "Model: Choose a model" })).toHaveTextContent(
+      "Choose a model",
+    );
+  });
+
+  it("offers Try again when its message has a retry", async () => {
+    const onRetry = vi.fn();
+    const { user } = renderWithStore(
+      <Subject message={{ text: "Could not list the models", tone: "error", onRetry }} />,
+    );
+    await user.click(screen.getByRole("button", { name: "Model: Opus" }));
+    await user.click(await screen.findByRole("button", { name: "Try again" }));
+    expect(onRetry).toHaveBeenCalledOnce();
+  });
 });

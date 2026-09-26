@@ -24,9 +24,9 @@ export interface DialogProps {
   children: ReactNode;
 }
 
-/* The width keeps 2rem free in a narrow window; the max width is the one of the system. */
+/* The width keeps --space-8 free in a narrow window; the max width is the one of the system. */
 const CONTENT =
-  "flex max-h-[calc(100dvh-2*round(8vh,1px))] w-[calc(100%-2rem)] flex-col gap-0 overflow-hidden rounded-xl bg-surface-3 p-0 text-ink-1 shadow-overlay ring-0 duration-(--duration-base)";
+  "flex max-h-[calc(100dvh-2*round(8vh,1px))] w-[calc(100%-var(--space-8))] flex-col gap-0 overflow-hidden rounded-xl bg-surface-3 p-0 text-ink-1 shadow-overlay ring-0 duration-(--duration-base)";
 
 /* The alert primitive sets its max width per data-size, so those variants are replaced too. */
 const WIDTHS = {

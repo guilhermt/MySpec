@@ -10,7 +10,7 @@ const TOKENS = readFileSync(
 );
 
 interface TokenColor {
-  settings: { foreground: string };
+  settings: { foreground: string; fontStyle?: string };
 }
 
 function colours(theme: (typeof CODE_THEMES)[number]): string[] {
@@ -46,6 +46,16 @@ describe("CODE_THEMES", () => {
       const hues = colours(theme);
       for (const token of ["keyword", "string", "function", "number", "comment"]) {
         expect(hues).toContain(`var(--code-${token})`);
+      }
+    }
+  });
+
+  it("sets every token in the regular weight, without italic or bold", () => {
+    for (const theme of CODE_THEMES) {
+      const tokenColors = (theme.tokenColors ?? []) as TokenColor[];
+      expect(tokenColors.length).toBeGreaterThan(0);
+      for (const item of tokenColors) {
+        expect(item.settings, item.settings.foreground).not.toHaveProperty("fontStyle");
       }
     }
   });

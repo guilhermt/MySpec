@@ -68,4 +68,16 @@ describe("Radio", () => {
     await user.click(screen.getByRole("radio", { name: "Squash" }));
     expect(onValueChange).not.toHaveBeenCalled();
   });
+
+  it("marks the group invalid in the error state", () => {
+    renderWithStore(
+      <RadioGroup label="Merge method" value="" onValueChange={() => {}} invalid>
+        <Radio value="merge">Merge commit</Radio>
+      </RadioGroup>,
+    );
+    expect(screen.getByRole("radiogroup", { name: "Merge method" })).toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
+  });
 });

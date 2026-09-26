@@ -46,10 +46,13 @@ export function SearchInput({
       )}
     >
       <Icon icon={Search} size="sm" tone="muted" />
+      {/* biome-ignore lint/a11y/useSemanticElements: type="search" makes WebKit draw its own cancel next to the clear button, so the text field declares the role. */}
       <input
         ref={input}
         {...attributes}
-        type="search"
+        type="text"
+        role="searchbox"
+        enterKeyHint="search"
         aria-label={label}
         value={value}
         placeholder={placeholder}

@@ -1,8 +1,10 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { screen, within } from "@testing-library/react";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { renderWithStore } from "@/test/render";
-import { Listbox, type ListboxProps } from "./Listbox";
+import { LIST_OFFSET_PX, Listbox, type ListboxProps } from "./Listbox";
 
 const ITEMS = [
   { value: "main", label: "main", sub: "default" },
@@ -32,7 +34,16 @@ async function open(props: Partial<ListboxProps> = {}, name = "Base branch: main
   return rendered;
 }
 
+const TOKENS = readFileSync(
+  join(import.meta.dirname, "../../../../design/system/tokens.css"),
+  "utf8",
+);
+
 describe("Listbox", () => {
+  it("keeps the gap of tokens.css", () => {
+    expect(TOKENS).toContain(`--space-1: ${LIST_OFFSET_PX / 16}rem`);
+  });
+
   it("opens from its trigger", async () => {
     await open();
     expect(screen.getByRole("listbox")).toBeInTheDocument();

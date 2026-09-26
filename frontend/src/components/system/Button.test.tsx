@@ -95,4 +95,24 @@ describe("Button", () => {
     const diff = screen.getByRole("button", { name: "Diff" });
     expect(diff).toHaveAttribute("aria-pressed", "true");
   });
+
+  it("keeps its name and its click in the error state", async () => {
+    const onClick = vi.fn();
+    const { user } = renderWithStore(
+      <Button error onClick={onClick}>
+        Try again
+      </Button>,
+    );
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+    expect(onClick).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the key of a quiet button out of its name too", () => {
+    renderWithStore(
+      <Button size="xs" icon={Check} shortcut="Esc">
+        Cancel
+      </Button>,
+    );
+    expect(screen.getByRole("button", { name: "Cancel" })).toHaveTextContent("Esc");
+  });
 });
