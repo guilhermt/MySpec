@@ -96,7 +96,7 @@ jobs:
         with:
           name: code-coverage
           path: coverage/go.out
-      - uses: fgrosse/go-coverage-report@v1.3.1
+      - uses: fgrosse/go-coverage-report@v1.4.0
         id: coverage
         if: github.event_name == 'pull_request'
         with:
