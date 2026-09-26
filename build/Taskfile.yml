@@ -36,6 +36,7 @@ tasks:
     dir: frontend
     sources:
       - "**/*"
+      - ../design/system/tokens.css
       - exclude: node_modules/**/*
     generates:
       - dist/**/*

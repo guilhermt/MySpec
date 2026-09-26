@@ -132,10 +132,10 @@ func darkFromSignal(signal *dbus.Signal) (dark, ok bool) {
 }
 
 // backgroundFor is the colour painted behind the webview until the frontend
-// draws, matching the shadcn neutral --background of each mode.
+// draws: --surface-1 of the design system in each mode, in sRGB.
 func backgroundFor(mode theme.Mode) application.RGBA {
 	if mode == theme.ModeDark {
-		return application.NewRGB(10, 10, 10)
+		return application.NewRGB(25, 23, 21)
 	}
-	return application.NewRGB(255, 255, 255)
+	return application.NewRGB(254, 253, 253)
 }

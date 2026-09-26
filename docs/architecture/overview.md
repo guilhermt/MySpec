@@ -156,7 +156,7 @@ Cada diretório de `features/` cobre uma área: `sidebar` para a barra lateral e
 
 ### Estilo
 
-`styles/globals.css` importa o Tailwind, o tw-animate-css e o CSS do shadcn, define as variáveis de cor em oklch para os temas claro e escuro e, fora de qualquer camada, arredonda para o pixel a centralização dos dialogs do shadcn, que o WebKitGTK borraria quando ela cai em meio pixel. `styles/tokens.css` define fontes, tamanhos, durações, curvas e as cores de status de sessão. Os componentes usam classes do Tailwind e os tokens; uma cor nunca é o único portador de um estado, todo ponto colorido tem um rótulo.
+`styles/globals.css` importa o Tailwind, os tokens do design system de `design/system/tokens.css`, o tw-animate-css e o CSS do shadcn. Os tokens são a fonte única de cores, fontes, tamanhos, durações e curvas, nos temas claro e escuro; as variáveis que os componentes do shadcn leem e as cores de status de sessão apontam para eles, sem valor próprio. Fora de qualquer camada, `globals.css` arredonda para o pixel a centralização dos dialogs do shadcn, que o WebKitGTK borraria quando ela cai em meio pixel, e dá a todo ícone o traço do design system. Os componentes usam classes do Tailwind e os tokens; uma cor nunca é o único portador de um estado, todo ponto colorido tem um rótulo.
 
 ## Build
 
