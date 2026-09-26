@@ -19,7 +19,7 @@ Este é o ponto de entrada para quem vai mudar o código, pessoa ou agente. Ele 
 
 ## O que nunca fazer
 
-- **Editar à mão `frontend/src/components/ui/` ou `frontend/bindings/`.** O primeiro é código do shadcn, o segundo é gerado. Um componente que precisa de comportamento diferente ganha um wrapper em `features/`.
+- **Editar à mão `frontend/src/components/ui/` ou `frontend/bindings/`.** O primeiro é código do shadcn, o segundo é gerado. Um componente que precisa de comportamento diferente ganha um wrapper em `components/system/`.
 - **Editar uma migration já aplicada.** Toda mudança de schema é um arquivo novo em `internal/store/migrations/`, com o próximo número.
 - **Derivar estado no frontend.** O `State` que chega do Go é a verdade; o frontend só o renderiza e guarda estado de interface.
 - **Chamar `api` de um componente.** Componentes chamam `store/actions.ts`; o store importa só de `lib/`.

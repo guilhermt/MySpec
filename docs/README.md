@@ -11,6 +11,7 @@ A documentação é escrita em português; a interface, o código, os identifica
 
 - [stack.md](./architecture/stack.md): a stack e a razão de cada escolha.
 - [overview.md](./architecture/overview.md): a organização do código, as camadas do Go, a fronteira com o frontend, os eventos e o fluxo de estado.
+- [design-system.md](./architecture/design-system.md): os tokens, o tema, a ponte com o shadcn, as fontes, as regras do WebKitGTK e os componentes de components/system/.
 - [sessions.md](./architecture/sessions.md): o processo do Claude Code por trás de cada sessão: flags, protocolo, ciclo de vida, prompts e correções.
 - [storage.md](./architecture/storage.md): o diretório de dados, o banco e as migrations, os artefatos, as worktrees e o log.
 

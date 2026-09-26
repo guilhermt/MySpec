@@ -9,7 +9,7 @@ A stack do produto e a razão de cada escolha.
 | Forma do app | Aplicação desktop para Linux |
 | Base desktop | Wails v3 (`v3.0.0-beta.16`), backend em Go 1.27, WebKitGTK 6.0 sobre GTK4 |
 | Frontend | React 19 com TypeScript em modo strict, Vite |
-| Estilo e componentes | Tailwind CSS 4 e shadcn/ui sobre Base UI, ícones Lucide |
+| Estilo e componentes | Tailwind CSS 4, shadcn/ui sobre Base UI e o design system do MySpec, fontes Fira Sans e Fira Code, ícones Lucide |
 | Markdown e diagramas | Streamdown, com `@streamdown/code` e `@streamdown/mermaid` |
 | Diferenças de texto | jsdiff (`diff`) |
 | Estado da interface | Zustand |
@@ -37,7 +37,7 @@ No Linux o Wails usa WebKitGTK. O padrão desde o v3 é GTK4 com WebKitGTK 6.0, 
 
 **React com TypeScript** porque a interface é onde vive o refinamento e o ecossistema React tem o maior conjunto de componentes polidos, além de bibliotecas maduras de Markdown e mermaid.
 
-**Tailwind e shadcn/ui** para estilo. shadcn entrega primitivos acessíveis como código-fonte copiado para `frontend/src/components/ui`, não como dependência com aparência própria, o que permite refinar cada componente. Os primitivos são os do Base UI, o padrão do shadcn para projetos novos.
+**Tailwind e shadcn/ui** para estilo. shadcn entrega primitivos acessíveis como código-fonte copiado para `frontend/src/components/ui`, não como dependência com aparência própria, o que permite refinar cada componente. Os primitivos são os do Base UI, o padrão do shadcn para projetos novos. Os tokens do design system pintam os primitivos por uma ponte de variáveis, sem editá-los, e os componentes do produto são os wrappers de `components/system/`.
 
 **Streamdown** porque o texto do agente chega em streaming e o renderizador precisa lidar com Markdown incompleto sem piscar. Ele já integra mermaid e realce de código. O mesmo renderizador serve o chat, os artefatos e os prompts.
 
