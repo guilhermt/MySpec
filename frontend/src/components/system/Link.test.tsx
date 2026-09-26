@@ -44,7 +44,14 @@ describe("Link", () => {
         PR #48
       </Link>,
     );
-    expect(screen.getByText("✕ could not open")).toHaveClass("text-state-error");
+    expect(screen.getByText("could not open", { exact: false })).toHaveClass("text-state-error");
+    expect(screen.getByText("✕")).toHaveAttribute("aria-hidden", "true");
+  });
+
+  it("needs a destination, by its type", () => {
+    // @ts-expect-error: a link without a destination is a button.
+    const nowhere = <Link>PR #48</Link>;
+    expect(nowhere.props.children).toBe("PR #48");
   });
 
   it("shows the focus ring on keyboard focus", async () => {

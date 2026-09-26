@@ -57,4 +57,10 @@ describe("ExternalLink", () => {
 
     expect(api.openExternal).not.toHaveBeenCalled();
   });
+
+  it("writes code without line numbers", () => {
+    renderWithStore(<Markdown>Some text</Markdown>);
+
+    expect(screen.getByTestId("markdown")).toHaveAttribute("data-line-numbers", "false");
+  });
 });

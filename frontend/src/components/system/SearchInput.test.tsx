@@ -25,6 +25,13 @@ describe("SearchInput", () => {
     expect(within(search).getByText("/")).toBeInTheDocument();
   });
 
+  it("is a text field that offers search on the keyboard, without the native cancel", () => {
+    renderWithStore(<Subject />);
+    const box = screen.getByRole("searchbox", { name: "Search tasks" });
+    expect(box).toHaveAttribute("type", "text");
+    expect(box).toHaveAttribute("enterkeyhint", "search");
+  });
+
   it("reports what is typed", async () => {
     const onValueChange = vi.fn();
     const { user } = renderWithStore(<Subject value="" onValueChange={onValueChange} />);
@@ -51,13 +58,38 @@ describe("SearchInput", () => {
     expect(onArrowDown).toHaveBeenCalledOnce();
   });
 
-  it("has the hover and the focus of the system", async () => {
+  it("takes the focus", async () => {
     const { user } = renderWithStore(<Subject />);
     await user.tab();
     expect(screen.getByRole("searchbox", { name: "Search tasks" })).toHaveFocus();
-    expect(screen.getByRole("search")).toHaveClass(
-      "hover:border-ink-3",
-      "focus-within:field-focus",
+  });
+
+  it("stays focusable and read-only while disabled, and tells the reason", async () => {
+    const onValueChange = vi.fn();
+    const { user } = renderWithStore(
+      <Subject disabled disabledReason="No cards yet" onValueChange={onValueChange} />,
+    );
+    const box = screen.getByRole("searchbox", { name: "Search tasks" });
+    expect(box).toHaveAttribute("aria-disabled", "true");
+    expect(box).toHaveAccessibleDescription("No cards yet");
+    await user.tab();
+    expect(box).toHaveFocus();
+    await user.type(box, "x");
+    expect(onValueChange).not.toHaveBeenCalled();
+  });
+
+  it("is busy while loading, with the spinner and the gerund", () => {
+    renderWithStore(<Subject loading loadingLabel="Reading the cards…" />);
+    const box = screen.getByRole("searchbox", { name: "Search tasks" });
+    expect(box).toHaveAttribute("aria-busy", "true");
+    expect(box).toHaveAccessibleDescription("Reading the cards…");
+  });
+
+  it("disables the clear button with the field", () => {
+    renderWithStore(<Subject value="auth" disabled disabledReason="No cards yet" />);
+    expect(screen.getByRole("button", { name: "Clear search" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
     );
   });
 });

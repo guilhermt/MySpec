@@ -92,7 +92,7 @@ describe("StepTabs", () => {
 
     const reviewer = screen.getByRole("tab", { name: "Reviewer Question" });
     expect(within(reviewer).getByText("Question")).not.toHaveClass("sr-only");
-    expect(dotOf(reviewer)).toHaveClass("bg-[var(--status-attention)]");
+    expect(dotOf(reviewer)).toHaveClass("bg-[var(--status-attention-fill)]");
     const implementer = screen.getByRole("tab", { name: "Implementer Session error" });
     expect(dotOf(implementer)).toHaveClass("bg-destructive");
   });

@@ -32,11 +32,9 @@ describe("Collapsible", () => {
     expect(screen.queryByText("The full log")).not.toBeInTheDocument();
   });
 
-  it("has the hover and the focus of the system", async () => {
+  it("takes the focus", async () => {
     const { user } = renderWithStore(<Subject />);
     await user.tab();
-    const trigger = screen.getByRole("button", { name: "Details" });
-    expect(trigger).toHaveFocus();
-    expect(trigger).toHaveClass("hover:text-ink-1", "focus-visible:focus-ring");
+    expect(screen.getByRole("button", { name: "Details" })).toHaveFocus();
   });
 });

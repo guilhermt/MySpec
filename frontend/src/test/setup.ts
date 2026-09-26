@@ -21,10 +21,12 @@ vi.mock("streamdown", () => ({
     children,
     className,
     shikiTheme,
+    lineNumbers,
   }: {
     children: string;
     className?: string;
     shikiTheme?: readonly (string | { name?: string })[];
+    lineNumbers?: boolean;
   }) =>
     createElement(
       "div",
@@ -34,6 +36,7 @@ vi.mock("streamdown", () => ({
         "data-shiki-theme": shikiTheme
           ?.map((theme) => (typeof theme === "string" ? theme : theme.name))
           .join(" "),
+        "data-line-numbers": String(lineNumbers ?? true),
       },
       children,
     ),
@@ -70,6 +73,34 @@ Object.defineProperty(Element.prototype, "scrollTo", {
   configurable: true,
 });
 
+// The :focus-visible heuristic of jsdom keeps state from one test to the next, so the tests read the
+// rule a browser applies to a focus that is not in a text field: visible after a key press, not
+// after a pointer press or a programmatic focus.
+let keyboardFocus = false;
+document.addEventListener(
+  "keydown",
+  () => {
+    keyboardFocus = true;
+  },
+  true,
+);
+document.addEventListener(
+  "pointerdown",
+  () => {
+    keyboardFocus = false;
+  },
+  true,
+);
+const matches = Element.prototype.matches;
+Object.defineProperty(Element.prototype, "matches", {
+  value(this: Element, selector: string): boolean {
+    if (selector === ":focus-visible") return this === document.activeElement && keyboardFocus;
+    return matches.call(this, selector);
+  },
+  writable: true,
+  configurable: true,
+});
+
 // Only the boundary is replaced; the pure helpers of lib/wails stay real.
 vi.mock("@/lib/wails", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/wails")>()),
@@ -78,5 +109,6 @@ vi.mock("@/lib/wails", async (importOriginal) => ({
 
 afterEach(() => {
   cleanup();
+  keyboardFocus = false;
   wailsMock.resetWailsMock();
 });

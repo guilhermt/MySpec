@@ -1,13 +1,15 @@
 import type { LucideIcon } from "lucide-react";
 import { useId } from "react";
 import { cn } from "@/lib/utils";
-import { Button, type ButtonProps } from "./Button";
+import { Button, type ButtonBaseProps } from "./Button";
 import { Icon } from "./Icon";
+import { Spinner } from "./Spinner";
 import { Tooltip } from "./Tooltip";
 
 export interface IconButtonProps
-  extends Omit<ButtonProps, "variant" | "icon" | "children" | "loadingLabel" | "shortcut"> {
+  extends Omit<ButtonBaseProps, "variant" | "icon" | "children" | "shortcut"> {
   label: string;
+  loading?: boolean;
   icon: LucideIcon;
   shortcut?: string;
   variant?: "ghost" | "secondary";
@@ -31,6 +33,7 @@ export function IconButton({
   reasonId,
   loading,
   className,
+  onClick,
   ...props
 }: IconButtonProps) {
   const ownReasonId = useId();
@@ -48,12 +51,23 @@ export function IconButton({
           aria-label={label}
           {...props}
           {...(disabled !== undefined ? { disabled } : {})}
-          {...(loading !== undefined ? { loading } : {})}
+          {...(loading ? { "aria-busy": true } : {})}
           {...(describedBy !== undefined ? { reasonId: describedBy } : {})}
-          className={cn(SQUARES[size], className)}
+          onClick={(event) => {
+            // Loading, the label stays the name and the spinner takes the place of the icon.
+            if (loading) {
+              event.preventDefault();
+              return;
+            }
+            onClick?.(event);
+          }}
+          className={cn(SQUARES[size], loading && "cursor-progress", className)}
         >
-          {/* Loading, Button swaps the icon for the spinner. */}
-          <Icon icon={icon} size={size === "md" ? "md" : "sm"} />
+          {loading ? (
+            <Spinner tone="current" />
+          ) : (
+            <Icon icon={icon} size={size === "md" ? "md" : "sm"} />
+          )}
         </Button>
       </Tooltip>
       {reason !== undefined && reasonId === undefined && (

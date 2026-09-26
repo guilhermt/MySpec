@@ -41,26 +41,10 @@ describe("Radio", () => {
     expect(screen.getByRole("radio", { name: "Squash" })).toHaveAttribute("aria-checked", "true");
   });
 
-  it("has the hover and the focus of the system", async () => {
+  it("takes the focus on the chosen radio", async () => {
     const { user } = renderWithStore(<Subject />);
     await user.tab();
-    const radio = screen.getByRole("radio", { name: "Merge commit" });
-    expect(radio).toHaveFocus();
-    expect(radio).toHaveClass("group/radio", "focus-visible:focus-ring");
-    expect(radio.querySelector('[aria-hidden="true"]')).toHaveClass(
-      "group-hover/radio:not-group-data-checked/radio:border-ink-3",
-    );
-  });
-
-  it("shows the error on the rings", () => {
-    renderWithStore(
-      <RadioGroup label="Merge method" value="" onValueChange={() => {}} invalid>
-        <Radio value="merge">Merge commit</Radio>
-      </RadioGroup>,
-    );
-    expect(
-      screen.getByRole("radio", { name: "Merge commit" }).querySelector('[aria-hidden="true"]'),
-    ).toHaveClass("border-state-error", "bg-state-error-veil");
+    expect(screen.getByRole("radio", { name: "Merge commit" })).toHaveFocus();
   });
 
   it("ignores the change while disabled and tells the reason", async () => {
@@ -81,11 +65,19 @@ describe("Radio", () => {
     const group = screen.getByRole("radiogroup", { name: "Merge method" });
     expect(group).toHaveAttribute("aria-disabled", "true");
     expect(group).toHaveAccessibleDescription("The repository allows only squash");
-    expect(group).toHaveClass("flex-row", "text-ink-4");
-    expect(
-      screen.getByRole("radio", { name: "Squash" }).querySelector('[aria-hidden="true"]'),
-    ).not.toHaveClass("group-hover/radio:not-group-data-checked/radio:border-ink-3");
     await user.click(screen.getByRole("radio", { name: "Squash" }));
     expect(onValueChange).not.toHaveBeenCalled();
+  });
+
+  it("marks the group invalid in the error state", () => {
+    renderWithStore(
+      <RadioGroup label="Merge method" value="" onValueChange={() => {}} invalid>
+        <Radio value="merge">Merge commit</Radio>
+      </RadioGroup>,
+    );
+    expect(screen.getByRole("radiogroup", { name: "Merge method" })).toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
   });
 });

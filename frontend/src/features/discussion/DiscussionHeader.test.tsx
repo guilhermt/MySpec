@@ -91,6 +91,8 @@ describe("DiscussionHeader", () => {
       ],
     });
 
-    expect(container.querySelector(".bg-\\[var\\(--status-attention\\)\\]")).toBeInTheDocument();
+    expect(
+      container.querySelector(".bg-\\[var\\(--status-attention-fill\\)\\]"),
+    ).toBeInTheDocument();
   });
 });

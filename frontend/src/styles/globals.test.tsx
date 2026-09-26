@@ -44,6 +44,13 @@ const CENTRING = ["-translate-x-1/2", "-translate-y-1/2", "left-1/2", "top-1/2"]
 /** Utilities that place an element, whatever their variant: offsets, insets, translates, margins. */
 const PLACEMENT = /^-?(inset|top|right|bottom|left|start|end|translate|m[xytrblse]?)(-|$)/;
 
+/**
+ * TAILWIND_PALETTE matches a class that paints with a colour of the Tailwind palette (text-red-500,
+ * bg-amber-100/50, fill-white), which reads the oklch of the Tailwind theme instead of a token.
+ */
+const TAILWIND_PALETTE =
+  /(?:^|[\s"'`:])(?:bg|text|border(?:-[trblxyse])?|ring|ring-offset|outline|fill|stroke|from|via|to|decoration|divide|shadow|inset-shadow|accent|caret|placeholder)-(?:(?:red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|slate|gray|zinc|neutral|stone|mauve|olive|mist|taupe)-\d{2,3}|black|white)(?:\/\d+)?(?=$|[\s"'`])/;
+
 /** Tokens measured in em, which follow the text they sit in instead of the pixel grid. */
 const EM_TOKENS = ["--link-offset", "--tracking-caps"];
 
@@ -152,22 +159,44 @@ describe("globals.css", () => {
     }
   });
 
-  it("paints no literal colour outside the tokens", () => {
+  it("paints no literal colour outside the tokens, nor a colour of the Tailwind palette", () => {
     const src = join(STYLES, "..");
     const files = readdirSync(src, { recursive: true, encoding: "utf8" }).filter(
       (path) =>
-        /\.(css|tsx?)$/.test(path) && !path.startsWith("components/ui/") && !/\.test\./.test(path),
+        /\.(css|tsx?)$/.test(path) &&
+        !path.startsWith("components/ui/") &&
+        // The test helpers name computed values to compare with, and paint nothing.
+        !path.startsWith("test/") &&
+        !/\.test\./.test(path),
     );
     const painted = files.filter((path) => {
       const text = readFileSync(join(src, path), "utf8");
       if (path.endsWith(".css")) {
         return /oklch\(|rgba?\(|hsla?\(|#[0-9a-fA-F]{3,8}\b/.test(text);
       }
-      return /oklch\(|rgba?\(|hsla?\(/.test(text) || /["'`[]#[0-9a-fA-F]{3,8}["'`\]]/.test(text);
+      return (
+        /oklch\(|rgba?\(|hsla?\(/.test(text) ||
+        /["'`[]#[0-9a-fA-F]{3,8}["'`\]]/.test(text) ||
+        TAILWIND_PALETTE.test(text)
+      );
     });
 
     expect(files.length).toBeGreaterThan(0);
     expect(painted).toEqual([]);
+  });
+
+  it("recognises a colour of the Tailwind palette in a class", () => {
+    for (const painted of [
+      "text-red-500",
+      "bg-amber-100/50",
+      "hover:border-slate-200",
+      "fill-white",
+    ]) {
+      expect(TAILWIND_PALETTE.test(`className="${painted}"`), painted).toBe(true);
+    }
+    for (const system of ["text-ink-3", "bg-state-error-veil", "text-red-ish", "border-line-2"]) {
+      expect(TAILWIND_PALETTE.test(`className="${system}"`), system).toBe(false);
+    }
   });
 
   it("draws every icon with the stroke of the system", () => {

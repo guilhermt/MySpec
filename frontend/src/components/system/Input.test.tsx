@@ -20,26 +20,53 @@ describe("Input", () => {
     expect(screen.getByRole("textbox", { name: "Branch" })).toHaveValue("main");
   });
 
-  it("has the hover and the focus of the system", async () => {
+  it("takes the focus", async () => {
     const { user } = renderWithStore(<Input aria-label="Branch" />);
     await user.tab();
     const input = screen.getByRole("textbox", { name: "Branch" });
     expect(input).toHaveFocus();
-    expect(input).toHaveClass("hover:border-ink-3", "focus-visible:field-focus");
-    expect(input).not.toHaveClass("focus-visible:ring-3", "md:text-sm");
   });
 
-  it("is dashed while disabled", () => {
-    renderWithStore(<Input aria-label="Branch" disabled />);
-    const input = screen.getByRole("textbox", { name: "Branch" });
-    expect(input).toBeDisabled();
-    expect(input).toHaveClass("disabled:dashed-disabled");
-    expect(input).not.toHaveClass("disabled:opacity-50");
+  it("stays focusable and read-only while disabled, with the reason after the help", async () => {
+    const { user } = renderWithStore(
+      <Field label="Branch" help="Where the work starts">
+        <Input disabled disabledReason="The task already exists" defaultValue="main" />
+      </Field>,
+    );
+    const field = screen.getByRole("textbox", { name: "Branch" });
+    expect(field).toHaveAttribute("aria-disabled", "true");
+    expect(field).toHaveAccessibleDescription("Where the work starts The task already exists");
+    await user.tab();
+    expect(field).toHaveFocus();
+    await user.type(field, "x");
+    expect(field).toHaveValue("main");
   });
 
-  it("is busy while loading", () => {
-    renderWithStore(<Input aria-label="Branch" loading />);
-    expect(screen.getByRole("textbox", { name: "Branch" })).toHaveAttribute("aria-busy", "true");
+  it("carries its reason next to it outside a field", () => {
+    renderWithStore(
+      <Input aria-label="Branch" disabled disabledReason="The task already exists" />,
+    );
+    expect(screen.getByRole("textbox", { name: "Branch" })).toHaveAccessibleDescription(
+      "The task already exists",
+    );
+  });
+
+  it("is busy while loading, with the spinner and the gerund on the help line", () => {
+    renderWithStore(
+      <Field label="Branch" help="Where the work starts">
+        <Input loading loadingLabel="Checking the name…" />
+      </Field>,
+    );
+    const field = screen.getByRole("textbox", { name: "Branch" });
+    expect(field).toHaveAttribute("aria-busy", "true");
+    expect(field).toHaveAccessibleDescription("Checking the name… Where the work starts");
+  });
+
+  it("carries its gerund next to it outside a field", () => {
+    renderWithStore(<Input aria-label="Branch" loading loadingLabel="Checking the name…" />);
+    expect(screen.getByRole("textbox", { name: "Branch" })).toHaveAccessibleDescription(
+      "Checking the name…",
+    );
   });
 
   it("writes in the mono family", () => {

@@ -5,10 +5,12 @@ import {
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { Button } from "./Button";
 import { Icon } from "./Icon";
 
 /** Menu is the root of a system menu. */
@@ -21,13 +23,16 @@ export function MenuTrigger(props: ComponentProps<typeof DropdownMenuTrigger>) {
 
 export interface MenuContentProps extends ComponentProps<typeof DropdownMenuContent> {}
 
-/** MenuContent is the floating surface of the menu. */
+/**
+ * MenuContent is the floating surface of the menu. The shadow is written shadow-(--shadow-float),
+ * the form cn reads as a shadow, so it replaces the shadow-md of the primitive instead of joining it.
+ */
 export function MenuContent({ className, ...props }: MenuContentProps) {
   return (
     <DropdownMenuContent
       {...props}
       className={cn(
-        "flex min-w-(--size-menu-min) flex-col gap-0.5 rounded-lg bg-surface-3 p-1 text-(length:--text-ui) leading-(--leading-ui) text-ink-1 shadow-float ring-0 duration-(--duration-base)",
+        "flex min-w-(--size-menu-min) flex-col gap-0.5 rounded-lg bg-surface-3 p-1 text-(length:--text-ui) leading-(--leading-ui) text-ink-1 shadow-(--shadow-float) ring-0 duration-(--duration-base)",
         className,
       )}
     />
@@ -39,15 +44,18 @@ export interface MenuGroupLabelProps {
   note?: string;
 }
 
-/** MenuGroupLabel is the caps heading of a group, with an optional note on the same line. */
+/**
+ * MenuGroupLabel is the caps heading of a group, with an optional note on the same line. It sits in
+ * a MenuGroup, which it names.
+ */
 export function MenuGroupLabel({ children, note }: MenuGroupLabelProps) {
   return (
-    <div className="px-2 pt-1 pb-0.5 text-(length:--text-caps) leading-(--leading-caps) font-bold tracking-(--tracking-caps) uppercase text-ink-3">
+    <DropdownMenuLabel className="px-2 pt-1 pb-0.5 text-(length:--text-caps) leading-(--leading-caps) font-bold tracking-(--tracking-caps) uppercase text-ink-3">
       {children}
       {note !== undefined && (
         <span className="normal-case font-normal tracking-normal text-ink-4"> {note}</span>
       )}
-    </div>
+    </DropdownMenuLabel>
   );
 }
 
@@ -82,7 +90,7 @@ export function MenuItem({
       className={cn(
         MENU_ITEM,
         destructive &&
-          "text-state-error data-[variant=destructive]:text-state-error data-[variant=destructive]:focus:bg-state-error-veil data-[variant=destructive]:focus:text-state-error data-[variant=destructive]:*:[svg]:text-state-error",
+          "text-state-error data-[variant=destructive]:text-state-error data-[variant=destructive]:focus:bg-state-error-veil dark:data-[variant=destructive]:focus:bg-state-error-veil data-[variant=destructive]:focus:text-state-error data-[variant=destructive]:*:[svg]:text-state-error",
       )}
     >
       {icon !== undefined && <Icon icon={icon} size="md" tone="muted" />}
@@ -138,20 +146,28 @@ export function MenuCycleItem({ label, state, onStateChange }: MenuCycleItemProp
 export interface MenuMessageProps {
   children: ReactNode;
   tone?: "neutral" | "error";
+  onRetry?: () => void;
 }
 
-/** MenuMessage stands in for the items while the menu loads or when it fails. */
-export function MenuMessage({ children, tone = "neutral" }: MenuMessageProps) {
+/** MenuMessage stands in for the items while the menu loads or when it fails, with Try again. */
+export function MenuMessage({ children, tone = "neutral", onRetry }: MenuMessageProps) {
   const error = tone === "error";
   return (
-    <div
-      role={error ? "alert" : "status"}
-      className={cn(
-        "max-w-(--size-tooltip-max) px-2 py-1.5 text-(length:--text-meta) leading-(--leading-meta) text-ink-3",
-        error && "text-state-error",
+    <div className="flex flex-col items-start gap-1 px-2 py-1.5">
+      <div
+        role={error ? "alert" : "status"}
+        className={cn(
+          "max-w-(--size-tooltip-max) text-(length:--text-meta) leading-(--leading-meta) text-ink-3",
+          error && "text-state-error",
+        )}
+      >
+        {children}
+      </div>
+      {onRetry !== undefined && (
+        <Button size="xs" onClick={onRetry}>
+          Try again
+        </Button>
       )}
-    >
-      {children}
     </div>
   );
 }

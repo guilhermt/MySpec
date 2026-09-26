@@ -39,15 +39,10 @@ describe("Checkbox", () => {
     );
   });
 
-  it("has the hover and the focus of the system", async () => {
+  it("takes the focus", async () => {
     const { user } = renderWithStore(<Subject />);
     await user.tab();
-    const box = screen.getByRole("checkbox", { name: "Include tests" });
-    expect(box).toHaveFocus();
-    expect(box).toHaveClass("group/checkbox", "focus-visible:focus-ring");
-    expect(box.querySelector('[aria-hidden="true"]')).toHaveClass(
-      "group-hover/checkbox:border-ink-3",
-    );
+    expect(screen.getByRole("checkbox", { name: "Include tests" })).toHaveFocus();
   });
 
   it("does not toggle while disabled and tells the reason", async () => {
@@ -65,11 +60,6 @@ describe("Checkbox", () => {
     const box = screen.getByRole("checkbox", { name: "Include tests" });
     expect(box).toHaveAttribute("aria-disabled", "true");
     expect(box).toHaveAccessibleDescription("Tests are required");
-    expect(box).toHaveClass("text-ink-4");
-    expect(box.querySelector('[aria-hidden="true"]')).not.toHaveClass(
-      "group-hover/checkbox:border-ink-3",
-      "group-active/checkbox:bg-brand-tint-press",
-    );
     await user.click(box);
     expect(onCheckedChange).not.toHaveBeenCalled();
     expect(box).toHaveAttribute("aria-checked", "false");

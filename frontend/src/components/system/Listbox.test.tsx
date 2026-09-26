@@ -1,8 +1,10 @@
-import { screen } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { screen, within } from "@testing-library/react";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { renderWithStore } from "@/test/render";
-import { Listbox, type ListboxProps } from "./Listbox";
+import { LIST_OFFSET_PX, Listbox, type ListboxProps } from "./Listbox";
 
 const ITEMS = [
   { value: "main", label: "main", sub: "default" },
@@ -32,7 +34,16 @@ async function open(props: Partial<ListboxProps> = {}, name = "Base branch: main
   return rendered;
 }
 
+const TOKENS = readFileSync(
+  join(import.meta.dirname, "../../../../design/system/tokens.css"),
+  "utf8",
+);
+
 describe("Listbox", () => {
+  it("keeps the gap of tokens.css", () => {
+    expect(TOKENS).toContain(`--space-1: ${LIST_OFFSET_PX / 16}rem`);
+  });
+
   it("opens from its trigger", async () => {
     await open();
     expect(screen.getByRole("listbox")).toBeInTheDocument();
@@ -79,11 +90,66 @@ describe("Listbox", () => {
     expect(screen.getByRole("combobox", { name: "Base branch: main" })).toHaveFocus();
   });
 
-  it("has the hover and the focus of the system", async () => {
+  it("takes the focus", async () => {
     const { user } = renderWithStore(<Subject />);
     await user.tab();
+    expect(screen.getByRole("combobox", { name: "Base branch: main" })).toHaveFocus();
+  });
+
+  it("does not open while disabled and tells the reason", async () => {
+    const { user } = renderWithStore(<Subject disabled disabledReason="The session is running" />);
     const trigger = screen.getByRole("combobox", { name: "Base branch: main" });
+    expect(trigger).toHaveAttribute("aria-disabled", "true");
+    expect(trigger).toHaveAccessibleDescription("The session is running");
+    await user.tab();
     expect(trigger).toHaveFocus();
-    expect(trigger).toHaveClass("hover:border-ink-3", "focus-visible:field-focus");
+    await user.click(trigger);
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+  });
+
+  it("shimmers the saved choice while the catalog is read", () => {
+    renderWithStore(<Subject loading />);
+    const trigger = screen.getByRole("combobox", { name: "Base branch: main" });
+    expect(trigger).toHaveAttribute("aria-busy", "true");
+    expect(within(trigger).getByText("main")).toBeInTheDocument();
+  });
+
+  it("stands a message in for the list, as a status or as an alert with Try again", async () => {
+    const onRetry = vi.fn();
+    const { user } = renderWithStore(
+      <Subject message={{ text: "Could not list the branches", tone: "error", onRetry }} />,
+    );
+    await user.click(screen.getByRole("combobox", { name: "Base branch: main" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Could not list the branches");
+    expect(screen.queryByRole("option")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+    expect(onRetry).toHaveBeenCalledOnce();
+  });
+
+  it("says a neutral message as a status", async () => {
+    const { user } = renderWithStore(<Subject message={{ text: "Reading the branches…" }} />);
+    await user.click(screen.getByRole("combobox", { name: "Base branch: main" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Reading the branches…");
+  });
+
+  it("marks a choice no longer offered without letting it be chosen", async () => {
+    const onValueChange = vi.fn();
+    const { user } = await open({
+      items: [...ITEMS, { value: "old", label: "old", unavailable: true }],
+      onValueChange,
+    });
+    const old = screen.getByRole("option", { name: "◇ old · unavailable" });
+    expect(old).toHaveAttribute("aria-disabled", "true");
+    await user.click(old);
+    expect(onValueChange).not.toHaveBeenCalled();
+  });
+
+  it("keeps a saved choice that is no longer offered, marked", () => {
+    renderWithStore(
+      <Subject items={[...ITEMS, { value: "old", label: "old", unavailable: true }]} value="old" />,
+    );
+    expect(
+      screen.getByRole("combobox", { name: "Base branch: old · unavailable" }),
+    ).toHaveTextContent("◇ old · unavailable");
   });
 });

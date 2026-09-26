@@ -60,12 +60,16 @@ describe("Menu", () => {
 
   it("shows its items when opened", async () => {
     await open();
-    expect(screen.getByRole("menu")).toHaveClass("bg-surface-3", "shadow-float");
-    expect(screen.getByRole("menuitem", { name: "Edit in the editor Ctrl+E" })).toHaveClass(
-      "focus:bg-veil-hover",
+    expect(screen.getByRole("menuitem", { name: "Edit in the editor Ctrl+E" })).toBeInTheDocument();
+    // The label is aria-hidden, read once through aria-labelledby, which jsdom does not follow to a
+    // hidden node; the browser suite finds the group by its name.
+    const group = screen.getByRole("group");
+    expect(document.getElementById(group.getAttribute("aria-labelledby") ?? "")).toHaveTextContent(
+      "Task 2 open",
     );
-    expect(screen.getByText("Task")).toHaveTextContent("Task 2 open");
-    expect(screen.getByText("in the editor")).toHaveClass("text-ink-3");
+    expect(group).toContainElement(
+      screen.getByRole("menuitem", { name: "Edit in the editor Ctrl+E" }),
+    );
   });
 
   it("closes on Escape and gives the focus back to the trigger", async () => {
@@ -73,11 +77,6 @@ describe("Menu", () => {
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Actions" })).toHaveFocus();
-  });
-
-  it("paints the destructive item in the error ink", async () => {
-    await open();
-    expect(screen.getByRole("menuitem", { name: "Delete" })).toHaveClass("text-state-error");
   });
 
   it("disables an item and tells the reason", async () => {
@@ -95,8 +94,6 @@ describe("Menu", () => {
     await user.click(screen.getByRole("button", { name: "Actions" }));
     const item = await screen.findByRole("menuitem", { name: "Archive · The step is running" });
     expect(item).toHaveAttribute("aria-disabled", "true");
-    expect(item).toHaveClass("data-disabled:text-ink-4");
-    expect(item).not.toHaveClass("data-disabled:opacity-50");
     await user.click(item);
     expect(onClick).not.toHaveBeenCalled();
   });
@@ -133,6 +130,6 @@ describe("Menu", () => {
       </>,
     );
     expect(screen.getByRole("status")).toHaveTextContent("Loading branches…");
-    expect(screen.getByRole("alert")).toHaveClass("text-state-error");
+    expect(screen.getByRole("alert")).toHaveTextContent("Could not list the branches");
   });
 });

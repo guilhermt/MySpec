@@ -22,7 +22,11 @@ const HIDDEN = {
   close: "ready to close",
 } as const;
 
-/** TimeChip is how long a task has waited for the person, or has been ready to close. */
+/**
+ * TimeChip is how long a task has waited for the person, or has been ready to close. The reader
+ * hears the time in full (waiting for you, 18 minutes); the short time is for the eye, and the
+ * tooltip gives the full one to the pointer.
+ */
 export function TimeChip({ tone, time, longTime, raised }: TimeChipProps) {
   return (
     <Tooltip content={longTime}>
@@ -34,13 +38,13 @@ export function TimeChip({ tone, time, longTime, raised }: TimeChipProps) {
           tone === "close" && raised && "bg-surface-2",
         )}
       >
-        <span className="sr-only">{HIDDEN[tone]} </span>
+        <span className="sr-only">{`${HIDDEN[tone]}, ${longTime}`}</span>
         {tone === "error" && (
           <span aria-hidden="true" className="font-bold">
             !
           </span>
         )}
-        {time}
+        <span aria-hidden="true">{time}</span>
       </span>
     </Tooltip>
   );

@@ -1,6 +1,9 @@
 import type { ThemeRegistrationAny } from "streamdown";
 
-/** The TextMate scopes painted with each hue of the system's code tokens. */
+/**
+ * The TextMate scopes painted with each hue of the system's code tokens. No scope gets a fontStyle:
+ * the code is all in the regular weight, and only the hue tells the kinds of token apart.
+ */
 const SCOPES = {
   "var(--code-comment)": ["comment", "punctuation.definition.comment"],
   "var(--code-keyword)": [

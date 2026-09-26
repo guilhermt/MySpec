@@ -5,7 +5,7 @@ import type { TaskSummary } from "@/lib/wails";
 // Written out so Tailwind sees every class; the tones are chosen at runtime.
 const TONE_CLASS: Record<StatusTone, string> = {
   working: "bg-[var(--status-working)] animate-pulse",
-  attention: "bg-[var(--status-attention)]",
+  attention: "bg-[var(--status-attention-fill)]",
   paused: "bg-[var(--status-paused)]",
   error: "bg-destructive",
   done: "bg-[var(--status-success)]",

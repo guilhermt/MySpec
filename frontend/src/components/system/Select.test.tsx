@@ -64,7 +64,9 @@ describe("Select", () => {
 
   it("marks an unavailable choice on the trigger", () => {
     renderWithStore(<Subject value="legacy" />);
-    expect(screen.getByRole("button", { name: "Model: Legacy" })).toHaveTextContent("◇ Legacy");
+    expect(screen.getByRole("button", { name: "Model: Legacy · unavailable" })).toHaveTextContent(
+      "◇ Legacy · unavailable",
+    );
   });
 
   it("shows its choices in groups", async () => {
@@ -93,12 +95,10 @@ describe("Select", () => {
     expect(screen.queryByRole("menuitemradio")).not.toBeInTheDocument();
   });
 
-  it("has the hover and the focus of the system", async () => {
+  it("takes the focus", async () => {
     const { user } = renderWithStore(<Subject />);
     await user.tab();
-    const trigger = screen.getByRole("button", { name: "Model: Opus" });
-    expect(trigger).toHaveFocus();
-    expect(trigger).toHaveClass("hover:border-ink-3", "focus-visible:field-focus");
+    expect(screen.getByRole("button", { name: "Model: Opus" })).toHaveFocus();
   });
 
   it("does not open while disabled and tells the reason", async () => {
@@ -106,8 +106,31 @@ describe("Select", () => {
     const trigger = screen.getByRole("button", { name: "Model: Opus" });
     expect(trigger).toHaveAttribute("aria-disabled", "true");
     expect(trigger).toHaveAccessibleDescription("The session is running");
-    expect(trigger).toHaveClass("dashed-disabled");
     await user.click(trigger);
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
+
+  it("shows the placeholder without a choice", () => {
+    renderWithStore(<Subject value="" placeholder="Choose a model" size="sm" />);
+    expect(screen.getByRole("button", { name: "Model: Choose a model" })).toHaveTextContent(
+      "Choose a model",
+    );
+  });
+
+  it("offers Try again when its message has a retry", async () => {
+    const onRetry = vi.fn();
+    const { user } = renderWithStore(
+      <Subject message={{ text: "Could not list the models", tone: "error", onRetry }} />,
+    );
+    await user.click(screen.getByRole("button", { name: "Model: Opus" }));
+    await user.click(await screen.findByRole("button", { name: "Try again" }));
+    expect(onRetry).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the saved choice as its name while the choices are read", () => {
+    renderWithStore(<Subject loading />);
+    const trigger = screen.getByRole("button", { name: "Model: Opus" });
+    expect(trigger).toHaveAttribute("aria-busy", "true");
+    expect(trigger).toHaveTextContent("Opus");
   });
 });

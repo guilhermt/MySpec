@@ -279,7 +279,7 @@ describe("StepBar", () => {
       },
     );
 
-    expect(dotOf(screen.getByRole("status"))).toHaveClass("bg-[var(--status-attention)]");
+    expect(dotOf(screen.getByRole("status"))).toHaveClass("bg-[var(--status-attention-fill)]");
   });
 
   it("shows nothing when the task has no step to run", () => {

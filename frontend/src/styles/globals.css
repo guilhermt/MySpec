@@ -159,9 +159,11 @@
   --sidebar-border: var(--sidebar-line);
   --sidebar-ring: var(--focus);
 
-  /* Session status, for the screens that still read it; each is a state of the system. */
+  /* Session status, for the screens that still read it; each is a state of the system. The wait is
+     text in --state-wait and a fill in --state-wait-glyph (components.md, Cor da espera). */
   --status-working: var(--state-work);
   --status-attention: var(--state-wait);
+  --status-attention-fill: var(--state-wait-glyph);
   --status-success: var(--state-close);
   --status-paused: var(--state-paused);
 }
@@ -181,6 +183,14 @@
 @utility field-error {
   border-color: var(--state-error);
   box-shadow: inset var(--error-rail) 0 0 var(--state-error);
+}
+/* A field in error that takes the focus keeps the error border and the rail and adds the halo outside. */
+@utility field-error-focus {
+  outline: none;
+  border-color: var(--state-error);
+  box-shadow:
+    inset var(--error-rail) 0 0 var(--state-error),
+    0 0 0 var(--halo) var(--focus-halo);
 }
 /* Disabled in every variant: dashed control line, faint ink, no body, no shadow. */
 @utility dashed-disabled {
@@ -279,7 +289,7 @@
      FLASH_MS, the time the class stays on the element. */
   .attention-flash,
   .attention-flash-ring {
-    --flash-color: var(--status-attention);
+    --flash-color: var(--status-attention-fill);
     &[data-tone="error"] {
       --flash-color: var(--destructive);
     }

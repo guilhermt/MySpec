@@ -1,8 +1,9 @@
 import { Menu as BaseMenu } from "@base-ui/react/menu";
-import { Check, ChevronDown } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { Fragment, useId } from "react";
 import { cn } from "@/lib/utils";
 import { Icon } from "./Icon";
+import { ICONS } from "./icons";
 import {
   MENU_ITEM,
   Menu,
@@ -13,12 +14,20 @@ import {
   MenuSeparator,
   MenuTrigger,
 } from "./Menu";
+import { Shimmer } from "./Shimmer";
 
 export interface SelectOption {
   value: string;
   label: string;
   sub?: string;
   unavailable?: boolean;
+}
+
+/** ListMessage stands in for the choices of a Select or a Listbox while they load or when they fail. */
+export interface ListMessage {
+  text: string;
+  tone?: "neutral" | "error";
+  onRetry?: () => void;
 }
 
 export interface SelectGroup {
@@ -34,20 +43,29 @@ export interface SelectProps {
   groups?: readonly SelectGroup[];
   onValueChange: (value: string) => void;
   placeholder?: string;
-  message?: { text: string; tone?: "neutral" | "error" };
+  message?: ListMessage;
   size?: "md" | "sm";
+  loading?: boolean;
   disabled?: boolean;
   disabledReason?: string;
 }
 
-/** SELECT_TRIGGER is the look of a field that opens a list, shared with Listbox. */
+/** choiceName is how a trigger names its choice: the label, and · unavailable when it is no longer offered. */
+export function choiceName(choice: { label: string; unavailable?: boolean }): string {
+  return choice.unavailable ? `${choice.label} · unavailable` : choice.label;
+}
+
+/**
+ * SELECT_TRIGGER is the look of a field that opens a list, shared with Listbox. Disabled rides on
+ * aria-disabled, whose variant outweighs the plain classes; focused, it keeps the focus border and halo.
+ */
 export const SELECT_TRIGGER =
-  "flex h-(--size-control) w-full items-center justify-between gap-2 rounded-sm border border-line-3 bg-surface-input px-2.5 text-(length:--text-ui) leading-(--leading-ui) text-ink-1 transition-[border-color,box-shadow] duration-(--duration-fast) ease-standard hover:border-ink-3 aria-expanded:border-focus focus-visible:field-focus";
+  "flex h-(--size-control) w-full items-center justify-between gap-2 rounded-sm border border-line-3 bg-surface-input px-2.5 text-(length:--text-ui) leading-(--leading-ui) text-ink-1 transition-[border-color,box-shadow] duration-(--duration-fast) ease-standard hover:border-ink-3 aria-expanded:border-focus focus-visible:field-focus aria-disabled:dashed-disabled aria-disabled:focus-visible:field-focus";
 
 /** UNAVAILABLE marks a choice that is no longer offered. */
-const UNAVAILABLE = "◇";
+export const UNAVAILABLE = "◇";
 
-/** Select is a field that opens a menu of choices, one of them checked. */
+/** Select is a field that opens a menu of choices, one of them checked; while they are read, the saved choice shimmers. */
 export function Select({
   label,
   value,
@@ -57,6 +75,7 @@ export function Select({
   placeholder = "",
   message,
   size = "md",
+  loading,
   disabled,
   disabledReason,
 }: SelectProps) {
@@ -68,18 +87,18 @@ export function Select({
   const trigger = (
     <MenuTrigger
       render={<button type="button" />}
-      aria-label={`${label}: ${chosen?.label ?? placeholder}`}
+      aria-label={`${label}: ${chosen !== undefined ? choiceName(chosen) : placeholder}`}
       {...(disabled ? { "aria-disabled": true } : {})}
       {...(withReason ? { "aria-describedby": reasonId } : {})}
-      className={cn(
-        SELECT_TRIGGER,
-        size === "sm" && "h-(--size-control-sm)",
-        disabled && "dashed-disabled",
-      )}
+      {...(loading ? { "aria-busy": true } : {})}
+      className={cn(SELECT_TRIGGER, size === "sm" && "h-(--size-control-sm)")}
     >
       <span className="truncate">
-        {chosen?.unavailable && `${UNAVAILABLE} `}
-        {chosen?.label ?? <span className="text-ink-4">{placeholder}</span>}
+        {chosen === undefined ? (
+          <span className="text-ink-4">{placeholder}</span>
+        ) : (
+          <ChosenText choice={chosen} loading={loading === true} />
+        )}
       </span>
       <Icon icon={ChevronDown} size="sm" tone="muted" />
     </MenuTrigger>
@@ -102,7 +121,12 @@ export function Select({
       )}
       <MenuContent>
         {message !== undefined ? (
-          <MenuMessage tone={message.tone ?? "neutral"}>{message.text}</MenuMessage>
+          <MenuMessage
+            tone={message.tone ?? "neutral"}
+            {...(message.onRetry !== undefined ? { onRetry: message.onRetry } : {})}
+          >
+            {message.text}
+          </MenuMessage>
         ) : (
           <BaseMenu.RadioGroup value={value} onValueChange={(next: string) => onValueChange(next)}>
             {options?.map((option) => (
@@ -128,6 +152,18 @@ export function Select({
   );
 }
 
+/** ChosenText is the choice written on a trigger: ◇ and · unavailable when it is no longer offered, shimmering while the choices are read. */
+export function ChosenText({
+  choice,
+  loading,
+}: {
+  choice: { label: string; unavailable?: boolean };
+  loading: boolean;
+}) {
+  const text = `${choice.unavailable ? `${UNAVAILABLE} ` : ""}${choiceName(choice)}`;
+  return loading ? <Shimmer>{text}</Shimmer> : text;
+}
+
 /** SelectItem is a choice with its check at the start, in the brand ink. */
 function SelectItem({ option }: { option: SelectOption }) {
   return (
@@ -143,7 +179,7 @@ function SelectItem({ option }: { option: SelectOption }) {
         keepMounted
         className="size-(--icon) text-brand-ink data-unchecked:invisible"
       >
-        <Check className="size-(--icon)" />
+        <Icon icon={ICONS.done} />
       </BaseMenu.RadioItemIndicator>
       <span>
         {option.unavailable && `${UNAVAILABLE} `}

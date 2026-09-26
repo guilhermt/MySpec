@@ -1,6 +1,6 @@
 import { AlertDialog as BaseAlertDialog } from "@base-ui/react/alert-dialog";
 import { X } from "lucide-react";
-import type { KeyboardEvent, ReactNode, RefObject } from "react";
+import { type KeyboardEvent, type ReactNode, type RefObject, useRef } from "react";
 import { AlertDialog, AlertDialogContent, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import {
   Dialog as UIDialog,
@@ -9,6 +9,7 @@ import {
   DialogTitle as UIDialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { Button, type ButtonBaseProps, type ButtonLoading } from "./Button";
 import { IconButton } from "./IconButton";
 
 export interface DialogProps {
@@ -23,9 +24,9 @@ export interface DialogProps {
   children: ReactNode;
 }
 
-/* The width keeps 2rem free in a narrow window; the max width is the one of the system. */
+/* The width keeps --space-8 free in a narrow window; the max width is the one of the system. */
 const CONTENT =
-  "flex max-h-[calc(100dvh-2*round(8vh,1px))] w-[calc(100%-2rem)] flex-col gap-0 overflow-hidden rounded-xl bg-surface-3 p-0 text-ink-1 shadow-overlay ring-0 duration-(--duration-base)";
+  "flex max-h-[calc(100dvh-2*round(8vh,1px))] w-[calc(100%-var(--space-8))] flex-col gap-0 overflow-hidden rounded-xl bg-surface-3 p-0 text-ink-1 shadow-overlay ring-0 duration-(--duration-base)";
 
 /* The alert primitive sets its max width per data-size, so those variants are replaced too. */
 const WIDTHS = {
@@ -44,6 +45,8 @@ const TITLE =
  * - wide: size="wide";
  * - in steps: subtitle with the step, a DialogFooter with back from the second step and refusal;
  * - destructive: alert, with the confirmation as a danger Button.
+ * Without initialFocus, an alert opens on its DialogCancel and the others on the first field of the
+ * body, or on the dialog itself when the body has none; never on the close button.
  */
 export function Dialog({
   open,
@@ -56,6 +59,12 @@ export function Dialog({
   initialFocus,
   children,
 }: DialogProps) {
+  const popup = useRef<HTMLDivElement>(null);
+  const firstFocus = () => {
+    const sheet = popup.current;
+    if (sheet === null) return true;
+    return sheet.querySelector<HTMLElement>(alert ? CANCEL : FIELD) ?? sheet;
+  };
   const handleKeyDown = (event: KeyboardEvent) => {
     if (onConfirm !== undefined && event.ctrlKey && event.key === "Enter") {
       event.preventDefault();
@@ -63,7 +72,8 @@ export function Dialog({
     }
   };
   const content = {
-    ...(initialFocus !== undefined ? { initialFocus } : {}),
+    ref: popup,
+    initialFocus: initialFocus ?? firstFocus,
     // Base UI makes the rest of the page inert without saying so; aria-modal says it.
     "aria-modal": true,
     onKeyDown: handleKeyDown,
@@ -124,6 +134,16 @@ function DialogHeading({
   );
 }
 
+/** CANCEL finds the DialogCancel of a dialog, where an alert opens. */
+const CANCEL = "[data-dialog-cancel]";
+
+/**
+ * FIELD finds the first field of a dialog body that takes the focus, where the others open. A
+ * disabled field of the system stays focusable with aria-disabled, so both kinds are left out.
+ */
+const FIELD =
+  '[data-dialog-body] :is(input:not([type=hidden]), textarea, select, [role=combobox]):not(:disabled):not([aria-disabled="true"])';
+
 export interface DialogBodyProps {
   children: ReactNode;
   className?: string;
@@ -133,6 +153,7 @@ export interface DialogBodyProps {
 export function DialogBody({ children, className }: DialogBodyProps) {
   return (
     <div
+      data-dialog-body=""
       className={cn(
         "flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-5 pb-4 text-(length:--text-body) leading-(--leading-body) text-ink-2",
         className,
@@ -174,4 +195,12 @@ export function DialogFooter({ children, back, reason, refusal }: DialogFooterPr
       {children}
     </div>
   );
+}
+
+export type DialogCancelProps = Omit<ButtonBaseProps, "variant" | "children"> &
+  ButtonLoading & { children?: ReactNode };
+
+/** DialogCancel is the secondary Cancel of a footer: it closes the dialog, and an alert opens on it. */
+export function DialogCancel({ children = "Cancel", ...props }: DialogCancelProps) {
+  return <UIDialogClose data-dialog-cancel="" render={<Button {...props}>{children}</Button>} />;
 }

@@ -44,6 +44,16 @@ jobs:
       - run: task lint:web
       - run: pnpm typecheck
       - run: pnpm test:coverage --reporter=default --reporter=json --outputFile.json=./coverage/test-results.json
+      - name: Resolve the Playwright version
+        id: playwright
+        run: echo "version=$(node -p "require('playwright/package.json').version")" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+      - name: Install the Chromium of Playwright
+        run: pnpm exec playwright install --with-deps --only-shell chromium
+      - run: pnpm test:painted
       - uses: davelosert/vitest-coverage-report-action@v2
         if: github.event_name == 'pull_request'
         with:
