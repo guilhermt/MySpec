@@ -357,17 +357,24 @@
   background: color-mix(in srgb, var(--brand) var(--mix-marker), transparent);
 }
 
-/* Dialogs are centred with top and left at 50% and a -50% translate. When the
-   width or the height of a dialog is odd, the translate lands on half a pixel,
-   and WebKitGTK composites the dialog there and resamples it, blurring its text
-   and borders. Rounding each value keeps the dialog on whole pixels. Unlayered,
-   so it wins over the utilities of the generated components; globals.test.tsx
-   fails when those components stop matching it. */
+/* Dialogs open 8vh from the top and grow downwards, so opening a section never
+   moves the title. The left edge is rounded to the pixel: when the width is odd
+   the -50% translate lands on half a pixel, and WebKitGTK composites the dialog
+   there and resamples it, blurring its text and borders. Unlayered, so it wins
+   over the utilities of the generated components; globals.test.tsx fails when
+   those components stop matching it. */
 [data-slot="dialog-content"],
 [data-slot="alert-dialog-content"] {
-  top: round(50%, 1px);
+  top: round(8vh, 1px);
   left: round(50%, 1px);
-  translate: round(-50%, 1px) round(-50%, 1px);
+  translate: round(-50%, 1px) 0;
+}
+
+/* The veil under a dialog is the scrim of the system, without blur. */
+[data-slot="dialog-overlay"],
+[data-slot="alert-dialog-overlay"] {
+  background: var(--scrim);
+  backdrop-filter: none;
 }
 
 /* The chrome of Streamdown's code, drawn with the tokens. Unlayered, because

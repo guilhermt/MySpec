@@ -12,13 +12,22 @@ const GLOBALS = readFileSync(join(STYLES, "globals.css"), "utf8");
 const TOKENS_PATH = join(STYLES, "../../../design/system/tokens.css");
 const TOKENS = readFileSync(TOKENS_PATH, "utf8");
 
-/** The rule that keeps dialogs on whole pixels, at the top level of globals.css. */
+/** The rule that opens dialogs 8vh from the top on whole pixels, at the top level of globals.css. */
 const PIXEL_SNAP_RULE = `
 [data-slot="dialog-content"],
 [data-slot="alert-dialog-content"] {
-  top: round(50%, 1px);
+  top: round(8vh, 1px);
   left: round(50%, 1px);
-  translate: round(-50%, 1px) round(-50%, 1px);
+  translate: round(-50%, 1px) 0;
+}
+`;
+
+/** The rule that veils the app under a dialog, at the top level of globals.css. */
+const SCRIM_RULE = `
+[data-slot="dialog-overlay"],
+[data-slot="alert-dialog-overlay"] {
+  background: var(--scrim);
+  backdrop-filter: none;
 }
 `;
 
@@ -165,8 +174,32 @@ describe("globals.css", () => {
     expect(GLOBALS).toContain(ICON_RULE);
   });
 
-  it("rounds the centring of dialogs to whole pixels, outside any layer", () => {
+  it("places dialogs 8vh from the top, on whole pixels, outside any layer", () => {
     expect(GLOBALS).toContain(PIXEL_SNAP_RULE);
+  });
+
+  it("veils the app under a dialog with the scrim, without blur", () => {
+    expect(GLOBALS).toContain(SCRIM_RULE);
+  });
+
+  it("matches the slots of the dialog overlays", () => {
+    renderWithStore(
+      <>
+        <Dialog open>
+          <DialogContent>
+            <DialogTitle>Title</DialogTitle>
+          </DialogContent>
+        </Dialog>
+        <AlertDialog open>
+          <AlertDialogContent>
+            <AlertDialogTitle>Title</AlertDialogTitle>
+          </AlertDialogContent>
+        </AlertDialog>
+      </>,
+    );
+
+    expect(document.body.querySelector('[data-slot="dialog-overlay"]')).not.toBeNull();
+    expect(document.body.querySelector('[data-slot="alert-dialog-overlay"]')).not.toBeNull();
   });
 
   it("matches how DialogContent is placed", () => {
