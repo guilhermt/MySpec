@@ -64,13 +64,13 @@ Duas linhas, e uma terceira só enquanto o agente trabalha.
 |---|---|
 | 1 | Glifo de tipo e nome, com a largura inteira da linha para o nome. `repo#card`, `repo#PR` ou `#cards`, e `One-Shot`, aparecem à direita em hover, no foco e na linha aberta, e só quando cabem ao lado do nome inteiro; quando não cabem, ficam no tooltip do nome. O nome nunca perde largura para eles, e eles estão sempre no nome acessível. Na linha que `Ctrl+J` abriria, a marca `Ctrl J` fica à direita em qualquer largura |
 | 2 | Glifo de gravidade ou de estado; o que o item pede ou onde está, **sempre com a posição**; `+N` quando há mais de uma situação; na borda direita, o tempo |
-| 3 | Só com o agente rodando: a ação em curso, em fonte monoespaçada, com o verbo primeiro, e o medidor de contexto com a porcentagem |
+| 3 | Só com o agente rodando: a ação em curso, em fonte monoespaçada, com o verbo primeiro, e o medidor de contexto com a porcentagem. Sem ação em curso, a palavra da atividade da conversa: `Starting session…`, `Thinking…`, `Retrying · attempt N` |
 
 **Por tipo de item**, a posição é:
 
-- task: a etapa; na implementação, `Step N/M` e o estado do step (`Reviewer pass 2`); na PR, `PR review · checks 3/5`, `PR #1279 merged`;
-- review de PR: a passada e o progresso de decisão (`Pass 1 · 1/3`), ou a espera (`Pass 1 · checks 4/6`);
-- discussão: o estado e a rodada (`Discussing`, `Decide drafts · 3/6`, `Ready to archive`).
+- task: a etapa como o stepper a nomeia (`PRD`, `Tech spec`, `Plan`, `Planning`, `PR`, `PR review`, `Closing`); na implementação, `Step N/M`, com o laço quando há (`Reviewer · pass 2`, `Addressing review · round 1`);
+- review de PR: a passada (`Pass 1`), com o progresso de decisão ou a espera (`Pass 1 · checks 4/6`);
+- discussão: `Discussing` até os primeiros rascunhos, depois a rodada (`Round 1`).
 
 A task One-Shot tem uma marca própria no glifo de tipo, em qualquer largura.
 
@@ -81,7 +81,8 @@ A task One-Shot tem uma marca própria no glifo de tipo, em qualquer largura.
 | Erro | Losango | Situação e posição (`Session error · Plan`) | Chip quadrado cheio, com `!` | — |
 | Esperando o usuário | Disco cheio | Situação e posição (`Question · Step 3/7`), `+N` | Chip redondo, cheio de uma tinta âmbar, com contorno | — |
 | Pronto para encerrar | Anel | Situação e posição (`Ready to close · #1279`, `Ready to archive`) | Chip redondo contornado | — |
-| Agente trabalhando | Spinner, o único da linha | Posição (`Step 2/5 · Reviewer pass 2`) | O tempo do turno, em texto | Ação e contexto |
+| Agente trabalhando | Spinner, o único da linha | Posição (`Step 2/5 · Reviewer · pass 2`) | O tempo do turno, em texto | Ação e contexto |
+| O app trabalhando (preparar, commitar, abrir a PR, encerrar, publicar) | Spinner | O que o app faz (`Step 3/7 · committing`) | — | — |
 | Publicando (discussão) | Spinner | `Round 1 · publishing` | — | — |
 | Esperando o GitHub | Círculo tracejado | `PR review · checks 3/5` | `GitHub` | — |
 | Pausado | Duas barras | `Paused · <etapa>` | — | — |
@@ -89,15 +90,78 @@ A task One-Shot tem uma marca própria no glifo de tipo, em qualquer largura.
 
 - **Os dois relógios.** O chip é o relógio do usuário: há quanto tempo o item espera por ele, da situação mais grave e, entre as de mesma gravidade, da mais antiga. O texto na borda direita da linha em que o agente trabalha é o relógio do agente: há quanto tempo ele está no turno atual. O spinner fica só no início da segunda linha. Formas diferentes, e o nome acessível diz `waiting for you` ou `agent working`.
 - **Destaque.** Uma linha que espera pelo usuário tem o nome em negrito.
-- **O que se lê em voz.** O nome acessível da linha é a frase inteira: tipo (`One-Shot task`), nome, cada situação com lugar e tempo, a posição, e, com o agente rodando, quem trabalha, a ação e o contexto.
+- **O que se lê em voz.** O nome acessível da linha é a frase inteira: tipo (`One-Shot task`), nome, cada situação com lugar e tempo, a posição, e, com o agente rodando, quem trabalha, a ação e o contexto; o meta; e, na linha que `Ctrl+J` abriria, `Ctrl+J opens this next.` Quem trabalha é `Implementer` ou `Reviewer` num step, `<Etapa> agent` numa etapa (`PRD agent`, `Plan agent`, `PR agent`), `Reviewer` num review e `Discussion agent` numa discussão.
 - **Linha selecionada.** Meta e ação sobem de `--ink-4` para `--ink-3`, pelo contraste sobre o fundo selecionado.
+
+#### A linha 2 com situação
+
+A linha 2 fala da situação mais grave e, entre iguais, da mais antiga. A forma longa junta as partes com ` · `, e nenhuma parte repete outra. A curta tira a conversa (`Implementer`, `Reviewer`), a razão, o `% staged` e o progresso por extenso; o progresso de decisão fica, curto (`3/6`). A curta entra quando a longa não cabe. `+N` vem depois das duas.
+
+Nas fórmulas: `N/M` é o step e o total, `<etapa>` é `PRD`, `Tech spec`, `Plan` ou `Planning`, `<conversa>` é `Implementer` ou `Reviewer`, `#P` é o número da PR, `pass K` é a passada, `a of b` o progresso de decisão e `Round R` a rodada da discussão.
+
+| `kind` | Longa | Curta |
+|---|---|---|
+| `session_error`, `permission`, `question`, `reply` | `<Rótulo> · <lugar>`. Rótulo: `Session error`, `Permission`, `Question`, `Reply`. Lugar: `<etapa>`; num step, `<conversa> · Step N/M`; na PR, `PR` antes da abertura e `PR review · pass K` depois; num review, `pass K`; numa discussão, `Discussing` ou `Round R` | Sem a conversa: `Question · Step 3/7`, `Reply · PRD`, `Session error · PR review · pass 1` |
+| `step_blocked` | `Step N/M blocked · <razão>` | `Step N/M blocked` |
+| `worktree_unreadable` | `Can't read worktree · Step N/M` | igual |
+| `plan_invalid` | `Plan still invalid · <n> problems` | `Plan still invalid` |
+| `ready_to_continue` | `Ready to continue · <etapa>` | igual |
+| `step_review` | `Review · Step N/M`; com stage, `Review · Step N/M · P% staged`; pronto, `Approve · Step N/M` | `Review · Step N/M`, `Approve · Step N/M` |
+| `step_empty` | `No changes · Step N/M` | igual |
+| `pr_blocked` | `PR blocked · <razão>` | `PR blocked` |
+| `draft` | `Draft to approve · PR` | `Draft · PR` |
+| `findings` (PR da task) | `Decide findings · PR review · pass K · a of b` | `Decide findings · a/b` |
+| `changes_review` | `Review changes · <lugar>`; com stage, `· P% staged`; pronto, `Approve changes · <lugar>`. Lugar: `PR review` na task, `pass K` no review | Sem o `% staged` |
+| `pr_trouble` | `Checks failed`, `Conflict with base` ou `Checks failed · conflict`, seguido de `PR #P` na task e de `pass K` no review | Na task, `#P` no lugar de `PR #P` |
+| `pr_closed` | `PR closed unmerged · #P` | igual |
+| `merge` | `Ready to merge · PR #P`; ao encerrar, `Ready to close · PR #P merged`; no review, `Ready to merge · pass K` | `Ready to merge · #P`, `Ready to close · #P` |
+| `review_report` | `Decide findings · pass K · a of b`; `Ready to publish · pass K`; `Ready to apply · pass K` | `Decide findings · a/b`; as outras iguais |
+| `new_commits` | `New commits · pass K` | igual |
+| `pass_blocked` | `Pass blocked · pass K`, a passada que o app pediu | igual |
+| `publish_failed` | `Publish failed · pass K` no review, `Publish failed · Round R` na discussão | igual |
+| `drafts` | `Decide drafts · Round R · a of b` | `Decide drafts · a/b` |
+| Épico que não publica, épico descartado | `Epic can't publish · Round R`, `Epic discarded · Round R` | sem a rodada |
+| Pronta para arquivar | `Ready to archive · <n> published` | `Ready to archive` |
+
+A razão de um step bloqueado vem do bloqueio do step: `worktree not clean`, `fetch failed`, `no base branch`, `path exists`, `branch exists`, `git failed`, `clone missing`. A da PR, do bloqueio da PR: `gh not installed`, `gh not signed in`, `gh failed`, `git failed`, `no worktree`. O rótulo da árvore é a palavra curta da situação; a barra do pedido, as notificações e o anúncio da região ao vivo usam o rótulo inteiro (`Waiting for reply`). Decidir apontamentos tem um nome só, `Decide findings`, na PR da task e no review. O nome acessível da linha usa o texto que a linha mostra, na forma longa.
+
+#### A linha sem situação
+
+Um item sem situação mostra o que roda ou onde está. A gravidade ordena esses estados depois das situações, como na seção seguinte.
+
+| Item e estado | Glifo | Linha 2 (longa / curta) | Borda direita | Gravidade |
+|---|---|---|---|---|
+| Task numa etapa de planejamento, sessão trabalhando | Spinner | `<etapa>` | O relógio do turno | Agente |
+| Step que o app prepara (`not_started`, `preparing`) | Spinner | `Step N/M · preparing the worktree` / `Step N/M · preparing` | — | Agente |
+| Step implementando, sessão trabalhando | Spinner | `Step N/M` | O relógio | Agente |
+| Step na passada do revisor, revisor trabalhando | Spinner | `Step N/M · Reviewer · pass K` / `Step N/M · pass K` | O relógio | Agente |
+| Step tratando o relatório, implementador trabalhando | Spinner | `Step N/M · Addressing review · round R` / `Step N/M · round R` | O relógio | Agente |
+| Step que o app commita (`committing`) | Spinner | `Step N/M · committing` | — | Agente |
+| PR que o app prepara ou abre (`preparing`, `opening`) | Spinner | `PR · preparing`, `PR · opening` | — | Agente |
+| PR com o rascunho sendo escrito, sessão trabalhando | Spinner | `PR · drafting` | O relógio | Agente |
+| PR com a passada do review, sessão trabalhando | Spinner | `PR review · pass K` | O relógio | Agente |
+| PR com as mudanças sendo commitadas | Spinner | `PR review · committing` | — | Agente |
+| PR esperando os checks (`waiting_checks`) | Círculo tracejado | `PR review · checks a/b`; antes da primeira leitura, `PR review · checking GitHub`, com o brilho | `GitHub` | GitHub |
+| Task que o app encerra (`closing`) | Spinner | `Closing` | — | Agente |
+| Review, passada rodando | Spinner | `Pass K` | O relógio | Agente |
+| Review esperando os checks | Círculo tracejado | `Pass K · checks a/b` | `GitHub` | GitHub |
+| Review aplicando os aprovados (`applying`) | Spinner | `Pass K · applying` | O relógio | Agente |
+| Review que o app commita | Spinner | `Pass K · committing` | — | Agente |
+| Review publicado | Círculo fino | `Published · approved`, `Published · changes requested`, `Published · commented` | `idle` | Ocioso |
+| Discussão, sessão trabalhando | Spinner | `Discussing` ou `Round R` | O relógio | Agente |
+| Discussão publicando | Spinner | `Round R · publishing` / `publishing` | — | Agente |
+| Qualquer um dos acima com a sessão pausada | Duas barras | `Paused · <posição>` | — | Pausado |
+| Sessão ociosa, sem turno | Círculo fino | A posição | `idle` | Ocioso |
+| Sessão com erro sem situação | Círculo fino | `Session stopped · <posição>` | `idle` | Ocioso |
+
+O spinner do app é o mesmo do agente (`principles.md` §8), sem relógio e sem linha 3, e o nome acessível diz `working`, não `agent working`. Com duas conversas do mesmo item trabalhando, a linha fala da que está no turno mais antigo. O erro de uma sessão sem situação fica no cinza da árvore, porque a cor de atenção vem só das situações; a aba e a conversa dela o mostram como erro.
 
 ### Gravidade e ordem
 
 - Erro > esperando > encerramento. Depois, sem situação: agente > GitHub > pausado > ocioso.
 - A cor de atenção vem só das situações. Uma sessão com erro sem situação aparece como erro na aba e na conversa dela, nunca no cinza do ocioso.
 - **Portadores do erro**, nenhum deles só cor: o losango, o chip quadrado com `!` e um trilho na borda esquerda da linha. O trilho marca o erro em todo lugar: linha, faixa recolhida, barra do pedido, bloco de erro da conversa, aviso do app.
-- **`Ctrl+J`** abre o primeiro item que espera, fora o aberto: o mais grave, depois a espera mais antiga. O resto é como em "Chegar a uma situação", na seção 1.
+- **`Ctrl+J`** abre o primeiro item que espera, fora o aberto: o mais grave, depois a espera mais antiga. O resto é como em "Chegar a uma situação", na seção 1. O `Ctrl+J` e a marca ignoram o filtro por repositório; abrir um item que o filtro esconde, por `Ctrl+J`, pela notificação ou por qualquer outro caminho, volta o filtro a **All repositories**, porque a linha do lugar aberto está sempre à vista.
 
 ### Situação nova
 
@@ -323,7 +387,7 @@ O design funciona de 1100 a 2600 px, sem pontos fixos de janela. Cada regra depe
 | Onde | Regra |
 |---|---|
 | Lateral | `clamp(288px, 8vw + 200px, 380px)`: 288 px a 1100, 300 a 1250, 380 a partir de cerca de 2250. Recolhida, 60 px |
-| Linha da árvore | Lateral abaixo de 330 px: o meta sai e os rótulos passam à forma curta. A posição nunca sai. Abaixo de 370 px, a ação passa à forma curta: o verbo primeiro e o caminho encurtado pelo meio, com o último segmento |
+| Linha da árvore | Lateral abaixo de 330 px: o meta sai, os rótulos passam à forma curta e o medidor fica só com a porcentagem. A posição nunca sai. A ação passa à forma curta sempre que a longa não cabe: o verbo primeiro; de um caminho, `…/` e o último segmento; de um comando, o executável, o subcomando e o último segmento do primeiro caminho, sem as flags (`Running go test …/ratelimit`) |
 | Cabeçalho do item | Cede em ordem, pelos limites de `screens/task.md` §3 (1660, 1440, 1360, 1300, 1200, 1040 e 900 px de área principal) |
 | Conversa | Medida de 800 px, centrada |
 | Painéis do item | A regra da seção 3 |

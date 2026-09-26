@@ -79,7 +79,7 @@ Cada componente embrulha um primitivo gerado em `frontend/src/components/ui` (nu
 | | |
 |---|---|
 | Anatomia | Um conjunto só, de traço, em `--icon` (16 px), `--icon-sm` e `--icon-xs`, traço `--icon-stroke`, pontas e junções arredondadas, `currentColor` |
-| Significados fixos | Robô: modo `Agent`. Pessoa: modo `Manual`. `<>`: abrir no editor. Seta externa: abre fora do app (GitHub). Lápis: `Revised`. Cadeia: o gesto publica uma cadeia. Ampulheta: espera (neutra). Visto: feito, aprovado, escolhido. Os glifos de tipo (task, One-Shot, review, discussão, épico, board) são ícones, não glifos de estado |
+| Significados fixos | Robô: modo `Agent`. Pessoa: modo `Manual`. `<>`: abrir no editor. Seta externa: abre fora do app (GitHub). Lápis: `Revised`. Cadeia: o gesto publica uma cadeia. Ampulheta: espera (neutra). Visto: feito, aprovado, escolhido. Documento (`file`): um artefato, um relatório, um painel de documentos. Arquivamento (`archive`): o item foi para o History. Merge (`merge`): a PR foi mergeada ou fechada. Lixeira (`trash`): apagado. Os glifos de tipo (task, One-Shot, review, discussão, épico, board) são ícones, não glifos de estado |
 | Tokens | `--icon`, `--icon-sm`, `--icon-xs`, `--icon-stroke`, `--ink-3` em repouso, `--brand-ink` ativo |
 | Acessibilidade | `aria-hidden` ao lado de um rótulo; num botão só de ícone, o `aria-label` e o tooltip |
 | Faça | Use um ícone por significado, o mesmo em todo o produto |
@@ -142,7 +142,7 @@ Cada componente embrulha um primitivo gerado em `frontend/src/components/ui` (nu
 | | |
 |---|---|
 | Regra | Ir a um lugar é imediato: o lugar novo aparece inteiro, sem deslizar nem esmaecer. Só o que muda de estado dentro de um lugar se anima (painel que entra, menu, toast, piscada) |
-| Foco | Numa ida pelo teclado, o foco vai ao que o lugar pede (a primeira opção do cartão, a ação da barra do pedido, **Continue**, a lista); no resto, fica no cabeçalho do lugar |
+| Foco | Numa ida por `Ctrl+J` ou pela notificação, o foco vai ao que o lugar pede (a primeira opção do cartão, a ação da barra do pedido, **Continue**, a lista). `Enter` e o clique numa linha da árvore deixam o foco na linha, para a árvore continuar sendo o painel de comando. `Alt+←`, `Alt+→` e os níveis do breadcrumb levam o foco ao título do lugar (o `h1`, com `tabindex="-1"`). O clique em `←` ou `→` deixa o foco no botão. A página do item que saiu recebe o foco em **Next that needs you** quando aparece |
 | Faça | Traga a linha do lugar à vista na árvore na mesma troca |
 
 ## Controles
@@ -205,6 +205,7 @@ Cada componente embrulha um primitivo gerado em `frontend/src/components/ui` (nu
 |---|---|
 | Anatomia | Gatilho com a anatomia do input e um chevron; menu flutuante (`--surface-3`, `--shadow-float`, raio `--radius-lg`) com itens de `--size-control` |
 | Variantes | **Lista de escolha** (`listbox`: visto no escolhido). **Menu de ações** (`menu`: o destrutivo por último, depois de um separador, em `--state-error`). **Grupos**: legenda em caixa alta de `--text-caps` e nota. **Modelo e esforço**: dois grupos de `menuitemradio`, o modelo e o esforço dele, a escolha de fábrica marcada `factory`; um modelo sem esforço diz `<modelo> has no effort levels.` **Item que alterna em três estados** (sem filtro, oculto `−dependabot`, só este `+rsouza`), com o menu aberto enquanto se alterna. **Com busca**: um campo no alto, para os cards de um board. **Item desabilitado com ação**: `Not cloned` com **Clone** no próprio item |
+| Gatilho da lateral | O filtro por repositório usa o gatilho no tom da lateral: `--size-control-sm`, fundo `--sidebar-input`, borda `--sidebar-control`, rótulo em `--text-meta` e `--ink-2`. O menu é o mesmo |
 | Estados | Gatilho: os comuns. Item: realce em `--veil-hover` (hover e teclado), escolhido com visto em `--brand-ink`, desabilitado em `--ink-4` com o motivo, destrutivo em vermelho. Menu carregando e com erro, com a mensagem no lugar dos itens (`features.md`, Modelos e esforço, quando o catálogo nunca foi lido) |
 | Tokens | `--surface-3`, `--shadow-float`, `--veil-hover`, `--veil-press`, `--brand-ink`, `--state-error`, `--size-menu-min`, `--text-caps` |
 | Teclado | ↑↓ realçam, `Enter` escolhe, `Esc` fecha e devolve o foco ao gatilho, letras saltam ao item |
@@ -315,7 +316,7 @@ Cada componente embrulha um primitivo gerado em `frontend/src/components/ui` (nu
 | Largura | O nome ocupa as colunas 2 e 3. O meta aparece no hover, no foco e na linha aberta só quando cabe ao lado do nome inteiro; quando não cabe, vai para o tooltip do nome (`Rotate API keys without downtime · api#441`) e continua no nome acessível. `Ctrl J` fica sempre visível. Abaixo de 330 px de lateral, rótulos curtos e o medidor só com a porcentagem. A linha 3 passa à forma curta sempre que a longa não cabe |
 | Tokens | `--surface-sidebar`, `--ink-1..4`, `--weight-name`, `--weight-name-waiting`, `--brand-veil`, `--brand-ring`, `--veil-hover`, `--veil-press`, `--row-pad-y`, `--row-gap`, `--line-gap`, `--tree-pad`, `--epic-indent`, `--sidebar-guide` |
 | Teclado | A árvore é uma parada de Tab. ↑↓, `Home`, `End`, ← recolhe ou sobe, → expande, `Enter` abre |
-| Acessibilidade | `treeitem` com `aria-level`, `aria-current="page"` na aberta; o nome acessível é a frase inteira (tipo, nome, cada situação com lugar e tempo, posição, quem trabalha, a ação e o contexto) |
+| Acessibilidade | `treeitem` com `aria-level`, `aria-current="page"` na aberta; o nome acessível é a frase inteira (tipo, nome, cada situação com lugar e tempo, posição, quem trabalha, a ação e o contexto, o meta, e `Ctrl+J opens this next.` na linha da marca). A árvore é `Active items`, dentro da lateral `aside` `Work`. O texto e a gravidade de cada estado estão em `structure.md` §2 |
 | Faça | Deixe o nome inteiro sempre que houver espaço, também em hover e em foco |
 | Não faça | Não reordene a árvore sozinha. Não esconda a posição para caber. Não pinte `--ink-4` sobre a linha aberta: o meta sobe para `--ink-3` |
 
@@ -323,11 +324,12 @@ Cada componente embrulha um primitivo gerado em `frontend/src/components/ui` (nu
 
 | | |
 |---|---|
-| Anatomia | Nó de `--size-node`: chevron, título, e à direita `4 pending`, `reading…`, `◇ Read failed` ou o resumo do nó recolhido |
-| Variantes | **Board**: 14 px, 500, `--ink-2`, abre a visão do board. **Épico**: 13 px, 500, `--ink-3`, com a guia a 3:1 sob o chevron. **Reviews**: com a contagem de PRs pendentes, abre o lugar Reviews. **No board** |
+| Anatomia | Nó de `--size-node`: chevron, título, e à direita `4 pending`, `reading…`, `◇ Read failed` ou o resumo do nó recolhido. No board e em Reviews, a seta de ir (`go`, `--icon-xs`) aparece depois do título em hover e em foco. O chevron recolhe e expande; o título abre o lugar (no épico e em No board, que não são lugares, o título também recolhe) |
+| Variantes | **Board**: 14 px, 500, `--ink-2`, abre a visão do board. **Épico**: 13 px, 500, `--ink-3`, com a guia a 3:1 sob o chevron. **Reviews**: com a contagem de PRs pendentes, abre o lugar Reviews; com a leitura de um repositório falha, `◇ Read failed` com os repositórios no tooltip, como o board. **No board** |
 | Estados | Hover, foco, pressionado; lugar aberto (a visão do board ou Reviews): `--brand-veil`, anel `--brand-ring`, `aria-current="page"`, a contagem sobe de `--ink-4` para `--ink-3`; recolhido com o resumo do mais grave ao menos grave (o mais grave nomeado); vazio (`No active items.`); lendo; falha de leitura (nunca uma situação) |
 | Tokens | `--ink-2`, `--ink-3`, `--sidebar-guide`, `--veil-hover`, `--section-gap`, `--guide-x`, `--brand-veil`, `--brand-ring` |
-| Acessibilidade | `aria-expanded`; o grupo apontado por `aria-owns`; o resumo recolhido tem nome acessível com todas as contagens |
+| Resumo recolhido | Um glifo e uma contagem por estado, do mais grave ao menos (erro, espera, encerramento, trabalhando, GitHub, pausado; o ocioso não conta), só o primeiro com a palavra (`error` ou `errors`, `waiting`, `to close`, `working`, `checks`, `paused`). O nó de board conta também os itens dos épicos dele |
+| Acessibilidade | `aria-expanded`; o grupo apontado por `aria-owns`; o resumo recolhido tem nome acessível com todas as contagens (`1 error, 2 waiting, 1 ready to close, 1 on GitHub`) |
 | Faça | Deixe o board acima do épico em tamanho e tinta |
 | Não faça | Não use caixa alta num nó que é um lugar |
 
@@ -342,15 +344,16 @@ Cada componente embrulha um primitivo gerado em `frontend/src/components/ui` (nu
 
 | | |
 |---|---|
-| Anatomia | A lateral em `--sidebar-collapsed`, no tom dela. Um bloco por item, na ordem da árvore: o glifo de tipo com o de estado no canto; embaixo o chip de espera ou o tempo do turno, ou na falta dos dois a palavra do estado (`checks`, `paused`, `idle`); `+N`; o trilho no erro. Entre os grupos, um separador leva o `◇` da falha de leitura ou do clone e, em Reviews, a contagem de pendentes. O rodapé em coluna |
-| Estados | Os da linha da árvore, sem o meta. **`»`** expande; **`«`** no topo da lateral recolhe |
-| Acessibilidade | O nome acessível de cada bloco é o da linha inteira; o tooltip tem o nome |
+| Anatomia | A lateral em `--sidebar-collapsed` (60 px), no tom dela, em três faixas como a aberta. **Topo**: `»`, fantasma de ícone, e abaixo **New** como botão de ícone (o `+` em `--brand-ink`), com o mesmo menu. **Blocos**: um por item, na ordem da árvore, todos os itens, também os de um nó recolhido; bloco de 60 px de largura com `--tree-pad` de folga, o ícone de tipo em `--icon`, centrado, com o `StateGlyph` pequeno (`--glyph-sm`) no canto inferior direito, contornado por `--border-2` de `--surface-sidebar`; `+N` no canto superior direito, em `--text-micro` `--ink-3`; embaixo, centrado, o chip de tempo do system, ou o relógio do turno em `--text-micro` `--ink-3`, ou a palavra do estado (`checks`, `paused`, `idle`, `working`) em `--text-micro` `--ink-4`; o trilho de erro na borda esquerda. **Separadores**: entre os grupos, um fio de `--line-1` com, centrados, o `◇` da falha de leitura ou do clone, e em Reviews a contagem de pendentes em `--text-micro`; não são paradas de Tab. **Rodapé**: em coluna, três botões de ícone: **History** (a contagem no nome acessível e no tooltip, não visível), o tema e **Settings** |
+| Estados | Hover `--veil-hover`; foco pelo anel por dentro, porque a faixa rola; pressionado `--veil-press`; aberto `--brand-veil` com `--brand-ring` colado e o ícone de tipo em `--brand-ink`; situação nova pisca como a linha. Sem a marca `Ctrl J`: o bloco que o atalho abriria diz `Ctrl+J opens this next.` no nome acessível |
+| Teclado | A faixa é `role="tree"`, uma parada de Tab; ↑↓, `Home`, `End`, `Enter` abre |
+| Acessibilidade | O nome acessível de cada bloco é o da linha inteira; o tooltip tem o nome do item e o que ele pede |
 
 ### Seletor de tema
 
 | | |
 |---|---|
-| Anatomia | Fantasma de ícone no rodapé da lateral. É o único lugar do tema |
+| Anatomia | Fantasma de ícone no rodapé da lateral, com um ícone fixo (o meio disco); o estado está no nome e no tooltip. É o único lugar do tema |
 | Estados | Três, em ciclo: System, Light, Dark. O estado está no `aria-label` e no tooltip (`Theme: System · click to change`) |
 | Faça | Aplique na hora, sem recarregar |
 
@@ -368,8 +371,9 @@ Cada componente embrulha um primitivo gerado em `frontend/src/components/ui` (nu
 | Anatomia | Coluna à direita da área principal, afundada (`--surface-0`), largura `round(down, var(--panel-width), 1px)`. Cabeçalho de `--size-head` com o título em `--text-ui` 600, e o `×` (`Close · Esc`); corpo que rola, em `--text-meta` |
 | Variantes | **Do item**: `Details`, `Artifacts` e `Card` (task), `Details` e `Reports` (review), `Details` e `Documents` (discussão). **Da lista**: o card no board e a PR em Reviews, largura `--panel-card-width`, com a faixa (`#474 · acme/api`, **Open on GitHub**, `×`), o título em `--text-title`, as ações, os avisos, o bloco do item, os fatos em chave e valor, o corpo em Markdown no registro de leitura e as relações |
 | Coluna ou cobertura | O painel do item fica ao lado enquanto a conversa cabe inteira (área principal − painel ≥ 760 px); o painel da lista, enquanto a lista mantém 440 px. Fora disso, cobre com `--surface-3` e `--shadow-overlay` |
-| Grupo de painéis | No cabeçalho, os botões dos painéis do lugar como um grupo que alterna: o aberto pressionado (`--brand-tint-plane`, `aria-pressed`); abaixo de 1440 px de área principal, só o ícone |
-| Estados | Entra em `--duration-base` com `--ease-enter`; vazio com o que falta (`No artifacts yet`, `Steps come from the plan`); carregando; o item da lista que saiu da leitura: a faixa de aviso no alto e as ações tracejadas |
+| Grupo de painéis | No cabeçalho, os botões dos painéis do lugar como um grupo que alterna: o aberto pressionado (`--brand-tint-plane`, `aria-pressed`); abaixo de 1440 px de área principal, só o ícone, com o nome no tooltip e no nome acessível. `Artifacts`, `Reports` e `Documents` usam o ícone de documento (`file`) |
+| Regra em pixel | A largura do painel e a condição da coluna ficam em pixel inteiro: com `--panel-width`, a regra `área principal − painel ≥ 760 px` vale exatamente a partir de 1120 px de área principal, e é uma container query nesse limite |
+| Estados | Entra em `--duration-base` com `--ease-enter`, por opacidade e um deslocamento de `--space-4` da direita; sai em `--duration-fast` com `--ease-exit`. Não é modal: o foco fica no botão que o abriu, e `Esc` fecha e devolve o foco a ele; vazio com o que falta (`No artifacts yet`, `Steps come from the plan`); carregando; o item da lista que saiu da leitura: a faixa de aviso no alto e as ações tracejadas |
 | Teclado | Um de cada vez; `Esc` fecha; o teclado continua na lista enquanto o painel da lista está aberto |
 | Acessibilidade | `aside` com o nome (`Card #474`) |
 | Faça | Deixe fechado por padrão e abra só por uma ação do usuário |
@@ -380,7 +384,7 @@ Cada componente embrulha um primitivo gerado em `frontend/src/components/ui` (nu
 | | |
 |---|---|
 | Anatomia | No lugar do item, na medida `--measure-read`: um ícone neutro (arquivo, merge, lixeira), o título em `--text-title` (`web#2291 was merged, and its review ended`, `Usage-based pricing tiers was archived`, `This task was deleted.`), o que aconteceu, o resultado num bloco afundado (o resultado do encerramento, uma linha por passada, uma linha por rodada publicada; no apagado, o que ficou no disco com o comando copiável), e as ações |
-| Ações | **Next that needs you** `Ctrl J` (primária, com o foco, o destino no tooltip), **Open in History** (menos no apagado) e a volta (**Back to Reviews**, **Open Platform Roadmap**). Sem nada esperando: **Next that needs you** tracejado com `Nothing else needs you now.`, e **Open in History** primária, com o foco. Os casos estão em `screens/rest.md` §9 |
+| Ações | **Next that needs you** `Ctrl J` (primária, com o foco, o destino no tooltip: `Next: <nome do item> · Ctrl+J`), **Open in History** (menos no apagado) e a volta (**Back to Reviews**, **Open Platform Roadmap**). Sem nada esperando: **Next that needs you** tracejado com `Nothing else needs you now.`, e **Open in History** primária, com o foco. Os casos estão em `screens/rest.md` §9 |
 | Faça | Diga o que aconteceu e o resultado. Nunca deixe a área vazia |
 
 ### Estado vazio de página
@@ -424,11 +428,11 @@ Cada componente embrulha um primitivo gerado em `frontend/src/components/ui` (nu
 
 | | |
 |---|---|
-| Aviso do app | Faixa no topo da área principal, sobre o cabeçalho, `--state-error-veil` com trilho, o rótulo em vermelho e 700, que é a ação que falhou (`Couldn't pause Rate limit per API key`), o detalhe com o que aconteceu e o que fazer, e **Dismiss**. Fica até ser dispensado; a próxima falha substitui a anterior. Só para uma ação sem lugar próprio: a falha que tem lugar (a linha do modelo, o rodapé do diálogo, a linha do repositório) fica nele |
-| Toast | Flutuante, `--surface-3` com `--shadow-float`, até `--size-toast`: ícone, texto (`“Idempotency keys for payment intents” was archived`), detalhe (o resultado curto), **Open in History** sob o texto, e `×`. Só para uma task, um review ou uma discussão que saiu sem estar aberta. Fica 10 segundos; até três empilhados, e o mais antigo sai |
+| Aviso do app | Faixa no topo da área principal, sobre o cabeçalho, `--state-error-veil` com trilho, o rótulo em vermelho e 700, que é a ação que falhou (`Couldn't pause Rate limit per API key`), o detalhe com o que aconteceu e o que fazer (`<mensagem do erro>. <o que fazer>`, e só a mensagem quando a ação não tem saída conhecida), e **Dismiss**. Fica até ser dispensado; a próxima falha substitui a anterior. Só para uma ação sem lugar próprio: a falha que tem lugar (a linha do modelo, o rodapé do diálogo, a linha do repositório) fica nele |
+| Toast | Flutuante, `--surface-3` com `--shadow-float`, até `--size-toast`: ícone, texto (`“Idempotency keys for payment intents” was archived`), detalhe (o resultado curto), **Open in History** sob o texto, e `×`. Só para uma task, um review ou uma discussão que saiu sem estar aberta. Fica 10 segundos, contados só enquanto ele não tem o ponteiro nem o foco; até três empilhados, e o mais antigo sai |
 | Estados | O toast entra em `--duration-base` com `--ease-enter` e sai em `--duration-fast` com `--ease-exit`; mora na região `.toasts`, embaixo à esquerda da área principal (`--z-toast`), que é também a região `aria-live` do app |
 | Tokens | `--surface-3`, `--shadow-float`, `--state-error-veil`, `--state-error`, `--error-rail`, `--size-toast`, `--z-toast` |
-| Acessibilidade | Toast em `role="status"`; aviso em `role="alert"` |
+| Acessibilidade | A região `.toasts` (`role="status"`, `aria-live="polite"`) é a única região ao vivo dos toasts e dos anúncios do app (situação nova, `Ctrl+J` sem destino, página do item que saiu): os toasts dentro dela não têm papel próprio, e o anúncio é um texto visualmente oculto no mesmo contêiner. Os componentes com papel próprio (a idade da leitura, o esqueleto, a faixa de aviso, a barra do pedido, a atividade, a linha do que o gesto publica, a barra da seleção) o mantêm, fora dela e nunca dentro dela. Aviso em `role="alert"` |
 | Não faça | Não use toast para o item aberto nem para algo que depende do usuário: isso é uma situação |
 
 ## O item aberto
@@ -464,13 +468,13 @@ Cada componente embrulha um primitivo gerado em `frontend/src/components/ui` (nu
 | | |
 |---|---|
 | Anatomia | Acima do compositor, na coluna da conversa (`--measure-conversation`), com as mesmas bordas das entradas, `--size-ask` de altura mínima: à esquerda o glifo, o rótulo em 700, o lugar e o chip de tempo; no meio o progresso (`1 of 4 decided`, `5 of 7 files staged · 71%`), nunca a razão que o bloco de erro já diz; à direita as ações |
-| Variantes | **Quieta** (`--surface-0`): o cartão na conversa tem o conteúdo e a resposta, a barra tem **Show**. **Tingida** (`--state-wait-veil`): o pedido sem cartão com ação própria; a barra tem a ação. **De decisão**: tingida, com o progresso, **Next to decide** `Alt ↓` e a primária tracejada com o que falta até tudo estar decidido (**Apply approved**, **Publish review…**). **Erro** (`--state-error-veil` com trilho). **Encerramento**: fundo quieto, rótulo em `--state-close` (`Ready to close`, `Ready to archive`). **A outra conversa espera**: quieta, `● The reviewer waits · Question 18m` com **Go to reviewer** |
+| Variantes | **Quieta** (`--surface-0`): o cartão na conversa tem o conteúdo e a resposta, a barra tem **Show**. **Tingida** (`--state-wait-veil`): o pedido sem cartão com ação própria; a barra tem a ação. **De decisão**: tingida, com o progresso, **Next to decide** `Alt ↓` e a primária tracejada com o que falta até tudo estar decidido (**Apply approved**, **Publish review…**). **Erro** (`--state-error-veil` com trilho). **Encerramento**: fundo quieto, rótulo em `--state-close` (`Ready to close`, `Ready to archive`). **A outra conversa espera**: quieta, `● The reviewer waits · Question 18m` com **Go to reviewer**. **A outra conversa falhou**: fundo quieto com o trilho de erro, o losango e o rótulo em `--state-error` 700, `◆ Session error · Reviewer · pass 2` com **Go to reviewer** |
 | Conteúdo | O que cada situação diz e a ação estão em `screens/task.md` §7, `review.md` §10 e `discussion.md` §8 |
 | Estados | A ação segue os estados do botão (`Retrying…`, `Publishing…`). Existe só enquanto o item pede algo; ao nascer com a tela aberta, pisca duas vezes no véu da gravidade e é anunciada |
 | Largura | Quebra em duas linhas antes de esconder uma ação |
 | Tokens | `--surface-0`, `--state-wait-veil`, `--state-error-veil`, `--error-rail`, `--state-wait`, `--state-error`, `--state-close`, `--size-ask` |
 | Teclado | `Ctrl+Enter` abre a publicação com o foco na barra ou no cartão, nunca no compositor |
-| Acessibilidade | `role="region"` com nome; o texto de estado em `role="status"` |
+| Acessibilidade | `role="region"` com o nome `Request`; o texto de estado em `role="status"` |
 | Faça | Deixe a ação que resolve aqui e em nenhum outro lugar, fora as exceções de `structure.md` §3 |
 | Não faça | Não repita o comando nem a pergunta: a barra é a chamada, o cartão é o conteúdo |
 
