@@ -80,7 +80,7 @@ Três durações e uma curva padrão, só o que muda de estado se anima, e só o
 
 Há dois laços, e cada um diz uma coisa:
 - o **spinner** diz que alguém trabalha: o agente, ou o app numa ação sua. Há um spinner só no sistema, o meio arco do glifo "trabalhando", que num botão toma a tinta do botão;
-- o **brilho** diz que uma leitura ainda não tem resultado: `checking GitHub…`, o medidor antes da primeira leitura.
+- o **brilho** diz que uma leitura ainda não tem resultado: `checking GitHub`, o medidor antes da primeira leitura.
 
 Com `prefers-reduced-motion`, tudo vai a zero: o spinner para como um anel de três quartos, o brilho vira tinta chapada, e a piscada não acontece.
 

@@ -1,79 +1,52 @@
 # Crítica das correções da task 2 · PR #68
 
-Revisão da branch `shell-fixes` (commits `9035a5b` e `7392046`) antes do merge, contra as 17 divergências de `design/research/critique-task-02.md`, `design/structure.md` §2, §3 e §6, `design/system/components.md` (grupo Shell), `design/system/tokens.css` e os mocks `design/lab/08-visual-final/index.html` e `design/lab/10-screen-task-minimal/b.html`. Os caminhos de código são relativos a `frontend/src/` e as linhas são as de `7392046`.
+Revisão da branch `shell-fixes` antes do merge, até o commit `549d7e1` (depois de `9035a5b` e `7392046`). A régua: as 17 divergências de `design/research/critique-task-02.md`, os oito restos (R1 a R8) da primeira versão desta crítica, `design/structure.md` §2, §3 e §6, `design/system/components.md` (grupo Shell), `design/system/tokens.css` e os mocks `design/lab/08-visual-final/index.html` e `design/lab/10-screen-task-minimal/b.html`. Os caminhos de código são relativos a `frontend/src/`, e as linhas são as de `549d7e1`.
 
 ## Como foi verificado
 
-- **Testes.** `task test:web`: jsdom com cobertura, 208 arquivos e 2.579 testes, verde (97,75% de linhas); suíte pintada (Chromium), 26 arquivos e 296 testes, verde. `task test:go`: 2.455 testes (1 pulado), cobertura total de 90,7%, limites satisfeitos.
-- **Mutação das provas pintadas novas**, numa cópia de `frontend/` e `design/system/` no scratchpad. Cada correção foi revertida sozinha e o teste rodado:
-  - glifo de volta a `-bottom-(--space-1)` e vão de volta a `--line-gap` (`SidebarRail.tsx:161` e `:142`): `keeps the state glyph of every block clear of its clock` falha nos dois temas (alcance 126,49 contra o pé em 124). A caixa do ícone sem `size-(--icon)` não muda nada, porque o ícone já tem 16 px.
-  - `min-h-(--size-time-chip)` no lugar de `h-` (`SidebarRail.tsx:174`): `sets the foot of every block on whole pixels` **passa** (ver desvio declarado 1).
-  - `gap-(--row-gap)` no lugar de `--section-gap` (`Tree.tsx:128`): falha (4 contra 24).
-  - o grupo do épico sem `ml-(--epic-indent)`: falha (0 contra 16); a guia de volta a `left: --guide-x`: falha (a guia passa por baixo da linha, 40 contra 24).
-  - sem a regra `[data-leaving] > .aux-panel` ou sem `.toast[data-leaving]` em `globals.css`, `PanelLayout` sem o `Presence`, e o `×` do toast chamando `onDismiss` direto: cada um faz falhar o teste correspondente de `Presence.painted.test.tsx`.
-- **A tela montada.** Uma página de teste pintada na cópia montou a `Sidebar` real e o `TaskHeader` real com dados falsos (Reviews com 4 pendentes e um review trabalhando, o board `Platform Roadmap` com um clone ausente, o épico `API hardening` com uma task em erro, uma em espera com `+1` e a aberta rodando `go test ./internal/ratelimit/... -run TestBucket`, uma PR antes da primeira leitura, uma discussão, o board `Billing` com leitura falha e vazio, e No board com uma task pausada e uma ociosa), a 1250 e 2560 px, aberta e recolhida, claro e escuro, medindo cada caixa. A mesma página rodou contra `64fd7cd` (antes da PR). Os mocks foram capturados a 1250 e 2560 px nos dois temas, pelo Playwright, em `file://`. Nenhum servidor foi aberto.
-- **Contraste**, calculado dos OKLCH de `tokens.css` com o véu composto em srgb: `--ink-4` sobre `--veil-press` na lateral, 4,36 (claro) e 5,47 (escuro); `--ink-3` sobre o mesmo véu, 5,18 e 6,82.
+- **Testes em `549d7e1`.** `task test:web`: jsdom, 2.580 testes, verde; suíte pintada (Chromium), 304 testes, verde. `task test:go`: 2.455 testes (1 pulado), cobertura total de 90,8%, limites satisfeitos.
+- **Mutação**, numa cópia de `frontend/` e `design/system/` no scratchpad. Cada correção foi revertida sozinha e o teste rodado nos dois temas:
+  - **R1.** Com a versão de `7392046` de `whenExitEnds` (a subárvore do invólucro, sem filtro e sem teto), `lets a closed panel go even with a loop running inside it` falha. Uma sonda à parte, um `AuxPanel` numa área principal de 1400 px com o ponto de step pulsando, um `Skeleton`, um `Shimmer` e o glifo `work` dentro, agora sai do documento nos cinco casos. Na primeira revisão, quatro deles ficavam presos.
+  - **R2.** Com `gap-(--row-gap)` de volta na seção (`Tree.tsx:136`), `sets the first line of a section one step under its node` falha (8 contra 4).
+  - **R4.** Com o trilho da linha de volta à sombra, `draws the error rail on the left edge` falha.
+  - **R8.** Com o pé e o separador centrados por flex, `centres the foot of every block and what a separator says on whole pixels` falha (o relógio `now` cai em meio pixel).
+  - **R5.** Sem o `setPushedOut` (`ShellToasts.tsx:33`), `plays the exit of the oldest toast a fourth one pushes out` falha.
+- **A tela montada.** A mesma página de teste da primeira revisão (a `Sidebar` e o `TaskHeader` reais, com dados falsos de todos os estados da lateral) foi capturada de novo a 1250 e 2560 px, aberta e recolhida, claro e escuro. Resultados:
+  - nenhuma caixa da faixa fica fora do pixel inteiro, na horizontal ou na vertical;
+  - o glifo fica acima do pé em todo bloco;
+  - o trilho de erro é uma barra reta na linha e no bloco, como `08/index.html:542`;
+  - o nó de topo fica a 4 px da primeira linha, como o `.grp` do mock.
+- **O merge com `main`.** `git merge-tree --write-tree main shell-fixes` sai sem conflito. No resultado, o diff de `design/system/` contra `main` é exatamente o da PR contra a base (`64fd7cd`), e o diff contra `shell-fixes` é exatamente o de `main` contra a base. As edições de `9566b85` e `75c9953` em `components.md` e as da PR em `components.md` e `tokens.css` sobrevivem inteiras.
 
-## As 17 divergências
+## Os oito restos da primeira versão
 
 | # | Estado | Evidência |
 |---|---|---|
-| 1 | Corrigida | Nas capturas da faixa a 1250 e 2560 px, o fundo do glifo fica de 1,5 a 3,2 px acima do pé em todo bloco (antes, de 4,8 a 6,5 px dentro dele). Todo `top` do pé é inteiro. Sobre o meio pixel, ver o desvio declarado 1 |
-| 2 | Corrigida | `nodeStatus` (`sidebar-tree.ts:1041`) segue a mesma ordem que `NodeStatus` desenha (falha, leitura, pendentes), e os testes pedem `Reviews, 4 pending` e `… read failed: <razão>` pelo nome |
-| 3 | Corrigida, com um resto | `Tree.tsx:128`, com a prova pintada. Ver R2 |
-| 4 | Corrigida | `Tree.tsx:150`: a caixa começa depois da guia e a guia fica à vista ao lado da linha aberta e do trilho de erro, como no mock (captura comparada com `08/index.html:506–507`) |
-| 5 | Corrigida | `cutPath` (`sidebar-tree.ts:625`); a linha 3 diz `Running go test …/ratelimit`, e `go vet ./...` fica inteiro |
-| 6 | Corrigida | `FLASH_MS = 2 × DURATION_SLOW_MS` (`lib/situations.ts:16–22`), com um teste que lê `--duration-slow` de `tokens.css`; a aba usa as mesmas duas vezes (`globals.css:290`) |
-| 7 | Corrigida | `PR review · checking GitHub` com `Shimmer` antes do primeiro `checkedAt` (`sidebar-tree.ts:532–545`, `TreeRow.tsx:180`). Ver R6 |
-| 8 | Corrigida | `IconButton` com `ICONS.trash` e o tooltip (`TaskHeader.tsx:71–76`) |
-| 9 | Corrigida | O tooltip diz o nome e depois a descrição (`AuxPanel.tsx:28`) |
-| 10 | **Corrigida com uma regressão grave** | O painel e o toast saem com a animação e a curva certas. Mas o `Presence` espera toda animação da subárvore, e um laço nunca termina: ver R1 |
-| 11 | Corrigida | Os sete símbolos saíram, com os testes deles; nenhum código morto novo (`openIdOf`, `reviewsOf`, `stageName`, `asPlaceKind` e os exports de `features/sidebar/sessions.ts` têm leitores) |
-| 12 | Corrigida na árvore e na faixa, com um resto | `FAINT` (`TreeRow.tsx:52`), a palavra do bloco (`SidebarRail.tsx:194`) e a contagem do nó (`TreeNodeRow.tsx:77`). Ver R3 |
-| 13 | Corrigida | `basis-(--notice-detail-min)`, com o token em `tokens.css` e em `components.md`. Ver o desvio declarado 2 |
-| 14 | Corrigida | Verbo em `--ink-3` e alvo em `--ink-4` na linha 3; `Change path ↵` em `--brand-ink`; o aviso em `--text-ui`; o vazio na coluna do texto, com o padding exato de `.sb-empty` |
-| 15 | Corrigida | O épico é texto no menu, e o nome do `…` (`Show the hidden levels: …`) o diz ao leitor. Ver R7 |
-| 16 | Corrigida | `sessions.ts` mora em `features/sidebar/`, e `workingSession` recebe o `now` |
-| 17 | Corrigida | `MoreBelow.tsx:16–25` conta a linha cortada; na captura a 1250 px, a task pausada cortada aparece como `↓ 1 more below` |
+| R1 | Corrigido | `whenExitEnds` espera só as animações finitas do próprio elemento (`Presence.tsx:15`), com a duração da saída como teto (`:32`), e o `Presence` o chama com o elemento que ele guarda (`:65`). Um painel cujo elemento não anima sai na hora. Com movimento reduzido, a saída tem 0 ms, e o teto é 0. Ver o resto M1 |
+| R2 | Corrigido | `Tree.tsx:136`, com a prova pintada |
+| R3 | Corrigido | A contagem de History sobe para `--ink-3` com o botão pressionado (`features/sidebar/SidebarFooter.tsx:97`), 5,18:1 no claro. O `className` chega ao `button` pelo `cn` de `Button.tsx`. Sem teste pintado, pela mesma razão aceita na divergência 12 |
+| R4 | Corrigido | O `@utility error-rail-bar` (`styles/globals.css:197–209`) é o `::before` do mock, na linha (`TreeRow.tsx:112`) e no bloco (`SidebarRail.tsx:147`), documentado em `docs/architecture/design-system.md`. Ver o resto M2 |
+| R5 | Corrigido | `ShellToasts` guarda o toast que o store tira e o passa com `leaving` (`features/notice/ShellToasts.tsx:26–33`). O toast que saía sozinho e é empurrado no meio da saída mantém a instância, pela mesma chave, e termina uma vez. Um toast que o store tira por outro caminho, como `openArchived`, também toca a saída |
+| R6 | Corrigido na régua do system | `components.md:73` e `:316` passam a `checking GitHub`, como `structure.md:144` e o código. Ver o resto M3 |
+| R7 | Corrigido | `MenuText` (`components/system/Menu.tsx:184`) e a variante **Linha de texto** em `components.md:208` |
+| R8 | Corrigido | `CENTERED` (`SidebarRail.tsx:70`) centra o pé e o que o separador diz com `round()`, e o que o separador diz interrompe o fio sobre `--surface-sidebar`, como pede a regra de meio pixel |
 
-## Os desvios declarados
+`--notice-detail-min` foi para o bloco das colunas (`tokens.css:112`), ao lado dos outros `calc(var(--space-16) * N)`.
 
-1. **O meio pixel da divergência 1.** A crítica anterior mediu no Chromium, não no WebKitGTK; atribuir o defeito ao WebKitGTK não tem base. A página desta revisão não reproduziu o meio pixel nem no código antigo (`64fd7cd`): com as fontes carregadas ou bloqueadas, a 800 e 900 px de altura, todo `top` da faixa é inteiro nas duas versões, e a fração relatada vinha provavelmente da página daquela revisão. Então o teste de pixel inteiro não prova a correção, e nem precisa: `h-` no lugar de `min-h-` fixa a altura do pé em 18 px, com o texto de 16 px centrado a 1 px, o que é certo por construção, e o teste guarda isso contra uma regressão. **Basta.** Nenhuma prova extra no WebKitGTK é necessária para este item. A varredura da task 12 na máquina alvo cobre o resto.
-2. **`--notice-detail-min`.** Aceito. O valor é o `basis-64` de antes (16 rem), escrito em múltiplos de `--space-16` como os tokens de coluna. Está documentado na linha de tokens do aviso (`components.md:435`), e `design/system/tokens.css` já recebeu tokens fora de uma rodada antes (`fa456fa`). Um detalhe: ele está no bloco "Small fixed pieces of content" (`tokens.css:115`), enquanto os outros `calc(var(--space-16) * N)` ficam no bloco de colunas logo acima (`tokens.css:97–111`).
-3. **`pending` do nó Reviews em `--ink-3`.** Conforme. `components.md:330` manda a contagem subir de `--ink-4` para `--ink-3` no lugar aberto. O comentário de `--ink-4` (`tokens.css:159–162`) exclui "a pressed veil on the sidebar", e isso cobre o nó pressionado. O mock (`08/index.html:500`, `.node .x`) só desenha o repouso.
-4. **A piscada das abas sem tinta estática com movimento reduzido.** Conforme, e é o que a régua pede: "Com `prefers-reduced-motion`, não há piscada. O chip `now` e o anúncio bastam" (`structure.md` §2, Situação nova). A tinta que ficava parada por 1,6 s contrariava a régua.
-5. **Nenhum teste pintado da tinta pressionada.** Aceitável. `:active` não se força num teste pintado sem um clique real segurado, e as classes são de uma regra só (`FAINT`, `group-active/block`, `group-active/node`). O teste de jsdom não prova a tinta, mas o par medido acima mostra que `--ink-3` sobre o véu pressionado passa (5,18 e 6,82).
+## O que resta, da mais grave para a menos
 
-## Divergências que restam, da mais grave para a menos
+Nada impede o merge. Tudo abaixo é registro, e pode entrar junto da task 3 ou da varredura da task 12.
 
-### Antes do merge
+**M1. Duas partes da correção de R1 não têm prova.** Com o filtro dos laços removido (`Presence.tsx:15`), ou sem o teto (`:32`), ou com `getAnimations({ subtree: true })` no próprio elemento, a suíte continua verde. O teste do laço prova só que a espera saiu da subárvore do invólucro. Dois casos ficam sem prova: um laço no próprio elemento que sai, e uma saída que nunca avisa o fim. Opinião: o teto em `endTime`, contado a partir do efeito e não do início da animação, pode cortar o último quadro da saída (cerca de 16 ms, com a opacidade já perto de 0). Não se vê, mas `finished` sozinho já basta no caso comum.
 
-**R1. Um painel fechado com um laço dentro nunca sai: some da vista, mas fica ocupando a coluna.** `whenExitEnds` (`components/system/Presence.tsx:10–11`) espera `getAnimations({ subtree: true })`, e isso inclui qualquer animação em laço dentro do painel. O `finished` de uma animação infinita nunca resolve. O painel toca a saída até `opacity: 0` (`forwards`) e fica montado, `inert`, com a largura dele, até o painel ser reaberto ou o usuário navegar. Provado na cópia, com um `AuxPanel` numa área principal de 1400 px: com o ponto de step trabalhando (`ToneDot tone="working"`, `animate-pulse`, `features/task/StatusDot.tsx:7`), com um `Skeleton` (`animate-pulse`), com `Shimmer` e com o glifo `work`, o painel continua no documento 1,5 s depois de fechar, e a coluna de leitura fica em 1008 px. Só o corpo sem laço sai. O caso é o comum: a lista de steps de **Artifacts** durante a implementação desenha o ponto pulsando (`StepList.tsx:102`, montada em `ArtifactPanel.tsx:268`), e **Artifacts**, **Reports** e **Documents** mostram o esqueleto enquanto leem (`ArtifactPanel.tsx:288`, `ReportsPanel.tsx:111`, `DocumentsPanel.tsx:70`). A partir de 1120 px de área principal, fechar o painel deixa um vão vazio de 360 a 480 px à direita, e o botão já diz `aria-pressed="false"`. Com movimento reduzido não acontece, porque as durações vão a 0. `Presence.painted.test.tsx` não pega o caso porque o painel dele só tem um `<p>`. O toast usa a mesma espera (`Toast.tsx:53`) e hoje não tem laço, mas quebra do mesmo jeito no dia em que tiver. O que mudar: esperar só a animação de saída, a do elemento que a regra de `data-leaving` anima, e não a subárvore, com um teste pintado de um painel com um laço dentro.
+**M2. O trilho de erro do bloco da faixa não tem prova.** Com o bloco de volta à sombra curva (`SidebarRail.tsx:147`), a suíte continua verde. Só a linha da árvore tem o teste pintado da barra.
 
-### Pode entrar junto da task 3
+**M3. Restam três `checking GitHub…` fora do system.** São `design/principles.md:83` (em `main`), o comentário de `components/system/Shimmer.tsx:9` e o texto de `Shimmer.test.tsx:8–9`. Os dois últimos são só exemplo. O primeiro é régua. Hoje `principles.md` tem edições em andamento na worktree principal, então o alinhamento é do coordenador.
 
-**R2. O nó de topo tem 4 px a mais sobre o primeiro filho.** O invólucro de seção que a PR criou (`Tree.tsx:135`) é `flex flex-col gap-(--row-gap)`, e o grupo ainda tem `pt-(--space-1)` (`Tree.tsx:160`): são 8 px entre o nó e a primeira linha. O mock tem 4 px, porque `.sec` é um bloco sem gap e só `.grp` tem `padding-top: var(--space-1)` (`08/index.html:485`, `:504`). Medido nas capturas: de Reviews à primeira linha, 36 px na implementação contra 32 no mock. O mesmo excesso aparece sobre `No active items.`. A diferença já existia antes da PR, mas o invólucro novo é o lugar de fechá-la.
+**M4. A saída do toast empurrado repete a lógica do `Presence`.** `ShellToasts.tsx:21–60` guarda à mão o que sai (`pushedOut`, `shown`, `dismissed`), em vez de reusar o `Presence` do painel. Funciona e está provado. É opinião: são duas formas de "manter até a saída" no shell, e a segunda só serve a uma lista.
 
-**R3. A contagem de History em `--ink-4` sobre o véu pressionado.** `features/sidebar/SidebarFooter.tsx:95` pinta a contagem em `--ink-4` dentro de um botão fantasma que pressiona com `--veil-press` (`components/system/Button.tsx:49`): 4,36:1 no claro, o mesmo par da divergência 12, que o comentário de `tokens.css:159–162` exclui. A PR subiu a tinta na árvore, na faixa e no nó, mas não aqui.
-
-**R4. O trilho de erro da linha e do bloco é um colchete curvo, e o mock desenha uma barra reta.** O mock pinta o trilho como `::before` reto, com `top` e `bottom` recuados em `--space-1-5` e a ponta direita arredondada (`08/index.html:542`; `08` e `10-b` mostram o trilho reto em `Deprecate v1 webhooks`). A implementação usa `inset` box-shadow numa caixa `rounded-md` (`TreeRow.tsx:112–116`, `SidebarRail.tsx:144–147`), e a sombra segue o raio: nas capturas, o trilho de `rate-limit-per-api-key` e o do bloco em erro da faixa são um "(" vermelho. A primeira crítica não apontou isso, então não é regressão desta PR, mas é da lateral, que nenhuma task seguinte reabre.
-
-**R5. O quarto toast tira o mais antigo sem a saída.** `components.md:434` pede a saída em `--duration-fast`. `store/app-store.ts:685–691` corta a lista, e o toast mais antigo some sem tocar a saída. É o único caminho de saída do toast que não passa pela animação.
-
-### Menores
-
-**R6. `checking GitHub` sem as reticências do system.** `components.md:73` e `:316` escrevem `checking GitHub…`; a linha diz `PR review · checking GitHub` (`sidebar-tree.ts:537`), como `structure.md:144`. Pela precedência de `implementation.md:5`, vale `components.md`. Uma das duas réguas precisa se alinhar à outra, e a decisão é do coordenador.
-
-**R7. O nível que não é lugar no menu do breadcrumb é uma forma nova sem registro.** `PlaceHeader.tsx:88–94` monta à mão um `div` de texto em `--text-ui` e `--ink-3` dentro de `MenuContent`. A seção de menu de `components.md` (Select, menu e listbox; Menu do item) não tem essa variante. Ela deveria entrar lá, ou virar uma peça de `Menu.tsx` ao lado de `MenuGroupLabel` e `MenuMessage`.
-
-**R8. O pé dos blocos e os separadores da faixa caem em meio pixel na horizontal.** Com texto de largura ímpar centrado nos 60 px da faixa, `idle` fica em `left` 19,5, `paused` em 9,5, o chip `!2h` em 14,5, a contagem `4` do separador em 26,5 e o fio da direita em 37,5 (medido a 1250 e 2560 px, nas duas versões). O pronto 11 da task 2 diz "sem meio pixel", e a primeira crítica só mediu na vertical. Isto é opinião quanto ao peso: no Chromium não se vê. Fica para a varredura da task 12 na máquina alvo, onde o WebKitGTK pode borrar o texto.
-
-## O que está conforme e merece registro
-
-- As provas pintadas novas pegam o defeito que dizem pegar: toda mutação da correção, fora a do meio pixel, derruba o teste certo nos dois temas.
-- A faixa, a árvore e o cabeçalho a 1250 e 2560 px, claro e escuro, batem com o mock no que a PR tocou: seções separadas, a caixa do épico depois da guia, o verbo e o alvo da linha 3, o aviso de clone, o vazio na coluna do texto, `↓ 1 more below` com a linha cortada, sem rolagem lateral.
-- `docs/product/features.md`, `docs/architecture/design-system.md` e `overview.md` descrevem o estado novo, sem histórico.
+**M5. Durante a saída do toast empurrado, a região mostra quatro toasts por 120 ms.** `components.md:433` diz "até três empilhados, e o mais antigo sai". Ler a saída como parte do "sai" é razoável, e não vejo defeito. Fica anotado para a varredura.
 
 ## Veredito
 
-**Corrigir antes do merge.** As 17 divergências estão corrigidas de fato, e as provas pintadas foram conferidas por mutação. Mas a divergência 10 trouxe uma regressão que a task 2 não tinha: fechar **Artifacts** com um step trabalhando, ou qualquer painel enquanto ele lê, deixa um vão invisível do tamanho do painel ao lado da conversa até a próxima navegação (R1). É um caso comum e está no shell, então entra nesta PR, com um teste pintado de um painel com um laço dentro. R2 a R5 podem entrar agora, com pouco custo, ou junto da task 3. R6 a R8 são registro.
+**Mergear.** As 17 divergências e os oito restos estão corrigidos. Cada prova pintada nova derruba o teste certo quando a correção é revertida. A tela montada bate com os mocks nos dois temas e nas duas larguras, e o merge com `main` preserva as edições dos dois lados em `components.md` e `tokens.css`. M1 a M5 são lacunas de prova e registros, não defeitos visíveis.
