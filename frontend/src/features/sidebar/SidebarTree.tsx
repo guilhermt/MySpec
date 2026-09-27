@@ -10,7 +10,7 @@ import {
   type SidebarNode,
   sidebarTree,
   visibleRows,
-} from "@/features/sidebar/sidebar-tree";
+} from "@/features/sidebar/legacy-sidebar-tree";
 import { emptyTasksText, type TaskRow } from "@/features/sidebar/task-list";
 import { useTaskListKeyboard } from "@/features/sidebar/useTaskListKeyboard";
 import { StatusDot, ToneDot } from "@/features/task/StatusDot";

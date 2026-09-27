@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
+import { ALL_REPOSITORIES } from "@/lib/repositories";
 import {
+  announcement,
+  announcePlace,
   compactWait,
   compareSituations,
   discussionSituation,
   namesPlace,
+  nextWaiting,
   placeLabel,
   prSituation,
   reviewerSituation,
@@ -393,6 +397,110 @@ describe("waitingEntries", () => {
         null,
       ),
     ).toEqual([]);
+  });
+});
+
+describe("nextWaiting", () => {
+  const early = "2026-09-05T09:00:00Z";
+  const late = "2026-09-05T11:00:00Z";
+  const app = makeState({
+    repositoryFilter: "repo-2",
+    tasks: [
+      makeTask({
+        id: "task-1",
+        name: "zeta",
+        repositoryId: "repo-1",
+        situations: [makeSituation({ id: "zeta-reply", startedAt: "2026-09-05T08:00:00Z" })],
+      }),
+      makeTask({
+        id: "task-2",
+        name: "billing",
+        repositoryId: "repo-2",
+        situations: [
+          makeSituation({ id: "billing-reply", startedAt: late }),
+          makeSituation({
+            id: "billing-error",
+            kind: "session_error",
+            group: "error",
+            startedAt: late,
+          }),
+        ],
+      }),
+    ],
+    reviews: [
+      makeReviewSummary({
+        id: "review-1",
+        title: "Rate limit",
+        situations: [makeSituation({ id: "review-merge", group: "closing", startedAt: early })],
+      }),
+    ],
+    discussions: [
+      makeDiscussion({
+        id: "discussion-1",
+        title: "Onboarding",
+        situations: [makeSituation({ id: "discussion-reply", startedAt: early })],
+      }),
+    ],
+  });
+
+  it.each([
+    ["the most severe situation of all first", null, "billing-error"],
+    ["the longest wait of the same group, leaving out the item on screen", "task-2", "zeta-reply"],
+  ])("opens %s", (_case, open, expected) => {
+    expect(nextWaiting(app, open)?.situation.id).toBe(expected);
+  });
+
+  it("takes the name between the same waits, and names the item as the tree does", () => {
+    const tied = {
+      ...app,
+      tasks: [
+        makeTask({ id: "task-9", name: "zeta", situations: [makeSituation({ startedAt: early })] }),
+      ],
+      reviews: [],
+    };
+
+    expect(nextWaiting(tied, null)).toMatchObject({
+      itemId: "discussion-1",
+      name: "Onboarding",
+    });
+  });
+
+  it("gives the same item whatever the repository filter", () => {
+    const all = nextWaiting({ ...app, repositoryFilter: ALL_REPOSITORIES }, null);
+
+    expect(nextWaiting(app, null)).toEqual(all);
+  });
+
+  it("is null when nothing waits", () => {
+    expect(nextWaiting(makeState({ tasks: [makeTask({ situations: null })] }), null)).toBeNull();
+  });
+});
+
+describe("announcement", () => {
+  it.each([
+    [makeSituation({ kind: "question", place: stagePlace("prd") }), "Login: question in PRD"],
+    [
+      makeSituation({ kind: "reply", place: stagePlace("tech_spec") }),
+      "Login: waiting for reply in Tech spec",
+    ],
+    [
+      makeSituation({ kind: "permission", place: stagePlace("one_shot") }),
+      "Login: permission in Planning",
+    ],
+    [
+      makeSituation({ kind: "step_empty", place: stepPlace(3) }),
+      "Login: step 3 has no changes in Step 3",
+    ],
+    [makeSituation({ kind: "question", place: reviewerPlace(2) }), "Login: question in Reviewer"],
+    [makeSituation({ kind: "draft", place: PR_PLACE }), "Login: draft to approve in PR"],
+    [makeSituation({ kind: "new_commits", place: REVIEW_PLACE }), "Login: new commits"],
+    [makeSituation({ kind: "drafts", place: DISCUSSION_PLACE }), "Login: decide drafts"],
+  ])("tells %o as %s", (situation, expected) => {
+    expect(announcement("Login", situation)).toBe(expected);
+  });
+
+  it("names no place for a review or a discussion", () => {
+    expect(announcePlace(makeSituation({ place: REVIEW_PLACE }))).toBeNull();
   });
 });
 

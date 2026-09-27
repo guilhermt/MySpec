@@ -1,5 +1,5 @@
 import { type KeyboardEvent, useCallback } from "react";
-import type { SidebarRow } from "@/features/sidebar/sidebar-tree";
+import type { SidebarRow } from "@/features/sidebar/legacy-sidebar-tree";
 import { useAppStore } from "@/store/app-store";
 
 /**

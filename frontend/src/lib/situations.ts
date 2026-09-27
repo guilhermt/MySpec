@@ -253,6 +253,79 @@ export function waitingEntries(app: State | null, openItemId: string | null): Wa
   );
 }
 
+/**
+ * nextWaiting is the item Ctrl+J opens: the one whose most severe situation is
+ * the most severe of all, then the one that has waited the longest, leaving out
+ * the item on screen. The repository filter plays no part. null when nothing waits.
+ */
+export function nextWaiting(app: State | null, openItemId: string | null): WaitingEntry | null {
+  const items = [
+    ...(app?.tasks ?? []).map((task) => ({ id: task.id, name: task.name, all: task.situations })),
+    ...(app?.reviews ?? []).map((review) => ({
+      id: review.id,
+      name: review.title,
+      all: review.situations,
+    })),
+    ...(app?.discussions ?? []).map((discussion) => ({
+      id: discussion.id,
+      name: discussion.title,
+      all: discussion.situations,
+    })),
+  ];
+  let next: WaitingEntry | null = null;
+  for (const item of items) {
+    const [situation] = [...(item.all ?? [])].sort(compareSituations);
+    if (item.id === openItemId || situation === undefined) {
+      continue;
+    }
+    const entry = { itemId: item.id, name: item.name, situation };
+    if (
+      next === null ||
+      (compareSituations(situation, next.situation) ||
+        item.name.localeCompare(next.name) ||
+        item.id.localeCompare(next.itemId)) < 0
+    ) {
+      next = entry;
+    }
+  }
+  return next;
+}
+
+/** announcePlace is where a situation is, as the announcement of a new one says it; null when the item says enough. */
+export function announcePlace(situation: Situation): string | null {
+  const { place } = situation;
+  switch (asPlaceKind(place.kind)) {
+    case "stage":
+      switch (place.stage) {
+        case "prd":
+          return "PRD";
+        case "tech_spec":
+          return "Tech spec";
+        case "plan":
+          return "Plan";
+        default:
+          return "Planning";
+      }
+    case "step":
+      return `Step ${place.step}`;
+    case "step_review":
+      return "Reviewer";
+    case "pr":
+      return "PR";
+    case "review":
+    case "discussion":
+      return null;
+  }
+}
+
+/** announcement is what the live region says of a new situation: `<name>: <what it asks> in <where>`. */
+export function announcement(name: string, situation: Situation): string {
+  const label = situationLabel(situation);
+  const asks = `${label.charAt(0).toLowerCase()}${label.slice(1)}`;
+  const place = announcePlace(situation);
+  return place === null ? `${name}: ${asks}` : `${name}: ${asks} in ${place}`;
+}
+
 /** stageSituation is the situation of the planning stage of a task, null when it has none. */
 export function stageSituation(task: TaskSummary): Situation | null {
   return (
