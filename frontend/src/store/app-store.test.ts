@@ -2457,4 +2457,34 @@ describe("places beside the one on screen", () => {
       forward: [SETTINGS],
     });
   });
+
+  it("does not offer the board on screen behind a task that left after it", () => {
+    useAppStore.getState().applyState(withTasks({ boards: [BOARD] }));
+    useAppStore.getState().openBoard(BOARD.id);
+    useAppStore.getState().openTask(WEB_TASK.id);
+    useAppStore.getState().openBoard(BOARD.id);
+    useAppStore.getState().applyState(withTasks({ boards: [BOARD], tasks: [API_TASK] }));
+    const { result } = renderHook(() => useBackTarget());
+    expect(result.current).toEqual(HOME);
+
+    useAppStore.getState().goBack();
+
+    expect(useAppStore.getState()).toMatchObject({
+      location: HOME,
+      back: [],
+      forward: [BOARD_PLACE],
+    });
+  });
+
+  it("closes the settings reopened from a task that left while they were open", () => {
+    useAppStore.getState().applyState(withTasks());
+    useAppStore.getState().openSettings();
+    useAppStore.getState().openTask(WEB_TASK.id);
+    useAppStore.getState().openSettings();
+    useAppStore.getState().applyState(withTasks({ tasks: [API_TASK] }));
+
+    useAppStore.getState().closeSettings();
+
+    expect(location()).toEqual(HOME);
+  });
 });

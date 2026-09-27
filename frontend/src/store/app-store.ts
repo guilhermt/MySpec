@@ -514,10 +514,16 @@ function navigate(
   return { ...common, back: beside(back, target), forward: [] };
 }
 
-// travel opens the nearest place behind (or ahead of) the current one that
-// still exists, dropping the ones that no longer do; the current one goes to
-// the other side, unless it is the page of an item that left. Null when there
-// is nowhere to go.
+// reachable is whether Back or Forward can go to a place: it still exists and
+// is not the place on screen, which a place that left between them can hide
+// from beside.
+function reachable(app: State | null, place: Location, current: Location): boolean {
+  return locationExists(app, place) && !sameLocation(resolveHome(app, place), current);
+}
+
+// travel opens the nearest place behind (or ahead of) the current one it can
+// reach, dropping the ones it cannot; the current one goes to the other side,
+// unless it is the page of an item that left. Null when there is nowhere to go.
 function travel(
   state: AppStore,
   direction: "back" | "forward",
@@ -526,7 +532,7 @@ function travel(
   const from = direction === "back" ? state.back : state.forward;
   const to = direction === "back" ? state.forward : state.back;
   const index = from.reduce(
-    (found, place, at) => (locationExists(state.app, place) ? at : found),
+    (found, place, at) => (reachable(state.app, place, state.location) ? at : found),
     -1,
   );
   const place = from[index];
@@ -1013,19 +1019,23 @@ export function useOpenBoardId(): string | null {
   return useAppStore((state) => openIdOf(state, "board"));
 }
 
-// The last of the places that still exists, null when none does.
-function lastExisting(app: State | null, places: readonly Location[]): Location | null {
-  return [...places].reverse().find((place) => locationExists(app, place)) ?? null;
+// The last of the places Back or Forward can reach, null when there is none.
+function lastReachable(
+  app: State | null,
+  places: readonly Location[],
+  current: Location,
+): Location | null {
+  return [...places].reverse().find((place) => reachable(app, place, current)) ?? null;
 }
 
 /** useBackTarget is the place Back goes to, null when there is none. */
 export function useBackTarget(): Location | null {
-  return useAppStore((state) => lastExisting(state.app, state.back));
+  return useAppStore((state) => lastReachable(state.app, state.back, state.location));
 }
 
 /** useForwardTarget is the place Forward goes to, null when there is none. */
 export function useForwardTarget(): Location | null {
-  return useAppStore((state) => lastExisting(state.app, state.forward));
+  return useAppStore((state) => lastReachable(state.app, state.forward, state.location));
 }
 
 /** usePanel is the auxiliary panel open in the place on screen, null when none is. */
