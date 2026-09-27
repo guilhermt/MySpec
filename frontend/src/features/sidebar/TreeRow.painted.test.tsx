@@ -88,6 +88,39 @@ describe.each(THEMES)("TreeRow in the %s theme", (theme) => {
     expect(regular && getComputedStyle(regular).fontWeight).toBe("400");
   });
 
+  it("writes the verb of line 3 in the third ink and what it acts on in the fourth", () => {
+    setTheme(theme);
+    const working = taskRow(
+      makeState(),
+      makeTask({
+        stage: "prd",
+        sessionStatus: "working",
+        turnRunning: true,
+        actionLabel: "Reading",
+        actionTarget: "go.mod",
+      }),
+      NOW,
+    );
+    render(
+      <TreeRow
+        row={working}
+        level={2}
+        selected={false}
+        isNext={false}
+        flash={null}
+        narrow={false}
+        tabIndex={0}
+      />,
+    );
+    const verb = screen.getByText("Reading", { selector: "span" });
+    const line = verb.parentElement;
+    if (line === null) throw new Error("line 3");
+    const third = { color: token("--ink-3") };
+    const fourth = { color: token("--ink-4") };
+    expect(paintOf(verb, third)).toEqual(third);
+    expect(paintOf(line, fourth)).toEqual(fourth);
+  });
+
   it("never widens the tree it sits in with the copies it measures", () => {
     setTheme(theme);
     const long = taskRow(

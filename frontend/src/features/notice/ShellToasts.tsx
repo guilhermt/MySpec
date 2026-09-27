@@ -21,10 +21,7 @@ export function ShellToasts() {
           text={`“${toast.name}” was archived`}
           action={{
             label: "Open in History",
-            onClick: () => {
-              openArchived(toast.taskId);
-              dismissToast(toast.id);
-            },
+            onClick: () => openArchived(toast.taskId),
           }}
           onDismiss={() => dismissToast(toast.id)}
         />

@@ -29,8 +29,9 @@ import {
 
 const groupIdOf = (nodeId: string) => `${nodeId}:group`;
 
+// An empty node or tree says so in the column of the rows' text.
 const EMPTY =
-  "px-(--tree-pad) py-(--row-pad-y) text-(length:--text-meta) leading-(--leading-meta) text-ink-3";
+  "py-(--space-1) pr-(--space-2) pl-[calc(var(--tree-pad)+var(--icon)+var(--space-2-5))] text-(length:--text-meta) leading-(--leading-meta) text-ink-3";
 
 /**
  * Tree is the active items in their nodes: Reviews, a node per board with its

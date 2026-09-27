@@ -118,10 +118,8 @@ describe("PlaceHeader", () => {
       }),
     );
     const menu = await screen.findByRole("menu");
-    expect(within(menu).getByRole("menuitem", { name: "API hardening" })).toHaveAttribute(
-      "aria-disabled",
-      "true",
-    );
+    expect(within(menu).queryByRole("menuitem", { name: "API hardening" })).toBeNull();
+    expect(within(menu).getByText("API hardening")).toBeInTheDocument();
 
     await user.click(within(menu).getByRole("menuitem", { name: "Platform Roadmap" }));
     expect(onOpen).toHaveBeenCalledOnce();

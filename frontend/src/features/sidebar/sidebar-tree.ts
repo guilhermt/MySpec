@@ -1,12 +1,12 @@
-import { boardOfRepository } from "@/lib/boards";
-import { ALL_REPOSITORIES, findRepository, shortName, tasksInFilter } from "@/lib/repositories";
 import {
   discussionSessions,
   type ItemSession,
   reviewSessions,
   taskSessions,
   workingSession,
-} from "@/lib/sessions";
+} from "@/features/sidebar/sessions";
+import { boardOfRepository } from "@/lib/boards";
+import { ALL_REPOSITORIES, findRepository, shortName, tasksInFilter } from "@/lib/repositories";
 import { compactWait, compareSituations, spokenWait } from "@/lib/situations";
 import type {
   Board,
@@ -70,11 +70,16 @@ export interface ItemRow {
   /** waiting is a situation waiting on the user, which makes the name bold. */
   waiting: boolean;
   line2: RowText;
+  /** reading is line 2 telling a reading of GitHub that has no result yet, which shimmers. */
+  reading: boolean;
   /** more is the other situations: +N and the tooltip listing them; null with one or none. */
   more: { count: number; tooltip: string } | null;
   clock: RowClock | null;
-  /** line3 is what the agent does now, with the context it used; null unless an agent works. */
-  line3: (RowText & { contextPercent: number }) | null;
+  /**
+   * line3 is what the agent does now, with the context it used; null unless an agent works. verb is
+   * what both forms start with: the action's verb, or the whole of what the conversation does.
+   */
+  line3: (RowText & { verb: string; contextPercent: number }) | null;
   situationIds: string[];
   /** repositoryId is the repository a task lives in, which the filter looks at; null for a review or a discussion. */
   repositoryId: string | null;
@@ -456,6 +461,8 @@ interface Standing {
   tone: RowTone;
   line2: RowText;
   clock: RowClock | null;
+  /** reading is line 2 telling a reading of GitHub that has no result yet. */
+  reading?: boolean;
 }
 
 const IDLE_CLOCK: RowClock = { kind: "word", word: "idle" };
@@ -468,7 +475,7 @@ function sessionStanding(
   place: string,
   working: RowText,
 ): Standing {
-  if (workingSession(sessions) !== null) {
+  if (sessions.some((session) => session.working)) {
     return { tone: "agent", line2: working, clock: null };
   }
   if (sessions.some((session) => session.status === "paused")) {
@@ -523,11 +530,19 @@ function taskStanding(task: TaskSummary): Standing {
       case "closing":
         return appWork(same("Closing"));
       case "waiting_checks":
-        return {
-          tone: "github",
-          line2: { long: "PR review · waiting for checks", short: "PR review · checks" },
-          clock: { kind: "word", word: "GitHub" },
-        };
+        // Before gh first reports the pull request, the row says it is being read.
+        return task.pr.checkedAt === ""
+          ? {
+              tone: "github",
+              line2: same("PR review · checking GitHub"),
+              clock: { kind: "word", word: "GitHub" },
+              reading: true,
+            }
+          : {
+              tone: "github",
+              line2: { long: "PR review · waiting for checks", short: "PR review · checks" },
+              clock: { kind: "word", word: "GitHub" },
+            };
       case "drafting":
         return sessionStanding(sessions, place, same("PR · drafting"));
       case "reviewing":
@@ -557,7 +572,7 @@ function reviewStanding(review: ReviewSummary): Standing {
       };
     case "applying": {
       const applying = same(`${pass} · applying`);
-      return workingSession(sessions) === null
+      return !sessions.some((session) => session.working)
         ? appWork(applying)
         : sessionStanding(sessions, pass, applying);
     }
@@ -678,7 +693,7 @@ function buildRow(owner: Owner, parts: RowParts, now: number): ItemRow {
       longTime: spokenWait(main.startedAt, now),
     };
   }
-  const session = tone === "agent" ? workingSession(parts.sessions) : null;
+  const session = tone === "agent" ? workingSession(parts.sessions, now) : null;
   let line3: ItemRow["line3"] = null;
   if (session !== null) {
     clock = {
@@ -689,10 +704,11 @@ function buildRow(owner: Owner, parts: RowParts, now: number): ItemRow {
     const words = activity(session);
     line3 =
       session.actionLabel === ""
-        ? { ...same(words.row), contextPercent: session.contextPercent }
+        ? { ...same(words.row), verb: words.row, contextPercent: session.contextPercent }
         : {
             long: `${session.actionLabel} ${session.actionTarget}`,
             short: `${session.actionLabel} ${shortAction(session.actionLabel, session.actionTarget)}`,
+            verb: session.actionLabel,
             contextPercent: session.contextPercent,
           };
   }
@@ -744,6 +760,7 @@ function buildRow(owner: Owner, parts: RowParts, now: number): ItemRow {
           },
     clock,
     line3,
+    reading: main === undefined && parts.standing.reading === true,
     situationIds: situations.map((situation) => situation.id),
     repositoryId: parts.repositoryId,
     label: sentences.join(" "),
@@ -921,11 +938,6 @@ export function nodeRows(node: TreeNode | EpicNode): ItemRow[] {
   return node.kind === "board"
     ? [...node.epics.flatMap((epic) => epic.rows), ...node.rows]
     : node.rows;
-}
-
-/** allRows is every row in tree order, the collapsed ones included, as the collapsed strip shows them. */
-export function allRows(nodes: readonly TreeNode[]): ItemRow[] {
-  return nodes.flatMap(nodeRows);
 }
 
 /** visibleEntries is the lines of the tree on screen, in order, skipping what collapsed nodes hold. */

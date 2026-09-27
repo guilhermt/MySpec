@@ -89,16 +89,18 @@ export function discussionSessions(discussion: DiscussionSummary): ItemSession[]
     : [itemSession("Discussion agent", discussion.sessionStage, discussion)];
 }
 
-/** workingSession is the working session whose turn started first, null when none works. */
-export function workingSession(sessions: readonly ItemSession[]): ItemSession | null {
+/**
+ * workingSession is the working session whose turn started first, null when none works. A turn that
+ * has not told its start yet counts as starting at now.
+ */
+export function workingSession(sessions: readonly ItemSession[], now: number): ItemSession | null {
   let first: ItemSession | null = null;
   let firstAt = Infinity;
   for (const session of sessions) {
     if (!session.working) {
       continue;
     }
-    // A turn that has not told its start yet counts as starting now.
-    const at = session.turnStartedAt === "" ? Date.now() : Date.parse(session.turnStartedAt);
+    const at = session.turnStartedAt === "" ? now : Date.parse(session.turnStartedAt);
     if (first === null || at < firstAt) {
       first = session;
       firstAt = at;

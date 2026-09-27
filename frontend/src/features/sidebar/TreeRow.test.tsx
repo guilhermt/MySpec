@@ -152,11 +152,26 @@ describe("TreeRow", () => {
       rowOf(
         task({
           stage: "pr",
-          pr: makePullRequest({ status: "waiting_checks", prNumber: 1279 }),
+          pr: makePullRequest({
+            status: "waiting_checks",
+            prNumber: 1279,
+            checkedAt: "2026-09-05T11:59:00Z",
+          }),
         }),
       ),
       "github",
       "task add-login. waiting on GitHub, PR review · waiting for checks. web#42.",
+    ],
+    [
+      "a pull request GitHub has not reported yet",
+      rowOf(
+        task({
+          stage: "pr",
+          pr: makePullRequest({ status: "waiting_checks", prNumber: 1279 }),
+        }),
+      ),
+      "github",
+      "task add-login. waiting on GitHub, PR review · checking GitHub. web#42.",
     ],
     [
       "a paused session",
@@ -340,8 +355,26 @@ describe("TreeRow", () => {
       ),
     );
 
-    expect(screen.getByText("Reading go.mod", { selector: "span.font-mono" })).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        (_, element) =>
+          element?.matches("span.font-mono") === true &&
+          element.textContent?.startsWith("Reading go.mod") === true,
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByRole("meter")).toHaveAttribute("aria-valuenow", "40");
+  });
+
+  it("shimmers line 2 while GitHub has not reported the pull request", () => {
+    renderRow(
+      rowOf(
+        task({ stage: "pr", pr: makePullRequest({ status: "waiting_checks", prNumber: 1279 }) }),
+      ),
+    );
+
+    expect(
+      screen.getByText("PR review · checking GitHub", { selector: ".shimmer-text" }),
+    ).toBeInTheDocument();
   });
 
   it("opens its item on click", async () => {

@@ -78,14 +78,21 @@ function Breadcrumb({ crumbs }: { crumbs: readonly PlaceCrumb[] }) {
             }
           />
           <MenuContent align="start">
-            {crumbs.map((crumb) => (
-              <MenuItem
-                key={crumb.label}
-                {...(crumb.onOpen !== undefined ? { onClick: crumb.onOpen } : { disabled: true })}
-              >
-                {crumb.label}
-              </MenuItem>
-            ))}
+            {/* A level that is not a place, like an epic, is text in the menu, not an item. */}
+            {crumbs.map((crumb) =>
+              crumb.onOpen !== undefined ? (
+                <MenuItem key={crumb.label} onClick={crumb.onOpen}>
+                  {crumb.label}
+                </MenuItem>
+              ) : (
+                <div
+                  key={crumb.label}
+                  className="flex min-h-(--size-control) items-center px-2 text-(length:--text-ui) leading-(--leading-ui) text-ink-3"
+                >
+                  {crumb.label}
+                </div>
+              ),
+            )}
           </MenuContent>
         </Menu>
         <Slash />

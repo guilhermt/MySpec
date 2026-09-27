@@ -46,10 +46,10 @@ export function CloneNotice({ notice, tabIndex }: CloneNoticeProps) {
           <span className="grid place-items-center">
             <StateGlyph state="blocked" />
           </span>
-          <span className="truncate text-(length:--text-meta) leading-(--leading-meta)">
+          <span className="truncate text-(length:--text-ui) leading-(--leading-ui)">
             {notice.text}
           </span>
-          <span aria-hidden="true" className={cn(MICRO, "whitespace-nowrap text-ink-3")}>
+          <span aria-hidden="true" className={cn(MICRO, "whitespace-nowrap text-brand-ink")}>
             Change path ↵
           </span>
         </div>

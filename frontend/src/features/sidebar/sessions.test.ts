@@ -5,7 +5,7 @@ import {
   reviewSessions,
   taskSessions,
   workingSession,
-} from "@/lib/sessions";
+} from "@/features/sidebar/sessions";
 import type { TaskSummary } from "@/lib/wails";
 import {
   makeDiscussion,
@@ -92,6 +92,8 @@ describe("reviewSessions and discussionSessions", () => {
 });
 
 describe("workingSession", () => {
+  const NOW = Date.parse("2026-09-26T14:20:00Z");
+
   const session = (role: string, working: boolean, turnStartedAt: string): ItemSession => ({
     role,
     stage: "prd",
@@ -112,25 +114,28 @@ describe("workingSession", () => {
       session("Reviewer", true, "2026-09-26T14:05:00Z"),
       session("PR agent", false, "2026-09-26T14:00:00Z"),
     ];
-    expect(workingSession(sessions)?.role).toBe("Reviewer");
+    expect(workingSession(sessions, NOW)?.role).toBe("Reviewer");
   });
 
   it("puts a turn without a start last and keeps the first of a tie", () => {
     expect(
-      workingSession([
-        session("Implementer", true, ""),
-        session("Reviewer", true, "2026-09-26T14:05:00Z"),
-      ])?.role,
+      workingSession(
+        [session("Implementer", true, ""), session("Reviewer", true, "2026-09-26T14:05:00Z")],
+        NOW,
+      )?.role,
     ).toBe("Reviewer");
     expect(
-      workingSession([
-        session("Implementer", true, "2026-09-26T14:05:00Z"),
-        session("Reviewer", true, "2026-09-26T14:05:00Z"),
-      ])?.role,
+      workingSession(
+        [
+          session("Implementer", true, "2026-09-26T14:05:00Z"),
+          session("Reviewer", true, "2026-09-26T14:05:00Z"),
+        ],
+        NOW,
+      )?.role,
     ).toBe("Implementer");
   });
 
   it("is null when none works", () => {
-    expect(workingSession([session("Implementer", false, "")])).toBeNull();
+    expect(workingSession([session("Implementer", false, "")], NOW)).toBeNull();
   });
 });

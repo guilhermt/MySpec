@@ -112,6 +112,7 @@
 
   /* Small fixed pieces of content. */
   --key-size: 1.25rem; --action-verb-w: 3.5rem; --list-indent: 1.25rem; --newmsg-w: 8.5rem;
+  --notice-detail-min: calc(var(--space-16) * 4);                  /* the app notice's detail: narrower, it goes under the label */
   --code-pad-y: 0.0625rem; --code-pad-x: 0.3125rem; --fade: 1.5rem; --link-offset: 0.2em;
 
   /* Motion: three durations and one standard curve; the spinner is the only loop. prefers-reduced-motion zeroes all of it. */

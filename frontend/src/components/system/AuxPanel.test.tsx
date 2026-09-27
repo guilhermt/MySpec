@@ -113,6 +113,8 @@ describe("AuxPanel", () => {
 
     await user.hover(screen.getByRole("button", { name: "Reports" }));
 
-    expect(await screen.findByText("Reports of every pass")).toBeInTheDocument();
+    const tooltip = await screen.findByRole("tooltip");
+    expect(tooltip).toHaveTextContent("Reports");
+    expect(tooltip).toHaveTextContent("Reports of every pass");
   });
 });

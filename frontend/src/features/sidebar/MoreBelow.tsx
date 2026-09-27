@@ -9,12 +9,15 @@ export interface MoreBelowProps {
   viewport: RefObject<HTMLElement | null>;
 }
 
-/** entriesBelow counts the lines of the tree whose top is past the bottom of the viewport. */
+/**
+ * entriesBelow counts the lines of the tree that do not end inside the viewport: the ones below it
+ * and the one its bottom cuts.
+ */
 function entriesBelow(viewport: HTMLElement): number {
   const bottom = viewport.getBoundingClientRect().bottom;
   let count = 0;
   for (const line of viewport.querySelectorAll(`[${ENTRY_ATTRIBUTE}]`)) {
-    if (line.getBoundingClientRect().top > bottom) {
+    if (line.getBoundingClientRect().bottom > bottom) {
       count += 1;
     }
   }
@@ -22,7 +25,7 @@ function entriesBelow(viewport: HTMLElement): number {
 }
 
 /**
- * MoreBelow says how many lines of the tree are below the fold, over a fade at
+ * MoreBelow says how many lines of the tree are below the fold, the one it cuts included, over a fade at
  * the foot of the viewport, and scrolls to the end on a click. It is not a Tab
  * stop: the keyboard walks the tree itself. Nothing below, it is gone.
  */

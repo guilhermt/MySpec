@@ -139,7 +139,7 @@ function RailBlock({ row, selected, isNext, flash, tabIndex }: RailBlockProps) {
         className={cn(
           // The gap under the type icon holds the corner of the state glyph with its outline, so
           // the glyph never reaches the clock.
-          "tree-flash relative flex w-full cursor-pointer flex-col items-center gap-(--space-1-5) rounded-md px-(--tree-pad) py-(--row-pad-y) outline-none transition-[background-color,box-shadow] duration-(--duration-fast) ease-standard focus-visible:outline-(length:--focus-width) focus-visible:outline-focus focus-visible:-outline-offset-(length:--focus-width)",
+          "group/block tree-flash relative flex w-full cursor-pointer flex-col items-center gap-(--space-1-5) rounded-md px-(--tree-pad) py-(--row-pad-y) outline-none transition-[background-color,box-shadow] duration-(--duration-fast) ease-standard focus-visible:outline-(length:--focus-width) focus-visible:outline-focus focus-visible:-outline-offset-(length:--focus-width)",
           selected ? "bg-brand-veil" : "hover:bg-veil-hover active:bg-veil-press",
           row.tone === "error" && selected
             ? "shadow-[inset_var(--error-rail)_0_0_var(--state-error),inset_0_0_0_var(--border)_var(--brand-ring)]"
@@ -186,7 +186,16 @@ function RailBlock({ row, selected, isNext, flash, tabIndex }: RailBlockProps) {
             </span>
           )}
           {word !== undefined && (
-            <span className={cn(MICRO, selected ? "text-ink-3" : "text-ink-4")}>{word}</span>
+            <span
+              className={cn(
+                MICRO,
+                // The fourth ink steps up on the open block and on the pressed one, whose veils it
+                // does not reach 4.5:1 over.
+                selected ? "text-ink-3" : "text-ink-4 group-active/block:text-ink-3",
+              )}
+            >
+              {word}
+            </span>
           )}
         </span>
       </div>

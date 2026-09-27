@@ -70,7 +70,13 @@ function NodeStatus({ node }: NodeStatusProps) {
     }
     if (node.pending > 0) {
       return (
-        <span className={cn(MICRO, "font-normal tabular-nums text-ink-4")}>
+        // The count steps up to the third ink on the open place and on the pressed node.
+        <span
+          className={cn(
+            MICRO,
+            "font-normal tabular-nums text-ink-4 group-active/node:text-ink-3 group-aria-[current=page]/node:text-ink-3",
+          )}
+        >
           {node.pending} pending
         </span>
       );

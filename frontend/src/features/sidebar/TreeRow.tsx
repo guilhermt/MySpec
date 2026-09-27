@@ -3,6 +3,7 @@ import { ContextMeter } from "@/components/system/ContextMeter";
 import { Icon } from "@/components/system/Icon";
 import { ICONS } from "@/components/system/icons";
 import { Kbd } from "@/components/system/Kbd";
+import { Shimmer } from "@/components/system/Shimmer";
 import { type GlyphState, StateGlyph } from "@/components/system/StateGlyph";
 import { TimeChip } from "@/components/system/TimeChip";
 import { Tooltip } from "@/components/system/Tooltip";
@@ -46,6 +47,9 @@ export const ROW_GLYPHS: Record<RowTone, GlyphState> = {
 };
 
 const MICRO = "text-(length:--text-micro) leading-(--leading-micro)";
+// FAINT is the fourth ink of the quiet texts, which steps up to the third on the open row and on the
+// pressed one: the fourth ink does not reach 4.5:1 over their veils.
+const FAINT = "text-ink-4 group-active/row:text-ink-3";
 // The invisible copy a cell measures its long content with. The row clips it, so a long copy never
 // widens the tree into a sideways scroll.
 const MEASURE = "invisible absolute whitespace-nowrap";
@@ -141,7 +145,7 @@ function TreeRowView({ row, level, selected, isNext, flash, narrow, tabIndex }: 
                   "shrink-0 whitespace-nowrap tabular-nums",
                   selected
                     ? "text-ink-3"
-                    : "hidden text-ink-4 group-hover/row:inline group-focus-within/row:inline",
+                    : cn(FAINT, "hidden group-hover/row:inline group-focus-within/row:inline"),
                 )}
               >
                 {row.meta}
@@ -173,7 +177,13 @@ function TreeRowView({ row, level, selected, isNext, flash, narrow, tabIndex }: 
           className="relative flex min-w-0 items-center gap-(--space-1-5) text-(length:--text-meta) leading-(--leading-meta) text-ink-3"
         >
           <span className="min-w-0 truncate">
-            {!narrow && longFits ? row.line2.long : row.line2.short}
+            {row.reading ? (
+              <Shimmer>{!narrow && longFits ? row.line2.long : row.line2.short}</Shimmer>
+            ) : !narrow && longFits ? (
+              row.line2.long
+            ) : (
+              row.line2.short
+            )}
           </span>
           {row.more !== null && (
             <Tooltip content={row.more.tooltip}>
@@ -215,7 +225,7 @@ function TreeRowView({ row, level, selected, isNext, flash, narrow, tabIndex }: 
             </Tooltip>
           )}
           {clock?.kind === "word" && (
-            <span className={cn(MICRO, selected ? "text-ink-3" : "text-ink-4")}>{clock.word}</span>
+            <span className={cn(MICRO, selected ? "text-ink-3" : FAINT)}>{clock.word}</span>
           )}
         </span>
 
@@ -227,10 +237,12 @@ function TreeRowView({ row, level, selected, isNext, flash, narrow, tabIndex }: 
               className={cn(
                 MICRO,
                 "relative min-w-0 truncate font-mono",
-                selected ? "text-ink-3" : "text-ink-4",
+                selected ? "text-ink-3" : FAINT,
               )}
             >
-              {line3Fits ? work.long : work.short}
+              {/* The verb in the third ink, what it acts on in the row's. */}
+              <span className="text-ink-3">{work.verb}</span>
+              {(line3Fits ? work.long : work.short).slice(work.verb.length)}
               <span ref={line3Measure} aria-hidden="true" className={MEASURE}>
                 {work.long}
               </span>

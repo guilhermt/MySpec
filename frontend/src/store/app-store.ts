@@ -1188,19 +1188,9 @@ export function useReviewCenter(): ReviewCenter {
   return useAppStore((state) => state.app?.reviewCenter ?? NO_REVIEW_CENTER);
 }
 
-/** useReviews is every active review, in the order they were started. */
-export function useReviews(): readonly ReviewSummary[] {
-  return useAppStore((state) => reviewsOf(state.app));
-}
-
 /** useReview is an active review by id, null when none is. */
 export function useReview(id: string | null): ReviewSummary | null {
   return useAppStore((state) => findReview(state.app, id));
-}
-
-/** useOpenReviewId is the review whose screen is open, null when none is. */
-export function useOpenReviewId(): string | null {
-  return useAppStore((state) => openIdOf(state, "review"));
 }
 
 /** useReviewsOpen is the Reviews view being the main area. */
@@ -1239,11 +1229,6 @@ export function useDiscussions(): readonly DiscussionSummary[] {
 /** useDiscussion is an active discussion by id, null when none is. */
 export function useDiscussion(id: string | null): DiscussionSummary | null {
   return useAppStore((state) => findDiscussion(state.app, id));
-}
-
-/** useOpenDiscussionId is the discussion whose screen is open, null when none is. */
-export function useOpenDiscussionId(): string | null {
-  return useAppStore((state) => openIdOf(state, "discussion"));
 }
 
 /** useDiscussionHistory is every archived discussion, the most recent first. */
