@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { Markdown } from "@/features/chat/Markdown";
-import { ErrorNotice } from "@/features/notice/Notice";
+import { Banner } from "@/features/notice/Notice";
 import { PLACEHOLDERS, promptMeta } from "@/features/settings/prompts";
 import { messageOf } from "@/lib/errors";
 import type { Prompt, PromptStage } from "@/lib/wails";
@@ -104,7 +104,8 @@ export function PromptPane({ stage }: { stage: PromptStage }) {
   const [state, setPrompt] = usePrompt(stage);
   const [saving, setSaving] = useState(false);
   const [restoring, setRestoring] = useState(false);
-  const [actionError, setActionError] = useState<string | null>(null);
+  // actionError is the save or the restore that failed: what it was, and what happened.
+  const [actionError, setActionError] = useState<{ title: string; message: string } | null>(null);
   const [loadDismissed, setLoadDismissed] = useState(false);
 
   const prompt = state.status === "ready" ? state.prompt : null;
@@ -121,7 +122,9 @@ export function PromptPane({ stage }: { stage: PromptStage }) {
         setPrompt(saved);
         finishPromptEdit();
       })
-      .catch((reason: unknown) => setActionError(messageOf(reason)))
+      .catch((reason: unknown) =>
+        setActionError({ title: "Couldn't save the prompt", message: messageOf(reason) }),
+      )
       .finally(() => setSaving(false));
   };
 
@@ -130,7 +133,9 @@ export function PromptPane({ stage }: { stage: PromptStage }) {
     setActionError(null);
     void restorePrompt(stage)
       .then(setPrompt)
-      .catch((reason: unknown) => setActionError(messageOf(reason)));
+      .catch((reason: unknown) =>
+        setActionError({ title: "Couldn't restore the prompt", message: messageOf(reason) }),
+      );
   };
 
   const onEditorKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -181,7 +186,13 @@ export function PromptPane({ stage }: { stage: PromptStage }) {
 
       {actionError !== null && (
         <div className="px-8 pt-4">
-          <ErrorNotice message={actionError} onDismiss={() => setActionError(null)} />
+          <Banner
+            className="bg-destructive/10"
+            title={actionError.title}
+            onDismiss={() => setActionError(null)}
+          >
+            {actionError.message}
+          </Banner>
         </div>
       )}
 
@@ -195,7 +206,13 @@ export function PromptPane({ stage }: { stage: PromptStage }) {
 
       {state.status === "error" && !loadDismissed && (
         <div className="px-8 py-6">
-          <ErrorNotice message={state.message} onDismiss={() => setLoadDismissed(true)} />
+          <Banner
+            className="bg-destructive/10"
+            title="Couldn't read the prompt"
+            onDismiss={() => setLoadDismissed(true)}
+          >
+            {state.message}
+          </Banner>
         </div>
       )}
 

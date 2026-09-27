@@ -70,7 +70,8 @@ export function CardList({
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (!(event.target instanceof HTMLElement)) {
+    // A key with a modifier is a shortcut of the app, as Alt+arrows for the history.
+    if (!(event.target instanceof HTMLElement) || event.altKey || event.ctrlKey || event.metaKey) {
       return;
     }
     const cardKey = event.target.closest("[data-card-key]")?.getAttribute("data-card-key") ?? null;
@@ -140,9 +141,6 @@ export function CardList({
       }
       case "d":
       case "D": {
-        if (event.ctrlKey || event.metaKey || event.altKey) {
-          return;
-        }
         // The selection comes first; with none, the card under the focus discusses alone.
         if (checked.size === 0 && (card === undefined || !isCheckable(card))) {
           return;
@@ -153,13 +151,7 @@ export function CardList({
       }
       case "s":
       case "S":
-        if (
-          card === undefined ||
-          event.ctrlKey ||
-          event.metaKey ||
-          event.altKey ||
-          !STARTABLE.has(card.action)
-        ) {
+        if (card === undefined || !STARTABLE.has(card.action)) {
           return;
         }
         event.preventDefault();

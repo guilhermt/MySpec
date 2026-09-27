@@ -44,7 +44,7 @@ export function BoardView({ boardId }: BoardViewProps) {
   }, [boardId]);
 
   if (board === null) {
-    return <main className="h-dvh bg-background" />;
+    return <section className="min-h-0 flex-1 bg-background" />;
   }
   // Each board remembers its own filters and sections.
   return <BoardScreen key={boardId} board={board} />;
@@ -196,10 +196,10 @@ function BoardScreen({ board }: { board: Board }) {
   }
 
   return (
-    <main
+    <section
       aria-label={board.title}
       onKeyDown={onKeyDown}
-      className="flex h-dvh min-w-0 flex-col bg-background"
+      className="flex min-h-0 min-w-0 flex-1 flex-col bg-background"
     >
       <BoardHeader board={board} onNewDiscussion={() => openDiscuss([...checked])} />
       <BoardFilterBar
@@ -216,6 +216,6 @@ function BoardScreen({ board }: { board: Board }) {
         />
       )}
       <div className="flex min-h-0 flex-1 flex-col">{content}</div>
-    </main>
+    </section>
   );
 }

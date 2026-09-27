@@ -15,11 +15,11 @@ export type SituationTone = "error" | "attention";
 /** FLASH_MS is how long a row, a counter or a tab stays highlighted for a new situation. */
 export const FLASH_MS = 1600;
 
-/** WaitingEntry is one line of "Waiting for you": a situation and the item it belongs to. */
+/** WaitingEntry is an item that waits on the user, with the situation that makes it wait. */
 export interface WaitingEntry {
   /** itemId is the task, the review or the discussion the situation is in. */
   itemId: string;
-  /** name is what the line reads: the name of a task, name#number of a review, or the title of a discussion. */
+  /** name is what the tree calls the item: the name of a task, the title of a review or of a discussion. */
   name: string;
   situation: Situation;
 }
@@ -101,8 +101,8 @@ export function situationLabel(situation: Situation): string {
   }
 }
 
-// A planning stage as a sentence names it.
-function stageName(stage: string): string {
+/** stageName is how a sentence names a planning stage of a task: "PRD", "tech spec", "plan". */
+export function stageName(stage: string): string {
   switch (stage) {
     case "prd":
       return "PRD";
@@ -213,44 +213,76 @@ export function reviewName(review: ReviewSummary): string {
 }
 
 /**
- * waitingEntries is everything the active tasks, reviews and discussions wait
- * on the user for, one entry per situation, most urgent first. The item on
- * screen is left out: the user is already there.
+ * nextWaiting is the item Ctrl+J opens: the one whose most severe situation is
+ * the most severe of all, then the one that has waited the longest, leaving out
+ * the item on screen. The repository filter plays no part. null when nothing waits.
  */
-export function waitingEntries(app: State | null, openItemId: string | null): WaitingEntry[] {
-  const tasks = (app?.tasks ?? [])
-    .filter((task) => task.id !== openItemId)
-    .flatMap((task) =>
-      (task.situations ?? []).map((situation) => ({
-        itemId: task.id,
-        name: task.name,
-        situation,
-      })),
-    );
-  const reviews = (app?.reviews ?? [])
-    .filter((review) => review.id !== openItemId)
-    .flatMap((review) =>
-      (review.situations ?? []).map((situation) => ({
-        itemId: review.id,
-        name: reviewName(review),
-        situation,
-      })),
-    );
-  const discussions = (app?.discussions ?? [])
-    .filter((discussion) => discussion.id !== openItemId)
-    .flatMap((discussion) =>
-      (discussion.situations ?? []).map((situation) => ({
-        itemId: discussion.id,
-        name: discussion.title,
-        situation,
-      })),
-    );
-  return [...tasks, ...reviews, ...discussions].sort(
-    (a, b) =>
-      compareSituations(a.situation, b.situation) ||
-      a.name.localeCompare(b.name) ||
-      a.situation.id.localeCompare(b.situation.id),
-  );
+export function nextWaiting(app: State | null, openItemId: string | null): WaitingEntry | null {
+  const items = [
+    ...(app?.tasks ?? []).map((task) => ({ id: task.id, name: task.name, all: task.situations })),
+    ...(app?.reviews ?? []).map((review) => ({
+      id: review.id,
+      name: review.title,
+      all: review.situations,
+    })),
+    ...(app?.discussions ?? []).map((discussion) => ({
+      id: discussion.id,
+      name: discussion.title,
+      all: discussion.situations,
+    })),
+  ];
+  let next: WaitingEntry | null = null;
+  for (const item of items) {
+    const [situation] = [...(item.all ?? [])].sort(compareSituations);
+    if (item.id === openItemId || situation === undefined) {
+      continue;
+    }
+    const entry = { itemId: item.id, name: item.name, situation };
+    if (
+      next === null ||
+      (compareSituations(situation, next.situation) ||
+        item.name.localeCompare(next.name) ||
+        item.id.localeCompare(next.itemId)) < 0
+    ) {
+      next = entry;
+    }
+  }
+  return next;
+}
+
+/** announcePlace is where a situation is, as the announcement of a new one says it; null when the item says enough. */
+export function announcePlace(situation: Situation): string | null {
+  const { place } = situation;
+  switch (asPlaceKind(place.kind)) {
+    case "stage":
+      switch (place.stage) {
+        case "prd":
+          return "PRD";
+        case "tech_spec":
+          return "Tech spec";
+        case "plan":
+          return "Plan";
+        default:
+          return "Planning";
+      }
+    case "step":
+      return `Step ${place.step}`;
+    case "step_review":
+      return "Reviewer";
+    case "pr":
+      return "PR";
+    case "review":
+    case "discussion":
+      return null;
+  }
+}
+
+/** announcement is what the live region says of a new situation: `<name>: <what it asks> in <where>`. */
+export function announcement(name: string, situation: Situation): string {
+  const label = situationLabel(situation);
+  const asks = `${label.charAt(0).toLowerCase()}${label.slice(1)}`;
+  const place = announcePlace(situation);
+  return place === null ? `${name}: ${asks}` : `${name}: ${asks} in ${place}`;
 }
 
 /** stageSituation is the situation of the planning stage of a task, null when it has none. */

@@ -38,4 +38,19 @@ describe("WelcomeScreen", () => {
     expect(await screen.findByRole("dialog", { name: "Add repository" })).toBeInTheDocument();
     expect(api.scanRepositories).toHaveBeenCalledOnce();
   });
+
+  it("shows a failed action at the top of its column", () => {
+    renderWithStore(<WelcomeScreen />, {
+      state: makeState({ repositories: [] }),
+      ui: { error: { label: "Couldn't change the theme", detail: "disk full. Try again." } },
+    });
+
+    const notice = screen.getByRole("alert");
+    expect(notice).toHaveTextContent("Couldn't change the theme");
+    expect(notice).toHaveTextContent("disk full. Try again.");
+    expect(notice.parentElement?.firstElementChild).toBe(notice);
+    expect(notice.nextElementSibling).toContainElement(
+      screen.getByRole("heading", { name: "MySpec" }),
+    );
+  });
 });

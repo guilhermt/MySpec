@@ -1,45 +1,58 @@
 import { screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { ReviewHeader } from "@/features/reviews/ReviewHeader";
 import { api, type ReviewSummary } from "@/lib/wails";
+import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
 import { makeReviewSummary, makeSituation, makeState } from "@/test/wails-mock";
 
 function header(overrides: Partial<ReviewSummary> = {}) {
   const review = makeReviewSummary(overrides);
-  const onToggleArtifacts = vi.fn();
-  const view = renderWithStore(
-    <ReviewHeader review={review} artifactsOpen={false} onToggleArtifacts={onToggleArtifacts} />,
-    { state: makeState({ reviews: [review] }) },
-  );
-  return { ...view, onToggleArtifacts };
+  return renderWithStore(<ReviewHeader review={review} />, {
+    state: makeState({ reviews: [review] }),
+    ui: { location: { kind: "review", id: review.id } },
+  });
 }
 
+const CARD = {
+  boardId: "board-1",
+  number: 12,
+  title: "Add the login screen",
+  url: "https://github.com/dev/web/issues/12",
+  status: "In review",
+};
+
 describe("ReviewHeader", () => {
-  it("names the pull request, its repository, its author and the mode", () => {
+  it("names the place after the pull request, with the mode and the state on the right", () => {
     header();
 
-    expect(screen.getByText("#31")).toBeInTheDocument();
-    expect(screen.getByText("Add the login screen")).toBeInTheDocument();
-    expect(screen.getByText("web")).toBeInTheDocument();
-    expect(screen.getByText("alice")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Add the login screen" }),
+    ).toBeInTheDocument();
     expect(screen.getByText("Publish")).toBeInTheDocument();
     expect(screen.getByText("Reviewing")).toBeInTheDocument();
   });
 
-  it("shows the card the pull request is linked to", () => {
-    header({
-      card: {
-        boardId: "board-1",
-        number: 12,
-        title: "Add the login screen",
-        url: "https://github.com/dev/web/issues/12",
-        status: "In review",
-      },
-    });
+  it("leaves the number, the repository and the author to the tree", () => {
+    header();
 
-    expect(screen.getByRole("button", { name: "#12" })).toBeInTheDocument();
-    expect(screen.getByText("In review")).toBeInTheDocument();
+    expect(screen.queryByText("#31")).not.toBeInTheDocument();
+    expect(screen.queryByText("web")).not.toBeInTheDocument();
+    expect(screen.queryByText("alice")).not.toBeInTheDocument();
+  });
+
+  it("opens the card the pull request is linked to on GitHub", async () => {
+    const { user } = header({ card: CARD });
+
+    await user.click(screen.getByRole("button", { name: "Open card #12 on GitHub · In review" }));
+
+    expect(api.openExternal).toHaveBeenCalledWith("https://github.com/dev/web/issues/12");
+  });
+
+  it("names the card by its number alone when the board gives it no status", () => {
+    header({ card: { ...CARD, status: "" } });
+
+    expect(screen.getByRole("button", { name: "Open card #12 on GitHub" })).toBeInTheDocument();
   });
 
   it("pauses the conversation of the review", async () => {
@@ -59,10 +72,11 @@ describe("ReviewHeader", () => {
   });
 
   it("offers the reports panel and the deletion", async () => {
-    const { user, onToggleArtifacts } = header();
+    const { user } = header();
 
     await user.click(screen.getByRole("button", { name: "Reports" }));
-    expect(onToggleArtifacts).toHaveBeenCalledOnce();
+    expect(useAppStore.getState().panel).toBe("reports");
+    expect(screen.getByRole("button", { name: "Reports" })).toHaveAttribute("aria-pressed", "true");
 
     await user.click(screen.getByRole("button", { name: "Delete review" }));
     expect(

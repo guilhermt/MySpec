@@ -1,6 +1,7 @@
 import { type RenderResult, render } from "@testing-library/react";
 import userEvent, { type UserEvent } from "@testing-library/user-event";
 import type { ReactElement } from "react";
+import { HOME } from "@/lib/locations";
 import type { State } from "@/lib/wails";
 import { type AppStore, useAppStore } from "@/store/app-store";
 
@@ -10,7 +11,15 @@ export interface StoreOptions {
     Pick<
       AppStore,
       | "error"
-      | "openTaskId"
+      | "location"
+      | "back"
+      | "forward"
+      | "panel"
+      | "pendingFocus"
+      | "sidebarRail"
+      | "toasts"
+      | "announcement"
+      | "expectGone"
       | "transcripts"
       | "drafts"
       | "openStepTab"
@@ -18,26 +27,15 @@ export interface StoreOptions {
       | "newTaskOpen"
       | "newTaskCard"
       | "pendingStart"
-      | "openBoardId"
-      | "reviewsOpen"
-      | "openReviewId"
-      | "openArchivedReviewId"
       | "startReview"
       | "pendingReview"
-      | "openDiscussionId"
-      | "openArchivedDiscussionId"
       | "newDiscussion"
       | "textDrafts"
       | "sidebarCollapsed"
       | "lastRepositoryId"
-      | "historyOpen"
-      | "openArchivedId"
       | "historyQuery"
-      | "archivedNotice"
       | "leftover"
       | "flashing"
-      | "settingsOpen"
-      | "settingsSection"
       | "promptEdit"
       | "pendingLeave"
     >
@@ -52,7 +50,15 @@ export function resetAppStore(options: StoreOptions = {}): void {
   useAppStore.setState({
     app: options.state ?? null,
     error: options.ui?.error ?? null,
-    openTaskId: options.ui?.openTaskId ?? null,
+    location: options.ui?.location ?? HOME,
+    back: options.ui?.back ?? [],
+    forward: options.ui?.forward ?? [],
+    panel: options.ui?.panel ?? null,
+    pendingFocus: options.ui?.pendingFocus ?? null,
+    sidebarRail: options.ui?.sidebarRail ?? false,
+    toasts: options.ui?.toasts ?? [],
+    announcement: options.ui?.announcement ?? null,
+    expectGone: options.ui?.expectGone ?? null,
     transcripts: options.ui?.transcripts ?? {},
     drafts: options.ui?.drafts ?? {},
     openStepTab: options.ui?.openStepTab ?? {},
@@ -60,26 +66,15 @@ export function resetAppStore(options: StoreOptions = {}): void {
     newTaskOpen: options.ui?.newTaskOpen ?? false,
     newTaskCard: options.ui?.newTaskCard ?? null,
     pendingStart: options.ui?.pendingStart ?? null,
-    openBoardId: options.ui?.openBoardId ?? null,
-    reviewsOpen: options.ui?.reviewsOpen ?? false,
-    openReviewId: options.ui?.openReviewId ?? null,
-    openArchivedReviewId: options.ui?.openArchivedReviewId ?? null,
     startReview: options.ui?.startReview ?? null,
     pendingReview: options.ui?.pendingReview ?? null,
-    openDiscussionId: options.ui?.openDiscussionId ?? null,
-    openArchivedDiscussionId: options.ui?.openArchivedDiscussionId ?? null,
     newDiscussion: options.ui?.newDiscussion ?? null,
     textDrafts: options.ui?.textDrafts ?? {},
     sidebarCollapsed: options.ui?.sidebarCollapsed ?? new Set<string>(),
     lastRepositoryId: options.ui?.lastRepositoryId ?? null,
-    historyOpen: options.ui?.historyOpen ?? false,
-    openArchivedId: options.ui?.openArchivedId ?? null,
     historyQuery: options.ui?.historyQuery ?? "",
-    archivedNotice: options.ui?.archivedNotice ?? null,
     leftover: options.ui?.leftover ?? null,
     flashing: options.ui?.flashing ?? new Set<string>(),
-    settingsOpen: options.ui?.settingsOpen ?? false,
-    settingsSection: options.ui?.settingsSection ?? "defaults",
     promptEdit: options.ui?.promptEdit ?? null,
     pendingLeave: options.ui?.pendingLeave ?? null,
   });

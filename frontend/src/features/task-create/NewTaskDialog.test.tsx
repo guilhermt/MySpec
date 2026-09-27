@@ -46,7 +46,7 @@ describe("NewTaskDialog", () => {
   it("opens on the repository of the open task when the filter shows them all", () => {
     const task = makeTask({ repositoryId: "repo-2", repository: "dev/api" });
 
-    open({ tasks: [task] }, { openTaskId: task.id });
+    open({ tasks: [task] }, { location: { kind: "task", id: task.id } });
 
     expect(screen.getByRole("button", { name: "Repository: dev/api" })).toBeInTheDocument();
   });
@@ -182,7 +182,7 @@ describe("NewTaskDialog", () => {
     await user.click(screen.getByRole("button", { name: "Create" }));
 
     await waitFor(() => {
-      expect(useAppStore.getState().openTaskId).toBe("task-9");
+      expect(useAppStore.getState().location).toEqual({ kind: "task", id: "task-9" });
     });
     expect(api.createTask).toHaveBeenCalledWith({
       name: "fix-header",
@@ -537,7 +537,7 @@ describe("NewTaskDialog", () => {
       await user.click(screen.getByRole("button", { name: "Create" }));
 
       await waitFor(() => {
-        expect(useAppStore.getState().openTaskId).toBe("task-9");
+        expect(useAppStore.getState().location).toEqual({ kind: "task", id: "task-9" });
       });
       expect(api.createTask).toHaveBeenCalledWith({
         name: "12-add-the-login-screen",

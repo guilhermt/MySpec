@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Markdown } from "@/features/chat/Markdown";
-import { ErrorNotice } from "@/features/notice/Notice";
+import { Banner } from "@/features/notice/Notice";
 import { OneShotView } from "@/features/task/OneShotView";
 import { prReportLabel } from "@/features/task/pr-status";
 import { StepDocument } from "@/features/task/StepDocument";
@@ -290,10 +290,13 @@ export function ArtifactPanel({ task }: ArtifactPanelProps) {
                   </div>
                 )}
                 {artifact.status === "error" && artifact.error !== dismissed && (
-                  <ErrorNotice
-                    message={artifact.error}
+                  <Banner
+                    className="bg-destructive/10"
+                    title="Couldn't read the document"
                     onDismiss={() => setDismissed(artifact.error)}
-                  />
+                  >
+                    {artifact.error}
+                  </Banner>
                 )}
                 {artifact.status === "ready" &&
                   (openStep === null ? (

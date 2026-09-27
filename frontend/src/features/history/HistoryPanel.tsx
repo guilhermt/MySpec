@@ -1,9 +1,10 @@
-import { Archive, ExternalLink } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { pluralize } from "@/features/boards/board-dialog";
 import { formatDates, stepCount } from "@/features/history/history-format";
 import { historyEntries } from "@/features/history/history-list";
+import { LocationHeader } from "@/features/navigation/LocationHeader";
 import { outcomeLabel } from "@/features/reviews/review-status";
 import { RepositoryFilter } from "@/features/sidebar/RepositoryFilter";
 import { shortName } from "@/lib/repositories";
@@ -147,62 +148,59 @@ export function HistoryPanel() {
   const query = historyQuery.trim();
 
   return (
-    <main className="h-dvh overflow-auto bg-background p-8 text-foreground">
-      <div className="flex w-full max-w-[55.5rem] flex-col gap-4">
-        <header className="flex flex-col gap-1">
-          <div className="flex items-center gap-2">
-            <Archive aria-hidden="true" className="size-6 shrink-0 text-muted-foreground" />
-            <h1 className="text-[1.5rem] font-semibold">History</h1>
-          </div>
+    <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-background text-foreground">
+      <LocationHeader />
+      <div className="min-h-0 flex-1 overflow-auto p-8">
+        <div className="flex w-full max-w-[55.5rem] flex-col gap-4">
           <p className="text-sm text-muted-foreground">
             Finished tasks, reviews and discussions of every repository, with their documents.
           </p>
-        </header>
 
-        <div className="flex items-center gap-2">
-          <Input
-            // The panel exists to be searched, so the field is where typing goes.
-            autoFocus
-            aria-label="Search history"
-            placeholder="Search by name, title or #number"
-            value={historyQuery}
-            onChange={(event) => setHistoryQuery(event.target.value)}
-            className="flex-1"
-          />
-          <RepositoryFilter variant="field" className="w-56" />
+          <div className="flex items-center gap-2">
+            <Input
+              // The panel exists to be searched, so the field is where typing goes.
+              autoFocus
+              aria-label="Search history"
+              placeholder="Search by name, title or #number"
+              value={historyQuery}
+              onChange={(event) => setHistoryQuery(event.target.value)}
+              className="flex-1"
+            />
+            <RepositoryFilter className="w-56" />
+          </div>
+
+          {empty ? (
+            <Empty
+              title="Nothing archived yet"
+              hint="A task comes here once it's closed, a review once its pull request is merged or closed, a discussion once it's archived."
+            />
+          ) : shown.length === 0 && query === "" && filtered !== null ? (
+            <Empty
+              title={`Nothing archived in ${shortName(filtered.fullName)}`}
+              hint="Choose another repository, or all of them."
+            />
+          ) : shown.length === 0 ? (
+            <Empty
+              title={`Nothing matches “${query}”`}
+              hint="Try another name, or clear the search."
+            />
+          ) : (
+            <ul className="flex flex-col">
+              {shown.map((entry) => (
+                <li key={entry.id}>
+                  {entry.kind === "task" ? (
+                    <TaskRow task={entry.task} />
+                  ) : entry.kind === "review" ? (
+                    <ReviewRow review={entry.review} />
+                  ) : (
+                    <DiscussionRow discussion={entry.discussion} />
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
-
-        {empty ? (
-          <Empty
-            title="Nothing archived yet"
-            hint="A task comes here once it's closed, a review once its pull request is merged or closed, a discussion once it's archived."
-          />
-        ) : shown.length === 0 && query === "" && filtered !== null ? (
-          <Empty
-            title={`Nothing archived in ${shortName(filtered.fullName)}`}
-            hint="Choose another repository, or all of them."
-          />
-        ) : shown.length === 0 ? (
-          <Empty
-            title={`Nothing matches “${query}”`}
-            hint="Try another name, or clear the search."
-          />
-        ) : (
-          <ul className="flex flex-col">
-            {shown.map((entry) => (
-              <li key={entry.id}>
-                {entry.kind === "task" ? (
-                  <TaskRow task={entry.task} />
-                ) : entry.kind === "review" ? (
-                  <ReviewRow review={entry.review} />
-                ) : (
-                  <DiscussionRow discussion={entry.discussion} />
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
       </div>
-    </main>
+    </section>
   );
 }

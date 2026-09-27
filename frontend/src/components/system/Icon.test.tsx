@@ -12,6 +12,13 @@ describe("Icon", () => {
     expect(container.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
   });
 
+  it("draws one of the system's own icons at a size", () => {
+    const { container } = renderWithStore(<Icon icon={ICONS.task} size="sm" />);
+    const svg = container.querySelector("svg");
+    expect(svg).toHaveAttribute("aria-hidden", "true");
+    expect(svg).toHaveClass("size-(--icon-sm)");
+  });
+
   it.each([
     ["md", "size-(--icon)"],
     ["sm", "size-(--icon-sm)"],

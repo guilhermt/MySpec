@@ -1,5 +1,8 @@
-import { Archive, MessagesSquare, PanelRight, Pause, Play, Trash2 } from "lucide-react";
+import { Archive, Trash2 } from "lucide-react";
 import { useState } from "react";
+import { PauseButton } from "@/components/PauseButton";
+import { PanelGroup } from "@/components/system/AuxPanel";
+import { ICONS } from "@/components/system/icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -9,27 +12,27 @@ import {
   discussionStatusLabel,
   discussionStatusTone,
 } from "@/features/discussion/discussion-status";
+import { LocationHeader } from "@/features/navigation/LocationHeader";
 import { ContextGauge } from "@/features/task/ContextGauge";
 import { ToneDot } from "@/features/task/StatusDot";
 import { discussionSituation, situationTone } from "@/lib/situations";
 import { asSessionStatus, type DiscussionSummary } from "@/lib/wails";
 import { pause, resume } from "@/store/actions";
+import { useAppStore, usePanel } from "@/store/app-store";
 
 export interface DiscussionHeaderProps {
   discussion: DiscussionSummary;
-  /** documentsOpen is whether the panel of the documents is showing right now. */
-  documentsOpen: boolean;
-  onToggleDocuments: () => void;
 }
 
-/** DiscussionHeader names the discussion and holds what the user can do to it. */
-export function DiscussionHeader({
-  discussion,
-  documentsOpen,
-  onToggleDocuments,
-}: DiscussionHeaderProps) {
+/**
+ * DiscussionHeader is the header of the place of a discussion, with what the user can do to it on
+ * the right.
+ */
+export function DiscussionHeader({ discussion }: DiscussionHeaderProps) {
   const [archiving, setArchiving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const panel = usePanel();
+  const openPanel = useAppStore((state) => state.openPanel);
 
   const situation = discussionSituation(discussion);
   // What waits on the user takes the colour of its situation; without one, the
@@ -52,45 +55,35 @@ export function DiscussionHeader({
   );
 
   return (
-    <header className="flex h-11 shrink-0 items-center gap-2 border-b px-3">
-      <MessagesSquare aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
-      <Badge variant="outline">Discussion</Badge>
-      <span className="min-w-0 truncate font-medium">{discussion.title}</span>
-      <Badge variant="secondary">{discussion.board}</Badge>
+    <LocationHeader>
       <Badge variant="outline" className="gap-1.5">
         <ToneDot tone={tone} />
         {discussionStatusLabel(discussion)}
       </Badge>
-
-      <span className="flex-1" />
-
       <ContextGauge percent={discussion.contextPercent} />
       {running && (
-        <Button
-          variant="ghost"
-          size="sm"
+        <PauseButton
+          paused={paused}
           disabled={!paused && status === "error"}
           onClick={() =>
             void (paused
               ? resume(discussion.id, discussion.sessionStage)
               : pause(discussion.id, discussion.sessionStage))
           }
-        >
-          {paused ? <Play /> : <Pause />}
-          {paused ? "Resume" : "Pause"}
-        </Button>
+        />
       )}
-      <Tooltip>
-        <TooltipTrigger
-          render={<Button variant="ghost" size="icon-sm" />}
-          aria-label="Documents"
-          aria-pressed={documentsOpen}
-          onClick={onToggleDocuments}
-        >
-          <PanelRight />
-        </TooltipTrigger>
-        <TooltipContent>Documents</TooltipContent>
-      </Tooltip>
+      <PanelGroup
+        panels={[
+          {
+            id: "documents",
+            label: "Documents",
+            tooltip: "The document and the context",
+            icon: ICONS.file,
+          },
+        ]}
+        open={panel}
+        onOpenChange={openPanel}
+      />
       {discussion.canArchive || discussion.archiveHint === "" ? (
         archiveButton
       ) : (
@@ -114,6 +107,6 @@ export function DiscussionHeader({
         onOpenChange={setArchiving}
       />
       <DeleteDiscussionDialog discussion={discussion} open={deleting} onOpenChange={setDeleting} />
-    </header>
+    </LocationHeader>
   );
 }

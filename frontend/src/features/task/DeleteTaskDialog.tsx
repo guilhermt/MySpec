@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ErrorNotice } from "@/features/notice/Notice";
+import { Banner } from "@/features/notice/Notice";
 import { OrphanPR } from "@/features/task/OrphanPRs";
 import { messageOf } from "@/lib/errors";
 import { api, type DeletePreview } from "@/lib/wails";
@@ -116,7 +116,13 @@ export function DeleteTaskDialog({
         {/* The preview is information, not a precondition: the deletion goes
             ahead whatever git had to say about the worktrees. */}
         {preview.status === "error" && preview.error !== dismissed && (
-          <ErrorNotice message={preview.error} onDismiss={() => setDismissed(preview.error)} />
+          <Banner
+            className="bg-destructive/10"
+            title="Couldn't check what the deletion removes"
+            onDismiss={() => setDismissed(preview.error)}
+          >
+            {preview.error}
+          </Banner>
         )}
 
         {data !== null && (

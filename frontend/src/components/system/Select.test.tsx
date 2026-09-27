@@ -133,4 +133,14 @@ describe("Select", () => {
     expect(trigger).toHaveAttribute("aria-busy", "true");
     expect(trigger).toHaveTextContent("Opus");
   });
+
+  it("keeps its name and its choices as the trigger of the sidebar", async () => {
+    const { user } = renderWithStore(<Subject variant="sidebar" />);
+    await user.click(screen.getByRole("button", { name: "Model: Opus" }));
+    await screen.findByRole("menu");
+    expect(screen.getByRole("menuitemradio", { name: "Opus most capable" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+  });
 });

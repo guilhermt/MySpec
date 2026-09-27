@@ -13,13 +13,11 @@ import { setRepositoryFilter } from "@/store/actions";
 import { useAppStore, useRepositories, useRepositoryFilter } from "@/store/app-store";
 
 export interface RepositoryFilterProps {
-  /** sidebar fills the row of the sidebar; field is a bordered control next to a search. */
-  variant: "sidebar" | "field";
   className?: string;
 }
 
-/** RepositoryFilter picks the repository the task list and the history show. */
-export function RepositoryFilter({ variant, className }: RepositoryFilterProps) {
+/** RepositoryFilter picks the repository the history shows, as a bordered control next to its search. */
+export function RepositoryFilter({ className }: RepositoryFilterProps) {
   const app = useAppStore((state) => state.app);
   const repositories = useRepositories();
   const filter = useRepositoryFilter();
@@ -28,7 +26,7 @@ export function RepositoryFilter({ variant, className }: RepositoryFilterProps) 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        render={<Button variant={variant === "sidebar" ? "ghost" : "outline"} size="sm" />}
+        render={<Button variant="outline" size="sm" />}
         aria-label={`Repository filter: ${label}`}
         className={className}
       >

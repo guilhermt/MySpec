@@ -1,58 +1,53 @@
-import { Plus } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Kbd } from "@/components/ui/kbd";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { WaitingSection } from "@/features/attention/WaitingSection";
-import { HistoryButton } from "@/features/history/HistoryButton";
-import { SettingsButton } from "@/features/settings/SettingsButton";
-import { MissingClones } from "@/features/sidebar/MissingClones";
-import { RepositoryFilter } from "@/features/sidebar/RepositoryFilter";
-import { ReviewsNode } from "@/features/sidebar/ReviewsNode";
-import { SidebarTree } from "@/features/sidebar/SidebarTree";
-import { ThemeToggle } from "@/features/theme/ThemeToggle";
-import { useAppStore } from "@/store/app-store";
+import { useRef } from "react";
+import { ScrollArea } from "@/components/system/ScrollArea";
+import { MoreBelow } from "@/features/sidebar/MoreBelow";
+import { SidebarFilter } from "@/features/sidebar/SidebarFilter";
+import { SidebarFooter } from "@/features/sidebar/SidebarFooter";
+import { SidebarRail } from "@/features/sidebar/SidebarRail";
+import { SidebarTop } from "@/features/sidebar/SidebarTop";
+import { Tree } from "@/features/sidebar/Tree";
+import { NARROW_PX, SidebarWidthContext, useWidth } from "@/features/sidebar/useFits";
+import { useRevealOpenItem } from "@/features/sidebar/useRevealOpenItem";
+import { useSidebarRail } from "@/store/app-store";
 
-/** NewTaskButton opens the creation dialog, from wherever the app is. */
-function NewTaskButton() {
-  const openNewTask = useAppStore((state) => state.openNewTask);
-
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={<Button variant="ghost" size="icon-sm" />}
-        aria-label="New task"
-        onClick={() => openNewTask()}
-      >
-        <Plus aria-hidden="true" />
-      </TooltipTrigger>
-      <TooltipContent>
-        New task <Kbd>Ctrl N</Kbd>
-      </TooltipContent>
-    </Tooltip>
-  );
-}
-
+/**
+ * Sidebar is the Work sidebar. Open, it holds the top with New, the
+ * repository filter, the tree with what is below the fold, and the foot;
+ * collapsed, the strip. It measures its own width and tells the tree when it
+ * is narrow.
+ */
 export function Sidebar() {
+  const rail = useSidebarRail();
+  const ref = useRef<HTMLElement>(null);
+  const viewport = useRef<HTMLDivElement>(null);
+  const width = useWidth(ref);
+  // Before a first measure the sidebar counts as wide.
+  const narrow = width > 0 && width < NARROW_PX;
+  useRevealOpenItem();
+
   return (
-    <div className="flex h-dvh min-w-0 flex-col border-r bg-sidebar text-sidebar-foreground">
-      <WaitingSection />
-      <ReviewsNode />
-      <div className="flex h-11 shrink-0 items-center gap-1 border-b px-1">
-        <RepositoryFilter variant="sidebar" className="min-w-0 flex-1" />
-        <NewTaskButton />
-      </div>
-      <MissingClones />
-      <ScrollArea className="min-h-0 flex-1">
-        <SidebarTree />
-      </ScrollArea>
-      <div className="flex h-11 shrink-0 items-center gap-2 border-t px-2">
-        <HistoryButton />
-        <div className="ml-auto flex items-center gap-1">
-          <SettingsButton />
-          <ThemeToggle />
-        </div>
-      </div>
-    </div>
+    <aside
+      ref={ref}
+      aria-label="Work"
+      className="@container/sidebar flex h-dvh min-w-0 flex-col bg-surface-sidebar text-ink-1"
+    >
+      {rail ? (
+        <SidebarRail />
+      ) : (
+        <SidebarWidthContext value={narrow}>
+          <SidebarTop />
+          <SidebarFilter />
+          <ScrollArea
+            className="min-h-0 flex-1"
+            viewportClassName="relative"
+            viewportRef={viewport}
+          >
+            <Tree />
+            <MoreBelow viewport={viewport} />
+          </ScrollArea>
+          <SidebarFooter />
+        </SidebarWidthContext>
+      )}
+    </aside>
   );
 }

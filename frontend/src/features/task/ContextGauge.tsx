@@ -20,6 +20,10 @@ export interface ContextGaugeProps {
   className?: string;
 }
 
+/**
+ * ContextGauge is the share of the context window the conversation on screen used: a ring and the
+ * percentage. Below 1300px of main area the ring gives way and the percentage stays.
+ */
 export function ContextGauge({ percent, className }: ContextGaugeProps) {
   if (percent <= 0) {
     return null;
@@ -36,7 +40,11 @@ export function ContextGauge({ percent, className }: ContextGaugeProps) {
           className,
         )}
       >
-        <svg aria-hidden="true" className="size-4 -rotate-90" viewBox="0 0 16 16">
+        <svg
+          aria-hidden="true"
+          className="size-4 -rotate-90 @max-[1300px]/main:hidden"
+          viewBox="0 0 16 16"
+        >
           <circle className="stroke-border" cx="8" cy="8" r={RADIUS} fill="none" strokeWidth="2" />
           <circle
             className="stroke-current"

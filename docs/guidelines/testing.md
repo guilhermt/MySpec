@@ -64,6 +64,7 @@ O jsdom roda sem CSS, então um teste nele não vê a cascata: uma classe presen
 - Cada arquivo roda os seus testes nos dois temas, `describe.each(THEMES)`, e `setTheme` põe o `data-theme` no `documentElement`, como o app.
 - O estado vem de verdade: hover e foco pelo `userEvent` de `vitest/browser`, desabilitado, erro e carregando pelas props.
 - O esperado é o token resolvido no mesmo tema: `token("--surface-input")` e `resolve("0 0 0 var(--halo) var(--focus-halo)", "box-shadow")` passam o valor por um elemento de sonda no documento, que o devolve na mesma notação do `getComputedStyle`. `paintOf(elemento, esperado)` lê do elemento as mesmas entradas do esperado, e a comparação é `expect(paintOf(el, want)).toEqual(want)`; a sombra é lida sem as camadas vazias que o Tailwind compõe.
+- O que cede pela largura da área principal é medido dentro de um invólucro com o estilo `mainArea(largura)`, que faz o papel do container `main` das container queries. `NARROW_MAIN` é a área principal mais estreita, 812 px, e `placeHeaderFits(faixa)` diz se um cabeçalho de lugar cabe numa linha, com só o título cortado.
 - A cobertura vem só do jsdom; a suíte de estilo computado prova a cascata, não linhas.
 
 ### Setup e dublês

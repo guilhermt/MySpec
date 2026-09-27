@@ -67,11 +67,11 @@ export function ReviewsView() {
   }
 
   return (
-    <main aria-label="Reviews" className="flex h-dvh min-w-0 flex-col bg-background">
+    <section aria-label="Reviews" className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
       <ReviewsHeader center={center} />
       <ReadFailures failures={center.failures ?? []} />
       <ReviewsFilterBar center={center} />
       <div className="flex min-h-0 flex-1 flex-col">{content}</div>
-    </main>
+    </section>
   );
 }

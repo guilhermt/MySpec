@@ -49,7 +49,7 @@ import {
   type TaskMode,
 } from "@/lib/wails";
 import { createTask } from "@/store/actions";
-import { useAppStore, useModelCatalog } from "@/store/app-store";
+import { useAppStore, useModelCatalog, useOpenTaskId } from "@/store/app-store";
 
 const NAME_HELP = "Lowercase letters, digits and hyphens.";
 
@@ -138,7 +138,7 @@ function NewTaskFields({ origin }: NewTaskFieldsProps) {
   const closeNewTask = useAppStore((state) => state.closeNewTask);
   const openTask = useAppStore((state) => state.openTask);
   const rememberRepository = useAppStore((state) => state.rememberRepository);
-  const openTaskId = useAppStore((state) => state.openTaskId);
+  const openTaskId = useOpenTaskId();
   const lastRepositoryId = useAppStore((state) => state.lastRepositoryId);
 
   const defaults = useAppStore((state) => state.app?.modelDefaults ?? NO_MODELS);

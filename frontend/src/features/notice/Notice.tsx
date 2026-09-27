@@ -10,7 +10,10 @@ export interface BannerProps {
   className?: string;
 }
 
-/** Banner is the shape every notice of the app takes: a title, a body, a way out. */
+/**
+ * Banner is a notice inside a place, a panel or a dialog, and the notice of what stayed on disk: a
+ * title, a body, a way out. A failed action is said by the app notice, which has a shape of its own.
+ */
 export function Banner({ title, children, onDismiss, className }: BannerProps) {
   return (
     <div
@@ -36,18 +39,5 @@ export function Banner({ title, children, onDismiss, className }: BannerProps) {
         <X />
       </Button>
     </div>
-  );
-}
-
-export interface ErrorNoticeProps {
-  message: string;
-  onDismiss: () => void;
-}
-
-export function ErrorNotice({ message, onDismiss }: ErrorNoticeProps) {
-  return (
-    <Banner title="Something went wrong" onDismiss={onDismiss} className="bg-destructive/10">
-      {message}
-    </Banner>
   );
 }

@@ -1,4 +1,4 @@
-import { act, createEvent, fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "@/app/App";
 import { api } from "@/lib/wails";
@@ -8,7 +8,6 @@ import {
   makeArchivedReview,
   makeArchivedTask,
   makeBoard,
-  makeDiscussion,
   makeMigration,
   makePullRequestRow,
   makeRepository,
@@ -57,7 +56,7 @@ describe("App", () => {
       await screen.findByRole("button", { name: "Repository filter: All repositories" }),
     ).toBeInTheDocument();
     expect(screen.getByText("No tasks yet")).toBeInTheDocument();
-    expect(screen.getByRole("group", { name: "Theme" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Theme: System" })).toBeInTheDocument();
   });
 
   it("renders the welcome screen without a registered repository", async () => {
@@ -94,280 +93,24 @@ describe("App", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("opens the new task dialog on Ctrl+N", async () => {
-    const { user } = renderWithStore(<App />);
-    await screen.findByRole("button", { name: "Repository filter: All repositories" });
-
-    await user.keyboard("{Control>}n{/Control}");
-
-    expect(await screen.findByRole("heading", { name: "New task" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Repository: dev/web" })).toBeInTheDocument();
-  });
-
-  it("leaves Ctrl+N alone without a registered repository", async () => {
-    vi.mocked(api.getState).mockResolvedValue(makeState({ repositories: [] }));
-    const { user } = renderWithStore(<App />);
-    await screen.findByRole("button", { name: /^Add repository/ });
-
-    await user.keyboard("{Control>}n{/Control}");
-
-    expect(screen.queryByRole("heading", { name: "New task" })).not.toBeInTheDocument();
-  });
-
-  it("opens the first entry waiting for the user on Ctrl+J, leaving the open task out", async () => {
+  it("gives a row of the tree the main area back from the settings", async () => {
     vi.mocked(api.getState).mockResolvedValue(waitingState());
     const { user } = renderWithStore(<App />);
-    await screen.findByRole("tree", { name: "Tasks" });
-
-    // The error comes before the reply, though it started later.
-    await user.keyboard("{Control>}j{/Control}");
-
-    expect(await screen.findByRole("treeitem", { name: /^fix-header,/ })).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
-    expect(screen.getByRole("button", { name: "Delete task" })).toBeInTheDocument();
-
-    // The task on screen is not an entry any more: the next one is.
-    await user.keyboard("{Control>}j{/Control}");
-
-    expect(screen.getByRole("treeitem", { name: /^add-login,/ })).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
-  });
-
-  it("opens the review a situation is in on Ctrl+J", async () => {
-    vi.mocked(api.getState).mockResolvedValue(
-      makeState({
-        tasks: [makeTask()],
-        reviews: [
-          makeReviewSummary({
-            situations: [
-              makeSituation({
-                id: "s-report",
-                taskId: "review-1",
-                kind: "review_report",
-                form: "decide",
-                place: { kind: "review", stage: "", step: 0 },
-              }),
-            ],
-          }),
-        ],
-      }),
-    );
-    const { user } = renderWithStore(<App />);
-    await screen.findByRole("tree", { name: "Tasks" });
-
-    await user.keyboard("{Control>}j{/Control}");
-
-    expect(useAppStore.getState().openReviewId).toBe("review-1");
-  });
-
-  it("changes nothing on Ctrl+J when nothing waits for the user", async () => {
-    vi.mocked(api.getState).mockResolvedValue(makeState({ tasks: [makeTask()] }));
-    const { user } = renderWithStore(<App />);
-    await screen.findByRole("tree", { name: "Tasks" });
-
-    await user.keyboard("{Control>}j{/Control}");
-
-    expect(screen.getByText("No task open")).toBeInTheDocument();
-    expect(screen.getByRole("treeitem", { name: /^add-login,/ })).toHaveAttribute(
-      "aria-selected",
-      "false",
-    );
-  });
-
-  it("opens the first entry on Ctrl+J from the message box of a conversation", async () => {
-    vi.mocked(api.getState).mockResolvedValue(waitingState());
-    const { user } = renderWithStore(<App />);
-
-    await user.click(await screen.findByRole("treeitem", { name: /^add-login,/ }));
-    const box = await screen.findByPlaceholderText("Reply to the agent…");
-    // Focused directly: jsdom lays nothing out, so a click lands on the resize handle.
-    act(() => box.focus());
-    await user.keyboard("half a message");
-    expect(box).toHaveFocus();
-
-    await user.keyboard("{Control>}j{/Control}");
-
-    expect(await screen.findByRole("treeitem", { name: /^fix-header,/ })).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
-    // What the user was typing stays with the conversation it was typed in.
-    expect(useAppStore.getState().drafts["task-1|prd"]).toBe("half a message");
-  });
-
-  it("leaves the creation dialog where it is on Ctrl+J", async () => {
-    vi.mocked(api.getState).mockResolvedValue(waitingState());
-    const { user } = renderWithStore(<App />);
-    await screen.findByRole("tree", { name: "Tasks" });
-    await user.keyboard("{Control>}n{/Control}");
-    await screen.findByRole("heading", { name: "New task" });
-
-    const shortcut = createEvent.keyDown(window, { key: "j", ctrlKey: true });
-    fireEvent(window, shortcut);
-
-    expect(shortcut.defaultPrevented).toBe(true);
-    expect(screen.getByRole("heading", { name: "New task" })).toBeInTheDocument();
-    expect(useAppStore.getState().openTaskId).toBeNull();
-  });
-
-  it("leaves the dialog that starts a review where it is on Ctrl+N, Ctrl+J and Ctrl+,", async () => {
-    vi.mocked(api.getState).mockResolvedValue(
-      makeState({
-        ...waitingState(),
-        reviewCenter: makeReviewCenter({ pullRequests: [makePullRequestRow()] }),
-      }),
-    );
-    renderWithStore(<App />);
-    await screen.findByRole("tree", { name: "Tasks" });
-    act(() => {
-      useAppStore.getState().openStartReview({ repositoryId: "repo-1", number: 31 });
-    });
-    await screen.findByRole("heading", { name: "Start review" });
-
-    for (const key of ["n", "j", ","]) {
-      const shortcut = createEvent.keyDown(window, { key, ctrlKey: true });
-      fireEvent(window, shortcut);
-      expect(shortcut.defaultPrevented).toBe(true);
-    }
-
-    expect(screen.getByRole("heading", { name: "Start review" })).toBeInTheDocument();
-    expect(useAppStore.getState().newTaskOpen).toBe(false);
-    expect(useAppStore.getState().openTaskId).toBeNull();
-    expect(useAppStore.getState().settingsOpen).toBe(false);
-  });
-
-  it("opens the discussion a situation is in on Ctrl+J", async () => {
-    vi.mocked(api.getState).mockResolvedValue(
-      makeState({
-        tasks: [makeTask()],
-        discussions: [
-          makeDiscussion({
-            situations: [
-              makeSituation({
-                id: "s-drafts",
-                taskId: "discussion-1",
-                kind: "drafts",
-                form: "decide",
-                place: { kind: "discussion", stage: "", step: 0 },
-              }),
-            ],
-          }),
-        ],
-      }),
-    );
-    const { user } = renderWithStore(<App />);
-    await screen.findByRole("tree", { name: "Tasks" });
-
-    await user.keyboard("{Control>}j{/Control}");
-
-    expect(useAppStore.getState().openDiscussionId).toBe("discussion-1");
-  });
-
-  it("leaves the dialog that creates a discussion where it is on Ctrl+N, Ctrl+J and Ctrl+,", async () => {
-    vi.mocked(api.getState).mockResolvedValue(waitingState());
-    renderWithStore(<App />);
-    await screen.findByRole("tree", { name: "Tasks" });
-    act(() => {
-      useAppStore.getState().openNewDiscussion({ boardId: "board-1", cardKeys: ["dev/web#12"] });
-    });
-
-    for (const key of ["n", "j", ","]) {
-      const shortcut = createEvent.keyDown(window, { key, ctrlKey: true });
-      fireEvent(window, shortcut);
-      expect(shortcut.defaultPrevented).toBe(true);
-    }
-
-    expect(useAppStore.getState().newDiscussion).toEqual({
-      boardId: "board-1",
-      cardKeys: ["dev/web#12"],
-    });
-    expect(useAppStore.getState().newTaskOpen).toBe(false);
-    expect(useAppStore.getState().openTaskId).toBeNull();
-    expect(useAppStore.getState().settingsOpen).toBe(false);
-  });
-
-  it("keeps the card of the creation dialog on Ctrl+N", async () => {
-    const { user } = renderWithStore(<App />);
-    await screen.findByRole("button", { name: "Repository filter: All repositories" });
-    const card = { boardId: "board-1", key: "dev/web#7" };
-    act(() => {
-      useAppStore.getState().openNewTask(card);
-    });
-
-    await user.keyboard("{Control>}n{/Control}");
-
-    expect(useAppStore.getState().newTaskCard).toEqual(card);
-  });
-
-  it("leaves Ctrl+J alone without a registered repository", async () => {
-    vi.mocked(api.getState).mockResolvedValue(makeState({ repositories: [] }));
-    renderWithStore(<App />);
-    await screen.findByRole("button", { name: /^Add repository/ });
-
-    const shortcut = createEvent.keyDown(window, { key: "j", ctrlKey: true });
-    fireEvent(window, shortcut);
-
-    expect(shortcut.defaultPrevented).toBe(false);
-  });
-
-  it("toggles the settings on Ctrl+,", async () => {
-    const { user } = renderWithStore(<App />);
-    await screen.findByRole("button", { name: "Repository filter: All repositories" });
-
-    await user.keyboard("{Control>},{/Control}");
-
-    expect(await screen.findByRole("heading", { name: "Defaults" })).toBeInTheDocument();
-
-    await user.keyboard("{Control>},{/Control}");
-
-    expect(screen.queryByRole("heading", { name: "Defaults" })).not.toBeInTheDocument();
-  });
-
-  it("opens the settings on Ctrl+, with a board registered and no repository", async () => {
-    vi.mocked(api.getState).mockResolvedValue(
-      makeState({ repositories: [], boards: [makeBoard()] }),
-    );
-    const { user } = renderWithStore(<App />);
-    await screen.findByRole("button", { name: "Settings" });
-
-    await user.keyboard("{Control>},{/Control}");
-
-    expect(await screen.findByRole("heading", { name: "Defaults" })).toBeInTheDocument();
-  });
-
-  it("leaves Ctrl+, alone without a registered repository", async () => {
-    vi.mocked(api.getState).mockResolvedValue(makeState({ repositories: [] }));
-    renderWithStore(<App />);
-    await screen.findByRole("button", { name: /^Add repository/ });
-
-    const shortcut = createEvent.keyDown(window, { key: ",", ctrlKey: true });
-    fireEvent(window, shortcut);
-
-    expect(shortcut.defaultPrevented).toBe(false);
-  });
-
-  it("gives an entry waiting for the user the main area back from the settings", async () => {
-    vi.mocked(api.getState).mockResolvedValue(waitingState());
-    const { user } = renderWithStore(<App />);
-    await screen.findByRole("tree", { name: "Tasks" });
+    await screen.findByRole("tree", { name: "Active items" });
 
     await user.click(screen.getByRole("button", { name: "Settings" }));
     expect(await screen.findByRole("heading", { name: "Defaults" })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /^add-login, Waiting for reply/ }));
+    await user.click(screen.getByRole("treeitem", { name: /^task add-login\./ }));
 
     expect(screen.queryByRole("heading", { name: "Defaults" })).not.toBeInTheDocument();
-    expect(await screen.findByRole("treeitem", { name: /^add-login,/ })).toHaveAttribute(
+    expect(await screen.findByRole("treeitem", { name: /^task add-login\./ })).toHaveAttribute(
       "aria-selected",
       "true",
     );
   });
 
-  it("shows a rejected binding and dismisses it", async () => {
+  it("shows a rejected binding at the top of the main area and dismisses it", async () => {
     vi.mocked(api.setRepositoryFilter).mockRejectedValueOnce(new Error("filter failed"));
     const { user } = renderWithStore(<App />);
 
@@ -376,11 +119,14 @@ describe("App", () => {
     );
     await user.click(await screen.findByRole("menuitemradio", { name: /dev\/web/ }));
 
-    expect(await screen.findByRole("status")).toHaveTextContent("filter failed");
+    const notice = await screen.findByRole("alert");
+    expect(notice).toHaveTextContent("Couldn't show the tasks of dev/web");
+    expect(notice).toHaveTextContent("filter failed. Try again.");
+    expect(screen.getByRole("main").firstElementChild).toBe(notice);
 
     await user.click(screen.getByRole("button", { name: "Dismiss" }));
 
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   it("unsubscribes when it unmounts", async () => {
@@ -398,13 +144,13 @@ describe("App", () => {
     vi.mocked(api.getState).mockResolvedValue(makeState({ tasks: [makeTask()] }));
     const { user } = renderWithStore(<App />);
 
-    await user.click(await screen.findByRole("treeitem", { name: /^add-login,/ }));
+    await user.click(await screen.findByRole("treeitem", { name: /^task add-login\./ }));
 
     expect(await screen.findByRole("button", { name: "Delete task" })).toBeInTheDocument();
     expect(screen.queryByText("No task open")).not.toBeInTheDocument();
 
     act(() => {
-      useAppStore.getState().closeTask();
+      useAppStore.getState().go({ kind: "home" });
     });
 
     expect(await screen.findByText("No task open")).toBeInTheDocument();
@@ -421,7 +167,7 @@ describe("App", () => {
     expect(screen.queryByText("No tasks yet")).not.toBeInTheDocument();
 
     act(() => {
-      useAppStore.getState().closeHistory();
+      useAppStore.getState().go({ kind: "home" });
     });
 
     expect(screen.getByText("No tasks yet")).toBeInTheDocument();
@@ -435,14 +181,14 @@ describe("App", () => {
       }),
     );
     const { user } = renderWithStore(<App />);
-    await screen.findByRole("treeitem", { name: /^add-login,/ });
+    await screen.findByRole("treeitem", { name: /^task add-login\./ });
 
     await user.click(screen.getByRole("button", { name: /^History/ }));
     await user.click(screen.getByRole("button", { name: /fix-header/ }));
 
     expect(screen.getByText("Archived")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("treeitem", { name: /^add-login,/ }));
+    await user.click(screen.getByRole("treeitem", { name: /^task add-login\./ }));
 
     expect(screen.queryByText("Archived")).not.toBeInTheDocument();
     expect(await screen.findByRole("button", { name: "Artifacts" })).toBeInTheDocument();
@@ -453,7 +199,7 @@ describe("App", () => {
       makeState({ tasks: [makeTask()], boards: [makeBoard({ title: "Platform" })] }),
     );
     const { user } = renderWithStore(<App />);
-    await screen.findByRole("treeitem", { name: /^add-login,/ });
+    await screen.findByRole("treeitem", { name: /^task add-login\./ });
 
     act(() => {
       useAppStore.getState().openBoard("board-1");
@@ -462,7 +208,7 @@ describe("App", () => {
     expect(screen.getByRole("heading", { level: 1, name: "Platform" })).toBeInTheDocument();
     expect(screen.queryByText("No task open")).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("treeitem", { name: /^add-login,/ }));
+    await user.click(screen.getByRole("treeitem", { name: /^task add-login\./ }));
 
     expect(screen.queryByRole("heading", { level: 1, name: "Platform" })).not.toBeInTheDocument();
     expect(await screen.findByRole("button", { name: "Delete task" })).toBeInTheDocument();
@@ -493,18 +239,18 @@ describe("App", () => {
       }),
     );
     const { user } = renderWithStore(<App />);
-    await screen.findByRole("treeitem", { name: /^add-login,/ });
+    await screen.findByRole("treeitem", { name: /^task add-login\./ });
 
     act(() => {
       useAppStore.getState().openReviews();
     });
 
-    expect(screen.getByRole("main", { name: "Reviews" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Reviews" })).toBeInTheDocument();
     expect(api.refreshPullRequests).toHaveBeenCalled();
 
-    await user.click(screen.getByRole("treeitem", { name: /^add-login,/ }));
+    await user.click(screen.getByRole("treeitem", { name: /^task add-login\./ }));
 
-    expect(screen.queryByRole("main", { name: "Reviews" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Reviews" })).not.toBeInTheDocument();
   });
 
   it("gives the main area to the screen of a review", async () => {
@@ -512,7 +258,7 @@ describe("App", () => {
       makeState({ tasks: [makeTask()], reviews: [makeReviewSummary()] }),
     );
     renderWithStore(<App />);
-    await screen.findByRole("treeitem", { name: /^add-login,/ });
+    await screen.findByRole("treeitem", { name: /^task add-login\./ });
 
     act(() => {
       useAppStore.getState().openReview("review-1");
@@ -541,7 +287,7 @@ describe("App", () => {
       }),
     );
     const { user } = renderWithStore(<App />);
-    await screen.findByRole("treeitem", { name: /^add-login,/ });
+    await screen.findByRole("treeitem", { name: /^task add-login\./ });
 
     act(() => {
       useAppStore.getState().openReview("review-1");
@@ -563,13 +309,15 @@ describe("App", () => {
       makeState({ tasks: [makeTask()], reviewHistory: [makeArchivedReview()] }),
     );
     renderWithStore(<App />);
-    await screen.findByRole("treeitem", { name: /^add-login,/ });
+    await screen.findByRole("treeitem", { name: /^task add-login\./ });
 
     act(() => {
       useAppStore.getState().openArchivedReview("review-1");
     });
 
-    expect(screen.getByRole("button", { name: "← History" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Add the login screen" }),
+    ).toBeInTheDocument();
     expect(screen.getByText("Merged")).toBeInTheDocument();
     await waitFor(() => {
       expect(api.readReviewArtifact).toHaveBeenCalledWith("review-1", "review-1.md");

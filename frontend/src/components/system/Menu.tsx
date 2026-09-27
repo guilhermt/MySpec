@@ -1,4 +1,3 @@
-import type { LucideIcon } from "lucide-react";
 import type { ComponentProps, ReactNode } from "react";
 import {
   DropdownMenu,
@@ -12,6 +11,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "./Button";
 import { Icon } from "./Icon";
+import type { IconGlyph } from "./icons";
 
 /** Menu is the root of a system menu. */
 export const Menu = DropdownMenu;
@@ -65,7 +65,7 @@ export const MENU_ITEM =
 
 export interface MenuItemProps
   extends Omit<ComponentProps<typeof DropdownMenuItem>, "variant" | "className"> {
-  icon?: LucideIcon;
+  icon?: IconGlyph;
   shortcut?: string;
   sub?: string;
   destructive?: boolean;

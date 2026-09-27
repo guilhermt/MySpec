@@ -1,6 +1,7 @@
 import { LoaderCircle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNow } from "@/features/attention/useNow";
+import { LocationHeader } from "@/features/navigation/LocationHeader";
 import { relativeTime } from "@/lib/boards";
 import type { ReviewCenter } from "@/lib/wails";
 import { refreshPullRequests } from "@/store/actions";
@@ -12,14 +13,12 @@ export interface ReviewsHeaderProps {
   center: ReviewCenter;
 }
 
-/** ReviewsHeader names the Reviews view and tells how its last reading went. */
+/** ReviewsHeader is the header of the place of Reviews, with how its last reading went on the right. */
 export function ReviewsHeader({ center }: ReviewsHeaderProps) {
   const now = useNow(READING_CLOCK_MS, center.readAt !== "");
 
   return (
-    <header className="flex min-w-0 items-center gap-2 border-b px-4 py-3">
-      <h1 className="min-w-0 truncate font-medium">Reviews</h1>
-      <span className="flex-1" />
+    <LocationHeader>
       {center.readAt !== "" && (
         <span className="text-xs text-muted-foreground">
           {`Updated ${relativeTime(center.readAt, now)}`}
@@ -41,6 +40,6 @@ export function ReviewsHeader({ center }: ReviewsHeaderProps) {
       >
         <RefreshCw aria-hidden="true" />
       </Button>
-    </header>
+    </LocationHeader>
   );
 }

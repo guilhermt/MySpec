@@ -30,3 +30,12 @@ export const boardViewKey = (boardId: string) => `myspec.board.${boardId}`;
 
 /** SIDEBAR_COLLAPSED_KEY is where the sidebar nodes the user collapsed are kept. */
 export const SIDEBAR_COLLAPSED_KEY = "myspec.sidebar.collapsed";
+
+/** NAV_STACK_KEY is where the history of places is kept: the places behind the current one and the current one. */
+export const NAV_STACK_KEY = "myspec.nav.stack";
+
+/** LAST_ITEM_KEY is where the last active item opened is kept, for Continue on Home. */
+export const LAST_ITEM_KEY = "myspec.nav.last-item";
+
+/** SIDEBAR_RAIL_KEY is where the sidebar being collapsed into its strip is kept. */
+export const SIDEBAR_RAIL_KEY = "myspec.sidebar.rail";

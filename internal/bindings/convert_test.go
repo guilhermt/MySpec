@@ -2525,3 +2525,81 @@ func TestFromReviewsCarriesWhatWentWrongWithThePullRequestSinceItsLastPass(t *te
 		t.Errorf("trouble = %#v, want an empty list and no conflict", clean)
 	}
 }
+
+// sessionBlock is the part of a session block that tells the turn in progress.
+type sessionBlock struct {
+	TurnStartedAt, ActionLabel, ActionTarget string
+}
+
+func TestEverySessionBlockCarriesTheTurnInProgressAndItsAction(t *testing.T) {
+	t.Parallel()
+
+	startedAt := time.Date(2026, 9, 26, 14, 5, 0, 0, time.UTC)
+	busy := session.Summary{
+		Status: session.StatusWorking, TurnRunning: true, TurnStartedAt: startedAt,
+		ActionLabel: "Reading", ActionTarget: "internal/app/state.go",
+	}
+	idle := session.Summary{Status: session.StatusWaiting, Idle: true}
+
+	blocks := map[string]func(session.Summary) sessionBlock{
+		"task": func(summary session.Summary) sessionBlock {
+			got := bindings.FromTasks(
+				[]task.Task{{ID: "task-1", Name: "login-screen", Stage: task.StagePRD}},
+				func(string) task.Artifacts { return task.Artifacts{} },
+				func(string) []flow.StepState { return nil },
+				noPR,
+				repoOf,
+				map[session.Key]session.Summary{{TaskID: "task-1", Stage: string(task.StagePRD)}: summary},
+				nil,
+			)[0]
+			return sessionBlock{got.TurnStartedAt, got.ActionLabel, got.ActionTarget}
+		},
+		"step reviewer": func(summary session.Summary) sessionBlock {
+			got := stepsOf(t, []flow.StepState{{
+				Step:   task.Step{Number: 1, File: "1-first.md", Title: "First"},
+				Status: flow.StepAgentReview, ReviewMode: reviewmode.Agent,
+				ReviewerStage: "step_review:1", Reviewer: summary,
+			}})[0].Reviewer
+			return sessionBlock{got.TurnStartedAt, got.ActionLabel, got.ActionTarget}
+		},
+		"pull request": func(summary session.Summary) sessionBlock {
+			pr := flow.PullRequest{Status: flow.PRDone, SessionStage: "pr", Session: summary}
+			got := bindings.FromTasks(
+				[]task.Task{{ID: "task-1", Name: "login-screen", Stage: task.StagePR}},
+				func(string) task.Artifacts { return task.Artifacts{} },
+				func(string) []flow.StepState { return nil },
+				func(string) (flow.PullRequest, bool) { return pr, true },
+				repoOf,
+				nil,
+				nil,
+			)[0].PR
+			return sessionBlock{got.TurnStartedAt, got.ActionLabel, got.ActionTarget}
+		},
+		"review": func(summary session.Summary) sessionBlock {
+			state := reviewState(reviewflow.StatusReviewing, recordedPass(1, ""))
+			state.Session = summary
+			got := bindings.FromReviews([]reviewflow.State{state}, nil, reviewRepos)[0]
+			return sessionBlock{got.TurnStartedAt, got.ActionLabel, got.ActionTarget}
+		},
+		"discussion": func(summary session.Summary) sessionBlock {
+			state := discussionState(discussionflow.StatusPublishFailed)
+			state.Session = summary
+			got := convertDiscussion(state, nil, true, nil)
+			return sessionBlock{got.TurnStartedAt, got.ActionLabel, got.ActionTarget}
+		},
+	}
+
+	for name, block := range blocks {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			want := sessionBlock{"2026-09-26T14:05:00Z", "Reading", "internal/app/state.go"}
+			if got := block(busy); got != want {
+				t.Errorf("in a turn = %+v, want %+v", got, want)
+			}
+			if got := block(idle); got != (sessionBlock{}) {
+				t.Errorf("without a turn = %+v, want every field empty", got)
+			}
+		})
+	}
+}

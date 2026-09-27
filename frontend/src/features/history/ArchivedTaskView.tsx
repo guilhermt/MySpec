@@ -1,5 +1,6 @@
 import { Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { CardLink } from "@/components/CardLink";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -7,17 +8,17 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Markdown } from "@/features/chat/Markdown";
 import { HistoryPR } from "@/features/history/HistoryPanel";
 import { formatDates, stepCount } from "@/features/history/history-format";
-import { ErrorNotice } from "@/features/notice/Notice";
+import { LocationHeader } from "@/features/navigation/LocationHeader";
+import { Banner } from "@/features/notice/Notice";
 import { DeleteTaskDialog } from "@/features/task/DeleteTaskDialog";
 import { OneShotView } from "@/features/task/OneShotView";
 import { StepDocument } from "@/features/task/StepDocument";
 import { StepReportList } from "@/features/task/StepList";
-import { TaskCardBadge } from "@/features/task/TaskCardBadge";
 import { useArtifact } from "@/features/task/useArtifact";
 import { findStepReport, stepReportLabel } from "@/lib/review-modes";
 import { isOneShot } from "@/lib/task-modes";
 import type { ArchivedTask } from "@/lib/wails";
-import { useAppStore, useArchivedTask } from "@/store/app-store";
+import { useArchivedTask } from "@/store/app-store";
 
 const LOADING_WIDTHS = ["w-1/2", "w-full", "w-3/4"];
 
@@ -75,7 +76,6 @@ export interface ArchivedTaskViewProps {
  */
 export function ArchivedTaskView({ taskId }: ArchivedTaskViewProps) {
   const task = useArchivedTask(taskId);
-  const closeArchived = useAppStore((state) => state.closeArchived);
   const [selection, setSelection] = useState<Selection | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [dismissed, setDismissed] = useState("");
@@ -105,25 +105,16 @@ export function ArchivedTaskView({ taskId }: ArchivedTaskViewProps) {
   );
 
   if (task === null) {
-    return <section className="h-dvh bg-background" />;
+    return <section className="min-h-0 flex-1 bg-background" />;
   }
 
   const oneShot = isOneShot(task);
 
   return (
-    <section className="flex h-dvh min-w-0 flex-col bg-background">
-      <header className="flex h-11 shrink-0 items-center gap-2 border-b px-3">
-        <Button variant="ghost" size="sm" onClick={() => closeArchived()}>
-          ← History
-        </Button>
-        <span className="min-w-0 truncate font-medium">{task.name}</span>
-        {oneShot && <Badge variant="outline">One-Shot</Badge>}
-        <Badge variant="secondary">{task.repository}</Badge>
-        {task.card !== null && <TaskCardBadge card={task.card} />}
+    <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
+      <LocationHeader>
         <Badge variant="outline">Archived</Badge>
-
-        <span className="flex-1" />
-
+        {task.card !== null && <CardLink card={task.card} />}
         <Button
           variant="ghost"
           size="icon-sm"
@@ -140,7 +131,7 @@ export function ArchivedTaskView({ taskId }: ArchivedTaskViewProps) {
           open={deleting}
           onOpenChange={setDeleting}
         />
-      </header>
+      </LocationHeader>
 
       <div className="flex h-9 shrink-0 items-center gap-3 border-b px-3 text-xs text-muted-foreground">
         <span className="shrink-0">{formatDates(task.createdAt, task.archivedAt)}</span>
@@ -238,10 +229,13 @@ export function ArchivedTaskView({ taskId }: ArchivedTaskViewProps) {
                   </div>
                 )}
                 {artifact.status === "error" && artifact.error !== dismissed && (
-                  <ErrorNotice
-                    message={artifact.error}
+                  <Banner
+                    className="bg-destructive/10"
+                    title="Couldn't read the document"
                     onDismiss={() => setDismissed(artifact.error)}
-                  />
+                  >
+                    {artifact.error}
+                  </Banner>
                 )}
                 {artifact.status === "ready" &&
                   (openStep === null ? (

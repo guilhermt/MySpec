@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
+import { ALL_REPOSITORIES } from "@/lib/repositories";
 import {
+  announcement,
+  announcePlace,
   compactWait,
   compareSituations,
   discussionSituation,
   namesPlace,
+  nextWaiting,
   placeLabel,
   prSituation,
   reviewerSituation,
@@ -17,7 +21,6 @@ import {
   stepOrReviewerSituation,
   stepSituation,
   summaryLabel,
-  waitingEntries,
 } from "@/lib/situations";
 import type { Place } from "@/lib/wails";
 import {
@@ -227,172 +230,110 @@ describe("the order of the situations", () => {
   });
 });
 
-describe("waitingEntries", () => {
-  const started = "2026-09-05T10:00:00Z";
+describe("nextWaiting", () => {
+  const early = "2026-09-05T09:00:00Z";
+  const late = "2026-09-05T11:00:00Z";
   const app = makeState({
+    repositoryFilter: "repo-2",
     tasks: [
       makeTask({
         id: "task-1",
         name: "zeta",
-        situations: [makeSituation({ id: "zeta-reply", taskId: "task-1", startedAt: started })],
+        repositoryId: "repo-1",
+        situations: [makeSituation({ id: "zeta-reply", startedAt: "2026-09-05T08:00:00Z" })],
       }),
       makeTask({
         id: "task-2",
         name: "billing",
+        repositoryId: "repo-2",
         situations: [
+          makeSituation({ id: "billing-reply", startedAt: late }),
           makeSituation({
-            id: "billing-draft",
-            taskId: "task-2",
-            kind: "draft",
-            place: PR_PLACE,
-            startedAt: started,
-          }),
-          makeSituation({
-            id: "billing-findings",
-            taskId: "task-2",
-            kind: "findings",
-            place: PR_PLACE,
-            startedAt: started,
-          }),
-        ],
-      }),
-      makeTask({
-        id: "task-3",
-        name: "add-login",
-        situations: [
-          makeSituation({
-            id: "add-login-blocked",
-            taskId: "task-3",
-            kind: "step_blocked",
+            id: "billing-error",
+            kind: "session_error",
             group: "error",
-            place: stepPlace(2),
-            startedAt: "2026-09-05T11:00:00Z",
+            startedAt: late,
           }),
         ],
       }),
     ],
+    reviews: [
+      makeReviewSummary({
+        id: "review-1",
+        title: "Rate limit",
+        situations: [makeSituation({ id: "review-merge", group: "closing", startedAt: early })],
+      }),
+    ],
+    discussions: [
+      makeDiscussion({
+        id: "discussion-1",
+        title: "Onboarding",
+        situations: [makeSituation({ id: "discussion-reply", startedAt: early })],
+      }),
+    ],
   });
 
-  it("lists every situation of the active tasks, most urgent first, then by name and id", () => {
-    const entries = waitingEntries(app, null);
-
-    expect(entries.map((entry) => [entry.name, entry.situation.id])).toEqual([
-      ["add-login", "add-login-blocked"],
-      ["billing", "billing-draft"],
-      ["billing", "billing-findings"],
-      ["zeta", "zeta-reply"],
-    ]);
+  it.each([
+    ["the most severe situation of all first", null, "billing-error"],
+    ["the longest wait of the same group, leaving out the item on screen", "task-2", "zeta-reply"],
+  ])("opens %s", (_case, open, expected) => {
+    expect(nextWaiting(app, open)?.situation.id).toBe(expected);
   });
 
-  it("leaves the open task out", () => {
-    expect(ids(waitingEntries(app, "task-2").map((entry) => entry.situation))).toEqual([
-      "add-login-blocked",
-      "zeta-reply",
-    ]);
-  });
-
-  it("lists the situations of the reviews beside the ones of the tasks", () => {
-    const withReview = makeState({
+  it("takes the name between the same waits, and names the item as the tree does", () => {
+    const tied = {
+      ...app,
       tasks: [
-        makeTask({
-          id: "task-1",
-          name: "billing",
-          situations: [makeSituation({ id: "billing-draft", kind: "draft", place: PR_PLACE })],
-        }),
+        makeTask({ id: "task-9", name: "zeta", situations: [makeSituation({ startedAt: early })] }),
       ],
-      reviews: [
-        makeReviewSummary({
-          id: "review-1",
-          situations: [
-            makeSituation({
-              id: "review-failed",
-              taskId: "review-1",
-              kind: "publish_failed",
-              group: "error",
-              place: REVIEW_PLACE,
-            }),
-          ],
-        }),
-      ],
-    });
+      reviews: [],
+    };
 
-    expect(waitingEntries(withReview, null)).toEqual([
-      expect.objectContaining({ itemId: "review-1", name: "web#31" }),
-      expect.objectContaining({ itemId: "task-1", name: "billing" }),
-    ]);
+    expect(nextWaiting(tied, null)).toMatchObject({
+      itemId: "discussion-1",
+      name: "Onboarding",
+    });
   });
 
-  it("lists the situations of the discussions by the title of each", () => {
-    const withDiscussion = makeState({
-      tasks: [
-        makeTask({
-          id: "task-1",
-          name: "billing",
-          situations: [makeSituation({ id: "billing-draft", kind: "draft", place: PR_PLACE })],
-        }),
-      ],
-      discussions: [
-        makeDiscussion({
-          id: "discussion-1",
-          title: "Invoices",
-          situations: [
-            makeSituation({
-              id: "invoices-drafts",
-              taskId: "discussion-1",
-              kind: "drafts",
-              place: DISCUSSION_PLACE,
-            }),
-          ],
-        }),
-      ],
-    });
+  it("gives the same item whatever the repository filter", () => {
+    const all = nextWaiting({ ...app, repositoryFilter: ALL_REPOSITORIES }, null);
+    // The filter keeps repo-1, and the most severe situation is billing's, in repo-2.
+    const filtered = nextWaiting({ ...app, repositoryFilter: "repo-1" }, null);
 
-    expect(waitingEntries(withDiscussion, null)).toEqual([
-      expect.objectContaining({ itemId: "task-1", name: "billing" }),
-      expect.objectContaining({ itemId: "discussion-1", name: "Invoices" }),
-    ]);
+    expect(filtered).toMatchObject({ itemId: "task-2", situation: { id: "billing-error" } });
+    expect(filtered).toEqual(all);
   });
 
-  it("leaves the open discussion out", () => {
-    const withDiscussion = makeState({
-      discussions: [
-        makeDiscussion({
-          situations: [makeSituation({ id: "invoices-drafts", place: DISCUSSION_PLACE })],
-        }),
-      ],
-    });
+  it("is null when nothing waits", () => {
+    expect(nextWaiting(makeState({ tasks: [makeTask({ situations: null })] }), null)).toBeNull();
+  });
+});
 
-    expect(waitingEntries(withDiscussion, "discussion-1")).toEqual([]);
+describe("announcement", () => {
+  it.each([
+    [makeSituation({ kind: "question", place: stagePlace("prd") }), "Login: question in PRD"],
+    [
+      makeSituation({ kind: "reply", place: stagePlace("tech_spec") }),
+      "Login: waiting for reply in Tech spec",
+    ],
+    [
+      makeSituation({ kind: "permission", place: stagePlace("one_shot") }),
+      "Login: permission in Planning",
+    ],
+    [
+      makeSituation({ kind: "step_empty", place: stepPlace(3) }),
+      "Login: step 3 has no changes in Step 3",
+    ],
+    [makeSituation({ kind: "question", place: reviewerPlace(2) }), "Login: question in Reviewer"],
+    [makeSituation({ kind: "draft", place: PR_PLACE }), "Login: draft to approve in PR"],
+    [makeSituation({ kind: "new_commits", place: REVIEW_PLACE }), "Login: new commits"],
+    [makeSituation({ kind: "drafts", place: DISCUSSION_PLACE }), "Login: decide drafts"],
+  ])("tells %o as %s", (situation, expected) => {
+    expect(announcement("Login", situation)).toBe(expected);
   });
 
-  it("leaves the open review out", () => {
-    const withReview = makeState({
-      reviews: [
-        makeReviewSummary({
-          id: "review-1",
-          situations: [makeSituation({ id: "review-report", place: REVIEW_PLACE })],
-        }),
-      ],
-    });
-
-    expect(waitingEntries(withReview, "review-1")).toEqual([]);
-  });
-
-  it("is empty without items, or without a situation in them", () => {
-    expect(waitingEntries(null, null)).toEqual([]);
-    expect(
-      waitingEntries(makeState({ tasks: null, reviews: null, discussions: null }), null),
-    ).toEqual([]);
-    expect(
-      waitingEntries(
-        makeState({
-          tasks: [makeTask({ situations: null })],
-          reviews: [makeReviewSummary({ situations: null })],
-          discussions: [makeDiscussion({ situations: null })],
-        }),
-        null,
-      ),
-    ).toEqual([]);
+  it("names no place for a review or a discussion", () => {
+    expect(announcePlace(makeSituation({ place: REVIEW_PLACE }))).toBeNull();
   });
 });
 

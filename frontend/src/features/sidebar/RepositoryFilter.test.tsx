@@ -14,8 +14,8 @@ const API = makeRepository({
   missing: true,
 });
 
-function filter(chosen = "", variant: "sidebar" | "field" = "sidebar") {
-  return renderWithStore(<RepositoryFilter variant={variant} />, {
+function filter(chosen = "") {
+  return renderWithStore(<RepositoryFilter />, {
     state: makeState({ repositories: [WEB, API], repositoryFilter: chosen }),
   });
 }

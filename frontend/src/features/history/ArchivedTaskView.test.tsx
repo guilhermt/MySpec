@@ -12,7 +12,7 @@ function view(overrides: Partial<ArchivedTask> = {}) {
   const task = makeArchivedTask(overrides);
   return renderWithStore(<ArchivedTaskView taskId={task.id} />, {
     state: makeState({ history: [task] }),
-    ui: { historyOpen: true, openArchivedId: task.id },
+    ui: { location: { kind: "archived-task", id: task.id } },
   });
 }
 
@@ -20,18 +20,20 @@ describe("ArchivedTaskView", () => {
   it("names the task and says it is archived", async () => {
     view();
 
-    expect(await screen.findByText("add-login")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: "add-login" })).toBeInTheDocument();
     expect(screen.getByText("Archived")).toBeInTheDocument();
-    expect(screen.getByText("dev/web")).toBeInTheDocument();
     expect(screen.getByText("1 step")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "#12" })).toBeInTheDocument();
   });
 
-  it("shows the card the task was created from", async () => {
-    view({ card: makeTaskCard({ number: 40, state: "closed" }) });
+  it("links the card the task was created from", async () => {
+    const { user } = view({ card: makeTaskCard({ number: 40 }) });
 
-    expect(await screen.findByRole("button", { name: "#40" })).toBeInTheDocument();
-    expect(screen.getByText("Issue closed")).toBeInTheDocument();
+    await user.click(
+      await screen.findByRole("button", { name: "Open card #40 on GitHub · In progress" }),
+    );
+
+    expect(api.openExternal).toHaveBeenCalledWith(makeTaskCard().url);
   });
 
   it("opens on the PRD and reads it back from the artifacts", async () => {
@@ -135,10 +137,10 @@ describe("ArchivedTaskView", () => {
     ],
   };
 
-  it("labels a One-Shot task, with no count of steps and no tabs", async () => {
+  it("shows a One-Shot task with no count of steps and no tabs", async () => {
     view(ONE_SHOT);
 
-    expect(await screen.findByText("One-Shot")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1 })).toBeInTheDocument();
     expect(screen.queryByText("1 step")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "PRD" })).not.toBeInTheDocument();
   });
@@ -186,13 +188,12 @@ describe("ArchivedTaskView", () => {
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
-  it("goes back to the history", async () => {
+  it("goes to the history through the breadcrumb", async () => {
     const { user } = view();
 
-    await user.click(screen.getByRole("button", { name: "← History" }));
+    await user.click(screen.getByRole("button", { name: "History" }));
 
-    expect(useAppStore.getState().openArchivedId).toBeNull();
-    expect(useAppStore.getState().historyOpen).toBe(true);
+    expect(useAppStore.getState().location).toEqual({ kind: "history" });
   });
 
   it("offers the deletion of the archived task", async () => {

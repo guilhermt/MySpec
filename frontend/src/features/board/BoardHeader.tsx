@@ -1,6 +1,9 @@
-import { ExternalLink, LoaderCircle, MessagesSquare, RefreshCw, TriangleAlert } from "lucide-react";
+import { LoaderCircle, MessagesSquare, RefreshCw, TriangleAlert } from "lucide-react";
+import { IconButton } from "@/components/system/IconButton";
+import { ICONS } from "@/components/system/icons";
 import { Button } from "@/components/ui/button";
 import { useNow } from "@/features/attention/useNow";
+import { LocationHeader } from "@/features/navigation/LocationHeader";
 import { relativeTime } from "@/lib/boards";
 import type { Board } from "@/lib/wails";
 import { openExternal, refreshBoard } from "@/store/actions";
@@ -14,23 +17,16 @@ export interface BoardHeaderProps {
   onNewDiscussion: () => void;
 }
 
-/** BoardHeader names the board on screen and tells how its last reading went. */
+/**
+ * BoardHeader is the header of the place of a board, with how its last reading went and what the
+ * user can do to it on the right. A failed reading shows as a line under it.
+ */
 export function BoardHeader({ board, onNewDiscussion }: BoardHeaderProps) {
   const now = useNow(READING_CLOCK_MS, board.readAt !== "");
 
   return (
-    <header className="flex flex-col gap-1 border-b px-4 py-3">
-      <div className="flex min-w-0 items-center gap-2">
-        <h1 className="min-w-0 truncate font-medium">{board.title}</h1>
-        <Button
-          variant="ghost"
-          size="icon-xs"
-          aria-label="Open on GitHub"
-          onClick={() => void openExternal(board.url)}
-        >
-          <ExternalLink aria-hidden="true" />
-        </Button>
-        <span className="flex-1" />
+    <>
+      <LocationHeader>
         {board.readAt !== "" && (
           <span className="text-xs text-muted-foreground">
             {`Updated ${relativeTime(board.readAt, now)}`}
@@ -61,14 +57,23 @@ export function BoardHeader({ board, onNewDiscussion }: BoardHeaderProps) {
         >
           <RefreshCw aria-hidden="true" />
         </Button>
-      </div>
+        <IconButton
+          label="Open on GitHub"
+          icon={ICONS.external}
+          size="sm"
+          onClick={() => void openExternal(board.url)}
+        />
+      </LocationHeader>
       {/* A board never read shows its failure in place of the cards. */}
       {board.failure !== null && board.readAt !== "" && (
-        <p role="alert" className="flex items-start gap-1.5 text-xs text-destructive">
+        <p
+          role="alert"
+          className="flex items-start gap-1.5 border-b px-4 py-2 text-xs text-destructive"
+        >
           <TriangleAlert aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
           <span className="break-all">{board.failure.message}</span>
         </p>
       )}
-    </header>
+    </>
   );
 }

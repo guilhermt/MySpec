@@ -9,13 +9,22 @@ const OPTIONS = [
   { value: "sonnet", label: "Sonnet" },
 ];
 
-function Subject({ disabled, loading }: { disabled?: boolean; loading?: boolean }) {
+function Subject({
+  disabled,
+  loading,
+  sidebar,
+}: {
+  disabled?: boolean;
+  loading?: boolean;
+  sidebar?: boolean;
+}) {
   return (
     <Select
       label="Model"
       value="opus"
       options={OPTIONS}
       onValueChange={() => {}}
+      {...(sidebar ? { variant: "sidebar" as const } : {})}
       {...(loading ? { loading } : {})}
       {...(disabled ? { disabled, disabledReason: "The session is running" } : {})}
     />
@@ -95,5 +104,18 @@ describe.each(THEMES)("Select in the %s theme", (theme) => {
     render(<Subject loading />);
     const choice = screen.getByText("Opus");
     expect(getComputedStyle(choice).animationName).toBe("shimmer");
+  });
+
+  it("takes the tone of the sidebar as its trigger", () => {
+    setTheme(theme);
+    render(<Subject sidebar />);
+    const want = {
+      background: token("--sidebar-input"),
+      border: token("--sidebar-control"),
+      color: token("--ink-2"),
+      height: resolve("var(--size-control-sm)", "height"),
+      fontSize: resolve("var(--text-meta)", "font-size"),
+    };
+    expect(paintOf(screen.getByRole("button", { name: "Model: Opus" }), want)).toEqual(want);
   });
 });

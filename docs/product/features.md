@@ -75,7 +75,7 @@ Uma falha de leitura aparece onde a leitura foi pedida: no diálogo do board, na
 
 A visão do board abre pelo nó do board na barra lateral e ocupa a área principal, no lugar da task. Abri-la relê o board.
 
-- **Cabeçalho:** o título, o link para o GitHub, `Updated <há quanto tempo>`, o indicador de leitura em curso, o botão de atualizar, **New discussion** e a falha da última leitura, quando houver.
+- **Cabeçalho:** o [cabeçalho do lugar](#cabeçalho-do-lugar), com o título do board, e à direita `Updated <há quanto tempo>`, o indicador de leitura em curso, **New discussion**, o botão de atualizar e **Open on GitHub**; a falha da última leitura, quando houver, fica numa linha logo abaixo.
 - **Barra de filtros:** a busca, que casa com o título, sem diferenciar maiúsculas nem acentos, e com o número, com ou sem `#`; os filtros **Repository**, entre os administrados, **Status**, com `No status`, e **Assignee**; e **Assigned to me**, que filtra pelo usuário autenticado no `gh`. Os filtros combinam entre si, e **Clear filters** limpa todos. Os filtros de cada board são lembrados entre execuções.
 - **Barra de seleção**, acima da lista, quando há cards selecionados: `N cards selected`, **Discuss selected** e **Clear selection**.
 - **Lista de cards** agrupada por status: uma seção por opção do campo de status, na ordem do board, mesmo vazia, e a seção `No status` quando há cards sem status. Um board sem campo de status tem uma seção única, `Cards`. Cada seção mostra o nome e a contagem já filtrada e é recolhível. As seções dos status finais começam recolhidas, e o que o usuário recolhe ou expande é lembrado por board. Dentro de cada seção, as issues abertas vêm antes das fechadas, cada grupo na ordem do board, e uma issue fechada numa seção de status não final aparece esmaecida.
@@ -111,7 +111,7 @@ O agente lê o código dos repositórios do board que têm clone e nunca os alte
 
 ### Criar uma discussão
 
-Uma discussão pertence a um board e nasce da visão dele, de dois lugares: **New discussion**, no cabeçalho, e **Discuss**, no painel de detalhe de um card, que abre o diálogo com aquele card. Com cards selecionados na lista, **New discussion** abre o diálogo com eles, e `D` faz o mesmo pelo teclado, com a seleção ou com o card sob o foco.
+Uma discussão pertence a um board e nasce da visão dele, de dois lugares: **New discussion**, no cabeçalho, e **Discuss**, no painel de detalhe de um card, que abre o diálogo com aquele card. **New discussion** também está no menu **New** da barra lateral, que abre o diálogo sem cards para o board do lugar na tela (ver [Tela de boas-vindas e barra lateral](#tela-de-boas-vindas-e-barra-lateral)). Com cards selecionados na lista, **New discussion** abre o diálogo com eles, e `D` faz o mesmo pelo teclado, com a seleção ou com o card sob o foco.
 
 O diálogo de criação tem:
 
@@ -201,11 +201,11 @@ O campo de módulo é o campo de seleção única do board chamado `Módulo` ou 
 
 ### A discussão como item
 
-- **Barra lateral:** cada discussão ativa aparece sob o nó do board, depois das tasks dele, em ordem de criação, com o rótulo `Discussion`, o título, o ponto de estado e, à direita, o que espera pelo usuário ou o estado. Ela não aparece sob os nós de épico, e o filtro por repositório não a esconde. Uma discussão de um board removido vai para o grupo **No board**.
-- **Tela da discussão:** o cabeçalho com o rótulo `Discussion`, o título, o board, o estado, o medidor de contexto, **Pause** ou **Resume**, o botão do painel de documentos, **Archive** e **Delete discussion**; a barra da discussão com o estado e os avisos; o painel de rascunhos e a conversa; o painel de documentos.
+- **Barra lateral:** cada discussão ativa é uma linha sob o nó do board, depois das tasks dele, em ordem de criação, com o glifo de discussão, o título, `#<card> #<card>` no meta e, na segunda linha, como nas linhas das tasks, a situação mais grave (`Question · Discussing`, `Decide drafts · 2 of 5`, `Publish failed`) ou, sem situação, `Discussing` ou `Publishing`. Uma discussão publicada diz `Ready to archive`, sem relógio, e não entra no `Ctrl+J` nem no resumo de um nó recolhido. Ela não aparece sob os nós de épico, e o filtro por repositório não a esconde. Uma discussão de um board removido vai para o grupo **No board**.
+- **Tela da discussão:** o [cabeçalho do lugar](#cabeçalho-do-lugar), com o board no breadcrumb e o título, e à direita o estado, o medidor de contexto, **Pause** ou **Resume**, o botão do painel de documentos, **Archive** e **Delete discussion**; a barra da discussão com o estado e os avisos; o painel de rascunhos e a conversa; o painel de documentos.
 - **Estados:** `Discussing`, `Waiting for the drafts`, `Decide drafts`, `Publishing`, `Publish failed` e `Drafts published`. O estado da conversa, pausada, com erro, pedindo permissão ou perguntando, prevalece, como na task.
-- **Waiting for you:** a discussão espera pelo usuário quando o agente pergunta ou pede permissão, quando a sessão falha, quando um turno termina sem resposta ao usuário antes de os rascunhos existirem, quando o artefato de rascunhos não pode ser lido, quando há rascunhos a decidir e quando uma publicação falha. Ela notifica como uma task, uma vez por situação, com o som do produto. Uma discussão pausada ou arquivada não espera por ninguém.
-- **Archive:** o usuário arquiva a discussão a qualquer momento, depois da confirmação `The conversation ends. The document, the drafts and what was published stay in the history.` Rascunhos aprovados aguardando publicação impedem o arquivamento, com `Approved drafts are waiting to be published.`, e uma publicação que falhou, com `A publication failed.` Rascunhos sem decisão são arquivados como `Not published`. Arquivar encerra a sessão.
+- **Espera pelo usuário:** a discussão espera pelo usuário quando o agente pergunta ou pede permissão, quando a sessão falha, quando um turno termina sem resposta ao usuário antes de os rascunhos existirem, quando o artefato de rascunhos não pode ser lido, quando há rascunhos a decidir e quando uma publicação falha. Ela notifica como uma task, uma vez por situação, com o som do produto. Uma discussão pausada ou arquivada não espera por ninguém.
+- **Archive:** o usuário arquiva a discussão a qualquer momento, depois da confirmação `The conversation ends. The document, the drafts and what was published stay in the history.` Rascunhos aprovados aguardando publicação impedem o arquivamento, com `Approved drafts are waiting to be published.`, e uma publicação que falhou, com `A publication failed.` Rascunhos sem decisão são arquivados como `Not published`. Arquivar encerra a sessão, e o lugar da discussão dá vez à [página do item que saiu](#a-página-do-item-que-saiu).
 - **Delete discussion:** apaga a discussão, ativa ou arquivada, depois da confirmação `The conversation, the document and the drafts go away. What was published on GitHub stays.`
 
 ### Contexto da task
@@ -216,7 +216,7 @@ Uma task criada de um card que foi criado ou atualizado por uma discussão receb
 
 O produto conhece os repositórios que o usuário cadastra. Um repositório cadastrado é um repositório do GitHub, identificado por `dono/nome`, ligado ao caminho local de um clone ou ainda sem clone. Um repositório cadastrado a partir de um clone tem a identidade lida do remote `origin`; um repositório cadastrado por um board, sem clone, tem a identidade lida do GitHub. Cada repositório pertence a um board ou a nenhum.
 
-Onde o espaço é curto, como na lista de tasks, o produto mostra o nome curto, a parte `nome`, com `dono/nome` no tooltip; onde há espaço, como na página de cadastro e no cabeçalho da task, mostra `dono/nome`.
+Onde o espaço é curto, como na lista de tasks, o produto mostra o nome curto, a parte `nome`, com `dono/nome` no tooltip; onde há espaço, como na página de cadastro, mostra `dono/nome`.
 
 Só uma instância do app roda por vez. Abrir uma segunda traz para a frente a janela que já existe; um argumento na linha de comando é ignorado.
 
@@ -253,7 +253,7 @@ Se a pasta de destino já existe e é um clone do mesmo repositório, ela é lig
 
 ### Clone inexistente
 
-Quando o caminho cadastrado não existe, não é um diretório ou não é mais um repositório git, o repositório aparece na página **Repositories** e na barra lateral com o aviso `The clone at <caminho> is missing.` e a ação de trocar o caminho. As tasks dele continuam visíveis e navegáveis, com suas conversas, artefatos e histórico. Fica bloqueado tudo o que precisa do clone, sempre com essa razão:
+Quando o caminho cadastrado não existe, não é um diretório ou não é mais um repositório git, o repositório aparece na página **Repositories** com o aviso `The clone at <caminho> is missing.` e a ação de trocar o caminho, e na árvore da barra lateral como o aviso `<nome> · clone missing`, que troca o caminho. As tasks dele continuam visíveis e navegáveis, com suas conversas, artefatos e histórico. Fica bloqueado tudo o que precisa do clone, sempre com essa razão:
 
 - criar uma task nesse repositório: ele aparece no diálogo, desabilitado, com o aviso;
 - criar a worktree da task, no primeiro step: o step fica bloqueado como um step de worktree suja, com o aviso e **Tentar de novo**;
@@ -267,22 +267,33 @@ Enquanto nenhum board e nenhum repositório estão cadastrados, o produto mostra
 
 A barra lateral tem, de cima para baixo:
 
-- a seção **Waiting for you**, fixa no topo, com todas as tasks, todos os reviews de pull request e todas as discussões que esperam pelo usuário, exceto o que está aberto. Ela nunca é filtrada por repositório;
-- o nó **Reviews**, que abre a visão do [centro de review](#centro-de-review), com a contagem das pull requests pendentes e, dentro dele, os reviews ativos;
-- o **filtro por repositório**, um seletor com **All repositories** e um item por repositório cadastrado, em ordem alfabética, e o botão de nova task. A escolha do filtro é lembrada entre execuções do app, e um repositório removido volta o filtro para todos;
-- o aviso de clone inexistente de cada repositório que o filtro mostra, com **Change path**;
-- a **árvore de tasks** e discussões ativas, agrupada por board;
-- o rodapé com **History**, o tema e as configurações.
+- o topo, com a marca e o nome do produto, **New** e `«`, que recolhe a barra na faixa. **New** abre um menu com **New task** (`Ctrl N`), **Review a pull request**, que vai à visão Reviews, e **New discussion**, que abre o diálogo de criação para o board do lugar na tela: a visão do board aberta, o board do repositório da task aberta ou o board da discussão aberta; fora deles, o board da última discussão criada e, sem ela, o primeiro board por título. Sem nenhum board, **New discussion** fica desabilitado com `Add a board to discuss its cards.`;
+- o **filtro por repositório**, um seletor com **All repositories** e um item por repositório cadastrado, em ordem alfabética, com `· clone missing` no repositório cujo clone sumiu e `· not cloned` no que não tem clone. A escolha do filtro é lembrada entre execuções do app, e um repositório removido volta o filtro para todos;
+- a **árvore** `Active items`, com os reviews, as tasks e as discussões ativas, agrupada por board. Quando há linhas abaixo da parte visível, o fim da árvore esmaece sob `↓ N more below`, que rola até o fim com um clique;
+- o rodapé com **History**, o tema e **Settings**. **History** mostra quantos itens estão arquivados, com a conta por tipo no tooltip (`44 archived: 22 tasks, 12 reviews, 10 discussions`), e fica pressionado com o History ou um arquivado na tela. O tema é um botão de ícone fixo, `Theme: System`, `Theme: Light` ou `Theme: Dark`, que passa ao seguinte a cada clique. **Settings** fica pressionado com as configurações na tela, e o clique nele as fecha de volta ao lugar anterior.
 
-A árvore tem um nó por board, em ordem alfabética de título, e depois o grupo **No board**:
+`«` recolhe a barra lateral numa **faixa** de 60 px, e `»` a expande; o estado é lembrado entre execuções. No alto da faixa ficam `»` e o `+` de **New**, com o mesmo menu. Cada item vira um bloco, na ordem da árvore, também os que estão num nó recolhido: o glifo do tipo com o glifo do estado no canto, `+N` quando há outras situações, e embaixo o chip de espera, o relógio do turno do agente ou a palavra do estado (`working`, `checks`, `paused`, `idle`); um item em erro tem o trilho à esquerda, e o aberto fica destacado. Um fio separa os grupos da árvore e leva `◇` quando um board ou Reviews falhou na leitura ou um repositório do grupo está sem clone, e, em Reviews, o número de pull requests pendentes. O nome acessível de cada bloco é o da linha dele, e o tooltip diz o nome do item e o que ele pede. A faixa é navegável pelo teclado como a árvore, com uma parada de Tab só: as setas para cima e para baixo, `Home` e `End` percorrem os blocos, e `Enter` abre o item. O rodapé fica em coluna, com os três como botões de ícone, e a conta de **History** vai para o nome acessível e o tooltip.
 
-- o **nó do board** mostra o título e abre a visão do board. Quando a última leitura falhou, ele mostra um ícone de falha, com o motivo no tooltip. Um board sem tasks aparece como nó vazio;
-- dentro do board vem primeiro um **nó por épico** que tem ao menos uma task ativa, com o título do épico, na ordem de criação da primeira task dele, com as tasks dos seus cards dentro. O nó do épico só expande e recolhe. Depois dos épicos vêm as tasks do board sem épico: as de cards sem épico e as tasks sem card dos repositórios do board. Por último vêm as **discussões** ativas do board, cada uma com o rótulo `Discussion`, e elas não aparecem sob os nós de épico;
-- o grupo **No board** tem as tasks dos repositórios sem board, inclusive as de cards de um board removido, e as discussões de um board removido, e aparece só quando tem alguma.
+A árvore começa pelo nó **Reviews** e segue com um nó por board, em ordem alfabética de título, e depois o grupo **No board**:
 
-Dentro de cada nó as tasks seguem a ordem de criação. Cada task mostra o nome, o nome curto do repositório abaixo, precedido de `#<número>` numa task criada de um card, a etapa em que está, o step em andamento e o que falta, o progresso do review, ou **Agent review** e **Addressing review** quando um agente revisa o step, e o que espera pelo usuário. Os agrupamentos usam o que as tasks guardam dos seus cards, então a árvore não depende de nenhuma leitura do GitHub.
+- o **nó Reviews** mostra o título, com a seta `↗` sob o ponteiro, e abre a visão do [centro de review](#centro-de-review); fica destacado com a visão aberta. À direita ele diz `N pending` com pull requests pendentes, `reading…` enquanto as pull requests são lidas e `◇ Read failed` quando a leitura falhou, com os repositórios no tooltip. Dentro dele vêm os reviews ativos, em ordem de criação, ou `No review in progress.`;
+- o **nó do board** mostra o título, com a seta `↗` sob o ponteiro, e abre a visão do board; o nó do board aberto fica destacado como o lugar na tela. À direita ele diz `reading…` enquanto o board é lido e `◇ Read failed` quando a última leitura falhou, com o motivo no tooltip. Um board sem itens ativos mostra `No active items.`. O primeiro item dentro do board é o **aviso de clone inexistente** de cada repositório dele que o filtro mostra, `<nome> · clone missing` com `Change path ↵`, o caminho no tooltip; o clique ou `Enter` trocam o caminho, e uma recusa aparece sob o aviso. O aviso de um repositório sem board fica no grupo **No board**;
+- dentro do board vem primeiro um **nó por épico** que tem ao menos uma task ativa, com o título do épico, na ordem de criação da primeira task dele, com as tasks dos seus cards dentro. O nó do épico só expande e recolhe. Depois dos épicos vêm as tasks do board sem épico: as de cards sem épico e as tasks sem card dos repositórios do board. Por último vêm as **discussões** ativas do board, que não aparecem sob os nós de épico;
+- o grupo **No board** tem os avisos de clone inexistente e as tasks dos repositórios sem board, inclusive as de cards de um board removido, e as discussões de um board removido, e aparece só quando tem alguma.
 
-Cada nó expande e recolhe pela seta ao lado do título, e o que o usuário recolhe é lembrado entre execuções. O board e o épico da task aberta se expandem ao abri-la. A árvore é navegável pelo teclado entre as tasks visíveis, pulando os nós recolhidos, com a task sob o foco sendo a que abre. Com o filtro num repositório, a árvore mostra só o nó do board desse repositório, ou o grupo **No board**, com as tasks do repositório. Uma discussão pertence a um board, não a um repositório, então o filtro nunca a esconde do nó que ele mostra. Um filtro num repositório sem board e sem tasks diz `No tasks in <nome curto>.`
+Dentro de cada nó as tasks seguem a ordem de criação. Os agrupamentos usam o que as tasks guardam dos seus cards, então a árvore não depende de nenhuma leitura do GitHub.
+
+Cada item é uma **linha** de até três linhas:
+
+- a primeira tem o glifo do tipo (task, task One-Shot, review, discussão) e o nome, em negrito quando o item espera pelo usuário. À direita, sob o ponteiro, com o foco ou na linha aberta, vem o meta, `<repositório>#<card>` numa task (com ` · One-Shot`), `<repositório>#<número>` num review e `#<card> #<card>` numa discussão, só quando cabe ao lado do nome inteiro; o que não cabe vai para o tooltip do nome;
+- a segunda diz o estado mais grave do item, com o glifo do estado: a situação que espera pelo usuário, com o lugar dela (`Question · Implementer · Step 3/7`) e o tempo de espera num chip, ou, sem situação, o que acontece (a etapa ou o step com o agente trabalhando e o relógio do turno, o app preparando ou commitando, `GitHub` esperando os checks, `Paused · <posição>`, `idle`). Outras situações do item somam `+N`, com a lista no tooltip. Uma discussão publicada diz `Ready to archive`. O texto tem uma forma longa e uma curta, e a curta entra quando a longa não cabe ou com a barra lateral abaixo de 330 px;
+- a terceira aparece só com um agente trabalhando: o que ele faz agora, verbo primeiro, em mono (`Running go test …/ratelimit`, `Thinking…`), e o medidor do contexto que a conversa usou.
+
+Um item em erro tem um trilho à esquerda; o item aberto fica destacado na cor da marca e rola para a vista. O nome acessível de uma linha diz o tipo, o nome, cada situação com o tempo, a posição, o que o agente faz e o meta, numa frase só.
+
+Cada nó expande e recolhe pela seta ao lado do título, e o que o usuário recolhe é lembrado entre execuções. Recolhido, o nó resume as suas linhas por estado, do mais grave (`1 error`, `2 waiting`, `to close`, `working`, `checks`, `paused`), e o nome acessível dele diz o resumo inteiro. Os nós do item aberto se expandem ao abri-lo, e uma task escondida pelo filtro volta o filtro para **All repositories**.
+
+A árvore é navegável pelo teclado, com uma parada de Tab só: na linha aberta ou, sem item aberto, no nó **Reviews**. As setas para cima e para baixo percorrem as linhas visíveis, e `Home` e `End` vão às pontas, sem abrir nada. A seta para a direita expande um nó recolhido e, num nó aberto, vai ao primeiro item dele; a seta para a esquerda recolhe um nó aberto e, num item ou num nó recolhido, vai ao nó de cima. `Enter` abre o item, o board ou a visão Reviews, alterna um épico ou **No board**, e troca o caminho num aviso de clone. Com o filtro num repositório, a árvore mostra só o nó do board desse repositório, ou o grupo **No board**, com as tasks do repositório. Uma discussão pertence a um board, não a um repositório, então o filtro nunca a esconde do nó que ele mostra. Um filtro num repositório sem board e sem tasks diz `No tasks in <nome curto>.` sob a árvore. Os reviews não passam pelo filtro.
 
 ### Dados de uma versão com áreas de trabalho
 
@@ -292,7 +303,7 @@ A migração é tudo ou nada, e três coisas a impedem: uma task ativa na raiz d
 
 ## Criação de uma task
 
-O botão de nova task e `Ctrl+N` abrem o diálogo de criação de qualquer lugar do produto. Na criação o usuário informa:
+**New task**, no menu **New** da barra lateral, e `Ctrl+N` abrem o diálogo de criação de qualquer lugar do produto. Na criação o usuário informa:
 
 - o **repositório**, obrigatório, entre os cadastrados. O seletor vem pré-selecionado com, nesta ordem, o primeiro que existir: o repositório do filtro, quando o filtro não é **All repositories**; o repositório da task aberta; o último repositório usado numa criação; o primeiro da lista. Um repositório com clone inexistente aparece desabilitado, com o aviso, e um repositório sem clone aparece desabilitado, com `Not cloned`, ou `Cloning…` enquanto clona, e a ação **Clone** ao lado;
 - o **nome**, em minúsculas, dígitos e hífens simples, com até 64 caracteres, único no repositório escolhido, tasks arquivadas incluídas, porque ele nomeia a branch e a worktree. Um nome já usado é recusado com `A task named <nome> already exists in <dono/nome>.`; o mesmo nome em outro repositório é permitido;
@@ -301,7 +312,7 @@ O botão de nova task e `Ctrl+N` abrem o diálogo de criação de qualquer lugar
 - o **modo de review**, `Manual` ou `Agent`, partindo do padrão configurado, com uma linha que diz o que o modo escolhido faz: `You review each step in VS Code before its commit.` ou `An agent reviews each step, and the task runs to the pull request on its own.` Ele vale para todos os steps que o plano escrever, ou para o step único de uma task One-Shot;
 - o **modelo e o esforço de cada etapa** do modo escolhido, partindo dos padrões configurados. O usuário pode ajustar qualquer etapa para essa task. A lista acompanha o modo, e o ajuste de uma etapa que os dois modos têm, como a implementação, se mantém ao trocar de modo; o resumo ao lado de **Models** considera só as etapas do modo escolhido.
 
-Ao confirmar, a primeira sessão de planejamento do modo abre no clone do repositório e começa com o contexto inicial, e a primeira coisa que o usuário vê é a primeira pergunta do agente. Se a sessão não conseguir começar, a task é desfeita. O cabeçalho de uma task One-Shot mostra o rótulo `One-Shot` ao lado do nome.
+Ao confirmar, a primeira sessão de planejamento do modo abre no clone do repositório e começa com o contexto inicial, e a primeira coisa que o usuário vê é a primeira pergunta do agente. Se a sessão não conseguir começar, a task é desfeita. Uma task One-Shot se distingue pelo glifo e pelo meta ` · One-Shot` da linha na barra lateral.
 
 ### A partir de um card
 
@@ -318,7 +329,7 @@ O contexto usa a leitura guardada do board. Quando a leitura do card tem mais de
 
 Criar a task de um card que ganhou uma task ativa enquanto o diálogo estava aberto é recusado com `Card #<número> already has an active task: <nome>.`
 
-A task guarda o card: o board, o repositório, o número, o título, o corpo, o link, o status e o estado da issue, e o épico. Cada leitura do board atualiza esses dados nas tasks ativas; uma task arquivada guarda o card como estava ao arquivar. O cabeçalho da task e o da task arquivada no histórico mostram o card: `#<número>`, que abre a issue e tem o título no tooltip, o status da última leitura e `Issue closed` quando a issue foi fechada.
+A task guarda o card: o board, o repositório, o número, o título, o corpo, o link, o status e o estado da issue, e o épico. Cada leitura do board atualiza esses dados nas tasks ativas; uma task arquivada guarda o card como estava ao arquivar. O cabeçalho da task tem o link do card, um botão de ícone `Open card #<número> on GitHub · <status>`, com o status da última leitura, que abre a issue. O da task arquivada no histórico tem o mesmo link, com o status de quando a task foi arquivada.
 
 ## Etapas de planejamento
 
@@ -330,7 +341,7 @@ O modo define as etapas de planejamento. Uma task Structured passa por PRD, tech
 
 O plano é validado antes de a task avançar. Quando os arquivos não formam um plano válido, o produto diz ao agente o que está errado e pede a correção, até três vezes. Depois disso para de corrigir e mostra os problemas acima do compositor, para o usuário resolver na conversa ou descartar o plano.
 
-O PRD, o tech spec e cada step ficam visíveis no painel de artefatos da task, renderizados como Markdown com diagramas mermaid.
+O PRD, o tech spec e cada step ficam visíveis no painel de artefatos da task, renderizados como Markdown com diagramas mermaid. O painel fica fechado até o usuário abri-lo pelo botão **Artifacts** do cabeçalho.
 
 ### Planejamento One-Shot
 
@@ -383,7 +394,7 @@ O modo é escolhido em quatro lugares:
 
 - **Settings**: a página **Defaults** guarda o padrão, `Manual` de fábrica. Uma mudança vale para as tasks criadas depois dela.
 - **Criação da task**: o diálogo parte do padrão, e a escolha vira o modo da task.
-- **Cabeçalho da task**: o botão ao lado de **Models**, com o ícone do modo da task, um robô ou uma pessoa, abre um painel que troca o modo da task. A troca vale para os steps não iniciados sem escolha própria e, antes do plano, para os steps que o plano escrever; numa task One-Shot, para o step único enquanto ele não começou. Quando nenhum step resta para começar, o seletor fica desabilitado.
+- **Cabeçalho da task**: o botão `Review: <modo>` antes de **Models**, com o ícone do modo da task, um robô ou uma pessoa, abre um painel que troca o modo da task. A troca vale para os steps não iniciados sem escolha própria e, antes do plano, para os steps que o plano escrever; numa task One-Shot, para o step único enquanto ele não começou. Quando nenhum step resta para começar, o seletor fica desabilitado.
 - **Lista de steps**: cada step não iniciado tem um seletor de modo ao lado do modelo, e escolher um modo dá ao step um modo próprio. Um step com modo próprio aparece em destaque; um que segue a task aparece discreto. Uma task One-Shot não tem lista de steps, e o step único segue o modo da task.
 
 O modo de um step congela quando a sessão do step começa. Dali em diante ele só muda de `Agent` para `Manual`, pelas saídas do review pelo agente, e nunca volta. Na lista de steps, um step iniciado ou concluído mostra, sem edição, o modo com que é revisado; um step que passou ao usuário mostra `Manual`, com um tooltip que diz por quê.
@@ -472,19 +483,38 @@ Ao encerrar, o produto:
 2. apaga a branch da task. Quando o GitHub confirmou o merge, apaga sem perguntar ao git, porque um squash merge nunca aparece como ancestral; quando o merge não pôde ser confirmado, só apaga se o git considerar a branch mergeada;
 3. atualiza a branch base local, se ela estiver em checkout no clone, limpa, com upstream e atrás da remota sem divergir.
 
-Cada parte reporta o que fez, o que pulou e por quê, e o que falhou. Terminado o encerramento, a task é arquivada: sai da lista de tasks e passa a existir só no histórico, com um aviso momentâneo de que saiu, e o resultado do encerramento fica guardado com ela.
+Cada parte reporta o que fez, o que pulou e por quê, e o que falhou. Terminado o encerramento, a task é arquivada: sai da lista de tasks e passa a existir só no histórico, e o resultado do encerramento fica guardado com ela.
+
+### A página do item que saiu
+
+Quando o item aberto sai do app, arquivado, apagado, com a pull request mergeada ou fechada, ou o board removido, o lugar dele dá vez à página do item que saiu: o cabeçalho com `←` e o nome do item, um ícone, o título e as ações.
+
+| Caso | Título | Ações |
+|---|---|---|
+| Task encerrada | `<nome> was closed and archived` | **Next that needs you**, **Open in History**, **Back to <board>** |
+| Task apagada | `<nome> was deleted` | **Next that needs you**, **Back to <board>** |
+| Review mergeado | `<repo>#<N> was merged, and its review ended` | **Next that needs you**, **Open in History**, **Back to Reviews** |
+| Review fechado | `<repo>#<N> was closed without a merge` | as mesmas |
+| Review apagado | `<repo>#<N> was deleted` | **Next that needs you**, **Back to Reviews** |
+| Discussão arquivada | `<título> was archived` | **Next that needs you**, **Open in History**, **Open <board>** |
+| Discussão apagada | `<título> was deleted` | **Next that needs you**, **Open <board>** |
+| Board removido | `This board was removed.` | **Back to <lugar anterior>** |
+
+Sem board, ou com ele removido, a volta da task e da discussão é **Back to Home**; o board removido sem lugar anterior também. **Next that needs you** abre o próximo item que espera pelo usuário, o mesmo do `Ctrl+J`, com `Next: <nome>` no tooltip; sem nenhum, fica desabilitado com `Nothing else needs you now.` A primeira ação habilitada é a principal e recebe o foco. **Open in History** abre o item arquivado. A página não entra no histórico de lugares: sair dela a descarta, e voltar não a reencontra. Quando o item sai sem o usuário ter pedido, a região ao vivo anuncia o título da página; quando foi ele quem apagou, arquivou ou encerrou, não.
+
+Uma task arquivada que não estava aberta aparece num toast no canto inferior esquerdo da área principal: `“<nome>” was archived`, com **Open in History** e o `×`. Ele sai sozinho depois de 10 segundos, contados só enquanto não tem o ponteiro nem o foco, e cabem três de uma vez; o quarto tira o mais antigo.
 
 ## Centro de review
 
 O centro de review mostra num lugar só as pull requests abertas de todos os repositórios cadastrados, de qualquer autor, tenham nascido de uma task do produto ou não, e conduz o review de qualquer uma delas dentro do produto. O agente revisa a pull request com o card, a descrição e as instruções do usuário e escreve um relatório numerado; o usuário decide apontamento a apontamento; o produto publica o review no GitHub, com cada apontamento aprovado como comentário na linha do diff. Numa pull request do próprio usuário, o review pode, em vez de publicar, aplicar as correções.
 
-O review de uma pull request é um item do produto como uma task, sem etapas: tem conversa, relatórios, situações que esperam pelo usuário, lugar na barra lateral, em **Waiting for you** e no histórico.
+O review de uma pull request é um item do produto como uma task, sem etapas: tem conversa, relatórios, situações que esperam pelo usuário, lugar na barra lateral e no histórico.
 
 ### Visão Reviews
 
-O nó **Reviews** da barra lateral abre a visão, que ocupa a área principal. Ela lista as pull requests abertas de todos os repositórios cadastrados, com ou sem board, com ou sem clone, as pendentes primeiro e, em cada grupo, as atualizadas mais recentemente primeiro.
+O nó **Reviews** da barra lateral e **Review a pull request**, no menu **New**, abrem a visão, que ocupa a área principal. Ela lista as pull requests abertas de todos os repositórios cadastrados, com ou sem board, com ou sem clone, as pendentes primeiro e, em cada grupo, as atualizadas mais recentemente primeiro.
 
-- **Cabeçalho:** o título, `Updated <há quanto tempo>`, o indicador `Reading pull requests` durante uma leitura e o botão **Refresh**.
+- **Cabeçalho:** o [cabeçalho do lugar](#cabeçalho-do-lugar), com o título `Reviews`, e à direita `Updated <há quanto tempo>`, o indicador `Reading pull requests` durante uma leitura e o botão **Refresh**.
 - **Falhas:** um aviso por repositório que o produto não conseguiu ler, com a razão e o que fazer (ver [Leitura das pull requests](#leitura-das-pull-requests)). As pull requests dos outros repositórios continuam aparecendo.
 - **Barra de filtros:** ver [Filtros](#filtros).
 - **Linha da pull request:** o título e o número, o repositório, o autor, as labels, `Draft` num draft, `Task` numa pull request de uma task do produto, o estado do review no produto quando existe um, `Reviewed` quando o usuário já a revisou e `New commits` quando há commits depois do último review dele, e o card vinculado, `#<número> · <status no board>`, que abre o card no GitHub. Uma pendente é destacada, com um ponto rotulado `Pending`. O ícone **Open on GitHub** abre a pull request.
@@ -495,7 +525,7 @@ O nó **Reviews** da barra lateral abre a visão, que ocupa a área principal. E
 
 Toda pull request aberta espera o review do usuário, pedido no GitHub ou não; o pedido de review do GitHub não é usado. Uma pull request está **pendente** quando o usuário ainda não a revisou ou quando há commits novos desde o último review dele. "Revisada" vem do GitHub: conta qualquer review enviado pela conta do `gh`, publicado pelo produto ou direto no site, e "commits novos" são os que vieram depois do último deles. As pull requests do próprio usuário e as das tasks do produto aparecem na lista, mas nunca são pendentes; o que a pull request de uma task espera do usuário aparece na task.
 
-O nó **Reviews** mostra a contagem das pendentes que passam pelos filtros. Uma pull request pendente sem review iniciado não notifica e não aparece em **Waiting for you**.
+O nó **Reviews** mostra a contagem das pendentes que passam pelos filtros. Uma pull request pendente sem review iniciado não notifica e não espera pelo usuário.
 
 ### Filtros
 
@@ -544,7 +574,7 @@ O painel de apontamentos, acima da conversa, mostra a passada mais recente, com 
 
 A conversa fica aberta durante a decisão. Um apontamento que o usuário quer incluir, mudar ou retirar é pedido ao agente na conversa; o agente reescreve o relatório da passada e o produto mostra a versão nova, mantendo o texto e a decisão de cada apontamento que não mudou e o resumo editado, quando o original não mudou.
 
-O painel **Reports**, à direita, recolhível, lista `Context` e os relatórios de todas as passadas, como `Review 1 · changes · published` e `Review 2 · clean`, renderizados como Markdown. Um relatório publicado mostra acima dele o veredito, a data e o link do review no GitHub.
+O painel **Reports**, à direita, aberto pelo botão do cabeçalho, lista `Context` e os relatórios de todas as passadas, como `Review 1 · changes · published` e `Review 2 · clean`, renderizados como Markdown. Um relatório publicado mostra acima dele o veredito, a data e o link do review no GitHub.
 
 ### Publicar
 
@@ -562,7 +592,7 @@ Uma publicação que falha não perde nada: decisões e edições ficam, o revie
 
 ### Commits novos e novas passadas
 
-Um commit novo na pull request depois do último review publicado é uma situação que espera pelo usuário: aparece no review, na lista, em **Waiting for you**, e notifica. Commits que chegam antes de a passada em curso ser publicada não notificam: o review avisa `New commits since this pass`, e o diálogo de publicação também. Quando o git não disse em que commit a passada foi feita, o aviso não aparece, porque nada diz que a pull request andou.
+Um commit novo na pull request depois do último review publicado é uma situação que espera pelo usuário: aparece no review, na lista, na linha dele na barra lateral, e notifica. Commits que chegam antes de a passada em curso ser publicada não notificam: o review avisa `New commits since this pass`, e o diálogo de publicação também. Quando o git não disse em que commit a passada foi feita, o aviso não aparece, porque nada diz que a pull request andou.
 
 Um review `Published`, ou `Ready to merge` no modo aplicar, que ganha um check com falha ou um conflito com a base que a leitura que liberou a última passada não tinha, sai desse estado e espera pelo usuário, com a razão na barra do review, com os checks pelo nome, na linha sob **Reviews** e na lista de pull requests. Um check pendente e um conflito ainda não calculado não mudam nada. A situação notifica uma vez, ao começar, e um problema a mais só atualiza a razão. No modo publicar, `New commits` prevalece. Quando os problemas somem, o review volta ao estado de antes, sem notificar. **Review again** sai da situação: a nova passada lê o GitHub, transforma o que encontra em apontamentos e passa a ser a nova referência. A situação sobrevive ao fechamento do app e é confirmada na primeira leitura depois de reabrir.
 
@@ -586,23 +616,23 @@ Um relatório limpo, ou uma passada em que nada foi aprovado, deixa o review pro
 
 ### O review como item
 
-- **Barra lateral:** cada review ativo aparece sob o nó **Reviews**, em ordem de criação, com `<nome curto>#<número>`, o título, o ponto de estado e, à direita, o que espera pelo usuário ou o estado do review. Os reviews não passam pelo filtro de repositório da barra lateral.
-- **Tela do review:** o cabeçalho com o número, o título, o repositório, o autor, o card vinculado com o status no board, o modo, o medidor de contexto, **Pause** ou **Resume**, o botão do painel de relatórios e **Delete review**; a barra do review com o link da pull request, o estado, os avisos e as ações **Publish review**, ou **Apply** e **Approve** no modo aplicar, **Review again** e **Open in VS Code**, que abre a worktree; o painel de apontamentos e a conversa; o painel de relatórios.
+- **Barra lateral:** cada review ativo é uma linha sob o nó **Reviews** da árvore, em ordem de criação, com o título, `<nome curto>#<número>` no meta e o estado mais grave na segunda linha, como as linhas das tasks. Os reviews não passam pelo filtro de repositório da barra lateral.
+- **Tela do review:** o [cabeçalho do lugar](#cabeçalho-do-lugar), com `Reviews` no breadcrumb e o título da pull request, e à direita o modo, o estado, o medidor de contexto, **Pause** ou **Resume**, o link do card vinculado (`Open card #<número> on GitHub · <status no board>`), o botão do painel de relatórios e **Delete review**; a barra do review com o link da pull request, o estado, os avisos e as ações **Publish review**, ou **Apply** e **Approve** no modo aplicar, **Review again** e **Open in VS Code**, que abre a worktree; o painel de apontamentos e a conversa; o painel de relatórios.
 - **Estados:** `Reviewing`, `Waiting for checks`, `Pass blocked`, `Waiting for the report`, `Decide findings`, `Ready to publish`, `Publish failed`, `Published`, `New commits` e o que deu errado com a pull request depois da passada (`Checks failed: <checks>`, `Conflict with <base>` ou os dois); no modo aplicar, `Ready to apply`, `Applying`, `In review`, `Ready to approve`, `Committing`, `Ready to merge` e o mesmo estado de checks e conflito. O estado da conversa, pausada, com erro, pedindo permissão ou perguntando, prevalece sobre eles, como na task, e o agente trabalhando numa conversa durante a espera pelos checks mostra `Reviewing`. Em `Pass blocked`, a barra do review mostra a razão, e num check que falhou depois da passada, os checks pelo nome.
-- **Fim:** o review termina quando a pull request é mergeada ou fechada. A leitura de cada minuto percebe, e o produto encerra a sessão, remove a worktree e leva o review ao histórico, sem ação do usuário e sem notificar. Uma leitura que falha deixa o aviso `Couldn't check GitHub` na barra do review.
+- **Fim:** o review termina quando a pull request é mergeada ou fechada. A leitura de cada minuto percebe, e o produto encerra a sessão, remove a worktree e leva o review ao histórico, sem ação do usuário e sem notificar. Com o review aberto, o lugar dele dá vez à [página do item que saiu](#a-página-do-item-que-saiu). Uma leitura que falha deixa o aviso `Couldn't check GitHub` na barra do review.
 - **Apagar:** **Delete review** apaga o review a qualquer momento, ativo ou arquivado, depois da confirmação `The worktree, the conversation and the reports go away. What was published on GitHub stays.` A pull request volta a ser uma pull request comum na lista e pode ter um review novo. Uma worktree que o git não conseguiu remover é listada num aviso, como ao apagar uma task.
 
 ## Histórico
 
-O botão **History** no rodapé da barra lateral abre a lista das tasks arquivadas, da mais recente à mais antiga, com busca por nome e o mesmo filtro por repositório da barra lateral. A contagem do botão soma tasks, reviews e discussões. Cada linha mostra o nome curto do repositório da task. A lista inclui os reviews de pull request e as discussões arquivadas, misturados às tasks pela data de arquivamento; ver [Histórico de um review](#histórico-de-um-review) e [Histórico de uma discussão](#histórico-de-uma-discussão). Uma task arquivada mostra os seus artefatos finais renderizados, com PRD, tech spec, steps com os relatórios de review de cada step, a pull request e o resultado do encerramento. Uma task One-Shot aparece na lista com o rótulo `One-Shot` no lugar da contagem de steps, e mostra o documento One-Shot com os relatórios de review do step no lugar de PRD, tech spec e steps. As conversas de uma task e de um review de pull request não são guardadas no histórico; a de uma discussão é, porque é parte do entendimento.
+O botão **History** no rodapé da barra lateral abre a lista das tasks arquivadas, da mais recente à mais antiga, com busca por nome e o mesmo filtro por repositório da barra lateral. A contagem do botão soma tasks, reviews e discussões. Cada linha mostra o nome curto do repositório da task. A lista inclui os reviews de pull request e as discussões arquivadas, misturados às tasks pela data de arquivamento; ver [Histórico de um review](#histórico-de-um-review) e [Histórico de uma discussão](#histórico-de-uma-discussão). Uma task arquivada mostra os seus artefatos finais renderizados, com PRD, tech spec, steps com os relatórios de review de cada step, a pull request e o resultado do encerramento. Uma task One-Shot aparece na lista com o rótulo `One-Shot` no lugar da contagem de steps, e mostra o documento One-Shot com os relatórios de review do step no lugar de PRD, tech spec e steps. O cabeçalho de uma task arquivada tem a etiqueta `Archived`, o link do card de origem e o apagar, e `History`, no breadcrumb, volta à lista. As conversas de uma task e de um review de pull request não são guardadas no histórico; a de uma discussão é, porque é parte do entendimento.
 
 ### Histórico de um review
 
-Um review arquivado aparece na lista com o rótulo `Review`, `#<número>` e o título da pull request, o repositório, o autor, o desfecho, `Merged` ou `Closed`, e as datas. A busca casa com o título e com o número, com ou sem `#`, e o filtro por repositório vale para ele. Aberto, ele mostra a pull request com o link, o desfecho e, para cada passada, o relatório renderizado e, quando publicada, o veredito e cada apontamento publicado com onde foi. **← History** volta à lista, e o review arquivado pode ser apagado dali.
+Um review arquivado aparece na lista com o rótulo `Review`, `#<número>` e o título da pull request, o repositório, o autor, o desfecho, `Merged` ou `Closed`, e as datas. A busca casa com o título e com o número, com ou sem `#`, e o filtro por repositório vale para ele. Aberto, ele tem no cabeçalho o desfecho, o link do card vinculado, o link da pull request e o apagar, e mostra o autor, as datas e, para cada passada, o relatório renderizado e, quando publicada, o veredito e cada apontamento publicado com onde foi. `History`, no breadcrumb, volta à lista.
 
 ### Histórico de uma discussão
 
-Uma discussão arquivada aparece na lista com o rótulo `Discussion`, o título, o board, a contagem de cards publicados e as datas. A busca casa com o título, e o filtro por repositório mostra as discussões cujos cards de entrada ou publicados pertencem ao repositório. Aberta, ela mostra o documento renderizado, ou `No document was written.`, os rascunhos com o que cada um virou, `Created`, `Updated` ou `Not published`, com a referência e o link, os épicos com os cards dentro, e a conversa inteira, somente leitura. **← History** volta à lista, e a discussão arquivada pode ser apagada dali.
+Uma discussão arquivada aparece na lista com o rótulo `Discussion`, o título, o board, a contagem de cards publicados e as datas. A busca casa com o título, e o filtro por repositório mostra as discussões cujos cards de entrada ou publicados pertencem ao repositório. Aberta, ela mostra o documento renderizado, ou `No document was written.`, os rascunhos com o que cada um virou, `Created`, `Updated` ou `Not published`, com a referência e o link, os épicos com os cards dentro, e a conversa inteira, somente leitura. O cabeçalho tem a etiqueta `Archived` e o apagar; `History`, no breadcrumb, volta à lista.
 
 ## Apagar uma task
 
@@ -636,11 +666,11 @@ Uma discussão espera pelo usuário quando o agente pergunta ou pede permissão,
 
 Cada situação diz onde está e o que pede. As situações aparecem:
 
-- na seção **Waiting for you**, fixa no topo da barra lateral, com todas as tasks, todos os reviews e todas as discussões que esperam, exceto o que está aberto. `Ctrl+J` abre o primeiro;
-- na lista de tasks, na linha de cada task, sob o nó **Reviews**, na linha de cada review, e sob o nó do board, na linha de cada discussão;
+- na árvore da barra lateral, na linha de cada task e de cada discussão, e sob o nó **Reviews**, na linha de cada review, ou no bloco de cada item na faixa recolhida. A linha do item que `Ctrl+J` abre leva a tecla `Ctrl J` no lugar do meta, e o nome acessível dela, como o do bloco na faixa, termina em `Ctrl+J opens this next.`;
+- por `Ctrl+J`, que abre o item cuja situação mais grave é a mais grave de todas e, entre iguais, o que espera há mais tempo, deixando de fora o item aberto. O filtro por repositório não muda o destino. Sem nenhum destino, `Ctrl+J` fica onde está e o leitor de tela ouve `Nothing else needs you now.`;
 - na própria task, na trilha de etapas, na barra do step, nas abas **Implementer** e **Reviewer** e na barra da pull request, no próprio review, na barra dele, e na própria discussão, na barra dela.
 
-Uma situação que começa enquanto o usuário olha para o produto pisca brevemente onde surgiu, em silêncio. Uma situação que começa com a janela fora de foco gera uma notificação do sistema, que identifica a task, a pull request do review ou a discussão, e o que ela pede; clicar nela traz a janela e abre o lugar certo. Cada situação notifica uma vez, ao começar. Continuações da mesma espera, como o stage chegar a 100%, a pull request passar de pronta a mergeada, a razão de checks e conflito mudar ou a pull request voltar a ficar pronta depois de um check ou de um conflito, não notificam.
+Uma situação que começa enquanto o usuário olha para o produto pisca brevemente onde surgiu, em silêncio: na árvore, a linha do item pisca duas vezes no véu da gravidade (o de erro, ou o de espera, que cobre também o encerramento), ou o resumo do nó que a esconde, quando ele está recolhido, e na faixa recolhida, o bloco do item; a linha aberta não pisca. Sem movimento no sistema, nada pisca. Ao mesmo tempo, o leitor de tela ouve a situação nova, com o nome do item, o que ela pede e onde está (`add-login: waiting for reply in PRD`); a piscada e o anúncio não tiram o foco de onde ele está. Uma situação que começa com a janela fora de foco gera uma notificação do sistema, que identifica a task, a pull request do review ou a discussão, e o que ela pede; clicar nela traz a janela e abre o lugar certo. Cada situação notifica uma vez, ao começar. Continuações da mesma espera, como o stage chegar a 100%, a pull request passar de pronta a mergeada, a razão de checks e conflito mudar ou a pull request voltar a ficar pronta depois de um check ou de um conflito, não notificam.
 
 A notificação toca, ao aparecer, o som do MySpec: um carrilhão curto e suave, o mesmo em todo sistema, no volume e na saída de áudio do sistema. Situações que começam juntas são ouvidas uma vez só: uma notificação a menos de dois segundos da última que tocou chega em silêncio, e cada situação continua com a sua notificação. Com o sistema em não perturbe o som não toca, onde o sistema torna esse estado conhecido. Clicar, dispensar ou retirar uma notificação não faz som. Uma notificação que não aparece não toca, e um som que não pode tocar deixa a notificação aparecer muda; nenhum dos dois vira erro na interface.
 
@@ -673,19 +703,43 @@ Sair do editor com uma edição não salva pede confirmação.
 
 ## Configurações e aparência
 
-As configurações abrem pelo ícone no rodapé da barra lateral ou por `Ctrl+,`, e pertencem ao app. Elas contêm a página **Defaults**, com o modo de review e os modelos e esforços com que uma task nova começa, a página **Boards**, a página **Repositories**, e os prompts.
+As configurações abrem por **Settings**, no rodapé da barra lateral, ou por `Ctrl+,`, e pertencem ao app. Elas contêm a página **Defaults**, com o modo de review e os modelos e esforços com que uma task nova começa, a página **Boards**, a página **Repositories**, e os prompts. O cabeçalho do lugar das configurações tem **Close** (`Esc`), que volta ao lugar de onde elas foram abertas.
 
-O tema segue o sistema por padrão e pode ser fixado em claro ou escuro pelo botão da barra lateral. Uma troca do tema do sistema com o app aberto é aplicada na hora.
+O tema segue o sistema por padrão e pode ser fixado em claro ou escuro pelo botão de tema do rodapé da barra lateral, o único lugar dele: cada clique passa ao seguinte, System, Light, Dark e System de novo, e o novo tema é aplicado na hora. Uma troca do tema do sistema com o app aberto também é aplicada na hora.
+
+## Cabeçalho do lugar
+
+Todo lugar da área principal abre com o cabeçalho do lugar, uma faixa só, sem quebra de linha: a task, o review, a discussão, o board, Reviews, o History, os três arquivados, as configurações e o início.
+
+- `←` volta ao lugar anterior, com o destino no tooltip (`Back to Platform Roadmap · Alt+←`); sem anterior, fica desabilitado com `Nothing to go back to`. `→` só aparece quando há para onde avançar (`Forward to <lugar> · Alt+→`);
+- o **breadcrumb** diz onde o item mora: o board e o épico de uma task, ou `No board`; o board de uma discussão, ou `No board`; `Reviews` de um review; `History` de um item arquivado. O board, `Reviews` e `History` abrem o lugar deles; o épico e `No board` são texto. Com a área principal abaixo de 1660 px, os níveis se recolhem num `…`, cujo menu os lista;
+- o **título**, o nome da task, o título da pull request, o da discussão ou o do board, ou o nome do lugar (`Reviews`, `History`, `Settings`, `Home`), corta quando falta espaço, com o nome inteiro no tooltip. O tipo e a referência do item (`#N`, o repositório, o autor, `One-Shot`) ficam na linha da barra lateral;
+- à direita, o que o lugar tem: o estado, o medidor de contexto, **Pause** ou **Resume**, os controles do item, o link do card, o botão do painel e o apagar.
+
+A direita cede pela largura da área principal, em limites fixos: abaixo de 1360 px **Pause** fica só com o ícone, abaixo de 1300 px o medidor fica só com a porcentagem, e abaixo de 1040 px `Review: <modo>` e **Models** ficam só com o ícone; o nome de cada um continua no tooltip e no nome acessível. O estado mantém o texto. Com tudo cedido, a 1100 px de janela, o que falta de espaço sai do título.
+
+Os painéis de um item, **Artifacts** na task, **Reports** no review e **Documents** na discussão, abrem pelo botão do cabeçalho, um de cada vez, e começam fechados. Com a área principal a partir de 1120 px o painel fica ao lado da conversa; abaixo, cobre-a. `×` ou `Esc` fecha e devolve o foco ao botão; ir a outro lugar fecha o painel, e voltar não o reabre.
+
+Quando uma ação falha, o **aviso do app** aparece no alto da área principal, sobre o cabeçalho do lugar, com o trilho de erro: o rótulo diz a ação que falhou e o item dela (`Couldn't pause Rate limit per API key`, `Couldn't refresh the board Platform Roadmap`), e o detalhe diz a mensagem do erro e, quando a ação tem uma saída conhecida, o que fazer: `Try again.`, `Check that gh is signed in.` numa ação que fala com o GitHub, ou `Change the path of the clone in Settings.` ao refazer, limpar e começar ou descartar um step, ou ao encerrar a task, quando o clone dela sumiu. O aviso fica até **Dismiss**, e a falha seguinte toma o lugar dele. Logo abaixo dele fica o aviso do que uma remoção deixou no disco. Na tela de boas-vindas, os dois ficam no topo da coluna dela.
+
+O foco segue a ida: `Alt+←`, `Alt+→`, um nível do breadcrumb, `Ctrl+J` e o clique numa notificação levam o foco ao título do lugar; o clique em `←` ou `→` deixa o foco no botão, e em `←` quando não resta nada à frente; o clique numa linha da árvore deixa o foco na linha.
 
 ## Atalhos
 
 | Atalho | Ação |
 |---|---|
 | `Ctrl+N` | Criar uma task |
-| `Ctrl+J` | Abrir o primeiro item que espera pelo usuário: task, review ou discussão |
-| `Ctrl+,` | Abrir ou fechar as configurações |
+| `Ctrl+J` | Abrir o próximo item que espera pelo usuário, o mais grave e, entre iguais, o que espera há mais tempo: task, review ou discussão |
+| `Ctrl+,` | Abrir as configurações; com elas abertas, fechá-las de volta ao lugar anterior |
+| `Alt+←` | Voltar ao lugar anterior |
+| `Alt+→` | Avançar ao lugar seguinte |
+| `Esc` | Fechar o painel aberto; sem painel, cancelar a edição de um prompt; fora dela, fechar as configurações de volta ao lugar anterior |
 
-`Cmd` vale no lugar de `Ctrl`. Os atalhos funcionam com o foco em qualquer lugar da janela, inclusive na caixa de mensagem. Com o diálogo de criação de uma task, o que inicia um review ou o que cria uma discussão aberto, os três não fazem nada: o que o usuário digita ali não fica para trás nem é coberto por outro diálogo.
+`Cmd` vale no lugar de `Ctrl`. Os atalhos funcionam com o foco em qualquer lugar da janela, inclusive na caixa de mensagem. Com um diálogo modal aberto, nenhum deles faz nada: o que o usuário faz ali não fica para trás nem é coberto por outro diálogo. O clique numa notificação com um diálogo modal aberto só traz a janela para a frente.
+
+O app guarda o histórico dos lugares por onde o usuário passou, até 50 atrás do atual. Voltar e avançar pulam os lugares que não existem mais, e ir a um lugar novo descarta os que estavam à frente. Trocar de página nas configurações não conta como um lugar novo. O histórico sobrevive a reinícios: o app abre na Home, com os lugares da última execução atrás dela. Fechar as configurações volta ao lugar anterior, ou à Home quando não há nenhum.
+
+O `Esc` das configurações vale quando nada mais perto do usuário o usa: um menu, uma lista ou um diálogo aberto o recebe primeiro, e a caixa de mensagem, a busca do board e o rascunho de uma discussão tratam o seu.
 
 Na visão do board:
 

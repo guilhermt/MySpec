@@ -1,21 +1,16 @@
 import { ListTodo, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
-import { BoardView } from "@/features/board/BoardView";
-import { useAppStore, useBoards, useTasks } from "@/store/app-store";
+import { LocationHeader } from "@/features/navigation/LocationHeader";
+import { useAppStore, useTasks } from "@/store/app-store";
 
 /**
- * Home is the main area with nothing else open: the first board while there is
- * no task, otherwise what to do next and the way to do it.
+ * Home is the main area with nothing else open: what to do next and the way to
+ * do it.
  */
 export function Home() {
   const openNewTask = useAppStore((state) => state.openNewTask);
   const tasks = useTasks();
-  const [firstBoard] = useBoards();
-
-  if (tasks.length === 0 && firstBoard !== undefined) {
-    return <BoardView boardId={firstBoard.id} />;
-  }
 
   const title = tasks.length === 0 ? "No tasks yet" : "No task open";
   const description =
@@ -24,20 +19,23 @@ export function Home() {
       : "Pick a task from the list, or create a new one.";
 
   return (
-    <main className="flex h-dvh items-center justify-center bg-background p-8 text-foreground">
-      <div className="flex max-w-[32.25rem] flex-col items-center gap-2 text-center">
-        <ListTodo aria-hidden="true" className="size-8 text-muted-foreground" />
-        <p className="font-medium">{title}</p>
-        <p className="text-muted-foreground">{description}</p>
-        <Button size="sm" className="mt-2" onClick={() => openNewTask()}>
-          <Plus />
-          New task
-          <KbdGroup>
-            <Kbd>Ctrl</Kbd>
-            <Kbd>N</Kbd>
-          </KbdGroup>
-        </Button>
+    <section className="flex min-h-0 flex-1 flex-col bg-background text-foreground">
+      <LocationHeader />
+      <div className="flex min-h-0 flex-1 items-center justify-center p-8">
+        <div className="flex max-w-[32.25rem] flex-col items-center gap-2 text-center">
+          <ListTodo aria-hidden="true" className="size-8 text-muted-foreground" />
+          <p className="font-medium">{title}</p>
+          <p className="text-muted-foreground">{description}</p>
+          <Button size="sm" className="mt-2" onClick={() => openNewTask()}>
+            <Plus />
+            New task
+            <KbdGroup>
+              <Kbd>Ctrl</Kbd>
+              <Kbd>N</Kbd>
+            </KbdGroup>
+          </Button>
+        </div>
       </div>
-    </main>
+    </section>
   );
 }

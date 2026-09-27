@@ -38,7 +38,9 @@ describe("StartReviewDialog", () => {
       effort: "high",
       mode: "publish",
     });
-    await waitFor(() => expect(useAppStore.getState().openReviewId).toBe("review-1"));
+    await waitFor(() =>
+      expect(useAppStore.getState().location).toEqual({ kind: "review", id: "review-1" }),
+    );
     expect(useAppStore.getState().startReview).toBeNull();
   });
 

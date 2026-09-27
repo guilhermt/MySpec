@@ -2,7 +2,7 @@ import { screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { SettingsView } from "@/features/settings/SettingsView";
 import { api, type Prompt } from "@/lib/wails";
-import type { SettingsSection } from "@/store/app-store";
+import { type SettingsSection, useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
 import { makePrompt, makeState } from "@/test/wails-mock";
 
@@ -11,7 +11,7 @@ const TEXT = makePrompt().text;
 function view(section: SettingsSection = "defaults") {
   return renderWithStore(<SettingsView />, {
     state: makeState(),
-    ui: { settingsOpen: true, settingsSection: section },
+    ui: { location: { kind: "settings", section } },
   });
 }
 
@@ -37,6 +37,15 @@ async function edited() {
 }
 
 describe("SettingsView", () => {
+  it("names the place Settings and closes it from the header", async () => {
+    const { user } = view();
+
+    expect(screen.getByRole("heading", { level: 1, name: "Settings" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^Close/ }));
+
+    expect(useAppStore.getState().location).toEqual({ kind: "home" });
+  });
+
   it("lists the defaults, the boards, the repositories and the eight prompts in its navigation, with the one on screen as the current page", () => {
     view();
 

@@ -1,11 +1,11 @@
-import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { Icon } from "./Icon";
+import type { IconGlyph } from "./icons";
 import { StateGlyph } from "./StateGlyph";
 
 export interface SunkenLineProps {
-  icon?: LucideIcon | "blocked";
+  icon?: IconGlyph | "blocked";
   children: ReactNode;
   action?: ReactNode;
   id?: string;

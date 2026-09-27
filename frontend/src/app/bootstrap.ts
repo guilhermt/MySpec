@@ -1,5 +1,6 @@
 import type { StoreApi } from "zustand";
-import { FLASH_MS } from "@/lib/situations";
+import { modalOpen } from "@/lib/layers";
+import { announcement, FLASH_MS } from "@/lib/situations";
 import {
   api,
   onSituationOpen,
@@ -10,6 +11,15 @@ import {
 } from "@/lib/wails";
 import { loadTranscript } from "@/store/actions";
 import type { AppStore } from "@/store/app-store";
+
+// itemName is the name of the task, review or discussion with the id, null
+// when none is on the state.
+function itemName(store: AppStore, id: string): string | null {
+  const task = store.app?.tasks?.find((item) => item.id === id);
+  const review = store.app?.reviews?.find((item) => item.id === id);
+  const discussion = store.app?.discussions?.find((item) => item.id === id);
+  return task?.name ?? review?.title ?? discussion?.title ?? null;
+}
 
 // Subscribing before asking for the state means an event emitted in between is
 // applied instead of lost.
@@ -29,13 +39,21 @@ export async function bootstrap(store: StoreApi<AppStore>): Promise<() => void> 
     if (!event.focused) {
       return;
     }
-    const id = event.situation.id;
-    store.getState().flashSituation(id);
-    setTimeout(() => store.getState().unflashSituation(id), FLASH_MS);
+    const { situation } = event;
+    store.getState().flashSituation(situation.id);
+    setTimeout(() => store.getState().unflashSituation(situation.id), FLASH_MS);
+    const name = itemName(store.getState(), situation.taskId);
+    if (name !== null) {
+      store.getState().announce(announcement(name, situation));
+    }
   });
-  const stopOpen = onSituationOpen((event) =>
-    store.getState().openPlace(event.taskId, event.place),
-  );
+  // A modal dialog on screen holds what the user is doing there: the click on
+  // the notification only brought the window forward.
+  const stopOpen = onSituationOpen((event) => {
+    if (!modalOpen()) {
+      store.getState().openSituation(event.taskId, event.place);
+    }
+  });
   store.getState().applyState(await api.getState());
   return () => {
     stopState();

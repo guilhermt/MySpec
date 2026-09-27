@@ -1,15 +1,23 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { SIDEBAR_COLLAPSED_KEY } from "@/lib/ui-storage";
-import type { Place, PullRequest, Situation, TranscriptEvent } from "@/lib/wails";
+import { HOME, type Location, NAV_LIMIT } from "@/lib/locations";
+import {
+  LAST_ITEM_KEY,
+  NAV_STACK_KEY,
+  SIDEBAR_COLLAPSED_KEY,
+  SIDEBAR_RAIL_KEY,
+} from "@/lib/ui-storage";
+import type { ArchivedTask, Place, PullRequest, Situation, TranscriptEvent } from "@/lib/wails";
 import { sessionKey } from "@/lib/wails";
 import {
+  initialNav,
+  readLastItem,
   stepTabKey,
   useAppStore,
   useArchivedDiscussion,
-  useArchivedNotice,
   useArchivedReview,
   useArchivedTask,
+  useBackTarget,
   useBoard,
   useBoards,
   useDiscussion,
@@ -18,6 +26,7 @@ import {
   useDraft,
   useError,
   useFlashing,
+  useForwardTarget,
   useHistory,
   useHistoryUi,
   useLeftover,
@@ -29,7 +38,7 @@ import {
   useOpenDiscussionId,
   useOpenReviewId,
   useOpenStepTab,
-  useOpenTask,
+  useOpenTaskId,
   usePrDraft,
   useRepositories,
   useRepository,
@@ -105,6 +114,11 @@ function transcriptEvent(overrides: Partial<TranscriptEvent> = {}): TranscriptEv
   };
 }
 
+// location is the place on screen.
+function location(): Location {
+  return useAppStore.getState().location;
+}
+
 beforeEach(() => {
   resetAppStore();
 });
@@ -116,7 +130,7 @@ describe("applyState", () => {
 
     useAppStore.getState().applyState(withTasks({ systemDark: true }));
 
-    expect(useAppStore.getState().openTaskId).toBe(API_TASK.id);
+    expect(location()).toEqual({ kind: "task", id: API_TASK.id });
   });
 
   // The welcome screen takes the place of everything the app shows of the tasks.
@@ -127,9 +141,7 @@ describe("applyState", () => {
 
     useAppStore.getState().applyState(makeState({ repositories: [], tasks: [] }));
 
-    expect(useAppStore.getState().openTaskId).toBeNull();
-    expect(useAppStore.getState().settingsOpen).toBe(false);
-    expect(useAppStore.getState().settingsSection).toBe("defaults");
+    expect(location()).toEqual(HOME);
   });
 
   it("forgets the last repository used once it is no longer registered", () => {
@@ -191,7 +203,7 @@ describe("selectors", () => {
           systemDark: true,
         }),
       );
-      useAppStore.getState().setError("binding failed");
+      useAppStore.getState().setError({ label: "Couldn't pause", detail: "binding failed" });
     });
 
     expect(result.current.repositories).toHaveLength(2);
@@ -200,7 +212,7 @@ describe("selectors", () => {
     expect(result.current.unknown).toBeNull();
     expect(result.current.migration).toBeNull();
     expect(result.current.catalog).toEqual(makeModelCatalog());
-    expect(result.current.error).toBe("binding failed");
+    expect(result.current.error).toEqual({ label: "Couldn't pause", detail: "binding failed" });
     expect(result.current.theme).toEqual({ preference: "dark", systemDark: true });
   });
 
@@ -234,9 +246,7 @@ describe("open task", () => {
 
     useAppStore.getState().openTask(API_TASK.id);
 
-    expect(useAppStore.getState().openTaskId).toBe(API_TASK.id);
-    expect(useAppStore.getState().historyOpen).toBe(false);
-    expect(useAppStore.getState().settingsOpen).toBe(false);
+    expect(location()).toEqual({ kind: "task", id: API_TASK.id });
   });
 
   it("opens a task the snapshot does not have yet", () => {
@@ -244,16 +254,7 @@ describe("open task", () => {
 
     useAppStore.getState().openTask("task-unknown");
 
-    expect(useAppStore.getState().openTaskId).toBe("task-unknown");
-  });
-
-  it("closes the task", () => {
-    useAppStore.getState().applyState(withTasks());
-    useAppStore.getState().openTask(WEB_TASK.id);
-
-    useAppStore.getState().closeTask();
-
-    expect(useAppStore.getState().openTaskId).toBeNull();
+    expect(location()).toEqual({ kind: "task", id: "task-unknown" });
   });
 
   it("closes a task that the snapshot no longer has and drops its transcript", () => {
@@ -263,7 +264,7 @@ describe("open task", () => {
 
     useAppStore.getState().applyState(withTasks({ tasks: [API_TASK] }));
 
-    expect(useAppStore.getState().openTaskId).toBeNull();
+    expect(location().kind).toBe("gone");
     expect(useAppStore.getState().transcripts[WEB_KEY]).toBeUndefined();
   });
 
@@ -277,7 +278,7 @@ describe("open task", () => {
 
     useAppStore.getState().applyState(makeState({ repositories: [], tasks: [] }));
 
-    expect(useAppStore.getState().openTaskId).toBeNull();
+    expect(location()).toEqual(HOME);
     expect(useAppStore.getState().transcripts).toEqual({});
     expect(useAppStore.getState().drafts).toEqual({});
     expect(useAppStore.getState().newTaskOpen).toBe(false);
@@ -407,7 +408,7 @@ describe("task selectors", () => {
     const { result } = renderHook(() => ({
       tasks: useTasks(),
       task: useTask(API_TASK.id),
-      open: useOpenTask(),
+      open: useOpenTaskId(),
       transcript: useTranscript(WEB_TASK.id, WEB_TASK.stage),
       draft: useDraft(WEB_TASK.id, WEB_TASK.stage),
     }));
@@ -426,7 +427,7 @@ describe("task selectors", () => {
 
     expect(result.current.tasks).toHaveLength(2);
     expect(result.current.task).toEqual(API_TASK);
-    expect(result.current.open).toEqual(WEB_TASK);
+    expect(result.current.open).toBe(WEB_TASK.id);
     expect(result.current.transcript?.status).toBe("ready");
     expect(result.current.draft).toBe("hello");
   });
@@ -621,7 +622,7 @@ describe("history", () => {
       openArchivedId: null,
       historyQuery: "",
     });
-    expect(useAppStore.getState().openTaskId).toBeNull();
+    expect(location()).toEqual({ kind: "history" });
 
     act(() => {
       useAppStore.getState().openArchived(ARCHIVED.id);
@@ -632,16 +633,6 @@ describe("history", () => {
       openArchivedId: ARCHIVED.id,
       historyQuery: "log",
     });
-
-    act(() => {
-      useAppStore.getState().closeArchived();
-    });
-    expect(result.current.openArchivedId).toBeNull();
-
-    act(() => {
-      useAppStore.getState().closeHistory();
-    });
-    expect(result.current.historyOpen).toBe(false);
   });
 
   it("leaves the history when a task is opened", () => {
@@ -650,8 +641,7 @@ describe("history", () => {
 
     useAppStore.getState().openTask(WEB_TASK.id);
 
-    expect(useAppStore.getState().historyOpen).toBe(false);
-    expect(useAppStore.getState().openArchivedId).toBeNull();
+    expect(location()).toEqual({ kind: "task", id: WEB_TASK.id });
   });
 
   it("closes an archived task that left the history", () => {
@@ -660,8 +650,7 @@ describe("history", () => {
 
     useAppStore.getState().applyState(withTasks({ history: [] }));
 
-    expect(useAppStore.getState().openArchivedId).toBeNull();
-    expect(useAppStore.getState().historyOpen).toBe(true);
+    expect(location()).toEqual({ kind: "history" });
   });
 
   it("keeps the archived task open while the history still has it", () => {
@@ -670,52 +659,87 @@ describe("history", () => {
 
     useAppStore.getState().applyState(withTasks({ history: [ARCHIVED, OLDER] }));
 
-    expect(useAppStore.getState().openArchivedId).toBe(ARCHIVED.id);
+    expect(location()).toEqual({ kind: "archived-task", id: ARCHIVED.id });
+  });
+});
+
+describe("toasts", () => {
+  it("shows a toast for a task archived while not open", () => {
+    useAppStore.getState().applyState(withTasks());
+
+    useAppStore.getState().applyState(withTasks({ tasks: [API_TASK], history: [ARCHIVED] }));
+
+    expect(useAppStore.getState().toasts).toEqual([
+      { id: ARCHIVED.id, taskId: ARCHIVED.id, name: ARCHIVED.name },
+    ]);
+  });
+
+  it("shows no toast for the task archived while open", () => {
+    const task = makeTask({ id: ARCHIVED.id, name: ARCHIVED.name });
+    useAppStore.getState().applyState(withTasks({ tasks: [task] }));
+    useAppStore.getState().openTask(task.id);
+
+    useAppStore.getState().applyState(withTasks({ tasks: [], history: [ARCHIVED] }));
+
+    expect(useAppStore.getState().toasts).toEqual([]);
+  });
+
+  it("shows a toast for each task archived in the same update", () => {
+    useAppStore.getState().applyState(withTasks());
+
+    useAppStore.getState().applyState(withTasks({ tasks: [], history: [ARCHIVED, OLDER] }));
+
+    expect(useAppStore.getState().toasts).toEqual([
+      { id: ARCHIVED.id, taskId: ARCHIVED.id, name: ARCHIVED.name },
+      { id: OLDER.id, taskId: OLDER.id, name: OLDER.name },
+    ]);
+  });
+
+  it("shows a toast for every task archived in the same update but the open one", () => {
+    const task = makeTask({ id: ARCHIVED.id, name: ARCHIVED.name });
+    useAppStore.getState().applyState(withTasks({ tasks: [task] }));
+    useAppStore.getState().openTask(task.id);
+
+    useAppStore.getState().applyState(withTasks({ tasks: [], history: [ARCHIVED, OLDER] }));
+
+    expect(useAppStore.getState().toasts).toEqual([
+      { id: OLDER.id, taskId: OLDER.id, name: OLDER.name },
+    ]);
+  });
+
+  // The first snapshot brings the whole history; none of it was archived now.
+  it("shows no toast for a history that was already there", () => {
+    useAppStore.getState().applyState(withTasks({ history: [ARCHIVED, OLDER] }));
+
+    expect(useAppStore.getState().toasts).toEqual([]);
+  });
+
+  it("keeps three toasts at most, dropping the oldest", () => {
+    useAppStore.getState().applyState(withTasks());
+    const history: ArchivedTask[] = [];
+    for (const n of [1, 2, 3, 4]) {
+      history.push(makeArchivedTask({ id: `task-${n}`, name: `task ${n}` }));
+      useAppStore.getState().applyState(withTasks({ history: [...history] }));
+    }
+
+    expect(useAppStore.getState().toasts.map((toast) => toast.id)).toEqual([
+      "task-2",
+      "task-3",
+      "task-4",
+    ]);
+  });
+
+  it("takes a dismissed toast off", () => {
+    useAppStore.getState().applyState(withTasks());
+    useAppStore.getState().applyState(withTasks({ history: [ARCHIVED] }));
+
+    useAppStore.getState().dismissToast(ARCHIVED.id);
+
+    expect(useAppStore.getState().toasts).toEqual([]);
   });
 });
 
 describe("notices", () => {
-  it("announces the task that was just archived", () => {
-    const { result } = renderHook(() => useArchivedNotice());
-
-    act(() => {
-      useAppStore.getState().applyState(withTasks());
-    });
-    expect(result.current).toBeNull();
-
-    act(() => {
-      useAppStore.getState().applyState(withTasks({ tasks: [API_TASK], history: [ARCHIVED] }));
-    });
-
-    expect(result.current).toEqual({ id: ARCHIVED.id, name: ARCHIVED.name });
-  });
-
-  // The first snapshot brings the whole history; none of it was archived now.
-  it("says nothing about a history that was already there", () => {
-    useAppStore.getState().applyState(withTasks({ history: [ARCHIVED, OLDER] }));
-
-    expect(useAppStore.getState().archivedNotice).toBeNull();
-  });
-
-  it("says nothing once no repository is registered", () => {
-    useAppStore.getState().applyState(withTasks({ tasks: [WEB_TASK] }));
-
-    useAppStore.getState().applyState(makeState({ repositories: [], history: [ARCHIVED] }));
-
-    expect(useAppStore.getState().archivedNotice).toBeNull();
-  });
-
-  it("keeps the notice while the snapshots go by, until it is dismissed", () => {
-    useAppStore.getState().applyState(withTasks());
-    useAppStore.getState().applyState(withTasks({ tasks: [API_TASK], history: [ARCHIVED] }));
-
-    useAppStore.getState().applyState(withTasks({ tasks: [API_TASK], history: [ARCHIVED] }));
-    expect(useAppStore.getState().archivedNotice?.id).toBe(ARCHIVED.id);
-
-    useAppStore.getState().dismissArchivedNotice();
-    expect(useAppStore.getState().archivedNotice).toBeNull();
-  });
-
   it("holds what the last deletion left on disk", () => {
     const { result } = renderHook(() => useLeftover());
     const leftover = {
@@ -750,13 +774,14 @@ function reviewerPlace(step: number): Place {
   return { kind: "step_review", stage: "", step };
 }
 
-describe("open place", () => {
+describe("open situation", () => {
   it("opens the task of a situation", () => {
     useAppStore.getState().applyState(withTasks());
 
-    useAppStore.getState().openPlace(API_TASK.id, stagePlace("prd"));
+    useAppStore.getState().openSituation(API_TASK.id, stagePlace("prd"));
 
-    expect(useAppStore.getState().openTaskId).toBe(API_TASK.id);
+    expect(location()).toEqual({ kind: "task", id: API_TASK.id });
+    expect(useAppStore.getState().pendingFocus).toBe("title");
   });
 
   it("opens the reviewer tab of the step the situation is in", () => {
@@ -766,10 +791,10 @@ describe("open place", () => {
     });
 
     act(() => {
-      useAppStore.getState().openPlace(WEB_TASK.id, reviewerPlace(1));
+      useAppStore.getState().openSituation(WEB_TASK.id, reviewerPlace(1));
     });
 
-    expect(useAppStore.getState().openTaskId).toBe(WEB_TASK.id);
+    expect(location()).toEqual({ kind: "task", id: WEB_TASK.id });
     expect(result.current).toBe("reviewer");
   });
 
@@ -781,34 +806,29 @@ describe("open place", () => {
     });
 
     act(() => {
-      useAppStore.getState().openPlace(WEB_TASK.id, stepPlace(1));
+      useAppStore.getState().openSituation(WEB_TASK.id, stepPlace(1));
     });
 
     expect(result.current).toBe("implementer");
   });
 
-  it("puts away the history, the archived task and the creation dialog", () => {
-    useAppStore.getState().applyState(withTasks());
+  it("puts away the archived task", () => {
+    useAppStore.getState().applyState(withTasks({ history: [ARCHIVED] }));
     useAppStore.getState().openArchived(ARCHIVED.id);
-    useAppStore.getState().openNewTask();
 
-    useAppStore.getState().openPlace(WEB_TASK.id, stagePlace("prd"));
+    useAppStore.getState().openSituation(WEB_TASK.id, stagePlace("prd"));
 
-    expect(useAppStore.getState().openTaskId).toBe(WEB_TASK.id);
-    expect(useAppStore.getState().historyOpen).toBe(false);
-    expect(useAppStore.getState().openArchivedId).toBeNull();
-    expect(useAppStore.getState().newTaskOpen).toBe(false);
+    expect(location()).toEqual({ kind: "task", id: WEB_TASK.id });
   });
 
-  it("ignores a task that is no longer there", () => {
+  it("ignores an item that is no longer there", () => {
     useAppStore.getState().applyState(withTasks());
     useAppStore.getState().openHistory();
     useAppStore.getState().openNewTask();
 
-    useAppStore.getState().openPlace("task-gone", PR_PLACE);
+    useAppStore.getState().openSituation("task-gone", PR_PLACE);
 
-    expect(useAppStore.getState().openTaskId).toBeNull();
-    expect(useAppStore.getState().historyOpen).toBe(true);
+    expect(location()).toEqual({ kind: "history" });
     expect(useAppStore.getState().newTaskOpen).toBe(true);
   });
 });
@@ -967,10 +987,7 @@ describe("settings", () => {
       promptEdit: null,
       pendingLeave: null,
     });
-    expect(useAppStore.getState().openTaskId).toBeNull();
-    expect(useAppStore.getState().historyOpen).toBe(false);
-    expect(useAppStore.getState().openArchivedId).toBeNull();
-    expect(useAppStore.getState().newTaskOpen).toBe(false);
+    expect(location()).toEqual({ kind: "settings", section: "defaults" });
 
     act(() => {
       useAppStore.getState().closeSettings();
@@ -985,13 +1002,13 @@ describe("settings", () => {
       () => useAppStore.getState().openTask(WEB_TASK.id),
       () => useAppStore.getState().openHistory(),
       () => useAppStore.getState().openArchived(ARCHIVED.id),
-      () => useAppStore.getState().openPlace(WEB_TASK.id, stagePlace("prd")),
+      () => useAppStore.getState().openSituation(WEB_TASK.id, stagePlace("prd")),
     ]) {
       useAppStore.getState().openSettings();
 
       navigate();
 
-      expect(useAppStore.getState().settingsOpen).toBe(false);
+      expect(location().kind).not.toBe("settings");
     }
   });
 
@@ -1003,8 +1020,7 @@ describe("settings", () => {
 
     useAppStore.getState().applyState(makeState({ repositories: [WEB], tasks: [WEB_TASK] }));
 
-    expect(useAppStore.getState().settingsOpen).toBe(true);
-    expect(useAppStore.getState().settingsSection).toBe("plan");
+    expect(location()).toEqual({ kind: "settings", section: "plan" });
     expect(useAppStore.getState().promptEdit).toEqual({
       stage: "plan",
       original: "# Plan",
@@ -1019,7 +1035,7 @@ describe("settings", () => {
 
     useAppStore.getState().selectSettingsSection("commit");
 
-    expect(useAppStore.getState().settingsSection).toBe("commit");
+    expect(location()).toEqual({ kind: "settings", section: "commit" });
     expect(useAppStore.getState().promptEdit).toBeNull();
     expect(useAppStore.getState().pendingLeave).toBeNull();
 
@@ -1037,21 +1053,18 @@ describe("settings", () => {
     useAppStore.getState().openTask(WEB_TASK.id);
 
     expect(useAppStore.getState().pendingLeave).not.toBeNull();
-    expect(useAppStore.getState().openTaskId).toBeNull();
-    expect(useAppStore.getState().settingsOpen).toBe(true);
+    expect(location()).toEqual({ kind: "settings", section: "defaults" });
 
     useAppStore.getState().cancelLeave();
 
     expect(useAppStore.getState().pendingLeave).toBeNull();
-    expect(useAppStore.getState().openTaskId).toBeNull();
-    expect(useAppStore.getState().settingsOpen).toBe(true);
+    expect(location()).toEqual({ kind: "settings", section: "defaults" });
     expect(useAppStore.getState().promptEdit?.text).toBe("# PRD, edited");
 
     useAppStore.getState().openTask(WEB_TASK.id);
     useAppStore.getState().confirmLeave();
 
-    expect(useAppStore.getState().openTaskId).toBe(WEB_TASK.id);
-    expect(useAppStore.getState().settingsOpen).toBe(false);
+    expect(location()).toEqual({ kind: "task", id: WEB_TASK.id });
     expect(useAppStore.getState().promptEdit).toBeNull();
     expect(useAppStore.getState().pendingLeave).toBeNull();
   });
@@ -1069,7 +1082,68 @@ describe("settings", () => {
     useAppStore.getState().confirmLeave();
 
     expect(useAppStore.getState().promptEdit).toBeNull();
-    expect(useAppStore.getState().settingsOpen).toBe(true);
+    expect(location().kind).toBe("settings");
+  });
+
+  it.each([
+    ["Back", "back", () => useAppStore.getState().goBack()],
+    ["Forward", "forward", () => useAppStore.getState().goForward()],
+  ] as const)("asks before %s leaves an edit with changes", (_name, side, move) => {
+    const settings: Location = { kind: "settings", section: "prd" };
+    const task: Location = { kind: "task", id: WEB_TASK.id };
+    useAppStore.getState().applyState(withTasks());
+    useAppStore.setState({
+      location: settings,
+      back: side === "back" ? [task] : [],
+      forward: side === "forward" ? [task] : [],
+    });
+    useAppStore.getState().startPromptEdit("prd", "# PRD");
+    useAppStore.getState().setPromptEditText("# PRD, edited");
+
+    move();
+
+    expect(useAppStore.getState().pendingLeave).not.toBeNull();
+    expect(location()).toEqual(settings);
+
+    useAppStore.getState().confirmLeave();
+
+    expect(location()).toEqual(task);
+    expect(useAppStore.getState().promptEdit).toBeNull();
+  });
+
+  it.each([
+    ["Back", () => useAppStore.getState().goBack()],
+    ["Forward", () => useAppStore.getState().goForward()],
+  ])("does not ask when %s has nowhere to go", (_name, move) => {
+    const settings: Location = { kind: "settings", section: "prd" };
+    useAppStore.getState().applyState(withTasks());
+    useAppStore.setState({ location: settings, back: [], forward: [] });
+    useAppStore.getState().startPromptEdit("prd", "# PRD");
+    useAppStore.getState().setPromptEditText("# PRD, edited");
+
+    move();
+
+    expect(useAppStore.getState().pendingLeave).toBeNull();
+    expect(location()).toEqual(settings);
+    expect(useAppStore.getState().promptEdit?.text).toBe("# PRD, edited");
+  });
+
+  it("asks before closing the settings with an edit with changes", () => {
+    useAppStore.getState().applyState(withTasks());
+    useAppStore.getState().openTask(WEB_TASK.id);
+    useAppStore.getState().openSettings("prd");
+    useAppStore.getState().startPromptEdit("prd", "# PRD");
+    useAppStore.getState().setPromptEditText("# PRD, edited");
+
+    useAppStore.getState().closeSettings();
+
+    expect(useAppStore.getState().pendingLeave).not.toBeNull();
+    expect(location()).toEqual({ kind: "settings", section: "prd" });
+
+    useAppStore.getState().confirmLeave();
+
+    expect(location()).toEqual({ kind: "task", id: WEB_TASK.id });
+    expect(useAppStore.getState().promptEdit).toBeNull();
   });
 
   it("closes the editor after a save without asking", () => {
@@ -1125,10 +1199,7 @@ describe("boards", () => {
       });
 
       expect(result.current).toBe("board-2");
-      expect(useAppStore.getState().openTaskId).toBeNull();
-      expect(useAppStore.getState().openArchivedId).toBeNull();
-      expect(useAppStore.getState().historyOpen).toBe(false);
-      expect(useAppStore.getState().settingsOpen).toBe(false);
+      expect(location()).toEqual({ kind: "board", id: "board-2" });
     }
   });
 
@@ -1140,13 +1211,13 @@ describe("boards", () => {
       () => useAppStore.getState().openHistory(),
       () => useAppStore.getState().openArchived(ARCHIVED.id),
       () => useAppStore.getState().openSettings(),
-      () => useAppStore.getState().openPlace(WEB_TASK.id, stagePlace("prd")),
+      () => useAppStore.getState().openSituation(WEB_TASK.id, stagePlace("prd")),
     ]) {
       useAppStore.getState().openBoard("board-1");
 
       navigate();
 
-      expect(useAppStore.getState().openBoardId).toBeNull();
+      expect(location().kind).not.toBe("board");
     }
   });
 
@@ -1158,11 +1229,11 @@ describe("boards", () => {
 
     useAppStore.getState().openBoard("board-1");
 
-    expect(useAppStore.getState().openBoardId).toBeNull();
+    expect(location().kind).toBe("settings");
 
     useAppStore.getState().confirmLeave();
 
-    expect(useAppStore.getState().openBoardId).toBe("board-1");
+    expect(location()).toEqual({ kind: "board", id: "board-1" });
   });
 
   it("takes the view of a board that is gone off the screen", () => {
@@ -1170,10 +1241,10 @@ describe("boards", () => {
     useAppStore.getState().openBoard("board-2");
 
     useAppStore.getState().applyState(withBoards([OPS]));
-    expect(useAppStore.getState().openBoardId).toBe("board-2");
+    expect(location()).toEqual({ kind: "board", id: "board-2" });
 
     useAppStore.getState().applyState(withBoards([ROADMAP]));
-    expect(useAppStore.getState().openBoardId).toBeNull();
+    expect(location().kind).toBe("gone");
   });
 
   it("keeps the screen while a board is registered without any repository", () => {
@@ -1182,7 +1253,7 @@ describe("boards", () => {
 
     useAppStore.getState().applyState(makeState({ repositories: [], boards: [OPS] }));
 
-    expect(useAppStore.getState().openBoardId).toBe("board-2");
+    expect(location()).toEqual({ kind: "board", id: "board-2" });
   });
 
   it("clears the board view once no board and no repository is registered", () => {
@@ -1194,7 +1265,7 @@ describe("boards", () => {
 
     useAppStore.getState().applyState(makeState({ repositories: [], boards: [] }));
 
-    expect(useAppStore.getState().openBoardId).toBeNull();
+    expect(location()).toEqual(HOME);
     expect(useAppStore.getState().pendingStart).toBeNull();
   });
 
@@ -1342,7 +1413,7 @@ describe("reviews", () => {
     expect(result.current.history).toEqual([]);
   });
 
-  it("opens the Reviews view in place of a task and closes it into a review", () => {
+  it("opens the Reviews view in place of a task and then a review", () => {
     const { result } = renderHook(() => ({
       open: useReviewsOpen(),
       openId: useOpenReviewId(),
@@ -1354,55 +1425,40 @@ describe("reviews", () => {
       useAppStore.getState().openReviews();
     });
     expect(result.current).toEqual({ open: true, openId: null });
-    expect(useAppStore.getState().openTaskId).toBeNull();
+    expect(location()).toEqual({ kind: "reviews" });
 
     act(() => {
       useAppStore.getState().openReview(REVIEW.id);
     });
     expect(result.current).toEqual({ open: false, openId: REVIEW.id });
-
-    act(() => {
-      useAppStore.getState().closeReview();
-    });
-    expect(result.current).toEqual({ open: true, openId: null });
   });
 
-  it("opens an archived review inside the history and closes it", () => {
+  it("opens an archived review inside the history", () => {
     act(() => {
       useAppStore.getState().applyState(withReviews({ reviewHistory: [ARCHIVED_REVIEW] }));
       useAppStore.getState().openReview(REVIEW.id);
       useAppStore.getState().openArchivedReview(ARCHIVED_REVIEW.id);
     });
-    expect(useAppStore.getState().openArchivedReviewId).toBe(ARCHIVED_REVIEW.id);
-    expect(useAppStore.getState().historyOpen).toBe(true);
-    expect(useAppStore.getState().openReviewId).toBeNull();
-
-    act(() => {
-      useAppStore.getState().closeArchivedReview();
-    });
-    expect(useAppStore.getState().openArchivedReviewId).toBeNull();
+    expect(location()).toEqual({ kind: "archived-review", id: ARCHIVED_REVIEW.id });
   });
 
   it.each([
     ["a task", () => useAppStore.getState().openTask(WEB_TASK.id)],
     [
       "the situation of a task",
-      () => useAppStore.getState().openPlace(WEB_TASK.id, stagePlace("prd")),
+      () => useAppStore.getState().openSituation(WEB_TASK.id, stagePlace("prd")),
     ],
     ["a board", () => useAppStore.getState().openBoard("board-1")],
     ["the history", () => useAppStore.getState().openHistory()],
     ["an archived task", () => useAppStore.getState().openArchived(ARCHIVED.id)],
     ["the settings", () => useAppStore.getState().openSettings()],
-    ["nothing", () => useAppStore.getState().closeTask()],
   ])("leaves the review places behind when %s opens", (_name, navigate) => {
     useAppStore.getState().applyState(withReviews({ history: [ARCHIVED] }));
     useAppStore.getState().openReview(REVIEW.id);
 
     navigate();
 
-    expect(useAppStore.getState().openReviewId).toBeNull();
-    expect(useAppStore.getState().reviewsOpen).toBe(false);
-    expect(useAppStore.getState().openArchivedReviewId).toBeNull();
+    expect(["review", "reviews", "archived-review"]).not.toContain(location().kind);
   });
 
   it("closes the screen of a review that is gone and drops its conversation", () => {
@@ -1412,24 +1468,8 @@ describe("reviews", () => {
 
     useAppStore.getState().applyState(withReviews({ reviews: [OTHER_REVIEW] }));
 
-    expect(useAppStore.getState().openReviewId).toBeNull();
-    expect(useAppStore.getState().openArchivedReviewId).toBeNull();
+    expect(location().kind).toBe("gone");
     expect(useAppStore.getState().transcripts[REVIEW_KEY]).toBeUndefined();
-  });
-
-  it("opens the archived review of a review whose pull request was merged", () => {
-    useAppStore.getState().applyState(withReviews());
-    useAppStore.getState().openReview(REVIEW.id);
-
-    useAppStore
-      .getState()
-      .applyState(withReviews({ reviews: [OTHER_REVIEW], reviewHistory: [ARCHIVED_REVIEW] }));
-
-    expect(useAppStore.getState().openReviewId).toBeNull();
-    expect(useAppStore.getState().openArchivedReviewId).toBe(ARCHIVED_REVIEW.id);
-    // Inside the history, so that going back from the archived review lands
-    // where every other archived entity is opened from.
-    expect(useAppStore.getState().historyOpen).toBe(true);
   });
 
   it("closes an archived review that is no longer in the history", () => {
@@ -1438,7 +1478,7 @@ describe("reviews", () => {
 
     useAppStore.getState().applyState(withReviews({ reviewHistory: [] }));
 
-    expect(useAppStore.getState().openArchivedReviewId).toBeNull();
+    expect(location()).toEqual({ kind: "history" });
   });
 
   it("forgets the review screens once no repository is registered", () => {
@@ -1447,8 +1487,7 @@ describe("reviews", () => {
 
     useAppStore.getState().applyState(makeState({ repositories: [], tasks: [] }));
 
-    expect(useAppStore.getState().openReviewId).toBeNull();
-    expect(useAppStore.getState().reviewsOpen).toBe(false);
+    expect(location()).toEqual(HOME);
   });
 
   it("opens the dialog that starts a review, and keeps the pull request waiting for a clone", () => {
@@ -1493,11 +1532,12 @@ describe("reviews", () => {
   it("opens the review a situation is in, and ignores one that is gone", () => {
     useAppStore.getState().applyState(withReviews());
 
-    useAppStore.getState().openPlace("review-gone", REVIEW_PLACE);
-    expect(useAppStore.getState().openReviewId).toBeNull();
+    useAppStore.getState().openSituation("review-gone", REVIEW_PLACE);
+    expect(location()).toEqual(HOME);
 
-    useAppStore.getState().openPlace(REVIEW.id, REVIEW_PLACE);
-    expect(useAppStore.getState().openReviewId).toBe(REVIEW.id);
+    useAppStore.getState().openSituation(REVIEW.id, REVIEW_PLACE);
+    expect(location()).toEqual({ kind: "review", id: REVIEW.id });
+    expect(useAppStore.getState().pendingFocus).toBe("title");
   });
 
   it("is the situation of the open review on screen", () => {
@@ -1581,7 +1621,7 @@ describe("discussions", () => {
     expect(result.current.history).toEqual([]);
   });
 
-  it("opens a discussion in place of a task and closes it into the view of its board", () => {
+  it("opens a discussion in place of a task", () => {
     const { result } = renderHook(() => ({
       openId: useOpenDiscussionId(),
       boardId: useOpenBoardId(),
@@ -1593,25 +1633,10 @@ describe("discussions", () => {
       useAppStore.getState().openDiscussion(DISCUSSION.id);
     });
     expect(result.current).toEqual({ openId: DISCUSSION.id, boardId: null });
-    expect(useAppStore.getState().openTaskId).toBeNull();
-
-    act(() => {
-      useAppStore.getState().closeDiscussion();
-    });
-    expect(result.current).toEqual({ openId: null, boardId: BOARD.id });
+    expect(location()).toEqual({ kind: "discussion", id: DISCUSSION.id });
   });
 
-  it("closes a discussion whose board is gone into the home", () => {
-    useAppStore.getState().applyState(withDiscussions({ boards: [] }));
-    useAppStore.getState().openDiscussion(DISCUSSION.id);
-
-    useAppStore.getState().closeDiscussion();
-
-    expect(useAppStore.getState().openDiscussionId).toBeNull();
-    expect(useAppStore.getState().openBoardId).toBeNull();
-  });
-
-  it("opens an archived discussion inside the history and closes it", () => {
+  it("opens an archived discussion inside the history", () => {
     act(() => {
       useAppStore
         .getState()
@@ -1619,36 +1644,27 @@ describe("discussions", () => {
       useAppStore.getState().openDiscussion(DISCUSSION.id);
       useAppStore.getState().openArchivedDiscussion(ARCHIVED_DISCUSSION.id);
     });
-    expect(useAppStore.getState().openArchivedDiscussionId).toBe(ARCHIVED_DISCUSSION.id);
-    expect(useAppStore.getState().historyOpen).toBe(true);
-    expect(useAppStore.getState().openDiscussionId).toBeNull();
-
-    act(() => {
-      useAppStore.getState().closeArchivedDiscussion();
-    });
-    expect(useAppStore.getState().openArchivedDiscussionId).toBeNull();
+    expect(location()).toEqual({ kind: "archived-discussion", id: ARCHIVED_DISCUSSION.id });
   });
 
   it.each([
     ["a task", () => useAppStore.getState().openTask(WEB_TASK.id)],
     [
       "the situation of a task",
-      () => useAppStore.getState().openPlace(WEB_TASK.id, stagePlace("prd")),
+      () => useAppStore.getState().openSituation(WEB_TASK.id, stagePlace("prd")),
     ],
     ["a board", () => useAppStore.getState().openBoard(BOARD.id)],
     ["the history", () => useAppStore.getState().openHistory()],
     ["an archived task", () => useAppStore.getState().openArchived(ARCHIVED.id)],
     ["the settings", () => useAppStore.getState().openSettings()],
     ["the Reviews view", () => useAppStore.getState().openReviews()],
-    ["nothing", () => useAppStore.getState().closeTask()],
   ])("leaves the discussion screens behind when %s opens", (_name, navigate) => {
     useAppStore.getState().applyState(withDiscussions({ history: [ARCHIVED] }));
     useAppStore.getState().openDiscussion(DISCUSSION.id);
 
     navigate();
 
-    expect(useAppStore.getState().openDiscussionId).toBeNull();
-    expect(useAppStore.getState().openArchivedDiscussionId).toBeNull();
+    expect(["discussion", "archived-discussion"]).not.toContain(location().kind);
   });
 
   it("closes the screen of a discussion that is gone and drops its conversation", () => {
@@ -1660,25 +1676,8 @@ describe("discussions", () => {
 
     useAppStore.getState().applyState(withDiscussions({ discussions: [OTHER_DISCUSSION] }));
 
-    expect(useAppStore.getState().openDiscussionId).toBeNull();
-    expect(useAppStore.getState().openArchivedDiscussionId).toBeNull();
+    expect(location().kind).toBe("gone");
     expect(useAppStore.getState().transcripts[DISCUSSION_KEY]).toBeUndefined();
-  });
-
-  it("opens the archived discussion of one that was archived", () => {
-    useAppStore.getState().applyState(withDiscussions());
-    useAppStore.getState().openDiscussion(DISCUSSION.id);
-
-    useAppStore.getState().applyState(
-      withDiscussions({
-        discussions: [OTHER_DISCUSSION],
-        discussionHistory: [ARCHIVED_DISCUSSION],
-      }),
-    );
-
-    expect(useAppStore.getState().openDiscussionId).toBeNull();
-    expect(useAppStore.getState().openArchivedDiscussionId).toBe(ARCHIVED_DISCUSSION.id);
-    expect(useAppStore.getState().historyOpen).toBe(true);
   });
 
   it("closes an archived discussion that is no longer in the history", () => {
@@ -1689,7 +1688,7 @@ describe("discussions", () => {
 
     useAppStore.getState().applyState(withDiscussions({ discussionHistory: [] }));
 
-    expect(useAppStore.getState().openArchivedDiscussionId).toBeNull();
+    expect(location()).toEqual({ kind: "history" });
   });
 
   it("forgets the discussion screens once no repository and no board is registered", () => {
@@ -1698,8 +1697,7 @@ describe("discussions", () => {
 
     useAppStore.getState().applyState(makeState({ repositories: [], tasks: [] }));
 
-    expect(useAppStore.getState().openDiscussionId).toBeNull();
-    expect(useAppStore.getState().openArchivedDiscussionId).toBeNull();
+    expect(location()).toEqual(HOME);
   });
 
   it("opens and closes the dialog that creates a discussion", () => {
@@ -1722,11 +1720,12 @@ describe("discussions", () => {
   it("opens the discussion a situation is in, and ignores one that is gone", () => {
     useAppStore.getState().applyState(withDiscussions());
 
-    useAppStore.getState().openPlace("discussion-gone", DISCUSSION_PLACE);
-    expect(useAppStore.getState().openDiscussionId).toBeNull();
+    useAppStore.getState().openSituation("discussion-gone", DISCUSSION_PLACE);
+    expect(location()).toEqual(HOME);
 
-    useAppStore.getState().openPlace(DISCUSSION.id, DISCUSSION_PLACE);
-    expect(useAppStore.getState().openDiscussionId).toBe(DISCUSSION.id);
+    useAppStore.getState().openSituation(DISCUSSION.id, DISCUSSION_PLACE);
+    expect(location()).toEqual({ kind: "discussion", id: DISCUSSION.id });
+    expect(useAppStore.getState().pendingFocus).toBe("title");
   });
 
   it("is the situation of the open discussion on screen", () => {
@@ -1750,5 +1749,742 @@ describe("discussions", () => {
       useAppStore.getState().openDiscussion(DISCUSSION.id);
     });
     expect(result.current).toBe("s-drafts");
+  });
+});
+
+describe("selectors of the place on screen", () => {
+  const SPEC_TASK = {
+    ...WEB_TASK,
+    stage: "tech_spec",
+    situations: [makeSituation({ id: "s-spec", place: stagePlace("tech_spec") })],
+  };
+  const REVIEW_WITH_SITUATION = {
+    ...REVIEW,
+    situations: [
+      makeSituation({
+        id: "s-report",
+        taskId: REVIEW.id,
+        kind: "review_report",
+        form: "decide",
+        place: REVIEW_PLACE,
+      }),
+    ],
+  };
+  const DISCUSSION_WITH_SITUATION = {
+    ...DISCUSSION,
+    situations: [
+      makeSituation({
+        id: "s-drafts",
+        taskId: DISCUSSION.id,
+        kind: "drafts",
+        form: "decide",
+        place: DISCUSSION_PLACE,
+      }),
+    ],
+  };
+
+  interface Expected {
+    task: string | null;
+    review: string | null;
+    discussion: string | null;
+    board: string | null;
+    reviews: boolean;
+    history: { historyOpen: boolean; openArchivedId: string | null };
+    settings: { settingsOpen: boolean; settingsSection: string };
+    situation: string | null;
+  }
+
+  const NONE: Expected = {
+    task: null,
+    review: null,
+    discussion: null,
+    board: null,
+    reviews: false,
+    history: { historyOpen: false, openArchivedId: null },
+    settings: { settingsOpen: false, settingsSection: "defaults" },
+    situation: null,
+  };
+  const IN_HISTORY = { historyOpen: true, openArchivedId: null };
+
+  it.each<[Location, Expected]>([
+    [HOME, NONE],
+    [
+      { kind: "board", id: BOARD.id },
+      { ...NONE, board: BOARD.id },
+    ],
+    [{ kind: "reviews" }, { ...NONE, reviews: true }],
+    [{ kind: "history" }, { ...NONE, history: IN_HISTORY }],
+    [
+      { kind: "settings", section: "plan" },
+      { ...NONE, settings: { settingsOpen: true, settingsSection: "plan" } },
+    ],
+    [
+      { kind: "task", id: WEB_TASK.id },
+      { ...NONE, task: WEB_TASK.id, situation: "s-spec" },
+    ],
+    [
+      { kind: "review", id: REVIEW.id },
+      { ...NONE, review: REVIEW.id, situation: "s-report" },
+    ],
+    [
+      { kind: "discussion", id: DISCUSSION.id },
+      { ...NONE, discussion: DISCUSSION.id, situation: "s-drafts" },
+    ],
+    [
+      { kind: "archived-task", id: ARCHIVED.id },
+      { ...NONE, history: { historyOpen: true, openArchivedId: ARCHIVED.id } },
+    ],
+    [
+      { kind: "archived-review", id: ARCHIVED_REVIEW.id },
+      { ...NONE, history: IN_HISTORY },
+    ],
+    [
+      { kind: "archived-discussion", id: ARCHIVED_DISCUSSION.id },
+      { ...NONE, history: IN_HISTORY },
+    ],
+  ])("reads %o as the screens it stands for", (place, expected) => {
+    useAppStore.getState().applyState(
+      withTasks({
+        tasks: [SPEC_TASK],
+        boards: [BOARD],
+        reviews: [REVIEW_WITH_SITUATION],
+        discussions: [DISCUSSION_WITH_SITUATION],
+      }),
+    );
+    useAppStore.setState({ location: place });
+
+    const { result } = renderHook(() => ({
+      task: useOpenTaskId(),
+      review: useOpenReviewId(),
+      discussion: useOpenDiscussionId(),
+      board: useOpenBoardId(),
+      reviews: useReviewsOpen(),
+      history: useHistoryUi(),
+      settings: useSettingsUi(),
+      situation: useOnScreenSituationId(),
+    }));
+
+    expect(result.current).toEqual({
+      ...expected,
+      history: { ...expected.history, historyQuery: "" },
+      settings: { ...expected.settings, promptEdit: null, pendingLeave: null },
+    });
+  });
+});
+
+describe("navigation", () => {
+  const TASK: Location = { kind: "task", id: WEB_TASK.id };
+  const OTHER_TASK: Location = { kind: "task", id: API_TASK.id };
+  const HISTORY: Location = { kind: "history" };
+
+  function withEverything(overrides = {}) {
+    return withTasks({ boards: [BOARD], history: [ARCHIVED], ...overrides });
+  }
+
+  it("puts the current place behind the new one", () => {
+    useAppStore.getState().applyState(withEverything());
+    useAppStore.getState().go(TASK);
+
+    useAppStore.getState().go(HISTORY);
+
+    expect(useAppStore.getState().back).toEqual([HOME, TASK]);
+    expect(location()).toEqual(HISTORY);
+  });
+
+  it("drops the places ahead when it goes somewhere new", () => {
+    useAppStore.getState().applyState(withEverything());
+    useAppStore.setState({ location: TASK, back: [HOME], forward: [HISTORY] });
+
+    useAppStore.getState().go(OTHER_TASK);
+
+    expect(useAppStore.getState().forward).toEqual([]);
+    expect(useAppStore.getState().back).toEqual([HOME, TASK]);
+  });
+
+  it("does not stack the place already on screen", () => {
+    useAppStore.getState().applyState(withEverything());
+    useAppStore.getState().go(TASK);
+
+    useAppStore.getState().go(TASK);
+
+    expect(useAppStore.getState().back).toEqual([HOME]);
+  });
+
+  it("changes the page of the settings without stacking", () => {
+    useAppStore.getState().applyState(withEverything());
+    useAppStore.getState().openSettings();
+
+    useAppStore.getState().selectSettingsSection("plan");
+
+    expect(location()).toEqual({ kind: "settings", section: "plan" });
+    expect(useAppStore.getState().back).toEqual([HOME]);
+  });
+
+  it("never stacks the page of an item that left", () => {
+    useAppStore.getState().applyState(withEverything());
+    useAppStore.setState({
+      location: { kind: "gone", item: "task", id: "task-old", name: "old", boardId: "" },
+      back: [HOME],
+    });
+
+    useAppStore.getState().go(TASK);
+
+    expect(useAppStore.getState().back).toEqual([HOME]);
+  });
+
+  it("keeps at most NAV_LIMIT places behind", () => {
+    useAppStore.getState().applyState(withEverything());
+    const behind: Location[] = Array.from({ length: NAV_LIMIT }, (_, index) => ({
+      kind: "task",
+      id: `task-${index}`,
+    }));
+    useAppStore.setState({ location: TASK, back: behind });
+
+    useAppStore.getState().go(HISTORY);
+
+    const { back } = useAppStore.getState();
+    expect(back).toHaveLength(NAV_LIMIT);
+    expect(back[0]).toEqual({ kind: "task", id: "task-1" });
+    expect(back.at(-1)).toEqual(TASK);
+  });
+
+  it("goes to the first board for Home while there is no task", () => {
+    useAppStore
+      .getState()
+      .applyState(makeState({ repositories: [WEB], tasks: [], boards: [BOARD] }));
+    useAppStore.getState().openHistory();
+
+    useAppStore.getState().go(HOME);
+
+    expect(location()).toEqual({ kind: "board", id: BOARD.id });
+  });
+
+  it("closes the panel of the place it leaves", () => {
+    useAppStore.getState().applyState(withEverything());
+    useAppStore.setState({ location: TASK, panel: "artifacts" });
+
+    useAppStore.getState().go(HISTORY);
+
+    expect(useAppStore.getState().panel).toBeNull();
+  });
+
+  it("closes the settings back to the place they were opened from", () => {
+    useAppStore.getState().applyState(withEverything());
+    useAppStore.getState().openTask(WEB_TASK.id);
+    useAppStore.getState().openSettings();
+
+    useAppStore.getState().closeSettings();
+
+    expect(location()).toEqual(TASK);
+    expect(useAppStore.getState().pendingFocus).toBe("title");
+  });
+
+  it("closes the settings to Home when there is no place behind them", () => {
+    useAppStore.getState().applyState(withEverything());
+    useAppStore.setState({ location: { kind: "settings", section: "defaults" }, back: [] });
+
+    useAppStore.getState().closeSettings();
+
+    expect(location()).toEqual(HOME);
+  });
+
+  it("closes the settings past the places behind them that no longer exist", () => {
+    useAppStore.getState().applyState(withEverything());
+    const settings: Location = { kind: "settings", section: "defaults" };
+    useAppStore.setState({ location: settings, back: [TASK, { kind: "task", id: "task-gone" }] });
+
+    useAppStore.getState().closeSettings();
+
+    expect(useAppStore.getState()).toMatchObject({ location: TASK, back: [], forward: [settings] });
+  });
+
+  it("offers as Back and Forward only places that still exist", () => {
+    useAppStore.getState().applyState(withEverything());
+    useAppStore.setState({
+      location: HISTORY,
+      back: [TASK, { kind: "task", id: "task-gone" }],
+      forward: [OTHER_TASK, { kind: "board", id: "board-gone" }],
+    });
+
+    const { result } = renderHook(() => ({ back: useBackTarget(), forward: useForwardTarget() }));
+
+    expect(result.current).toEqual({ back: TASK, forward: OTHER_TASK });
+  });
+
+  it("offers no Back and no Forward when nothing behind or ahead exists", () => {
+    useAppStore.getState().applyState(withEverything());
+    useAppStore.setState({ back: [{ kind: "task", id: "task-gone" }], forward: [] });
+
+    const { result } = renderHook(() => ({ back: useBackTarget(), forward: useForwardTarget() }));
+
+    expect(result.current).toEqual({ back: null, forward: null });
+  });
+});
+
+describe("history of places", () => {
+  const TASK: Location = { kind: "task", id: WEB_TASK.id };
+  const OTHER_TASK: Location = { kind: "task", id: API_TASK.id };
+  const HISTORY: Location = { kind: "history" };
+  const GONE: Location = { kind: "gone", item: "task", id: "task-old", name: "old", boardId: "" };
+
+  beforeEach(() => {
+    useAppStore.getState().applyState(withTasks({ boards: [BOARD], history: [ARCHIVED] }));
+  });
+
+  it("goes back to the place behind and keeps the current one ahead", () => {
+    useAppStore.setState({ location: HISTORY, back: [HOME, TASK], forward: [] });
+
+    useAppStore.getState().goBack({ focus: "back" });
+
+    expect(useAppStore.getState()).toMatchObject({
+      location: TASK,
+      back: [HOME],
+      forward: [HISTORY],
+      pendingFocus: "back",
+    });
+  });
+
+  it("goes forward to the place ahead and keeps the current one behind", () => {
+    useAppStore.setState({ location: HOME, back: [], forward: [HISTORY, TASK] });
+
+    useAppStore.getState().goForward({ focus: "forward" });
+
+    expect(useAppStore.getState()).toMatchObject({
+      location: TASK,
+      back: [HOME],
+      forward: [HISTORY],
+      pendingFocus: "forward",
+    });
+  });
+
+  it("goes back past the places that no longer exist", () => {
+    useAppStore.setState({
+      location: HISTORY,
+      back: [TASK, { kind: "task", id: "task-gone" }],
+      forward: [],
+    });
+
+    useAppStore.getState().goBack();
+
+    expect(useAppStore.getState()).toMatchObject({ location: TASK, back: [], forward: [HISTORY] });
+  });
+
+  it("goes forward past the places that no longer exist", () => {
+    useAppStore.setState({
+      location: HOME,
+      back: [],
+      forward: [OTHER_TASK, { kind: "board", id: "board-gone" }],
+    });
+
+    useAppStore.getState().goForward();
+
+    expect(useAppStore.getState()).toMatchObject({
+      location: OTHER_TASK,
+      back: [HOME],
+      forward: [],
+    });
+  });
+
+  it("does nothing going back with no place behind that exists", () => {
+    useAppStore.setState({ location: TASK, back: [{ kind: "task", id: "task-gone" }] });
+
+    useAppStore.getState().goBack();
+
+    expect(useAppStore.getState()).toMatchObject({
+      location: TASK,
+      back: [{ kind: "task", id: "task-gone" }],
+      forward: [],
+    });
+  });
+
+  it("never keeps the page of an item that left ahead of the one it goes back to", () => {
+    useAppStore.setState({ location: GONE, back: [TASK], forward: [] });
+
+    useAppStore.getState().goBack();
+
+    expect(useAppStore.getState()).toMatchObject({ location: TASK, back: [], forward: [] });
+  });
+
+  it("closes the panel going back", () => {
+    useAppStore.setState({ location: TASK, back: [HISTORY], panel: "reports" });
+
+    useAppStore.getState().goBack();
+
+    expect(useAppStore.getState().panel).toBeNull();
+  });
+
+  it("opens a panel, closes it on the next navigation and never reopens it going back", () => {
+    useAppStore.setState({ location: TASK, back: [], forward: [], panel: null });
+
+    useAppStore.getState().openPanel("artifacts");
+    expect(useAppStore.getState().panel).toBe("artifacts");
+
+    useAppStore.getState().go(HISTORY);
+    expect(useAppStore.getState().panel).toBeNull();
+
+    useAppStore.getState().goBack();
+    expect(useAppStore.getState()).toMatchObject({ location: TASK, panel: null });
+  });
+
+  it("clears the focus it asked for", () => {
+    useAppStore.setState({ pendingFocus: "title" });
+
+    useAppStore.getState().clearPendingFocus();
+
+    expect(useAppStore.getState().pendingFocus).toBeNull();
+  });
+
+  it("says the same announcement again with a new id", () => {
+    useAppStore.getState().announce("Nothing else needs you now.");
+    const first = useAppStore.getState().announcement;
+
+    useAppStore.getState().announce("Nothing else needs you now.");
+
+    expect(useAppStore.getState().announcement).toEqual({
+      id: (first?.id ?? 0) + 1,
+      text: "Nothing else needs you now.",
+    });
+  });
+});
+
+describe("kept places", () => {
+  const TASK: Location = { kind: "task", id: WEB_TASK.id };
+  const HISTORY: Location = { kind: "history" };
+
+  beforeEach(() => {
+    localStorage.clear();
+    useAppStore.getState().applyState(withTasks({ boards: [BOARD], history: [ARCHIVED] }));
+  });
+
+  it("reopens with Home on screen and the places of the last run behind it", () => {
+    useAppStore.getState().go(TASK);
+    useAppStore.getState().go(HISTORY);
+
+    expect(initialNav()).toEqual({ location: HOME, back: [HOME, TASK, HISTORY], forward: [] });
+  });
+
+  it("does not repeat Home behind Home when the last run ended on it", () => {
+    useAppStore.getState().go(TASK);
+    useAppStore.getState().go(HOME);
+
+    expect(initialNav()).toEqual({ location: HOME, back: [HOME, TASK], forward: [] });
+  });
+
+  it("keeps neither the page of an item that left nor the places ahead", () => {
+    const gone: Location = { kind: "gone", item: "task", id: "task-old", name: "old", boardId: "" };
+    useAppStore.setState({ location: gone, back: [TASK, gone], forward: [HISTORY] });
+
+    expect(initialNav()).toEqual({ location: HOME, back: [TASK], forward: [] });
+  });
+
+  it("reopens with at most NAV_LIMIT places behind", () => {
+    const behind: Location[] = Array.from({ length: NAV_LIMIT }, (_, index) => ({
+      kind: "task",
+      id: `task-${index}`,
+    }));
+    useAppStore.setState({ location: HISTORY, back: behind });
+
+    const { back } = initialNav();
+
+    expect(back).toHaveLength(NAV_LIMIT);
+    expect(back.at(-1)).toEqual(HISTORY);
+  });
+
+  it.each([
+    ["nothing kept", null],
+    ["not JSON", "{"],
+    ["no current place", JSON.stringify({ back: [] })],
+    ["an unknown place", JSON.stringify({ back: [{ kind: "nowhere" }], current: HOME })],
+  ])("opens with nothing behind on %s", (_, raw) => {
+    if (raw !== null) {
+      localStorage.setItem(NAV_STACK_KEY, raw);
+    }
+
+    expect(initialNav()).toEqual({ location: HOME, back: [], forward: [] });
+  });
+
+  it("keeps the last active item opened", () => {
+    useAppStore.getState().go(TASK);
+    useAppStore.getState().go(HISTORY);
+
+    expect(readLastItem()).toEqual(TASK);
+  });
+
+  it.each([
+    ["nothing kept", null],
+    ["a place that is not an active item", JSON.stringify(HISTORY)],
+    ["an unknown place", JSON.stringify({ kind: "nowhere" })],
+  ])("has no last item with %s", (_, raw) => {
+    if (raw !== null) {
+      localStorage.setItem(LAST_ITEM_KEY, raw);
+    }
+
+    expect(readLastItem()).toBeNull();
+  });
+
+  it("keeps the sidebar collapsed into its strip", () => {
+    useAppStore.getState().toggleSidebarRail();
+
+    expect(useAppStore.getState().sidebarRail).toBe(true);
+    expect(localStorage.getItem(SIDEBAR_RAIL_KEY)).toBe("true");
+  });
+});
+
+describe("place in a new snapshot", () => {
+  it("leaves an archived task that is gone for the history", () => {
+    useAppStore.getState().applyState(withTasks({ history: [ARCHIVED] }));
+    useAppStore.getState().openArchived(ARCHIVED.id);
+    const { back } = useAppStore.getState();
+
+    useAppStore.getState().applyState(withTasks({ history: [] }));
+
+    expect(location()).toEqual({ kind: "history" });
+    expect(useAppStore.getState().back).toBe(back);
+  });
+
+  it("puts the page of a review that left in its place, named by its reference", () => {
+    useAppStore.getState().applyState(withReviews());
+    useAppStore.getState().openReview(REVIEW.id);
+    const { back } = useAppStore.getState();
+
+    useAppStore
+      .getState()
+      .applyState(withReviews({ reviews: [OTHER_REVIEW], reviewHistory: [ARCHIVED_REVIEW] }));
+
+    expect(location()).toEqual({
+      kind: "gone",
+      item: "review",
+      id: REVIEW.id,
+      name: `web#${REVIEW.number}`,
+      boardId: "",
+    });
+    expect(useAppStore.getState().back).toBe(back);
+  });
+
+  it("puts the page of a discussion that left in its place, with its board", () => {
+    useAppStore.getState().applyState(withDiscussions());
+    useAppStore.getState().openDiscussion(DISCUSSION.id);
+
+    useAppStore.getState().applyState(withDiscussions({ discussions: [OTHER_DISCUSSION] }));
+
+    expect(location()).toEqual({
+      kind: "gone",
+      item: "discussion",
+      id: DISCUSSION.id,
+      name: DISCUSSION.title,
+      boardId: DISCUSSION.boardId,
+    });
+  });
+
+  it("puts the page of a task that left in its place, with the board of its repository", () => {
+    const repository = { ...WEB, boardId: BOARD.id };
+    useAppStore
+      .getState()
+      .applyState(withTasks({ repositories: [repository, API], boards: [BOARD] }));
+    useAppStore.getState().openTask(WEB_TASK.id);
+
+    useAppStore
+      .getState()
+      .applyState(
+        withTasks({ repositories: [repository, API], boards: [BOARD], tasks: [API_TASK] }),
+      );
+
+    expect(location()).toEqual({
+      kind: "gone",
+      item: "task",
+      id: WEB_TASK.id,
+      name: WEB_TASK.name,
+      boardId: BOARD.id,
+    });
+  });
+
+  it("puts the page of a task without a board in its place", () => {
+    useAppStore.getState().applyState(withTasks());
+    useAppStore.getState().openTask(WEB_TASK.id);
+
+    useAppStore.getState().applyState(withTasks({ tasks: [API_TASK] }));
+
+    expect(location()).toEqual({
+      kind: "gone",
+      item: "task",
+      id: WEB_TASK.id,
+      name: WEB_TASK.name,
+      boardId: "",
+    });
+  });
+
+  it("puts the page of a board that was removed in its place", () => {
+    useAppStore.getState().applyState(withTasks({ boards: [BOARD] }));
+    useAppStore.getState().openBoard(BOARD.id);
+
+    useAppStore.getState().applyState(withTasks({ boards: [] }));
+
+    expect(location()).toEqual({
+      kind: "gone",
+      item: "board",
+      id: BOARD.id,
+      name: BOARD.title,
+      boardId: "",
+    });
+  });
+
+  it("announces the page of an item that left on its own", () => {
+    useAppStore.getState().applyState(withTasks());
+    useAppStore.getState().openTask(WEB_TASK.id);
+
+    useAppStore.getState().applyState(withTasks({ tasks: [API_TASK] }));
+
+    expect(useAppStore.getState().announcement?.text).toBe(`${WEB_TASK.name} was deleted`);
+  });
+
+  it("does not announce the page of the item the user asked to remove", () => {
+    useAppStore.getState().applyState(withTasks());
+    useAppStore.getState().openTask(WEB_TASK.id);
+    useAppStore.setState({ expectGone: WEB_TASK.id });
+
+    useAppStore.getState().applyState(withTasks({ tasks: [API_TASK] }));
+
+    expect(useAppStore.getState().announcement).toBeNull();
+    expect(useAppStore.getState().expectGone).toBeNull();
+  });
+
+  it("keeps an item that was not in the previous snapshot", () => {
+    useAppStore.getState().applyState(withTasks());
+    useAppStore.getState().openTask("task-new");
+
+    useAppStore.getState().applyState(withTasks());
+
+    expect(location()).toEqual({ kind: "task", id: "task-new" });
+    expect(useAppStore.getState().announcement).toBeNull();
+  });
+
+  it("shows the first board for Home while there is no task", () => {
+    useAppStore
+      .getState()
+      .applyState(makeState({ repositories: [WEB], tasks: [], boards: [BOARD] }));
+
+    expect(location()).toEqual({ kind: "board", id: BOARD.id });
+  });
+
+  it("closes the panel when the place on screen changes", () => {
+    useAppStore.getState().applyState(withTasks());
+    useAppStore.getState().openTask(WEB_TASK.id);
+    useAppStore.setState({ panel: "reports" });
+
+    useAppStore.getState().applyState(withTasks({ tasks: [API_TASK] }));
+
+    expect(useAppStore.getState().panel).toBeNull();
+  });
+
+  it("goes Home on the welcome screen and keeps the places behind and ahead", () => {
+    useAppStore.getState().applyState(withTasks());
+    const back: Location[] = [HOME];
+    const forward: Location[] = [{ kind: "history" }];
+    useAppStore.setState({ location: { kind: "task", id: WEB_TASK.id }, back, forward });
+
+    useAppStore.getState().applyState(makeState({ repositories: [], tasks: [] }));
+
+    expect(location()).toEqual(HOME);
+    expect(useAppStore.getState().back).toBe(back);
+    expect(useAppStore.getState().forward).toBe(forward);
+  });
+});
+
+describe("places beside the one on screen", () => {
+  const BOARD_PLACE: Location = { kind: "board", id: BOARD.id };
+  const SETTINGS: Location = { kind: "settings", section: "defaults" };
+
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it("does not keep behind a board the board the page of an item that left opens", () => {
+    useAppStore.getState().applyState(withTasks({ boards: [BOARD] }));
+    useAppStore.getState().openBoard(BOARD.id);
+    useAppStore.getState().openTask(WEB_TASK.id);
+    useAppStore.getState().applyState(withTasks({ boards: [BOARD], tasks: [API_TASK] }));
+    expect(location().kind).toBe("gone");
+
+    useAppStore.getState().go(BOARD_PLACE);
+
+    expect(useAppStore.getState()).toMatchObject({
+      location: BOARD_PLACE,
+      back: [HOME],
+      forward: [],
+    });
+    const { result } = renderHook(() => useBackTarget());
+    expect(result.current).toEqual(HOME);
+  });
+
+  it("closes the settings opened from the page of an item that left to the place before them", () => {
+    useAppStore.getState().applyState(withTasks());
+    useAppStore.getState().openSettings();
+    useAppStore.getState().openTask(WEB_TASK.id);
+    useAppStore.getState().applyState(withTasks({ tasks: [API_TASK] }));
+
+    useAppStore.getState().openSettings();
+
+    expect(useAppStore.getState().back).toEqual([HOME]);
+
+    useAppStore.getState().closeSettings();
+
+    expect(location()).toEqual(HOME);
+  });
+
+  it("does not keep behind the board Home stands for the same board from the last run", () => {
+    const state = makeState({ repositories: [WEB], tasks: [], boards: [BOARD] });
+    useAppStore.getState().applyState(state);
+    expect(location()).toEqual(BOARD_PLACE);
+    useAppStore.setState(initialNav());
+    expect(useAppStore.getState().back).toEqual([BOARD_PLACE]);
+
+    useAppStore.getState().applyState(state);
+
+    expect(useAppStore.getState()).toMatchObject({ location: BOARD_PLACE, back: [], forward: [] });
+  });
+
+  it("does not keep behind the board Home stands for going back to it", () => {
+    useAppStore
+      .getState()
+      .applyState(makeState({ repositories: [WEB], tasks: [], boards: [BOARD] }));
+    useAppStore.setState({ location: SETTINGS, back: [BOARD_PLACE, HOME], forward: [] });
+
+    useAppStore.getState().goBack();
+
+    expect(useAppStore.getState()).toMatchObject({
+      location: BOARD_PLACE,
+      back: [],
+      forward: [SETTINGS],
+    });
+  });
+
+  it("does not offer the board on screen behind a task that left after it", () => {
+    useAppStore.getState().applyState(withTasks({ boards: [BOARD] }));
+    useAppStore.getState().openBoard(BOARD.id);
+    useAppStore.getState().openTask(WEB_TASK.id);
+    useAppStore.getState().openBoard(BOARD.id);
+    useAppStore.getState().applyState(withTasks({ boards: [BOARD], tasks: [API_TASK] }));
+    const { result } = renderHook(() => useBackTarget());
+    expect(result.current).toEqual(HOME);
+
+    useAppStore.getState().goBack();
+
+    expect(useAppStore.getState()).toMatchObject({
+      location: HOME,
+      back: [],
+      forward: [BOARD_PLACE],
+    });
+  });
+
+  it("closes the settings reopened from a task that left while they were open", () => {
+    useAppStore.getState().applyState(withTasks());
+    useAppStore.getState().openSettings();
+    useAppStore.getState().openTask(WEB_TASK.id);
+    useAppStore.getState().openSettings();
+    useAppStore.getState().applyState(withTasks({ tasks: [API_TASK] }));
+
+    useAppStore.getState().closeSettings();
+
+    expect(location()).toEqual(HOME);
   });
 });

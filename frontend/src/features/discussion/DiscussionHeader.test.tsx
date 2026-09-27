@@ -1,32 +1,32 @@
 import { screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { DiscussionHeader } from "@/features/discussion/DiscussionHeader";
 import { api, type DiscussionSummary } from "@/lib/wails";
+import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
 import { makeDiscussion, makeSituation, makeState } from "@/test/wails-mock";
 
 function header(overrides: Partial<DiscussionSummary> = {}) {
   const discussion = makeDiscussion(overrides);
-  const onToggleDocuments = vi.fn();
-  const view = renderWithStore(
-    <DiscussionHeader
-      discussion={discussion}
-      documentsOpen={false}
-      onToggleDocuments={onToggleDocuments}
-    />,
-    { state: makeState({ discussions: [discussion] }) },
-  );
-  return { ...view, onToggleDocuments };
+  return renderWithStore(<DiscussionHeader discussion={discussion} />, {
+    state: makeState({ discussions: [discussion] }),
+    ui: { location: { kind: "discussion", id: discussion.id } },
+  });
 }
 
 describe("DiscussionHeader", () => {
-  it("names the discussion, its board and where it stands", () => {
+  it("names the place after the discussion, with where it stands on the right", () => {
     header();
 
-    expect(screen.getByText("Discussion")).toBeInTheDocument();
-    expect(screen.getByText("Invoices")).toBeInTheDocument();
-    expect(screen.getByText("Roadmap")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Invoices" })).toBeInTheDocument();
     expect(screen.getByText("Discussing")).toBeInTheDocument();
+  });
+
+  it("leaves the kind and the board to the tree and the breadcrumb", () => {
+    header();
+
+    expect(screen.queryByText("Discussion")).not.toBeInTheDocument();
+    expect(screen.queryByText("Roadmap")).not.toBeInTheDocument();
   });
 
   it("pauses the conversation of the discussion", async () => {
@@ -46,11 +46,11 @@ describe("DiscussionHeader", () => {
   });
 
   it("offers the documents panel", async () => {
-    const { user, onToggleDocuments } = header();
+    const { user } = header();
 
     await user.click(screen.getByRole("button", { name: "Documents" }));
 
-    expect(onToggleDocuments).toHaveBeenCalledOnce();
+    expect(useAppStore.getState().panel).toBe("documents");
   });
 
   it("asks before archiving and before deleting", async () => {

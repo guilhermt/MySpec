@@ -45,6 +45,8 @@ export interface SelectProps {
   placeholder?: string;
   message?: ListMessage;
   size?: "md" | "sm";
+  /** variant is the look of the trigger: a field, or the trigger in the tone of the sidebar. */
+  variant?: "field" | "sidebar";
   loading?: boolean;
   disabled?: boolean;
   disabledReason?: string;
@@ -62,6 +64,13 @@ export function choiceName(choice: { label: string; unavailable?: boolean }): st
 export const SELECT_TRIGGER =
   "flex h-(--size-control) w-full items-center justify-between gap-2 rounded-sm border border-line-3 bg-surface-input px-2.5 text-(length:--text-ui) leading-(--leading-ui) text-ink-1 transition-[border-color,box-shadow] duration-(--duration-fast) ease-standard hover:border-ink-3 aria-expanded:border-focus focus-visible:field-focus aria-disabled:dashed-disabled aria-disabled:focus-visible:field-focus";
 
+/**
+ * SIDEBAR_TRIGGER is the trigger in the tone of the sidebar: smaller, on the sidebar's own input
+ * with its control border, and the choice in the meta size and the second ink.
+ */
+const SIDEBAR_TRIGGER =
+  "h-(--size-control-sm) border-sidebar-control bg-sidebar-input text-(length:--text-meta) leading-(--leading-meta) text-ink-2";
+
 /** UNAVAILABLE marks a choice that is no longer offered. */
 export const UNAVAILABLE = "◇";
 
@@ -75,6 +84,7 @@ export function Select({
   placeholder = "",
   message,
   size = "md",
+  variant = "field",
   loading,
   disabled,
   disabledReason,
@@ -91,7 +101,11 @@ export function Select({
       {...(disabled ? { "aria-disabled": true } : {})}
       {...(withReason ? { "aria-describedby": reasonId } : {})}
       {...(loading ? { "aria-busy": true } : {})}
-      className={cn(SELECT_TRIGGER, size === "sm" && "h-(--size-control-sm)")}
+      className={cn(
+        SELECT_TRIGGER,
+        size === "sm" && "h-(--size-control-sm)",
+        variant === "sidebar" && SIDEBAR_TRIGGER,
+      )}
     >
       <span className="truncate">
         {chosen === undefined ? (

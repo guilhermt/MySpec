@@ -204,6 +204,14 @@ type StepReviewer struct {
 	TurnRunning    bool   `json:"turnRunning"`
 	ProcessRunning bool   `json:"processRunning"`
 	RetryAttempt   int    `json:"retryAttempt"`
+	// TurnStartedAt is when the turn in progress started, RFC 3339; "" without
+	// a turn.
+	TurnStartedAt string `json:"turnStartedAt"`
+	// ActionLabel and ActionTarget are the action the agent runs now, as the
+	// conversation words it ("Reading", "internal/app/state.go"); "" when none
+	// runs.
+	ActionLabel    string `json:"actionLabel"`
+	ActionTarget   string `json:"actionTarget"`
 	ContextPercent int    `json:"contextPercent"`
 	PendingCount   int    `json:"pendingCount"`
 	LastError      string `json:"lastError"`
@@ -302,6 +310,14 @@ type PullRequest struct {
 	TurnRunning    bool   `json:"turnRunning"`
 	ProcessRunning bool   `json:"processRunning"`
 	RetryAttempt   int    `json:"retryAttempt"`
+	// TurnStartedAt is when the turn in progress started, RFC 3339; "" without
+	// a turn.
+	TurnStartedAt string `json:"turnStartedAt"`
+	// ActionLabel and ActionTarget are the action the agent runs now, as the
+	// conversation words it ("Reading", "internal/app/state.go"); "" when none
+	// runs.
+	ActionLabel    string `json:"actionLabel"`
+	ActionTarget   string `json:"actionTarget"`
 	ContextPercent int    `json:"contextPercent"`
 	PendingCount   int    `json:"pendingCount"`
 	LastError      string `json:"lastError"`
@@ -398,11 +414,19 @@ type TaskSummary struct {
 	SessionStatus string `json:"sessionStatus"`
 	// SessionModel and SessionEffort are what the session the task screen shows
 	// runs with from its next message on; "" without a session.
-	SessionModel    string           `json:"sessionModel"`
-	SessionEffort   string           `json:"sessionEffort"`
-	TurnRunning     bool             `json:"turnRunning"`
-	ProcessRunning  bool             `json:"processRunning"`
-	RetryAttempt    int              `json:"retryAttempt"`
+	SessionModel   string `json:"sessionModel"`
+	SessionEffort  string `json:"sessionEffort"`
+	TurnRunning    bool   `json:"turnRunning"`
+	ProcessRunning bool   `json:"processRunning"`
+	RetryAttempt   int    `json:"retryAttempt"`
+	// TurnStartedAt is when the turn in progress started, RFC 3339; "" without
+	// a turn.
+	TurnStartedAt string `json:"turnStartedAt"`
+	// ActionLabel and ActionTarget are the action the agent runs now, as the
+	// conversation words it ("Reading", "internal/app/state.go"); "" when none
+	// runs.
+	ActionLabel     string           `json:"actionLabel"`
+	ActionTarget    string           `json:"actionTarget"`
 	ContextPercent  int              `json:"contextPercent"`
 	PendingCount    int              `json:"pendingCount"`
 	Corrections     int              `json:"corrections"`
@@ -1077,11 +1101,19 @@ type ReviewSummary struct {
 	SessionStatus string `json:"sessionStatus"`
 	// SessionModel and SessionEffort are what the conversation runs with from
 	// its next message on; "" without a session.
-	SessionModel   string      `json:"sessionModel"`
-	SessionEffort  string      `json:"sessionEffort"`
-	TurnRunning    bool        `json:"turnRunning"`
-	ProcessRunning bool        `json:"processRunning"`
-	RetryAttempt   int         `json:"retryAttempt"`
+	SessionModel   string `json:"sessionModel"`
+	SessionEffort  string `json:"sessionEffort"`
+	TurnRunning    bool   `json:"turnRunning"`
+	ProcessRunning bool   `json:"processRunning"`
+	RetryAttempt   int    `json:"retryAttempt"`
+	// TurnStartedAt is when the turn in progress started, RFC 3339; "" without
+	// a turn.
+	TurnStartedAt string `json:"turnStartedAt"`
+	// ActionLabel and ActionTarget are the action the agent runs now, as the
+	// conversation words it ("Reading", "internal/app/state.go"); "" when none
+	// runs.
+	ActionLabel    string      `json:"actionLabel"`
+	ActionTarget   string      `json:"actionTarget"`
 	ContextPercent int         `json:"contextPercent"`
 	PendingCount   int         `json:"pendingCount"`
 	LastError      string      `json:"lastError"`
@@ -1253,11 +1285,19 @@ type DiscussionSummary struct {
 	SessionStatus string `json:"sessionStatus"`
 	// SessionModel and SessionEffort are what the conversation runs with from
 	// its next message on; "" without a session.
-	SessionModel   string      `json:"sessionModel"`
-	SessionEffort  string      `json:"sessionEffort"`
-	TurnRunning    bool        `json:"turnRunning"`
-	ProcessRunning bool        `json:"processRunning"`
-	RetryAttempt   int         `json:"retryAttempt"`
+	SessionModel   string `json:"sessionModel"`
+	SessionEffort  string `json:"sessionEffort"`
+	TurnRunning    bool   `json:"turnRunning"`
+	ProcessRunning bool   `json:"processRunning"`
+	RetryAttempt   int    `json:"retryAttempt"`
+	// TurnStartedAt is when the turn in progress started, RFC 3339; "" without
+	// a turn.
+	TurnStartedAt string `json:"turnStartedAt"`
+	// ActionLabel and ActionTarget are the action the agent runs now, as the
+	// conversation words it ("Reading", "internal/app/state.go"); "" when none
+	// runs.
+	ActionLabel    string      `json:"actionLabel"`
+	ActionTarget   string      `json:"actionTarget"`
 	ContextPercent int         `json:"contextPercent"`
 	PendingCount   int         `json:"pendingCount"`
 	LastError      string      `json:"lastError"`

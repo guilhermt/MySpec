@@ -1,5 +1,7 @@
-import { Sparkles } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { ChevronDown, Sparkles } from "lucide-react";
+import { Button } from "@/components/system/Button";
+import { Icon } from "@/components/system/Icon";
+import { Tooltip } from "@/components/system/Tooltip";
 import {
   Popover,
   PopoverContent,
@@ -8,7 +10,6 @@ import {
   PopoverTitle,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ModelPicker, ModelValue } from "@/features/models/ModelPicker";
 import { modelStageLabel } from "@/lib/models";
 import { asModelStage, type TaskStageModel, type TaskSummary } from "@/lib/wails";
@@ -40,18 +41,27 @@ function ModelRow({ taskId, row }: { taskId: string; row: TaskStageModel }) {
   );
 }
 
-/** TaskModelsButton opens the models of the stages of a task, from its header. */
+/**
+ * TaskModelsButton opens the models of the stages of a task, from its header. Below 1040px of main
+ * area only the icon stays, with the name in the tooltip.
+ */
 export function TaskModelsButton({ task }: { task: TaskSummary }) {
   return (
     <Popover>
-      <Tooltip>
-        <TooltipTrigger
-          render={<PopoverTrigger render={<Button variant="ghost" size="icon-sm" />} />}
-          aria-label="Models"
+      <Tooltip content="Models">
+        <PopoverTrigger
+          render={
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={Sparkles}
+              className="@max-[1040px]/main:w-(--size-control-sm) @max-[1040px]/main:px-0"
+            />
+          }
         >
-          <Sparkles />
-        </TooltipTrigger>
-        <TooltipContent>Models</TooltipContent>
+          <span className="@max-[1040px]/main:sr-only">Models</span>
+          <Icon icon={ChevronDown} size="sm" className="@max-[1040px]/main:hidden" />
+        </PopoverTrigger>
       </Tooltip>
       <PopoverContent align="end" className="w-96 gap-3 p-3">
         <PopoverHeader>

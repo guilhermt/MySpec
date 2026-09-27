@@ -217,6 +217,9 @@ func FromTasks(
 			TurnRunning:        summary.TurnRunning,
 			ProcessRunning:     summary.ProcessRunning,
 			RetryAttempt:       summary.RetryAttempt,
+			TurnStartedAt:      turnStart(summary),
+			ActionLabel:        summary.ActionLabel,
+			ActionTarget:       summary.ActionTarget,
 			ContextPercent:     summary.ContextPercent,
 			PendingCount:       summary.PendingCount,
 			Corrections:        summary.Corrections,
@@ -299,6 +302,9 @@ func fromPullRequest(pr *flow.PullRequest) *PullRequest {
 		TurnRunning:    summary.TurnRunning,
 		ProcessRunning: summary.ProcessRunning,
 		RetryAttempt:   summary.RetryAttempt,
+		TurnStartedAt:  turnStart(summary),
+		ActionLabel:    summary.ActionLabel,
+		ActionTarget:   summary.ActionTarget,
 		ContextPercent: summary.ContextPercent,
 		PendingCount:   summary.PendingCount,
 		LastError:      summary.LastError,
@@ -524,6 +530,9 @@ func fromStepReviewer(stage string, summary session.Summary) *StepReviewer {
 		TurnRunning:    summary.TurnRunning,
 		ProcessRunning: summary.ProcessRunning,
 		RetryAttempt:   summary.RetryAttempt,
+		TurnStartedAt:  turnStart(summary),
+		ActionLabel:    summary.ActionLabel,
+		ActionTarget:   summary.ActionTarget,
 		ContextPercent: summary.ContextPercent,
 		PendingCount:   summary.PendingCount,
 		LastError:      summary.LastError,
@@ -1384,6 +1393,9 @@ func FromReviews(
 			TurnRunning:    summary.TurnRunning,
 			ProcessRunning: summary.ProcessRunning,
 			RetryAttempt:   summary.RetryAttempt,
+			TurnStartedAt:  turnStart(summary),
+			ActionLabel:    summary.ActionLabel,
+			ActionTarget:   summary.ActionTarget,
 			ContextPercent: summary.ContextPercent,
 			PendingCount:   summary.PendingCount,
 			LastError:      summary.LastError,
@@ -1607,6 +1619,9 @@ func FromDiscussions(
 			TurnRunning:    summary.TurnRunning,
 			ProcessRunning: summary.ProcessRunning,
 			RetryAttempt:   summary.RetryAttempt,
+			TurnStartedAt:  turnStart(summary),
+			ActionLabel:    summary.ActionLabel,
+			ActionTarget:   summary.ActionTarget,
 			ContextPercent: summary.ContextPercent,
 			PendingCount:   summary.PendingCount,
 			LastError:      summary.LastError,
@@ -1948,4 +1963,12 @@ func cardOfReading(reading *board.Reading, key string) (board.Card, bool) {
 		return board.Card{}, false
 	}
 	return reading.Cards[i], true
+}
+
+// turnStart is when the turn of a session started, "" without one.
+func turnStart(summary session.Summary) string {
+	if summary.TurnStartedAt.IsZero() {
+		return ""
+	}
+	return summary.TurnStartedAt.Format(time.RFC3339)
 }

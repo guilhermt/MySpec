@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Markdown } from "@/features/chat/Markdown";
-import { ErrorNotice } from "@/features/notice/Notice";
+import { Banner } from "@/features/notice/Notice";
 import { reportLabel, verdictLabel } from "@/features/reviews/review-status";
 import { useReviewArtifact } from "@/features/reviews/useReviewArtifact";
 import type { ReviewPass, ReviewSummary } from "@/lib/wails";
@@ -113,10 +113,13 @@ export function ReportsPanel({ review }: ReportsPanelProps) {
               </div>
             )}
             {artifact.status === "error" && artifact.error !== dismissed && (
-              <ErrorNotice
-                message={artifact.error}
+              <Banner
+                className="bg-destructive/10"
+                title="Couldn't read the report"
                 onDismiss={() => setDismissed(artifact.error)}
-              />
+              >
+                {artifact.error}
+              </Banner>
             )}
             {artifact.status === "ready" && (
               <div className="max-w-[58.5rem] select-text">

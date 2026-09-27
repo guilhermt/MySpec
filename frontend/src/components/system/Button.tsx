@@ -1,9 +1,9 @@
 import { cva } from "class-variance-authority";
-import type { LucideIcon } from "lucide-react";
 import { type ComponentProps, useId } from "react";
 import { Button as UIButton } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Icon } from "./Icon";
+import type { IconGlyph } from "./icons";
 import { Kbd } from "./Kbd";
 import { Spinner } from "./Spinner";
 
@@ -11,7 +11,7 @@ export interface ButtonBaseProps
   extends Omit<ComponentProps<typeof UIButton>, "variant" | "size" | "className"> {
   variant?: "primary" | "secondary" | "ghost" | "danger" | "new";
   size?: "md" | "sm" | "xs";
-  icon?: LucideIcon;
+  icon?: IconGlyph;
   shortcut?: string;
   pressed?: boolean;
   error?: boolean;
