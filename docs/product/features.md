@@ -253,7 +253,7 @@ Se a pasta de destino já existe e é um clone do mesmo repositório, ela é lig
 
 ### Clone inexistente
 
-Quando o caminho cadastrado não existe, não é um diretório ou não é mais um repositório git, o repositório aparece na página **Repositories** e na barra lateral com o aviso `The clone at <caminho> is missing.` e a ação de trocar o caminho. As tasks dele continuam visíveis e navegáveis, com suas conversas, artefatos e histórico. Fica bloqueado tudo o que precisa do clone, sempre com essa razão:
+Quando o caminho cadastrado não existe, não é um diretório ou não é mais um repositório git, o repositório aparece na página **Repositories** com o aviso `The clone at <caminho> is missing.` e a ação de trocar o caminho, e na árvore da barra lateral como o aviso `<nome> · clone missing`, que troca o caminho. As tasks dele continuam visíveis e navegáveis, com suas conversas, artefatos e histórico. Fica bloqueado tudo o que precisa do clone, sempre com essa razão:
 
 - criar uma task nesse repositório: ele aparece no diálogo, desabilitado, com o aviso;
 - criar a worktree da task, no primeiro step: o step fica bloqueado como um step de worktree suja, com o aviso e **Tentar de novo**;
@@ -267,17 +267,16 @@ Enquanto nenhum board e nenhum repositório estão cadastrados, o produto mostra
 
 A barra lateral tem, de cima para baixo:
 
-- o nó **Reviews**, que abre a visão do [centro de review](#centro-de-review), com a contagem das pull requests pendentes e, dentro dele, os reviews ativos;
 - o **filtro por repositório**, um seletor com **All repositories** e um item por repositório cadastrado, em ordem alfabética, e o botão de nova task. A escolha do filtro é lembrada entre execuções do app, e um repositório removido volta o filtro para todos;
-- o aviso de clone inexistente de cada repositório que o filtro mostra, com **Change path**;
-- a **árvore** `Active items`, com as tasks e as discussões ativas, agrupada por board;
+- a **árvore** `Active items`, com os reviews, as tasks e as discussões ativas, agrupada por board;
 - o rodapé com **History**, o tema e as configurações.
 
-A árvore tem um nó por board, em ordem alfabética de título, e depois o grupo **No board**:
+A árvore começa pelo nó **Reviews** e segue com um nó por board, em ordem alfabética de título, e depois o grupo **No board**:
 
-- o **nó do board** mostra o título, com a seta `↗` sob o ponteiro, e abre a visão do board; o nó do board aberto fica destacado como o lugar na tela. À direita ele diz `reading…` enquanto o board é lido e `◇ Read failed` quando a última leitura falhou, com o motivo no tooltip. Um board sem itens ativos mostra `No active items.`;
+- o **nó Reviews** mostra o título, com a seta `↗` sob o ponteiro, e abre a visão do [centro de review](#centro-de-review); fica destacado com a visão aberta. À direita ele diz `N pending` com pull requests pendentes, `reading…` enquanto as pull requests são lidas e `◇ Read failed` quando a leitura falhou, com os repositórios no tooltip. Dentro dele vêm os reviews ativos, em ordem de criação, ou `No review in progress.`;
+- o **nó do board** mostra o título, com a seta `↗` sob o ponteiro, e abre a visão do board; o nó do board aberto fica destacado como o lugar na tela. À direita ele diz `reading…` enquanto o board é lido e `◇ Read failed` quando a última leitura falhou, com o motivo no tooltip. Um board sem itens ativos mostra `No active items.`. O primeiro item dentro do board é o **aviso de clone inexistente** de cada repositório dele que o filtro mostra, `<nome> · clone missing` com `Change path ↵`, o caminho no tooltip; o clique ou `Enter` trocam o caminho, e uma recusa aparece sob o aviso. O aviso de um repositório sem board fica no grupo **No board**;
 - dentro do board vem primeiro um **nó por épico** que tem ao menos uma task ativa, com o título do épico, na ordem de criação da primeira task dele, com as tasks dos seus cards dentro. O nó do épico só expande e recolhe. Depois dos épicos vêm as tasks do board sem épico: as de cards sem épico e as tasks sem card dos repositórios do board. Por último vêm as **discussões** ativas do board, que não aparecem sob os nós de épico;
-- o grupo **No board** tem as tasks dos repositórios sem board, inclusive as de cards de um board removido, e as discussões de um board removido, e aparece só quando tem alguma.
+- o grupo **No board** tem os avisos de clone inexistente e as tasks dos repositórios sem board, inclusive as de cards de um board removido, e as discussões de um board removido, e aparece só quando tem alguma.
 
 Dentro de cada nó as tasks seguem a ordem de criação. Os agrupamentos usam o que as tasks guardam dos seus cards, então a árvore não depende de nenhuma leitura do GitHub.
 
@@ -289,7 +288,9 @@ Cada item é uma **linha** de até três linhas:
 
 Um item em erro tem um trilho à esquerda; o item aberto fica destacado na cor da marca e rola para a vista. O nome acessível de uma linha diz o tipo, o nome, cada situação com o tempo, a posição, o que o agente faz e o meta, numa frase só.
 
-Cada nó expande e recolhe pela seta ao lado do título, e o que o usuário recolhe é lembrado entre execuções. Recolhido, o nó resume as suas linhas por estado, do mais grave (`1 error`, `2 waiting`, `to close`, `working`, `checks`, `paused`), e o nome acessível dele diz o resumo inteiro. O board e o épico do item aberto se expandem ao abri-lo. A árvore tem uma parada de Tab só, na linha aberta ou, sem item aberto, no primeiro nó. Com o filtro num repositório, a árvore mostra só o nó do board desse repositório, ou o grupo **No board**, com as tasks do repositório. Uma discussão pertence a um board, não a um repositório, então o filtro nunca a esconde do nó que ele mostra. Um filtro num repositório sem board e sem tasks diz `No tasks in <nome curto>.`
+Cada nó expande e recolhe pela seta ao lado do título, e o que o usuário recolhe é lembrado entre execuções. Recolhido, o nó resume as suas linhas por estado, do mais grave (`1 error`, `2 waiting`, `to close`, `working`, `checks`, `paused`), e o nome acessível dele diz o resumo inteiro. Os nós do item aberto se expandem ao abri-lo, e uma task escondida pelo filtro volta o filtro para **All repositories**.
+
+A árvore é navegável pelo teclado, com uma parada de Tab só: na linha aberta ou, sem item aberto, no nó **Reviews**. As setas para cima e para baixo percorrem as linhas visíveis, e `Home` e `End` vão às pontas, sem abrir nada. A seta para a direita expande um nó recolhido e, num nó aberto, vai ao primeiro item dele; a seta para a esquerda recolhe um nó aberto e, num item ou num nó recolhido, vai ao nó de cima. `Enter` abre o item, o board ou a visão Reviews, alterna um épico ou **No board**, e troca o caminho num aviso de clone. Com o filtro num repositório, a árvore mostra só o nó do board desse repositório, ou o grupo **No board**, com as tasks do repositório. Uma discussão pertence a um board, não a um repositório, então o filtro nunca a esconde do nó que ele mostra. Um filtro num repositório sem board e sem tasks diz `No tasks in <nome curto>.` sob a árvore. Os reviews não passam pelo filtro.
 
 ### Dados de uma versão com áreas de trabalho
 
@@ -593,7 +594,7 @@ Um relatório limpo, ou uma passada em que nada foi aprovado, deixa o review pro
 
 ### O review como item
 
-- **Barra lateral:** cada review ativo aparece sob o nó **Reviews**, em ordem de criação, com `<nome curto>#<número>`, o título, o ponto de estado e, à direita, o que espera pelo usuário ou o estado do review. Os reviews não passam pelo filtro de repositório da barra lateral.
+- **Barra lateral:** cada review ativo é uma linha sob o nó **Reviews** da árvore, em ordem de criação, com o título, `<nome curto>#<número>` no meta e o estado mais grave na segunda linha, como as linhas das tasks. Os reviews não passam pelo filtro de repositório da barra lateral.
 - **Tela do review:** o cabeçalho com o número, o título, o repositório, o autor, o card vinculado com o status no board, o modo, o medidor de contexto, **Pause** ou **Resume**, o botão do painel de relatórios e **Delete review**; a barra do review com o link da pull request, o estado, os avisos e as ações **Publish review**, ou **Apply** e **Approve** no modo aplicar, **Review again** e **Open in VS Code**, que abre a worktree; o painel de apontamentos e a conversa; o painel de relatórios.
 - **Estados:** `Reviewing`, `Waiting for checks`, `Pass blocked`, `Waiting for the report`, `Decide findings`, `Ready to publish`, `Publish failed`, `Published`, `New commits` e o que deu errado com a pull request depois da passada (`Checks failed: <checks>`, `Conflict with <base>` ou os dois); no modo aplicar, `Ready to apply`, `Applying`, `In review`, `Ready to approve`, `Committing`, `Ready to merge` e o mesmo estado de checks e conflito. O estado da conversa, pausada, com erro, pedindo permissão ou perguntando, prevalece sobre eles, como na task, e o agente trabalhando numa conversa durante a espera pelos checks mostra `Reviewing`. Em `Pass blocked`, a barra do review mostra a razão, e num check que falhou depois da passada, os checks pelo nome.
 - **Fim:** o review termina quando a pull request é mergeada ou fechada. A leitura de cada minuto percebe, e o produto encerra a sessão, remove a worktree e leva o review ao histórico, sem ação do usuário e sem notificar. Uma leitura que falha deixa o aviso `Couldn't check GitHub` na barra do review.

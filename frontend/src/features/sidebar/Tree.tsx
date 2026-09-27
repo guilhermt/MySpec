@@ -1,17 +1,20 @@
-import { Fragment, type ReactNode, useEffect } from "react";
+import { Fragment, type ReactNode } from "react";
 import { useNow } from "@/features/attention/useNow";
+import { CloneNotice } from "@/features/sidebar/CloneNotice";
 import {
   type EpicNode,
+  emptyTreeText,
   flashOf,
   type ItemRow,
   nodeRows,
   nodeSummary,
-  nodesOfItem,
   sidebarTree,
   type TreeNode,
+  visibleEntries,
 } from "@/features/sidebar/sidebar-tree";
 import { TreeNodeRow } from "@/features/sidebar/TreeNodeRow";
 import { TreeRow } from "@/features/sidebar/TreeRow";
+import { useTreeKeyboard } from "@/features/sidebar/useTreeKeyboard";
 import { nextWaiting } from "@/lib/situations";
 import {
   useAppStore,
@@ -19,6 +22,7 @@ import {
   useOpenBoardId,
   useOpenItemId,
   useRepositoryFilter,
+  useReviewsOpen,
   useSidebarCollapsed,
 } from "@/store/app-store";
 
@@ -33,44 +37,33 @@ const EMPTY =
   "px-(--tree-pad) py-(--row-pad-y) text-(length:--text-meta) leading-(--leading-meta) text-ink-3";
 
 /**
- * Tree is the active items in their nodes: a node per board, with its epics,
- * then No board. The item on screen shows open, the one Ctrl+J opens next
- * carries the mark, and a situation that just started blinks its row, or the
- * summary of the collapsed node holding it.
+ * Tree is the active items in their nodes: Reviews, a node per board with its
+ * clone notices and its epics, then No board. The item on screen shows open,
+ * the one Ctrl+J opens next carries the mark, and a situation that just started
+ * blinks its row, or the summary of the collapsed node holding it. The
+ * keyboard walks it as one Tab stop.
  */
 export function Tree({ narrow }: TreeProps) {
   const app = useAppStore((state) => state.app);
-  const expandSidebarNodes = useAppStore((state) => state.expandSidebarNodes);
   const filter = useRepositoryFilter();
   const collapsed = useSidebarCollapsed();
   const flashing = useFlashing();
   const openItemId = useOpenItemId();
   const openBoardId = useOpenBoardId();
+  const reviewsOpen = useReviewsOpen();
   const now = useNow(60_000, true);
 
-  // Reviews and the clone notices keep their own pieces above the tree.
-  const nodes =
-    app === null ? [] : sidebarTree(app, filter, now).filter((node) => node.kind !== "reviews");
+  const nodes = app === null ? [] : sidebarTree(app, filter, now);
   const nextId = nextWaiting(app, openItemId)?.itemId ?? null;
+  const empty = app === null ? null : emptyTreeText(app, filter);
+  const { tabIndexOf, onKeyDown, onFocus, onBlur } = useTreeKeyboard(
+    visibleEntries(nodes, collapsed),
+    openItemId,
+  );
 
-  // An item that opens shows in the tree, with its nodes expanded: when it
-  // opens, or when it joins the state after opening. Collapsing a node changes
-  // neither.
-  const openNodes = openItemId === null ? [] : nodesOfItem(nodes, openItemId);
-  const openNodesKey = openNodes.join("\n");
-  // biome-ignore lint/correctness/useExhaustiveDependencies: openNodesKey stands for openNodes
-  useEffect(() => {
-    expandSidebarNodes(openNodes);
-  }, [openItemId, openNodesKey, expandSidebarNodes]);
-
-  if (nodes.length === 0) {
+  if (app === null) {
     return null;
   }
-
-  // One Tab stop: the open row, or the first line of the tree.
-  const rows = nodes.flatMap(nodeRows);
-  const tabStop = rows.some((row) => row.id === openItemId) ? openItemId : nodes[0]?.id;
-  const tabIndexOf = (id: string) => (id === tabStop ? 0 : -1);
 
   const itemRow = (row: ItemRow, level: 2 | 3) => (
     <TreeRow
@@ -99,7 +92,10 @@ export function Tree({ narrow }: TreeProps) {
           node={item}
           level={level}
           expanded={expanded}
-          current={item.kind === "board" && item.board.id === openBoardId}
+          current={
+            (item.kind === "board" && item.board.id === openBoardId) ||
+            (item.kind === "reviews" && reviewsOpen)
+          }
           summary={expanded ? null : nodeSummary(under)}
           flash={
             expanded
@@ -126,15 +122,22 @@ export function Tree({ narrow }: TreeProps) {
     <div
       role="tree"
       aria-label="Active items"
+      onKeyDown={onKeyDown}
+      onFocus={onFocus}
+      onBlur={onBlur}
       className="flex flex-col gap-(--row-gap) p-(--space-2)"
     >
       {nodes.map((top) => {
         const epics = top.kind === "board" ? top.epics : [];
-        const empty = epics.length === 0 && top.rows.length === 0;
+        const notices = top.kind === "reviews" ? [] : top.notices;
+        const nothing = notices.length === 0 && epics.length === 0 && top.rows.length === 0;
         return node(
           top,
           1,
           <>
+            {notices.map((notice) => (
+              <CloneNotice key={notice.id} notice={notice} tabIndex={tabIndexOf(notice.id)} />
+            ))}
             {epics.map((epic) =>
               node(
                 epic,
@@ -145,15 +148,20 @@ export function Tree({ narrow }: TreeProps) {
               ),
             )}
             {top.rows.map((row) => itemRow(row, 2))}
-            {empty && top.kind === "board" && (
+            {nothing && top.kind !== "no-board" && (
               <div role="none" className={EMPTY}>
-                No active items.
+                {top.kind === "reviews" ? "No review in progress." : "No active items."}
               </div>
             )}
           </>,
           "flex flex-col gap-(--row-gap) pt-(--space-1)",
         );
       })}
+      {empty !== null && (
+        <div role="none" className={EMPTY}>
+          {empty}
+        </div>
+      )}
     </div>
   );
 }

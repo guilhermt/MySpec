@@ -93,6 +93,7 @@ function TreeRowView({ row, level, selected, isNext, flash, narrow, tabIndex }: 
         aria-selected={selected}
         {...(selected ? { "aria-current": "page" as const } : {})}
         tabIndex={tabIndex}
+        data-entry-id={row.id}
         data-tone={row.tone}
         {...(flash !== null ? { "data-flash": flash } : {})}
         onClick={open}

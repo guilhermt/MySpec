@@ -1,9 +1,10 @@
-import { screen } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { Sidebar } from "@/features/sidebar/Sidebar";
+import { api } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
-import { makeState, makeTask } from "@/test/wails-mock";
+import { makeRepository, makeState, makeTask } from "@/test/wails-mock";
 
 function sidebar() {
   return renderWithStore(<Sidebar />, { state: makeState({ tasks: [makeTask()] }) });
@@ -22,12 +23,25 @@ describe("Sidebar", () => {
     expect(screen.getByRole("group", { name: "Theme" })).toBeInTheDocument();
   });
 
-  it("puts the node of the reviews above the tasks", () => {
+  it("holds the tree of active items in the Work sidebar", () => {
     sidebar();
 
-    const reviews = screen.getByRole("navigation", { name: "Reviews" });
-    const tasks = screen.getByRole("tree", { name: "Active items" });
-    expect(reviews.compareDocumentPosition(tasks) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const work = screen.getByRole("complementary", { name: "Work" });
+    expect(within(work).getByRole("tree", { name: "Active items" })).toBeInTheDocument();
+  });
+
+  it("expands the nodes of the item on screen and shows its repository again", () => {
+    renderWithStore(<Sidebar />, {
+      state: makeState({
+        repositories: [makeRepository({ id: "repo-1" }), makeRepository({ id: "repo-2" })],
+        tasks: [makeTask({ id: "task-1", repositoryId: "repo-1" })],
+        repositoryFilter: "repo-2",
+      }),
+      ui: { location: { kind: "task", id: "task-1" }, sidebarCollapsed: new Set(["no-board"]) },
+    });
+
+    expect(useAppStore.getState().sidebarCollapsed.has("no-board")).toBe(false);
+    expect(api.setRepositoryFilter).toHaveBeenCalledWith("");
   });
 
   it("opens the creation dialog from New task", async () => {

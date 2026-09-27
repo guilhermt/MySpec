@@ -147,6 +147,7 @@ export function TreeNodeRow({
       aria-label={shown !== null ? `${title}, ${shown.label}` : title}
       {...(current ? { "aria-current": "page" as const } : {})}
       tabIndex={tabIndex}
+      data-entry-id={node.id}
       className={cn(
         "group/node grid h-(--size-node) w-full grid-cols-[var(--icon)_minmax(0,1fr)_auto] items-center gap-x-(--space-2-5) rounded-sm pr-(--space-2) pl-(--tree-pad) outline-none transition-colors duration-(--duration-fast) ease-standard focus-visible:focus-ring",
         node.kind === "epic"
