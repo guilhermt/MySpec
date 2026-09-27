@@ -16,10 +16,11 @@ import {
 } from "@/features/discussion/discussion-status";
 import { useDiscussionArtifact } from "@/features/discussion/useDiscussionArtifact";
 import { formatDates } from "@/features/history/history-format";
+import { LocationHeader } from "@/features/navigation/LocationHeader";
 import { cn } from "@/lib/utils";
 import { DISCUSSION_STAGE, type Draft } from "@/lib/wails";
 import { loadTranscript, openExternal } from "@/store/actions";
-import { useAppStore, useArchivedDiscussion } from "@/store/app-store";
+import { useArchivedDiscussion } from "@/store/app-store";
 
 const LOADING_WIDTHS = ["w-1/2", "w-full", "w-3/4"];
 
@@ -97,7 +98,6 @@ export interface ArchivedDiscussionViewProps {
  */
 export function ArchivedDiscussionView({ discussionId }: ArchivedDiscussionViewProps) {
   const discussion = useArchivedDiscussion(discussionId);
-  const closeArchivedDiscussion = useAppStore((state) => state.closeArchivedDiscussion);
   const [deleting, setDeleting] = useState(false);
   // The document never changes again, so it is read once, at revision zero.
   const artifact = useDiscussionArtifact(discussionId, DOCUMENT_FILE, 0);
@@ -119,16 +119,8 @@ export function ArchivedDiscussionView({ discussionId }: ArchivedDiscussionViewP
 
   return (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
-      <header className="flex h-11 shrink-0 items-center gap-2 border-b px-3">
-        <Button variant="ghost" size="sm" onClick={() => closeArchivedDiscussion()}>
-          ← History
-        </Button>
-        <Badge variant="outline">Discussion</Badge>
-        <span className="min-w-0 truncate font-medium">{discussion.title}</span>
-        <Badge variant="secondary">{discussion.board}</Badge>
-
-        <span className="flex-1" />
-
+      <LocationHeader>
+        <Badge variant="outline">Archived</Badge>
         <Button
           variant="ghost"
           size="icon-sm"
@@ -143,7 +135,7 @@ export function ArchivedDiscussionView({ discussionId }: ArchivedDiscussionViewP
           open={deleting}
           onOpenChange={setDeleting}
         />
-      </header>
+      </LocationHeader>
 
       <div className="flex h-9 shrink-0 items-center gap-3 border-b px-3 text-xs text-muted-foreground">
         <span className="shrink-0">{formatDates(discussion.createdAt, discussion.archivedAt)}</span>

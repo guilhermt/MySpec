@@ -7,7 +7,10 @@ import { makeReviewCenter, makeState } from "@/test/wails-mock";
 
 describe("ReviewsHeader", () => {
   it("names the view", () => {
-    renderWithStore(<ReviewsHeader center={makeReviewCenter()} />, { state: makeState() });
+    renderWithStore(<ReviewsHeader center={makeReviewCenter()} />, {
+      state: makeState(),
+      ui: { location: { kind: "reviews" } },
+    });
 
     expect(screen.getByRole("heading", { level: 1, name: "Reviews" })).toBeInTheDocument();
   });

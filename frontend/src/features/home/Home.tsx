@@ -1,6 +1,7 @@
 import { ListTodo, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
+import { LocationHeader } from "@/features/navigation/LocationHeader";
 import { useAppStore, useTasks } from "@/store/app-store";
 
 /**
@@ -18,19 +19,22 @@ export function Home() {
       : "Pick a task from the list, or create a new one.";
 
   return (
-    <section className="flex min-h-0 flex-1 items-center justify-center bg-background p-8 text-foreground">
-      <div className="flex max-w-[32.25rem] flex-col items-center gap-2 text-center">
-        <ListTodo aria-hidden="true" className="size-8 text-muted-foreground" />
-        <p className="font-medium">{title}</p>
-        <p className="text-muted-foreground">{description}</p>
-        <Button size="sm" className="mt-2" onClick={() => openNewTask()}>
-          <Plus />
-          New task
-          <KbdGroup>
-            <Kbd>Ctrl</Kbd>
-            <Kbd>N</Kbd>
-          </KbdGroup>
-        </Button>
+    <section className="flex min-h-0 flex-1 flex-col bg-background text-foreground">
+      <LocationHeader />
+      <div className="flex min-h-0 flex-1 items-center justify-center p-8">
+        <div className="flex max-w-[32.25rem] flex-col items-center gap-2 text-center">
+          <ListTodo aria-hidden="true" className="size-8 text-muted-foreground" />
+          <p className="font-medium">{title}</p>
+          <p className="text-muted-foreground">{description}</p>
+          <Button size="sm" className="mt-2" onClick={() => openNewTask()}>
+            <Plus />
+            New task
+            <KbdGroup>
+              <Kbd>Ctrl</Kbd>
+              <Kbd>N</Kbd>
+            </KbdGroup>
+          </Button>
+        </div>
       </div>
     </section>
   );

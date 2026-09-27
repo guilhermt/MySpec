@@ -34,7 +34,10 @@ function stateWith(board: Partial<Board> = {}): State {
 }
 
 function view(board: Partial<Board> = {}) {
-  return renderWithStore(<BoardView boardId="board-1" />, { state: stateWith(board) });
+  return renderWithStore(<BoardView boardId="board-1" />, {
+    state: stateWith(board),
+    ui: { location: { kind: "board", id: "board-1" } },
+  });
 }
 
 afterEach(() => {
@@ -57,6 +60,14 @@ describe("BoardView", () => {
     expect(within(tree).getByRole("treeitem", { name: /#12/ })).toBeInTheDocument();
     expect(within(tree).getByRole("treeitem", { name: /#7/ })).toBeInTheDocument();
     expect(within(tree).queryByRole("treeitem", { name: /#3/ })).not.toBeInTheDocument();
+  });
+
+  it("opens the board on GitHub from the header", async () => {
+    const { user } = view();
+
+    await user.click(screen.getByRole("button", { name: "Open on GitHub" }));
+
+    expect(api.openExternal).toHaveBeenCalledWith(makeBoard().url);
   });
 
   it("shows placeholder rows while a board never read is being read", () => {

@@ -1,6 +1,8 @@
 import { FolderGit2, SlidersHorizontal, SquareKanban } from "lucide-react";
 import { type ReactNode, useId } from "react";
+import { Button } from "@/components/system/Button";
 import { BoardsPage } from "@/features/boards/BoardsPage";
+import { LocationHeader } from "@/features/navigation/LocationHeader";
 import { RepositoriesPage } from "@/features/repositories/RepositoriesPage";
 import { Defaults } from "@/features/settings/Defaults";
 import { DiscardChangesDialog } from "@/features/settings/DiscardChangesDialog";
@@ -34,44 +36,51 @@ function NavItem({ section, children }: { section: SettingsSection; children: Re
 export function SettingsView() {
   const { settingsSection } = useSettingsUi();
   const promptsId = useId();
+  const closeSettings = useAppStore((state) => state.closeSettings);
 
   return (
-    <section className="flex min-h-0 min-w-0 flex-1 bg-background text-foreground">
-      <nav aria-label="Settings" className="flex w-56 shrink-0 flex-col gap-0.5 border-r p-2">
-        <h1 className="flex h-9 items-center px-2 text-sm font-semibold">Settings</h1>
-        <NavItem section="defaults">
-          <SlidersHorizontal aria-hidden="true" />
-          Defaults
-        </NavItem>
-        <NavItem section="boards">
-          <SquareKanban aria-hidden="true" />
-          Boards
-        </NavItem>
-        <NavItem section="repositories">
-          <FolderGit2 aria-hidden="true" />
-          Repositories
-        </NavItem>
-        <h2 id={promptsId} className="mt-3 px-2 pb-1 text-xs font-medium text-muted-foreground">
-          Prompts
-        </h2>
-        <ul aria-labelledby={promptsId} className="flex flex-col gap-0.5">
-          {PROMPTS.map((prompt) => (
-            <li key={prompt.stage}>
-              <NavItem section={prompt.stage}>{prompt.name}</NavItem>
-            </li>
-          ))}
-        </ul>
-      </nav>
-      <div className="min-w-0 flex-1">
-        {settingsSection === "defaults" ? (
-          <Defaults />
-        ) : settingsSection === "boards" ? (
-          <BoardsPage />
-        ) : settingsSection === "repositories" ? (
-          <RepositoriesPage />
-        ) : (
-          <PromptPane key={settingsSection} stage={settingsSection} />
-        )}
+    <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-background text-foreground">
+      <LocationHeader>
+        <Button variant="ghost" size="sm" shortcut="Esc" onClick={() => closeSettings()}>
+          Close
+        </Button>
+      </LocationHeader>
+      <div className="flex min-h-0 flex-1">
+        <nav aria-label="Settings" className="flex w-56 shrink-0 flex-col gap-0.5 border-r p-2">
+          <NavItem section="defaults">
+            <SlidersHorizontal aria-hidden="true" />
+            Defaults
+          </NavItem>
+          <NavItem section="boards">
+            <SquareKanban aria-hidden="true" />
+            Boards
+          </NavItem>
+          <NavItem section="repositories">
+            <FolderGit2 aria-hidden="true" />
+            Repositories
+          </NavItem>
+          <h2 id={promptsId} className="mt-3 px-2 pb-1 text-xs font-medium text-muted-foreground">
+            Prompts
+          </h2>
+          <ul aria-labelledby={promptsId} className="flex flex-col gap-0.5">
+            {PROMPTS.map((prompt) => (
+              <li key={prompt.stage}>
+                <NavItem section={prompt.stage}>{prompt.name}</NavItem>
+              </li>
+            ))}
+          </ul>
+        </nav>
+        <div className="min-w-0 flex-1">
+          {settingsSection === "defaults" ? (
+            <Defaults />
+          ) : settingsSection === "boards" ? (
+            <BoardsPage />
+          ) : settingsSection === "repositories" ? (
+            <RepositoriesPage />
+          ) : (
+            <PromptPane key={settingsSection} stage={settingsSection} />
+          )}
+        </div>
       </div>
       <DiscardChangesDialog />
     </section>

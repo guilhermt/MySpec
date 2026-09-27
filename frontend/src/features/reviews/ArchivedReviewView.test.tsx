@@ -40,14 +40,30 @@ function view(overrides: Partial<ArchivedReview> = {}) {
 }
 
 describe("ArchivedReviewView", () => {
-  it("names the pull request, its repository, its author and what became of it", () => {
+  it("names the pull request, its author and what became of it", () => {
     view({ outcome: "closed" });
 
-    expect(screen.getByText("#31")).toBeInTheDocument();
-    expect(screen.getByText("Add the login screen")).toBeInTheDocument();
-    expect(screen.getByText("dev/web")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Add the login screen" }),
+    ).toBeInTheDocument();
     expect(screen.getByText("alice")).toBeInTheDocument();
     expect(screen.getByText("Closed")).toBeInTheDocument();
+  });
+
+  it("links the card the pull request is linked to", async () => {
+    const { user } = view({
+      card: {
+        boardId: "board-1",
+        number: 12,
+        title: "Add the login screen",
+        url: "https://github.com/dev/web/issues/12",
+        status: "Done",
+      },
+    });
+
+    await user.click(screen.getByRole("button", { name: "Open card #12 on GitHub · Done" }));
+
+    expect(api.openExternal).toHaveBeenCalledWith("https://github.com/dev/web/issues/12");
   });
 
   it("renders the report of every recorded pass", async () => {
@@ -94,10 +110,10 @@ describe("ArchivedReviewView", () => {
     expect(api.openExternal).toHaveBeenCalledWith("https://github.com/dev/web/pull/31");
   });
 
-  it("goes back to the history", async () => {
+  it("goes to the history through the breadcrumb", async () => {
     const { user } = view();
 
-    await user.click(screen.getByRole("button", { name: "← History" }));
+    await user.click(screen.getByRole("button", { name: "History" }));
 
     expect(useAppStore.getState().location).toEqual({ kind: "history" });
   });

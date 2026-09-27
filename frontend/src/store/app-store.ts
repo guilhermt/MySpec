@@ -209,14 +209,12 @@ export interface AppStore {
   openReviews: () => void;
   openReview: (id: string) => void;
   openArchivedReview: (id: string) => void;
-  closeArchivedReview: () => void;
   /** openStartReview opens the dialog that starts a review of a pull request. */
   openStartReview: (pull: PullRef) => void;
   closeStartReview: () => void;
   setPendingReview: (pending: PullRef | null) => void;
   openDiscussion: (id: string) => void;
   openArchivedDiscussion: (id: string) => void;
-  closeArchivedDiscussion: () => void;
   /** openNewDiscussion opens the dialog that creates a discussion of a board. */
   openNewDiscussion: (ref: NewDiscussionRef) => void;
   closeNewDiscussion: () => void;
@@ -238,7 +236,6 @@ export interface AppStore {
 
   openHistory: () => void;
   openArchived: (id: string) => void;
-  closeArchived: () => void;
   setHistoryQuery: (query: string) => void;
   dismissArchivedNotice: () => void;
   setLeftover: (leftover: Leftover | null) => void;
@@ -695,8 +692,6 @@ export const useAppStore = create<AppStore>()((set, get) => {
 
     openArchivedReview: (id) => go({ kind: "archived-review", id }),
 
-    closeArchivedReview: () => go({ kind: "history" }),
-
     openStartReview: (pull) => set({ startReview: pull }),
 
     closeStartReview: () => set({ startReview: null }),
@@ -706,8 +701,6 @@ export const useAppStore = create<AppStore>()((set, get) => {
     openDiscussion: (id) => go({ kind: "discussion", id }),
 
     openArchivedDiscussion: (id) => go({ kind: "archived-discussion", id }),
-
-    closeArchivedDiscussion: () => go({ kind: "history" }),
 
     openNewDiscussion: (ref) => set({ newDiscussion: ref }),
 
@@ -812,8 +805,6 @@ export const useAppStore = create<AppStore>()((set, get) => {
     openHistory: () => go({ kind: "history" }),
 
     openArchived: (id) => go({ kind: "archived-task", id }),
-
-    closeArchived: () => go({ kind: "history" }),
 
     setHistoryQuery: (query) => set({ historyQuery: query }),
 

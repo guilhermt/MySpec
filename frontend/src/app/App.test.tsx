@@ -312,7 +312,9 @@ describe("App", () => {
       useAppStore.getState().openArchivedReview("review-1");
     });
 
-    expect(screen.getByRole("button", { name: "← History" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Add the login screen" }),
+    ).toBeInTheDocument();
     expect(screen.getByText("Merged")).toBeInTheDocument();
     await waitFor(() => {
       expect(api.readReviewArtifact).toHaveBeenCalledWith("review-1", "review-1.md");

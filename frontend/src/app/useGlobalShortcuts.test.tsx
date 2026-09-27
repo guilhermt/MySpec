@@ -374,7 +374,8 @@ describe("useGlobalShortcuts", () => {
     await screen.findByRole("heading", { name: "Defaults" });
     await user.keyboard("{Control>},{/Control}");
 
-    expect(useAppStore.getState()).toMatchObject({ location: HISTORY, pendingFocus: "title" });
+    expect(useAppStore.getState().location).toEqual(HISTORY);
+    expect(screen.getByRole("heading", { level: 1, name: "History" })).toHaveFocus();
   });
 
   it("closes the settings on Esc back to the place they were opened from", async () => {
@@ -388,7 +389,8 @@ describe("useGlobalShortcuts", () => {
 
     await user.keyboard("{Escape}");
 
-    expect(useAppStore.getState()).toMatchObject({ location: HISTORY, pendingFocus: "title" });
+    expect(useAppStore.getState().location).toEqual(HISTORY);
+    expect(screen.getByRole("heading", { level: 1, name: "History" })).toHaveFocus();
   });
 
   it("closes the settings on Esc to Home when there is no place behind them", async () => {

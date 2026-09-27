@@ -26,12 +26,11 @@ describe("ArchivedDiscussionView", () => {
     Object.defineProperty(Element.prototype, "scrollTo", { value: vi.fn(), configurable: true });
   });
 
-  it("names the discussion, its board and what it published", () => {
+  it("names the discussion, says it is archived and what it published", () => {
     view({ publishedCount: 2 });
 
-    expect(screen.getByText("Invoices")).toBeInTheDocument();
-    expect(screen.getByText("Discussion")).toBeInTheDocument();
-    expect(screen.getByText("Roadmap")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Invoices" })).toBeInTheDocument();
+    expect(screen.getByText("Archived")).toBeInTheDocument();
     expect(screen.getByText("2 cards published")).toBeInTheDocument();
     expect(screen.getByText(/2026/)).toBeInTheDocument();
   });
@@ -111,10 +110,10 @@ describe("ArchivedDiscussionView", () => {
     expect(await screen.findByText("On it.")).toBeInTheDocument();
   });
 
-  it("goes back to the history", async () => {
+  it("goes to the history through the breadcrumb", async () => {
     const { user } = view();
 
-    await user.click(screen.getByRole("button", { name: "← History" }));
+    await user.click(screen.getByRole("button", { name: "History" }));
 
     expect(useAppStore.getState().location).toEqual({ kind: "history" });
   });

@@ -634,15 +634,6 @@ describe("history", () => {
       openArchivedId: ARCHIVED.id,
       historyQuery: "log",
     });
-
-    act(() => {
-      useAppStore.getState().closeArchived();
-    });
-    expect(result.current).toEqual({
-      historyOpen: true,
-      openArchivedId: null,
-      historyQuery: "log",
-    });
   });
 
   it("leaves the history when a task is opened", () => {
@@ -1347,18 +1338,13 @@ describe("reviews", () => {
     expect(result.current).toEqual({ open: false, openId: REVIEW.id });
   });
 
-  it("opens an archived review inside the history and closes it", () => {
+  it("opens an archived review inside the history", () => {
     act(() => {
       useAppStore.getState().applyState(withReviews({ reviewHistory: [ARCHIVED_REVIEW] }));
       useAppStore.getState().openReview(REVIEW.id);
       useAppStore.getState().openArchivedReview(ARCHIVED_REVIEW.id);
     });
     expect(location()).toEqual({ kind: "archived-review", id: ARCHIVED_REVIEW.id });
-
-    act(() => {
-      useAppStore.getState().closeArchivedReview();
-    });
-    expect(location()).toEqual({ kind: "history" });
   });
 
   it.each([
@@ -1566,7 +1552,7 @@ describe("discussions", () => {
     expect(location()).toEqual({ kind: "discussion", id: DISCUSSION.id });
   });
 
-  it("opens an archived discussion inside the history and closes it", () => {
+  it("opens an archived discussion inside the history", () => {
     act(() => {
       useAppStore
         .getState()
@@ -1575,11 +1561,6 @@ describe("discussions", () => {
       useAppStore.getState().openArchivedDiscussion(ARCHIVED_DISCUSSION.id);
     });
     expect(location()).toEqual({ kind: "archived-discussion", id: ARCHIVED_DISCUSSION.id });
-
-    act(() => {
-      useAppStore.getState().closeArchivedDiscussion();
-    });
-    expect(location()).toEqual({ kind: "history" });
   });
 
   it.each([

@@ -75,7 +75,7 @@ Uma falha de leitura aparece onde a leitura foi pedida: no diálogo do board, na
 
 A visão do board abre pelo nó do board na barra lateral e ocupa a área principal, no lugar da task. Abri-la relê o board.
 
-- **Cabeçalho:** o título, o link para o GitHub, `Updated <há quanto tempo>`, o indicador de leitura em curso, o botão de atualizar, **New discussion** e a falha da última leitura, quando houver.
+- **Cabeçalho:** o [cabeçalho do lugar](#cabeçalho-do-lugar), com o título do board, e à direita `Updated <há quanto tempo>`, o indicador de leitura em curso, **New discussion**, o botão de atualizar e **Open on GitHub**; a falha da última leitura, quando houver, fica numa linha logo abaixo.
 - **Barra de filtros:** a busca, que casa com o título, sem diferenciar maiúsculas nem acentos, e com o número, com ou sem `#`; os filtros **Repository**, entre os administrados, **Status**, com `No status`, e **Assignee**; e **Assigned to me**, que filtra pelo usuário autenticado no `gh`. Os filtros combinam entre si, e **Clear filters** limpa todos. Os filtros de cada board são lembrados entre execuções.
 - **Barra de seleção**, acima da lista, quando há cards selecionados: `N cards selected`, **Discuss selected** e **Clear selection**.
 - **Lista de cards** agrupada por status: uma seção por opção do campo de status, na ordem do board, mesmo vazia, e a seção `No status` quando há cards sem status. Um board sem campo de status tem uma seção única, `Cards`. Cada seção mostra o nome e a contagem já filtrada e é recolhível. As seções dos status finais começam recolhidas, e o que o usuário recolhe ou expande é lembrado por board. Dentro de cada seção, as issues abertas vêm antes das fechadas, cada grupo na ordem do board, e uma issue fechada numa seção de status não final aparece esmaecida.
@@ -329,7 +329,7 @@ O contexto usa a leitura guardada do board. Quando a leitura do card tem mais de
 
 Criar a task de um card que ganhou uma task ativa enquanto o diálogo estava aberto é recusado com `Card #<número> already has an active task: <nome>.`
 
-A task guarda o card: o board, o repositório, o número, o título, o corpo, o link, o status e o estado da issue, e o épico. Cada leitura do board atualiza esses dados nas tasks ativas; uma task arquivada guarda o card como estava ao arquivar. O cabeçalho da task tem o link do card, um botão de ícone `Open card #<número> on GitHub · <status>`, com o status da última leitura, que abre a issue. O da task arquivada no histórico mostra o card: `#<número>`, que abre a issue e tem o título no tooltip, o status da última leitura e `Issue closed` quando a issue foi fechada.
+A task guarda o card: o board, o repositório, o número, o título, o corpo, o link, o status e o estado da issue, e o épico. Cada leitura do board atualiza esses dados nas tasks ativas; uma task arquivada guarda o card como estava ao arquivar. O cabeçalho da task tem o link do card, um botão de ícone `Open card #<número> on GitHub · <status>`, com o status da última leitura, que abre a issue. O da task arquivada no histórico tem o mesmo link, com o status de quando a task foi arquivada.
 
 ## Etapas de planejamento
 
@@ -495,7 +495,7 @@ O review de uma pull request é um item do produto como uma task, sem etapas: te
 
 O nó **Reviews** da barra lateral e **Review a pull request**, no menu **New**, abrem a visão, que ocupa a área principal. Ela lista as pull requests abertas de todos os repositórios cadastrados, com ou sem board, com ou sem clone, as pendentes primeiro e, em cada grupo, as atualizadas mais recentemente primeiro.
 
-- **Cabeçalho:** o título, `Updated <há quanto tempo>`, o indicador `Reading pull requests` durante uma leitura e o botão **Refresh**.
+- **Cabeçalho:** o [cabeçalho do lugar](#cabeçalho-do-lugar), com o título `Reviews`, e à direita `Updated <há quanto tempo>`, o indicador `Reading pull requests` durante uma leitura e o botão **Refresh**.
 - **Falhas:** um aviso por repositório que o produto não conseguiu ler, com a razão e o que fazer (ver [Leitura das pull requests](#leitura-das-pull-requests)). As pull requests dos outros repositórios continuam aparecendo.
 - **Barra de filtros:** ver [Filtros](#filtros).
 - **Linha da pull request:** o título e o número, o repositório, o autor, as labels, `Draft` num draft, `Task` numa pull request de uma task do produto, o estado do review no produto quando existe um, `Reviewed` quando o usuário já a revisou e `New commits` quando há commits depois do último review dele, e o card vinculado, `#<número> · <status no board>`, que abre o card no GitHub. Uma pendente é destacada, com um ponto rotulado `Pending`. O ícone **Open on GitHub** abre a pull request.
@@ -605,15 +605,15 @@ Um relatório limpo, ou uma passada em que nada foi aprovado, deixa o review pro
 
 ## Histórico
 
-O botão **History** no rodapé da barra lateral abre a lista das tasks arquivadas, da mais recente à mais antiga, com busca por nome e o mesmo filtro por repositório da barra lateral. A contagem do botão soma tasks, reviews e discussões. Cada linha mostra o nome curto do repositório da task. A lista inclui os reviews de pull request e as discussões arquivadas, misturados às tasks pela data de arquivamento; ver [Histórico de um review](#histórico-de-um-review) e [Histórico de uma discussão](#histórico-de-uma-discussão). Uma task arquivada mostra os seus artefatos finais renderizados, com PRD, tech spec, steps com os relatórios de review de cada step, a pull request e o resultado do encerramento. Uma task One-Shot aparece na lista com o rótulo `One-Shot` no lugar da contagem de steps, e mostra o documento One-Shot com os relatórios de review do step no lugar de PRD, tech spec e steps. As conversas de uma task e de um review de pull request não são guardadas no histórico; a de uma discussão é, porque é parte do entendimento.
+O botão **History** no rodapé da barra lateral abre a lista das tasks arquivadas, da mais recente à mais antiga, com busca por nome e o mesmo filtro por repositório da barra lateral. A contagem do botão soma tasks, reviews e discussões. Cada linha mostra o nome curto do repositório da task. A lista inclui os reviews de pull request e as discussões arquivadas, misturados às tasks pela data de arquivamento; ver [Histórico de um review](#histórico-de-um-review) e [Histórico de uma discussão](#histórico-de-uma-discussão). Uma task arquivada mostra os seus artefatos finais renderizados, com PRD, tech spec, steps com os relatórios de review de cada step, a pull request e o resultado do encerramento. Uma task One-Shot aparece na lista com o rótulo `One-Shot` no lugar da contagem de steps, e mostra o documento One-Shot com os relatórios de review do step no lugar de PRD, tech spec e steps. O cabeçalho de uma task arquivada tem a etiqueta `Archived`, o link do card de origem e o apagar, e `History`, no breadcrumb, volta à lista. As conversas de uma task e de um review de pull request não são guardadas no histórico; a de uma discussão é, porque é parte do entendimento.
 
 ### Histórico de um review
 
-Um review arquivado aparece na lista com o rótulo `Review`, `#<número>` e o título da pull request, o repositório, o autor, o desfecho, `Merged` ou `Closed`, e as datas. A busca casa com o título e com o número, com ou sem `#`, e o filtro por repositório vale para ele. Aberto, ele mostra a pull request com o link, o desfecho e, para cada passada, o relatório renderizado e, quando publicada, o veredito e cada apontamento publicado com onde foi. **← History** volta à lista, e o review arquivado pode ser apagado dali.
+Um review arquivado aparece na lista com o rótulo `Review`, `#<número>` e o título da pull request, o repositório, o autor, o desfecho, `Merged` ou `Closed`, e as datas. A busca casa com o título e com o número, com ou sem `#`, e o filtro por repositório vale para ele. Aberto, ele tem no cabeçalho o desfecho, o link do card vinculado, o link da pull request e o apagar, e mostra o autor, as datas e, para cada passada, o relatório renderizado e, quando publicada, o veredito e cada apontamento publicado com onde foi. `History`, no breadcrumb, volta à lista.
 
 ### Histórico de uma discussão
 
-Uma discussão arquivada aparece na lista com o rótulo `Discussion`, o título, o board, a contagem de cards publicados e as datas. A busca casa com o título, e o filtro por repositório mostra as discussões cujos cards de entrada ou publicados pertencem ao repositório. Aberta, ela mostra o documento renderizado, ou `No document was written.`, os rascunhos com o que cada um virou, `Created`, `Updated` ou `Not published`, com a referência e o link, os épicos com os cards dentro, e a conversa inteira, somente leitura. **← History** volta à lista, e a discussão arquivada pode ser apagada dali.
+Uma discussão arquivada aparece na lista com o rótulo `Discussion`, o título, o board, a contagem de cards publicados e as datas. A busca casa com o título, e o filtro por repositório mostra as discussões cujos cards de entrada ou publicados pertencem ao repositório. Aberta, ela mostra o documento renderizado, ou `No document was written.`, os rascunhos com o que cada um virou, `Created`, `Updated` ou `Not published`, com a referência e o link, os épicos com os cards dentro, e a conversa inteira, somente leitura. O cabeçalho tem a etiqueta `Archived` e o apagar; `History`, no breadcrumb, volta à lista.
 
 ## Apagar uma task
 
@@ -684,17 +684,17 @@ Sair do editor com uma edição não salva pede confirmação.
 
 ## Configurações e aparência
 
-As configurações abrem por **Settings**, no rodapé da barra lateral, ou por `Ctrl+,`, e pertencem ao app. Elas contêm a página **Defaults**, com o modo de review e os modelos e esforços com que uma task nova começa, a página **Boards**, a página **Repositories**, e os prompts.
+As configurações abrem por **Settings**, no rodapé da barra lateral, ou por `Ctrl+,`, e pertencem ao app. Elas contêm a página **Defaults**, com o modo de review e os modelos e esforços com que uma task nova começa, a página **Boards**, a página **Repositories**, e os prompts. O cabeçalho do lugar das configurações tem **Close** (`Esc`), que volta ao lugar de onde elas foram abertas.
 
 O tema segue o sistema por padrão e pode ser fixado em claro ou escuro pelo botão de tema do rodapé da barra lateral, o único lugar dele: cada clique passa ao seguinte, System, Light, Dark e System de novo, e o novo tema é aplicado na hora. Uma troca do tema do sistema com o app aberto também é aplicada na hora.
 
 ## Cabeçalho do lugar
 
-A tela de uma task, de um review e de uma discussão abre com o cabeçalho do lugar, uma faixa só, sem quebra de linha:
+Todo lugar da área principal abre com o cabeçalho do lugar, uma faixa só, sem quebra de linha: a task, o review, a discussão, o board, Reviews, o History, os três arquivados, as configurações e o início.
 
 - `←` volta ao lugar anterior, com o destino no tooltip (`Back to Platform Roadmap · Alt+←`); sem anterior, fica desabilitado com `Nothing to go back to`. `→` só aparece quando há para onde avançar (`Forward to <lugar> · Alt+→`);
-- o **breadcrumb** diz onde o item mora: o board e o épico de uma task, ou `No board`; o board de uma discussão, ou `No board`; `Reviews` de um review. O board e `Reviews` abrem o lugar deles; o épico e `No board` são texto. Com a área principal abaixo de 1660 px, os níveis se recolhem num `…`, cujo menu os lista;
-- o **título**, o nome da task, o título da pull request ou o da discussão, corta quando falta espaço, com o nome inteiro no tooltip. O tipo e a referência do item (`#N`, o repositório, o autor, `One-Shot`) ficam na linha da barra lateral;
+- o **breadcrumb** diz onde o item mora: o board e o épico de uma task, ou `No board`; o board de uma discussão, ou `No board`; `Reviews` de um review; `History` de um item arquivado. O board, `Reviews` e `History` abrem o lugar deles; o épico e `No board` são texto. Com a área principal abaixo de 1660 px, os níveis se recolhem num `…`, cujo menu os lista;
+- o **título**, o nome da task, o título da pull request, o da discussão ou o do board, ou o nome do lugar (`Reviews`, `History`, `Settings`, `Home`), corta quando falta espaço, com o nome inteiro no tooltip. O tipo e a referência do item (`#N`, o repositório, o autor, `One-Shot`) ficam na linha da barra lateral;
 - à direita, o que o lugar tem: o estado, o medidor de contexto, **Pause** ou **Resume**, os controles do item, o link do card, o botão do painel e o apagar.
 
 A direita cede pela largura da área principal, em limites fixos: abaixo de 1360 px **Pause** fica só com o ícone, abaixo de 1300 px o medidor fica só com a porcentagem, e abaixo de 1040 px `Review: <modo>` e **Models** ficam só com o ícone; o nome de cada um continua no tooltip e no nome acessível. O estado mantém o texto. Com tudo cedido, a 1100 px de janela, o que falta de espaço sai do título.

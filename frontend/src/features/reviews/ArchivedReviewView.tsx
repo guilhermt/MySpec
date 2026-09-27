@@ -1,13 +1,14 @@
 import { ExternalLink, Trash2 } from "lucide-react";
 import { useState } from "react";
+import { CardLink } from "@/components/CardLink";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Markdown } from "@/features/chat/Markdown";
 import { formatDates } from "@/features/history/history-format";
+import { LocationHeader } from "@/features/navigation/LocationHeader";
 import { ErrorNotice } from "@/features/notice/Notice";
 import { DeleteReviewDialog } from "@/features/reviews/DeleteReviewDialog";
-import { PullCardBadge } from "@/features/reviews/PullCardBadge";
 import { Published } from "@/features/reviews/ReportsPanel";
 import {
   findingLocation,
@@ -18,7 +19,7 @@ import {
 import { useReviewArtifact } from "@/features/reviews/useReviewArtifact";
 import type { ReviewPass } from "@/lib/wails";
 import { openExternal } from "@/store/actions";
-import { useAppStore, useArchivedReview } from "@/store/app-store";
+import { useArchivedReview } from "@/store/app-store";
 
 const LOADING_WIDTHS = ["w-1/2", "w-full", "w-3/4"];
 
@@ -88,7 +89,6 @@ export interface ArchivedReviewViewProps {
  */
 export function ArchivedReviewView({ reviewId }: ArchivedReviewViewProps) {
   const review = useArchivedReview(reviewId);
-  const closeArchivedReview = useAppStore((state) => state.closeArchivedReview);
   const [deleting, setDeleting] = useState(false);
 
   if (review === null) {
@@ -99,18 +99,9 @@ export function ArchivedReviewView({ reviewId }: ArchivedReviewViewProps) {
 
   return (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
-      <header className="flex h-11 shrink-0 items-center gap-2 border-b px-3">
-        <Button variant="ghost" size="sm" onClick={() => closeArchivedReview()}>
-          ← History
-        </Button>
-        <span className="shrink-0 text-muted-foreground tabular-nums">{`#${review.number}`}</span>
-        <span className="min-w-0 truncate font-medium">{review.title}</span>
-        <Badge variant="secondary">{review.repository}</Badge>
-        {review.card !== null && <PullCardBadge card={review.card} />}
+      <LocationHeader>
         <Badge variant="outline">{outcomeLabel(review.outcome)}</Badge>
-
-        <span className="flex-1" />
-
+        {review.card !== null && <CardLink card={review.card} />}
         <Button
           variant="ghost"
           size="icon-sm"
@@ -129,7 +120,7 @@ export function ArchivedReviewView({ reviewId }: ArchivedReviewViewProps) {
         </Button>
 
         <DeleteReviewDialog review={review} open={deleting} onOpenChange={setDeleting} />
-      </header>
+      </LocationHeader>
 
       <div className="flex h-9 shrink-0 items-center gap-3 border-b px-3 text-xs text-muted-foreground">
         <span className="shrink-0">{review.author}</span>

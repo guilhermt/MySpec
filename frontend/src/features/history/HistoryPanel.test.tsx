@@ -56,6 +56,7 @@ function panel(
       reviewHistory,
       discussionHistory,
     }),
+    ui: { location: { kind: "history" } },
   });
 }
 
@@ -63,7 +64,7 @@ describe("HistoryPanel", () => {
   it("lists every archived task with what it touched", () => {
     panel();
 
-    expect(screen.getByRole("heading", { name: "History" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "History" })).toBeInTheDocument();
     const [first, second] = screen.getAllByRole("listitem");
     expect(first).toHaveTextContent("add-login");
     expect(first).toHaveTextContent("web");
@@ -96,7 +97,7 @@ describe("HistoryPanel", () => {
     await user.click(screen.getByRole("button", { name: "#12" }));
 
     expect(api.openExternal).toHaveBeenCalledWith("https://github.com/dev/web/pull/12");
-    expect(useAppStore.getState().location).toEqual({ kind: "home" });
+    expect(useAppStore.getState().location).toEqual({ kind: "history" });
   });
 
   it("opens the task the user picks", async () => {
