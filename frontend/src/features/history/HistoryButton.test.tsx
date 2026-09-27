@@ -53,7 +53,7 @@ describe("HistoryButton", () => {
 
     await user.click(screen.getByRole("button", { name: "History" }));
 
-    expect(useAppStore.getState().historyOpen).toBe(true);
+    expect(useAppStore.getState().location).toEqual({ kind: "history" });
     expect(screen.getByRole("button", { name: "History" })).toHaveAttribute("aria-pressed", "true");
   });
 });

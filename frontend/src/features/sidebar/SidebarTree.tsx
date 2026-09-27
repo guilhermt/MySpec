@@ -22,6 +22,7 @@ import {
   useFlashing,
   useOpenBoardId,
   useOpenDiscussionId,
+  useOpenTaskId,
   useRepositoryFilter,
   useSidebarCollapsed,
 } from "@/store/app-store";
@@ -308,7 +309,7 @@ function Node({ node, focusableId }: NodeProps) {
  */
 export function SidebarTree() {
   const app = useAppStore((state) => state.app);
-  const openTaskId = useAppStore((state) => state.openTaskId);
+  const openTaskId = useOpenTaskId();
   const openDiscussionId = useOpenDiscussionId();
   const expandSidebarNodes = useAppStore((state) => state.expandSidebarNodes);
   const collapsed = useSidebarCollapsed();

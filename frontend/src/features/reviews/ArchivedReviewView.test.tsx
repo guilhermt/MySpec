@@ -35,7 +35,7 @@ const PUBLISHED = makeReviewPass({
 function view(overrides: Partial<ArchivedReview> = {}) {
   return renderWithStore(<ArchivedReviewView reviewId="review-1" />, {
     state: makeState({ reviewHistory: [makeArchivedReview(overrides)] }),
-    ui: { historyOpen: true, openArchivedReviewId: "review-1" },
+    ui: { location: { kind: "archived-review", id: "review-1" } },
   });
 }
 
@@ -99,8 +99,7 @@ describe("ArchivedReviewView", () => {
 
     await user.click(screen.getByRole("button", { name: "← History" }));
 
-    expect(useAppStore.getState().openArchivedReviewId).toBeNull();
-    expect(useAppStore.getState().historyOpen).toBe(true);
+    expect(useAppStore.getState().location).toEqual({ kind: "history" });
   });
 
   it("deletes the review once confirmed", async () => {

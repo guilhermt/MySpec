@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { openItemId } from "@/lib/locations";
 import { waitingEntries } from "@/lib/situations";
 import { type AppStore, useAppStore } from "@/store/app-store";
 
@@ -47,12 +48,9 @@ export function useGlobalShortcuts(): void {
           if (typingInDialog(store)) {
             return;
           }
-          const [first] = waitingEntries(
-            store.app,
-            store.openTaskId ?? store.openReviewId ?? store.openDiscussionId,
-          );
+          const [first] = waitingEntries(store.app, openItemId(store.location));
           if (first !== undefined) {
-            store.openPlace(first.itemId, first.situation.place);
+            store.openSituation(first.itemId, first.situation.place);
           }
           break;
         }
@@ -65,7 +63,7 @@ export function useGlobalShortcuts(): void {
           if (typingInDialog(store)) {
             return;
           }
-          if (store.settingsOpen) {
+          if (store.location.kind === "settings") {
             store.closeSettings();
           } else {
             store.openSettings();

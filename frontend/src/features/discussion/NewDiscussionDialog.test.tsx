@@ -153,7 +153,7 @@ describe("NewDiscussionDialog", () => {
         effort: "high",
       });
     });
-    expect(useAppStore.getState().openDiscussionId).toBe("discussion-1");
+    expect(useAppStore.getState().location).toEqual({ kind: "discussion", id: "discussion-1" });
     expect(useAppStore.getState().newDiscussion).toBeNull();
   });
 

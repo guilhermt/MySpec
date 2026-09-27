@@ -12,7 +12,7 @@ function view(overrides: Partial<ArchivedTask> = {}) {
   const task = makeArchivedTask(overrides);
   return renderWithStore(<ArchivedTaskView taskId={task.id} />, {
     state: makeState({ history: [task] }),
-    ui: { historyOpen: true, openArchivedId: task.id },
+    ui: { location: { kind: "archived-task", id: task.id } },
   });
 }
 
@@ -191,8 +191,7 @@ describe("ArchivedTaskView", () => {
 
     await user.click(screen.getByRole("button", { name: "← History" }));
 
-    expect(useAppStore.getState().openArchivedId).toBeNull();
-    expect(useAppStore.getState().historyOpen).toBe(true);
+    expect(useAppStore.getState().location).toEqual({ kind: "history" });
   });
 
   it("offers the deletion of the archived task", async () => {

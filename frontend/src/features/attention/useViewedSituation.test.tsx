@@ -42,7 +42,7 @@ describe("useViewedSituation", () => {
   it("tells it again whenever the window comes back to the front", () => {
     resetAppStore({
       state: withSituations([makeSituation({ id: "s1" })]),
-      ui: { openTaskId: "task-1" },
+      ui: { location: { kind: "task", id: "task-1" } },
     });
     renderHook(() => useViewedSituation());
 
@@ -56,7 +56,7 @@ describe("useViewedSituation", () => {
     hasFocus.mockReturnValue(false);
     resetAppStore({
       state: withSituations([makeSituation({ id: "s1" })]),
-      ui: { openTaskId: "task-1" },
+      ui: { location: { kind: "task", id: "task-1" } },
     });
     renderHook(() => useViewedSituation());
 
@@ -71,7 +71,7 @@ describe("useViewedSituation", () => {
   it("follows the situation on screen, and listens only while there is one", () => {
     resetAppStore({
       state: withSituations([makeSituation({ id: "s1" })]),
-      ui: { openTaskId: "task-1" },
+      ui: { location: { kind: "task", id: "task-1" } },
     });
     renderHook(() => useViewedSituation());
 
@@ -91,7 +91,7 @@ describe("useViewedSituation", () => {
   it("stops listening once it is gone", () => {
     resetAppStore({
       state: withSituations([makeSituation({ id: "s1" })]),
-      ui: { openTaskId: "task-1" },
+      ui: { location: { kind: "task", id: "task-1" } },
     });
     const { unmount } = renderHook(() => useViewedSituation());
 
@@ -105,7 +105,7 @@ describe("useViewedSituation", () => {
     vi.mocked(api.viewSituation).mockRejectedValueOnce(new Error("bus gone"));
     resetAppStore({
       state: withSituations([makeSituation({ id: "s1" })]),
-      ui: { openTaskId: "task-1" },
+      ui: { location: { kind: "task", id: "task-1" } },
     });
 
     renderHook(() => useViewedSituation());

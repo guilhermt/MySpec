@@ -73,7 +73,7 @@ describe("ReviewsNode", () => {
 
     await user.click(screen.getByRole("button", { name: "Reviews" }));
 
-    expect(useAppStore.getState().reviewsOpen).toBe(true);
+    expect(useAppStore.getState().location).toEqual({ kind: "reviews" });
     expect(screen.getByRole("button", { name: "Reviews" })).toHaveAttribute("aria-current", "page");
   });
 
@@ -82,7 +82,7 @@ describe("ReviewsNode", () => {
 
     await user.click(screen.getByRole("button", { name: /^web#31,/ }));
 
-    expect(useAppStore.getState().openReviewId).toBe("review-1");
+    expect(useAppStore.getState().location).toEqual({ kind: "review", id: "review-1" });
     expect(screen.getByRole("button", { name: /^web#31,/ })).toHaveAttribute(
       "aria-current",
       "page",

@@ -40,7 +40,7 @@ describe("ReviewsView", () => {
       ],
     });
 
-    expect(screen.getByRole("main", { name: "Reviews" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Reviews" })).toBeInTheDocument();
     expect(screen.getAllByRole("listitem")).toHaveLength(2);
     expect(screen.queryByText("Bump deps")).not.toBeInTheDocument();
   });

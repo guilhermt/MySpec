@@ -105,7 +105,7 @@ describe("PullRequestRow", () => {
 
     await user.click(screen.getByRole("button", { name: "Open review" }));
 
-    expect(useAppStore.getState().openReviewId).toBe("review-1");
+    expect(useAppStore.getState().location).toEqual({ kind: "review", id: "review-1" });
   });
 
   it("opens the task the pull request belongs to", async () => {
@@ -113,7 +113,7 @@ describe("PullRequestRow", () => {
 
     await user.click(screen.getByRole("button", { name: "Open task" }));
 
-    expect(useAppStore.getState().openTaskId).toBe("task-1");
+    expect(useAppStore.getState().location).toEqual({ kind: "task", id: "task-1" });
   });
 
   it("refuses a pull request from a fork, and says why", async () => {

@@ -55,11 +55,11 @@ export function ReviewView({ reviewId }: ReviewViewProps) {
   }, [panelRef]);
 
   if (review === null) {
-    return <section className="h-dvh bg-background" />;
+    return <section className="min-h-0 flex-1 bg-background" />;
   }
 
   return (
-    <section className="flex h-dvh min-w-0 flex-col bg-background">
+    <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
       <ReviewHeader review={review} artifactsOpen={reportsOpen} onToggleArtifacts={toggleReports} />
       <ReviewBar review={review} />
       <ResizablePanelGroup

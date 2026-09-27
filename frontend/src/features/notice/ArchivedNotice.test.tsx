@@ -22,8 +22,7 @@ describe("ArchivedNotice", () => {
 
     await user.click(screen.getByRole("button", { name: "Open in history" }));
 
-    expect(useAppStore.getState().openArchivedId).toBe("task-1");
-    expect(useAppStore.getState().historyOpen).toBe(true);
+    expect(useAppStore.getState().location).toEqual({ kind: "archived-task", id: "task-1" });
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 

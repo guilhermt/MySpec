@@ -161,7 +161,7 @@ describe("App", () => {
 
     await user.keyboard("{Control>}j{/Control}");
 
-    expect(useAppStore.getState().openReviewId).toBe("review-1");
+    expect(useAppStore.getState().location).toEqual({ kind: "review", id: "review-1" });
   });
 
   it("changes nothing on Ctrl+J when nothing waits for the user", async () => {
@@ -211,7 +211,7 @@ describe("App", () => {
 
     expect(shortcut.defaultPrevented).toBe(true);
     expect(screen.getByRole("heading", { name: "New task" })).toBeInTheDocument();
-    expect(useAppStore.getState().openTaskId).toBeNull();
+    expect(useAppStore.getState().location).toEqual({ kind: "home" });
   });
 
   it("leaves the dialog that starts a review where it is on Ctrl+N, Ctrl+J and Ctrl+,", async () => {
@@ -236,8 +236,7 @@ describe("App", () => {
 
     expect(screen.getByRole("heading", { name: "Start review" })).toBeInTheDocument();
     expect(useAppStore.getState().newTaskOpen).toBe(false);
-    expect(useAppStore.getState().openTaskId).toBeNull();
-    expect(useAppStore.getState().settingsOpen).toBe(false);
+    expect(useAppStore.getState().location).toEqual({ kind: "home" });
   });
 
   it("opens the discussion a situation is in on Ctrl+J", async () => {
@@ -264,7 +263,7 @@ describe("App", () => {
 
     await user.keyboard("{Control>}j{/Control}");
 
-    expect(useAppStore.getState().openDiscussionId).toBe("discussion-1");
+    expect(useAppStore.getState().location).toEqual({ kind: "discussion", id: "discussion-1" });
   });
 
   it("leaves the dialog that creates a discussion where it is on Ctrl+N, Ctrl+J and Ctrl+,", async () => {
@@ -286,8 +285,7 @@ describe("App", () => {
       cardKeys: ["dev/web#12"],
     });
     expect(useAppStore.getState().newTaskOpen).toBe(false);
-    expect(useAppStore.getState().openTaskId).toBeNull();
-    expect(useAppStore.getState().settingsOpen).toBe(false);
+    expect(useAppStore.getState().location).toEqual({ kind: "home" });
   });
 
   it("keeps the card of the creation dialog on Ctrl+N", async () => {
@@ -404,7 +402,7 @@ describe("App", () => {
     expect(screen.queryByText("No task open")).not.toBeInTheDocument();
 
     act(() => {
-      useAppStore.getState().closeTask();
+      useAppStore.getState().go({ kind: "home" });
     });
 
     expect(await screen.findByText("No task open")).toBeInTheDocument();
@@ -421,7 +419,7 @@ describe("App", () => {
     expect(screen.queryByText("No tasks yet")).not.toBeInTheDocument();
 
     act(() => {
-      useAppStore.getState().closeHistory();
+      useAppStore.getState().go({ kind: "home" });
     });
 
     expect(screen.getByText("No tasks yet")).toBeInTheDocument();
@@ -499,12 +497,12 @@ describe("App", () => {
       useAppStore.getState().openReviews();
     });
 
-    expect(screen.getByRole("main", { name: "Reviews" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Reviews" })).toBeInTheDocument();
     expect(api.refreshPullRequests).toHaveBeenCalled();
 
     await user.click(screen.getByRole("treeitem", { name: /^add-login,/ }));
 
-    expect(screen.queryByRole("main", { name: "Reviews" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Reviews" })).not.toBeInTheDocument();
   });
 
   it("gives the main area to the screen of a review", async () => {

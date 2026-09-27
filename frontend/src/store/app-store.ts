@@ -2,6 +2,16 @@ import { create } from "zustand";
 import { useShallow } from "zustand/react/shallow";
 import { findBoard } from "@/lib/boards";
 import {
+  HOME,
+  type Location,
+  locationExists,
+  NAV_LIMIT,
+  openItemId,
+  resolveHome,
+  type SettingsSection,
+  sameLocation,
+} from "@/lib/locations";
+import {
   discussionSituation,
   prSituation,
   reviewerSituation,
@@ -39,8 +49,17 @@ import {
   type TranscriptState,
 } from "@/store/transcript";
 
-/** SettingsSection is what the settings screen shows: the defaults of a new task, the boards, the repositories or one prompt. */
-export type SettingsSection = "defaults" | "boards" | "repositories" | PromptStage;
+export type { SettingsSection } from "@/lib/locations";
+
+/** PanelId is an auxiliary panel of an item: its artifacts, its reports or its documents. */
+export type PanelId = "artifacts" | "reports" | "documents";
+
+/** Toast is the notice of an item that left without being open; its id is the id of the task. */
+export interface Toast {
+  id: string;
+  taskId: string;
+  name: string;
+}
 
 /** StepTab is the conversation of a step on screen: the agent that implements it, or the one that reviews it. */
 export type StepTab = "implementer" | "reviewer";
@@ -93,7 +112,23 @@ export interface PullRef {
 export interface AppStore {
   app: State | null;
   error: string | null;
-  openTaskId: string | null;
+  /** location is the place on screen. */
+  location: Location;
+  /** back are the places behind the current one, the most recent last; forward the ones ahead, the nearest last. */
+  back: Location[];
+  forward: Location[];
+  /** panel is the auxiliary panel open in the place on screen, null when none is; every navigation closes it. */
+  panel: PanelId | null;
+  /** pendingFocus is where the focus goes once the new place is on screen: its title, or the back or forward button. */
+  pendingFocus: "title" | "back" | "forward" | null;
+  /** sidebarRail is the sidebar collapsed into its strip; kept across runs. */
+  sidebarRail: boolean;
+  /** toasts are the notices of items that left without being open, the oldest first, three at most. */
+  toasts: Toast[];
+  /** announcement is the text the live region says now; id changes with every announcement, so the same text is said again. */
+  announcement: { id: number; text: string } | null;
+  /** expectGone is the item the user just asked to remove, whose page is not announced. */
+  expectGone: string | null;
   /** transcripts and drafts are keyed by sessionKey: a task has one per stage. */
   transcripts: Record<string, TranscriptState>;
   drafts: Record<string, string>;
@@ -107,22 +142,10 @@ export interface AppStore {
   newTaskCard: CardRef | null;
   /** pendingStart is a card waiting for its clone to open the creation dialog. */
   pendingStart: PendingStart | null;
-  /** openBoardId is the board view on screen, when one is. */
-  openBoardId: string | null;
-  /** reviewsOpen shows the open pull requests of the registered repositories in the main area. */
-  reviewsOpen: boolean;
-  /** openReviewId is the review on screen, when one is. */
-  openReviewId: string | null;
-  /** openArchivedReviewId is the archived review on screen, when one is. */
-  openArchivedReviewId: string | null;
   /** startReview is the pull request the dialog that starts a review opens for. */
   startReview: PullRef | null;
   /** pendingReview is a pull request waiting for the clone of its repository to open the dialog. */
   pendingReview: PullRef | null;
-  /** openDiscussionId is the discussion on screen, when one is. */
-  openDiscussionId: string | null;
-  /** openArchivedDiscussionId is the archived discussion on screen, when one is. */
-  openArchivedDiscussionId: string | null;
   /** newDiscussion is what the dialog that creates a discussion is open for, null when it is closed. */
   newDiscussion: NewDiscussionRef | null;
   /**
@@ -139,10 +162,6 @@ export interface AppStore {
    * the app, which preselects the dialog when nothing before it does.
    */
   lastRepositoryId: string | null;
-  /** historyOpen shows the archived tasks in the main area instead of a node. */
-  historyOpen: boolean;
-  /** openArchivedId is the archived task on screen, when one is. */
-  openArchivedId: string | null;
   historyQuery: string;
   /** archivedNotice names the task that was just archived, until dismissed. */
   archivedNotice: ArchivedNotice | null;
@@ -153,9 +172,6 @@ export interface AppStore {
    * by id, for the brief highlight.
    */
   flashing: ReadonlySet<string>;
-  /** settingsOpen shows the settings in the main area. */
-  settingsOpen: boolean;
-  settingsSection: SettingsSection;
   /** promptEdit is the prompt open in the editor, null when the editor is closed. */
   promptEdit: PromptEdit | null;
   /** pendingLeave is the navigation that waits for the user to discard the unsaved edit of a prompt. */
@@ -164,8 +180,9 @@ export interface AppStore {
   applyState: (next: State) => void;
   setError: (message: string | null) => void;
 
+  /** go opens a place: the current one goes behind it and whatever was ahead is dropped. */
+  go: (location: Location, options?: { focus?: "title" | "back" | "forward" }) => void;
   openTask: (id: string) => void;
-  closeTask: () => void;
   /** openNewTask opens the creation dialog, for a card when one is given. */
   openNewTask: (card?: CardRef) => void;
   closeNewTask: () => void;
@@ -173,8 +190,6 @@ export interface AppStore {
   openBoard: (id: string) => void;
   openReviews: () => void;
   openReview: (id: string) => void;
-  /** closeReview goes back to the Reviews view, where the review was opened from. */
-  closeReview: () => void;
   openArchivedReview: (id: string) => void;
   closeArchivedReview: () => void;
   /** openStartReview opens the dialog that starts a review of a pull request. */
@@ -182,8 +197,6 @@ export interface AppStore {
   closeStartReview: () => void;
   setPendingReview: (pending: PullRef | null) => void;
   openDiscussion: (id: string) => void;
-  /** closeDiscussion goes back to the board view of the discussion, where it was started from. */
-  closeDiscussion: () => void;
   openArchivedDiscussion: (id: string) => void;
   closeArchivedDiscussion: () => void;
   /** openNewDiscussion opens the dialog that creates a discussion of a board. */
@@ -206,7 +219,6 @@ export interface AppStore {
   clearPrDraft: (taskId: string) => void;
 
   openHistory: () => void;
-  closeHistory: () => void;
   openArchived: (id: string) => void;
   closeArchived: () => void;
   setHistoryQuery: (query: string) => void;
@@ -215,10 +227,10 @@ export interface AppStore {
 
   flashSituation: (id: string) => void;
   unflashSituation: (id: string) => void;
-  /** openPlace opens a task where one of its situations is. */
-  openPlace: (taskId: string, place: Place) => void;
+  /** openSituation opens an item where one of its situations is. */
+  openSituation: (itemId: string, place: Place) => void;
 
-  openSettings: () => void;
+  openSettings: (section?: SettingsSection) => void;
   closeSettings: () => void;
   selectSettingsSection: (section: SettingsSection) => void;
   startPromptEdit: (stage: PromptStage, text: string) => void;
@@ -344,20 +356,9 @@ function storeCollapsed(collapsed: Set<string>): Set<string> {
   return collapsed;
 }
 
-// The screens of the reviews and of the discussions every other navigation
-// leaves behind.
-const NO_ITEM_PLACE = {
-  reviewsOpen: false,
-  openReviewId: null,
-  openArchivedReviewId: null,
-  openDiscussionId: null,
-  openArchivedDiscussionId: null,
-} as const;
-
 // What the app shows of the tasks, as it stands with none of them on screen.
 function initialTaskUi(): Pick<
   AppStore,
-  | "openTaskId"
   | "transcripts"
   | "drafts"
   | "openStepTab"
@@ -365,26 +366,17 @@ function initialTaskUi(): Pick<
   | "newTaskOpen"
   | "newTaskCard"
   | "pendingStart"
-  | "openBoardId"
-  | "reviewsOpen"
-  | "openReviewId"
-  | "openArchivedReviewId"
   | "startReview"
   | "pendingReview"
-  | "openDiscussionId"
-  | "openArchivedDiscussionId"
   | "newDiscussion"
   | "textDrafts"
   | "lastRepositoryId"
-  | "historyOpen"
-  | "openArchivedId"
   | "historyQuery"
   | "archivedNotice"
   | "leftover"
   | "flashing"
 > {
   return {
-    openTaskId: null,
     transcripts: {},
     drafts: {},
     openStepTab: {},
@@ -392,19 +384,11 @@ function initialTaskUi(): Pick<
     newTaskOpen: false,
     newTaskCard: null,
     pendingStart: null,
-    openBoardId: null,
-    reviewsOpen: false,
-    openReviewId: null,
-    openArchivedReviewId: null,
     startReview: null,
     pendingReview: null,
-    openDiscussionId: null,
-    openArchivedDiscussionId: null,
     newDiscussion: null,
     textDrafts: {},
     lastRepositoryId: null,
-    historyOpen: false,
-    openArchivedId: null,
     historyQuery: "",
     archivedNotice: null,
     leftover: null,
@@ -412,62 +396,81 @@ function initialTaskUi(): Pick<
   };
 }
 
-/** ReviewPlace is where the two review screens stand in a new snapshot. */
-interface ReviewPlace {
-  openReviewId: string | null;
-  openArchivedReviewId: string | null;
-  historyOpen: boolean;
-}
+/** Navigation is the part of the store a navigation changes. */
+type Navigation = Pick<
+  AppStore,
+  "location" | "back" | "forward" | "panel" | "pendingFocus" | "promptEdit"
+>;
 
-// A review on screen stays while it is active; an entity that is gone takes its
-// screen with it.
-function reviewPlace(state: AppStore, next: State): ReviewPlace {
-  const archived = findArchivedReview(next, state.openArchivedReviewId)?.id ?? null;
-  const open = state.openReviewId;
-  if (open === null || findReview(next, open) !== null) {
-    return {
-      openReviewId: open,
-      openArchivedReviewId: archived,
-      historyOpen: state.historyOpen,
-    };
+// navigate opens a place. The same place only takes the new one (a page of
+// Settings changes without stacking); another pushes the current one behind it,
+// unless it is the page of an item that left, which is never revisited, and
+// drops whatever was ahead.
+function navigate(
+  state: AppStore,
+  location: Location,
+  focus: AppStore["pendingFocus"],
+): Navigation {
+  const target = resolveHome(state.app, location);
+  const common = { location: target, panel: null, pendingFocus: focus, promptEdit: null };
+  if (sameLocation(state.location, target)) {
+    return { ...common, back: state.back, forward: state.forward };
   }
-  // A review whose pull request was merged or closed leaves the screen of an
-  // active review for the archived one, inside the history, where every other
-  // way of opening an archived entity leaves the user.
-  const moved = findArchivedReview(next, open)?.id ?? null;
-  return {
-    openReviewId: null,
-    openArchivedReviewId: moved,
-    historyOpen: moved !== null || state.historyOpen,
-  };
+  const back =
+    state.location.kind === "gone" ? state.back : [...state.back, state.location].slice(-NAV_LIMIT);
+  return { ...common, back, forward: [] };
 }
 
-/** DiscussionPlace is where the two discussion screens stand in a new snapshot. */
-interface DiscussionPlace {
-  openDiscussionId: string | null;
-  openArchivedDiscussionId: string | null;
-  historyOpen: boolean;
-}
-
-// A discussion on screen stays while it is active; one that is gone takes its
-// screen with it, and one that was archived hands it to the archived screen,
-// inside the history, like a review.
-function discussionPlace(state: AppStore, next: State): DiscussionPlace {
-  const archived = findArchivedDiscussion(next, state.openArchivedDiscussionId)?.id ?? null;
-  const open = state.openDiscussionId;
-  if (open === null || findDiscussion(next, open) !== null) {
-    return {
-      openDiscussionId: open,
-      openArchivedDiscussionId: archived,
-      historyOpen: state.historyOpen,
-    };
+// Where the place on screen stands in a new snapshot: an archived item that is
+// gone leaves for the history; an active item or a board that is gone leaves
+// for where it went, or for Home; Home stands for the first board while there
+// is no task. An item that was not in the previous snapshot, just created and
+// not yet published, has not left.
+function placeIn(prev: State | null, next: State, location: Location): Location {
+  switch (location.kind) {
+    case "archived-task":
+      return (next.history ?? []).some((entry) => entry.id === location.id)
+        ? location
+        : { kind: "history" };
+    case "archived-review":
+      return findArchivedReview(next, location.id) === null ? { kind: "history" } : location;
+    case "archived-discussion":
+      return findArchivedDiscussion(next, location.id) === null ? { kind: "history" } : location;
+    case "task":
+      return findTask(prev, location.id) !== null && findTask(next, location.id) === null
+        ? HOME
+        : location;
+    case "review":
+      if (findReview(prev, location.id) === null || findReview(next, location.id) !== null) {
+        return location;
+      }
+      // A review whose pull request was merged or closed goes on as the
+      // archived one.
+      return findArchivedReview(next, location.id) === null
+        ? HOME
+        : { kind: "archived-review", id: location.id };
+    case "discussion":
+      if (
+        findDiscussion(prev, location.id) === null ||
+        findDiscussion(next, location.id) !== null
+      ) {
+        return location;
+      }
+      return findArchivedDiscussion(next, location.id) === null
+        ? HOME
+        : { kind: "archived-discussion", id: location.id };
+    case "board":
+      return findBoard(prev, location.id) !== null && findBoard(next, location.id) === null
+        ? HOME
+        : location;
+    case "home":
+      return resolveHome(next, location);
+    case "reviews":
+    case "history":
+    case "settings":
+    case "gone":
+      return location;
   }
-  const moved = findArchivedDiscussion(next, open)?.id ?? null;
-  return {
-    openDiscussionId: null,
-    openArchivedDiscussionId: moved,
-    historyOpen: moved !== null || state.historyOpen,
-  };
 }
 
 export const useAppStore = create<AppStore>()((set, get) => {
@@ -483,11 +486,21 @@ export const useAppStore = create<AppStore>()((set, get) => {
     navigate();
   };
 
+  const go: AppStore["go"] = (location, options) =>
+    leave(() => set((state) => navigate(state, location, options?.focus ?? null)));
+
   return {
     app: null,
     error: null,
-    settingsOpen: false,
-    settingsSection: "defaults",
+    location: HOME,
+    back: [],
+    forward: [],
+    panel: null,
+    pendingFocus: null,
+    sidebarRail: false,
+    toasts: [],
+    announcement: null,
+    expectGone: null,
     promptEdit: null,
     pendingLeave: null,
     sidebarCollapsed: new Set(readStored(SIDEBAR_COLLAPSED_KEY, [], isStringList)),
@@ -501,8 +514,8 @@ export const useAppStore = create<AppStore>()((set, get) => {
           return {
             app: next,
             ...initialTaskUi(),
-            settingsOpen: false,
-            settingsSection: "defaults",
+            location: HOME,
+            panel: null,
             promptEdit: null,
             pendingLeave: null,
           };
@@ -513,72 +526,32 @@ export const useAppStore = create<AppStore>()((set, get) => {
         const archived = state.app === null ? null : newlyArchived(historyOf(state.app), history);
         const archivedNotice =
           archived === null ? state.archivedNotice : { id: archived.id, name: archived.name };
-        const openArchivedId =
-          state.openArchivedId !== null &&
-          !history.some((entry) => entry.id === state.openArchivedId)
-            ? null
-            : state.openArchivedId;
         // A repository that is gone stops preselecting the creation dialog.
         const lastRepositoryId =
           state.lastRepositoryId !== null &&
           !(next.repositories ?? []).some((repository) => repository.id === state.lastRepositoryId)
             ? null
             : state.lastRepositoryId;
-        // A board that is gone takes its view off the screen.
-        const openBoardId =
-          state.openBoardId !== null && findBoard(next, state.openBoardId) === null
-            ? null
-            : state.openBoardId;
-        const place = reviewPlace(state, next);
-        const discussion = discussionPlace(state, next);
-        const common = {
+        const location = placeIn(state.app, next, state.location);
+        const moved = location !== state.location;
+        // An item that left takes every conversation it had with it.
+        const left = moved ? openItemId(state.location) : null;
+        return {
           app: next,
           archivedNotice,
-          openArchivedId,
           lastRepositoryId,
-          openBoardId,
-          ...place,
-          ...discussion,
-          // Only one item is on screen at a time, so whichever of the two sent
-          // the user to the history opens it.
-          historyOpen: place.historyOpen || discussion.historyOpen,
-        };
-        // A review or a discussion that is gone takes its conversation with it,
-        // like a task.
-        const withoutReview =
-          state.openReviewId !== null && place.openReviewId === null
-            ? withoutTaskTranscripts(state.transcripts, state.openReviewId)
-            : state.transcripts;
-        const transcripts =
-          state.openDiscussionId !== null && discussion.openDiscussionId === null
-            ? withoutTaskTranscripts(withoutReview, state.openDiscussionId)
-            : withoutReview;
-        const openTaskId = state.openTaskId;
-        if (openTaskId === null || findTask(next, openTaskId) !== null) {
-          return { ...common, transcripts };
-        }
-        return {
-          ...common,
-          openTaskId: null,
-          transcripts: withoutTaskTranscripts(transcripts, openTaskId),
+          location,
+          panel: moved ? null : state.panel,
+          transcripts:
+            left === null ? state.transcripts : withoutTaskTranscripts(state.transcripts, left),
         };
       }),
 
     setError: (message) => set({ error: message }),
 
-    openTask: (id) =>
-      leave(() =>
-        set({
-          openTaskId: id,
-          historyOpen: false,
-          openArchivedId: null,
-          settingsOpen: false,
-          openBoardId: null,
-          ...NO_ITEM_PLACE,
-        }),
-      ),
+    go,
 
-    closeTask: () => set({ openTaskId: null, ...NO_ITEM_PLACE }),
+    openTask: (id) => go({ kind: "task", id }),
 
     openNewTask: (card) => set({ newTaskOpen: true, newTaskCard: card ?? null }),
 
@@ -586,71 +559,15 @@ export const useAppStore = create<AppStore>()((set, get) => {
 
     setPendingStart: (pending) => set({ pendingStart: pending }),
 
-    // A board view is a place of its own, like the history.
-    openBoard: (id) =>
-      leave(() =>
-        set({
-          openBoardId: id,
-          openTaskId: null,
-          openArchivedId: null,
-          historyOpen: false,
-          settingsOpen: false,
-          ...NO_ITEM_PLACE,
-        }),
-      ),
+    openBoard: (id) => go({ kind: "board", id }),
 
-    // The Reviews view is a place of its own, like the history.
-    openReviews: () =>
-      leave(() =>
-        set({
-          reviewsOpen: true,
-          openReviewId: null,
-          openArchivedReviewId: null,
-          openDiscussionId: null,
-          openArchivedDiscussionId: null,
-          openTaskId: null,
-          openArchivedId: null,
-          historyOpen: false,
-          settingsOpen: false,
-          openBoardId: null,
-        }),
-      ),
+    openReviews: () => go({ kind: "reviews" }),
 
-    openReview: (id) =>
-      leave(() =>
-        set({
-          openReviewId: id,
-          reviewsOpen: false,
-          openArchivedReviewId: null,
-          openDiscussionId: null,
-          openArchivedDiscussionId: null,
-          openTaskId: null,
-          openArchivedId: null,
-          historyOpen: false,
-          settingsOpen: false,
-          openBoardId: null,
-        }),
-      ),
+    openReview: (id) => go({ kind: "review", id }),
 
-    closeReview: () => set({ openReviewId: null, reviewsOpen: true }),
+    openArchivedReview: (id) => go({ kind: "archived-review", id }),
 
-    openArchivedReview: (id) =>
-      leave(() =>
-        set({
-          openArchivedReviewId: id,
-          historyOpen: true,
-          openReviewId: null,
-          reviewsOpen: false,
-          openDiscussionId: null,
-          openArchivedDiscussionId: null,
-          openTaskId: null,
-          openArchivedId: null,
-          settingsOpen: false,
-          openBoardId: null,
-        }),
-      ),
-
-    closeArchivedReview: () => set({ openArchivedReviewId: null }),
+    closeArchivedReview: () => go({ kind: "history" }),
 
     openStartReview: (pull) => set({ startReview: pull }),
 
@@ -658,52 +575,11 @@ export const useAppStore = create<AppStore>()((set, get) => {
 
     setPendingReview: (pending) => set({ pendingReview: pending }),
 
-    // A discussion is a place of its own, like a review.
-    openDiscussion: (id) =>
-      leave(() =>
-        set({
-          openDiscussionId: id,
-          openArchivedDiscussionId: null,
-          reviewsOpen: false,
-          openReviewId: null,
-          openArchivedReviewId: null,
-          openTaskId: null,
-          openArchivedId: null,
-          historyOpen: false,
-          settingsOpen: false,
-          openBoardId: null,
-        }),
-      ),
+    openDiscussion: (id) => go({ kind: "discussion", id }),
 
-    // A discussion is started from the view of its board, which is where
-    // closing it goes back to; without the board, it goes home.
-    closeDiscussion: () =>
-      set((state) => {
-        const discussion = findDiscussion(state.app, state.openDiscussionId);
-        const board =
-          discussion !== null && findBoard(state.app, discussion.boardId) !== null
-            ? discussion.boardId
-            : null;
-        return { openDiscussionId: null, openBoardId: board };
-      }),
+    openArchivedDiscussion: (id) => go({ kind: "archived-discussion", id }),
 
-    openArchivedDiscussion: (id) =>
-      leave(() =>
-        set({
-          openArchivedDiscussionId: id,
-          historyOpen: true,
-          openDiscussionId: null,
-          reviewsOpen: false,
-          openReviewId: null,
-          openArchivedReviewId: null,
-          openTaskId: null,
-          openArchivedId: null,
-          settingsOpen: false,
-          openBoardId: null,
-        }),
-      ),
-
-    closeArchivedDiscussion: () => set({ openArchivedDiscussionId: null }),
+    closeArchivedDiscussion: () => go({ kind: "history" }),
 
     openNewDiscussion: (ref) => set({ newDiscussion: ref }),
 
@@ -805,36 +681,11 @@ export const useAppStore = create<AppStore>()((set, get) => {
         return { prDrafts: rest };
       }),
 
-    // The history is a place of its own: opening it puts away whatever the main
-    // area was showing.
-    openHistory: () =>
-      leave(() =>
-        set({
-          historyOpen: true,
-          openTaskId: null,
-          openArchivedId: null,
-          newTaskOpen: false,
-          settingsOpen: false,
-          openBoardId: null,
-          ...NO_ITEM_PLACE,
-        }),
-      ),
+    openHistory: () => go({ kind: "history" }),
 
-    closeHistory: () => set({ historyOpen: false, openArchivedId: null }),
+    openArchived: (id) => go({ kind: "archived-task", id }),
 
-    openArchived: (id) =>
-      leave(() =>
-        set({
-          openArchivedId: id,
-          historyOpen: true,
-          openTaskId: null,
-          settingsOpen: false,
-          openBoardId: null,
-          ...NO_ITEM_PLACE,
-        }),
-      ),
-
-    closeArchived: () => set({ openArchivedId: null }),
+    closeArchived: () => go({ kind: "history" }),
 
     setHistoryQuery: (query) => set({ historyQuery: query }),
 
@@ -855,58 +706,59 @@ export const useAppStore = create<AppStore>()((set, get) => {
 
     // A situation opens where it is: its review, its discussion, or its task and
     // the tab of the conversation of a step when it is in a step: the situation
-    // of a reviewer opens on its tab. Going there puts away the history, the
-    // settings and the creation of a task.
-    openPlace: (taskId, place) => {
-      const store = get();
-      const kind = asPlaceKind(place.kind);
-      if (kind === "review") {
-        if (findReview(store.app, taskId) !== null) {
-          store.openReview(taskId);
-        }
-        return;
-      }
-      if (kind === "discussion") {
-        if (findDiscussion(store.app, taskId) !== null) {
-          store.openDiscussion(taskId);
-        }
-        return;
-      }
-      // A situation of a task that is gone navigates nowhere, so it never asks
-      // the user about an unsaved edit either.
-      if (findTask(store.app, taskId) === null) {
+    // of a reviewer opens on its tab. A situation of an item that is gone
+    // navigates nowhere, so it never asks the user about an unsaved edit either.
+    openSituation: (itemId, place) => {
+      const { app } = get();
+      const location: Location | null =
+        findTask(app, itemId) !== null
+          ? { kind: "task", id: itemId }
+          : findReview(app, itemId) !== null
+            ? { kind: "review", id: itemId }
+            : findDiscussion(app, itemId) !== null
+              ? { kind: "discussion", id: itemId }
+              : null;
+      if (location === null) {
         return;
       }
       leave(() =>
         set((state) => ({
-          openTaskId: taskId,
-          historyOpen: false,
-          openArchivedId: null,
-          newTaskOpen: false,
-          settingsOpen: false,
-          openBoardId: null,
-          ...NO_ITEM_PLACE,
-          openStepTab: withStepTab(state.openStepTab, taskId, place),
+          ...navigate(state, location, "title"),
+          openStepTab:
+            location.kind === "task"
+              ? withStepTab(state.openStepTab, itemId, place)
+              : state.openStepTab,
         })),
       );
     },
 
-    // The settings are a place of its own, like the history. Opening them takes
-    // no prompt editor off the screen, so they go without the guard.
-    openSettings: () =>
-      set({
-        settingsOpen: true,
-        openTaskId: null,
-        historyOpen: false,
-        openArchivedId: null,
-        newTaskOpen: false,
-        openBoardId: null,
-        ...NO_ITEM_PLACE,
-      }),
+    openSettings: (section) => go({ kind: "settings", section: section ?? "defaults" }),
 
-    closeSettings: () => leave(() => set({ settingsOpen: false })),
+    // Settings close back to the place they were opened from, skipping the
+    // ones that no longer exist; with none, to Home.
+    closeSettings: () =>
+      leave(() =>
+        set((state) => {
+          const index = state.back.reduce(
+            (found, place, at) => (locationExists(state.app, place) ? at : found),
+            -1,
+          );
+          const previous = state.back[index];
+          if (previous === undefined) {
+            return navigate(state, HOME, "title");
+          }
+          return {
+            location: previous,
+            back: state.back.slice(0, index),
+            forward: [...state.forward, state.location],
+            panel: null,
+            pendingFocus: "title",
+            promptEdit: null,
+          };
+        }),
+      ),
 
-    selectSettingsSection: (section) => leave(() => set({ settingsSection: section })),
+    selectSettingsSection: (section) => go({ kind: "settings", section }),
 
     startPromptEdit: (stage, text) => set({ promptEdit: { stage, original: text, text } }),
 
@@ -971,9 +823,58 @@ export function useBoard(id: string): Board | null {
   return useAppStore((state) => findBoard(state.app, id));
 }
 
+/** useLocation is the place on screen. */
+export function useLocation(): Location {
+  return useAppStore((state) => state.location);
+}
+
+// The id of the place on screen when it is of a kind, null otherwise.
+function openIdOf(
+  state: AppStore,
+  kind: "task" | "review" | "discussion" | "board",
+): string | null {
+  const { location } = state;
+  return location.kind === kind ? location.id : null;
+}
+
+/** useOpenTaskId is the task whose screen is open, null when none is. */
+export function useOpenTaskId(): string | null {
+  return useAppStore((state) => openIdOf(state, "task"));
+}
+
+/** useOpenItemId is the active item whose screen is open: a task, a review or a discussion; null when none is. */
+export function useOpenItemId(): string | null {
+  return useAppStore((state) => openItemId(state.location));
+}
+
 /** useOpenBoardId is the board whose view is on screen, null when none is. */
 export function useOpenBoardId(): string | null {
-  return useAppStore((state) => state.openBoardId);
+  return useAppStore((state) => openIdOf(state, "board"));
+}
+
+// The last of the places that still exists, null when none does.
+function lastExisting(app: State | null, places: readonly Location[]): Location | null {
+  return [...places].reverse().find((place) => locationExists(app, place)) ?? null;
+}
+
+/** useBackTarget is the place Back goes to, null when there is none. */
+export function useBackTarget(): Location | null {
+  return useAppStore((state) => lastExisting(state.app, state.back));
+}
+
+/** useForwardTarget is the place Forward goes to, null when there is none. */
+export function useForwardTarget(): Location | null {
+  return useAppStore((state) => lastExisting(state.app, state.forward));
+}
+
+/** usePanel is the auxiliary panel open in the place on screen, null when none is. */
+export function usePanel(): PanelId | null {
+  return useAppStore((state) => state.panel);
+}
+
+/** useSidebarRail is the sidebar being collapsed into its strip. */
+export function useSidebarRail(): boolean {
+  return useAppStore((state) => state.sidebarRail);
 }
 
 /** useSidebarCollapsed is the ids of the sidebar nodes the user collapsed. */
@@ -1020,10 +921,6 @@ export function useTask(id: string | null): TaskSummary | null {
   return useAppStore((state) => findTask(state.app, id));
 }
 
-export function useOpenTask(): TaskSummary | null {
-  return useAppStore((state) => findTask(state.app, state.openTaskId));
-}
-
 export function useTranscript(taskId: string, stage: string): TranscriptState | null {
   return useAppStore((state) => state.transcripts[sessionKey(taskId, stage)] ?? null);
 }
@@ -1051,15 +948,15 @@ export function useOpenStepTab(taskId: string): StepTab {
 // the open review, or, of the open task, the stage it is in, the conversation
 // of the step that runs whose tab is selected, or the pull request.
 function onScreenSituation(state: AppStore): Situation | null {
-  const discussion = findDiscussion(state.app, state.openDiscussionId);
+  const discussion = findDiscussion(state.app, openIdOf(state, "discussion"));
   if (discussion !== null) {
     return discussionSituation(discussion);
   }
-  const review = findReview(state.app, state.openReviewId);
+  const review = findReview(state.app, openIdOf(state, "review"));
   if (review !== null) {
     return reviewSituation(review);
   }
-  const task = findTask(state.app, state.openTaskId);
+  const task = findTask(state.app, openIdOf(state, "task"));
   if (task === null) {
     return null;
   }
@@ -1131,12 +1028,12 @@ export function useReview(id: string | null): ReviewSummary | null {
 
 /** useOpenReviewId is the review whose screen is open, null when none is. */
 export function useOpenReviewId(): string | null {
-  return useAppStore((state) => state.openReviewId);
+  return useAppStore((state) => openIdOf(state, "review"));
 }
 
 /** useReviewsOpen is the Reviews view being the main area. */
 export function useReviewsOpen(): boolean {
-  return useAppStore((state) => state.reviewsOpen);
+  return useAppStore((state) => state.location.kind === "reviews");
 }
 
 /** useReviewHistory is every archived review, the most recent first. */
@@ -1174,7 +1071,7 @@ export function useDiscussion(id: string | null): DiscussionSummary | null {
 
 /** useOpenDiscussionId is the discussion whose screen is open, null when none is. */
 export function useOpenDiscussionId(): string | null {
-  return useAppStore((state) => state.openDiscussionId);
+  return useAppStore((state) => openIdOf(state, "discussion"));
 }
 
 /** useDiscussionHistory is every archived discussion, the most recent first. */
@@ -1201,8 +1098,12 @@ export interface HistoryUi {
 export function useHistoryUi(): HistoryUi {
   return useAppStore(
     useShallow((state) => ({
-      historyOpen: state.historyOpen,
-      openArchivedId: state.openArchivedId,
+      historyOpen:
+        state.location.kind === "history" ||
+        state.location.kind === "archived-task" ||
+        state.location.kind === "archived-review" ||
+        state.location.kind === "archived-discussion",
+      openArchivedId: state.location.kind === "archived-task" ? state.location.id : null,
       historyQuery: state.historyQuery,
     })),
   );
@@ -1218,8 +1119,8 @@ export interface SettingsUi {
 export function useSettingsUi(): SettingsUi {
   return useAppStore(
     useShallow((state) => ({
-      settingsOpen: state.settingsOpen,
-      settingsSection: state.settingsSection,
+      settingsOpen: state.location.kind === "settings",
+      settingsSection: state.location.kind === "settings" ? state.location.section : "defaults",
       promptEdit: state.promptEdit,
       pendingLeave: state.pendingLeave,
     })),

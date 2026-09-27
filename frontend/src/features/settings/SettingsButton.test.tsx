@@ -14,16 +14,18 @@ describe("SettingsButton", () => {
 
     await user.click(button());
 
-    expect(useAppStore.getState().settingsOpen).toBe(true);
+    expect(useAppStore.getState().location).toEqual({ kind: "settings", section: "defaults" });
     expect(button()).toHaveAttribute("aria-pressed", "true");
   });
 
   it("closes the settings when it is pressed again", async () => {
-    const { user } = renderWithStore(<SettingsButton />, { ui: { settingsOpen: true } });
+    const { user } = renderWithStore(<SettingsButton />, {
+      ui: { location: { kind: "settings", section: "defaults" } },
+    });
 
     await user.click(button());
 
-    expect(useAppStore.getState().settingsOpen).toBe(false);
+    expect(useAppStore.getState().location).toEqual({ kind: "home" });
     expect(button()).toHaveAttribute("aria-pressed", "false");
   });
 });

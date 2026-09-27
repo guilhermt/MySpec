@@ -15,7 +15,7 @@ import {
   waitingEntries,
 } from "@/lib/situations";
 import { cn } from "@/lib/utils";
-import { useAppStore } from "@/store/app-store";
+import { useAppStore, useOpenReviewId, useOpenTaskId } from "@/store/app-store";
 
 /** NOW_INTERVAL_MS is how often the waiting times are read again. */
 const NOW_INTERVAL_MS = 60_000;
@@ -72,9 +72,9 @@ function onListKeyDown(event: KeyboardEvent<HTMLUListElement>) {
  */
 export function WaitingSection() {
   const app = useAppStore((state) => state.app);
-  const openTaskId = useAppStore((state) => state.openTaskId);
-  const openReviewId = useAppStore((state) => state.openReviewId);
-  const openPlace = useAppStore((state) => state.openPlace);
+  const openTaskId = useOpenTaskId();
+  const openReviewId = useOpenReviewId();
+  const openSituation = useAppStore((state) => state.openSituation);
   const titleId = useId();
   const openItemId = openTaskId ?? openReviewId;
   const entries = useMemo(() => waitingEntries(app, openItemId), [app, openItemId]);
@@ -132,7 +132,7 @@ export function WaitingSection() {
                       data-waiting-entry=""
                       tabIndex={leaving ? -1 : 0}
                       aria-label={spokenEntry(entry, now)}
-                      onClick={() => openPlace(entry.itemId, entry.situation.place)}
+                      onClick={() => openSituation(entry.itemId, entry.situation.place)}
                       className="flex h-12 w-full flex-col justify-center gap-0.5 rounded-md px-2 text-left outline-none transition-colors duration-[var(--duration-fast)] hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
                     >
                       <span className="flex w-full items-center gap-2">

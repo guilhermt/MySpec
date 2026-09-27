@@ -16,7 +16,7 @@ function view(overrides: Partial<ArchivedDiscussion> = {}) {
   const discussion = makeArchivedDiscussion(overrides);
   return renderWithStore(<ArchivedDiscussionView discussionId={discussion.id} />, {
     state: makeState({ discussionHistory: [discussion] }),
-    ui: { historyOpen: true, openArchivedDiscussionId: discussion.id },
+    ui: { location: { kind: "archived-discussion", id: discussion.id } },
   });
 }
 
@@ -116,8 +116,7 @@ describe("ArchivedDiscussionView", () => {
 
     await user.click(screen.getByRole("button", { name: "← History" }));
 
-    expect(useAppStore.getState().openArchivedDiscussionId).toBeNull();
-    expect(useAppStore.getState().historyOpen).toBe(true);
+    expect(useAppStore.getState().location).toEqual({ kind: "history" });
   });
 
   it("asks before deleting the discussion", async () => {

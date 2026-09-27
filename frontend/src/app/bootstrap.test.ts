@@ -87,7 +87,7 @@ describe("bootstrap", () => {
 
     expect(useAppStore.getState().app?.repositoryFilter).toBe("");
     expect(useAppStore.getState().flashing.size).toBe(0);
-    expect(useAppStore.getState().openTaskId).toBeNull();
+    expect(useAppStore.getState().location).toEqual({ kind: "home" });
   });
 
   it("applies a transcript:changed event to the conversation it belongs to", async () => {
@@ -163,6 +163,6 @@ describe("bootstrap", () => {
 
     emitSituationOpen({ taskId: "task-1", place: PR_PLACE });
 
-    expect(useAppStore.getState().openTaskId).toBe("task-1");
+    expect(useAppStore.getState().location).toEqual({ kind: "task", id: "task-1" });
   });
 });

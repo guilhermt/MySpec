@@ -162,7 +162,7 @@ describe("WaitingSection", () => {
   it("leaves the open task out, and brings it back once the task is closed", () => {
     renderWithStore(<WaitingSection />, {
       state: makeState({ tasks: TASKS }),
-      ui: { openTaskId: "t-draft" },
+      ui: { location: { kind: "task", id: "t-draft" } },
     });
 
     expect(entries()).toHaveLength(2);
@@ -170,7 +170,7 @@ describe("WaitingSection", () => {
     expect(screen.queryByRole("button", { name: /^add-login,/ })).not.toBeInTheDocument();
 
     act(() => {
-      useAppStore.getState().closeTask();
+      useAppStore.getState().go({ kind: "home" });
     });
 
     expect(entries()).toHaveLength(3);
@@ -180,16 +180,14 @@ describe("WaitingSection", () => {
   it("opens an entry where its situation is, and puts the history away", async () => {
     const { user } = renderWithStore(<WaitingSection />, {
       state: makeState({ tasks: TASKS }),
-      ui: { historyOpen: true },
+      ui: { location: { kind: "history" } },
     });
     // With the history on screen no task is open, so every situation is listed.
     expect(entries()).toHaveLength(3);
 
     await user.click(entryOf("add-login"));
 
-    const store = useAppStore.getState();
-    expect(store.openTaskId).toBe("t-draft");
-    expect(store.historyOpen).toBe(false);
+    expect(useAppStore.getState().location).toEqual({ kind: "task", id: "t-draft" });
   });
 
   it("moves the focus along the entries with the arrows, Home and End, without wrapping around", async () => {
@@ -220,7 +218,7 @@ describe("WaitingSection", () => {
     expect(arrow.defaultPrevented).toBe(true);
 
     await user.keyboard("{Home}{Enter}");
-    expect(useAppStore.getState().openTaskId).toBe("t-blocked");
+    expect(useAppStore.getState().location).toEqual({ kind: "task", id: "t-blocked" });
   });
 
   it("takes an entry on its way out out of reach before it goes", () => {
@@ -310,6 +308,6 @@ describe("WaitingSection", () => {
 
     await user.click(entryOf("web#31"));
 
-    expect(useAppStore.getState().openReviewId).toBe("review-1");
+    expect(useAppStore.getState().location).toEqual({ kind: "review", id: "review-1" });
   });
 });

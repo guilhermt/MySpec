@@ -92,13 +92,13 @@ export function ArchivedReviewView({ reviewId }: ArchivedReviewViewProps) {
   const [deleting, setDeleting] = useState(false);
 
   if (review === null) {
-    return <section className="h-dvh bg-background" />;
+    return <section className="min-h-0 flex-1 bg-background" />;
   }
 
   const passes = (review.passes ?? []).filter((pass) => pass.recorded);
 
   return (
-    <section className="flex h-dvh min-w-0 flex-col bg-background">
+    <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
       <header className="flex h-11 shrink-0 items-center gap-2 border-b px-3">
         <Button variant="ghost" size="sm" onClick={() => closeArchivedReview()}>
           ← History

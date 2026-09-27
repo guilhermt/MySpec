@@ -164,7 +164,7 @@ describe("CardDetail", () => {
 
     await user.click(screen.getByRole("button", { name: "add-login" }));
 
-    expect(useAppStore.getState().openTaskId).toBe("task-1");
+    expect(useAppStore.getState().location).toEqual({ kind: "task", id: "task-1" });
     expect(screen.queryByRole("button", { name: /^Start task/ })).not.toBeInTheDocument();
   });
 
@@ -176,7 +176,7 @@ describe("CardDetail", () => {
 
     await user.click(screen.getByRole("button", { name: "Archived: fix-login" }));
 
-    expect(useAppStore.getState().openArchivedId).toBe("old");
+    expect(useAppStore.getState().location).toEqual({ kind: "archived-task", id: "old" });
   });
 
   it("runs Start task from its button", async () => {

@@ -109,7 +109,7 @@ export function ArchivedDiscussionView({ discussionId }: ArchivedDiscussionViewP
   }, [discussionId]);
 
   if (discussion === null) {
-    return <section className="h-dvh bg-background" />;
+    return <section className="min-h-0 flex-1 bg-background" />;
   }
 
   const drafts = discussion.drafts ?? [];
@@ -118,7 +118,7 @@ export function ArchivedDiscussionView({ discussionId }: ArchivedDiscussionViewP
   const written = artifact.status === "ready" && artifact.content.trim() !== "";
 
   return (
-    <section className="flex h-dvh min-w-0 flex-col bg-background">
+    <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
       <header className="flex h-11 shrink-0 items-center gap-2 border-b px-3">
         <Button variant="ghost" size="sm" onClick={() => closeArchivedDiscussion()}>
           ← History

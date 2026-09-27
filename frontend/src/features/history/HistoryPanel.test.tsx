@@ -96,7 +96,7 @@ describe("HistoryPanel", () => {
     await user.click(screen.getByRole("button", { name: "#12" }));
 
     expect(api.openExternal).toHaveBeenCalledWith("https://github.com/dev/web/pull/12");
-    expect(useAppStore.getState().openArchivedId).toBeNull();
+    expect(useAppStore.getState().location).toEqual({ kind: "home" });
   });
 
   it("opens the task the user picks", async () => {
@@ -104,7 +104,7 @@ describe("HistoryPanel", () => {
 
     await user.click(screen.getByRole("button", { name: /fix-header/ }));
 
-    expect(useAppStore.getState().openArchivedId).toBe("task-2");
+    expect(useAppStore.getState().location).toEqual({ kind: "archived-task", id: "task-2" });
   });
 
   it("opens the task from the keyboard", async () => {
@@ -113,7 +113,7 @@ describe("HistoryPanel", () => {
     screen.getByRole("button", { name: /add-login/ }).focus();
     await user.keyboard("{Enter}");
 
-    expect(useAppStore.getState().openArchivedId).toBe("task-1");
+    expect(useAppStore.getState().location).toEqual({ kind: "archived-task", id: "task-1" });
   });
 
   it("keeps only the tasks whose name carries what was typed", async () => {
@@ -194,8 +194,7 @@ describe("HistoryPanel", () => {
 
     await user.click(screen.getByRole("button", { name: /Cache the sessions/ }));
 
-    expect(useAppStore.getState().openArchivedReviewId).toBe("review-31");
-    expect(useAppStore.getState().historyOpen).toBe(true);
+    expect(useAppStore.getState().location).toEqual({ kind: "archived-review", id: "review-31" });
   });
 
   it("lists an archived discussion with its board and what it published", () => {
@@ -227,7 +226,9 @@ describe("HistoryPanel", () => {
 
     await user.click(screen.getByRole("button", { name: /The invoices/ }));
 
-    expect(useAppStore.getState().openArchivedDiscussionId).toBe("discussion-1");
-    expect(useAppStore.getState().historyOpen).toBe(true);
+    expect(useAppStore.getState().location).toEqual({
+      kind: "archived-discussion",
+      id: "discussion-1",
+    });
   });
 });

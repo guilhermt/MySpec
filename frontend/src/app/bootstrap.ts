@@ -34,7 +34,7 @@ export async function bootstrap(store: StoreApi<AppStore>): Promise<() => void> 
     setTimeout(() => store.getState().unflashSituation(id), FLASH_MS);
   });
   const stopOpen = onSituationOpen((event) =>
-    store.getState().openPlace(event.taskId, event.place),
+    store.getState().openSituation(event.taskId, event.place),
   );
   store.getState().applyState(await api.getState());
   return () => {

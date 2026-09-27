@@ -36,7 +36,7 @@ export function SettingsView() {
   const promptsId = useId();
 
   return (
-    <main className="flex h-dvh min-w-0 bg-background text-foreground">
+    <section className="flex min-h-0 min-w-0 flex-1 bg-background text-foreground">
       <nav aria-label="Settings" className="flex w-56 shrink-0 flex-col gap-0.5 border-r p-2">
         <h1 className="flex h-9 items-center px-2 text-sm font-semibold">Settings</h1>
         <NavItem section="defaults">
@@ -74,6 +74,6 @@ export function SettingsView() {
         )}
       </div>
       <DiscardChangesDialog />
-    </main>
+    </section>
   );
 }

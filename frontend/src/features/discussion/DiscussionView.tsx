@@ -53,11 +53,11 @@ export function DiscussionView({ discussionId }: DiscussionViewProps) {
   }, [panelRef]);
 
   if (discussion === null) {
-    return <section className="h-dvh bg-background" />;
+    return <section className="min-h-0 flex-1 bg-background" />;
   }
 
   return (
-    <section className="flex h-dvh min-w-0 flex-col bg-background">
+    <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
       <DiscussionHeader
         discussion={discussion}
         documentsOpen={documentsOpen}

@@ -122,7 +122,7 @@ describe("SidebarTree", () => {
 
     await user.click(title);
 
-    expect(useAppStore.getState().openBoardId).toBe("board-1");
+    expect(useAppStore.getState().location).toEqual({ kind: "board", id: "board-1" });
     expect(screen.getByRole("button", { name: "Roadmap" })).toHaveAttribute("aria-current", "page");
   });
 
@@ -148,7 +148,7 @@ describe("SidebarTree", () => {
 
     await user.click(screen.getByRole("treeitem", { name: /^fix-header,/ }));
 
-    expect(useAppStore.getState().openTaskId).toBe("task-2");
+    expect(useAppStore.getState().location).toEqual({ kind: "task", id: "task-2" });
   });
 
   it("puts a discussion under its board, with what it waits for", () => {
@@ -173,7 +173,7 @@ describe("SidebarTree", () => {
 
     await user.click(screen.getByRole("treeitem", { name: /^Invoices, discussion,/ }));
 
-    expect(useAppStore.getState().openDiscussionId).toBe("discussion-1");
+    expect(useAppStore.getState().location).toEqual({ kind: "discussion", id: "discussion-1" });
   });
 
   it("moves from the tasks onto the discussions with the arrows", async () => {
@@ -182,13 +182,12 @@ describe("SidebarTree", () => {
 
     await user.keyboard("{End}");
 
-    expect(useAppStore.getState().openDiscussionId).toBe("discussion-1");
-    expect(useAppStore.getState().openTaskId).toBeNull();
+    expect(useAppStore.getState().location).toEqual({ kind: "discussion", id: "discussion-1" });
     expect(screen.getByRole("treeitem", { name: /^Invoices, discussion,/ })).toHaveFocus();
 
     await user.keyboard("{ArrowUp}");
 
-    expect(useAppStore.getState().openTaskId).toBe("task-1");
+    expect(useAppStore.getState().location).toEqual({ kind: "task", id: "task-1" });
   });
 
   it("expands the board of a discussion that opens", () => {
@@ -204,24 +203,24 @@ describe("SidebarTree", () => {
     rows()[0]?.focus();
 
     await user.keyboard("{ArrowDown}");
-    expect(useAppStore.getState().openTaskId).toBe("task-1");
+    expect(useAppStore.getState().location).toEqual({ kind: "task", id: "task-1" });
 
     await user.keyboard("{ArrowDown}");
-    expect(useAppStore.getState().openTaskId).toBe("task-2");
+    expect(useAppStore.getState().location).toEqual({ kind: "task", id: "task-2" });
     expect(screen.getByRole("treeitem", { name: /^fix-header,/ })).toHaveFocus();
 
     // The list does not wrap around.
     await user.keyboard("{ArrowDown}");
-    expect(useAppStore.getState().openTaskId).toBe("task-2");
+    expect(useAppStore.getState().location).toEqual({ kind: "task", id: "task-2" });
 
     await user.keyboard("{Home}");
-    expect(useAppStore.getState().openTaskId).toBe("task-1");
+    expect(useAppStore.getState().location).toEqual({ kind: "task", id: "task-1" });
 
     await user.keyboard("{End}");
-    expect(useAppStore.getState().openTaskId).toBe("task-2");
+    expect(useAppStore.getState().location).toEqual({ kind: "task", id: "task-2" });
 
     await user.keyboard("{ArrowUp}");
-    expect(useAppStore.getState().openTaskId).toBe("task-1");
+    expect(useAppStore.getState().location).toEqual({ kind: "task", id: "task-1" });
   });
 
   it("skips the rows of a collapsed node", async () => {
@@ -243,10 +242,10 @@ describe("SidebarTree", () => {
     rows()[0]?.focus();
 
     await user.keyboard("{ArrowDown}");
-    expect(useAppStore.getState().openTaskId).toBe("task-2");
+    expect(useAppStore.getState().location).toEqual({ kind: "task", id: "task-2" });
 
     await user.keyboard("{ArrowDown}");
-    expect(useAppStore.getState().openTaskId).toBe("task-4");
+    expect(useAppStore.getState().location).toEqual({ kind: "task", id: "task-4" });
   });
 
   it("opens the focused task with Enter or Space when no task is open", async () => {
@@ -254,12 +253,12 @@ describe("SidebarTree", () => {
     rows()[0]?.focus();
 
     await user.keyboard("{Enter}");
-    expect(useAppStore.getState().openTaskId).toBe("task-1");
+    expect(useAppStore.getState().location).toEqual({ kind: "task", id: "task-1" });
 
-    useAppStore.setState({ openTaskId: null });
+    useAppStore.setState({ location: { kind: "home" } });
     rows()[0]?.focus();
     await user.keyboard("{ }");
-    expect(useAppStore.getState().openTaskId).toBe("task-1");
+    expect(useAppStore.getState().location).toEqual({ kind: "task", id: "task-1" });
   });
 
   it("leaves the keys of a header to the header", async () => {
@@ -268,7 +267,7 @@ describe("SidebarTree", () => {
 
     await user.keyboard("{Enter}");
 
-    expect(useAppStore.getState().openTaskId).toBeNull();
+    expect(useAppStore.getState().location).toEqual({ kind: "home" });
     expect(useAppStore.getState().sidebarCollapsed.has("board:board-1")).toBe(true);
   });
 
@@ -306,7 +305,7 @@ describe("SidebarTree", () => {
   });
 
   it("keeps a node collapsed that the user collapses while its task is open", async () => {
-    const { user } = tree({ tasks: [WEB_TASK] }, { openTaskId: "task-1" });
+    const { user } = tree({ tasks: [WEB_TASK] }, { location: { kind: "task", id: "task-1" } });
 
     await user.click(screen.getByRole("button", { name: "Collapse Roadmap" }));
 

@@ -16,54 +16,37 @@ import { SettingsView } from "@/features/settings/SettingsView";
 import { Sidebar } from "@/features/sidebar/Sidebar";
 import { TaskView } from "@/features/task/TaskView";
 import { NewTaskDialog } from "@/features/task-create/NewTaskDialog";
-import { useAppStore, useOpenBoardId } from "@/store/app-store";
+import { useLocation } from "@/store/app-store";
 
-/** MainArea is the one screen the app is on: a task, a review, a discussion, an archived one, the history, the settings, a board, or home. */
-function MainArea() {
-  const openTaskId = useAppStore((state) => state.openTaskId);
-  const openReviewId = useAppStore((state) => state.openReviewId);
-  const openDiscussionId = useAppStore((state) => state.openDiscussionId);
-  const openArchivedId = useAppStore((state) => state.openArchivedId);
-  const openArchivedReviewId = useAppStore((state) => state.openArchivedReviewId);
-  const openArchivedDiscussionId = useAppStore((state) => state.openArchivedDiscussionId);
-  const settingsOpen = useAppStore((state) => state.settingsOpen);
-  const historyOpen = useAppStore((state) => state.historyOpen);
-  const reviewsOpen = useAppStore((state) => state.reviewsOpen);
-  const openBoardId = useOpenBoardId();
-
-  if (openTaskId !== null) {
-    return <TaskView taskId={openTaskId} />;
+/** LocationView is the screen of the place on screen. */
+function LocationView() {
+  const location = useLocation();
+  switch (location.kind) {
+    case "home":
+      return <Home />;
+    case "board":
+      return <BoardView key={location.id} boardId={location.id} />;
+    case "reviews":
+      return <ReviewsView />;
+    case "history":
+      return <HistoryPanel />;
+    case "settings":
+      return <SettingsView />;
+    case "task":
+      return <TaskView key={location.id} taskId={location.id} />;
+    case "review":
+      return <ReviewView key={location.id} reviewId={location.id} />;
+    case "discussion":
+      return <DiscussionView key={location.id} discussionId={location.id} />;
+    case "archived-task":
+      return <ArchivedTaskView key={location.id} taskId={location.id} />;
+    case "archived-review":
+      return <ArchivedReviewView key={location.id} reviewId={location.id} />;
+    case "archived-discussion":
+      return <ArchivedDiscussionView key={location.id} discussionId={location.id} />;
+    case "gone":
+      return <Home />;
   }
-  if (openReviewId !== null) {
-    return <ReviewView key={openReviewId} reviewId={openReviewId} />;
-  }
-  if (openDiscussionId !== null) {
-    return <DiscussionView key={openDiscussionId} discussionId={openDiscussionId} />;
-  }
-  if (openArchivedId !== null) {
-    return <ArchivedTaskView taskId={openArchivedId} />;
-  }
-  if (openArchivedReviewId !== null) {
-    return <ArchivedReviewView key={openArchivedReviewId} reviewId={openArchivedReviewId} />;
-  }
-  if (openArchivedDiscussionId !== null) {
-    return (
-      <ArchivedDiscussionView
-        key={openArchivedDiscussionId}
-        discussionId={openArchivedDiscussionId}
-      />
-    );
-  }
-  if (settingsOpen) {
-    return <SettingsView />;
-  }
-  if (historyOpen) {
-    return <HistoryPanel />;
-  }
-  if (reviewsOpen) {
-    return <ReviewsView />;
-  }
-  return openBoardId !== null ? <BoardView boardId={openBoardId} /> : <Home />;
 }
 
 export function AppShell() {
@@ -74,7 +57,9 @@ export function AppShell() {
   return (
     <div className="grid h-dvh grid-cols-[var(--sidebar-width)_minmax(0,1fr)]">
       <Sidebar />
-      <MainArea />
+      <main className="main-area relative flex h-dvh min-w-0 flex-col @container/main">
+        <LocationView />
+      </main>
       <NewTaskDialog />
       <StartReviewDialog />
       <NewDiscussionDialog />

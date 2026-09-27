@@ -11,7 +11,7 @@ const TEXT = makePrompt().text;
 function view(section: SettingsSection = "defaults") {
   return renderWithStore(<SettingsView />, {
     state: makeState(),
-    ui: { settingsOpen: true, settingsSection: section },
+    ui: { location: { kind: "settings", section } },
   });
 }
 

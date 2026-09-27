@@ -1,21 +1,15 @@
 import { ListTodo, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
-import { BoardView } from "@/features/board/BoardView";
-import { useAppStore, useBoards, useTasks } from "@/store/app-store";
+import { useAppStore, useTasks } from "@/store/app-store";
 
 /**
- * Home is the main area with nothing else open: the first board while there is
- * no task, otherwise what to do next and the way to do it.
+ * Home is the main area with nothing else open: what to do next and the way to
+ * do it.
  */
 export function Home() {
   const openNewTask = useAppStore((state) => state.openNewTask);
   const tasks = useTasks();
-  const [firstBoard] = useBoards();
-
-  if (tasks.length === 0 && firstBoard !== undefined) {
-    return <BoardView boardId={firstBoard.id} />;
-  }
 
   const title = tasks.length === 0 ? "No tasks yet" : "No task open";
   const description =
@@ -24,7 +18,7 @@ export function Home() {
       : "Pick a task from the list, or create a new one.";
 
   return (
-    <main className="flex h-dvh items-center justify-center bg-background p-8 text-foreground">
+    <section className="flex min-h-0 flex-1 items-center justify-center bg-background p-8 text-foreground">
       <div className="flex max-w-[32.25rem] flex-col items-center gap-2 text-center">
         <ListTodo aria-hidden="true" className="size-8 text-muted-foreground" />
         <p className="font-medium">{title}</p>
@@ -38,6 +32,6 @@ export function Home() {
           </KbdGroup>
         </Button>
       </div>
-    </main>
+    </section>
   );
 }

@@ -147,7 +147,7 @@ export function HistoryPanel() {
   const query = historyQuery.trim();
 
   return (
-    <main className="h-dvh overflow-auto bg-background p-8 text-foreground">
+    <section className="min-h-0 flex-1 overflow-auto bg-background p-8 text-foreground">
       <div className="flex w-full max-w-[55.5rem] flex-col gap-4">
         <header className="flex flex-col gap-1">
           <div className="flex items-center gap-2">
@@ -203,6 +203,6 @@ export function HistoryPanel() {
           </ul>
         )}
       </div>
-    </main>
+    </section>
   );
 }
