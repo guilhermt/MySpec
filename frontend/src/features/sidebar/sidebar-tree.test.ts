@@ -5,6 +5,7 @@ import {
   emptyTreeText,
   flashOf,
   type ItemRow,
+  nodeStatus,
   nodeSummary,
   nodesOfItem,
   type RowTone,
@@ -12,6 +13,7 @@ import {
   shortAction,
   sidebarTree,
   TONE_RANK,
+  type TreeNode,
   taskRow,
   visibleEntries,
 } from "@/features/sidebar/sidebar-tree";
@@ -768,6 +770,8 @@ describe("the accessible name", () => {
 describe("shortAction", () => {
   it.each([
     ["Running", "go test ./internal/api/ratelimit", "go test …/ratelimit"],
+    ["Running", "go test ./internal/ratelimit/... -run TestBucket", "go test …/ratelimit"],
+    ["Running", "go vet ./...", "go vet ./..."],
     ["Running", "pnpm vitest run src/lib/a.test.ts", "pnpm vitest …/a.test.ts"],
     ["Running", "ls -la /tmp/x", "ls …/x"],
     ["Running", "make", "make"],
@@ -793,6 +797,44 @@ describe("the severity", () => {
     ]);
     expect(TONE_RANK.app).toBe(TONE_RANK.agent);
     expect(TONE_RANK.archive).toBe(TONE_RANK.idle);
+  });
+});
+
+describe("nodeStatus", () => {
+  const reviews = (overrides: Partial<Extract<TreeNode, { kind: "reviews" }>>): TreeNode => ({
+    kind: "reviews",
+    id: "reviews",
+    rows: [],
+    pending: 0,
+    reading: false,
+    failures: [],
+    ...overrides,
+  });
+  const board = (overrides: Parameters<typeof makeBoard>[0]): TreeNode => ({
+    kind: "board",
+    id: "board:board-1",
+    board: makeBoard(overrides),
+    notices: [],
+    epics: [],
+    rows: [],
+  });
+  const failure = { reason: "gh_failed", message: "gh is not signed in", failedAt: "" };
+
+  it.each<[string, TreeNode, string | null]>([
+    ["Reviews pending", reviews({ pending: 4 }), "4 pending"],
+    ["Reviews reading", reviews({ reading: true, pending: 4 }), "reading"],
+    [
+      "Reviews failing",
+      reviews({ failures: ["dev/web: gh failed", "dev/api: gh failed"], reading: true }),
+      "read failed: dev/web: gh failed, dev/api: gh failed",
+    ],
+    ["Reviews quiet", reviews({}), null],
+    ["a board reading", board({ reading: true }), "reading"],
+    ["a board failing", board({ failure, reading: true }), "read failed: gh is not signed in"],
+    ["a quiet board", board({}), null],
+    ["No board", { kind: "no-board", id: "no-board", notices: [], rows: [] }, null],
+  ])("tells %s", (_, node, expected) => {
+    expect(nodeStatus(node)).toBe(expected);
   });
 });
 

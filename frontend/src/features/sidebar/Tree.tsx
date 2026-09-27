@@ -123,36 +123,42 @@ export function Tree() {
       onKeyDown={onKeyDown}
       onFocus={onFocus}
       onBlur={onBlur}
-      className="flex flex-col gap-(--row-gap) p-(--space-2)"
+      // The top nodes stand apart as sections: Reviews, each board, No board.
+      className="flex flex-col gap-(--section-gap) p-(--space-2)"
     >
       {nodes.map((top) => {
         const epics = top.kind === "board" ? top.epics : [];
         const notices = top.kind === "reviews" ? [] : top.notices;
         const nothing = notices.length === 0 && epics.length === 0 && top.rows.length === 0;
-        return node(
-          top,
-          1,
-          <>
-            {notices.map((notice) => (
-              <CloneNotice key={notice.id} notice={notice} tabIndex={tabIndexOf(notice.id)} />
-            ))}
-            {epics.map((epic) =>
-              node(
-                epic,
-                2,
-                epic.rows.map((row) => itemRow(row, 3)),
-                // The guide runs down under the epic's chevron.
-                "relative flex flex-col gap-(--row-gap) pt-(--row-gap) before:absolute before:top-0 before:bottom-(--space-1) before:left-(--guide-x) before:w-(--border) before:bg-sidebar-guide",
-              ),
+        return (
+          <div key={top.id} role="none" className="flex flex-col gap-(--row-gap)">
+            {node(
+              top,
+              1,
+              <>
+                {notices.map((notice) => (
+                  <CloneNotice key={notice.id} notice={notice} tabIndex={tabIndexOf(notice.id)} />
+                ))}
+                {epics.map((epic) =>
+                  node(
+                    epic,
+                    2,
+                    epic.rows.map((row) => itemRow(row, 3)),
+                    // The epic's items step in as boxes, so the open row, the hover and the error rail
+                    // start after the guide, which runs down under the epic's chevron.
+                    "relative ml-(--epic-indent) flex flex-col gap-(--row-gap) pt-(--row-gap) before:absolute before:top-0 before:bottom-(--space-1) before:left-[calc(var(--guide-x)-var(--epic-indent))] before:w-(--border) before:bg-sidebar-guide",
+                  ),
+                )}
+                {top.rows.map((row) => itemRow(row, 2))}
+                {nothing && top.kind !== "no-board" && (
+                  <div role="none" className={EMPTY}>
+                    {top.kind === "reviews" ? "No review in progress." : "No active items."}
+                  </div>
+                )}
+              </>,
+              "flex flex-col gap-(--row-gap) pt-(--space-1)",
             )}
-            {top.rows.map((row) => itemRow(row, 2))}
-            {nothing && top.kind !== "no-board" && (
-              <div role="none" className={EMPTY}>
-                {top.kind === "reviews" ? "No review in progress." : "No active items."}
-              </div>
-            )}
-          </>,
-          "flex flex-col gap-(--row-gap) pt-(--space-1)",
+          </div>
         );
       })}
       {empty !== null && (

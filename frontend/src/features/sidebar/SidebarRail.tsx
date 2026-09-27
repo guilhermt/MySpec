@@ -137,7 +137,9 @@ function RailBlock({ row, selected, isNext, flash, tabIndex }: RailBlockProps) {
         {...(flash !== null ? { "data-flash": flash } : {})}
         onClick={open}
         className={cn(
-          "tree-flash relative flex w-full cursor-pointer flex-col items-center gap-(--line-gap) rounded-md px-(--tree-pad) py-(--row-pad-y) outline-none transition-[background-color,box-shadow] duration-(--duration-fast) ease-standard focus-visible:outline-(length:--focus-width) focus-visible:outline-focus focus-visible:-outline-offset-(length:--focus-width)",
+          // The gap under the type icon holds the corner of the state glyph with its outline, so
+          // the glyph never reaches the clock.
+          "tree-flash relative flex w-full cursor-pointer flex-col items-center gap-(--space-1-5) rounded-md px-(--tree-pad) py-(--row-pad-y) outline-none transition-[background-color,box-shadow] duration-(--duration-fast) ease-standard focus-visible:outline-(length:--focus-width) focus-visible:outline-focus focus-visible:-outline-offset-(length:--focus-width)",
           selected ? "bg-brand-veil" : "hover:bg-veil-hover active:bg-veil-press",
           row.tone === "error" && selected
             ? "shadow-[inset_var(--error-rail)_0_0_var(--state-error),inset_0_0_0_var(--border)_var(--brand-ring)]"
@@ -146,7 +148,8 @@ function RailBlock({ row, selected, isNext, flash, tabIndex }: RailBlockProps) {
               : selected && "shadow-[inset_0_0_0_var(--border)_var(--brand-ring)]",
         )}
       >
-        <span className="relative grid place-items-center">
+        {/* The state glyph sits in the bottom right corner of the type icon's box. */}
+        <span className="relative grid size-(--icon) place-items-center">
           <Icon
             icon={TYPE_ICONS[row.itemKind]}
             tone={selected ? "active" : "current"}
@@ -155,7 +158,7 @@ function RailBlock({ row, selected, isNext, flash, tabIndex }: RailBlockProps) {
           <StateGlyph
             state={ROW_GLYPHS[row.tone]}
             size="sm"
-            className="absolute -right-(--space-1) -bottom-(--space-1) outline-(length:--border-2) outline-surface-sidebar"
+            className="absolute -right-(--space-1) bottom-0 outline-(length:--border-2) outline-surface-sidebar"
           />
         </span>
         {row.more !== null && (
@@ -168,7 +171,7 @@ function RailBlock({ row, selected, isNext, flash, tabIndex }: RailBlockProps) {
             +{row.more.count}
           </span>
         )}
-        <span className="flex min-h-(--size-time-chip) items-center">
+        <span className="flex h-(--size-time-chip) items-center">
           {clock?.kind === "chip" && (
             <TimeChip
               tone={clock.tone}

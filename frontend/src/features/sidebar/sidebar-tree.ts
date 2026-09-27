@@ -598,20 +598,21 @@ export function shortAction(label: string, target: string): string {
     }
     const path = rest.find((term) => term.includes("/") && !term.startsWith("-"));
     if (path !== undefined) {
-      parts.push(`…/${lastSegment(path)}`);
+      parts.push(cutPath(path));
     }
     return parts.join(" ");
   }
-  return target.includes("/") ? `…/${lastSegment(target)}` : target;
+  return target.includes("/") ? cutPath(target) : target;
 }
 
-function lastSegment(path: string): string {
-  return (
-    path
-      .split("/")
-      .filter((segment) => segment !== "")
-      .at(-1) ?? path
-  );
+// cutPath is a path cut to its last segment that tells it apart, `…/ratelimit`: the empty ones, `.`
+// and the `...` of a Go package pattern say nothing, and a path of nothing else stays whole.
+function cutPath(path: string): string {
+  const last = path
+    .split("/")
+    .filter((segment) => segment !== "" && segment !== "." && segment !== "...")
+    .at(-1);
+  return last === undefined ? path : `…/${last}`;
 }
 
 // The words of line 3 and of the name without an action: what the conversation does.
@@ -1019,6 +1020,29 @@ export function nodeSummary(rows: readonly ItemRow[]): NodeSummary | null {
       .join(", "),
     situationIds: rows.flatMap((row) => row.situationIds),
   };
+}
+
+/**
+ * nodeStatus is what an expanded node says at its right edge, in words for its accessible name:
+ * `read failed: <what failed>`, `reading` or `4 pending`; null when it says nothing.
+ */
+export function nodeStatus(node: TreeNode | EpicNode): string | null {
+  if (node.kind === "reviews") {
+    if (node.failures.length > 0) {
+      return `read failed: ${node.failures.join(", ")}`;
+    }
+    if (node.reading) {
+      return "reading";
+    }
+    return node.pending > 0 ? `${node.pending} pending` : null;
+  }
+  if (node.kind === "board") {
+    if (node.board.failure !== null) {
+      return `read failed: ${node.board.failure.message}`;
+    }
+    return node.board.reading ? "reading" : null;
+  }
+  return null;
 }
 
 /** emptyTreeText is what the tree says when the filter's repository has no task: `No tasks in <name>.`; null otherwise. */

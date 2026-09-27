@@ -56,10 +56,12 @@ describe("TreeNodeRow", () => {
     expect(node).toHaveAttribute("aria-level", "1");
   });
 
-  it("tells a board being read", () => {
+  it("tells a board being read, in its name too", () => {
     renderNode(boardNode({ reading: true }));
 
-    expect(screen.getByText("reading…")).toBeInTheDocument();
+    expect(screen.getByRole("treeitem", { name: "Product, reading" })).toHaveTextContent(
+      "reading…",
+    );
   });
 
   it("tells a failed reading, with the failure in the tooltip", async () => {
@@ -72,6 +74,16 @@ describe("TreeNodeRow", () => {
     expect(await screen.findByRole("tooltip")).toHaveTextContent("gh is not signed in");
   });
 
+  it("names a board whose reading failed with the failure", () => {
+    renderNode(
+      boardNode({ failure: { reason: "gh_failed", message: "gh is not signed in", failedAt: "" } }),
+    );
+
+    expect(
+      screen.getByRole("treeitem", { name: "Product, read failed: gh is not signed in" }),
+    ).toBeInTheDocument();
+  });
+
   it("says nothing more of a quiet board", () => {
     renderNode(boardNode());
 
@@ -81,13 +93,17 @@ describe("TreeNodeRow", () => {
   it("tells the pull requests pending a review", () => {
     renderNode(reviewsNode({ pending: 3 }));
 
-    expect(screen.getByRole("treeitem", { name: "Reviews" })).toHaveTextContent("3 pending");
+    expect(screen.getByRole("treeitem", { name: "Reviews, 3 pending" })).toHaveTextContent(
+      "3 pending",
+    );
   });
 
   it("tells Reviews reading", () => {
     renderNode(reviewsNode({ reading: true, pending: 3 }));
 
-    expect(screen.getByText("reading…")).toBeInTheDocument();
+    expect(screen.getByRole("treeitem", { name: "Reviews, reading" })).toHaveTextContent(
+      "reading…",
+    );
   });
 
   it("tells the repositories Reviews failed to read", async () => {
@@ -100,6 +116,11 @@ describe("TreeNodeRow", () => {
     expect(await screen.findByRole("tooltip")).toHaveTextContent(
       "dev/web: gh failed, dev/api: gh failed",
     );
+    expect(
+      screen.getByRole("treeitem", {
+        name: "Reviews, read failed: dev/web: gh failed, dev/api: gh failed",
+      }),
+    ).toBeInTheDocument();
   });
 
   it("says nothing more of Reviews without a review", () => {
