@@ -70,7 +70,7 @@ export function AuxPanel({ id, title, onClose, children }: AuxPanelProps) {
   // Esc is the global shortcut's, in the order of the layers of the app.
   return (
     <aside aria-label={title} className="aux-panel flex flex-col">
-      <div className="flex h-(--size-head) shrink-0 items-center justify-between gap-2 border-b border-line-1 pr-2 pl-4">
+      <div className="flex h-(--size-head) shrink-0 items-center justify-between gap-2 pr-2 pl-4 shadow-[inset_0_calc(var(--border)*-1)_0_var(--line-1)]">
         <h2 className="truncate text-(length:--text-ui) font-semibold text-ink-1">{title}</h2>
         <IconButton
           icon={X}

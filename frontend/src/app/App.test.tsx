@@ -110,7 +110,7 @@ describe("App", () => {
     );
   });
 
-  it("shows a rejected binding and dismisses it", async () => {
+  it("shows a rejected binding at the top of the main area and dismisses it", async () => {
     vi.mocked(api.setRepositoryFilter).mockRejectedValueOnce(new Error("filter failed"));
     const { user } = renderWithStore(<App />);
 
@@ -119,11 +119,14 @@ describe("App", () => {
     );
     await user.click(await screen.findByRole("menuitemradio", { name: /dev\/web/ }));
 
-    expect(await screen.findByText("filter failed")).toBeInTheDocument();
+    const notice = await screen.findByRole("alert");
+    expect(notice).toHaveTextContent("Couldn't show the tasks of dev/web");
+    expect(notice).toHaveTextContent("filter failed. Try again.");
+    expect(screen.getByRole("main").firstElementChild).toBe(notice);
 
     await user.click(screen.getByRole("button", { name: "Dismiss" }));
 
-    expect(screen.queryByText("filter failed")).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   it("unsubscribes when it unmounts", async () => {

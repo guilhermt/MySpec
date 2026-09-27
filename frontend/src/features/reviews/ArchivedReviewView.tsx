@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Markdown } from "@/features/chat/Markdown";
 import { formatDates } from "@/features/history/history-format";
 import { LocationHeader } from "@/features/navigation/LocationHeader";
-import { ErrorNotice } from "@/features/notice/Notice";
+import { Banner } from "@/features/notice/Notice";
 import { DeleteReviewDialog } from "@/features/reviews/DeleteReviewDialog";
 import { Published } from "@/features/reviews/ReportsPanel";
 import {
@@ -67,7 +67,13 @@ function PassReport({ reviewId, pass }: PassReportProps) {
         </div>
       )}
       {artifact.status === "error" && artifact.error !== dismissed && (
-        <ErrorNotice message={artifact.error} onDismiss={() => setDismissed(artifact.error)} />
+        <Banner
+          className="bg-destructive/10"
+          title="Couldn't read the report"
+          onDismiss={() => setDismissed(artifact.error)}
+        >
+          {artifact.error}
+        </Banner>
       )}
       {artifact.status === "ready" && (
         <div className="select-text">

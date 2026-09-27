@@ -2,6 +2,7 @@ import { FolderPlus, SquareKanban } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { BoardDialog } from "@/features/boards/BoardDialog";
+import { AppNotices } from "@/features/notice/AppNotices";
 import { AddRepositoryDialog } from "@/features/repositories/AddRepositoryDialog";
 
 /** AppMark is the logo of the app, on the screens that stand in for the product. */
@@ -36,6 +37,7 @@ export function WelcomeScreen() {
   return (
     <main className="flex h-dvh items-center justify-center bg-background px-6 text-foreground">
       <div className="flex w-full max-w-[43rem] flex-col gap-8">
+        <AppNotices />
         <header className="flex flex-col gap-2">
           <div className="flex items-center gap-3">
             <AppMark />

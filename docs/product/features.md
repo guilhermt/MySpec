@@ -720,6 +720,8 @@ A direita cede pela largura da área principal, em limites fixos: abaixo de 1360
 
 Os painéis de um item, **Artifacts** na task, **Reports** no review e **Documents** na discussão, abrem pelo botão do cabeçalho, um de cada vez, e começam fechados. Com a área principal a partir de 1120 px o painel fica ao lado da conversa; abaixo, cobre-a. `×` ou `Esc` fecha e devolve o foco ao botão; ir a outro lugar fecha o painel, e voltar não o reabre.
 
+Quando uma ação falha, o **aviso do app** aparece no alto da área principal, sobre o cabeçalho do lugar, com o trilho de erro: o rótulo diz a ação que falhou e o item dela (`Couldn't pause Rate limit per API key`, `Couldn't refresh the board Platform Roadmap`), e o detalhe diz a mensagem do erro e, quando a ação tem uma saída conhecida, o que fazer: `Try again.`, `Check that gh is signed in.` numa ação que fala com o GitHub, ou `Change the path of the clone in Settings.` numa ação de uma task cujo clone sumiu. O aviso fica até **Dismiss**, e a falha seguinte toma o lugar dele. Logo abaixo dele fica o aviso do que uma remoção deixou no disco. Na tela de boas-vindas, os dois ficam no topo da coluna dela.
+
 O foco segue a ida: `Alt+←`, `Alt+→`, um nível do breadcrumb, `Ctrl+J` e o clique numa notificação levam o foco ao título do lugar; o clique em `←` ou `→` deixa o foco no botão, e em `←` quando não resta nada à frente; o clique numa linha da árvore deixa o foco na linha.
 
 ## Atalhos

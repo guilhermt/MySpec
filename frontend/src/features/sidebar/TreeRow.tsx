@@ -46,7 +46,8 @@ export const ROW_GLYPHS: Record<RowTone, GlyphState> = {
 };
 
 const MICRO = "text-(length:--text-micro) leading-(--leading-micro)";
-// The invisible copy a cell measures its long content with.
+// The invisible copy a cell measures its long content with. The row clips it, so a long copy never
+// widens the tree into a sideways scroll.
 const MEASURE = "invisible absolute whitespace-nowrap";
 
 /** TreeRowView is a task, a review or a discussion of the tree, in its three lines. */
@@ -100,7 +101,7 @@ function TreeRowView({ row, level, selected, isNext, flash, narrow, tabIndex }: 
         {...(flash !== null ? { "data-flash": flash } : {})}
         onClick={open}
         className={cn(
-          "group/row tree-flash relative grid w-full cursor-pointer grid-cols-[var(--icon)_minmax(0,1fr)_auto] items-center gap-x-(--space-2-5) gap-y-(--line-gap) rounded-md py-(--row-pad-y) pr-(--space-2) text-ink-1 outline-none transition-[background-color,box-shadow] duration-(--duration-fast) ease-standard focus-visible:focus-ring",
+          "group/row tree-flash relative grid w-full cursor-pointer overflow-clip grid-cols-[var(--icon)_minmax(0,1fr)_auto] items-center gap-x-(--space-2-5) gap-y-(--line-gap) rounded-md py-(--row-pad-y) pr-(--space-2) text-ink-1 outline-none transition-[background-color,box-shadow] duration-(--duration-fast) ease-standard focus-visible:focus-ring",
           // An item of an epic steps in along the epic's guide.
           level === 3 ? "pl-[calc(var(--tree-pad)+var(--epic-indent))]" : "pl-(--tree-pad)",
           selected ? "bg-brand-veil" : "hover:bg-veil-hover active:bg-veil-press",

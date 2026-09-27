@@ -87,4 +87,31 @@ describe.each(THEMES)("TreeRow in the %s theme", (theme) => {
     expect(bold && getComputedStyle(bold).fontWeight).toBe("600");
     expect(regular && getComputedStyle(regular).fontWeight).toBe("400");
   });
+
+  it("never widens the tree it sits in with the copies it measures", () => {
+    setTheme(theme);
+    const long = taskRow(
+      makeState(),
+      makeTask({
+        name: "idempotency-keys-for-payment-intents-and-refunds-across-every-api",
+        situations: [makeSituation({ kind: "question" })],
+      }),
+      NOW,
+    );
+    render(
+      <div data-testid="tree" style={{ width: "288px", overflow: "auto" }}>
+        <TreeRow
+          row={long}
+          level={2}
+          selected
+          isNext={false}
+          flash={null}
+          narrow={false}
+          tabIndex={0}
+        />
+      </div>,
+    );
+    const tree = screen.getByTestId("tree");
+    expect(tree.scrollWidth).toBe(tree.clientWidth);
+  });
 });

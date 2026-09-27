@@ -8,6 +8,7 @@ import { ArchivedTaskView } from "@/features/history/ArchivedTaskView";
 import { HistoryPanel } from "@/features/history/HistoryPanel";
 import { Home } from "@/features/home/Home";
 import { GoneView } from "@/features/navigation/GoneView";
+import { AppNotices } from "@/features/notice/AppNotices";
 import { ShellToasts } from "@/features/notice/ShellToasts";
 import { ArchivedReviewView } from "@/features/reviews/ArchivedReviewView";
 import { ReviewsView } from "@/features/reviews/ReviewsView";
@@ -69,6 +70,7 @@ export function AppShell() {
     >
       <Sidebar />
       <main className="main-area relative flex h-dvh min-w-0 flex-col">
+        <AppNotices />
         <LocationView />
         <ShellToasts />
       </main>

@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { createRef } from "react";
 import { describe, expect, it } from "vitest";
-import { mainArea, paintOf, setTheme, THEMES, token } from "@/test/painted";
+import { mainArea, paintOf, resolve, setTheme, THEMES, token } from "@/test/painted";
 import { PlaceHeader } from "./PlaceHeader";
 
 // header draws the header inside a main area of a fixed width, the container its
@@ -30,10 +30,12 @@ describe.each(THEMES)("PlaceHeader in the %s theme", (theme) => {
   it("is a band of --size-head over the first line", () => {
     setTheme(theme);
     const band = header(1700);
-    expect(paintOf(band, { height: "" })).toEqual({ height: "48px" });
-    const style = getComputedStyle(band);
-    expect(style.borderBottomColor).toBe(token("--line-1"));
-    expect(style.borderBottomWidth).toBe("1px");
+    // The line is drawn inside the band, so what the band centers stays on whole pixels.
+    const want = {
+      height: "48px",
+      shadow: resolve("inset 0 calc(var(--border) * -1) 0 var(--line-1)", "box-shadow"),
+    };
+    expect(paintOf(band, want)).toEqual(want);
   });
 
   it("writes the breadcrumb in the third ink, with the slashes in the decoration line", () => {

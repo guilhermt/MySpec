@@ -101,8 +101,8 @@ export function situationLabel(situation: Situation): string {
   }
 }
 
-// A planning stage as a sentence names it.
-function stageName(stage: string): string {
+/** stageName is how a sentence names a planning stage of a task: "PRD", "tech spec", "plan". */
+export function stageName(stage: string): string {
   switch (stage) {
     case "prd":
       return "PRD";

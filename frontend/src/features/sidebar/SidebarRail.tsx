@@ -63,19 +63,25 @@ interface RailSeparatorProps {
   group: RailGroup;
 }
 
+/**
+ * RAIL_LINE is a line of the separator. Centered in the separator's even height it would fall on a
+ * half pixel, so it sits on the whole pixel just below the middle.
+ */
+const RAIL_LINE = "mt-(--space-2) h-(--border) flex-1 self-start bg-line-1";
+
 /** RailSeparator is the line between two groups, with the ◇ of a failure and the count of Reviews. */
 function RailSeparator({ group }: RailSeparatorProps) {
   const says = group.blocked || group.pending > 0;
   return (
     <div role="none" className="flex h-(--space-4) items-center gap-(--space-1) px-(--space-2)">
-      <span className="h-(--border) flex-1 bg-line-1" />
+      <span className={RAIL_LINE} />
       {says && (
         <>
           {group.blocked && <StateGlyph state="blocked" size="sm" />}
           {group.pending > 0 && (
             <span className={cn(MICRO, "tabular-nums text-ink-3")}>{group.pending}</span>
           )}
-          <span className="h-(--border) flex-1 bg-line-1" />
+          <span className={RAIL_LINE} />
         </>
       )}
     </div>

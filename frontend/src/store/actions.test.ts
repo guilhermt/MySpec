@@ -85,15 +85,168 @@ import {
 import { useAppStore } from "@/store/app-store";
 import { resetAppStore } from "@/test/render";
 import {
+  makeArchivedTask,
+  makeBoard,
+  makeBoardCard,
   makeBoardPreview,
   makeBoardRepositoryOption,
+  makeDiscussion,
   makeEntry,
+  makeRepository,
   makeReviewFilters,
+  makeReviewSummary,
+  makeState,
+  makeTask,
   makeTranscript,
 } from "@/test/wails-mock";
 
 beforeEach(() => {
   resetAppStore();
+});
+
+describe("the app notice of a failed action", () => {
+  function withState(missing = false) {
+    resetAppStore({
+      state: makeState({
+        repositories: [makeRepository({ id: "repo-1", fullName: "dev/web", missing })],
+        boards: [makeBoard({ id: "board-1", title: "Roadmap", cards: [makeBoardCard()] })],
+        tasks: [makeTask({ id: "task-1", name: "add-login", repositoryId: "repo-1" })],
+        history: [makeArchivedTask({ id: "task-9", name: "old-login" })],
+        reviews: [makeReviewSummary({ id: "review-1", title: "Rate limit per API key" })],
+        discussions: [makeDiscussion({ id: "discussion-1", title: "Pricing tiers" })],
+      }),
+    });
+  }
+
+  it("names the action with its item and says to try again", async () => {
+    withState();
+    vi.mocked(api.pause).mockRejectedValueOnce(new Error("no session"));
+
+    await pause("task-1", "prd");
+
+    expect(useAppStore.getState().error).toEqual({
+      label: "Couldn't pause add-login",
+      detail: "no session. Try again.",
+    });
+  });
+
+  it("names an item inside the label by the title the tree gives it", async () => {
+    withState();
+    vi.mocked(api.decideFinding).mockRejectedValueOnce(new Error("pass is over"));
+
+    await decideFinding("review-1", 1, 3, "approved");
+
+    expect(useAppStore.getState().error).toEqual({
+      label: "Couldn't decide finding 3 of Rate limit per API key",
+      detail: "pass is over. Try again.",
+    });
+  });
+
+  it("names an archived task", async () => {
+    withState();
+    vi.mocked(api.openInEditor).mockRejectedValueOnce(new Error("no worktree"));
+
+    await openInEditor("task-9");
+
+    expect(useAppStore.getState().error?.label).toBe("Couldn't open old-login in the editor");
+  });
+
+  it("says only the message when the action has no known way out", async () => {
+    withState();
+    vi.mocked(api.openExternal).mockRejectedValueOnce(new Error("no browser"));
+
+    await openExternal("https://github.com/dev/web");
+
+    expect(useAppStore.getState().error).toEqual({
+      label: "Couldn't open the link",
+      detail: "no browser",
+    });
+  });
+
+  it("asks to check gh for an action that talks to GitHub", async () => {
+    withState();
+    vi.mocked(api.refreshBoard).mockRejectedValueOnce(new Error("HTTP 401"));
+    vi.mocked(api.cardContext).mockRejectedValueOnce(new Error("HTTP 401"));
+
+    await refreshBoard("board-1");
+    expect(useAppStore.getState().error).toEqual({
+      label: "Couldn't refresh the board Roadmap",
+      detail: "HTTP 401. Check that gh is signed in.",
+    });
+
+    await cardContext("board-1", "dev/web#12");
+    expect(useAppStore.getState().error?.label).toBe("Couldn't read the card #12");
+  });
+
+  it("names the repository by its full name", async () => {
+    withState();
+    vi.mocked(api.setRepositoryFilter).mockRejectedValueOnce(new Error("disk full"));
+
+    await setRepositoryFilter("repo-1");
+
+    expect(useAppStore.getState().error?.label).toBe("Couldn't show the tasks of dev/web");
+  });
+
+  it("says every repository when the filter is cleared", async () => {
+    withState();
+    vi.mocked(api.setRepositoryFilter).mockRejectedValueOnce(new Error("disk full"));
+
+    await setRepositoryFilter("");
+
+    expect(useAppStore.getState().error?.label).toBe("Couldn't show every repository");
+  });
+
+  it("names the stage a task goes back to", async () => {
+    withState();
+    vi.mocked(api.backToStage).mockRejectedValueOnce(new Error("busy"));
+
+    await backToStage("task-1", "tech_spec");
+
+    expect(useAppStore.getState().error?.label).toBe(
+      "Couldn't go back to the tech spec of add-login",
+    );
+  });
+
+  it("names a discussion", async () => {
+    withState();
+    vi.mocked(api.archiveDiscussion).mockRejectedValueOnce(new Error("publishing"));
+
+    await archiveDiscussion("discussion-1");
+
+    expect(useAppStore.getState().error?.label).toBe("Couldn't archive Pricing tiers");
+  });
+
+  it("says to change the path of a missing clone", async () => {
+    withState(true);
+    vi.mocked(api.retryStep).mockRejectedValueOnce(new Error("the clone is missing"));
+
+    await retryStep("task-1");
+
+    expect(useAppStore.getState().error).toEqual({
+      label: "Couldn't retry the step of add-login",
+      detail: "the clone is missing. Change the path of the clone in Settings.",
+    });
+  });
+
+  it("says to try again when the clone of the task is there", async () => {
+    withState();
+    vi.mocked(api.closeTask).mockRejectedValueOnce(new Error("not merged"));
+
+    await closeTask("task-1");
+
+    expect(useAppStore.getState().error).toEqual({
+      label: "Couldn't close add-login",
+      detail: "not merged. Try again.",
+    });
+  });
+
+  it("says the item when it is gone", async () => {
+    vi.mocked(api.sendMessage).mockRejectedValueOnce(new Error("no such task"));
+
+    await sendMessage("task-7", "prd", "hello");
+
+    expect(useAppStore.getState().error?.label).toBe("Couldn't send the message to the item");
+  });
 });
 
 describe("actions", () => {
@@ -115,7 +268,10 @@ describe("actions", () => {
 
     await removeRepository("repo-1");
 
-    expect(useAppStore.getState().error).toBe("remove failed");
+    expect(useAppStore.getState().error).toEqual({
+      label: "Couldn't remove the repository",
+      detail: "remove failed. Try again.",
+    });
   });
 
   it("stores a rejection that is not an Error", async () => {
@@ -123,7 +279,10 @@ describe("actions", () => {
 
     await setRepositoryFilter("repo-1");
 
-    expect(useAppStore.getState().error).toBe("boom");
+    expect(useAppStore.getState().error).toEqual({
+      label: "Couldn't show the tasks of the repository",
+      detail: "boom. Try again.",
+    });
   });
 
   it("leaves the snapshot untouched", async () => {
@@ -134,7 +293,7 @@ describe("actions", () => {
 });
 
 // The screen that asked shows the refusal where the user is, so these
-// reject instead of filling the banner.
+// reject instead of filling the app notice.
 describe("scanning, adding and moving a repository", () => {
   it("delegate to the matching binding", async () => {
     await scanRepositories();
@@ -148,7 +307,7 @@ describe("scanning, adding and moving a repository", () => {
     expect(api.changeRepositoryPath).toHaveBeenCalledWith("repo-1");
   });
 
-  it("reject instead of using the banner", async () => {
+  it("reject instead of using the app notice", async () => {
     vi.mocked(api.addRepository).mockRejectedValueOnce(new Error("not a git repository"));
 
     await expect(addRepository("/home/dev/web")).rejects.toThrow("not a git repository");
@@ -164,25 +323,28 @@ describe("clone actions", () => {
     expect(api.cloneRepository).toHaveBeenCalledWith("repo-1");
   });
 
-  it("reject a clone that could not start instead of using the banner", async () => {
+  it("reject a clone that could not start instead of using the app notice", async () => {
     vi.mocked(api.cloneRepository).mockRejectedValueOnce(new Error("Choose a clone folder first."));
 
     await expect(cloneRepository("repo-1")).rejects.toThrow("Choose a clone folder first.");
     expect(useAppStore.getState().error).toBeNull();
   });
 
-  it("report a clone folder that could not be chosen in the banner", async () => {
+  it("report a clone folder that could not be chosen in the app notice", async () => {
     vi.mocked(api.chooseCloneFolder).mockRejectedValueOnce(new Error("no chooser"));
 
     await chooseCloneFolder();
 
     expect(api.chooseCloneFolder).toHaveBeenCalledOnce();
-    expect(useAppStore.getState().error).toBe("no chooser");
+    expect(useAppStore.getState().error).toEqual({
+      label: "Couldn't choose the clone folder",
+      detail: "no chooser. Try again.",
+    });
   });
 });
 
 // The dialogs and panels of the boards show the refusal where the user is, so
-// these reject instead of filling the banner.
+// these reject instead of filling the app notice.
 describe("board actions shown in place", () => {
   const req = { finalStatuses: ["done"], newCardStatus: "todo", repositories: [] };
   const choice = { owner: "dev", name: "api", path: "" };
@@ -213,7 +375,7 @@ describe("board actions shown in place", () => {
     expect(api.addRepositoryToBoard).toHaveBeenCalledWith("board-1", choice);
   });
 
-  it("reject instead of using the banner", async () => {
+  it("reject instead of using the app notice", async () => {
     vi.mocked(api.previewBoard).mockRejectedValueOnce(new Error("This board doesn't exist."));
 
     await expect(previewBoard("https://github.com/orgs/dev/projects/9")).rejects.toThrow(
@@ -223,7 +385,7 @@ describe("board actions shown in place", () => {
   });
 });
 
-describe("board actions reported in the banner", () => {
+describe("board actions reported in the app notice", () => {
   it("start a reading of a board", async () => {
     await refreshBoard("board-1");
 
@@ -241,7 +403,10 @@ describe("board actions reported in the banner", () => {
     vi.mocked(api.previewRemoveBoard).mockRejectedValueOnce(new Error("board gone"));
 
     expect(await previewRemoveBoard("board-1")).toBeNull();
-    expect(useAppStore.getState().error).toBe("board gone");
+    expect(useAppStore.getState().error).toEqual({
+      label: "Couldn't check what removing the board takes with it",
+      detail: "board gone. Try again.",
+    });
   });
 
   it("answer the context of a card", async () => {
@@ -255,7 +420,10 @@ describe("board actions reported in the banner", () => {
     vi.mocked(api.cardContext).mockRejectedValueOnce(new Error("card gone"));
 
     expect(await cardContext("board-1", "dev/web#12")).toBe("");
-    expect(useAppStore.getState().error).toBe("card gone");
+    expect(useAppStore.getState().error).toEqual({
+      label: "Couldn't read the card",
+      detail: "card gone. Check that gh is signed in.",
+    });
   });
 });
 
@@ -363,7 +531,10 @@ describe("task actions", () => {
 
     await openPR("task-1", "Log in", "why");
 
-    expect(useAppStore.getState().error).toBe("the draft is empty");
+    expect(useAppStore.getState().error).toEqual({
+      label: "Couldn't open the pull request of the item",
+      detail: "the draft is empty. Check that gh is signed in.",
+    });
     expect(useAppStore.getState().prDrafts["task-1"]).toEqual(draft);
   });
 
@@ -388,12 +559,15 @@ describe("task actions", () => {
     expect(useAppStore.getState().leftover).toBeNull();
   });
 
-  it("reports a failed task action in the banner", async () => {
+  it("reports a failed task action in the app notice", async () => {
     vi.mocked(api.pause).mockRejectedValueOnce(new Error("no session"));
 
     await pause("task-1", "prd");
 
-    expect(useAppStore.getState().error).toBe("no session");
+    expect(useAppStore.getState().error).toEqual({
+      label: "Couldn't pause",
+      detail: "no session. Try again.",
+    });
   });
 });
 
@@ -414,7 +588,7 @@ describe("createTask", () => {
     expect(id).toBe("task-9");
   });
 
-  it("rejects instead of using the banner, so the dialog can show the message", async () => {
+  it("rejects instead of using the app notice, so the dialog can show the message", async () => {
     vi.mocked(api.createTask).mockRejectedValueOnce(new Error("claude is not logged in"));
 
     await expect(
@@ -453,11 +627,14 @@ describe("loadTranscript", () => {
 
     await loadTranscript("task-1", "prd");
 
-    expect(useAppStore.getState().error).toBe("no such task");
+    expect(useAppStore.getState().error).toEqual({
+      label: "Couldn't load the conversation of the item",
+      detail: "no such task. Try again.",
+    });
   });
 });
 
-describe("review actions reported in the banner", () => {
+describe("review actions reported in the app notice", () => {
   it("delegate to the matching binding", async () => {
     const filters = makeReviewFilters({ pendingOnly: true });
 
@@ -488,12 +665,15 @@ describe("review actions reported in the banner", () => {
     expect(useAppStore.getState().error).toBeNull();
   });
 
-  it("report a failed review action in the banner", async () => {
+  it("report a failed review action in the app notice", async () => {
     vi.mocked(api.applyReview).mockRejectedValueOnce(new Error("the worktree is dirty"));
 
     await applyReview("review-1");
 
-    expect(useAppStore.getState().error).toBe("the worktree is dirty");
+    expect(useAppStore.getState().error).toEqual({
+      label: "Couldn't apply the approved findings of the item",
+      detail: "the worktree is dirty. Try again.",
+    });
   });
 
   it("answer whether the filters were stored", async () => {
@@ -504,7 +684,10 @@ describe("review actions reported in the banner", () => {
     vi.mocked(api.setReviewFilters).mockRejectedValueOnce(new Error("disk full"));
 
     expect(await setReviewFilters(filters)).toBe(false);
-    expect(useAppStore.getState().error).toBe("disk full");
+    expect(useAppStore.getState().error).toEqual({
+      label: "Couldn't change the filters of Reviews",
+      detail: "disk full. Try again.",
+    });
   });
 
   it("say what the deletion of a review left behind", async () => {
@@ -529,7 +712,7 @@ describe("review actions reported in the banner", () => {
 });
 
 // The dialog or the panel that asked shows the refusal where the user is, so
-// these reject instead of filling the banner.
+// these reject instead of filling the app notice.
 describe("review actions shown in place", () => {
   const request = {
     repositoryId: "repo-1",
@@ -554,7 +737,7 @@ describe("review actions shown in place", () => {
     expect(api.setReviewInstructions).toHaveBeenCalledWith("repo-1", "Look at the migrations.");
   });
 
-  it("reject instead of using the banner", async () => {
+  it("reject instead of using the app notice", async () => {
     vi.mocked(api.publishReview).mockRejectedValueOnce(new Error("gh is not authenticated"));
 
     await expect(publishReview("review-1", "approve")).rejects.toThrow("gh is not authenticated");
@@ -562,7 +745,7 @@ describe("review actions shown in place", () => {
   });
 });
 
-describe("discussion actions reported in the banner", () => {
+describe("discussion actions reported in the app notice", () => {
   it("delegate to the matching binding", async () => {
     await saveDraftText("discussion-1", "draft-1", "Export the invoices", "A button.");
     await setDraftRepository("discussion-1", "draft-1", "repo-2");
@@ -591,14 +774,17 @@ describe("discussion actions reported in the banner", () => {
     expect(useAppStore.getState().error).toBeNull();
   });
 
-  it("report a failed discussion action in the banner", async () => {
+  it("report a failed discussion action in the app notice", async () => {
     vi.mocked(api.archiveDiscussion).mockRejectedValueOnce(
       new Error("a draft is still publishing"),
     );
 
     await archiveDiscussion("discussion-1");
 
-    expect(useAppStore.getState().error).toBe("a draft is still publishing");
+    expect(useAppStore.getState().error).toEqual({
+      label: "Couldn't archive",
+      detail: "a draft is still publishing. Try again.",
+    });
   });
 
   it("answer the id of the epic the drafts were grouped into", async () => {
@@ -612,12 +798,15 @@ describe("discussion actions reported in the banner", () => {
     vi.mocked(api.groupIntoEpic).mockRejectedValueOnce(new Error("a draft is published"));
 
     expect(await groupIntoEpic("discussion-1", ["draft-1"])).toBe("");
-    expect(useAppStore.getState().error).toBe("a draft is published");
+    expect(useAppStore.getState().error).toEqual({
+      label: "Couldn't group the drafts of the item into an epic",
+      detail: "a draft is published. Try again.",
+    });
   });
 });
 
 // The dialog and the cards of the drafts show the refusal where the user is, so
-// these reject instead of filling the banner.
+// these reject instead of filling the app notice.
 describe("discussion actions shown in place", () => {
   const request = {
     boardId: "board-1",
@@ -644,7 +833,7 @@ describe("discussion actions shown in place", () => {
     expect(api.publishEpic).toHaveBeenCalledWith("discussion-1", "draft-epic");
   });
 
-  it("reject instead of using the banner", async () => {
+  it("reject instead of using the app notice", async () => {
     vi.mocked(api.startDiscussion).mockRejectedValueOnce(new Error("This board has no clone."));
     vi.mocked(api.addDraftDependency).mockRejectedValueOnce(new Error("This draft doesn't exist."));
 

@@ -38,16 +38,3 @@ export function Banner({ title, children, onDismiss, className }: BannerProps) {
     </div>
   );
 }
-
-export interface ErrorNoticeProps {
-  message: string;
-  onDismiss: () => void;
-}
-
-export function ErrorNotice({ message, onDismiss }: ErrorNoticeProps) {
-  return (
-    <Banner title="Something went wrong" onDismiss={onDismiss} className="bg-destructive/10">
-      {message}
-    </Banner>
-  );
-}

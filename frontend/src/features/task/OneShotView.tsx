@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Markdown } from "@/features/chat/Markdown";
-import { ErrorNotice } from "@/features/notice/Notice";
+import { Banner } from "@/features/notice/Notice";
 import { useArtifact } from "@/features/task/useArtifact";
 import { stepReportLabel } from "@/lib/review-modes";
 import type { StepReport } from "@/lib/wails";
@@ -80,7 +80,13 @@ export function OneShotView({
           </div>
         )}
         {artifact.status === "error" && artifact.error !== dismissed && (
-          <ErrorNotice message={artifact.error} onDismiss={() => setDismissed(artifact.error)} />
+          <Banner
+            className="bg-destructive/10"
+            title="Couldn't read the document"
+            onDismiss={() => setDismissed(artifact.error)}
+          >
+            {artifact.error}
+          </Banner>
         )}
         {artifact.status === "ready" && (
           <div className="max-w-[58.5rem] select-text">

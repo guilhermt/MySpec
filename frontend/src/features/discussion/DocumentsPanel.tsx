@@ -3,7 +3,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Markdown } from "@/features/chat/Markdown";
 import { useDiscussionArtifact } from "@/features/discussion/useDiscussionArtifact";
-import { ErrorNotice } from "@/features/notice/Notice";
+import { Banner } from "@/features/notice/Notice";
 import type { DiscussionSummary } from "@/lib/wails";
 
 const LOADING_WIDTHS = ["w-1/2", "w-full", "w-3/4"];
@@ -72,7 +72,13 @@ export function DocumentsPanel({ discussion }: DocumentsPanelProps) {
           </div>
         )}
         {artifact.status === "error" && artifact.error !== dismissed && (
-          <ErrorNotice message={artifact.error} onDismiss={() => setDismissed(artifact.error)} />
+          <Banner
+            className="bg-destructive/10"
+            title="Couldn't read the document"
+            onDismiss={() => setDismissed(artifact.error)}
+          >
+            {artifact.error}
+          </Banner>
         )}
         {artifact.status === "ready" && (
           <div className="max-w-[58.5rem] select-text">

@@ -110,7 +110,7 @@ export function PlaceHeader({
   children,
 }: PlaceHeaderProps) {
   return (
-    <header className="flex h-(--size-head) min-w-0 shrink-0 flex-nowrap items-center gap-(--space-2) border-b border-line-1 px-(--space-3)">
+    <header className="flex h-(--size-head) min-w-0 shrink-0 flex-nowrap items-center gap-(--space-2) px-(--space-3) shadow-[inset_0_calc(var(--border)*-1)_0_var(--line-1)]">
       {back !== null ? (
         <IconButton
           ref={backRef}

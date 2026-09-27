@@ -126,9 +126,18 @@ export interface PullRef {
   number: number;
 }
 
+/** AppError is what the app notice says of an action that failed: which action, and what happened. */
+export interface AppError {
+  /** label is the action that failed, with its item: "Couldn't pause Rate limit per API key". */
+  label: string;
+  /** detail is the message of the failure and, when the action has one, what to do. */
+  detail: string;
+}
+
 export interface AppStore {
   app: State | null;
-  error: string | null;
+  /** error is the failure the app notice shows, until it is dismissed or the next one replaces it. */
+  error: AppError | null;
   /** location is the place on screen. */
   location: Location;
   /** back are the places behind the current one, the most recent last; forward the ones ahead, the nearest last. */
@@ -193,7 +202,7 @@ export interface AppStore {
   pendingLeave: (() => void) | null;
 
   applyState: (next: State) => void;
-  setError: (message: string | null) => void;
+  setError: (error: AppError | null) => void;
 
   /** go opens a place: the current one goes behind it and whatever was ahead is dropped. */
   go: (location: Location, options?: { focus?: "title" | "back" | "forward" }) => void;
@@ -678,7 +687,7 @@ export const useAppStore = create<AppStore>()((set, get) => {
         };
       }),
 
-    setError: (message) => set({ error: message }),
+    setError: (error) => set({ error }),
 
     go,
 
@@ -1040,7 +1049,8 @@ export function useModelCatalog(): ModelCatalog {
   return useAppStore((state) => state.app?.modelCatalog ?? NO_CATALOG);
 }
 
-export function useError(): string | null {
+/** useError is the failure the app notice shows, if any. */
+export function useError(): AppError | null {
   return useAppStore((state) => state.error);
 }
 

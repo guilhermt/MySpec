@@ -9,7 +9,7 @@ import { Markdown } from "@/features/chat/Markdown";
 import { HistoryPR } from "@/features/history/HistoryPanel";
 import { formatDates, stepCount } from "@/features/history/history-format";
 import { LocationHeader } from "@/features/navigation/LocationHeader";
-import { ErrorNotice } from "@/features/notice/Notice";
+import { Banner } from "@/features/notice/Notice";
 import { DeleteTaskDialog } from "@/features/task/DeleteTaskDialog";
 import { OneShotView } from "@/features/task/OneShotView";
 import { StepDocument } from "@/features/task/StepDocument";
@@ -229,10 +229,13 @@ export function ArchivedTaskView({ taskId }: ArchivedTaskViewProps) {
                   </div>
                 )}
                 {artifact.status === "error" && artifact.error !== dismissed && (
-                  <ErrorNotice
-                    message={artifact.error}
+                  <Banner
+                    className="bg-destructive/10"
+                    title="Couldn't read the document"
                     onDismiss={() => setDismissed(artifact.error)}
-                  />
+                  >
+                    {artifact.error}
+                  </Banner>
                 )}
                 {artifact.status === "ready" &&
                   (openStep === null ? (

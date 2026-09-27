@@ -203,7 +203,7 @@ describe("selectors", () => {
           systemDark: true,
         }),
       );
-      useAppStore.getState().setError("binding failed");
+      useAppStore.getState().setError({ label: "Couldn't pause", detail: "binding failed" });
     });
 
     expect(result.current.repositories).toHaveLength(2);
@@ -212,7 +212,7 @@ describe("selectors", () => {
     expect(result.current.unknown).toBeNull();
     expect(result.current.migration).toBeNull();
     expect(result.current.catalog).toEqual(makeModelCatalog());
-    expect(result.current.error).toBe("binding failed");
+    expect(result.current.error).toEqual({ label: "Couldn't pause", detail: "binding failed" });
     expect(result.current.theme).toEqual({ preference: "dark", systemDark: true });
   });
 
