@@ -1,11 +1,33 @@
-import { type RefObject, useEffect, useLayoutEffect, useState } from "react";
+import {
+  createContext,
+  type RefObject,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useState,
+} from "react";
+
+/** NARROW_PX is the sidebar width under which the rows take their short forms and drop the meta. */
+export const NARROW_PX = 330;
+
+/** SidebarWidthContext tells the tree whether the sidebar is narrow, under NARROW_PX. */
+export const SidebarWidthContext = createContext(false);
+
+/** useNarrow is the sidebar being narrow, under NARROW_PX. */
+export function useNarrow(): boolean {
+  return useContext(SidebarWidthContext);
+}
 
 // One ResizeObserver for the whole tree: each element keeps the callbacks of
 // the hooks that measure it.
 let observer: ResizeObserver | null = null;
 const callbacks = new Map<Element, Set<() => void>>();
 
-function observe(element: Element, callback: () => void): () => void {
+/**
+ * observeSize calls back each time the element changes size, through the
+ * tree's shared ResizeObserver, until the returned function stops it.
+ */
+export function observeSize(element: Element, callback: () => void): () => void {
   if (observer === null) {
     observer = new ResizeObserver((entries) => {
       for (const entry of entries) {
@@ -41,7 +63,7 @@ export function useWidth(ref: RefObject<HTMLElement | null>): number {
     }
     const measure = () => setWidth(element.clientWidth);
     measure();
-    return observe(element, measure);
+    return observeSize(element, measure);
   }, [ref]);
 
   return width;
@@ -63,7 +85,7 @@ export function useFits(
     }
     const check = () => setFits((measure.current?.scrollWidth ?? 0) <= element.clientWidth);
     check();
-    return observe(element, check);
+    return observeSize(element, check);
   }, [box, measure, content]);
 
   return fits;

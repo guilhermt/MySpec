@@ -16,7 +16,8 @@ import { SettingsView } from "@/features/settings/SettingsView";
 import { Sidebar } from "@/features/sidebar/Sidebar";
 import { TaskView } from "@/features/task/TaskView";
 import { NewTaskDialog } from "@/features/task-create/NewTaskDialog";
-import { useLocation } from "@/store/app-store";
+import { cn } from "@/lib/utils";
+import { useLocation, useSidebarRail } from "@/store/app-store";
 
 /** LocationView is the screen of the place on screen. */
 function LocationView() {
@@ -53,9 +54,17 @@ export function AppShell() {
   useViewedSituation();
   usePendingStart();
   usePendingReview();
+  const rail = useSidebarRail();
 
   return (
-    <div className="grid h-dvh grid-cols-[var(--sidebar-width)_minmax(0,1fr)]">
+    <div
+      className={cn(
+        "grid h-dvh",
+        rail
+          ? "grid-cols-[var(--sidebar-collapsed)_minmax(0,1fr)]"
+          : "grid-cols-[var(--sidebar-width)_minmax(0,1fr)]",
+      )}
+    >
       <Sidebar />
       <main className="main-area relative flex h-dvh min-w-0 flex-col @container/main">
         <LocationView />

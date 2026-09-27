@@ -56,7 +56,7 @@ describe("App", () => {
       await screen.findByRole("button", { name: "Repository filter: All repositories" }),
     ).toBeInTheDocument();
     expect(screen.getByText("No tasks yet")).toBeInTheDocument();
-    expect(screen.getByRole("group", { name: "Theme" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Theme: System" })).toBeInTheDocument();
   });
 
   it("renders the welcome screen without a registered repository", async () => {

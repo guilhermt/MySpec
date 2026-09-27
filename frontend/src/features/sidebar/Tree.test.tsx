@@ -59,7 +59,7 @@ function missingClone(): State {
 }
 
 function renderTree(options: StoreOptions = {}) {
-  return renderWithStore(<Tree narrow={false} />, { state: state(), ...options });
+  return renderWithStore(<Tree />, { state: state(), ...options });
 }
 
 describe("Tree", () => {

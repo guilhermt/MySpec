@@ -133,6 +133,8 @@ As convenções de todo componente:
 
 **Tooltip.** Abre depois da pausa no hover e na hora num foco de teclado, o que casa com `:focus-visible`. Um foco que não é visível, como o que um diálogo aberto com o ponteiro põe no **Cancel**, não abre tooltip: o Base UI já o recusa no navegador, e o `Tooltip` o recusa também, para não depender disso.
 
+**Gatilho da lateral.** O select tem duas variantes: `field`, com a anatomia do input, e `sidebar`, o gatilho no tom da barra lateral, de `--size-control-sm`, sobre `--sidebar-input` com a borda `--sidebar-control` e a escolha em `--text-meta` e `--ink-2`, que o filtro por repositório usa. O menu é o mesmo nas duas.
+
 **Escolha indisponível.** Uma escolha que o catálogo não tem mais aparece no gatilho do select e do listbox como `◇ old · unavailable`, e o nome do gatilho diz o mesmo (`Base branch: old · unavailable`): o `◇` não é o único portador.
 
 **Campo fora de um `Field`.** O controle fica sempre dentro do mesmo invólucro, `display: contents` sem linha, e a razão ou o gerúndio aparecem dentro dele: o `<input>` nunca é remontado, e o foco e o valor sobrevivem ao carregando que liga e desliga enquanto se digita.
@@ -141,7 +143,7 @@ As convenções de todo componente:
 
 **Scroll area.** O anel de foco é o único desenhado por dentro, no viewport, porque por fora ele seria cortado pelo que envolve a área. `viewportRef` entrega o viewport a quem mede ou rola o conteúdo.
 
-**Peças de uma feature.** As peças da árvore da barra lateral (`Tree`, `TreeRow`, `TreeNodeRow`, `CloneNotice`) moram em `features/sidebar/`, feitas só de componentes de `components/system/`, porque só a lateral as usa. A piscada de uma situação nova é a classe `tree-flash` com `data-flash="error"` ou `"wait"`: duas vezes `--duration-slow` no véu da gravidade, e nada sem movimento.
+**Peças de uma feature.** As peças da barra lateral (a árvore em `Tree`, `TreeRow`, `TreeNodeRow` e `CloneNotice`; o topo em `SidebarTop` e `NewMenu`; `SidebarFilter`, `MoreBelow`, `SidebarFooter` com `ThemeButton`, e a faixa recolhida em `SidebarRail`) moram em `features/sidebar/`, feitas só de componentes de `components/system/`, porque só a lateral as usa. A faixa desenha cada item como um bloco com os mesmos glifos de tipo e de estado da linha (`TYPE_ICONS` e `ROW_GLYPHS`, de `TreeRow`), e o anel de foco dos blocos é desenhado por dentro, como o do scroll area, porque a faixa rola. A piscada de uma situação nova é a classe `tree-flash` com `data-flash="error"` ou `"wait"`: duas vezes `--duration-slow` no véu da gravidade, e nada sem movimento.
 
 **Ícones.** `icons.ts` é o mapa de significado para ícone (`ICONS`): cada significado tem um ícone só, o mesmo no produto inteiro. `Icon` o desenha num tamanho e num tom do system. Um ícone é um `IconGlyph`: um ícone do lucide ou um SVG próprio do system, e os dois recebem uma classe e se escondem do leitor. Os próprios, em `type-icons.tsx`, são os glifos de tipo de um item (`TaskIcon`, `OneShotIcon`, `ReviewIcon`, `DiscussionIcon`), a seta de ir a um lugar (`GoIcon`) e a marca (`MarkIcon`), na grade de 16 px, com a classe `lucide` para receberem o traço da mesma regra global. Um componente de `components/system/` nunca importa do `lucide-react` um ícone que o mapa tem (o visto é `ICONS.done`), e `Icon.test.tsx` falha quando um importa.
 

@@ -14,6 +14,7 @@ import {
 } from "@/features/sidebar/sidebar-tree";
 import { TreeNodeRow } from "@/features/sidebar/TreeNodeRow";
 import { TreeRow } from "@/features/sidebar/TreeRow";
+import { useNarrow } from "@/features/sidebar/useFits";
 import { useTreeKeyboard } from "@/features/sidebar/useTreeKeyboard";
 import { nextWaiting } from "@/lib/situations";
 import {
@@ -26,11 +27,6 @@ import {
   useSidebarCollapsed,
 } from "@/store/app-store";
 
-export interface TreeProps {
-  /** narrow is a sidebar under 330px, whose rows take their short forms. */
-  narrow: boolean;
-}
-
 const groupIdOf = (nodeId: string) => `${nodeId}:group`;
 
 const EMPTY =
@@ -41,9 +37,11 @@ const EMPTY =
  * clone notices and its epics, then No board. The item on screen shows open,
  * the one Ctrl+J opens next carries the mark, and a situation that just started
  * blinks its row, or the summary of the collapsed node holding it. The
- * keyboard walks it as one Tab stop.
+ * keyboard walks it as one Tab stop. A narrow sidebar, told by
+ * SidebarWidthContext, gives its rows their short forms.
  */
-export function Tree({ narrow }: TreeProps) {
+export function Tree() {
+  const narrow = useNarrow();
   const app = useAppStore((state) => state.app);
   const filter = useRepositoryFilter();
   const collapsed = useSidebarCollapsed();

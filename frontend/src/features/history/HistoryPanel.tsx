@@ -169,7 +169,7 @@ export function HistoryPanel() {
             onChange={(event) => setHistoryQuery(event.target.value)}
             className="flex-1"
           />
-          <RepositoryFilter variant="field" className="w-56" />
+          <RepositoryFilter className="w-56" />
         </div>
 
         {empty ? (

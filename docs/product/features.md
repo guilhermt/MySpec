@@ -111,7 +111,7 @@ O agente lê o código dos repositórios do board que têm clone e nunca os alte
 
 ### Criar uma discussão
 
-Uma discussão pertence a um board e nasce da visão dele, de dois lugares: **New discussion**, no cabeçalho, e **Discuss**, no painel de detalhe de um card, que abre o diálogo com aquele card. Com cards selecionados na lista, **New discussion** abre o diálogo com eles, e `D` faz o mesmo pelo teclado, com a seleção ou com o card sob o foco.
+Uma discussão pertence a um board e nasce da visão dele, de dois lugares: **New discussion**, no cabeçalho, e **Discuss**, no painel de detalhe de um card, que abre o diálogo com aquele card. **New discussion** também está no menu **New** da barra lateral, que abre o diálogo sem cards para o board do lugar na tela (ver [Tela de boas-vindas e barra lateral](#tela-de-boas-vindas-e-barra-lateral)). Com cards selecionados na lista, **New discussion** abre o diálogo com eles, e `D` faz o mesmo pelo teclado, com a seleção ou com o card sob o foco.
 
 O diálogo de criação tem:
 
@@ -201,7 +201,7 @@ O campo de módulo é o campo de seleção única do board chamado `Módulo` ou 
 
 ### A discussão como item
 
-- **Barra lateral:** cada discussão ativa aparece sob o nó do board, depois das tasks dele, em ordem de criação, com o rótulo `Discussion`, o título, o ponto de estado e, à direita, o que espera pelo usuário ou o estado. Ela não aparece sob os nós de épico, e o filtro por repositório não a esconde. Uma discussão de um board removido vai para o grupo **No board**.
+- **Barra lateral:** cada discussão ativa é uma linha sob o nó do board, depois das tasks dele, em ordem de criação, com o glifo de discussão, o título, `#<card> #<card>` no meta e, na segunda linha, como nas linhas das tasks, a situação mais grave (`Question · Discussing`, `Decide drafts · 2 of 5`, `Publish failed`) ou, sem situação, `Discussing` ou `Publishing`. Uma discussão publicada diz `Ready to archive`, sem relógio, e não entra no `Ctrl+J` nem no resumo de um nó recolhido. Ela não aparece sob os nós de épico, e o filtro por repositório não a esconde. Uma discussão de um board removido vai para o grupo **No board**.
 - **Tela da discussão:** o cabeçalho com o rótulo `Discussion`, o título, o board, o estado, o medidor de contexto, **Pause** ou **Resume**, o botão do painel de documentos, **Archive** e **Delete discussion**; a barra da discussão com o estado e os avisos; o painel de rascunhos e a conversa; o painel de documentos.
 - **Estados:** `Discussing`, `Waiting for the drafts`, `Decide drafts`, `Publishing`, `Publish failed` e `Drafts published`. O estado da conversa, pausada, com erro, pedindo permissão ou perguntando, prevalece, como na task.
 - **Espera pelo usuário:** a discussão espera pelo usuário quando o agente pergunta ou pede permissão, quando a sessão falha, quando um turno termina sem resposta ao usuário antes de os rascunhos existirem, quando o artefato de rascunhos não pode ser lido, quando há rascunhos a decidir e quando uma publicação falha. Ela notifica como uma task, uma vez por situação, com o som do produto. Uma discussão pausada ou arquivada não espera por ninguém.
@@ -267,9 +267,12 @@ Enquanto nenhum board e nenhum repositório estão cadastrados, o produto mostra
 
 A barra lateral tem, de cima para baixo:
 
-- o **filtro por repositório**, um seletor com **All repositories** e um item por repositório cadastrado, em ordem alfabética, e o botão de nova task. A escolha do filtro é lembrada entre execuções do app, e um repositório removido volta o filtro para todos;
-- a **árvore** `Active items`, com os reviews, as tasks e as discussões ativas, agrupada por board;
-- o rodapé com **History**, o tema e as configurações.
+- o topo, com a marca e o nome do produto, **New** e `«`, que recolhe a barra na faixa. **New** abre um menu com **New task** (`Ctrl N`), **Review a pull request**, que vai à visão Reviews, e **New discussion**, que abre o diálogo de criação para o board do lugar na tela: a visão do board aberta, o board do repositório da task aberta ou o board da discussão aberta; fora deles, o board da última discussão criada e, sem ela, o primeiro board por título. Sem nenhum board, **New discussion** fica desabilitado com `Add a board to discuss its cards.`;
+- o **filtro por repositório**, um seletor com **All repositories** e um item por repositório cadastrado, em ordem alfabética, com `· clone missing` no repositório cujo clone sumiu e `· not cloned` no que não tem clone. A escolha do filtro é lembrada entre execuções do app, e um repositório removido volta o filtro para todos;
+- a **árvore** `Active items`, com os reviews, as tasks e as discussões ativas, agrupada por board. Quando há linhas abaixo da parte visível, o fim da árvore esmaece sob `↓ N more below`, que rola até o fim com um clique;
+- o rodapé com **History**, o tema e **Settings**. **History** mostra quantos itens estão arquivados, com a conta por tipo no tooltip (`44 archived: 22 tasks, 12 reviews, 10 discussions`), e fica pressionado com o History ou um arquivado na tela. O tema é um botão de ícone fixo, `Theme: System`, `Theme: Light` ou `Theme: Dark`, que passa ao seguinte a cada clique. **Settings** fica pressionado com as configurações na tela, e o clique nele as fecha de volta ao lugar anterior.
+
+`«` recolhe a barra lateral numa **faixa** de 60 px, e `»` a expande; o estado é lembrado entre execuções. No alto da faixa ficam `»` e o `+` de **New**, com o mesmo menu. Cada item vira um bloco, na ordem da árvore, também os que estão num nó recolhido: o glifo do tipo com o glifo do estado no canto, `+N` quando há outras situações, e embaixo o chip de espera, o relógio do turno do agente ou a palavra do estado (`working`, `checks`, `paused`, `idle`); um item em erro tem o trilho à esquerda, e o aberto fica destacado. Um fio separa os grupos da árvore e leva `◇` quando um board ou Reviews falhou na leitura ou um repositório do grupo está sem clone, e, em Reviews, o número de pull requests pendentes. O nome acessível de cada bloco é o da linha dele, e o tooltip diz o nome do item e o que ele pede. A faixa é navegável pelo teclado como a árvore, com uma parada de Tab só: as setas para cima e para baixo, `Home` e `End` percorrem os blocos, e `Enter` abre o item. O rodapé fica em coluna, com os três como botões de ícone, e a conta de **History** vai para o nome acessível e o tooltip.
 
 A árvore começa pelo nó **Reviews** e segue com um nó por board, em ordem alfabética de título, e depois o grupo **No board**:
 
@@ -300,7 +303,7 @@ A migração é tudo ou nada, e três coisas a impedem: uma task ativa na raiz d
 
 ## Criação de uma task
 
-O botão de nova task e `Ctrl+N` abrem o diálogo de criação de qualquer lugar do produto. Na criação o usuário informa:
+**New task**, no menu **New** da barra lateral, e `Ctrl+N` abrem o diálogo de criação de qualquer lugar do produto. Na criação o usuário informa:
 
 - o **repositório**, obrigatório, entre os cadastrados. O seletor vem pré-selecionado com, nesta ordem, o primeiro que existir: o repositório do filtro, quando o filtro não é **All repositories**; o repositório da task aberta; o último repositório usado numa criação; o primeiro da lista. Um repositório com clone inexistente aparece desabilitado, com o aviso, e um repositório sem clone aparece desabilitado, com `Not cloned`, ou `Cloning…` enquanto clona, e a ação **Clone** ao lado;
 - o **nome**, em minúsculas, dígitos e hífens simples, com até 64 caracteres, único no repositório escolhido, tasks arquivadas incluídas, porque ele nomeia a branch e a worktree. Um nome já usado é recusado com `A task named <nome> already exists in <dono/nome>.`; o mesmo nome em outro repositório é permitido;
@@ -490,7 +493,7 @@ O review de uma pull request é um item do produto como uma task, sem etapas: te
 
 ### Visão Reviews
 
-O nó **Reviews** da barra lateral abre a visão, que ocupa a área principal. Ela lista as pull requests abertas de todos os repositórios cadastrados, com ou sem board, com ou sem clone, as pendentes primeiro e, em cada grupo, as atualizadas mais recentemente primeiro.
+O nó **Reviews** da barra lateral e **Review a pull request**, no menu **New**, abrem a visão, que ocupa a área principal. Ela lista as pull requests abertas de todos os repositórios cadastrados, com ou sem board, com ou sem clone, as pendentes primeiro e, em cada grupo, as atualizadas mais recentemente primeiro.
 
 - **Cabeçalho:** o título, `Updated <há quanto tempo>`, o indicador `Reading pull requests` durante uma leitura e o botão **Refresh**.
 - **Falhas:** um aviso por repositório que o produto não conseguiu ler, com a razão e o que fazer (ver [Leitura das pull requests](#leitura-das-pull-requests)). As pull requests dos outros repositórios continuam aparecendo.
@@ -644,11 +647,11 @@ Uma discussão espera pelo usuário quando o agente pergunta ou pede permissão,
 
 Cada situação diz onde está e o que pede. As situações aparecem:
 
-- na árvore da barra lateral, na linha de cada task e de cada discussão, e sob o nó **Reviews**, na linha de cada review. A linha do item que `Ctrl+J` abre leva a tecla `Ctrl J` no lugar do meta, e o nome acessível dela termina em `Ctrl+J opens this next.`;
+- na árvore da barra lateral, na linha de cada task e de cada discussão, e sob o nó **Reviews**, na linha de cada review, ou no bloco de cada item na faixa recolhida. A linha do item que `Ctrl+J` abre leva a tecla `Ctrl J` no lugar do meta, e o nome acessível dela, como o do bloco na faixa, termina em `Ctrl+J opens this next.`;
 - por `Ctrl+J`, que abre o item cuja situação mais grave é a mais grave de todas e, entre iguais, o que espera há mais tempo, deixando de fora o item aberto. O filtro por repositório não muda o destino;
 - na própria task, na trilha de etapas, na barra do step, nas abas **Implementer** e **Reviewer** e na barra da pull request, no próprio review, na barra dele, e na própria discussão, na barra dela.
 
-Uma situação que começa enquanto o usuário olha para o produto pisca brevemente onde surgiu, em silêncio: na árvore, a linha do item pisca duas vezes no véu da gravidade (o de erro, ou o de espera, que cobre também o encerramento), ou o resumo do nó que a esconde, quando ele está recolhido; a linha aberta não pisca. Sem movimento no sistema, nada pisca. Uma situação que começa com a janela fora de foco gera uma notificação do sistema, que identifica a task, a pull request do review ou a discussão, e o que ela pede; clicar nela traz a janela e abre o lugar certo. Cada situação notifica uma vez, ao começar. Continuações da mesma espera, como o stage chegar a 100%, a pull request passar de pronta a mergeada, a razão de checks e conflito mudar ou a pull request voltar a ficar pronta depois de um check ou de um conflito, não notificam.
+Uma situação que começa enquanto o usuário olha para o produto pisca brevemente onde surgiu, em silêncio: na árvore, a linha do item pisca duas vezes no véu da gravidade (o de erro, ou o de espera, que cobre também o encerramento), ou o resumo do nó que a esconde, quando ele está recolhido, e na faixa recolhida, o bloco do item; a linha aberta não pisca. Sem movimento no sistema, nada pisca. Uma situação que começa com a janela fora de foco gera uma notificação do sistema, que identifica a task, a pull request do review ou a discussão, e o que ela pede; clicar nela traz a janela e abre o lugar certo. Cada situação notifica uma vez, ao começar. Continuações da mesma espera, como o stage chegar a 100%, a pull request passar de pronta a mergeada, a razão de checks e conflito mudar ou a pull request voltar a ficar pronta depois de um check ou de um conflito, não notificam.
 
 A notificação toca, ao aparecer, o som do MySpec: um carrilhão curto e suave, o mesmo em todo sistema, no volume e na saída de áudio do sistema. Situações que começam juntas são ouvidas uma vez só: uma notificação a menos de dois segundos da última que tocou chega em silêncio, e cada situação continua com a sua notificação. Com o sistema em não perturbe o som não toca, onde o sistema torna esse estado conhecido. Clicar, dispensar ou retirar uma notificação não faz som. Uma notificação que não aparece não toca, e um som que não pode tocar deixa a notificação aparecer muda; nenhum dos dois vira erro na interface.
 
@@ -681,9 +684,9 @@ Sair do editor com uma edição não salva pede confirmação.
 
 ## Configurações e aparência
 
-As configurações abrem pelo ícone no rodapé da barra lateral ou por `Ctrl+,`, e pertencem ao app. Elas contêm a página **Defaults**, com o modo de review e os modelos e esforços com que uma task nova começa, a página **Boards**, a página **Repositories**, e os prompts.
+As configurações abrem por **Settings**, no rodapé da barra lateral, ou por `Ctrl+,`, e pertencem ao app. Elas contêm a página **Defaults**, com o modo de review e os modelos e esforços com que uma task nova começa, a página **Boards**, a página **Repositories**, e os prompts.
 
-O tema segue o sistema por padrão e pode ser fixado em claro ou escuro pelo botão da barra lateral. Uma troca do tema do sistema com o app aberto é aplicada na hora.
+O tema segue o sistema por padrão e pode ser fixado em claro ou escuro pelo botão de tema do rodapé da barra lateral, o único lugar dele: cada clique passa ao seguinte, System, Light, Dark e System de novo, e o novo tema é aplicado na hora. Uma troca do tema do sistema com o app aberto também é aplicada na hora.
 
 ## Atalhos
 

@@ -24,14 +24,16 @@ export interface TreeRowProps {
   tabIndex: 0 | -1;
 }
 
-const TYPE_ICONS = {
+/** TYPE_ICONS is the type glyph of each kind of item, on its row and on its block of the strip. */
+export const TYPE_ICONS = {
   task: ICONS.task,
   "one-shot": ICONS.oneShot,
   review: ICONS.review,
   discussion: ICONS.discussion,
 } as const satisfies Record<ItemKind, unknown>;
 
-const GLYPHS: Record<RowTone, GlyphState> = {
+/** ROW_GLYPHS is the state glyph of each tone, on a row and on its block of the strip. */
+export const ROW_GLYPHS: Record<RowTone, GlyphState> = {
   error: "error",
   wait: "wait",
   close: "close",
@@ -163,7 +165,7 @@ function TreeRowView({ row, level, selected, isNext, flash, narrow, tabIndex }: 
         </span>
 
         <span className="grid place-items-center">
-          <StateGlyph state={GLYPHS[row.tone]} />
+          <StateGlyph state={ROW_GLYPHS[row.tone]} />
         </span>
         <span
           ref={line2}
