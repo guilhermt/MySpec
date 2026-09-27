@@ -325,14 +325,14 @@ function findArchivedDiscussion(state: State | null, id: string | null): Archive
   return discussionHistoryOf(state).find((discussion) => discussion.id === id) ?? null;
 }
 
-// A task that shows up in the history between two snapshots was archived
+// The tasks that show up in the history between two snapshots were archived
 // while the user was watching, which is what a toast says.
 function newlyArchived(
   previous: readonly ArchivedTask[],
   next: readonly ArchivedTask[],
-): ArchivedTask | null {
+): ArchivedTask[] {
   const known = new Set(previous.map((entry) => entry.id));
-  return next.find((entry) => !known.has(entry.id)) ?? null;
+  return next.filter((entry) => !known.has(entry.id));
 }
 
 function withoutTranscript(
@@ -478,6 +478,19 @@ type Navigation = Pick<
   "location" | "back" | "forward" | "panel" | "pendingFocus" | "promptEdit"
 >;
 
+// beside drops the places at the end of a history that are the place on
+// screen, which Back or Forward would only open again: leaving the page of an
+// item that left stacks nothing, so the place it opens may already be the
+// last one behind it, and Home may resolve to the board kept behind it. The
+// same list comes back when nothing is dropped.
+function beside(places: Location[], location: Location): Location[] {
+  const end = places.reduce(
+    (kept, place, at) => (sameLocation(place, location) ? kept : at + 1),
+    0,
+  );
+  return end === places.length ? places : places.slice(0, end);
+}
+
 // navigate opens a place. The same place only takes the new one (a page of
 // Settings changes without stacking); another pushes the current one behind it,
 // unless it is the page of an item that left, which is never revisited, and
@@ -490,11 +503,15 @@ function navigate(
   const target = resolveHome(state.app, location);
   const common = { location: target, panel: null, pendingFocus: focus, promptEdit: null };
   if (sameLocation(state.location, target)) {
-    return { ...common, back: state.back, forward: state.forward };
+    return {
+      ...common,
+      back: beside(state.back, target),
+      forward: beside(state.forward, target),
+    };
   }
   const back =
     state.location.kind === "gone" ? state.back : [...state.back, state.location].slice(-NAV_LIMIT);
-  return { ...common, back, forward: [] };
+  return { ...common, back: beside(back, target), forward: [] };
 }
 
 // travel opens the nearest place behind (or ahead of) the current one that
@@ -518,10 +535,11 @@ function travel(
   }
   const rest = from.slice(0, index);
   const behind = state.location.kind === "gone" ? to : [...to, state.location].slice(-NAV_LIMIT);
+  const location = resolveHome(state.app, place);
   return {
-    location: resolveHome(state.app, place),
-    back: direction === "back" ? rest : behind,
-    forward: direction === "back" ? behind : rest,
+    location,
+    back: beside(direction === "back" ? rest : behind, location),
+    forward: beside(direction === "back" ? behind : rest, location),
     panel: null,
     pendingFocus: focus,
     promptEdit: null,
@@ -645,7 +663,7 @@ export const useAppStore = create<AppStore>()((set, get) => {
         const history = historyOf(next);
         // The first snapshot brings the whole history at once; nothing in it was
         // archived under the eyes of the user.
-        const archived = state.app === null ? null : newlyArchived(historyOf(state.app), history);
+        const archived = state.app === null ? [] : newlyArchived(historyOf(state.app), history);
         // A repository that is gone stops preselecting the creation dialog.
         const lastRepositoryId =
           state.lastRepositoryId !== null &&
@@ -656,13 +674,14 @@ export const useAppStore = create<AppStore>()((set, get) => {
         const moved = location !== state.location;
         // An item that left takes every conversation it had with it.
         const left = moved ? openItemId(state.location) : null;
-        // The task archived while open has its page; any other one, a toast.
+        // The task archived while open has its page; every other one, a toast.
+        const toasted = archived.filter((entry) => entry.id !== openItemId(state.location));
         const toasts =
-          archived === null || archived.id === openItemId(state.location)
+          toasted.length === 0
             ? state.toasts
             : [
                 ...state.toasts,
-                { id: archived.id, taskId: archived.id, name: archived.name },
+                ...toasted.map((entry) => ({ id: entry.id, taskId: entry.id, name: entry.name })),
               ].slice(-MAX_TOASTS);
         // The page of an item that left on its own is announced; the one the
         // user just asked to remove is not.
@@ -678,6 +697,8 @@ export const useAppStore = create<AppStore>()((set, get) => {
           app: next,
           lastRepositoryId,
           location,
+          back: moved ? beside(state.back, location) : state.back,
+          forward: moved ? beside(state.forward, location) : state.forward,
           panel: moved ? null : state.panel,
           toasts,
           announcement,

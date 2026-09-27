@@ -44,7 +44,7 @@ export function Toast({ icon, text, action, onDismiss, duration = TOAST_MS }: To
 
   return (
     <div
-      className="toast flex w-(--size-toast) max-w-full items-start gap-2.5 rounded-lg bg-surface-3 py-2.5 pr-2 pl-3 text-(length:--text-ui) leading-(--leading-ui) text-ink-1 shadow-(--shadow-float)"
+      className="toast flex max-w-(--size-toast) items-start gap-2.5 rounded-lg bg-surface-3 py-2.5 pr-2 pl-3 text-(length:--text-ui) leading-(--leading-ui) text-ink-1 shadow-(--shadow-float)"
       onPointerEnter={() => setHovered(true)}
       onPointerLeave={() => setHovered(false)}
       onFocusCapture={() => setFocused(true)}

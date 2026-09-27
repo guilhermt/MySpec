@@ -440,6 +440,51 @@ describe("task actions", () => {
     expect(useAppStore.getState().expectGone).toBe("item-1");
   });
 
+  it.each([
+    [
+      "deleteTask",
+      () => vi.mocked(api.deleteTask).mockRejectedValueOnce(new Error("busy")),
+      () => deleteTask("item-1"),
+    ],
+    [
+      "closeTask",
+      () => vi.mocked(api.closeTask).mockRejectedValueOnce(new Error("busy")),
+      () => closeTask("item-1"),
+    ],
+    [
+      "deleteReview",
+      () => vi.mocked(api.deleteReview).mockRejectedValueOnce(new Error("busy")),
+      () => deleteReview("item-1"),
+    ],
+    [
+      "archiveDiscussion",
+      () => vi.mocked(api.archiveDiscussion).mockRejectedValueOnce(new Error("busy")),
+      () => archiveDiscussion("item-1"),
+    ],
+    [
+      "deleteDiscussion",
+      () => vi.mocked(api.deleteDiscussion).mockRejectedValueOnce(new Error("busy")),
+      () => deleteDiscussion("item-1"),
+    ],
+  ])("%s forgets the mark when the removal fails", async (_name, refuse, action) => {
+    refuse();
+
+    await action();
+
+    expect(useAppStore.getState().expectGone).toBeNull();
+    expect(useAppStore.getState().error?.detail).toBe("busy. Try again.");
+  });
+
+  it("keeps the mark of a later removal when an earlier one fails", async () => {
+    vi.mocked(api.deleteTask).mockRejectedValueOnce(new Error("busy"));
+
+    const first = deleteTask("item-1");
+    await deleteDiscussion("item-2");
+    await first;
+
+    expect(useAppStore.getState().expectGone).toBe("item-2");
+  });
+
   it("delegate to the matching binding", async () => {
     await deleteTask("task-1");
     await sendMessage("task-1", "prd", "go on");

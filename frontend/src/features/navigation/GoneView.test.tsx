@@ -93,6 +93,18 @@ describe("GoneView", () => {
     expect(actions()).toEqual(["Next that needs you", "Open in History", "Back to Reviews"]);
   });
 
+  it("shows a review that was deleted, going back to Reviews", async () => {
+    const { user } = page(gone("review", "review-1", "web#12"), stateWith());
+
+    expect(screen.getByText("web#12 was deleted")).toBeInTheDocument();
+    expect(document.querySelector("svg.lucide-trash-2")).not.toBeNull();
+    expect(actions()).toEqual(["Next that needs you", "Back to Reviews"]);
+
+    await user.click(screen.getByRole("button", { name: "Back to Reviews" }));
+
+    expect(useAppStore.getState().location).toEqual({ kind: "reviews" });
+  });
+
   it("shows a discussion that was archived, opening its board", () => {
     page(
       gone("discussion", "discussion-1", "Invoices", "board-1"),

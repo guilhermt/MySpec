@@ -261,6 +261,21 @@ describe("Tree", () => {
       expect(screen.getByRole("treeitem", { name: "Login" })).toHaveFocus();
     });
 
+    it("leaves Alt with the arrows to the history, neither collapsing nor moving", async () => {
+      const { user } = renderTree();
+      const product = screen.getByRole("treeitem", { name: /^Product/ });
+      const row = screen.getByRole("treeitem", { name: /^task fix-header\./ });
+
+      product.focus();
+      await user.keyboard("{Alt>}{ArrowLeft}{/Alt}");
+      expect(product).toHaveAttribute("aria-expanded", "true");
+      expect(product).toHaveFocus();
+
+      row.focus();
+      await user.keyboard("{Alt>}{ArrowLeft}{/Alt}");
+      expect(row).toHaveFocus();
+    });
+
     it("opens a row with Enter, keeping the focus on it", async () => {
       const { user } = renderTree();
       const row = screen.getByRole("treeitem", { name: /^task fix-header\./ });

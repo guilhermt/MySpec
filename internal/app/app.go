@@ -512,6 +512,9 @@ func (a *App) shutdown() {
 	a.discussionFlow.Close()
 	a.pulls.Close()
 	a.sessions.Shutdown(ctx)
+	// After the sessions, whose exits publish: a trailing publish would run
+	// after Run closed the store and the log.
+	a.publisher.stop()
 	// The notifications go with the app: one left behind would lead nowhere.
 	if a.notifier != nil {
 		a.notifier.Close()

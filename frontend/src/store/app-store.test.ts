@@ -684,6 +684,29 @@ describe("toasts", () => {
     expect(useAppStore.getState().toasts).toEqual([]);
   });
 
+  it("shows a toast for each task archived in the same update", () => {
+    useAppStore.getState().applyState(withTasks());
+
+    useAppStore.getState().applyState(withTasks({ tasks: [], history: [ARCHIVED, OLDER] }));
+
+    expect(useAppStore.getState().toasts).toEqual([
+      { id: ARCHIVED.id, taskId: ARCHIVED.id, name: ARCHIVED.name },
+      { id: OLDER.id, taskId: OLDER.id, name: OLDER.name },
+    ]);
+  });
+
+  it("shows a toast for every task archived in the same update but the open one", () => {
+    const task = makeTask({ id: ARCHIVED.id, name: ARCHIVED.name });
+    useAppStore.getState().applyState(withTasks({ tasks: [task] }));
+    useAppStore.getState().openTask(task.id);
+
+    useAppStore.getState().applyState(withTasks({ tasks: [], history: [ARCHIVED, OLDER] }));
+
+    expect(useAppStore.getState().toasts).toEqual([
+      { id: OLDER.id, taskId: OLDER.id, name: OLDER.name },
+    ]);
+  });
+
   // The first snapshot brings the whole history; none of it was archived now.
   it("shows no toast for a history that was already there", () => {
     useAppStore.getState().applyState(withTasks({ history: [ARCHIVED, OLDER] }));
@@ -1060,6 +1083,67 @@ describe("settings", () => {
 
     expect(useAppStore.getState().promptEdit).toBeNull();
     expect(location().kind).toBe("settings");
+  });
+
+  it.each([
+    ["Back", "back", () => useAppStore.getState().goBack()],
+    ["Forward", "forward", () => useAppStore.getState().goForward()],
+  ] as const)("asks before %s leaves an edit with changes", (_name, side, move) => {
+    const settings: Location = { kind: "settings", section: "prd" };
+    const task: Location = { kind: "task", id: WEB_TASK.id };
+    useAppStore.getState().applyState(withTasks());
+    useAppStore.setState({
+      location: settings,
+      back: side === "back" ? [task] : [],
+      forward: side === "forward" ? [task] : [],
+    });
+    useAppStore.getState().startPromptEdit("prd", "# PRD");
+    useAppStore.getState().setPromptEditText("# PRD, edited");
+
+    move();
+
+    expect(useAppStore.getState().pendingLeave).not.toBeNull();
+    expect(location()).toEqual(settings);
+
+    useAppStore.getState().confirmLeave();
+
+    expect(location()).toEqual(task);
+    expect(useAppStore.getState().promptEdit).toBeNull();
+  });
+
+  it.each([
+    ["Back", () => useAppStore.getState().goBack()],
+    ["Forward", () => useAppStore.getState().goForward()],
+  ])("does not ask when %s has nowhere to go", (_name, move) => {
+    const settings: Location = { kind: "settings", section: "prd" };
+    useAppStore.getState().applyState(withTasks());
+    useAppStore.setState({ location: settings, back: [], forward: [] });
+    useAppStore.getState().startPromptEdit("prd", "# PRD");
+    useAppStore.getState().setPromptEditText("# PRD, edited");
+
+    move();
+
+    expect(useAppStore.getState().pendingLeave).toBeNull();
+    expect(location()).toEqual(settings);
+    expect(useAppStore.getState().promptEdit?.text).toBe("# PRD, edited");
+  });
+
+  it("asks before closing the settings with an edit with changes", () => {
+    useAppStore.getState().applyState(withTasks());
+    useAppStore.getState().openTask(WEB_TASK.id);
+    useAppStore.getState().openSettings("prd");
+    useAppStore.getState().startPromptEdit("prd", "# PRD");
+    useAppStore.getState().setPromptEditText("# PRD, edited");
+
+    useAppStore.getState().closeSettings();
+
+    expect(useAppStore.getState().pendingLeave).not.toBeNull();
+    expect(location()).toEqual({ kind: "settings", section: "prd" });
+
+    useAppStore.getState().confirmLeave();
+
+    expect(location()).toEqual({ kind: "task", id: WEB_TASK.id });
+    expect(useAppStore.getState().promptEdit).toBeNull();
   });
 
   it("closes the editor after a save without asking", () => {
@@ -2303,5 +2387,74 @@ describe("place in a new snapshot", () => {
     expect(location()).toEqual(HOME);
     expect(useAppStore.getState().back).toBe(back);
     expect(useAppStore.getState().forward).toBe(forward);
+  });
+});
+
+describe("places beside the one on screen", () => {
+  const BOARD_PLACE: Location = { kind: "board", id: BOARD.id };
+  const SETTINGS: Location = { kind: "settings", section: "defaults" };
+
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it("does not keep behind a board the board the page of an item that left opens", () => {
+    useAppStore.getState().applyState(withTasks({ boards: [BOARD] }));
+    useAppStore.getState().openBoard(BOARD.id);
+    useAppStore.getState().openTask(WEB_TASK.id);
+    useAppStore.getState().applyState(withTasks({ boards: [BOARD], tasks: [API_TASK] }));
+    expect(location().kind).toBe("gone");
+
+    useAppStore.getState().go(BOARD_PLACE);
+
+    expect(useAppStore.getState()).toMatchObject({
+      location: BOARD_PLACE,
+      back: [HOME],
+      forward: [],
+    });
+    const { result } = renderHook(() => useBackTarget());
+    expect(result.current).toEqual(HOME);
+  });
+
+  it("closes the settings opened from the page of an item that left to the place before them", () => {
+    useAppStore.getState().applyState(withTasks());
+    useAppStore.getState().openSettings();
+    useAppStore.getState().openTask(WEB_TASK.id);
+    useAppStore.getState().applyState(withTasks({ tasks: [API_TASK] }));
+
+    useAppStore.getState().openSettings();
+
+    expect(useAppStore.getState().back).toEqual([HOME]);
+
+    useAppStore.getState().closeSettings();
+
+    expect(location()).toEqual(HOME);
+  });
+
+  it("does not keep behind the board Home stands for the same board from the last run", () => {
+    const state = makeState({ repositories: [WEB], tasks: [], boards: [BOARD] });
+    useAppStore.getState().applyState(state);
+    expect(location()).toEqual(BOARD_PLACE);
+    useAppStore.setState(initialNav());
+    expect(useAppStore.getState().back).toEqual([BOARD_PLACE]);
+
+    useAppStore.getState().applyState(state);
+
+    expect(useAppStore.getState()).toMatchObject({ location: BOARD_PLACE, back: [], forward: [] });
+  });
+
+  it("does not keep behind the board Home stands for going back to it", () => {
+    useAppStore
+      .getState()
+      .applyState(makeState({ repositories: [WEB], tasks: [], boards: [BOARD] }));
+    useAppStore.setState({ location: SETTINGS, back: [BOARD_PLACE, HOME], forward: [] });
+
+    useAppStore.getState().goBack();
+
+    expect(useAppStore.getState()).toMatchObject({
+      location: BOARD_PLACE,
+      back: [],
+      forward: [SETTINGS],
+    });
   });
 });

@@ -32,9 +32,23 @@ export default mergeConfig(
         },
         {
           extends: true,
-          // Vite scans the painted tests for the dependencies to prebundle on every run, so no
-          // dependency found halfway reloads the page and loads React a second time.
-          optimizeDeps: { entries: [PAINTED], force: true },
+          // A dependency Vite finds halfway through the run reloads the page, which loads React a
+          // second time and breaks the suite that was loading. The scan of the entries does not
+          // reach the painted tests in browser mode, so the dependencies they pull in through the
+          // feature components are prebundled by name.
+          optimizeDeps: {
+            entries: [PAINTED],
+            include: [
+              "@base-ui/react/toggle-group",
+              "@streamdown/code",
+              "@streamdown/mermaid",
+              "diff",
+              "react-dom/client",
+              "react-resizable-panels",
+              "streamdown",
+            ],
+            force: true,
+          },
           test: {
             name: "painted",
             include: [PAINTED],

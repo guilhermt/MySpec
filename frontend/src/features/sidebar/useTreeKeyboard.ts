@@ -24,7 +24,7 @@ function lineOf(tree: HTMLElement, id: string): HTMLElement | null {
  * useTreeKeyboard is the roving tabindex of the tree: one Tab stop, on the line
  * with the focus, else the open row, else the first line. The arrows move the
  * focus and expand or collapse nodes, and never open anything; Enter does what
- * a click on the line does.
+ * a click on the line does. A key with Alt, Ctrl or Meta is left to the app.
  */
 export function useTreeKeyboard(
   entries: readonly TreeEntry[],
@@ -38,6 +38,10 @@ export function useTreeKeyboard(
   const stop = has(focusedId) ? focusedId : has(openId) ? openId : (entries[0]?.id ?? null);
 
   const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    // A key with a modifier is a shortcut of the app, as Alt+arrows for the history.
+    if (event.altKey || event.ctrlKey || event.metaKey) {
+      return;
+    }
     const tree = event.currentTarget;
     const line = (event.target as HTMLElement).closest<HTMLElement>(`[${ENTRY_ATTRIBUTE}]`);
     const index = entries.findIndex((entry) => entry.id === line?.getAttribute(ENTRY_ATTRIBUTE));

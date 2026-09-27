@@ -184,7 +184,7 @@ export function addRepositoryToBoard(
 
 /**
  * previewRemoveBoard says what removing a board takes with it; null when it
- * could not tell, with the reason in the banner.
+ * could not tell, with the reason in the app notice.
  */
 export async function previewRemoveBoard(id: string): Promise<BoardRemoval | null> {
   let removal: BoardRemoval | null = null;
@@ -309,23 +309,31 @@ export function restorePrompt(stage: PromptStage): Promise<Prompt> {
 
 /**
  * createTask does not swallow its failure either: the creation dialog stays
- * open and shows the message next to the form instead of the global banner, so
+ * open and shows the message next to the form instead of the app notice, so
  * the user can fix the name and try again.
  */
 export function createTask(req: CreateTaskRequest): Promise<string> {
   return api.createTask(req);
 }
 
-// expectRemoval marks the item the user asked to remove: when it leaves, its
-// page is not announced, since the user knows.
-function expectRemoval(id: string): void {
+// runRemoval runs the removal of an item the user asked for, marking the item
+// first: when it leaves, its page is not announced, since the user knows. A
+// removal that fails leaves the item in place, so the mark goes with it.
+function runRemoval(id: string, failure: Failure, operation: () => Promise<void>): Promise<void> {
   useAppStore.setState({ expectGone: id });
+  return run(failure, () =>
+    operation().catch((error: unknown) => {
+      if (useAppStore.getState().expectGone === id) {
+        useAppStore.setState({ expectGone: null });
+      }
+      throw error;
+    }),
+  );
 }
 
 /** deleteTask removes the task for good and reports what stayed on disk. */
 export function deleteTask(taskId: string): Promise<void> {
-  expectRemoval(taskId);
-  return run(fail(withItem("Couldn't delete", itemName(taskId)), TRY), async () => {
+  return runRemoval(taskId, fail(withItem("Couldn't delete", itemName(taskId)), TRY), async () => {
     const result = await api.deleteTask(taskId);
     if (result.leftover !== null) {
       useAppStore.getState().setLeftover(result.leftover);
@@ -508,9 +516,10 @@ export function refreshPR(taskId: string): Promise<void> {
 
 /** closeTask removes the worktree of a merged task and updates its base branch. */
 export function closeTask(taskId: string): Promise<void> {
-  expectRemoval(taskId);
-  return run(fail(withItem("Couldn't close", itemName(taskId)), cloneRemedy(taskId, TRY)), () =>
-    api.closeTask(taskId),
+  return runRemoval(
+    taskId,
+    fail(withItem("Couldn't close", itemName(taskId)), cloneRemedy(taskId, TRY)),
+    () => api.closeTask(taskId),
   );
 }
 
@@ -634,8 +643,7 @@ export function openFindingInEditor(id: string, pass: number, number: number): P
 
 /** deleteReview removes the review for good and reports what stayed on disk. */
 export function deleteReview(id: string): Promise<void> {
-  expectRemoval(id);
-  return run(fail(withItem("Couldn't delete", itemName(id)), TRY), async () => {
+  return runRemoval(id, fail(withItem("Couldn't delete", itemName(id)), TRY), async () => {
     const result = await api.deleteReview(id);
     if (result.leftover !== null) {
       useAppStore.getState().setLeftover(result.leftover);
@@ -740,14 +748,14 @@ export function retryPublish(id: string, draftId: string): Promise<void> {
 
 /** archiveDiscussion ends the conversation and sends the discussion to the history. */
 export function archiveDiscussion(id: string): Promise<void> {
-  expectRemoval(id);
-  return run(fail(withItem("Couldn't archive", itemName(id)), TRY), () =>
+  return runRemoval(id, fail(withItem("Couldn't archive", itemName(id)), TRY), () =>
     api.archiveDiscussion(id),
   );
 }
 
 /** deleteDiscussion removes the discussion for good. */
 export function deleteDiscussion(id: string): Promise<void> {
-  expectRemoval(id);
-  return run(fail(withItem("Couldn't delete", itemName(id)), TRY), () => api.deleteDiscussion(id));
+  return runRemoval(id, fail(withItem("Couldn't delete", itemName(id)), TRY), () =>
+    api.deleteDiscussion(id),
+  );
 }

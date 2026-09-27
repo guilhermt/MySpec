@@ -111,6 +111,17 @@ describe("CardList", () => {
     expect(row(2)).toHaveFocus();
   });
 
+  it("leaves Alt with the arrows to the history, neither collapsing nor moving", async () => {
+    const { user } = list();
+    row(3).focus();
+
+    await user.keyboard("{Alt>}{ArrowLeft}{/Alt}");
+    expect(row(3)).toHaveFocus();
+
+    await user.keyboard("{Alt>}{ArrowUp}{/Alt}");
+    expect(row(3)).toHaveFocus();
+  });
+
   it("goes from a section header to its first card", async () => {
     const { user } = list();
     screen.getByRole("button", { name: /^In progress/ }).focus();

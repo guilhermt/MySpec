@@ -8,3 +8,6 @@ var NewThrottle = newThrottle
 
 // Request exposes request to the external tests of the package.
 func (t *throttle) Request() { t.request() }
+
+// Stop exposes stop to the external tests of the package.
+func (t *throttle) Stop() { t.stop() }

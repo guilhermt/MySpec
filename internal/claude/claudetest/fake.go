@@ -36,9 +36,9 @@ const (
 	// EnvCatalog picks what the fake answers to list_models: "" for Catalog,
 	// "unsupported" for the error an older CLI gives, "silent" for no answer.
 	EnvCatalog = "MYSPEC_FAKE_CATALOG"
-	// EnvGates is the folder the actions scenario waits in: before each of its
-	// stages it waits for a file named "<turn>-<stage>" there, which is how a
-	// test holds a turn at a known point.
+	// EnvGates is the folder the actions scenario waits in: after each of its
+	// stages it waits for a file named "<turn>-<stage>" there before going on,
+	// which is how a test holds a turn at a known point.
 	EnvGates = "MYSPEC_FAKE_GATES"
 )
 
@@ -639,10 +639,10 @@ func (f *fake) slowTurn() {
 	}
 }
 
-// actionsTurn runs two overlapping reads, stopping at a gate before each
-// stage: 1, the first read starts; 2, the second read starts; 3, the second
-// read ends; 4, the first read ends; then the turn answers with its text. An
-// interrupt at a gate aborts the turn.
+// actionsTurn runs two overlapping reads, stopping at a gate after each stage:
+// 1, the first read starts; 2, the second read starts; 3, the second read ends;
+// 4, the first read ends. Gate N releases stage N+1, and gate 4 releases the
+// answer with its text. An interrupt at a gate aborts the turn.
 func (f *fake) actionsTurn(text string) {
 	f.emitInit()
 	messageID := f.nextID("msg")

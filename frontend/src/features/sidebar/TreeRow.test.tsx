@@ -18,8 +18,14 @@ import {
 } from "@/test/wails-mock";
 
 // The meta that does not fit is a layout jsdom cannot make: the measure is switched by hand.
-const measure = vi.hoisted(() => ({ fits: true }));
-vi.mock("@/features/sidebar/useFits", () => ({ useFits: () => measure.fits }));
+// Each drawing of a row measures, so the count of measures tells whether it drew again.
+const measure = vi.hoisted(() => ({ fits: true, count: 0 }));
+vi.mock("@/features/sidebar/useFits", () => ({
+  useFits: () => {
+    measure.count += 1;
+    return measure.fits;
+  },
+}));
 
 const NOW = Date.parse("2026-09-05T12:00:00Z");
 const TWO_HOURS_AGO = "2026-09-05T10:00:00Z";
@@ -41,8 +47,8 @@ const stepAt = (status: string) =>
 
 const rowOf = (summary: TaskSummary) => taskRow(makeState(), summary, NOW);
 
-function renderRow(row: ItemRow, props: Partial<TreeRowProps> = {}) {
-  return renderWithStore(
+function rowElement(row: ItemRow, props: Partial<TreeRowProps> = {}) {
+  return (
     <TreeRow
       row={row}
       level={2}
@@ -52,16 +58,21 @@ function renderRow(row: ItemRow, props: Partial<TreeRowProps> = {}) {
       narrow={false}
       tabIndex={0}
       {...props}
-    />,
+    />
   );
+}
+
+function renderRow(row: ItemRow, props: Partial<TreeRowProps> = {}) {
+  return renderWithStore(rowElement(row, props));
 }
 
 afterEach(() => {
   measure.fits = true;
+  measure.count = 0;
 });
 
 describe("TreeRow", () => {
-  it.each<[string, ItemRow, string]>([
+  it.each<[string, ItemRow, string, string]>([
     [
       "an error",
       rowOf(
@@ -77,6 +88,7 @@ describe("TreeRow", () => {
         }),
       ),
       "error",
+      "task add-login. error: Session error · Implementer · Step 3/7, for 2 hours. Step 3/7. web#42.",
     ],
     [
       "a question",
@@ -92,18 +104,27 @@ describe("TreeRow", () => {
         }),
       ),
       "wait",
+      "task add-login. waiting for you: Question · Implementer · Step 3/7, for 2 hours. Step 3/7. web#42.",
     ],
     [
       "a task ready to close",
       rowOf(
         task({
-          stage: "closing",
+          stage: "pr",
+          pr: makePullRequest({ status: "done", prNumber: 1279, prState: "MERGED" }),
           situations: [
-            makeSituation({ kind: "close", group: "closing", startedAt: TWO_HOURS_AGO }),
+            makeSituation({
+              kind: "merge",
+              group: "closing",
+              form: "close",
+              place: { kind: "pr", stage: "", step: 0 },
+              startedAt: TWO_HOURS_AGO,
+            }),
           ],
         }),
       ),
       "close",
+      "task add-login. ready to close: Ready to close · PR #1279 merged, for 2 hours. PR review. web#42.",
     ],
     [
       "an agent working",
@@ -118,8 +139,14 @@ describe("TreeRow", () => {
         }),
       ),
       "agent",
+      "task add-login. agent working, Step 3/7. Implementer working for 3 minutes: Reading go.mod. context 0% used. web#42.",
     ],
-    ["the app preparing a step", rowOf(task({ steps: stepAt("preparing") })), "app"],
+    [
+      "the app preparing a step",
+      rowOf(task({ steps: stepAt("preparing") })),
+      "app",
+      "task add-login. working, Step 3/7 · preparing the worktree. web#42.",
+    ],
     [
       "a pull request on GitHub",
       rowOf(
@@ -129,29 +156,36 @@ describe("TreeRow", () => {
         }),
       ),
       "github",
+      "task add-login. waiting on GitHub, PR review · waiting for checks. web#42.",
     ],
     [
       "a paused session",
       rowOf(task({ steps: stepAt("implementing"), sessionStatus: "paused" })),
       "paused",
+      "task add-login. paused, Paused · Step 3/7. web#42.",
     ],
-    ["an idle task", rowOf(task({ stage: "prd", steps: [], currentStep: 0 })), "idle"],
+    [
+      "an idle task",
+      rowOf(task({ stage: "prd", steps: [], currentStep: 0 })),
+      "idle",
+      "task add-login. idle, PRD. web#42.",
+    ],
     [
       "a quiet discussion",
       discussionRow(makeDiscussion({ sessionStatus: "waiting" }), NOW),
       "idle",
+      "discussion Invoices. idle, Discussing. #12.",
     ],
     [
       "a published discussion",
       discussionRow(makeDiscussion({ status: "published", cards: [] }), NOW),
       "archive",
+      "discussion Invoices. ready to close, Ready to archive.",
     ],
-  ])("draws %s under its whole sentence", (_, row, tone) => {
+  ])("draws %s under its whole sentence", (_, row, tone, sentence) => {
     renderRow(row);
 
-    const item = screen.getByRole("treeitem", { name: row.label });
-    expect(item).toHaveAttribute("data-tone", tone);
-    expect(row.tone).toBe(tone);
+    expect(screen.getByRole("treeitem", { name: sentence })).toHaveAttribute("data-tone", tone);
   });
 
   it("reads a waiting task as one sentence", () => {
@@ -202,6 +236,54 @@ describe("TreeRow", () => {
     await user.hover(screen.getByRole("treeitem"));
 
     expect(await screen.findByRole("tooltip")).toHaveTextContent("add-login · web#42");
+  });
+
+  it("tells the meta in the tooltip on the next row, where the Ctrl J key takes its place", async () => {
+    const { user } = renderRow(rowOf(task({ steps: stepAt("preparing") })), { isNext: true });
+
+    await user.hover(screen.getByRole("treeitem"));
+
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(/^add-login · web#42$/);
+  });
+
+  it("tells only the name in the tooltip when the meta is on the line", async () => {
+    const { user } = renderRow(rowOf(task({ steps: stepAt("preparing") })));
+
+    await user.hover(screen.getByRole("treeitem"));
+
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(/^add-login$/);
+  });
+
+  it("tells only the name in the tooltip of an item without a meta", async () => {
+    measure.fits = false;
+    const { user } = renderRow(
+      discussionRow(makeDiscussion({ sessionStatus: "waiting", cards: [] }), NOW),
+    );
+
+    await user.hover(screen.getByRole("treeitem"));
+
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(/^Invoices$/);
+  });
+
+  it("does not draw again for a new summary that shows the same", () => {
+    const { rerender } = renderRow(rowOf(task({ steps: stepAt("preparing") })));
+    const drawn = measure.count;
+
+    rerender(rowElement(rowOf(task({ steps: stepAt("preparing") }))));
+
+    expect(measure.count).toBe(drawn);
+  });
+
+  it("draws again when what it shows changes", () => {
+    const { rerender } = renderRow(rowOf(task({ steps: stepAt("preparing") })));
+    const drawn = measure.count;
+
+    rerender(rowElement(rowOf(task({ steps: stepAt("committing") }))));
+
+    expect(measure.count).toBeGreaterThan(drawn);
+    expect(
+      screen.getByText("Step 3/7 · committing", { selector: "span.truncate" }),
+    ).toBeInTheDocument();
   });
 
   it("marks the open row as the page on screen", () => {

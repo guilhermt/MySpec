@@ -5,7 +5,15 @@ import { taskRow } from "@/features/sidebar/sidebar-tree";
 import { api } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
-import { makeRepository, makeSituation, makeState, makeStep, makeTask } from "@/test/wails-mock";
+import {
+  makeBoard,
+  makeDiscussion,
+  makeRepository,
+  makeSituation,
+  makeState,
+  makeStep,
+  makeTask,
+} from "@/test/wails-mock";
 
 function sidebar(ui: { sidebarRail?: boolean } = {}) {
   return renderWithStore(<Sidebar />, { state: makeState({ tasks: [makeTask()] }), ui });
@@ -94,5 +102,41 @@ describe("Sidebar", () => {
 
     expect(useAppStore.getState().sidebarCollapsed.has("no-board")).toBe(false);
     expect(api.setRepositoryFilter).toHaveBeenCalledWith("");
+  });
+
+  it("shows every repository again for a discussion of a board the filter hides", () => {
+    renderWithStore(<Sidebar />, {
+      state: makeState({
+        repositories: [
+          makeRepository({ id: "repo-1", boardId: "board-1" }),
+          makeRepository({ id: "repo-2", boardId: "board-2" }),
+        ],
+        boards: [
+          makeBoard({ id: "board-1", repositoryIds: ["repo-1"] }),
+          makeBoard({ id: "board-2", title: "Ops", repositoryIds: ["repo-2"] }),
+        ],
+        tasks: [],
+        discussions: [makeDiscussion({ id: "discussion-1", boardId: "board-2" })],
+        repositoryFilter: "repo-1",
+      }),
+      ui: { location: { kind: "discussion", id: "discussion-1" } },
+    });
+
+    expect(api.setRepositoryFilter).toHaveBeenCalledWith("");
+  });
+
+  it("keeps the filter for a discussion of the board it shows", () => {
+    renderWithStore(<Sidebar />, {
+      state: makeState({
+        repositories: [makeRepository({ id: "repo-1", boardId: "board-1" })],
+        boards: [makeBoard({ id: "board-1", repositoryIds: ["repo-1"] })],
+        tasks: [],
+        discussions: [makeDiscussion({ id: "discussion-1", boardId: "board-1" })],
+        repositoryFilter: "repo-1",
+      }),
+      ui: { location: { kind: "discussion", id: "discussion-1" } },
+    });
+
+    expect(api.setRepositoryFilter).not.toHaveBeenCalled();
   });
 });

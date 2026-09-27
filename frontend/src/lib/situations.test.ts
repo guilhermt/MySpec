@@ -297,8 +297,11 @@ describe("nextWaiting", () => {
 
   it("gives the same item whatever the repository filter", () => {
     const all = nextWaiting({ ...app, repositoryFilter: ALL_REPOSITORIES }, null);
+    // The filter keeps repo-1, and the most severe situation is billing's, in repo-2.
+    const filtered = nextWaiting({ ...app, repositoryFilter: "repo-1" }, null);
 
-    expect(nextWaiting(app, null)).toEqual(all);
+    expect(filtered).toMatchObject({ itemId: "task-2", situation: { id: "billing-error" } });
+    expect(filtered).toEqual(all);
   });
 
   it("is null when nothing waits", () => {

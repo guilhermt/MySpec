@@ -1,15 +1,16 @@
 import { useEffect } from "react";
 import { nodesOfItem, sidebarTree } from "@/features/sidebar/sidebar-tree";
 import { openItemId } from "@/lib/locations";
+import { ALL_REPOSITORIES } from "@/lib/repositories";
 import { setRepositoryFilter } from "@/store/actions";
 import { useAppStore, useLocation } from "@/store/app-store";
 
 /**
  * useRevealOpenItem shows the item on screen in the tree: it expands the nodes
- * holding it and, when the repository filter hides a task, shows every
- * repository again. It acts when the place changes and when the open item
- * joins the state after opening; collapsing a node or choosing a filter
- * afterwards stays.
+ * holding it and, when the repository filter hides it (a task of another
+ * repository, a discussion of another board), shows every repository again.
+ * It acts when the place changes and when the open item joins the state after
+ * opening; collapsing a node or choosing a filter afterwards stays.
  */
 export function useRevealOpenItem(): void {
   const location = useLocation();
@@ -31,14 +32,15 @@ export function useRevealOpenItem(): void {
     if (!present || itemId === null || app === null) {
       return;
     }
-    expandSidebarNodes(nodesOfItem(sidebarTree(app, "", Date.now()), itemId));
-    const task = app.tasks?.find((candidate) => candidate.id === itemId);
+    const now = Date.now();
+    const nodes = nodesOfItem(sidebarTree(app, ALL_REPOSITORIES, now), itemId);
+    expandSidebarNodes(nodes);
     if (
-      task !== undefined &&
-      app.repositoryFilter !== "" &&
-      task.repositoryId !== app.repositoryFilter
+      nodes.length > 0 &&
+      app.repositoryFilter !== ALL_REPOSITORIES &&
+      nodesOfItem(sidebarTree(app, app.repositoryFilter, now), itemId).length === 0
     ) {
-      void setRepositoryFilter("");
+      void setRepositoryFilter(ALL_REPOSITORIES);
     }
   }, [location, present]);
 }

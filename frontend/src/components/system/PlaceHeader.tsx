@@ -109,6 +109,8 @@ export function PlaceHeader({
   forwardRef,
   children,
 }: PlaceHeaderProps) {
+  // The line under the band is an inset shadow rather than a border, so it is drawn inside the
+  // band and what the band centers stays on whole pixels.
   return (
     <header className="flex h-(--size-head) min-w-0 shrink-0 flex-nowrap items-center gap-(--space-2) px-(--space-3) shadow-[inset_0_calc(var(--border)*-1)_0_var(--line-1)]">
       {back !== null ? (

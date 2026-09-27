@@ -84,9 +84,11 @@ function TreeRowView({ row, level, selected, isNext, flash, narrow, tabIndex }: 
   };
   const showMeta = !narrow && metaFits;
   const { clock, line3: work } = row;
+  // The meta the line does not carry, dropped or taken by the Ctrl J key, goes in the tooltip.
+  const metaOnLine = showMeta && !isNext;
 
   return (
-    <Tooltip content={showMeta ? row.name : `${row.name} · ${row.meta}`}>
+    <Tooltip content={metaOnLine || row.meta === "" ? row.name : `${row.name} · ${row.meta}`}>
       {/* biome-ignore lint/a11y/useKeyWithClickEvents: the tree owns the keyboard of its rows */}
       <div
         ref={ref}
@@ -249,16 +251,40 @@ function TreeRowView({ row, level, selected, isNext, flash, narrow, tabIndex }: 
   );
 }
 
+// sameData is whether two plain values hold the same data, field by field.
+function sameData(a: unknown, b: unknown): boolean {
+  if (a === b) {
+    return true;
+  }
+  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) {
+    return false;
+  }
+  const before = a as Record<string, unknown>;
+  const after = b as Record<string, unknown>;
+  const keys = Object.keys(before);
+  return (
+    keys.length === Object.keys(after).length &&
+    keys.every((key) => Object.hasOwn(after, key) && sameData(before[key], after[key]))
+  );
+}
+
+// sameShown is whether two rows show the same: every field of the row but the
+// summary it came from, which is a new object on every state the app sends.
+function sameShown(before: ItemRow, after: ItemRow): boolean {
+  const { item: _before, ...shownBefore } = before;
+  const { item: _after, ...shownAfter } = after;
+  return sameData(shownBefore, shownAfter);
+}
+
 /**
- * TreeRow redraws only when what it shows changes: the summary it came from
- * (by reference, as the state replaces what changed), its name, and its place
+ * TreeRow redraws only when what it shows changes: its texts, times, tone and
+ * context, compared by value as each state brings new summaries, and its place
  * among the open, the next and the blinking rows.
  */
 export const TreeRow = memo(
   TreeRowView,
   (before, after) =>
-    before.row.item === after.row.item &&
-    before.row.label === after.row.label &&
+    sameShown(before.row, after.row) &&
     before.selected === after.selected &&
     before.isNext === after.isNext &&
     before.flash === after.flash &&

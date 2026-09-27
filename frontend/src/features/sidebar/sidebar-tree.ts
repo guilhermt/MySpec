@@ -80,7 +80,7 @@ export interface ItemRow {
   repositoryId: string | null;
   /** label is the accessible name without the Ctrl+J sentence, which the row adds when it is the next. */
   label: string;
-  /** item is the summary the row came from, which the memo compares by reference. */
+  /** item is the summary the row came from, for its situations and its card; the row does not draw it. */
   item: TaskSummary | ReviewSummary | DiscussionSummary;
 }
 
