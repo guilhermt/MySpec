@@ -7,7 +7,7 @@ import {
   SIDEBAR_COLLAPSED_KEY,
   SIDEBAR_RAIL_KEY,
 } from "@/lib/ui-storage";
-import type { Place, PullRequest, Situation, TranscriptEvent } from "@/lib/wails";
+import type { ArchivedTask, Place, PullRequest, Situation, TranscriptEvent } from "@/lib/wails";
 import { sessionKey } from "@/lib/wails";
 import {
   initialNav,
@@ -15,7 +15,6 @@ import {
   stepTabKey,
   useAppStore,
   useArchivedDiscussion,
-  useArchivedNotice,
   useArchivedReview,
   useArchivedTask,
   useBackTarget,
@@ -265,7 +264,7 @@ describe("open task", () => {
 
     useAppStore.getState().applyState(withTasks({ tasks: [API_TASK] }));
 
-    expect(location()).toEqual(HOME);
+    expect(location().kind).toBe("gone");
     expect(useAppStore.getState().transcripts[WEB_KEY]).toBeUndefined();
   });
 
@@ -664,48 +663,60 @@ describe("history", () => {
   });
 });
 
-describe("notices", () => {
-  it("announces the task that was just archived", () => {
-    const { result } = renderHook(() => useArchivedNotice());
+describe("toasts", () => {
+  it("shows a toast for a task archived while not open", () => {
+    useAppStore.getState().applyState(withTasks());
 
-    act(() => {
-      useAppStore.getState().applyState(withTasks());
-    });
-    expect(result.current).toBeNull();
+    useAppStore.getState().applyState(withTasks({ tasks: [API_TASK], history: [ARCHIVED] }));
 
-    act(() => {
-      useAppStore.getState().applyState(withTasks({ tasks: [API_TASK], history: [ARCHIVED] }));
-    });
+    expect(useAppStore.getState().toasts).toEqual([
+      { id: ARCHIVED.id, taskId: ARCHIVED.id, name: ARCHIVED.name },
+    ]);
+  });
 
-    expect(result.current).toEqual({ id: ARCHIVED.id, name: ARCHIVED.name });
+  it("shows no toast for the task archived while open", () => {
+    const task = makeTask({ id: ARCHIVED.id, name: ARCHIVED.name });
+    useAppStore.getState().applyState(withTasks({ tasks: [task] }));
+    useAppStore.getState().openTask(task.id);
+
+    useAppStore.getState().applyState(withTasks({ tasks: [], history: [ARCHIVED] }));
+
+    expect(useAppStore.getState().toasts).toEqual([]);
   });
 
   // The first snapshot brings the whole history; none of it was archived now.
-  it("says nothing about a history that was already there", () => {
+  it("shows no toast for a history that was already there", () => {
     useAppStore.getState().applyState(withTasks({ history: [ARCHIVED, OLDER] }));
 
-    expect(useAppStore.getState().archivedNotice).toBeNull();
+    expect(useAppStore.getState().toasts).toEqual([]);
   });
 
-  it("says nothing once no repository is registered", () => {
-    useAppStore.getState().applyState(withTasks({ tasks: [WEB_TASK] }));
-
-    useAppStore.getState().applyState(makeState({ repositories: [], history: [ARCHIVED] }));
-
-    expect(useAppStore.getState().archivedNotice).toBeNull();
-  });
-
-  it("keeps the notice while the snapshots go by, until it is dismissed", () => {
+  it("keeps three toasts at most, dropping the oldest", () => {
     useAppStore.getState().applyState(withTasks());
-    useAppStore.getState().applyState(withTasks({ tasks: [API_TASK], history: [ARCHIVED] }));
+    const history: ArchivedTask[] = [];
+    for (const n of [1, 2, 3, 4]) {
+      history.push(makeArchivedTask({ id: `task-${n}`, name: `task ${n}` }));
+      useAppStore.getState().applyState(withTasks({ history: [...history] }));
+    }
 
-    useAppStore.getState().applyState(withTasks({ tasks: [API_TASK], history: [ARCHIVED] }));
-    expect(useAppStore.getState().archivedNotice?.id).toBe(ARCHIVED.id);
-
-    useAppStore.getState().dismissArchivedNotice();
-    expect(useAppStore.getState().archivedNotice).toBeNull();
+    expect(useAppStore.getState().toasts.map((toast) => toast.id)).toEqual([
+      "task-2",
+      "task-3",
+      "task-4",
+    ]);
   });
 
+  it("takes a dismissed toast off", () => {
+    useAppStore.getState().applyState(withTasks());
+    useAppStore.getState().applyState(withTasks({ history: [ARCHIVED] }));
+
+    useAppStore.getState().dismissToast(ARCHIVED.id);
+
+    expect(useAppStore.getState().toasts).toEqual([]);
+  });
+});
+
+describe("notices", () => {
   it("holds what the last deletion left on disk", () => {
     const { result } = renderHook(() => useLeftover());
     const leftover = {
@@ -1149,7 +1160,7 @@ describe("boards", () => {
     expect(location()).toEqual({ kind: "board", id: "board-2" });
 
     useAppStore.getState().applyState(withBoards([ROADMAP]));
-    expect(location()).toEqual(HOME);
+    expect(location().kind).toBe("gone");
   });
 
   it("keeps the screen while a board is registered without any repository", () => {
@@ -1373,19 +1384,8 @@ describe("reviews", () => {
 
     useAppStore.getState().applyState(withReviews({ reviews: [OTHER_REVIEW] }));
 
-    expect(location()).toEqual(HOME);
+    expect(location().kind).toBe("gone");
     expect(useAppStore.getState().transcripts[REVIEW_KEY]).toBeUndefined();
-  });
-
-  it("opens the archived review of a review whose pull request was merged", () => {
-    useAppStore.getState().applyState(withReviews());
-    useAppStore.getState().openReview(REVIEW.id);
-
-    useAppStore
-      .getState()
-      .applyState(withReviews({ reviews: [OTHER_REVIEW], reviewHistory: [ARCHIVED_REVIEW] }));
-
-    expect(location()).toEqual({ kind: "archived-review", id: ARCHIVED_REVIEW.id });
   });
 
   it("closes an archived review that is no longer in the history", () => {
@@ -1592,22 +1592,8 @@ describe("discussions", () => {
 
     useAppStore.getState().applyState(withDiscussions({ discussions: [OTHER_DISCUSSION] }));
 
-    expect(location()).toEqual(HOME);
+    expect(location().kind).toBe("gone");
     expect(useAppStore.getState().transcripts[DISCUSSION_KEY]).toBeUndefined();
-  });
-
-  it("opens the archived discussion of one that was archived", () => {
-    useAppStore.getState().applyState(withDiscussions());
-    useAppStore.getState().openDiscussion(DISCUSSION.id);
-
-    useAppStore.getState().applyState(
-      withDiscussions({
-        discussions: [OTHER_DISCUSSION],
-        discussionHistory: [ARCHIVED_DISCUSSION],
-      }),
-    );
-
-    expect(location()).toEqual({ kind: "archived-discussion", id: ARCHIVED_DISCUSSION.id });
   });
 
   it("closes an archived discussion that is no longer in the history", () => {
@@ -2172,65 +2158,110 @@ describe("place in a new snapshot", () => {
     expect(useAppStore.getState().back).toBe(back);
   });
 
-  it("leaves a review that is gone for its archived one", () => {
+  it("puts the page of a review that left in its place, named by its reference", () => {
     useAppStore.getState().applyState(withReviews());
     useAppStore.getState().openReview(REVIEW.id);
+    const { back } = useAppStore.getState();
 
     useAppStore
       .getState()
       .applyState(withReviews({ reviews: [OTHER_REVIEW], reviewHistory: [ARCHIVED_REVIEW] }));
 
-    expect(location()).toEqual({ kind: "archived-review", id: REVIEW.id });
+    expect(location()).toEqual({
+      kind: "gone",
+      item: "review",
+      id: REVIEW.id,
+      name: `web#${REVIEW.number}`,
+      boardId: "",
+    });
+    expect(useAppStore.getState().back).toBe(back);
   });
 
-  it("leaves a review that is gone and not archived for Home", () => {
-    useAppStore.getState().applyState(withReviews());
-    useAppStore.getState().openReview(REVIEW.id);
-
-    useAppStore.getState().applyState(withReviews({ reviews: [OTHER_REVIEW] }));
-
-    expect(location()).toEqual(HOME);
-  });
-
-  it("leaves a discussion that is gone for its archived one", () => {
-    useAppStore.getState().applyState(withDiscussions());
-    useAppStore.getState().openDiscussion(DISCUSSION.id);
-
-    useAppStore.getState().applyState(
-      withDiscussions({
-        discussions: [OTHER_DISCUSSION],
-        discussionHistory: [ARCHIVED_DISCUSSION],
-      }),
-    );
-
-    expect(location()).toEqual({ kind: "archived-discussion", id: DISCUSSION.id });
-  });
-
-  it("leaves a discussion that is gone and not archived for Home", () => {
+  it("puts the page of a discussion that left in its place, with its board", () => {
     useAppStore.getState().applyState(withDiscussions());
     useAppStore.getState().openDiscussion(DISCUSSION.id);
 
     useAppStore.getState().applyState(withDiscussions({ discussions: [OTHER_DISCUSSION] }));
 
-    expect(location()).toEqual(HOME);
+    expect(location()).toEqual({
+      kind: "gone",
+      item: "discussion",
+      id: DISCUSSION.id,
+      name: DISCUSSION.title,
+      boardId: DISCUSSION.boardId,
+    });
   });
 
-  it("leaves a task that is gone for Home", () => {
+  it("puts the page of a task that left in its place, with the board of its repository", () => {
+    const repository = { ...WEB, boardId: BOARD.id };
+    useAppStore
+      .getState()
+      .applyState(withTasks({ repositories: [repository, API], boards: [BOARD] }));
+    useAppStore.getState().openTask(WEB_TASK.id);
+
+    useAppStore
+      .getState()
+      .applyState(
+        withTasks({ repositories: [repository, API], boards: [BOARD], tasks: [API_TASK] }),
+      );
+
+    expect(location()).toEqual({
+      kind: "gone",
+      item: "task",
+      id: WEB_TASK.id,
+      name: WEB_TASK.name,
+      boardId: BOARD.id,
+    });
+  });
+
+  it("puts the page of a task without a board in its place", () => {
     useAppStore.getState().applyState(withTasks());
     useAppStore.getState().openTask(WEB_TASK.id);
 
     useAppStore.getState().applyState(withTasks({ tasks: [API_TASK] }));
 
-    expect(location()).toEqual(HOME);
+    expect(location()).toEqual({
+      kind: "gone",
+      item: "task",
+      id: WEB_TASK.id,
+      name: WEB_TASK.name,
+      boardId: "",
+    });
   });
 
-  it("leaves a board that is gone for Home", () => {
+  it("puts the page of a board that was removed in its place", () => {
     useAppStore.getState().applyState(withTasks({ boards: [BOARD] }));
     useAppStore.getState().openBoard(BOARD.id);
 
     useAppStore.getState().applyState(withTasks({ boards: [] }));
 
-    expect(location()).toEqual(HOME);
+    expect(location()).toEqual({
+      kind: "gone",
+      item: "board",
+      id: BOARD.id,
+      name: BOARD.title,
+      boardId: "",
+    });
+  });
+
+  it("announces the page of an item that left on its own", () => {
+    useAppStore.getState().applyState(withTasks());
+    useAppStore.getState().openTask(WEB_TASK.id);
+
+    useAppStore.getState().applyState(withTasks({ tasks: [API_TASK] }));
+
+    expect(useAppStore.getState().announcement?.text).toBe(`${WEB_TASK.name} was deleted`);
+  });
+
+  it("does not announce the page of the item the user asked to remove", () => {
+    useAppStore.getState().applyState(withTasks());
+    useAppStore.getState().openTask(WEB_TASK.id);
+    useAppStore.setState({ expectGone: WEB_TASK.id });
+
+    useAppStore.getState().applyState(withTasks({ tasks: [API_TASK] }));
+
+    expect(useAppStore.getState().announcement).toBeNull();
+    expect(useAppStore.getState().expectGone).toBeNull();
   });
 
   it("keeps an item that was not in the previous snapshot", () => {
@@ -2240,6 +2271,7 @@ describe("place in a new snapshot", () => {
     useAppStore.getState().applyState(withTasks());
 
     expect(location()).toEqual({ kind: "task", id: "task-new" });
+    expect(useAppStore.getState().announcement).toBeNull();
   });
 
   it("shows the first board for Home while there is no task", () => {

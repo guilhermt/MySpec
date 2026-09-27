@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   breadcrumbOf,
+  type GoneLocation,
+  goneOutcome,
+  goneTitle,
   HOME,
   isActiveItem,
   isLocation,
@@ -252,5 +255,37 @@ describe("isLocationList", () => {
     ["a place that is not a list", HOME, false],
   ])("%s is %s", (_name, value, valid) => {
     expect(isLocationList(value)).toBe(valid);
+  });
+});
+
+describe("goneOutcome and goneTitle", () => {
+  const leftApp = makeState({
+    history: [makeArchivedTask({ id: "task-1" })],
+    reviewHistory: [
+      makeArchivedReview({ id: "review-1", outcome: "merged" }),
+      makeArchivedReview({ id: "review-2", outcome: "closed" }),
+    ],
+    discussionHistory: [makeArchivedDiscussion({ id: "discussion-1" })],
+  });
+  const gone = (item: GoneLocation["item"], id: string, name: string): GoneLocation => ({
+    kind: "gone",
+    item,
+    id,
+    name,
+    boardId: "",
+  });
+
+  it.each([
+    [gone("task", "task-1", "add-login"), "archived", "add-login was closed and archived"],
+    [gone("task", "task-9", "add-login"), "deleted", "add-login was deleted"],
+    [gone("review", "review-1", "web#7"), "merged", "web#7 was merged, and its review ended"],
+    [gone("review", "review-2", "web#7"), "closed", "web#7 was closed without a merge"],
+    [gone("review", "review-9", "web#7"), "deleted", "web#7 was deleted"],
+    [gone("discussion", "discussion-1", "Invoices"), "archived", "Invoices was archived"],
+    [gone("discussion", "discussion-9", "Invoices"), "deleted", "Invoices was deleted"],
+    [gone("board", "board-1", "Roadmap"), "removed", "This board was removed."],
+  ] as const)("reads what became of %o", (location, outcome, title) => {
+    expect(goneOutcome(leftApp, location)).toBe(outcome);
+    expect(goneTitle(location, outcome)).toBe(title);
   });
 });

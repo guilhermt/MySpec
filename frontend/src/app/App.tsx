@@ -3,7 +3,6 @@ import { AppShell } from "@/app/AppShell";
 import { bootstrap } from "@/app/bootstrap";
 import { useGlobalShortcuts } from "@/app/useGlobalShortcuts";
 import { MigrationRefused } from "@/features/migration/MigrationRefused";
-import { ArchivedNotice } from "@/features/notice/ArchivedNotice";
 import { LeftoversNotice } from "@/features/notice/LeftoversNotice";
 import { ErrorNotice } from "@/features/notice/Notice";
 import { useApplyTheme } from "@/features/theme/useApplyTheme";
@@ -57,10 +56,7 @@ export function App() {
       {(app.repositories ?? []).length === 0 && (app.boards ?? []).length === 0 ? (
         <WelcomeScreen />
       ) : (
-        <>
-          <AppShell />
-          <ArchivedNotice />
-        </>
+        <AppShell />
       )}
     </>
   );

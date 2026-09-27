@@ -340,6 +340,11 @@
     gap: var(--space-2);
   }
 
+  /* A toast comes in rising into its place; it leaves by being removed. */
+  .toast {
+    animation: toast-enter var(--duration-base) var(--ease-enter);
+  }
+
   /* A new situation blinks twice in the veil of its gravity. */
   .tree-flash[data-flash] {
     animation: tree-flash var(--duration-slow) var(--ease-standard) 2;
@@ -380,6 +385,13 @@
   }
   to {
     background-color: transparent;
+  }
+}
+
+@keyframes toast-enter {
+  from {
+    opacity: 0;
+    translate: 0 var(--space-2);
   }
 }
 

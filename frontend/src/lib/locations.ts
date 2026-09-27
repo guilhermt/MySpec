@@ -266,3 +266,46 @@ export function isLocation(value: unknown): value is Location {
 export function isLocationList(value: unknown): value is Location[] {
   return Array.isArray(value) && value.every(isLocation);
 }
+
+/** GoneLocation is the page of an item that left while open. */
+export type GoneLocation = Extract<Location, { kind: "gone" }>;
+
+/** GoneOutcome is what became of an item that left: archived, deleted, its pull request merged or closed, or the board removed. */
+export type GoneOutcome = "archived" | "deleted" | "merged" | "closed" | "removed";
+
+/** goneOutcome reads from the state what became of an item that left. */
+export function goneOutcome(app: State | null, gone: GoneLocation): GoneOutcome {
+  switch (gone.item) {
+    case "task":
+      return findArchivedTask(app, gone.id) === null ? "deleted" : "archived";
+    case "review": {
+      const archived = findArchivedReview(app, gone.id);
+      if (archived === null) {
+        return "deleted";
+      }
+      return archived.outcome === "merged" ? "merged" : "closed";
+    }
+    case "discussion":
+      return findArchivedDiscussion(app, gone.id) === null ? "deleted" : "archived";
+    case "board":
+      return "removed";
+  }
+}
+
+/** goneTitle is what the page of an item that left says of it. */
+export function goneTitle(gone: GoneLocation, outcome: GoneOutcome): string {
+  switch (outcome) {
+    case "archived":
+      return gone.item === "task"
+        ? `${gone.name} was closed and archived`
+        : `${gone.name} was archived`;
+    case "deleted":
+      return `${gone.name} was deleted`;
+    case "merged":
+      return `${gone.name} was merged, and its review ended`;
+    case "closed":
+      return `${gone.name} was closed without a merge`;
+    case "removed":
+      return "This board was removed.";
+  }
+}

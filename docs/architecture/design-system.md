@@ -154,6 +154,10 @@ As convenções de todo componente:
 
 **Região de toasts.** `ToastRegion` é a região ao vivo do app, a classe `.toasts`: posicionada no canto inferior esquerdo da área principal, a `--space-4` das bordas, em `--z-toast`, com os toasts em coluna separados por `--space-2`. O anúncio fica nela, visualmente oculto (`sr-only`), e um anúncio novo remonta o texto, que é dito de novo mesmo quando repete.
 
+**Toast.** `Toast` é um aviso curto dentro da região de toasts, sem papel próprio: `--surface-3`, `--shadow-float`, até `--size-toast` de largura, o ícone em `--ink-3`, o texto, a ação como botão fantasma `sm` sob o texto e o `×` (`Dismiss`). Ele entra subindo em `--duration-base` com `--ease-enter` e sai ao ser removido. Sai sozinho depois de `TOAST_MS` (10 s), um tempo que só corre enquanto ele não tem o ponteiro nem o foco e retoma com o que faltava.
+
+**Página do item que saiu.** `GonePage` é o corpo do lugar de um item que saiu: na medida `--measure-read`, alinhada à esquerda, o ícone `muted`, o título em `--text-title` e as ações numa linha. A primeira ação habilitada é a principal (`primary`) e recebe o foco ao aparecer; as outras são secundárias, e uma desabilitada fica tracejada com a razão ao lado. `features/navigation/GoneView` a monta pelo que o estado diz do item (`goneOutcome` e `goneTitle` de `lib/locations.ts`), sob o cabeçalho do lugar sem nada à direita.
+
 **Chip de tempo.** O leitor de tela ouve o tempo por extenso, depois do estado (`waiting for you, 18 minutes`); o tempo curto é só visual, `aria-hidden`, e o tooltip dá o por extenso ao ponteiro.
 
 **Medidor de contexto.** `ContextMeter` é um `meter` com `aria-valuenow` arredondado, que nunca muda de cor ao encher. Sem leitura, ele brilha e mostra `…`; pausado, mostra `—`; nos dois casos `aria-valuetext` diz o estado ao leitor de tela.

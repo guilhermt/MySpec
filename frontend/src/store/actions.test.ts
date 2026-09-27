@@ -260,6 +260,18 @@ describe("board actions reported in the banner", () => {
 });
 
 describe("task actions", () => {
+  it.each([
+    ["deleteTask", () => deleteTask("item-1")],
+    ["closeTask", () => closeTask("item-1")],
+    ["deleteReview", () => deleteReview("item-1")],
+    ["archiveDiscussion", () => archiveDiscussion("item-1")],
+    ["deleteDiscussion", () => deleteDiscussion("item-1")],
+  ])("%s marks the item whose page is not announced", async (_name, action) => {
+    await action();
+
+    expect(useAppStore.getState().expectGone).toBe("item-1");
+  });
+
   it("delegate to the matching binding", async () => {
     await deleteTask("task-1");
     await sendMessage("task-1", "prd", "go on");

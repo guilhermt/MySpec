@@ -205,7 +205,7 @@ O campo de módulo é o campo de seleção única do board chamado `Módulo` ou 
 - **Tela da discussão:** o [cabeçalho do lugar](#cabeçalho-do-lugar), com o board no breadcrumb e o título, e à direita o estado, o medidor de contexto, **Pause** ou **Resume**, o botão do painel de documentos, **Archive** e **Delete discussion**; a barra da discussão com o estado e os avisos; o painel de rascunhos e a conversa; o painel de documentos.
 - **Estados:** `Discussing`, `Waiting for the drafts`, `Decide drafts`, `Publishing`, `Publish failed` e `Drafts published`. O estado da conversa, pausada, com erro, pedindo permissão ou perguntando, prevalece, como na task.
 - **Espera pelo usuário:** a discussão espera pelo usuário quando o agente pergunta ou pede permissão, quando a sessão falha, quando um turno termina sem resposta ao usuário antes de os rascunhos existirem, quando o artefato de rascunhos não pode ser lido, quando há rascunhos a decidir e quando uma publicação falha. Ela notifica como uma task, uma vez por situação, com o som do produto. Uma discussão pausada ou arquivada não espera por ninguém.
-- **Archive:** o usuário arquiva a discussão a qualquer momento, depois da confirmação `The conversation ends. The document, the drafts and what was published stay in the history.` Rascunhos aprovados aguardando publicação impedem o arquivamento, com `Approved drafts are waiting to be published.`, e uma publicação que falhou, com `A publication failed.` Rascunhos sem decisão são arquivados como `Not published`. Arquivar encerra a sessão.
+- **Archive:** o usuário arquiva a discussão a qualquer momento, depois da confirmação `The conversation ends. The document, the drafts and what was published stay in the history.` Rascunhos aprovados aguardando publicação impedem o arquivamento, com `Approved drafts are waiting to be published.`, e uma publicação que falhou, com `A publication failed.` Rascunhos sem decisão são arquivados como `Not published`. Arquivar encerra a sessão, e o lugar da discussão dá vez à [página do item que saiu](#a-página-do-item-que-saiu).
 - **Delete discussion:** apaga a discussão, ativa ou arquivada, depois da confirmação `The conversation, the document and the drafts go away. What was published on GitHub stays.`
 
 ### Contexto da task
@@ -483,7 +483,26 @@ Ao encerrar, o produto:
 2. apaga a branch da task. Quando o GitHub confirmou o merge, apaga sem perguntar ao git, porque um squash merge nunca aparece como ancestral; quando o merge não pôde ser confirmado, só apaga se o git considerar a branch mergeada;
 3. atualiza a branch base local, se ela estiver em checkout no clone, limpa, com upstream e atrás da remota sem divergir.
 
-Cada parte reporta o que fez, o que pulou e por quê, e o que falhou. Terminado o encerramento, a task é arquivada: sai da lista de tasks e passa a existir só no histórico, com um aviso momentâneo de que saiu, e o resultado do encerramento fica guardado com ela.
+Cada parte reporta o que fez, o que pulou e por quê, e o que falhou. Terminado o encerramento, a task é arquivada: sai da lista de tasks e passa a existir só no histórico, e o resultado do encerramento fica guardado com ela.
+
+### A página do item que saiu
+
+Quando o item aberto sai do app, arquivado, apagado, com a pull request mergeada ou fechada, ou o board removido, o lugar dele dá vez à página do item que saiu: o cabeçalho com `←` e o nome do item, um ícone, o título e as ações.
+
+| Caso | Título | Ações |
+|---|---|---|
+| Task encerrada | `<nome> was closed and archived` | **Next that needs you**, **Open in History**, **Back to <board>** |
+| Task apagada | `<nome> was deleted` | **Next that needs you**, **Back to <board>** |
+| Review mergeado | `<repo>#<N> was merged, and its review ended` | **Next that needs you**, **Open in History**, **Back to Reviews** |
+| Review fechado | `<repo>#<N> was closed without a merge` | as mesmas |
+| Review apagado | `<repo>#<N> was deleted` | **Next that needs you**, **Back to Reviews** |
+| Discussão arquivada | `<título> was archived` | **Next that needs you**, **Open in History**, **Open <board>** |
+| Discussão apagada | `<título> was deleted` | **Next that needs you**, **Open <board>** |
+| Board removido | `This board was removed.` | **Back to <lugar anterior>** |
+
+Sem board, ou com ele removido, a volta da task e da discussão é **Back to Home**; o board removido sem lugar anterior também. **Next that needs you** abre o próximo item que espera pelo usuário, o mesmo do `Ctrl+J`, com `Next: <nome>` no tooltip; sem nenhum, fica desabilitado com `Nothing else needs you now.` A primeira ação habilitada é a principal e recebe o foco. **Open in History** abre o item arquivado. A página não entra no histórico de lugares: sair dela a descarta, e voltar não a reencontra. Quando o item sai sem o usuário ter pedido, a região ao vivo anuncia o título da página; quando foi ele quem apagou, arquivou ou encerrou, não.
+
+Uma task arquivada que não estava aberta aparece num toast no canto inferior esquerdo da área principal: `“<nome>” was archived`, com **Open in History** e o `×`. Ele sai sozinho depois de 10 segundos, contados só enquanto não tem o ponteiro nem o foco, e cabem três de uma vez; o quarto tira o mais antigo.
 
 ## Centro de review
 
@@ -600,7 +619,7 @@ Um relatório limpo, ou uma passada em que nada foi aprovado, deixa o review pro
 - **Barra lateral:** cada review ativo é uma linha sob o nó **Reviews** da árvore, em ordem de criação, com o título, `<nome curto>#<número>` no meta e o estado mais grave na segunda linha, como as linhas das tasks. Os reviews não passam pelo filtro de repositório da barra lateral.
 - **Tela do review:** o [cabeçalho do lugar](#cabeçalho-do-lugar), com `Reviews` no breadcrumb e o título da pull request, e à direita o modo, o estado, o medidor de contexto, **Pause** ou **Resume**, o link do card vinculado (`Open card #<número> on GitHub · <status no board>`), o botão do painel de relatórios e **Delete review**; a barra do review com o link da pull request, o estado, os avisos e as ações **Publish review**, ou **Apply** e **Approve** no modo aplicar, **Review again** e **Open in VS Code**, que abre a worktree; o painel de apontamentos e a conversa; o painel de relatórios.
 - **Estados:** `Reviewing`, `Waiting for checks`, `Pass blocked`, `Waiting for the report`, `Decide findings`, `Ready to publish`, `Publish failed`, `Published`, `New commits` e o que deu errado com a pull request depois da passada (`Checks failed: <checks>`, `Conflict with <base>` ou os dois); no modo aplicar, `Ready to apply`, `Applying`, `In review`, `Ready to approve`, `Committing`, `Ready to merge` e o mesmo estado de checks e conflito. O estado da conversa, pausada, com erro, pedindo permissão ou perguntando, prevalece sobre eles, como na task, e o agente trabalhando numa conversa durante a espera pelos checks mostra `Reviewing`. Em `Pass blocked`, a barra do review mostra a razão, e num check que falhou depois da passada, os checks pelo nome.
-- **Fim:** o review termina quando a pull request é mergeada ou fechada. A leitura de cada minuto percebe, e o produto encerra a sessão, remove a worktree e leva o review ao histórico, sem ação do usuário e sem notificar. Uma leitura que falha deixa o aviso `Couldn't check GitHub` na barra do review.
+- **Fim:** o review termina quando a pull request é mergeada ou fechada. A leitura de cada minuto percebe, e o produto encerra a sessão, remove a worktree e leva o review ao histórico, sem ação do usuário e sem notificar. Com o review aberto, o lugar dele dá vez à [página do item que saiu](#a-página-do-item-que-saiu). Uma leitura que falha deixa o aviso `Couldn't check GitHub` na barra do review.
 - **Apagar:** **Delete review** apaga o review a qualquer momento, ativo ou arquivado, depois da confirmação `The worktree, the conversation and the reports go away. What was published on GitHub stays.` A pull request volta a ser uma pull request comum na lista e pode ter um review novo. Uma worktree que o git não conseguiu remover é listada num aviso, como ao apagar uma task.
 
 ## Histórico

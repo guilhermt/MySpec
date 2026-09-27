@@ -217,8 +217,15 @@ export function createTask(req: CreateTaskRequest): Promise<string> {
   return api.createTask(req);
 }
 
+// expectRemoval marks the item the user asked to remove: when it leaves, its
+// page is not announced, since the user knows.
+function expectRemoval(id: string): void {
+  useAppStore.setState({ expectGone: id });
+}
+
 /** deleteTask removes the task for good and reports what stayed on disk. */
 export function deleteTask(taskId: string): Promise<void> {
+  expectRemoval(taskId);
   return run(async () => {
     const result = await api.deleteTask(taskId);
     if (result.leftover !== null) {
@@ -357,6 +364,7 @@ export function refreshPR(taskId: string): Promise<void> {
 
 /** closeTask removes the worktree of a merged task and updates its base branch. */
 export function closeTask(taskId: string): Promise<void> {
+  expectRemoval(taskId);
   return run(() => api.closeTask(taskId));
 }
 
@@ -462,6 +470,7 @@ export function openFindingInEditor(id: string, pass: number, number: number): P
 
 /** deleteReview removes the review for good and reports what stayed on disk. */
 export function deleteReview(id: string): Promise<void> {
+  expectRemoval(id);
   return run(async () => {
     const result = await api.deleteReview(id);
     if (result.leftover !== null) {
@@ -553,10 +562,12 @@ export function retryPublish(id: string, draftId: string): Promise<void> {
 
 /** archiveDiscussion ends the conversation and sends the discussion to the history. */
 export function archiveDiscussion(id: string): Promise<void> {
+  expectRemoval(id);
   return run(() => api.archiveDiscussion(id));
 }
 
 /** deleteDiscussion removes the discussion for good. */
 export function deleteDiscussion(id: string): Promise<void> {
+  expectRemoval(id);
   return run(() => api.deleteDiscussion(id));
 }

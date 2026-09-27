@@ -34,7 +34,6 @@ export interface StoreOptions {
       | "sidebarCollapsed"
       | "lastRepositoryId"
       | "historyQuery"
-      | "archivedNotice"
       | "leftover"
       | "flashing"
       | "promptEdit"
@@ -74,7 +73,6 @@ export function resetAppStore(options: StoreOptions = {}): void {
     sidebarCollapsed: options.ui?.sidebarCollapsed ?? new Set<string>(),
     lastRepositoryId: options.ui?.lastRepositoryId ?? null,
     historyQuery: options.ui?.historyQuery ?? "",
-    archivedNotice: options.ui?.archivedNotice ?? null,
     leftover: options.ui?.leftover ?? null,
     flashing: options.ui?.flashing ?? new Set<string>(),
     promptEdit: options.ui?.promptEdit ?? null,

@@ -1,7 +1,10 @@
 import { create } from "zustand";
 import { useShallow } from "zustand/react/shallow";
-import { findBoard } from "@/lib/boards";
+import { boardOfRepository, findBoard } from "@/lib/boards";
 import {
+  type GoneLocation,
+  goneOutcome,
+  goneTitle,
   HOME,
   isActiveItem,
   isLocation,
@@ -18,6 +21,7 @@ import {
   discussionSituation,
   prSituation,
   reviewerSituation,
+  reviewName,
   reviewSituation,
   stageSituation,
   stepSituation,
@@ -60,6 +64,9 @@ import {
 } from "@/store/transcript";
 
 export type { SettingsSection } from "@/lib/locations";
+
+/** MAX_TOASTS is how many toasts show at once; a new one pushes out the oldest. */
+const MAX_TOASTS = 3;
 
 /** PanelId is an auxiliary panel of an item: its artifacts, its reports or its documents. */
 export type PanelId = "artifacts" | "reports" | "documents";
@@ -173,8 +180,6 @@ export interface AppStore {
    */
   lastRepositoryId: string | null;
   historyQuery: string;
-  /** archivedNotice names the task that was just archived, until dismissed. */
-  archivedNotice: ArchivedNotice | null;
   /** leftover is what the last deletion could not remove from disk, until dismissed. */
   leftover: Leftover | null;
   /**
@@ -239,7 +244,8 @@ export interface AppStore {
   openHistory: () => void;
   openArchived: (id: string) => void;
   setHistoryQuery: (query: string) => void;
-  dismissArchivedNotice: () => void;
+  /** dismissToast takes a toast off the screen. */
+  dismissToast: (id: string) => void;
   setLeftover: (leftover: Leftover | null) => void;
 
   flashSituation: (id: string) => void;
@@ -264,12 +270,6 @@ export interface AppStore {
 export interface PrDraft {
   title: string;
   body: string;
-}
-
-/** ArchivedNotice is the task that was just archived, as the notice names it. */
-export interface ArchivedNotice {
-  id: string;
-  name: string;
 }
 
 function tasksOf(state: State | null): readonly TaskSummary[] {
@@ -317,7 +317,7 @@ function findArchivedDiscussion(state: State | null, id: string | null): Archive
 }
 
 // A task that shows up in the history between two snapshots was archived
-// while the user was watching, which is what the notice announces.
+// while the user was watching, which is what a toast says.
 function newlyArchived(
   previous: readonly ArchivedTask[],
   next: readonly ArchivedTask[],
@@ -441,7 +441,6 @@ function initialTaskUi(): Pick<
   | "textDrafts"
   | "lastRepositoryId"
   | "historyQuery"
-  | "archivedNotice"
   | "leftover"
   | "flashing"
 > {
@@ -459,7 +458,6 @@ function initialTaskUi(): Pick<
     textDrafts: {},
     lastRepositoryId: null,
     historyQuery: "",
-    archivedNotice: null,
     leftover: null,
     flashing: new Set<string>(),
   };
@@ -521,11 +519,16 @@ function travel(
   };
 }
 
-// Where the place on screen stands in a new snapshot: an archived item that is
-// gone leaves for the history; an active item or a board that is gone leaves
-// for where it went, or for Home; Home stands for the first board while there
-// is no task. An item that was not in the previous snapshot, just created and
-// not yet published, has not left.
+// gone is the page of an item that left, with what the state no longer has of
+// it: the name its page says and the board it lived under.
+function gone(item: GoneLocation["item"], id: string, name: string, boardId: string): GoneLocation {
+  return { kind: "gone", item, id, name, boardId };
+}
+
+// The place on screen once a new state arrives. An archived item that left
+// goes back to the History; an active item or a board that was there and is
+// no longer becomes the page of what left. An item that was not in the
+// previous state is not treated as gone: it was just created.
 function placeIn(prev: State | null, next: State, location: Location): Location {
   switch (location.kind) {
     case "archived-task":
@@ -536,33 +539,35 @@ function placeIn(prev: State | null, next: State, location: Location): Location 
       return findArchivedReview(next, location.id) === null ? { kind: "history" } : location;
     case "archived-discussion":
       return findArchivedDiscussion(next, location.id) === null ? { kind: "history" } : location;
-    case "task":
-      return findTask(prev, location.id) !== null && findTask(next, location.id) === null
-        ? HOME
-        : location;
-    case "review":
-      if (findReview(prev, location.id) === null || findReview(next, location.id) !== null) {
+    case "task": {
+      const task = findTask(prev, location.id);
+      if (task === null || findTask(next, location.id) !== null) {
         return location;
       }
-      // A review whose pull request was merged or closed goes on as the
-      // archived one.
-      return findArchivedReview(next, location.id) === null
-        ? HOME
-        : { kind: "archived-review", id: location.id };
-    case "discussion":
-      if (
-        findDiscussion(prev, location.id) === null ||
-        findDiscussion(next, location.id) !== null
-      ) {
+      const boardId = boardOfRepository(prev, task.repositoryId)?.id ?? "";
+      return gone("task", task.id, task.name, boardId);
+    }
+    case "review": {
+      const review = findReview(prev, location.id);
+      if (review === null || findReview(next, location.id) !== null) {
         return location;
       }
-      return findArchivedDiscussion(next, location.id) === null
-        ? HOME
-        : { kind: "archived-discussion", id: location.id };
-    case "board":
-      return findBoard(prev, location.id) !== null && findBoard(next, location.id) === null
-        ? HOME
-        : location;
+      return gone("review", review.id, reviewName(review), "");
+    }
+    case "discussion": {
+      const discussion = findDiscussion(prev, location.id);
+      if (discussion === null || findDiscussion(next, location.id) !== null) {
+        return location;
+      }
+      return gone("discussion", discussion.id, discussion.title, discussion.boardId);
+    }
+    case "board": {
+      const board = findBoard(prev, location.id);
+      if (board === null || findBoard(next, location.id) !== null) {
+        return location;
+      }
+      return gone("board", board.id, board.title, "");
+    }
     case "home":
       return resolveHome(next, location);
     case "reviews":
@@ -632,8 +637,6 @@ export const useAppStore = create<AppStore>()((set, get) => {
         // The first snapshot brings the whole history at once; nothing in it was
         // archived under the eyes of the user.
         const archived = state.app === null ? null : newlyArchived(historyOf(state.app), history);
-        const archivedNotice =
-          archived === null ? state.archivedNotice : { id: archived.id, name: archived.name };
         // A repository that is gone stops preselecting the creation dialog.
         const lastRepositoryId =
           state.lastRepositoryId !== null &&
@@ -644,12 +647,32 @@ export const useAppStore = create<AppStore>()((set, get) => {
         const moved = location !== state.location;
         // An item that left takes every conversation it had with it.
         const left = moved ? openItemId(state.location) : null;
+        // The task archived while open has its page; any other one, a toast.
+        const toasts =
+          archived === null || archived.id === openItemId(state.location)
+            ? state.toasts
+            : [
+                ...state.toasts,
+                { id: archived.id, taskId: archived.id, name: archived.name },
+              ].slice(-MAX_TOASTS);
+        // The page of an item that left on its own is announced; the one the
+        // user just asked to remove is not.
+        const arrived = moved && location.kind === "gone" ? location : null;
+        const announcement =
+          arrived === null || arrived.id === state.expectGone
+            ? state.announcement
+            : {
+                id: (state.announcement?.id ?? 0) + 1,
+                text: goneTitle(arrived, goneOutcome(next, arrived)),
+              };
         return {
           app: next,
-          archivedNotice,
           lastRepositoryId,
           location,
           panel: moved ? null : state.panel,
+          toasts,
+          announcement,
+          expectGone: arrived === null ? state.expectGone : null,
           transcripts:
             left === null ? state.transcripts : withoutTaskTranscripts(state.transcripts, left),
         };
@@ -812,7 +835,8 @@ export const useAppStore = create<AppStore>()((set, get) => {
 
     setHistoryQuery: (query) => set({ historyQuery: query }),
 
-    dismissArchivedNotice: () => set({ archivedNotice: null }),
+    dismissToast: (id) =>
+      set((state) => ({ toasts: state.toasts.filter((toast) => toast.id !== id) })),
 
     setLeftover: (leftover) => set({ leftover }),
 
@@ -1234,8 +1258,9 @@ export function useSettingsUi(): SettingsUi {
   );
 }
 
-export function useArchivedNotice(): ArchivedNotice | null {
-  return useAppStore((state) => state.archivedNotice);
+/** useToasts are the toasts on screen, the oldest first. */
+export function useToasts(): readonly Toast[] {
+  return useAppStore((state) => state.toasts);
 }
 
 /** useAnnouncement is what the live region says now. */

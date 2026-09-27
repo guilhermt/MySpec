@@ -7,6 +7,7 @@ import { NewDiscussionDialog } from "@/features/discussion/NewDiscussionDialog";
 import { ArchivedTaskView } from "@/features/history/ArchivedTaskView";
 import { HistoryPanel } from "@/features/history/HistoryPanel";
 import { Home } from "@/features/home/Home";
+import { GoneView } from "@/features/navigation/GoneView";
 import { ShellToasts } from "@/features/notice/ShellToasts";
 import { ArchivedReviewView } from "@/features/reviews/ArchivedReviewView";
 import { ReviewsView } from "@/features/reviews/ReviewsView";
@@ -47,7 +48,7 @@ function LocationView() {
     case "archived-discussion":
       return <ArchivedDiscussionView key={location.id} discussionId={location.id} />;
     case "gone":
-      return <Home />;
+      return <GoneView key={`${location.item}:${location.id}`} location={location} />;
   }
 }
 
