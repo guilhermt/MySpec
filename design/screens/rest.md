@@ -498,7 +498,7 @@ Uma task arquivada usa o texto da seção 4, sem prévia.
 - **O cabeçalho:** **Resume** no lugar de **Pause**, e a pílula neutra com `paused` e `Paused since 14:52` no tooltip. O medidor de contexto vira `—`.
 - **A conversa:** o marco `Paused by you · the reviewer's pass 2 stopped; Resume or a message starts it again` diz desde quando no tooltip, nunca no texto.
 - **As abas:** só a conversa que trabalhava fica pausada (a aba Reviewer). O implementador fica ocioso.
-- **A barra e o compositor:** a barra do pedido existe só quando uma situação espera pelo usuário, quieta e sem chip (`screens/task.md` §7); nesta cena nada espera, então não há barra. O compositor diz `Sending resumes the task…`.
+- **A barra e o compositor:** a barra do pedido existe só quando o estado do step, da PR ou da etapa pede uma ação, quieta e sem chip (`screens/task.md` §7); nesta cena nada é pedido, então não há barra. O compositor diz `Sending resumes the task…`.
 - **A árvore:** o glifo de duas barras e `Paused · Step 3/7`.
 - **Pausando:** **Pause** diz `Pausing…` com o spinner.
 - **Nada a pausar:** com um erro de sessão, **Pause** fica tracejado, com o motivo no tooltip e na descrição (`Nothing is running to pause: the reviewer's session stopped with an error. Retry it, or discard the step.`).

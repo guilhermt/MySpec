@@ -190,7 +190,7 @@ Fica acima do compositor, na coluna da conversa, com a mesma borda esquerda e di
 - Quando só a outra conversa do step espera, a barra diz isso e leva até lá: `● The reviewer waits · Question 18m [Go to reviewer]`. Com erro: `◆ Session error · Reviewer · pass 2 [Go to reviewer]`.
 - Quando as duas esperam, a barra fala da conversa na tela, e a aba de fora aponta a outra com o glifo e `waits`.
 - `step_review` e `step_empty` são do step, não de uma conversa: a barra os mostra nas duas abas.
-- **Pausada**, a task não tem situação (não espera por ninguém), mas a barra continua com o que o estado do step, da PR ou da etapa pede e com a ação, na forma quieta, com as duas barras no lugar do glifo e sem chip de tempo; a ação retoma a sessão. As situações da própria sessão (pergunta, permissão, erro) não aparecem na barra enquanto ela está pausada.
+- **Pausada**, a task não tem situação (não espera por ninguém), mas a barra continua com o que o estado do step ou da PR pede e com a ação (continuar uma etapa revisitada espera o **Resume**), na forma quieta, com as duas barras no lugar do glifo e sem chip de tempo; a ação retoma a sessão. As situações da própria sessão (pergunta, permissão, erro) não aparecem na barra enquanto ela está pausada.
 
 | Situação | A barra diz | Ação | Teclas | Variante |
 |---|---|---|---|---|
@@ -288,7 +288,7 @@ A conversa na tela aparece na lista com `now`, sem abrir. Um relatório abre no 
 **`⋯`**, agrupado por assunto, com o destrutivo por último em vermelho:
 
 - **o step** (com um step em curso): **Review myself** (só no `Agent`), **Open in VS Code** `Ctrl+E`, **Discard step N…**;
-- **a PR** (a partir da abertura): **Open PR**, **Refresh PR** (tooltip `checked 2m ago`), **Review again** (a qualquer momento em que o produto aceita uma passada, também durante uma; desabilitado com a razão no resto: `a pass waits for the checks`, `the changes are being committed`, `the pull request was closed`, `the task is closing`), **Open in VS Code** `Ctrl+E`; antes da abertura, **Discard draft** (enquanto o rascunho pode ser descartado) e **Open in VS Code**;
+- **a PR** (a partir da abertura): **Open PR**, **Refresh PR** (tooltip `checked 2m ago`), **Review again** (a qualquer momento em que o produto aceita uma passada, também durante uma; desabilitado com a razão no resto: `a pass waits for the checks`, `the changes are being committed`, `the pull request was closed`, `the pull request stage is blocked`, `the task is closing`), **Open in VS Code** `Ctrl+E`; antes da abertura, **Discard draft** (enquanto o rascunho pode ser descartado) e **Open in VS Code**;
 - **o planejamento:** **Discard and restart the <etapa>…** na etapa atual de planejamento;
 - **a task:**
   - **Review mode ›** e **Models ›**;
