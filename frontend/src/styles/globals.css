@@ -301,6 +301,18 @@
     animation: attention-flash-ring 1600ms var(--ease-standard);
   }
 
+  /* The live region of the app: toasts and announcements, bottom left of the
+     main area. */
+  .toasts {
+    position: absolute;
+    left: var(--space-4);
+    bottom: var(--space-4);
+    z-index: var(--z-toast);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
   /* A new situation blinks twice in the veil of its gravity. */
   .tree-flash[data-flash] {
     animation: tree-flash var(--duration-slow) var(--ease-standard) 2;

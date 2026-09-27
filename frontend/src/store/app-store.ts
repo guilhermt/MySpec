@@ -1243,6 +1243,11 @@ export function useArchivedNotice(): ArchivedNotice | null {
   return useAppStore((state) => state.archivedNotice);
 }
 
+/** useAnnouncement is what the live region says now. */
+export function useAnnouncement(): { id: number; text: string } | null {
+  return useAppStore((state) => state.announcement);
+}
+
 export function useLeftover(): Leftover | null {
   return useAppStore((state) => state.leftover);
 }

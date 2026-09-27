@@ -7,6 +7,7 @@ import { NewDiscussionDialog } from "@/features/discussion/NewDiscussionDialog";
 import { ArchivedTaskView } from "@/features/history/ArchivedTaskView";
 import { HistoryPanel } from "@/features/history/HistoryPanel";
 import { Home } from "@/features/home/Home";
+import { ShellToasts } from "@/features/notice/ShellToasts";
 import { ArchivedReviewView } from "@/features/reviews/ArchivedReviewView";
 import { ReviewsView } from "@/features/reviews/ReviewsView";
 import { ReviewView } from "@/features/reviews/ReviewView";
@@ -68,6 +69,7 @@ export function AppShell() {
       <Sidebar />
       <main className="main-area relative flex h-dvh min-w-0 flex-col @container/main">
         <LocationView />
+        <ShellToasts />
       </main>
       <NewTaskDialog />
       <StartReviewDialog />

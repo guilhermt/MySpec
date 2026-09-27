@@ -126,7 +126,7 @@ describe("useGlobalShortcuts", () => {
     expect(useAppStore.getState().location).toEqual({ kind: "review", id: "review-1" });
   });
 
-  it("changes nothing on Ctrl+J when nothing waits for the user", async () => {
+  it("stays where it is on Ctrl+J and says so when nothing waits for the user", async () => {
     vi.mocked(api.getState).mockResolvedValue(makeState({ tasks: [makeTask()] }));
     const { user } = renderWithStore(<App />);
     await screen.findByRole("tree", { name: "Active items" });
@@ -138,6 +138,7 @@ describe("useGlobalShortcuts", () => {
       "aria-selected",
       "false",
     );
+    expect(screen.getByRole("status")).toHaveTextContent("Nothing else needs you now.");
   });
 
   it("opens the first entry on Ctrl+J from the message box of a conversation", async () => {

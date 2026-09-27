@@ -147,6 +147,8 @@ As convenções de todo componente:
 
 **Ícones.** `icons.ts` é o mapa de significado para ícone (`ICONS`): cada significado tem um ícone só, o mesmo no produto inteiro. `Icon` o desenha num tamanho e num tom do system. Um ícone é um `IconGlyph`: um ícone do lucide ou um SVG próprio do system, e os dois recebem uma classe e se escondem do leitor. Os próprios, em `type-icons.tsx`, são os glifos de tipo de um item (`TaskIcon`, `OneShotIcon`, `ReviewIcon`, `DiscussionIcon`), a seta de ir a um lugar (`GoIcon`) e a marca (`MarkIcon`), na grade de 16 px, com a classe `lucide` para receberem o traço da mesma regra global. Um componente de `components/system/` nunca importa do `lucide-react` um ícone que o mapa tem (o visto é `ICONS.done`), e `Icon.test.tsx` falha quando um importa.
 
+**Região de toasts.** `ToastRegion` é a região ao vivo do app, a classe `.toasts`: posicionada no canto inferior esquerdo da área principal, a `--space-4` das bordas, em `--z-toast`, com os toasts em coluna separados por `--space-2`. O anúncio fica nela, visualmente oculto (`sr-only`), e um anúncio novo remonta o texto, que é dito de novo mesmo quando repete.
+
 **Chip de tempo.** O leitor de tela ouve o tempo por extenso, depois do estado (`waiting for you, 18 minutes`); o tempo curto é só visual, `aria-hidden`, e o tooltip dá o por extenso ao ponteiro.
 
 **Medidor de contexto.** `ContextMeter` é um `meter` com `aria-valuenow` arredondado, que nunca muda de cor ao encher. Sem leitura, ele brilha e mostra `…`; pausado, mostra `—`; nos dois casos `aria-valuetext` diz o estado ao leitor de tela.

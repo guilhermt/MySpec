@@ -119,11 +119,11 @@ describe("App", () => {
     );
     await user.click(await screen.findByRole("menuitemradio", { name: /dev\/web/ }));
 
-    expect(await screen.findByRole("status")).toHaveTextContent("filter failed");
+    expect(await screen.findByText("filter failed")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Dismiss" }));
 
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.queryByText("filter failed")).not.toBeInTheDocument();
   });
 
   it("unsubscribes when it unmounts", async () => {

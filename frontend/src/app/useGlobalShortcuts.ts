@@ -22,7 +22,9 @@ function runShortcut(key: string, store: AppStore): void {
       break;
     case "j": {
       const next = nextWaiting(store.app, openItemId(store.location));
-      if (next !== null) {
+      if (next === null) {
+        store.announce("Nothing else needs you now.");
+      } else {
         store.openSituation(next.itemId, next.situation.place);
       }
       break;

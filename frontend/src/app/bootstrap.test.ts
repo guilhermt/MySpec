@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { bootstrap } from "@/app/bootstrap";
-import { FLASH_MS } from "@/lib/situations";
+import { announcement, FLASH_MS } from "@/lib/situations";
 import { api, onSituationOpen, onSituationStarted, type Place } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
 import { resetAppStore } from "@/test/render";
@@ -11,6 +11,7 @@ import {
   emitTranscript,
   makeEntry,
   makePullRequest,
+  makeReviewSummary,
   makeSituation,
   makeState,
   makeTask,
@@ -28,6 +29,7 @@ afterEach(() => {
 });
 
 const PR_PLACE: Place = { kind: "pr", stage: "", step: 0 };
+const REVIEW_PLACE: Place = { kind: "review", stage: "", step: 0 };
 
 // A task in the PR stage, writing its draft.
 function inPR() {
@@ -155,6 +157,50 @@ describe("bootstrap", () => {
     emitSituationStarted({ situation: makeSituation({ id: "s1" }), focused: false });
 
     expect(useAppStore.getState().flashing.size).toBe(0);
+  });
+
+  it("announces a situation that started under the eyes of the user", async () => {
+    vi.mocked(api.getState).mockResolvedValueOnce(
+      makeState({ tasks: [makeTask({ id: "task-1", name: "add-login" })] }),
+    );
+    await bootstrap(useAppStore);
+
+    emitSituationStarted({ situation: makeSituation({ taskId: "task-1" }), focused: true });
+
+    expect(useAppStore.getState().announcement?.text).toBe(
+      announcement("add-login", makeSituation({ taskId: "task-1" })),
+    );
+  });
+
+  it("announces a situation of a review by its title", async () => {
+    vi.mocked(api.getState).mockResolvedValueOnce(
+      makeState({ reviews: [makeReviewSummary({ id: "review-1", title: "Fix the login" })] }),
+    );
+    await bootstrap(useAppStore);
+    const situation = makeSituation({ taskId: "review-1", place: REVIEW_PLACE });
+
+    emitSituationStarted({ situation, focused: true });
+
+    expect(useAppStore.getState().announcement?.text).toBe(
+      announcement("Fix the login", situation),
+    );
+  });
+
+  it("announces nothing when the window was away", async () => {
+    vi.mocked(api.getState).mockResolvedValueOnce(makeState({ tasks: [makeTask()] }));
+    await bootstrap(useAppStore);
+
+    emitSituationStarted({ situation: makeSituation({ taskId: "task-1" }), focused: false });
+
+    expect(useAppStore.getState().announcement).toBeNull();
+  });
+
+  it("announces nothing for an item the state does not have", async () => {
+    await bootstrap(useAppStore);
+
+    emitSituationStarted({ situation: makeSituation({ taskId: "task-gone" }), focused: true });
+
+    expect(useAppStore.getState().announcement).toBeNull();
   });
 
   it("opens the place of a notification the user clicked", async () => {
