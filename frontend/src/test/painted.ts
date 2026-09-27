@@ -3,6 +3,8 @@
  * CSS and compare what an element paints with the token it should paint, resolved in the same theme.
  */
 
+import type { CSSProperties } from "react";
+
 /** THEMES are the two values of data-theme every painted test runs under. */
 export const THEMES = ["light", "dark"] as const;
 
@@ -105,4 +107,42 @@ export function dashedDisabled(): Paint {
     borderStyle: "dashed",
     shadow: NONE,
   };
+}
+
+/**
+ * NARROW_MAIN is the main area of a 1100px window with the sidebar at its narrowest (288px): the
+ * narrowest main area the app is drawn in.
+ */
+export const NARROW_MAIN = 812;
+
+/** mainArea is the style of a wrapper that stands in for the main area, the container of @…/main. */
+export function mainArea(width: number): CSSProperties {
+  return { containerType: "inline-size", containerName: "main", width: `${width}px` };
+}
+
+/**
+ * placeHeaderFits tells whether a place header keeps everything on one line: its height, nothing
+ * past its edge, every button inside it, and the title cut rather than the band.
+ */
+export function placeHeaderFits(band: HTMLElement): boolean {
+  const edge = band.getBoundingClientRect();
+  const title = band.querySelector("h1");
+  const inside = [...band.querySelectorAll("button")]
+    .map((button) => button.getBoundingClientRect())
+    .filter((box) => box.width > 0)
+    .every(
+      (box) =>
+        box.left >= edge.left &&
+        box.right <= edge.right &&
+        box.top >= edge.top &&
+        box.bottom <= edge.bottom,
+    );
+  return (
+    edge.height === 48 &&
+    band.scrollWidth <= band.clientWidth &&
+    inside &&
+    title !== null &&
+    title.getBoundingClientRect().width > 0 &&
+    title.scrollWidth > title.clientWidth
+  );
 }

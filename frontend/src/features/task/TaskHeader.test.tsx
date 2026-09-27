@@ -17,42 +17,62 @@ function header(overrides: Partial<TaskSummary> = {}, onToggle = vi.fn()) {
   const task = makeTask(overrides);
   return renderWithStore(
     <TaskHeader task={task} artifactsOpen={false} onToggleArtifacts={onToggle} />,
-    { state: makeState({ tasks: [task] }) },
+    { state: makeState({ tasks: [task] }), ui: { location: { kind: "task", id: task.id } } },
   );
 }
 
 describe("TaskHeader", () => {
-  it("names the task and the repository it belongs to", () => {
+  it("names the place after the task, with its state on the right", () => {
     header();
 
-    expect(screen.getByText("add-login")).toBeInTheDocument();
-    expect(screen.getByText("dev/web")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "add-login" })).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("Waiting");
   });
 
-  it("shows the card the task was created from", () => {
-    header({ card: makeTaskCard() });
+  it("leaves the repository, the card number and the One-Shot label to the tree", () => {
+    header({ mode: "one_shot", stage: "one_shot", card: makeTaskCard() });
 
-    expect(screen.getByRole("button", { name: "#12" })).toBeInTheDocument();
-    expect(screen.getByText("In progress")).toBeInTheDocument();
-  });
-
-  it("shows no card for a task without one", () => {
-    header();
-
-    expect(screen.queryByRole("button", { name: "#12" })).not.toBeInTheDocument();
-  });
-
-  it("labels a One-Shot task", () => {
-    header({ mode: "one_shot", stage: "one_shot" });
-
-    expect(screen.getByText("One-Shot")).toBeInTheDocument();
-  });
-
-  it("has no label for a Structured task", () => {
-    header();
-
+    expect(screen.queryByText("dev/web")).not.toBeInTheDocument();
+    expect(screen.queryByText("#12")).not.toBeInTheDocument();
     expect(screen.queryByText("One-Shot")).not.toBeInTheDocument();
+  });
+
+  it("opens the card the task was created from on GitHub", async () => {
+    const { user } = header({ card: makeTaskCard() });
+
+    await user.click(screen.getByRole("button", { name: "Open card #12 on GitHub · In progress" }));
+
+    expect(api.openExternal).toHaveBeenCalledWith("https://github.com/dev/web/issues/12");
+  });
+
+  it("names the card by its number alone when the board gives it no status", () => {
+    header({ card: makeTaskCard({ status: "" }) });
+
+    expect(screen.getByRole("button", { name: "Open card #12 on GitHub" })).toBeInTheDocument();
+  });
+
+  it("has no card link for a task without one", () => {
+    header();
+
+    expect(screen.queryByRole("button", { name: /^Open card/ })).not.toBeInTheDocument();
+  });
+
+  it("holds its controls on the right in their order", () => {
+    header({ sessionStatus: "working", card: makeTaskCard() });
+
+    const names = screen
+      .getAllByRole("button")
+      .map((button) => button.getAttribute("aria-label") ?? button.textContent);
+    expect(names).toEqual([
+      "Back",
+      "Show the hidden levels: No board",
+      "Pause",
+      "Review: Manual",
+      "Models",
+      "Open card #12 on GitHub · In progress",
+      "Artifacts",
+      "Delete task",
+    ]);
   });
 
   it.each([
@@ -102,7 +122,7 @@ describe("TaskHeader", () => {
   it("has nothing to pause on a session that stopped on an error", () => {
     header({ sessionStatus: "error" });
 
-    expect(screen.getByRole("button", { name: "Pause" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Pause" })).toHaveAttribute("aria-disabled", "true");
   });
 
   it("has nothing to pause while the step has no session yet", () => {
@@ -199,7 +219,7 @@ describe("TaskHeader", () => {
   it("has the review mode of the task a click away", async () => {
     const { user } = header({ reviewMode: "agent" });
 
-    await user.click(screen.getByRole("button", { name: "Review mode: Agent" }));
+    await user.click(screen.getByRole("button", { name: "Review: Agent" }));
 
     expect(await screen.findByRole("heading", { name: "Review mode" })).toBeInTheDocument();
     expect(
@@ -219,7 +239,7 @@ describe("TaskHeader", () => {
   it("keeps the review mode as it is once every step started", async () => {
     const { user } = header({ reviewModeEditable: false });
 
-    await user.click(screen.getByRole("button", { name: "Review mode: Manual" }));
+    await user.click(screen.getByRole("button", { name: "Review: Manual" }));
 
     expect(await screen.findByRole("button", { name: "Task review mode: Manual" })).toBeDisabled();
   });

@@ -56,6 +56,7 @@ function measuredPanels() {
 function view(overrides: Partial<ReviewSummary> = {}) {
   return renderWithStore(<ReviewView reviewId="review-1" />, {
     state: makeState({ reviews: [makeReviewSummary(overrides)] }),
+    ui: { location: { kind: "review", id: "review-1" } },
   });
 }
 

@@ -14,19 +14,27 @@ function header(overrides: Partial<DiscussionSummary> = {}) {
       documentsOpen={false}
       onToggleDocuments={onToggleDocuments}
     />,
-    { state: makeState({ discussions: [discussion] }) },
+    {
+      state: makeState({ discussions: [discussion] }),
+      ui: { location: { kind: "discussion", id: discussion.id } },
+    },
   );
   return { ...view, onToggleDocuments };
 }
 
 describe("DiscussionHeader", () => {
-  it("names the discussion, its board and where it stands", () => {
+  it("names the place after the discussion, with where it stands on the right", () => {
     header();
 
-    expect(screen.getByText("Discussion")).toBeInTheDocument();
-    expect(screen.getByText("Invoices")).toBeInTheDocument();
-    expect(screen.getByText("Roadmap")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Invoices" })).toBeInTheDocument();
     expect(screen.getByText("Discussing")).toBeInTheDocument();
+  });
+
+  it("leaves the kind and the board to the tree and the breadcrumb", () => {
+    header();
+
+    expect(screen.queryByText("Discussion")).not.toBeInTheDocument();
+    expect(screen.queryByText("Roadmap")).not.toBeInTheDocument();
   });
 
   it("pauses the conversation of the discussion", async () => {

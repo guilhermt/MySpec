@@ -16,6 +16,7 @@ const SEEN_KEY = "myspec.artifacts.seen:task-1";
 function view(overrides: Partial<TaskSummary> = {}) {
   return renderWithStore(<TaskView taskId="task-1" />, {
     state: makeState({ tasks: [makeTask(overrides)] }),
+    ui: { location: { kind: "task", id: "task-1" } },
   });
 }
 

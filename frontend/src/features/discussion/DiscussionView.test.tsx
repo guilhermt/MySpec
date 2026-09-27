@@ -56,6 +56,7 @@ function measuredPanels() {
 function view(overrides: Partial<DiscussionSummary> = {}) {
   return renderWithStore(<DiscussionView discussionId="discussion-1" />, {
     state: makeState({ discussions: [makeDiscussion(overrides)] }),
+    ui: { location: { kind: "discussion", id: "discussion-1" } },
   });
 }
 

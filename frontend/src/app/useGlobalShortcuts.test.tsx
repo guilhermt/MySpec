@@ -324,7 +324,9 @@ describe("useGlobalShortcuts", () => {
       press({ key: "ArrowLeft", altKey: true });
     });
 
-    expect(useAppStore.getState()).toMatchObject({ location: TASK, pendingFocus: "title" });
+    // The header of the task takes the focus on its title.
+    expect(useAppStore.getState()).toMatchObject({ location: TASK, pendingFocus: null });
+    expect(screen.getByRole("heading", { level: 1, name: "add-login" })).toHaveFocus();
 
     act(() => {
       press({ key: "ArrowRight", altKey: true });

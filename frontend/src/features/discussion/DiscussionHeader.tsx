@@ -1,5 +1,6 @@
-import { Archive, MessagesSquare, PanelRight, Pause, Play, Trash2 } from "lucide-react";
+import { Archive, PanelRight, Trash2 } from "lucide-react";
 import { useState } from "react";
+import { PauseButton } from "@/components/PauseButton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -9,6 +10,7 @@ import {
   discussionStatusLabel,
   discussionStatusTone,
 } from "@/features/discussion/discussion-status";
+import { LocationHeader } from "@/features/navigation/LocationHeader";
 import { ContextGauge } from "@/features/task/ContextGauge";
 import { ToneDot } from "@/features/task/StatusDot";
 import { discussionSituation, situationTone } from "@/lib/situations";
@@ -22,7 +24,10 @@ export interface DiscussionHeaderProps {
   onToggleDocuments: () => void;
 }
 
-/** DiscussionHeader names the discussion and holds what the user can do to it. */
+/**
+ * DiscussionHeader is the header of the place of a discussion, with what the user can do to it on
+ * the right.
+ */
 export function DiscussionHeader({
   discussion,
   documentsOpen,
@@ -52,33 +57,22 @@ export function DiscussionHeader({
   );
 
   return (
-    <header className="flex h-11 shrink-0 items-center gap-2 border-b px-3">
-      <MessagesSquare aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
-      <Badge variant="outline">Discussion</Badge>
-      <span className="min-w-0 truncate font-medium">{discussion.title}</span>
-      <Badge variant="secondary">{discussion.board}</Badge>
+    <LocationHeader>
       <Badge variant="outline" className="gap-1.5">
         <ToneDot tone={tone} />
         {discussionStatusLabel(discussion)}
       </Badge>
-
-      <span className="flex-1" />
-
       <ContextGauge percent={discussion.contextPercent} />
       {running && (
-        <Button
-          variant="ghost"
-          size="sm"
+        <PauseButton
+          paused={paused}
           disabled={!paused && status === "error"}
           onClick={() =>
             void (paused
               ? resume(discussion.id, discussion.sessionStage)
               : pause(discussion.id, discussion.sessionStage))
           }
-        >
-          {paused ? <Play /> : <Pause />}
-          {paused ? "Resume" : "Pause"}
-        </Button>
+        />
       )}
       <Tooltip>
         <TooltipTrigger
@@ -114,6 +108,6 @@ export function DiscussionHeader({
         onOpenChange={setArchiving}
       />
       <DeleteDiscussionDialog discussion={discussion} open={deleting} onOpenChange={setDeleting} />
-    </header>
+    </LocationHeader>
   );
 }
