@@ -769,6 +769,20 @@ export interface DiscussionSummary {
     "turnRunning": boolean;
     "processRunning": boolean;
     "retryAttempt": number;
+
+    /**
+     * TurnStartedAt is when the turn in progress started, RFC 3339; "" without
+     * a turn.
+     */
+    "turnStartedAt": string;
+
+    /**
+     * ActionLabel and ActionTarget are the action the agent runs now, as the
+     * conversation words it ("Reading", "internal/app/state.go"); "" when none
+     * runs.
+     */
+    "actionLabel": string;
+    "actionTarget": string;
     "contextPercent": number;
     "pendingCount": number;
     "lastError": string;
@@ -1437,6 +1451,20 @@ export interface PullRequest {
     "turnRunning": boolean;
     "processRunning": boolean;
     "retryAttempt": number;
+
+    /**
+     * TurnStartedAt is when the turn in progress started, RFC 3339; "" without
+     * a turn.
+     */
+    "turnStartedAt": string;
+
+    /**
+     * ActionLabel and ActionTarget are the action the agent runs now, as the
+     * conversation words it ("Reading", "internal/app/state.go"); "" when none
+     * runs.
+     */
+    "actionLabel": string;
+    "actionTarget": string;
     "contextPercent": number;
     "pendingCount": number;
     "lastError": string;
@@ -1964,6 +1992,20 @@ export interface ReviewSummary {
     "turnRunning": boolean;
     "processRunning": boolean;
     "retryAttempt": number;
+
+    /**
+     * TurnStartedAt is when the turn in progress started, RFC 3339; "" without
+     * a turn.
+     */
+    "turnStartedAt": string;
+
+    /**
+     * ActionLabel and ActionTarget are the action the agent runs now, as the
+     * conversation words it ("Reading", "internal/app/state.go"); "" when none
+     * runs.
+     */
+    "actionLabel": string;
+    "actionTarget": string;
     "contextPercent": number;
     "pendingCount": number;
     "lastError": string;
@@ -2383,6 +2425,20 @@ export interface StepReviewer {
     "turnRunning": boolean;
     "processRunning": boolean;
     "retryAttempt": number;
+
+    /**
+     * TurnStartedAt is when the turn in progress started, RFC 3339; "" without
+     * a turn.
+     */
+    "turnStartedAt": string;
+
+    /**
+     * ActionLabel and ActionTarget are the action the agent runs now, as the
+     * conversation words it ("Reading", "internal/app/state.go"); "" when none
+     * runs.
+     */
+    "actionLabel": string;
+    "actionTarget": string;
     "contextPercent": number;
     "pendingCount": number;
     "lastError": string;
@@ -2492,6 +2548,20 @@ export interface TaskSummary {
     "turnRunning": boolean;
     "processRunning": boolean;
     "retryAttempt": number;
+
+    /**
+     * TurnStartedAt is when the turn in progress started, RFC 3339; "" without
+     * a turn.
+     */
+    "turnStartedAt": string;
+
+    /**
+     * ActionLabel and ActionTarget are the action the agent runs now, as the
+     * conversation words it ("Reading", "internal/app/state.go"); "" when none
+     * runs.
+     */
+    "actionLabel": string;
+    "actionTarget": string;
     "contextPercent": number;
     "pendingCount": number;
     "corrections": number;
