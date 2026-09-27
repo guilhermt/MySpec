@@ -46,6 +46,15 @@ Fica fora: custo em tokens e dólares, e duração de task, etapa e step (`decis
 | P40 | A hora da resposta de uma pergunta estruturada | O tooltip e o nome acessível da pergunta respondida | Task, Review, Discussão | `screens/task.md` §6, §15; a permissão tem `answeredAt`, e a pergunta não |
 | P41 | A porcentagem de contexto no momento da compactação | `Context compacted · at 81%` | Task, Review, Discussão | `screens/task.md` §6, §15; `preTokens` já chega no marcador; falta a janela de contexto no momento |
 
+**Conversas anteriores e fatos da task**
+
+| # | Dado | Para | Telas | Referência |
+|---|---|---|---|---|
+| P42 | A conversa de um lugar que não é o atual: a sessão fechada de uma etapa ou de um step encerrado, lida do banco, somente leitura | As conversas anteriores em `Details` | Task | `screens/task.md` §10, §15; `session.Service.Transcript` lê só as sessões abertas, e uma etapa ou um step encerrado fecha a sua (`flow/service.go`, `flow/step.go`); as entradas ficam no banco. Exposto na task 3 |
+| P43 | As conversas da task, com o lugar e a hora de início | As linhas de conversa em `Details` e quais existem | Task | `screens/task.md` §10; `sessions.created_at`. Exposto na task 3 |
+| P44 | Desfazer o modo de review próprio de um step não iniciado | **Follow the task** no seletor de modo do step | Task | `screens/task.md` §10; `SetStepReviewMode` só grava um modo próprio. Exposto na task 3 |
+| P45 | A branch, a base e o caminho da worktree da task, na implementação | `Details` › Task | Task | `screens/task.md` §10; hoje só a pull request os traz, e o step só o caminho; a tabela `worktrees` os guarda. Exposto na task 3 |
+
 **Pull requests e GitHub**
 
 | # | Dado | Para | Telas | Referência |
@@ -98,7 +107,6 @@ Fica fora: custo em tokens e dólares, e duração de task, etapa e step (`decis
 | F1 | A pilha de navegação e o último item ativo aberto, persistidos entre execuções | `←` `→`, **Continue** | Shell, Board | `structure.md` §1; `screens/board.md` §11 |
 | F2 | Derivados do `State`: a posição curta de cada linha, a gravidade e a ordem do `Ctrl+J`, as contagens dos nós, a marca One-Shot, `checkedAt`, a fase de leitura do GitHub, o progresso de decisão, o tempo de espera (`startedAt`), a situação nova (`situation:started`), se um item que sumiu foi arquivado ou apagado | A árvore, a pílula, a piscada, a página do item que saiu | Shell | `structure.md` §2 |
 | F3 | A passada e a rodada na posição (`3/7 · pass 2`, `round 1`) | A pílula | Task | `screens/task.md` §15; o estado do step já as tem |
-| F4 | A conversa de um lugar que não é o atual | As conversas anteriores em `Details` | Task | `screens/task.md` §15; `GetTranscript(item, stage)` já existe por lugar |
 | F5 | A instrução com que um step e uma One-Shot começaram | `Started with steps/03-token-bucket.md` | Task | `screens/task.md` §15 |
 | F6 | As opções de uma pergunta em texto | A resposta rápida | Task, Discussão | `screens/task.md` §15; heurística sobre `a)` e `1.` no último parágrafo |
 | F7 | `In discussion` de um card que é entrada de uma discussão ativa | A linha e o painel do card | Board | `screens/board.md` §11; `discussions[].cards[]` pela chave `dono/nome#N` |
@@ -121,6 +129,6 @@ Fica fora: custo em tokens e dólares, e duração de task, etapa e step (`decis
 
 | Custo | Linhas |
 |---|---|
-| Backend médio | 2 |
-| Backend pequeno | 37 |
+| Backend médio | 3 |
+| Backend pequeno | 45 |
 | Só frontend | 20 |

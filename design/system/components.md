@@ -80,7 +80,7 @@ Cada componente embrulha um primitivo gerado em `frontend/src/components/ui` (nu
 | | |
 |---|---|
 | Anatomia | Um conjunto só, de traço, em `--icon` (16 px), `--icon-sm` e `--icon-xs`, traço `--icon-stroke`, pontas e junções arredondadas, `currentColor` |
-| Significados fixos | Robô: modo `Agent`. Pessoa: modo `Manual`. `<>`: abrir no editor. Seta externa: abre fora do app (GitHub). Lápis: `Revised`. Cadeia: o gesto publica uma cadeia. Ampulheta: espera (neutra). Visto: feito, aprovado, escolhido. Documento (`file`): um artefato, um relatório, um painel de documentos. Arquivamento (`archive`): o item foi para o History. Merge (`merge`): a PR foi mergeada ou fechada. Lixeira (`trash`): apagado. Os glifos de tipo (task, One-Shot, review, discussão, épico, board) são ícones, não glifos de estado |
+| Significados fixos | Robô: modo `Agent`. Pessoa: modo `Manual`. `<>`: abrir no editor. Seta externa: abre fora do app (GitHub). Lápis: `Revised`. Cadeia: o gesto publica uma cadeia. Ampulheta: espera (neutra). Visto: feito, aprovado, escolhido. Documento (`file`): um artefato, um relatório, um painel de documentos. Arquivamento (`archive`): o item foi para o History. Merge (`merge`): a PR foi mergeada ou fechada. Lixeira (`trash`): apagado. Informação (`details`): o painel `Details`. Card (`card`): o painel `Card`. Balão (`conversation`): uma conversa em `Details`. Histórico (`history`): uma conversa anterior. Reticências (`more`): o menu do item. Pausa (`pause`) e play (`resume`): pausar e retomar. Os glifos de tipo (task, One-Shot, review, discussão, épico, board) são ícones, não glifos de estado |
 | Tokens | `--icon`, `--icon-sm`, `--icon-xs`, `--icon-stroke`, `--ink-3` em repouso, `--brand-ink` ativo |
 | Acessibilidade | `aria-hidden` ao lado de um rótulo; num botão só de ícone, o `aria-label` e o tooltip |
 | Faça | Use um ícone por significado, o mesmo em todo o produto |
@@ -263,9 +263,9 @@ Cada componente embrulha um primitivo gerado em `frontend/src/components/ui` (nu
 
 | | |
 |---|---|
-| Anatomia | Popover (`--surface-3`, `--shadow-float`) com o título e duas opções em `radiogroup`, cada uma com o ícone, o nome e o que faz (`Agent`: *An agent reviews each step with the implementer; clean steps are committed.* `Manual`: *You review each step in VS Code, stage the files and approve.*); embaixo, a quem a troca vale (`Applies to the steps not started that follow the task: 5, 6, 7. Step 4 has its own mode.`) |
+| Anatomia | Popover (`--surface-3`, `--shadow-float`, largura `--size-popover`) com o título e duas opções em `radiogroup`, cada uma com o ícone, o nome e o que faz (`Agent`: *An agent reviews each step with the implementer; clean steps are committed.* `Manual`: *You review each step in VS Code, stage the files and approve.*); embaixo, a quem a troca vale (`Applies to the steps not started that follow the task: 5, 6, 7. Step 4 has its own mode.`) |
 | Variantes | O popover da task. Em **Settings › Defaults**, as mesmas duas opções lado a lado, na página, com `Who reviews the steps of a new task` |
-| Estados | Padrão, hover, foco, escolhida (`--brand-tint`), desabilitado com a razão quando nenhum step resta, salvando (spinner e `· saving…`), erro (`Couldn't save the mode · Try again`) |
+| Estados | Padrão, hover, foco, escolhida (`--brand-tint`), desabilitado com a razão quando nenhum step resta, salvando (spinner no lugar do visto e `Saving…` na nota), erro (`Couldn't save the mode · Try again` na nota) |
 | Teclado | ↑↓ trocam; `Esc` fecha e devolve o foco ao gatilho |
 
 ### Linha de modelo por etapa e popover Models
@@ -294,7 +294,7 @@ Cada componente embrulha um primitivo gerado em `frontend/src/components/ui` (nu
 |---|---|
 | Anatomia | Faixa de `--size-head` com um fio `--line-1` embaixo. **`←`** fantasma de ícone, com o destino no tooltip (`Back to Platform Roadmap · Alt+←`); **`→`** só quando há para onde avançar; o breadcrumb (`Platform Roadmap / API hardening /`, 13 px `--ink-3`, separadores `/` em `--line-deco` com `aria-hidden`), que dobra num `…` com os níveis escondidos no menu dele; o título em `--text-body` e peso 600; à direita, o que o lugar tem |
 | Variantes | **Item**: o stepper ou a pílula, e à direita o medidor (só com a sessão na tela), **Pause** ou **Resume**, o grupo de painéis e `⋯`. **Lista** (board, Reviews): a idade da leitura, **Refresh**, e as ações do lugar. **Home**, **History**, **Settings**: o título; Settings tem **Close** `Esc`. **Arquivado**: `← History`, o glifo do tipo, o título, a etiqueta (`Archived`, `Merged`, `Closed`, `One-Shot`), e à direita o link do GitHub ou do board e `⋯` com **Delete…**. **Página que saiu**: `←` e o nome do item |
-| Largura | Cede pela largura da área principal, em limites fixos, nunca pelo comprimento do que diz: primeiro o que fica em volta do stepper, depois as etapas feitas, depois o laço e a palavra da pílula, por último os nomes da atual e das futuras. O título cede depois de tudo. A tabela está em `screens/task.md` §3 |
+| Largura | Cede pela largura da área principal, em limites fixos, nunca pelo comprimento do que diz: primeiro o que fica em volta do stepper, depois as etapas feitas, depois o laço e a palavra da pílula, por último os nomes das futuras; o nome da etapa atual nunca sai. O título cede depois de tudo. A tabela está em `screens/task.md` §3 |
 | Estados | `←` com o destino; os níveis do breadcrumb são links |
 | Teclado | `Alt+←` e `Alt+→`; `nav` com `aria-label="Breadcrumb"` |
 | Não faça | Não repita no título o glifo de tipo nem a referência: estão na árvore e em `Details` |
@@ -445,10 +445,10 @@ Cada componente embrulha um primitivo gerado em `frontend/src/components/ui` (nu
 | Anatomia | No cabeçalho, depois do título. Uma lista ordenada, sem trilha inteira e sem tempos, com três formas de etapa ligadas por traços de `--space-3` em `--line-2`. **Feita**: visto de `--icon-xs` e o nome em `--ink-3`. **Futura**: círculo de `--glyph-sm` em `--line-deco` e o nome em `--ink-4`. **Atual**: a pílula |
 | Pílula | `--size-control-sm`, `--brand-tint-plane` com anel `--brand-marker-ring`, raio `--radius-pill`: o nome em `--brand-ink` e peso 600, a posição em `--ink-2` com algarismos tabulares (`3/7 · pass 2`), um divisor fino, o glifo do estado e a palavra do estado (`working`, `checks 3/5`, `publishing`, `published`, `paused`) |
 | Variantes | **Stepper da task**: as etapas do modo (Structured: `PRD`, `Tech spec`, `Plan`, `Implementation`, `PR`, `PR review`, `Closing`; One-Shot: `Planning`, `Implementation`, `PR`, `PR review`, `Closing`). **Pílula sozinha** no review (`Pass 1`) e na discussão (`Discussing`, `Round N`). O que cada uma diz em cada momento está em `screens/task.md` §4, `review.md` §4 e `discussion.md` §3 |
-| A situação é dita uma vez | Com a barra do pedido, a pílula mostra só o glifo e a posição; a palavra fica no nome acessível |
+| A situação é dita uma vez | Com uma situação no item, a pílula mostra só o glifo e a posição; a palavra fica no nome acessível |
 | Estados | Hover num ponto dobrado mostra o nome; foco (uma parada de Tab, com o progresso inteiro no nome acessível e a lista das etapas no tooltip); sem ação no clique; pausada (pílula neutra: `--surface-0`, anel `--line-2`, nome `--ink-2`, `paused`); carregando (os nomes com brilho); erro (o losango) |
-| Largura | Abaixo de 1300 px de área principal, os traços saem; de 1200, as feitas ficam só com o visto; de 1040, a pílula perde o laço e a palavra; de 900, as futuras ficam só com o círculo. Os nomes vão ao tooltip e ficam no nome acessível |
-| Acessibilidade | `aria-current="step"` na atual; nome acessível `Progress · Implementation 3/7 · Reviewer asks you` |
+| Largura | Abaixo de 1300 px de área principal, os traços saem; de 1200, as feitas ficam só com o visto; de 1040, a pílula perde o qualificador (o que vem depois de `N/M`) e a palavra; de 900, as futuras ficam só com o círculo. Os nomes vão ao tooltip e ficam no nome acessível. "Abaixo de" é `width < N` |
+| Acessibilidade | `aria-current="step"` na atual; o nome acessível `Progress · <etapa>[ <posição>][ · <qualificador>] · <estado>`, com o estado de uma situação como o anúncio o diz (`waiting for you: question in Reviewer`) ou o que roda (`Implementer working`, `waiting for the checks, 3 of 5 passed`, `paused since 14:52`); as etapas dobradas com `· done` ou `· to come` num texto oculto (`screens/task.md` §4) |
 | Faça | Traga a posição dentro da etapa na pílula |
 | Não faça | Não ponha ação no stepper: **Back to…** e **Discard and restart…** ficam no `⋯` |
 
@@ -460,7 +460,7 @@ Cada componente embrulha um primitivo gerado em `frontend/src/components/ui` (nu
 | Quando existem | Num step `Agent`, da primeira passada do revisor até o commit. A mesma forma serve às abas de uma task arquivada (**PRD**, **Tech spec**, **Steps · 6**, **Pull request**; **One-Shot document** numa One-Shot), sem glifo |
 | Estados | Escolhida: `--ink-1`, peso 600, sublinhada por `--border-2` em `--brand`. A outra: `--ink-3`; hover em `--ink-1`. A de fora diz a palavra só quando espera ou falhou: `Implementer · waits` em `--state-wait`, `Reviewer · error` em `--state-error`, com o que pede no tooltip. Foco: anel por dentro. Desabilitada com a razão (`Reviewer · starts with pass 1`). Carregando (`starting`, spinner) |
 | Teclado | `tablist` com uma parada de Tab, a escolhida; ←→ trocam de aba e abrem a conversa; o produto nunca troca de aba sozinho |
-| Acessibilidade | `role="tab"`, `aria-selected`, `aria-controls` para a conversa; o tempo de espera no nome acessível |
+| Acessibilidade | `role="tab"`, `aria-selected`, `aria-controls` para a conversa; o nome acessível e o tooltip `<Nome>: <estado>` (`Implementer: waits for you: permission, for 4 minutes`, `Reviewer: working`) |
 | Faça | Mantenha o glifo da outra conversa visível: é ele que aponta onde mais se espera |
 | Não faça | Não ponha chip de tempo na aba |
 
@@ -469,7 +469,7 @@ Cada componente embrulha um primitivo gerado em `frontend/src/components/ui` (nu
 | | |
 |---|---|
 | Anatomia | Acima do compositor, na coluna da conversa (`--measure-conversation`), com as mesmas bordas das entradas, `--size-ask` de altura mínima: à esquerda o glifo, o rótulo em 700, o lugar e o chip de tempo; no meio o progresso (`1 of 4 decided`, `5 of 7 files staged · 71%`), nunca a razão que o bloco de erro já diz; à direita as ações |
-| Variantes | **Quieta** (`--surface-0`): o cartão na conversa tem o conteúdo e a resposta, a barra tem **Show**. **Tingida** (`--state-wait-veil`): o pedido sem cartão com ação própria; a barra tem a ação. **De decisão**: tingida, com o progresso, **Next to decide** `Alt ↓` e a primária tracejada com o que falta até tudo estar decidido (**Apply approved**, **Publish review…**). **Erro** (`--state-error-veil` com trilho). **Encerramento**: fundo quieto, rótulo em `--state-close` (`Ready to close`, `Ready to archive`). **A outra conversa espera**: quieta, `● The reviewer waits · Question 18m` com **Go to reviewer**. **A outra conversa falhou**: fundo quieto com o trilho de erro, o losango e o rótulo em `--state-error` 700, `◆ Session error · Reviewer · pass 2` com **Go to reviewer** |
+| Variantes | **Quieta** (`--surface-0`): o cartão na conversa tem o conteúdo e a resposta, a barra tem **Show**. **Tingida** (`--state-wait-veil`): o pedido sem cartão com ação própria; a barra tem a ação. **De decisão**: tingida, com o progresso, **Next to decide** `Alt ↓` e a primária tracejada com o que falta até tudo estar decidido (**Apply approved**, **Publish review…**). **Erro** (`--state-error-veil` com trilho). **Encerramento**: fundo quieto, rótulo em `--state-close` (`Ready to close`, `Ready to archive`). **A outra conversa espera**: quieta, `● The reviewer waits · Question 18m` com **Go to reviewer**. **A outra conversa falhou**: fundo quieto com o trilho de erro, o losango e o rótulo em `--state-error` 700, `◆ Session error · Reviewer · pass 2` com **Go to reviewer**. **Pausada**: o item pausado não tem situação, e a barra mostra o que o estado pede com a ação, quieta, com as duas barras no lugar do glifo, o rótulo em `--ink-1` 700 e sem chip de tempo |
 | Conteúdo | O que cada situação diz e a ação estão em `screens/task.md` §7, `review.md` §10 e `discussion.md` §8 |
 | Estados | A ação segue os estados do botão (`Retrying…`, `Publishing…`). Existe só enquanto o item pede algo; ao nascer com a tela aberta, pisca duas vezes no véu da gravidade e é anunciada |
 | Largura | Quebra em duas linhas antes de esconder uma ação |
@@ -504,8 +504,8 @@ Cada componente embrulha um primitivo gerado em `frontend/src/components/ui` (nu
 
 | | |
 |---|---|
-| Linha em `Details` | Sob cada step commitado e em **Planning** e **Pull request**: `Implementer`, `Reviewer`, `PRD`… com a hora; abre a conversa. Estados: padrão, hover, foco, sendo lida (marcada), carregando (`Opening the conversation…`), erro |
-| Faixa | No lugar do compositor enquanto se lê: `Step 2 · Implementer · an earlier conversation. It takes no more messages.` e **Back to step 3**. A barra do pedido sai enquanto se lê; `Esc` volta; com o painel cobrindo a conversa, abrir uma conversa anterior fecha o painel |
+| Linha em `Details` | Sob cada step commitado e em **Planning** e **Pull request**: `Implementer`, `Reviewer`, `PRD`… com a hora de início; abre a conversa, e um segundo clique volta à atual. A conversa na tela aparece com `now`, sem abrir. Estados: padrão, hover, foco, sendo lida (`aria-pressed`, `--brand-tint-plane` com anel `--brand-marker-ring` e tinta `--brand-ink`), carregando (`Opening the conversation…` com o spinner), erro (`Couldn't open it · Try again`, com o losango, na linha) |
+| Faixa | No lugar do compositor enquanto se lê, `--size-ask`, `--surface-0`, raio `--radius-md`, `--text-meta` `--ink-3`: o ícone `history`, o lugar em `--ink-1` 600, `Step 2 · Implementer · an earlier conversation. It takes no more messages.`, e **Back to step 3** (secundário, tooltip `Back to where the task is · Esc`), com a conversa do lugar atual no rótulo. A conversa anterior abre no começo. A barra do pedido, as abas e o medidor saem enquanto se lê; `Esc` volta; com o painel cobrindo a conversa, abrir uma conversa anterior fecha o painel |
 
 ## A conversa
 
@@ -528,7 +528,7 @@ A conversa é uma coluna centrada de `--measure-conversation` (60rem, 960 px), e
 
 | | |
 |---|---|
-| Anatomia | Uma linha de `--size-control-sm`, sem fios: o chevron no sulco da esquerda quando abre (vazio quando não abre), o ícone de `--icon-sm` em `--ink-4`, o texto em `--ink-2` peso 500 e o complemento em `--ink-3`. A hora fica no fim, só com hover e foco. O que tem conteúdo abre no lugar, num bloco afundado na largura da coluna, com **Open in Artifacts** (ou **Open in Reports**, **Open in Documents**) ao pé |
+| Anatomia | Uma linha de `--size-control-sm`, sem fios: o chevron no sulco da esquerda quando abre (vazio quando não abre), o ícone de `--icon-sm` em `--ink-4`, o texto em `--ink-2` peso 500 e o complemento em `--ink-3`. A hora fica no fim, só com hover e foco. O que tem conteúdo abre no lugar, num bloco afundado na largura da coluna, com **Open in Artifacts** (ou **Open in Details** num relatório da task, **Open in Reports**, **Open in Documents**) ao pé |
 | Variantes | **Evento**: etapa ou step iniciado (`Started with steps/03-token-bucket.md`), documento escrito, relatório escrito (`Review 1 written · changes · 2 findings`), commit, PR aberta, merge, checks lidos antes da passada, commits novos, `Context compacted · at 81%`, `Paused by you`. **Retried on its own**: o rastro de um retry automático que deu certo (`the API was overloaded · 2 attempts`), sem hora. **Decisão do usuário**: `You approved the draft`, `You decided · 3 approved, 1 discarded`. **Mensagem do produto**: o ícone do produto, `MySpec → Implementer` em peso 400 e `Review 1 · 2 findings · round 1 of 3`, com o Markdown enviado a um clique. **Que se atualiza**: `Published · round 1 · 2 so far`, depois o total. **Com erro**: o losango e o trilho (`Publication stopped · round 1 · …`) |
 | Estados | Padrão, hover (a hora aparece), foco, aberto, desabilitado (conteúdo descartado por um recomeço: sem chevron, texto em `--ink-3`), carregando (o brilho da leitura), erro (`Couldn't read … · Try again`, em `--state-error-veil`). Um marco novo que pede algo pisca no véu da gravidade |
 | Teclado | Só o que abre é parada no percurso das setas: `→` abre, `←` fecha, `Enter` e `Space` alternam |
@@ -631,8 +631,9 @@ A conversa é uma coluna centrada de `--measure-conversation` (60rem, 960 px), e
 
 | | |
 |---|---|
-| Anatomia | Bloco afundado: o cabeçalho (`◌ Waiting for checks · 4 of 6 passed`, `checked 40s ago`), uma linha por check (glifo, nome em mono, estado: `passed`, `running` em 500, `queued`, `failed` em vermelho, e a duração), e ao pé o que espera (`The first pass starts when e2e / chromium and preview-deploy finish. MySpec reads web#2291 every minute; you can leave meanwhile.`) |
-| Variantes | Ao vivo (a espera, no vazio do PR review e do review); lidos antes de uma passada (atrás do marco `Checks read before pass 1`); no painel da PR, com o resumo (`3 of 5 passed · 2 not finished`) |
+| Anatomia | Bloco afundado: o cabeçalho (`◌ Waiting for checks · 4 of 6 passed`, `checked just now`), uma linha por check (glifo, nome em mono, estado: `passed`, `running` em 500, `queued`, `failed` em vermelho, e a duração), e ao pé o que espera (`The first pass starts when e2e / chromium and preview-deploy finish. MySpec reads web#2291 every minute; you can leave meanwhile.`) |
+| Variantes | Ao vivo (a espera, no vazio do PR review e do review); lidos antes de uma passada (atrás do marco `Checks read before pass 1`); no painel da PR e em `Details` da task, com o resumo (`3 of 5 passed · 2 not finished`, `· 1 failed`, `· merges clean` ou `· conflict with dev`), `Not read yet` sem leitura e `No checks` sem checks |
+| Linha | O glifo (visto em `passed`, losango em `failed`, spinner em `running`, círculo em `queued`, visto em `--ink-4` em `skipped`), o nome em mono, o estado e a duração (`1m 52s`; rodando, desde o início, a cada segundo; na fila, `—`). `passed` conta `skipped` e `neutral`, como o GitHub |
 | Estados | Carregando (a primeira leitura, com brilho), erro de leitura |
 | Não faça | Não use âmbar: a espera é do GitHub, não do usuário |
 
@@ -865,3 +866,4 @@ Os tokens de medida e de layout da conversa, das listas, do painel da lista, do 
 | `--col-result` | `calc(var(--space-16) * 4)` | Linha do History |
 | `--col-time` | `var(--space-12)` | Linha do History |
 | `--snav-w` | `calc(var(--space-16) * 3 + var(--space-4))` | Navegação de Settings |
+| `--size-popover` | `22rem` | Os popovers Review mode e Models |

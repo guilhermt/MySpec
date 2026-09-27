@@ -114,7 +114,7 @@ Nas fórmulas: `N/M` é o step e o total, `<etapa>` é `PRD`, `Tech spec`, `Plan
 | `changes_review` | `Review changes · <lugar>`; com stage, `· P% staged`; pronto, `Approve changes · <lugar>`. Lugar: `PR review` na task, `pass K` no review | Sem o `% staged` |
 | `pr_trouble` | `Checks failed`, `Conflict with base` ou `Checks failed · conflict`, seguido de `PR #P` na task e de `pass K` no review | Na task, `#P` no lugar de `PR #P` |
 | `pr_closed` | `PR closed unmerged · #P` | igual |
-| `merge` | `Ready to merge · PR #P`; ao encerrar, `Ready to close · PR #P merged`; no review, `Ready to merge · pass K` | `Ready to merge · #P`, `Ready to close · #P` |
+| `merge` | `Ready to merge · PR #P`; com o encerramento oferecido, `Ready to close · PR #P merged` com o merge confirmado e `Ready to close · PR #P` com a leitura falha; no review, `Ready to merge · pass K` | `Ready to merge · #P`, `Ready to close · #P` |
 | `review_report` | `Decide findings · pass K · a of b`; `Ready to publish · pass K`; `Ready to apply · pass K` | `Decide findings · a/b`; as outras iguais |
 | `new_commits` | `New commits · pass K` | igual |
 | `pass_blocked` | `Pass blocked · pass K`, a passada que o app pediu | igual |
@@ -220,13 +220,13 @@ Todo o resto fica fechado, nos painéis ou no menu `⋯`. Um painel aberto fica 
 
 **O progresso.** Na task, o **stepper**: as etapas nomeadas, a feita com o visto, a atual como pílula com a posição (`Implementation 3/7 · pass 2`) e o glifo do estado, a futura com o círculo, sem trilha inteira nem tempos (`screens/task.md` §4). No review e na discussão, a **pílula** sozinha: `Pass 1`, `Discussing`, `Round N` (`review.md` §4, `discussion.md` §3). O progresso não tem ação.
 
-**Largura.** O topo cede pela largura da área principal, em limites fixos: primeiro o que fica em volta do progresso (o breadcrumb dobra, os painéis ficam só com o ícone, **Pause** só com o ícone, o medidor só com a porcentagem), depois as etapas feitas, depois o laço e a palavra da pílula, por último os nomes da atual e das futuras. O título cede depois de tudo. Os limites estão em `screens/task.md` §3. Na metade do monitor, o stepper ainda nomeia a atual e as futuras.
+**Largura.** O topo cede pela largura da área principal, em limites fixos: primeiro o que fica em volta do progresso (o breadcrumb dobra, os painéis ficam só com o ícone, **Pause** só com o ícone, o medidor só com a porcentagem), depois as etapas feitas, depois o laço e a palavra da pílula, por último os nomes das futuras; o nome da etapa atual nunca sai. O título cede depois de tudo. Os limites estão em `screens/task.md` §3. Na metade do monitor, o stepper ainda nomeia a atual e as futuras.
 
-**O `⋯`** tem as ferramentas do item e as ações raras e destrutivas, agrupadas por assunto, com o destrutivo por último, em vermelho: na task, as do step (**Review myself**, **Open in VS Code**, **Discard step N…**), as da PR (**Open PR**, **Refresh PR**, **Review again…**), as do planejamento e da task (**Review mode ›**, **Models ›**, **Back to <etapa>…**, **Discard and restart the <etapa>…**, **Delete task…**); no review, **Open PR**, **Refresh PR**, **Open in VS Code**, **Review again…** e **Delete review…**; na discussão, **Open <board>**, **Group drafts into an epic…**, **Archive…** e **Delete discussion…**. Cada destrutiva diz antes o que será perdido. Um item desabilitado diz por quê ao lado. O conteúdo exato está no documento de cada tela.
+**O `⋯`** tem as ferramentas do item e as ações raras e destrutivas, agrupadas por assunto, com o destrutivo por último, em vermelho: na task, as do step (**Review myself**, **Open in VS Code**, **Discard step N…**), as da PR (**Open PR**, **Refresh PR**, **Review again**, que na task pede a passada sem diálogo), as do planejamento e da task (**Review mode ›**, **Models ›**, **Back to <etapa>…**, **Discard and restart the <etapa>…**, **Delete task…**); no review, **Open PR**, **Refresh PR**, **Open in VS Code**, **Review again…** e **Delete review…**; na discussão, **Open <board>**, **Group drafts into an epic…**, **Archive…** e **Delete discussion…**. Cada destrutiva diz antes o que será perdido. Um item desabilitado diz por quê ao lado. O conteúdo exato está no documento de cada tela.
 
 ### A situação é dita uma vez
 
-Enquanto a barra do pedido existe, o topo e o cartão não repetem a situação: a pílula mostra só o glifo e a posição, e a palavra fica no nome acessível. O glifo, o rótulo, o tempo e a ação da situação ficam na barra do pedido. Sem barra, a pílula diz o que roda: `working`, `checks 3/5`, `publishing`, `paused`.
+Enquanto o item tem uma situação, o topo e o cartão não a repetem: a pílula mostra só o glifo e a posição, e a palavra fica no nome acessível. O glifo, o rótulo, o tempo e a ação da situação ficam na barra do pedido. Sem situação, a pílula diz o que roda: `working`, `checks 3/5`, `publishing`, `paused`.
 
 ### Abas `Implementer` e `Reviewer`
 
@@ -234,7 +234,7 @@ Duas abas de texto sobre um fio, cada uma com o glifo da sua sessão. A escolhid
 
 ### A conversa
 
-- É uma coluna de leitura centrada, com medida própria (800 px). A largura que sobra fica dos lados.
+- É uma coluna centrada de `--measure-conversation` (960 px), e tudo o que está nela, a barra do pedido, o compositor e as abas têm as mesmas bordas. Numa área principal mais estreita, a coluna ocupa a área menos `--space-6` de cada lado. A largura que sobra fica dos lados.
 - Reúne as falas do agente, as mensagens do usuário e as da fila, os grupos de ações dobrados (rotulados pela descrição que o agente escreveu, com o subagente aninhado), a atividade, os marcos, os cartões e os blocos de erro.
 - **Marcos.** Os eventos do workflow e as mensagens do produto são marcos de uma linha, que abrem o conteúdo no lugar: etapa ou step iniciado com a instrução, documento escrito, relatório escrito, mensagem do produto ao agente, commit, PR aberta, merge, checks lidos, decisões do usuário, publicação, rodadas. Uma rodada ou um cartão substituído dobra num marco.
 - **Cartões.** O que o usuário responde ou decide mora na conversa, num cartão: a pergunta e a permissão (com anel âmbar e barra quieta); os arquivos de um step `Manual`, os apontamentos de um review e os rascunhos de uma discussão (cartões neutros, com a barra do pedido tingida como barra de decisão); o rascunho da PR, editável. Não há coluna de decisão.
@@ -281,8 +281,8 @@ Tem quatro formas: **quieta**, quando um cartão na conversa tem o conteúdo e a
 **Único lugar da ação e as exceções.** A ação que resolve uma situação fica na barra do pedido e em nenhum outro lugar da tela. As exceções são três, cada uma por uma razão:
 
 - **Ação de uma parte de um cartão.** Ela fica na parte, porque age só sobre ela: **Retry** de uma publicação que falhou, no rascunho em que ela parou; a decisão de cada apontamento e de cada rascunho. A barra do pedido leva até a parte (**Show**, **Next to decide**) e não repete a ação.
-- **Ferramenta do item disponível a qualquer momento que também resolve uma situação.** **Discard step N…**, **Delete task…**, **Review again…** e **Archive…** ficam no `⋯`, porque existem fora de qualquer situação. Quando uma delas é a saída de uma situação (`step_empty`, `pr_closed`, `new_commits`, pronta para arquivar), a barra do pedido a repete, porque é para lá que o olho do usuário vai.
-- **Pausar e retomar.** **Pause** e **Resume** ficam só no cabeçalho. Um item pausado não espera por ninguém, então não tem barra do pedido. A pílula diz `paused`, o marco `Paused by you` diz desde quando, e o compositor diz que enviar retoma.
+- **Ferramenta do item disponível a qualquer momento que também resolve uma situação.** **Discard step N…**, **Discard draft**, **Delete task…**, **Review again** (na task; **Review again…** no review) e **Archive…** ficam no `⋯`, porque existem fora de qualquer situação. Quando uma delas é a saída de uma situação (`step_empty`, `draft`, `pr_closed`, `new_commits`, pronta para arquivar), a barra do pedido a repete, porque é para lá que o olho do usuário vai.
+- **Pausar e retomar.** **Pause** e **Resume** ficam só no cabeçalho. Um item pausado não espera por ninguém: não tem situação, não notifica e fica fora do `Ctrl+J`. A barra do pedido continua com o que o estado do item pede e com a ação (aprovar, continuar, abrir a PR, encerrar), na forma quieta, com as duas barras no lugar do glifo e sem o chip de tempo, porque a espera não conta; a ação retoma a sessão, como hoje. A pílula diz `paused`, o marco `Paused by you` diz desde quando, e o compositor diz que enviar retoma.
 
 **Mais de uma situação.** A barra fala da conversa em tela. A outra está na aba dela. Se só a outra conversa espera, a barra diz isso e leva até lá (**Go to reviewer**).
 
@@ -389,7 +389,7 @@ O design funciona de 1100 a 2600 px, sem pontos fixos de janela. Cada regra depe
 | Lateral | `clamp(288px, 8vw + 200px, 380px)`: 288 px a 1100, 300 a 1250, 380 a partir de cerca de 2250. Recolhida, 60 px |
 | Linha da árvore | Lateral abaixo de 330 px: o meta sai, os rótulos passam à forma curta e o medidor fica só com a porcentagem. A posição nunca sai. A ação passa à forma curta sempre que a longa não cabe: o verbo primeiro; de um caminho, `…/` e o último segmento; de um comando, o executável, o subcomando e o último segmento do primeiro caminho, sem as flags (`Running go test …/ratelimit`) |
 | Cabeçalho do item | Cede em ordem, pelos limites de `screens/task.md` §3 (1660, 1440, 1360, 1300, 1200, 1040 e 900 px de área principal) |
-| Conversa | Medida de 800 px, centrada |
+| Conversa | `--measure-conversation` (960 px), centrada em pixel inteiro; numa área mais estreita, a área menos `--space-6` de cada lado |
 | Painéis do item | A regra da seção 3 |
 | Lista do board e de Reviews | 70rem centrada. Abaixo de 1040 px de lista, o que não é número, título e teclas desce para uma segunda linha; o título tem sempre um terço da linha. O painel da lista (`clamp(360px, 42%, 640px)`) fica ao lado enquanto a lista mantém 440 px |
 | Lista do History | As colunas até 860 px de lista; abaixo, onde e o resultado descem para a segunda linha |
@@ -414,7 +414,7 @@ O design funciona de 1100 a 2600 px, sem pontos fixos de janela. Cada regra depe
 | Erro de um item | O mesmo, com os três portadores do erro e o bloco de erro na conversa |
 | Agente trabalhando | As linhas 2 e 3 da árvore, a pílula com `working`, o grupo vivo na conversa, o relógio do turno, **Stop** e a fila no compositor |
 | Esperando o GitHub | A linha, a pílula com `checks N/M` e o bloco na conversa com os checks pelo nome. Antes da primeira passada, o vazio diz que a conversa começa quando os checks terminam, sem compositor |
-| Pausado, ocioso | Glifos e rótulos diferentes. A pílula neutra diz `paused`, o marco `Paused by you` diz desde quando, e o compositor diz que enviar retoma. Ocioso: a próxima mensagem retoma sem aviso |
+| Pausado, ocioso | Glifos e rótulos diferentes. A pílula neutra diz `paused`, a barra do pedido fica quieta com o que o estado pede, sem chip de tempo, o marco `Paused by you` diz desde quando, e o compositor diz que enviar retoma. Ocioso: a próxima mensagem retoma sem aviso |
 | Item que saiu enquanto aberto | A página da seção 1 |
 | Item que saiu sem estar aberto | Um toast para a task, o review ou a discussão, com o resultado curto e **Open in History** |
 | Aviso do app | Uma ação sem lugar próprio que falhou: uma faixa no topo da área principal, com o trilho de erro, o rótulo com a ação (`Couldn't pause Rate limit per API key`) e o que fazer, até ser dispensada. Uma por vez |

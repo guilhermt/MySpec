@@ -41,7 +41,7 @@ Da esquerda para a direita:
 - **o stepper** (seção 4);
 - à direita, o **medidor de contexto** (só com uma sessão na tela), **Pause** ou **Resume**, o grupo de painéis **Details**, **Artifacts** e **Card**, e **`⋯`**.
 
-**Regra de largura.** O topo cede pela largura da área principal (container query em `main`), em limites fixos, nunca pelo comprimento do que diz. A ordem é esta: primeiro o que fica em volta do stepper, depois as etapas feitas, depois o laço e a palavra da pílula, e por último os nomes da atual e das futuras. O título cede depois de tudo.
+**Regra de largura.** O topo cede pela largura da área principal (container query em `main`), em limites fixos, nunca pelo comprimento do que diz. A ordem é esta: primeiro o que fica em volta do stepper, depois as etapas feitas, depois o laço e a palavra da pílula, e por último os nomes das futuras; o nome da etapa atual nunca sai. O título cede depois de tudo.
 
 | Área principal abaixo de | O que muda |
 |---|---|
@@ -50,8 +50,10 @@ Da esquerda para a direita:
 | 1360 px | **Pause** fica só com o ícone |
 | 1300 px | O medidor fica só com a porcentagem; os traços entre as etapas saem |
 | 1200 px | As etapas feitas ficam só com o visto; o nome vai ao tooltip e continua no nome acessível |
-| 1040 px | A pílula perde o laço (`3/7`, sem `· round 1`) e a palavra `working` (o spinner fica, e a palavra continua no nome acessível e no compositor) |
-| 900 px | As etapas futuras ficam só com o círculo |
+| 1040 px | A pílula perde o qualificador, tudo o que vem depois de `N/M` (`· round 1`, `· pass 2`, `· Manual`, `· committing`, `· preparing`, `· revisiting`), e a palavra `working` (o glifo fica, e os dois continuam no nome acessível; numa One-Shot, que não tem `N/M`, o qualificador fica) |
+| 900 px | As etapas futuras ficam só com o círculo; o espaço entre as ferramentas da direita vai de `--space-2` a `--space-1` |
+
+"Abaixo de N" é a container query `width < N` em `main`: no limite exato, a forma larga vale.
 
 Na metade do monitor, com 1250 a 1300 px de janela (950 a 1000 px de área principal), o stepper ainda mostra a atual e as futuras pelo nome: `✓ ✓ ✓ [Implementation 3/7 ◌] ○ PR ○ PR review ○ Closing`.
 
@@ -70,7 +72,7 @@ Na metade do monitor, com 1250 a 1300 px de janela (950 a 1000 px de área princ
   - o glifo de estado da situação ou do trabalho;
   - a palavra do estado, que aparece só quando não há barra do pedido.
 
-**A situação é dita uma vez.** Enquanto a barra do pedido existe, a pílula mostra só o glifo e a posição, e a palavra fica no nome acessível. Sem barra, a pílula diz o que roda: `working`, `checks 3/5`, `paused`.
+**A situação é dita uma vez.** Enquanto a task tem uma situação, a barra do pedido a diz, e a pílula mostra só o glifo e a posição, com a palavra no nome acessível. Sem situação, a pílula diz o que roda: `working`, `checks 3/5`, `paused`.
 
 **O que a pílula mostra.**
 
@@ -94,9 +96,11 @@ Na metade do monitor, com 1250 a 1300 px de janela (950 a 1000 px de área princ
 | Pronta para merge ou para encerrar | `Closing` | anel verde |
 | Pausada | a pílula neutra (`--surface-0`, anel `--line-2`, nome em `--ink-2`) · `paused` | duas barras |
 
+Os outros momentos seguem as mesmas regras. O agente trabalhando tem o spinner e `working` só com a sessão do lugar (a da etapa, a do laço do step, a da PR) trabalhando ou começando; parada sozinha, a pílula fica sem glifo. O app trabalhando tem o spinner e `working`: o step preparando (`Implementation 5/7 · preparing`), todos os steps commitados antes da PR (`Implementation 7/7`), a PR preparando, escrevendo o rascunho ou abrindo (`PR`), o PR review commitando (`PR review pass 1 · committing`) e o encerramento (`Closing`). Antes da primeira leitura dos checks, ou sem nenhum check, a palavra é `checking GitHub`, com o brilho. `checks a/b` conta os que passaram, `skipped` e `neutral` incluídos, de todos. Sem situação e sem nada rodando, a pílula tem só o nome e a posição, sem glifo e sem divisor. Numa task One-Shot a implementação não tem `N/M`, e o qualificador toma o lugar da posição (`Implementation pass 2`); uma implementação sem nenhum step também fica sem posição. No PR review, `pass K` conta os relatórios quando a passada já escreveu o seu (a decisão, as mudanças, o commit, a espera do merge, o problema depois do review) e os relatórios mais um da partida da passada até o relatório dela (a passada rodando, a resposta que ela espera); esperando os checks, não há posição. A pílula nunca repete o que a barra, o cartão ou o bloco de erro dizem.
+
 **Estados do componente.**
 - **Hover** num ponto dobrado mostra o tooltip com o nome.
-- **Foco:** o stepper é uma parada de Tab. Tem o progresso inteiro como nome acessível (`Progress · Implementation 3/7 · Reviewer asks you`) e o tooltip com a lista completa (`✓ PRD  ✓ Tech spec  ✓ Plan  ● Implementation  ○ PR…`).
+- **Foco:** o stepper é uma parada de Tab. Tem o progresso inteiro como nome acessível, `Progress · <etapa>[ <posição>][ · <qualificador>] · <estado>` (`Progress · Implementation 3/7 · pass 2 · waiting for you: question in Reviewer`, `Progress · PR review · waiting for the checks, 3 of 5 passed`, `Progress · Implementation 3/7 · round 1 · Implementer working`), e o tooltip com a lista completa (`✓ PRD  ✓ Tech spec  ✓ Plan  ● Implementation 3/7 · pass 2  ○ PR  ○ PR review  ○ Closing`), com `Paused since 14:52` numa segunda linha quando pausada e a hora da pausa é conhecida. O estado com situação é o tom (`error`, `waiting for you`, `ready to close`) e o que ela pede com o lugar, como no anúncio da região ao vivo, com `, and N more` quando há outras.
 - **Pressionado:** nenhum. O stepper não tem ação. **Back to…** e **Discard and restart…** ficam no `⋯` (seção 10).
 - **Desabilitado:** a task pausada, com a pílula neutra.
 - **Carregando** (a primeira leitura da task): os nomes com brilho.
@@ -110,7 +114,9 @@ A etapa atual tem `aria-current="step"`.
 
 **Forma.** Duas abas de texto, alinhadas à esquerda na coluna da conversa, sobre um fio `--line-1`, sem fundo. Cada uma tem o glifo da sua sessão (`--glyph-sm`) e o nome. A escolhida fica em `--ink-1`, peso 600, sublinhada por `--border-2` em `--brand`. A outra fica em `--ink-3`. A aba de fora diz a palavra só quando espera ou falhou: `Implementer · waits` em `--state-wait`, `Reviewer · error` em `--state-error`. O que ela pede (`Permission, 4 minutes`) fica no tooltip e no nome acessível.
 
-**Qual abre.** A conversa de quem tem a vez. Com os dois esperando, abre a do pedido mais antigo, que é o mesmo que o chip da árvore mostra. O produto nunca troca de aba sozinho depois disso.
+**Qual abre.** A conversa de quem tem a vez: a do pedido, e com os dois esperando, a do pedido mais antigo, que é o mesmo que o chip da árvore mostra; sem pedido, a do revisor durante uma passada e a do implementador no resto. A primeira abertura guarda a escolha do step, e o produto nunca troca de aba sozinho depois disso; só o usuário, `Ctrl+J` e a notificação trocam.
+
+**Nome e tooltip.** `<Nome>: <estado>`, com o estado `waits for you: permission, for 4 minutes`, `error: session error, for 5 minutes`, `working`, `starting`, `paused` ou `idle`.
 
 **Estados.**
 - Padrão, hover (tinta `--ink-1`), foco (anel por dentro) e escolhida.
@@ -140,7 +146,7 @@ Uma coluna só: a fala, a sua mensagem, os grupos de ações, o código, as tabe
 | **Grupo vivo** | Dobrado como os outros. O resumo é a ação em curso, com spinner: `11 actions ◌ Run the refill and eviction tests go test ./internal/ratelimit/…` |
 | **Subagente** | Um comando do grupo, `Delegated · Find why e2e / rate-limit-burst failed`, que abre os comandos do subagente recuados sob um fio, com o próprio resumo (`44 actions · Read 21 · Searched 14 · GitHub 9`) |
 | **Mensagem do produto** | Um marco de uma linha com o ícone do produto: `MySpec → Implementer · Review 1 · 2 findings · round 1 of 3`. O conteúdo em Markdown abre no lugar, com um clique no chevron |
-| **Marcadores** | Uma linha discreta, na borda da coluna: o chevron no sulco quando abre, o ícone de `--icon-sm` em `--ink-4`, o texto em `--ink-2` e o complemento em `--ink-3`. São eles: `Started with steps/03-token-bucket.md`, `Written PRD.md`, `Review 1 written · changes · 2 findings`, `Committed c19f02e`, `Opened #1284`, `Merged #1284 into dev · by lnakamura`, `Checks read before pass 1 · 4 of 5 passed…`, `Context compacted · at 81%`, `Paused by you`, e as decisões do usuário (`You approved the draft`, `You decided · 3 approved, 1 discarded`, `You approved the changes · 3 files staged`). Os que têm conteúdo (documento, relatório, instrução inicial, card de entrada) abrem no lugar, e o conteúdo tem **Open in Artifacts** ao pé |
+| **Marcadores** | Uma linha discreta, na borda da coluna: o chevron no sulco quando abre, o ícone de `--icon-sm` em `--ink-4`, o texto em `--ink-2` e o complemento em `--ink-3`. São eles: `Started with steps/03-token-bucket.md`, `Written PRD.md`, `Review 1 written · changes · 2 findings`, `Committed c19f02e`, `Opened #1284`, `Merged #1284 into dev · by lnakamura`, `Checks read before pass 1 · 4 of 5 passed…`, `Context compacted · at 81%`, `Paused by you`, e as decisões do usuário (`You approved the draft`, `You decided · 3 approved, 1 discarded`, `You approved the changes · 3 files staged`). Os que têm conteúdo (documento, relatório, instrução inicial, card de entrada) abrem no lugar, e o conteúdo tem **Open in Artifacts** ao pé, ou **Open in Details** num relatório, que mora em `Details` |
 | **Retry automático** | Enquanto a API recusa: a atividade `Retrying · attempt 3 of 10 · the API is overloaded · next try in 8 s`, com spinner, sem cor de alarme. Depois que passa, fica o marco `Retried on its own · the API was overloaded · 2 attempts` |
 | **Dobra de trecho** | Numa sessão longa, cada trecho anterior à rodada atual dobra numa linha com o ícone do histórico: `5 speeches · 71 actions  from the start · steps/06-throttle-metrics.md`, `4 speeches · 44 actions  from Review 1 · 3 findings · round 1 of 3`. Aberta, mostra as entradas como eram. O trecho vai de uma mensagem do produto que abre uma rodada à próxima |
 | **Código longo** | Acima de 24 linhas, o bloco mostra as 20 primeiras, com **Show all 46 lines** num rodapé; aberto, **Show less** |
@@ -151,7 +157,7 @@ Uma coluna só: a fala, a sua mensagem, os grupos de ações, o código, as tabe
 | **Atividade** | `Starting session…`, `Thinking…`, `Retrying · attempt 3 of 10 · …`, com spinner, no fim |
 | **Cartão de review `Manual`** | Neutro (`--surface-2`, `--shadow-xs`), na largura da coluna, com o cabeçalho `Changed files · 7` e um arquivo por linha: o glifo, o tipo (`M`, `A`, `D`), o caminho (que abre no VS Code) e `staged`, `1 hunk left` ou `not staged`. O progresso fica na barra |
 | **Cartão de apontamentos** | Seção 9 |
-| **Estado vazio** | Um lugar sem conversa ainda. No PR review antes da primeira passada aparece `The review starts when the checks finish.`, com o que falta, e o bloco dos checks pelo nome (`build passed 1m 52s`, `e2e / rate-limit-burst running 4m 12s`, `preview-deploy queued`) com `checked 40s ago` |
+| **Estado vazio** | Um lugar sem conversa ainda. No PR review antes da primeira passada aparece `The review starts when the checks finish.`, com o que falta, e o bloco dos checks pelo nome (`build passed 1m 52s`, `e2e / rate-limit-burst running 4m 12s`, `preview-deploy queued`) com `checked just now` |
 
 **A volta ao fim.** Fora do fim, um botão flutuante acima da barra do pedido volta ao fim. Ele diz `New messages` com o número do que chegou desde que o usuário saiu do fim, e quem trabalha: `↓ New messages 2 | ◌ Implementer writing`. Some no fim.
 
@@ -183,6 +189,8 @@ Fica acima do compositor, na coluna da conversa, com a mesma borda esquerda e di
 - A barra fala da conversa na tela.
 - Quando só a outra conversa do step espera, a barra diz isso e leva até lá: `● The reviewer waits · Question 18m [Go to reviewer]`. Com erro: `◆ Session error · Reviewer · pass 2 [Go to reviewer]`.
 - Quando as duas esperam, a barra fala da conversa na tela, e a aba de fora aponta a outra com o glifo e `waits`.
+- `step_review` e `step_empty` são do step, não de uma conversa: a barra os mostra nas duas abas.
+- **Pausada**, a task não tem situação (não espera por ninguém), mas a barra continua com o que o estado do step, da PR ou da etapa pede e com a ação, na forma quieta, com as duas barras no lugar do glifo e sem chip de tempo; a ação retoma a sessão. As situações da própria sessão (pergunta, permissão, erro) não aparecem na barra enquanto ela está pausada.
 
 | Situação | A barra diz | Ação | Teclas | Variante |
 |---|---|---|---|---|
@@ -197,13 +205,14 @@ Fica acima do compositor, na coluna da conversa, com a mesma borda esquerda e di
 | `ready_to_continue` | `Ready to continue · Tech spec` | **Continue** | — | tingida |
 | `step_review` (`Manual`, ou depois de três rodadas ou de **Review myself**) | `Review step 4 9m` · `5 of 7 files staged · 71%`, depois `Approve step 4` | **Open in VS Code**, **Approve** (tracejado com `Stage 2 more files` até 100%) | — | tingida |
 | `step_empty` | `Step 4 has no changes` | **Discard step 4…** (repetida do `⋯`); pedir uma mudança pelo compositor | — | tingida |
-| `draft` | `Draft to approve` | **Approve draft** (primária), **Discard draft**. O rascunho, editável, fica na conversa | — | tingida |
+| `draft` | `Draft to approve` | **Approve draft** (primária), **Discard draft** (repetida do `⋯`). O rascunho, editável, fica na conversa | — | tingida |
 | `findings` | `Findings to decide · PR review · pass 1 12m` · `1 of 4 decided` | **Next to decide** `Alt ↓`, **Apply approved** (tracejado com `Decide 3 more`) | `A` e `D` no apontamento em foco, `Alt+↓` e `Alt+↑` | tingida |
 | `changes_review` | `Review changes` · `3 of 5 files staged`, depois `Approve changes` | **Open in VS Code**, **Approve** | — | tingida |
-| `pr_trouble` | `Checks failed`, `Conflict with base` ou `Checks failed · conflict`, com os checks pelo nome | **Review again** | — | erro |
+| `pr_trouble` | `Checks failed`, `Conflict with base` ou `Checks failed · conflict`, com os checks pelo nome; com a leitura falha, `Couldn't confirm the merge` | **Review again**; com a leitura falha e o encerramento oferecido, **Close task** secundário | — | erro |
 | `pr_closed` | `PR closed unmerged` | **Delete task…** (repetida do `⋯`) | — | erro |
-| `merge` | `Ready to merge · #1284` | **Open PR** | — | tingida |
-| `merge` (encerrar) | `Ready to close · #1284 merged 2h` · `Removes the worktree and the branch, then updates dev` | **Close task** (primária) | — | encerramento |
+| `merge` (forma `merge`, a PR esperando o merge) | `Ready to merge · #1284` | **Open PR** | — | tingida |
+| `merge` (forma `close`, o merge sem confirmação: a leitura falhou) | `Ready to close · #1284` · `Couldn't confirm the merge · Removes the worktree and the branch, then updates dev` | **Open PR**, **Close task** (primária) | — | encerramento |
+| `merge` (forma `close`, mergeada) | `Ready to close · #1284 merged 2h` · `Removes the worktree and the branch, then updates dev` | **Close task** (primária) | — | encerramento |
 
 A barra é `role="region"` com nome, e o texto de estado é `role="status"`. Um botão desabilitado tem borda tracejada e a razão ao lado, ligada por `aria-describedby`.
 
@@ -245,15 +254,18 @@ Os painéis ficam fechados por padrão e nunca abrem sozinhos. Abre um de cada v
 
 **`Details`**
 - **Steps** (`Steps · 2 of 7 committed`), uma linha por step:
-  - **commitado:** o visto, `N · título` e o SHA. Abaixo vêm as conversas (`Implementer`, `Reviewer`) e os relatórios (`Review 1 · changes`, `Review 2 · clean`);
-  - **atual:** o glifo da situação e `now · Agent`, em identidade;
+  - **commitado:** o visto, `N · título`, o SHA e a hora do commit (`c19f02e · 13:48`, o assunto no tooltip). Abaixo vêm as conversas (`Implementer`, `Reviewer`, com a hora de início) e os relatórios (`Review 1 · changes`, `Review 2 · clean`);
+  - **atual:** o glifo da situação e `now · Agent`, em identidade, e abaixo os relatórios da passada, sem as linhas de conversa, que estão nas abas;
   - **não iniciado:** dois seletores, o de modo (robô e `Agent`, ou pessoa e `Manual`) e o de modelo (`Sonnet · high`). Um step com escolha própria aparece em `--ink-1`, peso 500, e um que segue a task aparece em `--ink-3`. **Follow the task** desfaz o modo próprio.
 - **Planning:** as conversas do PRD, do tech spec e do plano, com a hora de início.
-- **Pull request**, a partir da PR:
-  - a conversa do rascunho e da abertura;
-  - o número e a base;
-  - os checks pelo nome, com o estado e a duração;
+- **Pull request**, a partir da etapa de PR:
+  - as conversas `Draft and opening` e `PR review`, e sob esta os relatórios de cada passada (`Review 1 · changes`);
+  - com a PR aberta, o número e a base;
+  - os checks pelo nome, com o estado e a duração, e se a branch merge limpa;
   - a última leitura.
+- Numa task One-Shot, **Implementation** toma o lugar de **Steps**: o step único, sem número, com as conversas e os relatórios.
+
+A conversa na tela aparece na lista com `now`, sem abrir. Um relatório abre no lugar da lista, dentro de `Details`, com **← Details** e o título.
 - **Task:**
   - repositório com o clone, card, épico, modo (fixo);
   - **Review mode** e **Models**, que são botões e abrem os popovers;
@@ -263,21 +275,25 @@ Os painéis ficam fechados por padrão e nunca abrem sozinhos. Abre um de cada v
 - no lugar do compositor fica a faixa `Step 2 · Implementer · an earlier conversation. It takes no more messages.` com **Back to step 3**;
 - a barra do pedido sai enquanto se lê o passado, e o stepper e a árvore continuam dizendo o que espera;
 - `Esc` volta;
-- com o painel cobrindo a conversa, abrir uma conversa anterior fecha o painel, para a volta ficar à vista.
+- com o painel cobrindo a conversa, abrir uma conversa anterior fecha o painel, para a volta ficar à vista; como coluna, ele fica aberto;
+- ela abre no começo, e a volta nomeia o lugar atual, não a conversa: **Back to step 3**, **Back to the implementation** numa One-Shot, **Back to the tech spec**, **Back to the PR review** com a conversa do review na tela e **Back to the pull request** no resto da etapa de PR;
+- enquanto ela é lida, a linha diz `Opening the conversation…` e a conversa atual fica; a coluna troca quando a anterior chega;
+- ao abrir, o foco vai à região da conversa anterior; ao sair, volta à linha que a abriu com o painel aberto, e à região da conversa atual sem ele;
+- as abas, a faixa de review e o medidor também saem; um segundo clique na linha, qualquer ida e a chegada a uma situação da task também voltam.
 
-**`Artifacts`:** o PRD e o tech spec, os arquivos de step e o rascunho da PR, cada um aberto renderizado.
+**`Artifacts`:** os documentos escritos, o PRD e o tech spec (ou o documento One-Shot), os arquivos de step e o rascunho da PR, cada um aberto renderizado no lugar da lista, com **← Artifacts**. Sem nenhum, `No artifacts yet`.
 
-**`Card`:** o card, o épico e os irmãos.
+**`Card`:** o card da última leitura do board, com a referência, o status e **Open on GitHub**, o título, o corpo, e o épico, os irmãos, as dependências e as pull requests (`#N · <estado>`) como lista de relações; cada relação é um link externo, e um card do board passa a abrir o painel dele no board com a visão do board (task 5). Fora da última leitura, a faixa de aviso diz por quê e o painel mostra o que a task guarda do card.
 
 **`⋯`**, agrupado por assunto, com o destrutivo por último em vermelho:
 
 - **o step** (com um step em curso): **Review myself** (só no `Agent`), **Open in VS Code** `Ctrl+E`, **Discard step N…**;
-- **a PR** (a partir do PR review): **Open PR**, **Refresh PR** (tooltip `checked 40s ago`), **Review again…** (desabilitado com `a pass waits for the checks` durante os checks), **Open in VS Code** `Ctrl+E`;
+- **a PR** (a partir da abertura): **Open PR**, **Refresh PR** (tooltip `checked 2m ago`), **Review again** (a qualquer momento em que o produto aceita uma passada, também durante uma; desabilitado com a razão no resto: `a pass waits for the checks`, `the changes are being committed`, `the pull request was closed`, `the task is closing`), **Open in VS Code** `Ctrl+E`; antes da abertura, **Discard draft** (enquanto o rascunho pode ser descartado) e **Open in VS Code**;
 - **o planejamento:** **Discard and restart the <etapa>…** na etapa atual de planejamento;
 - **a task:**
   - **Review mode ›** e **Models ›**;
-  - **Back to PRD…** (com a task depois do PRD);
-  - **Back to Tech spec…** (depois do tech spec);
+  - **Back to PRD…** e **Discard and restart the PRD…** (com a task depois do PRD);
+  - **Back to Tech spec…** e **Discard and restart the tech spec…** (depois do tech spec);
   - **Discard and restart the plan…** (na implementação);
   - numa One-Shot, **Back to planning…** e **Discard and restart planning…**;
 - depois de um separador, **Delete task…**.
@@ -287,7 +303,8 @@ Cada item destrutivo abre o diálogo que diz o que será perdido.
 **Popover Review mode.**
 - Tem o título e duas opções em `radiogroup`, cada uma com o ícone, o nome e o que faz. `Agent`: *An agent reviews each step with the implementer; clean steps are committed.* `Manual`: *You review each step in VS Code, stage the files and approve.*
 - Embaixo, a quem a troca vale: `Applies to the steps not started that follow the task: 5, 6, 7. Step 4 has its own mode.`, ou, antes do plano, `Applies to the steps the plan writes.`
-- Fica desabilitado, com a razão, quando nenhum step resta para começar.
+- Numa task One-Shot, `Applies to the implementation, before it starts.`
+- Fica desabilitado, com a razão, quando nenhum step resta para começar: `No step is left to start, so the mode can't change.`; `Every step not started has its own mode.`; numa One-Shot, `The implementation has started, so the mode can't change.`
 - Estados: padrão, hover, foco, pressionado, desabilitado, salvando e erro (`Couldn't save the mode · Try again`).
 
 **Popover Models.**
@@ -314,7 +331,7 @@ A task de referência é `Rate limit per API key`, Structured, modo `Agent`, com
 | `blocked` · worktree suja | `[Implementation 5/7 ◆]` | — | `Step 5 is next` e o bloco com o `git status` | `Step 5 blocked · worktree not clean` · **Clean and start…**, **Try again** | Nenhum |
 | `checks` · a PR espera os checks | `✓✓✓✓✓ [PR review ◌ checks 3/5]` | — | O vazio e os checks pelo nome | — | Nenhum; sem medidor |
 | `findings` · apontamentos a decidir | `[PR review pass 1 ●]` | — | O relatório e o cartão de decisão | `Findings to decide` · `1 of 4 decided` · **Next to decide**, **Apply approved** | `Ask the reviewer to add, change or drop a finding…` |
-| `close` · pronta para encerrar | `[Closing ○]` | — | O ciclo do PR review até `Merged #1284 · by lnakamura` | `Ready to close` · **Close task** | `Reply to the PR reviewer…` |
+| `close` · pronta para encerrar | `[Closing ○]` | — | O ciclo do PR review até `Merged #1284 · by lnakamura` | `Ready to close` · **Close task** | `Reply to the PR agent…` |
 
 ## 12. Os estados de toda tela (`brief.md` §7)
 
@@ -325,7 +342,7 @@ A task de referência é `Rate limit per API key`, Structured, modo `Agent`, com
 | **Erro** | O bloco de erro na conversa, a barra de erro com a ação da sessão, o losango no stepper e na aba. Uma leitura que falha nunca esconde o que estava na tela |
 | **Aguardando o usuário** | A barra do pedido, o glifo âmbar na pílula e na aba de fora, o cartão com o anel âmbar. A barra e o cartão novos piscam no véu e são anunciados |
 | **Agente trabalhando** | O spinner na pílula e na aba, `working` na pílula sem barra, o grupo vivo com a ação no resumo, **Stop** e `Working · 3m 40s` no compositor. Esperar os checks é o GitHub trabalhando: círculo tracejado e `checks 3/5`, sem barra |
-| **Pausado e ocioso** | Pausada: **Resume** no cabeçalho, a pílula neutra com `paused`, nenhuma barra do pedido, e o compositor diz `Sending resumes the task…`. Ociosa (parada sozinha depois de 10 minutos): o glifo ocioso na aba, e a próxima mensagem retoma sem aviso |
+| **Pausado e ocioso** | Pausada: **Resume** no cabeçalho, a pílula neutra com `paused`, a barra do pedido quieta com o que o estado pede e sem chip de tempo, e o compositor diz `Sending resumes the task…`. Ociosa (parada sozinha depois de 10 minutos): o glifo ocioso na aba, e a próxima mensagem retoma sem aviso |
 | **Muitos itens** | Uma sessão longa fica legível pelos grupos dobrados (o vivo também), pelo `Show N earlier actions`, pelas mensagens do produto em uma linha, pelas dobras de trecho e pelo código cortado em 20 linhas. A conversa é virtualizada acima de algumas centenas de entradas. Uma task com muitos steps muda só a posição (`12/18`); `Details` rola |
 | **Item que sumiu** | A task encerrada ou apagada com a tela aberta: a área principal diz `This task was closed and archived.` com **Open in History**, ou `This task was deleted.`, e a árvore já não a mostra |
 
@@ -386,7 +403,7 @@ O coordenador consolida. Os estados de cada um estão em `components.html`.
 - Sem sessão, o compositor sai em vez de ficar desabilitado.
 - **`→`** aparece só com destino.
 - O glifo de tipo e a referência saem do cabeçalho.
-- Enquanto a barra do pedido existe, o topo e o cartão não repetem a situação.
+- Enquanto o item tem uma situação, o topo e o cartão não a repetem.
 - **Review mode** e **Models** saem do cabeçalho, para o `⋯` e para `Details`.
 - A lista de steps com os seletores sai de `Artifacts` e vai para `Details`.
 
@@ -403,7 +420,8 @@ O coordenador consolida. Os estados de cada um estão em `components.html`.
 | O `sessionStatus` de cada sessão do step | O glifo e a palavra de cada aba, e a barra que aponta a outra conversa | Pequeno |
 | **Retry** da sessão certa | **Retry reviewer** | Pequeno: o frontend segue só o implementador (`app-store.ts`) |
 | A passada e a rodada do laço na posição | `3/7 · pass 2`, `3/7 · round 1` | Nenhum no backend: o estado do step já tem `Agent review · pass N` e `Addressing review · round N of 3` |
-| Ler a conversa de um lugar que não é o atual | As conversas anteriores em `Details` | Só frontend: `GetTranscript(item, stage)` já existe por lugar |
+| Ler a conversa de um lugar que não é o atual, com o início de cada uma | As conversas anteriores em `Details` | Pequeno: `GetTranscript(item, stage)` existe por lugar, mas lê só as sessões abertas, e a de uma etapa ou de um step encerrado é fechada; ela passa a ser lida do banco |
+| A branch, a base e a worktree da task; desfazer o modo próprio de um step | `Details` › Task; **Follow the task** | Pequeno |
 | Os checks pelo nome durante `Waiting for checks` | O vazio do PR review e `Details` | Pequeno |
 | Marcos das decisões do usuário (rascunho aprovado, apontamentos decididos, mudanças aprovadas) | `You approved the draft`, `You decided…` | Pequeno: tipos novos de marcador |
 | A hora do commit de cada step e quem fez o merge | `Committed c19f02e` (a hora com hover e em `Details`), `Merged by lnakamura` | Pequeno: o git e o `gh` já sabem |
