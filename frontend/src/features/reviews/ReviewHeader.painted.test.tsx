@@ -28,7 +28,7 @@ describe.each(THEMES)("ReviewHeader in the %s theme", (theme) => {
     });
     renderWithStore(
       <div style={mainArea(NARROW_MAIN)}>
-        <ReviewHeader review={review} artifactsOpen={false} onToggleArtifacts={() => undefined} />
+        <ReviewHeader review={review} />
       </div>,
       {
         state: makeState({ reviews: [review] }),

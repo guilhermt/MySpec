@@ -67,7 +67,7 @@ export function AppShell() {
       )}
     >
       <Sidebar />
-      <main className="main-area relative flex h-dvh min-w-0 flex-col @container/main">
+      <main className="main-area relative flex h-dvh min-w-0 flex-col">
         <LocationView />
         <ShellToasts />
       </main>

@@ -20,11 +20,7 @@ describe.each(THEMES)("DiscussionHeader in the %s theme", (theme) => {
     });
     renderWithStore(
       <div style={mainArea(NARROW_MAIN)}>
-        <DiscussionHeader
-          discussion={discussion}
-          documentsOpen={false}
-          onToggleDocuments={() => undefined}
-        />
+        <DiscussionHeader discussion={discussion} />
       </div>,
       {
         state: makeState({ boards: [makeBoard()], discussions: [discussion] }),

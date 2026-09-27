@@ -1,10 +1,11 @@
-import { PanelRight, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { useState } from "react";
 import { CardLink } from "@/components/CardLink";
 import { PauseButton } from "@/components/PauseButton";
+import { PanelGroup } from "@/components/system/AuxPanel";
+import { ICONS } from "@/components/system/icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { LocationHeader } from "@/features/navigation/LocationHeader";
 import { DeleteReviewDialog } from "@/features/reviews/DeleteReviewDialog";
 import { reviewStatusLabel, reviewStatusTone } from "@/features/reviews/review-status";
@@ -18,23 +19,23 @@ import {
   type ReviewSummary,
 } from "@/lib/wails";
 import { pause, resume } from "@/store/actions";
+import { useAppStore, usePanel } from "@/store/app-store";
 
 /** MODE_LABEL names what the review does with the findings the user approves. */
 const MODE_LABEL: Record<PullReviewMode, string> = { publish: "Publish", apply: "Apply" };
 
 export interface ReviewHeaderProps {
   review: ReviewSummary;
-  /** artifactsOpen is whether the panel of the reports is showing right now. */
-  artifactsOpen: boolean;
-  onToggleArtifacts: () => void;
 }
 
 /**
  * ReviewHeader is the header of the place of a pull request under review, with what the user can
  * do to it on the right.
  */
-export function ReviewHeader({ review, artifactsOpen, onToggleArtifacts }: ReviewHeaderProps) {
+export function ReviewHeader({ review }: ReviewHeaderProps) {
   const [deleting, setDeleting] = useState(false);
+  const panel = usePanel();
+  const openPanel = useAppStore((state) => state.openPanel);
 
   const situation = reviewSituation(review);
   // What waits on the user takes the colour of its situation; without one, the
@@ -64,17 +65,13 @@ export function ReviewHeader({ review, artifactsOpen, onToggleArtifacts }: Revie
         />
       )}
       {review.card !== null && <CardLink card={review.card} />}
-      <Tooltip>
-        <TooltipTrigger
-          render={<Button variant="ghost" size="icon-sm" />}
-          aria-label="Reports"
-          aria-pressed={artifactsOpen}
-          onClick={onToggleArtifacts}
-        >
-          <PanelRight />
-        </TooltipTrigger>
-        <TooltipContent>Reports</TooltipContent>
-      </Tooltip>
+      <PanelGroup
+        panels={[
+          { id: "reports", label: "Reports", tooltip: "Reports of every pass", icon: ICONS.file },
+        ]}
+        open={panel}
+        onOpenChange={openPanel}
+      />
       <Button
         variant="ghost"
         size="icon-sm"

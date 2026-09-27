@@ -37,7 +37,7 @@ function header(width: number) {
   });
   renderWithStore(
     <div style={mainArea(width)}>
-      <TaskHeader task={task} artifactsOpen={false} onToggleArtifacts={() => undefined} />
+      <TaskHeader task={task} />
     </div>,
     {
       state: makeState({

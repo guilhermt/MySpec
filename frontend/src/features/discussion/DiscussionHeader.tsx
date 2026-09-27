@@ -1,6 +1,8 @@
-import { Archive, PanelRight, Trash2 } from "lucide-react";
+import { Archive, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { PauseButton } from "@/components/PauseButton";
+import { PanelGroup } from "@/components/system/AuxPanel";
+import { ICONS } from "@/components/system/icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -16,25 +18,21 @@ import { ToneDot } from "@/features/task/StatusDot";
 import { discussionSituation, situationTone } from "@/lib/situations";
 import { asSessionStatus, type DiscussionSummary } from "@/lib/wails";
 import { pause, resume } from "@/store/actions";
+import { useAppStore, usePanel } from "@/store/app-store";
 
 export interface DiscussionHeaderProps {
   discussion: DiscussionSummary;
-  /** documentsOpen is whether the panel of the documents is showing right now. */
-  documentsOpen: boolean;
-  onToggleDocuments: () => void;
 }
 
 /**
  * DiscussionHeader is the header of the place of a discussion, with what the user can do to it on
  * the right.
  */
-export function DiscussionHeader({
-  discussion,
-  documentsOpen,
-  onToggleDocuments,
-}: DiscussionHeaderProps) {
+export function DiscussionHeader({ discussion }: DiscussionHeaderProps) {
   const [archiving, setArchiving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const panel = usePanel();
+  const openPanel = useAppStore((state) => state.openPanel);
 
   const situation = discussionSituation(discussion);
   // What waits on the user takes the colour of its situation; without one, the
@@ -74,17 +72,18 @@ export function DiscussionHeader({
           }
         />
       )}
-      <Tooltip>
-        <TooltipTrigger
-          render={<Button variant="ghost" size="icon-sm" />}
-          aria-label="Documents"
-          aria-pressed={documentsOpen}
-          onClick={onToggleDocuments}
-        >
-          <PanelRight />
-        </TooltipTrigger>
-        <TooltipContent>Documents</TooltipContent>
-      </Tooltip>
+      <PanelGroup
+        panels={[
+          {
+            id: "documents",
+            label: "Documents",
+            tooltip: "The document and the context",
+            icon: ICONS.file,
+          },
+        ]}
+        open={panel}
+        onOpenChange={openPanel}
+      />
       {discussion.canArchive || discussion.archiveHint === "" ? (
         archiveButton
       ) : (

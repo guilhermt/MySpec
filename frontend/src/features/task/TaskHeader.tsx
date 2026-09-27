@@ -1,33 +1,33 @@
-import { PanelRight, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { useState } from "react";
 import { CardLink } from "@/components/CardLink";
 import { PauseButton } from "@/components/PauseButton";
+import { PanelGroup } from "@/components/system/AuxPanel";
+import { ICONS } from "@/components/system/icons";
 import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { LocationHeader } from "@/features/navigation/LocationHeader";
 import { ContextGauge } from "@/features/task/ContextGauge";
 import { DeleteTaskDialog } from "@/features/task/DeleteTaskDialog";
 import { StatusBadge } from "@/features/task/StatusBadge";
-import { hasArtifacts } from "@/features/task/status";
 import { currentStepOf, hasStepSession, loopSession } from "@/features/task/step-status";
 import { TaskModelsButton } from "@/features/task/TaskModels";
 import { TaskReviewModeButton } from "@/features/task/TaskReviewMode";
 import { asSessionStatus, asTaskStage, type TaskSummary } from "@/lib/wails";
 import { pause, resume } from "@/store/actions";
+import { useAppStore, usePanel } from "@/store/app-store";
 
 export interface TaskHeaderProps {
   task: TaskSummary;
-  /** artifactsOpen is whether the artifact panel is showing right now. */
-  artifactsOpen: boolean;
-  onToggleArtifacts: () => void;
 }
 
 /**
  * TaskHeader is the header of the place of a task, with everything the user can do to it on the
  * right.
  */
-export function TaskHeader({ task, artifactsOpen, onToggleArtifacts }: TaskHeaderProps) {
+export function TaskHeader({ task }: TaskHeaderProps) {
   const [deleting, setDeleting] = useState(false);
+  const panel = usePanel();
+  const openPanel = useAppStore((state) => state.openPanel);
 
   // The implementation stage holds the session of the step being run, and only
   // once the step got as far as opening one. The PR stage holds none of its
@@ -57,17 +57,18 @@ export function TaskHeader({ task, artifactsOpen, onToggleArtifacts }: TaskHeade
       <TaskReviewModeButton task={task} />
       <TaskModelsButton task={task} />
       {task.card !== null && <CardLink card={task.card} />}
-      <Tooltip>
-        <TooltipTrigger
-          render={<Button variant="ghost" size="icon-sm" />}
-          aria-label="Artifacts"
-          aria-pressed={artifactsOpen}
-          onClick={onToggleArtifacts}
-        >
-          <PanelRight />
-        </TooltipTrigger>
-        <TooltipContent>{hasArtifacts(task) ? "Artifacts" : "No artifacts yet"}</TooltipContent>
-      </Tooltip>
+      <PanelGroup
+        panels={[
+          {
+            id: "artifacts",
+            label: "Artifacts",
+            tooltip: "PRD, tech spec, steps and reports",
+            icon: ICONS.file,
+          },
+        ]}
+        open={panel}
+        onOpenChange={openPanel}
+      />
       <Button
         variant="ghost"
         size="icon-sm"

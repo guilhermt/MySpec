@@ -1,7 +1,8 @@
 import { screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { TaskHeader } from "@/features/task/TaskHeader";
 import { api, type TaskSummary } from "@/lib/wails";
+import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
 import {
   makePullRequest,
@@ -13,12 +14,12 @@ import {
   makeTaskCard,
 } from "@/test/wails-mock";
 
-function header(overrides: Partial<TaskSummary> = {}, onToggle = vi.fn()) {
+function header(overrides: Partial<TaskSummary> = {}) {
   const task = makeTask(overrides);
-  return renderWithStore(
-    <TaskHeader task={task} artifactsOpen={false} onToggleArtifacts={onToggle} />,
-    { state: makeState({ tasks: [task] }), ui: { location: { kind: "task", id: task.id } } },
-  );
+  return renderWithStore(<TaskHeader task={task} />, {
+    state: makeState({ tasks: [task] }),
+    ui: { location: { kind: "task", id: task.id } },
+  });
 }
 
 describe("TaskHeader", () => {
@@ -244,33 +245,20 @@ describe("TaskHeader", () => {
     expect(await screen.findByRole("button", { name: "Task review mode: Manual" })).toBeDisabled();
   });
 
-  it("says the panel is empty until an artifact exists", async () => {
-    const onToggle = vi.fn();
-    const { user } = header({}, onToggle);
+  it("toggles the artifacts panel, named in its tooltip", async () => {
+    const { user } = header();
+    const artifacts = () => screen.getByRole("button", { name: "Artifacts" });
 
-    await user.hover(screen.getByRole("button", { name: "Artifacts" }));
-    expect(await screen.findByText("No artifacts yet")).toBeInTheDocument();
+    await user.hover(artifacts());
+    expect(await screen.findByText("PRD, tech spec, steps and reports")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Artifacts" }));
+    await user.click(artifacts());
+    expect(useAppStore.getState().panel).toBe("artifacts");
+    expect(artifacts()).toHaveAttribute("aria-pressed", "true");
 
-    expect(onToggle).toHaveBeenCalledOnce();
-    expect(screen.getByRole("button", { name: "Artifacts" })).toHaveAttribute(
-      "aria-pressed",
-      "false",
-    );
-  });
-
-  it.each([
-    [{ hasPrd: true }],
-    [{ hasTechSpec: true }],
-    [{ hasOneShot: true }],
-    [{ steps: [makeStep()] }],
-  ])("opens the panel on anything the task wrote %#", async (overrides) => {
-    const { user } = header(overrides);
-
-    await user.hover(screen.getByRole("button", { name: "Artifacts" }));
-
-    expect(await screen.findByText("Artifacts")).toBeInTheDocument();
+    await user.click(artifacts());
+    expect(useAppStore.getState().panel).toBeNull();
+    expect(artifacts()).toHaveAttribute("aria-pressed", "false");
   });
 
   it("deletes the task after the confirmation", async () => {

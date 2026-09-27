@@ -1,5 +1,5 @@
 import { screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { TaskView } from "@/features/task/TaskView";
 import { api, type TaskSummary } from "@/lib/wails";
 import { renderWithStore } from "@/test/render";
@@ -11,18 +11,12 @@ import {
   makeTask,
 } from "@/test/wails-mock";
 
-const SEEN_KEY = "myspec.artifacts.seen:task-1";
-
 function view(overrides: Partial<TaskSummary> = {}) {
   return renderWithStore(<TaskView taskId="task-1" />, {
     state: makeState({ tasks: [makeTask(overrides)] }),
     ui: { location: { kind: "task", id: "task-1" } },
   });
 }
-
-beforeEach(() => {
-  localStorage.clear();
-});
 
 describe("TaskView", () => {
   it("puts the conversation, the composer and the header together", async () => {
@@ -137,35 +131,22 @@ describe("TaskView", () => {
     expect(api.getTranscript).toHaveBeenCalledOnce();
   });
 
-  it("remembers that the artifacts of the task have been shown", async () => {
+  it("keeps the artifacts panel closed until the user opens it", () => {
     view({ hasPrd: true, artifactVersion: 1 });
 
-    await waitFor(() => {
-      expect(localStorage.getItem(SEEN_KEY)).not.toBeNull();
-    });
+    expect(screen.queryByRole("complementary", { name: "Artifacts" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Artifacts" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
   });
 
-  it("opens the panel for a tech spec of a task that never had a PRD read", async () => {
-    view({ hasTechSpec: true, stage: "plan", artifactVersion: 1 });
-
-    await waitFor(() => {
-      expect(localStorage.getItem(SEEN_KEY)).not.toBeNull();
-    });
-  });
-
-  it("has nothing to show, and nothing to remember, without a PRD", () => {
-    view();
-
-    expect(screen.getByText("No artifacts yet")).toBeInTheDocument();
-    expect(localStorage.getItem(SEEN_KEY)).toBeNull();
-  });
-
-  it("toggles the artifact panel from the header", async () => {
-    const { user } = view();
+  it("opens the artifacts panel from its button", async () => {
+    const { user } = view({ hasPrd: true, artifactVersion: 1 });
 
     await user.click(screen.getByRole("button", { name: "Artifacts" }));
 
-    expect(screen.getByRole("button", { name: "Artifacts" })).toHaveAttribute("aria-pressed");
+    expect(screen.getByRole("complementary", { name: "Artifacts" })).toBeInTheDocument();
   });
 
   it("shows nothing for a task that is no longer there", () => {
@@ -197,17 +178,10 @@ describe("TaskView", () => {
     expect(api.getTranscript).not.toHaveBeenCalled();
   });
 
-  it("lets nothing but the conversation scroll in its panel", () => {
+  it("lets nothing but the conversation scroll in its column", () => {
     view();
 
-    const panel = screen.getByRole("textbox").closest("[data-panel]");
-    if (panel === null) {
-      throw new Error("the field sits in no panel");
-    }
-    const inner = panel.firstElementChild;
-    if (inner === null) {
-      throw new Error("the panel has no content");
-    }
-    expect(inner).toHaveStyle({ overflow: "clip" });
+    const column = screen.getByRole("textbox").closest(".overflow-clip");
+    expect(column).not.toBeNull();
   });
 });

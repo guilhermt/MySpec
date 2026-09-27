@@ -2043,6 +2043,19 @@ describe("history of places", () => {
     expect(useAppStore.getState().panel).toBeNull();
   });
 
+  it("opens a panel, closes it on the next navigation and never reopens it going back", () => {
+    useAppStore.setState({ location: TASK, back: [], forward: [], panel: null });
+
+    useAppStore.getState().openPanel("artifacts");
+    expect(useAppStore.getState().panel).toBe("artifacts");
+
+    useAppStore.getState().go(HISTORY);
+    expect(useAppStore.getState().panel).toBeNull();
+
+    useAppStore.getState().goBack();
+    expect(useAppStore.getState()).toMatchObject({ location: TASK, panel: null });
+  });
+
   it("clears the focus it asked for", () => {
     useAppStore.setState({ pendingFocus: "title" });
 

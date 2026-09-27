@@ -197,6 +197,8 @@ export interface AppStore {
   /** goForward opens the nearest place ahead of the current one that still exists; with none, nothing happens. */
   goForward: (options?: { focus?: "title" | "forward" }) => void;
   clearPendingFocus: () => void;
+  /** openPanel opens an auxiliary panel of the place on screen, closing the one open; null closes it. */
+  openPanel: (panel: PanelId | null) => void;
   toggleSidebarRail: () => void;
   /** announce has the live region say a text, even the same one again. */
   announce: (text: string) => void;
@@ -666,6 +668,8 @@ export const useAppStore = create<AppStore>()((set, get) => {
     },
 
     clearPendingFocus: () => set({ pendingFocus: null }),
+
+    openPanel: (panel) => set({ panel }),
 
     toggleSidebarRail: () =>
       set((state) => {

@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { panelTriggerId } from "@/components/system/AuxPanel";
 import { layerOpen, modalOpen } from "@/lib/layers";
 import { openItemId } from "@/lib/locations";
 import { nextWaiting } from "@/lib/situations";
@@ -71,7 +72,7 @@ export function useGlobalShortcuts(): void {
       }
     };
 
-    // Esc closes what the place on screen has open, once nothing closer to the
+    // Esc closes what the place on screen has open, the panel first, once nothing closer to the
     // user took it: the owners of Esc inside the screen (the message box, the
     // search of a board, a draft) prevent its default, and a layer over the
     // screen closes first.
@@ -88,7 +89,11 @@ export function useGlobalShortcuts(): void {
         return;
       }
       const store = useAppStore.getState();
-      if (store.promptEdit !== null) {
+      if (store.panel !== null) {
+        const trigger = panelTriggerId(store.panel);
+        store.openPanel(null);
+        document.getElementById(trigger)?.focus();
+      } else if (store.promptEdit !== null) {
         store.cancelPromptEdit();
       } else if (store.location.kind === "settings") {
         store.closeSettings();

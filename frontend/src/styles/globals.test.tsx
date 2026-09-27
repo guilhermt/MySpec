@@ -203,6 +203,17 @@ describe("globals.css", () => {
     expect(GLOBALS).toContain(ICON_RULE);
   });
 
+  it("rounds the width of the auxiliary panel to the pixel", () => {
+    expect(GLOBALS).toMatch(/\.aux-panel \{[^}]*width: round\(down, var\(--panel-width\), 1px\);/);
+  });
+
+  it("puts the panel beside the column from 1120px of main area", () => {
+    expect(GLOBALS).toContain(".main-area {\n    container: main / inline-size;\n  }");
+    expect(GLOBALS).toMatch(
+      /@container main \(min-width: 1120px\) \{\s*\.aux-panel \{\s*position: relative;/,
+    );
+  });
+
   it("blinks a new situation twice for --duration-slow, and never with reduced motion", () => {
     expect(GLOBALS).toContain("animation: tree-flash var(--duration-slow) var(--ease-standard) 2;");
     const reduced = [

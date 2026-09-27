@@ -1,21 +1,17 @@
 import { screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { ReviewHeader } from "@/features/reviews/ReviewHeader";
 import { api, type ReviewSummary } from "@/lib/wails";
+import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
 import { makeReviewSummary, makeSituation, makeState } from "@/test/wails-mock";
 
 function header(overrides: Partial<ReviewSummary> = {}) {
   const review = makeReviewSummary(overrides);
-  const onToggleArtifacts = vi.fn();
-  const view = renderWithStore(
-    <ReviewHeader review={review} artifactsOpen={false} onToggleArtifacts={onToggleArtifacts} />,
-    {
-      state: makeState({ reviews: [review] }),
-      ui: { location: { kind: "review", id: review.id } },
-    },
-  );
-  return { ...view, onToggleArtifacts };
+  return renderWithStore(<ReviewHeader review={review} />, {
+    state: makeState({ reviews: [review] }),
+    ui: { location: { kind: "review", id: review.id } },
+  });
 }
 
 const CARD = {
@@ -76,10 +72,11 @@ describe("ReviewHeader", () => {
   });
 
   it("offers the reports panel and the deletion", async () => {
-    const { user, onToggleArtifacts } = header();
+    const { user } = header();
 
     await user.click(screen.getByRole("button", { name: "Reports" }));
-    expect(onToggleArtifacts).toHaveBeenCalledOnce();
+    expect(useAppStore.getState().panel).toBe("reports");
+    expect(screen.getByRole("button", { name: "Reports" })).toHaveAttribute("aria-pressed", "true");
 
     await user.click(screen.getByRole("button", { name: "Delete review" }));
     expect(

@@ -404,6 +404,34 @@ describe("useGlobalShortcuts", () => {
     expect(useAppStore.getState().location).toEqual({ kind: "home" });
   });
 
+  it("closes the open panel on Esc and gives the focus back to its button", async () => {
+    vi.mocked(api.getState).mockResolvedValue(makeState({ tasks: [makeTask()] }));
+    const { user } = renderWithStore(<App />, { ui: { location: TASK } });
+    await user.click(await screen.findByRole("button", { name: "Artifacts" }));
+    expect(screen.getByRole("complementary", { name: "Artifacts" })).toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+
+    expect(useAppStore.getState()).toMatchObject({ panel: null, location: TASK });
+    expect(screen.queryByRole("complementary", { name: "Artifacts" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Artifacts" })).toHaveFocus();
+  });
+
+  it("closes the panel on Esc before closing the settings", () => {
+    renderWithStore(<App />, {
+      ui: { location: { kind: "settings", section: "defaults" }, panel: "artifacts" },
+    });
+
+    act(() => {
+      press({ key: "Escape" });
+    });
+
+    expect(useAppStore.getState()).toMatchObject({
+      panel: null,
+      location: { kind: "settings", section: "defaults" },
+    });
+  });
+
   it("cancels the edit of a prompt on Esc before closing the settings", async () => {
     renderWithStore(<App />, { ui: { location: { kind: "settings", section: "plan" } } });
     await screen.findByRole("button", { name: "Repository filter: All repositories" });

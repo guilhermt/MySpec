@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  hasArtifacts,
-  taskStageLabel,
-  taskStatusLabel,
-  taskStatusTone,
-} from "@/features/task/status";
+import { taskStageLabel, taskStatusLabel, taskStatusTone } from "@/features/task/status";
 import type { PullRequest } from "@/lib/wails";
 import { makePullRequest, makeReview, makeSituation, makeStep, makeTask } from "@/test/wails-mock";
 
@@ -268,17 +263,5 @@ describe("taskStageLabel", () => {
 
   it("says when a stage was reopened", () => {
     expect(taskStageLabel(makeTask({ stage: "plan", revisiting: true }))).toBe("Plan · revisiting");
-  });
-});
-
-describe("hasArtifacts", () => {
-  it.each([
-    [{}, false],
-    [{ hasPrd: true }, true],
-    [{ hasTechSpec: true }, true],
-    [{ hasOneShot: true }, true],
-    [{ steps: [makeStep()] }, true],
-  ])("knows whether the task wrote anything %#", (overrides, expected) => {
-    expect(hasArtifacts(makeTask(overrides))).toBe(expected);
   });
 });

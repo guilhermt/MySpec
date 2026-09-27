@@ -341,7 +341,7 @@ O modo define as etapas de planejamento. Uma task Structured passa por PRD, tech
 
 O plano é validado antes de a task avançar. Quando os arquivos não formam um plano válido, o produto diz ao agente o que está errado e pede a correção, até três vezes. Depois disso para de corrigir e mostra os problemas acima do compositor, para o usuário resolver na conversa ou descartar o plano.
 
-O PRD, o tech spec e cada step ficam visíveis no painel de artefatos da task, renderizados como Markdown com diagramas mermaid.
+O PRD, o tech spec e cada step ficam visíveis no painel de artefatos da task, renderizados como Markdown com diagramas mermaid. O painel fica fechado até o usuário abri-lo pelo botão **Artifacts** do cabeçalho.
 
 ### Planejamento One-Shot
 
@@ -555,7 +555,7 @@ O painel de apontamentos, acima da conversa, mostra a passada mais recente, com 
 
 A conversa fica aberta durante a decisão. Um apontamento que o usuário quer incluir, mudar ou retirar é pedido ao agente na conversa; o agente reescreve o relatório da passada e o produto mostra a versão nova, mantendo o texto e a decisão de cada apontamento que não mudou e o resumo editado, quando o original não mudou.
 
-O painel **Reports**, à direita, recolhível, lista `Context` e os relatórios de todas as passadas, como `Review 1 · changes · published` e `Review 2 · clean`, renderizados como Markdown. Um relatório publicado mostra acima dele o veredito, a data e o link do review no GitHub.
+O painel **Reports**, à direita, aberto pelo botão do cabeçalho, lista `Context` e os relatórios de todas as passadas, como `Review 1 · changes · published` e `Review 2 · clean`, renderizados como Markdown. Um relatório publicado mostra acima dele o veredito, a data e o link do review no GitHub.
 
 ### Publicar
 
@@ -699,6 +699,8 @@ Todo lugar da área principal abre com o cabeçalho do lugar, uma faixa só, sem
 
 A direita cede pela largura da área principal, em limites fixos: abaixo de 1360 px **Pause** fica só com o ícone, abaixo de 1300 px o medidor fica só com a porcentagem, e abaixo de 1040 px `Review: <modo>` e **Models** ficam só com o ícone; o nome de cada um continua no tooltip e no nome acessível. O estado mantém o texto. Com tudo cedido, a 1100 px de janela, o que falta de espaço sai do título.
 
+Os painéis de um item, **Artifacts** na task, **Reports** no review e **Documents** na discussão, abrem pelo botão do cabeçalho, um de cada vez, e começam fechados. Com a área principal a partir de 1120 px o painel fica ao lado da conversa; abaixo, cobre-a. `×` ou `Esc` fecha e devolve o foco ao botão; ir a outro lugar fecha o painel, e voltar não o reabre.
+
 O foco segue a ida: `Alt+←`, `Alt+→`, um nível do breadcrumb, `Ctrl+J` e o clique numa notificação levam o foco ao título do lugar; o clique em `←` ou `→` deixa o foco no botão, e em `←` quando não resta nada à frente; o clique numa linha da árvore deixa o foco na linha.
 
 ## Atalhos
@@ -710,7 +712,7 @@ O foco segue a ida: `Alt+←`, `Alt+→`, um nível do breadcrumb, `Ctrl+J` e o 
 | `Ctrl+,` | Abrir as configurações; com elas abertas, fechá-las de volta ao lugar anterior |
 | `Alt+←` | Voltar ao lugar anterior |
 | `Alt+→` | Avançar ao lugar seguinte |
-| `Esc` | Cancelar a edição de um prompt; fora dela, fechar as configurações de volta ao lugar anterior |
+| `Esc` | Fechar o painel aberto; sem painel, cancelar a edição de um prompt; fora dela, fechar as configurações de volta ao lugar anterior |
 
 `Cmd` vale no lugar de `Ctrl`. Os atalhos funcionam com o foco em qualquer lugar da janela, inclusive na caixa de mensagem. Com um diálogo modal aberto, nenhum deles faz nada: o que o usuário faz ali não fica para trás nem é coberto por outro diálogo. O clique numa notificação com um diálogo modal aberto só traz a janela para a frente.
 
