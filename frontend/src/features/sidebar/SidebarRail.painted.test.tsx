@@ -53,6 +53,67 @@ function strip() {
   return within(screen.getByRole("tree", { name: "Active items" })).getAllByRole("treeitem");
 }
 
+const AGES = [1, 12, 3 * 60, 22 * 24 * 60, 63 * 24 * 60];
+
+// varied draws the strip with a chip of every length, as an error and as a wait, the words and a
+// turn, and Reviews with its count, the letters spaced by spacing.
+function varied(spacing: string) {
+  const ago = (minutes: number) => new Date(Date.now() - minutes * MINUTE).toISOString();
+  const chips = AGES.flatMap((minutes, index) => [
+    makeTask({
+      id: `error-${index}`,
+      name: `error-${index}`,
+      situations: [
+        makeSituation({
+          id: `e-${index}`,
+          taskId: `error-${index}`,
+          kind: "session_error",
+          group: "error",
+          startedAt: ago(minutes),
+        }),
+      ],
+    }),
+    makeTask({
+      id: `wait-${index}`,
+      name: `wait-${index}`,
+      situations: [
+        makeSituation({
+          id: `w-${index}`,
+          taskId: `wait-${index}`,
+          kind: "question",
+          startedAt: ago(minutes),
+        }),
+      ],
+    }),
+  ]);
+  renderWithStore(
+    <div style={{ letterSpacing: spacing }}>
+      <Sidebar />
+    </div>,
+    {
+      ui: { sidebarRail: true },
+      state: makeState({
+        repositories: [makeRepository()],
+        reviewCenter: makeReviewCenter({ pendingCount: 17 }),
+        reviews: [makeReviewSummary({ id: "review-1", title: "Rate limit" })],
+        tasks: [
+          ...chips,
+          makeTask({
+            id: "turn",
+            name: "turn",
+            sessionStatus: "working",
+            turnRunning: true,
+            processRunning: true,
+            turnStartedAt: ago(4),
+          }),
+          makeTask({ id: "paused", name: "paused", sessionStatus: "paused" }),
+          makeTask({ id: "idle", name: "idle" }),
+        ],
+      }),
+    },
+  );
+}
+
 // reach is how far down the state glyph paints: its box, turned for a diamond, and the outline around
 // it, counted as if turned too.
 function reach(glyph: Element): number {
@@ -88,21 +149,29 @@ describe.each(THEMES)("SidebarRail in the %s theme", (theme) => {
     }
   });
 
-  it("centres the foot of every block and what a separator says on whole pixels", () => {
-    setTheme(theme);
-    const blocks = strip();
-    const separators = [...document.querySelectorAll("[data-rail-separator]")];
+  // The widths of the texts change with the font a machine renders, so the test spreads them:
+  // times of every length, and a fractional letter spacing that makes them odd and fractional.
+  it.each(["normal", "0.013em", "0.37px", "0.9px"])(
+    "centres the foot of every block and what a separator says on whole pixels, spaced %s",
+    (spacing) => {
+      setTheme(theme);
+      varied(spacing);
+      const blocks = within(screen.getByRole("tree", { name: "Active items" })).getAllByRole(
+        "treeitem",
+      );
+      const separators = [...document.querySelectorAll("[data-rail-separator]")];
 
-    const pieces = [
-      ...blocks.flatMap((block) => {
-        const foot = block.lastElementChild;
-        return foot === null ? [] : [...foot.querySelectorAll("*")];
-      }),
-      ...separators.flatMap((separator) => [...separator.querySelectorAll("*")]),
-    ].filter((piece) => !piece.matches(".sr-only, .sr-only *, [data-state], [data-state] *"));
-    expect(pieces.length).toBeGreaterThan(0);
-    for (const piece of pieces) {
-      expect(Number.isInteger(piece.getBoundingClientRect().left), piece.outerHTML).toBe(true);
-    }
-  });
+      const pieces = [
+        ...blocks.flatMap((block) => {
+          const foot = block.lastElementChild;
+          return foot === null ? [] : [...foot.querySelectorAll("*")];
+        }),
+        ...separators.flatMap((separator) => [...separator.querySelectorAll("*")]),
+      ].filter((piece) => !piece.matches(".sr-only, .sr-only *, [data-state], [data-state] *"));
+      expect(pieces.length).toBeGreaterThan(0);
+      for (const piece of pieces) {
+        expect(Number.isInteger(piece.getBoundingClientRect().left), piece.outerHTML).toBe(true);
+      }
+    },
+  );
 });

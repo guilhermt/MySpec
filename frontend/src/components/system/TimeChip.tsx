@@ -39,8 +39,10 @@ export function TimeChip({ tone, time, longTime, raised }: TimeChipProps) {
         )}
       >
         <span className="sr-only">{`${HIDDEN[tone]}, ${longTime}`}</span>
+        {/* The ! sits in a box of a whole width, so the time after it starts on a whole pixel
+            whatever width the font gives the glyph. */}
         {tone === "error" && (
-          <span aria-hidden="true" className="font-bold">
+          <span aria-hidden="true" className="inline-flex w-(--space-1) justify-center font-bold">
             !
           </span>
         )}

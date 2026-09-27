@@ -169,6 +169,6 @@ As convenções de todo componente:
 
 **Aviso do app.** `AppNotice` é a faixa no alto da área principal, sobre o cabeçalho do lugar, que diz que uma ação falhou: um `alert` sobre `--state-error-veil` com o trilho `--error-rail`, o rótulo (a ação com o item, `Couldn't pause Rate limit per API key`) em `--state-error` 700, o detalhe (a mensagem e o que fazer) em `--text-meta` e `--ink-2`, que desce para baixo de um rótulo longo em vez de ficar mais estreito que `--notice-detail-min`, e **Dismiss**. `features/notice/AppNotices` o liga ao `error` do store, com o aviso do que uma remoção deixou no disco logo abaixo, no topo do `main` do shell e no topo da coluna das boas-vindas.
 
-**Chip de tempo.** O leitor de tela ouve o tempo por extenso, depois do estado (`waiting for you, 18 minutes`); o tempo curto é só visual, `aria-hidden`, e o tooltip dá o por extenso ao ponteiro.
+**Chip de tempo.** O leitor de tela ouve o tempo por extenso, depois do estado (`waiting for you, 18 minutes`); o tempo curto é só visual, `aria-hidden`, e o tooltip dá o por extenso ao ponteiro. O `!` do chip de erro fica numa caixa de `--space-1`, para que o tempo depois dele comece num pixel inteiro qualquer que seja a largura que a fonte dá ao glifo.
 
 **Medidor de contexto.** `ContextMeter` é um `meter` com `aria-valuenow` arredondado, que nunca muda de cor ao encher. Sem leitura, ele brilha e mostra `…`; pausado, mostra `—`; nos dois casos `aria-valuetext` diz o estado ao leitor de tela.
