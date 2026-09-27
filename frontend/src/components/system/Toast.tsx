@@ -16,6 +16,8 @@ export interface ToastProps {
   onDismiss: () => void;
   /** duration is how long the toast stays, counted only while it has neither the pointer nor the focus. */
   duration?: number;
+  /** leaving is the toast pushed out by a newer one: it plays its exit, then tells onDismiss. */
+  leaving?: boolean;
 }
 
 /**
@@ -24,10 +26,18 @@ export interface ToastProps {
  * goes on with what was left when both are gone. It leaves by its exit, after its action, its ×
  * or its time, and tells onDismiss once the exit is over.
  */
-export function Toast({ icon, text, action, onDismiss, duration = TOAST_MS }: ToastProps) {
+export function Toast({
+  icon,
+  text,
+  action,
+  onDismiss,
+  duration = TOAST_MS,
+  leaving: pushedOut = false,
+}: ToastProps) {
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
-  const [leaving, setLeaving] = useState(false);
+  const [leftOnItsOwn, setLeaving] = useState(false);
+  const leaving = leftOnItsOwn || pushedOut;
   const ref = useRef<HTMLDivElement>(null);
   const left = useRef(duration);
   const dismiss = useRef(onDismiss);

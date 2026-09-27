@@ -2,7 +2,7 @@ import { ArrowLeft, ArrowRight, Ellipsis } from "lucide-react";
 import type { ReactNode, Ref } from "react";
 import { cn } from "@/lib/utils";
 import { IconButton } from "./IconButton";
-import { Menu, MenuContent, MenuItem, MenuTrigger } from "./Menu";
+import { Menu, MenuContent, MenuItem, MenuText, MenuTrigger } from "./Menu";
 import { Tooltip } from "./Tooltip";
 
 export interface PlaceNav {
@@ -85,12 +85,7 @@ function Breadcrumb({ crumbs }: { crumbs: readonly PlaceCrumb[] }) {
                   {crumb.label}
                 </MenuItem>
               ) : (
-                <div
-                  key={crumb.label}
-                  className="flex min-h-(--size-control) items-center px-2 text-(length:--text-ui) leading-(--leading-ui) text-ink-3"
-                >
-                  {crumb.label}
-                </div>
+                <MenuText key={crumb.label}>{crumb.label}</MenuText>
               ),
             )}
           </MenuContent>

@@ -502,7 +502,7 @@ Quando o item aberto sai do app, arquivado, apagado, com a pull request mergeada
 
 Sem board, ou com ele removido, a volta da task e da discussão é **Back to Home**; o board removido sem lugar anterior também. **Next that needs you** abre o próximo item que espera pelo usuário, o mesmo do `Ctrl+J`, com `Next: <nome>` no tooltip; sem nenhum, fica desabilitado com `Nothing else needs you now.` A primeira ação habilitada é a principal e recebe o foco. **Open in History** abre o item arquivado. A página não entra no histórico de lugares: sair dela a descarta, e voltar não a reencontra. Quando o item sai sem o usuário ter pedido, a região ao vivo anuncia o título da página; quando foi ele quem apagou, arquivou ou encerrou, não.
 
-Uma task arquivada que não estava aberta aparece num toast no canto inferior esquerdo da área principal: `“<nome>” was archived`, com **Open in History** e o `×`. Ele sai sozinho depois de 10 segundos, contados só enquanto não tem o ponteiro nem o foco, ou depois de **Open in History** ou do `×`, descendo e esmaecendo; cabem três de uma vez, e o quarto tira o mais antigo.
+Uma task arquivada que não estava aberta aparece num toast no canto inferior esquerdo da área principal: `“<nome>” was archived`, com **Open in History** e o `×`. Ele sai sozinho depois de 10 segundos, contados só enquanto não tem o ponteiro nem o foco, ou depois de **Open in History** ou do `×`, descendo e esmaecendo; cabem três de uma vez, e o quarto tira o mais antigo, que sai do mesmo jeito.
 
 ## Centro de review
 

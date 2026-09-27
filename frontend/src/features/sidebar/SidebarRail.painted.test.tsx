@@ -3,7 +3,14 @@ import { describe, expect, it } from "vitest";
 import { Sidebar } from "@/features/sidebar/Sidebar";
 import { setTheme, THEMES } from "@/test/painted";
 import { renderWithStore } from "@/test/render";
-import { makeRepository, makeSituation, makeState, makeTask } from "@/test/wails-mock";
+import {
+  makeRepository,
+  makeReviewCenter,
+  makeReviewSummary,
+  makeSituation,
+  makeState,
+  makeTask,
+} from "@/test/wails-mock";
 
 const MINUTE = 60_000;
 
@@ -15,6 +22,8 @@ function strip() {
     ui: { sidebarRail: true },
     state: makeState({
       repositories: [makeRepository()],
+      reviewCenter: makeReviewCenter({ pendingCount: 4 }),
+      reviews: [makeReviewSummary({ id: "review-1", title: "Rate limit" })],
       tasks: [
         makeTask({
           id: "task-1",
@@ -56,7 +65,7 @@ describe.each(THEMES)("SidebarRail in the %s theme", (theme) => {
     setTheme(theme);
     const blocks = strip();
 
-    expect(blocks).toHaveLength(5);
+    expect(blocks).toHaveLength(6);
     for (const block of blocks) {
       const glyph = block.querySelector("[data-state]");
       const foot = block.lastElementChild;
@@ -76,6 +85,24 @@ describe.each(THEMES)("SidebarRail in the %s theme", (theme) => {
         const { top, bottom } = box.getBoundingClientRect();
         expect([top, bottom].map((edge) => Number.isInteger(edge))).toEqual([true, true]);
       }
+    }
+  });
+
+  it("centres the foot of every block and what a separator says on whole pixels", () => {
+    setTheme(theme);
+    const blocks = strip();
+    const separators = [...document.querySelectorAll("[data-rail-separator]")];
+
+    const pieces = [
+      ...blocks.flatMap((block) => {
+        const foot = block.lastElementChild;
+        return foot === null ? [] : [...foot.querySelectorAll("*")];
+      }),
+      ...separators.flatMap((separator) => [...separator.querySelectorAll("*")]),
+    ].filter((piece) => !piece.matches(".sr-only, .sr-only *, [data-state], [data-state] *"));
+    expect(pieces.length).toBeGreaterThan(0);
+    for (const piece of pieces) {
+      expect(Number.isInteger(piece.getBoundingClientRect().left), piece.outerHTML).toBe(true);
     }
   });
 });

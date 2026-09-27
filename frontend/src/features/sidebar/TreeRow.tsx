@@ -109,11 +109,8 @@ function TreeRowView({ row, level, selected, isNext, flash, narrow, tabIndex }: 
         className={cn(
           "group/row tree-flash relative grid w-full cursor-pointer overflow-clip grid-cols-[var(--icon)_minmax(0,1fr)_auto] items-center gap-x-(--space-2-5) gap-y-(--line-gap) rounded-md py-(--row-pad-y) pr-(--space-2) pl-(--tree-pad) text-ink-1 outline-none transition-[background-color,box-shadow] duration-(--duration-fast) ease-standard focus-visible:focus-ring",
           selected ? "bg-brand-veil" : "hover:bg-veil-hover active:bg-veil-press",
-          row.tone === "error" && selected
-            ? "shadow-[inset_var(--error-rail)_0_0_var(--state-error),inset_0_0_0_var(--border)_var(--brand-ring)]"
-            : row.tone === "error"
-              ? "shadow-[inset_var(--error-rail)_0_0_var(--state-error)]"
-              : selected && "shadow-[inset_0_0_0_var(--border)_var(--brand-ring)]",
+          row.tone === "error" && "error-rail-bar",
+          selected && "shadow-[inset_0_0_0_var(--border)_var(--brand-ring)]",
         )}
       >
         <span className="grid place-items-center">

@@ -87,12 +87,14 @@ export function SidebarFooter({ rail = false }: SidebarFooterProps) {
       icon={History}
       {...current(historyOpen)}
       onClick={() => openHistory()}
-      className={cn(historyOpen && CURRENT)}
+      className={cn("group/history", historyOpen && CURRENT)}
     >
       History
       {archived !== null && " "}
       {archived !== null && (
-        <span className="text-(length:--text-micro) leading-(--leading-micro) text-ink-4 tabular-nums">
+        // The count steps up to the third ink on the pressed button, whose veil the fourth does
+        // not reach 4.5:1 over.
+        <span className="text-(length:--text-micro) leading-(--leading-micro) text-ink-4 tabular-nums group-active/history:text-ink-3">
           {total}
         </span>
       )}

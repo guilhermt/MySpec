@@ -132,7 +132,8 @@ export function Tree() {
         const notices = top.kind === "reviews" ? [] : top.notices;
         const nothing = notices.length === 0 && epics.length === 0 && top.rows.length === 0;
         return (
-          <div key={top.id} role="none" className="flex flex-col gap-(--row-gap)">
+          // A section is its node and, right under it, the group, which keeps its own step down.
+          <div key={top.id} role="none" className="flex flex-col">
             {node(
               top,
               1,

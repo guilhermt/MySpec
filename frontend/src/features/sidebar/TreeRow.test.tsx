@@ -329,9 +329,7 @@ describe("TreeRow", () => {
       ),
     );
 
-    expect(screen.getByRole("treeitem")).toHaveClass(
-      "shadow-[inset_var(--error-rail)_0_0_var(--state-error)]",
-    );
+    expect(screen.getByRole("treeitem")).toHaveClass("error-rail-bar");
   });
 
   it("blinks in the veil it is given", () => {

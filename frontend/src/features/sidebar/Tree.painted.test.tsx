@@ -74,6 +74,18 @@ describe.each(THEMES)("Tree in the %s theme", (theme) => {
     }
   });
 
+  it("sets the first line of a section one step under its node", () => {
+    setTheme(theme);
+    const lines = tree();
+
+    const reviews = lines.find((line) => line.textContent === "Reviews");
+    const first = screen.getByRole("treeitem", { name: /^pull request review Rate limit\./ });
+    if (reviews === undefined) throw new Error("the Reviews node");
+    expect(first.getBoundingClientRect().top - reviews.getBoundingClientRect().bottom).toBe(
+      px("--space-1"),
+    );
+  });
+
   it("steps the row of an epic in as a box, after the guide, which stays in sight", () => {
     setTheme(theme);
     const lines = tree();

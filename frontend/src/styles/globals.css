@@ -192,6 +192,20 @@
     inset var(--error-rail) 0 0 var(--state-error),
     0 0 0 var(--halo) var(--focus-halo);
 }
+/* The error rail of a row or a block of the sidebar: a straight bar on the left edge, inset from
+   the top and the bottom, with its right end rounded, whatever the radius of the row. */
+@utility error-rail-bar {
+  &::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: var(--space-1-5);
+    bottom: var(--space-1-5);
+    width: var(--error-rail);
+    border-radius: 0 var(--radius-pill) var(--radius-pill) 0;
+    background: var(--state-error);
+  }
+}
 /* Disabled in every variant: dashed control line, faint ink, no body, no shadow. */
 @utility dashed-disabled {
   border-style: dashed;

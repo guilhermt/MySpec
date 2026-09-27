@@ -1,17 +1,22 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { ShellToasts } from "@/features/notice/ShellToasts";
+import { useAppStore } from "@/store/app-store";
 import { resolve, setTheme, THEMES } from "@/test/painted";
+import { renderWithStore } from "@/test/render";
 import { AuxPanel, PanelLayout } from "./AuxPanel";
 import { ICONS } from "./icons";
 import { Toast } from "./Toast";
 
-function Place({ open }: { open: boolean }) {
+function Place({ open, looping = false }: { open: boolean; looping?: boolean }) {
   return (
     <PanelLayout
       panel={
         open && (
           <AuxPanel id="artifacts" title="Artifacts" onClose={() => undefined}>
             <p>The body</p>
+            {/* A loop inside the panel, like the pulse of a working step or a skeleton. */}
+            {looping && <span className="animate-pulse">Reading…</span>}
           </AuxPanel>
         )
       }
@@ -53,6 +58,17 @@ describe.each(THEMES)("Exits in the %s theme", (theme) => {
     await waitFor(() => expect(panel).not.toBeInTheDocument());
   });
 
+  it("lets a closed panel go even with a loop running inside it", async () => {
+    setTheme(theme);
+    const { rerender } = render(<Place open looping />);
+    const panel = screen.getByRole("complementary", { name: "Artifacts" });
+
+    rerender(<Place open={false} looping />);
+
+    expect(panel).toBeInTheDocument();
+    await waitFor(() => expect(panel).not.toBeInTheDocument());
+  });
+
   it("plays the exit of a toast before it tells it is gone", async () => {
     setTheme(theme);
     let gone = false;
@@ -77,5 +93,25 @@ describe.each(THEMES)("Exits in the %s theme", (theme) => {
     expect(gone).toBe(false);
     expect(exit(toast)).toEqual(expected("toast-exit"));
     await waitFor(() => expect(gone).toBe(true));
+  });
+
+  it("plays the exit of the oldest toast a fourth one pushes out", async () => {
+    setTheme(theme);
+    const toasts = ["1", "2", "3"].map((n) => ({ id: `task-${n}`, taskId: `task-${n}`, name: n }));
+    renderWithStore(<ShellToasts />, { ui: { toasts } });
+    const oldest = screen.getByText("“1” was archived").closest(".toast");
+    if (oldest === null) throw new Error("the oldest toast");
+
+    act(() =>
+      useAppStore.setState({
+        toasts: [...toasts.slice(1), { id: "task-4", taskId: "task-4", name: "4" }],
+      }),
+    );
+
+    const leaving = screen.getByText("“1” was archived").closest(".toast");
+    if (leaving === null) throw new Error("the oldest toast, leaving");
+    expect(leaving).toHaveAttribute("data-leaving");
+    expect(exit(leaving)).toEqual(expected("toast-exit"));
+    await waitFor(() => expect(screen.queryByText("“1” was archived")).not.toBeInTheDocument());
   });
 });

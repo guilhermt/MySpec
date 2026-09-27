@@ -43,6 +43,20 @@ describe("ShellToasts", () => {
     expect(useAppStore.getState().toasts).toEqual([]);
   });
 
+  it("lets a toast a newer one pushes out go, keeping three", () => {
+    const toasts = ["1", "2", "3"].map((n) => ({ id: `task-${n}`, taskId: `task-${n}`, name: n }));
+    renderWithStore(<ShellToasts />, { ui: { toasts } });
+
+    act(() =>
+      useAppStore.setState({
+        toasts: [...toasts.slice(1), { id: "task-4", taskId: "task-4", name: "4" }],
+      }),
+    );
+
+    expect(screen.queryByText("“1” was archived")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Dismiss" })).toHaveLength(3);
+  });
+
   it("takes the toast off on Dismiss", async () => {
     const { user } = renderWithStore(<ShellToasts />, { ui: { toasts: [TOAST] } });
 

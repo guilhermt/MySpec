@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { taskRow } from "@/features/sidebar/sidebar-tree";
 import { TreeRow } from "@/features/sidebar/TreeRow";
-import { paintOf, resolve, setTheme, THEMES, token } from "@/test/painted";
+import { NONE, paintOf, resolve, setTheme, THEMES, token } from "@/test/painted";
 import { makeSituation, makeState, makeTask } from "@/test/wails-mock";
 
 const NOW = Date.parse("2026-09-05T12:00:00Z");
@@ -53,10 +53,24 @@ describe.each(THEMES)("TreeRow in the %s theme", (theme) => {
         tabIndex={0}
       />,
     );
-    const want = {
-      shadow: resolve("inset var(--error-rail) 0 0 var(--state-error)", "box-shadow"),
-    };
-    expect(paintOf(screen.getByRole("treeitem"), want)).toEqual(want);
+    // A straight bar, inset from the top and the bottom, not a shadow that bends with the radius.
+    const rail = getComputedStyle(screen.getByRole("treeitem"), "::before");
+    expect({
+      background: rail.backgroundColor,
+      width: rail.width,
+      top: rail.top,
+      bottom: rail.bottom,
+      left: rail.left,
+      corner: rail.borderTopLeftRadius,
+    }).toEqual({
+      background: token("--state-error"),
+      width: resolve("var(--error-rail)", "width"),
+      top: resolve("var(--space-1-5)", "top"),
+      bottom: resolve("var(--space-1-5)", "bottom"),
+      left: "0px",
+      corner: "0px",
+    });
+    expect(paintOf(screen.getByRole("treeitem"), { shadow: NONE })).toEqual({ shadow: NONE });
   });
 
   it("makes the name of a row that waits bold, and leaves the others regular", () => {
