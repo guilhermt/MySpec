@@ -165,4 +165,17 @@ describe("bootstrap", () => {
 
     expect(useAppStore.getState().location).toEqual({ kind: "task", id: "task-1" });
   });
+
+  it("leaves a modal dialog where it is when the user clicks a notification", async () => {
+    vi.mocked(api.getState).mockResolvedValueOnce(inPR());
+    await bootstrap(useAppStore);
+    const dialog = document.createElement("div");
+    dialog.setAttribute("data-slot", "dialog-content");
+    document.body.append(dialog);
+
+    emitSituationOpen({ taskId: "task-1", place: PR_PLACE });
+
+    expect(useAppStore.getState().location).toEqual({ kind: "home" });
+    dialog.remove();
+  });
 });

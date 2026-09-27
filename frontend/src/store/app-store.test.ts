@@ -1,10 +1,17 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HOME, type Location, NAV_LIMIT } from "@/lib/locations";
-import { SIDEBAR_COLLAPSED_KEY } from "@/lib/ui-storage";
+import {
+  LAST_ITEM_KEY,
+  NAV_STACK_KEY,
+  SIDEBAR_COLLAPSED_KEY,
+  SIDEBAR_RAIL_KEY,
+} from "@/lib/ui-storage";
 import type { Place, PullRequest, Situation, TranscriptEvent } from "@/lib/wails";
 import { sessionKey } from "@/lib/wails";
 import {
+  initialNav,
+  readLastItem,
   stepTabKey,
   useAppStore,
   useArchivedDiscussion,
@@ -1960,6 +1967,202 @@ describe("navigation", () => {
     const { result } = renderHook(() => ({ back: useBackTarget(), forward: useForwardTarget() }));
 
     expect(result.current).toEqual({ back: null, forward: null });
+  });
+});
+
+describe("history of places", () => {
+  const TASK: Location = { kind: "task", id: WEB_TASK.id };
+  const OTHER_TASK: Location = { kind: "task", id: API_TASK.id };
+  const HISTORY: Location = { kind: "history" };
+  const GONE: Location = { kind: "gone", item: "task", id: "task-old", name: "old", boardId: "" };
+
+  beforeEach(() => {
+    useAppStore.getState().applyState(withTasks({ boards: [BOARD], history: [ARCHIVED] }));
+  });
+
+  it("goes back to the place behind and keeps the current one ahead", () => {
+    useAppStore.setState({ location: HISTORY, back: [HOME, TASK], forward: [] });
+
+    useAppStore.getState().goBack({ focus: "back" });
+
+    expect(useAppStore.getState()).toMatchObject({
+      location: TASK,
+      back: [HOME],
+      forward: [HISTORY],
+      pendingFocus: "back",
+    });
+  });
+
+  it("goes forward to the place ahead and keeps the current one behind", () => {
+    useAppStore.setState({ location: HOME, back: [], forward: [HISTORY, TASK] });
+
+    useAppStore.getState().goForward({ focus: "forward" });
+
+    expect(useAppStore.getState()).toMatchObject({
+      location: TASK,
+      back: [HOME],
+      forward: [HISTORY],
+      pendingFocus: "forward",
+    });
+  });
+
+  it("goes back past the places that no longer exist", () => {
+    useAppStore.setState({
+      location: HISTORY,
+      back: [TASK, { kind: "task", id: "task-gone" }],
+      forward: [],
+    });
+
+    useAppStore.getState().goBack();
+
+    expect(useAppStore.getState()).toMatchObject({ location: TASK, back: [], forward: [HISTORY] });
+  });
+
+  it("goes forward past the places that no longer exist", () => {
+    useAppStore.setState({
+      location: HOME,
+      back: [],
+      forward: [OTHER_TASK, { kind: "board", id: "board-gone" }],
+    });
+
+    useAppStore.getState().goForward();
+
+    expect(useAppStore.getState()).toMatchObject({
+      location: OTHER_TASK,
+      back: [HOME],
+      forward: [],
+    });
+  });
+
+  it("does nothing going back with no place behind that exists", () => {
+    useAppStore.setState({ location: TASK, back: [{ kind: "task", id: "task-gone" }] });
+
+    useAppStore.getState().goBack();
+
+    expect(useAppStore.getState()).toMatchObject({
+      location: TASK,
+      back: [{ kind: "task", id: "task-gone" }],
+      forward: [],
+    });
+  });
+
+  it("never keeps the page of an item that left ahead of the one it goes back to", () => {
+    useAppStore.setState({ location: GONE, back: [TASK], forward: [] });
+
+    useAppStore.getState().goBack();
+
+    expect(useAppStore.getState()).toMatchObject({ location: TASK, back: [], forward: [] });
+  });
+
+  it("closes the panel going back", () => {
+    useAppStore.setState({ location: TASK, back: [HISTORY], panel: "reports" });
+
+    useAppStore.getState().goBack();
+
+    expect(useAppStore.getState().panel).toBeNull();
+  });
+
+  it("clears the focus it asked for", () => {
+    useAppStore.setState({ pendingFocus: "title" });
+
+    useAppStore.getState().clearPendingFocus();
+
+    expect(useAppStore.getState().pendingFocus).toBeNull();
+  });
+
+  it("says the same announcement again with a new id", () => {
+    useAppStore.getState().announce("Nothing else needs you now.");
+    const first = useAppStore.getState().announcement;
+
+    useAppStore.getState().announce("Nothing else needs you now.");
+
+    expect(useAppStore.getState().announcement).toEqual({
+      id: (first?.id ?? 0) + 1,
+      text: "Nothing else needs you now.",
+    });
+  });
+});
+
+describe("kept places", () => {
+  const TASK: Location = { kind: "task", id: WEB_TASK.id };
+  const HISTORY: Location = { kind: "history" };
+
+  beforeEach(() => {
+    localStorage.clear();
+    useAppStore.getState().applyState(withTasks({ boards: [BOARD], history: [ARCHIVED] }));
+  });
+
+  it("reopens with Home on screen and the places of the last run behind it", () => {
+    useAppStore.getState().go(TASK);
+    useAppStore.getState().go(HISTORY);
+
+    expect(initialNav()).toEqual({ location: HOME, back: [HOME, TASK, HISTORY], forward: [] });
+  });
+
+  it("does not repeat Home behind Home when the last run ended on it", () => {
+    useAppStore.getState().go(TASK);
+    useAppStore.getState().go(HOME);
+
+    expect(initialNav()).toEqual({ location: HOME, back: [HOME, TASK], forward: [] });
+  });
+
+  it("keeps neither the page of an item that left nor the places ahead", () => {
+    const gone: Location = { kind: "gone", item: "task", id: "task-old", name: "old", boardId: "" };
+    useAppStore.setState({ location: gone, back: [TASK, gone], forward: [HISTORY] });
+
+    expect(initialNav()).toEqual({ location: HOME, back: [TASK], forward: [] });
+  });
+
+  it("reopens with at most NAV_LIMIT places behind", () => {
+    const behind: Location[] = Array.from({ length: NAV_LIMIT }, (_, index) => ({
+      kind: "task",
+      id: `task-${index}`,
+    }));
+    useAppStore.setState({ location: HISTORY, back: behind });
+
+    const { back } = initialNav();
+
+    expect(back).toHaveLength(NAV_LIMIT);
+    expect(back.at(-1)).toEqual(HISTORY);
+  });
+
+  it.each([
+    ["nothing kept", null],
+    ["not JSON", "{"],
+    ["no current place", JSON.stringify({ back: [] })],
+    ["an unknown place", JSON.stringify({ back: [{ kind: "nowhere" }], current: HOME })],
+  ])("opens with nothing behind on %s", (_, raw) => {
+    if (raw !== null) {
+      localStorage.setItem(NAV_STACK_KEY, raw);
+    }
+
+    expect(initialNav()).toEqual({ location: HOME, back: [], forward: [] });
+  });
+
+  it("keeps the last active item opened", () => {
+    useAppStore.getState().go(TASK);
+    useAppStore.getState().go(HISTORY);
+
+    expect(readLastItem()).toEqual(TASK);
+  });
+
+  it.each([
+    ["nothing kept", null],
+    ["a place that is not an active item", JSON.stringify(HISTORY)],
+    ["an unknown place", JSON.stringify({ kind: "nowhere" })],
+  ])("has no last item with %s", (_, raw) => {
+    if (raw !== null) {
+      localStorage.setItem(LAST_ITEM_KEY, raw);
+    }
+
+    expect(readLastItem()).toBeNull();
+  });
+
+  it("keeps the sidebar collapsed into its strip", () => {
+    useAppStore.getState().toggleSidebarRail();
+
+    expect(useAppStore.getState().sidebarRail).toBe(true);
+    expect(localStorage.getItem(SIDEBAR_RAIL_KEY)).toBe("true");
   });
 });
 

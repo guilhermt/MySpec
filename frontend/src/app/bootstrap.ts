@@ -1,4 +1,5 @@
 import type { StoreApi } from "zustand";
+import { modalOpen } from "@/lib/layers";
 import { FLASH_MS } from "@/lib/situations";
 import {
   api,
@@ -33,9 +34,13 @@ export async function bootstrap(store: StoreApi<AppStore>): Promise<() => void> 
     store.getState().flashSituation(id);
     setTimeout(() => store.getState().unflashSituation(id), FLASH_MS);
   });
-  const stopOpen = onSituationOpen((event) =>
-    store.getState().openSituation(event.taskId, event.place),
-  );
+  // A modal dialog on screen holds what the user is doing there: the click on
+  // the notification only brought the window forward.
+  const stopOpen = onSituationOpen((event) => {
+    if (!modalOpen()) {
+      store.getState().openSituation(event.taskId, event.place);
+    }
+  });
   store.getState().applyState(await api.getState());
   return () => {
     stopState();

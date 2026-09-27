@@ -683,9 +683,16 @@ O tema segue o sistema por padrão e pode ser fixado em claro ou escuro pelo bot
 |---|---|
 | `Ctrl+N` | Criar uma task |
 | `Ctrl+J` | Abrir o primeiro item que espera pelo usuário: task, review ou discussão |
-| `Ctrl+,` | Abrir ou fechar as configurações |
+| `Ctrl+,` | Abrir as configurações; com elas abertas, fechá-las de volta ao lugar anterior |
+| `Alt+←` | Voltar ao lugar anterior |
+| `Alt+→` | Avançar ao lugar seguinte |
+| `Esc` | Cancelar a edição de um prompt; fora dela, fechar as configurações de volta ao lugar anterior |
 
-`Cmd` vale no lugar de `Ctrl`. Os atalhos funcionam com o foco em qualquer lugar da janela, inclusive na caixa de mensagem. Com o diálogo de criação de uma task, o que inicia um review ou o que cria uma discussão aberto, os três não fazem nada: o que o usuário digita ali não fica para trás nem é coberto por outro diálogo.
+`Cmd` vale no lugar de `Ctrl`. Os atalhos funcionam com o foco em qualquer lugar da janela, inclusive na caixa de mensagem. Com um diálogo modal aberto, nenhum deles faz nada: o que o usuário faz ali não fica para trás nem é coberto por outro diálogo. O clique numa notificação com um diálogo modal aberto só traz a janela para a frente.
+
+O app guarda o histórico dos lugares por onde o usuário passou, até 50 atrás do atual. Voltar e avançar pulam os lugares que não existem mais, e ir a um lugar novo descarta os que estavam à frente. Trocar de página nas configurações não conta como um lugar novo. O histórico sobrevive a reinícios: o app abre na Home, com os lugares da última execução atrás dela. Fechar as configurações volta ao lugar anterior, ou à Home quando não há nenhum.
+
+O `Esc` das configurações vale quando nada mais perto do usuário o usa: um menu, uma lista ou um diálogo aberto o recebe primeiro, e a caixa de mensagem, a busca do board e o rascunho de uma discussão tratam o seu.
 
 Na visão do board:
 

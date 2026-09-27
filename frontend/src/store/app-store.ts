@@ -3,6 +3,9 @@ import { useShallow } from "zustand/react/shallow";
 import { findBoard } from "@/lib/boards";
 import {
   HOME,
+  isActiveItem,
+  isLocation,
+  isLocationList,
   type Location,
   locationExists,
   NAV_LIMIT,
@@ -19,7 +22,14 @@ import {
   stageSituation,
   stepSituation,
 } from "@/lib/situations";
-import { readStored, SIDEBAR_COLLAPSED_KEY, writeStored } from "@/lib/ui-storage";
+import {
+  LAST_ITEM_KEY,
+  NAV_STACK_KEY,
+  readStored,
+  SIDEBAR_COLLAPSED_KEY,
+  SIDEBAR_RAIL_KEY,
+  writeStored,
+} from "@/lib/ui-storage";
 import type {
   ArchivedDiscussion,
   ArchivedReview,
@@ -182,6 +192,14 @@ export interface AppStore {
 
   /** go opens a place: the current one goes behind it and whatever was ahead is dropped. */
   go: (location: Location, options?: { focus?: "title" | "back" | "forward" }) => void;
+  /** goBack opens the nearest place behind the current one that still exists; with none, nothing happens. */
+  goBack: (options?: { focus?: "title" | "back" }) => void;
+  /** goForward opens the nearest place ahead of the current one that still exists; with none, nothing happens. */
+  goForward: (options?: { focus?: "title" | "forward" }) => void;
+  clearPendingFocus: () => void;
+  toggleSidebarRail: () => void;
+  /** announce has the live region say a text, even the same one again. */
+  announce: (text: string) => void;
   openTask: (id: string) => void;
   /** openNewTask opens the creation dialog, for a card when one is given. */
   openNewTask: (card?: CardRef) => void;
@@ -346,6 +364,58 @@ function withStepTab(
   }
 }
 
+function isBoolean(value: unknown): value is boolean {
+  return typeof value === "boolean";
+}
+
+/** SavedNav is the history of places as it is kept between runs. */
+interface SavedNav {
+  back: Location[];
+  current: Location;
+}
+
+function isSavedNav(value: unknown): value is SavedNav {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "back" in value &&
+    "current" in value &&
+    isLocationList(value.back) &&
+    isLocation(value.current)
+  );
+}
+
+/** initialNav is the history of places the app opens with: Home, with the places of the last run behind it. */
+export function initialNav(): Pick<AppStore, "location" | "back" | "forward"> {
+  const saved = readStored<SavedNav>(NAV_STACK_KEY, { back: [], current: HOME }, isSavedNav);
+  const back = saved.current.kind === "home" ? saved.back : [...saved.back, saved.current];
+  return { location: HOME, back: back.slice(-NAV_LIMIT), forward: [] };
+}
+
+function isActiveItemLocation(value: unknown): value is Location {
+  return isLocation(value) && isActiveItem(value);
+}
+
+/** readLastItem is the last active item opened, kept between runs; null when there is none. */
+export function readLastItem(): Location | null {
+  return readStored<Location | null>(LAST_ITEM_KEY, null, isActiveItemLocation);
+}
+
+// persistNav keeps the history of places for the next run, without the pages
+// of items that left, which are never revisited, and the last active item
+// opened.
+function persistNav(state: Pick<AppStore, "location" | "back">): void {
+  const current = state.location.kind === "gone" ? HOME : state.location;
+  const saved: SavedNav = {
+    back: state.back.filter((place) => place.kind !== "gone"),
+    current,
+  };
+  writeStored(NAV_STACK_KEY, saved);
+  if (isActiveItem(state.location)) {
+    writeStored(LAST_ITEM_KEY, state.location);
+  }
+}
+
 function isStringList(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string");
 }
@@ -421,6 +491,37 @@ function navigate(
   return { ...common, back, forward: [] };
 }
 
+// travel opens the nearest place behind (or ahead of) the current one that
+// still exists, dropping the ones that no longer do; the current one goes to
+// the other side, unless it is the page of an item that left. Null when there
+// is nowhere to go.
+function travel(
+  state: AppStore,
+  direction: "back" | "forward",
+  focus: AppStore["pendingFocus"],
+): Navigation | null {
+  const from = direction === "back" ? state.back : state.forward;
+  const to = direction === "back" ? state.forward : state.back;
+  const index = from.reduce(
+    (found, place, at) => (locationExists(state.app, place) ? at : found),
+    -1,
+  );
+  const place = from[index];
+  if (place === undefined) {
+    return null;
+  }
+  const rest = from.slice(0, index);
+  const behind = state.location.kind === "gone" ? to : [...to, state.location].slice(-NAV_LIMIT);
+  return {
+    location: resolveHome(state.app, place),
+    back: direction === "back" ? rest : behind,
+    forward: direction === "back" ? behind : rest,
+    panel: null,
+    pendingFocus: focus,
+    promptEdit: null,
+  };
+}
+
 // Where the place on screen stands in a new snapshot: an archived item that is
 // gone leaves for the history; an active item or a board that is gone leaves
 // for where it went, or for Home; Home stands for the first board while there
@@ -489,15 +590,23 @@ export const useAppStore = create<AppStore>()((set, get) => {
   const go: AppStore["go"] = (location, options) =>
     leave(() => set((state) => navigate(state, location, options?.focus ?? null)));
 
+  // A step through the history with nowhere to go does nothing, so it never
+  // asks the user about an unsaved edit either.
+  const step = (direction: "back" | "forward", focus: AppStore["pendingFocus"]): boolean => {
+    if (travel(get(), direction, focus) === null) {
+      return false;
+    }
+    leave(() => set((state) => travel(state, direction, focus) ?? {}));
+    return true;
+  };
+
   return {
     app: null,
     error: null,
-    location: HOME,
-    back: [],
-    forward: [],
+    ...initialNav(),
     panel: null,
     pendingFocus: null,
-    sidebarRail: false,
+    sidebarRail: readStored(SIDEBAR_RAIL_KEY, false, isBoolean),
     toasts: [],
     announcement: null,
     expectGone: null,
@@ -550,6 +659,25 @@ export const useAppStore = create<AppStore>()((set, get) => {
     setError: (message) => set({ error: message }),
 
     go,
+
+    goBack: (options) => {
+      step("back", options?.focus ?? null);
+    },
+
+    goForward: (options) => {
+      step("forward", options?.focus ?? null);
+    },
+
+    clearPendingFocus: () => set({ pendingFocus: null }),
+
+    toggleSidebarRail: () =>
+      set((state) => {
+        writeStored(SIDEBAR_RAIL_KEY, !state.sidebarRail);
+        return { sidebarRail: !state.sidebarRail };
+      }),
+
+    announce: (text) =>
+      set((state) => ({ announcement: { id: (state.announcement?.id ?? 0) + 1, text } })),
 
     openTask: (id) => go({ kind: "task", id }),
 
@@ -734,29 +862,13 @@ export const useAppStore = create<AppStore>()((set, get) => {
 
     openSettings: (section) => go({ kind: "settings", section: section ?? "defaults" }),
 
-    // Settings close back to the place they were opened from, skipping the
-    // ones that no longer exist; with none, to Home.
-    closeSettings: () =>
-      leave(() =>
-        set((state) => {
-          const index = state.back.reduce(
-            (found, place, at) => (locationExists(state.app, place) ? at : found),
-            -1,
-          );
-          const previous = state.back[index];
-          if (previous === undefined) {
-            return navigate(state, HOME, "title");
-          }
-          return {
-            location: previous,
-            back: state.back.slice(0, index),
-            forward: [...state.forward, state.location],
-            panel: null,
-            pendingFocus: "title",
-            promptEdit: null,
-          };
-        }),
-      ),
+    // Settings close back to the place before them, skipping the ones that no
+    // longer exist; with none, to Home.
+    closeSettings: () => {
+      if (!step("back", "title")) {
+        go(HOME, { focus: "title" });
+      }
+    },
 
     selectSettingsSection: (section) => go({ kind: "settings", section }),
 
@@ -1134,3 +1246,14 @@ export function useArchivedNotice(): ArchivedNotice | null {
 export function useLeftover(): Leftover | null {
   return useAppStore((state) => state.leftover);
 }
+
+// The history of places is kept whenever it changes, whatever changed it.
+useAppStore.subscribe((state, previous) => {
+  if (
+    state.location !== previous.location ||
+    state.back !== previous.back ||
+    state.forward !== previous.forward
+  ) {
+    persistNav(state);
+  }
+});
