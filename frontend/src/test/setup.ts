@@ -112,3 +112,11 @@ afterEach(() => {
   keyboardFocus = false;
   wailsMock.resetWailsMock();
 });
+
+// Nor does it scroll an element into view, which the open row of the tree
+// asks for.
+Object.defineProperty(Element.prototype, "scrollIntoView", {
+  value: () => {},
+  writable: true,
+  configurable: true,
+});

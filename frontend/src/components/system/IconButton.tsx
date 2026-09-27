@@ -1,8 +1,8 @@
-import type { LucideIcon } from "lucide-react";
 import { useId } from "react";
 import { cn } from "@/lib/utils";
 import { Button, type ButtonBaseProps } from "./Button";
 import { Icon } from "./Icon";
+import type { IconGlyph } from "./icons";
 import { Spinner } from "./Spinner";
 import { Tooltip } from "./Tooltip";
 
@@ -10,7 +10,7 @@ export interface IconButtonProps
   extends Omit<ButtonBaseProps, "variant" | "icon" | "children" | "shortcut"> {
   label: string;
   loading?: boolean;
-  icon: LucideIcon;
+  icon: IconGlyph;
   shortcut?: string;
   variant?: "ghost" | "secondary";
 }

@@ -15,11 +15,11 @@ export type SituationTone = "error" | "attention";
 /** FLASH_MS is how long a row, a counter or a tab stays highlighted for a new situation. */
 export const FLASH_MS = 1600;
 
-/** WaitingEntry is one line of "Waiting for you": a situation and the item it belongs to. */
+/** WaitingEntry is an item that waits on the user, with the situation that makes it wait. */
 export interface WaitingEntry {
   /** itemId is the task, the review or the discussion the situation is in. */
   itemId: string;
-  /** name is what the line reads: the name of a task, name#number of a review, or the title of a discussion. */
+  /** name is what the tree calls the item: the name of a task, the title of a review or of a discussion. */
   name: string;
   situation: Situation;
 }
@@ -210,47 +210,6 @@ export function compareSituations(a: Situation, b: Situation): number {
 /** reviewName is what a line of the interface calls a review: name#number. */
 export function reviewName(review: ReviewSummary): string {
   return `${shortName(review.repository)}#${review.number}`;
-}
-
-/**
- * waitingEntries is everything the active tasks, reviews and discussions wait
- * on the user for, one entry per situation, most urgent first. The item on
- * screen is left out: the user is already there.
- */
-export function waitingEntries(app: State | null, openItemId: string | null): WaitingEntry[] {
-  const tasks = (app?.tasks ?? [])
-    .filter((task) => task.id !== openItemId)
-    .flatMap((task) =>
-      (task.situations ?? []).map((situation) => ({
-        itemId: task.id,
-        name: task.name,
-        situation,
-      })),
-    );
-  const reviews = (app?.reviews ?? [])
-    .filter((review) => review.id !== openItemId)
-    .flatMap((review) =>
-      (review.situations ?? []).map((situation) => ({
-        itemId: review.id,
-        name: reviewName(review),
-        situation,
-      })),
-    );
-  const discussions = (app?.discussions ?? [])
-    .filter((discussion) => discussion.id !== openItemId)
-    .flatMap((discussion) =>
-      (discussion.situations ?? []).map((situation) => ({
-        itemId: discussion.id,
-        name: discussion.title,
-        situation,
-      })),
-    );
-  return [...tasks, ...reviews, ...discussions].sort(
-    (a, b) =>
-      compareSituations(a.situation, b.situation) ||
-      a.name.localeCompare(b.name) ||
-      a.situation.id.localeCompare(b.situation.id),
-  );
 }
 
 /**

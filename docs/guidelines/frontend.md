@@ -22,7 +22,7 @@ React 19, TypeScript em modo strict, Vite, Tailwind CSS 4, shadcn/ui sobre Base 
 - A lógica de apresentação sem React vai para um arquivo `.ts` ao lado (`status.ts`, `step-status.ts`, `pr-status.ts`, `stage-actions.ts`): recebe DTOs, devolve rótulos, tons e booleanos, e é testada sem renderizar.
 - Os componentes do design system moram em `components/system/`: embrulham os primitivos de `components/ui/`, gerados pelo shadcn e nunca editados, ou são próprios sobre o Base UI. Um comportamento diferente de um primitivo é um wrapper em `components/system/`, nunca em `features/`.
 - Código novo de uma feature importa os componentes de `components/system/`. As importações de `components/ui/` que existem nas features são as das telas anteriores ao design system, e o redesenho de cada tela as troca pelas de `components/system/`.
-- Um componente próprio usado por mais de uma feature, como o `FilterMenu` das visões de board e de reviews, fica em `src/components/`, ao lado de `ui/`, com o teste ao lado. Um componente de uma feature só fica na feature; ele sobe para `src/components/` quando uma segunda feature precisa dele.
+- Um componente próprio usado por mais de uma feature, como o `FilterMenu` das visões de board e de reviews, fica em `src/components/`, ao lado de `ui/`, com o teste ao lado. Um componente de uma feature só fica na feature, mesmo feito de peças do system, como as linhas da árvore em `features/sidebar/`; ele sobe para `src/components/` quando uma segunda feature precisa dele.
 - Ícones do `lucide-react`. Classes com `cn` de `lib/utils`; variantes com `class-variance-authority`.
 - Toda constante de apresentação com mais de um uso é nomeada e comentada (`REVIEW_STATES`, `MAX_CORRECTIONS`, que espelha `flow.MaxCorrections`).
 - Textos da interface em inglês, curtos, com o separador `·` entre partes de uma mesma linha, como modelo e esforço. O usuário é "you"; o agente é "the agent".
@@ -31,7 +31,8 @@ React 19, TypeScript em modo strict, Vite, Tailwind CSS 4, shadcn/ui sobre Base 
 
 - Toda superfície interativa tem um papel e um nome acessível; os testes a encontram por `getByRole`.
 - Uma cor nunca é o único portador de um estado: cada ponto de status é `aria-hidden` e vem acompanhado de um rótulo em texto. Estados vivos (`role="status"`) para o que muda sozinho.
-- Foco visível, navegação por teclado na lista de tasks e nos diálogos, atalhos que funcionam com o foco em qualquer lugar da janela.
+- Foco visível, navegação por teclado nos diálogos, atalhos que funcionam com o foco em qualquer lugar da janela.
+- A árvore da barra lateral é um `tree` com `treeitem`s: cada linha tem o nome acessível inteiro, montado em `sidebar-tree.ts` (os tempos por extenso, a posição e o meta), porque o que ela mostra está em partes visuais curtas; o grupo de um nó é um `group` apontado pelo `aria-owns` do nó, e a árvore tem uma parada de Tab só.
 - `prefers-reduced-motion` zera as durações; as animações usam as três durações (`--duration-fast`, `--duration-base`, `--duration-slow`) e as curvas `--ease-standard`, `--ease-enter` e `--ease-exit`, nunca valores soltos. Os dois laços, o giro do spinner e o brilho de uma leitura sem resultado, param sem movimento: o spinner fica como um anel de três quartos e o brilho, chapado.
 
 ## Estilo

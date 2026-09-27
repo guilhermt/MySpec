@@ -16,7 +16,7 @@ describe("Sidebar", () => {
     expect(
       screen.getByRole("button", { name: "Repository filter: All repositories" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("treeitem", { name: /^add-login,/ })).toBeInTheDocument();
+    expect(screen.getByRole("treeitem", { name: /^task add-login\./ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^History/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument();
     expect(screen.getByRole("group", { name: "Theme" })).toBeInTheDocument();
@@ -26,7 +26,7 @@ describe("Sidebar", () => {
     sidebar();
 
     const reviews = screen.getByRole("navigation", { name: "Reviews" });
-    const tasks = screen.getByRole("tree", { name: "Tasks" });
+    const tasks = screen.getByRole("tree", { name: "Active items" });
     expect(reviews.compareDocumentPosition(tasks) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 

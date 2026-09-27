@@ -3,6 +3,7 @@ import {
   allRows,
   discussionRow,
   emptyTreeText,
+  flashOf,
   type ItemRow,
   nodeSummary,
   nodesOfItem,
@@ -1007,5 +1008,27 @@ describe("the tree", () => {
     ["repo-3", "No tasks in cli."],
   ])("says of the filter %s: %s", (filter, expected) => {
     expect(emptyTreeText(app, filter)).toBe(expected);
+  });
+});
+
+describe("flashOf", () => {
+  const waiting = situation({ id: "reply", group: "waiting" });
+  const closing = situation({ id: "close", group: "closing", kind: "close" });
+  const failed = situation({ id: "failed", group: "error", kind: "session_error" });
+  const row = (situations: Situation[]) => taskRow(makeState(), taskWith({ situations }), NOW);
+
+  it.each([
+    ["nothing when none of the situations blinks", [waiting], [], null],
+    ["the wait veil for a waiting situation", [waiting], ["reply"], "wait"],
+    ["the wait veil for a closing situation", [closing], ["close"], "wait"],
+    [
+      "the error veil when an error blinks among others",
+      [waiting, failed],
+      ["reply", "failed"],
+      "error",
+    ],
+    ["only the veil of what blinks", [waiting, failed], ["reply"], "wait"],
+  ] as const)("gives %s", (_, situations, flashing, flash) => {
+    expect(flashOf([row([...situations])], new Set(flashing))).toBe(flash);
   });
 });

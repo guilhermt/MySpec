@@ -1032,3 +1032,23 @@ export function emptyTreeText(app: State, filter: string): string | null {
   }
   return `No tasks in ${shortName(repository.fullName)}.`;
 }
+
+/** RowFlash is the veil a row or a collapsed node blinks in when a situation of it just started. */
+export type RowFlash = "error" | "wait";
+
+/**
+ * flashOf is how the rows blink for the situations in `flashing`: error when
+ * one of them is an error, wait for the others (waiting and closing); null
+ * when none of theirs blinks.
+ */
+export function flashOf(rows: readonly ItemRow[], flashing: ReadonlySet<string>): RowFlash | null {
+  const started = rows
+    .flatMap((row) => row.item.situations ?? [])
+    .filter((candidate) => flashing.has(candidate.id));
+  if (started.length === 0) {
+    return null;
+  }
+  return started.some((candidate) => asSituationGroup(candidate.group) === "error")
+    ? "error"
+    : "wait";
+}

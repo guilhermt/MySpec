@@ -1,14 +1,14 @@
 import { Radio } from "@base-ui/react/radio";
 import { RadioGroup } from "@base-ui/react/radio-group";
-import type { LucideIcon } from "lucide-react";
 import { useId } from "react";
 import { cn } from "@/lib/utils";
 import { Icon } from "./Icon";
+import type { IconGlyph } from "./icons";
 
 export interface SegmentOption<T extends string> {
   value: T;
   label: string;
-  icon?: LucideIcon;
+  icon?: IconGlyph;
   detail?: string;
 }
 

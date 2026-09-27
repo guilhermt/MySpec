@@ -1,12 +1,12 @@
 import { cva } from "class-variance-authority";
-import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { Icon } from "./Icon";
+import type { IconGlyph } from "./icons";
 
 export interface BadgeProps {
   variant?: "default" | "edited" | "suggested";
-  icon?: LucideIcon;
+  icon?: IconGlyph;
   children: ReactNode;
   className?: string;
 }

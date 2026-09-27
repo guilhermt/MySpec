@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { layerOpen, modalOpen } from "@/lib/layers";
 import { openItemId } from "@/lib/locations";
-import { waitingEntries } from "@/lib/situations";
+import { nextWaiting } from "@/lib/situations";
 import { type AppStore, useAppStore } from "@/store/app-store";
 
 // The shortcuts belong to the product itself: the welcome screen and the
@@ -21,9 +21,9 @@ function runShortcut(key: string, store: AppStore): void {
       store.openNewTask();
       break;
     case "j": {
-      const [first] = waitingEntries(store.app, openItemId(store.location));
-      if (first !== undefined) {
-        store.openSituation(first.itemId, first.situation.place);
+      const next = nextWaiting(store.app, openItemId(store.location));
+      if (next !== null) {
+        store.openSituation(next.itemId, next.situation.place);
       }
       break;
     }

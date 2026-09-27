@@ -129,8 +129,8 @@ export function ReviewsNode() {
         </button>
       </div>
       {!collapsed && reviews.length > 0 && (
-        // Five rows of h-12 make 60: the sixth is the first to scroll, as in
-        // Waiting for you, so the tasks below keep their room.
+        // Five rows of h-12 make 60: the sixth is the first to scroll, so the
+        // tree below keeps its room.
         <ScrollArea className="max-h-60 **:data-[slot=scroll-area-viewport]:max-h-60">
           <ul className="flex flex-col">
             {reviews.map((review) => (

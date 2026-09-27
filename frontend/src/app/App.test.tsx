@@ -93,18 +93,18 @@ describe("App", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("gives an entry waiting for the user the main area back from the settings", async () => {
+  it("gives a row of the tree the main area back from the settings", async () => {
     vi.mocked(api.getState).mockResolvedValue(waitingState());
     const { user } = renderWithStore(<App />);
-    await screen.findByRole("tree", { name: "Tasks" });
+    await screen.findByRole("tree", { name: "Active items" });
 
     await user.click(screen.getByRole("button", { name: "Settings" }));
     expect(await screen.findByRole("heading", { name: "Defaults" })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /^add-login, Waiting for reply/ }));
+    await user.click(screen.getByRole("treeitem", { name: /^task add-login\./ }));
 
     expect(screen.queryByRole("heading", { name: "Defaults" })).not.toBeInTheDocument();
-    expect(await screen.findByRole("treeitem", { name: /^add-login,/ })).toHaveAttribute(
+    expect(await screen.findByRole("treeitem", { name: /^task add-login\./ })).toHaveAttribute(
       "aria-selected",
       "true",
     );
@@ -141,7 +141,7 @@ describe("App", () => {
     vi.mocked(api.getState).mockResolvedValue(makeState({ tasks: [makeTask()] }));
     const { user } = renderWithStore(<App />);
 
-    await user.click(await screen.findByRole("treeitem", { name: /^add-login,/ }));
+    await user.click(await screen.findByRole("treeitem", { name: /^task add-login\./ }));
 
     expect(await screen.findByRole("button", { name: "Delete task" })).toBeInTheDocument();
     expect(screen.queryByText("No task open")).not.toBeInTheDocument();
@@ -178,14 +178,14 @@ describe("App", () => {
       }),
     );
     const { user } = renderWithStore(<App />);
-    await screen.findByRole("treeitem", { name: /^add-login,/ });
+    await screen.findByRole("treeitem", { name: /^task add-login\./ });
 
     await user.click(screen.getByRole("button", { name: /^History/ }));
     await user.click(screen.getByRole("button", { name: /fix-header/ }));
 
     expect(screen.getByText("Archived")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("treeitem", { name: /^add-login,/ }));
+    await user.click(screen.getByRole("treeitem", { name: /^task add-login\./ }));
 
     expect(screen.queryByText("Archived")).not.toBeInTheDocument();
     expect(await screen.findByRole("button", { name: "Artifacts" })).toBeInTheDocument();
@@ -196,7 +196,7 @@ describe("App", () => {
       makeState({ tasks: [makeTask()], boards: [makeBoard({ title: "Platform" })] }),
     );
     const { user } = renderWithStore(<App />);
-    await screen.findByRole("treeitem", { name: /^add-login,/ });
+    await screen.findByRole("treeitem", { name: /^task add-login\./ });
 
     act(() => {
       useAppStore.getState().openBoard("board-1");
@@ -205,7 +205,7 @@ describe("App", () => {
     expect(screen.getByRole("heading", { level: 1, name: "Platform" })).toBeInTheDocument();
     expect(screen.queryByText("No task open")).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("treeitem", { name: /^add-login,/ }));
+    await user.click(screen.getByRole("treeitem", { name: /^task add-login\./ }));
 
     expect(screen.queryByRole("heading", { level: 1, name: "Platform" })).not.toBeInTheDocument();
     expect(await screen.findByRole("button", { name: "Delete task" })).toBeInTheDocument();
@@ -236,7 +236,7 @@ describe("App", () => {
       }),
     );
     const { user } = renderWithStore(<App />);
-    await screen.findByRole("treeitem", { name: /^add-login,/ });
+    await screen.findByRole("treeitem", { name: /^task add-login\./ });
 
     act(() => {
       useAppStore.getState().openReviews();
@@ -245,7 +245,7 @@ describe("App", () => {
     expect(screen.getByRole("region", { name: "Reviews" })).toBeInTheDocument();
     expect(api.refreshPullRequests).toHaveBeenCalled();
 
-    await user.click(screen.getByRole("treeitem", { name: /^add-login,/ }));
+    await user.click(screen.getByRole("treeitem", { name: /^task add-login\./ }));
 
     expect(screen.queryByRole("region", { name: "Reviews" })).not.toBeInTheDocument();
   });
@@ -255,7 +255,7 @@ describe("App", () => {
       makeState({ tasks: [makeTask()], reviews: [makeReviewSummary()] }),
     );
     renderWithStore(<App />);
-    await screen.findByRole("treeitem", { name: /^add-login,/ });
+    await screen.findByRole("treeitem", { name: /^task add-login\./ });
 
     act(() => {
       useAppStore.getState().openReview("review-1");
@@ -284,7 +284,7 @@ describe("App", () => {
       }),
     );
     const { user } = renderWithStore(<App />);
-    await screen.findByRole("treeitem", { name: /^add-login,/ });
+    await screen.findByRole("treeitem", { name: /^task add-login\./ });
 
     act(() => {
       useAppStore.getState().openReview("review-1");
@@ -306,7 +306,7 @@ describe("App", () => {
       makeState({ tasks: [makeTask()], reviewHistory: [makeArchivedReview()] }),
     );
     renderWithStore(<App />);
-    await screen.findByRole("treeitem", { name: /^add-login,/ });
+    await screen.findByRole("treeitem", { name: /^task add-login\./ });
 
     act(() => {
       useAppStore.getState().openArchivedReview("review-1");

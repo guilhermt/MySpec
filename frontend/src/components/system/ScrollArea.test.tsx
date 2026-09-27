@@ -1,4 +1,5 @@
 import { fireEvent, screen } from "@testing-library/react";
+import { createRef } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { renderWithStore } from "@/test/render";
 import { ScrollArea } from "./ScrollArea";
@@ -14,6 +15,16 @@ describe("ScrollArea", () => {
     expect(screen.getByLabelText("Conversation")).toHaveClass(
       "focus-visible:-outline-offset-(length:--focus-width)",
     );
+  });
+
+  it("hands its viewport to the viewport ref", () => {
+    const ref = createRef<HTMLDivElement>();
+    renderWithStore(
+      <ScrollArea label="Conversation" viewportRef={ref}>
+        The transcript
+      </ScrollArea>,
+    );
+    expect(ref.current).toBe(screen.getByLabelText("Conversation"));
   });
 
   it("draws the thumb of the system", async () => {

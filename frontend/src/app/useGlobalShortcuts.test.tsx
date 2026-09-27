@@ -79,12 +79,12 @@ describe("useGlobalShortcuts", () => {
   it("opens the first entry waiting for the user on Ctrl+J, leaving the open task out", async () => {
     vi.mocked(api.getState).mockResolvedValue(waitingState());
     const { user } = renderWithStore(<App />);
-    await screen.findByRole("tree", { name: "Tasks" });
+    await screen.findByRole("tree", { name: "Active items" });
 
     // The error comes before the reply, though it started later.
     await user.keyboard("{Control>}j{/Control}");
 
-    expect(await screen.findByRole("treeitem", { name: /^fix-header,/ })).toHaveAttribute(
+    expect(await screen.findByRole("treeitem", { name: /^task fix-header\./ })).toHaveAttribute(
       "aria-selected",
       "true",
     );
@@ -93,7 +93,7 @@ describe("useGlobalShortcuts", () => {
     // The task on screen is not an entry any more: the next one is.
     await user.keyboard("{Control>}j{/Control}");
 
-    expect(screen.getByRole("treeitem", { name: /^add-login,/ })).toHaveAttribute(
+    expect(screen.getByRole("treeitem", { name: /^task add-login\./ })).toHaveAttribute(
       "aria-selected",
       "true",
     );
@@ -119,7 +119,7 @@ describe("useGlobalShortcuts", () => {
       }),
     );
     const { user } = renderWithStore(<App />);
-    await screen.findByRole("tree", { name: "Tasks" });
+    await screen.findByRole("tree", { name: "Active items" });
 
     await user.keyboard("{Control>}j{/Control}");
 
@@ -129,12 +129,12 @@ describe("useGlobalShortcuts", () => {
   it("changes nothing on Ctrl+J when nothing waits for the user", async () => {
     vi.mocked(api.getState).mockResolvedValue(makeState({ tasks: [makeTask()] }));
     const { user } = renderWithStore(<App />);
-    await screen.findByRole("tree", { name: "Tasks" });
+    await screen.findByRole("tree", { name: "Active items" });
 
     await user.keyboard("{Control>}j{/Control}");
 
     expect(screen.getByText("No task open")).toBeInTheDocument();
-    expect(screen.getByRole("treeitem", { name: /^add-login,/ })).toHaveAttribute(
+    expect(screen.getByRole("treeitem", { name: /^task add-login\./ })).toHaveAttribute(
       "aria-selected",
       "false",
     );
@@ -144,7 +144,7 @@ describe("useGlobalShortcuts", () => {
     vi.mocked(api.getState).mockResolvedValue(waitingState());
     const { user } = renderWithStore(<App />);
 
-    await user.click(await screen.findByRole("treeitem", { name: /^add-login,/ }));
+    await user.click(await screen.findByRole("treeitem", { name: /^task add-login\./ }));
     const box = await screen.findByPlaceholderText("Reply to the agent…");
     // Focused directly: jsdom lays nothing out, so a click lands on the resize handle.
     act(() => box.focus());
@@ -153,7 +153,7 @@ describe("useGlobalShortcuts", () => {
 
     await user.keyboard("{Control>}j{/Control}");
 
-    expect(await screen.findByRole("treeitem", { name: /^fix-header,/ })).toHaveAttribute(
+    expect(await screen.findByRole("treeitem", { name: /^task fix-header\./ })).toHaveAttribute(
       "aria-selected",
       "true",
     );
@@ -164,7 +164,7 @@ describe("useGlobalShortcuts", () => {
   it("leaves the creation dialog where it is on Ctrl+J", async () => {
     vi.mocked(api.getState).mockResolvedValue(waitingState());
     const { user } = renderWithStore(<App />);
-    await screen.findByRole("tree", { name: "Tasks" });
+    await screen.findByRole("tree", { name: "Active items" });
     await user.keyboard("{Control>}n{/Control}");
     await screen.findByRole("heading", { name: "New task" });
 
@@ -184,7 +184,7 @@ describe("useGlobalShortcuts", () => {
       }),
     );
     renderWithStore(<App />);
-    await screen.findByRole("tree", { name: "Tasks" });
+    await screen.findByRole("tree", { name: "Active items" });
     act(() => {
       useAppStore.getState().openStartReview({ repositoryId: "repo-1", number: 31 });
     });
@@ -221,7 +221,7 @@ describe("useGlobalShortcuts", () => {
       }),
     );
     const { user } = renderWithStore(<App />);
-    await screen.findByRole("tree", { name: "Tasks" });
+    await screen.findByRole("tree", { name: "Active items" });
 
     await user.keyboard("{Control>}j{/Control}");
 
@@ -231,7 +231,7 @@ describe("useGlobalShortcuts", () => {
   it("leaves the dialog that creates a discussion where it is on Ctrl+N, Ctrl+J and Ctrl+,", async () => {
     vi.mocked(api.getState).mockResolvedValue(waitingState());
     renderWithStore(<App />);
-    await screen.findByRole("tree", { name: "Tasks" });
+    await screen.findByRole("tree", { name: "Active items" });
     act(() => {
       useAppStore.getState().openNewDiscussion({ boardId: "board-1", cardKeys: ["dev/web#12"] });
     });

@@ -203,6 +203,16 @@ describe("globals.css", () => {
     expect(GLOBALS).toContain(ICON_RULE);
   });
 
+  it("blinks a new situation twice for --duration-slow, and never with reduced motion", () => {
+    expect(GLOBALS).toContain("animation: tree-flash var(--duration-slow) var(--ease-standard) 2;");
+    const reduced = [
+      ...GLOBALS.matchAll(/@media \(prefers-reduced-motion: reduce\) \{([\s\S]*?)\n\}/g),
+    ]
+      .map((match) => match[1] ?? "")
+      .join("\n");
+    expect(reduced).toMatch(/\.tree-flash\[data-flash\] \{\s*animation: none;\s*\}/);
+  });
+
   it("places dialogs 8vh from the top, on whole pixels, outside any layer", () => {
     expect(GLOBALS).toContain(PIXEL_SNAP_RULE);
   });

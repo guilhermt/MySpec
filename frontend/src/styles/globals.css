@@ -300,6 +300,17 @@
   .attention-flash-ring {
     animation: attention-flash-ring 1600ms var(--ease-standard);
   }
+
+  /* A new situation blinks twice in the veil of its gravity. */
+  .tree-flash[data-flash] {
+    animation: tree-flash var(--duration-slow) var(--ease-standard) 2;
+  }
+  .tree-flash[data-flash="error"] {
+    --flash-veil: var(--state-error-veil);
+  }
+  .tree-flash[data-flash="wait"] {
+    --flash-veil: var(--state-wait-veil);
+  }
 }
 
 @keyframes attention-flash {
@@ -321,6 +332,15 @@
   20%,
   60% {
     box-shadow: 0 0 0 3px color-mix(in oklch, var(--flash-color) 45%, transparent);
+  }
+}
+
+@keyframes tree-flash {
+  from {
+    background-color: var(--flash-veil);
+  }
+  to {
+    background-color: transparent;
   }
 }
 
@@ -349,6 +369,10 @@
   .attention-flash-ring {
     animation: none;
     box-shadow: 0 0 0 3px color-mix(in oklch, var(--flash-color) 45%, transparent);
+  }
+  /* Nothing in the tree blinks, and no veil stays behind. */
+  .tree-flash[data-flash] {
+    animation: none;
   }
 }
 
