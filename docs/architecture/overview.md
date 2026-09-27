@@ -92,11 +92,13 @@ A publicação roda numa goroutine da discussão, uma por vez, então nenhuma av
 
 ### Composição e injeção
 
-`app.Run` monta os services na ordem das dependências, cada um recebendo as suas por uma struct `Deps` e um `*slog.Logger`. Não há variável global: quem precisa de algo recebe no construtor. Os callbacks `OnChange` de cada service convergem para `app.publish`, que monta um snapshot e emite `state:changed`.
+`app.Run` monta os services na ordem das dependências, cada um recebendo as suas por uma struct `Deps` e um `*slog.Logger`. Não há variável global: quem precisa de algo recebe no construtor. Os callbacks `OnChange` de cada service convergem para `app.publish`, que pede ao limitador de `app/throttle.go` um snapshot emitido como `state:changed`.
 
 ### O estado que o frontend vê
 
 `bindings.State` é tudo que a interface renderiza, produzido no Go e nunca derivado no frontend. `app.snapshot` lê os boards cadastrados, com a leitura guardada de cada um, os repositórios cadastrados, com o estado do clone e as instruções de review, as tasks, com o card de cada uma, os resumos das sessões, os artefatos, os steps e a pull request de cada task, o estado de cada review ativo, os reviews arquivados e a última leitura das pull requests, deriva as situações das tasks e dos reviews a partir das mesmas leituras, para que todas as superfícies concordem, e converte tudo em DTOs. Cada mudança em qualquer service publica um snapshot inteiro; o frontend substitui o que tem. A leitura inteira de cada board viaja no `State`, porque a janela de leitura a mantém pequena, e o que cada card permite (**Start task**, clonar, acrescentar ao board) é decidido no Go. Do mesmo modo, `State.ReviewCenter` traz as pull requests lidas já com o card, a task ou o review de cada uma, se é pendente, se passa pelos filtros e a ação da linha, e a contagem do nó **Reviews**; `State.Reviews` traz os reviews ativos, com o status, as passadas, os apontamentos, as situações e as ações que cada um permite; `State.ReviewHistory`, os arquivados; `State.Discussions` traz as discussões ativas, com o status, os rascunhos com o que cada um permite, os avisos e as situações, e `State.DiscussionHistory`, as arquivadas com os rascunhos e o que cada um virou. `State.ModelDefaults` traz a escolha com que uma task nova começa cada etapa, e `State.ModelCatalog`, o que o Claude Code instalado oferece, com os níveis de esforço de cada modelo e, enquanto não há catálogo nenhum, a razão da falha; é dele que todo seletor de modelo vive, e é comparando as escolhas com ele que a interface marca o que está indisponível.
+
+O resumo de cada sessão (`session.Summary`) diz, além do status, quando a mensagem que abriu o turno em curso foi ao CLI (`TurnStartedAt`) e a ação que o turno roda agora (`ActionLabel` e `ActionTarget`: a última ação do turno ainda em curso, vazia quando nenhuma roda). O começo de uma ação, a chegada do alvo dela e o fim dela publicam o estado; sem turno, os três campos ficam vazios.
 
 Os enums dos DTOs viajam como `string`, com um comentário listando os valores, para que os bindings gerados não emitam enums TypeScript; o frontend estreita com funções `asX` em `lib/wails.ts`.
 
@@ -110,6 +112,8 @@ Quatro eventos tipados, registrados em `bindings.RegisterEvents` antes de `appli
 | `transcript:changed` | um `TranscriptEvent`: entrada nova, texto em streaming, remoção ou reset | A cada mudança numa conversa |
 | `situation:started` | a situação e se a janela estava em foco | Uma situação nova começa; dirige o piscar |
 | `situation:open` | item e lugar | Um clique numa notificação pede a abertura |
+
+`state:changed` passa por um limitador (`publishWindow`, 100 ms): uma mudança depois de um intervalo calmo publica na hora; numa rajada, como a de uma sessão que roda muitas ações seguidas, o estado sai no máximo uma vez por janela, sempre com uma última publicação no fim da janela, para que a última mudança nunca se perca. Cada publicação registra `state published` no log em nível debug.
 
 ### Notificações e som
 

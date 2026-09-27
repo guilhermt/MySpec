@@ -94,6 +94,7 @@ type App struct {
 	window *application.WebviewWindow
 
 	publishMu sync.Mutex // keeps concurrent publishes from interleaving
+	publisher *throttle  // limits how often the state is published
 }
 
 // Run starts the application and returns the process exit code.
@@ -152,6 +153,7 @@ func Run(cfg Config) int {
 	bindings.RegisterEvents()
 
 	a := &App{log: log}
+	a.publisher = newThrottle(publishWindow, a.publishNow)
 
 	// Without the chime on disk the notifications are silent; they still show.
 	chimePath, err := chime.Install(dirs.Data)

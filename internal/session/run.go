@@ -46,6 +46,7 @@ type run struct {
 // turn is the state of the turn in progress.
 type turn struct {
 	id        string            // the user entry that started it
+	startedAt time.Time         // when the message that opened the turn went to the CLI
 	messageID string            // current API message id
 	blocks    map[int]*Entry    // content block index -> assistant or action entry of the current message
 	toolNames map[int]string    // block index -> tool name, for tool_use blocks
@@ -83,15 +84,28 @@ func newRun(t TaskInfo, rec Record, nextSeq int) *run {
 // key is the session this run is held under.
 func (r *run) key() Key { return Key{TaskID: r.task.ID, Stage: r.rec.Stage} }
 
-func newTurn(id string) *turn {
+func newTurn(id string, startedAt time.Time) *turn {
 	return &turn{
 		id:        id,
+		startedAt: startedAt,
 		blocks:    map[int]*Entry{},
 		toolNames: map[int]string{},
 		actions:   map[string]*Entry{},
 		partial:   map[int][]byte{},
 		finalized: map[int]bool{},
 	}
+}
+
+// runningAction is the last action of the turn that is still running, nil when
+// none is.
+func (t *turn) runningAction() *Entry {
+	var last *Entry
+	for _, e := range t.actions {
+		if e.Action.Status == ActionRunning && (last == nil || e.Seq > last.Seq) {
+			last = e
+		}
+	}
+	return last
 }
 
 // newEntry stamps the envelope of an entry about to join the conversation: a
@@ -137,6 +151,12 @@ func (r *run) summary() Summary {
 		sum.Status = StatusWaiting
 	}
 	sum.Idle = sum.Status == StatusWaiting && len(r.pending) == 0
+	if r.turn != nil {
+		sum.TurnStartedAt = r.turn.startedAt
+		if e := r.turn.runningAction(); e != nil {
+			sum.ActionLabel, sum.ActionTarget = e.Action.Label, e.Action.Target
+		}
+	}
 	return sum
 }
 
@@ -371,7 +391,7 @@ func (s *Service) flushPendingLocked(ctx context.Context, r *run, n *notes) bool
 	r.entries = append(r.entries, e)
 	s.updateLocked(ctx, r, e, n)
 
-	r.turn = newTurn(e.ID)
+	r.turn = newTurn(e.ID, s.now().UTC())
 	r.turnFailed = false
 	r.turnDone = make(chan struct{})
 	r.stopTimer(&r.idleTimer)

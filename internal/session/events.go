@@ -183,6 +183,7 @@ func (s *Service) startBlock(ctx context.Context, r *run, index int, block claud
 		}}, n)
 		t.blocks[index] = e
 		t.actions[block.ID] = e
+		n.state(r.key())
 	default:
 		// Thinking blocks are not shown.
 	}
@@ -218,6 +219,7 @@ func (s *Service) handleAssistant(ctx context.Context, r *run, ev *claude.Assist
 			}
 			e.Action.Label, e.Action.Target = For(block.Name, block.Input, r.task.Dir)
 			s.updateLocked(ctx, r, e, n)
+			n.state(r.key())
 		default:
 			// Thinking blocks are not shown.
 		}
@@ -253,6 +255,7 @@ func (s *Service) handleUser(ctx context.Context, r *run, ev *claude.UserEvent, 
 	if r.turn == nil {
 		return
 	}
+	changed := false
 	for _, result := range ev.ToolResults() {
 		e := r.turn.actions[result.ToolUseID]
 		if e == nil {
@@ -263,6 +266,10 @@ func (s *Service) handleUser(ctx context.Context, r *run, ev *claude.UserEvent, 
 			e.Action.Status = ActionError
 		}
 		s.updateLocked(ctx, r, e, n)
+		changed = true
+	}
+	if changed {
+		n.state(r.key())
 	}
 }
 

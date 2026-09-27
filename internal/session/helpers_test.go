@@ -265,6 +265,7 @@ func (r *memEntries) indexOf(id string) int {
 // records every Config it started, and fails where a test tells it to.
 type fakeLauncher struct {
 	scenario string
+	env      []string // extra environment of the fake, as KEY=value
 
 	mu           sync.Mutex
 	locateErr    error
@@ -298,6 +299,7 @@ func (l *fakeLauncher) Start(ctx context.Context, cfg claude.Config) (session.Pr
 		claudetest.EnvFlag+"=1",
 		claudetest.EnvScenario+"="+l.scenario,
 	)
+	cfg.Env = append(cfg.Env, l.env...)
 	p, err := claude.Start(ctx, cfg, slog.New(slog.DiscardHandler))
 	if err != nil {
 		return nil, err
@@ -330,6 +332,7 @@ type fixture struct {
 	launcher *fakeLauncher
 
 	mu     sync.Mutex
+	now    time.Time
 	states []session.Key
 	events []session.TranscriptEvent
 }
@@ -356,6 +359,7 @@ func newFixtureWith(t *testing.T, launcher *fakeLauncher, idle time.Duration) *f
 		sessions: newMemSessions(),
 		entries:  &memEntries{},
 		launcher: launcher,
+		now:      base,
 	}
 
 	var ids int
@@ -366,7 +370,7 @@ func newFixtureWith(t *testing.T, launcher *fakeLauncher, idle time.Duration) *f
 		Launcher:     launcher,
 		RenderPrompt: renderPrompt,
 		Log:          slog.New(slog.DiscardHandler),
-		Now:          func() time.Time { return base },
+		Now:          f.clock,
 		NewID: func() string {
 			idMu.Lock()
 			defer idMu.Unlock()
@@ -383,6 +387,43 @@ func newFixtureWith(t *testing.T, launcher *fakeLauncher, idle time.Duration) *f
 		f.service.Shutdown(ctx)
 	})
 	return f
+}
+
+// clock is the fixture's time, base until a test advances it.
+func (f *fixture) clock() time.Time {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	return f.now
+}
+
+// advance moves the fixture's clock forward.
+func (f *fixture) advance(d time.Duration) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.now = f.now.Add(d)
+}
+
+// newGatedFixture builds a Service whose processes play the actions scenario,
+// held at each gate until the test opens it.
+func newGatedFixture(t *testing.T) (*fixture, func(gates ...string)) {
+	t.Helper()
+
+	dir := t.TempDir()
+	f := newFixtureWith(t, &fakeLauncher{
+		scenario: "actions",
+		env:      []string{claudetest.EnvGates + "=" + dir},
+	}, 0)
+	open := func(gates ...string) {
+		t.Helper()
+		for _, g := range gates {
+			if err := os.WriteFile(filepath.Join(dir, g), nil, 0o600); err != nil {
+				t.Fatalf("open gate %s: %v", g, err)
+			}
+		}
+	}
+	return f, open
 }
 
 func (f *fixture) onState(k session.Key) {

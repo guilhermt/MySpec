@@ -36,6 +36,10 @@ const (
 	// EnvCatalog picks what the fake answers to list_models: "" for Catalog,
 	// "unsupported" for the error an older CLI gives, "silent" for no answer.
 	EnvCatalog = "MYSPEC_FAKE_CATALOG"
+	// EnvGates is the folder the actions scenario waits in: before each of its
+	// stages it waits for a file named "<turn>-<stage>" there, which is how a
+	// test holds a turn at a known point.
+	EnvGates = "MYSPEC_FAKE_GATES"
 )
 
 // The effort levels every model of Catalog that takes one accepts.
@@ -69,6 +73,10 @@ const ContextWindow = 200000
 // ReadPath is the file the tool scenario pretends to read.
 const ReadPath = "/tmp/fake/hello.txt"
 
+// SecondReadPath is the file the actions scenario reads while ReadPath is
+// still being read.
+const SecondReadPath = "/tmp/fake/world.txt"
+
 // BashCommand is the command the permission scenario asks to run.
 const BashCommand = `echo "hi" > hello.txt`
 
@@ -80,6 +88,9 @@ const deltaChunks = 3
 
 // tickInterval is how often the slow scenario emits a text delta.
 const tickInterval = 100 * time.Millisecond
+
+// gatePoll is how often the actions scenario looks for its next gate.
+const gatePoll = 5 * time.Millisecond
 
 // queueSize buffers what the stdin reader hands to the scenario, so a slow
 // scenario never stops the fake from reading its input.
@@ -308,6 +319,8 @@ func (f *fake) play(scenario string) int {
 			f.questionTurn()
 		case "slow":
 			f.slowTurn()
+		case "actions":
+			f.actionsTurn(text)
 		case "writer":
 			f.writerTurn(text)
 		case "turn_error":
@@ -460,7 +473,7 @@ func (f *fake) toolTurn(text string) {
 	toolUseID := f.nextID("toolu")
 	input := map[string]any{"file_path": ReadPath}
 	f.streamToolUse(0, messageID, toolUseID, "Read", input)
-	f.toolResult(toolUseID, "1\thi\n", false)
+	f.toolResult(toolUseID, "1\thi\n")
 
 	f.streamText(1, text)
 	f.endMessage()
@@ -513,7 +526,7 @@ func (f *fake) permissionTurn() {
 
 	reply := "done"
 	if answer.Behavior == "allow" {
-		f.toolResult(toolUseID, "(Bash completed with no output)", false)
+		f.toolResult(toolUseID, "(Bash completed with no output)")
 		// The app's rewrite of the suggestions is echoed so a test can read it.
 		if len(answer.UpdatedPermissions) > 0 {
 			reply += " " + string(answer.UpdatedPermissions)
@@ -586,7 +599,7 @@ func (f *fake) questionTurn() {
 	_ = json.Unmarshal(answer.UpdatedInput, &updated)
 	reply := string(mustMarshal(updated.Answers))
 
-	f.toolResult(toolUseID, "Your questions have been answered", false)
+	f.toolResult(toolUseID, "Your questions have been answered")
 	f.streamText(1, reply)
 	f.endMessage()
 	f.assistantText(messageID, reply)
@@ -622,6 +635,68 @@ func (f *fake) slowTurn() {
 			return
 		case <-ticker.C:
 			f.textDelta(0, "tick ")
+		}
+	}
+}
+
+// actionsTurn runs two overlapping reads, stopping at a gate before each
+// stage: 1, the first read starts; 2, the second read starts; 3, the second
+// read ends; 4, the first read ends; then the turn answers with its text. An
+// interrupt at a gate aborts the turn.
+func (f *fake) actionsTurn(text string) {
+	f.emitInit()
+	messageID := f.nextID("msg")
+	f.messageStart(messageID)
+
+	first, second := f.nextID("toolu"), f.nextID("toolu")
+	stages := []func(){
+		func() { f.streamToolUse(0, messageID, first, "Read", map[string]any{"file_path": ReadPath}) },
+		func() { f.streamToolUse(1, messageID, second, "Read", map[string]any{"file_path": SecondReadPath}) },
+		func() { f.toolResult(second, "1\tworld\n") },
+		func() { f.toolResult(first, "1\thi\n") },
+	}
+	for i, stage := range stages {
+		stage()
+		if !f.awaitGate(fmt.Sprintf("%d-%d", f.turns, i+1)) {
+			return
+		}
+	}
+	f.streamText(2, text)
+	f.endMessage()
+	f.assistantText(messageID, text)
+	f.result("success", false, text, "completed")
+}
+
+// awaitGate waits for the named file in EnvGates, reporting false when an
+// interrupt aborted the turn or stdin ended first.
+//
+//nolint:gosec // G703: the gate lives where the test says it does
+func (f *fake) awaitGate(name string) bool {
+	path := filepath.Join(os.Getenv(EnvGates), name)
+	ticker := time.NewTicker(gatePoll)
+	defer ticker.Stop()
+
+	for {
+		if _, err := os.Stat(path); err == nil {
+			return true
+		}
+		select {
+		case requestID, ok := <-f.interrupts:
+			if !ok {
+				return false
+			}
+			f.emitRaw(map[string]any{
+				"type": "control_response",
+				"response": map[string]any{
+					"subtype":    "success",
+					"request_id": requestID,
+					"response":   map[string]any{"still_queued": []any{}},
+				},
+			})
+			f.userText("[Request interrupted by user]")
+			f.result("error_during_execution", true, "", "aborted_streaming")
+			return false
+		case <-ticker.C:
 		}
 	}
 }
@@ -754,7 +829,7 @@ func (f *fake) assistantText(messageID, text string) {
 }
 
 // toolResult emits what a tool returned to the agent.
-func (f *fake) toolResult(toolUseID, content string, isError bool) {
+func (f *fake) toolResult(toolUseID, content string) {
 	f.emit(map[string]any{
 		"type": "user",
 		"message": map[string]any{
@@ -763,7 +838,7 @@ func (f *fake) toolResult(toolUseID, content string, isError bool) {
 				"type":        "tool_result",
 				"tool_use_id": toolUseID,
 				"content":     content,
-				"is_error":    isError,
+				"is_error":    false,
 			}},
 		},
 		"parent_tool_use_id": nil,

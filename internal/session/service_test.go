@@ -1943,3 +1943,117 @@ func TestStartOfAReviewOfAPullRequestSendsWhatTheAppReadFromGitHub(t *testing.T)
 		t.Errorf("prompt sent = %q, want it to contain %q", got, want)
 	}
 }
+
+// readLabel is the label every action of the actions scenario carries.
+var readLabel, _ = session.For("Read", nil, "")
+
+// waitAction waits until the action in progress of a session has the target.
+func waitAction(t *testing.T, f *fixture, k session.Key, target string) session.Summary {
+	t.Helper()
+
+	return f.waitStatus(t, k, "the action on "+target, func(s session.Summary) bool {
+		return s.ActionTarget == target
+	})
+}
+
+func TestATurnStartsWhenItsMessageGoesToTheCLI(t *testing.T) {
+	t.Parallel()
+
+	f, open := newGatedFixture(t)
+	f.start(t, taskInfo(t, "t1"))
+	if sum := waitAction(t, f, prd("t1"), claudetest.ReadPath); !sum.TurnStartedAt.Equal(base) {
+		t.Errorf("TurnStartedAt = %v, want %v, when the prompt went out", sum.TurnStartedAt, base)
+	}
+
+	f.advance(time.Minute)
+	f.send(t, prd("t1"), "queued")
+	f.advance(time.Minute)
+	open("1-1", "1-2", "1-3", "1-4")
+
+	sum := f.waitStatus(t, prd("t1"), "the queued message to go out", func(s session.Summary) bool {
+		return s.PendingCount == 0 && s.ActionTarget == claudetest.ReadPath
+	})
+	if want := base.Add(2 * time.Minute); !sum.TurnStartedAt.Equal(want) {
+		t.Errorf("TurnStartedAt = %v, want %v, when the queued message went out", sum.TurnStartedAt, want)
+	}
+}
+
+func TestAnActionRunsFromItsStartToItsResult(t *testing.T) {
+	t.Parallel()
+
+	f, open := newGatedFixture(t)
+	f.start(t, taskInfo(t, "t1"))
+	sum := waitAction(t, f, prd("t1"), claudetest.ReadPath)
+	if sum.ActionLabel != readLabel {
+		t.Errorf("ActionLabel = %q, want %q", sum.ActionLabel, readLabel)
+	}
+
+	open("1-1", "1-2", "1-3")
+	sum = f.waitStatus(t, prd("t1"), "no action after both results", func(s session.Summary) bool {
+		return s.ActionLabel == "" && s.ActionTarget == ""
+	})
+	if !sum.TurnRunning {
+		t.Errorf("summary = %+v, want a running turn with no action after both results", sum)
+	}
+}
+
+func TestTheLastOfTwoRunningActionsIsTheOneInProgress(t *testing.T) {
+	t.Parallel()
+
+	f, open := newGatedFixture(t)
+	f.start(t, taskInfo(t, "t1"))
+	waitAction(t, f, prd("t1"), claudetest.ReadPath)
+
+	open("1-1")
+	waitAction(t, f, prd("t1"), claudetest.SecondReadPath)
+
+	open("1-2")
+	if sum := waitAction(t, f, prd("t1"), claudetest.ReadPath); sum.ActionLabel != readLabel {
+		t.Errorf("ActionLabel = %q, want %q when the first read goes on", sum.ActionLabel, readLabel)
+	}
+}
+
+func TestATurnWithoutActionHasNoAction(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "slow")
+	f.start(t, taskInfo(t, "t1"))
+	waitStreaming(t, f, prd("t1"))
+
+	sum := f.summary(t, prd("t1"))
+	if !sum.TurnStartedAt.Equal(base) || sum.ActionLabel != "" || sum.ActionTarget != "" {
+		t.Errorf("summary = %+v, want the turn started at %v and no action", sum, base)
+	}
+}
+
+func TestAnInterruptedTurnLeavesNeitherTurnNorAction(t *testing.T) {
+	t.Parallel()
+
+	f, _ := newGatedFixture(t)
+	f.start(t, taskInfo(t, "t1"))
+	waitAction(t, f, prd("t1"), claudetest.ReadPath)
+
+	if err := f.service.Interrupt(t.Context(), prd("t1")); err != nil {
+		t.Fatalf("Interrupt() = %v, want nil", err)
+	}
+	sum := f.waitIdle(t, prd("t1"))
+	if !sum.TurnStartedAt.IsZero() || sum.ActionLabel != "" || sum.ActionTarget != "" {
+		t.Errorf("summary = %+v, want neither turn nor action", sum)
+	}
+}
+
+func TestTheStartAndTheEndOfAnActionReportTheState(t *testing.T) {
+	t.Parallel()
+
+	f, open := newGatedFixture(t)
+	f.start(t, taskInfo(t, "t1"))
+	waitAction(t, f, prd("t1"), claudetest.ReadPath)
+
+	for _, gate := range []string{"1-1", "1-2"} {
+		before := f.stateCount(prd("t1"))
+		open(gate)
+		waitFor(t, "the state reported after gate "+gate, func() bool {
+			return f.stateCount(prd("t1")) > before
+		})
+	}
+}

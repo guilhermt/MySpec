@@ -128,6 +128,13 @@ type Summary struct {
 	TurnRunning    bool
 	ProcessRunning bool
 	RetryAttempt   int // last api_retry attempt of the running turn, 0 otherwise
+	// TurnStartedAt is when the message that opened the turn in progress went
+	// to the CLI; zero without a turn.
+	TurnStartedAt time.Time
+	// ActionLabel and ActionTarget are the action the turn runs now: the last
+	// action entry of the turn that is still running. "" when none runs.
+	ActionLabel    string
+	ActionTarget   string
 	ContextPercent int // 0 until the first result of the session
 	PendingCount   int
 	Corrections    int

@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"time"
 
 	"github.com/guilhermt/myspec/internal/attention"
 	"github.com/guilhermt/myspec/internal/bindings"
@@ -177,9 +178,19 @@ func (a *App) emitSituationStarted(started attention.Started) {
 	}
 }
 
-// publish sends the whole state to the frontend. It runs on every domain
-// change and tolerates being called before the window exists.
+// publishWindow is the shortest time between two publishes of the state, which
+// keeps the bursts of a busy session from flooding the frontend.
+const publishWindow = 100 * time.Millisecond
+
+// publish asks for the state to be sent to the frontend; a burst of changes is
+// sent at most once per publishWindow, the last change included. It tolerates
+// being called before the window exists.
 func (a *App) publish() {
+	a.publisher.request()
+}
+
+// publishNow sends the whole state to the frontend.
+func (a *App) publishNow() {
 	a.publishMu.Lock()
 	defer a.publishMu.Unlock()
 
@@ -187,5 +198,6 @@ func (a *App) publish() {
 
 	if wails, _ := a.handles(); wails != nil {
 		wails.Event.Emit(bindings.EventStateChanged, state)
+		a.log.Debug("state published")
 	}
 }
