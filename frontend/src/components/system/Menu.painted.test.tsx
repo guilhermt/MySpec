@@ -4,7 +4,16 @@ import { describe, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { paintOf, resolve, setTheme, THEMES, TRANSPARENT, token } from "@/test/painted";
 import { Button } from "./Button";
-import { Menu, MenuContent, MenuGroup, MenuGroupLabel, MenuItem, MenuTrigger } from "./Menu";
+import {
+  Menu,
+  MenuContent,
+  MenuGroup,
+  MenuGroupLabel,
+  MenuItem,
+  MenuRadioGroup,
+  MenuRadioItem,
+  MenuTrigger,
+} from "./Menu";
 
 function Subject() {
   return (
@@ -19,6 +28,13 @@ function Subject() {
         <MenuItem icon={Trash2} destructive>
           Delete
         </MenuItem>
+        <MenuRadioGroup value="opus">
+          <MenuRadioItem value="opus">Opus</MenuRadioItem>
+          <MenuRadioItem value="sonnet">Sonnet</MenuRadioItem>
+          <MenuRadioItem value="fable" unavailable>
+            Fable
+          </MenuRadioItem>
+        </MenuRadioGroup>
       </MenuContent>
     </Menu>
   );
@@ -70,6 +86,38 @@ describe.each(THEMES)("Menu in the %s theme", (theme) => {
     const item = screen.getByRole("menuitem", { name: "Archive · The step is running" });
     expect(paintOf(item, { color: "" })).toEqual({ color: token("--ink-4") });
     expect(getComputedStyle(item).opacity).toBe("1");
+  });
+
+  it("checks the chosen item in the brand ink, and leaves the others without a check", async () => {
+    setTheme(theme);
+    await open();
+    // The check is the first glyph of the item, in the indicator that stays mounted unchecked.
+    const check = (name: string) =>
+      screen.getByRole("menuitemradio", { name }).querySelector("svg")?.parentElement ?? null;
+    const chosen = check("Opus");
+    const other = check("Sonnet");
+    expect(chosen).not.toBeNull();
+    expect(other).not.toBeNull();
+    if (chosen !== null && other !== null) {
+      expect(paintOf(chosen, { color: "" })).toEqual({ color: token("--brand-ink") });
+      expect(getComputedStyle(other).visibility).toBe("hidden");
+    }
+  });
+
+  it("highlights a choice under the pointer with the veil", async () => {
+    setTheme(theme);
+    await open();
+    const item = screen.getByRole("menuitemradio", { name: "Sonnet" });
+    await userEvent.hover(item);
+    const want = { background: token("--veil-hover"), color: token("--ink-1") };
+    expect(paintOf(item, want)).toEqual(want);
+  });
+
+  it("writes an unavailable choice in the faint ink", async () => {
+    setTheme(theme);
+    await open();
+    const item = screen.getByRole("menuitemradio", { name: "◇ Fable · unavailable" });
+    expect(paintOf(item, { color: "" })).toEqual({ color: token("--ink-4") });
   });
 });
 

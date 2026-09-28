@@ -1,18 +1,18 @@
-import { Menu as BaseMenu } from "@base-ui/react/menu";
 import { ChevronDown } from "lucide-react";
 import { Fragment, useId } from "react";
 import { cn } from "@/lib/utils";
 import { Icon } from "./Icon";
-import { ICONS } from "./icons";
 import {
-  MENU_ITEM,
   Menu,
   MenuContent,
   MenuGroup,
   MenuGroupLabel,
   MenuMessage,
+  MenuRadioGroup,
+  MenuRadioItem,
   MenuSeparator,
   MenuTrigger,
+  UNAVAILABLE,
 } from "./Menu";
 import { Shimmer } from "./Shimmer";
 
@@ -70,9 +70,6 @@ export const SELECT_TRIGGER =
  */
 const SIDEBAR_TRIGGER =
   "h-(--size-control-sm) border-sidebar-control bg-sidebar-input text-(length:--text-meta) leading-(--leading-meta) text-ink-2";
-
-/** UNAVAILABLE marks a choice that is no longer offered. */
-export const UNAVAILABLE = "◇";
 
 /** Select is a field that opens a menu of choices, one of them checked; while they are read, the saved choice shimmers. */
 export function Select({
@@ -142,7 +139,7 @@ export function Select({
             {message.text}
           </MenuMessage>
         ) : (
-          <BaseMenu.RadioGroup value={value} onValueChange={(next: string) => onValueChange(next)}>
+          <MenuRadioGroup value={value} onValueChange={(next: string) => onValueChange(next)}>
             {options?.map((option) => (
               <SelectItem key={option.value} option={option} />
             ))}
@@ -159,7 +156,7 @@ export function Select({
                 </MenuGroup>
               </Fragment>
             ))}
-          </BaseMenu.RadioGroup>
+          </MenuRadioGroup>
         )}
       </MenuContent>
     </Menu>
@@ -178,34 +175,15 @@ export function ChosenText({
   return loading ? <Shimmer>{text}</Shimmer> : text;
 }
 
-/** SelectItem is a choice with its check at the start, in the brand ink. */
+/** SelectItem is a choice of the menu of a Select. */
 function SelectItem({ option }: { option: SelectOption }) {
   return (
-    <BaseMenu.RadioItem
+    <MenuRadioItem
       value={option.value}
-      {...(option.unavailable ? { disabled: true } : {})}
-      className={cn(
-        "relative flex cursor-default items-center outline-hidden select-none",
-        MENU_ITEM,
-      )}
+      {...(option.unavailable ? { unavailable: true } : {})}
+      {...(option.sub !== undefined ? { sub: option.sub } : {})}
     >
-      <BaseMenu.RadioItemIndicator
-        keepMounted
-        className="size-(--icon) text-brand-ink data-unchecked:invisible"
-      >
-        <Icon icon={ICONS.done} />
-      </BaseMenu.RadioItemIndicator>
-      <span>
-        {option.unavailable && `${UNAVAILABLE} `}
-        {option.label}
-        {option.unavailable && " · unavailable"}
-      </span>
-      {option.sub !== undefined && " "}
-      {option.sub !== undefined && (
-        <span className="text-(length:--text-meta) leading-(--leading-meta) text-ink-3">
-          {option.sub}
-        </span>
-      )}
-    </BaseMenu.RadioItem>
+      {option.label}
+    </MenuRadioItem>
   );
 }

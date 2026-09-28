@@ -77,6 +77,8 @@ import {
   setReviewInstructions,
   setReviewMode,
   setReviewModeDefault,
+  setReviewModeInPlace,
+  setStageModelInPlace,
   setStepReviewMode,
   setTheme,
   startDiscussion,
@@ -618,6 +620,38 @@ describe("task actions", () => {
       label: "Couldn't change the review mode of the item",
       detail: "the step started. Try again.",
     });
+  });
+
+  it("saves the review mode in place, answering null and leaving the app notice alone", async () => {
+    expect(await setReviewModeInPlace("task-1", "agent")).toBeNull();
+
+    expect(api.setReviewMode).toHaveBeenCalledWith("task-1", "agent");
+    expect(useAppStore.getState().error).toBeNull();
+  });
+
+  it("answers the failure of saving the review mode in place instead of the app notice", async () => {
+    vi.mocked(api.setReviewMode).mockRejectedValueOnce(new Error("no step is left to start"));
+
+    expect(await setReviewModeInPlace("task-1", "manual")).toBe("no step is left to start");
+    expect(useAppStore.getState().error).toBeNull();
+  });
+
+  it("saves the model of a stage in place, answering null and leaving the app notice alone", async () => {
+    const choice = { model: "claude-sonnet-5", effort: "high" };
+
+    expect(await setStageModelInPlace("task-1", "plan", choice)).toBeNull();
+
+    expect(api.setStageModel).toHaveBeenCalledWith("task-1", "plan", "claude-sonnet-5", "high");
+    expect(useAppStore.getState().error).toBeNull();
+  });
+
+  it("answers the failure of saving the model of a stage in place instead of the app notice", async () => {
+    vi.mocked(api.setStageModel).mockRejectedValueOnce(new Error("the stage has started"));
+
+    expect(
+      await setStageModelInPlace("task-1", "plan", { model: "claude-sonnet-5", effort: "high" }),
+    ).toBe("the stage has started");
+    expect(useAppStore.getState().error).toBeNull();
   });
 
   it("reports a failed task action in the app notice", async () => {

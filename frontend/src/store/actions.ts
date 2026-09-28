@@ -54,6 +54,17 @@ async function run(failure: Failure, operation: () => Promise<void>): Promise<vo
   }
 }
 
+// inPlace runs an action whose failure has a place of its own on screen: it answers the message of
+// the failure, or null, instead of raising the app notice.
+async function inPlace(operation: () => Promise<void>): Promise<string | null> {
+  try {
+    await operation();
+    return null;
+  } catch (error) {
+    return messageOf(error);
+  }
+}
+
 // itemName is the name of a task, active or archived, or the title of a review or a discussion, as
 // the tree calls it; "" when the item is gone.
 function itemName(id: string): string {
@@ -262,6 +273,18 @@ export function setStageModel(
   );
 }
 
+/**
+ * setStageModelInPlace is setStageModel for a popover that shows its own failure under the row: it
+ * answers the message of the failure, or null, and leaves the app notice alone.
+ */
+export function setStageModelInPlace(
+  taskId: string,
+  stage: ModelStage,
+  choice: ModelChoice,
+): Promise<string | null> {
+  return inPlace(() => api.setStageModel(taskId, stage, choice.model, choice.effort));
+}
+
 /** setStepModel gives one step a choice of its own, apart from the implementation. */
 export function setStepModel(taskId: string, step: number, choice: ModelChoice): Promise<void> {
   return run(fail(`Couldn't change the model of step ${step} of ${theItem(taskId)}`, TRY), () =>
@@ -281,6 +304,14 @@ export function setReviewMode(taskId: string, mode: ReviewMode): Promise<void> {
   return run(fail(`Couldn't change the review mode of ${theItem(taskId)}`, TRY), () =>
     api.setReviewMode(taskId, mode),
   );
+}
+
+/**
+ * setReviewModeInPlace is setReviewMode for a popover that shows its own failure in its note: it
+ * answers the message of the failure, or null, and leaves the app notice alone.
+ */
+export function setReviewModeInPlace(taskId: string, mode: ReviewMode): Promise<string | null> {
+  return inPlace(() => api.setReviewMode(taskId, mode));
 }
 
 /** setStepReviewMode gives one step a review mode of its own, apart from the task. */
