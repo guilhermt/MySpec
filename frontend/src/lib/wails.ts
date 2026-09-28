@@ -51,6 +51,7 @@ import type {
   Place,
   PlanProblem,
   PRBlock,
+  PRCheck,
   PRDraft,
   PRPreview,
   PRReport,
@@ -150,6 +151,7 @@ export type {
   Place,
   PlanProblem,
   PRBlock,
+  PRCheck,
   PRDraft,
   PRPreview,
   PRReport,
@@ -283,6 +285,8 @@ export type PRBlockReason =
 
 /** PRState is what GitHub last said about a pull request; "" before it is read. */
 export type PRState = "open" | "merged" | "closed" | "";
+/** CheckState is where a check of a pull request stands at the last reading. */
+export type CheckState = "passed" | "skipped" | "neutral" | "failed" | "running" | "queued";
 export type ReviewFileKind = "added" | "modified" | "deleted" | "renamed" | "untracked";
 export type BlockReason =
   | "dirty_worktree"
@@ -671,6 +675,20 @@ export function asPRState(value: string): PRState {
       return value;
     default:
       return "";
+  }
+}
+
+export function asCheckState(value: string): CheckState {
+  switch (value) {
+    case "passed":
+    case "skipped":
+    case "neutral":
+    case "failed":
+    case "running":
+    case "queued":
+      return value;
+    default:
+      return "queued";
   }
 }
 

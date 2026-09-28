@@ -5,6 +5,9 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/google/go-cmp/cmp"
 
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/gh"
@@ -513,5 +516,50 @@ func TestAReadingThatFailsKeepsTheTrouble(t *testing.T) {
 	})
 	if run, _ := f.tasks.prRun("task-1"); !run.Trouble.Equal(trouble) {
 		t.Errorf("trouble = %+v, want %+v", run.Trouble, trouble)
+	}
+}
+
+func TestEveryReadingOfThePullRequestKeepsItsChecksByName(t *testing.T) {
+	t.Parallel()
+
+	started := time.Date(2026, 9, 27, 23, 56, 8, 0, time.UTC)
+	first := gh.PRChecks{
+		Checks: []gh.Check{
+			{Name: "test", URL: "https://github.com/acme/api/runs/1", Pending: true, State: gh.CheckRunning, StartedAt: started},
+			{Name: "ci/deploy", Pending: true, State: gh.CheckQueued},
+		},
+		Mergeable: gh.MergeableUnknown,
+	}
+	f := newFixture(t)
+	foundPR(f, first)
+
+	f.service.Check("task-1")
+	f.waitPRRun(t, "the checks of the first reading", func(run task.PRRun) bool { return len(run.PR.Checks) == 2 })
+	run, _ := f.tasks.prRun("task-1")
+	if diff := cmp.Diff(first.Checks, run.PR.Checks); diff != "" {
+		t.Errorf("checks of the first reading mismatch (-want +got):\n%s", diff)
+	}
+	if run.PR.Mergeable != gh.MergeableUnknown {
+		t.Errorf("Mergeable = %q, want unknown", run.PR.Mergeable)
+	}
+
+	next := gh.PRChecks{
+		Checks: []gh.Check{{
+			Name: "test", URL: "https://github.com/acme/api/runs/1", Conclusion: "success", State: gh.CheckPassed,
+			StartedAt: started, CompletedAt: started.Add(time.Minute),
+		}},
+		Mergeable: gh.MergeableClean,
+	}
+	f.gh.setPR("task-1", withChecks(next))
+	f.pollUntil(t, "the checks of the next reading", func() bool {
+		read, _ := f.tasks.prRun("task-1")
+		return len(read.PR.Checks) == 1
+	})
+	run, _ = f.tasks.prRun("task-1")
+	if diff := cmp.Diff(next.Checks, run.PR.Checks); diff != "" {
+		t.Errorf("checks of the next reading mismatch (-want +got):\n%s", diff)
+	}
+	if run.PR.Mergeable != gh.MergeableClean {
+		t.Errorf("Mergeable = %q, want mergeable", run.PR.Mergeable)
 	}
 }

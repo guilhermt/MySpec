@@ -27,6 +27,7 @@ import type {
   ModelCatalog,
   ModelStage,
   PermissionDecision,
+  PRCheck,
   Prompt,
   PromptStage,
   PullRequest,
@@ -669,6 +670,18 @@ export function makeStepReviewer(overrides: Partial<StepReviewer> = {}): StepRev
   };
 }
 
+export function makePRCheck(overrides: Partial<PRCheck> = {}): PRCheck {
+  return {
+    name: "test",
+    state: "passed",
+    conclusion: "success",
+    startedAt: "2026-09-27T23:56:08Z",
+    completedAt: "2026-09-27T23:58:00Z",
+    url: "https://github.com/acme/web/actions/runs/1",
+    ...overrides,
+  };
+}
+
 export function makePullRequest(overrides: Partial<PullRequest> = {}): PullRequest {
   return {
     status: "preparing",
@@ -687,6 +700,8 @@ export function makePullRequest(overrides: Partial<PullRequest> = {}): PullReque
     prBase: "",
     checkError: "",
     trouble: { failedChecks: [], conflict: false },
+    checks: [],
+    mergeable: "",
     canClose: false,
     cloneMissing: false,
     close: null,

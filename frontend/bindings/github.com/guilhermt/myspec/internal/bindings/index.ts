@@ -67,6 +67,7 @@ export type {
     MigrationTask,
     ModelCatalog,
     PRBlock,
+    PRCheck,
     PRDraft,
     PRPreview,
     PRReport,

@@ -292,6 +292,8 @@ func fromPullRequest(pr *flow.PullRequest) *PullRequest {
 		PRBase:       pr.PR.Base,
 		CheckError:   pr.CheckError,
 		Trouble:      fromTrouble(pr.Trouble),
+		Checks:       fromChecks(pr.PR.Checks),
+		Mergeable:    string(pr.PR.Mergeable),
 		CanClose:     pr.CanClose,
 		CloneMissing: pr.CloneMissing,
 		Close:        fromCloseResult(pr.Close),
@@ -319,6 +321,22 @@ func fromTrouble(t gh.Trouble) PRTrouble {
 	failed := make([]string, len(t.FailedChecks))
 	copy(failed, t.FailedChecks)
 	return PRTrouble{FailedChecks: failed, Conflict: t.Conflict}
+}
+
+// fromChecks converts the checks of the last reading, never nil.
+func fromChecks(checks []gh.Check) []PRCheck {
+	converted := make([]PRCheck, 0, len(checks))
+	for _, c := range checks {
+		converted = append(converted, PRCheck{
+			Name:        c.Name,
+			State:       string(c.State),
+			Conclusion:  c.Conclusion,
+			StartedAt:   timeOrEmpty(c.StartedAt),
+			CompletedAt: timeOrEmpty(c.CompletedAt),
+			URL:         c.URL,
+		})
+	}
+	return converted
 }
 
 // fromCloseResult converts what closing a task did, keeping nil for a task that

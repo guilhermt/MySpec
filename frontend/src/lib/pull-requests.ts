@@ -1,5 +1,5 @@
 import type { PRStatus, PRTrouble, PullRequest, TaskSummary } from "@/lib/wails";
-import { asPRStatus } from "@/lib/wails";
+import { asCheckState, asPRStatus } from "@/lib/wails";
 
 // The states the pull request reaches once its review is behind it: from there
 // on the only thing left is the closing.
@@ -18,6 +18,15 @@ export function isReviewed(pr: PullRequest): boolean {
 /** isOpen reports whether the pull request exists on GitHub. */
 export function isOpen(pr: PullRequest): boolean {
   return pr.prNumber > 0;
+}
+
+/** checkCounts is how many checks of the last reading passed, skipped and neutral included, of how many. */
+export function checkCounts(pr: PullRequest): { passed: number; total: number } {
+  const checks = pr.checks ?? [];
+  const passed = checks.filter((check) =>
+    ["passed", "skipped", "neutral"].includes(asCheckState(check.state)),
+  ).length;
+  return { passed, total: checks.length };
 }
 
 /** troubleLabel is what went wrong with a pull request after its review, in the few words a list has room for. */

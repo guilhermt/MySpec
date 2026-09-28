@@ -295,8 +295,12 @@ type PullRequest struct {
 	CheckError string `json:"checkError"`
 	// Trouble is what went wrong since the last review pass; meaningful in
 	// trouble.
-	Trouble  PRTrouble `json:"trouble"`
-	CanClose bool      `json:"canClose"` // the user may close the task now
+	Trouble PRTrouble `json:"trouble"`
+	Checks  []PRCheck `json:"checks"` // the last reading, in GitHub's order; never nil
+	// Mergeable is mergeable, conflicting or unknown; "" before the first
+	// reading.
+	Mergeable string `json:"mergeable"`
+	CanClose  bool   `json:"canClose"` // the user may close the task now
 	// CloneMissing says the closing waits for the clone of the repository.
 	CloneMissing bool         `json:"cloneMissing"`
 	Close        *CloseResult `json:"close"` // closed only
@@ -324,6 +328,16 @@ type PullRequest struct {
 	ContextPercent int    `json:"contextPercent"`
 	PendingCount   int    `json:"pendingCount"`
 	LastError      string `json:"lastError"`
+}
+
+// PRCheck is one check of the pull request at the last reading.
+type PRCheck struct {
+	Name        string `json:"name"`
+	State       string `json:"state"`       // passed, skipped, neutral, failed, running or queued
+	Conclusion  string `json:"conclusion"`  // what GitHub concluded, lower case; "" while it runs
+	StartedAt   string `json:"startedAt"`   // RFC 3339; "" when GitHub gave none
+	CompletedAt string `json:"completedAt"` // RFC 3339; "" while it runs or when GitHub gave none
+	URL         string `json:"url"`
 }
 
 // PRTrouble is what went wrong with a pull request after its review: the

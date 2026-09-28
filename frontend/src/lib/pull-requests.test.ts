@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { isOpen, isReviewed, prOf, troubleLabel, troubleText } from "@/lib/pull-requests";
-import { makePullRequest, makeTask } from "@/test/wails-mock";
+import {
+  checkCounts,
+  isOpen,
+  isReviewed,
+  prOf,
+  troubleLabel,
+  troubleText,
+} from "@/lib/pull-requests";
+import { makePRCheck, makePullRequest, makeTask } from "@/test/wails-mock";
 
 describe("prOf", () => {
   it("is the pull request of a task in the PR stage", () => {
@@ -61,5 +68,25 @@ describe("troubleText", () => {
 
   it("calls the base the base when its name is unknown", () => {
     expect(troubleText({ failedChecks: null, conflict: true }, "")).toBe("Conflict with the base");
+  });
+});
+
+describe("checkCounts", () => {
+  it.each([
+    ["no checks", [], { passed: 0, total: 0 }],
+    [
+      "every state, skipped and neutral counted as passed",
+      [
+        makePRCheck({ state: "passed" }),
+        makePRCheck({ state: "skipped" }),
+        makePRCheck({ state: "neutral" }),
+        makePRCheck({ state: "failed" }),
+        makePRCheck({ state: "running" }),
+        makePRCheck({ state: "queued" }),
+      ],
+      { passed: 3, total: 6 },
+    ],
+  ])("counts %s", (_name, checks, want) => {
+    expect(checkCounts(makePullRequest({ checks }))).toEqual(want);
   });
 });

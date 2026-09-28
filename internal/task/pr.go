@@ -85,6 +85,8 @@ type PRDetails struct {
 	State     PRState // "" until a reading says otherwise
 	Base      string  // the branch the pull request merges into; "" until gh says
 	CheckedAt time.Time
+	Checks    []gh.Check   // the checks of the reading; nil before the first
+	Mergeable gh.Mergeable // "" before the first reading
 }
 
 // CloseOutcome is what became of one of the three things closing a task acts

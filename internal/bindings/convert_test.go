@@ -936,6 +936,7 @@ func TestFromTasksCarriesThePullRequestOfThePRStage(t *testing.T) {
 		PRState:        "open",
 		CheckedAt:      "2026-09-05T10:00:00Z",
 		Trouble:        bindings.PRTrouble{FailedChecks: []string{}},
+		Checks:         []bindings.PRCheck{},
 		SessionStage:   "pr_review",
 		SessionStatus:  "waiting",
 		SessionModel:   "claude-opus-5-5[1m]",
@@ -2512,6 +2513,63 @@ func TestFromTasksCarriesWhatWentWrongWithThePullRequestSinceItsReview(t *testin
 	}
 	if clean := got[1].PR.Trouble; clean.FailedChecks == nil || len(clean.FailedChecks) != 0 || clean.Conflict {
 		t.Errorf("trouble = %#v, want an empty list and no conflict", clean)
+	}
+}
+
+func TestFromTasksCarriesTheChecksOfThePullRequestByName(t *testing.T) {
+	t.Parallel()
+
+	started := time.Date(2026, 9, 27, 23, 56, 8, 0, time.UTC)
+	read := flow.PullRequest{
+		Status: flow.PRWaitingChecks,
+		PR: task.PRDetails{
+			Number: 8, State: task.PRStateOpen, Base: "main", CheckedAt: started,
+			Checks: []gh.Check{
+				{
+					Name: "test", URL: "https://github.com/acme/api/actions/runs/1", Conclusion: "failure", State: gh.CheckFailed,
+					StartedAt: started, CompletedAt: started.Add(112 * time.Second),
+				},
+				{Name: "ci/deploy", Pending: true, State: gh.CheckRunning, StartedAt: started},
+				{Name: "ci/queued", Pending: true, State: gh.CheckQueued},
+			},
+			Mergeable: gh.MergeableClean,
+		},
+	}
+	unread := flow.PullRequest{Status: flow.PRWaitingChecks, PR: task.PRDetails{Number: 9}}
+	byTask := map[string]flow.PullRequest{"task-1": read, "task-2": unread}
+
+	got := bindings.FromTasks(
+		[]task.Task{
+			{ID: "task-1", Name: "login-screen", Stage: task.StagePR},
+			{ID: "task-2", Name: "signup-screen", Stage: task.StagePR},
+		},
+		func(string) task.Artifacts { return task.Artifacts{} },
+		func(string) []flow.StepState { return nil },
+		func(id string) (flow.PullRequest, bool) { pr, ok := byTask[id]; return pr, ok },
+		repoOf,
+		nil,
+		nil,
+	)
+	if len(got) != 2 || got[0].PR == nil || got[1].PR == nil {
+		t.Fatalf("FromTasks() = %+v, want two tasks with their pull requests", got)
+	}
+	want := []bindings.PRCheck{
+		{
+			Name: "test", State: "failed", Conclusion: "failure",
+			StartedAt: "2026-09-27T23:56:08Z", CompletedAt: "2026-09-27T23:58:00Z",
+			URL: "https://github.com/acme/api/actions/runs/1",
+		},
+		{Name: "ci/deploy", State: "running", StartedAt: "2026-09-27T23:56:08Z"},
+		{Name: "ci/queued", State: "queued"},
+	}
+	if diff := cmp.Diff(want, got[0].PR.Checks); diff != "" {
+		t.Errorf("checks mismatch (-want +got):\n%s", diff)
+	}
+	if got[0].PR.Mergeable != "mergeable" {
+		t.Errorf("Mergeable = %q, want mergeable", got[0].PR.Mergeable)
+	}
+	if got[1].PR.Checks == nil || len(got[1].PR.Checks) != 0 || got[1].PR.Mergeable != "" {
+		t.Errorf("Checks, Mergeable = %#v, %q, want an empty list and no merge state before a reading", got[1].PR.Checks, got[1].PR.Mergeable)
 	}
 }
 

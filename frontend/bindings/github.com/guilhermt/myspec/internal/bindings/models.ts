@@ -1185,6 +1185,34 @@ export interface PRBlock {
 }
 
 /**
+ * PRCheck is one check of the pull request at the last reading.
+ */
+export interface PRCheck {
+    "name": string;
+
+    /**
+     * passed, skipped, neutral, failed, running or queued
+     */
+    "state": string;
+
+    /**
+     * what GitHub concluded, lower case; "" while it runs
+     */
+    "conclusion": string;
+
+    /**
+     * RFC 3339; "" when GitHub gave none
+     */
+    "startedAt": string;
+
+    /**
+     * RFC 3339; "" while it runs or when GitHub gave none
+     */
+    "completedAt": string;
+    "url": string;
+}
+
+/**
  * PRDraft is the description of a pull request the agent wrote and the user
  * edits.
  */
@@ -1420,6 +1448,17 @@ export interface PullRequest {
      * trouble.
      */
     "trouble": PRTrouble;
+
+    /**
+     * the last reading, in GitHub's order; never nil
+     */
+    "checks": PRCheck[] | null;
+
+    /**
+     * Mergeable is mergeable, conflicting or unknown; "" before the first
+     * reading.
+     */
+    "mergeable": string;
 
     /**
      * the user may close the task now

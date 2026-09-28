@@ -493,6 +493,8 @@ func prDetails(pr gh.PR) task.PRDetails {
 		State:     task.PRState(pr.State),
 		Base:      pr.Base,
 		CheckedAt: time.Now().UTC(),
+		Checks:    pr.Checks.Checks,
+		Mergeable: pr.Checks.Mergeable,
 	}
 }
 

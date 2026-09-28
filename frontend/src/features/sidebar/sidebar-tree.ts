@@ -6,6 +6,7 @@ import {
   workingSession,
 } from "@/features/sidebar/sessions";
 import { boardOfRepository } from "@/lib/boards";
+import { checkCounts } from "@/lib/pull-requests";
 import { ALL_REPOSITORIES, findRepository, shortName, tasksInFilter } from "@/lib/repositories";
 import { compactWait, compareSituations, spokenWait } from "@/lib/situations";
 import type {
@@ -529,9 +530,10 @@ function taskStanding(task: TaskSummary): Standing {
         return appWork(same("PR review · committing"));
       case "closing":
         return appWork(same("Closing"));
-      case "waiting_checks":
-        // Before gh first reports the pull request, the row says it is being read.
-        return task.pr.checkedAt === ""
+      case "waiting_checks": {
+        // Until a reading of gh lists a check, the row says GitHub is being read.
+        const { passed, total } = checkCounts(task.pr);
+        return task.pr.checkedAt === "" || total === 0
           ? {
               tone: "github",
               line2: same("PR review · checking GitHub"),
@@ -540,9 +542,10 @@ function taskStanding(task: TaskSummary): Standing {
             }
           : {
               tone: "github",
-              line2: { long: "PR review · waiting for checks", short: "PR review · checks" },
+              line2: same(`PR review · checks ${passed}/${total}`),
               clock: { kind: "word", word: "GitHub" },
             };
+      }
       case "drafting":
         return sessionStanding(sessions, place, same("PR · drafting"));
       case "reviewing":
