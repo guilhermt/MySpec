@@ -1,5 +1,5 @@
 import type { StatusTone } from "@/features/task/status";
-import { troubleText } from "@/lib/pull-requests";
+import { prBaseName, troubleText } from "@/lib/pull-requests";
 import { cloneMissingText } from "@/lib/repositories";
 import type {
   CloseResult,
@@ -85,11 +85,6 @@ export function prStatusTone(pr: PullRequest): StatusTone {
   }
 }
 
-/** prBaseName is the branch the pull request merges into: what GitHub says, or else the base of the worktree. */
-export function prBaseName(pr: PullRequest): string {
-  return pr.prBase !== "" ? pr.prBase : pr.baseBranch.replace(/^origin\//, "");
-}
-
 /**
  * draftAtHand reports whether the draft is the user's to send: a ready draft,
  * or the one an opening that failed left while the agent waits for a reply, so
@@ -165,6 +160,27 @@ export function canReviewAgain(pr: PullRequest): boolean {
       return pr.prNumber > 0;
     default:
       return false;
+  }
+}
+
+/** reviewAgainRefusal is why another review pass can't be asked for right now; null when it can. */
+export function reviewAgainRefusal(pr: PullRequest): string | null {
+  if (canReviewAgain(pr)) {
+    return null;
+  }
+  switch (asPRStatus(pr.status)) {
+    case "waiting_checks":
+      return "a pass waits for the checks";
+    case "committing":
+      return "the changes are being committed";
+    case "pr_closed":
+      return "the pull request was closed";
+    case "blocked":
+      return "the pull request stage is blocked";
+    case "closing":
+      return "the task is closing";
+    default:
+      return null;
   }
 }
 

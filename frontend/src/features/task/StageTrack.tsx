@@ -9,23 +9,17 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { StageActionDialog } from "@/features/task/StageActionDialog";
-import { nextStage, type StageAction, stageNoun } from "@/features/task/stage-actions";
+import { nextStage, stageNoun } from "@/features/task/stage-actions";
+import { menuItems, type StageMenuItem } from "@/features/task/task-menu";
 import {
   type LifecycleStage,
   lifecycleOf,
   type StageState,
-  stageIndex,
   stageLabel,
   stageState,
 } from "@/lib/stages";
 import { cn } from "@/lib/utils";
-import {
-  asTaskMode,
-  asTaskStage,
-  type TaskMode,
-  type TaskStage,
-  type TaskSummary,
-} from "@/lib/wails";
+import { asTaskMode, asTaskStage, type TaskSummary } from "@/lib/wails";
 import { continueStage } from "@/store/actions";
 
 const CHIP = "inline-flex h-6 shrink-0 items-center gap-1 rounded-md px-2 text-xs";
@@ -35,49 +29,6 @@ const TONE: Record<StageState, string> = {
   current: "bg-accent font-medium text-accent-foreground",
   upcoming: "text-muted-foreground",
 };
-
-/** A stage control, ready to be confirmed: what to do and what to do it to. */
-interface StageMenuItem {
-  action: StageAction;
-  stage: TaskStage;
-  label: string;
-}
-
-function discardItem(stage: TaskStage): StageMenuItem {
-  return { action: "discard", stage, label: "Discard and restart" };
-}
-
-function backItem(stage: TaskStage): StageMenuItem {
-  return { action: "back", stage, label: `Back to ${stageNoun(stage)}` };
-}
-
-/**
- * menuItems is what a chip offers: reopening a finished PRD, tech spec or
- * One-Shot planning, and starting any planning stage over. Every other chip is
- * inert.
- */
-function menuItems(mode: TaskMode, current: TaskStage, id: LifecycleStage): StageMenuItem[] {
-  if (id === "one_shot") {
-    return current === "one_shot"
-      ? [discardItem("one_shot")]
-      : [backItem("one_shot"), discardItem("one_shot")];
-  }
-  if (id === "prd" && current !== "prd") {
-    return [backItem("prd"), discardItem("prd")];
-  }
-  if (id === "tech_spec" && stageIndex(mode, current) > stageIndex(mode, "tech_spec")) {
-    return [backItem("tech_spec"), discardItem("tech_spec")];
-  }
-  if (id === "plan" && current === "implementation") {
-    return [discardItem("plan")];
-  }
-  // The implementation and the PR stage are made of steps and of the pull
-  // request; neither is thrown away from the track.
-  if (id === current && current !== "implementation" && current !== "pr") {
-    return [discardItem(current)];
-  }
-  return [];
-}
 
 interface StageChipProps {
   id: LifecycleStage;

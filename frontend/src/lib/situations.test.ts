@@ -15,6 +15,7 @@ import {
   reviewerSituation,
   reviewName,
   reviewSituation,
+  situationFragment,
   situationLabel,
   situationTone,
   spokenWait,
@@ -281,6 +282,16 @@ describe("announcement", () => {
 
   it("names no place for a review or a discussion", () => {
     expect(announcePlace(makeSituation({ place: REVIEW_PLACE }))).toBeNull();
+  });
+});
+
+describe("situationFragment", () => {
+  it.each([
+    [makeSituation({ kind: "question", place: reviewerPlace(2) }), "question in Reviewer"],
+    [makeSituation({ kind: "step_empty", place: stepPlace(3) }), "step 3 has no changes in Step 3"],
+    [makeSituation({ kind: "new_commits", place: REVIEW_PLACE }), "new commits"],
+  ])("tells %o as %s", (situation, expected) => {
+    expect(situationFragment(situation)).toBe(expected);
   });
 });
 

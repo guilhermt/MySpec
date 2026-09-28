@@ -10,13 +10,13 @@ import {
   closeStepLabel,
   draftAtHand,
   hasPRSession,
-  prBaseName,
   prBlockHint,
   prBlockTitle,
   prReportLabel,
   prStateLabel,
   prStatusLabel,
   prStatusTone,
+  reviewAgainRefusal,
 } from "@/features/task/pr-status";
 import { makeCloseResult, makePullRequest, makeRepository, makeReview } from "@/test/wails-mock";
 
@@ -171,13 +171,6 @@ describe("closeHint", () => {
   });
 });
 
-describe("prBaseName", () => {
-  it("is the base GitHub says, or else the base of the worktree", () => {
-    expect(prBaseName(makePullRequest({ prBase: "main", baseBranch: "origin/dev" }))).toBe("main");
-    expect(prBaseName(makePullRequest({ prBase: "", baseBranch: "origin/dev" }))).toBe("dev");
-  });
-});
-
 describe("closeStepLabel", () => {
   it("reads what became of the worktree", () => {
     expect(closeStepLabel("worktree", makeCloseResult())).toBe("Worktree removed");
@@ -288,5 +281,20 @@ describe("approvePRHint", () => {
     expect(approvePRHint(makePullRequest({ review: makeReview({ error: "boom" }) }))).toBe(
       "The worktree couldn't be read",
     );
+  });
+});
+
+describe("reviewAgainRefusal", () => {
+  it.each([
+    ["waiting_checks", 12, "a pass waits for the checks"],
+    ["committing", 12, "the changes are being committed"],
+    ["pr_closed", 12, "the pull request was closed"],
+    ["blocked", 12, "the pull request stage is blocked"],
+    ["closing", 12, "the task is closing"],
+    ["reviewing", 12, null],
+    ["done", 12, null],
+    ["awaiting_reply", 12, null],
+  ])("refuses a pass in %s with %s", (status, prNumber, reason) => {
+    expect(reviewAgainRefusal(makePullRequest({ status, prNumber }))).toBe(reason);
   });
 });

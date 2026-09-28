@@ -12,7 +12,7 @@ Um repositório pertence a no máximo um board, e é o board do repositório que
 
 ### Página Boards
 
-As configurações têm a página **Boards**. Ela lista os boards cadastrados, em ordem alfabética de título, cada um com o título, o dono e o tipo (`Organization` ou `User`), a quantidade de repositórios administrados, o link para o GitHub, os status do board na linha `Final: <finais> · New cards: <status de cards novos>`, a última leitura (`Updated 3 min ago`, `Not read yet` ou a falha da última leitura) e as ações **Edit** e **Remove**. Acima da lista fica **Add board**.
+As configurações têm a página **Boards**. Ela lista os boards cadastrados, em ordem alfabética de título, cada um com o título, o dono e o tipo (`Organization` ou `User`), a quantidade de repositórios administrados, o link para o GitHub, os status do board na linha `Final: <finais> · New cards: <status de cards novos>`, a última leitura (`Updated 3m ago`, `Not read yet` ou a falha da última leitura) e as ações **Edit** e **Remove**. Acima da lista fica **Add board**.
 
 ### Cadastrar um board
 

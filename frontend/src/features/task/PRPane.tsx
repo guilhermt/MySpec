@@ -11,13 +11,13 @@ import {
   closeStepLabel,
   draftAtHand,
   hasPRSession,
-  prBaseName,
   prReportLabel,
   prStateLabel,
 } from "@/features/task/pr-status";
 import { ReviewStrip } from "@/features/task/ReviewStrip";
 import { ToneDot } from "@/features/task/StatusDot";
 import type { StatusTone } from "@/features/task/status";
+import { prBaseName } from "@/lib/pull-requests";
 import {
   asCloseOutcome,
   asPRState,

@@ -20,7 +20,7 @@ describe("ReviewsHeader", () => {
       <ReviewsHeader center={makeReviewCenter({ readAt: "2026-09-16T12:00:00Z" })} />,
     );
 
-    expect(screen.getByText(/^Updated /)).toBeInTheDocument();
+    expect(screen.getByText(/^Updated (just now|\d+[mhd] ago)$/)).toBeInTheDocument();
   });
 
   it("tells that a reading is running, and keeps another from starting", () => {

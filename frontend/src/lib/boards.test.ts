@@ -4,7 +4,6 @@ import {
   findBoard,
   issueLabel,
   prStateLabel,
-  relativeTime,
   repositoryByFullName,
   stateLabel,
 } from "@/lib/boards";
@@ -52,29 +51,6 @@ describe("repositoryByFullName", () => {
   it("is null for a repository not registered", () => {
     expect(repositoryByFullName(app, "dev/other")).toBeNull();
     expect(repositoryByFullName(null, "dev/api")).toBeNull();
-  });
-});
-
-describe("relativeTime", () => {
-  const readAt = "2026-09-16T12:00:00Z";
-  const at = (ms: number) => Date.parse(readAt) + ms;
-
-  it.each([
-    [0, "just now"],
-    [59_000, "just now"],
-    [60_000, "1 min ago"],
-    [59 * 60_000, "59 min ago"],
-    [60 * 60_000, "1 h ago"],
-    [23 * 60 * 60_000, "23 h ago"],
-    [24 * 60 * 60_000, "1 day ago"],
-    [3 * 24 * 60 * 60_000, "3 days ago"],
-  ])("reads %i ms as %s", (elapsed, text) => {
-    expect(relativeTime(readAt, at(elapsed))).toBe(text);
-  });
-
-  it("reads an instant it cannot parse, or one ahead of the clock, as just now", () => {
-    expect(relativeTime("", at(0))).toBe("just now");
-    expect(relativeTime(readAt, at(-60_000))).toBe("just now");
   });
 });
 

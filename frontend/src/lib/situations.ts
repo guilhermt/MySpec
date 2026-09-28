@@ -225,12 +225,17 @@ export function announcePlace(situation: Situation): string | null {
   }
 }
 
-/** announcement is what the live region says of a new situation: `<name>: <what it asks> in <where>`. */
-export function announcement(name: string, situation: Situation): string {
+/** situationFragment is what a situation asks and where, as a sentence goes on after a name or a tone: `question in Reviewer`. */
+export function situationFragment(situation: Situation): string {
   const label = situationLabel(situation);
   const asks = `${label.charAt(0).toLowerCase()}${label.slice(1)}`;
   const place = announcePlace(situation);
-  return place === null ? `${name}: ${asks}` : `${name}: ${asks} in ${place}`;
+  return place === null ? asks : `${asks} in ${place}`;
+}
+
+/** announcement is what the live region says of a new situation: `<name>: <what it asks> in <where>`. */
+export function announcement(name: string, situation: Situation): string {
+  return `${name}: ${situationFragment(situation)}`;
 }
 
 /** stageSituation is the situation of the planning stage of a task, null when it has none. */

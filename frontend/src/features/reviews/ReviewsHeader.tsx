@@ -2,8 +2,8 @@ import { LoaderCircle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNow } from "@/features/attention/useNow";
 import { LocationHeader } from "@/features/navigation/LocationHeader";
-import { relativeTime } from "@/lib/boards";
 import type { ReviewCenter } from "@/lib/wails";
+import { age } from "@/lib/when";
 import { refreshPullRequests } from "@/store/actions";
 
 /** READING_CLOCK_MS is how often the time since the last reading is told again: a minute. */
@@ -21,7 +21,7 @@ export function ReviewsHeader({ center }: ReviewsHeaderProps) {
     <LocationHeader>
       {center.readAt !== "" && (
         <span className="text-xs text-muted-foreground">
-          {`Updated ${relativeTime(center.readAt, now)}`}
+          {`Updated ${age(center.readAt, now)}`}
         </span>
       )}
       {center.reading && (

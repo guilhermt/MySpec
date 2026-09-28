@@ -4,8 +4,8 @@ import { ICONS } from "@/components/system/icons";
 import { Button } from "@/components/ui/button";
 import { useNow } from "@/features/attention/useNow";
 import { LocationHeader } from "@/features/navigation/LocationHeader";
-import { relativeTime } from "@/lib/boards";
 import type { Board } from "@/lib/wails";
+import { age } from "@/lib/when";
 import { openExternal, refreshBoard } from "@/store/actions";
 
 /** READING_CLOCK_MS is how often the time since the last reading is told again: a minute. */
@@ -29,7 +29,7 @@ export function BoardHeader({ board, onNewDiscussion }: BoardHeaderProps) {
       <LocationHeader>
         {board.readAt !== "" && (
           <span className="text-xs text-muted-foreground">
-            {`Updated ${relativeTime(board.readAt, now)}`}
+            {`Updated ${age(board.readAt, now)}`}
           </span>
         )}
         {board.reading && (
