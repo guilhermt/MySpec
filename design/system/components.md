@@ -80,7 +80,7 @@ Cada componente embrulha um primitivo gerado em `frontend/src/components/ui` (nu
 | | |
 |---|---|
 | Anatomia | Um conjunto só, de traço, em `--icon` (16 px), `--icon-sm` e `--icon-xs`, traço `--icon-stroke`, pontas e junções arredondadas, `currentColor` |
-| Significados fixos | Robô: modo `Agent`. Pessoa: modo `Manual`. `<>`: abrir no editor. Seta externa: abre fora do app (GitHub). Lápis: `Revised`. Cadeia: o gesto publica uma cadeia. Ampulheta: espera (neutra). Visto: feito, aprovado, escolhido. Documento (`file`): um artefato, um relatório, um painel de documentos. Arquivamento (`archive`): o item foi para o History. Merge (`merge`): a PR foi mergeada ou fechada. Lixeira (`trash`): apagado. Informação (`details`): o painel `Details`. Card (`card`): o painel `Card`. Balão (`conversation`): uma conversa em `Details`. Histórico (`history`): uma conversa anterior. Reticências (`more`): o menu do item. Pausa (`pause`) e play (`resume`): pausar e retomar. Na conversa: bandeira (`start`), o início de uma sessão; a marca do produto (`product`), a mensagem do produto; commit (`commit`); pull request (`pullRequest`), a PR aberta; lista com vistos (`checks`), os checks lidos; recolher (`compact`), a compactação do contexto; seta circular (`retry`), o retry automático; alerta neutro (`problem`), um problema que o produto achou; bloqueio (`ban`), uma interrupção; ramificação (`subagent`), o subagente; ampulheta (`hold`), a ação que espera a permissão. Os glifos de tipo (task, One-Shot, review, discussão, épico, board) são ícones, não glifos de estado |
+| Significados fixos | Robô: modo `Agent`. Pessoa: modo `Manual`. `<>`: abrir no editor. Seta externa: abre fora do app (GitHub). Lápis: `Revised`. Cadeia: o gesto publica uma cadeia. Ampulheta: espera (neutra). Visto: feito, aprovado, escolhido. Documento (`file`): um artefato, um relatório, um painel de documentos. Arquivamento (`archive`): o item foi para o History. Merge (`merge`): a PR foi mergeada ou fechada. Lixeira (`trash`): apagado. Informação (`details`): o painel `Details`. Card (`card`): o painel `Card`. Balão (`conversation`): uma conversa em `Details`. Histórico (`history`): uma conversa anterior. Reticências (`more`): o menu do item. Pausa (`pause`) e play (`resume`): pausar e retomar. Na conversa: bandeira (`start`), o início de uma sessão; a marca do produto (`product`), a mensagem do produto; commit (`commit`); pull request (`pullRequest`), a PR aberta; lista com vistos (`checks`), os checks lidos; recolher (`compact`), a compactação do contexto; seta circular (`retry`), o retry automático; alerta neutro (`problem`), um problema que o produto achou; bloqueio (`ban`), uma interrupção; ramificação (`subagent`), o subagente; ampulheta (`hold`), a ação que espera a permissão. Nas listas e na Home: duas setas em ciclo (`refresh`), ler de novo (o board, as PRs), distinta da seta circular única do retry automático; três traços decrescentes (`filter`), o menu **Filter**; seta para baixo sobre a bandeja (`clone`), clonar; caixa com o visto (`select`), o modo de seleção; engrenagem (`settings`), Settings; mais (`plus`), começar algo novo; a pasta do git (`repository`), os repositórios, e **No board** na Home; a pilha de barras (`epic`), o épico. Os glifos de tipo (task, One-Shot, review, discussão, épico, board) são ícones, não glifos de estado |
 | Tokens | `--icon`, `--icon-sm`, `--icon-xs`, `--icon-stroke`, `--ink-3` em repouso, `--brand-ink` ativo |
 | Acessibilidade | `aria-hidden` ao lado de um rótulo; num botão só de ícone, o `aria-label` e o tooltip |
 | Faça | Use um ícone por significado, o mesmo em todo o produto |
@@ -106,6 +106,16 @@ Cada componente embrulha um primitivo gerado em `frontend/src/components/ui` (nu
 | Acessibilidade | `role="tooltip"`; nunca é o único portador de uma informação: o nome acessível já a tem |
 | Faça | Escreva o atalho no tooltip de toda ação que tem um |
 | Não faça | Não ponha controles dentro de um tooltip |
+
+### Aviso de tecla
+
+| | |
+|---|---|
+| Anatomia | A superfície do tooltip (`--tooltip-surface`, raio `--radius-sm`, até `--size-tooltip-max`), presa à linha em foco, abaixo dela, ou acima quando não cabe, em pixel inteiro: o que não aconteceu em `--tooltip-ink` e peso 600 (`No task from #412`) e, depois de ` · `, a razão em `--tooltip-ink-2` (`#412 already has a task: 412-rate-limit-per-api-key.`) |
+| Quando | Uma tecla de uma letra que não age: `S`, `D` e `Space` na linha em foco da lista do board (ou no painel, preso à linha das ações), e `N` num board nunca lido, preso a **New discussion**. Os textos estão em `screens/board.md` §3.6 e em `tasks/05-board.md` §4.2 |
+| Comportamento | Aparece na hora, sem atraso; some depois de 4 segundos, ou antes, na próxima tecla, quando o foco sai da linha, ao rolar ou ao clicar. Um aviso novo toma o lugar do anterior. Com movimento reduzido, entra e sai sem transição |
+| Acessibilidade | `role="status"`, com o texto inteiro; não é `tooltip`, porque não descreve um alvo, e não fica na região `.toasts`, porque tem papel próprio |
+| Não faça | Não use para uma ação que falhou (isso é o aviso do app) nem para uma tecla que age |
 
 ### Etiqueta, tag, placeholder e tecla
 
@@ -205,7 +215,7 @@ Cada componente embrulha um primitivo gerado em `frontend/src/components/ui` (nu
 | | |
 |---|---|
 | Anatomia | Gatilho com a anatomia do input e um chevron; menu flutuante (`--surface-3`, `--shadow-float`, raio `--radius-lg`) com itens de `--size-control` |
-| Variantes | **Lista de escolha** (`listbox`: visto no escolhido). **Menu de ações** (`menu`: o destrutivo por último, depois de um separador, em `--state-error`). **Grupos**: legenda em caixa alta de `--text-caps` e nota. **Modelo e esforço**: dois grupos de `menuitemradio`, o modelo e o esforço dele, a escolha de fábrica marcada `factory`; um modelo sem esforço diz `<modelo> has no effort levels.` **Item que alterna em três estados** (sem filtro, oculto `−dependabot`, só este `+rsouza`), com o menu aberto enquanto se alterna. **Com busca**: um campo no alto, para os cards de um board. **Item desabilitado com ação**: `Not cloned` com **Clone** no próprio item. **Linha de texto**: uma linha entre os itens que não é item, na altura dele, em `--text-ui` e `--ink-3`, sem realce e fora do teclado; é o nível do breadcrumb dobrado que não é lugar, como o épico |
+| Variantes | **Lista de escolha** (`listbox`: visto no escolhido). **Menu de ações** (`menu`: o destrutivo por último, depois de um separador, em `--state-error`). **Grupos**: legenda em caixa alta de `--text-caps` e nota. **Modelo e esforço**: dois grupos de `menuitemradio`, o modelo e o esforço dele, a escolha de fábrica marcada `factory`; um modelo sem esforço diz `<modelo> has no effort levels.` **Item que alterna em três estados** (sem filtro, oculto `−dependabot`, só este `+rsouza`), com o menu aberto enquanto se alterna. **Com busca**: um campo no alto, para os cards de um board. **Item desabilitado com ação**: `Not cloned` com **Clone** no próprio item; o item fica no percurso das setas com `aria-disabled`, não é escolhível, `Enter` nele aciona a ação, o nome acessível diz os dois (`acme/billing, not cloned. Enter clones it.`), e o menu fica aberto enquanto o item passa a `Cloning…` e depois a utilizável, sem ser escolhido sozinho. **Opção desabilitada com razão**: não escolhível, com a razão como subtítulo (`not read yet`). **Linha de texto**: uma linha entre os itens que não é item, na altura dele, em `--text-ui` e `--ink-3`, sem realce e fora do teclado; é o nível do breadcrumb dobrado que não é lugar, como o épico |
 | Gatilho da lateral | O filtro por repositório usa o gatilho no tom da lateral: `--size-control-sm`, fundo `--sidebar-input`, borda `--sidebar-control`, rótulo em `--text-meta` e `--ink-2`. O menu é o mesmo |
 | Estados | Gatilho: os comuns. Item: realce em `--veil-hover` (hover e teclado), escolhido com visto em `--brand-ink`, desabilitado em `--ink-4` com o motivo, destrutivo em vermelho. Menu carregando e com erro, com a mensagem no lugar dos itens (`features.md`, Modelos e esforço, quando o catálogo nunca foi lido) |
 | Tokens | `--surface-3`, `--shadow-float`, `--veil-hover`, `--veil-press`, `--brand-ink`, `--state-error`, `--size-menu-min`, `--text-caps` |
@@ -232,6 +242,7 @@ Cada componente embrulha um primitivo gerado em `frontend/src/components/ui` (nu
 | Anatomia | Caixa de `--icon` com borda `--line-3` sobre `--surface-input`, raio `--radius-xs`. Marcada: `--brand` com o visto em `--brand-on`. O alvo é a linha inteira, e a caixa é o sinal |
 | Estados | Desmarcada, marcada, hover (borda `--ink-3`), foco (o anel da linha), pressionada (`--brand-tint-press`), desabilitada (tracejada, sem fundo, com a razão), cadastrando (spinner no lugar da caixa) |
 | Usos | O modo de seleção do board, **Include the summary** na publicação, os repositórios de um board, os clones da varredura, os rascunhos de **Group drafts** |
+| Variantes | **Linha que marca**: a linha inteira é o controle, com a caixa no início e o rótulo (`Include the summary`, um repositório). **Sinal**: só a caixa, `aria-hidden`, dentro de uma linha que já tem papel próprio (o `treeitem` do card no modo de seleção), que leva o `aria-checked`; sem hover próprio, porque o hover é o da linha |
 | Acessibilidade | `aria-checked` na linha; a lista com `aria-multiselectable` |
 
 ### Rádio
@@ -370,12 +381,12 @@ Cada componente embrulha um primitivo gerado em `frontend/src/components/ui` (nu
 | | |
 |---|---|
 | Anatomia | Coluna à direita da área principal, afundada (`--surface-0`), largura `round(down, var(--panel-width), 1px)`. Cabeçalho de `--size-head` com o título em `--text-ui` 600, e o `×` (`Close · Esc`); corpo que rola, em `--text-meta` |
-| Variantes | **Do item**: `Details`, `Artifacts` e `Card` (task), `Details` e `Reports` (review), `Details` e `Documents` (discussão). **Da lista**: o card no board e a PR em Reviews, largura `--panel-card-width`, com a faixa (`#474 · acme/api`, **Open on GitHub**, `×`), o título em `--text-title`, as ações, os avisos, o bloco do item, os fatos em chave e valor, o corpo em Markdown no registro de leitura e as relações |
+| Variantes | **Do item**: `Details`, `Artifacts` e `Card` (task), `Details` e `Reports` (review), `Details` e `Documents` (discussão). **Da lista**: o card no board e a PR em Reviews, largura `round(down, var(--panel-card-width), 1px)`, com a faixa de `--size-head` no lugar do título (`#474 · acme/api` em `--text-meta` `--ink-3`, **Open on GitHub** fantasma de ícone com a seta externa, e `×`), o título em `--text-title`, as ações, os avisos, o bloco do item, os fatos em chave e valor, o corpo em Markdown no registro de leitura e as relações |
 | Coluna ou cobertura | O painel do item fica ao lado enquanto a conversa cabe inteira (área principal − painel ≥ 760 px); o painel da lista, enquanto a lista mantém 440 px. Fora disso, cobre com `--surface-3` e `--shadow-overlay` |
 | Grupo de painéis | No cabeçalho, os botões dos painéis do lugar como um grupo que alterna: o aberto pressionado (`--brand-tint-plane`, `aria-pressed`); abaixo de 1440 px de área principal, só o ícone, com o nome no tooltip e no nome acessível. `Artifacts`, `Reports` e `Documents` usam o ícone de documento (`file`) |
-| Regra em pixel | A largura do painel e a condição da coluna ficam em pixel inteiro: com `--panel-width`, a regra `área principal − painel ≥ 760 px` vale exatamente a partir de 1120 px de área principal, e é uma container query nesse limite |
+| Regra em pixel | A largura do painel e a condição da coluna ficam em pixel inteiro: com `--panel-width`, a regra `área principal − painel ≥ 760 px` vale exatamente a partir de 1120 px de área principal, e é uma container query nesse limite. Com `--panel-card-width`, a regra `área principal − painel ≥ 440 px` vale exatamente a partir de 800 px de área principal (abaixo de 857 px o painel tem o mínimo de 360 px, e 800 − 360 = 440; acima, a lista fica com 58% da área, sempre mais de 440), e é a container query do painel da lista |
 | Estados | Entra em `--duration-base` com `--ease-enter`, por opacidade e um deslocamento de `--space-4` da direita; sai em `--duration-fast` com `--ease-exit`. Não é modal: o foco fica no botão que o abriu, e `Esc` fecha e devolve o foco a ele; vazio com o que falta (`No artifacts yet`, `Steps come from the plan`); carregando; o item da lista que saiu da leitura: a faixa de aviso no alto e as ações tracejadas |
-| Teclado | Um de cada vez; `Esc` fecha; o teclado continua na lista enquanto o painel da lista está aberto |
+| Teclado | Um de cada vez; `Esc` fecha; o teclado continua na lista enquanto o painel da lista está aberto. O painel da lista não tem botão que o abriu: `Esc` e o `×` devolvem o foco à linha do card, quando ele estava no painel |
 | Acessibilidade | `aside` com o nome (`Card #474`) |
 | Faça | Deixe fechado por padrão e abra só por uma ação do usuário |
 | Não faça | Não abra um painel sozinho. Não troque de documento sozinho |
@@ -394,8 +405,8 @@ Cada componente embrulha um primitivo gerado em `frontend/src/components/ui` (nu
 |---|---|
 | Anatomia | No lugar da lista ou do conteúdo, alinhado à esquerda na medida da lista, como nos mocks: o título em `--text-ui` 600, o texto em `--ink-3` (o que aparece ali e quando), e a ação que o resolve (**New discussion**, **Read now**, **Clear filters**) |
 | Variantes | Vazio de verdade (`This board has no issues.`, `No open pull requests.`); filtro sem resultado (`No cards match the filters.`, o que foi pedido, **Clear filters**, com a barra de filtros à vista); nunca lido e falhou (`Couldn't read the board`, a mensagem, **Try again**); Home sem item (`Nothing in progress`) |
-| Faça | Diga o que faria algo aparecer |
-| Não faça | Não repita a ação que já está à vista na página |
+| Faça | Diga o que faria algo aparecer. A ação do vazio é a saída dele, ao lado do texto que a explica, mesmo quando o cabeçalho ou a barra já a têm (**New discussion** num board sem issues, **Clear filters** num filtro sem resultado) |
+| Não faça | Não ponha no vazio uma ação que não o resolve |
 
 ### Estado vazio de um lugar
 
@@ -689,10 +700,10 @@ A conversa é uma coluna centrada de `--measure-conversation` (60rem, 960 px), e
 | | |
 |---|---|
 | Anatomia | Uma linha de `--size-control` numa grade de colunas de largura fixa, para as colunas se alinharem de linha em linha. O título tem sempre ao menos um terço da linha, cortado com tooltip. A coluna das teclas aparece só na linha com o foco do teclado, com as teclas que agem |
-| Variantes | **Card** (board): início (glifo de épico, ou a caixa no modo de seleção), `--col-num`, título, `--col-epic`, `--col-dep` (`◇ #461 +1`), `--col-task` (a situação mais grave da task e a posição, ou `In discussion`), `--col-keys` (`S start`, `D discuss`). **Pull request** (Reviews): `--col-ref`, título com uma etiqueta, `--col-author`, `--col-state`, `--col-keys` (`R review`, `R open`, `R open task`). **History**: glifo do tipo, nome, `--col-where`, `--col-result`, `--col-time`, sem teclas |
-| Estados | Hover `--veil-hover`; foco (anel por fora e as teclas); pressionada `--veil-press`; aberta no painel (`--brand-tint-plane` com anel `--brand-ring`, o glifo de tipo em `--brand-ink`, o número sobe a `--ink-3`); desabilitada (tracejada, com a razão); carregando (`Cloning acme/billing…`, `Starting the review…`, com o spinner); erro (em vermelho, com o trilho); fechada numa seção não final (`--ink-4`); nova numa leitura (pisca duas vezes no véu neutro); recém-arquivada no History (destacada ao chegar da página do item que saiu) |
+| Variantes | **Card** (board): início (glifo de épico, ou o sinal da caixa no modo de seleção), `--col-num`, título, `--col-epic`, `--col-dep` (`◇ #461 +1`), `--col-task` (o glifo e a forma curta da linha 2 da árvore, `structure.md` §2, com `+N`, ou `In discussion`), `--col-keys` (`S start`, `D discuss`; no modo de seleção, só `Space select` ou `Space unselect`). **Pull request** (Reviews): `--col-ref`, título com uma etiqueta, `--col-author`, `--col-state`, `--col-keys` (`R review`, `R open`, `R open task`). **History**: glifo do tipo, nome, `--col-where`, `--col-result`, `--col-time`, sem teclas |
+| Estados | Hover `--veil-hover`; foco (anel por fora e as teclas); pressionada `--veil-press`; aberta no painel (`--brand-tint-plane` com anel `--brand-ring`, o glifo de tipo em `--brand-ink`, o número sobe a `--ink-3`); desabilitada (tracejada, com a razão); carregando (`Cloning acme/billing…`, `Starting the review…`, com o spinner); erro (em vermelho, com o trilho); fechada numa seção não final (o título em `--ink-4`, e `--ink-3` na linha aberta, que com `--ink-4` cairia abaixo de 4,5:1 no escuro com o hover e o pressionado); nova numa leitura (pisca duas vezes no véu neutro); recém-arquivada no History (destacada ao chegar da página do item que saiu) |
 | Situação na linha | Com espera ou erro, o rótulo da task ou do review em `--ink-1` e peso 500; sem situação, em `--ink-2` ou `--ink-3` |
-| Largura | Pela largura da própria lista (container query). Abaixo de 1040 px (860 px no History), a grade fica com o início, o número, o título e as teclas, e o resto desce para uma segunda linha sob o título, inteiro, em `--text-meta`, com `--space-4` entre as partes. Uma linha sem nada a descer fica com uma linha só |
+| Largura | Pela largura do contêiner da lista, a área que rola, com as margens de `--space-6` (container query). Abaixo de 1040 px (860 px no History), a grade fica com o início, o número, o título e as teclas, e o resto desce para uma segunda linha sob o título, que vai da coluna do título à das teclas, em `--text-meta`, com `--space-4` entre as partes, sem quebrar: a dependência e a task ficam inteiras, e o épico corta com tooltip; quando sobra ao épico menos de `--space-12`, ele sai da segunda linha; só quando a dependência e a task não cabem juntas a task também corta, com tooltip. A linha de duas linhas tem `--space-1-5` em cima e embaixo e `--space-0-5` entre as duas (52 px). Uma linha sem nada a descer fica com uma linha só. No card, com as colunas decididas para a task 5 (a tabela de Tamanhos de layout), o título tem 337 px a 1041 px de contêiner (um terço é 331) e 180 px na lista mais estreita ao lado do painel (452 px de contêiner, janela de 1100 px) |
 | Teclado | A lista é um `tree` com uma parada de Tab; ↑↓ `Home` `End` percorrem as linhas e os cabeçalhos visíveis; `Enter` abre ou fecha o painel |
 | Acessibilidade | Cards e PRs são `treeitem` de nível 2, com `aria-selected` no aberto; o nome acessível é a frase inteira |
 | Faça | Mostre só o que decide a escolha; o resto fica no painel |
@@ -715,8 +726,10 @@ A conversa é uma coluna centrada de `--measure-conversation` (60rem, 960 px), e
 |---|---|
 | Anatomia | Fixa no alto da lista, com um esmaecido de `--space-3` por baixo: a busca (quando o lugar busca), os chips que alternam, os filtros ativos como chips com `×`, **Filter** (o menu com grupos) e **Clear filters**, fantasma, só com algum filtro ativo |
 | Variantes | Board: a busca, **Assigned to me**, **Filter**. Reviews: só **Filter**. History: a busca (`Search by name, title or #number`, onde o foco começa), o chip do filtro da lateral quando ativo (`Only acme/web`, cujo `×` limpa o filtro da lateral também), e à direita a contagem (`44 archived · Sep 12 – today`, `12 of 44`) |
-| Estados | Padrão, filtros ativos, chip tracejado com a razão (`gh didn't say who you are`), menu carregando, filtro órfão (`◇`) |
-| Largura | Abaixo de 620 px de lista, a busca encolhe |
+| Menu Filter | Um grupo por filtro, com a legenda em caixa alta, e itens `menuitemcheckbox`: no máximo um marcado por grupo; escolher outro troca, escolher o marcado o desmarca, e o menu fecha a cada escolha. No board, **Repository** (os repositórios do board, `dono/nome`), **Assignee** (os responsáveis da leitura, em ordem alfabética, o do `gh` com `· you`) e **Status** (as opções na ordem do board e `No status`, só num board com campo de status) |
+| Chip do filtro ativo | `acme/api`; `Assignee: tchen`; `Status: Ready` ou `Status: No status`, cada um com o `×` (`Remove the filter acme/api`). Um filtro de um repositório que saiu do board ou de um status que saiu das opções é órfão: o chip leva `◇` antes do nome, com `acme/old isn't a repository of this board anymore.` ou `Ready isn't a status of this board anymore.` no tooltip, e continua filtrando até o `×` |
+| Estados | Padrão, filtros ativos, chip tracejado com a razão (`gh didn't say who you are`), menu carregando (Reviews), filtro órfão (`◇`) |
+| Largura | Abaixo de 620 px de lista, a busca encolhe de `--space-16` × 4 para `--space-16` × 3 |
 | Acessibilidade | `role="search"` |
 | Faça | Lembre os filtros entre execuções |
 
@@ -725,7 +738,7 @@ A conversa é uma coluna centrada de `--measure-conversation` (60rem, 960 px), e
 | | |
 |---|---|
 | Anatomia | No lugar da barra de filtros durante o modo de seleção, neutra (`--surface-0` com anel `--line-2`): `3 selected`, os números em `--ink-3`, a ação primária (**Discuss 3 cards** `D`) e **Cancel** `Esc` |
-| Estados | Nenhum marcado (a primária tracejada com `Select a card with Space`), três, abrindo |
+| Estados | Nenhum marcado (`0 selected`, sem números, e **Discuss cards** tracejado com `Select a card with Space`), um (**Discuss 1 card**), vários (**Discuss 3 cards**); os números cortam com tooltip; com a lista filtrada, `· filtered` em `--ink-3` depois dos números, com o filtro no tooltip |
 | Acessibilidade | `role="toolbar"`, a contagem em `role="status"` |
 | Não faça | Não use a identidade na barra: ela não é uma escolha |
 
@@ -733,8 +746,8 @@ A conversa é uma coluna centrada de `--measure-conversation` (60rem, 960 px), e
 
 | | |
 |---|---|
-| Anatomia | No painel da lista, elevado (`--surface-2`, `--shadow-xs`): o glifo de tipo, o nome, a situação com a posição e o chip de tempo (`● Question · Reviewer · Step 3/7 18m`), e **Open** (**Open review** `R`, **Open task**), primário quando o item espera o usuário |
-| Variantes | A task ativa de um card; o review ativo de uma PR; a task dona de uma PR (`The review of this pull request happens in its task.`). Sem ativo: a task arquivada mais recente ou a discussão do card, como link |
+| Anatomia | No painel da lista, elevado (`--surface-2`, `--shadow-xs`): o glifo de tipo em `--brand-ink`, o nome em 500, a situação com a posição e o chip de tempo (`● Question · Reviewer · Step 3/7 18m`; sem situação, o glifo e a linha 2 da árvore na forma longa), e **Open** (**Open review** `R`, **Open task**), primário quando o item espera o usuário e nenhuma outra primária está na tela |
+| Variantes | A task ativa de um card, com **Open** secundário, porque **Start task** é a única primária da visão do board (`screens/board.md` §3.6); o review ativo de uma PR; a task dona de uma PR (`The review of this pull request happens in its task.`). Sem ativo: a task arquivada mais recente (`Archived task: <nome>`) e a discussão do card (`In the discussion <título>`, ou `From the discussion <título>` quando ela está arquivada), como links |
 
 ### Aviso de dependência
 
@@ -747,15 +760,16 @@ A conversa é uma coluna centrada de `--measure-conversation` (60rem, 960 px), e
 
 | | |
 |---|---|
-| Anatomia | Grupos com o título em caixa alta (`Epic · 2 of 8 finished`, `Cards of the epic · 6`, `Cards · 8`, `Dependencies`, `Pull requests`), uma linha por item (número, título, status); cada card do board abre com um clique, e o de fora é um link externo; `◇ Not satisfied` na dependência que falta |
+| Anatomia | Grupos com o título em caixa alta (`Epic`, `Cards of the epic · 6`, `Cards · 8`, `Dependencies`, `Pull requests`), uma linha por item (número, título, e à direita o status, o estado ou o progresso do épico, `2 of 8 finished`); `◇ Not satisfied` na dependência que falta |
+| Variantes | **Link externo**: o que não é card do board, com a seta externa, abre no GitHub. **Card do board**: o link sem a seta, que abre o card no painel da lista (no board) ou a visão do board com o card no painel (no painel `Card` da task) |
 
 ### Continue e linha de início
 
 | | |
 |---|---|
-| Continue | Botão elevado (`--surface-2`, `--shadow-xs`, raio `--radius-lg`) com duas linhas: o glifo de tipo em `--brand-ink`, o nome em `--text-body` 600 e `Enter` à direita; o glifo da situação, o que ela pede com a posição, o chip do tempo e onde o item vive em `--ink-3`. Recebe o foco na Home. Estados: padrão, hover, foco, pressionado, desabilitado (o item saiu, sem a tecla `Enter`), abrindo |
+| Continue | Botão elevado (`--surface-2`, `--shadow-xs`, raio `--radius-lg`) com duas linhas: o glifo de tipo em `--brand-ink`, o nome em `--text-body` 600 e `Enter` à direita; o glifo da situação, o que ela pede com a posição, o chip do tempo e onde o item vive em `--ink-3`. Recebe o foco na Home. Estados: padrão, hover, foco, pressionado. Não tem desabilitado nem carregando: o item dele é sempre um item ativo que existe (`screens/board.md` §2.2), e abrir um lugar é imediato |
 | Linha de início | O ícone, o rótulo em 500, o subtítulo em `--ink-3` e a tecla à direita (**New task** `Ctrl N`, **Review a pull request** `4 pending in 3 repositories`, **New discussion**, **Add board**, **Add repository**). Estados: padrão, hover, foco, pressionado, desabilitada |
-| Linha de board | O ícone, o título, os cards abertos e os repositórios em `--ink-3`, e à direita a idade da leitura ou `◇ Read failed 18m ago`; sob ela, as faixas de aviso do que bloqueia |
+| Linha de board | A linha de início com o ícone de board, o título, os cards abertos e os repositórios em `--ink-3`, e à direita a idade da leitura ou `◇ Read failed 18m ago`, que brilha durante uma leitura; sob ela, recuadas até o texto, as linhas do que bloqueia, cada uma com a ação fantasma `xs`. A linha **No board** tem a mesma forma, sem ser botão (`role="group"`), porque não abre um lugar |
 
 ## Diálogos
 
@@ -863,12 +877,12 @@ Os tokens de medida e de layout da conversa, das listas, do painel da lista, do 
 | `--measure-read` | `42rem` | Um bloco curto de texto: a Home, a página do item que saiu, o início |
 | `--list-measure` | `calc(var(--measure) + var(--space-16) * 5)` | A coluna da lista do board e de Reviews |
 | `--panel-card-width` | `clamp(22.5rem, 42%, 40rem)` | O painel da lista |
-| `--size-dialog-wide` | `calc(var(--size-dialog) + var(--space-16))` | O diálogo largo |
+| `--size-dialog-wide` | `calc(var(--size-dialog) + var(--space-16) + var(--space-8))` | O diálogo largo, 576 px, o valor decidido, que a task 5 leva a `tokens.css` com os testes (hoje o token dá 544): um nome de 64 caracteres em Fira Code de 13 px (512 px) cabe no campo, com o corpo do diálogo (`--space-5` de cada lado) e o campo (10 px de folga e a borda de cada lado) |
 | `--col-num` | `var(--space-12)` | Linha do card |
 | `--col-epic` | `calc(var(--space-16) * 2.25)` | Linha do card |
-| `--col-dep` | `calc(var(--space-12) + var(--space-2))` | Linha do card |
+| `--col-dep` | `calc(var(--space-16) + var(--space-2))` | Linha do card, 72 px, o valor decidido, que a task 5 leva a `tokens.css` com os testes (hoje 56): o glifo de 8 px, `--space-1-5` e `#1291 +1` medem 60 px, e `#12345 +9`, 69 |
 | `--col-task` | `calc(var(--space-16) * 3)` | Linha do card |
-| `--col-keys` | `calc(var(--space-16) + var(--space-12))` | Linha do card e da PR |
+| `--col-keys` | `calc(var(--space-16) + var(--space-12) + var(--space-2))` | Linha do card e da PR, 120 px, o valor decidido, que a task 5 leva a `tokens.css` com os testes (hoje 112): `S start` e `D discuss` com `--space-2` entre as duas (117 px); o rótulo das chaves de `Details` usa a mesma largura |
 | `--col-ref` | `calc(var(--space-16) + var(--space-8))` | Linha da PR |
 | `--col-author` | `calc(var(--space-16) + var(--space-8))` | Linha da PR |
 | `--col-state` | `calc(var(--space-16) * 3 + var(--space-4))` | Linha da PR |

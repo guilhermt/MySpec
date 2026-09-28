@@ -45,13 +45,15 @@ A Home é o lugar sem item aberto (`structure.md` §1). O cabeçalho tem `←` e
 
 O foco começa nele, então `Enter` abre o item no lugar da situação. O nome acessível é a frase inteira. Quando nenhum item está ativo, a seção dá lugar a `Nothing in progress` / `No task, review or discussion is active. Start one from a card, a pull request or a board.`
 
+O item de **Continue** é o primeiro item ativo que ainda existe entre o lugar na tela e os lugares atrás dele, do mais recente ao mais antigo; sem nenhum, o último item ativo aberto guardado; sem ele, o item ativo criado por último. Então um item arquivado ou apagado nunca fica em **Continue**: o anterior toma o lugar dele, e **Continue** não tem estado desabilitado. Onde o item vive é o breadcrumb dele (`Platform Roadmap / API hardening`, `No board`, `Reviews`).
+
 **Start.** São três linhas de lista, cada uma com o ícone, o rótulo em peso 500, o subtítulo em `--ink-3` e a tecla à direita, quando há:
 
 - **New task** · `From scratch. A card starts its task on its board.` · `Ctrl N`. Abre o diálogo livre;
 - **Review a pull request** · `4 pending in 3 repositories`. Vai a Reviews;
 - **New discussion** · `About the demand of one board`. Abre o diálogo de discussão (seção 2.3).
 
-**Boards.** Uma linha por board, em ordem alfabética. Cada linha tem o ícone, o título e, em `--ink-3`, os cards abertos e os repositórios (`46 open cards · api, web, gateway, docs, billing`). À direita fica a idade da leitura (`read 2m ago`, com brilho durante uma leitura) ou `◇ Read failed 18m ago`. A linha abre a visão do board. Sob ela, recuadas, ficam as linhas do que bloqueia sem ser situação:
+**Boards.** Uma linha por board, em ordem alfabética. Cada linha tem o ícone, o título e, em `--ink-3`, os cards abertos fora dos status finais (o que ainda se escolhe; num board sem campo de status, todos os abertos) e os repositórios (`46 open cards · api, billing, docs, gateway, web`, os nomes curtos em ordem alfabética; `No open cards`; num board nunca lido, `Not read yet`). À direita fica a idade da leitura (`read 2m ago`) ou `◇ Read failed 18m ago`, e, num board nunca lido, `reading…` durante a primeira leitura; durante qualquer leitura, o texto da direita brilha. A linha abre a visão do board. Sob ela, recuadas, ficam as linhas do que bloqueia sem ser situação:
 
 - a razão da falha, com **Try again** (`GitHub's rate limit was reached. It resets at 14:32.`);
 - `◇ acme/billing isn't cloned. Its cards can't start a task yet.`, com **Clone**;
@@ -63,7 +65,7 @@ Os repositórios sem board ficam numa última linha, **No board**, com os avisos
 
 ### 2.3 O diálogo de discussão a partir da Home
 
-**New discussion** abre o diálogo de discussão. Quando há mais de um board, o primeiro campo é **Board**, um seletor com a lista dos boards. Cada board da lista tem os repositórios e a idade da leitura, e um board com a leitura falha diz `◇ read failed 18m ago · uses the last reading`. A lista vem no board da última discussão, marcado `last used`. A ajuda do campo diz `The discussion reads the clones of the board's repositories and publishes its cards there.` Com um board só, o campo não aparece, e o board é fixo, como a partir da visão do board.
+**New discussion** abre o diálogo de discussão. Quando há mais de um board, o primeiro campo é **Board**, um seletor com a lista dos boards. Cada board da lista tem os repositórios e a idade da leitura, e um board com a leitura falha diz `◇ read failed 18m ago · uses the last reading`; um board nunca lido fica desabilitado, com `not read yet`, como o **New discussion** do cabeçalho dele. A lista vem no board da última discussão criada, ativa ou arquivada, marcado `last used`. O **New discussion** do menu **+ New** da lateral abre o mesmo diálogo com o campo **Board** quando o lugar na tela não tem board (a Home, Reviews, History, Settings, uma task sem board); num lugar com board, o board é fixo. Trocar o board mantém o título e o texto já escritos. A ajuda do campo diz `The discussion reads the clones of the board's repositories and publishes its cards there.` Com um board só, o campo não aparece, e o board é fixo, como a partir da visão do board.
 
 O resto do diálogo é o de `features.md` (Criar uma discussão), e a forma dele é da tela da discussão. Aqui ficam o que a Home e o board usam:
 
@@ -114,13 +116,13 @@ A barra fica fixa acima da lista e tem, da esquerda para a direita:
 - **Filter**, um chip que abre o menu com três grupos de escolha: **Repository** (os do board), **Assignee** (o usuário marcado `· you`) e **Status** (as opções do board e `No status`, só num board com campo de status);
 - **Clear filters**, fantasma, só com algum filtro ativo.
 
-Os filtros combinam entre si e são lembrados por board entre execuções. Um filtro de um repositório que saiu do board vira um chip com `◇` e a razão no tooltip, e o `×` o remove. Abaixo de 620 px de lista, a busca encolhe para `--space-16` vezes 3.
+Os filtros combinam entre si e são lembrados por board entre execuções. Um filtro de um repositório que saiu do board, ou de um status que saiu das opções, vira um chip com `◇` e a razão no tooltip, continua filtrando, e o `×` o remove. Abaixo de 620 px de lista, a busca encolhe para `--space-16` vezes 3.
 
 ### 3.4 As seções por status e a linha do card
 
-**As seções.** Há uma seção por opção do campo de status, na ordem do board, **mesmo vazia**, para a lista não pular quando o filtro muda. Um board sem campo de status tem uma seção só, `Cards`. A seção `No status` aparece quando há cards sem status. O cabeçalho da seção tem `--size-node` de altura, o chevron, o nome em `--text-meta` e peso 600 e a contagem já filtrada em `--ink-4`. Uma seção vazia não tem chevron nem ação.
+**As seções.** Há uma seção por opção do campo de status, na ordem do board, **mesmo vazia**, para a lista não pular quando o filtro muda. Um board sem campo de status tem uma seção só, `Cards`. A seção `No status` aparece quando a leitura tem card sem status, com a contagem filtrada, e não some pelo filtro. O cabeçalho da seção tem `--size-node` de altura, o chevron, o nome em `--text-meta` e peso 600 e a contagem já filtrada em `--ink-4`. Uma seção vazia não tem chevron nem ação.
 
-**A regra das finais.** As seções de status final começam recolhidas. O que o usuário recolhe ou expande é lembrado por board. Dentro de uma seção, as issues abertas vêm antes das fechadas, cada grupo na ordem do board. Uma issue fechada numa seção não final fica em `--ink-4`, com `Closed` no nome acessível. Uma seção final tem o tooltip `A final status: folded when the board opens`.
+**A regra das finais.** As seções de status final começam recolhidas. O que o usuário recolhe ou expande é lembrado por board. Dentro de uma seção, as issues abertas vêm antes das fechadas, cada grupo na ordem do board. Uma issue fechada numa seção não final fica com o título em `--ink-4`, que sobe a `--ink-3` na linha aberta (o contraste de 4,5:1 com o hover e o pressionado nos dois temas), com `Closed` no nome acessível. Uma seção final tem o tooltip `A final status: folded when the board opens`.
 
 **A linha do card.** É uma linha de `--size-control` (32 px), numa grade de colunas de largura fixa, para as colunas se alinharem de linha em linha. Os campos, da esquerda para a direita:
 
@@ -131,7 +133,7 @@ Os filtros combinam entre si e são lembrados por board entre execuções. Um fi
 | Título | o resto | Em `--text-ui` e `--ink-1`, cortado com tooltip. O título de um épico fica em peso 500 |
 | Épico | `--col-epic` | O título do épico em `--ink-3`, cortado com tooltip. No card de um épico: `Epic · 2 of 8 finished` |
 | Dependência | `--col-dep` | Só com uma dependência não satisfeita: `◇ #461`, e `+N` quando há mais (`◇ #461 +1`). O losango contornado, em tinta neutra, nunca âmbar. O tooltip diz cada uma: `Depends on #461 Metering events from the gateway · open, Backlog. A warning: it never blocks.` |
-| Task | `--col-task` | Com uma task ativa, o glifo da situação mais grave (o da árvore) e a posição com o que ela pede: `● Question · Step 3/7`, `◌ Step 2/5 · Reviewer pass 2`, `◆ Session error · Plan`. Com espera ou erro, o rótulo fica em `--ink-1` e peso 500. Sem task e com o card numa discussão ativa, o glifo da discussão e `In discussion`, em `--ink-3`. O tooltip tem a task inteira |
+| Task | `--col-task` | Com uma task ativa, o glifo e a forma curta da linha 2 da árvore (`structure.md` §2), com `+N` quando há mais situações: `● Question · Step 3/7`, `◌ Step 2/5 · pass 2`, `◆ Session error · Plan`, `‖ Paused · PRD`. Com espera ou erro, o rótulo fica em `--ink-1` e peso 500. Sem task e com o card numa discussão ativa, o glifo da discussão e `In discussion`, em `--ink-3`. O tooltip tem a task inteira |
 | Teclas | `--col-keys` | `S start` e `D discuss`, visíveis só na linha com o foco do teclado, e só as que agem: `S` num card sem task que pode começar uma, `D` em todo card que pode entrar numa discussão |
 
 O repositório, os responsáveis, os campos, as PRs e o status não estão na linha. O status é a seção, e o resto fica no card. O nome acessível da linha é a frase inteira: `#474 Usage alerts at 80% of the plan. acme/api. Ready. epic Usage-based billing. depends on #461, not satisfied`, com a task e o tempo de espera, a discussão e, no modo de seleção, se está marcado.
@@ -140,7 +142,7 @@ O repositório, os responsáveis, os campos, as PRs e o status não estão na li
 - Hover: `--veil-hover`.
 - Foco: o anel por fora, e as teclas aparecem.
 - Pressionada: `--veil-press`.
-- **Aberta** (o card no painel): `--brand-tint-plane` com anel `--brand-ring`, o glifo de épico em `--brand-ink` e o número em `--ink-3`.
+- **Aberta** (o card no painel): `--brand-tint-plane` com anel `--brand-ring`, o glifo de épico em `--brand-ink`, o número em `--ink-3` e o título de uma fechada em `--ink-3`.
 - Desabilitada: no modo de seleção, um card que não pode entrar numa discussão, tracejado.
 - Carregando: `Cloning acme/billing…` com o spinner na coluna da task, enquanto **Clone and continue** roda.
 - Erro: `Clone failed` em vermelho na coluna da task, com o trilho.
@@ -149,7 +151,7 @@ O repositório, os responsáveis, os campos, as PRs e o status não estão na li
 **O que cede na largura.** A regra depende da largura da própria lista (container query), em limites fixos:
 
 - **acima de 1040 px de lista**, uma linha só, com todas as colunas;
-- **até 1040 px** (a metade do monitor, ou a lista ao lado do painel até cerca de 2000 px de janela), a grade fica com o início, o número, o título e as teclas. O épico, a dependência e a task descem para **uma segunda linha sob o título**, inteiros, em `--text-meta`, com `--space-4` entre eles. Uma linha sem nenhum dos três continua com uma linha só;
+- **até 1040 px** (a metade do monitor, ou a lista ao lado do painel até cerca de 2050 px de janela), a grade fica com o início, o número, o título e as teclas. O épico, a dependência e a task descem para **uma segunda linha sob o título**, da coluna do título à das teclas, em `--text-meta`, com `--space-4` entre eles, sem quebrar: a dependência e a task ficam inteiras, e o épico corta com tooltip, e sai da segunda linha quando sobra a ele menos de `--space-12` (só quando a dependência e a task não cabem juntas a task também corta). Uma linha sem nenhum dos três continua com uma linha só;
 - **nada que decide a escolha sai**. O título tem sempre ao menos um terço da linha, e as teclas têm a coluna delas, então aparecer no foco nunca tira largura do título.
 
 A 1250 px com o painel aberto, `#474 Usage alerts at 80% of the plan` tem embaixo `Usage-based billing · ◇ #461`, e `#412 Rate limit per API key` tem `API hardening · ● Question · Step 3/7`.
@@ -161,7 +163,7 @@ A 1250 px com o painel aberto, `#474 Usage alerts at 80% of the plan` tem embaix
 **Forma e largura.** É o painel auxiliar de `structure.md` §3, afundado (`--surface-0`) ao lado da lista. É mais largo que os painéis da task, porque o corpo do card é lido ali:
 
 - largura `--panel-card-width`, `clamp(22.5rem, 42%, 40rem)` da área principal, arredondada para baixo ao pixel;
-- fica ao lado enquanto a lista mantém 440 px; abaixo disso, cobre a lista com `--surface-3` e `--shadow-overlay`. De 1100 a 2600 px de janela, fica sempre ao lado.
+- fica ao lado enquanto a lista mantém 440 px, o que vale exatamente a partir de 800 px de área principal; abaixo disso, cobre a lista com `--surface-3` e `--shadow-overlay`. De 1100 a 2600 px de janela, fica sempre ao lado (a 1100 px, a área tem 812 px e a lista 452).
 
 **O que mostra**, de cima para baixo:
 
@@ -172,7 +174,7 @@ A 1250 px com o painel aberto, `#474 Usage alerts at 80% of the plan` tem embaix
 5. **A task do card**, quando há:
    - a ativa é um objeto elevado com o glifo de tipo, o nome, a situação com a posição e o chip do tempo (`● Question · Reviewer · Step 3/7 18m`) e **Open**, que abre a task;
    - sem ativa, a arquivada mais recente (`Archived task: 409-hash-api-keys-at-rest`, um link que abre no History);
-   - a discussão, quando o card está numa (`In the discussion Usage-based pricing tiers`, um link).
+   - a discussão, quando o card está numa, de entrada ou como autora ativa (`In the discussion Usage-based pricing tiers`, um link), ou a autora arquivada (`From the discussion Usage alerts`, que abre no History).
 6. **Os campos**, numa lista de chave e valor em `--text-meta`: os campos preenchidos do board (`Module`, `Estimate`, datas), na ordem que o GitHub devolve, e `Assignees`.
 7. **O corpo**, em Markdown, no registro de leitura (`--text-read`), com títulos em `--text-body` e peso 600, código, tabelas, imagens e mermaid, depois de um fio. Um corpo vazio diz `No description.`
 8. **As relações**, cada grupo com o título em caixa alta e uma linha por card (número, título, status), e cada card do board abre com um clique:
@@ -180,7 +182,7 @@ A 1250 px com o painel aberto, `#474 Usage alerts at 80% of the plan` tem embaix
    - **Cards of the epic · 6**, os irmãos com o status no board, ou o estado da issue fora dele (um irmão fora do board é um link externo);
    - num épico, **Cards · 8**;
    - **Dependencies**, todas, com `◇ Not satisfied` nas que faltam, o estado, o status e as PRs;
-   - **Pull requests**, `acme/api#1291 · Open`.
+   - **Pull requests**, `#1291 · Open`, com o repositório antes do número só quando é outro (`acme/web#88 · Merged`).
 
 O painel mantém o card quando uma leitura nova ainda o traz.
 
@@ -196,20 +198,20 @@ O painel mantém o card quando uma leitura nova ainda o traz.
 | Repositório sem board ou não cadastrado | **Start task** `S`, que abre **Add acme/status-page to the board** primeiro. **Discuss** tracejado | `acme/status-page isn't managed by this board. Start task adds it first.` |
 | Repositório de outro board | **Start task** e **Discuss** tracejados | `acme/ios belongs to the board Mobile App.` |
 | Card com task ativa | Só **Discuss** `D`. A task fica no bloco dela | — |
-| Issue fechada | Só **Discuss** | `The issue is closed.` |
+| Issue fechada | Só **Discuss** `D` | `The issue is closed.` |
 
-**As teclas na linha.**
+**As teclas na linha.** `S` e `D` valem na linha em foco e, com o foco no painel, para o card dele.
 - `S` age como **Start task**, ou como **Clone and continue**, que abre o card com o foco nele.
-- Num card em que `S` não age, um aviso diz por quê: `No task from #412 · #412 already has a task: Rate limit per API key.`, e o mesmo para a issue fechada, o outro board e o clone inexistente.
-- `D` abre o diálogo de discussão com a seleção, ou, sem seleção, com o card do foco, se ele pode entrar numa discussão.
+- Num card em que `S` não age, o aviso de tecla (`system/components.md`) diz por quê: `No task from #412 · #412 already has a task: 412-rate-limit-per-api-key.` (o nome da task), `No task from #409 · The issue is closed.`, `No task from #104 · acme/ios belongs to the board Mobile App.`, `No task from #488 · The clone at ~/code/api is missing.`, e no card fora da leitura, `No task from #466 · The card isn't in the last reading of the board.`; no modo de seleção, `S` não age e não avisa. O aviso do painel fica preso à linha das ações
+- `D` abre o diálogo de discussão com a seleção, ou, sem seleção, com o card do foco, se ele pode entrar numa discussão; num card que não pode, o aviso diz `#104 can't go into a discussion · acme/ios isn't a repository of this board.`, no card fora da leitura, `#466 can't go into a discussion · The card isn't in the last reading of the board.`, e no modo de seleção sem nenhum marcado, `No card is selected · Select a card with Space.`
 
 Quando uma leitura termina um clone, o diálogo de criação abre sozinho, mesmo com o usuário fora da visão, como em `features.md`.
 
 **New discussion** fica no cabeçalho, com `N` de qualquer ponto da visão fora de um campo. Abre o diálogo de discussão com o board fixo e sem cards. É a ação diária sem card: 10 das 11 discussões guardadas começaram assim.
 
 **O modo de seleção** existe só quando pedido: **Select cards to discuss** no `⋯`, ou `Space` numa linha, que entra no modo e já marca aquele card.
-- A barra de filtros dá lugar à barra da seleção, neutra (`--surface-0` com anel `--line-2`), com `3 selected`, os números (`#455 #461 #475`, em `--ink-3`), **Discuss 3 cards** `D` (primário) e **Cancel** `Esc`. Sem nenhum marcado, **Discuss cards** fica tracejado, com `Select a card with Space`.
-- As linhas ganham a caixa na coluna de início. O clique e `Space` alternam.
+- A barra de filtros dá lugar à barra da seleção, neutra (`--surface-0` com anel `--line-2`), com `3 selected`, os números (`#455 #461 #475`, em `--ink-3`), **Discuss 3 cards** `D` (primário) e **Cancel** `Esc`; com algum filtro ou busca ativos, a barra diz também `· filtered`, com o filtro no tooltip, porque a lista continua filtrada. Sem nenhum marcado, **Discuss cards** fica tracejado, com `Select a card with Space`.
+- As linhas ganham a caixa na coluna de início. O clique, `Space` e `Enter` alternam. Entrar no modo fecha o painel, e o card não abre durante ele, para a tela ter uma primária só (**Discuss N cards**); a busca e os filtros esperam o fim do modo, e `/` não age nele.
 - Um card que não pode entrar numa discussão tem a caixa tracejada, e `Space` nele diz por quê: `#104 can't go into a discussion · acme/ios isn't a repository of this board.`
 - A seleção é da visão: sai ao sair dela. Um card que sai da leitura sai da seleção.
 
@@ -224,7 +226,7 @@ Aparece só no modo de seleção. É uma caixa de `--icon` com borda `--line-3` 
 - Pressionada: `--brand-tint-press`.
 - Desabilitada: tracejada, sem fundo.
 
-No `tree`, a linha tem `aria-checked` e a lista `aria-multiselectable`.
+No `tree`, a linha tem `aria-checked` no lugar de `aria-selected` e a lista `aria-multiselectable`. **Select cards to discuss** fica tracejado com `· no card to select` quando nenhuma linha está visível.
 
 ### 3.8 Leitura e falhas
 
@@ -252,7 +254,7 @@ A falha nunca é situação, nunca notifica e nunca é vermelha.
 
 ### 4.1 O diálogo
 
-É o diálogo de criação do sistema: sobre `--scrim`, `--surface-3`, `--shadow-overlay`, raio `--radius-xl`. A largura é `--size-dialog-wide` (`--size-dialog` mais `--space-16`), para caber um nome de 64 caracteres em mono. Fica a uma altura fixa do topo (8% da janela, em pixel inteiro) e cresce para baixo, então abrir **Models** não move o título. O corpo rola quando passa da janela.
+É o diálogo de criação do sistema: sobre `--scrim`, `--surface-3`, `--shadow-overlay`, raio `--radius-xl`. A largura é `--size-dialog-wide` (576 px), para caber um nome de 64 caracteres em mono de 13 px. Fica a uma altura fixa do topo (8% da janela, em pixel inteiro) e cresce para baixo, então abrir **Models** não move o título. O corpo rola quando passa da janela.
 
 - **Título:** `New task`, com o `×` (`Close · Esc`).
 - **Rodapé** afundado: a razão quando **Create** está desabilitado, **Cancel** (fantasma) e **Create** `Ctrl ↵`, o único primário.
@@ -332,7 +334,7 @@ Ao confirmar, **Create** vira `Creating…` com o spinner, **Cancel** fica trace
 - `This card isn't in the last reading of the board.`
 - `<dono/nome> isn't managed by this board.`
 - `The clone at <caminho> is missing.`
-- o erro da sessão que não começou, seguido de `The task was undone.` e **Try again**.
+- o erro da sessão que não começou, que o Go devolve terminado em `The task was undone.` (`backend.md` P22b); **Create** volta a agir e é o repetir, sem um **Try again** ao lado.
 
 Com a task criada, o diálogo fecha e a task abre, esperando a primeira pergunta do agente.
 
@@ -361,12 +363,12 @@ Com a task criada, o diálogo fecha e a task abre, esperando a primeira pergunta
 | Estado | Nesta tela |
 |---|---|
 | **Vazio** | Board sem issues (seção 3.9). Seção vazia com a contagem 0 e sem chevron. Filtro sem resultado. Home sem item ativo: `Nothing in progress`, e a árvore com `No active items.` em cada board |
-| **Carregando** | Board nunca lido: o esqueleto. Releitura: a lista guardada, `Reading…` e `reading…` na árvore. Home: `reading…` com brilho na linha do board. Diálogo: `Refreshing the card…` e os chips de modelo com brilho |
+| **Carregando** | Board nunca lido: o esqueleto. Releitura: a lista guardada, `Reading…` e `reading…` na árvore. Home: o texto da direita da linha do board brilha (`read 2m ago`, ou `reading…` num board nunca lido). Diálogo: `Refreshing the card…` e os chips de modelo com brilho |
 | **Erro** | A faixa da falha de leitura com **Try again**, sempre neutra. O clone que falhou, em vermelho, no card e na linha. Os erros de criação no rodapé do diálogo |
 | **Aguardando o usuário** | A task de um card que espera: o glifo âmbar e o rótulo em peso 500 na linha, o chip do tempo no painel e em **Continue** |
 | **Agente trabalhando** | O spinner e a posição na coluna da task. Um clone em curso é o app trabalhando: o spinner no botão e na linha |
 | **Pausado e ocioso** | A task pausada ou ociosa de um card aparece na linha com o glifo e a palavra da árvore (`Paused · PRD`) |
-| **Muitos itens** | 120 cards e 46 visíveis com as finais recolhidas no board real. A lista rola, a barra de filtros fica fixa, e as seções recolhem. A leitura traz até 2.000 issues: a implementação mede e virtualiza a lista se passar de algumas centenas de linhas visíveis |
+| **Muitos itens** | 120 cards e 46 visíveis com as finais recolhidas no board real. A lista rola, a barra de filtros fica fixa, e as seções recolhem. A leitura traz até 2.000 issues: a lista não é virtualizada, e a task 5 mede, na máquina alvo, 2.000 cards com todas as seções abertas; a virtualização vai para a task 12 só se a medição pedir (`tasks/05-board.md` §6) |
 | **Item que sumiu** | O card que sai da leitura fica aberto com a faixa. O board que sai do estado dá a página do lugar que saiu |
 
 ## 7. Atalhos
@@ -424,9 +426,9 @@ O coordenador consolida. Os estados de cada um estão em `components.html`.
 
 **Tokens novos para `system/tokens.css`**
 - `--panel-card-width: clamp(22.5rem, 42%, 40rem)`;
-- `--size-dialog-wide: calc(var(--size-dialog) + var(--space-16))`;
+- `--size-dialog-wide: calc(var(--size-dialog) + var(--space-16) + var(--space-8))`, o valor decidido, que a task 5 leva a `tokens.css` com `--col-keys` e `--col-dep` (`tasks/05-board.md` §4.3);
 - `--list-measure: calc(var(--measure) + var(--space-16) * 5)`;
-- as larguras das colunas da linha, `calc()` de tokens de espaço: `--col-num`, `--col-epic`, `--col-dep`, `--col-task`, `--col-keys`.
+- as larguras das colunas da linha, `calc()` de tokens de espaço: `--col-num`, `--col-epic`, `--col-dep`, `--col-task`, `--col-keys`, com os valores e a medida de cada um em `system/components.md` (Tamanhos de layout).
 
 ## 10. O que muda em `features.md` e em `structure.md`
 

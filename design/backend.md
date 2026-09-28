@@ -74,7 +74,8 @@ Fica fora: custo em tokens e dólares, e duração de task, etapa e step (`decis
 
 | # | Dado | Para | Telas | Referência |
 |---|---|---|---|---|
-| P22 | `In discussion` de um card criado ou atualizado por uma discussão, e qual discussão | A linha do card, o painel, a linha do contexto na criação | Board | `screens/board.md` §11; expor no `BoardCard` o que `discussion.Service.DocumentOfCard` sabe |
+| P22 | `In discussion` de um card criado ou atualizado por uma discussão, e qual discussão | A linha do card, o painel, a linha do contexto na criação | Board | `screens/board.md` §11; expor no `BoardCard` o que `discussion.Service.DocumentOfCard` sabe: a discussão da publicação mais recente do card, ativa ou arquivada (`writtenBy`, com o id, o título e se está arquivada), pela mesma seleção que escolhe a seção `Discussion` do contexto (`tasks/05-board.md` §4.4) |
+| P22b | Que a criação de uma task foi desfeita porque a primeira sessão não começou | O rodapé do diálogo de criação | Board | `tasks/05-board.md` §4.4; `CreateTask` apaga a task e devolve só o erro (`internal/bindings/task_service.go:173–178`): a mensagem ganha ` The task was undone.` quando o apagamento dá certo |
 | P23 | As partes do contexto montado (épico, irmãos, dependências, discussão) e o tamanho | A linha do contexto na criação de task e na nova discussão, o marco `Context` | Board, Discussão | `screens/board.md` §11; `screens/discussion.md` §16; `CardContext` devolve só o texto. Alternativa só frontend: derivar do `BoardCard` e medir o texto |
 | P24 | A versão anterior dos rascunhos revisados (título, dependências, decisão) | O marco `Drafts revised` | Discussão | `screens/discussion.md` §16; o reconcile guarda o anterior antes de substituir |
 | P25 | O número da rodada de cada rascunho | A pílula, o cartão, os marcos, a rodada dobrada | Discussão | `screens/discussion.md` §16; um contador que sobe quando uma leitura traz rascunhos novos depois de uma publicação |
@@ -131,5 +132,5 @@ Fica fora: custo em tokens e dólares, e duração de task, etapa e step (`decis
 | Custo | Linhas |
 |---|---|
 | Backend médio | 3 |
-| Backend pequeno | 46 |
+| Backend pequeno | 47 |
 | Só frontend | 20 |

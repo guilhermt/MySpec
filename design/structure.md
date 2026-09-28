@@ -22,7 +22,7 @@ Este documento tem a regra geral. O detalhe de cada lugar está no documento del
 - **Breadcrumb.** No cabeçalho, depois de `←` e `→`: `board / épico /`, `Reviews /`, ou `No board /`, seguido do título do lugar. Cada nível abre o seu lugar. Numa área principal estreita, os níveis dobram num `…` com um menu. O glifo de tipo e a referência do item (`repo#card`, `repo#PR`) não ficam no cabeçalho: estão na árvore e em `Details`.
 - **Settings e History** são lugares como os outros. Settings abre pelo rodapé ou por `Ctrl+,`, também nas boas-vindas, e abre em **Defaults**, ou na página do link que o trouxe (**Edit the board in Settings…** abre Boards; o aviso de clone abre Repositories). Fechar Settings (`Esc`, **Close**, `Ctrl+,` de novo, `←`) volta ao lugar anterior, nunca a Home.
 - **Home** é o lugar sem nada aberto (`screens/board.md` §2). De cima para baixo:
-  - **Continue**, com o último item ativo aberto, o que ele pede com a posição (`Question · Reviewer · Step 3/7`), o tempo e onde ele vive. **Continue** recebe o foco, então `Enter` o abre no lugar da situação. Sem item ativo, a seção dá lugar a `Nothing in progress`;
+  - **Continue**, com o item ativo mais recente que ainda existe (`screens/board.md` §2.2), o que ele pede com a posição (`Question · Reviewer · Step 3/7`), o tempo e onde ele vive. **Continue** recebe o foco, então `Enter` o abre no lugar da situação. Sem item ativo, a seção dá lugar a `Nothing in progress`;
   - **Start**, as três ações de início: **New task** (o diálogo livre), **Review a pull request** (vai a Reviews, com as pendentes) e **New discussion** (o diálogo de discussão, com a escolha do board quando há mais de um);
   - **Boards**, um por linha, com os cards abertos, os repositórios e a idade da leitura, e sob cada um o que bloqueia sem ser situação (leitura falha, repositório sem clone, clone inexistente), com a ação; os repositórios sem board numa última linha, **No board**;
   - a linha dos atalhos.
@@ -391,10 +391,10 @@ O design funciona de 1100 a 2600 px, sem pontos fixos de janela. Cada regra depe
 | Cabeçalho do item | Cede em ordem, pelos limites de `screens/task.md` §3 (1660, 1440, 1360, 1300, 1200, 1040 e 900 px de área principal) |
 | Conversa | `--measure-conversation` (960 px), centrada em pixel inteiro; numa área mais estreita, a área menos `--space-6` de cada lado |
 | Painéis do item | A regra da seção 3 |
-| Lista do board e de Reviews | 70rem centrada. Abaixo de 1040 px de lista, o que não é número, título e teclas desce para uma segunda linha; o título tem sempre um terço da linha. O painel da lista (`clamp(360px, 42%, 640px)`) fica ao lado enquanto a lista mantém 440 px |
+| Lista do board e de Reviews | 70rem centrada. Abaixo de 1040 px de lista, o que não é número, título e teclas desce para uma segunda linha; o título tem sempre um terço da linha. O painel da lista (`clamp(360px, 42%, 640px)`) fica ao lado enquanto a lista mantém 440 px, o que vale exatamente a partir de 800 px de área principal (a janela de 1100 px dá 812) |
 | Lista do History | As colunas até 860 px de lista; abaixo, onde e o resultado descem para a segunda linha |
 | Settings | A navegação à esquerda; abaixo de cerca de 820 px de área principal, uma linha acima da página |
-| Diálogos | O mínimo em 480 px, o largo em 544 px, os dois a `8vh` do topo, crescendo para baixo |
+| Diálogos | O mínimo em 480 px, o largo em 576 px (o valor decidido, que a task 5 leva a `tokens.css`), os dois a `8vh` do topo, crescendo para baixo |
 | Barras | Quebram em duas linhas antes de esconder uma ação |
 
 ## 7. Estados de toda tela
@@ -420,7 +420,7 @@ O design funciona de 1100 a 2600 px, sem pontos fixos de janela. Cada regra depe
 | Aviso do app | Uma ação sem lugar próprio que falhou: uma faixa no topo da área principal, com o trilho de erro, o rótulo com a ação (`Couldn't pause Rate limit per API key`) e o que fazer, até ser dispensada. Uma por vez |
 | Vazios | `No active items.` num board, `No review in progress.`, `No tasks in <repo>.`, `No artifacts yet`, e o estado vazio de cada lista, com o que faria algo aparecer e a ação |
 | Muitos itens na árvore | A árvore rola. O item aberto é trazido à vista. Os nós recolhem com resumo |
-| Muitos itens fora da árvore | A conversa longa fica legível pelos grupos dobrados e pelos marcos, com os trechos dobrados sem montar o conteúdo; a virtualização entra só se a medição da task 4 pedir. O board, com até 2.000 issues, rola com as seções finais recolhidas e é virtualizado se passar de algumas centenas de linhas visíveis. O History carrega os últimos 90 dias e busca os mais antigos quando a busca pede ou a rolagem chega ao fim |
+| Muitos itens fora da árvore | A conversa longa fica legível pelos grupos dobrados e pelos marcos, com os trechos dobrados sem montar o conteúdo; a virtualização entra só se a medição da task 4 pedir. O board, com até 2.000 issues, rola com as seções finais recolhidas; a virtualização dele entra só se a medição da task 5 pedir (`tasks/05-board.md` §6). O History carrega os últimos 90 dias e busca os mais antigos quando a busca pede ou a rolagem chega ao fim |
 
 ## 8. Dados
 
