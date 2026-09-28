@@ -17,7 +17,7 @@ import {
   screenSession,
   waitingSession,
 } from "@/features/task/task-session";
-import { asSessionStatus, type TaskSummary } from "@/lib/wails";
+import { asSessionStatus, asTaskMode, type TaskSummary } from "@/lib/wails";
 import { clockTime } from "@/lib/when";
 import { pause, resume } from "@/store/actions";
 import { useAppStore, useOpenStepTab, usePanel } from "@/store/app-store";
@@ -42,6 +42,38 @@ const LOADING_PILL: PillView = {
   paused: false,
   state: "",
 };
+
+/** STRUCTURED_PANELS are the panels of a Structured task, in their order, each with what it shows. */
+const STRUCTURED_PANELS = [
+  {
+    id: "details",
+    label: "Details",
+    tooltip: "Steps, earlier conversations, reports and the facts of the task",
+    icon: ICONS.details,
+  },
+  {
+    id: "artifacts",
+    label: "Artifacts",
+    tooltip: "PRD, tech spec, step files and the pull request draft",
+    icon: ICONS.file,
+  },
+] as const;
+
+/** ONE_SHOT_PANELS are the panels of a One-Shot task, which has no steps nor PRD. */
+const ONE_SHOT_PANELS = [
+  {
+    id: "details",
+    label: "Details",
+    tooltip: "Earlier conversations, reports and the facts of the task",
+    icon: ICONS.details,
+  },
+  {
+    id: "artifacts",
+    label: "Artifacts",
+    tooltip: "The One-Shot document and the pull request draft",
+    icon: ICONS.file,
+  },
+] as const;
 
 /**
  * TaskHeader is the header of the place of a task: the title, the stepper, and on the right the
@@ -102,14 +134,7 @@ function TaskTools({ task, now }: { task: TaskSummary; now: number }) {
       <TaskPause task={task} now={now} />
       {task.card !== null && <CardLink card={task.card} />}
       <PanelGroup
-        panels={[
-          {
-            id: "artifacts",
-            label: "Artifacts",
-            tooltip: "PRD, tech spec, steps and reports",
-            icon: ICONS.file,
-          },
-        ]}
+        panels={asTaskMode(task.mode) === "one_shot" ? ONE_SHOT_PANELS : STRUCTURED_PANELS}
         open={panel}
         onOpenChange={openPanel}
       />

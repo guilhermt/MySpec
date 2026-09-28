@@ -73,7 +73,7 @@ Uma task Structured tem `PRD.md`, `tech-spec.md` e `steps/`; uma task One-Shot t
 
 O review pelo agente escreve em `step-reviews/` um relatório por passada de cada step, com o número do step e o da passada no nome. O step único de uma task One-Shot é o número 1. O relatório abre com um cabeçalho `---` que carrega `step`, `pass` e `status`, `clean` ou `changes`; um relatório com outro status, ou com um cabeçalho que discorda do nome, não conta como passada. Os relatórios ficam fora de `steps/`, que é validada como plano. O app relê a pasta a cada inspeção da task, e é dela que o loop deriva o que fazer. Os relatórios pertencem ao step: vão embora ao descartar o step, ao voltar a uma etapa anterior à implementação e ao descartar o plano ou o planejamento One-Shot.
 
-A etapa de PR escreve em `pr/` o rascunho da pull request da task, `draft.md`, e os relatórios de review dela, um por passada, nomeados `review-<n>.md`. Os artefatos são o que as sessões leem por caminho e o que o painel de artefatos e o histórico mostram. Apagar uma task apaga a pasta.
+A etapa de PR escreve em `pr/` o rascunho da pull request da task, `draft.md`, e os relatórios de review dela, um por passada, nomeados `review-<n>.md`. Os artefatos são o que as sessões leem por caminho e o que os painéis **Details** e **Artifacts** da task e o histórico mostram. Apagar uma task apaga a pasta.
 
 ### Artefatos de um review
 

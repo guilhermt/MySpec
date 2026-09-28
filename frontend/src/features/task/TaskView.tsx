@@ -1,10 +1,11 @@
 import { useEffect } from "react";
-import { AuxPanel, PanelLayout } from "@/components/system/AuxPanel";
+import { PanelLayout } from "@/components/system/AuxPanel";
 import { Composer } from "@/features/chat/Composer";
 import { Conversation } from "@/features/chat/Conversation";
 import { AgentTabs } from "@/features/task/AgentTabs";
-import { ArtifactPanel } from "@/features/task/ArtifactPanel";
+import { ArtifactsPanel } from "@/features/task/ArtifactsPanel";
 import { agentTabsOf } from "@/features/task/agent-tabs";
+import { DetailsPanel } from "@/features/task/DetailsPanel";
 import { PlanProblemsNotice } from "@/features/task/PlanProblemsNotice";
 import { PRPane } from "@/features/task/PRPane";
 import { ReviewStrip } from "@/features/task/ReviewStrip";
@@ -71,7 +72,6 @@ export function TaskView({ taskId }: TaskViewProps) {
   const task = useTask(taskId);
   const stepTab = useOpenStepTab(taskId);
   const panel = usePanel();
-  const openPanel = useAppStore((state) => state.openPanel);
 
   const implementing = task !== null && asTaskStage(task.stage) === "implementation";
   const opening = task !== null && asTaskStage(task.stage) === "pr";
@@ -121,11 +121,11 @@ export function TaskView({ taskId }: TaskViewProps) {
       <TaskHeader task={task} />
       <PanelLayout
         panel={
-          panel === "artifacts" && (
-            <AuxPanel id="artifacts" title="Artifacts" onClose={() => openPanel(null)}>
-              <ArtifactPanel task={task} />
-            </AuxPanel>
-          )
+          panel === "details" ? (
+            <DetailsPanel key="details" task={task} />
+          ) : panel === "artifacts" ? (
+            <ArtifactsPanel key="artifacts" task={task} />
+          ) : null
         }
       >
         {implementing ? (

@@ -231,6 +231,18 @@ describe("TaskView", () => {
     expect(screen.getByRole("complementary", { name: "Artifacts" })).toBeInTheDocument();
   });
 
+  it("opens the details panel from its button, in place of the artifacts", async () => {
+    const { user } = view({ hasPrd: true, artifactVersion: 1 });
+
+    await user.click(screen.getByRole("button", { name: "Artifacts" }));
+    await user.click(screen.getByRole("button", { name: "Details" }));
+
+    expect(screen.getByRole("complementary", { name: "Details" })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByRole("complementary", { name: "Artifacts" })).not.toBeInTheDocument();
+    });
+  });
+
   it("shows the header loading until the snapshot brings the task, and nothing else", () => {
     renderWithStore(<TaskView taskId="task-1" />, {
       state: makeState(),

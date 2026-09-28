@@ -80,6 +80,7 @@ describe("TaskHeader", () => {
       "Show the hidden levels: No board",
       "Pause",
       "Open card #12 on GitHub · In progress",
+      "Details",
       "Artifacts",
       "More actions",
     ]);
@@ -359,7 +360,9 @@ describe("TaskHeader", () => {
     const artifacts = () => screen.getByRole("button", { name: "Artifacts" });
 
     await user.hover(artifacts());
-    expect(await screen.findByText("PRD, tech spec, steps and reports")).toBeInTheDocument();
+    expect(
+      await screen.findByText("PRD, tech spec, step files and the pull request draft"),
+    ).toBeInTheDocument();
 
     await user.click(artifacts());
     expect(useAppStore.getState().panel).toBe("artifacts");
@@ -368,5 +371,35 @@ describe("TaskHeader", () => {
     await user.click(artifacts());
     expect(useAppStore.getState().panel).toBeNull();
     expect(artifacts()).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("toggles the details panel, named in its tooltip, one panel at a time", async () => {
+    const { user } = header();
+    const details = () => screen.getByRole("button", { name: "Details" });
+
+    await user.hover(details());
+    expect(
+      await screen.findByText("Steps, earlier conversations, reports and the facts of the task"),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Artifacts" }));
+    await user.click(details());
+    expect(useAppStore.getState().panel).toBe("details");
+    expect(details()).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Artifacts" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+  });
+
+  it.each([
+    ["Details", "Earlier conversations, reports and the facts of the task"],
+    ["Artifacts", "The One-Shot document and the pull request draft"],
+  ])("says what %s shows in a One-Shot task", async (name, tooltip) => {
+    const { user } = header({ mode: "one_shot", stage: "one_shot" });
+
+    await user.hover(screen.getByRole("button", { name }));
+
+    expect(await screen.findByText(tooltip)).toBeInTheDocument();
   });
 });

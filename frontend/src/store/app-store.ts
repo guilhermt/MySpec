@@ -69,8 +69,8 @@ export type { SettingsSection } from "@/lib/locations";
 /** MAX_TOASTS is how many toasts show at once; a new one pushes out the oldest. */
 const MAX_TOASTS = 3;
 
-/** PanelId is an auxiliary panel of an item: its artifacts, its reports or its documents. */
-export type PanelId = "artifacts" | "reports" | "documents";
+/** PanelId is an auxiliary panel of an item: its artifacts, its reports, its documents, its details or its card. */
+export type PanelId = "artifacts" | "reports" | "documents" | "details" | "card";
 
 /** Toast is the notice of an item that left without being open; its id is the id of the task. */
 export interface Toast {
