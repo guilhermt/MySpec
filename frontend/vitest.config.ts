@@ -11,6 +11,11 @@ export default mergeConfig(
   defineConfig({
     test: {
       globals: false,
+      // A VM context of the vm pools leaks what its modules hold, so a worker is recycled past this.
+      // The default, the machine memory over the workers, sits above the heap Node gives a worker on
+      // a small runner, and the worker dies before it is recycled. Vitest reads it only here, at the
+      // root, never from a project.
+      vmMemoryLimit: "1GB",
       coverage: {
         provider: "v8",
         reporter: ["text", "json", "json-summary", "lcov"],
@@ -28,10 +33,6 @@ export default mergeConfig(
             // vmForks builds jsdom once per worker and gives each file a fresh VM context over it,
             // where forks builds jsdom again for each of the 200-odd files, a third of the run.
             pool: "vmForks",
-            // A VM context leaks what its modules hold, so a worker is recycled past this. The default,
-            // the machine memory over the workers, sits above the heap Node gives a worker on a small
-            // runner, and the worker dies before it is recycled.
-            vmMemoryLimit: "1GB",
             css: false,
             setupFiles: ["src/test/setup.ts"],
             include: ["src/**/*.test.{ts,tsx}"],
