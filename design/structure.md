@@ -32,7 +32,7 @@ Este documento tem a regra geral. O detalhe de cada lugar está no documento del
   - a janela vem à frente;
   - o item abre no lugar da situação (a aba `Reviewer` para uma situação do revisor);
   - a linha é trazida à vista na árvore;
-  - o foco vai para o que o item pede. Numa pergunta ou permissão, é a primeira opção do cartão, e as teclas 1 a 9 respondem direto. Com apontamentos ou rascunhos a decidir, é o próximo por decidir. Em todo o resto, é a primeira ação da barra do pedido.
+  - o foco vai para o que o item pede. Numa pergunta ou permissão, é a primeira opção do cartão, e as teclas 1 a 9 respondem direto. Com apontamentos ou rascunhos a decidir, é o próximo por decidir. Em todo o resto, é a primária da barra do pedido (ou a primeira ação habilitada); quando a resposta vai pelo compositor (`reply`, um plano inválido, um turno que falhou, `findings` em texto), é o compositor; sem nenhuma ação habilitada, é a própria barra. Quando a ação com o foco resolve a situação e some, o foco vai ao compositor, ou à última entrada da conversa sem ele, ou ao título sem conversa.
 
   Chegar pela notificação entra na pilha do histórico como qualquer ida.
 - **Um item que sai do estado enquanto está aberto** (task encerrada ou apagada, review terminado pelo merge ou pelo fechamento, discussão arquivada ou apagada) dá lugar à página do item que saiu: o que aconteceu e o resultado (o do encerramento, as passadas publicadas, as rodadas publicadas; no apagado, o que ficou no disco e o comando para remover). A página oferece **Next that needs you** (primária, com o foco; desabilitada com a razão quando nada espera, e então **Open in History** é a primária), **Open in History** (menos no apagado) e a volta ao lugar de origem. Nunca uma área vazia. Um item que sai sem estar aberto gera só um toast.
@@ -205,7 +205,7 @@ Task, review de PR e discussão têm a mesma forma, e a tela da task é a refer�
 - **as abas `Implementer` e `Reviewer`**, só num step `Agent`, da primeira passada do revisor até o commit;
 - **a conversa do lugar atual**, que rola;
 - **a barra do pedido**, enquanto o item pede algo;
-- **o compositor**, enquanto a conversa na tela existe.
+- **o compositor**, enquanto a conversa na tela tem uma sessão aberta.
 
 Todo o resto fica fechado, nos painéis ou no menu `⋯`. Um painel aberto fica à direita.
 
@@ -257,16 +257,16 @@ Tem quatro formas: **quieta**, quando um cartão na conversa tem o conteúdo e a
 |---|---|---|
 | `question`, `permission` | O tipo e o lugar | **Show**. A resposta fica no cartão |
 | `reply` | `Waiting for reply` e o lugar | Nenhuma: a resposta vai pelo compositor, com a resposta rápida |
-| `session_error` | O erro e o lugar | **Retry** da sessão que caiu (`Retry reviewer`) |
-| `step_blocked` | A razão (`worktree not clean`, clone ausente…) | **Try again**, **Clean and start…**; **Change path** com o clone ausente |
+| `session_error` | O erro e o lugar | **Retry** da sessão que caiu (`Retry reviewer`); um turno que falhou com o processo vivo não tem ação, e a resposta vai pelo compositor |
+| `step_blocked` | A razão (`worktree not clean`, clone ausente…) | **Try again**, **Clean and start…** (com um diálogo do que será jogado fora); **Change path…** com o clone ausente |
 | `worktree_unreadable` | `Can't read worktree` e a razão | Nenhuma: resolve sozinho |
 | `pr_blocked` | A razão do `gh` ou do git | **Try again** |
-| `plan_invalid` | `Plan still invalid` e o número de problemas | Nenhuma: a correção vai pelo compositor, ou **Discard and restart the plan…** no `⋯` |
+| `plan_invalid` | `Plan still invalid` e o número de problemas | **Show problems**, que abre o marco com os problemas na conversa; a correção vai pelo compositor, ou **Discard and restart the plan…** no `⋯` |
 | `ready_to_continue` | Que a etapa revisitada está pronta | **Continue** |
 | `step_review`, `changes_review` | O progresso de stage | **Open in VS Code**, **Approve** com o que falta |
 | `step_empty` | `Step N has no changes` | **Discard step N…**; ou pedir uma mudança pelo compositor |
 | `draft` | Que o rascunho da PR espera o OK | **Approve draft**, **Discard draft** |
-| `findings` (PR da task e review) | `Decide findings · <lugar> · pass N` e o progresso | **Next to decide**; **Apply approved** ou **Publish review…** com o que falta |
+| `findings` (PR da task e review) | `Decide findings · <lugar>` e o progresso (a passada está na pílula) | **Next to decide**; **Apply approved** ou **Publish review…** com o que falta |
 | `review_report` pronto | `Ready to publish` ou `Ready to apply` | **Publish review…** ou **Apply approved** |
 | `new_commits`, `pass_blocked` | A razão, os checks pelo nome e o conflito | **Review again…** |
 | `pr_trouble` | `Checks failed`, `Conflict with base`, os checks pelo nome | **Review again** |
@@ -292,13 +292,13 @@ Tem quatro formas: **quieta**, quando um cartão na conversa tem o conteúdo e a
 
 ### O compositor
 
-Embaixo da conversa, na mesma medida. Existe sempre que a conversa na tela existe; sem sessão ainda, sai. Tem:
+Embaixo da conversa, na mesma medida. Existe sempre que a conversa na tela tem uma sessão aberta; sem ela (ainda não aberta, ou fechada pelo produto), sai. Tem:
 
 - **A caixa de texto.** O placeholder diz a quem se responde e como (`Answer with 1–3, or reply to the reviewer…`, `Queue a message for the implementer…`, `Sending resumes the task…`).
 - **As pastilhas**, quando há: a resposta rápida a uma pergunta em texto com opções, e os começos de mensagem (**Ask for changes**, **Ask to fix the drafts**).
 - **O seletor de modelo e esforço da sessão** (`Opus · high ▾`), que vale a partir da próxima mensagem. A resposta em andamento termina com a escolha anterior. Um modelo sem esforço mostra só o nome. Uma escolha que o catálogo não tem mais aparece marcada como indisponível.
 - **Send**, ou, com o agente trabalhando, o relógio do turno e **Stop**, que interrompe a resposta e mantém a sessão. Uma mensagem enviada com o agente ocupado entra na fila, que aparece na conversa, no fim, com **Remove**.
-- **Estados.** Com a sessão pausada, o compositor diz que enviar retoma. Numa conversa em que o produto não age mais (o revisor depois de **Review myself**), ele continua aceitando mensagens.
+- **Estados.** Com a sessão pausada, o compositor diz que enviar retoma, e enviar retoma a sessão. Com uma pergunta estruturada aberta, o que se escreve responde a pergunta. Numa conversa em que o produto não age mais (o revisor depois de **Review myself**), ele continua aceitando mensagens.
 
 ### Painéis auxiliares
 
@@ -378,7 +378,7 @@ Sob o cabeçalho, na medida da conversa, quando algo bloqueia sem ser a situaç�
 
 `Cmd` vale no lugar de `Ctrl`. Os atalhos globais ficam inertes com os diálogos de criação abertos. As teclas de uma letra valem só fora de um campo de texto.
 
-**Ordem de Tab:** topo da lateral, filtro, árvore (uma parada), rodapé, cabeçalho (navegação, breadcrumb, progresso, ferramentas), abas, faixa de aviso, conversa (cada cartão é uma parada), barra do pedido, compositor, painel. Nas listas: cabeçalho, barra de filtros, a lista (uma parada), o painel.
+**Ordem de Tab:** topo da lateral, filtro, árvore (uma parada), rodapé, cabeçalho (navegação, breadcrumb, progresso, ferramentas), abas, faixa de aviso, conversa (uma parada: a entrada atual e os controles dela), barra do pedido, compositor, painel. Nas listas: cabeçalho, barra de filtros, a lista (uma parada), o painel.
 
 ## 6. Larguras
 
@@ -420,7 +420,7 @@ O design funciona de 1100 a 2600 px, sem pontos fixos de janela. Cada regra depe
 | Aviso do app | Uma ação sem lugar próprio que falhou: uma faixa no topo da área principal, com o trilho de erro, o rótulo com a ação (`Couldn't pause Rate limit per API key`) e o que fazer, até ser dispensada. Uma por vez |
 | Vazios | `No active items.` num board, `No review in progress.`, `No tasks in <repo>.`, `No artifacts yet`, e o estado vazio de cada lista, com o que faria algo aparecer e a ação |
 | Muitos itens na árvore | A árvore rola. O item aberto é trazido à vista. Os nós recolhem com resumo |
-| Muitos itens fora da árvore | A conversa longa fica legível pelos grupos dobrados e pelos marcos, e é virtualizada acima de algumas centenas de entradas. O board, com até 2.000 issues, rola com as seções finais recolhidas e é virtualizado se passar de algumas centenas de linhas visíveis. O History carrega os últimos 90 dias e busca os mais antigos quando a busca pede ou a rolagem chega ao fim |
+| Muitos itens fora da árvore | A conversa longa fica legível pelos grupos dobrados e pelos marcos, com os trechos dobrados sem montar o conteúdo; a virtualização entra só se a medição da task 4 pedir. O board, com até 2.000 issues, rola com as seções finais recolhidas e é virtualizado se passar de algumas centenas de linhas visíveis. O History carrega os últimos 90 dias e busca os mais antigos quando a busca pede ou a rolagem chega ao fim |
 
 ## 8. Dados
 

@@ -28,7 +28,7 @@ Ele tem estes papéis, e só estes:
 
 Quem fala na conversa não é marcado pelo azul: o agente é uma palavra em tinta neutra, e a aba diz qual dos dois agentes de um step está na tela. O agente trabalhando é tinta neutra em movimento.
 
-Há uma ação primária por tela, e ela é a que resolve o que a tela pede. O **Send** do compositor fica primário com texto só quando nada mais na tela espera uma resposta. Com um cartão de pergunta ou de permissão na tela, a primária é a do cartão, e o **Send** fica secundário mesmo com texto.
+Há uma ação primária por tela, e ela é a que resolve o que a tela pede. O **Send** do compositor fica primário com texto só quando nenhuma outra primária está desenhada na tela, habilitada ou tracejada: a de um cartão de pergunta ou de permissão pendente, ou a da barra do pedido, a da barra de um item pausado incluída. Com uma delas, o **Send** fica secundário mesmo com texto; sem nenhuma, quando a resposta vai pelo compositor, ele é a primária. A tela nunca tem duas primárias, nem um **Resume** no compositor e outro no cabeçalho.
 
 *Exemplo:* na tela da task, **Allow** é o único botão azul cheio, mesmo que você digite no compositor. `Rotate API keys without downtime` gira em tinta neutra, e não em azul.
 

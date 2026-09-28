@@ -80,7 +80,7 @@ Cada componente embrulha um primitivo gerado em `frontend/src/components/ui` (nu
 | | |
 |---|---|
 | Anatomia | Um conjunto só, de traço, em `--icon` (16 px), `--icon-sm` e `--icon-xs`, traço `--icon-stroke`, pontas e junções arredondadas, `currentColor` |
-| Significados fixos | Robô: modo `Agent`. Pessoa: modo `Manual`. `<>`: abrir no editor. Seta externa: abre fora do app (GitHub). Lápis: `Revised`. Cadeia: o gesto publica uma cadeia. Ampulheta: espera (neutra). Visto: feito, aprovado, escolhido. Documento (`file`): um artefato, um relatório, um painel de documentos. Arquivamento (`archive`): o item foi para o History. Merge (`merge`): a PR foi mergeada ou fechada. Lixeira (`trash`): apagado. Informação (`details`): o painel `Details`. Card (`card`): o painel `Card`. Balão (`conversation`): uma conversa em `Details`. Histórico (`history`): uma conversa anterior. Reticências (`more`): o menu do item. Pausa (`pause`) e play (`resume`): pausar e retomar. Os glifos de tipo (task, One-Shot, review, discussão, épico, board) são ícones, não glifos de estado |
+| Significados fixos | Robô: modo `Agent`. Pessoa: modo `Manual`. `<>`: abrir no editor. Seta externa: abre fora do app (GitHub). Lápis: `Revised`. Cadeia: o gesto publica uma cadeia. Ampulheta: espera (neutra). Visto: feito, aprovado, escolhido. Documento (`file`): um artefato, um relatório, um painel de documentos. Arquivamento (`archive`): o item foi para o History. Merge (`merge`): a PR foi mergeada ou fechada. Lixeira (`trash`): apagado. Informação (`details`): o painel `Details`. Card (`card`): o painel `Card`. Balão (`conversation`): uma conversa em `Details`. Histórico (`history`): uma conversa anterior. Reticências (`more`): o menu do item. Pausa (`pause`) e play (`resume`): pausar e retomar. Na conversa: bandeira (`start`), o início de uma sessão; a marca do produto (`product`), a mensagem do produto; commit (`commit`); pull request (`pullRequest`), a PR aberta; lista com vistos (`checks`), os checks lidos; recolher (`compact`), a compactação do contexto; seta circular (`retry`), o retry automático; alerta neutro (`problem`), um problema que o produto achou; bloqueio (`ban`), uma interrupção; ramificação (`subagent`), o subagente; ampulheta (`hold`), a ação que espera a permissão. Os glifos de tipo (task, One-Shot, review, discussão, épico, board) são ícones, não glifos de estado |
 | Tokens | `--icon`, `--icon-sm`, `--icon-xs`, `--icon-stroke`, `--ink-3` em repouso, `--brand-ink` ativo |
 | Acessibilidade | `aria-hidden` ao lado de um rótulo; num botão só de ícone, o `aria-label` e o tooltip |
 | Faça | Use um ícone por significado, o mesmo em todo o produto |
@@ -143,7 +143,7 @@ Cada componente embrulha um primitivo gerado em `frontend/src/components/ui` (nu
 | | |
 |---|---|
 | Regra | Ir a um lugar é imediato: o lugar novo aparece inteiro, sem deslizar nem esmaecer. Só o que muda de estado dentro de um lugar se anima (painel que entra, menu, toast, piscada) |
-| Foco | Numa ida por `Ctrl+J` ou pela notificação, o foco vai ao que o lugar pede (a primeira opção do cartão, a ação da barra do pedido, **Continue**, a lista). `Enter` e o clique numa linha da árvore deixam o foco na linha, para a árvore continuar sendo o painel de comando. `Alt+←`, `Alt+→` e os níveis do breadcrumb levam o foco ao título do lugar (o `h1`, com `tabindex="-1"`). O clique em `←` ou `→` deixa o foco no botão. A página do item que saiu recebe o foco em **Next that needs you** quando aparece |
+| Foco | Numa ida por `Ctrl+J` ou pela notificação, o foco vai ao que o lugar pede (a primeira opção do cartão, **Allow**, a primária da barra do pedido, **Continue**, o compositor quando a resposta vai por ele, a barra sem ação habilitada, a lista). Quando o que tinha o foco resolve a situação e some, o foco vai ao compositor, à última entrada da conversa sem ele, ao título sem conversa. `Enter` e o clique numa linha da árvore deixam o foco na linha, para a árvore continuar sendo o painel de comando. `Alt+←`, `Alt+→` e os níveis do breadcrumb levam o foco ao título do lugar (o `h1`, com `tabindex="-1"`). O clique em `←` ou `→` deixa o foco no botão. A página do item que saiu recebe o foco em **Next that needs you** quando aparece |
 | Faça | Traga a linha do lugar à vista na árvore na mesma troca |
 
 ## Controles
@@ -155,13 +155,13 @@ Cada componente embrulha um primitivo gerado em `frontend/src/components/ui` (nu
 | Anatomia | Ícone opcional, rótulo, tecla opcional (`.k`). Alturas `--size-control` (32), `-sm` (28), `-xs` (22); raio `--radius-sm` |
 | Variantes | **Primário**: `--brand` com `--brand-on`, um por tela. **Secundário**: `--surface-2` com borda `--line-2` e `--shadow-button`. **Fantasma**: sem corpo, para ferramentas e ações raras. **Perigoso**: `--state-error` com `--state-error-on`, só como confirmação final de um diálogo. **New**: elevado sobre a lateral, com o texto em `--brand-ink`. **Ícone**: quadrado, sempre com `aria-label` e tooltip |
 | Estados | Todos os comuns. Primário e perigoso escurecem no hover (`--brand-hover`, `--state-error-hover`) e mais no pressionado. Secundário usa `--surface-2-hover` e `--surface-2-press`. O fantasma que alterna um painel fica pressionado com `--brand-tint-plane` e `aria-pressed` |
-| Uma primária por tela | A primária é a ação que resolve o que a tela pede. **Send** fica primário com texto só quando nada mais na tela espera uma resposta |
+| Uma primária por tela | A primária é a ação que resolve o que a tela pede. **Send** fica primário com texto só quando nenhuma outra primária está desenhada na tela, habilitada ou tracejada (a de um cartão pendente, a da barra do pedido, a da barra pausada); sem nenhuma, **Send** com texto é a primária |
 | Desabilitado com o que falta | O botão que espera uma condição fica tracejado com o que falta ao lado (`Decide 2 more`, `Stage 2 more files`, `Choose a verdict`, `Name the task to create it.`) |
 | Tokens | `--brand*`, `--state-error*`, `--surface-2`, `--surface-2-hover`, `--surface-2-press`, `--line-2`, `--line-3`, `--shadow-button`, `--shadow-primary`, `--shadow-xs`, `--brand-key-ring` |
 | Teclado | `Enter` e `Space`. A tecla da ação aparece no botão (`Allow 1`, `Publish review… Ctrl ↵`) e no tooltip (`Alt+←`) |
 | Acessibilidade | Desabilitado com `aria-describedby` para a razão; carregando com `aria-busy`; painel com `aria-pressed` |
 | Faça | Deixe a ação primária de cada tela como o único azul cheio |
-| Não faça | Não ponha o perigoso na tela principal. Não tire o tracejado de um fantasma desabilitado |
+| Não faça | Não ponha o perigoso na tela principal, fora de uma exceção: a confirmação final de um gesto dentro de um cartão pendente (**Deny**, depois de **Deny…**, no cartão de permissão). Não tire o tracejado de um fantasma desabilitado |
 
 ### Chip
 
@@ -397,6 +397,15 @@ Cada componente embrulha um primitivo gerado em `frontend/src/components/ui` (nu
 | Faça | Diga o que faria algo aparecer |
 | Não faça | Não repita a ação que já está à vista na página |
 
+### Estado vazio de um lugar
+
+| | |
+|---|---|
+| Anatomia | No alto da coluna da conversa, com `--space-16` × 2 acima: o título em `--text-title` 600 `--ink-1`, o texto em `--text-body` `--ink-3` na medida `--measure-read`, `--space-2` entre os dois, e, com `--space-3` acima, o bloco do que espera (os checks ao vivo, o bloco de erro) na largura da coluna |
+| Usos | `The review starts when the checks finish.` com os checks; `The pull request stage stopped` com o bloco de erro; `Every step is committed`; `No steps were found`. O app trabalhando sem nada a dizer além disso é a atividade, não este estado |
+| Acessibilidade | O título é um parágrafo, não um cabeçalho; o bloco mantém o papel dele |
+| Não faça | Não ponha ação aqui: a ação é da barra do pedido |
+
 ### Esqueleto
 
 | | |
@@ -469,7 +478,7 @@ Cada componente embrulha um primitivo gerado em `frontend/src/components/ui` (nu
 | | |
 |---|---|
 | Anatomia | Acima do compositor, na coluna da conversa (`--measure-conversation`), com as mesmas bordas das entradas, `--size-ask` de altura mínima: à esquerda o glifo, o rótulo em 700, o lugar e o chip de tempo; no meio o progresso (`1 of 4 decided`, `5 of 7 files staged · 71%`), nunca a razão que o bloco de erro já diz; à direita as ações |
-| Variantes | **Quieta** (`--surface-0`): o cartão na conversa tem o conteúdo e a resposta, a barra tem **Show**. **Tingida** (`--state-wait-veil`): o pedido sem cartão com ação própria; a barra tem a ação. **De decisão**: tingida, com o progresso, **Next to decide** `Alt ↓` e a primária tracejada com o que falta até tudo estar decidido (**Apply approved**, **Publish review…**). **Erro** (`--state-error-veil` com trilho). **Encerramento**: fundo quieto, rótulo em `--state-close` (`Ready to close`, `Ready to archive`). **A outra conversa espera**: quieta, `● The reviewer waits · Question 18m` com **Go to reviewer**. **A outra conversa falhou**: fundo quieto com o trilho de erro, o losango e o rótulo em `--state-error` 700, `◆ Session error · Reviewer · pass 2` com **Go to reviewer**. **Pausada**: o item pausado não tem situação, e a barra mostra o que o estado pede com a ação, quieta, com as duas barras no lugar do glifo, o rótulo em `--ink-1` 700 e sem chip de tempo |
+| Variantes | **Quieta** (`--surface-0`): o cartão na conversa tem o conteúdo e a resposta, a barra tem **Show**. **Tingida** (`--state-wait-veil`): o pedido sem cartão com ação própria; a barra tem a ação. **De decisão**: tingida, com o progresso, **Next to decide** `Alt ↓` e a primária tracejada com o que falta até tudo estar decidido (**Apply approved**, **Publish review…**). **Erro** (`--state-error-veil` com trilho). **Encerramento**: fundo quieto, rótulo em `--state-close` (`Ready to close`, `Ready to archive`). **A outra conversa espera**: quieta, `● The reviewer waits · Question 18m` com **Go to reviewer**. **A outra conversa falhou**: fundo quieto com o trilho de erro, o losango e o rótulo em `--state-error` 700, `◆ Session error · Reviewer` com **Go to reviewer**. O lugar de toda forma é a conversa (`Reviewer`, `PRD`, `PR review`), sem a passada, que está na pílula. **Pausada**: o item pausado não tem situação, e a barra mostra o que o estado pede com a ação, quieta, com as duas barras no lugar do glifo, o rótulo em `--ink-1` 700 e sem chip de tempo |
 | Conteúdo | O que cada situação diz e a ação estão em `screens/task.md` §7, `review.md` §10 e `discussion.md` §8 |
 | Estados | A ação segue os estados do botão (`Retrying…`, `Publishing…`). Existe só enquanto o item pede algo; ao nascer com a tela aberta, pisca duas vezes no véu da gravidade e é anunciada |
 | Largura | Quebra em duas linhas antes de esconder uma ação |
@@ -484,10 +493,10 @@ Cada componente embrulha um primitivo gerado em `frontend/src/components/ui` (nu
 | | |
 |---|---|
 | Anatomia | Caixa `--surface-input` com borda `--line-3`, raio `--radius-lg` e `--shadow-xs`, na coluna da conversa (`--measure-conversation`), com as mesmas bordas das entradas: as pastilhas (quando há), a textarea em 15/22, e o rodapé com o seletor de modelo e esforço da sessão à esquerda e, à direita, **Send**, ou `◌ Working · 3m 40s` e **Stop** |
-| Quando existe | Sempre que a conversa na tela existe. Sem sessão ainda, sai, e o vazio ou o bloco de erro dizem por quê |
-| Placeholder | Diz a quem se responde e como: `Answer with 1–3, or reply to the reviewer…`, `Queue a message for the implementer…`, `Sending restarts the reviewer's session…`, `Ask the reviewer to add, change or drop a finding…`, `Ask for changes: add, change or drop a draft…`, `Sending resumes the task…` |
+| Quando existe | Sempre que a conversa na tela tem uma sessão aberta. Sem ela (ainda não aberta, ou fechada pelo produto, como o review da PR depois de um review limpo), sai, e o vazio ou o bloco de erro dizem por quê |
+| Placeholder | Diz a quem se responde e como: `Answer with 1–3, or reply to the reviewer…`, `Queue a message for the implementer…`, `Sending restarts the reviewer's session…`, `Reply to the reviewer to go on…` (um turno que falhou), `Ask the reviewer to add, change or drop a finding…`, `Ask for changes: add, change or drop a draft…`, `Sending resumes the task…` |
 | Pastilhas | **Resposta rápida**: uma pastilha por opção de uma pergunta em texto (`a · Yes. Read the limits from the plans table…`), que envia a letra. **Começo de mensagem**: **Ask for changes**, **Ask to fix the drafts**, que começam o texto. Contornadas por `--line-2`, `--text-meta`, raio `--radius-pill`; hover, foco, pressionada |
-| Estados | Hover, foco (borda e halo), com texto (**Send** primário só se nada mais na tela espera uma resposta), enviando, erro (`Not sent · the session stopped`, **Send again**), agente trabalhando (**Stop**, a mensagem entra na fila), pausado |
+| Estados | Hover, foco (borda e halo), com texto (**Send** primário só se nada mais na tela espera uma resposta), enviando (**Send** diz `Sending…` e o texto fica), erro (o texto fica, `Not sent · <razão>` no rodapé e **Send again**), agente trabalhando (`◌ Working · 3m 40s` e **Stop**; com texto, **Send** secundário antes dele, e a mensagem entra na fila), pausado (enviar retoma a sessão). A caixa cresce até `--size-composer-max` e depois rola |
 | Tokens | `--surface-input`, `--line-3`, `--focus`, `--focus-halo`, `--shadow-xs`, `--state-error`, `--size-composer-min` |
 | Teclado | `Enter` envia, `Shift+Enter` quebra a linha |
 | Acessibilidade | Rótulo que diz a quem se responde (`Reply to the implementer`) |
@@ -517,9 +526,9 @@ A conversa é uma coluna centrada de `--measure-conversation` (60rem, 960 px), e
 |---|---|
 | Fala do agente | Texto na página, sem cartão e sem fundo: a faixa de quem fala e o Markdown em `--text-body`/`--leading-body` (15/22) e `--ink-1`, com cabeçalhos, listas, tabelas, mermaid e código na largura da coluna. `Interrupted by you` é uma linha sob a fala interrompida por **Stop**; uma queda da sessão é o bloco de erro |
 | Streaming | A fala cresce e termina num cursor parado, em `--ink-3`. O spinner fica antes da palavra de quem fala; ele é o único laço da fala |
-| Mensagem do usuário | Na largura da coluna, em `--surface-user`, raio `--radius-lg`: `You`, a hora com hover e foco, e o texto em 15/22. Sem destinatário. Estados: enviando (`Sending…` com o spinner), erro (`Not sent · the session stopped` e **Send again**), vinda da fila (no nome acessível) |
-| Mensagem na fila | A mesma forma em `--surface-0`, com `Queued · sends when the turn ends` e **Remove** na cabeça. Sai da fila quando o turno acaba |
-| Atividade | Uma linha no fim, em `role="status"`, com o spinner: `Starting session…`, `Thinking…`, `Retrying · attempt 3 of 10 · the API is overloaded · next try in 8 s` |
+| Mensagem do usuário | Na largura da coluna, em `--surface-user`, raio `--radius-lg`: `You`, a hora com hover e foco, e o texto em 15/22, sem Markdown. Sem destinatário. Enviando e não enviada são estados do compositor: a mensagem só existe depois que o envio deu certo |
+| Mensagem na fila | A mesma forma em `--surface-0`, com `Queued · sends when the turn ends` (com a sessão em erro, `sends after the retry`; pausada, `sends when the task resumes`) e **Remove** na cabeça. Sai da fila quando o turno acaba |
+| Atividade | Uma linha no fim, em `role="status"`, com o spinner: `Starting session…`, `Thinking…`, `Retrying · attempt 3 of 10 · the API is overloaded · next try in 8s` |
 | Ritmo | `--space-3` entre as entradas |
 | Acessibilidade | A conversa é um `feed`, e cada filho é um `article` com nome (`Implementer, 14:19`, `You, 14:28`, `14 actions, Read 8 · Searched 4 · git 2, started 13:48`) |
 | Não faça | Não ponha a fala num cartão nem pinte quem fala com cor de marca. Não estreite o texto dentro da coluna |
@@ -530,7 +539,7 @@ A conversa é uma coluna centrada de `--measure-conversation` (60rem, 960 px), e
 |---|---|
 | Anatomia | Uma linha de `--size-control-sm`, sem fios: o chevron no sulco da esquerda quando abre (vazio quando não abre), o ícone de `--icon-sm` em `--ink-4`, o texto em `--ink-2` peso 500 e o complemento em `--ink-3`. A hora fica no fim, só com hover e foco. O que tem conteúdo abre no lugar, num bloco afundado na largura da coluna, com **Open in Artifacts** (ou **Open in Details** num relatório da task, **Open in Reports**, **Open in Documents**) ao pé |
 | Variantes | **Evento**: etapa ou step iniciado (`Started with steps/03-token-bucket.md`), documento escrito, relatório escrito (`Review 1 written · changes · 2 findings`), commit, PR aberta, merge, checks lidos antes da passada, commits novos, `Context compacted · at 81%`, `Paused by you`. **Retried on its own**: o rastro de um retry automático que deu certo (`the API was overloaded · 2 attempts`), sem hora. **Decisão do usuário**: `You approved the draft`, `You decided · 3 approved, 1 discarded`. **Mensagem do produto**: o ícone do produto, `MySpec → Implementer` em peso 400 e `Review 1 · 2 findings · round 1 of 3`, com o Markdown enviado a um clique. **Que se atualiza**: `Published · round 1 · 2 so far`, depois o total. **Com erro**: o losango e o trilho (`Publication stopped · round 1 · …`) |
-| Estados | Padrão, hover (a hora aparece), foco, aberto, desabilitado (conteúdo descartado por um recomeço: sem chevron, texto em `--ink-3`), carregando (o brilho da leitura), erro (`Couldn't read … · Try again`, em `--state-error-veil`). Um marco novo que pede algo pisca no véu da gravidade |
+| Estados | Padrão, hover (a hora aparece), foco, aberto, desabilitado (conteúdo descartado por um recomeço: sem chevron, texto em `--ink-3`; não acontece na conversa da task, em que o recomeço apaga a conversa), carregando (o brilho da leitura), erro (`Couldn't read … · Try again`, em `--state-error-veil`). Um marco novo que pede algo pisca no véu da gravidade |
 | Teclado | Só o que abre é parada no percurso das setas: `→` abre, `←` fecha, `Enter` e `Space` alternam |
 | Acessibilidade | O que abre é `summary` com `aria-expanded`; o que não abre é lido, sem foco |
 | Faça | Diga o acontecimento numa linha, com o número que importa |
@@ -542,17 +551,18 @@ A conversa é uma coluna centrada de `--measure-conversation` (60rem, 960 px), e
 |---|---|
 | Anatomia | Numa sessão longa, cada trecho anterior à rodada atual dobra numa linha na forma do marco, com o ícone do histórico e o tamanho primeiro: `5 speeches · 71 actions` em `--ink-2` peso 500, e onde o trecho começou em `--ink-3` (`from the start · steps/06-throttle-metrics.md`, `from Review 1 · 3 findings · round 1 of 3`). O intervalo de horas aparece só com hover e foco. Um trecho vai de uma mensagem do produto que abre uma rodada à próxima, ou do início à primeira |
 | Aberto | As entradas do trecho, como eram, na mesma coluna |
-| Estados | Padrão, hover, foco, aberto, carregando (`Opening 11 entries…` num bloco afundado com o brilho), erro (`Couldn't read this stretch of the conversation` e **Try again**, em `--state-error-veil`) |
+| Quando dobra | Um trecho que não é o último e tem ao menos 12 entradas, contando um grupo como uma; os menores ficam abertos. Um trecho dobrado não monta o conteúdo |
+| Estados | Padrão, hover, foco, aberto; lido por partes, carregando (`Opening 11 entries…` num bloco afundado com o brilho) e erro (`Couldn't read this stretch of the conversation` e **Try again**, em `--state-error-veil`). Com o transcript inteiro na memória, abrir é imediato |
 | Não faça | Não use o ícone do produto: a dobra não é a mensagem do produto |
 
 ### Grupo de ações
 
 | | |
 |---|---|
-| Anatomia | Dobrado, é uma linha sem fundo: o chevron, `14 actions` em peso 500, o resumo por tipo (`Read 8 · Searched 4 · git 2`), a hora de início com hover e foco, e a duração à direita. Aberto, ganha o bloco `--surface-0` na largura da coluna, com um **comando** por linha, as últimas seis, e `Show N earlier actions` |
+| Anatomia | Dobrado, é uma linha sem fundo: o chevron, `14 actions` em peso 500, o resumo por tipo (`Read 8 · Searched 4 · git 2`), a hora de início com hover e foco, e a duração à direita. Aberto, ganha o bloco `--surface-0` na largura da coluna, com um **comando** por linha: até oito, todos; acima de oito, as últimas seis e `Show N earlier actions` |
 | Variantes | **Vivo**: dobrado como os outros; o resumo é a ação em curso, com spinner (`11 actions ◌ Run the refill and eviction tests go test ./internal/ratelimit/…`). **Com falha**: `· 1 failed` em `--state-error`. **Falhou e depois passou**: `· 1 failed, then passed` em `--ink-3`, porque não pede atenção. **Em espera**: `· 1 waits for your permission`, a ação com a ampulheta neutra e o alvo `the command in the card below`. **Com retry**: `↻ retried on its own · 2 attempts` depois do resumo |
 | Subagente | Uma linha do grupo, `Delegated · Find why e2e / rate-limit-burst failed`, com o próprio resumo em sans (`44 actions · Read 21 · Searched 14 · GitHub 9`) e a duração, que abre os comandos dele recuados sob um fio `--line-2` |
-| Ações anteriores | `Show 15 earlier actions` lê sob demanda: carregando é o brilho (`Loading 15 earlier actions…`), erro é `Couldn't load the earlier actions` e **Try again** |
+| Ações anteriores | `Show 15 earlier actions` mostra as outras no lugar. Enquanto o transcript inteiro está na memória, é imediato; lido por partes, carregando é o brilho (`Loading 15 earlier actions…`), erro é `Couldn't load the earlier actions` e **Try again** |
 | Estados | O resumo tem hover, foco e pressionado. O grupo não tem desabilitado: sempre abre |
 | Teclado | O resumo é `summary` e parada no percurso das setas: `→` abre, `←` dobra; aberto, as setas passam pelos comandos e pelo subagente |
 | Faça | Deixe dobrado por padrão, o vivo também, com a ação em curso no resumo |
@@ -562,11 +572,11 @@ A conversa é uma coluna centrada de `--measure-conversation` (60rem, 960 px), e
 
 | | |
 |---|---|
-| Anatomia | A unidade das ações, uma linha de `--size-control` no bloco do grupo, separada da próxima por um fio `--line-1`: o chevron quando há saída, o ícone do estado, a descrição que o agente escreveu (`Run the rate limit tests`) em `--ink-2`, o comando em mono `--text-micro` e `--ink-4`, cortado com tooltip, e à direita a duração ou o código de saída (`exit 1 · 8.2 s`) |
-| Saída | Dobrada. Aberta, é a cauda do que o comando imprimiu, em mono `--text-micro` e `--ink-2`, sobre `--surface-1` com fio `--line-1`, recuada sob a descrição: `31 more lines above` e **Show all 36 lines** em cima, as últimas linhas embaixo. Rola na horizontal |
-| Variantes | **Feito**: o visto. **Falha**: o `✕`, a descrição e o código em `--state-error`, e a saída aberta por padrão, com o trilho `--error-rail` à esquerda: a cauda é o que se precisa ver. **Rodando**: o spinner, a descrição em `--ink-1` peso 500, a saída chegando com o cursor. **Interrompido**: o ícone de bloqueio, `stopped with the session`. **Em espera**: a ampulheta, sem saída. **Sem saída** (o desabilitado): um comando que não imprimiu nada, ou cuja saída não foi guardada, não tem chevron nem dobra |
+| Anatomia | A unidade das ações, uma linha de `--size-control` no bloco do grupo, separada da próxima por um fio `--line-1`: o chevron quando há saída, o ícone do estado, a descrição que o agente escreveu (`Run the rate limit tests`) em `--ink-2`, o comando em mono `--text-micro` e `--ink-4`, cortado com tooltip, e à direita a duração ou o código de saída (`exit 1 · 8.2s`). Sem a descrição, o comando ocupa o lugar dela, em `--ink-2`, e nada vem depois |
+| Saída | Dobrada. Aberta, até 16 linhas, é a saída inteira; acima, é a cauda (as 12 últimas linhas) do que o comando imprimiu, em mono `--text-micro` e `--ink-2`, sobre `--surface-1` com fio `--line-1`, recuada sob a descrição: `24 more lines above` e **Show all 36 lines** em cima, as últimas linhas embaixo (`N` é o total menos as linhas da cauda). Têm saída o Bash que imprimiu algo, toda ferramenta que falhou (a razão) e o subagente (o relatório final); uma ferramenta que não é Bash e passou não tem dobra. Rola na horizontal |
+| Variantes | **Feito**: o visto. **Falha**: o `✕`, a descrição e o código em `--state-error`, e a saída aberta por padrão, com o trilho `--error-rail` à esquerda: a cauda é o que se precisa ver. **Rodando**: o spinner, a descrição em `--ink-1` peso 500 e o tempo correndo; sem saída até o fim, porque o CLI a manda quando o comando termina. **Interrompido**: o ícone de bloqueio, `stopped`, ou `stopped with the session` quando a sessão caiu. **Em espera**: a ampulheta, sem saída. **Sem saída** (o desabilitado): um comando que não imprimiu nada, ou cuja saída não foi guardada, não tem chevron nem dobra |
 | Estados | Padrão, hover, foco, pressionado, aberto, carregando (`Reading the output…` com o brilho), erro (`Couldn't read the output` e **Try again**) |
-| Acessibilidade | Com saída, é `summary`; sem saída, é o item da lista, com o nome inteiro (`Run the rate limit tests: go test ./internal/ratelimit/... -race, 7.9 s`) |
+| Acessibilidade | Com saída, é `summary`; sem saída, é o item da lista, com o nome inteiro (`Run the rate limit tests: go test ./internal/ratelimit/... -race, 7.9s`) |
 | Não faça | Não mostre a saída de um comando que passou sem que se peça |
 
 ### Bloco de erro
@@ -582,7 +592,7 @@ A conversa é uma coluna centrada de `--measure-conversation` (60rem, 960 px), e
 |---|---|
 | Anatomia | Afundado, raio `--radius-md`, fio interno, na largura da coluna; cabeçalho com a linguagem, o caminho em mono e o intervalo de linhas (cada um quando existe) e **Copy**; o código em 13/20, sem números de linha |
 | Tinta | O código é todo em peso 400, sem itálico nem negrito: os quatro matizes `--code-*` e o comentário em `--code-comment` separam os tipos de token só pela cor |
-| Código longo | Acima de 24 linhas, o bloco mostra as 20 primeiras e um rodapé de fio com **Show all 46 lines** e `26 more`; aberto, **Show less**. Continua rolando na horizontal |
+| Código longo | Na conversa, acima de 24 linhas, o bloco mostra as 20 primeiras e um rodapé de fio com **Show all 46 lines** e `26 more`; aberto, **Show less**. Vale também durante o streaming, a partir da linha 25, para o bloco não encolher quando a fala termina. Continua rolando na horizontal. Fora da conversa (painéis, prompts), não corta |
 | Estados de Copy | Hover, foco, copiado (visto e `Copied`), erro (`Can't copy · select the text`) |
 | Estados de Show all | Padrão, hover, foco, aberto |
 | Tokens | `--surface-0`, `--line-1`, `--code-keyword`, `--code-string`, `--code-function`, `--code-number`, `--code-comment`, `--text-code` |
@@ -604,7 +614,7 @@ A conversa é uma coluna centrada de `--measure-conversation` (60rem, 960 px), e
 | | |
 |---|---|
 | Anatomia | Na largura da coluna, `--surface-2` com `--shadow-card` e anel `--state-wait-line`, raio `--radius-lg`, sem faixa de cabeçalho: a barra do pedido diz o que é e de quem. É o único bloco da conversa com contorno e com elevação. Corpo: a pergunta em 18/24 ou a descrição e o comando, a nota, as respostas |
-| Variantes | **Pergunta**: opções numeradas (tecla, título, trade-off) e `Other…`. **Permissão**: a ferramenta como tag, o comando uma vez em mono, **Allow** `1` (a única primária da tela), **Allow for this session** `2`, **Deny…** `3`. **Respondido**: um bloco chapado em `--surface-0`, sem anel e sem fio, com o visto, a pergunta e a resposta; a hora da resposta fica no tooltip. **Pergunta em texto**: não é cartão; o parágrafo da pergunta, no fim da fala do agente, ganha um fio `--state-wait-ring` à esquerda, e o compositor oferece a resposta rápida |
+| Variantes | **Pergunta**: para cada pergunta, o `header` como etiqueta e as opções numeradas (tecla, título, trade-off), caixas de seleção quando a pergunta aceita várias; `Other…`, que leva ao compositor; ao pé, **Answer** `↵`, a primária, tracejada com o que falta (`Choose an option`, `Answer 2 more questions`). **Permissão**: a ferramenta como tag, o comando uma vez em mono, **Allow** `1` (a única primária da tela), **Allow for this session** `2` (só quando o CLI oferece uma regra), **Deny…** com a última tecla, que abre no cartão o texto opcional para o agente e **Deny**, perigoso. **Respondido**: um bloco chapado em `--surface-0`, sem anel e sem fio, com o visto, a pergunta e a resposta; a hora da resposta fica no tooltip. **Pergunta em texto**: não é cartão; o parágrafo da pergunta, no fim da fala do agente, ganha um fio `--state-wait-ring` à esquerda, e o compositor oferece a resposta rápida |
 | Estados da opção | Hover, foco, escolhida (`--brand-tint`, `aria-checked`), desabilitada, enviando, erro (`Not sent · the session stopped`) |
 | Tokens | `--surface-2`, `--shadow-card`, `--state-wait-line`, `--state-wait-ring`, `--brand-tint`, `--brand-ring`, `--text-title`, `--key-size` |
 | Teclado | Ao chegar pela notificação, por `Ctrl+J` ou por **Show**, o foco vai à primeira opção. `1`–`9` respondem com o foco no cartão ou na entrada dele, e na permissão `1` a `3` são **Allow**, **Allow for this session** e **Deny…**. As setas andam dentro do `radiogroup`, com volta ao início, sem sair do cartão; `Enter` envia a escolha, e **Other…** leva ao compositor |
@@ -624,14 +634,14 @@ A conversa é uma coluna centrada de `--measure-conversation` (60rem, 960 px), e
 
 | | |
 |---|---|
-| Anatomia | Uma linha do cartão de review de um step `Manual` ou das mudanças aplicadas: o glifo, o tipo (`M`, `A`, `D`), o caminho em mono (link que abre no VS Code) e `staged`, `1 hunk left` ou `not staged` |
+| Anatomia | Uma linha do cartão de review de um step `Manual` ou das mudanças aplicadas: o glifo, o tipo (`M`, `A`, `D`), o caminho em mono (link que abre no VS Code) e `staged`, `partly staged` ou `not staged` |
 | Estados | Não staged, staged, hover, foco, apagado (desabilitado), carregando, erro. O progresso fica na barra do pedido |
 
 ### Checks do GitHub
 
 | | |
 |---|---|
-| Anatomia | Bloco afundado: o cabeçalho (`◌ Waiting for checks · 4 of 6 passed`, `checked just now`), uma linha por check (glifo, nome em mono, estado: `passed`, `running` em 500, `queued`, `failed` em vermelho, e a duração), e ao pé o que espera (`The first pass starts when e2e / chromium and preview-deploy finish. MySpec reads web#2291 every minute; you can leave meanwhile.`) |
+| Anatomia | Bloco afundado: o cabeçalho (`◌ Waiting for checks · 4 of 6 passed`, `checked just now`), uma linha por check (glifo, nome em mono, estado: `passed`, `running` em 500, `queued`, `failed` em vermelho, e a duração). A variante ao vivo não tem rodapé: o que falta está no texto do estado vazio de um lugar acima dela (`MySpec reads #1284 every minute. The first pass begins once e2e / chromium and preview-deploy are done.`) |
 | Variantes | Ao vivo (a espera, no vazio do PR review e do review); lidos antes de uma passada (atrás do marco `Checks read before pass 1`); no painel da PR e em `Details` da task, com o resumo (`3 of 5 passed · 2 not finished`, `· 1 failed`, `· merges clean` ou `· conflict with dev`), `Not read yet` sem leitura e `No checks` sem checks |
 | Linha | O glifo (visto em `passed`, losango em `failed`, spinner em `running`, círculo em `queued`, visto em `--ink-4` em `skipped`), o nome em mono, o estado e a duração (`1m 52s`; rodando, desde o início, a cada segundo; na fila, `—`). `passed` conta `skipped` e `neutral`, como o GitHub |
 | Estados | Carregando (a primeira leitura, com brilho), erro de leitura |
@@ -867,3 +877,4 @@ Os tokens de medida e de layout da conversa, das listas, do painel da lista, do 
 | `--col-time` | `var(--space-12)` | Linha do History |
 | `--snav-w` | `calc(var(--space-16) * 3 + var(--space-4))` | Navegação de Settings |
 | `--size-popover` | `22rem` | Os popovers Review mode e Models |
+| `--size-composer-max` | `15rem` | A altura máxima da caixa do compositor, cerca de dez linhas; a task 4 o acrescenta a `tokens.css` |
