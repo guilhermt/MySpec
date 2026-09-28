@@ -78,10 +78,10 @@ type Sessions interface {
 	Summary(k session.Key) (session.Summary, bool)
 	Summaries() map[session.Key]session.Summary
 	LastReply(k session.Key) string
-	SendFromApp(ctx context.Context, k session.Key, text string) error
-	SendCorrection(ctx context.Context, k session.Key, text string) error
-	MarkPRReview(ctx context.Context, k session.Key, pass int)
-	MarkStepReview(ctx context.Context, k session.Key, pass int, clean bool)
+	SendFromApp(ctx context.Context, k session.Key, m session.AppMessage) error
+	SendCorrection(ctx context.Context, k session.Key, m session.AppMessage) error
+	MarkPRReview(ctx context.Context, k session.Key, pass int, clean bool)
+	MarkStepReview(ctx context.Context, k session.Key, pass int, clean bool, findings int)
 }
 
 // Repositories is what the flow needs from internal/repository.

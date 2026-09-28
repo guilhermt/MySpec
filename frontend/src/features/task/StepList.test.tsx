@@ -206,13 +206,13 @@ describe("StepList", () => {
 
   it("opens a report of the agent review", async () => {
     const onOpenReport = vi.fn();
-    const report = { pass: 1, file: "1-review-1.md", clean: false };
+    const report = { pass: 1, file: "1-review-1.md", clean: false, findings: -1 };
     const step = makeStep({
       status: "addressing_review",
       reviewMode: "agent",
       reviewModeEditable: false,
       reviewRound: 1,
-      reports: [report, { pass: 2, file: "1-review-2.md", clean: true }],
+      reports: [report, { pass: 2, file: "1-review-2.md", clean: true, findings: 0 }],
     });
     const { user } = renderWithStore(
       <StepList

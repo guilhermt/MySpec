@@ -89,6 +89,15 @@ func TestAnInvalidPlanIsCorrectedUpToThreeTimes(t *testing.T) {
 	if sent := f.sessions.sent(); len(sent) > 0 && !strings.Contains(sent[0], "1-first.md") {
 		t.Errorf("correction = %q, want the broken file in it", sent[0])
 	}
+	var want []session.AppMessage
+	for attempt := 1; attempt <= flow.MaxCorrections; attempt++ {
+		want = append(want, session.AppMessage{
+			Kind: session.AppCorrection, Round: attempt, Rounds: flow.MaxCorrections, Count: 1,
+		})
+	}
+	if diff := cmp.Diff(want, f.sessions.sentApps()); diff != "" {
+		t.Errorf("app messages mismatch (-want +got):\n%s", diff)
+	}
 }
 
 func TestAnEmptyStepsFolderIsNotCorrected(t *testing.T) {

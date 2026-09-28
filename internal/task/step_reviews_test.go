@@ -66,11 +66,74 @@ func TestReadStepReportsReadsTheReportsOfEveryStep(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "3-review-1.md"), stepReportFile(3, 1, "changes", "1. A name misleads.\n"))
 
 	want := map[int][]task.ReviewReport{
-		1: {{Pass: 1, File: "1-review-1.md"}, {Pass: 2, File: "1-review-2.md", Clean: true}},
-		3: {{Pass: 1, File: "3-review-1.md"}},
+		1: {{Pass: 1, File: "1-review-1.md", Findings: -1}, {Pass: 2, File: "1-review-2.md", Clean: true, Findings: -1}},
+		3: {{Pass: 1, File: "3-review-1.md", Findings: -1}},
 	}
 	if diff := cmp.Diff(want, task.ReadStepReports(dir)); diff != "" {
 		t.Errorf("ReadStepReports() mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestReadStepReportsCountsTheFindings(t *testing.T) {
+	t.Parallel()
+
+	const reviewed = "1. **What was reviewed**: the store.\n2. **Checks**: `task check` passes.\n"
+	const rest = "4. **Accepted divergences**: None.\n5. **Contestations**: None.\n6. **Decisions of the user**: None.\n"
+	tests := map[string]struct {
+		body string
+		want int
+	}{
+		"numbered findings in the format of the prompt": {
+			body: reviewed + "3. **Findings**:\n   1. `store.go:12` leaks a handle; close it.\n" +
+				"   2. `store_test.go` misses the empty case; add it.\n" + rest,
+			want: 2,
+		},
+		"None. on the line of the title": {
+			body: reviewed + "3. **Findings**: None.\n" + rest,
+			want: 0,
+		},
+		"none without the dot": {
+			body: reviewed + "3. **Findings**: none\n" + rest,
+			want: 0,
+		},
+		"an empty section": {
+			body: reviewed + "3. **Findings**:\n\n" + rest,
+			want: 0,
+		},
+		"titles in ##": {
+			body: "## What was reviewed\n\nThe store.\n\n## Findings\n\n- A handle leaks.\n- A case is missing.\n" +
+				"* A name misleads.\n\n## Accepted divergences\n\nNone.\n",
+			want: 3,
+		},
+		"None. under a ## title": {
+			body: "## Findings\n\nNone.\n\n## Contestations\n\n- One.\n",
+			want: 0,
+		},
+		"text that is not a list": {
+			body: "## Findings\n\nThe handle of the store leaks.\n",
+			want: 1,
+		},
+		"no Findings section": {
+			body: reviewed + rest,
+			want: -1,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := t.TempDir()
+			writeFile(t, filepath.Join(dir, "1-review-1.md"), stepReportFile(1, 1, "changes", tc.body))
+
+			reports := task.ReadStepReports(dir)[1]
+			if len(reports) != 1 {
+				t.Fatalf("ReadStepReports() = %v, want one report", reports)
+			}
+			if got := reports[0].Findings; got != tc.want {
+				t.Errorf("Findings = %d, want %d", got, tc.want)
+			}
+		})
 	}
 }
 
@@ -133,7 +196,7 @@ func TestInspectReadsTheStepReviewsFolder(t *testing.T) {
 	if !got.Has(task.ArtifactStepReview) {
 		t.Errorf("Has(ArtifactStepReview) = false, want the report found: %+v", got.StepReports)
 	}
-	want := map[int][]task.ReviewReport{2: {{Pass: 1, File: "2-review-1.md", Clean: true}}}
+	want := map[int][]task.ReviewReport{2: {{Pass: 1, File: "2-review-1.md", Clean: true, Findings: -1}}}
 	if diff := cmp.Diff(want, got.StepReports); diff != "" {
 		t.Errorf("StepReports mismatch (-want +got):\n%s", diff)
 	}
@@ -271,7 +334,7 @@ func TestClearStepReviewForgetsTheReviewOfOneStep(t *testing.T) {
 		t.Errorf("ArtifactVersion = %d, want it past %d", after.ArtifactVersion, before.ArtifactVersion)
 	}
 	cached, _ := f.service.Artifacts(created.ID)
-	wantReports := map[int][]task.ReviewReport{12: {{Pass: 1, File: "12-review-1.md", Clean: true}}}
+	wantReports := map[int][]task.ReviewReport{12: {{Pass: 1, File: "12-review-1.md", Clean: true, Findings: -1}}}
 	if diff := cmp.Diff(wantReports, cached.StepReports); diff != "" {
 		t.Errorf("StepReports mismatch (-want +got):\n%s", diff)
 	}

@@ -47,6 +47,44 @@ type UserEntry struct {
 	Pending bool   `json:"pending"` // queued, not yet delivered to the CLI
 	Prompt  bool   `json:"prompt"`  // the first message of a stage: Text is the initial context, the CLI got the rendered prompt
 	App     bool   `json:"app"`     // the app wrote it, not the user
+	// Sent is the rendered prompt the CLI got, for a prompt entry of the tech
+	// spec, the plan, the pull request and the pull request review; "" for
+	// every other entry.
+	Sent string `json:"sent"`
+	// AppKind is which message of the workflow the app sent, and AppPass,
+	// AppRound, AppRounds and AppCount its numbers, as in AppMessage; "" and
+	// zero for every other entry.
+	AppKind   AppKind `json:"appKind"`
+	AppPass   int     `json:"appPass"`
+	AppRound  int     `json:"appRound"`
+	AppRounds int     `json:"appRounds"`
+	AppCount  int     `json:"appCount"`
+}
+
+// AppKind says which message of the workflow the app sent.
+type AppKind string
+
+// The messages of the workflow.
+const (
+	AppReport     AppKind = "report"      // a step review report to the implementer
+	AppPass       AppKind = "pass"        // the next pass to the step reviewer
+	AppCommit     AppKind = "commit"      // commit the staged files
+	AppCommitAll  AppKind = "commit_all"  // commit every change of the step, after a clean report
+	AppCommitPush AppKind = "commit_push" // commit the staged files and push
+	AppCorrection AppKind = "correction"  // the plan isn't valid yet
+	AppOpen       AppKind = "open"        // open the pull request
+	AppPRPass     AppKind = "pr_pass"     // the next pass of the pull request review
+	AppApply      AppKind = "apply"       // apply the approved findings
+)
+
+// AppMessage is a message the app sends the agent on the user's behalf.
+type AppMessage struct {
+	Text   string
+	Kind   AppKind
+	Pass   int // report, pass, pr_pass
+	Round  int // report: the round; correction: the attempt
+	Rounds int // report: MaxReviewRounds; correction: MaxCorrections
+	Count  int // report: findings (-1 unknown); correction: problems; apply: approved findings
 }
 
 // AssistantEntry is one content block of an assistant message.
@@ -238,8 +276,11 @@ type MarkerEntry struct {
 	Stage     string     `json:"stage"`     // stage_started only
 	Step      int        `json:"step"`      // step_started and step_review_started only
 	Pass      int        `json:"pass"`      // pr_review_written and step_review_written only: the pass it closed
-	Clean     bool       `json:"clean"`     // step_review_written only: the pass found nothing to change
-	Restarted bool       `json:"restarted"` // stage_started and step_started only: it was started again
+	Clean     bool       `json:"clean"`     // pr_review_written and step_review_written only: the pass found nothing to change
+	// Findings is how many findings the pass of a step review reported,
+	// step_review_written only; nil when unknown.
+	Findings  *int `json:"findings"`
+	Restarted bool `json:"restarted"` // stage_started and step_started only: it was started again
 	// Percent is how full the context was, compacted only; 0 when the window
 	// is unknown.
 	Percent int `json:"percent"`

@@ -744,15 +744,15 @@ func TestFromArchivedCarriesTheReportsOfTheSteps(t *testing.T) {
 			},
 		},
 		StepReports: map[int][]task.ReviewReport{
-			1: {{Pass: 1, File: "1-review-1.md"}, {Pass: 2, File: "1-review-2.md", Clean: true}},
+			1: {{Pass: 1, File: "1-review-1.md", Findings: 2}, {Pass: 2, File: "1-review-2.md", Clean: true, Findings: -1}},
 		},
 	}
 	want := []bindings.ArchivedStep{
 		{
 			Number: 1, File: "1-first.md", Title: "First",
 			Reports: []bindings.StepReport{
-				{Pass: 1, File: "1-review-1.md"},
-				{Pass: 2, File: "1-review-2.md", Clean: true},
+				{Pass: 1, File: "1-review-1.md", Findings: 2},
+				{Pass: 2, File: "1-review-2.md", Clean: true, Findings: -1},
 			},
 		},
 		{Number: 2, File: "2-second.md", Title: "Second", Reports: []bindings.StepReport{}},
@@ -876,7 +876,7 @@ func TestFromEntryCarriesTheStepOfAMarker(t *testing.T) {
 		Kind:   session.KindMarker,
 		Marker: &session.MarkerEntry{Type: session.MarkerStepStarted, Step: 2, Restarted: true},
 	})
-	want := &bindings.MarkerEntry{Type: "step_started", Step: 2, Restarted: true}
+	want := &bindings.MarkerEntry{Type: "step_started", Step: 2, Findings: -1, Restarted: true}
 	if diff := cmp.Diff(want, got.Marker); diff != "" {
 		t.Errorf("marker mismatch (-want +got):\n%s", diff)
 	}
@@ -950,15 +950,15 @@ func TestFromEntryCarriesTheNewMarkerFields(t *testing.T) {
 	}{
 		"compacted": {
 			marker: &session.MarkerEntry{Type: session.MarkerCompacted, PreTokens: 150000, Percent: 75},
-			want:   &bindings.MarkerEntry{Type: "compacted", PreTokens: 150000, Percent: 75},
+			want:   &bindings.MarkerEntry{Type: "compacted", PreTokens: 150000, Findings: -1, Percent: 75},
 		},
 		"retried": {
 			marker: &session.MarkerEntry{Type: session.MarkerRetried, Attempts: 2, Reason: "rate_limit"},
-			want:   &bindings.MarkerEntry{Type: "retried", Attempts: 2, Reason: "rate_limit"},
+			want:   &bindings.MarkerEntry{Type: "retried", Findings: -1, Attempts: 2, Reason: "rate_limit"},
 		},
 		"interrupted": {
 			marker: &session.MarkerEntry{Type: session.MarkerInterrupted, InterruptedBy: "user"},
-			want:   &bindings.MarkerEntry{Type: "interrupted", InterruptedBy: "user"},
+			want:   &bindings.MarkerEntry{Type: "interrupted", Findings: -1, InterruptedBy: "user"},
 		},
 	}
 	for name, tc := range cases {
@@ -1009,13 +1009,70 @@ func TestFromEntryCarriesTheSubagentOfAText(t *testing.T) {
 func TestFromEntryCarriesTheVerdictOfAStepReviewMarker(t *testing.T) {
 	t.Parallel()
 
-	got := bindings.FromEntry(session.Entry{
-		Kind:   session.KindMarker,
-		Marker: &session.MarkerEntry{Type: session.MarkerStepReviewWritten, Pass: 2, Clean: true},
-	})
-	want := &bindings.MarkerEntry{Type: "step_review_written", Pass: 2, Clean: true}
-	if diff := cmp.Diff(want, got.Marker); diff != "" {
-		t.Errorf("marker mismatch (-want +got):\n%s", diff)
+	cases := map[string]struct {
+		marker *session.MarkerEntry
+		want   *bindings.MarkerEntry
+	}{
+		"findings counted": {
+			marker: &session.MarkerEntry{Type: session.MarkerStepReviewWritten, Pass: 2, Findings: new(3)},
+			want:   &bindings.MarkerEntry{Type: "step_review_written", Pass: 2, Findings: 3},
+		},
+		"no findings": {
+			marker: &session.MarkerEntry{Type: session.MarkerStepReviewWritten, Pass: 2, Clean: true, Findings: new(0)},
+			want:   &bindings.MarkerEntry{Type: "step_review_written", Pass: 2, Clean: true},
+		},
+		"an old transcript": {
+			marker: &session.MarkerEntry{Type: session.MarkerStepReviewWritten, Pass: 1},
+			want:   &bindings.MarkerEntry{Type: "step_review_written", Pass: 1, Findings: -1},
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			got := bindings.FromEntry(session.Entry{Kind: session.KindMarker, Marker: tc.marker})
+			if diff := cmp.Diff(tc.want, got.Marker); diff != "" {
+				t.Errorf("marker mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestFromEntryCarriesTheMessageOfTheAppAndThePromptSent(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]struct {
+		user *session.UserEntry
+		want *bindings.UserEntry
+	}{
+		"a report": {
+			user: &session.UserEntry{
+				Text: "the report", App: true,
+				AppKind: session.AppReport, AppPass: 2, AppRound: 2, AppRounds: 3, AppCount: -1,
+			},
+			want: &bindings.UserEntry{
+				Text: "the report", App: true,
+				AppKind: "report", AppPass: 2, AppRound: 2, AppRounds: 3, AppCount: -1,
+			},
+		},
+		"a prompt": {
+			user: &session.UserEntry{Prompt: true, Sent: "the rendered prompt"},
+			want: &bindings.UserEntry{Prompt: true, Sent: "the rendered prompt"},
+		},
+		"an old transcript": {
+			user: &session.UserEntry{Text: "commit", App: true},
+			want: &bindings.UserEntry{Text: "commit", App: true},
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			got := bindings.FromEntry(session.Entry{Kind: session.KindUser, User: tc.user})
+			if diff := cmp.Diff(tc.want, got.User); diff != "" {
+				t.Errorf("user mismatch (-want +got):\n%s", diff)
+			}
+		})
 	}
 }
 

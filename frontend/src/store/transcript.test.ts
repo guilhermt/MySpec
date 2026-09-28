@@ -63,7 +63,18 @@ describe("applyEvent", () => {
     const queued = makeEntry("user", {
       id: "a",
       seq: 1,
-      user: { text: "later", pending: true, prompt: false, app: false },
+      user: {
+        text: "later",
+        pending: true,
+        prompt: false,
+        app: false,
+        sent: "",
+        appKind: "",
+        appPass: 0,
+        appRound: 0,
+        appRounds: 0,
+        appCount: 0,
+      },
     });
 
     const state = applyEvent(ready(), entryEvent(queued));
@@ -76,11 +87,33 @@ describe("applyEvent", () => {
     const queued = makeEntry("user", {
       id: "a",
       seq: 1,
-      user: { text: "later", pending: true, prompt: false, app: false },
+      user: {
+        text: "later",
+        pending: true,
+        prompt: false,
+        app: false,
+        sent: "",
+        appKind: "",
+        appPass: 0,
+        appRound: 0,
+        appRounds: 0,
+        appCount: 0,
+      },
     });
     const delivered = {
       ...queued,
-      user: { text: "later", pending: false, prompt: false, app: false },
+      user: {
+        text: "later",
+        pending: false,
+        prompt: false,
+        app: false,
+        sent: "",
+        appKind: "",
+        appPass: 0,
+        appRound: 0,
+        appRounds: 0,
+        appCount: 0,
+      },
     };
 
     let state = applyEvent(ready(), entryEvent(queued));
@@ -94,12 +127,34 @@ describe("applyEvent", () => {
     const first = makeEntry("user", {
       id: "a",
       seq: 1,
-      user: { text: "one", pending: true, prompt: false, app: false },
+      user: {
+        text: "one",
+        pending: true,
+        prompt: false,
+        app: false,
+        sent: "",
+        appKind: "",
+        appPass: 0,
+        appRound: 0,
+        appRounds: 0,
+        appCount: 0,
+      },
     });
     const second = makeEntry("user", {
       id: "b",
       seq: 2,
-      user: { text: "two", pending: true, prompt: false, app: false },
+      user: {
+        text: "two",
+        pending: true,
+        prompt: false,
+        app: false,
+        sent: "",
+        appKind: "",
+        appPass: 0,
+        appRound: 0,
+        appRounds: 0,
+        appCount: 0,
+      },
     });
 
     let state = applyEvent(ready(), entryEvent(first));
@@ -145,7 +200,18 @@ describe("applyEvent", () => {
     const queued = makeEntry("user", {
       id: "b",
       seq: 2,
-      user: { text: "later", pending: true, prompt: false, app: false },
+      user: {
+        text: "later",
+        pending: true,
+        prompt: false,
+        app: false,
+        sent: "",
+        appKind: "",
+        appPass: 0,
+        appRound: 0,
+        appRounds: 0,
+        appCount: 0,
+      },
     });
     const state = ready([entry], [queued]);
 

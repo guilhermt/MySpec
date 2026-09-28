@@ -87,7 +87,18 @@ describe("Conversation", () => {
   it("shows what the app said to the agent as coming from the app", () => {
     const entries = [
       makeEntry("user", {
-        user: { text: "The plan is not valid yet.", pending: false, prompt: false, app: true },
+        user: {
+          text: "The plan is not valid yet.",
+          pending: false,
+          prompt: false,
+          app: true,
+          sent: "",
+          appKind: "",
+          appPass: 0,
+          appRound: 0,
+          appRounds: 0,
+          appCount: 0,
+        },
       }),
     ];
     renderWithStore(<Conversation stage="prd" taskId="task-1" session={makeTask()} />, {
@@ -102,7 +113,18 @@ describe("Conversation", () => {
   it("leaves the stage prompt out of the conversation", () => {
     const entries = [
       makeEntry("user", {
-        user: { text: "", pending: false, prompt: true, app: false },
+        user: {
+          text: "",
+          pending: false,
+          prompt: true,
+          app: false,
+          sent: "",
+          appKind: "",
+          appPass: 0,
+          appRound: 0,
+          appRounds: 0,
+          appCount: 0,
+        },
       }),
       makeEntry("assistant"),
     ];
@@ -118,7 +140,18 @@ describe("Conversation", () => {
   it("keeps the brief the user gave along with the first prompt", () => {
     const entries = [
       makeEntry("user", {
-        user: { text: "Add a login screen", pending: false, prompt: true, app: false },
+        user: {
+          text: "Add a login screen",
+          pending: false,
+          prompt: true,
+          app: false,
+          sent: "",
+          appKind: "",
+          appPass: 0,
+          appRound: 0,
+          appRounds: 0,
+          appCount: 0,
+        },
       }),
     ];
     renderWithStore(<Conversation stage="prd" taskId="task-1" session={makeTask()} />, {
@@ -151,7 +184,18 @@ describe("Conversation", () => {
   it("marks a message that is still waiting its turn", () => {
     const pending = [
       makeEntry("user", {
-        user: { text: "and dark mode", pending: true, prompt: false, app: false },
+        user: {
+          text: "and dark mode",
+          pending: true,
+          prompt: false,
+          app: false,
+          sent: "",
+          appKind: "",
+          appPass: 0,
+          appRound: 0,
+          appRounds: 0,
+          appCount: 0,
+        },
       }),
     ];
     renderWithStore(<Conversation stage="prd" taskId="task-1" session={makeTask()} />, {
@@ -321,7 +365,18 @@ describe("Conversation", () => {
     ];
     const pending = [
       makeEntry("user", {
-        user: { text: "and dark mode", pending: true, prompt: false, app: false },
+        user: {
+          text: "and dark mode",
+          pending: true,
+          prompt: false,
+          app: false,
+          sent: "",
+          appKind: "",
+          appPass: 0,
+          appRound: 0,
+          appRounds: 0,
+          appCount: 0,
+        },
       }),
     ];
     renderWithStore(<Conversation stage="prd" taskId="task-1" session={IDLE_SESSION} readOnly />, {

@@ -107,7 +107,11 @@ func (s *Service) evaluate(ctx context.Context, id string) {
 		if sum.Corrections >= MaxCorrections {
 			return
 		}
-		message := correctionMessage(t.StepsDir(), a.Plan.Problems)
+		message := session.AppMessage{
+			Text: correctionMessage(t.StepsDir(), a.Plan.Problems),
+			Kind: session.AppCorrection, Round: sum.Corrections + 1, Rounds: MaxCorrections,
+			Count: len(a.Plan.Problems),
+		}
 		if err := s.sessions.SendCorrection(ctx, key, message); err != nil {
 			s.log.Error("send plan correction failed", "task", id, "stage", string(t.Stage), "error", err)
 		}

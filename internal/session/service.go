@@ -454,20 +454,20 @@ func (s *Service) Send(ctx context.Context, k Key, text string) error {
 }
 
 // SendFromApp queues a message the app wrote for the agent.
-func (s *Service) SendFromApp(ctx context.Context, k Key, text string) error {
-	return s.sendFromApp(ctx, k, text, false)
+func (s *Service) SendFromApp(ctx context.Context, k Key, m AppMessage) error {
+	return s.sendFromApp(ctx, k, m, false)
 }
 
 // SendCorrection queues a message the app wrote to fix what the agent
 // produced, and counts it against MaxCorrections.
-func (s *Service) SendCorrection(ctx context.Context, k Key, text string) error {
-	return s.sendFromApp(ctx, k, text, true)
+func (s *Service) SendCorrection(ctx context.Context, k Key, m AppMessage) error {
+	return s.sendFromApp(ctx, k, m, true)
 }
 
 // sendFromApp queues a message of the app, counting it as a correction of the
 // session when it is one.
-func (s *Service) sendFromApp(ctx context.Context, k Key, text string, correction bool) error {
-	text = strings.TrimSpace(text)
+func (s *Service) sendFromApp(ctx context.Context, k Key, m AppMessage, correction bool) error {
+	text := strings.TrimSpace(m.Text)
 	if text == "" {
 		return ErrEmptyMessage
 	}
@@ -490,7 +490,10 @@ func (s *Service) sendFromApp(ctx context.Context, k Key, text string, correctio
 			return err
 		}
 	}
-	if err := s.enqueueLocked(ctx, r, &UserEntry{Text: text, App: true}, n); err != nil {
+	if err := s.enqueueLocked(ctx, r, &UserEntry{
+		Text: text, App: true,
+		AppKind: m.Kind, AppPass: m.Pass, AppRound: m.Round, AppRounds: m.Rounds, AppCount: m.Count,
+	}, n); err != nil {
 		return err
 	}
 	r.stopTimer(&r.idleTimer)
@@ -875,8 +878,8 @@ func (s *Service) MarkArtifact(ctx context.Context, k Key, kind ArtifactKind, fi
 }
 
 // MarkPRReview records that a pass of the review of a pull request was
-// written.
-func (s *Service) MarkPRReview(ctx context.Context, k Key, pass int) {
+// written, with its verdict.
+func (s *Service) MarkPRReview(ctx context.Context, k Key, pass int, clean bool) {
 	n := &notes{}
 	defer s.flush(n)
 	s.mu.Lock()
@@ -886,13 +889,13 @@ func (s *Service) MarkPRReview(ctx context.Context, k Key, pass int) {
 	if err != nil {
 		return
 	}
-	marker := &MarkerEntry{Type: MarkerPRReviewWritten, Pass: pass}
+	marker := &MarkerEntry{Type: MarkerPRReviewWritten, Pass: pass, Clean: clean}
 	s.appendLocked(ctx, r, Entry{Kind: KindMarker, Marker: marker}, n)
 }
 
 // MarkStepReview records that a pass of the agent review of a step was
-// written, with its verdict.
-func (s *Service) MarkStepReview(ctx context.Context, k Key, pass int, clean bool) {
+// written, with its verdict and how many findings it reported (-1 unknown).
+func (s *Service) MarkStepReview(ctx context.Context, k Key, pass int, clean bool, findings int) {
 	n := &notes{}
 	defer s.flush(n)
 	s.mu.Lock()
@@ -903,6 +906,9 @@ func (s *Service) MarkStepReview(ctx context.Context, k Key, pass int, clean boo
 		return
 	}
 	marker := &MarkerEntry{Type: MarkerStepReviewWritten, Pass: pass, Clean: clean}
+	if findings >= 0 {
+		marker.Findings = &findings
+	}
 	s.appendLocked(ctx, r, Entry{Kind: KindMarker, Marker: marker}, n)
 }
 

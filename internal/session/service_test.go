@@ -1234,13 +1234,13 @@ func TestMarkPRReview(t *testing.T) {
 	f.start(t, taskInfo(t, "t1"))
 	f.waitIdle(t, prd("t1"))
 
-	f.service.MarkPRReview(t.Context(), prd("t1"), 2)
-	f.service.MarkPRReview(t.Context(), prd("missing"), 1)
+	f.service.MarkPRReview(t.Context(), prd("t1"), 2, true)
+	f.service.MarkPRReview(t.Context(), prd("missing"), 1, false)
 
 	markers := f.entriesOf(t, prd("t1"), session.KindMarker)
-	last := markers[len(markers)-1].Marker
-	if last.Type != session.MarkerPRReviewWritten || last.Pass != 2 {
-		t.Errorf("marker = %+v, want the pass of the review that was written", last)
+	want := &session.MarkerEntry{Type: session.MarkerPRReviewWritten, Pass: 2, Clean: true}
+	if diff := cmp.Diff(want, markers[len(markers)-1].Marker); diff != "" {
+		t.Errorf("marker mismatch (-want +got):\n%s", diff)
 	}
 }
 
@@ -1251,13 +1251,63 @@ func TestMarkStepReview(t *testing.T) {
 	f.start(t, taskInfo(t, "t1"))
 	f.waitIdle(t, prd("t1"))
 
-	f.service.MarkStepReview(t.Context(), prd("t1"), 2, true)
-	f.service.MarkStepReview(t.Context(), prd("missing"), 1, false)
+	f.service.MarkStepReview(t.Context(), prd("t1"), 2, false, 3)
+	f.service.MarkStepReview(t.Context(), prd("t1"), 3, false, -1)
+	f.service.MarkStepReview(t.Context(), prd("missing"), 1, false, 0)
 
 	markers := f.entriesOf(t, prd("t1"), session.KindMarker)
-	want := &session.MarkerEntry{Type: session.MarkerStepReviewWritten, Pass: 2, Clean: true}
-	if diff := cmp.Diff(want, markers[len(markers)-1].Marker); diff != "" {
-		t.Errorf("marker mismatch (-want +got):\n%s", diff)
+	findings := 3
+	want := []*session.MarkerEntry{
+		{Type: session.MarkerStepReviewWritten, Pass: 2, Findings: &findings},
+		// A count the report did not give is unknown, not zero.
+		{Type: session.MarkerStepReviewWritten, Pass: 3},
+	}
+	got := []*session.MarkerEntry{markers[len(markers)-2].Marker, markers[len(markers)-1].Marker}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("markers mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestThePromptSentIsKeptForTheStagesThatShowIt(t *testing.T) {
+	t.Parallel()
+
+	tests := map[prompts.Stage]bool{
+		prompts.StagePRD:      false,
+		prompts.StageOneShot:  false,
+		prompts.StageTechSpec: true,
+		prompts.StagePlan:     true,
+		prompts.StagePR:       true,
+		prompts.StagePRReview: true,
+	}
+
+	for stage, kept := range tests {
+		t.Run(string(stage), func(t *testing.T) {
+			t.Parallel()
+
+			f := newFixture(t, "echo")
+			info := atStage(taskInfo(t, "t1"), stage)
+			f.start(t, info)
+			f.waitIdle(t, info.Key())
+
+			tr := f.transcript(t, info.Key())
+			var user *session.UserEntry
+			var echoed string
+			for _, e := range tr.Entries {
+				switch {
+				case e.User != nil:
+					user = e.User
+				case e.Assistant != nil:
+					echoed = e.Assistant.Text
+				}
+			}
+			want := ""
+			if kept {
+				want = echoed
+			}
+			if user == nil || user.Sent != want {
+				t.Errorf("user entry = %+v, want sent %q", user, want)
+			}
+		})
 	}
 }
 
@@ -1282,15 +1332,15 @@ func TestStartOfALaterStageSendsItsPromptWithoutTheInitialContext(t *testing.T) 
 	}
 	// What the user typed belongs to the PRD alone; a later stage reads the
 	// artifacts instead, so its user entry is empty.
-	wantUser := &session.UserEntry{Prompt: true}
-	if diff := cmp.Diff(wantUser, tr.Entries[1].User); diff != "" {
-		t.Errorf("user entry mismatch (-want +got):\n%s", diff)
-	}
 	rendered, _ := renderPrompt(prompts.StageTechSpec, prompts.Vars{
 		TaskName:     info.Name,
 		ArtifactsDir: info.ArtifactsDir,
 		PRDPath:      info.PRDPath,
 	})
+	wantUser := &session.UserEntry{Prompt: true, Sent: rendered}
+	if diff := cmp.Diff(wantUser, tr.Entries[1].User); diff != "" {
+		t.Errorf("user entry mismatch (-want +got):\n%s", diff)
+	}
 	if got := tr.Entries[2].Assistant.Text; got != rendered {
 		t.Errorf("prompt sent = %q, want %q", got, rendered)
 	}
@@ -1539,7 +1589,9 @@ func TestSendFromAppMarksTheMessageWithoutCountingIt(t *testing.T) {
 	f.start(t, taskInfo(t, "t1"))
 	f.waitIdle(t, prd("t1"))
 
-	if err := f.service.SendFromApp(t.Context(), prd("t1"), "  commit what is staged  "); err != nil {
+	if err := f.service.SendFromApp(t.Context(), prd("t1"), session.AppMessage{
+		Text: "  commit what is staged  ", Kind: session.AppReport, Pass: 2, Round: 2, Rounds: 3, Count: -1,
+	}); err != nil {
 		t.Fatalf("SendFromApp() = %v, want nil", err)
 	}
 	f.waitIdle(t, prd("t1"))
@@ -1548,7 +1600,10 @@ func TestSendFromAppMarksTheMessageWithoutCountingIt(t *testing.T) {
 	if len(users) != 2 {
 		t.Fatalf("user entries = %d, want the prompt and the message of the app", len(users))
 	}
-	want := &session.UserEntry{Text: "commit what is staged", App: true}
+	want := &session.UserEntry{
+		Text: "commit what is staged", App: true,
+		AppKind: session.AppReport, AppPass: 2, AppRound: 2, AppRounds: 3, AppCount: -1,
+	}
 	if diff := cmp.Diff(want, users[1].User); diff != "" {
 		t.Errorf("app entry mismatch (-want +got):\n%s", diff)
 	}
@@ -1559,7 +1614,7 @@ func TestSendFromAppMarksTheMessageWithoutCountingIt(t *testing.T) {
 	if rec := f.sessions.get(t, "t1", string(prompts.StagePRD)); rec.Corrections != 0 {
 		t.Errorf("stored corrections = %d, want none", rec.Corrections)
 	}
-	wantErrIs(t, f.service.SendFromApp(t.Context(), prd("t1"), "   "), session.ErrEmptyMessage)
+	wantErrIs(t, f.service.SendFromApp(t.Context(), prd("t1"), session.AppMessage{Text: "   "}), session.ErrEmptyMessage)
 }
 
 func TestSendCorrectionMarksTheMessageAndCountsIt(t *testing.T) {
@@ -1569,7 +1624,9 @@ func TestSendCorrectionMarksTheMessageAndCountsIt(t *testing.T) {
 	f.start(t, taskInfo(t, "t1"))
 	f.waitIdle(t, prd("t1"))
 
-	if err := f.service.SendCorrection(t.Context(), prd("t1"), "  fix the plan  "); err != nil {
+	if err := f.service.SendCorrection(t.Context(), prd("t1"), session.AppMessage{
+		Text: "  fix the plan  ", Kind: session.AppCorrection, Round: 1, Rounds: 3, Count: 2,
+	}); err != nil {
 		t.Fatalf("SendCorrection() = %v, want nil", err)
 	}
 	f.waitIdle(t, prd("t1"))
@@ -1578,7 +1635,10 @@ func TestSendCorrectionMarksTheMessageAndCountsIt(t *testing.T) {
 	if len(users) != 2 {
 		t.Fatalf("user entries = %d, want the prompt and the correction", len(users))
 	}
-	want := &session.UserEntry{Text: "fix the plan", App: true}
+	want := &session.UserEntry{
+		Text: "fix the plan", App: true,
+		AppKind: session.AppCorrection, AppRound: 1, AppRounds: 3, AppCount: 2,
+	}
 	if diff := cmp.Diff(want, users[1].User); diff != "" {
 		t.Errorf("correction entry mismatch (-want +got):\n%s", diff)
 	}
@@ -1588,7 +1648,7 @@ func TestSendCorrectionMarksTheMessageAndCountsIt(t *testing.T) {
 	if rec := f.sessions.get(t, "t1", string(prompts.StagePRD)); rec.Corrections != 1 {
 		t.Errorf("stored corrections = %d, want 1", rec.Corrections)
 	}
-	wantErrIs(t, f.service.SendCorrection(t.Context(), prd("t1"), "   "), session.ErrEmptyMessage)
+	wantErrIs(t, f.service.SendCorrection(t.Context(), prd("t1"), session.AppMessage{Text: "   "}), session.ErrEmptyMessage)
 }
 
 func TestDiscardClosesTheRunAndDropsTheRecords(t *testing.T) {
@@ -2118,10 +2178,6 @@ func TestStartOfAReviewOfAPullRequestMarksItAndSendsWhatTheUserWroteForThePass(t
 	}
 	// What the user wrote for the pass reads in the conversation as their first
 	// message, as the initial context of a task does.
-	wantUser := &session.UserEntry{Text: info.PassInstructions, Prompt: true}
-	if diff := cmp.Diff(wantUser, tr.Entries[1].User); diff != "" {
-		t.Errorf("user entry mismatch (-want +got):\n%s", diff)
-	}
 	rendered, _ := renderPrompt(prompts.StagePRReview, prompts.Vars{
 		ContextPath:      info.ContextPath,
 		External:         info.External,
@@ -2129,6 +2185,10 @@ func TestStartOfAReviewOfAPullRequestMarksItAndSendsWhatTheUserWroteForThePass(t
 		Instructions:     info.Instructions,
 		PassInstructions: info.PassInstructions,
 	})
+	wantUser := &session.UserEntry{Text: info.PassInstructions, Prompt: true, Sent: rendered}
+	if diff := cmp.Diff(wantUser, tr.Entries[1].User); diff != "" {
+		t.Errorf("user entry mismatch (-want +got):\n%s", diff)
+	}
 	if got := tr.Entries[2].Assistant.Text; got != rendered {
 		t.Errorf("prompt sent = %q, want %q", got, rendered)
 	}

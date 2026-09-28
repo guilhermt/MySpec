@@ -1172,14 +1172,15 @@ export interface MarkerEntry {
     /**
      * Stage belongs to stage_started alone, Step to the markers of a step
      * (step_started, step_review_started), Pass to the markers of a review
-     * (pr_review_written, step_review_written) and Clean to
-     * step_review_written alone; Restarted belongs to stage_started and
-     * step_started.
+     * (pr_review_written, step_review_written) with Clean; Findings belongs to
+     * step_review_written alone, -1 when unknown; Restarted belongs to
+     * stage_started and step_started.
      */
     "stage": string;
     "step": number;
     "pass": number;
     "clean": boolean;
+    "findings": number;
     "restarted": boolean;
 
     /**
@@ -2589,6 +2590,11 @@ export interface StepReport {
      */
     "file": string;
     "clean": boolean;
+
+    /**
+     * Findings is how many findings the report lists; -1 when unknown.
+     */
+    "findings": number;
 }
 
 /**
@@ -2913,6 +2919,28 @@ export interface UserEntry {
     "pending": boolean;
     "prompt": boolean;
     "app": boolean;
+
+    /**
+     * Sent is the rendered prompt the CLI got, for a prompt entry of the tech
+     * spec, the plan, the pull request and the pull request review; "" for
+     * every other entry.
+     */
+    "sent": string;
+
+    /**
+     * AppKind is which message of the workflow the app sent: report, pass,
+     * commit, commit_all, commit_push, correction, open, pr_pass or apply; ""
+     * for every other entry. AppPass belongs to report, pass and pr_pass;
+     * AppRound and AppRounds to report (the round of MaxReviewRounds) and
+     * correction (the attempt of MaxCorrections); AppCount to report (the
+     * findings, -1 when unknown), correction (the problems) and apply (the
+     * approved findings).
+     */
+    "appKind": string;
+    "appPass": number;
+    "appRound": number;
+    "appRounds": number;
+    "appCount": number;
 }
 
 /**

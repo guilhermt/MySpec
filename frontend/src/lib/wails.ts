@@ -336,6 +336,18 @@ export type MarkerType =
   | "compacted"
   | "interrupted"
   | "retried";
+/** AppKind is which message of the workflow the app sent; "" for any other message. */
+export type AppKind =
+  | ""
+  | "report"
+  | "pass"
+  | "commit"
+  | "commit_all"
+  | "commit_push"
+  | "correction"
+  | "open"
+  | "pr_pass"
+  | "apply";
 /** InterruptedBy is who cut a text, an action or a turn short; "" when nobody did. */
 export type InterruptedBy = "" | "user" | "crash";
 /** RetryReason is why an API call the CLI retries failed; "" without a retry. */
@@ -806,6 +818,23 @@ export function asMarkerType(value: string): MarkerType {
       return value;
     default:
       return "compacted";
+  }
+}
+
+export function asAppKind(value: string): AppKind {
+  switch (value) {
+    case "report":
+    case "pass":
+    case "commit":
+    case "commit_all":
+    case "commit_push":
+    case "correction":
+    case "open":
+    case "pr_pass":
+    case "apply":
+      return value;
+    default:
+      return "";
   }
 }
 

@@ -780,7 +780,7 @@ func (s *Service) recordReport(
 		return task.PRRun{}, false
 	}
 	s.setPassAsked(t.ID, "")
-	s.sessions.MarkPRReview(ctx, key, report.Pass)
+	s.sessions.MarkPRReview(ctx, key, report.Pass, report.Clean)
 	s.log.Info("pr review written", "task", t.ID, "pass", report.Pass)
 	return updated, true
 }
@@ -822,7 +822,8 @@ func (s *Service) askPass(
 	// One commit asks for one pass, however many evaluations it takes for the
 	// report of that pass to land.
 	s.setPassAsked(t.ID, head)
-	if err := s.sessions.SendFromApp(ctx, key, message); err != nil {
+	app := session.AppMessage{Text: message, Kind: session.AppPRPass, Pass: pass}
+	if err := s.sessions.SendFromApp(ctx, key, app); err != nil {
 		s.setPassAsked(t.ID, "")
 		s.log.Error("send pr review prompt failed", "task", t.ID, "error", err)
 		return
@@ -1191,7 +1192,7 @@ func (s *Service) OpenPR(ctx context.Context, id, title, body string) error {
 		return err
 	}
 	s.setOpenFailed(id, false)
-	if err := s.sessions.SendFromApp(ctx, key, openMessage(path, base)); err != nil {
+	if err := s.sessions.SendFromApp(ctx, key, session.AppMessage{Text: openMessage(path, base), Kind: session.AppOpen}); err != nil {
 		// The button stays where the user left it: the draft is theirs again.
 		if _, setErr := s.tasks.SetPRRun(ctx, id, task.PRDrafting, nil); setErr != nil {
 			s.log.Error("record drafting pull request failed", "task", id, "error", setErr)
@@ -1254,7 +1255,8 @@ func (s *Service) ApprovePR(ctx context.Context, id string) error {
 		return err
 	}
 	s.setPRNoCommit(id, false)
-	if err := s.sessions.SendFromApp(ctx, key, message); err != nil {
+	app := session.AppMessage{Text: message, Kind: session.AppCommitPush}
+	if err := s.sessions.SendFromApp(ctx, key, app); err != nil {
 		if _, setErr := s.tasks.SetPRRun(ctx, id, task.PRReviewing, nil); setErr != nil {
 			s.log.Error("record reviewing pull request failed", "task", id, "error", setErr)
 		}

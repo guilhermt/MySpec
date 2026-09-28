@@ -2,6 +2,7 @@ import { Browser, Call, Events } from "@wailsio/runtime";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   asActionStatus,
+  asAppKind,
   asBlockReason,
   asBoardFailureReason,
   asCardAction,
@@ -116,6 +117,19 @@ describe("narrowing", () => {
     expect(asMarkerType("stage_started")).toBe("stage_started");
     expect(asMarkerType("step_started")).toBe("step_started");
     expect(asMarkerType("retried")).toBe("retried");
+    for (const kind of [
+      "report",
+      "pass",
+      "commit",
+      "commit_all",
+      "commit_push",
+      "correction",
+      "open",
+      "pr_pass",
+      "apply",
+    ] as const) {
+      expect(asAppKind(kind)).toBe(kind);
+    }
     expect(asInterruptedBy("user")).toBe("user");
     expect(asInterruptedBy("crash")).toBe("crash");
     expect(asRetryReason("")).toBe("");
@@ -376,6 +390,9 @@ describe("narrowing", () => {
     expect(asDraftDecision("deferred")).toBe("");
     expect(asDraftOutcome("closed")).toBe("");
     expect(asDependencyDrop("cycle")).toBe("");
+    // A message of the user, or of the app in a transcript that has no kind.
+    expect(asAppKind("")).toBe("");
+    expect(asAppKind("merge")).toBe("");
     // "" is what the app carries while the reading of the catalog runs.
     expect(asCatalogFailure("")).toBe("");
     expect(asCatalogFailure("timeout")).toBe("");

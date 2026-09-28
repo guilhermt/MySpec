@@ -68,7 +68,7 @@ func (s *Service) recordAsked(
 		s.log.Error("record review report failed", "review", stored.ID, "pass", pass, "error", err)
 		return
 	}
-	s.sessions.MarkPRReview(ctx, key, pass)
+	s.sessions.MarkPRReview(ctx, key, pass, report.Clean)
 	s.setUnreadable(stored.ID, "")
 	s.log.Info("review report recorded", "review", stored.ID, "pass", pass)
 	s.notify(stored.ID)

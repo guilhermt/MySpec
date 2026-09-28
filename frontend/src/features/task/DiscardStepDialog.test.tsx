@@ -44,7 +44,7 @@ describe("DiscardStepDialog", () => {
 
   it.each([
     [{ reviewer: makeStepReviewer() }],
-    [{ reviewer: null, reports: [{ pass: 1, file: "1-review-1.md", clean: false }] }],
+    [{ reviewer: null, reports: [{ pass: 1, file: "1-review-1.md", clean: false, findings: -1 }] }],
   ])("says the reviewer and its reports go too, when the step has them %#", async (overrides) => {
     dialog(vi.fn(), overrides);
 

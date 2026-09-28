@@ -100,7 +100,7 @@ func readStepReport(path string, number, pass int) (ReviewReport, bool) {
 		return ReviewReport{}, false
 	}
 
-	fields, _ := frontmatter.Split(string(content))
+	fields, body := frontmatter.Split(string(content))
 	status := strings.TrimSpace(fields["status"])
 	if status != cleanStatus && status != changesStatus {
 		return ReviewReport{}, false
@@ -108,7 +108,48 @@ func readStepReport(path string, number, pass int) (ReviewReport, bool) {
 	if !headerAgrees(fields["pass"], pass) || !headerAgrees(fields["step"], number) {
 		return ReviewReport{}, false
 	}
-	return ReviewReport{Pass: pass, File: filepath.Base(path), Clean: status == cleanStatus}, true
+	return ReviewReport{
+		Pass: pass, File: filepath.Base(path), Clean: status == cleanStatus, Findings: countFindings(body),
+	}, true
+}
+
+var (
+	// findingsTitle is the line that opens the Findings section of a report.
+	findingsTitle = regexp.MustCompile(`(?i)^\s*(?:#{1,6}\s*)?(?:\d+[.)]\s*)?\*{0,2}findings\*{0,2}\s*:?`)
+	// sectionTitle is a line that opens another section.
+	sectionTitle = regexp.MustCompile(`^\s*(?:#{1,6}\s+|\d+[.)]\s*\*\*[^*]+\*\*)`)
+	// findingItem is a line that starts one item of a list.
+	findingItem = regexp.MustCompile(`^\s{0,3}(?:\d+[.)]|[-*])\s+\S`)
+)
+
+// countFindings is how many findings the Findings section of the body of a
+// report lists: 0 when it says "None.", one per item of its list, 1 when it
+// says something that is not a list, and -1 when there is no such section.
+func countFindings(body string) int {
+	lines := strings.Split(body, "\n")
+	start := slices.IndexFunc(lines, findingsTitle.MatchString)
+	if start < 0 {
+		return -1
+	}
+	section := []string{lines[start][len(findingsTitle.FindString(lines[start])):]}
+	for _, line := range lines[start+1:] {
+		if sectionTitle.MatchString(line) {
+			break
+		}
+		section = append(section, line)
+	}
+
+	text := strings.TrimSpace(strings.Join(section, "\n"))
+	if text == "" || strings.EqualFold(strings.TrimSuffix(text, "."), "none") {
+		return 0
+	}
+	count := 0
+	for _, line := range section {
+		if findingItem.MatchString(line) {
+			count++
+		}
+	}
+	return max(count, 1)
 }
 
 // headerAgrees reports whether a number of the header, when there is one, is

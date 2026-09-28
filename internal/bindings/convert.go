@@ -560,7 +560,9 @@ func fromSteps(states []flow.StepState) []Step {
 func fromStepReports(reports []task.ReviewReport) []StepReport {
 	converted := make([]StepReport, len(reports))
 	for i, report := range reports {
-		converted[i] = StepReport{Pass: report.Pass, File: report.File, Clean: report.Clean}
+		converted[i] = StepReport{
+			Pass: report.Pass, File: report.File, Clean: report.Clean, Findings: report.Findings,
+		}
 	}
 	return converted
 }
@@ -757,6 +759,13 @@ func FromEntry(e session.Entry) Entry {
 			Pending: e.User.Pending,
 			Prompt:  e.User.Prompt,
 			App:     e.User.App,
+
+			Sent:      e.User.Sent,
+			AppKind:   string(e.User.AppKind),
+			AppPass:   e.User.AppPass,
+			AppRound:  e.User.AppRound,
+			AppRounds: e.User.AppRounds,
+			AppCount:  e.User.AppCount,
 		}
 	}
 	if e.Assistant != nil {
@@ -787,11 +796,15 @@ func FromEntry(e session.Entry) Entry {
 			Step:          e.Marker.Step,
 			Pass:          e.Marker.Pass,
 			Clean:         e.Marker.Clean,
+			Findings:      -1,
 			Restarted:     e.Marker.Restarted,
 			Percent:       e.Marker.Percent,
 			Attempts:      e.Marker.Attempts,
 			Reason:        e.Marker.Reason,
 			InterruptedBy: e.Marker.InterruptedBy,
+		}
+		if e.Marker.Findings != nil {
+			converted.Marker.Findings = *e.Marker.Findings
 		}
 	}
 	if e.Error != nil {

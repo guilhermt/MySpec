@@ -5,7 +5,7 @@ import type { MarkerType } from "@/lib/wails";
 import { renderWithStore } from "@/test/render";
 
 // The fields of the markers this component does not read.
-const NEW_FIELDS = { percent: 0, attempts: 0, reason: "", interruptedBy: "" };
+const NEW_FIELDS = { percent: 0, attempts: 0, reason: "", interruptedBy: "", findings: -1 };
 
 describe("Marker", () => {
   it.each([

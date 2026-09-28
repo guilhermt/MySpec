@@ -387,6 +387,12 @@ func (s *Service) flushPendingLocked(ctx context.Context, r *run, n *notes) bool
 			return false
 		}
 		text = rendered
+		switch r.task.Prompt {
+		case prompts.StageTechSpec, prompts.StagePlan, prompts.StagePR, prompts.StagePRReview:
+			e.User.Sent = rendered
+		default:
+			// The prompt of every other stage is not kept.
+		}
 	}
 
 	if err := r.proc.Send(text); err != nil {

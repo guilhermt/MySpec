@@ -5,7 +5,18 @@ import { UserMessage } from "@/features/chat/entries/UserMessage";
 import { api } from "@/lib/wails";
 import { renderWithStore } from "@/test/render";
 
-const USER = { text: "Add a login screen", pending: false, prompt: false, app: false };
+const USER = {
+  text: "Add a login screen",
+  pending: false,
+  prompt: false,
+  app: false,
+  sent: "",
+  appKind: "",
+  appPass: 0,
+  appRound: 0,
+  appRounds: 0,
+  appCount: 0,
+};
 
 describe("UserMessage", () => {
   it("shows what the user said", () => {

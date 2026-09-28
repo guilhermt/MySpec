@@ -72,7 +72,7 @@ func reportDelivered(t *testing.T, f *fixture) {
 
 	underAgentReview(t, f)
 	reviewerWrites(f, stepReport(1, 1, false))
-	f.waitSessionCall(t, "markStep:task-1:step_review:1:pass=1:clean=false")
+	f.waitSessionCall(t, "markStep:task-1:step_review:1:pass=1:clean=false:findings=2")
 }
 
 // countCalls is how many times a call was taken.
@@ -528,10 +528,14 @@ func TestAReportWithChangesGoesToTheImplementer(t *testing.T) {
 			t.Errorf("message = %q, want it to carry %q", sent[0], part)
 		}
 	}
+	want := []session.AppMessage{{Kind: session.AppReport, Pass: 1, Round: 1, Rounds: flow.MaxReviewRounds, Count: 2}}
+	if diff := cmp.Diff(want, f.sessions.sentApps()); diff != "" {
+		t.Errorf("app messages mismatch (-want +got):\n%s", diff)
+	}
 	// The report is acted on first, and recorded as acted on after.
 	calls := f.sessions.recorded()
 	send := slices.Index(calls, "send:task-1:step:1")
-	mark := slices.Index(calls, "markStep:task-1:step_review:1:pass=1:clean=false")
+	mark := slices.Index(calls, "markStep:task-1:step_review:1:pass=1:clean=false:findings=2")
 	if send < 0 || send > mark {
 		t.Errorf("session calls = %v, want the report sent before it is marked", calls)
 	}
@@ -572,6 +576,10 @@ func TestTheNextPassIsAskedInTheSameConversation(t *testing.T) {
 			t.Errorf("message = %q, want it to carry %q", last, part)
 		}
 	}
+	apps := f.sessions.sentApps()
+	if diff := cmp.Diff(session.AppMessage{Kind: session.AppPass, Pass: 2}, apps[len(apps)-1]); diff != "" {
+		t.Errorf("app message mismatch (-want +got):\n%s", diff)
+	}
 	if state := f.stepState(t, "task-1", 1); state.Status != flow.StepAgentReview || state.ReviewPass != 2 {
 		t.Errorf("step 1 = %+v, want the second pass under way", state)
 	}
@@ -583,10 +591,13 @@ func TestACleanReportGetsTheStepCommittedWithEveryChange(t *testing.T) {
 	f := newFixture(t)
 	underAgentReview(t, f)
 	reviewerWrites(f, stepReport(1, 1, true))
-	f.waitSessionCall(t, "markStep:task-1:step_review:1:pass=1:clean=true")
+	f.waitSessionCall(t, "markStep:task-1:step_review:1:pass=1:clean=true:findings=0")
 
 	if want := []string{commitAllPrompt("task-1")}; !slices.Equal(f.sessions.sent(), want) {
 		t.Errorf("messages = %q, want %q", f.sessions.sent(), want)
+	}
+	if diff := cmp.Diff([]session.AppMessage{{Kind: session.AppCommitAll}}, f.sessions.sentApps()); diff != "" {
+		t.Errorf("app messages mismatch (-want +got):\n%s", diff)
 	}
 	// Nobody stages under the agent review: there is no progress to show.
 	if state := f.stepState(t, "task-1", 1); state.Status != flow.StepCommitting || state.Review != nil {
@@ -608,7 +619,7 @@ func TestACommitTurnUnderWayAsksForNoPass(t *testing.T) {
 	f := newFixture(t)
 	underAgentReview(t, f)
 	reviewerWrites(f, stepReport(1, 1, true))
-	f.waitSessionCall(t, "markStep:task-1:step_review:1:pass=1:clean=true")
+	f.waitSessionCall(t, "markStep:task-1:step_review:1:pass=1:clean=true:findings=0")
 
 	// The implementer commits, the reviewer rests and the worktree still has the
 	// changes: the report was already acted on, and nothing else is.
@@ -642,7 +653,7 @@ func TestAReportThatCannotBeSentIsActedOnAgain(t *testing.T) {
 
 	f.sessions.failWith(nil)
 	f.service.Check("task-1")
-	f.waitSessionCall(t, "markStep:task-1:step_review:1:pass=1:clean=false")
+	f.waitSessionCall(t, "markStep:task-1:step_review:1:pass=1:clean=false:findings=2")
 	if n := countCalls(f.tasks.recorded(), "stepReported:task-1:1:1"); n != 1 {
 		t.Errorf("reports recorded = %d, want one", n)
 	}
@@ -664,7 +675,7 @@ func TestTheLastRoundThatStillAsksForChangesHandsTheStepToTheUser(t *testing.T) 
 
 	// Both conversations come back at rest.
 	f.service.Sync(t.Context())
-	f.waitSessionCall(t, "markStep:task-1:step_review:1:pass=4:clean=false")
+	f.waitSessionCall(t, "markStep:task-1:step_review:1:pass=4:clean=false:findings=2")
 
 	calls := f.tasks.recorded()
 	fallback := slices.Index(calls, "stepFallback:task-1:1:rounds_exhausted")
@@ -688,7 +699,7 @@ func TestACommitAfterACleanReportThatDoesNotHappenHandsTheStepToTheUser(t *testi
 	f := newFixture(t)
 	underAgentReview(t, f)
 	reviewerWrites(f, stepReport(1, 1, true))
-	f.waitSessionCall(t, "markStep:task-1:step_review:1:pass=1:clean=true")
+	f.waitSessionCall(t, "markStep:task-1:step_review:1:pass=1:clean=true:findings=0")
 
 	// The implementer stops with the branch exactly where it was.
 	f.sessions.goIdleSession(implementerKey("task-1", 1))

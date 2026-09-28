@@ -282,7 +282,20 @@ const reviewer = (overrides: Parameters<typeof makeStepReviewer>[0]) =>
 // talk is a short conversation: what the product asked and what the agent answered.
 function talk(ask: string, answer: string, ...rest: Entry[]): Entry[] {
   return [
-    makeEntry("user", { user: { text: ask, pending: false, prompt: true, app: false } }),
+    makeEntry("user", {
+      user: {
+        text: ask,
+        pending: false,
+        prompt: true,
+        app: false,
+        sent: "",
+        appKind: "",
+        appPass: 0,
+        appRound: 0,
+        appRounds: 0,
+        appCount: 0,
+      },
+    }),
     makeEntry("assistant", {
       assistant: {
         messageId: "msg_1",

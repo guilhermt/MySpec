@@ -40,7 +40,18 @@ const BOTH_READY: Record<string, TranscriptState> = {
     error: "",
     entries: [
       makeEntry("user", {
-        user: { text: "Check the login form", pending: false, prompt: false, app: false },
+        user: {
+          text: "Check the login form",
+          pending: false,
+          prompt: false,
+          app: false,
+          sent: "",
+          appKind: "",
+          appPass: 0,
+          appRound: 0,
+          appRounds: 0,
+          appCount: 0,
+        },
       }),
     ],
     pending: [],
@@ -338,7 +349,18 @@ describe("TaskView, earlier conversation", () => {
 
   const EARLIER_ENTRIES = [
     makeEntry("user", {
-      user: { text: "Implement step 1.", pending: false, prompt: false, app: false },
+      user: {
+        text: "Implement step 1.",
+        pending: false,
+        prompt: false,
+        app: false,
+        sent: "",
+        appKind: "",
+        appPass: 0,
+        appRound: 0,
+        appRounds: 0,
+        appCount: 0,
+      },
     }),
     makeEntry("question"),
     makeEntry("permission"),

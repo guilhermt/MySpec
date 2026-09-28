@@ -22,7 +22,7 @@ const committed = (number: number) =>
     commitSha: "c19f02e8a1b2",
     commitSubject: `Commit ${number}`,
     committedAt: "2026-09-27T13:48:00Z",
-    reports: [{ pass: 1, file: `${number}-1.md`, clean: false }],
+    reports: [{ pass: 1, file: `${number}-1.md`, clean: false, findings: -1 }],
   });
 
 const STRUCTURED: TaskSummary = makeTask({
@@ -39,7 +39,7 @@ const STRUCTURED: TaskSummary = makeTask({
       reviewMode: "agent",
       reviewPass: 2,
       reviewer: makeStepReviewer({ sessionStage: "step_review:3", sessionStatus: "working" }),
-      reports: [{ pass: 1, file: "3-1.md", clean: false }],
+      reports: [{ pass: 1, file: "3-1.md", clean: false, findings: -1 }],
     }),
     makeStep({ number: 4, title: "Add the limits" }),
   ],
@@ -164,7 +164,7 @@ describe("detailsOf, Implementation", () => {
         makeStep({
           status: "agent_review",
           reviewMode: "agent",
-          reports: [{ pass: 1, file: "1-1.md", clean: true }],
+          reports: [{ pass: 1, file: "1-1.md", clean: true, findings: 0 }],
         }),
       ],
     });

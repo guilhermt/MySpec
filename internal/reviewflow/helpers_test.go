@@ -61,8 +61,9 @@ type memSessions struct {
 	stored    map[session.Key]bool // the sessions ever created, open or not
 	calls     []string
 	messages  []string
-	err       error // returned by every call that changes something
-	startErr  error // returned by Start alone
+	apps      []session.AppMessage // every message of the app, with its kind and numbers
+	err       error                // returned by every call that changes something
+	startErr  error                // returned by Start alone
 }
 
 func newSessions() *memSessions {
@@ -184,7 +185,7 @@ func (m *memSessions) Exists(_ context.Context, k session.Key) (bool, error) {
 	return m.stored[k], nil
 }
 
-func (m *memSessions) SendFromApp(_ context.Context, k session.Key, text string) error {
+func (m *memSessions) SendFromApp(_ context.Context, k session.Key, msg session.AppMessage) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -192,18 +193,32 @@ func (m *memSessions) SendFromApp(_ context.Context, k session.Key, text string)
 	if m.err != nil {
 		return m.err
 	}
-	m.messages = append(m.messages, text)
+	m.messages = append(m.messages, msg.Text)
+	m.apps = append(m.apps, msg)
 	sum := m.summaries[k]
 	sum.Status, sum.Idle = session.StatusWorking, false
 	m.summaries[k] = sum
 	return nil
 }
 
-func (m *memSessions) MarkPRReview(_ context.Context, k session.Key, pass int) {
+func (m *memSessions) MarkPRReview(_ context.Context, k session.Key, pass int, clean bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.calls = append(m.calls, "mark:"+k.TaskID+":pass="+strconv.Itoa(pass))
+	m.calls = append(m.calls, "mark:"+k.TaskID+":pass="+strconv.Itoa(pass)+":clean="+strconv.FormatBool(clean))
+}
+
+// sentApps is the kind and the numbers of every message of the app, without
+// the text, which sent holds.
+func (m *memSessions) sentApps() []session.AppMessage {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	apps := slices.Clone(m.apps)
+	for i := range apps {
+		apps[i].Text = ""
+	}
+	return apps
 }
 
 // goIdle brings the conversation of a review to rest, which is what an

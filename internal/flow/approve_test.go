@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
+
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/review"
@@ -124,6 +126,9 @@ func TestApprovingAStepSendsTheCommitPromptAsAMessageOfTheApp(t *testing.T) {
 
 	if want := []string{commitPrompt("task-1", false)}; !slices.Equal(f.sessions.sent(), want) {
 		t.Errorf("messages = %q, want %q", f.sessions.sent(), want)
+	}
+	if diff := cmp.Diff([]session.AppMessage{{Kind: session.AppCommit}}, f.sessions.sentApps()); diff != "" {
+		t.Errorf("app messages mismatch (-want +got):\n%s", diff)
 	}
 	// The commit prompt is not a correction: it must not count against the
 	// corrections the app allows itself.

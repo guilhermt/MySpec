@@ -9,6 +9,7 @@ import (
 	"github.com/guilhermt/myspec/internal/prreview"
 	"github.com/guilhermt/myspec/internal/review"
 	"github.com/guilhermt/myspec/internal/reviewflow"
+	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/worktree"
 )
 
@@ -90,6 +91,7 @@ func TestApplyingAsksTheAgentToFixOnlyTheApprovedFindings(t *testing.T) {
 	if got := lastMessage(t, f); got != want {
 		t.Errorf("message =\n%s\n\nwant:\n%s", got, want)
 	}
+	wantLastApp(t, f, session.AppMessage{Kind: session.AppApply, Count: 2})
 	if stored, _ := f.reviews.Get(id); stored.Phase != prreview.PhaseApplying {
 		t.Errorf("phase = %q, want applying", stored.Phase)
 	}
@@ -202,6 +204,7 @@ func TestApprovingAsksTheAgentToCommitAndPushToTheBranchOfThePullRequest(t *test
 	if got := lastMessage(t, f); got != want {
 		t.Errorf("message = %q, want %q", got, want)
 	}
+	wantLastApp(t, f, session.AppMessage{Kind: session.AppCommitPush})
 	if stored.Phase != prreview.PhaseCommitting {
 		t.Errorf("phase = %q, want committing", stored.Phase)
 	}

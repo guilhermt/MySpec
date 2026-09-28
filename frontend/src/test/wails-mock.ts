@@ -1129,7 +1129,18 @@ function payloadOf(kind: EntryKind): Omit<Entry, "id" | "seq" | "turnId" | "kind
     case "user":
       return {
         ...empty,
-        user: { text: "Add a login screen", pending: false, prompt: false, app: false },
+        user: {
+          text: "Add a login screen",
+          pending: false,
+          prompt: false,
+          app: false,
+          sent: "",
+          appKind: "",
+          appPass: 0,
+          appRound: 0,
+          appRounds: 0,
+          appCount: 0,
+        },
       };
     case "assistant":
       return {
@@ -1201,6 +1212,7 @@ function payloadOf(kind: EntryKind): Omit<Entry, "id" | "seq" | "turnId" | "kind
           step: 0,
           pass: 0,
           clean: false,
+          findings: -1,
           restarted: false,
           percent: 0,
           attempts: 0,

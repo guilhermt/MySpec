@@ -39,7 +39,7 @@ const committed = (number: number) =>
     commitSubject: `Commit ${number}`,
     committedAt: COMMITTED_AT,
     reviewMode: "agent",
-    reports: [{ pass: 1, file: `${number}-1.md`, clean: false }],
+    reports: [{ pass: 1, file: `${number}-1.md`, clean: false, findings: -1 }],
   });
 
 /** STRUCTURED is a Structured task on its step 3, under a pass of its reviewer. */
@@ -58,7 +58,7 @@ const STRUCTURED: TaskSummary = makeTask({
       reviewMode: "agent",
       reviewPass: 2,
       reviewer: makeStepReviewer({ sessionStage: "step_review:3", sessionStatus: "working" }),
-      reports: [{ pass: 1, file: "3-1.md", clean: false }],
+      reports: [{ pass: 1, file: "3-1.md", clean: false, findings: -1 }],
     }),
     makeStep({ number: 4, file: "4-limits.md", title: "Add the limits", reviewMode: "agent" }),
   ],
@@ -80,7 +80,7 @@ const ONE_SHOT: TaskSummary = makeTask({
       title: "Rate limit per API key",
       status: "implementing",
       reviewMode: "agent",
-      reports: [{ pass: 1, file: "1-1.md", clean: true }],
+      reports: [{ pass: 1, file: "1-1.md", clean: true, findings: 0 }],
     }),
   ],
 });

@@ -191,6 +191,8 @@ type StepReport struct {
 	Pass  int    `json:"pass"`
 	File  string `json:"file"` // name inside the step-reviews folder, for ReadArtifact
 	Clean bool   `json:"clean"`
+	// Findings is how many findings the report lists; -1 when unknown.
+	Findings int `json:"findings"`
 }
 
 // StepReviewer is the conversation that reviews a step, with the state of its
@@ -589,6 +591,22 @@ type UserEntry struct {
 	Pending bool   `json:"pending"`
 	Prompt  bool   `json:"prompt"`
 	App     bool   `json:"app"`
+	// Sent is the rendered prompt the CLI got, for a prompt entry of the tech
+	// spec, the plan, the pull request and the pull request review; "" for
+	// every other entry.
+	Sent string `json:"sent"`
+	// AppKind is which message of the workflow the app sent: report, pass,
+	// commit, commit_all, commit_push, correction, open, pr_pass or apply; ""
+	// for every other entry. AppPass belongs to report, pass and pr_pass;
+	// AppRound and AppRounds to report (the round of MaxReviewRounds) and
+	// correction (the attempt of MaxCorrections); AppCount to report (the
+	// findings, -1 when unknown), correction (the problems) and apply (the
+	// approved findings).
+	AppKind   string `json:"appKind"`
+	AppPass   int    `json:"appPass"`
+	AppRound  int    `json:"appRound"`
+	AppRounds int    `json:"appRounds"`
+	AppCount  int    `json:"appCount"`
 }
 
 // AssistantEntry is one content block of an assistant message.
@@ -702,13 +720,14 @@ type MarkerEntry struct {
 	PreTokens int    `json:"preTokens"`
 	// Stage belongs to stage_started alone, Step to the markers of a step
 	// (step_started, step_review_started), Pass to the markers of a review
-	// (pr_review_written, step_review_written) and Clean to
-	// step_review_written alone; Restarted belongs to stage_started and
-	// step_started.
+	// (pr_review_written, step_review_written) with Clean; Findings belongs to
+	// step_review_written alone, -1 when unknown; Restarted belongs to
+	// stage_started and step_started.
 	Stage     string `json:"stage"`
 	Step      int    `json:"step"`
 	Pass      int    `json:"pass"`
 	Clean     bool   `json:"clean"`
+	Findings  int    `json:"findings"`
 	Restarted bool   `json:"restarted"`
 	// Percent belongs to compacted: how full the context was, 0 when unknown.
 	// Attempts and Reason (overloaded, rate_limit, server, connection or

@@ -7,7 +7,18 @@ describe("AppMessage", () => {
   it("shows what the app sent, and says it came from the app", () => {
     renderWithStore(
       <AppMessage
-        user={{ text: "The plan is not valid yet.", pending: false, prompt: false, app: true }}
+        user={{
+          text: "The plan is not valid yet.",
+          pending: false,
+          prompt: false,
+          app: true,
+          sent: "",
+          appKind: "",
+          appPass: 0,
+          appRound: 0,
+          appRounds: 0,
+          appCount: 0,
+        }}
       />,
     );
 

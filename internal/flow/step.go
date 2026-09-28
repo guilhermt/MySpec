@@ -794,7 +794,8 @@ func (s *Service) ApproveStep(ctx context.Context, id string) error {
 		return err
 	}
 	s.setNoCommit(id, false)
-	if err := s.sessions.SendFromApp(ctx, key, message); err != nil {
+	app := session.AppMessage{Text: message, Kind: session.AppCommit}
+	if err := s.sessions.SendFromApp(ctx, key, app); err != nil {
 		// The button stays where the user left it: the step is theirs again.
 		if _, setErr := s.tasks.SetStepRun(ctx, id, step.Number, task.StepStarted, nil); setErr != nil {
 			s.log.Error("record started step failed", "task", id, "step", step.Number, "error", setErr)

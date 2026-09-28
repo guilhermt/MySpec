@@ -812,7 +812,8 @@ type memSessions struct {
 	replies   map[session.Key]string // what the agent of a session said last
 	calls     []string
 	messages  []string
-	err       error // returned by every call that changes something
+	apps      []session.AppMessage // every message of the app, with its kind and numbers
+	err       error                // returned by every call that changes something
 }
 
 func newSessions() *memSessions {
@@ -1001,31 +1002,45 @@ func (m *memSessions) setReply(k session.Key, text string) {
 	m.replies[k] = text
 }
 
-func (m *memSessions) SendFromApp(_ context.Context, k session.Key, text string) error {
-	return m.send(k, text, false)
+func (m *memSessions) SendFromApp(_ context.Context, k session.Key, msg session.AppMessage) error {
+	return m.send(k, msg, false)
 }
 
-func (m *memSessions) SendCorrection(_ context.Context, k session.Key, text string) error {
-	return m.send(k, text, true)
+func (m *memSessions) SendCorrection(_ context.Context, k session.Key, msg session.AppMessage) error {
+	return m.send(k, msg, true)
 }
 
-func (m *memSessions) MarkPRReview(_ context.Context, k session.Key, pass int) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	m.calls = append(m.calls, "mark:"+k.TaskID+":"+k.Stage+":pass="+strconv.Itoa(pass))
-}
-
-func (m *memSessions) MarkStepReview(_ context.Context, k session.Key, pass int, clean bool) {
+func (m *memSessions) MarkPRReview(_ context.Context, k session.Key, pass int, clean bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	m.calls = append(m.calls,
-		"markStep:"+k.TaskID+":"+k.Stage+":pass="+strconv.Itoa(pass)+":clean="+strconv.FormatBool(clean))
+		"mark:"+k.TaskID+":"+k.Stage+":pass="+strconv.Itoa(pass)+":clean="+strconv.FormatBool(clean))
+}
+
+func (m *memSessions) MarkStepReview(_ context.Context, k session.Key, pass int, clean bool, findings int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.calls = append(m.calls, "markStep:"+k.TaskID+":"+k.Stage+":pass="+strconv.Itoa(pass)+
+		":clean="+strconv.FormatBool(clean)+":findings="+strconv.Itoa(findings))
+}
+
+// sentApps is the kind and the numbers of every message of the app, without
+// the text, which sent holds.
+func (m *memSessions) sentApps() []session.AppMessage {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	apps := slices.Clone(m.apps)
+	for i := range apps {
+		apps[i].Text = ""
+	}
+	return apps
 }
 
 // send records a message of the app, counting it as the service would.
-func (m *memSessions) send(k session.Key, text string, correction bool) error {
+func (m *memSessions) send(k session.Key, msg session.AppMessage, correction bool) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -1033,7 +1048,8 @@ func (m *memSessions) send(k session.Key, text string, correction bool) error {
 	if m.err != nil {
 		return m.err
 	}
-	m.messages = append(m.messages, text)
+	m.messages = append(m.messages, msg.Text)
+	m.apps = append(m.apps, msg)
 	sum := m.summaries[k]
 	if correction {
 		sum.Corrections++
@@ -1813,9 +1829,13 @@ func (f *fixture) waitReviewer(t *testing.T, id string, number int) {
 }
 
 // stepReport is the report of one pass of the agent review of a step, as the
-// disk holds it.
+// disk holds it: two findings when it asks for changes.
 func stepReport(number, pass int, clean bool) task.ReviewReport {
-	return task.ReviewReport{Pass: pass, File: task.StepReportFile(number, pass), Clean: clean}
+	findings := 2
+	if clean {
+		findings = 0
+	}
+	return task.ReviewReport{Pass: pass, File: task.StepReportFile(number, pass), Clean: clean, Findings: findings}
 }
 
 // stepState is the state of a step of a task, failing the test when the plan
