@@ -21,6 +21,8 @@ const (
 	describedFixture = "bash-description.jsonl"
 	exitFixture      = "bash-exit.jsonl"
 	subagentFixture  = "subagent.jsonl"
+	silentFixture    = "bash-silent.jsonl"
+	editErrorFixture = "edit-error.jsonl"
 )
 
 // loadFixture decodes every line of a captured session in testdata.
@@ -905,6 +907,36 @@ func TestDecodeBashExitCode(t *testing.T) {
 	var result string
 	if err := json.Unmarshal(users(events)[0].ToolUseResult, &result); err != nil || !strings.HasPrefix(result, "Error: Exit code 1") {
 		t.Errorf("tool_use_result = %s, want the error line", users(events)[0].ToolUseResult)
+	}
+}
+
+func TestDecodeBashWithoutOutput(t *testing.T) {
+	t.Parallel()
+	events := loadFixture(t, silentFixture)
+
+	got := toolResults(events)
+	if len(got) != 1 || got[0].IsError {
+		t.Fatalf("results = %+v, want one that passes", got)
+	}
+	if want := "(Bash completed with no output)"; got[0].Text() != want {
+		t.Errorf("Text() = %q, want %q", got[0].Text(), want)
+	}
+	var result struct{ Stdout, Stderr string }
+	if err := json.Unmarshal(users(events)[0].ToolUseResult, &result); err != nil || result.Stdout != "" || result.Stderr != "" {
+		t.Errorf("tool_use_result = %s, want empty stdout and stderr", users(events)[0].ToolUseResult)
+	}
+}
+
+func TestDecodeEditError(t *testing.T) {
+	t.Parallel()
+	events := loadFixture(t, editErrorFixture)
+
+	got := toolResults(events)
+	if len(got) != 2 || !got[1].IsError {
+		t.Fatalf("results = %+v, want the read and a failed edit", got)
+	}
+	if want := "<tool_use_error>String to replace not found in file.\nString: missing text</tool_use_error>"; got[1].Text() != want {
+		t.Errorf("Text() = %q, want %q", got[1].Text(), want)
 	}
 }
 

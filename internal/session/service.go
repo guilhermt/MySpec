@@ -27,6 +27,8 @@ type EntryRepository interface {
 	Update(ctx context.Context, e Entry) error
 	Delete(ctx context.Context, id string) error
 	MaxSeq(ctx context.Context, sessionID string) (int, error)
+	SaveOutput(ctx context.Context, entryID string, o Output) error
+	Output(ctx context.Context, entryID string) (Output, error) // ErrNotFound
 }
 
 // Process is the running CLI, as internal/claude provides it.
@@ -981,6 +983,27 @@ func (s *Service) closedTranscript(ctx context.Context, k Key) (Transcript, erro
 		entries = append(entries, e)
 	}
 	return Transcript{TaskID: k.TaskID, SessionID: rec.ID, Stage: rec.Stage, Entries: entries}, nil
+}
+
+// ActionOutput reads the whole output of an action of a session, open or
+// closed; ErrNotFound when the entry is not of that session or has no output.
+func (s *Service) ActionOutput(ctx context.Context, k Key, entryID string) (Output, error) {
+	s.mu.Lock()
+	r, open := s.runs[k]
+	found := open && r.byID[entryID] != nil
+	s.mu.Unlock()
+
+	if !open {
+		tr, err := s.closedTranscript(ctx, k)
+		if err != nil {
+			return Output{}, err
+		}
+		found = slices.ContainsFunc(tr.Entries, func(e Entry) bool { return e.ID == entryID })
+	}
+	if !found {
+		return Output{}, fmt.Errorf("output of entry %s: %w", entryID, ErrNotFound)
+	}
+	return s.entries.Output(ctx, entryID)
 }
 
 // Summary describes one session, false when it is not open.

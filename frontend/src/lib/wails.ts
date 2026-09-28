@@ -3,6 +3,7 @@ import * as BoardService from "@bindings/boardservice";
 import * as DiscussionService from "@bindings/discussionservice";
 import type {
   ActionEntry,
+  ActionOutput,
   ArchivedDiscussion,
   ArchivedPR,
   ArchivedReview,
@@ -104,6 +105,7 @@ import { Browser, Events } from "@wailsio/runtime";
 
 export type {
   ActionEntry,
+  ActionOutput,
   ArchivedDiscussion,
   ArchivedPR,
   ArchivedReview,
@@ -1205,6 +1207,8 @@ export const api = {
   previewDelete: (taskId: string): Promise<DeletePreview> => TaskService.PreviewDelete(taskId),
   getTranscript: (taskId: string, stage: string): Promise<Transcript> =>
     TaskService.GetTranscript(taskId, stage),
+  getActionOutput: (itemId: string, stage: string, entryId: string): Promise<ActionOutput> =>
+    TaskService.GetActionOutput(itemId, stage, entryId),
   sendMessage: (taskId: string, stage: string, text: string): Promise<void> =>
     TaskService.SendMessage(taskId, stage, text),
   removePending: (taskId: string, stage: string, entryId: string): Promise<void> =>

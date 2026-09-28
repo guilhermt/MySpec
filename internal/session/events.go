@@ -268,8 +268,13 @@ func (s *Service) handleUser(ctx context.Context, r *run, ev *claude.UserEvent, 
 	if r.turn == nil {
 		return
 	}
+	results := ev.ToolResults()
+	var useResult json.RawMessage
+	if len(results) == 1 {
+		useResult = ev.ToolUseResult
+	}
 	changed := false
-	for _, result := range ev.ToolResults() {
+	for _, result := range results {
 		e := r.turn.actions[result.ToolUseID]
 		if e == nil {
 			continue
@@ -281,6 +286,14 @@ func (s *Service) handleUser(ctx context.Context, r *run, ev *claude.UserEvent, 
 			if e.Action.Tool == "Bash" {
 				e.Action.ExitCode = exitCode(result.Text())
 			}
+		}
+		if o, ok := outputOf(e.Action, result, useResult); ok {
+			if err := s.entries.SaveOutput(ctx, e.ID, o); err != nil {
+				s.log.Error("save output failed", "task", r.task.ID, "entry", e.ID, "error", err)
+			}
+			e.Action.OutputLines = o.Lines
+			e.Action.OutputTail = tailOf(o)
+			e.Action.OutputTruncated = o.Truncated
 		}
 		s.updateLocked(ctx, r, e, n)
 		changed = true

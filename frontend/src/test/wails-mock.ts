@@ -1,6 +1,7 @@
 import { vi } from "vitest";
 import type {
   ActionEntry,
+  ActionOutput,
   ArchivedDiscussion,
   ArchivedReview,
   ArchivedTask,
@@ -124,6 +125,9 @@ export const api = {
   ),
   getTranscript: vi.fn<(taskId: string, stage: string) => Promise<Transcript>>((taskId, stage) =>
     Promise.resolve(makeTranscript({ taskId, stage })),
+  ),
+  getActionOutput: vi.fn<(itemId: string, stage: string, entryId: string) => Promise<ActionOutput>>(
+    () => Promise.resolve({ text: "", lines: 0, truncated: false }),
   ),
   sendMessage: vi.fn<(taskId: string, stage: string, text: string) => Promise<void>>(() =>
     Promise.resolve(),
@@ -1199,6 +1203,9 @@ export function makeAction(overrides: Partial<ActionEntry> = {}): ActionEntry {
     finishedAt: "",
     exitCode: -1,
     parentToolUseId: "",
+    outputLines: 0,
+    outputTail: "",
+    outputTruncated: false,
     ...overrides,
   };
 }
@@ -1259,6 +1266,9 @@ export function resetWailsMock(): void {
   api.readReviewArtifact.mockImplementation(() => Promise.resolve("## Findings\n"));
   api.getTranscript.mockImplementation((taskId, stage) =>
     Promise.resolve(makeTranscript({ taskId, stage })),
+  );
+  api.getActionOutput.mockImplementation(() =>
+    Promise.resolve({ text: "", lines: 0, truncated: false }),
   );
   api.getPrompt.mockImplementation((stage) => Promise.resolve(makePrompt({ stage })));
   api.savePrompt.mockImplementation((stage, text) =>

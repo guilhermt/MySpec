@@ -599,6 +599,21 @@ type ActionEntry struct {
 	// ParentToolUseID is the Agent/Task action of the subagent that made it;
 	// "" in the main thread.
 	ParentToolUseID string `json:"parentToolUseId"`
+	// OutputLines counts the lines of the whole output, 0 when it has none;
+	// GetActionOutput reads it.
+	OutputLines int `json:"outputLines"`
+	// OutputTail is the end of the output the conversation shows.
+	OutputTail string `json:"outputTail"`
+	// OutputTruncated says the whole output is only the end of a longer one.
+	OutputTruncated bool `json:"outputTruncated"`
+}
+
+// ActionOutput is the whole output of a tool call: ANSI stripped, at most its
+// last 64 KiB.
+type ActionOutput struct {
+	Text      string `json:"text"`
+	Lines     int    `json:"lines"`
+	Truncated bool   `json:"truncated"`
 }
 
 // PermissionEntry is a tool the agent asked to use. Input and Suggestions carry

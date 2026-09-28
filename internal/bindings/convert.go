@@ -713,6 +713,9 @@ func fromAction(a *session.ActionEntry) *ActionEntry {
 		CommandLines:    a.CommandLines,
 		ExitCode:        -1,
 		ParentToolUseID: a.ParentToolUseID,
+		OutputLines:     a.OutputLines,
+		OutputTail:      a.OutputTail,
+		OutputTruncated: a.OutputTruncated,
 	}
 	if a.StartedAt != nil {
 		converted.StartedAt = timeOrEmpty(*a.StartedAt)

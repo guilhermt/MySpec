@@ -164,8 +164,9 @@ type storedEntry struct {
 
 // memEntries is an in-memory session.EntryRepository.
 type memEntries struct {
-	mu    sync.Mutex
-	items []storedEntry
+	mu      sync.Mutex
+	items   []storedEntry
+	outputs map[string]session.Output
 }
 
 func (r *memEntries) List(_ context.Context, sessionID string) ([]session.Entry, error) {
@@ -246,6 +247,28 @@ func (r *memEntries) MaxSeq(_ context.Context, sessionID string) (int, error) {
 		}
 	}
 	return maxSeq, nil
+}
+
+func (r *memEntries) SaveOutput(_ context.Context, entryID string, o session.Output) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.outputs == nil {
+		r.outputs = map[string]session.Output{}
+	}
+	r.outputs[entryID] = o
+	return nil
+}
+
+func (r *memEntries) Output(_ context.Context, entryID string) (session.Output, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	o, ok := r.outputs[entryID]
+	if !ok {
+		return session.Output{}, fmt.Errorf("output of entry %s: %w", entryID, session.ErrNotFound)
+	}
+	return o, nil
 }
 
 // seed stores entries directly, bypassing the service.

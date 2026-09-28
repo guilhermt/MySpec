@@ -41,6 +41,32 @@ export interface ActionEntry {
      * "" in the main thread.
      */
     "parentToolUseId": string;
+
+    /**
+     * OutputLines counts the lines of the whole output, 0 when it has none;
+     * GetActionOutput reads it.
+     */
+    "outputLines": number;
+
+    /**
+     * OutputTail is the end of the output the conversation shows.
+     */
+    "outputTail": string;
+
+    /**
+     * OutputTruncated says the whole output is only the end of a longer one.
+     */
+    "outputTruncated": boolean;
+}
+
+/**
+ * ActionOutput is the whole output of a tool call: ANSI stripped, at most its
+ * last 64 KiB.
+ */
+export interface ActionOutput {
+    "text": string;
+    "lines": number;
+    "truncated": boolean;
 }
 
 /**

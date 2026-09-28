@@ -896,11 +896,13 @@ func TestFromEntryCarriesTheFieldsOfAnAction(t *testing.T) {
 				ToolUseID: "toolu_2", Tool: "Bash", Label: "Running", Target: "go test ./...",
 				Status: session.ActionError, Description: "Run the tests", CommandLines: 2,
 				StartedAt: &started, FinishedAt: &finished, ExitCode: new(2), ParentToolUseID: "toolu_1",
+				OutputLines: 40, OutputTail: "FAIL", OutputTruncated: true,
 			},
 			want: &bindings.ActionEntry{
 				ToolUseID: "toolu_2", Tool: "Bash", Label: "Running", Target: "go test ./...",
 				Status: "error", Description: "Run the tests", CommandLines: 2,
 				StartedAt: "2026-09-06T12:00:00Z", FinishedAt: "2026-09-06T12:00:03Z", ExitCode: 2, ParentToolUseID: "toolu_1",
+				OutputLines: 40, OutputTail: "FAIL", OutputTruncated: true,
 			},
 		},
 		"an old transcript": {

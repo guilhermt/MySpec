@@ -129,6 +129,14 @@ export function DiscardStep(taskID: string, cleanWorktree: boolean): $Cancellabl
 }
 
 /**
+ * GetActionOutput returns the whole output of an action of one session of an
+ * item, named by its stage, open or closed.
+ */
+export function GetActionOutput(taskID: string, stage: string, entryID: string): $CancellablePromise<$models.ActionOutput> {
+    return $Call.ByID(10474781, taskID, stage, entryID);
+}
+
+/**
  * GetTranscript returns the whole conversation of one session of an item,
  * named by its stage. It is how the frontend gets its first one; every later
  * change arrives with EventTranscriptChanged.

@@ -95,6 +95,13 @@ type ActionEntry struct {
 	// ParentToolUseID is the Agent/Task action of the subagent that made it;
 	// "" in the main thread.
 	ParentToolUseID string `json:"parentToolUseId"`
+	// OutputLines counts the lines of the whole output; 0 when it has none.
+	// The whole output is kept apart (Output), the payload carries its tail.
+	OutputLines int `json:"outputLines"`
+	// OutputTail is the end of the output the conversation shows.
+	OutputTail string `json:"outputTail"`
+	// OutputTruncated says the output kept is only the end of a longer one.
+	OutputTruncated bool `json:"outputTruncated"`
 }
 
 // PermissionStatus is how a permission request or a question was answered.

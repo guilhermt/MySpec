@@ -198,9 +198,57 @@ func TestFailedBashKeepsItsExitCode(t *testing.T) {
 		StartedAt:    &base,
 		FinishedAt:   &base,
 		ExitCode:     new(2),
+		OutputLines:  1,
+		OutputTail:   "--- FAIL: TestX",
 	}
 	if diff := cmp.Diff(want, action); diff != "" {
 		t.Errorf("action mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestActionOutputReadsTheWholeOutputOpenAndClosed(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "subagent")
+	f.start(t, taskInfo(t, "t1"))
+	f.waitIdle(t, prd("t1"))
+
+	actions := map[string]*session.Entry{}
+	for _, e := range f.transcript(t, prd("t1")).Entries {
+		if e.Kind == session.KindAction {
+			actions[e.Action.Tool] = &e
+		}
+	}
+	agent, read := actions["Agent"], actions["Read"]
+	if agent == nil || read == nil {
+		t.Fatalf("actions = %v, want the Agent and the Read", actions)
+	}
+	if agent.Action.OutputLines != 1 || agent.Action.OutputTail != claudetest.SubagentReport {
+		t.Errorf("Agent output = %d lines, tail %q, want the report", agent.Action.OutputLines, agent.Action.OutputTail)
+	}
+
+	want := session.Output{Text: claudetest.SubagentReport, Lines: 1}
+	read1 := func(label string) {
+		t.Helper()
+		got, err := f.service.ActionOutput(t.Context(), prd("t1"), agent.ID)
+		if err != nil {
+			t.Fatalf("ActionOutput() %s = %v, want nil", label, err)
+		}
+		if diff := cmp.Diff(want, got); diff != "" {
+			t.Errorf("ActionOutput() %s mismatch (-want +got):\n%s", label, diff)
+		}
+		if _, err := f.service.ActionOutput(t.Context(), prd("t1"), read.ID); !errors.Is(err, session.ErrNotFound) {
+			t.Errorf("ActionOutput() of a read %s = %v, want session.ErrNotFound", label, err)
+		}
+	}
+	read1("while open")
+	if err := f.service.Close(t.Context(), prd("t1")); err != nil {
+		t.Fatalf("Close() = %v, want nil", err)
+	}
+	read1("once closed")
+
+	if _, err := f.service.ActionOutput(t.Context(), session.Key{TaskID: "t1", Stage: "tech_spec"}, agent.ID); !errors.Is(err, session.ErrNotFound) {
+		t.Errorf("ActionOutput() from another session = %v, want session.ErrNotFound", err)
 	}
 }
 
