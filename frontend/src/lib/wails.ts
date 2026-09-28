@@ -334,7 +334,12 @@ export type MarkerType =
   | "stage_started"
   | "step_started"
   | "compacted"
-  | "interrupted";
+  | "interrupted"
+  | "retried";
+/** InterruptedBy is who cut a text, an action or a turn short; "" when nobody did. */
+export type InterruptedBy = "" | "user" | "crash";
+/** RetryReason is why an API call the CLI retries failed; "" without a retry. */
+export type RetryReason = "" | "overloaded" | "rate_limit" | "server" | "connection" | "other";
 export type ErrorKind =
   | "process_exit"
   | "start_failed"
@@ -797,9 +802,33 @@ export function asMarkerType(value: string): MarkerType {
     case "step_started":
     case "compacted":
     case "interrupted":
+    case "retried":
       return value;
     default:
       return "compacted";
+  }
+}
+
+export function asInterruptedBy(value: string): InterruptedBy {
+  switch (value) {
+    case "user":
+    case "crash":
+      return value;
+    default:
+      return "";
+  }
+}
+
+export function asRetryReason(value: string): RetryReason {
+  switch (value) {
+    case "":
+    case "overloaded":
+    case "rate_limit":
+    case "server":
+    case "connection":
+      return value;
+    default:
+      return "other";
   }
 }
 

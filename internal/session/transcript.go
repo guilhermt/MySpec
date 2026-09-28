@@ -59,6 +59,9 @@ type AssistantEntry struct {
 	// ParentToolUseID is the Agent/Task action of the subagent that wrote it;
 	// "" in the main thread.
 	ParentToolUseID string `json:"parentToolUseId"`
+	// InterruptedBy is who cut the text short: "user" or "crash"; "" when it
+	// was not.
+	InterruptedBy string `json:"interruptedBy"`
 }
 
 // ActionStatus is how far a tool call has gone.
@@ -102,6 +105,9 @@ type ActionEntry struct {
 	OutputTail string `json:"outputTail"`
 	// OutputTruncated says the output kept is only the end of a longer one.
 	OutputTruncated bool `json:"outputTruncated"`
+	// InterruptedBy is who stopped the action, interrupted only: "user" or
+	// "crash".
+	InterruptedBy string `json:"interruptedBy"`
 }
 
 // PermissionStatus is how a permission request or a question was answered.
@@ -155,6 +161,9 @@ type QuestionEntry struct {
 	Questions []Question        `json:"questions"`
 	Answers   map[string]string `json:"answers"` // question text -> label(s); nil while pending
 	Status    PermissionStatus  `json:"status"`  // pending | allowed (answered) | cancelled
+	// AnsweredAt is when the answer went to the CLI; nil while pending, when
+	// cancelled and in old transcripts.
+	AnsweredAt *time.Time `json:"answeredAt"`
 }
 
 // MarkerType is the event a marker records.
@@ -179,6 +188,7 @@ const (
 	MarkerStepStarted       MarkerType = "step_started"
 	MarkerCompacted         MarkerType = "compacted"
 	MarkerInterrupted       MarkerType = "interrupted"
+	MarkerRetried           MarkerType = "retried"
 )
 
 // ArtifactKind is the artifact a marker refers to. The values are the ones of
@@ -230,6 +240,15 @@ type MarkerEntry struct {
 	Pass      int        `json:"pass"`      // pr_review_written and step_review_written only: the pass it closed
 	Clean     bool       `json:"clean"`     // step_review_written only: the pass found nothing to change
 	Restarted bool       `json:"restarted"` // stage_started and step_started only: it was started again
+	// Percent is how full the context was, compacted only; 0 when the window
+	// is unknown.
+	Percent int `json:"percent"`
+	// Attempts and Reason are the retries of the API call, retried only.
+	// Reason is one of the codes of retryReasonOf.
+	Attempts int    `json:"attempts"`
+	Reason   string `json:"reason"`
+	// InterruptedBy is who interrupted the turn, interrupted only: "user".
+	InterruptedBy string `json:"interruptedBy"`
 }
 
 // ErrorKind says what went wrong.

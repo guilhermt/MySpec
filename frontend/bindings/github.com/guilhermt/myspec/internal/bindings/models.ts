@@ -57,6 +57,12 @@ export interface ActionEntry {
      * OutputTruncated says the whole output is only the end of a longer one.
      */
     "outputTruncated": boolean;
+
+    /**
+     * InterruptedBy is user or crash when the status is interrupted, ""
+     * otherwise.
+     */
+    "interruptedBy": string;
 }
 
 /**
@@ -226,6 +232,11 @@ export interface AssistantEntry {
      * "" in the main thread.
      */
     "parentToolUseId": string;
+
+    /**
+     * InterruptedBy is user or crash when the text was cut short, "" otherwise.
+     */
+    "interruptedBy": string;
 }
 
 /**
@@ -830,6 +841,20 @@ export interface DiscussionSummary {
     "retryAttempt": number;
 
     /**
+     * RetryMax, RetryAt (RFC 3339) and RetryReason (overloaded, rate_limit,
+     * server, connection or other) go with RetryAttempt; zero without a retry.
+     */
+    "retryMax": number;
+    "retryAt": string;
+    "retryReason": string;
+
+    /**
+     * TurnFailed says the last turn ended in an error the CLI survived; the
+     * session is at rest all the same.
+     */
+    "turnFailed": boolean;
+
+    /**
      * TurnStartedAt is when the turn in progress started, RFC 3339; "" without
      * a turn.
      */
@@ -1139,7 +1164,7 @@ export interface MarkerEntry {
      * plan_written, plan_updated, one_shot_written, one_shot_updated,
      * pr_review_written, step_review_started, step_review_written,
      * review_started, discussion_started, stage_started, step_started,
-     * compacted or interrupted.
+     * compacted, interrupted or retried.
      */
     "type": string;
     "preTokens": number;
@@ -1156,6 +1181,16 @@ export interface MarkerEntry {
     "pass": number;
     "clean": boolean;
     "restarted": boolean;
+
+    /**
+     * Percent belongs to compacted: how full the context was, 0 when unknown.
+     * Attempts and Reason (overloaded, rate_limit, server, connection or
+     * other) belong to retried; InterruptedBy (user) to interrupted.
+     */
+    "percent": number;
+    "attempts": number;
+    "reason": string;
+    "interruptedBy": string;
 }
 
 /**
@@ -1556,6 +1591,20 @@ export interface PullRequest {
     "retryAttempt": number;
 
     /**
+     * RetryMax, RetryAt (RFC 3339) and RetryReason (overloaded, rate_limit,
+     * server, connection or other) go with RetryAttempt; zero without a retry.
+     */
+    "retryMax": number;
+    "retryAt": string;
+    "retryReason": string;
+
+    /**
+     * TurnFailed says the last turn ended in an error the CLI survived; the
+     * session is at rest all the same.
+     */
+    "turnFailed": boolean;
+
+    /**
      * TurnStartedAt is when the turn in progress started, RFC 3339; "" without
      * a turn.
      */
@@ -1698,6 +1747,11 @@ export interface QuestionEntry {
      * Status is pending, allowed or cancelled.
      */
     "status": string;
+
+    /**
+     * RFC 3339; "" while pending, when cancelled or unknown
+     */
+    "answeredAt": string;
 }
 
 /**
@@ -2100,6 +2154,20 @@ export interface ReviewSummary {
     "turnRunning": boolean;
     "processRunning": boolean;
     "retryAttempt": number;
+
+    /**
+     * RetryMax, RetryAt (RFC 3339) and RetryReason (overloaded, rate_limit,
+     * server, connection or other) go with RetryAttempt; zero without a retry.
+     */
+    "retryMax": number;
+    "retryAt": string;
+    "retryReason": string;
+
+    /**
+     * TurnFailed says the last turn ended in an error the CLI survived; the
+     * session is at rest all the same.
+     */
+    "turnFailed": boolean;
 
     /**
      * TurnStartedAt is when the turn in progress started, RFC 3339; "" without
@@ -2545,6 +2613,20 @@ export interface StepReviewer {
     "retryAttempt": number;
 
     /**
+     * RetryMax, RetryAt (RFC 3339) and RetryReason (overloaded, rate_limit,
+     * server, connection or other) go with RetryAttempt; zero without a retry.
+     */
+    "retryMax": number;
+    "retryAt": string;
+    "retryReason": string;
+
+    /**
+     * TurnFailed says the last turn ended in an error the CLI survived; the
+     * session is at rest all the same.
+     */
+    "turnFailed": boolean;
+
+    /**
      * TurnStartedAt is when the turn in progress started, RFC 3339; "" without
      * a turn.
      */
@@ -2686,6 +2768,20 @@ export interface TaskSummary {
     "turnRunning": boolean;
     "processRunning": boolean;
     "retryAttempt": number;
+
+    /**
+     * RetryMax, RetryAt (RFC 3339) and RetryReason (overloaded, rate_limit,
+     * server, connection or other) go with RetryAttempt; zero without a retry.
+     */
+    "retryMax": number;
+    "retryAt": string;
+    "retryReason": string;
+
+    /**
+     * TurnFailed says the last turn ended in an error the CLI survived; the
+     * session is at rest all the same.
+     */
+    "turnFailed": boolean;
 
     /**
      * TurnStartedAt is when the turn in progress started, RFC 3339; "" without

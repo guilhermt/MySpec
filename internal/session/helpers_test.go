@@ -308,6 +308,7 @@ type fakeLauncher struct {
 	locateErr    error
 	preflightErr error
 	starts       []claude.Config
+	procs        []session.Process
 }
 
 func (l *fakeLauncher) Locate() (string, error) {
@@ -341,7 +342,22 @@ func (l *fakeLauncher) Start(ctx context.Context, cfg claude.Config) (session.Pr
 	if err != nil {
 		return nil, err
 	}
+	l.mu.Lock()
+	l.procs = append(l.procs, p)
+	l.mu.Unlock()
 	return p, nil
+}
+
+// kill kills the last process started, the way a crash ends it.
+func (l *fakeLauncher) kill(t *testing.T) {
+	t.Helper()
+
+	l.mu.Lock()
+	p := l.procs[len(l.procs)-1]
+	l.mu.Unlock()
+	if err := p.Kill(); err != nil {
+		t.Fatalf("Kill() = %v, want nil", err)
+	}
 }
 
 // fix clears the failures so the next start succeeds.
@@ -368,10 +384,11 @@ type fixture struct {
 	entries  *memEntries
 	launcher *fakeLauncher
 
-	mu     sync.Mutex
-	now    time.Time
-	states []session.Key
-	events []session.TranscriptEvent
+	mu      sync.Mutex
+	now     time.Time
+	states  []session.Key
+	retries []session.Summary // the summaries reported while an api_retry was pending
+	events  []session.TranscriptEvent
 }
 
 // prd is the session key of a task in the PRD stage, which is where most of
@@ -480,10 +497,23 @@ func newGatedFixture(t *testing.T) (*fixture, func(gates ...string)) {
 }
 
 func (f *fixture) onState(k session.Key) {
+	sum, _ := f.service.Summary(k)
+
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
 	f.states = append(f.states, k)
+	if sum.RetryAttempt > 0 {
+		f.retries = append(f.retries, sum)
+	}
+}
+
+// retrySummaries returns the summaries reported while an api_retry was pending.
+func (f *fixture) retrySummaries() []session.Summary {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	return slices.Clone(f.retries)
 }
 
 func (f *fixture) onTranscript(ev session.TranscriptEvent) {

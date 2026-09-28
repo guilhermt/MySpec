@@ -12,6 +12,7 @@ function assistant(overrides: Partial<AssistantEntry> = {}): AssistantEntry {
     complete: true,
     interrupted: false,
     parentToolUseId: "",
+    interruptedBy: "",
     ...overrides,
   };
 }

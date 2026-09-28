@@ -224,6 +224,10 @@ func FromTasks(
 			TurnRunning:        summary.TurnRunning,
 			ProcessRunning:     summary.ProcessRunning,
 			RetryAttempt:       summary.RetryAttempt,
+			RetryMax:           summary.RetryMax,
+			RetryAt:            timeOrEmpty(summary.RetryAt),
+			RetryReason:        summary.RetryReason,
+			TurnFailed:         summary.TurnFailed,
 			TurnStartedAt:      turnStart(summary),
 			PausedAt:           pausedAt(summary),
 			ActionLabel:        summary.ActionLabel,
@@ -325,6 +329,10 @@ func fromPullRequest(pr *flow.PullRequest) *PullRequest {
 		TurnRunning:    summary.TurnRunning,
 		ProcessRunning: summary.ProcessRunning,
 		RetryAttempt:   summary.RetryAttempt,
+		RetryMax:       summary.RetryMax,
+		RetryAt:        timeOrEmpty(summary.RetryAt),
+		RetryReason:    summary.RetryReason,
+		TurnFailed:     summary.TurnFailed,
 		TurnStartedAt:  turnStart(summary),
 		PausedAt:       pausedAt(summary),
 		ActionLabel:    summary.ActionLabel,
@@ -571,6 +579,10 @@ func fromStepReviewer(stage string, summary session.Summary) *StepReviewer {
 		TurnRunning:    summary.TurnRunning,
 		ProcessRunning: summary.ProcessRunning,
 		RetryAttempt:   summary.RetryAttempt,
+		RetryMax:       summary.RetryMax,
+		RetryAt:        timeOrEmpty(summary.RetryAt),
+		RetryReason:    summary.RetryReason,
+		TurnFailed:     summary.TurnFailed,
 		TurnStartedAt:  turnStart(summary),
 		PausedAt:       pausedAt(summary),
 		ActionLabel:    summary.ActionLabel,
@@ -716,6 +728,7 @@ func fromAction(a *session.ActionEntry) *ActionEntry {
 		OutputLines:     a.OutputLines,
 		OutputTail:      a.OutputTail,
 		OutputTruncated: a.OutputTruncated,
+		InterruptedBy:   a.InterruptedBy,
 	}
 	if a.StartedAt != nil {
 		converted.StartedAt = timeOrEmpty(*a.StartedAt)
@@ -753,6 +766,7 @@ func FromEntry(e session.Entry) Entry {
 			Text:            e.Assistant.Text,
 			Complete:        e.Assistant.Complete,
 			Interrupted:     e.Assistant.Interrupted,
+			InterruptedBy:   e.Assistant.InterruptedBy,
 			ParentToolUseID: e.Assistant.ParentToolUseID,
 		}
 	}
@@ -767,13 +781,17 @@ func FromEntry(e session.Entry) Entry {
 	}
 	if e.Marker != nil {
 		converted.Marker = &MarkerEntry{
-			Type:      string(e.Marker.Type),
-			PreTokens: e.Marker.PreTokens,
-			Stage:     e.Marker.Stage,
-			Step:      e.Marker.Step,
-			Pass:      e.Marker.Pass,
-			Clean:     e.Marker.Clean,
-			Restarted: e.Marker.Restarted,
+			Type:          string(e.Marker.Type),
+			PreTokens:     e.Marker.PreTokens,
+			Stage:         e.Marker.Stage,
+			Step:          e.Marker.Step,
+			Pass:          e.Marker.Pass,
+			Clean:         e.Marker.Clean,
+			Restarted:     e.Marker.Restarted,
+			Percent:       e.Marker.Percent,
+			Attempts:      e.Marker.Attempts,
+			Reason:        e.Marker.Reason,
+			InterruptedBy: e.Marker.InterruptedBy,
 		}
 	}
 	if e.Error != nil {
@@ -826,12 +844,17 @@ func fromQuestion(q *session.QuestionEntry) *QuestionEntry {
 			MultiSelect: question.MultiSelect,
 		}
 	}
+	answeredAt := ""
+	if q.AnsweredAt != nil {
+		answeredAt = timeOrEmpty(*q.AnsweredAt)
+	}
 	return &QuestionEntry{
-		RequestID: q.RequestID,
-		ToolUseID: q.ToolUseID,
-		Questions: questions,
-		Answers:   q.Answers,
-		Status:    string(q.Status),
+		RequestID:  q.RequestID,
+		ToolUseID:  q.ToolUseID,
+		Questions:  questions,
+		Answers:    q.Answers,
+		Status:     string(q.Status),
+		AnsweredAt: answeredAt,
 	}
 }
 
@@ -1458,6 +1481,10 @@ func FromReviews(
 			TurnRunning:    summary.TurnRunning,
 			ProcessRunning: summary.ProcessRunning,
 			RetryAttempt:   summary.RetryAttempt,
+			RetryMax:       summary.RetryMax,
+			RetryAt:        timeOrEmpty(summary.RetryAt),
+			RetryReason:    summary.RetryReason,
+			TurnFailed:     summary.TurnFailed,
 			TurnStartedAt:  turnStart(summary),
 			PausedAt:       pausedAt(summary),
 			ActionLabel:    summary.ActionLabel,
@@ -1685,6 +1712,10 @@ func FromDiscussions(
 			TurnRunning:    summary.TurnRunning,
 			ProcessRunning: summary.ProcessRunning,
 			RetryAttempt:   summary.RetryAttempt,
+			RetryMax:       summary.RetryMax,
+			RetryAt:        timeOrEmpty(summary.RetryAt),
+			RetryReason:    summary.RetryReason,
+			TurnFailed:     summary.TurnFailed,
 			TurnStartedAt:  turnStart(summary),
 			PausedAt:       pausedAt(summary),
 			ActionLabel:    summary.ActionLabel,

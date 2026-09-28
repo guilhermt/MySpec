@@ -922,6 +922,77 @@ func TestFromEntryCarriesTheFieldsOfAnAction(t *testing.T) {
 	}
 }
 
+func TestFromEntryCarriesWhoInterrupted(t *testing.T) {
+	t.Parallel()
+
+	text := bindings.FromEntry(session.Entry{
+		Kind:      session.KindAssistant,
+		Assistant: &session.AssistantEntry{Text: "half", Complete: true, Interrupted: true, InterruptedBy: "crash"},
+	})
+	if got := text.Assistant.InterruptedBy; got != "crash" {
+		t.Errorf("assistant InterruptedBy = %q, want crash", got)
+	}
+	action := bindings.FromEntry(session.Entry{
+		Kind:   session.KindAction,
+		Action: &session.ActionEntry{Tool: "Read", Status: session.ActionInterrupted, InterruptedBy: "user"},
+	})
+	if got := action.Action.InterruptedBy; got != "user" {
+		t.Errorf("action InterruptedBy = %q, want user", got)
+	}
+}
+
+func TestFromEntryCarriesTheNewMarkerFields(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]struct {
+		marker *session.MarkerEntry
+		want   *bindings.MarkerEntry
+	}{
+		"compacted": {
+			marker: &session.MarkerEntry{Type: session.MarkerCompacted, PreTokens: 150000, Percent: 75},
+			want:   &bindings.MarkerEntry{Type: "compacted", PreTokens: 150000, Percent: 75},
+		},
+		"retried": {
+			marker: &session.MarkerEntry{Type: session.MarkerRetried, Attempts: 2, Reason: "rate_limit"},
+			want:   &bindings.MarkerEntry{Type: "retried", Attempts: 2, Reason: "rate_limit"},
+		},
+		"interrupted": {
+			marker: &session.MarkerEntry{Type: session.MarkerInterrupted, InterruptedBy: "user"},
+			want:   &bindings.MarkerEntry{Type: "interrupted", InterruptedBy: "user"},
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			got := bindings.FromEntry(session.Entry{Kind: session.KindMarker, Marker: tc.marker})
+			if diff := cmp.Diff(tc.want, got.Marker); diff != "" {
+				t.Errorf("marker mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestFromEntryCarriesWhenAQuestionWasAnswered(t *testing.T) {
+	t.Parallel()
+
+	answeredAt := time.Date(2026, time.September, 6, 12, 0, 0, 0, time.UTC)
+	answered := bindings.FromEntry(session.Entry{
+		Kind:     session.KindQuestion,
+		Question: &session.QuestionEntry{Status: session.PermissionAllowed, AnsweredAt: &answeredAt},
+	})
+	if got := answered.Question.AnsweredAt; got != "2026-09-06T12:00:00Z" {
+		t.Errorf("AnsweredAt = %q, want 2026-09-06T12:00:00Z", got)
+	}
+	pending := bindings.FromEntry(session.Entry{
+		Kind:     session.KindQuestion,
+		Question: &session.QuestionEntry{Status: session.PermissionPending},
+	})
+	if got := pending.Question.AnsweredAt; got != "" {
+		t.Errorf("AnsweredAt = %q, want empty while pending", got)
+	}
+}
+
 func TestFromEntryCarriesTheSubagentOfAText(t *testing.T) {
 	t.Parallel()
 
@@ -2742,6 +2813,9 @@ func TestFromReviewsCarriesWhatWentWrongWithThePullRequestSinceItsLastPass(t *te
 // sessionBlock is the part of a session block that tells the turn in progress.
 type sessionBlock struct {
 	TurnStartedAt, ActionLabel, ActionTarget string
+	RetryMax                                 int
+	RetryAt, RetryReason                     string
+	TurnFailed                               bool
 }
 
 func TestEverySessionBlockCarriesTheTurnInProgressAndItsAction(t *testing.T) {
@@ -2751,6 +2825,8 @@ func TestEverySessionBlockCarriesTheTurnInProgressAndItsAction(t *testing.T) {
 	busy := session.Summary{
 		Status: session.StatusWorking, TurnRunning: true, TurnStartedAt: startedAt,
 		ActionLabel: "Reading", ActionTarget: "internal/app/state.go",
+		RetryAttempt: 3, RetryMax: 10, RetryAt: startedAt.Add(8 * time.Second), RetryReason: "overloaded",
+		TurnFailed: true,
 	}
 	idle := session.Summary{Status: session.StatusWaiting, Idle: true}
 
@@ -2767,7 +2843,7 @@ func TestEverySessionBlockCarriesTheTurnInProgressAndItsAction(t *testing.T) {
 				map[session.Key]session.Summary{{TaskID: "task-1", Stage: string(task.StagePRD)}: summary},
 				nil,
 			)[0]
-			return sessionBlock{got.TurnStartedAt, got.ActionLabel, got.ActionTarget}
+			return sessionBlock{got.TurnStartedAt, got.ActionLabel, got.ActionTarget, got.RetryMax, got.RetryAt, got.RetryReason, got.TurnFailed}
 		},
 		"step reviewer": func(summary session.Summary) sessionBlock {
 			got := stepsOf(t, []flow.StepState{{
@@ -2775,7 +2851,7 @@ func TestEverySessionBlockCarriesTheTurnInProgressAndItsAction(t *testing.T) {
 				Status: flow.StepAgentReview, ReviewMode: reviewmode.Agent,
 				ReviewerStage: "step_review:1", Reviewer: summary,
 			}})[0].Reviewer
-			return sessionBlock{got.TurnStartedAt, got.ActionLabel, got.ActionTarget}
+			return sessionBlock{got.TurnStartedAt, got.ActionLabel, got.ActionTarget, got.RetryMax, got.RetryAt, got.RetryReason, got.TurnFailed}
 		},
 		"pull request": func(summary session.Summary) sessionBlock {
 			pr := flow.PullRequest{Status: flow.PRDone, SessionStage: "pr", Session: summary}
@@ -2790,19 +2866,19 @@ func TestEverySessionBlockCarriesTheTurnInProgressAndItsAction(t *testing.T) {
 				nil,
 				nil,
 			)[0].PR
-			return sessionBlock{got.TurnStartedAt, got.ActionLabel, got.ActionTarget}
+			return sessionBlock{got.TurnStartedAt, got.ActionLabel, got.ActionTarget, got.RetryMax, got.RetryAt, got.RetryReason, got.TurnFailed}
 		},
 		"review": func(summary session.Summary) sessionBlock {
 			state := reviewState(reviewflow.StatusReviewing, recordedPass(1, ""))
 			state.Session = summary
 			got := bindings.FromReviews([]reviewflow.State{state}, nil, reviewRepos)[0]
-			return sessionBlock{got.TurnStartedAt, got.ActionLabel, got.ActionTarget}
+			return sessionBlock{got.TurnStartedAt, got.ActionLabel, got.ActionTarget, got.RetryMax, got.RetryAt, got.RetryReason, got.TurnFailed}
 		},
 		"discussion": func(summary session.Summary) sessionBlock {
 			state := discussionState(discussionflow.StatusPublishFailed)
 			state.Session = summary
 			got := convertDiscussion(state, nil, true, nil)
-			return sessionBlock{got.TurnStartedAt, got.ActionLabel, got.ActionTarget}
+			return sessionBlock{got.TurnStartedAt, got.ActionLabel, got.ActionTarget, got.RetryMax, got.RetryAt, got.RetryReason, got.TurnFailed}
 		},
 	}
 
@@ -2810,7 +2886,10 @@ func TestEverySessionBlockCarriesTheTurnInProgressAndItsAction(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			want := sessionBlock{"2026-09-26T14:05:00Z", "Reading", "internal/app/state.go"}
+			want := sessionBlock{
+				"2026-09-26T14:05:00Z", "Reading", "internal/app/state.go",
+				10, "2026-09-26T14:05:08Z", "overloaded", true,
+			}
 			if got := block(busy); got != want {
 				t.Errorf("in a turn = %+v, want %+v", got, want)
 			}

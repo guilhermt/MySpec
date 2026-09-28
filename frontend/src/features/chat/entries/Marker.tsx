@@ -13,7 +13,8 @@ import {
 import { asLifecycleStage, stageLabel } from "@/lib/stages";
 import { asMarkerType, type MarkerEntry, type MarkerType } from "@/lib/wails";
 
-const MARKERS: Record<MarkerType, { icon: LucideIcon; text: string }> = {
+// The markers drawn today; a type left out (retried) draws nothing.
+const MARKERS: Partial<Record<MarkerType, { icon: LucideIcon; text: string }>> = {
   prd_written: { icon: FileCheck, text: "PRD written" },
   prd_updated: { icon: FileText, text: "PRD updated" },
   tech_spec_written: { icon: FileCheck, text: "Tech spec written" },
@@ -55,8 +56,12 @@ function stepMarker(marker: MarkerEntry): { icon: LucideIcon; text: string } {
 
 // A stage, a step and a review marker read from the marker itself; the rest are
 // fixed.
-function markerOf(type: MarkerType, marker: MarkerEntry): { icon: LucideIcon; text: string } {
-  const { icon } = MARKERS[type];
+function markerOf(
+  type: MarkerType,
+  marker: MarkerEntry,
+  fixed: { icon: LucideIcon; text: string },
+): { icon: LucideIcon; text: string } {
+  const { icon } = fixed;
   switch (type) {
     case "stage_started":
       return stageMarker(marker);
@@ -72,7 +77,7 @@ function markerOf(type: MarkerType, marker: MarkerEntry): { icon: LucideIcon; te
         text: `Review ${marker.pass} written · ${marker.clean ? "clean" : "changes"}`,
       };
     default:
-      return MARKERS[type];
+      return fixed;
   }
 }
 
@@ -91,7 +96,11 @@ export interface MarkerProps {
 /** Marker is a milestone of the conversation, drawn as a rule across it. */
 export function Marker({ marker, createdAt }: MarkerProps) {
   const type = asMarkerType(marker.type);
-  const { icon: Icon, text } = markerOf(type, marker);
+  const fixed = MARKERS[type];
+  if (type !== marker.type || fixed === undefined) {
+    return null;
+  }
+  const { icon: Icon, text } = markerOf(type, marker, fixed);
   const time = timeOf(createdAt);
 
   return (

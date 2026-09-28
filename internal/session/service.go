@@ -778,8 +778,10 @@ func (s *Service) AnswerQuestion(ctx context.Context, k Key, requestID string, a
 		return fmt.Errorf("answer question %s: %w", requestID, err)
 	}
 
+	answeredAt := s.now().UTC()
 	q.Answers = answers
 	q.Status = PermissionAllowed
+	q.AnsweredAt = &answeredAt
 	s.answered(ctx, r, e, n)
 	return nil
 }

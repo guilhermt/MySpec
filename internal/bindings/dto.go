@@ -205,6 +205,14 @@ type StepReviewer struct {
 	TurnRunning    bool   `json:"turnRunning"`
 	ProcessRunning bool   `json:"processRunning"`
 	RetryAttempt   int    `json:"retryAttempt"`
+	// RetryMax, RetryAt (RFC 3339) and RetryReason (overloaded, rate_limit,
+	// server, connection or other) go with RetryAttempt; zero without a retry.
+	RetryMax    int    `json:"retryMax"`
+	RetryAt     string `json:"retryAt"`
+	RetryReason string `json:"retryReason"`
+	// TurnFailed says the last turn ended in an error the CLI survived; the
+	// session is at rest all the same.
+	TurnFailed bool `json:"turnFailed"`
 	// TurnStartedAt is when the turn in progress started, RFC 3339; "" without
 	// a turn.
 	TurnStartedAt string `json:"turnStartedAt"`
@@ -316,6 +324,14 @@ type PullRequest struct {
 	TurnRunning    bool   `json:"turnRunning"`
 	ProcessRunning bool   `json:"processRunning"`
 	RetryAttempt   int    `json:"retryAttempt"`
+	// RetryMax, RetryAt (RFC 3339) and RetryReason (overloaded, rate_limit,
+	// server, connection or other) go with RetryAttempt; zero without a retry.
+	RetryMax    int    `json:"retryMax"`
+	RetryAt     string `json:"retryAt"`
+	RetryReason string `json:"retryReason"`
+	// TurnFailed says the last turn ended in an error the CLI survived; the
+	// session is at rest all the same.
+	TurnFailed bool `json:"turnFailed"`
 	// TurnStartedAt is when the turn in progress started, RFC 3339; "" without
 	// a turn.
 	TurnStartedAt string `json:"turnStartedAt"`
@@ -436,6 +452,14 @@ type TaskSummary struct {
 	TurnRunning    bool   `json:"turnRunning"`
 	ProcessRunning bool   `json:"processRunning"`
 	RetryAttempt   int    `json:"retryAttempt"`
+	// RetryMax, RetryAt (RFC 3339) and RetryReason (overloaded, rate_limit,
+	// server, connection or other) go with RetryAttempt; zero without a retry.
+	RetryMax    int    `json:"retryMax"`
+	RetryAt     string `json:"retryAt"`
+	RetryReason string `json:"retryReason"`
+	// TurnFailed says the last turn ended in an error the CLI survived; the
+	// session is at rest all the same.
+	TurnFailed bool `json:"turnFailed"`
 	// TurnStartedAt is when the turn in progress started, RFC 3339; "" without
 	// a turn.
 	TurnStartedAt string `json:"turnStartedAt"`
@@ -577,6 +601,8 @@ type AssistantEntry struct {
 	// ParentToolUseID is the Agent/Task action of the subagent that wrote it;
 	// "" in the main thread.
 	ParentToolUseID string `json:"parentToolUseId"`
+	// InterruptedBy is user or crash when the text was cut short, "" otherwise.
+	InterruptedBy string `json:"interruptedBy"`
 }
 
 // ActionEntry is a tool call the agent made.
@@ -606,6 +632,9 @@ type ActionEntry struct {
 	OutputTail string `json:"outputTail"`
 	// OutputTruncated says the whole output is only the end of a longer one.
 	OutputTruncated bool `json:"outputTruncated"`
+	// InterruptedBy is user or crash when the status is interrupted, ""
+	// otherwise.
+	InterruptedBy string `json:"interruptedBy"`
 }
 
 // ActionOutput is the whole output of a tool call: ANSI stripped, at most its
@@ -658,7 +687,8 @@ type QuestionEntry struct {
 	Questions []Question        `json:"questions"` // never nil
 	Answers   map[string]string `json:"answers"`   // question text -> label(s); nil while pending
 	// Status is pending, allowed or cancelled.
-	Status string `json:"status"`
+	Status     string `json:"status"`
+	AnsweredAt string `json:"answeredAt"` // RFC 3339; "" while pending, when cancelled or unknown
 }
 
 // MarkerEntry is a milestone of the conversation.
@@ -667,7 +697,7 @@ type MarkerEntry struct {
 	// plan_written, plan_updated, one_shot_written, one_shot_updated,
 	// pr_review_written, step_review_started, step_review_written,
 	// review_started, discussion_started, stage_started, step_started,
-	// compacted or interrupted.
+	// compacted, interrupted or retried.
 	Type      string `json:"type"`
 	PreTokens int    `json:"preTokens"`
 	// Stage belongs to stage_started alone, Step to the markers of a step
@@ -680,6 +710,13 @@ type MarkerEntry struct {
 	Pass      int    `json:"pass"`
 	Clean     bool   `json:"clean"`
 	Restarted bool   `json:"restarted"`
+	// Percent belongs to compacted: how full the context was, 0 when unknown.
+	// Attempts and Reason (overloaded, rate_limit, server, connection or
+	// other) belong to retried; InterruptedBy (user) to interrupted.
+	Percent       int    `json:"percent"`
+	Attempts      int    `json:"attempts"`
+	Reason        string `json:"reason"`
+	InterruptedBy string `json:"interruptedBy"`
 }
 
 // ErrorEntry is a failure shown in the conversation.
@@ -1166,6 +1203,14 @@ type ReviewSummary struct {
 	TurnRunning    bool   `json:"turnRunning"`
 	ProcessRunning bool   `json:"processRunning"`
 	RetryAttempt   int    `json:"retryAttempt"`
+	// RetryMax, RetryAt (RFC 3339) and RetryReason (overloaded, rate_limit,
+	// server, connection or other) go with RetryAttempt; zero without a retry.
+	RetryMax    int    `json:"retryMax"`
+	RetryAt     string `json:"retryAt"`
+	RetryReason string `json:"retryReason"`
+	// TurnFailed says the last turn ended in an error the CLI survived; the
+	// session is at rest all the same.
+	TurnFailed bool `json:"turnFailed"`
 	// TurnStartedAt is when the turn in progress started, RFC 3339; "" without
 	// a turn.
 	TurnStartedAt string `json:"turnStartedAt"`
@@ -1351,6 +1396,14 @@ type DiscussionSummary struct {
 	TurnRunning    bool   `json:"turnRunning"`
 	ProcessRunning bool   `json:"processRunning"`
 	RetryAttempt   int    `json:"retryAttempt"`
+	// RetryMax, RetryAt (RFC 3339) and RetryReason (overloaded, rate_limit,
+	// server, connection or other) go with RetryAttempt; zero without a retry.
+	RetryMax    int    `json:"retryMax"`
+	RetryAt     string `json:"retryAt"`
+	RetryReason string `json:"retryReason"`
+	// TurnFailed says the last turn ended in an error the CLI survived; the
+	// session is at rest all the same.
+	TurnFailed bool `json:"turnFailed"`
 	// TurnStartedAt is when the turn in progress started, RFC 3339; "" without
 	// a turn.
 	TurnStartedAt string `json:"turnStartedAt"`

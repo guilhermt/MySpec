@@ -291,6 +291,7 @@ function talk(ask: string, answer: string, ...rest: Entry[]): Entry[] {
         complete: true,
         interrupted: false,
         parentToolUseId: "",
+        interruptedBy: "",
       },
     }),
     ...rest,

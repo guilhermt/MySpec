@@ -115,6 +115,13 @@ describe("loopSession", () => {
       turnRunning: false,
       processRunning: false,
       retryAttempt: 0,
+      retryMax: 0,
+      retryAt: "",
+      retryReason: "",
+      turnStartedAt: "",
+      lastError: "",
+      turnFailed: false,
+      pausedAt: "",
       contextPercent: 12,
     });
   });

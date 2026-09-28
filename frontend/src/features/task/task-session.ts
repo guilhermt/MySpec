@@ -14,11 +14,10 @@ export interface TaskSession extends SessionState {
   /** role is who talks: Implementer, Reviewer, PRD agent, Tech spec agent, Plan agent, Planning agent, PR agent. */
   role: string;
   contextPercent: number;
-  pausedAt: string;
 }
 
 /** SessionBlock is the part of a DTO that tells the state of a session. */
-type SessionBlock = SessionState & { contextPercent: number; pausedAt: string };
+type SessionBlock = SessionState & { contextPercent: number };
 
 function sessionOf(task: TaskSummary, stage: string, block: SessionBlock): TaskSession {
   // The name of each conversation is the one the sidebar gives it, so the app has one.
@@ -32,6 +31,12 @@ function sessionOf(task: TaskSummary, stage: string, block: SessionBlock): TaskS
     turnRunning: block.turnRunning,
     processRunning: block.processRunning,
     retryAttempt: block.retryAttempt,
+    retryMax: block.retryMax,
+    retryAt: block.retryAt,
+    retryReason: block.retryReason,
+    turnStartedAt: block.turnStartedAt,
+    lastError: block.lastError,
+    turnFailed: block.turnFailed,
     contextPercent: block.contextPercent,
     pausedAt: block.pausedAt,
   };

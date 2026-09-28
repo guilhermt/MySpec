@@ -340,6 +340,8 @@ func (f *fake) play(scenario string) int {
 			f.writerTurn(text)
 		case "turn_error":
 			f.failedTurn(text)
+		case "retry":
+			f.retryTurn(text)
 		case "crash":
 			f.emitInit()
 			_, _ = fmt.Fprintln(os.Stderr, "boom")
@@ -387,6 +389,37 @@ func (f *fake) failedTurn(text string) {
 	}
 	f.emitInit()
 	f.result("error_during_execution", true, "API Error: overloaded", "")
+}
+
+// RetryAttempts is how many api_retry events the retry scenario emits before
+// its turn, and RetryError the error they carry.
+const (
+	RetryAttempts = 2
+	RetryError    = "overloaded"
+)
+
+// retryTurn has the API fail RetryAttempts times, the way an overloaded API
+// fails, and then answers like echo.
+func (f *fake) retryTurn(text string) {
+	f.emitInit()
+	for attempt := 1; attempt <= RetryAttempts; attempt++ {
+		f.emitRaw(map[string]any{
+			"type":           "system",
+			"subtype":        "api_retry",
+			"attempt":        attempt,
+			"max_retries":    10,
+			"retry_delay_ms": 500,
+			"error_status":   529,
+			"error":          RetryError,
+			"session_id":     f.sessionID,
+		})
+	}
+	messageID := f.nextID("msg")
+	f.messageStart(messageID)
+	f.streamText(0, text)
+	f.endMessage()
+	f.assistantText(messageID, text)
+	f.result("success", false, text, "completed")
 }
 
 // The markers that wrap a file a writer message asks for.

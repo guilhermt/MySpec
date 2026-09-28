@@ -97,11 +97,20 @@ func (s *Service) handleSystem(ctx context.Context, r *run, ev claude.Event, n *
 		// Progress the interface does not show.
 	case "api_retry":
 		r.retryAttempt = ev.APIRetry.Attempt
+		r.retryMax = ev.APIRetry.MaxRetries
+		r.retryAt = s.now().UTC().Add(time.Duration(ev.APIRetry.RetryDelayMS) * time.Millisecond)
+		r.retryReason = retryReasonOf(ev.APIRetry.Error)
 		n.state(r.key())
 	case "compact_boundary":
+		pre := ev.CompactBoundary.CompactMetadata.PreTokens
+		percent := 0
+		if r.rec.ContextWindow > 0 {
+			percent = pre * 100 / r.rec.ContextWindow
+		}
 		s.appendLocked(ctx, r, Entry{Kind: KindMarker, Marker: &MarkerEntry{
 			Type:      MarkerCompacted,
-			PreTokens: ev.CompactBoundary.CompactMetadata.PreTokens,
+			PreTokens: pre,
+			Percent:   percent,
 		}}, n)
 	default:
 		s.log.Debug("claude event ignored", "task", r.task.ID, "type", ev.Type, "subtype", ev.Subtype)
@@ -120,6 +129,14 @@ func (s *Service) handleStream(ctx context.Context, r *run, ev *claude.StreamEve
 	case "message_start":
 		if event.Message == nil {
 			return
+		}
+		if r.retryAttempt > 0 {
+			s.appendLocked(ctx, r, Entry{Kind: KindMarker, Marker: &MarkerEntry{
+				Type:     MarkerRetried,
+				Attempts: r.retryAttempt,
+				Reason:   r.retryReason,
+			}}, n)
+			r.clearRetry()
 		}
 		t.messageID = event.Message.ID
 		t.blocks = map[int]*Entry{}
@@ -377,6 +394,37 @@ func rawOrNull(raw json.RawMessage) json.RawMessage {
 	return raw
 }
 
+// Who interrupted a turn: the user asked for it (Stop, Pause, Review myself,
+// discarding, closing), or the process died.
+const (
+	interruptedByUser  = "user"
+	interruptedByCrash = "crash"
+)
+
+// serverStatus is an HTTP 5xx status in an error text.
+var serverStatus = regexp.MustCompile(`\b5\d\d\b`)
+
+// retryReasonOf reads why an API call failed from the error of an api_retry:
+// "overloaded", "rate_limit", "connection", "server" or "other".
+func retryReasonOf(message string) string {
+	text := strings.ToLower(message)
+	has := func(words ...string) bool {
+		return slices.ContainsFunc(words, func(w string) bool { return strings.Contains(text, w) })
+	}
+	switch {
+	case has("overloaded", "529"):
+		return "overloaded"
+	case has("rate", "429"):
+		return "rate_limit"
+	case has("connection", "timeout", "timed out", "econn", "network", "socket"):
+		return "connection"
+	case serverStatus.MatchString(text):
+		return "server"
+	default:
+		return "other"
+	}
+}
+
 // stripANSI removes terminal escape sequences from a text.
 func stripANSI(text string) string {
 	return ansiEscape.ReplaceAllString(text, "")
@@ -387,7 +435,7 @@ func (s *Service) handleResult(ctx context.Context, r *run, ev *claude.ResultEve
 	aborted := ev.TerminalReason == abortedReason || r.interruptReq != ""
 	hadTurn := r.turn != nil
 	if hadTurn {
-		s.closeTurnLocked(ctx, r, aborted, n)
+		s.closeTurnLocked(ctx, r, aborted, interruptedByUser, n)
 	}
 
 	if w := ev.ContextWindow(); w > 0 {
@@ -412,8 +460,10 @@ func (s *Service) handleResult(ctx context.Context, r *run, ev *claude.ResultEve
 
 // closeTurnLocked brings every entry of the turn to rest: streaming text is
 // completed, running actions are done or interrupted, a pending request is
-// cancelled. The caller holds the mutex and r.turn is set.
-func (s *Service) closeTurnLocked(ctx context.Context, r *run, aborted bool, n *notes) {
+// cancelled. by is who aborted the turn (interruptedByUser or
+// interruptedByCrash); the interrupted marker is only the user's. The caller
+// holds the mutex and r.turn is set.
+func (s *Service) closeTurnLocked(ctx context.Context, r *run, aborted bool, by string, n *notes) {
 	t := r.turn
 
 	interruptedText := false
@@ -423,12 +473,18 @@ func (s *Service) closeTurnLocked(ctx context.Context, r *run, aborted bool, n *
 		}
 		e.Assistant.Complete = true
 		e.Assistant.Interrupted = aborted
+		if aborted {
+			e.Assistant.InterruptedBy = by
+		}
 		interruptedText = interruptedText || aborted
 		delete(r.dirty, e.ID)
 		s.updateLocked(ctx, r, e, n)
 	}
-	if aborted && !interruptedText {
-		s.appendLocked(ctx, r, Entry{Kind: KindMarker, Marker: &MarkerEntry{Type: MarkerInterrupted}}, n)
+	if aborted && by == interruptedByUser && !interruptedText {
+		s.appendLocked(ctx, r, Entry{Kind: KindMarker, Marker: &MarkerEntry{
+			Type:          MarkerInterrupted,
+			InterruptedBy: interruptedByUser,
+		}}, n)
 	}
 
 	for _, e := range bySeq(t.actions) {
@@ -438,6 +494,7 @@ func (s *Service) closeTurnLocked(ctx context.Context, r *run, aborted bool, n *
 		e.Action.Status = ActionDone
 		if aborted {
 			e.Action.Status = ActionInterrupted
+			e.Action.InterruptedBy = by
 		}
 		s.updateLocked(ctx, r, e, n)
 	}
@@ -462,7 +519,7 @@ func (s *Service) resetTurnLocked(r *run, n *notes) {
 	r.turn = nil
 	r.interruptReq = ""
 	r.stopTimer(&r.interruptTmr)
-	r.retryAttempt = 0
+	r.clearRetry()
 	n.state(r.key())
 }
 
@@ -507,7 +564,7 @@ func (s *Service) processExited(k Key, gen int, exit claude.ExitInfo) {
 	}
 
 	if r.turn != nil {
-		s.closeTurnLocked(ctx, r, true, n)
+		s.closeTurnLocked(ctx, r, true, interruptedByCrash, n)
 		s.resetTurnLocked(r, n)
 	}
 

@@ -18,6 +18,7 @@ import {
   asErrorKind,
   asFindingDecision,
   asFindingPlacement,
+  asInterruptedBy,
   asIssueState,
   asMarkerType,
   asMigrationCaseKind,
@@ -33,6 +34,7 @@ import {
   asPullReviewMode,
   asPullReviewStatus,
   asRepositoryLinkKind,
+  asRetryReason,
   asReviewFallback,
   asReviewFileKind,
   asReviewMode,
@@ -113,6 +115,15 @@ describe("narrowing", () => {
     expect(asMarkerType("step_review_written")).toBe("step_review_written");
     expect(asMarkerType("stage_started")).toBe("stage_started");
     expect(asMarkerType("step_started")).toBe("step_started");
+    expect(asMarkerType("retried")).toBe("retried");
+    expect(asInterruptedBy("user")).toBe("user");
+    expect(asInterruptedBy("crash")).toBe("crash");
+    expect(asRetryReason("")).toBe("");
+    expect(asRetryReason("overloaded")).toBe("overloaded");
+    expect(asRetryReason("rate_limit")).toBe("rate_limit");
+    expect(asRetryReason("server")).toBe("server");
+    expect(asRetryReason("connection")).toBe("connection");
+    expect(asRetryReason("other")).toBe("other");
     expect(asStepStatus("preparing")).toBe("preparing");
     expect(asStepStatus("blocked")).toBe("blocked");
     expect(asStepStatus("implementing")).toBe("implementing");

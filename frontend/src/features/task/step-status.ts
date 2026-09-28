@@ -154,6 +154,13 @@ export function loopSession(task: TaskSummary, step: Step): LoopSession {
     turnRunning: task.turnRunning,
     processRunning: task.processRunning,
     retryAttempt: task.retryAttempt,
+    retryMax: task.retryMax,
+    retryAt: task.retryAt,
+    retryReason: task.retryReason,
+    turnStartedAt: task.turnStartedAt,
+    lastError: task.lastError,
+    turnFailed: task.turnFailed,
+    pausedAt: task.pausedAt,
     contextPercent: task.contextPercent,
   };
 }

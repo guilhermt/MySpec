@@ -137,6 +137,12 @@ type Summary struct {
 	TurnRunning    bool
 	ProcessRunning bool
 	RetryAttempt   int // last api_retry attempt of the running turn, 0 otherwise
+	// RetryMax, RetryAt and RetryReason go with RetryAttempt: the most
+	// attempts the CLI makes, when the next one goes out and why the call
+	// failed (retryReasonOf). Zero without a retry.
+	RetryMax    int
+	RetryAt     time.Time
+	RetryReason string
 	// TurnStartedAt is when the message that opened the turn in progress went
 	// to the CLI; zero without a turn.
 	TurnStartedAt time.Time

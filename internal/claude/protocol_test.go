@@ -23,6 +23,7 @@ const (
 	subagentFixture  = "subagent.jsonl"
 	silentFixture    = "bash-silent.jsonl"
 	editErrorFixture = "edit-error.jsonl"
+	apiRetryFixture  = "api-retry.jsonl"
 )
 
 // loadFixture decodes every line of a captured session in testdata.
@@ -996,5 +997,19 @@ func TestToolResultText(t *testing.T) {
 				t.Errorf("Text() = %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestDecodeRecordedAPIRetry(t *testing.T) {
+	t.Parallel()
+	events := loadFixture(t, apiRetryFixture)
+
+	got := pick(events, func(e claude.Event) *claude.APIRetryEvent { return e.APIRetry })
+	want := []*claude.APIRetryEvent{
+		{Attempt: 1, MaxRetries: 2, RetryDelayMS: 534, Error: "overloaded"},
+		{Attempt: 2, MaxRetries: 2, RetryDelayMS: 1230, Error: "overloaded"},
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("APIRetry mismatch (-want +got):\n%s", diff)
 	}
 }

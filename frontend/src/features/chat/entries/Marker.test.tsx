@@ -4,6 +4,9 @@ import { Marker } from "@/features/chat/entries/Marker";
 import type { MarkerType } from "@/lib/wails";
 import { renderWithStore } from "@/test/render";
 
+// The fields of the markers this component does not read.
+const NEW_FIELDS = { percent: 0, attempts: 0, reason: "", interruptedBy: "" };
+
 describe("Marker", () => {
   it.each([
     ["prd_written", "PRD written"],
@@ -21,7 +24,16 @@ describe("Marker", () => {
   ] as const)("names the %s milestone", (type: MarkerType, expected) => {
     renderWithStore(
       <Marker
-        marker={{ type, preTokens: 0, stage: "", step: 0, pass: 0, clean: false, restarted: false }}
+        marker={{
+          type,
+          preTokens: 0,
+          stage: "",
+          step: 0,
+          pass: 0,
+          clean: false,
+          restarted: false,
+          ...NEW_FIELDS,
+        }}
         createdAt="2026-09-05T10:00:00Z"
       />,
     );
@@ -50,6 +62,7 @@ describe("Marker", () => {
             pass: 0,
             clean: false,
             restarted,
+            ...NEW_FIELDS,
           }}
           createdAt="2026-09-05T10:00:00Z"
         />,
@@ -73,6 +86,7 @@ describe("Marker", () => {
           pass: 0,
           clean: false,
           restarted,
+          ...NEW_FIELDS,
         }}
         createdAt="2026-09-05T10:00:00Z"
       />,
@@ -89,7 +103,7 @@ describe("Marker", () => {
   ])("reads %s from a review marker", (expected, fields) => {
     renderWithStore(
       <Marker
-        marker={{ preTokens: 0, stage: "", restarted: false, ...fields }}
+        marker={{ preTokens: 0, stage: "", restarted: false, ...NEW_FIELDS, ...fields }}
         createdAt="2026-09-05T10:00:00Z"
       />,
     );
@@ -108,6 +122,7 @@ describe("Marker", () => {
           pass: 0,
           clean: false,
           restarted: false,
+          ...NEW_FIELDS,
         }}
         createdAt="2026-09-05T10:00:00Z"
       />,
@@ -127,6 +142,7 @@ describe("Marker", () => {
           pass: 0,
           clean: false,
           restarted: false,
+          ...NEW_FIELDS,
         }}
         createdAt=""
       />,
@@ -134,4 +150,27 @@ describe("Marker", () => {
 
     expect(screen.queryByText(/^\d{2}:\d{2}$/)).not.toBeInTheDocument();
   });
+
+  it.each(["retried", "a_marker_from_later"])(
+    "draws nothing for the %s type it does not know",
+    (type) => {
+      const { container } = renderWithStore(
+        <Marker
+          marker={{
+            type,
+            preTokens: 0,
+            stage: "",
+            step: 0,
+            pass: 0,
+            clean: false,
+            restarted: false,
+            ...NEW_FIELDS,
+          }}
+          createdAt="2026-09-05T10:00:00Z"
+        />,
+      );
+
+      expect(container).toBeEmptyDOMElement();
+    },
+  );
 });

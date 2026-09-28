@@ -258,11 +258,17 @@ func TestCompactionAddsAMarker(t *testing.T) {
 	f := newFixture(t, "compact")
 	f.start(t, taskInfo(t, "t1"))
 	f.waitIdle(t, prd("t1"))
+	// The first compaction comes before any result gives the window; the
+	// second knows it.
+	f.send(t, prd("t1"), "again")
+	f.waitEntries(t, prd("t1"), session.KindMarker, 3)
+	f.waitIdle(t, prd("t1"))
 
 	markers := f.entriesOf(t, prd("t1"), session.KindMarker)
 	want := []*session.MarkerEntry{
 		{Type: session.MarkerStageStarted, Stage: string(prompts.StagePRD)},
 		{Type: session.MarkerCompacted, PreTokens: 120000},
+		{Type: session.MarkerCompacted, PreTokens: 120000, Percent: 120000 * 100 / claudetest.ContextWindow},
 	}
 	got := make([]*session.MarkerEntry, 0, len(markers))
 	for _, m := range markers {
@@ -425,7 +431,7 @@ func TestAnswerQuestion(t *testing.T) {
 	if len(q.Questions) != 2 || q.Questions[0].MultiSelect || !q.Questions[1].MultiSelect {
 		t.Fatalf("questions = %+v, want two, the second multiple choice", q.Questions)
 	}
-	if q.Status != session.PermissionPending || q.Answers != nil {
+	if q.Status != session.PermissionPending || q.Answers != nil || q.AnsweredAt != nil {
 		t.Errorf("question = %+v, want pending without answers", q)
 	}
 	if actions := f.entriesOf(t, prd("t1"), session.KindAction); len(actions) != 0 {
@@ -444,6 +450,9 @@ func TestAnswerQuestion(t *testing.T) {
 	got := f.entriesOf(t, prd("t1"), session.KindQuestion)[0].Question
 	if got.Status != session.PermissionAllowed {
 		t.Errorf("status = %q, want allowed", got.Status)
+	}
+	if got.AnsweredAt == nil || !got.AnsweredAt.Equal(base) {
+		t.Errorf("AnsweredAt = %v, want %v", got.AnsweredAt, base)
 	}
 	if diff := cmp.Diff(answers, got.Answers); diff != "" {
 		t.Errorf("answers mismatch (-want +got):\n%s", diff)
@@ -526,8 +535,8 @@ func TestInterruptEndsTheTurn(t *testing.T) {
 	}
 
 	got := f.entriesOf(t, prd("t1"), session.KindAssistant)[0].Assistant
-	if !got.Complete || !got.Interrupted || !strings.HasPrefix(got.Text, "tick ") {
-		t.Errorf("assistant = %+v, want a complete, interrupted entry with the ticks", got)
+	if !got.Complete || !got.Interrupted || got.InterruptedBy != "user" || !strings.HasPrefix(got.Text, "tick ") {
+		t.Errorf("assistant = %+v, want a complete entry the user interrupted, with the ticks", got)
 	}
 	if markers := f.entriesOf(t, prd("t1"), session.KindMarker); len(markers) != 1 {
 		t.Errorf("markers = %+v, want only the stage marker when text was interrupted", markers)
@@ -623,9 +632,8 @@ func TestCrashIsReportedAndRetried(t *testing.T) {
 	if diff := cmp.Diff(want, errs[0].Error); diff != "" {
 		t.Errorf("error entry mismatch (-want +got):\n%s", diff)
 	}
-	markers := f.entriesOf(t, prd("t1"), session.KindMarker)
-	if len(markers) != 2 || markers[1].Marker.Type != session.MarkerInterrupted {
-		t.Errorf("markers = %+v, want the interrupted marker of a turn without text", markers)
+	if markers := f.entriesOf(t, prd("t1"), session.KindMarker); len(markers) != 1 {
+		t.Errorf("markers = %+v, want only the stage marker: a crash leaves no interrupted marker", markers)
 	}
 	if rec := f.sessions.get(t, "t1", string(prompts.StagePRD)); rec.LastError != sum.LastError || !rec.Started {
 		t.Errorf("record = %+v, want the error persisted on a started session", rec)
@@ -2244,6 +2252,108 @@ func TestAnInterruptedTurnLeavesNeitherTurnNorAction(t *testing.T) {
 	sum := f.waitIdle(t, prd("t1"))
 	if !sum.TurnStartedAt.IsZero() || sum.ActionLabel != "" || sum.ActionTarget != "" {
 		t.Errorf("summary = %+v, want neither turn nor action", sum)
+	}
+}
+
+func TestTheUserInterruptingAnActionIsRecorded(t *testing.T) {
+	t.Parallel()
+
+	f, _ := newGatedFixture(t)
+	f.start(t, taskInfo(t, "t1"))
+	waitAction(t, f, prd("t1"), claudetest.ReadPath)
+
+	if err := f.service.Interrupt(t.Context(), prd("t1")); err != nil {
+		t.Fatalf("Interrupt() = %v, want nil", err)
+	}
+	f.waitIdle(t, prd("t1"))
+
+	action := f.entriesOf(t, prd("t1"), session.KindAction)[0].Action
+	if action.Status != session.ActionInterrupted || action.InterruptedBy != "user" {
+		t.Errorf("action = %+v, want interrupted by the user", action)
+	}
+	markers := f.entriesOf(t, prd("t1"), session.KindMarker)
+	want := &session.MarkerEntry{Type: session.MarkerInterrupted, InterruptedBy: "user"}
+	if len(markers) != 2 {
+		t.Fatalf("markers = %+v, want the stage marker and the interrupted one", markers)
+	}
+	if diff := cmp.Diff(want, markers[1].Marker); diff != "" {
+		t.Errorf("interrupted marker mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestACrashInterruptsTheActionWithoutAMarker(t *testing.T) {
+	t.Parallel()
+
+	f, _ := newGatedFixture(t)
+	f.start(t, taskInfo(t, "t1"))
+	waitAction(t, f, prd("t1"), claudetest.ReadPath)
+
+	f.launcher.kill(t)
+	f.waitStatus(t, prd("t1"), "the crash", func(s session.Summary) bool {
+		return s.Status == session.StatusError
+	})
+
+	action := f.entriesOf(t, prd("t1"), session.KindAction)[0].Action
+	if action.Status != session.ActionInterrupted || action.InterruptedBy != "crash" {
+		t.Errorf("action = %+v, want interrupted by the crash", action)
+	}
+	if markers := f.entriesOf(t, prd("t1"), session.KindMarker); len(markers) != 1 {
+		t.Errorf("markers = %+v, want only the stage marker", markers)
+	}
+}
+
+func TestACrashCutsTheTextShort(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "slow")
+	f.start(t, taskInfo(t, "t1"))
+	waitStreaming(t, f, prd("t1"))
+
+	f.launcher.kill(t)
+	f.waitStatus(t, prd("t1"), "the crash", func(s session.Summary) bool {
+		return s.Status == session.StatusError
+	})
+
+	got := f.entriesOf(t, prd("t1"), session.KindAssistant)[0].Assistant
+	if !got.Complete || !got.Interrupted || got.InterruptedBy != "crash" {
+		t.Errorf("assistant = %+v, want a complete entry the crash interrupted", got)
+	}
+	if markers := f.entriesOf(t, prd("t1"), session.KindMarker); len(markers) != 1 {
+		t.Errorf("markers = %+v, want only the stage marker", markers)
+	}
+}
+
+func TestAnAPIRetryIsReportedAndThenMarked(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "retry")
+	f.start(t, taskInfo(t, "t1"))
+	sum := f.waitIdle(t, prd("t1"))
+	if sum.RetryAttempt != 0 || sum.RetryMax != 0 || !sum.RetryAt.IsZero() || sum.RetryReason != "" {
+		t.Errorf("summary = %+v, want the retry cleared once the turn answered", sum)
+	}
+	retries := f.retrySummaries()
+	if len(retries) == 0 {
+		t.Fatal("no summary reported the retry")
+	}
+	last := retries[len(retries)-1]
+	wantAt := base.Add(500 * time.Millisecond)
+	if last.RetryAttempt != claudetest.RetryAttempts || last.RetryMax != 10 ||
+		!last.RetryAt.Equal(wantAt) || last.RetryReason != "overloaded" {
+		t.Errorf("retry summary = %+v, want attempt %d of 10 at %v, overloaded", last, claudetest.RetryAttempts, wantAt)
+	}
+
+	markers := f.entriesOf(t, prd("t1"), session.KindMarker)
+	want := &session.MarkerEntry{Type: session.MarkerRetried, Attempts: claudetest.RetryAttempts, Reason: "overloaded"}
+	if len(markers) != 2 {
+		t.Fatalf("markers = %+v, want the stage marker and the retried one", markers)
+	}
+	if diff := cmp.Diff(want, markers[1].Marker); diff != "" {
+		t.Errorf("retried marker mismatch (-want +got):\n%s", diff)
+	}
+	assistant := f.entriesOf(t, prd("t1"), session.KindAssistant)[0]
+	if markers[1].Seq > assistant.Seq {
+		t.Errorf("retried marker seq = %d, want before the answer (%d)", markers[1].Seq, assistant.Seq)
 	}
 }
 
