@@ -882,6 +882,57 @@ func TestFromEntryCarriesTheStepOfAMarker(t *testing.T) {
 	}
 }
 
+func TestFromEntryCarriesTheFieldsOfAnAction(t *testing.T) {
+	t.Parallel()
+
+	started := time.Date(2026, time.September, 6, 12, 0, 0, 0, time.UTC)
+	finished := started.Add(3 * time.Second)
+	cases := map[string]struct {
+		action *session.ActionEntry
+		want   *bindings.ActionEntry
+	}{
+		"every field present": {
+			action: &session.ActionEntry{
+				ToolUseID: "toolu_2", Tool: "Bash", Label: "Running", Target: "go test ./...",
+				Status: session.ActionError, Description: "Run the tests", CommandLines: 2,
+				StartedAt: &started, FinishedAt: &finished, ExitCode: new(2), ParentToolUseID: "toolu_1",
+			},
+			want: &bindings.ActionEntry{
+				ToolUseID: "toolu_2", Tool: "Bash", Label: "Running", Target: "go test ./...",
+				Status: "error", Description: "Run the tests", CommandLines: 2,
+				StartedAt: "2026-09-06T12:00:00Z", FinishedAt: "2026-09-06T12:00:03Z", ExitCode: 2, ParentToolUseID: "toolu_1",
+			},
+		},
+		"an old transcript": {
+			action: &session.ActionEntry{ToolUseID: "toolu_1", Tool: "Read", Label: "Reading", Status: session.ActionDone},
+			want:   &bindings.ActionEntry{ToolUseID: "toolu_1", Tool: "Read", Label: "Reading", Status: "done", ExitCode: -1},
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			got := bindings.FromEntry(session.Entry{Kind: session.KindAction, Action: tc.action})
+			if diff := cmp.Diff(tc.want, got.Action); diff != "" {
+				t.Errorf("action mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestFromEntryCarriesTheSubagentOfAText(t *testing.T) {
+	t.Parallel()
+
+	got := bindings.FromEntry(session.Entry{
+		Kind:      session.KindAssistant,
+		Assistant: &session.AssistantEntry{Text: "done", Complete: true, ParentToolUseID: "toolu_1"},
+	})
+	want := &bindings.AssistantEntry{Text: "done", Complete: true, ParentToolUseID: "toolu_1"}
+	if diff := cmp.Diff(want, got.Assistant); diff != "" {
+		t.Errorf("assistant mismatch (-want +got):\n%s", diff)
+	}
+}
+
 func TestFromEntryCarriesTheVerdictOfAStepReviewMarker(t *testing.T) {
 	t.Parallel()
 

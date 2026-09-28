@@ -3,22 +3,12 @@ import { describe, expect, it } from "vitest";
 import { ActionGroup } from "@/features/chat/entries/ActionGroup";
 import type { ActionEntry, ActionStatus } from "@/lib/wails";
 import { renderWithStore } from "@/test/render";
-
-function action(overrides: Partial<ActionEntry> = {}): ActionEntry {
-  return {
-    toolUseId: "toolu_1",
-    tool: "Read",
-    label: "Read",
-    target: "src/main.tsx",
-    status: "done",
-    ...overrides,
-  };
-}
+import { makeAction } from "@/test/wails-mock";
 
 const THREE: ActionEntry[] = [
-  action(),
-  action({ toolUseId: "toolu_2", tool: "Grep", label: "Searched", target: "useAppStore" }),
-  action({ toolUseId: "toolu_3", tool: "Bash", label: "Ran", target: "task check" }),
+  makeAction(),
+  makeAction({ toolUseId: "toolu_2", tool: "Grep", label: "Searched", target: "useAppStore" }),
+  makeAction({ toolUseId: "toolu_3", tool: "Bash", label: "Ran", target: "task check" }),
 ];
 
 describe("ActionGroup", () => {
@@ -36,7 +26,7 @@ describe("ActionGroup", () => {
   });
 
   it("counts a single action in the singular", () => {
-    renderWithStore(<ActionGroup actions={[action()]} />);
+    renderWithStore(<ActionGroup actions={[makeAction()]} />);
 
     expect(screen.getByRole("button", { name: /1 action/ })).toBeInTheDocument();
   });
@@ -45,8 +35,8 @@ describe("ActionGroup", () => {
     renderWithStore(
       <ActionGroup
         actions={[
-          action(),
-          action({
+          makeAction(),
+          makeAction({
             toolUseId: "toolu_2",
             label: "Running",
             target: "go test ./...",
@@ -81,7 +71,7 @@ describe("ActionGroup", () => {
     ["done", "lucide-check"],
   ] as const)("sums the group up as %s", (status: ActionStatus, icon) => {
     const { container } = renderWithStore(
-      <ActionGroup actions={[action(), action({ toolUseId: "toolu_2", status })]} />,
+      <ActionGroup actions={[makeAction(), makeAction({ toolUseId: "toolu_2", status })]} />,
     );
 
     expect(container.querySelector(`.${icon}`)).not.toBeNull();

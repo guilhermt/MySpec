@@ -56,6 +56,9 @@ type AssistantEntry struct {
 	Text        string `json:"text"`
 	Complete    bool   `json:"complete"`
 	Interrupted bool   `json:"interrupted"`
+	// ParentToolUseID is the Agent/Task action of the subagent that wrote it;
+	// "" in the main thread.
+	ParentToolUseID string `json:"parentToolUseId"`
 }
 
 // ActionStatus is how far a tool call has gone.
@@ -76,6 +79,22 @@ type ActionEntry struct {
 	Label     string       `json:"label"`  // "Reading", "Running", ... (labels.go)
 	Target    string       `json:"target"` // path, command, pattern; "" when none
 	Status    ActionStatus `json:"status"`
+	// Description is the description the agent wrote (Bash, Agent/Task); ""
+	// when none.
+	Description string `json:"description"`
+	// CommandLines counts the lines of the whole command, Bash only; 0 when
+	// unknown.
+	CommandLines int `json:"commandLines"`
+	// StartedAt is when the input became complete; nil in old transcripts.
+	StartedAt *time.Time `json:"startedAt"`
+	// FinishedAt is when the result arrived; nil while running, when
+	// interrupted and in old transcripts.
+	FinishedAt *time.Time `json:"finishedAt"`
+	// ExitCode is read from a failed Bash result; nil when unknown.
+	ExitCode *int `json:"exitCode"`
+	// ParentToolUseID is the Agent/Task action of the subagent that made it;
+	// "" in the main thread.
+	ParentToolUseID string `json:"parentToolUseId"`
 }
 
 // PermissionStatus is how a permission request or a question was answered.

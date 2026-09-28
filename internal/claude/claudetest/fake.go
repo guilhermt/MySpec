@@ -80,6 +80,17 @@ const SecondReadPath = "/tmp/fake/world.txt"
 // BashCommand is the command the permission scenario asks to run.
 const BashCommand = `echo "hi" > hello.txt`
 
+// The Agent call of the subagent scenario and the Bash call of the bash_fail
+// scenario.
+const (
+	SubagentType        = "general-purpose"
+	SubagentDescription = "Inspect the folder"
+	SubagentText        = "The folder holds hello.txt."
+	SubagentReport      = "hello.txt says hi."
+	FailingCommand      = "go test ./...\ngo vet ./..."
+	FailingDescription  = "Run the tests"
+)
+
 // Capabilities is what the fake announces in system/init.
 var Capabilities = []string{"interrupt_receipt_v1", "interrupt_cancel_queued_v1", "msg_lifecycle_v1"}
 
@@ -321,6 +332,10 @@ func (f *fake) play(scenario string) int {
 			f.slowTurn()
 		case "actions":
 			f.actionsTurn(text)
+		case "subagent":
+			f.subagentTurn(text)
+		case "bash_fail":
+			f.bashFailTurn(text)
 		case "writer":
 			f.writerTurn(text)
 		case "turn_error":
@@ -667,6 +682,61 @@ func (f *fake) actionsTurn(text string) {
 	f.result("success", false, text, "completed")
 }
 
+// subagentTurn delegates to a subagent that reads a file, runs a command and
+// says what it found, then answers with the text it was given. The subagent
+// streams a text delta the app ignores; its blocks arrive whole.
+func (f *fake) subagentTurn(text string) {
+	f.emitInit()
+	messageID := f.nextID("msg")
+	f.messageStart(messageID)
+
+	agentID := f.nextID("toolu")
+	f.streamToolUse(0, messageID, agentID, "Agent", map[string]any{
+		"subagent_type": SubagentType,
+		"description":   SubagentDescription,
+		"prompt":        "Inspect the folder and report.",
+	})
+
+	subMessageID := f.nextID("msg")
+	readID, bashID := f.nextID("toolu"), f.nextID("toolu")
+	f.emit(map[string]any{
+		"type":               "stream_event",
+		"event":              map[string]any{"type": "content_block_start", "index": 0, "content_block": map[string]any{"type": "text", "text": ""}},
+		"parent_tool_use_id": agentID,
+	})
+	f.toolUseWithParent(subMessageID, readID, "Read", map[string]any{"file_path": ReadPath}, agentID)
+	f.toolResult(readID, "1\thi\n")
+	f.toolUseWithParent(subMessageID, bashID, "Bash", map[string]any{"command": "ls -1", "description": "List the files"}, agentID)
+	f.toolResult(bashID, "hello.txt")
+	f.assistantTextWithParent(subMessageID, SubagentText, agentID)
+	f.toolResult(agentID, SubagentReport)
+
+	f.streamText(1, text)
+	f.endMessage()
+	f.assistantText(messageID, text)
+	f.result("success", false, text, "completed")
+}
+
+// bashFailTurn runs a command that fails with exit code 2, then answers with
+// the text it was given.
+func (f *fake) bashFailTurn(text string) {
+	f.emitInit()
+	messageID := f.nextID("msg")
+	f.messageStart(messageID)
+
+	toolUseID := f.nextID("toolu")
+	f.streamToolUse(0, messageID, toolUseID, "Bash", map[string]any{
+		"command":     FailingCommand,
+		"description": FailingDescription,
+	})
+	f.toolResultError(toolUseID, "Exit code 2\n--- FAIL: TestX")
+
+	f.streamText(1, text)
+	f.endMessage()
+	f.assistantText(messageID, text)
+	f.result("success", false, text, "completed")
+}
+
 // awaitGate waits for the named file in EnvGates, reporting false when an
 // interrupt aborted the turn or stdin ended first.
 //
@@ -825,6 +895,54 @@ func (f *fake) assistantText(messageID, text string) {
 			"content": []any{map[string]any{"type": "text", "text": text}},
 		},
 		"parent_tool_use_id": nil,
+	})
+}
+
+// toolUseWithParent emits a whole tool_use block of a subagent.
+func (f *fake) toolUseWithParent(messageID, toolUseID, name string, input map[string]any, parent string) {
+	f.emit(map[string]any{
+		"type": "assistant",
+		"message": map[string]any{
+			"id":      messageID,
+			"model":   Model,
+			"role":    "assistant",
+			"type":    "message",
+			"content": []any{map[string]any{"type": "tool_use", "id": toolUseID, "name": name, "input": input}},
+		},
+		"parent_tool_use_id": parent,
+	})
+}
+
+// assistantTextWithParent emits a whole text block of a subagent.
+func (f *fake) assistantTextWithParent(messageID, text, parent string) {
+	f.emit(map[string]any{
+		"type": "assistant",
+		"message": map[string]any{
+			"id":      messageID,
+			"model":   Model,
+			"role":    "assistant",
+			"type":    "message",
+			"content": []any{map[string]any{"type": "text", "text": text}},
+		},
+		"parent_tool_use_id": parent,
+	})
+}
+
+// toolResultError emits a tool that failed, as the CLI reports it.
+func (f *fake) toolResultError(toolUseID, content string) {
+	f.emit(map[string]any{
+		"type": "user",
+		"message": map[string]any{
+			"role": "user",
+			"content": []any{map[string]any{
+				"type":        "tool_result",
+				"tool_use_id": toolUseID,
+				"content":     content,
+				"is_error":    true,
+			}},
+		},
+		"parent_tool_use_id": nil,
+		"tool_use_result":    "Error: " + content,
 	})
 }
 

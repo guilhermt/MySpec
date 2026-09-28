@@ -14,6 +14,33 @@ export interface ActionEntry {
      * Status is running, done, error or interrupted.
      */
     "status": string;
+
+    /**
+     * Description is what the agent wrote the call is for; "" when none.
+     */
+    "description": string;
+
+    /**
+     * CommandLines counts the lines of a Bash command; 0 when unknown.
+     */
+    "commandLines": number;
+
+    /**
+     * StartedAt and FinishedAt are RFC 3339, "" when unknown.
+     */
+    "startedAt": string;
+    "finishedAt": string;
+
+    /**
+     * ExitCode is the code a failed Bash command exited with, -1 when unknown.
+     */
+    "exitCode": number;
+
+    /**
+     * ParentToolUseID is the Agent/Task action of the subagent that made it;
+     * "" in the main thread.
+     */
+    "parentToolUseId": string;
 }
 
 /**
@@ -167,6 +194,12 @@ export interface AssistantEntry {
     "text": string;
     "complete": boolean;
     "interrupted": boolean;
+
+    /**
+     * ParentToolUseID is the Agent/Task action of the subagent that wrote it;
+     * "" in the main thread.
+     */
+    "parentToolUseId": string;
 }
 
 /**

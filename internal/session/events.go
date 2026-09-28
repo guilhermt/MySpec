@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -56,6 +57,9 @@ func (s *Service) handle(k Key, gen int, ev claude.Event) {
 	case "system":
 		s.handleSystem(ctx, r, ev, n)
 	case "stream_event":
+		if ev.Stream.ParentToolUseID != nil && *ev.Stream.ParentToolUseID != "" {
+			return // a subagent's stream; its assistant events carry what is kept
+		}
 		s.handleStream(ctx, r, ev.Stream, n)
 	case "assistant":
 		s.handleAssistant(ctx, r, ev.Assistant, n)
@@ -196,10 +200,11 @@ func (s *Service) handleAssistant(ctx context.Context, r *run, ev *claude.Assist
 		return
 	}
 
+	parent := deref(ev.ParentToolUseID)
 	for i, block := range ev.Message.Content {
 		switch block.Type {
 		case "text":
-			e := s.textEntry(ctx, r, ev.Message.ID, i, n)
+			e := s.textEntry(ctx, r, ev.Message.ID, i, parent, n)
 			e.Assistant.Text = block.Text
 			e.Assistant.Complete = true
 			delete(r.dirty, e.ID)
@@ -211,13 +216,19 @@ func (s *Service) handleAssistant(ctx context.Context, r *run, ev *claude.Assist
 			e := t.actions[block.ID]
 			if e == nil {
 				e = s.appendLocked(ctx, r, Entry{Kind: KindAction, Action: &ActionEntry{
-					ToolUseID: block.ID,
-					Tool:      block.Name,
-					Status:    ActionRunning,
+					ToolUseID:       block.ID,
+					Tool:            block.Name,
+					Status:          ActionRunning,
+					ParentToolUseID: parent,
 				}}, n)
 				t.actions[block.ID] = e
 			}
-			e.Action.Label, e.Action.Target = For(block.Name, block.Input, r.task.Dir)
+			d := For(block.Name, block.Input, r.task.Dir)
+			e.Action.Label, e.Action.Target = d.Label, d.Target
+			e.Action.Description, e.Action.CommandLines = d.Description, d.CommandLines
+			if e.Action.StartedAt == nil {
+				e.Action.StartedAt = new(s.now().UTC())
+			}
 			s.updateLocked(ctx, r, e, n)
 			n.state(r.key())
 		default:
@@ -228,8 +239,9 @@ func (s *Service) handleAssistant(ctx context.Context, r *run, ev *claude.Assist
 
 // textEntry finds the streamed entry an assistant text block is the final
 // version of: the first text block of the message not yet finalized, in block
-// order. When the stream did not announce the block, the entry is created now.
-func (s *Service) textEntry(ctx context.Context, r *run, messageID string, position int, n *notes) *Entry {
+// order. When the stream did not announce the block, the entry is created now,
+// with the subagent that wrote it.
+func (s *Service) textEntry(ctx context.Context, r *run, messageID string, position int, parent string, n *notes) *Entry {
 	t := r.turn
 	indexes := make([]int, 0, len(t.blocks))
 	for index, e := range t.blocks {
@@ -244,8 +256,9 @@ func (s *Service) textEntry(ctx context.Context, r *run, messageID string, posit
 	}
 
 	e := s.appendLocked(ctx, r, Entry{Kind: KindAssistant, Assistant: &AssistantEntry{
-		MessageID:  messageID,
-		BlockIndex: position,
+		MessageID:       messageID,
+		BlockIndex:      position,
+		ParentToolUseID: parent,
 	}}, n)
 	return e
 }
@@ -262,8 +275,12 @@ func (s *Service) handleUser(ctx context.Context, r *run, ev *claude.UserEvent, 
 			continue
 		}
 		e.Action.Status = ActionDone
+		e.Action.FinishedAt = new(s.now().UTC())
 		if result.IsError {
 			e.Action.Status = ActionError
+			if e.Action.Tool == "Bash" {
+				e.Action.ExitCode = exitCode(result.Text())
+			}
 		}
 		s.updateLocked(ctx, r, e, n)
 		changed = true
@@ -271,6 +288,24 @@ func (s *Service) handleUser(ctx context.Context, r *run, ev *claude.UserEvent, 
 	if changed {
 		n.state(r.key())
 	}
+}
+
+// exitCodeLine is the first line of a failed Bash result that names the code.
+var exitCodeLine = regexp.MustCompile(`^(?:Error: )?Exit code (-?\d+)`)
+
+// exitCode reads the code a failed Bash command exited with, nil when the
+// result does not say.
+func exitCode(text string) *int {
+	line, _, _ := strings.Cut(text, "\n")
+	match := exitCodeLine.FindStringSubmatch(line)
+	if match == nil {
+		return nil
+	}
+	code, err := strconv.Atoi(match[1])
+	if err != nil {
+		return nil
+	}
+	return &code
 }
 
 // handleControlRequest turns a can_use_tool request into a permission or a
@@ -525,4 +560,12 @@ func dirtyEntries(r *run) map[string]*Entry {
 		}
 	}
 	return out
+}
+
+// deref is the string a pointer points to, "" when it is nil.
+func deref(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
 }

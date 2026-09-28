@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"strings"
 )
 
 // Envelope is the first decoding phase: the fields every stdout line shares.
@@ -107,6 +108,7 @@ type StreamEvent struct {
 		} `json:"delta"`
 		Usage *Usage `json:"usage"`
 	} `json:"event"`
+	ParentToolUseID *string `json:"parent_tool_use_id"`
 }
 
 // AssistantEvent is the authoritative version of one content block.
@@ -126,12 +128,34 @@ type ToolResult struct {
 	IsError   bool            `json:"is_error"`
 }
 
+// Text is the content as text: the string itself, or the text blocks of an
+// array joined by newlines; "" for any other shape.
+func (r ToolResult) Text() string {
+	var text string
+	if err := json.Unmarshal(r.Content, &text); err == nil {
+		return text
+	}
+
+	var blocks []textBlock
+	if err := json.Unmarshal(r.Content, &blocks); err != nil {
+		return ""
+	}
+	texts := make([]string, 0, len(blocks))
+	for _, block := range blocks {
+		if block.Type == "text" {
+			texts = append(texts, block.Text)
+		}
+	}
+	return strings.Join(texts, "\n")
+}
+
 // UserEvent is a user message the CLI echoes back, tool results included.
 type UserEvent struct {
 	Message struct {
 		Content json.RawMessage `json:"content"`
 	} `json:"message"`
-	ParentToolUseID *string `json:"parent_tool_use_id"`
+	ParentToolUseID *string         `json:"parent_tool_use_id"`
+	ToolUseResult   json.RawMessage `json:"tool_use_result"` // the structured result of the tool; not interpreted
 }
 
 // ToolResults returns the tool_result blocks of a user message, none when the

@@ -1,5 +1,6 @@
 import { vi } from "vitest";
 import type {
+  ActionEntry,
   ArchivedDiscussion,
   ArchivedReview,
   ArchivedTask,
@@ -1115,18 +1116,13 @@ function payloadOf(kind: EntryKind): Omit<Entry, "id" | "seq" | "turnId" | "kind
           text: "On it.",
           complete: true,
           interrupted: false,
+          parentToolUseId: "",
         },
       };
     case "action":
       return {
         ...empty,
-        action: {
-          toolUseId: "toolu_1",
-          tool: "Read",
-          label: "Read",
-          target: "src/main.tsx",
-          status: "done",
-        },
+        action: makeAction(),
       };
     case "permission":
       return {
@@ -1188,6 +1184,23 @@ function payloadOf(kind: EntryKind): Omit<Entry, "id" | "seq" | "turnId" | "kind
         error: { kind: "turn_error", message: "the agent stopped", retryable: true },
       };
   }
+}
+
+export function makeAction(overrides: Partial<ActionEntry> = {}): ActionEntry {
+  return {
+    toolUseId: "toolu_1",
+    tool: "Read",
+    label: "Read",
+    target: "src/main.tsx",
+    status: "done",
+    description: "",
+    commandLines: 0,
+    startedAt: "",
+    finishedAt: "",
+    exitCode: -1,
+    parentToolUseId: "",
+    ...overrides,
+  };
 }
 
 export function makeEntry(kind: EntryKind, overrides: Partial<Entry> = {}): Entry {

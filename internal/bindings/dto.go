@@ -574,6 +574,9 @@ type AssistantEntry struct {
 	Text        string `json:"text"`
 	Complete    bool   `json:"complete"`
 	Interrupted bool   `json:"interrupted"`
+	// ParentToolUseID is the Agent/Task action of the subagent that wrote it;
+	// "" in the main thread.
+	ParentToolUseID string `json:"parentToolUseId"`
 }
 
 // ActionEntry is a tool call the agent made.
@@ -584,6 +587,18 @@ type ActionEntry struct {
 	Target    string `json:"target"`
 	// Status is running, done, error or interrupted.
 	Status string `json:"status"`
+	// Description is what the agent wrote the call is for; "" when none.
+	Description string `json:"description"`
+	// CommandLines counts the lines of a Bash command; 0 when unknown.
+	CommandLines int `json:"commandLines"`
+	// StartedAt and FinishedAt are RFC 3339, "" when unknown.
+	StartedAt  string `json:"startedAt"`
+	FinishedAt string `json:"finishedAt"`
+	// ExitCode is the code a failed Bash command exited with, -1 when unknown.
+	ExitCode int `json:"exitCode"`
+	// ParentToolUseID is the Agent/Task action of the subagent that made it;
+	// "" in the main thread.
+	ParentToolUseID string `json:"parentToolUseId"`
 }
 
 // PermissionEntry is a tool the agent asked to use. Input and Suggestions carry

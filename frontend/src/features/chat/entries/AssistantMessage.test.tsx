@@ -11,6 +11,7 @@ function assistant(overrides: Partial<AssistantEntry> = {}): AssistantEntry {
     text: "On it.",
     complete: true,
     interrupted: false,
+    parentToolUseId: "",
     ...overrides,
   };
 }

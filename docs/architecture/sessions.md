@@ -29,6 +29,8 @@ O modo `-p` sem `--bare` usa as credenciais do login interativo, ou seja, a assi
 
 O app escreve as mensagens do usuário no stdin como JSON, uma por linha, e lê o stream de eventos do stdout linha a linha. Do stream ele monta o transcript: mensagens do assistente com texto em streaming, chamadas de ferramenta com o resultado, e o `result` que fecha cada turno. O `system/init` traz o id da sessão, o modelo e as `capabilities`, que servem para detectar mudanças de protocolo sem comparar versões.
 
+Um subagente, lançado pelas ferramentas `Agent` ou `Task`, fala pelo mesmo stdout: os eventos dele trazem em `parent_tool_use_id` o id da chamada que o lançou, nulo no fio principal. Os `stream_event` de um subagente são ignorados, porque subagentes paralelos se intercalam e nada do que eles transmitem aos pedaços é desenhado; as chamadas e a fala dele entram no transcript pelo `assistant` completo, com o pai gravado. O resultado de uma ferramenta chega num `tool_result`, cujo `content` é um texto ou uma lista de blocos de texto; um `Bash` que falha traz `is_error` e a primeira linha `Exit code N`, às vezes precedida de `Error: `, de onde sai o código de saída.
+
 O mesmo canal carrega o controle:
 
 - **Permissões**: com `--permission-prompt-tool stdio`, uma escalada que o modo auto não resolve chega como `control_request` de `can_use_tool`, com a ferramenta e a entrada exata. O app a mostra como um cartão e responde com um `control_response` de allow, allow pela sessão, ou deny com uma mensagem.
@@ -36,6 +38,13 @@ O mesmo canal carrega o controle:
 - **Interrupção**: um `control_request` de `interrupt` escrito no stdin encerra o turno; o CLI responde com um `result` abortado e segue vivo.
 
 Uma linha de saída pode chegar a 16 MiB, porque o resultado de uma ferramenta pode ser grande. Os últimos 4 KiB do stderr são guardados para explicar uma saída inesperada.
+
+## O que o transcript guarda
+
+O transcript de uma sessão é uma lista de entradas, cada uma de um tipo, gravadas em `transcript_entries` como JSON e atualizadas enquanto o turno corre.
+
+- **Ação**: uma chamada de ferramenta. Guarda o id da chamada e a ferramenta; o verbo e o alvo que a interface mostra (o arquivo, a primeira linha do comando até 1000 caracteres, o padrão, o tipo do subagente); o estado, `running`, `done`, `error` ou `interrupted`; a descrição que o agente escreveu, num `Bash`, num `Agent` ou num `Task`; o número de linhas do comando inteiro de um `Bash`; a hora em que a entrada ficou completa e a hora em que o resultado chegou; o código de saída de um `Bash` que falhou, quando o resultado o diz; e o id da chamada do subagente que a fez, vazio no fio principal. As horas e o código são nulos quando desconhecidos, como nas conversas gravadas antes de existirem.
+- **Fala do assistente**: um bloco de texto, com o id da mensagem, a posição, se está completo ou foi interrompido e o subagente que o escreveu, vazio no fio principal.
 
 ## Catálogo de modelos
 

@@ -6,7 +6,7 @@ import type { Entry, TaskSummary } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
 import type { TranscriptState } from "@/store/transcript";
 import { renderWithStore } from "@/test/render";
-import { makeEntry, makeState, makeTask, makeTranscript } from "@/test/wails-mock";
+import { makeAction, makeEntry, makeState, makeTask, makeTranscript } from "@/test/wails-mock";
 
 function ready(entries: Entry[], pending: Entry[] = []): Record<string, TranscriptState> {
   return { "task-1|prd": { status: "ready", error: "", entries, pending, buffered: [] } };
@@ -47,7 +47,7 @@ function withTask(overrides: Partial<TaskSummary> = {}) {
 function action(turnId: string, target: string, status = "done"): Entry {
   return makeEntry("action", {
     turnId,
-    action: { toolUseId: target, tool: "Read", label: "Read", target, status },
+    action: makeAction({ toolUseId: target, target, status }),
   });
 }
 

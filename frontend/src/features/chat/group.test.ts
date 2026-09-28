@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { groupEntries } from "@/features/chat/group";
 import type { Entry } from "@/lib/wails";
-import { makeEntry } from "@/test/wails-mock";
+import { makeAction, makeEntry } from "@/test/wails-mock";
 
 function action(turnId: string, target: string): Entry {
   return makeEntry("action", {
     turnId,
-    action: { toolUseId: target, tool: "Read", label: "Read", target, status: "done" },
+    action: makeAction({ toolUseId: target, target }),
   });
 }
 

@@ -18,6 +18,9 @@ const (
 	interruptFixture = "interrupt.jsonl"
 	questionFixture  = "question.jsonl"
 	resumeFixture    = "resume.jsonl"
+	describedFixture = "bash-description.jsonl"
+	exitFixture      = "bash-exit.jsonl"
+	subagentFixture  = "subagent.jsonl"
 )
 
 // loadFixture decodes every line of a captured session in testdata.
@@ -839,5 +842,127 @@ func TestControlResponseRejectsAnInvalidInput(t *testing.T) {
 		UpdatedInput: json.RawMessage(`{`),
 	}); err == nil {
 		t.Error("ControlResponse() = nil, want an error")
+	}
+}
+
+// toolUses is every tool_use block of the assistant events of a capture.
+func toolUses(events []claude.Event) []claude.ContentBlock {
+	var blocks []claude.ContentBlock
+	for _, assistant := range assistants(events) {
+		for _, block := range assistant.Message.Content {
+			if block.Type == "tool_use" {
+				blocks = append(blocks, block)
+			}
+		}
+	}
+	return blocks
+}
+
+func TestDecodeBashWithDescription(t *testing.T) {
+	t.Parallel()
+	events := loadFixture(t, describedFixture)
+
+	uses := toolUses(events)
+	if len(uses) != 1 || uses[0].Name != "Bash" {
+		t.Fatalf("tool uses = %+v, want one Bash", uses)
+	}
+	var input struct{ Command, Description string }
+	if err := json.Unmarshal(uses[0].Input, &input); err != nil {
+		t.Fatalf("Unmarshal(input) = %v, want nil", err)
+	}
+	if input.Description != "List the files" {
+		t.Errorf("description = %q, want List the files", input.Description)
+	}
+
+	got := toolResults(events)
+	if len(got) != 1 || got[0].IsError || got[0].Text() != "a.txt" {
+		t.Errorf("results = %+v, want one result with the text a.txt", got)
+	}
+	for _, stream := range streams(events) {
+		if stream.ParentToolUseID != nil {
+			t.Fatalf("stream parent = %q, want nil in the main thread", *stream.ParentToolUseID)
+		}
+	}
+	for _, user := range users(events) {
+		var result struct{ Stdout string }
+		if err := json.Unmarshal(user.ToolUseResult, &result); err != nil || result.Stdout != "a.txt" {
+			t.Errorf("tool_use_result = %s, want the stdout a.txt", user.ToolUseResult)
+		}
+	}
+}
+
+func TestDecodeBashExitCode(t *testing.T) {
+	t.Parallel()
+	events := loadFixture(t, exitFixture)
+
+	got := toolResults(events)
+	if len(got) != 1 || !got[0].IsError {
+		t.Fatalf("results = %+v, want one error", got)
+	}
+	if want := "Exit code 1\ncat: missing.txt: No such file or directory"; got[0].Text() != want {
+		t.Errorf("Text() = %q, want %q", got[0].Text(), want)
+	}
+	var result string
+	if err := json.Unmarshal(users(events)[0].ToolUseResult, &result); err != nil || !strings.HasPrefix(result, "Error: Exit code 1") {
+		t.Errorf("tool_use_result = %s, want the error line", users(events)[0].ToolUseResult)
+	}
+}
+
+func TestDecodeSubagent(t *testing.T) {
+	t.Parallel()
+	events := loadFixture(t, subagentFixture)
+
+	uses := toolUses(events)
+	if len(uses) != 3 || uses[0].Name != "Agent" {
+		t.Fatalf("tool uses = %+v, want the Agent and its two actions", uses)
+	}
+	agentID := uses[0].ID
+
+	var parents []string
+	for _, assistant := range assistants(events) {
+		for _, block := range assistant.Message.Content {
+			if block.Type != "tool_use" {
+				continue
+			}
+			parent := ""
+			if assistant.ParentToolUseID != nil {
+				parent = *assistant.ParentToolUseID
+			}
+			parents = append(parents, block.Name+" "+parent)
+		}
+	}
+	want := []string{"Agent ", "Bash " + agentID, "Read " + agentID}
+	if diff := cmp.Diff(want, parents); diff != "" {
+		t.Errorf("tool uses and parents mismatch (-want +got):\n%s", diff)
+	}
+
+	results := toolResults(events)
+	report := results[len(results)-1]
+	if report.ToolUseID != agentID || !strings.Contains(report.Text(), "hi") {
+		t.Errorf("last result = %s: %q, want the report of %s", report.ToolUseID, report.Text(), agentID)
+	}
+}
+
+func TestToolResultText(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]struct {
+		content string
+		want    string
+	}{
+		"string":                 {`"Exit code 2\nboom"`, "Exit code 2\nboom"},
+		"text blocks are joined": {`[{"type":"text","text":"a"},{"type":"image"},{"type":"text","text":"b"}]`, "a\nb"},
+		"no content":             {``, ""},
+		"another shape":          {`{"x":1}`, ""},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			result := claude.ToolResult{Content: json.RawMessage(tc.content)}
+			if got := result.Text(); got != tc.want {
+				t.Errorf("Text() = %q, want %q", got, tc.want)
+			}
+		})
 	}
 }

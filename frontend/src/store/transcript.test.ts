@@ -6,7 +6,7 @@ import {
   fromTranscript,
   type TranscriptState,
 } from "@/store/transcript";
-import { makeEntry, makeTranscript } from "@/test/wails-mock";
+import { makeAction, makeEntry, makeTranscript } from "@/test/wails-mock";
 
 function ready(entries: Entry[] = [], pending: Entry[] = []): TranscriptState {
   return { status: "ready", error: "", entries, pending, buffered: [] };
@@ -33,13 +33,7 @@ describe("applyEvent", () => {
     const running = makeEntry("action", {
       id: "a",
       seq: 1,
-      action: {
-        toolUseId: "toolu_1",
-        tool: "Read",
-        label: "Read",
-        target: "src/main.tsx",
-        status: "running",
-      },
+      action: makeAction({ status: "running" }),
     });
     const done = makeEntry("action", { id: "a", seq: 1 });
 

@@ -108,13 +108,98 @@ func TestToolCallBecomesAnAction(t *testing.T) {
 	}
 
 	wantAction := &session.ActionEntry{
-		ToolUseID: "toolu_fake_3",
-		Tool:      "Read",
-		Label:     "Reading",
-		Target:    claudetest.ReadPath,
-		Status:    session.ActionDone,
+		ToolUseID:  "toolu_fake_3",
+		Tool:       "Read",
+		Label:      "Reading",
+		Target:     claudetest.ReadPath,
+		Status:     session.ActionDone,
+		StartedAt:  &base,
+		FinishedAt: &base,
 	}
 	if diff := cmp.Diff(wantAction, tr.Entries[2].Action); diff != "" {
+		t.Errorf("action mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestSubagentActionsAndTextCarryTheirParent(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "subagent")
+	f.start(t, taskInfo(t, "t1"))
+	f.waitIdle(t, prd("t1"))
+
+	type row struct {
+		Kind                       session.Kind
+		Tool, Target, Text, Parent string
+		Description                string
+		CommandLines               int
+	}
+	var agentID string
+	var got []row
+	for _, e := range f.transcript(t, prd("t1")).Entries {
+		switch e.Kind {
+		case session.KindAction:
+			if e.Action.Tool == "Agent" {
+				agentID = e.Action.ToolUseID
+			}
+			if e.Action.StartedAt == nil || e.Action.FinishedAt == nil || !e.Action.StartedAt.Equal(base) || !e.Action.FinishedAt.Equal(base) {
+				t.Errorf("%s times = %v and %v, want both %v", e.Action.Tool, e.Action.StartedAt, e.Action.FinishedAt, base)
+			}
+			got = append(got, row{
+				Kind: e.Kind, Tool: e.Action.Tool, Target: e.Action.Target, Parent: e.Action.ParentToolUseID,
+				Description: e.Action.Description, CommandLines: e.Action.CommandLines,
+			})
+		case session.KindAssistant:
+			got = append(got, row{Kind: e.Kind, Text: e.Assistant.Text, Parent: e.Assistant.ParentToolUseID})
+		default:
+		}
+	}
+	want := []row{
+		{Kind: session.KindAction, Tool: "Agent", Target: claudetest.SubagentType, Description: claudetest.SubagentDescription},
+		{Kind: session.KindAction, Tool: "Read", Target: claudetest.ReadPath, Parent: agentID},
+		{Kind: session.KindAction, Tool: "Bash", Target: "ls -1", Parent: agentID, Description: "List the files", CommandLines: 1},
+		{Kind: session.KindAssistant, Text: claudetest.SubagentText, Parent: agentID},
+	}
+	if len(got) != len(want)+1 {
+		t.Fatalf("entries = %+v, want the subagent's and the answer", got)
+	}
+	if diff := cmp.Diff(want, got[:len(want)]); diff != "" {
+		t.Errorf("entries mismatch (-want +got):\n%s", diff)
+	}
+	if answer := got[len(want)]; answer.Kind != session.KindAssistant || answer.Parent != "" {
+		t.Errorf("last entry = %+v, want the answer of the main thread", answer)
+	}
+}
+
+func TestFailedBashKeepsItsExitCode(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "bash_fail")
+	f.start(t, taskInfo(t, "t1"))
+	f.waitIdle(t, prd("t1"))
+
+	var action *session.ActionEntry
+	for _, e := range f.transcript(t, prd("t1")).Entries {
+		if e.Kind == session.KindAction {
+			action = e.Action
+		}
+	}
+	if action == nil {
+		t.Fatal("no action in the transcript, want the failed command")
+	}
+	want := &session.ActionEntry{
+		ToolUseID:    action.ToolUseID,
+		Tool:         "Bash",
+		Label:        "Running",
+		Target:       "go test ./...",
+		Status:       session.ActionError,
+		Description:  claudetest.FailingDescription,
+		CommandLines: 2,
+		StartedAt:    &base,
+		FinishedAt:   &base,
+		ExitCode:     new(2),
+	}
+	if diff := cmp.Diff(want, action); diff != "" {
 		t.Errorf("action mismatch (-want +got):\n%s", diff)
 	}
 }
@@ -2017,7 +2102,7 @@ func TestStartOfAReviewOfAPullRequestSendsWhatTheAppReadFromGitHub(t *testing.T)
 }
 
 // readLabel is the label every action of the actions scenario carries.
-var readLabel, _ = session.For("Read", nil, "")
+var readLabel = session.For("Read", nil, "").Label
 
 // waitAction waits until the action in progress of a session has the target.
 func waitAction(t *testing.T, f *fixture, k session.Key, target string) session.Summary {

@@ -701,6 +701,31 @@ func fromEntries(entries []session.Entry) []Entry {
 	return converted
 }
 
+// fromAction converts a tool call, with "" and -1 for what is unknown.
+func fromAction(a *session.ActionEntry) *ActionEntry {
+	converted := &ActionEntry{
+		ToolUseID:       a.ToolUseID,
+		Tool:            a.Tool,
+		Label:           a.Label,
+		Target:          a.Target,
+		Status:          string(a.Status),
+		Description:     a.Description,
+		CommandLines:    a.CommandLines,
+		ExitCode:        -1,
+		ParentToolUseID: a.ParentToolUseID,
+	}
+	if a.StartedAt != nil {
+		converted.StartedAt = timeOrEmpty(*a.StartedAt)
+	}
+	if a.FinishedAt != nil {
+		converted.FinishedAt = timeOrEmpty(*a.FinishedAt)
+	}
+	if a.ExitCode != nil {
+		converted.ExitCode = *a.ExitCode
+	}
+	return converted
+}
+
 // FromEntry converts one entry with the payload matching its kind.
 func FromEntry(e session.Entry) Entry {
 	converted := Entry{
@@ -720,21 +745,16 @@ func FromEntry(e session.Entry) Entry {
 	}
 	if e.Assistant != nil {
 		converted.Assistant = &AssistantEntry{
-			MessageID:   e.Assistant.MessageID,
-			BlockIndex:  e.Assistant.BlockIndex,
-			Text:        e.Assistant.Text,
-			Complete:    e.Assistant.Complete,
-			Interrupted: e.Assistant.Interrupted,
+			MessageID:       e.Assistant.MessageID,
+			BlockIndex:      e.Assistant.BlockIndex,
+			Text:            e.Assistant.Text,
+			Complete:        e.Assistant.Complete,
+			Interrupted:     e.Assistant.Interrupted,
+			ParentToolUseID: e.Assistant.ParentToolUseID,
 		}
 	}
 	if e.Action != nil {
-		converted.Action = &ActionEntry{
-			ToolUseID: e.Action.ToolUseID,
-			Tool:      e.Action.Tool,
-			Label:     e.Action.Label,
-			Target:    e.Action.Target,
-			Status:    string(e.Action.Status),
-		}
+		converted.Action = fromAction(e.Action)
 	}
 	if e.Permission != nil {
 		converted.Permission = fromPermission(e.Permission)
