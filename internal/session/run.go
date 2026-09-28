@@ -139,6 +139,7 @@ func (r *run) summary() Summary {
 	switch {
 	case r.rec.Paused:
 		sum.Status = StatusPaused
+		sum.PausedAt = r.rec.PausedAt
 	case r.rec.LastError != "":
 		sum.Status = StatusError
 	case r.permission != nil && r.permission.Kind == KindQuestion:

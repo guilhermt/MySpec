@@ -7,6 +7,7 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/models"
@@ -81,7 +82,8 @@ type StepState struct {
 
 	CommitSHA     string // done only
 	CommitSubject string
-	CommitFailed  bool // the last approval ended without a commit
+	CommittedAt   time.Time // done only; zero when unknown
+	CommitFailed  bool      // the last approval ended without a commit
 }
 
 // ModelEditable reports whether the model and effort of the step can still
@@ -160,7 +162,7 @@ func (s *Service) Steps(id string) []StepState {
 				}
 			case task.StepDone:
 				state.Status = StepDone
-				state.CommitSHA, state.CommitSubject = run.CommitSHA, run.CommitSubject
+				state.CommitSHA, state.CommitSubject, state.CommittedAt = run.CommitSHA, run.CommitSubject, run.CommittedAt
 			}
 		}
 		if state.Status != StepDone && noCommit {
@@ -629,7 +631,7 @@ func (s *Service) completeStep(
 		s.log.Warn("read commit failed", "task", t.ID, "step", step.Number, "error", err)
 		commit = git.Commit{SHA: head}
 	}
-	if _, err := s.tasks.SetStepCommitted(ctx, t.ID, step.Number, commit.SHA, commit.Subject); err != nil {
+	if _, err := s.tasks.SetStepCommitted(ctx, t.ID, step.Number, commit.SHA, commit.Subject, commit.CommittedAt); err != nil {
 		s.log.Error("record committed step failed", "task", t.ID, "step", step.Number, "error", err)
 		return
 	}

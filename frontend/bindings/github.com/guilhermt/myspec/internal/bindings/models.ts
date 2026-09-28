@@ -777,6 +777,11 @@ export interface DiscussionSummary {
     "turnStartedAt": string;
 
     /**
+     * when the session was paused, RFC 3339; "" when it is not, or the time is unknown
+     */
+    "pausedAt": string;
+
+    /**
      * ActionLabel and ActionTarget are the action the agent runs now, as the
      * conversation words it ("Reading", "internal/app/state.go"); "" when none
      * runs.
@@ -1459,6 +1464,11 @@ export interface PullRequest {
     "turnStartedAt": string;
 
     /**
+     * when the session was paused, RFC 3339; "" when it is not, or the time is unknown
+     */
+    "pausedAt": string;
+
+    /**
      * ActionLabel and ActionTarget are the action the agent runs now, as the
      * conversation words it ("Reading", "internal/app/state.go"); "" when none
      * runs.
@@ -2000,6 +2010,11 @@ export interface ReviewSummary {
     "turnStartedAt": string;
 
     /**
+     * when the session was paused, RFC 3339; "" when it is not, or the time is unknown
+     */
+    "pausedAt": string;
+
+    /**
      * ActionLabel and ActionTarget are the action the agent runs now, as the
      * conversation words it ("Reading", "internal/app/state.go"); "" when none
      * runs.
@@ -2300,6 +2315,11 @@ export interface Step {
     "commitSubject": string;
 
     /**
+     * done only: the committer date, RFC 3339; "" when unknown
+     */
+    "committedAt": string;
+
+    /**
      * the last approval ended without a commit
      */
     "commitFailed": boolean;
@@ -2433,6 +2453,11 @@ export interface StepReviewer {
     "turnStartedAt": string;
 
     /**
+     * when the session was paused, RFC 3339; "" when it is not, or the time is unknown
+     */
+    "pausedAt": string;
+
+    /**
      * ActionLabel and ActionTarget are the action the agent runs now, as the
      * conversation words it ("Reading", "internal/app/state.go"); "" when none
      * runs.
@@ -2554,6 +2579,11 @@ export interface TaskSummary {
      * a turn.
      */
     "turnStartedAt": string;
+
+    /**
+     * when the session was paused, RFC 3339; "" when it is not, or the time is unknown
+     */
+    "pausedAt": string;
 
     /**
      * ActionLabel and ActionTarget are the action the agent runs now, as the

@@ -589,6 +589,9 @@ func (s *Service) Pause(ctx context.Context, k Key) error {
 	if err != nil {
 		return err
 	}
+	if !r.rec.Paused {
+		r.rec.PausedAt = s.now().UTC()
+	}
 	r.rec.Paused = true
 	if err := s.persistRecord(ctx, r); err != nil {
 		return err
@@ -612,6 +615,7 @@ func (s *Service) Resume(ctx context.Context, k Key) error {
 		return err
 	}
 	r.rec.Paused = false
+	r.rec.PausedAt = time.Time{}
 	if err := s.persistRecord(ctx, r); err != nil {
 		return err
 	}

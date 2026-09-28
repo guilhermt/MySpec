@@ -50,7 +50,9 @@ type Tasks interface {
 	StepRuns(id string) []task.StepRun
 	SetStepRun(ctx context.Context, id string, number int, status task.StepStatus, block *task.StepBlock) (task.StepRun, error)
 	SetStepStarted(ctx context.Context, id string, number int, startCommit string) (task.StepRun, error)
-	SetStepCommitted(ctx context.Context, id string, number int, sha, subject string) (task.StepRun, error)
+	SetStepCommitted(
+		ctx context.Context, id string, number int, sha, subject string, committedAt time.Time,
+	) (task.StepRun, error)
 	SetStepPass(ctx context.Context, id string, number, pass int) (task.StepRun, error)
 	SetStepReported(ctx context.Context, id string, number, pass int) (task.StepRun, error)
 	SetStepFallback(ctx context.Context, id string, number int, fallback task.ReviewFallback) (task.StepRun, error)

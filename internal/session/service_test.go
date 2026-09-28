@@ -554,6 +554,80 @@ func TestPauseStopsAndResumeContinues(t *testing.T) {
 	}
 }
 
+func TestPausingASessionRecordsWhenItWasPaused(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "slow")
+	f.open(t, taskInfo(t, "t1"))
+	f.advance(time.Minute)
+
+	if err := f.service.Pause(t.Context(), prd("t1")); err != nil {
+		t.Fatalf("Pause() = %v, want nil", err)
+	}
+	want := base.Add(time.Minute)
+	if got := f.summary(t, prd("t1")).PausedAt; !got.Equal(want) {
+		t.Errorf("summary PausedAt = %v, want %v", got, want)
+	}
+	if got := f.sessions.get(t, "t1", string(prompts.StagePRD)).PausedAt; !got.Equal(want) {
+		t.Errorf("record PausedAt = %v, want %v", got, want)
+	}
+}
+
+func TestPausingAPausedSessionKeepsTheFirstTime(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "slow")
+	f.open(t, taskInfo(t, "t1"))
+	for range 2 {
+		if err := f.service.Pause(t.Context(), prd("t1")); err != nil {
+			t.Fatalf("Pause() = %v, want nil", err)
+		}
+		f.advance(time.Minute)
+	}
+
+	if got := f.summary(t, prd("t1")).PausedAt; !got.Equal(base) {
+		t.Errorf("PausedAt = %v, want the first pause %v", got, base)
+	}
+}
+
+func TestResumingASessionClearsThePauseTime(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "slow")
+	f.open(t, taskInfo(t, "t1"))
+	if err := f.service.Pause(t.Context(), prd("t1")); err != nil {
+		t.Fatalf("Pause() = %v, want nil", err)
+	}
+	if err := f.service.Resume(t.Context(), prd("t1")); err != nil {
+		t.Fatalf("Resume() = %v, want nil", err)
+	}
+
+	if got := f.summary(t, prd("t1")).PausedAt; !got.IsZero() {
+		t.Errorf("summary PausedAt = %v, want zero", got)
+	}
+	if got := f.sessions.get(t, "t1", string(prompts.StagePRD)).PausedAt; !got.IsZero() {
+		t.Errorf("record PausedAt = %v, want zero", got)
+	}
+}
+
+func TestAPausedSessionKeepsItsPauseTimeAcrossARestart(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "slow")
+	f.open(t, taskInfo(t, "t1"))
+	if err := f.service.Pause(t.Context(), prd("t1")); err != nil {
+		t.Fatalf("Pause() = %v, want nil", err)
+	}
+
+	next := f.restart(t)
+	next.advance(time.Hour)
+	next.open(t, taskInfo(t, "t1"))
+	sum := next.summary(t, prd("t1"))
+	if sum.Status != session.StatusPaused || !sum.PausedAt.Equal(base) {
+		t.Errorf("summary = %v at %v, want paused at %v", sum.Status, sum.PausedAt, base)
+	}
+}
+
 func TestIdleProcessStopsAndResumesOnDemand(t *testing.T) {
 	t.Parallel()
 

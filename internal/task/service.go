@@ -741,10 +741,12 @@ func (s *Service) SetStepStarted(ctx context.Context, id string, number int, sta
 
 // SetStepCommitted records the commit a step produced, which is what makes it
 // done.
-func (s *Service) SetStepCommitted(ctx context.Context, id string, number int, sha, subject string) (StepRun, error) {
+func (s *Service) SetStepCommitted(
+	ctx context.Context, id string, number int, sha, subject string, committedAt time.Time,
+) (StepRun, error) {
 	run, err := s.updateStepRun(ctx, id, number, func(run *StepRun) {
 		run.Status = StepDone
-		run.CommitSHA, run.CommitSubject = sha, subject
+		run.CommitSHA, run.CommitSubject, run.CommittedAt = sha, subject, committedAt
 	})
 	if err != nil {
 		return StepRun{}, err

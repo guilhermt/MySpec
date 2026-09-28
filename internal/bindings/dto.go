@@ -161,6 +161,7 @@ type Step struct {
 	Review        *Review `json:"review"`        // the review states and committing only
 	CommitSHA     string  `json:"commitSha"`     // done only
 	CommitSubject string  `json:"commitSubject"` // done only
+	CommittedAt   string  `json:"committedAt"`   // done only: the committer date, RFC 3339; "" when unknown
 	CommitFailed  bool    `json:"commitFailed"`  // the last approval ended without a commit
 
 	Model         string `json:"model"` // what the step runs with, or will run with
@@ -207,6 +208,7 @@ type StepReviewer struct {
 	// TurnStartedAt is when the turn in progress started, RFC 3339; "" without
 	// a turn.
 	TurnStartedAt string `json:"turnStartedAt"`
+	PausedAt      string `json:"pausedAt"` // when the session was paused, RFC 3339; "" when it is not, or the time is unknown
 	// ActionLabel and ActionTarget are the action the agent runs now, as the
 	// conversation words it ("Reading", "internal/app/state.go"); "" when none
 	// runs.
@@ -313,6 +315,7 @@ type PullRequest struct {
 	// TurnStartedAt is when the turn in progress started, RFC 3339; "" without
 	// a turn.
 	TurnStartedAt string `json:"turnStartedAt"`
+	PausedAt      string `json:"pausedAt"` // when the session was paused, RFC 3339; "" when it is not, or the time is unknown
 	// ActionLabel and ActionTarget are the action the agent runs now, as the
 	// conversation words it ("Reading", "internal/app/state.go"); "" when none
 	// runs.
@@ -422,6 +425,7 @@ type TaskSummary struct {
 	// TurnStartedAt is when the turn in progress started, RFC 3339; "" without
 	// a turn.
 	TurnStartedAt string `json:"turnStartedAt"`
+	PausedAt      string `json:"pausedAt"` // when the session was paused, RFC 3339; "" when it is not, or the time is unknown
 	// ActionLabel and ActionTarget are the action the agent runs now, as the
 	// conversation words it ("Reading", "internal/app/state.go"); "" when none
 	// runs.
@@ -1109,6 +1113,7 @@ type ReviewSummary struct {
 	// TurnStartedAt is when the turn in progress started, RFC 3339; "" without
 	// a turn.
 	TurnStartedAt string `json:"turnStartedAt"`
+	PausedAt      string `json:"pausedAt"` // when the session was paused, RFC 3339; "" when it is not, or the time is unknown
 	// ActionLabel and ActionTarget are the action the agent runs now, as the
 	// conversation words it ("Reading", "internal/app/state.go"); "" when none
 	// runs.
@@ -1293,6 +1298,7 @@ type DiscussionSummary struct {
 	// TurnStartedAt is when the turn in progress started, RFC 3339; "" without
 	// a turn.
 	TurnStartedAt string `json:"turnStartedAt"`
+	PausedAt      string `json:"pausedAt"` // when the session was paused, RFC 3339; "" when it is not, or the time is unknown
 	// ActionLabel and ActionTarget are the action the agent runs now, as the
 	// conversation words it ("Reading", "internal/app/state.go"); "" when none
 	// runs.

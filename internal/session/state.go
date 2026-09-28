@@ -30,6 +30,7 @@ type Record struct {
 	Choice        models.Choice
 	Started       bool // system/init has arrived at least once for this id
 	Paused        bool
+	PausedAt      time.Time // zero while not paused, and for a pause recorded before the time was kept
 	ContextTokens int
 	ContextWindow int
 	Corrections   int // automatic corrections the app sent to this session
@@ -131,6 +132,7 @@ type Summary struct {
 	// TurnStartedAt is when the message that opened the turn in progress went
 	// to the CLI; zero without a turn.
 	TurnStartedAt time.Time
+	PausedAt      time.Time // the moment the session was paused; zero when it is not, or when the time is unknown
 	// ActionLabel and ActionTarget are the action the turn runs now: the last
 	// action entry of the turn that is still running. "" when none runs.
 	ActionLabel    string

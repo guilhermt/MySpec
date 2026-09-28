@@ -134,6 +134,23 @@ func parseTime(value, subject string) (time.Time, error) {
 	return parsed, nil
 }
 
+// formatTimeOrEmpty writes an instant into a NOT NULL timestamp column that
+// spells "unknown" as the empty string.
+func formatTimeOrEmpty(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return formatTime(t)
+}
+
+// parseTimeOrEmpty reads a timestamp column written by formatTimeOrEmpty.
+func parseTimeOrEmpty(value, subject string) (time.Time, error) {
+	if value == "" {
+		return time.Time{}, nil
+	}
+	return parseTime(value, subject)
+}
+
 // nullString stores an empty string as NULL, which is how the nullable columns
 // spell "absent".
 func nullString(value string) sql.NullString {

@@ -361,13 +361,30 @@ func newFixtureWith(t *testing.T, launcher *fakeLauncher, idle time.Duration) *f
 		launcher: launcher,
 		now:      base,
 	}
+	f.build(t, idle)
+	return f
+}
+
+// restart builds a new Service over the records of this one, as a new run of
+// the app finds them.
+func (f *fixture) restart(t *testing.T) *fixture {
+	t.Helper()
+
+	next := &fixture{sessions: f.sessions, entries: f.entries, launcher: f.launcher, now: f.clock()}
+	next.build(t, 0)
+	return next
+}
+
+// build creates the Service of a fixture over its collaborators.
+func (f *fixture) build(t *testing.T, idle time.Duration) {
+	t.Helper()
 
 	var ids int
 	var idMu sync.Mutex
 	f.service = session.New(session.Deps{
 		Sessions:     f.sessions,
 		Entries:      f.entries,
-		Launcher:     launcher,
+		Launcher:     f.launcher,
 		RenderPrompt: renderPrompt,
 		Log:          slog.New(slog.DiscardHandler),
 		Now:          f.clock,
@@ -386,7 +403,6 @@ func newFixtureWith(t *testing.T, launcher *fakeLauncher, idle time.Duration) *f
 		defer cancel()
 		f.service.Shutdown(ctx)
 	})
-	return f
 }
 
 // clock is the fixture's time, base until a test advances it.

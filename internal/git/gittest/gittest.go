@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // Env is the environment the tests run git in: the parent's without any GIT_*
@@ -100,4 +101,27 @@ func Commit(t *testing.T, dir, file, content, message string) {
 	}
 	Run(t, dir, "add", "--", file)
 	Run(t, dir, "commit", "-m", message)
+}
+
+// CommitAt is Commit with the author and committer dates set to when.
+func CommitAt(t *testing.T, dir, file, content, message string, when time.Time) {
+	t.Helper()
+
+	full := filepath.Join(dir, file)
+	if err := os.MkdirAll(filepath.Dir(full), 0o750); err != nil {
+		t.Fatalf("MkdirAll(%s) = %v, want nil", filepath.Dir(full), err)
+	}
+	if err := os.WriteFile(full, []byte(content), 0o600); err != nil {
+		t.Fatalf("WriteFile(%s) = %v, want nil", full, err)
+	}
+	Run(t, dir, "add", "--", file)
+
+	date := when.Format(time.RFC3339)
+	cmd := exec.Command("git", "commit", "-m", message)
+	cmd.Dir = dir
+	// t.Setenv does not fit: the tests run in parallel.
+	cmd.Env = append(Env(t), "GIT_AUTHOR_DATE="+date, "GIT_COMMITTER_DATE="+date)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git commit in %s = %v, want nil: %s", dir, err, out)
+	}
 }

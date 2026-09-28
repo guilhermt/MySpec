@@ -104,6 +104,7 @@ func TestStepsCarryTheCommitsOfTheStep(t *testing.T) {
 	run.Status = task.StepDone
 	run.CommitSHA = "2222222222222222222222222222222222222222"
 	run.CommitSubject = "Add the login screen"
+	run.CommittedAt = fixedTime.Add(30 * time.Second)
 	run.UpdatedAt = fixedTime.Add(time.Minute)
 	if err := s.Tasks.UpsertStepRun(t.Context(), run); err != nil {
 		t.Fatalf("UpsertStepRun(done) = %v, want nil", err)

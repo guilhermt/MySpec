@@ -527,9 +527,11 @@ func (m *memTasks) SetStepStarted(_ context.Context, id string, number int, star
 	return m.updateRun(id, number, task.StepStarted, func(run *task.StepRun) { run.StartCommit = startCommit })
 }
 
-func (m *memTasks) SetStepCommitted(_ context.Context, id string, number int, sha, subject string) (task.StepRun, error) {
+func (m *memTasks) SetStepCommitted(
+	_ context.Context, id string, number int, sha, subject string, committedAt time.Time,
+) (task.StepRun, error) {
 	return m.updateRun(id, number, task.StepDone, func(run *task.StepRun) {
-		run.CommitSHA, run.CommitSubject = sha, subject
+		run.CommitSHA, run.CommitSubject, run.CommittedAt = sha, subject, committedAt
 	})
 }
 
@@ -1146,6 +1148,7 @@ type memWorktrees struct {
 	baseErr   error
 	mergedErr error
 	subject   string           // the subject every commit reading answers with
+	committed time.Time        // the committer date every commit reading answers with
 	phases    []worktree.Phase // reported by every Ensure
 	ensureErr error
 	statusErr error
@@ -1170,10 +1173,11 @@ type closeCall struct {
 
 func newWorktrees() *memWorktrees {
 	return &memWorktrees{
-		items:   map[string]worktree.Worktree{},
-		subject: "Do the work of the step",
-		phases:  []worktree.Phase{worktree.PhaseFetching, worktree.PhaseCreating},
-		base:    "origin/dev",
+		items:     map[string]worktree.Worktree{},
+		subject:   "Do the work of the step",
+		committed: commitTime,
+		phases:    []worktree.Phase{worktree.PhaseFetching, worktree.PhaseCreating},
+		base:      "origin/dev",
 		closeResult: task.CloseResult{
 			Worktree:    task.CloseStep{Outcome: task.OutcomeDone},
 			Branch:      task.CloseStep{Outcome: task.OutcomeDone},
@@ -1276,6 +1280,13 @@ func (m *memWorktrees) Status(_ context.Context, wt worktree.Worktree) (git.Stat
 	return m.status, nil
 }
 
+// failCommits makes every commit reading fail.
+func (m *memWorktrees) failCommits(err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.commitErr = err
+}
+
 func (m *memWorktrees) Commit(_ context.Context, wt worktree.Worktree, rev string) (git.Commit, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -1284,7 +1295,7 @@ func (m *memWorktrees) Commit(_ context.Context, wt worktree.Worktree, rev strin
 	if m.commitErr != nil {
 		return git.Commit{}, m.commitErr
 	}
-	return git.Commit{SHA: rev, Subject: m.subject}, nil
+	return git.Commit{SHA: rev, Subject: m.subject, CommittedAt: m.committed}, nil
 }
 
 func (m *memWorktrees) Clean(_ context.Context, wt worktree.Worktree) error {

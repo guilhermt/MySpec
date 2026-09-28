@@ -218,6 +218,7 @@ func FromTasks(
 			ProcessRunning:     summary.ProcessRunning,
 			RetryAttempt:       summary.RetryAttempt,
 			TurnStartedAt:      turnStart(summary),
+			PausedAt:           pausedAt(summary),
 			ActionLabel:        summary.ActionLabel,
 			ActionTarget:       summary.ActionTarget,
 			ContextPercent:     summary.ContextPercent,
@@ -303,6 +304,7 @@ func fromPullRequest(pr *flow.PullRequest) *PullRequest {
 		ProcessRunning: summary.ProcessRunning,
 		RetryAttempt:   summary.RetryAttempt,
 		TurnStartedAt:  turnStart(summary),
+		PausedAt:       pausedAt(summary),
 		ActionLabel:    summary.ActionLabel,
 		ActionTarget:   summary.ActionTarget,
 		ContextPercent: summary.ContextPercent,
@@ -485,6 +487,7 @@ func fromSteps(states []flow.StepState) []Step {
 			Review:        fromReview(state.Review),
 			CommitSHA:     state.CommitSHA,
 			CommitSubject: state.CommitSubject,
+			CommittedAt:   timeOrEmpty(state.CommittedAt),
 			CommitFailed:  state.CommitFailed,
 
 			Model:         string(state.Choice.Model),
@@ -531,6 +534,7 @@ func fromStepReviewer(stage string, summary session.Summary) *StepReviewer {
 		ProcessRunning: summary.ProcessRunning,
 		RetryAttempt:   summary.RetryAttempt,
 		TurnStartedAt:  turnStart(summary),
+		PausedAt:       pausedAt(summary),
 		ActionLabel:    summary.ActionLabel,
 		ActionTarget:   summary.ActionTarget,
 		ContextPercent: summary.ContextPercent,
@@ -1394,6 +1398,7 @@ func FromReviews(
 			ProcessRunning: summary.ProcessRunning,
 			RetryAttempt:   summary.RetryAttempt,
 			TurnStartedAt:  turnStart(summary),
+			PausedAt:       pausedAt(summary),
 			ActionLabel:    summary.ActionLabel,
 			ActionTarget:   summary.ActionTarget,
 			ContextPercent: summary.ContextPercent,
@@ -1620,6 +1625,7 @@ func FromDiscussions(
 			ProcessRunning: summary.ProcessRunning,
 			RetryAttempt:   summary.RetryAttempt,
 			TurnStartedAt:  turnStart(summary),
+			PausedAt:       pausedAt(summary),
 			ActionLabel:    summary.ActionLabel,
 			ActionTarget:   summary.ActionTarget,
 			ContextPercent: summary.ContextPercent,
@@ -1963,6 +1969,20 @@ func cardOfReading(reading *board.Reading, key string) (board.Card, bool) {
 		return board.Card{}, false
 	}
 	return reading.Cards[i], true
+}
+
+// pausedAt is when a session was paused, "" when it is not or the time is
+// unknown.
+func pausedAt(summary session.Summary) string {
+	return timeOrEmpty(summary.PausedAt)
+}
+
+// timeOrEmpty writes an instant as RFC 3339, "" for the zero time.
+func timeOrEmpty(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.Format(time.RFC3339)
 }
 
 // turnStart is when the turn of a session started, "" without one.

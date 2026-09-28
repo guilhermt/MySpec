@@ -164,6 +164,7 @@ func TestSetStepCommittedIsWhatMakesAStepDone(t *testing.T) {
 		sha     = "2222222222222222222222222222222222222222"
 		subject = "Add the login screen"
 	)
+	committedAt := time.Date(2026, 9, 20, 14, 30, 0, 0, time.UTC)
 	if _, err := f.service.SetStepStarted(t.Context(), created.ID, 1, start); err != nil {
 		t.Fatalf("SetStepStarted() = %v, want nil", err)
 	}
@@ -171,14 +172,14 @@ func TestSetStepCommittedIsWhatMakesAStepDone(t *testing.T) {
 		t.Fatalf("SetStepRun(committing) = %v, want nil", err)
 	}
 
-	run, err := f.service.SetStepCommitted(t.Context(), created.ID, 1, sha, subject)
+	run, err := f.service.SetStepCommitted(t.Context(), created.ID, 1, sha, subject, committedAt)
 	if err != nil {
 		t.Fatalf("SetStepCommitted() = %v, want nil", err)
 	}
 	want := task.StepRun{
 		TaskID: created.ID, Number: 1, Status: task.StepDone,
 		CreatedAt: base, UpdatedAt: base,
-		StartCommit: start, CommitSHA: sha, CommitSubject: subject,
+		StartCommit: start, CommitSHA: sha, CommitSubject: subject, CommittedAt: committedAt,
 	}
 	if diff := cmp.Diff(want, run); diff != "" {
 		t.Errorf("SetStepCommitted() mismatch (-want +got):\n%s", diff)
@@ -245,7 +246,7 @@ func TestSetStepStartedAndCommittedRejectAnUnknownTask(t *testing.T) {
 	_, err := f.service.SetStepStarted(t.Context(), "nope", 1, "sha")
 	wantErrIs(t, err, task.ErrNotFound)
 
-	_, err = f.service.SetStepCommitted(t.Context(), "nope", 1, "sha", "subject")
+	_, err = f.service.SetStepCommitted(t.Context(), "nope", 1, "sha", "subject", time.Time{})
 	wantErrIs(t, err, task.ErrNotFound)
 }
 

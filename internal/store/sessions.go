@@ -16,7 +16,7 @@ import (
 type SessionsRepo struct{ db *sql.DB }
 
 // sessionColumns is the column list every session query selects, in scan order.
-const sessionColumns = `id, item_id, stage, started, paused, context_tokens,
+const sessionColumns = `id, item_id, stage, started, paused, paused_at, context_tokens,
 	context_window, corrections, last_error, created_at, updated_at, model, effort`
 
 // Get returns the session of a task in one stage, or session.ErrNotFound.
@@ -25,12 +25,12 @@ func (r *SessionsRepo) Get(ctx context.Context, taskID, stage string) (session.R
 
 	var (
 		rec                  session.Record
-		lastError            sql.NullString
+		lastError, pausedAt  sql.NullString
 		createdAt, updatedAt string
 		model, effort        string
 	)
 	err := r.db.QueryRowContext(ctx, query, taskID, stage).Scan(&rec.ID, &rec.TaskID, &rec.Stage,
-		&rec.Started, &rec.Paused, &rec.ContextTokens, &rec.ContextWindow, &rec.Corrections,
+		&rec.Started, &rec.Paused, &pausedAt, &rec.ContextTokens, &rec.ContextWindow, &rec.Corrections,
 		&lastError, &createdAt, &updatedAt, &model, &effort)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
@@ -42,6 +42,11 @@ func (r *SessionsRepo) Get(ctx context.Context, taskID, stage string) (session.R
 	rec.LastError = lastError.String
 	// The choice is not validated: only the app writes these columns.
 	rec.Choice = models.Choice{Model: models.Model(model), Effort: models.Effort(effort)}
+	if pausedAt.Valid {
+		if rec.PausedAt, err = parseTime(pausedAt.String, "session "+rec.ID); err != nil {
+			return session.Record{}, err
+		}
+	}
 	if rec.CreatedAt, err = parseTime(createdAt, "session "+rec.ID); err != nil {
 		return session.Record{}, err
 	}
@@ -54,9 +59,9 @@ func (r *SessionsRepo) Get(ctx context.Context, taskID, stage string) (session.R
 // Insert stores a new session.
 func (r *SessionsRepo) Insert(ctx context.Context, rec session.Record) error {
 	const stmt = `INSERT INTO sessions (` + sessionColumns + `)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
-	_, err := r.db.ExecContext(ctx, stmt, rec.ID, rec.TaskID, rec.Stage, rec.Started, rec.Paused,
+	_, err := r.db.ExecContext(ctx, stmt, rec.ID, rec.TaskID, rec.Stage, rec.Started, rec.Paused, nullTime(rec.PausedAt),
 		rec.ContextTokens, rec.ContextWindow, rec.Corrections, nullString(rec.LastError),
 		formatTime(rec.CreatedAt), formatTime(rec.UpdatedAt),
 		string(rec.Choice.Model), string(rec.Choice.Effort))
@@ -68,11 +73,11 @@ func (r *SessionsRepo) Insert(ctx context.Context, rec session.Record) error {
 
 // Update rewrites every mutable column of a session.
 func (r *SessionsRepo) Update(ctx context.Context, rec session.Record) error {
-	const stmt = `UPDATE sessions SET stage = ?, started = ?, paused = ?, context_tokens = ?,
+	const stmt = `UPDATE sessions SET stage = ?, started = ?, paused = ?, paused_at = ?, context_tokens = ?,
 		context_window = ?, corrections = ?, last_error = ?, model = ?, effort = ?, updated_at = ?
 		WHERE id = ?`
 
-	_, err := r.db.ExecContext(ctx, stmt, rec.Stage, rec.Started, rec.Paused, rec.ContextTokens,
+	_, err := r.db.ExecContext(ctx, stmt, rec.Stage, rec.Started, rec.Paused, nullTime(rec.PausedAt), rec.ContextTokens,
 		rec.ContextWindow, rec.Corrections, nullString(rec.LastError),
 		string(rec.Choice.Model), string(rec.Choice.Effort), formatTime(rec.UpdatedAt), rec.ID)
 	if err != nil {

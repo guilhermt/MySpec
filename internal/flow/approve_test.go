@@ -1,8 +1,10 @@
 package flow_test
 
 import (
+	"errors"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/git"
@@ -17,6 +19,9 @@ const (
 	startCommit = "1111111111111111111111111111111111111111"
 	commitSHA   = "2222222222222222222222222222222222222222"
 )
+
+// commitTime is the committer date of every commit the worktrees read.
+var commitTime = time.Date(2026, 9, 20, 14, 30, 0, 0, time.UTC)
 
 // staged is a reading of the worktree of a step that has not committed yet:
 // the branch is where the step started, with staged of total files read.
@@ -187,6 +192,9 @@ func TestAStepIsConcludedWhenItsBranchMovesAndTheNextOneIsPrepared(t *testing.T)
 	if state.CommitSHA != commitSHA || state.CommitSubject != "Do the work of the step" {
 		t.Errorf("commit = %q %q, want the one the step produced", state.CommitSHA, state.CommitSubject)
 	}
+	if !state.CommittedAt.Equal(commitTime) {
+		t.Errorf("CommittedAt = %v, want the committer date %v", state.CommittedAt, commitTime)
+	}
 	// The commit is recorded before the worktree of the step is forgotten, so
 	// the step reads done while the forget can still be on its way.
 	waitFor(t, "the worktree of step 1 to be forgotten", func() bool {
@@ -201,6 +209,27 @@ func TestAStepIsConcludedWhenItsBranchMovesAndTheNextOneIsPrepared(t *testing.T)
 		"commit:task-1:"+commitSHA,
 		"ensure:task-1:dev/web", "status:task-1:task-1",
 	)
+}
+
+func TestAStepWhoseCommitCannotBeReadIsConcludedWithoutItsTime(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	readyToApprove(t, f, twoStepPlan(), staged(3, 3))
+	f.worktrees.failCommits(errors.New("git log failed"))
+	if err := f.service.ApproveStep(t.Context(), "task-1"); err != nil {
+		t.Fatalf("ApproveStep() = %v, want nil", err)
+	}
+
+	f.reviews.setSnapshot(review.Snapshot{Head: commitSHA})
+	f.sessions.goIdleSession(session.Key{TaskID: "task-1", Stage: session.StepStage(1)})
+	f.service.Check("task-1")
+
+	f.waitStep(t, "task-1", 1, flow.StepDone)
+	state := f.stepState(t, "task-1", 1)
+	if state.CommitSHA != commitSHA || !state.CommittedAt.IsZero() {
+		t.Errorf("commit = %q at %v, want %q with no time", state.CommitSHA, state.CommittedAt, commitSHA)
+	}
 }
 
 func TestTheLastStepOfAPlanIsConcludedWithNothingAfterIt(t *testing.T) {

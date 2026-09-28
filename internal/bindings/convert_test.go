@@ -344,6 +344,7 @@ func TestFromTasksCarriesTheCommitOfAStepThatIsOver(t *testing.T) {
 			Status:        flow.StepDone,
 			CommitSHA:     "2222222",
 			CommitSubject: "Add the login screen",
+			CommittedAt:   time.Date(2026, 9, 20, 14, 30, 0, 0, time.UTC),
 		},
 		{
 			Step:         task.Step{Number: 2, File: "2-second.md", Title: "Second"},
@@ -356,6 +357,12 @@ func TestFromTasksCarriesTheCommitOfAStepThatIsOver(t *testing.T) {
 	got := stepsOf(t, states)
 	if got[0].CommitSHA != "2222222" || got[0].CommitSubject != "Add the login screen" {
 		t.Errorf("commit = %q %q, want the one the step produced", got[0].CommitSHA, got[0].CommitSubject)
+	}
+	if got[0].CommittedAt != "2026-09-20T14:30:00Z" {
+		t.Errorf("committedAt = %q, want the committer date", got[0].CommittedAt)
+	}
+	if got[1].CommittedAt != "" {
+		t.Errorf("committedAt = %q, want empty on a step not committed", got[1].CommittedAt)
 	}
 	if got[0].Review != nil {
 		t.Errorf("review = %+v, want nil on a step that is over", got[0].Review)
@@ -2599,6 +2606,81 @@ func TestEverySessionBlockCarriesTheTurnInProgressAndItsAction(t *testing.T) {
 			}
 			if got := block(idle); got != (sessionBlock{}) {
 				t.Errorf("without a turn = %+v, want every field empty", got)
+			}
+		})
+	}
+}
+
+func TestEverySessionBlockCarriesWhenItsSessionWasPaused(t *testing.T) {
+	t.Parallel()
+
+	pausedAt := time.Date(2026, 9, 26, 14, 5, 0, 0, time.UTC)
+	summaries := []struct {
+		name    string
+		summary session.Summary
+		want    string
+	}{
+		{"paused", session.Summary{Status: session.StatusPaused, PausedAt: pausedAt}, "2026-09-26T14:05:00Z"},
+		{"paused before the time was kept", session.Summary{Status: session.StatusPaused}, ""},
+		{"not paused", session.Summary{Status: session.StatusWaiting, Idle: true}, ""},
+	}
+
+	blocks := map[string]func(session.Summary) string{
+		"task": func(summary session.Summary) string {
+			got := bindings.FromTasks(
+				[]task.Task{{ID: "task-1", Name: "login-screen", Stage: task.StagePRD}},
+				func(string) task.Artifacts { return task.Artifacts{} },
+				func(string) []flow.StepState { return nil },
+				noPR,
+				repoOf,
+				map[session.Key]session.Summary{{TaskID: "task-1", Stage: string(task.StagePRD)}: summary},
+				nil,
+			)[0]
+			return got.PausedAt
+		},
+		"step reviewer": func(summary session.Summary) string {
+			got := stepsOf(t, []flow.StepState{{
+				Step:   task.Step{Number: 1, File: "1-first.md", Title: "First"},
+				Status: flow.StepAgentReview, ReviewMode: reviewmode.Agent,
+				ReviewerStage: "step_review:1", Reviewer: summary,
+			}})[0].Reviewer
+			return got.PausedAt
+		},
+		"pull request": func(summary session.Summary) string {
+			pr := flow.PullRequest{Status: flow.PRDone, SessionStage: "pr", Session: summary}
+			got := bindings.FromTasks(
+				[]task.Task{{ID: "task-1", Name: "login-screen", Stage: task.StagePR}},
+				func(string) task.Artifacts { return task.Artifacts{} },
+				func(string) []flow.StepState { return nil },
+				func(string) (flow.PullRequest, bool) { return pr, true },
+				repoOf,
+				nil,
+				nil,
+			)[0].PR
+			return got.PausedAt
+		},
+		"review": func(summary session.Summary) string {
+			state := reviewState(reviewflow.StatusReviewing, recordedPass(1, ""))
+			state.Session = summary
+			got := bindings.FromReviews([]reviewflow.State{state}, nil, reviewRepos)[0]
+			return got.PausedAt
+		},
+		"discussion": func(summary session.Summary) string {
+			state := discussionState(discussionflow.StatusPublishFailed)
+			state.Session = summary
+			got := convertDiscussion(state, nil, true, nil)
+			return got.PausedAt
+		},
+	}
+
+	for name, block := range blocks {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			for _, tt := range summaries {
+				if got := block(tt.summary); got != tt.want {
+					t.Errorf("%s: pausedAt = %q, want %q", tt.name, got, tt.want)
+				}
 			}
 		})
 	}

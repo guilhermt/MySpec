@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/git/gittest"
@@ -325,10 +326,11 @@ func TestIsIgnoredAnswersForBothKindsOfPath(t *testing.T) {
 	}
 }
 
-func TestCommitReadsTheShaAndTheSubject(t *testing.T) {
+func TestCommitReadsTheShaTheSubjectAndTheCommitterDate(t *testing.T) {
 	t.Parallel()
 	runner, dir := repo(t)
-	gittest.Commit(t, dir, "one.txt", "one\n", "Add the first file\n\nWith a body git must not return.")
+	when := time.Date(2026, 9, 20, 11, 30, 0, 0, time.FixedZone("BRT", -3*60*60))
+	gittest.CommitAt(t, dir, "one.txt", "one\n", "Add the first file\n\nWith a body git must not return.", when)
 
 	got, err := runner.Commit(t.Context(), dir, "HEAD")
 	if err != nil {
@@ -339,6 +341,9 @@ func TestCommitReadsTheShaAndTheSubject(t *testing.T) {
 	}
 	if want := "Add the first file"; got.Subject != want {
 		t.Errorf("Subject = %q, want %q", got.Subject, want)
+	}
+	if !got.CommittedAt.Equal(when) || got.CommittedAt.Location() != time.UTC {
+		t.Errorf("CommittedAt = %v, want %v", got.CommittedAt, when.UTC())
 	}
 }
 
