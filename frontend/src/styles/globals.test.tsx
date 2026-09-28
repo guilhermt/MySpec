@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { AUX_PANEL_COLUMN_MIN } from "@/components/system/AuxPanel";
 import { AlertDialog, AlertDialogContent, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { renderWithStore } from "@/test/render";
@@ -212,6 +213,10 @@ describe("globals.css", () => {
     expect(GLOBALS).toMatch(
       /@container main \(min-width: 1120px\) \{\s*\.aux-panel \{\s*position: relative;/,
     );
+  });
+
+  it("measures the panel beside the column from the width the stylesheet puts it there", () => {
+    expect(GLOBALS).toContain(`@container main (min-width: ${AUX_PANEL_COLUMN_MIN}px) {`);
   });
 
   it("blinks a new situation twice for --duration-slow, and never with reduced motion", () => {

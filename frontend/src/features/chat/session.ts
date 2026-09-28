@@ -12,3 +12,16 @@ export interface SessionState {
   processRunning: boolean;
   retryAttempt: number;
 }
+
+/**
+ * IDLE_SESSION is a session that does nothing: the one behind an earlier conversation, which is
+ * read and never talks again.
+ */
+export const IDLE_SESSION: SessionState = {
+  sessionStatus: "waiting",
+  sessionModel: "",
+  sessionEffort: "",
+  turnRunning: false,
+  processRunning: false,
+  retryAttempt: 0,
+};

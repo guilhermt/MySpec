@@ -159,4 +159,29 @@ describe("QuestionCard", () => {
 
     expect(screen.getByText("Cancelled before an answer")).toBeInTheDocument();
   });
+
+  it("reads a question of an earlier conversation as text, with nothing to answer", () => {
+    renderWithStore(<QuestionCard stage="prd" taskId="task-1" question={question()} readOnly />);
+
+    expect(screen.getByText("Which database?")).toBeInTheDocument();
+    expect(screen.getByText("SQLite")).toBeInTheDocument();
+    expect(screen.getByText("· One file, no server")).toBeInTheDocument();
+    expect(screen.queryByRole("radio")).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  });
+
+  it("gives the answer of a question of an earlier conversation when there was one", () => {
+    renderWithStore(
+      <QuestionCard
+        stage="prd"
+        taskId="task-1"
+        question={question({ status: "allowed", answers: { "Which database?": "Postgres" } })}
+        readOnly
+      />,
+    );
+
+    expect(screen.getByText("Which database?")).toBeInTheDocument();
+    expect(screen.getByText("Database: Postgres")).toBeInTheDocument();
+  });
 });

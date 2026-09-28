@@ -1,11 +1,14 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { PanelLayout } from "@/components/system/AuxPanel";
 import { Composer } from "@/features/chat/Composer";
 import { Conversation } from "@/features/chat/Conversation";
+import { IDLE_SESSION } from "@/features/chat/session";
 import { AgentTabs } from "@/features/task/AgentTabs";
 import { ArtifactsPanel } from "@/features/task/ArtifactsPanel";
 import { agentTabsOf } from "@/features/task/agent-tabs";
 import { DetailsPanel } from "@/features/task/DetailsPanel";
+import { earlierPlace } from "@/features/task/details";
+import { EarlierConversationFoot } from "@/features/task/EarlierConversationFoot";
 import { PlanProblemsNotice } from "@/features/task/PlanProblemsNotice";
 import { PRPane } from "@/features/task/PRPane";
 import { ReviewStrip } from "@/features/task/ReviewStrip";
@@ -23,7 +26,13 @@ import {
   type TaskSummary,
 } from "@/lib/wails";
 import { loadTranscript } from "@/store/actions";
-import { useAppStore, useOpenStepTab, usePanel, useTask } from "@/store/app-store";
+import {
+  useAppStore,
+  useEarlierConversation,
+  useOpenStepTab,
+  usePanel,
+  useTask,
+} from "@/store/app-store";
 
 /** COLUMN is the conversation column, centered on a whole pixel. */
 const COLUMN =
@@ -63,15 +72,49 @@ function StepTop({ task, step }: { task: TaskSummary; step: Step }) {
   );
 }
 
+/**
+ * EarlierConversation is a conversation of the task read in place of the one of its place, from its
+ * start and taking no message, with the strip that leads back. It takes the focus as it opens.
+ */
+function EarlierConversation({ task, stage }: { task: TaskSummary; stage: string }) {
+  const ref = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    ref.current?.focus();
+  }, []);
+
+  return (
+    <>
+      <section
+        ref={ref}
+        aria-label={`${earlierPlace(task, stage)}, an earlier conversation`}
+        tabIndex={-1}
+        className="flex min-h-0 flex-1 flex-col outline-none"
+      >
+        <Conversation taskId={task.id} stage={stage} session={IDLE_SESSION} readOnly />
+      </section>
+      <EarlierConversationFoot task={task} stage={stage} />
+    </>
+  );
+}
+
 export interface TaskViewProps {
   taskId: string;
 }
 
-/** TaskView is the screen of one task: the conversation and what came out of it. */
+/**
+ * TaskView is the screen of one task: the conversation and what came out of it. An earlier
+ * conversation, once read, takes the place of all of it but the header and the panels.
+ */
 export function TaskView({ taskId }: TaskViewProps) {
   const task = useTask(taskId);
   const stepTab = useOpenStepTab(taskId);
   const panel = usePanel();
+  const earlier = useEarlierConversation(taskId);
+  const earlierReady = useAppStore(
+    (state) =>
+      earlier !== null && state.transcripts[sessionKey(taskId, earlier.stage)]?.status === "ready",
+  );
 
   const implementing = task !== null && asTaskStage(task.stage) === "implementation";
   const opening = task !== null && asTaskStage(task.stage) === "pr";
@@ -128,7 +171,9 @@ export function TaskView({ taskId }: TaskViewProps) {
           ) : null
         }
       >
-        {implementing ? (
+        {earlier !== null && earlierReady ? (
+          <EarlierConversation key={earlier.stage} task={task} stage={earlier.stage} />
+        ) : implementing ? (
           <>
             {step !== null && <StepTop task={task} step={step} />}
             <StepPane task={task} />

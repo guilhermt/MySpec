@@ -1,6 +1,7 @@
 import { act, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { Conversation } from "@/features/chat/Conversation";
+import { IDLE_SESSION } from "@/features/chat/session";
 import type { Entry, TaskSummary } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
 import type { TranscriptState } from "@/store/transcript";
@@ -309,5 +310,70 @@ describe("Conversation", () => {
     }
 
     expect(scroller).toHaveClass("relative");
+  });
+
+  it("takes no message in an earlier conversation: no answer, no retry, nothing queued", () => {
+    const entries = [
+      makeEntry("user"),
+      makeEntry("question"),
+      makeEntry("permission"),
+      makeEntry("error"),
+    ];
+    const pending = [
+      makeEntry("user", {
+        user: { text: "and dark mode", pending: true, prompt: false, app: false },
+      }),
+    ];
+    renderWithStore(<Conversation stage="prd" taskId="task-1" session={IDLE_SESSION} readOnly />, {
+      state: withTask({ sessionStatus: "error" }),
+      ui: { transcripts: ready(entries, pending) },
+    });
+
+    expect(screen.getByText("Add a login screen")).toBeInTheDocument();
+    expect(screen.getByText("Which database?")).toBeInTheDocument();
+    expect(screen.getByText("The agent couldn't finish")).toBeInTheDocument();
+    expect(screen.queryByText("and dark mode")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    expect(screen.queryByRole("radio")).not.toBeInTheDocument();
+  });
+
+  it("says nothing of the work of the session behind an earlier conversation", () => {
+    renderWithStore(
+      <Conversation
+        stage="prd"
+        taskId="task-1"
+        session={makeTask({ sessionStatus: "working", turnRunning: true, processRunning: true })}
+        readOnly
+      />,
+      { state: withTask(), ui: { transcripts: ready([makeEntry("user")]) } },
+    );
+
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("opens an earlier conversation at its start, with no way to the end", () => {
+    const { container } = renderWithStore(
+      <Conversation stage="prd" taskId="task-1" session={IDLE_SESSION} readOnly />,
+      { state: withTask(), ui: { transcripts: ready([makeEntry("user")]) } },
+    );
+    const scrollTo = scrollUp(container);
+
+    act(() => {
+      useAppStore
+        .getState()
+        .setTranscript(makeTranscript({ entries: [makeEntry("user"), makeEntry("assistant")] }));
+    });
+
+    expect(scrollTo).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: /New messages|Scroll to bottom/ })).toBeNull();
+  });
+
+  it("can take the focus from code, for the way back from an earlier conversation", () => {
+    const { container } = renderWithStore(
+      <Conversation stage="prd" taskId="task-1" session={makeTask()} />,
+      { state: withTask(), ui: { transcripts: ready([makeEntry("user")]) } },
+    );
+
+    expect(container.querySelector('[data-slot="conversation"]')).toHaveAttribute("tabindex", "-1");
   });
 });

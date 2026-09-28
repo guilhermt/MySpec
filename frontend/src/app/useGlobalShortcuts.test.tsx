@@ -4,6 +4,7 @@ import { App } from "@/app/App";
 import type { Location } from "@/lib/locations";
 import { api } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
+import type { TranscriptState } from "@/store/transcript";
 import { renderWithStore, resetAppStore } from "@/test/render";
 import {
   makeBoard,
@@ -14,6 +15,7 @@ import {
   makeSituation,
   makeState,
   makeTask,
+  makeTaskConversation,
 } from "@/test/wails-mock";
 
 beforeEach(() => {
@@ -520,5 +522,123 @@ describe("useGlobalShortcuts", () => {
     menu.remove();
 
     expect(useAppStore.getState().location).toEqual({ kind: "settings", section: "defaults" });
+  });
+
+  describe("with an earlier conversation on screen", () => {
+    // READING is a task on its tech spec whose PRD conversation is read in place of it.
+    const READING = makeState({
+      tasks: [
+        makeTask({
+          stage: "tech_spec",
+          conversations: [
+            makeTaskConversation({ stage: "prd" }),
+            makeTaskConversation({ stage: "tech_spec" }),
+          ],
+        }),
+      ],
+    });
+    const READ: TranscriptState = {
+      status: "ready",
+      error: "",
+      entries: [],
+      pending: [],
+      buffered: [],
+    };
+    const TRANSCRIPTS = { "task-1|prd": READ, "task-1|tech_spec": READ };
+    const EARLIER = "PRD, an earlier conversation";
+
+    function reading(panel: "details" | null) {
+      // The panel was open beside the conversation when the earlier one opened, or not at all.
+      vi.mocked(api.getState).mockResolvedValue(READING);
+      return renderWithStore(<App />, {
+        state: READING,
+        ui: {
+          location: TASK,
+          panel,
+          transcripts: TRANSCRIPTS,
+          earlierConversation: {
+            taskId: "task-1",
+            stage: "prd",
+            from: panel === null ? null : "panel",
+          },
+        },
+      });
+    }
+
+    // openLayer puts over the screen a layer as Base UI draws it open: a listbox, a popover or the
+    // ⋯ menu. Like Base UI, it closes itself on Esc, the last one opened first, once the key has
+    // gone through the window, so the global Esc still sees it open.
+    function openLayer(attributes: Record<string, string>): HTMLElement {
+      const layer = document.createElement("div");
+      for (const [name, value] of Object.entries(attributes)) {
+        layer.setAttribute(name, value);
+      }
+      layer.setAttribute("data-open", "");
+      document.body.append(layer);
+      return layer;
+    }
+
+    function closeTopLayerOnEsc(layers: HTMLElement[]): () => void {
+      const close = (event: KeyboardEvent) => {
+        const top = [...layers].reverse().find((layer) => layer.isConnected);
+        if (event.key === "Escape" && top !== undefined) {
+          queueMicrotask(() => top.remove());
+        }
+      };
+      window.addEventListener("keydown", close, { capture: true });
+      return () => window.removeEventListener("keydown", close, { capture: true });
+    }
+
+    it("closes the earlier conversation on Esc, with the focus on the conversation of the task", async () => {
+      reading(null);
+      expect(await screen.findByRole("region", { name: EARLIER })).toHaveFocus();
+
+      await act(async () => {
+        press({ key: "Escape" });
+      });
+
+      expect(useAppStore.getState()).toMatchObject({ earlierConversation: null, location: TASK });
+      expect(screen.queryByRole("region", { name: EARLIER })).not.toBeInTheDocument();
+      expect(document.querySelector('[data-slot="conversation"]')).toHaveFocus();
+    });
+
+    it("closes the listbox, the popover, the ⋯, the panel and then the earlier conversation, one Esc each", async () => {
+      reading("details");
+      await screen.findByRole("region", { name: EARLIER });
+      const menu = openLayer({ role: "menu" });
+      const popover = openLayer({ "data-slot": "popover-content" });
+      const listbox = openLayer({ role: "listbox" });
+      const stop = closeTopLayerOnEsc([menu, popover, listbox]);
+      const open = () => ({
+        listbox: listbox.isConnected,
+        popover: popover.isConnected,
+        menu: menu.isConnected,
+        panel: useAppStore.getState().panel !== null,
+        earlier: useAppStore.getState().earlierConversation !== null,
+      });
+
+      try {
+        const after: ReturnType<typeof open>[] = [];
+        for (let times = 0; times < 5; times += 1) {
+          await act(async () => {
+            press({ key: "Escape" });
+          });
+          after.push(open());
+        }
+
+        const shut = { listbox: false, popover: false, menu: false, panel: false, earlier: false };
+        expect(after).toEqual([
+          { ...shut, popover: true, menu: true, panel: true, earlier: true },
+          { ...shut, menu: true, panel: true, earlier: true },
+          { ...shut, panel: true, earlier: true },
+          { ...shut, earlier: true },
+          shut,
+        ]);
+        expect(useAppStore.getState().location).toEqual(TASK);
+        expect(document.querySelector('[data-slot="conversation"]')).toHaveFocus();
+      } finally {
+        stop();
+      }
+    });
   });
 });

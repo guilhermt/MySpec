@@ -20,7 +20,7 @@ import {
 import { asSessionStatus, asTaskMode, type TaskSummary } from "@/lib/wails";
 import { clockTime } from "@/lib/when";
 import { pause, resume } from "@/store/actions";
-import { useAppStore, useOpenStepTab, usePanel } from "@/store/app-store";
+import { useAppStore, useEarlierConversation, useOpenStepTab, usePanel } from "@/store/app-store";
 
 export interface TaskHeaderProps {
   /** task is null in the instant before the first snapshot that brings a new task. */
@@ -119,7 +119,9 @@ function TaskTools({ task, now }: { task: TaskSummary; now: number }) {
   const tab = useOpenStepTab(task.id);
   const panel = usePanel();
   const openPanel = useAppStore((state) => state.openPanel);
-  const onScreen = screenSession(task, tab);
+  const earlier = useEarlierConversation(task.id);
+  // An earlier conversation on screen is not the one the meter measures, so it steps aside.
+  const onScreen = earlier === null ? screenSession(task, tab) : null;
 
   return (
     <>

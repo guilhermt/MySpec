@@ -388,6 +388,21 @@ export function loadTranscript(taskId: string, stage: string): Promise<void> {
   });
 }
 
+/**
+ * readEarlierConversation reads a conversation of a task that is not the one of its place. A failure
+ * is kept on the conversation, where the row of Details that asked for it says so, and never raises
+ * the app notice.
+ */
+export async function readEarlierConversation(taskId: string, stage: string): Promise<void> {
+  const store = useAppStore.getState();
+  store.beginTranscript(taskId, stage);
+  try {
+    store.setTranscript(await api.getTranscript(taskId, stage));
+  } catch (error) {
+    store.failTranscript(taskId, stage, messageOf(error));
+  }
+}
+
 export function sendMessage(taskId: string, stage: string, text: string): Promise<void> {
   return run(fail(`Couldn't send the message to ${theItem(taskId)}`, TRY), () =>
     api.sendMessage(taskId, stage, text),

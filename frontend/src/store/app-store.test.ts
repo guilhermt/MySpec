@@ -24,6 +24,7 @@ import {
   useDiscussionHistory,
   useDiscussions,
   useDraft,
+  useEarlierConversation,
   useError,
   useFlashing,
   useForwardTarget,
@@ -74,6 +75,7 @@ import {
   makeStep,
   makeStepReviewer,
   makeTask,
+  makeTaskConversation,
   makeTranscript,
 } from "@/test/wails-mock";
 
@@ -2493,5 +2495,144 @@ describe("places beside the one on screen", () => {
     useAppStore.getState().closeSettings();
 
     expect(location()).toEqual(HOME);
+  });
+});
+
+describe("earlier conversation", () => {
+  // READ_TASK is the web task on its tech spec, with the PRD conversation behind it.
+  const READ_TASK = makeTask({
+    ...WEB_TASK,
+    stage: "tech_spec",
+    conversations: [
+      makeTaskConversation({ stage: "prd" }),
+      makeTaskConversation({ stage: "tech_spec", startedAt: "2026-09-05T11:00:00Z" }),
+    ],
+    situations: [makeSituation({ taskId: WEB_TASK.id, place: stagePlace("tech_spec") })],
+  });
+  const TASK_PLACE: Location = { kind: "task", id: WEB_TASK.id };
+
+  // reading opens the task and reads its PRD conversation in place of the tech spec one.
+  function reading() {
+    useAppStore.getState().applyState(withTasks({ tasks: [READ_TASK, API_TASK] }));
+    useAppStore.getState().go(TASK_PLACE);
+    useAppStore.getState().openEarlierConversation(WEB_TASK.id, "prd", true);
+  }
+
+  it("is read in place of the conversation of the task, and closes back to it", () => {
+    const { result } = renderHook(() => useEarlierConversation(WEB_TASK.id));
+    act(() => reading());
+
+    expect(result.current).toEqual({ taskId: WEB_TASK.id, stage: "prd", from: "panel" });
+
+    act(() => useAppStore.getState().closeEarlierConversation());
+
+    expect(result.current).toBeNull();
+  });
+
+  it("remembers that the panel was closed when it opened", () => {
+    act(() => reading());
+    useAppStore.getState().openEarlierConversation(WEB_TASK.id, "prd", false);
+
+    expect(useAppStore.getState().earlierConversation?.from).toBeNull();
+  });
+
+  it("belongs to its task only", () => {
+    act(() => reading());
+    const { result } = renderHook(() => useEarlierConversation(API_TASK.id));
+
+    expect(result.current).toBeNull();
+  });
+
+  it("hides the situation of the place while it is on screen", () => {
+    const { result } = renderHook(() => useOnScreenSituationId());
+    act(() => {
+      useAppStore.getState().applyState(withTasks({ tasks: [READ_TASK, API_TASK] }));
+      useAppStore.getState().go(TASK_PLACE);
+    });
+    expect(result.current).toBe("situation-1");
+
+    act(() => useAppStore.getState().openEarlierConversation(WEB_TASK.id, "prd", true));
+
+    expect(result.current).toBeNull();
+  });
+
+  it("closes on the way to another place", () => {
+    reading();
+
+    useAppStore.getState().go({ kind: "history" });
+
+    expect(useAppStore.getState().earlierConversation).toBeNull();
+  });
+
+  it("closes on the way back and forward through the places", () => {
+    useAppStore.getState().applyState(withTasks({ tasks: [READ_TASK, API_TASK] }));
+    useAppStore.getState().go({ kind: "history" });
+    reading();
+
+    useAppStore.getState().goBack();
+
+    expect(useAppStore.getState().earlierConversation).toBeNull();
+
+    useAppStore.getState().goForward();
+    useAppStore.getState().openEarlierConversation(WEB_TASK.id, "prd", true);
+    useAppStore.getState().goBack();
+    useAppStore.getState().goForward();
+
+    expect(location()).toEqual(TASK_PLACE);
+    expect(useAppStore.getState().earlierConversation).toBeNull();
+  });
+
+  it("closes when a situation of the same task is opened", () => {
+    reading();
+
+    useAppStore.getState().openSituation(WEB_TASK.id, stagePlace("tech_spec"));
+
+    expect(location()).toEqual(TASK_PLACE);
+    expect(useAppStore.getState().earlierConversation).toBeNull();
+  });
+
+  it("is never stacked among the places", () => {
+    reading();
+
+    expect(useAppStore.getState().back).not.toContainEqual(
+      expect.objectContaining({ stage: "prd" }),
+    );
+    expect(localStorage.getItem(NAV_STACK_KEY) ?? "").not.toContain("earlier");
+  });
+
+  it("stays open while its session is still there", () => {
+    reading();
+
+    useAppStore.getState().applyState(withTasks({ tasks: [READ_TASK, API_TASK] }));
+
+    expect(useAppStore.getState().earlierConversation).not.toBeNull();
+  });
+
+  it("closes when a snapshot comes without its session, as a discarded one", () => {
+    reading();
+
+    useAppStore.getState().applyState(
+      withTasks({
+        tasks: [{ ...READ_TASK, conversations: [makeTaskConversation({ stage: "tech_spec" })] }],
+      }),
+    );
+
+    expect(useAppStore.getState().earlierConversation).toBeNull();
+  });
+
+  it("closes when a snapshot comes without its task", () => {
+    reading();
+
+    useAppStore.getState().applyState(withTasks({ tasks: [API_TASK] }));
+
+    expect(useAppStore.getState().earlierConversation).toBeNull();
+  });
+
+  it("closes once no repository nor board is registered", () => {
+    reading();
+
+    useAppStore.getState().applyState(makeState({ repositories: [], boards: [], tasks: [] }));
+
+    expect(useAppStore.getState().earlierConversation).toBeNull();
   });
 });

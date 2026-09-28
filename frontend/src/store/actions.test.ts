@@ -49,6 +49,7 @@ import {
   previewRemoveBoard,
   publishEpic,
   publishReview,
+  readEarlierConversation,
   refreshBoard,
   refreshCard,
   refreshPR,
@@ -726,6 +727,37 @@ describe("loadTranscript", () => {
       label: "Couldn't load the conversation of the item",
       detail: "no such task. Try again.",
     });
+  });
+});
+
+describe("readEarlierConversation", () => {
+  it("reads a conversation that is not the one of the place of the task", async () => {
+    const entry = makeEntry("user", { id: "a", seq: 1 });
+    vi.mocked(api.getTranscript).mockResolvedValueOnce(
+      makeTranscript({ taskId: "task-1", stage: "step:2", entries: [entry] }),
+    );
+
+    const reading = readEarlierConversation("task-1", "step:2");
+    expect(useAppStore.getState().transcripts["task-1|step:2"]?.status).toBe("loading");
+    await reading;
+
+    expect(api.getTranscript).toHaveBeenCalledWith("task-1", "step:2");
+    expect(useAppStore.getState().transcripts["task-1|step:2"]).toMatchObject({
+      status: "ready",
+      entries: [entry],
+    });
+  });
+
+  it("keeps a failure on the conversation, and leaves the app notice alone", async () => {
+    vi.mocked(api.getTranscript).mockRejectedValueOnce(new Error("database is locked"));
+
+    await readEarlierConversation("task-1", "step:2");
+
+    expect(useAppStore.getState().transcripts["task-1|step:2"]).toMatchObject({
+      status: "error",
+      error: "database is locked",
+    });
+    expect(useAppStore.getState().error).toBeNull();
   });
 });
 

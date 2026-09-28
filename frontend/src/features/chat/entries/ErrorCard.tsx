@@ -15,15 +15,17 @@ export interface ErrorCardProps {
   taskId: string;
   stage: string;
   error: ErrorEntry;
+  /** readOnly is the card of an earlier conversation, which is never retried. */
+  readOnly?: boolean;
 }
 
 /**
  * ErrorCard is a failure the user has to see. Retrying is offered only while
  * the task is still stopped on it: an error already left behind is history.
  */
-export function ErrorCard({ taskId, stage, error }: ErrorCardProps) {
+export function ErrorCard({ taskId, stage, error, readOnly = false }: ErrorCardProps) {
   const task = useTask(taskId);
-  const canRetry = error.retryable && task?.sessionStatus === "error";
+  const canRetry = !readOnly && error.retryable && task?.sessionStatus === "error";
 
   return (
     <div

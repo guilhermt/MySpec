@@ -31,7 +31,14 @@ function Loading() {
   );
 }
 
-function EntryBlock({ taskId, stage, entry }: { taskId: string; stage: string; entry: Entry }) {
+interface EntryBlockProps {
+  taskId: string;
+  stage: string;
+  entry: Entry;
+  readOnly: boolean;
+}
+
+function EntryBlock({ taskId, stage, entry, readOnly }: EntryBlockProps) {
   if (entry.user !== null) {
     // The stage prompt is the agent's instructions, not a line of the
     // conversation: only what the app says on top of it is worth showing.
@@ -47,16 +54,25 @@ function EntryBlock({ taskId, stage, entry }: { taskId: string; stage: string; e
     return <ActionGroup actions={[entry.action]} />;
   }
   if (entry.permission !== null) {
-    return <PermissionCard taskId={taskId} stage={stage} permission={entry.permission} />;
+    return (
+      <PermissionCard
+        taskId={taskId}
+        stage={stage}
+        permission={entry.permission}
+        readOnly={readOnly}
+      />
+    );
   }
   if (entry.question !== null) {
-    return <QuestionCard taskId={taskId} stage={stage} question={entry.question} />;
+    return (
+      <QuestionCard taskId={taskId} stage={stage} question={entry.question} readOnly={readOnly} />
+    );
   }
   if (entry.marker !== null) {
     return <Marker marker={entry.marker} createdAt={entry.createdAt} />;
   }
   if (entry.error !== null) {
-    return <ErrorCard taskId={taskId} stage={stage} error={entry.error} />;
+    return <ErrorCard taskId={taskId} stage={stage} error={entry.error} readOnly={readOnly} />;
   }
   return null;
 }
@@ -67,10 +83,15 @@ export interface ConversationProps {
   stage: string;
   /** session is the one that stage names, whose work the indicator shows. */
   session: SessionState;
+  /**
+   * readOnly is an earlier conversation, which takes nothing more: no card answers, no error
+   * retries, nothing queued, no indicator, and it opens at its start.
+   */
+  readOnly?: boolean;
 }
 
 /** Conversation is everything that was said and done, from the top down. */
-export function Conversation({ taskId, stage, session }: ConversationProps) {
+export function Conversation({ taskId, stage, session, readOnly = false }: ConversationProps) {
   const transcript = useTranscript(taskId, stage);
   const scrollRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -79,11 +100,12 @@ export function Conversation({ taskId, stage, session }: ConversationProps) {
   const pending = transcript?.pending ?? NO_ENTRIES;
   // The text of the last entry is what grows while the agent writes.
   const streaming = entries.at(-1)?.assistant?.text ?? "";
-  const { atBottom, hasNew, scrollToBottom } = useAutoScroll(scrollRef, contentRef, [
-    entries.length,
-    pending.length,
-    streaming,
-  ]);
+  const { atBottom, hasNew, scrollToBottom } = useAutoScroll(
+    scrollRef,
+    contentRef,
+    [entries.length, pending.length, streaming],
+    !readOnly,
+  );
   const items = useMemo(() => groupEntries(entries), [entries]);
   // A reload keeps what is on screen, so the scroll has nothing to lose.
   const loading =
@@ -93,8 +115,14 @@ export function Conversation({ taskId, stage, session }: ConversationProps) {
   return (
     <div className="relative min-h-0 flex-1">
       {/* Positioned, so what is absolutely placed inside the conversation, sr-only
-          included, stays within its scroll instead of reaching the panel around it. */}
-      <div ref={scrollRef} data-slot="conversation" className="relative h-full overflow-y-auto">
+          included, stays within its scroll instead of reaching the panel around it.
+          Focusable from code: the focus comes back here from an earlier conversation. */}
+      <div
+        ref={scrollRef}
+        data-slot="conversation"
+        tabIndex={-1}
+        className="relative h-full overflow-y-auto outline-none"
+      >
         <div
           ref={contentRef}
           className="mx-auto flex w-full max-w-[58.5rem] flex-col gap-4 px-6 py-6"
@@ -107,22 +135,30 @@ export function Conversation({ taskId, stage, session }: ConversationProps) {
                 item.kind === "actions" ? (
                   <ActionGroup key={item.key} actions={item.items} />
                 ) : (
-                  <EntryBlock key={item.key} taskId={taskId} stage={stage} entry={item.entry} />
+                  <EntryBlock
+                    key={item.key}
+                    taskId={taskId}
+                    stage={stage}
+                    entry={item.entry}
+                    readOnly={readOnly}
+                  />
                 ),
               )}
-              {pending.map(
-                (entry) =>
-                  entry.user !== null && (
-                    <PendingMessage
-                      key={entry.id}
-                      taskId={taskId}
-                      stage={stage}
-                      entryId={entry.id}
-                      user={entry.user}
-                    />
-                  ),
-              )}
-              <ActivityIndicator session={session} entries={entries} />
+              {/* An earlier conversation is read without what was queued: it sends nothing more. */}
+              {!readOnly &&
+                pending.map(
+                  (entry) =>
+                    entry.user !== null && (
+                      <PendingMessage
+                        key={entry.id}
+                        taskId={taskId}
+                        stage={stage}
+                        entryId={entry.id}
+                        user={entry.user}
+                      />
+                    ),
+                )}
+              {!readOnly && <ActivityIndicator session={session} entries={entries} />}
             </>
           )}
         </div>

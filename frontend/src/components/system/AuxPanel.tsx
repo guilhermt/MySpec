@@ -8,6 +8,12 @@ import { Presence } from "./Presence";
 import { ScrollArea } from "./ScrollArea";
 import { Tooltip } from "./Tooltip";
 
+/**
+ * AUX_PANEL_COLUMN_MIN is the width of main area, in px, from which a panel stands beside the reading
+ * column instead of covering it: the mirror of the container query of .aux-panel in globals.css.
+ */
+export const AUX_PANEL_COLUMN_MIN = 1120;
+
 /** panelTriggerId is the id of the button that opens the panel id, where the focus returns when it closes. */
 export function panelTriggerId(id: string): string {
   return `panel-trigger-${id}`;

@@ -14,6 +14,14 @@ export interface PanelRowProps {
   nested?: boolean;
   /** focusOnMount takes the focus when the row appears: the row a document opened in place came from. */
   focusOnMount?: boolean;
+  /** pressed is a row that opens something and stands for what is open now: the conversation being read. */
+  pressed?: boolean;
+  /** busy is a row whose opening is on its way. */
+  busy?: boolean;
+  /** id names the row, for the focus to come back to it. */
+  id?: string;
+  /** label is the accessible name of a row that opens something, when its text and meta don't read as one. */
+  label?: string;
   className?: string;
 }
 
@@ -21,9 +29,9 @@ export interface PanelRowProps {
 const ROW =
   "-mx-(--space-2) flex w-[calc(100%+var(--space-4))] min-h-(--size-control-sm) items-center gap-(--space-2) rounded-sm px-(--space-2) text-left text-(length:--text-meta) leading-(--leading-meta) text-ink-1";
 
-/** BUTTON is the hover, the press and the focus of a row that opens something. */
+/** BUTTON is the hover, the press and the focus of a row that opens something; pressed, it is tinted. */
 const BUTTON =
-  "outline-none transition-colors duration-(--duration-fast) ease-standard hover:bg-veil-hover active:bg-veil-press focus-visible:focus-ring";
+  "outline-none transition-colors duration-(--duration-fast) ease-standard not-aria-pressed:hover:bg-veil-hover not-aria-pressed:active:bg-veil-press focus-visible:focus-ring aria-pressed:bg-brand-tint-plane aria-pressed:text-brand-ink aria-pressed:shadow-[inset_0_0_0_var(--border)_var(--brand-marker-ring)]";
 
 /** NESTED is a row under another: the second ink, shorter, past the glyph of the row above. */
 const NESTED =
@@ -40,6 +48,10 @@ export function PanelRow({
   onClick,
   nested = false,
   focusOnMount = false,
+  pressed,
+  busy = false,
+  id,
+  label,
   className,
 }: PanelRowProps) {
   const ref = useRef<HTMLButtonElement>(null);
@@ -72,7 +84,16 @@ export function PanelRow({
     return <div className={classes}>{content}</div>;
   }
   return (
-    <button ref={ref} type="button" onClick={onClick} className={cn(classes, BUTTON)}>
+    <button
+      ref={ref}
+      id={id}
+      type="button"
+      onClick={onClick}
+      {...(pressed !== undefined ? { "aria-pressed": pressed } : {})}
+      {...(busy ? { "aria-busy": true } : {})}
+      {...(label !== undefined ? { "aria-label": label } : {})}
+      className={cn(classes, BUTTON)}
+    >
       {content}
     </button>
   );

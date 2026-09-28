@@ -27,12 +27,15 @@ export interface AutoScroll {
 /**
  * useAutoScroll keeps the end of the conversation in view while the user is
  * there, whatever makes the conversation grow, and never moves the scroll away
- * from someone reading further up: for them an arrival only sets hasNew.
+ * from someone reading further up: for them an arrival only sets hasNew. With
+ * follow false, as for a conversation read from its start, it never scrolls and
+ * never offers the way back to the end.
  */
 export function useAutoScroll(
   ref: RefObject<HTMLElement | null>,
   contentRef: RefObject<HTMLElement | null>,
   deps: readonly unknown[],
+  follow = true,
 ): AutoScroll {
   const [hasNew, setHasNew] = useState(false);
   const [atBottom, setAtBottom] = useState(true);
@@ -65,7 +68,7 @@ export function useAutoScroll(
   useEffect(() => {
     const element = ref.current;
     const content = contentRef.current;
-    if (element === null || content === null) {
+    if (!follow || element === null || content === null) {
       return;
     }
     const observer = new ResizeObserver(() => {
@@ -76,7 +79,7 @@ export function useAutoScroll(
     observer.observe(element);
     observer.observe(content);
     return () => observer.disconnect();
-  }, [ref, contentRef]);
+  }, [ref, contentRef, follow]);
 
   const scrollToBottom = useCallback(() => {
     const element = ref.current;
@@ -91,7 +94,7 @@ export function useAutoScroll(
   // The effect runs on every render and compares the values itself, so the
   // caller can pass the lengths and the streaming text as a plain array.
   useEffect(() => {
-    if (same(previous.current, deps)) {
+    if (!follow || same(previous.current, deps)) {
       return;
     }
     previous.current = deps;
@@ -106,5 +109,8 @@ export function useAutoScroll(
     }
   });
 
-  return { atBottom, hasNew, scrollToBottom };
+  // Not following, the reader is never away from an end they are taken back to.
+  return follow
+    ? { atBottom, hasNew, scrollToBottom }
+    : { atBottom: true, hasNew: false, scrollToBottom };
 }

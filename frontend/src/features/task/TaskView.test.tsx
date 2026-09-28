@@ -1,18 +1,21 @@
-import { screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { AGENT_CONVERSATION } from "@/features/task/AgentTabs";
 import { TaskView } from "@/features/task/TaskView";
 import { api, type Step, type TaskSummary } from "@/lib/wails";
+import { useAppStore } from "@/store/app-store";
 import type { TranscriptState } from "@/store/transcript";
 import { renderWithStore } from "@/test/render";
 import {
   makeEntry,
   makePullRequest,
   makeReview,
+  makeSituation,
   makeState,
   makeStep,
   makeStepReviewer,
   makeTask,
+  makeTaskConversation,
 } from "@/test/wails-mock";
 
 function view(overrides: Partial<TaskSummary> = {}) {
@@ -282,5 +285,241 @@ describe("TaskView", () => {
 
     const column = screen.getByRole("textbox").closest(".overflow-clip");
     expect(column).not.toBeNull();
+  });
+});
+
+describe("TaskView, earlier conversation", () => {
+  /** read is a conversation already read, with the entries given. */
+  const read = (entries: ReturnType<typeof makeEntry>[]): TranscriptState => ({
+    status: "ready",
+    error: "",
+    entries,
+    pending: [],
+    buffered: [],
+  });
+
+  /**
+   * LOOP is a task on its step 2, under a pass of its reviewer with the review of the step on view,
+   * after a step 1 whose implementer asked, was allowed and failed once.
+   */
+  const LOOP = makeTask({
+    stage: "implementation",
+    reviewMode: "agent",
+    currentStep: 2,
+    steps: [
+      makeStep({ number: 1, status: "done", commitSha: "c19f02e8a1b2", reviewMode: "agent" }),
+      makeStep({
+        number: 2,
+        title: "Wire the API",
+        status: "agent_review",
+        reviewMode: "agent",
+        reviewPass: 1,
+        review: makeReview(),
+        reviewer: makeStepReviewer({ sessionStage: "step_review:2", sessionStatus: "working" }),
+      }),
+    ],
+    conversations: [
+      makeTaskConversation({ stage: "prd" }),
+      makeTaskConversation({ stage: "step:1" }),
+      makeTaskConversation({ stage: "step:2" }),
+      makeTaskConversation({ stage: "step_review:2" }),
+    ],
+    sessionStatus: "error",
+  });
+
+  const EARLIER_ENTRIES = [
+    makeEntry("user", {
+      user: { text: "Implement step 1.", pending: false, prompt: false, app: false },
+    }),
+    makeEntry("question"),
+    makeEntry("permission"),
+    makeEntry("error"),
+  ];
+
+  const LOOP_TRANSCRIPTS: Record<string, TranscriptState> = {
+    "task-1|step:1": read(EARLIER_ENTRIES),
+    "task-1|step:2": read([makeEntry("user")]),
+    "task-1|step_review:2": read([makeEntry("user")]),
+  };
+
+  function loop(ui: Parameters<typeof renderWithStore>[1] = {}) {
+    return renderWithStore(<TaskView taskId="task-1" />, {
+      state: makeState({ tasks: [LOOP] }),
+      ...ui,
+      ui: {
+        location: { kind: "task", id: "task-1" },
+        transcripts: LOOP_TRANSCRIPTS,
+        ...ui.ui,
+      },
+    });
+  }
+
+  const EARLIER_REGION = "Step 1 · Implementer, an earlier conversation";
+
+  it("has the tabs, the review, the meter and the composer before an earlier conversation opens", () => {
+    loop();
+
+    expect(screen.getByRole("tablist", { name: "Conversations" })).toBeInTheDocument();
+    expect(screen.getByRole("progressbar", { name: "Review progress" })).toBeInTheDocument();
+    expect(screen.getByRole("meter", { name: "Context" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox")).toBeInTheDocument();
+  });
+
+  it("takes the place of the conversation, with the strip in place of the composer and the focus on it", () => {
+    loop({ ui: { earlierConversation: { taskId: "task-1", stage: "step:1", from: null } } });
+
+    const region = screen.getByRole("region", { name: EARLIER_REGION });
+    expect(region).toHaveFocus();
+    expect(within(region).getByText("Implement step 1.")).toBeInTheDocument();
+    expect(
+      screen.getByText("· an earlier conversation. It takes no more messages.", { exact: false }),
+    ).toHaveTextContent(
+      "Step 1 · Implementer · an earlier conversation. It takes no more messages.",
+    );
+    expect(screen.getByRole("button", { name: "Back to step 2" })).toBeInTheDocument();
+  });
+
+  it("never takes a message: no composer, no card to answer, no retry, nothing to remove", () => {
+    loop({ ui: { earlierConversation: { taskId: "task-1", stage: "step:1", from: null } } });
+
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    const region = screen.getByRole("region", { name: EARLIER_REGION });
+    expect(within(region).getByText("Which database?")).toBeInTheDocument();
+    expect(within(region).queryByRole("button")).not.toBeInTheDocument();
+    expect(within(region).queryByRole("radio")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Retry|Answer|Allow|Deny|Remove/ })).toBeNull();
+  });
+
+  it("hides the tabs, the review of the step and the meter, and keeps the stepper and the panels", () => {
+    loop({ ui: { earlierConversation: { taskId: "task-1", stage: "step:1", from: null } } });
+
+    expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+    expect(screen.queryByRole("progressbar", { name: "Review progress" })).toBeNull();
+    expect(screen.queryByRole("meter", { name: "Context" })).not.toBeInTheDocument();
+    expect(screen.getByRole("list", { name: /^Progress/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Details" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "More actions" })).toBeInTheDocument();
+  });
+
+  it("hides the bar of the request", () => {
+    const task = makeTask({
+      stage: "implementation",
+      currentStep: 1,
+      steps: [makeStep({ status: "awaiting_review", review: makeReview() })],
+      situations: [
+        makeSituation({ kind: "step_review", place: { kind: "step", stage: "", step: 1 } }),
+      ],
+      conversations: [makeTaskConversation({ stage: "prd" })],
+    });
+    const transcripts = { "task-1|step:1": read([]), "task-1|prd": read([]) };
+    const { unmount } = renderWithStore(<TaskView taskId="task-1" />, {
+      state: makeState({ tasks: [task] }),
+      ui: { location: { kind: "task", id: "task-1" }, transcripts },
+    });
+    expect(screen.getByRole("region", { name: "Request" })).toBeInTheDocument();
+    unmount();
+
+    renderWithStore(<TaskView taskId="task-1" />, {
+      state: makeState({ tasks: [task] }),
+      ui: {
+        location: { kind: "task", id: "task-1" },
+        transcripts,
+        earlierConversation: { taskId: "task-1", stage: "prd", from: null },
+      },
+    });
+
+    expect(screen.getByRole("region", { name: "PRD, an earlier conversation" })).toBeVisible();
+    expect(screen.queryByRole("region", { name: "Request" })).not.toBeInTheDocument();
+  });
+
+  it("hides the warning of a plan that stayed invalid", () => {
+    renderWithStore(<TaskView taskId="task-1" />, {
+      state: makeState({
+        tasks: [
+          makeTask({
+            stage: "plan",
+            corrections: 3,
+            planProblems: [{ file: "", message: "no step files were written" }],
+            conversations: [makeTaskConversation({ stage: "prd" })],
+          }),
+        ],
+      }),
+      ui: {
+        location: { kind: "task", id: "task-1" },
+        transcripts: { "task-1|prd": read([]), "task-1|plan": read([]) },
+        earlierConversation: { taskId: "task-1", stage: "prd", from: null },
+      },
+    });
+
+    expect(screen.getByRole("button", { name: "Back to the plan" })).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("leaves the conversation of the task on screen until the earlier one is read", () => {
+    loop({
+      ui: {
+        earlierConversation: { taskId: "task-1", stage: "step:1", from: null },
+        transcripts: {
+          ...LOOP_TRANSCRIPTS,
+          "task-1|step:1": { ...read([]), status: "loading" },
+        },
+      },
+    });
+
+    expect(screen.queryByRole("region", { name: EARLIER_REGION })).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox")).toBeInTheDocument();
+  });
+
+  it("goes back to the conversation of the task on Back, with the focus on it", async () => {
+    const { user } = loop({
+      ui: { earlierConversation: { taskId: "task-1", stage: "step:1", from: null } },
+    });
+
+    await user.click(screen.getByRole("button", { name: "Back to step 2" }));
+
+    expect(useAppStore.getState().earlierConversation).toBeNull();
+    expect(screen.queryByRole("region", { name: EARLIER_REGION })).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox")).toBeInTheDocument();
+    expect(document.querySelector('[data-slot="conversation"]')).toHaveFocus();
+  });
+
+  it("goes back with the focus on the row that opened it, while the panel is open beside it", async () => {
+    const { user } = loop({
+      ui: {
+        panel: "details",
+        earlierConversation: { taskId: "task-1", stage: "step:1", from: "panel" },
+      },
+    });
+
+    await user.click(screen.getByRole("button", { name: "Back to step 2" }));
+
+    const details = screen.getByRole("complementary", { name: "Details" });
+    expect(within(details).getByRole("button", { name: /^Implementer/ })).toHaveFocus();
+  });
+
+  it("goes back to the conversation of the task when its session is discarded", () => {
+    loop({ ui: { earlierConversation: { taskId: "task-1", stage: "step:1", from: null } } });
+
+    act(() => {
+      useAppStore.getState().applyState(
+        makeState({
+          tasks: [{ ...LOOP, conversations: [makeTaskConversation({ stage: "step:2" })] }],
+        }),
+      );
+    });
+
+    expect(screen.queryByRole("region", { name: EARLIER_REGION })).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox")).toBeInTheDocument();
+  });
+
+  it("goes back to the conversation of the task when a situation of the task opens", () => {
+    loop({ ui: { earlierConversation: { taskId: "task-1", stage: "step:1", from: null } } });
+
+    act(() => {
+      useAppStore.getState().openSituation("task-1", { kind: "step_review", stage: "", step: 2 });
+    });
+
+    expect(screen.queryByRole("region", { name: EARLIER_REGION })).not.toBeInTheDocument();
+    expect(screen.getByRole("tablist", { name: "Conversations" })).toBeInTheDocument();
   });
 });

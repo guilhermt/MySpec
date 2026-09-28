@@ -1,21 +1,24 @@
-import { type ReactNode, useRef, useState } from "react";
-import { AuxPanel } from "@/components/system/AuxPanel";
+import { type ReactNode, useEffect, useRef, useState } from "react";
+import { AUX_PANEL_COLUMN_MIN, AuxPanel } from "@/components/system/AuxPanel";
 import { ChecksList } from "@/components/system/ChecksList";
 import { Chip } from "@/components/system/Chip";
 import { Icon } from "@/components/system/Icon";
 import { ICONS } from "@/components/system/icons";
 import { Link } from "@/components/system/Link";
+import { Spinner } from "@/components/system/Spinner";
 import { StateGlyph } from "@/components/system/StateGlyph";
 import { Tooltip } from "@/components/system/Tooltip";
 import { useNow } from "@/features/attention/useNow";
 import { ModelChip } from "@/features/models/ModelChip";
 import { StepModeChip } from "@/features/review-mode/StepModeChip";
 import {
+  type DetailsConversation,
   type DetailsModel,
   type DetailsReport,
   type DetailsStepRow,
   detailsOf,
 } from "@/features/task/details";
+import { earlierRowId, leaveEarlierConversation } from "@/features/task/earlier-conversation";
 import { ModelsPopover } from "@/features/task/ModelsPopover";
 import { PanelDocument } from "@/features/task/PanelDocument";
 import { PanelRow } from "@/features/task/PanelRow";
@@ -27,15 +30,28 @@ import { displayPath } from "@/lib/paths";
 import { checkDuration, checkRows, checksSummary } from "@/lib/pull-requests";
 import { reviewModeLabel } from "@/lib/review-modes";
 import { cn } from "@/lib/utils";
-import { asReviewMode, type PullRequest, type Step, type TaskSummary } from "@/lib/wails";
-import { age, clockTime, fullTime, startedTime } from "@/lib/when";
+import {
+  asReviewMode,
+  type PullRequest,
+  type Step,
+  sessionKey,
+  type TaskSummary,
+} from "@/lib/wails";
+import { age, clockTime, fullTime, shortTime, startedTime } from "@/lib/when";
 import {
   followTaskReviewMode,
   openExternal,
+  readEarlierConversation,
   setStepModel,
   setStepReviewMode,
 } from "@/store/actions";
-import { useAppStore, useModelCatalog, useOpenStepTab, useRepository } from "@/store/app-store";
+import {
+  useAppStore,
+  useEarlierConversation,
+  useModelCatalog,
+  useOpenStepTab,
+  useRepository,
+} from "@/store/app-store";
 
 /** MINUTE is how often the times of the panel are read again. */
 const MINUTE = 60_000;
@@ -55,8 +71,9 @@ export interface DetailsPanelProps {
 
 /**
  * DetailsPanel is what a task has done and the facts of it: its steps, or its implementation, with
- * their reports, its pull request with the checks by name, and the task itself, whose review mode and
- * models open their popovers. A report opens in place of the list, with the way back to it.
+ * their conversations and reports, its planning conversations, its pull request with the checks by
+ * name, and the task itself, whose review mode and models open their popovers. A report opens in
+ * place of the list, with the way back to it; a conversation opens in place of the one of the task.
  */
 export function DetailsPanel({ task }: DetailsPanelProps) {
   const openPanel = useAppStore((state) => state.openPanel);
@@ -85,6 +102,13 @@ export function DetailsPanel({ task }: DetailsPanelProps) {
       </li>
     ));
 
+  const conversationRows = (conversations: readonly DetailsConversation[], nested: boolean) =>
+    conversations.map((conversation) => (
+      <li key={conversation.stage}>
+        <ConversationRow task={task} conversation={conversation} now={now} nested={nested} />
+      </li>
+    ));
+
   return (
     <AuxPanel id="details" title="Details" onClose={() => openPanel(null)}>
       <div className="flex flex-col gap-(--space-4) px-(--space-4) pt-(--space-3) pb-(--space-6)">
@@ -110,6 +134,7 @@ export function DetailsPanel({ task }: DetailsPanelProps) {
                       row={row}
                       now={now}
                       reports={reportRows}
+                      conversations={conversationRows}
                     />
                   ))}
                 </ol>
@@ -123,17 +148,30 @@ export function DetailsPanel({ task }: DetailsPanelProps) {
                     row={model.implementation}
                     now={now}
                     reports={reportRows}
+                    conversations={conversationRows}
                     oneShot
                   />
                 </ol>
               </PanelSection>
             )}
+            {model.planning.length > 0 && (
+              <PanelSection legend="Planning">
+                <ul className="flex flex-col">{conversationRows(model.planning, false)}</ul>
+              </PanelSection>
+            )}
             {model.pullRequest !== null &&
               task.pr !== null &&
-              (model.pullRequest.reports.length > 0 || model.pullRequest.pr !== null) && (
+              (model.pullRequest.conversations.length > 0 ||
+                model.pullRequest.reports.length > 0 ||
+                model.pullRequest.pr !== null) && (
                 <PanelSection legend="Pull request">
-                  {model.pullRequest.reports.length > 0 && (
-                    <ul className="flex flex-col">{reportRows(model.pullRequest.reports)}</ul>
+                  {(model.pullRequest.conversations.length > 0 ||
+                    model.pullRequest.reports.length > 0) && (
+                    // The reports of every pass sit under the PR review conversation, the last row.
+                    <ul className="flex flex-col">
+                      {conversationRows(model.pullRequest.conversations, false)}
+                      {reportRows(model.pullRequest.reports)}
+                    </ul>
                   )}
                   {model.pullRequest.pr !== null && (
                     <PullRequestFacts pr={task.pr} facts={model.pullRequest.pr} />
@@ -154,12 +192,14 @@ interface StepRowProps {
   now: number;
   /** reports draws the rows of the reports under the step. */
   reports: (reports: readonly DetailsReport[]) => ReactNode;
+  /** conversations draws the rows of the conversations under a committed step. */
+  conversations: (conversations: readonly DetailsConversation[], nested: boolean) => ReactNode;
   /** oneShot names the row Implementation, without a number: the single step of a One-Shot task. */
   oneShot?: boolean;
 }
 
 /** StepRow is one step in Details: committed, the current one, or one still to start. */
-function StepRow({ task, row, now, reports, oneShot = false }: StepRowProps) {
+function StepRow({ task, row, now, reports, conversations, oneShot = false }: StepRowProps) {
   const number = row.kind === "not_started" ? row.step.number : row.number;
   const title = row.kind === "not_started" ? row.step.title : row.title;
   const name = oneShot ? "Implementation" : `${number} · ${title}`;
@@ -183,7 +223,12 @@ function StepRow({ task, row, now, reports, oneShot = false }: StepRowProps) {
         >
           {name}
         </PanelRow>
-        {row.reports.length > 0 && <ul className="flex flex-col">{reports(row.reports)}</ul>}
+        {(row.conversations.length > 0 || row.reports.length > 0) && (
+          <ul className="flex flex-col">
+            {conversations(row.conversations, true)}
+            {reports(row.reports)}
+          </ul>
+        )}
       </li>
     );
   }
@@ -225,6 +270,102 @@ function StepRow({ task, row, now, reports, oneShot = false }: StepRowProps) {
         {name}
       </PanelRow>
     </li>
+  );
+}
+
+interface ConversationRowProps {
+  task: TaskSummary;
+  conversation: DetailsConversation;
+  now: number;
+  /** nested is a conversation under a step, past its glyph. */
+  nested: boolean;
+}
+
+/**
+ * ConversationRow is a conversation the task has had, with the time it started. The one on screen
+ * says now and opens nothing; any other opens in place of it, once it is read, and a second click
+ * brings back the one of the task. While it is read the row says so, and a failure stays on the row,
+ * where a click reads it again.
+ */
+function ConversationRow({ task, conversation, now, nested }: ConversationRowProps) {
+  const { stage } = conversation;
+  const earlier = useEarlierConversation(task.id);
+  const status = useAppStore(
+    (state) => state.transcripts[sessionKey(task.id, stage)]?.status ?? null,
+  );
+  const openEarlierConversation = useAppStore((state) => state.openEarlierConversation);
+  const openPanel = useAppStore((state) => state.openPanel);
+  // asked is the reading this row started, and whether the panel covered the conversation then.
+  const [asked, setAsked] = useState<{ covering: boolean } | null>(null);
+
+  // The conversation takes the place of the one of the task only once it is read; a panel that
+  // covers it closes then, so the way back is on view.
+  useEffect(() => {
+    if (asked === null || status !== "ready") {
+      return;
+    }
+    setAsked(null);
+    openEarlierConversation(task.id, stage, !asked.covering);
+    if (asked.covering) {
+      openPanel(null);
+    }
+  }, [asked, status, task.id, stage, openEarlierConversation, openPanel]);
+
+  if (conversation.now) {
+    return (
+      <PanelRow
+        nested={nested}
+        glyph={<Icon icon={ICONS.conversation} size="sm" />}
+        meta={<span className="font-medium text-brand-ink">now</span>}
+      >
+        {conversation.label}
+      </PanelRow>
+    );
+  }
+
+  const reading = earlier?.stage === stage;
+  const loading = asked !== null && status === "loading";
+  const failed = asked !== null && status === "error";
+  const time = shortTime(conversation.startedAt, now);
+
+  const open = () => {
+    if (reading) {
+      leaveEarlierConversation();
+      return;
+    }
+    // The panel covers the conversation below the width from which it stands beside it.
+    const width = document.querySelector<HTMLElement>(".main-area")?.clientWidth ?? 0;
+    setAsked({ covering: width < AUX_PANEL_COLUMN_MIN });
+    void readEarlierConversation(task.id, stage);
+  };
+
+  return (
+    <PanelRow
+      id={earlierRowId(stage)}
+      nested={nested}
+      pressed={reading}
+      busy={loading}
+      onClick={open}
+      glyph={
+        loading ? (
+          <Spinner tone="current" />
+        ) : failed ? (
+          <StateGlyph state="error" size="sm" />
+        ) : (
+          <Icon icon={ICONS.conversation} size="sm" />
+        )
+      }
+      {...(loading || failed || time === ""
+        ? {}
+        : { meta: time, label: `${conversation.label} · ${time}` })}
+      {...(failed ? { className: "text-state-error" } : {})}
+    >
+      {loading
+        ? "Opening the conversation…"
+        : failed
+          ? "Couldn't open it · Try again"
+          : conversation.label}
+    </PanelRow>
   );
 }
 

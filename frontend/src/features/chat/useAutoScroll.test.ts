@@ -40,11 +40,15 @@ function makeScroller(): Scroller {
   };
 }
 
-function mount(element: HTMLElement, content: HTMLElement = document.createElement("div")) {
+function mount(
+  element: HTMLElement,
+  content: HTMLElement = document.createElement("div"),
+  follow = true,
+) {
   const ref = { current: element };
   const contentRef = { current: content };
   return renderHook(
-    ({ deps }: { deps: readonly unknown[] }) => useAutoScroll(ref, contentRef, deps),
+    ({ deps }: { deps: readonly unknown[] }) => useAutoScroll(ref, contentRef, deps, follow),
     { initialProps: { deps: [0] as readonly unknown[] } },
   );
 }
@@ -221,5 +225,22 @@ describe("useAutoScroll", () => {
     });
 
     expect(result.current.hasNew).toBe(false);
+  });
+
+  it("never scrolls a conversation it does not follow, and never offers the end", () => {
+    const { resize, restore } = observedResizes();
+    try {
+      const scroller = makeScroller();
+      const { result, rerender } = mount(scroller.element, document.createElement("div"), false);
+
+      scroller.scrollTop(0);
+      rerender({ deps: [1] });
+      act(resize);
+
+      expect(scroller.scrollTo).not.toHaveBeenCalled();
+      expect(result.current).toMatchObject({ atBottom: true, hasNew: false });
+    } finally {
+      restore();
+    }
   });
 });

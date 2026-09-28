@@ -3,7 +3,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { DetailsPanel } from "@/features/task/DetailsPanel";
 import { choiceLabel } from "@/lib/models";
 import { api, type Repository, type TaskSummary } from "@/lib/wails";
-import { clockTime, fullTime, startedTime } from "@/lib/when";
+import { clockTime, fullTime, shortTime, startedTime } from "@/lib/when";
+import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
 import {
   makeModelCatalog,
@@ -15,6 +16,8 @@ import {
   makeStepReviewer,
   makeTask,
   makeTaskCard,
+  makeTaskConversation,
+  makeTranscript,
 } from "@/test/wails-mock";
 
 function details(task: TaskSummary, repository: Repository = makeRepository()) {
@@ -463,5 +466,239 @@ describe("DetailsPanel, Task", () => {
     await user.click(screen.getByRole("button", { name: "Models per stage" }));
 
     expect(await screen.findByRole("dialog", { name: "Models" })).toBeInTheDocument();
+  });
+});
+
+describe("DetailsPanel, conversations", () => {
+  const STARTED = "2026-09-27T09:14:00Z";
+
+  /** TALKED is STRUCTURED with every conversation it had: its planning and its steps. */
+  const TALKED: TaskSummary = {
+    ...STRUCTURED,
+    conversations: [
+      makeTaskConversation({ stage: "prd", startedAt: STARTED }),
+      makeTaskConversation({ stage: "tech_spec", startedAt: STARTED }),
+      makeTaskConversation({ stage: "plan", startedAt: STARTED }),
+      makeTaskConversation({ stage: "step:1", startedAt: STARTED }),
+      makeTaskConversation({ stage: "step_review:1", startedAt: STARTED }),
+      makeTaskConversation({ stage: "step:2", startedAt: STARTED }),
+      makeTaskConversation({ stage: "step:3", startedAt: STARTED }),
+      makeTaskConversation({ stage: "step_review:3", startedAt: STARTED }),
+    ],
+  };
+
+  /**
+   * inMainArea renders Details inside a main area of a width, which says whether the panel stands
+   * beside the conversation or covers it.
+   */
+  function inMainArea(task: TaskSummary, width: number) {
+    const rendered = renderWithStore(
+      <div className="main-area">
+        <DetailsPanel task={task} />
+      </div>,
+      {
+        state: makeState({ tasks: [task], repositories: [makeRepository()] }),
+        ui: { location: { kind: "task", id: task.id }, panel: "details" },
+      },
+    );
+    const area = rendered.container.querySelector(".main-area");
+    Object.defineProperty(area, "clientWidth", { value: width, configurable: true });
+    return rendered;
+  }
+
+  /** later is a reading of a conversation that answers when the test says. */
+  function later() {
+    let answer: (stage: string) => void = () => {};
+    let refuse: (message: string) => void = () => {};
+    vi.mocked(api.getTranscript).mockImplementationOnce(
+      (taskId, stage) =>
+        new Promise((resolve, reject) => {
+          answer = () => resolve(makeTranscript({ taskId, stage }));
+          refuse = (message) => reject(new Error(message));
+        }),
+    );
+    return {
+      answer: () => act(() => answer("")),
+      refuse: (message: string) => act(() => refuse(message)),
+    };
+  }
+
+  const time = shortTime(STARTED, Date.now());
+
+  it("lists the conversations of a committed step under it, with the time each started", () => {
+    details(TALKED);
+
+    const rows = within(group(/^Steps/)).getAllByRole("listitem");
+    expect(rows.slice(0, 4).map((row) => row.firstElementChild?.textContent)).toEqual([
+      expect.stringMatching(/^1 · Step 1 title/),
+      `Implementer${time}`,
+      `Reviewer${time}`,
+      "Review 1 · changes",
+    ]);
+    expect(within(rows[1] as HTMLElement).getByRole("button")).toHaveAccessibleName(
+      `Implementer · ${time}`,
+    );
+    expect(within(rows[1] as HTMLElement).getByRole("button")).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+  });
+
+  it("lists no conversation under the current step, whose conversations are the tabs", () => {
+    details(TALKED);
+
+    const current = within(group(/^Steps/))
+      .getAllByRole("listitem")
+      .find((row) => row.getAttribute("aria-current") === "step");
+    expect(current).toHaveTextContent(/^3 · Wire the APInow · AgentReview 1 · changes$/);
+  });
+
+  it("lists the planning conversations, with the one on screen saying now and opening nothing", () => {
+    details({ ...TALKED, stage: "tech_spec", steps: [], currentStep: 0 });
+
+    const planning = group("Planning");
+    expect(
+      within(planning)
+        .getAllByRole("listitem")
+        .map((row) => row.textContent),
+    ).toEqual([`PRD${time}`, "Tech specnow", `Plan${time}`]);
+    expect(within(planning).getByRole("button", { name: `PRD · ${time}` })).toBeInTheDocument();
+    expect(within(planning).queryByRole("button", { name: /^Tech spec/ })).toBeNull();
+  });
+
+  it("has no Planning group without a planning conversation", () => {
+    details(STRUCTURED);
+
+    expect(screen.queryByRole("region", { name: "Planning" })).not.toBeInTheDocument();
+  });
+
+  it("lists the conversations of the pull request, the one on screen saying now, with the reports under the review", () => {
+    details({
+      ...inPR(),
+      conversations: [
+        makeTaskConversation({ stage: "pr", startedAt: STARTED }),
+        makeTaskConversation({ stage: "pr_review", startedAt: STARTED }),
+      ],
+    });
+
+    const rows = within(group("Pull request")).getAllByRole("listitem");
+    expect(rows.slice(0, 3).map((row) => row.textContent)).toEqual([
+      "Draft and opening · #1284now",
+      `PR review${time}`,
+      "Review 1 · changes",
+    ]);
+  });
+
+  it("has a Pull request group with only its conversations before a report or the opening", () => {
+    details(
+      makeTask({
+        stage: "pr",
+        pr: makePullRequest({ status: "drafting", sessionStage: "pr" }),
+        conversations: [makeTaskConversation({ stage: "pr", startedAt: STARTED })],
+      }),
+    );
+
+    expect(within(group("Pull request")).getByText("Draft and opening")).toBeInTheDocument();
+    expect(within(group("Pull request")).getByText("now")).toBeInTheDocument();
+  });
+
+  it("says the conversation is being opened, and leaves the one of the task on screen meanwhile", async () => {
+    const reading = later();
+    const { user } = inMainArea(TALKED, 1300);
+
+    await user.click(screen.getByRole("button", { name: `PRD · ${time}` }));
+
+    expect(api.getTranscript).toHaveBeenCalledWith("task-1", "prd");
+    const row = screen.getByRole("button", { name: "Opening the conversation…" });
+    expect(row).toHaveAttribute("aria-busy", "true");
+    expect(useAppStore.getState().earlierConversation).toBeNull();
+
+    await reading.answer();
+
+    expect(useAppStore.getState().earlierConversation).toEqual({
+      taskId: "task-1",
+      stage: "prd",
+      from: "panel",
+    });
+    expect(screen.getByRole("button", { name: `PRD · ${time}` })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
+  it("stays open beside the conversation it opens, as a column", async () => {
+    const { user } = inMainArea(TALKED, 1120);
+
+    await user.click(screen.getByRole("button", { name: `PRD · ${time}` }));
+
+    await waitFor(() => {
+      expect(useAppStore.getState().earlierConversation).not.toBeNull();
+    });
+    expect(useAppStore.getState().panel).toBe("details");
+  });
+
+  it("closes when it covers the conversation it opens, so the way back is on view", async () => {
+    const { user } = inMainArea(TALKED, 1119);
+
+    await user.click(screen.getByRole("button", { name: `PRD · ${time}` }));
+
+    await waitFor(() => {
+      expect(useAppStore.getState().panel).toBeNull();
+    });
+    expect(useAppStore.getState().earlierConversation).toEqual({
+      taskId: "task-1",
+      stage: "prd",
+      from: null,
+    });
+  });
+
+  it("says on the row that the conversation couldn't be opened, and reads it again on a click", async () => {
+    const reading = later();
+    const { user } = inMainArea(TALKED, 1300);
+
+    await user.click(screen.getByRole("button", { name: `PRD · ${time}` }));
+    await reading.refuse("database is locked");
+
+    const row = screen.getByRole("button", { name: "Couldn't open it · Try again" });
+    expect(useAppStore.getState().error).toBeNull();
+    expect(useAppStore.getState().earlierConversation).toBeNull();
+
+    await user.click(row);
+
+    expect(api.getTranscript).toHaveBeenCalledTimes(2);
+    await waitFor(() => {
+      expect(useAppStore.getState().earlierConversation?.stage).toBe("prd");
+    });
+  });
+
+  it("brings back the conversation of the task on a second click, keeping the focus on the row", async () => {
+    const { user } = inMainArea(TALKED, 1300);
+    act(() => useAppStore.getState().openEarlierConversation("task-1", "step:1", true));
+    const [row] = within(group(/^Steps/)).getAllByRole("button", {
+      name: `Implementer · ${time}`,
+    });
+    if (row === undefined) {
+      throw new Error("step 1 has no Implementer row");
+    }
+    expect(row).toHaveAttribute("aria-pressed", "true");
+    expect(row).toHaveAttribute("id", "earlier-step:1");
+
+    await user.click(row);
+
+    expect(useAppStore.getState().earlierConversation).toBeNull();
+    expect(api.getTranscript).not.toHaveBeenCalled();
+    expect(row).toHaveAttribute("aria-pressed", "false");
+    expect(row).toHaveFocus();
+  });
+
+  it("opens another conversation in place of the earlier one being read", async () => {
+    const { user } = inMainArea(TALKED, 1300);
+    act(() => useAppStore.getState().openEarlierConversation("task-1", "step:1", true));
+
+    await user.click(within(group(/^Steps/)).getByRole("button", { name: `Reviewer · ${time}` }));
+
+    await waitFor(() => {
+      expect(useAppStore.getState().earlierConversation?.stage).toBe("step_review:1");
+    });
   });
 });
