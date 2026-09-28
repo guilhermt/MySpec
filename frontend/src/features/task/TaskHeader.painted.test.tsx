@@ -4,7 +4,7 @@ import { TaskHeader } from "@/features/task/TaskHeader";
 import { TASK_NAME_MAX } from "@/lib/task-name";
 import { mainArea, NARROW_MAIN, placeHeaderFits, resolve, setTheme, THEMES } from "@/test/painted";
 import { renderWithStore } from "@/test/render";
-import { LONGEST_NAME, sceneTask, TASK_ID } from "@/test/task-scenes";
+import { fixSceneClock, LONGEST_NAME, sceneTask, TASK_ID } from "@/test/task-scenes";
 
 // header draws the header of the task in the loop of its step, with every piece the band can hold,
 // inside a main area of a fixed width, the container its queries measure.
@@ -88,6 +88,9 @@ function measures(band: HTMLElement) {
 function space(name: string): string {
   return resolve(`var(${name})`, "margin-left");
 }
+
+// The scenes are drawn at the moment of the mock, whatever the day the suite runs.
+fixSceneClock();
 
 describe("the longest name", () => {
   it("is as long as a task name can be", () => {

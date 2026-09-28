@@ -254,3 +254,44 @@ export async function capture(name: string, element: HTMLElement): Promise<void>
     await page.viewport(innerWidth, innerHeight);
   }
 }
+
+/**
+ * inkRuns are the widths, in CSS pixels, of the runs a screenshot of an element paints across its
+ * middle row, each run a stretch of pixels that differ from the one at the top left corner, which is
+ * the background. It measures a shape the computed style can't give, as the bars of a gradient.
+ */
+export async function inkRuns(element: HTMLElement): Promise<number[]> {
+  const shot = await page.screenshot({ element, save: false });
+  const image = new Image();
+  image.src = `data:image/png;base64,${shot}`;
+  await image.decode();
+  const canvas = document.createElement("canvas");
+  canvas.width = image.width;
+  canvas.height = image.height;
+  const context = canvas.getContext("2d");
+  if (context === null) {
+    throw new Error("no 2d context to read the screenshot");
+  }
+  context.drawImage(image, 0, 0);
+  const background = context.getImageData(0, 0, 1, 1).data;
+  const row = context.getImageData(0, Math.floor(image.height / 2), image.width, 1).data;
+  const scale = image.width / element.getBoundingClientRect().width;
+  const runs: number[] = [];
+  let run = 0;
+  for (let x = 0; x < image.width; x++) {
+    const distance = [0, 1, 2].reduce(
+      (sum, channel) => sum + Math.abs((row[x * 4 + channel] ?? 0) - (background[channel] ?? 0)),
+      0,
+    );
+    if (distance > 24) {
+      run++;
+    } else if (run > 0) {
+      runs.push(run / scale);
+      run = 0;
+    }
+  }
+  if (run > 0) {
+    runs.push(run / scale);
+  }
+  return runs;
+}

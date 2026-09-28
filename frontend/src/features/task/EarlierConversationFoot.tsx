@@ -30,7 +30,7 @@ export function EarlierConversationFoot({ task, stage }: EarlierConversationFoot
   const back = backTarget(task, screenSession(task, tab)?.stage ?? null);
 
   return (
-    <div className="shrink-0 p-(--space-3)">
+    <div className="shrink-0 px-(--space-6) py-(--space-3)">
       <div className={FOOT}>
         <p className="flex min-w-0 flex-1 items-center gap-(--space-2)">
           <Icon icon={ICONS.history} />

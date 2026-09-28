@@ -105,7 +105,7 @@ export function TaskRequest({ task, tab }: TaskRequestProps) {
   };
 
   return (
-    <div className="shrink-0 px-(--space-3) pt-(--space-2)">
+    <div className="shrink-0 px-(--space-6) pt-(--space-2)">
       <RequestBar
         form={request.form}
         glyph={request.glyph}

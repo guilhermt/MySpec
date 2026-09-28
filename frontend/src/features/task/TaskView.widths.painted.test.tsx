@@ -12,7 +12,7 @@ import {
   THEMES,
 } from "@/test/painted";
 import { renderWithStore } from "@/test/render";
-import { type Scene, TASK_ID, taskInLoop, taskInPRReview } from "@/test/task-scenes";
+import { fixSceneClock, type Scene, TASK_ID, taskInLoop, taskInPRReview } from "@/test/task-scenes";
 
 // Only the boundary is replaced, as in the jsdom suite: no call reaches the runtime of Wails. The
 // mock is imported inside the factory, which runs before the imports of the file.
@@ -48,6 +48,9 @@ function view(scene: Scene, width: number) {
   }
   return { area, band: screen.getByRole("banner") };
 }
+
+// The scenes are drawn at the moment of the mock, whatever the day the suite runs.
+fixSceneClock();
 
 describe.each(THEMES)("TaskView in the %s theme", (theme) => {
   describe.each(Object.keys(FIXTURES) as (keyof typeof FIXTURES)[])("with the %s task", (name) => {

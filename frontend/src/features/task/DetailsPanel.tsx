@@ -434,7 +434,7 @@ function Fact({ label, children }: { label: string; children: ReactNode }) {
 
 /** FACTS is a list of keys and values: the key in its column, the value beside it. */
 const FACTS =
-  "grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)] items-center gap-x-(--space-3) gap-y-(--space-1-5)";
+  "grid grid-cols-[minmax(0,var(--col-keys))_minmax(0,1fr)] items-baseline gap-x-(--space-3) gap-y-(--space-1-5)";
 
 /** ExternalLink is a link that opens in the browser, since nothing navigates inside the webview. */
 function ExternalLink({ url, children }: { url: string; children: ReactNode }) {

@@ -20,7 +20,7 @@ export interface LinkProps
  * a line of text, like Try again in a note, is a button with this look.
  */
 export const LINK =
-  "inline-flex items-center gap-0.5 rounded-xs text-brand-ink underline decoration-[color-mix(in_srgb,currentColor_var(--mix-link-line),transparent)] decoration-(length:--border) underline-offset-(--link-offset) hover:decoration-current focus-visible:focus-ring active:text-brand-active";
+  "inline-flex items-center gap-(--space-0-5) rounded-xs text-brand-ink underline decoration-[color-mix(in_srgb,currentColor_var(--mix-link-line),transparent)] decoration-(length:--border) underline-offset-(--link-offset) hover:decoration-current focus-visible:focus-ring active:text-brand-active";
 
 /**
  * Link is a text link to a destination; the caller owns the click, since nothing navigates inside

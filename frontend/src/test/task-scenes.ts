@@ -4,12 +4,23 @@
  * tests draw TaskView from them.
  */
 
-import type { Entry, PullRequest, Situation, State, Step, TaskSummary } from "@/lib/wails";
+import { afterEach, beforeEach, vi } from "vitest";
+import type {
+  Entry,
+  ModelStage,
+  PullRequest,
+  Situation,
+  State,
+  Step,
+  TaskConversation,
+  TaskSummary,
+} from "@/lib/wails";
 import { sessionKey } from "@/lib/wails";
 import { stepTabKey } from "@/store/app-store";
 import { fromTranscript, type TranscriptState } from "@/store/transcript";
 import {
   makeBoard,
+  makeBoardCard,
   makeEntry,
   makePRCheck,
   makePullRequest,
@@ -20,6 +31,8 @@ import {
   makeStepReviewer,
   makeTask,
   makeTaskCard,
+  makeTaskConversation,
+  makeTaskModels,
   makeTranscript,
 } from "@/test/wails-mock";
 
@@ -66,7 +79,28 @@ const TITLES = [
   "Load test the limiter",
 ];
 
-const CHECKED_AT = "2026-09-27T17:37:00Z";
+/**
+ * SCENE_NOW is the moment every scene is drawn at: the tests fix the clock on it, so the ages, the
+ * durations and the times the scenes show are the ones of the mock, on any day they run.
+ */
+export const SCENE_NOW = "2026-09-27T17:40:00Z";
+
+// at is a moment minutes before SCENE_NOW.
+const at = (minutes: number) => new Date(Date.parse(SCENE_NOW) - minutes * 60_000).toISOString();
+
+const CHECKED_AT = at(3);
+
+/** WORKTREE is the worktree of the reference task, where its steps and its pull request work. */
+const WORKTREE = "/home/dev/.local/share/myspec/worktrees/acme/api/rate-limit";
+
+const CARD = {
+  key: "acme/api#412",
+  repository: "acme/api",
+  number: 412,
+  title: "Rate limit per API key",
+  url: "https://github.com/acme/api/issues/412",
+  status: "In progress",
+};
 
 // steps is the plan of the reference task with the current step at n, the ones before it
 // committed; n past the last is every step committed. Step 4 has its own mode, Manual.
@@ -95,7 +129,15 @@ function situation(
   place: Situation["place"],
   rest: Partial<Situation> = {},
 ) {
-  return makeSituation({ id: `${kind}-1`, taskId: TASK_ID, kind, group, place, ...rest });
+  return makeSituation({
+    id: `${kind}-1`,
+    taskId: TASK_ID,
+    kind,
+    group,
+    place,
+    startedAt: at(4),
+    ...rest,
+  });
 }
 
 const stepPlace = (step: number) => ({ kind: "step", stage: "", step });
@@ -108,13 +150,7 @@ function reference(overrides: Partial<TaskSummary>, longName: boolean): TaskSumm
     id: TASK_ID,
     name: longName ? LONGEST_NAME : REFERENCE_NAME,
     repository: "acme/api",
-    card: makeTaskCard({
-      key: "acme/api#412",
-      repository: "acme/api",
-      number: 412,
-      title: "Rate limit per API key",
-      url: "https://github.com/acme/api/issues/412",
-    }),
+    card: makeTaskCard(CARD),
     reviewMode: "agent",
     hasPrd: true,
     hasTechSpec: true,
@@ -122,14 +158,81 @@ function reference(overrides: Partial<TaskSummary>, longName: boolean): TaskSumm
   });
 }
 
+// models are the models of the stages as the backend reads them at a moment of the reference task:
+// the stages behind it closed, the one of the conversation on screen live, the ones ahead editable.
+function models(live: ModelStage[], editable: ModelStage[]): ReturnType<typeof makeTaskModels> {
+  const stages: ModelStage[] = [
+    "prd",
+    "tech_spec",
+    "plan",
+    "implementation",
+    "step_review",
+    "pr",
+    "pr_review",
+  ];
+  return makeTaskModels(
+    Object.fromEntries(
+      stages.map((stage) => [
+        stage,
+        { live: live.includes(stage), editable: editable.includes(stage) },
+      ]),
+    ),
+  );
+}
+
+// conversations are the conversations the reference task has had up to a moment, the oldest first,
+// each one started an hour after the one before it: the planning, the steps up to the current one,
+// with a reviewer on the steps reviewed by the agent, and those of the pull request.
+function conversations(stages: string[]): TaskConversation[] {
+  return stages.map((stage, index) =>
+    makeTaskConversation({ stage, startedAt: at((stages.length - index) * 60) }),
+  );
+}
+
+// stepConversations are the conversations of the steps up to n, the reviewer of n only when it ran.
+function stepConversations(n: number, reviewerOfN: boolean): string[] {
+  return TITLES.slice(0, n).flatMap((_, index) => {
+    const number = index + 1;
+    const reviewed = number !== 4 && (number < n || reviewerOfN);
+    return reviewed ? [`step:${number}`, `step_review:${number}`] : [`step:${number}`];
+  });
+}
+
+const PLANNING = ["prd", "tech_spec", "plan"];
+
+/** OPUS is the model the steps and the pull request of the reference task run on. */
+const OPUS = "claude-opus-5-5[1m]";
+
 function inStep(
   n: number,
   step: Partial<Step>,
   task: Partial<TaskSummary>,
   longName: boolean,
 ): TaskSummary {
+  const reviewerOfN = step.reviewer !== undefined && step.reviewer !== null;
+  const working = step.status !== "blocked";
   return reference(
-    { stage: "implementation", currentStep: n, steps: steps(n, step), ...task },
+    {
+      stage: "implementation",
+      currentStep: n,
+      sessionModel: OPUS,
+      steps: steps(n, { worktreePath: WORKTREE, ...step }),
+      branch: "rate-limit",
+      baseBranch: "dev",
+      worktreePath: WORKTREE,
+      models: models(
+        [
+          ...(working ? (["implementation"] as const) : []),
+          ...(reviewerOfN ? (["step_review"] as const) : []),
+        ],
+        ["implementation", "step_review"],
+      ),
+      conversations: conversations([
+        ...PLANNING,
+        ...stepConversations(working ? n : n - 1, reviewerOfN),
+      ]),
+      ...task,
+    },
     longName,
   );
 }
@@ -143,12 +246,30 @@ function inPR(
     {
       stage: "pr",
       currentStep: 0,
+      sessionModel: OPUS,
       steps: steps(TITLES.length + 1),
       pr: makePullRequest({
         prNumber: 1284,
         prUrl: "https://github.com/acme/api/pull/1284",
+        worktreePath: WORKTREE,
+        branch: "rate-limit",
+        baseBranch: "origin/dev",
+        checkedAt: CHECKED_AT,
         ...pr,
       }),
+      branch: "rate-limit",
+      baseBranch: "dev",
+      worktreePath: WORKTREE,
+      models: models(
+        pr.sessionStage === "pr_review" ? ["pr_review"] : [],
+        pr.sessionStage === "" ? ["pr_review"] : [],
+      ),
+      conversations: conversations([
+        ...PLANNING,
+        ...stepConversations(TITLES.length, true),
+        "pr",
+        ...(pr.sessionStage === "pr_review" ? ["pr_review"] : []),
+      ]),
       ...task,
     },
     longName,
@@ -185,6 +306,7 @@ function taskOf(name: SceneName, longName: boolean): TaskSummary {
           hasPrd: false,
           hasTechSpec: false,
           contextPercent: 12,
+          conversations: conversations(["prd"]),
           situations: [situation("reply", "waiting", { kind: "stage", stage: "prd", step: 0 })],
         },
         longName,
@@ -237,12 +359,10 @@ function taskOf(name: SceneName, longName: boolean): TaskSummary {
         4,
         {
           status: "in_review",
-          worktreePath: "/home/dev/.local/share/myspec/worktrees/acme/api/rate-limit",
           review: { files: [], staged: 5, total: 7, percent: 71, error: "" },
         },
         {
           contextPercent: 29,
-          worktreePath: "/home/dev/.local/share/myspec/worktrees/acme/api/rate-limit",
           situations: [situation("step_review", "waiting", stepPlace(4), { percent: 71 })],
         },
         longName,
@@ -262,15 +382,15 @@ function taskOf(name: SceneName, longName: boolean): TaskSummary {
         {
           status: "waiting_checks",
           sessionStage: "",
-          checkedAt: CHECKED_AT,
           checks: [
-            makePRCheck({ name: "build" }),
-            makePRCheck({ name: "lint" }),
-            makePRCheck({ name: "unit" }),
+            makePRCheck({ name: "build", startedAt: at(12), completedAt: at(10) }),
+            makePRCheck({ name: "lint", startedAt: at(12), completedAt: at(11) }),
+            makePRCheck({ name: "unit", startedAt: at(12), completedAt: at(8) }),
             makePRCheck({
               name: "e2e / rate-limit-burst",
               state: "running",
               conclusion: "",
+              startedAt: at(6),
               completedAt: "",
             }),
             makePRCheck({
@@ -374,12 +494,38 @@ export function sceneTask(name: SceneName, { longName = false } = {}): Scene {
       repositories: [
         makeRepository({ owner: "acme", name: "api", fullName: "acme/api", boardId: "board-1" }),
       ],
-      boards: [makeBoard({ title: "Platform Roadmap" })],
+      boards: [
+        makeBoard({
+          title: "Platform Roadmap",
+          readAt: at(2),
+          cards: [
+            makeBoardCard({
+              ...CARD,
+              body: "Each API key gets its own limit, read from its plan.",
+              statusId: "in-progress",
+            }),
+          ],
+        }),
+      ],
       tasks: [task],
     }),
     transcripts,
     openStepTab: task.currentStep > 0 ? { [stepTabKey(TASK_ID, task.currentStep)]: tab } : {},
   };
+}
+
+/**
+ * fixSceneClock stops the clock of the page at SCENE_NOW for the test that runs next, and gives it
+ * back after; only Date is faked, so the timers of the page still run.
+ */
+export function fixSceneClock(): void {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(SCENE_NOW));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
 }
 
 /** taskInLoop is the task with a step in the loop of the implementer and the reviewer: the run scene. */

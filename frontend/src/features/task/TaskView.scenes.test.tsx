@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { TaskView } from "@/features/task/TaskView";
 import { api } from "@/lib/wails";
 import { renderWithStore } from "@/test/render";
-import { SCENES, type SceneName, sceneTask, TASK_ID } from "@/test/task-scenes";
+import { fixSceneClock, SCENES, type SceneName, sceneTask, TASK_ID } from "@/test/task-scenes";
 
 // scene draws the task screen at a moment of the reference task, with its conversations read.
 function scene(name: SceneName) {
@@ -17,6 +17,9 @@ function scene(name: SceneName) {
 const stepper = () => screen.getByRole("list", { name: /^Progress/ });
 
 // The nine scenes of the mock (design/screens/task.md §11), as the stepper and the bar say them.
+// The scenes are drawn at the moment of the mock, whatever the day the suite runs.
+fixSceneClock();
+
 describe("TaskView, the nine scenes", () => {
   it.each<[SceneName, string, string]>([
     ["plan", "Progress · PRD · waiting for you: waiting for reply in PRD", "wait"],

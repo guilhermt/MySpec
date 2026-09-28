@@ -28,13 +28,15 @@ export interface MenuContentProps extends ComponentProps<typeof DropdownMenuCont
 /**
  * MenuContent is the floating surface of the menu. The shadow is written shadow-(--shadow-float),
  * the form cn reads as a shadow, so it replaces the shadow-md of the primitive instead of joining it.
+ * The menu is as wide as its longest item, from --size-menu-min up to the room the window leaves, so
+ * no item breaks its line; w-max replaces the width of the trigger the primitive gives.
  */
 export function MenuContent({ className, ...props }: MenuContentProps) {
   return (
     <DropdownMenuContent
       {...props}
       className={cn(
-        "flex min-w-(--size-menu-min) flex-col gap-0.5 rounded-lg bg-surface-3 p-1 text-(length:--text-ui) leading-(--leading-ui) text-ink-1 shadow-(--shadow-float) ring-0 duration-(--duration-base)",
+        "flex w-max max-w-(--available-width) min-w-(--size-menu-min) flex-col gap-0.5 rounded-lg bg-surface-3 p-1 text-(length:--text-ui) leading-(--leading-ui) text-ink-1 shadow-(--shadow-float) ring-0 duration-(--duration-base)",
         className,
       )}
     />
