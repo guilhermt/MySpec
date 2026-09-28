@@ -1,7 +1,8 @@
-import { ArrowLeft, ArrowRight, Ellipsis } from "lucide-react";
+import { ArrowLeft, ArrowRight } from "lucide-react";
 import type { ReactNode, Ref } from "react";
 import { cn } from "@/lib/utils";
 import { IconButton } from "./IconButton";
+import { ICONS } from "./icons";
 import { Menu, MenuContent, MenuItem, MenuText, MenuTrigger } from "./Menu";
 import { Tooltip } from "./Tooltip";
 
@@ -74,7 +75,7 @@ function Breadcrumb({ crumbs }: { crumbs: readonly PlaceCrumb[] }) {
         <Menu>
           <MenuTrigger
             render={
-              <IconButton label={`Show the hidden levels: ${hidden}`} icon={Ellipsis} size="sm" />
+              <IconButton label={`Show the hidden levels: ${hidden}`} icon={ICONS.more} size="sm" />
             }
           />
           <MenuContent align="start">

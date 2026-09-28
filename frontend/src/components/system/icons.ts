@@ -5,16 +5,23 @@ import {
   Check,
   Code,
   Contrast,
+  Ellipsis,
   FileText,
   GitMerge,
+  History,
   Hourglass,
+  Info,
   Kanban,
   Link,
+  MessageSquare,
+  Pause,
   Pencil,
+  Play,
   Trash2,
   User,
 } from "lucide-react";
 import type { ComponentType } from "react";
+import { CardIcon } from "./CardIcon";
 import { DiscussionIcon, GoIcon, MarkIcon, OneShotIcon, ReviewIcon, TaskIcon } from "./type-icons";
 
 /** IconGlyph is a lucide icon or one of the system's own SVG icons: both take a class and hide from the reader. */
@@ -42,6 +49,13 @@ export const ICONS = {
   merge: GitMerge,
   trash: Trash2,
   theme: Contrast,
+  details: Info,
+  card: CardIcon,
+  conversation: MessageSquare,
+  history: History,
+  more: Ellipsis,
+  pause: Pause,
+  resume: Play,
 } as const satisfies Record<string, IconGlyph>;
 
 /** IconMeaning is the name of a meaning in ICONS. */

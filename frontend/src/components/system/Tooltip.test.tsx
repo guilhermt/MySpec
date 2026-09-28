@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderWithStore } from "@/test/render";
@@ -79,6 +79,36 @@ describe("Tooltip", () => {
     const { user } = renderWithStore(<Subject />);
     await user.tab();
     expect((await screen.findByText("Ctrl Enter")).tagName).toBe("KBD");
+  });
+
+  it("stays closed under the pointer without hover, and opens on keyboard focus", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(
+      <Tooltip content="The stages" hover={false}>
+        <button type="button">Progress</button>
+      </Tooltip>,
+    );
+    await user.hover(screen.getByRole("button", { name: "Progress" }));
+    await act(async () => {
+      vi.advanceTimersByTime(TOOLTIP_DELAY_MS * 2);
+    });
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    await user.unhover(screen.getByRole("button", { name: "Progress" }));
+    await user.tab();
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("The stages");
+  });
+
+  it("writes a list of strings one per line", async () => {
+    const { user } = renderWithStore(
+      <Tooltip content={["✓ PRD  ● Tech spec", "Paused since 14:52"]}>
+        <button type="button">Progress</button>
+      </Tooltip>,
+    );
+    await user.tab();
+    const tooltip = await screen.findByRole("tooltip");
+    expect(within(tooltip).getByText(/^✓ PRD/).parentElement).toHaveClass("flex-col");
+    expect(within(tooltip).getByText("Paused since 14:52")).toBeInTheDocument();
   });
 
   it("keeps the delay of tokens.css", () => {
