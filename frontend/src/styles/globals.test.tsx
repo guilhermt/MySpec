@@ -215,15 +215,16 @@ describe("globals.css", () => {
   });
 
   it("blinks a new situation twice for --duration-slow, and never with reduced motion", () => {
-    expect(GLOBALS).toContain("animation: tree-flash var(--duration-slow) var(--ease-standard) 2;");
+    expect(GLOBALS).toContain(
+      "animation: situation-flash var(--duration-slow) var(--ease-standard) 2;",
+    );
     const reduced = [
       ...GLOBALS.matchAll(/@media \(prefers-reduced-motion: reduce\) \{([\s\S]*?)\n\}/g),
     ]
       .map((match) => match[1] ?? "")
       .join("\n");
-    expect(reduced).toMatch(
-      /\.attention-flash,\s*\.tree-flash\[data-flash\] \{\s*animation: none;\s*\}/,
-    );
+    expect(reduced).toMatch(/\.situation-flash\[data-flash\] \{\s*animation: none;\s*\}/);
+    expect(GLOBALS).not.toContain("attention-flash");
   });
 
   it("takes the panel and the toast away in --duration-fast with the exit curve", () => {

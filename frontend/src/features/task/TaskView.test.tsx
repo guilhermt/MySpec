@@ -1,10 +1,14 @@
 import { screen, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { AGENT_CONVERSATION } from "@/features/task/AgentTabs";
 import { TaskView } from "@/features/task/TaskView";
-import { api, type TaskSummary } from "@/lib/wails";
+import { api, type Step, type TaskSummary } from "@/lib/wails";
+import type { TranscriptState } from "@/store/transcript";
 import { renderWithStore } from "@/test/render";
 import {
+  makeEntry,
   makePullRequest,
+  makeReview,
   makeState,
   makeStep,
   makeStepReviewer,
@@ -15,6 +19,44 @@ function view(overrides: Partial<TaskSummary> = {}) {
   return renderWithStore(<TaskView taskId="task-1" />, {
     state: makeState({ tasks: [makeTask(overrides)] }),
     ui: { location: { kind: "task", id: "task-1" } },
+  });
+}
+
+// The implementer and the reviewer of step 1, each with a conversation of its own.
+const BOTH_READY: Record<string, TranscriptState> = {
+  "task-1|step:1": {
+    status: "ready",
+    error: "",
+    entries: [makeEntry("user")],
+    pending: [],
+    buffered: [],
+  },
+  "task-1|step_review:1": {
+    status: "ready",
+    error: "",
+    entries: [
+      makeEntry("user", {
+        user: { text: "Check the login form", pending: false, prompt: false, app: false },
+      }),
+    ],
+    pending: [],
+    buffered: [],
+  },
+};
+
+const UNDER_AGENT_REVIEW: Partial<Step> = {
+  status: "agent_review",
+  reviewMode: "agent",
+  reviewPass: 1,
+  reviewer: makeStepReviewer({ sessionStatus: "working" }),
+};
+
+function stepView(step: Partial<Step>) {
+  return renderWithStore(<TaskView taskId="task-1" />, {
+    state: makeState({
+      tasks: [makeTask({ stage: "implementation", steps: [makeStep(step)], currentStep: 1 })],
+    }),
+    ui: { location: { kind: "task", id: "task-1" }, transcripts: BOTH_READY },
   });
 }
 
@@ -69,7 +111,7 @@ describe("TaskView", () => {
       stage: "implementation",
       steps: [
         makeStep({
-          status: "agent_review",
+          status: "addressing_review",
           reviewMode: "agent",
           reviewPass: 1,
           worktreePath: "/w/api/add-login",
@@ -88,6 +130,47 @@ describe("TaskView", () => {
     await waitFor(() => {
       expect(api.getTranscript).toHaveBeenCalledWith("task-1", "step_review:1");
     });
+  });
+
+  it("keeps the draft of each conversation apart when the tab changes", async () => {
+    const { user } = stepView(UNDER_AGENT_REVIEW);
+
+    await user.type(screen.getByRole("textbox"), "For the reviewer");
+    await user.click(screen.getByRole("tab", { name: /Implementer/ }));
+
+    expect(screen.getByText("Add a login screen")).toBeInTheDocument();
+    expect(screen.getByRole("textbox")).toHaveValue("");
+
+    await user.click(screen.getByRole("tab", { name: /Reviewer/ }));
+
+    expect(screen.getByText("Check the login form")).toBeInTheDocument();
+    expect(screen.getByRole("textbox")).toHaveValue("For the reviewer");
+  });
+
+  it("puts the tabs over the conversation they switch, with no review strip under the agent", () => {
+    stepView(UNDER_AGENT_REVIEW);
+
+    const tablist = screen.getByRole("tablist", { name: "Conversations" });
+    const conversation = document.getElementById(AGENT_CONVERSATION);
+    expect(conversation).not.toBeNull();
+    for (const tab of screen.getAllByRole("tab")) {
+      expect(tab).toHaveAttribute("aria-controls", AGENT_CONVERSATION);
+    }
+    expect(
+      tablist.compareDocumentPosition(conversation as Node) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(screen.queryByRole("progressbar", { name: "Review progress" })).not.toBeInTheDocument();
+  });
+
+  it("puts the review of the step under the header, above the conversation", () => {
+    stepView({ status: "in_review", review: makeReview({ staged: 3, total: 5, percent: 60 }) });
+
+    const strip = screen.getByRole("progressbar", { name: "Review progress" });
+    expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+    expect(
+      strip.compareDocumentPosition(screen.getByText("Add a login screen")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("shows no conversation while the step is blocked", () => {

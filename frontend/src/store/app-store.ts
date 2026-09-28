@@ -56,6 +56,7 @@ import type {
   TranscriptEvent,
 } from "@/lib/wails";
 import { asPlaceKind, asTaskStage, asThemePreference, sessionKey } from "@/lib/wails";
+import { firstTab } from "@/store/step-tab";
 import {
   applyEvent,
   emptyTranscript,
@@ -1120,14 +1121,15 @@ export function useDraft(taskId: string, stage: string): string {
   return useAppStore((state) => state.drafts[sessionKey(taskId, stage)] ?? "");
 }
 
-// A tab that no longer has a conversation behind it falls back to the implementer.
+// A tab that no longer has a conversation behind it falls back to the implementer, and a step
+// with nothing stored opens the tab of firstTab.
 function openStepTabOf(state: AppStore, taskId: string): StepTab {
   const task = findTask(state.app, taskId);
   const step = (task?.steps ?? []).find((candidate) => candidate.number === task?.currentStep);
-  if (step === undefined || step.reviewer === null) {
+  if (task === null || step === undefined || step.reviewer === null) {
     return "implementer";
   }
-  return state.openStepTab[stepTabKey(taskId, step.number)] ?? "implementer";
+  return state.openStepTab[stepTabKey(taskId, step.number)] ?? firstTab(task, step);
 }
 
 /** useOpenStepTab is the conversation tab of the current step of a task. */

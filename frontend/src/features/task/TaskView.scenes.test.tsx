@@ -44,6 +44,29 @@ describe("TaskView, the nine scenes", () => {
     expect(pill.querySelector("[data-state]")).toHaveAttribute("data-state", glyph);
   });
 
+  it.each<[SceneName, "Implementer" | "Reviewer", string]>([
+    ["run", "Implementer", "ImplementerReviewer"],
+    ["ask", "Reviewer", "Implementer· waitsReviewer"],
+    ["error", "Reviewer", "ImplementerReviewer"],
+  ])("puts the agent tabs of the %s scene on the %s", (name, chosen, text) => {
+    scene(name);
+
+    const tablist = screen.getByRole("tablist", { name: "Conversations" });
+    expect(tablist).toHaveTextContent(text, { normalizeWhitespace: true });
+    expect(within(tablist).getByRole("tab", { selected: true })).toHaveAccessibleName(
+      new RegExp(`^${chosen}: `),
+    );
+  });
+
+  it.each<SceneName>(["plan", "manual", "blocked", "checks", "findings", "close"])(
+    "has no agent tabs in the %s scene",
+    (name) => {
+      scene(name);
+
+      expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+    },
+  );
+
   it.each<SceneName>([...SCENES])("reads no conversation again in the %s scene", (name) => {
     scene(name);
 

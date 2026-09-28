@@ -1,10 +1,9 @@
 import { LoaderCircle } from "lucide-react";
 import { Composer } from "@/features/chat/Composer";
 import { Conversation } from "@/features/chat/Conversation";
+import { AGENT_CONVERSATION } from "@/features/task/AgentTabs";
 import { ImplementationDone } from "@/features/task/ImplementationDone";
-import { ReviewStrip } from "@/features/task/ReviewStrip";
 import { StepBlocked } from "@/features/task/StepBlocked";
-import { StepTabs } from "@/features/task/StepTabs";
 import { currentStepOf, stepPhaseLabel, stepStage } from "@/features/task/step-status";
 import { TaskRequest } from "@/features/task/TaskRequest";
 import { asStepStatus, type Step, type TaskSummary } from "@/lib/wails";
@@ -78,13 +77,9 @@ export function StepPane({ task }: StepPaneProps) {
     case "review_failed":
     case "committing":
       return (
-        <>
-          {step.review !== null && (
-            <ReviewStrip taskId={task.id} subject="step" review={step.review} />
-          )}
-          <StepTabs task={task} step={step} />
+        <div id={AGENT_CONVERSATION} className="flex min-h-0 flex-1 flex-col">
           <StepConversation task={task} step={step} />
-        </>
+        </div>
       );
     case "preparing":
       return <Waiting text={stepPhaseLabel(step.phase)} />;

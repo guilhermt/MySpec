@@ -99,33 +99,9 @@ describe("StepPane", () => {
     expect(api.sendMessage).toHaveBeenCalledWith("task-1", "step_review:1", "The test is missing");
   });
 
-  it("keeps the draft of each conversation apart when the tab changes", async () => {
-    const { user } = pane(UNDER_AGENT_REVIEW, {}, { transcripts: BOTH_READY });
-
-    await user.type(screen.getByRole("textbox"), "For the implementer");
-    await user.click(screen.getByRole("tab", { name: /Reviewer/ }));
-
-    expect(screen.getByText("Check the login form")).toBeInTheDocument();
-    expect(screen.getByRole("textbox")).toHaveValue("");
-
-    await user.click(screen.getByRole("tab", { name: /Implementer/ }));
-
-    expect(screen.getByText("Add a login screen")).toBeInTheDocument();
-    expect(screen.getByRole("textbox")).toHaveValue("For the implementer");
-  });
-
   it("shows only the conversation of the implementer while the step has no reviewer", () => {
     pane({ status: "implementing", reviewMode: "agent" });
 
-    expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
-    expect(screen.getByText("Add a login screen")).toBeInTheDocument();
-  });
-
-  it("keeps the review strip out under the agent review", () => {
-    pane(UNDER_AGENT_REVIEW, {}, { transcripts: BOTH_READY });
-
-    expect(screen.queryByRole("progressbar", { name: "Review progress" })).not.toBeInTheDocument();
-    expect(screen.getByRole("tablist", { name: "Conversations" })).toBeInTheDocument();
     expect(screen.getByText("Add a login screen")).toBeInTheDocument();
   });
 
@@ -155,13 +131,6 @@ describe("StepPane", () => {
     pane({ status: "not_started" });
 
     expect(screen.getByRole("status")).toHaveTextContent("Starting…");
-  });
-
-  it("puts the review above the conversation while the step is reviewed", () => {
-    pane({ status: "in_review", review: makeReview({ staged: 3, total: 5, percent: 60 }) });
-
-    expect(screen.getByRole("progressbar", { name: "Review progress" })).toBeInTheDocument();
-    expect(screen.getByText("Add a login screen")).toBeInTheDocument();
   });
 
   it("keeps the conversation while the commit is being made", () => {

@@ -535,23 +535,23 @@ function withSteps(
 }
 
 describe("step tabs", () => {
-  it("opens on the implementer and keeps the tab the user picks", () => {
+  it("opens on the tab of firstTab and keeps the tab the user picks", () => {
     const { result } = renderHook(() => useOpenStepTab(WEB_TASK.id));
 
     act(() => {
       useAppStore.getState().applyState(withSteps());
     });
-    expect(result.current).toBe("implementer");
+    expect(result.current).toBe("reviewer");
 
     act(() => {
-      useAppStore.getState().selectStepTab(WEB_TASK.id, 1, "reviewer");
+      useAppStore.getState().selectStepTab(WEB_TASK.id, 1, "implementer");
     });
-    expect(result.current).toBe("reviewer");
+    expect(result.current).toBe("implementer");
 
     act(() => {
       useAppStore.getState().applyState(withSteps());
     });
-    expect(result.current).toBe("reviewer");
+    expect(result.current).toBe("implementer");
   });
 
   it("falls back to the implementer while the step has no reviewer", () => {
@@ -574,13 +574,13 @@ describe("step tabs", () => {
 
     act(() => {
       useAppStore.getState().applyState(withSteps());
-      useAppStore.getState().selectStepTab(WEB_TASK.id, 1, "reviewer");
+      useAppStore.getState().selectStepTab(WEB_TASK.id, 1, "implementer");
       useAppStore.getState().applyState(withSteps({ currentStep: 2 }));
     });
 
-    expect(result.current).toBe("implementer");
+    expect(result.current).toBe("reviewer");
     expect(useAppStore.getState().openStepTab).toEqual({
-      [stepTabKey(WEB_TASK.id, 1)]: "reviewer",
+      [stepTabKey(WEB_TASK.id, 1)]: "implementer",
     });
   });
 });

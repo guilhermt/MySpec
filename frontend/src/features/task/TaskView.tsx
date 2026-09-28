@@ -2,17 +2,65 @@ import { useEffect } from "react";
 import { AuxPanel, PanelLayout } from "@/components/system/AuxPanel";
 import { Composer } from "@/features/chat/Composer";
 import { Conversation } from "@/features/chat/Conversation";
+import { AgentTabs } from "@/features/task/AgentTabs";
 import { ArtifactPanel } from "@/features/task/ArtifactPanel";
+import { agentTabsOf } from "@/features/task/agent-tabs";
 import { PlanProblemsNotice } from "@/features/task/PlanProblemsNotice";
 import { PRPane } from "@/features/task/PRPane";
+import { ReviewStrip } from "@/features/task/ReviewStrip";
 import { StepPane } from "@/features/task/StepPane";
 import { currentStepOf, hasStepSession, stepStage } from "@/features/task/step-status";
 import { TaskHeader } from "@/features/task/TaskHeader";
 import { TaskRequest } from "@/features/task/TaskRequest";
 import { prOf } from "@/lib/pull-requests";
-import { asTaskStage, sessionKey } from "@/lib/wails";
+import {
+  asStepStatus,
+  asTaskStage,
+  type Step,
+  type StepStatus,
+  sessionKey,
+  type TaskSummary,
+} from "@/lib/wails";
 import { loadTranscript } from "@/store/actions";
 import { useAppStore, useOpenStepTab, usePanel, useTask } from "@/store/app-store";
+
+/** COLUMN is the conversation column, centered on a whole pixel. */
+const COLUMN =
+  "w-full max-w-(--measure-conversation) ml-[max(0px,round(down,calc((100%_-_var(--measure-conversation))/2),1px))]";
+
+/** CONVERSING are the states of a step whose conversation is on screen. */
+const CONVERSING: ReadonlySet<StepStatus> = new Set<StepStatus>([
+  "implementing",
+  "agent_review",
+  "addressing_review",
+  "awaiting_review",
+  "in_review",
+  "ready_to_approve",
+  "nothing_to_commit",
+  "review_failed",
+  "committing",
+]);
+
+/**
+ * StepTop is what sits over the conversation of the step: the agent tabs and the review of the
+ * step, in the conversation column.
+ */
+function StepTop({ task, step }: { task: TaskSummary; step: Step }) {
+  const status = asStepStatus(step.status);
+  const review = step.review !== null && CONVERSING.has(status) ? step.review : null;
+  // Only whether there are tabs matters here: AgentTabs says which one is chosen.
+  if (agentTabsOf(task, step, "implementer", 0) === null && review === null) {
+    return null;
+  }
+  return (
+    <div className="shrink-0 px-(--space-6) pt-(--space-1)">
+      <div className={COLUMN}>
+        <AgentTabs task={task} step={step} />
+        {review !== null && <ReviewStrip taskId={task.id} subject="step" review={review} />}
+      </div>
+    </div>
+  );
+}
 
 export interface TaskViewProps {
   taskId: string;
@@ -81,7 +129,10 @@ export function TaskView({ taskId }: TaskViewProps) {
         }
       >
         {implementing ? (
-          <StepPane task={task} />
+          <>
+            {step !== null && <StepTop task={task} step={step} />}
+            <StepPane task={task} />
+          </>
         ) : opening ? (
           pr !== null && <PRPane task={task} pr={pr} tab={stepTab} />
         ) : (
