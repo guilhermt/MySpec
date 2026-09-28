@@ -62,7 +62,7 @@ O hook, definido em `lefthook.yml`, é de pre-commit e só formata: Biome nos ar
 
 O som das notificações, `internal/platform/chime/chime.wav`, é versionado e gerado por `go generate ./internal/platform/chime/`, que roda `gen.go`. Só precisa rodar de novo quando o gerador muda.
 
-Um teste só, em Go: `go test -run 'TestNome' ./internal/pacote/`. No frontend: `pnpm vitest run src/features/task/StepBar.test.tsx`, a partir de `frontend/`, ou `pnpm test:watch` para o modo interativo da suíte do jsdom. `pnpm test:painted` roda só a suíte de estilo computado, e `pnpm vitest run src/components/system/Input.painted.test.tsx`, um arquivo dela.
+Um teste só, em Go: `go test -run 'TestNome' ./internal/pacote/`. No frontend: `pnpm vitest run src/features/task/StepPane.test.tsx`, a partir de `frontend/`, ou `pnpm test:watch` para o modo interativo da suíte do jsdom. `pnpm test:painted` roda só a suíte de estilo computado, e `pnpm vitest run src/components/system/Input.painted.test.tsx`, um arquivo dela.
 
 ## Instalação
 

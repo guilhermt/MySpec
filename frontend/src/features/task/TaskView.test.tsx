@@ -29,12 +29,13 @@ describe("TaskView", () => {
     });
   });
 
-  it("puts the stage track under the header", () => {
+  it("holds the controls over the task in the ⋯ of the header", () => {
     view({ stage: "tech_spec" });
 
-    const chips = screen.getAllByRole("button", { name: "PRD" });
-    expect(chips.some((chip) => chip.getAttribute("aria-haspopup") === "menu")).toBe(true);
-    expect(screen.getByText("Closing")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "More actions" })).toHaveAttribute(
+      "aria-haspopup",
+      "menu",
+    );
   });
 
   it("shows the step being run instead of a conversation of its own", () => {
@@ -44,10 +45,8 @@ describe("TaskView", () => {
       currentStep: 1,
     });
 
-    expect(screen.getByText("Step 1 of 1")).toBeInTheDocument();
-    // The bar names the phase next to the step, the pane in the empty space
-    // where the conversation will be.
-    expect(screen.getAllByText("Fetching origin…")).toHaveLength(2);
+    // The pane names the phase in the empty space where the conversation will be.
+    expect(screen.getByText("Fetching origin…")).toBeInTheDocument();
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
     expect(api.getTranscript).not.toHaveBeenCalled();
   });

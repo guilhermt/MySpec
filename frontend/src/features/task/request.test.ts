@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { pausedRequestOf, type TaskRequestModel, taskRequestOf } from "@/features/task/request";
+import {
+  pausedRequestOf,
+  requestKindOf,
+  type TaskRequestModel,
+  taskRequestOf,
+} from "@/features/task/request";
 import { cloneMissingText } from "@/lib/repositories";
 import type { PullRequest, Situation, Step, TaskSummary } from "@/lib/wails";
 import {
@@ -423,7 +428,10 @@ describe("taskRequestOf and pausedRequestOf", () => {
         situationId: "s-pr_closed",
       },
     ],
-  ])("draws %s the same from both sources", (_, scene, bar) => {
+  ])("draws %s the same from both sources", (name, scene, bar) => {
+    const kind = name.split(",")[0];
+    expect(requestKindOf(scene.waiting)).toBe(kind);
+    expect(requestKindOf(scene.paused)).toBe(kind);
     expect(taskRequestOf(scene.waiting, "implementer", NOW, REPOSITORY)).toEqual(bar);
     expect(pausedRequestOf(scene.paused, REPOSITORY)).toEqual({
       ...bar,
@@ -464,7 +472,9 @@ describe("taskRequestOf and pausedRequestOf", () => {
       ],
       situationId: "s-ready_to_continue",
     });
+    expect(requestKindOf(task("waiting", [found]))).toBe("ready_to_continue");
     expect(pausedRequestOf(task("paused", []))).toBeNull();
+    expect(requestKindOf(task("paused", []))).toBeNull();
     expect(taskRequestOf(task("paused", []), "implementer", NOW)).toBeNull();
   });
 

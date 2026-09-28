@@ -353,12 +353,12 @@ A etapa termina como as outras, com o documento escrito e a conversa ociosa, e o
 
 ### Voltar e descartar
 
-A trilha de etapas no topo da task mostra onde ela está e o que pode fazer. Numa task Structured ela é `PRD › Tech spec › Plan › Implementation › PR › PR review › Closing`; numa task One-Shot, `Planning › Implementation › PR › PR review › Closing`. Nas duas, a etapa de PR ocupa os três últimos chips.
+As ações sobre as etapas ficam no menu `⋯` do cabeçalho da task. O grupo da etapa de planejamento atual tem **Discard and restart the PRD…**, **…the tech spec…** ou **…the plan…**; numa One-Shot, **Discard and restart planning…**. O grupo **Task** tem as ações sobre as etapas já passadas: **Back to PRD…** e **Discard and restart the PRD…** numa task Structured depois do PRD, **Back to Tech spec…** e **Discard and restart the tech spec…** depois do tech spec, **Discard and restart the plan…** na implementação.
 
-- **Voltar a uma etapa** reabre uma etapa anterior e apaga tudo que veio depois: conversas, documentos, arquivos de step, relatórios de review, worktrees e branches, com o que houver de não commitado nelas, e o que a etapa de PR criou. A task fica na etapa reaberta, em modo de revisita, até o usuário pressionar **Continuar**, para que o documento possa ser retrabalhado sem o produto avançar no meio.
+- **Voltar a uma etapa** reabre uma etapa anterior e apaga tudo que veio depois: conversas, documentos, arquivos de step, relatórios de review, worktrees e branches, com o que houver de não commitado nelas, e o que a etapa de PR criou. A task fica na etapa reaberta, em modo de revisita, para que o documento possa ser retrabalhado sem o produto avançar no meio. Com o documento escrito e a conversa ociosa, a barra do pedido acima do compositor diz `Ready to continue` com o nome da etapa, e o botão **Continue** a encerra.
 - **Descartar e recomeçar** apaga a etapa atual também e inicia uma sessão nova para ela na hora.
 
-Numa task One-Shot, as duas ações ficam no chip **Planning**. **Back to planning** existe com a task na implementação ou na etapa de PR, mantém o documento e a conversa de planejamento e deixa o chip em `Planning · revisiting` até **Continue to implementation**, que habilita com o documento escrito e a conversa ociosa; a implementação então começa do zero numa worktree nova. **Discard and restart** existe em qualquer etapa e apaga também a conversa e o documento de planejamento. Os chips da implementação e da PR não têm ações nos dois modos: um step se descarta com **Descartar step**.
+Numa task One-Shot, **Back to planning…** existe com a task na implementação ou na etapa de PR, mantém o documento e a conversa de planejamento e deixa a task revisitando o planejamento até **Continue**; a implementação então começa do zero numa worktree nova. **Discard and restart planning…** existe em qualquer etapa e apaga também a conversa e o documento de planejamento. A implementação e a PR não são descartadas como etapas nos dois modos: um step se descarta com **Descartar step**.
 
 Cada ação diz, antes de confirmar, exatamente o que será perdido.
 
@@ -401,15 +401,15 @@ O modo de um step congela quando a sessão do step começa. Dali em diante ele s
 
 ### Review
 
-No modo `Manual`, o review é feito no editor, arquivo por arquivo. **Abrir no VS Code** abre a worktree, e cada arquivo da lista de mudanças abre diretamente ao ser clicado. O usuário dá stage em cada arquivo revisado e faz alterações manuais quando quer.
+No modo `Manual`, o review é feito no editor, arquivo por arquivo. **Open in VS Code**, no menu `⋯` da task, na barra do pedido ou por `Ctrl+E`, abre a worktree, e cada arquivo da lista de mudanças abre diretamente ao ser clicado. O usuário dá stage em cada arquivo revisado e faz alterações manuais quando quer.
 
-Enquanto o step aguarda review o produto observa a worktree, inclusive o diretório do git, para que o stage feito no editor apareça na hora, e lê o `git status` a cada rajada de eventos. Todo arquivo alterado que o git reporta conta, arquivos novos um a um, ignorados nunca. Um arquivo está revisado quando nada dele resta fora do índice; um arquivo parcialmente em stage ainda está pendente. A faixa de review sob a barra do step mostra a barra de progresso, a contagem e a lista de arquivos. O mesmo progresso aparece como percentual na lista de tasks. O produto nunca dá stage em nada: o stage é o review, e o review é o portão.
+Enquanto o step aguarda review o produto observa a worktree, inclusive o diretório do git, para que o stage feito no editor apareça na hora, e lê o `git status` a cada rajada de eventos. Todo arquivo alterado que o git reporta conta, arquivos novos um a um, ignorados nunca. Um arquivo está revisado quando nada dele resta fora do índice; um arquivo parcialmente em stage ainda está pendente. A faixa de review acima da conversa do step mostra a barra de progresso, a contagem e a lista de arquivos. O mesmo progresso aparece como percentual na lista de tasks. O produto nunca dá stage em nada: o stage é o review, e o review é o portão.
 
 ### Aprovação e commit
 
-**Aprovar** existe no modo `Manual` e só habilita com 100% em stage; abaixo disso diz o que falta. Também exige a sessão ociosa, sem turno rodando, nada na fila e nenhuma permissão ou pergunta em aberto, e retoma uma sessão pausada por conta própria.
+Com o step esperando review, a barra do pedido acima do compositor diz `Review step N`, ou `Approve step N` com tudo em stage, com o progresso ao lado (`5 of 7 files staged · 71%`), e traz **Open in VS Code** e **Approve**. A barra aparece também com a task pausada, sem a cor e sem o tempo de espera. **Approve** existe no modo `Manual` e só habilita com 100% em stage; abaixo disso diz o que falta (`Stage 2 more files`), e com a worktree ilegível diz `The worktree couldn't be read`. Também exige a sessão ociosa, sem turno rodando, nada na fila e nenhuma permissão ou pergunta em aberto, e retoma uma sessão pausada por conta própria.
 
-Aprovar envia o prompt de commit como mensagem do produto na própria conversa do step, para o agente que escreveu o código commitar exatamente o que está em stage, em um commit, com assunto no imperativo e a convenção do repositório. O step fica **concluído** quando um commit aparece na branch além daquele em que começou, venha do turno de commit ou da mão do usuário. Se o turno termina sem commit, o step volta a **pronto para aprovar** e diz isso. Um step em que o agente não mudou nada não pode ser aprovado.
+Aprovar envia o prompt de commit como mensagem do produto na própria conversa do step, para o agente que escreveu o código commitar exatamente o que está em stage, em um commit, com assunto no imperativo e a convenção do repositório. O step fica **concluído** quando um commit aparece na branch além daquele em que começou, venha do turno de commit ou da mão do usuário. Se o turno termina sem commit, o step volta a **pronto para aprovar** e a barra diz `the last approval didn't produce a commit`. Um step em que o agente não mudou nada não pode ser aprovado: a barra diz `Step N has no changes` e oferece **Discard step N…**.
 
 O produto então encerra os processos do step e do seu revisor e inicia o próximo.
 
@@ -429,9 +429,9 @@ O produto age sobre cada relatório:
 
 Uma passada que termina sem relatório, ou com um relatório cujo status o produto não consegue ler, deixa o step esperando pelo usuário na conversa do revisor. O produto só pede o commit de um step no modo `Agent` depois de um relatório limpo; um commit feito à mão na branch conclui o step, como no modo `Manual`.
 
-**Review myself** aparece na barra do step no lugar de **Aprovar** enquanto o agente revisa o step, antes do commit, e tira o review do agente sem confirmação. Uma passada em curso é interrompida na hora, sem relatório; um implementador no meio de um turno termina o turno. Toda saída do loop que não termina num commit leva o step para o modo `Manual`, em **aguardando review**, com a worktree como está e os relatórios à vista: **Review myself**, as três rodadas sem relatório limpo, que a barra anuncia com `The agent review didn't come clean after three rounds.`, e o turno de commit que termina sem commit, que ela anuncia com `The last approval didn't produce a commit.`. Dali em diante é o fluxo do modo `Manual`. A conversa do revisor continua visível e aceita mensagens, mas o produto não pede mais passadas nem age sobre relatórios novos.
+**Review myself** aparece no grupo do step do menu `⋯` enquanto o agente revisa o step, antes do commit, e tira o review do agente sem confirmação. Uma passada em curso é interrompida na hora, sem relatório; um implementador no meio de um turno termina o turno. Toda saída do loop que não termina num commit leva o step para o modo `Manual`, em **aguardando review**, com a worktree como está e os relatórios à vista: **Review myself**, as três rodadas sem relatório limpo e o turno de commit que termina sem commit, que a barra do pedido anuncia ao lado do progresso. Dali em diante é o fluxo do modo `Manual`. A conversa do revisor continua visível e aceita mensagens, mas o produto não pede mais passadas nem age sobre relatórios novos.
 
-A barra do step lê `Implementing` antes da primeira passada, `Agent review · pass N` durante uma passada, `Addressing review · round N of 3` enquanto o implementador trata um relatório e `Committing` durante o commit. O estado da conversa em que o step espera, pausada, com erro, pedindo permissão ou perguntando, prevalece sobre o texto. A faixa de review não aparece: ninguém dá stage. **Abrir no VS Code** e **Descartar step** continuam na barra, e o usuário pode mudar arquivos na worktree ou escrever a qualquer das conversas durante o loop; o que ele muda entra na próxima passada e no commit.
+A faixa de review não aparece: ninguém dá stage. **Open in VS Code** e **Discard step N…** continuam no menu `⋯`, e o usuário pode mudar arquivos na worktree ou escrever a qualquer das conversas durante o loop; o que ele muda entra na próxima passada e no commit.
 
 A partir da primeira passada, a conversa do step tem as abas **Implementer** e **Reviewer**, cada uma com o ponto de estado da sua sessão e a cor da situação que espera pelo usuário. O produto nunca troca de aba sozinho; abrir uma situação do revisor abre a aba dele. O relatório entregue e o prompt de commit aparecem na conversa do implementador como mensagens do produto, e cada relatório tratado aparece como marcador na conversa do revisor, com o número e o status. No painel de artefatos, os relatórios aparecem sob o seu step, na lista de steps, como `Review 1 · changes`, `Review 2 · clean`, e abrem renderizados. Numa task One-Shot, eles aparecem acima do documento, na aba **One-Shot**, e **← One-Shot** volta ao documento.
 
@@ -439,7 +439,7 @@ O loop não anda enquanto qualquer das conversas trabalha, pergunta, está pausa
 
 ### Descartar step
 
-**Descartar step** encerra as sessões do step e do revisor, apaga as duas conversas e os relatórios de review do step e o começa de novo, limpando a worktree a menos que o usuário peça o contrário. O step recomeça com o modo escolhido antes de ele começar e com as rodadas zeradas.
+**Discard step N…**, no grupo do step do menu `⋯` (numa One-Shot, **Discard the implementation…**), encerra as sessões do step e do revisor, apaga as duas conversas e os relatórios de review do step e o começa de novo, limpando a worktree a menos que o usuário peça o contrário. O step recomeça com o modo escolhido antes de ele começar e com as rodadas zeradas.
 
 ## Pull request
 
@@ -668,7 +668,7 @@ Cada situação diz onde está e o que pede. As situações aparecem:
 
 - na árvore da barra lateral, na linha de cada task e de cada discussão, e sob o nó **Reviews**, na linha de cada review, ou no bloco de cada item na faixa recolhida. A linha do item que `Ctrl+J` abre leva a tecla `Ctrl J` no lugar do meta, e o nome acessível dela, como o do bloco na faixa, termina em `Ctrl+J opens this next.`;
 - por `Ctrl+J`, que abre o item cuja situação mais grave é a mais grave de todas e, entre iguais, o que espera há mais tempo, deixando de fora o item aberto. O filtro por repositório não muda o destino. Sem nenhum destino, `Ctrl+J` fica onde está e o leitor de tela ouve `Nothing else needs you now.`;
-- na própria task, na trilha de etapas, na barra do step, nas abas **Implementer** e **Reviewer** e na barra da pull request, no próprio review, na barra dele, e na própria discussão, na barra dela.
+- na própria task, na barra do pedido, nas abas **Implementer** e **Reviewer** e na barra da pull request, no próprio review, na barra dele, e na própria discussão, na barra dela.
 
 Uma situação que começa enquanto o usuário olha para o produto pisca brevemente onde surgiu, em silêncio: na árvore, a linha do item pisca duas vezes no véu da gravidade (o de erro, ou o de espera, que cobre também o encerramento), ou o resumo do nó que a esconde, quando ele está recolhido, e na faixa recolhida, o bloco do item; a linha aberta não pisca. Sem movimento no sistema, nada pisca. Ao mesmo tempo, o leitor de tela ouve a situação nova, com o nome do item, o que ela pede e onde está (`add-login: waiting for reply in PRD`); a piscada e o anúncio não tiram o foco de onde ele está. Uma situação que começa com a janela fora de foco gera uma notificação do sistema, que identifica a task, a pull request do review ou a discussão, e o que ela pede; clicar nela traz a janela e abre o lugar certo. Cada situação notifica uma vez, ao começar. Continuações da mesma espera, como o stage chegar a 100%, a pull request passar de pronta a mergeada, a razão de checks e conflito mudar ou a pull request voltar a ficar pronta depois de um check ou de um conflito, não notificam.
 
@@ -731,6 +731,7 @@ O foco segue a ida: `Alt+←`, `Alt+→`, um nível do breadcrumb, `Ctrl+J` e o 
 | `Ctrl+N` | Criar uma task |
 | `Ctrl+J` | Abrir o próximo item que espera pelo usuário, o mais grave e, entre iguais, o que espera há mais tempo: task, review ou discussão |
 | `Ctrl+,` | Abrir as configurações; com elas abertas, fechá-las de volta ao lugar anterior |
+| `Ctrl+E` | Na tela de uma task, abrir a worktree dela no VS Code; sem worktree, nada |
 | `Alt+←` | Voltar ao lugar anterior |
 | `Alt+→` | Avançar ao lugar seguinte |
 | `Esc` | Fechar o painel aberto; sem painel, cancelar a edição de um prompt; fora dela, fechar as configurações de volta ao lugar anterior |

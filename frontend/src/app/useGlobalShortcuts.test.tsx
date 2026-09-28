@@ -363,6 +363,49 @@ describe("useGlobalShortcuts", () => {
     expect(useAppStore.getState().location).toEqual({ kind: "home" });
   });
 
+  it("opens the worktree of the task on screen on Ctrl+E from the message box", async () => {
+    vi.mocked(api.getState).mockResolvedValue(
+      makeState({ tasks: [makeTask({ worktreePath: "/worktrees/add-login" })] }),
+    );
+    renderWithStore(<App />, { ui: { location: TASK } });
+    const box = await screen.findByPlaceholderText("Reply to the agent…");
+    act(() => box.focus());
+
+    let event: KeyboardEvent | undefined;
+    act(() => {
+      event = press({ key: "e", ctrlKey: true, bubbles: true }, box);
+    });
+
+    expect(event?.defaultPrevented).toBe(true);
+    expect(api.openInEditor).toHaveBeenCalledWith("task-1");
+  });
+
+  it("leaves Ctrl+E alone on a task without a worktree", async () => {
+    vi.mocked(api.getState).mockResolvedValue(makeState({ tasks: [makeTask()] }));
+    renderWithStore(<App />, { ui: { location: TASK } });
+    await screen.findByPlaceholderText("Reply to the agent…");
+
+    act(() => {
+      press({ key: "e", ctrlKey: true });
+    });
+
+    expect(api.openInEditor).not.toHaveBeenCalled();
+  });
+
+  it("leaves Ctrl+E inert under a modal dialog", async () => {
+    vi.mocked(api.getState).mockResolvedValue(
+      makeState({ tasks: [makeTask({ worktreePath: "/worktrees/add-login" })] }),
+    );
+    const { user } = renderWithStore(<App />, { ui: { location: TASK } });
+    await screen.findByPlaceholderText("Reply to the agent…");
+    await user.keyboard("{Control>}n{/Control}");
+    await screen.findByRole("heading", { name: "New task" });
+
+    expect(press({ key: "e", ctrlKey: true }).defaultPrevented).toBe(true);
+
+    expect(api.openInEditor).not.toHaveBeenCalled();
+  });
+
   it("closes the settings on Ctrl+, back to the place they were opened from", async () => {
     const { user } = renderWithStore(<App />);
     await screen.findByRole("button", { name: "Repository filter: All repositories" });

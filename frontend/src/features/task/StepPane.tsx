@@ -6,6 +6,7 @@ import { ReviewStrip } from "@/features/task/ReviewStrip";
 import { StepBlocked } from "@/features/task/StepBlocked";
 import { StepTabs } from "@/features/task/StepTabs";
 import { currentStepOf, stepPhaseLabel, stepStage } from "@/features/task/step-status";
+import { TaskRequest } from "@/features/task/TaskRequest";
 import { asStepStatus, type Step, type TaskSummary } from "@/lib/wails";
 import { useOpenStepTab } from "@/store/app-store";
 
@@ -37,6 +38,7 @@ function StepConversation({ task, step }: { task: TaskSummary; step: Step }) {
         stage={stage}
         session={session}
       />
+      <TaskRequest task={task} tab={tab} />
       <Composer key={`composer:${stage}`} taskId={task.id} stage={stage} session={session} />
     </>
   );

@@ -81,7 +81,7 @@ export interface TaskRequestModel {
 }
 
 /** RequestKind is each situation whose bar the task screen draws. */
-type RequestKind = Extract<
+export type RequestKind = Extract<
   SituationKind,
   | "step_review"
   | "step_empty"
@@ -443,6 +443,15 @@ function pausedWant(task: TaskSummary): Want | null {
     default:
       return null;
   }
+}
+
+/** requestKindOf is the kind of the bar taskRequestOf draws for the task, null when it draws none. */
+export function requestKindOf(task: TaskSummary): RequestKind | null {
+  if (isPaused(task)) {
+    return pausedWant(task)?.kind ?? null;
+  }
+  const situation = screenSituation(task);
+  return situation === null ? null : (asSituationKind(situation.kind) as RequestKind);
 }
 
 /** pausedRequestOf is the paused half: what the state of the step or the PR asks for, quiet, without a chip. */

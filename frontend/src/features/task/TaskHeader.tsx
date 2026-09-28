@@ -9,6 +9,7 @@ import { ContextGauge } from "@/features/task/ContextGauge";
 import { DeleteTaskDialog } from "@/features/task/DeleteTaskDialog";
 import { StatusBadge } from "@/features/task/StatusBadge";
 import { currentStepOf, hasStepSession, loopSession } from "@/features/task/step-status";
+import { TaskMenu } from "@/features/task/TaskMenu";
 import { TaskModelsButton } from "@/features/task/TaskModels";
 import { TaskReviewModeButton } from "@/features/task/TaskReviewMode";
 import { asSessionStatus, asTaskStage, type TaskSummary } from "@/lib/wails";
@@ -74,6 +75,7 @@ export function TaskHeader({ task }: TaskHeaderProps) {
         size="sm"
         onClick={() => setDeleting(true)}
       />
+      <TaskMenu task={task} />
 
       <DeleteTaskDialog
         taskId={task.id}

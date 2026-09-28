@@ -6,11 +6,10 @@ import { ArtifactPanel } from "@/features/task/ArtifactPanel";
 import { PlanProblemsNotice } from "@/features/task/PlanProblemsNotice";
 import { PRBar } from "@/features/task/PRBar";
 import { PRPane } from "@/features/task/PRPane";
-import { StageTrack } from "@/features/task/StageTrack";
-import { StepBar } from "@/features/task/StepBar";
 import { StepPane } from "@/features/task/StepPane";
 import { currentStepOf, hasStepSession, stepStage } from "@/features/task/step-status";
 import { TaskHeader } from "@/features/task/TaskHeader";
+import { TaskRequest } from "@/features/task/TaskRequest";
 import { prOf } from "@/lib/pull-requests";
 import { asTaskStage, sessionKey } from "@/lib/wails";
 import { loadTranscript } from "@/store/actions";
@@ -68,7 +67,6 @@ export function TaskView({ taskId }: TaskViewProps) {
   return (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
       <TaskHeader task={task} />
-      <StageTrack task={task} />
       <PanelLayout
         panel={
           panel === "artifacts" && (
@@ -79,10 +77,7 @@ export function TaskView({ taskId }: TaskViewProps) {
         }
       >
         {implementing ? (
-          <>
-            <StepBar task={task} />
-            <StepPane task={task} />
-          </>
+          <StepPane task={task} />
         ) : opening ? (
           pr !== null && (
             <>
@@ -99,6 +94,7 @@ export function TaskView({ taskId }: TaskViewProps) {
               session={task}
             />
             <PlanProblemsNotice task={task} />
+            <TaskRequest task={task} tab={stepTab} />
             <Composer taskId={task.id} stage={task.stage} session={task} />
           </>
         )}

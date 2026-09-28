@@ -73,6 +73,7 @@ describe("TaskHeader", () => {
       "Open card #12 on GitHub · In progress",
       "Artifacts",
       "Delete task",
+      "More actions",
     ]);
   });
 
