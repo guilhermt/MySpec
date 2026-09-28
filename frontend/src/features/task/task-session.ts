@@ -1,5 +1,6 @@
 import type { SessionState } from "@/features/chat/session";
 import { taskSessions } from "@/features/sidebar/sessions";
+import { stageNoun } from "@/features/task/stage-actions";
 import { currentStepOf, hasStepSession, loopSession, stepStage } from "@/features/task/step-status";
 import type { Step, StepReviewer, TaskSummary } from "@/lib/wails";
 import { asPRStatus, asSessionStatus, asTaskStage } from "@/lib/wails";
@@ -95,4 +96,38 @@ export function screenSession(task: TaskSummary, tab: StepTab): TaskSession | nu
 export function isPaused(task: TaskSummary): boolean {
   const session = waitingSession(task);
   return session !== null && asSessionStatus(session.sessionStatus) === "paused";
+}
+
+/** speaker is who talks in a session inside a sentence: implementer, reviewer, PRD agent, tech spec agent. */
+export function speaker(session: TaskSession): string {
+  const [first = ""] = session.role.split(" ");
+  // An acronym keeps its capitals: PRD agent, PR agent.
+  if (first.length > 1 && first === first.toUpperCase()) {
+    return session.role;
+  }
+  return `${session.role.charAt(0).toLowerCase()}${session.role.slice(1)}`;
+}
+
+/**
+ * pauseRefusal is why Pause can't act on the session the task waits on: it stopped with an error,
+ * so nothing runs. Null when it can.
+ */
+export function pauseRefusal(task: TaskSummary, session: TaskSession): string | null {
+  if (asSessionStatus(session.sessionStatus) !== "error") {
+    return null;
+  }
+  const stage = asTaskStage(task.stage);
+  const way =
+    stage === "implementation"
+      ? ", or discard the step."
+      : stage === "pr"
+        ? "."
+        : `, or discard and restart ${stage === "one_shot" ? "planning" : `the ${stageNoun(stage)}`}.`;
+  return `Nothing is running to pause: the ${speaker(session)}'s session stopped with an error. Retry it${way}`;
+}
+
+/** contextDetail is the tooltip of the meter: "Context used by the implementer: 44%", "…" before the first reading. */
+export function contextDetail(session: TaskSession): string {
+  const used = session.contextPercent === 0 ? "…" : `${Math.round(session.contextPercent)}%`;
+  return `Context used by the ${speaker(session)}: ${used}`;
 }

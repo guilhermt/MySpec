@@ -88,7 +88,7 @@ describe("useGlobalShortcuts", () => {
       "aria-selected",
       "true",
     );
-    expect(screen.getByRole("button", { name: "Delete task" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "More actions" })).toBeInTheDocument();
 
     // The task on screen is not an entry any more: the next one is.
     await user.keyboard("{Control>}j{/Control}");

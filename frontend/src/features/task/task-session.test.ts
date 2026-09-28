@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { isPaused, screenSession, waitingSession } from "@/features/task/task-session";
+import {
+  contextDetail,
+  isPaused,
+  pauseRefusal,
+  screenSession,
+  speaker,
+  type TaskSession,
+  waitingSession,
+} from "@/features/task/task-session";
 import type { Step, TaskSummary } from "@/lib/wails";
 import { makePullRequest, makeStep, makeStepReviewer, makeTask } from "@/test/wails-mock";
 
@@ -162,5 +170,90 @@ describe("isPaused", () => {
     ["a step without a session", inStep({ status: "blocked" }, { sessionStatus: "paused" }), false],
   ])("tells %s", (_, task, paused) => {
     expect(isPaused(task)).toBe(paused);
+  });
+});
+
+/** sessionOf is the session a task waits on, which the task of a test always has. */
+function sessionOf(task: TaskSummary): TaskSession {
+  const session = waitingSession(task);
+  if (session === null) {
+    throw new Error("the task waits on no session");
+  }
+  return session;
+}
+
+describe("speaker", () => {
+  it.each([
+    [makeTask({ stage: "prd" }), "PRD agent"],
+    [makeTask({ stage: "tech_spec" }), "tech spec agent"],
+    [makeTask({ stage: "plan" }), "plan agent"],
+    [makeTask({ mode: "one_shot", stage: "one_shot" }), "planning agent"],
+    [inStep({ status: "implementing" }), "implementer"],
+    [inStep({ status: "agent_review", reviewer }), "reviewer"],
+    [makeTask({ stage: "pr", pr: makePullRequest({ status: "drafting" }) }), "PR agent"],
+  ])("names who talks inside a sentence %#", (task, name) => {
+    expect(speaker(sessionOf(task))).toBe(name);
+  });
+});
+
+describe("pauseRefusal", () => {
+  it.each([
+    [
+      "the PRD",
+      makeTask({ sessionStatus: "error" }),
+      "Nothing is running to pause: the PRD agent's session stopped with an error. Retry it, or discard and restart the PRD.",
+    ],
+    [
+      "the tech spec",
+      makeTask({ stage: "tech_spec", sessionStatus: "error" }),
+      "Nothing is running to pause: the tech spec agent's session stopped with an error. Retry it, or discard and restart the tech spec.",
+    ],
+    [
+      "One-Shot planning",
+      makeTask({ mode: "one_shot", stage: "one_shot", sessionStatus: "error" }),
+      "Nothing is running to pause: the planning agent's session stopped with an error. Retry it, or discard and restart planning.",
+    ],
+    [
+      "a step",
+      inStep({ status: "implementing" }, { sessionStatus: "error" }),
+      "Nothing is running to pause: the implementer's session stopped with an error. Retry it, or discard the step.",
+    ],
+    [
+      "a pass",
+      inStep({ status: "agent_review", reviewer: { ...reviewer, sessionStatus: "error" } }),
+      "Nothing is running to pause: the reviewer's session stopped with an error. Retry it, or discard the step.",
+    ],
+    [
+      "the pull request",
+      makeTask({
+        stage: "pr",
+        pr: makePullRequest({ status: "drafting", sessionStatus: "error" }),
+      }),
+      "Nothing is running to pause: the PR agent's session stopped with an error. Retry it.",
+    ],
+  ])("says nothing runs to pause after an error in %s", (_, task, reason) => {
+    expect(pauseRefusal(task, sessionOf(task))).toBe(reason);
+  });
+
+  it.each(["working", "waiting", "paused", "needs_permission"])(
+    "lets a %s session be paused or resumed",
+    (sessionStatus) => {
+      const task = makeTask({ sessionStatus });
+      expect(pauseRefusal(task, sessionOf(task))).toBeNull();
+    },
+  );
+});
+
+describe("contextDetail", () => {
+  it("says who used how much of the context", () => {
+    expect(contextDetail(sessionOf(inStep({ status: "agent_review", reviewer })))).toBe(
+      "Context used by the reviewer: 30%",
+    );
+  });
+
+  it("says … before the first reading", () => {
+    expect(contextDetail(sessionOf(makeTask({ contextPercent: 0 })))).toBe(
+      "Context used by the PRD agent: …",
+    );
   });
 });

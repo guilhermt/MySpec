@@ -60,8 +60,13 @@ export function TaskView({ taskId }: TaskViewProps) {
     }
   }, [taskId, stage, hasConversation]);
 
+  // A new task is on screen before the snapshot that brings it: the header shows it loading.
   if (task === null) {
-    return <section className="min-h-0 flex-1 bg-background" />;
+    return (
+      <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
+        <TaskHeader task={null} />
+      </section>
+    );
   }
 
   return (

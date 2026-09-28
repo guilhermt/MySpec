@@ -148,9 +148,14 @@ describe("TaskView", () => {
     expect(screen.getByRole("complementary", { name: "Artifacts" })).toBeInTheDocument();
   });
 
-  it("shows nothing for a task that is no longer there", () => {
-    renderWithStore(<TaskView taskId="task-1" />, { state: makeState() });
+  it("shows the header loading until the snapshot brings the task, and nothing else", () => {
+    renderWithStore(<TaskView taskId="task-1" />, {
+      state: makeState(),
+      ui: { location: { kind: "task", id: "task-1" } },
+    });
 
+    expect(screen.getByRole("list", { name: "Progress" })).toHaveAttribute("aria-busy", "true");
+    expect(screen.queryByRole("button", { name: "More actions" })).not.toBeInTheDocument();
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
     expect(api.getTranscript).not.toHaveBeenCalled();
   });

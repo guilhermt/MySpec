@@ -1,6 +1,7 @@
 .task
 bin
 coverage
+frontend/captures
 frontend/coverage
 frontend/.vitest
 frontend/dist

@@ -2,60 +2,104 @@ import { useState } from "react";
 import { CardLink } from "@/components/CardLink";
 import { PauseButton } from "@/components/PauseButton";
 import { PanelGroup } from "@/components/system/AuxPanel";
-import { IconButton } from "@/components/system/IconButton";
+import { ContextMeter } from "@/components/system/ContextMeter";
 import { ICONS } from "@/components/system/icons";
+import type { PillView } from "@/components/system/Pill";
+import { Stepper } from "@/components/system/Stepper";
+import { useNow } from "@/features/attention/useNow";
 import { LocationHeader } from "@/features/navigation/LocationHeader";
-import { ContextGauge } from "@/features/task/ContextGauge";
-import { DeleteTaskDialog } from "@/features/task/DeleteTaskDialog";
-import { StatusBadge } from "@/features/task/StatusBadge";
-import { currentStepOf, hasStepSession, loopSession } from "@/features/task/step-status";
+import { loadingSteps, stepperOf } from "@/features/task/stepper";
 import { TaskMenu } from "@/features/task/TaskMenu";
-import { TaskModelsButton } from "@/features/task/TaskModels";
-import { TaskReviewModeButton } from "@/features/task/TaskReviewMode";
+import {
+  contextDetail,
+  isPaused,
+  pauseRefusal,
+  screenSession,
+  waitingSession,
+} from "@/features/task/task-session";
 import { asSessionStatus, asTaskStage, type TaskSummary } from "@/lib/wails";
+import { clockTime } from "@/lib/when";
 import { pause, resume } from "@/store/actions";
-import { useAppStore, usePanel } from "@/store/app-store";
+import { useAppStore, useOpenStepTab, usePanel } from "@/store/app-store";
 
 export interface TaskHeaderProps {
-  task: TaskSummary;
+  /** task is null in the instant before the first snapshot that brings a new task. */
+  task: TaskSummary | null;
 }
 
+/** LOADING_STEPS are the stages the loading stepper glows over: the Structured ones a new task starts with. */
+const LOADING_STEPS = loadingSteps();
+
+/** LOADING_PILL fills the pill of the loading stepper, which draws none. */
+const LOADING_PILL: PillView = {
+  name: "",
+  position: "",
+  qualifier: "",
+  keepsQualifier: false,
+  glyph: null,
+  word: "",
+  shimmer: false,
+  paused: false,
+  state: "",
+};
+
 /**
- * TaskHeader is the header of the place of a task, with everything the user can do to it on the
- * right.
+ * TaskHeader is the header of the place of a task: the title, the stepper, and on the right the
+ * context meter, Pause or Resume, the panels and the ⋯. Before the first snapshot of a new task it
+ * has the empty title and the loading stepper, and nothing on the right.
  */
 export function TaskHeader({ task }: TaskHeaderProps) {
-  const [deleting, setDeleting] = useState(false);
+  const now = useNow(60_000, task !== null);
+  if (task === null) {
+    return (
+      <LocationHeader
+        progress={
+          <Stepper
+            steps={LOADING_STEPS}
+            pill={LOADING_PILL}
+            label="Progress"
+            tooltip={[LOADING_STEPS.map((step) => `○ ${step.name}`).join("  ")]}
+            loading
+          />
+        }
+      />
+    );
+  }
+  const stepper = stepperOf(task, now);
+  return (
+    <LocationHeader
+      progress={
+        <Stepper
+          steps={stepper.steps}
+          pill={stepper.pill}
+          label={stepper.label}
+          tooltip={stepper.tooltip}
+        />
+      }
+    >
+      <TaskTools task={task} now={now} />
+    </LocationHeader>
+  );
+}
+
+/** TaskTools is the right of the header of a task, in its order. */
+function TaskTools({ task, now }: { task: TaskSummary; now: number }) {
+  const tab = useOpenStepTab(task.id);
   const panel = usePanel();
   const openPanel = useAppStore((state) => state.openPanel);
-
-  // The implementation stage holds the session of the step being run, and only
-  // once the step got as far as opening one. The PR stage holds none of its
-  // own: its session is paused from the bar of the pull request.
-  const implementing = asTaskStage(task.stage) === "implementation";
-  const step = currentStepOf(task);
-  const running = asTaskStage(task.stage) !== "pr" && (!implementing || hasStepSession(step));
-  // In the implementation stage the header acts on the conversation the step
-  // waits on: its reviewer during a pass, its implementer otherwise. Pausing it
-  // is what stops the agent review.
-  const loop = implementing && step !== null ? loopSession(task, step) : null;
-  const stage = loop?.stage ?? task.stage;
-  const status = asSessionStatus(loop?.sessionStatus ?? task.sessionStatus);
-  const paused = status === "paused";
+  const onScreen = screenSession(task, tab);
 
   return (
-    <LocationHeader>
-      <StatusBadge task={task} />
-      <ContextGauge percent={loop?.contextPercent ?? task.contextPercent} />
-      {running && (
-        <PauseButton
-          paused={paused}
-          disabled={!paused && status === "error"}
-          onClick={() => void (paused ? resume(task.id, stage) : pause(task.id, stage))}
+    <>
+      {onScreen !== null && (
+        <ContextMeter
+          percent={onScreen.contextPercent === 0 ? null : onScreen.contextPercent}
+          paused={asSessionStatus(onScreen.sessionStatus) === "paused"}
+          compact="narrow"
+          detail={contextDetail(onScreen)}
         />
       )}
-      <TaskReviewModeButton task={task} />
-      <TaskModelsButton task={task} />
+      <TaskPause task={task} now={now} />
       {task.card !== null && <CardLink card={task.card} />}
       <PanelGroup
         panels={[
@@ -69,21 +113,41 @@ export function TaskHeader({ task }: TaskHeaderProps) {
         open={panel}
         onOpenChange={openPanel}
       />
-      <IconButton
-        label="Delete task"
-        icon={ICONS.trash}
-        size="sm"
-        onClick={() => setDeleting(true)}
-      />
       <TaskMenu task={task} />
+    </>
+  );
+}
 
-      <DeleteTaskDialog
-        taskId={task.id}
-        name={task.name}
-        archived={false}
-        open={deleting}
-        onOpenChange={setDeleting}
-      />
-    </LocationHeader>
+/**
+ * TaskPause pauses or resumes the conversation the task waits on, with no dialog: Pausing… until the
+ * call comes back. The pull request pauses its session from its own bar.
+ */
+function TaskPause({ task, now }: { task: TaskSummary; now: number }) {
+  const [loading, setLoading] = useState(false);
+  const session = asTaskStage(task.stage) === "pr" ? null : waitingSession(task);
+  if (session === null) {
+    return null;
+  }
+  const paused = isPaused(task);
+  const refusal = paused ? null : pauseRefusal(task, session);
+
+  const act = async () => {
+    setLoading(true);
+    try {
+      await (paused ? resume(task.id, session.stage) : pause(task.id, session.stage));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <PauseButton
+      paused={paused}
+      loading={loading}
+      {...(refusal !== null ? { disabledReason: refusal } : {})}
+      pausedSince={session.pausedAt === "" ? "" : clockTime(session.pausedAt, now)}
+      item="the task"
+      onClick={() => void act()}
+    />
   );
 }
