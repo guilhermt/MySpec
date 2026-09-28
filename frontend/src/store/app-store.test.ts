@@ -19,6 +19,7 @@ import {
   useArchivedTask,
   useBackTarget,
   useBoard,
+  useBoardCard,
   useBoards,
   useDiscussion,
   useDiscussionHistory,
@@ -62,6 +63,7 @@ import {
   makeArchivedReview,
   makeArchivedTask,
   makeBoard,
+  makeBoardCard,
   makeDiscussion,
   makeEntry,
   makeMigration,
@@ -1197,6 +1199,29 @@ describe("boards", () => {
     expect(result.current.boards).toEqual([ROADMAP, OPS]);
     expect(result.current.ops).toBe(OPS);
     expect(result.current.unknown).toBeNull();
+  });
+
+  it("reads a card in the last reading of its board, and says why when it can't", () => {
+    const card = makeBoardCard();
+    const { result } = renderHook(() => ({
+      read: useBoardCard("board-1", card.key),
+      outside: useBoardCard("board-1", "dev/web#99"),
+      unread: useBoardCard("board-2", card.key),
+      missing: useBoardCard("board-9", card.key),
+    }));
+
+    act(() => {
+      useAppStore
+        .getState()
+        .applyState(withBoards([makeBoard({ cards: [card] }), { ...OPS, readAt: "" }]));
+    });
+
+    expect(result.current).toEqual({
+      read: { board: "read", card },
+      outside: { board: "read", card: null },
+      unread: { board: "unread", card: null },
+      missing: { board: "missing", card: null },
+    });
   });
 
   it("opens a board view in place of a task, the history and the settings", () => {

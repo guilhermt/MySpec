@@ -30,13 +30,14 @@ export function PanelGroup<Id extends string>({ panels, open, onOpenChange }: Pa
   return (
     <>
       {panels.map((panel) => (
-        // Below 1440px of main area only the icon shows: the tooltip names the panel first.
+        // Below 1440px of main area only the icon shows, on a square button: the tooltip names the panel first.
         <Tooltip key={panel.id} content={panel.label} sub={panel.tooltip}>
           <Button
             id={panelTriggerId(panel.id)}
             variant="ghost"
             size="sm"
             pressed={open === panel.id}
+            className="@max-[1440px]/main:w-(--size-control-sm) @max-[1440px]/main:px-0"
             onClick={() => onOpenChange(open === panel.id ? null : panel.id)}
           >
             <Icon icon={panel.icon} />

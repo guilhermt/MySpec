@@ -39,6 +39,7 @@ import type {
   ArchivedReview,
   ArchivedTask,
   Board,
+  BoardCard,
   DiscussionSummary,
   Leftover,
   Migration,
@@ -1056,6 +1057,31 @@ export function useBoards(): readonly Board[] {
 /** useBoard is a registered board by id, null when none is. */
 export function useBoard(id: string): Board | null {
   return useAppStore((state) => findBoard(state.app, id));
+}
+
+/**
+ * BoardCardReading is a card as the last reading of its board has it: the board missing when it was
+ * removed, unread before its first reading, and read with the card, or with null when the reading
+ * doesn't have it.
+ */
+export type BoardCardReading =
+  | { board: "missing" | "unread"; card: null }
+  | { board: "read"; card: BoardCard | null };
+
+/** useBoardCard is the card of a key in the last reading of a board. */
+export function useBoardCard(boardId: string, key: string): BoardCardReading {
+  return useAppStore(
+    useShallow((state): BoardCardReading => {
+      const board = findBoard(state.app, boardId);
+      if (board === null) {
+        return { board: "missing", card: null };
+      }
+      if (board.readAt === "") {
+        return { board: "unread", card: null };
+      }
+      return { board: "read", card: (board.cards ?? []).find((card) => card.key === key) ?? null };
+    }),
+  );
 }
 
 /** useLocation is the place on screen. */

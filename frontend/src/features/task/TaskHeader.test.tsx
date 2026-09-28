@@ -79,9 +79,9 @@ describe("TaskHeader", () => {
       "Back",
       "Show the hidden levels: No board",
       "Pause",
-      "Open card #12 on GitHub · In progress",
       "Details",
       "Artifacts",
+      "Card",
       "More actions",
     ]);
   });
@@ -335,23 +335,22 @@ describe("TaskHeader", () => {
     });
   });
 
-  it("opens the card the task was created from on GitHub", async () => {
+  it("toggles the card panel, named in its tooltip, for a task created from a card", async () => {
     const { user } = header({ card: makeTaskCard() });
+    const card = () => screen.getByRole("button", { name: "Card" });
 
-    await user.click(screen.getByRole("button", { name: "Open card #12 on GitHub · In progress" }));
+    await user.hover(card());
+    expect(await screen.findByText("The card dev/web#12 on the board")).toBeInTheDocument();
 
-    expect(api.openExternal).toHaveBeenCalledWith("https://github.com/dev/web/issues/12");
+    await user.click(card());
+    expect(useAppStore.getState().panel).toBe("card");
+    expect(card()).toHaveAttribute("aria-pressed", "true");
   });
 
-  it("names the card by its number alone when the board gives it no status", () => {
-    header({ card: makeTaskCard({ status: "" }) });
-
-    expect(screen.getByRole("button", { name: "Open card #12 on GitHub" })).toBeInTheDocument();
-  });
-
-  it("has no card link for a task without one", () => {
+  it("has no card button and no card link for a task without a card", () => {
     header();
 
+    expect(screen.queryByRole("button", { name: "Card" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Open card/ })).not.toBeInTheDocument();
   });
 

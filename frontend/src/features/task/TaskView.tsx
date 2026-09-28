@@ -6,6 +6,7 @@ import { IDLE_SESSION } from "@/features/chat/session";
 import { AgentTabs } from "@/features/task/AgentTabs";
 import { ArtifactsPanel } from "@/features/task/ArtifactsPanel";
 import { agentTabsOf } from "@/features/task/agent-tabs";
+import { CardPanel } from "@/features/task/CardPanel";
 import { DetailsPanel } from "@/features/task/DetailsPanel";
 import { earlierPlace } from "@/features/task/details";
 import { EarlierConversationFoot } from "@/features/task/EarlierConversationFoot";
@@ -168,6 +169,8 @@ export function TaskView({ taskId }: TaskViewProps) {
             <DetailsPanel key="details" task={task} />
           ) : panel === "artifacts" ? (
             <ArtifactsPanel key="artifacts" task={task} />
+          ) : panel === "card" && task.card !== null ? (
+            <CardPanel key="card" task={task} />
           ) : null
         }
       >

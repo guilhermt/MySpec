@@ -15,6 +15,7 @@ import {
   makeStep,
   makeStepReviewer,
   makeTask,
+  makeTaskCard,
   makeTaskConversation,
 } from "@/test/wails-mock";
 
@@ -244,6 +245,14 @@ describe("TaskView", () => {
     await waitFor(() => {
       expect(screen.queryByRole("complementary", { name: "Artifacts" })).not.toBeInTheDocument();
     });
+  });
+
+  it("opens the card panel from its button, for a task created from a card", async () => {
+    const { user } = view({ card: makeTaskCard() });
+
+    await user.click(screen.getByRole("button", { name: "Card" }));
+
+    expect(screen.getByRole("complementary", { name: "Card #12" })).toBeInTheDocument();
   });
 
   it("shows the header loading until the snapshot brings the task, and nothing else", () => {

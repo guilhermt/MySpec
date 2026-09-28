@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { CardLink } from "@/components/CardLink";
 import { PauseButton } from "@/components/PauseButton";
 import { PanelGroup } from "@/components/system/AuxPanel";
 import { ContextMeter } from "@/components/system/ContextMeter";
@@ -17,7 +16,7 @@ import {
   screenSession,
   waitingSession,
 } from "@/features/task/task-session";
-import { asSessionStatus, asTaskMode, type TaskSummary } from "@/lib/wails";
+import { asSessionStatus, asTaskMode, type TaskCard, type TaskSummary } from "@/lib/wails";
 import { clockTime } from "@/lib/when";
 import { pause, resume } from "@/store/actions";
 import { useAppStore, useEarlierConversation, useOpenStepTab, usePanel } from "@/store/app-store";
@@ -75,6 +74,16 @@ const ONE_SHOT_PANELS = [
   },
 ] as const;
 
+/** cardPanel is the panel of the card a task was created from, which only such a task has. */
+function cardPanel(card: TaskCard) {
+  return {
+    id: "card",
+    label: "Card",
+    tooltip: `The card ${card.repository}#${card.number} on the board`,
+    icon: ICONS.card,
+  } as const;
+}
+
 /**
  * TaskHeader is the header of the place of a task: the title, the stepper, and on the right the
  * context meter, Pause or Resume, the panels and the ⋯. Before the first snapshot of a new task it
@@ -120,6 +129,7 @@ function TaskTools({ task, now }: { task: TaskSummary; now: number }) {
   const panel = usePanel();
   const openPanel = useAppStore((state) => state.openPanel);
   const earlier = useEarlierConversation(task.id);
+  const panels = asTaskMode(task.mode) === "one_shot" ? ONE_SHOT_PANELS : STRUCTURED_PANELS;
   // An earlier conversation on screen is not the one the meter measures, so it steps aside.
   const onScreen = earlier === null ? screenSession(task, tab) : null;
 
@@ -134,9 +144,8 @@ function TaskTools({ task, now }: { task: TaskSummary; now: number }) {
         />
       )}
       <TaskPause task={task} now={now} />
-      {task.card !== null && <CardLink card={task.card} />}
       <PanelGroup
-        panels={asTaskMode(task.mode) === "one_shot" ? ONE_SHOT_PANELS : STRUCTURED_PANELS}
+        panels={task.card === null ? panels : [...panels, cardPanel(task.card)]}
         open={panel}
         onOpenChange={openPanel}
       />
