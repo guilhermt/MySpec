@@ -103,7 +103,7 @@ Um componente **embrulha** o primitivo de `components/ui/` quando os estados do 
 | Chip | `Chip.tsx` | `ui/toggle` (alterna), `ui/button` (abre menu) | Idem |
 | Tecla | `Kbd.tsx` | `ui/kbd` | Idem |
 | Rótulo, input, textarea | `Field.tsx`, `Input.tsx`, `Textarea.tsx` | `ui/label`, `ui/input`, `ui/textarea` | Idem |
-| Menu | `Menu.tsx` | `ui/dropdown-menu`, e o item de rádio próprio sobre `Menu.RadioItem` do Base UI | Idem, no conteúdo e nos itens; o item de rádio do ui põe o visto à direita, sem `className`, e o system o quer à esquerda; o ui dá ao menu a largura do gatilho, e o system a do item mais longo, de `--size-menu-min` até o espaço da janela, para nenhum item quebrar linha |
+| Menu | `Menu.tsx` | `ui/dropdown-menu`, e o item de rádio próprio sobre `Menu.RadioItem` do Base UI | Idem, no conteúdo e nos itens; o item de rádio do ui põe o visto à direita, sem `className`, e o system o quer à esquerda; o ui dá ao menu a largura do gatilho, e o system a do item mais longo, de `--size-menu-min` ou da largura do gatilho, a maior, até o espaço da janela, para nenhum item quebrar linha e o menu de um `Select` nunca ficar mais estreito que o campo |
 | Select | `Select.tsx` | O menu, com os itens de rádio dele | Idem |
 | Listbox | `Listbox.tsx` | Próprio sobre `@base-ui/react/combobox` | Não há primitivo de lista com busca |
 | Diálogo | `Dialog.tsx` | `ui/dialog`, `ui/alert-dialog` | O conteúdo se sobrescreve por classe; posição e véu vêm das regras sem camada |
