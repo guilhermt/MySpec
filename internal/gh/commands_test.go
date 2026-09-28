@@ -3,8 +3,11 @@ package gh_test
 import (
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 
@@ -56,6 +59,48 @@ func TestAuthFailsWithoutGhOnThePath(t *testing.T) {
 	}
 }
 
+func TestViewPRReadsWhatARealGhAnswersWithTheTimesOfTheChecks(t *testing.T) {
+	t.Parallel()
+	recorded, err := os.ReadFile(filepath.Join("testdata", "status_check_rollup.json"))
+	if err != nil {
+		t.Fatalf("read the recorded answer: %v", err)
+	}
+	r, _ := runner(t, map[string]ghtest.Reply{"pr": {Stdout: string(recorded)}})
+
+	got, err := r.ViewPR(t.Context(), t.TempDir(), "login-screen")
+	if err != nil {
+		t.Fatalf("ViewPR() = %v, want nil", err)
+	}
+	at := func(value string) time.Time {
+		parsed, parseErr := time.Parse(time.RFC3339, value)
+		if parseErr != nil {
+			t.Fatalf("parse %q: %v", value, parseErr)
+		}
+		return parsed
+	}
+	run := "https://github.com/guilhermt/MySpec/actions/runs/36360336611/job/"
+	want := gh.PRChecks{
+		Checks: []gh.Check{
+			{
+				Name: "Frontend", URL: run + "108736125096", Conclusion: "success", State: gh.CheckPassed,
+				StartedAt: at("2026-09-27T23:56:08Z"), CompletedAt: at("2026-09-28T00:03:30Z"),
+			},
+			{
+				Name: "Go", URL: run + "108736124998", Conclusion: "success", State: gh.CheckPassed,
+				StartedAt: at("2026-09-27T23:56:08Z"), CompletedAt: at("2026-09-28T00:01:11Z"),
+			},
+			{
+				Name: "Build", URL: run + "108737339194", Conclusion: "success", State: gh.CheckPassed,
+				StartedAt: at("2026-09-28T00:03:32Z"), CompletedAt: at("2026-09-28T00:07:52Z"),
+			},
+		},
+		Mergeable: gh.MergeableUnknown,
+	}
+	if diff := cmp.Diff(want, got.Checks); diff != "" {
+		t.Errorf("ViewPR().Checks mismatch (-want +got):\n%s", diff)
+	}
+}
+
 func TestViewPRReadsThePullRequestOfTheBranch(t *testing.T) {
 	t.Parallel()
 	r, fake := runner(t, map[string]ghtest.Reply{
@@ -77,8 +122,8 @@ func TestViewPRReadsThePullRequestOfTheBranch(t *testing.T) {
 		Base:   "dev",
 		Checks: gh.PRChecks{
 			Checks: []gh.Check{
-				{Name: "test", URL: "https://github.com/acme/api/actions/runs/1", Conclusion: "success"},
-				{Name: "ci/deploy", URL: "https://ci.example.com/2", Pending: true},
+				{Name: "test", URL: "https://github.com/acme/api/actions/runs/1", Conclusion: "success", State: gh.CheckPassed},
+				{Name: "ci/deploy", URL: "https://ci.example.com/2", Pending: true, State: gh.CheckRunning},
 			},
 			Mergeable: gh.MergeableClean,
 		},

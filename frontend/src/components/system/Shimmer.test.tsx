@@ -5,7 +5,7 @@ import { Shimmer } from "./Shimmer";
 
 describe("Shimmer", () => {
   it("reads its text with the shimmer", () => {
-    renderWithStore(<Shimmer>checking GitHub…</Shimmer>);
-    expect(screen.getByText("checking GitHub…")).toHaveClass("shimmer-text");
+    renderWithStore(<Shimmer>checking GitHub</Shimmer>);
+    expect(screen.getByText("checking GitHub")).toHaveClass("shimmer-text");
   });
 });

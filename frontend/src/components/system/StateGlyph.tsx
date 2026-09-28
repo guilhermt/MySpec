@@ -27,7 +27,7 @@ const SHAPES: Record<Exclude<GlyphState, "work">, string> = {
   close: "rounded-full border-(length:--border-2) border-state-close",
   github: "rounded-full border border-dashed border-state-github",
   paused:
-    "bg-[linear-gradient(90deg,var(--state-paused)_0_var(--glyph-bar),transparent_var(--glyph-bar)_calc(var(--glyph)-var(--glyph-bar)),var(--state-paused)_calc(var(--glyph)-var(--glyph-bar)))]",
+    "bg-[linear-gradient(90deg,var(--state-paused)_0_var(--glyph-bar),transparent_var(--glyph-bar)_calc(100%-var(--glyph-bar)),var(--state-paused)_calc(100%-var(--glyph-bar)))]",
   idle: "rounded-full border border-state-idle",
   blocked: "rotate-45 rounded-(--radius-glyph) border border-state-notice",
   todo: "rounded-full border border-line-deco",

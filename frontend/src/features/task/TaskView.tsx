@@ -1,31 +1,100 @@
-import { useEffect } from "react";
-import { AuxPanel, PanelLayout } from "@/components/system/AuxPanel";
+import { useEffect, useRef } from "react";
+import { PanelLayout } from "@/components/system/AuxPanel";
 import { Composer } from "@/features/chat/Composer";
 import { Conversation } from "@/features/chat/Conversation";
-import { ArtifactPanel } from "@/features/task/ArtifactPanel";
+import { IDLE_SESSION } from "@/features/chat/session";
+import { AgentTabs } from "@/features/task/AgentTabs";
+import { ArtifactsPanel } from "@/features/task/ArtifactsPanel";
+import { agentTabsOf } from "@/features/task/agent-tabs";
+import { CardPanel } from "@/features/task/CardPanel";
+import { DetailsPanel } from "@/features/task/DetailsPanel";
+import { earlierPlace } from "@/features/task/details";
+import { EarlierConversationFoot } from "@/features/task/EarlierConversationFoot";
 import { PlanProblemsNotice } from "@/features/task/PlanProblemsNotice";
-import { PRBar } from "@/features/task/PRBar";
 import { PRPane } from "@/features/task/PRPane";
-import { StageTrack } from "@/features/task/StageTrack";
-import { StepBar } from "@/features/task/StepBar";
+import { ReviewStrip } from "@/features/task/ReviewStrip";
 import { StepPane } from "@/features/task/StepPane";
 import { currentStepOf, hasStepSession, stepStage } from "@/features/task/step-status";
 import { TaskHeader } from "@/features/task/TaskHeader";
+import { TaskRequest } from "@/features/task/TaskRequest";
 import { prOf } from "@/lib/pull-requests";
-import { asTaskStage, sessionKey } from "@/lib/wails";
+import { asTaskStage, type Step, sessionKey, type TaskSummary } from "@/lib/wails";
 import { loadTranscript } from "@/store/actions";
-import { useAppStore, useOpenStepTab, usePanel, useTask } from "@/store/app-store";
+import {
+  useAppStore,
+  useEarlierConversation,
+  useOpenStepTab,
+  usePanel,
+  useTask,
+} from "@/store/app-store";
+
+/** COLUMN is the conversation column, centered on a whole pixel. */
+const COLUMN =
+  "w-full max-w-(--measure-conversation) ml-[max(0px,round(down,calc((100%_-_var(--measure-conversation))/2),1px))]";
+
+/**
+ * StepTop is what sits over the conversation of the step: the agent tabs and the review of the
+ * step, in the conversation column.
+ */
+function StepTop({ task, step }: { task: TaskSummary; step: Step }) {
+  const review = step.review !== null && hasStepSession(step) ? step.review : null;
+  // Only whether there are tabs matters here: AgentTabs says which one is chosen.
+  if (agentTabsOf(task, step, "implementer", 0) === null && review === null) {
+    return null;
+  }
+  return (
+    <div className="shrink-0 px-(--space-6) pt-(--space-1)">
+      <div className={COLUMN}>
+        <AgentTabs task={task} step={step} />
+        {review !== null && <ReviewStrip taskId={task.id} subject="step" review={review} />}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * EarlierConversation is a conversation of the task read in place of the one of its place, from its
+ * start and taking no message, with the strip that leads back. It takes the focus as it opens.
+ */
+function EarlierConversation({ task, stage }: { task: TaskSummary; stage: string }) {
+  const ref = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    ref.current?.focus();
+  }, []);
+
+  return (
+    <>
+      <section
+        ref={ref}
+        aria-label={`${earlierPlace(task, stage)}, an earlier conversation`}
+        tabIndex={-1}
+        className="flex min-h-0 flex-1 flex-col outline-none"
+      >
+        <Conversation taskId={task.id} stage={stage} session={IDLE_SESSION} readOnly />
+      </section>
+      <EarlierConversationFoot task={task} stage={stage} />
+    </>
+  );
+}
 
 export interface TaskViewProps {
   taskId: string;
 }
 
-/** TaskView is the screen of one task: the conversation and what came out of it. */
+/**
+ * TaskView is the screen of one task: the conversation and what came out of it. An earlier
+ * conversation, once read, takes the place of all of it but the header and the panels.
+ */
 export function TaskView({ taskId }: TaskViewProps) {
   const task = useTask(taskId);
   const stepTab = useOpenStepTab(taskId);
   const panel = usePanel();
-  const openPanel = useAppStore((state) => state.openPanel);
+  const earlier = useEarlierConversation(taskId);
+  const earlierReady = useAppStore(
+    (state) =>
+      earlier !== null && state.transcripts[sessionKey(taskId, earlier.stage)]?.status === "ready",
+  );
 
   const implementing = task !== null && asTaskStage(task.stage) === "implementation";
   const opening = task !== null && asTaskStage(task.stage) === "pr";
@@ -61,35 +130,38 @@ export function TaskView({ taskId }: TaskViewProps) {
     }
   }, [taskId, stage, hasConversation]);
 
+  // A new task is on screen before the snapshot that brings it: the header shows it loading.
   if (task === null) {
-    return <section className="min-h-0 flex-1 bg-background" />;
+    return (
+      <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
+        <TaskHeader task={null} />
+      </section>
+    );
   }
 
   return (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
       <TaskHeader task={task} />
-      <StageTrack task={task} />
       <PanelLayout
         panel={
-          panel === "artifacts" && (
-            <AuxPanel id="artifacts" title="Artifacts" onClose={() => openPanel(null)}>
-              <ArtifactPanel task={task} />
-            </AuxPanel>
-          )
+          panel === "details" ? (
+            <DetailsPanel key="details" task={task} />
+          ) : panel === "artifacts" ? (
+            <ArtifactsPanel key="artifacts" task={task} />
+          ) : panel === "card" && task.card !== null ? (
+            <CardPanel key="card" task={task} />
+          ) : null
         }
       >
-        {implementing ? (
+        {earlier !== null && earlierReady ? (
+          <EarlierConversation key={earlier.stage} task={task} stage={earlier.stage} />
+        ) : implementing ? (
           <>
-            <StepBar task={task} />
+            {step !== null && <StepTop task={task} step={step} />}
             <StepPane task={task} />
           </>
         ) : opening ? (
-          pr !== null && (
-            <>
-              <PRBar task={task} pr={pr} />
-              <PRPane task={task} pr={pr} />
-            </>
-          )
+          pr !== null && <PRPane task={task} pr={pr} tab={stepTab} />
         ) : (
           <>
             <Conversation
@@ -99,6 +171,7 @@ export function TaskView({ taskId }: TaskViewProps) {
               session={task}
             />
             <PlanProblemsNotice task={task} />
+            <TaskRequest task={task} tab={stepTab} />
             <Composer taskId={task.id} stage={task.stage} session={task} />
           </>
         )}

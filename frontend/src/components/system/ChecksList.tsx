@@ -1,0 +1,110 @@
+import { cn } from "@/lib/utils";
+import { Icon } from "./Icon";
+import { ICONS } from "./icons";
+import { Link } from "./Link";
+import { StateGlyph } from "./StateGlyph";
+import { Tooltip } from "./Tooltip";
+
+/** CheckGlyph is the glyph of a check: passed, skipped or neutral, failed, running, queued. */
+export type CheckGlyph = "done" | "doneFaint" | "error" | "work" | "todo";
+
+/** CheckRowView is one check as the list draws it, with its duration ready. */
+export interface CheckRowView {
+  name: string;
+  /** word is the state: passed, skipped, neutral, failed, running, queued. */
+  word: string;
+  glyph: CheckGlyph;
+  /** tooltip is the conclusion of GitHub on a failed check. */
+  tooltip: string | null;
+  /** duration is "1m 52s", or "—" for a check with no times. */
+  duration: string;
+  /** url links the name to the check on GitHub; "" leaves the name plain text. */
+  url: string;
+}
+
+export interface ChecksListProps {
+  /** summary is "3 of 5 passed · 2 not finished", "Not read yet" or "No checks". */
+  summary: string;
+  rows: readonly CheckRowView[];
+  /** onOpen opens the url of a check in the browser, since nothing navigates inside the webview. */
+  onOpen: (url: string) => void;
+}
+
+/** WORDS paints the word of a state that stands out: the failure, and the check that runs. */
+const WORDS: Partial<Record<CheckGlyph, string>> = {
+  error: "font-medium text-state-error",
+  work: "font-medium text-ink-1",
+};
+
+/** Glyph is the sign of a check in its column. */
+function Glyph({ glyph }: { glyph: CheckGlyph }) {
+  if (glyph === "done" || glyph === "doneFaint") {
+    return (
+      <Icon
+        icon={ICONS.done}
+        size="sm"
+        className={glyph === "done" ? "text-ink-3" : "text-ink-4"}
+      />
+    );
+  }
+  return <StateGlyph state={glyph} size="sm" />;
+}
+
+/**
+ * ChecksList is the checks of a pull request, by name, in a panel: the summary on top and one row per
+ * check with its glyph, the name in mono, the state and the duration on the right. A check with a url
+ * names itself as an external link, which onOpen opens; without one it stays plain text.
+ */
+export function ChecksList({ summary, rows, onOpen }: ChecksListProps) {
+  return (
+    <div className="flex flex-col gap-(--space-1) text-(length:--text-meta) leading-(--leading-meta)">
+      <p className="text-ink-2">{summary}</p>
+      {rows.length > 0 && (
+        <ul aria-label="Checks" className="flex flex-col">
+          {rows.map((row, index) => {
+            const word = (
+              <span className={cn("whitespace-nowrap text-ink-3", WORDS[row.glyph])}>
+                {row.word}
+                {row.tooltip !== null && <span className="sr-only"> · {row.tooltip}</span>}
+              </span>
+            );
+            const name =
+              row.url !== "" ? (
+                <Link
+                  href={row.url}
+                  external
+                  onClick={(event) => {
+                    event.preventDefault();
+                    onOpen(row.url);
+                  }}
+                  className="min-w-0 truncate font-mono text-(length:--text-micro)"
+                >
+                  {row.name}
+                </Link>
+              ) : (
+                <span className="truncate font-mono text-(length:--text-micro) text-ink-1">
+                  {row.name}
+                </span>
+              );
+            return (
+              <li
+                key={row.url !== "" ? row.url : `${row.name}-${index}`}
+                data-glyph={row.glyph}
+                className="grid min-h-(--size-control-sm) grid-cols-[var(--icon)_minmax(0,1fr)_auto_auto] items-center gap-(--space-2)"
+              >
+                <span className="grid place-items-center">
+                  <Glyph glyph={row.glyph} />
+                </span>
+                {name}
+                {row.tooltip !== null ? <Tooltip content={row.tooltip}>{word}</Tooltip> : word}
+                <span className="min-w-(--space-12) text-right whitespace-nowrap text-ink-4 tabular-nums">
+                  {row.duration}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}

@@ -56,4 +56,13 @@ describe("ErrorCard", () => {
 
     expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
   });
+
+  it("offers no retry in an earlier conversation, even with the session stopped on it", () => {
+    renderWithStore(<ErrorCard stage="prd" taskId="task-1" error={failure()} readOnly />, {
+      state: STOPPED,
+    });
+
+    expect(screen.getByRole("alert")).toHaveTextContent("The agent couldn't finish");
+    expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
+  });
 });

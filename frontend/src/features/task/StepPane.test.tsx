@@ -1,5 +1,7 @@
 import { screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { tabId } from "@/components/system/Tabs";
+import { AGENT_CONVERSATION } from "@/features/task/AgentTabs";
 import { StepPane } from "@/features/task/StepPane";
 import { api, type Step, type TaskSummary } from "@/lib/wails";
 import type { TranscriptState } from "@/store/transcript";
@@ -14,7 +16,13 @@ import {
 } from "@/test/wails-mock";
 
 const READY: Record<string, TranscriptState> = {
-  "task-1|step:1": { status: "ready", entries: [makeEntry("user")], pending: [], buffered: [] },
+  "task-1|step:1": {
+    status: "ready",
+    error: "",
+    entries: [makeEntry("user")],
+    pending: [],
+    buffered: [],
+  },
 };
 
 // The implementer and the reviewer of step 1, each with a conversation of its own.
@@ -22,6 +30,7 @@ const BOTH_READY: Record<string, TranscriptState> = {
   ...READY,
   "task-1|step_review:1": {
     status: "ready",
+    error: "",
     entries: [
       makeEntry("user", {
         user: { text: "Check the login form", pending: false, prompt: false, app: false },
@@ -92,34 +101,29 @@ describe("StepPane", () => {
     expect(api.sendMessage).toHaveBeenCalledWith("task-1", "step_review:1", "The test is missing");
   });
 
-  it("keeps the draft of each conversation apart when the tab changes", async () => {
-    const { user } = pane(UNDER_AGENT_REVIEW, {}, { transcripts: BOTH_READY });
-
-    await user.type(screen.getByRole("textbox"), "For the implementer");
-    await user.click(screen.getByRole("tab", { name: /Reviewer/ }));
-
-    expect(screen.getByText("Check the login form")).toBeInTheDocument();
-    expect(screen.getByRole("textbox")).toHaveValue("");
-
-    await user.click(screen.getByRole("tab", { name: /Implementer/ }));
-
-    expect(screen.getByText("Add a login screen")).toBeInTheDocument();
-    expect(screen.getByRole("textbox")).toHaveValue("For the implementer");
-  });
-
   it("shows only the conversation of the implementer while the step has no reviewer", () => {
     pane({ status: "implementing", reviewMode: "agent" });
 
-    expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
     expect(screen.getByText("Add a login screen")).toBeInTheDocument();
   });
 
-  it("keeps the review strip out under the agent review", () => {
-    pane(UNDER_AGENT_REVIEW, {}, { transcripts: BOTH_READY });
+  it("is a tabpanel labelled by the chosen agent tab while the step has tabs", () => {
+    pane(
+      UNDER_AGENT_REVIEW,
+      {},
+      { transcripts: BOTH_READY, openStepTab: { "task-1|1": "reviewer" } },
+    );
 
-    expect(screen.queryByRole("progressbar", { name: "Review progress" })).not.toBeInTheDocument();
-    expect(screen.getByRole("tablist", { name: "Conversations" })).toBeInTheDocument();
-    expect(screen.getByText("Add a login screen")).toBeInTheDocument();
+    expect(screen.getByRole("tabpanel")).toHaveAttribute(
+      "aria-labelledby",
+      tabId(AGENT_CONVERSATION, "reviewer"),
+    );
+  });
+
+  it("has no tabpanel role for a step with no tabs to show", () => {
+    pane({ status: "implementing", reviewMode: "agent" });
+
+    expect(screen.queryByRole("tabpanel")).toBeNull();
   });
 
   it("keeps the conversation while the step waits for review", () => {
@@ -148,13 +152,6 @@ describe("StepPane", () => {
     pane({ status: "not_started" });
 
     expect(screen.getByRole("status")).toHaveTextContent("Starting…");
-  });
-
-  it("puts the review above the conversation while the step is reviewed", () => {
-    pane({ status: "in_review", review: makeReview({ staged: 3, total: 5, percent: 60 }) });
-
-    expect(screen.getByRole("progressbar", { name: "Review progress" })).toBeInTheDocument();
-    expect(screen.getByText("Add a login screen")).toBeInTheDocument();
   });
 
   it("keeps the conversation while the commit is being made", () => {

@@ -16,6 +16,13 @@ export interface LinkProps
 }
 
 /**
+ * LINK is the look of a link: the brand ink with its underline always on. An action written inline in
+ * a line of text, like Try again in a note, is a button with this look.
+ */
+export const LINK =
+  "inline-flex items-center gap-(--space-0-5) rounded-xs text-brand-ink underline decoration-[color-mix(in_srgb,currentColor_var(--mix-link-line),transparent)] decoration-(length:--border) underline-offset-(--link-offset) hover:decoration-current focus-visible:focus-ring active:text-brand-active";
+
+/**
  * Link is a text link to a destination; the caller owns the click, since nothing navigates inside
  * the webview. An action without a destination is a Button.
  */
@@ -40,13 +47,7 @@ export function Link({
   }
   return (
     <>
-      <a
-        className={cn(
-          "inline-flex items-center gap-0.5 rounded-xs text-brand-ink underline decoration-[color-mix(in_srgb,currentColor_var(--mix-link-line),transparent)] decoration-(length:--border) underline-offset-(--link-offset) hover:decoration-current focus-visible:focus-ring active:text-brand-active",
-          className,
-        )}
-        {...props}
-      >
+      <a className={cn(LINK, className)} {...props}>
         {children}
         {external && <Icon icon={ICONS.external} size="xs" />}
       </a>

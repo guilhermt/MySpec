@@ -348,19 +348,45 @@ func (s *Service) SetStepReviewMode(ctx context.Context, id string, number int, 
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
+	if err := s.stepModeEditable(id, number); err != nil {
+		return err
+	}
+	if _, err := s.tasks.SetStepReviewMode(ctx, id, number, mode); err != nil {
+		return err
+	}
+	return nil
+}
+
+// ClearStepReviewMode makes a step that has not started follow the review mode
+// of the task again.
+func (s *Service) ClearStepReviewMode(ctx context.Context, id string, number int) error {
+	l := s.lockOf(id)
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	if err := s.stepModeEditable(id, number); err != nil {
+		return err
+	}
+	if _, err := s.tasks.ClearStepReviewMode(ctx, id, number); err != nil {
+		return err
+	}
+	return nil
+}
+
+// stepModeEditable says whether the review mode of a step can still change:
+// the task and the step exist and the step has not started. The caller holds
+// the lock of the task.
+func (s *Service) stepModeEditable(id string, number int) error {
 	if _, ok := s.tasks.Get(id); !ok {
-		return fmt.Errorf("set the review mode of step %d: %w", number, task.ErrNotFound)
+		return fmt.Errorf("change the review mode of step %d: %w", number, task.ErrNotFound)
 	}
 	steps := s.Steps(id)
 	index := slices.IndexFunc(steps, func(st StepState) bool { return st.Step.Number == number })
 	if index < 0 {
-		return fmt.Errorf("set the review mode of step %d of task %s: %w", number, id, ErrNoStep)
+		return fmt.Errorf("change the review mode of step %d of task %s: %w", number, id, ErrNoStep)
 	}
 	if !steps[index].ModeEditable() {
-		return fmt.Errorf("set the review mode of step %d of task %s: %w", number, id, ErrStepStarted)
-	}
-	if _, err := s.tasks.SetStepReviewMode(ctx, id, number, mode); err != nil {
-		return err
+		return fmt.Errorf("change the review mode of step %d of task %s: %w", number, id, ErrStepStarted)
 	}
 	return nil
 }

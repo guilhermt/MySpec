@@ -4,8 +4,8 @@ import { useId } from "react";
 import { cn } from "@/lib/utils";
 import { Icon } from "./Icon";
 import { ICONS } from "./icons";
-import { MENU_ITEM, MenuMessage } from "./Menu";
-import { ChosenText, choiceName, type ListMessage, SELECT_TRIGGER, UNAVAILABLE } from "./Select";
+import { MENU_ITEM, MenuMessage, UNAVAILABLE } from "./Menu";
+import { ChosenText, choiceName, type ListMessage, SELECT_TRIGGER } from "./Select";
 
 export interface ListboxItem {
   value: string;

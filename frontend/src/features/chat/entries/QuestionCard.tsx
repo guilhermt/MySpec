@@ -41,13 +41,15 @@ export interface QuestionCardProps {
   taskId: string;
   stage: string;
   question: QuestionEntry;
+  /** readOnly is the card of an earlier conversation: the questions and their options as text, and the answers when there were. */
+  readOnly?: boolean;
 }
 
 /**
  * QuestionCard is the agent asking the user to decide. Every question has to be
  * answered before the turn goes on.
  */
-export function QuestionCard({ taskId, stage, question }: QuestionCardProps) {
+export function QuestionCard({ taskId, stage, question, readOnly = false }: QuestionCardProps) {
   const titleId = useId();
   const groupName = useId();
   const questions = question.questions ?? [];
@@ -55,6 +57,8 @@ export function QuestionCard({ taskId, stage, question }: QuestionCardProps) {
 
   const status = asPermissionStatus(question.status);
   const pending = status === "pending";
+  // An earlier conversation takes no answer: its card has no controls.
+  const answerable = pending && !readOnly;
   const answered = question.answers ?? {};
 
   const choiceAt = (index: number): Choice => choices[index] ?? NO_CHOICE;
@@ -80,7 +84,15 @@ export function QuestionCard({ taskId, stage, question }: QuestionCardProps) {
         A question for you
       </span>
 
-      {pending ? (
+      {readOnly ? (
+        questions.map((item) => (
+          <QuestionText
+            key={item.question}
+            question={item}
+            answer={answered[item.question] ?? ""}
+          />
+        ))
+      ) : pending ? (
         questions.map((item, index) => (
           <QuestionField
             key={item.question}
@@ -104,7 +116,7 @@ export function QuestionCard({ taskId, stage, question }: QuestionCardProps) {
         <p className="text-xs text-muted-foreground">Cancelled before an answer</p>
       )}
 
-      {pending && (
+      {answerable && (
         <div>
           <Button disabled={!complete} onClick={send}>
             Answer
@@ -112,6 +124,38 @@ export function QuestionCard({ taskId, stage, question }: QuestionCardProps) {
         </div>
       )}
     </fieldset>
+  );
+}
+
+interface QuestionTextProps {
+  question: Question;
+  /** answer is what was answered to the question, "" when nothing was. */
+  answer: string;
+}
+
+/** QuestionText is a question read after the fact: what was asked, the options offered, and the answer. */
+function QuestionText({ question, answer }: QuestionTextProps) {
+  return (
+    <div className="flex flex-col gap-2 select-text">
+      <div className="flex flex-col gap-1">
+        <Badge variant="secondary" className="self-start">
+          {question.header}
+        </Badge>
+        <p className="font-medium">{question.question}</p>
+      </div>
+      <ul className="flex flex-col gap-1">
+        {(question.options ?? []).map((option) => (
+          <li key={option.label}>
+            {option.label}
+            {option.description !== "" && (
+              <span className="text-xs text-muted-foreground">{` · ${option.description}`}</span>
+            )}
+          </li>
+        ))}
+      </ul>
+      {/* The answer reads as it does on a card answered in the conversation of the place. */}
+      {answer !== "" && <p>{`${question.header}: ${answer}`}</p>}
+    </div>
   );
 }
 

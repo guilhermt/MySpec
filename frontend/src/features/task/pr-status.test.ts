@@ -1,7 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  approvePRHint,
-  canApprovePR,
   canCloseTask,
   canDiscardDraft,
   canOpenPR,
@@ -10,15 +8,15 @@ import {
   closeStepLabel,
   draftAtHand,
   hasPRSession,
-  prBaseName,
   prBlockHint,
   prBlockTitle,
   prReportLabel,
   prStateLabel,
   prStatusLabel,
   prStatusTone,
+  reviewAgainRefusal,
 } from "@/features/task/pr-status";
-import { makeCloseResult, makePullRequest, makeRepository, makeReview } from "@/test/wails-mock";
+import { makeCloseResult, makePullRequest, makeRepository } from "@/test/wails-mock";
 
 const DRAFT = { title: "Add the login form", body: "Adds the form.", file: "draft.md" };
 
@@ -100,11 +98,6 @@ describe("what the pull request allows", () => {
     expect(canOpenPR(repo)).toBe(false);
   });
 
-  it("approves only with everything staged", () => {
-    expect(canApprovePR(makePullRequest({ status: "ready_to_approve" }))).toBe(true);
-    expect(canApprovePR(makePullRequest({ status: "in_review" }))).toBe(false);
-  });
-
   it("throws the draft away only while it is still a proposal", () => {
     expect(canDiscardDraft(makePullRequest({ status: "drafting" }))).toBe(true);
     expect(canDiscardDraft(makePullRequest({ status: "draft_ready" }))).toBe(true);
@@ -168,13 +161,6 @@ describe("closeHint", () => {
     const pr = makePullRequest({ status: "merged", cloneMissing: true });
 
     expect(closeHint(pr, repository)).toBe("The clone at /home/dev/projects/web is missing.");
-  });
-});
-
-describe("prBaseName", () => {
-  it("is the base GitHub says, or else the base of the worktree", () => {
-    expect(prBaseName(makePullRequest({ prBase: "main", baseBranch: "origin/dev" }))).toBe("main");
-    expect(prBaseName(makePullRequest({ prBase: "", baseBranch: "origin/dev" }))).toBe("dev");
   });
 });
 
@@ -280,13 +266,17 @@ describe("prReportLabel", () => {
   });
 });
 
-describe("approvePRHint", () => {
-  it("says what is missing", () => {
-    expect(approvePRHint(makePullRequest({ review: makeReview() }))).toContain(
-      "Stage every changed",
-    );
-    expect(approvePRHint(makePullRequest({ review: makeReview({ error: "boom" }) }))).toBe(
-      "The worktree couldn't be read",
-    );
+describe("reviewAgainRefusal", () => {
+  it.each([
+    ["waiting_checks", 12, "a pass waits for the checks"],
+    ["committing", 12, "the changes are being committed"],
+    ["pr_closed", 12, "the pull request was closed"],
+    ["blocked", 12, "the pull request stage is blocked"],
+    ["closing", 12, "the task is closing"],
+    ["reviewing", 12, null],
+    ["done", 12, null],
+    ["awaiting_reply", 12, null],
+  ])("refuses a pass in %s with %s", (status, prNumber, reason) => {
+    expect(reviewAgainRefusal(makePullRequest({ status, prNumber }))).toBe(reason);
   });
 });

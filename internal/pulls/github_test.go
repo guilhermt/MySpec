@@ -224,8 +224,8 @@ func TestReadDetailsReadsTheChecksAndTheMergeState(t *testing.T) {
 
 	want := gh.PRChecks{
 		Checks: []gh.Check{
-			{Name: "test", URL: "https://github.com/acme/alpha/actions/runs/1/job/2", Conclusion: "success"},
-			{Name: "ci/deploy", URL: "https://ci.example.com/deploy/3", Conclusion: "failure"},
+			{Name: "test", URL: "https://github.com/acme/alpha/actions/runs/1/job/2", Conclusion: "success", State: gh.CheckPassed},
+			{Name: "ci/deploy", URL: "https://ci.example.com/deploy/3", Conclusion: "failure", State: gh.CheckFailed},
 		},
 		Mergeable: gh.MergeableClean,
 	}

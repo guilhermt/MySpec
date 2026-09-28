@@ -72,6 +72,7 @@ type StepRun struct {
 	StartCommit   string // the commit the worktree was on when the step started
 	CommitSHA     string // the commit the step produced; set with StepDone
 	CommitSubject string
+	CommittedAt   time.Time // the committer date of CommitSHA; zero when unknown
 
 	// ReviewPass is the last pass of the agent review the app asked for, and
 	// ReportedPass the last pass whose report it acted on: a pass is under way

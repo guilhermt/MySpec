@@ -1,0 +1,62 @@
+import { AuxPanel } from "@/components/system/AuxPanel";
+import { Link } from "@/components/system/Link";
+import { NoticeStrip } from "@/components/system/NoticeStrip";
+import { RelationList } from "@/components/system/RelationList";
+import { Markdown } from "@/features/chat/Markdown";
+import { cardViewOf, noticeOf } from "@/features/task/card-panel";
+import type { TaskSummary } from "@/lib/wails";
+import { openExternal } from "@/store/actions";
+import { useAppStore, useBoardCard } from "@/store/app-store";
+
+export interface CardPanelProps {
+  task: TaskSummary;
+}
+
+/**
+ * CardPanel is the card a task was created from, as the last reading of its board has it: the
+ * reference, the status and the way to GitHub, the title, the body and its relations, each an
+ * external link. Outside that reading, a strip says why, and the panel shows what the task keeps.
+ */
+export function CardPanel({ task }: CardPanelProps) {
+  const openPanel = useAppStore((state) => state.openPanel);
+  const reading = useBoardCard(task.card?.boardId ?? "", task.card?.key ?? "");
+  if (task.card === null) {
+    return null;
+  }
+  const notice = noticeOf(reading);
+  const card = cardViewOf(task.card, reading.card);
+
+  return (
+    <AuxPanel id="card" title={`Card #${task.card.number}`} onClose={() => openPanel(null)}>
+      <div className="flex flex-col gap-(--space-4) px-(--space-4) pt-(--space-3) pb-(--space-6)">
+        {notice !== null && <NoticeStrip title={notice} role="status" outlined />}
+        <div className="flex flex-col gap-(--space-1)">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-(--space-2)">
+            <span className="font-mono text-ink-2">{`${card.repository}#${card.number}`}</span>
+            {card.status !== "" && <span className="text-ink-3">{card.status}</span>}
+            <Link
+              href={card.url}
+              external
+              onClick={(event) => {
+                event.preventDefault();
+                void openExternal(card.url);
+              }}
+              className="ml-auto"
+            >
+              Open on GitHub
+            </Link>
+          </div>
+          <h3 className="text-(length:--text-ui) leading-(--leading-ui) font-semibold text-ink-1">
+            {card.title}
+          </h3>
+        </div>
+        {card.body !== "" && (
+          <div className="select-text">
+            <Markdown>{card.body}</Markdown>
+          </div>
+        )}
+        <RelationList groups={card.relations} onOpen={(url) => void openExternal(url)} />
+      </div>
+    </AuxPanel>
+  );
+}

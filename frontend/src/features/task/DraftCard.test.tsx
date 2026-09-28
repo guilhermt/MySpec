@@ -10,13 +10,23 @@ const DRAFT = { title: "Add the login form", body: "Closes #12", file: "draft.md
 function card(overrides: Partial<PullRequest> = {}, prDrafts: Record<string, never> | object = {}) {
   const pr = makePullRequest({ status: "draft_ready", draft: DRAFT, ...overrides });
   const task = makeTask({ stage: "pr", pr });
-  return renderWithStore(<DraftCard taskId={task.id} pr={pr} />, {
+  return renderWithStore(<DraftCard taskId={task.id} pr={pr} showOpenPR />, {
     state: makeState({ tasks: [task] }),
     ui: { prDrafts: prDrafts as never },
   });
 }
 
 describe("DraftCard", () => {
+  it("leaves the opening to the request bar when it has one", () => {
+    const pr = makePullRequest({ status: "draft_ready", draft: DRAFT });
+    const task = makeTask({ stage: "pr", pr });
+    renderWithStore(<DraftCard taskId={task.id} pr={pr} showOpenPR={false} />, {
+      state: makeState({ tasks: [task] }),
+    });
+
+    expect(screen.queryByRole("button", { name: "Open PR" })).not.toBeInTheDocument();
+  });
+
   it("starts from what the agent wrote", () => {
     card();
 
@@ -64,14 +74,14 @@ describe("DraftCard", () => {
   it("shows the draft again when the agent rewrites it", () => {
     const pr = makePullRequest({ status: "draft_ready", draft: DRAFT });
     const task = makeTask({ stage: "pr", pr });
-    const { rerender } = renderWithStore(<DraftCard taskId={task.id} pr={pr} />, {
+    const { rerender } = renderWithStore(<DraftCard taskId={task.id} pr={pr} showOpenPR />, {
       state: makeState({ tasks: [task] }),
       ui: { prDrafts: { "task-1": { title: "Mine", body: "My body" } } },
     });
     expect(screen.getByLabelText("Title")).toHaveValue("Mine");
 
     const rewritten = { ...pr, draft: { ...DRAFT, title: "Teste" } };
-    rerender(<DraftCard taskId={task.id} pr={rewritten} />);
+    rerender(<DraftCard taskId={task.id} pr={rewritten} showOpenPR={false} />);
 
     expect(screen.getByLabelText("Title")).toHaveValue("Teste");
   });
@@ -79,13 +89,13 @@ describe("DraftCard", () => {
   it("keeps what the user is typing while the draft on disk stands still", () => {
     const pr = makePullRequest({ status: "draft_ready", draft: DRAFT });
     const task = makeTask({ stage: "pr", pr });
-    const { rerender } = renderWithStore(<DraftCard taskId={task.id} pr={pr} />, {
+    const { rerender } = renderWithStore(<DraftCard taskId={task.id} pr={pr} showOpenPR />, {
       state: makeState({ tasks: [task] }),
       ui: { prDrafts: { "task-1": { title: "Mine", body: "My body" } } },
     });
 
     // Anything else about the pull request moving on leaves the edit alone.
-    rerender(<DraftCard taskId={task.id} pr={{ ...pr, turnRunning: true }} />);
+    rerender(<DraftCard taskId={task.id} pr={{ ...pr, turnRunning: true }} showOpenPR />);
 
     expect(screen.getByLabelText("Title")).toHaveValue("Mine");
   });

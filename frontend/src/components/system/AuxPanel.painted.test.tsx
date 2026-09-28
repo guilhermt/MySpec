@@ -1,7 +1,8 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { mainArea, setTheme, THEMES, token } from "@/test/painted";
-import { AuxPanel, PanelLayout } from "./AuxPanel";
+import { ICONS } from "@/components/system/icons";
+import { mainArea, resolve, setTheme, THEMES, token } from "@/test/painted";
+import { AuxPanel, PanelGroup, PanelLayout } from "./AuxPanel";
 
 // place draws a reading column with the panel open inside a main area of a
 // fixed width, the container its query measures.
@@ -65,5 +66,36 @@ describe.each(THEMES)("AuxPanel in the %s theme", (theme) => {
     expect(style.borderLeftWidth).toBe("1px");
     expect(column().right).toBe(box().left);
     expect(box().right).toBe(1200);
+  });
+});
+
+// group draws the buttons of the panels inside a main area of a fixed width.
+function group(width: number) {
+  render(
+    <div style={mainArea(width)}>
+      <PanelGroup
+        panels={[{ id: "details", label: "Details", tooltip: "The facts", icon: ICONS.details }]}
+        open={null}
+        onOpenChange={() => undefined}
+      />
+    </div>,
+  );
+  return screen.getByRole("button", { name: "Details" }).getBoundingClientRect();
+}
+
+describe.each(THEMES)("PanelGroup in the %s theme", (theme) => {
+  it("writes the name of a panel beside its icon from 1440px of main area", () => {
+    setTheme(theme);
+    const button = group(1440);
+
+    expect(button.width).toBeGreaterThan(button.height);
+  });
+
+  it("keeps only the icon on a square button below 1440px of main area", () => {
+    setTheme(theme);
+    const button = group(1439);
+
+    expect(button.width).toBe(button.height);
+    expect(`${button.height}px`).toBe(resolve("var(--size-control-sm)", "width"));
   });
 });

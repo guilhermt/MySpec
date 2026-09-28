@@ -60,6 +60,8 @@ func (a *App) snapshot() bindings.State {
 			func(id string) task.Artifacts { return artifacts[id] },
 			func(id string) []flow.StepState { return steps[id] },
 			func(id string) (flow.PullRequest, bool) { pr, ok := prs[id]; return pr, ok },
+			a.flow.Worktree,
+			a.sessions.Conversations,
 			a.repositories.Get,
 			summaries, situations,
 		),

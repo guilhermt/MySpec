@@ -1,5 +1,5 @@
 import { screen } from "@testing-library/react";
-import { Trash2 } from "lucide-react";
+import { Bot, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { renderWithStore } from "@/test/render";
@@ -13,6 +13,8 @@ import {
   MenuGroupLabel,
   MenuItem,
   MenuMessage,
+  MenuRadioGroup,
+  MenuRadioItem,
   MenuSeparator,
   MenuTrigger,
 } from "./Menu";
@@ -131,5 +133,66 @@ describe("Menu", () => {
     );
     expect(screen.getByRole("status")).toHaveTextContent("Loading branches…");
     expect(screen.getByRole("alert")).toHaveTextContent("Could not list the branches");
+  });
+});
+
+function Choices({ onValueChange = () => {} }: { onValueChange?: (value: string) => void }) {
+  const [value, setValue] = useState("opus");
+  return (
+    <Menu>
+      <MenuTrigger render={<Button />}>Model</MenuTrigger>
+      <MenuContent>
+        <MenuRadioGroup
+          value={value}
+          onValueChange={(next: string) => {
+            setValue(next);
+            onValueChange(next);
+          }}
+        >
+          <MenuRadioItem value="opus" icon={Bot}>
+            Opus
+          </MenuRadioItem>
+          <MenuRadioItem value="sonnet" sub="faster">
+            Sonnet
+          </MenuRadioItem>
+          <MenuRadioItem value="fable" unavailable>
+            Fable
+          </MenuRadioItem>
+        </MenuRadioGroup>
+      </MenuContent>
+    </Menu>
+  );
+}
+
+describe("MenuRadioItem", () => {
+  it("checks the chosen item of its group", async () => {
+    const { user } = renderWithStore(<Choices />);
+    await user.click(screen.getByRole("button", { name: "Model" }));
+    expect(await screen.findByRole("menuitemradio", { name: "Opus" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    expect(screen.getByRole("menuitemradio", { name: "Sonnet faster" })).toHaveAttribute(
+      "aria-checked",
+      "false",
+    );
+  });
+
+  it("chooses the item clicked", async () => {
+    const onValueChange = vi.fn();
+    const { user } = renderWithStore(<Choices onValueChange={onValueChange} />);
+    await user.click(screen.getByRole("button", { name: "Model" }));
+    await user.click(await screen.findByRole("menuitemradio", { name: "Sonnet faster" }));
+    expect(onValueChange).toHaveBeenCalledWith("sonnet");
+  });
+
+  it("keeps an unavailable choice with ◇, not to be chosen again", async () => {
+    const onValueChange = vi.fn();
+    const { user } = renderWithStore(<Choices onValueChange={onValueChange} />);
+    await user.click(screen.getByRole("button", { name: "Model" }));
+    const item = await screen.findByRole("menuitemradio", { name: "◇ Fable · unavailable" });
+    expect(item).toHaveAttribute("aria-disabled", "true");
+    await user.click(item);
+    expect(onValueChange).not.toHaveBeenCalled();
   });
 });

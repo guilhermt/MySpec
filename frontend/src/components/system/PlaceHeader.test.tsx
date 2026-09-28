@@ -137,4 +137,27 @@ describe("PlaceHeader", () => {
 
     expect(screen.getByRole("button", { name: "Pause" })).toBeInTheDocument();
   });
+
+  it("draws the progress of the item after the title, before what the place holds", () => {
+    renderWithStore(
+      <PlaceHeader
+        back={null}
+        forward={null}
+        crumbs={[]}
+        title="Rate limit per API key"
+        titleRef={createRef()}
+        backRef={createRef()}
+        forwardRef={createRef()}
+        progress={<ol aria-label="Progress" />}
+      >
+        <button type="button">Pause</button>
+      </PlaceHeader>,
+    );
+
+    const title = screen.getByRole("heading", { level: 1 });
+    const progress = screen.getByRole("list", { name: "Progress" });
+    const pause = screen.getByRole("button", { name: "Pause" });
+    expect(title.compareDocumentPosition(progress)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(progress.compareDocumentPosition(pause)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  });
 });

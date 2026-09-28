@@ -87,6 +87,7 @@ func TestCreateTaskAddsTheTaskToTheState(t *testing.T) {
 		PlanProblems:       []bindings.PlanProblem{},
 		Situations:         []bindings.Situation{},
 		Models:             startedTaskModels(models.Factory()),
+		Conversations:      got.Conversations,
 		CreatedAt:          got.CreatedAt,
 		UpdatedAt:          got.UpdatedAt,
 	}
@@ -96,6 +97,9 @@ func TestCreateTaskAddsTheTaskToTheState(t *testing.T) {
 	got.ProcessRunning = false
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("task mismatch (-want +got):\n%s", diff)
+	}
+	if len(got.Conversations) != 1 || got.Conversations[0].Stage != "prd" {
+		t.Errorf("conversations = %+v, want the PRD session", got.Conversations)
 	}
 }
 
@@ -579,6 +583,49 @@ func TestGetTranscriptRejectsAnUnknownTask(t *testing.T) {
 	}
 	if err.Error() != "This conversation has ended." {
 		t.Errorf("GetTranscript() error = %q, want the ended conversation notice", err)
+	}
+}
+
+func TestGetTranscriptReadsAClosedStage(t *testing.T) {
+	t.Parallel()
+
+	f, _, id := plannedTask(t)
+	f.waitReviewed(t, id, 1)
+
+	transcript, err := f.tasks.GetTranscript(id, "prd")
+	if err != nil {
+		t.Fatalf("GetTranscript() = %v, want nil", err)
+	}
+	if transcript.Stage != "prd" || len(transcript.Entries) == 0 {
+		t.Errorf("transcript = stage %q with %d entries, want the conversation of the PRD", transcript.Stage, len(transcript.Entries))
+	}
+	conversations := f.taskOf(t, id).Conversations
+	stages := make([]string, 0, len(conversations))
+	for _, c := range conversations {
+		stages = append(stages, c.Stage)
+	}
+	if diff := cmp.Diff([]string{"prd", "tech_spec", "plan", "step:1"}, stages); diff != "" {
+		t.Errorf("conversations mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestClearStepReviewModeMakesTheStepFollowTheTask(t *testing.T) {
+	t.Parallel()
+
+	f, _, id := plannedTask(t)
+	f.waitReviewed(t, id, 1)
+
+	if err := f.tasks.SetStepReviewMode(id, 2, "agent"); err != nil {
+		t.Fatalf("SetStepReviewMode() = %v, want nil", err)
+	}
+	if err := f.tasks.ClearStepReviewMode(id, 2); err != nil {
+		t.Fatalf("ClearStepReviewMode() = %v, want nil", err)
+	}
+	if step := f.taskOf(t, id).Steps[1]; step.ReviewMode != "manual" || step.ReviewModeAdjusted {
+		t.Errorf("step 2 = %+v, want it to follow the task again", step)
+	}
+	if err := f.tasks.ClearStepReviewMode(id, 1); err == nil {
+		t.Error("ClearStepReviewMode() of a started step = nil, want an error")
 	}
 }
 

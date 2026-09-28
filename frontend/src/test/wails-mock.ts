@@ -27,6 +27,7 @@ import type {
   ModelCatalog,
   ModelStage,
   PermissionDecision,
+  PRCheck,
   Prompt,
   PromptStage,
   PullRequest,
@@ -52,6 +53,7 @@ import type {
   Step,
   StepReviewer,
   TaskCard,
+  TaskConversation,
   TaskStage,
   TaskStageModel,
   TaskSummary,
@@ -173,6 +175,9 @@ export const api = {
     Promise.resolve(),
   ),
   setStepReviewMode: vi.fn<(taskId: string, step: number, mode: ReviewMode) => Promise<void>>(() =>
+    Promise.resolve(),
+  ),
+  clearStepReviewMode: vi.fn<(taskId: string, step: number) => Promise<void>>(() =>
     Promise.resolve(),
   ),
   reviewStepMyself: vi.fn<(taskId: string) => Promise<void>>(() => Promise.resolve()),
@@ -535,6 +540,7 @@ export function makeTask(overrides: Partial<TaskSummary> = {}): TaskSummary {
     processRunning: false,
     retryAttempt: 0,
     turnStartedAt: "",
+    pausedAt: "",
     actionLabel: "",
     actionTarget: "",
     contextPercent: 0,
@@ -549,6 +555,10 @@ export function makeTask(overrides: Partial<TaskSummary> = {}): TaskSummary {
     planProblems: [],
     situations: [],
     models: makeTaskModels(),
+    conversations: [],
+    branch: "",
+    baseBranch: "",
+    worktreePath: "",
     canContinue: false,
     artifactVersion: 0,
     lastError: "",
@@ -556,6 +566,10 @@ export function makeTask(overrides: Partial<TaskSummary> = {}): TaskSummary {
     updatedAt: "2026-09-05T10:00:00Z",
     ...overrides,
   };
+}
+
+export function makeTaskConversation(overrides: Partial<TaskConversation> = {}): TaskConversation {
+  return { stage: "prd", startedAt: "2026-09-05T10:00:00Z", ...overrides };
 }
 
 export function makeSituation(overrides: Partial<Situation> = {}): Situation {
@@ -629,6 +643,7 @@ export function makeStep(overrides: Partial<Step> = {}): Step {
     review: null,
     commitSha: "",
     commitSubject: "",
+    committedAt: "",
     commitFailed: false,
     model: "claude-opus-5-5[1m]",
     effort: "high",
@@ -657,11 +672,24 @@ export function makeStepReviewer(overrides: Partial<StepReviewer> = {}): StepRev
     processRunning: false,
     retryAttempt: 0,
     turnStartedAt: "",
+    pausedAt: "",
     actionLabel: "",
     actionTarget: "",
     contextPercent: 0,
     pendingCount: 0,
     lastError: "",
+    ...overrides,
+  };
+}
+
+export function makePRCheck(overrides: Partial<PRCheck> = {}): PRCheck {
+  return {
+    name: "test",
+    state: "passed",
+    conclusion: "success",
+    startedAt: "2026-09-27T23:56:08Z",
+    completedAt: "2026-09-27T23:58:00Z",
+    url: "https://github.com/acme/web/actions/runs/1",
     ...overrides,
   };
 }
@@ -684,6 +712,8 @@ export function makePullRequest(overrides: Partial<PullRequest> = {}): PullReque
     prBase: "",
     checkError: "",
     trouble: { failedChecks: [], conflict: false },
+    checks: [],
+    mergeable: "",
     canClose: false,
     cloneMissing: false,
     close: null,
@@ -695,6 +725,7 @@ export function makePullRequest(overrides: Partial<PullRequest> = {}): PullReque
     processRunning: false,
     retryAttempt: 0,
     turnStartedAt: "",
+    pausedAt: "",
     actionLabel: "",
     actionTarget: "",
     contextPercent: 0,
@@ -882,6 +913,7 @@ export function makeReviewSummary(overrides: Partial<ReviewSummary> = {}): Revie
     processRunning: true,
     retryAttempt: 0,
     turnStartedAt: "",
+    pausedAt: "",
     actionLabel: "",
     actionTarget: "",
     contextPercent: 0,
@@ -971,6 +1003,7 @@ export function makeDiscussion(overrides: Partial<DiscussionSummary> = {}): Disc
     processRunning: true,
     retryAttempt: 0,
     turnStartedAt: "",
+    pausedAt: "",
     actionLabel: "",
     actionTarget: "",
     contextPercent: 0,

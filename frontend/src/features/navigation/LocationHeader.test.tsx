@@ -64,6 +64,15 @@ describe("LocationHeader", () => {
     expect(screen.getByRole("heading", { level: 1, name: "add-login" })).toBeInTheDocument();
   });
 
+  it("draws the progress it is given after the title", () => {
+    renderWithStore(<LocationHeader progress={<ol aria-label="Progress" />} />, {
+      state: app,
+      ui: { location: TASK },
+    });
+
+    expect(screen.getByRole("list", { name: "Progress" })).toBeInTheDocument();
+  });
+
   it("goes back to the place behind, named in the tooltip with its key", async () => {
     const { user } = header({ location: TASK, back: [BOARD] });
 

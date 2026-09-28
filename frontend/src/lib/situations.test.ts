@@ -15,11 +15,11 @@ import {
   reviewerSituation,
   reviewName,
   reviewSituation,
+  situationFragment,
   situationLabel,
   situationTone,
   spokenWait,
   stageSituation,
-  stepOrReviewerSituation,
   stepSituation,
   summaryLabel,
 } from "@/lib/situations";
@@ -284,6 +284,16 @@ describe("announcement", () => {
   });
 });
 
+describe("situationFragment", () => {
+  it.each([
+    [makeSituation({ kind: "question", place: reviewerPlace(2) }), "question in Reviewer"],
+    [makeSituation({ kind: "step_empty", place: stepPlace(3) }), "step 3 has no changes in Step 3"],
+    [makeSituation({ kind: "new_commits", place: REVIEW_PLACE }), "new commits"],
+  ])("tells %o as %s", (situation, expected) => {
+    expect(situationFragment(situation)).toBe(expected);
+  });
+});
+
 describe("reviewName", () => {
   it("names a review by the short name of its repository and its number", () => {
     expect(reviewName(makeReviewSummary())).toBe("web#31");
@@ -337,22 +347,6 @@ describe("the situation of a place", () => {
     expect(reviewerSituation(task, 3)).toBeNull();
     expect(stepSituation(task, 2)?.id).toBe("step");
     expect(reviewerSituation(makeTask({ situations: null }), 2)).toBeNull();
-  });
-
-  it("finds the most urgent situation of a step, in either of its conversations", () => {
-    const reviewer = makeSituation({ id: "reviewer", kind: "question", place: reviewerPlace(2) });
-    const error = makeSituation({
-      id: "error",
-      kind: "session_error",
-      group: "error",
-      place: reviewerPlace(2),
-    });
-
-    expect(stepOrReviewerSituation(makeTask({ situations: [step, reviewer] }), 2)?.id).toBe("step");
-    expect(stepOrReviewerSituation(makeTask({ situations: [error, step] }), 2)?.id).toBe("error");
-    expect(stepOrReviewerSituation(makeTask({ situations: [reviewer] }), 2)?.id).toBe("reviewer");
-    expect(stepOrReviewerSituation(makeTask({ situations: [stage, reviewer] }), 3)).toBeNull();
-    expect(stepOrReviewerSituation(makeTask({ situations: null }), 2)).toBeNull();
   });
 
   it("finds the situation of the pull request", () => {

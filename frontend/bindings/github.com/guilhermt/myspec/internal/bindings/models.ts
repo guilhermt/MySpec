@@ -777,6 +777,11 @@ export interface DiscussionSummary {
     "turnStartedAt": string;
 
     /**
+     * when the session was paused, RFC 3339; "" when it is not, or the time is unknown
+     */
+    "pausedAt": string;
+
+    /**
      * ActionLabel and ActionTarget are the action the agent runs now, as the
      * conversation words it ("Reading", "internal/app/state.go"); "" when none
      * runs.
@@ -1180,6 +1185,34 @@ export interface PRBlock {
 }
 
 /**
+ * PRCheck is one check of the pull request at the last reading.
+ */
+export interface PRCheck {
+    "name": string;
+
+    /**
+     * passed, skipped, neutral, failed, running or queued
+     */
+    "state": string;
+
+    /**
+     * what GitHub concluded, lower case; "" while it runs
+     */
+    "conclusion": string;
+
+    /**
+     * RFC 3339; "" when GitHub gave none
+     */
+    "startedAt": string;
+
+    /**
+     * RFC 3339; "" while it runs or when GitHub gave none
+     */
+    "completedAt": string;
+    "url": string;
+}
+
+/**
  * PRDraft is the description of a pull request the agent wrote and the user
  * edits.
  */
@@ -1417,6 +1450,17 @@ export interface PullRequest {
     "trouble": PRTrouble;
 
     /**
+     * the last reading, in GitHub's order; never nil
+     */
+    "checks": PRCheck[] | null;
+
+    /**
+     * Mergeable is mergeable, conflicting or unknown; "" before the first
+     * reading.
+     */
+    "mergeable": string;
+
+    /**
      * the user may close the task now
      */
     "canClose": boolean;
@@ -1457,6 +1501,11 @@ export interface PullRequest {
      * a turn.
      */
     "turnStartedAt": string;
+
+    /**
+     * when the session was paused, RFC 3339; "" when it is not, or the time is unknown
+     */
+    "pausedAt": string;
 
     /**
      * ActionLabel and ActionTarget are the action the agent runs now, as the
@@ -2000,6 +2049,11 @@ export interface ReviewSummary {
     "turnStartedAt": string;
 
     /**
+     * when the session was paused, RFC 3339; "" when it is not, or the time is unknown
+     */
+    "pausedAt": string;
+
+    /**
      * ActionLabel and ActionTarget are the action the agent runs now, as the
      * conversation words it ("Reading", "internal/app/state.go"); "" when none
      * runs.
@@ -2300,6 +2354,11 @@ export interface Step {
     "commitSubject": string;
 
     /**
+     * done only: the committer date, RFC 3339; "" when unknown
+     */
+    "committedAt": string;
+
+    /**
      * the last approval ended without a commit
      */
     "commitFailed": boolean;
@@ -2433,6 +2492,11 @@ export interface StepReviewer {
     "turnStartedAt": string;
 
     /**
+     * when the session was paused, RFC 3339; "" when it is not, or the time is unknown
+     */
+    "pausedAt": string;
+
+    /**
      * ActionLabel and ActionTarget are the action the agent runs now, as the
      * conversation words it ("Reading", "internal/app/state.go"); "" when none
      * runs.
@@ -2461,6 +2525,21 @@ export interface TaskCard {
      * State of the epic is ""; the task does not keep it
      */
     "epic": CardIssue | null;
+}
+
+/**
+ * TaskConversation is a conversation a task has had, open or closed.
+ */
+export interface TaskConversation {
+    /**
+     * the session stage: prd, tech_spec, plan, one_shot, step:<n>, step_review:<n>, pr or pr_review
+     */
+    "stage": string;
+
+    /**
+     * RFC 3339
+     */
+    "startedAt": string;
 }
 
 /**
@@ -2556,6 +2635,11 @@ export interface TaskSummary {
     "turnStartedAt": string;
 
     /**
+     * when the session was paused, RFC 3339; "" when it is not, or the time is unknown
+     */
+    "pausedAt": string;
+
+    /**
      * ActionLabel and ActionTarget are the action the agent runs now, as the
      * conversation words it ("Reading", "internal/app/state.go"); "" when none
      * runs.
@@ -2598,6 +2682,27 @@ export interface TaskSummary {
      * every stage, in workflow order; never nil
      */
     "models": TaskStageModel[] | null;
+
+    /**
+     * Conversations is every session the task has, open or closed, by start;
+     * never nil.
+     */
+    "conversations": TaskConversation[] | null;
+
+    /**
+     * the branch of the worktree of the task; "" before it exists
+     */
+    "branch": string;
+
+    /**
+     * as the worktree keeps it, origin/<base>; "" before it exists
+     */
+    "baseBranch": string;
+
+    /**
+     * "" before the worktree exists
+     */
+    "worktreePath": string;
     "canContinue": boolean;
     "artifactVersion": number;
     "lastError": string;

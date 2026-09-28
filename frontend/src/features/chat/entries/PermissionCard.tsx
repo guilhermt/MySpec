@@ -72,19 +72,28 @@ export interface PermissionCardProps {
   taskId: string;
   stage: string;
   permission: PermissionEntry;
+  /** readOnly is the card of an earlier conversation: the tool and the command, and the decision when there was one. */
+  readOnly?: boolean;
 }
 
 /**
  * PermissionCard is the agent asking to use a tool. Nothing runs until the user
  * answers, so the card is the one thing in the conversation that blocks.
  */
-export function PermissionCard({ taskId, stage, permission }: PermissionCardProps) {
+export function PermissionCard({
+  taskId,
+  stage,
+  permission,
+  readOnly = false,
+}: PermissionCardProps) {
   const titleId = useId();
   const [denying, setDenying] = useState(false);
   const [message, setMessage] = useState("");
 
   const status = asPermissionStatus(permission.status);
   const pending = status === "pending";
+  // An earlier conversation takes no answer: its card has no controls.
+  const answerable = pending && !readOnly;
 
   const answer = (decision: "allow" | "allow_session" | "deny", text: string) => {
     void answerPermission(taskId, stage, permission.requestId, decision, text);
@@ -126,7 +135,7 @@ export function PermissionCard({ taskId, stage, permission }: PermissionCardProp
         </p>
       )}
 
-      {pending && !denying && (
+      {answerable && !denying && (
         <div className="flex flex-wrap items-center gap-2">
           <Button autoFocus={!permission.defaultToNo} onClick={() => answer("allow", "")}>
             Allow
@@ -142,7 +151,7 @@ export function PermissionCard({ taskId, stage, permission }: PermissionCardProp
         </div>
       )}
 
-      {pending && denying && (
+      {answerable && denying && (
         <div className="flex flex-col gap-2">
           <Textarea
             autoFocus

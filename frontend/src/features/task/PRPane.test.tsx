@@ -1,28 +1,37 @@
-import { screen } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { PRPane } from "@/features/task/PRPane";
-import { api, type PullRequest } from "@/lib/wails";
+import { api, type PullRequest, type Situation } from "@/lib/wails";
 import { renderWithStore } from "@/test/render";
 import {
   makeCloseResult,
   makePullRequest,
   makeRepository,
   makeReview,
+  makeSituation,
   makeState,
   makeTask,
 } from "@/test/wails-mock";
 
 const DRAFT = { title: "Add the login form", body: "Closes #12", file: "draft.md" };
 
-function pane(overrides: Partial<PullRequest> = {}, repositories = [makeRepository()]) {
+// onPR is the situation of the pull request the request bar is drawn from.
+const onPR = (kind: string, form = "") =>
+  makeSituation({ kind, form, place: { kind: "pr", stage: "", step: 0 } });
+
+function pane(
+  overrides: Partial<PullRequest> = {},
+  repositories = [makeRepository()],
+  situations: Situation[] = [],
+) {
   const pr = makePullRequest(overrides);
-  const task = makeTask({ stage: "pr", pr });
-  return renderWithStore(<PRPane task={task} pr={pr} />, {
+  const task = makeTask({ stage: "pr", pr, situations });
+  return renderWithStore(<PRPane task={task} pr={pr} tab="implementer" />, {
     state: makeState({ repositories, tasks: [task] }),
     ui: {
       transcripts: {
-        "task-1|pr": { status: "ready", entries: [], pending: [], buffered: [] },
-        "task-1|pr_review": { status: "ready", entries: [], pending: [], buffered: [] },
+        "task-1|pr": { status: "ready", error: "", entries: [], pending: [], buffered: [] },
+        "task-1|pr_review": { status: "ready", error: "", entries: [], pending: [], buffered: [] },
       },
     },
   });
@@ -49,11 +58,14 @@ describe("PRPane", () => {
     expect(screen.queryByLabelText("Title")).not.toBeInTheDocument();
   });
 
-  it("puts the draft above the conversation once it is ready", () => {
-    pane({ status: "draft_ready", draft: DRAFT });
+  it("puts the draft above the conversation once it is ready, and its approval in the bar", () => {
+    pane({ status: "draft_ready", draft: DRAFT, sessionStage: "pr" }, undefined, [onPR("draft")]);
 
     expect(screen.getByLabelText("Title")).toHaveValue(DRAFT.title);
     expect(screen.getByPlaceholderText("Reply to the agent…")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Open PR" })).not.toBeInTheDocument();
+    const bar = screen.getByRole("region", { name: "Request" });
+    expect(within(bar).getByRole("button", { name: "Approve draft" })).toBeInTheDocument();
   });
 
   it("keeps the draft above the conversation after an opening that failed", () => {
@@ -124,28 +136,30 @@ describe("PRPane", () => {
     expect(screen.getByPlaceholderText("Reply to the agent…")).toBeInTheDocument();
   });
 
-  it("waits for the merge with the link, the passes and a way back in", async () => {
-    const { user } = pane({
-      status: "done",
-      prNumber: 12,
-      prUrl: "https://github.com/o/r/pull/12",
-      prState: "open",
-      reports: [
-        { pass: 1, file: "review-1.md", clean: false },
-        { pass: 2, file: "review-2.md", clean: true },
-      ],
-    });
+  it("waits for the merge with the link and the passes, the bar below the note", () => {
+    pane(
+      {
+        status: "done",
+        prNumber: 12,
+        prUrl: "https://github.com/o/r/pull/12",
+        prState: "open",
+        reports: [
+          { pass: 1, file: "review-1.md", clean: false },
+          { pass: 2, file: "review-2.md", clean: true },
+        ],
+      },
+      undefined,
+      [onPR("merge", "merge")],
+    );
 
     expect(screen.getByText("The pull request is waiting for the merge")).toBeInTheDocument();
     expect(screen.getByText("Pass 1 · changes requested")).toBeInTheDocument();
     expect(screen.getByText("Pass 2 · nothing to change")).toBeInTheDocument();
     expect(screen.getByText("Open")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Review again" }));
-    await user.click(screen.getByRole("button", { name: "Refresh PR" }));
-
-    expect(api.reviewAgain).toHaveBeenCalledWith("task-1");
-    expect(api.refreshPR).toHaveBeenCalledWith("task-1");
+    // Review again and Refresh PR are in the ⋯; the note keeps only its text and the link.
+    expect(screen.queryByRole("button", { name: "Review again" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Refresh PR" })).not.toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Request" })).toHaveTextContent("Ready to merge");
   });
 
   it("says when the merge couldn't be confirmed", () => {
@@ -158,8 +172,8 @@ describe("PRPane", () => {
     ).toBeInTheDocument();
   });
 
-  it("lists what went wrong after the review and offers another pass", async () => {
-    const { user } = pane({
+  it("lists what went wrong after the review, with no buttons of its own", () => {
+    pane({
       status: "trouble",
       prNumber: 12,
       prState: "open",
@@ -174,12 +188,8 @@ describe("PRPane", () => {
     expect(
       screen.getByText("Review again reads GitHub and turns this into findings of a new pass."),
     ).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Review again" }));
-    await user.click(screen.getByRole("button", { name: "Refresh PR" }));
-
-    expect(api.reviewAgain).toHaveBeenCalledWith("task-1");
-    expect(api.refreshPR).toHaveBeenCalledWith("task-1");
+    expect(screen.queryByRole("button", { name: "Review again" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Refresh PR" })).not.toBeInTheDocument();
   });
 
   it("names the base of the worktree when the conflict is all that went wrong", () => {
@@ -194,14 +204,18 @@ describe("PRPane", () => {
     expect(screen.queryByText(/Check failed/)).not.toBeInTheDocument();
   });
 
-  it("closes a merged task and says what that does", async () => {
-    const { user } = pane({
-      status: "merged",
-      canClose: true,
-      prNumber: 12,
-      prState: "merged",
-      prBase: "main",
-    });
+  it("says what closing a merged task does, the closing in the bar", async () => {
+    const { user } = pane(
+      {
+        status: "merged",
+        canClose: true,
+        prNumber: 12,
+        prState: "merged",
+        prBase: "main",
+      },
+      undefined,
+      [onPR("merge", "close")],
+    );
 
     expect(screen.getByText("The pull request was merged")).toBeInTheDocument();
     expect(
@@ -210,7 +224,8 @@ describe("PRPane", () => {
       ),
     ).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Close task" }));
+    const bar = screen.getByRole("region", { name: "Request" });
+    await user.click(within(bar).getByRole("button", { name: "Close task" }));
 
     expect(api.closeTask).toHaveBeenCalledWith("task-1");
   });
@@ -218,22 +233,27 @@ describe("PRPane", () => {
   it("offers no closing while the clone of the repository is missing", () => {
     // The Go side refuses the closing while the clone is missing, however
     // merged the pull request is.
-    pane({ status: "merged", prNumber: 12, cloneMissing: true, canClose: false }, [
-      makeRepository({ missing: true }),
-    ]);
+    pane(
+      { status: "merged", prNumber: 12, cloneMissing: true, canClose: false },
+      [makeRepository({ missing: true })],
+      [onPR("merge", "close")],
+    );
 
-    expect(screen.getByRole("button", { name: "Close task" })).toBeDisabled();
-    expect(screen.getByText("The clone at /home/dev/projects/web is missing.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Close task/ })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+    const note = screen.getByText("The pull request was merged").parentElement as HTMLElement;
+    expect(within(note).getByText("The clone at /home/dev/projects/web is missing.")).toBeVisible();
   });
 
-  it("sends the user back to GitHub when the pull request was closed without a merge", async () => {
-    const { user } = pane({ status: "pr_closed", prNumber: 12, prState: "closed" });
+  it("sends the user back to GitHub when the pull request was closed without a merge", () => {
+    pane({ status: "pr_closed", prNumber: 12, prState: "closed" }, undefined, [onPR("pr_closed")]);
 
     expect(screen.getByText("The pull request was closed without a merge")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Refresh PR" }));
-
-    expect(api.refreshPR).toHaveBeenCalledWith("task-1");
+    expect(screen.queryByRole("button", { name: "Refresh PR" })).not.toBeInTheDocument();
+    const bar = screen.getByRole("region", { name: "Request" });
+    expect(within(bar).getByRole("button", { name: "Delete task…" })).toBeInTheDocument();
   });
 
   it("waits while the task is being closed", () => {

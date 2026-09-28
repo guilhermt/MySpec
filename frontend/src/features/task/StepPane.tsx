@@ -1,11 +1,13 @@
 import { LoaderCircle } from "lucide-react";
+import { tabId } from "@/components/system/Tabs";
 import { Composer } from "@/features/chat/Composer";
 import { Conversation } from "@/features/chat/Conversation";
+import { AGENT_CONVERSATION } from "@/features/task/AgentTabs";
+import { agentTabsOf } from "@/features/task/agent-tabs";
 import { ImplementationDone } from "@/features/task/ImplementationDone";
-import { ReviewStrip } from "@/features/task/ReviewStrip";
 import { StepBlocked } from "@/features/task/StepBlocked";
-import { StepTabs } from "@/features/task/StepTabs";
 import { currentStepOf, stepPhaseLabel, stepStage } from "@/features/task/step-status";
+import { TaskRequest } from "@/features/task/TaskRequest";
 import { asStepStatus, type Step, type TaskSummary } from "@/lib/wails";
 import { useOpenStepTab } from "@/store/app-store";
 
@@ -37,6 +39,7 @@ function StepConversation({ task, step }: { task: TaskSummary; step: Step }) {
         stage={stage}
         session={session}
       />
+      <TaskRequest task={task} tab={tab} />
       <Composer key={`composer:${stage}`} taskId={task.id} stage={stage} session={session} />
     </>
   );
@@ -48,6 +51,7 @@ export interface StepPaneProps {
 
 /** StepPane is what the implementation stage shows below the bar of the step. */
 export function StepPane({ task }: StepPaneProps) {
+  const chosen = useOpenStepTab(task.id);
   const step = currentStepOf(task);
   if (step === null) {
     // No step to run with a plan behind it means every step is committed.
@@ -66,24 +70,6 @@ export function StepPane({ task }: StepPaneProps) {
   switch (asStepStatus(step.status)) {
     case "blocked":
       return <StepBlocked task={task} step={step} />;
-    case "implementing":
-    case "agent_review":
-    case "addressing_review":
-    case "awaiting_review":
-    case "in_review":
-    case "ready_to_approve":
-    case "nothing_to_commit":
-    case "review_failed":
-    case "committing":
-      return (
-        <>
-          {step.review !== null && (
-            <ReviewStrip taskId={task.id} subject="step" review={step.review} />
-          )}
-          <StepTabs task={task} step={step} />
-          <StepConversation task={task} step={step} />
-        </>
-      );
     case "preparing":
       return <Waiting text={stepPhaseLabel(step.phase)} />;
     case "not_started":
@@ -91,5 +77,24 @@ export function StepPane({ task }: StepPaneProps) {
     // The step is committed and the app is already moving on to the next one.
     case "done":
       return <Waiting text="Starting the next step…" />;
+    // Every other status is one hasStepSession says has a conversation to show: the tabs of
+    // AgentTabs sit over it when the step has them, so the panel names the tab that chose it.
+    default: {
+      const shown = agentTabsOf(task, step, chosen, 0) !== null;
+      return shown ? (
+        <div
+          id={AGENT_CONVERSATION}
+          role="tabpanel"
+          aria-labelledby={tabId(AGENT_CONVERSATION, chosen)}
+          className="flex min-h-0 flex-1 flex-col"
+        >
+          <StepConversation task={task} step={step} />
+        </div>
+      ) : (
+        <div id={AGENT_CONVERSATION} className="flex min-h-0 flex-1 flex-col">
+          <StepConversation task={task} step={step} />
+        </div>
+      );
+    }
   }
 }

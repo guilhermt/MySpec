@@ -64,6 +64,14 @@ export function CleanAndStartStep(taskID: string): $CancellablePromise<void> {
 }
 
 /**
+ * ClearStepReviewMode makes a step that has not started follow the review mode
+ * of the task again.
+ */
+export function ClearStepReviewMode(taskID: string, step: number): $CancellablePromise<void> {
+    return $Call.ByID(1318080766, taskID, step);
+}
+
+/**
  * CloseTask takes down the worktree and the branch of a task whose pull request
  * was merged and updates the base branch of its clone. It returns as soon as
  * the work is scheduled; what git does arrives as state.

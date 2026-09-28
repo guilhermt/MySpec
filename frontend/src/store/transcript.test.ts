@@ -9,7 +9,7 @@ import {
 import { makeEntry, makeTranscript } from "@/test/wails-mock";
 
 function ready(entries: Entry[] = [], pending: Entry[] = []): TranscriptState {
-  return { status: "ready", entries, pending, buffered: [] };
+  return { status: "ready", error: "", entries, pending, buffered: [] };
 }
 
 function entryEvent(entry: Entry): TranscriptEvent {
@@ -174,6 +174,7 @@ describe("applyEvent", () => {
   it("puts the conversation back in loading on a reset", () => {
     const state: TranscriptState = {
       status: "ready",
+      error: "",
       entries: [makeEntry("user", { id: "a", seq: 1 })],
       pending: [],
       buffered: [
@@ -214,6 +215,7 @@ describe("emptyTranscript and fromTranscript", () => {
   it("start loading and end ready", () => {
     expect(emptyTranscript()).toEqual({
       status: "loading",
+      error: "",
       entries: [],
       pending: [],
       buffered: [],
@@ -222,6 +224,7 @@ describe("emptyTranscript and fromTranscript", () => {
     const entry = makeEntry("user", { id: "a", seq: 1 });
     expect(fromTranscript(makeTranscript({ entries: [entry] }))).toEqual({
       status: "ready",
+      error: "",
       entries: [entry],
       pending: [],
       buffered: [],
@@ -231,6 +234,7 @@ describe("emptyTranscript and fromTranscript", () => {
   it("tolerates the nil lists of the bindings", () => {
     expect(fromTranscript(makeTranscript({ entries: null, pending: null }))).toEqual({
       status: "ready",
+      error: "",
       entries: [],
       pending: [],
       buffered: [],

@@ -23,6 +23,7 @@ import (
 	"github.com/guilhermt/myspec/internal/task"
 	"github.com/guilhermt/myspec/internal/theme"
 	"github.com/guilhermt/myspec/internal/upgrade"
+	"github.com/guilhermt/myspec/internal/worktree"
 )
 
 // FromRepositories converts the registered repositories, with what the last
@@ -179,6 +180,8 @@ func FromTasks(
 	artifacts func(id string) task.Artifacts,
 	steps func(id string) []flow.StepState,
 	prs func(id string) (flow.PullRequest, bool),
+	worktrees func(id string) (worktree.Worktree, bool),
+	conversations func(id string) []session.Conversation,
 	repositories func(id string) (repository.Repository, bool),
 	summaries map[session.Key]session.Summary,
 	situations map[string][]attention.Situation,
@@ -195,6 +198,10 @@ func FromTasks(
 		fullName := ""
 		if repo, ok := repositories(t.RepositoryID); ok {
 			fullName = repo.FullName()
+		}
+		var wt worktree.Worktree
+		if found, ok := worktrees(t.ID); ok {
+			wt = found
 		}
 		summary := summaries[taskSessionKey(t, states)]
 		if summary.Status == "" {
@@ -218,6 +225,7 @@ func FromTasks(
 			ProcessRunning:     summary.ProcessRunning,
 			RetryAttempt:       summary.RetryAttempt,
 			TurnStartedAt:      turnStart(summary),
+			PausedAt:           pausedAt(summary),
 			ActionLabel:        summary.ActionLabel,
 			ActionTarget:       summary.ActionTarget,
 			ContextPercent:     summary.ContextPercent,
@@ -232,6 +240,10 @@ func FromTasks(
 			PlanProblems:       fromProblems(a.Plan.Problems),
 			Situations:         fromSituations(situations[t.ID]),
 			Models:             fromStageModels(flow.StageModels(t, states, prPointer)),
+			Conversations:      fromConversations(conversations(t.ID)),
+			Branch:             wt.Branch,
+			BaseBranch:         wt.Base,
+			WorktreePath:       wt.Path,
 			CanContinue:        t.Revisiting && a.Done(t.Stage) && summary.Idle,
 			ArtifactVersion:    t.ArtifactVersion,
 			LastError:          summary.LastError,
@@ -240,6 +252,15 @@ func FromTasks(
 		}
 	}
 	return converted
+}
+
+// fromConversations converts the sessions of a task, never nil.
+func fromConversations(list []session.Conversation) []TaskConversation {
+	out := make([]TaskConversation, len(list))
+	for i, c := range list {
+		out[i] = TaskConversation{Stage: c.Stage, StartedAt: c.StartedAt.Format(time.RFC3339)}
+	}
+	return out
 }
 
 // taskSessionKey is the session the task screen shows: the one of the stage
@@ -291,6 +312,8 @@ func fromPullRequest(pr *flow.PullRequest) *PullRequest {
 		PRBase:       pr.PR.Base,
 		CheckError:   pr.CheckError,
 		Trouble:      fromTrouble(pr.Trouble),
+		Checks:       fromChecks(pr.PR.Checks),
+		Mergeable:    string(pr.PR.Mergeable),
 		CanClose:     pr.CanClose,
 		CloneMissing: pr.CloneMissing,
 		Close:        fromCloseResult(pr.Close),
@@ -303,6 +326,7 @@ func fromPullRequest(pr *flow.PullRequest) *PullRequest {
 		ProcessRunning: summary.ProcessRunning,
 		RetryAttempt:   summary.RetryAttempt,
 		TurnStartedAt:  turnStart(summary),
+		PausedAt:       pausedAt(summary),
 		ActionLabel:    summary.ActionLabel,
 		ActionTarget:   summary.ActionTarget,
 		ContextPercent: summary.ContextPercent,
@@ -317,6 +341,22 @@ func fromTrouble(t gh.Trouble) PRTrouble {
 	failed := make([]string, len(t.FailedChecks))
 	copy(failed, t.FailedChecks)
 	return PRTrouble{FailedChecks: failed, Conflict: t.Conflict}
+}
+
+// fromChecks converts the checks of the last reading, never nil.
+func fromChecks(checks []gh.Check) []PRCheck {
+	converted := make([]PRCheck, 0, len(checks))
+	for _, c := range checks {
+		converted = append(converted, PRCheck{
+			Name:        c.Name,
+			State:       string(c.State),
+			Conclusion:  c.Conclusion,
+			StartedAt:   timeOrEmpty(c.StartedAt),
+			CompletedAt: timeOrEmpty(c.CompletedAt),
+			URL:         c.URL,
+		})
+	}
+	return converted
 }
 
 // fromCloseResult converts what closing a task did, keeping nil for a task that
@@ -485,6 +525,7 @@ func fromSteps(states []flow.StepState) []Step {
 			Review:        fromReview(state.Review),
 			CommitSHA:     state.CommitSHA,
 			CommitSubject: state.CommitSubject,
+			CommittedAt:   timeOrEmpty(state.CommittedAt),
 			CommitFailed:  state.CommitFailed,
 
 			Model:         string(state.Choice.Model),
@@ -531,6 +572,7 @@ func fromStepReviewer(stage string, summary session.Summary) *StepReviewer {
 		ProcessRunning: summary.ProcessRunning,
 		RetryAttempt:   summary.RetryAttempt,
 		TurnStartedAt:  turnStart(summary),
+		PausedAt:       pausedAt(summary),
 		ActionLabel:    summary.ActionLabel,
 		ActionTarget:   summary.ActionTarget,
 		ContextPercent: summary.ContextPercent,
@@ -1394,6 +1436,7 @@ func FromReviews(
 			ProcessRunning: summary.ProcessRunning,
 			RetryAttempt:   summary.RetryAttempt,
 			TurnStartedAt:  turnStart(summary),
+			PausedAt:       pausedAt(summary),
 			ActionLabel:    summary.ActionLabel,
 			ActionTarget:   summary.ActionTarget,
 			ContextPercent: summary.ContextPercent,
@@ -1620,6 +1663,7 @@ func FromDiscussions(
 			ProcessRunning: summary.ProcessRunning,
 			RetryAttempt:   summary.RetryAttempt,
 			TurnStartedAt:  turnStart(summary),
+			PausedAt:       pausedAt(summary),
 			ActionLabel:    summary.ActionLabel,
 			ActionTarget:   summary.ActionTarget,
 			ContextPercent: summary.ContextPercent,
@@ -1963,6 +2007,20 @@ func cardOfReading(reading *board.Reading, key string) (board.Card, bool) {
 		return board.Card{}, false
 	}
 	return reading.Cards[i], true
+}
+
+// pausedAt is when a session was paused, "" when it is not or the time is
+// unknown.
+func pausedAt(summary session.Summary) string {
+	return timeOrEmpty(summary.PausedAt)
+}
+
+// timeOrEmpty writes an instant as RFC 3339, "" for the zero time.
+func timeOrEmpty(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.Format(time.RFC3339)
 }
 
 // turnStart is when the turn of a session started, "" without one.

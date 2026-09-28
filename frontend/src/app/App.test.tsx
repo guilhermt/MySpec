@@ -146,7 +146,7 @@ describe("App", () => {
 
     await user.click(await screen.findByRole("treeitem", { name: /^task add-login\./ }));
 
-    expect(await screen.findByRole("button", { name: "Delete task" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "More actions" })).toBeInTheDocument();
     expect(screen.queryByText("No task open")).not.toBeInTheDocument();
 
     act(() => {
@@ -154,7 +154,7 @@ describe("App", () => {
     });
 
     expect(await screen.findByText("No task open")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Delete task" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "More actions" })).not.toBeInTheDocument();
   });
 
   it("opens the history over home and comes back to it", async () => {
@@ -211,7 +211,7 @@ describe("App", () => {
     await user.click(screen.getByRole("treeitem", { name: /^task add-login\./ }));
 
     expect(screen.queryByRole("heading", { level: 1, name: "Platform" })).not.toBeInTheDocument();
-    expect(await screen.findByRole("button", { name: "Delete task" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "More actions" })).toBeInTheDocument();
   });
 
   it("opens the creation dialog for a card once its clone is there", async () => {

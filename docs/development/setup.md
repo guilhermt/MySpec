@@ -54,6 +54,8 @@ O hook, definido em `lefthook.yml`, é de pre-commit e só formata: Biome nos ar
 | `task vuln` | `govulncheck ./...` |
 | `task tidy:check` | Falha quando `go.mod` e `go.sum` não estão tidy |
 | `task bindings:check` | Falha quando `frontend/bindings` está desatualizado |
+| `task captures` | Roda a suíte de estilo computado com `MYSPEC_CAPTURES=1`, que grava em `frontend/captures/` as capturas da pull request, depois de apagar as anteriores |
+| `task captures:push` | Publica `frontend/captures/*.png` na branch órfã `captures/<branch atual>` do `origin`, reescrita a cada vez, e imprime o Markdown das imagens para o corpo da pull request |
 | `task check` | Tudo que o CI roda, em ordem |
 | `task install` | Instala o app para o usuário atual |
 | `task uninstall` | Remove o que `install` colocou; nunca toca os dados do app |
@@ -62,7 +64,9 @@ O hook, definido em `lefthook.yml`, é de pre-commit e só formata: Biome nos ar
 
 O som das notificações, `internal/platform/chime/chime.wav`, é versionado e gerado por `go generate ./internal/platform/chime/`, que roda `gen.go`. Só precisa rodar de novo quando o gerador muda.
 
-Um teste só, em Go: `go test -run 'TestNome' ./internal/pacote/`. No frontend: `pnpm vitest run src/features/task/StepBar.test.tsx`, a partir de `frontend/`, ou `pnpm test:watch` para o modo interativo da suíte do jsdom. `pnpm test:painted` roda só a suíte de estilo computado, e `pnpm vitest run src/components/system/Input.painted.test.tsx`, um arquivo dela.
+Um teste só, em Go: `go test -run 'TestNome' ./internal/pacote/`. No frontend: `pnpm vitest run src/features/task/StepPane.test.tsx`, a partir de `frontend/`, ou `pnpm test:watch` para o modo interativo da suíte do jsdom. `pnpm test:painted` roda só a suíte de estilo computado, e `pnpm vitest run src/components/system/Input.painted.test.tsx`, um arquivo dela.
+
+As capturas da tela da task, nas larguras e nas nove cenas, vão ao corpo da pull request como imagens. `task captures` as grava em `frontend/captures/`, que o git ignora, e `task captures:push` as publica numa branch órfã `captures/<branch>`, fora de `main`, e imprime uma linha `![nome](…)` por imagem, com o dono e o repositório lidos pelo `gh`. Nenhuma das duas roda no `task check` nem no CI.
 
 ## Instalação
 
@@ -86,3 +90,4 @@ Abrir a pasta normalmente; não há arquivo de workspace. `.vscode/settings.json
 | `MYSPEC_CLAUDE_PATH` | Caminho do binário `claude` |
 | `MYSPEC_LOG_LEVEL` | `debug`, `info` (padrão), `warn` ou `error` |
 | `WAILS_VITE_PORT` | Porta do Vite em `task dev` (padrão 9245) |
+| `MYSPEC_CAPTURES` | `1` faz os testes pintados gravarem as capturas em `frontend/captures/`; sem ela, nada é gravado |

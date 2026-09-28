@@ -198,7 +198,7 @@ export function TreeNodeRow({
           {...(flash !== null ? { "data-flash": flash } : {})}
           className={cn(
             MICRO,
-            "tree-flash inline-flex items-center gap-(--space-1-5) rounded-sm font-medium tabular-nums text-ink-3",
+            "situation-flash inline-flex items-center gap-(--space-1-5) rounded-sm font-medium tabular-nums text-ink-3",
           )}
         >
           {shown.parts.map((part, index) => (

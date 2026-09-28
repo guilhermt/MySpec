@@ -142,7 +142,7 @@ function RailBlock({ row, selected, isNext, flash, tabIndex }: RailBlockProps) {
         className={cn(
           // The gap under the type icon holds the corner of the state glyph with its outline, so
           // the glyph never reaches the clock.
-          "group/block tree-flash relative flex w-full cursor-pointer flex-col items-center gap-(--space-1-5) rounded-md px-(--tree-pad) py-(--row-pad-y) outline-none transition-[background-color,box-shadow] duration-(--duration-fast) ease-standard focus-visible:outline-(length:--focus-width) focus-visible:outline-focus focus-visible:-outline-offset-(length:--focus-width)",
+          "group/block situation-flash relative flex w-full cursor-pointer flex-col items-center gap-(--space-1-5) rounded-md px-(--tree-pad) py-(--row-pad-y) outline-none transition-[background-color,box-shadow] duration-(--duration-fast) ease-standard focus-visible:outline-(length:--focus-width) focus-visible:outline-focus focus-visible:-outline-offset-(length:--focus-width)",
           selected ? "bg-brand-veil" : "hover:bg-veil-hover active:bg-veil-press",
           row.tone === "error" && "error-rail-bar",
           selected && "shadow-[inset_0_0_0_var(--border)_var(--brand-ring)]",

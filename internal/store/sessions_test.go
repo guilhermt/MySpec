@@ -83,6 +83,7 @@ func TestSessionsUpdateRewritesEveryMutableColumn(t *testing.T) {
 	want := newSession(sessionID, taskID, task.StagePRD)
 	want.Started = true
 	want.Paused = true
+	want.PausedAt = fixedTime.Add(30 * time.Second)
 	want.ContextTokens = 12_000
 	want.ContextWindow = 200_000
 	want.Corrections = 2
@@ -91,6 +92,30 @@ func TestSessionsUpdateRewritesEveryMutableColumn(t *testing.T) {
 	want.UpdatedAt = fixedTime.Add(time.Minute)
 	if err := s.Sessions.Update(t.Context(), want); err != nil {
 		t.Fatalf("Update() = %v, want nil", err)
+	}
+
+	got, err := s.Sessions.Get(t.Context(), taskID, string(task.StagePRD))
+	if err != nil {
+		t.Fatalf("Get() = %v, want nil", err)
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("Get() mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestSessionsUpdateClearsThePauseTime(t *testing.T) {
+	t.Parallel()
+	s := newStoreWithRepositories(t)
+
+	taskID, sessionID := seedSession(t, s)
+	want := newSession(sessionID, taskID, task.StagePRD)
+	want.Paused, want.PausedAt = true, fixedTime.Add(time.Minute)
+	if err := s.Sessions.Update(t.Context(), want); err != nil {
+		t.Fatalf("Update(paused) = %v, want nil", err)
+	}
+	want.Paused, want.PausedAt = false, time.Time{}
+	if err := s.Sessions.Update(t.Context(), want); err != nil {
+		t.Fatalf("Update(resumed) = %v, want nil", err)
 	}
 
 	got, err := s.Sessions.Get(t.Context(), taskID, string(task.StagePRD))
@@ -216,5 +241,31 @@ func TestSessionsDeleteWithoutStagesDoesNothing(t *testing.T) {
 	}
 	if _, err := s.Sessions.Get(t.Context(), taskID, string(task.StagePRD)); err != nil {
 		t.Errorf("Get() = %v, want nil", err)
+	}
+}
+
+func TestSessionsListReturnsEverySessionByTaskAndCreation(t *testing.T) {
+	t.Parallel()
+	s := newStoreWithRepositories(t)
+
+	taskID, sessionID := seedSession(t, s)
+	other := seedNamedTask(t, s, "task-0", "zero")
+	later := newSession("sess-2", taskID, task.StageTechSpec)
+	later.CreatedAt = fixedTime.Add(time.Hour)
+	earlier := newSession("sess-3", taskID, task.StagePlan)
+	earlier.CreatedAt = fixedTime.Add(-time.Hour)
+	for _, rec := range []session.Record{later, earlier, newSession("sess-4", other, task.StagePRD)} {
+		if err := s.Sessions.Insert(t.Context(), rec); err != nil {
+			t.Fatalf("Insert() = %v, want nil", err)
+		}
+	}
+
+	got, err := s.Sessions.List(t.Context())
+	if err != nil {
+		t.Fatalf("List() = %v, want nil", err)
+	}
+	want := []session.Record{newSession("sess-4", other, task.StagePRD), earlier, newSession(sessionID, taskID, task.StagePRD), later}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("List() mismatch (-want +got):\n%s", diff)
 	}
 }

@@ -7,6 +7,7 @@ import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
 import {
   makeDiscussion,
+  makePRCheck,
   makePullRequest,
   makeReviewPass,
   makeReviewSummary,
@@ -111,7 +112,7 @@ describe("TreeRow", () => {
       rowOf(
         task({
           stage: "pr",
-          pr: makePullRequest({ status: "done", prNumber: 1279, prState: "MERGED" }),
+          pr: makePullRequest({ status: "merged", prNumber: 1279, prState: "MERGED" }),
           situations: [
             makeSituation({
               kind: "merge",
@@ -156,11 +157,12 @@ describe("TreeRow", () => {
             status: "waiting_checks",
             prNumber: 1279,
             checkedAt: "2026-09-05T11:59:00Z",
+            checks: [makePRCheck(), makePRCheck({ name: "web", state: "running" })],
           }),
         }),
       ),
       "github",
-      "task add-login. waiting on GitHub, PR review · waiting for checks. web#42.",
+      "task add-login. waiting on GitHub, PR review · checks 1/2. web#42.",
     ],
     [
       "a pull request GitHub has not reported yet",

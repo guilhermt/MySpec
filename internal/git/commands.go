@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // The exit codes the app reads as an answer instead of a failure.
@@ -300,22 +301,27 @@ func (r *Runner) IsIgnored(ctx context.Context, dir, path string) (bool, error) 
 
 // Commit is one commit, as the app shows it.
 type Commit struct {
-	SHA     string
-	Subject string
+	SHA         string
+	Subject     string
+	CommittedAt time.Time // the committer date
 }
 
 // Commit reads a commit of the repository at dir.
 func (r *Runner) Commit(ctx context.Context, dir, rev string) (Commit, error) {
-	out, err := r.Run(ctx, dir, "log", "-1", "--format=%H%x00%s", rev)
+	out, err := r.Run(ctx, dir, "log", "-1", "--format=%H%x00%cI%x00%s", rev)
 	if err != nil {
 		return Commit{}, err
 	}
 
-	sha, subject, found := strings.Cut(out, "\x00")
-	if !found {
+	parts := strings.SplitN(out, "\x00", 3)
+	if len(parts) != 3 {
 		return Commit{}, fmt.Errorf("parse git log: unexpected output %q", out)
 	}
-	return Commit{SHA: sha, Subject: subject}, nil
+	committedAt, err := time.Parse(time.RFC3339, parts[1])
+	if err != nil {
+		return Commit{}, fmt.Errorf("parse git log: unexpected output %q", out)
+	}
+	return Commit{SHA: parts[0], Subject: parts[2], CommittedAt: committedAt.UTC()}, nil
 }
 
 // CountCommits is how many commits ref has that base does not.

@@ -1,8 +1,10 @@
 import { useEffect } from "react";
 import { panelTriggerId } from "@/components/system/AuxPanel";
+import { leaveEarlierConversation } from "@/features/task/earlier-conversation";
 import { layerOpen, modalOpen } from "@/lib/layers";
 import { openItemId } from "@/lib/locations";
 import { nextWaiting } from "@/lib/situations";
+import { openInEditor } from "@/store/actions";
 import { type AppStore, useAppStore } from "@/store/app-store";
 
 // The shortcuts belong to the product itself: the welcome screen and the
@@ -37,14 +39,29 @@ function runShortcut(key: string, store: AppStore): void {
         store.openSettings();
       }
       break;
+    case "e":
+      openTaskInEditor(store);
+      break;
     default:
       break;
   }
 }
 
+// openTaskInEditor opens the worktree of the task on screen; without a worktree there is nothing to open.
+function openTaskInEditor(store: AppStore): void {
+  const location = store.location;
+  if (location.kind !== "task") {
+    return;
+  }
+  const task = (store.app?.tasks ?? []).find((candidate) => candidate.id === location.id);
+  if (task !== undefined && task.worktreePath !== "") {
+    void openInEditor(task.id);
+  }
+}
+
 function isShortcut(event: KeyboardEvent): boolean {
   if (event.ctrlKey || event.metaKey) {
-    return ["n", "j", ","].includes(event.key.toLowerCase());
+    return ["n", "j", ",", "e"].includes(event.key.toLowerCase());
   }
   // Alt+← and Alt+→ step through the history of places.
   return event.altKey && (event.key === "ArrowLeft" || event.key === "ArrowRight");
@@ -72,10 +89,10 @@ export function useGlobalShortcuts(): void {
       }
     };
 
-    // Esc closes what the place on screen has open, the panel first, once nothing closer to the
-    // user took it: the owners of Esc inside the screen (the message box, the
-    // search of a board, a draft) prevent its default, and a layer over the
-    // screen closes first.
+    // Esc closes what the place on screen has open, the panel first and then an earlier
+    // conversation, once nothing closer to the user took it: the owners of Esc inside the screen
+    // (the message box, the search of a board, a draft) prevent its default, and a layer over the
+    // screen (a listbox, a popover, the ⋯ menu) closes first, on its own.
     const onEscape = (event: KeyboardEvent) => {
       if (
         event.key !== "Escape" ||
@@ -93,6 +110,8 @@ export function useGlobalShortcuts(): void {
         const trigger = panelTriggerId(store.panel);
         store.openPanel(null);
         document.getElementById(trigger)?.focus();
+      } else if (store.earlierConversation !== null) {
+        leaveEarlierConversation();
       } else if (store.promptEdit !== null) {
         store.cancelPromptEdit();
       } else if (store.location.kind === "settings") {

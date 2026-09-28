@@ -2,8 +2,10 @@ import type { Entry, Transcript, TranscriptEvent } from "@/lib/wails";
 
 /** TranscriptState is the conversation of one task as the interface holds it. */
 export interface TranscriptState {
-  /** status is loading until the first GetTranscript answers. */
-  status: "loading" | "ready";
+  /** status is loading until the first GetTranscript answers, error when it failed. */
+  status: "loading" | "ready" | "error";
+  /** error is why the conversation could not be read; "" outside the error. */
+  error: string;
   /** entries are the conversation, ordered by seq. */
   entries: Entry[];
   /** pending are the queued user messages, in arrival order. */
@@ -14,13 +16,14 @@ export interface TranscriptState {
 
 /** emptyTranscript is the state of a conversation nobody has loaded yet. */
 export function emptyTranscript(): TranscriptState {
-  return { status: "loading", entries: [], pending: [], buffered: [] };
+  return { status: "loading", error: "", entries: [], pending: [], buffered: [] };
 }
 
 /** fromTranscript turns a loaded conversation into a ready state. */
 export function fromTranscript(transcript: Transcript): TranscriptState {
   return {
     status: "ready",
+    error: "",
     entries: transcript.entries ?? [],
     pending: transcript.pending ?? [],
     buffered: [],

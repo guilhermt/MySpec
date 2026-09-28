@@ -634,6 +634,18 @@ func (s *Service) SetStepReviewMode(ctx context.Context, id string, number int, 
 	return t, nil
 }
 
+// ClearStepReviewMode drops the mode of a step of its own, so the step follows
+// the task again. A step without a mode of its own is left as it is.
+func (s *Service) ClearStepReviewMode(ctx context.Context, id string, number int) (Task, error) {
+	t, err := s.updateReviewModes(ctx, id, func(m *ReviewModes) { delete(m.Steps, number) })
+	if err != nil {
+		return Task{}, err
+	}
+
+	s.log.Info("task step review mode cleared", "task", id, "step", number)
+	return t, nil
+}
+
 // updateReviewModes rewrites the review modes of a task on a copy of them,
 // persists it and tells the app.
 func (s *Service) updateReviewModes(ctx context.Context, id string, mutate func(*ReviewModes)) (Task, error) {
@@ -741,10 +753,12 @@ func (s *Service) SetStepStarted(ctx context.Context, id string, number int, sta
 
 // SetStepCommitted records the commit a step produced, which is what makes it
 // done.
-func (s *Service) SetStepCommitted(ctx context.Context, id string, number int, sha, subject string) (StepRun, error) {
+func (s *Service) SetStepCommitted(
+	ctx context.Context, id string, number int, sha, subject string, committedAt time.Time,
+) (StepRun, error) {
 	run, err := s.updateStepRun(ctx, id, number, func(run *StepRun) {
 		run.Status = StepDone
-		run.CommitSHA, run.CommitSubject = sha, subject
+		run.CommitSHA, run.CommitSubject, run.CommittedAt = sha, subject, committedAt
 	})
 	if err != nil {
 		return StepRun{}, err
@@ -1271,6 +1285,7 @@ func clonePRRun(run PRRun) PRRun {
 		result := *run.Close
 		run.Close = &result
 	}
+	run.PR.Checks = slices.Clone(run.PR.Checks)
 	run.TroubleBaseline.FailedChecks = slices.Clone(run.TroubleBaseline.FailedChecks)
 	run.Trouble.FailedChecks = slices.Clone(run.Trouble.FailedChecks)
 	return run

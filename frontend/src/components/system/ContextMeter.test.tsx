@@ -39,6 +39,13 @@ describe("ContextMeter", () => {
     expect(screen.getByRole("meter", { name: "Context" })).toHaveTextContent("30%");
   });
 
+  it("drops the track only in a narrow main area when compact there", () => {
+    const { container } = renderWithStore(
+      <ContextMeter percent={30} compact="narrow" detail="60k" />,
+    );
+    expect(container.querySelector('[data-slot="track"]')).toHaveClass("@max-[1300px]/main:hidden");
+  });
+
   it("shows its detail in a tooltip on focus", async () => {
     const { user } = renderWithStore(<ContextMeter percent={30} detail="60k of 200k tokens" />);
     await user.tab();

@@ -4,15 +4,12 @@ import {
   blockTitle,
   canApprove,
   canReviewMyself,
-  conversationDisplay,
   currentStepDisplay,
   currentStepOf,
   hasStepSession,
   loopSession,
   reviewCountLabel,
-  stepBarDisplay,
   stepPhaseLabel,
-  stepStateLabel,
   stepStatusLabel,
   stepStatusTone,
 } from "@/features/task/step-status";
@@ -91,28 +88,6 @@ describe("step status", () => {
   });
 });
 
-describe("stepStateLabel", () => {
-  it("spells out the pass of the agent review", () => {
-    expect(stepStateLabel(makeStep({ status: "agent_review", reviewPass: 2 }))).toBe(
-      "Agent review · pass 2",
-    );
-  });
-
-  it("spells out the round of the report being addressed", () => {
-    expect(stepStateLabel(makeStep({ status: "addressing_review", reviewRound: 1 }))).toBe(
-      "Addressing review · round 1 of 3",
-    );
-  });
-
-  it.each([
-    ["implementing", "Implementing"],
-    ["awaiting_review", "Awaiting review"],
-    ["committing", "Committing"],
-  ])("reads %s as the step does", (status, label) => {
-    expect(stepStateLabel(makeStep({ status }))).toBe(label);
-  });
-});
-
 describe("loopSession", () => {
   const reviewer = makeStepReviewer({ sessionStatus: "needs_answer", contextPercent: 40 });
 
@@ -150,72 +125,6 @@ describe("loopSession", () => {
     expect(loopSession(task, currentStepOf(task) as Step)).toMatchObject({
       stage: "step:1",
       sessionStatus: "paused",
-    });
-  });
-});
-
-describe("conversationDisplay", () => {
-  it.each([
-    ["working", "Working", "working"],
-    ["waiting", "Waiting", "idle"],
-    ["needs_permission", "Permission", "idle"],
-    ["needs_answer", "Question", "idle"],
-    ["paused", "Paused", "paused"],
-    ["error", "Error", "idle"],
-  ])("reads a %s conversation", (sessionStatus, label, tone) => {
-    expect(conversationDisplay(makeStepReviewer({ sessionStatus }))).toEqual({ label, tone });
-  });
-});
-
-describe("stepBarDisplay", () => {
-  it.each([
-    [{ status: "agent_review", reviewPass: 1 }, "Agent review · pass 1", "working"],
-    [
-      { status: "addressing_review", reviewRound: 2 },
-      "Addressing review · round 2 of 3",
-      "working",
-    ],
-    [{ status: "awaiting_review" }, "Awaiting review", "idle"],
-    [{ status: "committing" }, "Committing", "working"],
-  ] as const)("reads the step while its conversation simply works %#", (step, label, tone) => {
-    const task = implementing(
-      { ...step, reviewer: makeStepReviewer({ sessionStatus: "working" }) },
-      { sessionStatus: "waiting" },
-    );
-
-    expect(stepBarDisplay(task, currentStepOf(task) as Step)).toEqual({ label, tone });
-  });
-
-  it("reads the reviewer when it asks during a pass", () => {
-    const task = implementing(
-      { status: "agent_review", reviewer: makeStepReviewer({ sessionStatus: "needs_answer" }) },
-      { sessionStatus: "paused" },
-    );
-
-    expect(stepBarDisplay(task, currentStepOf(task) as Step)).toEqual({
-      label: "Question",
-      tone: "idle",
-    });
-  });
-
-  it("reads the implementer while it addresses a report", () => {
-    const task = implementing(
-      { status: "addressing_review", reviewer: makeStepReviewer({ sessionStatus: "error" }) },
-      { sessionStatus: "paused" },
-    );
-
-    expect(stepBarDisplay(task, currentStepOf(task) as Step)).toEqual({
-      label: "Paused",
-      tone: "paused",
-    });
-  });
-
-  it("leaves a step that waits for the user to the step", () => {
-    const task = implementing({ status: "awaiting_review" }, { sessionStatus: "needs_answer" });
-
-    expect(stepBarDisplay(task, currentStepOf(task) as Step)).toEqual({
-      label: "Awaiting review",
-      tone: "idle",
     });
   });
 });

@@ -13,7 +13,7 @@ describe("ownerText", () => {
 
 describe("readingText", () => {
   it("tells how long ago the board was read, or that it never was", () => {
-    expect(readingText(makeBoard(), NOW)).toBe("Updated 5 min ago");
+    expect(readingText(makeBoard(), NOW)).toBe("checked 5m ago");
     expect(readingText(makeBoard({ readAt: "" }), NOW)).toBe("Not read yet");
   });
 

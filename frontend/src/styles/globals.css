@@ -298,17 +298,6 @@
     }
   }
 
-  /* The highlight of a new situation on a tab: it tints twice for
-     --duration-slow, in the colour the tone of the situation picks, while the
-     class stays on it for FLASH_MS. */
-  .attention-flash {
-    --flash-color: var(--status-attention-fill);
-    animation: attention-flash var(--duration-slow) var(--ease-standard) 2;
-    &[data-tone="error"] {
-      --flash-color: var(--destructive);
-    }
-  }
-
   /* The main area is the container the header, the panels and the toasts
      measure themselves against. */
   .main-area {
@@ -361,29 +350,18 @@
   }
 
   /* A new situation blinks twice in the veil of its gravity. */
-  .tree-flash[data-flash] {
-    animation: tree-flash var(--duration-slow) var(--ease-standard) 2;
+  .situation-flash[data-flash] {
+    animation: situation-flash var(--duration-slow) var(--ease-standard) 2;
   }
-  .tree-flash[data-flash="error"] {
+  .situation-flash[data-flash="error"] {
     --flash-veil: var(--state-error-veil);
   }
-  .tree-flash[data-flash="wait"] {
+  .situation-flash[data-flash="wait"] {
     --flash-veil: var(--state-wait-veil);
   }
 }
 
-@keyframes attention-flash {
-  0%,
-  100% {
-    background-color: transparent;
-  }
-  20%,
-  60% {
-    background-color: color-mix(in oklch, var(--flash-color) 22%, transparent);
-  }
-}
-
-@keyframes tree-flash {
+@keyframes situation-flash {
   from {
     background-color: var(--flash-veil);
   }
@@ -437,8 +415,7 @@
 
 /* Without motion nothing blinks, and no tint stays behind. */
 @media (prefers-reduced-motion: reduce) {
-  .attention-flash,
-  .tree-flash[data-flash] {
+  .situation-flash[data-flash] {
     animation: none;
   }
 }

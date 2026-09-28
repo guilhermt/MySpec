@@ -1,10 +1,11 @@
 .task
 bin
 coverage
+frontend/captures
 frontend/coverage
 frontend/.vitest
 frontend/dist
-frontend/node_modules
+node_modules/
 .tools
 __pycache__
 planning

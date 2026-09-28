@@ -6,6 +6,7 @@ import {
   workingSession,
 } from "@/features/sidebar/sessions";
 import { boardOfRepository } from "@/lib/boards";
+import { checkCounts } from "@/lib/pull-requests";
 import { ALL_REPOSITORIES, findRepository, shortName, tasksInFilter } from "@/lib/repositories";
 import { compactWait, compareSituations, spokenWait } from "@/lib/situations";
 import type {
@@ -405,15 +406,18 @@ function situationText(owner: Owner, situation: Situation): RowText {
       if (task === null) {
         return same(`Ready to merge · ${passText(owner)}`);
       }
-      return form === "close"
-        ? {
-            long: `Ready to close · PR #${prNumber(task)} merged`,
-            short: `Ready to close · #${prNumber(task)}`,
-          }
-        : {
-            long: `Ready to merge · PR #${prNumber(task)}`,
-            short: `Ready to merge · #${prNumber(task)}`,
-          };
+      if (form === "close") {
+        // Only a merge GitHub confirmed says merged; the closing offered after a failed reading doesn't.
+        const merged = task.pr !== null && asPRStatus(task.pr.status) === "merged" ? " merged" : "";
+        return {
+          long: `Ready to close · PR #${prNumber(task)}${merged}`,
+          short: `Ready to close · #${prNumber(task)}${merged}`,
+        };
+      }
+      return {
+        long: `Ready to merge · PR #${prNumber(task)}`,
+        short: `Ready to merge · #${prNumber(task)}`,
+      };
     case "review_report": {
       if (form === "publish") {
         return same(`Ready to publish · ${passText(owner)}`);
@@ -529,9 +533,10 @@ function taskStanding(task: TaskSummary): Standing {
         return appWork(same("PR review · committing"));
       case "closing":
         return appWork(same("Closing"));
-      case "waiting_checks":
-        // Before gh first reports the pull request, the row says it is being read.
-        return task.pr.checkedAt === ""
+      case "waiting_checks": {
+        // Until a reading of gh lists a check, the row says GitHub is being read.
+        const { passed, total } = checkCounts(task.pr);
+        return task.pr.checkedAt === "" || total === 0
           ? {
               tone: "github",
               line2: same("PR review · checking GitHub"),
@@ -540,9 +545,10 @@ function taskStanding(task: TaskSummary): Standing {
             }
           : {
               tone: "github",
-              line2: { long: "PR review · waiting for checks", short: "PR review · checks" },
+              line2: same(`PR review · checks ${passed}/${total}`),
               clock: { kind: "word", word: "GitHub" },
             };
+      }
       case "drafting":
         return sessionStanding(sessions, place, same("PR · drafting"));
       case "reviewing":

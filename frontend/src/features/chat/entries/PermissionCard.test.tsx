@@ -175,4 +175,28 @@ describe("PermissionCard", () => {
     expect(screen.getByText("no rule matched")).toBeInTheDocument();
     expect(screen.getByText("Outside the working directory: /etc/hosts")).toBeInTheDocument();
   });
+
+  it("reads a permission of an earlier conversation with the tool and the command, and no answer", () => {
+    renderWithStore(
+      <PermissionCard stage="prd" taskId="task-1" permission={permission()} readOnly />,
+    );
+
+    expect(screen.getByText("Bash")).toBeInTheDocument();
+    expect(screen.getByText("ls")).toBeInTheDocument();
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+  });
+
+  it("gives the decision of a permission of an earlier conversation when there was one", () => {
+    renderWithStore(
+      <PermissionCard
+        stage="prd"
+        taskId="task-1"
+        permission={permission({ status: "denied", denyMessage: "Use the script" })}
+        readOnly
+      />,
+    );
+
+    expect(screen.getByText("Denied · Use the script")).toBeInTheDocument();
+  });
 });

@@ -51,6 +51,7 @@ import type {
   Place,
   PlanProblem,
   PRBlock,
+  PRCheck,
   PRDraft,
   PRPreview,
   PRReport,
@@ -86,6 +87,7 @@ import type {
   StepReport,
   StepReviewer,
   TaskCard,
+  TaskConversation,
   TaskStageModel,
   TaskSummary,
   Transcript,
@@ -150,6 +152,7 @@ export type {
   Place,
   PlanProblem,
   PRBlock,
+  PRCheck,
   PRDraft,
   PRPreview,
   PRReport,
@@ -185,6 +188,7 @@ export type {
   StepReport,
   StepReviewer,
   TaskCard,
+  TaskConversation,
   TaskStageModel,
   TaskSummary,
   Transcript,
@@ -283,6 +287,8 @@ export type PRBlockReason =
 
 /** PRState is what GitHub last said about a pull request; "" before it is read. */
 export type PRState = "open" | "merged" | "closed" | "";
+/** CheckState is where a check of a pull request stands at the last reading. */
+export type CheckState = "passed" | "skipped" | "neutral" | "failed" | "running" | "queued";
 export type ReviewFileKind = "added" | "modified" | "deleted" | "renamed" | "untracked";
 export type BlockReason =
   | "dirty_worktree"
@@ -671,6 +677,20 @@ export function asPRState(value: string): PRState {
       return value;
     default:
       return "";
+  }
+}
+
+export function asCheckState(value: string): CheckState {
+  switch (value) {
+    case "passed":
+    case "skipped":
+    case "neutral":
+    case "failed":
+    case "running":
+    case "queued":
+      return value;
+    default:
+      return "queued";
   }
 }
 
@@ -1231,6 +1251,8 @@ export const api = {
     TaskService.SetReviewMode(taskId, mode),
   setStepReviewMode: (taskId: string, step: number, mode: ReviewMode): Promise<void> =>
     TaskService.SetStepReviewMode(taskId, step, mode),
+  clearStepReviewMode: (taskId: string, step: number): Promise<void> =>
+    TaskService.ClearStepReviewMode(taskId, step),
   reviewStepMyself: (taskId: string): Promise<void> => TaskService.ReviewStepMyself(taskId),
   approveStep: (taskId: string): Promise<void> => TaskService.ApproveStep(taskId),
   openPR: (taskId: string, title: string, body: string): Promise<void> =>

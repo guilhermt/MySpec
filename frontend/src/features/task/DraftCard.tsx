@@ -11,6 +11,8 @@ import { useAppStore, usePrDraft } from "@/store/app-store";
 export interface DraftCardProps {
   taskId: string;
   pr: PullRequest;
+  /** showOpenPR draws the card's own Open PR: the draft a failed opening left, which no bar asks to approve. */
+  showOpenPR: boolean;
 }
 
 /**
@@ -18,7 +20,7 @@ export interface DraftCardProps {
  * draft on disk is the starting point; what the user types survives every
  * update but one, and only opening the pull request sends it.
  */
-export function DraftCard({ taskId, pr }: DraftCardProps) {
+export function DraftCard({ taskId, pr, showOpenPR }: DraftCardProps) {
   const edited = usePrDraft(taskId);
   const setPrDraft = useAppStore((state) => state.setPrDraft);
   const clearPrDraft = useAppStore((state) => state.clearPrDraft);
@@ -75,12 +77,14 @@ export function DraftCard({ taskId, pr }: DraftCardProps) {
             className="max-h-72 min-h-32 resize-none font-mono text-xs"
           />
         </div>
-        <div className="flex items-center justify-end">
-          <Button size="sm" disabled={!ready} onClick={() => void openPR(taskId, title, body)}>
-            <GitPullRequestArrow />
-            Open PR
-          </Button>
-        </div>
+        {showOpenPR && (
+          <div className="flex items-center justify-end">
+            <Button size="sm" disabled={!ready} onClick={() => void openPR(taskId, title, body)}>
+              <GitPullRequestArrow />
+              Open PR
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   );

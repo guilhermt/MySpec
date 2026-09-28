@@ -107,7 +107,7 @@ function TreeRowView({ row, level, selected, isNext, flash, narrow, tabIndex }: 
         {...(flash !== null ? { "data-flash": flash } : {})}
         onClick={open}
         className={cn(
-          "group/row tree-flash relative grid w-full cursor-pointer overflow-clip grid-cols-[var(--icon)_minmax(0,1fr)_auto] items-center gap-x-(--space-2-5) gap-y-(--line-gap) rounded-md py-(--row-pad-y) pr-(--space-2) pl-(--tree-pad) text-ink-1 outline-none transition-[background-color,box-shadow] duration-(--duration-fast) ease-standard focus-visible:focus-ring",
+          "group/row situation-flash relative grid w-full cursor-pointer overflow-clip grid-cols-[var(--icon)_minmax(0,1fr)_auto] items-center gap-x-(--space-2-5) gap-y-(--line-gap) rounded-md py-(--row-pad-y) pr-(--space-2) pl-(--tree-pad) text-ink-1 outline-none transition-[background-color,box-shadow] duration-(--duration-fast) ease-standard focus-visible:focus-ring",
           selected ? "bg-brand-veil" : "hover:bg-veil-hover active:bg-veil-press",
           row.tone === "error" && "error-rail-bar",
           selected && "shadow-[inset_0_0_0_var(--border)_var(--brand-ring)]",

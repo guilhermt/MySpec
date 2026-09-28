@@ -1,3 +1,4 @@
+import { Menu as BaseMenu } from "@base-ui/react/menu";
 import type { ComponentProps, ReactNode } from "react";
 import {
   DropdownMenu,
@@ -5,13 +6,14 @@ import {
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { Button } from "./Button";
 import { Icon } from "./Icon";
-import type { IconGlyph } from "./icons";
+import { ICONS, type IconGlyph } from "./icons";
 
 /** Menu is the root of a system menu. */
 export const Menu = DropdownMenu;
@@ -26,13 +28,16 @@ export interface MenuContentProps extends ComponentProps<typeof DropdownMenuCont
 /**
  * MenuContent is the floating surface of the menu. The shadow is written shadow-(--shadow-float),
  * the form cn reads as a shadow, so it replaces the shadow-md of the primitive instead of joining it.
+ * The menu is as wide as its longest item, from --size-menu-min up to the room the window leaves, so
+ * no item breaks its line, and never narrower than its trigger, as the menu of a Select; w-max
+ * replaces the width of the trigger the primitive gives.
  */
 export function MenuContent({ className, ...props }: MenuContentProps) {
   return (
     <DropdownMenuContent
       {...props}
       className={cn(
-        "flex min-w-(--size-menu-min) flex-col gap-0.5 rounded-lg bg-surface-3 p-1 text-(length:--text-ui) leading-(--leading-ui) text-ink-1 shadow-(--shadow-float) ring-0 duration-(--duration-base)",
+        "flex w-max max-w-(--available-width) min-w-[max(var(--size-menu-min),var(--anchor-width))] flex-col gap-0.5 rounded-lg bg-surface-3 p-1 text-(length:--text-ui) leading-(--leading-ui) text-ink-1 shadow-(--shadow-float) ring-0 duration-(--duration-base)",
         className,
       )}
     />
@@ -109,6 +114,57 @@ export function MenuItem({
         </kbd>
       )}
     </DropdownMenuItem>
+  );
+}
+
+/** UNAVAILABLE marks a choice that is no longer offered. */
+export const UNAVAILABLE = "◇";
+
+/** MenuRadioGroup holds the choices of a menu, one of them checked. */
+export function MenuRadioGroup(props: ComponentProps<typeof DropdownMenuRadioGroup>) {
+  return <DropdownMenuRadioGroup {...props} />;
+}
+
+export interface MenuRadioItemProps {
+  value: string;
+  children: ReactNode;
+  icon?: IconGlyph;
+  sub?: string;
+  /** unavailable is a choice that is no longer offered: kept, marked with ◇, and not chosen again. */
+  unavailable?: boolean;
+}
+
+/**
+ * MenuRadioItem is a choice of a MenuRadioGroup, with its check at the start in the brand ink. It is
+ * built on the Base UI item, since the radio item of the ui puts the check at the end.
+ */
+export function MenuRadioItem({ value, children, icon, sub, unavailable }: MenuRadioItemProps) {
+  return (
+    <BaseMenu.RadioItem
+      value={value}
+      {...(unavailable ? { disabled: true } : {})}
+      className={cn(
+        "relative flex cursor-default items-center outline-hidden select-none",
+        MENU_ITEM,
+      )}
+    >
+      <BaseMenu.RadioItemIndicator
+        keepMounted
+        className="size-(--icon) text-brand-ink data-unchecked:invisible"
+      >
+        <Icon icon={ICONS.done} />
+      </BaseMenu.RadioItemIndicator>
+      {icon !== undefined && <Icon icon={icon} size="md" tone="muted" />}
+      <span>
+        {unavailable && `${UNAVAILABLE} `}
+        {children}
+        {unavailable && " · unavailable"}
+      </span>
+      {sub !== undefined && " "}
+      {sub !== undefined && (
+        <span className="text-(length:--text-meta) leading-(--leading-meta) text-ink-3">{sub}</span>
+      )}
+    </BaseMenu.RadioItem>
   );
 }
 

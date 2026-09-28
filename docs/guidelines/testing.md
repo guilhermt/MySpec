@@ -52,7 +52,7 @@ Os pacotes que rodam binários testam contra o binário real ou contra um fake q
 ### Forma
 
 - Vitest com Testing Library, `user-event` e jsdom. `describe` com o nome do componente ou módulo, `it` com uma frase: `it("places the step in the plan, with its title and repository")`.
-- Um arquivo de testes ao lado do que testa: `StepBar.test.tsx` ao lado de `StepBar.tsx`, `status.test.ts` ao lado de `status.ts`.
+- Um arquivo de testes ao lado do que testa: `StepPane.test.tsx` ao lado de `StepPane.tsx`, `status.test.ts` ao lado de `status.ts`.
 - A lógica de apresentação em `.ts` é testada como função pura, sem renderizar. Os componentes são testados pelo que o usuário vê e faz: `getByRole`, `getByText`, `user.click`, `user.type`. Consultar classes só para o que não tem outra forma de ser observado, como o tom de um ponto de status ou a centralização alinhada ao pixel, que o jsdom não calcula.
 - Um comportamento por `it`. Sem snapshots.
 
@@ -64,7 +64,10 @@ O jsdom roda sem CSS, então um teste nele não vê a cascata: uma classe presen
 - Cada arquivo roda os seus testes nos dois temas, `describe.each(THEMES)`, e `setTheme` põe o `data-theme` no `documentElement`, como o app.
 - O estado vem de verdade: hover e foco pelo `userEvent` de `vitest/browser`, desabilitado, erro e carregando pelas props.
 - O esperado é o token resolvido no mesmo tema: `token("--surface-input")` e `resolve("0 0 0 var(--halo) var(--focus-halo)", "box-shadow")` passam o valor por um elemento de sonda no documento, que o devolve na mesma notação do `getComputedStyle`. `paintOf(elemento, esperado)` lê do elemento as mesmas entradas do esperado, e a comparação é `expect(paintOf(el, want)).toEqual(want)`; a sombra é lida sem as camadas vazias que o Tailwind compõe.
-- O que cede pela largura da área principal é medido dentro de um invólucro com o estilo `mainArea(largura)`, que faz o papel do container `main` das container queries. `NARROW_MAIN` é a área principal mais estreita, 812 px, e `placeHeaderFits(faixa)` diz se um cabeçalho de lugar cabe numa linha, com só o título cortado.
+- O que cede pela largura da área principal é medido dentro de um invólucro com o estilo `mainArea(largura)`, que faz o papel do container `main` das container queries. `NARROW_MAIN` é a área principal mais estreita, 812 px. `placeHeaderOneLine(faixa)` diz se um cabeçalho de lugar cabe numa linha, e `placeHeaderFits(faixa)`, se cabe com só o título cortado; `overlaps(placeHeaderPieces(faixa))` diz se alguma peça dele cobre outra, e `stepperText(stepper)` lê o que um stepper mostra, sem o que só o leitor de tela ouve (`✓ ✓ ✓ Implementation 3/7 ○ PR ○ PR review ○ Closing`).
+- Uma forma que o estilo computado não dá, como as barras de um degradê, é medida em pixel: `inkRuns(elemento)` tira uma captura do elemento e devolve a largura, em pixels CSS, de cada trecho da linha do meio que difere do fundo, lido no primeiro pixel. O elemento vai sobre um fundo liso, e o teste nunca mede texto, cuja largura muda com a fonte da máquina.
+- Um teste que monta uma tela inteira, como `TaskView`, declara no topo o mesmo `vi.mock("@/lib/wails", …)` de `src/test/setup.ts`, com o `wails-mock` importado dentro da fábrica, para nenhuma chamada chegar ao runtime do Wails. As cenas e as tasks das larguras da tela da task vêm de `src/test/task-scenes.ts` (`sceneTask`, `taskInLoop`, `taskInPRReview`), com as conversas já lidas, os modelos, a worktree, as conversas da task e o card do board coerentes com cada momento; `fixSceneClock()` fixa o relógio em `SCENE_NOW`, o momento das cenas, para as idades e as durações serem as do mock em qualquer dia.
+- O que a pull request mostra em imagem é gravado por `capture(nome, elemento)`, só com `MYSPEC_CAPTURES=1`, em `frontend/captures/`, que o git ignora: `widths-<task>-<largura>-<tema>` e `scene-<cena>-<tema>`. `task captures` as grava e `task captures:push` as publica ([setup.md](../development/setup.md)).
 - A cobertura vem só do jsdom; a suíte de estilo computado prova a cascata, não linhas.
 
 ### Setup e dublês

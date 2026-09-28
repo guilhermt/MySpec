@@ -119,3 +119,21 @@ describe.each(THEMES)("Select in the %s theme", (theme) => {
     expect(paintOf(screen.getByRole("button", { name: "Model: Opus" }), want)).toEqual(want);
   });
 });
+
+describe("Select, the width of its menu", () => {
+  it("is never narrower than its trigger", async () => {
+    render(
+      <div style={{ width: "var(--size-dialog)" }}>
+        <Subject sidebar />
+      </div>,
+    );
+    const trigger = screen.getByRole("button", { name: "Model: Opus" });
+    await userEvent.click(trigger);
+    const menu = await screen.findByRole("menu");
+    // offsetWidth is the width of the layout, before the scale the menu opens with.
+    expect(trigger.offsetWidth).toBeGreaterThan(
+      parseFloat(resolve("var(--size-menu-min)", "width")),
+    );
+    expect(menu.offsetWidth).toBeGreaterThanOrEqual(trigger.offsetWidth);
+  });
+});

@@ -24,6 +24,7 @@ import {
   makeDiscussion,
   makeDiscussionCard,
   makeDraft,
+  makePRCheck,
   makePullRequest,
   makeRepository,
   makeReviewFinding,
@@ -283,8 +284,15 @@ describe("the line 2 of a task with a situation", () => {
     [
       "a merged PR ready to close",
       { kind: "merge", group: "closing", form: "close", place: PR_PLACE },
-      {},
+      { pr: makePullRequest({ status: "merged", prNumber: 1279 }) },
       "Ready to close · PR #1279 merged",
+      "Ready to close · #1279 merged",
+    ],
+    [
+      "a PR ready to close without the merge confirmed",
+      { kind: "merge", group: "closing", form: "close", place: PR_PLACE },
+      { pr: makePullRequest({ status: "done", prNumber: 1279, canClose: true }) },
+      "Ready to close · PR #1279",
       "Ready to close · #1279",
     ],
   ])("reads %s", (_case, fields, task, long, short) => {
@@ -535,7 +543,7 @@ describe("the line of an item without a situation", () => {
       "word",
     ],
     [
-      "a PR waiting for the checks",
+      "a PR waiting for the checks, read without any check",
       taskWith({
         stage: "pr",
         pr: makePullRequest({
@@ -545,8 +553,30 @@ describe("the line of an item without a situation", () => {
         }),
       }),
       "github",
-      "PR review · waiting for checks",
-      "PR review · checks",
+      "PR review · checking GitHub",
+      "PR review · checking GitHub",
+      "word",
+    ],
+    [
+      "a PR waiting for the checks, counting skipped and neutral as passed",
+      taskWith({
+        stage: "pr",
+        pr: makePullRequest({
+          status: "waiting_checks",
+          prNumber: 7,
+          checkedAt: "2026-09-05T11:59:00Z",
+          checks: [
+            makePRCheck({ name: "go" }),
+            makePRCheck({ name: "docs", state: "skipped", conclusion: "skipped" }),
+            makePRCheck({ name: "lint", state: "neutral", conclusion: "neutral" }),
+            makePRCheck({ name: "web", state: "running", conclusion: "", completedAt: "" }),
+            makePRCheck({ name: "build", state: "failed", conclusion: "failure" }),
+          ],
+        }),
+      }),
+      "github",
+      "PR review · checks 3/5",
+      "PR review · checks 3/5",
       "word",
     ],
     [
@@ -581,14 +611,15 @@ describe("the line of an item without a situation", () => {
     expect(row.clock?.kind ?? null).toBe(clock);
   });
 
-  it("shimmers the line of a PR until GitHub first reports it, and only then", () => {
-    const pr = (checkedAt: string) =>
+  it("shimmers the line of a PR until a reading of GitHub lists a check, and only then", () => {
+    const pr = (checkedAt: string, checks = [makePRCheck()]) =>
       taskWith({
         stage: "pr",
-        pr: makePullRequest({ status: "waiting_checks", prNumber: 7, checkedAt }),
+        pr: makePullRequest({ status: "waiting_checks", prNumber: 7, checkedAt, checks }),
       });
 
     expect(taskRow(makeState(), pr(""), NOW).reading).toBe(true);
+    expect(taskRow(makeState(), pr("2026-09-05T11:59:00Z", []), NOW).reading).toBe(true);
     expect(taskRow(makeState(), pr("2026-09-05T11:59:00Z"), NOW).reading).toBe(false);
     expect(taskRow(makeState(), taskWith({ stage: "prd" }), NOW).reading).toBe(false);
   });

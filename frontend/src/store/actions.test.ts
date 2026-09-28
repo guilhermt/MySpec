@@ -33,6 +33,7 @@ import {
   discardStage,
   discardStep,
   discussionContext,
+  followTaskReviewMode,
   groupIntoEpic,
   interrupt,
   loadTranscript,
@@ -48,6 +49,7 @@ import {
   previewRemoveBoard,
   publishEpic,
   publishReview,
+  readEarlierConversation,
   refreshBoard,
   refreshCard,
   refreshPR,
@@ -76,6 +78,8 @@ import {
   setReviewInstructions,
   setReviewMode,
   setReviewModeDefault,
+  setReviewModeInPlace,
+  setStageModelInPlace,
   setStepReviewMode,
   setTheme,
   startDiscussion,
@@ -604,6 +608,53 @@ describe("task actions", () => {
     expect(useAppStore.getState().leftover).toBeNull();
   });
 
+  it("makes a step follow the review mode of the task again", async () => {
+    await followTaskReviewMode("task-1", 2);
+
+    expect(api.clearStepReviewMode).toHaveBeenCalledWith("task-1", 2);
+    expect(useAppStore.getState().error).toBeNull();
+
+    vi.mocked(api.clearStepReviewMode).mockRejectedValueOnce(new Error("the step started"));
+    await followTaskReviewMode("task-1", 2);
+
+    expect(useAppStore.getState().error).toEqual({
+      label: "Couldn't change the review mode of the item",
+      detail: "the step started. Try again.",
+    });
+  });
+
+  it("saves the review mode in place, answering null and leaving the app notice alone", async () => {
+    expect(await setReviewModeInPlace("task-1", "agent")).toBeNull();
+
+    expect(api.setReviewMode).toHaveBeenCalledWith("task-1", "agent");
+    expect(useAppStore.getState().error).toBeNull();
+  });
+
+  it("answers the failure of saving the review mode in place instead of the app notice", async () => {
+    vi.mocked(api.setReviewMode).mockRejectedValueOnce(new Error("no step is left to start"));
+
+    expect(await setReviewModeInPlace("task-1", "manual")).toBe("no step is left to start");
+    expect(useAppStore.getState().error).toBeNull();
+  });
+
+  it("saves the model of a stage in place, answering null and leaving the app notice alone", async () => {
+    const choice = { model: "claude-sonnet-5", effort: "high" };
+
+    expect(await setStageModelInPlace("task-1", "plan", choice)).toBeNull();
+
+    expect(api.setStageModel).toHaveBeenCalledWith("task-1", "plan", "claude-sonnet-5", "high");
+    expect(useAppStore.getState().error).toBeNull();
+  });
+
+  it("answers the failure of saving the model of a stage in place instead of the app notice", async () => {
+    vi.mocked(api.setStageModel).mockRejectedValueOnce(new Error("the stage has started"));
+
+    expect(
+      await setStageModelInPlace("task-1", "plan", { model: "claude-sonnet-5", effort: "high" }),
+    ).toBe("the stage has started");
+    expect(useAppStore.getState().error).toBeNull();
+  });
+
   it("reports a failed task action in the app notice", async () => {
     vi.mocked(api.pause).mockRejectedValueOnce(new Error("no session"));
 
@@ -676,6 +727,37 @@ describe("loadTranscript", () => {
       label: "Couldn't load the conversation of the item",
       detail: "no such task. Try again.",
     });
+  });
+});
+
+describe("readEarlierConversation", () => {
+  it("reads a conversation that is not the one of the place of the task", async () => {
+    const entry = makeEntry("user", { id: "a", seq: 1 });
+    vi.mocked(api.getTranscript).mockResolvedValueOnce(
+      makeTranscript({ taskId: "task-1", stage: "step:2", entries: [entry] }),
+    );
+
+    const reading = readEarlierConversation("task-1", "step:2");
+    expect(useAppStore.getState().transcripts["task-1|step:2"]?.status).toBe("loading");
+    await reading;
+
+    expect(api.getTranscript).toHaveBeenCalledWith("task-1", "step:2");
+    expect(useAppStore.getState().transcripts["task-1|step:2"]).toMatchObject({
+      status: "ready",
+      entries: [entry],
+    });
+  });
+
+  it("keeps a failure on the conversation, and leaves the app notice alone", async () => {
+    vi.mocked(api.getTranscript).mockRejectedValueOnce(new Error("database is locked"));
+
+    await readEarlierConversation("task-1", "step:2");
+
+    expect(useAppStore.getState().transcripts["task-1|step:2"]).toMatchObject({
+      status: "error",
+      error: "database is locked",
+    });
+    expect(useAppStore.getState().error).toBeNull();
   });
 });
 

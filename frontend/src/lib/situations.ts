@@ -35,6 +35,11 @@ export function situationTone(situation: Situation): SituationTone {
   return asSituationGroup(situation.group) === "error" ? "error" : "attention";
 }
 
+/** lowerFirst is text with its first letter turned lowercase, the rest untouched. */
+export function lowerFirst(text: string): string {
+  return `${text.charAt(0).toLowerCase()}${text.slice(1)}`;
+}
+
 /**
  * situationLabel is what a situation asks of the user, in the few words the
  * lists and the section have room for. A situation with more than one form
@@ -225,12 +230,16 @@ export function announcePlace(situation: Situation): string | null {
   }
 }
 
+/** situationFragment is what a situation asks and where, as a sentence goes on after a name or a tone: `question in Reviewer`. */
+export function situationFragment(situation: Situation): string {
+  const asks = lowerFirst(situationLabel(situation));
+  const place = announcePlace(situation);
+  return place === null ? asks : `${asks} in ${place}`;
+}
+
 /** announcement is what the live region says of a new situation: `<name>: <what it asks> in <where>`. */
 export function announcement(name: string, situation: Situation): string {
-  const label = situationLabel(situation);
-  const asks = `${label.charAt(0).toLowerCase()}${label.slice(1)}`;
-  const place = announcePlace(situation);
-  return place === null ? `${name}: ${asks}` : `${name}: ${asks} in ${place}`;
+  return `${name}: ${situationFragment(situation)}`;
 }
 
 /** stageSituation is the situation of the planning stage of a task, null when it has none. */
@@ -258,18 +267,6 @@ export function reviewerSituation(task: TaskSummary, number: number): Situation 
       (situation) =>
         asPlaceKind(situation.place.kind) === "step_review" && situation.place.step === number,
     ) ?? null
-  );
-}
-
-/** stepOrReviewerSituation is the most urgent situation of a step, in its own conversation or in the one of its reviewer. */
-export function stepOrReviewerSituation(task: TaskSummary, number: number): Situation | null {
-  // The situations of a task come from the most urgent, so the first one of
-  // either place is the one that matters.
-  return (
-    (task.situations ?? []).find((situation) => {
-      const kind = asPlaceKind(situation.place.kind);
-      return (kind === "step" || kind === "step_review") && situation.place.step === number;
-    }) ?? null
   );
 }
 

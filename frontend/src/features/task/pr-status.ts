@@ -1,5 +1,5 @@
 import type { StatusTone } from "@/features/task/status";
-import { troubleText } from "@/lib/pull-requests";
+import { prBaseName, troubleText } from "@/lib/pull-requests";
 import { cloneMissingText } from "@/lib/repositories";
 import type {
   CloseResult,
@@ -85,11 +85,6 @@ export function prStatusTone(pr: PullRequest): StatusTone {
   }
 }
 
-/** prBaseName is the branch the pull request merges into: what GitHub says, or else the base of the worktree. */
-export function prBaseName(pr: PullRequest): string {
-  return pr.prBase !== "" ? pr.prBase : pr.baseBranch.replace(/^origin\//, "");
-}
-
 /**
  * draftAtHand reports whether the draft is the user's to send: a ready draft,
  * or the one an opening that failed left while the agent waits for a reply, so
@@ -112,19 +107,6 @@ export function draftAtHand(pr: PullRequest): boolean {
  */
 export function canOpenPR(pr: PullRequest): boolean {
   return draftAtHand(pr) && !pr.turnRunning;
-}
-
-/** canApprovePR reports whether every changed file is staged and waiting. */
-export function canApprovePR(pr: PullRequest): boolean {
-  return asPRStatus(pr.status) === "ready_to_approve";
-}
-
-/** approvePRHint says what is missing before the pull request can be approved. */
-export function approvePRHint(pr: PullRequest): string {
-  if (pr.review?.error !== undefined && pr.review.error !== "") {
-    return "The worktree couldn't be read";
-  }
-  return "Stage every changed file in VS Code to approve";
 }
 
 /** hasPRSession reports whether the PR stage has a conversation to show. */
@@ -165,6 +147,27 @@ export function canReviewAgain(pr: PullRequest): boolean {
       return pr.prNumber > 0;
     default:
       return false;
+  }
+}
+
+/** reviewAgainRefusal is why another review pass can't be asked for right now; null when it can. */
+export function reviewAgainRefusal(pr: PullRequest): string | null {
+  if (canReviewAgain(pr)) {
+    return null;
+  }
+  switch (asPRStatus(pr.status)) {
+    case "waiting_checks":
+      return "a pass waits for the checks";
+    case "committing":
+      return "the changes are being committed";
+    case "pr_closed":
+      return "the pull request was closed";
+    case "blocked":
+      return "the pull request stage is blocked";
+    case "closing":
+      return "the task is closing";
+    default:
+      return null;
   }
 }
 

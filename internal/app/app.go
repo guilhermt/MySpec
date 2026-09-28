@@ -206,6 +206,9 @@ func Run(cfg Config) int {
 		},
 		OnTranscript: a.emitTranscript,
 	})
+	if err = sessions.LoadConversations(ctx); err != nil {
+		return fail(log, "read sessions", err)
+	}
 	ghRunner := gh.New(gh.Deps{Log: log})
 	repositories := repository.New(repository.Deps{
 		Store:         st.Repositories,

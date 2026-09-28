@@ -26,8 +26,9 @@ import (
 // brought the PR stage, modelsVersion the one that brought the models,
 // reviewModeVersion the one that brought the review mode, modeVersion the one
 // that brought the mode of a task, boardsVersion the one that brought the
-// boards, itemsVersion the one that brought the items and the reviews, and
-// latestVersion the version the embedded migrations end at.
+// boards, itemsVersion the one that brought the items and the reviews,
+// taskScreenVersion the one that brought the pause time, the commit time and
+// the checks, and latestVersion the version the embedded migrations end at.
 const (
 	stagesVersion     = 3
 	commitsVersion    = 5
@@ -37,7 +38,8 @@ const (
 	modeVersion       = 11
 	boardsVersion     = 14
 	itemsVersion      = 15
-	latestVersion     = 18
+	taskScreenVersion = 19
+	latestVersion     = 19
 )
 
 // upgradeTime is the instant the repositories of the fake upgrades are stamped
@@ -522,6 +524,42 @@ func TestTheItemsMigrationCarriesTheTaskAndWhatBelongsToIt(t *testing.T) {
 	}
 	if got := readOne(t, db, `SELECT stage FROM sessions WHERE id = 'sess-2'`); got != "implementation" {
 		t.Errorf("the stage of the second session = %q, want %q", got, "implementation")
+	}
+}
+
+func TestTheTaskScreenMigrationAddsThePauseTheCommitTimeAndTheChecks(t *testing.T) {
+	t.Parallel()
+
+	db := openAt(t, taskScreenVersion-1)
+	seedRepositoryAndTask(t, db)
+	seedItemRecords(t, db, "task-1", "item_id")
+	const insertStep = `INSERT INTO steps (task_id, number, status, block_files, created_at, updated_at)
+		VALUES ('task-1', 1, 'done', 0, '2026-09-06T10:00:00Z', '2026-09-06T10:00:00Z')`
+	const insertRun = `INSERT INTO pr_runs (task_id, status, created_at, updated_at)
+		VALUES ('task-1', 'done', '2026-09-06T10:00:00Z', '2026-09-06T10:00:00Z')`
+	for _, stmt := range []string{insertStep, insertRun} {
+		if _, err := db.ExecContext(t.Context(), stmt); err != nil {
+			t.Fatalf("seed: %v", err)
+		}
+	}
+
+	if err := migrate(t.Context(), db, slog.New(slog.DiscardHandler), carryOver(t)); err != nil {
+		t.Fatalf("migrate() = %v, want nil", err)
+	}
+
+	const pausedQuery = `SELECT count(*) FROM sessions WHERE item_id = 'task-1' AND paused_at IS NULL`
+	if got := readOne(t, db, pausedQuery); got != "2" {
+		t.Errorf("sessions without a pause time = %s, want both", got)
+	}
+	defaults := []struct{ subject, query string }{
+		{"committed_at", `SELECT committed_at FROM steps WHERE task_id = 'task-1'`},
+		{"checks", `SELECT checks FROM pr_runs WHERE task_id = 'task-1'`},
+		{"mergeable", `SELECT mergeable FROM pr_runs WHERE task_id = 'task-1'`},
+	}
+	for _, d := range defaults {
+		if got := readOne(t, db, d.query); got != "" {
+			t.Errorf("%s = %q, want it empty on a row recorded before the column", d.subject, got)
+		}
 	}
 }
 

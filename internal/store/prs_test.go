@@ -171,6 +171,38 @@ func TestPRRunKeepsItsTroubleAndTheBaselineItIsMeasuredAgainst(t *testing.T) {
 	}
 }
 
+func TestPRRunKeepsTheChecksOfItsLastReadingAndTheMergeState(t *testing.T) {
+	t.Parallel()
+	s := newStoreWithRepositories(t)
+
+	taskID := seedTask(t, s)
+	run := newPRRun(taskID, task.PRWaitingChecks)
+	run.PR.Checks = []gh.Check{
+		{
+			Name: "test", URL: "https://github.com/acme/api/actions/runs/1", Conclusion: "success", State: gh.CheckPassed,
+			StartedAt: fixedTime, CompletedAt: fixedTime.Add(time.Minute),
+		},
+		{Name: "ci/deploy", Pending: true, State: gh.CheckQueued},
+	}
+	run.PR.Mergeable = gh.MergeableConflicting
+	if err := s.Tasks.UpsertPRRun(t.Context(), run); err != nil {
+		t.Fatalf("UpsertPRRun() = %v, want nil", err)
+	}
+	if diff := cmp.Diff(run, getPRRun(t, s, taskID)); diff != "" {
+		t.Errorf("GetPRRun() mismatch (-want +got):\n%s", diff)
+	}
+
+	// The next reading replaces the checks, an empty list included.
+	run.PR.Checks = []gh.Check{}
+	run.PR.Mergeable = gh.MergeableClean
+	if err := s.Tasks.UpsertPRRun(t.Context(), run); err != nil {
+		t.Fatalf("UpsertPRRun() again = %v, want nil", err)
+	}
+	if diff := cmp.Diff(run, getPRRun(t, s, taskID)); diff != "" {
+		t.Errorf("GetPRRun() after the next reading mismatch (-want +got):\n%s", diff)
+	}
+}
+
 func TestPRRunWithoutAReadingCarriesNoInstant(t *testing.T) {
 	t.Parallel()
 	s := newStoreWithRepositories(t)
@@ -186,6 +218,9 @@ func TestPRRunWithoutAReadingCarriesNoInstant(t *testing.T) {
 	}
 	if got.PR.State != "" {
 		t.Errorf("PR.State = %q, want no state", got.PR.State)
+	}
+	if got.PR.Checks != nil || got.PR.Mergeable != "" {
+		t.Errorf("PR.Checks, PR.Mergeable = %v, %q, want none read", got.PR.Checks, got.PR.Mergeable)
 	}
 }
 

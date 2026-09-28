@@ -27,6 +27,7 @@ import (
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
 	"github.com/guilhermt/myspec/internal/upgrade"
+	"github.com/guilhermt/myspec/internal/worktree"
 )
 
 func TestFromTasksCarriesTheStateOfEachStep(t *testing.T) {
@@ -82,6 +83,8 @@ func TestFromTasksCarriesTheStateOfEachStep(t *testing.T) {
 		func(string) task.Artifacts { return task.Artifacts{} },
 		func(string) []flow.StepState { return states },
 		noPR,
+		noWorktree,
+		noConversations,
 		repoOf,
 		nil,
 		nil,
@@ -244,6 +247,8 @@ func TestFromTasksCarriesTheReviewModeOfTheTask(t *testing.T) {
 				func(string) task.Artifacts { return task.Artifacts{} },
 				func(string) []flow.StepState { return nil },
 				noPR,
+				noWorktree,
+				noConversations,
 				repoOf,
 				nil,
 				nil,
@@ -267,6 +272,8 @@ func TestFromTasksHasNoCurrentStepWithoutAPlan(t *testing.T) {
 		func(string) task.Artifacts { return task.Artifacts{} },
 		func(string) []flow.StepState { return nil },
 		noPR,
+		noWorktree,
+		noConversations,
 		repoOf,
 		nil,
 		nil,
@@ -279,6 +286,64 @@ func TestFromTasksHasNoCurrentStepWithoutAPlan(t *testing.T) {
 	}
 	if got[0].Steps == nil {
 		t.Error("steps = nil, want an empty slice")
+	}
+}
+
+func TestFromTasksCarriesTheConversationsOfTheTask(t *testing.T) {
+	t.Parallel()
+
+	start := time.Date(2026, time.September, 27, 10, 0, 0, 0, time.UTC)
+	conversations := map[string][]session.Conversation{
+		"task-1": {
+			{Stage: "prd", StartedAt: start},
+			{Stage: "step:1", StartedAt: start.Add(time.Hour)},
+		},
+	}
+	got := bindings.FromTasks(
+		[]task.Task{{ID: "task-1", Stage: task.StagePRD}, {ID: "task-2", Stage: task.StagePRD}},
+		func(string) task.Artifacts { return task.Artifacts{} },
+		func(string) []flow.StepState { return nil },
+		noPR,
+		noWorktree,
+		func(id string) []session.Conversation { return conversations[id] },
+		repoOf,
+		nil,
+		nil,
+	)
+
+	want := []bindings.TaskConversation{
+		{Stage: "prd", StartedAt: "2026-09-27T10:00:00Z"},
+		{Stage: "step:1", StartedAt: "2026-09-27T11:00:00Z"},
+	}
+	if diff := cmp.Diff(want, got[0].Conversations); diff != "" {
+		t.Errorf("conversations mismatch (-want +got):\n%s", diff)
+	}
+	if got[1].Conversations == nil || len(got[1].Conversations) != 0 {
+		t.Errorf("conversations of a task without sessions = %#v, want an empty slice", got[1].Conversations)
+	}
+}
+
+func TestFromTasksCarriesTheWorktreeOfTheTask(t *testing.T) {
+	t.Parallel()
+
+	wt := worktree.Worktree{TaskID: "task-1", Path: "/data/worktrees/login", Branch: "login", Base: "origin/main"}
+	got := bindings.FromTasks(
+		[]task.Task{{ID: "task-1", Stage: task.StageImplementation}, {ID: "task-2", Stage: task.StagePRD}},
+		func(string) task.Artifacts { return task.Artifacts{} },
+		func(string) []flow.StepState { return nil },
+		noPR,
+		func(id string) (worktree.Worktree, bool) { return wt, id == "task-1" },
+		noConversations,
+		repoOf,
+		nil,
+		nil,
+	)
+
+	type place struct{ Branch, BaseBranch, WorktreePath string }
+	for i, want := range []place{{"login", "origin/main", "/data/worktrees/login"}, {}} {
+		if diff := cmp.Diff(want, place{got[i].Branch, got[i].BaseBranch, got[i].WorktreePath}); diff != "" {
+			t.Errorf("worktree of %s mismatch (-want +got):\n%s", got[i].ID, diff)
+		}
 	}
 }
 
@@ -344,6 +409,7 @@ func TestFromTasksCarriesTheCommitOfAStepThatIsOver(t *testing.T) {
 			Status:        flow.StepDone,
 			CommitSHA:     "2222222",
 			CommitSubject: "Add the login screen",
+			CommittedAt:   time.Date(2026, 9, 20, 14, 30, 0, 0, time.UTC),
 		},
 		{
 			Step:         task.Step{Number: 2, File: "2-second.md", Title: "Second"},
@@ -356,6 +422,12 @@ func TestFromTasksCarriesTheCommitOfAStepThatIsOver(t *testing.T) {
 	got := stepsOf(t, states)
 	if got[0].CommitSHA != "2222222" || got[0].CommitSubject != "Add the login screen" {
 		t.Errorf("commit = %q %q, want the one the step produced", got[0].CommitSHA, got[0].CommitSubject)
+	}
+	if got[0].CommittedAt != "2026-09-20T14:30:00Z" {
+		t.Errorf("committedAt = %q, want the committer date", got[0].CommittedAt)
+	}
+	if got[1].CommittedAt != "" {
+		t.Errorf("committedAt = %q, want empty on a step not committed", got[1].CommittedAt)
 	}
 	if got[0].Review != nil {
 		t.Errorf("review = %+v, want nil on a step that is over", got[0].Review)
@@ -391,6 +463,8 @@ func TestTheCurrentStepIsTheFirstOneThatIsNotDone(t *testing.T) {
 				func(string) task.Artifacts { return task.Artifacts{} },
 				func(string) []flow.StepState { return states },
 				noPR,
+				noWorktree,
+				noConversations,
 				repoOf,
 				nil,
 				nil,
@@ -404,6 +478,10 @@ func TestTheCurrentStepIsTheFirstOneThatIsNotDone(t *testing.T) {
 
 // noPR is the PR stage of a task that has not reached it.
 func noPR(string) (flow.PullRequest, bool) { return flow.PullRequest{}, false }
+
+func noWorktree(string) (worktree.Worktree, bool) { return worktree.Worktree{}, false }
+
+func noConversations(string) []session.Conversation { return nil }
 
 // convertRepo is the repository every converted task belongs to.
 var convertRepo = repository.Repository{ID: "repo-1", Owner: "dev", Name: "web", Path: "/home/dev/web"}
@@ -423,6 +501,8 @@ func stepsOf(t *testing.T, states []flow.StepState) []bindings.Step {
 		func(string) task.Artifacts { return task.Artifacts{} },
 		func(string) []flow.StepState { return states },
 		noPR,
+		noWorktree,
+		noConversations,
 		repoOf,
 		nil,
 		nil,
@@ -459,6 +539,8 @@ func TestFromTasksCarriesWhatClosingATaskDid(t *testing.T) {
 		func(string) task.Artifacts { return task.Artifacts{} },
 		func(string) []flow.StepState { return nil },
 		func(string) (flow.PullRequest, bool) { return pr, true },
+		noWorktree,
+		noConversations,
 		repoOf,
 		nil,
 		nil,
@@ -501,6 +583,8 @@ func TestFromTasksCarriesAReadingThatFailedAndTheMissingClone(t *testing.T) {
 		func(string) task.Artifacts { return task.Artifacts{} },
 		func(string) []flow.StepState { return nil },
 		func(string) (flow.PullRequest, bool) { return pr, true },
+		noWorktree,
+		noConversations,
 		repoOf,
 		nil,
 		nil,
@@ -592,6 +676,8 @@ func TestFromTasksCarriesTheModeAndTheOneShotDocument(t *testing.T) {
 		func(id string) task.Artifacts { return task.Artifacts{OneShot: id == "task-1"} },
 		func(string) []flow.StepState { return nil },
 		noPR,
+		noWorktree,
+		noConversations,
 		repoOf,
 		nil,
 		nil,
@@ -835,6 +921,8 @@ func TestFromTasksPicksTheSessionOfTheStageTheTaskIsIn(t *testing.T) {
 			return nil
 		},
 		noPR,
+		noWorktree,
+		noConversations,
 		repoOf,
 		summaries,
 		nil,
@@ -865,6 +953,8 @@ func TestFromTasksLeavesAnImplementingTaskWithoutAStepAtRest(t *testing.T) {
 		func(string) task.Artifacts { return task.Artifacts{} },
 		func(string) []flow.StepState { return states },
 		noPR,
+		noWorktree,
+		noConversations,
 		repoOf,
 		summaries,
 		nil,
@@ -902,6 +992,8 @@ func TestFromTasksCarriesThePullRequestOfThePRStage(t *testing.T) {
 		func(string) task.Artifacts { return task.Artifacts{} },
 		func(string) []flow.StepState { return nil },
 		func(string) (flow.PullRequest, bool) { return pr, true },
+		noWorktree,
+		noConversations,
 		repoOf,
 		map[session.Key]session.Summary{
 			{TaskID: "task-1", Stage: session.PRReviewStage}: {Status: session.StatusWaiting},
@@ -929,6 +1021,7 @@ func TestFromTasksCarriesThePullRequestOfThePRStage(t *testing.T) {
 		PRState:        "open",
 		CheckedAt:      "2026-09-05T10:00:00Z",
 		Trouble:        bindings.PRTrouble{FailedChecks: []string{}},
+		Checks:         []bindings.PRCheck{},
 		SessionStage:   "pr_review",
 		SessionStatus:  "waiting",
 		SessionModel:   "claude-opus-5-5[1m]",
@@ -971,6 +1064,8 @@ func TestFromTasksCarriesTheModelsOfEveryStage(t *testing.T) {
 		func(string) task.Artifacts { return task.Artifacts{} },
 		func(string) []flow.StepState { return nil },
 		noPR,
+		noWorktree,
+		noConversations,
 		repoOf,
 		map[session.Key]session.Summary{
 			{TaskID: "task-1", Stage: "tech_spec"}: {
@@ -1116,6 +1211,8 @@ func TestFromTasksCarriesTheSituationsOfEachTask(t *testing.T) {
 		func(string) task.Artifacts { return task.Artifacts{} },
 		func(string) []flow.StepState { return nil },
 		noPR,
+		noWorktree,
+		noConversations,
 		repoOf,
 		nil,
 		situations,
@@ -1590,6 +1687,8 @@ func TestFromTasksAndFromArchivedCarryTheCardOfTheTask(t *testing.T) {
 		func(string) task.Artifacts { return task.Artifacts{} },
 		func(string) []flow.StepState { return nil },
 		func(string) (flow.PullRequest, bool) { return flow.PullRequest{}, false },
+		noWorktree,
+		noConversations,
 		func(string) (repository.Repository, bool) { return repository.Repository{}, false },
 		nil, nil,
 	)
@@ -2492,6 +2591,8 @@ func TestFromTasksCarriesWhatWentWrongWithThePullRequestSinceItsReview(t *testin
 		func(string) task.Artifacts { return task.Artifacts{} },
 		func(string) []flow.StepState { return nil },
 		func(id string) (flow.PullRequest, bool) { pr, ok := byTask[id]; return pr, ok },
+		noWorktree,
+		noConversations,
 		repoOf,
 		nil,
 		nil,
@@ -2505,6 +2606,65 @@ func TestFromTasksCarriesWhatWentWrongWithThePullRequestSinceItsReview(t *testin
 	}
 	if clean := got[1].PR.Trouble; clean.FailedChecks == nil || len(clean.FailedChecks) != 0 || clean.Conflict {
 		t.Errorf("trouble = %#v, want an empty list and no conflict", clean)
+	}
+}
+
+func TestFromTasksCarriesTheChecksOfThePullRequestByName(t *testing.T) {
+	t.Parallel()
+
+	started := time.Date(2026, 9, 27, 23, 56, 8, 0, time.UTC)
+	read := flow.PullRequest{
+		Status: flow.PRWaitingChecks,
+		PR: task.PRDetails{
+			Number: 8, State: task.PRStateOpen, Base: "main", CheckedAt: started,
+			Checks: []gh.Check{
+				{
+					Name: "test", URL: "https://github.com/acme/api/actions/runs/1", Conclusion: "failure", State: gh.CheckFailed,
+					StartedAt: started, CompletedAt: started.Add(112 * time.Second),
+				},
+				{Name: "ci/deploy", Pending: true, State: gh.CheckRunning, StartedAt: started},
+				{Name: "ci/queued", Pending: true, State: gh.CheckQueued},
+			},
+			Mergeable: gh.MergeableClean,
+		},
+	}
+	unread := flow.PullRequest{Status: flow.PRWaitingChecks, PR: task.PRDetails{Number: 9}}
+	byTask := map[string]flow.PullRequest{"task-1": read, "task-2": unread}
+
+	got := bindings.FromTasks(
+		[]task.Task{
+			{ID: "task-1", Name: "login-screen", Stage: task.StagePR},
+			{ID: "task-2", Name: "signup-screen", Stage: task.StagePR},
+		},
+		func(string) task.Artifacts { return task.Artifacts{} },
+		func(string) []flow.StepState { return nil },
+		func(id string) (flow.PullRequest, bool) { pr, ok := byTask[id]; return pr, ok },
+		noWorktree,
+		noConversations,
+		repoOf,
+		nil,
+		nil,
+	)
+	if len(got) != 2 || got[0].PR == nil || got[1].PR == nil {
+		t.Fatalf("FromTasks() = %+v, want two tasks with their pull requests", got)
+	}
+	want := []bindings.PRCheck{
+		{
+			Name: "test", State: "failed", Conclusion: "failure",
+			StartedAt: "2026-09-27T23:56:08Z", CompletedAt: "2026-09-27T23:58:00Z",
+			URL: "https://github.com/acme/api/actions/runs/1",
+		},
+		{Name: "ci/deploy", State: "running", StartedAt: "2026-09-27T23:56:08Z"},
+		{Name: "ci/queued", State: "queued"},
+	}
+	if diff := cmp.Diff(want, got[0].PR.Checks); diff != "" {
+		t.Errorf("checks mismatch (-want +got):\n%s", diff)
+	}
+	if got[0].PR.Mergeable != "mergeable" {
+		t.Errorf("Mergeable = %q, want mergeable", got[0].PR.Mergeable)
+	}
+	if got[1].PR.Checks == nil || len(got[1].PR.Checks) != 0 || got[1].PR.Mergeable != "" {
+		t.Errorf("Checks, Mergeable = %#v, %q, want an empty list and no merge state before a reading", got[1].PR.Checks, got[1].PR.Mergeable)
 	}
 }
 
@@ -2548,6 +2708,8 @@ func TestEverySessionBlockCarriesTheTurnInProgressAndItsAction(t *testing.T) {
 				func(string) task.Artifacts { return task.Artifacts{} },
 				func(string) []flow.StepState { return nil },
 				noPR,
+				noWorktree,
+				noConversations,
 				repoOf,
 				map[session.Key]session.Summary{{TaskID: "task-1", Stage: string(task.StagePRD)}: summary},
 				nil,
@@ -2569,6 +2731,8 @@ func TestEverySessionBlockCarriesTheTurnInProgressAndItsAction(t *testing.T) {
 				func(string) task.Artifacts { return task.Artifacts{} },
 				func(string) []flow.StepState { return nil },
 				func(string) (flow.PullRequest, bool) { return pr, true },
+				noWorktree,
+				noConversations,
 				repoOf,
 				nil,
 				nil,
@@ -2599,6 +2763,85 @@ func TestEverySessionBlockCarriesTheTurnInProgressAndItsAction(t *testing.T) {
 			}
 			if got := block(idle); got != (sessionBlock{}) {
 				t.Errorf("without a turn = %+v, want every field empty", got)
+			}
+		})
+	}
+}
+
+func TestEverySessionBlockCarriesWhenItsSessionWasPaused(t *testing.T) {
+	t.Parallel()
+
+	pausedAt := time.Date(2026, 9, 26, 14, 5, 0, 0, time.UTC)
+	summaries := []struct {
+		name    string
+		summary session.Summary
+		want    string
+	}{
+		{"paused", session.Summary{Status: session.StatusPaused, PausedAt: pausedAt}, "2026-09-26T14:05:00Z"},
+		{"paused before the time was kept", session.Summary{Status: session.StatusPaused}, ""},
+		{"not paused", session.Summary{Status: session.StatusWaiting, Idle: true}, ""},
+	}
+
+	blocks := map[string]func(session.Summary) string{
+		"task": func(summary session.Summary) string {
+			got := bindings.FromTasks(
+				[]task.Task{{ID: "task-1", Name: "login-screen", Stage: task.StagePRD}},
+				func(string) task.Artifacts { return task.Artifacts{} },
+				func(string) []flow.StepState { return nil },
+				noPR,
+				noWorktree,
+				noConversations,
+				repoOf,
+				map[session.Key]session.Summary{{TaskID: "task-1", Stage: string(task.StagePRD)}: summary},
+				nil,
+			)[0]
+			return got.PausedAt
+		},
+		"step reviewer": func(summary session.Summary) string {
+			got := stepsOf(t, []flow.StepState{{
+				Step:   task.Step{Number: 1, File: "1-first.md", Title: "First"},
+				Status: flow.StepAgentReview, ReviewMode: reviewmode.Agent,
+				ReviewerStage: "step_review:1", Reviewer: summary,
+			}})[0].Reviewer
+			return got.PausedAt
+		},
+		"pull request": func(summary session.Summary) string {
+			pr := flow.PullRequest{Status: flow.PRDone, SessionStage: "pr", Session: summary}
+			got := bindings.FromTasks(
+				[]task.Task{{ID: "task-1", Name: "login-screen", Stage: task.StagePR}},
+				func(string) task.Artifacts { return task.Artifacts{} },
+				func(string) []flow.StepState { return nil },
+				func(string) (flow.PullRequest, bool) { return pr, true },
+				noWorktree,
+				noConversations,
+				repoOf,
+				nil,
+				nil,
+			)[0].PR
+			return got.PausedAt
+		},
+		"review": func(summary session.Summary) string {
+			state := reviewState(reviewflow.StatusReviewing, recordedPass(1, ""))
+			state.Session = summary
+			got := bindings.FromReviews([]reviewflow.State{state}, nil, reviewRepos)[0]
+			return got.PausedAt
+		},
+		"discussion": func(summary session.Summary) string {
+			state := discussionState(discussionflow.StatusPublishFailed)
+			state.Session = summary
+			got := convertDiscussion(state, nil, true, nil)
+			return got.PausedAt
+		},
+	}
+
+	for name, block := range blocks {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			for _, tt := range summaries {
+				if got := block(tt.summary); got != tt.want {
+					t.Errorf("%s: pausedAt = %q, want %q", tt.name, got, tt.want)
+				}
 			}
 		})
 	}

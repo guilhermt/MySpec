@@ -3,16 +3,33 @@ package gh
 import (
 	"slices"
 	"strings"
+	"time"
 )
 
 // Check is one check of the head of a pull request: a check run of GitHub
 // Actions or a commit status of another system, which GitHub lists alike.
 type Check struct {
-	Name       string
-	URL        string // the check on GitHub; "" when GitHub gave none
-	Pending    bool   // not finished yet
-	Conclusion string // lower case, as GitHub wrote it: success, failure, cancelled...; "" while pending
+	Name        string     `json:"name"`
+	URL         string     `json:"url"`         // the check on GitHub; "" when GitHub gave none
+	Pending     bool       `json:"pending"`     // not finished yet
+	Conclusion  string     `json:"conclusion"`  // lower case, as GitHub wrote it: success, failure, cancelled...; "" while pending
+	State       CheckState `json:"state"`       // passed, skipped, neutral, failed, running or queued
+	StartedAt   time.Time  `json:"startedAt"`   // zero when GitHub gave none
+	CompletedAt time.Time  `json:"completedAt"` // zero while it runs, or when GitHub gave none
 }
+
+// CheckState is where a check stands, as the app shows it.
+type CheckState string
+
+// The states a check is in.
+const (
+	CheckPassed  CheckState = "passed"
+	CheckSkipped CheckState = "skipped"
+	CheckNeutral CheckState = "neutral"
+	CheckFailed  CheckState = "failed"
+	CheckRunning CheckState = "running"
+	CheckQueued  CheckState = "queued"
+)
 
 // Mergeable is whether GitHub says the branch merges clean into its base.
 type Mergeable string
@@ -44,6 +61,10 @@ type CheckNode struct {
 	Context    string `json:"context"`
 	State      string `json:"state"`
 	TargetURL  string `json:"targetUrl"`
+	// StartedAt and CompletedAt are RFC 3339, given for a CheckRun; a
+	// StatusContext may come without them.
+	StartedAt   string `json:"startedAt"`
+	CompletedAt string `json:"completedAt"`
 }
 
 // passingConclusions are the conclusions of a finished check that do not fail
@@ -66,24 +87,70 @@ func ParseChecks(nodes []CheckNode, mergeable string) PRChecks {
 // checkOf reads one node, a StatusContext or a CheckRun. A node that does not
 // say its type is a StatusContext when it names a context.
 func checkOf(n CheckNode) Check {
+	c := Check{StartedAt: timeOf(n.StartedAt), CompletedAt: timeOf(n.CompletedAt)}
 	if n.Typename == "StatusContext" || (n.Typename == "" && n.Context != "") {
-		c := Check{Name: n.Context, URL: n.TargetURL}
-		switch strings.ToUpper(n.State) {
+		c.Name, c.URL = n.Context, n.TargetURL
+		state := strings.ToUpper(n.State)
+		switch state {
 		case "PENDING", "EXPECTED":
 			c.Pending = true
 		default:
 			c.Conclusion = strings.ToLower(n.State)
 		}
+		c.State = contextState(state)
 		return c
 	}
 
-	c := Check{Name: n.Name, URL: n.DetailsURL}
-	if n.Status != "COMPLETED" {
-		c.Pending = true
-	} else {
+	c.Name, c.URL = n.Name, n.DetailsURL
+	switch n.Status {
+	case "COMPLETED":
 		c.Conclusion = strings.ToLower(n.Conclusion)
+		c.State = conclusionState(c.Conclusion)
+	case "IN_PROGRESS":
+		c.Pending, c.State = true, CheckRunning
+	default:
+		c.Pending, c.State = true, CheckQueued
 	}
 	return c
+}
+
+// conclusionState is the state of a finished CheckRun: any conclusion that
+// does not pass it fails it.
+func conclusionState(conclusion string) CheckState {
+	switch conclusion {
+	case "success":
+		return CheckPassed
+	case "skipped":
+		return CheckSkipped
+	case "neutral":
+		return CheckNeutral
+	default:
+		return CheckFailed
+	}
+}
+
+// contextState is the state of a StatusContext by its upper-case state.
+func contextState(state string) CheckState {
+	switch state {
+	case "SUCCESS":
+		return CheckPassed
+	case "PENDING":
+		return CheckRunning
+	case "EXPECTED":
+		return CheckQueued
+	default:
+		return CheckFailed
+	}
+}
+
+// timeOf reads a time GitHub gave, zero when it gave none or one the app
+// cannot read.
+func timeOf(value string) time.Time {
+	parsed, err := time.Parse(time.RFC3339, value)
+	if err != nil {
+		return time.Time{}
+	}
+	return parsed
 }
 
 // mergeableOf normalizes the merge state GitHub writes in upper case.

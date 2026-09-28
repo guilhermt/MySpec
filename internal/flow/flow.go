@@ -38,6 +38,7 @@ type Tasks interface {
 	SetStepModel(ctx context.Context, id string, number int, c models.Choice) (task.Task, error)
 	SetReviewMode(ctx context.Context, id string, mode reviewmode.Mode) (task.Task, error)
 	SetStepReviewMode(ctx context.Context, id string, number int, mode reviewmode.Mode) (task.Task, error)
+	ClearStepReviewMode(ctx context.Context, id string, number int) (task.Task, error)
 	RemoveArtifacts(ctx context.Context, id string, from task.Stage) error
 	PRRun(id string) (task.PRRun, bool)
 	SetPRRun(ctx context.Context, id string, status task.PRStatus, block *task.PRBlock) (task.PRRun, error)
@@ -50,7 +51,9 @@ type Tasks interface {
 	StepRuns(id string) []task.StepRun
 	SetStepRun(ctx context.Context, id string, number int, status task.StepStatus, block *task.StepBlock) (task.StepRun, error)
 	SetStepStarted(ctx context.Context, id string, number int, startCommit string) (task.StepRun, error)
-	SetStepCommitted(ctx context.Context, id string, number int, sha, subject string) (task.StepRun, error)
+	SetStepCommitted(
+		ctx context.Context, id string, number int, sha, subject string, committedAt time.Time,
+	) (task.StepRun, error)
 	SetStepPass(ctx context.Context, id string, number, pass int) (task.StepRun, error)
 	SetStepReported(ctx context.Context, id string, number, pass int) (task.StepRun, error)
 	SetStepFallback(ctx context.Context, id string, number int, fallback task.ReviewFallback) (task.StepRun, error)
@@ -68,6 +71,7 @@ type Sessions interface {
 	Exists(ctx context.Context, k session.Key) (bool, error)
 	CloseTask(ctx context.Context, taskID string) error
 	DiscardTask(ctx context.Context, taskID string) error
+	ForgetTask(taskID string)
 	Resume(ctx context.Context, k session.Key) error
 	Interrupt(ctx context.Context, k session.Key) error
 	SetChoice(ctx context.Context, k session.Key, c models.Choice) error

@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import { playwright } from "@vitest/browser-playwright";
 import { defineConfig, mergeConfig } from "vitest/config";
 import viteConfig from "./vite.config.ts";
@@ -52,6 +53,11 @@ export default mergeConfig(
           test: {
             name: "painted",
             include: [PAINTED],
+            // capture saves the screenshots of the pull request here, only when asked to.
+            provide: {
+              captureDir:
+                process.env.MYSPEC_CAPTURES === "1" ? resolve(import.meta.dirname, "captures") : "",
+            },
             setupFiles: ["src/test/painted-setup.ts"],
             browser: {
               enabled: true,

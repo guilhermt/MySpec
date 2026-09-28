@@ -5,7 +5,8 @@ import { Tooltip } from "./Tooltip";
 export interface ContextMeterProps {
   percent: number | null;
   paused?: boolean;
-  compact?: boolean;
+  /** compact drops the track; "narrow" drops it only below 1300px of main area. */
+  compact?: boolean | "narrow";
   detail: string;
 }
 
@@ -30,10 +31,11 @@ export function ContextMeter({ percent, paused, compact, detail }: ContextMeterP
         tabIndex={0}
         className="inline-flex items-center gap-1.5 rounded-xs text-(length:--text-micro) leading-(--leading-micro) text-ink-3 tabular-nums hover:text-ink-1 focus-visible:focus-ring"
       >
-        {!compact && (
+        {compact !== true && (
           <span
             data-slot="track"
             className={cn(
+              compact === "narrow" && "@max-[1300px]/main:hidden",
               "block h-(--meter-h) w-(--meter-w) shrink-0 overflow-hidden rounded-(--radius-pill)",
               percent === null && !paused ? "shimmer-track" : "bg-brand-track",
             )}

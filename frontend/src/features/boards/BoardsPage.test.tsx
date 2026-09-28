@@ -51,7 +51,7 @@ describe("BoardsPage", () => {
       within(roadmap).getByRole("link", { name: "https://github.com/orgs/dev/projects/3" }),
     ).toBeInTheDocument();
     expect(roadmap).toHaveTextContent("Final: Done · New cards: Todo");
-    expect(roadmap).toHaveTextContent("Updated 3 min ago");
+    expect(roadmap).toHaveTextContent("checked 3m ago");
     expect(support).toHaveTextContent("ana · User · 0 repositories");
     expect(support).toHaveTextContent(
       "gh can't read projects. Run gh auth refresh -s read:project.",

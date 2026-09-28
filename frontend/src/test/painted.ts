@@ -4,6 +4,15 @@
  */
 
 import type { CSSProperties } from "react";
+import { inject } from "vitest";
+import { page } from "vitest/browser";
+
+declare module "vitest" {
+  export interface ProvidedContext {
+    /** captureDir is where capture saves its screenshots: frontend/captures with MYSPEC_CAPTURES=1, "" without. */
+    captureDir: string;
+  }
+}
 
 /** THEMES are the two values of data-theme every painted test runs under. */
 export const THEMES = ["light", "dark"] as const;
@@ -121,12 +130,11 @@ export function mainArea(width: number): CSSProperties {
 }
 
 /**
- * placeHeaderFits tells whether a place header keeps everything on one line: its height, nothing
- * past its edge, every button inside it, and the title cut rather than the band.
+ * placeHeaderOneLine tells whether a place header keeps everything on one line: its height, nothing
+ * past its edge and every button inside it.
  */
-export function placeHeaderFits(band: HTMLElement): boolean {
+export function placeHeaderOneLine(band: HTMLElement): boolean {
   const edge = band.getBoundingClientRect();
-  const title = band.querySelector("h1");
   const inside = [...band.querySelectorAll("button")]
     .map((button) => button.getBoundingClientRect())
     .filter((box) => box.width > 0)
@@ -137,12 +145,153 @@ export function placeHeaderFits(band: HTMLElement): boolean {
         box.top >= edge.top &&
         box.bottom <= edge.bottom,
     );
+  return edge.height === 48 && band.scrollWidth <= band.clientWidth && inside;
+}
+
+/**
+ * placeHeaderFits tells whether a place header keeps everything on one line with the title cut
+ * rather than the band.
+ */
+export function placeHeaderFits(band: HTMLElement): boolean {
+  const title = band.querySelector("h1");
   return (
-    edge.height === 48 &&
-    band.scrollWidth <= band.clientWidth &&
-    inside &&
+    placeHeaderOneLine(band) &&
     title !== null &&
     title.getBoundingClientRect().width > 0 &&
     title.scrollWidth > title.clientWidth
   );
+}
+
+/** shows tells whether an element takes room on screen: a visually hidden one keeps a pixel at most. */
+function shows(element: Element): boolean {
+  return element.getBoundingClientRect().width > 1;
+}
+
+/** MARKS are the signs stepperText writes for a stage that is not the current one. */
+const MARKS: Record<string, string> = { done: "✓", upcoming: "○" };
+
+/**
+ * stepperText is what a stepper shows, read off the screen: ✓ for a done stage and ○ for one to come,
+ * each with its name when the name shows, and the visible words of the pill, without what only the
+ * reader hears: "✓ ✓ ✓ Implementation 3/7 ○ PR ○ PR review ○ Closing".
+ */
+export function stepperText(stepper: HTMLElement): string {
+  return [...stepper.querySelectorAll(":scope > li")]
+    .map((stage) => {
+      const folded = stage.querySelector("[data-stage]");
+      const mark = folded === null ? "" : (MARKS[folded.getAttribute("data-stage") ?? ""] ?? "");
+      return [mark, visibleText(stage)].filter((part) => part !== "").join(" ");
+    })
+    .join(" ");
+}
+
+// visibleText joins the text of an element that shows on screen, one piece per text node.
+function visibleText(element: Element): string {
+  const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+  const pieces: string[] = [];
+  for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+    const parent = node.parentElement;
+    if (parent !== null && shows(parent) && ancestorsShow(parent, element)) {
+      pieces.push(node.textContent ?? "");
+    }
+  }
+  return pieces.join(" ").replace(/\s+/g, " ").trim();
+}
+
+// ancestorsShow tells whether every element from one up to a root takes room on screen.
+function ancestorsShow(from: Element, root: Element): boolean {
+  for (let current: Element | null = from; current !== null; current = current.parentElement) {
+    if (!shows(current)) {
+      return false;
+    }
+    if (current === root) {
+      return true;
+    }
+  }
+  return true;
+}
+
+/**
+ * placeHeaderPieces are the parts of a place header that must never cover one another: what sits on
+ * the band, and each piece of its right, the last part.
+ */
+export function placeHeaderPieces(band: HTMLElement): Element[] {
+  const parts = [...band.children];
+  const right = parts.at(-1);
+  return right === undefined ? parts : [...parts.slice(0, -1), ...right.children];
+}
+
+/** overlaps tells whether any two of the elements that show on screen cover one another. */
+export function overlaps(elements: readonly Element[]): boolean {
+  const boxes = elements.filter(shows).map((element) => element.getBoundingClientRect());
+  return boxes.some((box, index) =>
+    boxes
+      .slice(index + 1)
+      .some(
+        (other) =>
+          box.left < other.right &&
+          other.left < box.right &&
+          box.top < other.bottom &&
+          other.top < box.bottom,
+      ),
+  );
+}
+
+/** capture saves a screenshot of an element for the pull request, only when MYSPEC_CAPTURES=1. */
+export async function capture(name: string, element: HTMLElement): Promise<void> {
+  const dir = inject("captureDir");
+  if (dir === "") return;
+  // The viewport grows to hold the whole element, which a wide main area passes, and then goes back.
+  const { innerWidth, innerHeight } = window;
+  const box = element.getBoundingClientRect();
+  await page.viewport(
+    Math.max(innerWidth, Math.ceil(box.right + window.scrollX)),
+    Math.max(innerHeight, Math.ceil(box.bottom + window.scrollY)),
+  );
+  try {
+    await page.screenshot({ path: `${dir}/${name}.png`, element });
+  } finally {
+    await page.viewport(innerWidth, innerHeight);
+  }
+}
+
+/**
+ * inkRuns are the widths, in CSS pixels, of the runs a screenshot of an element paints across its
+ * middle row, each run a stretch of pixels that differ from the one at the top left corner, which is
+ * the background. It measures a shape the computed style can't give, as the bars of a gradient.
+ */
+export async function inkRuns(element: HTMLElement): Promise<number[]> {
+  const shot = await page.screenshot({ element, save: false });
+  const image = new Image();
+  image.src = `data:image/png;base64,${shot}`;
+  await image.decode();
+  const canvas = document.createElement("canvas");
+  canvas.width = image.width;
+  canvas.height = image.height;
+  const context = canvas.getContext("2d");
+  if (context === null) {
+    throw new Error("no 2d context to read the screenshot");
+  }
+  context.drawImage(image, 0, 0);
+  const background = context.getImageData(0, 0, 1, 1).data;
+  const row = context.getImageData(0, Math.floor(image.height / 2), image.width, 1).data;
+  const scale = image.width / element.getBoundingClientRect().width;
+  const runs: number[] = [];
+  let run = 0;
+  for (let x = 0; x < image.width; x++) {
+    const distance = [0, 1, 2].reduce(
+      (sum, channel) => sum + Math.abs((row[x * 4 + channel] ?? 0) - (background[channel] ?? 0)),
+      0,
+    );
+    if (distance > 24) {
+      run++;
+    } else if (run > 0) {
+      runs.push(run / scale);
+      run = 0;
+    }
+  }
+  if (run > 0) {
+    runs.push(run / scale);
+  }
+  return runs;
 }

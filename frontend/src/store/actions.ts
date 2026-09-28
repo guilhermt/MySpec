@@ -54,6 +54,17 @@ async function run(failure: Failure, operation: () => Promise<void>): Promise<vo
   }
 }
 
+// inPlace runs an action whose failure has a place of its own on screen: it answers the message of
+// the failure, or null, instead of raising the app notice.
+async function inPlace(operation: () => Promise<void>): Promise<string | null> {
+  try {
+    await operation();
+    return null;
+  } catch (error) {
+    return messageOf(error);
+  }
+}
+
 // itemName is the name of a task, active or archived, or the title of a review or a discussion, as
 // the tree calls it; "" when the item is gone.
 function itemName(id: string): string {
@@ -262,6 +273,18 @@ export function setStageModel(
   );
 }
 
+/**
+ * setStageModelInPlace is setStageModel for a popover that shows its own failure under the row: it
+ * answers the message of the failure, or null, and leaves the app notice alone.
+ */
+export function setStageModelInPlace(
+  taskId: string,
+  stage: ModelStage,
+  choice: ModelChoice,
+): Promise<string | null> {
+  return inPlace(() => api.setStageModel(taskId, stage, choice.model, choice.effort));
+}
+
 /** setStepModel gives one step a choice of its own, apart from the implementation. */
 export function setStepModel(taskId: string, step: number, choice: ModelChoice): Promise<void> {
   return run(fail(`Couldn't change the model of step ${step} of ${theItem(taskId)}`, TRY), () =>
@@ -283,11 +306,26 @@ export function setReviewMode(taskId: string, mode: ReviewMode): Promise<void> {
   );
 }
 
+/**
+ * setReviewModeInPlace is setReviewMode for a popover that shows its own failure in its note: it
+ * answers the message of the failure, or null, and leaves the app notice alone.
+ */
+export function setReviewModeInPlace(taskId: string, mode: ReviewMode): Promise<string | null> {
+  return inPlace(() => api.setReviewMode(taskId, mode));
+}
+
 /** setStepReviewMode gives one step a review mode of its own, apart from the task. */
 export function setStepReviewMode(taskId: string, step: number, mode: ReviewMode): Promise<void> {
   return run(
     fail(`Couldn't change the review mode of step ${step} of ${theItem(taskId)}`, TRY),
     () => api.setStepReviewMode(taskId, step, mode),
+  );
+}
+
+/** followTaskReviewMode drops the review mode of a step, which follows the task again. */
+export function followTaskReviewMode(taskId: string, step: number): Promise<void> {
+  return run(fail(`Couldn't change the review mode of ${theItem(taskId)}`, TRY), () =>
+    api.clearStepReviewMode(taskId, step),
   );
 }
 
@@ -348,6 +386,21 @@ export function loadTranscript(taskId: string, stage: string): Promise<void> {
     const transcript = await api.getTranscript(taskId, stage);
     useAppStore.getState().setTranscript(transcript);
   });
+}
+
+/**
+ * readEarlierConversation reads a conversation of a task that is not the one of its place. A failure
+ * is kept on the conversation, where the row of Details that asked for it says so, and never raises
+ * the app notice.
+ */
+export async function readEarlierConversation(taskId: string, stage: string): Promise<void> {
+  const store = useAppStore.getState();
+  store.beginTranscript(taskId, stage);
+  try {
+    store.setTranscript(await api.getTranscript(taskId, stage));
+  } catch (error) {
+    store.failTranscript(taskId, stage, messageOf(error));
+  }
 }
 
 export function sendMessage(taskId: string, stage: string, text: string): Promise<void> {

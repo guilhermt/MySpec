@@ -733,8 +733,9 @@ func TestDeleteStopsTheSessionsAndPurgesTheWorktree(t *testing.T) {
 		t.Errorf("leftover = %+v, want none", result.Leftover)
 	}
 
-	// The conversation of the step stops before the worktree it runs in.
-	f.wantCalls(t, "start:task-1:step:1:restarted=false", "closeTask:task-1")
+	// The conversation of the step stops before the worktree it runs in, and
+	// the index forgets the task once the delete lands.
+	f.wantCalls(t, "start:task-1:step:1:restarted=false", "closeTask:task-1", "forgetTask:task-1")
 	f.waitWorktreeCalls(t, "ensure:task-1:dev/web", "status:task-1:task-1", "purge:task-1")
 	if _, ok := f.tasks.Get("task-1"); ok {
 		t.Error("the task is still there")
@@ -755,8 +756,9 @@ func TestDeleteOfAnArchivedTaskTouchesNoWorktree(t *testing.T) {
 	}
 
 	// The closing of its last repository already took the worktrees and the
-	// conversations; only the records are left to remove.
-	f.wantCalls(t)
+	// conversations; only the records, and the now-stale index entry, are left
+	// to remove.
+	f.wantCalls(t, "forgetTask:task-1")
 	if calls := f.worktrees.recorded(); len(calls) != 0 {
 		t.Errorf("worktree calls = %v, want none", calls)
 	}

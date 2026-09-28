@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { AUX_PANEL_COLUMN_MIN } from "@/components/system/AuxPanel";
 import { AlertDialog, AlertDialogContent, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { renderWithStore } from "@/test/render";
@@ -214,16 +215,21 @@ describe("globals.css", () => {
     );
   });
 
+  it("measures the panel beside the column from the width the stylesheet puts it there", () => {
+    expect(GLOBALS).toContain(`@container main (min-width: ${AUX_PANEL_COLUMN_MIN}px) {`);
+  });
+
   it("blinks a new situation twice for --duration-slow, and never with reduced motion", () => {
-    expect(GLOBALS).toContain("animation: tree-flash var(--duration-slow) var(--ease-standard) 2;");
+    expect(GLOBALS).toContain(
+      "animation: situation-flash var(--duration-slow) var(--ease-standard) 2;",
+    );
     const reduced = [
       ...GLOBALS.matchAll(/@media \(prefers-reduced-motion: reduce\) \{([\s\S]*?)\n\}/g),
     ]
       .map((match) => match[1] ?? "")
       .join("\n");
-    expect(reduced).toMatch(
-      /\.attention-flash,\s*\.tree-flash\[data-flash\] \{\s*animation: none;\s*\}/,
-    );
+    expect(reduced).toMatch(/\.situation-flash\[data-flash\] \{\s*animation: none;\s*\}/);
+    expect(GLOBALS).not.toContain("attention-flash");
   });
 
   it("takes the panel and the toast away in --duration-fast with the exit curve", () => {

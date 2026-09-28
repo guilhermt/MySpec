@@ -39,6 +39,7 @@ import type {
   ArchivedReview,
   ArchivedTask,
   Board,
+  BoardCard,
   DiscussionSummary,
   Leftover,
   Migration,
@@ -56,6 +57,7 @@ import type {
   TranscriptEvent,
 } from "@/lib/wails";
 import { asPlaceKind, asTaskStage, asThemePreference, sessionKey } from "@/lib/wails";
+import { firstTab } from "@/store/step-tab";
 import {
   applyEvent,
   emptyTranscript,
@@ -68,8 +70,8 @@ export type { SettingsSection } from "@/lib/locations";
 /** MAX_TOASTS is how many toasts show at once; a new one pushes out the oldest. */
 const MAX_TOASTS = 3;
 
-/** PanelId is an auxiliary panel of an item: its artifacts, its reports or its documents. */
-export type PanelId = "artifacts" | "reports" | "documents";
+/** PanelId is an auxiliary panel of an item: its artifacts, its reports, its documents, its details or its card. */
+export type PanelId = "artifacts" | "reports" | "documents" | "details" | "card";
 
 /** Toast is the notice of an item that left without being open; its id is the id of the task. */
 export interface Toast {
@@ -126,6 +128,17 @@ export interface PullRef {
   number: number;
 }
 
+/**
+ * EarlierConversation is a conversation of a task read from Details in place of the one of its
+ * place: the stage of its session, and whether it was opened with the panel open.
+ */
+export interface EarlierConversation {
+  taskId: string;
+  stage: string;
+  /** from is "panel" when the panel stayed open beside the conversation, where the focus returns. */
+  from: "panel" | null;
+}
+
 /** AppError is what the app notice says of an action that failed: which action, and what happened. */
 export interface AppError {
   /** label is the action that failed, with its item: "Couldn't pause Rate limit per API key". */
@@ -145,6 +158,11 @@ export interface AppStore {
   forward: Location[];
   /** panel is the auxiliary panel open in the place on screen, null when none is; every navigation closes it. */
   panel: PanelId | null;
+  /**
+   * earlierConversation is a conversation of the task that is not the one of its place, read from
+   * Details; every navigation clears it, and it is never stacked nor stored.
+   */
+  earlierConversation: EarlierConversation | null;
   /** pendingFocus is where the focus goes once the new place is on screen: its title, or the back or forward button. */
   pendingFocus: "title" | "back" | "forward" | null;
   /** sidebarRail is the sidebar collapsed into its strip; kept across runs. */
@@ -213,6 +231,10 @@ export interface AppStore {
   clearPendingFocus: () => void;
   /** openPanel opens an auxiliary panel of the place on screen, closing the one open; null closes it. */
   openPanel: (panel: PanelId | null) => void;
+  /** openEarlierConversation puts an earlier conversation of a task in place of the one of its place. */
+  openEarlierConversation: (taskId: string, stage: string, fromPanel: boolean) => void;
+  /** closeEarlierConversation brings back the conversation of the place. */
+  closeEarlierConversation: () => void;
   toggleSidebarRail: () => void;
   /** announce has the live region say a text, even the same one again. */
   announce: (text: string) => void;
@@ -244,6 +266,8 @@ export interface AppStore {
   beginTranscript: (taskId: string, stage: string) => void;
   setTranscript: (transcript: Transcript) => void;
   applyTranscriptEvent: (event: TranscriptEvent) => void;
+  /** failTranscript records why the conversation of a stage could not be read. */
+  failTranscript: (taskId: string, stage: string, message: string) => void;
   dropTranscript: (taskId: string, stage: string) => void;
   setDraft: (taskId: string, stage: string, text: string) => void;
   selectStepTab: (taskId: string, step: number, tab: StepTab) => void;
@@ -475,7 +499,7 @@ function initialTaskUi(): Pick<
 /** Navigation is the part of the store a navigation changes. */
 type Navigation = Pick<
   AppStore,
-  "location" | "back" | "forward" | "panel" | "pendingFocus" | "promptEdit"
+  "location" | "back" | "forward" | "panel" | "earlierConversation" | "pendingFocus" | "promptEdit"
 >;
 
 // beside drops the places at the end of a history that are the place on
@@ -501,7 +525,13 @@ function navigate(
   focus: AppStore["pendingFocus"],
 ): Navigation {
   const target = resolveHome(state.app, location);
-  const common = { location: target, panel: null, pendingFocus: focus, promptEdit: null };
+  const common = {
+    location: target,
+    panel: null,
+    earlierConversation: null,
+    pendingFocus: focus,
+    promptEdit: null,
+  };
   if (sameLocation(state.location, target)) {
     return {
       ...common,
@@ -547,9 +577,23 @@ function travel(
     back: beside(direction === "back" ? rest : behind, location),
     forward: beside(direction === "back" ? behind : rest, location),
     panel: null,
+    earlierConversation: null,
     pendingFocus: focus,
     promptEdit: null,
   };
+}
+
+// keptEarlier is the earlier conversation once a new state arrives: it closes when its task or its
+// session is gone, as a discarded session is.
+function keptEarlier(next: State, earlier: EarlierConversation | null): EarlierConversation | null {
+  if (earlier === null) {
+    return null;
+  }
+  const task = findTask(next, earlier.taskId);
+  const kept = (task?.conversations ?? []).some(
+    (conversation) => conversation.stage === earlier.stage,
+  );
+  return kept ? earlier : null;
 }
 
 // gone is the page of an item that left, with what the state no longer has of
@@ -642,6 +686,7 @@ export const useAppStore = create<AppStore>()((set, get) => {
     error: null,
     ...initialNav(),
     panel: null,
+    earlierConversation: null,
     pendingFocus: null,
     sidebarRail: readStored(SIDEBAR_RAIL_KEY, false, isBoolean),
     toasts: [],
@@ -662,6 +707,7 @@ export const useAppStore = create<AppStore>()((set, get) => {
             ...initialTaskUi(),
             location: HOME,
             panel: null,
+            earlierConversation: null,
             promptEdit: null,
             pendingLeave: null,
           };
@@ -706,6 +752,7 @@ export const useAppStore = create<AppStore>()((set, get) => {
           back: moved ? beside(state.back, location) : state.back,
           forward: moved ? beside(state.forward, location) : state.forward,
           panel: moved ? null : state.panel,
+          earlierConversation: keptEarlier(next, state.earlierConversation),
           toasts,
           announcement,
           expectGone: arrived === null ? state.expectGone : null,
@@ -729,6 +776,11 @@ export const useAppStore = create<AppStore>()((set, get) => {
     clearPendingFocus: () => set({ pendingFocus: null }),
 
     openPanel: (panel) => set({ panel }),
+
+    openEarlierConversation: (taskId, stage, fromPanel) =>
+      set({ earlierConversation: { taskId, stage, from: fromPanel ? "panel" : null } }),
+
+    closeEarlierConversation: () => set({ earlierConversation: null }),
 
     toggleSidebarRail: () =>
       set((state) => {
@@ -810,6 +862,7 @@ export const useAppStore = create<AppStore>()((set, get) => {
             [key]: {
               ...(state.transcripts[key] ?? emptyTranscript()),
               status: "loading",
+              error: "",
               buffered: [],
             },
           },
@@ -841,6 +894,22 @@ export const useAppStore = create<AppStore>()((set, get) => {
           return {};
         }
         return { transcripts: { ...state.transcripts, [key]: next } };
+      }),
+
+    failTranscript: (taskId, stage, message) =>
+      set((state) => {
+        const key = sessionKey(taskId, stage);
+        return {
+          transcripts: {
+            ...state.transcripts,
+            [key]: {
+              ...(state.transcripts[key] ?? emptyTranscript()),
+              status: "error",
+              error: message,
+              buffered: [],
+            },
+          },
+        };
       }),
 
     dropTranscript: (taskId, stage) =>
@@ -990,6 +1059,31 @@ export function useBoard(id: string): Board | null {
   return useAppStore((state) => findBoard(state.app, id));
 }
 
+/**
+ * BoardCardReading is a card as the last reading of its board has it: the board missing when it was
+ * removed, unread before its first reading, and read with the card, or with null when the reading
+ * doesn't have it.
+ */
+export type BoardCardReading =
+  | { board: "missing" | "unread"; card: null }
+  | { board: "read"; card: BoardCard | null };
+
+/** useBoardCard is the card of a key in the last reading of a board. */
+export function useBoardCard(boardId: string, key: string): BoardCardReading {
+  return useAppStore(
+    useShallow((state): BoardCardReading => {
+      const board = findBoard(state.app, boardId);
+      if (board === null) {
+        return { board: "missing", card: null };
+      }
+      if (board.readAt === "") {
+        return { board: "unread", card: null };
+      }
+      return { board: "read", card: (board.cards ?? []).find((card) => card.key === key) ?? null };
+    }),
+  );
+}
+
 /** useLocation is the place on screen. */
 export function useLocation(): Location {
   return useAppStore((state) => state.location);
@@ -1036,6 +1130,13 @@ export function useBackTarget(): Location | null {
 /** useForwardTarget is the place Forward goes to, null when there is none. */
 export function useForwardTarget(): Location | null {
   return useAppStore((state) => lastReachable(state.app, state.forward, state.location));
+}
+
+/** useEarlierConversation is the earlier conversation on screen of a task, null when none is. */
+export function useEarlierConversation(taskId: string): EarlierConversation | null {
+  return useAppStore((state) =>
+    state.earlierConversation?.taskId === taskId ? state.earlierConversation : null,
+  );
 }
 
 /** usePanel is the auxiliary panel open in the place on screen, null when none is. */
@@ -1101,14 +1202,15 @@ export function useDraft(taskId: string, stage: string): string {
   return useAppStore((state) => state.drafts[sessionKey(taskId, stage)] ?? "");
 }
 
-// A tab that no longer has a conversation behind it falls back to the implementer.
+// A tab that no longer has a conversation behind it falls back to the implementer, and a step
+// with nothing stored opens the tab of firstTab.
 function openStepTabOf(state: AppStore, taskId: string): StepTab {
   const task = findTask(state.app, taskId);
   const step = (task?.steps ?? []).find((candidate) => candidate.number === task?.currentStep);
-  if (step === undefined || step.reviewer === null) {
+  if (task === null || step === undefined || step.reviewer === null) {
     return "implementer";
   }
-  return state.openStepTab[stepTabKey(taskId, step.number)] ?? "implementer";
+  return state.openStepTab[stepTabKey(taskId, step.number)] ?? firstTab(task, step);
 }
 
 /** useOpenStepTab is the conversation tab of the current step of a task. */
@@ -1118,8 +1220,12 @@ export function useOpenStepTab(taskId: string): StepTab {
 
 // The situation of the place on screen: the one of the open discussion or of
 // the open review, or, of the open task, the stage it is in, the conversation
-// of the step that runs whose tab is selected, or the pull request.
+// of the step that runs whose tab is selected, or the pull request. An earlier
+// conversation on screen hides the one of the place, and its situation with it.
 function onScreenSituation(state: AppStore): Situation | null {
+  if (state.earlierConversation !== null) {
+    return null;
+  }
   const discussion = findDiscussion(state.app, openIdOf(state, "discussion"));
   if (discussion !== null) {
     return discussionSituation(discussion);

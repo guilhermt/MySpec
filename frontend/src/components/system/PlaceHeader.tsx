@@ -1,7 +1,8 @@
-import { ArrowLeft, ArrowRight, Ellipsis } from "lucide-react";
+import { ArrowLeft, ArrowRight } from "lucide-react";
 import type { ReactNode, Ref } from "react";
 import { cn } from "@/lib/utils";
 import { IconButton } from "./IconButton";
+import { ICONS } from "./icons";
 import { Menu, MenuContent, MenuItem, MenuText, MenuTrigger } from "./Menu";
 import { Tooltip } from "./Tooltip";
 
@@ -25,6 +26,8 @@ export interface PlaceHeaderProps {
   titleRef: Ref<HTMLHeadingElement>;
   backRef: Ref<HTMLButtonElement>;
   forwardRef: Ref<HTMLButtonElement>;
+  /** progress is where the item stands, drawn after the title and never shrunk: the stepper of a task. */
+  progress?: ReactNode;
   /** children is what the place holds on the right, in its order. */
   children?: ReactNode;
 }
@@ -74,7 +77,7 @@ function Breadcrumb({ crumbs }: { crumbs: readonly PlaceCrumb[] }) {
         <Menu>
           <MenuTrigger
             render={
-              <IconButton label={`Show the hidden levels: ${hidden}`} icon={Ellipsis} size="sm" />
+              <IconButton label={`Show the hidden levels: ${hidden}`} icon={ICONS.more} size="sm" />
             }
           />
           <MenuContent align="start">
@@ -98,8 +101,9 @@ function Breadcrumb({ crumbs }: { crumbs: readonly PlaceCrumb[] }) {
 
 /**
  * PlaceHeader is the band on top of a place: back and forward through the history, the breadcrumb,
- * the title, and on the right what the place holds. Nothing in it wraps; the title cuts last, with
- * the whole name in its tooltip.
+ * the title, the progress of the item, and on the right what the place holds. Nothing in it wraps;
+ * the title cuts last, with the whole name in its tooltip. Below 900px of main area the pieces on the
+ * right draw closer.
  */
 export function PlaceHeader({
   back,
@@ -109,6 +113,7 @@ export function PlaceHeader({
   titleRef,
   backRef,
   forwardRef,
+  progress,
   children,
 }: PlaceHeaderProps) {
   // The line under the band is an inset shadow rather than a border, so it is drawn inside the
@@ -149,13 +154,16 @@ export function PlaceHeader({
         <h1
           ref={titleRef}
           tabIndex={-1}
-          className="min-w-0 truncate rounded-xs text-(length:--text-body) leading-(--leading-body) font-semibold text-ink-1 outline-none focus-visible:focus-ring"
+          className="min-w-0 flex-[0_1_auto] truncate rounded-xs text-(length:--text-body) leading-(--leading-body) font-semibold text-ink-1 outline-none focus-visible:focus-ring"
         >
           {title}
         </h1>
       </Tooltip>
+      {progress !== undefined && <div className="flex shrink-0 items-center">{progress}</div>}
       {children !== undefined && (
-        <div className="ml-auto flex shrink-0 items-center gap-(--space-2)">{children}</div>
+        <div className="ml-auto flex shrink-0 items-center gap-(--space-2) @max-[900px]/main:gap-(--space-1)">
+          {children}
+        </div>
       )}
     </header>
   );

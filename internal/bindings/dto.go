@@ -161,6 +161,7 @@ type Step struct {
 	Review        *Review `json:"review"`        // the review states and committing only
 	CommitSHA     string  `json:"commitSha"`     // done only
 	CommitSubject string  `json:"commitSubject"` // done only
+	CommittedAt   string  `json:"committedAt"`   // done only: the committer date, RFC 3339; "" when unknown
 	CommitFailed  bool    `json:"commitFailed"`  // the last approval ended without a commit
 
 	Model         string `json:"model"` // what the step runs with, or will run with
@@ -207,6 +208,7 @@ type StepReviewer struct {
 	// TurnStartedAt is when the turn in progress started, RFC 3339; "" without
 	// a turn.
 	TurnStartedAt string `json:"turnStartedAt"`
+	PausedAt      string `json:"pausedAt"` // when the session was paused, RFC 3339; "" when it is not, or the time is unknown
 	// ActionLabel and ActionTarget are the action the agent runs now, as the
 	// conversation words it ("Reading", "internal/app/state.go"); "" when none
 	// runs.
@@ -293,8 +295,12 @@ type PullRequest struct {
 	CheckError string `json:"checkError"`
 	// Trouble is what went wrong since the last review pass; meaningful in
 	// trouble.
-	Trouble  PRTrouble `json:"trouble"`
-	CanClose bool      `json:"canClose"` // the user may close the task now
+	Trouble PRTrouble `json:"trouble"`
+	Checks  []PRCheck `json:"checks"` // the last reading, in GitHub's order; never nil
+	// Mergeable is mergeable, conflicting or unknown; "" before the first
+	// reading.
+	Mergeable string `json:"mergeable"`
+	CanClose  bool   `json:"canClose"` // the user may close the task now
 	// CloneMissing says the closing waits for the clone of the repository.
 	CloneMissing bool         `json:"cloneMissing"`
 	Close        *CloseResult `json:"close"` // closed only
@@ -313,6 +319,7 @@ type PullRequest struct {
 	// TurnStartedAt is when the turn in progress started, RFC 3339; "" without
 	// a turn.
 	TurnStartedAt string `json:"turnStartedAt"`
+	PausedAt      string `json:"pausedAt"` // when the session was paused, RFC 3339; "" when it is not, or the time is unknown
 	// ActionLabel and ActionTarget are the action the agent runs now, as the
 	// conversation words it ("Reading", "internal/app/state.go"); "" when none
 	// runs.
@@ -321,6 +328,16 @@ type PullRequest struct {
 	ContextPercent int    `json:"contextPercent"`
 	PendingCount   int    `json:"pendingCount"`
 	LastError      string `json:"lastError"`
+}
+
+// PRCheck is one check of the pull request at the last reading.
+type PRCheck struct {
+	Name        string `json:"name"`
+	State       string `json:"state"`       // passed, skipped, neutral, failed, running or queued
+	Conclusion  string `json:"conclusion"`  // what GitHub concluded, lower case; "" while it runs
+	StartedAt   string `json:"startedAt"`   // RFC 3339; "" when GitHub gave none
+	CompletedAt string `json:"completedAt"` // RFC 3339; "" while it runs or when GitHub gave none
+	URL         string `json:"url"`
 }
 
 // PRTrouble is what went wrong with a pull request after its review: the
@@ -422,28 +439,41 @@ type TaskSummary struct {
 	// TurnStartedAt is when the turn in progress started, RFC 3339; "" without
 	// a turn.
 	TurnStartedAt string `json:"turnStartedAt"`
+	PausedAt      string `json:"pausedAt"` // when the session was paused, RFC 3339; "" when it is not, or the time is unknown
 	// ActionLabel and ActionTarget are the action the agent runs now, as the
 	// conversation words it ("Reading", "internal/app/state.go"); "" when none
 	// runs.
-	ActionLabel     string           `json:"actionLabel"`
-	ActionTarget    string           `json:"actionTarget"`
-	ContextPercent  int              `json:"contextPercent"`
-	PendingCount    int              `json:"pendingCount"`
-	Corrections     int              `json:"corrections"`
-	HasPRD          bool             `json:"hasPrd"`
-	HasTechSpec     bool             `json:"hasTechSpec"`
-	HasOneShot      bool             `json:"hasOneShot"`
-	Steps           []Step           `json:"steps"`        // never nil
-	CurrentStep     int              `json:"currentStep"`  // the step that runs or runs next; 0 when the task has no steps
-	PR              *PullRequest     `json:"pr"`           // nil outside the pull request stage
-	PlanProblems    []PlanProblem    `json:"planProblems"` // never nil
-	Situations      []Situation      `json:"situations"`   // what the task waits on the user for, the most urgent first; never nil
-	Models          []TaskStageModel `json:"models"`       // every stage, in workflow order; never nil
-	CanContinue     bool             `json:"canContinue"`
-	ArtifactVersion int              `json:"artifactVersion"`
-	LastError       string           `json:"lastError"`
-	CreatedAt       string           `json:"createdAt"`
-	UpdatedAt       string           `json:"updatedAt"`
+	ActionLabel    string           `json:"actionLabel"`
+	ActionTarget   string           `json:"actionTarget"`
+	ContextPercent int              `json:"contextPercent"`
+	PendingCount   int              `json:"pendingCount"`
+	Corrections    int              `json:"corrections"`
+	HasPRD         bool             `json:"hasPrd"`
+	HasTechSpec    bool             `json:"hasTechSpec"`
+	HasOneShot     bool             `json:"hasOneShot"`
+	Steps          []Step           `json:"steps"`        // never nil
+	CurrentStep    int              `json:"currentStep"`  // the step that runs or runs next; 0 when the task has no steps
+	PR             *PullRequest     `json:"pr"`           // nil outside the pull request stage
+	PlanProblems   []PlanProblem    `json:"planProblems"` // never nil
+	Situations     []Situation      `json:"situations"`   // what the task waits on the user for, the most urgent first; never nil
+	Models         []TaskStageModel `json:"models"`       // every stage, in workflow order; never nil
+	// Conversations is every session the task has, open or closed, by start;
+	// never nil.
+	Conversations   []TaskConversation `json:"conversations"`
+	Branch          string             `json:"branch"`       // the branch of the worktree of the task; "" before it exists
+	BaseBranch      string             `json:"baseBranch"`   // as the worktree keeps it, origin/<base>; "" before it exists
+	WorktreePath    string             `json:"worktreePath"` // "" before the worktree exists
+	CanContinue     bool               `json:"canContinue"`
+	ArtifactVersion int                `json:"artifactVersion"`
+	LastError       string             `json:"lastError"`
+	CreatedAt       string             `json:"createdAt"`
+	UpdatedAt       string             `json:"updatedAt"`
+}
+
+// TaskConversation is a conversation a task has had, open or closed.
+type TaskConversation struct {
+	Stage     string `json:"stage"`     // the session stage: prd, tech_spec, plan, one_shot, step:<n>, step_review:<n>, pr or pr_review
+	StartedAt string `json:"startedAt"` // RFC 3339
 }
 
 // ArchivedStep is one step of an archived task, as the plan wrote it.
@@ -1109,6 +1139,7 @@ type ReviewSummary struct {
 	// TurnStartedAt is when the turn in progress started, RFC 3339; "" without
 	// a turn.
 	TurnStartedAt string `json:"turnStartedAt"`
+	PausedAt      string `json:"pausedAt"` // when the session was paused, RFC 3339; "" when it is not, or the time is unknown
 	// ActionLabel and ActionTarget are the action the agent runs now, as the
 	// conversation words it ("Reading", "internal/app/state.go"); "" when none
 	// runs.
@@ -1293,6 +1324,7 @@ type DiscussionSummary struct {
 	// TurnStartedAt is when the turn in progress started, RFC 3339; "" without
 	// a turn.
 	TurnStartedAt string `json:"turnStartedAt"`
+	PausedAt      string `json:"pausedAt"` // when the session was paused, RFC 3339; "" when it is not, or the time is unknown
 	// ActionLabel and ActionTarget are the action the agent runs now, as the
 	// conversation words it ("Reading", "internal/app/state.go"); "" when none
 	// runs.

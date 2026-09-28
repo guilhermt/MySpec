@@ -2,11 +2,104 @@ package gh_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 
 	"github.com/guilhermt/myspec/internal/gh"
 )
+
+func TestParseChecksGivesEachCheckItsState(t *testing.T) {
+	t.Parallel()
+
+	run := func(status, conclusion string) gh.CheckNode {
+		return gh.CheckNode{Typename: "CheckRun", Name: "test", Status: status, Conclusion: conclusion}
+	}
+	context := func(state string) gh.CheckNode {
+		return gh.CheckNode{Typename: "StatusContext", Context: "ci/build", State: state}
+	}
+	tests := []struct {
+		name string
+		node gh.CheckNode
+		want gh.CheckState
+	}{
+		{"a check run that succeeded", run("COMPLETED", "SUCCESS"), gh.CheckPassed},
+		{"a check run skipped", run("COMPLETED", "SKIPPED"), gh.CheckSkipped},
+		{"a check run neutral", run("COMPLETED", "NEUTRAL"), gh.CheckNeutral},
+		{"a check run that failed", run("COMPLETED", "FAILURE"), gh.CheckFailed},
+		{"a check run cancelled", run("COMPLETED", "CANCELLED"), gh.CheckFailed},
+		{"a check run timed out", run("COMPLETED", "TIMED_OUT"), gh.CheckFailed},
+		{"a check run with a conclusion the app does not know", run("COMPLETED", "STALE"), gh.CheckFailed},
+		{"a check run in progress", run("IN_PROGRESS", ""), gh.CheckRunning},
+		{"a check run queued", run("QUEUED", ""), gh.CheckQueued},
+		{"a check run waiting", run("WAITING", ""), gh.CheckQueued},
+		{"a check run requested", run("REQUESTED", ""), gh.CheckQueued},
+		{"a check run pending", run("PENDING", ""), gh.CheckQueued},
+		{"a check run with a status the app does not know", run("SOMETHING", ""), gh.CheckQueued},
+		{"a status context that succeeded", context("SUCCESS"), gh.CheckPassed},
+		{"a status context that failed", context("FAILURE"), gh.CheckFailed},
+		{"a status context that errored", context("ERROR"), gh.CheckFailed},
+		{"a status context pending", context("PENDING"), gh.CheckRunning},
+		{"a status context expected", context("EXPECTED"), gh.CheckQueued},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			check := gh.ParseChecks([]gh.CheckNode{test.node}, "").Checks[0]
+			if check.State != test.want {
+				t.Errorf("State = %q, want %q", check.State, test.want)
+			}
+			if (check.State == gh.CheckFailed) != check.Failed() {
+				t.Errorf("State = %q but Failed() = %v, want the two to agree", check.State, check.Failed())
+			}
+		})
+	}
+}
+
+func TestParseChecksReadsTheTimesOfACheck(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name                   string
+		node                   gh.CheckNode
+		wantStarted, wantEnded time.Time
+	}{
+		{
+			name: "a finished check run",
+			node: gh.CheckNode{
+				Typename: "CheckRun", Name: "test", Status: "COMPLETED", Conclusion: "SUCCESS",
+				StartedAt: "2026-09-27T23:56:08Z", CompletedAt: "2026-09-28T00:03:30Z",
+			},
+			wantStarted: time.Date(2026, 9, 27, 23, 56, 8, 0, time.UTC),
+			wantEnded:   time.Date(2026, 9, 28, 0, 3, 30, 0, time.UTC),
+		},
+		{
+			name:        "a check run that runs",
+			node:        gh.CheckNode{Typename: "CheckRun", Name: "test", Status: "IN_PROGRESS", StartedAt: "2026-09-27T23:56:08Z"},
+			wantStarted: time.Date(2026, 9, 27, 23, 56, 8, 0, time.UTC),
+		},
+		{
+			name: "a node without times",
+			node: gh.CheckNode{Typename: "StatusContext", Context: "ci/build", State: "SUCCESS"},
+		},
+		{
+			name: "a node with times the app cannot read",
+			node: gh.CheckNode{Typename: "CheckRun", Name: "test", Status: "COMPLETED", StartedAt: "yesterday", CompletedAt: "0001"},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			check := gh.ParseChecks([]gh.CheckNode{test.node}, "").Checks[0]
+			if !check.StartedAt.Equal(test.wantStarted) {
+				t.Errorf("StartedAt = %v, want %v", check.StartedAt, test.wantStarted)
+			}
+			if !check.CompletedAt.Equal(test.wantEnded) {
+				t.Errorf("CompletedAt = %v, want %v", check.CompletedAt, test.wantEnded)
+			}
+		})
+	}
+}
 
 func TestParseChecksReadsWhatGitHubAnswers(t *testing.T) {
 	t.Parallel()
@@ -22,7 +115,7 @@ func TestParseChecksReadsWhatGitHubAnswers(t *testing.T) {
 			node:      gh.CheckNode{Typename: "CheckRun", Name: "test", Status: "COMPLETED", Conclusion: "SUCCESS", DetailsURL: "https://github.com/acme/api/actions/runs/1"},
 			mergeable: "MERGEABLE",
 			want: gh.PRChecks{
-				Checks:    []gh.Check{{Name: "test", URL: "https://github.com/acme/api/actions/runs/1", Conclusion: "success"}},
+				Checks:    []gh.Check{{Name: "test", URL: "https://github.com/acme/api/actions/runs/1", Conclusion: "success", State: gh.CheckPassed}},
 				Mergeable: gh.MergeableClean,
 			},
 		},
@@ -31,7 +124,7 @@ func TestParseChecksReadsWhatGitHubAnswers(t *testing.T) {
 			node:      gh.CheckNode{Typename: "CheckRun", Name: "test", Status: "IN_PROGRESS", DetailsURL: "u"},
 			mergeable: "CONFLICTING",
 			want: gh.PRChecks{
-				Checks:    []gh.Check{{Name: "test", URL: "u", Pending: true}},
+				Checks:    []gh.Check{{Name: "test", URL: "u", Pending: true, State: gh.CheckRunning}},
 				Mergeable: gh.MergeableConflicting,
 			},
 		},
@@ -40,7 +133,7 @@ func TestParseChecksReadsWhatGitHubAnswers(t *testing.T) {
 			node:      gh.CheckNode{Typename: "CheckRun", Name: "lint", Status: "COMPLETED", Conclusion: "FAILURE"},
 			mergeable: "UNKNOWN",
 			want: gh.PRChecks{
-				Checks:    []gh.Check{{Name: "lint", Conclusion: "failure"}},
+				Checks:    []gh.Check{{Name: "lint", Conclusion: "failure", State: gh.CheckFailed}},
 				Mergeable: gh.MergeableUnknown,
 			},
 		},
@@ -49,7 +142,7 @@ func TestParseChecksReadsWhatGitHubAnswers(t *testing.T) {
 			node:      gh.CheckNode{Typename: "StatusContext", Context: "ci/build", State: "SUCCESS", TargetURL: "https://ci.example.com/1"},
 			mergeable: "",
 			want: gh.PRChecks{
-				Checks:    []gh.Check{{Name: "ci/build", URL: "https://ci.example.com/1", Conclusion: "success"}},
+				Checks:    []gh.Check{{Name: "ci/build", URL: "https://ci.example.com/1", Conclusion: "success", State: gh.CheckPassed}},
 				Mergeable: gh.MergeableUnknown,
 			},
 		},
@@ -58,7 +151,7 @@ func TestParseChecksReadsWhatGitHubAnswers(t *testing.T) {
 			node:      gh.CheckNode{Typename: "StatusContext", Context: "ci/build", State: "PENDING"},
 			mergeable: "mergeable",
 			want: gh.PRChecks{
-				Checks:    []gh.Check{{Name: "ci/build", Pending: true}},
+				Checks:    []gh.Check{{Name: "ci/build", Pending: true, State: gh.CheckRunning}},
 				Mergeable: gh.MergeableClean,
 			},
 		},
@@ -67,7 +160,7 @@ func TestParseChecksReadsWhatGitHubAnswers(t *testing.T) {
 			node:      gh.CheckNode{Context: "ci/build", State: "ERROR"},
 			mergeable: "MERGEABLE",
 			want: gh.PRChecks{
-				Checks:    []gh.Check{{Name: "ci/build", Conclusion: "error"}},
+				Checks:    []gh.Check{{Name: "ci/build", Conclusion: "error", State: gh.CheckFailed}},
 				Mergeable: gh.MergeableClean,
 			},
 		},

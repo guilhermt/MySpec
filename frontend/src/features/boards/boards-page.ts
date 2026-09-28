@@ -1,5 +1,5 @@
-import { relativeTime } from "@/lib/boards";
 import type { Board, BoardRemoval } from "@/lib/wails";
+import { age } from "@/lib/when";
 
 /** ownerText names who owns a board: "dev · Organization". */
 export function ownerText(board: Board): string {
@@ -14,7 +14,7 @@ export function readingText(board: Board, now: number): string {
   if (board.readAt === "") {
     return "Not read yet";
   }
-  return `Updated ${relativeTime(board.readAt, now)}`;
+  return `checked ${age(board.readAt, now)}`;
 }
 
 /**
