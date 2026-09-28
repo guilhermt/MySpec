@@ -25,6 +25,9 @@ export default mergeConfig(
           test: {
             name: "unit",
             environment: "jsdom",
+            // vmForks builds jsdom once per worker and gives each file a fresh VM context over it,
+            // where forks builds jsdom again for each of the 200-odd files, a third of the run.
+            pool: "vmForks",
             css: false,
             setupFiles: ["src/test/setup.ts"],
             include: ["src/**/*.test.{ts,tsx}"],

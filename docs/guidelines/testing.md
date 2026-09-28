@@ -9,12 +9,17 @@ Os testes são o que permite mudar o produto com confiança, e os limiares de co
 | `task test` | Tudo: Go e frontend, com cobertura |
 | `task test:go` | gotestsum com `-race -shuffle=on -count=1`, cobertura e o limiar de `.testcoverage.yml` |
 | `task test:web` | Vitest: a suíte do jsdom com cobertura e os limiares de `vitest.config.ts`, depois a de estilo computado no Chromium |
+| `task test:fast` | O laço de trabalho: `test:go:fast` e `test:web:fast` |
+| `task test:go:fast` | Os testes Go sem `-race`, sem embaralhar e sem cobertura, então um pacote que não mudou vem do cache de testes do Go |
+| `task test:web:fast` | Os testes do jsdom que alcançam um arquivo mudado desde que a branch saiu de `main`, sem cobertura; uma mudança na configuração do Vitest roda todos |
 | `go test -run 'TestNome' ./internal/pacote/` | Um teste Go |
 | `pnpm vitest run <arquivo>` (em `frontend/`) | Um arquivo de testes do frontend |
 | `pnpm test:watch` (em `frontend/`) | Vitest interativo, na suíte do jsdom |
 | `pnpm test:painted` (em `frontend/`) | Só a suíte de estilo computado |
 
-Os testes Go rodam com o detector de corrida e em ordem embaralhada. Um teste que passa só numa ordem ou só sem `-race` está errado.
+Os testes Go rodam com o detector de corrida e em ordem embaralhada. Um teste que passa só numa ordem ou só sem `-race` está errado. As versões rápidas deixam o detector e o embaralhamento de fora porque eles custam caro e desligam o cache: o detector deixa a suíte três a quatro vezes mais lenta, e o `-shuffle` e o `-count=1` fazem cada pacote rodar de novo mesmo sem mudança. Elas servem ao laço de trabalho; o que prova a mudança é `task test`.
+
+Cada ferramenta usa no máximo `JOBS` núcleos, 4 por padrão ou os que a máquina tiver se forem menos, e `MYSPEC_JOBS` muda o valor: `-p` do `go test`, `--maxWorkers` do Vitest e `--concurrency` do golangci-lint. Sem o limite, cada ferramenta toma todos os núcleos, e vários agentes rodando as verificações ao mesmo tempo disputam a máquina.
 
 ## Limiares
 
@@ -51,7 +56,7 @@ Os pacotes que rodam binários testam contra o binário real ou contra um fake q
 
 ### Forma
 
-- Vitest com Testing Library, `user-event` e jsdom. `describe` com o nome do componente ou módulo, `it` com uma frase: `it("places the step in the plan, with its title and repository")`.
+- Vitest com Testing Library, `user-event` e jsdom, no pool `vmForks`: cada worker monta o jsdom uma vez e dá a cada arquivo um contexto de VM novo sobre ele, isolado como antes, em vez de montar o jsdom de novo para cada arquivo. `describe` com o nome do componente ou módulo, `it` com uma frase: `it("places the step in the plan, with its title and repository")`.
 - Um arquivo de testes ao lado do que testa: `StepPane.test.tsx` ao lado de `StepPane.tsx`, `status.test.ts` ao lado de `status.ts`.
 - A lógica de apresentação em `.ts` é testada como função pura, sem renderizar. Os componentes são testados pelo que o usuário vê e faz: `getByRole`, `getByText`, `user.click`, `user.type`. Consultar classes só para o que não tem outra forma de ser observado, como o tom de um ponto de status ou a centralização alinhada ao pixel, que o jsdom não calcula.
 - Um comportamento por `it`. Sem snapshots.

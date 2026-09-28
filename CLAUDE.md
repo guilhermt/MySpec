@@ -18,7 +18,7 @@ O índice completo está em [docs/README.md](./docs/README.md).
 ## Convenções
 
 - Interface do produto em inglês. Código, identificadores e commits em inglês. Documentação em português.
-- `task check` passa por inteiro antes de uma mudança estar pronta: tidy, lint, typecheck, testes Go e web, vulnerabilidades e bindings.
+- `task check` passa por inteiro antes de uma mudança estar pronta: tidy, lint, typecheck, testes Go e web, vulnerabilidades e bindings. Durante o trabalho, `task check:fast` é o laço rápido: sem race, sem cobertura, só os testes que a mudança alcança.
 - `frontend/src/components/ui` e `frontend/bindings` são gerados e nunca editados à mão. Mudou um service ou um DTO: `task generate`.
 
 ## Documentação
