@@ -33,6 +33,7 @@ import {
   discardStage,
   discardStep,
   discussionContext,
+  followTaskReviewMode,
   groupIntoEpic,
   interrupt,
   loadTranscript,
@@ -602,6 +603,21 @@ describe("task actions", () => {
     await deleteTask("task-1");
 
     expect(useAppStore.getState().leftover).toBeNull();
+  });
+
+  it("makes a step follow the review mode of the task again", async () => {
+    await followTaskReviewMode("task-1", 2);
+
+    expect(api.clearStepReviewMode).toHaveBeenCalledWith("task-1", 2);
+    expect(useAppStore.getState().error).toBeNull();
+
+    vi.mocked(api.clearStepReviewMode).mockRejectedValueOnce(new Error("the step started"));
+    await followTaskReviewMode("task-1", 2);
+
+    expect(useAppStore.getState().error).toEqual({
+      label: "Couldn't change the review mode of the item",
+      detail: "the step started. Try again.",
+    });
   });
 
   it("reports a failed task action in the app notice", async () => {

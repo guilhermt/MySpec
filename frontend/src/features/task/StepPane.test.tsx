@@ -14,7 +14,13 @@ import {
 } from "@/test/wails-mock";
 
 const READY: Record<string, TranscriptState> = {
-  "task-1|step:1": { status: "ready", entries: [makeEntry("user")], pending: [], buffered: [] },
+  "task-1|step:1": {
+    status: "ready",
+    error: "",
+    entries: [makeEntry("user")],
+    pending: [],
+    buffered: [],
+  },
 };
 
 // The implementer and the reviewer of step 1, each with a conversation of its own.
@@ -22,6 +28,7 @@ const BOTH_READY: Record<string, TranscriptState> = {
   ...READY,
   "task-1|step_review:1": {
     status: "ready",
+    error: "",
     entries: [
       makeEntry("user", {
         user: { text: "Check the login form", pending: false, prompt: false, app: false },

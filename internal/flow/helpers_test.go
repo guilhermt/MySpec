@@ -310,6 +310,14 @@ func (m *memTasks) SetStepReviewMode(_ context.Context, id string, number int, m
 	)
 }
 
+func (m *memTasks) ClearStepReviewMode(_ context.Context, id string, number int) (task.Task, error) {
+	return m.updateReviewModes(
+		id,
+		"clearStepReviewMode:"+id+":"+strconv.Itoa(number),
+		func(modes *task.ReviewModes) { delete(modes.Steps, number) },
+	)
+}
+
 // updateReviewModes records the review modes of a task the way task.Service
 // does, on a copy of the map: what the call says nothing about is kept.
 func (m *memTasks) updateReviewModes(id, label string, mutate func(*task.ReviewModes)) (task.Task, error) {

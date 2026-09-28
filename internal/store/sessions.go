@@ -23,20 +23,53 @@ const sessionColumns = `id, item_id, stage, started, paused, paused_at, context_
 func (r *SessionsRepo) Get(ctx context.Context, taskID, stage string) (session.Record, error) {
 	const query = `SELECT ` + sessionColumns + ` FROM sessions WHERE item_id = ? AND stage = ?`
 
+	rec, err := scanSession(r.db.QueryRowContext(ctx, query, taskID, stage))
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return session.Record{}, fmt.Errorf("get %s session of task %s: %w", stage, taskID, session.ErrNotFound)
+	case err != nil:
+		return session.Record{}, fmt.Errorf("get %s session of task %s: %w", stage, taskID, err)
+	}
+	return rec, nil
+}
+
+// List returns every session of every task, by task and creation.
+func (r *SessionsRepo) List(ctx context.Context) ([]session.Record, error) {
+	const query = `SELECT ` + sessionColumns + ` FROM sessions ORDER BY item_id, created_at`
+
+	rows, err := r.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("list sessions: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []session.Record
+	for rows.Next() {
+		rec, err := scanSession(rows)
+		if err != nil {
+			return nil, fmt.Errorf("list sessions: %w", err)
+		}
+		out = append(out, rec)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list sessions: %w", err)
+	}
+	return out, nil
+}
+
+// scanSession reads one row of sessionColumns.
+func scanSession(row interface{ Scan(dest ...any) error }) (session.Record, error) {
 	var (
 		rec                  session.Record
 		lastError, pausedAt  sql.NullString
 		createdAt, updatedAt string
 		model, effort        string
 	)
-	err := r.db.QueryRowContext(ctx, query, taskID, stage).Scan(&rec.ID, &rec.TaskID, &rec.Stage,
+	err := row.Scan(&rec.ID, &rec.TaskID, &rec.Stage,
 		&rec.Started, &rec.Paused, &pausedAt, &rec.ContextTokens, &rec.ContextWindow, &rec.Corrections,
 		&lastError, &createdAt, &updatedAt, &model, &effort)
-	switch {
-	case errors.Is(err, sql.ErrNoRows):
-		return session.Record{}, fmt.Errorf("get %s session of task %s: %w", stage, taskID, session.ErrNotFound)
-	case err != nil:
-		return session.Record{}, fmt.Errorf("get %s session of task %s: %w", stage, taskID, err)
+	if err != nil {
+		return session.Record{}, err
 	}
 
 	rec.LastError = lastError.String

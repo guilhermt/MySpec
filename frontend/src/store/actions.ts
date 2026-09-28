@@ -291,6 +291,13 @@ export function setStepReviewMode(taskId: string, step: number, mode: ReviewMode
   );
 }
 
+/** followTaskReviewMode drops the review mode of a step, which follows the task again. */
+export function followTaskReviewMode(taskId: string, step: number): Promise<void> {
+  return run(fail(`Couldn't change the review mode of ${theItem(taskId)}`, TRY), () =>
+    api.clearStepReviewMode(taskId, step),
+  );
+}
+
 /**
  * getPrompt, savePrompt and restorePrompt do not swallow their failure: the
  * prompt screen shows it where the user is, and the editor keeps the text.

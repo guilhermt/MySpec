@@ -53,6 +53,7 @@ import type {
   Step,
   StepReviewer,
   TaskCard,
+  TaskConversation,
   TaskStage,
   TaskStageModel,
   TaskSummary,
@@ -174,6 +175,9 @@ export const api = {
     Promise.resolve(),
   ),
   setStepReviewMode: vi.fn<(taskId: string, step: number, mode: ReviewMode) => Promise<void>>(() =>
+    Promise.resolve(),
+  ),
+  clearStepReviewMode: vi.fn<(taskId: string, step: number) => Promise<void>>(() =>
     Promise.resolve(),
   ),
   reviewStepMyself: vi.fn<(taskId: string) => Promise<void>>(() => Promise.resolve()),
@@ -551,6 +555,10 @@ export function makeTask(overrides: Partial<TaskSummary> = {}): TaskSummary {
     planProblems: [],
     situations: [],
     models: makeTaskModels(),
+    conversations: [],
+    branch: "",
+    baseBranch: "",
+    worktreePath: "",
     canContinue: false,
     artifactVersion: 0,
     lastError: "",
@@ -558,6 +566,10 @@ export function makeTask(overrides: Partial<TaskSummary> = {}): TaskSummary {
     updatedAt: "2026-09-05T10:00:00Z",
     ...overrides,
   };
+}
+
+export function makeTaskConversation(overrides: Partial<TaskConversation> = {}): TaskConversation {
+  return { stage: "prd", startedAt: "2026-09-05T10:00:00Z", ...overrides };
 }
 
 export function makeSituation(overrides: Partial<Situation> = {}): Situation {

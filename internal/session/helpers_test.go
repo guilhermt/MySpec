@@ -1,14 +1,17 @@
 package session_test
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -113,6 +116,17 @@ func (r *memSessions) Delete(_ context.Context, taskID string, stages ...string)
 		delete(r.recs, key(taskID, stage))
 	}
 	return nil
+}
+
+func (r *memSessions) List(context.Context) ([]session.Record, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	out := slices.Collect(maps.Values(r.recs))
+	slices.SortFunc(out, func(a, b session.Record) int {
+		return cmp.Or(strings.Compare(a.TaskID, b.TaskID), a.CreatedAt.Compare(b.CreatedAt))
+	})
+	return out, nil
 }
 
 func (r *memSessions) DeleteByTask(_ context.Context, taskID string) error {

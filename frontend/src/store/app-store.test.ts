@@ -346,6 +346,21 @@ describe("transcripts", () => {
     expect(transcript?.entries).toEqual([entry]);
   });
 
+  it("keeps why a conversation could not be read until it loads again", () => {
+    const entry = makeEntry("user", { id: "a", seq: 1 });
+    useAppStore.getState().setTranscript(makeTranscript({ taskId: WEB_TASK.id, entries: [entry] }));
+
+    useAppStore.getState().failTranscript(WEB_TASK.id, WEB_TASK.stage, "database is locked");
+
+    const failed = useAppStore.getState().transcripts[WEB_KEY];
+    expect(failed?.status).toBe("error");
+    expect(failed?.error).toBe("database is locked");
+    expect(failed?.entries).toEqual([entry]);
+
+    useAppStore.getState().beginTranscript(WEB_TASK.id, WEB_TASK.stage);
+    expect(useAppStore.getState().transcripts[WEB_KEY]?.error).toBe("");
+  });
+
   it("drops a conversation on request", () => {
     useAppStore.getState().setTranscript(makeTranscript({ taskId: WEB_TASK.id }));
 

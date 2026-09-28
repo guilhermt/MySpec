@@ -188,25 +188,27 @@ type Service struct {
 	onState      func(k Key)
 	onTranscript func(ev TranscriptEvent)
 
-	mu          sync.Mutex
-	runs        map[Key]*run
-	preflightOK bool
+	mu            sync.Mutex
+	runs          map[Key]*run
+	conversations map[string][]Conversation // by task id: every session row, loaded by LoadConversations
+	preflightOK   bool
 }
 
 // New builds a Service from deps.
 func New(deps Deps) *Service {
 	s := &Service{
-		sessions:     deps.Sessions,
-		entries:      deps.Entries,
-		launcher:     deps.Launcher,
-		renderPrompt: deps.RenderPrompt,
-		log:          deps.Log,
-		now:          deps.Now,
-		newID:        deps.NewID,
-		idleTimeout:  deps.IdleTimeout,
-		onState:      deps.OnState,
-		onTranscript: deps.OnTranscript,
-		runs:         map[Key]*run{},
+		sessions:      deps.Sessions,
+		entries:       deps.Entries,
+		launcher:      deps.Launcher,
+		renderPrompt:  deps.RenderPrompt,
+		log:           deps.Log,
+		now:           deps.Now,
+		newID:         deps.NewID,
+		idleTimeout:   deps.IdleTimeout,
+		onState:       deps.OnState,
+		onTranscript:  deps.OnTranscript,
+		runs:          map[Key]*run{},
+		conversations: map[string][]Conversation{},
 	}
 	if s.log == nil {
 		s.log = slog.New(slog.DiscardHandler)
@@ -266,6 +268,7 @@ func (s *Service) load(ctx context.Context, t TaskInfo, n *notes) (*run, error) 
 		if insertErr := s.sessions.Insert(ctx, rec); insertErr != nil {
 			return nil, insertErr
 		}
+		s.conversations[t.ID] = append(s.conversations[t.ID], Conversation{Stage: rec.Stage, StartedAt: rec.CreatedAt})
 	case err != nil:
 		return nil, err
 	}
@@ -510,7 +513,15 @@ func (s *Service) Discard(ctx context.Context, taskID string, stages ...string) 
 			return err
 		}
 	}
-	return s.sessions.Delete(ctx, taskID, stages...)
+	if err := s.sessions.Delete(ctx, taskID, stages...); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.conversations[taskID] = slices.DeleteFunc(s.conversations[taskID], func(c Conversation) bool {
+		return slices.Contains(stages, c.Stage)
+	})
+	return nil
 }
 
 // RemovePending drops a queued message before it reaches the CLI.
@@ -928,22 +939,48 @@ func (s *Service) LastReply(k Key) string {
 	return strings.Join(parts, "\n\n")
 }
 
-// Transcript returns a copy of the conversation of a task.
-func (s *Service) Transcript(_ context.Context, k Key) (Transcript, error) {
+// Transcript returns a copy of the conversation of a session, open or
+// closed. A closed one is read from the database.
+func (s *Service) Transcript(ctx context.Context, k Key) (Transcript, error) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	r, ok := s.runs[k]
+	var tr Transcript
+	if ok {
+		tr = Transcript{
+			TaskID:    k.TaskID,
+			SessionID: r.rec.ID,
+			Stage:     r.rec.Stage,
+			Entries:   cloneEntries(r.entries),
+			Pending:   cloneEntries(r.pending),
+		}
+	}
+	s.mu.Unlock()
+	if ok {
+		return tr, nil
+	}
+	return s.closedTranscript(ctx, k)
+}
 
-	r, err := s.runOf(k)
+// closedTranscript reads the conversation of a session that is not open from
+// the database, without opening it: nothing is written and no run is created.
+// A closed session sends nothing more, so its queued messages stay out.
+func (s *Service) closedTranscript(ctx context.Context, k Key) (Transcript, error) {
+	rec, err := s.sessions.Get(ctx, k.TaskID, k.Stage)
 	if err != nil {
 		return Transcript{}, err
 	}
-	return Transcript{
-		TaskID:    k.TaskID,
-		SessionID: r.rec.ID,
-		Stage:     r.rec.Stage,
-		Entries:   cloneEntries(r.entries),
-		Pending:   cloneEntries(r.pending),
-	}, nil
+	stored, err := s.entries.List(ctx, rec.ID)
+	if err != nil {
+		return Transcript{}, err
+	}
+	entries := make([]Entry, 0, len(stored))
+	for _, e := range stored {
+		if e.User != nil && e.User.Pending {
+			continue
+		}
+		entries = append(entries, e)
+	}
+	return Transcript{TaskID: k.TaskID, SessionID: rec.ID, Stage: rec.Stage, Entries: entries}, nil
 }
 
 // Summary describes one session, false when it is not open.
@@ -1038,7 +1075,40 @@ func (s *Service) DiscardTask(ctx context.Context, taskID string) error {
 	if err := s.CloseTask(ctx, taskID); err != nil {
 		return err
 	}
-	return s.sessions.DeleteByTask(ctx, taskID)
+	if err := s.sessions.DeleteByTask(ctx, taskID); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.conversations, taskID)
+	return nil
+}
+
+// LoadConversations reads every session the database keeps into the index
+// Conversations answers from. The app calls it once, at start.
+func (s *Service) LoadConversations(ctx context.Context) error {
+	recs, err := s.sessions.List(ctx)
+	if err != nil {
+		return err
+	}
+	index := map[string][]Conversation{}
+	for _, rec := range recs {
+		index[rec.TaskID] = append(index[rec.TaskID], Conversation{Stage: rec.Stage, StartedAt: rec.CreatedAt})
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.conversations = index
+	return nil
+}
+
+// Conversations lists every session a task has, open or closed, by start.
+func (s *Service) Conversations(taskID string) []Conversation {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	out := slices.Clone(s.conversations[taskID])
+	slices.SortStableFunc(out, func(a, b Conversation) int { return a.StartedAt.Compare(b.StartedAt) })
+	return out
 }
 
 // Shutdown stops every process gracefully within ctx, and kills what is left

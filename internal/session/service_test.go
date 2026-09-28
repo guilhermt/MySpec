@@ -986,8 +986,6 @@ func TestCloseForgetsTheTask(t *testing.T) {
 	if _, ok := f.service.Summary(prd("t1")); ok {
 		t.Error("Summary() found the task after Close")
 	}
-	_, err := f.service.Transcript(t.Context(), prd("t1"))
-	wantErrIs(t, err, session.ErrNotFound)
 	wantErrIs(t, f.service.Send(t.Context(), prd("t1"), "hi"), session.ErrNotFound)
 
 	// Closing what is not open is not an error.
@@ -2129,5 +2127,142 @@ func TestTheStartAndTheEndOfAnActionReportTheState(t *testing.T) {
 		waitFor(t, "the state reported after gate "+gate, func() bool {
 			return f.stateCount(prd("t1")) > before
 		})
+	}
+}
+
+func TestTheTranscriptOfAClosedSessionIsReadFromTheDatabase(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	f.start(t, taskInfo(t, "t1"))
+	f.waitIdle(t, prd("t1"))
+	open := f.transcript(t, prd("t1"))
+	if err := f.service.Close(t.Context(), prd("t1")); err != nil {
+		t.Fatalf("Close() = %v, want nil", err)
+	}
+	// A message still queued when the session closed is never sent.
+	queued := session.Entry{ID: "queued", Seq: 99, Kind: session.KindUser, User: &session.UserEntry{Text: "later", Pending: true}}
+	if err := f.entries.Insert(t.Context(), open.SessionID, queued); err != nil {
+		t.Fatalf("Insert() = %v, want nil", err)
+	}
+
+	got, err := f.service.Transcript(t.Context(), prd("t1"))
+	if err != nil {
+		t.Fatalf("Transcript() = %v, want nil", err)
+	}
+	open.Pending = nil
+	if diff := cmp.Diff(open, got); diff != "" {
+		t.Errorf("Transcript() mismatch (-want +got):\n%s", diff)
+	}
+	if _, ok := f.service.Summary(prd("t1")); ok {
+		t.Error("Transcript() opened the session")
+	}
+}
+
+func TestTheTranscriptOfAClosedSessionSurvivesARestart(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	f.start(t, taskInfo(t, "t1"))
+	f.waitIdle(t, prd("t1"))
+	want := f.transcript(t, prd("t1"))
+	want.Pending = nil
+
+	next := f.restart(t)
+	got, err := next.service.Transcript(t.Context(), prd("t1"))
+	if err != nil {
+		t.Fatalf("Transcript() = %v, want nil", err)
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("Transcript() mismatch (-want +got):\n%s", diff)
+	}
+	if _, ok := next.service.Summary(prd("t1")); ok {
+		t.Error("Transcript() opened the session")
+	}
+}
+
+func TestADiscardedSessionHasNoTranscript(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	f.start(t, taskInfo(t, "t1"))
+	f.waitIdle(t, prd("t1"))
+	if err := f.service.Discard(t.Context(), "t1", string(prompts.StagePRD)); err != nil {
+		t.Fatalf("Discard() = %v, want nil", err)
+	}
+
+	_, err := f.service.Transcript(t.Context(), prd("t1"))
+	wantErrIs(t, err, session.ErrNotFound)
+}
+
+func TestTheConversationsOfATaskListEverySessionItHadByStart(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "slow")
+	info := taskInfo(t, "t1")
+	f.open(t, info)
+	f.advance(time.Minute)
+	f.open(t, atStage(info, prompts.StageTechSpec))
+	f.open(t, taskInfo(t, "t2"))
+	if err := f.service.Close(t.Context(), prd("t1")); err != nil {
+		t.Fatalf("Close() = %v, want nil", err)
+	}
+
+	want := []session.Conversation{
+		{Stage: string(prompts.StagePRD), StartedAt: base},
+		{Stage: string(prompts.StageTechSpec), StartedAt: base.Add(time.Minute)},
+	}
+	if diff := cmp.Diff(want, f.service.Conversations("t1")); diff != "" {
+		t.Errorf("Conversations(t1) mismatch (-want +got):\n%s", diff)
+	}
+	if got := f.service.Conversations("t3"); len(got) != 0 {
+		t.Errorf("Conversations(t3) = %+v, want none", got)
+	}
+}
+
+func TestADiscardedStageLeavesTheConversationsOfItsTask(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "slow")
+	info := taskInfo(t, "t1")
+	f.open(t, info)
+	f.open(t, atStage(info, prompts.StageTechSpec))
+	f.open(t, taskInfo(t, "t2"))
+
+	if err := f.service.Discard(t.Context(), "t1", string(prompts.StageTechSpec)); err != nil {
+		t.Fatalf("Discard() = %v, want nil", err)
+	}
+	want := []session.Conversation{{Stage: string(prompts.StagePRD), StartedAt: base}}
+	if diff := cmp.Diff(want, f.service.Conversations("t1")); diff != "" {
+		t.Errorf("Conversations(t1) after Discard mismatch (-want +got):\n%s", diff)
+	}
+
+	if err := f.service.DiscardTask(t.Context(), "t1"); err != nil {
+		t.Fatalf("DiscardTask() = %v, want nil", err)
+	}
+	if got := f.service.Conversations("t1"); len(got) != 0 {
+		t.Errorf("Conversations(t1) after DiscardTask = %+v, want none", got)
+	}
+	if got := f.service.Conversations("t2"); len(got) != 1 {
+		t.Errorf("Conversations(t2) = %+v, want the session of the other task", got)
+	}
+}
+
+func TestTheConversationsOfATaskAreLoadedAtStart(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "slow")
+	f.open(t, taskInfo(t, "t1"))
+
+	next := f.restart(t)
+	if got := next.service.Conversations("t1"); len(got) != 0 {
+		t.Errorf("Conversations() before loading = %+v, want none", got)
+	}
+	if err := next.service.LoadConversations(t.Context()); err != nil {
+		t.Fatalf("LoadConversations() = %v, want nil", err)
+	}
+	want := []session.Conversation{{Stage: string(prompts.StagePRD), StartedAt: base}}
+	if diff := cmp.Diff(want, next.service.Conversations("t1")); diff != "" {
+		t.Errorf("Conversations() mismatch (-want +got):\n%s", diff)
 	}
 }

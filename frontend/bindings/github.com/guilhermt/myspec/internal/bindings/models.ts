@@ -2528,6 +2528,21 @@ export interface TaskCard {
 }
 
 /**
+ * TaskConversation is a conversation a task has had, open or closed.
+ */
+export interface TaskConversation {
+    /**
+     * the session stage: prd, tech_spec, plan, one_shot, step:<n>, step_review:<n>, pr or pr_review
+     */
+    "stage": string;
+
+    /**
+     * RFC 3339
+     */
+    "startedAt": string;
+}
+
+/**
  * TaskStageModel is the model and effort of one stage of a task, with what the
  * user can still do about it.
  */
@@ -2667,6 +2682,27 @@ export interface TaskSummary {
      * every stage, in workflow order; never nil
      */
     "models": TaskStageModel[] | null;
+
+    /**
+     * Conversations is every session the task has, open or closed, by start;
+     * never nil.
+     */
+    "conversations": TaskConversation[] | null;
+
+    /**
+     * the branch of the worktree of the task; "" before it exists
+     */
+    "branch": string;
+
+    /**
+     * as the worktree keeps it, origin/<base>; "" before it exists
+     */
+    "baseBranch": string;
+
+    /**
+     * "" before the worktree exists
+     */
+    "worktreePath": string;
     "canContinue": boolean;
     "artifactVersion": number;
     "lastError": string;

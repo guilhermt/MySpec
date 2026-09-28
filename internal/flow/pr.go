@@ -87,6 +87,11 @@ const noWorktreeDetail = "the worktree of this task is gone; discard the plan to
 // say which commit it is about.
 const passAskedWithoutHead = "asked"
 
+// Worktree is the worktree of a task, false before it exists.
+func (s *Service) Worktree(id string) (worktree.Worktree, bool) {
+	return s.worktrees.Get(id)
+}
+
 // PullRequest is the PR stage of a task, false before it.
 func (s *Service) PullRequest(id string) (PullRequest, bool) {
 	t, ok := s.tasks.Get(id)

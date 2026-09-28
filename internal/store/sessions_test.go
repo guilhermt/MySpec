@@ -243,3 +243,29 @@ func TestSessionsDeleteWithoutStagesDoesNothing(t *testing.T) {
 		t.Errorf("Get() = %v, want nil", err)
 	}
 }
+
+func TestSessionsListReturnsEverySessionByTaskAndCreation(t *testing.T) {
+	t.Parallel()
+	s := newStoreWithRepositories(t)
+
+	taskID, sessionID := seedSession(t, s)
+	other := seedNamedTask(t, s, "task-0", "zero")
+	later := newSession("sess-2", taskID, task.StageTechSpec)
+	later.CreatedAt = fixedTime.Add(time.Hour)
+	earlier := newSession("sess-3", taskID, task.StagePlan)
+	earlier.CreatedAt = fixedTime.Add(-time.Hour)
+	for _, rec := range []session.Record{later, earlier, newSession("sess-4", other, task.StagePRD)} {
+		if err := s.Sessions.Insert(t.Context(), rec); err != nil {
+			t.Fatalf("Insert() = %v, want nil", err)
+		}
+	}
+
+	got, err := s.Sessions.List(t.Context())
+	if err != nil {
+		t.Fatalf("List() = %v, want nil", err)
+	}
+	want := []session.Record{newSession("sess-4", other, task.StagePRD), earlier, newSession(sessionID, taskID, task.StagePRD), later}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("List() mismatch (-want +got):\n%s", diff)
+	}
+}

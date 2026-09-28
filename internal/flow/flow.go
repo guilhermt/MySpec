@@ -38,6 +38,7 @@ type Tasks interface {
 	SetStepModel(ctx context.Context, id string, number int, c models.Choice) (task.Task, error)
 	SetReviewMode(ctx context.Context, id string, mode reviewmode.Mode) (task.Task, error)
 	SetStepReviewMode(ctx context.Context, id string, number int, mode reviewmode.Mode) (task.Task, error)
+	ClearStepReviewMode(ctx context.Context, id string, number int) (task.Task, error)
 	RemoveArtifacts(ctx context.Context, id string, from task.Stage) error
 	PRRun(id string) (task.PRRun, bool)
 	SetPRRun(ctx context.Context, id string, status task.PRStatus, block *task.PRBlock) (task.PRRun, error)

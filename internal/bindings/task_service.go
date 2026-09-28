@@ -433,6 +433,18 @@ func (s *TaskService) SetStepReviewMode(taskID string, step int, mode string) er
 	return nil
 }
 
+// ClearStepReviewMode makes a step that has not started follow the review mode
+// of the task again.
+func (s *TaskService) ClearStepReviewMode(taskID string, step int) error {
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+
+	if err := s.flow.ClearStepReviewMode(ctx, taskID, step); err != nil {
+		return s.fail("ClearStepReviewMode", err)
+	}
+	return nil
+}
+
 // ReviewStepMyself takes the review of the current step of a task back from
 // the agent.
 func (s *TaskService) ReviewStepMyself(taskID string) error {

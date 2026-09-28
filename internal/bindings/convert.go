@@ -23,6 +23,7 @@ import (
 	"github.com/guilhermt/myspec/internal/task"
 	"github.com/guilhermt/myspec/internal/theme"
 	"github.com/guilhermt/myspec/internal/upgrade"
+	"github.com/guilhermt/myspec/internal/worktree"
 )
 
 // FromRepositories converts the registered repositories, with what the last
@@ -179,6 +180,8 @@ func FromTasks(
 	artifacts func(id string) task.Artifacts,
 	steps func(id string) []flow.StepState,
 	prs func(id string) (flow.PullRequest, bool),
+	worktrees func(id string) (worktree.Worktree, bool),
+	conversations func(id string) []session.Conversation,
 	repositories func(id string) (repository.Repository, bool),
 	summaries map[session.Key]session.Summary,
 	situations map[string][]attention.Situation,
@@ -195,6 +198,10 @@ func FromTasks(
 		fullName := ""
 		if repo, ok := repositories(t.RepositoryID); ok {
 			fullName = repo.FullName()
+		}
+		var wt worktree.Worktree
+		if found, ok := worktrees(t.ID); ok {
+			wt = found
 		}
 		summary := summaries[taskSessionKey(t, states)]
 		if summary.Status == "" {
@@ -233,6 +240,10 @@ func FromTasks(
 			PlanProblems:       fromProblems(a.Plan.Problems),
 			Situations:         fromSituations(situations[t.ID]),
 			Models:             fromStageModels(flow.StageModels(t, states, prPointer)),
+			Conversations:      fromConversations(conversations(t.ID)),
+			Branch:             wt.Branch,
+			BaseBranch:         wt.Base,
+			WorktreePath:       wt.Path,
 			CanContinue:        t.Revisiting && a.Done(t.Stage) && summary.Idle,
 			ArtifactVersion:    t.ArtifactVersion,
 			LastError:          summary.LastError,
@@ -241,6 +252,15 @@ func FromTasks(
 		}
 	}
 	return converted
+}
+
+// fromConversations converts the sessions of a task, never nil.
+func fromConversations(list []session.Conversation) []TaskConversation {
+	out := make([]TaskConversation, len(list))
+	for i, c := range list {
+		out[i] = TaskConversation{Stage: c.Stage, StartedAt: c.StartedAt.Format(time.RFC3339)}
+	}
+	return out
 }
 
 // taskSessionKey is the session the task screen shows: the one of the stage

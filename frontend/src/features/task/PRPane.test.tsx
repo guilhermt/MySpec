@@ -21,8 +21,8 @@ function pane(overrides: Partial<PullRequest> = {}, repositories = [makeReposito
     state: makeState({ repositories, tasks: [task] }),
     ui: {
       transcripts: {
-        "task-1|pr": { status: "ready", entries: [], pending: [], buffered: [] },
-        "task-1|pr_review": { status: "ready", entries: [], pending: [], buffered: [] },
+        "task-1|pr": { status: "ready", error: "", entries: [], pending: [], buffered: [] },
+        "task-1|pr_review": { status: "ready", error: "", entries: [], pending: [], buffered: [] },
       },
     },
   });

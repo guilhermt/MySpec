@@ -634,6 +634,18 @@ func (s *Service) SetStepReviewMode(ctx context.Context, id string, number int, 
 	return t, nil
 }
 
+// ClearStepReviewMode drops the mode of a step of its own, so the step follows
+// the task again. A step without a mode of its own is left as it is.
+func (s *Service) ClearStepReviewMode(ctx context.Context, id string, number int) (Task, error) {
+	t, err := s.updateReviewModes(ctx, id, func(m *ReviewModes) { delete(m.Steps, number) })
+	if err != nil {
+		return Task{}, err
+	}
+
+	s.log.Info("task step review mode cleared", "task", id, "step", number)
+	return t, nil
+}
+
 // updateReviewModes rewrites the review modes of a task on a copy of them,
 // persists it and tells the app.
 func (s *Service) updateReviewModes(ctx context.Context, id string, mutate func(*ReviewModes)) (Task, error) {

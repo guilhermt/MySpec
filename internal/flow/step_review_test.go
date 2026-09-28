@@ -267,6 +267,37 @@ func TestSetStepReviewModeRefusesAStartedStep(t *testing.T) {
 	f.wantTaskCalls(t)
 }
 
+func TestAStepThatFollowsTheTaskAgainTakesTheModeOfTheTask(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	implementing(f, "task-1", twoStepPlan())
+	if err := f.service.SetStepReviewMode(t.Context(), "task-1", 2, reviewmode.Agent); err != nil {
+		t.Fatalf("SetStepReviewMode() = %v, want nil", err)
+	}
+
+	if err := f.service.ClearStepReviewMode(t.Context(), "task-1", 2); err != nil {
+		t.Fatalf("ClearStepReviewMode() = %v, want nil", err)
+	}
+	f.wantTaskCalls(t, "stepReviewMode:task-1:2:agent", "clearStepReviewMode:task-1:2")
+	if state := f.stepState(t, "task-1", 2); state.ReviewMode != reviewmode.Manual || state.ModeAdjusted {
+		t.Errorf("step 2 = %+v, want it to follow the manual mode of the task", state)
+	}
+}
+
+func TestFollowingTheTaskIsRefusedOnceTheStepStarted(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	implementing(f, "task-1", twoStepPlan())
+	f.tasks.setStepRun("task-1", task.StepRun{Number: 1, Status: task.StepStarted, StartCommit: startCommit})
+
+	wantErrIs(t, f.service.ClearStepReviewMode(t.Context(), "task-1", 1), flow.ErrStepStarted)
+	wantErrIs(t, f.service.ClearStepReviewMode(t.Context(), "task-1", 7), flow.ErrNoStep)
+	wantErrIs(t, f.service.ClearStepReviewMode(t.Context(), "nobody", 1), task.ErrNotFound)
+	f.wantTaskCalls(t)
+}
+
 func TestSetStepReviewModeOfAStepThePlanDoesNotHave(t *testing.T) {
 	t.Parallel()
 

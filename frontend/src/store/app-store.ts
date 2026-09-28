@@ -244,6 +244,8 @@ export interface AppStore {
   beginTranscript: (taskId: string, stage: string) => void;
   setTranscript: (transcript: Transcript) => void;
   applyTranscriptEvent: (event: TranscriptEvent) => void;
+  /** failTranscript records why the conversation of a stage could not be read. */
+  failTranscript: (taskId: string, stage: string, message: string) => void;
   dropTranscript: (taskId: string, stage: string) => void;
   setDraft: (taskId: string, stage: string, text: string) => void;
   selectStepTab: (taskId: string, step: number, tab: StepTab) => void;
@@ -810,6 +812,7 @@ export const useAppStore = create<AppStore>()((set, get) => {
             [key]: {
               ...(state.transcripts[key] ?? emptyTranscript()),
               status: "loading",
+              error: "",
               buffered: [],
             },
           },
@@ -841,6 +844,22 @@ export const useAppStore = create<AppStore>()((set, get) => {
           return {};
         }
         return { transcripts: { ...state.transcripts, [key]: next } };
+      }),
+
+    failTranscript: (taskId, stage, message) =>
+      set((state) => {
+        const key = sessionKey(taskId, stage);
+        return {
+          transcripts: {
+            ...state.transcripts,
+            [key]: {
+              ...(state.transcripts[key] ?? emptyTranscript()),
+              status: "error",
+              error: message,
+              buffered: [],
+            },
+          },
+        };
       }),
 
     dropTranscript: (taskId, stage) =>

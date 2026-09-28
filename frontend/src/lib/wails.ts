@@ -87,6 +87,7 @@ import type {
   StepReport,
   StepReviewer,
   TaskCard,
+  TaskConversation,
   TaskStageModel,
   TaskSummary,
   Transcript,
@@ -187,6 +188,7 @@ export type {
   StepReport,
   StepReviewer,
   TaskCard,
+  TaskConversation,
   TaskStageModel,
   TaskSummary,
   Transcript,
@@ -1249,6 +1251,8 @@ export const api = {
     TaskService.SetReviewMode(taskId, mode),
   setStepReviewMode: (taskId: string, step: number, mode: ReviewMode): Promise<void> =>
     TaskService.SetStepReviewMode(taskId, step, mode),
+  clearStepReviewMode: (taskId: string, step: number): Promise<void> =>
+    TaskService.ClearStepReviewMode(taskId, step),
   reviewStepMyself: (taskId: string): Promise<void> => TaskService.ReviewStepMyself(taskId),
   approveStep: (taskId: string): Promise<void> => TaskService.ApproveStep(taskId),
   openPR: (taskId: string, title: string, body: string): Promise<void> =>

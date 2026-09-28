@@ -443,25 +443,37 @@ type TaskSummary struct {
 	// ActionLabel and ActionTarget are the action the agent runs now, as the
 	// conversation words it ("Reading", "internal/app/state.go"); "" when none
 	// runs.
-	ActionLabel     string           `json:"actionLabel"`
-	ActionTarget    string           `json:"actionTarget"`
-	ContextPercent  int              `json:"contextPercent"`
-	PendingCount    int              `json:"pendingCount"`
-	Corrections     int              `json:"corrections"`
-	HasPRD          bool             `json:"hasPrd"`
-	HasTechSpec     bool             `json:"hasTechSpec"`
-	HasOneShot      bool             `json:"hasOneShot"`
-	Steps           []Step           `json:"steps"`        // never nil
-	CurrentStep     int              `json:"currentStep"`  // the step that runs or runs next; 0 when the task has no steps
-	PR              *PullRequest     `json:"pr"`           // nil outside the pull request stage
-	PlanProblems    []PlanProblem    `json:"planProblems"` // never nil
-	Situations      []Situation      `json:"situations"`   // what the task waits on the user for, the most urgent first; never nil
-	Models          []TaskStageModel `json:"models"`       // every stage, in workflow order; never nil
-	CanContinue     bool             `json:"canContinue"`
-	ArtifactVersion int              `json:"artifactVersion"`
-	LastError       string           `json:"lastError"`
-	CreatedAt       string           `json:"createdAt"`
-	UpdatedAt       string           `json:"updatedAt"`
+	ActionLabel    string           `json:"actionLabel"`
+	ActionTarget   string           `json:"actionTarget"`
+	ContextPercent int              `json:"contextPercent"`
+	PendingCount   int              `json:"pendingCount"`
+	Corrections    int              `json:"corrections"`
+	HasPRD         bool             `json:"hasPrd"`
+	HasTechSpec    bool             `json:"hasTechSpec"`
+	HasOneShot     bool             `json:"hasOneShot"`
+	Steps          []Step           `json:"steps"`        // never nil
+	CurrentStep    int              `json:"currentStep"`  // the step that runs or runs next; 0 when the task has no steps
+	PR             *PullRequest     `json:"pr"`           // nil outside the pull request stage
+	PlanProblems   []PlanProblem    `json:"planProblems"` // never nil
+	Situations     []Situation      `json:"situations"`   // what the task waits on the user for, the most urgent first; never nil
+	Models         []TaskStageModel `json:"models"`       // every stage, in workflow order; never nil
+	// Conversations is every session the task has, open or closed, by start;
+	// never nil.
+	Conversations   []TaskConversation `json:"conversations"`
+	Branch          string             `json:"branch"`       // the branch of the worktree of the task; "" before it exists
+	BaseBranch      string             `json:"baseBranch"`   // as the worktree keeps it, origin/<base>; "" before it exists
+	WorktreePath    string             `json:"worktreePath"` // "" before the worktree exists
+	CanContinue     bool               `json:"canContinue"`
+	ArtifactVersion int                `json:"artifactVersion"`
+	LastError       string             `json:"lastError"`
+	CreatedAt       string             `json:"createdAt"`
+	UpdatedAt       string             `json:"updatedAt"`
+}
+
+// TaskConversation is a conversation a task has had, open or closed.
+type TaskConversation struct {
+	Stage     string `json:"stage"`     // the session stage: prd, tech_spec, plan, one_shot, step:<n>, step_review:<n>, pr or pr_review
+	StartedAt string `json:"startedAt"` // RFC 3339
 }
 
 // ArchivedStep is one step of an archived task, as the plan wrote it.

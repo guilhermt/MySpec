@@ -106,6 +106,7 @@ export type {
     StepReport,
     StepReviewer,
     TaskCard,
+    TaskConversation,
     TaskStageModel,
     TaskSummary,
     Transcript,

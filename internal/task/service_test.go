@@ -1042,6 +1042,34 @@ func TestSetStepReviewModeMakesTheModeOfTheStepItsOwn(t *testing.T) {
 	wantErrIs(t, err, task.ErrNotFound)
 }
 
+func TestClearStepReviewModeMakesTheStepFollowTheTask(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	created := f.create(t, "add-login")
+	if _, err := f.service.SetStepReviewMode(t.Context(), created.ID, 2, reviewmode.Agent); err != nil {
+		t.Fatalf("SetStepReviewMode() = %v, want nil", err)
+	}
+
+	got, err := f.service.ClearStepReviewMode(t.Context(), created.ID, 2)
+	if err != nil {
+		t.Fatalf("ClearStepReviewMode() = %v, want nil", err)
+	}
+	if got.ReviewModes.Adjusted(2) {
+		t.Error("Adjusted(2) = true, want the step to follow the task")
+	}
+	if f.repo.get(t, created.ID).ReviewModes.Adjusted(2) {
+		t.Error("stored Adjusted(2) = true, want the step to follow the task")
+	}
+
+	// A step that already follows the task is left as it is.
+	if _, err = f.service.ClearStepReviewMode(t.Context(), created.ID, 3); err != nil {
+		t.Errorf("ClearStepReviewMode() of a step without a mode = %v, want nil", err)
+	}
+	_, err = f.service.ClearStepReviewMode(t.Context(), "nope", 1)
+	wantErrIs(t, err, task.ErrNotFound)
+}
+
 func TestSetModelOfAnUnknownTaskIsNotFound(t *testing.T) {
 	t.Parallel()
 

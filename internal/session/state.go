@@ -105,6 +105,14 @@ type SessionRepository interface {
 	Update(ctx context.Context, rec Record) error
 	Delete(ctx context.Context, taskID string, stages ...string) error
 	DeleteByTask(ctx context.Context, taskID string) error
+	List(ctx context.Context) ([]Record, error) // every session of every task, by task and creation
+}
+
+// Conversation is a session a task has had, open or closed: the stage it
+// talks in and when it started.
+type Conversation struct {
+	Stage     string
+	StartedAt time.Time
 }
 
 // Status is what the interface shows about a session at a glance.

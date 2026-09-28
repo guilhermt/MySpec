@@ -8,15 +8,15 @@ import { renderWithStore } from "@/test/render";
 import { makeEntry, makeState, makeTask, makeTranscript } from "@/test/wails-mock";
 
 function ready(entries: Entry[], pending: Entry[] = []): Record<string, TranscriptState> {
-  return { "task-1|prd": { status: "ready", entries, pending, buffered: [] } };
+  return { "task-1|prd": { status: "ready", error: "", entries, pending, buffered: [] } };
 }
 
 function loading(): Record<string, TranscriptState> {
-  return { "task-1|prd": { status: "loading", entries: [], pending: [], buffered: [] } };
+  return { "task-1|prd": { status: "loading", error: "", entries: [], pending: [], buffered: [] } };
 }
 
 function reloading(entries: Entry[]): Record<string, TranscriptState> {
-  return { "task-1|prd": { status: "loading", entries, pending: [], buffered: [] } };
+  return { "task-1|prd": { status: "loading", error: "", entries, pending: [], buffered: [] } };
 }
 
 /**

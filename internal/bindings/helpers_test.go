@@ -793,7 +793,7 @@ func (f *fixture) snapshot() bindings.State {
 		ModelDefaults:     bindings.FromModelSet(f.models.Defaults()),
 		ReviewModeDefault: string(f.reviewModes.Default()),
 		Tasks: bindings.FromTasks(
-			f.taskSvc.List(), f.taskArtifacts, f.flow.Steps, f.flow.PullRequest,
+			f.taskSvc.List(), f.taskArtifacts, f.flow.Steps, f.flow.PullRequest, f.flow.Worktree, f.sessions.Conversations,
 			f.repositories.Get, f.sessions.Summaries(), nil,
 		),
 		History: bindings.FromArchived(
