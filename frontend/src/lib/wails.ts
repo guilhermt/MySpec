@@ -335,7 +335,14 @@ export type MarkerType =
   | "step_started"
   | "compacted"
   | "interrupted"
-  | "retried";
+  | "retried"
+  | "committed"
+  | "pr_opened"
+  | "checks_read"
+  | "draft_approved"
+  | "changes_approved"
+  | "paused"
+  | "plan_invalid";
 /** AppKind is which message of the workflow the app sent; "" for any other message. */
 export type AppKind =
   | ""
@@ -815,6 +822,13 @@ export function asMarkerType(value: string): MarkerType {
     case "compacted":
     case "interrupted":
     case "retried":
+    case "committed":
+    case "pr_opened":
+    case "checks_read":
+    case "draft_approved":
+    case "changes_approved":
+    case "paused":
+    case "plan_invalid":
       return value;
     default:
       return "compacted";

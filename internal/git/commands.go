@@ -121,6 +121,10 @@ type Change struct {
 // index differs from HEAD and the working tree matches the index.
 func (c Change) Staged() bool { return c.X != '.' && c.X != '?' && c.Y == '.' }
 
+// Partial reports whether the path is staged in part: the index differs from
+// HEAD and the working tree differs from the index.
+func (c Change) Partial() bool { return c.X != '.' && c.X != '?' && c.Y != '.' }
+
 // Kind names the change for the interface.
 func (c Change) Kind() Kind {
 	switch {

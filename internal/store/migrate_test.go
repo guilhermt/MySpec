@@ -563,6 +563,27 @@ func TestTheTaskScreenMigrationAddsThePauseTheCommitTimeAndTheChecks(t *testing.
 	}
 }
 
+func TestTheConversationMigrationLeavesAPullRequestWithoutWhoMergedIt(t *testing.T) {
+	t.Parallel()
+
+	db := openAt(t, latestVersion-1)
+	seedRepositoryAndTask(t, db)
+	const insertRun = `INSERT INTO pr_runs (task_id, status, created_at, updated_at)
+		VALUES ('task-1', 'done', '2026-09-06T10:00:00Z', '2026-09-06T10:00:00Z')`
+	if _, err := db.ExecContext(t.Context(), insertRun); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	if err := migrate(t.Context(), db, slog.New(slog.DiscardHandler), carryOver(t)); err != nil {
+		t.Fatalf("migrate() = %v, want nil", err)
+	}
+
+	const query = `SELECT merged_by || merged_at FROM pr_runs WHERE task_id = 'task-1'`
+	if got := readOne(t, db, query); got != "" {
+		t.Errorf("merged_by, merged_at = %q, want them empty on a row recorded before the columns", got)
+	}
+}
+
 func TestTheConversationMigrationKeepsTheOutputOfAnEntryWhileTheEntryLives(t *testing.T) {
 	t.Parallel()
 

@@ -99,13 +99,16 @@ func TestViewPRReadsWhatARealGhAnswersWithTheTimesOfTheChecks(t *testing.T) {
 	if diff := cmp.Diff(want, got.Checks); diff != "" {
 		t.Errorf("ViewPR().Checks mismatch (-want +got):\n%s", diff)
 	}
+	if got.MergedBy != "guilhermt" || !got.MergedAt.Equal(at("2026-09-28T00:09:14Z")) {
+		t.Errorf("ViewPR() merged by %q at %v, want guilhermt at 2026-09-28T00:09:14Z", got.MergedBy, got.MergedAt)
+	}
 }
 
 func TestViewPRReadsThePullRequestOfTheBranch(t *testing.T) {
 	t.Parallel()
 	r, fake := runner(t, map[string]ghtest.Reply{
 		"pr": {Stdout: `{"number":42,"url":"https://github.com/acme/api/pull/42","state":"OPEN","baseRefName":"dev",` +
-			`"mergeable":"MERGEABLE","statusCheckRollup":[` +
+			`"mergeable":"MERGEABLE","mergedBy":null,"mergedAt":null,"statusCheckRollup":[` +
 			`{"__typename":"CheckRun","name":"test","status":"COMPLETED","conclusion":"SUCCESS","detailsUrl":"https://github.com/acme/api/actions/runs/1"},` +
 			`{"__typename":"StatusContext","context":"ci/deploy","state":"PENDING","targetUrl":"https://ci.example.com/2"}]}`},
 	})
@@ -136,7 +139,7 @@ func TestViewPRReadsThePullRequestOfTheBranch(t *testing.T) {
 	if len(calls) != 1 {
 		t.Fatalf("calls = %+v, want one", calls)
 	}
-	if calls[0].Args != "pr view login-screen --json number,url,state,baseRefName,mergeable,statusCheckRollup" {
+	if calls[0].Args != "pr view login-screen --json number,url,state,baseRefName,mergeable,statusCheckRollup,mergedBy,mergedAt" {
 		t.Errorf("args = %q, want the branch and the fields the app reads", calls[0].Args)
 	}
 	if calls[0].Dir != dir {

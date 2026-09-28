@@ -182,6 +182,10 @@ func TestApprovingAReviewAsksForACommitThatIsPushed(t *testing.T) {
 	if diff := cmp.Diff([]session.AppMessage{{Kind: session.AppCommitPush}}, f.sessions.sentApps()); diff != "" {
 		t.Errorf("app messages mismatch (-want +got):\n%s", diff)
 	}
+	approved := []keyedMarker{{Key: reviewKeyOf, Marker: session.MarkerEntry{Type: session.MarkerChangesApproved, Files: 3}}}
+	if diff := cmp.Diff(approved, f.sessions.marked(session.MarkerChangesApproved)); diff != "" {
+		t.Errorf("changes_approved markers mismatch (-want +got):\n%s", diff)
+	}
 	if !slices.Contains(f.sessions.recorded(), "send:task-1:pr_review") {
 		t.Errorf("session calls = %q, want the prompt sent to the review session", f.sessions.recorded())
 	}
@@ -220,6 +224,12 @@ func TestACommitOfAReviewStartsTheNextPass(t *testing.T) {
 	}
 	if state := f.prState(t, "task-1"); state.CommitFailed {
 		t.Error("the approval is reported as having produced no commit")
+	}
+	committed := []keyedMarker{{Key: reviewKeyOf, Marker: session.MarkerEntry{
+		Type: session.MarkerCommitted, SHA: commitSHA[:7], Subject: "Do the work of the step", Pushed: true, Number: 7,
+	}}}
+	if diff := cmp.Diff(committed, f.sessions.marked(session.MarkerCommitted)); diff != "" {
+		t.Errorf("committed markers mismatch (-want +got):\n%s", diff)
 	}
 
 	// The same commit never asks for a second pass.
@@ -343,6 +353,13 @@ func TestOpeningThePullRequestWritesTheDraftTheUserApproved(t *testing.T) {
 	}
 	if diff := cmp.Diff([]session.AppMessage{{Kind: session.AppOpen}}, f.sessions.sentApps()); diff != "" {
 		t.Errorf("app messages mismatch (-want +got):\n%s", diff)
+	}
+	approved := []keyedMarker{{
+		Key:    session.Key{TaskID: "task-1", Stage: session.PRStage},
+		Marker: session.MarkerEntry{Type: session.MarkerDraftApproved, Title: "Add the login screen"},
+	}}
+	if diff := cmp.Diff(approved, f.sessions.marked(session.MarkerDraftApproved)); diff != "" {
+		t.Errorf("draft_approved markers mismatch (-want +got):\n%s", diff)
 	}
 }
 

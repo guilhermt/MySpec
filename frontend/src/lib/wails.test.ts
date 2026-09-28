@@ -117,6 +117,13 @@ describe("narrowing", () => {
     expect(asMarkerType("stage_started")).toBe("stage_started");
     expect(asMarkerType("step_started")).toBe("step_started");
     expect(asMarkerType("retried")).toBe("retried");
+    expect(asMarkerType("committed")).toBe("committed");
+    expect(asMarkerType("pr_opened")).toBe("pr_opened");
+    expect(asMarkerType("checks_read")).toBe("checks_read");
+    expect(asMarkerType("draft_approved")).toBe("draft_approved");
+    expect(asMarkerType("changes_approved")).toBe("changes_approved");
+    expect(asMarkerType("paused")).toBe("paused");
+    expect(asMarkerType("plan_invalid")).toBe("plan_invalid");
     for (const kind of [
       "report",
       "pass",

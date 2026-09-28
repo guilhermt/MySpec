@@ -876,7 +876,7 @@ func TestFromEntryCarriesTheStepOfAMarker(t *testing.T) {
 		Kind:   session.KindMarker,
 		Marker: &session.MarkerEntry{Type: session.MarkerStepStarted, Step: 2, Restarted: true},
 	})
-	want := &bindings.MarkerEntry{Type: "step_started", Step: 2, Findings: -1, Restarted: true}
+	want := markerDTO(bindings.MarkerEntry{Type: "step_started", Step: 2, Findings: -1, Restarted: true})
 	if diff := cmp.Diff(want, got.Marker); diff != "" {
 		t.Errorf("marker mismatch (-want +got):\n%s", diff)
 	}
@@ -941,6 +941,17 @@ func TestFromEntryCarriesWhoInterrupted(t *testing.T) {
 	}
 }
 
+// markerDTO is a marker as FromEntry converts it: its lists are never nil.
+func markerDTO(m bindings.MarkerEntry) *bindings.MarkerEntry {
+	if m.Failed == nil {
+		m.Failed = []string{}
+	}
+	if m.Problems == nil {
+		m.Problems = []bindings.PlanProblem{}
+	}
+	return &m
+}
+
 func TestFromEntryCarriesTheNewMarkerFields(t *testing.T) {
 	t.Parallel()
 
@@ -950,15 +961,55 @@ func TestFromEntryCarriesTheNewMarkerFields(t *testing.T) {
 	}{
 		"compacted": {
 			marker: &session.MarkerEntry{Type: session.MarkerCompacted, PreTokens: 150000, Percent: 75},
-			want:   &bindings.MarkerEntry{Type: "compacted", PreTokens: 150000, Findings: -1, Percent: 75},
+			want:   markerDTO(bindings.MarkerEntry{Type: "compacted", PreTokens: 150000, Findings: -1, Percent: 75}),
 		},
 		"retried": {
 			marker: &session.MarkerEntry{Type: session.MarkerRetried, Attempts: 2, Reason: "rate_limit"},
-			want:   &bindings.MarkerEntry{Type: "retried", Findings: -1, Attempts: 2, Reason: "rate_limit"},
+			want:   markerDTO(bindings.MarkerEntry{Type: "retried", Findings: -1, Attempts: 2, Reason: "rate_limit"}),
+		},
+		"committed": {
+			marker: &session.MarkerEntry{
+				Type: session.MarkerCommitted, SHA: "a1b2c3d", Subject: "Fix the lint", Pushed: true, Number: 42,
+			},
+			want: markerDTO(bindings.MarkerEntry{
+				Type: "committed", Findings: -1, SHA: "a1b2c3d", Subject: "Fix the lint", Pushed: true, Number: 42,
+			}),
+		},
+		"pr_opened": {
+			marker: &session.MarkerEntry{Type: session.MarkerPROpened, Number: 42, Base: "main"},
+			want:   markerDTO(bindings.MarkerEntry{Type: "pr_opened", Findings: -1, Number: 42, Base: "main"}),
+		},
+		"checks_read": {
+			marker: &session.MarkerEntry{
+				Type: session.MarkerChecksRead, Pass: 2, Passed: 3, Total: 5, Failed: []string{"lint"}, Conflict: true,
+			},
+			want: markerDTO(bindings.MarkerEntry{
+				Type: "checks_read", Pass: 2, Findings: -1, Passed: 3, Total: 5, Failed: []string{"lint"}, Conflict: true,
+			}),
+		},
+		"draft_approved": {
+			marker: &session.MarkerEntry{Type: session.MarkerDraftApproved, Title: "Add login"},
+			want:   markerDTO(bindings.MarkerEntry{Type: "draft_approved", Findings: -1, Title: "Add login"}),
+		},
+		"changes_approved": {
+			marker: &session.MarkerEntry{Type: session.MarkerChangesApproved, Files: 4},
+			want:   markerDTO(bindings.MarkerEntry{Type: "changes_approved", Findings: -1, Files: 4}),
+		},
+		"paused": {
+			marker: &session.MarkerEntry{Type: session.MarkerPaused},
+			want:   markerDTO(bindings.MarkerEntry{Type: "paused", Findings: -1}),
+		},
+		"plan_invalid": {
+			marker: &session.MarkerEntry{
+				Type: session.MarkerPlanInvalid, Problems: []session.PlanProblem{{File: "01-a.md", Message: "no title"}},
+			},
+			want: markerDTO(bindings.MarkerEntry{
+				Type: "plan_invalid", Findings: -1, Problems: []bindings.PlanProblem{{File: "01-a.md", Message: "no title"}},
+			}),
 		},
 		"interrupted": {
 			marker: &session.MarkerEntry{Type: session.MarkerInterrupted, InterruptedBy: "user"},
-			want:   &bindings.MarkerEntry{Type: "interrupted", Findings: -1, InterruptedBy: "user"},
+			want:   markerDTO(bindings.MarkerEntry{Type: "interrupted", Findings: -1, InterruptedBy: "user"}),
 		},
 	}
 	for name, tc := range cases {
@@ -1015,15 +1066,15 @@ func TestFromEntryCarriesTheVerdictOfAStepReviewMarker(t *testing.T) {
 	}{
 		"findings counted": {
 			marker: &session.MarkerEntry{Type: session.MarkerStepReviewWritten, Pass: 2, Findings: new(3)},
-			want:   &bindings.MarkerEntry{Type: "step_review_written", Pass: 2, Findings: 3},
+			want:   markerDTO(bindings.MarkerEntry{Type: "step_review_written", Pass: 2, Findings: 3}),
 		},
 		"no findings": {
 			marker: &session.MarkerEntry{Type: session.MarkerStepReviewWritten, Pass: 2, Clean: true, Findings: new(0)},
-			want:   &bindings.MarkerEntry{Type: "step_review_written", Pass: 2, Clean: true},
+			want:   markerDTO(bindings.MarkerEntry{Type: "step_review_written", Pass: 2, Clean: true}),
 		},
 		"an old transcript": {
 			marker: &session.MarkerEntry{Type: session.MarkerStepReviewWritten, Pass: 1},
-			want:   &bindings.MarkerEntry{Type: "step_review_written", Pass: 1, Findings: -1},
+			want:   markerDTO(bindings.MarkerEntry{Type: "step_review_written", Pass: 1, Findings: -1}),
 		},
 	}
 	for name, tc := range cases {
@@ -2846,6 +2897,44 @@ func TestFromTasksCarriesTheChecksOfThePullRequestByName(t *testing.T) {
 	}
 	if got[1].PR.Checks == nil || len(got[1].PR.Checks) != 0 || got[1].PR.Mergeable != "" {
 		t.Errorf("Checks, Mergeable = %#v, %q, want an empty list and no merge state before a reading", got[1].PR.Checks, got[1].PR.Mergeable)
+	}
+}
+
+func TestFromTasksCarriesWhoMergedThePullRequestAndWhen(t *testing.T) {
+	t.Parallel()
+
+	merged := flow.PullRequest{
+		Status: flow.PRMerged,
+		PR: task.PRDetails{
+			Number: 8, State: task.PRStateMerged,
+			MergedBy: "guilhermt", MergedAt: time.Date(2026, 9, 28, 0, 9, 14, 0, time.UTC),
+		},
+	}
+	open := flow.PullRequest{Status: flow.PRWaitingChecks, PR: task.PRDetails{Number: 9}}
+	byTask := map[string]flow.PullRequest{"task-1": merged, "task-2": open}
+
+	got := bindings.FromTasks(
+		[]task.Task{
+			{ID: "task-1", Name: "login-screen", Stage: task.StagePR},
+			{ID: "task-2", Name: "signup-screen", Stage: task.StagePR},
+		},
+		func(string) task.Artifacts { return task.Artifacts{} },
+		func(string) []flow.StepState { return nil },
+		func(id string) (flow.PullRequest, bool) { pr, ok := byTask[id]; return pr, ok },
+		noWorktree,
+		noConversations,
+		repoOf,
+		nil,
+		nil,
+	)
+	if len(got) != 2 || got[0].PR == nil || got[1].PR == nil {
+		t.Fatalf("FromTasks() = %+v, want two tasks with their pull requests", got)
+	}
+	if got[0].PR.MergedBy != "guilhermt" || got[0].PR.MergedAt != "2026-09-28T00:09:14Z" {
+		t.Errorf("MergedBy, MergedAt = %q, %q, want guilhermt at 2026-09-28T00:09:14Z", got[0].PR.MergedBy, got[0].PR.MergedAt)
+	}
+	if got[1].PR.MergedBy != "" || got[1].PR.MergedAt != "" {
+		t.Errorf("MergedBy, MergedAt = %q, %q, want both empty before the merge", got[1].PR.MergedBy, got[1].PR.MergedAt)
 	}
 }
 

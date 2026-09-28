@@ -605,12 +605,16 @@ func (s *Service) Pause(ctx context.Context, k Key) error {
 	if err != nil {
 		return err
 	}
-	if !r.rec.Paused {
+	was := r.rec.Paused
+	if !was {
 		r.rec.PausedAt = s.now().UTC()
 	}
 	r.rec.Paused = true
 	if err := s.persistRecord(ctx, r); err != nil {
 		return err
+	}
+	if !was {
+		s.appendLocked(ctx, r, Entry{Kind: KindMarker, Marker: &MarkerEntry{Type: MarkerPaused}}, n)
 	}
 	n.state(k)
 	if r.proc != nil && !r.stopping {
@@ -909,6 +913,74 @@ func (s *Service) MarkStepReview(ctx context.Context, k Key, pass int, clean boo
 	if findings >= 0 {
 		marker.Findings = &findings
 	}
+	s.appendLocked(ctx, r, Entry{Kind: KindMarker, Marker: marker}, n)
+}
+
+// mark records a marker in the conversation of a session; a session that is
+// not open records nothing.
+func (s *Service) mark(ctx context.Context, k Key, marker *MarkerEntry) {
+	n := &notes{}
+	defer s.flush(n)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	r, err := s.runOf(k)
+	if err != nil {
+		return
+	}
+	s.appendLocked(ctx, r, Entry{Kind: KindMarker, Marker: marker}, n)
+}
+
+// MarkCommitted records that the changes were committed; pushed says the
+// commit went to pull request number.
+func (s *Service) MarkCommitted(ctx context.Context, k Key, sha, subject string, pushed bool, number int) {
+	s.mark(ctx, k, &MarkerEntry{Type: MarkerCommitted, SHA: sha, Subject: subject, Pushed: pushed, Number: number})
+}
+
+// MarkPROpened records that pull request number was opened against base.
+func (s *Service) MarkPROpened(ctx context.Context, k Key, number int, base string) {
+	s.mark(ctx, k, &MarkerEntry{Type: MarkerPROpened, Number: number, Base: base})
+}
+
+// MarkChecksRead records the checks of the pull request read for a pass of
+// its review.
+func (s *Service) MarkChecksRead(ctx context.Context, k Key, pass, passed, total int, failed []string, conflict bool) {
+	s.mark(ctx, k, &MarkerEntry{
+		Type: MarkerChecksRead, Pass: pass, Passed: passed, Total: total, Failed: failed, Conflict: conflict,
+	})
+}
+
+// MarkDraftApproved records that the draft of the pull request was approved.
+func (s *Service) MarkDraftApproved(ctx context.Context, k Key, title string) {
+	s.mark(ctx, k, &MarkerEntry{Type: MarkerDraftApproved, Title: title})
+}
+
+// MarkChangesApproved records that the user approved the changed files.
+func (s *Service) MarkChangesApproved(ctx context.Context, k Key, files int) {
+	s.mark(ctx, k, &MarkerEntry{Type: MarkerChangesApproved, Files: files})
+}
+
+// MarkPlanInvalid records the problems of a plan that is not valid, unless
+// the last plan_invalid marker of the conversation has the same ones.
+func (s *Service) MarkPlanInvalid(ctx context.Context, k Key, problems []PlanProblem) {
+	n := &notes{}
+	defer s.flush(n)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	r, err := s.runOf(k)
+	if err != nil {
+		return
+	}
+	for _, e := range slices.Backward(r.entries) {
+		if e.Kind == KindMarker && e.Marker != nil && e.Marker.Type == MarkerPlanInvalid {
+			if slices.Equal(e.Marker.Problems, problems) {
+				return
+			}
+			break
+		}
+	}
+	marker := &MarkerEntry{Type: MarkerPlanInvalid, Problems: problems}
 	s.appendLocked(ctx, r, Entry{Kind: KindMarker, Marker: marker}, n)
 }
 

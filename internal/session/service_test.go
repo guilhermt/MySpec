@@ -1268,6 +1268,92 @@ func TestMarkStepReview(t *testing.T) {
 	}
 }
 
+func TestTheMilestonesOfTheWorkflowAreMarked(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	f.start(t, taskInfo(t, "t1"))
+	f.waitIdle(t, prd("t1"))
+	before := len(f.entriesOf(t, prd("t1"), session.KindMarker))
+
+	ctx := t.Context()
+	f.service.MarkChangesApproved(ctx, prd("t1"), 4)
+	f.service.MarkCommitted(ctx, prd("t1"), "a1b2c3d", "Add the login screen", false, 0)
+	f.service.MarkDraftApproved(ctx, prd("t1"), "Add the login screen")
+	f.service.MarkPROpened(ctx, prd("t1"), 42, "main")
+	f.service.MarkChecksRead(ctx, prd("t1"), 2, 3, 5, []string{"lint"}, true)
+	f.service.MarkCommitted(ctx, prd("t1"), "e4f5a6b", "Fix the lint", true, 42)
+	f.service.MarkCommitted(ctx, prd("missing"), "e4f5a6b", "Fix the lint", true, 42)
+
+	markers := f.entriesOf(t, prd("t1"), session.KindMarker)[before:]
+	got := make([]*session.MarkerEntry, 0, len(markers))
+	for _, m := range markers {
+		got = append(got, m.Marker)
+	}
+	want := []*session.MarkerEntry{
+		{Type: session.MarkerChangesApproved, Files: 4},
+		{Type: session.MarkerCommitted, SHA: "a1b2c3d", Subject: "Add the login screen"},
+		{Type: session.MarkerDraftApproved, Title: "Add the login screen"},
+		{Type: session.MarkerPROpened, Number: 42, Base: "main"},
+		{Type: session.MarkerChecksRead, Pass: 2, Passed: 3, Total: 5, Failed: []string{"lint"}, Conflict: true},
+		{Type: session.MarkerCommitted, SHA: "e4f5a6b", Subject: "Fix the lint", Pushed: true, Number: 42},
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("markers mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestAPlanInvalidMarkerIsRecordedOnlyWhenTheProblemsChange(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	f.start(t, taskInfo(t, "t1"))
+	f.waitIdle(t, prd("t1"))
+
+	first := []session.PlanProblem{{File: "01-login.md", Message: "missing a title"}}
+	second := []session.PlanProblem{{Message: "no steps"}}
+	ctx := t.Context()
+	f.service.MarkPlanInvalid(ctx, prd("t1"), first)
+	f.service.MarkPlanInvalid(ctx, prd("t1"), first)
+	f.service.MarkPlanInvalid(ctx, prd("t1"), second)
+	f.service.MarkPlanInvalid(ctx, prd("t1"), first)
+
+	var got [][]session.PlanProblem
+	for _, m := range f.entriesOf(t, prd("t1"), session.KindMarker) {
+		if m.Marker.Type == session.MarkerPlanInvalid {
+			got = append(got, m.Marker.Problems)
+		}
+	}
+	want := [][]session.PlanProblem{first, second, first}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("plan_invalid problems mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestPausingMarksThePauseOnce(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	f.start(t, taskInfo(t, "t1"))
+	f.waitIdle(t, prd("t1"))
+
+	for range 2 {
+		if err := f.service.Pause(t.Context(), prd("t1")); err != nil {
+			t.Fatalf("Pause() = %v, want nil", err)
+		}
+	}
+
+	paused := 0
+	for _, m := range f.entriesOf(t, prd("t1"), session.KindMarker) {
+		if m.Marker.Type == session.MarkerPaused {
+			paused++
+		}
+	}
+	if paused != 1 {
+		t.Errorf("paused markers = %d, want 1", paused)
+	}
+}
+
 func TestThePromptSentIsKeptForTheStagesThatShowIt(t *testing.T) {
 	t.Parallel()
 

@@ -130,6 +130,13 @@ func TestApprovingAStepSendsTheCommitPromptAsAMessageOfTheApp(t *testing.T) {
 	if diff := cmp.Diff([]session.AppMessage{{Kind: session.AppCommit}}, f.sessions.sentApps()); diff != "" {
 		t.Errorf("app messages mismatch (-want +got):\n%s", diff)
 	}
+	approved := []keyedMarker{{
+		Key:    session.Key{TaskID: "task-1", Stage: session.StepStage(1)},
+		Marker: session.MarkerEntry{Type: session.MarkerChangesApproved, Files: 3},
+	}}
+	if diff := cmp.Diff(approved, f.sessions.marked(session.MarkerChangesApproved)); diff != "" {
+		t.Errorf("changes_approved markers mismatch (-want +got):\n%s", diff)
+	}
 	// The commit prompt is not a correction: it must not count against the
 	// corrections the app allows itself.
 	sum, _ := f.sessions.Summary(session.Key{TaskID: "task-1", Stage: session.StepStage(1)})
@@ -199,6 +206,13 @@ func TestAStepIsConcludedWhenItsBranchMovesAndTheNextOneIsPrepared(t *testing.T)
 	}
 	if !state.CommittedAt.Equal(commitTime) {
 		t.Errorf("CommittedAt = %v, want the committer date %v", state.CommittedAt, commitTime)
+	}
+	committed := []keyedMarker{{
+		Key:    session.Key{TaskID: "task-1", Stage: session.StepStage(1)},
+		Marker: session.MarkerEntry{Type: session.MarkerCommitted, SHA: commitSHA[:7], Subject: "Do the work of the step"},
+	}}
+	if diff := cmp.Diff(committed, f.sessions.marked(session.MarkerCommitted)); diff != "" {
+		t.Errorf("committed markers mismatch (-want +got):\n%s", diff)
 	}
 	// The commit is recorded before the worktree of the step is forgotten, so
 	// the step reads done while the forget can still be on its way.

@@ -13,7 +13,8 @@ import {
 import { asLifecycleStage, stageLabel } from "@/lib/stages";
 import { asMarkerType, type MarkerEntry, type MarkerType } from "@/lib/wails";
 
-// The markers drawn today; a type left out (retried) draws nothing.
+// The markers drawn today; a type left out (retried, the markers of the
+// workflow) draws nothing.
 const MARKERS: Partial<Record<MarkerType, { icon: LucideIcon; text: string }>> = {
   prd_written: { icon: FileCheck, text: "PRD written" },
   prd_updated: { icon: FileText, text: "PRD updated" },

@@ -194,8 +194,39 @@ func TestStatusSeesAFileStagedAndThenChangedAgainAsPending(t *testing.T) {
 	if change := got.Changes[0]; change.Staged() {
 		t.Errorf("Staged(%s) = true, want false for a partly staged file", change.Path)
 	}
+	if change := got.Changes[0]; !change.Partial() {
+		t.Errorf("Partial(%s) = false, want true for a partly staged file", change.Path)
+	}
 	if want := "MM README.md"; got.Lines()[0] != want {
 		t.Errorf("Lines = %q, want %q", got.Lines()[0], want)
+	}
+}
+
+func TestPartialIsAPathStagedAndChangedAgain(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		x, y byte
+		want bool
+	}{
+		{"modified in both", 'M', 'M', true},
+		{"added and changed again", 'A', 'M', true},
+		{"renamed and changed again", 'R', 'M', true},
+		{"staged, then deleted", 'M', 'D', true},
+		{"only staged", 'M', '.', false},
+		{"only in the working tree", '.', 'M', false},
+		{"untracked", '?', '?', false},
+		{"unmerged", 'U', 'U', true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			change := git.Change{X: tt.x, Y: tt.y, Path: "a.go"}
+			if got := change.Partial(); got != tt.want {
+				t.Errorf("Partial(%c%c) = %t, want %t", tt.x, tt.y, got, tt.want)
+			}
+		})
 	}
 }
 

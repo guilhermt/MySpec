@@ -98,6 +98,15 @@ func TestAnInvalidPlanIsCorrectedUpToThreeTimes(t *testing.T) {
 	if diff := cmp.Diff(want, f.sessions.sentApps()); diff != "" {
 		t.Errorf("app messages mismatch (-want +got):\n%s", diff)
 	}
+	// Once the corrections are over, the problems stay in the conversation.
+	invalid := f.sessions.marked(session.MarkerPlanInvalid)
+	problems := []session.PlanProblem{{File: "1-first.md", Message: `missing the title heading ("# Step N: Title")`}}
+	if len(invalid) == 0 || invalid[0].Key != (session.Key{TaskID: "task-1", Stage: string(task.StagePlan)}) {
+		t.Fatalf("plan_invalid markers = %+v, want one in the plan session", invalid)
+	}
+	if diff := cmp.Diff(problems, invalid[0].Marker.Problems); diff != "" {
+		t.Errorf("plan_invalid problems mismatch (-want +got):\n%s", diff)
+	}
 }
 
 func TestAnEmptyStepsFolderIsNotCorrected(t *testing.T) {

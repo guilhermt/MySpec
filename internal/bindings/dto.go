@@ -130,8 +130,9 @@ type ReviewFile struct {
 	Path string `json:"path"`
 	// Kind is added, modified, deleted, renamed or untracked, a string for the
 	// same reason as State.Theme.
-	Kind   string `json:"kind"`
-	Staged bool   `json:"staged"` // nothing of it is left outside the index
+	Kind    string `json:"kind"`
+	Staged  bool   `json:"staged"`  // nothing of it is left outside the index
+	Partial bool   `json:"partial"` // part of it is in the index and part is not
 }
 
 // Review is how far the review of a step has got.
@@ -310,7 +311,12 @@ type PullRequest struct {
 	// Mergeable is mergeable, conflicting or unknown; "" before the first
 	// reading.
 	Mergeable string `json:"mergeable"`
-	CanClose  bool   `json:"canClose"` // the user may close the task now
+	// MergedBy is the login of who merged the pull request and MergedAt when,
+	// RFC 3339; "" before the merge and for a merge read before they were
+	// recorded.
+	MergedBy string `json:"mergedBy"`
+	MergedAt string `json:"mergedAt"`
+	CanClose bool   `json:"canClose"` // the user may close the task now
 	// CloneMissing says the closing waits for the clone of the repository.
 	CloneMissing bool         `json:"cloneMissing"`
 	Close        *CloseResult `json:"close"` // closed only
@@ -715,7 +721,8 @@ type MarkerEntry struct {
 	// plan_written, plan_updated, one_shot_written, one_shot_updated,
 	// pr_review_written, step_review_started, step_review_written,
 	// review_started, discussion_started, stage_started, step_started,
-	// compacted, interrupted or retried.
+	// compacted, interrupted, retried, committed, pr_opened, checks_read,
+	// draft_approved, changes_approved, paused or plan_invalid.
 	Type      string `json:"type"`
 	PreTokens int    `json:"preTokens"`
 	// Stage belongs to stage_started alone, Step to the markers of a step
@@ -736,6 +743,22 @@ type MarkerEntry struct {
 	Attempts      int    `json:"attempts"`
 	Reason        string `json:"reason"`
 	InterruptedBy string `json:"interruptedBy"`
+	// SHA (short), Subject and Pushed belong to committed; Number to committed
+	// with a push and to pr_opened, Base to pr_opened; Pass, Passed, Total,
+	// Failed (never nil) and Conflict to checks_read; Title to draft_approved;
+	// Files to changes_approved; Problems (never nil) to plan_invalid.
+	SHA      string        `json:"sha"`
+	Subject  string        `json:"subject"`
+	Pushed   bool          `json:"pushed"`
+	Number   int           `json:"number"`
+	Base     string        `json:"base"`
+	Passed   int           `json:"passed"`
+	Total    int           `json:"total"`
+	Failed   []string      `json:"failed"`
+	Conflict bool          `json:"conflict"`
+	Title    string        `json:"title"`
+	Files    int           `json:"files"`
+	Problems []PlanProblem `json:"problems"`
 }
 
 // ErrorEntry is a failure shown in the conversation.

@@ -87,6 +87,10 @@ type PRDetails struct {
 	CheckedAt time.Time
 	Checks    []gh.Check   // the checks of the reading; nil before the first
 	Mergeable gh.Mergeable // "" before the first reading
+	// MergedBy is the login of who merged the pull request and MergedAt when;
+	// "" and zero before the merge.
+	MergedBy string
+	MergedAt time.Time
 }
 
 // CloseOutcome is what became of one of the three things closing a task acts

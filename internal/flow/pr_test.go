@@ -307,6 +307,13 @@ func TestAPullRequestThatAlreadyExistsSkipsTheDraft(t *testing.T) {
 	if run.PR.CheckedAt.IsZero() {
 		t.Error("the pull request was recorded with no reading time")
 	}
+	opened := []keyedMarker{{
+		Key:    session.Key{TaskID: "task-1", Stage: session.PRStage},
+		Marker: session.MarkerEntry{Type: session.MarkerPROpened, Number: samePR.Number, Base: samePR.Base},
+	}}
+	if diff := cmp.Diff(opened, f.sessions.marked(session.MarkerPROpened)); diff != "" {
+		t.Errorf("pr_opened markers mismatch (-want +got):\n%s", diff)
+	}
 	// The draft is for a task that has no pull request yet.
 	if slices.Contains(f.sessions.recorded(), "start:task-1:pr") {
 		t.Errorf("session calls = %q, want no draft session", f.sessions.recorded())

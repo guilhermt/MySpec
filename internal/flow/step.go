@@ -635,6 +635,7 @@ func (s *Service) completeStep(
 		s.log.Error("record committed step failed", "task", t.ID, "step", step.Number, "error", err)
 		return
 	}
+	s.sessions.MarkCommitted(ctx, stepKey(t.ID, step.Number), task.ShortSHA(commit.SHA), commit.Subject, false, 0)
 	s.review.Forget(t.ID)
 	s.setNoCommit(t.ID, false)
 	if err := s.sessions.Close(ctx, stepKey(t.ID, step.Number)); err != nil {
@@ -794,6 +795,7 @@ func (s *Service) ApproveStep(ctx context.Context, id string) error {
 		return err
 	}
 	s.setNoCommit(id, false)
+	s.sessions.MarkChangesApproved(ctx, key, snap.Total)
 	app := session.AppMessage{Text: message, Kind: session.AppCommit}
 	if err := s.sessions.SendFromApp(ctx, key, app); err != nil {
 		// The button stays where the user left it: the step is theirs again.

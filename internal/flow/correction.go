@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
 )
 
@@ -33,4 +34,13 @@ func correctionMessage(stepsDir string, problems []task.PlanProblem) string {
 	b.WriteString("\n")
 	b.WriteString(correctionInstructions)
 	return b.String()
+}
+
+// planProblems are the problems of a plan the way a conversation records them.
+func planProblems(problems []task.PlanProblem) []session.PlanProblem {
+	out := make([]session.PlanProblem, 0, len(problems))
+	for _, p := range problems {
+		out = append(out, session.PlanProblem{File: p.File, Message: p.Message})
+	}
+	return out
 }

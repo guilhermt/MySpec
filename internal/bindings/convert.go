@@ -318,6 +318,8 @@ func fromPullRequest(pr *flow.PullRequest) *PullRequest {
 		Trouble:      fromTrouble(pr.Trouble),
 		Checks:       fromChecks(pr.PR.Checks),
 		Mergeable:    string(pr.PR.Mergeable),
+		MergedBy:     pr.PR.MergedBy,
+		MergedAt:     timeOrEmpty(pr.PR.MergedAt),
 		CanClose:     pr.CanClose,
 		CloneMissing: pr.CloneMissing,
 		Close:        fromCloseResult(pr.Close),
@@ -603,7 +605,7 @@ func fromReview(snap *review.Snapshot) *Review {
 	}
 	files := make([]ReviewFile, len(snap.Files))
 	for i, file := range snap.Files {
-		files[i] = ReviewFile{Path: file.Path, Kind: string(file.Kind), Staged: file.Staged}
+		files[i] = ReviewFile{Path: file.Path, Kind: string(file.Kind), Staged: file.Staged, Partial: file.Partial}
 	}
 	return &Review{
 		Files:   files,
@@ -802,6 +804,18 @@ func FromEntry(e session.Entry) Entry {
 			Attempts:      e.Marker.Attempts,
 			Reason:        e.Marker.Reason,
 			InterruptedBy: e.Marker.InterruptedBy,
+			SHA:           e.Marker.SHA,
+			Subject:       e.Marker.Subject,
+			Pushed:        e.Marker.Pushed,
+			Number:        e.Marker.Number,
+			Base:          e.Marker.Base,
+			Passed:        e.Marker.Passed,
+			Total:         e.Marker.Total,
+			Failed:        names(e.Marker.Failed),
+			Conflict:      e.Marker.Conflict,
+			Title:         e.Marker.Title,
+			Files:         e.Marker.Files,
+			Problems:      fromMarkerProblems(e.Marker.Problems),
 		}
 		if e.Marker.Findings != nil {
 			converted.Marker.Findings = *e.Marker.Findings
@@ -2096,4 +2110,13 @@ func turnStart(summary session.Summary) string {
 		return ""
 	}
 	return summary.TurnStartedAt.Format(time.RFC3339)
+}
+
+// fromMarkerProblems converts the problems of a plan_invalid marker; never nil.
+func fromMarkerProblems(problems []session.PlanProblem) []PlanProblem {
+	out := make([]PlanProblem, 0, len(problems))
+	for _, p := range problems {
+		out = append(out, PlanProblem{File: p.File, Message: p.Message})
+	}
+	return out
 }

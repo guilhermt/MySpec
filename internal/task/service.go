@@ -764,7 +764,7 @@ func (s *Service) SetStepCommitted(
 		return StepRun{}, err
 	}
 
-	s.log.Info("step committed", "task", id, "step", number, "commit", shortSHA(sha), "subject", subject)
+	s.log.Info("step committed", "task", id, "step", number, "commit", ShortSHA(sha), "subject", subject)
 	return run, nil
 }
 

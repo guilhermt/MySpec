@@ -105,6 +105,9 @@ func (s *Service) evaluate(ctx context.Context, id string) {
 	// stage stays where it is until the agent fixes them.
 	if t.Stage == task.StagePlan && sum.Idle && a.Plan.Present && !a.Plan.Valid() {
 		if sum.Corrections >= MaxCorrections {
+			// The corrections are over: the problems stay in the conversation
+			// for the user.
+			s.sessions.MarkPlanInvalid(ctx, key, planProblems(a.Plan.Problems))
 			return
 		}
 		message := session.AppMessage{

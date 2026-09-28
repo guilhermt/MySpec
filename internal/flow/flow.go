@@ -82,6 +82,12 @@ type Sessions interface {
 	SendCorrection(ctx context.Context, k session.Key, m session.AppMessage) error
 	MarkPRReview(ctx context.Context, k session.Key, pass int, clean bool)
 	MarkStepReview(ctx context.Context, k session.Key, pass int, clean bool, findings int)
+	MarkCommitted(ctx context.Context, k session.Key, sha, subject string, pushed bool, number int)
+	MarkPROpened(ctx context.Context, k session.Key, number int, base string)
+	MarkChecksRead(ctx context.Context, k session.Key, pass, passed, total int, failed []string, conflict bool)
+	MarkDraftApproved(ctx context.Context, k session.Key, title string)
+	MarkChangesApproved(ctx context.Context, k session.Key, files int)
+	MarkPlanInvalid(ctx context.Context, k session.Key, problems []session.PlanProblem)
 }
 
 // Repositories is what the flow needs from internal/repository.

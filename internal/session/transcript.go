@@ -227,6 +227,13 @@ const (
 	MarkerCompacted         MarkerType = "compacted"
 	MarkerInterrupted       MarkerType = "interrupted"
 	MarkerRetried           MarkerType = "retried"
+	MarkerCommitted         MarkerType = "committed"
+	MarkerPROpened          MarkerType = "pr_opened"
+	MarkerChecksRead        MarkerType = "checks_read"
+	MarkerDraftApproved     MarkerType = "draft_approved"
+	MarkerChangesApproved   MarkerType = "changes_approved"
+	MarkerPaused            MarkerType = "paused"
+	MarkerPlanInvalid       MarkerType = "plan_invalid"
 )
 
 // ArtifactKind is the artifact a marker refers to. The values are the ones of
@@ -275,7 +282,7 @@ type MarkerEntry struct {
 	PreTokens int        `json:"preTokens"` // compacted only
 	Stage     string     `json:"stage"`     // stage_started only
 	Step      int        `json:"step"`      // step_started and step_review_started only
-	Pass      int        `json:"pass"`      // pr_review_written and step_review_written only: the pass it closed
+	Pass      int        `json:"pass"`      // pr_review_written, step_review_written and checks_read only: the pass it closed or starts
 	Clean     bool       `json:"clean"`     // pr_review_written and step_review_written only: the pass found nothing to change
 	// Findings is how many findings the pass of a step review reported,
 	// step_review_written only; nil when unknown.
@@ -290,6 +297,25 @@ type MarkerEntry struct {
 	Reason   string `json:"reason"`
 	// InterruptedBy is who interrupted the turn, interrupted only: "user".
 	InterruptedBy string `json:"interruptedBy"`
+
+	SHA      string        `json:"sha"`      // committed
+	Subject  string        `json:"subject"`  // committed
+	Pushed   bool          `json:"pushed"`   // committed: the commit went to the pull request
+	Number   int           `json:"number"`   // pr_opened, committed with push
+	Base     string        `json:"base"`     // pr_opened: the base branch
+	Passed   int           `json:"passed"`   // checks_read
+	Total    int           `json:"total"`    // checks_read
+	Failed   []string      `json:"failed"`   // checks_read: names of the failed checks; nil when none
+	Conflict bool          `json:"conflict"` // checks_read
+	Title    string        `json:"title"`    // draft_approved
+	Files    int           `json:"files"`    // changes_approved
+	Problems []PlanProblem `json:"problems"` // plan_invalid
+}
+
+// PlanProblem is a problem of a plan that is not valid, plan_invalid only.
+type PlanProblem struct {
+	File    string `json:"file"`
+	Message string `json:"message"`
 }
 
 // ErrorKind says what went wrong.

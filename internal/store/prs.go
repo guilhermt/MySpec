@@ -14,7 +14,7 @@ import (
 // prColumns is the column list every PR run query selects, in scan order.
 const prColumns = `task_id, status, block_reason, block_detail,
 	pr_number, pr_url, pr_state, pr_checked_at, pr_base, reviewed_commit, reported_pass,
-	close_result, trouble_baseline, trouble, checks, mergeable, created_at, updated_at`
+	close_result, trouble_baseline, trouble, checks, mergeable, merged_by, merged_at, created_at, updated_at`
 
 // GetPRRun returns what the app recorded about the PR stage of a task. ok is
 // false before the stage.
@@ -34,7 +34,7 @@ func (r *TasksRepo) GetPRRun(ctx context.Context, taskID string) (task.PRRun, bo
 // UpsertPRRun stores the state of the PR stage of a task, rewriting what was
 // there.
 func (r *TasksRepo) UpsertPRRun(ctx context.Context, run task.PRRun) error {
-	const stmt = `INSERT INTO pr_runs (` + prColumns + `) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	const stmt = `INSERT INTO pr_runs (` + prColumns + `) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (task_id) DO UPDATE SET
 			status = excluded.status,
 			block_reason = excluded.block_reason,
@@ -51,6 +51,8 @@ func (r *TasksRepo) UpsertPRRun(ctx context.Context, run task.PRRun) error {
 			trouble = excluded.trouble,
 			checks = excluded.checks,
 			mergeable = excluded.mergeable,
+			merged_by = excluded.merged_by,
+			merged_at = excluded.merged_at,
 			updated_at = excluded.updated_at`
 
 	var block task.PRBlock
@@ -77,7 +79,7 @@ func (r *TasksRepo) UpsertPRRun(ctx context.Context, run task.PRRun) error {
 		nullString(string(block.Reason)), nullString(block.Detail),
 		run.PR.Number, run.PR.URL, string(run.PR.State), nullTime(run.PR.CheckedAt), run.PR.Base,
 		run.ReviewedCommit, run.ReportedPass, closeResult, baseline, trouble, checks, string(run.PR.Mergeable),
-		formatTime(run.CreatedAt), formatTime(run.UpdatedAt))
+		run.PR.MergedBy, formatTimeOrEmpty(run.PR.MergedAt), formatTime(run.CreatedAt), formatTime(run.UpdatedAt))
 	if err != nil {
 		return fmt.Errorf("upsert pr run of task %s: %w", run.TaskID, err)
 	}
@@ -103,12 +105,13 @@ func scanPRRun(row scanner) (task.PRRun, error) {
 		closeResult          string
 		baseline, trouble    string
 		checks, mergeable    string
+		mergedAt             string
 		createdAt, updatedAt string
 	)
 	err := row.Scan(&run.TaskID, &status, &reason, &detail,
 		&run.PR.Number, &run.PR.URL, &state, &checkedAt, &run.PR.Base,
 		&run.ReviewedCommit, &run.ReportedPass, &closeResult, &baseline, &trouble,
-		&checks, &mergeable, &createdAt, &updatedAt)
+		&checks, &mergeable, &run.PR.MergedBy, &mergedAt, &createdAt, &updatedAt)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		return task.PRRun{}, err
@@ -147,6 +150,9 @@ func scanPRRun(row scanner) (task.PRRun, error) {
 		if run.PR.CheckedAt, err = parseTime(checkedAt.String, subject); err != nil {
 			return task.PRRun{}, err
 		}
+	}
+	if run.PR.MergedAt, err = parseTimeOrEmpty(mergedAt, subject); err != nil {
+		return task.PRRun{}, err
 	}
 	if run.CreatedAt, err = parseTime(createdAt, subject); err != nil {
 		return task.PRRun{}, err

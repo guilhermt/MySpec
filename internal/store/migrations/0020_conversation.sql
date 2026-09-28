@@ -8,3 +8,8 @@ CREATE TABLE action_outputs (
     lines     INTEGER NOT NULL,
     truncated INTEGER NOT NULL
 ) STRICT;
+
+-- Who merged the pull request and when, as gh reads them: '' before the merge
+-- and for a merge read before these columns.
+ALTER TABLE pr_runs ADD COLUMN merged_by TEXT NOT NULL DEFAULT '';
+ALTER TABLE pr_runs ADD COLUMN merged_at TEXT NOT NULL DEFAULT '';

@@ -813,6 +813,7 @@ type memSessions struct {
 	calls     []string
 	messages  []string
 	apps      []session.AppMessage // every message of the app, with its kind and numbers
+	markers   []keyedMarker        // every marker of the Mark methods but the reviews'
 	err       error                // returned by every call that changes something
 }
 
@@ -1024,6 +1025,63 @@ func (m *memSessions) MarkStepReview(_ context.Context, k session.Key, pass int,
 
 	m.calls = append(m.calls, "markStep:"+k.TaskID+":"+k.Stage+":pass="+strconv.Itoa(pass)+
 		":clean="+strconv.FormatBool(clean)+":findings="+strconv.Itoa(findings))
+}
+
+// keyedMarker is a marker and the session it was recorded in.
+type keyedMarker struct {
+	Key    session.Key
+	Marker session.MarkerEntry
+}
+
+func (m *memSessions) mark(k session.Key, marker session.MarkerEntry) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.markers = append(m.markers, keyedMarker{Key: k, Marker: marker})
+}
+
+func (m *memSessions) MarkCommitted(_ context.Context, k session.Key, sha, subject string, pushed bool, number int) {
+	m.mark(k, session.MarkerEntry{
+		Type: session.MarkerCommitted, SHA: sha, Subject: subject, Pushed: pushed, Number: number,
+	})
+}
+
+func (m *memSessions) MarkPROpened(_ context.Context, k session.Key, number int, base string) {
+	m.mark(k, session.MarkerEntry{Type: session.MarkerPROpened, Number: number, Base: base})
+}
+
+func (m *memSessions) MarkChecksRead(
+	_ context.Context, k session.Key, pass, passed, total int, failed []string, conflict bool,
+) {
+	m.mark(k, session.MarkerEntry{
+		Type: session.MarkerChecksRead, Pass: pass, Passed: passed, Total: total, Failed: failed, Conflict: conflict,
+	})
+}
+
+func (m *memSessions) MarkDraftApproved(_ context.Context, k session.Key, title string) {
+	m.mark(k, session.MarkerEntry{Type: session.MarkerDraftApproved, Title: title})
+}
+
+func (m *memSessions) MarkChangesApproved(_ context.Context, k session.Key, files int) {
+	m.mark(k, session.MarkerEntry{Type: session.MarkerChangesApproved, Files: files})
+}
+
+func (m *memSessions) MarkPlanInvalid(_ context.Context, k session.Key, problems []session.PlanProblem) {
+	m.mark(k, session.MarkerEntry{Type: session.MarkerPlanInvalid, Problems: problems})
+}
+
+// marked is every marker recorded of type t.
+func (m *memSessions) marked(t session.MarkerType) []keyedMarker {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	var out []keyedMarker
+	for _, km := range m.markers {
+		if km.Marker.Type == t {
+			out = append(out, km)
+		}
+	}
+	return out
 }
 
 // sentApps is the kind and the numbers of every message of the app, without

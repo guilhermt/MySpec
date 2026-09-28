@@ -727,6 +727,8 @@ export function makePullRequest(overrides: Partial<PullRequest> = {}): PullReque
     trouble: { failedChecks: [], conflict: false },
     checks: [],
     mergeable: "",
+    mergedBy: "",
+    mergedAt: "",
     canClose: false,
     cloneMissing: false,
     close: null,
@@ -828,8 +830,8 @@ export function makePrompt(overrides: Partial<Prompt> = {}): Prompt {
 export function makeReview(overrides: Partial<Review> = {}): Review {
   return {
     files: [
-      { path: "src/LoginForm.tsx", kind: "modified", staged: true },
-      { path: "src/api/login.ts", kind: "added", staged: false },
+      { path: "src/LoginForm.tsx", kind: "modified", staged: true, partial: false },
+      { path: "src/api/login.ts", kind: "added", staged: false, partial: false },
     ],
     staged: 1,
     total: 2,
@@ -1218,6 +1220,18 @@ function payloadOf(kind: EntryKind): Omit<Entry, "id" | "seq" | "turnId" | "kind
           attempts: 0,
           reason: "",
           interruptedBy: "",
+          sha: "",
+          subject: "",
+          pushed: false,
+          number: 0,
+          base: "",
+          passed: 0,
+          total: 0,
+          failed: [],
+          conflict: false,
+          title: "",
+          files: 0,
+          problems: [],
         },
       };
     case "error":

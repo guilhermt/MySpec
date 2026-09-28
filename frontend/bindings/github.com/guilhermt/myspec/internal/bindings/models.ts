@@ -1164,7 +1164,8 @@ export interface MarkerEntry {
      * plan_written, plan_updated, one_shot_written, one_shot_updated,
      * pr_review_written, step_review_started, step_review_written,
      * review_started, discussion_started, stage_started, step_started,
-     * compacted, interrupted or retried.
+     * compacted, interrupted, retried, committed, pr_opened, checks_read,
+     * draft_approved, changes_approved, paused or plan_invalid.
      */
     "type": string;
     "preTokens": number;
@@ -1192,6 +1193,25 @@ export interface MarkerEntry {
     "attempts": number;
     "reason": string;
     "interruptedBy": string;
+
+    /**
+     * SHA (short), Subject and Pushed belong to committed; Number to committed
+     * with a push and to pr_opened, Base to pr_opened; Pass, Passed, Total,
+     * Failed (never nil) and Conflict to checks_read; Title to draft_approved;
+     * Files to changes_approved; Problems (never nil) to plan_invalid.
+     */
+    "sha": string;
+    "subject": string;
+    "pushed": boolean;
+    "number": number;
+    "base": string;
+    "passed": number;
+    "total": number;
+    "failed": string[] | null;
+    "conflict": boolean;
+    "title": string;
+    "files": number;
+    "problems": PlanProblem[] | null;
 }
 
 /**
@@ -1556,6 +1576,14 @@ export interface PullRequest {
     "mergeable": string;
 
     /**
+     * MergedBy is the login of who merged the pull request and MergedAt when,
+     * RFC 3339; "" before the merge and for a merge read before they were
+     * recorded.
+     */
+    "mergedBy": string;
+    "mergedAt": string;
+
+    /**
      * the user may close the task now
      */
     "canClose": boolean;
@@ -1905,6 +1933,11 @@ export interface ReviewFile {
      * nothing of it is left outside the index
      */
     "staged": boolean;
+
+    /**
+     * part of it is in the index and part is not
+     */
+    "partial": boolean;
 }
 
 /**
