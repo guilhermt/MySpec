@@ -86,4 +86,17 @@ describe.each(THEMES)("TaskView, the nine scenes in the %s theme", (theme) => {
     expect(pill.querySelector("[data-state]")).toHaveAttribute("data-state", glyph);
     await capture(`scene-${name}-${theme}`, area);
   });
+
+  it("draws the bar of the close scene inside the main area", () => {
+    setTheme(theme);
+    const { area } = scene("close");
+
+    const bar = screen.getByRole("region", { name: "Request" });
+    const inner = bar.getBoundingClientRect();
+    const outer = area.getBoundingClientRect();
+    expect(inner.height).toBeGreaterThan(0);
+    expect(inner.left).toBeGreaterThanOrEqual(outer.left);
+    expect(inner.right).toBeLessThanOrEqual(outer.right);
+    expect(inner.bottom).toBeLessThanOrEqual(outer.bottom);
+  });
 });

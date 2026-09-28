@@ -17,7 +17,7 @@ import {
   screenSession,
   waitingSession,
 } from "@/features/task/task-session";
-import { asSessionStatus, asTaskStage, type TaskSummary } from "@/lib/wails";
+import { asSessionStatus, type TaskSummary } from "@/lib/wails";
 import { clockTime } from "@/lib/when";
 import { pause, resume } from "@/store/actions";
 import { useAppStore, useOpenStepTab, usePanel } from "@/store/app-store";
@@ -120,11 +120,11 @@ function TaskTools({ task, now }: { task: TaskSummary; now: number }) {
 
 /**
  * TaskPause pauses or resumes the conversation the task waits on, with no dialog: Pausing… until the
- * call comes back. The pull request pauses its session from its own bar.
+ * call comes back.
  */
 function TaskPause({ task, now }: { task: TaskSummary; now: number }) {
   const [loading, setLoading] = useState(false);
-  const session = asTaskStage(task.stage) === "pr" ? null : waitingSession(task);
+  const session = waitingSession(task);
   if (session === null) {
     return null;
   }

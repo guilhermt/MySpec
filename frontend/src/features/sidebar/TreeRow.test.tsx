@@ -112,7 +112,7 @@ describe("TreeRow", () => {
       rowOf(
         task({
           stage: "pr",
-          pr: makePullRequest({ status: "done", prNumber: 1279, prState: "MERGED" }),
+          pr: makePullRequest({ status: "merged", prNumber: 1279, prState: "MERGED" }),
           situations: [
             makeSituation({
               kind: "merge",

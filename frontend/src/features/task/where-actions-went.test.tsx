@@ -1,9 +1,17 @@
 import { screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { TaskView } from "@/features/task/TaskView";
-import type { Situation, Step, TaskSummary } from "@/lib/wails";
+import type { PullRequest, Situation, Step, TaskSummary } from "@/lib/wails";
 import { renderWithStore } from "@/test/render";
-import { makeReview, makeSituation, makeState, makeStep, makeTask } from "@/test/wails-mock";
+import {
+  makePullRequest,
+  makeRepository,
+  makeReview,
+  makeSituation,
+  makeState,
+  makeStep,
+  makeTask,
+} from "@/test/wails-mock";
 
 const WORKTREE = "/w/api/add-login";
 
@@ -22,15 +30,30 @@ function stepSituation(kind: string, form = ""): Situation {
   return makeSituation({ kind, form, place: { kind: "step", stage: "", step: 1 } });
 }
 
+// inPR is the task in the PR stage, its pull request in the state given, with the situation it waits on.
+function inPR(pr: Partial<PullRequest>, kind = "", form = ""): TaskSummary {
+  return makeTask({
+    stage: "pr",
+    worktreePath: WORKTREE,
+    pr: makePullRequest({ worktreePath: WORKTREE, ...pr }),
+    situations:
+      kind === "" ? [] : [makeSituation({ kind, form, place: { kind: "pr", stage: "", step: 0 } })],
+  });
+}
+
+const DRAFT = { title: "Add login", body: "The login page.", file: "draft.md" };
+const OPENED = { prNumber: 12, prUrl: "https://github.com/o/r/pull/12" };
+const PR_SESSION = { sessionStage: "pr_review", sessionStatus: "working" };
+
 const REVIEWING = makeReview({ staged: 2, total: 2, percent: 100 });
 
 /** Row is a button of a bar that left, in a state it appeared in, and where it is now. */
 interface Row {
-  origin: "StepBar" | "StageTrack";
+  origin: "StepBar" | "PRBar" | "StageTrack";
   button: string;
   state: string;
   task: TaskSummary;
-  where: "menu" | "bar";
+  where: "menu" | "bar" | "header" | "pane";
   /** name is the accessible name in the new place. */
   name: RegExp;
   disabled?: boolean;
@@ -133,6 +156,220 @@ const ROWS: Row[] = [
     name: /^Discard step 1…$/,
   },
   {
+    origin: "PRBar",
+    button: "Open PR",
+    state: "a draft to approve",
+    task: inPR({ status: "draft_ready", draft: DRAFT }, "draft"),
+    where: "bar",
+    name: /^Approve draft$/,
+  },
+  {
+    origin: "PRBar",
+    button: "Open PR",
+    state: "a draft still being written",
+    task: inPR({ status: "draft_ready", draft: DRAFT, turnRunning: true }, "draft"),
+    where: "bar",
+    name: /^Approve draft$/,
+    disabled: true,
+  },
+  {
+    origin: "PRBar",
+    button: "Open PR",
+    state: "the draft a failed opening left",
+    task: inPR({ status: "awaiting_reply", draft: DRAFT, sessionStage: "pr" }),
+    where: "pane",
+    name: /^Open PR$/,
+  },
+  {
+    origin: "PRBar",
+    button: "Discard draft",
+    state: "a draft to approve",
+    task: inPR({ status: "draft_ready", draft: DRAFT }, "draft"),
+    where: "bar",
+    name: /^Discard draft$/,
+  },
+  {
+    origin: "PRBar",
+    button: "Discard draft",
+    state: "a draft being written",
+    task: inPR({ status: "draft_ready", draft: DRAFT, turnRunning: true }, "draft"),
+    where: "menu",
+    name: /^Discard draft$/,
+  },
+  {
+    origin: "PRBar",
+    button: "Approve",
+    state: "changes to review, files left to stage",
+    task: inPR(
+      { ...OPENED, status: "in_review", review: makeReview(), sessionStage: "pr_review" },
+      "changes_review",
+      "review",
+    ),
+    where: "bar",
+    name: /^Approve$/,
+    disabled: true,
+  },
+  {
+    origin: "PRBar",
+    button: "Approve",
+    state: "changes ready to approve",
+    task: inPR(
+      { ...OPENED, status: "ready_to_approve", review: REVIEWING, sessionStage: "pr_review" },
+      "changes_review",
+      "approve",
+    ),
+    where: "bar",
+    name: /^Approve$/,
+  },
+  {
+    origin: "PRBar",
+    button: "Open in VS Code",
+    state: "changes to review",
+    task: inPR(
+      { ...OPENED, status: "in_review", review: makeReview(), sessionStage: "pr_review" },
+      "changes_review",
+      "review",
+    ),
+    where: "bar",
+    name: /^Open in VS Code$/,
+  },
+  {
+    origin: "PRBar",
+    button: "Open in VS Code",
+    state: "a draft being written",
+    task: inPR({ status: "drafting", ...PR_SESSION, sessionStage: "pr" }),
+    where: "menu",
+    name: /^Open in VS Code/,
+  },
+  {
+    origin: "PRBar",
+    button: "Open in VS Code",
+    state: "an open pull request",
+    task: inPR({ ...OPENED, status: "awaiting_decision", sessionStage: "pr_review" }),
+    where: "menu",
+    name: /^Open in VS Code/,
+  },
+  {
+    origin: "PRBar",
+    button: "#N",
+    state: "an open pull request",
+    task: inPR({ ...OPENED, status: "awaiting_decision", sessionStage: "pr_review" }),
+    where: "menu",
+    name: /^Open PR$/,
+  },
+  {
+    origin: "PRBar",
+    button: "#N",
+    state: "waiting for the merge",
+    task: inPR({ ...OPENED, status: "done" }, "merge", "merge"),
+    where: "bar",
+    name: /^Open PR$/,
+  },
+  {
+    origin: "PRBar",
+    button: "Close task",
+    state: "merged",
+    task: inPR({ ...OPENED, status: "merged", canClose: true }, "merge", "close"),
+    where: "bar",
+    name: /^Close task$/,
+  },
+  {
+    origin: "PRBar",
+    button: "Close task",
+    state: "merged, the clone missing",
+    task: inPR(
+      { ...OPENED, status: "merged", canClose: false, cloneMissing: true },
+      "merge",
+      "close",
+    ),
+    where: "bar",
+    name: /^Close task$/,
+    disabled: true,
+  },
+  {
+    origin: "PRBar",
+    button: "Close task",
+    state: "the merge unconfirmed",
+    task: inPR(
+      { ...OPENED, status: "done", canClose: true, checkError: "timeout" },
+      "merge",
+      "close",
+    ),
+    where: "bar",
+    name: /^Close task$/,
+  },
+  {
+    origin: "PRBar",
+    button: "Close task",
+    state: "in trouble, the merge unconfirmed",
+    task: inPR(
+      {
+        ...OPENED,
+        status: "trouble",
+        canClose: true,
+        checkError: "timeout",
+        trouble: { failedChecks: ["build"], conflict: false },
+      },
+      "pr_trouble",
+      "checks",
+    ),
+    where: "bar",
+    name: /^Close task$/,
+  },
+  {
+    origin: "PRBar",
+    button: "Review again",
+    state: "in trouble",
+    task: inPR(
+      { ...OPENED, status: "trouble", trouble: { failedChecks: ["build"], conflict: false } },
+      "pr_trouble",
+      "checks",
+    ),
+    where: "bar",
+    name: /^Review again$/,
+  },
+  {
+    origin: "PRBar",
+    button: "Review again",
+    state: "waiting for the merge",
+    task: inPR({ ...OPENED, status: "done" }, "merge", "merge"),
+    where: "menu",
+    name: /^Review again$/,
+  },
+  {
+    origin: "PRBar",
+    button: "Refresh PR",
+    state: "an open pull request",
+    task: inPR({ ...OPENED, status: "done" }, "merge", "merge"),
+    where: "menu",
+    name: /^Refresh PR$/,
+  },
+  {
+    origin: "PRBar",
+    button: "Refresh PR",
+    state: "closing",
+    task: inPR({ ...OPENED, status: "closing" }),
+    where: "menu",
+    name: /^Refresh PR · the task is closing$/,
+    disabled: true,
+  },
+  {
+    origin: "PRBar",
+    button: "Pause",
+    state: "the PR session working",
+    task: inPR({ status: "drafting", ...PR_SESSION, sessionStage: "pr" }),
+    where: "header",
+    name: /^Pause$/,
+  },
+  {
+    origin: "PRBar",
+    button: "Resume",
+    state: "the PR session paused",
+    task: inPR({ status: "drafting", sessionStage: "pr", sessionStatus: "paused" }),
+    where: "header",
+    name: /^Resume$/,
+  },
+  {
     origin: "StageTrack",
     button: "Discard and restart",
     state: "in the PRD",
@@ -221,7 +458,10 @@ describe("where the actions of the bars that left went", () => {
     "$origin: $button, $state, is in the $where",
     async ({ task, where, name, disabled }) => {
       const { user } = renderWithStore(<TaskView taskId={task.id} />, {
-        state: makeState({ tasks: [task] }),
+        state: makeState({
+          tasks: [task],
+          repositories: [makeRepository({ id: task.repositoryId })],
+        }),
         ui: { location: { kind: "task", id: task.id } },
       });
 
@@ -229,10 +469,14 @@ describe("where the actions of the bars that left went", () => {
       if (where === "menu") {
         await user.click(screen.getByRole("button", { name: "More actions" }));
         found = await screen.findByRole("menuitem", { name });
-      } else {
+      } else if (where === "bar") {
         found = within(screen.getByRole("region", { name: "Request" })).getByRole("button", {
           name,
         });
+      } else if (where === "header") {
+        found = within(screen.getByRole("banner")).getByRole("button", { name });
+      } else {
+        found = screen.getByRole("button", { name });
       }
 
       if (disabled) {

@@ -406,15 +406,18 @@ function situationText(owner: Owner, situation: Situation): RowText {
       if (task === null) {
         return same(`Ready to merge · ${passText(owner)}`);
       }
-      return form === "close"
-        ? {
-            long: `Ready to close · PR #${prNumber(task)} merged`,
-            short: `Ready to close · #${prNumber(task)}`,
-          }
-        : {
-            long: `Ready to merge · PR #${prNumber(task)}`,
-            short: `Ready to merge · #${prNumber(task)}`,
-          };
+      if (form === "close") {
+        // Only a merge GitHub confirmed says merged; the closing offered after a failed reading doesn't.
+        const merged = task.pr !== null && asPRStatus(task.pr.status) === "merged" ? " merged" : "";
+        return {
+          long: `Ready to close · PR #${prNumber(task)}${merged}`,
+          short: `Ready to close · #${prNumber(task)}${merged}`,
+        };
+      }
+      return {
+        long: `Ready to merge · PR #${prNumber(task)}`,
+        short: `Ready to merge · #${prNumber(task)}`,
+      };
     case "review_report": {
       if (form === "publish") {
         return same(`Ready to publish · ${passText(owner)}`);

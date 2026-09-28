@@ -63,6 +63,43 @@ describe("TaskView, the nine scenes", () => {
     );
   });
 
+  it("offers the closing in the bar of the close scene", () => {
+    scene("close");
+
+    const bar = screen.getByRole("region", { name: "Request" });
+    expect(within(bar).getByRole("status")).toHaveTextContent("Ready to close");
+    expect(bar).toHaveTextContent("#1284 merged");
+    expect(bar).toHaveTextContent("Removes the worktree and the branch, then updates dev");
+    expect(within(bar).getByRole("button", { name: "Close task" })).not.toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+  });
+
+  it.each<[SceneName, string]>([
+    ["checks", "Pull request #1284"],
+    ["findings", "Pull request #1284"],
+    ["close", "Pull request #1284"],
+  ])("puts the pull request in the ⋯ of the %s scene", async (name, group) => {
+    const { user } = scene(name);
+
+    await user.click(screen.getByRole("button", { name: "More actions" }));
+
+    expect(await screen.findByText(group)).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Open PR" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: /^Refresh PR/ })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: /^Review again/ })).toBeInTheDocument();
+  });
+
+  it.each<SceneName>(["findings", "close"])(
+    "pauses the session of the pull request from the header in the %s scene",
+    (name) => {
+      scene(name);
+
+      expect(screen.getByRole("button", { name: "Pause" })).toBeInTheDocument();
+    },
+  );
+
   it.each<SceneName>(["plan", "run", "ask", "error", "blocked", "checks", "findings"])(
     "has no request bar in the %s scene",
     (name) => {

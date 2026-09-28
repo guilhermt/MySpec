@@ -4,7 +4,6 @@ import { Composer } from "@/features/chat/Composer";
 import { Conversation } from "@/features/chat/Conversation";
 import { ArtifactPanel } from "@/features/task/ArtifactPanel";
 import { PlanProblemsNotice } from "@/features/task/PlanProblemsNotice";
-import { PRBar } from "@/features/task/PRBar";
 import { PRPane } from "@/features/task/PRPane";
 import { StepPane } from "@/features/task/StepPane";
 import { currentStepOf, hasStepSession, stepStage } from "@/features/task/step-status";
@@ -84,12 +83,7 @@ export function TaskView({ taskId }: TaskViewProps) {
         {implementing ? (
           <StepPane task={task} />
         ) : opening ? (
-          pr !== null && (
-            <>
-              <PRBar task={task} pr={pr} />
-              <PRPane task={task} pr={pr} />
-            </>
-          )
+          pr !== null && <PRPane task={task} pr={pr} tab={stepTab} />
         ) : (
           <>
             <Conversation

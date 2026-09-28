@@ -284,8 +284,15 @@ describe("the line 2 of a task with a situation", () => {
     [
       "a merged PR ready to close",
       { kind: "merge", group: "closing", form: "close", place: PR_PLACE },
-      {},
+      { pr: makePullRequest({ status: "merged", prNumber: 1279 }) },
       "Ready to close · PR #1279 merged",
+      "Ready to close · #1279 merged",
+    ],
+    [
+      "a PR ready to close without the merge confirmed",
+      { kind: "merge", group: "closing", form: "close", place: PR_PLACE },
+      { pr: makePullRequest({ status: "done", prNumber: 1279, canClose: true }) },
+      "Ready to close · PR #1279",
       "Ready to close · #1279",
     ],
   ])("reads %s", (_case, fields, task, long, short) => {

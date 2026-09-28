@@ -3,30 +3,31 @@ import { Button } from "@/components/system/Button";
 import { RequestBar } from "@/components/system/RequestBar";
 import { Tooltip } from "@/components/system/Tooltip";
 import { useNow } from "@/features/attention/useNow";
+import { DeleteTaskDialog } from "@/features/task/DeleteTaskDialog";
 import { DiscardStepDialog } from "@/features/task/DiscardStepDialog";
-import {
-  type RequestKind,
-  requestKindOf,
-  type TaskRequestAction,
-  taskRequestOf,
-} from "@/features/task/request";
+import { type TaskRequestAction, taskRequestOf } from "@/features/task/request";
 import { currentStepOf } from "@/features/task/step-status";
 import type { TaskSummary } from "@/lib/wails";
-import { approveStep, continueStage, openInEditor } from "@/store/actions";
-import type { StepTab } from "@/store/app-store";
-
-/** REQUEST_KINDS_ON_SCREEN are the bars the task screen draws: the step's and the planning stage's. */
-const REQUEST_KINDS_ON_SCREEN: readonly RequestKind[] = [
-  "step_review",
-  "step_empty",
-  "ready_to_continue",
-];
+import {
+  approvePR,
+  approveStep,
+  closeTask,
+  continueStage,
+  discardDraft,
+  openExternal,
+  openInEditor,
+  openPR,
+  reviewAgain,
+} from "@/store/actions";
+import { type PrDraft, type StepTab, usePrDraft, useRepository } from "@/store/app-store";
 
 // MINUTE is how often the wait on the chip is read again.
 const MINUTE = 60_000;
 
 // run starts what a button of the bar does; the ones that ask first open their dialog instead.
-function run(action: TaskRequestAction, taskId: string): Promise<void> {
+function run(action: TaskRequestAction, task: TaskSummary, edited: PrDraft | null): Promise<void> {
+  const taskId = task.id;
+  const pr = task.pr;
   switch (action) {
     case "openInEditor":
       return openInEditor(taskId);
@@ -34,6 +35,23 @@ function run(action: TaskRequestAction, taskId: string): Promise<void> {
       return approveStep(taskId);
     case "continue":
       return continueStage(taskId);
+    case "approveDraft":
+      // The draft sent is the one the user edited, or the agent's as it is on disk.
+      return openPR(
+        taskId,
+        edited?.title ?? pr?.draft?.title ?? "",
+        edited?.body ?? pr?.draft?.body ?? "",
+      );
+    case "discardDraft":
+      return discardDraft(taskId);
+    case "approvePR":
+      return approvePR(taskId);
+    case "openPR":
+      return pr === null ? Promise.resolve() : openExternal(pr.prUrl);
+    case "closeTask":
+      return closeTask(taskId);
+    case "reviewAgain":
+      return reviewAgain(taskId);
     default:
       return Promise.resolve();
   }
@@ -48,11 +66,12 @@ export interface TaskRequestProps {
 export function TaskRequest({ task, tab }: TaskRequestProps) {
   const [running, setRunning] = useState<TaskRequestAction | null>(null);
   const [discarding, setDiscarding] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const edited = usePrDraft(task.id);
+  const repository = useRepository(task.repositoryId);
   const now = useNow(MINUTE, true);
 
-  const kind = requestKindOf(task);
-  const request =
-    kind !== null && REQUEST_KINDS_ON_SCREEN.includes(kind) ? taskRequestOf(task, tab, now) : null;
+  const request = taskRequestOf(task, tab, now, repository);
   if (request === null) {
     return null;
   }
@@ -63,9 +82,13 @@ export function TaskRequest({ task, tab }: TaskRequestProps) {
       setDiscarding(true);
       return;
     }
+    if (action === "deleteTask") {
+      setDeleting(true);
+      return;
+    }
     setRunning(action);
     try {
-      await run(action, task.id);
+      await run(action, task, edited);
     } finally {
       setRunning(null);
     }
@@ -111,6 +134,13 @@ export function TaskRequest({ task, tab }: TaskRequestProps) {
       {step !== null && (
         <DiscardStepDialog task={task} step={step} open={discarding} onOpenChange={setDiscarding} />
       )}
+      <DeleteTaskDialog
+        taskId={task.id}
+        name={task.name}
+        archived={false}
+        open={deleting}
+        onOpenChange={setDeleting}
+      />
     </div>
   );
 }

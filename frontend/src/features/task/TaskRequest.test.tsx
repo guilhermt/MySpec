@@ -12,10 +12,11 @@ import {
   makeTask,
 } from "@/test/wails-mock";
 
-function request(overrides: Partial<TaskSummary>) {
+function request(overrides: Partial<TaskSummary>, prDrafts: object = {}) {
   const task = makeTask(overrides);
   return renderWithStore(<TaskRequest task={task} tab="implementer" />, {
     state: makeState({ tasks: [task] }),
+    ui: { prDrafts: prDrafts as never },
   });
 }
 
@@ -32,6 +33,20 @@ function inStep(step: Partial<Step>, situations: Situation[], sessionStatus = "w
 
 const onStep = (kind: string, form = "") =>
   makeSituation({ kind, form, place: { kind: "step", stage: "", step: 1 } });
+
+const onPR = (kind: string, form = "") =>
+  makeSituation({ kind, form, place: { kind: "pr", stage: "", step: 0 } });
+
+const DRAFT = { title: "Add the login form", body: "Closes #12", file: "draft.md" };
+
+// inDraft is the task whose pull request draft waits for the user's approval.
+function inDraft(): Partial<TaskSummary> {
+  return {
+    stage: "pr",
+    pr: makePullRequest({ status: "draft_ready", sessionStage: "pr", draft: DRAFT }),
+    situations: [onPR("draft")],
+  };
+}
 
 const STAGED = makeReview({ staged: 2, total: 2, percent: 100 });
 
@@ -121,14 +136,61 @@ describe("TaskRequest", () => {
     expect(api.continueStage).toHaveBeenCalledWith("task-1");
   });
 
-  it("leaves the bars of the pull request out", () => {
-    request({
+  it("opens the pull request with the draft the user edited", async () => {
+    const { user } = request(inDraft(), { "task-1": { title: "Mine", body: "My body" } });
+
+    await user.click(screen.getByRole("button", { name: "Approve draft" }));
+
+    expect(api.openPR).toHaveBeenCalledWith("task-1", "Mine", "My body");
+  });
+
+  it("opens the pull request with the agent's draft when the user edited nothing", async () => {
+    const { user } = request(inDraft());
+
+    await user.click(screen.getByRole("button", { name: "Approve draft" }));
+
+    expect(api.openPR).toHaveBeenCalledWith("task-1", DRAFT.title, DRAFT.body);
+  });
+
+  it("closes a merged task from its bar", async () => {
+    const { user } = request({
       stage: "pr",
-      pr: makePullRequest({ status: "draft_ready", sessionStage: "pr" }),
-      situations: [makeSituation({ kind: "draft", place: { kind: "pr", stage: "", step: 0 } })],
+      pr: makePullRequest({ status: "merged", prNumber: 12, canClose: true }),
+      situations: [onPR("merge", "close")],
     });
 
-    expect(screen.queryByRole("region", { name: "Request" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Close task" }));
+
+    expect(api.closeTask).toHaveBeenCalledWith("task-1");
+  });
+
+  it("asks for another pass on a pull request in trouble", async () => {
+    const { user } = request({
+      stage: "pr",
+      pr: makePullRequest({
+        status: "trouble",
+        prNumber: 12,
+        trouble: { failedChecks: ["build"], conflict: false },
+      }),
+      situations: [onPR("pr_trouble", "checks")],
+    });
+
+    await user.click(screen.getByRole("button", { name: "Review again" }));
+
+    expect(api.reviewAgain).toHaveBeenCalledWith("task-1");
+  });
+
+  it("confirms the deletion of a task whose pull request was closed unmerged", async () => {
+    const { user } = request({
+      stage: "pr",
+      pr: makePullRequest({ status: "pr_closed", prNumber: 12 }),
+      situations: [onPR("pr_closed")],
+    });
+
+    await user.click(screen.getByRole("button", { name: "Delete task…" }));
+
+    expect(await screen.findByRole("alertdialog")).toBeInTheDocument();
+    expect(api.deleteTask).not.toHaveBeenCalled();
   });
 
   it("draws nothing when nothing is asked", () => {

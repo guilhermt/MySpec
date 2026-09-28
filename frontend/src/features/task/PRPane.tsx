@@ -1,6 +1,6 @@
-import { Archive, ExternalLink, LoaderCircle, RefreshCw, RotateCcw } from "lucide-react";
+import { ExternalLink, LoaderCircle } from "lucide-react";
+import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Composer } from "@/features/chat/Composer";
 import { Conversation } from "@/features/chat/Conversation";
 import { DraftCard } from "@/features/task/DraftCard";
@@ -17,6 +17,7 @@ import {
 import { ReviewStrip } from "@/features/task/ReviewStrip";
 import { ToneDot } from "@/features/task/StatusDot";
 import type { StatusTone } from "@/features/task/status";
+import { TaskRequest } from "@/features/task/TaskRequest";
 import { prBaseName } from "@/lib/pull-requests";
 import {
   asCloseOutcome,
@@ -27,8 +28,8 @@ import {
   type PullRequest,
   type TaskSummary,
 } from "@/lib/wails";
-import { closeTask, openExternal, refreshPR, reviewAgain } from "@/store/actions";
-import { useRepository } from "@/store/app-store";
+import { openExternal } from "@/store/actions";
+import { type StepTab, useRepository } from "@/store/app-store";
 
 // The three parts of a closing, in the order the app carries them out.
 const CLOSE_PARTS = ["worktree", "branch", "base"] as const;
@@ -78,7 +79,7 @@ function PRLink({ pr }: { pr: PullRequest }) {
 }
 
 /** AwaitingMerge is a pull request whose review closed clean, waiting for the merge. */
-function AwaitingMerge({ taskId, pr }: { taskId: string; pr: PullRequest }) {
+function AwaitingMerge({ pr }: { pr: PullRequest }) {
   const reports = pr.reports ?? [];
 
   return (
@@ -100,22 +101,12 @@ function AwaitingMerge({ taskId, pr }: { taskId: string; pr: PullRequest }) {
           ))}
         </ul>
       )}
-      <div className="flex gap-2">
-        <Button variant="outline" size="sm" onClick={() => void reviewAgain(taskId)}>
-          <RotateCcw />
-          Review again
-        </Button>
-        <Button variant="outline" size="sm" onClick={() => void refreshPR(taskId)}>
-          <RefreshCw />
-          Refresh PR
-        </Button>
-      </div>
     </Note>
   );
 }
 
 /** Troubled is a pull request that stopped being ready after its review: a check failed or a conflict with its base came up. */
-function Troubled({ taskId, pr }: { taskId: string; pr: PullRequest }) {
+function Troubled({ pr }: { pr: PullRequest }) {
   const checks = pr.trouble.failedChecks ?? [];
 
   return (
@@ -135,16 +126,6 @@ function Troubled({ taskId, pr }: { taskId: string; pr: PullRequest }) {
         </p>
       )}
       <PRLink pr={pr} />
-      <div className="flex gap-2">
-        <Button variant="outline" size="sm" onClick={() => void reviewAgain(taskId)}>
-          <RotateCcw />
-          Review again
-        </Button>
-        <Button variant="outline" size="sm" onClick={() => void refreshPR(taskId)}>
-          <RefreshCw />
-          Refresh PR
-        </Button>
-      </div>
     </Note>
   );
 }
@@ -163,19 +144,13 @@ function Merged({ task, pr }: { task: TaskSummary; pr: PullRequest }) {
         {`Closing removes the worktree and the branch of the task and brings ${base} up to date when that is a fast-forward. Nothing else in the repository is touched.`}
       </p>
       <PRLink pr={pr} />
-      <div>
-        <Button size="sm" disabled={!canCloseTask(pr)} onClick={() => void closeTask(task.id)}>
-          <Archive />
-          Close task
-        </Button>
-      </div>
       {!canCloseTask(pr) && hint !== "" && <p className="text-sm text-muted-foreground">{hint}</p>}
     </Note>
   );
 }
 
 /** PRClosedUnmerged is a pull request that was closed without a merge. */
-function PRClosedUnmerged({ taskId, pr }: { taskId: string; pr: PullRequest }) {
+function PRClosedUnmerged({ pr }: { pr: PullRequest }) {
   return (
     <Note title="The pull request was closed without a merge">
       <p className="text-sm text-muted-foreground">
@@ -183,12 +158,6 @@ function PRClosedUnmerged({ taskId, pr }: { taskId: string; pr: PullRequest }) {
         task.
       </p>
       <PRLink pr={pr} />
-      <div>
-        <Button variant="outline" size="sm" onClick={() => void refreshPR(taskId)}>
-          <RefreshCw />
-          Refresh PR
-        </Button>
-      </div>
     </Note>
   );
 }
@@ -259,8 +228,8 @@ function ClosedSummary({ pr }: { pr: PullRequest }) {
   );
 }
 
-/** Chat is the conversation of the PR stage and the field to answer it. */
-function Chat({ taskId, pr }: { taskId: string; pr: PullRequest }) {
+/** Chat is the conversation of the PR stage, what it asks of the user and the field to answer it. */
+function Chat({ taskId, pr, request }: { taskId: string; pr: PullRequest; request: ReactNode }) {
   return (
     <>
       <Conversation
@@ -269,6 +238,7 @@ function Chat({ taskId, pr }: { taskId: string; pr: PullRequest }) {
         stage={pr.sessionStage}
         session={pr}
       />
+      {request}
       <Composer taskId={taskId} stage={pr.sessionStage} session={pr} />
     </>
   );
@@ -277,10 +247,13 @@ function Chat({ taskId, pr }: { taskId: string; pr: PullRequest }) {
 export interface PRPaneProps {
   task: TaskSummary;
   pr: PullRequest;
+  tab: StepTab;
 }
 
 /** PRPane is what the PR stage shows below the bar of the pull request. */
-export function PRPane({ task, pr }: PRPaneProps) {
+export function PRPane({ task, pr, tab }: PRPaneProps) {
+  const request = <TaskRequest task={task} tab={tab} />;
+  const chat = <Chat taskId={task.id} pr={pr} request={request} />;
   switch (asPRStatus(pr.status)) {
     case "preparing":
       return <Waiting text="Checking GitHub…" />;
@@ -289,8 +262,8 @@ export function PRPane({ task, pr }: PRPaneProps) {
     case "draft_ready":
       return (
         <>
-          <DraftCard taskId={task.id} pr={pr} />
-          <Chat taskId={task.id} pr={pr} />
+          <DraftCard taskId={task.id} pr={pr} showOpenPR={false} />
+          {chat}
         </>
       );
     case "opening":
@@ -302,7 +275,7 @@ export function PRPane({ task, pr }: PRPaneProps) {
               Opening the pull request…
             </p>
           </div>
-          <Chat taskId={task.id} pr={pr} />
+          {chat}
         </>
       );
     case "in_review":
@@ -311,35 +284,55 @@ export function PRPane({ task, pr }: PRPaneProps) {
       return (
         <>
           {pr.review !== null && <ReviewStrip taskId={task.id} subject="pr" review={pr.review} />}
-          <Chat taskId={task.id} pr={pr} />
+          {chat}
         </>
       );
     case "awaiting_reply":
       // Only the draft an opening that failed left is still there to send.
       return (
         <>
-          {draftAtHand(pr) && <DraftCard taskId={task.id} pr={pr} />}
-          <Chat taskId={task.id} pr={pr} />
+          {draftAtHand(pr) && <DraftCard taskId={task.id} pr={pr} showOpenPR />}
+          {chat}
         </>
       );
     case "drafting":
     case "reviewing":
     case "awaiting_decision":
-      return <Chat taskId={task.id} pr={pr} />;
+      return chat;
     case "waiting_checks":
       return hasPRSession(pr) ? (
-        <Chat taskId={task.id} pr={pr} />
+        chat
       ) : (
         <Waiting text="Waiting for the checks of the pull request…" />
       );
     case "done":
-      return <AwaitingMerge taskId={task.id} pr={pr} />;
+      return (
+        <>
+          <AwaitingMerge pr={pr} />
+          {request}
+        </>
+      );
     case "trouble":
-      return <Troubled taskId={task.id} pr={pr} />;
+      return (
+        <>
+          <Troubled pr={pr} />
+          {request}
+        </>
+      );
     case "merged":
-      return <Merged task={task} pr={pr} />;
+      return (
+        <>
+          <Merged task={task} pr={pr} />
+          {request}
+        </>
+      );
     case "pr_closed":
-      return <PRClosedUnmerged taskId={task.id} pr={pr} />;
+      return (
+        <>
+          <PRClosedUnmerged pr={pr} />
+          {request}
+        </>
+      );
     case "closing":
       return <Waiting text="Closing the task…" />;
     case "closed":

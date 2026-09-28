@@ -271,13 +271,15 @@ describe("TaskHeader", () => {
       expect(screen.queryByRole("button", { name: "Resume" })).not.toBeInTheDocument();
     });
 
-    it("leaves the session of the pull request to its bar", () => {
-      header({
+    it("pauses the session of the pull request", async () => {
+      const { user } = header({
         stage: "pr",
-        pr: makePullRequest({ status: "drafting", sessionStatus: "working" }),
+        pr: makePullRequest({ status: "drafting", sessionStage: "pr", sessionStatus: "working" }),
       });
 
-      expect(screen.queryByRole("button", { name: "Pause" })).not.toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Pause" }));
+
+      expect(api.pause).toHaveBeenCalledWith("task-1", "pr");
     });
 
     it("pauses the session of the step being implemented", async () => {
