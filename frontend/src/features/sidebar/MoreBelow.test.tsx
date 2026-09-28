@@ -60,6 +60,13 @@ describe("MoreBelow", () => {
     expect(screen.getByRole("button", { name: "2 more below" })).toHaveAttribute("tabindex", "-1");
   });
 
+  it("counts the line the fold cuts", () => {
+    layOut();
+    render(<Subject tops={[0, 40, 90]} />);
+
+    expect(screen.getByRole("button", { name: "1 more below" })).toBeInTheDocument();
+  });
+
   it("is gone with nothing below", () => {
     layOut();
     render(<Subject tops={[0, 40, 80]} />);
@@ -73,7 +80,7 @@ describe("MoreBelow", () => {
     const viewport = screen.getByTestId("viewport");
 
     act(() => {
-      viewport.scrollTop = 30;
+      viewport.scrollTop = 50;
       fireEvent.scroll(viewport);
     });
 

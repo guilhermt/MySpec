@@ -172,6 +172,23 @@ export function MenuMessage({ children, tone = "neutral", onRetry }: MenuMessage
   );
 }
 
+export interface MenuTextProps {
+  children: ReactNode;
+}
+
+/**
+ * MenuText is a line of text among the items that is not an item: a level of the folded breadcrumb
+ * that is not a place, like an epic. It has the height of an item and the third ink, and takes
+ * neither the highlight nor the keyboard.
+ */
+export function MenuText({ children }: MenuTextProps) {
+  return (
+    <div className="flex min-h-(--size-control) items-center px-2 text-(length:--text-ui) leading-(--leading-ui) text-ink-3">
+      {children}
+    </div>
+  );
+}
+
 /** MenuSeparator is the line between groups. */
 export function MenuSeparator(
   props: Omit<ComponentProps<typeof DropdownMenuSeparator>, "className">,

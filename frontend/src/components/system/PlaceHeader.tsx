@@ -2,7 +2,7 @@ import { ArrowLeft, ArrowRight, Ellipsis } from "lucide-react";
 import type { ReactNode, Ref } from "react";
 import { cn } from "@/lib/utils";
 import { IconButton } from "./IconButton";
-import { Menu, MenuContent, MenuItem, MenuTrigger } from "./Menu";
+import { Menu, MenuContent, MenuItem, MenuText, MenuTrigger } from "./Menu";
 import { Tooltip } from "./Tooltip";
 
 export interface PlaceNav {
@@ -78,14 +78,16 @@ function Breadcrumb({ crumbs }: { crumbs: readonly PlaceCrumb[] }) {
             }
           />
           <MenuContent align="start">
-            {crumbs.map((crumb) => (
-              <MenuItem
-                key={crumb.label}
-                {...(crumb.onOpen !== undefined ? { onClick: crumb.onOpen } : { disabled: true })}
-              >
-                {crumb.label}
-              </MenuItem>
-            ))}
+            {/* A level that is not a place, like an epic, is text in the menu, not an item. */}
+            {crumbs.map((crumb) =>
+              crumb.onOpen !== undefined ? (
+                <MenuItem key={crumb.label} onClick={crumb.onOpen}>
+                  {crumb.label}
+                </MenuItem>
+              ) : (
+                <MenuText key={crumb.label}>{crumb.label}</MenuText>
+              ),
+            )}
           </MenuContent>
         </Menu>
         <Slash />

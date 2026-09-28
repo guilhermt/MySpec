@@ -64,25 +64,28 @@ interface RailSeparatorProps {
 }
 
 /**
- * RAIL_LINE is a line of the separator. Centered in the separator's even height it would fall on a
- * half pixel, so it sits on the whole pixel just below the middle.
+ * CENTERED puts a piece in the middle of the strip on whole pixels: a flex item centred in the 60px
+ * strip lands on a half pixel whenever its width is odd, so the centring is rounded instead.
  */
-const RAIL_LINE = "mt-(--space-2) h-(--border) flex-1 self-start bg-line-1";
+const CENTERED =
+  "absolute inset-y-0 left-[round(50%,1px)] flex translate-x-[round(-50%,1px)] items-center";
 
 /** RailSeparator is the line between two groups, with the ◇ of a failure and the count of Reviews. */
 function RailSeparator({ group }: RailSeparatorProps) {
   const says = group.blocked || group.pending > 0;
   return (
-    <div role="none" className="flex h-(--space-4) items-center gap-(--space-1) px-(--space-2)">
-      <span className={RAIL_LINE} />
+    <div role="none" data-rail-separator="" className="relative h-(--space-4)">
+      {/* Centred in the separator's even height the line would fall on a half pixel, so it sits
+          on the whole pixel just below the middle. */}
+      <span className="absolute inset-x-(--space-2) top-(--space-2) h-(--border) bg-line-1" />
       {says && (
-        <>
+        // What the separator says breaks the line, on the sidebar's own tone.
+        <span className={cn(CENTERED, "gap-(--space-1) bg-surface-sidebar px-(--space-1)")}>
           {group.blocked && <StateGlyph state="blocked" size="sm" />}
           {group.pending > 0 && (
             <span className={cn(MICRO, "tabular-nums text-ink-3")}>{group.pending}</span>
           )}
-          <span className={RAIL_LINE} />
-        </>
+        </span>
       )}
     </div>
   );
@@ -137,16 +140,16 @@ function RailBlock({ row, selected, isNext, flash, tabIndex }: RailBlockProps) {
         {...(flash !== null ? { "data-flash": flash } : {})}
         onClick={open}
         className={cn(
-          "tree-flash relative flex w-full cursor-pointer flex-col items-center gap-(--line-gap) rounded-md px-(--tree-pad) py-(--row-pad-y) outline-none transition-[background-color,box-shadow] duration-(--duration-fast) ease-standard focus-visible:outline-(length:--focus-width) focus-visible:outline-focus focus-visible:-outline-offset-(length:--focus-width)",
+          // The gap under the type icon holds the corner of the state glyph with its outline, so
+          // the glyph never reaches the clock.
+          "group/block tree-flash relative flex w-full cursor-pointer flex-col items-center gap-(--space-1-5) rounded-md px-(--tree-pad) py-(--row-pad-y) outline-none transition-[background-color,box-shadow] duration-(--duration-fast) ease-standard focus-visible:outline-(length:--focus-width) focus-visible:outline-focus focus-visible:-outline-offset-(length:--focus-width)",
           selected ? "bg-brand-veil" : "hover:bg-veil-hover active:bg-veil-press",
-          row.tone === "error" && selected
-            ? "shadow-[inset_var(--error-rail)_0_0_var(--state-error),inset_0_0_0_var(--border)_var(--brand-ring)]"
-            : row.tone === "error"
-              ? "shadow-[inset_var(--error-rail)_0_0_var(--state-error)]"
-              : selected && "shadow-[inset_0_0_0_var(--border)_var(--brand-ring)]",
+          row.tone === "error" && "error-rail-bar",
+          selected && "shadow-[inset_0_0_0_var(--border)_var(--brand-ring)]",
         )}
       >
-        <span className="relative grid place-items-center">
+        {/* The state glyph sits in the bottom right corner of the type icon's box. */}
+        <span className="relative grid size-(--icon) place-items-center">
           <Icon
             icon={TYPE_ICONS[row.itemKind]}
             tone={selected ? "active" : "current"}
@@ -155,7 +158,7 @@ function RailBlock({ row, selected, isNext, flash, tabIndex }: RailBlockProps) {
           <StateGlyph
             state={ROW_GLYPHS[row.tone]}
             size="sm"
-            className="absolute -right-(--space-1) -bottom-(--space-1) outline-(length:--border-2) outline-surface-sidebar"
+            className="absolute -right-(--space-1) bottom-0 outline-(length:--border-2) outline-surface-sidebar"
           />
         </span>
         {row.more !== null && (
@@ -168,23 +171,34 @@ function RailBlock({ row, selected, isNext, flash, tabIndex }: RailBlockProps) {
             +{row.more.count}
           </span>
         )}
-        <span className="flex min-h-(--size-time-chip) items-center">
-          {clock?.kind === "chip" && (
-            <TimeChip
-              tone={clock.tone}
-              time={clock.time}
-              longTime={clock.longTime}
-              raised={selected && clock.tone === "close"}
-            />
-          )}
-          {clock?.kind === "turn" && (
-            <span className={cn(MICRO, "whitespace-nowrap tabular-nums text-ink-3")}>
-              {clock.time}
-            </span>
-          )}
-          {word !== undefined && (
-            <span className={cn(MICRO, selected ? "text-ink-3" : "text-ink-4")}>{word}</span>
-          )}
+        <span className="relative h-(--size-time-chip) w-full">
+          <span className={CENTERED}>
+            {clock?.kind === "chip" && (
+              <TimeChip
+                tone={clock.tone}
+                time={clock.time}
+                longTime={clock.longTime}
+                raised={selected && clock.tone === "close"}
+              />
+            )}
+            {clock?.kind === "turn" && (
+              <span className={cn(MICRO, "whitespace-nowrap tabular-nums text-ink-3")}>
+                {clock.time}
+              </span>
+            )}
+            {word !== undefined && (
+              <span
+                className={cn(
+                  MICRO,
+                  // The fourth ink steps up on the open block and on the pressed one, whose veils it
+                  // does not reach 4.5:1 over.
+                  selected ? "text-ink-3" : "text-ink-4 group-active/block:text-ink-3",
+                )}
+              >
+                {word}
+              </span>
+            )}
+          </span>
         </span>
       </div>
     </Tooltip>

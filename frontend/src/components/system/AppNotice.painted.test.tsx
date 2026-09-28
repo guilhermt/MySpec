@@ -32,4 +32,12 @@ describe.each(THEMES)("AppNotice in the %s theme", (theme) => {
     expect(paintOf(screen.getByText("Couldn't pause add-login"), label)).toEqual(label);
     expect(paintOf(screen.getByText("no session. Try again."), detail)).toEqual(detail);
   });
+
+  it("keeps the detail at least as wide as its token before it goes under the label", () => {
+    setTheme(theme);
+    notice();
+    expect(getComputedStyle(screen.getByText("no session. Try again.")).flexBasis).toBe(
+      resolve("var(--notice-detail-min)", "width"),
+    );
+  });
 });

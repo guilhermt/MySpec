@@ -35,8 +35,7 @@ import {
   useNewDiscussion,
   useOnScreenSituationId,
   useOpenBoardId,
-  useOpenDiscussionId,
-  useOpenReviewId,
+  useOpenItemId,
   useOpenStepTab,
   useOpenTaskId,
   usePrDraft,
@@ -46,7 +45,6 @@ import {
   useReview,
   useReviewCenter,
   useReviewHistory,
-  useReviews,
   useReviewsOpen,
   useSettingsUi,
   useSidebarCollapsed,
@@ -1370,7 +1368,6 @@ describe("reviews", () => {
   it("report the reviews of the snapshot, and nothing before the first one", () => {
     const { result } = renderHook(() => ({
       center: useReviewCenter(),
-      reviews: useReviews(),
       review: useReview(REVIEW.id),
       missing: useReview("review-gone"),
       history: useReviewHistory(),
@@ -1379,7 +1376,6 @@ describe("reviews", () => {
 
     expect(result.current.center.pendingCount).toBe(0);
     expect(result.current.center.pullRequests).toEqual([]);
-    expect(result.current.reviews).toEqual([]);
     expect(result.current.review).toBeNull();
     expect(result.current.history).toEqual([]);
 
@@ -1393,7 +1389,6 @@ describe("reviews", () => {
     });
 
     expect(result.current.center.pendingCount).toBe(2);
-    expect(result.current.reviews).toHaveLength(2);
     expect(result.current.review).toEqual(REVIEW);
     expect(result.current.missing).toBeNull();
     expect(result.current.archived).toEqual(ARCHIVED_REVIEW);
@@ -1401,7 +1396,7 @@ describe("reviews", () => {
 
   it("falls back to no review when the snapshot carries none", () => {
     const { result } = renderHook(() => ({
-      reviews: useReviews(),
+      review: useReview(REVIEW.id),
       history: useReviewHistory(),
     }));
 
@@ -1409,14 +1404,14 @@ describe("reviews", () => {
       useAppStore.getState().applyState(withTasks({ reviews: null, reviewHistory: null }));
     });
 
-    expect(result.current.reviews).toEqual([]);
+    expect(result.current.review).toBeNull();
     expect(result.current.history).toEqual([]);
   });
 
   it("opens the Reviews view in place of a task and then a review", () => {
     const { result } = renderHook(() => ({
       open: useReviewsOpen(),
-      openId: useOpenReviewId(),
+      openId: useOpenItemId(),
     }));
 
     act(() => {
@@ -1623,7 +1618,7 @@ describe("discussions", () => {
 
   it("opens a discussion in place of a task", () => {
     const { result } = renderHook(() => ({
-      openId: useOpenDiscussionId(),
+      openId: useOpenItemId(),
       boardId: useOpenBoardId(),
     }));
 
@@ -1785,8 +1780,7 @@ describe("selectors of the place on screen", () => {
 
   interface Expected {
     task: string | null;
-    review: string | null;
-    discussion: string | null;
+    item: string | null;
     board: string | null;
     reviews: boolean;
     history: { historyOpen: boolean; openArchivedId: string | null };
@@ -1796,8 +1790,7 @@ describe("selectors of the place on screen", () => {
 
   const NONE: Expected = {
     task: null,
-    review: null,
-    discussion: null,
+    item: null,
     board: null,
     reviews: false,
     history: { historyOpen: false, openArchivedId: null },
@@ -1820,15 +1813,15 @@ describe("selectors of the place on screen", () => {
     ],
     [
       { kind: "task", id: WEB_TASK.id },
-      { ...NONE, task: WEB_TASK.id, situation: "s-spec" },
+      { ...NONE, task: WEB_TASK.id, item: WEB_TASK.id, situation: "s-spec" },
     ],
     [
       { kind: "review", id: REVIEW.id },
-      { ...NONE, review: REVIEW.id, situation: "s-report" },
+      { ...NONE, item: REVIEW.id, situation: "s-report" },
     ],
     [
       { kind: "discussion", id: DISCUSSION.id },
-      { ...NONE, discussion: DISCUSSION.id, situation: "s-drafts" },
+      { ...NONE, item: DISCUSSION.id, situation: "s-drafts" },
     ],
     [
       { kind: "archived-task", id: ARCHIVED.id },
@@ -1855,8 +1848,7 @@ describe("selectors of the place on screen", () => {
 
     const { result } = renderHook(() => ({
       task: useOpenTaskId(),
-      review: useOpenReviewId(),
-      discussion: useOpenDiscussionId(),
+      item: useOpenItemId(),
       board: useOpenBoardId(),
       reviews: useReviewsOpen(),
       history: useHistoryUi(),

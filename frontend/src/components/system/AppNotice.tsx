@@ -20,7 +20,7 @@ export function AppNotice({ label, detail, onDismiss }: AppNoticeProps) {
     >
       <span className="min-w-0 font-bold text-state-error">{label}</span>
       {/* The detail keeps a readable width, and goes under a long label instead of squeezing. */}
-      <span className="min-w-0 flex-1 basis-64 text-(length:--text-meta) leading-(--leading-meta) text-ink-2">
+      <span className="min-w-0 flex-1 basis-(--notice-detail-min) text-(length:--text-meta) leading-(--leading-meta) text-ink-2">
         {detail}
       </span>
       <Button variant="ghost" size="sm" onClick={onDismiss}>

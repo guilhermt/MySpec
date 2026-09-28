@@ -5,12 +5,13 @@ import { ICONS } from "@/components/system/icons";
 import { Shimmer } from "@/components/system/Shimmer";
 import { type GlyphState, StateGlyph } from "@/components/system/StateGlyph";
 import { Tooltip } from "@/components/system/Tooltip";
-import type {
-  EpicNode,
-  NodeSummary,
-  RowFlash,
-  RowTone,
-  TreeNode,
+import {
+  type EpicNode,
+  type NodeSummary,
+  nodeStatus,
+  type RowFlash,
+  type RowTone,
+  type TreeNode,
 } from "@/features/sidebar/sidebar-tree";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/app-store";
@@ -69,7 +70,13 @@ function NodeStatus({ node }: NodeStatusProps) {
     }
     if (node.pending > 0) {
       return (
-        <span className={cn(MICRO, "font-normal tabular-nums text-ink-4")}>
+        // The count steps up to the third ink on the open place and on the pressed node.
+        <span
+          className={cn(
+            MICRO,
+            "font-normal tabular-nums text-ink-4 group-active/node:text-ink-3 group-aria-[current=page]/node:text-ink-3",
+          )}
+        >
           {node.pending} pending
         </span>
       );
@@ -125,8 +132,10 @@ export function TreeNodeRow({
   const openReviews = useAppStore((state) => state.openReviews);
   const title = titleOf(node);
   const place = node.kind === "board" || node.kind === "reviews";
-  // A collapsed node tells what its rows say.
+  // A collapsed node tells what its rows say; otherwise the node tells its own state, which its
+  // name says too, since the name takes the place of what the node shows.
   const shown = expanded ? null : summary;
+  const told = shown !== null ? shown.label : nodeStatus(node);
 
   const onTitle = () => {
     if (node.kind === "board") {
@@ -144,7 +153,7 @@ export function TreeNodeRow({
       aria-level={level}
       aria-expanded={expanded}
       aria-owns={groupId}
-      aria-label={shown !== null ? `${title}, ${shown.label}` : title}
+      aria-label={told !== null ? `${title}, ${told}` : title}
       {...(current ? { "aria-current": "page" as const } : {})}
       tabIndex={tabIndex}
       data-entry-id={node.id}

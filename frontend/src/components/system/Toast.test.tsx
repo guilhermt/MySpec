@@ -36,13 +36,21 @@ describe("Toast", () => {
     expect(region.querySelector("[role]")).toBeNull();
   });
 
-  it("runs its action and dismisses on ×", () => {
+  it("runs its action and leaves after it", () => {
     const { onDismiss, onClick } = toast();
 
     fireEvent.click(screen.getByRole("button", { name: "Open in History" }));
-    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
 
     expect(onClick).toHaveBeenCalledOnce();
+    expect(onDismiss).toHaveBeenCalledOnce();
+  });
+
+  it("leaves on ×", () => {
+    const { onDismiss, onClick } = toast();
+
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+
+    expect(onClick).not.toHaveBeenCalled();
     expect(onDismiss).toHaveBeenCalledOnce();
   });
 

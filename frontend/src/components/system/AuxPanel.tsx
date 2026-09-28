@@ -4,6 +4,7 @@ import { Button } from "./Button";
 import { Icon } from "./Icon";
 import { IconButton } from "./IconButton";
 import type { IconGlyph } from "./icons";
+import { Presence } from "./Presence";
 import { ScrollArea } from "./ScrollArea";
 import { Tooltip } from "./Tooltip";
 
@@ -23,7 +24,8 @@ export function PanelGroup<Id extends string>({ panels, open, onOpenChange }: Pa
   return (
     <>
       {panels.map((panel) => (
-        <Tooltip key={panel.id} content={panel.tooltip}>
+        // Below 1440px of main area only the icon shows: the tooltip names the panel first.
+        <Tooltip key={panel.id} content={panel.label} sub={panel.tooltip}>
           <Button
             id={panelTriggerId(panel.id)}
             variant="ghost"
@@ -32,7 +34,7 @@ export function PanelGroup<Id extends string>({ panels, open, onOpenChange }: Pa
             onClick={() => onOpenChange(open === panel.id ? null : panel.id)}
           >
             <Icon icon={panel.icon} />
-            {/* Below 1440px of main area only the icon shows; the label still names the button. */}
+            {/* Hidden below 1440px of main area, the label still names the button. */}
             <span className="@max-[1440px]/main:sr-only">{panel.label}</span>
           </Button>
         </Tooltip>
@@ -47,12 +49,15 @@ export interface PanelLayoutProps {
   panel: ReactNode;
 }
 
-/** PanelLayout puts a panel beside the reading column from 1120px of main area, and over it below. */
+/**
+ * PanelLayout puts a panel beside the reading column from 1120px of main area, and over it below.
+ * A panel that closes stays for its exit.
+ */
 export function PanelLayout({ children, panel }: PanelLayoutProps) {
   return (
     <div className="relative flex min-h-0 flex-1">
       <div className="flex min-w-0 flex-1 flex-col overflow-clip">{children}</div>
-      {panel}
+      <Presence>{panel}</Presence>
     </div>
   );
 }

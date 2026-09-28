@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { ALL_REPOSITORIES } from "@/lib/repositories";
 import {
@@ -5,15 +7,14 @@ import {
   announcePlace,
   compactWait,
   compareSituations,
+  DURATION_SLOW_MS,
   discussionSituation,
-  namesPlace,
+  FLASH_MS,
   nextWaiting,
-  placeLabel,
   prSituation,
   reviewerSituation,
   reviewName,
   reviewSituation,
-  situationDetail,
   situationLabel,
   situationTone,
   spokenWait,
@@ -48,6 +49,18 @@ const REVIEW_PLACE: Place = { kind: "review", stage: "", step: 0 };
 const DISCUSSION_PLACE: Place = { kind: "discussion", stage: "", step: 0 };
 
 const ids = (situations: readonly { id: string }[]) => situations.map((situation) => situation.id);
+
+describe("FLASH_MS", () => {
+  it("lasts the two blinks of --duration-slow", () => {
+    const tokens = readFileSync(
+      join(import.meta.dirname, "../../../design/system/tokens.css"),
+      "utf8",
+    );
+
+    expect(tokens).toContain(`--duration-slow: ${DURATION_SLOW_MS}ms`);
+    expect(FLASH_MS).toBe(2 * DURATION_SLOW_MS);
+  });
+});
 
 describe("situationTone", () => {
   it.each([
@@ -108,72 +121,6 @@ describe("situationLabel", () => {
     expect(situationLabel(makeSituation({ kind: "review_report", place: REVIEW_PLACE }))).toBe(
       "Decide findings",
     );
-  });
-});
-
-describe("placeLabel", () => {
-  it.each([
-    [stagePlace("prd"), "PRD"],
-    [stagePlace("tech_spec"), "tech spec"],
-    [stagePlace("plan"), "plan"],
-    [stagePlace("one_shot"), "One-Shot planning"],
-    [stagePlace("implementation"), "implementation"],
-    [stepPlace(4), "step 4"],
-    [reviewerPlace(2), "step 2 review"],
-    [PR_PLACE, "pull request"],
-    [REVIEW_PLACE, "review"],
-    [DISCUSSION_PLACE, "discussion"],
-  ])("names the place %#", (place, label) => {
-    expect(placeLabel(makeSituation({ place }))).toBe(label);
-  });
-});
-
-describe("namesPlace and situationDetail", () => {
-  it.each([
-    ["step_blocked", true],
-    ["step_review", true],
-    ["step_empty", true],
-    ["plan_invalid", true],
-    ["review_report", true],
-    ["new_commits", true],
-    ["publish_failed", true],
-    ["pass_blocked", true],
-    ["session_error", false],
-    ["worktree_unreadable", false],
-    ["pr_blocked", false],
-    ["pr_closed", false],
-    ["permission", false],
-    ["question", false],
-    ["reply", false],
-    ["ready_to_continue", false],
-    ["draft", false],
-    ["findings", false],
-    ["changes_review", false],
-    ["merge", false],
-    ["pr_trouble", false],
-    ["drafts", false],
-  ])("knows whether the label of %s names its place", (kind, expected) => {
-    expect(namesPlace(makeSituation({ kind }))).toBe(expected);
-  });
-
-  it("follows the label with the place when the label does not name it", () => {
-    const draft = makeSituation({ kind: "draft", place: PR_PLACE });
-    const reply = makeSituation({ kind: "reply", place: stagePlace("tech_spec") });
-
-    expect(situationDetail(draft)).toBe("Draft to approve · pull request");
-    expect(situationDetail(reply)).toBe("Waiting for reply · tech spec");
-  });
-
-  it("says it is the reviewer of the step that asks", () => {
-    const question = makeSituation({ kind: "question", place: reviewerPlace(2) });
-
-    expect(situationDetail(question)).toBe("Question · step 2 review");
-  });
-
-  it("is the label alone when the label names the place", () => {
-    const review = makeSituation({ kind: "step_review", form: "review", place: stepPlace(3) });
-
-    expect(situationDetail(review)).toBe("Review step 3");
   });
 });
 

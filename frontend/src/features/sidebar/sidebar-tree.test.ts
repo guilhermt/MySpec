@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
-  allRows,
   discussionRow,
   emptyTreeText,
   flashOf,
   type ItemRow,
+  nodeRows,
+  nodeStatus,
   nodeSummary,
   nodesOfItem,
   type RowTone,
@@ -12,6 +13,7 @@ import {
   shortAction,
   sidebarTree,
   TONE_RANK,
+  type TreeNode,
   taskRow,
   visibleEntries,
 } from "@/features/sidebar/sidebar-tree";
@@ -525,8 +527,23 @@ describe("the line of an item without a situation", () => {
       null,
     ],
     [
-      "a PR waiting for the checks",
+      "a PR waiting for the checks, before GitHub's first reading",
       taskWith({ stage: "pr", pr: makePullRequest({ status: "waiting_checks", prNumber: 7 }) }),
+      "github",
+      "PR review · checking GitHub",
+      "PR review · checking GitHub",
+      "word",
+    ],
+    [
+      "a PR waiting for the checks",
+      taskWith({
+        stage: "pr",
+        pr: makePullRequest({
+          status: "waiting_checks",
+          prNumber: 7,
+          checkedAt: "2026-09-05T11:59:00Z",
+        }),
+      }),
       "github",
       "PR review · waiting for checks",
       "PR review · checks",
@@ -562,6 +579,18 @@ describe("the line of an item without a situation", () => {
 
     expect(row).toMatchObject({ tone, waiting: false, line2: { long, short } });
     expect(row.clock?.kind ?? null).toBe(clock);
+  });
+
+  it("shimmers the line of a PR until GitHub first reports it, and only then", () => {
+    const pr = (checkedAt: string) =>
+      taskWith({
+        stage: "pr",
+        pr: makePullRequest({ status: "waiting_checks", prNumber: 7, checkedAt }),
+      });
+
+    expect(taskRow(makeState(), pr(""), NOW).reading).toBe(true);
+    expect(taskRow(makeState(), pr("2026-09-05T11:59:00Z"), NOW).reading).toBe(false);
+    expect(taskRow(makeState(), taskWith({ stage: "prd" }), NOW).reading).toBe(false);
   });
 
   it.each<[string, ReviewSummary, RowTone, string, string]>([
@@ -636,20 +665,33 @@ describe("line 3", () => {
     contextPercent: 42,
   };
 
-  it.each<[string, Partial<TaskSummary>, string, string]>([
+  it.each<[string, Partial<TaskSummary>, string, string, string]>([
     [
       "the action, verb first",
       { actionLabel: "Editing", actionTarget: "internal/api/ratelimit/limiter.go" },
       "Editing internal/api/ratelimit/limiter.go",
       "Editing …/limiter.go",
+      "Editing",
     ],
-    ["thinking, with no action", {}, "Thinking…", "Thinking…"],
-    ["a session starting", { turnRunning: false }, "Starting session…", "Starting session…"],
-    ["a retry", { retryAttempt: 2 }, "Retrying · attempt 2", "Retrying · attempt 2"],
-  ])("tells %s", (_case, fields, long, short) => {
+    ["thinking, with no action", {}, "Thinking…", "Thinking…", "Thinking…"],
+    [
+      "a session starting",
+      { turnRunning: false },
+      "Starting session…",
+      "Starting session…",
+      "Starting session…",
+    ],
+    [
+      "a retry",
+      { retryAttempt: 2 },
+      "Retrying · attempt 2",
+      "Retrying · attempt 2",
+      "Retrying · attempt 2",
+    ],
+  ])("tells %s", (_case, fields, long, short, verb) => {
     const row = taskRow(makeState(), taskWith({ stage: "plan", ...working, ...fields }), NOW);
 
-    expect(row.line3).toEqual({ long, short, contextPercent: 42 });
+    expect(row.line3).toEqual({ long, short, verb, contextPercent: 42 });
   });
 
   it("follows the session in the oldest turn, with its clock", () => {
@@ -679,6 +721,7 @@ describe("line 3", () => {
       line3: {
         long: "Running go test ./internal/api/ratelimit",
         short: "Running go test …/ratelimit",
+        verb: "Running",
         contextPercent: 10,
       },
       clock: { kind: "turn", time: "2h", tooltip: "Agent working on this turn for 2 hours" },
@@ -695,6 +738,7 @@ describe("line 3", () => {
     expect(row.line3).toEqual({
       long: "Writing PRD.md",
       short: "Writing PRD.md",
+      verb: "Writing",
       contextPercent: 42,
     });
   });
@@ -768,6 +812,8 @@ describe("the accessible name", () => {
 describe("shortAction", () => {
   it.each([
     ["Running", "go test ./internal/api/ratelimit", "go test …/ratelimit"],
+    ["Running", "go test ./internal/ratelimit/... -run TestBucket", "go test …/ratelimit"],
+    ["Running", "go vet ./...", "go vet ./..."],
     ["Running", "pnpm vitest run src/lib/a.test.ts", "pnpm vitest …/a.test.ts"],
     ["Running", "ls -la /tmp/x", "ls …/x"],
     ["Running", "make", "make"],
@@ -793,6 +839,44 @@ describe("the severity", () => {
     ]);
     expect(TONE_RANK.app).toBe(TONE_RANK.agent);
     expect(TONE_RANK.archive).toBe(TONE_RANK.idle);
+  });
+});
+
+describe("nodeStatus", () => {
+  const reviews = (overrides: Partial<Extract<TreeNode, { kind: "reviews" }>>): TreeNode => ({
+    kind: "reviews",
+    id: "reviews",
+    rows: [],
+    pending: 0,
+    reading: false,
+    failures: [],
+    ...overrides,
+  });
+  const board = (overrides: Parameters<typeof makeBoard>[0]): TreeNode => ({
+    kind: "board",
+    id: "board:board-1",
+    board: makeBoard(overrides),
+    notices: [],
+    epics: [],
+    rows: [],
+  });
+  const failure = { reason: "gh_failed", message: "gh is not signed in", failedAt: "" };
+
+  it.each<[string, TreeNode, string | null]>([
+    ["Reviews pending", reviews({ pending: 4 }), "4 pending"],
+    ["Reviews reading", reviews({ reading: true, pending: 4 }), "reading"],
+    [
+      "Reviews failing",
+      reviews({ failures: ["dev/web: gh failed", "dev/api: gh failed"], reading: true }),
+      "read failed: dev/web: gh failed, dev/api: gh failed",
+    ],
+    ["Reviews quiet", reviews({}), null],
+    ["a board reading", board({ reading: true }), "reading"],
+    ["a board failing", board({ failure, reading: true }), "read failed: gh is not signed in"],
+    ["a quiet board", board({}), null],
+    ["No board", { kind: "no-board", id: "no-board", notices: [], rows: [] }, null],
+  ])("tells %s", (_, node, expected) => {
+    expect(nodeStatus(node)).toBe(expected);
   });
 });
 
@@ -980,16 +1064,12 @@ describe("the tree", () => {
     ]);
   });
 
-  it("lists every row in tree order, collapsed or not", () => {
-    expect(allRows(sidebarTree(app, ALL_REPOSITORIES, NOW)).map((row) => row.id)).toEqual([
-      "review-1",
-      "epic-a",
-      "plain",
-      "api",
-      "on-board",
-      "loose",
-      "orphan",
-    ]);
+  it("lists every row of the nodes in tree order, as the strip shows them", () => {
+    expect(
+      sidebarTree(app, ALL_REPOSITORIES, NOW)
+        .flatMap(nodeRows)
+        .map((row) => row.id),
+    ).toEqual(["review-1", "epic-a", "plain", "api", "on-board", "loose", "orphan"]);
   });
 
   it.each([

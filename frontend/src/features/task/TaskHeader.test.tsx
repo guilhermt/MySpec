@@ -261,6 +261,14 @@ describe("TaskHeader", () => {
     expect(artifacts()).toHaveAttribute("aria-pressed", "false");
   });
 
+  it("names the delete button in its tooltip", async () => {
+    const { user } = header();
+
+    await user.hover(screen.getByRole("button", { name: "Delete task" }));
+
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Delete task");
+  });
+
   it("deletes the task after the confirmation", async () => {
     const { user } = header();
 

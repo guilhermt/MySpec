@@ -12,8 +12,14 @@ import { asPlaceKind, asSituationForm, asSituationGroup, asSituationKind } from 
 /** SituationTone is the colour of a situation: an error or block, or a wait. */
 export type SituationTone = "error" | "attention";
 
-/** FLASH_MS is how long a row, a counter or a tab stays highlighted for a new situation. */
-export const FLASH_MS = 1600;
+/** DURATION_SLOW_MS mirrors --duration-slow of tokens.css. */
+export const DURATION_SLOW_MS = 280;
+
+/**
+ * FLASH_MS is how long a new situation keeps blinking the row of its item, the collapsed node
+ * holding it, or its tab: two blinks of --duration-slow.
+ */
+export const FLASH_MS = 2 * DURATION_SLOW_MS;
 
 /** WaitingEntry is an item that waits on the user, with the situation that makes it wait. */
 export interface WaitingEntry {
@@ -115,64 +121,6 @@ export function stageName(stage: string): string {
     default:
       return stage;
   }
-}
-
-/** placeLabel names where in its task a situation is: the stage, "step 3", "step 3 review", or the pull request. */
-export function placeLabel(situation: Situation): string {
-  const { place } = situation;
-  switch (asPlaceKind(place.kind)) {
-    case "stage":
-      return stageName(place.stage);
-    case "step":
-      return `step ${place.step}`;
-    case "step_review":
-      return `step ${place.step} review`;
-    case "pr":
-      return "pull request";
-    case "review":
-      return "review";
-    case "discussion":
-      return "discussion";
-  }
-}
-
-/** namesPlace reports whether the label of a situation already says where it is. */
-export function namesPlace(situation: Situation): boolean {
-  switch (asSituationKind(situation.kind)) {
-    case "step_blocked":
-    case "step_review":
-    case "step_empty":
-    case "plan_invalid":
-    case "review_report":
-    case "new_commits":
-    case "publish_failed":
-    case "pass_blocked":
-      return true;
-    case "session_error":
-    case "worktree_unreadable":
-    case "pr_blocked":
-    case "pr_closed":
-    case "permission":
-    case "question":
-    case "reply":
-    case "ready_to_continue":
-    case "draft":
-    case "findings":
-    case "changes_review":
-    case "merge":
-    case "pr_trouble":
-    case "drafts":
-      return false;
-  }
-}
-
-/**
- * situationDetail is a situation in one line: its label, followed by its place
- * when the label does not name it.
- */
-export function situationDetail(situation: Situation): string {
-  const label = situationLabel(situation);
-  return namesPlace(situation) ? label : `${label} · ${placeLabel(situation)}`;
 }
 
 /**

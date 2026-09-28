@@ -1,10 +1,9 @@
-import { Trash2 } from "lucide-react";
 import { useState } from "react";
 import { CardLink } from "@/components/CardLink";
 import { PauseButton } from "@/components/PauseButton";
 import { PanelGroup } from "@/components/system/AuxPanel";
+import { IconButton } from "@/components/system/IconButton";
 import { ICONS } from "@/components/system/icons";
-import { Button } from "@/components/ui/button";
 import { LocationHeader } from "@/features/navigation/LocationHeader";
 import { ContextGauge } from "@/features/task/ContextGauge";
 import { DeleteTaskDialog } from "@/features/task/DeleteTaskDialog";
@@ -69,14 +68,12 @@ export function TaskHeader({ task }: TaskHeaderProps) {
         open={panel}
         onOpenChange={openPanel}
       />
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        aria-label="Delete task"
+      <IconButton
+        label="Delete task"
+        icon={ICONS.trash}
+        size="sm"
         onClick={() => setDeleting(true)}
-      >
-        <Trash2 />
-      </Button>
+      />
 
       <DeleteTaskDialog
         taskId={task.id}
