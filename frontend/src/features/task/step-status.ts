@@ -1,6 +1,5 @@
 import type { SessionState } from "@/features/chat/session";
 import type { StatusTone } from "@/features/task/status";
-import { MAX_REVIEW_ROUNDS } from "@/lib/review-modes";
 import type { BlockReason, Review, Step, TaskSummary } from "@/lib/wails";
 import { asBlockReason, asReviewMode, asSessionStatus, asStepStatus } from "@/lib/wails";
 
@@ -67,18 +66,6 @@ export function stepStatusLabel(step: Step): string {
       return "Committing";
     case "done":
       return "Done";
-  }
-}
-
-/** stepStateLabel is the state of a step as its bar reads it, with the pass and the round of the agent review spelled out. */
-export function stepStateLabel(step: Step): string {
-  switch (asStepStatus(step.status)) {
-    case "agent_review":
-      return `Agent review · pass ${step.reviewPass}`;
-    case "addressing_review":
-      return `Addressing review · round ${step.reviewRound} of ${MAX_REVIEW_ROUNDS}`;
-    default:
-      return stepStatusLabel(step);
   }
 }
 
@@ -171,24 +158,6 @@ export function loopSession(task: TaskSummary, step: Step): LoopSession {
   };
 }
 
-/** conversationDisplay is what one conversation of a step is doing, for its tab. */
-export function conversationDisplay(session: SessionState): StepDisplay {
-  switch (asSessionStatus(session.sessionStatus)) {
-    case "working":
-      return { label: "Working", tone: "working" };
-    case "paused":
-      return { label: "Paused", tone: "paused" };
-    case "error":
-      return { label: "Error", tone: "idle" };
-    case "needs_permission":
-      return { label: "Permission", tone: "idle" };
-    case "needs_answer":
-      return { label: "Question", tone: "idle" };
-    case "waiting":
-      return { label: "Waiting", tone: "idle" };
-  }
-}
-
 // What the conversation a running step waits on says, when that comes before
 // the step: a paused, failed or asking session. null while it simply works or
 // rests, and for a step with no conversation in progress.
@@ -231,11 +200,6 @@ export function currentStepDisplay(task: TaskSummary): StepDisplay {
     return { label: `Review ${step.review?.percent ?? 0}%`, tone: stepStatusTone(step) };
   }
   return sessionDisplay(task, step) ?? { label: stepStatusLabel(step), tone: stepStatusTone(step) };
-}
-
-/** stepBarDisplay is the state of the current step as its bar reads it: what the conversation it waits on says, when that comes first. */
-export function stepBarDisplay(task: TaskSummary, step: Step): StepDisplay {
-  return sessionDisplay(task, step) ?? { label: stepStateLabel(step), tone: stepStatusTone(step) };
 }
 
 /** blockTitle names why a step could not start. */

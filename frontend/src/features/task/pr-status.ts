@@ -109,19 +109,6 @@ export function canOpenPR(pr: PullRequest): boolean {
   return draftAtHand(pr) && !pr.turnRunning;
 }
 
-/** canApprovePR reports whether every changed file is staged and waiting. */
-export function canApprovePR(pr: PullRequest): boolean {
-  return asPRStatus(pr.status) === "ready_to_approve";
-}
-
-/** approvePRHint says what is missing before the pull request can be approved. */
-export function approvePRHint(pr: PullRequest): string {
-  if (pr.review?.error !== undefined && pr.review.error !== "") {
-    return "The worktree couldn't be read";
-  }
-  return "Stage every changed file in VS Code to approve";
-}
-
 /** hasPRSession reports whether the PR stage has a conversation to show. */
 export function hasPRSession(pr: PullRequest): boolean {
   return pr.sessionStage !== "";

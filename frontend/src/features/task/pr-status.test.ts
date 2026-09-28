@@ -1,7 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  approvePRHint,
-  canApprovePR,
   canCloseTask,
   canDiscardDraft,
   canOpenPR,
@@ -18,7 +16,7 @@ import {
   prStatusTone,
   reviewAgainRefusal,
 } from "@/features/task/pr-status";
-import { makeCloseResult, makePullRequest, makeRepository, makeReview } from "@/test/wails-mock";
+import { makeCloseResult, makePullRequest, makeRepository } from "@/test/wails-mock";
 
 const DRAFT = { title: "Add the login form", body: "Adds the form.", file: "draft.md" };
 
@@ -98,11 +96,6 @@ describe("what the pull request allows", () => {
 
     expect(draftAtHand(repo)).toBe(false);
     expect(canOpenPR(repo)).toBe(false);
-  });
-
-  it("approves only with everything staged", () => {
-    expect(canApprovePR(makePullRequest({ status: "ready_to_approve" }))).toBe(true);
-    expect(canApprovePR(makePullRequest({ status: "in_review" }))).toBe(false);
   });
 
   it("throws the draft away only while it is still a proposal", () => {
@@ -270,17 +263,6 @@ describe("prReportLabel", () => {
   it("says how a pass closed", () => {
     expect(prReportLabel(1, false)).toBe("Pass 1 · changes requested");
     expect(prReportLabel(2, true)).toBe("Pass 2 · nothing to change");
-  });
-});
-
-describe("approvePRHint", () => {
-  it("says what is missing", () => {
-    expect(approvePRHint(makePullRequest({ review: makeReview() }))).toContain(
-      "Stage every changed",
-    );
-    expect(approvePRHint(makePullRequest({ review: makeReview({ error: "boom" }) }))).toBe(
-      "The worktree couldn't be read",
-    );
   });
 });
 

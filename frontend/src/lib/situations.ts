@@ -270,18 +270,6 @@ export function reviewerSituation(task: TaskSummary, number: number): Situation 
   );
 }
 
-/** stepOrReviewerSituation is the most urgent situation of a step, in its own conversation or in the one of its reviewer. */
-export function stepOrReviewerSituation(task: TaskSummary, number: number): Situation | null {
-  // The situations of a task come from the most urgent, so the first one of
-  // either place is the one that matters.
-  return (
-    (task.situations ?? []).find((situation) => {
-      const kind = asPlaceKind(situation.place.kind);
-      return (kind === "step" || kind === "step_review") && situation.place.step === number;
-    }) ?? null
-  );
-}
-
 /** reviewSituation is the situation of a review of a pull request, null when it has none. */
 export function reviewSituation(review: ReviewSummary): Situation | null {
   return (

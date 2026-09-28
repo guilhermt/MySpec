@@ -20,7 +20,6 @@ import {
   situationTone,
   spokenWait,
   stageSituation,
-  stepOrReviewerSituation,
   stepSituation,
   summaryLabel,
 } from "@/lib/situations";
@@ -348,22 +347,6 @@ describe("the situation of a place", () => {
     expect(reviewerSituation(task, 3)).toBeNull();
     expect(stepSituation(task, 2)?.id).toBe("step");
     expect(reviewerSituation(makeTask({ situations: null }), 2)).toBeNull();
-  });
-
-  it("finds the most urgent situation of a step, in either of its conversations", () => {
-    const reviewer = makeSituation({ id: "reviewer", kind: "question", place: reviewerPlace(2) });
-    const error = makeSituation({
-      id: "error",
-      kind: "session_error",
-      group: "error",
-      place: reviewerPlace(2),
-    });
-
-    expect(stepOrReviewerSituation(makeTask({ situations: [step, reviewer] }), 2)?.id).toBe("step");
-    expect(stepOrReviewerSituation(makeTask({ situations: [error, step] }), 2)?.id).toBe("error");
-    expect(stepOrReviewerSituation(makeTask({ situations: [reviewer] }), 2)?.id).toBe("reviewer");
-    expect(stepOrReviewerSituation(makeTask({ situations: [stage, reviewer] }), 3)).toBeNull();
-    expect(stepOrReviewerSituation(makeTask({ situations: null }), 2)).toBeNull();
   });
 
   it("finds the situation of the pull request", () => {
