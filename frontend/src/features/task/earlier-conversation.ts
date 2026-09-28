@@ -8,19 +8,27 @@ export function earlierRowId(stage: string): string {
 
 /**
  * leaveEarlierConversation closes the earlier conversation on screen and puts the focus back where
- * the reading started: on the row of Details that opened it, while the panel it was opened from is
- * open beside the conversation, and on the conversation of the place otherwise. The conversation of
- * the place is drawn before the focus moves, so it is there to take it.
+ * the reading started: on `returnTo` when the close comes from the row itself (a second click on it,
+ * regardless of where it was opened from), on the row of Details that opened it while the panel it
+ * was opened from is open beside the conversation, and on the conversation of the place otherwise. A
+ * place with no conversation to land on, such as a step blocked or a pull request with no session,
+ * falls back to the place's title. The conversation of the place is drawn before the focus moves, so
+ * it is there to take it.
  */
-export function leaveEarlierConversation(): void {
+export function leaveEarlierConversation(returnTo?: HTMLElement | null): void {
   const { earlierConversation, panel, closeEarlierConversation } = useAppStore.getState();
   if (earlierConversation === null) {
     return;
   }
-  flushSync(closeEarlierConversation);
   const row =
-    earlierConversation.from === "panel" && panel !== null
+    returnTo ??
+    (earlierConversation.from === "panel" && panel !== null
       ? document.getElementById(earlierRowId(earlierConversation.stage))
-      : null;
-  (row ?? document.querySelector<HTMLElement>('[data-slot="conversation"]'))?.focus();
+      : null);
+  flushSync(closeEarlierConversation);
+  (
+    row ??
+    document.querySelector<HTMLElement>('[data-slot="conversation"]') ??
+    document.querySelector<HTMLElement>("h1")
+  )?.focus();
 }

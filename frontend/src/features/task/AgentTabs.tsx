@@ -5,6 +5,7 @@ import { useNow } from "@/features/attention/useNow";
 import { type AgentTabModel, agentTabsOf, firstTab } from "@/features/task/agent-tabs";
 import { asSituationGroup, type Step, type TaskSummary } from "@/lib/wails";
 import { stepTabKey, useAppStore, useFlashing, useOpenStepTab } from "@/store/app-store";
+import { firstTabDecided } from "@/store/step-tab";
 
 const MINUTE = 60_000;
 
@@ -43,9 +44,11 @@ export function AgentTabs({ task, step }: AgentTabsProps) {
   const shown = tabs !== null;
 
   // The first opening stores the choice, and from then on the product never moves between the
-  // tabs on its own.
+  // tabs on its own. Before the reviewer's session starts and without a situation on either side,
+  // firstTab only guesses "implementer" to have something to display; that guess waits, unstored,
+  // until firstTab has real grounds to decide.
   useEffect(() => {
-    if (shown && !stored) {
+    if (shown && !stored && firstTabDecided(task, step)) {
       selectStepTab(task.id, step.number, firstTab(task, step));
     }
   }, [shown, stored, selectStepTab, task, step]);

@@ -1,7 +1,7 @@
 import { screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { TaskRequest } from "@/features/task/TaskRequest";
-import { api, type Situation, type Step, type TaskSummary } from "@/lib/wails";
+import { api, type PullRequest, type Situation, type Step, type TaskSummary } from "@/lib/wails";
 import { renderWithStore } from "@/test/render";
 import {
   makePullRequest,
@@ -197,5 +197,61 @@ describe("TaskRequest", () => {
     request(inStep({ status: "implementing" }, []));
 
     expect(screen.queryByRole("region", { name: "Request" })).not.toBeInTheDocument();
+  });
+
+  it("keeps the status text as the situation was born, through a change of the form", () => {
+    const pr = (overrides: Partial<PullRequest>) =>
+      makePullRequest({ status: "done", canClose: true, prNumber: 1284, ...overrides });
+    const done = makeTask({
+      stage: "pr",
+      pr: pr({ status: "done" }),
+      situations: [onPR("merge", "close")],
+    });
+
+    const { rerender } = renderWithStore(<TaskRequest task={done} tab="implementer" />, {
+      state: makeState({ tasks: [done] }),
+    });
+
+    expect(screen.getByRole("status")).toHaveTextContent("Ready to close · #1284");
+    expect(screen.getByRole("region", { name: "Request" })).not.toHaveTextContent("merged");
+
+    const merged = makeTask({
+      stage: "pr",
+      pr: pr({ status: "merged" }),
+      situations: [onPR("merge", "close")],
+    });
+
+    rerender(<TaskRequest task={merged} tab="implementer" />);
+
+    // The visible place moves from "#1284" to "#1284 merged", but the status announced once, the
+    // situation was born with, does not change.
+    expect(screen.getByRole("region", { name: "Request" })).toHaveTextContent("#1284 merged");
+    expect(screen.getByRole("status")).toHaveTextContent("Ready to close · #1284");
+  });
+
+  it("disables approving the draft once the edited title is blank", () => {
+    request(inDraft(), { "task-1": { title: " ", body: "still here" } });
+
+    expect(screen.getByRole("button", { name: "Approve draft" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+    expect(screen.getByText("Write a title and a description")).toBeInTheDocument();
+  });
+
+  it("enables approving the draft once the user fills what the agent left blank", () => {
+    request(
+      {
+        stage: "pr",
+        pr: makePullRequest({ status: "draft_ready", sessionStage: "pr", draft: null }),
+        situations: [onPR("draft")],
+      },
+      { "task-1": { title: "Add the login form", body: "Closes #12" } },
+    );
+
+    expect(screen.getByRole("button", { name: "Approve draft" })).not.toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
   });
 });

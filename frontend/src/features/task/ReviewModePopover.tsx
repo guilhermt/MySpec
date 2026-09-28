@@ -1,6 +1,6 @@
 import { Radio } from "@base-ui/react/radio";
 import { RadioGroup } from "@base-ui/react/radio-group";
-import { type RefObject, useId, useRef, useState } from "react";
+import { type RefObject, useEffect, useId, useRef, useState } from "react";
 import { Icon } from "@/components/system/Icon";
 import { ICONS, type IconGlyph } from "@/components/system/icons";
 import { Popover } from "@/components/system/Popover";
@@ -55,6 +55,15 @@ export function ReviewModePopover({
   const [failed, setFailed] = useState<ReviewMode | null>(null);
   const note = reviewModeNote(task);
   const mode = saving ?? asReviewMode(task.reviewMode);
+
+  // The popover stays mounted while closed; a stale saving or failed choice from the last time
+  // it was open must not show again when it reopens.
+  useEffect(() => {
+    if (open) {
+      setSaving(null);
+      setFailed(null);
+    }
+  }, [open]);
 
   const choose = async (next: ReviewMode) => {
     setSaving(next);

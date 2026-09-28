@@ -18,14 +18,7 @@ import { currentStepOf, hasStepSession, stepStage } from "@/features/task/step-s
 import { TaskHeader } from "@/features/task/TaskHeader";
 import { TaskRequest } from "@/features/task/TaskRequest";
 import { prOf } from "@/lib/pull-requests";
-import {
-  asStepStatus,
-  asTaskStage,
-  type Step,
-  type StepStatus,
-  sessionKey,
-  type TaskSummary,
-} from "@/lib/wails";
+import { asTaskStage, type Step, sessionKey, type TaskSummary } from "@/lib/wails";
 import { loadTranscript } from "@/store/actions";
 import {
   useAppStore,
@@ -39,26 +32,12 @@ import {
 const COLUMN =
   "w-full max-w-(--measure-conversation) ml-[max(0px,round(down,calc((100%_-_var(--measure-conversation))/2),1px))]";
 
-/** CONVERSING are the states of a step whose conversation is on screen. */
-const CONVERSING: ReadonlySet<StepStatus> = new Set<StepStatus>([
-  "implementing",
-  "agent_review",
-  "addressing_review",
-  "awaiting_review",
-  "in_review",
-  "ready_to_approve",
-  "nothing_to_commit",
-  "review_failed",
-  "committing",
-]);
-
 /**
  * StepTop is what sits over the conversation of the step: the agent tabs and the review of the
  * step, in the conversation column.
  */
 function StepTop({ task, step }: { task: TaskSummary; step: Step }) {
-  const status = asStepStatus(step.status);
-  const review = step.review !== null && CONVERSING.has(status) ? step.review : null;
+  const review = step.review !== null && hasStepSession(step) ? step.review : null;
   // Only whether there are tabs matters here: AgentTabs says which one is chosen.
   if (agentTabsOf(task, step, "implementer", 0) === null && review === null) {
     return null;

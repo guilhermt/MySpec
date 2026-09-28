@@ -40,7 +40,7 @@ export function EarlierConversationFoot({ task, stage }: EarlierConversationFoot
           </span>
         </p>
         <Tooltip content="Back to where the task is" shortcut="Esc">
-          <Button variant="secondary" size="sm" onClick={leaveEarlierConversation}>
+          <Button variant="secondary" size="sm" onClick={() => leaveEarlierConversation()}>
             {`Back to ${back}`}
           </Button>
         </Tooltip>

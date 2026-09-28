@@ -21,7 +21,7 @@ export function ReviewsHeader({ center }: ReviewsHeaderProps) {
     <LocationHeader>
       {center.readAt !== "" && (
         <span className="text-xs text-muted-foreground">
-          {`Updated ${age(center.readAt, now)}`}
+          {`checked ${age(center.readAt, now)}`}
         </span>
       )}
       {center.reading && (

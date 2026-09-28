@@ -1084,6 +1084,15 @@ func (s *Service) DiscardTask(ctx context.Context, taskID string) error {
 	return nil
 }
 
+// ForgetTask makes the conversations index forget a task, without touching
+// the database. Used when a task is deleted: its sessions rows go with it by
+// cascade, but nobody tells the index that on its own.
+func (s *Service) ForgetTask(taskID string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.conversations, taskID)
+}
+
 // LoadConversations reads every session the database keeps into the index
 // Conversations answers from. The app calls it once, at start.
 func (s *Service) LoadConversations(ctx context.Context) error {

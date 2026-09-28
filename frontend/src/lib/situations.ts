@@ -35,6 +35,11 @@ export function situationTone(situation: Situation): SituationTone {
   return asSituationGroup(situation.group) === "error" ? "error" : "attention";
 }
 
+/** lowerFirst is text with its first letter turned lowercase, the rest untouched. */
+export function lowerFirst(text: string): string {
+  return `${text.charAt(0).toLowerCase()}${text.slice(1)}`;
+}
+
 /**
  * situationLabel is what a situation asks of the user, in the few words the
  * lists and the section have room for. A situation with more than one form
@@ -227,8 +232,7 @@ export function announcePlace(situation: Situation): string | null {
 
 /** situationFragment is what a situation asks and where, as a sentence goes on after a name or a tone: `question in Reviewer`. */
 export function situationFragment(situation: Situation): string {
-  const label = situationLabel(situation);
-  const asks = `${label.charAt(0).toLowerCase()}${label.slice(1)}`;
+  const asks = lowerFirst(situationLabel(situation));
   const place = announcePlace(situation);
   return place === null ? asks : `${asks} in ${place}`;
 }

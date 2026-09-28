@@ -492,6 +492,27 @@ describe("TaskView, earlier conversation", () => {
     expect(document.querySelector('[data-slot="conversation"]')).toHaveFocus();
   });
 
+  it("falls back to the header's title when the place has no conversation to land on", async () => {
+    const task = makeTask({
+      stage: "pr",
+      pr: makePullRequest({ status: "preparing", sessionStage: "" }),
+      conversations: [makeTaskConversation({ stage: "prd" })],
+    });
+    const { user } = renderWithStore(<TaskView taskId="task-1" />, {
+      state: makeState({ tasks: [task] }),
+      ui: {
+        location: { kind: "task", id: "task-1" },
+        transcripts: { "task-1|prd": read([]) },
+        earlierConversation: { taskId: "task-1", stage: "prd", from: null },
+      },
+    });
+
+    await user.click(screen.getByRole("button", { name: "Back to the pull request" }));
+
+    expect(document.querySelector('[data-slot="conversation"]')).toBeNull();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveFocus();
+  });
+
   it("goes back with the focus on the row that opened it, while the panel is open beside it", async () => {
     const { user } = loop({
       ui: {

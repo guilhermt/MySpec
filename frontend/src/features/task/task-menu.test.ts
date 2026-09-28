@@ -308,14 +308,13 @@ describe("taskMenuOf, the items", () => {
 });
 
 describe("menuItems", () => {
+  // taskGroup, its only caller, never asks about the current stage itself, so every case here has
+  // id different from current.
   it.each([
     ["structured", "tech_spec", "prd", ["back prd", "discard prd"]],
-    ["structured", "prd", "prd", ["discard prd"]],
     ["structured", "implementation", "tech_spec", ["back tech_spec", "discard tech_spec"]],
     ["structured", "implementation", "plan", ["discard plan"]],
     ["structured", "pr", "plan", []],
-    ["structured", "implementation", "implementation", []],
-    ["one_shot", "one_shot", "one_shot", ["discard one_shot"]],
     ["one_shot", "pr", "one_shot", ["back one_shot", "discard one_shot"]],
   ] as const)("offers, in %s at %s, on %s: %o", (mode, current, id, items) => {
     expect(menuItems(mode, current, id).map((item) => `${item.action} ${item.stage}`)).toEqual(

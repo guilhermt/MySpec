@@ -7,6 +7,7 @@ import { prBaseName, troubleLabel } from "@/lib/pull-requests";
 import { fallbackReason } from "@/lib/review-modes";
 import {
   compactWait,
+  lowerFirst,
   prSituation,
   spokenWait,
   stageSituation,
@@ -32,7 +33,7 @@ import {
   asStepStatus,
   asTaskMode,
 } from "@/lib/wails";
-import type { StepTab } from "@/store/app-store";
+import type { PrDraft, StepTab } from "@/store/app-store";
 
 /** TaskRequestAction is what a button of the request bar of a task does. */
 export type TaskRequestAction =
@@ -117,10 +118,6 @@ const TONES: Record<SituationGroup, "wait" | "error" | "close"> = {
   waiting: "wait",
   closing: "close",
 };
-
-function lowerFirst(text: string): string {
-  return `${text.charAt(0).toLowerCase()}${text.slice(1)}`;
-}
 
 function openInEditor(): TaskRequestButton {
   return {
@@ -208,12 +205,20 @@ function continueBar(task: TaskSummary): Bar {
   };
 }
 
-function draftRefusal(pr: PullRequest): string | undefined {
+// effectiveDraft is the title and the body the user would send: what the user edited, field by
+// field, falling back to the agent's draft on disk.
+function effectiveDraft(pr: PullRequest, edited: PrDraft | null): PrDraft {
+  return {
+    title: edited?.title ?? pr.draft?.title ?? "",
+    body: edited?.body ?? pr.draft?.body ?? "",
+  };
+}
+
+function draftRefusal(pr: PullRequest, draft: PrDraft): string | undefined {
   if (pr.turnRunning) {
     return "Wait for the agent to finish";
   }
-  const draft = pr.draft;
-  if (draft === null || draft.title.trim() === "" || draft.body.trim() === "") {
+  if (draft.title.trim() === "" || draft.body.trim() === "") {
     return "Write a title and a description";
   }
   return undefined;
@@ -297,10 +302,15 @@ function troubleBar(pr: PullRequest): Bar {
   return { form: "error", label, progress: joined(notes), status: label, actions };
 }
 
-function prBar(pr: PullRequest, want: Want, repository: Repository | null): Bar {
+function prBar(
+  pr: PullRequest,
+  want: Want,
+  repository: Repository | null,
+  editedDraft: PrDraft | null,
+): Bar {
   switch (want.kind) {
     case "draft": {
-      const refusal = draftRefusal(pr);
+      const refusal = draftRefusal(pr, effectiveDraft(pr, editedDraft));
       return {
         form: "tinted",
         label: "Draft to approve",
@@ -354,7 +364,12 @@ function prBar(pr: PullRequest, want: Want, repository: Repository | null): Bar 
   }
 }
 
-function barOf(task: TaskSummary, want: Want, repository: Repository | null): Bar | null {
+function barOf(
+  task: TaskSummary,
+  want: Want,
+  repository: Repository | null,
+  editedDraft: PrDraft | null,
+): Bar | null {
   switch (want.kind) {
     case "step_review":
     case "step_empty": {
@@ -364,7 +379,7 @@ function barOf(task: TaskSummary, want: Want, repository: Repository | null): Ba
     case "ready_to_continue":
       return continueBar(task);
     default:
-      return task.pr === null ? null : prBar(task.pr, want, repository);
+      return task.pr === null ? null : prBar(task.pr, want, repository, editedDraft);
   }
 }
 
@@ -411,7 +426,6 @@ function pausedWant(task: TaskSummary): Want | null {
     switch (asStepStatus(step.status)) {
       case "awaiting_review":
       case "in_review":
-      case "review_failed":
         return { kind: "step_review", form: "" };
       case "ready_to_approve":
         return { kind: "step_review", form: "approve" };
@@ -445,22 +459,14 @@ function pausedWant(task: TaskSummary): Want | null {
   }
 }
 
-/** requestKindOf is the kind of the bar taskRequestOf draws for the task, null when it draws none. */
-export function requestKindOf(task: TaskSummary): RequestKind | null {
-  if (isPaused(task)) {
-    return pausedWant(task)?.kind ?? null;
-  }
-  const situation = screenSituation(task);
-  return situation === null ? null : (asSituationKind(situation.kind) as RequestKind);
-}
-
 /** pausedRequestOf is the paused half: what the state of the step or the PR asks for, quiet, without a chip. */
 export function pausedRequestOf(
   task: TaskSummary,
   repository: Repository | null = null,
+  editedDraft: PrDraft | null = null,
 ): TaskRequestModel | null {
   const want = pausedWant(task);
-  const bar = want === null ? null : barOf(task, want, repository);
+  const bar = want === null ? null : barOf(task, want, repository, editedDraft);
   return bar === null ? null : { ...clean(bar), form: "quiet", glyph: "paused", situationId: null };
 }
 
@@ -473,16 +479,17 @@ export function taskRequestOf(
   _tab: StepTab,
   now: number,
   repository: Repository | null = null,
+  editedDraft: PrDraft | null = null,
 ): TaskRequestModel | null {
   if (isPaused(task)) {
-    return pausedRequestOf(task, repository);
+    return pausedRequestOf(task, repository, editedDraft);
   }
   const situation = screenSituation(task);
   if (situation === null) {
     return null;
   }
   const kind = asSituationKind(situation.kind) as RequestKind;
-  const bar = barOf(task, { kind, form: formOf(situation) }, repository);
+  const bar = barOf(task, { kind, form: formOf(situation) }, repository, editedDraft);
   if (bar === null) {
     return null;
   }

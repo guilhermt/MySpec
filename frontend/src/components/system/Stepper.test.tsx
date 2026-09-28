@@ -74,6 +74,29 @@ describe("Stepper", () => {
     expect(within(tooltip).getByText("Paused since 14:52")).toBeInTheDocument();
   });
 
+  it("opens the list of the stages on hover over the pill, and only that tooltip", async () => {
+    const { user } = renderWithStore(<Stepper {...PROPS} />);
+    await user.hover(screen.getByText("Implementation"));
+    const tooltip = await screen.findByRole("tooltip", {}, { timeout: 2000 });
+    expect(within(tooltip).getByText(/^✓ PRD/)).toBeInTheDocument();
+    expect(within(tooltip).getByText("Paused since 14:52")).toBeInTheDocument();
+    expect(screen.getAllByRole("tooltip")).toHaveLength(1);
+  });
+
+  it("shows a done folded stage's name and word on hover", async () => {
+    const { user } = renderWithStore(<Stepper {...PROPS} />);
+    await user.hover(screen.getByText("PRD"));
+    const tooltip = await screen.findByRole("tooltip", {}, { timeout: 2000 });
+    expect(tooltip).toHaveTextContent("PRD · done");
+  });
+
+  it("shows an upcoming folded stage's name and word on hover", async () => {
+    const { user } = renderWithStore(<Stepper {...PROPS} />);
+    await user.hover(screen.getByText("PR"));
+    const tooltip = await screen.findByRole("tooltip", {}, { timeout: 2000 });
+    expect(tooltip).toHaveTextContent("PR · to come");
+  });
+
   it("gives way by the width of the main area", () => {
     renderWithStore(<Stepper {...PROPS} />);
     expect(screen.getByText("PRD")).toHaveClass("@max-[1200px]/main:sr-only");

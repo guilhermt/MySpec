@@ -1,6 +1,6 @@
 import type { StepperGlyph } from "@/features/task/stepper";
 import { stepperOf } from "@/features/task/stepper";
-import { prBaseName } from "@/lib/pull-requests";
+import { baseName, prBaseName } from "@/lib/pull-requests";
 import { fallbackReason, stepReportLabel } from "@/lib/review-modes";
 import { asLifecycleStage, lifecycleOf, stageLabel } from "@/lib/stages";
 import { taskModeLabel } from "@/lib/task-modes";
@@ -257,7 +257,7 @@ export function detailsOf(
       mode: taskModeLabel(asTaskMode(task.mode)),
       reviewMode: asReviewMode(task.reviewMode),
       branch: task.branch,
-      base: task.baseBranch.replace(/^origin\//, ""),
+      base: baseName(task.baseBranch),
       worktree: task.worktreePath,
       startedAt: task.createdAt,
     },

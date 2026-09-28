@@ -29,7 +29,7 @@ export function BoardHeader({ board, onNewDiscussion }: BoardHeaderProps) {
       <LocationHeader>
         {board.readAt !== "" && (
           <span className="text-xs text-muted-foreground">
-            {`Updated ${age(board.readAt, now)}`}
+            {`checked ${age(board.readAt, now)}`}
           </span>
         )}
         {board.reading && (

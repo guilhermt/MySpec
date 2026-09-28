@@ -922,6 +922,13 @@ func (m *memSessions) DiscardTask(_ context.Context, taskID string) error {
 	return nil
 }
 
+func (m *memSessions) ForgetTask(taskID string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.calls = append(m.calls, "forgetTask:"+taskID)
+}
+
 func (m *memSessions) Resume(_ context.Context, k session.Key) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

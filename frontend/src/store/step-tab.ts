@@ -23,3 +23,18 @@ export function firstTab(task: TaskSummary, step: Step): StepTab {
     ? "reviewer"
     : "implementer";
 }
+
+/**
+ * firstTabDecided says whether firstTab already has grounds to pick a side: the reviewer
+ * conversation exists, or a situation, the implementer's or the reviewer's, does. In a pass
+ * before the reviewer's session starts, none of those hold, and firstTab falls back to
+ * "implementer" only to have something to display; that guess must not be stored, or the
+ * reviewer tab stays stuck on it once the session actually starts.
+ */
+export function firstTabDecided(task: TaskSummary, step: Step): boolean {
+  return (
+    step.reviewer !== null ||
+    stepSituation(task, step.number) !== null ||
+    reviewerSituation(task, step.number) !== null
+  );
+}

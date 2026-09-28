@@ -131,6 +131,22 @@ describe("ReviewModePopover", () => {
     await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
   });
 
+  it("clears a saved failure when it reopens, since it stays mounted while closed", async () => {
+    vi.mocked(api.setReviewMode).mockRejectedValueOnce(new Error("the step started"));
+    const { user } = await open();
+    await user.click(manual());
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Couldn't save the mode · Try again",
+    );
+
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    await user.click(screen.getByRole("button", { name: "More actions" }));
+    await screen.findByRole("dialog", { name: "Review mode" });
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
   it("can't change the mode when no step is left to start, and says why", async () => {
     const task = makeTask({
       reviewMode: "agent",

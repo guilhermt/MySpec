@@ -1,5 +1,7 @@
 import { screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { tabId } from "@/components/system/Tabs";
+import { AGENT_CONVERSATION } from "@/features/task/AgentTabs";
 import { StepPane } from "@/features/task/StepPane";
 import { api, type Step, type TaskSummary } from "@/lib/wails";
 import type { TranscriptState } from "@/store/transcript";
@@ -103,6 +105,25 @@ describe("StepPane", () => {
     pane({ status: "implementing", reviewMode: "agent" });
 
     expect(screen.getByText("Add a login screen")).toBeInTheDocument();
+  });
+
+  it("is a tabpanel labelled by the chosen agent tab while the step has tabs", () => {
+    pane(
+      UNDER_AGENT_REVIEW,
+      {},
+      { transcripts: BOTH_READY, openStepTab: { "task-1|1": "reviewer" } },
+    );
+
+    expect(screen.getByRole("tabpanel")).toHaveAttribute(
+      "aria-labelledby",
+      tabId(AGENT_CONVERSATION, "reviewer"),
+    );
+  });
+
+  it("has no tabpanel role for a step with no tabs to show", () => {
+    pane({ status: "implementing", reviewMode: "agent" });
+
+    expect(screen.queryByRole("tabpanel")).toBeNull();
   });
 
   it("keeps the conversation while the step waits for review", () => {

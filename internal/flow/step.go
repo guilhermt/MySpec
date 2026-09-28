@@ -1030,6 +1030,7 @@ func (s *Service) Delete(ctx context.Context, id string) (DeleteResult, error) {
 	if err := s.tasks.Delete(ctx, id); err != nil {
 		return DeleteResult{}, err
 	}
+	s.sessions.ForgetTask(id)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()

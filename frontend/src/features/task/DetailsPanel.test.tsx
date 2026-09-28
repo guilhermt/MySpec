@@ -691,6 +691,23 @@ describe("DetailsPanel, conversations", () => {
     expect(row).toHaveFocus();
   });
 
+  it("keeps the focus on the row on a second click, even when it wasn't opened from the panel", async () => {
+    const { user } = inMainArea(TALKED, 1300);
+    act(() => useAppStore.getState().openEarlierConversation("task-1", "step:1", false));
+    const [row] = within(group(/^Steps/)).getAllByRole("button", {
+      name: `Implementer · ${time}`,
+    });
+    if (row === undefined) {
+      throw new Error("step 1 has no Implementer row");
+    }
+    expect(row).toHaveAttribute("aria-pressed", "true");
+
+    await user.click(row);
+
+    expect(useAppStore.getState().earlierConversation).toBeNull();
+    expect(row).toHaveFocus();
+  });
+
   it("opens another conversation in place of the earlier one being read", async () => {
     const { user } = inMainArea(TALKED, 1300);
     act(() => useAppStore.getState().openEarlierConversation("task-1", "step:1", true));

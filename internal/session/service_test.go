@@ -2208,7 +2208,13 @@ func TestTheConversationsOfATaskListEverySessionItHadByStart(t *testing.T) {
 		t.Fatalf("Close() = %v, want nil", err)
 	}
 
+	// This one starts before both sessions already recorded, so it lands out of
+	// start order in the index; Conversations still lists it first.
+	f.advance(-90 * time.Second)
+	f.open(t, atStage(info, prompts.StagePR))
+
 	want := []session.Conversation{
+		{Stage: string(prompts.StagePR), StartedAt: base.Add(-30 * time.Second)},
 		{Stage: string(prompts.StagePRD), StartedAt: base},
 		{Stage: string(prompts.StageTechSpec), StartedAt: base.Add(time.Minute)},
 	}
@@ -2245,6 +2251,34 @@ func TestADiscardedStageLeavesTheConversationsOfItsTask(t *testing.T) {
 	}
 	if got := f.service.Conversations("t2"); len(got) != 1 {
 		t.Errorf("Conversations(t2) = %+v, want the session of the other task", got)
+	}
+}
+
+func TestForgettingATaskDropsItsConversationsWithoutTouchingTheDatabase(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "slow")
+	f.open(t, taskInfo(t, "t1"))
+	f.open(t, taskInfo(t, "t2"))
+
+	f.service.ForgetTask("t1")
+
+	if got := f.service.Conversations("t1"); len(got) != 0 {
+		t.Errorf("Conversations(t1) after ForgetTask = %+v, want none", got)
+	}
+	if got := f.service.Conversations("t2"); len(got) != 1 {
+		t.Errorf("Conversations(t2) = %+v, want the session of the other task", got)
+	}
+
+	// Unlike DiscardTask, ForgetTask leaves the sessions rows alone: a caller
+	// whose task delete already removed them by cascade needs only the index
+	// told, not a second removal.
+	recs, err := f.sessions.List(t.Context())
+	if err != nil {
+		t.Fatalf("List() = %v, want nil", err)
+	}
+	if len(recs) != 2 {
+		t.Errorf("sessions in the database = %d, want both still there", len(recs))
 	}
 }
 

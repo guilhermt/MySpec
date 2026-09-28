@@ -1,4 +1,4 @@
-import { type RefObject, useRef, useState } from "react";
+import { type RefObject, useEffect, useRef, useState } from "react";
 import { Popover } from "@/components/system/Popover";
 import { Tooltip } from "@/components/system/Tooltip";
 import { ModelChip } from "@/features/models/ModelChip";
@@ -57,6 +57,12 @@ export function ModelsPopover({
   const rows = task.models ?? [];
   const firstEditable = rows.find((row) => row.editable)?.stage;
   const oneShot = asTaskMode(task.mode) === "one_shot";
+
+  // The popover stays mounted while closed; a stale saving or failed choice from the last time
+  // it was open must not show again when it reopens.
+  useEffect(() => {
+    if (open) setSaves({});
+  }, [open]);
 
   const choose = async (stage: ModelStage, choice: ModelChoice) => {
     setSaves((current) => ({ ...current, [stage]: { choice, failure: null } }));

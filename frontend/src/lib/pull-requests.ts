@@ -31,9 +31,14 @@ export function checkCounts(pr: PullRequest): { passed: number; total: number } 
   return { passed, total: checks.length };
 }
 
+/** baseName strips a remote's "origin/" prefix off a branch name, when it has one. */
+export function baseName(branch: string): string {
+  return branch.replace(/^origin\//, "");
+}
+
 /** prBaseName is the branch the pull request merges into: what GitHub says, or else the base of the worktree. */
 export function prBaseName(pr: PullRequest): string {
-  return pr.prBase !== "" ? pr.prBase : pr.baseBranch.replace(/^origin\//, "");
+  return pr.prBase !== "" ? pr.prBase : baseName(pr.baseBranch);
 }
 
 /** checksSummary is the checks of the last reading in one line: "3 of 5 passed · 2 not finished · 1 failed · merges clean". */

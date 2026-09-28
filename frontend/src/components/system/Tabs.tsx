@@ -32,6 +32,11 @@ const WORD_TONES = {
   error: "font-medium text-state-error",
 } as const;
 
+/** tabId is the stable id of a tab button, for the panel it controls to point its aria-labelledby at. */
+export function tabId(controls: string, item: string): string {
+  return `${controls}-tab-${item}`;
+}
+
 /**
  * Tabs is the minimal tab list: text tabs over a line, the chosen one in the first ink with the
  * brand underline. It is one Tab stop, the chosen tab; ← and → move to the next enabled tab and
@@ -45,17 +50,27 @@ export function Tabs<T extends string>({
   controls,
 }: TabsProps<T>) {
   const list = useRef<HTMLDivElement>(null);
-  const enabled = items.filter((item) => !item.disabled);
 
+  // Walks from the tab's own position in items, not from an index into the enabled-only list:
+  // when the chosen tab is itself disabled, its id has no place in that list, and indexing into
+  // it lands on the wrong neighbour.
   const move = (event: KeyboardEvent, from: T) => {
     if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
     event.preventDefault();
-    const at = enabled.findIndex((item) => item.id === from);
+    const at = items.findIndex((item) => item.id === from);
+    if (at === -1) return;
     const step = event.key === "ArrowRight" ? 1 : -1;
-    const next = enabled[(at + step + enabled.length) % enabled.length];
-    if (next === undefined || next.id === from) return;
-    onValueChange(next.id);
-    list.current?.querySelector<HTMLElement>(`[data-tab="${next.id}"]`)?.focus();
+    for (let i = 1; i <= items.length; i++) {
+      const index = (((at + step * i) % items.length) + items.length) % items.length;
+      const next = items[index];
+      if (next === undefined) return;
+      if (next.id === from) return;
+      if (!next.disabled) {
+        onValueChange(next.id);
+        list.current?.querySelector<HTMLElement>(`[data-tab="${next.id}"]`)?.focus();
+        return;
+      }
+    }
   };
 
   return (
@@ -70,6 +85,7 @@ export function Tabs<T extends string>({
         const tab = (
           <button
             key={item.id}
+            id={tabId(controls, item.id)}
             type="button"
             role="tab"
             data-tab={item.id}

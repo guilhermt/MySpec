@@ -2,6 +2,7 @@ import type { SessionState } from "@/features/chat/session";
 import { taskSessions } from "@/features/sidebar/sessions";
 import { stageNoun } from "@/features/task/stage-actions";
 import { currentStepOf, hasStepSession, loopSession, stepStage } from "@/features/task/step-status";
+import { lowerFirst } from "@/lib/situations";
 import type { Step, StepReviewer, TaskSummary } from "@/lib/wails";
 import { asPRStatus, asSessionStatus, asTaskStage } from "@/lib/wails";
 import type { StepTab } from "@/store/app-store";
@@ -105,7 +106,7 @@ export function speaker(session: TaskSession): string {
   if (first.length > 1 && first === first.toUpperCase()) {
     return session.role;
   }
-  return `${session.role.charAt(0).toLowerCase()}${session.role.slice(1)}`;
+  return lowerFirst(session.role);
 }
 
 /**

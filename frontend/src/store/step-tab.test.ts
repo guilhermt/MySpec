@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Situation, Step } from "@/lib/wails";
-import { firstTab } from "@/store/step-tab";
+import { firstTab, firstTabDecided } from "@/store/step-tab";
 import { makeSituation, makeStep, makeStepReviewer, makeTask } from "@/test/wails-mock";
 
 const implementerAsks = (startedAt: string) =>
@@ -63,5 +63,44 @@ describe("firstTab", () => {
     expect(
       firstTab(makeTask(), makeStep({ number: 3, status: "agent_review", reviewer: null })),
     ).toBe("implementer");
+  });
+});
+
+describe("firstTabDecided", () => {
+  it("is undecided in a pass whose reviewer has no session and no situation asks", () => {
+    expect(
+      firstTabDecided(makeTask(), makeStep({ number: 3, status: "agent_review", reviewer: null })),
+    ).toBe(false);
+  });
+
+  it("is decided once the reviewer has a session", () => {
+    expect(
+      firstTabDecided(
+        makeTask(),
+        makeStep({
+          number: 3,
+          status: "agent_review",
+          reviewer: makeStepReviewer({ sessionStage: "step_review:3" }),
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it("is decided by the implementer's situation, reviewer or not", () => {
+    expect(
+      firstTabDecided(
+        makeTask({ situations: [implementerAsks(EARLY)] }),
+        makeStep({ number: 3, status: "agent_review", reviewer: null }),
+      ),
+    ).toBe(true);
+  });
+
+  it("is decided by the reviewer's situation, reviewer or not", () => {
+    expect(
+      firstTabDecided(
+        makeTask({ situations: [reviewerAsks(EARLY)] }),
+        makeStep({ number: 3, status: "agent_review", reviewer: null }),
+      ),
+    ).toBe(true);
   });
 });

@@ -378,15 +378,15 @@ func (s *Service) ClearStepReviewMode(ctx context.Context, id string, number int
 // the lock of the task.
 func (s *Service) stepModeEditable(id string, number int) error {
 	if _, ok := s.tasks.Get(id); !ok {
-		return fmt.Errorf("set the review mode of step %d: %w", number, task.ErrNotFound)
+		return fmt.Errorf("change the review mode of step %d: %w", number, task.ErrNotFound)
 	}
 	steps := s.Steps(id)
 	index := slices.IndexFunc(steps, func(st StepState) bool { return st.Step.Number == number })
 	if index < 0 {
-		return fmt.Errorf("set the review mode of step %d of task %s: %w", number, id, ErrNoStep)
+		return fmt.Errorf("change the review mode of step %d of task %s: %w", number, id, ErrNoStep)
 	}
 	if !steps[index].ModeEditable() {
-		return fmt.Errorf("set the review mode of step %d of task %s: %w", number, id, ErrStepStarted)
+		return fmt.Errorf("change the review mode of step %d of task %s: %w", number, id, ErrStepStarted)
 	}
 	return nil
 }

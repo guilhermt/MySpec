@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Button } from "@/components/system/Button";
 import { RequestBar } from "@/components/system/RequestBar";
 import { Tooltip } from "@/components/system/Tooltip";
@@ -70,10 +70,20 @@ export function TaskRequest({ task, tab }: TaskRequestProps) {
   const edited = usePrDraft(task.id);
   const repository = useRepository(task.repositoryId);
   const now = useNow(MINUTE, true);
+  const bornStatus = useRef<{ situationId: string; status: string } | null>(null);
 
-  const request = taskRequestOf(task, tab, now, repository);
+  const request = taskRequestOf(task, tab, now, repository, edited);
   if (request === null) {
     return null;
+  }
+  // The status announced by role="status" is the one the situation was born with: frozen the first
+  // time this situationId is seen, so a later change to the form doesn't get announced again.
+  let status = request.status;
+  if (request.situationId !== null) {
+    if (bornStatus.current === null || bornStatus.current.situationId !== request.situationId) {
+      bornStatus.current = { situationId: request.situationId, status: request.status };
+    }
+    status = bornStatus.current.status;
   }
   const step = currentStepOf(task);
 
@@ -100,7 +110,7 @@ export function TaskRequest({ task, tab }: TaskRequestProps) {
         form={request.form}
         glyph={request.glyph}
         label={request.label}
-        status={request.status}
+        status={status}
         {...(request.place !== undefined ? { place: request.place } : {})}
         {...(request.time !== undefined ? { time: request.time } : {})}
         {...(request.progress !== undefined ? { progress: request.progress } : {})}

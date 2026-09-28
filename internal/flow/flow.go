@@ -71,6 +71,7 @@ type Sessions interface {
 	Exists(ctx context.Context, k session.Key) (bool, error)
 	CloseTask(ctx context.Context, taskID string) error
 	DiscardTask(ctx context.Context, taskID string) error
+	ForgetTask(taskID string)
 	Resume(ctx context.Context, k session.Key) error
 	Interrupt(ctx context.Context, k session.Key) error
 	SetChoice(ctx context.Context, k session.Key, c models.Choice) error

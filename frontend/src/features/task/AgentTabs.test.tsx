@@ -152,6 +152,21 @@ describe("AgentTabs", () => {
     );
   });
 
+  it("waits to store a choice while the reviewer has no session and no situation asks, then picks the reviewer once it starts", () => {
+    const { rerender } = tabs({ reviewer: null });
+    expect(stored()).toBeUndefined();
+    expect(tab(/^Implementer/)).toHaveAttribute("aria-selected", "true");
+
+    const { task, step } = taskWith({});
+    act(() => {
+      useAppStore.getState().applyState(makeState({ tasks: [task] }));
+    });
+    rerender(<AgentTabs task={task} step={step} />);
+
+    expect(stored()).toBe("reviewer");
+    expect(tab(/^Reviewer/)).toHaveAttribute("aria-selected", "true");
+  });
+
   it("never moves to another tab on its own after the first opening", () => {
     const { rerender } = tabs({ status: "addressing_review" });
     expect(stored()).toBe("implementer");

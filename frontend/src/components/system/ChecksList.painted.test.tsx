@@ -25,7 +25,7 @@ function row(name: string): HTMLElement {
 describe.each(THEMES)("ChecksList in the %s theme", (theme) => {
   it("writes the summary in the second ink", () => {
     setTheme(theme);
-    render(<ChecksList summary="3 of 5 passed · 2 not finished" rows={ROWS} />);
+    render(<ChecksList summary="3 of 5 passed · 2 not finished" rows={ROWS} onOpen={() => {}} />);
     expect(paintOf(screen.getByText("3 of 5 passed · 2 not finished"), { color: "" })).toEqual({
       color: token("--ink-2"),
     });
@@ -33,7 +33,7 @@ describe.each(THEMES)("ChecksList in the %s theme", (theme) => {
 
   it("writes the name in mono in the first ink and the duration in the fourth", () => {
     setTheme(theme);
-    render(<ChecksList summary="" rows={ROWS} />);
+    render(<ChecksList summary="" rows={ROWS} onOpen={() => {}} />);
     const name = screen.getByText("build");
     expect(paintOf(name, { color: "" })).toEqual({ color: token("--ink-1") });
     expect(getComputedStyle(name).fontFamily).toBe(resolve("var(--font-mono)", "font-family"));
@@ -49,7 +49,7 @@ describe.each(THEMES)("ChecksList in the %s theme", (theme) => {
     ["deploy", "queued", "--ink-3", "400"],
   ] as const)("writes the state of %s, %s, in %s at %s", (name, word, color, weight) => {
     setTheme(theme);
-    render(<ChecksList summary="" rows={ROWS} />);
+    render(<ChecksList summary="" rows={ROWS} onOpen={() => {}} />);
     const state = screen.getByText(word);
     expect(paintOf(state, { color: "" })).toEqual({ color: token(color) });
     expect(getComputedStyle(state).fontWeight).toBe(weight);
@@ -61,15 +61,33 @@ describe.each(THEMES)("ChecksList in the %s theme", (theme) => {
     ["docs", "--ink-4"],
   ] as const)("draws the check of %s in %s", (name, color) => {
     setTheme(theme);
-    render(<ChecksList summary="" rows={ROWS} />);
+    render(<ChecksList summary="" rows={ROWS} onOpen={() => {}} />);
     const check = row(name).querySelector("svg") as SVGElement;
     expect(getComputedStyle(check).color).toBe(token(color));
   });
 
   it("draws the failure as the error diamond", () => {
     setTheme(theme);
-    render(<ChecksList summary="" rows={ROWS} />);
+    render(<ChecksList summary="" rows={ROWS} onOpen={() => {}} />);
     const glyph = row("e2e").querySelector('[data-state="error"]') as HTMLElement;
     expect(getComputedStyle(glyph).backgroundColor).toBe(token("--state-error"));
+  });
+
+  it("writes the name of a check with a url in the brand ink, underlined", () => {
+    setTheme(theme);
+    const rows: readonly CheckRowView[] = [
+      {
+        name: "build",
+        word: "passed",
+        glyph: "done",
+        tooltip: null,
+        duration: "1m 52s",
+        url: "https://github.com/acme/web/actions/runs/1",
+      },
+    ];
+    render(<ChecksList summary="" rows={rows} onOpen={() => {}} />);
+    const link = screen.getByRole("link", { name: /build/ });
+    expect(paintOf(link, { color: "" })).toEqual({ color: token("--brand-ink") });
+    expect(getComputedStyle(link).textDecorationLine).toBe("underline");
   });
 });

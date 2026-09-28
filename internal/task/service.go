@@ -1285,6 +1285,7 @@ func clonePRRun(run PRRun) PRRun {
 		result := *run.Close
 		run.Close = &result
 	}
+	run.PR.Checks = slices.Clone(run.PR.Checks)
 	run.TroubleBaseline.FailedChecks = slices.Clone(run.TroubleBaseline.FailedChecks)
 	run.Trouble.FailedChecks = slices.Clone(run.Trouble.FailedChecks)
 	return run

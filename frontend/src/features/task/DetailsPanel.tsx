@@ -330,7 +330,8 @@ function ConversationRow({ task, conversation, now, nested }: ConversationRowPro
 
   const open = () => {
     if (reading) {
-      leaveEarlierConversation();
+      // A second click on the row that opened it keeps the focus there, whichever panel it opened from.
+      leaveEarlierConversation(document.getElementById(earlierRowId(stage)));
       return;
     }
     // The panel covers the conversation below the width from which it stands beside it.
@@ -473,7 +474,11 @@ function PullRequestFacts({ pr, facts }: PullRequestFactsProps) {
         {` · into ${facts.base}${ended}`}
       </Fact>
       <Fact label="Checks">
-        <ChecksList summary={checksSummary(pr)} rows={rows} />
+        <ChecksList
+          summary={checksSummary(pr)}
+          rows={rows}
+          onOpen={(url) => void openExternal(url)}
+        />
       </Fact>
       {pr.checkedAt !== "" && (
         <Fact label="Checked">

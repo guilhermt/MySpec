@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  pausedRequestOf,
-  requestKindOf,
-  type TaskRequestModel,
-  taskRequestOf,
-} from "@/features/task/request";
+import { pausedRequestOf, type TaskRequestModel, taskRequestOf } from "@/features/task/request";
 import { cloneMissingText } from "@/lib/repositories";
 import type { PullRequest, Situation, Step, TaskSummary } from "@/lib/wails";
 import {
@@ -162,7 +157,7 @@ describe("taskRequestOf and pausedRequestOf", () => {
     [
       "step_review, the worktree unreadable",
       inStep(
-        { status: "review_failed", review: staged(0, 0, "git status failed") },
+        { review: staged(0, 0, "git status failed") },
         situation("step_review", "waiting", "review", STEP_PLACE),
       ),
       {
@@ -428,10 +423,7 @@ describe("taskRequestOf and pausedRequestOf", () => {
         situationId: "s-pr_closed",
       },
     ],
-  ])("draws %s the same from both sources", (name, scene, bar) => {
-    const kind = name.split(",")[0];
-    expect(requestKindOf(scene.waiting)).toBe(kind);
-    expect(requestKindOf(scene.paused)).toBe(kind);
+  ])("draws %s the same from both sources", (_name, scene, bar) => {
     expect(taskRequestOf(scene.waiting, "implementer", NOW, REPOSITORY)).toEqual(bar);
     expect(pausedRequestOf(scene.paused, REPOSITORY)).toEqual({
       ...bar,
@@ -443,6 +435,18 @@ describe("taskRequestOf and pausedRequestOf", () => {
     expect(taskRequestOf(scene.paused, "reviewer", NOW, REPOSITORY)).toEqual(
       pausedRequestOf(scene.paused, REPOSITORY),
     );
+  });
+
+  it("draws no bar for a paused step whose worktree became unreadable", () => {
+    // review_failed carries the situation worktree_unreadable, which task 3 doesn't show; a paused
+    // task in this state waits on nothing the bar can draw.
+    const { paused } = inStep(
+      { status: "review_failed", review: staged(0, 0, "git status failed") },
+      situation("step_review", "waiting", "review", STEP_PLACE),
+    );
+
+    expect(pausedRequestOf(paused, REPOSITORY)).toBeNull();
+    expect(taskRequestOf(paused, "implementer", NOW, REPOSITORY)).toBeNull();
   });
 
   it("draws ready_to_continue from its situation, and nothing once paused", () => {
@@ -472,9 +476,7 @@ describe("taskRequestOf and pausedRequestOf", () => {
       ],
       situationId: "s-ready_to_continue",
     });
-    expect(requestKindOf(task("waiting", [found]))).toBe("ready_to_continue");
     expect(pausedRequestOf(task("paused", []))).toBeNull();
-    expect(requestKindOf(task("paused", []))).toBeNull();
     expect(taskRequestOf(task("paused", []), "implementer", NOW)).toBeNull();
   });
 
@@ -530,5 +532,33 @@ describe("taskRequestOf and pausedRequestOf", () => {
     expect(taskRequestOf(task, "implementer", NOW)?.actions[0]?.disabledReason).toBe(
       "Wait for the agent to finish",
     );
+  });
+
+  it("disables approving the draft once the edited title is blank, even with a full draft on disk", () => {
+    const task = makeTask({
+      stage: "pr",
+      pr: makePullRequest({ status: "draft_ready", sessionStage: "pr", draft: DRAFT }),
+      situations: [situation("draft", "waiting", "")],
+    });
+
+    expect(
+      taskRequestOf(task, "implementer", NOW, null, { title: " ", body: "still here" })?.actions[0]
+        ?.disabledReason,
+    ).toBe("Write a title and a description");
+  });
+
+  it("enables approving the draft once the user fills what the agent left blank", () => {
+    const task = makeTask({
+      stage: "pr",
+      pr: makePullRequest({ status: "draft_ready", sessionStage: "pr", draft: null }),
+      situations: [situation("draft", "waiting", "")],
+    });
+
+    expect(
+      taskRequestOf(task, "implementer", NOW, null, {
+        title: "Add the login form",
+        body: "Closes #12",
+      })?.actions[0]?.disabledReason,
+    ).toBeUndefined();
   });
 });

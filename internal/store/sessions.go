@@ -58,7 +58,7 @@ func (r *SessionsRepo) List(ctx context.Context) ([]session.Record, error) {
 }
 
 // scanSession reads one row of sessionColumns.
-func scanSession(row interface{ Scan(dest ...any) error }) (session.Record, error) {
+func scanSession(row scanner) (session.Record, error) {
 	var (
 		rec                  session.Record
 		lastError, pausedAt  sql.NullString

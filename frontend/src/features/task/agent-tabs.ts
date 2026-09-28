@@ -1,6 +1,12 @@
 import type { SessionState } from "@/features/chat/session";
 import type { StepperGlyph } from "@/features/task/stepper";
-import { reviewerSituation, situationLabel, spokenWait, stepSituation } from "@/lib/situations";
+import {
+  lowerFirst,
+  reviewerSituation,
+  situationLabel,
+  spokenWait,
+  stepSituation,
+} from "@/lib/situations";
 import type { Situation, Step, TaskSummary } from "@/lib/wails";
 import { asSessionStatus, asSituationGroup, asStepStatus } from "@/lib/wails";
 import type { StepTab } from "@/store/app-store";
@@ -24,8 +30,7 @@ export interface AgentTabModel {
 }
 
 function asks(situation: Situation): string {
-  const label = situationLabel(situation);
-  return `${label.charAt(0).toLowerCase()}${label.slice(1)}`;
+  return lowerFirst(situationLabel(situation));
 }
 
 function glyphOf(session: SessionState, situation: Situation | null): StepperGlyph | "idle" {

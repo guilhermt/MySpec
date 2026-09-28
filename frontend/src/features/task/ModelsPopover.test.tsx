@@ -158,6 +158,21 @@ describe("ModelsPopover", () => {
     await waitFor(() => expect(within(popover).queryByRole("alert")).not.toBeInTheDocument());
   });
 
+  it("clears a saved failure when it reopens, since it stays mounted while closed", async () => {
+    vi.mocked(api.setStageModel).mockRejectedValueOnce(new Error("The stage has started"));
+    const { user } = await open();
+    await user.click(screen.getByRole("button", { name: /^Plan model:/ }));
+    await user.click(await screen.findByRole("menuitemradio", { name: "Sonnet 5" }));
+    await screen.findByRole("alert");
+
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    await user.click(screen.getByRole("button", { name: "More actions" }));
+    const popover = await screen.findByRole("dialog", { name: "Models" });
+
+    expect(within(popover).queryByRole("alert")).not.toBeInTheDocument();
+  });
+
   it("says a stage takes its model when it starts, and that a step can have its own", async () => {
     const { popover } = await open();
     expect(popover).toHaveTextContent(

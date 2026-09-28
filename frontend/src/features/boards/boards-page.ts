@@ -14,7 +14,7 @@ export function readingText(board: Board, now: number): string {
   if (board.readAt === "") {
     return "Not read yet";
   }
-  return `Updated ${age(board.readAt, now)}`;
+  return `checked ${age(board.readAt, now)}`;
 }
 
 /**

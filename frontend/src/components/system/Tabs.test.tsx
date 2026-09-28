@@ -19,14 +19,28 @@ const ITEMS: readonly TabItem<Agent>[] = [
   { id: "notes", label: "Notes", accessibleName: "Notes: idle" },
 ];
 
+const DISABLED_MIDDLE: readonly TabItem<Agent>[] = [
+  ITEMS[0] as TabItem<Agent>,
+  {
+    id: "reviewer",
+    label: "Reviewer",
+    accessibleName: "Reviewer: starts with pass 1",
+    disabled: true,
+    disabledLabel: "starts with pass 1",
+  },
+  ITEMS[2] as TabItem<Agent>,
+];
+
 function Subject({
   items = ITEMS,
   onValueChange = () => {},
+  initial = "implementer",
 }: {
   items?: readonly TabItem<Agent>[];
   onValueChange?: (id: Agent) => void;
+  initial?: Agent;
 }) {
-  const [value, setValue] = useState<Agent>("implementer");
+  const [value, setValue] = useState<Agent>(initial);
   return (
     <Tabs
       label="Agents"
@@ -92,27 +106,45 @@ describe("Tabs", () => {
     expect(reviewer).toHaveTextContent(/^Reviewer$/);
   });
 
-  it("skips a disabled tab and ignores its click", async () => {
+  it("skips a disabled tab in the middle, both ways, and ignores its click", async () => {
     const onValueChange = vi.fn();
-    const items: readonly TabItem<Agent>[] = [
-      ITEMS[0] as TabItem<Agent>,
-      {
-        id: "reviewer",
-        label: "Reviewer",
-        accessibleName: "Reviewer: starts with pass 1",
-        disabled: true,
-        disabledLabel: "starts with pass 1",
-      },
-    ];
-    const { user } = renderWithStore(<Subject items={items} onValueChange={onValueChange} />);
+    const { user } = renderWithStore(
+      <Subject items={DISABLED_MIDDLE} onValueChange={onValueChange} />,
+    );
     const reviewer = screen.getByRole("tab", { name: "Reviewer: starts with pass 1" });
     expect(reviewer).toHaveAttribute("aria-disabled", "true");
     expect(reviewer).toHaveTextContent("Reviewer · starts with pass 1");
+
     await user.tab();
     await user.keyboard("{ArrowRight}");
+    const notes = screen.getByRole("tab", { name: "Notes: idle" });
+    expect(notes).toHaveFocus();
+    expect(notes).toHaveAttribute("aria-selected", "true");
+
+    await user.keyboard("{ArrowLeft}");
     expect(screen.getByRole("tab", { name: "Implementer: working" })).toHaveFocus();
+    expect(onValueChange.mock.calls).toEqual([["notes"], ["implementer"]]);
+
     await user.click(reviewer);
-    expect(onValueChange).not.toHaveBeenCalled();
+    expect(onValueChange).toHaveBeenCalledTimes(2);
+  });
+
+  it("walks from a disabled chosen tab's own position, not from the enabled list", async () => {
+    const onValueChange = vi.fn();
+    const { user } = renderWithStore(
+      <Subject items={DISABLED_MIDDLE} onValueChange={onValueChange} initial="reviewer" />,
+    );
+    const reviewer = screen.getByRole("tab", { name: "Reviewer: starts with pass 1" });
+    expect(reviewer).toHaveAttribute("aria-selected", "true");
+
+    await user.tab();
+    expect(reviewer).toHaveFocus();
+    await user.keyboard("{ArrowRight}");
+
+    const notes = screen.getByRole("tab", { name: "Notes: idle" });
+    expect(notes).toHaveFocus();
+    expect(notes).toHaveAttribute("aria-selected", "true");
+    expect(onValueChange).toHaveBeenCalledExactlyOnceWith("notes");
   });
 
   it("flashes a tab with a new situation", () => {

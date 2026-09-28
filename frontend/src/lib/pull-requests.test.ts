@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  baseName,
   type CheckRow,
   checkCounts,
   checkDuration,
@@ -94,6 +95,16 @@ describe("checkCounts", () => {
     ],
   ])("counts %s", (_name, checks, want) => {
     expect(checkCounts(makePullRequest({ checks }))).toEqual(want);
+  });
+});
+
+describe("baseName", () => {
+  it("strips the origin/ prefix off a branch", () => {
+    expect(baseName("origin/dev")).toBe("dev");
+  });
+
+  it("leaves a branch with no remote prefix as it is", () => {
+    expect(baseName("dev")).toBe("dev");
   });
 });
 

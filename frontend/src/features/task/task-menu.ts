@@ -66,13 +66,12 @@ function backItem(stage: TaskStage): StageMenuItem {
 
 /**
  * menuItems is what a stage offers: reopening a finished PRD, tech spec or One-Shot planning, and
- * starting any planning stage over. Every other stage offers nothing.
+ * starting any planning stage over. Every other stage offers nothing. Its only caller, taskGroup,
+ * never asks about the current stage itself.
  */
 export function menuItems(mode: TaskMode, current: TaskStage, id: LifecycleStage): StageMenuItem[] {
   if (id === "one_shot") {
-    return current === "one_shot"
-      ? [discardItem("one_shot")]
-      : [backItem("one_shot"), discardItem("one_shot")];
+    return [backItem("one_shot"), discardItem("one_shot")];
   }
   if (id === "prd" && current !== "prd") {
     return [backItem("prd"), discardItem("prd")];
@@ -82,11 +81,6 @@ export function menuItems(mode: TaskMode, current: TaskStage, id: LifecycleStage
   }
   if (id === "plan" && current === "implementation") {
     return [discardItem("plan")];
-  }
-  // The implementation and the PR stage are made of steps and of the pull request; neither is
-  // thrown away as a stage.
-  if (id === current && current !== "implementation" && current !== "pr") {
-    return [discardItem(current)];
   }
   return [];
 }
