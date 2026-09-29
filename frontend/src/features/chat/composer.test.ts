@@ -3,14 +3,18 @@ import {
   answersOf,
   answerWithText,
   type ComposerContext,
+  chipsOf,
   composerLabelOf,
   lastBlockOf,
+  otherHeaderOf,
+  pendingCardsOf,
   placeholderOf,
   type QuestionChoices,
   quickRepliesOf,
   sendIsPrimary,
 } from "@/features/chat/composer";
-import type { Question, QuestionEntry } from "@/lib/wails";
+import type { Entry, Question, QuestionEntry } from "@/lib/wails";
+import { makeEntry } from "@/test/wails-mock";
 
 function question(header: string, options: string[], multiSelect = false): Question {
   return {
@@ -415,5 +419,70 @@ describe("sendIsPrimary", () => {
     ["with blank text", "  \n", false, false],
   ])("decides Send %s", (_name, text, otherPrimary, primary) => {
     expect(sendIsPrimary(text, otherPrimary)).toBe(primary);
+  });
+});
+
+// said is a complete speech of the agent, or of the subagent a tool use delegated to.
+function said(text: string, parentToolUseId = ""): Entry {
+  const entry = makeEntry("assistant");
+  return entry.assistant === null
+    ? entry
+    : { ...entry, assistant: { ...entry.assistant, text, parentToolUseId } };
+}
+
+function asked(status: string): Entry {
+  return makeEntry("question", { question: { ...pending(LIMITS), status } });
+}
+
+function permission(status: string): Entry {
+  const entry = makeEntry("permission");
+  return entry.permission === null
+    ? entry
+    : { ...entry, permission: { ...entry.permission, status } };
+}
+
+describe("pendingCardsOf", () => {
+  it.each<[string, Entry[], boolean, boolean]>([
+    ["a conversation without cards", [said("Done.")], false, false],
+    ["a pending question", [asked("pending")], true, false],
+    ["an answered question", [asked("answered")], false, false],
+    ["a pending permission", [permission("pending")], false, true],
+    ["a cancelled permission", [permission("cancelled")], false, false],
+    ["both pending", [asked("pending"), permission("pending")], true, true],
+  ])("reads %s", (_name, entries, question, perm) => {
+    const cards = pendingCardsOf(entries);
+    expect(cards.question !== null).toBe(question);
+    expect(cards.permission).toBe(perm);
+  });
+});
+
+describe("chipsOf", () => {
+  const OPTIONS = "Which one?\n\na) Per key\nb) Per plan";
+
+  it.each<[string, Entry[], string[]]>([
+    ["the options of the last speech", [said(OPTIONS)], ["a", "b"]],
+    ["a speech without options", [said(OPTIONS), said("Done.")], []],
+    [
+      "the agent's speech, not the subagent's after it",
+      [said(OPTIONS), said("x", "toolu_9")],
+      ["a", "b"],
+    ],
+    ["no speech at all", [asked("answered")], []],
+  ])("reads %s", (_name, entries, keys) => {
+    expect(chipsOf(entries).map((chip) => chip.key)).toEqual(keys);
+  });
+});
+
+describe("otherHeaderOf", () => {
+  it.each<[string, QuestionChoices, string | null]>([
+    ["no choice", {}, null],
+    ["Other… chosen without its text", { 1: { labels: [], other: "" } }, "Store"],
+    ["Other… with its text", { 1: { labels: [], other: "Disk" } }, null],
+  ])("reads %s", (_name, choices, header) => {
+    expect(otherHeaderOf(pending(LIMITS, STORE), choices)).toBe(header);
+  });
+
+  it("has no header without a question", () => {
+    expect(otherHeaderOf(null, { 0: { labels: [], other: "" } })).toBeNull();
   });
 });

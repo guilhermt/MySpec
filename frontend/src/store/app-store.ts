@@ -192,6 +192,12 @@ export interface AppStore {
   openStepTab: Record<string, StepTab>;
   /** prDrafts is the pull request the user is editing, by task id. */
   prDrafts: Record<string, PrDraft>;
+  /**
+   * questionChoices are the choices of a pending question card, by its requestId, shared by the card
+   * and the composer that answers it: by the index of each question, the labels picked and the text
+   * of Other… (QuestionChoices of features/chat/composer.ts).
+   */
+  questionChoices: Record<string, Record<number, { labels: string[]; other: string | null }>>;
   /** newTaskOpen is the creation dialog being open. */
   newTaskOpen: boolean;
   /** newTaskCard is the card the creation dialog opens for; null for a task without one. */
@@ -290,6 +296,11 @@ export interface AppStore {
   setDraft: (taskId: string, stage: string, text: string) => void;
   selectStepTab: (taskId: string, step: number, tab: StepTab) => void;
   setPrDraft: (taskId: string, draft: PrDraft) => void;
+  /** setQuestionChoices keeps what the card of a pending question has chosen. */
+  setQuestionChoices: (
+    requestId: string,
+    choices: Record<number, { labels: string[]; other: string | null }>,
+  ) => void;
   clearPrDraft: (taskId: string) => void;
 
   openHistory: () => void;
@@ -484,6 +495,7 @@ function initialTaskUi(): Pick<
   | "markerRequest"
   | "openStepTab"
   | "prDrafts"
+  | "questionChoices"
   | "newTaskOpen"
   | "newTaskCard"
   | "pendingStart"
@@ -502,6 +514,7 @@ function initialTaskUi(): Pick<
     markerRequest: null,
     openStepTab: {},
     prDrafts: {},
+    questionChoices: {},
     newTaskOpen: false,
     newTaskCard: null,
     pendingStart: null,
@@ -956,6 +969,9 @@ export const useAppStore = create<AppStore>()((set, get) => {
     // opening the pull request, or throwing the draft away, clears it.
     setPrDraft: (taskId, draft) =>
       set((state) => ({ prDrafts: { ...state.prDrafts, [taskId]: draft } })),
+
+    setQuestionChoices: (requestId, choices) =>
+      set((state) => ({ questionChoices: { ...state.questionChoices, [requestId]: choices } })),
 
     clearPrDraft: (taskId) =>
       set((state) => {

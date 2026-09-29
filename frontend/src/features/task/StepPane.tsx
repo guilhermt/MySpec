@@ -1,6 +1,5 @@
 import { LoaderCircle } from "lucide-react";
 import { tabId } from "@/components/system/Tabs";
-import { Composer } from "@/features/chat/Composer";
 import { Conversation } from "@/features/chat/Conversation";
 import { COLUMN_CLASS } from "@/features/chat/ConversationColumn";
 import { AGENT_CONVERSATION } from "@/features/task/AgentTabs";
@@ -8,6 +7,7 @@ import { agentTabsOf } from "@/features/task/agent-tabs";
 import { ImplementationDone } from "@/features/task/ImplementationDone";
 import { StepBlocked } from "@/features/task/StepBlocked";
 import { currentStepOf, stepPhaseLabel, stepStage } from "@/features/task/step-status";
+import { TaskComposer } from "@/features/task/TaskComposer";
 import { TaskRequest } from "@/features/task/TaskRequest";
 import { cn } from "@/lib/utils";
 import { asStepStatus, type Step, type TaskSummary } from "@/lib/wails";
@@ -42,7 +42,13 @@ function StepConversation({ task, step }: { task: TaskSummary; step: Step }) {
         session={session}
       />
       <TaskRequest task={task} tab={tab} />
-      <Composer key={`composer:${stage}`} taskId={task.id} stage={stage} session={session} />
+      <TaskComposer
+        key={`composer:${stage}`}
+        task={task}
+        tab={tab}
+        stage={stage}
+        session={session}
+      />
     </>
   );
 }

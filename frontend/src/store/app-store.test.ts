@@ -517,6 +517,36 @@ describe("pull request drafts", () => {
   });
 });
 
+describe("question choices", () => {
+  const choices = { 0: { labels: ["Per key"], other: null } };
+
+  it("keeps the choices by request and leaves the others", () => {
+    act(() => {
+      useAppStore.getState().setQuestionChoices("req-1", choices);
+      useAppStore.getState().setQuestionChoices("req-2", { 0: { labels: [], other: "Disk" } });
+      useAppStore.getState().setQuestionChoices("req-2", { 0: { labels: [], other: "Memory" } });
+    });
+
+    expect(useAppStore.getState().questionChoices).toEqual({
+      "req-1": choices,
+      "req-2": { 0: { labels: [], other: "Memory" } },
+    });
+  });
+
+  it("drops the choices once no repository is registered", () => {
+    act(() => {
+      useAppStore.getState().applyState(withPR(makePullRequest()));
+      useAppStore.getState().setQuestionChoices("req-1", choices);
+    });
+
+    act(() => {
+      useAppStore.getState().applyState(makeState({ repositories: [], tasks: [] }));
+    });
+
+    expect(useAppStore.getState().questionChoices).toEqual({});
+  });
+});
+
 // A task under the agent review of two steps, each with a reviewer unless told otherwise.
 function withSteps(
   overrides: { currentStep?: number; reviewer?: boolean; situations?: Situation[] } = {},

@@ -48,13 +48,15 @@ describe("PRPane", () => {
     pane({ status: "blocked", block: { reason: "gh_missing", detail: "" } });
 
     expect(screen.getByRole("alert")).toHaveTextContent("GitHub CLI was not found");
-    expect(screen.queryByPlaceholderText("Reply to the agent…")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("textbox", { name: "Reply to the PR agent" }),
+    ).not.toBeInTheDocument();
   });
 
   it("is the conversation alone while the agent writes the draft", () => {
     pane({ status: "drafting" });
 
-    expect(screen.getByPlaceholderText("Reply to the agent…")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Reply to the PR agent" })).toBeInTheDocument();
     expect(screen.queryByLabelText("Title")).not.toBeInTheDocument();
   });
 
@@ -62,7 +64,7 @@ describe("PRPane", () => {
     pane({ status: "draft_ready", draft: DRAFT, sessionStage: "pr" }, undefined, [onPR("draft")]);
 
     expect(screen.getByLabelText("Title")).toHaveValue(DRAFT.title);
-    expect(screen.getByPlaceholderText("Reply to the agent…")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Reply to the PR agent" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Open PR" })).not.toBeInTheDocument();
     const bar = screen.getByRole("region", { name: "Request" });
     expect(within(bar).getByRole("button", { name: "Approve draft" })).toBeInTheDocument();
@@ -72,13 +74,13 @@ describe("PRPane", () => {
     pane({ status: "awaiting_reply", draft: DRAFT });
 
     expect(screen.getByLabelText("Title")).toHaveValue(DRAFT.title);
-    expect(screen.getByPlaceholderText("Reply to the agent…")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Reply to the PR agent" })).toBeInTheDocument();
   });
 
   it("is the conversation alone while the agent waits for a reply without a draft", () => {
     pane({ status: "awaiting_reply" });
 
-    expect(screen.getByPlaceholderText("Reply to the agent…")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Reply to the PR agent" })).toBeInTheDocument();
     expect(screen.queryByLabelText("Title")).not.toBeInTheDocument();
   });
 
@@ -90,7 +92,7 @@ describe("PRPane", () => {
       sessionStage: "pr_review",
     });
 
-    expect(screen.getByPlaceholderText("Reply to the agent…")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Reply to the PR agent" })).toBeInTheDocument();
     expect(screen.queryByLabelText("Title")).not.toBeInTheDocument();
   });
 
@@ -103,7 +105,7 @@ describe("PRPane", () => {
   it("is the conversation alone while the agent reviews", () => {
     pane({ status: "reviewing", prNumber: 12, sessionStage: "pr_review" });
 
-    expect(screen.getByPlaceholderText("Reply to the agent…")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Reply to the PR agent" })).toBeInTheDocument();
     expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
   });
 
@@ -113,13 +115,15 @@ describe("PRPane", () => {
     expect(screen.getByRole("status")).toHaveTextContent(
       "Waiting for the checks of the pull request…",
     );
-    expect(screen.queryByPlaceholderText("Reply to the agent…")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("textbox", { name: "Reply to the PR agent" }),
+    ).not.toBeInTheDocument();
   });
 
   it("keeps the conversation while a later pass waits for the checks", () => {
     pane({ status: "waiting_checks", prNumber: 12, sessionStage: "pr_review" });
 
-    expect(screen.getByPlaceholderText("Reply to the agent…")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Reply to the PR agent" })).toBeInTheDocument();
   });
 
   it("puts the review strip above the conversation once changes are applied", () => {
@@ -131,7 +135,7 @@ describe("PRPane", () => {
     });
 
     expect(screen.getByRole("progressbar", { name: "Review progress" })).toBeInTheDocument();
-    expect(screen.getByPlaceholderText("Reply to the agent…")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Reply to the PR agent" })).toBeInTheDocument();
   });
 
   it("waits for the merge with the link and the passes, the bar below the note", () => {

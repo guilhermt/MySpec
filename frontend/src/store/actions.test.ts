@@ -71,7 +71,7 @@ import {
   saveFindingText,
   saveReviewSummary,
   scanRepositories,
-  sendMessage,
+  sendMessageInPlace,
   setDraftEpic,
   setDraftModule,
   setDraftRepository,
@@ -247,11 +247,26 @@ describe("the app notice of a failed action", () => {
   });
 
   it("says the item when it is gone", async () => {
-    vi.mocked(api.sendMessage).mockRejectedValueOnce(new Error("no such task"));
+    vi.mocked(api.interrupt).mockRejectedValueOnce(new Error("no such task"));
 
-    await sendMessage("task-7", "prd", "hello");
+    await interrupt("task-7", "prd");
 
-    expect(useAppStore.getState().error?.label).toBe("Couldn't send the message to the item");
+    expect(useAppStore.getState().error?.label).toBe("Couldn't stop the agent of the item");
+  });
+});
+
+describe("sendMessageInPlace", () => {
+  it("sends the message and answers nothing", async () => {
+    await expect(sendMessageInPlace("task-1", "prd", "go on")).resolves.toBe("");
+
+    expect(api.sendMessage).toHaveBeenCalledWith("task-1", "prd", "go on");
+  });
+
+  it("answers the reason of a failure without the app notice", async () => {
+    vi.mocked(api.sendMessage).mockRejectedValueOnce(new Error("the session is gone"));
+
+    await expect(sendMessageInPlace("task-1", "prd", "go on")).resolves.toBe("the session is gone");
+    expect(useAppStore.getState().error).toBeNull();
   });
 });
 
@@ -502,7 +517,6 @@ describe("task actions", () => {
 
   it("delegate to the matching binding", async () => {
     await deleteTask("task-1");
-    await sendMessage("task-1", "prd", "go on");
     await removePending("task-1", "prd", "entry-1");
     await interrupt("task-1", "prd");
     await pause("task-1", "prd");
@@ -531,7 +545,6 @@ describe("task actions", () => {
 
     expect(api.deleteTask).toHaveBeenCalledWith("task-1");
     expect(api.closeTask).toHaveBeenCalledWith("task-1");
-    expect(api.sendMessage).toHaveBeenCalledWith("task-1", "prd", "go on");
     expect(api.removePending).toHaveBeenCalledWith("task-1", "prd", "entry-1");
     expect(api.interrupt).toHaveBeenCalledWith("task-1", "prd");
     expect(api.pause).toHaveBeenCalledWith("task-1", "prd");

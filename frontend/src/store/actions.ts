@@ -423,10 +423,16 @@ export function readActionOutput(
   return api.getActionOutput(taskId, stage, entryId);
 }
 
-export function sendMessage(taskId: string, stage: string, text: string): Promise<void> {
-  return run(fail(`Couldn't send the message to ${theItem(taskId)}`, TRY), () =>
-    api.sendMessage(taskId, stage, text),
-  );
+/**
+ * sendMessageInPlace sends a message from the composer, whose failure has a place of its own under
+ * the field: "" when it is sent, the reason when it is not.
+ */
+export async function sendMessageInPlace(
+  taskId: string,
+  stage: string,
+  text: string,
+): Promise<string> {
+  return (await inPlace(() => api.sendMessage(taskId, stage, text))) ?? "";
 }
 
 export function removePending(taskId: string, stage: string, entryId: string): Promise<void> {

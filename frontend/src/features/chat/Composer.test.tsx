@@ -1,148 +1,241 @@
-import { screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
-import { Composer } from "@/features/chat/Composer";
-import { api } from "@/lib/wails";
+import { screen, waitFor } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import { Composer, type ComposerProps } from "@/features/chat/Composer";
+import type { SessionState } from "@/features/chat/session";
+import { api, type QuestionEntry } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
 import { makeState, makeTask } from "@/test/wails-mock";
 
 const DRAFT = { "task-1|prd": "ship it" };
+const REST = { findings: false, askForChange: false };
+const RUNNING = { sessionStatus: "working", turnRunning: true, processRunning: true };
+
+function composer(
+  session: SessionState = makeTask(),
+  props: Partial<ComposerProps> = {},
+  stage = "prd",
+) {
+  return (
+    <Composer
+      taskId="task-1"
+      stage={stage}
+      session={session}
+      otherPrimary={false}
+      context={REST}
+      {...props}
+    />
+  );
+}
+
+function asking(multiSelect = false): QuestionEntry {
+  return {
+    requestId: "req-1",
+    toolUseId: "toolu_1",
+    questions: [
+      {
+        question: "Which limits?",
+        header: "Limits",
+        options: [{ label: "Per key", description: "" }],
+        multiSelect,
+      },
+      {
+        question: "Which store?",
+        header: "Store",
+        options: [{ label: "Redis", description: "" }],
+        multiSelect: false,
+      },
+    ],
+    answers: null,
+    status: "pending",
+    answeredAt: "",
+  };
+}
+
+const field = () => screen.getByRole("textbox", { name: "Reply to the PRD agent" });
 
 describe("Composer", () => {
-  it("sends the draft on Enter and empties the field", async () => {
-    const { user } = renderWithStore(
-      <Composer stage="prd" taskId="task-1" session={makeTask()} />,
-      {
-        ui: { drafts: DRAFT },
-      },
-    );
+  it("sends the draft on Enter and empties the field once it is sent", async () => {
+    const { user } = renderWithStore(composer(), { ui: { drafts: DRAFT } });
 
-    await user.click(screen.getByRole("textbox"));
+    await user.click(field());
     await user.keyboard("{Enter}");
 
     expect(api.sendMessage).toHaveBeenCalledWith("task-1", "prd", "ship it");
-    expect(useAppStore.getState().drafts["task-1|prd"]).toBe("");
+    await waitFor(() => expect(useAppStore.getState().drafts["task-1|prd"]).toBe(""));
   });
 
   it("sends nothing when there is nothing but blanks to send", async () => {
-    const { user } = renderWithStore(
-      <Composer stage="prd" taskId="task-1" session={makeTask()} />,
-      {
-        ui: { drafts: { "task-1|prd": "   " } },
-      },
-    );
+    const { user } = renderWithStore(composer(), { ui: { drafts: { "task-1|prd": "   " } } });
 
-    await user.click(screen.getByRole("textbox"));
+    await user.click(field());
     await user.keyboard("{Enter}");
 
     expect(api.sendMessage).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: /Send/ })).toHaveAttribute("aria-disabled", "true");
   });
 
   it("keeps Shift+Enter for a new line", async () => {
-    const { user } = renderWithStore(
-      <Composer stage="prd" taskId="task-1" session={makeTask()} />,
-      {
-        ui: { drafts: DRAFT },
-      },
-    );
+    const { user } = renderWithStore(composer(), { ui: { drafts: DRAFT } });
 
-    await user.click(screen.getByRole("textbox"));
+    await user.click(field());
     await user.keyboard("{Shift>}{Enter}{/Shift}");
 
     expect(api.sendMessage).not.toHaveBeenCalled();
   });
 
-  it("types into the draft of its own task", async () => {
-    const { user } = renderWithStore(<Composer stage="prd" taskId="task-1" session={makeTask()} />);
-
-    await user.type(screen.getByRole("textbox"), "hi");
-
-    expect(useAppStore.getState().drafts["task-1|prd"]).toBe("hi");
-  });
-
   it("keeps the draft of the stage it was given, not one per task", async () => {
-    const { user } = renderWithStore(
-      <Composer stage="step:1" taskId="task-1" session={makeTask()} />,
-      {
-        ui: { drafts: DRAFT },
-      },
-    );
+    const { user } = renderWithStore(composer(makeTask(), {}, "step:1"), { ui: { drafts: DRAFT } });
 
-    // The draft of the PRD is not this composer's to show.
-    expect(screen.getByRole("textbox")).toHaveValue("");
+    const input = screen.getByRole("textbox", { name: "Reply to the implementer" });
+    expect(input).toHaveValue("");
+    expect(input).toHaveAttribute("placeholder", "Reply to the implementer…");
 
-    await user.type(screen.getByRole("textbox"), "hi");
+    await user.type(input, "hi");
     await user.keyboard("{Enter}");
 
     expect(api.sendMessage).toHaveBeenCalledWith("task-1", "step:1", "hi");
     expect(useAppStore.getState().drafts["task-1|prd"]).toBe("ship it");
   });
 
-  it("stops the response with the button and with Esc", async () => {
-    const task = makeTask({ sessionStatus: "working", turnRunning: true, processRunning: true });
-    const { user } = renderWithStore(<Composer stage="prd" taskId="task-1" session={task} />);
+  it("keeps the text and offers to send again when the message is not sent", async () => {
+    vi.mocked(api.sendMessage).mockRejectedValueOnce(new Error("the session is gone"));
+    const { user } = renderWithStore(composer(), { ui: { drafts: DRAFT } });
 
-    await user.click(screen.getByRole("button", { name: "Stop the response" }));
-    await user.click(screen.getByRole("textbox"));
-    await user.keyboard("{Escape}");
+    await user.click(field());
+    await user.keyboard("{Enter}");
 
-    expect(api.interrupt).toHaveBeenCalledTimes(2);
-    expect(api.interrupt).toHaveBeenCalledWith("task-1", "prd");
-    expect(screen.getByText(/Esc to stop/)).toBeInTheDocument();
+    expect(await screen.findByText("Not sent · the session is gone")).toBeInTheDocument();
+    expect(field()).toHaveValue("ship it");
+    expect(useAppStore.getState().error).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: /Send again/ }));
+    await waitFor(() => expect(field()).toHaveValue(""));
+    expect(screen.queryByText(/Not sent/)).not.toBeInTheDocument();
   });
 
-  it("leaves the response alone when there is none to stop", async () => {
-    const { user } = renderWithStore(<Composer stage="prd" taskId="task-1" session={makeTask()} />);
+  it("makes Send the primary only with text and no other primary on screen", () => {
+    const { unmount } = renderWithStore(composer(), { ui: { drafts: DRAFT } });
+    expect(screen.getByRole("button", { name: /Send/ })).toHaveAttribute("data-variant", "primary");
+    unmount();
 
-    await user.click(screen.getByRole("textbox"));
+    renderWithStore(composer(makeTask(), { otherPrimary: true }), { ui: { drafts: DRAFT } });
+    expect(screen.getByRole("button", { name: /Send/ })).toHaveAttribute(
+      "data-variant",
+      "secondary",
+    );
+  });
+
+  it("stops the turn with the button, and with Esc only while the field is empty", async () => {
+    const task = makeTask({ ...RUNNING, turnStartedAt: new Date(Date.now() - 5000).toISOString() });
+    const { user } = renderWithStore(composer(task));
+
+    expect(screen.getByText(/^Working · \d/)).toBeInTheDocument();
+    expect(field()).toHaveAttribute("placeholder", "Queue a message for the PRD agent…");
+
+    await user.click(screen.getByRole("button", { name: "Stop" }));
+    await user.click(field());
+    await user.keyboard("{Escape}");
+    expect(api.interrupt).toHaveBeenCalledTimes(2);
+    expect(api.interrupt).toHaveBeenCalledWith("task-1", "prd");
+
+    await user.type(field(), "wait");
+    await user.keyboard("{Escape}");
+    expect(api.interrupt).toHaveBeenCalledTimes(2);
+    expect(field()).toHaveValue("wait");
+  });
+
+  it("leaves the turn alone when there is none to stop", async () => {
+    const { user } = renderWithStore(composer());
+
+    await user.click(field());
     await user.keyboard("{Escape}");
 
     expect(api.interrupt).not.toHaveBeenCalled();
-    expect(screen.queryByRole("button", { name: "Stop the response" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Stop" })).not.toBeInTheDocument();
   });
 
-  it("queues a message while the agent is answering", async () => {
-    const task = makeTask({ sessionStatus: "working", turnRunning: true, processRunning: true });
-    const { user } = renderWithStore(<Composer stage="prd" taskId="task-1" session={task} />, {
-      ui: { drafts: DRAFT },
-    });
+  it("queues a message while the agent is answering, with a secondary Send", async () => {
+    const { user } = renderWithStore(composer(makeTask(RUNNING)), { ui: { drafts: DRAFT } });
 
-    await user.click(screen.getByRole("button", { name: "Send" }));
+    const send = screen.getByRole("button", { name: /Send/ });
+    expect(send).toHaveAttribute("data-variant", "secondary");
+    await user.click(send);
 
     expect(api.sendMessage).toHaveBeenCalledWith("task-1", "prd", "ship it");
   });
 
-  it("offers to resume instead of a field while the task is paused", async () => {
+  it("resumes the paused task and then sends the message", async () => {
     const task = makeTask({ sessionStatus: "paused" });
-    const { user } = renderWithStore(<Composer stage="prd" taskId="task-1" session={task} />);
+    const { user } = renderWithStore(composer(task), { ui: { drafts: DRAFT } });
 
-    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
-    expect(screen.getByText("Paused. Resume to keep talking.")).toBeInTheDocument();
+    expect(field()).toHaveAttribute("placeholder", "Sending resumes the task…");
+    expect(screen.queryByRole("button", { name: "Resume" })).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Resume" }));
+    await user.click(field());
+    await user.keyboard("{Enter}");
 
+    await waitFor(() => expect(api.sendMessage).toHaveBeenCalledWith("task-1", "prd", "ship it"));
     expect(api.resume).toHaveBeenCalledWith("task-1", "prd");
+    expect(vi.mocked(api.resume).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(api.sendMessage).mock.invocationCallOrder[0] ?? 0,
+    );
   });
 
-  it("shows what the session runs with under the field", () => {
-    renderWithStore(<Composer stage="prd" taskId="task-1" session={makeTask()} />, {
-      state: makeState(),
+  it("sends a quick reply without touching the draft", async () => {
+    const chips = [
+      { key: "a", text: "Per key" },
+      { key: "b", text: "Per plan" },
+    ];
+    const { user } = renderWithStore(composer(makeTask(), { chips }), { ui: { drafts: DRAFT } });
+
+    expect(field()).toHaveAttribute("placeholder", "Answer a or b, or reply to the PRD agent…");
+    await user.click(screen.getByRole("button", { name: "b · Per plan" }));
+
+    expect(api.sendMessage).toHaveBeenCalledWith("task-1", "prd", "b");
+    expect(field()).toHaveValue("ship it");
+  });
+
+  it("answers the first question without a choice and goes back to the card", async () => {
+    const question = asking();
+    const { user } = renderWithStore(composer(makeTask(), { question, otherPrimary: true }), {
+      ui: { drafts: { "task-1|prd": "Per user" } },
     });
 
-    expect(
-      screen.getByRole("button", { name: "Session model: Fable 5.1 · high" }),
-    ).toHaveTextContent("Fable 5.1 · high");
+    await user.click(field());
+    await user.keyboard("{Enter}");
+
+    expect(useAppStore.getState().questionChoices["req-1"]).toEqual({
+      0: { labels: [], other: "Per user" },
+    });
+    expect(field()).toHaveValue("");
+    expect(api.answerQuestion).not.toHaveBeenCalled();
+    expect(api.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("sends the card once the text answers the last question", async () => {
+    const question = asking();
+    const { user } = renderWithStore(composer(makeTask(), { question, otherPrimary: true }), {
+      ui: {
+        drafts: { "task-1|prd": "Disk" },
+        questionChoices: { "req-1": { 0: { labels: ["Per key"], other: null } } },
+      },
+    });
+
+    await user.click(field());
+    await user.keyboard("{Enter}");
+
+    expect(api.answerQuestion).toHaveBeenCalledWith("task-1", "prd", "req-1", {
+      "Which limits?": "Per key",
+      "Which store?": "Disk",
+    });
+    expect(field()).toHaveValue("");
   });
 
   it("changes the model of the session it writes to", async () => {
-    const { user } = renderWithStore(
-      <Composer stage="step:2" taskId="task-1" session={makeTask()} />,
-      {
-        state: makeState(),
-      },
-    );
+    const { user } = renderWithStore(composer(makeTask(), {}, "step:2"), { state: makeState() });
 
-    await user.click(screen.getByRole("button", { name: "Session model: Fable 5.1 · high" }));
+    await user.click(screen.getByRole("button", { name: "Conversation model: Fable 5.1 · high" }));
     await user.click(await screen.findByRole("menuitemradio", { name: "Opus 5.5 (1M)" }));
 
     expect(api.setSessionModel).toHaveBeenCalledWith(
@@ -153,41 +246,16 @@ describe("Composer", () => {
     );
   });
 
-  it("offers the model while the session is paused", () => {
-    const task = makeTask({ sessionStatus: "paused" });
-    renderWithStore(<Composer stage="prd" taskId="task-1" session={task} />, {
-      state: makeState(),
-    });
-
-    expect(
-      screen.getByRole("button", { name: "Session model: Fable 5.1 · high" }),
-    ).toBeInTheDocument();
-  });
-
   it("has no model to show without a session", () => {
-    const task = makeTask({ sessionModel: "", sessionEffort: "" });
-    renderWithStore(<Composer stage="prd" taskId="task-1" session={task} />);
+    renderWithStore(composer(makeTask({ sessionModel: "", sessionEffort: "" })));
 
-    expect(screen.queryByRole("button", { name: /Session model:/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Conversation model:/ })).not.toBeInTheDocument();
   });
 
   it("never gives way to the conversation above it", () => {
-    const { unmount } = renderWithStore(
-      <Composer stage="prd" taskId="task-1" session={makeTask()} />,
-    );
-    const composer = screen.getByRole("textbox").closest("div.shrink-0");
-    if (composer === null) {
-      throw new Error("the field sits in no composer");
-    }
-    expect(composer).toHaveClass("pt-(--space-2)", "pb-(--space-4)");
-    unmount();
+    renderWithStore(composer(makeTask({ sessionStatus: "paused" })));
 
-    const task = makeTask({ sessionStatus: "paused" });
-    renderWithStore(<Composer stage="prd" taskId="task-1" session={task} />);
-    const paused = screen.getByRole("button", { name: "Resume" }).closest("div.shrink-0");
-    if (paused === null) {
-      throw new Error("the resume button sits in no composer");
-    }
-    expect(paused).toHaveClass("pt-(--space-2)", "pb-(--space-4)");
+    const box = field().closest("div.shrink-0");
+    expect(box).toHaveClass("pt-(--space-2)", "pb-(--space-4)");
   });
 });

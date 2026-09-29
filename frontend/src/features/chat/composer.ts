@@ -1,4 +1,4 @@
-import type { Question, QuestionEntry } from "@/lib/wails";
+import { asPermissionStatus, type Entry, type Question, type QuestionEntry } from "@/lib/wails";
 
 /**
  * QuestionChoices is what the question card has chosen, by the index of each question: the labels
@@ -315,4 +315,49 @@ export function answersOf(q: QuestionEntry, choices: QuestionChoices): Record<st
  */
 export function sendIsPrimary(text: string, otherPrimary: boolean): boolean {
   return text.trim() !== "" && !otherPrimary;
+}
+
+/** PendingCards are the cards a conversation holds pending: the question, and a permission. */
+export interface PendingCards {
+  question: QuestionEntry | null;
+  permission: boolean;
+}
+
+/** pendingCardsOf are the question and the permission still unanswered in the entries of a conversation. */
+export function pendingCardsOf(entries: readonly Entry[]): PendingCards {
+  let question: QuestionEntry | null = null;
+  let permission = false;
+  for (const entry of entries) {
+    if (entry.question != null && asPermissionStatus(entry.question.status) === "pending") {
+      question = entry.question;
+    }
+    if (entry.permission != null && asPermissionStatus(entry.permission.status) === "pending") {
+      permission = true;
+    }
+  }
+  return { question, permission };
+}
+
+/**
+ * chipsOf are the quick replies of a conversation: the options of the last block of its last
+ * complete speech, the agent's own and not a subagent's.
+ */
+export function chipsOf(entries: readonly Entry[]): QuickReply[] {
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    const speech = entries[index]?.assistant;
+    if (speech?.complete === true && speech.parentToolUseId === "") {
+      return quickRepliesOf(lastBlockOf(speech.text));
+    }
+  }
+  return [];
+}
+
+/**
+ * otherHeaderOf is the header of the question whose Other… waits for its text on the card, null
+ * without one.
+ */
+export function otherHeaderOf(q: QuestionEntry | null, choices: QuestionChoices): string | null {
+  const questions = q?.questions ?? [];
+  const index = questions.findIndex((_, i) => choices[i]?.other === "");
+  return index < 0 ? null : (questions[index]?.header ?? null);
 }

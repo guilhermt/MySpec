@@ -548,6 +548,12 @@ function screenSituation(task: TaskSummary, tab: StepTab): Situation | null {
   return found !== null && TASK_KINDS.includes(asSituationKind(found.kind)) ? found : null;
 }
 
+/** screenSituationKindOf is the kind of the situation of the conversation on screen, null without one. */
+export function screenSituationKindOf(task: TaskSummary, tab: StepTab): SituationKind | null {
+  const situation = screenSituation(task, tab);
+  return situation === null ? null : asSituationKind(situation.kind);
+}
+
 // pausedWant is what the state of the step or of the pull request asks for while the task is paused.
 function pausedWant(task: TaskSummary): Want | null {
   const step = currentStepOf(task);

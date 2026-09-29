@@ -1,10 +1,12 @@
-import { useId, useState } from "react";
+import { useId } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import type { QuestionChoices } from "@/features/chat/composer";
 import { cn } from "@/lib/utils";
 import { asPermissionStatus, type Question, type QuestionEntry } from "@/lib/wails";
 import { answerQuestion } from "@/store/actions";
+import { useAppStore } from "@/store/app-store";
 
 const OTHER_LABEL = "Other…";
 
@@ -19,6 +21,17 @@ interface Choice {
 }
 
 const NO_CHOICE: Choice = { labels: [], other: false, otherText: "" };
+
+const NO_CHOICES: QuestionChoices = {};
+
+// choiceOf reads the choice kept in the store, where the composer answers too: other is null
+// without Other….
+function choiceOf(kept: QuestionChoices[number] | undefined): Choice {
+  if (kept === undefined) {
+    return NO_CHOICE;
+  }
+  return { labels: kept.labels, other: kept.other !== null, otherText: kept.other ?? "" };
+}
 
 function toggle(labels: readonly string[], label: string): string[] {
   return labels.includes(label)
@@ -53,7 +66,13 @@ export function QuestionCard({ taskId, stage, question, readOnly = false }: Ques
   const titleId = useId();
   const groupName = useId();
   const questions = question.questions ?? [];
-  const [choices, setChoices] = useState<Record<number, Choice>>({});
+  const choices = useAppStore((state) => state.questionChoices[question.requestId] ?? NO_CHOICES);
+  const setQuestionChoices = useAppStore((state) => state.setQuestionChoices);
+  const setChoice = (index: number, choice: Choice) =>
+    setQuestionChoices(question.requestId, {
+      ...choices,
+      [index]: { labels: choice.labels, other: choice.other ? choice.otherText : null },
+    });
 
   const status = asPermissionStatus(question.status);
   const pending = status === "pending";
@@ -61,7 +80,7 @@ export function QuestionCard({ taskId, stage, question, readOnly = false }: Ques
   const answerable = pending && !readOnly;
   const answered = question.answers ?? {};
 
-  const choiceAt = (index: number): Choice => choices[index] ?? NO_CHOICE;
+  const choiceAt = (index: number): Choice => choiceOf(choices[index]);
   const complete = questions.every((_, index) => isComplete(choiceAt(index)));
 
   const send = () => {
@@ -99,7 +118,7 @@ export function QuestionCard({ taskId, stage, question, readOnly = false }: Ques
             name={`${groupName}-${index}`}
             question={item}
             choice={choiceAt(index)}
-            onChange={(choice) => setChoices((current) => ({ ...current, [index]: choice }))}
+            onChange={(choice) => setChoice(index, choice)}
           />
         ))
       ) : (

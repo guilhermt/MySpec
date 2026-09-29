@@ -1,6 +1,5 @@
 import { useEffect, useRef } from "react";
 import { PanelLayout } from "@/components/system/AuxPanel";
-import { Composer } from "@/features/chat/Composer";
 import { Conversation } from "@/features/chat/Conversation";
 import { COLUMN_CLASS } from "@/features/chat/ConversationColumn";
 import { IDLE_SESSION } from "@/features/chat/session";
@@ -17,6 +16,7 @@ import { screenStageOf } from "@/features/task/request";
 import { focusRequest, focusTitle, useFocusRescue } from "@/features/task/request-focus";
 import { StepPane } from "@/features/task/StepPane";
 import { currentStepOf, hasStepSession } from "@/features/task/step-status";
+import { TaskComposer } from "@/features/task/TaskComposer";
 import { TaskHeader } from "@/features/task/TaskHeader";
 import { TaskRequest } from "@/features/task/TaskRequest";
 import { useTaskRequest } from "@/features/task/useTaskRequest";
@@ -188,7 +188,7 @@ export function TaskView({ taskId }: TaskViewProps) {
               session={task}
             />
             <TaskRequest task={task} tab={stepTab} />
-            <Composer taskId={task.id} stage={task.stage} session={task} />
+            <TaskComposer task={task} tab={stepTab} stage={task.stage} session={task} />
           </>
         )}
       </PanelLayout>

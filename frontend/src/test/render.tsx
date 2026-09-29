@@ -27,6 +27,7 @@ export interface StoreOptions {
       | "markerRequest"
       | "openStepTab"
       | "prDrafts"
+      | "questionChoices"
       | "newTaskOpen"
       | "newTaskCard"
       | "pendingStart"
@@ -69,6 +70,7 @@ export function resetAppStore(options: StoreOptions = {}): void {
     markerRequest: options.ui?.markerRequest ?? null,
     openStepTab: options.ui?.openStepTab ?? {},
     prDrafts: options.ui?.prDrafts ?? {},
+    questionChoices: options.ui?.questionChoices ?? {},
     newTaskOpen: options.ui?.newTaskOpen ?? false,
     newTaskCard: options.ui?.newTaskCard ?? null,
     pendingStart: options.ui?.pendingStart ?? null,

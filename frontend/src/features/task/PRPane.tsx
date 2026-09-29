@@ -1,7 +1,6 @@
 import { ExternalLink, LoaderCircle } from "lucide-react";
 import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
-import { Composer } from "@/features/chat/Composer";
 import { Conversation } from "@/features/chat/Conversation";
 import { COLUMN_CLASS } from "@/features/chat/ConversationColumn";
 import { DraftCard } from "@/features/task/DraftCard";
@@ -18,6 +17,7 @@ import {
 import { ReviewStrip } from "@/features/task/ReviewStrip";
 import { ToneDot } from "@/features/task/StatusDot";
 import type { StatusTone } from "@/features/task/status";
+import { TaskComposer } from "@/features/task/TaskComposer";
 import { TaskRequest } from "@/features/task/TaskRequest";
 import { prBaseName } from "@/lib/pull-requests";
 import { cn } from "@/lib/utils";
@@ -218,7 +218,18 @@ function ClosedSummary({ pr }: { pr: PullRequest }) {
 }
 
 /** Chat is the conversation of the PR stage, what it asks of the user and the field to answer it. */
-function Chat({ taskId, pr, request }: { taskId: string; pr: PullRequest; request: ReactNode }) {
+function Chat({
+  task,
+  pr,
+  tab,
+  request,
+}: {
+  task: TaskSummary;
+  pr: PullRequest;
+  tab: StepTab;
+  request: ReactNode;
+}) {
+  const taskId = task.id;
   return (
     <>
       <Conversation
@@ -228,7 +239,7 @@ function Chat({ taskId, pr, request }: { taskId: string; pr: PullRequest; reques
         session={pr}
       />
       {request}
-      <Composer taskId={taskId} stage={pr.sessionStage} session={pr} />
+      <TaskComposer task={task} tab={tab} stage={pr.sessionStage} session={pr} />
     </>
   );
 }
@@ -242,7 +253,7 @@ export interface PRPaneProps {
 /** PRPane is what the PR stage shows below the bar of the pull request. */
 export function PRPane({ task, pr, tab }: PRPaneProps) {
   const request = <TaskRequest task={task} tab={tab} />;
-  const chat = <Chat taskId={task.id} pr={pr} request={request} />;
+  const chat = <Chat task={task} pr={pr} tab={tab} request={request} />;
   switch (asPRStatus(pr.status)) {
     case "preparing":
       return <Waiting text="Checking GitHub…" />;
