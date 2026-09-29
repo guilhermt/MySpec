@@ -1,5 +1,5 @@
 import { Search } from "lucide-react";
-import { type Ref, useRef } from "react";
+import { type KeyboardEvent, type Ref, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { type ControlStateProps, useControlState } from "./Field";
 import { Icon } from "./Icon";
@@ -13,7 +13,8 @@ export interface SearchInputProps extends ControlStateProps {
   onValueChange: (value: string) => void;
   placeholder: string;
   shortcut?: string;
-  onEscape?: () => void;
+  /** onEscape is told the event, so it can keep the key from reaching the place around the box. */
+  onEscape?: (event: KeyboardEvent<HTMLInputElement>) => void;
   onArrowDown?: () => void;
   /** landmark is false when the bar around the field already is the search landmark. */
   landmark?: boolean;
@@ -70,7 +71,7 @@ export function SearchInput({
         placeholder={placeholder}
         onChange={(event) => onValueChange(event.target.value)}
         onKeyDown={(event) => {
-          if (event.key === "Escape") onEscape?.();
+          if (event.key === "Escape") onEscape?.(event);
           if (event.key === "ArrowDown") onArrowDown?.();
         }}
         className="min-w-0 flex-1 border-0 bg-transparent read-only:cursor-not-allowed text-(length:--text-meta) leading-(--leading-meta) text-ink-1 aria-disabled:text-ink-4 placeholder:text-ink-4 outline-none"

@@ -8,8 +8,8 @@ import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
 import { makeBoard, makeBoardCard, makeRepository, makeState } from "@/test/wails-mock";
 
-/** PLACEHOLDER_ROWS is how many rows BoardView stands in with, its SKELETON_ROWS. */
-const PLACEHOLDER_ROWS = 8;
+/** SKELETON_BARS is how many bars the skeleton of a board never read has. */
+const SKELETON_BARS = 4;
 
 const LOGIN = makeBoardCard();
 const HEADER = makeBoardCard({
@@ -63,59 +63,110 @@ describe("BoardView", () => {
     expect(within(tree).queryByRole("treeitem", { name: /#3/ })).not.toBeInTheDocument();
   });
 
-  it("opens the board on GitHub from the header", async () => {
+  it("opens the board on GitHub from the ⋯", async () => {
     const { user } = view();
 
-    await user.click(screen.getByRole("button", { name: "Open on GitHub" }));
+    await user.click(screen.getByRole("button", { name: "More actions" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Open on GitHub" }));
 
     expect(api.openExternal).toHaveBeenCalledWith(makeBoard().url);
   });
 
-  it("shows placeholder rows while a board never read is being read", () => {
+  it("shows the skeleton while a board never read is being read", () => {
     const { container } = view({ readAt: "", reading: true, cards: [] });
 
     expect(screen.queryByRole("tree")).not.toBeInTheDocument();
-    expect(screen.getByRole("status", { name: "Reading the board" })).toBeInTheDocument();
-    // The placeholder rows stand in for the cards, and are aria-hidden.
-    expect(container.querySelectorAll('[data-slot="skeleton"]')).toHaveLength(PLACEHOLDER_ROWS);
+    expect(screen.getByRole("status", { name: "Reading the board…" })).toBeInTheDocument();
+    expect(container.querySelectorAll('[data-slot="skeleton"]')).toHaveLength(SKELETON_BARS);
+    // The header says the reading too, and the filters wait for the cards.
+    expect(screen.getByText("Reading…")).toBeInTheDocument();
+    expect(screen.queryByRole("search")).not.toBeInTheDocument();
   });
 
-  it("shows why a board never read failed, and tries again", async () => {
+  it("shows why a board never read failed in place of the list, and tries again", async () => {
     const { user } = view({
       readAt: "",
       cards: [],
       failure: { reason: "not_found", message: "The board wasn't found.", failedAt: "" },
     });
 
-    expect(screen.getByRole("alert")).toHaveTextContent("The board wasn't found.");
+    expect(screen.getByText("Couldn't read the board")).toBeInTheDocument();
+    expect(screen.getByText("The board wasn't found.")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Try again" }));
 
     expect(api.refreshBoard).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows the skeleton, not the failure, while a board never read is read again", () => {
+    view({
+      readAt: "",
+      reading: true,
+      cards: [],
+      failure: { reason: "not_found", message: "The board wasn't found.", failedAt: "" },
+    });
+
+    expect(screen.getByRole("status", { name: "Reading the board…" })).toBeInTheDocument();
+    expect(screen.queryByText("The board wasn't found.")).not.toBeInTheDocument();
+  });
+
+  it("shows the skeleton for a board never read that is neither reading nor failed", () => {
+    view({ readAt: "", cards: [] });
+
+    expect(screen.getByRole("status", { name: "Reading the board…" })).toBeInTheDocument();
   });
 
   it("says when the board has no issues", () => {
     view({ cards: [] });
 
     expect(screen.getByText("This board has no issues.")).toBeInTheDocument();
+    expect(screen.getByText(/A discussion publishes new cards here\./)).toBeInTheDocument();
+    // There is nothing to filter, so the bar is not there.
+    expect(screen.queryByRole("search")).not.toBeInTheDocument();
+  });
+
+  it("starts a discussion from the empty board", async () => {
+    const { user } = view({ cards: [] });
+
+    const [, fromTheEmptyBoard] = screen.getAllByRole("button", { name: "New discussion" });
+    await user.click(fromTheEmptyBoard as HTMLElement);
+
+    expect(useAppStore.getState().newDiscussion).toEqual({
+      boardId: "board-1",
+      cardKeys: [],
+      askBoard: false,
+    });
+  });
+
+  it("says what the filters ask when no card matches", async () => {
+    const { user } = view();
+
+    await user.type(screen.getByRole("searchbox", { name: "Search cards" }), "refund");
+
+    expect(screen.getByText("No cards match the filters.")).toBeInTheDocument();
+    expect(
+      screen.getByText('Nothing on the board has "refund" in the title or the number.'),
+    ).toBeInTheDocument();
+    // The bar stays, to change the filters.
+    expect(screen.getByRole("search", { name: "Filter the cards" })).toBeInTheDocument();
   });
 
   it("clears filters that leave no card", async () => {
     const { user } = view();
 
-    await user.type(screen.getByRole("textbox", { name: "Search cards" }), "nothing like it");
+    await user.type(screen.getByRole("searchbox", { name: "Search cards" }), "nothing like it");
     expect(screen.getByText("No cards match the filters.")).toBeInTheDocument();
 
     const [clear] = screen.getAllByRole("button", { name: "Clear filters" });
     await user.click(clear ?? document.body);
 
     expect(screen.getByRole("treeitem", { name: /#12/ })).toBeInTheDocument();
-    expect(screen.getByRole("textbox", { name: "Search cards" })).toHaveValue("");
+    expect(screen.getByRole("searchbox", { name: "Search cards" })).toHaveValue("");
   });
 
   it("remembers the filters and the sections of each board", async () => {
     const { user, unmount } = view();
 
-    await user.type(screen.getByRole("textbox", { name: "Search cards" }), "header");
+    await user.type(screen.getByRole("searchbox", { name: "Search cards" }), "header");
     await user.click(screen.getByRole("button", { name: /^Done/ }));
     unmount();
 
@@ -133,16 +184,14 @@ describe("BoardView", () => {
     });
 
     view();
-    expect(screen.getByRole("textbox", { name: "Search cards" })).toHaveValue("header");
+    expect(screen.getByRole("searchbox", { name: "Search cards" })).toHaveValue("header");
     expect(screen.getByRole("treeitem", { name: /#7/ })).toBeInTheDocument();
     expect(screen.queryByRole("treeitem", { name: /#12/ })).not.toBeInTheDocument();
   });
 
   it("collapses the final statuses of a board first opened before its reading", async () => {
-    const { user } = view({ readAt: "", reading: true, statuses: [], cards: [] });
+    view({ readAt: "", reading: true, statuses: [], cards: [] });
 
-    await user.type(screen.getByRole("textbox", { name: "Search cards" }), "x");
-    await user.clear(screen.getByRole("textbox", { name: "Search cards" }));
     act(() => {
       useAppStore.getState().applyState(stateWith());
     });
@@ -184,8 +233,8 @@ describe("BoardView", () => {
 
     await user.keyboard("/");
 
-    expect(screen.getByRole("textbox", { name: "Search cards" })).toHaveFocus();
-    expect(screen.getByRole("textbox", { name: "Search cards" })).toHaveValue("");
+    expect(screen.getByRole("searchbox", { name: "Search cards" })).toHaveFocus();
+    expect(screen.getByRole("searchbox", { name: "Search cards" })).toHaveValue("");
   });
 
   it("starts a task for the focused card on S", async () => {
@@ -209,16 +258,15 @@ describe("BoardView", () => {
     });
   });
 
-  it("opens a discussion of the cards picked from the header", async () => {
+  it("opens a discussion of the board with no card even with cards picked", async () => {
     const { user } = view();
     await user.click(screen.getByRole("checkbox", { name: "Select #12" }));
-    await user.click(screen.getByRole("checkbox", { name: "Select #7" }));
 
     await user.click(screen.getByRole("button", { name: "New discussion" }));
 
     expect(useAppStore.getState().newDiscussion).toEqual({
       boardId: "board-1",
-      cardKeys: ["dev/web#12", "dev/web#7"],
+      cardKeys: [],
       askBoard: false,
     });
   });
@@ -226,7 +274,9 @@ describe("BoardView", () => {
   it("waits for the first reading to offer a discussion", () => {
     view({ readAt: "", reading: true, cards: [] });
 
-    expect(screen.getByRole("button", { name: "New discussion" })).toBeDisabled();
+    const button = screen.getByRole("button", { name: "New discussion" });
+    expect(button).toHaveAttribute("aria-disabled", "true");
+    expect(button).toHaveAccessibleDescription("The board hasn't been read yet.");
   });
 
   it("picks cards and discusses them from the selection bar", async () => {
@@ -252,7 +302,7 @@ describe("BoardView", () => {
     const { user } = view();
     await user.click(screen.getByRole("checkbox", { name: "Select #12" }));
 
-    await user.type(screen.getByRole("textbox", { name: "Search cards" }), "header");
+    await user.type(screen.getByRole("searchbox", { name: "Search cards" }), "header");
     expect(screen.getByText("1 card selected")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Clear selection" }));
@@ -262,7 +312,7 @@ describe("BoardView", () => {
   it("discusses the whole selection on D, a card a filter hides included", async () => {
     const { user } = view();
     await user.click(screen.getByRole("checkbox", { name: "Select #12" }));
-    await user.type(screen.getByRole("textbox", { name: "Search cards" }), "header");
+    await user.type(screen.getByRole("searchbox", { name: "Search cards" }), "header");
 
     screen.getByRole("treeitem", { name: /#7/ }).focus();
     await user.keyboard("d");
@@ -336,10 +386,115 @@ describe("BoardView", () => {
     expect(api.refreshBoard).toHaveBeenCalledTimes(2);
   });
 
-  it("shows the failure of a later reading over the stored cards", () => {
-    view({ failure: { reason: "rate_limited", message: "GitHub limits.", failedAt: "" } });
+  it("says how old the reading is", () => {
+    view({ readAt: new Date(Date.now() - 120_000).toISOString() });
+    expect(screen.getByText("Read 2m ago")).toBeInTheDocument();
+  });
 
-    expect(screen.getByRole("alert")).toHaveTextContent("GitHub limits.");
+  it("dashes Refresh while reading, over the stored list", () => {
+    view({ reading: true });
+
+    expect(screen.getByRole("button", { name: "Refresh" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+    expect(screen.getByText("Reading…")).toBeInTheDocument();
     expect(screen.getByRole("treeitem", { name: /#12/ })).toBeInTheDocument();
+  });
+
+  describe("the ⋯", () => {
+    async function openMenu(board: Partial<Board> = {}) {
+      const rendered = view(board);
+      await rendered.user.click(screen.getByRole("button", { name: "More actions" }));
+      await screen.findByRole("menu");
+      return rendered;
+    }
+
+    it("holds selecting, GitHub and the board settings", async () => {
+      await openMenu();
+
+      expect(screen.getByRole("menuitem", { name: "Select cards to discuss" })).toBeInTheDocument();
+      expect(screen.getByRole("menuitem", { name: "Open on GitHub" })).toBeInTheDocument();
+      expect(
+        screen.getByRole("menuitem", { name: "Edit the board in Settings…" }),
+      ).toBeInTheDocument();
+    });
+
+    it("opens the boards of Settings", async () => {
+      const { user } = await openMenu();
+
+      await user.click(screen.getByRole("menuitem", { name: "Edit the board in Settings…" }));
+
+      expect(useAppStore.getState().location).toEqual({ kind: "settings", section: "boards" });
+    });
+
+    it("dashes selecting with the reason of a board never read", async () => {
+      await openMenu({ readAt: "", reading: true, cards: [] });
+
+      const item = screen.getByRole("menuitem", { name: /Select cards to discuss/ });
+      expect(item).toHaveAttribute("aria-disabled", "true");
+      expect(item).toHaveTextContent("the board hasn't been read yet");
+    });
+
+    it("dashes selecting when no card can be selected", async () => {
+      await openMenu({
+        cards: [makeBoardCard({ key: "dev/api#1", number: 1, repositoryId: "repo-9" })],
+      });
+
+      expect(screen.getByRole("menuitem", { name: /Select cards to discuss/ })).toHaveTextContent(
+        "no card to select",
+      );
+    });
+
+    it("dashes selecting while cards are picked", async () => {
+      const { user } = view();
+      await user.click(screen.getByRole("checkbox", { name: "Select #12" }));
+      await user.click(screen.getByRole("button", { name: "More actions" }));
+
+      expect(
+        await screen.findByRole("menuitem", { name: /Select cards to discuss/ }),
+      ).toHaveTextContent("already selecting");
+    });
+  });
+
+  describe("the failure of a later reading", () => {
+    const failure = {
+      reason: "rate_limited",
+      message: "GitHub limits.",
+      failedAt: "2026-09-16T12:03:00Z",
+    };
+
+    it("shows a strip over the stored cards, with the age of the stored reading", () => {
+      view({ failure });
+
+      const strip = screen.getByRole("alert");
+      expect(strip).toHaveTextContent("Couldn't read the board");
+      expect(strip).toHaveTextContent("GitHub limits.");
+      expect(screen.getByRole("treeitem", { name: /#12/ })).toBeInTheDocument();
+      expect(screen.getByText(/^Read /)).toBeInTheDocument();
+    });
+
+    it("keeps the strip with the empty board", async () => {
+      view({ failure, cards: [] });
+
+      expect(screen.getByRole("alert")).toHaveTextContent("GitHub limits.");
+      expect(screen.getByText("This board has no issues.")).toBeInTheDocument();
+    });
+
+    it("tries again from the strip, which says Reading… meanwhile", async () => {
+      const { user } = view({ failure });
+
+      await user.click(screen.getByRole("button", { name: "Try again" }));
+      expect(api.refreshBoard).toHaveBeenCalledTimes(2);
+
+      act(() => {
+        useAppStore.getState().applyState(stateWith({ failure, reading: true }));
+      });
+      expect(screen.queryByRole("button", { name: "Try again" })).not.toBeInTheDocument();
+      expect(screen.getAllByRole("status").some((node) => node.textContent === "Reading…")).toBe(
+        true,
+      );
+      expect(screen.getByRole("treeitem", { name: /#12/ })).toBeInTheDocument();
+    });
   });
 });

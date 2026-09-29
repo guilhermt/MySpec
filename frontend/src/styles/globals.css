@@ -334,6 +334,11 @@
     container: main / inline-size;
   }
 
+  /* The area of the list of a board is the container its bar measures itself against. */
+  .board-list-area {
+    container: list / inline-size;
+  }
+
   /* An auxiliary panel: beside the reading column while the column keeps
      760px (from 1120px of main area with --panel-width), over it below. */
   .aux-panel {

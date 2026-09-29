@@ -20,6 +20,23 @@ describe("IconButton", () => {
     expect(tooltip).toHaveTextContent("Ctrl ,");
   });
 
+  it("says more in the tooltip than in the name, with the reason after it", async () => {
+    const { user } = renderWithStore(
+      <IconButton
+        label="Refresh"
+        tooltip="Read the board again"
+        icon={Settings}
+        disabled
+        disabledReason="A reading is running."
+      />,
+    );
+    await user.tab();
+    expect(screen.getByRole("button", { name: "Refresh" })).toBeInTheDocument();
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "Read the board again · A reading is running.",
+    );
+  });
+
   it("takes the focus", async () => {
     const { user } = renderWithStore(<IconButton label="Settings" icon={Settings} />);
     await user.tab();

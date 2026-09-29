@@ -1,16 +1,23 @@
-import { TriangleAlert } from "lucide-react";
 import { type KeyboardEvent, useEffect, useRef, useState } from "react";
-import { Button } from "@/components/ui/button";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
-import { Skeleton } from "@/components/ui/skeleton";
+import { useNow } from "@/features/attention/useNow";
 import { BoardFilterBar } from "@/features/board/BoardFilterBar";
 import { BoardHeader } from "@/features/board/BoardHeader";
+import {
+  FailureStrip,
+  NeverReadFailed,
+  NoCards,
+  NoMatch,
+  ReadingSkeleton,
+} from "@/features/board/BoardReadingStates";
 import {
   type BoardFilters,
   EMPTY_FILTERS,
   filterCards,
   isCheckable,
+  readingView,
   sections,
+  showsFailureStrip,
 } from "@/features/board/board-view";
 import { CardDetail } from "@/features/board/CardDetail";
 import { CardList } from "@/features/board/CardList";
@@ -21,8 +28,11 @@ import type { Board, BoardCard } from "@/lib/wails";
 import { refreshBoard } from "@/store/actions";
 import { useAppStore, useBoard } from "@/store/app-store";
 
-/** SKELETON_ROWS is how many placeholder rows stand for the cards of a board never read. */
-const SKELETON_ROWS = 8;
+/** READING_CLOCK_MS is how often the time since the last reading is told again: a minute. */
+const READING_CLOCK_MS = 60_000;
+
+/** COLUMN is the reading column of the list: --list-measure on whole pixels, with --space-6 at each side at least. */
+const COLUMN = "mx-auto w-[min(round(down,var(--list-measure),1px),100%-2*var(--space-6))]";
 
 /** NO_CARDS stands for a board whose reading brought no cards, always the same array. */
 const NO_CARDS: BoardCard[] = [];
@@ -61,6 +71,8 @@ function BoardScreen({ board }: { board: Board }) {
   const [memory, setMemory] = useBoardViewMemory(board.id);
   const app = useAppStore((state) => state.app);
   const searchRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const now = useNow(READING_CLOCK_MS, board.readAt !== "" || board.failure !== null);
   // The cards picked for a discussion are local to the view: they go when it does.
   const [checked, setChecked] = useState<ReadonlySet<string>>(new Set());
   const [selectedKey, select] = useState<string | null>(null);
@@ -127,72 +139,30 @@ function BoardScreen({ board }: { board: Board }) {
     }
   };
 
-  let content: React.ReactNode;
-  if (board.readAt === "" && !board.reading && board.failure !== null) {
+  const view = readingView(board, filtered);
+  const checkableCards = filtered.filter(checkable);
+  const selectDisabledReason =
+    board.readAt === ""
+      ? "the board hasn't been read yet"
+      : checked.size > 0
+        ? "already selecting"
+        : checkableCards.length === 0
+          ? "no card to select"
+          : null;
+  // The list takes the focus at its tab stop.
+  const focusList = () =>
+    listRef.current?.querySelector<HTMLElement>('[role="tree"] [tabindex="0"]')?.focus();
+
+  let content: React.ReactNode = null;
+  if (view.kind === "skeleton") {
+    content = <ReadingSkeleton />;
+  } else if (view.kind === "never-read-failed") {
+    content = <NeverReadFailed board={board} />;
+  } else if (view.kind === "no-cards") {
+    content = <NoCards onNewDiscussion={() => openDiscuss([])} />;
+  } else if (view.kind === "no-match") {
     content = (
-      <div className="flex flex-col items-start gap-2 p-4">
-        <p role="alert" className="flex items-start gap-1.5 text-sm text-destructive">
-          <TriangleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
-          <span className="break-all">{board.failure.message}</span>
-        </p>
-        <Button variant="outline" size="sm" onClick={() => void refreshBoard(board.id)}>
-          Try again
-        </Button>
-      </div>
-    );
-  } else if (board.readAt === "") {
-    content = (
-      <div className="flex flex-col gap-2 p-4" aria-hidden="true">
-        {Array.from({ length: SKELETON_ROWS }, (_, row) => (
-          // biome-ignore lint/suspicious/noArrayIndexKey: the placeholder rows never move
-          <Skeleton key={row} className="h-7" />
-        ))}
-      </div>
-    );
-  } else if (cards.length === 0) {
-    content = <p className="p-4 text-sm text-muted-foreground">This board has no issues.</p>;
-  } else if (filtered.length === 0) {
-    content = (
-      <div className="flex flex-col items-start gap-2 p-4">
-        <p className="text-sm text-muted-foreground">No cards match the filters.</p>
-        <Button variant="outline" size="sm" onClick={() => setFilters(EMPTY_FILTERS)}>
-          Clear filters
-        </Button>
-      </div>
-    );
-  } else {
-    content = (
-      <ResizablePanelGroup orientation="horizontal" className="min-h-0 flex-1">
-        <ResizablePanel id={LIST_PANEL} defaultSize="60%" className="min-w-0">
-          <CardList
-            sections={cardSections}
-            collapsed={collapsed}
-            selectedKey={selectedKey}
-            onToggleSection={toggleSection}
-            onSelect={select}
-            onStart={startCard}
-            checked={checked}
-            isCheckable={checkable}
-            onToggleChecked={toggleChecked}
-            onDiscuss={(card) => openDiscuss(card === null ? [...checked] : [card.key])}
-          />
-        </ResizablePanel>
-        {selected !== null && (
-          <>
-            <ResizableHandle />
-            <ResizablePanel id={DETAIL_PANEL} defaultSize="40%" minSize="25%" className="min-w-0">
-              <CardDetail
-                board={board}
-                card={selected}
-                start={start}
-                onClose={() => select(null)}
-                onSelect={select}
-                onDiscuss={() => openDiscuss([selected.key])}
-              />
-            </ResizablePanel>
-          </>
-        )}
-      </ResizablePanelGroup>
+      <NoMatch board={board} filters={memory.filters} onClear={() => setFilters(EMPTY_FILTERS)} />
     );
   }
 
@@ -200,15 +170,34 @@ function BoardScreen({ board }: { board: Board }) {
     <section
       aria-label={board.title}
       onKeyDown={onKeyDown}
-      className="flex min-h-0 min-w-0 flex-1 flex-col bg-background"
+      className="flex min-h-0 min-w-0 flex-1 flex-col bg-surface-1"
     >
-      <BoardHeader board={board} onNewDiscussion={() => openDiscuss([...checked])} />
-      <BoardFilterBar
+      <BoardHeader
         board={board}
-        filters={memory.filters}
-        onChange={setFilters}
-        searchRef={searchRef}
+        now={now}
+        onNewDiscussion={() => openDiscuss([])}
+        onEnterSelect={focusList}
+        selectDisabledReason={selectDisabledReason}
       />
+      <div className="board-list-area shrink-0">
+        <div className={COLUMN}>
+          {showsFailureStrip(board) && <FailureStrip board={board} now={now} />}
+          {board.readAt !== "" && cards.length > 0 && (
+            <BoardFilterBar
+              board={board}
+              filters={memory.filters}
+              onChange={setFilters}
+              searchRef={searchRef}
+              onSearchEscape={(event) => {
+                event.preventDefault();
+                focusList();
+              }}
+              onSearchDown={focusList}
+            />
+          )}
+          {content}
+        </div>
+      </div>
       {checked.size > 0 && (
         <SelectionBar
           count={checked.size}
@@ -216,7 +205,46 @@ function BoardScreen({ board }: { board: Board }) {
           onClear={clearChecked}
         />
       )}
-      <div className="flex min-h-0 flex-1 flex-col">{content}</div>
+      <div ref={listRef} className="flex min-h-0 flex-1 flex-col">
+        {view.kind === "list" && (
+          <ResizablePanelGroup orientation="horizontal" className="min-h-0 flex-1">
+            <ResizablePanel id={LIST_PANEL} defaultSize="60%" className="min-w-0">
+              <CardList
+                sections={cardSections}
+                collapsed={collapsed}
+                selectedKey={selectedKey}
+                onToggleSection={toggleSection}
+                onSelect={select}
+                onStart={startCard}
+                checked={checked}
+                isCheckable={checkable}
+                onToggleChecked={toggleChecked}
+                onDiscuss={(card) => openDiscuss(card === null ? [...checked] : [card.key])}
+              />
+            </ResizablePanel>
+            {selected !== null && (
+              <>
+                <ResizableHandle />
+                <ResizablePanel
+                  id={DETAIL_PANEL}
+                  defaultSize="40%"
+                  minSize="25%"
+                  className="min-w-0"
+                >
+                  <CardDetail
+                    board={board}
+                    card={selected}
+                    start={start}
+                    onClose={() => select(null)}
+                    onSelect={select}
+                    onDiscuss={() => openDiscuss([selected.key])}
+                  />
+                </ResizablePanel>
+              </>
+            )}
+          </ResizablePanelGroup>
+        )}
+      </div>
     </section>
   );
 }
