@@ -53,4 +53,63 @@ describe("RelationList", () => {
     await user.click(screen.getByRole("link", { name: "#400 API hardening" }));
     expect(onOpen).toHaveBeenCalledWith("https://github.com/acme/api/issues/400");
   });
+
+  it("opens a card of the reading in the panel, with no arrow", async () => {
+    const onOpen = vi.fn();
+    const onOpenCard = vi.fn();
+    const { user } = renderWithStore(
+      <RelationList
+        onOpen={onOpen}
+        onOpenCard={onOpenCard}
+        groups={[
+          {
+            label: "Cards · 1",
+            items: [
+              {
+                key: "card",
+                cardKey: "acme/api#412",
+                number: "#412",
+                title: "Rotate keys",
+                meta: "Backlog",
+                url: "https://github.com/acme/api/issues/412",
+              },
+            ],
+          },
+        ]}
+      />,
+    );
+    const link = screen.getByRole("link", { name: "#412 Rotate keys" });
+    expect(link).toHaveAttribute("href", "#");
+    expect(link.querySelector("svg")).toBeNull();
+    await user.click(link);
+    expect(onOpenCard).toHaveBeenCalledWith("acme/api#412");
+    expect(onOpen).not.toHaveBeenCalled();
+  });
+
+  it("keeps a card without the handler as an external link", () => {
+    renderWithStore(
+      <RelationList
+        onOpen={() => {}}
+        groups={[
+          {
+            label: "Cards · 1",
+            items: [
+              {
+                key: "card",
+                cardKey: "acme/api#412",
+                number: "#412",
+                title: "Rotate keys",
+                meta: "",
+                url: "https://github.com/acme/api/issues/412",
+              },
+            ],
+          },
+        ]}
+      />,
+    );
+    expect(screen.getByRole("link", { name: "#412 Rotate keys" })).toHaveAttribute(
+      "href",
+      "https://github.com/acme/api/issues/412",
+    );
+  });
 });

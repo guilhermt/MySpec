@@ -219,6 +219,18 @@ describe("globals.css", () => {
     expect(GLOBALS).toContain(`@container main (min-width: ${AUX_PANEL_COLUMN_MIN}px) {`);
   });
 
+  it("rounds the width of the list panel and puts it beside the list from 800px of main area", () => {
+    expect(GLOBALS).toMatch(
+      /\.list-panel \{[^}]*width: round\(down, var\(--panel-card-width\), 1px\);/,
+    );
+    expect(GLOBALS).toMatch(
+      /@container main \(min-width: 800px\) \{\s*\.list-panel \{\s*position: relative;/,
+    );
+    expect(GLOBALS).toContain(
+      "[data-leaving] > .list-panel {\n    animation: aux-panel-exit var(--duration-fast) var(--ease-exit) forwards;",
+    );
+  });
+
   it("blinks a new situation twice for --duration-slow, and never with reduced motion", () => {
     expect(GLOBALS).toContain(
       "animation: situation-flash var(--duration-slow) var(--ease-standard) 2;",

@@ -1,7 +1,7 @@
 import { memo, useEffect, useRef } from "react";
 import { ContextMeter } from "@/components/system/ContextMeter";
 import { Icon } from "@/components/system/Icon";
-import { ICONS } from "@/components/system/icons";
+import { ITEM_ICONS, TONE_GLYPHS } from "@/components/system/item-parts";
 import { Kbd } from "@/components/system/Kbd";
 import { Shimmer } from "@/components/system/Shimmer";
 import { type GlyphState, StateGlyph } from "@/components/system/StateGlyph";
@@ -26,25 +26,10 @@ export interface TreeRowProps {
 }
 
 /** TYPE_ICONS is the type glyph of each kind of item, on its row and on its block of the strip. */
-export const TYPE_ICONS = {
-  task: ICONS.task,
-  "one-shot": ICONS.oneShot,
-  review: ICONS.review,
-  discussion: ICONS.discussion,
-} as const satisfies Record<ItemKind, unknown>;
+export const TYPE_ICONS = ITEM_ICONS satisfies Record<ItemKind, unknown>;
 
 /** ROW_GLYPHS is the state glyph of each tone, on a row and on its block of the strip. */
-export const ROW_GLYPHS: Record<RowTone, GlyphState> = {
-  error: "error",
-  wait: "wait",
-  close: "close",
-  archive: "close",
-  agent: "work",
-  app: "work",
-  github: "github",
-  paused: "paused",
-  idle: "idle",
-};
+export const ROW_GLYPHS = TONE_GLYPHS satisfies Record<RowTone, GlyphState>;
 
 const MICRO = "text-(length:--text-micro) leading-(--leading-micro)";
 // FAINT is the fourth ink of the quiet texts, which steps up to the third on the open row and on the

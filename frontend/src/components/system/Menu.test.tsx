@@ -5,8 +5,10 @@ import { describe, expect, it, vi } from "vitest";
 import { renderWithStore } from "@/test/render";
 import { Button } from "./Button";
 import {
+  actionItemLabel,
   type FilterCycle,
   Menu,
+  MenuActionItem,
   MenuCheckboxItem,
   MenuContent,
   MenuCycleItem,
@@ -229,5 +231,44 @@ describe("MenuCheckboxItem", () => {
     await user.click(await screen.findByRole("menuitemcheckbox", { name: "acme/web" }));
     expect(onChange).toHaveBeenCalledWith(true, expect.anything());
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
+});
+
+describe("MenuActionItem", () => {
+  const action = { label: "Clone", onAction: vi.fn() };
+
+  it("names the reason and what Enter does", () => {
+    expect(actionItemLabel("acme/billing", "Not cloned", action)).toBe(
+      "acme/billing, not cloned. Enter clones it.",
+    );
+    expect(actionItemLabel("acme/billing", undefined, action)).toBe(
+      "acme/billing. Enter clones it.",
+    );
+  });
+
+  it("acts on Enter and on a click, and the menu stays open", async () => {
+    const onAction = vi.fn();
+    const { user } = renderWithStore(
+      <Menu>
+        <MenuTrigger render={<Button />}>Repository</MenuTrigger>
+        <MenuContent>
+          <MenuActionItem
+            label="acme/billing"
+            sub="Not cloned"
+            action={{ label: "Clone", onAction }}
+          />
+        </MenuContent>
+      </Menu>,
+    );
+    await user.click(screen.getByRole("button", { name: "Repository" }));
+    const item = await screen.findByRole("menuitem", {
+      name: "acme/billing, not cloned. Enter clones it.",
+    });
+    expect(item).toHaveAttribute("aria-disabled", "true");
+    await user.keyboard("{ArrowDown}{Enter}");
+    expect(onAction).toHaveBeenCalledTimes(1);
+    await user.click(item);
+    expect(onAction).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole("menu")).toBeInTheDocument();
   });
 });

@@ -3,7 +3,9 @@ import { Fragment, useId } from "react";
 import { cn } from "@/lib/utils";
 import { Icon } from "./Icon";
 import {
+  type ItemAction,
   Menu,
+  MenuActionItem,
   MenuContent,
   MenuGroup,
   MenuGroupLabel,
@@ -20,7 +22,13 @@ export interface SelectOption {
   value: string;
   label: string;
   sub?: string;
+  /** subTone paints the sub as an error: the clone that failed. */
+  subTone?: "error";
   unavailable?: boolean;
+  /** disabled is an option that can't be chosen, its reason in sub. */
+  disabled?: boolean;
+  /** action is what Enter or a click does on a disabled option instead of choosing it: Clone. */
+  action?: ItemAction;
 }
 
 /** ListMessage stands in for the choices of a Select or a Listbox while they load or when they fail. */
@@ -175,13 +183,21 @@ export function ChosenText({
   return loading ? <Shimmer>{text}</Shimmer> : text;
 }
 
-/** SelectItem is a choice of the menu of a Select. */
+/** SelectItem is a choice of the menu of a Select: a disabled one with an action offers it instead of the choice. */
 function SelectItem({ option }: { option: SelectOption }) {
+  const sub = {
+    ...(option.sub !== undefined ? { sub: option.sub } : {}),
+    ...(option.subTone !== undefined ? { subTone: option.subTone } : {}),
+  };
+  if (option.disabled && option.action !== undefined) {
+    return <MenuActionItem label={option.label} action={option.action} {...sub} />;
+  }
   return (
     <MenuRadioItem
       value={option.value}
       {...(option.unavailable ? { unavailable: true } : {})}
-      {...(option.sub !== undefined ? { sub: option.sub } : {})}
+      {...(option.disabled ? { disabled: true } : {})}
+      {...sub}
     >
       {option.label}
     </MenuRadioItem>

@@ -6,6 +6,7 @@ import { paintOf, resolve, setTheme, THEMES, TRANSPARENT, token } from "@/test/p
 import { Button } from "./Button";
 import {
   Menu,
+  MenuActionItem,
   MenuContent,
   MenuGroup,
   MenuGroupLabel,
@@ -34,7 +35,17 @@ function Subject() {
           <MenuRadioItem value="fable" unavailable>
             Fable
           </MenuRadioItem>
+          <MenuRadioItem value="haiku" disabled sub="Not offered">
+            Haiku
+          </MenuRadioItem>
         </MenuRadioGroup>
+        <MenuActionItem
+          label="acme/billing"
+          sub="Clone failed"
+          subTone="error"
+          action={{ label: "Clone", onAction: () => {} }}
+        />
+        <MenuRadioGroup value=""></MenuRadioGroup>
       </MenuContent>
     </Menu>
   );
@@ -118,6 +129,18 @@ describe.each(THEMES)("Menu in the %s theme", (theme) => {
     await open();
     const item = screen.getByRole("menuitemradio", { name: "◇ Fable · unavailable" });
     expect(paintOf(item, { color: "" })).toEqual({ color: token("--ink-4") });
+  });
+  it("writes a disabled choice and an item with an action in the faint ink, the failed reason in error", async () => {
+    setTheme(theme);
+    await open();
+    const choice = screen.getByRole("menuitemradio", { name: "Haiku Not offered" });
+    expect(paintOf(choice, { color: "" })).toEqual({ color: token("--ink-4") });
+    const item = screen.getByRole("menuitem", {
+      name: "acme/billing, clone failed. Enter clones it.",
+    });
+    expect(paintOf(item, { color: "" })).toEqual({ color: token("--ink-4") });
+    expect(getComputedStyle(screen.getByText("Clone failed")).color).toBe(token("--state-error"));
+    expect(getComputedStyle(screen.getByText("Clone")).color).toBe(token("--ink-3"));
   });
 });
 
