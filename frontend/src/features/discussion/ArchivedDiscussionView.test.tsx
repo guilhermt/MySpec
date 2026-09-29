@@ -125,4 +125,23 @@ describe("ArchivedDiscussionView", () => {
 
     expect(await screen.findByRole("alertdialog")).toHaveTextContent('Delete "Invoices"?');
   });
+
+  it("reads the conversation as a feed of the discussion agent", async () => {
+    vi.mocked(api.getTranscript).mockResolvedValueOnce(
+      makeTranscript({
+        taskId: "discussion-1",
+        stage: "discussion",
+        entries: [makeEntry("user"), makeEntry("assistant")],
+      }),
+    );
+    view();
+
+    const feed = await screen.findByRole("feed", {
+      name: "Conversation with the discussion agent",
+    });
+    expect(within(feed).getByRole("article", { name: /^You, / })).toBeInTheDocument();
+    expect(within(feed).getByRole("article", { name: /^Discussion agent, / })).toHaveTextContent(
+      "On it.",
+    );
+  });
 });

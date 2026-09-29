@@ -48,9 +48,14 @@ function mount(
   const ref = { current: element };
   const contentRef = { current: content };
   return renderHook(
-    ({ deps }: { deps: readonly unknown[] }) => useAutoScroll(ref, contentRef, deps, follow),
-    { initialProps: { deps: [0] as readonly unknown[] } },
+    ({ deps, keys = ["a"] }: Props) => useAutoScroll(ref, contentRef, deps, keys, follow),
+    { initialProps: { deps: [0] as readonly unknown[] } as Props },
   );
+}
+
+interface Props {
+  deps: readonly unknown[];
+  keys?: readonly string[];
 }
 
 /**
@@ -90,10 +95,10 @@ describe("useAutoScroll", () => {
     const scroller = makeScroller();
     const { result, rerender } = mount(scroller.element);
 
-    rerender({ deps: [1] });
+    rerender({ deps: [1], keys: ["a", "b"] });
 
     expect(scroller.scrollTo).toHaveBeenCalledWith({ top: HEIGHT });
-    expect(result.current.hasNew).toBe(false);
+    expect(result.current.newCount).toBe(0);
   });
 
   it("scrolls nothing while the deps stay the same", () => {
@@ -110,10 +115,22 @@ describe("useAutoScroll", () => {
     const { result, rerender } = mount(scroller.element);
 
     scroller.scrollTop(0);
-    rerender({ deps: [1] });
+    rerender({ deps: [1], keys: ["a", "b"] });
 
     expect(scroller.scrollTo).not.toHaveBeenCalled();
-    expect(result.current.hasNew).toBe(true);
+    expect(result.current.newCount).toBe(1);
+  });
+
+  it("counts the rows born since the reader left the end, a row that grows once", () => {
+    const scroller = makeScroller();
+    const { result, rerender } = mount(scroller.element);
+
+    scroller.scrollTop(0);
+    rerender({ deps: [1], keys: ["a", "b"] });
+    rerender({ deps: [2], keys: ["a", "b"] });
+    rerender({ deps: [3], keys: ["a", "b", "c"] });
+
+    expect(result.current.newCount).toBe(2);
   });
 
   it("takes the reader back to the end when asked", () => {
@@ -121,13 +138,13 @@ describe("useAutoScroll", () => {
     const { result, rerender } = mount(scroller.element);
 
     scroller.scrollTop(0);
-    rerender({ deps: [1] });
+    rerender({ deps: [1], keys: ["a", "b"] });
     act(() => {
       result.current.scrollToBottom();
     });
 
     expect(scroller.scrollTo).toHaveBeenCalledWith({ top: HEIGHT });
-    expect(result.current.hasNew).toBe(false);
+    expect(result.current.newCount).toBe(0);
   });
 
   it("forgets the news once the reader scrolls back to the end", () => {
@@ -135,10 +152,10 @@ describe("useAutoScroll", () => {
     const { result, rerender } = mount(scroller.element);
 
     scroller.scrollTop(0);
-    rerender({ deps: [1] });
+    rerender({ deps: [1], keys: ["a", "b"] });
     scroller.scrollTop(END);
 
-    expect(result.current.hasNew).toBe(false);
+    expect(result.current.newCount).toBe(0);
   });
 
   it("knows whether the reader is at the end", () => {
@@ -165,7 +182,7 @@ describe("useAutoScroll", () => {
 
     scroller.scrollTop(0);
 
-    expect(result.current.hasNew).toBe(false);
+    expect(result.current.newCount).toBe(0);
     expect(result.current.atBottom).toBe(false);
   });
 
@@ -215,7 +232,7 @@ describe("useAutoScroll", () => {
     const ref = { current: null };
     const contentRef = { current: null };
     const { result, rerender } = renderHook(
-      ({ deps }: { deps: readonly unknown[] }) => useAutoScroll(ref, contentRef, deps),
+      ({ deps }: { deps: readonly unknown[] }) => useAutoScroll(ref, contentRef, deps, []),
       { initialProps: { deps: [0] as readonly unknown[] } },
     );
 
@@ -224,7 +241,7 @@ describe("useAutoScroll", () => {
       result.current.scrollToBottom();
     });
 
-    expect(result.current.hasNew).toBe(false);
+    expect(result.current.newCount).toBe(0);
   });
 
   it("never scrolls a conversation it does not follow, and never offers the end", () => {
@@ -234,11 +251,11 @@ describe("useAutoScroll", () => {
       const { result, rerender } = mount(scroller.element, document.createElement("div"), false);
 
       scroller.scrollTop(0);
-      rerender({ deps: [1] });
+      rerender({ deps: [1], keys: ["a", "b"] });
       act(resize);
 
       expect(scroller.scrollTo).not.toHaveBeenCalled();
-      expect(result.current).toMatchObject({ atBottom: true, hasNew: false });
+      expect(result.current).toMatchObject({ atBottom: true, newCount: 0 });
     } finally {
       restore();
     }

@@ -3,8 +3,10 @@ import type { KeyboardEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { COLUMN_CLASS } from "@/features/chat/ConversationColumn";
 import type { SessionState } from "@/features/chat/session";
 import { ModelPicker } from "@/features/models/ModelPicker";
+import { cn } from "@/lib/utils";
 import { asSessionStatus } from "@/lib/wails";
 import { interrupt, resume, sendMessage, setSessionModel } from "@/store/actions";
 import { useAppStore, useDraft } from "@/store/app-store";
@@ -34,7 +36,12 @@ function SessionModel({ taskId, stage, session }: ComposerProps) {
 
 function PausedNotice({ taskId, stage, session }: ComposerProps) {
   return (
-    <div className="mx-auto flex w-full max-w-[58.5rem] items-center justify-between gap-3 rounded-lg border bg-muted p-3">
+    <div
+      className={cn(
+        COLUMN_CLASS,
+        "flex items-center justify-between gap-3 rounded-lg border bg-muted p-3",
+      )}
+    >
       <p className="text-sm">Paused. Resume to keep talking.</p>
       <div className="flex items-center gap-2">
         <SessionModel taskId={taskId} stage={stage} session={session} />
@@ -79,15 +86,15 @@ export function Composer({ taskId, stage, session }: ComposerProps) {
 
   if (asSessionStatus(session.sessionStatus) === "paused") {
     return (
-      <div className="shrink-0 border-t p-3">
+      <div className="shrink-0 px-(--space-6) pt-(--space-2) pb-(--space-4)">
         <PausedNotice taskId={taskId} stage={stage} session={session} />
       </div>
     );
   }
 
   return (
-    <div className="shrink-0 border-t p-3">
-      <div className="mx-auto flex w-full max-w-[58.5rem] flex-col gap-1.5">
+    <div className="shrink-0 px-(--space-6) pt-(--space-2) pb-(--space-4)">
+      <div className={cn(COLUMN_CLASS, "flex flex-col gap-1.5")}>
         <div className="flex items-end gap-2">
           <Textarea
             id="composer-input"

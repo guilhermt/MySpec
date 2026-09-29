@@ -90,6 +90,15 @@ export function voiceOf(stage: string): string {
   return VOICES[stage] ?? "";
 }
 
+/** voiceInSentence is the voice inside a sentence: "implementer", "tech spec agent"; an acronym keeps its capitals, "PRD agent". */
+export function voiceInSentence(voice: string): string {
+  const [first = ""] = voice.split(" ");
+  if (first.length > 1 && first === first.toUpperCase()) {
+    return voice;
+  }
+  return voice.charAt(0).toLowerCase() + voice.slice(1);
+}
+
 const NONE: MarkerBody = { kind: "none" };
 
 // counted is a count with its noun: "1 finding", "3 findings".

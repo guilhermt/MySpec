@@ -1,20 +1,24 @@
-import { useMemo, useRef } from "react";
-import { Skeleton } from "@/components/ui/skeleton";
-import { ActivityIndicator } from "@/features/chat/ActivityIndicator";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { Skeleton, SkeletonBar } from "@/components/system/Skeleton";
+import { ConversationColumn } from "@/features/chat/ConversationColumn";
+import { buildConversation, type Row } from "@/features/chat/conversation";
 import { ActionGroup } from "@/features/chat/entries/ActionGroup";
+import { Activity } from "@/features/chat/entries/Activity";
 import { AppMessage } from "@/features/chat/entries/AppMessage";
-import { AssistantMessage } from "@/features/chat/entries/AssistantMessage";
-import { ErrorCard } from "@/features/chat/entries/ErrorCard";
+import { BackToEnd } from "@/features/chat/entries/BackToEnd";
+import { ErrorBlock } from "@/features/chat/entries/ErrorBlock";
 import { Marker } from "@/features/chat/entries/Marker";
-import { PendingMessage } from "@/features/chat/entries/PendingMessage";
 import { PermissionCard } from "@/features/chat/entries/PermissionCard";
 import { QuestionCard } from "@/features/chat/entries/QuestionCard";
-import { UserMessage } from "@/features/chat/entries/UserMessage";
-import { groupEntries } from "@/features/chat/group";
-import { ScrollToBottomButton } from "@/features/chat/ScrollToBottomButton";
+import { QueuedMessage } from "@/features/chat/entries/QueuedMessage";
+import { Speech } from "@/features/chat/entries/Speech";
+import { YourMessage } from "@/features/chat/entries/YourMessage";
+import { voiceInSentence, voiceOf } from "@/features/chat/markers";
 import type { SessionState } from "@/features/chat/session";
 import { useAutoScroll } from "@/features/chat/useAutoScroll";
+import { useFeed } from "@/features/chat/useFeed";
 import type { Entry } from "@/lib/wails";
+import { clockTime } from "@/lib/when";
 import { useTranscript } from "@/store/app-store";
 
 const NO_ENTRIES: readonly Entry[] = [];
@@ -23,147 +27,256 @@ const LOADING_WIDTHS = ["w-3/4", "w-full", "w-1/2"];
 
 function Loading() {
   return (
-    <div className="flex flex-col gap-3">
+    <Skeleton label="Loading the conversation">
       {LOADING_WIDTHS.map((width) => (
-        <Skeleton key={width} className={`h-4 ${width}`} />
+        <SkeletonBar key={width} className={width} />
       ))}
-    </div>
+    </Skeleton>
   );
 }
 
-interface EntryBlockProps {
-  taskId: string;
-  stage: string;
-  entry: Entry;
-  readOnly: boolean;
+// Held is an entry of today's forms, held in an entry of the feed named by its time.
+function Held({ createdAt, children }: { createdAt: string; children: ReactNode }) {
+  return (
+    <article
+      data-feed-item
+      tabIndex={-1}
+      aria-label={clockTime(createdAt, Date.now())}
+      className="rounded-sm outline-none focus-visible:focus-ring"
+    >
+      {children}
+    </article>
+  );
 }
 
-function EntryBlock({ taskId, stage, entry, readOnly }: EntryBlockProps) {
-  if (entry.user !== null) {
-    // The stage prompt is the agent's instructions, not a line of the
-    // conversation: only what the app says on top of it is worth showing.
-    if (entry.user.prompt && entry.user.text === "") {
-      return null;
+interface RowViewProps {
+  taskId: string;
+  stage: string;
+  row: Row;
+  voice: string;
+  readOnly: boolean;
+  /** railLast is the last speech, when it waits for a reply in text. */
+  railLast: boolean;
+}
+
+function RowView({ taskId, stage, row, voice, readOnly, railLast }: RowViewProps) {
+  switch (row.kind) {
+    case "speech":
+      return row.entry.assistant === null ? null : (
+        <Speech
+          assistant={row.entry.assistant}
+          createdAt={row.entry.createdAt}
+          voice={voice}
+          voiceShown={row.voice !== null}
+          railLast={railLast}
+        />
+      );
+    case "user":
+      return row.entry.user === null ? null : (
+        <YourMessage user={row.entry.user} createdAt={row.entry.createdAt} />
+      );
+    case "start": {
+      const prompt = row.prompt?.user ?? null;
+      const createdAt = (row.marker ?? row.prompt)?.createdAt ?? "";
+      return (
+        <Held createdAt={createdAt}>
+          <div className="flex flex-col gap-(--space-3)">
+            {row.marker?.marker && (
+              <Marker marker={row.marker.marker} createdAt={row.marker.createdAt} />
+            )}
+            {/* The stage prompt is the agent's instructions: only what the user gave with it shows. */}
+            {prompt !== null && prompt.text !== "" && (
+              <p className="text-(length:--text-body) leading-(--leading-body) break-words whitespace-pre-wrap text-ink-1 select-text">
+                {prompt.text}
+              </p>
+            )}
+          </div>
+        </Held>
+      );
     }
-    return entry.user.app ? <AppMessage user={entry.user} /> : <UserMessage user={entry.user} />;
+    case "product":
+      return row.entry.user === null ? null : (
+        <Held createdAt={row.entry.createdAt}>
+          <AppMessage user={row.entry.user} />
+        </Held>
+      );
+    case "marker":
+      return row.entry.marker === null ? null : (
+        <Held createdAt={row.entry.createdAt}>
+          <Marker marker={row.entry.marker} createdAt={row.entry.createdAt} />
+        </Held>
+      );
+    case "group":
+      return (
+        <Held createdAt={row.group.startedAt}>
+          <ActionGroup
+            actions={row.group.nodes.flatMap((node) => [
+              node.action,
+              ...node.children.map((child) => child.action),
+            ])}
+          />
+        </Held>
+      );
+    case "question":
+      return row.entry.question === null ? null : (
+        <Held createdAt={row.entry.createdAt}>
+          <QuestionCard
+            taskId={taskId}
+            stage={stage}
+            question={row.entry.question}
+            readOnly={readOnly}
+          />
+        </Held>
+      );
+    case "permission":
+      return row.entry.permission === null ? null : (
+        <Held createdAt={row.entry.createdAt}>
+          <PermissionCard
+            taskId={taskId}
+            stage={stage}
+            permission={row.entry.permission}
+            readOnly={readOnly}
+          />
+        </Held>
+      );
+    case "error":
+      return row.entry.error === null ? null : (
+        <ErrorBlock error={row.entry.error} createdAt={row.entry.createdAt} />
+      );
   }
-  if (entry.assistant !== null) {
-    return <AssistantMessage assistant={entry.assistant} />;
-  }
-  if (entry.action !== null) {
-    return <ActionGroup actions={[entry.action]} />;
-  }
-  if (entry.permission !== null) {
-    return (
-      <PermissionCard
-        taskId={taskId}
-        stage={stage}
-        permission={entry.permission}
-        readOnly={readOnly}
-      />
-    );
-  }
-  if (entry.question !== null) {
-    return (
-      <QuestionCard taskId={taskId} stage={stage} question={entry.question} readOnly={readOnly} />
-    );
-  }
-  if (entry.marker !== null) {
-    return <Marker marker={entry.marker} createdAt={entry.createdAt} />;
-  }
-  if (entry.error !== null) {
-    return <ErrorCard taskId={taskId} stage={stage} error={entry.error} readOnly={readOnly} />;
-  }
-  return null;
+}
+
+// lastCompleteSpeech is the key of the last speech that is complete, "" without one.
+function lastCompleteSpeech(rows: readonly Row[]): string {
+  const speech = [...rows]
+    .reverse()
+    .find((row) => row.kind === "speech" && row.entry.assistant?.complete);
+  return speech?.key ?? "";
 }
 
 export interface ConversationProps {
   taskId: string;
   /** stage names the session on screen: a task stage, step:<n> or pr:<slug>. */
   stage: string;
-  /** session is the one that stage names, whose work the indicator shows. */
+  /** session is the one that stage names, whose work the activity shows. */
   session: SessionState;
   /**
-   * readOnly is an earlier conversation, which takes nothing more: no card answers, no error
-   * retries, nothing queued, no indicator, and it opens at its start.
+   * readOnly is an earlier conversation, which takes nothing more: no card answers, nothing
+   * queued, no activity, and it opens at its start without following the end.
    */
   readOnly?: boolean;
+  /** endLine is the derived line after the entries (Merged …, Closed …). */
+  endLine?: ReactNode;
+  /** fixed is the fixed card after the entries: changed files, the PR draft, the live checks. */
+  fixed?: ReactNode;
+  /** replyWaiting marks the last block of the last speech with the rail of a question in text (the reply situation). */
+  replyWaiting?: boolean;
 }
 
-/** Conversation is everything that was said and done, from the top down. */
-export function Conversation({ taskId, stage, session, readOnly = false }: ConversationProps) {
+/** Conversation is everything that was said and done, from the top down, as a feed. */
+export function Conversation({
+  taskId,
+  stage,
+  session,
+  readOnly = false,
+  endLine,
+  fixed,
+  replyWaiting = false,
+}: ConversationProps) {
   const transcript = useTranscript(taskId, stage);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const feedRef = useRef<HTMLDivElement>(null);
+  const [atTop, setAtTop] = useState(true);
+  useFeed(feedRef);
 
   const entries = transcript?.entries ?? NO_ENTRIES;
   const pending = transcript?.pending ?? NO_ENTRIES;
+  const voice = voiceOf(stage);
+  const model = useMemo(() => buildConversation(entries, voice), [entries, voice]);
+  const rows = useMemo(() => model.stretches.flatMap((stretch) => stretch.rows), [model]);
+  const rowKeys = useMemo(() => rows.map((row) => row.key), [rows]);
   // The text of the last entry is what grows while the agent writes.
-  const streaming = entries.at(-1)?.assistant?.text ?? "";
-  const { atBottom, hasNew, scrollToBottom } = useAutoScroll(
-    scrollRef,
+  const last = entries.at(-1);
+  const streaming = last?.assistant ? !last.assistant.complete : false;
+  const { atBottom, newCount, scrollToBottom } = useAutoScroll(
+    viewportRef,
     contentRef,
-    [entries.length, pending.length, streaming],
+    [entries.length, pending.length, last?.assistant?.text ?? ""],
+    rowKeys,
     !readOnly,
   );
-  const items = useMemo(() => groupEntries(entries), [entries]);
   // A reload keeps what is on screen, so the scroll has nothing to lose.
   const loading =
     transcript === null ||
     (transcript.status === "loading" && entries.length === 0 && pending.length === 0);
+  const railKey = replyWaiting ? lastCompleteSpeech(rows) : "";
+
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (viewport === null) {
+      return;
+    }
+    const onScroll = () => setAtTop(viewport.scrollTop <= 0);
+    viewport.addEventListener("scroll", onScroll, { passive: true });
+    return () => viewport.removeEventListener("scroll", onScroll);
+  }, []);
 
   return (
     <div className="relative min-h-0 flex-1">
-      {/* Positioned, so what is absolutely placed inside the conversation, sr-only
-          included, stays within its scroll instead of reaching the panel around it.
-          Focusable from code: the focus comes back here from an earlier conversation. */}
-      <div
-        ref={scrollRef}
-        data-slot="conversation"
-        tabIndex={-1}
-        className="relative h-full overflow-y-auto outline-none"
-      >
+      <ConversationColumn viewportRef={viewportRef} contentRef={contentRef} fadeTop={!atTop}>
         <div
-          ref={contentRef}
-          className="mx-auto flex w-full max-w-[58.5rem] flex-col gap-4 px-6 py-6"
+          ref={feedRef}
+          role="feed"
+          aria-label={`Conversation with the ${voiceInSentence(voice)}`}
+          aria-busy={streaming}
+          className="flex flex-col gap-(--space-3)"
         >
           {loading ? (
             <Loading />
           ) : (
             <>
-              {items.map((item) =>
-                item.kind === "actions" ? (
-                  <ActionGroup key={item.key} actions={item.items} />
-                ) : (
-                  <EntryBlock
-                    key={item.key}
-                    taskId={taskId}
-                    stage={stage}
-                    entry={item.entry}
-                    readOnly={readOnly}
-                  />
-                ),
-              )}
+              {rows.map((row) => (
+                <RowView
+                  key={row.key}
+                  taskId={taskId}
+                  stage={stage}
+                  row={row}
+                  voice={voice}
+                  readOnly={readOnly}
+                  railLast={row.key === railKey}
+                />
+              ))}
+              {endLine}
+              {fixed}
               {/* An earlier conversation is read without what was queued: it sends nothing more. */}
               {!readOnly &&
                 pending.map(
                   (entry) =>
                     entry.user !== null && (
-                      <PendingMessage
+                      <QueuedMessage
                         key={entry.id}
                         taskId={taskId}
                         stage={stage}
                         entryId={entry.id}
                         user={entry.user}
+                        session={session}
                       />
                     ),
                 )}
-              {!readOnly && <ActivityIndicator session={session} entries={entries} />}
+              {!readOnly && <Activity session={session} entries={entries} />}
             </>
           )}
         </div>
-      </div>
-      {!atBottom && <ScrollToBottomButton hasNew={hasNew} onClick={scrollToBottom} />}
+      </ConversationColumn>
+      {!atBottom && (
+        <BackToEnd
+          newCount={newCount}
+          voice={voice}
+          work={streaming ? "writing" : session.turnRunning ? "working" : null}
+          onClick={scrollToBottom}
+        />
+      )}
     </div>
   );
 }

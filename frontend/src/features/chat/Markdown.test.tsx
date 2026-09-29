@@ -63,4 +63,39 @@ describe("ExternalLink", () => {
 
     expect(screen.getByTestId("markdown")).toHaveAttribute("data-line-numbers", "false");
   });
+
+  it("cuts a long code block of the conversation to its first 20 lines, with the rest a click away", async () => {
+    const code = Array.from({ length: 46 }, (_, at) => `line ${at + 1}`).join("\n");
+    const { user } = renderWithStore(
+      <Markdown cutCode>{`Intro\n\n\`\`\`\n${code}\n\`\`\``}</Markdown>,
+    );
+
+    const show = screen.getByRole("button", { name: "Show all 46 lines" });
+    expect(show).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByText("26 more")).toBeInTheDocument();
+    expect(await screen.findByText(/line 20/)).toBeInTheDocument();
+    expect(screen.queryByText(/line 21/)).not.toBeInTheDocument();
+
+    await user.click(show);
+
+    expect(screen.getByRole("button", { name: "Show less" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+    expect(await screen.findByText(/line 46/)).toBeInTheDocument();
+    expect(screen.queryByText("26 more")).not.toBeInTheDocument();
+  });
+
+  it("leaves code whole out of the conversation", () => {
+    const code = Array.from({ length: 46 }, (_, at) => `line ${at + 1}`).join("\n");
+    renderWithStore(<Markdown>{`\`\`\`\n${code}\n\`\`\``}</Markdown>);
+
+    expect(screen.queryByRole("button", { name: /Show all/ })).not.toBeInTheDocument();
+  });
+
+  it("draws the rail of a question in text beside the last block", () => {
+    renderWithStore(<Markdown railLast>{"Which one?\n\na) This\nb) That"}</Markdown>);
+
+    expect(screen.getByTestId("markdown")).toHaveClass("markdown-rail-last");
+  });
 });

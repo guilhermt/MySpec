@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Composer } from "@/features/chat/Composer";
 import { Conversation } from "@/features/chat/Conversation";
+import { COLUMN_CLASS } from "@/features/chat/ConversationColumn";
 import { DraftCard } from "@/features/task/DraftCard";
 import { PRBlocked } from "@/features/task/PRBlocked";
 import {
@@ -19,6 +20,7 @@ import { ToneDot } from "@/features/task/StatusDot";
 import type { StatusTone } from "@/features/task/status";
 import { TaskRequest } from "@/features/task/TaskRequest";
 import { prBaseName } from "@/lib/pull-requests";
+import { cn } from "@/lib/utils";
 import {
   asCloseOutcome,
   asPRState,
@@ -50,7 +52,7 @@ function Waiting({ text }: { text: string }) {
 function Note({ title, children }: { title: string; children?: React.ReactNode }) {
   return (
     <div className="min-h-0 flex-1 overflow-y-auto p-6">
-      <div className="mx-auto flex max-w-[58.5rem] flex-col gap-3 rounded-lg border p-4">
+      <div className={cn(COLUMN_CLASS, "flex flex-col gap-3 rounded-lg border p-4")}>
         <p className="font-medium">{title}</p>
         {children}
       </div>

@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { PanelLayout } from "@/components/system/AuxPanel";
 import { Composer } from "@/features/chat/Composer";
 import { Conversation } from "@/features/chat/Conversation";
+import { COLUMN_CLASS } from "@/features/chat/ConversationColumn";
 import { IDLE_SESSION } from "@/features/chat/session";
 import { AgentTabs } from "@/features/task/AgentTabs";
 import { ArtifactsPanel } from "@/features/task/ArtifactsPanel";
@@ -32,10 +33,6 @@ import {
   useTask,
 } from "@/store/app-store";
 
-/** COLUMN is the conversation column, centered on a whole pixel. */
-const COLUMN =
-  "w-full max-w-(--measure-conversation) ml-[max(0px,round(down,calc((100%_-_var(--measure-conversation))/2),1px))]";
-
 /**
  * StepTop is what sits over the conversation of the step: the agent tabs and the review of the
  * step, in the conversation column.
@@ -48,7 +45,7 @@ function StepTop({ task, step }: { task: TaskSummary; step: Step }) {
   }
   return (
     <div className="shrink-0 px-(--space-6) pt-(--space-1)">
-      <div className={COLUMN}>
+      <div className={COLUMN_CLASS}>
         <AgentTabs task={task} step={step} />
         {review !== null && <ReviewStrip taskId={task.id} subject="step" review={review} />}
       </div>

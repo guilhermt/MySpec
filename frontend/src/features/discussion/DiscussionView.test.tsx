@@ -1,9 +1,9 @@
 import { screen, waitFor, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { DiscussionView } from "@/features/discussion/DiscussionView";
 import { api, type DiscussionSummary } from "@/lib/wails";
 import { renderWithStore } from "@/test/render";
-import { makeDiscussion, makeDraft, makeState } from "@/test/wails-mock";
+import { makeDiscussion, makeDraft, makeEntry, makeState, makeTranscript } from "@/test/wails-mock";
 
 function view(overrides: Partial<DiscussionSummary> = {}) {
   return renderWithStore(<DiscussionView discussionId="discussion-1" />, {
@@ -17,7 +17,7 @@ describe("DiscussionView", () => {
     view();
 
     expect(screen.getByText("Invoices")).toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("Discussing");
+    expect(screen.getAllByRole("status")[0]).toHaveTextContent("Discussing");
     expect(screen.getByRole("button", { name: "Documents" })).toBeInTheDocument();
     await waitFor(() => {
       expect(api.getTranscript).toHaveBeenCalledWith("discussion-1", "discussion");
@@ -59,5 +59,24 @@ describe("DiscussionView", () => {
 
     const column = screen.getByRole("textbox").closest(".overflow-clip");
     expect(column).not.toBeNull();
+  });
+
+  it("reads the conversation as a feed of the discussion agent", async () => {
+    vi.mocked(api.getTranscript).mockResolvedValueOnce(
+      makeTranscript({
+        taskId: "discussion-1",
+        stage: "discussion",
+        entries: [makeEntry("user"), makeEntry("assistant")],
+      }),
+    );
+    view();
+
+    const feed = await screen.findByRole("feed", {
+      name: "Conversation with the discussion agent",
+    });
+    expect(within(feed).getByRole("article", { name: /^You, / })).toBeInTheDocument();
+    expect(within(feed).getByRole("article", { name: /^Discussion agent, / })).toHaveTextContent(
+      "On it.",
+    );
   });
 });

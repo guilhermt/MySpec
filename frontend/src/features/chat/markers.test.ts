@@ -6,6 +6,7 @@ import {
   mergedLineOf,
   productMessageOf,
   startLineOf,
+  voiceInSentence,
   voiceOf,
 } from "@/features/chat/markers";
 import type { Entry, MarkerEntry, PullRequest, TaskSummary, UserEntry } from "@/lib/wails";
@@ -108,6 +109,18 @@ describe("voiceOf", () => {
     ["closing", ""],
   ])("names who talks in %s: %j", (stage, expected) => {
     expect(voiceOf(stage)).toBe(expected);
+  });
+});
+
+describe("voiceInSentence", () => {
+  it.each([
+    ["Implementer", "implementer"],
+    ["Tech spec agent", "tech spec agent"],
+    ["PRD agent", "PRD agent"],
+    ["PR agent", "PR agent"],
+    ["", ""],
+  ])("writes %j inside a sentence as %j", (voice, expected) => {
+    expect(voiceInSentence(voice)).toBe(expected);
   });
 });
 

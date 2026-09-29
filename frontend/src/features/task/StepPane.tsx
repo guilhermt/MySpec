@@ -2,12 +2,14 @@ import { LoaderCircle } from "lucide-react";
 import { tabId } from "@/components/system/Tabs";
 import { Composer } from "@/features/chat/Composer";
 import { Conversation } from "@/features/chat/Conversation";
+import { COLUMN_CLASS } from "@/features/chat/ConversationColumn";
 import { AGENT_CONVERSATION } from "@/features/task/AgentTabs";
 import { agentTabsOf } from "@/features/task/agent-tabs";
 import { ImplementationDone } from "@/features/task/ImplementationDone";
 import { StepBlocked } from "@/features/task/StepBlocked";
 import { currentStepOf, stepPhaseLabel, stepStage } from "@/features/task/step-status";
 import { TaskRequest } from "@/features/task/TaskRequest";
+import { cn } from "@/lib/utils";
 import { asStepStatus, type Step, type TaskSummary } from "@/lib/wails";
 import { useOpenStepTab } from "@/store/app-store";
 
@@ -60,7 +62,7 @@ export function StepPane({ task }: StepPaneProps) {
     }
     return (
       <div className="min-h-0 flex-1 overflow-y-auto p-6">
-        <div className="mx-auto flex max-w-[58.5rem] flex-col gap-4">
+        <div className={cn(COLUMN_CLASS, "flex flex-col gap-4")}>
           <p className="text-sm text-muted-foreground italic">No steps were found.</p>
         </div>
       </div>
