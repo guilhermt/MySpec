@@ -56,8 +56,8 @@ describe("BoardView", () => {
     view();
 
     expect(screen.getByRole("heading", { level: 1, name: "Roadmap" })).toBeInTheDocument();
-    const tree = screen.getByRole("tree", { name: "Cards" });
-    expect(within(tree).getByRole("button", { name: /^Todo/ })).toBeInTheDocument();
+    const tree = screen.getByRole("tree", { name: "Cards of Roadmap, by status" });
+    expect(within(tree).getByRole("treeitem", { name: /^Todo/ })).toBeInTheDocument();
     expect(within(tree).getByRole("treeitem", { name: /#12/ })).toBeInTheDocument();
     expect(within(tree).getByRole("treeitem", { name: /#7/ })).toBeInTheDocument();
     expect(within(tree).queryByRole("treeitem", { name: /#3/ })).not.toBeInTheDocument();
@@ -167,7 +167,7 @@ describe("BoardView", () => {
     const { user, unmount } = view();
 
     await user.type(screen.getByRole("searchbox", { name: "Search cards" }), "header");
-    await user.click(screen.getByRole("button", { name: /^Done/ }));
+    await user.click(screen.getByRole("treeitem", { name: /^In progress/ }));
     unmount();
 
     expect(JSON.parse(localStorage.getItem(boardViewKey("board-1")) ?? "null")).toEqual({
@@ -180,13 +180,16 @@ describe("BoardView", () => {
         assignee: "",
         mine: false,
       },
-      collapsed: [],
+      collapsed: ["done", "in-progress"],
     });
 
     view();
     expect(screen.getByRole("searchbox", { name: "Search cards" })).toHaveValue("header");
-    expect(screen.getByRole("treeitem", { name: /#7/ })).toBeInTheDocument();
-    expect(screen.queryByRole("treeitem", { name: /#12/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("treeitem", { name: /^In progress/ })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    expect(screen.queryByRole("treeitem", { name: /#7/ })).not.toBeInTheDocument();
   });
 
   it("collapses the final statuses of a board first opened before its reading", async () => {
@@ -196,7 +199,7 @@ describe("BoardView", () => {
       useAppStore.getState().applyState(stateWith());
     });
 
-    expect(screen.getByRole("treeitem", { name: "Done" })).toHaveAttribute(
+    expect(screen.getByRole("treeitem", { name: /^Done/ })).toHaveAttribute(
       "aria-expanded",
       "false",
     );
@@ -213,17 +216,6 @@ describe("BoardView", () => {
     expect(screen.getByRole("complementary", { name: "Card #12" })).toBeInTheDocument();
 
     await user.keyboard("{Escape}");
-    expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
-  });
-
-  it("drops the selection when the card leaves the reading", async () => {
-    const { user } = view();
-    await user.click(screen.getByRole("treeitem", { name: /#12/ }));
-
-    act(() => {
-      useAppStore.getState().applyState(stateWith({ cards: [HEADER] }));
-    });
-
     expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
   });
 
@@ -258,111 +250,12 @@ describe("BoardView", () => {
     });
   });
 
-  it("opens a discussion of the board with no card even with cards picked", async () => {
-    const { user } = view();
-    await user.click(screen.getByRole("checkbox", { name: "Select #12" }));
-
-    await user.click(screen.getByRole("button", { name: "New discussion" }));
-
-    expect(useAppStore.getState().newDiscussion).toEqual({
-      boardId: "board-1",
-      cardKeys: [],
-      askBoard: false,
-    });
-  });
-
   it("waits for the first reading to offer a discussion", () => {
     view({ readAt: "", reading: true, cards: [] });
 
     const button = screen.getByRole("button", { name: "New discussion" });
     expect(button).toHaveAttribute("aria-disabled", "true");
     expect(button).toHaveAccessibleDescription("The board hasn't been read yet.");
-  });
-
-  it("picks cards and discusses them from the selection bar", async () => {
-    const { user } = view();
-
-    await user.click(screen.getByRole("checkbox", { name: "Select #12" }));
-    // The checkbox picks the card without opening its detail.
-    expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("checkbox", { name: "Select #7" }));
-
-    const bar = screen.getByRole("toolbar", { name: "Selection" });
-    expect(within(bar).getByText("2 cards selected")).toBeInTheDocument();
-    await user.click(within(bar).getByRole("button", { name: "Discuss selected" }));
-
-    expect(useAppStore.getState().newDiscussion).toEqual({
-      boardId: "board-1",
-      cardKeys: ["dev/web#12", "dev/web#7"],
-      askBoard: false,
-    });
-  });
-
-  it("keeps the selection through the filters and clears it on demand", async () => {
-    const { user } = view();
-    await user.click(screen.getByRole("checkbox", { name: "Select #12" }));
-
-    await user.type(screen.getByRole("searchbox", { name: "Search cards" }), "header");
-    expect(screen.getByText("1 card selected")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Clear selection" }));
-    expect(screen.queryByRole("toolbar", { name: "Selection" })).not.toBeInTheDocument();
-  });
-
-  it("discusses the whole selection on D, a card a filter hides included", async () => {
-    const { user } = view();
-    await user.click(screen.getByRole("checkbox", { name: "Select #12" }));
-    await user.type(screen.getByRole("searchbox", { name: "Search cards" }), "header");
-
-    screen.getByRole("treeitem", { name: /#7/ }).focus();
-    await user.keyboard("d");
-
-    expect(useAppStore.getState().newDiscussion).toEqual({
-      boardId: "board-1",
-      cardKeys: ["dev/web#12"],
-      askBoard: false,
-    });
-  });
-
-  it("leaves the selection behind when another board opens", async () => {
-    const { user, rerender } = view();
-    await user.click(screen.getByRole("checkbox", { name: "Select #12" }));
-    expect(screen.getByRole("toolbar", { name: "Selection" })).toBeInTheDocument();
-
-    act(() => {
-      useAppStore.getState().applyState(
-        makeState({
-          repositories: [makeRepository({ boardId: "board-1" })],
-          boards: [
-            makeBoard({ cards: [LOGIN, HEADER, SHIPPED] }),
-            makeBoard({ id: "board-2", title: "Platform", cards: [LOGIN] }),
-          ],
-        }),
-      );
-    });
-    rerender(<BoardView boardId="board-2" />);
-
-    expect(screen.queryByRole("toolbar", { name: "Selection" })).not.toBeInTheDocument();
-  });
-
-  it("drops from the selection a card gone from the reading", async () => {
-    const { user } = view();
-    await user.click(screen.getByRole("checkbox", { name: "Select #12" }));
-
-    act(() => {
-      useAppStore.getState().applyState(stateWith({ cards: [HEADER] }));
-    });
-
-    expect(screen.queryByRole("toolbar", { name: "Selection" })).not.toBeInTheDocument();
-  });
-
-  it("leaves a card of a repository the board does not manage out of the selection", () => {
-    view({ cards: [makeBoardCard({ key: "dev/api#1", number: 1, repositoryId: "repo-9" })] });
-
-    expect(screen.getByRole("checkbox", { name: "Select #1" })).toHaveAttribute(
-      "aria-disabled",
-      "true",
-    );
   });
 
   it("discusses the focused card on D", async () => {
@@ -446,9 +339,9 @@ describe("BoardView", () => {
       );
     });
 
-    it("dashes selecting while cards are picked", async () => {
-      const { user } = view();
-      await user.click(screen.getByRole("checkbox", { name: "Select #12" }));
+    it("dashes selecting while selecting", async () => {
+      const { user } = await openMenu();
+      await user.click(screen.getByRole("menuitem", { name: /Select cards to discuss/ }));
       await user.click(screen.getByRole("button", { name: "More actions" }));
 
       expect(

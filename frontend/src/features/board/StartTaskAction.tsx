@@ -37,7 +37,7 @@ export function StartTaskAction({ board, card, start, onDiscuss }: StartTaskActi
   };
 
   const startButton = (disabled: boolean) => (
-    <Button size="sm" disabled={disabled} onClick={() => start.run()}>
+    <Button size="sm" data-primary-action disabled={disabled} onClick={() => start.run()}>
       Start task
       {!disabled && <Kbd>S</Kbd>}
     </Button>
@@ -60,14 +60,14 @@ export function StartTaskAction({ board, card, start, onDiscuss }: StartTaskActi
   switch (card.action) {
     case "start":
       return (
-        <div className="flex items-center gap-2">
+        <div data-panel-actions className="flex items-center gap-2">
           {startButton(false)}
           {discussButton}
         </div>
       );
     case "clone":
       return (
-        <div className="flex flex-col items-start gap-2">
+        <div data-panel-actions className="flex flex-col items-start gap-2">
           {repository?.cloning ? (
             <div className="flex items-center gap-2">
               <p role="status" className="flex items-center gap-1.5 text-sm text-muted-foreground">
@@ -76,21 +76,25 @@ export function StartTaskAction({ board, card, start, onDiscuss }: StartTaskActi
               </p>
               {discussButton}
             </div>
-          ) : start.offer === "clone" ? (
+          ) : (
             <>
               {hintText}
               <div className="flex items-center gap-2">
-                <Button size="sm" disabled={start.busy} onClick={() => void start.clone()}>
+                <Button
+                  size="sm"
+                  data-primary-action
+                  aria-busy={start.busy}
+                  onClick={() => {
+                    if (!start.busy) {
+                      void start.clone();
+                    }
+                  }}
+                >
                   Clone and continue
                 </Button>
                 {discussButton}
               </div>
             </>
-          ) : (
-            <div className="flex items-center gap-2">
-              {startButton(false)}
-              {discussButton}
-            </div>
           )}
           {alert(repository?.cloneError ?? null)}
           {alert(start.error)}
@@ -98,7 +102,7 @@ export function StartTaskAction({ board, card, start, onDiscuss }: StartTaskActi
       );
     case "clone_missing":
       return (
-        <div className="flex flex-col items-start gap-2">
+        <div data-panel-actions className="flex flex-col items-start gap-2">
           <div className="flex items-center gap-2">
             {startButton(true)}
             {discussButton}
@@ -112,7 +116,7 @@ export function StartTaskAction({ board, card, start, onDiscuss }: StartTaskActi
       );
     case "add_to_board":
       return (
-        <div className="flex flex-col items-start gap-2">
+        <div data-panel-actions className="flex flex-col items-start gap-2">
           <div className="flex items-center gap-2">
             {startButton(false)}
             {discussButton}
@@ -128,7 +132,7 @@ export function StartTaskAction({ board, card, start, onDiscuss }: StartTaskActi
       );
     case "other_board":
       return (
-        <div className="flex flex-col items-start gap-2">
+        <div data-panel-actions className="flex flex-col items-start gap-2">
           <div className="flex items-center gap-2">
             {startButton(true)}
             {discussButton}
@@ -140,7 +144,7 @@ export function StartTaskAction({ board, card, start, onDiscuss }: StartTaskActi
       // A card with a task of its own, or closed, still opens a discussion, and
       // its action says nothing about the repository: the hint belongs here too.
       return (
-        <div className="flex flex-col items-start gap-2">
+        <div data-panel-actions className="flex flex-col items-start gap-2">
           {discussButton}
           {!checkable && (
             <p className="text-sm text-muted-foreground">

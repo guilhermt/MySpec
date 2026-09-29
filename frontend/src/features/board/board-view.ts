@@ -302,14 +302,6 @@ export function defaultCollapsed(board: Board): string[] {
   return (board.statuses ?? []).filter((status) => status.final).map((status) => status.id);
 }
 
-/** visibleCards is the cards the keyboard walks through: those of the expanded sections, in order. */
-export function visibleCards(
-  cardSections: readonly CardSection[],
-  collapsed: ReadonlySet<string>,
-): BoardCard[] {
-  return cardSections.filter((section) => !collapsed.has(section.id)).flatMap((s) => s.cards);
-}
-
 /** BoardRow is one entry of the list as the keyboard and the screen walk it. */
 export type BoardRow =
   | { kind: "section"; section: CardSection; collapsed: boolean }

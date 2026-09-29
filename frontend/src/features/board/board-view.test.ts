@@ -33,7 +33,6 @@ import {
   startable,
   startNotice,
   unsatisfied,
-  visibleCards,
 } from "@/features/board/board-view";
 import {
   makeBoard,
@@ -165,16 +164,9 @@ describe("sections", () => {
   });
 });
 
-describe("defaultCollapsed and visibleCards", () => {
-  it("collapses the final statuses and walks only the expanded sections", () => {
-    const done = makeBoardCard({ key: "dev/web#1", statusId: "done", status: "Done" });
-    const cardSections = sections(BOARD, [LOGIN, done]);
-
+describe("defaultCollapsed", () => {
+  it("collapses the final statuses", () => {
     expect(defaultCollapsed(BOARD)).toEqual(["done"]);
-    expect(keys(visibleCards(cardSections, new Set(defaultCollapsed(BOARD))))).toEqual([
-      "dev/web#12",
-    ]);
-    expect(keys(visibleCards(cardSections, new Set()))).toEqual(["dev/web#12", "dev/web#1"]);
   });
 });
 

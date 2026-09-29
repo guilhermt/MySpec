@@ -1,8 +1,12 @@
-import { type KeyboardEvent, useEffect, useRef, useState } from "react";
-import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
+import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
+import { PanelLayout } from "@/components/system/AuxPanel";
+import { KeyNotice, useKeyNotice } from "@/components/system/KeyNotice";
+import { ListPanel } from "@/components/system/ListPanel";
+import { ScrollArea } from "@/components/system/ScrollArea";
+import { SelectionBar } from "@/components/system/SelectionBar";
 import { useNow } from "@/features/attention/useNow";
 import { BoardFilterBar } from "@/features/board/BoardFilterBar";
-import { BoardHeader } from "@/features/board/BoardHeader";
+import { BoardHeader, NEW_DISCUSSION_ID } from "@/features/board/BoardHeader";
 import {
   FailureStrip,
   NeverReadFailed,
@@ -12,39 +16,50 @@ import {
 } from "@/features/board/BoardReadingStates";
 import {
   type BoardFilters,
+  boardRows,
+  cardRowModel,
+  discussNotice,
   EMPTY_FILTERS,
+  epicChildren,
   filterCards,
+  filteredTooltip,
+  filtersActive,
   isCheckable,
+  newDiscussionNotice,
   readingView,
   sections,
+  selectNotice,
   showsFailureStrip,
+  startNotice,
 } from "@/features/board/board-view";
 import { CardDetail } from "@/features/board/CardDetail";
-import { CardList } from "@/features/board/CardList";
-import { SelectionBar } from "@/features/board/SelectionBar";
+import { CardTree } from "@/features/board/CardTree";
 import { useBoardViewMemory } from "@/features/board/useBoardViewMemory";
 import { useStartCard } from "@/features/board/useStartCard";
 import type { Board, BoardCard } from "@/lib/wails";
-import { refreshBoard } from "@/store/actions";
-import { useAppStore, useBoard } from "@/store/app-store";
+import { openExternal, refreshBoard } from "@/store/actions";
+import { useAppStore, useBoard, useRepository } from "@/store/app-store";
 
 /** READING_CLOCK_MS is how often the time since the last reading is told again: a minute. */
 const READING_CLOCK_MS = 60_000;
 
+/** FLASH_MS is how long a card a new reading brought stays flagged: its blink, twice (--duration-slow). */
+const FLASH_MS = 2 * 280;
+
 /** COLUMN is the reading column of the list: --list-measure on whole pixels, with --space-6 at each side at least. */
-const COLUMN = "mx-auto w-[min(round(down,var(--list-measure),1px),100%-2*var(--space-6))]";
+const COLUMN =
+  "mx-auto w-[min(round(down,var(--list-measure),1px),100%-2*var(--space-6))] pb-(--space-12)";
 
 /** NO_CARDS stands for a board whose reading brought no cards, always the same array. */
 const NO_CARDS: BoardCard[] = [];
 
-const LIST_PANEL = "board-cards";
-const DETAIL_PANEL = "board-card-detail";
+const NO_KEYS: ReadonlySet<string> = new Set();
 
 export interface BoardViewProps {
   boardId: string;
 }
 
-/** BoardView is a board on screen: its cards, filtered and grouped by status, and the one open in the detail. */
+/** BoardView is a board on screen: its cards, filtered and grouped by status, and the one open in the panel. */
 export function BoardView({ boardId }: BoardViewProps) {
   const board = useBoard(boardId);
 
@@ -54,7 +69,7 @@ export function BoardView({ boardId }: BoardViewProps) {
   }, [boardId]);
 
   if (board === null) {
-    return <section className="min-h-0 flex-1 bg-background" />;
+    return <section className="min-h-0 flex-1" />;
   }
   // Each board remembers its own filters and sections.
   return <BoardScreen key={boardId} board={board} />;
@@ -70,36 +85,88 @@ function isTyping(target: EventTarget): boolean {
 function BoardScreen({ board }: { board: Board }) {
   const [memory, setMemory] = useBoardViewMemory(board.id);
   const app = useAppStore((state) => state.app);
-  const searchRef = useRef<HTMLInputElement>(null);
-  const listRef = useRef<HTMLDivElement>(null);
-  const now = useNow(READING_CLOCK_MS, board.readAt !== "" || board.failure !== null);
-  // The cards picked for a discussion are local to the view: they go when it does.
-  const [checked, setChecked] = useState<ReadonlySet<string>>(new Set());
-  const [selectedKey, select] = useState<string | null>(null);
-  const cards = board.cards ?? NO_CARDS;
-  const selected = cards.find((card) => card.key === selectedKey) ?? null;
-  const start = useStartCard(board, selected);
   const openNewDiscussion = useAppStore((state) => state.openNewDiscussion);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const treeRef = useRef<HTMLDivElement>(null);
+  const now = useNow(READING_CLOCK_MS, board.readAt !== "" || board.failure !== null);
+  const notice = useKeyNotice();
+  const cards = board.cards ?? NO_CARDS;
 
-  // A card gone from the reading takes the selection with it.
-  useEffect(() => {
-    if (selectedKey !== null && selected === null) {
-      select(null);
-    }
-  }, [selectedKey, selected]);
+  const [openKey, setOpenKey] = useState<string | null>(null);
+  // The last card opened: a reading without it leaves it here, out of the reading.
+  const [openCard, setOpenCard] = useState<BoardCard | null>(null);
+  const [selecting, setSelecting] = useState(false);
+  const [checked, setChecked] = useState<string[]>([]);
+  const [cloneFor, setCloneFor] = useState<{ key: string } | null>(null);
+  const [newKeys, setNewKeys] = useState<ReadonlySet<string>>(NO_KEYS);
+  const start = useStartCard(board, openCard, (key) => setCloneFor({ key }));
 
-  // A card gone from the reading also leaves the selection.
+  const cardKeys = useMemo(() => new Set(cards.map((card) => card.key)), [cards]);
+
+  // A new reading refreshes the open card, and takes from the selection the cards it lost.
   useEffect(() => {
+    setOpenCard((current) => cards.find((card) => card.key === current?.key) ?? current);
     setChecked((current) => {
-      const kept = [...current].filter((key) => cards.some((card) => card.key === key));
-      return kept.length === current.size ? current : new Set(kept);
+      const kept = current.filter((key) => cardKeys.has(key));
+      return kept.length === current.length ? current : kept;
     });
-  }, [cards]);
+  }, [cards, cardKeys]);
 
-  const collapsed = new Set(memory.collapsed);
-  const filtered = filterCards(board, memory.filters);
-  const cardSections = sections(board, filtered);
+  // The cards a reading brings that the one before did not have flash, when it had any.
+  const readKeys = useRef(cardKeys);
+  useEffect(() => {
+    const before = readKeys.current;
+    readKeys.current = cardKeys;
+    const brought = [...cardKeys].filter((key) => !before.has(key));
+    if (before.size === 0 || brought.length === 0) {
+      return;
+    }
+    setNewKeys(new Set(brought));
+    const timer = setTimeout(() => setNewKeys(NO_KEYS), FLASH_MS);
+    return () => clearTimeout(timer);
+  }, [cardKeys]);
 
+  const collapsed = useMemo(() => new Set(memory.collapsed), [memory.collapsed]);
+  const filtered = useMemo(() => filterCards(board, memory.filters), [board, memory.filters]);
+  const rows = useMemo(
+    () => boardRows(sections(board, filtered), collapsed),
+    [board, filtered, collapsed],
+  );
+  const children = useMemo(() => epicChildren(cards), [cards]);
+
+  const cloneCard =
+    cloneFor === null ? null : (cards.find((card) => card.key === cloneFor.key) ?? null);
+  const cloneRepository = useRepository(cloneCard?.repositoryId ?? "");
+  const cloneState: "cloning" | "failed" | null =
+    cloneFor === null
+      ? null
+      : cloneRepository?.cloning
+        ? "cloning"
+        : (cloneRepository?.cloneError ?? "") !== "" ||
+            (start.error !== null && openKey === cloneFor.key)
+          ? "failed"
+          : null;
+  const cloneKey = cloneFor?.key ?? null;
+  const models = useMemo(() => {
+    if (app === null) {
+      return new Map();
+    }
+    const ctx = {
+      app,
+      board,
+      now,
+      children,
+      cloneFor:
+        cloneKey === null || cloneState === null ? null : { key: cloneKey, state: cloneState },
+    };
+    return new Map(
+      rows.flatMap((row) =>
+        row.kind === "card" ? [[row.card.key, cardRowModel(row.card, ctx)]] : [],
+      ),
+    );
+  }, [app, board, now, children, rows, cloneKey, cloneState]);
+
+  const checkable = (card: BoardCard) => isCheckable(card, app, board.id);
   const setFilters = (filters: BoardFilters) => setMemory((current) => ({ ...current, filters }));
   const toggleSection = (id: string) =>
     setMemory((current) => ({
@@ -108,50 +175,180 @@ function BoardScreen({ board }: { board: Board }) {
         ? current.collapsed.filter((other) => other !== id)
         : [...current.collapsed, id],
     }));
-  const startCard = (card: BoardCard) => {
-    select(card.key);
-    start.run(card);
-  };
-  const toggleChecked = (card: BoardCard) =>
-    setChecked((current) => {
-      const next = new Set(current);
-      if (!next.delete(card.key)) {
-        next.add(card.key);
-      }
-      return next;
-    });
-  const clearChecked = () => setChecked(new Set());
-  const checkable = (card: BoardCard) => isCheckable(card, app, board.id);
-  const openDiscuss = (cardKeys: string[]) =>
+  const discuss = (cardKeys: string[]) =>
     openNewDiscussion({ boardId: board.id, cardKeys, askBoard: false });
 
-  const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
-    // Dialogs render in a portal: their keys are not the view's.
-    if (!(event.target instanceof Node) || !event.currentTarget.contains(event.target)) {
+  const focusRow = (key: string | null) => {
+    const row =
+      key === null
+        ? null
+        : Array.from(treeRef.current?.querySelectorAll<HTMLElement>("[data-row-key]") ?? []).find(
+            (element) => element.getAttribute("data-row-key") === key,
+          );
+    (row ?? treeRef.current?.querySelector<HTMLElement>('[tabindex="0"]'))?.focus();
+  };
+  const openInPanel = (card: BoardCard) => {
+    setOpenKey(card.key);
+    setOpenCard(card);
+  };
+  const closePanel = () => {
+    setOpenKey(null);
+    setOpenCard(null);
+    focusRow(openKey);
+  };
+  // The panel mounts after the key that opened it: the focus waits a frame.
+  const focusPrimary = () =>
+    requestAnimationFrame(() =>
+      document.querySelector<HTMLElement>(".list-panel [data-primary-action]")?.focus(),
+    );
+  const enterSelecting = () => {
+    setSelecting(true);
+    setChecked([]);
+    setOpenKey(null);
+    setOpenCard(null);
+    requestAnimationFrame(() => focusRow(null));
+  };
+  const toggleChecked = (card: BoardCard, anchor: Element | null) => {
+    const text = app === null ? null : selectNotice(card, app, board.id);
+    if (text !== null) {
+      notice.show(anchor ?? treeRef.current ?? document.body, text);
       return;
     }
-    if (event.key === "/" && !isTyping(event.target)) {
+    setChecked((current) =>
+      current.includes(card.key)
+        ? current.filter((key) => key !== card.key)
+        : [...current, card.key],
+    );
+  };
+  const activateCard = (card: BoardCard) => {
+    if (selecting) {
+      toggleChecked(card, treeRef.current?.querySelector(`[data-row-key="${card.key}"]`) ?? null);
+    } else if (openKey === card.key) {
+      setOpenKey(null);
+      setOpenCard(null);
+    } else {
+      openInPanel(card);
+    }
+  };
+  const startCard = (card: BoardCard) => {
+    if (card.action === "clone" || card.action === "add_to_board") {
+      openInPanel(card);
+    }
+    if (start.run(card) === "focus-primary") {
+      focusPrimary();
+    }
+  };
+
+  const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    const target = event.target;
+    // Dialogs and menus render in a portal: their keys are not the view's.
+    if (!(target instanceof Element) || !event.currentTarget.contains(target)) {
+      return;
+    }
+    if (event.altKey || event.ctrlKey || event.metaKey || isTyping(target) || app === null) {
+      return;
+    }
+    if (event.key === "Escape") {
+      if (notice.notice !== null) {
+        notice.hide();
+      } else if (openKey !== null) {
+        closePanel();
+      } else if (selecting) {
+        setSelecting(false);
+        setChecked([]);
+      } else {
+        return;
+      }
       event.preventDefault();
-      searchRef.current?.focus();
-    } else if (event.key === "Escape" && selectedKey !== null) {
+      return;
+    }
+
+    const rowElement = target.closest<HTMLElement>("[data-row-key]");
+    const panel = target.closest(".list-panel");
+    const rowCard =
+      rowElement === null
+        ? undefined
+        : cards.find((card) => card.key === rowElement.getAttribute("data-row-key"));
+    const panelCard = panel !== null ? openCard : null;
+    const card = rowCard ?? panelCard;
+    const inList = target.closest('[role="tree"]') !== null;
+    const anchor =
+      rowElement ??
+      panel?.querySelector("[data-panel-actions]") ??
+      treeRef.current?.querySelector('[tabindex="0"]') ??
+      target;
+    const key = event.key.toLowerCase();
+
+    if (key === "n") {
       event.preventDefault();
-      select(null);
+      const text = newDiscussionNotice(board);
+      const button = document.getElementById(NEW_DISCUSSION_ID);
+      if (text !== null) {
+        notice.show(button ?? target, text);
+      } else {
+        discuss([]);
+      }
+    } else if (key === "/") {
+      if (!selecting && searchRef.current !== null) {
+        event.preventDefault();
+        searchRef.current.focus();
+      }
+    } else if (key === "d" && (selecting ? inList : card !== null && (inList || panel !== null))) {
+      event.preventDefault();
+      const outOfReadingCard =
+        rowCard === undefined && panelCard !== null && !cardKeys.has(panelCard.key);
+      const text = discussNotice(card, app, board.id, {
+        outOfReading: outOfReadingCard,
+        selecting,
+        selected: checked.length,
+      });
+      if (text !== null) {
+        notice.show(anchor, text);
+      } else {
+        discuss(selecting ? checked : card === null ? [] : [card.key]);
+      }
+    } else if (
+      key === "s" &&
+      !selecting &&
+      card !== null &&
+      (rowCard !== undefined || panel !== null)
+    ) {
+      event.preventDefault();
+      const outOfReadingCard =
+        rowCard === undefined && panelCard !== null && !cardKeys.has(panelCard.key);
+      const text = startNotice(card, app, outOfReadingCard);
+      if (text !== null) {
+        notice.show(anchor, text);
+      } else {
+        startCard(card);
+      }
+    } else if (event.key === " " && rowCard !== undefined) {
+      event.preventDefault();
+      if (selecting) {
+        toggleChecked(rowCard, rowElement);
+      } else {
+        const text = selectNotice(rowCard, app, board.id);
+        if (text !== null) {
+          notice.show(anchor, text);
+        } else {
+          setSelecting(true);
+          setChecked([rowCard.key]);
+          setOpenKey(null);
+          setOpenCard(null);
+        }
+      }
     }
   };
 
   const view = readingView(board, filtered);
-  const checkableCards = filtered.filter(checkable);
   const selectDisabledReason =
     board.readAt === ""
       ? "the board hasn't been read yet"
-      : checked.size > 0
+      : selecting
         ? "already selecting"
-        : checkableCards.length === 0
+        : !filtered.some(checkable)
           ? "no card to select"
           : null;
-  // The list takes the focus at its tab stop.
-  const focusList = () =>
-    listRef.current?.querySelector<HTMLElement>('[role="tree"] [tabindex="0"]')?.focus();
 
   let content: React.ReactNode = null;
   if (view.kind === "skeleton") {
@@ -159,12 +356,63 @@ function BoardScreen({ board }: { board: Board }) {
   } else if (view.kind === "never-read-failed") {
     content = <NeverReadFailed board={board} />;
   } else if (view.kind === "no-cards") {
-    content = <NoCards onNewDiscussion={() => openDiscuss([])} />;
+    content = <NoCards onNewDiscussion={() => discuss([])} />;
   } else if (view.kind === "no-match") {
     content = (
       <NoMatch board={board} filters={memory.filters} onClear={() => setFilters(EMPTY_FILTERS)} />
     );
+  } else {
+    content = (
+      <CardTree
+        board={board}
+        rows={rows}
+        models={models}
+        openKey={openKey}
+        selecting={selecting}
+        checked={checked}
+        checkable={checkable}
+        newKeys={newKeys}
+        treeRef={treeRef}
+        onToggleSection={toggleSection}
+        onActivateCard={activateCard}
+      />
+    );
   }
+
+  const numbers = checked
+    .map((key) => cards.find((card) => card.key === key))
+    .flatMap((card) => (card === undefined ? [] : [`#${card.number}`]))
+    .join(" ");
+  const bar =
+    board.readAt !== "" && cards.length > 0 ? (
+      selecting ? (
+        <div className="sticky top-0 z-(--z-sticky) bg-surface-1 pt-(--space-4) pb-(--space-3)">
+          <SelectionBar
+            count={checked.length}
+            numbers={numbers}
+            filtered={filtersActive(memory.filters)}
+            filteredTooltip={filteredTooltip(memory.filters, board.viewer)}
+            onDiscuss={() => discuss(checked)}
+            onCancel={() => {
+              setSelecting(false);
+              setChecked([]);
+            }}
+          />
+        </div>
+      ) : (
+        <BoardFilterBar
+          board={board}
+          filters={memory.filters}
+          onChange={setFilters}
+          searchRef={searchRef}
+          onSearchEscape={(event) => {
+            event.preventDefault();
+            focusRow(null);
+          }}
+          onSearchDown={() => focusRow(null)}
+        />
+      )
+    ) : null;
 
   return (
     <section
@@ -175,76 +423,47 @@ function BoardScreen({ board }: { board: Board }) {
       <BoardHeader
         board={board}
         now={now}
-        onNewDiscussion={() => openDiscuss([])}
-        onEnterSelect={focusList}
+        onNewDiscussion={() => discuss([])}
+        onEnterSelect={enterSelecting}
         selectDisabledReason={selectDisabledReason}
       />
-      <div className="board-list-area shrink-0">
-        <div className={COLUMN}>
-          {showsFailureStrip(board) && <FailureStrip board={board} now={now} />}
-          {board.readAt !== "" && cards.length > 0 && (
-            <BoardFilterBar
-              board={board}
-              filters={memory.filters}
-              onChange={setFilters}
-              searchRef={searchRef}
-              onSearchEscape={(event) => {
-                event.preventDefault();
-                focusList();
-              }}
-              onSearchDown={focusList}
-            />
-          )}
-          {content}
-        </div>
-      </div>
-      {checked.size > 0 && (
-        <SelectionBar
-          count={checked.size}
-          onDiscuss={() => openDiscuss([...checked])}
-          onClear={clearChecked}
-        />
-      )}
-      <div ref={listRef} className="flex min-h-0 flex-1 flex-col">
-        {view.kind === "list" && (
-          <ResizablePanelGroup orientation="horizontal" className="min-h-0 flex-1">
-            <ResizablePanel id={LIST_PANEL} defaultSize="60%" className="min-w-0">
-              <CardList
-                sections={cardSections}
-                collapsed={collapsed}
-                selectedKey={selectedKey}
-                onToggleSection={toggleSection}
-                onSelect={select}
-                onStart={startCard}
-                checked={checked}
-                isCheckable={checkable}
-                onToggleChecked={toggleChecked}
-                onDiscuss={(card) => openDiscuss(card === null ? [...checked] : [card.key])}
+      <PanelLayout
+        panel={
+          openCard !== null && (
+            <ListPanel
+              label={`Card #${openCard.number}`}
+              number={`#${openCard.number}`}
+              repository={openCard.repository}
+              url={openCard.url}
+              onOpenExternal={(url) => void openExternal(url)}
+              onClose={closePanel}
+              scrollKey={openCard.key}
+            >
+              <CardDetail
+                board={board}
+                card={openCard}
+                start={start}
+                onSelect={(key) => {
+                  const next = cards.find((card) => card.key === key);
+                  if (next !== undefined) {
+                    openInPanel(next);
+                  }
+                }}
+                onDiscuss={() => discuss([openCard.key])}
               />
-            </ResizablePanel>
-            {selected !== null && (
-              <>
-                <ResizableHandle />
-                <ResizablePanel
-                  id={DETAIL_PANEL}
-                  defaultSize="40%"
-                  minSize="25%"
-                  className="min-w-0"
-                >
-                  <CardDetail
-                    board={board}
-                    card={selected}
-                    start={start}
-                    onClose={() => select(null)}
-                    onSelect={select}
-                    onDiscuss={() => openDiscuss([selected.key])}
-                  />
-                </ResizablePanel>
-              </>
-            )}
-          </ResizablePanelGroup>
-        )}
-      </div>
+            </ListPanel>
+          )
+        }
+      >
+        <ScrollArea className="board-list-area min-h-0 flex-1">
+          <div className={COLUMN}>
+            {showsFailureStrip(board) && <FailureStrip board={board} now={now} />}
+            {bar}
+            {content}
+          </div>
+        </ScrollArea>
+      </PanelLayout>
+      <KeyNotice notice={notice.notice} onHide={notice.hide} />
     </section>
   );
 }

@@ -45,7 +45,7 @@ describe("StartTaskAction", () => {
     const uncloned = { cloned: false, path: "" };
     const { user } = action(makeBoardCard({ action: "clone" }), uncloned);
 
-    await user.click(screen.getByRole("button", { name: /^Start task/ }));
+    expect(screen.queryByRole("button", { name: /^Start task/ })).not.toBeInTheDocument();
     expect(screen.getByText("dev/web isn't cloned yet.")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Clone and continue" }));
 
@@ -62,7 +62,6 @@ describe("StartTaskAction", () => {
     vi.mocked(api.cloneRepository).mockResolvedValue(false);
     const { user } = action(makeBoardCard({ action: "clone" }), { cloned: false, path: "" });
 
-    await user.click(screen.getByRole("button", { name: /^Start task/ }));
     await user.click(screen.getByRole("button", { name: "Clone and continue" }));
 
     expect(useAppStore.getState().pendingStart).toBeNull();
@@ -72,7 +71,6 @@ describe("StartTaskAction", () => {
     vi.mocked(api.cloneRepository).mockRejectedValue(new Error("Choose a clone folder first."));
     const { user } = action(makeBoardCard({ action: "clone" }), { cloned: false, path: "" });
 
-    await user.click(screen.getByRole("button", { name: /^Start task/ }));
     await user.click(screen.getByRole("button", { name: "Clone and continue" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Choose a clone folder first.");

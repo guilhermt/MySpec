@@ -1,4 +1,4 @@
-import { ExternalLink as ExternalLinkIcon, TriangleAlert, X } from "lucide-react";
+import { TriangleAlert } from "lucide-react";
 import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,7 +16,6 @@ export interface CardDetailProps {
   board: Board;
   card: BoardCard;
   start: StartCard;
-  onClose: () => void;
   /** onSelect opens another card of the board in the detail. */
   onSelect: (key: string) => void;
   /** onDiscuss opens a discussion of this card alone. */
@@ -50,8 +49,8 @@ function PullRequestLink({ pr }: { pr: CardPullRequest }) {
   );
 }
 
-/** CardDetail is everything the last reading found about one card, and Start task for it. */
-export function CardDetail({ board, card, start, onClose, onSelect, onDiscuss }: CardDetailProps) {
+/** CardDetail is the body of the panel of a card: everything the last reading found about it, and Start task for it. */
+export function CardDetail({ board, card, start, onSelect, onDiscuss }: CardDetailProps) {
   const openTask = useAppStore((state) => state.openTask);
   const openArchived = useAppStore((state) => state.openArchived);
   const task = useTask(card.activeTaskId === "" ? null : card.activeTaskId);
@@ -63,28 +62,11 @@ export function CardDetail({ board, card, start, onClose, onSelect, onDiscuss }:
   const pullRequests = card.pullRequests ?? [];
 
   return (
-    <aside
-      aria-label={`Card ${issueLabel(card)}`}
-      className="flex h-full min-w-0 flex-col gap-4 overflow-y-auto border-l p-4 text-sm"
-    >
-      <div className="flex items-start gap-2">
-        <h2 className="min-w-0 flex-1 font-medium">{card.title}</h2>
-        <Button variant="ghost" size="icon-xs" aria-label="Close card" onClick={onClose}>
-          <X aria-hidden="true" />
-        </Button>
-      </div>
+    <div className="flex min-w-0 flex-col gap-4 p-4 text-sm">
+      <h2 className="font-medium">{card.title}</h2>
       <div className="flex flex-wrap items-center gap-2 text-muted-foreground">
-        <span className="tabular-nums">{issueLabel(card)}</span>
-        <span>{card.repository}</span>
         <Badge variant="secondary">{stateLabel(asIssueState(card.state))}</Badge>
         {card.status !== "" && <Badge variant="outline">{card.status}</Badge>}
-        <ExternalLink
-          href={card.url}
-          aria-label="Open on GitHub"
-          className="inline-flex items-center hover:text-foreground"
-        >
-          <ExternalLinkIcon aria-hidden="true" className="size-3.5" />
-        </ExternalLink>
       </div>
 
       {fields.length > 0 && (
@@ -205,6 +187,6 @@ export function CardDetail({ board, card, start, onClose, onSelect, onDiscuss }:
         </Section>
       )}
       <StartTaskAction board={board} card={card} start={start} onDiscuss={onDiscuss} />
-    </aside>
+    </div>
   );
 }
