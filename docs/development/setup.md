@@ -50,13 +50,15 @@ O hook, definido em `lefthook.yml`, é de pre-commit e só formata: Biome nos ar
 | `task fmt` | Formata Go e frontend |
 | `task lint` | `lint:go` (golangci-lint) e `lint:web` (Biome) |
 | `task typecheck` | `tsc --noEmit` no frontend |
-| `task test` | `test:go` (gotestsum, race, shuffle, limiar de cobertura) e `test:web` (a suíte do Vitest no jsdom, com cobertura, e a de estilo computado no Chromium) |
+| `task test` | `test:go` (os testes Go, com o cache de testes) e `test:web` (os testes do frontend que a branch alcança), sem cobertura ([testing.md](../guidelines/testing.md)) |
+| `task test:full` | Todos os testes, com race, embaralhamento, cobertura e os limiares |
 | `task vuln` | `govulncheck ./...` |
 | `task tidy:check` | Falha quando `go.mod` e `go.sum` não estão tidy |
 | `task bindings:check` | Falha quando `frontend/bindings` está desatualizado |
 | `task captures` | Roda a suíte de estilo computado com `MYSPEC_CAPTURES=1`, que grava em `frontend/captures/` as capturas da pull request, depois de apagar as anteriores |
 | `task captures:push` | Publica `frontend/captures/*.png` na branch órfã `captures/<branch atual>` do `origin`, reescrita a cada vez, e imprime o Markdown das imagens para o corpo da pull request |
-| `task check` | Tudo que o CI roda, em ordem |
+| `task check` | A verificação de todo dia, em segundos: tidy, lint, typecheck, `test`, vuln e bindings, com `nice` |
+| `task check:full` | A verificação completa, com `test:full` no lugar de `test`; só quando pedido |
 | `task install` | Instala o app para o usuário atual |
 | `task uninstall` | Remove o que `install` colocou; nunca toca os dados do app |
 

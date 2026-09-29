@@ -7,6 +7,14 @@ vars:
   PACKAGE_MANAGER: pnpm
   VITE_PORT: '{{.WAILS_VITE_PORT | default 9245}}'
   MODULE: github.com/guilhermt/myspec
+  # JOBS caps the parallelism of each tool in a run. Agents run the checks side by side and every
+  # tool defaults to all the cores, so an uncapped run takes the machine. MYSPEC_JOBS overrides it;
+  # the default is 4, or the cores there are when there are fewer.
+  JOBS:
+    sh: 'n=$(nproc); echo "${MYSPEC_JOBS:-$(( n < 4 ? n : 4 ))}"'
+  # The branch point with main, from which test:web picks the frontend tests to run.
+  BASE:
+    sh: git merge-base HEAD origin/main 2>/dev/null || echo HEAD
 
 includes:
   common: ./build/Taskfile.yml
@@ -66,7 +74,7 @@ tasks:
   lint:go:
     deps: [embed:stub]
     cmds:
-      - golangci-lint run ./...
+      - golangci-lint run --concurrency {{.JOBS}} ./...
 
   lint:web:
     cmds:
@@ -81,18 +89,34 @@ tasks:
     deps: [test:go, test:web]
 
   test:go:
+    summary: Runs the Go tests; a package that did not change comes from the test cache. The CI adds -race with `task test:go -- -race`
+    deps: [embed:stub]
+    cmds:
+      - gotestsum --format pkgname-and-test-fails -- -p {{.JOBS}} {{.CLI_ARGS}} ./...
+
+  test:web:
+    summary: Runs the frontend tests, both suites, that reach a file changed since the branch left main
+    dir: frontend
+    cmds:
+      - pnpm exec vitest run --changed {{.BASE}} --passWithNoTests --maxWorkers={{.JOBS}}
+
+  test:full:
+    deps: [test:go:full, test:web:full]
+
+  test:go:full:
+    summary: Runs every Go test with the race detector, in shuffled order, with coverage and its thresholds
     deps: [embed:stub]
     cmds:
       - mkdir -p coverage
-      - gotestsum --format testdox -- -race -shuffle=on -count=1 -covermode=atomic -coverprofile=coverage/go.out ./...
+      - gotestsum --format testdox -- -race -shuffle=on -count=1 -p {{.JOBS}} -coverprofile=coverage/go.out ./...
       - go-test-coverage --config .testcoverage.yml
 
-  test:web:
-    summary: Runs the jsdom suite with coverage, then the computed-style suite in Chromium
+  test:web:full:
+    summary: Runs the jsdom suite with coverage and its thresholds, then the computed-style suite in Chromium
     dir: frontend
     cmds:
-      - pnpm test:coverage
-      - pnpm test:painted
+      - pnpm test:coverage --maxWorkers={{.JOBS}}
+      - pnpm test:painted --maxWorkers={{.JOBS}}
 
   captures:
     summary: Runs the computed-style suite saving the screenshots of the pull request to frontend/captures
@@ -165,14 +189,14 @@ tasks:
       - git diff --exit-code -- frontend/bindings
 
   check:
-    summary: Everything the CI runs, in order
+    summary: The everyday check, in seconds
     cmds:
-      - task: tidy:check
-      - task: lint
-      - task: typecheck
-      - task: test
-      - task: vuln
-      - task: bindings:check
+      - nice -n 10 "{{.TASK_EXE}}" tidy:check lint typecheck test vuln bindings:check
+
+  check:full:
+    summary: Every test with the race detector, the shuffle and coverage; run on request and weekly in the CI
+    cmds:
+      - nice -n 10 "{{.TASK_EXE}}" tidy:check lint typecheck test:full vuln bindings:check
 
   install:
     summary: Installs the app for the current user (binary, launcher entry, icons)

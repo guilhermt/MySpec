@@ -29,6 +29,6 @@ A documentação é escrita em português; a interface, o código, os identifica
 ## Desenvolvimento
 
 - [setup.md](./development/setup.md): pré-requisitos, setup, comandos, instalação, VS Code e variáveis de ambiente.
-- [ci.md](./development/ci.md): o pipeline, a cobertura nas pull requests e o Dependabot.
+- [ci.md](./development/ci.md): a verificação de todo dia, a completa com cobertura e o Dependabot.
 - [troubleshooting.md](./development/troubleshooting.md): o log, o que cada linha significa e os problemas conhecidos.
 - [target-machine.md](./development/target-machine.md): as verificações feitas na máquina alvo e os comportamentos do Wails que exigiram contorno.

@@ -1,31 +1,27 @@
 # Integração contínua
 
-`.github/workflows/ci.yml` roda a cada push em `main` e a cada pull request para `main`. O repositório só usa `main`; não há branch `dev`. Uma execução nova no mesmo ref cancela a anterior.
+Dois workflows. `.github/workflows/ci.yml` é a verificação de todo dia: roda a cada pull request para `main` e a cada push em `main`, e uma execução nova no mesmo ref cancela a anterior. `.github/workflows/full.yml` é a verificação completa, com cobertura: roda toda segunda-feira e sob demanda, pelo **Run workflow** da aba Actions. O repositório só usa `main`; não há branch `dev`.
 
-## Jobs
+O runner de um repositório privado tem 2 vCPUs e 8 GB, e cada job é cobrado em minutos inteiros, arredondados para cima. Por isso o `ci.yml` roda só o que uma mudança alcança, sem cobertura, e os jobs rodam lado a lado.
 
-| Job | O que roda |
-|---|---|
-| `Frontend` | `pnpm install --frozen-lockfile`, `task lint:web`, `pnpm typecheck`, `pnpm test:coverage`, a instalação do Chromium do Playwright e `pnpm test:painted` |
-| `Go` | `task tidy:check`, `task lint:go`, `task vuln`, `task test:go` |
-| `Build` | `task bindings:check` e `task build`, depois de os outros dois passarem |
+## Verificação de todo dia
 
-Juntos cobrem o mesmo terreno que `task check`, então um `task check` verde na máquina é o melhor preditor de um pipeline verde.
+| Job | O que roda | Quando |
+|---|---|---|
+| `Changes` | `dorny/paths-filter`, que diz quais áreas a pull request toca | Pull request |
+| `Frontend` | `pnpm install --frozen-lockfile`, `task lint:web`, `pnpm typecheck`, a instalação do Chromium do Playwright e `pnpm test`, as duas suítes inteiras, sem cobertura | Pull request que toca o frontend |
+| `Go` | `task tidy:check`, `task lint:go`, `task vuln`, `task bindings:check` e `task test:go -- -race` | Pull request que toca o Go; todo push em `main` |
+| `Build` | `task build`, que envia o binário como `myspec-linux-amd64`, guardado por sete dias | Pull request que toca `build/`, as dependências do Go ou do frontend, ou `vite.config.ts` |
 
-A toolchain vem de `mise.toml` pelo `jdx/mise-action`, o que mantém o CI e a máquina nas mesmas versões. Os jobs `Go` e `Build` instalam `libgtk-4-dev` e `libwebkitgtk-6.0-dev`, que o cgo precisa e a imagem do runner não traz; o `Frontend` instala o Chromium do Playwright com as bibliotecas de sistema dele, para a suíte de estilo computado, com o `~/.cache/ms-playwright` em cache pela versão do `playwright`. O store do pnpm, o cache de módulos e o cache de build do Go são preservados entre execuções.
+O frontend é `frontend/**` e `biome.json`; o Go é `*.go`, `go.mod`, `go.sum`, `internal/**` e `.golangci.yml`; `Taskfile.yml`, `mise.toml` e o workflow contam para todas as áreas. Uma pull request só de documentação ou de `design/` roda só `Changes`. O filtro fica num job, e não em `on.paths`, para que cada job sempre reporte um status: um job pulado pelo `if` conta como aprovado, e um workflow que não roda deixa o check pendente.
 
-## Cobertura nas pull requests
+O frontend roda as suítes inteiras, e não só o que a mudança alcança como `task check` faz na máquina, porque o `--changed` do Vitest não segue imports dinâmicos nem o CSS. O Go roda com o detector de corrida e sai barato mesmo assim: o push em `main` grava o cache do Go com os resultados dos testes, e numa pull request um pacote que ela não alcança vem desse cache.
 
-Os dois jobs de teste comentam a cobertura na pull request:
+A toolchain vem de `mise.toml` pelo `jdx/mise-action`, o que mantém o CI e a máquina nas mesmas versões. Os jobs `Go` e `Build` instalam `libgtk-4-dev` e `libwebkitgtk-6.0-dev`, que o cgo precisa e a imagem do runner não traz, e o `wails3` por `go install tool`. O `Frontend` instala o Chromium do Playwright com as bibliotecas de sistema dele, com o `~/.cache/ms-playwright` em cache pela versão do `playwright`. O store do pnpm e o cache de módulos e de build do Go são preservados entre execuções. O do Go é gravado só em `main`, com o commit na chave, porque uma chave de cache nunca é reescrita: toda execução parte do cache do último `main`.
 
-- `vitest-coverage-report-action` posta o resumo do frontend.
-- `go-coverage-report` compara o `coverage/go.out` da execução com o artefato da última execução bem-sucedida em `main` e posta a diferença. O artefato é enviado em toda execução, `main` incluída, o que dá às pull requests seguintes uma base de comparação.
+## Verificação completa
 
-Nenhuma das duas actions aceita texto extra, então `.github/scripts/coverage_comment.py` acrescenta a cada comentário uma linha com o resumo da execução dos testes, lendo o JSON do Vitest e o JUnit do gotestsum, e a substitui em vez de empilhar numa segunda execução.
-
-Os limiares que fazem os testes falharem estão em `.testcoverage.yml` para o Go (60% por arquivo, 70% por pacote, 80% no total, excluindo `internal/app`, `main.go` e os pacotes de fakes) e em `frontend/vitest.config.ts` para o frontend (80% de linhas, funções e statements, 70% de branches, excluindo `components/ui`, `test/` e `main.tsx`), medidos só na suíte do jsdom.
-
-O job `Build` envia o binário como `myspec-linux-amd64`, guardado por sete dias.
+Um job só roda `task check:full`, com o detector de corrida, o embaralhamento, a cobertura e os limiares, e as duas suítes do frontend inteiras, e depois `task build`. É onde a cobertura é medida: os limiares estão em `.testcoverage.yml` para o Go (60% por arquivo, 70% por pacote, 80% no total, excluindo `internal/app`, `main.go` e os pacotes de fakes) e em `frontend/vitest.config.ts` para o frontend (80% de linhas, funções e statements, 70% de branches, excluindo `components/ui`, `test/` e `main.tsx`), medidos só na suíte do jsdom.
 
 ## Dependabot
 
@@ -33,6 +29,4 @@ O job `Build` envia o binário como `myspec-linux-amd64`, guardado por sete dias
 
 ## Notas
 
-- As actions são pinadas na major atual (`checkout@v7`, `mise-action@v4`, `cache@v6`, `upload-artifact@v7`).
-- `go-coverage-report` é pinado em `v1.3.1`, porque o repositório dele não publica uma tag de major móvel e `@v1` não resolve.
-- `go-coverage-report` recebe `root-package` explícito, porque o padrão seria `github.com/<owner>/<repo>` com o nome do repositório no GitHub, e o módulo é `github.com/guilhermt/myspec`.
+- As actions são pinadas na major atual (`checkout@v7`, `mise-action@v4`, `cache@v6`, `upload-artifact@v7`, `paths-filter@v4`).
