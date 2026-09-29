@@ -124,7 +124,7 @@ export function stepPhaseLabel(phase: string): string {
     case "checking":
       return "Checking the worktree…";
     default:
-      return "Preparing…";
+      return "Preparing the worktree…";
   }
 }
 

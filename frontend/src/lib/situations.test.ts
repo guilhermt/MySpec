@@ -289,6 +289,11 @@ describe("situationFragment", () => {
     [makeSituation({ kind: "question", place: reviewerPlace(2) }), "question in Reviewer"],
     [makeSituation({ kind: "step_empty", place: stepPlace(3) }), "step 3 has no changes in Step 3"],
     [makeSituation({ kind: "new_commits", place: REVIEW_PLACE }), "new commits"],
+    [makeSituation({ kind: "step_blocked", place: stepPlace(5) }), "step 5 blocked"],
+    [makeSituation({ kind: "worktree_unreadable", place: stepPlace(5) }), "can't read worktree"],
+    [makeSituation({ kind: "pr_blocked", place: PR_PLACE }), "PR blocked"],
+    [makeSituation({ kind: "plan_invalid", place: stagePlace("plan") }), "plan still invalid"],
+    [makeSituation({ kind: "findings", place: PR_PLACE }), "decide findings in PR review"],
   ])("tells %o as %s", (situation, expected) => {
     expect(situationFragment(situation)).toBe(expected);
   });

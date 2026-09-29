@@ -1,4 +1,3 @@
-import { ChevronRight } from "lucide-react";
 import type { ComponentProps } from "react";
 import {
   Collapsible as UICollapsible,
@@ -7,6 +6,7 @@ import {
 } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { Icon } from "./Icon";
+import { ICONS } from "./icons";
 
 /** Collapsible is the root of a section that opens and closes. */
 export const Collapsible = UICollapsible;
@@ -26,7 +26,7 @@ export function CollapsibleTrigger({ className, children, ...props }: Collapsibl
       )}
     >
       <Icon
-        icon={ChevronRight}
+        icon={ICONS.chevron}
         size="sm"
         className="transition-transform duration-(--duration-fast) ease-standard group-data-panel-open/collapsible:rotate-90"
       />

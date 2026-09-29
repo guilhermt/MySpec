@@ -4,6 +4,7 @@ import type {
   ReviewSummary,
   Situation,
   SituationGroup,
+  SituationKind,
   State,
   TaskSummary,
 } from "@/lib/wails";
@@ -35,8 +36,11 @@ export function situationTone(situation: Situation): SituationTone {
   return asSituationGroup(situation.group) === "error" ? "error" : "attention";
 }
 
-/** lowerFirst is text with its first letter turned lowercase, the rest untouched. */
+/** lowerFirst is text with its first letter turned lowercase, the rest untouched; a leading acronym (PR) stays. */
 export function lowerFirst(text: string): string {
+  if (/^[A-Z]{2}/.test(text)) {
+    return text;
+  }
   return `${text.charAt(0).toLowerCase()}${text.slice(1)}`;
 }
 
@@ -230,9 +234,25 @@ export function announcePlace(situation: Situation): string | null {
   }
 }
 
+/** PLACE_IN_LABEL are the situations whose label names the place, so the fragment doesn't repeat it. */
+const PLACE_IN_LABEL: readonly SituationKind[] = [
+  "step_blocked",
+  "worktree_unreadable",
+  "pr_blocked",
+  "plan_invalid",
+];
+
 /** situationFragment is what a situation asks and where, as a sentence goes on after a name or a tone: `question in Reviewer`. */
 export function situationFragment(situation: Situation): string {
+  const kind = asSituationKind(situation.kind);
+  if (kind === "findings") {
+    return "decide findings in PR review";
+  }
   const asks = lowerFirst(situationLabel(situation));
+  // These labels already name their place: "step 5 blocked", "PR blocked".
+  if (PLACE_IN_LABEL.includes(kind)) {
+    return asks;
+  }
   const place = announcePlace(situation);
   return place === null ? asks : `${asks} in ${place}`;
 }

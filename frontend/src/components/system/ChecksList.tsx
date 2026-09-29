@@ -2,6 +2,7 @@ import { cn } from "@/lib/utils";
 import { Icon } from "./Icon";
 import { ICONS } from "./icons";
 import { Link } from "./Link";
+import { Shimmer } from "./Shimmer";
 import { StateGlyph } from "./StateGlyph";
 import { Tooltip } from "./Tooltip";
 
@@ -26,6 +27,12 @@ export interface ChecksListProps {
   /** summary is "3 of 5 passed · 2 not finished", "Not read yet" or "No checks". */
   summary: string;
   rows: readonly CheckRowView[];
+  /**
+   * live draws the wait for the checks in place of the summary: the dashed glyph, the header
+   * ("Waiting for checks · 4 of 6 passed", "No checks"), or checking GitHub in a shimmer while
+   * reading, and the age of the reading with its exact time in the tooltip.
+   */
+  live?: { header: string; age: string; ageTooltip: string; reading: boolean };
   /** onOpen opens the url of a check in the browser, since nothing navigates inside the webview. */
   onOpen: (url: string) => void;
 }
@@ -53,12 +60,30 @@ function Glyph({ glyph }: { glyph: CheckGlyph }) {
 /**
  * ChecksList is the checks of a pull request, by name, in a panel: the summary on top and one row per
  * check with its glyph, the name in mono, the state and the duration on the right. A check with a url
- * names itself as an external link, which onOpen opens; without one it stays plain text.
+ * names itself as an external link, which onOpen opens; without one it stays plain text. The live
+ * variant is the wait for the checks: a sunken block with the live header, the rows and no footer.
  */
-export function ChecksList({ summary, rows, onOpen }: ChecksListProps) {
+export function ChecksList({ summary, rows, onOpen, live }: ChecksListProps) {
   return (
-    <div className="flex flex-col gap-(--space-1) text-(length:--text-meta) leading-(--leading-meta)">
-      <p className="text-ink-2">{summary}</p>
+    <div
+      className={cn(
+        "flex flex-col gap-(--space-1) text-(length:--text-meta) leading-(--leading-meta)",
+        live !== undefined && "rounded-md bg-surface-0 px-(--space-3) py-(--space-2)",
+      )}
+    >
+      {live !== undefined ? (
+        <div className="flex items-center gap-(--space-2)">
+          <StateGlyph state="github" size="sm" />
+          <p className="min-w-0 flex-1 text-ink-2">
+            {live.reading ? <Shimmer>checking GitHub</Shimmer> : live.header}
+          </p>
+          <Tooltip content={live.ageTooltip}>
+            <span className="whitespace-nowrap text-ink-4 tabular-nums">{live.age}</span>
+          </Tooltip>
+        </div>
+      ) : (
+        <p className="text-ink-2">{summary}</p>
+      )}
       {rows.length > 0 && (
         <ul aria-label="Checks" className="flex flex-col">
           {rows.map((row, index) => {

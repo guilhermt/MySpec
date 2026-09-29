@@ -734,11 +734,12 @@ func fromAction(a *session.ActionEntry) *ActionEntry {
 		OutputTruncated: a.OutputTruncated,
 		InterruptedBy:   a.InterruptedBy,
 	}
+	// The times of an action keep their fractions: a command of 8.2s reads 8.2s, not 8s.
 	if a.StartedAt != nil {
-		converted.StartedAt = timeOrEmpty(*a.StartedAt)
+		converted.StartedAt = a.StartedAt.Format(time.RFC3339Nano)
 	}
 	if a.FinishedAt != nil {
-		converted.FinishedAt = timeOrEmpty(*a.FinishedAt)
+		converted.FinishedAt = a.FinishedAt.Format(time.RFC3339Nano)
 	}
 	if a.ExitCode != nil {
 		converted.ExitCode = *a.ExitCode

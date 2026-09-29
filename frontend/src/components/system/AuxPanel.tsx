@@ -1,9 +1,8 @@
-import { X } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "./Button";
 import { Icon } from "./Icon";
 import { IconButton } from "./IconButton";
-import type { IconGlyph } from "./icons";
+import { ICONS, type IconGlyph } from "./icons";
 import { Presence } from "./Presence";
 import { ScrollArea } from "./ScrollArea";
 import { Tooltip } from "./Tooltip";
@@ -88,7 +87,7 @@ export function AuxPanel({ id, title, onClose, children }: AuxPanelProps) {
           {title}
         </h2>
         <IconButton
-          icon={X}
+          icon={ICONS.close}
           label="Close"
           shortcut="Esc"
           size="sm"

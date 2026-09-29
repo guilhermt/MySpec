@@ -192,7 +192,7 @@ describe("stepPhaseLabel", () => {
     ["fetching", "Fetching origin…"],
     ["creating", "Creating the worktree…"],
     ["checking", "Checking the worktree…"],
-    ["", "Preparing…"],
+    ["", "Preparing the worktree…"],
   ])("names the %s phase", (phase, expected) => {
     expect(stepPhaseLabel(phase)).toBe(expected);
   });

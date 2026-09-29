@@ -886,7 +886,7 @@ func TestFromEntryCarriesTheFieldsOfAnAction(t *testing.T) {
 	t.Parallel()
 
 	started := time.Date(2026, time.September, 6, 12, 0, 0, 0, time.UTC)
-	finished := started.Add(3 * time.Second)
+	finished := started.Add(3200 * time.Millisecond)
 	cases := map[string]struct {
 		action *session.ActionEntry
 		want   *bindings.ActionEntry
@@ -901,7 +901,7 @@ func TestFromEntryCarriesTheFieldsOfAnAction(t *testing.T) {
 			want: &bindings.ActionEntry{
 				ToolUseID: "toolu_2", Tool: "Bash", Label: "Running", Target: "go test ./...",
 				Status: "error", Description: "Run the tests", CommandLines: 2,
-				StartedAt: "2026-09-06T12:00:00Z", FinishedAt: "2026-09-06T12:00:03Z", ExitCode: 2, ParentToolUseID: "toolu_1",
+				StartedAt: "2026-09-06T12:00:00Z", FinishedAt: "2026-09-06T12:00:03.2Z", ExitCode: 2, ParentToolUseID: "toolu_1",
 				OutputLines: 40, OutputTail: "FAIL", OutputTruncated: true,
 			},
 		},

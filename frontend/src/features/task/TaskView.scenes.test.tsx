@@ -35,9 +35,13 @@ describe("TaskView, the nine scenes", () => {
       "Progress · Implementation 4/7 · Manual · waiting for you: review step 4 in Step 4",
       "wait",
     ],
-    ["blocked", "Progress · Implementation 5/7 · error: step 5 blocked in Step 5", "error"],
+    ["blocked", "Progress · Implementation 5/7 · error: step 5 blocked", "error"],
     ["checks", "Progress · PR review · waiting for the checks, 3 of 5 passed", "github"],
-    ["findings", "Progress · PR review pass 1 · waiting for you: findings to decide in PR", "wait"],
+    [
+      "findings",
+      "Progress · PR review pass 1 · waiting for you: decide findings in PR review",
+      "wait",
+    ],
     ["close", "Progress · Closing · ready to close: ready to close in PR", "close"],
   ])("draws the stepper of the %s scene, with the glyph of its pill", (name, label, glyph) => {
     scene(name);

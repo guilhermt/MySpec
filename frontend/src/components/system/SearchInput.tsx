@@ -1,9 +1,10 @@
-import { Search, X } from "lucide-react";
+import { Search } from "lucide-react";
 import { useRef } from "react";
 import { cn } from "@/lib/utils";
 import { type ControlStateProps, useControlState } from "./Field";
 import { Icon } from "./Icon";
 import { IconButton } from "./IconButton";
+import { ICONS } from "./icons";
 import { Kbd } from "./Kbd";
 
 export interface SearchInputProps extends ControlStateProps {
@@ -68,7 +69,7 @@ export function SearchInput({
       ) : (
         <IconButton
           label="Clear search"
-          icon={X}
+          icon={ICONS.close}
           size="xs"
           {...(disabled ? { disabled } : {})}
           onClick={() => {

@@ -1,0 +1,303 @@
+import { describe, expect, it } from "vitest";
+import type { MarkerView } from "@/features/chat/markers";
+import { hasComposer, type PlaceView, prPlaceOf, stepPlaceOf } from "@/features/task/place";
+import type { PullRequest, Step, TaskSummary } from "@/lib/wails";
+import { makePRCheck, makePullRequest, makeStep, makeTask } from "@/test/wails-mock";
+
+/** inStep is a task of seven steps whose fifth runs, in the given state. */
+function inStep(step: Partial<Step>, task: Partial<TaskSummary> = {}): TaskSummary {
+  return makeTask({
+    repository: "acme/api",
+    stage: "implementation",
+    currentStep: 5,
+    steps: Array.from({ length: 7 }, (_, index) =>
+      index === 4
+        ? makeStep({ number: 5, title: "Throttle the metrics endpoint", ...step })
+        : makeStep({ number: index + 1, status: index < 4 ? "done" : "not_started" }),
+    ),
+    ...task,
+  });
+}
+
+/** oneShot is a One-Shot task whose implementation is in the given state. */
+function oneShot(step: Partial<Step>): TaskSummary {
+  return makeTask({
+    name: "rate-limit-per-api-key",
+    repository: "acme/api",
+    mode: "one_shot",
+    stage: "implementation",
+    currentStep: 1,
+    steps: [makeStep({ number: 1, ...step })],
+  });
+}
+
+/** empty is the expected empty place: its title and body, and whatever else differs from a bare one. */
+function empty(
+  title: string,
+  body: string,
+  rest: {
+    checks?: boolean;
+    endLine?: MarkerView | null;
+    error?: { explanation: string; detail: string };
+  } = {},
+): PlaceView {
+  return { kind: "empty", title, body, checks: false, endLine: null, ...rest };
+}
+
+const nextLine = (text: string, complement: string): MarkerView => ({
+  icon: "start",
+  text,
+  complement,
+  body: { kind: "none" },
+  timeHidden: false,
+});
+
+const DIRTY = { reason: "dirty_worktree", detail: " M go.mod\n?? tmp/", files: 2 };
+
+describe("stepPlaceOf", () => {
+  it.each<[string, TaskSummary, PlaceView]>([
+    [
+      "a step not started",
+      inStep({ status: "not_started" }),
+      { kind: "activity", text: "Starting step 5…" },
+    ],
+    [
+      "the implementation of a One-Shot task not started",
+      oneShot({ status: "not_started" }),
+      { kind: "activity", text: "Starting the implementation…" },
+    ],
+    [
+      "a step fetching origin",
+      inStep({ status: "preparing", phase: "fetching" }),
+      { kind: "activity", text: "Fetching origin…" },
+    ],
+    [
+      "a step creating its worktree",
+      inStep({ status: "preparing", phase: "creating" }),
+      { kind: "activity", text: "Creating the worktree…" },
+    ],
+    [
+      "a step checking its worktree",
+      inStep({ status: "preparing", phase: "checking" }),
+      { kind: "activity", text: "Checking the worktree…" },
+    ],
+    [
+      "a step preparing without a phase",
+      inStep({ status: "preparing" }),
+      { kind: "activity", text: "Preparing the worktree…" },
+    ],
+    [
+      "a step done before the next",
+      inStep({ status: "done" }),
+      { kind: "activity", text: "Starting the next step…" },
+    ],
+    [
+      "a step blocked",
+      inStep({ status: "blocked", block: DIRTY }),
+      {
+        kind: "blocked",
+        line: nextLine("Step 5 is next", "Throttle the metrics endpoint"),
+        explanation:
+          "2 changed files in the worktree. Clean it yourself and try again, or let the app discard every change and start the step.",
+        detail: " M go.mod\n?? tmp/",
+      },
+    ],
+    [
+      "the implementation of a One-Shot task blocked",
+      oneShot({ status: "blocked", block: DIRTY }),
+      {
+        kind: "blocked",
+        line: nextLine("Implementation is next", "rate-limit-per-api-key"),
+        explanation:
+          "2 changed files in the worktree. Clean it yourself and try again, or let the app discard every change and start the step.",
+        detail: " M go.mod\n?? tmp/",
+      },
+    ],
+    [
+      "every step committed, before the PR",
+      inStep({ status: "done" }, { currentStep: 0 }),
+      empty("Every step is committed", "7 steps in acme/api. The pull request stage starts next."),
+    ],
+    [
+      "the implementation of a One-Shot task committed",
+      { ...oneShot({ status: "done" }), currentStep: 0 },
+      empty("The implementation is committed", "acme/api. The pull request stage starts next."),
+    ],
+    [
+      "an implementation without steps",
+      makeTask({ stage: "implementation", steps: [] }),
+      empty("No steps were found", "The plan has no step files."),
+    ],
+    ["a step with its conversation", inStep({ status: "implementing" }), { kind: "conversation" }],
+  ])("shows %s", (_, task, expected) => {
+    expect(stepPlaceOf(task)).toEqual(expected);
+  });
+});
+
+describe("prPlaceOf", () => {
+  const task = makeTask({ repository: "acme/api", stage: "pr" });
+  const pr = (fields: Partial<PullRequest>) =>
+    makePullRequest({ prNumber: 1284, prBase: "dev", ...fields });
+  const merged: MarkerView = {
+    icon: "merge",
+    text: "Merged #1284 into dev",
+    complement: "by lnakamura",
+    body: { kind: "none" },
+    timeHidden: false,
+  };
+  const closed: MarkerView = { ...merged, text: "Closed #1284 without a merge", complement: "" };
+  const checks = [
+    makePRCheck({ name: "unit", state: "passed" }),
+    makePRCheck({ name: "e2e / chromium", state: "running" }),
+    makePRCheck({ name: "preview-deploy", state: "queued" }),
+  ];
+
+  it.each<[string, PullRequest, boolean, PlaceView]>([
+    [
+      "the PR preparing",
+      pr({ status: "preparing", prNumber: 0 }),
+      false,
+      { kind: "activity", text: "Preparing the pull request…" },
+    ],
+    [
+      "the PR blocked",
+      pr({ status: "blocked", block: { reason: "gh_unauthenticated", detail: "not logged in" } }),
+      false,
+      empty("The pull request stage stopped", "", {
+        error: {
+          explanation: "Run `gh auth login` in a terminal, then try again.",
+          detail: "not logged in",
+        },
+      }),
+    ],
+    ["the PR opening", pr({ status: "opening", prNumber: 0 }), false, { kind: "conversation" }],
+    [
+      "the checks before the first pass",
+      pr({ status: "waiting_checks", checks, checkedAt: "2026-09-28T17:30:00Z" }),
+      false,
+      empty(
+        "The review starts when the checks finish.",
+        "MySpec reads #1284 every minute. The first pass begins once e2e / chromium and preview-deploy are done.",
+        { checks: true },
+      ),
+    ],
+    [
+      "the checks before the first pass, one left",
+      pr({
+        status: "waiting_checks",
+        checks: checks.slice(0, 2),
+        checkedAt: "2026-09-28T17:30:00Z",
+      }),
+      false,
+      empty(
+        "The review starts when the checks finish.",
+        "MySpec reads #1284 every minute. The first pass begins once e2e / chromium is done.",
+        { checks: true },
+      ),
+    ],
+    [
+      "the checks before the first reading",
+      pr({ status: "waiting_checks" }),
+      false,
+      empty("The review starts when the checks finish.", "MySpec reads #1284 every minute.", {
+        checks: true,
+      }),
+    ],
+    [
+      "the checks from the second pass on",
+      pr({ status: "waiting_checks", checks }),
+      true,
+      { kind: "conversation" },
+    ],
+    [
+      "the review done",
+      pr({ status: "done", prState: "open" }),
+      true,
+      { kind: "closedReview", endLine: null },
+    ],
+    [
+      "the review in trouble",
+      pr({ status: "trouble", prState: "open" }),
+      true,
+      { kind: "closedReview", endLine: null },
+    ],
+    [
+      "the pull request merged",
+      pr({ status: "merged", prState: "merged", mergedBy: "lnakamura" }),
+      true,
+      { kind: "closedReview", endLine: merged },
+    ],
+    [
+      "the pull request closed without a merge",
+      pr({ status: "pr_closed", prState: "closed" }),
+      true,
+      { kind: "closedReview", endLine: closed },
+    ],
+    [
+      "the pull request merged before the first pass",
+      pr({ status: "merged", prState: "merged", mergedBy: "lnakamura" }),
+      false,
+      empty("The pull request was merged before the first review pass.", "", { endLine: merged }),
+    ],
+    [
+      "the pull request closed before the first pass",
+      pr({ status: "pr_closed", prState: "closed" }),
+      false,
+      empty("The pull request was closed without a merge before the first review pass.", "", {
+        endLine: closed,
+      }),
+    ],
+    [
+      "the task closing",
+      pr({ status: "closing", prState: "merged" }),
+      true,
+      { kind: "activity", text: "Closing the task…" },
+    ],
+    [
+      "the task closed",
+      pr({ status: "closed", prState: "merged", mergedBy: "lnakamura" }),
+      true,
+      { kind: "closedReview", endLine: merged },
+    ],
+    ["the draft", pr({ status: "draft_ready", prNumber: 0 }), false, { kind: "conversation" }],
+    ["a pass of the review", pr({ status: "reviewing" }), true, { kind: "conversation" }],
+  ])("shows %s", (_, pullRequest, hasReviewConversation, expected) => {
+    expect(prPlaceOf(task, pullRequest, hasReviewConversation)).toEqual(expected);
+  });
+});
+
+describe("hasComposer", () => {
+  it.each<[string, PlaceView, string | undefined, boolean]>([
+    ["the conversation of a step", { kind: "conversation" }, undefined, true],
+    ["the conversation of the PR", { kind: "conversation" }, "opening", true],
+    ["the conversation of the review", { kind: "conversation" }, "waiting_checks", true],
+    ["a conversation whose review is behind", { kind: "conversation" }, "merged", false],
+    ["an activity", { kind: "activity", text: "Starting step 5…" }, undefined, false],
+    [
+      "a step blocked",
+      {
+        kind: "blocked",
+        line: {
+          icon: "start",
+          text: "Step 5 is next",
+          complement: "",
+          body: { kind: "none" },
+          timeHidden: false,
+        },
+        explanation: "",
+        detail: "",
+      },
+      undefined,
+      false,
+    ],
+    [
+      "an empty place",
+      empty("No steps were found", "The plan has no step files."),
+      undefined,
+      false,
+    ],
+    ["the closed review", { kind: "closedReview", endLine: null }, "merged", false],
+  ])("answers for %s", (_, view, prStatus, expected) => {
+    expect(hasComposer(view, prStatus)).toBe(expected);
+  });
+});

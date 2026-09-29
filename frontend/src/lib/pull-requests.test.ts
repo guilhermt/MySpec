@@ -8,6 +8,7 @@ import {
   checksSummary,
   isOpen,
   isReviewed,
+  liveChecksHeader,
   prBaseName,
   prOf,
   troubleLabel,
@@ -95,6 +96,25 @@ describe("checkCounts", () => {
     ],
   ])("counts %s", (_name, checks, want) => {
     expect(checkCounts(makePullRequest({ checks }))).toEqual(want);
+  });
+});
+
+describe("liveChecksHeader", () => {
+  it.each([
+    ["no checks", [], "No checks"],
+    ["checks never read", null, "No checks"],
+    [
+      "the checks that passed, skipped and neutral included",
+      [
+        makePRCheck({ state: "passed" }),
+        makePRCheck({ state: "skipped" }),
+        makePRCheck({ state: "running" }),
+        makePRCheck({ state: "failed" }),
+      ],
+      "Waiting for checks · 2 of 4 passed",
+    ],
+  ])("reads %s", (_name, checks, want) => {
+    expect(liveChecksHeader(checks)).toBe(want);
   });
 });
 

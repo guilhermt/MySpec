@@ -1,4 +1,4 @@
-import { ChevronDown, X } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { type ComponentProps, type MouseEvent, type ReactNode, useId } from "react";
 import { Button as UIButton } from "@/components/ui/button";
 import { Toggle as UIToggle } from "@/components/ui/toggle";
@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import type { ButtonLoading } from "./Button";
 import { Icon } from "./Icon";
 import { IconButton } from "./IconButton";
+import { ICONS } from "./icons";
 import { Shimmer } from "./Shimmer";
 import { Spinner } from "./Spinner";
 import { StateGlyph } from "./StateGlyph";
@@ -163,7 +164,12 @@ export function Chip({
     chip = (
       <span className="inline-flex items-center gap-0.5">
         {chip}
-        <IconButton size="xs" label={removeLabel ?? "Remove"} icon={X} onClick={onRemove} />
+        <IconButton
+          size="xs"
+          label={removeLabel ?? "Remove"}
+          icon={ICONS.close}
+          onClick={onRemove}
+        />
       </span>
     );
   }
