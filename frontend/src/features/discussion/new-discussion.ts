@@ -1,4 +1,8 @@
-import type { Board, BoardCard, Repository } from "@/lib/wails";
+import type { SelectOption } from "@/components/system/Select";
+import { findBoard } from "@/lib/boards";
+import { findRepository, shortName } from "@/lib/repositories";
+import type { Board, BoardCard, Repository, State } from "@/lib/wails";
+import { age } from "@/lib/when";
 
 /** TITLE_MAX is how long the title of a discussion can be. */
 export const TITLE_MAX = 120;
@@ -53,4 +57,60 @@ export function unclonedRepositories(
     .map((id) => repositories.find((repository) => repository.id === id))
     .filter((repository): repository is Repository => repository !== undefined)
     .filter((repository) => !repository.cloned || repository.missing);
+}
+
+/** BOARD_FIELD_HELP is what sits under the Board field of the dialog. */
+export const BOARD_FIELD_HELP =
+  "The discussion reads the clones of the board's repositories and publishes its cards there.";
+
+/** BoardOption is an option of the Board field: a board never read is disabled, its reason in sub. */
+export type BoardOption = SelectOption & { disabled?: boolean };
+
+/** lastUsedBoard is the board of the discussion created last, active or archived; null when none still exists. */
+export function lastUsedBoard(app: State): string | null {
+  const discussions = [...(app.discussions ?? []), ...(app.discussionHistory ?? [])];
+  let last: { boardId: string; createdAt: number } | null = null;
+  for (const discussion of discussions) {
+    const createdAt = Date.parse(discussion.createdAt) || 0;
+    if (last === null || createdAt > last.createdAt) {
+      last = { boardId: discussion.boardId, createdAt };
+    }
+  }
+  return last !== null && findBoard(app, last.boardId) !== null ? last.boardId : null;
+}
+
+/** defaultDiscussionBoard is the board the Board field starts on: the last used when read, else the first read board. */
+export function defaultDiscussionBoard(app: State): string | null {
+  const last = lastUsedBoard(app);
+  if (last !== null && findBoard(app, last)?.readAt !== "") {
+    return last;
+  }
+  return (app.boards ?? []).find((board) => board.readAt !== "")?.id ?? null;
+}
+
+// repositoryNames are the short names of the repositories of a board, alphabetically.
+function repositoryNames(app: State, board: Board): string {
+  return (board.repositoryIds ?? [])
+    .map((id) => shortName(findRepository(app, id)?.fullName ?? id))
+    .sort((a, b) => a.localeCompare(b))
+    .join(", ");
+}
+
+/** boardOptions are the options of the Board field, in the order of app.boards. */
+export function boardOptions(app: State, now: number): BoardOption[] {
+  const last = lastUsedBoard(app);
+  return (app.boards ?? []).map((board) => {
+    if (board.readAt === "") {
+      return { value: board.id, label: board.title, sub: "not read yet", disabled: true };
+    }
+    const reading =
+      board.failure === null
+        ? `read ${age(board.readAt, now)}`
+        : `◇ read failed ${age(board.failure.failedAt, now)} · uses the last reading`;
+    const parts = [repositoryNames(app, board), reading];
+    if (board.id === last) {
+      parts.push("last used");
+    }
+    return { value: board.id, label: board.title, sub: parts.join(" · ") };
+  });
 }

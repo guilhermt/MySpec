@@ -183,7 +183,19 @@ describe("adjustmentSummary", () => {
     const choices = withChoice(defaults, "prd", { model: "claude-fable-5-1", effort: "xhigh" });
 
     expect(adjustmentSummary(CATALOG, choices, defaults, MODEL_STAGES)).toBe(
-      "PRD: Fable 5.1 · xhigh",
+      "PRD: Fable 5.1 · xhigh · the rest from Defaults",
+    );
+  });
+
+  it("leaves the rest out when every stage was adjusted", () => {
+    const defaults = makeModelDefaults();
+    const choices = withChoice(defaults, "one_shot", {
+      model: "claude-fable-5-1",
+      effort: "xhigh",
+    });
+
+    expect(adjustmentSummary(CATALOG, choices, defaults, ["one_shot"])).toBe(
+      "One-Shot planning: Fable 5.1 · xhigh",
     );
   });
 
@@ -196,7 +208,7 @@ describe("adjustmentSummary", () => {
     );
 
     expect(adjustmentSummary(CATALOG, choices, defaults, modelStagesOf("one_shot"))).toBe(
-      "PR: Sonnet 5 · medium",
+      "PR: Sonnet 5 · medium · the rest from Defaults",
     );
     expect(adjustmentSummary(CATALOG, choices, defaults, ["one_shot", "implementation"])).toBe(
       "Defaults",
@@ -212,7 +224,7 @@ describe("adjustmentSummary", () => {
     );
 
     expect(adjustmentSummary(CATALOG, choices, defaults, MODEL_STAGES)).toBe(
-      "PRD: Fable 5.1 · xhigh +1",
+      "PRD: Fable 5.1 · xhigh +1 · the rest from Defaults",
     );
   });
 });

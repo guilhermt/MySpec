@@ -63,17 +63,18 @@ function BoardScreen({ board }: { board: Board }) {
   const searchRef = useRef<HTMLInputElement>(null);
   // The cards picked for a discussion are local to the view: they go when it does.
   const [checked, setChecked] = useState<ReadonlySet<string>>(new Set());
+  const [selectedKey, select] = useState<string | null>(null);
   const cards = board.cards ?? NO_CARDS;
-  const selected = cards.find((card) => card.key === memory.selectedKey) ?? null;
+  const selected = cards.find((card) => card.key === selectedKey) ?? null;
   const start = useStartCard(board, selected);
   const openNewDiscussion = useAppStore((state) => state.openNewDiscussion);
 
   // A card gone from the reading takes the selection with it.
   useEffect(() => {
-    if (memory.selectedKey !== null && selected === null) {
-      setMemory((current) => ({ ...current, selectedKey: null }));
+    if (selectedKey !== null && selected === null) {
+      select(null);
     }
-  }, [memory.selectedKey, selected, setMemory]);
+  }, [selectedKey, selected]);
 
   // A card gone from the reading also leaves the selection.
   useEffect(() => {
@@ -87,7 +88,6 @@ function BoardScreen({ board }: { board: Board }) {
   const filtered = filterCards(board, memory.filters);
   const cardSections = sections(board, filtered);
 
-  const select = (key: string | null) => setMemory((current) => ({ ...current, selectedKey: key }));
   const setFilters = (filters: BoardFilters) => setMemory((current) => ({ ...current, filters }));
   const toggleSection = (id: string) =>
     setMemory((current) => ({
@@ -120,7 +120,7 @@ function BoardScreen({ board }: { board: Board }) {
     if (event.key === "/" && !isTyping(event.target)) {
       event.preventDefault();
       searchRef.current?.focus();
-    } else if (event.key === "Escape" && memory.selectedKey !== null) {
+    } else if (event.key === "Escape" && selectedKey !== null) {
       event.preventDefault();
       select(null);
     }
@@ -166,7 +166,7 @@ function BoardScreen({ board }: { board: Board }) {
           <CardList
             sections={cardSections}
             collapsed={collapsed}
-            selectedKey={memory.selectedKey}
+            selectedKey={selectedKey}
             onToggleSection={toggleSection}
             onSelect={select}
             onStart={startCard}

@@ -1,6 +1,7 @@
 import { act, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { BoardView } from "@/features/board/BoardView";
+import { EMPTY_FILTERS } from "@/features/board/board-view";
 import { boardViewKey } from "@/lib/ui-storage";
 import { api, type Board, type State } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
@@ -119,7 +120,15 @@ describe("BoardView", () => {
     unmount();
 
     expect(JSON.parse(localStorage.getItem(boardViewKey("board-1")) ?? "null")).toEqual({
-      filters: { query: "header", repository: "", status: "", assignee: "", mine: false },
+      filters: {
+        query: "header",
+        repository: "",
+        repositoryName: "",
+        status: "",
+        statusName: "",
+        assignee: "",
+        mine: false,
+      },
       collapsed: [],
     });
 
@@ -144,7 +153,7 @@ describe("BoardView", () => {
     );
     expect(screen.queryByRole("treeitem", { name: /#3/ })).not.toBeInTheDocument();
     expect(JSON.parse(localStorage.getItem(boardViewKey("board-1")) ?? "null")).toEqual({
-      filters: { query: "", repository: "", status: "", assignee: "", mine: false },
+      filters: EMPTY_FILTERS,
     });
   });
 

@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { age, clockTime, duration, fullTime, shortTime, startedTime } from "@/lib/when";
+import {
+  age,
+  clockTime,
+  duration,
+  fullTime,
+  readClock,
+  readMoment,
+  shortTime,
+  startedTime,
+} from "@/lib/when";
 
 // NOW is Sunday, September 27, 2026, 15:00 in the local time of the runner.
 const NOW = new Date(2026, 8, 27, 15, 0).getTime();
@@ -64,6 +73,18 @@ describe("age", () => {
   it("says nothing of a time it does not have", () => {
     expect(age("", NOW)).toBe("");
     expect(age("not a time", NOW)).toBe("");
+  });
+});
+
+describe("readMoment and readClock", () => {
+  it.each([
+    ["today", local(2026, 8, 27, 14, 8), "14:08", "at 14:08"],
+    ["yesterday", local(2026, 8, 26, 17, 40), "yesterday at 17:40", "yesterday at 17:40"],
+    ["before", local(2026, 8, 21, 17, 40), "Sep 21 at 17:40", "Sep 21 at 17:40"],
+    ["no time", "", "", ""],
+  ])("writes a reading of %s", (_, iso, moment, clock) => {
+    expect(readMoment(iso, NOW)).toBe(moment);
+    expect(readClock(iso, NOW)).toBe(clock);
   });
 });
 

@@ -5,6 +5,7 @@ import {
   defaultCollapsed,
   EMPTY_FILTERS,
   isBoardViewMemory,
+  keptFilters,
 } from "@/features/board/board-view";
 import { findBoard } from "@/lib/boards";
 import { boardViewKey, readStored, writeStored } from "@/lib/ui-storage";
@@ -14,7 +15,6 @@ interface ViewState {
   filters: BoardFilters;
   /** collapsed is null while the user has not chosen: the final statuses of the board then. */
   collapsed: string[] | null;
-  selectedKey: string | null;
 }
 
 function collapsedOf(boardId: string, collapsed: string[] | null): string[] {
@@ -27,15 +27,15 @@ function collapsedOf(boardId: string, collapsed: string[] | null): string[] {
 
 /**
  * useBoardViewMemory is what a board view remembers, read once from the last
- * run and kept for the next one. The selected card is never kept, and the
- * collapsed sections only once the user chose them.
+ * run and kept for the next one. The collapsed sections are kept only once the
+ * user chose them.
  */
 export function useBoardViewMemory(
   boardId: string,
 ): [BoardViewMemory, Dispatch<SetStateAction<BoardViewMemory>>] {
   const [view, setView] = useState<ViewState>(() => {
     const stored = readStored(boardViewKey(boardId), { filters: EMPTY_FILTERS }, isBoardViewMemory);
-    return { filters: stored.filters, collapsed: stored.collapsed ?? null, selectedKey: null };
+    return { filters: keptFilters(stored.filters), collapsed: stored.collapsed ?? null };
   });
   // Subscribing to the board follows its statuses while the default applies.
   const board = useBoard(boardId);
@@ -62,5 +62,5 @@ export function useBoardViewMemory(
     );
   }, [boardId, view.filters, view.collapsed]);
 
-  return [{ filters: view.filters, collapsed, selectedKey: view.selectedKey }, setMemory];
+  return [{ filters: view.filters, collapsed }, setMemory];
 }
