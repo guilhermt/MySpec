@@ -104,6 +104,38 @@ function scene(
   return { area, band: screen.getByRole("banner") };
 }
 
+// barAndComposer are the bar of the request and the box of the composer, the ones the scene has.
+function barAndComposer(): HTMLElement[] {
+  const bar = document.querySelector<HTMLElement>('section[aria-label="Request"]');
+  const composer =
+    document
+      .getElementById("composer-input")
+      ?.closest<HTMLElement>('[class~="max-w-(--measure-conversation)"]') ?? null;
+  return [bar, composer].filter((piece) => piece !== null);
+}
+
+/**
+ * captureTogether saves one screenshot of pieces that stand one over the other: whatever else their
+ * common container holds leaves the flow first, and the container takes only their height. The
+ * screen is drawn again for the next test, so nothing is put back.
+ */
+async function captureTogether(name: string, pieces: readonly HTMLElement[]): Promise<void> {
+  let common = pieces[0]?.parentElement ?? null;
+  while (common !== null && !pieces.every((piece) => common?.contains(piece))) {
+    common = common.parentElement;
+  }
+  if (common === null) {
+    throw new Error("the pieces share no container");
+  }
+  for (const child of common.children) {
+    if (child instanceof HTMLElement && !pieces.some((piece) => child.contains(piece))) {
+      child.style.display = "none";
+    }
+  }
+  common.style.flex = "none";
+  await capture(name, common);
+}
+
 // The scenes are drawn at the moment of the mock, whatever the day the suite runs.
 fixSceneClock();
 
@@ -120,6 +152,21 @@ describe.each(THEMES)("TaskView, the nine scenes in the %s theme", (theme) => {
     expect(pill.querySelector("[data-state]")).toHaveAttribute("data-state", glyph);
     await capture(`scene-${name}-${theme}`, area);
   });
+
+  it.each(STEPPERS.map(([name]) => name))(
+    "captures the bar and the composer of the %s scene",
+    async (name) => {
+      setTheme(theme);
+      scene(name);
+
+      // Waiting for its checks, the pull request asks nothing and has no conversation to write in.
+      const pieces = barAndComposer();
+      expect(pieces.length === 0).toBe(name === "checks");
+      if (pieces.length > 0) {
+        await captureTogether(`bar-${name}-${theme}`, pieces);
+      }
+    },
+  );
 
   it("draws the bar of the close scene inside the main area", () => {
     setTheme(theme);

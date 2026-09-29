@@ -176,6 +176,15 @@ Onde a ordem difere da sugestão e por quê: a fundação e a tela da task são 
 
 - **Objetivo:** o app inteiro passa pelo passe do crítico contra o system, e o que sobrou do design antigo sai.
 - **Escopo:** o PRD desta task é o relatório do passe de consistência da frente (fase 5, o `design-critic` sobre o app rodando, nas larguras de `structure.md` §6 e nos dois modos); a remoção do que restou (`--status-*`, `.dark`, `react-resizable-panels` se nada mais o usa, os pacotes de Inter e JetBrains Mono, componentes e testes órfãos); as verificações que fecham a porta: nenhuma feature importa de `components/ui/`, nenhum `oklch(` fora de `tokens.css`, nenhuma classe de cor do shadcn (`bg-primary`, `text-muted-foreground`) fora da ponte; a varredura de largura (capturas a 1100, 1250, 1450, 2000 e 2560 px), de `prefers-reduced-motion` e de nomes acessíveis; a virtualização da conversa e do board se ficaram para trás; a pauta de polimento de `lab/08-visual-final/critique.md` §7 que ainda valer; `docs/` inteiro consistente (`features.md`, `overview.md`, `design-system.md`, `frontend.md`, `target-machine.md`).
+- **A conversa longa, medida na task 4:** `frontend/src/dev/measure-conversation.tsx` (`?measure=conversation` no servidor de dev, [setup.md](../docs/development/setup.md)) monta uma conversa de 1.500 entradas, 15 vezes o p90, em quatro trechos, três dobrados (89 entradas montadas), com o agente escrevendo no fim. Rodada no WebKitGTK 2.52.6 da máquina alvo (WebKit 6.0 sobre GTK4, o motor do app), sem janela, pelo backend Broadway do GTK, que desenha sem GPU, três vezes em cada build; e uma vez no Chromium, para comparar:
+
+  | | Primeira pintura (até o quadro seguinte ao commit) | Uma atualização de streaming (commit e layout), mediana e máximo |
+  |---|---|---|
+  | Servidor de dev (`task dev`, React de desenvolvimento) | 248 a 285 ms | 45 ms, até 77 ms |
+  | React de produção, para comparar | 195 a 202 ms | 30 ms, até 47 ms |
+  | Chromium do Playwright, React de produção | 100 ms | 19 ms, até 41 ms |
+
+  A primeira pintura fica abaixo dos 300 ms; a atualização de streaming passa dos 16 ms de um quadro em todos os casos. **Decisão:** pela regra do material da task 4 (§4.2, A virtualização), a virtualização da conversa é desta task, com esta medida. Cada evento `text` refaz o modelo da conversa inteira (`buildConversation` sobre todas as entradas) e renderiza de novo todas as entradas montadas; é esse o custo que a solução tem de tirar de cada quadro.
 - **`changes.md`:** o que a crítica apontar como não cumprido.
 - **`backend.md`:** nenhum.
 - **Dependências:** todas.

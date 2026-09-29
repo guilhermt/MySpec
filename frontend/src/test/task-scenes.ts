@@ -14,6 +14,7 @@ import type {
   Step,
   TaskConversation,
   TaskSummary,
+  Transcript,
 } from "@/lib/wails";
 import { sessionKey } from "@/lib/wails";
 import { stepTabKey } from "@/store/app-store";
@@ -203,7 +204,11 @@ const PLANNING = ["prd", "tech_spec", "plan"];
 /** OPUS is the model the steps and the pull request of the reference task run on. */
 const OPUS = "claude-opus-5-5[1m]";
 
-function inStep(
+/**
+ * inStep is the reference task in the implementation stage, at step n: the step and the task take
+ * the fields given; longName gives it the longest name a task can have.
+ */
+export function inStep(
   n: number,
   step: Partial<Step>,
   task: Partial<TaskSummary>,
@@ -495,15 +500,30 @@ function conversationsOf(name: SceneName): Record<string, Entry[]> {
 
 /** sceneTask is a scene of the reference task; longName gives it the longest name a task can have. */
 export function sceneTask(name: SceneName, { longName = false } = {}): Scene {
-  const task = taskOf(name, longName);
-  const transcripts = Object.fromEntries(
-    Object.entries(conversationsOf(name)).map(([stage, entries]) => [
-      sessionKey(TASK_ID, stage),
-      fromTranscript(makeTranscript({ taskId: TASK_ID, stage, entries })),
-    ]),
+  const transcripts = Object.entries(conversationsOf(name)).map(([stage, entries]) =>
+    makeTranscript({ taskId: TASK_ID, stage, entries }),
   );
   // The reviewer is on screen where it asks or failed; the implementer everywhere else.
   const tab = name === "ask" || name === "error" ? "reviewer" : "implementer";
+  return sceneOf(taskOf(name, longName), transcripts, tab);
+}
+
+/**
+ * sceneOf is what the store holds to draw a moment of the reference task: the task, among the
+ * repository and the board it belongs to, the conversations on screen already read, and the tab of
+ * its step.
+ */
+export function sceneOf(
+  task: TaskSummary,
+  conversations: readonly Transcript[],
+  tab: "implementer" | "reviewer",
+): Scene {
+  const transcripts = Object.fromEntries(
+    conversations.map((transcript) => [
+      sessionKey(transcript.taskId, transcript.stage),
+      fromTranscript(transcript),
+    ]),
+  );
   return {
     state: makeState({
       repositories: [
@@ -525,7 +545,7 @@ export function sceneTask(name: SceneName, { longName = false } = {}): Scene {
       tasks: [task],
     }),
     transcripts,
-    openStepTab: task.currentStep > 0 ? { [stepTabKey(TASK_ID, task.currentStep)]: tab } : {},
+    openStepTab: task.currentStep > 0 ? { [stepTabKey(task.id, task.currentStep)]: tab } : {},
   };
 }
 

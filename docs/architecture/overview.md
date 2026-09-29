@@ -40,7 +40,8 @@ frontend/
   src/components/ui/     componentes shadcn; gerados, nunca editados à mão
   src/components/system/   componentes do design system, os wrappers dos primitivos e os próprios
   src/styles/            Tailwind, a ponte dos tokens do design system e fontes
-  src/test/              setup do Vitest, render com store e mock do Go
+  src/test/              setup do Vitest, render com store, mock do Go e as cenas da tela da task
+  src/dev/               ferramentas do servidor de dev, fora do build de produção
   bindings/              gerados por `task generate`; nunca editados à mão
 build/                   config do Wails, ícones e entrada .desktop
 .github/                 CI e Dependabot
