@@ -1046,8 +1046,20 @@ func (m *memSessions) MarkCommitted(_ context.Context, k session.Key, sha, subje
 	})
 }
 
+// MarkPROpened records nothing when the session already has the pull request
+// marked opened, as the session service does.
 func (m *memSessions) MarkPROpened(_ context.Context, k session.Key, number int, base string) {
-	m.mark(k, session.MarkerEntry{Type: session.MarkerPROpened, Number: number, Base: base})
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	opened := slices.ContainsFunc(m.markers, func(km keyedMarker) bool {
+		return km.Key == k && km.Marker.Type == session.MarkerPROpened && km.Marker.Number == number
+	})
+	if !opened {
+		m.markers = append(m.markers, keyedMarker{
+			Key: k, Marker: session.MarkerEntry{Type: session.MarkerPROpened, Number: number, Base: base},
+		})
+	}
 }
 
 func (m *memSessions) MarkChecksRead(

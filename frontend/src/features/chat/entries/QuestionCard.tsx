@@ -164,21 +164,19 @@ interface PendingQuestionProps {
 function PendingQuestion({ taskId, stage, question, flash }: PendingQuestionProps) {
   const titleId = useId();
   const questions = question.questions ?? [];
-  const kept = useAppStore((state) => state.questionChoices[question.requestId] ?? NO_CHOICES);
+  const choices = useAppStore((state) => state.questionChoices[question.requestId] ?? NO_CHOICES);
   const setQuestionChoices = useAppStore((state) => state.setQuestionChoices);
-  const [sending, setSending] = useState<string | null>(null);
-  // sent are the choices of the answer on its way: the store forgets them once it is sent, and the
-  // card keeps showing them until the conversation turns it into its answer.
-  const [sent, setSent] = useState<QuestionChoices | null>(null);
+  // The answer on its way, sent from the card or from the composer, keeps its choices in the store
+  // until the conversation turns the card into its answer.
+  const sending = useAppStore((state) => state.questionSending[question.requestId] === true);
   const [failure, setFailure] = useState("");
-  const choices = sent ?? kept;
 
   const missing = missingOf(questions, choices);
   const keys = (questions[0]?.options ?? []).length + 1;
 
   const pick = (at: number, index: number) => {
     const item = questions[at];
-    if (item === undefined || sending !== null) {
+    if (item === undefined || sending) {
       return;
     }
     const next = chosen(item, choices[at], index);
@@ -190,20 +188,14 @@ function PendingQuestion({ taskId, stage, question, flash }: PendingQuestionProp
   };
 
   const send = async () => {
-    if (missing !== undefined || sending !== null) {
+    if (missing !== undefined || sending) {
       return;
     }
-    const answers = answersOf(question, choices);
-    setSending(Object.values(answers).join(", "));
-    setSent(choices);
     setFailure("");
-    const reason = await answerQuestionInPlace(taskId, stage, question.requestId, answers);
     // Sent, the card turns into its answer when the conversation says so.
-    if (reason !== "") {
-      setSending(null);
-      setSent(null);
-      setFailure(reason);
-    }
+    setFailure(
+      await answerQuestionInPlace(taskId, stage, question.requestId, answersOf(question, choices)),
+    );
   };
 
   // The digits pick in the question whose group has the focus, else in the first without a
@@ -251,7 +243,7 @@ function PendingQuestion({ taskId, stage, question, flash }: PendingQuestionProp
       data-pending-card="question"
       tabIndex={-1}
       aria-label={`Question, answer with 1 to ${keys}`}
-      aria-busy={sending !== null}
+      aria-busy={sending}
       {...(flash ? { "data-flash": "wait" } : {})}
       className={cn(ENTRY, "situation-flash")}
       onKeyDown={onKeyDown}
@@ -264,12 +256,12 @@ function PendingQuestion({ taskId, stage, question, flash }: PendingQuestionProp
             question={item}
             titleId={at === 0 ? titleId : undefined}
             choice={choices[at]}
-            disabled={sending !== null}
+            disabled={sending}
             onPick={(index) => pick(at, index)}
           />
         ))}
         <div className="flex flex-wrap items-center gap-(--space-2)">
-          {sending === null ? (
+          {!sending ? (
             <Button
               variant="primary"
               shortcut="↵"
@@ -281,10 +273,10 @@ function PendingQuestion({ taskId, stage, question, flash }: PendingQuestionProp
           ) : (
             <p role="status" className="flex items-center gap-(--space-2) text-ink-2">
               <Spinner />
-              {`Sending “${sending}”…`}
+              {`Sending “${Object.values(answersOf(question, choices)).join(", ")}”…`}
             </p>
           )}
-          {failure !== "" && sending === null && (
+          {failure !== "" && !sending && (
             <p className="text-(length:--text-meta) leading-(--leading-meta) text-state-error">
               {`Not sent · ${failure}`}
             </p>

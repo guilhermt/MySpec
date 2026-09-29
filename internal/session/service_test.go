@@ -1374,6 +1374,34 @@ func TestAPlanInvalidMarkerIsRecordedOnlyWhenTheProblemsChange(t *testing.T) {
 	}
 }
 
+func TestAPullRequestIsMarkedOpenedOncePerNumber(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	f.start(t, taskInfo(t, "t1"))
+	f.waitIdle(t, prd("t1"))
+
+	ctx := t.Context()
+	f.service.MarkPROpened(ctx, prd("t1"), 42, "main")
+	f.service.MarkPROpened(ctx, prd("t1"), 42, "main")
+	f.service.MarkPROpened(ctx, prd("t1"), 43, "main")
+	f.service.MarkPROpened(ctx, prd("t1"), 42, "develop")
+
+	var got []*session.MarkerEntry
+	for _, m := range f.entriesOf(t, prd("t1"), session.KindMarker) {
+		if m.Marker.Type == session.MarkerPROpened {
+			got = append(got, m.Marker)
+		}
+	}
+	want := []*session.MarkerEntry{
+		{Type: session.MarkerPROpened, Number: 42, Base: "main"},
+		{Type: session.MarkerPROpened, Number: 43, Base: "main"},
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("pr_opened markers mismatch (-want +got):\n%s", diff)
+	}
+}
+
 func TestPausingMarksThePauseOnce(t *testing.T) {
 	t.Parallel()
 

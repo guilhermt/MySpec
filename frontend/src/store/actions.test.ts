@@ -259,17 +259,32 @@ describe("the app notice of a failed action", () => {
 describe("answerQuestionInPlace", () => {
   const choices = { 0: { labels: ["Yes"], other: null } };
 
-  it("sends the answers, answers nothing and forgets the choices of the question", async () => {
+  it("marks the question sending while the answer is on its way", async () => {
+    let resolve: () => void = () => {};
+    vi.mocked(api.answerQuestion).mockReturnValueOnce(
+      new Promise<void>((done) => {
+        resolve = done;
+      }),
+    );
+
+    const sent = answerQuestionInPlace("task-1", "prd", "req-1", { Q: "Yes" });
+
+    expect(useAppStore.getState().questionSending).toEqual({ "req-1": true });
+    resolve();
+    await expect(sent).resolves.toBe("");
+  });
+
+  it("sends the answers and keeps the choices and the sending until the conversation answers", async () => {
     useAppStore.getState().setQuestionChoices("req-1", choices);
-    useAppStore.getState().setQuestionChoices("req-2", choices);
 
     await expect(answerQuestionInPlace("task-1", "prd", "req-1", { Q: "Yes" })).resolves.toBe("");
 
     expect(api.answerQuestion).toHaveBeenCalledWith("task-1", "prd", "req-1", { Q: "Yes" });
-    expect(useAppStore.getState().questionChoices).toEqual({ "req-2": choices });
+    expect(useAppStore.getState().questionChoices["req-1"]).toEqual(choices);
+    expect(useAppStore.getState().questionSending).toEqual({ "req-1": true });
   });
 
-  it("answers the reason of a failure without the app notice, keeping the choices", async () => {
+  it("answers the reason of a failure without the app notice, no longer sending", async () => {
     useAppStore.getState().setQuestionChoices("req-1", choices);
     vi.mocked(api.answerQuestion).mockRejectedValueOnce(new Error("the session stopped"));
 
@@ -278,6 +293,7 @@ describe("answerQuestionInPlace", () => {
     );
     expect(useAppStore.getState().error).toBeNull();
     expect(useAppStore.getState().questionChoices["req-1"]).toEqual(choices);
+    expect(useAppStore.getState().questionSending).toEqual({});
   });
 });
 

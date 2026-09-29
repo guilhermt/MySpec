@@ -491,8 +491,9 @@ export async function answerPermissionInPlace(
 
 /**
  * answerQuestionInPlace answers a question from its card or from the composer, whose failure has a
- * place of its own: "" when it is sent, the reason when it is not. Sent, the choices kept for the
- * card go away with the question.
+ * place of its own: "" when it is sent, the reason when it is not. The question is marked as
+ * sending while the answer is on its way, for the card and the composer alike; sent, it stays
+ * marked, with its choices, until the conversation marks it answered.
  */
 export async function answerQuestionInPlace(
   taskId: string,
@@ -500,11 +501,12 @@ export async function answerQuestionInPlace(
   requestId: string,
   answers: Record<string, string>,
 ): Promise<string> {
+  useAppStore.getState().setQuestionSending(requestId, true);
   const failure = await inPlace(() => api.answerQuestion(taskId, stage, requestId, answers));
   if (failure !== null) {
+    useAppStore.getState().setQuestionSending(requestId, false);
     return failure;
   }
-  useAppStore.getState().clearQuestionChoices(requestId);
   return "";
 }
 

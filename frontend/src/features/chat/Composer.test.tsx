@@ -272,11 +272,37 @@ describe("Composer", () => {
       "Which limits?": "Per key",
       "Which store?": "Disk",
     });
-    expect(field()).toHaveValue("");
-    await waitFor(() => expect(useAppStore.getState().questionChoices["req-1"]).toBeUndefined());
+    await waitFor(() => expect(field()).toHaveValue(""));
+    expect(useAppStore.getState().questionChoices["req-1"]).toEqual({
+      0: { labels: ["Per key"], other: null },
+      1: { labels: [], other: "Disk" },
+    });
   });
 
-  it("tells under the field that the answer was not sent, without the app notice", async () => {
+  it("keeps the text in the field until the answer is sent", async () => {
+    let resolve: () => void = () => {};
+    vi.mocked(api.answerQuestion).mockReturnValueOnce(
+      new Promise<void>((done) => {
+        resolve = done;
+      }),
+    );
+    const question = asking();
+    const { user } = renderWithStore(composer(makeTask(), { question, otherPrimary: true }), {
+      ui: {
+        drafts: { "task-1|prd": "Disk" },
+        questionChoices: { "req-1": { 0: { labels: ["Per key"], other: null } } },
+      },
+    });
+
+    await user.click(field());
+    await user.keyboard("{Enter}");
+
+    expect(field()).toHaveValue("Disk");
+    resolve();
+    await waitFor(() => expect(field()).toHaveValue(""));
+  });
+
+  it("tells under the field that the answer was not sent, keeping the text to send again", async () => {
     vi.mocked(api.answerQuestion).mockRejectedValueOnce(new Error("the session stopped"));
     const question = asking();
     const { user } = renderWithStore(composer(makeTask(), { question, otherPrimary: true }), {
@@ -291,10 +317,79 @@ describe("Composer", () => {
 
     expect(await screen.findByText("Not sent · the session stopped")).toBeInTheDocument();
     expect(useAppStore.getState().error).toBeNull();
+    expect(field()).toHaveValue("Disk");
     expect(useAppStore.getState().questionChoices["req-1"]).toEqual({
       0: { labels: ["Per key"], other: null },
-      1: { labels: [], other: "Disk" },
     });
+    const again = screen.getByRole("button", { name: "Send again" });
+    expect(again).not.toHaveAttribute("aria-disabled", "true");
+
+    await user.click(again);
+
+    expect(api.answerQuestion).toHaveBeenLastCalledWith("task-1", "prd", "req-1", {
+      "Which limits?": "Per key",
+      "Which store?": "Disk",
+    });
+    await waitFor(() => expect(field()).toHaveValue(""));
+    expect(screen.queryByText(/Not sent/)).not.toBeInTheDocument();
+  });
+
+  it("shows the card sending, with the answer on it, while the composer sends it", async () => {
+    let resolve: () => void = () => {};
+    vi.mocked(api.answerQuestion).mockReturnValueOnce(
+      new Promise<void>((done) => {
+        resolve = done;
+      }),
+    );
+    const question = asking();
+    const { user } = renderWithStore(
+      <>
+        <QuestionCard taskId="task-1" stage="prd" question={question} createdAt="" />
+        {composer(makeTask(), { question, otherPrimary: true })}
+      </>,
+      {
+        ui: {
+          drafts: { "task-1|prd": "Disk" },
+          questionChoices: { "req-1": { 0: { labels: ["Per key"], other: null } } },
+        },
+      },
+    );
+
+    await user.click(field());
+    await user.keyboard("{Enter}");
+
+    const card = screen.getByRole("article");
+    expect(card).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("status")).toHaveTextContent("Sending “Per key, Disk”…");
+    expect(screen.queryByRole("button", { name: /Answer/ })).not.toBeInTheDocument();
+
+    resolve();
+    await waitFor(() => expect(field()).toHaveValue(""));
+
+    expect(card).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("radio", { name: /Per key/ })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("radio", { name: /Other: Disk/ })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    expect(api.answerQuestion).toHaveBeenCalledTimes(1);
+  });
+
+  it("sends nothing from the field while the card sends the answer", async () => {
+    const question = asking();
+    const { user } = renderWithStore(composer(makeTask(), { question, otherPrimary: true }), {
+      ui: {
+        drafts: { "task-1|prd": "Disk" },
+        questionChoices: { "req-1": { 0: { labels: ["Per key"], other: null } } },
+        questionSending: { "req-1": true },
+      },
+    });
+
+    await user.click(field());
+    await user.keyboard("{Enter}");
+
+    expect(api.answerQuestion).not.toHaveBeenCalled();
+    expect(field()).toHaveValue("Disk");
   });
 
   it("changes the model of the session it writes to", async () => {

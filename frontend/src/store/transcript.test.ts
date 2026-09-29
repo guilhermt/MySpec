@@ -4,6 +4,7 @@ import {
   applyEvent,
   emptyTranscript,
   fromTranscript,
+  settledQuestions,
   type TranscriptState,
 } from "@/store/transcript";
 import { makeAction, makeEntry, makeTranscript } from "@/test/wails-mock";
@@ -299,5 +300,27 @@ describe("emptyTranscript and fromTranscript", () => {
       pending: [],
       buffered: [],
     });
+  });
+});
+
+describe("settledQuestions", () => {
+  // question is a question entry with a status of its own.
+  function question(requestId: string, status: string): Entry {
+    const entry = makeEntry("question", { id: requestId });
+    if (entry.question === null) {
+      throw new Error("the question fixture has no payload");
+    }
+    return { ...entry, question: { ...entry.question, requestId, status } };
+  }
+
+  it("names the questions answered or cancelled, not the pending ones nor other entries", () => {
+    const entries = [
+      question("req-1", "allowed"),
+      question("req-2", "pending"),
+      makeEntry("user", { id: "u" }),
+      question("req-3", "cancelled"),
+    ];
+
+    expect(settledQuestions(entries)).toEqual(["req-1", "req-3"]);
   });
 });

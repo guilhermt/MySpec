@@ -116,14 +116,40 @@ describe("QuestionCard pending", () => {
     resolve();
   });
 
-  it("forgets the choices once the answer is sent, still showing them until it is drawn", async () => {
+  it("keeps showing the answer sent, busy, until the conversation draws it", async () => {
     const { user } = card();
 
     await user.click(screen.getByRole("radio", { name: /Postgres/ }));
     await user.click(screen.getByRole("button", { name: /Answer/ }));
 
-    await waitFor(() => expect(useAppStore.getState().questionChoices["req-1"]).toBeUndefined());
+    await waitFor(() => expect(api.answerQuestion).toHaveBeenCalledTimes(1));
+    expect(screen.getByRole("article")).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByText("Sending “Postgres”…")).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: /Postgres/ })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("radio", { name: /Postgres/ })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+  });
+
+  it("shows the sending of an answer the composer sends, without Answer", () => {
+    renderWithStore(
+      <QuestionCard stage="prd" taskId="task-1" question={question()} createdAt={AT} />,
+      {
+        ui: {
+          questionChoices: { "req-1": { 0: { labels: [], other: "MySQL" } } },
+          questionSending: { "req-1": true },
+        },
+      },
+    );
+
+    expect(screen.getByRole("article")).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("status")).toHaveTextContent("Sending “MySQL”…");
+    expect(screen.queryByRole("button", { name: /Answer/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /Other: MySQL/ })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
   });
 
   it("tells the failure at its foot and gives Answer back", async () => {

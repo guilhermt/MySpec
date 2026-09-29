@@ -49,6 +49,18 @@ function upsertPending(pending: Entry[], entry: Entry): Entry[] {
   return [...pending, entry];
 }
 
+/**
+ * settledQuestions are the requestIds of the questions among entries that are no longer pending:
+ * answered or cancelled.
+ */
+export function settledQuestions(entries: readonly Entry[]): string[] {
+  return entries.flatMap((entry) =>
+    entry.question !== null && entry.question.status !== "pending"
+      ? [entry.question.requestId]
+      : [],
+  );
+}
+
 function without(entries: Entry[], id: string): Entry[] {
   return entries.some((entry) => entry.id === id)
     ? entries.filter((entry) => entry.id !== id)

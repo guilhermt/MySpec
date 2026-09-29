@@ -28,6 +28,7 @@ export interface StoreOptions {
       | "openStepTab"
       | "prDrafts"
       | "questionChoices"
+      | "questionSending"
       | "newTaskOpen"
       | "newTaskCard"
       | "pendingStart"
@@ -71,6 +72,7 @@ export function resetAppStore(options: StoreOptions = {}): void {
     openStepTab: options.ui?.openStepTab ?? {},
     prDrafts: options.ui?.prDrafts ?? {},
     questionChoices: options.ui?.questionChoices ?? {},
+    questionSending: options.ui?.questionSending ?? {},
     newTaskOpen: options.ui?.newTaskOpen ?? false,
     newTaskCard: options.ui?.newTaskCard ?? null,
     pendingStart: options.ui?.pendingStart ?? null,

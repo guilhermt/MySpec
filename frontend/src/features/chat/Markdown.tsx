@@ -3,6 +3,7 @@ import { createMermaidPlugin } from "@streamdown/mermaid";
 import { useEffect, useMemo, useState } from "react";
 import { Streamdown } from "streamdown";
 import { Button } from "@/components/system/Button";
+import { ICONS } from "@/components/system/icons";
 import { CUT_SHOWN, codeMarkdown, cutParts, type MarkdownPart } from "@/features/chat/code-cut";
 import { CODE_THEMES } from "@/features/chat/code-theme";
 import { ExternalLink } from "@/features/chat/ExternalLink";
@@ -91,11 +92,11 @@ type Copied = "idle" | "copied" | "failed";
 const COPY_LABELS: Record<Copied, string> = {
   idle: "Copy",
   copied: "Copied",
-  failed: "Couldn't copy",
+  failed: "Can't copy · select the text",
 };
 
-// CutCode is a long code block showing its first lines, with the foot that shows the rest and
-// copies the whole block.
+// CutCode is a long code block showing its first lines, with Copy of the whole block in its header
+// and the foot that shows the rest.
 function CutCode({ part, streaming, className }: CutCodeProps) {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState<Copied>("idle");
@@ -120,17 +121,29 @@ function CutCode({ part, streaming, className }: CutCodeProps) {
 
   return (
     <div className="flex flex-col">
-      <Block streaming={streaming && !part.closed} className={className} controls={CUT_CONTROLS}>
-        {codeMarkdown(part, open ? total : CUT_SHOWN)}
-      </Block>
+      <div className="relative">
+        <Block streaming={streaming && !part.closed} className={className} controls={CUT_CONTROLS}>
+          {codeMarkdown(part, open ? total : CUT_SHOWN)}
+        </Block>
+        {/* Copy stands at the end of the block's header, where Streamdown puts its own: the header
+            is the block's first row, of Streamdown's height (h-8). */}
+        <div className="absolute top-0 right-0 flex h-8 items-center pr-(--space-1)">
+          <Button
+            variant="ghost"
+            size="xs"
+            {...(copied === "copied" ? { icon: ICONS.done } : {})}
+            error={copied === "failed"}
+            onClick={() => void copy()}
+          >
+            {COPY_LABELS[copied]}
+          </Button>
+        </div>
+      </div>
       <div className="flex items-center gap-2 border-t border-line-1 pt-(--space-1) text-(length:--text-meta) leading-(--leading-meta) text-ink-3">
         <Button variant="ghost" size="xs" aria-expanded={open} onClick={() => setOpen(!open)}>
           {open ? "Show less" : `Show all ${total} lines`}
         </Button>
         {!open && <span className="tabular-nums">{total - CUT_SHOWN} more</span>}
-        <Button variant="ghost" size="xs" className="ml-auto" onClick={() => void copy()}>
-          {COPY_LABELS[copied]}
-        </Button>
       </div>
     </div>
   );

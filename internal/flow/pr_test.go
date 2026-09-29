@@ -319,6 +319,37 @@ func TestRefreshingThePullRequestDuringTheReviewDoesNotMarkItOpenedAgain(t *test
 	}
 }
 
+func TestRefreshingABlockedReviewResumesItWithoutMarkingThePullRequestOpenedAgain(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.gh.setPR("task-1", samePR)
+	inPR(f, "task-1", plan(), task.PRPreparing)
+	f.service.Sync(t.Context())
+	waitFor(t, "the review session of the task", f.reviewOpen)
+
+	// A reading of the checks that fails blocks the review while it runs.
+	block := &task.PRBlock{Reason: task.PRBlockGHFailed, Detail: "HTTP 502: Bad Gateway"}
+	if _, err := f.tasks.SetPRRun(t.Context(), "task-1", task.PRBlocked, block); err != nil {
+		t.Fatalf("SetPRRun() = %v, want nil", err)
+	}
+	before := f.tasks.inspectCount()
+	if err := f.service.RefreshPR(t.Context(), "task-1"); err != nil {
+		t.Fatalf("RefreshPR() = %v, want nil", err)
+	}
+	f.waitPRRun(t, "the review to resume", func(run task.PRRun) bool { return run.Status == task.PRReviewing })
+	// The reading asks for an evaluation after it marks the pull request.
+	f.waitEvaluated(t, "task-1", before)
+
+	opened := []keyedMarker{{
+		Key:    session.Key{TaskID: "task-1", Stage: session.PRStage},
+		Marker: session.MarkerEntry{Type: session.MarkerPROpened, Number: samePR.Number, Base: samePR.Base},
+	}}
+	if diff := cmp.Diff(opened, f.sessions.marked(session.MarkerPROpened)); diff != "" {
+		t.Errorf("pr_opened markers mismatch (-want +got):\n%s", diff)
+	}
+}
+
 func TestAPullRequestThatAlreadyExistsSkipsTheDraft(t *testing.T) {
 	t.Parallel()
 

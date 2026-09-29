@@ -922,9 +922,27 @@ func (s *Service) MarkCommitted(ctx context.Context, k Key, sha, subject string,
 	s.mark(ctx, k, &MarkerEntry{Type: MarkerCommitted, SHA: sha, Subject: subject, Pushed: pushed, Number: number})
 }
 
-// MarkPROpened records that pull request number was opened against base.
+// MarkPROpened records that pull request number was opened against base,
+// unless the conversation already records it: a reading of the pull request
+// that starts its review again, after a block, finds it opened already.
 func (s *Service) MarkPROpened(ctx context.Context, k Key, number int, base string) {
-	s.mark(ctx, k, &MarkerEntry{Type: MarkerPROpened, Number: number, Base: base})
+	n := &notes{}
+	defer s.flush(n)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	r, err := s.runOf(k)
+	if err != nil {
+		return
+	}
+	opened := slices.ContainsFunc(r.entries, func(e *Entry) bool {
+		return e.Kind == KindMarker && e.Marker != nil && e.Marker.Type == MarkerPROpened && e.Marker.Number == number
+	})
+	if opened {
+		return
+	}
+	marker := &MarkerEntry{Type: MarkerPROpened, Number: number, Base: base}
+	s.appendLocked(ctx, r, Entry{Kind: KindMarker, Marker: marker}, n)
 }
 
 // MarkChecksRead records the checks of the pull request read for a pass of

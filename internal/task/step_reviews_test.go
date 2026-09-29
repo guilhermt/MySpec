@@ -153,9 +153,37 @@ func TestReadStepReportsCountsTheFindings(t *testing.T) {
 				"2. **`store_test.go`**: misses the empty case; add it.\n" + rest,
 			want: 2,
 		},
-		"a heading ends a section whose title is no heading": {
-			body: reviewed + "3. **Findings**:\n- One.\n\n## Notes\n\n- Not a finding.\n",
-			want: 1,
+		"a heading named as a section ends a section whose title is bold": {
+			body: reviewed + "3. **Findings**:\n- One.\n- Two.\n\n## Accepted divergences\n\n- Not a finding.\n",
+			want: 2,
+		},
+		"sub-headings of a finding count with it": {
+			body: "## Findings\n\n### 1. The handle leaks\n\n#### Where\n\n`store.go:12`\n\n#### Fix\n\nClose it.\n\n" +
+				"### 2. A case is missing\n\nAdd it.\n\n## Accepted divergences\n\nNone.\n",
+			want: 2,
+		},
+		"a fenced code block neither counts nor ends the section": {
+			body: "## Findings\n\n1. The script prints nothing.\n\n   ```sh\n   ## note\n   # comment\n   - item\n   ```\n\n" +
+				"2. A case is missing.\n\n## Accepted divergences\n\nNone.\n",
+			want: 2,
+		},
+		"sub-headings under a bold title": {
+			body: reviewed + "3. **Findings**:\n\n### 1. The handle leaks\n\nClose it.\n\n### 2. A case is missing\n\nAdd it.\n\n" +
+				rest,
+			want: 2,
+		},
+		"a finding that starts with the name of a section in bold": {
+			body: "## Findings\n\n1. **Checks** are not run in CI.\n2. A case is missing.\n\n## Accepted divergences\n\nNone.\n",
+			want: 2,
+		},
+		"a finding that starts with the name of a section in bold under a bold title": {
+			body: reviewed + "3. **Findings**:\n   1. **Checks** are not run in CI.\n   2. A case is missing.\n" + rest,
+			want: 2,
+		},
+		"prose that starts with Findings is no title": {
+			body: "## What was reviewed\n\nFindings of pass 1 were addressed.\n\n## Findings\n\n1. A handle leaks.\n" +
+				"2. A case is missing.\n\n## Accepted divergences\n\nNone.\n",
+			want: 2,
 		},
 	}
 

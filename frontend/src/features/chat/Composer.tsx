@@ -87,6 +87,10 @@ export function Composer({
     question === null ? NO_CHOICES : (state.questionChoices[question.requestId] ?? NO_CHOICES),
   );
   const setQuestionChoices = useAppStore((state) => state.setQuestionChoices);
+  // answerSending is the question's answer on its way, from the card or from here.
+  const answerSending = useAppStore(
+    (state) => question !== null && state.questionSending[question.requestId] === true,
+  );
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
   const [stopping, setStopping] = useState(false);
@@ -135,12 +139,14 @@ export function Composer({
   };
 
   // answer puts the text of the field on the pending question, and sends the card once every
-  // question has a choice; otherwise the focus goes back to the card.
+  // question has a choice; otherwise the text leaves the field and the focus goes back to the card.
+  // Sending, the text stays in the field until the answer is sent: not sent, it leaves the card
+  // again, so Send again puts it back where it was.
   const answer = async (q: QuestionEntry, text: string) => {
     const next = answerWithText(q, choices, text);
     setQuestionChoices(q.requestId, next.choices);
-    setDraft(taskId, stage, "");
     if (!next.complete) {
+      setDraft(taskId, stage, "");
       setBackToCard((count) => count + 1);
       return;
     }
@@ -154,10 +160,15 @@ export function Composer({
     );
     setSending(false);
     setError(failure);
+    if (failure === "") {
+      setDraft(taskId, stage, "");
+    } else {
+      setQuestionChoices(q.requestId, choices);
+    }
   };
 
   const send = () => {
-    if (sending) {
+    if (sending || answerSending) {
       return;
     }
     const text = draft.trim();

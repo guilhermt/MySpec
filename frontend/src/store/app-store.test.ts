@@ -533,17 +533,69 @@ describe("question choices", () => {
     });
   });
 
-  it("forgets the choices of one question and leaves the others", () => {
+  // asked is a question entry of the conversation, pending or settled.
+  function asked(requestId: string, status: string, seq = 1) {
+    const entry = makeEntry("question", { id: requestId, seq });
+    if (entry.question === null) {
+      throw new Error("the question fixture has no payload");
+    }
+    return { ...entry, question: { ...entry.question, requestId, status } };
+  }
+
+  it("marks and unmarks the answer of a question on its way", () => {
+    act(() => {
+      useAppStore.getState().setQuestionSending("req-1", true);
+      useAppStore.getState().setQuestionSending("req-2", true);
+      useAppStore.getState().setQuestionSending("req-2", false);
+    });
+
+    expect(useAppStore.getState().questionSending).toEqual({ "req-1": true });
+  });
+
+  it("forgets the choices and the sending of a question the conversation marks answered", () => {
+    useAppStore.getState().setTranscript(makeTranscript({ taskId: WEB_TASK.id }));
     act(() => {
       useAppStore.getState().setQuestionChoices("req-1", choices);
       useAppStore.getState().setQuestionChoices("req-2", choices);
+      useAppStore.getState().setQuestionSending("req-1", true);
     });
 
     act(() => {
-      useAppStore.getState().clearQuestionChoices("req-1");
+      useAppStore
+        .getState()
+        .applyTranscriptEvent(transcriptEvent({ entry: asked("req-2", "pending") }));
+    });
+
+    expect(useAppStore.getState().questionChoices).toEqual({ "req-1": choices, "req-2": choices });
+
+    act(() => {
+      useAppStore
+        .getState()
+        .applyTranscriptEvent(transcriptEvent({ entry: asked("req-1", "allowed") }));
     });
 
     expect(useAppStore.getState().questionChoices).toEqual({ "req-2": choices });
+    expect(useAppStore.getState().questionSending).toEqual({});
+  });
+
+  it("forgets the choices of a question cancelled in a conversation loaded again", () => {
+    act(() => {
+      useAppStore.getState().setQuestionChoices("req-1", choices);
+      useAppStore.getState().setQuestionSending("req-1", true);
+      useAppStore.getState().beginTranscript(WEB_TASK.id, WEB_TASK.stage);
+      useAppStore
+        .getState()
+        .applyTranscriptEvent(transcriptEvent({ entry: asked("req-1", "cancelled") }));
+    });
+
+    expect(useAppStore.getState().questionChoices).toEqual({ "req-1": choices });
+
+    act(() => {
+      useAppStore.getState().setTranscript(makeTranscript({ taskId: WEB_TASK.id }));
+    });
+
+    expect(useAppStore.getState().questionChoices).toEqual({});
+    expect(useAppStore.getState().questionSending).toEqual({});
   });
 
   it("drops the choices once no repository is registered", () => {

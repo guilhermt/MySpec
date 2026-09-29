@@ -41,6 +41,7 @@ import type {
   Board,
   BoardCard,
   DiscussionSummary,
+  Entry,
   Leftover,
   MarkerType,
   Migration,
@@ -63,6 +64,7 @@ import {
   applyEvent,
   emptyTranscript,
   fromTranscript,
+  settledQuestions,
   type TranscriptState,
 } from "@/store/transcript";
 
@@ -195,10 +197,17 @@ export interface AppStore {
   /**
    * questionChoices are the choices of a pending question card, by its requestId, shared by the card
    * and the composer that answers it: by the index of each question, the labels picked and the text
-   * of Other… (QuestionChoices of features/chat/composer.ts). A question's entry goes away once
-   * its answer is sent.
+   * of Other… (QuestionChoices of features/chat/composer.ts). The choices of an answer on its way
+   * stay, so the card keeps showing them; a question's entry goes away when the conversation marks
+   * the question answered or cancelled.
    */
   questionChoices: Record<string, Record<number, { labels: string[]; other: string | null }>>;
+  /**
+   * questionSending are the pending questions whose answer is on its way, by requestId, sent from
+   * the card or from the composer: the card shows it sending and neither sends it again. A question
+   * leaves it when the send fails or when the conversation marks it answered or cancelled.
+   */
+  questionSending: Record<string, true>;
   /** newTaskOpen is the creation dialog being open. */
   newTaskOpen: boolean;
   /** newTaskCard is the card the creation dialog opens for; null for a task without one. */
@@ -302,8 +311,8 @@ export interface AppStore {
     requestId: string,
     choices: Record<number, { labels: string[]; other: string | null }>,
   ) => void;
-  /** clearQuestionChoices forgets the choices of a question whose answer was sent. */
-  clearQuestionChoices: (requestId: string) => void;
+  /** setQuestionSending marks a question's answer as on its way, or no longer. */
+  setQuestionSending: (requestId: string, sending: boolean) => void;
   clearPrDraft: (taskId: string) => void;
 
   openHistory: () => void;
@@ -409,6 +418,30 @@ function withoutTaskTranscripts(
   return Object.fromEntries(Object.entries(transcripts).filter(([key]) => !key.startsWith(prefix)));
 }
 
+// withoutKeys drops keys from a record; with none of them in it, the record stays the same object.
+function withoutKeys<T>(record: Record<string, T>, keys: readonly string[]): Record<string, T> {
+  if (!keys.some((key) => key in record)) {
+    return record;
+  }
+  return Object.fromEntries(Object.entries(record).filter(([key]) => !keys.includes(key)));
+}
+
+// A question the conversation marks answered or cancelled takes its choices and its sending mark
+// with it: the card has turned into its answer.
+function forgetSettled(
+  state: Pick<AppStore, "questionChoices" | "questionSending">,
+  entries: readonly Entry[],
+): Partial<Pick<AppStore, "questionChoices" | "questionSending">> {
+  const settled = settledQuestions(entries);
+  if (settled.length === 0) {
+    return {};
+  }
+  return {
+    questionChoices: withoutKeys(state.questionChoices, settled),
+    questionSending: withoutKeys(state.questionSending, settled),
+  };
+}
+
 // The tab a situation of a step asks for; any other place leaves the tabs alone.
 function withStepTab(
   current: Record<string, StepTab>,
@@ -499,6 +532,7 @@ function initialTaskUi(): Pick<
   | "openStepTab"
   | "prDrafts"
   | "questionChoices"
+  | "questionSending"
   | "newTaskOpen"
   | "newTaskCard"
   | "pendingStart"
@@ -518,6 +552,7 @@ function initialTaskUi(): Pick<
     openStepTab: {},
     prDrafts: {},
     questionChoices: {},
+    questionSending: {},
     newTaskOpen: false,
     newTaskCard: null,
     pendingStart: null,
@@ -921,7 +956,10 @@ export const useAppStore = create<AppStore>()((set, get) => {
         const key = sessionKey(transcript.taskId, transcript.stage);
         const buffered = state.transcripts[key]?.buffered ?? [];
         const loaded = buffered.reduce(applyEvent, fromTranscript(transcript));
-        return { transcripts: { ...state.transcripts, [key]: loaded } };
+        return {
+          transcripts: { ...state.transcripts, [key]: loaded },
+          ...forgetSettled(state, loaded.entries),
+        };
       }),
 
     applyTranscriptEvent: (event) =>
@@ -938,7 +976,15 @@ export const useAppStore = create<AppStore>()((set, get) => {
         if (next === current) {
           return {};
         }
-        return { transcripts: { ...state.transcripts, [key]: next } };
+        // A buffered event settles its question when the loaded conversation folds it in.
+        const settles =
+          current.status !== "loading" && event.kind === "entry" && event.entry !== null
+            ? [event.entry]
+            : [];
+        return {
+          transcripts: { ...state.transcripts, [key]: next },
+          ...forgetSettled(state, settles),
+        };
       }),
 
     failTranscript: (taskId, stage, message) =>
@@ -976,11 +1022,12 @@ export const useAppStore = create<AppStore>()((set, get) => {
     setQuestionChoices: (requestId, choices) =>
       set((state) => ({ questionChoices: { ...state.questionChoices, [requestId]: choices } })),
 
-    clearQuestionChoices: (requestId) =>
-      set((state) => {
-        const { [requestId]: _dropped, ...rest } = state.questionChoices;
-        return { questionChoices: rest };
-      }),
+    setQuestionSending: (requestId, sending) =>
+      set((state) => ({
+        questionSending: sending
+          ? { ...state.questionSending, [requestId]: true }
+          : withoutKeys(state.questionSending, [requestId]),
+      })),
 
     clearPrDraft: (taskId) =>
       set((state) => {
