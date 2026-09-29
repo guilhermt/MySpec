@@ -619,7 +619,9 @@ describe("Conversation stretches and markers", () => {
       },
     );
 
-    const fold = screen.getByRole("button", { name: /12 speeches · 0 actions/ });
+    const fold = screen.getByRole("button", {
+      name: /^Earlier: 12 speeches and 0 actions, from the start/,
+    });
     expect(
       screen.getByRole("article", { name: /^Earlier: 12 speeches and 0 actions, from the start/ }),
     ).toBeInTheDocument();
@@ -661,7 +663,7 @@ describe("Conversation stretches and markers", () => {
 
     const [older, newer] = screen.getAllByRole("button", { name: /The plan is still invalid/ });
     const marker = newer?.closest("article");
-    expect(marker).toHaveFocus();
+    expect(newer).toHaveFocus();
     expect(newer).toHaveAttribute("aria-expanded", "true");
     expect(older).toHaveAttribute("aria-expanded", "false");
     expect(marker).toHaveTextContent("2-api.md · no repository");
@@ -690,7 +692,7 @@ describe("Conversation stretches and markers", () => {
       "aria-expanded",
       "true",
     );
-    expect(screen.getByRole("article", { name: /^The plan is still invalid/ })).toHaveFocus();
+    expect(screen.getByRole("button", { name: /^The plan is still invalid/ })).toHaveFocus();
     expect(screen.getByText("Speech 0.")).toBeInTheDocument();
   });
 

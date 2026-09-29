@@ -1,4 +1,4 @@
-import { type KeyboardEvent, useRef, useState } from "react";
+import { type KeyboardEvent, useLayoutEffect, useRef, useState } from "react";
 import { Icon } from "@/components/system/Icon";
 import { ICONS } from "@/components/system/icons";
 import { Skeleton, SkeletonBar } from "@/components/system/Skeleton";
@@ -93,6 +93,17 @@ function FileRow({ taskId, file }: { taskId: string; file: ReviewFile }) {
 // failed, or the files.
 function Body({ taskId, review }: { taskId: string; review: Review | null }) {
   const [all, setAll] = useState(false);
+  const listRef = useRef<HTMLUListElement>(null);
+  // revealed is Show N more files pressed: the focus goes to the first file it shows, which takes
+  // the place of the button, before the rescue of the task screen sees the focus gone.
+  const revealed = useRef(false);
+
+  useLayoutEffect(() => {
+    if (all && revealed.current) {
+      revealed.current = false;
+      listRef.current?.querySelectorAll<HTMLElement>(ROW)[SHOWN_FILES]?.focus();
+    }
+  }, [all]);
   if (review === null) {
     return (
       <Skeleton label="Reading the worktree" className="py-(--space-1)">
@@ -117,7 +128,7 @@ function Body({ taskId, review }: { taskId: string; review: Review | null }) {
   const files = review.files ?? [];
   const more = all ? 0 : Math.max(files.length - SHOWN_FILES, 0);
   return (
-    <ul className="flex flex-col divide-y divide-line-1">
+    <ul ref={listRef} className="flex flex-col divide-y divide-line-1">
       {files.slice(0, files.length - more).map((file) => (
         <FileRow key={file.path} taskId={taskId} file={file} />
       ))}
@@ -127,7 +138,10 @@ function Body({ taskId, review }: { taskId: string; review: Review | null }) {
             type="button"
             data-file-row
             tabIndex={-1}
-            onClick={() => setAll(true)}
+            onClick={() => {
+              revealed.current = true;
+              setAll(true);
+            }}
             className="-ml-(--space-1-5) inline-flex h-(--size-control-xs) items-center gap-(--space-1-5) rounded-sm px-(--space-1-5) text-(length:--text-micro) leading-(--leading-micro) text-ink-3 outline-none hover:bg-veil-hover hover:text-ink-1 active:bg-veil-press focus-visible:focus-ring"
           >
             {`Show ${more} more files`}

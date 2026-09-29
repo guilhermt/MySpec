@@ -65,14 +65,16 @@ func renderPrompt(stage prompts.Stage, vars prompts.Vars) (string, error) {
 }
 
 // memSessions is an in-memory session.SessionRepository, one record per stage
-// of a task.
+// of a task. Deleting a record takes its entries, as the database's cascade
+// does.
 type memSessions struct {
-	mu   sync.Mutex
-	recs map[string]session.Record // by task id and stage
+	mu      sync.Mutex
+	recs    map[string]session.Record // by task id and stage
+	entries *memEntries
 }
 
-func newMemSessions() *memSessions {
-	return &memSessions{recs: map[string]session.Record{}}
+func newMemSessions(entries *memEntries) *memSessions {
+	return &memSessions{recs: map[string]session.Record{}, entries: entries}
 }
 
 // key indexes a record by the task and stage it belongs to.
@@ -113,6 +115,9 @@ func (r *memSessions) Delete(_ context.Context, taskID string, stages ...string)
 	defer r.mu.Unlock()
 
 	for _, stage := range stages {
+		if rec, ok := r.recs[key(taskID, stage)]; ok {
+			r.entries.dropSession(rec.ID)
+		}
 		delete(r.recs, key(taskID, stage))
 	}
 	return nil
@@ -135,6 +140,7 @@ func (r *memSessions) DeleteByTask(_ context.Context, taskID string) error {
 
 	for k, rec := range r.recs {
 		if rec.TaskID == taskID {
+			r.entries.dropSession(rec.ID)
 			delete(r.recs, k)
 		}
 	}
@@ -233,7 +239,23 @@ func (r *memEntries) Delete(_ context.Context, id string) error {
 	if index := r.indexOf(id); index >= 0 {
 		r.items = slices.Delete(r.items, index, index+1)
 	}
+	delete(r.outputs, id)
 	return nil
+}
+
+// dropSession removes the entries of a session with their outputs, as the
+// database's cascade does when the session goes.
+func (r *memEntries) dropSession(sessionID string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.items = slices.DeleteFunc(r.items, func(item storedEntry) bool {
+		if item.sessionID != sessionID {
+			return false
+		}
+		delete(r.outputs, item.entry.ID)
+		return true
+	})
 }
 
 func (r *memEntries) MaxSeq(_ context.Context, sessionID string) (int, error) {
@@ -409,9 +431,10 @@ func newFixture(t *testing.T, scenario string) *fixture {
 func newFixtureWith(t *testing.T, launcher *fakeLauncher, idle time.Duration) *fixture {
 	t.Helper()
 
+	entries := &memEntries{}
 	f := &fixture{
-		sessions: newMemSessions(),
-		entries:  &memEntries{},
+		sessions: newMemSessions(entries),
+		entries:  entries,
 		launcher: launcher,
 		now:      base,
 	}

@@ -34,8 +34,12 @@ describe("SubagentRow", () => {
       ),
     );
 
+    // The line is the stop of the walk, the one element with the name and the state of the fold.
     const toggle = screen.getByRole("button");
     expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(toggle).toHaveAttribute("data-feed-item");
+    expect(toggle).toHaveAccessibleName(/^Delegated · Check how others evict idle entries/);
+    expect(screen.getByRole("listitem")).not.toHaveAttribute("aria-label");
     expect(toggle).toHaveTextContent("Delegated · Check how others evict idle entries");
     expect(toggle).toHaveTextContent("3 actions · Read 3");
     expect(screen.queryByText("src/file0.ts")).not.toBeInTheDocument();

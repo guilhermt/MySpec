@@ -454,6 +454,27 @@ func TestAPassRecordsTheTroubleOfTheReadingItStartsFrom(t *testing.T) {
 	})
 }
 
+func TestTheChecksReadCountOnlyTheChecksThatPassed(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.service.MarkChecks(t.Context(), reviewKeyOf, 2, &gh.PRChecks{
+		Checks: []gh.Check{
+			{Name: "test", Conclusion: "success"},
+			{Name: "build", Pending: true},
+			{Name: "lint", Conclusion: "failure"},
+		},
+		Mergeable: gh.MergeableClean,
+	})
+
+	want := []keyedMarker{{Key: reviewKeyOf, Marker: session.MarkerEntry{
+		Type: session.MarkerChecksRead, Pass: 2, Passed: 1, Total: 3, Failed: []string{"lint"},
+	}}}
+	if diff := cmp.Diff(want, f.sessions.marked(session.MarkerChecksRead)); diff != "" {
+		t.Errorf("checks_read markers mismatch (-want +got):\n%s", diff)
+	}
+}
+
 // awaitingMerge puts the task after a clean review, with the baseline and the
 // trouble recorded and gh reading its pull request with checks.
 func awaitingMerge(f *fixture, state gh.State, baseline, trouble gh.Trouble, checks gh.PRChecks) {

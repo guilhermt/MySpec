@@ -3,6 +3,7 @@ import { useRef } from "react";
 import { describe, expect, it } from "vitest";
 import { useFeed } from "@/features/chat/useFeed";
 import { ChangedFilesCard } from "@/features/task/ChangedFilesCard";
+import { useFocusRescue } from "@/features/task/request-focus";
 import { api, type Review, type ReviewFile } from "@/lib/wails";
 import { renderWithStore } from "@/test/render";
 import { makeReview } from "@/test/wails-mock";
@@ -34,6 +35,18 @@ function InFeed({ review }: { review: Review | null }) {
       <article data-feed-item tabIndex={-1} aria-label="Speech" />
       <ChangedFilesCard taskId="task-1" review={review} />
       <article data-feed-item tabIndex={-1} aria-label="Queued" />
+    </div>
+  );
+}
+
+// Rescued is the card on the task screen, whose rescue takes a lost focus to the composer.
+function Rescued({ review }: { review: Review }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useFocusRescue(ref);
+  return (
+    <div ref={ref}>
+      <ChangedFilesCard taskId="task-1" review={review} />
+      <textarea id="composer-input" aria-label="Composer" />
     </div>
   );
 }
@@ -99,6 +112,17 @@ describe("ChangedFilesCard", () => {
 
     expect(within(card()).getAllByRole("listitem")).toHaveLength(15);
     expect(row(/file-15\.ts/)).toBeInTheDocument();
+  });
+
+  it("takes the focus to the first file it shows with Show N more files, not to the composer", async () => {
+    const { user } = renderWithStore(<Rescued review={many(15)} />);
+
+    within(card()).getByRole("button", { name: "Show 3 more files" }).focus();
+    await user.keyboard("{Enter}");
+
+    expect(row(/file-13\.ts/)).toHaveFocus();
+    await new Promise((settle) => setTimeout(settle, 0));
+    expect(row(/file-13\.ts/)).toHaveFocus();
   });
 
   it("stands in with a skeleton before the first reading of the worktree", () => {

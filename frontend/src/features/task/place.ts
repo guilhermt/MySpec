@@ -31,9 +31,6 @@ export type PlaceView =
   /** closedReview is the conversation of the review of the pull request, read-only, with the line of its end. */
   | { kind: "closedReview"; endLine: MarkerView | null };
 
-// The PR states past the review, when its session is closed: the conversation is only read.
-const CLOSED_SESSION: readonly PRStatus[] = ["done", "trouble", "merged", "pr_closed", "closed"];
-
 // counted is a count with its noun: "1 step", "7 steps".
 function counted(count: number, noun: string): string {
   return `${count} ${noun}${count === 1 ? "" : "s"}`;
@@ -194,15 +191,11 @@ export function prPlaceOf(
 }
 
 /**
- * hasComposer reports whether the place has the field to talk to its
- * conversation: only a conversation with a session. prStatus, in the PR
- * stage, closes it once the review is behind the pull request.
+ * hasComposer reports whether the place has the field to talk to its conversation: only a
+ * conversation with a session, which the review of a pull request behind it is not.
  */
-export function hasComposer(view: PlaceView, prStatus?: string): boolean {
-  if (view.kind !== "conversation") {
-    return false;
-  }
-  return prStatus === undefined || !CLOSED_SESSION.includes(asPRStatus(prStatus));
+export function hasComposer(view: PlaceView): boolean {
+  return view.kind === "conversation";
 }
 
 /** hasReviewConversation reports whether the review of the pull request has a conversation: the index of the conversations of the task lists it once the first pass started. */

@@ -1,5 +1,7 @@
 import type { RequestForm } from "@/components/system/RequestBar";
 import type { GlyphState } from "@/components/system/StateGlyph";
+import { pendingOf } from "@/features/chat/composer";
+import { voiceInSentence, voiceOf } from "@/features/chat/markers";
 import { canCloseTask, closeHint, draftAtHand } from "@/features/task/pr-status";
 import {
   currentStepOf,
@@ -8,6 +10,7 @@ import {
   stepStage,
 } from "@/features/task/step-status";
 import { isPaused } from "@/features/task/task-session";
+import type { RequestFocus } from "@/lib/focus";
 import { prBaseName, troubleLabel } from "@/lib/pull-requests";
 import { fallbackReason } from "@/lib/review-modes";
 import {
@@ -35,7 +38,6 @@ import type {
 } from "@/lib/wails";
 import {
   asBlockReason,
-  asPermissionStatus,
   asPlaceKind,
   asPRBlockReason,
   asPRStatus,
@@ -87,13 +89,6 @@ export interface TaskRequestButton {
   /** stage is the session Retry restarts (step:4, step_review:4, pr, pr_review, prd…); retrySession only. */
   stage?: string;
 }
-
-/**
- * RequestFocus is where the focus goes on arriving at the request, and on Show: the pending card
- * (its first option, or Allow), the primary of the bar, the composer, or the bar itself when none
- * of its actions can be pressed.
- */
-export type RequestFocus = "question" | "permission" | "primary" | "composer" | "bar";
 
 /** TaskRequestModel is the request bar of the task screen. */
 export interface TaskRequestModel {
@@ -679,14 +674,12 @@ export function taskRequestOf(
 
 /** pendingRequestOf is the card a conversation holds pending, from its entries: the last question or permission still unanswered. */
 export function pendingRequestOf(entries: readonly Entry[]): PendingRequest | null {
-  for (let index = entries.length - 1; index >= 0; index -= 1) {
-    const entry = entries[index];
-    if (entry?.question != null && asPermissionStatus(entry.question.status) === "pending") {
-      return { kind: "question", questions: (entry.question.questions ?? []).length };
-    }
-    if (entry?.permission != null && asPermissionStatus(entry.permission.status) === "pending") {
-      return { kind: "permission", defaultToNo: entry.permission.defaultToNo };
-    }
+  const { question, permission, last } = pendingOf(entries);
+  if (last === "question" && question !== null) {
+    return { kind: "question", questions: (question.questions ?? []).length };
+  }
+  if (last === "permission" && permission !== null) {
+    return { kind: "permission", defaultToNo: permission.defaultToNo };
   }
   return null;
 }
@@ -781,32 +774,9 @@ function conversationName(stage: string): string {
   }
 }
 
-// speakerOf is who talks in a conversation of a task inside a sentence, by its session stage.
-function speakerOf(stage: string): string {
-  switch (stage.split(":")[0]) {
-    case "prd":
-      return "PRD agent";
-    case "tech_spec":
-      return "tech spec agent";
-    case "plan":
-      return "plan agent";
-    case "one_shot":
-      return "planning agent";
-    case "step":
-      return "implementer";
-    case "step_review":
-      return "reviewer";
-    case "pr":
-    case "pr_review":
-      return "PR agent";
-    default:
-      return "";
-  }
-}
-
 /** retryLabelOf is the label of Retry on a session that stopped: "Retry implementer", "Retry PRD agent". */
 export function retryLabelOf(stage: string): string {
-  const who = speakerOf(stage);
+  const who = voiceInSentence(voiceOf(stage));
   return who === "" ? "Retry" : `Retry ${who}`;
 }
 

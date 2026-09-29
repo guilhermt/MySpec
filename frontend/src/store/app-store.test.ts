@@ -533,6 +533,19 @@ describe("question choices", () => {
     });
   });
 
+  it("forgets the choices of one question and leaves the others", () => {
+    act(() => {
+      useAppStore.getState().setQuestionChoices("req-1", choices);
+      useAppStore.getState().setQuestionChoices("req-2", choices);
+    });
+
+    act(() => {
+      useAppStore.getState().clearQuestionChoices("req-1");
+    });
+
+    expect(useAppStore.getState().questionChoices).toEqual({ "req-2": choices });
+  });
+
   it("drops the choices once no repository is registered", () => {
     act(() => {
       useAppStore.getState().applyState(withPR(makePullRequest()));

@@ -9,7 +9,7 @@ const FOLD: StretchFoldView = {
   text: "5 speeches · 71 actions",
   from: "from the start · steps/06-throttle-metrics.md",
   interval: "16:12–16:48",
-  name: "Earlier: 5 speeches and 71 actions, from the start · steps/06-throttle-metrics.md, 16:12 to 16:48",
+  name: "Earlier: 5 speeches and 71 actions, from the start, 16:12 to 16:48",
 };
 
 function Fold({ fold = FOLD }: { fold?: StretchFoldView }) {
@@ -26,7 +26,6 @@ describe("StretchFold", () => {
     render(<Fold />);
 
     const article = screen.getByRole("article", { name: FOLD.name });
-    expect(article).toHaveAttribute("data-feed-item");
     expect(article).toHaveTextContent("5 speeches · 71 actions");
     expect(article).toHaveTextContent("from the start · steps/06-throttle-metrics.md");
     expect(screen.getByText("16:12–16:48")).toHaveClass("entry-time");
@@ -35,9 +34,11 @@ describe("StretchFold", () => {
   it("doesn't mount the entries of a folded stretch, and shows them open", async () => {
     const user = userEvent.setup();
     render(<Fold />);
-    const toggle = screen.getByRole("button", { name: /5 speeches · 71 actions/ });
+    // The line is the stop of the walk, with the state of the fold, and has the name of the stretch.
+    const toggle = screen.getByRole("button", { name: FOLD.name });
     expect(toggle).toHaveAttribute("aria-expanded", "false");
     expect(toggle).toHaveAttribute("data-feed-toggle");
+    expect(toggle).toHaveAttribute("data-feed-item");
     expect(screen.queryByText("Speech 1.")).not.toBeInTheDocument();
 
     await user.click(toggle);

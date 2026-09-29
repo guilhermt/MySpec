@@ -5,13 +5,14 @@ import { Spinner } from "@/components/system/Spinner";
 import { Tooltip } from "@/components/system/Tooltip";
 import { useNow } from "@/features/attention/useNow";
 import { type ActionRight, actionLabel, actionRight } from "@/features/chat/actions";
+import { Chevron } from "@/features/chat/entries/Chevron";
 import { CommandOutput } from "@/features/chat/entries/CommandOutput";
 import { cn } from "@/lib/utils";
 import { type ActionEntry, type ActionStatus, asActionStatus, type Entry } from "@/lib/wails";
 
 /** ROW_GRID is the grid of a row of the open group: chevron, state, label, command, right. */
 export const ROW_GRID =
-  "grid min-h-(--size-control-sm) w-full grid-cols-[var(--icon-xs)_var(--icon-sm)_minmax(0,max-content)_minmax(0,1fr)_auto] items-center gap-x-(--space-2) rounded-sm px-(--space-2) text-left text-(length:--text-meta) leading-(--leading-meta) text-ink-2 outline-none focus-visible:focus-ring";
+  "grid min-h-(--size-control) w-full grid-cols-[var(--icon-xs)_var(--icon-sm)_minmax(0,max-content)_minmax(0,1fr)_auto] items-center gap-x-(--space-2) rounded-sm px-(--space-2) text-left text-(length:--text-meta) leading-(--leading-meta) text-ink-2 outline-none focus-visible:focus-ring";
 
 /** OUTPUT_INDENT puts the output under the label of its row. */
 export const OUTPUT_INDENT =
@@ -31,20 +32,6 @@ const LABEL_TONES: Record<ActionStatus, string> = {
   running: "font-medium text-ink-1",
   interrupted: "text-ink-3",
 };
-
-/** Chevron is the sign of a row that opens, turned while it is open. */
-export function Chevron({ open }: { open: boolean }) {
-  return (
-    <Icon
-      icon={ICONS.chevron}
-      size="xs"
-      className={cn(
-        "text-ink-4 transition-transform duration-(--duration-fast) ease-standard",
-        open && "rotate-90",
-      )}
-    />
-  );
-}
 
 // withTip gives the element the tooltip of the whole command, when there is one.
 function withTip(tip: string, element: ReactElement): ReactElement {
@@ -99,7 +86,18 @@ export function CommandRow({ taskId, stage, entry, action, waiting }: CommandRow
   const now = useNow(1000, status === "running");
   // The CLI sends the output only at the end: a running command has none yet.
   const hasOutput = action.outputLines > 0 && status !== "running";
-  const [open, setOpen] = useState(status === "error" && hasOutput);
+  const failed = status === "error" && hasOutput;
+  const [open, setOpen] = useState(failed);
+  // toggled is the user having opened or folded the output: a failure no longer opens it.
+  const [toggled, setToggled] = useState(false);
+  // A command that fails on screen opens its output once, as one that had failed would be.
+  const [wasFailed, setWasFailed] = useState(failed);
+  if (failed !== wasFailed) {
+    setWasFailed(failed);
+    if (failed && !toggled) {
+      setOpen(true);
+    }
+  }
   const label = actionLabel(action);
   const right = actionRight(action, waiting, now);
   const name = commandName(action, right, waiting);
@@ -157,7 +155,7 @@ export function CommandRow({ taskId, stage, entry, action, waiting }: CommandRow
     );
   }
   return (
-    <li className="flex flex-col">
+    <li data-feed-entry className="flex flex-col">
       <button
         type="button"
         data-feed-item
@@ -165,7 +163,10 @@ export function CommandRow({ taskId, stage, entry, action, waiting }: CommandRow
         tabIndex={-1}
         aria-expanded={open}
         aria-label={`${name}, output`}
-        onClick={() => setOpen(!open)}
+        onClick={() => {
+          setToggled(true);
+          setOpen(!open);
+        }}
         className={cn(ROW_GRID, "hover:bg-veil-hover active:bg-veil-press")}
       >
         {cells}

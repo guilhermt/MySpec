@@ -73,6 +73,44 @@ describe("CommandOutput", () => {
     expect(await screen.findByRole("button", { name: "Show less" })).toBeInTheDocument();
   });
 
+  it("keeps the focus in place: on its line while it reads, then on the one button that shows all and less", async () => {
+    let resolve: (value: { text: string; lines: number; truncated: boolean }) => void = () => {};
+    api.getActionOutput.mockImplementation(
+      () =>
+        new Promise((done) => {
+          resolve = done;
+        }),
+    );
+    const { user } = renderOutput();
+    screen.getByRole("button", { name: "Show all 36 lines" }).focus();
+
+    await user.keyboard("{Enter}");
+    const row = screen.getByText("Reading the output…").closest("div[tabindex]");
+    expect(row).toHaveFocus();
+
+    resolve({ text: WHOLE, lines: 36, truncated: false });
+    const less = await screen.findByRole("button", { name: "Show less" });
+    expect(less).toHaveFocus();
+
+    await user.keyboard("{Enter}");
+    expect(screen.getByRole("button", { name: "Show all 36 lines" })).toBe(less);
+    expect(less).toHaveFocus();
+  });
+
+  it("gives the focus to Try again when the reading fails, and keeps it through the next one", async () => {
+    api.getActionOutput.mockRejectedValueOnce(new Error("gone"));
+    const { user } = renderOutput();
+    screen.getByRole("button", { name: "Show all 36 lines" }).focus();
+
+    await user.keyboard("{Enter}");
+    const retry = await screen.findByRole("button", { name: "Try again" });
+    expect(retry).toHaveFocus();
+
+    api.getActionOutput.mockResolvedValueOnce({ text: WHOLE, lines: 36, truncated: false });
+    await user.keyboard("{Enter}");
+    expect(await screen.findByRole("button", { name: "Show less" })).toHaveFocus();
+  });
+
   it("says when the product kept only the end of the output", () => {
     renderOutput({ lines: 900, truncated: true });
 

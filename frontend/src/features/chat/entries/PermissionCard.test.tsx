@@ -1,6 +1,8 @@
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
+import { useRef } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { PermissionCard } from "@/features/chat/entries/PermissionCard";
+import { useFocusRescue } from "@/features/task/request-focus";
 import { api, type PermissionEntry } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
@@ -27,6 +29,18 @@ function card(p: PermissionEntry = permission(), readOnly = false) {
       createdAt={AT}
       readOnly={readOnly}
     />,
+  );
+}
+
+// Rescued is the card on the task screen, whose rescue takes a lost focus to the composer.
+function Rescued() {
+  const ref = useRef<HTMLDivElement>(null);
+  useFocusRescue(ref);
+  return (
+    <div ref={ref}>
+      <PermissionCard stage="prd" taskId="task-1" permission={permission()} createdAt={AT} />
+      <textarea id="composer-input" aria-label="Composer" />
+    </div>
   );
 }
 
@@ -120,6 +134,22 @@ describe("PermissionCard pending", () => {
     await user.click(screen.getByRole("button", { name: "Cancel" }));
 
     expect(screen.getByRole("button", { name: /Allow/ })).toBeInTheDocument();
+  });
+
+  it("gives the focus back to Deny… with Cancel, not to the composer", async () => {
+    const { user } = renderWithStore(<Rescued />);
+
+    await user.click(screen.getByRole("button", { name: /Deny…/ }));
+    await waitFor(() =>
+      expect(screen.getByRole("textbox", { name: /Tell the agent/ })).toHaveFocus(),
+    );
+    screen.getByRole("button", { name: "Cancel" }).focus();
+    await user.keyboard("{Enter}");
+
+    const deny = screen.getByRole("button", { name: /Deny…/ });
+    expect(deny).toHaveFocus();
+    await new Promise((settle) => setTimeout(settle, 0));
+    expect(deny).toHaveFocus();
   });
 
   it("starts on Deny… with defaultToNo", () => {

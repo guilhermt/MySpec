@@ -60,6 +60,15 @@ func TestOutputOfEachKindOfResult(t *testing.T) {
 			tool: "Agent", result: result("The report.\n", false),
 			want: session.Output{Text: "The report.", Lines: 1}, ok: true,
 		},
+		"a subagent's report comes from the structured result without the frame": {
+			tool:      "Agent",
+			result:    result("[Subagent hand-back] The report follows:\n  The report.\nagentId: a1\n<usage>tool_uses: 2</usage>", false),
+			useResult: `{"status":"completed","content":[{"type":"text","text":"The report."},{"type":"text","text":"More."}]}`,
+			want:      session.Output{Text: "The report.\n\nMore.", Lines: 3}, ok: true,
+		},
+		"a subagent's command with no output has none": {
+			tool: "Bash", result: result("(Bash completed with no output)", false),
+		},
 		"ANSI escapes are stripped": {
 			tool: "Bash", result: result("", false), useResult: `{"stdout":"\u001b[31mred\u001b[0m","stderr":""}`,
 			want: session.Output{Text: "red", Lines: 1}, ok: true,
@@ -132,6 +141,14 @@ func TestOutputOfTheRecordedResults(t *testing.T) {
 		ok         bool
 	}{
 		"a command that prints nothing": {file: "bash-silent.jsonl", tool: "Bash"},
+		"a subagent gives only its report": {
+			file: "subagent.jsonl", tool: "Agent",
+			want: session.Output{Text: `The file a.txt contains a single word "hi" on the first line.`, Lines: 1}, ok: true,
+		},
+		"a subagent's command": {
+			file: "subagent.jsonl", tool: "Bash",
+			want: session.Output{Text: "a.txt", Lines: 1}, ok: true,
+		},
 		"a command that fails": {
 			file: "bash-exit.jsonl", tool: "Bash",
 			want: session.Output{Text: "cat: missing.txt: No such file or directory", Lines: 1}, ok: true,

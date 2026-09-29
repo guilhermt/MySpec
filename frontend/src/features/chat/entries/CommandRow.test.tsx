@@ -15,9 +15,9 @@ const TESTS = {
   finishedAt: "2026-09-05T10:00:08.2Z",
 } satisfies Partial<ActionEntry>;
 
-function renderRow(overrides: Partial<ActionEntry> = {}, waiting = false) {
+function row(overrides: Partial<ActionEntry> = {}, waiting = false) {
   const action = makeAction({ ...TESTS, ...overrides });
-  return renderWithStore(
+  return (
     <ul>
       <CommandRow
         taskId="task-1"
@@ -26,9 +26,22 @@ function renderRow(overrides: Partial<ActionEntry> = {}, waiting = false) {
         action={action}
         waiting={waiting}
       />
-    </ul>,
+    </ul>
   );
 }
+
+function renderRow(overrides: Partial<ActionEntry> = {}, waiting = false) {
+  return renderWithStore(row(overrides, waiting));
+}
+
+const FAILED = {
+  status: "error",
+  exitCode: 1,
+  outputLines: 1,
+  outputTail: "--- FAIL: TestBurst",
+} satisfies Partial<ActionEntry>;
+
+const RUNNING = { status: "running", finishedAt: "" } satisfies Partial<ActionEntry>;
 
 describe("CommandRow", () => {
   it("reads by the description, with the command after it and the duration", () => {
@@ -60,6 +73,33 @@ describe("CommandRow", () => {
     await user.click(toggle);
     expect(toggle).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByText(/ok\s+done/)).toBeInTheDocument();
+  });
+
+  it("opens the output of a command that fails on screen", () => {
+    const { rerender } = renderRow(RUNNING);
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+
+    rerender(row(FAILED));
+
+    expect(screen.getByRole("button", { name: /, output$/ })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+    expect(screen.getByText("--- FAIL: TestBurst")).toBeInTheDocument();
+  });
+
+  it("leaves the output as the user left it when the command fails after", async () => {
+    const { user, rerender } = renderRow({ status: "done", outputLines: 1, outputTail: "ok" });
+    const toggle = screen.getByRole("button", { name: /, output$/ });
+    await user.click(toggle);
+    await user.click(toggle);
+
+    rerender(row(FAILED));
+
+    expect(screen.getByRole("button", { name: /, output$/ })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
   });
 
   it("opens the output of a failure, with the rail", () => {

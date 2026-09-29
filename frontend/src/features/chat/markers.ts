@@ -1,4 +1,5 @@
 import { baseName, prBaseName } from "@/lib/pull-requests";
+import { lowerFirst } from "@/lib/situations";
 import { asLifecycleStage, stageLabel } from "@/lib/stages";
 import type {
   Entry,
@@ -92,11 +93,7 @@ export function voiceOf(stage: string): string {
 
 /** voiceInSentence is the voice inside a sentence: "implementer", "tech spec agent"; an acronym keeps its capitals, "PRD agent". */
 export function voiceInSentence(voice: string): string {
-  const [first = ""] = voice.split(" ");
-  if (first.length > 1 && first === first.toUpperCase()) {
-    return voice;
-  }
-  return voice.charAt(0).toLowerCase() + voice.slice(1);
+  return lowerFirst(voice);
 }
 
 const NONE: MarkerBody = { kind: "none" };
@@ -167,7 +164,7 @@ function stepStart(start: StartOf, ctx: MarkerContext): MarkerView {
   }
   const step = (ctx.task?.steps ?? []).find((one) => one.number === start.step);
   if (step === undefined) {
-    return line("start", text, `step ${start.step}`);
+    return line("start", text);
   }
   const name = `steps/${step.file}`;
   return line("start", text, name, { kind: "artifact", name, openIn: "artifacts" });

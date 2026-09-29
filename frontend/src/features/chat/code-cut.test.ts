@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { codeMarkdown, cutParts } from "@/features/chat/code-cut";
+import { codeMarkdown, cutParts, fencedLines } from "@/features/chat/code-cut";
 
 const lines = (count: number) => Array.from({ length: count }, (_, at) => `line ${at + 1}`);
 
@@ -54,5 +54,38 @@ describe("codeMarkdown", () => {
     } as const;
 
     expect(codeMarkdown(part, 2)).toBe("```go\nline 1\nline 2\n```");
+  });
+});
+
+describe("fencedLines", () => {
+  it.each([
+    [
+      "a block and its fences",
+      ["Text", "```go", "x := 1", "```", "After"],
+      [false, true, true, true, false],
+    ],
+    [
+      "a fence with an info, which never closes a block",
+      ["```", "```go", "code", "```", "After"],
+      [true, true, true, true, false],
+    ],
+    [
+      "a shorter fence, which doesn't close a longer one",
+      ["````", "```", "````"],
+      [true, true, true],
+    ],
+    [
+      "a tilde fence, closed only by tildes",
+      ["~~~", "```", "~~~", "Text"],
+      [true, true, true, false],
+    ],
+    [
+      "backticks in the info of a backtick fence, which open nothing",
+      ["``` a`b", "Text"],
+      [false, false],
+    ],
+    ["a block that never closes", ["```", "code"], [true, true]],
+  ])("marks %s", (_, markdown, want) => {
+    expect(fencedLines(markdown)).toEqual(want);
   });
 });

@@ -15,6 +15,7 @@ import (
 	"github.com/guilhermt/myspec/internal/git/gittest"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
+	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
 	"github.com/guilhermt/myspec/internal/worktree"
 )
@@ -583,6 +584,51 @@ func TestGetTranscriptRejectsAnUnknownTask(t *testing.T) {
 	}
 	if err.Error() != "This conversation has ended." {
 		t.Errorf("GetTranscript() error = %q, want the ended conversation notice", err)
+	}
+}
+
+func TestGetActionOutputReadsTheStoredOutputOfAnEntry(t *testing.T) {
+	t.Parallel()
+
+	f, _, id := createdTask(t)
+	entryID := f.waitTranscript(t, id, "prd").Entries[0].ID
+	stored := session.Output{Text: "ok\nwarn", Lines: 2, Truncated: true}
+	if err := f.store.Entries.SaveOutput(t.Context(), entryID, stored); err != nil {
+		t.Fatalf("SaveOutput() = %v, want nil", err)
+	}
+
+	got, err := f.tasks.GetActionOutput(id, "prd", entryID)
+	if err != nil {
+		t.Fatalf("GetActionOutput() = %v, want nil", err)
+	}
+	want := bindings.ActionOutput{Text: "ok\nwarn", Lines: 2, Truncated: true}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("GetActionOutput() mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestGetActionOutputRejectsWhatItDoesNotKnow(t *testing.T) {
+	t.Parallel()
+
+	f, _, id := createdTask(t)
+	entryID := f.waitTranscript(t, id, "prd").Entries[0].ID
+	tests := map[string]struct{ task, entry string }{
+		"an unknown task":             {task: "nope", entry: entryID},
+		"an unknown entry":            {task: id, entry: "nope"},
+		"an entry that has no output": {task: id, entry: entryID},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := f.tasks.GetActionOutput(tc.task, "prd", tc.entry)
+			if err == nil {
+				t.Fatal("GetActionOutput() = nil, want an error")
+			}
+			if err.Error() != "This conversation has ended." {
+				t.Errorf("GetActionOutput() error = %q, want the ended conversation notice", err)
+			}
+		})
 	}
 }
 

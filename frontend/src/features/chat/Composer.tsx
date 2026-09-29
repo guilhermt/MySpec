@@ -1,4 +1,4 @@
-import { type KeyboardEvent, useState } from "react";
+import { type KeyboardEvent, useEffect, useState } from "react";
 import { Button } from "@/components/system/Button";
 import { Spinner } from "@/components/system/Spinner";
 import { Tooltip } from "@/components/system/Tooltip";
@@ -19,13 +19,13 @@ import {
 import { voiceInSentence, voiceOf } from "@/features/chat/markers";
 import type { SessionState } from "@/features/chat/session";
 import { ModelChip } from "@/features/models/ModelChip";
-import { focusRequest } from "@/features/task/request-focus";
+import { focusRequest } from "@/lib/focus";
 import { cn } from "@/lib/utils";
 import { asSessionStatus, type QuestionEntry } from "@/lib/wails";
 import {
-  answerQuestion,
+  answerQuestionInPlace,
   interrupt,
-  resume,
+  resumeInPlace,
   sendMessageInPlace,
   setSessionModel,
 } from "@/store/actions";
@@ -91,6 +91,15 @@ export function Composer({
   const [error, setError] = useState("");
   const [stopping, setStopping] = useState(false);
   const [saving, setSaving] = useState(false);
+  // backToCard counts the texts that left the card incomplete: after each one is drawn on the card,
+  // the focus goes to its first question without a choice.
+  const [backToCard, setBackToCard] = useState(0);
+
+  useEffect(() => {
+    if (backToCard > 0) {
+      focusRequest("question");
+    }
+  }, [backToCard]);
 
   const who = voiceInSentence(voiceOf(stage)) || "agent";
   const paused = asSessionStatus(session.sessionStatus) === "paused";
@@ -110,15 +119,14 @@ export function Composer({
     ...context,
   });
 
-  // deliver sends a text as a message, resuming a paused session first; the text of the field
-  // stays until it is sent.
+  // deliver sends a text as a message, resuming a paused session first, and stops there when it
+  // doesn't resume; the text of the field stays until it is sent.
   const deliver = async (text: string, clears: boolean) => {
     setSending(true);
     setError("");
-    if (paused) {
-      await resume(taskId, stage);
-    }
-    const failure = await sendMessageInPlace(taskId, stage, text);
+    const failure =
+      (paused ? await resumeInPlace(taskId, stage) : "") ||
+      (await sendMessageInPlace(taskId, stage, text));
     setSending(false);
     setError(failure);
     if (failure === "" && clears) {
@@ -128,15 +136,24 @@ export function Composer({
 
   // answer puts the text of the field on the pending question, and sends the card once every
   // question has a choice; otherwise the focus goes back to the card.
-  const answer = (q: QuestionEntry, text: string) => {
+  const answer = async (q: QuestionEntry, text: string) => {
     const next = answerWithText(q, choices, text);
     setQuestionChoices(q.requestId, next.choices);
     setDraft(taskId, stage, "");
-    if (next.complete) {
-      void answerQuestion(taskId, stage, q.requestId, answersOf(q, next.choices));
+    if (!next.complete) {
+      setBackToCard((count) => count + 1);
       return;
     }
-    focusRequest("question");
+    setSending(true);
+    setError("");
+    const failure = await answerQuestionInPlace(
+      taskId,
+      stage,
+      q.requestId,
+      answersOf(q, next.choices),
+    );
+    setSending(false);
+    setError(failure);
   };
 
   const send = () => {
@@ -146,7 +163,7 @@ export function Composer({
     const text = draft.trim();
     if (question !== null) {
       if (text !== "" || answerWithText(question, choices, "").complete) {
-        answer(question, text);
+        void answer(question, text);
       }
       return;
     }

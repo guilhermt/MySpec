@@ -1,12 +1,12 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { Icon } from "@/components/system/Icon";
 import { ICONS } from "@/components/system/icons";
 import { Spinner } from "@/components/system/Spinner";
 import { useNow } from "@/features/attention/useNow";
 import { actionLabel, formatDuration } from "@/features/chat/actions";
 import type { GroupModel } from "@/features/chat/conversation";
-import { Chevron } from "@/features/chat/entries/CommandRow";
-import { ActionRows } from "@/features/chat/entries/SubagentRow";
+import { ActionRows } from "@/features/chat/entries/ActionRows";
+import { Chevron } from "@/features/chat/entries/Chevron";
 import { cn } from "@/lib/utils";
 import { clockTime } from "@/lib/when";
 
@@ -47,6 +47,7 @@ export interface GroupProps {
  */
 export function Group({ taskId, stage, group, waitingToolUseId }: GroupProps) {
   const [open, setOpen] = useState(false);
+  const id = useId();
   const live = group.running !== null;
   const now = useNow(1000, live);
   const time = clockTime(group.startedAt, Date.now());
@@ -68,19 +69,17 @@ export function Group({ taskId, stage, group, waitingToolUseId }: GroupProps) {
       : `${countOf(group.count)}, running: ${running.label}`;
 
   return (
-    <article
-      data-feed-item
-      tabIndex={-1}
-      aria-label={name}
-      className="flex flex-col rounded-sm outline-none focus-visible:focus-ring"
-    >
+    // The line is the stop of the walk, with the state of the fold; the article holds the name.
+    <article id={id} data-feed-entry aria-label={name} className="flex flex-col">
       <button
         type="button"
+        data-feed-item
         data-feed-toggle
         tabIndex={-1}
         aria-expanded={open}
+        aria-labelledby={id}
         onClick={() => setOpen(!open)}
-        className="-mx-(--space-2) flex min-h-(--size-control-sm) min-w-0 items-center gap-(--space-2) rounded-sm px-(--space-2) text-left text-(length:--text-meta) leading-(--leading-meta) text-ink-3 outline-none transition-colors duration-(--duration-fast) ease-standard hover:bg-veil-hover active:bg-veil-press"
+        className="-mx-(--space-2) flex min-h-(--size-control-sm) min-w-0 items-center gap-(--space-2) rounded-sm px-(--space-2) text-left text-(length:--text-meta) leading-(--leading-meta) text-ink-3 outline-none transition-colors duration-(--duration-fast) ease-standard hover:bg-veil-hover active:bg-veil-press focus-visible:focus-ring"
       >
         <Chevron open={open} />
         <span

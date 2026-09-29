@@ -5,9 +5,7 @@ import {
   addDraftDependency,
   addRepository,
   addRepositoryToBoard,
-  answerPermission,
   answerPermissionInPlace,
-  answerQuestion,
   answerQuestionInPlace,
   applyReview,
   approvePR,
@@ -63,6 +61,7 @@ import {
   removePending,
   removeRepository,
   resume,
+  resumeInPlace,
   retry,
   retryPR,
   retryPublish,
@@ -258,18 +257,41 @@ describe("the app notice of a failed action", () => {
 });
 
 describe("answerQuestionInPlace", () => {
-  it("sends the answers and answers nothing", async () => {
+  const choices = { 0: { labels: ["Yes"], other: null } };
+
+  it("sends the answers, answers nothing and forgets the choices of the question", async () => {
+    useAppStore.getState().setQuestionChoices("req-1", choices);
+    useAppStore.getState().setQuestionChoices("req-2", choices);
+
     await expect(answerQuestionInPlace("task-1", "prd", "req-1", { Q: "Yes" })).resolves.toBe("");
 
     expect(api.answerQuestion).toHaveBeenCalledWith("task-1", "prd", "req-1", { Q: "Yes" });
+    expect(useAppStore.getState().questionChoices).toEqual({ "req-2": choices });
   });
 
-  it("answers the reason of a failure without the app notice", async () => {
+  it("answers the reason of a failure without the app notice, keeping the choices", async () => {
+    useAppStore.getState().setQuestionChoices("req-1", choices);
     vi.mocked(api.answerQuestion).mockRejectedValueOnce(new Error("the session stopped"));
 
     await expect(answerQuestionInPlace("task-1", "prd", "req-1", {})).resolves.toBe(
       "the session stopped",
     );
+    expect(useAppStore.getState().error).toBeNull();
+    expect(useAppStore.getState().questionChoices["req-1"]).toEqual(choices);
+  });
+});
+
+describe("resumeInPlace", () => {
+  it("resumes the session and answers nothing", async () => {
+    await expect(resumeInPlace("task-1", "prd")).resolves.toBe("");
+
+    expect(api.resume).toHaveBeenCalledWith("task-1", "prd");
+  });
+
+  it("answers the reason of a failure without the app notice", async () => {
+    vi.mocked(api.resume).mockRejectedValueOnce(new Error("the worktree is gone"));
+
+    await expect(resumeInPlace("task-1", "prd")).resolves.toBe("the worktree is gone");
     expect(useAppStore.getState().error).toBeNull();
   });
 });
@@ -558,8 +580,6 @@ describe("task actions", () => {
     await pause("task-1", "prd");
     await resume("task-1", "prd");
     await retry("task-1", "prd");
-    await answerPermission("task-1", "prd", "req-1", "allow_session", "");
-    await answerQuestion("task-1", "prd", "req-1", { "Which database?": "SQLite" });
     await openExternal("https://anthropic.com");
     await backToStage("task-1", "prd");
     await discardStage("task-1", "tech_spec");
@@ -586,16 +606,6 @@ describe("task actions", () => {
     expect(api.pause).toHaveBeenCalledWith("task-1", "prd");
     expect(api.resume).toHaveBeenCalledWith("task-1", "prd");
     expect(api.retry).toHaveBeenCalledWith("task-1", "prd");
-    expect(api.answerPermission).toHaveBeenCalledWith(
-      "task-1",
-      "prd",
-      "req-1",
-      "allow_session",
-      "",
-    );
-    expect(api.answerQuestion).toHaveBeenCalledWith("task-1", "prd", "req-1", {
-      "Which database?": "SQLite",
-    });
     expect(api.openExternal).toHaveBeenCalledWith("https://anthropic.com");
     expect(api.backToStage).toHaveBeenCalledWith("task-1", "prd");
     expect(api.discardStage).toHaveBeenCalledWith("task-1", "tech_spec");

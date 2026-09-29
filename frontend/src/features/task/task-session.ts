@@ -106,11 +106,6 @@ export function isPaused(task: TaskSummary): boolean {
 
 /** speaker is who talks in a session inside a sentence: implementer, reviewer, PRD agent, tech spec agent. */
 export function speaker(session: TaskSession): string {
-  const [first = ""] = session.role.split(" ");
-  // An acronym keeps its capitals: PRD agent, PR agent.
-  if (first.length > 1 && first === first.toUpperCase()) {
-    return session.role;
-  }
   return lowerFirst(session.role);
 }
 

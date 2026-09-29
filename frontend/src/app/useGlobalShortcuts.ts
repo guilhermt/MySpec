@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { panelTriggerId } from "@/components/system/AuxPanel";
 import { leaveEarlierConversation } from "@/features/task/earlier-conversation";
-import { focusRequest } from "@/features/task/request-focus";
+import { focusRequest } from "@/lib/focus";
 import { layerOpen, modalOpen } from "@/lib/layers";
 import { openItemId } from "@/lib/locations";
 import { nextWaiting } from "@/lib/situations";

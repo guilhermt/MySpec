@@ -131,7 +131,7 @@ func TestSubagentActionsAndTextCarryTheirParent(t *testing.T) {
 	type row struct {
 		Kind                       session.Kind
 		Tool, Target, Text, Parent string
-		Description                string
+		Description, OutputTail    string
 		CommandLines               int
 	}
 	var agentID string
@@ -147,7 +147,7 @@ func TestSubagentActionsAndTextCarryTheirParent(t *testing.T) {
 			}
 			got = append(got, row{
 				Kind: e.Kind, Tool: e.Action.Tool, Target: e.Action.Target, Parent: e.Action.ParentToolUseID,
-				Description: e.Action.Description, CommandLines: e.Action.CommandLines,
+				Description: e.Action.Description, CommandLines: e.Action.CommandLines, OutputTail: e.Action.OutputTail,
 			})
 		case session.KindAssistant:
 			got = append(got, row{Kind: e.Kind, Text: e.Assistant.Text, Parent: e.Assistant.ParentToolUseID})
@@ -155,9 +155,15 @@ func TestSubagentActionsAndTextCarryTheirParent(t *testing.T) {
 		}
 	}
 	want := []row{
-		{Kind: session.KindAction, Tool: "Agent", Target: claudetest.SubagentType, Description: claudetest.SubagentDescription},
+		{
+			Kind: session.KindAction, Tool: "Agent", Target: claudetest.SubagentType, Description: claudetest.SubagentDescription,
+			OutputTail: claudetest.SubagentReport,
+		},
 		{Kind: session.KindAction, Tool: "Read", Target: claudetest.ReadPath, Parent: agentID},
-		{Kind: session.KindAction, Tool: "Bash", Target: "ls -1", Parent: agentID, Description: "List the files", CommandLines: 1},
+		{
+			Kind: session.KindAction, Tool: "Bash", Target: "ls -1", Parent: agentID, Description: "List the files", CommandLines: 1,
+			OutputTail: "hello.txt",
+		},
 		{Kind: session.KindAssistant, Text: claudetest.SubagentText, Parent: agentID},
 	}
 	if len(got) != len(want)+1 {
@@ -223,6 +229,10 @@ func TestActionOutputReadsTheWholeOutputOpenAndClosed(t *testing.T) {
 	if agent == nil || read == nil {
 		t.Fatalf("actions = %v, want the Agent and the Read", actions)
 	}
+	// Another session of the same task, open, knows nothing of the entry.
+	other := atStage(taskInfo(t, "t1"), prompts.StageTechSpec)
+	f.start(t, other)
+	f.waitIdle(t, other.Key())
 	if agent.Action.OutputLines != 1 || agent.Action.OutputTail != claudetest.SubagentReport {
 		t.Errorf("Agent output = %d lines, tail %q, want the report", agent.Action.OutputLines, agent.Action.OutputTail)
 	}
@@ -240,15 +250,46 @@ func TestActionOutputReadsTheWholeOutputOpenAndClosed(t *testing.T) {
 		if _, err := f.service.ActionOutput(t.Context(), prd("t1"), read.ID); !errors.Is(err, session.ErrNotFound) {
 			t.Errorf("ActionOutput() of a read %s = %v, want session.ErrNotFound", label, err)
 		}
+		if _, err := f.service.ActionOutput(t.Context(), other.Key(), agent.ID); !errors.Is(err, session.ErrNotFound) {
+			t.Errorf("ActionOutput() from another session %s = %v, want session.ErrNotFound", label, err)
+		}
 	}
 	read1("while open")
-	if err := f.service.Close(t.Context(), prd("t1")); err != nil {
-		t.Fatalf("Close() = %v, want nil", err)
+	for _, k := range []session.Key{prd("t1"), other.Key()} {
+		if err := f.service.Close(t.Context(), k); err != nil {
+			t.Fatalf("Close(%s) = %v, want nil", k.Stage, err)
+		}
 	}
 	read1("once closed")
+}
 
-	if _, err := f.service.ActionOutput(t.Context(), session.Key{TaskID: "t1", Stage: "tech_spec"}, agent.ID); !errors.Is(err, session.ErrNotFound) {
-		t.Errorf("ActionOutput() from another session = %v, want session.ErrNotFound", err)
+func TestDiscardTakesTheOutputsOfTheConversation(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "subagent")
+	f.start(t, taskInfo(t, "t1"))
+	f.waitIdle(t, prd("t1"))
+
+	var agentID string
+	for _, e := range f.transcript(t, prd("t1")).Entries {
+		if e.Kind == session.KindAction && e.Action.Tool == "Agent" {
+			agentID = e.ID
+		}
+	}
+	if _, err := f.entries.Output(t.Context(), agentID); err != nil {
+		t.Fatalf("Output(%q) before the discard = %v, want the report", agentID, err)
+	}
+
+	sessionID := f.sessions.get(t, "t1", string(prompts.StagePRD)).ID
+	if err := f.service.Discard(t.Context(), "t1", string(prompts.StagePRD)); err != nil {
+		t.Fatalf("Discard() = %v, want nil", err)
+	}
+
+	if _, err := f.entries.Output(t.Context(), agentID); !errors.Is(err, session.ErrNotFound) {
+		t.Errorf("Output(%q) after the discard = %v, want session.ErrNotFound", agentID, err)
+	}
+	if entries := f.entries.list(t, sessionID); len(entries) != 0 {
+		t.Errorf("entries left = %d, want none", len(entries))
 	}
 }
 
@@ -340,7 +381,10 @@ func TestAnswerPermission(t *testing.T) {
 		}
 		actions := f.entriesOf(t, prd("t1"), session.KindAction)
 		if len(actions) != 1 || actions[0].Action.Status != session.ActionDone {
-			t.Errorf("actions = %+v, want one done Bash action", actions)
+			t.Fatalf("actions = %+v, want one done Bash action", actions)
+		}
+		if a := actions[0].Action; a.OutputLines != 0 || a.OutputTail != "" {
+			t.Errorf("output = %d lines, tail %q, want none for a command that printed nothing", a.OutputLines, a.OutputTail)
 		}
 	})
 
@@ -837,11 +881,11 @@ func TestOpenReconcilesALeftoverTranscript(t *testing.T) {
 	if tr.SessionID != "sess-1" || len(tr.Entries) != 6 || len(tr.Pending) != 0 {
 		t.Fatalf("transcript = %+v, want the five stored entries and the PRD marker", tr)
 	}
-	if a := tr.Entries[1].Assistant; !a.Complete || !a.Interrupted || a.Text != "half" {
-		t.Errorf("assistant = %+v, want complete and interrupted", a)
+	if a := tr.Entries[1].Assistant; !a.Complete || !a.Interrupted || a.InterruptedBy != "crash" || a.Text != "half" {
+		t.Errorf("assistant = %+v, want complete and interrupted by a crash", a)
 	}
-	if c := tr.Entries[2].Action; c.Status != session.ActionInterrupted {
-		t.Errorf("action status = %q, want interrupted", c.Status)
+	if c := tr.Entries[2].Action; c.Status != session.ActionInterrupted || c.InterruptedBy != "crash" {
+		t.Errorf("action = %+v, want interrupted by a crash", c)
 	}
 	if p := tr.Entries[3].Permission; p.Status != session.PermissionCancelled {
 		t.Errorf("permission status = %q, want cancelled", p.Status)
@@ -1358,12 +1402,14 @@ func TestThePromptSentIsKeptForTheStagesThatShowIt(t *testing.T) {
 	t.Parallel()
 
 	tests := map[prompts.Stage]bool{
-		prompts.StagePRD:      false,
-		prompts.StageOneShot:  false,
-		prompts.StageTechSpec: true,
-		prompts.StagePlan:     true,
-		prompts.StagePR:       true,
-		prompts.StagePRReview: true,
+		prompts.StagePRD:        false,
+		prompts.StageOneShot:    false,
+		prompts.StageStepReview: false,
+		prompts.StageDiscussion: false,
+		prompts.StageTechSpec:   true,
+		prompts.StagePlan:       true,
+		prompts.StagePR:         true,
+		prompts.StagePRReview:   true,
 	}
 
 	for stage, kept := range tests {
@@ -1372,6 +1418,13 @@ func TestThePromptSentIsKeptForTheStagesThatShowIt(t *testing.T) {
 
 			f := newFixture(t, "echo")
 			info := atStage(taskInfo(t, "t1"), stage)
+			switch stage {
+			case prompts.StageStepReview:
+				info = atStepReview(t, taskInfo(t, "t1"), 1, "")
+			case prompts.StageDiscussion:
+				info = atDiscussion(t, taskInfo(t, "t1"))
+			default:
+			}
 			f.start(t, info)
 			f.waitIdle(t, info.Key())
 

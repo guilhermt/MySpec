@@ -1,0 +1,71 @@
+/**
+ * RequestFocus is where the focus goes on arriving at the request, and on Show: the pending card
+ * (its first question without a choice, or its default answer), the primary of the bar, the
+ * composer, or the bar itself when none of its actions can be pressed.
+ */
+export type RequestFocus = "question" | "permission" | "primary" | "composer" | "bar";
+
+/** COMPOSER is the field of the composer of the place on screen. */
+export const COMPOSER = "#composer-input";
+
+/** BAR is the request bar of the place on screen. */
+const BAR = "[aria-label=Request]";
+
+/** OPTION is an option of a question card: a radio of a single choice, a checkbox of many. */
+const OPTION = "[role=radio], [role=checkbox]";
+
+// questionStop is the stop of Tab of the first question of the pending card without a choice, else
+// of the first question: the chosen option of a radio group, else its first option.
+function questionStop(): HTMLElement | null {
+  const card = document.querySelector("[data-pending-card=question]");
+  const groups = [...(card?.querySelectorAll<HTMLElement>("[data-question]") ?? [])];
+  const group =
+    groups.find((each) => each.querySelector(`[aria-checked="true"]`) === null) ?? groups[0];
+  return (
+    group?.querySelector<HTMLElement>(`:is(${OPTION})[tabindex="0"]`) ??
+    group?.querySelector<HTMLElement>(OPTION) ??
+    null
+  );
+}
+
+// targetOf is the element a focus of the request lands on, null when it isn't on screen.
+function targetOf(target: RequestFocus): HTMLElement | null {
+  switch (target) {
+    case "question":
+      return questionStop();
+    case "permission":
+      return document.querySelector<HTMLElement>(
+        "[data-pending-card=permission] [data-default-focus]",
+      );
+    case "primary":
+      return (
+        document.querySelector<HTMLElement>(
+          `${BAR} [data-variant=primary]:not([aria-disabled=true])`,
+        ) ?? document.querySelector<HTMLElement>(`${BAR} button:not([aria-disabled=true])`)
+      );
+    case "composer":
+      return document.querySelector<HTMLElement>(COMPOSER);
+    case "bar":
+      return document.querySelector<HTMLElement>(BAR);
+  }
+}
+
+/**
+ * focusRequest takes the focus to where the request asks it, scrolled into view: the first
+ * question without a choice of the pending card, the default answer of the pending permission, the
+ * primary of the bar, the composer or the bar itself. False when the target isn't on screen.
+ */
+export function focusRequest(target: RequestFocus): boolean {
+  const element = targetOf(target);
+  if (element === null) {
+    return false;
+  }
+  element.focus();
+  element.scrollIntoView({ block: "nearest" });
+  return true;
+}
+
+/** focusTitle takes the focus to the title of the place on screen. */
+export function focusTitle(): void {
+  document.querySelector<HTMLElement>("h1[tabindex='-1']")?.focus();
+}

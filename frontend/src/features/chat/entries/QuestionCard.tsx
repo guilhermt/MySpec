@@ -164,10 +164,14 @@ interface PendingQuestionProps {
 function PendingQuestion({ taskId, stage, question, flash }: PendingQuestionProps) {
   const titleId = useId();
   const questions = question.questions ?? [];
-  const choices = useAppStore((state) => state.questionChoices[question.requestId] ?? NO_CHOICES);
+  const kept = useAppStore((state) => state.questionChoices[question.requestId] ?? NO_CHOICES);
   const setQuestionChoices = useAppStore((state) => state.setQuestionChoices);
   const [sending, setSending] = useState<string | null>(null);
+  // sent are the choices of the answer on its way: the store forgets them once it is sent, and the
+  // card keeps showing them until the conversation turns it into its answer.
+  const [sent, setSent] = useState<QuestionChoices | null>(null);
   const [failure, setFailure] = useState("");
+  const choices = sent ?? kept;
 
   const missing = missingOf(questions, choices);
   const keys = (questions[0]?.options ?? []).length + 1;
@@ -191,11 +195,13 @@ function PendingQuestion({ taskId, stage, question, flash }: PendingQuestionProp
     }
     const answers = answersOf(question, choices);
     setSending(Object.values(answers).join(", "));
+    setSent(choices);
     setFailure("");
     const reason = await answerQuestionInPlace(taskId, stage, question.requestId, answers);
     // Sent, the card turns into its answer when the conversation says so.
     if (reason !== "") {
       setSending(null);
+      setSent(null);
       setFailure(reason);
     }
   };

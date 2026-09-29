@@ -1,4 +1,11 @@
-import { asPermissionStatus, type Entry, type Question, type QuestionEntry } from "@/lib/wails";
+import { fencedLines } from "@/features/chat/code-cut";
+import {
+  asPermissionStatus,
+  type Entry,
+  type PermissionEntry,
+  type Question,
+  type QuestionEntry,
+} from "@/lib/wails";
 
 /**
  * QuestionChoices is what the question card has chosen, by the index of each question: the labels
@@ -46,9 +53,6 @@ export const QUICK_REPLY_MAX = 48;
 // The fewest and the most options of a question in text that become quick replies.
 const MIN_REPLIES = 2;
 const MAX_REPLIES = 6;
-
-// A line that opens or closes a fenced code block, with its fence.
-const FENCE = /^\s{0,3}(`{3,}|~{3,})/;
 
 // A line that starts an item of a list: a bullet, 1. or 1), a) or (a), **a)**.
 const LIST_ITEM = /^\s{0,3}(?:[-*+]|\d+[.)]|(?:\*\*)?\(?[a-hA-H]\)(?:\*\*)?)\s+/;
@@ -132,25 +136,6 @@ export function placeholderOf(c: ComposerContext): string {
 // isListBlock reports whether a block of lines is a list: its first line starts an item.
 function isListBlock(block: readonly string[]): boolean {
   return LIST_ITEM.test(block[0] ?? "");
-}
-
-// fencedLines marks the lines of the fenced code blocks, their fences included.
-function fencedLines(lines: readonly string[]): boolean[] {
-  let fence: string | null = null;
-  return lines.map((line) => {
-    if (fence !== null) {
-      if (line.trim().startsWith(fence)) {
-        fence = null;
-      }
-      return true;
-    }
-    const opening = FENCE.exec(line);
-    if (opening === null) {
-      return false;
-    }
-    fence = opening[1] ?? null;
-    return true;
-  });
 }
 
 // blocksOf splits Markdown at its blank lines, keeping a fenced code block whole.
@@ -317,6 +302,32 @@ export function sendIsPrimary(text: string, otherPrimary: boolean): boolean {
   return text.trim() !== "" && !otherPrimary;
 }
 
+/**
+ * Pending is what a conversation holds unanswered: its last question and its last permission still
+ * pending, and which of the two came last.
+ */
+export interface Pending {
+  question: QuestionEntry | null;
+  permission: PermissionEntry | null;
+  last: "question" | "permission" | null;
+}
+
+/** pendingOf is the question and the permission still unanswered in the entries of a conversation. */
+export function pendingOf(entries: readonly Entry[]): Pending {
+  const pending: Pending = { question: null, permission: null, last: null };
+  for (const entry of entries) {
+    if (entry.question != null && asPermissionStatus(entry.question.status) === "pending") {
+      pending.question = entry.question;
+      pending.last = "question";
+    }
+    if (entry.permission != null && asPermissionStatus(entry.permission.status) === "pending") {
+      pending.permission = entry.permission;
+      pending.last = "permission";
+    }
+  }
+  return pending;
+}
+
 /** PendingCards are the cards a conversation holds pending: the question, and a permission. */
 export interface PendingCards {
   question: QuestionEntry | null;
@@ -325,17 +336,8 @@ export interface PendingCards {
 
 /** pendingCardsOf are the question and the permission still unanswered in the entries of a conversation. */
 export function pendingCardsOf(entries: readonly Entry[]): PendingCards {
-  let question: QuestionEntry | null = null;
-  let permission = false;
-  for (const entry of entries) {
-    if (entry.question != null && asPermissionStatus(entry.question.status) === "pending") {
-      question = entry.question;
-    }
-    if (entry.permission != null && asPermissionStatus(entry.permission.status) === "pending") {
-      permission = true;
-    }
-  }
-  return { question, permission };
+  const { question, permission } = pendingOf(entries);
+  return { question, permission: permission !== null };
 }
 
 /**

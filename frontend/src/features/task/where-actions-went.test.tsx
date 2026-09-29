@@ -62,11 +62,13 @@ interface Row {
     | "PRPane notes"
     | "QuestionCard"
     | "PermissionCard"
-    | "ReviewStrip";
+    | "ReviewStrip"
+    | "PausedNotice"
+    | "PendingMessage";
   button: string;
   state: string;
   task: TaskSummary;
-  where: "menu" | "bar" | "header" | "pane" | "card" | "composer" | "entry" | "tooltip";
+  where: "menu" | "bar" | "header" | "card" | "composer" | "entry" | "tooltip";
   /** name is the accessible name in the new place; in a tooltip, its text. */
   name: RegExp;
   /** trigger is the text in the bar that holds the tooltip. */
@@ -74,6 +76,8 @@ interface Row {
   disabled?: boolean;
   /** card names the fixed card that holds the control; the pending card when not given. */
   card?: RegExp;
+  /** entry names the entry of the conversation that holds the control. */
+  entry?: RegExp;
   /** role is the role of the control in the card, a button when not given. */
   role?: "radio";
   /** transcripts are the conversations the screen reads, with the pending card of a row. */
@@ -88,6 +92,32 @@ function withCard(entry: Entry): Record<string, TranscriptState> {
 }
 
 const ASKING = withCard(makeEntry("question"));
+
+// QUEUED is the conversation of step 1 with a message waiting for the turn to end.
+const QUEUED: Record<string, TranscriptState> = {
+  "task-1|step:1": {
+    status: "ready",
+    error: "",
+    entries: [],
+    pending: [
+      makeEntry("user", {
+        user: {
+          text: "and dark mode",
+          pending: true,
+          prompt: false,
+          app: false,
+          sent: "",
+          appKind: "",
+          appPass: 0,
+          appRound: 0,
+          appRounds: 0,
+          appCount: 0,
+        },
+      }),
+    ],
+    buffered: [],
+  },
+};
 
 function permissionEntry(suggestions: string): Entry {
   const entry = makeEntry("permission");
@@ -772,12 +802,38 @@ const ROWS: Row[] = [
     where: "card",
     name: /^Deny…/,
   },
+  {
+    origin: "PausedNotice",
+    button: "Resume",
+    state: "the step session paused",
+    task: inStep({ status: "implementing" }, { sessionStatus: "paused" }),
+    where: "header",
+    name: /^Resume$/,
+  },
+  {
+    origin: "PausedNotice",
+    button: "Model",
+    state: "the step session paused",
+    task: inStep({ status: "implementing" }, { sessionStatus: "paused" }),
+    where: "composer",
+    name: /^Conversation model:/,
+  },
+  {
+    origin: "PendingMessage",
+    button: "Remove",
+    state: "a message queued",
+    task: inStep({ status: "implementing" }, { pendingCount: 1 }),
+    transcripts: QUEUED,
+    where: "entry",
+    entry: /^You, queued/,
+    name: /^Remove$/,
+  },
 ];
 
 describe("where the actions of the bars that left went", () => {
   it.each(ROWS)(
     "$origin: $button, $state, is in the $where",
-    async ({ task, where, name, trigger, disabled, card: cardName, role, transcripts }) => {
+    async ({ task, where, name, trigger, disabled, card: cardName, entry, role, transcripts }) => {
       const { user } = renderWithStore(<TaskView taskId={task.id} />, {
         state: makeState({
           tasks: [task],
@@ -812,8 +868,13 @@ describe("where the actions of the bars that left went", () => {
         found = within(card).getByRole(role ?? "button", { name });
       } else if (where === "header") {
         found = within(screen.getByRole("banner")).getByRole("button", { name });
+      } else if (where === "composer") {
+        const composer = (await screen.findByRole("textbox", { name: /^Reply to/ })).parentElement;
+        expect(composer).not.toBeNull();
+        found = within(composer as HTMLElement).getByRole("button", { name });
       } else {
-        found = screen.getByRole("button", { name });
+        const held = await screen.findByRole("article", { name: entry ?? /^$/ });
+        found = within(held).getByRole("button", { name });
       }
 
       if (disabled) {
@@ -921,16 +982,42 @@ const SITUATIONS: [string, TaskSummary][] = [
   ],
 ];
 
+// PENDING_CARDS are the conversations holding the card of the situations that wait on one.
+const PENDING_CARDS: Record<string, Record<string, TranscriptState>> = {
+  question: ASKING,
+  permission: withCard(permissionEntry('[{"type":"addRules"}]')),
+};
+
+// WRITTEN is a message written in the composer of every conversation the situations show, so Send
+// could be a primary too.
+const WRITTEN = {
+  "task-1|step:1": "go on",
+  "task-1|pr": "go on",
+  "task-1|pr_review": "go on",
+  "task-1|prd": "go on",
+  "task-1|plan": "go on",
+};
+
 describe("the primary of the task screen", () => {
-  it.each(SITUATIONS)("is one at most in %s", (_kind, task) => {
+  it.each(SITUATIONS)("is one at most in %s", async (kind, task) => {
+    const cards = PENDING_CARDS[kind];
     const { container } = renderWithStore(<TaskView taskId={task.id} />, {
       state: makeState({
         tasks: [task],
         repositories: [makeRepository({ id: task.repositoryId })],
       }),
-      ui: { location: { kind: "task", id: task.id } },
+      ui: {
+        location: { kind: "task", id: task.id },
+        drafts: WRITTEN,
+        ...(cards === undefined ? {} : { transcripts: cards }),
+      },
     });
 
+    if (cards !== undefined) {
+      await waitFor(() =>
+        expect(container.querySelector(`[data-pending-card=${kind}]`)).not.toBeNull(),
+      );
+    }
     expect(container.querySelectorAll("button[data-variant=primary]").length).toBeLessThanOrEqual(
       1,
     );

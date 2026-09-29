@@ -1,7 +1,8 @@
 import { type FailureNote, failureNotes, summaryOf } from "@/features/chat/actions";
+import { pendingOf } from "@/features/chat/composer";
 import { type MarkerContext, productMessageOf, startLineOf } from "@/features/chat/markers";
 import type { ActionEntry, AppKind, Entry, MarkerType } from "@/lib/wails";
-import { asActionStatus, asAppKind, asMarkerType, asPermissionStatus } from "@/lib/wails";
+import { asActionStatus, asAppKind, asMarkerType } from "@/lib/wails";
 import { clockTime } from "@/lib/when";
 
 /** ActionNode is an action of a group; children are the actions of the subagent it started. */
@@ -125,14 +126,7 @@ function lastOf<T>(items: readonly T[], test: (item: T) => boolean): T | undefin
 
 /** waitingToolUseId is the action the pending permission of the conversation holds, null without one. */
 export function waitingToolUseId(entries: readonly Entry[]): string | null {
-  const pending = lastOf(
-    entries,
-    (entry) =>
-      entry.kind === "permission" &&
-      entry.permission !== null &&
-      asPermissionStatus(entry.permission.status) === "pending",
-  );
-  return pending?.permission?.toolUseId ?? null;
+  return pendingOf(entries).permission?.toolUseId ?? null;
 }
 
 // time is the instant of a time of the transcript, NaN when it is empty.
@@ -467,6 +461,9 @@ function counted(count: number, one: string, many: string): string {
   return `${count} ${count === 1 ? one : many}`;
 }
 
+// START is where the first stretch began, in its line and in its name.
+const START = "from the start";
+
 // fromOf is where a stretch began: the message of the product that opens it, or the start of the
 // conversation with the complement of its start line.
 function fromOf(stretch: Stretch, ctx: MarkerContext): string {
@@ -475,9 +472,7 @@ function fromOf(stretch: Stretch, ctx: MarkerContext): string {
   }
   const first = stretch.rows[0];
   const start = first?.kind === "start" ? startLineOf(first.marker, first.prompt, ctx) : null;
-  return start === null || start.complement === ""
-    ? "from the start"
-    : `from the start · ${start.complement}`;
+  return start === null || start.complement === "" ? START : `${START} · ${start.complement}`;
 }
 
 /** stretchFoldOf is the line of a folded stretch: its size, where it began and when it ran. */
@@ -492,7 +487,12 @@ export function stretchFoldOf(stretch: Stretch, ctx: MarkerContext, now: number)
     text: `${speeches} · ${actions}`,
     from,
     interval: timed ? `${started}–${ended}` : "",
-    name: [`Earlier: ${speeches} and ${actions}`, from, timed ? `${started} to ${ended}` : ""]
+    // The name says where the stretch began without the start line's complement.
+    name: [
+      `Earlier: ${speeches} and ${actions}`,
+      stretch.from === "" ? START : from,
+      timed ? `${started} to ${ended}` : "",
+    ]
       .filter((part) => part !== "")
       .join(", "),
   };

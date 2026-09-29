@@ -459,32 +459,17 @@ export function resume(taskId: string, stage: string): Promise<void> {
   );
 }
 
+/**
+ * resumeInPlace resumes a paused session from the composer, which sends right after it and shows
+ * the failure under the field: "" when it resumed, the reason when it did not.
+ */
+export async function resumeInPlace(taskId: string, stage: string): Promise<string> {
+  return (await inPlace(() => api.resume(taskId, stage))) ?? "";
+}
+
 export function retry(taskId: string, stage: string): Promise<void> {
   return run(fail(withItem("Couldn't retry", itemName(taskId)), TRY), () =>
     api.retry(taskId, stage),
-  );
-}
-
-export function answerPermission(
-  taskId: string,
-  stage: string,
-  requestId: string,
-  decision: PermissionDecision,
-  message: string,
-): Promise<void> {
-  return run(fail(`Couldn't answer the permission request of ${theItem(taskId)}`, TRY), () =>
-    api.answerPermission(taskId, stage, requestId, decision, message),
-  );
-}
-
-export function answerQuestion(
-  taskId: string,
-  stage: string,
-  requestId: string,
-  answers: Record<string, string>,
-): Promise<void> {
-  return run(fail(`Couldn't answer the question of ${theItem(taskId)}`, TRY), () =>
-    api.answerQuestion(taskId, stage, requestId, answers),
   );
 }
 
@@ -505,8 +490,9 @@ export async function answerPermissionInPlace(
 }
 
 /**
- * answerQuestionInPlace answers a question from its card, whose failure has a place of its own at
- * the foot of the card: "" when it is sent, the reason when it is not.
+ * answerQuestionInPlace answers a question from its card or from the composer, whose failure has a
+ * place of its own: "" when it is sent, the reason when it is not. Sent, the choices kept for the
+ * card go away with the question.
  */
 export async function answerQuestionInPlace(
   taskId: string,
@@ -514,7 +500,12 @@ export async function answerQuestionInPlace(
   requestId: string,
   answers: Record<string, string>,
 ): Promise<string> {
-  return (await inPlace(() => api.answerQuestion(taskId, stage, requestId, answers))) ?? "";
+  const failure = await inPlace(() => api.answerQuestion(taskId, stage, requestId, answers));
+  if (failure !== null) {
+    return failure;
+  }
+  useAppStore.getState().clearQuestionChoices(requestId);
+  return "";
 }
 
 /** backToStage reopens a stage that is already done. */

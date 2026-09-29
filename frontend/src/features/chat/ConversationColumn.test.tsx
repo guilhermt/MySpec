@@ -24,15 +24,23 @@ describe("ConversationColumn", () => {
     expect(column).toHaveAttribute("tabindex", "-1");
   });
 
-  it("fades the top only when something is above", () => {
-    const { container, rerender } = renderWithStore(
-      <ConversationColumn fadeTop={false}>An entry</ConversationColumn>,
+  it("fades the top of the viewport only when something is above, never the scrollbar", () => {
+    const { rerender } = renderWithStore(
+      <ConversationColumn fadeTop={false} label="Conversation">
+        An entry
+      </ConversationColumn>,
     );
-    expect(container.querySelector(".conversation-fade-bottom")).not.toBeNull();
+    const viewport = screen.getByLabelText("Conversation");
+    expect(viewport).toHaveClass("conversation-fade-bottom");
+    expect(viewport.parentElement).not.toHaveClass("conversation-fade-bottom");
 
-    rerender(<ConversationColumn fadeTop>An entry</ConversationColumn>);
-    expect(container.querySelector(".conversation-fade")).not.toBeNull();
-    expect(container.querySelector(".conversation-fade-bottom")).toBeNull();
+    rerender(
+      <ConversationColumn fadeTop label="Conversation">
+        An entry
+      </ConversationColumn>,
+    );
+    expect(viewport).toHaveClass("conversation-fade");
+    expect(viewport).not.toHaveClass("conversation-fade-bottom");
   });
 
   it("hands its scroller to the viewport ref", () => {

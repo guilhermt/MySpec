@@ -574,7 +574,7 @@ func (f *fake) permissionTurn() {
 
 	reply := "done"
 	if answer.Behavior == "allow" {
-		f.toolResult(toolUseID, "(Bash completed with no output)")
+		f.silentBashResult(toolUseID)
 		// The app's rewrite of the suggestions is echoed so a test can read it.
 		if len(answer.UpdatedPermissions) > 0 {
 			reply += " " + string(answer.UpdatedPermissions)
@@ -738,11 +738,11 @@ func (f *fake) subagentTurn(text string) {
 		"parent_tool_use_id": agentID,
 	})
 	f.toolUseWithParent(subMessageID, readID, "Read", map[string]any{"file_path": ReadPath}, agentID)
-	f.toolResult(readID, "1\thi\n")
+	f.toolResultWithParent(readID, "1\thi\n", agentID)
 	f.toolUseWithParent(subMessageID, bashID, "Bash", map[string]any{"command": "ls -1", "description": "List the files"}, agentID)
-	f.toolResult(bashID, "hello.txt")
+	f.toolResultWithParent(bashID, "hello.txt", agentID)
 	f.assistantTextWithParent(subMessageID, SubagentText, agentID)
-	f.toolResult(agentID, SubagentReport)
+	f.subagentResult(agentID, SubagentReport)
 
 	f.streamText(1, text)
 	f.endMessage()
@@ -994,6 +994,67 @@ func (f *fake) toolResult(toolUseID, content string) {
 		},
 		"parent_tool_use_id": nil,
 		"tool_use_result":    map[string]any{"stdout": content, "stderr": ""},
+	})
+}
+
+// silentBashResult emits a command that printed nothing, as the CLI reports
+// it: a placeholder in the text and empty streams in the structured result.
+func (f *fake) silentBashResult(toolUseID string) {
+	f.emit(map[string]any{
+		"type": "user",
+		"message": map[string]any{
+			"role": "user",
+			"content": []any{map[string]any{
+				"type":        "tool_result",
+				"tool_use_id": toolUseID,
+				"content":     "(Bash completed with no output)",
+				"is_error":    false,
+			}},
+		},
+		"parent_tool_use_id": nil,
+		"tool_use_result":    map[string]any{"stdout": "", "stderr": "", "interrupted": false, "noOutputExpected": true},
+	})
+}
+
+// toolResultWithParent emits what a tool of a subagent returned to it. The
+// CLI gives no structured result off the main thread.
+func (f *fake) toolResultWithParent(toolUseID, content, parent string) {
+	f.emit(map[string]any{
+		"type": "user",
+		"message": map[string]any{
+			"role": "user",
+			"content": []any{map[string]any{
+				"type":        "tool_result",
+				"tool_use_id": toolUseID,
+				"content":     content,
+				"is_error":    false,
+			}},
+		},
+		"parent_tool_use_id": parent,
+	})
+}
+
+// subagentResult emits the hand-back of a subagent, as the CLI reports it: the
+// report inside the harness frame in the text, and alone in the structured
+// result.
+func (f *fake) subagentResult(toolUseID, report string) {
+	framed := "[Subagent hand-back] The report follows:\n  " + report +
+		"\nagentId: a0fake (use SendMessage to continue this agent)\n<usage>tool_uses: 2</usage>"
+	f.emit(map[string]any{
+		"type": "user",
+		"message": map[string]any{
+			"role": "user",
+			"content": []any{map[string]any{
+				"type":        "tool_result",
+				"tool_use_id": toolUseID,
+				"content":     []any{map[string]any{"type": "text", "text": framed}},
+			}},
+		},
+		"parent_tool_use_id": nil,
+		"tool_use_result": map[string]any{
+			"status":  "completed",
+			"content": []any{map[string]any{"type": "text", "text": report}},
+		},
 	})
 }
 

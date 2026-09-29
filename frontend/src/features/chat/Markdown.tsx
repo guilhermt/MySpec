@@ -1,6 +1,6 @@
 import { code } from "@streamdown/code";
 import { createMermaidPlugin } from "@streamdown/mermaid";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Streamdown } from "streamdown";
 import { Button } from "@/components/system/Button";
 import { CUT_SHOWN, codeMarkdown, cutParts, type MarkdownPart } from "@/features/chat/code-cut";
@@ -15,6 +15,12 @@ const CONTROLS = {
   code: { copy: true, download: false },
   mermaid: { copy: false, download: false, fullscreen: true, panZoom: true },
 } as const;
+
+// A cut block copies itself whole with its own Copy: Streamdown's would copy the lines shown.
+const CUT_CONTROLS = { ...CONTROLS, code: { copy: false, download: false } } as const;
+
+/** COPIED_MS is how long Copy of a cut block says what the copy did. */
+const COPIED_MS = 2000;
 
 // The safety modal warns before leaving the page; links never navigate here.
 const LINK_SAFETY = { enabled: false } as const;
@@ -36,10 +42,11 @@ interface BlockProps {
   children: string;
   streaming: boolean;
   className: string | undefined;
+  controls?: typeof CONTROLS | typeof CUT_CONTROLS;
 }
 
 // Block is one Streamdown over a piece of the text.
-function Block({ children, streaming, className }: BlockProps) {
+function Block({ children, streaming, className, controls = CONTROLS }: BlockProps) {
   const dark = useEffectiveMode() === "dark";
   const plugins = useMemo(
     () => ({
@@ -63,7 +70,7 @@ function Block({ children, streaming, className }: BlockProps) {
       plugins={plugins}
       shikiTheme={[...CODE_THEMES]}
       lineNumbers={false}
-      controls={CONTROLS}
+      controls={controls}
       linkSafety={LINK_SAFETY}
       components={COMPONENTS}
     >
@@ -78,14 +85,42 @@ interface CutCodeProps {
   className: string | undefined;
 }
 
-// CutCode is a long code block showing its first lines, with the foot that shows the rest.
+// Copied is what the last Copy did, said on the button for COPIED_MS.
+type Copied = "idle" | "copied" | "failed";
+
+const COPY_LABELS: Record<Copied, string> = {
+  idle: "Copy",
+  copied: "Copied",
+  failed: "Couldn't copy",
+};
+
+// CutCode is a long code block showing its first lines, with the foot that shows the rest and
+// copies the whole block.
 function CutCode({ part, streaming, className }: CutCodeProps) {
   const [open, setOpen] = useState(false);
+  const [copied, setCopied] = useState<Copied>("idle");
   const total = part.lines.length;
+
+  useEffect(() => {
+    if (copied === "idle") {
+      return;
+    }
+    const timer = setTimeout(() => setCopied("idle"), COPIED_MS);
+    return () => clearTimeout(timer);
+  }, [copied]);
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(part.lines.join("\n"));
+      setCopied("copied");
+    } catch {
+      setCopied("failed");
+    }
+  };
 
   return (
     <div className="flex flex-col">
-      <Block streaming={streaming && !part.closed} className={className}>
+      <Block streaming={streaming && !part.closed} className={className} controls={CUT_CONTROLS}>
         {codeMarkdown(part, open ? total : CUT_SHOWN)}
       </Block>
       <div className="flex items-center gap-2 border-t border-line-1 pt-(--space-1) text-(length:--text-meta) leading-(--leading-meta) text-ink-3">
@@ -93,6 +128,9 @@ function CutCode({ part, streaming, className }: CutCodeProps) {
           {open ? "Show less" : `Show all ${total} lines`}
         </Button>
         {!open && <span className="tabular-nums">{total - CUT_SHOWN} more</span>}
+        <Button variant="ghost" size="xs" className="ml-auto" onClick={() => void copy()}>
+          {COPY_LABELS[copied]}
+        </Button>
       </div>
     </div>
   );

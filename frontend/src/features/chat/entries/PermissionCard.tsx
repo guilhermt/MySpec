@@ -1,4 +1,4 @@
-import { type KeyboardEvent, useId, useRef, useState } from "react";
+import { type KeyboardEvent, useId, useLayoutEffect, useRef, useState } from "react";
 import { Button } from "@/components/system/Button";
 import { Icon } from "@/components/system/Icon";
 import { ICONS } from "@/components/system/icons";
@@ -178,6 +178,9 @@ interface PendingPermissionProps {
 function PendingPermission({ taskId, stage, permission, flash }: PendingPermissionProps) {
   const titleId = useId();
   const denyRef = useRef<HTMLTextAreaElement>(null);
+  const denyButtonRef = useRef<HTMLButtonElement>(null);
+  // backToDeny is Cancel closing the Deny area: the focus goes back to Deny…, which it replaces.
+  const backToDeny = useRef(false);
   const [denying, setDenying] = useState(false);
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState<PermissionDecision | null>(null);
@@ -208,6 +211,19 @@ function PendingPermission({ taskId, stage, permission, flash }: PendingPermissi
     setDenying(true);
     requestAnimationFrame(() => denyRef.current?.focus());
   };
+
+  const cancelDeny = () => {
+    backToDeny.current = true;
+    setDenying(false);
+  };
+
+  // Before the rescue of the task screen sees the focus gone with Cancel.
+  useLayoutEffect(() => {
+    if (!denying && backToDeny.current) {
+      backToDeny.current = false;
+      denyButtonRef.current?.focus();
+    }
+  }, [denying]);
 
   // 1 to 3 are the buttons, in order, with the focus on the card or on one of its buttons.
   const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
@@ -280,7 +296,7 @@ function PendingPermission({ taskId, stage, permission, flash }: PendingPermissi
               <Button
                 variant="ghost"
                 {...(sending !== null ? { disabled: true } : {})}
-                onClick={() => setDenying(false)}
+                onClick={cancelDeny}
               >
                 Cancel
               </Button>
@@ -309,6 +325,7 @@ function PendingPermission({ taskId, stage, permission, flash }: PendingPermissi
               </Button>
             )}
             <Button
+              ref={denyButtonRef}
               variant="ghost"
               shortcut={forSession ? "3" : "2"}
               {...(permission.defaultToNo ? { "data-default-focus": true } : {})}

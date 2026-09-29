@@ -305,7 +305,7 @@ type MarkerEntry struct {
 	Base     string        `json:"base"`     // pr_opened: the base branch
 	Passed   int           `json:"passed"`   // checks_read
 	Total    int           `json:"total"`    // checks_read
-	Failed   []string      `json:"failed"`   // checks_read: names of the failed checks; nil when none
+	Failed   []string      `json:"failed"`   // checks_read: names of the failed checks; empty when none
 	Conflict bool          `json:"conflict"` // checks_read
 	Title    string        `json:"title"`    // draft_approved
 	Files    int           `json:"files"`    // changes_approved

@@ -414,7 +414,7 @@ func retryReasonOf(message string) string {
 	switch {
 	case has("overloaded", "529"):
 		return "overloaded"
-	case has("rate", "429"):
+	case has("rate limit", "rate_limit", "ratelimit", "429"):
 		return "rate_limit"
 	case has("connection", "timeout", "timed out", "econn", "network", "socket"):
 		return "connection"

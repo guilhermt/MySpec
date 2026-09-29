@@ -6,9 +6,9 @@ import { CleanAndStartDialog } from "@/features/task/CleanAndStartDialog";
 import { DeleteTaskDialog } from "@/features/task/DeleteTaskDialog";
 import { DiscardStepDialog } from "@/features/task/DiscardStepDialog";
 import type { TaskRequestAction, TaskRequestButton } from "@/features/task/request";
-import { focusRequest } from "@/features/task/request-focus";
 import { currentStepOf } from "@/features/task/step-status";
 import { useTaskRequest } from "@/features/task/useTaskRequest";
+import { focusRequest } from "@/lib/focus";
 import type { TaskSummary } from "@/lib/wails";
 import {
   approvePR,

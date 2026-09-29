@@ -41,11 +41,13 @@ describe("Group", () => {
   it("is one folded line with the count, the summary, the start and the duration in its name", () => {
     renderGroup([action(0), action(1), action(2, { tool: "Grep", target: "useAppStore" })]);
 
-    const group = screen.getByRole("article", {
-      name: `3 actions, Read 2 · Searched 1, started ${clockTime(START, Date.now())}, 20s`,
-    });
+    const name = `3 actions, Read 2 · Searched 1, started ${clockTime(START, Date.now())}, 20s`;
+    const group = screen.getByRole("article", { name });
     expect(group).toHaveTextContent("3 actions");
-    expect(screen.getByRole("button")).toHaveAttribute("aria-expanded", "false");
+    // The line is the stop of the walk, with the state of the fold and the name of the group.
+    const toggle = screen.getByRole("button", { name });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(toggle).toHaveAttribute("data-feed-item");
     expect(screen.queryByText("src/file0.ts")).not.toBeInTheDocument();
   });
 
@@ -90,6 +92,17 @@ describe("Group", () => {
 
     await user.click(screen.getByRole("button", { name: /Show 3 earlier actions/ }));
     expect(screen.getAllByRole("listitem", { name: /^Read: / })).toHaveLength(9);
+  });
+
+  it("gives the focus to the first row Show earlier actions reveals", async () => {
+    const { user } = renderGroup(Array.from({ length: 9 }, (_, i) => action(i)));
+    await user.click(screen.getByRole("button", { expanded: false }));
+    screen.getByRole("button", { name: /Show 3 earlier actions/ }).focus();
+
+    await user.keyboard("{Enter}");
+
+    expect(screen.queryByRole("button", { name: /earlier actions/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("listitem", { name: /^Read: src\/file0\.ts/ })).toHaveFocus();
   });
 
   it("keeps every command of up to eight", async () => {

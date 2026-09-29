@@ -282,7 +282,7 @@ describe("TaskView", () => {
     await user.click(screen.getByRole("button", { name: "Show problems" }));
 
     expect(marker).toHaveAttribute("aria-expanded", "true");
-    expect(marker.closest("article")).toHaveFocus();
+    expect(marker).toHaveFocus();
     expect(marker.closest("article")).toHaveTextContent("2-api.md · no repository");
   });
 
@@ -753,6 +753,37 @@ describe("TaskView, the focus on arriving at a situation", () => {
     });
 
     await waitFor(() => expect(screen.getByRole("radio", { name: /SQLite/ })).toHaveFocus());
+  });
+
+  it("lands once the conversation couldn't be read, instead of waiting for it", async () => {
+    renderWithStore(<TaskView taskId="task-1" />, {
+      state: makeState({
+        tasks: [
+          makeTask({
+            stage: "prd",
+            situations: [
+              makeSituation({ kind: "question", place: { kind: "stage", stage: "prd", step: 0 } }),
+            ],
+          }),
+        ],
+      }),
+      ui: {
+        location: { kind: "task", id: "task-1" },
+        pendingFocus: "request",
+        transcripts: {
+          "task-1|prd": {
+            status: "error",
+            error: "the transcript is unreadable",
+            entries: [],
+            pending: [],
+            buffered: [],
+          },
+        },
+      },
+    });
+
+    await waitFor(() => expect(screen.getByRole("heading", { level: 1 })).toHaveFocus());
+    expect(useAppStore.getState().pendingFocus).toBeNull();
   });
 
   it("falls back to the title when what the situation asks isn't on screen", async () => {

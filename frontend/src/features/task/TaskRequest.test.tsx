@@ -330,15 +330,17 @@ describe("TaskRequest", () => {
     expect(api.openPR).toHaveBeenCalledWith("task-1", DRAFT.title, DRAFT.body);
   });
 
-  it("shows the question card with Show, the focus on its first option", async () => {
+  it("shows the question card with Show, the focus on its first question without a choice", async () => {
     const task = makeTask(inStep({ status: "implementing" }, [onStep("question")]));
     const { user } = renderWithStore(
       <>
         <div data-pending-card="question">
-          {/* biome-ignore lint/a11y/useSemanticElements: the options of the card are buttons with the radio role. */}
-          <button type="button" role="radio" aria-checked="false">
-            SQLite
-          </button>
+          <div role="radiogroup" aria-label="Which database?" data-question={0}>
+            {/* biome-ignore lint/a11y/useSemanticElements: the options of the card are buttons with the radio role. */}
+            <button type="button" role="radio" aria-checked="false">
+              SQLite
+            </button>
+          </div>
         </div>
         <TaskRequest task={task} tab="implementer" />
       </>,

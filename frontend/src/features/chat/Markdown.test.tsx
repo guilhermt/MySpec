@@ -1,5 +1,5 @@
 import { screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ExternalLink } from "@/features/chat/ExternalLink";
 import { Markdown } from "@/features/chat/Markdown";
 import { api } from "@/lib/wails";
@@ -84,6 +84,31 @@ describe("ExternalLink", () => {
     );
     expect(await screen.findByText(/line 46/)).toBeInTheDocument();
     expect(screen.queryByText("26 more")).not.toBeInTheDocument();
+  });
+
+  it("copies a cut block whole, not the lines it shows, with its own Copy", async () => {
+    const code = Array.from({ length: 46 }, (_, at) => `line ${at + 1}`).join("\n");
+    const { user } = renderWithStore(
+      <Markdown cutCode>{`Intro\n\n\`\`\`go\n${code}\n\`\`\``}</Markdown>,
+    );
+    const [intro, block] = screen.getAllByTestId("markdown");
+    expect(intro).toHaveAttribute("data-code-copy", "true");
+    expect(block).toHaveAttribute("data-code-copy", "false");
+
+    await user.click(screen.getByRole("button", { name: "Copy" }));
+
+    expect(await navigator.clipboard.readText()).toBe(code);
+    expect(screen.getByRole("button", { name: "Copied" })).toBeInTheDocument();
+  });
+
+  it("says in place when the copy failed", async () => {
+    const code = Array.from({ length: 30 }, (_, at) => `line ${at + 1}`).join("\n");
+    const { user } = renderWithStore(<Markdown cutCode>{`\`\`\`\n${code}\n\`\`\``}</Markdown>);
+    vi.spyOn(navigator.clipboard, "writeText").mockRejectedValueOnce(new Error("denied"));
+
+    await user.click(screen.getByRole("button", { name: "Copy" }));
+
+    expect(await screen.findByRole("button", { name: "Couldn't copy" })).toBeInTheDocument();
   });
 
   it("leaves code whole out of the conversation", () => {

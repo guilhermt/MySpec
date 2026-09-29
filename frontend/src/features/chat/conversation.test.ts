@@ -562,7 +562,7 @@ describe("stretchFoldOf", () => {
       text: "5 speeches · 71 actions",
       from: "from the start · steps/06-throttle-metrics.md",
       interval,
-      name: `Earlier: 5 speeches and 71 actions, from the start · steps/06-throttle-metrics.md, ${clockTime(at(12), NOW)} to ${clockTime(at(48), NOW)}`,
+      name: `Earlier: 5 speeches and 71 actions, from the start, ${clockTime(at(12), NOW)} to ${clockTime(at(48), NOW)}`,
     });
   });
 
@@ -575,6 +575,9 @@ describe("stretchFoldOf", () => {
 
     expect(view.text).toBe("1 speech · 1 action");
     expect(view.from).toBe("from Review 1 · 3 findings · round 1 of 3");
+    expect(view.name).toMatch(
+      /^Earlier: 1 speech and 1 action, from Review 1 · 3 findings · round 1 of 3, /,
+    );
   });
 
   it("says only from the start without a start line, and no interval without the times", () => {

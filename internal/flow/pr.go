@@ -464,7 +464,9 @@ func (s *Service) viewPR(ctx context.Context, wt worktree.Worktree) (gh.PR, erro
 
 // recordPR stores the pull request a reading found and hands the task to its
 // review. With detailsOnly, the task is already past the review and waiting for
-// the merge: only what GitHub says about the pull request changes.
+// the merge: only what GitHub says about the pull request changes. A task whose
+// review is under way keeps its status: the pull request was found, and marked
+// in the conversation, when the review began.
 func (s *Service) recordPR(id string, pr gh.PR, detailsOnly bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), evaluateTimeout)
 	defer cancel()
@@ -483,6 +485,11 @@ func (s *Service) recordPR(id string, pr gh.PR, detailsOnly bool) {
 		s.Check(id)
 		return
 	}
+	if inReview(run.Status) {
+		s.log.Info("pull request read", "task", id, "state", string(details.State))
+		s.Check(id)
+		return
+	}
 	if _, err := s.tasks.SetPRRun(ctx, id, task.PRReviewing, nil); err != nil {
 		s.log.Error("record reviewing pull request failed", "task", id, "error", err)
 		return
@@ -490,6 +497,12 @@ func (s *Service) recordPR(id string, pr gh.PR, detailsOnly bool) {
 	s.sessions.MarkPROpened(ctx, session.Key{TaskID: id, Stage: session.PRStage}, pr.Number, pr.Base)
 	s.log.Info("pull request found", "task", id, "number", pr.Number)
 	s.Check(id)
+}
+
+// inReview reports whether the review of a pull request already began and is
+// not over.
+func inReview(status task.PRStatus) bool {
+	return status == task.PRReviewing || status == task.PRWaitingChecks || status == task.PRCommitting
 }
 
 // prDetails is what the app records of a reading of a pull request.

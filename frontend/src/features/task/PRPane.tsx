@@ -92,7 +92,7 @@ export function PRPane({ task, pr, tab }: PRPaneProps) {
             replyWaiting={screenSituationKindOf(task, tab) === "reply"}
           />
           {request}
-          {hasComposer(view, pr.status) && (
+          {hasComposer(view) && (
             <TaskComposer task={task} tab={tab} stage={pr.sessionStage} session={pr} />
           )}
         </>

@@ -117,6 +117,46 @@ func TestReadStepReportsCountsTheFindings(t *testing.T) {
 			body: reviewed + rest,
 			want: -1,
 		},
+		"the colon inside the bold and None.": {
+			body: reviewed + "3. **Findings:** None.\n" + rest,
+			want: 0,
+		},
+		"numbered findings in bold, the file first, under a ## title": {
+			body: "## Checks\n\nNone.\n\n## Findings\n\n" +
+				"1. **`frontend/src/features/chat/`** — `actions.ts` and its table tests do not exist. Implement them.\n" +
+				"2. **`frontend/src/features/task/request.ts`** — the new functions are not added. Add them with tests.\n" +
+				"3. **`frontend/src/features/task/place.ts`** — missing. Create it with its tests.\n" +
+				"4. Once complete, run `task check` in full.\n\n## Accepted divergences\n\nNone.\n",
+			want: 4,
+		},
+		"findings with the path and the line, under a ## title": {
+			body: "## Findings\n\n" +
+				"1. `frontend/src/store/actions.ts:426` — `sendMessage` has no caller left outside its tests. Remove it.\n" +
+				"2. `frontend/src/store/actions.test.ts` — the new store API has no tests of its own. Add them.\n\n" +
+				"## Accepted divergences\n\n- `TaskComposer` is a new file. Sound.\n- The chips are wired. Sound.\n\n" +
+				"## Contestations\n\nNone.\n",
+			want: 2,
+		},
+		"sub-items of a finding count with it": {
+			body: "## Findings\n\n1. **`output.go:39`: the report keeps its frame.**\n   - The text is framed.\n" +
+				"   - **Fix:** read the structured result.\n2. **`events.go:417`: rate matches generate.**\n" +
+				"   - **Fix:** match the words.\n\n## Accepted divergences\n\nNone.\n",
+			want: 2,
+		},
+		"sub-headings deeper than the title": {
+			body: "## Findings\n\n### 1. The handle leaks\n\n- `store.go:12`\n- Close it.\n\n" +
+				"### 2. A case is missing\n\nAdd it.\n\n## Accepted divergences\n\n- One.\n",
+			want: 2,
+		},
+		"numbered findings in bold in the format of the prompt": {
+			body: reviewed + "3. **Findings**:\n1. **`store.go:12`**: leaks a handle; close it.\n" +
+				"2. **`store_test.go`**: misses the empty case; add it.\n" + rest,
+			want: 2,
+		},
+		"a heading ends a section whose title is no heading": {
+			body: reviewed + "3. **Findings**:\n- One.\n\n## Notes\n\n- Not a finding.\n",
+			want: 1,
+		},
 	}
 
 	for name, tc := range tests {

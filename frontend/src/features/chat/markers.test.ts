@@ -205,7 +205,7 @@ describe("startLineOf", () => {
       markerEntry({ type: "step_started", step: 9 }),
       prompt({}),
       ctx("step:9"),
-      view("start", "Started with", { complement: "step 9" }),
+      view("start", "Started with", { complement: "" }),
     ],
     [
       "the implementation of a One-Shot task",

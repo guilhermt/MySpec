@@ -1,6 +1,7 @@
 import { screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { Composer, type ComposerProps } from "@/features/chat/Composer";
+import { QuestionCard } from "@/features/chat/entries/QuestionCard";
 import type { SessionState } from "@/features/chat/session";
 import { api, type QuestionEntry } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
@@ -49,6 +50,23 @@ function asking(multiSelect = false): QuestionEntry {
     answers: null,
     status: "pending",
     answeredAt: "",
+  };
+}
+
+// threeQuestions is a pending card of three single choices, which the card and the composer share.
+function threeQuestions(): QuestionEntry {
+  const question = asking();
+  return {
+    ...question,
+    questions: [
+      ...(question.questions ?? []),
+      {
+        question: "Which window?",
+        header: "Window",
+        options: [{ label: "Sliding", description: "" }],
+        multiSelect: false,
+      },
+    ],
   };
 }
 
@@ -182,6 +200,20 @@ describe("Composer", () => {
     );
   });
 
+  it("stops at a resume that fails, telling it under the field without the app notice", async () => {
+    vi.mocked(api.resume).mockRejectedValueOnce(new Error("the worktree is gone"));
+    const task = makeTask({ sessionStatus: "paused" });
+    const { user } = renderWithStore(composer(task), { ui: { drafts: DRAFT } });
+
+    await user.click(field());
+    await user.keyboard("{Enter}");
+
+    expect(await screen.findByText("Not sent · the worktree is gone")).toBeInTheDocument();
+    expect(api.sendMessage).not.toHaveBeenCalled();
+    expect(useAppStore.getState().error).toBeNull();
+    expect(field()).toHaveValue("ship it");
+  });
+
   it("sends a quick reply without touching the draft", async () => {
     const chips = [
       { key: "a", text: "Per key" },
@@ -197,18 +229,29 @@ describe("Composer", () => {
   });
 
   it("answers the first question without a choice and goes back to the card", async () => {
-    const question = asking();
-    const { user } = renderWithStore(composer(makeTask(), { question, otherPrimary: true }), {
-      ui: { drafts: { "task-1|prd": "Per user" } },
-    });
+    const question = threeQuestions();
+    const { user } = renderWithStore(
+      <>
+        <QuestionCard taskId="task-1" stage="prd" question={question} createdAt="" />
+        {composer(makeTask(), { question, otherPrimary: true })}
+      </>,
+      {
+        ui: {
+          drafts: { "task-1|prd": "Disk" },
+          questionChoices: { "req-1": { 0: { labels: ["Per key"], other: null } } },
+        },
+      },
+    );
 
     await user.click(field());
     await user.keyboard("{Enter}");
 
     expect(useAppStore.getState().questionChoices["req-1"]).toEqual({
-      0: { labels: [], other: "Per user" },
+      0: { labels: ["Per key"], other: null },
+      1: { labels: [], other: "Disk" },
     });
     expect(field()).toHaveValue("");
+    expect(screen.getByRole("radio", { name: /Sliding/ })).toHaveFocus();
     expect(api.answerQuestion).not.toHaveBeenCalled();
     expect(api.sendMessage).not.toHaveBeenCalled();
   });
@@ -230,6 +273,28 @@ describe("Composer", () => {
       "Which store?": "Disk",
     });
     expect(field()).toHaveValue("");
+    await waitFor(() => expect(useAppStore.getState().questionChoices["req-1"]).toBeUndefined());
+  });
+
+  it("tells under the field that the answer was not sent, without the app notice", async () => {
+    vi.mocked(api.answerQuestion).mockRejectedValueOnce(new Error("the session stopped"));
+    const question = asking();
+    const { user } = renderWithStore(composer(makeTask(), { question, otherPrimary: true }), {
+      ui: {
+        drafts: { "task-1|prd": "Disk" },
+        questionChoices: { "req-1": { 0: { labels: ["Per key"], other: null } } },
+      },
+    });
+
+    await user.click(field());
+    await user.keyboard("{Enter}");
+
+    expect(await screen.findByText("Not sent · the session stopped")).toBeInTheDocument();
+    expect(useAppStore.getState().error).toBeNull();
+    expect(useAppStore.getState().questionChoices["req-1"]).toEqual({
+      0: { labels: ["Per key"], other: null },
+      1: { labels: [], other: "Disk" },
+    });
   });
 
   it("changes the model of the session it writes to", async () => {

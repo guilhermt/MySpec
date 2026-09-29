@@ -338,14 +338,18 @@ func (s *Service) load(ctx context.Context, t TaskInfo, n *notes) (*run, error) 
 }
 
 // settle marks an entry a previous run left open as interrupted or cancelled,
-// reporting whether it changed anything.
+// reporting whether it changed anything. Only an app that died mid-turn leaves
+// one open, and nothing asked for that, so a text or an action it cuts short
+// was cut by a crash.
 func settle(e *Entry) bool {
 	switch {
 	case e.Kind == KindAssistant && !e.Assistant.Complete:
 		e.Assistant.Complete = true
 		e.Assistant.Interrupted = true
+		e.Assistant.InterruptedBy = interruptedByCrash
 	case e.Kind == KindAction && e.Action.Status == ActionRunning:
 		e.Action.Status = ActionInterrupted
+		e.Action.InterruptedBy = interruptedByCrash
 	case e.Kind == KindPermission && e.Permission.Status == PermissionPending:
 		e.Permission.Status = PermissionCancelled
 	case e.Kind == KindQuestion && e.Question.Status == PermissionPending:
@@ -884,36 +888,17 @@ func (s *Service) MarkArtifact(ctx context.Context, k Key, kind ArtifactKind, fi
 // MarkPRReview records that a pass of the review of a pull request was
 // written, with its verdict.
 func (s *Service) MarkPRReview(ctx context.Context, k Key, pass int, clean bool) {
-	n := &notes{}
-	defer s.flush(n)
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	r, err := s.runOf(k)
-	if err != nil {
-		return
-	}
-	marker := &MarkerEntry{Type: MarkerPRReviewWritten, Pass: pass, Clean: clean}
-	s.appendLocked(ctx, r, Entry{Kind: KindMarker, Marker: marker}, n)
+	s.mark(ctx, k, &MarkerEntry{Type: MarkerPRReviewWritten, Pass: pass, Clean: clean})
 }
 
 // MarkStepReview records that a pass of the agent review of a step was
 // written, with its verdict and how many findings it reported (-1 unknown).
 func (s *Service) MarkStepReview(ctx context.Context, k Key, pass int, clean bool, findings int) {
-	n := &notes{}
-	defer s.flush(n)
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	r, err := s.runOf(k)
-	if err != nil {
-		return
-	}
 	marker := &MarkerEntry{Type: MarkerStepReviewWritten, Pass: pass, Clean: clean}
 	if findings >= 0 {
 		marker.Findings = &findings
 	}
-	s.appendLocked(ctx, r, Entry{Kind: KindMarker, Marker: marker}, n)
+	s.mark(ctx, k, marker)
 }
 
 // mark records a marker in the conversation of a session; a session that is

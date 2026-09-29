@@ -36,7 +36,9 @@ func outputOf(action *ActionEntry, result claude.ToolResult, useResult json.RawM
 		if first, rest, _ := strings.Cut(text, "\n"); exitCodeLine.MatchString(first) {
 			text = rest
 		}
-	case action.Tool == "Agent" || action.Tool == "Task" || result.IsError:
+	case action.Tool == "Agent" || action.Tool == "Task":
+		text = subagentReport(result, useResult)
+	case result.IsError:
 		text = result.Text()
 	}
 
@@ -53,15 +55,48 @@ func outputOf(action *ActionEntry, result claude.ToolResult, useResult json.RawM
 	return o, true
 }
 
+// silentBash is the text the CLI gives a command that printed nothing.
+const silentBash = "(Bash completed with no output)"
+
+// subagentReport is the report of a subagent as the structured result gives
+// it, without the frame the harness puts around it in the text of the result,
+// or that text without one.
+func subagentReport(result claude.ToolResult, useResult json.RawMessage) string {
+	var report struct {
+		Content []struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		} `json:"content"`
+	}
+	if json.Unmarshal(useResult, &report) != nil {
+		return result.Text()
+	}
+	texts := make([]string, 0, len(report.Content))
+	for _, block := range report.Content {
+		if block.Type == "text" && block.Text != "" {
+			texts = append(texts, block.Text)
+		}
+	}
+	if len(texts) == 0 {
+		return result.Text()
+	}
+	return strings.Join(texts, "\n\n")
+}
+
 // bashOutput is the stdout of a command followed by its stderr, as the
-// structured result gives them, or the text of the result without one.
+// structured result gives them, or the text of the result without one. Only
+// the main thread's results carry the structured one, so a subagent's command
+// that printed nothing reads as the CLI's placeholder, which is no output.
 func bashOutput(result claude.ToolResult, useResult json.RawMessage) string {
 	var streams struct {
 		Stdout *string `json:"stdout"`
 		Stderr *string `json:"stderr"`
 	}
 	if json.Unmarshal(useResult, &streams) != nil || streams.Stdout == nil {
-		return result.Text()
+		if text := result.Text(); text != silentBash {
+			return text
+		}
+		return ""
 	}
 	stderr := ""
 	if streams.Stderr != nil {

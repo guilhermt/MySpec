@@ -1,8 +1,8 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useId } from "react";
 import { Icon } from "@/components/system/Icon";
 import { ICONS } from "@/components/system/icons";
 import type { StretchFoldView } from "@/features/chat/conversation";
-import { Chevron } from "@/features/chat/entries/CommandRow";
+import { Chevron } from "@/features/chat/entries/Chevron";
 
 export interface StretchFoldProps {
   fold: StretchFoldView;
@@ -17,21 +17,20 @@ export interface StretchFoldProps {
  * Open, its entries follow the line as they were, in the same column.
  */
 export function StretchFold({ fold, open, onToggle, children }: StretchFoldProps) {
+  const id = useId();
   return (
     <>
-      <article
-        data-feed-item
-        tabIndex={-1}
-        aria-label={fold.name}
-        className="flex flex-col rounded-sm outline-none focus-visible:focus-ring"
-      >
+      {/* The line is the stop of the walk, with the state of the fold; the article holds the name. */}
+      <article id={id} data-feed-entry aria-label={fold.name} className="flex flex-col">
         <button
           type="button"
+          data-feed-item
           data-feed-toggle
           tabIndex={-1}
           aria-expanded={open}
+          aria-labelledby={id}
           onClick={onToggle}
-          className="-mx-(--space-2) flex min-h-(--size-control-sm) min-w-0 items-center gap-(--space-2) rounded-sm px-(--space-2) text-left text-(length:--text-meta) leading-(--leading-meta) text-ink-3 outline-none transition-colors duration-(--duration-fast) ease-standard hover:bg-veil-hover active:bg-veil-press"
+          className="-mx-(--space-2) flex min-h-(--size-control-sm) min-w-0 items-center gap-(--space-2) rounded-sm px-(--space-2) text-left text-(length:--text-meta) leading-(--leading-meta) text-ink-3 outline-none transition-colors duration-(--duration-fast) ease-standard hover:bg-veil-hover active:bg-veil-press focus-visible:focus-ring"
         >
           <Chevron open={open} />
           <Icon icon={ICONS.history} size="sm" className="text-ink-4" />

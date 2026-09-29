@@ -32,7 +32,8 @@ export function ConversationColumn({
 }: ConversationColumnProps) {
   return (
     <ScrollArea
-      className={cn("h-full", fadeTop ? "conversation-fade" : "conversation-fade-bottom")}
+      className="h-full"
+      viewportClassName={fadeTop ? "conversation-fade" : "conversation-fade-bottom"}
       {...(label !== undefined ? { label } : {})}
       {...(viewportRef !== undefined ? { viewportRef } : {})}
     >

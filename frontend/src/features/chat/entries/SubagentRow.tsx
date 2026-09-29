@@ -4,10 +4,10 @@ import { ICONS } from "@/components/system/icons";
 import { useNow } from "@/features/attention/useNow";
 import { actionLabel, actionRight, summaryOf } from "@/features/chat/actions";
 import type { ActionNode } from "@/features/chat/conversation";
+import { ActionRows } from "@/features/chat/entries/ActionRows";
+import { Chevron } from "@/features/chat/entries/Chevron";
 import { CommandOutput } from "@/features/chat/entries/CommandOutput";
 import {
-  Chevron,
-  CommandRow,
   commandName,
   OUTPUT_INDENT,
   RIGHT_TONES,
@@ -15,80 +15,6 @@ import {
 } from "@/features/chat/entries/CommandRow";
 import { cn } from "@/lib/utils";
 import { asActionStatus } from "@/lib/wails";
-
-/** ALL_ROWS is the most rows a list shows whole; above it, the last SHOWN_ROWS and the way to the others. */
-const ALL_ROWS = 8;
-const SHOWN_ROWS = 6;
-
-// isSubagent says the node started a subagent: an Agent or a Task call.
-function isSubagent(node: ActionNode): boolean {
-  return node.action.tool === "Agent" || node.action.tool === "Task";
-}
-
-export interface ActionRowsProps {
-  taskId: string;
-  stage: string;
-  nodes: readonly ActionNode[];
-  /** waitingToolUseId is the action the pending permission holds, null without one. */
-  waitingToolUseId: string | null;
-  /** nested is the list of a subagent: a subagent in it is one of its commands. */
-  nested?: boolean;
-  className?: string;
-}
-
-/** ActionRows lists the commands of a group or a subagent: up to eight, else the last six and Show N earlier actions. */
-export function ActionRows({
-  taskId,
-  stage,
-  nodes,
-  waitingToolUseId,
-  nested = false,
-  className,
-}: ActionRowsProps) {
-  const [all, setAll] = useState(false);
-  const earlier = !all && nodes.length > ALL_ROWS ? nodes.length - SHOWN_ROWS : 0;
-
-  return (
-    <ul className={cn("flex flex-col divide-y divide-line-1", className)}>
-      {earlier > 0 && (
-        <li className="py-(--space-0-5) pl-[calc(var(--space-2)+var(--icon-xs)+var(--space-2))]">
-          <button
-            type="button"
-            data-feed-item
-            tabIndex={-1}
-            onClick={() => setAll(true)}
-            className="-ml-(--space-1-5) inline-flex h-(--size-control-xs) items-center gap-(--space-1-5) rounded-sm px-(--space-1-5) text-(length:--text-micro) leading-(--leading-micro) text-ink-3 outline-none hover:bg-veil-hover hover:text-ink-1 active:bg-veil-press focus-visible:focus-ring"
-          >
-            <Icon icon={ICONS.history} size="xs" />
-            {`Show ${earlier} earlier actions`}
-          </button>
-        </li>
-      )}
-      {nodes
-        .slice(earlier)
-        .map((node) =>
-          !nested && isSubagent(node) ? (
-            <SubagentRow
-              key={node.entry.id}
-              taskId={taskId}
-              stage={stage}
-              node={node}
-              waitingToolUseId={waitingToolUseId}
-            />
-          ) : (
-            <CommandRow
-              key={node.entry.id}
-              taskId={taskId}
-              stage={stage}
-              entry={node.entry}
-              action={node.action}
-              waiting={node.action.toolUseId === waitingToolUseId}
-            />
-          ),
-        )}
-    </ul>
-  );
-}
 
 // subagentSummary is "44 actions · Read 21 · Searched 14 · GitHub 9", "" without actions.
 function subagentSummary(node: ActionNode): string {
@@ -157,14 +83,10 @@ export function SubagentRow({ taskId, stage, node, waitingToolUseId }: SubagentR
     );
   }
   return (
-    <li
-      data-feed-item
-      tabIndex={-1}
-      aria-label={name}
-      className="flex flex-col rounded-sm outline-none focus-visible:focus-ring"
-    >
+    <li data-feed-entry className="flex flex-col">
       <button
         type="button"
+        data-feed-item
         data-feed-toggle
         tabIndex={-1}
         aria-expanded={open}

@@ -195,7 +195,8 @@ export interface AppStore {
   /**
    * questionChoices are the choices of a pending question card, by its requestId, shared by the card
    * and the composer that answers it: by the index of each question, the labels picked and the text
-   * of Other… (QuestionChoices of features/chat/composer.ts).
+   * of Other… (QuestionChoices of features/chat/composer.ts). A question's entry goes away once
+   * its answer is sent.
    */
   questionChoices: Record<string, Record<number, { labels: string[]; other: string | null }>>;
   /** newTaskOpen is the creation dialog being open. */
@@ -301,6 +302,8 @@ export interface AppStore {
     requestId: string,
     choices: Record<number, { labels: string[]; other: string | null }>,
   ) => void;
+  /** clearQuestionChoices forgets the choices of a question whose answer was sent. */
+  clearQuestionChoices: (requestId: string) => void;
   clearPrDraft: (taskId: string) => void;
 
   openHistory: () => void;
@@ -972,6 +975,12 @@ export const useAppStore = create<AppStore>()((set, get) => {
 
     setQuestionChoices: (requestId, choices) =>
       set((state) => ({ questionChoices: { ...state.questionChoices, [requestId]: choices } })),
+
+    clearQuestionChoices: (requestId) =>
+      set((state) => {
+        const { [requestId]: _dropped, ...rest } = state.questionChoices;
+        return { questionChoices: rest };
+      }),
 
     clearPrDraft: (taskId) =>
       set((state) => {

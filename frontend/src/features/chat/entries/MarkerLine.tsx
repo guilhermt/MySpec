@@ -1,9 +1,9 @@
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { Button } from "@/components/system/Button";
 import { Icon } from "@/components/system/Icon";
 import { ICONS, type IconMeaning } from "@/components/system/icons";
 import { Shimmer } from "@/components/system/Shimmer";
-import { Chevron } from "@/features/chat/entries/CommandRow";
+import { Chevron } from "@/features/chat/entries/Chevron";
 import { Markdown } from "@/features/chat/Markdown";
 import type { MarkerIcon, MarkerView } from "@/features/chat/markers";
 import { useArtifact } from "@/features/task/useArtifact";
@@ -101,7 +101,10 @@ export function MarkerLine({
   const [open, setOpen] = useState(false);
   // A new attempt reads the document again, as a new version on disk does.
   const [attempt, setAttempt] = useState(0);
+  const id = useId();
   const articleRef = useRef<HTMLElement>(null);
+  // toggleRef is the line that opens: the stop of the walk, which keeps the focus.
+  const toggleRef = useRef<HTMLButtonElement>(null);
   const openPanelAt = useAppStore((state) => state.openPanelAt);
   const { body } = view;
   const opens = body.kind !== "none";
@@ -118,12 +121,11 @@ export function MarkerLine({
     if (!requested) {
       return;
     }
-    const article = articleRef.current;
     if (opens) {
       setOpen(true);
-      article?.focus();
+      toggleRef.current?.focus();
     }
-    article?.scrollIntoView?.({ block: "nearest" });
+    articleRef.current?.scrollIntoView?.({ block: "nearest" });
     onRequested?.();
   }, [requested, opens, onRequested]);
 
@@ -182,7 +184,15 @@ export function MarkerLine({
           <p className="mt-(--space-1) flex items-center gap-(--space-2) rounded-md bg-state-error-veil px-(--space-4) py-(--space-1) text-(length:--text-meta) leading-(--leading-meta) text-state-error">
             {`Couldn't read ${body.name}`}
             <span aria-hidden="true">·</span>
-            <Button variant="ghost" size="xs" onClick={() => setAttempt(attempt + 1)}>
+            <Button
+              variant="ghost"
+              size="xs"
+              onClick={() => {
+                // Try again goes while the document reloads: the line keeps the focus.
+                toggleRef.current?.focus();
+                setAttempt(attempt + 1);
+              }}
+            >
               Try again
             </Button>
           </p>
@@ -208,22 +218,20 @@ export function MarkerLine({
   }
 
   return (
-    <article
-      ref={articleRef}
-      data-feed-item
-      tabIndex={-1}
-      aria-label={name}
-      className="flex flex-col rounded-sm outline-none focus-visible:focus-ring"
-    >
+    // The line is the stop of the walk, with the state of the fold; the article holds the name.
+    <article ref={articleRef} id={id} data-feed-entry aria-label={name} className="flex flex-col">
       <button
+        ref={toggleRef}
         type="button"
+        data-feed-item
         data-feed-toggle
         tabIndex={-1}
         aria-expanded={open}
+        aria-labelledby={id}
         onClick={() => setOpen(!open)}
         className={cn(
           LINE,
-          "outline-none transition-colors duration-(--duration-fast) ease-standard hover:bg-veil-hover active:bg-veil-press",
+          "outline-none transition-colors duration-(--duration-fast) ease-standard hover:bg-veil-hover active:bg-veil-press focus-visible:focus-ring",
         )}
       >
         {cells}

@@ -13,13 +13,14 @@ import { EarlierConversationFoot } from "@/features/task/EarlierConversationFoot
 import { PRPane } from "@/features/task/PRPane";
 import { hasReviewConversation, prPlaceOf } from "@/features/task/place";
 import { screenSituationKindOf, screenStageOf } from "@/features/task/request";
-import { focusRequest, focusTitle, useFocusRescue } from "@/features/task/request-focus";
+import { useFocusRescue } from "@/features/task/request-focus";
 import { StepPane } from "@/features/task/StepPane";
 import { currentStepOf, hasStepSession } from "@/features/task/step-status";
 import { TaskComposer } from "@/features/task/TaskComposer";
 import { TaskHeader } from "@/features/task/TaskHeader";
 import { TaskRequest } from "@/features/task/TaskRequest";
 import { useTaskRequest } from "@/features/task/useTaskRequest";
+import { focusRequest, focusTitle } from "@/lib/focus";
 import { prOf } from "@/lib/pull-requests";
 import { asTaskStage, type Step, sessionKey, type TaskSummary } from "@/lib/wails";
 import { loadTranscript } from "@/store/actions";
@@ -131,9 +132,11 @@ export function TaskView({ taskId }: TaskViewProps) {
   const stage = task === null ? "" : closedReview ? "pr_review" : screenStageOf(task, stepTab);
   const hasConversation =
     task !== null && (implementing ? hasStepSession(step) : opening ? stage !== "" : true);
-  const conversationReady = useAppStore(
-    (state) => state.transcripts[sessionKey(taskId, stage)]?.status === "ready",
-  );
+  // A conversation that couldn't be read is settled too: the focus lands without it.
+  const conversationSettled = useAppStore((state) => {
+    const status = state.transcripts[sessionKey(taskId, stage)]?.status;
+    return status === "ready" || status === "error";
+  });
   const rescue = useRef<HTMLElement>(null);
   useFocusRescue(rescue);
 
@@ -159,7 +162,7 @@ export function TaskView({ taskId }: TaskViewProps) {
   return (
     <section ref={rescue} className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
       <TaskHeader task={task} />
-      <ArrivalFocus task={task} tab={stepTab} ready={!hasConversation || conversationReady} />
+      <ArrivalFocus task={task} tab={stepTab} ready={!hasConversation || conversationSettled} />
       <PanelLayout
         panel={
           panel === "details" ? (

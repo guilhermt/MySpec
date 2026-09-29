@@ -21,6 +21,8 @@ func TestRetryReasonOf(t *testing.T) {
 		{name: "overloaded", error: "overloaded", want: "overloaded"},
 		{name: "529", error: "API Error: 529", want: "overloaded"},
 		{name: "rate limit", error: "Rate limit exceeded", want: "rate_limit"},
+		{name: "rate_limit_error", error: `{"type":"rate_limit_error"}`, want: "rate_limit"},
+		{name: "ratelimit", error: "RateLimitError", want: "rate_limit"},
 		{name: "429", error: "status 429", want: "rate_limit"},
 		{name: "connection", error: "Connection error.", want: "connection"},
 		{name: "timeout", error: "Request timed out", want: "connection"},
@@ -28,6 +30,7 @@ func TestRetryReasonOf(t *testing.T) {
 		{name: "socket", error: "socket hang up", want: "connection"},
 		{name: "server", error: "API Error: 500 Internal Server Error", want: "server"},
 		{name: "502", error: "502 Bad Gateway", want: "server"},
+		{name: "a word with rate in it", error: "API Error: 500 failed to generate a response", want: "server"},
 		{name: "other", error: "invalid_request_error", want: "other"},
 		{name: "empty", error: "", want: "other"},
 	}

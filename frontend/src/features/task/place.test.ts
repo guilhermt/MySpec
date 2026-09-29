@@ -282,12 +282,9 @@ describe("prPlaceOf", () => {
 });
 
 describe("hasComposer", () => {
-  it.each<[string, PlaceView, string | undefined, boolean]>([
-    ["the conversation of a step", { kind: "conversation" }, undefined, true],
-    ["the conversation of the PR", { kind: "conversation" }, "opening", true],
-    ["the conversation of the review", { kind: "conversation" }, "waiting_checks", true],
-    ["a conversation whose review is behind", { kind: "conversation" }, "merged", false],
-    ["an activity", { kind: "activity", text: "Starting step 5…" }, undefined, false],
+  it.each<[string, PlaceView, boolean]>([
+    ["a conversation", { kind: "conversation" }, true],
+    ["an activity", { kind: "activity", text: "Starting step 5…" }, false],
     [
       "a step blocked",
       {
@@ -302,18 +299,12 @@ describe("hasComposer", () => {
         explanation: "",
         detail: "",
       },
-      undefined,
       false,
     ],
-    [
-      "an empty place",
-      empty("No steps were found", "The plan has no step files."),
-      undefined,
-      false,
-    ],
-    ["the closed review", { kind: "closedReview", endLine: null }, "merged", false],
-  ])("answers for %s", (_, view, prStatus, expected) => {
-    expect(hasComposer(view, prStatus)).toBe(expected);
+    ["an empty place", empty("No steps were found", "The plan has no step files."), false],
+    ["the closed review", { kind: "closedReview", endLine: null }, false],
+  ])("answers for %s", (_, view, expected) => {
+    expect(hasComposer(view)).toBe(expected);
   });
 });
 

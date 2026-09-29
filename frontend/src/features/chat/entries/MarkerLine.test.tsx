@@ -68,10 +68,13 @@ describe("MarkerLine", () => {
       }),
     );
 
-    const toggle = screen.getByRole("button", { name: /MySpec → Implementer/ });
+    // The line is the stop of the walk, with the state of the fold, and has the name of its entry.
+    const name = `MySpec → Implementer · Review 1 · 2 findings · round 1 of 3, ${TIME}`;
+    const toggle = screen.getByRole("button", { name });
     expect(toggle).toHaveAttribute("aria-expanded", "false");
     expect(toggle).toHaveAttribute("data-feed-toggle");
-    expect(toggle.closest("article")).toHaveAttribute("data-feed-item");
+    expect(toggle).toHaveAttribute("data-feed-item");
+    expect(screen.getByRole("article", { name })).toContainElement(toggle);
     expect(screen.queryByTestId("markdown")).not.toBeInTheDocument();
 
     await user.click(toggle);
@@ -159,12 +162,15 @@ describe("MarkerLine", () => {
       view({ body: { kind: "artifact", name: "step-reviews/3-1.md", openIn: "details" } }),
     );
 
-    await user.click(screen.getByRole("button", { name: /Written PRD.md/ }));
+    const toggle = screen.getByRole("button", { name: /Written PRD.md/ });
+    await user.click(toggle);
 
     expect(await screen.findByText("Couldn't read step-reviews/3-1.md")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Try again" }));
 
+    // Try again goes while the document reloads: the line keeps the focus.
+    expect(toggle).toHaveFocus();
     expect(await screen.findByTestId("markdown")).toHaveTextContent("# Findings");
     await user.click(screen.getByRole("button", { name: "Open in Details" }));
     expect(useAppStore.getState()).toMatchObject({
@@ -187,7 +193,7 @@ describe("MarkerLine", () => {
 
     const toggle = screen.getByRole("button", { name: /The plan is still invalid/ });
     expect(toggle).toHaveAttribute("aria-expanded", "true");
-    expect(toggle.closest("article")).toHaveFocus();
+    expect(toggle).toHaveFocus();
     expect(onRequested).toHaveBeenCalledOnce();
   });
 });

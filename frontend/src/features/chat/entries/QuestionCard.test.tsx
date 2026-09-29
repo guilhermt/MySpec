@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { QuestionCard } from "@/features/chat/entries/QuestionCard";
 import { api, type QuestionEntry } from "@/lib/wails";
@@ -114,6 +114,16 @@ describe("QuestionCard pending", () => {
     });
     expect(screen.getByText("Sending “Postgres”…")).toBeInTheDocument();
     resolve();
+  });
+
+  it("forgets the choices once the answer is sent, still showing them until it is drawn", async () => {
+    const { user } = card();
+
+    await user.click(screen.getByRole("radio", { name: /Postgres/ }));
+    await user.click(screen.getByRole("button", { name: /Answer/ }));
+
+    await waitFor(() => expect(useAppStore.getState().questionChoices["req-1"]).toBeUndefined());
+    expect(screen.getByRole("radio", { name: /Postgres/ })).toHaveAttribute("aria-checked", "true");
   });
 
   it("tells the failure at its foot and gives Answer back", async () => {
