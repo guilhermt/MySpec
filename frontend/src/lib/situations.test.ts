@@ -89,7 +89,7 @@ describe("situationLabel", () => {
     ["step_review", "approve", 100, "Approve step 3"],
     ["step_empty", "", 0, "Step 3 has no changes"],
     ["draft", "", 0, "Draft to approve"],
-    ["findings", "", 0, "Findings to decide"],
+    ["findings", "", 0, "Decide findings"],
     ["changes_review", "review", 0, "Review changes"],
     ["changes_review", "staged", 40, "Changes · 40% staged"],
     ["changes_review", "approve", 100, "Approve changes"],

@@ -70,6 +70,23 @@ describe("Activity", () => {
     expect(screen.getByRole("status")).toHaveTextContent("retrying now");
   });
 
+  it("keeps the countdown out of what the status announces, so it speaks once per attempt", () => {
+    vi.useFakeTimers({ now: new Date("2026-09-05T10:00:00Z") });
+    const session = {
+      ...WORKING,
+      retryAttempt: 3,
+      retryMax: 10,
+      retryReason: "overloaded",
+      retryAt: "2026-09-05T10:00:08Z",
+    };
+    renderWithStore(<Activity session={session} entries={[]} />);
+
+    expect(screen.getByText(/next try in 8s/)).toHaveAttribute("aria-hidden", "true");
+    expect(
+      screen.getByText(/^Retrying · attempt 3 of 10 · the API is overloaded/),
+    ).not.toHaveAttribute("aria-hidden");
+  });
+
   it("says a fixed activity of the place", () => {
     renderWithStore(<Activity text="Starting step 5…" />);
 

@@ -119,27 +119,30 @@ function CutCode({ part, streaming, className }: CutCodeProps) {
     }
   };
 
+  // The frame is the sunken block: Streamdown's code block draws inside it without a frame of its
+  // own, and the foot is the last row of the block, under a rule.
   return (
-    <div className="flex flex-col">
-      <div className="relative">
-        <Block streaming={streaming && !part.closed} className={className} controls={CUT_CONTROLS}>
-          {codeMarkdown(part, open ? total : CUT_SHOWN)}
-        </Block>
-        {/* Copy stands at the end of the block's header, where Streamdown puts its own: the header
-            is the block's first row, of Streamdown's height (h-8). */}
-        <div className="absolute top-0 right-0 flex h-8 items-center pr-(--space-1)">
-          <Button
-            variant="ghost"
-            size="xs"
-            {...(copied === "copied" ? { icon: ICONS.done } : {})}
-            error={copied === "failed"}
-            onClick={() => void copy()}
-          >
-            {COPY_LABELS[copied]}
-          </Button>
-        </div>
+    <div
+      data-code-cut
+      className="relative flex flex-col overflow-hidden rounded-md bg-surface-0 shadow-[inset_0_0_0_var(--border)_var(--line-1)]"
+    >
+      <Block streaming={streaming && !part.closed} className={className} controls={CUT_CONTROLS}>
+        {codeMarkdown(part, open ? total : CUT_SHOWN)}
+      </Block>
+      {/* Copy stands at the end of the block's header, where Streamdown puts its own: the header
+          is the block's first row, of Streamdown's height (h-8). */}
+      <div className="absolute top-0 right-0 flex h-8 items-center pr-(--space-1)">
+        <Button
+          variant="ghost"
+          size="xs"
+          {...(copied === "copied" ? { icon: ICONS.done } : {})}
+          error={copied === "failed"}
+          onClick={() => void copy()}
+        >
+          {COPY_LABELS[copied]}
+        </Button>
       </div>
-      <div className="flex items-center gap-2 border-t border-line-1 pt-(--space-1) text-(length:--text-meta) leading-(--leading-meta) text-ink-3">
+      <div className="flex items-center gap-(--space-2) px-(--space-1-5) py-(--space-1) text-(length:--text-meta) leading-(--leading-meta) text-ink-3 shadow-[inset_0_var(--border)_0_var(--line-1)]">
         <Button variant="ghost" size="xs" aria-expanded={open} onClick={() => setOpen(!open)}>
           {open ? "Show less" : `Show all ${total} lines`}
         </Button>

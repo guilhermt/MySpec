@@ -15,7 +15,8 @@ export interface DraftCardProps {
  * DraftCard is the pull request the agent wrote, as the user edits it, at the end of the
  * conversation of the PR. The draft on disk is the starting point; what the user types survives
  * every update but one, and only Approve draft on the request bar sends it. It is one stop of the
- * feed, and its fields keep their keys: the arrows move in the text, not through the conversation.
+ * feed that the arrows walk like any entry; its fields keep their keys, since a key in a field is
+ * not one of an entry.
  */
 export function DraftCard({ taskId, pr }: DraftCardProps) {
   const edited = usePrDraft(taskId);
@@ -46,7 +47,6 @@ export function DraftCard({ taskId, pr }: DraftCardProps) {
   return (
     <article
       data-feed-item
-      data-feed-keys="own"
       tabIndex={-1}
       aria-label="Pull request draft"
       className="flex flex-col rounded-lg bg-surface-2 shadow-xs outline-none focus-visible:focus-ring"

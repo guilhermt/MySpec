@@ -54,11 +54,11 @@ describe("RequestBar", () => {
       <RequestBar
         form="decision"
         glyph="wait"
-        label="Findings to decide"
+        label="Decide findings"
         place="PR review · pass 1"
         time={{ short: "12m", long: "12 minutes", tone: "wait" }}
         progress="1 of 4 decided"
-        status="Findings to decide, 1 of 4 decided"
+        status="Decide findings, 1 of 4 decided"
         actions={
           <>
             <Button size="sm" shortcut="Alt ↓">

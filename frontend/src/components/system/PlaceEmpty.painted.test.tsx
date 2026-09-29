@@ -22,8 +22,12 @@ describe.each(THEMES)("PlaceEmpty in the %s theme", (theme) => {
 
   it("stands two --space-16 below the top of the column", () => {
     setTheme(theme);
-    render(<PlaceEmpty title="No steps were found" />);
-    expect(getComputedStyle(screen.getByRole("status")).paddingTop).toBe(
+    const { container } = render(<PlaceEmpty title="No steps were found" />);
+    const empty = container.querySelector('[data-slot="place-empty"]');
+    if (empty === null) {
+      throw new Error("the empty place is not drawn");
+    }
+    expect(getComputedStyle(empty).paddingTop).toBe(
       resolve("calc(var(--space-16) * 2)", "padding-top"),
     );
   });

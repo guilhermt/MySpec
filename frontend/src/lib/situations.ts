@@ -86,7 +86,7 @@ export function situationLabel(situation: Situation): string {
     case "draft":
       return "Draft to approve";
     case "findings":
-      return "Findings to decide";
+      return "Decide findings";
     case "changes_review":
       if (form === "staged") {
         return `Changes · ${p}% staged`;

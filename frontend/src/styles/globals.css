@@ -506,6 +506,13 @@
   box-shadow: inset 0 0 0 var(--border) var(--line-1);
   overflow: hidden;
 }
+/* A cut block draws its frame around the code and its foot: the code block inside it has none. */
+[data-code-cut] .markdown [data-streamdown="code-block"] {
+  margin: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
 .markdown [data-streamdown="code-block-header"] {
   padding-inline: var(--space-3);
   color: var(--ink-3);

@@ -1,5 +1,6 @@
-import { type KeyboardEvent, useEffect, useState } from "react";
+import { type KeyboardEvent, useEffect, useId, useState } from "react";
 import { Button } from "@/components/system/Button";
+import { Chip } from "@/components/system/Chip";
 import { Spinner } from "@/components/system/Spinner";
 import { Tooltip } from "@/components/system/Tooltip";
 import { useNow } from "@/features/attention/useNow";
@@ -34,6 +35,9 @@ import { useAppStore, useDraft } from "@/store/app-store";
 const NO_CHOICES: QuestionChoices = {};
 const NO_CHIPS: QuickReply[] = [];
 
+// EMPTY_REASON is why Send is disabled with nothing written, in its tooltip and its description.
+const EMPTY_REASON = "Write a message";
+
 // SECOND is how often the time of the running turn is read again.
 const SECOND = 1000;
 
@@ -59,7 +63,7 @@ function Working({ startedAt }: { startedAt: string }) {
   const start = startedAt === "" ? Number.NaN : Date.parse(startedAt);
   const now = useNow(SECOND, !Number.isNaN(start));
   return (
-    <span className="flex items-center gap-1.5 text-(length:--text-micro) leading-(--leading-micro) text-ink-3">
+    <span className="flex items-center gap-(--space-1-5) text-(length:--text-micro) leading-(--leading-micro) text-ink-3">
       <Spinner />
       {Number.isNaN(start) ? "Working" : `Working · ${formatDuration(Math.max(now - start, 0))}`}
     </span>
@@ -91,6 +95,7 @@ export function Composer({
   const answerSending = useAppStore(
     (state) => question !== null && state.questionSending[question.requestId] === true,
   );
+  const emptyReasonId = useId();
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
   const [stopping, setStopping] = useState(false);
@@ -228,7 +233,7 @@ export function Composer({
       size="sm"
       variant={!turnRunning && sendIsPrimary(draft, otherPrimary) ? "primary" : "secondary"}
       {...(turnRunning ? {} : { shortcut: "↵" })}
-      {...(empty ? { disabled: true, disabledReason: "Write a message" } : {})}
+      {...(empty ? { disabled: true, reasonId: emptyReasonId } : {})}
       loading={sending || answerSending}
       loadingLabel="Sending…"
       onClick={send}
@@ -236,26 +241,49 @@ export function Composer({
       {sendLabel}
     </Button>
   );
+  // With the box empty, Send is dashed and says why in its tooltip, never beside it.
+  const sendControl = empty ? (
+    <>
+      <Tooltip content={EMPTY_REASON}>{sendButton}</Tooltip>
+      <span id={emptyReasonId} className="sr-only">
+        {EMPTY_REASON}
+      </span>
+    </>
+  ) : (
+    sendButton
+  );
 
   return (
     <div className="shrink-0 px-(--space-6) pt-(--space-2) pb-(--space-4)">
       <div
+        data-slot="composer"
         className={cn(
           COLUMN_CLASS,
           "flex flex-col rounded-lg border border-line-3 bg-surface-input shadow-xs transition-[border-color,box-shadow] duration-(--duration-fast) ease-standard has-[textarea:focus-visible]:field-focus!",
         )}
       >
         {chips.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 px-3 pt-2">
+          <fieldset
+            aria-label="Quick replies"
+            className="flex min-w-0 flex-wrap items-center gap-(--space-1-5) px-(--space-3) pt-(--space-2)"
+          >
             {chips.map((chip) => (
               <Tooltip key={chip.key} content={`Sends “${chip.key}”`}>
-                <Button size="xs" disabled={sending} onClick={() => void deliver(chip.key, false)}>
-                  <span className="font-mono">{chip.key}</span>
-                  {` · ${chip.text}`}
-                </Button>
+                <Chip
+                  kind="action"
+                  aria-label={`${chip.key} · ${chip.text}`}
+                  className="h-(--size-control-xs) gap-(--space-1-5) px-(--space-2)"
+                  disabled={sending}
+                  onClick={() => void deliver(chip.key, false)}
+                >
+                  <span className="font-mono text-(length:--text-micro) leading-(--leading-micro) text-ink-3">
+                    {chip.key}
+                  </span>
+                  {chip.text}
+                </Chip>
               </Tooltip>
             ))}
-          </div>
+          </fieldset>
         )}
         <textarea
           id="composer-input"
@@ -264,10 +292,10 @@ export function Composer({
           onChange={(event) => setDraft(taskId, stage, event.target.value)}
           onKeyDown={onKeyDown}
           placeholder={placeholder}
-          className="field-sizing-content max-h-(--size-composer-max) min-h-(--size-composer-min) resize-none overflow-y-auto bg-transparent px-3 py-2 text-(length:--text-body) leading-(--leading-body) text-ink-1 outline-none placeholder:text-ink-4"
+          className="field-sizing-content max-h-(--size-composer-max) min-h-(--size-composer-min) resize-none overflow-y-auto bg-transparent px-(--space-3) py-(--space-2) text-(length:--text-body) leading-(--leading-body) text-ink-1 outline-none placeholder:text-ink-4"
         />
-        <div className="flex items-center justify-between gap-2 px-2 pb-2">
-          <div className="flex min-w-0 items-center gap-2">
+        <div className="flex items-center justify-between gap-(--space-2) px-(--space-2) pb-(--space-2)">
+          <div className="flex min-w-0 items-center gap-(--space-2)">
             {session.sessionModel !== "" && (
               <ModelChip
                 value={{ model: session.sessionModel, effort: session.sessionEffort }}
@@ -285,7 +313,7 @@ export function Composer({
             )}
           </div>
           {turnRunning ? (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-(--space-2)">
               <Working startedAt={session.turnStartedAt} />
               {!empty && (
                 <Tooltip content="Queues until the turn ends" shortcut="Enter">
@@ -304,7 +332,7 @@ export function Composer({
               </Tooltip>
             </div>
           ) : (
-            sendButton
+            sendControl
           )}
         </div>
       </div>

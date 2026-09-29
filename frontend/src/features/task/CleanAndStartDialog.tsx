@@ -63,7 +63,7 @@ function CleanAndStartBody({
     <>
       <DialogBody>
         <p>These changes are thrown away:</p>
-        <ul className="flex flex-col rounded-sm bg-surface-0 px-3 py-2 font-mono text-(length:--text-meta) leading-(--leading-meta) text-ink-1 select-text">
+        <ul className="flex flex-col rounded-sm bg-surface-0 px-(--space-3) py-(--space-2) font-mono text-(length:--text-meta) leading-(--leading-meta) text-ink-1 select-text">
           {shown.map((line) => (
             <li key={line} className="break-all">
               {line}

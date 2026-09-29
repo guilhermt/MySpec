@@ -14,7 +14,8 @@ import { Tooltip } from "./Tooltip";
 
 export interface ChipBaseProps
   extends Omit<ComponentProps<"button">, "children" | "className" | "disabled" | "value"> {
-  kind: "toggle" | "menu";
+  /** kind is what the chip does: toggles a filter, opens a menu, or acts once (a quick reply). */
+  kind: "toggle" | "menu" | "action";
   children: ReactNode;
   pressed?: boolean;
   onPressedChange?: (pressed: boolean) => void;
@@ -51,7 +52,8 @@ const ERROR =
   "data-error:border-state-error data-error:bg-state-error-veil data-error:text-state-error not-aria-disabled:not-aria-pressed:not-aria-expanded:data-error:hover:bg-state-error-veil not-aria-disabled:not-aria-pressed:not-aria-expanded:data-error:hover:text-state-error";
 
 /**
- * Chip is a pill that toggles a filter or opens a menu of choices. Saving, it shows the spinner and
+ * Chip is a pill that toggles a filter, opens a menu of choices, or acts once, like a quick reply of
+ * the composer. Saving, it shows the spinner and
  * the gerund; reading the catalog, the saved choice shimmers; in error, the error glyph and the
  * error ink on its veil, with the reason in the tooltip and in the description.
  */

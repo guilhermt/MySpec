@@ -42,12 +42,12 @@ describe("DraftCard", () => {
     expect(screen.getAllByRole("textbox")).toHaveLength(2);
   });
 
-  it("is one entry of the feed that keeps its keys, with the description in mono", () => {
+  it("is one entry of the feed the arrows walk, with the description in mono", () => {
     card();
 
     const draft = screen.getByRole("article", { name: "Pull request draft" });
     expect(draft).toHaveAttribute("data-feed-item");
-    expect(draft).toHaveAttribute("data-feed-keys", "own");
+    expect(draft).not.toHaveAttribute("data-feed-keys");
     expect(screen.getByLabelText("Description")).toHaveClass("font-mono", "resize-y");
   });
 

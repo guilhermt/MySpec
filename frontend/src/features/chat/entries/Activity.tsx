@@ -24,18 +24,14 @@ function nextTry(retryAt: string, now: number): string {
   return seconds > 0 ? `next try in ${duration(seconds * 1000)}` : "retrying now";
 }
 
-// retryText is "Retrying · attempt 3 of 10 · the API is overloaded · next try in 8s".
-function retryText(session: SessionState, now: number): string {
+// retryText is "Retrying · attempt 3 of 10 · the API is overloaded", what the retry says without
+// the countdown.
+function retryText(session: SessionState): string {
   const attempt =
     session.retryMax > 0
       ? `attempt ${session.retryAttempt} of ${session.retryMax}`
       : `attempt ${session.retryAttempt}`;
-  return [
-    "Retrying",
-    attempt,
-    REASONS[asRetryReason(session.retryReason)],
-    nextTry(session.retryAt, now),
-  ]
+  return ["Retrying", attempt, REASONS[asRetryReason(session.retryReason)]]
     .filter((part) => part !== "")
     .join(" · ");
 }
@@ -78,19 +74,26 @@ export function Activity(props: ActivityProps) {
     session === undefined
       ? props.text
       : retrying
-        ? retryText(session, now)
+        ? retryText(session)
         : // A turn with no process behind it is a session on its way up.
           session.processRunning
           ? "Thinking…"
           : "Starting session…";
 
+  const countdown = retrying && session !== undefined ? nextTry(session.retryAt, now) : "";
+
+  // The countdown changes every second: it stays out of what the status says, which speaks only
+  // when the attempt or the reason changes.
   return (
     <p
       role="status"
       className="flex items-center gap-(--space-1-5) text-(length:--text-meta) leading-(--leading-meta) text-ink-3"
     >
       <Spinner />
-      {text}
+      <span>
+        {text}
+        {countdown !== "" && <span aria-hidden="true"> · {countdown}</span>}
+      </span>
     </p>
   );
 }

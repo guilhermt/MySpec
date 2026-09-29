@@ -102,13 +102,16 @@ describe("ExternalLink", () => {
     expect(copied.querySelector("svg.lucide-check")).toHaveAttribute("aria-hidden", "true");
   });
 
-  it("puts Copy of a cut block with the block, where its header is, and Show all at its foot", () => {
+  it("puts Copy of a cut block and Show all at its foot inside the block", () => {
     const code = Array.from({ length: 30 }, (_, at) => `line ${at + 1}`).join("\n");
     renderWithStore(<Markdown cutCode>{`\`\`\`\n${code}\n\`\`\``}</Markdown>);
 
     const block = screen.getByTestId("markdown").parentElement;
+    expect(block).toHaveAttribute("data-code-cut");
     expect(block).toContainElement(screen.getByRole("button", { name: "Copy" }));
-    expect(block).not.toContainElement(screen.getByRole("button", { name: "Show all 30 lines" }));
+    expect(block?.lastElementChild).toContainElement(
+      screen.getByRole("button", { name: "Show all 30 lines" }),
+    );
   });
 
   it("says in place when the copy failed, and how to copy instead", async () => {

@@ -60,6 +60,15 @@ const UNDER_AGENT_REVIEW: Partial<Step> = {
   reviewer: makeStepReviewer({ sessionStatus: "working" }),
 };
 
+// placeEmpty is the empty state of the place, which is not a live region.
+function placeEmpty(): HTMLElement {
+  const empty = document.querySelector<HTMLElement>('[data-slot="place-empty"]');
+  if (empty === null) {
+    throw new Error("the place is not empty");
+  }
+  return empty;
+}
+
 function pane(
   step: Partial<Step> | null,
   overrides: Partial<TaskSummary> = {},
@@ -249,7 +258,7 @@ describe("StepPane, the place without a conversation", () => {
   it("says every step is committed before the pull request", () => {
     pane({ status: "done" }, { currentStep: 0, repository: "acme/api" });
 
-    const empty = screen.getByRole("status");
+    const empty = placeEmpty();
     expect(empty).toHaveTextContent("Every step is committed");
     expect(empty).toHaveTextContent("1 step in acme/api. The pull request stage starts next.");
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
@@ -258,7 +267,7 @@ describe("StepPane, the place without a conversation", () => {
   it("says the implementation of a One-Shot task is committed", () => {
     pane({ status: "done" }, { currentStep: 0, repository: "acme/api", mode: "one_shot" });
 
-    const empty = screen.getByRole("status");
+    const empty = placeEmpty();
     expect(empty).toHaveTextContent("The implementation is committed");
     expect(empty).toHaveTextContent("acme/api. The pull request stage starts next.");
   });
@@ -266,7 +275,7 @@ describe("StepPane, the place without a conversation", () => {
   it("says so when the plan has no steps", () => {
     pane(null);
 
-    const empty = screen.getByRole("status");
+    const empty = placeEmpty();
     expect(empty).toHaveTextContent("No steps were found");
     expect(empty).toHaveTextContent("The plan has no step files.");
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();

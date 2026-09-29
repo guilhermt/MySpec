@@ -77,6 +77,15 @@ function pane(overrides: Partial<PullRequest> = {}, options: PaneOptions = {}) {
 const composer = () => screen.queryByRole("textbox", { name: "Reply to the PR agent" });
 const feed = () => screen.getByRole("feed");
 
+// placeEmpty is the empty state of the place, which is not a live region.
+function placeEmpty(): HTMLElement {
+  const empty = document.querySelector<HTMLElement>('[data-slot="place-empty"]');
+  if (empty === null) {
+    throw new Error("the place is not empty");
+  }
+  return empty;
+}
+
 // The rows of the table of the place without a conversation, for the pull request.
 describe("PRPane, the place without a conversation", () => {
   it("prepares the pull request", () => {
@@ -99,7 +108,7 @@ describe("PRPane, the place without a conversation", () => {
 
     const empty = screen
       .getByText("The pull request stage stopped")
-      .closest("[role=status]") as HTMLElement;
+      .closest("[data-slot=place-empty]") as HTMLElement;
     const block = within(empty).getByRole("article", {
       name: "Run `gh auth login` in a terminal, then try again.",
     });
@@ -130,7 +139,8 @@ describe("PRPane, the place without a conversation", () => {
       ],
     });
 
-    const empty = screen.getByRole("status");
+    const empty = placeEmpty();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
     expect(empty).toHaveTextContent("The review starts when the checks finish.");
     expect(empty).toHaveTextContent(
       "MySpec reads #1284 every minute. The first pass begins once e2e / chromium is done.",
@@ -144,7 +154,7 @@ describe("PRPane, the place without a conversation", () => {
   it("reads GitHub for the checks before the first reading", () => {
     pane({ status: "waiting_checks", prNumber: 1284, sessionStage: "" });
 
-    const empty = screen.getByRole("status");
+    const empty = placeEmpty();
     expect(empty).toHaveTextContent("MySpec reads #1284 every minute.");
     expect(empty).toHaveTextContent("checking GitHub");
   });
@@ -196,7 +206,7 @@ describe("PRPane, the place without a conversation", () => {
   it("says the pull request was merged before the first review pass", () => {
     pane({ status: "merged", prState: "merged", prNumber: 1284, prBase: "dev", sessionStage: "" });
 
-    expect(screen.getByRole("status")).toHaveTextContent(
+    expect(placeEmpty()).toHaveTextContent(
       "The pull request was merged before the first review pass.",
     );
     expect(screen.getByRole("article", { name: /^Merged #1284 into dev/ })).toBeInTheDocument();
@@ -207,7 +217,7 @@ describe("PRPane, the place without a conversation", () => {
   it("says the pull request was closed before the first review pass", () => {
     pane({ status: "pr_closed", prState: "closed", prNumber: 1284, sessionStage: "" });
 
-    expect(screen.getByRole("status")).toHaveTextContent(
+    expect(placeEmpty()).toHaveTextContent(
       "The pull request was closed without a merge before the first review pass.",
     );
     expect(
@@ -255,6 +265,26 @@ describe("PRPane, the conversation", () => {
     expect(screen.queryByRole("button", { name: "Open PR" })).not.toBeInTheDocument();
     const bar = screen.getByRole("region", { name: "Request" });
     expect(within(bar).getByRole("button", { name: "Approve draft" })).toBeInTheDocument();
+  });
+
+  it("walks the arrows through the draft, the last entry of the feed, and leaves the fields their keys", async () => {
+    const { user } = pane(
+      { status: "draft_ready", draft: DRAFT, sessionStage: "pr" },
+      { situations: [onPR("draft")] },
+    );
+
+    const draft = within(feed()).getByRole("article", { name: "Pull request draft" });
+    draft.focus();
+    await user.keyboard("{ArrowUp}");
+    const before = within(feed()).getAllByRole("article").at(-2);
+    expect(before).toHaveFocus();
+    await user.keyboard("{ArrowDown}");
+    expect(draft).toHaveFocus();
+
+    const title = within(draft).getByLabelText("Title");
+    await user.click(title);
+    await user.keyboard("{ArrowUp}");
+    expect(title).toHaveFocus();
   });
 
   it("keeps the draft at the end of the conversation after an opening that failed", () => {

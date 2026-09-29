@@ -100,7 +100,7 @@ Um componente **embrulha** o primitivo de `components/ui/` quando os estados do 
 | Componente | Arquivo | Base | Razão |
 |---|---|---|---|
 | Botão, botão de ícone | `Button.tsx`, `IconButton.tsx` | `ui/button` | Foco, desabilitado, hover e o deslocamento ao pressionar se sobrescrevem no elemento |
-| Chip | `Chip.tsx` | `ui/toggle` (alterna), `ui/button` (abre menu) | Idem |
+| Chip | `Chip.tsx` | `ui/toggle` (alterna), `ui/button` (abre menu, age uma vez) | Idem |
 | Tecla | `Kbd.tsx` | `ui/kbd` | Idem |
 | Rótulo, input, textarea | `Field.tsx`, `Input.tsx`, `Textarea.tsx` | `ui/label`, `ui/input`, `ui/textarea` | Idem |
 | Menu | `Menu.tsx` | `ui/dropdown-menu`, e o item de rádio próprio sobre `Menu.RadioItem` do Base UI | Idem, no conteúdo e nos itens; o item de rádio do ui põe o visto à direita, sem `className`, e o system o quer à esquerda; o ui dá ao menu a largura do gatilho, e o system a do item mais longo, de `--size-menu-min` ou da largura do gatilho, a maior, até o espaço da janela, para nenhum item quebrar linha e o menu de um `Select` nunca ficar mais estreito que o campo |
@@ -155,7 +155,7 @@ As convenções de todo componente:
 
 **Ação na linha.** `LINK` (de `Link.tsx`) é a aparência do link. Uma ação escrita dentro de uma linha de texto, como o **Try again** da nota de um popover, é um `<button>` com essa aparência: ela muda estado, então é botão, e se lê como parte da frase.
 
-**Chip.** Dois tamanhos: `md`, de `--size-chip`, e `sm`, de `--size-chip-sm` com o rótulo em `--text-micro`, para as linhas densas. Em erro (`errorReason`), o losango de erro antes do rótulo e a tinta `--state-error` sobre `--state-error-veil` com a borda `--state-error`, também sob o ponteiro; a razão vai no tooltip e na descrição acessível, e a cor nunca é o único portador.
+**Chip.** Três tipos (`kind`): `toggle`, que alterna um filtro; `menu`, que abre as escolhas, com o chevron; e `action`, que age uma vez, como a pastilha de resposta rápida do compositor, na altura `--size-control-xs` com a tecla em mono `--ink-3`. Dois tamanhos: `md`, de `--size-chip`, e `sm`, de `--size-chip-sm` com o rótulo em `--text-micro`, para as linhas densas. Em erro (`errorReason`), o losango de erro antes do rótulo e a tinta `--state-error` sobre `--state-error-veil` com a borda `--state-error`, também sob o ponteiro; a razão vai no tooltip e na descrição acessível, e a cor nunca é o único portador.
 
 **Scroll area.** O anel de foco é o único desenhado por dentro, no viewport, porque por fora ele seria cortado pelo que envolve a área. `viewportRef` entrega o viewport a quem mede ou rola o conteúdo.
 
@@ -175,7 +175,7 @@ As convenções de todo componente:
 
 **Lista de checks.** `ChecksList` é o resumo dos checks de uma pull request em `--ink-2` e uma linha por check: o glifo (o visto em `--ink-3`, em `--ink-4` no pulado e no neutro, o losango na falha, o spinner no que roda, o círculo na fila), o nome em mono `--ink-1`, o estado (`failed` em `--state-error` 500, com a conclusão do GitHub no tooltip e num texto oculto; `running` em `--ink-1` 500) e a duração tabular em `--ink-4` à direita. A duração chega pronta: quem monta as linhas é quem tem o relógio. Um check com `url` tem o nome como um link externo, na forma de `Link`; sem `url`, o nome fica em texto simples. O clique é do chamador (`onOpen`), como na lista de relações. A linha é identificada pela `url` quando há uma, para o mesmo nome de check poder repetir em fluxos de trabalho diferentes. A variante ao vivo (`live`) é a espera pelos checks: um bloco afundado em `--surface-0`, com o cabeçalho no lugar do resumo, o glifo tracejado do GitHub, o texto de `liveChecksHeader` (`lib/pull-requests.ts`: `Waiting for checks · 4 of 6 passed`, ou `No checks`), `checking GitHub` no `Shimmer` antes da primeira leitura (`reading`) e a idade da leitura em `--ink-4` à direita, com a hora exata no tooltip; as linhas como as da variante de painel, e nenhum rodapé. `CheckGlyph` e `CheckRowView` moram aqui.
 
-**Estado vazio de um lugar.** `PlaceEmpty` é o lugar sem conversa, no alto da coluna da conversa, com `--space-16` × 2 acima e `role="status"`: o título, um parágrafo em `--text-title` 600 `--ink-1`, e, `--space-2` abaixo, o corpo (`children`), o texto em `--text-body` `--ink-3` na medida `--measure-read` e, `--space-3` abaixo dele, o bloco do que o lugar espera (os checks ao vivo, o bloco de erro) na largura da coluna. Não tem ação: a ação é da barra do pedido.
+**Estado vazio de um lugar.** `PlaceEmpty` é o lugar sem conversa, no alto da coluna da conversa, com `--space-16` × 2 acima: o título, um parágrafo em `--text-title` 600 `--ink-1`, e, `--space-2` abaixo, o corpo (`children`), o texto em `--text-body` `--ink-3` na medida `--measure-read` e, `--space-3` abaixo dele, o bloco do que o lugar espera (os checks ao vivo, o bloco de erro) na largura da coluna. Não é uma região ao vivo: o bloco mantém o papel dele, e os checks ao vivo, que se redesenham a cada segundo, não são lidos de novo. Não tem ação: a ação é da barra do pedido.
 
 **Lista de relações.** `RelationList` é o que se liga a um card, em grupos com a legenda em caixa alta, cada grupo só quando tem itens: cada relação um link externo com o número em mono e o título, o meta à direita em `--text-micro` `--ink-3`, e um aviso depois de `◇` em `--state-notice`. O clique é do chamador (`onOpen`).
 

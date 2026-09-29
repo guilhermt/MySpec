@@ -1,4 +1,4 @@
-import { act, screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { Composer, type ComposerProps } from "@/features/chat/Composer";
 import { QuestionCard } from "@/features/chat/entries/QuestionCard";
@@ -212,6 +212,35 @@ describe("Composer", () => {
     expect(api.sendMessage).not.toHaveBeenCalled();
     expect(useAppStore.getState().error).toBeNull();
     expect(field()).toHaveValue("ship it");
+  });
+
+  it("says why an empty Send is disabled in its tooltip, not beside it", async () => {
+    const { user } = renderWithStore(composer());
+
+    const send = screen.getByRole("button", { name: /^Send/ });
+    expect(send).toHaveAttribute("aria-disabled", "true");
+    expect(send).toHaveAccessibleDescription("Write a message");
+    const reason = screen.getByText("Write a message");
+    expect(reason).toHaveClass("sr-only");
+
+    await user.hover(send);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Write a message");
+  });
+
+  it("gathers the quick replies in a named group of chips", () => {
+    const chips = [
+      { key: "a", text: "Per key" },
+      { key: "b", text: "Per plan" },
+    ];
+    renderWithStore(composer(makeTask(), { chips }));
+
+    const group = screen.getByRole("group", { name: "Quick replies" });
+    const replies = within(group).getAllByRole("button");
+    expect(replies.map((reply) => reply.getAttribute("aria-label"))).toEqual([
+      "a · Per key",
+      "b · Per plan",
+    ]);
+    expect(replies[0]).toHaveClass("rounded-(--radius-pill)");
   });
 
   it("sends a quick reply without touching the draft", async () => {
