@@ -12,7 +12,7 @@ import { earlierPlace } from "@/features/task/details";
 import { EarlierConversationFoot } from "@/features/task/EarlierConversationFoot";
 import { PRPane } from "@/features/task/PRPane";
 import { ReviewStrip } from "@/features/task/ReviewStrip";
-import { screenStageOf } from "@/features/task/request";
+import { screenSituationKindOf, screenStageOf } from "@/features/task/request";
 import { focusRequest, focusTitle, useFocusRescue } from "@/features/task/request-focus";
 import { StepPane } from "@/features/task/StepPane";
 import { currentStepOf, hasStepSession } from "@/features/task/step-status";
@@ -186,6 +186,7 @@ export function TaskView({ taskId }: TaskViewProps) {
               taskId={task.id}
               stage={task.stage}
               session={task}
+              replyWaiting={screenSituationKindOf(task, stepTab) === "reply"}
             />
             <TaskRequest task={task} tab={stepTab} />
             <TaskComposer task={task} tab={stepTab} stage={task.stage} session={task} />

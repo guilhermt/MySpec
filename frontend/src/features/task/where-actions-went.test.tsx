@@ -1,9 +1,11 @@
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { TaskView } from "@/features/task/TaskView";
-import type { PullRequest, Situation, Step, TaskSummary } from "@/lib/wails";
+import type { Entry, PullRequest, Situation, Step, TaskSummary } from "@/lib/wails";
+import type { TranscriptState } from "@/store/transcript";
 import { renderWithStore } from "@/test/render";
 import {
+  makeEntry,
   makePullRequest,
   makeRepository,
   makeReview,
@@ -57,7 +59,9 @@ interface Row {
     | "StepBlocked"
     | "PRBlocked"
     | "DraftCard"
-    | "PRPane notes";
+    | "PRPane notes"
+    | "QuestionCard"
+    | "PermissionCard";
   button: string;
   state: string;
   task: TaskSummary;
@@ -67,6 +71,26 @@ interface Row {
   /** trigger is the text in the bar that holds the tooltip. */
   trigger?: RegExp;
   disabled?: boolean;
+  /** role is the role of the control in the card, a button when not given. */
+  role?: "radio";
+  /** transcripts are the conversations the screen reads, with the pending card of a row. */
+  transcripts?: Record<string, TranscriptState>;
+}
+
+// withCard is the conversation of step 1 holding a card pending.
+function withCard(entry: Entry): Record<string, TranscriptState> {
+  return {
+    "task-1|step:1": { status: "ready", error: "", entries: [entry], pending: [], buffered: [] },
+  };
+}
+
+const ASKING = withCard(makeEntry("question"));
+
+function permissionEntry(suggestions: string): Entry {
+  const entry = makeEntry("permission");
+  return entry.permission === null
+    ? entry
+    : { ...entry, permission: { ...entry.permission, suggestions } };
 }
 
 const ROWS: Row[] = [
@@ -578,18 +602,65 @@ const ROWS: Row[] = [
     where: "bar",
     name: /^Continue$/,
   },
+  {
+    origin: "QuestionCard",
+    button: "Answer",
+    state: "a question pending, nothing chosen",
+    task: inStep({ status: "implementing" }, { situations: [stepSituation("question")] }),
+    transcripts: ASKING,
+    where: "card",
+    name: /^Answer/,
+    disabled: true,
+  },
+  {
+    origin: "QuestionCard",
+    button: "Other…",
+    state: "a question pending",
+    task: inStep({ status: "implementing" }, { situations: [stepSituation("question")] }),
+    transcripts: ASKING,
+    where: "card",
+    role: "radio",
+    name: /Other…/,
+  },
+  {
+    origin: "PermissionCard",
+    button: "Allow",
+    state: "a permission pending",
+    task: inStep({ status: "implementing" }, { situations: [stepSituation("permission")] }),
+    transcripts: withCard(permissionEntry("")),
+    where: "card",
+    name: /^Allow/,
+  },
+  {
+    origin: "PermissionCard",
+    button: "Allow for this session",
+    state: "a permission pending with a rule to remember",
+    task: inStep({ status: "implementing" }, { situations: [stepSituation("permission")] }),
+    transcripts: withCard(permissionEntry('[{"type":"addRules"}]')),
+    where: "card",
+    name: /^Allow for this session/,
+  },
+  {
+    origin: "PermissionCard",
+    button: "Deny",
+    state: "a permission pending",
+    task: inStep({ status: "implementing" }, { situations: [stepSituation("permission")] }),
+    transcripts: withCard(permissionEntry("")),
+    where: "card",
+    name: /^Deny…/,
+  },
 ];
 
 describe("where the actions of the bars that left went", () => {
   it.each(ROWS)(
     "$origin: $button, $state, is in the $where",
-    async ({ task, where, name, trigger, disabled }) => {
+    async ({ task, where, name, trigger, disabled, role, transcripts }) => {
       const { user } = renderWithStore(<TaskView taskId={task.id} />, {
         state: makeState({
           tasks: [task],
           repositories: [makeRepository({ id: task.repositoryId })],
         }),
-        ui: { location: { kind: "task", id: task.id } },
+        ui: { location: { kind: "task", id: task.id }, ...(transcripts ? { transcripts } : {}) },
       });
 
       let found: HTMLElement;
@@ -606,6 +677,13 @@ describe("where the actions of the bars that left went", () => {
         found = await screen.findByRole("tooltip");
         expect(found).toHaveTextContent(name);
         return;
+      } else if (where === "card") {
+        const card = await waitFor(() => {
+          const pending = document.querySelector<HTMLElement>("[data-pending-card]");
+          expect(pending).not.toBeNull();
+          return pending as HTMLElement;
+        });
+        found = within(card).getByRole(role ?? "button", { name });
       } else if (where === "header") {
         found = within(screen.getByRole("banner")).getByRole("button", { name });
       } else {

@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { CleanAndStartDialog } from "@/features/task/CleanAndStartDialog";
 import { api, type TaskSummary } from "@/lib/wails";
@@ -27,7 +27,9 @@ describe("CleanAndStartDialog", () => {
     const alert = await screen.findByRole("alertdialog", {
       name: "Clean the worktree and start step 5?",
     });
-    expect(within(alert).getByRole("button", { name: "Cancel" })).toHaveFocus();
+    await waitFor(() =>
+      expect(within(alert).getByRole("button", { name: "Cancel" })).toHaveFocus(),
+    );
     expect(alert).toHaveTextContent("These changes are thrown away:");
     expect(
       within(alert)

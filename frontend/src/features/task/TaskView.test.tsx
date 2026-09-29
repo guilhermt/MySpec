@@ -76,6 +76,35 @@ function stepView(step: Partial<Step>) {
 }
 
 describe("TaskView", () => {
+  it("draws the rail of a question in text and its quick replies with the reply situation", async () => {
+    const asked = makeEntry("assistant");
+    if (asked.assistant !== null) {
+      asked.assistant.text = "Which cache?\n\na) Redis\nb) None";
+      asked.assistant.complete = true;
+    }
+    const { container } = renderWithStore(<TaskView taskId="task-1" />, {
+      state: makeState({
+        tasks: [
+          makeTask({
+            stage: "prd",
+            situations: [
+              makeSituation({ kind: "reply", place: { kind: "stage", stage: "prd", step: 0 } }),
+            ],
+          }),
+        ],
+      }),
+      ui: {
+        location: { kind: "task", id: "task-1" },
+        transcripts: {
+          "task-1|prd": { status: "ready", error: "", entries: [asked], pending: [], buffered: [] },
+        },
+      },
+    });
+
+    await waitFor(() => expect(container.querySelector(".markdown-rail-last")).not.toBeNull());
+    expect(screen.getByRole("button", { name: /Redis/ })).toBeInTheDocument();
+  });
+
   it("puts the conversation, the composer and the header together", async () => {
     view();
 
@@ -675,6 +704,36 @@ describe("TaskView, the focus on arriving at a situation", () => {
     );
 
     await waitFor(() => expect(screen.getByRole("button", { name: "Try again" })).toHaveFocus());
+  });
+
+  it("goes to the first option of the pending question card", async () => {
+    renderWithStore(<TaskView taskId="task-1" />, {
+      state: makeState({
+        tasks: [
+          makeTask({
+            stage: "prd",
+            situations: [
+              makeSituation({ kind: "question", place: { kind: "stage", stage: "prd", step: 0 } }),
+            ],
+          }),
+        ],
+      }),
+      ui: {
+        location: { kind: "task", id: "task-1" },
+        pendingFocus: "request",
+        transcripts: {
+          "task-1|prd": {
+            status: "ready",
+            error: "",
+            entries: [makeEntry("question")],
+            pending: [],
+            buffered: [],
+          },
+        },
+      },
+    });
+
+    await waitFor(() => expect(screen.getByRole("radio", { name: /SQLite/ })).toHaveFocus());
   });
 
   it("falls back to the title when what the situation asks isn't on screen", async () => {

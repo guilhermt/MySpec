@@ -5,6 +5,7 @@ import { COLUMN_CLASS } from "@/features/chat/ConversationColumn";
 import { AGENT_CONVERSATION } from "@/features/task/AgentTabs";
 import { agentTabsOf } from "@/features/task/agent-tabs";
 import { ImplementationDone } from "@/features/task/ImplementationDone";
+import { screenSituationKindOf } from "@/features/task/request";
 import { StepBlocked } from "@/features/task/StepBlocked";
 import { currentStepOf, stepPhaseLabel, stepStage } from "@/features/task/step-status";
 import { TaskComposer } from "@/features/task/TaskComposer";
@@ -40,6 +41,7 @@ function StepConversation({ task, step }: { task: TaskSummary; step: Step }) {
         taskId={task.id}
         stage={stage}
         session={session}
+        replyWaiting={screenSituationKindOf(task, tab) === "reply"}
       />
       <TaskRequest task={task} tab={tab} />
       <TaskComposer

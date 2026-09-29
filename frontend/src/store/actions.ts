@@ -488,6 +488,35 @@ export function answerQuestion(
   );
 }
 
+/**
+ * answerPermissionInPlace answers a permission from its card, whose failure has a place of its own
+ * at the foot of the card: "" when it is sent, the reason when it is not.
+ */
+export async function answerPermissionInPlace(
+  taskId: string,
+  stage: string,
+  requestId: string,
+  decision: PermissionDecision,
+  message: string,
+): Promise<string> {
+  return (
+    (await inPlace(() => api.answerPermission(taskId, stage, requestId, decision, message))) ?? ""
+  );
+}
+
+/**
+ * answerQuestionInPlace answers a question from its card, whose failure has a place of its own at
+ * the foot of the card: "" when it is sent, the reason when it is not.
+ */
+export async function answerQuestionInPlace(
+  taskId: string,
+  stage: string,
+  requestId: string,
+  answers: Record<string, string>,
+): Promise<string> {
+  return (await inPlace(() => api.answerQuestion(taskId, stage, requestId, answers))) ?? "";
+}
+
 /** backToStage reopens a stage that is already done. */
 export function backToStage(taskId: string, stage: TaskStage): Promise<void> {
   return run(fail(`Couldn't go back to the ${stageName(stage)} of ${theItem(taskId)}`, TRY), () =>

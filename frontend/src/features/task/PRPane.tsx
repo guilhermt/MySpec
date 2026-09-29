@@ -15,6 +15,7 @@ import {
   prStateLabel,
 } from "@/features/task/pr-status";
 import { ReviewStrip } from "@/features/task/ReviewStrip";
+import { screenSituationKindOf } from "@/features/task/request";
 import { ToneDot } from "@/features/task/StatusDot";
 import type { StatusTone } from "@/features/task/status";
 import { TaskComposer } from "@/features/task/TaskComposer";
@@ -237,6 +238,7 @@ function Chat({
         taskId={taskId}
         stage={pr.sessionStage}
         session={pr}
+        replyWaiting={screenSituationKindOf(task, tab) === "reply"}
       />
       {request}
       <TaskComposer task={task} tab={tab} stage={pr.sessionStage} session={pr} />

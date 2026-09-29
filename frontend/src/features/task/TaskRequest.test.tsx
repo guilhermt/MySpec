@@ -330,6 +330,45 @@ describe("TaskRequest", () => {
     expect(api.openPR).toHaveBeenCalledWith("task-1", DRAFT.title, DRAFT.body);
   });
 
+  it("shows the question card with Show, the focus on its first option", async () => {
+    const task = makeTask(inStep({ status: "implementing" }, [onStep("question")]));
+    const { user } = renderWithStore(
+      <>
+        <div data-pending-card="question">
+          {/* biome-ignore lint/a11y/useSemanticElements: the options of the card are buttons with the radio role. */}
+          <button type="button" role="radio" aria-checked="false">
+            SQLite
+          </button>
+        </div>
+        <TaskRequest task={task} tab="implementer" />
+      </>,
+      { state: makeState({ tasks: [task] }) },
+    );
+
+    await user.click(screen.getByRole("button", { name: "Show" }));
+
+    expect(screen.getByRole("radio", { name: "SQLite" })).toHaveFocus();
+  });
+
+  it("shows the permission card with Show, the focus on its default button", async () => {
+    const task = makeTask(inStep({ status: "implementing" }, [onStep("permission")]));
+    const { user } = renderWithStore(
+      <>
+        <div data-pending-card="permission">
+          <button type="button" data-default-focus>
+            Allow
+          </button>
+        </div>
+        <TaskRequest task={task} tab="implementer" />
+      </>,
+      { state: makeState({ tasks: [task] }) },
+    );
+
+    await user.click(screen.getByRole("button", { name: "Show" }));
+
+    expect(screen.getByRole("button", { name: "Allow" })).toHaveFocus();
+  });
+
   it("asks the conversation to open the marker of the problems of the plan", async () => {
     const { user } = request({
       stage: "plan",

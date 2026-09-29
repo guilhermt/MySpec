@@ -31,9 +31,8 @@ import {
 import type { SessionState } from "@/features/chat/session";
 import { useAutoScroll } from "@/features/chat/useAutoScroll";
 import { useFeed } from "@/features/chat/useFeed";
-import { asTaskMode, type Entry } from "@/lib/wails";
-import { clockTime } from "@/lib/when";
-import { useAppStore, useTask, useTranscript } from "@/store/app-store";
+import { asSituationKind, asTaskMode, type Entry } from "@/lib/wails";
+import { useAppStore, useFlashing, useTask, useTranscript } from "@/store/app-store";
 
 const NO_ENTRIES: readonly Entry[] = [];
 
@@ -49,18 +48,21 @@ function Loading() {
   );
 }
 
-// Held is an entry of today's forms, held in an entry of the feed named by its time.
-function Held({ createdAt, children }: { createdAt: string; children: ReactNode }) {
-  return (
-    <article
-      data-feed-item
-      tabIndex={-1}
-      aria-label={clockTime(createdAt, Date.now())}
-      className="rounded-sm outline-none focus-visible:focus-ring"
-    >
-      {children}
-    </article>
-  );
+// useCardFlash is the kind of the pending card whose situation just started with the screen open,
+// null without one: the question or the permission of an item blinks like its bar.
+function useCardFlash(itemId: string): "question" | "permission" | null {
+  const flashing = useFlashing();
+  const app = useAppStore((state) => state.app);
+  if (flashing.size === 0 || app === null) {
+    return null;
+  }
+  const owners = [...(app.tasks ?? []), ...(app.reviews ?? []), ...(app.discussions ?? [])];
+  const situation = owners
+    .filter((owner) => owner.id === itemId)
+    .flatMap((owner) => owner.situations ?? [])
+    .find((one) => flashing.has(one.id));
+  const kind = situation === undefined ? null : asSituationKind(situation.kind);
+  return kind === "question" || kind === "permission" ? kind : null;
 }
 
 interface RowViewProps {
@@ -78,6 +80,8 @@ interface RowViewProps {
   /** requested is the marker the request bar asked to open, which settles the request. */
   requested: boolean;
   onRequested: () => void;
+  /** flash is the kind of the pending card that blinks, null for none. */
+  flash: "question" | "permission" | null;
 }
 
 function RowView({
@@ -91,6 +95,7 @@ function RowView({
   waitingToolUseId,
   requested,
   onRequested,
+  flash,
 }: RowViewProps) {
   switch (row.kind) {
     case "speech":
@@ -146,25 +151,25 @@ function RowView({
       );
     case "question":
       return row.entry.question === null ? null : (
-        <Held createdAt={row.entry.createdAt}>
-          <QuestionCard
-            taskId={taskId}
-            stage={stage}
-            question={row.entry.question}
-            readOnly={readOnly}
-          />
-        </Held>
+        <QuestionCard
+          taskId={taskId}
+          stage={stage}
+          question={row.entry.question}
+          createdAt={row.entry.createdAt}
+          readOnly={readOnly}
+          flash={flash === "question"}
+        />
       );
     case "permission":
       return row.entry.permission === null ? null : (
-        <Held createdAt={row.entry.createdAt}>
-          <PermissionCard
-            taskId={taskId}
-            stage={stage}
-            permission={row.entry.permission}
-            readOnly={readOnly}
-          />
-        </Held>
+        <PermissionCard
+          taskId={taskId}
+          stage={stage}
+          permission={row.entry.permission}
+          createdAt={row.entry.createdAt}
+          readOnly={readOnly}
+          flash={flash === "permission"}
+        />
       );
     case "error":
       return row.entry.error === null ? null : (
@@ -214,6 +219,7 @@ export function Conversation({
   const task = useTask(taskId);
   const markerRequest = useAppStore((state) => state.markerRequest);
   const clearMarkerRequest = useAppStore((state) => state.clearMarkerRequest);
+  const flash = useCardFlash(taskId);
   const viewportRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const feedRef = useRef<HTMLDivElement>(null);
@@ -316,6 +322,7 @@ export function Conversation({
                     waitingToolUseId={waiting}
                     requested={row.key === asked?.row}
                     onRequested={clearMarkerRequest}
+                    flash={readOnly ? null : flash}
                   />
                 ));
                 return foldable?.has(stretch.key) ? (

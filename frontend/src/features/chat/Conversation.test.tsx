@@ -7,7 +7,14 @@ import { clockTime } from "@/lib/when";
 import { useAppStore } from "@/store/app-store";
 import type { TranscriptState } from "@/store/transcript";
 import { renderWithStore } from "@/test/render";
-import { makeAction, makeEntry, makeState, makeTask, makeTranscript } from "@/test/wails-mock";
+import {
+  makeAction,
+  makeEntry,
+  makeSituation,
+  makeState,
+  makeTask,
+  makeTranscript,
+} from "@/test/wails-mock";
 
 function ready(entries: Entry[], pending: Entry[] = []): Record<string, TranscriptState> {
   return { "task-1|prd": { status: "ready", error: "", entries, pending, buffered: [] } };
@@ -703,5 +710,37 @@ describe("Conversation stretches and markers", () => {
       taskId: "task-2",
       type: "plan_invalid",
     });
+  });
+  it("blinks the pending card whose situation started with the screen open", () => {
+    const situation = makeSituation({
+      id: "s-question",
+      kind: "question",
+      place: { kind: "stage", stage: "prd", step: 0 },
+    });
+    renderWithStore(<Conversation stage="prd" taskId="task-1" session={makeTask()} />, {
+      state: withTask({ situations: [situation] }),
+      ui: { transcripts: ready([makeEntry("question")]) },
+    });
+
+    const card = screen.getByRole("article", { name: /^Question, answer with/ });
+    expect(card).not.toHaveAttribute("data-flash");
+
+    act(() => {
+      useAppStore.getState().flashSituation("s-question");
+    });
+
+    expect(card).toHaveAttribute("data-flash", "wait");
+  });
+
+  it("starts the one stop of Tab on the pending card", () => {
+    renderWithStore(<Conversation stage="prd" taskId="task-1" session={makeTask()} />, {
+      state: withTask(),
+      ui: { transcripts: ready([makeEntry("question"), makeEntry("user")]) },
+    });
+
+    expect(screen.getByRole("article", { name: /^Question, answer with/ })).toHaveAttribute(
+      "tabindex",
+      "0",
+    );
   });
 });

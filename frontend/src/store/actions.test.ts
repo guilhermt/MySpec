@@ -6,7 +6,9 @@ import {
   addRepository,
   addRepositoryToBoard,
   answerPermission,
+  answerPermissionInPlace,
   answerQuestion,
+  answerQuestionInPlace,
   applyReview,
   approvePR,
   approveReview,
@@ -252,6 +254,40 @@ describe("the app notice of a failed action", () => {
     await interrupt("task-7", "prd");
 
     expect(useAppStore.getState().error?.label).toBe("Couldn't stop the agent of the item");
+  });
+});
+
+describe("answerQuestionInPlace", () => {
+  it("sends the answers and answers nothing", async () => {
+    await expect(answerQuestionInPlace("task-1", "prd", "req-1", { Q: "Yes" })).resolves.toBe("");
+
+    expect(api.answerQuestion).toHaveBeenCalledWith("task-1", "prd", "req-1", { Q: "Yes" });
+  });
+
+  it("answers the reason of a failure without the app notice", async () => {
+    vi.mocked(api.answerQuestion).mockRejectedValueOnce(new Error("the session stopped"));
+
+    await expect(answerQuestionInPlace("task-1", "prd", "req-1", {})).resolves.toBe(
+      "the session stopped",
+    );
+    expect(useAppStore.getState().error).toBeNull();
+  });
+});
+
+describe("answerPermissionInPlace", () => {
+  it("sends the decision and answers nothing", async () => {
+    await expect(answerPermissionInPlace("task-1", "prd", "req-1", "deny", "no")).resolves.toBe("");
+
+    expect(api.answerPermission).toHaveBeenCalledWith("task-1", "prd", "req-1", "deny", "no");
+  });
+
+  it("answers the reason of a failure without the app notice", async () => {
+    vi.mocked(api.answerPermission).mockRejectedValueOnce(new Error("the session stopped"));
+
+    await expect(answerPermissionInPlace("task-1", "prd", "req-1", "allow", "")).resolves.toBe(
+      "the session stopped",
+    );
+    expect(useAppStore.getState().error).toBeNull();
   });
 });
 
