@@ -280,9 +280,7 @@ describe("NewTaskDialog", () => {
   it("starts from the review mode of the settings and says what it does", () => {
     open({ reviewModeDefault: "agent" });
 
-    expect(screen.getByRole("button", { name: "Task review mode: Agent" })).toHaveTextContent(
-      "Agent",
-    );
+    expect(screen.getByRole("radio", { name: "Agent" })).toBeChecked();
     expect(
       screen.getByText(
         "An agent reviews each step, and the task runs to the pull request on its own.",
@@ -297,9 +295,7 @@ describe("NewTaskDialog", () => {
       screen.getByText("You review each step in VS Code before its commit."),
     ).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Task review mode: Manual" }));
-    await user.click(await screen.findByRole("menuitemradio", { name: "Agent" }));
-    // The menu is a child popup of the dialog: a click in it leaves the dialog open.
+    await user.click(screen.getByRole("radio", { name: "Agent" }));
     expect(screen.getByRole("dialog")).toBeInTheDocument();
 
     await user.type(screen.getByLabelText("Name"), "add-login");
@@ -322,34 +318,57 @@ describe("NewTaskDialog", () => {
   it("opens on the Structured mode and says what it does", () => {
     open();
 
-    const modes = screen.getByRole("group", { name: "Mode" });
-    expect(within(modes).getByRole("button", { name: "Structured" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    expect(within(modes).getByRole("button", { name: "One-Shot" })).toHaveAttribute(
-      "aria-pressed",
-      "false",
-    );
+    const modes = screen.getByRole("radiogroup", { name: "Mode" });
+    expect(within(modes).getByRole("radio", { name: "Structured" })).toBeChecked();
+    expect(within(modes).getByRole("radio", { name: "One-Shot" })).not.toBeChecked();
     expect(
-      screen.getByText("A PRD, a tech spec and a plan of steps, each step its own commit."),
+      screen.getByText(
+        "A PRD, a tech spec and a plan of steps, each step its own commit. Fixed once the task exists.",
+      ),
     ).toBeInTheDocument();
-    expect(within(modes).getByRole("button", { name: "One-Shot" })).toBeEnabled();
+  });
+
+  it("moves Mode and Review mode with the arrow keys", async () => {
+    const { user } = open();
+
+    await user.click(screen.getByRole("radio", { name: "Structured" }));
+    await user.keyboard("{ArrowRight}");
+    expect(screen.getByRole("radio", { name: "One-Shot" })).toBeChecked();
+    await user.keyboard("{ArrowLeft}");
+    expect(screen.getByRole("radio", { name: "Structured" })).toBeChecked();
+
+    await user.click(screen.getByRole("radio", { name: "Manual" }));
+    await user.keyboard("{ArrowLeft}");
+    expect(screen.getByRole("radio", { name: "Agent" })).toBeChecked();
+    expect(
+      screen.getByText(
+        "An agent reviews each step, and the task runs to the pull request on its own.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("names the defaults in the tooltip of an own choice", async () => {
+    const { user } = open();
+
+    await user.click(screen.getByRole("button", { name: /Models/ }));
+    await user.click(await screen.findByRole("button", { name: "PRD model: Fable 5.1 · high" }));
+    await user.click(await screen.findByRole("menuitemradio", { name: "xhigh" }));
+    await user.keyboard("{Escape}");
+    await user.hover(screen.getByRole("button", { name: "PRD model: Fable 5.1 · xhigh" }));
+
+    expect((await screen.findAllByText("Defaults: Fable 5.1 · high")).length).toBeGreaterThan(0);
   });
 
   it("switches the hint and the models to the One-Shot mode", async () => {
     const { user } = open();
 
     await user.click(screen.getByRole("button", { name: /Models/ }));
-    await user.click(screen.getByRole("button", { name: "One-Shot" }));
+    await user.click(screen.getByRole("radio", { name: "One-Shot" }));
 
-    expect(screen.getByRole("button", { name: "One-Shot" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    expect(screen.getByRole("radio", { name: "One-Shot" })).toBeChecked();
     expect(
       screen.getByText(
-        "One planning conversation writes a single document, implemented in one commit.",
+        "One planning conversation writes a single document, implemented in one commit. Fixed once the task exists.",
       ),
     ).toBeInTheDocument();
     expect(
@@ -361,7 +380,7 @@ describe("NewTaskDialog", () => {
       ).not.toBeInTheDocument();
     }
 
-    await user.click(screen.getByRole("button", { name: "Structured" }));
+    await user.click(screen.getByRole("radio", { name: "Structured" }));
 
     expect(screen.getByRole("button", { name: "PRD model: Fable 5.1 · high" })).toBeInTheDocument();
     expect(
@@ -378,7 +397,7 @@ describe("NewTaskDialog", () => {
     );
     await user.click(await screen.findByRole("menuitemradio", { name: "xhigh" }));
     await user.keyboard("{Escape}");
-    await user.click(screen.getByRole("button", { name: "One-Shot" }));
+    await user.click(screen.getByRole("radio", { name: "One-Shot" }));
 
     expect(screen.getByRole("button", { name: /Models/ })).toHaveTextContent(
       "Implementation: Opus 5.5 (1M) · xhigh",
@@ -395,7 +414,7 @@ describe("NewTaskDialog", () => {
     await user.click(await screen.findByRole("button", { name: "PRD model: Fable 5.1 · high" }));
     await user.click(await screen.findByRole("menuitemradio", { name: "xhigh" }));
     await user.keyboard("{Escape}");
-    await user.click(screen.getByRole("button", { name: "One-Shot" }));
+    await user.click(screen.getByRole("radio", { name: "One-Shot" }));
 
     expect(screen.getByRole("button", { name: /Models/ })).toHaveTextContent("Defaults");
   });
@@ -403,7 +422,7 @@ describe("NewTaskDialog", () => {
   it("creates the task in the mode of the dialog", async () => {
     const { user } = open();
 
-    await user.click(screen.getByRole("button", { name: "One-Shot" }));
+    await user.click(screen.getByRole("radio", { name: "One-Shot" }));
     await user.type(screen.getByLabelText("Name"), "fix-header");
     await user.type(screen.getByLabelText("Context"), "The header overlaps the menu");
     await user.click(screen.getByRole("button", { name: "Create" }));

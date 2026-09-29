@@ -1,21 +1,24 @@
-import { ChevronRight } from "lucide-react";
 import { type KeyboardEvent, useId, useLayoutEffect, useRef, useState } from "react";
 import { Button } from "@/components/system/Button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/system/Collapsible";
 import { DependencyNotice } from "@/components/system/DependencyNotice";
 import { Dialog, DialogBody, DialogCancel, DialogFooter } from "@/components/system/Dialog";
 import { Field } from "@/components/system/Field";
+import { Icon } from "@/components/system/Icon";
 import { Input } from "@/components/system/Input";
+import { ICONS } from "@/components/system/icons";
 import { Link } from "@/components/system/Link";
+import { SegmentedControl } from "@/components/system/SegmentedControl";
 import { Select } from "@/components/system/Select";
 import { SunkenLine } from "@/components/system/SunkenLine";
 import { Textarea } from "@/components/system/Textarea";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Label } from "@/components/ui/label";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { unsatisfied } from "@/features/board/board-view";
 import { dependencyNotice } from "@/features/board/card-panel";
-import { ModelPicker } from "@/features/models/ModelPicker";
-import { ReviewModePicker } from "@/features/review-mode/ReviewModePicker";
+import { ModelChip } from "@/features/models/ModelChip";
 import { CardContextLine } from "@/features/task-create/CardContextLine";
 import {
   CREATE_REASON,
@@ -27,16 +30,17 @@ import { findBoard } from "@/lib/boards";
 import { messageOf } from "@/lib/errors";
 import {
   adjustmentSummary,
+  choiceLabel,
   choiceOf,
   modelStageLabel,
   modelStagesOf,
+  sameChoice,
   withChoice,
 } from "@/lib/models";
 import { defaultRepositoryId, findRepository, takenNames } from "@/lib/repositories";
-import { reviewModeHint } from "@/lib/review-modes";
+import { REVIEW_MODES, reviewModeHint, reviewModeLabel } from "@/lib/review-modes";
 import { TASK_MODES, taskModeHint, taskModeLabel } from "@/lib/task-modes";
 import { isValidTaskName, suggestTaskName, taskNameProblem } from "@/lib/task-name";
-import { cn } from "@/lib/utils";
 import {
   asReviewMode,
   type BoardCard,
@@ -50,6 +54,9 @@ import { useAppStore, useModelCatalog, useOpenTaskId } from "@/store/app-store";
 const NO_MODELS: readonly StageModel[] = [];
 
 const NAME_HELP = "Lowercase letters, digits and hyphens. It names the branch and the worktree.";
+const MODE_FIXED = "Fixed once the task exists.";
+const HINT = "text-(length:--text-meta) leading-(--leading-meta) text-ink-3";
+const REVIEW_MODE_ICONS = { agent: ICONS.agentMode, manual: ICONS.manualMode } as const;
 const CONTEXT_HELP = "What you want to build, in your own words. High level or detailed.";
 
 export function NewTaskDialog() {
@@ -143,7 +150,6 @@ function NewTaskFields({ origin }: NewTaskFieldsProps) {
   const [reviewMode, setReviewMode] = useState<ReviewMode>(() => defaultMode);
   // Every task starts Structured: One-Shot is a choice made for the task at hand.
   const [mode, setMode] = useState<TaskMode>("structured");
-  const modeLabelId = useId();
   const reasonId = useId();
   const nameRef = useRef<HTMLInputElement>(null);
   // The choices hold every stage, so an adjustment to a stage both modes have
@@ -318,76 +324,73 @@ function NewTaskFields({ origin }: NewTaskFieldsProps) {
             return <DependencyNotice key={model.key} model={model} />;
           })}
 
-        <div className="flex flex-col gap-1.5">
-          <Label id={modeLabelId}>Mode</Label>
-          <ToggleGroup
-            aria-labelledby={modeLabelId}
-            size="sm"
-            value={[mode]}
-            disabled={creating}
-            onValueChange={(next: string[]) => {
-              const [value] = next;
-              if (value === "structured" || value === "one_shot") {
-                setMode(value);
-              }
-            }}
-          >
-            {TASK_MODES.map((option) => (
-              <ToggleGroupItem key={option} value={option}>
-                {taskModeLabel(option)}
-              </ToggleGroupItem>
-            ))}
-          </ToggleGroup>
-          <p className="text-xs text-muted-foreground">{taskModeHint(mode)}</p>
-        </div>
-
-        <div className="flex flex-col gap-1.5">
-          <Label>Review mode</Label>
-          <div>
-            <ReviewModePicker label="Task" value={reviewMode} onChange={setReviewMode} />
-          </div>
-          <p className="text-xs text-muted-foreground">{reviewModeHint(reviewMode)}</p>
-        </div>
-
-        <Collapsible
-          open={modelsOpen}
-          onOpenChange={setModelsOpen}
-          className="flex flex-col gap-1.5"
-        >
-          <CollapsibleTrigger
-            render={
-              <button
-                type="button"
-                className="flex h-8 items-center gap-2 rounded-md text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              />
-            }
-          >
-            <ChevronRight
-              aria-hidden="true"
-              className={cn(
-                "size-4 text-muted-foreground transition-transform duration-[var(--duration-fast)]",
-                modelsOpen && "rotate-90",
-              )}
+        <div className="grid grid-cols-2 gap-(--space-4)">
+          <Field label="Mode">
+            <SegmentedControl
+              label="Mode"
+              size="sm"
+              value={mode}
+              options={TASK_MODES.map((option) => ({
+                value: option,
+                label: taskModeLabel(option),
+              }))}
+              onValueChange={setMode}
+              disabled={creating}
             />
-            <span className="font-medium">Models</span>
-            <span className="min-w-0 truncate text-muted-foreground">
+            <p className={HINT}>{`${taskModeHint(mode)} ${MODE_FIXED}`}</p>
+          </Field>
+          <Field label="Review mode">
+            <SegmentedControl
+              label="Review mode"
+              size="sm"
+              value={reviewMode}
+              options={REVIEW_MODES.map((option) => ({
+                value: option,
+                label: reviewModeLabel(option),
+                icon: REVIEW_MODE_ICONS[option],
+              }))}
+              onValueChange={setReviewMode}
+              disabled={creating}
+            />
+            <p className={HINT}>{reviewModeHint(reviewMode)}</p>
+          </Field>
+        </div>
+
+        <Collapsible open={modelsOpen} onOpenChange={setModelsOpen} className="flex flex-col gap-2">
+          <CollapsibleTrigger className="group/models flex h-(--size-control) items-center gap-2 rounded-sm text-left text-(length:--text-body) leading-(--leading-body) outline-none focus-visible:focus-ring">
+            <Icon
+              icon={ICONS.chevron}
+              size="xs"
+              className="transition-transform duration-(--duration-fast) ease-standard group-data-panel-open/models:rotate-90"
+            />
+            <span className="font-medium text-ink-1">Models</span>
+            <span className="ml-auto min-w-0 truncate text-(length:--text-meta) text-ink-3">
               {adjustmentSummary(catalog, choices, defaults, modelStages)}
             </span>
           </CollapsibleTrigger>
           <CollapsibleContent>
-            <ul className="flex flex-col divide-y rounded-lg border">
-              {modelStages.map((stage) => (
-                <li key={stage} className="flex h-11 items-center justify-between gap-4 px-3">
-                  <span className="text-sm">{modelStageLabel(stage)}</span>
-                  <ModelPicker
-                    label={modelStageLabel(stage)}
-                    value={choiceOf(choices, stage)}
-                    onChange={(choice) =>
-                      setChoices((current) => withChoice(current, stage, choice))
-                    }
-                  />
-                </li>
-              ))}
+            <ul className="flex flex-col divide-y divide-line-1 rounded-md border border-line-1">
+              {modelStages.map((stage) => {
+                const own = !sameChoice(choiceOf(choices, stage), choiceOf(defaults, stage));
+                return (
+                  <li
+                    key={stage}
+                    className="flex h-(--size-control) items-center justify-between gap-4 px-3 text-(length:--text-body)"
+                  >
+                    <span>{modelStageLabel(stage)}</span>
+                    <ModelChip
+                      size="sm"
+                      label={modelStageLabel(stage)}
+                      value={choiceOf(choices, stage)}
+                      own={own}
+                      followNote={`Defaults: ${choiceLabel(catalog, choiceOf(defaults, stage))}`}
+                      onChange={(choice) =>
+                        setChoices((current) => withChoice(current, stage, choice))
+                      }
+                    />
+                  </li>
+                );
+              })}
             </ul>
           </CollapsibleContent>
         </Collapsible>
