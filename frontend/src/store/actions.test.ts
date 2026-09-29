@@ -50,6 +50,7 @@ import {
   previewRemoveBoard,
   publishEpic,
   publishReview,
+  readActionOutput,
   readEarlierConversation,
   refreshBoard,
   refreshCard,
@@ -744,6 +745,30 @@ describe("loadTranscript", () => {
       label: "Couldn't load the conversation of the item",
       detail: "no such task. Try again.",
     });
+  });
+});
+
+describe("readActionOutput", () => {
+  it("answers the whole output of a command", async () => {
+    vi.mocked(api.getActionOutput).mockResolvedValueOnce({
+      text: "ok",
+      lines: 1,
+      truncated: false,
+    });
+
+    await expect(readActionOutput("task-1", "step:3", "entry-9")).resolves.toEqual({
+      text: "ok",
+      lines: 1,
+      truncated: false,
+    });
+    expect(api.getActionOutput).toHaveBeenCalledWith("task-1", "step:3", "entry-9");
+  });
+
+  it("leaves a failure to the output that asked, without the app notice", async () => {
+    vi.mocked(api.getActionOutput).mockRejectedValueOnce(new Error("gone"));
+
+    await expect(readActionOutput("task-1", "step:3", "entry-9")).rejects.toThrow("gone");
+    expect(useAppStore.getState().error).toBeNull();
   });
 });
 

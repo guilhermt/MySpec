@@ -3,6 +3,7 @@ import { locationTitle } from "@/lib/locations";
 import type { ModelChoice } from "@/lib/models";
 import { stageName } from "@/lib/situations";
 import type {
+  ActionOutput,
   BoardPreview,
   BoardRemoval,
   BoardRepositoryChoice,
@@ -408,6 +409,18 @@ export async function readEarlierConversation(taskId: string, stage: string): Pr
   } catch (error) {
     store.failTranscript(taskId, stage, messageOf(error));
   }
+}
+
+/**
+ * readActionOutput reads the whole output of a command. Its failure has a place of its own, the
+ * output that asked for it, and never raises the app notice.
+ */
+export function readActionOutput(
+  taskId: string,
+  stage: string,
+  entryId: string,
+): Promise<ActionOutput> {
+  return api.getActionOutput(taskId, stage, entryId);
 }
 
 export function sendMessage(taskId: string, stage: string, text: string): Promise<void> {

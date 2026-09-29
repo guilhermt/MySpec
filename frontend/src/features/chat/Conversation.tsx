@@ -1,12 +1,12 @@
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Skeleton, SkeletonBar } from "@/components/system/Skeleton";
 import { ConversationColumn } from "@/features/chat/ConversationColumn";
-import { buildConversation, type Row } from "@/features/chat/conversation";
-import { ActionGroup } from "@/features/chat/entries/ActionGroup";
+import { buildConversation, type Row, waitingToolUseId } from "@/features/chat/conversation";
 import { Activity } from "@/features/chat/entries/Activity";
 import { AppMessage } from "@/features/chat/entries/AppMessage";
 import { BackToEnd } from "@/features/chat/entries/BackToEnd";
 import { ErrorBlock } from "@/features/chat/entries/ErrorBlock";
+import { Group } from "@/features/chat/entries/Group";
 import { Marker } from "@/features/chat/entries/Marker";
 import { PermissionCard } from "@/features/chat/entries/PermissionCard";
 import { QuestionCard } from "@/features/chat/entries/QuestionCard";
@@ -57,9 +57,19 @@ interface RowViewProps {
   readOnly: boolean;
   /** railLast is the last speech, when it waits for a reply in text. */
   railLast: boolean;
+  /** waitingToolUseId is the action the pending permission holds, null without one. */
+  waitingToolUseId: string | null;
 }
 
-function RowView({ taskId, stage, row, voice, readOnly, railLast }: RowViewProps) {
+function RowView({
+  taskId,
+  stage,
+  row,
+  voice,
+  readOnly,
+  railLast,
+  waitingToolUseId,
+}: RowViewProps) {
   switch (row.kind) {
     case "speech":
       return row.entry.assistant === null ? null : (
@@ -108,14 +118,12 @@ function RowView({ taskId, stage, row, voice, readOnly, railLast }: RowViewProps
       );
     case "group":
       return (
-        <Held createdAt={row.group.startedAt}>
-          <ActionGroup
-            actions={row.group.nodes.flatMap((node) => [
-              node.action,
-              ...node.children.map((child) => child.action),
-            ])}
-          />
-        </Held>
+        <Group
+          taskId={taskId}
+          stage={stage}
+          group={row.group}
+          waitingToolUseId={waitingToolUseId}
+        />
       );
     case "question":
       return row.entry.question === null ? null : (
@@ -211,6 +219,7 @@ export function Conversation({
     transcript === null ||
     (transcript.status === "loading" && entries.length === 0 && pending.length === 0);
   const railKey = replyWaiting ? lastCompleteSpeech(rows) : "";
+  const waiting = useMemo(() => waitingToolUseId(entries), [entries]);
 
   useEffect(() => {
     const viewport = viewportRef.current;
@@ -245,6 +254,7 @@ export function Conversation({
                   voice={voice}
                   readOnly={readOnly}
                   railLast={row.key === railKey}
+                  waitingToolUseId={waiting}
                 />
               ))}
               {endLine}

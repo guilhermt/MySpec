@@ -432,3 +432,41 @@ describe("actionRight", () => {
     expect(actionRight(bash("go test ./...", action), waiting, now)).toEqual(expected);
   });
 });
+
+// The commands of the scenes of the mock (lab/16-conversation-wide/src/conv-data.js), each labelled
+// by the description the agent wrote and counted in the category of its command.
+describe("the commands of the scenes", () => {
+  it.each<[string, string, ActionCategory]>([
+    ["Read the card context", "cat .myspec/rate-limit-per-api-key/context.md", "Read"],
+    ["Find the gateway's global limiter", 'grep -rn "rate.NewLimiter" internal/', "Searched"],
+    ["Read the gateway middleware", "sed -n '1,120p' internal/http/middleware/gateway.go", "Read"],
+    ["List the plan migrations", "ls migrations | grep -i plan", "Read"],
+    ["See what steps 1 and 2 changed", "git log --oneline -3 && git diff HEAD~2 --stat", "git"],
+    ["Write the bucket", "cat > internal/ratelimit/bucket.go <<'EOF'", "Wrote"],
+    ["Add the refill test", "cat >> internal/ratelimit/bucket_test.go <<'EOF'", "Wrote"],
+    ["Wire the limiter into the auth middleware", "python3 - <<'PY'", "Wrote"],
+    ["Run the rate limit tests", "go test ./internal/ratelimit/... -race", "Tests"],
+    [
+      "Start a new bucket full",
+      "sed -i 's/tokens: 0/tokens: burst/' internal/ratelimit/limiter.go",
+      "Wrote",
+    ],
+    ["Run the linter", "golangci-lint run ./...", "Lint"],
+    ["Format", "gofmt -w internal/ratelimit", "Lint"],
+    ["Look for eviction of idle keys", 'grep -n "delete(" internal/ratelimit/*.go', "Searched"],
+    ["See what the step changed", "git diff --stat && git status --short", "git"],
+    [
+      "Apply the migration",
+      "make migrate-local DATABASE_URL=postgres://localhost:5432/api_dev",
+      "Build",
+    ],
+  ])(
+    "labels “%s” by its description and counts it by its command",
+    (description, command, category) => {
+      const action = bash(command, { description });
+
+      expect(actionLabel(action)).toMatchObject({ label: description, command, mono: false });
+      expect(categoryOf(action)).toBe(category);
+    },
+  );
+});

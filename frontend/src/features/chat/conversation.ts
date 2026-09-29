@@ -122,8 +122,8 @@ function lastOf<T>(items: readonly T[], test: (item: T) => boolean): T | undefin
   return undefined;
 }
 
-// waitingToolUseId is the action the pending permission of the conversation holds, null without one.
-function waitingToolUseId(entries: readonly Entry[]): string | null {
+/** waitingToolUseId is the action the pending permission of the conversation holds, null without one. */
+export function waitingToolUseId(entries: readonly Entry[]): string | null {
   const pending = lastOf(
     entries,
     (entry) =>
