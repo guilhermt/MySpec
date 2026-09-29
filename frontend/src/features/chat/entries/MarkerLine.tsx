@@ -48,7 +48,7 @@ const SUNKEN =
 
 function ProblemsBody({ problems }: { problems: readonly PlanProblem[] }) {
   return (
-    <ul className={cn(SUNKEN, "flex flex-col gap-(--space-2) select-text")}>
+    <ul data-slot="marker-body" className={cn(SUNKEN, "flex flex-col gap-(--space-2) select-text")}>
       {problems.map((problem) => (
         <li
           key={`${problem.file}:${problem.message}`}
@@ -169,7 +169,7 @@ export function MarkerLine({
   switch (body.kind) {
     case "markdown":
       content = (
-        <div className={cn(SUNKEN, "select-text")}>
+        <div data-slot="marker-body" className={cn(SUNKEN, "select-text")}>
           <Markdown cutCode>{body.text}</Markdown>
         </div>
       );
@@ -197,7 +197,7 @@ export function MarkerLine({
             </Button>
           </p>
         ) : artifact.status === "ready" ? (
-          <div className={SUNKEN}>
+          <div data-slot="marker-body" className={SUNKEN}>
             <div className="select-text">
               <Markdown cutCode>{documentText(body.name, artifact.content)}</Markdown>
             </div>

@@ -132,7 +132,10 @@ export function Group({ taskId, stage, group, waitingToolUseId }: GroupProps) {
         )}
       </button>
       {open && (
-        <div className="mt-(--space-1) rounded-md bg-surface-0 px-(--space-2) py-(--space-1)">
+        <div
+          data-slot="group-block"
+          className="mt-(--space-1) rounded-md bg-surface-0 px-(--space-2) py-(--space-1)"
+        >
           <ActionRows
             taskId={taskId}
             stage={stage}

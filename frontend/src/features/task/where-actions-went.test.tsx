@@ -1023,3 +1023,35 @@ describe("the primary of the task screen", () => {
     );
   });
 });
+
+// SEND_IS_PRIMARY are the situations whose bar has no primary: Send with a message written is the
+// primary of the screen (principles 2).
+const SEND_IS_PRIMARY: [string, TaskSummary][] = [
+  ["reply without a draft", inPR({ status: "awaiting_reply", sessionStage: "pr" }, "reply")],
+  ...SITUATIONS.filter(([kind]) =>
+    ["plan_invalid", "findings", "worktree_unreadable", "step_empty"].includes(kind),
+  ),
+  [
+    "session_error of a turn that failed",
+    inStep(
+      { status: "implementing" },
+      { lastError: "", turnFailed: true, situations: [stepSituation("session_error")] },
+    ),
+  ],
+];
+
+describe("Send, the primary where the bar has none", () => {
+  it.each(SEND_IS_PRIMARY)("is the one primary in %s", async (_, task) => {
+    const { container } = renderWithStore(<TaskView taskId={task.id} />, {
+      state: makeState({
+        tasks: [task],
+        repositories: [makeRepository({ id: task.repositoryId })],
+      }),
+      ui: { location: { kind: "task", id: task.id }, drafts: WRITTEN },
+    });
+
+    const send = await screen.findByRole("button", { name: /^Send/ });
+    expect(send).toHaveAttribute("data-variant", "primary");
+    expect([...container.querySelectorAll("button[data-variant=primary]")]).toEqual([send]);
+  });
+});

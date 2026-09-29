@@ -91,6 +91,25 @@ const at = (minutes: number) => new Date(Date.parse(SCENE_NOW) - minutes * 60_00
 
 const CHECKED_AT = at(3);
 
+/**
+ * STEP_4_FILES are the changed files of step 4, the Manual one, as the mock lists them: five staged,
+ * one with a hunk left and one not staged.
+ */
+const STEP_4_FILES = [
+  { path: "internal/http/middleware/ratelimit.go", kind: "modified", staged: true, partial: false },
+  {
+    path: "internal/http/middleware/ratelimit_test.go",
+    kind: "added",
+    staged: true,
+    partial: false,
+  },
+  { path: "internal/ratelimit/bucket.go", kind: "modified", staged: true, partial: false },
+  { path: "internal/ratelimit/headers.go", kind: "added", staged: true, partial: false },
+  { path: "docs/api/errors.md", kind: "modified", staged: true, partial: false },
+  { path: "internal/http/middleware/auth.go", kind: "modified", staged: false, partial: true },
+  { path: "CHANGELOG.md", kind: "modified", staged: false, partial: false },
+];
+
 /** WORKTREE is the worktree of the reference task, where its steps and its pull request work. */
 const WORKTREE = "/home/dev/.local/share/myspec/worktrees/acme/api/rate-limit";
 
@@ -123,11 +142,13 @@ function steps(n: number, current: Partial<Step> = {}): Step[] {
   });
 }
 
-// situation is a situation of the reference task, started a while before the scene.
+// situation is a situation of the reference task that has waited some minutes at the moment of the
+// scene, as its chip in the mock says.
 function situation(
   kind: string,
   group: string,
   place: Situation["place"],
+  waited: number,
   rest: Partial<Situation> = {},
 ) {
   return makeSituation({
@@ -136,7 +157,7 @@ function situation(
     kind,
     group,
     place,
-    startedAt: at(4),
+    startedAt: at(waited),
     ...rest,
   });
 }
@@ -281,6 +302,27 @@ function inPR(
   );
 }
 
+// CHECKS are the checks of the pull request in the checks scene: three passed, one running, one queued.
+const CHECKS = [
+  makePRCheck({ name: "build", startedAt: at(12), completedAt: at(10) }),
+  makePRCheck({ name: "lint", startedAt: at(12), completedAt: at(11) }),
+  makePRCheck({ name: "unit", startedAt: at(12), completedAt: at(8) }),
+  makePRCheck({
+    name: "e2e / rate-limit-burst",
+    state: "running",
+    conclusion: "",
+    startedAt: at(6),
+    completedAt: "",
+  }),
+  makePRCheck({
+    name: "e2e / admin",
+    state: "queued",
+    conclusion: "",
+    startedAt: "",
+    completedAt: "",
+  }),
+];
+
 const reviewer = (overrides: Parameters<typeof makeStepReviewer>[0]) =>
   makeStepReviewer({ sessionStage: "step_review:3", ...overrides });
 
@@ -327,7 +369,7 @@ function taskOf(name: SceneName, longName: boolean): TaskSummary {
           hasTechSpec: false,
           contextPercent: 12,
           conversations: conversations(["prd"]),
-          situations: [situation("reply", "waiting", { kind: "stage", stage: "prd", step: 0 })],
+          situations: [situation("reply", "waiting", { kind: "stage", stage: "prd", step: 0 }, 2)],
         },
         longName,
       );
@@ -335,7 +377,14 @@ function taskOf(name: SceneName, longName: boolean): TaskSummary {
       return inStep(
         3,
         { status: "addressing_review", reviewRound: 1, reviewPass: 1, reviewer: reviewer({}) },
-        { sessionStatus: "working", turnRunning: true, processRunning: true, contextPercent: 38 },
+        {
+          sessionStatus: "working",
+          turnRunning: true,
+          processRunning: true,
+          // The turn has run for 3m 40s, as the composer of the mock says.
+          turnStartedAt: at(220 / 60),
+          contextPercent: 38,
+        },
         longName,
       );
     case "ask":
@@ -350,8 +399,8 @@ function taskOf(name: SceneName, longName: boolean): TaskSummary {
           sessionStatus: "needs_permission",
           contextPercent: 31,
           situations: [
-            situation("question", "waiting", reviewerPlace(3)),
-            situation("permission", "waiting", stepPlace(3), { id: "permission-2" }),
+            situation("question", "waiting", reviewerPlace(3), 18),
+            situation("permission", "waiting", stepPlace(3), 4, { id: "permission-2" }),
           ],
         },
         longName,
@@ -370,7 +419,7 @@ function taskOf(name: SceneName, longName: boolean): TaskSummary {
         },
         {
           contextPercent: 31,
-          situations: [situation("session_error", "error", reviewerPlace(3))],
+          situations: [situation("session_error", "error", reviewerPlace(3), 5)],
         },
         longName,
       );
@@ -379,11 +428,11 @@ function taskOf(name: SceneName, longName: boolean): TaskSummary {
         4,
         {
           status: "in_review",
-          review: { files: [], staged: 5, total: 7, percent: 71, error: "" },
+          review: { files: STEP_4_FILES, staged: 5, total: 7, percent: 71, error: "" },
         },
         {
           contextPercent: 29,
-          situations: [situation("step_review", "waiting", stepPlace(4), { percent: 71 })],
+          situations: [situation("step_review", "waiting", stepPlace(4), 9, { percent: 71 })],
         },
         longName,
       );
@@ -392,9 +441,13 @@ function taskOf(name: SceneName, longName: boolean): TaskSummary {
         5,
         {
           status: "blocked",
-          block: { reason: "dirty_worktree", detail: " M go.mod\n M go.sum\n?? tmp/", files: 3 },
+          block: {
+            reason: "dirty_worktree",
+            detail: " M go.sum\n?? scratch/bench_test.go\n?? scratch/results.txt",
+            files: 3,
+          },
         },
-        { situations: [situation("step_blocked", "error", stepPlace(5))] },
+        { situations: [situation("step_blocked", "error", stepPlace(5), 6)] },
         longName,
       );
     case "checks":
@@ -402,25 +455,7 @@ function taskOf(name: SceneName, longName: boolean): TaskSummary {
         {
           status: "waiting_checks",
           sessionStage: "",
-          checks: [
-            makePRCheck({ name: "build", startedAt: at(12), completedAt: at(10) }),
-            makePRCheck({ name: "lint", startedAt: at(12), completedAt: at(11) }),
-            makePRCheck({ name: "unit", startedAt: at(12), completedAt: at(8) }),
-            makePRCheck({
-              name: "e2e / rate-limit-burst",
-              state: "running",
-              conclusion: "",
-              startedAt: at(6),
-              completedAt: "",
-            }),
-            makePRCheck({
-              name: "e2e / admin",
-              state: "queued",
-              conclusion: "",
-              startedAt: "",
-              completedAt: "",
-            }),
-          ],
+          checks: CHECKS,
         },
         { contextPercent: 18 },
         longName,
@@ -433,19 +468,22 @@ function taskOf(name: SceneName, longName: boolean): TaskSummary {
           contextPercent: 33,
           reports: [{ pass: 1, file: "1.md", clean: false }],
         },
-        { situations: [situation("findings", "waiting", prPlace)] },
+        { situations: [situation("findings", "waiting", prPlace, 12)] },
         longName,
       );
     case "close":
       return inPR(
         {
           status: "merged",
+          prState: "merged",
+          mergedBy: "lnakamura",
+          mergedAt: at(120),
           sessionStage: "pr_review",
           canClose: true,
           contextPercent: 36,
           reports: [{ pass: 1, file: "1.md", clean: true }],
         },
-        { situations: [situation("merge", "closing", prPlace, { form: "close" })] },
+        { situations: [situation("merge", "closing", prPlace, 120, { form: "close" })] },
         longName,
       );
   }
@@ -458,7 +496,7 @@ function conversationsOf(name: SceneName): Record<string, Entry[]> {
       return {
         prd: talk(
           "Write the PRD for the card acme/api#412.",
-          "Should the limits live in the plans table, cached for 60 s, or in the config, with a release? a) plans table b) config",
+          "Should the limits live in the plans table or in the config?\n\na) Plans table, cached 60 s\nb) Config, with a release",
         ),
       };
     case "run":
@@ -482,7 +520,14 @@ function conversationsOf(name: SceneName): Record<string, Entry[]> {
     case "error":
       return {
         "step:3": talk("Implement step 3.", "Done; the tests pass."),
-        "step_review:3": talk("Review step 3, pass 2.", "Reading the diff.", makeEntry("error")),
+        // The reviewer's process stopped: the session error the bar retries, not a failed turn.
+        "step_review:3": talk(
+          "Review step 3, pass 2.",
+          "Reading the diff.",
+          makeEntry("error", {
+            error: { kind: "process_exit", message: "exit status 1", retryable: true },
+          }),
+        ),
       };
     case "manual":
       return { "step:4": talk("Implement step 4.", "The 429 answers carry Retry-After now.") };
@@ -506,6 +551,53 @@ export function sceneTask(name: SceneName, { longName = false } = {}): Scene {
   // The reviewer is on screen where it asks or failed; the implementer everywhere else.
   const tab = name === "ask" || name === "error" ? "reviewer" : "implementer";
   return sceneOf(taskOf(name, longName), transcripts, tab);
+}
+
+/** FixedCardName is a moment of the pull request that ends its conversation in a fixed card. */
+export type FixedCardName = "draft" | "checks-after-a-pass";
+
+/**
+ * fixedCardScene is the reference task at a moment of its pull request that no scene of the mock
+ * draws, whose conversation ends in a fixed card: the draft the agent wrote, or the live checks the
+ * second pass of the review waits for.
+ */
+export function fixedCardScene(name: FixedCardName): Scene {
+  const running = CHECKS.map((check, index) =>
+    index < 3 ? check : { ...check, state: "running", conclusion: "", completedAt: "" },
+  );
+  const task =
+    name === "draft"
+      ? inPR(
+          {
+            status: "draft_ready",
+            prNumber: 0,
+            prUrl: "",
+            sessionStage: "pr",
+            draft: {
+              title: "Rate limit per API key",
+              body: "Each API key gets its own limit, read from its plan.\n\nCloses acme/api#412.",
+              file: "pr.md",
+            },
+          },
+          { situations: [situation("draft", "waiting", prPlace, 3)] },
+          false,
+        )
+      : inPR(
+          {
+            status: "waiting_checks",
+            sessionStage: "pr_review",
+            reports: [{ pass: 1, file: "1.md", clean: false }],
+            checks: running,
+          },
+          {},
+          false,
+        );
+  const stage = name === "draft" ? "pr" : "pr_review";
+  const entries =
+    name === "draft"
+      ? talk("Write the pull request of the task.", "The draft is ready: title and description.")
+      : talk("Review the pull request #1284.", "Report 1 written · 4 findings.");
+  return sceneOf(task, [makeTranscript({ taskId: TASK_ID, stage, entries })], "implementer");
 }
 
 /**

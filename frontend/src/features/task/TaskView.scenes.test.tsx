@@ -142,6 +142,61 @@ describe("TaskView, the nine scenes", () => {
     expect(screen.getByRole("region", { name: "Request" })).toHaveTextContent(label);
   });
 
+  it.each<[SceneName, string]>([
+    ["plan", "2m"],
+    ["ask", "18m"],
+    ["error", "5m"],
+    ["manual", "9m"],
+    ["blocked", "6m"],
+    ["findings", "12m"],
+    ["close", "2h"],
+  ])("says in the chip of the %s scene how long it waited, as the mock does", (name, wait) => {
+    scene(name);
+
+    expect(screen.getByRole("region", { name: "Request" })).toHaveTextContent(wait);
+  });
+
+  it("offers the options of the question in text of the plan scene as quick replies", () => {
+    scene("plan");
+
+    const replies = screen.getByRole("group", { name: "Quick replies" });
+    expect(
+      within(replies)
+        .getAllByRole("button")
+        .map((reply) => reply.textContent),
+    ).toEqual(["aPlans table, cached 60 s", "bConfig, with a release"]);
+  });
+
+  it("says how long the turn of the run scene has run", () => {
+    scene("run");
+
+    expect(screen.getByText("Working · 3m 40s")).toBeInTheDocument();
+  });
+
+  it("retries the reviewer whose session stopped in the error scene", () => {
+    scene("error");
+
+    const bar = screen.getByRole("region", { name: "Request" });
+    expect(within(bar).getByRole("button", { name: "Retry reviewer" })).toBeInTheDocument();
+    expect(screen.getByText("Claude Code stopped unexpectedly.")).toBeInTheDocument();
+    expect(screen.queryByText("The agent couldn't finish the turn.")).not.toBeInTheDocument();
+  });
+
+  it("lists the seven changed files of step 4 in the manual scene", () => {
+    scene("manual");
+
+    const card = screen.getByRole("article", { name: /^Changed files · 7/ });
+    expect(within(card).getAllByRole("listitem")).toHaveLength(7);
+  });
+
+  it("ends the conversation of the close scene with the merge", () => {
+    scene("close");
+
+    expect(
+      screen.getByRole("article", { name: /^Merged #1284 into dev · by lnakamura/ }),
+    ).toBeInTheDocument();
+  });
+
   it.each<SceneName>(["run", "checks"])("has no request bar in the %s scene", (name) => {
     scene(name);
 

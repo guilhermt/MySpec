@@ -218,3 +218,18 @@ func lastResultOf(t *testing.T, file, tool string) (claude.ToolResult, json.RawM
 	}
 	return found, useResult
 }
+
+func TestAnOutputKeepsItsLast64KiB(t *testing.T) {
+	t.Parallel()
+
+	// The limit is written out, not derived from OutputLimit: the interface says 64 KiB.
+	const kept = 64 * 1024
+	text := strings.Repeat("a", 10) + strings.Repeat("b", kept)
+	got, ok := session.OutputOf(&session.ActionEntry{Tool: "Bash"}, result(text, false), nil)
+	if !ok {
+		t.Fatal("the command has no output")
+	}
+	if len(got.Text) != kept || strings.Contains(got.Text, "a") || !got.Truncated {
+		t.Errorf("kept %d bytes, truncated %v; want the last %d, truncated", len(got.Text), got.Truncated, kept)
+	}
+}

@@ -9,7 +9,16 @@ import {
   conversationScene,
   fixConversationClock,
 } from "@/test/conversation-scenes";
-import { capture, mainArea, setTheme, THEMES } from "@/test/painted";
+import {
+  capture,
+  conversationEdges,
+  type Edges,
+  edgesOf,
+  innerEdgesOf,
+  mainArea,
+  setTheme,
+  THEMES,
+} from "@/test/painted";
 import { renderWithStore } from "@/test/render";
 import { TASK_ID } from "@/test/task-scenes";
 import { api } from "@/test/wails-mock";
@@ -21,8 +30,34 @@ vi.mock("@/lib/wails", async (importOriginal) => ({
   ...(await import("@/test/wails-mock")),
 }));
 
-/** WIDTHS are the main areas the column is proved at: a 1100px window, half a monitor, the mock, a wide one. */
+/**
+ * WIDTHS are the main areas the column is proved and captured at: a 1100px window, a 1250px one
+ * (half a monitor), the mock, and a 2560px one.
+ */
 const WIDTHS = [812, 950, 1566, 2180];
+
+/**
+ * ODD_WIDTHS are main areas whose column has an odd margin to share: centred without rounding, the
+ * column would stand on half a pixel.
+ */
+const ODD_WIDTHS = [1567, 2181];
+
+/** FRAMES are the sunken blocks that hold blocks of their own: the open group and the body of a line. */
+const FRAMES = '[data-slot="group-block"], [data-slot="marker-body"]';
+
+/**
+ * BLOCKS are the blocks inside an entry: the text of a speech, a code block, cut or not, a table, a
+ * diagram, the open group and the body of a line. Outside a frame, each one has the edges of the
+ * column; inside one, the edges of what the frame holds.
+ */
+const BLOCKS = [
+  ".markdown",
+  "[data-code-cut]",
+  '[data-streamdown="code-block"]',
+  '[data-streamdown="table-wrapper"]',
+  '[data-streamdown="mermaid-block"]',
+  FRAMES,
+].join(", ");
 
 /**
  * CASES are the scenes, each by the name of its captures, and the implementer's tab of the two where
@@ -98,22 +133,49 @@ function columnPieces(area: HTMLElement, feed: HTMLElement): [string, HTMLElemen
   const pieces: [string, HTMLElement][] = [...feed.querySelectorAll<HTMLElement>("article")].map(
     (article) => [article.getAttribute("aria-label") ?? "an entry", article],
   );
-  const bar = area.querySelector<HTMLElement>('section[aria-label="Request"]');
-  if (bar !== null) {
-    pieces.push(["the bar", bar]);
-  }
-  // The box of the composer is the element in the column that holds its field.
-  const composer = document
-    .getElementById("composer-input")
-    ?.closest<HTMLElement>('[class~="max-w-(--measure-conversation)"]');
-  if (composer !== null && composer !== undefined) {
-    pieces.push(["the composer", composer]);
-  }
-  const tabs = area.querySelector<HTMLElement>('[role="tablist"]');
-  if (tabs !== null) {
-    pieces.push(["the tabs", tabs]);
+  const others: [string, string][] = [
+    ["the bar", 'section[aria-label="Request"]'],
+    ["the composer", '[data-slot="composer"]'],
+    ["the tabs", '[role="tablist"]'],
+  ];
+  for (const [name, selector] of others) {
+    const piece = area.querySelector<HTMLElement>(selector);
+    if (piece !== null) {
+      pieces.push([name, piece]);
+    }
   }
   return pieces;
+}
+
+// nameOf names a block by the entry it is in and what it is, for the message of a failure.
+function nameOf(block: Element): string {
+  const entry = block.closest("article")?.getAttribute("aria-label") ?? "an entry";
+  const what =
+    block.getAttribute("data-slot") ??
+    block.getAttribute("data-streamdown") ??
+    (block.hasAttribute("data-code-cut") ? "cut code" : "text");
+  return `${what} in ${entry}`;
+}
+
+// blockEdges are the edges of every block inside the entries, each beside the edges it should have:
+// the column's, or those of what the frame around it holds.
+function blockEdges(feed: HTMLElement, column: Edges): [string, Edges, Edges][] {
+  return [...feed.querySelectorAll(BLOCKS)].map((block) => {
+    const frame = block.parentElement?.closest(FRAMES) ?? null;
+    return [nameOf(block), edgesOf(block), frame === null ? column : innerEdgesOf(frame)];
+  });
+}
+
+// outputEdges are the right edge of every output of a command and the right edge of the inside of
+// the open group that holds it: the output is indented under its row and ends where the group does.
+function outputEdges(feed: HTMLElement): [string, number, number][] {
+  return [...feed.querySelectorAll("[data-output]")].map((output) => {
+    const frame = output.closest(FRAMES);
+    if (frame === null) {
+      throw new Error(`${nameOf(output)} is outside an open group`);
+    }
+    return [nameOf(output), edgesOf(output).right, innerEdgesOf(frame).right];
+  });
 }
 
 // shows tells whether an element and every one around it up to a root paints: a visually hidden
@@ -162,19 +224,26 @@ describe.each(THEMES)("TaskView, the conversation scenes in the %s theme", (them
     // The scene is drawn at the moment of the mock, whatever the day the suite runs.
     fixConversationClock(name);
 
-    it.each(WIDTHS)(
-      "keeps every piece in the column, on whole pixels, with no time in sight at %ipx",
+    it.each([...WIDTHS, ...ODD_WIDTHS])(
+      "keeps every piece and every block in the column, on whole pixels, with no time in sight at %ipx",
       async (width) => {
         setTheme(theme);
         const { area, column, feed } = draw(name, voice, width);
         await awayFromTheEntries();
         await openAll(feed);
 
-        const edge = column.getBoundingClientRect();
-        expect(Number.isInteger(edge.left) && Number.isInteger(edge.right)).toBe(true);
+        // The column is min(960, area − 48) wide, centred on a whole pixel.
+        const edges = conversationEdges(area);
+        expect(Number.isInteger(edges.left) && Number.isInteger(edges.right)).toBe(true);
+        expect(edgesOf(column)).toEqual(edges);
         for (const [piece, element] of columnPieces(area, feed)) {
-          const box = element.getBoundingClientRect();
-          expect([piece, box.left, box.right]).toEqual([piece, edge.left, edge.right]);
+          expect([piece, edgesOf(element)]).toEqual([piece, edges]);
+        }
+        for (const [block, got, want] of blockEdges(feed, edges)) {
+          expect([block, got]).toEqual([block, want]);
+        }
+        for (const [output, right, want] of outputEdges(feed)) {
+          expect([output, right]).toEqual([output, want]);
         }
         expect(visibleClocks(area)).toEqual([]);
         for (const article of feed.querySelectorAll("article")) {
@@ -189,7 +258,9 @@ describe.each(THEMES)("TaskView, the conversation scenes in the %s theme", (them
             .poll(() => feed.querySelector("svg[aria-roledescription]"), { timeout: 10_000 })
             .not.toBeNull();
         }
-        await capture(`conversation-${label}-${width}-${theme}`, area);
+        if (WIDTHS.includes(width)) {
+          await capture(`conversation-${label}-${width}-${theme}`, area);
+        }
       },
     );
   });
