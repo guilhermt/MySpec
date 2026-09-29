@@ -1,4 +1,4 @@
-import { ChevronDown, X } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { type ComponentProps, type MouseEvent, type ReactNode, useId } from "react";
 import { Button as UIButton } from "@/components/ui/button";
 import { Toggle as UIToggle } from "@/components/ui/toggle";
@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import type { ButtonLoading } from "./Button";
 import { Icon } from "./Icon";
 import { IconButton } from "./IconButton";
+import { ICONS } from "./icons";
 import { Shimmer } from "./Shimmer";
 import { Spinner } from "./Spinner";
 import { StateGlyph } from "./StateGlyph";
@@ -13,7 +14,8 @@ import { Tooltip } from "./Tooltip";
 
 export interface ChipBaseProps
   extends Omit<ComponentProps<"button">, "children" | "className" | "disabled" | "value"> {
-  kind: "toggle" | "menu";
+  /** kind is what the chip does: toggles a filter, opens a menu, or acts once (a quick reply). */
+  kind: "toggle" | "menu" | "action";
   children: ReactNode;
   pressed?: boolean;
   onPressedChange?: (pressed: boolean) => void;
@@ -50,7 +52,8 @@ const ERROR =
   "data-error:border-state-error data-error:bg-state-error-veil data-error:text-state-error not-aria-disabled:not-aria-pressed:not-aria-expanded:data-error:hover:bg-state-error-veil not-aria-disabled:not-aria-pressed:not-aria-expanded:data-error:hover:text-state-error";
 
 /**
- * Chip is a pill that toggles a filter or opens a menu of choices. Saving, it shows the spinner and
+ * Chip is a pill that toggles a filter, opens a menu of choices, or acts once, like a quick reply of
+ * the composer. Saving, it shows the spinner and
  * the gerund; reading the catalog, the saved choice shimmers; in error, the error glyph and the
  * error ink on its veil, with the reason in the tooltip and in the description.
  */
@@ -163,7 +166,12 @@ export function Chip({
     chip = (
       <span className="inline-flex items-center gap-0.5">
         {chip}
-        <IconButton size="xs" label={removeLabel ?? "Remove"} icon={X} onClick={onRemove} />
+        <IconButton
+          size="xs"
+          label={removeLabel ?? "Remove"}
+          icon={ICONS.close}
+          onClick={onRemove}
+        />
       </span>
     );
   }

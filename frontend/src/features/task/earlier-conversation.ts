@@ -28,7 +28,8 @@ export function leaveEarlierConversation(returnTo?: HTMLElement | null): void {
   flushSync(closeEarlierConversation);
   (
     row ??
-    document.querySelector<HTMLElement>('[data-slot="conversation"]') ??
+    // The column of a place without a conversation holds no feed, so it takes no focus back.
+    document.querySelector("[role=feed]")?.closest<HTMLElement>('[data-slot="conversation"]') ??
     document.querySelector<HTMLElement>("h1")
   )?.focus();
 }

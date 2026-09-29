@@ -40,7 +40,18 @@ const BOTH_READY: Record<string, TranscriptState> = {
     error: "",
     entries: [
       makeEntry("user", {
-        user: { text: "Check the login form", pending: false, prompt: false, app: false },
+        user: {
+          text: "Check the login form",
+          pending: false,
+          prompt: false,
+          app: false,
+          sent: "",
+          appKind: "",
+          appPass: 0,
+          appRound: 0,
+          appRounds: 0,
+          appCount: 0,
+        },
       }),
     ],
     pending: [],
@@ -65,6 +76,35 @@ function stepView(step: Partial<Step>) {
 }
 
 describe("TaskView", () => {
+  it("draws the rail of a question in text and its quick replies with the reply situation", async () => {
+    const asked = makeEntry("assistant");
+    if (asked.assistant !== null) {
+      asked.assistant.text = "Which cache?\n\na) Redis\nb) None";
+      asked.assistant.complete = true;
+    }
+    const { container } = renderWithStore(<TaskView taskId="task-1" />, {
+      state: makeState({
+        tasks: [
+          makeTask({
+            stage: "prd",
+            situations: [
+              makeSituation({ kind: "reply", place: { kind: "stage", stage: "prd", step: 0 } }),
+            ],
+          }),
+        ],
+      }),
+      ui: {
+        location: { kind: "task", id: "task-1" },
+        transcripts: {
+          "task-1|prd": { status: "ready", error: "", entries: [asked], pending: [], buffered: [] },
+        },
+      },
+    });
+
+    await waitFor(() => expect(container.querySelector(".markdown-rail-last")).not.toBeNull());
+    expect(screen.getByRole("button", { name: /Redis/ })).toBeInTheDocument();
+  });
+
   it("puts the conversation, the composer and the header together", async () => {
     view();
 
@@ -151,7 +191,7 @@ describe("TaskView", () => {
     expect(screen.getByRole("textbox")).toHaveValue("For the reviewer");
   });
 
-  it("puts the tabs over the conversation they switch, with no review strip under the agent", () => {
+  it("puts the tabs over the conversation they switch, with no changed files under the agent", () => {
     stepView(UNDER_AGENT_REVIEW);
 
     const tablist = screen.getByRole("tablist", { name: "Conversations" });
@@ -163,18 +203,20 @@ describe("TaskView", () => {
     expect(
       tablist.compareDocumentPosition(conversation as Node) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-    expect(screen.queryByRole("progressbar", { name: "Review progress" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("article", { name: /^Changed files/ })).not.toBeInTheDocument();
   });
 
-  it("puts the review of the step under the header, above the conversation", () => {
-    stepView({ status: "in_review", review: makeReview({ staged: 3, total: 5, percent: 60 }) });
+  it("puts the changed files of the step at the end of its conversation", async () => {
+    stepView({ status: "in_review", review: makeReview({ staged: 1, total: 2, percent: 50 }) });
 
-    const strip = screen.getByRole("progressbar", { name: "Review progress" });
+    const feed = screen.getByRole("feed");
+    const card = await within(feed).findByRole("article", { name: "Changed files · 2" });
     expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
     expect(
-      strip.compareDocumentPosition(screen.getByText("Add a login screen")) &
+      screen.getByText("Add a login screen").compareDocumentPosition(card) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+    expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
   });
 
   it("shows no conversation while the step is blocked", () => {
@@ -189,21 +231,59 @@ describe("TaskView", () => {
       currentStep: 1,
     });
 
-    expect(screen.getByRole("alert")).toHaveTextContent("Couldn't fetch origin");
+    expect(
+      screen.getByRole("article", {
+        name: "Check the network and the credentials of origin, then try again.",
+      }),
+    ).toHaveTextContent("fatal: unable to access");
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
     expect(api.getTranscript).not.toHaveBeenCalled();
   });
 
-  it("warns above the composer when the plan stayed invalid", () => {
-    view({
-      stage: "plan",
-      corrections: 3,
-      planProblems: [{ file: "", message: "no step files were written" }],
+  it("tells a plan still invalid in the bar, whose Show problems opens the marker that lists them", async () => {
+    const problems = [{ file: "2-api.md", message: "no repository" }];
+    const invalid = makeEntry("marker");
+    const { user } = renderWithStore(<TaskView taskId="task-1" />, {
+      state: makeState({
+        tasks: [
+          makeTask({
+            stage: "plan",
+            corrections: 3,
+            planProblems: problems,
+            situations: [
+              makeSituation({
+                kind: "plan_invalid",
+                place: { kind: "stage", stage: "plan", step: 0 },
+              }),
+            ],
+          }),
+        ],
+      }),
+      ui: {
+        location: { kind: "task", id: "task-1" },
+        transcripts: {
+          "task-1|plan": {
+            status: "ready",
+            error: "",
+            entries: [
+              invalid.marker === null
+                ? invalid
+                : { ...invalid, marker: { ...invalid.marker, type: "plan_invalid", problems } },
+            ],
+            pending: [],
+            buffered: [],
+          },
+        },
+      },
     });
+    const marker = screen.getByRole("button", { name: /The plan is still invalid/ });
+    expect(marker).toHaveAttribute("aria-expanded", "false");
 
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      "The plan is still invalid after three automatic corrections.",
-    );
+    await user.click(screen.getByRole("button", { name: "Show problems" }));
+
+    expect(marker).toHaveAttribute("aria-expanded", "true");
+    expect(marker).toHaveFocus();
+    expect(marker.closest("article")).toHaveTextContent("2-api.md · no repository");
   });
 
   it("fetches the conversation only the first time the task is opened", async () => {
@@ -276,17 +356,31 @@ describe("TaskView", () => {
       }),
     });
 
-    expect(screen.getByLabelText("Title")).toHaveValue("Wire the api");
-    await waitFor(() => {
-      expect(api.getTranscript).toHaveBeenCalledWith("task-1", "pr");
-    });
+    expect(await screen.findByLabelText("Title")).toHaveValue("Wire the api");
+    expect(api.getTranscript).toHaveBeenCalledWith("task-1", "pr");
   });
 
   it("asks for no conversation while the pull request has none", () => {
     view({ stage: "pr", pr: makePullRequest({ status: "preparing", sessionStage: "" }) });
 
-    expect(screen.getByText("Checking GitHub…")).toBeInTheDocument();
+    expect(screen.getByText("Preparing the pull request…")).toBeInTheDocument();
     expect(api.getTranscript).not.toHaveBeenCalled();
+  });
+
+  it("reads the conversation of the review once the pull request is merged", async () => {
+    view({
+      stage: "pr",
+      pr: makePullRequest({ status: "merged", prState: "merged", prNumber: 12, sessionStage: "" }),
+      conversations: [
+        makeTaskConversation({ stage: "pr" }),
+        makeTaskConversation({ stage: "pr_review" }),
+      ],
+    });
+
+    await waitFor(() => {
+      expect(api.getTranscript).toHaveBeenCalledWith("task-1", "pr_review");
+    });
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
   });
 
   it("lets nothing but the conversation scroll in its column", () => {
@@ -338,7 +432,18 @@ describe("TaskView, earlier conversation", () => {
 
   const EARLIER_ENTRIES = [
     makeEntry("user", {
-      user: { text: "Implement step 1.", pending: false, prompt: false, app: false },
+      user: {
+        text: "Implement step 1.",
+        pending: false,
+        prompt: false,
+        app: false,
+        sent: "",
+        appKind: "",
+        appPass: 0,
+        appRound: 0,
+        appRounds: 0,
+        appCount: 0,
+      },
     }),
     makeEntry("question"),
     makeEntry("permission"),
@@ -365,11 +470,10 @@ describe("TaskView, earlier conversation", () => {
 
   const EARLIER_REGION = "Step 1 · Implementer, an earlier conversation";
 
-  it("has the tabs, the review, the meter and the composer before an earlier conversation opens", () => {
+  it("has the tabs, the meter and the composer before an earlier conversation opens", () => {
     loop();
 
     expect(screen.getByRole("tablist", { name: "Conversations" })).toBeInTheDocument();
-    expect(screen.getByRole("progressbar", { name: "Review progress" })).toBeInTheDocument();
     expect(screen.getByRole("meter", { name: "Context" })).toBeInTheDocument();
     expect(screen.getByRole("textbox")).toBeInTheDocument();
   });
@@ -399,11 +503,10 @@ describe("TaskView, earlier conversation", () => {
     expect(screen.queryByRole("button", { name: /Retry|Answer|Allow|Deny|Remove/ })).toBeNull();
   });
 
-  it("hides the tabs, the review of the step and the meter, and keeps the stepper and the panels", () => {
+  it("hides the tabs and the meter, and keeps the stepper and the panels", () => {
     loop({ ui: { earlierConversation: { taskId: "task-1", stage: "step:1", from: null } } });
 
     expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
-    expect(screen.queryByRole("progressbar", { name: "Review progress" })).toBeNull();
     expect(screen.queryByRole("meter", { name: "Context" })).not.toBeInTheDocument();
     expect(screen.getByRole("list", { name: /^Progress/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Details" })).toBeInTheDocument();
@@ -509,7 +612,8 @@ describe("TaskView, earlier conversation", () => {
 
     await user.click(screen.getByRole("button", { name: "Back to the pull request" }));
 
-    expect(document.querySelector('[data-slot="conversation"]')).toBeNull();
+    expect(screen.getByText("Preparing the pull request…")).toBeInTheDocument();
+    expect(screen.queryByRole("feed")).toBeNull();
     expect(screen.getByRole("heading", { level: 1 })).toHaveFocus();
   });
 
@@ -551,5 +655,147 @@ describe("TaskView, earlier conversation", () => {
 
     expect(screen.queryByRole("region", { name: EARLIER_REGION })).not.toBeInTheDocument();
     expect(screen.getByRole("tablist", { name: "Conversations" })).toBeInTheDocument();
+  });
+});
+
+describe("TaskView, the focus on arriving at a situation", () => {
+  function arrive(task: TaskSummary) {
+    return renderWithStore(<TaskView taskId={task.id} />, {
+      state: makeState({ tasks: [task] }),
+      ui: { location: { kind: "task", id: task.id }, pendingFocus: "request" },
+    });
+  }
+
+  it("goes to the primary of the bar once the conversation is read", async () => {
+    arrive(
+      makeTask({
+        stage: "implementation",
+        currentStep: 1,
+        steps: [
+          makeStep({
+            status: "ready_to_approve",
+            review: makeReview({ staged: 2, total: 2, percent: 100 }),
+          }),
+        ],
+        situations: [
+          makeSituation({
+            kind: "step_review",
+            form: "approve",
+            place: { kind: "step", stage: "", step: 1 },
+          }),
+        ],
+      }),
+    );
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "Approve" })).toHaveFocus());
+    expect(useAppStore.getState().pendingFocus).toBeNull();
+  });
+
+  it("goes to the composer when the answer goes through it", async () => {
+    arrive(
+      makeTask({
+        stage: "prd",
+        situations: [
+          makeSituation({ kind: "reply", place: { kind: "stage", stage: "prd", step: 0 } }),
+        ],
+      }),
+    );
+
+    await waitFor(() => expect(document.getElementById("composer-input")).toHaveFocus());
+  });
+
+  it("goes to Try again of a blocked step, which has no conversation", async () => {
+    arrive(
+      makeTask({
+        stage: "implementation",
+        currentStep: 1,
+        steps: [
+          makeStep({ status: "blocked", block: { reason: "fetch_failed", detail: "", files: 0 } }),
+        ],
+        situations: [
+          makeSituation({
+            kind: "step_blocked",
+            group: "error",
+            place: { kind: "step", stage: "", step: 1 },
+          }),
+        ],
+      }),
+    );
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "Try again" })).toHaveFocus());
+  });
+
+  it("goes to the first option of the pending question card", async () => {
+    renderWithStore(<TaskView taskId="task-1" />, {
+      state: makeState({
+        tasks: [
+          makeTask({
+            stage: "prd",
+            situations: [
+              makeSituation({ kind: "question", place: { kind: "stage", stage: "prd", step: 0 } }),
+            ],
+          }),
+        ],
+      }),
+      ui: {
+        location: { kind: "task", id: "task-1" },
+        pendingFocus: "request",
+        transcripts: {
+          "task-1|prd": {
+            status: "ready",
+            error: "",
+            entries: [makeEntry("question")],
+            pending: [],
+            buffered: [],
+          },
+        },
+      },
+    });
+
+    await waitFor(() => expect(screen.getByRole("radio", { name: /SQLite/ })).toHaveFocus());
+  });
+
+  it("lands once the conversation couldn't be read, instead of waiting for it", async () => {
+    renderWithStore(<TaskView taskId="task-1" />, {
+      state: makeState({
+        tasks: [
+          makeTask({
+            stage: "prd",
+            situations: [
+              makeSituation({ kind: "question", place: { kind: "stage", stage: "prd", step: 0 } }),
+            ],
+          }),
+        ],
+      }),
+      ui: {
+        location: { kind: "task", id: "task-1" },
+        pendingFocus: "request",
+        transcripts: {
+          "task-1|prd": {
+            status: "error",
+            error: "the transcript is unreadable",
+            entries: [],
+            pending: [],
+            buffered: [],
+          },
+        },
+      },
+    });
+
+    await waitFor(() => expect(screen.getByRole("heading", { level: 1 })).toHaveFocus());
+    expect(useAppStore.getState().pendingFocus).toBeNull();
+  });
+
+  it("falls back to the title when what the situation asks isn't on screen", async () => {
+    arrive(
+      makeTask({
+        stage: "prd",
+        situations: [
+          makeSituation({ kind: "question", place: { kind: "stage", stage: "prd", step: 0 } }),
+        ],
+      }),
+    );
+
+    await waitFor(() => expect(screen.getByRole("heading", { level: 1 })).toHaveFocus());
   });
 });

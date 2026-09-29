@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { PanelLayout } from "@/components/system/AuxPanel";
-import { Composer } from "@/features/chat/Composer";
 import { Conversation } from "@/features/chat/Conversation";
+import { COLUMN_CLASS } from "@/features/chat/ConversationColumn";
 import { IDLE_SESSION } from "@/features/chat/session";
 import { AgentTabs } from "@/features/task/AgentTabs";
 import { ArtifactsPanel } from "@/features/task/ArtifactsPanel";
@@ -10,17 +10,22 @@ import { CardPanel } from "@/features/task/CardPanel";
 import { DetailsPanel } from "@/features/task/DetailsPanel";
 import { earlierPlace } from "@/features/task/details";
 import { EarlierConversationFoot } from "@/features/task/EarlierConversationFoot";
-import { PlanProblemsNotice } from "@/features/task/PlanProblemsNotice";
 import { PRPane } from "@/features/task/PRPane";
-import { ReviewStrip } from "@/features/task/ReviewStrip";
+import { hasReviewConversation, prPlaceOf } from "@/features/task/place";
+import { screenSituationKindOf, screenStageOf } from "@/features/task/request";
+import { useFocusRescue } from "@/features/task/request-focus";
 import { StepPane } from "@/features/task/StepPane";
-import { currentStepOf, hasStepSession, stepStage } from "@/features/task/step-status";
+import { currentStepOf, hasStepSession } from "@/features/task/step-status";
+import { TaskComposer } from "@/features/task/TaskComposer";
 import { TaskHeader } from "@/features/task/TaskHeader";
 import { TaskRequest } from "@/features/task/TaskRequest";
+import { useTaskRequest } from "@/features/task/useTaskRequest";
+import { focusRequest, focusTitle } from "@/lib/focus";
 import { prOf } from "@/lib/pull-requests";
 import { asTaskStage, type Step, sessionKey, type TaskSummary } from "@/lib/wails";
 import { loadTranscript } from "@/store/actions";
 import {
+  type StepTab,
   useAppStore,
   useEarlierConversation,
   useOpenStepTab,
@@ -28,25 +33,16 @@ import {
   useTask,
 } from "@/store/app-store";
 
-/** COLUMN is the conversation column, centered on a whole pixel. */
-const COLUMN =
-  "w-full max-w-(--measure-conversation) ml-[max(0px,round(down,calc((100%_-_var(--measure-conversation))/2),1px))]";
-
-/**
- * StepTop is what sits over the conversation of the step: the agent tabs and the review of the
- * step, in the conversation column.
- */
+/** StepTop is what sits over the conversation of the step: the agent tabs, in the conversation column. */
 function StepTop({ task, step }: { task: TaskSummary; step: Step }) {
-  const review = step.review !== null && hasStepSession(step) ? step.review : null;
   // Only whether there are tabs matters here: AgentTabs says which one is chosen.
-  if (agentTabsOf(task, step, "implementer", 0) === null && review === null) {
+  if (agentTabsOf(task, step, "implementer", 0) === null) {
     return null;
   }
   return (
     <div className="shrink-0 px-(--space-6) pt-(--space-1)">
-      <div className={COLUMN}>
+      <div className={COLUMN_CLASS}>
         <AgentTabs task={task} step={step} />
-        {review !== null && <ReviewStrip taskId={task.id} subject="step" review={review} />}
       </div>
     </div>
   );
@@ -78,6 +74,30 @@ function EarlierConversation({ task, stage }: { task: TaskSummary; stage: string
   );
 }
 
+/**
+ * ArrivalFocus takes the focus, on arriving at a situation of the task, to what it asks once the
+ * conversation and the bar are on screen: the pending card, the primary of the bar, the composer,
+ * or the bar; the title when none is there.
+ */
+function ArrivalFocus({ task, tab, ready }: { task: TaskSummary; tab: StepTab; ready: boolean }) {
+  const pendingFocus = useAppStore((state) => state.pendingFocus);
+  const clearPendingFocus = useAppStore((state) => state.clearPendingFocus);
+  const { request } = useTaskRequest(task, tab);
+  const target = request?.focus ?? "composer";
+
+  useEffect(() => {
+    if (pendingFocus !== "request" || !ready) {
+      return;
+    }
+    if (!focusRequest(target)) {
+      focusTitle();
+    }
+    clearPendingFocus();
+  }, [pendingFocus, ready, target, clearPendingFocus]);
+
+  return null;
+}
+
 export interface TaskViewProps {
   taskId: string;
 }
@@ -102,23 +122,23 @@ export function TaskView({ taskId }: TaskViewProps) {
   const pr = task === null ? null : prOf(task);
   // The conversation on screen is the one of the stage the task is in: the tab
   // of the step that runs in the implementation stage, the pull request in the
-  // PR one. Both open a session of their own only once they get that far.
-  const stage = (() => {
-    if (implementing) {
-      if (step === null) {
-        return "";
-      }
-      return stepTab === "reviewer" && step.reviewer !== null
-        ? step.reviewer.sessionStage
-        : stepStage(step.number);
-    }
-    if (opening) {
-      return pr?.sessionStage ?? "";
-    }
-    return task?.stage ?? "";
-  })();
+  // PR one. Both open a session of their own only once they get that far. Past
+  // its review, the pull request reads the conversation of the review, closed.
+  const closedReview =
+    task !== null &&
+    opening &&
+    pr !== null &&
+    prPlaceOf(task, pr, hasReviewConversation(task)).kind === "closedReview";
+  const stage = task === null ? "" : closedReview ? "pr_review" : screenStageOf(task, stepTab);
   const hasConversation =
     task !== null && (implementing ? hasStepSession(step) : opening ? stage !== "" : true);
+  // A conversation that couldn't be read is settled too: the focus lands without it.
+  const conversationSettled = useAppStore((state) => {
+    const status = state.transcripts[sessionKey(taskId, stage)]?.status;
+    return status === "ready" || status === "error";
+  });
+  const rescue = useRef<HTMLElement>(null);
+  useFocusRescue(rescue);
 
   // The conversation is fetched once and then kept: leaving the task and coming
   // back costs nothing, and the events keep being applied while it is away. It
@@ -133,15 +153,16 @@ export function TaskView({ taskId }: TaskViewProps) {
   // A new task is on screen before the snapshot that brings it: the header shows it loading.
   if (task === null) {
     return (
-      <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
+      <section ref={rescue} className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
         <TaskHeader task={null} />
       </section>
     );
   }
 
   return (
-    <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
+    <section ref={rescue} className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
       <TaskHeader task={task} />
+      <ArrivalFocus task={task} tab={stepTab} ready={!hasConversation || conversationSettled} />
       <PanelLayout
         panel={
           panel === "details" ? (
@@ -169,10 +190,10 @@ export function TaskView({ taskId }: TaskViewProps) {
               taskId={task.id}
               stage={task.stage}
               session={task}
+              replyWaiting={screenSituationKindOf(task, stepTab) === "reply"}
             />
-            <PlanProblemsNotice task={task} />
             <TaskRequest task={task} tab={stepTab} />
-            <Composer taskId={task.id} stage={task.stage} session={task} />
+            <TaskComposer task={task} tab={stepTab} stage={task.stage} session={task} />
           </>
         )}
       </PanelLayout>

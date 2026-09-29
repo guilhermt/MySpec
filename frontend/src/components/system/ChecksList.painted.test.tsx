@@ -90,4 +90,29 @@ describe.each(THEMES)("ChecksList in the %s theme", (theme) => {
     expect(paintOf(link, { color: "" })).toEqual({ color: token("--brand-ink") });
     expect(getComputedStyle(link).textDecorationLine).toBe("underline");
   });
+  it("sinks the live variant into the first surface, the header in the second ink and the age in the fourth", () => {
+    setTheme(theme);
+    render(
+      <ChecksList
+        summary=""
+        rows={ROWS}
+        onOpen={() => {}}
+        live={{
+          header: "Waiting for checks · 4 of 6 passed",
+          age: "checked just now",
+          ageTooltip: "Checked at 14:02",
+          reading: false,
+        }}
+      />,
+    );
+    const header = screen.getByText("Waiting for checks · 4 of 6 passed");
+    expect(paintOf(header, { color: "" })).toEqual({ color: token("--ink-2") });
+    expect(paintOf(screen.getByText("checked just now"), { color: "" })).toEqual({
+      color: token("--ink-4"),
+    });
+    const block = header.parentElement?.parentElement as HTMLElement;
+    expect(paintOf(block, { background: "" })).toEqual({ background: token("--surface-0") });
+    const glyph = document.querySelector('[data-state="github"]') as HTMLElement;
+    expect(getComputedStyle(glyph).borderStyle).toBe("dashed");
+  });
 });

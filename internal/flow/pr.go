@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/guilhermt/myspec/internal/gh"
+	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/repository"
@@ -303,12 +304,12 @@ func (s *Service) spawnPRWork(id string, work func(context.Context, string)) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	l.pr = &prWork{running: true, cancel: cancel}
-	s.mu.Unlock()
-
-	go func() {
+	// Counted before the lock is released, so that Close never misses it.
+	s.spawned.Go(func() {
 		defer s.finishPRWork(id)
 		work(ctx, id)
-	}()
+	})
+	s.mu.Unlock()
 }
 
 // finishPRWork forgets the work of the PR stage and releases its context. A
@@ -463,7 +464,9 @@ func (s *Service) viewPR(ctx context.Context, wt worktree.Worktree) (gh.PR, erro
 
 // recordPR stores the pull request a reading found and hands the task to its
 // review. With detailsOnly, the task is already past the review and waiting for
-// the merge: only what GitHub says about the pull request changes.
+// the merge: only what GitHub says about the pull request changes. A task whose
+// review is under way keeps its status: the pull request was found, and marked
+// in the conversation, when the review began.
 func (s *Service) recordPR(id string, pr gh.PR, detailsOnly bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), evaluateTimeout)
 	defer cancel()
@@ -482,12 +485,24 @@ func (s *Service) recordPR(id string, pr gh.PR, detailsOnly bool) {
 		s.Check(id)
 		return
 	}
+	if inReview(run.Status) {
+		s.log.Info("pull request read", "task", id, "state", string(details.State))
+		s.Check(id)
+		return
+	}
 	if _, err := s.tasks.SetPRRun(ctx, id, task.PRReviewing, nil); err != nil {
 		s.log.Error("record reviewing pull request failed", "task", id, "error", err)
 		return
 	}
+	s.sessions.MarkPROpened(ctx, session.Key{TaskID: id, Stage: session.PRStage}, pr.Number, pr.Base)
 	s.log.Info("pull request found", "task", id, "number", pr.Number)
 	s.Check(id)
+}
+
+// inReview reports whether the review of a pull request already began and is
+// not over.
+func inReview(status task.PRStatus) bool {
+	return status == task.PRReviewing || status == task.PRWaitingChecks || status == task.PRCommitting
 }
 
 // prDetails is what the app records of a reading of a pull request.
@@ -500,6 +515,8 @@ func prDetails(pr gh.PR) task.PRDetails {
 		CheckedAt: time.Now().UTC(),
 		Checks:    pr.Checks.Checks,
 		Mergeable: pr.Checks.Mergeable,
+		MergedBy:  pr.MergedBy,
+		MergedAt:  pr.MergedAt,
 	}
 }
 
@@ -739,8 +756,26 @@ func (s *Service) evaluatePRCommit(ctx context.Context, t task.Task, run task.PR
 		// it did, it did not commit, and the task goes back to the user.
 		s.setPRNoCommit(t.ID, true)
 		s.log.Warn("commit did not happen", "task", t.ID)
+		return back, true
 	}
+	s.markPRCommit(ctx, t.ID, key, snap.Head, run.PR.Number)
 	return back, true
+}
+
+// markPRCommit records in the conversation of the review the commit that went
+// to pull request number.
+func (s *Service) markPRCommit(ctx context.Context, id string, key session.Key, head string, number int) {
+	commit := git.Commit{SHA: head}
+	if wt, ok := s.worktrees.Get(id); ok {
+		read, err := s.worktrees.Commit(ctx, wt, head)
+		if err != nil {
+			// The commit is a fact of the branch; its subject is a nicety.
+			s.log.Warn("read commit failed", "task", id, "error", err)
+		} else {
+			commit = read
+		}
+	}
+	s.sessions.MarkCommitted(ctx, key, task.ShortSHA(commit.SHA), commit.Subject, true, number)
 }
 
 // startReview opens the conversation that reviews the pull request of a task
@@ -765,6 +800,7 @@ func (s *Service) startReview(
 		s.log.Error("start pr review session failed", "task", t.ID, "error", err)
 		return
 	}
+	s.markChecks(ctx, session.Key{TaskID: t.ID, Stage: session.PRReviewStage}, pass, checks)
 	s.recordBaseline(ctx, t.ID, checks)
 	s.log.Info("pr review started", "task", t.ID, "pass", pass)
 }
@@ -780,7 +816,7 @@ func (s *Service) recordReport(
 		return task.PRRun{}, false
 	}
 	s.setPassAsked(t.ID, "")
-	s.sessions.MarkPRReview(ctx, key, report.Pass)
+	s.sessions.MarkPRReview(ctx, key, report.Pass, report.Clean)
 	s.log.Info("pr review written", "task", t.ID, "pass", report.Pass)
 	return updated, true
 }
@@ -822,13 +858,31 @@ func (s *Service) askPass(
 	// One commit asks for one pass, however many evaluations it takes for the
 	// report of that pass to land.
 	s.setPassAsked(t.ID, head)
-	if err := s.sessions.SendFromApp(ctx, key, message); err != nil {
+	s.markChecks(ctx, key, pass, checks)
+	app := session.AppMessage{Text: message, Kind: session.AppPRPass, Pass: pass}
+	if err := s.sessions.SendFromApp(ctx, key, app); err != nil {
 		s.setPassAsked(t.ID, "")
 		s.log.Error("send pr review prompt failed", "task", t.ID, "error", err)
 		return
 	}
 	s.recordBaseline(ctx, t.ID, checks)
 	s.log.Info("pr review pass asked", "task", t.ID, "pass", pass)
+}
+
+// markChecks records in the conversation of the review the checks a pass is
+// asked with; a pass asked without a reading records nothing.
+func (s *Service) markChecks(ctx context.Context, key session.Key, pass int, checks *gh.PRChecks) {
+	if checks == nil {
+		return
+	}
+	passed := 0
+	for _, check := range checks.Checks {
+		if !check.Failed() && !check.Pending {
+			passed++
+		}
+	}
+	trouble := checks.Trouble()
+	s.sessions.MarkChecksRead(ctx, key, pass, passed, len(checks.Checks), trouble.FailedChecks, trouble.Conflict)
 }
 
 // newReport is the report of a pass the app has not recorded yet.
@@ -1191,7 +1245,8 @@ func (s *Service) OpenPR(ctx context.Context, id, title, body string) error {
 		return err
 	}
 	s.setOpenFailed(id, false)
-	if err := s.sessions.SendFromApp(ctx, key, openMessage(path, base)); err != nil {
+	s.sessions.MarkDraftApproved(ctx, key, title)
+	if err := s.sessions.SendFromApp(ctx, key, session.AppMessage{Text: openMessage(path, base), Kind: session.AppOpen}); err != nil {
 		// The button stays where the user left it: the draft is theirs again.
 		if _, setErr := s.tasks.SetPRRun(ctx, id, task.PRDrafting, nil); setErr != nil {
 			s.log.Error("record drafting pull request failed", "task", id, "error", setErr)
@@ -1254,7 +1309,9 @@ func (s *Service) ApprovePR(ctx context.Context, id string) error {
 		return err
 	}
 	s.setPRNoCommit(id, false)
-	if err := s.sessions.SendFromApp(ctx, key, message); err != nil {
+	s.sessions.MarkChangesApproved(ctx, key, snap.Total)
+	app := session.AppMessage{Text: message, Kind: session.AppCommitPush}
+	if err := s.sessions.SendFromApp(ctx, key, app); err != nil {
 		if _, setErr := s.tasks.SetPRRun(ctx, id, task.PRReviewing, nil); setErr != nil {
 			s.log.Error("record reviewing pull request failed", "task", id, "error", setErr)
 		}

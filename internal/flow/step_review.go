@@ -192,7 +192,9 @@ func (s *Service) askStepPass(
 		err = s.sessions.Start(ctx, stepReviewInfo(t, step, wt, pass, reply, repo), false)
 	} else {
 		message := passMessage(reply, t.StepReportPath(step.Number, pass))
-		err = s.sessions.SendFromApp(ctx, stepReviewKey(t.ID, step.Number), message)
+		err = s.sessions.SendFromApp(ctx, stepReviewKey(t.ID, step.Number), session.AppMessage{
+			Text: message, Kind: session.AppPass, Pass: pass,
+		})
 	}
 	if err != nil {
 		if _, setErr := s.tasks.SetStepPass(ctx, t.ID, step.Number, run.ReviewPass); setErr != nil {
@@ -237,7 +239,8 @@ func (s *Service) commitReviewedStep(ctx context.Context, t task.Task, step task
 		return
 	}
 	s.setNoCommit(t.ID, false)
-	if err := s.sessions.SendFromApp(ctx, stepKey(t.ID, step.Number), message); err != nil {
+	app := session.AppMessage{Text: message, Kind: session.AppCommitAll}
+	if err := s.sessions.SendFromApp(ctx, stepKey(t.ID, step.Number), app); err != nil {
 		if _, setErr := s.tasks.SetStepRun(ctx, t.ID, step.Number, task.StepStarted, nil); setErr != nil {
 			s.log.Error("record started step failed", "task", t.ID, "step", step.Number, "error", setErr)
 		}
@@ -255,7 +258,11 @@ func (s *Service) deliverStepReport(ctx context.Context, t task.Task, step task.
 		s.log.Error("read step review report failed", "task", t.ID, "step", step.Number, "error", err)
 		return
 	}
-	message := reportMessage(t.StepReportPath(step.Number, report.Pass), content)
+	message := session.AppMessage{
+		Text: reportMessage(t.StepReportPath(step.Number, report.Pass), content),
+		Kind: session.AppReport, Pass: report.Pass,
+		Round: report.Pass, Rounds: MaxReviewRounds, Count: report.Findings,
+	}
 	if err := s.sessions.SendFromApp(ctx, stepKey(t.ID, step.Number), message); err != nil {
 		s.log.Error("send step review report failed", "task", t.ID, "step", step.Number, "error", err)
 		return
@@ -270,7 +277,7 @@ func (s *Service) recordStepReport(ctx context.Context, id string, number int, r
 		s.log.Error("record step review report failed", "task", id, "step", number, "error", err)
 		return
 	}
-	s.sessions.MarkStepReview(ctx, stepReviewKey(id, number), report.Pass, report.Clean)
+	s.sessions.MarkStepReview(ctx, stepReviewKey(id, number), report.Pass, report.Clean, report.Findings)
 	s.log.Info("step review written", "task", id, "step", number, "pass", report.Pass, "clean", report.Clean)
 }
 

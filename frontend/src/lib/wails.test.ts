@@ -2,6 +2,7 @@ import { Browser, Call, Events } from "@wailsio/runtime";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   asActionStatus,
+  asAppKind,
   asBlockReason,
   asBoardFailureReason,
   asCardAction,
@@ -18,6 +19,7 @@ import {
   asErrorKind,
   asFindingDecision,
   asFindingPlacement,
+  asInterruptedBy,
   asIssueState,
   asMarkerType,
   asMigrationCaseKind,
@@ -33,6 +35,7 @@ import {
   asPullReviewMode,
   asPullReviewStatus,
   asRepositoryLinkKind,
+  asRetryReason,
   asReviewFallback,
   asReviewFileKind,
   asReviewMode,
@@ -113,6 +116,35 @@ describe("narrowing", () => {
     expect(asMarkerType("step_review_written")).toBe("step_review_written");
     expect(asMarkerType("stage_started")).toBe("stage_started");
     expect(asMarkerType("step_started")).toBe("step_started");
+    expect(asMarkerType("retried")).toBe("retried");
+    expect(asMarkerType("committed")).toBe("committed");
+    expect(asMarkerType("pr_opened")).toBe("pr_opened");
+    expect(asMarkerType("checks_read")).toBe("checks_read");
+    expect(asMarkerType("draft_approved")).toBe("draft_approved");
+    expect(asMarkerType("changes_approved")).toBe("changes_approved");
+    expect(asMarkerType("paused")).toBe("paused");
+    expect(asMarkerType("plan_invalid")).toBe("plan_invalid");
+    for (const kind of [
+      "report",
+      "pass",
+      "commit",
+      "commit_all",
+      "commit_push",
+      "correction",
+      "open",
+      "pr_pass",
+      "apply",
+    ] as const) {
+      expect(asAppKind(kind)).toBe(kind);
+    }
+    expect(asInterruptedBy("user")).toBe("user");
+    expect(asInterruptedBy("crash")).toBe("crash");
+    expect(asRetryReason("")).toBe("");
+    expect(asRetryReason("overloaded")).toBe("overloaded");
+    expect(asRetryReason("rate_limit")).toBe("rate_limit");
+    expect(asRetryReason("server")).toBe("server");
+    expect(asRetryReason("connection")).toBe("connection");
+    expect(asRetryReason("other")).toBe("other");
     expect(asStepStatus("preparing")).toBe("preparing");
     expect(asStepStatus("blocked")).toBe("blocked");
     expect(asStepStatus("implementing")).toBe("implementing");
@@ -365,6 +397,9 @@ describe("narrowing", () => {
     expect(asDraftDecision("deferred")).toBe("");
     expect(asDraftOutcome("closed")).toBe("");
     expect(asDependencyDrop("cycle")).toBe("");
+    // A message of the user, or of the app in a transcript that has no kind.
+    expect(asAppKind("")).toBe("");
+    expect(asAppKind("merge")).toBe("");
     // "" is what the app carries while the reading of the catalog runs.
     expect(asCatalogFailure("")).toBe("");
     expect(asCatalogFailure("timeout")).toBe("");

@@ -105,6 +105,7 @@ func TestPRRunKeepsTheBaseAndWhatTheClosingDid(t *testing.T) {
 	run.PR = task.PRDetails{
 		Number: 12, URL: "https://github.com/acme/api/pull/12",
 		State: task.PRStateMerged, Base: "dev", CheckedAt: fixedTime.Add(time.Minute),
+		MergedBy: "guilhermt", MergedAt: fixedTime.Add(30 * time.Second),
 	}
 	run.Close = &task.CloseResult{
 		Worktree: task.CloseStep{Outcome: task.OutcomeDone},

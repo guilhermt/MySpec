@@ -298,6 +298,36 @@
     }
   }
 
+  /* The time of an entry of the conversation shows with the hover and the focus of the entry. */
+  .entry-time {
+    opacity: 0;
+    transition: opacity var(--duration-fast) var(--ease-standard);
+  }
+  article:hover .entry-time,
+  article:focus-within .entry-time {
+    opacity: 1;
+  }
+
+  /* The rail of a question in text, beside the last block of the last speech. */
+  .markdown-rail-last > :last-child {
+    border-left: var(--border-2) solid var(--state-wait-ring);
+    padding-left: var(--space-3);
+  }
+
+  /* The conversation fades out under what is above it and over what is below it. */
+  .conversation-fade {
+    mask-image: linear-gradient(
+      to bottom,
+      transparent,
+      black var(--fade),
+      black calc(100% - var(--fade)),
+      transparent
+    );
+  }
+  .conversation-fade-bottom {
+    mask-image: linear-gradient(to bottom, black calc(100% - var(--fade)), transparent);
+  }
+
   /* The main area is the container the header, the panels and the toasts
      measure themselves against. */
   .main-area {
@@ -475,6 +505,13 @@
   background: var(--surface-0);
   box-shadow: inset 0 0 0 var(--border) var(--line-1);
   overflow: hidden;
+}
+/* A cut block draws its frame around the code and its foot: the code block inside it has none. */
+[data-code-cut] .markdown [data-streamdown="code-block"] {
+  margin: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 .markdown [data-streamdown="code-block-header"] {
   padding-inline: var(--space-3);

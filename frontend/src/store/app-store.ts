@@ -41,7 +41,9 @@ import type {
   Board,
   BoardCard,
   DiscussionSummary,
+  Entry,
   Leftover,
+  MarkerType,
   Migration,
   ModelCatalog,
   Place,
@@ -62,6 +64,7 @@ import {
   applyEvent,
   emptyTranscript,
   fromTranscript,
+  settledQuestions,
   type TranscriptState,
 } from "@/store/transcript";
 
@@ -159,12 +162,21 @@ export interface AppStore {
   /** panel is the auxiliary panel open in the place on screen, null when none is; every navigation closes it. */
   panel: PanelId | null;
   /**
+   * panelDocument is the document the panel opens at, in place of its list: the one Open in
+   * Artifacts or Open in Details of a marker of the conversation asked for. The panel takes it and
+   * clears it.
+   */
+  panelDocument: string | null;
+  /**
    * earlierConversation is a conversation of the task that is not the one of its place, read from
    * Details; every navigation clears it, and it is never stacked nor stored.
    */
   earlierConversation: EarlierConversation | null;
-  /** pendingFocus is where the focus goes once the new place is on screen: its title, or the back or forward button. */
-  pendingFocus: "title" | "back" | "forward" | null;
+  /**
+   * pendingFocus is where the focus goes once the new place is on screen: its title, the back or
+   * forward button, or what the situation of a task asks (request), which the task screen settles.
+   */
+  pendingFocus: "title" | "back" | "forward" | "request" | null;
   /** sidebarRail is the sidebar collapsed into its strip; kept across runs. */
   sidebarRail: boolean;
   /** toasts are the notices of items that left without being open, the oldest first, three at most. */
@@ -176,10 +188,26 @@ export interface AppStore {
   /** transcripts and drafts are keyed by sessionKey: a task has one per stage. */
   transcripts: Record<string, TranscriptState>;
   drafts: Record<string, string>;
+  /** markerRequest is a marker of a task the conversation opens and focuses: the last one of its type. */
+  markerRequest: { taskId: string; type: MarkerType } | null;
   /** openStepTab is the conversation tab of a step, by stepTabKey. */
   openStepTab: Record<string, StepTab>;
   /** prDrafts is the pull request the user is editing, by task id. */
   prDrafts: Record<string, PrDraft>;
+  /**
+   * questionChoices are the choices of a pending question card, by its requestId, shared by the card
+   * and the composer that answers it: by the index of each question, the labels picked and the text
+   * of Other… (QuestionChoices of features/chat/composer.ts). The choices of an answer on its way
+   * stay, so the card keeps showing them; a question's entry goes away when the conversation marks
+   * the question answered or cancelled.
+   */
+  questionChoices: Record<string, Record<number, { labels: string[]; other: string | null }>>;
+  /**
+   * questionSending are the pending questions whose answer is on its way, by requestId, sent from
+   * the card or from the composer: the card shows it sending and neither sends it again. A question
+   * leaves it when the send fails or when the conversation marks it answered or cancelled.
+   */
+  questionSending: Record<string, true>;
   /** newTaskOpen is the creation dialog being open. */
   newTaskOpen: boolean;
   /** newTaskCard is the card the creation dialog opens for; null for a task without one. */
@@ -229,8 +257,14 @@ export interface AppStore {
   /** goForward opens the nearest place ahead of the current one that still exists; with none, nothing happens. */
   goForward: (options?: { focus?: "title" | "forward" }) => void;
   clearPendingFocus: () => void;
+  /** requestMarkerOpen asks the conversation of a task to open and focus its last marker of a type. */
+  requestMarkerOpen: (taskId: string, type: MarkerType) => void;
+  clearMarkerRequest: () => void;
   /** openPanel opens an auxiliary panel of the place on screen, closing the one open; null closes it. */
   openPanel: (panel: PanelId | null) => void;
+  /** openPanelAt opens an auxiliary panel of the place on screen already at one of its documents. */
+  openPanelAt: (panel: PanelId, file: string) => void;
+  clearPanelDocument: () => void;
   /** openEarlierConversation puts an earlier conversation of a task in place of the one of its place. */
   openEarlierConversation: (taskId: string, stage: string, fromPanel: boolean) => void;
   /** closeEarlierConversation brings back the conversation of the place. */
@@ -272,6 +306,13 @@ export interface AppStore {
   setDraft: (taskId: string, stage: string, text: string) => void;
   selectStepTab: (taskId: string, step: number, tab: StepTab) => void;
   setPrDraft: (taskId: string, draft: PrDraft) => void;
+  /** setQuestionChoices keeps what the card of a pending question has chosen. */
+  setQuestionChoices: (
+    requestId: string,
+    choices: Record<number, { labels: string[]; other: string | null }>,
+  ) => void;
+  /** setQuestionSending marks a question's answer as on its way, or no longer. */
+  setQuestionSending: (requestId: string, sending: boolean) => void;
   clearPrDraft: (taskId: string) => void;
 
   openHistory: () => void;
@@ -377,6 +418,30 @@ function withoutTaskTranscripts(
   return Object.fromEntries(Object.entries(transcripts).filter(([key]) => !key.startsWith(prefix)));
 }
 
+// withoutKeys drops keys from a record; with none of them in it, the record stays the same object.
+function withoutKeys<T>(record: Record<string, T>, keys: readonly string[]): Record<string, T> {
+  if (!keys.some((key) => key in record)) {
+    return record;
+  }
+  return Object.fromEntries(Object.entries(record).filter(([key]) => !keys.includes(key)));
+}
+
+// A question the conversation marks answered or cancelled takes its choices and its sending mark
+// with it: the card has turned into its answer.
+function forgetSettled(
+  state: Pick<AppStore, "questionChoices" | "questionSending">,
+  entries: readonly Entry[],
+): Partial<Pick<AppStore, "questionChoices" | "questionSending">> {
+  const settled = settledQuestions(entries);
+  if (settled.length === 0) {
+    return {};
+  }
+  return {
+    questionChoices: withoutKeys(state.questionChoices, settled),
+    questionSending: withoutKeys(state.questionSending, settled),
+  };
+}
+
 // The tab a situation of a step asks for; any other place leaves the tabs alone.
 function withStepTab(
   current: Record<string, StepTab>,
@@ -463,8 +528,11 @@ function initialTaskUi(): Pick<
   AppStore,
   | "transcripts"
   | "drafts"
+  | "markerRequest"
   | "openStepTab"
   | "prDrafts"
+  | "questionChoices"
+  | "questionSending"
   | "newTaskOpen"
   | "newTaskCard"
   | "pendingStart"
@@ -480,8 +548,11 @@ function initialTaskUi(): Pick<
   return {
     transcripts: {},
     drafts: {},
+    markerRequest: null,
     openStepTab: {},
     prDrafts: {},
+    questionChoices: {},
+    questionSending: {},
     newTaskOpen: false,
     newTaskCard: null,
     pendingStart: null,
@@ -686,6 +757,7 @@ export const useAppStore = create<AppStore>()((set, get) => {
     error: null,
     ...initialNav(),
     panel: null,
+    panelDocument: null,
     earlierConversation: null,
     pendingFocus: null,
     sidebarRail: readStored(SIDEBAR_RAIL_KEY, false, isBoolean),
@@ -775,7 +847,15 @@ export const useAppStore = create<AppStore>()((set, get) => {
 
     clearPendingFocus: () => set({ pendingFocus: null }),
 
-    openPanel: (panel) => set({ panel }),
+    requestMarkerOpen: (taskId, type) => set({ markerRequest: { taskId, type } }),
+
+    clearMarkerRequest: () => set({ markerRequest: null }),
+
+    openPanel: (panel) => set({ panel, panelDocument: null }),
+
+    openPanelAt: (panel, file) => set({ panel, panelDocument: file }),
+
+    clearPanelDocument: () => set({ panelDocument: null }),
 
     openEarlierConversation: (taskId, stage, fromPanel) =>
       set({ earlierConversation: { taskId, stage, from: fromPanel ? "panel" : null } }),
@@ -876,7 +956,10 @@ export const useAppStore = create<AppStore>()((set, get) => {
         const key = sessionKey(transcript.taskId, transcript.stage);
         const buffered = state.transcripts[key]?.buffered ?? [];
         const loaded = buffered.reduce(applyEvent, fromTranscript(transcript));
-        return { transcripts: { ...state.transcripts, [key]: loaded } };
+        return {
+          transcripts: { ...state.transcripts, [key]: loaded },
+          ...forgetSettled(state, loaded.entries),
+        };
       }),
 
     applyTranscriptEvent: (event) =>
@@ -893,7 +976,15 @@ export const useAppStore = create<AppStore>()((set, get) => {
         if (next === current) {
           return {};
         }
-        return { transcripts: { ...state.transcripts, [key]: next } };
+        // A buffered event settles its question when the loaded conversation folds it in.
+        const settles =
+          current.status !== "loading" && event.kind === "entry" && event.entry !== null
+            ? [event.entry]
+            : [];
+        return {
+          transcripts: { ...state.transcripts, [key]: next },
+          ...forgetSettled(state, settles),
+        };
       }),
 
     failTranscript: (taskId, stage, message) =>
@@ -927,6 +1018,16 @@ export const useAppStore = create<AppStore>()((set, get) => {
     // opening the pull request, or throwing the draft away, clears it.
     setPrDraft: (taskId, draft) =>
       set((state) => ({ prDrafts: { ...state.prDrafts, [taskId]: draft } })),
+
+    setQuestionChoices: (requestId, choices) =>
+      set((state) => ({ questionChoices: { ...state.questionChoices, [requestId]: choices } })),
+
+    setQuestionSending: (requestId, sending) =>
+      set((state) => ({
+        questionSending: sending
+          ? { ...state.questionSending, [requestId]: true }
+          : withoutKeys(state.questionSending, [requestId]),
+      })),
 
     clearPrDraft: (taskId) =>
       set((state) => {
@@ -973,9 +1074,10 @@ export const useAppStore = create<AppStore>()((set, get) => {
       if (location === null) {
         return;
       }
+      // A task takes the focus to what its situation asks; a review and a discussion, to the title.
       leave(() =>
         set((state) => ({
-          ...navigate(state, location, "title"),
+          ...navigate(state, location, location.kind === "task" ? "request" : "title"),
           openStepTab:
             location.kind === "task"
               ? withStepTab(state.openStepTab, itemId, place)

@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
+
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/git"
@@ -139,7 +141,7 @@ func TestAReportWithFindingsWaitsForTheDecision(t *testing.T) {
 		t.Errorf("status = %q, want reviewing: the pass found something to change", run.Status)
 	}
 	// The pass is a milestone of the conversation, like an artifact is.
-	if !slices.Contains(f.sessions.recorded(), "mark:task-1:pr_review:pass=1") {
+	if !slices.Contains(f.sessions.recorded(), "mark:task-1:pr_review:pass=1:clean=false") {
 		t.Errorf("session calls = %q, want the pass marked", f.sessions.recorded())
 	}
 	// The worktree is the user's to review while they decide.
@@ -177,6 +179,13 @@ func TestApprovingAReviewAsksForACommitThatIsPushed(t *testing.T) {
 	if len(sent) != 1 || !strings.Contains(sent[0], prompts.PushInstruction) {
 		t.Errorf("sent = %q, want the commit prompt with the push instruction", sent)
 	}
+	if diff := cmp.Diff([]session.AppMessage{{Kind: session.AppCommitPush}}, f.sessions.sentApps()); diff != "" {
+		t.Errorf("app messages mismatch (-want +got):\n%s", diff)
+	}
+	approved := []keyedMarker{{Key: reviewKeyOf, Marker: session.MarkerEntry{Type: session.MarkerChangesApproved, Files: 3}}}
+	if diff := cmp.Diff(approved, f.sessions.marked(session.MarkerChangesApproved)); diff != "" {
+		t.Errorf("changes_approved markers mismatch (-want +got):\n%s", diff)
+	}
 	if !slices.Contains(f.sessions.recorded(), "send:task-1:pr_review") {
 		t.Errorf("session calls = %q, want the prompt sent to the review session", f.sessions.recorded())
 	}
@@ -209,8 +218,18 @@ func TestACommitOfAReviewStartsTheNextPass(t *testing.T) {
 	if run.Status != task.PRReviewing {
 		t.Errorf("status = %q, want reviewing", run.Status)
 	}
+	apps := f.sessions.sentApps()
+	if diff := cmp.Diff(session.AppMessage{Kind: session.AppPRPass, Pass: 2}, apps[len(apps)-1]); diff != "" {
+		t.Errorf("app message mismatch (-want +got):\n%s", diff)
+	}
 	if state := f.prState(t, "task-1"); state.CommitFailed {
 		t.Error("the approval is reported as having produced no commit")
+	}
+	committed := []keyedMarker{{Key: reviewKeyOf, Marker: session.MarkerEntry{
+		Type: session.MarkerCommitted, SHA: commitSHA[:7], Subject: "Do the work of the step", Pushed: true, Number: 7,
+	}}}
+	if diff := cmp.Diff(committed, f.sessions.marked(session.MarkerCommitted)); diff != "" {
+		t.Errorf("committed markers mismatch (-want +got):\n%s", diff)
 	}
 
 	// The same commit never asks for a second pass.
@@ -331,6 +350,16 @@ func TestOpeningThePullRequestWritesTheDraftTheUserApproved(t *testing.T) {
 	sent := f.sessions.sent()
 	if len(sent) != 1 || !strings.Contains(sent[0], path) || !strings.Contains(sent[0], "origin/dev") {
 		t.Errorf("sent = %q, want the message that opens the pull request", sent)
+	}
+	if diff := cmp.Diff([]session.AppMessage{{Kind: session.AppOpen}}, f.sessions.sentApps()); diff != "" {
+		t.Errorf("app messages mismatch (-want +got):\n%s", diff)
+	}
+	approved := []keyedMarker{{
+		Key:    session.Key{TaskID: "task-1", Stage: session.PRStage},
+		Marker: session.MarkerEntry{Type: session.MarkerDraftApproved, Title: "Add the login screen"},
+	}}
+	if diff := cmp.Diff(approved, f.sessions.marked(session.MarkerDraftApproved)); diff != "" {
+		t.Errorf("draft_approved markers mismatch (-want +got):\n%s", diff)
 	}
 }
 

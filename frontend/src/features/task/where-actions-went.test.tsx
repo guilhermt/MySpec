@@ -1,9 +1,11 @@
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { TaskView } from "@/features/task/TaskView";
-import type { PullRequest, Situation, Step, TaskSummary } from "@/lib/wails";
+import type { Entry, PullRequest, Situation, Step, TaskSummary } from "@/lib/wails";
+import type { TranscriptState } from "@/store/transcript";
 import { renderWithStore } from "@/test/render";
 import {
+  makeEntry,
   makePullRequest,
   makeRepository,
   makeReview,
@@ -47,17 +49,90 @@ const PR_SESSION = { sessionStage: "pr_review", sessionStatus: "working" };
 
 const REVIEWING = makeReview({ staged: 2, total: 2, percent: 100 });
 
-/** Row is a button of a bar that left, in a state it appeared in, and where it is now. */
+/** Row is a control that left its place, in a state it appeared in, and where it is now. */
 interface Row {
-  origin: "StepBar" | "PRBar" | "StageTrack";
+  origin:
+    | "StepBar"
+    | "PRBar"
+    | "StageTrack"
+    | "ErrorCard"
+    | "StepBlocked"
+    | "PRBlocked"
+    | "DraftCard"
+    | "PRPane notes"
+    | "QuestionCard"
+    | "PermissionCard"
+    | "ReviewStrip"
+    | "PausedNotice"
+    | "PendingMessage";
   button: string;
   state: string;
   task: TaskSummary;
-  where: "menu" | "bar" | "header" | "pane";
-  /** name is the accessible name in the new place. */
+  where: "menu" | "bar" | "header" | "card" | "composer" | "entry" | "tooltip";
+  /** name is the accessible name in the new place; in a tooltip, its text. */
   name: RegExp;
+  /** trigger is the text in the bar that holds the tooltip. */
+  trigger?: RegExp;
   disabled?: boolean;
+  /** card names the fixed card that holds the control; the pending card when not given. */
+  card?: RegExp;
+  /** entry names the entry of the conversation that holds the control. */
+  entry?: RegExp;
+  /** role is the role of the control in the card, a button when not given. */
+  role?: "radio";
+  /** transcripts are the conversations the screen reads, with the pending card of a row. */
+  transcripts?: Record<string, TranscriptState>;
 }
+
+// withCard is the conversation of step 1 holding a card pending.
+function withCard(entry: Entry): Record<string, TranscriptState> {
+  return {
+    "task-1|step:1": { status: "ready", error: "", entries: [entry], pending: [], buffered: [] },
+  };
+}
+
+const ASKING = withCard(makeEntry("question"));
+
+// QUEUED is the conversation of step 1 with a message waiting for the turn to end.
+const QUEUED: Record<string, TranscriptState> = {
+  "task-1|step:1": {
+    status: "ready",
+    error: "",
+    entries: [],
+    pending: [
+      makeEntry("user", {
+        user: {
+          text: "and dark mode",
+          pending: true,
+          prompt: false,
+          app: false,
+          sent: "",
+          appKind: "",
+          appPass: 0,
+          appRound: 0,
+          appRounds: 0,
+          appCount: 0,
+        },
+      }),
+    ],
+    buffered: [],
+  },
+};
+
+function permissionEntry(suggestions: string): Entry {
+  const entry = makeEntry("permission");
+  return entry.permission === null
+    ? entry
+    : { ...entry, permission: { ...entry.permission, suggestions } };
+}
+
+// DELETED is a review of the step with a file that was deleted.
+const DELETED = makeReview({
+  files: [{ path: "src/legacy.ts", kind: "deleted", staged: false, partial: false }],
+  staged: 0,
+  total: 1,
+  percent: 0,
+});
 
 const ROWS: Row[] = [
   {
@@ -173,12 +248,241 @@ const ROWS: Row[] = [
     disabled: true,
   },
   {
-    origin: "PRBar",
+    origin: "DraftCard",
     button: "Open PR",
     state: "the draft a failed opening left",
-    task: inPR({ status: "awaiting_reply", draft: DRAFT, sessionStage: "pr" }),
-    where: "pane",
+    task: inPR({ status: "awaiting_reply", draft: DRAFT, sessionStage: "pr" }, "reply"),
+    where: "bar",
+    name: /^Approve draft$/,
+  },
+  {
+    origin: "DraftCard",
+    button: "Open PR",
+    state: "the draft a failed opening left, the agent still working",
+    task: inPR(
+      { status: "awaiting_reply", draft: DRAFT, sessionStage: "pr", turnRunning: true },
+      "reply",
+    ),
+    where: "bar",
+    name: /^Approve draft$/,
+    disabled: true,
+  },
+  {
+    origin: "ErrorCard",
+    button: "Retry",
+    state: "the session of the step stopped",
+    task: inStep(
+      { status: "implementing" },
+      {
+        sessionStatus: "error",
+        lastError: "claude exited",
+        situations: [stepSituation("session_error")],
+      },
+    ),
+    where: "bar",
+    name: /^Retry implementer$/,
+  },
+  {
+    origin: "ErrorCard",
+    button: "Retry",
+    state: "the session of the PRD stopped",
+    task: makeTask({
+      stage: "prd",
+      sessionStatus: "error",
+      lastError: "not logged in",
+      situations: [
+        makeSituation({ kind: "session_error", place: { kind: "stage", stage: "prd", step: 0 } }),
+      ],
+    }),
+    where: "bar",
+    name: /^Retry PRD agent$/,
+  },
+  {
+    origin: "StepBlocked",
+    button: "Try again",
+    state: "the step blocked",
+    task: inStep(
+      { status: "blocked", block: { reason: "fetch_failed", detail: "", files: 0 } },
+      { situations: [stepSituation("step_blocked")] },
+    ),
+    where: "bar",
+    name: /^Try again$/,
+  },
+  {
+    origin: "StepBlocked",
+    button: "Clean and start",
+    state: "the worktree not clean",
+    task: inStep(
+      { status: "blocked", block: { reason: "dirty_worktree", detail: " M a.ts", files: 1 } },
+      { situations: [stepSituation("step_blocked")] },
+    ),
+    where: "bar",
+    name: /^Clean and start…$/,
+  },
+  {
+    origin: "PRBlocked",
+    button: "Try again",
+    state: "the pull request blocked",
+    task: inPR({ status: "blocked", block: { reason: "gh_failed", detail: "" } }, "pr_blocked"),
+    where: "bar",
+    name: /^Try again$/,
+  },
+  {
+    origin: "PRPane notes",
+    button: "The merge couldn't be confirmed",
+    state: "waiting for the merge",
+    task: inPR(
+      { ...OPENED, status: "done", canClose: true, checkError: "gh: not authenticated" },
+      "merge",
+      "close",
+    ),
+    where: "tooltip",
+    trigger: /^Couldn't confirm the merge/,
+    name: /^gh: not authenticated$/,
+  },
+  {
+    origin: "PRPane notes",
+    button: "The merge couldn't be confirmed",
+    state: "in trouble",
+    task: inPR(
+      {
+        ...OPENED,
+        status: "trouble",
+        canClose: true,
+        checkError: "gh: not authenticated",
+        trouble: { failedChecks: ["build"], conflict: false },
+      },
+      "pr_trouble",
+      "checks",
+    ),
+    where: "tooltip",
+    trigger: /Couldn't confirm the merge$/,
+    name: /^gh: not authenticated$/,
+  },
+  {
+    origin: "PRPane notes",
+    button: "Review again reads GitHub",
+    state: "in trouble",
+    task: inPR(
+      { ...OPENED, status: "trouble", trouble: { failedChecks: ["build"], conflict: false } },
+      "pr_trouble",
+      "checks",
+    ),
+    where: "tooltip",
+    trigger: /^Review again$/,
+    name: /^Review again reads GitHub and turns this into findings of a new pass\.$/,
+  },
+  {
+    origin: "PRPane notes",
+    button: "#N",
+    state: "waiting for the merge",
+    task: inPR({ ...OPENED, status: "done", prState: "open" }, "merge", "merge"),
+    where: "menu",
     name: /^Open PR$/,
+  },
+  {
+    origin: "PRPane notes",
+    button: "#N",
+    state: "in trouble",
+    task: inPR(
+      { ...OPENED, status: "trouble", trouble: { failedChecks: ["build"], conflict: false } },
+      "pr_trouble",
+      "checks",
+    ),
+    where: "menu",
+    name: /^Open PR$/,
+  },
+  {
+    origin: "PRPane notes",
+    button: "#N",
+    state: "merged",
+    task: inPR(
+      { ...OPENED, status: "merged", prState: "merged", canClose: true },
+      "merge",
+      "close",
+    ),
+    where: "menu",
+    name: /^Open PR$/,
+  },
+  {
+    origin: "PRPane notes",
+    button: "#N",
+    state: "closed without a merge",
+    task: inPR({ ...OPENED, status: "pr_closed", prState: "closed" }, "pr_closed"),
+    where: "menu",
+    name: /^Open PR$/,
+  },
+  {
+    origin: "ReviewStrip",
+    button: "a file",
+    state: "awaiting review",
+    task: inStep(
+      { status: "awaiting_review", review: makeReview() },
+      { situations: [stepSituation("step_review", "review")] },
+    ),
+    where: "card",
+    card: /^Changed files/,
+    name: /src\/api\/login\.ts/,
+  },
+  {
+    origin: "ReviewStrip",
+    button: "a file",
+    state: "ready to approve",
+    task: inStep(
+      { status: "ready_to_approve", review: REVIEWING },
+      { situations: [stepSituation("step_review", "approve")] },
+    ),
+    where: "card",
+    card: /^Changed files/,
+    name: /src\/LoginForm\.tsx/,
+  },
+  {
+    origin: "ReviewStrip",
+    button: "a file",
+    state: "committing",
+    task: inStep({ status: "committing", review: REVIEWING }),
+    where: "card",
+    card: /^Changed files/,
+    name: /src\/LoginForm\.tsx/,
+  },
+  {
+    origin: "ReviewStrip",
+    button: "a deleted file",
+    state: "awaiting review",
+    task: inStep(
+      { status: "awaiting_review", review: DELETED },
+      { situations: [stepSituation("step_review", "review")] },
+    ),
+    where: "card",
+    card: /^Changed files/,
+    name: /src\/legacy\.ts/,
+    disabled: true,
+  },
+  {
+    origin: "ReviewStrip",
+    button: "a file",
+    state: "changes of the pull request to review",
+    task: inPR(
+      { ...OPENED, status: "in_review", review: makeReview(), sessionStage: "pr_review" },
+      "changes_review",
+      "review",
+    ),
+    where: "card",
+    card: /^Changed files/,
+    name: /src\/api\/login\.ts/,
+  },
+  {
+    origin: "ReviewStrip",
+    button: "a file",
+    state: "changes of the pull request ready to approve",
+    task: inPR(
+      { ...OPENED, status: "ready_to_approve", review: REVIEWING, sessionStage: "pr_review" },
+      "changes_review",
+      "approve",
+    ),
+    where: "card",
+    card: /^Changed files/,
+    name: /src\/LoginForm\.tsx/,
   },
   {
     origin: "PRBar",
@@ -451,18 +755,91 @@ const ROWS: Row[] = [
     where: "bar",
     name: /^Continue$/,
   },
+  {
+    origin: "QuestionCard",
+    button: "Answer",
+    state: "a question pending, nothing chosen",
+    task: inStep({ status: "implementing" }, { situations: [stepSituation("question")] }),
+    transcripts: ASKING,
+    where: "card",
+    name: /^Answer/,
+    disabled: true,
+  },
+  {
+    origin: "QuestionCard",
+    button: "Other…",
+    state: "a question pending",
+    task: inStep({ status: "implementing" }, { situations: [stepSituation("question")] }),
+    transcripts: ASKING,
+    where: "card",
+    role: "radio",
+    name: /Other…/,
+  },
+  {
+    origin: "PermissionCard",
+    button: "Allow",
+    state: "a permission pending",
+    task: inStep({ status: "implementing" }, { situations: [stepSituation("permission")] }),
+    transcripts: withCard(permissionEntry("")),
+    where: "card",
+    name: /^Allow/,
+  },
+  {
+    origin: "PermissionCard",
+    button: "Allow for this session",
+    state: "a permission pending with a rule to remember",
+    task: inStep({ status: "implementing" }, { situations: [stepSituation("permission")] }),
+    transcripts: withCard(permissionEntry('[{"type":"addRules"}]')),
+    where: "card",
+    name: /^Allow for this session/,
+  },
+  {
+    origin: "PermissionCard",
+    button: "Deny",
+    state: "a permission pending",
+    task: inStep({ status: "implementing" }, { situations: [stepSituation("permission")] }),
+    transcripts: withCard(permissionEntry("")),
+    where: "card",
+    name: /^Deny…/,
+  },
+  {
+    origin: "PausedNotice",
+    button: "Resume",
+    state: "the step session paused",
+    task: inStep({ status: "implementing" }, { sessionStatus: "paused" }),
+    where: "header",
+    name: /^Resume$/,
+  },
+  {
+    origin: "PausedNotice",
+    button: "Model",
+    state: "the step session paused",
+    task: inStep({ status: "implementing" }, { sessionStatus: "paused" }),
+    where: "composer",
+    name: /^Conversation model:/,
+  },
+  {
+    origin: "PendingMessage",
+    button: "Remove",
+    state: "a message queued",
+    task: inStep({ status: "implementing" }, { pendingCount: 1 }),
+    transcripts: QUEUED,
+    where: "entry",
+    entry: /^You, queued/,
+    name: /^Remove$/,
+  },
 ];
 
 describe("where the actions of the bars that left went", () => {
   it.each(ROWS)(
     "$origin: $button, $state, is in the $where",
-    async ({ task, where, name, disabled }) => {
+    async ({ task, where, name, trigger, disabled, card: cardName, entry, role, transcripts }) => {
       const { user } = renderWithStore(<TaskView taskId={task.id} />, {
         state: makeState({
           tasks: [task],
           repositories: [makeRepository({ id: task.repositoryId })],
         }),
-        ui: { location: { kind: "task", id: task.id } },
+        ui: { location: { kind: "task", id: task.id }, ...(transcripts ? { transcripts } : {}) },
       });
 
       let found: HTMLElement;
@@ -473,10 +850,31 @@ describe("where the actions of the bars that left went", () => {
         found = within(screen.getByRole("region", { name: "Request" })).getByRole("button", {
           name,
         });
+      } else if (where === "tooltip") {
+        const bar = screen.getByRole("region", { name: "Request" });
+        await user.hover(within(bar).getByText(trigger ?? /^$/));
+        found = await screen.findByRole("tooltip");
+        expect(found).toHaveTextContent(name);
+        return;
+      } else if (where === "card") {
+        const card =
+          cardName === undefined
+            ? await waitFor(() => {
+                const pending = document.querySelector<HTMLElement>("[data-pending-card]");
+                expect(pending).not.toBeNull();
+                return pending as HTMLElement;
+              })
+            : await screen.findByRole("article", { name: cardName });
+        found = within(card).getByRole(role ?? "button", { name });
       } else if (where === "header") {
         found = within(screen.getByRole("banner")).getByRole("button", { name });
+      } else if (where === "composer") {
+        const composer = (await screen.findByRole("textbox", { name: /^Reply to/ })).parentElement;
+        expect(composer).not.toBeNull();
+        found = within(composer as HTMLElement).getByRole("button", { name });
       } else {
-        found = screen.getByRole("button", { name });
+        const held = await screen.findByRole("article", { name: entry ?? /^$/ });
+        found = within(held).getByRole("button", { name });
       }
 
       if (disabled) {
@@ -486,4 +884,174 @@ describe("where the actions of the bars that left went", () => {
       }
     },
   );
+});
+
+// The seventeen situations of the bar and the paused one: the screen draws one primary at most.
+const SITUATIONS: [string, TaskSummary][] = [
+  [
+    "step_review",
+    inStep(
+      { status: "ready_to_approve", review: REVIEWING },
+      { situations: [stepSituation("step_review", "approve")] },
+    ),
+  ],
+  [
+    "step_empty",
+    inStep({ status: "nothing_to_commit" }, { situations: [stepSituation("step_empty")] }),
+  ],
+  [
+    "ready_to_continue",
+    makeTask({
+      stage: "prd",
+      revisiting: true,
+      canContinue: true,
+      situations: [
+        makeSituation({
+          kind: "ready_to_continue",
+          place: { kind: "stage", stage: "prd", step: 0 },
+        }),
+      ],
+    }),
+  ],
+  ["draft", inPR({ status: "draft_ready", draft: DRAFT }, "draft")],
+  [
+    "changes_review",
+    inPR(
+      { ...OPENED, status: "ready_to_approve", review: REVIEWING, sessionStage: "pr_review" },
+      "changes_review",
+      "approve",
+    ),
+  ],
+  ["merge", inPR({ ...OPENED, status: "merged", canClose: true }, "merge", "close")],
+  [
+    "pr_trouble",
+    inPR(
+      {
+        ...OPENED,
+        status: "trouble",
+        canClose: true,
+        trouble: { failedChecks: ["build"], conflict: false },
+      },
+      "pr_trouble",
+      "checks",
+    ),
+  ],
+  ["pr_closed", inPR({ ...OPENED, status: "pr_closed" }, "pr_closed")],
+  ["question", inStep({ status: "implementing" }, { situations: [stepSituation("question")] })],
+  ["permission", inStep({ status: "implementing" }, { situations: [stepSituation("permission")] })],
+  ["reply", inPR({ status: "awaiting_reply", draft: DRAFT, sessionStage: "pr" }, "reply")],
+  [
+    "session_error",
+    inStep(
+      { status: "implementing" },
+      { lastError: "claude exited", situations: [stepSituation("session_error")] },
+    ),
+  ],
+  [
+    "step_blocked",
+    inStep(
+      { status: "blocked", block: { reason: "dirty_worktree", detail: " M a.ts", files: 1 } },
+      { situations: [stepSituation("step_blocked")] },
+    ),
+  ],
+  [
+    "worktree_unreadable",
+    inStep({ status: "implementing" }, { situations: [stepSituation("worktree_unreadable")] }),
+  ],
+  [
+    "pr_blocked",
+    inPR({ status: "blocked", block: { reason: "gh_failed", detail: "" } }, "pr_blocked"),
+  ],
+  [
+    "plan_invalid",
+    makeTask({
+      stage: "plan",
+      planProblems: [{ file: "02.md", message: "no title" }],
+      situations: [
+        makeSituation({ kind: "plan_invalid", place: { kind: "stage", stage: "plan", step: 0 } }),
+      ],
+    }),
+  ],
+  [
+    "findings",
+    inPR({ ...OPENED, status: "awaiting_decision", sessionStage: "pr_review" }, "findings"),
+  ],
+  [
+    "paused",
+    inStep({ status: "ready_to_approve", review: REVIEWING }, { sessionStatus: "paused" }),
+  ],
+];
+
+// PENDING_CARDS are the conversations holding the card of the situations that wait on one.
+const PENDING_CARDS: Record<string, Record<string, TranscriptState>> = {
+  question: ASKING,
+  permission: withCard(permissionEntry('[{"type":"addRules"}]')),
+};
+
+// WRITTEN is a message written in the composer of every conversation the situations show, so Send
+// could be a primary too.
+const WRITTEN = {
+  "task-1|step:1": "go on",
+  "task-1|pr": "go on",
+  "task-1|pr_review": "go on",
+  "task-1|prd": "go on",
+  "task-1|plan": "go on",
+};
+
+describe("the primary of the task screen", () => {
+  it.each(SITUATIONS)("is one at most in %s", async (kind, task) => {
+    const cards = PENDING_CARDS[kind];
+    const { container } = renderWithStore(<TaskView taskId={task.id} />, {
+      state: makeState({
+        tasks: [task],
+        repositories: [makeRepository({ id: task.repositoryId })],
+      }),
+      ui: {
+        location: { kind: "task", id: task.id },
+        drafts: WRITTEN,
+        ...(cards === undefined ? {} : { transcripts: cards }),
+      },
+    });
+
+    if (cards !== undefined) {
+      await waitFor(() =>
+        expect(container.querySelector(`[data-pending-card=${kind}]`)).not.toBeNull(),
+      );
+    }
+    expect(container.querySelectorAll("button[data-variant=primary]").length).toBeLessThanOrEqual(
+      1,
+    );
+  });
+});
+
+// SEND_IS_PRIMARY are the situations whose bar has no primary: Send with a message written is the
+// primary of the screen (principles 2).
+const SEND_IS_PRIMARY: [string, TaskSummary][] = [
+  ["reply without a draft", inPR({ status: "awaiting_reply", sessionStage: "pr" }, "reply")],
+  ...SITUATIONS.filter(([kind]) =>
+    ["plan_invalid", "findings", "worktree_unreadable", "step_empty"].includes(kind),
+  ),
+  [
+    "session_error of a turn that failed",
+    inStep(
+      { status: "implementing" },
+      { lastError: "", turnFailed: true, situations: [stepSituation("session_error")] },
+    ),
+  ],
+];
+
+describe("Send, the primary where the bar has none", () => {
+  it.each(SEND_IS_PRIMARY)("is the one primary in %s", async (_, task) => {
+    const { container } = renderWithStore(<TaskView taskId={task.id} />, {
+      state: makeState({
+        tasks: [task],
+        repositories: [makeRepository({ id: task.repositoryId })],
+      }),
+      ui: { location: { kind: "task", id: task.id }, drafts: WRITTEN },
+    });
+
+    const send = await screen.findByRole("button", { name: /^Send/ });
+    expect(send).toHaveAttribute("data-variant", "primary");
+    expect([...container.querySelectorAll("button[data-variant=primary]")]).toEqual([send]);
+  });
 });

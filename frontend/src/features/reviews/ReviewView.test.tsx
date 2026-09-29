@@ -1,9 +1,16 @@
 import { screen, waitFor, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ReviewView } from "@/features/reviews/ReviewView";
 import { api, type ReviewSummary } from "@/lib/wails";
 import { renderWithStore } from "@/test/render";
-import { makeReview, makeReviewPass, makeReviewSummary, makeState } from "@/test/wails-mock";
+import {
+  makeEntry,
+  makeReview,
+  makeReviewPass,
+  makeReviewSummary,
+  makeState,
+  makeTranscript,
+} from "@/test/wails-mock";
 
 function view(overrides: Partial<ReviewSummary> = {}) {
   return renderWithStore(<ReviewView reviewId="review-1" />, {
@@ -17,7 +24,7 @@ describe("ReviewView", () => {
     view();
 
     expect(screen.getByText("Add the login screen")).toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("Reviewing");
+    expect(screen.getAllByRole("status")[0]).toHaveTextContent("Reviewing");
     expect(screen.getByText("Reports")).toBeInTheDocument();
     await waitFor(() => {
       expect(api.getTranscript).toHaveBeenCalledWith("review-1", "review");
@@ -75,5 +82,20 @@ describe("ReviewView", () => {
 
     const column = screen.getByRole("textbox").closest(".overflow-clip");
     expect(column).not.toBeNull();
+  });
+
+  it("reads the conversation as a feed of the reviewer", async () => {
+    vi.mocked(api.getTranscript).mockResolvedValueOnce(
+      makeTranscript({
+        taskId: "review-1",
+        stage: "review",
+        entries: [makeEntry("assistant"), makeEntry("error")],
+      }),
+    );
+    view();
+
+    const feed = await screen.findByRole("feed", { name: "Conversation with the reviewer" });
+    expect(within(feed).getByRole("article", { name: /^Reviewer, / })).toHaveTextContent("On it.");
+    expect(within(feed).getByRole("article", { name: /^Session error, / })).toBeInTheDocument();
   });
 });

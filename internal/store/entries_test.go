@@ -1,6 +1,7 @@
 package store_test
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -160,5 +161,33 @@ func TestEntriesInsertRejectsAnEntryWithoutItsPayload(t *testing.T) {
 	}
 	if err := s.Entries.Update(t.Context(), broken); err == nil {
 		t.Error("Update() = nil, want error")
+	}
+}
+
+func TestEntriesSaveOutputReplacesTheOutputOfAnEntry(t *testing.T) {
+	t.Parallel()
+	s := newStoreWithRepositories(t)
+
+	_, sessionID := seedSession(t, s)
+	if err := s.Entries.Insert(t.Context(), sessionID, newEntry("entry-1", 1, "run")); err != nil {
+		t.Fatalf("Insert() = %v, want nil", err)
+	}
+	if _, err := s.Entries.Output(t.Context(), "entry-1"); !errors.Is(err, session.ErrNotFound) {
+		t.Errorf("Output() before any = %v, want session.ErrNotFound", err)
+	}
+
+	want := session.Output{Text: "b\nc", Lines: 2, Truncated: true}
+	for _, o := range []session.Output{{Text: "a", Lines: 1}, want} {
+		if err := s.Entries.SaveOutput(t.Context(), "entry-1", o); err != nil {
+			t.Fatalf("SaveOutput() = %v, want nil", err)
+		}
+	}
+
+	got, err := s.Entries.Output(t.Context(), "entry-1")
+	if err != nil {
+		t.Fatalf("Output() = %v, want nil", err)
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("Output() mismatch (-want +got):\n%s", diff)
 	}
 }

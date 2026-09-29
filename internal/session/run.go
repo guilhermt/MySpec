@@ -32,8 +32,11 @@ type run struct {
 	permission   *Entry // pending permission or question
 	interruptReq string // request id of the interrupt in flight, "" otherwise
 	interruptTmr *time.Timer
-	retryAttempt int
-	turnFailed   bool // the last turn ended in an error; the next turn clears it
+	retryAttempt int       // the last api_retry of the turn; 0 when none is pending
+	retryMax     int       // the most attempts the CLI makes
+	retryAt      time.Time // when the next attempt goes out
+	retryReason  string    // retryReasonOf the error
+	turnFailed   bool      // the last turn ended in an error; the next turn clears it
 
 	idleTimer  *time.Timer
 	flushTimer *time.Timer
@@ -121,6 +124,14 @@ func (r *run) newEntry(s *Service, e Entry) *Entry {
 	return &e
 }
 
+// clearRetry forgets the api_retry of the turn.
+func (r *run) clearRetry() {
+	r.retryAttempt = 0
+	r.retryMax = 0
+	r.retryAt = time.Time{}
+	r.retryReason = ""
+}
+
 // summary derives what the interface shows from the state of the run.
 func (r *run) summary() Summary {
 	sum := Summary{
@@ -130,6 +141,9 @@ func (r *run) summary() Summary {
 		TurnRunning:    r.turn != nil,
 		ProcessRunning: r.proc != nil,
 		RetryAttempt:   r.retryAttempt,
+		RetryMax:       r.retryMax,
+		RetryAt:        r.retryAt,
+		RetryReason:    r.retryReason,
 		ContextPercent: contextPercent(r.rec.ContextTokens, r.rec.ContextWindow),
 		PendingCount:   len(r.pending),
 		Corrections:    r.rec.Corrections,
@@ -373,6 +387,12 @@ func (s *Service) flushPendingLocked(ctx context.Context, r *run, n *notes) bool
 			return false
 		}
 		text = rendered
+		switch r.task.Prompt {
+		case prompts.StageTechSpec, prompts.StagePlan, prompts.StagePR, prompts.StagePRReview:
+			e.User.Sent = rendered
+		default:
+			// The prompt of every other stage is not kept.
+		}
 	}
 
 	if err := r.proc.Send(text); err != nil {
@@ -489,7 +509,7 @@ func (s *Service) stopProcess(k Key, gen int, graceful bool, g graces) {
 	n := &notes{}
 	s.mu.Lock()
 	if r.procGen == gen && r.turn != nil {
-		s.closeTurnLocked(ctx, r, true, n)
+		s.closeTurnLocked(ctx, r, true, interruptedByUser, n)
 		s.resetTurnLocked(r, n)
 	}
 	s.mu.Unlock()

@@ -224,6 +224,10 @@ func FromTasks(
 			TurnRunning:        summary.TurnRunning,
 			ProcessRunning:     summary.ProcessRunning,
 			RetryAttempt:       summary.RetryAttempt,
+			RetryMax:           summary.RetryMax,
+			RetryAt:            timeOrEmpty(summary.RetryAt),
+			RetryReason:        summary.RetryReason,
+			TurnFailed:         summary.TurnFailed,
 			TurnStartedAt:      turnStart(summary),
 			PausedAt:           pausedAt(summary),
 			ActionLabel:        summary.ActionLabel,
@@ -314,6 +318,8 @@ func fromPullRequest(pr *flow.PullRequest) *PullRequest {
 		Trouble:      fromTrouble(pr.Trouble),
 		Checks:       fromChecks(pr.PR.Checks),
 		Mergeable:    string(pr.PR.Mergeable),
+		MergedBy:     pr.PR.MergedBy,
+		MergedAt:     timeOrEmpty(pr.PR.MergedAt),
 		CanClose:     pr.CanClose,
 		CloneMissing: pr.CloneMissing,
 		Close:        fromCloseResult(pr.Close),
@@ -325,6 +331,10 @@ func fromPullRequest(pr *flow.PullRequest) *PullRequest {
 		TurnRunning:    summary.TurnRunning,
 		ProcessRunning: summary.ProcessRunning,
 		RetryAttempt:   summary.RetryAttempt,
+		RetryMax:       summary.RetryMax,
+		RetryAt:        timeOrEmpty(summary.RetryAt),
+		RetryReason:    summary.RetryReason,
+		TurnFailed:     summary.TurnFailed,
 		TurnStartedAt:  turnStart(summary),
 		PausedAt:       pausedAt(summary),
 		ActionLabel:    summary.ActionLabel,
@@ -552,7 +562,9 @@ func fromSteps(states []flow.StepState) []Step {
 func fromStepReports(reports []task.ReviewReport) []StepReport {
 	converted := make([]StepReport, len(reports))
 	for i, report := range reports {
-		converted[i] = StepReport{Pass: report.Pass, File: report.File, Clean: report.Clean}
+		converted[i] = StepReport{
+			Pass: report.Pass, File: report.File, Clean: report.Clean, Findings: report.Findings,
+		}
 	}
 	return converted
 }
@@ -571,6 +583,10 @@ func fromStepReviewer(stage string, summary session.Summary) *StepReviewer {
 		TurnRunning:    summary.TurnRunning,
 		ProcessRunning: summary.ProcessRunning,
 		RetryAttempt:   summary.RetryAttempt,
+		RetryMax:       summary.RetryMax,
+		RetryAt:        timeOrEmpty(summary.RetryAt),
+		RetryReason:    summary.RetryReason,
+		TurnFailed:     summary.TurnFailed,
 		TurnStartedAt:  turnStart(summary),
 		PausedAt:       pausedAt(summary),
 		ActionLabel:    summary.ActionLabel,
@@ -589,7 +605,7 @@ func fromReview(snap *review.Snapshot) *Review {
 	}
 	files := make([]ReviewFile, len(snap.Files))
 	for i, file := range snap.Files {
-		files[i] = ReviewFile{Path: file.Path, Kind: string(file.Kind), Staged: file.Staged}
+		files[i] = ReviewFile{Path: file.Path, Kind: string(file.Kind), Staged: file.Staged, Partial: file.Partial}
 	}
 	return &Review{
 		Files:   files,
@@ -701,6 +717,36 @@ func fromEntries(entries []session.Entry) []Entry {
 	return converted
 }
 
+// fromAction converts a tool call, with "" and -1 for what is unknown.
+func fromAction(a *session.ActionEntry) *ActionEntry {
+	converted := &ActionEntry{
+		ToolUseID:       a.ToolUseID,
+		Tool:            a.Tool,
+		Label:           a.Label,
+		Target:          a.Target,
+		Status:          string(a.Status),
+		Description:     a.Description,
+		CommandLines:    a.CommandLines,
+		ExitCode:        -1,
+		ParentToolUseID: a.ParentToolUseID,
+		OutputLines:     a.OutputLines,
+		OutputTail:      a.OutputTail,
+		OutputTruncated: a.OutputTruncated,
+		InterruptedBy:   a.InterruptedBy,
+	}
+	// The times of an action keep their fractions: a command of 8.2s reads 8.2s, not 8s.
+	if a.StartedAt != nil {
+		converted.StartedAt = a.StartedAt.Format(time.RFC3339Nano)
+	}
+	if a.FinishedAt != nil {
+		converted.FinishedAt = a.FinishedAt.Format(time.RFC3339Nano)
+	}
+	if a.ExitCode != nil {
+		converted.ExitCode = *a.ExitCode
+	}
+	return converted
+}
+
 // FromEntry converts one entry with the payload matching its kind.
 func FromEntry(e session.Entry) Entry {
 	converted := Entry{
@@ -716,25 +762,28 @@ func FromEntry(e session.Entry) Entry {
 			Pending: e.User.Pending,
 			Prompt:  e.User.Prompt,
 			App:     e.User.App,
+
+			Sent:      e.User.Sent,
+			AppKind:   string(e.User.AppKind),
+			AppPass:   e.User.AppPass,
+			AppRound:  e.User.AppRound,
+			AppRounds: e.User.AppRounds,
+			AppCount:  e.User.AppCount,
 		}
 	}
 	if e.Assistant != nil {
 		converted.Assistant = &AssistantEntry{
-			MessageID:   e.Assistant.MessageID,
-			BlockIndex:  e.Assistant.BlockIndex,
-			Text:        e.Assistant.Text,
-			Complete:    e.Assistant.Complete,
-			Interrupted: e.Assistant.Interrupted,
+			MessageID:       e.Assistant.MessageID,
+			BlockIndex:      e.Assistant.BlockIndex,
+			Text:            e.Assistant.Text,
+			Complete:        e.Assistant.Complete,
+			Interrupted:     e.Assistant.Interrupted,
+			InterruptedBy:   e.Assistant.InterruptedBy,
+			ParentToolUseID: e.Assistant.ParentToolUseID,
 		}
 	}
 	if e.Action != nil {
-		converted.Action = &ActionEntry{
-			ToolUseID: e.Action.ToolUseID,
-			Tool:      e.Action.Tool,
-			Label:     e.Action.Label,
-			Target:    e.Action.Target,
-			Status:    string(e.Action.Status),
-		}
+		converted.Action = fromAction(e.Action)
 	}
 	if e.Permission != nil {
 		converted.Permission = fromPermission(e.Permission)
@@ -744,13 +793,33 @@ func FromEntry(e session.Entry) Entry {
 	}
 	if e.Marker != nil {
 		converted.Marker = &MarkerEntry{
-			Type:      string(e.Marker.Type),
-			PreTokens: e.Marker.PreTokens,
-			Stage:     e.Marker.Stage,
-			Step:      e.Marker.Step,
-			Pass:      e.Marker.Pass,
-			Clean:     e.Marker.Clean,
-			Restarted: e.Marker.Restarted,
+			Type:          string(e.Marker.Type),
+			PreTokens:     e.Marker.PreTokens,
+			Stage:         e.Marker.Stage,
+			Step:          e.Marker.Step,
+			Pass:          e.Marker.Pass,
+			Clean:         e.Marker.Clean,
+			Findings:      -1,
+			Restarted:     e.Marker.Restarted,
+			Percent:       e.Marker.Percent,
+			Attempts:      e.Marker.Attempts,
+			Reason:        e.Marker.Reason,
+			InterruptedBy: e.Marker.InterruptedBy,
+			SHA:           e.Marker.SHA,
+			Subject:       e.Marker.Subject,
+			Pushed:        e.Marker.Pushed,
+			Number:        e.Marker.Number,
+			Base:          e.Marker.Base,
+			Passed:        e.Marker.Passed,
+			Total:         e.Marker.Total,
+			Failed:        names(e.Marker.Failed),
+			Conflict:      e.Marker.Conflict,
+			Title:         e.Marker.Title,
+			Files:         e.Marker.Files,
+			Problems:      fromMarkerProblems(e.Marker.Problems),
+		}
+		if e.Marker.Findings != nil {
+			converted.Marker.Findings = *e.Marker.Findings
 		}
 	}
 	if e.Error != nil {
@@ -803,12 +872,17 @@ func fromQuestion(q *session.QuestionEntry) *QuestionEntry {
 			MultiSelect: question.MultiSelect,
 		}
 	}
+	answeredAt := ""
+	if q.AnsweredAt != nil {
+		answeredAt = timeOrEmpty(*q.AnsweredAt)
+	}
 	return &QuestionEntry{
-		RequestID: q.RequestID,
-		ToolUseID: q.ToolUseID,
-		Questions: questions,
-		Answers:   q.Answers,
-		Status:    string(q.Status),
+		RequestID:  q.RequestID,
+		ToolUseID:  q.ToolUseID,
+		Questions:  questions,
+		Answers:    q.Answers,
+		Status:     string(q.Status),
+		AnsweredAt: answeredAt,
 	}
 }
 
@@ -1435,6 +1509,10 @@ func FromReviews(
 			TurnRunning:    summary.TurnRunning,
 			ProcessRunning: summary.ProcessRunning,
 			RetryAttempt:   summary.RetryAttempt,
+			RetryMax:       summary.RetryMax,
+			RetryAt:        timeOrEmpty(summary.RetryAt),
+			RetryReason:    summary.RetryReason,
+			TurnFailed:     summary.TurnFailed,
 			TurnStartedAt:  turnStart(summary),
 			PausedAt:       pausedAt(summary),
 			ActionLabel:    summary.ActionLabel,
@@ -1662,6 +1740,10 @@ func FromDiscussions(
 			TurnRunning:    summary.TurnRunning,
 			ProcessRunning: summary.ProcessRunning,
 			RetryAttempt:   summary.RetryAttempt,
+			RetryMax:       summary.RetryMax,
+			RetryAt:        timeOrEmpty(summary.RetryAt),
+			RetryReason:    summary.RetryReason,
+			TurnFailed:     summary.TurnFailed,
 			TurnStartedAt:  turnStart(summary),
 			PausedAt:       pausedAt(summary),
 			ActionLabel:    summary.ActionLabel,
@@ -2029,4 +2111,13 @@ func turnStart(summary session.Summary) string {
 		return ""
 	}
 	return summary.TurnStartedAt.Format(time.RFC3339)
+}
+
+// fromMarkerProblems converts the problems of a plan_invalid marker; never nil.
+func fromMarkerProblems(problems []session.PlanProblem) []PlanProblem {
+	out := make([]PlanProblem, 0, len(problems))
+	for _, p := range problems {
+		out = append(out, PlanProblem{File: p.File, Message: p.Message})
+	}
+	return out
 }

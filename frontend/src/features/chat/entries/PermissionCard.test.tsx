@@ -1,67 +1,94 @@
-import { screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { screen, waitFor } from "@testing-library/react";
+import { useRef } from "react";
+import { describe, expect, it, vi } from "vitest";
 import { PermissionCard } from "@/features/chat/entries/PermissionCard";
+import { useFocusRescue } from "@/features/task/request-focus";
 import { api, type PermissionEntry } from "@/lib/wails";
+import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
 import { makeEntry } from "@/test/wails-mock";
+
+const AT = "2026-09-29T09:14:00Z";
 
 function permission(overrides: Partial<PermissionEntry> = {}): PermissionEntry {
   const entry = makeEntry("permission");
   if (entry.permission === null) {
     throw new Error("the permission fixture has no payload");
   }
-  return { ...entry.permission, suggestions: '[{"type":"addRules"}]', ...overrides };
+  return { ...entry.permission, ...overrides };
 }
 
-describe("PermissionCard", () => {
-  it("shows the tool and what it wants to run", () => {
-    renderWithStore(<PermissionCard stage="prd" taskId="task-1" permission={permission()} />);
+const OFFERED = permission({ suggestions: '[{"type":"addRules"}]' });
 
-    expect(screen.getByRole("group", { name: "Permission needed" })).toBeInTheDocument();
+function card(p: PermissionEntry = permission(), readOnly = false) {
+  return renderWithStore(
+    <PermissionCard
+      stage="prd"
+      taskId="task-1"
+      permission={p}
+      createdAt={AT}
+      readOnly={readOnly}
+    />,
+  );
+}
+
+// Rescued is the card on the task screen, whose rescue takes a lost focus to the composer.
+function Rescued() {
+  const ref = useRef<HTMLDivElement>(null);
+  useFocusRescue(ref);
+  return (
+    <div ref={ref}>
+      <PermissionCard stage="prd" taskId="task-1" permission={permission()} createdAt={AT} />
+      <textarea id="composer-input" aria-label="Composer" />
+    </div>
+  );
+}
+
+describe("PermissionCard pending", () => {
+  it("shows the tool, the description and the command once", () => {
+    card();
+
+    expect(screen.getByRole("article")).toHaveAttribute("data-pending-card", "permission");
     expect(screen.getByText("Bash")).toBeInTheDocument();
     expect(screen.getByText("List the working directory")).toBeInTheDocument();
     expect(screen.getByText("ls")).toBeInTheDocument();
   });
 
-  it("shows the path of a file tool and the raw input of anything else", () => {
-    const { unmount } = renderWithStore(
-      <PermissionCard
-        stage="prd"
-        taskId="task-1"
-        permission={permission({ tool: "Write", input: '{"file_path":"src/main.tsx"}' })}
-      />,
+  it("shows the path of a file tool, the reason and the path outside", () => {
+    card(
+      permission({
+        tool: "Write",
+        displayName: "Write",
+        input: '{"file_path":"/etc/hosts","content":"x"}',
+        decisionReason: "Writes outside the project",
+        blockedPath: "/etc",
+      }),
     );
 
-    expect(screen.getByText("src/main.tsx")).toBeInTheDocument();
-    unmount();
-
-    renderWithStore(
-      <PermissionCard
-        stage="prd"
-        taskId="task-1"
-        permission={permission({ tool: "WebFetch", input: '{"url":"https://example.com"}' })}
-      />,
-    );
-
-    expect(screen.getByText(/"url": "https:\/\/example.com"/)).toBeInTheDocument();
+    expect(screen.getByText("/etc/hosts")).toBeInTheDocument();
+    expect(screen.getByText("Writes outside the project")).toBeInTheDocument();
+    expect(screen.getByText("Outside the working directory: /etc")).toBeInTheDocument();
   });
 
-  it("allows the tool once", async () => {
-    const { user } = renderWithStore(
-      <PermissionCard stage="prd" taskId="task-1" permission={permission()} />,
-    );
+  it("allows with the primary, which has the default focus", async () => {
+    const { user } = card();
 
-    await user.click(screen.getByRole("button", { name: "Allow" }));
+    const allow = screen.getByRole("button", { name: /Allow/ });
+    expect(allow).toHaveAttribute("data-variant", "primary");
+    expect(allow).toHaveAttribute("data-default-focus");
+
+    await user.click(allow);
 
     expect(api.answerPermission).toHaveBeenCalledWith("task-1", "prd", "req-1", "allow", "");
   });
 
-  it("allows the tool for the whole session", async () => {
-    const { user } = renderWithStore(
-      <PermissionCard stage="prd" taskId="task-1" permission={permission()} />,
-    );
+  it("offers Allow for this session only with a rule to remember", async () => {
+    const { user, unmount } = card();
+    expect(screen.queryByRole("button", { name: /Allow for this session/ })).toBeNull();
+    unmount();
 
-    await user.click(screen.getByRole("button", { name: "Allow for this session" }));
+    card(OFFERED);
+    await user.click(screen.getByRole("button", { name: /Allow for this session/ }));
 
     expect(api.answerPermission).toHaveBeenCalledWith(
       "task-1",
@@ -72,131 +99,143 @@ describe("PermissionCard", () => {
     );
   });
 
-  it.each([
-    ["the CLI suppresses it", { suppressAlwaysAllow: true }],
-    ["there is no rule to remember", { suggestions: "" }],
-  ])("hides the session answer when %s", (_reason, overrides) => {
-    renderWithStore(
-      <PermissionCard stage="prd" taskId="task-1" permission={permission(overrides)} />,
-    );
+  it("hides Allow for this session when the CLI suppresses it", () => {
+    card(permission({ suggestions: '[{"type":"addRules"}]', suppressAlwaysAllow: true }));
 
-    expect(
-      screen.queryByRole("button", { name: "Allow for this session" }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Allow for this session/ })).toBeNull();
   });
 
-  it("asks what to do instead before denying", async () => {
-    const { user } = renderWithStore(
-      <PermissionCard stage="prd" taskId="task-1" permission={permission()} />,
-    );
+  it("opens the text of Deny… in the card, with Deny dangerous and Cancel", async () => {
+    const { user } = card();
 
-    await user.click(screen.getByRole("button", { name: "Deny" }));
-    expect(api.answerPermission).not.toHaveBeenCalled();
-
+    await user.click(screen.getByRole("button", { name: /Deny…/ }));
     await user.type(
       screen.getByRole("textbox", { name: "Tell the agent what to do instead (optional)" }),
-      "read it first",
+      "Use git status",
     );
-    await user.click(screen.getByRole("button", { name: "Confirm deny" }));
+    const deny = screen.getByRole("button", { name: "Deny" });
+    expect(deny).toHaveAttribute("data-variant", "danger");
+
+    await user.click(deny);
 
     expect(api.answerPermission).toHaveBeenCalledWith(
       "task-1",
       "prd",
       "req-1",
       "deny",
-      "read it first",
+      "Use git status",
     );
   });
 
-  it("takes the denial back", async () => {
-    const { user } = renderWithStore(
-      <PermissionCard stage="prd" taskId="task-1" permission={permission()} />,
-    );
+  it("goes back to the buttons with Cancel", async () => {
+    const { user } = card();
 
-    await user.click(screen.getByRole("button", { name: "Deny" }));
+    await user.click(screen.getByRole("button", { name: /Deny…/ }));
     await user.click(screen.getByRole("button", { name: "Cancel" }));
 
-    expect(screen.getByRole("button", { name: "Allow" })).toBeInTheDocument();
-    expect(api.answerPermission).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: /Allow/ })).toBeInTheDocument();
   });
 
-  it("puts the focus on Allow, unless the CLI wants a deliberate answer", () => {
-    const { unmount } = renderWithStore(
-      <PermissionCard stage="prd" taskId="task-1" permission={permission()} />,
+  it("gives the focus back to Deny… with Cancel, not to the composer", async () => {
+    const { user } = renderWithStore(<Rescued />);
+
+    await user.click(screen.getByRole("button", { name: /Deny…/ }));
+    await waitFor(() =>
+      expect(screen.getByRole("textbox", { name: /Tell the agent/ })).toHaveFocus(),
     );
+    screen.getByRole("button", { name: "Cancel" }).focus();
+    await user.keyboard("{Enter}");
 
-    expect(screen.getByRole("button", { name: "Allow" })).toHaveFocus();
-    unmount();
-
-    renderWithStore(
-      <PermissionCard stage="prd" taskId="task-1" permission={permission({ defaultToNo: true })} />,
-    );
-
-    expect(screen.getByRole("button", { name: "Allow" })).not.toHaveFocus();
+    const deny = screen.getByRole("button", { name: /Deny…/ });
+    expect(deny).toHaveFocus();
+    await new Promise((settle) => setTimeout(settle, 0));
+    expect(deny).toHaveFocus();
   });
 
-  it.each([
-    ["allowed", "Allowed"],
-    ["allowed_session", "Allowed for this session"],
-    ["cancelled", "Cancelled before an answer"],
-  ] as const)("reports the answer that was given: %s", (status, expected) => {
-    renderWithStore(
-      <PermissionCard stage="prd" taskId="task-1" permission={permission({ status })} />,
-    );
+  it("starts on Deny… with defaultToNo", () => {
+    card(permission({ defaultToNo: true }));
 
-    expect(screen.getByText(expected)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Allow" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Deny…/ })).toHaveAttribute("data-default-focus");
+    expect(screen.getByRole("button", { name: /Allow/ })).not.toHaveAttribute("data-default-focus");
   });
 
-  it("carries the message along with a denial", () => {
-    renderWithStore(
-      <PermissionCard
-        stage="prd"
-        taskId="task-1"
-        permission={permission({ status: "denied", denyMessage: "read it first" })}
-      />,
-    );
+  it("answers 1 to 3 as the buttons, with the focus on the card", async () => {
+    const { user } = card(OFFERED);
 
-    expect(screen.getByText("Denied · read it first")).toBeInTheDocument();
+    screen.getByRole("article").focus();
+    await user.keyboard("2");
+
+    expect(api.answerPermission).toHaveBeenCalledWith(
+      "task-1",
+      "prd",
+      "req-1",
+      "allow_session",
+      "",
+    );
   });
 
-  it("explains why the CLI stopped the tool", () => {
-    renderWithStore(
-      <PermissionCard
-        stage="prd"
-        taskId="task-1"
-        permission={permission({
-          decisionReason: "no rule matched",
-          blockedPath: "/etc/hosts",
-        })}
-      />,
-    );
+  it("takes the last key to Deny… without the middle button", async () => {
+    const { user } = card();
 
-    expect(screen.getByText("no rule matched")).toBeInTheDocument();
-    expect(screen.getByText("Outside the working directory: /etc/hosts")).toBeInTheDocument();
+    screen.getByRole("button", { name: /Allow/ }).focus();
+    await user.keyboard("2");
+
+    expect(
+      screen.getByRole("textbox", { name: "Tell the agent what to do instead (optional)" }),
+    ).toBeInTheDocument();
   });
 
-  it("reads a permission of an earlier conversation with the tool and the command, and no answer", () => {
-    renderWithStore(
-      <PermissionCard stage="prd" taskId="task-1" permission={permission()} readOnly />,
-    );
+  it("says the gerund while sending, with the other buttons off", async () => {
+    vi.mocked(api.answerPermission).mockReturnValueOnce(new Promise<void>(() => {}));
+    const { user } = card();
 
-    expect(screen.getByText("Bash")).toBeInTheDocument();
-    expect(screen.getByText("ls")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Allow/ }));
+
+    expect(screen.getByRole("button", { name: "Allowing…" })).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("button", { name: /Deny…/ })).toHaveAttribute("aria-disabled", "true");
+  });
+
+  it("tells the failure at its foot and gives the buttons back", async () => {
+    vi.mocked(api.answerPermission).mockRejectedValueOnce(new Error("the session stopped"));
+    const { user } = card();
+
+    await user.click(screen.getByRole("button", { name: /Allow/ }));
+
+    expect(await screen.findByText("Not sent · the session stopped")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Allow/ })).not.toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+    expect(useAppStore.getState().error).toBeNull();
+  });
+});
+
+describe("PermissionCard settled", () => {
+  it("is flat with the decision and its time in the tooltip", async () => {
+    const { user } = card(permission({ status: "allowed", answeredAt: "2026-09-29T09:19:00Z" }));
+
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
-    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    await user.hover(screen.getByText("Allowed"));
+
+    expect(await screen.findByText(/^Allowed at /)).toBeInTheDocument();
   });
 
-  it("gives the decision of a permission of an earlier conversation when there was one", () => {
-    renderWithStore(
-      <PermissionCard
-        stage="prd"
-        taskId="task-1"
-        permission={permission({ status: "denied", denyMessage: "Use the script" })}
-        readOnly
-      />,
-    );
+  it("says the message of a denial", () => {
+    card(permission({ status: "denied", denyMessage: "Not now" }));
 
-    expect(screen.getByText("Denied · Use the script")).toBeInTheDocument();
+    expect(screen.getByText("Denied · Not now")).toBeInTheDocument();
+  });
+
+  it("says a cancelled request", () => {
+    card(permission({ status: "cancelled" }));
+
+    expect(screen.getByText("Cancelled before an answer")).toBeInTheDocument();
+  });
+
+  it("takes no answer in an earlier conversation", () => {
+    card(permission(), true);
+
+    expect(screen.getByText("List the working directory")).toBeInTheDocument();
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 });

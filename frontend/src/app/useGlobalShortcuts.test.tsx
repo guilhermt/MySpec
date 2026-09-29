@@ -148,7 +148,7 @@ describe("useGlobalShortcuts", () => {
     const { user } = renderWithStore(<App />);
 
     await user.click(await screen.findByRole("treeitem", { name: /^task add-login\./ }));
-    const box = await screen.findByPlaceholderText("Reply to the agent…");
+    const box = await screen.findByRole("textbox", { name: /^Reply to the/ });
     // Focused directly: jsdom lays nothing out, so a click lands on the resize handle.
     act(() => box.focus());
     await user.keyboard("half a message");
@@ -340,7 +340,7 @@ describe("useGlobalShortcuts", () => {
   it("goes back on Alt+← from the message box of a conversation", async () => {
     vi.mocked(api.getState).mockResolvedValue(waitingState());
     renderWithStore(<App />, { ui: { location: TASK, back: [HISTORY] } });
-    const box = await screen.findByPlaceholderText("Reply to the agent…");
+    const box = await screen.findByRole("textbox", { name: /^Reply to the/ });
     act(() => box.focus());
 
     let event: KeyboardEvent | undefined;
@@ -370,7 +370,7 @@ describe("useGlobalShortcuts", () => {
       makeState({ tasks: [makeTask({ worktreePath: "/worktrees/add-login" })] }),
     );
     renderWithStore(<App />, { ui: { location: TASK } });
-    const box = await screen.findByPlaceholderText("Reply to the agent…");
+    const box = await screen.findByRole("textbox", { name: /^Reply to the/ });
     act(() => box.focus());
 
     let event: KeyboardEvent | undefined;
@@ -385,7 +385,7 @@ describe("useGlobalShortcuts", () => {
   it("leaves Ctrl+E alone on a task without a worktree", async () => {
     vi.mocked(api.getState).mockResolvedValue(makeState({ tasks: [makeTask()] }));
     renderWithStore(<App />, { ui: { location: TASK } });
-    await screen.findByPlaceholderText("Reply to the agent…");
+    await screen.findByRole("textbox", { name: /^Reply to the/ });
 
     act(() => {
       press({ key: "e", ctrlKey: true });
@@ -399,7 +399,7 @@ describe("useGlobalShortcuts", () => {
       makeState({ tasks: [makeTask({ worktreePath: "/worktrees/add-login" })] }),
     );
     const { user } = renderWithStore(<App />, { ui: { location: TASK } });
-    await screen.findByPlaceholderText("Reply to the agent…");
+    await screen.findByRole("textbox", { name: /^Reply to the/ });
     await user.keyboard("{Control>}n{/Control}");
     await screen.findByRole("heading", { name: "New task" });
 

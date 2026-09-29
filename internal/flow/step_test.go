@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/git"
@@ -286,6 +287,36 @@ func TestSyncResumesAnInterruptedPreparationOnlyOnce(t *testing.T) {
 
 	close(release)
 	f.waitStep(t, "task-1", 1, flow.StepImplementing)
+}
+
+func TestCloseWaitsForThePreparationItCancels(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	implementing(f, "task-1", twoStepPlan())
+	f.worktrees.blockEnsure()
+	linger := f.worktrees.lingerOnCancel()
+
+	f.service.Sync(t.Context())
+	f.waitWorktreeCalls(t, "ensure:task-1:dev/web")
+
+	closed := make(chan struct{})
+	go func() {
+		f.service.Close()
+		close(closed)
+	}()
+	select {
+	case <-closed:
+		t.Fatal("Close returned while the preparation it cancelled was still running")
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	close(linger)
+	select {
+	case <-closed:
+	case <-time.After(pollTimeout):
+		t.Fatal("Close did not return once the preparation ended")
+	}
 }
 
 func TestSyncReportsThePhasesOfAPreparation(t *testing.T) {

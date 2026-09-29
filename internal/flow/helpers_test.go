@@ -812,7 +812,9 @@ type memSessions struct {
 	replies   map[session.Key]string // what the agent of a session said last
 	calls     []string
 	messages  []string
-	err       error // returned by every call that changes something
+	apps      []session.AppMessage // every message of the app, with its kind and numbers
+	markers   []keyedMarker        // every marker of the Mark methods but the reviews'
+	err       error                // returned by every call that changes something
 }
 
 func newSessions() *memSessions {
@@ -1001,31 +1003,114 @@ func (m *memSessions) setReply(k session.Key, text string) {
 	m.replies[k] = text
 }
 
-func (m *memSessions) SendFromApp(_ context.Context, k session.Key, text string) error {
-	return m.send(k, text, false)
+func (m *memSessions) SendFromApp(_ context.Context, k session.Key, msg session.AppMessage) error {
+	return m.send(k, msg, false)
 }
 
-func (m *memSessions) SendCorrection(_ context.Context, k session.Key, text string) error {
-	return m.send(k, text, true)
+func (m *memSessions) SendCorrection(_ context.Context, k session.Key, msg session.AppMessage) error {
+	return m.send(k, msg, true)
 }
 
-func (m *memSessions) MarkPRReview(_ context.Context, k session.Key, pass int) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	m.calls = append(m.calls, "mark:"+k.TaskID+":"+k.Stage+":pass="+strconv.Itoa(pass))
-}
-
-func (m *memSessions) MarkStepReview(_ context.Context, k session.Key, pass int, clean bool) {
+func (m *memSessions) MarkPRReview(_ context.Context, k session.Key, pass int, clean bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	m.calls = append(m.calls,
-		"markStep:"+k.TaskID+":"+k.Stage+":pass="+strconv.Itoa(pass)+":clean="+strconv.FormatBool(clean))
+		"mark:"+k.TaskID+":"+k.Stage+":pass="+strconv.Itoa(pass)+":clean="+strconv.FormatBool(clean))
+}
+
+func (m *memSessions) MarkStepReview(_ context.Context, k session.Key, pass int, clean bool, findings int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.calls = append(m.calls, "markStep:"+k.TaskID+":"+k.Stage+":pass="+strconv.Itoa(pass)+
+		":clean="+strconv.FormatBool(clean)+":findings="+strconv.Itoa(findings))
+}
+
+// keyedMarker is a marker and the session it was recorded in.
+type keyedMarker struct {
+	Key    session.Key
+	Marker session.MarkerEntry
+}
+
+func (m *memSessions) mark(k session.Key, marker session.MarkerEntry) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.markers = append(m.markers, keyedMarker{Key: k, Marker: marker})
+}
+
+func (m *memSessions) MarkCommitted(_ context.Context, k session.Key, sha, subject string, pushed bool, number int) {
+	m.mark(k, session.MarkerEntry{
+		Type: session.MarkerCommitted, SHA: sha, Subject: subject, Pushed: pushed, Number: number,
+	})
+}
+
+// MarkPROpened records nothing when the session already has the pull request
+// marked opened, as the session service does.
+func (m *memSessions) MarkPROpened(_ context.Context, k session.Key, number int, base string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	opened := slices.ContainsFunc(m.markers, func(km keyedMarker) bool {
+		return km.Key == k && km.Marker.Type == session.MarkerPROpened && km.Marker.Number == number
+	})
+	if !opened {
+		m.markers = append(m.markers, keyedMarker{
+			Key: k, Marker: session.MarkerEntry{Type: session.MarkerPROpened, Number: number, Base: base},
+		})
+	}
+}
+
+func (m *memSessions) MarkChecksRead(
+	_ context.Context, k session.Key, pass, passed, total int, failed []string, conflict bool,
+) {
+	m.mark(k, session.MarkerEntry{
+		Type: session.MarkerChecksRead, Pass: pass, Passed: passed, Total: total, Failed: failed, Conflict: conflict,
+	})
+}
+
+func (m *memSessions) MarkDraftApproved(_ context.Context, k session.Key, title string) {
+	m.mark(k, session.MarkerEntry{Type: session.MarkerDraftApproved, Title: title})
+}
+
+func (m *memSessions) MarkChangesApproved(_ context.Context, k session.Key, files int) {
+	m.mark(k, session.MarkerEntry{Type: session.MarkerChangesApproved, Files: files})
+}
+
+func (m *memSessions) MarkPlanInvalid(_ context.Context, k session.Key, problems []session.PlanProblem) {
+	m.mark(k, session.MarkerEntry{Type: session.MarkerPlanInvalid, Problems: problems})
+}
+
+// marked is every marker recorded of type t.
+func (m *memSessions) marked(t session.MarkerType) []keyedMarker {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	var out []keyedMarker
+	for _, km := range m.markers {
+		if km.Marker.Type == t {
+			out = append(out, km)
+		}
+	}
+	return out
+}
+
+// sentApps is the kind and the numbers of every message of the app, without
+// the text, which sent holds.
+func (m *memSessions) sentApps() []session.AppMessage {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	apps := slices.Clone(m.apps)
+	for i := range apps {
+		apps[i].Text = ""
+	}
+	return apps
 }
 
 // send records a message of the app, counting it as the service would.
-func (m *memSessions) send(k session.Key, text string, correction bool) error {
+func (m *memSessions) send(k session.Key, msg session.AppMessage, correction bool) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -1033,7 +1118,8 @@ func (m *memSessions) send(k session.Key, text string, correction bool) error {
 	if m.err != nil {
 		return m.err
 	}
-	m.messages = append(m.messages, text)
+	m.messages = append(m.messages, msg.Text)
+	m.apps = append(m.apps, msg)
 	sum := m.summaries[k]
 	if correction {
 		sum.Corrections++
@@ -1171,6 +1257,7 @@ type memWorktrees struct {
 	cleanErr  error
 	removeErr error
 	block     chan struct{} // when set, Ensure waits on it or on the context
+	linger    chan struct{} // when set, a cancelled Ensure waits on it before it returns
 
 	closeResult task.CloseResult // what every closing answers with
 	closeCalls  []closeCall      // the closings the flow asked for, in order
@@ -1251,13 +1338,16 @@ func (m *memWorktrees) Ensure(
 ) (worktree.Worktree, error) {
 	m.mu.Lock()
 	m.calls = append(m.calls, "ensure:"+t.ID+":"+registered.FullName())
-	block, phases, err := m.block, slices.Clone(m.phases), m.ensureErr
+	block, linger, phases, err := m.block, m.linger, slices.Clone(m.phases), m.ensureErr
 	m.mu.Unlock()
 
 	if block != nil {
 		select {
 		case <-block:
 		case <-ctx.Done():
+			if linger != nil {
+				<-linger
+			}
 			return worktree.Worktree{}, ctx.Err()
 		}
 	}
@@ -1439,6 +1529,17 @@ func (m *memWorktrees) blockEnsure() chan struct{} {
 
 	m.block = make(chan struct{})
 	return m.block
+}
+
+// lingerOnCancel keeps a cancelled creation of a worktree running until the
+// returned channel is closed, as git goes on writing for a moment after it is
+// told to stop.
+func (m *memWorktrees) lingerOnCancel() chan struct{} {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.linger = make(chan struct{})
+	return m.linger
 }
 
 // memReviews is an in-memory flow.Reviews: it hands out the reading a test
@@ -1813,9 +1914,13 @@ func (f *fixture) waitReviewer(t *testing.T, id string, number int) {
 }
 
 // stepReport is the report of one pass of the agent review of a step, as the
-// disk holds it.
+// disk holds it: two findings when it asks for changes.
 func stepReport(number, pass int, clean bool) task.ReviewReport {
-	return task.ReviewReport{Pass: pass, File: task.StepReportFile(number, pass), Clean: clean}
+	findings := 2
+	if clean {
+		findings = 0
+	}
+	return task.ReviewReport{Pass: pass, File: task.StepReportFile(number, pass), Clean: clean, Findings: findings}
 }
 
 // stepState is the state of a step of a task, failing the test when the plan

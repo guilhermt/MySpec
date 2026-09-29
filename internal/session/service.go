@@ -27,6 +27,8 @@ type EntryRepository interface {
 	Update(ctx context.Context, e Entry) error
 	Delete(ctx context.Context, id string) error
 	MaxSeq(ctx context.Context, sessionID string) (int, error)
+	SaveOutput(ctx context.Context, entryID string, o Output) error
+	Output(ctx context.Context, entryID string) (Output, error) // ErrNotFound
 }
 
 // Process is the running CLI, as internal/claude provides it.
@@ -336,14 +338,18 @@ func (s *Service) load(ctx context.Context, t TaskInfo, n *notes) (*run, error) 
 }
 
 // settle marks an entry a previous run left open as interrupted or cancelled,
-// reporting whether it changed anything.
+// reporting whether it changed anything. Only an app that died mid-turn leaves
+// one open, and nothing asked for that, so a text or an action it cuts short
+// was cut by a crash.
 func settle(e *Entry) bool {
 	switch {
 	case e.Kind == KindAssistant && !e.Assistant.Complete:
 		e.Assistant.Complete = true
 		e.Assistant.Interrupted = true
+		e.Assistant.InterruptedBy = interruptedByCrash
 	case e.Kind == KindAction && e.Action.Status == ActionRunning:
 		e.Action.Status = ActionInterrupted
+		e.Action.InterruptedBy = interruptedByCrash
 	case e.Kind == KindPermission && e.Permission.Status == PermissionPending:
 		e.Permission.Status = PermissionCancelled
 	case e.Kind == KindQuestion && e.Question.Status == PermissionPending:
@@ -452,20 +458,20 @@ func (s *Service) Send(ctx context.Context, k Key, text string) error {
 }
 
 // SendFromApp queues a message the app wrote for the agent.
-func (s *Service) SendFromApp(ctx context.Context, k Key, text string) error {
-	return s.sendFromApp(ctx, k, text, false)
+func (s *Service) SendFromApp(ctx context.Context, k Key, m AppMessage) error {
+	return s.sendFromApp(ctx, k, m, false)
 }
 
 // SendCorrection queues a message the app wrote to fix what the agent
 // produced, and counts it against MaxCorrections.
-func (s *Service) SendCorrection(ctx context.Context, k Key, text string) error {
-	return s.sendFromApp(ctx, k, text, true)
+func (s *Service) SendCorrection(ctx context.Context, k Key, m AppMessage) error {
+	return s.sendFromApp(ctx, k, m, true)
 }
 
 // sendFromApp queues a message of the app, counting it as a correction of the
 // session when it is one.
-func (s *Service) sendFromApp(ctx context.Context, k Key, text string, correction bool) error {
-	text = strings.TrimSpace(text)
+func (s *Service) sendFromApp(ctx context.Context, k Key, m AppMessage, correction bool) error {
+	text := strings.TrimSpace(m.Text)
 	if text == "" {
 		return ErrEmptyMessage
 	}
@@ -488,7 +494,10 @@ func (s *Service) sendFromApp(ctx context.Context, k Key, text string, correctio
 			return err
 		}
 	}
-	if err := s.enqueueLocked(ctx, r, &UserEntry{Text: text, App: true}, n); err != nil {
+	if err := s.enqueueLocked(ctx, r, &UserEntry{
+		Text: text, App: true,
+		AppKind: m.Kind, AppPass: m.Pass, AppRound: m.Round, AppRounds: m.Rounds, AppCount: m.Count,
+	}, n); err != nil {
 		return err
 	}
 	r.stopTimer(&r.idleTimer)
@@ -600,12 +609,16 @@ func (s *Service) Pause(ctx context.Context, k Key) error {
 	if err != nil {
 		return err
 	}
-	if !r.rec.Paused {
+	was := r.rec.Paused
+	if !was {
 		r.rec.PausedAt = s.now().UTC()
 	}
 	r.rec.Paused = true
 	if err := s.persistRecord(ctx, r); err != nil {
 		return err
+	}
+	if !was {
+		s.appendLocked(ctx, r, Entry{Kind: KindMarker, Marker: &MarkerEntry{Type: MarkerPaused}}, n)
 	}
 	n.state(k)
 	if r.proc != nil && !r.stopping {
@@ -776,8 +789,10 @@ func (s *Service) AnswerQuestion(ctx context.Context, k Key, requestID string, a
 		return fmt.Errorf("answer question %s: %w", requestID, err)
 	}
 
+	answeredAt := s.now().UTC()
 	q.Answers = answers
 	q.Status = PermissionAllowed
+	q.AnsweredAt = &answeredAt
 	s.answered(ctx, r, e, n)
 	return nil
 }
@@ -871,24 +886,24 @@ func (s *Service) MarkArtifact(ctx context.Context, k Key, kind ArtifactKind, fi
 }
 
 // MarkPRReview records that a pass of the review of a pull request was
-// written.
-func (s *Service) MarkPRReview(ctx context.Context, k Key, pass int) {
-	n := &notes{}
-	defer s.flush(n)
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	r, err := s.runOf(k)
-	if err != nil {
-		return
-	}
-	marker := &MarkerEntry{Type: MarkerPRReviewWritten, Pass: pass}
-	s.appendLocked(ctx, r, Entry{Kind: KindMarker, Marker: marker}, n)
+// written, with its verdict.
+func (s *Service) MarkPRReview(ctx context.Context, k Key, pass int, clean bool) {
+	s.mark(ctx, k, &MarkerEntry{Type: MarkerPRReviewWritten, Pass: pass, Clean: clean})
 }
 
 // MarkStepReview records that a pass of the agent review of a step was
-// written, with its verdict.
-func (s *Service) MarkStepReview(ctx context.Context, k Key, pass int, clean bool) {
+// written, with its verdict and how many findings it reported (-1 unknown).
+func (s *Service) MarkStepReview(ctx context.Context, k Key, pass int, clean bool, findings int) {
+	marker := &MarkerEntry{Type: MarkerStepReviewWritten, Pass: pass, Clean: clean}
+	if findings >= 0 {
+		marker.Findings = &findings
+	}
+	s.mark(ctx, k, marker)
+}
+
+// mark records a marker in the conversation of a session; a session that is
+// not open records nothing.
+func (s *Service) mark(ctx context.Context, k Key, marker *MarkerEntry) {
 	n := &notes{}
 	defer s.flush(n)
 	s.mu.Lock()
@@ -898,7 +913,77 @@ func (s *Service) MarkStepReview(ctx context.Context, k Key, pass int, clean boo
 	if err != nil {
 		return
 	}
-	marker := &MarkerEntry{Type: MarkerStepReviewWritten, Pass: pass, Clean: clean}
+	s.appendLocked(ctx, r, Entry{Kind: KindMarker, Marker: marker}, n)
+}
+
+// MarkCommitted records that the changes were committed; pushed says the
+// commit went to pull request number.
+func (s *Service) MarkCommitted(ctx context.Context, k Key, sha, subject string, pushed bool, number int) {
+	s.mark(ctx, k, &MarkerEntry{Type: MarkerCommitted, SHA: sha, Subject: subject, Pushed: pushed, Number: number})
+}
+
+// MarkPROpened records that pull request number was opened against base,
+// unless the conversation already records it: a reading of the pull request
+// that starts its review again, after a block, finds it opened already.
+func (s *Service) MarkPROpened(ctx context.Context, k Key, number int, base string) {
+	n := &notes{}
+	defer s.flush(n)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	r, err := s.runOf(k)
+	if err != nil {
+		return
+	}
+	opened := slices.ContainsFunc(r.entries, func(e *Entry) bool {
+		return e.Kind == KindMarker && e.Marker != nil && e.Marker.Type == MarkerPROpened && e.Marker.Number == number
+	})
+	if opened {
+		return
+	}
+	marker := &MarkerEntry{Type: MarkerPROpened, Number: number, Base: base}
+	s.appendLocked(ctx, r, Entry{Kind: KindMarker, Marker: marker}, n)
+}
+
+// MarkChecksRead records the checks of the pull request read for a pass of
+// its review.
+func (s *Service) MarkChecksRead(ctx context.Context, k Key, pass, passed, total int, failed []string, conflict bool) {
+	s.mark(ctx, k, &MarkerEntry{
+		Type: MarkerChecksRead, Pass: pass, Passed: passed, Total: total, Failed: failed, Conflict: conflict,
+	})
+}
+
+// MarkDraftApproved records that the draft of the pull request was approved.
+func (s *Service) MarkDraftApproved(ctx context.Context, k Key, title string) {
+	s.mark(ctx, k, &MarkerEntry{Type: MarkerDraftApproved, Title: title})
+}
+
+// MarkChangesApproved records that the user approved the changed files.
+func (s *Service) MarkChangesApproved(ctx context.Context, k Key, files int) {
+	s.mark(ctx, k, &MarkerEntry{Type: MarkerChangesApproved, Files: files})
+}
+
+// MarkPlanInvalid records the problems of a plan that is not valid, unless
+// the last plan_invalid marker of the conversation has the same ones.
+func (s *Service) MarkPlanInvalid(ctx context.Context, k Key, problems []PlanProblem) {
+	n := &notes{}
+	defer s.flush(n)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	r, err := s.runOf(k)
+	if err != nil {
+		return
+	}
+	for _, e := range slices.Backward(r.entries) {
+		if e.Kind == KindMarker && e.Marker != nil && e.Marker.Type == MarkerPlanInvalid {
+			if slices.Equal(e.Marker.Problems, problems) {
+				return
+			}
+			break
+		}
+	}
+	marker := &MarkerEntry{Type: MarkerPlanInvalid, Problems: problems}
 	s.appendLocked(ctx, r, Entry{Kind: KindMarker, Marker: marker}, n)
 }
 
@@ -981,6 +1066,27 @@ func (s *Service) closedTranscript(ctx context.Context, k Key) (Transcript, erro
 		entries = append(entries, e)
 	}
 	return Transcript{TaskID: k.TaskID, SessionID: rec.ID, Stage: rec.Stage, Entries: entries}, nil
+}
+
+// ActionOutput reads the whole output of an action of a session, open or
+// closed; ErrNotFound when the entry is not of that session or has no output.
+func (s *Service) ActionOutput(ctx context.Context, k Key, entryID string) (Output, error) {
+	s.mu.Lock()
+	r, open := s.runs[k]
+	found := open && r.byID[entryID] != nil
+	s.mu.Unlock()
+
+	if !open {
+		tr, err := s.closedTranscript(ctx, k)
+		if err != nil {
+			return Output{}, err
+		}
+		found = slices.ContainsFunc(tr.Entries, func(e Entry) bool { return e.ID == entryID })
+	}
+	if !found {
+		return Output{}, fmt.Errorf("output of entry %s: %w", entryID, ErrNotFound)
+	}
+	return s.entries.Output(ctx, entryID)
 }
 
 // Summary describes one session, false when it is not open.

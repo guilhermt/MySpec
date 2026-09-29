@@ -3,6 +3,7 @@ import { locationTitle } from "@/lib/locations";
 import type { ModelChoice } from "@/lib/models";
 import { stageName } from "@/lib/situations";
 import type {
+  ActionOutput,
   BoardPreview,
   BoardRemoval,
   BoardRepositoryChoice,
@@ -134,6 +135,13 @@ export function browseRepository(): Promise<boolean> {
 
 export function changeRepositoryPath(id: string): Promise<void> {
   return api.changeRepositoryPath(id);
+}
+
+/** changeClonePath is changeRepositoryPath for a bar, which has no place for the failure: the app notice says it. */
+export function changeClonePath(id: string): Promise<void> {
+  return run(fail("Couldn't change the path of the clone", TRY), () =>
+    api.changeRepositoryPath(id),
+  );
 }
 
 /**
@@ -403,10 +411,28 @@ export async function readEarlierConversation(taskId: string, stage: string): Pr
   }
 }
 
-export function sendMessage(taskId: string, stage: string, text: string): Promise<void> {
-  return run(fail(`Couldn't send the message to ${theItem(taskId)}`, TRY), () =>
-    api.sendMessage(taskId, stage, text),
-  );
+/**
+ * readActionOutput reads the whole output of a command. Its failure has a place of its own, the
+ * output that asked for it, and never raises the app notice.
+ */
+export function readActionOutput(
+  taskId: string,
+  stage: string,
+  entryId: string,
+): Promise<ActionOutput> {
+  return api.getActionOutput(taskId, stage, entryId);
+}
+
+/**
+ * sendMessageInPlace sends a message from the composer, whose failure has a place of its own under
+ * the field: "" when it is sent, the reason when it is not.
+ */
+export async function sendMessageInPlace(
+  taskId: string,
+  stage: string,
+  text: string,
+): Promise<string> {
+  return (await inPlace(() => api.sendMessage(taskId, stage, text))) ?? "";
 }
 
 export function removePending(taskId: string, stage: string, entryId: string): Promise<void> {
@@ -433,33 +459,55 @@ export function resume(taskId: string, stage: string): Promise<void> {
   );
 }
 
+/**
+ * resumeInPlace resumes a paused session from the composer, which sends right after it and shows
+ * the failure under the field: "" when it resumed, the reason when it did not.
+ */
+export async function resumeInPlace(taskId: string, stage: string): Promise<string> {
+  return (await inPlace(() => api.resume(taskId, stage))) ?? "";
+}
+
 export function retry(taskId: string, stage: string): Promise<void> {
   return run(fail(withItem("Couldn't retry", itemName(taskId)), TRY), () =>
     api.retry(taskId, stage),
   );
 }
 
-export function answerPermission(
+/**
+ * answerPermissionInPlace answers a permission from its card, whose failure has a place of its own
+ * at the foot of the card: "" when it is sent, the reason when it is not.
+ */
+export async function answerPermissionInPlace(
   taskId: string,
   stage: string,
   requestId: string,
   decision: PermissionDecision,
   message: string,
-): Promise<void> {
-  return run(fail(`Couldn't answer the permission request of ${theItem(taskId)}`, TRY), () =>
-    api.answerPermission(taskId, stage, requestId, decision, message),
+): Promise<string> {
+  return (
+    (await inPlace(() => api.answerPermission(taskId, stage, requestId, decision, message))) ?? ""
   );
 }
 
-export function answerQuestion(
+/**
+ * answerQuestionInPlace answers a question from its card or from the composer, whose failure has a
+ * place of its own: "" when it is sent, the reason when it is not. The question is marked as
+ * sending while the answer is on its way, for the card and the composer alike; sent, it stays
+ * marked, with its choices, until the conversation marks it answered.
+ */
+export async function answerQuestionInPlace(
   taskId: string,
   stage: string,
   requestId: string,
   answers: Record<string, string>,
-): Promise<void> {
-  return run(fail(`Couldn't answer the question of ${theItem(taskId)}`, TRY), () =>
-    api.answerQuestion(taskId, stage, requestId, answers),
-  );
+): Promise<string> {
+  useAppStore.getState().setQuestionSending(requestId, true);
+  const failure = await inPlace(() => api.answerQuestion(taskId, stage, requestId, answers));
+  if (failure !== null) {
+    useAppStore.getState().setQuestionSending(requestId, false);
+    return failure;
+  }
+  return "";
 }
 
 /** backToStage reopens a stage that is already done. */
@@ -490,12 +538,12 @@ export function retryStep(taskId: string): Promise<void> {
   );
 }
 
-/** cleanAndStartStep throws away every change in the worktree and starts the step. */
-export function cleanAndStartStep(taskId: string): Promise<void> {
-  return run(
-    fail(`Couldn't clean the worktree of ${theItem(taskId)}`, cloneRemedy(taskId, TRY)),
-    () => api.cleanAndStartStep(taskId),
-  );
+/**
+ * cleanAndStartStep throws away every change in the worktree and starts the step. Its dialog shows
+ * the failure: it answers the message of the failure, or null, and leaves the app notice alone.
+ */
+export function cleanAndStartStep(taskId: string): Promise<string | null> {
+  return inPlace(() => api.cleanAndStartStep(taskId));
 }
 
 /** discardStep deletes the conversation of the step and runs it again from scratch. */

@@ -10,7 +10,7 @@ import (
 
 // commandLimit is the longest command shown as the target of a Bash action,
 // in runes.
-const commandLimit = 120
+const commandLimit = 1000
 
 // ellipsis closes a command cut at commandLimit.
 const ellipsis = "…"
@@ -51,10 +51,16 @@ func Label(tool string) string {
 	return tool
 }
 
-// For returns the verb and the target once the input is complete. dir is the
-// session directory, used to shorten paths.
-func For(tool string, input json.RawMessage, dir string) (label, target string) {
-	label = Label(tool)
+// Described is what the input of a tool says about the call.
+type Described struct {
+	Label, Target, Description string
+	CommandLines               int
+}
+
+// For describes a call once its input is complete. dir is the session
+// directory, used to shorten paths.
+func For(tool string, input json.RawMessage, dir string) Described {
+	d := Described{Label: Label(tool)}
 
 	var fields map[string]any
 	if err := json.Unmarshal(input, &fields); err != nil {
@@ -67,27 +73,39 @@ func For(tool string, input json.RawMessage, dir string) (label, target string) 
 
 	switch tool {
 	case "Read", "Write", "Edit", "MultiEdit":
-		target = shortenPath(str("file_path"), dir)
+		d.Target = shortenPath(str("file_path"), dir)
 	case "NotebookEdit":
-		target = shortenPath(cmp.Or(str("file_path"), str("notebook_path")), dir)
+		d.Target = shortenPath(cmp.Or(str("file_path"), str("notebook_path")), dir)
 	case "Bash":
-		target = firstLine(str("command"))
+		d.Target = firstLine(str("command"))
+		d.Description = str("description")
+		d.CommandLines = lineCount(str("command"))
 	case "Glob", "Grep":
-		target = str("pattern")
+		d.Target = str("pattern")
 	case "WebFetch":
-		target = str("url")
+		d.Target = str("url")
 	case "WebSearch":
-		target = str("query")
+		d.Target = str("query")
 	case "Task", "Agent":
-		target = str("description")
+		d.Target = str("subagent_type")
+		d.Description = str("description")
 	case "Skill":
-		target = str("skill")
+		d.Target = str("skill")
 	default:
 		if strings.HasPrefix(tool, mcpPrefix) {
-			target = mcpTarget(tool)
+			d.Target = mcpTarget(tool)
 		}
 	}
-	return label, target
+	return d
+}
+
+// lineCount is the number of lines of a command, 0 when it is empty.
+func lineCount(command string) int {
+	command = strings.TrimSpace(command)
+	if command == "" {
+		return 0
+	}
+	return strings.Count(command, "\n") + 1
 }
 
 // mcpTarget renders mcp__<server>__<tool> as "<server> · <tool>".

@@ -39,7 +39,7 @@ const committed = (number: number) =>
     commitSubject: `Commit ${number}`,
     committedAt: COMMITTED_AT,
     reviewMode: "agent",
-    reports: [{ pass: 1, file: `${number}-1.md`, clean: false }],
+    reports: [{ pass: 1, file: `${number}-1.md`, clean: false, findings: -1 }],
   });
 
 /** STRUCTURED is a Structured task on its step 3, under a pass of its reviewer. */
@@ -58,7 +58,7 @@ const STRUCTURED: TaskSummary = makeTask({
       reviewMode: "agent",
       reviewPass: 2,
       reviewer: makeStepReviewer({ sessionStage: "step_review:3", sessionStatus: "working" }),
-      reports: [{ pass: 1, file: "3-1.md", clean: false }],
+      reports: [{ pass: 1, file: "3-1.md", clean: false, findings: -1 }],
     }),
     makeStep({ number: 4, file: "4-limits.md", title: "Add the limits", reviewMode: "agent" }),
   ],
@@ -80,7 +80,7 @@ const ONE_SHOT: TaskSummary = makeTask({
       title: "Rate limit per API key",
       status: "implementing",
       reviewMode: "agent",
-      reports: [{ pass: 1, file: "1-1.md", clean: true }],
+      reports: [{ pass: 1, file: "1-1.md", clean: true, findings: 0 }],
     }),
   ],
 });
@@ -294,6 +294,44 @@ describe("DetailsPanel, reports", () => {
     expect(
       within(group(/^Steps/)).getAllByRole("button", { name: "Review 1 · changes" })[2],
     ).toHaveFocus();
+  });
+
+  it("opens at the report a marker of the conversation asked for, and comes back to its row", async () => {
+    vi.mocked(api.readArtifact).mockResolvedValue("# Findings");
+    const { user } = renderWithStore(<DetailsPanel task={STRUCTURED} />, {
+      state: makeState({ tasks: [STRUCTURED], repositories: [makeRepository()] }),
+      ui: {
+        location: { kind: "task", id: STRUCTURED.id },
+        panel: "details",
+        panelDocument: "step-reviews/3-1.md",
+      },
+    });
+
+    expect(
+      screen.getByRole("heading", { name: "Step 3 · Review 1 · changes" }),
+    ).toBeInTheDocument();
+    expect(await screen.findByTestId("markdown")).toHaveTextContent("# Findings");
+    expect(useAppStore.getState().panelDocument).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "← Details" }));
+
+    expect(
+      within(group(/^Steps/)).getAllByRole("button", { name: "Review 1 · changes" })[2],
+    ).toHaveFocus();
+  });
+
+  it("goes to the report a marker asks for with the panel already open", async () => {
+    vi.mocked(api.readArtifact).mockResolvedValue("# Findings");
+    details(STRUCTURED);
+
+    act(() => {
+      useAppStore.getState().openPanelAt("details", "step-reviews/1-1.md");
+    });
+
+    expect(
+      await screen.findByRole("heading", { name: "Step 1 · Review 1 · changes" }),
+    ).toBeInTheDocument();
+    expect(api.readArtifact).toHaveBeenCalledWith("task-1", "step-reviews/1-1.md");
   });
 
   it("says a report couldn't be read, and reads it again on Try again", async () => {
@@ -587,6 +625,23 @@ describe("DetailsPanel, conversations", () => {
       `PR review${time}`,
       "Review 1 · changes",
     ]);
+  });
+
+  it("says now on the conversation of the review once the pull request is merged, the one on screen", () => {
+    details({
+      ...inPR({ status: "merged", prState: "merged", sessionStage: "" }),
+      conversations: [
+        makeTaskConversation({ stage: "pr", startedAt: STARTED }),
+        makeTaskConversation({ stage: "pr_review", startedAt: STARTED }),
+      ],
+    });
+
+    const rows = within(group("Pull request")).getAllByRole("listitem");
+    expect(rows.slice(0, 2).map((row) => row.textContent)).toEqual([
+      `Draft and opening · #1284${time}`,
+      "PR reviewnow",
+    ]);
+    expect(within(group("Pull request")).queryByRole("button", { name: /^PR review/ })).toBeNull();
   });
 
   it("has a Pull request group with only its conversations before a report or the opening", () => {

@@ -1,5 +1,7 @@
 import { vi } from "vitest";
 import type {
+  ActionEntry,
+  ActionOutput,
   ArchivedDiscussion,
   ArchivedReview,
   ArchivedTask,
@@ -123,6 +125,9 @@ export const api = {
   ),
   getTranscript: vi.fn<(taskId: string, stage: string) => Promise<Transcript>>((taskId, stage) =>
     Promise.resolve(makeTranscript({ taskId, stage })),
+  ),
+  getActionOutput: vi.fn<(itemId: string, stage: string, entryId: string) => Promise<ActionOutput>>(
+    () => Promise.resolve({ text: "", lines: 0, truncated: false }),
   ),
   sendMessage: vi.fn<(taskId: string, stage: string, text: string) => Promise<void>>(() =>
     Promise.resolve(),
@@ -539,6 +544,10 @@ export function makeTask(overrides: Partial<TaskSummary> = {}): TaskSummary {
     turnRunning: false,
     processRunning: false,
     retryAttempt: 0,
+    retryMax: 0,
+    retryAt: "",
+    retryReason: "",
+    turnFailed: false,
     turnStartedAt: "",
     pausedAt: "",
     actionLabel: "",
@@ -671,6 +680,10 @@ export function makeStepReviewer(overrides: Partial<StepReviewer> = {}): StepRev
     turnRunning: false,
     processRunning: false,
     retryAttempt: 0,
+    retryMax: 0,
+    retryAt: "",
+    retryReason: "",
+    turnFailed: false,
     turnStartedAt: "",
     pausedAt: "",
     actionLabel: "",
@@ -714,6 +727,8 @@ export function makePullRequest(overrides: Partial<PullRequest> = {}): PullReque
     trouble: { failedChecks: [], conflict: false },
     checks: [],
     mergeable: "",
+    mergedBy: "",
+    mergedAt: "",
     canClose: false,
     cloneMissing: false,
     close: null,
@@ -724,6 +739,10 @@ export function makePullRequest(overrides: Partial<PullRequest> = {}): PullReque
     turnRunning: false,
     processRunning: false,
     retryAttempt: 0,
+    retryMax: 0,
+    retryAt: "",
+    retryReason: "",
+    turnFailed: false,
     turnStartedAt: "",
     pausedAt: "",
     actionLabel: "",
@@ -811,8 +830,8 @@ export function makePrompt(overrides: Partial<Prompt> = {}): Prompt {
 export function makeReview(overrides: Partial<Review> = {}): Review {
   return {
     files: [
-      { path: "src/LoginForm.tsx", kind: "modified", staged: true },
-      { path: "src/api/login.ts", kind: "added", staged: false },
+      { path: "src/LoginForm.tsx", kind: "modified", staged: true, partial: false },
+      { path: "src/api/login.ts", kind: "added", staged: false, partial: false },
     ],
     staged: 1,
     total: 2,
@@ -912,6 +931,10 @@ export function makeReviewSummary(overrides: Partial<ReviewSummary> = {}): Revie
     turnRunning: true,
     processRunning: true,
     retryAttempt: 0,
+    retryMax: 0,
+    retryAt: "",
+    retryReason: "",
+    turnFailed: false,
     turnStartedAt: "",
     pausedAt: "",
     actionLabel: "",
@@ -1002,6 +1025,10 @@ export function makeDiscussion(overrides: Partial<DiscussionSummary> = {}): Disc
     turnRunning: true,
     processRunning: true,
     retryAttempt: 0,
+    retryMax: 0,
+    retryAt: "",
+    retryReason: "",
+    turnFailed: false,
     turnStartedAt: "",
     pausedAt: "",
     actionLabel: "",
@@ -1104,7 +1131,18 @@ function payloadOf(kind: EntryKind): Omit<Entry, "id" | "seq" | "turnId" | "kind
     case "user":
       return {
         ...empty,
-        user: { text: "Add a login screen", pending: false, prompt: false, app: false },
+        user: {
+          text: "Add a login screen",
+          pending: false,
+          prompt: false,
+          app: false,
+          sent: "",
+          appKind: "",
+          appPass: 0,
+          appRound: 0,
+          appRounds: 0,
+          appCount: 0,
+        },
       };
     case "assistant":
       return {
@@ -1115,18 +1153,14 @@ function payloadOf(kind: EntryKind): Omit<Entry, "id" | "seq" | "turnId" | "kind
           text: "On it.",
           complete: true,
           interrupted: false,
+          parentToolUseId: "",
+          interruptedBy: "",
         },
       };
     case "action":
       return {
         ...empty,
-        action: {
-          toolUseId: "toolu_1",
-          tool: "Read",
-          label: "Read",
-          target: "src/main.tsx",
-          status: "done",
-        },
+        action: makeAction(),
       };
     case "permission":
       return {
@@ -1167,6 +1201,7 @@ function payloadOf(kind: EntryKind): Omit<Entry, "id" | "seq" | "turnId" | "kind
           ],
           answers: null,
           status: "pending",
+          answeredAt: "",
         },
       };
     case "marker":
@@ -1179,7 +1214,24 @@ function payloadOf(kind: EntryKind): Omit<Entry, "id" | "seq" | "turnId" | "kind
           step: 0,
           pass: 0,
           clean: false,
+          findings: -1,
           restarted: false,
+          percent: 0,
+          attempts: 0,
+          reason: "",
+          interruptedBy: "",
+          sha: "",
+          subject: "",
+          pushed: false,
+          number: 0,
+          base: "",
+          passed: 0,
+          total: 0,
+          failed: [],
+          conflict: false,
+          title: "",
+          files: 0,
+          problems: [],
         },
       };
     case "error":
@@ -1188,6 +1240,27 @@ function payloadOf(kind: EntryKind): Omit<Entry, "id" | "seq" | "turnId" | "kind
         error: { kind: "turn_error", message: "the agent stopped", retryable: true },
       };
   }
+}
+
+export function makeAction(overrides: Partial<ActionEntry> = {}): ActionEntry {
+  return {
+    toolUseId: "toolu_1",
+    tool: "Read",
+    label: "Read",
+    target: "src/main.tsx",
+    status: "done",
+    description: "",
+    commandLines: 0,
+    startedAt: "",
+    finishedAt: "",
+    exitCode: -1,
+    parentToolUseId: "",
+    interruptedBy: "",
+    outputLines: 0,
+    outputTail: "",
+    outputTruncated: false,
+    ...overrides,
+  };
 }
 
 export function makeEntry(kind: EntryKind, overrides: Partial<Entry> = {}): Entry {
@@ -1246,6 +1319,9 @@ export function resetWailsMock(): void {
   api.readReviewArtifact.mockImplementation(() => Promise.resolve("## Findings\n"));
   api.getTranscript.mockImplementation((taskId, stage) =>
     Promise.resolve(makeTranscript({ taskId, stage })),
+  );
+  api.getActionOutput.mockImplementation(() =>
+    Promise.resolve({ text: "", lines: 0, truncated: false }),
   );
   api.getPrompt.mockImplementation((stage) => Promise.resolve(makePrompt({ stage })));
   api.savePrompt.mockImplementation((stage, text) =>

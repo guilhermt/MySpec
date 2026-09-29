@@ -32,8 +32,8 @@ type Sessions interface {
 	Resume(ctx context.Context, k session.Key) error
 	Summary(k session.Key) (session.Summary, bool)
 	Exists(ctx context.Context, k session.Key) (bool, error)
-	SendFromApp(ctx context.Context, k session.Key, text string) error
-	MarkPRReview(ctx context.Context, k session.Key, pass int)
+	SendFromApp(ctx context.Context, k session.Key, m session.AppMessage) error
+	MarkPRReview(ctx context.Context, k session.Key, pass int, clean bool)
 }
 
 // Worktrees is what the reviews need from internal/worktree: a worktree on a

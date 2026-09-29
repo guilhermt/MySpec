@@ -1,5 +1,5 @@
 import { screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ExternalLink } from "@/features/chat/ExternalLink";
 import { Markdown } from "@/features/chat/Markdown";
 import { api } from "@/lib/wails";
@@ -62,5 +62,80 @@ describe("ExternalLink", () => {
     renderWithStore(<Markdown>Some text</Markdown>);
 
     expect(screen.getByTestId("markdown")).toHaveAttribute("data-line-numbers", "false");
+  });
+
+  it("cuts a long code block of the conversation to its first 20 lines, with the rest a click away", async () => {
+    const code = Array.from({ length: 46 }, (_, at) => `line ${at + 1}`).join("\n");
+    const { user } = renderWithStore(
+      <Markdown cutCode>{`Intro\n\n\`\`\`\n${code}\n\`\`\``}</Markdown>,
+    );
+
+    const show = screen.getByRole("button", { name: "Show all 46 lines" });
+    expect(show).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByText("26 more")).toBeInTheDocument();
+    expect(await screen.findByText(/line 20/)).toBeInTheDocument();
+    expect(screen.queryByText(/line 21/)).not.toBeInTheDocument();
+
+    await user.click(show);
+
+    expect(screen.getByRole("button", { name: "Show less" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+    expect(await screen.findByText(/line 46/)).toBeInTheDocument();
+    expect(screen.queryByText("26 more")).not.toBeInTheDocument();
+  });
+
+  it("copies a cut block whole, not the lines it shows, with its own Copy", async () => {
+    const code = Array.from({ length: 46 }, (_, at) => `line ${at + 1}`).join("\n");
+    const { user } = renderWithStore(
+      <Markdown cutCode>{`Intro\n\n\`\`\`go\n${code}\n\`\`\``}</Markdown>,
+    );
+    const [intro, block] = screen.getAllByTestId("markdown");
+    expect(intro).toHaveAttribute("data-code-copy", "true");
+    expect(block).toHaveAttribute("data-code-copy", "false");
+
+    await user.click(screen.getByRole("button", { name: "Copy" }));
+
+    expect(await navigator.clipboard.readText()).toBe(code);
+    const copied = screen.getByRole("button", { name: "Copied" });
+    expect(copied.querySelector("svg.lucide-check")).toHaveAttribute("aria-hidden", "true");
+  });
+
+  it("puts Copy of a cut block and Show all at its foot inside the block", () => {
+    const code = Array.from({ length: 30 }, (_, at) => `line ${at + 1}`).join("\n");
+    renderWithStore(<Markdown cutCode>{`\`\`\`\n${code}\n\`\`\``}</Markdown>);
+
+    const block = screen.getByTestId("markdown").parentElement;
+    expect(block).toHaveAttribute("data-code-cut");
+    expect(block).toContainElement(screen.getByRole("button", { name: "Copy" }));
+    expect(block?.lastElementChild).toContainElement(
+      screen.getByRole("button", { name: "Show all 30 lines" }),
+    );
+  });
+
+  it("says in place when the copy failed, and how to copy instead", async () => {
+    const code = Array.from({ length: 30 }, (_, at) => `line ${at + 1}`).join("\n");
+    const { user } = renderWithStore(<Markdown cutCode>{`\`\`\`\n${code}\n\`\`\``}</Markdown>);
+    vi.spyOn(navigator.clipboard, "writeText").mockRejectedValueOnce(new Error("denied"));
+
+    await user.click(screen.getByRole("button", { name: "Copy" }));
+
+    expect(
+      await screen.findByRole("button", { name: "Can't copy · select the text" }),
+    ).toBeInTheDocument();
+  });
+
+  it("leaves code whole out of the conversation", () => {
+    const code = Array.from({ length: 46 }, (_, at) => `line ${at + 1}`).join("\n");
+    renderWithStore(<Markdown>{`\`\`\`\n${code}\n\`\`\``}</Markdown>);
+
+    expect(screen.queryByRole("button", { name: /Show all/ })).not.toBeInTheDocument();
+  });
+
+  it("draws the rail of a question in text beside the last block", () => {
+    renderWithStore(<Markdown railLast>{"Which one?\n\na) This\nb) That"}</Markdown>);
+
+    expect(screen.getByTestId("markdown")).toHaveClass("markdown-rail-last");
   });
 });

@@ -78,10 +78,16 @@ type Sessions interface {
 	Summary(k session.Key) (session.Summary, bool)
 	Summaries() map[session.Key]session.Summary
 	LastReply(k session.Key) string
-	SendFromApp(ctx context.Context, k session.Key, text string) error
-	SendCorrection(ctx context.Context, k session.Key, text string) error
-	MarkPRReview(ctx context.Context, k session.Key, pass int)
-	MarkStepReview(ctx context.Context, k session.Key, pass int, clean bool)
+	SendFromApp(ctx context.Context, k session.Key, m session.AppMessage) error
+	SendCorrection(ctx context.Context, k session.Key, m session.AppMessage) error
+	MarkPRReview(ctx context.Context, k session.Key, pass int, clean bool)
+	MarkStepReview(ctx context.Context, k session.Key, pass int, clean bool, findings int)
+	MarkCommitted(ctx context.Context, k session.Key, sha, subject string, pushed bool, number int)
+	MarkPROpened(ctx context.Context, k session.Key, number int, base string)
+	MarkChecksRead(ctx context.Context, k session.Key, pass, passed, total int, failed []string, conflict bool)
+	MarkDraftApproved(ctx context.Context, k session.Key, title string)
+	MarkChangesApproved(ctx context.Context, k session.Key, files int)
+	MarkPlanInvalid(ctx context.Context, k session.Key, problems []session.PlanProblem)
 }
 
 // Repositories is what the flow needs from internal/repository.
@@ -173,6 +179,9 @@ type Service struct {
 	mu     sync.Mutex
 	locks  map[string]*taskLock // by task id
 	closed bool
+	// spawned counts the preparations and the PR work in flight, which Close
+	// cancels and waits for.
+	spawned sync.WaitGroup
 }
 
 // taskLock serializes the work on one task and coalesces its pending checks.

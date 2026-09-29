@@ -108,14 +108,188 @@ func TestToolCallBecomesAnAction(t *testing.T) {
 	}
 
 	wantAction := &session.ActionEntry{
-		ToolUseID: "toolu_fake_3",
-		Tool:      "Read",
-		Label:     "Reading",
-		Target:    claudetest.ReadPath,
-		Status:    session.ActionDone,
+		ToolUseID:  "toolu_fake_3",
+		Tool:       "Read",
+		Label:      "Reading",
+		Target:     claudetest.ReadPath,
+		Status:     session.ActionDone,
+		StartedAt:  &base,
+		FinishedAt: &base,
 	}
 	if diff := cmp.Diff(wantAction, tr.Entries[2].Action); diff != "" {
 		t.Errorf("action mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestSubagentActionsAndTextCarryTheirParent(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "subagent")
+	f.start(t, taskInfo(t, "t1"))
+	f.waitIdle(t, prd("t1"))
+
+	type row struct {
+		Kind                       session.Kind
+		Tool, Target, Text, Parent string
+		Description, OutputTail    string
+		CommandLines               int
+	}
+	var agentID string
+	var got []row
+	for _, e := range f.transcript(t, prd("t1")).Entries {
+		switch e.Kind {
+		case session.KindAction:
+			if e.Action.Tool == "Agent" {
+				agentID = e.Action.ToolUseID
+			}
+			if e.Action.StartedAt == nil || e.Action.FinishedAt == nil || !e.Action.StartedAt.Equal(base) || !e.Action.FinishedAt.Equal(base) {
+				t.Errorf("%s times = %v and %v, want both %v", e.Action.Tool, e.Action.StartedAt, e.Action.FinishedAt, base)
+			}
+			got = append(got, row{
+				Kind: e.Kind, Tool: e.Action.Tool, Target: e.Action.Target, Parent: e.Action.ParentToolUseID,
+				Description: e.Action.Description, CommandLines: e.Action.CommandLines, OutputTail: e.Action.OutputTail,
+			})
+		case session.KindAssistant:
+			got = append(got, row{Kind: e.Kind, Text: e.Assistant.Text, Parent: e.Assistant.ParentToolUseID})
+		default:
+		}
+	}
+	want := []row{
+		{
+			Kind: session.KindAction, Tool: "Agent", Target: claudetest.SubagentType, Description: claudetest.SubagentDescription,
+			OutputTail: claudetest.SubagentReport,
+		},
+		{Kind: session.KindAction, Tool: "Read", Target: claudetest.ReadPath, Parent: agentID},
+		{
+			Kind: session.KindAction, Tool: "Bash", Target: "ls -1", Parent: agentID, Description: "List the files", CommandLines: 1,
+			OutputTail: "hello.txt",
+		},
+		{Kind: session.KindAssistant, Text: claudetest.SubagentText, Parent: agentID},
+	}
+	if len(got) != len(want)+1 {
+		t.Fatalf("entries = %+v, want the subagent's and the answer", got)
+	}
+	if diff := cmp.Diff(want, got[:len(want)]); diff != "" {
+		t.Errorf("entries mismatch (-want +got):\n%s", diff)
+	}
+	if answer := got[len(want)]; answer.Kind != session.KindAssistant || answer.Parent != "" {
+		t.Errorf("last entry = %+v, want the answer of the main thread", answer)
+	}
+}
+
+func TestFailedBashKeepsItsExitCode(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "bash_fail")
+	f.start(t, taskInfo(t, "t1"))
+	f.waitIdle(t, prd("t1"))
+
+	var action *session.ActionEntry
+	for _, e := range f.transcript(t, prd("t1")).Entries {
+		if e.Kind == session.KindAction {
+			action = e.Action
+		}
+	}
+	if action == nil {
+		t.Fatal("no action in the transcript, want the failed command")
+	}
+	want := &session.ActionEntry{
+		ToolUseID:    action.ToolUseID,
+		Tool:         "Bash",
+		Label:        "Running",
+		Target:       "go test ./...",
+		Status:       session.ActionError,
+		Description:  claudetest.FailingDescription,
+		CommandLines: 2,
+		StartedAt:    &base,
+		FinishedAt:   &base,
+		ExitCode:     new(2),
+		OutputLines:  1,
+		OutputTail:   "--- FAIL: TestX",
+	}
+	if diff := cmp.Diff(want, action); diff != "" {
+		t.Errorf("action mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestActionOutputReadsTheWholeOutputOpenAndClosed(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "subagent")
+	f.start(t, taskInfo(t, "t1"))
+	f.waitIdle(t, prd("t1"))
+
+	actions := map[string]*session.Entry{}
+	for _, e := range f.transcript(t, prd("t1")).Entries {
+		if e.Kind == session.KindAction {
+			actions[e.Action.Tool] = &e
+		}
+	}
+	agent, read := actions["Agent"], actions["Read"]
+	if agent == nil || read == nil {
+		t.Fatalf("actions = %v, want the Agent and the Read", actions)
+	}
+	// Another session of the same task, open, knows nothing of the entry.
+	other := atStage(taskInfo(t, "t1"), prompts.StageTechSpec)
+	f.start(t, other)
+	f.waitIdle(t, other.Key())
+	if agent.Action.OutputLines != 1 || agent.Action.OutputTail != claudetest.SubagentReport {
+		t.Errorf("Agent output = %d lines, tail %q, want the report", agent.Action.OutputLines, agent.Action.OutputTail)
+	}
+
+	want := session.Output{Text: claudetest.SubagentReport, Lines: 1}
+	read1 := func(label string) {
+		t.Helper()
+		got, err := f.service.ActionOutput(t.Context(), prd("t1"), agent.ID)
+		if err != nil {
+			t.Fatalf("ActionOutput() %s = %v, want nil", label, err)
+		}
+		if diff := cmp.Diff(want, got); diff != "" {
+			t.Errorf("ActionOutput() %s mismatch (-want +got):\n%s", label, diff)
+		}
+		if _, err := f.service.ActionOutput(t.Context(), prd("t1"), read.ID); !errors.Is(err, session.ErrNotFound) {
+			t.Errorf("ActionOutput() of a read %s = %v, want session.ErrNotFound", label, err)
+		}
+		if _, err := f.service.ActionOutput(t.Context(), other.Key(), agent.ID); !errors.Is(err, session.ErrNotFound) {
+			t.Errorf("ActionOutput() from another session %s = %v, want session.ErrNotFound", label, err)
+		}
+	}
+	read1("while open")
+	for _, k := range []session.Key{prd("t1"), other.Key()} {
+		if err := f.service.Close(t.Context(), k); err != nil {
+			t.Fatalf("Close(%s) = %v, want nil", k.Stage, err)
+		}
+	}
+	read1("once closed")
+}
+
+func TestDiscardTakesTheOutputsOfTheConversation(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "subagent")
+	f.start(t, taskInfo(t, "t1"))
+	f.waitIdle(t, prd("t1"))
+
+	var agentID string
+	for _, e := range f.transcript(t, prd("t1")).Entries {
+		if e.Kind == session.KindAction && e.Action.Tool == "Agent" {
+			agentID = e.ID
+		}
+	}
+	if _, err := f.entries.Output(t.Context(), agentID); err != nil {
+		t.Fatalf("Output(%q) before the discard = %v, want the report", agentID, err)
+	}
+
+	sessionID := f.sessions.get(t, "t1", string(prompts.StagePRD)).ID
+	if err := f.service.Discard(t.Context(), "t1", string(prompts.StagePRD)); err != nil {
+		t.Fatalf("Discard() = %v, want nil", err)
+	}
+
+	if _, err := f.entries.Output(t.Context(), agentID); !errors.Is(err, session.ErrNotFound) {
+		t.Errorf("Output(%q) after the discard = %v, want session.ErrNotFound", agentID, err)
+	}
+	if entries := f.entries.list(t, sessionID); len(entries) != 0 {
+		t.Errorf("entries left = %d, want none", len(entries))
 	}
 }
 
@@ -125,11 +299,17 @@ func TestCompactionAddsAMarker(t *testing.T) {
 	f := newFixture(t, "compact")
 	f.start(t, taskInfo(t, "t1"))
 	f.waitIdle(t, prd("t1"))
+	// The first compaction comes before any result gives the window; the
+	// second knows it.
+	f.send(t, prd("t1"), "again")
+	f.waitEntries(t, prd("t1"), session.KindMarker, 3)
+	f.waitIdle(t, prd("t1"))
 
 	markers := f.entriesOf(t, prd("t1"), session.KindMarker)
 	want := []*session.MarkerEntry{
 		{Type: session.MarkerStageStarted, Stage: string(prompts.StagePRD)},
 		{Type: session.MarkerCompacted, PreTokens: 120000},
+		{Type: session.MarkerCompacted, PreTokens: 120000, Percent: 120000 * 100 / claudetest.ContextWindow},
 	}
 	got := make([]*session.MarkerEntry, 0, len(markers))
 	for _, m := range markers {
@@ -201,7 +381,10 @@ func TestAnswerPermission(t *testing.T) {
 		}
 		actions := f.entriesOf(t, prd("t1"), session.KindAction)
 		if len(actions) != 1 || actions[0].Action.Status != session.ActionDone {
-			t.Errorf("actions = %+v, want one done Bash action", actions)
+			t.Fatalf("actions = %+v, want one done Bash action", actions)
+		}
+		if a := actions[0].Action; a.OutputLines != 0 || a.OutputTail != "" {
+			t.Errorf("output = %d lines, tail %q, want none for a command that printed nothing", a.OutputLines, a.OutputTail)
 		}
 	})
 
@@ -292,7 +475,7 @@ func TestAnswerQuestion(t *testing.T) {
 	if len(q.Questions) != 2 || q.Questions[0].MultiSelect || !q.Questions[1].MultiSelect {
 		t.Fatalf("questions = %+v, want two, the second multiple choice", q.Questions)
 	}
-	if q.Status != session.PermissionPending || q.Answers != nil {
+	if q.Status != session.PermissionPending || q.Answers != nil || q.AnsweredAt != nil {
 		t.Errorf("question = %+v, want pending without answers", q)
 	}
 	if actions := f.entriesOf(t, prd("t1"), session.KindAction); len(actions) != 0 {
@@ -311,6 +494,9 @@ func TestAnswerQuestion(t *testing.T) {
 	got := f.entriesOf(t, prd("t1"), session.KindQuestion)[0].Question
 	if got.Status != session.PermissionAllowed {
 		t.Errorf("status = %q, want allowed", got.Status)
+	}
+	if got.AnsweredAt == nil || !got.AnsweredAt.Equal(base) {
+		t.Errorf("AnsweredAt = %v, want %v", got.AnsweredAt, base)
 	}
 	if diff := cmp.Diff(answers, got.Answers); diff != "" {
 		t.Errorf("answers mismatch (-want +got):\n%s", diff)
@@ -393,8 +579,8 @@ func TestInterruptEndsTheTurn(t *testing.T) {
 	}
 
 	got := f.entriesOf(t, prd("t1"), session.KindAssistant)[0].Assistant
-	if !got.Complete || !got.Interrupted || !strings.HasPrefix(got.Text, "tick ") {
-		t.Errorf("assistant = %+v, want a complete, interrupted entry with the ticks", got)
+	if !got.Complete || !got.Interrupted || got.InterruptedBy != "user" || !strings.HasPrefix(got.Text, "tick ") {
+		t.Errorf("assistant = %+v, want a complete entry the user interrupted, with the ticks", got)
 	}
 	if markers := f.entriesOf(t, prd("t1"), session.KindMarker); len(markers) != 1 {
 		t.Errorf("markers = %+v, want only the stage marker when text was interrupted", markers)
@@ -490,9 +676,8 @@ func TestCrashIsReportedAndRetried(t *testing.T) {
 	if diff := cmp.Diff(want, errs[0].Error); diff != "" {
 		t.Errorf("error entry mismatch (-want +got):\n%s", diff)
 	}
-	markers := f.entriesOf(t, prd("t1"), session.KindMarker)
-	if len(markers) != 2 || markers[1].Marker.Type != session.MarkerInterrupted {
-		t.Errorf("markers = %+v, want the interrupted marker of a turn without text", markers)
+	if markers := f.entriesOf(t, prd("t1"), session.KindMarker); len(markers) != 1 {
+		t.Errorf("markers = %+v, want only the stage marker: a crash leaves no interrupted marker", markers)
 	}
 	if rec := f.sessions.get(t, "t1", string(prompts.StagePRD)); rec.LastError != sum.LastError || !rec.Started {
 		t.Errorf("record = %+v, want the error persisted on a started session", rec)
@@ -696,11 +881,11 @@ func TestOpenReconcilesALeftoverTranscript(t *testing.T) {
 	if tr.SessionID != "sess-1" || len(tr.Entries) != 6 || len(tr.Pending) != 0 {
 		t.Fatalf("transcript = %+v, want the five stored entries and the PRD marker", tr)
 	}
-	if a := tr.Entries[1].Assistant; !a.Complete || !a.Interrupted || a.Text != "half" {
-		t.Errorf("assistant = %+v, want complete and interrupted", a)
+	if a := tr.Entries[1].Assistant; !a.Complete || !a.Interrupted || a.InterruptedBy != "crash" || a.Text != "half" {
+		t.Errorf("assistant = %+v, want complete and interrupted by a crash", a)
 	}
-	if c := tr.Entries[2].Action; c.Status != session.ActionInterrupted {
-		t.Errorf("action status = %q, want interrupted", c.Status)
+	if c := tr.Entries[2].Action; c.Status != session.ActionInterrupted || c.InterruptedBy != "crash" {
+		t.Errorf("action = %+v, want interrupted by a crash", c)
 	}
 	if p := tr.Entries[3].Permission; p.Status != session.PermissionCancelled {
 		t.Errorf("permission status = %q, want cancelled", p.Status)
@@ -1093,13 +1278,13 @@ func TestMarkPRReview(t *testing.T) {
 	f.start(t, taskInfo(t, "t1"))
 	f.waitIdle(t, prd("t1"))
 
-	f.service.MarkPRReview(t.Context(), prd("t1"), 2)
-	f.service.MarkPRReview(t.Context(), prd("missing"), 1)
+	f.service.MarkPRReview(t.Context(), prd("t1"), 2, true)
+	f.service.MarkPRReview(t.Context(), prd("missing"), 1, false)
 
 	markers := f.entriesOf(t, prd("t1"), session.KindMarker)
-	last := markers[len(markers)-1].Marker
-	if last.Type != session.MarkerPRReviewWritten || last.Pass != 2 {
-		t.Errorf("marker = %+v, want the pass of the review that was written", last)
+	want := &session.MarkerEntry{Type: session.MarkerPRReviewWritten, Pass: 2, Clean: true}
+	if diff := cmp.Diff(want, markers[len(markers)-1].Marker); diff != "" {
+		t.Errorf("marker mismatch (-want +got):\n%s", diff)
 	}
 }
 
@@ -1110,13 +1295,186 @@ func TestMarkStepReview(t *testing.T) {
 	f.start(t, taskInfo(t, "t1"))
 	f.waitIdle(t, prd("t1"))
 
-	f.service.MarkStepReview(t.Context(), prd("t1"), 2, true)
-	f.service.MarkStepReview(t.Context(), prd("missing"), 1, false)
+	f.service.MarkStepReview(t.Context(), prd("t1"), 2, false, 3)
+	f.service.MarkStepReview(t.Context(), prd("t1"), 3, false, -1)
+	f.service.MarkStepReview(t.Context(), prd("missing"), 1, false, 0)
 
 	markers := f.entriesOf(t, prd("t1"), session.KindMarker)
-	want := &session.MarkerEntry{Type: session.MarkerStepReviewWritten, Pass: 2, Clean: true}
-	if diff := cmp.Diff(want, markers[len(markers)-1].Marker); diff != "" {
-		t.Errorf("marker mismatch (-want +got):\n%s", diff)
+	findings := 3
+	want := []*session.MarkerEntry{
+		{Type: session.MarkerStepReviewWritten, Pass: 2, Findings: &findings},
+		// A count the report did not give is unknown, not zero.
+		{Type: session.MarkerStepReviewWritten, Pass: 3},
+	}
+	got := []*session.MarkerEntry{markers[len(markers)-2].Marker, markers[len(markers)-1].Marker}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("markers mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestTheMilestonesOfTheWorkflowAreMarked(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	f.start(t, taskInfo(t, "t1"))
+	f.waitIdle(t, prd("t1"))
+	before := len(f.entriesOf(t, prd("t1"), session.KindMarker))
+
+	ctx := t.Context()
+	f.service.MarkChangesApproved(ctx, prd("t1"), 4)
+	f.service.MarkCommitted(ctx, prd("t1"), "a1b2c3d", "Add the login screen", false, 0)
+	f.service.MarkDraftApproved(ctx, prd("t1"), "Add the login screen")
+	f.service.MarkPROpened(ctx, prd("t1"), 42, "main")
+	f.service.MarkChecksRead(ctx, prd("t1"), 2, 3, 5, []string{"lint"}, true)
+	f.service.MarkCommitted(ctx, prd("t1"), "e4f5a6b", "Fix the lint", true, 42)
+	f.service.MarkCommitted(ctx, prd("missing"), "e4f5a6b", "Fix the lint", true, 42)
+
+	markers := f.entriesOf(t, prd("t1"), session.KindMarker)[before:]
+	got := make([]*session.MarkerEntry, 0, len(markers))
+	for _, m := range markers {
+		got = append(got, m.Marker)
+	}
+	want := []*session.MarkerEntry{
+		{Type: session.MarkerChangesApproved, Files: 4},
+		{Type: session.MarkerCommitted, SHA: "a1b2c3d", Subject: "Add the login screen"},
+		{Type: session.MarkerDraftApproved, Title: "Add the login screen"},
+		{Type: session.MarkerPROpened, Number: 42, Base: "main"},
+		{Type: session.MarkerChecksRead, Pass: 2, Passed: 3, Total: 5, Failed: []string{"lint"}, Conflict: true},
+		{Type: session.MarkerCommitted, SHA: "e4f5a6b", Subject: "Fix the lint", Pushed: true, Number: 42},
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("markers mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestAPlanInvalidMarkerIsRecordedOnlyWhenTheProblemsChange(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	f.start(t, taskInfo(t, "t1"))
+	f.waitIdle(t, prd("t1"))
+
+	first := []session.PlanProblem{{File: "01-login.md", Message: "missing a title"}}
+	second := []session.PlanProblem{{Message: "no steps"}}
+	ctx := t.Context()
+	f.service.MarkPlanInvalid(ctx, prd("t1"), first)
+	f.service.MarkPlanInvalid(ctx, prd("t1"), first)
+	f.service.MarkPlanInvalid(ctx, prd("t1"), second)
+	f.service.MarkPlanInvalid(ctx, prd("t1"), first)
+
+	var got [][]session.PlanProblem
+	for _, m := range f.entriesOf(t, prd("t1"), session.KindMarker) {
+		if m.Marker.Type == session.MarkerPlanInvalid {
+			got = append(got, m.Marker.Problems)
+		}
+	}
+	want := [][]session.PlanProblem{first, second, first}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("plan_invalid problems mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestAPullRequestIsMarkedOpenedOncePerNumber(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	f.start(t, taskInfo(t, "t1"))
+	f.waitIdle(t, prd("t1"))
+
+	ctx := t.Context()
+	f.service.MarkPROpened(ctx, prd("t1"), 42, "main")
+	f.service.MarkPROpened(ctx, prd("t1"), 42, "main")
+	f.service.MarkPROpened(ctx, prd("t1"), 43, "main")
+	f.service.MarkPROpened(ctx, prd("t1"), 42, "develop")
+
+	var got []*session.MarkerEntry
+	for _, m := range f.entriesOf(t, prd("t1"), session.KindMarker) {
+		if m.Marker.Type == session.MarkerPROpened {
+			got = append(got, m.Marker)
+		}
+	}
+	want := []*session.MarkerEntry{
+		{Type: session.MarkerPROpened, Number: 42, Base: "main"},
+		{Type: session.MarkerPROpened, Number: 43, Base: "main"},
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("pr_opened markers mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestPausingMarksThePauseOnce(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	f.start(t, taskInfo(t, "t1"))
+	f.waitIdle(t, prd("t1"))
+
+	for range 2 {
+		if err := f.service.Pause(t.Context(), prd("t1")); err != nil {
+			t.Fatalf("Pause() = %v, want nil", err)
+		}
+	}
+
+	paused := 0
+	for _, m := range f.entriesOf(t, prd("t1"), session.KindMarker) {
+		if m.Marker.Type == session.MarkerPaused {
+			paused++
+		}
+	}
+	if paused != 1 {
+		t.Errorf("paused markers = %d, want 1", paused)
+	}
+}
+
+func TestThePromptSentIsKeptForTheStagesThatShowIt(t *testing.T) {
+	t.Parallel()
+
+	tests := map[prompts.Stage]bool{
+		prompts.StagePRD:        false,
+		prompts.StageOneShot:    false,
+		prompts.StageStepReview: false,
+		prompts.StageDiscussion: false,
+		prompts.StageTechSpec:   true,
+		prompts.StagePlan:       true,
+		prompts.StagePR:         true,
+		prompts.StagePRReview:   true,
+	}
+
+	for stage, kept := range tests {
+		t.Run(string(stage), func(t *testing.T) {
+			t.Parallel()
+
+			f := newFixture(t, "echo")
+			info := atStage(taskInfo(t, "t1"), stage)
+			switch stage {
+			case prompts.StageStepReview:
+				info = atStepReview(t, taskInfo(t, "t1"), 1, "")
+			case prompts.StageDiscussion:
+				info = atDiscussion(t, taskInfo(t, "t1"))
+			default:
+			}
+			f.start(t, info)
+			f.waitIdle(t, info.Key())
+
+			tr := f.transcript(t, info.Key())
+			var user *session.UserEntry
+			var echoed string
+			for _, e := range tr.Entries {
+				switch {
+				case e.User != nil:
+					user = e.User
+				case e.Assistant != nil:
+					echoed = e.Assistant.Text
+				}
+			}
+			want := ""
+			if kept {
+				want = echoed
+			}
+			if user == nil || user.Sent != want {
+				t.Errorf("user entry = %+v, want sent %q", user, want)
+			}
+		})
 	}
 }
 
@@ -1141,15 +1499,15 @@ func TestStartOfALaterStageSendsItsPromptWithoutTheInitialContext(t *testing.T) 
 	}
 	// What the user typed belongs to the PRD alone; a later stage reads the
 	// artifacts instead, so its user entry is empty.
-	wantUser := &session.UserEntry{Prompt: true}
-	if diff := cmp.Diff(wantUser, tr.Entries[1].User); diff != "" {
-		t.Errorf("user entry mismatch (-want +got):\n%s", diff)
-	}
 	rendered, _ := renderPrompt(prompts.StageTechSpec, prompts.Vars{
 		TaskName:     info.Name,
 		ArtifactsDir: info.ArtifactsDir,
 		PRDPath:      info.PRDPath,
 	})
+	wantUser := &session.UserEntry{Prompt: true, Sent: rendered}
+	if diff := cmp.Diff(wantUser, tr.Entries[1].User); diff != "" {
+		t.Errorf("user entry mismatch (-want +got):\n%s", diff)
+	}
 	if got := tr.Entries[2].Assistant.Text; got != rendered {
 		t.Errorf("prompt sent = %q, want %q", got, rendered)
 	}
@@ -1398,7 +1756,9 @@ func TestSendFromAppMarksTheMessageWithoutCountingIt(t *testing.T) {
 	f.start(t, taskInfo(t, "t1"))
 	f.waitIdle(t, prd("t1"))
 
-	if err := f.service.SendFromApp(t.Context(), prd("t1"), "  commit what is staged  "); err != nil {
+	if err := f.service.SendFromApp(t.Context(), prd("t1"), session.AppMessage{
+		Text: "  commit what is staged  ", Kind: session.AppReport, Pass: 2, Round: 2, Rounds: 3, Count: -1,
+	}); err != nil {
 		t.Fatalf("SendFromApp() = %v, want nil", err)
 	}
 	f.waitIdle(t, prd("t1"))
@@ -1407,7 +1767,10 @@ func TestSendFromAppMarksTheMessageWithoutCountingIt(t *testing.T) {
 	if len(users) != 2 {
 		t.Fatalf("user entries = %d, want the prompt and the message of the app", len(users))
 	}
-	want := &session.UserEntry{Text: "commit what is staged", App: true}
+	want := &session.UserEntry{
+		Text: "commit what is staged", App: true,
+		AppKind: session.AppReport, AppPass: 2, AppRound: 2, AppRounds: 3, AppCount: -1,
+	}
 	if diff := cmp.Diff(want, users[1].User); diff != "" {
 		t.Errorf("app entry mismatch (-want +got):\n%s", diff)
 	}
@@ -1418,7 +1781,7 @@ func TestSendFromAppMarksTheMessageWithoutCountingIt(t *testing.T) {
 	if rec := f.sessions.get(t, "t1", string(prompts.StagePRD)); rec.Corrections != 0 {
 		t.Errorf("stored corrections = %d, want none", rec.Corrections)
 	}
-	wantErrIs(t, f.service.SendFromApp(t.Context(), prd("t1"), "   "), session.ErrEmptyMessage)
+	wantErrIs(t, f.service.SendFromApp(t.Context(), prd("t1"), session.AppMessage{Text: "   "}), session.ErrEmptyMessage)
 }
 
 func TestSendCorrectionMarksTheMessageAndCountsIt(t *testing.T) {
@@ -1428,7 +1791,9 @@ func TestSendCorrectionMarksTheMessageAndCountsIt(t *testing.T) {
 	f.start(t, taskInfo(t, "t1"))
 	f.waitIdle(t, prd("t1"))
 
-	if err := f.service.SendCorrection(t.Context(), prd("t1"), "  fix the plan  "); err != nil {
+	if err := f.service.SendCorrection(t.Context(), prd("t1"), session.AppMessage{
+		Text: "  fix the plan  ", Kind: session.AppCorrection, Round: 1, Rounds: 3, Count: 2,
+	}); err != nil {
 		t.Fatalf("SendCorrection() = %v, want nil", err)
 	}
 	f.waitIdle(t, prd("t1"))
@@ -1437,7 +1802,10 @@ func TestSendCorrectionMarksTheMessageAndCountsIt(t *testing.T) {
 	if len(users) != 2 {
 		t.Fatalf("user entries = %d, want the prompt and the correction", len(users))
 	}
-	want := &session.UserEntry{Text: "fix the plan", App: true}
+	want := &session.UserEntry{
+		Text: "fix the plan", App: true,
+		AppKind: session.AppCorrection, AppRound: 1, AppRounds: 3, AppCount: 2,
+	}
 	if diff := cmp.Diff(want, users[1].User); diff != "" {
 		t.Errorf("correction entry mismatch (-want +got):\n%s", diff)
 	}
@@ -1447,7 +1815,7 @@ func TestSendCorrectionMarksTheMessageAndCountsIt(t *testing.T) {
 	if rec := f.sessions.get(t, "t1", string(prompts.StagePRD)); rec.Corrections != 1 {
 		t.Errorf("stored corrections = %d, want 1", rec.Corrections)
 	}
-	wantErrIs(t, f.service.SendCorrection(t.Context(), prd("t1"), "   "), session.ErrEmptyMessage)
+	wantErrIs(t, f.service.SendCorrection(t.Context(), prd("t1"), session.AppMessage{Text: "   "}), session.ErrEmptyMessage)
 }
 
 func TestDiscardClosesTheRunAndDropsTheRecords(t *testing.T) {
@@ -1977,10 +2345,6 @@ func TestStartOfAReviewOfAPullRequestMarksItAndSendsWhatTheUserWroteForThePass(t
 	}
 	// What the user wrote for the pass reads in the conversation as their first
 	// message, as the initial context of a task does.
-	wantUser := &session.UserEntry{Text: info.PassInstructions, Prompt: true}
-	if diff := cmp.Diff(wantUser, tr.Entries[1].User); diff != "" {
-		t.Errorf("user entry mismatch (-want +got):\n%s", diff)
-	}
 	rendered, _ := renderPrompt(prompts.StagePRReview, prompts.Vars{
 		ContextPath:      info.ContextPath,
 		External:         info.External,
@@ -1988,6 +2352,10 @@ func TestStartOfAReviewOfAPullRequestMarksItAndSendsWhatTheUserWroteForThePass(t
 		Instructions:     info.Instructions,
 		PassInstructions: info.PassInstructions,
 	})
+	wantUser := &session.UserEntry{Text: info.PassInstructions, Prompt: true, Sent: rendered}
+	if diff := cmp.Diff(wantUser, tr.Entries[1].User); diff != "" {
+		t.Errorf("user entry mismatch (-want +got):\n%s", diff)
+	}
 	if got := tr.Entries[2].Assistant.Text; got != rendered {
 		t.Errorf("prompt sent = %q, want %q", got, rendered)
 	}
@@ -2017,7 +2385,7 @@ func TestStartOfAReviewOfAPullRequestSendsWhatTheAppReadFromGitHub(t *testing.T)
 }
 
 // readLabel is the label every action of the actions scenario carries.
-var readLabel, _ = session.For("Read", nil, "")
+var readLabel = session.For("Read", nil, "").Label
 
 // waitAction waits until the action in progress of a session has the target.
 func waitAction(t *testing.T, f *fixture, k session.Key, target string) session.Summary {
@@ -2111,6 +2479,108 @@ func TestAnInterruptedTurnLeavesNeitherTurnNorAction(t *testing.T) {
 	sum := f.waitIdle(t, prd("t1"))
 	if !sum.TurnStartedAt.IsZero() || sum.ActionLabel != "" || sum.ActionTarget != "" {
 		t.Errorf("summary = %+v, want neither turn nor action", sum)
+	}
+}
+
+func TestTheUserInterruptingAnActionIsRecorded(t *testing.T) {
+	t.Parallel()
+
+	f, _ := newGatedFixture(t)
+	f.start(t, taskInfo(t, "t1"))
+	waitAction(t, f, prd("t1"), claudetest.ReadPath)
+
+	if err := f.service.Interrupt(t.Context(), prd("t1")); err != nil {
+		t.Fatalf("Interrupt() = %v, want nil", err)
+	}
+	f.waitIdle(t, prd("t1"))
+
+	action := f.entriesOf(t, prd("t1"), session.KindAction)[0].Action
+	if action.Status != session.ActionInterrupted || action.InterruptedBy != "user" {
+		t.Errorf("action = %+v, want interrupted by the user", action)
+	}
+	markers := f.entriesOf(t, prd("t1"), session.KindMarker)
+	want := &session.MarkerEntry{Type: session.MarkerInterrupted, InterruptedBy: "user"}
+	if len(markers) != 2 {
+		t.Fatalf("markers = %+v, want the stage marker and the interrupted one", markers)
+	}
+	if diff := cmp.Diff(want, markers[1].Marker); diff != "" {
+		t.Errorf("interrupted marker mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestACrashInterruptsTheActionWithoutAMarker(t *testing.T) {
+	t.Parallel()
+
+	f, _ := newGatedFixture(t)
+	f.start(t, taskInfo(t, "t1"))
+	waitAction(t, f, prd("t1"), claudetest.ReadPath)
+
+	f.launcher.kill(t)
+	f.waitStatus(t, prd("t1"), "the crash", func(s session.Summary) bool {
+		return s.Status == session.StatusError
+	})
+
+	action := f.entriesOf(t, prd("t1"), session.KindAction)[0].Action
+	if action.Status != session.ActionInterrupted || action.InterruptedBy != "crash" {
+		t.Errorf("action = %+v, want interrupted by the crash", action)
+	}
+	if markers := f.entriesOf(t, prd("t1"), session.KindMarker); len(markers) != 1 {
+		t.Errorf("markers = %+v, want only the stage marker", markers)
+	}
+}
+
+func TestACrashCutsTheTextShort(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "slow")
+	f.start(t, taskInfo(t, "t1"))
+	waitStreaming(t, f, prd("t1"))
+
+	f.launcher.kill(t)
+	f.waitStatus(t, prd("t1"), "the crash", func(s session.Summary) bool {
+		return s.Status == session.StatusError
+	})
+
+	got := f.entriesOf(t, prd("t1"), session.KindAssistant)[0].Assistant
+	if !got.Complete || !got.Interrupted || got.InterruptedBy != "crash" {
+		t.Errorf("assistant = %+v, want a complete entry the crash interrupted", got)
+	}
+	if markers := f.entriesOf(t, prd("t1"), session.KindMarker); len(markers) != 1 {
+		t.Errorf("markers = %+v, want only the stage marker", markers)
+	}
+}
+
+func TestAnAPIRetryIsReportedAndThenMarked(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "retry")
+	f.start(t, taskInfo(t, "t1"))
+	sum := f.waitIdle(t, prd("t1"))
+	if sum.RetryAttempt != 0 || sum.RetryMax != 0 || !sum.RetryAt.IsZero() || sum.RetryReason != "" {
+		t.Errorf("summary = %+v, want the retry cleared once the turn answered", sum)
+	}
+	retries := f.retrySummaries()
+	if len(retries) == 0 {
+		t.Fatal("no summary reported the retry")
+	}
+	last := retries[len(retries)-1]
+	wantAt := base.Add(500 * time.Millisecond)
+	if last.RetryAttempt != claudetest.RetryAttempts || last.RetryMax != 10 ||
+		!last.RetryAt.Equal(wantAt) || last.RetryReason != "overloaded" {
+		t.Errorf("retry summary = %+v, want attempt %d of 10 at %v, overloaded", last, claudetest.RetryAttempts, wantAt)
+	}
+
+	markers := f.entriesOf(t, prd("t1"), session.KindMarker)
+	want := &session.MarkerEntry{Type: session.MarkerRetried, Attempts: claudetest.RetryAttempts, Reason: "overloaded"}
+	if len(markers) != 2 {
+		t.Fatalf("markers = %+v, want the stage marker and the retried one", markers)
+	}
+	if diff := cmp.Diff(want, markers[1].Marker); diff != "" {
+		t.Errorf("retried marker mismatch (-want +got):\n%s", diff)
+	}
+	assistant := f.entriesOf(t, prd("t1"), session.KindAssistant)[0]
+	if markers[1].Seq > assistant.Seq {
+		t.Errorf("retried marker seq = %d, want before the answer (%d)", markers[1].Seq, assistant.Seq)
 	}
 }
 

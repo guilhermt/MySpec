@@ -80,6 +80,17 @@ const SecondReadPath = "/tmp/fake/world.txt"
 // BashCommand is the command the permission scenario asks to run.
 const BashCommand = `echo "hi" > hello.txt`
 
+// The Agent call of the subagent scenario and the Bash call of the bash_fail
+// scenario.
+const (
+	SubagentType        = "general-purpose"
+	SubagentDescription = "Inspect the folder"
+	SubagentText        = "The folder holds hello.txt."
+	SubagentReport      = "hello.txt says hi."
+	FailingCommand      = "go test ./...\ngo vet ./..."
+	FailingDescription  = "Run the tests"
+)
+
 // Capabilities is what the fake announces in system/init.
 var Capabilities = []string{"interrupt_receipt_v1", "interrupt_cancel_queued_v1", "msg_lifecycle_v1"}
 
@@ -321,10 +332,16 @@ func (f *fake) play(scenario string) int {
 			f.slowTurn()
 		case "actions":
 			f.actionsTurn(text)
+		case "subagent":
+			f.subagentTurn(text)
+		case "bash_fail":
+			f.bashFailTurn(text)
 		case "writer":
 			f.writerTurn(text)
 		case "turn_error":
 			f.failedTurn(text)
+		case "retry":
+			f.retryTurn(text)
 		case "crash":
 			f.emitInit()
 			_, _ = fmt.Fprintln(os.Stderr, "boom")
@@ -372,6 +389,37 @@ func (f *fake) failedTurn(text string) {
 	}
 	f.emitInit()
 	f.result("error_during_execution", true, "API Error: overloaded", "")
+}
+
+// RetryAttempts is how many api_retry events the retry scenario emits before
+// its turn, and RetryError the error they carry.
+const (
+	RetryAttempts = 2
+	RetryError    = "overloaded"
+)
+
+// retryTurn has the API fail RetryAttempts times, the way an overloaded API
+// fails, and then answers like echo.
+func (f *fake) retryTurn(text string) {
+	f.emitInit()
+	for attempt := 1; attempt <= RetryAttempts; attempt++ {
+		f.emitRaw(map[string]any{
+			"type":           "system",
+			"subtype":        "api_retry",
+			"attempt":        attempt,
+			"max_retries":    10,
+			"retry_delay_ms": 500,
+			"error_status":   529,
+			"error":          RetryError,
+			"session_id":     f.sessionID,
+		})
+	}
+	messageID := f.nextID("msg")
+	f.messageStart(messageID)
+	f.streamText(0, text)
+	f.endMessage()
+	f.assistantText(messageID, text)
+	f.result("success", false, text, "completed")
 }
 
 // The markers that wrap a file a writer message asks for.
@@ -526,7 +574,7 @@ func (f *fake) permissionTurn() {
 
 	reply := "done"
 	if answer.Behavior == "allow" {
-		f.toolResult(toolUseID, "(Bash completed with no output)")
+		f.silentBashResult(toolUseID)
 		// The app's rewrite of the suggestions is echoed so a test can read it.
 		if len(answer.UpdatedPermissions) > 0 {
 			reply += " " + string(answer.UpdatedPermissions)
@@ -662,6 +710,61 @@ func (f *fake) actionsTurn(text string) {
 		}
 	}
 	f.streamText(2, text)
+	f.endMessage()
+	f.assistantText(messageID, text)
+	f.result("success", false, text, "completed")
+}
+
+// subagentTurn delegates to a subagent that reads a file, runs a command and
+// says what it found, then answers with the text it was given. The subagent
+// streams a text delta the app ignores; its blocks arrive whole.
+func (f *fake) subagentTurn(text string) {
+	f.emitInit()
+	messageID := f.nextID("msg")
+	f.messageStart(messageID)
+
+	agentID := f.nextID("toolu")
+	f.streamToolUse(0, messageID, agentID, "Agent", map[string]any{
+		"subagent_type": SubagentType,
+		"description":   SubagentDescription,
+		"prompt":        "Inspect the folder and report.",
+	})
+
+	subMessageID := f.nextID("msg")
+	readID, bashID := f.nextID("toolu"), f.nextID("toolu")
+	f.emit(map[string]any{
+		"type":               "stream_event",
+		"event":              map[string]any{"type": "content_block_start", "index": 0, "content_block": map[string]any{"type": "text", "text": ""}},
+		"parent_tool_use_id": agentID,
+	})
+	f.toolUseWithParent(subMessageID, readID, "Read", map[string]any{"file_path": ReadPath}, agentID)
+	f.toolResultWithParent(readID, "1\thi\n", agentID)
+	f.toolUseWithParent(subMessageID, bashID, "Bash", map[string]any{"command": "ls -1", "description": "List the files"}, agentID)
+	f.toolResultWithParent(bashID, "hello.txt", agentID)
+	f.assistantTextWithParent(subMessageID, SubagentText, agentID)
+	f.subagentResult(agentID, SubagentReport)
+
+	f.streamText(1, text)
+	f.endMessage()
+	f.assistantText(messageID, text)
+	f.result("success", false, text, "completed")
+}
+
+// bashFailTurn runs a command that fails with exit code 2, then answers with
+// the text it was given.
+func (f *fake) bashFailTurn(text string) {
+	f.emitInit()
+	messageID := f.nextID("msg")
+	f.messageStart(messageID)
+
+	toolUseID := f.nextID("toolu")
+	f.streamToolUse(0, messageID, toolUseID, "Bash", map[string]any{
+		"command":     FailingCommand,
+		"description": FailingDescription,
+	})
+	f.toolResultError(toolUseID, "Exit code 2\n--- FAIL: TestX")
+
+	f.streamText(1, text)
 	f.endMessage()
 	f.assistantText(messageID, text)
 	f.result("success", false, text, "completed")
@@ -828,6 +931,54 @@ func (f *fake) assistantText(messageID, text string) {
 	})
 }
 
+// toolUseWithParent emits a whole tool_use block of a subagent.
+func (f *fake) toolUseWithParent(messageID, toolUseID, name string, input map[string]any, parent string) {
+	f.emit(map[string]any{
+		"type": "assistant",
+		"message": map[string]any{
+			"id":      messageID,
+			"model":   Model,
+			"role":    "assistant",
+			"type":    "message",
+			"content": []any{map[string]any{"type": "tool_use", "id": toolUseID, "name": name, "input": input}},
+		},
+		"parent_tool_use_id": parent,
+	})
+}
+
+// assistantTextWithParent emits a whole text block of a subagent.
+func (f *fake) assistantTextWithParent(messageID, text, parent string) {
+	f.emit(map[string]any{
+		"type": "assistant",
+		"message": map[string]any{
+			"id":      messageID,
+			"model":   Model,
+			"role":    "assistant",
+			"type":    "message",
+			"content": []any{map[string]any{"type": "text", "text": text}},
+		},
+		"parent_tool_use_id": parent,
+	})
+}
+
+// toolResultError emits a tool that failed, as the CLI reports it.
+func (f *fake) toolResultError(toolUseID, content string) {
+	f.emit(map[string]any{
+		"type": "user",
+		"message": map[string]any{
+			"role": "user",
+			"content": []any{map[string]any{
+				"type":        "tool_result",
+				"tool_use_id": toolUseID,
+				"content":     content,
+				"is_error":    true,
+			}},
+		},
+		"parent_tool_use_id": nil,
+		"tool_use_result":    "Error: " + content,
+	})
+}
+
 // toolResult emits what a tool returned to the agent.
 func (f *fake) toolResult(toolUseID, content string) {
 	f.emit(map[string]any{
@@ -843,6 +994,67 @@ func (f *fake) toolResult(toolUseID, content string) {
 		},
 		"parent_tool_use_id": nil,
 		"tool_use_result":    map[string]any{"stdout": content, "stderr": ""},
+	})
+}
+
+// silentBashResult emits a command that printed nothing, as the CLI reports
+// it: a placeholder in the text and empty streams in the structured result.
+func (f *fake) silentBashResult(toolUseID string) {
+	f.emit(map[string]any{
+		"type": "user",
+		"message": map[string]any{
+			"role": "user",
+			"content": []any{map[string]any{
+				"type":        "tool_result",
+				"tool_use_id": toolUseID,
+				"content":     "(Bash completed with no output)",
+				"is_error":    false,
+			}},
+		},
+		"parent_tool_use_id": nil,
+		"tool_use_result":    map[string]any{"stdout": "", "stderr": "", "interrupted": false, "noOutputExpected": true},
+	})
+}
+
+// toolResultWithParent emits what a tool of a subagent returned to it. The
+// CLI gives no structured result off the main thread.
+func (f *fake) toolResultWithParent(toolUseID, content, parent string) {
+	f.emit(map[string]any{
+		"type": "user",
+		"message": map[string]any{
+			"role": "user",
+			"content": []any{map[string]any{
+				"type":        "tool_result",
+				"tool_use_id": toolUseID,
+				"content":     content,
+				"is_error":    false,
+			}},
+		},
+		"parent_tool_use_id": parent,
+	})
+}
+
+// subagentResult emits the hand-back of a subagent, as the CLI reports it: the
+// report inside the harness frame in the text, and alone in the structured
+// result.
+func (f *fake) subagentResult(toolUseID, report string) {
+	framed := "[Subagent hand-back] The report follows:\n  " + report +
+		"\nagentId: a0fake (use SendMessage to continue this agent)\n<usage>tool_uses: 2</usage>"
+	f.emit(map[string]any{
+		"type": "user",
+		"message": map[string]any{
+			"role": "user",
+			"content": []any{map[string]any{
+				"type":        "tool_result",
+				"tool_use_id": toolUseID,
+				"content":     []any{map[string]any{"type": "text", "text": framed}},
+			}},
+		},
+		"parent_tool_use_id": nil,
+		"tool_use_result": map[string]any{
+			"status":  "completed",
+			"content": []any{map[string]any{"type": "text", "text": report}},
+		},
 	})
 }
 

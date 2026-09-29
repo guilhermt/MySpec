@@ -1,9 +1,8 @@
-import { X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "./Button";
 import { Icon } from "./Icon";
 import { IconButton } from "./IconButton";
-import type { IconGlyph } from "./icons";
+import { ICONS, type IconGlyph } from "./icons";
 import { whenExitEnds } from "./Presence";
 
 /** TOAST_MS is how long a toast stays, counted while it has neither the pointer nor the focus. */
@@ -95,7 +94,7 @@ export function Toast({
           {action.label}
         </Button>
       </div>
-      <IconButton icon={X} label="Dismiss" size="sm" onClick={() => setLeaving(true)} />
+      <IconButton icon={ICONS.close} label="Dismiss" size="sm" onClick={() => setLeaving(true)} />
     </div>
   );
 }

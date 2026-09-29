@@ -54,6 +54,9 @@ type ReviewReport struct {
 	Pass  int
 	File  string // file name inside pr/
 	Clean bool   // the pass closed with nothing to change
+	// Findings is how many findings the report lists; -1 when unknown, as for
+	// every pass of the pull request review.
+	Findings int
 }
 
 // PRArtifacts is what the pr folder holds.
@@ -145,7 +148,7 @@ func readReport(path string, pass int) (ReviewReport, bool) {
 			return ReviewReport{}, false
 		}
 	}
-	return ReviewReport{Pass: pass, File: filepath.Base(path), Clean: status == cleanStatus}, true
+	return ReviewReport{Pass: pass, File: filepath.Base(path), Clean: status == cleanStatus, Findings: -1}, true
 }
 
 // filePerm keeps an artifact the app writes private to the user.

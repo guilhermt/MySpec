@@ -35,9 +35,13 @@ describe("TaskView, the nine scenes", () => {
       "Progress · Implementation 4/7 · Manual · waiting for you: review step 4 in Step 4",
       "wait",
     ],
-    ["blocked", "Progress · Implementation 5/7 · error: step 5 blocked in Step 5", "error"],
+    ["blocked", "Progress · Implementation 5/7 · error: step 5 blocked", "error"],
     ["checks", "Progress · PR review · waiting for the checks, 3 of 5 passed", "github"],
-    ["findings", "Progress · PR review pass 1 · waiting for you: findings to decide in PR", "wait"],
+    [
+      "findings",
+      "Progress · PR review pass 1 · waiting for you: decide findings in PR review",
+      "wait",
+    ],
     ["close", "Progress · Closing · ready to close: ready to close in PR", "close"],
   ])("draws the stepper of the %s scene, with the glyph of its pill", (name, label, glyph) => {
     scene(name);
@@ -80,7 +84,7 @@ describe("TaskView, the nine scenes", () => {
     scene("manual");
 
     const bar = screen.getByRole("region", { name: "Request" });
-    expect(within(bar).getByRole("status")).toHaveTextContent("Review step 4");
+    expect(bar).toHaveTextContent("Review step 4");
     expect(bar).toHaveTextContent("5 of 7 files staged · 71%");
     expect(within(bar).getByRole("button", { name: "Open in VS Code" })).toBeInTheDocument();
     expect(within(bar).getByRole("button", { name: "Approve" })).toHaveAttribute(
@@ -93,7 +97,7 @@ describe("TaskView, the nine scenes", () => {
     scene("close");
 
     const bar = screen.getByRole("region", { name: "Request" });
-    expect(within(bar).getByRole("status")).toHaveTextContent("Ready to close");
+    expect(bar).toHaveTextContent("Ready to close");
     expect(bar).toHaveTextContent("#1284 merged");
     expect(bar).toHaveTextContent("Removes the worktree and the branch, then updates dev");
     expect(within(bar).getByRole("button", { name: "Close task" })).not.toHaveAttribute(
@@ -126,14 +130,78 @@ describe("TaskView, the nine scenes", () => {
     },
   );
 
-  it.each<SceneName>(["plan", "run", "ask", "error", "blocked", "checks", "findings"])(
-    "has no request bar in the %s scene",
-    (name) => {
-      scene(name);
+  it.each<[SceneName, string]>([
+    ["plan", "Waiting for reply· PRD"],
+    ["ask", "Question· Reviewer"],
+    ["error", "Session error· Reviewer"],
+    ["blocked", "Step 5 blocked· worktree not clean"],
+    ["findings", "Decide findings· PR review"],
+  ])("draws the bar of the %s scene", (name, label) => {
+    scene(name);
 
-      expect(screen.queryByRole("region", { name: "Request" })).not.toBeInTheDocument();
-    },
-  );
+    expect(screen.getByRole("region", { name: "Request" })).toHaveTextContent(label);
+  });
+
+  it.each<[SceneName, string]>([
+    ["plan", "2m"],
+    ["ask", "18m"],
+    ["error", "5m"],
+    ["manual", "9m"],
+    ["blocked", "6m"],
+    ["findings", "12m"],
+    ["close", "2h"],
+  ])("says in the chip of the %s scene how long it waited, as the mock does", (name, wait) => {
+    scene(name);
+
+    expect(screen.getByRole("region", { name: "Request" })).toHaveTextContent(wait);
+  });
+
+  it("offers the options of the question in text of the plan scene as quick replies", () => {
+    scene("plan");
+
+    const replies = screen.getByRole("group", { name: "Quick replies" });
+    expect(
+      within(replies)
+        .getAllByRole("button")
+        .map((reply) => reply.textContent),
+    ).toEqual(["aPlans table, cached 60 s", "bConfig, with a release"]);
+  });
+
+  it("says how long the turn of the run scene has run", () => {
+    scene("run");
+
+    expect(screen.getByText("Working · 3m 40s")).toBeInTheDocument();
+  });
+
+  it("retries the reviewer whose session stopped in the error scene", () => {
+    scene("error");
+
+    const bar = screen.getByRole("region", { name: "Request" });
+    expect(within(bar).getByRole("button", { name: "Retry reviewer" })).toBeInTheDocument();
+    expect(screen.getByText("Claude Code stopped unexpectedly.")).toBeInTheDocument();
+    expect(screen.queryByText("The agent couldn't finish the turn.")).not.toBeInTheDocument();
+  });
+
+  it("lists the seven changed files of step 4 in the manual scene", () => {
+    scene("manual");
+
+    const card = screen.getByRole("article", { name: /^Changed files · 7/ });
+    expect(within(card).getAllByRole("listitem")).toHaveLength(7);
+  });
+
+  it("ends the conversation of the close scene with the merge", () => {
+    scene("close");
+
+    expect(
+      screen.getByRole("article", { name: /^Merged #1284 into dev · by lnakamura/ }),
+    ).toBeInTheDocument();
+  });
+
+  it.each<SceneName>(["run", "checks"])("has no request bar in the %s scene", (name) => {
+    scene(name);
+
+    expect(screen.queryByRole("region", { name: "Request" })).not.toBeInTheDocument();
+  });
 
   it("has no context meter in the checks scene, where no conversation is on screen", () => {
     scene("checks");

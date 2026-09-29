@@ -1,5 +1,4 @@
 import { AlertDialog as BaseAlertDialog } from "@base-ui/react/alert-dialog";
-import { X } from "lucide-react";
 import { type KeyboardEvent, type ReactNode, type RefObject, useRef } from "react";
 import { AlertDialog, AlertDialogContent, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import {
@@ -11,6 +10,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Button, type ButtonBaseProps, type ButtonLoading } from "./Button";
 import { IconButton } from "./IconButton";
+import { ICONS } from "./icons";
 
 export interface DialogProps {
   open: boolean;
@@ -129,7 +129,7 @@ function DialogHeading({
           </p>
         )}
       </div>
-      <Close render={<IconButton label="Close" shortcut="Esc" icon={X} size="sm" />} />
+      <Close render={<IconButton label="Close" shortcut="Esc" icon={ICONS.close} size="sm" />} />
     </div>
   );
 }

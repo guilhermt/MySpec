@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // State is where a pull request is.
@@ -26,10 +27,14 @@ type PR struct {
 	State  State
 	Base   string // the branch the pull request merges into, as GitHub names it
 	Checks PRChecks
+	// MergedBy is the login of who merged the pull request and MergedAt when;
+	// "" and zero before the merge.
+	MergedBy string
+	MergedAt time.Time
 }
 
 // prFields are the fields of a pull request the app asks gh for.
-const prFields = "number,url,state,baseRefName,mergeable,statusCheckRollup"
+const prFields = "number,url,state,baseRefName,mergeable,statusCheckRollup,mergedBy,mergedAt"
 
 // noPR is what gh says, in lower case, about a branch with no pull request.
 const noPR = "no pull requests found"
@@ -71,16 +76,22 @@ func (r *Runner) ViewPR(ctx context.Context, dir, branch string) (PR, error) {
 		BaseRefName       string      `json:"baseRefName"`
 		Mergeable         string      `json:"mergeable"`
 		StatusCheckRollup []CheckNode `json:"statusCheckRollup"`
+		MergedBy          struct {
+			Login string `json:"login"`
+		} `json:"mergedBy"`
+		MergedAt time.Time `json:"mergedAt"`
 	}
 	if err := json.Unmarshal([]byte(out), &body); err != nil {
 		return PR{}, fmt.Errorf("gh pr view %s: %w", branch, err)
 	}
 	return PR{
-		Number: body.Number,
-		URL:    body.URL,
-		State:  stateOf(body.State),
-		Base:   body.BaseRefName,
-		Checks: ParseChecks(body.StatusCheckRollup, body.Mergeable),
+		Number:   body.Number,
+		URL:      body.URL,
+		State:    stateOf(body.State),
+		Base:     body.BaseRefName,
+		Checks:   ParseChecks(body.StatusCheckRollup, body.Mergeable),
+		MergedBy: body.MergedBy.Login,
+		MergedAt: body.MergedAt,
 	}, nil
 }
 

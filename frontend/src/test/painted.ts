@@ -237,6 +237,49 @@ export function overlaps(elements: readonly Element[]): boolean {
   );
 }
 
+/**
+ * CONVERSATION_MEASURE is the widest the conversation column is, in pixels, as the material fixes
+ * it: a number, not the token, so a token that drifts fails the proof.
+ */
+export const CONVERSATION_MEASURE = 960;
+
+/** CONVERSATION_GUTTER is what the column keeps free on each side of the main area: --space-6. */
+export const CONVERSATION_GUTTER = 24;
+
+/** Edges are the left and the right edge of a box, in pixels of the page. */
+export interface Edges {
+  left: number;
+  right: number;
+}
+
+/**
+ * conversationEdges are where the conversation column stands in a main area: min(960, area − 48)
+ * wide, the margin that centres it rounded down to the pixel, so both edges are whole pixels.
+ */
+export function conversationEdges(area: HTMLElement): Edges {
+  const box = area.getBoundingClientRect();
+  const inner = box.width - 2 * CONVERSATION_GUTTER;
+  const left =
+    box.left + CONVERSATION_GUTTER + Math.max(0, Math.floor((inner - CONVERSATION_MEASURE) / 2));
+  return { left, right: left + Math.min(CONVERSATION_MEASURE, inner) };
+}
+
+/** edgesOf are the left and the right edge of an element. */
+export function edgesOf(element: Element): Edges {
+  const { left, right } = element.getBoundingClientRect();
+  return { left, right };
+}
+
+/** innerEdgesOf are the edges of the content box of an element: its box less its side paddings. */
+export function innerEdgesOf(element: Element): Edges {
+  const { left, right } = element.getBoundingClientRect();
+  const style = getComputedStyle(element);
+  return {
+    left: left + parseFloat(style.paddingLeft) + parseFloat(style.borderLeftWidth),
+    right: right - parseFloat(style.paddingRight) - parseFloat(style.borderRightWidth),
+  };
+}
+
 /** capture saves a screenshot of an element for the pull request, only when MYSPEC_CAPTURES=1. */
 export async function capture(name: string, element: HTMLElement): Promise<void> {
   const dir = inject("captureDir");

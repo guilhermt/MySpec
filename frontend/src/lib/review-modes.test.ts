@@ -50,8 +50,8 @@ describe("stepReportLabel", () => {
 });
 
 describe("findStepReport", () => {
-  const first = { pass: 1, file: "1-review-1.md", clean: false };
-  const second = { pass: 1, file: "2-review-1.md", clean: true };
+  const first = { pass: 1, file: "1-review-1.md", clean: false, findings: -1 };
+  const second = { pass: 1, file: "2-review-1.md", clean: true, findings: 0 };
   const steps = [
     { number: 1, reports: [first] },
     { number: 2, reports: [second] },

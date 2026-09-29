@@ -2,6 +2,7 @@ import { screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { ArtifactsPanel } from "@/features/task/ArtifactsPanel";
 import { api, type TaskSummary } from "@/lib/wails";
+import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
 import { makePullRequest, makeState, makeStep, makeTask } from "@/test/wails-mock";
 
@@ -81,6 +82,19 @@ describe("ArtifactsPanel", () => {
     expect(within(group("Pull request")).getByRole("button")).toHaveTextContent(
       "Draft · Add the login screenapproved",
     );
+  });
+
+  it("opens at the document a marker of the conversation asked for", async () => {
+    const task = makeTask({ hasPrd: true });
+    renderWithStore(<ArtifactsPanel task={task} />, {
+      state: makeState({ tasks: [task] }),
+      ui: { location: { kind: "task", id: task.id }, panel: "artifacts", panelDocument: "PRD.md" },
+    });
+
+    expect(screen.getByRole("button", { name: "← Artifacts" })).toBeInTheDocument();
+    expect(await screen.findByTestId("markdown")).toHaveTextContent("# PRD");
+    expect(api.readArtifact).toHaveBeenCalledWith(task.id, "PRD.md");
+    expect(useAppStore.getState().panelDocument).toBeNull();
   });
 
   it("opens a document in place of the list, and comes back to it", async () => {

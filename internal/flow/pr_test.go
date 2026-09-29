@@ -287,6 +287,94 @@ func TestADraftSessionThatStopsWithoutADraftWaitsForAReply(t *testing.T) {
 	}
 }
 
+func TestRefreshingThePullRequestDuringTheReviewDoesNotMarkItOpenedAgain(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.gh.setPR("task-1", samePR)
+	inPR(f, "task-1", plan(), task.PRPreparing)
+	f.service.Sync(t.Context())
+	waitFor(t, "the review session of the task", f.reviewOpen)
+
+	f.gh.setPR("task-1", withChecks(failing(gh.MergeableClean, "lint")))
+	before := f.tasks.inspectCount()
+	if err := f.service.RefreshPR(t.Context(), "task-1"); err != nil {
+		t.Fatalf("RefreshPR() = %v, want nil", err)
+	}
+	f.waitPRRun(t, "the new reading to be recorded", func(run task.PRRun) bool {
+		return slices.ContainsFunc(run.PR.Checks, func(c gh.Check) bool { return c.Name == "lint" })
+	})
+	// The reading asks for an evaluation once it is recorded.
+	f.waitEvaluated(t, "task-1", before)
+
+	if run, _ := f.tasks.prRun("task-1"); run.Status != task.PRReviewing {
+		t.Errorf("status = %q, want the review where it was", run.Status)
+	}
+	opened := []keyedMarker{{
+		Key:    session.Key{TaskID: "task-1", Stage: session.PRStage},
+		Marker: session.MarkerEntry{Type: session.MarkerPROpened, Number: samePR.Number, Base: samePR.Base},
+	}}
+	if diff := cmp.Diff(opened, f.sessions.marked(session.MarkerPROpened)); diff != "" {
+		t.Errorf("pr_opened markers mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestRefreshingThePullRequestWhileAPassCommitsKeepsTheStatus(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.gh.setPR("task-1", withChecks(failing(gh.MergeableClean, "lint")))
+	inPR(f, "task-1", plan(), task.PRCommitting)
+
+	before := f.tasks.inspectCount()
+	if err := f.service.RefreshPR(t.Context(), "task-1"); err != nil {
+		t.Fatalf("RefreshPR() = %v, want nil", err)
+	}
+	f.waitPRRun(t, "the new reading to be recorded", func(run task.PRRun) bool {
+		return slices.ContainsFunc(run.PR.Checks, func(c gh.Check) bool { return c.Name == "lint" })
+	})
+	// The reading asks for an evaluation once it is recorded.
+	f.waitEvaluations(t, before+1)
+
+	if run, _ := f.tasks.prRun("task-1"); run.Status != task.PRCommitting {
+		t.Errorf("status = %q, want the commit where it was", run.Status)
+	}
+	if diff := cmp.Diff([]keyedMarker(nil), f.sessions.marked(session.MarkerPROpened)); diff != "" {
+		t.Errorf("pr_opened markers mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestRefreshingABlockedReviewResumesItWithoutMarkingThePullRequestOpenedAgain(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.gh.setPR("task-1", samePR)
+	inPR(f, "task-1", plan(), task.PRPreparing)
+	f.service.Sync(t.Context())
+	waitFor(t, "the review session of the task", f.reviewOpen)
+
+	// A reading of the checks that fails blocks the review while it runs.
+	block := &task.PRBlock{Reason: task.PRBlockGHFailed, Detail: "HTTP 502: Bad Gateway"}
+	if _, err := f.tasks.SetPRRun(t.Context(), "task-1", task.PRBlocked, block); err != nil {
+		t.Fatalf("SetPRRun() = %v, want nil", err)
+	}
+	before := f.tasks.inspectCount()
+	if err := f.service.RefreshPR(t.Context(), "task-1"); err != nil {
+		t.Fatalf("RefreshPR() = %v, want nil", err)
+	}
+	f.waitPRRun(t, "the review to resume", func(run task.PRRun) bool { return run.Status == task.PRReviewing })
+	// The reading asks for an evaluation after it marks the pull request.
+	f.waitEvaluated(t, "task-1", before)
+
+	opened := []keyedMarker{{
+		Key:    session.Key{TaskID: "task-1", Stage: session.PRStage},
+		Marker: session.MarkerEntry{Type: session.MarkerPROpened, Number: samePR.Number, Base: samePR.Base},
+	}}
+	if diff := cmp.Diff(opened, f.sessions.marked(session.MarkerPROpened)); diff != "" {
+		t.Errorf("pr_opened markers mismatch (-want +got):\n%s", diff)
+	}
+}
+
 func TestAPullRequestThatAlreadyExistsSkipsTheDraft(t *testing.T) {
 	t.Parallel()
 
@@ -306,6 +394,13 @@ func TestAPullRequestThatAlreadyExistsSkipsTheDraft(t *testing.T) {
 	}
 	if run.PR.CheckedAt.IsZero() {
 		t.Error("the pull request was recorded with no reading time")
+	}
+	opened := []keyedMarker{{
+		Key:    session.Key{TaskID: "task-1", Stage: session.PRStage},
+		Marker: session.MarkerEntry{Type: session.MarkerPROpened, Number: samePR.Number, Base: samePR.Base},
+	}}
+	if diff := cmp.Diff(opened, f.sessions.marked(session.MarkerPROpened)); diff != "" {
+		t.Errorf("pr_opened markers mismatch (-want +got):\n%s", diff)
 	}
 	// The draft is for a task that has no pull request yet.
 	if slices.Contains(f.sessions.recorded(), "start:task-1:pr") {

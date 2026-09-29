@@ -262,6 +262,19 @@ func (s *TaskService) GetTranscript(taskID, stage string) (Transcript, error) {
 	return FromTranscript(transcript), nil
 }
 
+// GetActionOutput returns the whole output of an action of one session of an
+// item, named by its stage, open or closed.
+func (s *TaskService) GetActionOutput(taskID, stage, entryID string) (ActionOutput, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+
+	o, err := s.sessions.ActionOutput(ctx, session.Key{TaskID: taskID, Stage: stage}, entryID)
+	if err != nil {
+		return ActionOutput{}, s.fail("GetActionOutput", err)
+	}
+	return ActionOutput{Text: o.Text, Lines: o.Lines, Truncated: o.Truncated}, nil
+}
+
 // BackToStage reopens a finished stage of a task, throwing away what came
 // after it. The stage is prd, tech_spec or one_shot.
 func (s *TaskService) BackToStage(taskID, stage string) error {

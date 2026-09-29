@@ -8,6 +8,7 @@ import (
 
 	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/prreview"
+	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/worktree"
 )
 
@@ -41,7 +42,9 @@ func (s *Service) Apply(ctx context.Context, id string) error {
 		return err
 	}
 	s.watch.Track(id, wt, true)
-	if err = s.sessions.SendFromApp(ctx, sessionKey(id), applyMessage(last.Number, approved)); err != nil {
+	if err = s.sessions.SendFromApp(ctx, sessionKey(id), session.AppMessage{
+		Text: applyMessage(last.Number, approved), Kind: session.AppApply, Count: len(approved),
+	}); err != nil {
 		// The fix never reached the agent: the findings are the user's again.
 		s.watch.Forget(id)
 		if backErr := s.setPhase(ctx, id, prreview.PhaseNone); backErr != nil {
@@ -116,7 +119,8 @@ func (s *Service) Approve(ctx context.Context, id string) error {
 		return err
 	}
 	s.setCommitFailed(id, false)
-	if err = s.sessions.SendFromApp(ctx, sessionKey(id), message); err != nil {
+	app := session.AppMessage{Text: message, Kind: session.AppCommitPush}
+	if err = s.sessions.SendFromApp(ctx, sessionKey(id), app); err != nil {
 		if backErr := s.setPhase(ctx, id, prreview.PhaseApplying); backErr != nil {
 			s.log.Error("record review phase failed", "review", id, "error", backErr)
 		}

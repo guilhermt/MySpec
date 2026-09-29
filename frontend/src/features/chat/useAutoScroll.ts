@@ -19,15 +19,16 @@ function same(left: readonly unknown[], right: readonly unknown[]): boolean {
 export interface AutoScroll {
   /** atBottom is true while the user is reading the end of the conversation. */
   atBottom: boolean;
-  /** hasNew is true when something arrived while the user was reading further up. */
-  hasNew: boolean;
+  /** newCount is how many rows were born since the user left the end; a row that grows counts once. */
+  newCount: number;
   scrollToBottom: () => void;
 }
 
 /**
  * useAutoScroll keeps the end of the conversation in view while the user is
  * there, whatever makes the conversation grow, and never moves the scroll away
- * from someone reading further up: for them an arrival only sets hasNew. With
+ * from someone reading further up: for them an arrival only counts in newCount, by the keys of the
+ * rows seen when they left the end. With
  * follow false, as for a conversation read from its start, it never scrolls and
  * never offers the way back to the end.
  */
@@ -35,14 +36,21 @@ export function useAutoScroll(
   ref: RefObject<HTMLElement | null>,
   contentRef: RefObject<HTMLElement | null>,
   deps: readonly unknown[],
+  rowKeys: readonly string[],
   follow = true,
 ): AutoScroll {
-  const [hasNew, setHasNew] = useState(false);
+  // seen is the rows on screen when the user left the end; null at the end.
+  const [seen, setSeen] = useState<ReadonlySet<string> | null>(null);
   const [atBottom, setAtBottom] = useState(true);
   const atBottomRef = useRef(true);
+  const rowKeysRef = useRef(rowKeys);
+  rowKeysRef.current = rowKeys;
   const previous = useRef(deps);
 
   const markAtBottom = useCallback((value: boolean) => {
+    if (value !== atBottomRef.current) {
+      setSeen(value ? null : new Set(rowKeysRef.current));
+    }
     atBottomRef.current = value;
     setAtBottom(value);
   }, []);
@@ -52,13 +60,7 @@ export function useAutoScroll(
     if (element === null) {
       return;
     }
-    const onScroll = () => {
-      const bottom = atBottomOf(element);
-      markAtBottom(bottom);
-      if (bottom) {
-        setHasNew(false);
-      }
-    };
+    const onScroll = () => markAtBottom(atBottomOf(element));
     element.addEventListener("scroll", onScroll, { passive: true });
     return () => element.removeEventListener("scroll", onScroll);
   }, [ref, markAtBottom]);
@@ -88,7 +90,6 @@ export function useAutoScroll(
     }
     toBottom(element);
     markAtBottom(true);
-    setHasNew(false);
   }, [ref, markAtBottom]);
 
   // The effect runs on every render and compares the values itself, so the
@@ -104,13 +105,12 @@ export function useAutoScroll(
     }
     if (atBottomRef.current) {
       toBottom(element);
-    } else {
-      setHasNew(true);
     }
   });
 
+  const newCount = seen === null ? 0 : rowKeys.filter((key) => !seen.has(key)).length;
   // Not following, the reader is never away from an end they are taken back to.
   return follow
-    ? { atBottom, hasNew, scrollToBottom }
-    : { atBottom: true, hasNew: false, scrollToBottom };
+    ? { atBottom, newCount, scrollToBottom }
+    : { atBottom: true, newCount: 0, scrollToBottom };
 }

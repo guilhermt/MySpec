@@ -15,6 +15,7 @@ export interface StoreOptions {
       | "back"
       | "forward"
       | "panel"
+      | "panelDocument"
       | "earlierConversation"
       | "pendingFocus"
       | "sidebarRail"
@@ -23,8 +24,11 @@ export interface StoreOptions {
       | "expectGone"
       | "transcripts"
       | "drafts"
+      | "markerRequest"
       | "openStepTab"
       | "prDrafts"
+      | "questionChoices"
+      | "questionSending"
       | "newTaskOpen"
       | "newTaskCard"
       | "pendingStart"
@@ -55,6 +59,7 @@ export function resetAppStore(options: StoreOptions = {}): void {
     back: options.ui?.back ?? [],
     forward: options.ui?.forward ?? [],
     panel: options.ui?.panel ?? null,
+    panelDocument: options.ui?.panelDocument ?? null,
     earlierConversation: options.ui?.earlierConversation ?? null,
     pendingFocus: options.ui?.pendingFocus ?? null,
     sidebarRail: options.ui?.sidebarRail ?? false,
@@ -63,8 +68,11 @@ export function resetAppStore(options: StoreOptions = {}): void {
     expectGone: options.ui?.expectGone ?? null,
     transcripts: options.ui?.transcripts ?? {},
     drafts: options.ui?.drafts ?? {},
+    markerRequest: options.ui?.markerRequest ?? null,
     openStepTab: options.ui?.openStepTab ?? {},
     prDrafts: options.ui?.prDrafts ?? {},
+    questionChoices: options.ui?.questionChoices ?? {},
+    questionSending: options.ui?.questionSending ?? {},
     newTaskOpen: options.ui?.newTaskOpen ?? false,
     newTaskCard: options.ui?.newTaskCard ?? null,
     pendingStart: options.ui?.pendingStart ?? null,

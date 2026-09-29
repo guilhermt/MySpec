@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { tabId } from "@/components/system/Tabs";
 import { AGENT_CONVERSATION } from "@/features/task/AgentTabs";
@@ -9,6 +9,7 @@ import { renderWithStore, type StoreOptions } from "@/test/render";
 import {
   makeEntry,
   makeReview,
+  makeSituation,
   makeState,
   makeStep,
   makeStepReviewer,
@@ -33,7 +34,18 @@ const BOTH_READY: Record<string, TranscriptState> = {
     error: "",
     entries: [
       makeEntry("user", {
-        user: { text: "Check the login form", pending: false, prompt: false, app: false },
+        user: {
+          text: "Check the login form",
+          pending: false,
+          prompt: false,
+          app: false,
+          sent: "",
+          appKind: "",
+          appPass: 0,
+          appRound: 0,
+          appRounds: 0,
+          appCount: 0,
+        },
       }),
     ],
     pending: [],
@@ -47,6 +59,15 @@ const UNDER_AGENT_REVIEW: Partial<Step> = {
   reviewPass: 1,
   reviewer: makeStepReviewer({ sessionStatus: "working" }),
 };
+
+// placeEmpty is the empty state of the place, which is not a live region.
+function placeEmpty(): HTMLElement {
+  const empty = document.querySelector<HTMLElement>('[data-slot="place-empty"]');
+  if (empty === null) {
+    throw new Error("the place is not empty");
+  }
+  return empty;
+}
 
 function pane(
   step: Partial<Step> | null,
@@ -132,53 +153,131 @@ describe("StepPane", () => {
     expect(screen.getByText("Add a login screen")).toBeInTheDocument();
   });
 
-  it("shows why a blocked step did not start, and no conversation", () => {
-    pane({
-      status: "blocked",
-      block: { reason: "path_exists", detail: "", files: 0 },
-    });
-
-    expect(screen.getByRole("alert")).toHaveTextContent("The worktree folder already exists");
-    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
-  });
-
-  it("says what the app is doing while the step prepares", () => {
-    pane({ status: "preparing", phase: "creating" });
-
-    expect(screen.getByRole("status")).toHaveTextContent("Creating the worktree…");
-  });
-
-  it("waits for a step that has not started yet", () => {
-    pane({ status: "not_started" });
-
-    expect(screen.getByRole("status")).toHaveTextContent("Starting…");
-  });
-
   it("keeps the conversation while the commit is being made", () => {
     pane({ status: "committing", review: makeReview({ staged: 2, total: 2, percent: 100 }) });
 
     expect(screen.getByText("Add a login screen")).toBeInTheDocument();
   });
 
-  it("closes the implementation once every step is committed", () => {
-    const task = makeTask({
-      stage: "implementation",
-      currentStep: 0,
-      steps: [makeStep({ status: "done" })],
-    });
+  it.each(["implementer", "reviewer"] as const)(
+    "puts the changed files at the end of the conversation while the step is reviewed, on the %s tab",
+    (tab) => {
+      pane(
+        {
+          status: "in_review",
+          review: makeReview(),
+          reviewMode: "agent",
+          reviewer: makeStepReviewer({ sessionStatus: "idle" }),
+        },
+        {},
+        { transcripts: BOTH_READY, openStepTab: { "task-1|1": tab } },
+      );
 
-    renderWithStore(<StepPane task={task} />, {
-      state: makeState({ tasks: [task] }),
-      ui: { transcripts: READY },
-    });
+      const feed = screen.getByRole("feed");
+      expect(
+        within(feed).getByText(tab === "reviewer" ? "Check the login form" : "Add a login screen"),
+      ).toBeInTheDocument();
+      expect(within(feed).getByRole("article", { name: "Changed files · 2" })).toBeInTheDocument();
+    },
+  );
 
-    expect(screen.getByText("Every step is committed")).toBeInTheDocument();
+  it("has no changed files while the agent implements", () => {
+    pane({ status: "implementing", review: makeReview() });
+
+    expect(screen.queryByRole("article", { name: /^Changed files/ })).not.toBeInTheDocument();
+  });
+});
+
+// The rows of the table of the place without a conversation, for the implementation.
+describe("StepPane, the place without a conversation", () => {
+  it("starts a step not started", () => {
+    pane({ status: "not_started", number: 1 });
+
+    expect(screen.getByRole("status")).toHaveTextContent("Starting step 1…");
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    expect(screen.queryByRole("feed")).not.toBeInTheDocument();
+  });
+
+  it("starts the implementation of a One-Shot task", () => {
+    pane({ status: "not_started" }, { mode: "one_shot" });
+
+    expect(screen.getByRole("status")).toHaveTextContent("Starting the implementation…");
+  });
+
+  it.each([
+    ["fetching", "Fetching origin…"],
+    ["creating", "Creating the worktree…"],
+    ["checking", "Checking the worktree…"],
+    ["", "Preparing the worktree…"],
+  ])("says what the app is doing while the step prepares, %s", (phase, text) => {
+    pane({ status: "preparing", phase });
+
+    expect(screen.getByRole("status")).toHaveTextContent(text);
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+  });
+
+  it("starts the next step once the step is committed", () => {
+    pane({ status: "done" });
+
+    expect(screen.getByRole("status")).toHaveTextContent("Starting the next step…");
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+  });
+
+  it("shows the step that is next and why it did not start, with the way out in the bar", () => {
+    pane(
+      { status: "blocked", block: { reason: "dirty_worktree", detail: " M go.mod", files: 1 } },
+      {
+        situations: [
+          makeSituation({ kind: "step_blocked", place: { kind: "step", stage: "", step: 1 } }),
+        ],
+      },
+    );
+
+    expect(
+      screen.getByRole("article", { name: "Step 1 is next · Add the login form" }),
+    ).toBeInTheDocument();
+    const block = screen.getByRole("article", { name: /^1 changed file in the worktree\./ });
+    expect(block).toHaveTextContent(" M go.mod");
+    expect(within(block).queryByRole("button")).not.toBeInTheDocument();
+    const bar = screen.getByRole("region", { name: "Request" });
+    expect(within(bar).getByRole("button", { name: "Try again" })).toBeInTheDocument();
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+  });
+
+  it("names the implementation that is next in a One-Shot task", () => {
+    pane(
+      { status: "blocked", block: { reason: "path_exists", detail: "", files: 0 } },
+      { mode: "one_shot" },
+    );
+
+    expect(
+      screen.getByRole("article", { name: "Implementation is next · add-login" }),
+    ).toBeInTheDocument();
+  });
+
+  it("says every step is committed before the pull request", () => {
+    pane({ status: "done" }, { currentStep: 0, repository: "acme/api" });
+
+    const empty = placeEmpty();
+    expect(empty).toHaveTextContent("Every step is committed");
+    expect(empty).toHaveTextContent("1 step in acme/api. The pull request stage starts next.");
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+  });
+
+  it("says the implementation of a One-Shot task is committed", () => {
+    pane({ status: "done" }, { currentStep: 0, repository: "acme/api", mode: "one_shot" });
+
+    const empty = placeEmpty();
+    expect(empty).toHaveTextContent("The implementation is committed");
+    expect(empty).toHaveTextContent("acme/api. The pull request stage starts next.");
   });
 
   it("says so when the plan has no steps", () => {
     pane(null);
 
-    expect(screen.getByText("No steps were found.")).toBeInTheDocument();
+    const empty = placeEmpty();
+    expect(empty).toHaveTextContent("No steps were found");
+    expect(empty).toHaveTextContent("The plan has no step files.");
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
   });
 });

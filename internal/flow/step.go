@@ -270,7 +270,7 @@ func (s *Service) spawnPrepare(id string, opts prepareOptions) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	l.preparing, l.cancel = true, cancel
-	go s.prepare(ctx, id, opts)
+	s.spawned.Go(func() { s.prepare(ctx, id, opts) })
 }
 
 // setPhase records what the preparation of a task is doing and tells the app.
@@ -635,6 +635,7 @@ func (s *Service) completeStep(
 		s.log.Error("record committed step failed", "task", t.ID, "step", step.Number, "error", err)
 		return
 	}
+	s.sessions.MarkCommitted(ctx, stepKey(t.ID, step.Number), task.ShortSHA(commit.SHA), commit.Subject, false, 0)
 	s.review.Forget(t.ID)
 	s.setNoCommit(t.ID, false)
 	if err := s.sessions.Close(ctx, stepKey(t.ID, step.Number)); err != nil {
@@ -794,7 +795,9 @@ func (s *Service) ApproveStep(ctx context.Context, id string) error {
 		return err
 	}
 	s.setNoCommit(id, false)
-	if err := s.sessions.SendFromApp(ctx, key, message); err != nil {
+	s.sessions.MarkChangesApproved(ctx, key, snap.Total)
+	app := session.AppMessage{Text: message, Kind: session.AppCommit}
+	if err := s.sessions.SendFromApp(ctx, key, app); err != nil {
 		// The button stays where the user left it: the step is theirs again.
 		if _, setErr := s.tasks.SetStepRun(ctx, id, step.Number, task.StepStarted, nil); setErr != nil {
 			s.log.Error("record started step failed", "task", id, "step", step.Number, "error", setErr)

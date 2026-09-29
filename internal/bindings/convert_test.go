@@ -744,15 +744,15 @@ func TestFromArchivedCarriesTheReportsOfTheSteps(t *testing.T) {
 			},
 		},
 		StepReports: map[int][]task.ReviewReport{
-			1: {{Pass: 1, File: "1-review-1.md"}, {Pass: 2, File: "1-review-2.md", Clean: true}},
+			1: {{Pass: 1, File: "1-review-1.md", Findings: 2}, {Pass: 2, File: "1-review-2.md", Clean: true, Findings: -1}},
 		},
 	}
 	want := []bindings.ArchivedStep{
 		{
 			Number: 1, File: "1-first.md", Title: "First",
 			Reports: []bindings.StepReport{
-				{Pass: 1, File: "1-review-1.md"},
-				{Pass: 2, File: "1-review-2.md", Clean: true},
+				{Pass: 1, File: "1-review-1.md", Findings: 2},
+				{Pass: 2, File: "1-review-2.md", Clean: true, Findings: -1},
 			},
 		},
 		{Number: 2, File: "2-second.md", Title: "Second", Reports: []bindings.StepReport{}},
@@ -876,22 +876,254 @@ func TestFromEntryCarriesTheStepOfAMarker(t *testing.T) {
 		Kind:   session.KindMarker,
 		Marker: &session.MarkerEntry{Type: session.MarkerStepStarted, Step: 2, Restarted: true},
 	})
-	want := &bindings.MarkerEntry{Type: "step_started", Step: 2, Restarted: true}
+	want := markerDTO(bindings.MarkerEntry{Type: "step_started", Step: 2, Findings: -1, Restarted: true})
 	if diff := cmp.Diff(want, got.Marker); diff != "" {
 		t.Errorf("marker mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestFromEntryCarriesTheFieldsOfAnAction(t *testing.T) {
+	t.Parallel()
+
+	started := time.Date(2026, time.September, 6, 12, 0, 0, 0, time.UTC)
+	finished := started.Add(3200 * time.Millisecond)
+	cases := map[string]struct {
+		action *session.ActionEntry
+		want   *bindings.ActionEntry
+	}{
+		"every field present": {
+			action: &session.ActionEntry{
+				ToolUseID: "toolu_2", Tool: "Bash", Label: "Running", Target: "go test ./...",
+				Status: session.ActionError, Description: "Run the tests", CommandLines: 2,
+				StartedAt: &started, FinishedAt: &finished, ExitCode: new(2), ParentToolUseID: "toolu_1",
+				OutputLines: 40, OutputTail: "FAIL", OutputTruncated: true,
+			},
+			want: &bindings.ActionEntry{
+				ToolUseID: "toolu_2", Tool: "Bash", Label: "Running", Target: "go test ./...",
+				Status: "error", Description: "Run the tests", CommandLines: 2,
+				StartedAt: "2026-09-06T12:00:00Z", FinishedAt: "2026-09-06T12:00:03.2Z", ExitCode: 2, ParentToolUseID: "toolu_1",
+				OutputLines: 40, OutputTail: "FAIL", OutputTruncated: true,
+			},
+		},
+		"an old transcript": {
+			action: &session.ActionEntry{ToolUseID: "toolu_1", Tool: "Read", Label: "Reading", Status: session.ActionDone},
+			want:   &bindings.ActionEntry{ToolUseID: "toolu_1", Tool: "Read", Label: "Reading", Status: "done", ExitCode: -1},
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			got := bindings.FromEntry(session.Entry{Kind: session.KindAction, Action: tc.action})
+			if diff := cmp.Diff(tc.want, got.Action); diff != "" {
+				t.Errorf("action mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestFromEntryCarriesWhoInterrupted(t *testing.T) {
+	t.Parallel()
+
+	text := bindings.FromEntry(session.Entry{
+		Kind:      session.KindAssistant,
+		Assistant: &session.AssistantEntry{Text: "half", Complete: true, Interrupted: true, InterruptedBy: "crash"},
+	})
+	if got := text.Assistant.InterruptedBy; got != "crash" {
+		t.Errorf("assistant InterruptedBy = %q, want crash", got)
+	}
+	action := bindings.FromEntry(session.Entry{
+		Kind:   session.KindAction,
+		Action: &session.ActionEntry{Tool: "Read", Status: session.ActionInterrupted, InterruptedBy: "user"},
+	})
+	if got := action.Action.InterruptedBy; got != "user" {
+		t.Errorf("action InterruptedBy = %q, want user", got)
+	}
+}
+
+// markerDTO is a marker as FromEntry converts it: its lists are never nil.
+func markerDTO(m bindings.MarkerEntry) *bindings.MarkerEntry {
+	if m.Failed == nil {
+		m.Failed = []string{}
+	}
+	if m.Problems == nil {
+		m.Problems = []bindings.PlanProblem{}
+	}
+	return &m
+}
+
+func TestFromEntryCarriesTheNewMarkerFields(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]struct {
+		marker *session.MarkerEntry
+		want   *bindings.MarkerEntry
+	}{
+		"compacted": {
+			marker: &session.MarkerEntry{Type: session.MarkerCompacted, PreTokens: 150000, Percent: 75},
+			want:   markerDTO(bindings.MarkerEntry{Type: "compacted", PreTokens: 150000, Findings: -1, Percent: 75}),
+		},
+		"retried": {
+			marker: &session.MarkerEntry{Type: session.MarkerRetried, Attempts: 2, Reason: "rate_limit"},
+			want:   markerDTO(bindings.MarkerEntry{Type: "retried", Findings: -1, Attempts: 2, Reason: "rate_limit"}),
+		},
+		"committed": {
+			marker: &session.MarkerEntry{
+				Type: session.MarkerCommitted, SHA: "a1b2c3d", Subject: "Fix the lint", Pushed: true, Number: 42,
+			},
+			want: markerDTO(bindings.MarkerEntry{
+				Type: "committed", Findings: -1, SHA: "a1b2c3d", Subject: "Fix the lint", Pushed: true, Number: 42,
+			}),
+		},
+		"pr_opened": {
+			marker: &session.MarkerEntry{Type: session.MarkerPROpened, Number: 42, Base: "main"},
+			want:   markerDTO(bindings.MarkerEntry{Type: "pr_opened", Findings: -1, Number: 42, Base: "main"}),
+		},
+		"checks_read": {
+			marker: &session.MarkerEntry{
+				Type: session.MarkerChecksRead, Pass: 2, Passed: 3, Total: 5, Failed: []string{"lint"}, Conflict: true,
+			},
+			want: markerDTO(bindings.MarkerEntry{
+				Type: "checks_read", Pass: 2, Findings: -1, Passed: 3, Total: 5, Failed: []string{"lint"}, Conflict: true,
+			}),
+		},
+		"draft_approved": {
+			marker: &session.MarkerEntry{Type: session.MarkerDraftApproved, Title: "Add login"},
+			want:   markerDTO(bindings.MarkerEntry{Type: "draft_approved", Findings: -1, Title: "Add login"}),
+		},
+		"changes_approved": {
+			marker: &session.MarkerEntry{Type: session.MarkerChangesApproved, Files: 4},
+			want:   markerDTO(bindings.MarkerEntry{Type: "changes_approved", Findings: -1, Files: 4}),
+		},
+		"paused": {
+			marker: &session.MarkerEntry{Type: session.MarkerPaused},
+			want:   markerDTO(bindings.MarkerEntry{Type: "paused", Findings: -1}),
+		},
+		"plan_invalid": {
+			marker: &session.MarkerEntry{
+				Type: session.MarkerPlanInvalid, Problems: []session.PlanProblem{{File: "01-a.md", Message: "no title"}},
+			},
+			want: markerDTO(bindings.MarkerEntry{
+				Type: "plan_invalid", Findings: -1, Problems: []bindings.PlanProblem{{File: "01-a.md", Message: "no title"}},
+			}),
+		},
+		"interrupted": {
+			marker: &session.MarkerEntry{Type: session.MarkerInterrupted, InterruptedBy: "user"},
+			want:   markerDTO(bindings.MarkerEntry{Type: "interrupted", Findings: -1, InterruptedBy: "user"}),
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			got := bindings.FromEntry(session.Entry{Kind: session.KindMarker, Marker: tc.marker})
+			if diff := cmp.Diff(tc.want, got.Marker); diff != "" {
+				t.Errorf("marker mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestFromEntryCarriesWhenAQuestionWasAnswered(t *testing.T) {
+	t.Parallel()
+
+	answeredAt := time.Date(2026, time.September, 6, 12, 0, 0, 0, time.UTC)
+	answered := bindings.FromEntry(session.Entry{
+		Kind:     session.KindQuestion,
+		Question: &session.QuestionEntry{Status: session.PermissionAllowed, AnsweredAt: &answeredAt},
+	})
+	if got := answered.Question.AnsweredAt; got != "2026-09-06T12:00:00Z" {
+		t.Errorf("AnsweredAt = %q, want 2026-09-06T12:00:00Z", got)
+	}
+	pending := bindings.FromEntry(session.Entry{
+		Kind:     session.KindQuestion,
+		Question: &session.QuestionEntry{Status: session.PermissionPending},
+	})
+	if got := pending.Question.AnsweredAt; got != "" {
+		t.Errorf("AnsweredAt = %q, want empty while pending", got)
+	}
+}
+
+func TestFromEntryCarriesTheSubagentOfAText(t *testing.T) {
+	t.Parallel()
+
+	got := bindings.FromEntry(session.Entry{
+		Kind:      session.KindAssistant,
+		Assistant: &session.AssistantEntry{Text: "done", Complete: true, ParentToolUseID: "toolu_1"},
+	})
+	want := &bindings.AssistantEntry{Text: "done", Complete: true, ParentToolUseID: "toolu_1"}
+	if diff := cmp.Diff(want, got.Assistant); diff != "" {
+		t.Errorf("assistant mismatch (-want +got):\n%s", diff)
 	}
 }
 
 func TestFromEntryCarriesTheVerdictOfAStepReviewMarker(t *testing.T) {
 	t.Parallel()
 
-	got := bindings.FromEntry(session.Entry{
-		Kind:   session.KindMarker,
-		Marker: &session.MarkerEntry{Type: session.MarkerStepReviewWritten, Pass: 2, Clean: true},
-	})
-	want := &bindings.MarkerEntry{Type: "step_review_written", Pass: 2, Clean: true}
-	if diff := cmp.Diff(want, got.Marker); diff != "" {
-		t.Errorf("marker mismatch (-want +got):\n%s", diff)
+	cases := map[string]struct {
+		marker *session.MarkerEntry
+		want   *bindings.MarkerEntry
+	}{
+		"findings counted": {
+			marker: &session.MarkerEntry{Type: session.MarkerStepReviewWritten, Pass: 2, Findings: new(3)},
+			want:   markerDTO(bindings.MarkerEntry{Type: "step_review_written", Pass: 2, Findings: 3}),
+		},
+		"no findings": {
+			marker: &session.MarkerEntry{Type: session.MarkerStepReviewWritten, Pass: 2, Clean: true, Findings: new(0)},
+			want:   markerDTO(bindings.MarkerEntry{Type: "step_review_written", Pass: 2, Clean: true}),
+		},
+		"an old transcript": {
+			marker: &session.MarkerEntry{Type: session.MarkerStepReviewWritten, Pass: 1},
+			want:   markerDTO(bindings.MarkerEntry{Type: "step_review_written", Pass: 1, Findings: -1}),
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			got := bindings.FromEntry(session.Entry{Kind: session.KindMarker, Marker: tc.marker})
+			if diff := cmp.Diff(tc.want, got.Marker); diff != "" {
+				t.Errorf("marker mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestFromEntryCarriesTheMessageOfTheAppAndThePromptSent(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]struct {
+		user *session.UserEntry
+		want *bindings.UserEntry
+	}{
+		"a report": {
+			user: &session.UserEntry{
+				Text: "the report", App: true,
+				AppKind: session.AppReport, AppPass: 2, AppRound: 2, AppRounds: 3, AppCount: -1,
+			},
+			want: &bindings.UserEntry{
+				Text: "the report", App: true,
+				AppKind: "report", AppPass: 2, AppRound: 2, AppRounds: 3, AppCount: -1,
+			},
+		},
+		"a prompt": {
+			user: &session.UserEntry{Prompt: true, Sent: "the rendered prompt"},
+			want: &bindings.UserEntry{Prompt: true, Sent: "the rendered prompt"},
+		},
+		"an old transcript": {
+			user: &session.UserEntry{Text: "commit", App: true},
+			want: &bindings.UserEntry{Text: "commit", App: true},
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			got := bindings.FromEntry(session.Entry{Kind: session.KindUser, User: tc.user})
+			if diff := cmp.Diff(tc.want, got.User); diff != "" {
+				t.Errorf("user mismatch (-want +got):\n%s", diff)
+			}
+		})
 	}
 }
 
@@ -2668,6 +2900,44 @@ func TestFromTasksCarriesTheChecksOfThePullRequestByName(t *testing.T) {
 	}
 }
 
+func TestFromTasksCarriesWhoMergedThePullRequestAndWhen(t *testing.T) {
+	t.Parallel()
+
+	merged := flow.PullRequest{
+		Status: flow.PRMerged,
+		PR: task.PRDetails{
+			Number: 8, State: task.PRStateMerged,
+			MergedBy: "guilhermt", MergedAt: time.Date(2026, 9, 28, 0, 9, 14, 0, time.UTC),
+		},
+	}
+	open := flow.PullRequest{Status: flow.PRWaitingChecks, PR: task.PRDetails{Number: 9}}
+	byTask := map[string]flow.PullRequest{"task-1": merged, "task-2": open}
+
+	got := bindings.FromTasks(
+		[]task.Task{
+			{ID: "task-1", Name: "login-screen", Stage: task.StagePR},
+			{ID: "task-2", Name: "signup-screen", Stage: task.StagePR},
+		},
+		func(string) task.Artifacts { return task.Artifacts{} },
+		func(string) []flow.StepState { return nil },
+		func(id string) (flow.PullRequest, bool) { pr, ok := byTask[id]; return pr, ok },
+		noWorktree,
+		noConversations,
+		repoOf,
+		nil,
+		nil,
+	)
+	if len(got) != 2 || got[0].PR == nil || got[1].PR == nil {
+		t.Fatalf("FromTasks() = %+v, want two tasks with their pull requests", got)
+	}
+	if got[0].PR.MergedBy != "guilhermt" || got[0].PR.MergedAt != "2026-09-28T00:09:14Z" {
+		t.Errorf("MergedBy, MergedAt = %q, %q, want guilhermt at 2026-09-28T00:09:14Z", got[0].PR.MergedBy, got[0].PR.MergedAt)
+	}
+	if got[1].PR.MergedBy != "" || got[1].PR.MergedAt != "" {
+		t.Errorf("MergedBy, MergedAt = %q, %q, want both empty before the merge", got[1].PR.MergedBy, got[1].PR.MergedAt)
+	}
+}
+
 func TestFromReviewsCarriesWhatWentWrongWithThePullRequestSinceItsLastPass(t *testing.T) {
 	t.Parallel()
 
@@ -2689,6 +2959,9 @@ func TestFromReviewsCarriesWhatWentWrongWithThePullRequestSinceItsLastPass(t *te
 // sessionBlock is the part of a session block that tells the turn in progress.
 type sessionBlock struct {
 	TurnStartedAt, ActionLabel, ActionTarget string
+	RetryMax                                 int
+	RetryAt, RetryReason                     string
+	TurnFailed                               bool
 }
 
 func TestEverySessionBlockCarriesTheTurnInProgressAndItsAction(t *testing.T) {
@@ -2698,6 +2971,8 @@ func TestEverySessionBlockCarriesTheTurnInProgressAndItsAction(t *testing.T) {
 	busy := session.Summary{
 		Status: session.StatusWorking, TurnRunning: true, TurnStartedAt: startedAt,
 		ActionLabel: "Reading", ActionTarget: "internal/app/state.go",
+		RetryAttempt: 3, RetryMax: 10, RetryAt: startedAt.Add(8 * time.Second), RetryReason: "overloaded",
+		TurnFailed: true,
 	}
 	idle := session.Summary{Status: session.StatusWaiting, Idle: true}
 
@@ -2714,7 +2989,7 @@ func TestEverySessionBlockCarriesTheTurnInProgressAndItsAction(t *testing.T) {
 				map[session.Key]session.Summary{{TaskID: "task-1", Stage: string(task.StagePRD)}: summary},
 				nil,
 			)[0]
-			return sessionBlock{got.TurnStartedAt, got.ActionLabel, got.ActionTarget}
+			return sessionBlock{got.TurnStartedAt, got.ActionLabel, got.ActionTarget, got.RetryMax, got.RetryAt, got.RetryReason, got.TurnFailed}
 		},
 		"step reviewer": func(summary session.Summary) sessionBlock {
 			got := stepsOf(t, []flow.StepState{{
@@ -2722,7 +2997,7 @@ func TestEverySessionBlockCarriesTheTurnInProgressAndItsAction(t *testing.T) {
 				Status: flow.StepAgentReview, ReviewMode: reviewmode.Agent,
 				ReviewerStage: "step_review:1", Reviewer: summary,
 			}})[0].Reviewer
-			return sessionBlock{got.TurnStartedAt, got.ActionLabel, got.ActionTarget}
+			return sessionBlock{got.TurnStartedAt, got.ActionLabel, got.ActionTarget, got.RetryMax, got.RetryAt, got.RetryReason, got.TurnFailed}
 		},
 		"pull request": func(summary session.Summary) sessionBlock {
 			pr := flow.PullRequest{Status: flow.PRDone, SessionStage: "pr", Session: summary}
@@ -2737,19 +3012,19 @@ func TestEverySessionBlockCarriesTheTurnInProgressAndItsAction(t *testing.T) {
 				nil,
 				nil,
 			)[0].PR
-			return sessionBlock{got.TurnStartedAt, got.ActionLabel, got.ActionTarget}
+			return sessionBlock{got.TurnStartedAt, got.ActionLabel, got.ActionTarget, got.RetryMax, got.RetryAt, got.RetryReason, got.TurnFailed}
 		},
 		"review": func(summary session.Summary) sessionBlock {
 			state := reviewState(reviewflow.StatusReviewing, recordedPass(1, ""))
 			state.Session = summary
 			got := bindings.FromReviews([]reviewflow.State{state}, nil, reviewRepos)[0]
-			return sessionBlock{got.TurnStartedAt, got.ActionLabel, got.ActionTarget}
+			return sessionBlock{got.TurnStartedAt, got.ActionLabel, got.ActionTarget, got.RetryMax, got.RetryAt, got.RetryReason, got.TurnFailed}
 		},
 		"discussion": func(summary session.Summary) sessionBlock {
 			state := discussionState(discussionflow.StatusPublishFailed)
 			state.Session = summary
 			got := convertDiscussion(state, nil, true, nil)
-			return sessionBlock{got.TurnStartedAt, got.ActionLabel, got.ActionTarget}
+			return sessionBlock{got.TurnStartedAt, got.ActionLabel, got.ActionTarget, got.RetryMax, got.RetryAt, got.RetryReason, got.TurnFailed}
 		},
 	}
 
@@ -2757,7 +3032,10 @@ func TestEverySessionBlockCarriesTheTurnInProgressAndItsAction(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			want := sessionBlock{"2026-09-26T14:05:00Z", "Reading", "internal/app/state.go"}
+			want := sessionBlock{
+				"2026-09-26T14:05:00Z", "Reading", "internal/app/state.go",
+				10, "2026-09-26T14:05:08Z", "overloaded", true,
+			}
 			if got := block(busy); got != want {
 				t.Errorf("in a turn = %+v, want %+v", got, want)
 			}

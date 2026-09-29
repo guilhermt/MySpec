@@ -100,7 +100,7 @@ func readStepReport(path string, number, pass int) (ReviewReport, bool) {
 		return ReviewReport{}, false
 	}
 
-	fields, _ := frontmatter.Split(string(content))
+	fields, body := frontmatter.Split(string(content))
 	status := strings.TrimSpace(fields["status"])
 	if status != cleanStatus && status != changesStatus {
 		return ReviewReport{}, false
@@ -108,7 +108,181 @@ func readStepReport(path string, number, pass int) (ReviewReport, bool) {
 	if !headerAgrees(fields["pass"], pass) || !headerAgrees(fields["step"], number) {
 		return ReviewReport{}, false
 	}
-	return ReviewReport{Pass: pass, File: filepath.Base(path), Clean: status == cleanStatus}, true
+	return ReviewReport{
+		Pass: pass, File: filepath.Base(path), Clean: status == cleanStatus, Findings: countFindings(body),
+	}, true
+}
+
+// sectionNames are the sections of a report in the format the step_review
+// prompt asks for.
+const sectionNames = `what was reviewed|checks|findings|accepted divergences|contestations|decisions of the user`
+
+var (
+	// findingsHeading is a heading that opens the Findings section, with its
+	// level: the heading holds only the name, so "### Findings of pass 1" is
+	// no title.
+	findingsHeading = regexp.MustCompile(`(?i)^\s*(#{1,6})\s+(?:\d+[.)]\s*)?(?:\*\*)?\s*findings\s*:?\s*(?:\*\*)?\s*:?\s*$`)
+	// findingsBold is a bold line that opens the Findings section, numbered or
+	// not: the bold name alone on its line, or followed by a colon, inside the
+	// bold or after it, and the text of the section that goes on. "**Findings**
+	// of pass 1 were addressed." has no colon after the name and is no title.
+	findingsBold = regexp.MustCompile(`(?i)^\s*(?:\d+[.)]\s*)?\*\*\s*findings\s*(?::\s*\*\*(.*)|\*\*\s*(?::(.*))?)$`)
+	// heading is a Markdown heading, with its level.
+	heading = regexp.MustCompile(`^\s*(#{1,6})\s+\S`)
+	// reportSection is a bold line that opens a section of the report: the
+	// bold name alone on its line, or followed by a colon and its text. A
+	// finding that starts with one of the names in bold, as in "**Checks** are
+	// not run", has no colon after it and is no section.
+	reportSection = regexp.MustCompile(`(?i)^\s*(?:\d+[.)]\s*)?\*\*\s*(?:` + sectionNames +
+		`)\s*(?::\s*\*\*.*|\*\*\s*(?::.*)?)$`)
+	// sectionHeading is a heading that holds only the name of a section of
+	// the report.
+	sectionHeading = regexp.MustCompile(`(?i)^\s*#{1,6}\s+(?:\d+[.)]\s*)?(?:\*\*)?\s*(?:` + sectionNames +
+		`)\s*:?\s*(?:\*\*)?\s*:?\s*$`)
+	// fence is the line that opens or closes a fenced code block.
+	fence = regexp.MustCompile("^\\s*```")
+	// findingItem is a line that starts one item of a list, with its indent.
+	findingItem = regexp.MustCompile(`^(\s*)(?:\d+[.)]|[-*])\s+\S`)
+)
+
+// countFindings is how many findings the Findings section of the body of a
+// report lists: 0 when it is empty or says "None.", one per heading of the
+// shallowest level in it, else one per item of the outermost list, else 1 for
+// text that is no list, and -1 when there is no such section.
+//
+// The title is a heading that holds only the name or a bold line with the name
+// alone or followed by a colon; prose that starts with the word is no title.
+// Under a heading title, the section ends at a heading of the same level or
+// above, or at the bold line of another section of the report. Under a bold
+// title, the headings stay inside it, and it ends at the bold line of another
+// section of the report or at a heading that is only the name of one, as
+// "## Accepted divergences". The lines of a fenced
+// code block neither open nor end the section, and never count.
+func countFindings(body string) int {
+	lines := markFences(strings.Split(body, "\n"))
+	start, level, rest := findingsTitleOf(lines)
+	if start < 0 {
+		return -1
+	}
+	section := findingsSection(lines[start+1:], level)
+
+	texts := []string{rest}
+	for _, line := range section {
+		texts = append(texts, line.text)
+	}
+	text := strings.TrimSpace(strings.Join(texts, "\n"))
+	if text == "" || strings.EqualFold(strings.TrimSuffix(text, "."), "none") {
+		return 0
+	}
+	if headings := shallowestHeadings(section); headings > 0 {
+		return headings
+	}
+	return max(outermostItems(section), 1)
+}
+
+// reportLine is a line of a report and whether it sits inside a fenced code
+// block, the fences included.
+type reportLine struct {
+	text   string
+	fenced bool
+}
+
+// markFences marks the lines of the fenced code blocks of lines.
+func markFences(lines []string) []reportLine {
+	marked := make([]reportLine, len(lines))
+	inside := false
+	for i, line := range lines {
+		isFence := fence.MatchString(line)
+		marked[i] = reportLine{text: line, fenced: inside || isFence}
+		if isFence {
+			inside = !inside
+		}
+	}
+	return marked
+}
+
+// findingsTitleOf finds the line that opens the Findings section: its index
+// (-1 when there is none), the level of its heading (0 for a bold title) and
+// the text after the title on the same line, which only a bold title has.
+func findingsTitleOf(lines []reportLine) (index, level int, rest string) {
+	for i, line := range lines {
+		if line.fenced {
+			continue
+		}
+		if match := findingsHeading.FindStringSubmatch(line.text); match != nil {
+			return i, len(match[1]), ""
+		}
+		if match := findingsBold.FindStringSubmatch(line.text); match != nil {
+			return i, 0, match[1] + match[2]
+		}
+	}
+	return -1, 0, ""
+}
+
+// findingsSection is the lines of the Findings section, from the line after
+// its title, whose heading level is level (0 for a bold title).
+func findingsSection(lines []reportLine, level int) []reportLine {
+	end := slices.IndexFunc(lines, func(line reportLine) bool {
+		if line.fenced {
+			return false
+		}
+		if reportSection.MatchString(line.text) {
+			return true
+		}
+		if level == 0 {
+			return sectionHeading.MatchString(line.text)
+		}
+		match := heading.FindStringSubmatch(line.text)
+		return match != nil && len(match[1]) <= level
+	})
+	if end < 0 {
+		return lines
+	}
+	return lines[:end]
+}
+
+// shallowestHeadings is how many headings of the shallowest level lines hold
+// outside the fenced code blocks, so the sub-headings of a finding count with
+// it.
+func shallowestHeadings(lines []reportLine) int {
+	count, level := 0, 0
+	for _, line := range lines {
+		if line.fenced {
+			continue
+		}
+		match := heading.FindStringSubmatch(line.text)
+		switch {
+		case match == nil:
+		case level == 0 || len(match[1]) < level:
+			count, level = 1, len(match[1])
+		case len(match[1]) == level:
+			count++
+		default:
+		}
+	}
+	return count
+}
+
+// outermostItems is how many items the outermost list of lines has outside
+// the fenced code blocks: the items with the smallest indent, so the sub-items
+// of a finding count with it.
+func outermostItems(lines []reportLine) int {
+	count, indent := 0, -1
+	for _, line := range lines {
+		if line.fenced {
+			continue
+		}
+		match := findingItem.FindStringSubmatch(line.text)
+		switch {
+		case match == nil:
+		case indent < 0 || len(match[1]) < indent:
+			count, indent = 1, len(match[1])
+		case len(match[1]) == indent:
+			count++
+		default:
+		}
+	}
+	return count
 }
 
 // headerAgrees reports whether a number of the header, when there is one, is

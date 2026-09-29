@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { AuxPanel, PanelLayout } from "@/components/system/AuxPanel";
-import { Composer } from "@/features/chat/Composer";
 import { Conversation } from "@/features/chat/Conversation";
+import { ConversationComposer } from "@/features/chat/ConversationComposer";
 import { FindingsPanel } from "@/features/reviews/FindingsPanel";
 import { ReportsPanel } from "@/features/reviews/ReportsPanel";
 import { ReviewBar } from "@/features/reviews/ReviewBar";
@@ -54,7 +54,7 @@ export function ReviewView({ reviewId }: ReviewViewProps) {
         )}
         <FindingsPanel review={review} />
         <Conversation taskId={review.id} stage={REVIEW_STAGE} session={review} />
-        <Composer taskId={review.id} stage={REVIEW_STAGE} session={review} />
+        <ConversationComposer taskId={review.id} stage={REVIEW_STAGE} session={review} />
       </PanelLayout>
     </section>
   );

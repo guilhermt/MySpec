@@ -1,3 +1,4 @@
+import { hasReviewConversation, prPlaceOf } from "@/features/task/place";
 import type { StepperGlyph } from "@/features/task/stepper";
 import { stepperOf } from "@/features/task/stepper";
 import { baseName, prBaseName } from "@/lib/pull-requests";
@@ -209,6 +210,12 @@ function pullRequestGroup(
     return null;
   }
   const open = pr.prNumber > 0;
+  // Past its review, the place of the pull request is the conversation of the review, closed: the
+  // one on screen.
+  const screen =
+    prPlaceOf(task, pr, hasReviewConversation(task)).kind === "closedReview"
+      ? "pr_review"
+      : onScreenStage;
   const labels = [
     { stage: "pr", label: open ? `Draft and opening · #${pr.prNumber}` : "Draft and opening" },
     { stage: "pr_review", label: "PR review" },
@@ -216,7 +223,7 @@ function pullRequestGroup(
   const conversations = labels.flatMap(({ stage, label }) =>
     conversationsOf(task)
       .filter((conversation) => conversation.stage === stage)
-      .map((conversation) => conversationRow(conversation, label, onScreenStage)),
+      .map((conversation) => conversationRow(conversation, label, screen)),
   );
   const reports = (pr.reports ?? []).map((report) => {
     const label = stepReportLabel(report.pass, report.clean);
@@ -262,6 +269,19 @@ export function detailsOf(
       startedAt: task.createdAt,
     },
   };
+}
+
+/** reportOf is the report of Details read from a file, null when Details doesn't list it. */
+export function reportOf(model: DetailsModel, file: string): DetailsReport | null {
+  const rows = [
+    ...(model.steps?.rows ?? []),
+    ...(model.implementation ? [model.implementation] : []),
+  ];
+  const reports = [
+    ...rows.flatMap((row) => (row.kind === "not_started" ? [] : row.reports)),
+    ...(model.pullRequest?.reports ?? []),
+  ];
+  return reports.find((report) => report.file === file) ?? null;
 }
 
 /** earlierPlace is the <Lugar> of an earlier conversation: PRD, Step 2 · Implementer, Draft and opening… */

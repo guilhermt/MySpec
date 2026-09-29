@@ -4,6 +4,7 @@ import (
 	"errors"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/gh"
@@ -257,7 +258,10 @@ func TestAReadingThatWorksAgainClearsTheWarning(t *testing.T) {
 		return f.prState(t, "task-1").CheckError != ""
 	})
 
-	f.gh.setPR("task-1", gh.PR{Number: 7, URL: samePR.URL, State: gh.StateMerged, Base: "main"})
+	mergedAt := time.Date(2026, 9, 28, 0, 9, 14, 0, time.UTC)
+	f.gh.setPR("task-1", gh.PR{
+		Number: 7, URL: samePR.URL, State: gh.StateMerged, Base: "main", MergedBy: "guilhermt", MergedAt: mergedAt,
+	})
 	f.service.PollPRs()
 	f.waitPR(t, "task-1", flow.PRMerged)
 
@@ -274,7 +278,8 @@ func TestAReadingThatWorksAgainClearsTheWarning(t *testing.T) {
 	if run.Status != task.PRDone {
 		t.Errorf("status = %q, want done", run.Status)
 	}
-	if run.PR.State != task.PRStateMerged || run.PR.Base != "main" {
+	if run.PR.State != task.PRStateMerged || run.PR.Base != "main" ||
+		run.PR.MergedBy != "guilhermt" || !run.PR.MergedAt.Equal(mergedAt) {
 		t.Errorf("pull request = %+v, want what gh reported", run.PR)
 	}
 }

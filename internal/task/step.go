@@ -87,8 +87,8 @@ type StepRun struct {
 // shortSHALen is how many characters of a commit sha the app shows.
 const shortSHALen = 7
 
-// shortSHA abbreviates a commit sha, the way git and the interface print it.
-func shortSHA(sha string) string {
+// ShortSHA abbreviates a commit sha, the way git and the interface print it.
+func ShortSHA(sha string) string {
 	if len(sha) <= shortSHALen {
 		return sha
 	}

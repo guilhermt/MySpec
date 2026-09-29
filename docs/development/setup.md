@@ -68,7 +68,9 @@ O som das notificações, `internal/platform/chime/chime.wav`, é versionado e g
 
 Um teste só, em Go: `go test -run 'TestNome' ./internal/pacote/`. No frontend: `pnpm vitest run src/features/task/StepPane.test.tsx`, a partir de `frontend/`, ou `pnpm test:watch` para o modo interativo da suíte do jsdom. `pnpm test:painted` roda só a suíte de estilo computado, e `pnpm vitest run src/components/system/Input.painted.test.tsx`, um arquivo dela.
 
-As capturas da tela da task, nas larguras e nas nove cenas, vão ao corpo da pull request como imagens. `task captures` as grava em `frontend/captures/`, que o git ignora, e `task captures:push` as publica numa branch órfã `captures/<branch>`, fora de `main`, e imprime uma linha `![nome](…)` por imagem, com o dono e o repositório lidos pelo `gh`. Nenhuma das duas roda no `task check` nem no CI.
+As capturas da tela da task, nas larguras, nas nove cenas, na barra e no compositor de cada uma e nas sete cenas da conversa, vão ao corpo da pull request como imagens. `task captures` as grava em `frontend/captures/`, que o git ignora, e `task captures:push` as publica numa branch órfã `captures/<branch>`, fora de `main`, e imprime uma linha `![nome](…)` por imagem, com o dono e o repositório lidos pelo `gh`. Nenhuma das duas roda no `task check` nem no CI.
+
+A conversa longa é medida no motor do app. Com o Vite de pé (`task dev`, ou `pnpm dev` em `frontend/`), a URL `http://127.0.0.1:9245/?measure=conversation` aberta num WebKitGTK 6.0, como o `MiniBrowser` do pacote `webkitgtk-6.0` (`/usr/lib/webkitgtk-6.0/MiniBrowser` no Arch), monta no lugar do app `frontend/src/dev/measure-conversation.tsx`: uma conversa de 1.500 entradas em quatro trechos, três dobrados, com o agente escrevendo no fim. Ela mede a primeira pintura, do render ao quadro seguinte ao commit, e as atualizações do texto em streaming, o trabalho de cada uma e o tempo até o quadro seguinte, e escreve os números no console e na página. A ferramenta só existe no servidor de dev: o build de produção não a leva.
 
 ## Instalação
 

@@ -3,6 +3,7 @@ import * as BoardService from "@bindings/boardservice";
 import * as DiscussionService from "@bindings/discussionservice";
 import type {
   ActionEntry,
+  ActionOutput,
   ArchivedDiscussion,
   ArchivedPR,
   ArchivedReview,
@@ -104,6 +105,7 @@ import { Browser, Events } from "@wailsio/runtime";
 
 export type {
   ActionEntry,
+  ActionOutput,
   ArchivedDiscussion,
   ArchivedPR,
   ArchivedReview,
@@ -332,7 +334,31 @@ export type MarkerType =
   | "stage_started"
   | "step_started"
   | "compacted"
-  | "interrupted";
+  | "interrupted"
+  | "retried"
+  | "committed"
+  | "pr_opened"
+  | "checks_read"
+  | "draft_approved"
+  | "changes_approved"
+  | "paused"
+  | "plan_invalid";
+/** AppKind is which message of the workflow the app sent; "" for any other message. */
+export type AppKind =
+  | ""
+  | "report"
+  | "pass"
+  | "commit"
+  | "commit_all"
+  | "commit_push"
+  | "correction"
+  | "open"
+  | "pr_pass"
+  | "apply";
+/** InterruptedBy is who cut a text, an action or a turn short; "" when nobody did. */
+export type InterruptedBy = "" | "user" | "crash";
+/** RetryReason is why an API call the CLI retries failed; "" without a retry. */
+export type RetryReason = "" | "overloaded" | "rate_limit" | "server" | "connection" | "other";
 export type ErrorKind =
   | "process_exit"
   | "start_failed"
@@ -795,9 +821,57 @@ export function asMarkerType(value: string): MarkerType {
     case "step_started":
     case "compacted":
     case "interrupted":
+    case "retried":
+    case "committed":
+    case "pr_opened":
+    case "checks_read":
+    case "draft_approved":
+    case "changes_approved":
+    case "paused":
+    case "plan_invalid":
       return value;
     default:
       return "compacted";
+  }
+}
+
+export function asAppKind(value: string): AppKind {
+  switch (value) {
+    case "report":
+    case "pass":
+    case "commit":
+    case "commit_all":
+    case "commit_push":
+    case "correction":
+    case "open":
+    case "pr_pass":
+    case "apply":
+      return value;
+    default:
+      return "";
+  }
+}
+
+export function asInterruptedBy(value: string): InterruptedBy {
+  switch (value) {
+    case "user":
+    case "crash":
+      return value;
+    default:
+      return "";
+  }
+}
+
+export function asRetryReason(value: string): RetryReason {
+  switch (value) {
+    case "":
+    case "overloaded":
+    case "rate_limit":
+    case "server":
+    case "connection":
+      return value;
+    default:
+      return "other";
   }
 }
 
@@ -1205,6 +1279,8 @@ export const api = {
   previewDelete: (taskId: string): Promise<DeletePreview> => TaskService.PreviewDelete(taskId),
   getTranscript: (taskId: string, stage: string): Promise<Transcript> =>
     TaskService.GetTranscript(taskId, stage),
+  getActionOutput: (itemId: string, stage: string, entryId: string): Promise<ActionOutput> =>
+    TaskService.GetActionOutput(itemId, stage, entryId),
   sendMessage: (taskId: string, stage: string, text: string): Promise<void> =>
     TaskService.SendMessage(taskId, stage, text),
   removePending: (taskId: string, stage: string, entryId: string): Promise<void> =>

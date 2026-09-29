@@ -5,8 +5,8 @@ import {
   addDraftDependency,
   addRepository,
   addRepositoryToBoard,
-  answerPermission,
-  answerQuestion,
+  answerPermissionInPlace,
+  answerQuestionInPlace,
   applyReview,
   approvePR,
   approveReview,
@@ -16,6 +16,7 @@ import {
   backToStage,
   browseRepository,
   cardContext,
+  changeClonePath,
   changeRepositoryPath,
   checkBoardRepository,
   chooseCloneFolder,
@@ -49,6 +50,7 @@ import {
   previewRemoveBoard,
   publishEpic,
   publishReview,
+  readActionOutput,
   readEarlierConversation,
   refreshBoard,
   refreshCard,
@@ -59,6 +61,7 @@ import {
   removePending,
   removeRepository,
   resume,
+  resumeInPlace,
   retry,
   retryPR,
   retryPublish,
@@ -69,7 +72,7 @@ import {
   saveFindingText,
   saveReviewSummary,
   scanRepositories,
-  sendMessage,
+  sendMessageInPlace,
   setDraftEpic,
   setDraftModule,
   setDraftRepository,
@@ -245,11 +248,99 @@ describe("the app notice of a failed action", () => {
   });
 
   it("says the item when it is gone", async () => {
-    vi.mocked(api.sendMessage).mockRejectedValueOnce(new Error("no such task"));
+    vi.mocked(api.interrupt).mockRejectedValueOnce(new Error("no such task"));
 
-    await sendMessage("task-7", "prd", "hello");
+    await interrupt("task-7", "prd");
 
-    expect(useAppStore.getState().error?.label).toBe("Couldn't send the message to the item");
+    expect(useAppStore.getState().error?.label).toBe("Couldn't stop the agent of the item");
+  });
+});
+
+describe("answerQuestionInPlace", () => {
+  const choices = { 0: { labels: ["Yes"], other: null } };
+
+  it("marks the question sending while the answer is on its way", async () => {
+    let resolve: () => void = () => {};
+    vi.mocked(api.answerQuestion).mockReturnValueOnce(
+      new Promise<void>((done) => {
+        resolve = done;
+      }),
+    );
+
+    const sent = answerQuestionInPlace("task-1", "prd", "req-1", { Q: "Yes" });
+
+    expect(useAppStore.getState().questionSending).toEqual({ "req-1": true });
+    resolve();
+    await expect(sent).resolves.toBe("");
+  });
+
+  it("sends the answers and keeps the choices and the sending until the conversation answers", async () => {
+    useAppStore.getState().setQuestionChoices("req-1", choices);
+
+    await expect(answerQuestionInPlace("task-1", "prd", "req-1", { Q: "Yes" })).resolves.toBe("");
+
+    expect(api.answerQuestion).toHaveBeenCalledWith("task-1", "prd", "req-1", { Q: "Yes" });
+    expect(useAppStore.getState().questionChoices["req-1"]).toEqual(choices);
+    expect(useAppStore.getState().questionSending).toEqual({ "req-1": true });
+  });
+
+  it("answers the reason of a failure without the app notice, no longer sending", async () => {
+    useAppStore.getState().setQuestionChoices("req-1", choices);
+    vi.mocked(api.answerQuestion).mockRejectedValueOnce(new Error("the session stopped"));
+
+    await expect(answerQuestionInPlace("task-1", "prd", "req-1", {})).resolves.toBe(
+      "the session stopped",
+    );
+    expect(useAppStore.getState().error).toBeNull();
+    expect(useAppStore.getState().questionChoices["req-1"]).toEqual(choices);
+    expect(useAppStore.getState().questionSending).toEqual({});
+  });
+});
+
+describe("resumeInPlace", () => {
+  it("resumes the session and answers nothing", async () => {
+    await expect(resumeInPlace("task-1", "prd")).resolves.toBe("");
+
+    expect(api.resume).toHaveBeenCalledWith("task-1", "prd");
+  });
+
+  it("answers the reason of a failure without the app notice", async () => {
+    vi.mocked(api.resume).mockRejectedValueOnce(new Error("the worktree is gone"));
+
+    await expect(resumeInPlace("task-1", "prd")).resolves.toBe("the worktree is gone");
+    expect(useAppStore.getState().error).toBeNull();
+  });
+});
+
+describe("answerPermissionInPlace", () => {
+  it("sends the decision and answers nothing", async () => {
+    await expect(answerPermissionInPlace("task-1", "prd", "req-1", "deny", "no")).resolves.toBe("");
+
+    expect(api.answerPermission).toHaveBeenCalledWith("task-1", "prd", "req-1", "deny", "no");
+  });
+
+  it("answers the reason of a failure without the app notice", async () => {
+    vi.mocked(api.answerPermission).mockRejectedValueOnce(new Error("the session stopped"));
+
+    await expect(answerPermissionInPlace("task-1", "prd", "req-1", "allow", "")).resolves.toBe(
+      "the session stopped",
+    );
+    expect(useAppStore.getState().error).toBeNull();
+  });
+});
+
+describe("sendMessageInPlace", () => {
+  it("sends the message and answers nothing", async () => {
+    await expect(sendMessageInPlace("task-1", "prd", "go on")).resolves.toBe("");
+
+    expect(api.sendMessage).toHaveBeenCalledWith("task-1", "prd", "go on");
+  });
+
+  it("answers the reason of a failure without the app notice", async () => {
+    vi.mocked(api.sendMessage).mockRejectedValueOnce(new Error("the session is gone"));
+
+    await expect(sendMessageInPlace("task-1", "prd", "go on")).resolves.toBe("the session is gone");
+    expect(useAppStore.getState().error).toBeNull();
   });
 });
 
@@ -320,6 +411,15 @@ describe("scanning, adding and moving a repository", () => {
 });
 
 describe("clone actions", () => {
+  it("change the path of a clone from a bar, the failure in the app notice", async () => {
+    vi.mocked(api.changeRepositoryPath).mockRejectedValueOnce(new Error("not a clone"));
+
+    await changeClonePath("repo-1");
+
+    expect(api.changeRepositoryPath).toHaveBeenCalledWith("repo-1");
+    expect(useAppStore.getState().error?.label).toBe("Couldn't change the path of the clone");
+  });
+
   it("clone a repository and answer whether the clone started", async () => {
     vi.mocked(api.cloneRepository).mockResolvedValueOnce(false);
 
@@ -491,14 +591,11 @@ describe("task actions", () => {
 
   it("delegate to the matching binding", async () => {
     await deleteTask("task-1");
-    await sendMessage("task-1", "prd", "go on");
     await removePending("task-1", "prd", "entry-1");
     await interrupt("task-1", "prd");
     await pause("task-1", "prd");
     await resume("task-1", "prd");
     await retry("task-1", "prd");
-    await answerPermission("task-1", "prd", "req-1", "allow_session", "");
-    await answerQuestion("task-1", "prd", "req-1", { "Which database?": "SQLite" });
     await openExternal("https://anthropic.com");
     await backToStage("task-1", "prd");
     await discardStage("task-1", "tech_spec");
@@ -520,22 +617,11 @@ describe("task actions", () => {
 
     expect(api.deleteTask).toHaveBeenCalledWith("task-1");
     expect(api.closeTask).toHaveBeenCalledWith("task-1");
-    expect(api.sendMessage).toHaveBeenCalledWith("task-1", "prd", "go on");
     expect(api.removePending).toHaveBeenCalledWith("task-1", "prd", "entry-1");
     expect(api.interrupt).toHaveBeenCalledWith("task-1", "prd");
     expect(api.pause).toHaveBeenCalledWith("task-1", "prd");
     expect(api.resume).toHaveBeenCalledWith("task-1", "prd");
     expect(api.retry).toHaveBeenCalledWith("task-1", "prd");
-    expect(api.answerPermission).toHaveBeenCalledWith(
-      "task-1",
-      "prd",
-      "req-1",
-      "allow_session",
-      "",
-    );
-    expect(api.answerQuestion).toHaveBeenCalledWith("task-1", "prd", "req-1", {
-      "Which database?": "SQLite",
-    });
     expect(api.openExternal).toHaveBeenCalledWith("https://anthropic.com");
     expect(api.backToStage).toHaveBeenCalledWith("task-1", "prd");
     expect(api.discardStage).toHaveBeenCalledWith("task-1", "tech_spec");
@@ -637,6 +723,13 @@ describe("task actions", () => {
     expect(useAppStore.getState().error).toBeNull();
   });
 
+  it("answers the failure of cleaning the worktree instead of the app notice", async () => {
+    vi.mocked(api.cleanAndStartStep).mockRejectedValueOnce(new Error("git clean failed"));
+
+    expect(await cleanAndStartStep("task-1")).toBe("git clean failed");
+    expect(useAppStore.getState().error).toBeNull();
+  });
+
   it("saves the model of a stage in place, answering null and leaving the app notice alone", async () => {
     const choice = { model: "claude-sonnet-5", effort: "high" };
 
@@ -727,6 +820,30 @@ describe("loadTranscript", () => {
       label: "Couldn't load the conversation of the item",
       detail: "no such task. Try again.",
     });
+  });
+});
+
+describe("readActionOutput", () => {
+  it("answers the whole output of a command", async () => {
+    vi.mocked(api.getActionOutput).mockResolvedValueOnce({
+      text: "ok",
+      lines: 1,
+      truncated: false,
+    });
+
+    await expect(readActionOutput("task-1", "step:3", "entry-9")).resolves.toEqual({
+      text: "ok",
+      lines: 1,
+      truncated: false,
+    });
+    expect(api.getActionOutput).toHaveBeenCalledWith("task-1", "step:3", "entry-9");
+  });
+
+  it("leaves a failure to the output that asked, without the app notice", async () => {
+    vi.mocked(api.getActionOutput).mockRejectedValueOnce(new Error("gone"));
+
+    await expect(readActionOutput("task-1", "step:3", "entry-9")).rejects.toThrow("gone");
+    expect(useAppStore.getState().error).toBeNull();
   });
 });
 

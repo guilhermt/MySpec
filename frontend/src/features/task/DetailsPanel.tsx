@@ -17,6 +17,7 @@ import {
   type DetailsReport,
   type DetailsStepRow,
   detailsOf,
+  reportOf,
 } from "@/features/task/details";
 import { earlierRowId, leaveEarlierConversation } from "@/features/task/earlier-conversation";
 import { ModelsPopover } from "@/features/task/ModelsPopover";
@@ -77,13 +78,27 @@ export interface DetailsPanelProps {
  */
 export function DetailsPanel({ task }: DetailsPanelProps) {
   const openPanel = useAppStore((state) => state.openPanel);
+  const asked = useAppStore((state) => state.panelDocument);
+  const clearPanelDocument = useAppStore((state) => state.clearPanelDocument);
   const repository = useRepository(task.repositoryId);
   const tab = useOpenStepTab(task.id);
   const now = useNow(MINUTE, true);
-  const [open, setOpen] = useState<DetailsReport | null>(null);
+  // The file of the report open, the one a marker of the conversation asked for at first.
+  const [openFile, setOpenFile] = useState<string | null>(asked);
   // The last report opened is the row the focus returns to on the way back.
-  const [lastReport, setLastReport] = useState<string | null>(null);
+  const [lastReport, setLastReport] = useState<string | null>(asked);
   const model = detailsOf(task, repository, screenSession(task, tab)?.stage ?? null);
+  // A report the task no longer has falls back to the list.
+  const open = openFile === null ? null : reportOf(model, openFile);
+
+  // Open in Details of a marker opens its report, also with the panel already open.
+  useEffect(() => {
+    if (asked !== null) {
+      setOpenFile(asked);
+      setLastReport(asked);
+      clearPanelDocument();
+    }
+  }, [asked, clearPanelDocument]);
 
   const reportRows = (reports: readonly DetailsReport[]) =>
     reports.map((report) => (
@@ -92,10 +107,10 @@ export function DetailsPanel({ task }: DetailsPanelProps) {
           nested
           glyph={<Icon icon={ICONS.file} size="sm" />}
           onClick={() => {
-            setOpen(report);
-            setLastReport(report.key);
+            setOpenFile(report.file);
+            setLastReport(report.file);
           }}
-          focusOnMount={report.key === lastReport}
+          focusOnMount={report.file === lastReport}
         >
           {report.label}
         </PanelRow>
@@ -119,7 +134,7 @@ export function DetailsPanel({ task }: DetailsPanelProps) {
             artifactVersion={task.artifactVersion}
             title={open.title}
             back="Details"
-            onBack={() => setOpen(null)}
+            onBack={() => setOpenFile(null)}
           />
         ) : (
           <>

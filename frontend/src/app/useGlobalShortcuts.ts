@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { panelTriggerId } from "@/components/system/AuxPanel";
 import { leaveEarlierConversation } from "@/features/task/earlier-conversation";
+import { focusRequest } from "@/lib/focus";
 import { layerOpen, modalOpen } from "@/lib/layers";
 import { openItemId } from "@/lib/locations";
 import { nextWaiting } from "@/lib/situations";
@@ -92,7 +93,8 @@ export function useGlobalShortcuts(): void {
     // Esc closes what the place on screen has open, the panel first and then an earlier
     // conversation, once nothing closer to the user took it: the owners of Esc inside the screen
     // (the message box, the search of a board, a draft) prevent its default, and a layer over the
-    // screen (a listbox, a popover, the ⋯ menu) closes first, on its own.
+    // screen (a listbox, a popover, the ⋯ menu) closes first, on its own. With nothing to close,
+    // Esc in the conversation takes the focus to the composer, when there is one.
     const onEscape = (event: KeyboardEvent) => {
       if (
         event.key !== "Escape" ||
@@ -116,7 +118,7 @@ export function useGlobalShortcuts(): void {
         store.cancelPromptEdit();
       } else if (store.location.kind === "settings") {
         store.closeSettings();
-      } else {
+      } else if (!(document.activeElement?.closest('[role="feed"]') && focusRequest("composer"))) {
         return;
       }
       event.preventDefault();

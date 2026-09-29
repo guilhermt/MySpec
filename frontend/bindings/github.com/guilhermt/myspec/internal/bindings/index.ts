@@ -22,6 +22,7 @@ export {
 
 export type {
     ActionEntry,
+    ActionOutput,
     ArchivedDiscussion,
     ArchivedPR,
     ArchivedReview,

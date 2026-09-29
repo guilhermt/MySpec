@@ -65,14 +65,16 @@ func renderPrompt(stage prompts.Stage, vars prompts.Vars) (string, error) {
 }
 
 // memSessions is an in-memory session.SessionRepository, one record per stage
-// of a task.
+// of a task. Deleting a record takes its entries, as the database's cascade
+// does.
 type memSessions struct {
-	mu   sync.Mutex
-	recs map[string]session.Record // by task id and stage
+	mu      sync.Mutex
+	recs    map[string]session.Record // by task id and stage
+	entries *memEntries
 }
 
-func newMemSessions() *memSessions {
-	return &memSessions{recs: map[string]session.Record{}}
+func newMemSessions(entries *memEntries) *memSessions {
+	return &memSessions{recs: map[string]session.Record{}, entries: entries}
 }
 
 // key indexes a record by the task and stage it belongs to.
@@ -113,6 +115,9 @@ func (r *memSessions) Delete(_ context.Context, taskID string, stages ...string)
 	defer r.mu.Unlock()
 
 	for _, stage := range stages {
+		if rec, ok := r.recs[key(taskID, stage)]; ok {
+			r.entries.dropSession(rec.ID)
+		}
 		delete(r.recs, key(taskID, stage))
 	}
 	return nil
@@ -135,6 +140,7 @@ func (r *memSessions) DeleteByTask(_ context.Context, taskID string) error {
 
 	for k, rec := range r.recs {
 		if rec.TaskID == taskID {
+			r.entries.dropSession(rec.ID)
 			delete(r.recs, k)
 		}
 	}
@@ -164,8 +170,9 @@ type storedEntry struct {
 
 // memEntries is an in-memory session.EntryRepository.
 type memEntries struct {
-	mu    sync.Mutex
-	items []storedEntry
+	mu      sync.Mutex
+	items   []storedEntry
+	outputs map[string]session.Output
 }
 
 func (r *memEntries) List(_ context.Context, sessionID string) ([]session.Entry, error) {
@@ -232,7 +239,23 @@ func (r *memEntries) Delete(_ context.Context, id string) error {
 	if index := r.indexOf(id); index >= 0 {
 		r.items = slices.Delete(r.items, index, index+1)
 	}
+	delete(r.outputs, id)
 	return nil
+}
+
+// dropSession removes the entries of a session with their outputs, as the
+// database's cascade does when the session goes.
+func (r *memEntries) dropSession(sessionID string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.items = slices.DeleteFunc(r.items, func(item storedEntry) bool {
+		if item.sessionID != sessionID {
+			return false
+		}
+		delete(r.outputs, item.entry.ID)
+		return true
+	})
 }
 
 func (r *memEntries) MaxSeq(_ context.Context, sessionID string) (int, error) {
@@ -246,6 +269,28 @@ func (r *memEntries) MaxSeq(_ context.Context, sessionID string) (int, error) {
 		}
 	}
 	return maxSeq, nil
+}
+
+func (r *memEntries) SaveOutput(_ context.Context, entryID string, o session.Output) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.outputs == nil {
+		r.outputs = map[string]session.Output{}
+	}
+	r.outputs[entryID] = o
+	return nil
+}
+
+func (r *memEntries) Output(_ context.Context, entryID string) (session.Output, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	o, ok := r.outputs[entryID]
+	if !ok {
+		return session.Output{}, fmt.Errorf("output of entry %s: %w", entryID, session.ErrNotFound)
+	}
+	return o, nil
 }
 
 // seed stores entries directly, bypassing the service.
@@ -285,6 +330,7 @@ type fakeLauncher struct {
 	locateErr    error
 	preflightErr error
 	starts       []claude.Config
+	procs        []session.Process
 }
 
 func (l *fakeLauncher) Locate() (string, error) {
@@ -318,7 +364,22 @@ func (l *fakeLauncher) Start(ctx context.Context, cfg claude.Config) (session.Pr
 	if err != nil {
 		return nil, err
 	}
+	l.mu.Lock()
+	l.procs = append(l.procs, p)
+	l.mu.Unlock()
 	return p, nil
+}
+
+// kill kills the last process started, the way a crash ends it.
+func (l *fakeLauncher) kill(t *testing.T) {
+	t.Helper()
+
+	l.mu.Lock()
+	p := l.procs[len(l.procs)-1]
+	l.mu.Unlock()
+	if err := p.Kill(); err != nil {
+		t.Fatalf("Kill() = %v, want nil", err)
+	}
 }
 
 // fix clears the failures so the next start succeeds.
@@ -345,10 +406,11 @@ type fixture struct {
 	entries  *memEntries
 	launcher *fakeLauncher
 
-	mu     sync.Mutex
-	now    time.Time
-	states []session.Key
-	events []session.TranscriptEvent
+	mu      sync.Mutex
+	now     time.Time
+	states  []session.Key
+	retries []session.Summary // the summaries reported while an api_retry was pending
+	events  []session.TranscriptEvent
 }
 
 // prd is the session key of a task in the PRD stage, which is where most of
@@ -369,9 +431,10 @@ func newFixture(t *testing.T, scenario string) *fixture {
 func newFixtureWith(t *testing.T, launcher *fakeLauncher, idle time.Duration) *fixture {
 	t.Helper()
 
+	entries := &memEntries{}
 	f := &fixture{
-		sessions: newMemSessions(),
-		entries:  &memEntries{},
+		sessions: newMemSessions(entries),
+		entries:  entries,
 		launcher: launcher,
 		now:      base,
 	}
@@ -457,10 +520,23 @@ func newGatedFixture(t *testing.T) (*fixture, func(gates ...string)) {
 }
 
 func (f *fixture) onState(k session.Key) {
+	sum, _ := f.service.Summary(k)
+
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
 	f.states = append(f.states, k)
+	if sum.RetryAttempt > 0 {
+		f.retries = append(f.retries, sum)
+	}
+}
+
+// retrySummaries returns the summaries reported while an api_retry was pending.
+func (f *fixture) retrySummaries() []session.Summary {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	return slices.Clone(f.retries)
 }
 
 func (f *fixture) onTranscript(ev session.TranscriptEvent) {

@@ -6,7 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { pluralize } from "@/features/boards/board-dialog";
 import { Conversation } from "@/features/chat/Conversation";
 import { Markdown } from "@/features/chat/Markdown";
-import type { SessionState } from "@/features/chat/session";
+import { IDLE_SESSION, type SessionState } from "@/features/chat/session";
 import { DeleteDiscussionDialog } from "@/features/discussion/DeleteDiscussionDialog";
 import {
   epicGroups,
@@ -28,14 +28,7 @@ const LOADING_WIDTHS = ["w-1/2", "w-full", "w-3/4"];
 const DOCUMENT_FILE = "discussion.md";
 
 /** ARCHIVED_SESSION is a session that is over: nothing runs behind the conversation. */
-const ARCHIVED_SESSION: SessionState = {
-  sessionStatus: "waiting",
-  sessionModel: "",
-  sessionEffort: "",
-  turnRunning: false,
-  processRunning: false,
-  retryAttempt: 0,
-};
+const ARCHIVED_SESSION: SessionState = IDLE_SESSION;
 
 /** DraftLine is one draft of the archived discussion: what it was, and what became of it. */
 function DraftLine({ draft, indented }: { draft: Draft; indented?: boolean }) {

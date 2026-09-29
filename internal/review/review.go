@@ -19,9 +19,10 @@ const readTimeout = 30 * time.Second
 
 // File is one changed path of a worktree under review.
 type File struct {
-	Path   string
-	Kind   git.Kind
-	Staged bool // nothing of it is left outside the index
+	Path    string
+	Kind    git.Kind
+	Staged  bool // nothing of it is left outside the index
+	Partial bool // part of it is in the index and part is not
 }
 
 // Snapshot is the last reading of a worktree. A failed reading carries Err and

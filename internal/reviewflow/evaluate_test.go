@@ -58,7 +58,7 @@ func TestTheReportOfAPassIsRecordedWithTheCommitTheWorktreeIsOn(t *testing.T) {
 	// wait covers both.
 	f.evaluated(t, id, func(s reviewflow.State) bool {
 		return s.Status == reviewflow.StatusAwaitingDecision &&
-			slices.Contains(f.sessions.recorded(), "mark:"+id+":pass=1")
+			slices.Contains(f.sessions.recorded(), "mark:"+id+":pass=1:clean=false")
 	}, "the report of the first pass to be recorded")
 
 	pass := f.pass(t, id, 1)
@@ -81,7 +81,7 @@ func TestTheReportOfAPassIsRecordedWithTheCommitTheWorktreeIsOn(t *testing.T) {
 	if stored, _ := f.reviews.Get(id); stored.ReportedPass != 1 || stored.PassCommit != headHash {
 		t.Errorf("review = %+v, want the first pass reported", stored)
 	}
-	if diff := cmp.Diff([]string{"mark:" + id + ":pass=1"}, f.sessions.recorded()[2:]); diff != "" {
+	if diff := cmp.Diff([]string{"mark:" + id + ":pass=1:clean=false"}, f.sessions.recorded()[2:]); diff != "" {
 		t.Errorf("session calls (-want +got):\n%s", diff)
 	}
 }

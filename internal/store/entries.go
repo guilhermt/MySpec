@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 
 	"github.com/guilhermt/myspec/internal/session"
@@ -86,6 +87,33 @@ func (r *EntriesRepo) MaxSeq(ctx context.Context, sessionID string) (int, error)
 		return 0, fmt.Errorf("max seq of session %s: %w", sessionID, err)
 	}
 	return maxSeq, nil
+}
+
+// SaveOutput stores the whole output of an action, replacing the one it had.
+func (r *EntriesRepo) SaveOutput(ctx context.Context, entryID string, o session.Output) error {
+	const stmt = `INSERT INTO action_outputs (entry_id, text, lines, truncated) VALUES (?, ?, ?, ?)
+		ON CONFLICT (entry_id) DO UPDATE SET text = excluded.text, lines = excluded.lines,
+		truncated = excluded.truncated`
+
+	if _, err := r.db.ExecContext(ctx, stmt, entryID, o.Text, o.Lines, o.Truncated); err != nil {
+		return fmt.Errorf("save output of entry %s: %w", entryID, err)
+	}
+	return nil
+}
+
+// Output returns the whole output of an action, or session.ErrNotFound.
+func (r *EntriesRepo) Output(ctx context.Context, entryID string) (session.Output, error) {
+	const query = `SELECT text, lines, truncated FROM action_outputs WHERE entry_id = ?`
+
+	var o session.Output
+	err := r.db.QueryRowContext(ctx, query, entryID).Scan(&o.Text, &o.Lines, &o.Truncated)
+	if errors.Is(err, sql.ErrNoRows) {
+		return session.Output{}, fmt.Errorf("output of entry %s: %w", entryID, session.ErrNotFound)
+	}
+	if err != nil {
+		return session.Output{}, fmt.Errorf("output of entry %s: %w", entryID, err)
+	}
+	return o, nil
 }
 
 func scanEntry(row scanner) (session.Entry, error) {

@@ -1,5 +1,12 @@
 import type { CheckGlyph } from "@/components/system/ChecksList";
-import type { CheckState, PRStatus, PRTrouble, PullRequest, TaskSummary } from "@/lib/wails";
+import type {
+  CheckState,
+  PRCheck,
+  PRStatus,
+  PRTrouble,
+  PullRequest,
+  TaskSummary,
+} from "@/lib/wails";
 import { asCheckState, asPRStatus } from "@/lib/wails";
 import { duration } from "@/lib/when";
 
@@ -24,11 +31,23 @@ export function isOpen(pr: PullRequest): boolean {
 
 /** checkCounts is how many checks of the last reading passed, skipped and neutral included, of how many. */
 export function checkCounts(pr: PullRequest): { passed: number; total: number } {
-  const checks = pr.checks ?? [];
+  return countChecks(pr.checks ?? []);
+}
+
+function countChecks(checks: readonly PRCheck[]): { passed: number; total: number } {
   const passed = checks.filter((check) =>
     ["passed", "skipped", "neutral"].includes(asCheckState(check.state)),
   ).length;
   return { passed, total: checks.length };
+}
+
+/** liveChecksHeader is the header of the live checks: "Waiting for checks · 4 of 6 passed", or "No checks". */
+export function liveChecksHeader(checks: readonly PRCheck[] | null): string {
+  if (checks === null || checks.length === 0) {
+    return "No checks";
+  }
+  const { passed, total } = countChecks(checks);
+  return `Waiting for checks · ${passed} of ${total} passed`;
 }
 
 /** baseName strips a remote's "origin/" prefix off a branch name, when it has one. */

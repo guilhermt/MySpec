@@ -47,6 +47,44 @@ type UserEntry struct {
 	Pending bool   `json:"pending"` // queued, not yet delivered to the CLI
 	Prompt  bool   `json:"prompt"`  // the first message of a stage: Text is the initial context, the CLI got the rendered prompt
 	App     bool   `json:"app"`     // the app wrote it, not the user
+	// Sent is the rendered prompt the CLI got, for a prompt entry of the tech
+	// spec, the plan, the pull request and the pull request review; "" for
+	// every other entry.
+	Sent string `json:"sent"`
+	// AppKind is which message of the workflow the app sent, and AppPass,
+	// AppRound, AppRounds and AppCount its numbers, as in AppMessage; "" and
+	// zero for every other entry.
+	AppKind   AppKind `json:"appKind"`
+	AppPass   int     `json:"appPass"`
+	AppRound  int     `json:"appRound"`
+	AppRounds int     `json:"appRounds"`
+	AppCount  int     `json:"appCount"`
+}
+
+// AppKind says which message of the workflow the app sent.
+type AppKind string
+
+// The messages of the workflow.
+const (
+	AppReport     AppKind = "report"      // a step review report to the implementer
+	AppPass       AppKind = "pass"        // the next pass to the step reviewer
+	AppCommit     AppKind = "commit"      // commit the staged files
+	AppCommitAll  AppKind = "commit_all"  // commit every change of the step, after a clean report
+	AppCommitPush AppKind = "commit_push" // commit the staged files and push
+	AppCorrection AppKind = "correction"  // the plan isn't valid yet
+	AppOpen       AppKind = "open"        // open the pull request
+	AppPRPass     AppKind = "pr_pass"     // the next pass of the pull request review
+	AppApply      AppKind = "apply"       // apply the approved findings
+)
+
+// AppMessage is a message the app sends the agent on the user's behalf.
+type AppMessage struct {
+	Text   string
+	Kind   AppKind
+	Pass   int // report, pass, pr_pass
+	Round  int // report: the round; correction: the attempt
+	Rounds int // report: MaxReviewRounds; correction: MaxCorrections
+	Count  int // report: findings (-1 unknown); correction: problems; apply: approved findings
 }
 
 // AssistantEntry is one content block of an assistant message.
@@ -56,6 +94,12 @@ type AssistantEntry struct {
 	Text        string `json:"text"`
 	Complete    bool   `json:"complete"`
 	Interrupted bool   `json:"interrupted"`
+	// ParentToolUseID is the Agent/Task action of the subagent that wrote it;
+	// "" in the main thread.
+	ParentToolUseID string `json:"parentToolUseId"`
+	// InterruptedBy is who cut the text short: "user" or "crash"; "" when it
+	// was not.
+	InterruptedBy string `json:"interruptedBy"`
 }
 
 // ActionStatus is how far a tool call has gone.
@@ -76,6 +120,32 @@ type ActionEntry struct {
 	Label     string       `json:"label"`  // "Reading", "Running", ... (labels.go)
 	Target    string       `json:"target"` // path, command, pattern; "" when none
 	Status    ActionStatus `json:"status"`
+	// Description is the description the agent wrote (Bash, Agent/Task); ""
+	// when none.
+	Description string `json:"description"`
+	// CommandLines counts the lines of the whole command, Bash only; 0 when
+	// unknown.
+	CommandLines int `json:"commandLines"`
+	// StartedAt is when the input became complete; nil in old transcripts.
+	StartedAt *time.Time `json:"startedAt"`
+	// FinishedAt is when the result arrived; nil while running, when
+	// interrupted and in old transcripts.
+	FinishedAt *time.Time `json:"finishedAt"`
+	// ExitCode is read from a failed Bash result; nil when unknown.
+	ExitCode *int `json:"exitCode"`
+	// ParentToolUseID is the Agent/Task action of the subagent that made it;
+	// "" in the main thread.
+	ParentToolUseID string `json:"parentToolUseId"`
+	// OutputLines counts the lines of the whole output; 0 when it has none.
+	// The whole output is kept apart (Output), the payload carries its tail.
+	OutputLines int `json:"outputLines"`
+	// OutputTail is the end of the output the conversation shows.
+	OutputTail string `json:"outputTail"`
+	// OutputTruncated says the output kept is only the end of a longer one.
+	OutputTruncated bool `json:"outputTruncated"`
+	// InterruptedBy is who stopped the action, interrupted only: "user" or
+	// "crash".
+	InterruptedBy string `json:"interruptedBy"`
 }
 
 // PermissionStatus is how a permission request or a question was answered.
@@ -129,6 +199,9 @@ type QuestionEntry struct {
 	Questions []Question        `json:"questions"`
 	Answers   map[string]string `json:"answers"` // question text -> label(s); nil while pending
 	Status    PermissionStatus  `json:"status"`  // pending | allowed (answered) | cancelled
+	// AnsweredAt is when the answer went to the CLI; nil while pending, when
+	// cancelled and in old transcripts.
+	AnsweredAt *time.Time `json:"answeredAt"`
 }
 
 // MarkerType is the event a marker records.
@@ -153,6 +226,14 @@ const (
 	MarkerStepStarted       MarkerType = "step_started"
 	MarkerCompacted         MarkerType = "compacted"
 	MarkerInterrupted       MarkerType = "interrupted"
+	MarkerRetried           MarkerType = "retried"
+	MarkerCommitted         MarkerType = "committed"
+	MarkerPROpened          MarkerType = "pr_opened"
+	MarkerChecksRead        MarkerType = "checks_read"
+	MarkerDraftApproved     MarkerType = "draft_approved"
+	MarkerChangesApproved   MarkerType = "changes_approved"
+	MarkerPaused            MarkerType = "paused"
+	MarkerPlanInvalid       MarkerType = "plan_invalid"
 )
 
 // ArtifactKind is the artifact a marker refers to. The values are the ones of
@@ -201,9 +282,40 @@ type MarkerEntry struct {
 	PreTokens int        `json:"preTokens"` // compacted only
 	Stage     string     `json:"stage"`     // stage_started only
 	Step      int        `json:"step"`      // step_started and step_review_started only
-	Pass      int        `json:"pass"`      // pr_review_written and step_review_written only: the pass it closed
-	Clean     bool       `json:"clean"`     // step_review_written only: the pass found nothing to change
-	Restarted bool       `json:"restarted"` // stage_started and step_started only: it was started again
+	Pass      int        `json:"pass"`      // pr_review_written, step_review_written and checks_read only: the pass it closed or starts
+	Clean     bool       `json:"clean"`     // pr_review_written and step_review_written only: the pass found nothing to change
+	// Findings is how many findings the pass of a step review reported,
+	// step_review_written only; nil when unknown.
+	Findings  *int `json:"findings"`
+	Restarted bool `json:"restarted"` // stage_started and step_started only: it was started again
+	// Percent is how full the context was, compacted only; 0 when the window
+	// is unknown.
+	Percent int `json:"percent"`
+	// Attempts and Reason are the retries of the API call, retried only.
+	// Reason is one of the codes of retryReasonOf.
+	Attempts int    `json:"attempts"`
+	Reason   string `json:"reason"`
+	// InterruptedBy is who interrupted the turn, interrupted only: "user".
+	InterruptedBy string `json:"interruptedBy"`
+
+	SHA      string        `json:"sha"`      // committed
+	Subject  string        `json:"subject"`  // committed
+	Pushed   bool          `json:"pushed"`   // committed: the commit went to the pull request
+	Number   int           `json:"number"`   // pr_opened, committed with push
+	Base     string        `json:"base"`     // pr_opened: the base branch
+	Passed   int           `json:"passed"`   // checks_read
+	Total    int           `json:"total"`    // checks_read
+	Failed   []string      `json:"failed"`   // checks_read: names of the failed checks; empty when none
+	Conflict bool          `json:"conflict"` // checks_read
+	Title    string        `json:"title"`    // draft_approved
+	Files    int           `json:"files"`    // changes_approved
+	Problems []PlanProblem `json:"problems"` // plan_invalid
+}
+
+// PlanProblem is a problem of a plan that is not valid, plan_invalid only.
+type PlanProblem struct {
+	File    string `json:"file"`
+	Message string `json:"message"`
 }
 
 // ErrorKind says what went wrong.

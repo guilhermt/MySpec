@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { backTarget, type DetailsModel, detailsOf, earlierPlace } from "@/features/task/details";
+import {
+  backTarget,
+  type DetailsModel,
+  detailsOf,
+  earlierPlace,
+  reportOf,
+} from "@/features/task/details";
 import type { TaskSummary } from "@/lib/wails";
 import {
   makePullRequest,
@@ -22,7 +28,7 @@ const committed = (number: number) =>
     commitSha: "c19f02e8a1b2",
     commitSubject: `Commit ${number}`,
     committedAt: "2026-09-27T13:48:00Z",
-    reports: [{ pass: 1, file: `${number}-1.md`, clean: false }],
+    reports: [{ pass: 1, file: `${number}-1.md`, clean: false, findings: -1 }],
   });
 
 const STRUCTURED: TaskSummary = makeTask({
@@ -39,7 +45,7 @@ const STRUCTURED: TaskSummary = makeTask({
       reviewMode: "agent",
       reviewPass: 2,
       reviewer: makeStepReviewer({ sessionStage: "step_review:3", sessionStatus: "working" }),
-      reports: [{ pass: 1, file: "3-1.md", clean: false }],
+      reports: [{ pass: 1, file: "3-1.md", clean: false, findings: -1 }],
     }),
     makeStep({ number: 4, title: "Add the limits" }),
   ],
@@ -164,7 +170,7 @@ describe("detailsOf, Implementation", () => {
         makeStep({
           status: "agent_review",
           reviewMode: "agent",
-          reports: [{ pass: 1, file: "1-1.md", clean: true }],
+          reports: [{ pass: 1, file: "1-1.md", clean: true, findings: 0 }],
         }),
       ],
     });
@@ -240,7 +246,7 @@ describe("detailsOf, Pull request", () => {
     });
   });
 
-  it("lists the closed review of a done pull request as an earlier conversation, with every report", () => {
+  it("lists the closed review of a done pull request as the one on screen, with every report", () => {
     const task = makeTask({
       stage: "pr",
       conversations: [conversation("pr"), conversation("pr_review")],
@@ -261,7 +267,7 @@ describe("detailsOf, Pull request", () => {
     expect(detailsOf(task, null, null).pullRequest).toEqual({
       conversations: [
         { stage: "pr", label: "Draft and opening · #1284", startedAt: AT, now: false },
-        { stage: "pr_review", label: "PR review", startedAt: AT, now: false },
+        { stage: "pr_review", label: "PR review", startedAt: AT, now: true },
       ],
       reports: [
         {
@@ -284,6 +290,34 @@ describe("detailsOf, Pull request", () => {
         state: "open",
       },
     });
+  });
+});
+
+describe("detailsOf, Pull request past its review", () => {
+  it.each(["done", "trouble", "merged", "pr_closed"])(
+    "has the review on screen with the pull request %s",
+    (status) => {
+      const task = makeTask({
+        stage: "pr",
+        conversations: [conversation("pr"), conversation("pr_review")],
+        pr: makePullRequest({ status, prNumber: 1284, sessionStage: "" }),
+      });
+
+      expect(detailsOf(task, null, null).pullRequest?.conversations).toEqual([
+        { stage: "pr", label: "Draft and opening · #1284", startedAt: AT, now: false },
+        { stage: "pr_review", label: "PR review", startedAt: AT, now: true },
+      ]);
+    },
+  );
+
+  it("leaves the review an earlier conversation while a pass waits for the checks", () => {
+    const task = makeTask({
+      stage: "pr",
+      conversations: [conversation("pr"), conversation("pr_review")],
+      pr: makePullRequest({ status: "waiting_checks", prNumber: 1284, sessionStage: "" }),
+    });
+
+    expect(detailsOf(task, null, null).pullRequest?.conversations[1]?.now).toBe(false);
   });
 });
 
@@ -361,5 +395,47 @@ describe("backTarget", () => {
     ["the pull request, done", makeTask({ stage: "pr" }), null, "the pull request"],
   ])("goes back to %s", (_, task, screen, target) => {
     expect(backTarget(task, screen)).toBe(target);
+  });
+});
+
+describe("reportOf", () => {
+  it("finds a report of a step, of the implementation and of the pull request by its file", () => {
+    const steps = detailsOf(STRUCTURED, null, null);
+    expect(reportOf(steps, "step-reviews/2-1.md")).toMatchObject({ file: "step-reviews/2-1.md" });
+    expect(reportOf(steps, "step-reviews/3-1.md")).toMatchObject({ file: "step-reviews/3-1.md" });
+
+    const oneShot = detailsOf(
+      makeTask({
+        mode: "one_shot",
+        stage: "implementation",
+        currentStep: 1,
+        steps: [
+          makeStep({
+            status: "agent_review",
+            reports: [{ pass: 1, file: "1-1.md", clean: true, findings: 0 }],
+          }),
+        ],
+      }),
+      null,
+      null,
+    );
+    expect(reportOf(oneShot, "step-reviews/1-1.md")).toMatchObject({ file: "step-reviews/1-1.md" });
+
+    const pr = detailsOf(
+      makeTask({
+        stage: "pr",
+        pr: makePullRequest({
+          prNumber: 1284,
+          reports: [{ pass: 1, file: "review-1.md", clean: true }],
+        }),
+      }),
+      null,
+      null,
+    );
+    expect(reportOf(pr, "pr/review-1.md")).toMatchObject({ file: "pr/review-1.md" });
+  });
+
+  it("finds nothing for a file Details doesn't list", () => {
+    expect(reportOf(detailsOf(STRUCTURED, null, null), "step-reviews/9-1.md")).toBeNull();
   });
 });

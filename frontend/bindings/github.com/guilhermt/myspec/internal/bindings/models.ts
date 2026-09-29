@@ -14,6 +14,65 @@ export interface ActionEntry {
      * Status is running, done, error or interrupted.
      */
     "status": string;
+
+    /**
+     * Description is what the agent wrote the call is for; "" when none.
+     */
+    "description": string;
+
+    /**
+     * CommandLines counts the lines of a Bash command; 0 when unknown.
+     */
+    "commandLines": number;
+
+    /**
+     * StartedAt and FinishedAt are RFC 3339, "" when unknown.
+     */
+    "startedAt": string;
+    "finishedAt": string;
+
+    /**
+     * ExitCode is the code a failed Bash command exited with, -1 when unknown.
+     */
+    "exitCode": number;
+
+    /**
+     * ParentToolUseID is the Agent/Task action of the subagent that made it;
+     * "" in the main thread.
+     */
+    "parentToolUseId": string;
+
+    /**
+     * OutputLines counts the lines of the whole output, 0 when it has none;
+     * GetActionOutput reads it.
+     */
+    "outputLines": number;
+
+    /**
+     * OutputTail is the end of the output the conversation shows.
+     */
+    "outputTail": string;
+
+    /**
+     * OutputTruncated says the whole output is only the end of a longer one.
+     */
+    "outputTruncated": boolean;
+
+    /**
+     * InterruptedBy is user or crash when the status is interrupted, ""
+     * otherwise.
+     */
+    "interruptedBy": string;
+}
+
+/**
+ * ActionOutput is the whole output of a tool call: ANSI stripped, at most its
+ * last 64 KiB.
+ */
+export interface ActionOutput {
+    "text": string;
+    "lines": number;
+    "truncated": boolean;
 }
 
 /**
@@ -167,6 +226,17 @@ export interface AssistantEntry {
     "text": string;
     "complete": boolean;
     "interrupted": boolean;
+
+    /**
+     * ParentToolUseID is the Agent/Task action of the subagent that wrote it;
+     * "" in the main thread.
+     */
+    "parentToolUseId": string;
+
+    /**
+     * InterruptedBy is user or crash when the text was cut short, "" otherwise.
+     */
+    "interruptedBy": string;
 }
 
 /**
@@ -771,6 +841,20 @@ export interface DiscussionSummary {
     "retryAttempt": number;
 
     /**
+     * RetryMax, RetryAt (RFC 3339) and RetryReason (overloaded, rate_limit,
+     * server, connection or other) go with RetryAttempt; zero without a retry.
+     */
+    "retryMax": number;
+    "retryAt": string;
+    "retryReason": string;
+
+    /**
+     * TurnFailed says the last turn ended in an error the CLI survived; the
+     * session is at rest all the same.
+     */
+    "turnFailed": boolean;
+
+    /**
      * TurnStartedAt is when the turn in progress started, RFC 3339; "" without
      * a turn.
      */
@@ -1080,7 +1164,8 @@ export interface MarkerEntry {
      * plan_written, plan_updated, one_shot_written, one_shot_updated,
      * pr_review_written, step_review_started, step_review_written,
      * review_started, discussion_started, stage_started, step_started,
-     * compacted or interrupted.
+     * compacted, interrupted, retried, committed, pr_opened, checks_read,
+     * draft_approved, changes_approved, paused or plan_invalid.
      */
     "type": string;
     "preTokens": number;
@@ -1088,15 +1173,45 @@ export interface MarkerEntry {
     /**
      * Stage belongs to stage_started alone, Step to the markers of a step
      * (step_started, step_review_started), Pass to the markers of a review
-     * (pr_review_written, step_review_written) and Clean to
-     * step_review_written alone; Restarted belongs to stage_started and
-     * step_started.
+     * (pr_review_written, step_review_written) with Clean; Findings belongs to
+     * step_review_written alone, -1 when unknown; Restarted belongs to
+     * stage_started and step_started.
      */
     "stage": string;
     "step": number;
     "pass": number;
     "clean": boolean;
+    "findings": number;
     "restarted": boolean;
+
+    /**
+     * Percent belongs to compacted: how full the context was, 0 when unknown.
+     * Attempts and Reason (overloaded, rate_limit, server, connection or
+     * other) belong to retried; InterruptedBy (user) to interrupted.
+     */
+    "percent": number;
+    "attempts": number;
+    "reason": string;
+    "interruptedBy": string;
+
+    /**
+     * SHA (short), Subject and Pushed belong to committed; Number to committed
+     * with a push and to pr_opened, Base to pr_opened; Pass, Passed, Total,
+     * Failed (never nil) and Conflict to checks_read; Title to draft_approved;
+     * Files to changes_approved; Problems (never nil) to plan_invalid.
+     */
+    "sha": string;
+    "subject": string;
+    "pushed": boolean;
+    "number": number;
+    "base": string;
+    "passed": number;
+    "total": number;
+    "failed": string[] | null;
+    "conflict": boolean;
+    "title": string;
+    "files": number;
+    "problems": PlanProblem[] | null;
 }
 
 /**
@@ -1461,6 +1576,14 @@ export interface PullRequest {
     "mergeable": string;
 
     /**
+     * MergedBy is the login of who merged the pull request and MergedAt when,
+     * RFC 3339; "" before the merge and for a merge read before they were
+     * recorded.
+     */
+    "mergedBy": string;
+    "mergedAt": string;
+
+    /**
      * the user may close the task now
      */
     "canClose": boolean;
@@ -1495,6 +1618,20 @@ export interface PullRequest {
     "turnRunning": boolean;
     "processRunning": boolean;
     "retryAttempt": number;
+
+    /**
+     * RetryMax, RetryAt (RFC 3339) and RetryReason (overloaded, rate_limit,
+     * server, connection or other) go with RetryAttempt; zero without a retry.
+     */
+    "retryMax": number;
+    "retryAt": string;
+    "retryReason": string;
+
+    /**
+     * TurnFailed says the last turn ended in an error the CLI survived; the
+     * session is at rest all the same.
+     */
+    "turnFailed": boolean;
 
     /**
      * TurnStartedAt is when the turn in progress started, RFC 3339; "" without
@@ -1639,6 +1776,11 @@ export interface QuestionEntry {
      * Status is pending, allowed or cancelled.
      */
     "status": string;
+
+    /**
+     * RFC 3339; "" while pending, when cancelled or unknown
+     */
+    "answeredAt": string;
 }
 
 /**
@@ -1791,6 +1933,11 @@ export interface ReviewFile {
      * nothing of it is left outside the index
      */
     "staged": boolean;
+
+    /**
+     * part of it is in the index and part is not
+     */
+    "partial": boolean;
 }
 
 /**
@@ -2041,6 +2188,20 @@ export interface ReviewSummary {
     "turnRunning": boolean;
     "processRunning": boolean;
     "retryAttempt": number;
+
+    /**
+     * RetryMax, RetryAt (RFC 3339) and RetryReason (overloaded, rate_limit,
+     * server, connection or other) go with RetryAttempt; zero without a retry.
+     */
+    "retryMax": number;
+    "retryAt": string;
+    "retryReason": string;
+
+    /**
+     * TurnFailed says the last turn ended in an error the CLI survived; the
+     * session is at rest all the same.
+     */
+    "turnFailed": boolean;
 
     /**
      * TurnStartedAt is when the turn in progress started, RFC 3339; "" without
@@ -2462,6 +2623,11 @@ export interface StepReport {
      */
     "file": string;
     "clean": boolean;
+
+    /**
+     * Findings is how many findings the report lists; -1 when unknown.
+     */
+    "findings": number;
 }
 
 /**
@@ -2484,6 +2650,20 @@ export interface StepReviewer {
     "turnRunning": boolean;
     "processRunning": boolean;
     "retryAttempt": number;
+
+    /**
+     * RetryMax, RetryAt (RFC 3339) and RetryReason (overloaded, rate_limit,
+     * server, connection or other) go with RetryAttempt; zero without a retry.
+     */
+    "retryMax": number;
+    "retryAt": string;
+    "retryReason": string;
+
+    /**
+     * TurnFailed says the last turn ended in an error the CLI survived; the
+     * session is at rest all the same.
+     */
+    "turnFailed": boolean;
 
     /**
      * TurnStartedAt is when the turn in progress started, RFC 3339; "" without
@@ -2629,6 +2809,20 @@ export interface TaskSummary {
     "retryAttempt": number;
 
     /**
+     * RetryMax, RetryAt (RFC 3339) and RetryReason (overloaded, rate_limit,
+     * server, connection or other) go with RetryAttempt; zero without a retry.
+     */
+    "retryMax": number;
+    "retryAt": string;
+    "retryReason": string;
+
+    /**
+     * TurnFailed says the last turn ended in an error the CLI survived; the
+     * session is at rest all the same.
+     */
+    "turnFailed": boolean;
+
+    /**
      * TurnStartedAt is when the turn in progress started, RFC 3339; "" without
      * a turn.
      */
@@ -2758,6 +2952,28 @@ export interface UserEntry {
     "pending": boolean;
     "prompt": boolean;
     "app": boolean;
+
+    /**
+     * Sent is the rendered prompt the CLI got, for a prompt entry of the tech
+     * spec, the plan, the pull request and the pull request review; "" for
+     * every other entry.
+     */
+    "sent": string;
+
+    /**
+     * AppKind is which message of the workflow the app sent: report, pass,
+     * commit, commit_all, commit_push, correction, open, pr_pass or apply; ""
+     * for every other entry. AppPass belongs to report, pass and pr_pass;
+     * AppRound and AppRounds to report (the round of MaxReviewRounds) and
+     * correction (the attempt of MaxCorrections); AppCount to report (the
+     * findings, -1 when unknown), correction (the problems) and apply (the
+     * approved findings).
+     */
+    "appKind": string;
+    "appPass": number;
+    "appRound": number;
+    "appRounds": number;
+    "appCount": number;
 }
 
 /**

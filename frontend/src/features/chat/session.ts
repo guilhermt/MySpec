@@ -11,6 +11,18 @@ export interface SessionState {
   turnRunning: boolean;
   processRunning: boolean;
   retryAttempt: number;
+  /** retryMax, retryAt (RFC 3339) and retryReason go with retryAttempt; zero without a retry. */
+  retryMax: number;
+  retryAt: string;
+  retryReason: string;
+  /** turnStartedAt is when the turn in progress started, RFC 3339; "" without a turn. */
+  turnStartedAt: string;
+  /** lastError is the error that stopped the session; "" when it runs. */
+  lastError: string;
+  /** turnFailed is the last turn ending in an error the session survived. */
+  turnFailed: boolean;
+  /** pausedAt is when the session was paused, RFC 3339; "" when it is not, or the time is unknown. */
+  pausedAt: string;
 }
 
 /**
@@ -24,4 +36,11 @@ export const IDLE_SESSION: SessionState = {
   turnRunning: false,
   processRunning: false,
   retryAttempt: 0,
+  retryMax: 0,
+  retryAt: "",
+  retryReason: "",
+  turnStartedAt: "",
+  lastError: "",
+  turnFailed: false,
+  pausedAt: "",
 };

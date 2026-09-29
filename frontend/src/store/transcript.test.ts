@@ -4,9 +4,10 @@ import {
   applyEvent,
   emptyTranscript,
   fromTranscript,
+  settledQuestions,
   type TranscriptState,
 } from "@/store/transcript";
-import { makeEntry, makeTranscript } from "@/test/wails-mock";
+import { makeAction, makeEntry, makeTranscript } from "@/test/wails-mock";
 
 function ready(entries: Entry[] = [], pending: Entry[] = []): TranscriptState {
   return { status: "ready", error: "", entries, pending, buffered: [] };
@@ -33,13 +34,7 @@ describe("applyEvent", () => {
     const running = makeEntry("action", {
       id: "a",
       seq: 1,
-      action: {
-        toolUseId: "toolu_1",
-        tool: "Read",
-        label: "Read",
-        target: "src/main.tsx",
-        status: "running",
-      },
+      action: makeAction({ status: "running" }),
     });
     const done = makeEntry("action", { id: "a", seq: 1 });
 
@@ -69,7 +64,18 @@ describe("applyEvent", () => {
     const queued = makeEntry("user", {
       id: "a",
       seq: 1,
-      user: { text: "later", pending: true, prompt: false, app: false },
+      user: {
+        text: "later",
+        pending: true,
+        prompt: false,
+        app: false,
+        sent: "",
+        appKind: "",
+        appPass: 0,
+        appRound: 0,
+        appRounds: 0,
+        appCount: 0,
+      },
     });
 
     const state = applyEvent(ready(), entryEvent(queued));
@@ -82,11 +88,33 @@ describe("applyEvent", () => {
     const queued = makeEntry("user", {
       id: "a",
       seq: 1,
-      user: { text: "later", pending: true, prompt: false, app: false },
+      user: {
+        text: "later",
+        pending: true,
+        prompt: false,
+        app: false,
+        sent: "",
+        appKind: "",
+        appPass: 0,
+        appRound: 0,
+        appRounds: 0,
+        appCount: 0,
+      },
     });
     const delivered = {
       ...queued,
-      user: { text: "later", pending: false, prompt: false, app: false },
+      user: {
+        text: "later",
+        pending: false,
+        prompt: false,
+        app: false,
+        sent: "",
+        appKind: "",
+        appPass: 0,
+        appRound: 0,
+        appRounds: 0,
+        appCount: 0,
+      },
     };
 
     let state = applyEvent(ready(), entryEvent(queued));
@@ -100,12 +128,34 @@ describe("applyEvent", () => {
     const first = makeEntry("user", {
       id: "a",
       seq: 1,
-      user: { text: "one", pending: true, prompt: false, app: false },
+      user: {
+        text: "one",
+        pending: true,
+        prompt: false,
+        app: false,
+        sent: "",
+        appKind: "",
+        appPass: 0,
+        appRound: 0,
+        appRounds: 0,
+        appCount: 0,
+      },
     });
     const second = makeEntry("user", {
       id: "b",
       seq: 2,
-      user: { text: "two", pending: true, prompt: false, app: false },
+      user: {
+        text: "two",
+        pending: true,
+        prompt: false,
+        app: false,
+        sent: "",
+        appKind: "",
+        appPass: 0,
+        appRound: 0,
+        appRounds: 0,
+        appCount: 0,
+      },
     });
 
     let state = applyEvent(ready(), entryEvent(first));
@@ -151,7 +201,18 @@ describe("applyEvent", () => {
     const queued = makeEntry("user", {
       id: "b",
       seq: 2,
-      user: { text: "later", pending: true, prompt: false, app: false },
+      user: {
+        text: "later",
+        pending: true,
+        prompt: false,
+        app: false,
+        sent: "",
+        appKind: "",
+        appPass: 0,
+        appRound: 0,
+        appRounds: 0,
+        appCount: 0,
+      },
     });
     const state = ready([entry], [queued]);
 
@@ -239,5 +300,27 @@ describe("emptyTranscript and fromTranscript", () => {
       pending: [],
       buffered: [],
     });
+  });
+});
+
+describe("settledQuestions", () => {
+  // question is a question entry with a status of its own.
+  function question(requestId: string, status: string): Entry {
+    const entry = makeEntry("question", { id: requestId });
+    if (entry.question === null) {
+      throw new Error("the question fixture has no payload");
+    }
+    return { ...entry, question: { ...entry.question, requestId, status } };
+  }
+
+  it("names the questions answered or cancelled, not the pending ones nor other entries", () => {
+    const entries = [
+      question("req-1", "allowed"),
+      question("req-2", "pending"),
+      makeEntry("user", { id: "u" }),
+      question("req-3", "cancelled"),
+    ];
+
+    expect(settledQuestions(entries)).toEqual(["req-1", "req-3"]);
   });
 });

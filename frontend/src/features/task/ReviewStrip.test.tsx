@@ -50,7 +50,7 @@ describe("ReviewStrip", () => {
   it("has nothing to open for a file that was deleted", () => {
     strip(
       makeReview({
-        files: [{ path: "src/old.ts", kind: "deleted", staged: true }],
+        files: [{ path: "src/old.ts", kind: "deleted", staged: true, partial: false }],
         staged: 1,
         total: 1,
         percent: 100,

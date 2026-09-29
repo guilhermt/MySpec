@@ -72,8 +72,8 @@ func TestReadPRArtifactsFindsTheDraftAndTheReportsOfTheTask(t *testing.T) {
 	want := task.PRArtifacts{
 		Draft: task.Draft{Present: true, Title: "Add the store", Body: "What it does."},
 		Reports: []task.ReviewReport{
-			{Pass: 1, File: "review-1.md"},
-			{Pass: 2, File: "review-2.md", Clean: true},
+			{Pass: 1, File: "review-1.md", Findings: -1},
+			{Pass: 2, File: "review-2.md", Clean: true, Findings: -1},
 		},
 	}
 	if diff := cmp.Diff(want, got); diff != "" {

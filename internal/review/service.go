@@ -212,7 +212,7 @@ func (s *Service) read(taskID string) Snapshot {
 		snap.Total = len(status.Changes)
 		snap.Files = make([]File, 0, len(status.Changes))
 		for _, change := range status.Changes {
-			file := File{Path: change.Path, Kind: change.Kind(), Staged: change.Staged()}
+			file := File{Path: change.Path, Kind: change.Kind(), Staged: change.Staged(), Partial: change.Partial()}
 			if file.Staged {
 				snap.Staged++
 			}

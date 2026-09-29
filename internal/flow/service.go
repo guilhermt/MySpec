@@ -105,9 +105,16 @@ func (s *Service) evaluate(ctx context.Context, id string) {
 	// stage stays where it is until the agent fixes them.
 	if t.Stage == task.StagePlan && sum.Idle && a.Plan.Present && !a.Plan.Valid() {
 		if sum.Corrections >= MaxCorrections {
+			// The corrections are over: the problems stay in the conversation
+			// for the user.
+			s.sessions.MarkPlanInvalid(ctx, key, planProblems(a.Plan.Problems))
 			return
 		}
-		message := correctionMessage(t.StepsDir(), a.Plan.Problems)
+		message := session.AppMessage{
+			Text: correctionMessage(t.StepsDir(), a.Plan.Problems),
+			Kind: session.AppCorrection, Round: sum.Corrections + 1, Rounds: MaxCorrections,
+			Count: len(a.Plan.Problems),
+		}
 		if err := s.sessions.SendCorrection(ctx, key, message); err != nil {
 			s.log.Error("send plan correction failed", "task", id, "stage", string(t.Stage), "error", err)
 		}
@@ -327,12 +334,12 @@ func (s *Service) Sync(ctx context.Context) {
 	}
 }
 
-// Close stops the flow from evaluating anything else and cancels every
-// preparation in flight. The evaluations under way end on their own.
+// Close stops the flow from evaluating anything else, cancels every
+// preparation and every work of the PR stage in flight and waits for them to
+// end, so that none of them writes to the disk after it returns. The
+// evaluations under way end on their own.
 func (s *Service) Close() {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	s.closed = true
 	for _, l := range s.locks {
 		if l.cancel != nil {
@@ -342,6 +349,9 @@ func (s *Service) Close() {
 			l.pr.cancel()
 		}
 	}
+	s.mu.Unlock()
+
+	s.spawned.Wait()
 }
 
 // isClosed reports whether the flow was closed.

@@ -110,4 +110,54 @@ describe("ChecksList", () => {
     expect(items).toHaveLength(2);
     expect(items.map((item) => item.textContent)).toEqual(["buildpassed1m", "buildfailed2m"]);
   });
+  describe("live", () => {
+    const LIVE = {
+      header: "Waiting for checks · 4 of 6 passed",
+      age: "checked just now",
+      ageTooltip: "Checked at 14:02",
+      reading: false,
+    };
+
+    it("says the live header with the dashed glyph and the age in place of the summary", () => {
+      renderWithStore(
+        <ChecksList summary="3 of 5 passed" rows={ROWS} onOpen={() => {}} live={LIVE} />,
+      );
+      expect(screen.getByText("Waiting for checks · 4 of 6 passed")).toBeInTheDocument();
+      expect(screen.getByText("checked just now")).toBeInTheDocument();
+      expect(screen.queryByText("3 of 5 passed")).toBeNull();
+      expect(document.querySelector('[data-state="github"]')).not.toBeNull();
+      expect(screen.getAllByRole("listitem")).toHaveLength(5);
+    });
+
+    it("tells the exact time of the reading in the tooltip of the age", async () => {
+      const { user } = renderWithStore(
+        <ChecksList summary="" rows={ROWS} onOpen={() => {}} live={LIVE} />,
+      );
+      await user.hover(screen.getByText("checked just now"));
+      expect(await screen.findByRole("tooltip", {}, { timeout: 2000 })).toHaveTextContent(
+        "Checked at 14:02",
+      );
+    });
+
+    it("says checking GitHub in a shimmer before the first reading", () => {
+      renderWithStore(
+        <ChecksList summary="" rows={[]} onOpen={() => {}} live={{ ...LIVE, reading: true }} />,
+      );
+      expect(screen.getByText("checking GitHub")).toHaveClass("shimmer-text");
+      expect(screen.queryByText(LIVE.header)).toBeNull();
+    });
+
+    it("says No checks without rows", () => {
+      renderWithStore(
+        <ChecksList
+          summary=""
+          rows={[]}
+          onOpen={() => {}}
+          live={{ ...LIVE, header: "No checks" }}
+        />,
+      );
+      expect(screen.getByText("No checks")).toBeInTheDocument();
+      expect(screen.queryByRole("list")).toBeNull();
+    });
+  });
 });

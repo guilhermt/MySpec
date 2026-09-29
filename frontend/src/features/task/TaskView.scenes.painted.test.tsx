@@ -6,6 +6,8 @@ import { sessionKey } from "@/lib/wails";
 import { fromTranscript } from "@/store/transcript";
 import {
   capture,
+  conversationEdges,
+  edgesOf,
   mainArea,
   overlaps,
   placeHeaderOneLine,
@@ -16,7 +18,15 @@ import {
   THEMES,
 } from "@/test/painted";
 import { renderWithStore } from "@/test/render";
-import { fixSceneClock, type SceneName, sceneTask, TASK_ID } from "@/test/task-scenes";
+import {
+  type FixedCardName,
+  fixedCardScene,
+  fixSceneClock,
+  type Scene,
+  type SceneName,
+  sceneTask,
+  TASK_ID,
+} from "@/test/task-scenes";
 import { makeTranscript } from "@/test/wails-mock";
 
 // Only the boundary is replaced, as in the jsdom suite: no call reaches the runtime of Wails. The
@@ -65,6 +75,31 @@ const STEPPERS: [SceneName, string, string][] = [
 /** HALF_MAIN is the main area of a 1250px window, the narrowest the column is proved at. */
 const HALF_MAIN = 950;
 
+/** WIDE_MAIN is the main area of a 2560px window. */
+const WIDE_MAIN = 2180;
+
+/**
+ * COLUMN_WIDTHS are the main areas the fixed cards and the empty place are proved at: a 1250px
+ * window, one whose column has an odd margin to share, and a 2560px window.
+ */
+const COLUMN_WIDTHS = [HALF_MAIN, 1567, WIDE_MAIN];
+
+/**
+ * PLACES are the moments whose conversation ends in a fixed card or that have no conversation: the
+ * changed files of the Manual step, the step blocked with its error block, the empty place with the
+ * live checks, the merge line of the close, the draft of the pull request and the live checks at
+ * the end of the review.
+ */
+const PLACES: [string, () => Scene][] = [
+  ["manual", () => sceneTask("manual")],
+  ["blocked", () => sceneTask("blocked")],
+  ["checks", () => sceneTask("checks")],
+  ["close", () => sceneTask("close")],
+  ...(["draft", "checks-after-a-pass"] as const).map(
+    (name: FixedCardName): [string, () => Scene] => [name, () => fixedCardScene(name)],
+  ),
+];
+
 // px is a length token in pixels.
 const px = (name: `--${string}`) => parseFloat(resolve(`var(${name})`, "width"));
 
@@ -73,7 +108,14 @@ function scene(
   name: SceneName,
   { width = SCENE_MAIN, earlier = null }: { width?: number; earlier?: string | null } = {},
 ) {
-  const { state, transcripts, openStepTab } = sceneTask(name);
+  return drawScene(sceneTask(name), { width, earlier });
+}
+
+// drawScene draws the task screen of a scene in a main area of a width.
+function drawScene(
+  { state, transcripts, openStepTab }: Scene,
+  { width = SCENE_MAIN, earlier = null }: { width?: number; earlier?: string | null } = {},
+) {
   const { container } = renderWithStore(
     <div style={{ ...mainArea(width), height: "800px", display: "flex" }}>
       <TaskView taskId={TASK_ID} />
@@ -104,6 +146,35 @@ function scene(
   return { area, band: screen.getByRole("banner") };
 }
 
+// barAndComposer are the bar of the request and the box of the composer, the ones the scene has.
+function barAndComposer(): HTMLElement[] {
+  const bar = document.querySelector<HTMLElement>('section[aria-label="Request"]');
+  const composer = document.querySelector<HTMLElement>('[data-slot="composer"]');
+  return [bar, composer].filter((piece) => piece !== null);
+}
+
+/**
+ * captureTogether saves one screenshot of pieces that stand one over the other: whatever else their
+ * common container holds leaves the flow first, and the container takes only their height. The
+ * screen is drawn again for the next test, so nothing is put back.
+ */
+async function captureTogether(name: string, pieces: readonly HTMLElement[]): Promise<void> {
+  let common = pieces[0]?.parentElement ?? null;
+  while (common !== null && !pieces.every((piece) => common?.contains(piece))) {
+    common = common.parentElement;
+  }
+  if (common === null) {
+    throw new Error("the pieces share no container");
+  }
+  for (const child of common.children) {
+    if (child instanceof HTMLElement && !pieces.some((piece) => child.contains(piece))) {
+      child.style.display = "none";
+    }
+  }
+  common.style.flex = "none";
+  await capture(name, common);
+}
+
 // The scenes are drawn at the moment of the mock, whatever the day the suite runs.
 fixSceneClock();
 
@@ -120,6 +191,63 @@ describe.each(THEMES)("TaskView, the nine scenes in the %s theme", (theme) => {
     expect(pill.querySelector("[data-state]")).toHaveAttribute("data-state", glyph);
     await capture(`scene-${name}-${theme}`, area);
   });
+
+  it.each(
+    STEPPERS.flatMap(([name]) => [HALF_MAIN, WIDE_MAIN].map((width) => [name, width] as const)),
+  )("captures the %s scene at the main area of %ipx", async (name, width) => {
+    setTheme(theme);
+    const { area } = scene(name, { width });
+    await capture(`scene-${name}-${width}-${theme}`, area);
+  });
+
+  describe.each(PLACES)("the place of the %s moment", (_, sceneOf) => {
+    it.each(COLUMN_WIDTHS)(
+      "keeps every card, the empty place and what it waits for in the column at %ipx",
+      (width) => {
+        setTheme(theme);
+        const { area } = drawScene(sceneOf(), { width });
+
+        const edges = conversationEdges(area);
+        const column = area.querySelector('[data-slot="conversation"]');
+        if (column === null) {
+          throw new Error("the conversation column is not drawn");
+        }
+        expect(edgesOf(column)).toEqual(edges);
+        const pieces = [
+          ...column.querySelectorAll("article"),
+          ...column.querySelectorAll(
+            '[data-slot="place-empty"], [data-slot="place-empty"] > * > *',
+          ),
+          ...area.querySelectorAll('section[aria-label="Request"], [data-slot="composer"]'),
+        ];
+        expect(pieces.length).toBeGreaterThan(0);
+        for (const piece of pieces) {
+          const name = piece.getAttribute("aria-label") ?? piece.textContent?.slice(0, 40) ?? "";
+          // A paragraph of the empty place is read at --measure-read, from the left edge.
+          const want =
+            piece.tagName === "P" && piece.closest('[data-slot="place-empty"]') !== null
+              ? { left: edges.left, right: edgesOf(piece).right }
+              : edges;
+          expect([name, edgesOf(piece)]).toEqual([name, want]);
+        }
+      },
+    );
+  });
+
+  it.each(STEPPERS.map(([name]) => name))(
+    "captures the bar and the composer of the %s scene",
+    async (name) => {
+      setTheme(theme);
+      scene(name);
+
+      // Waiting for its checks, the pull request asks nothing and has no conversation to write in.
+      const pieces = barAndComposer();
+      expect(pieces.length === 0).toBe(name === "checks");
+      if (pieces.length > 0) {
+        await captureTogether(`bar-${name}-${theme}`, pieces);
+      }
+    },
+  );
 
   it("draws the bar of the close scene inside the main area", () => {
     setTheme(theme);

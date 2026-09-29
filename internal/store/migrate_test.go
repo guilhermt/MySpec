@@ -39,7 +39,7 @@ const (
 	boardsVersion     = 14
 	itemsVersion      = 15
 	taskScreenVersion = 19
-	latestVersion     = 19
+	latestVersion     = 20
 )
 
 // upgradeTime is the instant the repositories of the fake upgrades are stamped
@@ -560,6 +560,53 @@ func TestTheTaskScreenMigrationAddsThePauseTheCommitTimeAndTheChecks(t *testing.
 		if got := readOne(t, db, d.query); got != "" {
 			t.Errorf("%s = %q, want it empty on a row recorded before the column", d.subject, got)
 		}
+	}
+}
+
+func TestTheConversationMigrationLeavesAPullRequestWithoutWhoMergedIt(t *testing.T) {
+	t.Parallel()
+
+	db := openAt(t, latestVersion-1)
+	seedRepositoryAndTask(t, db)
+	const insertRun = `INSERT INTO pr_runs (task_id, status, created_at, updated_at)
+		VALUES ('task-1', 'done', '2026-09-06T10:00:00Z', '2026-09-06T10:00:00Z')`
+	if _, err := db.ExecContext(t.Context(), insertRun); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	if err := migrate(t.Context(), db, slog.New(slog.DiscardHandler), carryOver(t)); err != nil {
+		t.Fatalf("migrate() = %v, want nil", err)
+	}
+
+	const query = `SELECT merged_by || merged_at FROM pr_runs WHERE task_id = 'task-1'`
+	if got := readOne(t, db, query); got != "" {
+		t.Errorf("merged_by, merged_at = %q, want them empty on a row recorded before the columns", got)
+	}
+}
+
+func TestTheConversationMigrationKeepsTheOutputOfAnEntryWhileTheEntryLives(t *testing.T) {
+	t.Parallel()
+
+	db := openAt(t, latestVersion)
+	seedRepositoryAndTask(t, db)
+	seedItemRecords(t, db, "task-1", "item_id")
+	const insertOutputs = `INSERT INTO action_outputs (entry_id, text, lines, truncated)
+		VALUES ('entry-1', 'ok', 1, 0), ('entry-2', 'ok', 1, 0)`
+	if _, err := db.ExecContext(t.Context(), insertOutputs); err != nil {
+		t.Fatalf("seed outputs: %v", err)
+	}
+
+	for _, stmt := range []string{
+		`DELETE FROM transcript_entries WHERE id = 'entry-1'`,
+		`DELETE FROM sessions WHERE id = 'sess-2'`,
+	} {
+		if _, err := db.ExecContext(t.Context(), stmt); err != nil {
+			t.Fatalf("%s: %v", stmt, err)
+		}
+	}
+
+	if got := readOne(t, db, `SELECT count(*) FROM action_outputs`); got != "0" {
+		t.Errorf("outputs left = %s, want them gone with their entry and their session", got)
 	}
 }
 

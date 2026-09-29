@@ -891,4 +891,4 @@ Os tokens de medida e de layout da conversa, das listas, do painel da lista, do 
 | `--col-time` | `var(--space-12)` | Linha do History |
 | `--snav-w` | `calc(var(--space-16) * 3 + var(--space-4))` | Navegação de Settings |
 | `--size-popover` | `22rem` | Os popovers Review mode e Models |
-| `--size-composer-max` | `15rem` | A altura máxima da caixa do compositor, cerca de dez linhas; a task 4 o acrescenta a `tokens.css` |
+| `--size-composer-max` | `15rem` | A altura máxima da caixa do compositor, cerca de dez linhas |

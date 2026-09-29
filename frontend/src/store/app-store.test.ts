@@ -517,6 +517,101 @@ describe("pull request drafts", () => {
   });
 });
 
+describe("question choices", () => {
+  const choices = { 0: { labels: ["Per key"], other: null } };
+
+  it("keeps the choices by request and leaves the others", () => {
+    act(() => {
+      useAppStore.getState().setQuestionChoices("req-1", choices);
+      useAppStore.getState().setQuestionChoices("req-2", { 0: { labels: [], other: "Disk" } });
+      useAppStore.getState().setQuestionChoices("req-2", { 0: { labels: [], other: "Memory" } });
+    });
+
+    expect(useAppStore.getState().questionChoices).toEqual({
+      "req-1": choices,
+      "req-2": { 0: { labels: [], other: "Memory" } },
+    });
+  });
+
+  // asked is a question entry of the conversation, pending or settled.
+  function asked(requestId: string, status: string, seq = 1) {
+    const entry = makeEntry("question", { id: requestId, seq });
+    if (entry.question === null) {
+      throw new Error("the question fixture has no payload");
+    }
+    return { ...entry, question: { ...entry.question, requestId, status } };
+  }
+
+  it("marks and unmarks the answer of a question on its way", () => {
+    act(() => {
+      useAppStore.getState().setQuestionSending("req-1", true);
+      useAppStore.getState().setQuestionSending("req-2", true);
+      useAppStore.getState().setQuestionSending("req-2", false);
+    });
+
+    expect(useAppStore.getState().questionSending).toEqual({ "req-1": true });
+  });
+
+  it("forgets the choices and the sending of a question the conversation marks answered", () => {
+    useAppStore.getState().setTranscript(makeTranscript({ taskId: WEB_TASK.id }));
+    act(() => {
+      useAppStore.getState().setQuestionChoices("req-1", choices);
+      useAppStore.getState().setQuestionChoices("req-2", choices);
+      useAppStore.getState().setQuestionSending("req-1", true);
+    });
+
+    act(() => {
+      useAppStore
+        .getState()
+        .applyTranscriptEvent(transcriptEvent({ entry: asked("req-2", "pending") }));
+    });
+
+    expect(useAppStore.getState().questionChoices).toEqual({ "req-1": choices, "req-2": choices });
+
+    act(() => {
+      useAppStore
+        .getState()
+        .applyTranscriptEvent(transcriptEvent({ entry: asked("req-1", "allowed") }));
+    });
+
+    expect(useAppStore.getState().questionChoices).toEqual({ "req-2": choices });
+    expect(useAppStore.getState().questionSending).toEqual({});
+  });
+
+  it("forgets the choices of a question cancelled in a conversation loaded again", () => {
+    act(() => {
+      useAppStore.getState().setQuestionChoices("req-1", choices);
+      useAppStore.getState().setQuestionSending("req-1", true);
+      useAppStore.getState().beginTranscript(WEB_TASK.id, WEB_TASK.stage);
+      useAppStore
+        .getState()
+        .applyTranscriptEvent(transcriptEvent({ entry: asked("req-1", "cancelled") }));
+    });
+
+    expect(useAppStore.getState().questionChoices).toEqual({ "req-1": choices });
+
+    act(() => {
+      useAppStore.getState().setTranscript(makeTranscript({ taskId: WEB_TASK.id }));
+    });
+
+    expect(useAppStore.getState().questionChoices).toEqual({});
+    expect(useAppStore.getState().questionSending).toEqual({});
+  });
+
+  it("drops the choices once no repository is registered", () => {
+    act(() => {
+      useAppStore.getState().applyState(withPR(makePullRequest()));
+      useAppStore.getState().setQuestionChoices("req-1", choices);
+    });
+
+    act(() => {
+      useAppStore.getState().applyState(makeState({ repositories: [], tasks: [] }));
+    });
+
+    expect(useAppStore.getState().questionChoices).toEqual({});
+  });
+});
+
 // A task under the agent review of two steps, each with a reviewer unless told otherwise.
 function withSteps(
   overrides: { currentStep?: number; reviewer?: boolean; situations?: Situation[] } = {},
@@ -791,14 +886,27 @@ function reviewerPlace(step: number): Place {
   return { kind: "step_review", stage: "", step };
 }
 
+describe("marker request", () => {
+  it("asks the conversation of a task to open a marker, until it is cleared", () => {
+    useAppStore.getState().requestMarkerOpen("task-1", "plan_invalid");
+    expect(useAppStore.getState().markerRequest).toEqual({
+      taskId: "task-1",
+      type: "plan_invalid",
+    });
+
+    useAppStore.getState().clearMarkerRequest();
+    expect(useAppStore.getState().markerRequest).toBeNull();
+  });
+});
+
 describe("open situation", () => {
-  it("opens the task of a situation", () => {
+  it("opens the task of a situation, the focus going to what it asks", () => {
     useAppStore.getState().applyState(withTasks());
 
     useAppStore.getState().openSituation(API_TASK.id, stagePlace("prd"));
 
     expect(location()).toEqual({ kind: "task", id: API_TASK.id });
-    expect(useAppStore.getState().pendingFocus).toBe("title");
+    expect(useAppStore.getState().pendingFocus).toBe("request");
   });
 
   it("opens the reviewer tab of the step the situation is in", () => {
@@ -2158,6 +2266,23 @@ describe("history of places", () => {
 
     useAppStore.getState().goBack();
     expect(useAppStore.getState()).toMatchObject({ location: TASK, panel: null });
+  });
+
+  it("opens a panel at a document until the panel takes it, and a plain opening asks for none", () => {
+    useAppStore.setState({ location: TASK, panel: null, panelDocument: null });
+
+    useAppStore.getState().openPanelAt("details", "step-reviews/3-1.md");
+    expect(useAppStore.getState()).toMatchObject({
+      panel: "details",
+      panelDocument: "step-reviews/3-1.md",
+    });
+
+    useAppStore.getState().clearPanelDocument();
+    expect(useAppStore.getState()).toMatchObject({ panel: "details", panelDocument: null });
+
+    useAppStore.getState().openPanelAt("artifacts", "PRD.md");
+    useAppStore.getState().openPanel("details");
+    expect(useAppStore.getState()).toMatchObject({ panel: "details", panelDocument: null });
   });
 
   it("clears the focus it asked for", () => {

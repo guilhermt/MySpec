@@ -1,16 +1,8 @@
 import type { StatusTone } from "@/features/task/status";
 import { prBaseName, troubleText } from "@/lib/pull-requests";
 import { cloneMissingText } from "@/lib/repositories";
-import type {
-  CloseResult,
-  CloseSkipReason,
-  CloseStep,
-  PRBlockReason,
-  PRState,
-  PullRequest,
-  Repository,
-} from "@/lib/wails";
-import { asCloseOutcome, asCloseSkipReason, asPRState, asPRStatus } from "@/lib/wails";
+import type { PRBlockReason, PullRequest, Repository } from "@/lib/wails";
+import { asPRStatus } from "@/lib/wails";
 
 /** prStatusLabel is where the pull request of a task stands, in the words of the product. */
 export function prStatusLabel(pr: PullRequest): string {
@@ -109,11 +101,6 @@ export function canOpenPR(pr: PullRequest): boolean {
   return draftAtHand(pr) && !pr.turnRunning;
 }
 
-/** hasPRSession reports whether the PR stage has a conversation to show. */
-export function hasPRSession(pr: PullRequest): boolean {
-  return pr.sessionStage !== "";
-}
-
 /** canDiscardDraft reports whether the draft can still be thrown away. */
 export function canDiscardDraft(pr: PullRequest): boolean {
   switch (asPRStatus(pr.status)) {
@@ -192,110 +179,6 @@ export function closeHint(pr: PullRequest, repository: Repository | null): strin
   }
 }
 
-/** closeStepLabel reads one part of a close result as a sentence. */
-export function closeStepLabel(part: "worktree" | "branch" | "base", result: CloseResult): string {
-  switch (part) {
-    case "worktree":
-      return worktreeLabel(result.worktree);
-    case "branch":
-      return branchLabel(result.branch, result);
-    case "base":
-      return baseLabel(result.base, result);
-  }
-}
-
-function worktreeLabel(step: CloseStep): string {
-  switch (asCloseOutcome(step.outcome)) {
-    case "done":
-      return "Worktree removed";
-    // The folder is the only thing the worktree part can skip.
-    case "skipped":
-      return "Worktree was already gone";
-    case "failed":
-      return `Worktree couldn't be removed: ${step.detail}`;
-  }
-}
-
-function branchLabel(step: CloseStep, result: CloseResult): string {
-  const name = result.branchName;
-  switch (asCloseOutcome(step.outcome)) {
-    case "done":
-      return `Branch ${name} deleted`;
-    case "skipped":
-      return asCloseSkipReason(step.reason) === "not_merged"
-        ? `Branch ${name} kept: git doesn't see it merged into ${result.baseBranch}`
-        : `Branch ${name} was already gone`;
-    case "failed":
-      return `Branch ${name} couldn't be deleted: ${step.detail}`;
-  }
-}
-
-function baseLabel(step: CloseStep, result: CloseResult): string {
-  const base = result.baseBranch;
-  switch (asCloseOutcome(step.outcome)) {
-    case "done":
-      return `${base} updated by ${result.baseCommits} ${
-        result.baseCommits === 1 ? "commit" : "commits"
-      }`;
-    case "skipped":
-      return `${base} ${baseSkipPhrase(asCloseSkipReason(step.reason))}`;
-    case "failed":
-      return `${base} not updated: ${step.detail}`;
-  }
-}
-
-// What the base branch of a repository was spared for, in the words that
-// follow its name.
-function baseSkipPhrase(reason: CloseSkipReason): string {
-  switch (reason) {
-    case "missing":
-      return "not updated: the branch doesn't exist locally";
-    case "not_checked_out":
-      return "not updated: another branch is checked out";
-    case "dirty":
-      return "not updated: the repository has uncommitted changes";
-    case "no_upstream":
-      return "not updated: it tracks no remote branch";
-    case "diverged":
-      return "not updated: it has commits the remote doesn't";
-    case "up_to_date":
-      return "was already up to date";
-    // Only the branch of the task is ever kept for want of a merge.
-    case "not_merged":
-      return "not updated";
-  }
-}
-
-/** prStateLabel is what GitHub last said about the pull request. */
-export function prStateLabel(state: PRState): string {
-  switch (asPRState(state)) {
-    case "open":
-      return "Open";
-    case "merged":
-      return "Merged";
-    case "closed":
-      return "Closed";
-    case "":
-      return "";
-  }
-}
-
-/** prBlockTitle names why the PR stage of a task could not go on. */
-export function prBlockTitle(reason: PRBlockReason): string {
-  switch (reason) {
-    case "gh_missing":
-      return "GitHub CLI was not found";
-    case "gh_unauthenticated":
-      return "GitHub CLI isn't authenticated";
-    case "gh_failed":
-      return "GitHub CLI failed";
-    case "git_failed":
-      return "Git failed";
-    case "no_worktree":
-      return "The worktree is gone";
-  }
-}
-
 /** prBlockHint tells the user what to do about a block. */
 export function prBlockHint(reason: PRBlockReason): string {
   switch (reason) {
@@ -310,9 +193,4 @@ export function prBlockHint(reason: PRBlockReason): string {
     case "no_worktree":
       return "The app no longer knows the worktree of this task. Discard the plan to start the implementation over.";
   }
-}
-
-/** prReportLabel names one pass of the review, and how it closed. */
-export function prReportLabel(pass: number, clean: boolean): string {
-  return `Pass ${pass} · ${clean ? "nothing to change" : "changes requested"}`;
 }

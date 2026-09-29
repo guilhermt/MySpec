@@ -288,6 +288,24 @@ func TestCloseStopsEveryWaitInFlight(t *testing.T) {
 	}
 }
 
+func TestAFileStagedAndChangedAgainIsPartial(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	f.track(t)
+
+	write(t, f.wt.Path, "README.md", "# staged\n")
+	gittest.Run(t, f.wt.Path, "add", "README.md")
+	write(t, f.wt.Path, "README.md", "# and changed again\n")
+
+	got := f.waitFor(t, "saw the partial file", func(s review.Snapshot) bool {
+		return s.Total == 1 && s.Files[0].Partial
+	})
+	want := []review.File{{Path: "README.md", Kind: git.KindModified, Partial: true}}
+	if !slices.Equal(got.Files, want) {
+		t.Errorf("files = %+v, want %+v", got.Files, want)
+	}
+}
+
 func TestTheKindOfEachFileComesFromGit(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)

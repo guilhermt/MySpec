@@ -96,6 +96,7 @@ export function Button({
       size="default"
       focusableWhenDisabled
       {...props}
+      data-variant={variant}
       {...(disabled !== undefined ? { disabled } : {})}
       {...(pressed !== undefined ? { "aria-pressed": pressed } : {})}
       {...(loading ? { "aria-busy": true } : {})}

@@ -22,11 +22,13 @@ vi.mock("streamdown", () => ({
     className,
     shikiTheme,
     lineNumbers,
+    controls,
   }: {
     children: string;
     className?: string;
     shikiTheme?: readonly (string | { name?: string })[];
     lineNumbers?: boolean;
+    controls?: { code?: { copy?: boolean } };
   }) =>
     createElement(
       "div",
@@ -37,6 +39,7 @@ vi.mock("streamdown", () => ({
           ?.map((theme) => (typeof theme === "string" ? theme : theme.name))
           .join(" "),
         "data-line-numbers": String(lineNumbers ?? true),
+        "data-code-copy": String(controls?.code?.copy ?? true),
       },
       children,
     ),

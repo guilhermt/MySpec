@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { AuxPanel, PanelLayout } from "@/components/system/AuxPanel";
-import { Composer } from "@/features/chat/Composer";
 import { Conversation } from "@/features/chat/Conversation";
+import { ConversationComposer } from "@/features/chat/ConversationComposer";
 import { DiscussionBar } from "@/features/discussion/DiscussionBar";
 import { DiscussionHeader } from "@/features/discussion/DiscussionHeader";
 import { DocumentsPanel } from "@/features/discussion/DocumentsPanel";
@@ -49,7 +49,11 @@ export function DiscussionView({ discussionId }: DiscussionViewProps) {
       >
         <DraftsPanel discussion={discussion} />
         <Conversation taskId={discussion.id} stage={DISCUSSION_STAGE} session={discussion} />
-        <Composer taskId={discussion.id} stage={DISCUSSION_STAGE} session={discussion} />
+        <ConversationComposer
+          taskId={discussion.id}
+          stage={DISCUSSION_STAGE}
+          session={discussion}
+        />
       </PanelLayout>
     </section>
   );

@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
+
 	"github.com/guilhermt/myspec/internal/prreview"
 	"github.com/guilhermt/myspec/internal/reviewflow"
 	"github.com/guilhermt/myspec/internal/session"
@@ -37,6 +39,20 @@ func lastMessage(t *testing.T, f *fixture) string {
 		t.Fatal("the conversation of the review was told nothing")
 	}
 	return sent[len(sent)-1]
+}
+
+// wantLastApp fails a test whose last message of the app is not of the kind
+// and with the numbers it expects.
+func wantLastApp(t *testing.T, f *fixture, want session.AppMessage) {
+	t.Helper()
+
+	apps := f.sessions.sentApps()
+	if len(apps) == 0 {
+		t.Fatal("the conversation of the review was told nothing")
+	}
+	if diff := cmp.Diff(want, apps[len(apps)-1]); diff != "" {
+		t.Errorf("app message mismatch (-want +got):\n%s", diff)
+	}
 }
 
 func TestANewPassUpdatesTheWorktreeAndAsksForTheNextReport(t *testing.T) {
@@ -81,6 +97,7 @@ check the migrations`, stored.ReportPath(2), headHash, headHash)
 	if got := lastMessage(t, f); got != want {
 		t.Errorf("message =\n%s\n\nwant:\n%s", got, want)
 	}
+	wantLastApp(t, f, session.AppMessage{Kind: session.AppPRPass, Pass: 2})
 }
 
 func TestANewPassListsTheFindingsTheAuthorAlreadySaw(t *testing.T) {

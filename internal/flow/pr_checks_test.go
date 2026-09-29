@@ -13,6 +13,7 @@ import (
 	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/review"
+	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
 )
 
@@ -406,6 +407,12 @@ func TestAPassRecordsTheTroubleOfTheReadingItStartsFrom(t *testing.T) {
 		if run, _ := f.tasks.prRun("task-1"); run.Trouble.Any() {
 			t.Errorf("trouble = %+v, want none", run.Trouble)
 		}
+		read := []keyedMarker{{Key: reviewKeyOf, Marker: session.MarkerEntry{
+			Type: session.MarkerChecksRead, Pass: 1, Total: 1, Failed: []string{"lint"}, Conflict: true,
+		}}}
+		if diff := cmp.Diff(read, f.sessions.marked(session.MarkerChecksRead)); diff != "" {
+			t.Errorf("checks_read markers mismatch (-want +got):\n%s", diff)
+		}
 	})
 
 	t.Run("the pass after a commit", func(t *testing.T) {
@@ -434,7 +441,38 @@ func TestAPassRecordsTheTroubleOfTheReadingItStartsFrom(t *testing.T) {
 		if f.sessions.sentCount(reviewPrompt("/data/task-1/pr/review-2.md")) != 1 {
 			t.Error("the second pass was not asked for")
 		}
+		marked := f.sessions.marked(session.MarkerChecksRead)
+		wantMarker := keyedMarker{Key: reviewKeyOf, Marker: session.MarkerEntry{
+			Type: session.MarkerChecksRead, Pass: 2, Total: 1, Failed: []string{"test"},
+		}}
+		if len(marked) == 0 {
+			t.Fatal("no checks_read marker, want the one of the second pass")
+		}
+		if diff := cmp.Diff(wantMarker, marked[len(marked)-1]); diff != "" {
+			t.Errorf("checks_read marker mismatch (-want +got):\n%s", diff)
+		}
 	})
+}
+
+func TestTheChecksReadCountOnlyTheChecksThatPassed(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.service.MarkChecks(t.Context(), reviewKeyOf, 2, &gh.PRChecks{
+		Checks: []gh.Check{
+			{Name: "test", Conclusion: "success"},
+			{Name: "build", Pending: true},
+			{Name: "lint", Conclusion: "failure"},
+		},
+		Mergeable: gh.MergeableClean,
+	})
+
+	want := []keyedMarker{{Key: reviewKeyOf, Marker: session.MarkerEntry{
+		Type: session.MarkerChecksRead, Pass: 2, Passed: 1, Total: 3, Failed: []string{"lint"},
+	}}}
+	if diff := cmp.Diff(want, f.sessions.marked(session.MarkerChecksRead)); diff != "" {
+		t.Errorf("checks_read markers mismatch (-want +got):\n%s", diff)
+	}
 }
 
 // awaitingMerge puts the task after a clean review, with the baseline and the

@@ -21,7 +21,13 @@ export default mergeConfig(
         reporter: ["text", "lcov"],
         reportOnFailure: true,
         include: ["src/**"],
-        exclude: ["src/components/ui/**", "src/test/**", "src/main.tsx", "src/**/*.test.{ts,tsx}"],
+        exclude: [
+          "src/components/ui/**",
+          "src/test/**",
+          "src/dev/**",
+          "src/main.tsx",
+          "src/**/*.test.{ts,tsx}",
+        ],
         thresholds: { lines: 80, functions: 80, branches: 70, statements: 80 },
       },
       projects: [

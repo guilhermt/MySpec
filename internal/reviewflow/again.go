@@ -317,7 +317,9 @@ func (s *Service) sendLaterPass(
 		Instructions:     repo.ReviewInstructions,
 		PassInstructions: instructions,
 	})
-	return s.sessions.SendFromApp(ctx, sessionKey(stored.ID), message)
+	return s.sessions.SendFromApp(ctx, sessionKey(stored.ID), session.AppMessage{
+		Text: message, Kind: session.AppPRPass, Pass: pass,
+	})
 }
 
 // unaskPass takes back a pass that never reached the agent, so that the review

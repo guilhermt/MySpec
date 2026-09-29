@@ -66,11 +66,166 @@ func TestReadStepReportsReadsTheReportsOfEveryStep(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "3-review-1.md"), stepReportFile(3, 1, "changes", "1. A name misleads.\n"))
 
 	want := map[int][]task.ReviewReport{
-		1: {{Pass: 1, File: "1-review-1.md"}, {Pass: 2, File: "1-review-2.md", Clean: true}},
-		3: {{Pass: 1, File: "3-review-1.md"}},
+		1: {{Pass: 1, File: "1-review-1.md", Findings: -1}, {Pass: 2, File: "1-review-2.md", Clean: true, Findings: -1}},
+		3: {{Pass: 1, File: "3-review-1.md", Findings: -1}},
 	}
 	if diff := cmp.Diff(want, task.ReadStepReports(dir)); diff != "" {
 		t.Errorf("ReadStepReports() mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestReadStepReportsCountsTheFindings(t *testing.T) {
+	t.Parallel()
+
+	const reviewed = "1. **What was reviewed**: the store.\n2. **Checks**: `task check` passes.\n"
+	const rest = "4. **Accepted divergences**: None.\n5. **Contestations**: None.\n6. **Decisions of the user**: None.\n"
+	tests := map[string]struct {
+		body string
+		want int
+	}{
+		"numbered findings in the format of the prompt": {
+			body: reviewed + "3. **Findings**:\n   1. `store.go:12` leaks a handle; close it.\n" +
+				"   2. `store_test.go` misses the empty case; add it.\n" + rest,
+			want: 2,
+		},
+		"None. on the line of the title": {
+			body: reviewed + "3. **Findings**: None.\n" + rest,
+			want: 0,
+		},
+		"none without the dot": {
+			body: reviewed + "3. **Findings**: none\n" + rest,
+			want: 0,
+		},
+		"an empty section": {
+			body: reviewed + "3. **Findings**:\n\n" + rest,
+			want: 0,
+		},
+		"titles in ##": {
+			body: "## What was reviewed\n\nThe store.\n\n## Findings\n\n- A handle leaks.\n- A case is missing.\n" +
+				"* A name misleads.\n\n## Accepted divergences\n\nNone.\n",
+			want: 3,
+		},
+		"None. under a ## title": {
+			body: "## Findings\n\nNone.\n\n## Contestations\n\n- One.\n",
+			want: 0,
+		},
+		"text that is not a list": {
+			body: "## Findings\n\nThe handle of the store leaks.\n",
+			want: 1,
+		},
+		"no Findings section": {
+			body: reviewed + rest,
+			want: -1,
+		},
+		"the colon inside the bold and None.": {
+			body: reviewed + "3. **Findings:** None.\n" + rest,
+			want: 0,
+		},
+		"numbered findings in bold, the file first, under a ## title": {
+			body: "## Checks\n\nNone.\n\n## Findings\n\n" +
+				"1. **`frontend/src/features/chat/`** — `actions.ts` and its table tests do not exist. Implement them.\n" +
+				"2. **`frontend/src/features/task/request.ts`** — the new functions are not added. Add them with tests.\n" +
+				"3. **`frontend/src/features/task/place.ts`** — missing. Create it with its tests.\n" +
+				"4. Once complete, run `task check` in full.\n\n## Accepted divergences\n\nNone.\n",
+			want: 4,
+		},
+		"findings with the path and the line, under a ## title": {
+			body: "## Findings\n\n" +
+				"1. `frontend/src/store/actions.ts:426` — `sendMessage` has no caller left outside its tests. Remove it.\n" +
+				"2. `frontend/src/store/actions.test.ts` — the new store API has no tests of its own. Add them.\n\n" +
+				"## Accepted divergences\n\n- `TaskComposer` is a new file. Sound.\n- The chips are wired. Sound.\n\n" +
+				"## Contestations\n\nNone.\n",
+			want: 2,
+		},
+		"sub-items of a finding count with it": {
+			body: "## Findings\n\n1. **`output.go:39`: the report keeps its frame.**\n   - The text is framed.\n" +
+				"   - **Fix:** read the structured result.\n2. **`events.go:417`: rate matches generate.**\n" +
+				"   - **Fix:** match the words.\n\n## Accepted divergences\n\nNone.\n",
+			want: 2,
+		},
+		"sub-headings deeper than the title": {
+			body: "## Findings\n\n### 1. The handle leaks\n\n- `store.go:12`\n- Close it.\n\n" +
+				"### 2. A case is missing\n\nAdd it.\n\n## Accepted divergences\n\n- One.\n",
+			want: 2,
+		},
+		"numbered findings in bold in the format of the prompt": {
+			body: reviewed + "3. **Findings**:\n1. **`store.go:12`**: leaks a handle; close it.\n" +
+				"2. **`store_test.go`**: misses the empty case; add it.\n" + rest,
+			want: 2,
+		},
+		"a heading named as a section ends a section whose title is bold": {
+			body: reviewed + "3. **Findings**:\n- One.\n- Two.\n\n## Accepted divergences\n\n- Not a finding.\n",
+			want: 2,
+		},
+		"sub-headings of a finding count with it": {
+			body: "## Findings\n\n### 1. The handle leaks\n\n#### Where\n\n`store.go:12`\n\n#### Fix\n\nClose it.\n\n" +
+				"### 2. A case is missing\n\nAdd it.\n\n## Accepted divergences\n\nNone.\n",
+			want: 2,
+		},
+		"a fenced code block neither counts nor ends the section": {
+			body: "## Findings\n\n1. The script prints nothing.\n\n   ```sh\n   ## note\n   # comment\n   - item\n   ```\n\n" +
+				"2. A case is missing.\n\n## Accepted divergences\n\nNone.\n",
+			want: 2,
+		},
+		"sub-headings under a bold title": {
+			body: reviewed + "3. **Findings**:\n\n### 1. The handle leaks\n\nClose it.\n\n### 2. A case is missing\n\nAdd it.\n\n" +
+				rest,
+			want: 2,
+		},
+		"a finding that starts with the name of a section in bold": {
+			body: "## Findings\n\n1. **Checks** are not run in CI.\n2. A case is missing.\n\n## Accepted divergences\n\nNone.\n",
+			want: 2,
+		},
+		"a finding that starts with the name of a section in bold under a bold title": {
+			body: reviewed + "3. **Findings**:\n   1. **Checks** are not run in CI.\n   2. A case is missing.\n" + rest,
+			want: 2,
+		},
+		"prose that starts with Findings is no title": {
+			body: "## What was reviewed\n\nFindings of pass 1 were addressed.\n\n## Findings\n\n1. A handle leaks.\n" +
+				"2. A case is missing.\n\n## Accepted divergences\n\nNone.\n",
+			want: 2,
+		},
+		"a heading that only starts with the word is no title": {
+			body: "## What was reviewed\n\n### Findings of pass 1\n\nAll were addressed.\n\n## Findings\n\n1. A handle leaks.\n" +
+				"2. A case is missing.\n\n## Accepted divergences\n\nNone.\n",
+			want: 2,
+		},
+		"a bold line that only starts with the word is no title": {
+			body: "## What was reviewed\n\n**Findings** of pass 1 were addressed.\n\n## Findings\n\n1. A handle leaks.\n" +
+				"2. A case is missing.\n\n## Accepted divergences\n\nNone.\n",
+			want: 2,
+		},
+		"a bold section line ends a section whose title is a heading": {
+			body: "## Findings\n1. a\n2. b\n**Accepted divergences**:\n- x\n- y\n",
+			want: 2,
+		},
+		"a fenced Findings heading before the title is no title": {
+			body: "## What was reviewed\n\n```md\n## Findings\n\n- one\n```\n\n## Findings\n\n1. A handle leaks.\n" +
+				"2. A case is missing.\n\n## Accepted divergences\n\nNone.\n",
+			want: 2,
+		},
+		"a fenced item at the first column does not count": {
+			body: "## Findings\n\n  1. The script prints nothing.\n\n```sh\n- x\n```\n\n  2. A case is missing.\n\n" +
+				"## Accepted divergences\n\nNone.\n",
+			want: 2,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := t.TempDir()
+			writeFile(t, filepath.Join(dir, "1-review-1.md"), stepReportFile(1, 1, "changes", tc.body))
+
+			reports := task.ReadStepReports(dir)[1]
+			if len(reports) != 1 {
+				t.Fatalf("ReadStepReports() = %v, want one report", reports)
+			}
+			if got := reports[0].Findings; got != tc.want {
+				t.Errorf("Findings = %d, want %d", got, tc.want)
+			}
+		})
 	}
 }
 
@@ -133,7 +288,7 @@ func TestInspectReadsTheStepReviewsFolder(t *testing.T) {
 	if !got.Has(task.ArtifactStepReview) {
 		t.Errorf("Has(ArtifactStepReview) = false, want the report found: %+v", got.StepReports)
 	}
-	want := map[int][]task.ReviewReport{2: {{Pass: 1, File: "2-review-1.md", Clean: true}}}
+	want := map[int][]task.ReviewReport{2: {{Pass: 1, File: "2-review-1.md", Clean: true, Findings: -1}}}
 	if diff := cmp.Diff(want, got.StepReports); diff != "" {
 		t.Errorf("StepReports mismatch (-want +got):\n%s", diff)
 	}
@@ -271,7 +426,7 @@ func TestClearStepReviewForgetsTheReviewOfOneStep(t *testing.T) {
 		t.Errorf("ArtifactVersion = %d, want it past %d", after.ArtifactVersion, before.ArtifactVersion)
 	}
 	cached, _ := f.service.Artifacts(created.ID)
-	wantReports := map[int][]task.ReviewReport{12: {{Pass: 1, File: "12-review-1.md", Clean: true}}}
+	wantReports := map[int][]task.ReviewReport{12: {{Pass: 1, File: "12-review-1.md", Clean: true, Findings: -1}}}
 	if diff := cmp.Diff(wantReports, cached.StepReports); diff != "" {
 		t.Errorf("StepReports mismatch (-want +got):\n%s", diff)
 	}
