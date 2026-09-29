@@ -1,25 +1,29 @@
-import { ChevronRight, TriangleAlert } from "lucide-react";
-import { type FormEvent, type KeyboardEvent, useId, useState } from "react";
-import { Button } from "@/components/ui/button";
+import { ChevronRight } from "lucide-react";
+import { type KeyboardEvent, useId, useLayoutEffect, useRef, useState } from "react";
+import { Button } from "@/components/system/Button";
+import { DependencyNotice } from "@/components/system/DependencyNotice";
+import { Dialog, DialogBody, DialogCancel, DialogFooter } from "@/components/system/Dialog";
+import { Field } from "@/components/system/Field";
+import { Input } from "@/components/system/Input";
+import { Link } from "@/components/system/Link";
+import { Select } from "@/components/system/Select";
+import { SunkenLine } from "@/components/system/SunkenLine";
+import { Textarea } from "@/components/system/Textarea";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { unsatisfied } from "@/features/board/board-view";
+import { dependencyNotice } from "@/features/board/card-panel";
 import { ModelPicker } from "@/features/models/ModelPicker";
 import { ReviewModePicker } from "@/features/review-mode/ReviewModePicker";
-import { CardContextPreview } from "@/features/task-create/CardContextPreview";
-import { CardSummary } from "@/features/task-create/CardSummary";
-import { RepositoryPicker } from "@/features/task-create/RepositoryPicker";
-import { findBoard, issueLabel, prStateLabel, stateLabel } from "@/lib/boards";
+import { CardContextLine } from "@/features/task-create/CardContextLine";
+import {
+  CREATE_REASON,
+  createBlock,
+  nameProblemText,
+  repositoryOptions,
+} from "@/features/task-create/create-task";
+import { findBoard } from "@/lib/boards";
 import { messageOf } from "@/lib/errors";
 import {
   adjustmentSummary,
@@ -31,39 +35,22 @@ import {
 import { defaultRepositoryId, findRepository, takenNames } from "@/lib/repositories";
 import { reviewModeHint } from "@/lib/review-modes";
 import { TASK_MODES, taskModeHint, taskModeLabel } from "@/lib/task-modes";
-import {
-  isValidTaskName,
-  type NameProblem,
-  suggestTaskName,
-  TASK_NAME_MAX,
-  taskNameProblem,
-} from "@/lib/task-name";
+import { isValidTaskName, suggestTaskName, taskNameProblem } from "@/lib/task-name";
 import { cn } from "@/lib/utils";
 import {
-  asIssueState,
-  asPullRequestState,
   asReviewMode,
   type BoardCard,
   type ReviewMode,
   type StageModel,
   type TaskMode,
 } from "@/lib/wails";
-import { createTask } from "@/store/actions";
+import { cloneRepository, createTask } from "@/store/actions";
 import { useAppStore, useModelCatalog, useOpenTaskId } from "@/store/app-store";
-
-const NAME_HELP = "Lowercase letters, digits and hyphens.";
 
 const NO_MODELS: readonly StageModel[] = [];
 
-const NAME_PROBLEM_TEXT: Record<Exclude<NameProblem, "empty" | "taken">, string> = {
-  invalid: "Use lowercase letters, digits and single hyphens.",
-  too_long: `Use at most ${TASK_NAME_MAX} characters.`,
-};
-
-/** takenText names the task of the repository that already holds the name. */
-function takenText(name: string, fullName: string): string {
-  return `A task named ${name} already exists in ${fullName}.`;
-}
+const NAME_HELP = "Lowercase letters, digits and hyphens. It names the branch and the worktree.";
+const CONTEXT_HELP = "What you want to build, in your own words. High level or detailed.";
 
 export function NewTaskDialog() {
   const app = useAppStore((state) => state.app);
@@ -93,38 +80,31 @@ function NewTaskForm() {
         ) ?? null),
   );
 
+  if (cardRef !== null && card === null) {
+    return (
+      <Dialog
+        open
+        onOpenChange={(open) => {
+          if (!open) {
+            closeNewTask();
+          }
+        }}
+        size="wide"
+        title="New task"
+      >
+        <DialogBody>
+          <SunkenLine>◇ This card isn't in the last reading of the board.</SunkenLine>
+        </DialogBody>
+        <DialogFooter>
+          <DialogCancel />
+        </DialogFooter>
+      </Dialog>
+    );
+  }
   return (
-    <Dialog
-      open
-      onOpenChange={(open) => {
-        if (!open) {
-          closeNewTask();
-        }
-      }}
-    >
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>New task</DialogTitle>
-        </DialogHeader>
-
-        {cardRef !== null && card === null ? (
-          <>
-            <p className="text-sm text-muted-foreground">
-              This card isn't in the last reading of the board.
-            </p>
-            <DialogFooter>
-              <Button type="button" variant="ghost" onClick={closeNewTask}>
-                Cancel
-              </Button>
-            </DialogFooter>
-          </>
-        ) : (
-          <NewTaskFields
-            origin={cardRef === null || card === null ? null : { boardId: cardRef.boardId, card }}
-          />
-        )}
-      </DialogContent>
-    </Dialog>
+    <NewTaskFields
+      origin={cardRef === null || card === null ? null : { boardId: cardRef.boardId, card }}
+    />
   );
 }
 
@@ -154,6 +134,8 @@ function NewTaskFields({ origin }: NewTaskFieldsProps) {
   const [context, setContext] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  // A clone that could not start, by repository id: the dialog covers the banner that would say so.
+  const [cloneErrors, setCloneErrors] = useState<Record<string, string>>({});
   // The choices start from the defaults the dialog opened with; adjusting them
   // changes this task only.
   const [choices, setChoices] = useState<StageModel[]>(() => [...defaults]);
@@ -162,9 +144,17 @@ function NewTaskFields({ origin }: NewTaskFieldsProps) {
   // Every task starts Structured: One-Shot is a choice made for the task at hand.
   const [mode, setMode] = useState<TaskMode>("structured");
   const modeLabelId = useId();
+  const reasonId = useId();
+  const nameRef = useRef<HTMLInputElement>(null);
   // The choices hold every stage, so an adjustment to a stage both modes have
   // survives a change of mode; the list and its summary show the mode's own.
   const modelStages = modelStagesOf(mode);
+
+  // The cursor starts after the name a card suggests, ready to add to it.
+  useLayoutEffect(() => {
+    const field = nameRef.current;
+    field?.setSelectionRange(field.value.length, field.value.length);
+  }, []);
 
   // Without a repository chosen no name is taken yet: the names of the other
   // repositories are none of this task's business.
@@ -176,15 +166,11 @@ function NewTaskFields({ origin }: NewTaskFieldsProps) {
     suggestion !== name &&
     isValidTaskName(suggestion);
   // What the user adds to a card is optional; without a card it is all the task has.
-  const canCreate =
-    repositoryId !== "" &&
-    problem === null &&
-    (origin !== null || context.trim() !== "") &&
-    !creating;
+  const block = createBlock({ repositoryId, problem, fromCard: origin !== null, context });
   const dependencies = origin === null ? [] : unsatisfied(origin.card);
 
   const create = () => {
-    if (!canCreate) {
+    if (block !== null || creating) {
       return;
     }
     setCreating(true);
@@ -209,190 +195,221 @@ function NewTaskFields({ origin }: NewTaskFieldsProps) {
       });
   };
 
-  const onSubmit = (event: FormEvent) => {
-    event.preventDefault();
-    create();
+  const clone = (id: string) => {
+    setCloneErrors(({ [id]: _, ...rest }) => rest);
+    cloneRepository(id).catch((reason: unknown) =>
+      setCloneErrors((current) => ({ ...current, [id]: messageOf(reason) })),
+    );
   };
 
-  const onContextKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+  // Ctrl+Enter, from any field, is the Dialog's; a plain Enter in the name creates too.
+  const onNameKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Enter" && !event.ctrlKey && !event.metaKey) {
       event.preventDefault();
       create();
     }
   };
 
+  // The last failure to start a clone shows under the field as well as on its item.
+  const cloneError = Object.values(cloneErrors).at(-1);
+  const footerReason =
+    block !== null ? CREATE_REASON[block] : creating ? "Starting the first session…" : null;
+
   return (
-    <form onSubmit={onSubmit} className="flex flex-col gap-4">
-      {origin === null ? (
-        <div className="flex flex-col gap-1.5">
-          <Label>Repository</Label>
-          <RepositoryPicker value={repositoryId} onChange={setChosenRepositoryId} />
-        </div>
-      ) : (
-        <CardSummary card={origin.card} />
-      )}
-
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor="task-name">Name</Label>
-        <Input
-          id="task-name"
-          value={name}
-          autoFocus
-          spellCheck={false}
-          autoComplete="off"
-          aria-invalid={problem !== null && problem !== "empty"}
-          onChange={(event) => setName(event.target.value)}
-          className="font-mono"
-        />
-        {problem === null || problem === "empty" ? (
-          <p className="text-xs text-muted-foreground">{NAME_HELP}</p>
-        ) : (
-          <p className="flex items-center gap-1 text-xs text-destructive">
-            {problem === "taken"
-              ? takenText(name, findRepository(app, repositoryId)?.fullName ?? "")
-              : NAME_PROBLEM_TEXT[problem]}
-            {canSuggest && (
-              <Button
-                type="button"
-                variant="link"
-                size="xs"
-                onClick={() => setName(suggestion)}
-                className="h-auto p-0"
-              >
-                {`Use "${suggestion}"`}
-              </Button>
-            )}
-          </p>
-        )}
-      </div>
-
-      {origin !== null && <CardContextPreview boardId={origin.boardId} card={origin.card} />}
-
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor="task-context">
-          {origin === null ? "Initial context" : "Additional context"}
-        </Label>
-        <Textarea
-          id="task-context"
-          rows={origin === null ? 8 : 3}
-          value={context}
-          onChange={(event) => setContext(event.target.value)}
-          onKeyDown={onContextKeyDown}
-          className="max-h-[40dvh] field-sizing-content"
-        />
-        {origin === null && (
-          <p className="text-xs text-muted-foreground">
-            What you want to build, in your own words. High level or detailed.
-          </p>
-        )}
-      </div>
-
-      {dependencies.length > 0 && (
-        <div className="flex flex-col gap-1.5 rounded-lg border px-3 py-2 text-sm">
-          <p className="flex items-center gap-1.5 font-medium text-[var(--status-attention)]">
-            <TriangleAlert aria-hidden="true" className="size-4" />
-            Unsatisfied dependencies
-          </p>
-          <ul className="flex flex-col gap-1.5">
-            {dependencies.map((dependency) => (
-              <li key={dependency.key} className="flex flex-col gap-0.5">
-                <span>{`${issueLabel(dependency)} ${dependency.title}`}</span>
-                <span className="text-xs text-muted-foreground">
-                  {[
-                    dependency.repository,
-                    stateLabel(asIssueState(dependency.state)),
-                    dependency.status,
-                    ...(dependency.pullRequests ?? []).map(
-                      (pr) =>
-                        `PR ${pr.repository}#${pr.number} ${prStateLabel(asPullRequestState(pr.state))}`,
-                    ),
-                  ]
-                    .filter((part) => part !== "")
-                    .join(" · ")}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      <div className="flex flex-col gap-1.5">
-        <Label id={modeLabelId}>Mode</Label>
-        <ToggleGroup
-          aria-labelledby={modeLabelId}
-          size="sm"
-          value={[mode]}
-          onValueChange={(next: string[]) => {
-            const [value] = next;
-            if (value === "structured" || value === "one_shot") {
-              setMode(value);
-            }
-          }}
-        >
-          {TASK_MODES.map((option) => (
-            <ToggleGroupItem key={option} value={option}>
-              {taskModeLabel(option)}
-            </ToggleGroupItem>
-          ))}
-        </ToggleGroup>
-        <p className="text-xs text-muted-foreground">{taskModeHint(mode)}</p>
-      </div>
-
-      <div className="flex flex-col gap-1.5">
-        <Label>Review mode</Label>
-        <div>
-          <ReviewModePicker label="Task" value={reviewMode} onChange={setReviewMode} />
-        </div>
-        <p className="text-xs text-muted-foreground">{reviewModeHint(reviewMode)}</p>
-      </div>
-
-      <Collapsible open={modelsOpen} onOpenChange={setModelsOpen} className="flex flex-col gap-1.5">
-        <CollapsibleTrigger
-          render={
-            <button
-              type="button"
-              className="flex h-8 items-center gap-2 rounded-md text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) {
+          closeNewTask();
+        }
+      }}
+      size="wide"
+      title="New task"
+      onConfirm={create}
+      initialFocus={nameRef}
+    >
+      <DialogBody>
+        {origin === null ? (
+          <Field label="Repository" {...(cloneError !== undefined ? { error: cloneError } : {})}>
+            <Select
+              label="Repository"
+              value={repositoryId}
+              options={app === null ? [] : repositoryOptions(app, cloneErrors, clone)}
+              onValueChange={setChosenRepositoryId}
+              placeholder="Choose a repository"
+              disabled={creating}
             />
-          }
-        >
-          <ChevronRight
-            aria-hidden="true"
-            className={cn(
-              "size-4 text-muted-foreground transition-transform duration-[var(--duration-fast)]",
-              modelsOpen && "rotate-90",
-            )}
+          </Field>
+        ) : (
+          <SunkenLine>
+            <span className="flex flex-col">
+              <span>
+                <span className="text-ink-3 tabular-nums">{`#${origin.card.number}`}</span>{" "}
+                <span className="font-medium text-ink-1">{origin.card.title}</span>
+              </span>
+              <span className="text-ink-3">
+                {[origin.card.repository, origin.card.status, origin.card.epic?.title]
+                  .filter((part) => part !== undefined && part !== "")
+                  .join(" · ")}
+              </span>
+            </span>
+          </SunkenLine>
+        )}
+
+        <div className="flex flex-col gap-1">
+          <Field
+            label="Name"
+            {...(problem === null || problem === "empty"
+              ? { help: NAME_HELP }
+              : {
+                  error: nameProblemText(
+                    problem,
+                    name,
+                    findRepository(app, repositoryId)?.fullName ?? "",
+                  ),
+                })}
+          >
+            <Input
+              ref={nameRef}
+              mono
+              value={name}
+              spellCheck={false}
+              autoComplete="off"
+              readOnly={creating}
+              onChange={(event) => setName(event.target.value)}
+              onKeyDown={onNameKeyDown}
+            />
+          </Field>
+          {canSuggest && (
+            <Link
+              href="#"
+              onClick={(event) => {
+                event.preventDefault();
+                setName(suggestion);
+              }}
+            >
+              {`Use "${suggestion}"`}
+            </Link>
+          )}
+        </div>
+
+        {origin === null ? (
+          <Field label="Context" help={CONTEXT_HELP}>
+            <Textarea
+              rows={4}
+              value={context}
+              readOnly={creating}
+              onChange={(event) => setContext(event.target.value)}
+            />
+          </Field>
+        ) : (
+          <CardContextLine
+            boardId={origin.boardId}
+            card={origin.card}
+            additional={context}
+            onAdditionalChange={setContext}
+            readOnly={creating}
           />
-          <span className="font-medium">Models</span>
-          <span className="min-w-0 truncate text-muted-foreground">
-            {adjustmentSummary(catalog, choices, defaults, modelStages)}
-          </span>
-        </CollapsibleTrigger>
-        <CollapsibleContent>
-          <ul className="flex flex-col divide-y rounded-lg border">
-            {modelStages.map((stage) => (
-              <li key={stage} className="flex h-11 items-center justify-between gap-4 px-3">
-                <span className="text-sm">{modelStageLabel(stage)}</span>
-                <ModelPicker
-                  label={modelStageLabel(stage)}
-                  value={choiceOf(choices, stage)}
-                  onChange={(choice) => setChoices((current) => withChoice(current, stage, choice))}
-                />
-              </li>
+        )}
+
+        {origin !== null &&
+          dependencies.map((dependency) => {
+            const model = dependencyNotice(dependency, origin.card.repository, "dialog");
+            return <DependencyNotice key={model.key} model={model} />;
+          })}
+
+        <div className="flex flex-col gap-1.5">
+          <Label id={modeLabelId}>Mode</Label>
+          <ToggleGroup
+            aria-labelledby={modeLabelId}
+            size="sm"
+            value={[mode]}
+            disabled={creating}
+            onValueChange={(next: string[]) => {
+              const [value] = next;
+              if (value === "structured" || value === "one_shot") {
+                setMode(value);
+              }
+            }}
+          >
+            {TASK_MODES.map((option) => (
+              <ToggleGroupItem key={option} value={option}>
+                {taskModeLabel(option)}
+              </ToggleGroupItem>
             ))}
-          </ul>
-        </CollapsibleContent>
-      </Collapsible>
+          </ToggleGroup>
+          <p className="text-xs text-muted-foreground">{taskModeHint(mode)}</p>
+        </div>
 
-      {error !== null && <p className="text-destructive">{error}</p>}
+        <div className="flex flex-col gap-1.5">
+          <Label>Review mode</Label>
+          <div>
+            <ReviewModePicker label="Task" value={reviewMode} onChange={setReviewMode} />
+          </div>
+          <p className="text-xs text-muted-foreground">{reviewModeHint(reviewMode)}</p>
+        </div>
 
-      <DialogFooter>
-        <Button type="button" variant="ghost" onClick={closeNewTask}>
-          Cancel
-        </Button>
-        <Button type="submit" disabled={!canCreate}>
-          {creating ? "Creating…" : "Create"}
+        <Collapsible
+          open={modelsOpen}
+          onOpenChange={setModelsOpen}
+          className="flex flex-col gap-1.5"
+        >
+          <CollapsibleTrigger
+            render={
+              <button
+                type="button"
+                className="flex h-8 items-center gap-2 rounded-md text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              />
+            }
+          >
+            <ChevronRight
+              aria-hidden="true"
+              className={cn(
+                "size-4 text-muted-foreground transition-transform duration-[var(--duration-fast)]",
+                modelsOpen && "rotate-90",
+              )}
+            />
+            <span className="font-medium">Models</span>
+            <span className="min-w-0 truncate text-muted-foreground">
+              {adjustmentSummary(catalog, choices, defaults, modelStages)}
+            </span>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <ul className="flex flex-col divide-y rounded-lg border">
+              {modelStages.map((stage) => (
+                <li key={stage} className="flex h-11 items-center justify-between gap-4 px-3">
+                  <span className="text-sm">{modelStageLabel(stage)}</span>
+                  <ModelPicker
+                    label={modelStageLabel(stage)}
+                    value={choiceOf(choices, stage)}
+                    onChange={(choice) =>
+                      setChoices((current) => withChoice(current, stage, choice))
+                    }
+                  />
+                </li>
+              ))}
+            </ul>
+          </CollapsibleContent>
+        </Collapsible>
+      </DialogBody>
+
+      <DialogFooter
+        {...(footerReason !== null ? { reason: { id: reasonId, text: footerReason } } : {})}
+        {...(error !== null ? { refusal: error } : {})}
+      >
+        <DialogCancel disabled={creating} />
+        <Button
+          variant="primary"
+          shortcut="Ctrl ↵"
+          disabled={block !== null}
+          {...(footerReason !== null ? { reasonId } : {})}
+          loading={creating}
+          loadingLabel="Creating…"
+          onClick={create}
+        >
+          Create
         </Button>
       </DialogFooter>
-    </form>
+    </Dialog>
   );
 }

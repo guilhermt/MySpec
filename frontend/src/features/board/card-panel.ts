@@ -179,7 +179,15 @@ function pullRequestsText(dependency: CardDependency): string {
   return `${prs.length} pull requests, none merged`;
 }
 
-function dependencyNotice(dependency: CardDependency, repository: string): DependencyNoticeModel {
+/**
+ * dependencyNotice is the warning of a dependency not satisfied. The panel says it never blocks;
+ * the creation dialog, where it is a step away, says the task can start.
+ */
+export function dependencyNotice(
+  dependency: CardDependency,
+  repository: string,
+  place: "panel" | "dialog" = "panel",
+): DependencyNoticeModel {
   const meta = [
     dependency.repository,
     stateLabel(asIssueState(dependency.state)),
@@ -190,7 +198,7 @@ function dependencyNotice(dependency: CardDependency, repository: string): Depen
     key: dependency.key,
     title: `Depends on ${referenceOf(dependency, repository)}`,
     issueTitle: dependency.title,
-    meta: `${meta}. A warning only: it never blocks.`,
+    meta: `${meta}. ${place === "panel" ? "A warning only: it never blocks." : "A warning only: the task can start."}`,
   };
 }
 

@@ -6,10 +6,11 @@ import {
   contextLine,
   createBlock,
   nameProblemText,
+  repositoryOptions,
 } from "@/features/task-create/create-task";
 import type { NameProblem } from "@/lib/task-name";
 import type { BoardCard } from "@/lib/wails";
-import { makeBoardCard, makeWritingDiscussion } from "@/test/wails-mock";
+import { makeBoardCard, makeRepository, makeState, makeWritingDiscussion } from "@/test/wails-mock";
 
 const EPIC = {
   key: "acme/api#400",
@@ -184,5 +185,90 @@ describe("nameProblemText", () => {
     ["taken", "A task named rate-limit already exists in acme/api."],
   ])("says %s", (problem, want) => {
     expect(nameProblemText(problem, "rate-limit", "acme/api")).toBe(want);
+  });
+});
+
+describe("repositoryOptions", () => {
+  const repo = (overrides: Parameters<typeof makeRepository>[0]) =>
+    makeRepository({ id: "r", fullName: "acme/api", ...overrides });
+  const onClone = () => {};
+  const cases: {
+    name: string;
+    repository: ReturnType<typeof repo>;
+    errors?: Record<string, string>;
+    want: Record<string, unknown>;
+  }[] = [
+    { name: "a usable clone", repository: repo({}), want: { value: "r", label: "acme/api" } },
+    {
+      name: "a clone that is gone",
+      repository: repo({ path: "/code/api", missing: true }),
+      want: {
+        value: "r",
+        label: "acme/api",
+        sub: "The clone at /code/api is missing.",
+        disabled: true,
+      },
+    },
+    {
+      name: "a clone that runs",
+      repository: repo({ cloned: false, cloning: true }),
+      want: { value: "r", label: "acme/api", sub: "Cloning…", disabled: true },
+    },
+    {
+      name: "no clone",
+      repository: repo({ cloned: false }),
+      want: { value: "r", label: "acme/api", sub: "Not cloned", disabled: true },
+    },
+    {
+      name: "a clone that failed",
+      repository: repo({ cloned: false, cloneError: "gh: no access" }),
+      want: { sub: "gh: no access", subTone: "error", disabled: true },
+    },
+    {
+      name: "a clone that could not start",
+      repository: repo({ cloned: false, cloneError: "gh: no access" }),
+      errors: { r: "Could not start." },
+      want: { sub: "Could not start.", subTone: "error", disabled: true },
+    },
+  ];
+
+  it.each(cases)("offers $name", ({ repository, errors, want }) => {
+    const [option] = repositoryOptions(
+      makeState({ repositories: [repository] }),
+      errors ?? {},
+      onClone,
+    );
+
+    expect(option).toMatchObject(want);
+    expect(option?.action !== undefined).toBe(!repository.cloned && !repository.cloning);
+  });
+
+  it("clones the repository the action belongs to", () => {
+    const cloned: string[] = [];
+    const [option] = repositoryOptions(
+      makeState({ repositories: [repo({ cloned: false })] }),
+      {},
+      (id) => cloned.push(id),
+    );
+
+    option?.action?.onAction();
+
+    expect(option?.action?.label).toBe("Clone");
+    expect(cloned).toEqual(["r"]);
+  });
+
+  it("lists them in alphabetical order", () => {
+    const options = repositoryOptions(
+      makeState({
+        repositories: [
+          repo({ id: "b", fullName: "acme/web" }),
+          repo({ id: "a", fullName: "acme/api" }),
+        ],
+      }),
+      {},
+      onClone,
+    );
+
+    expect(options.map((option) => option.label)).toEqual(["acme/api", "acme/web"]);
   });
 });

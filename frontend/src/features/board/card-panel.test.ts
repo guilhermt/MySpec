@@ -4,6 +4,7 @@ import {
   type CardPanelContext,
   type CloneState,
   cardPanelModel,
+  dependencyNotice,
   outOfReadingText,
   type PanelActions,
 } from "@/features/board/card-panel";
@@ -308,6 +309,12 @@ describe("the head, the status and the dependencies", () => {
     it("leaves the status out without one on the board", () => {
       expect(notice({ status: "" })?.meta).toBe(
         "acme/gateway · Open · no pull request. A warning only: it never blocks.",
+      );
+    });
+
+    it("tells the dialog the task can start", () => {
+      expect(dependencyNotice(dependency(), "acme/api", "dialog").meta).toBe(
+        "acme/gateway · Open · Backlog · no pull request. A warning only: the task can start.",
       );
     });
 

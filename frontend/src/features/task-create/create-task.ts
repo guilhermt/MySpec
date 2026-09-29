@@ -1,6 +1,8 @@
+import type { SelectOption } from "@/components/system/Select";
+import { cloneMissingText } from "@/lib/repositories";
 import type { NameProblem } from "@/lib/task-name";
 import { TASK_NAME_MAX } from "@/lib/task-name";
-import type { BoardCard } from "@/lib/wails";
+import type { BoardCard, Repository, State } from "@/lib/wails";
 
 // joinParts reads a list the way a sentence does: "a", "a and b", "a, b and c".
 function joinParts(parts: readonly string[]): string {
@@ -83,4 +85,45 @@ export function nameProblemText(problem: NameProblem, name: string, fullName: st
     case "taken":
       return `A task named ${name} already exists in ${fullName}.`;
   }
+}
+
+// repositoryOption is a repository as the field offers it: one without a usable clone is
+// disabled, with the reason and, when it can be cloned, the action.
+function repositoryOption(
+  repository: Repository,
+  cloneError: string | undefined,
+  onClone: (id: string) => void,
+): SelectOption {
+  const { id, fullName } = repository;
+  if (repository.cloned) {
+    return repository.missing
+      ? { value: id, label: fullName, sub: cloneMissingText(repository), disabled: true }
+      : { value: id, label: fullName };
+  }
+  if (repository.cloning) {
+    return { value: id, label: fullName, sub: "Cloning…", disabled: true };
+  }
+  const error = cloneError ?? (repository.cloneError === "" ? undefined : repository.cloneError);
+  return {
+    value: id,
+    label: fullName,
+    sub: error ?? "Not cloned",
+    ...(error === undefined ? {} : { subTone: "error" as const }),
+    disabled: true,
+    action: { label: "Clone", onAction: () => onClone(id) },
+  };
+}
+
+/**
+ * repositoryOptions are the options of the Repository field, in alphabetical order. cloneErrors is
+ * the message of a clone that could not start, by repository id.
+ */
+export function repositoryOptions(
+  app: State,
+  cloneErrors: Readonly<Record<string, string>>,
+  onClone: (id: string) => void,
+): SelectOption[] {
+  return [...(app.repositories ?? [])]
+    .sort((a, b) => a.fullName.localeCompare(b.fullName))
+    .map((repository) => repositoryOption(repository, cloneErrors[repository.id], onClone));
 }
