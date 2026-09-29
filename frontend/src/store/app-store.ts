@@ -160,6 +160,12 @@ export interface AppStore {
   /** panel is the auxiliary panel open in the place on screen, null when none is; every navigation closes it. */
   panel: PanelId | null;
   /**
+   * panelDocument is the document the panel opens at, in place of its list: the one Open in
+   * Artifacts or Open in Details of a marker of the conversation asked for. The panel takes it and
+   * clears it.
+   */
+  panelDocument: string | null;
+  /**
    * earlierConversation is a conversation of the task that is not the one of its place, read from
    * Details; every navigation clears it, and it is never stacked nor stored.
    */
@@ -240,6 +246,9 @@ export interface AppStore {
   clearMarkerRequest: () => void;
   /** openPanel opens an auxiliary panel of the place on screen, closing the one open; null closes it. */
   openPanel: (panel: PanelId | null) => void;
+  /** openPanelAt opens an auxiliary panel of the place on screen already at one of its documents. */
+  openPanelAt: (panel: PanelId, file: string) => void;
+  clearPanelDocument: () => void;
   /** openEarlierConversation puts an earlier conversation of a task in place of the one of its place. */
   openEarlierConversation: (taskId: string, stage: string, fromPanel: boolean) => void;
   /** closeEarlierConversation brings back the conversation of the place. */
@@ -697,6 +706,7 @@ export const useAppStore = create<AppStore>()((set, get) => {
     error: null,
     ...initialNav(),
     panel: null,
+    panelDocument: null,
     earlierConversation: null,
     pendingFocus: null,
     sidebarRail: readStored(SIDEBAR_RAIL_KEY, false, isBoolean),
@@ -790,7 +800,11 @@ export const useAppStore = create<AppStore>()((set, get) => {
 
     clearMarkerRequest: () => set({ markerRequest: null }),
 
-    openPanel: (panel) => set({ panel }),
+    openPanel: (panel) => set({ panel, panelDocument: null }),
+
+    openPanelAt: (panel, file) => set({ panel, panelDocument: file }),
+
+    clearPanelDocument: () => set({ panelDocument: null }),
 
     openEarlierConversation: (taskId, stage, fromPanel) =>
       set({ earlierConversation: { taskId, stage, from: fromPanel ? "panel" : null } }),

@@ -264,6 +264,19 @@ export function detailsOf(
   };
 }
 
+/** reportOf is the report of Details read from a file, null when Details doesn't list it. */
+export function reportOf(model: DetailsModel, file: string): DetailsReport | null {
+  const rows = [
+    ...(model.steps?.rows ?? []),
+    ...(model.implementation ? [model.implementation] : []),
+  ];
+  const reports = [
+    ...rows.flatMap((row) => (row.kind === "not_started" ? [] : row.reports)),
+    ...(model.pullRequest?.reports ?? []),
+  ];
+  return reports.find((report) => report.file === file) ?? null;
+}
+
 /** earlierPlace is the <Lugar> of an earlier conversation: PRD, Step 2 · Implementer, Draft and opening… */
 export function earlierPlace(task: TaskSummary, stage: string): string {
   const step = /^(step|step_review):(\d+)$/.exec(stage);

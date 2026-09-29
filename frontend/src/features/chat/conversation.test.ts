@@ -4,10 +4,15 @@ import {
   type ConversationModel,
   foldableStretches,
   type GroupModel,
+  lastMarkerOf,
   type Row,
+  type Stretch,
+  stretchFoldOf,
 } from "@/features/chat/conversation";
+import type { MarkerContext } from "@/features/chat/markers";
 import type { ActionEntry, Entry, MarkerEntry, UserEntry } from "@/lib/wails";
-import { makeAction, makeEntry } from "@/test/wails-mock";
+import { clockTime } from "@/lib/when";
+import { makeAction, makeEntry, makeStep, makeTask } from "@/test/wails-mock";
 
 // A marker and a message as an old transcript keeps them: every field at its zero.
 const MARKER: MarkerEntry = {
@@ -501,5 +506,81 @@ describe("foldableStretches", () => {
 
   it("never folds the only stretch", () => {
     expect(foldableStretches(buildConversation(speeches(30, 0), "Implementer"))).toEqual(new Set());
+  });
+});
+
+describe("lastMarkerOf", () => {
+  const invalid = (message: string) =>
+    marker({ type: "plan_invalid", problems: [{ file: "2-api.md", message }] });
+  const correction = product({ appKind: "correction", appRound: 1, appRounds: 3, appCount: 1 });
+
+  it("finds the last marker of a type, in the stretch it is drawn in", () => {
+    const older = invalid("no repository");
+    const newer = invalid("no title");
+    const model = buildConversation(
+      [older, said("Fixing."), correction, newer, said("Still wrong.", "msg_2")],
+      "Plan agent",
+    );
+
+    expect(lastMarkerOf(model, "plan_invalid")).toEqual({
+      stretch: model.stretches[1]?.key,
+      row: newer.id,
+    });
+  });
+
+  it("finds nothing in a conversation without one", () => {
+    expect(lastMarkerOf(buildConversation([said("Done.")], "Plan agent"), "plan_invalid")).toBe(
+      null,
+    );
+  });
+});
+
+describe("stretchFoldOf", () => {
+  const NOW = Date.parse(at(59));
+  const ctx: MarkerContext = {
+    stage: "step:6",
+    task: makeTask({ steps: [makeStep({ number: 6, file: "06-throttle-metrics.md" })] }),
+    oneShot: false,
+  };
+  const stretch = (fields: Partial<Stretch>): Stretch => ({
+    key: "entry-1",
+    rows: [],
+    speeches: 5,
+    actions: 71,
+    from: "",
+    startedAt: at(12),
+    endedAt: at(48),
+    ...fields,
+  });
+
+  it("tells the first stretch from the start line, with its size and its interval", () => {
+    const start = marker({ type: "step_started", step: 6 });
+    const rows: Row[] = [{ kind: "start", key: start.id, marker: start, prompt: null }];
+    const interval = `${clockTime(at(12), NOW)}–${clockTime(at(48), NOW)}`;
+
+    expect(stretchFoldOf(stretch({ rows }), ctx, NOW)).toEqual({
+      text: "5 speeches · 71 actions",
+      from: "from the start · steps/06-throttle-metrics.md",
+      interval,
+      name: `Earlier: 5 speeches and 71 actions, from the start · steps/06-throttle-metrics.md, ${clockTime(at(12), NOW)} to ${clockTime(at(48), NOW)}`,
+    });
+  });
+
+  it("tells a stretch opened by the product from its message, in the singular when one", () => {
+    const view = stretchFoldOf(
+      stretch({ from: "Review 1 · 3 findings · round 1 of 3", speeches: 1, actions: 1 }),
+      ctx,
+      NOW,
+    );
+
+    expect(view.text).toBe("1 speech · 1 action");
+    expect(view.from).toBe("from Review 1 · 3 findings · round 1 of 3");
+  });
+
+  it("says only from the start without a start line, and no interval without the times", () => {
+    const view = stretchFoldOf(stretch({ startedAt: "", endedAt: "" }), ctx, NOW);
+
+    expect(view).toMatchObject({ from: "from the start", interval: "" });
+    expect(view.name).toBe("Earlier: 5 speeches and 71 actions, from the start");
   });
 });

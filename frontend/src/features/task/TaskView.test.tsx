@@ -205,16 +205,50 @@ describe("TaskView", () => {
     expect(api.getTranscript).not.toHaveBeenCalled();
   });
 
-  it("warns above the composer when the plan stayed invalid", () => {
-    view({
-      stage: "plan",
-      corrections: 3,
-      planProblems: [{ file: "", message: "no step files were written" }],
+  it("tells a plan still invalid in the bar, whose Show problems opens the marker that lists them", async () => {
+    const problems = [{ file: "2-api.md", message: "no repository" }];
+    const invalid = makeEntry("marker");
+    const { user } = renderWithStore(<TaskView taskId="task-1" />, {
+      state: makeState({
+        tasks: [
+          makeTask({
+            stage: "plan",
+            corrections: 3,
+            planProblems: problems,
+            situations: [
+              makeSituation({
+                kind: "plan_invalid",
+                place: { kind: "stage", stage: "plan", step: 0 },
+              }),
+            ],
+          }),
+        ],
+      }),
+      ui: {
+        location: { kind: "task", id: "task-1" },
+        transcripts: {
+          "task-1|plan": {
+            status: "ready",
+            error: "",
+            entries: [
+              invalid.marker === null
+                ? invalid
+                : { ...invalid, marker: { ...invalid.marker, type: "plan_invalid", problems } },
+            ],
+            pending: [],
+            buffered: [],
+          },
+        },
+      },
     });
+    const marker = screen.getByRole("button", { name: /The plan is still invalid/ });
+    expect(marker).toHaveAttribute("aria-expanded", "false");
 
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      "The plan is still invalid after three automatic corrections.",
-    );
+    await user.click(screen.getByRole("button", { name: "Show problems" }));
+
+    expect(marker).toHaveAttribute("aria-expanded", "true");
+    expect(marker.closest("article")).toHaveFocus();
+    expect(marker.closest("article")).toHaveTextContent("2-api.md · no repository");
   });
 
   it("fetches the conversation only the first time the task is opened", async () => {

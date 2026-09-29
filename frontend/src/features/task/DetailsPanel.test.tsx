@@ -296,6 +296,44 @@ describe("DetailsPanel, reports", () => {
     ).toHaveFocus();
   });
 
+  it("opens at the report a marker of the conversation asked for, and comes back to its row", async () => {
+    vi.mocked(api.readArtifact).mockResolvedValue("# Findings");
+    const { user } = renderWithStore(<DetailsPanel task={STRUCTURED} />, {
+      state: makeState({ tasks: [STRUCTURED], repositories: [makeRepository()] }),
+      ui: {
+        location: { kind: "task", id: STRUCTURED.id },
+        panel: "details",
+        panelDocument: "step-reviews/3-1.md",
+      },
+    });
+
+    expect(
+      screen.getByRole("heading", { name: "Step 3 · Review 1 · changes" }),
+    ).toBeInTheDocument();
+    expect(await screen.findByTestId("markdown")).toHaveTextContent("# Findings");
+    expect(useAppStore.getState().panelDocument).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "← Details" }));
+
+    expect(
+      within(group(/^Steps/)).getAllByRole("button", { name: "Review 1 · changes" })[2],
+    ).toHaveFocus();
+  });
+
+  it("goes to the report a marker asks for with the panel already open", async () => {
+    vi.mocked(api.readArtifact).mockResolvedValue("# Findings");
+    details(STRUCTURED);
+
+    act(() => {
+      useAppStore.getState().openPanelAt("details", "step-reviews/1-1.md");
+    });
+
+    expect(
+      await screen.findByRole("heading", { name: "Step 1 · Review 1 · changes" }),
+    ).toBeInTheDocument();
+    expect(api.readArtifact).toHaveBeenCalledWith("task-1", "step-reviews/1-1.md");
+  });
+
   it("says a report couldn't be read, and reads it again on Try again", async () => {
     vi.mocked(api.readArtifact).mockRejectedValueOnce(new Error("no such file"));
     const { user } = details(STRUCTURED);

@@ -1,7 +1,8 @@
 import { type FailureNote, failureNotes, summaryOf } from "@/features/chat/actions";
-import { productMessageOf } from "@/features/chat/markers";
+import { type MarkerContext, productMessageOf, startLineOf } from "@/features/chat/markers";
 import type { ActionEntry, AppKind, Entry, MarkerType } from "@/lib/wails";
 import { asActionStatus, asAppKind, asMarkerType, asPermissionStatus } from "@/lib/wails";
+import { clockTime } from "@/lib/when";
 
 /** ActionNode is an action of a group; children are the actions of the subagent it started. */
 export interface ActionNode {
@@ -424,4 +425,75 @@ export function foldableStretches(model: ConversationModel): Set<string> {
       .filter((stretch) => stretch.rows.length >= FOLD_MIN_ROWS)
       .map((stretch) => stretch.key),
   );
+}
+
+/** MarkerAt is where a marker is drawn: the key of its stretch and the key of its row. */
+export interface MarkerAt {
+  stretch: string;
+  row: string;
+}
+
+/** lastMarkerOf is where the last marker of a type is drawn, null when the conversation has none. */
+export function lastMarkerOf(model: ConversationModel, type: MarkerType): MarkerAt | null {
+  for (const stretch of [...model.stretches].reverse()) {
+    const row = lastOf(
+      stretch.rows,
+      (one) => one.kind === "marker" && one.entry.marker?.type === type,
+    );
+    if (row !== undefined) {
+      return { stretch: stretch.key, row: row.key };
+    }
+  }
+  return null;
+}
+
+/** StretchFoldView is the line a folded stretch is drawn as. */
+export interface StretchFoldView {
+  /** text is "5 speeches · 71 actions". */
+  text: string;
+  /**
+   * from is where the stretch began: "from the start · steps/06-throttle-metrics.md", or "from
+   * Review 1 · 3 findings · round 1 of 3".
+   */
+  from: string;
+  /** interval is "16:12–16:48", shown on hover and focus; "" without the times. */
+  interval: string;
+  /** name is "Earlier: 5 speeches and 71 actions, from the start, 16:12 to 16:48". */
+  name: string;
+}
+
+// counted is a count with its noun: "1 speech", "5 speeches".
+function counted(count: number, one: string, many: string): string {
+  return `${count} ${count === 1 ? one : many}`;
+}
+
+// fromOf is where a stretch began: the message of the product that opens it, or the start of the
+// conversation with the complement of its start line.
+function fromOf(stretch: Stretch, ctx: MarkerContext): string {
+  if (stretch.from !== "") {
+    return `from ${stretch.from}`;
+  }
+  const first = stretch.rows[0];
+  const start = first?.kind === "start" ? startLineOf(first.marker, first.prompt, ctx) : null;
+  return start === null || start.complement === ""
+    ? "from the start"
+    : `from the start · ${start.complement}`;
+}
+
+/** stretchFoldOf is the line of a folded stretch: its size, where it began and when it ran. */
+export function stretchFoldOf(stretch: Stretch, ctx: MarkerContext, now: number): StretchFoldView {
+  const speeches = counted(stretch.speeches, "speech", "speeches");
+  const actions = counted(stretch.actions, "action", "actions");
+  const from = fromOf(stretch, ctx);
+  const started = clockTime(stretch.startedAt, now);
+  const ended = clockTime(stretch.endedAt, now);
+  const timed = started !== "" && ended !== "";
+  return {
+    text: `${speeches} · ${actions}`,
+    from,
+    interval: timed ? `${started}–${ended}` : "",
+    name: [`Earlier: ${speeches} and ${actions}`, from, timed ? `${started} to ${ended}` : ""]
+      .filter((part) => part !== "")
+      .join(", "),
+  };
 }

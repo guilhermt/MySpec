@@ -2173,6 +2173,23 @@ describe("history of places", () => {
     expect(useAppStore.getState()).toMatchObject({ location: TASK, panel: null });
   });
 
+  it("opens a panel at a document until the panel takes it, and a plain opening asks for none", () => {
+    useAppStore.setState({ location: TASK, panel: null, panelDocument: null });
+
+    useAppStore.getState().openPanelAt("details", "step-reviews/3-1.md");
+    expect(useAppStore.getState()).toMatchObject({
+      panel: "details",
+      panelDocument: "step-reviews/3-1.md",
+    });
+
+    useAppStore.getState().clearPanelDocument();
+    expect(useAppStore.getState()).toMatchObject({ panel: "details", panelDocument: null });
+
+    useAppStore.getState().openPanelAt("artifacts", "PRD.md");
+    useAppStore.getState().openPanel("details");
+    expect(useAppStore.getState()).toMatchObject({ panel: "details", panelDocument: null });
+  });
+
   it("clears the focus it asked for", () => {
     useAppStore.setState({ pendingFocus: "title" });
 

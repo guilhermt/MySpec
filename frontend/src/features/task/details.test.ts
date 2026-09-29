@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { backTarget, type DetailsModel, detailsOf, earlierPlace } from "@/features/task/details";
+import {
+  backTarget,
+  type DetailsModel,
+  detailsOf,
+  earlierPlace,
+  reportOf,
+} from "@/features/task/details";
 import type { TaskSummary } from "@/lib/wails";
 import {
   makePullRequest,
@@ -361,5 +367,47 @@ describe("backTarget", () => {
     ["the pull request, done", makeTask({ stage: "pr" }), null, "the pull request"],
   ])("goes back to %s", (_, task, screen, target) => {
     expect(backTarget(task, screen)).toBe(target);
+  });
+});
+
+describe("reportOf", () => {
+  it("finds a report of a step, of the implementation and of the pull request by its file", () => {
+    const steps = detailsOf(STRUCTURED, null, null);
+    expect(reportOf(steps, "step-reviews/2-1.md")).toMatchObject({ file: "step-reviews/2-1.md" });
+    expect(reportOf(steps, "step-reviews/3-1.md")).toMatchObject({ file: "step-reviews/3-1.md" });
+
+    const oneShot = detailsOf(
+      makeTask({
+        mode: "one_shot",
+        stage: "implementation",
+        currentStep: 1,
+        steps: [
+          makeStep({
+            status: "agent_review",
+            reports: [{ pass: 1, file: "1-1.md", clean: true, findings: 0 }],
+          }),
+        ],
+      }),
+      null,
+      null,
+    );
+    expect(reportOf(oneShot, "step-reviews/1-1.md")).toMatchObject({ file: "step-reviews/1-1.md" });
+
+    const pr = detailsOf(
+      makeTask({
+        stage: "pr",
+        pr: makePullRequest({
+          prNumber: 1284,
+          reports: [{ pass: 1, file: "review-1.md", clean: true }],
+        }),
+      }),
+      null,
+      null,
+    );
+    expect(reportOf(pr, "pr/review-1.md")).toMatchObject({ file: "pr/review-1.md" });
+  });
+
+  it("finds nothing for a file Details doesn't list", () => {
+    expect(reportOf(detailsOf(STRUCTURED, null, null), "step-reviews/9-1.md")).toBeNull();
   });
 });

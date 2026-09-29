@@ -11,7 +11,6 @@ import { CardPanel } from "@/features/task/CardPanel";
 import { DetailsPanel } from "@/features/task/DetailsPanel";
 import { earlierPlace } from "@/features/task/details";
 import { EarlierConversationFoot } from "@/features/task/EarlierConversationFoot";
-import { PlanProblemsNotice } from "@/features/task/PlanProblemsNotice";
 import { PRPane } from "@/features/task/PRPane";
 import { ReviewStrip } from "@/features/task/ReviewStrip";
 import { screenStageOf } from "@/features/task/request";
@@ -188,7 +187,6 @@ export function TaskView({ taskId }: TaskViewProps) {
               stage={task.stage}
               session={task}
             />
-            <PlanProblemsNotice task={task} />
             <TaskRequest task={task} tab={stepTab} />
             <Composer taskId={task.id} stage={task.stage} session={task} />
           </>

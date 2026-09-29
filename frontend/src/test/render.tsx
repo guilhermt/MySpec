@@ -15,6 +15,7 @@ export interface StoreOptions {
       | "back"
       | "forward"
       | "panel"
+      | "panelDocument"
       | "earlierConversation"
       | "pendingFocus"
       | "sidebarRail"
@@ -56,6 +57,7 @@ export function resetAppStore(options: StoreOptions = {}): void {
     back: options.ui?.back ?? [],
     forward: options.ui?.forward ?? [],
     panel: options.ui?.panel ?? null,
+    panelDocument: options.ui?.panelDocument ?? null,
     earlierConversation: options.ui?.earlierConversation ?? null,
     pendingFocus: options.ui?.pendingFocus ?? null,
     sidebarRail: options.ui?.sidebarRail ?? false,

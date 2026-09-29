@@ -1,25 +1,39 @@
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Skeleton, SkeletonBar } from "@/components/system/Skeleton";
 import { ConversationColumn } from "@/features/chat/ConversationColumn";
-import { buildConversation, type Row, waitingToolUseId } from "@/features/chat/conversation";
+import {
+  buildConversation,
+  foldableStretches,
+  lastMarkerOf,
+  type Row,
+  stretchFoldOf,
+  waitingToolUseId,
+} from "@/features/chat/conversation";
 import { Activity } from "@/features/chat/entries/Activity";
-import { AppMessage } from "@/features/chat/entries/AppMessage";
 import { BackToEnd } from "@/features/chat/entries/BackToEnd";
 import { ErrorBlock } from "@/features/chat/entries/ErrorBlock";
 import { Group } from "@/features/chat/entries/Group";
-import { Marker } from "@/features/chat/entries/Marker";
+import { MarkerLine } from "@/features/chat/entries/MarkerLine";
 import { PermissionCard } from "@/features/chat/entries/PermissionCard";
 import { QuestionCard } from "@/features/chat/entries/QuestionCard";
 import { QueuedMessage } from "@/features/chat/entries/QueuedMessage";
 import { Speech } from "@/features/chat/entries/Speech";
+import { StretchFold } from "@/features/chat/entries/StretchFold";
 import { YourMessage } from "@/features/chat/entries/YourMessage";
-import { voiceInSentence, voiceOf } from "@/features/chat/markers";
+import {
+  type MarkerContext,
+  markerOf,
+  productMessageOf,
+  startLineOf,
+  voiceInSentence,
+  voiceOf,
+} from "@/features/chat/markers";
 import type { SessionState } from "@/features/chat/session";
 import { useAutoScroll } from "@/features/chat/useAutoScroll";
 import { useFeed } from "@/features/chat/useFeed";
-import type { Entry } from "@/lib/wails";
+import { asTaskMode, type Entry } from "@/lib/wails";
 import { clockTime } from "@/lib/when";
-import { useTranscript } from "@/store/app-store";
+import { useAppStore, useTask, useTranscript } from "@/store/app-store";
 
 const NO_ENTRIES: readonly Entry[] = [];
 
@@ -54,11 +68,16 @@ interface RowViewProps {
   stage: string;
   row: Row;
   voice: string;
+  /** ctx is what a line needs of its conversation: the stage and the task. */
+  ctx: MarkerContext;
   readOnly: boolean;
   /** railLast is the last speech, when it waits for a reply in text. */
   railLast: boolean;
   /** waitingToolUseId is the action the pending permission holds, null without one. */
   waitingToolUseId: string | null;
+  /** requested is the marker the request bar asked to open, which settles the request. */
+  requested: boolean;
+  onRequested: () => void;
 }
 
 function RowView({
@@ -66,9 +85,12 @@ function RowView({
   stage,
   row,
   voice,
+  ctx,
   readOnly,
   railLast,
   waitingToolUseId,
+  requested,
+  onRequested,
 }: RowViewProps) {
   switch (row.kind) {
     case "speech":
@@ -85,37 +107,34 @@ function RowView({
       return row.entry.user === null ? null : (
         <YourMessage user={row.entry.user} createdAt={row.entry.createdAt} />
       );
-    case "start": {
-      const prompt = row.prompt?.user ?? null;
-      const createdAt = (row.marker ?? row.prompt)?.createdAt ?? "";
+    case "start":
       return (
-        <Held createdAt={createdAt}>
-          <div className="flex flex-col gap-(--space-3)">
-            {row.marker?.marker && (
-              <Marker marker={row.marker.marker} createdAt={row.marker.createdAt} />
-            )}
-            {/* The stage prompt is the agent's instructions: only what the user gave with it shows. */}
-            {prompt !== null && prompt.text !== "" && (
-              <p className="text-(length:--text-body) leading-(--leading-body) break-words whitespace-pre-wrap text-ink-1 select-text">
-                {prompt.text}
-              </p>
-            )}
-          </div>
-        </Held>
+        <MarkerLine
+          view={startLineOf(row.marker, row.prompt, ctx)}
+          createdAt={(row.marker ?? row.prompt)?.createdAt ?? ""}
+          task={ctx.task}
+        />
       );
-    }
     case "product":
       return row.entry.user === null ? null : (
-        <Held createdAt={row.entry.createdAt}>
-          <AppMessage user={row.entry.user} />
-        </Held>
+        <MarkerLine
+          view={productMessageOf(row.entry.user, voice, ctx)}
+          createdAt={row.entry.createdAt}
+          task={ctx.task}
+        />
       );
-    case "marker":
-      return row.entry.marker === null ? null : (
-        <Held createdAt={row.entry.createdAt}>
-          <Marker marker={row.entry.marker} createdAt={row.entry.createdAt} />
-        </Held>
+    case "marker": {
+      const view = row.entry.marker === null ? null : markerOf(row.entry.marker, ctx);
+      return view === null ? null : (
+        <MarkerLine
+          view={view}
+          createdAt={row.entry.createdAt}
+          task={ctx.task}
+          requested={requested}
+          onRequested={onRequested}
+        />
       );
+    }
     case "group":
       return (
         <Group
@@ -192,6 +211,9 @@ export function Conversation({
   replyWaiting = false,
 }: ConversationProps) {
   const transcript = useTranscript(taskId, stage);
+  const task = useTask(taskId);
+  const markerRequest = useAppStore((state) => state.markerRequest);
+  const clearMarkerRequest = useAppStore((state) => state.clearMarkerRequest);
   const viewportRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const feedRef = useRef<HTMLDivElement>(null);
@@ -220,6 +242,41 @@ export function Conversation({
     (transcript.status === "loading" && entries.length === 0 && pending.length === 0);
   const railKey = replyWaiting ? lastCompleteSpeech(rows) : "";
   const waiting = useMemo(() => waitingToolUseId(entries), [entries]);
+  const ctx = useMemo<MarkerContext>(
+    () => ({ stage, task, oneShot: task !== null && asTaskMode(task.mode) === "one_shot" }),
+    [stage, task],
+  );
+  // The stretches that fold are settled once, when the entries first arrive: a stretch that stops
+  // being the last on screen stays open, so nothing folds under the reader.
+  const [foldable, setFoldable] = useState<ReadonlySet<string> | null>(null);
+  if (foldable === null && !loading) {
+    setFoldable(foldableStretches(model));
+  }
+  const [openFolds, setOpenFolds] = useState<ReadonlySet<string>>(new Set());
+  const toggleFold = (key: string) =>
+    setOpenFolds((folds) => {
+      const next = new Set(folds);
+      if (!next.delete(key)) {
+        next.add(key);
+      }
+      return next;
+    });
+  // The live conversation of a task settles what its request bar asked to open: the last marker of
+  // the type, its stretch unfolded; without one, the request is dropped.
+  const asking = markerRequest !== null && markerRequest.taskId === taskId && !readOnly && !loading;
+  const asked = asking ? lastMarkerOf(model, markerRequest.type) : null;
+  const askedStretch = asked?.stretch ?? null;
+
+  useEffect(() => {
+    if (!asking) {
+      return;
+    }
+    if (askedStretch === null) {
+      clearMarkerRequest();
+      return;
+    }
+    setOpenFolds((folds) => (folds.has(askedStretch) ? folds : new Set(folds).add(askedStretch)));
+  }, [asking, askedStretch, clearMarkerRequest]);
 
   useEffect(() => {
     const viewport = viewportRef.current;
@@ -245,18 +302,35 @@ export function Conversation({
             <Loading />
           ) : (
             <>
-              {rows.map((row) => (
-                <RowView
-                  key={row.key}
-                  taskId={taskId}
-                  stage={stage}
-                  row={row}
-                  voice={voice}
-                  readOnly={readOnly}
-                  railLast={row.key === railKey}
-                  waitingToolUseId={waiting}
-                />
-              ))}
+              {model.stretches.map((stretch) => {
+                const views = stretch.rows.map((row) => (
+                  <RowView
+                    key={row.key}
+                    taskId={taskId}
+                    stage={stage}
+                    row={row}
+                    voice={voice}
+                    ctx={ctx}
+                    readOnly={readOnly}
+                    railLast={row.key === railKey}
+                    waitingToolUseId={waiting}
+                    requested={row.key === asked?.row}
+                    onRequested={clearMarkerRequest}
+                  />
+                ));
+                return foldable?.has(stretch.key) ? (
+                  <StretchFold
+                    key={stretch.key}
+                    fold={stretchFoldOf(stretch, ctx, Date.now())}
+                    open={openFolds.has(stretch.key)}
+                    onToggle={() => toggleFold(stretch.key)}
+                  >
+                    {views}
+                  </StretchFold>
+                ) : (
+                  <Fragment key={stretch.key}>{views}</Fragment>
+                );
+              })}
               {endLine}
               {fixed}
               {/* An earlier conversation is read without what was queued: it sends nothing more. */}

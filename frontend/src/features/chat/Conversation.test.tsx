@@ -86,10 +86,10 @@ describe("Conversation", () => {
 
     expect(screen.getByText("Add a login screen")).toBeInTheDocument();
     expect(screen.getByTestId("markdown")).toHaveTextContent("On it.");
-    expect(screen.getByText("PRD written")).toBeInTheDocument();
+    expect(screen.getByText("Written PRD.md")).toBeInTheDocument();
   });
 
-  it("shows what the app said to the agent as coming from the app", () => {
+  it("draws what the app said to the agent as a line of the product that opens the message", async () => {
     const entries = [
       makeEntry("user", {
         user: {
@@ -98,21 +98,26 @@ describe("Conversation", () => {
           prompt: false,
           app: true,
           sent: "",
-          appKind: "",
+          appKind: "correction",
           appPass: 0,
-          appRound: 0,
-          appRounds: 0,
-          appCount: 0,
+          appRound: 1,
+          appRounds: 3,
+          appCount: 2,
         },
       }),
     ];
-    renderWithStore(<Conversation stage="prd" taskId="task-1" session={makeTask()} />, {
-      state: withTask(),
-      ui: { transcripts: ready(entries) },
-    });
+    const { user } = renderWithStore(
+      <Conversation stage="plan" taskId="task-1" session={makeTask()} />,
+      { state: withTask(), ui: { transcripts: { "task-1|plan": readyState(entries) } } },
+    );
 
-    expect(screen.getByText("MySpec · sent to the agent")).toBeInTheDocument();
-    expect(screen.getByText("The plan is not valid yet.")).toBeInTheDocument();
+    const line = screen.getByRole("button", { name: /MySpec → Plan agent/ });
+    expect(line).toHaveTextContent("The plan isn't valid yet · 2 problems · correction 1 of 3");
+    expect(screen.queryByText("The plan is not valid yet.")).not.toBeInTheDocument();
+
+    await user.click(line);
+
+    expect(screen.getByTestId("markdown")).toHaveTextContent("The plan is not valid yet.");
   });
 
   it("leaves the stage prompt out of the conversation", () => {
@@ -139,10 +144,10 @@ describe("Conversation", () => {
     });
 
     expect(screen.getByTestId("markdown")).toHaveTextContent("On it.");
-    expect(screen.queryByText("MySpec · sent to the agent")).not.toBeInTheDocument();
+    expect(screen.queryByText(/PRD started/)).not.toBeInTheDocument();
   });
 
-  it("keeps the brief the user gave along with the first prompt", () => {
+  it("joins the start of the stage and the brief the user gave into one line that opens it", async () => {
     const entries = [
       makeEntry("user", {
         user: {
@@ -159,12 +164,17 @@ describe("Conversation", () => {
         },
       }),
     ];
-    renderWithStore(<Conversation stage="prd" taskId="task-1" session={makeTask()} />, {
-      state: withTask(),
-      ui: { transcripts: ready(entries) },
-    });
+    const { user } = renderWithStore(
+      <Conversation stage="prd" taskId="task-1" session={makeTask()} />,
+      { state: withTask(), ui: { transcripts: ready(entries) } },
+    );
 
-    expect(screen.getByText("Add a login screen")).toBeInTheDocument();
+    const line = screen.getByRole("button", { name: /PRD started/ });
+    expect(line).toHaveTextContent("with your description");
+
+    await user.click(line);
+
+    expect(screen.getByTestId("markdown")).toHaveTextContent("Add a login screen");
   });
 
   it("collapses the actions of a turn into one line", async () => {
@@ -532,5 +542,166 @@ describe("Conversation", () => {
     );
 
     expect(screen.getByTestId("markdown")).toHaveClass("markdown-rail-last");
+  });
+});
+
+describe("Conversation stretches and markers", () => {
+  const said = (text: string, messageId: string): Entry => {
+    const entry = makeEntry("assistant");
+    return entry.assistant === null
+      ? entry
+      : { ...entry, assistant: { ...entry.assistant, text, messageId } };
+  };
+  const speeches = (count: number, from: number) =>
+    Array.from({ length: count }, (_, index) =>
+      said(`Speech ${from + index}.`, `msg_${from + index}`),
+    );
+  const correction = (round: number): Entry => {
+    const entry = makeEntry("user");
+    return entry.user === null
+      ? entry
+      : {
+          ...entry,
+          user: {
+            ...entry.user,
+            text: `Correction ${round}.`,
+            app: true,
+            appKind: "correction",
+            appRound: round,
+            appRounds: 3,
+            appCount: 1,
+          },
+        };
+  };
+  const invalid = (message: string): Entry => {
+    const entry = makeEntry("marker");
+    return entry.marker === null
+      ? entry
+      : {
+          ...entry,
+          marker: {
+            ...entry.marker,
+            type: "plan_invalid",
+            problems: [{ file: "2-api.md", message }],
+          },
+        };
+  };
+  const plan = (entries: Entry[]) => ({ "task-1|plan": readyState(entries) });
+
+  it("folds an earlier stretch of twelve entries into one line that opens it", async () => {
+    const { user } = renderWithStore(
+      <Conversation stage="plan" taskId="task-1" session={makeTask()} />,
+      {
+        state: withTask(),
+        ui: { transcripts: plan([...speeches(12, 0), correction(1), ...speeches(2, 20)]) },
+      },
+    );
+
+    const fold = screen.getByRole("button", { name: /12 speeches · 0 actions/ });
+    expect(
+      screen.getByRole("article", { name: /^Earlier: 12 speeches and 0 actions, from the start/ }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Speech 0.")).not.toBeInTheDocument();
+    expect(screen.getByText("Speech 20.")).toBeInTheDocument();
+
+    await user.click(fold);
+
+    expect(fold).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("Speech 0.")).toBeInTheDocument();
+  });
+
+  it("keeps a stretch open when a new round arrives on screen", () => {
+    renderWithStore(<Conversation stage="plan" taskId="task-1" session={makeTask()} />, {
+      state: withTask(),
+      ui: { transcripts: plan(speeches(12, 0)) },
+    });
+
+    act(() => {
+      useAppStore.setState({
+        transcripts: plan([...speeches(12, 0), correction(1), said("Fixing.", "msg_40")]),
+      });
+    });
+
+    expect(screen.getByText("Speech 0.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /12 speeches/ })).not.toBeInTheDocument();
+  });
+
+  it("opens and focuses the last invalid plan marker the request bar asked for", () => {
+    const entries = [invalid("no title"), said("Fixing.", "msg_1"), invalid("no repository")];
+    renderWithStore(<Conversation stage="plan" taskId="task-1" session={makeTask()} />, {
+      state: withTask(),
+      ui: { transcripts: plan(entries) },
+    });
+
+    act(() => {
+      useAppStore.getState().requestMarkerOpen("task-1", "plan_invalid");
+    });
+
+    const [older, newer] = screen.getAllByRole("button", { name: /The plan is still invalid/ });
+    const marker = newer?.closest("article");
+    expect(marker).toHaveFocus();
+    expect(newer).toHaveAttribute("aria-expanded", "true");
+    expect(older).toHaveAttribute("aria-expanded", "false");
+    expect(marker).toHaveTextContent("2-api.md · no repository");
+    expect(screen.queryByText(/no title/)).not.toBeInTheDocument();
+    expect(useAppStore.getState().markerRequest).toBeNull();
+  });
+
+  it("unfolds the stretch of the marker the request bar asked for", () => {
+    const entries = [
+      ...speeches(12, 0),
+      invalid("no repository"),
+      correction(1),
+      said("Fixing.", "msg_40"),
+    ];
+    renderWithStore(<Conversation stage="plan" taskId="task-1" session={makeTask()} />, {
+      state: withTask(),
+      ui: { transcripts: plan(entries) },
+    });
+    expect(screen.queryByText("Speech 0.")).not.toBeInTheDocument();
+
+    act(() => {
+      useAppStore.getState().requestMarkerOpen("task-1", "plan_invalid");
+    });
+
+    expect(screen.getByRole("button", { name: /12 speeches/ })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+    expect(screen.getByRole("article", { name: /^The plan is still invalid/ })).toHaveFocus();
+    expect(screen.getByText("Speech 0.")).toBeInTheDocument();
+  });
+
+  it("drops a request for a marker the conversation doesn't have", () => {
+    renderWithStore(<Conversation stage="plan" taskId="task-1" session={makeTask()} />, {
+      state: withTask(),
+      ui: { transcripts: plan([said("Done.", "msg_1")]) },
+    });
+
+    act(() => {
+      useAppStore.getState().requestMarkerOpen("task-1", "plan_invalid");
+    });
+
+    expect(useAppStore.getState().markerRequest).toBeNull();
+  });
+
+  it("leaves the request of another task, and of an earlier conversation, alone", () => {
+    renderWithStore(<Conversation stage="plan" taskId="task-1" session={makeTask()} readOnly />, {
+      state: withTask(),
+      ui: { transcripts: plan([invalid("no title")]) },
+    });
+
+    act(() => {
+      useAppStore.getState().requestMarkerOpen("task-1", "plan_invalid");
+    });
+    expect(useAppStore.getState().markerRequest).not.toBeNull();
+
+    act(() => {
+      useAppStore.getState().requestMarkerOpen("task-2", "plan_invalid");
+    });
+    expect(useAppStore.getState().markerRequest).toEqual({
+      taskId: "task-2",
+      type: "plan_invalid",
+    });
   });
 });

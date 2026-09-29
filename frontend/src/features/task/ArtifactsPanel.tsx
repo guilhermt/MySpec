@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AuxPanel } from "@/components/system/AuxPanel";
 import { EmptyState } from "@/components/system/EmptyState";
 import { Icon } from "@/components/system/Icon";
@@ -21,15 +21,27 @@ export interface ArtifactsPanelProps {
  */
 export function ArtifactsPanel({ task }: ArtifactsPanelProps) {
   const openPanel = useAppStore((state) => state.openPanel);
-  // The file chosen, not the stage, says what is open: the panel never changes document alone.
-  const [openFile, setOpenFile] = useState<string | null>(null);
+  const asked = useAppStore((state) => state.panelDocument);
+  const clearPanelDocument = useAppStore((state) => state.clearPanelDocument);
+  // The file chosen, not the stage, says what is open: the panel never changes document alone. At
+  // first it is the one a marker of the conversation asked for.
+  const [openFile, setOpenFile] = useState<string | null>(asked);
   // The last file opened is the row the focus returns to on the way back.
-  const [lastFile, setLastFile] = useState<string | null>(null);
+  const [lastFile, setLastFile] = useState<string | null>(asked);
   const groups = artifactGroupsOf(task);
   // A document the task no longer has falls back to the list.
   const open =
     groups.flatMap((group) => group.entries).find((entry) => entry.file === openFile) ?? null;
   const oneShot = asTaskMode(task.mode) === "one_shot";
+
+  // Open in Artifacts of a marker opens its document, also with the panel already open.
+  useEffect(() => {
+    if (asked !== null) {
+      setOpenFile(asked);
+      setLastFile(asked);
+      clearPanelDocument();
+    }
+  }, [asked, clearPanelDocument]);
 
   return (
     <AuxPanel id="artifacts" title="Artifacts" onClose={() => openPanel(null)}>

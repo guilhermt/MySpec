@@ -24,7 +24,7 @@ React 19, TypeScript em modo strict, Vite, Tailwind CSS 4, shadcn/ui sobre Base 
 - Código novo de uma feature importa os componentes de `components/system/`. As importações de `components/ui/` que existem nas features são as das telas anteriores ao design system, e o redesenho de cada tela as troca pelas de `components/system/`.
 - Um componente próprio usado por mais de uma feature, como o `FilterMenu` das visões de board e de reviews, fica em `src/components/`, ao lado de `ui/`, com o teste ao lado. Um componente de uma feature só fica na feature, mesmo feito de peças do system, como as linhas da árvore em `features/sidebar/` e as peças da tela da task em `features/task/` (o cabeçalho, o `⋯`, as abas, a barra do pedido, os painéis `Details`, `Artifacts` e `Card`); ele sobe para `src/components/` quando uma segunda feature precisa dele.
 - Ícones do `lucide-react`. Classes com `cn` de `lib/utils`; variantes com `class-variance-authority`.
-- Toda constante de apresentação com mais de um uso é nomeada e comentada (`REVIEW_STATES`, `MAX_CORRECTIONS`, que espelha `flow.MaxCorrections`).
+- Toda constante de apresentação com mais de um uso é nomeada e comentada (`REVIEW_STATES`, `MAX_REVIEW_ROUNDS`, que espelha `flow.MaxReviewRounds`).
 - Textos da interface em inglês, curtos, com o separador `·` entre partes de uma mesma linha, como modelo e esforço. O usuário é "you"; o agente é "the agent".
 
 ## Acessibilidade
