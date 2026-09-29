@@ -18,7 +18,9 @@ O índice completo está em [docs/README.md](./docs/README.md).
 ## Convenções
 
 - Interface do produto em inglês. Código, identificadores e commits em inglês. Documentação em português.
-- `task check` passa por inteiro antes de uma mudança estar pronta: tidy, lint, typecheck, os testes Go e web que a mudança alcança, vulnerabilidades e bindings, em segundos. Nunca rode `task check:full`, `task test:full` nem a cobertura, a não ser que seja pedido.
+- Enquanto itera, rode só os testes que a mudança toca: `go test -run 'TestNome' ./internal/pacote/` para Go e `pnpm vitest run <arquivo>` a partir de `frontend/` para o frontend. Não rode a suíte inteira com `go test ./...` nem `pnpm test`.
+- `task fmt` formata Go (gofumpt e goimports) e frontend (Biome). Rode antes de `task check`, cujo lint recusa código mal formatado. O hook de pre-commit também formata os arquivos em stage.
+- `task check` passa por inteiro antes de uma mudança estar pronta: tidy, lint, typecheck, os testes Go e web que a mudança alcança, vulnerabilidades e bindings, em uns 20 segundos. Nunca rode `task check:full`, `task test:full` nem a cobertura, a não ser que seja pedido.
 - `frontend/src/components/ui` e `frontend/bindings` são gerados e nunca editados à mão. Mudou um service ou um DTO: `task generate`.
 
 ## Documentação
