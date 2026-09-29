@@ -1,4 +1,4 @@
-import { act, screen, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { BoardView } from "@/features/board/BoardView";
 import { EMPTY_FILTERS } from "@/features/board/board-view";
@@ -217,6 +217,46 @@ describe("BoardView", () => {
 
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
+  });
+
+  describe("openBoardCard", () => {
+    it("opens the card in the panel with its section expanded and its row focused", () => {
+      view();
+      // The Done section starts collapsed: the card of the request is in it.
+      expect(screen.queryByRole("treeitem", { name: /#3/ })).not.toBeInTheDocument();
+
+      act(() => useAppStore.getState().openBoardCard("board-1", SHIPPED.key));
+
+      expect(screen.getByRole("complementary", { name: "Card #3" })).toBeInTheDocument();
+      expect(screen.getByRole("treeitem", { name: /#3/ })).toHaveFocus();
+      expect(useAppStore.getState().boardCardRequest).toBeNull();
+    });
+
+    it("keeps the filters and focuses the panel when they hide the row", async () => {
+      localStorage.setItem(
+        boardViewKey("board-1"),
+        JSON.stringify({ filters: { ...EMPTY_FILTERS, query: "header" } }),
+      );
+      view();
+
+      act(() => useAppStore.getState().openBoardCard("board-1", LOGIN.key));
+
+      const panel = await screen.findByRole("complementary", { name: "Card #12" });
+      expect(screen.queryByRole("treeitem", { name: /#12/ })).not.toBeInTheDocument();
+      expect(screen.getByRole("searchbox", { name: "Search cards" })).toHaveValue("header");
+      await waitFor(() =>
+        expect(within(panel).getByRole("button", { name: /^Start task/ })).toHaveFocus(),
+      );
+    });
+
+    it("is taken by the view already open on that board", () => {
+      view();
+
+      act(() => useAppStore.getState().openBoardCard("board-1", HEADER.key));
+
+      expect(screen.getByRole("complementary", { name: "Card #7" })).toBeInTheDocument();
+      expect(screen.getByRole("treeitem", { name: /#7/ })).toHaveFocus();
+    });
   });
 
   it("focuses the search on /", async () => {

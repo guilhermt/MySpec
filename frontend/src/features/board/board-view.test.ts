@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  actionHint,
   assigneesOf,
   type BoardFilters,
   boardRows,
@@ -209,29 +208,6 @@ describe("assigneesOf and unsatisfied", () => {
     });
 
     expect(keys(unsatisfied(card))).toEqual(["dev/web#1"]);
-  });
-});
-
-describe("actionHint", () => {
-  const app = makeState({ repositories: [makeRepository({ path: "/home/dev/web" })] });
-
-  it("says what keeps Start task from opening the dialog", () => {
-    expect(actionHint(makeBoardCard({ action: "clone" }), app)).toBe("dev/web isn't cloned yet.");
-    expect(actionHint(makeBoardCard({ action: "clone_missing" }), app)).toBe(
-      "The clone at /home/dev/web is missing.",
-    );
-    expect(actionHint(makeBoardCard({ action: "add_to_board" }), app)).toBe(
-      "dev/web isn't managed by this board.",
-    );
-    expect(actionHint(makeBoardCard({ action: "other_board", otherBoard: "Platform" }), app)).toBe(
-      "dev/web belongs to the board Platform.",
-    );
-  });
-
-  it("has nothing to say otherwise", () => {
-    for (const action of ["start", "has_task", "closed"]) {
-      expect(actionHint(makeBoardCard({ action }), app)).toBeNull();
-    }
   });
 });
 

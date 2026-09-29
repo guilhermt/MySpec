@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { AuxPanel } from "@/components/system/AuxPanel";
 import { Link } from "@/components/system/Link";
 import { NoticeStrip } from "@/components/system/NoticeStrip";
@@ -6,7 +7,9 @@ import { Markdown } from "@/features/chat/Markdown";
 import { cardViewOf, noticeOf } from "@/features/task/card-panel";
 import type { TaskSummary } from "@/lib/wails";
 import { openExternal } from "@/store/actions";
-import { useAppStore, useBoardCard } from "@/store/app-store";
+import { useAppStore, useBoard, useBoardCard } from "@/store/app-store";
+
+const NO_KEYS: ReadonlySet<string> = new Set();
 
 export interface CardPanelProps {
   task: TaskSummary;
@@ -19,12 +22,19 @@ export interface CardPanelProps {
  */
 export function CardPanel({ task }: CardPanelProps) {
   const openPanel = useAppStore((state) => state.openPanel);
+  const openBoardCard = useAppStore((state) => state.openBoardCard);
+  const board = useBoard(task.card?.boardId ?? "");
+  const cards = board?.cards;
+  const boardCards = useMemo(
+    () => (cards === undefined || cards === null ? NO_KEYS : new Set(cards.map((c) => c.key))),
+    [cards],
+  );
   const reading = useBoardCard(task.card?.boardId ?? "", task.card?.key ?? "");
   if (task.card === null) {
     return null;
   }
   const notice = noticeOf(reading);
-  const card = cardViewOf(task.card, reading.card);
+  const card = cardViewOf(task.card, reading.card, boardCards);
 
   return (
     <AuxPanel id="card" title={`Card #${task.card.number}`} onClose={() => openPanel(null)}>
@@ -55,7 +65,11 @@ export function CardPanel({ task }: CardPanelProps) {
             <Markdown>{card.body}</Markdown>
           </div>
         )}
-        <RelationList groups={card.relations} onOpen={(url) => void openExternal(url)} />
+        <RelationList
+          groups={card.relations}
+          onOpen={(url) => void openExternal(url)}
+          onOpenCard={(key) => openBoardCard(task.card?.boardId ?? "", key)}
+        />
       </div>
     </AuxPanel>
   );

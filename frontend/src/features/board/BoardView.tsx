@@ -1,10 +1,10 @@
-import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
+import { type KeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { PanelLayout } from "@/components/system/AuxPanel";
 import { KeyNotice, useKeyNotice } from "@/components/system/KeyNotice";
-import { ListPanel } from "@/components/system/ListPanel";
 import { ScrollArea } from "@/components/system/ScrollArea";
 import { SelectionBar } from "@/components/system/SelectionBar";
 import { useNow } from "@/features/attention/useNow";
+import { BoardCardPanel } from "@/features/board/BoardCardPanel";
 import { BoardFilterBar } from "@/features/board/BoardFilterBar";
 import { BoardHeader, NEW_DISCUSSION_ID } from "@/features/board/BoardHeader";
 import {
@@ -32,12 +32,11 @@ import {
   showsFailureStrip,
   startNotice,
 } from "@/features/board/board-view";
-import { CardDetail } from "@/features/board/CardDetail";
 import { CardTree } from "@/features/board/CardTree";
 import { useBoardViewMemory } from "@/features/board/useBoardViewMemory";
 import { useStartCard } from "@/features/board/useStartCard";
 import type { Board, BoardCard } from "@/lib/wails";
-import { openExternal, refreshBoard } from "@/store/actions";
+import { refreshBoard } from "@/store/actions";
 import { useAppStore, useBoard, useRepository } from "@/store/app-store";
 
 /** READING_CLOCK_MS is how often the time since the last reading is told again: a minute. */
@@ -86,6 +85,8 @@ function BoardScreen({ board }: { board: Board }) {
   const [memory, setMemory] = useBoardViewMemory(board.id);
   const app = useAppStore((state) => state.app);
   const openNewDiscussion = useAppStore((state) => state.openNewDiscussion);
+  const boardCardRequest = useAppStore((state) => state.boardCardRequest);
+  const clearBoardCardRequest = useAppStore((state) => state.clearBoardCardRequest);
   const searchRef = useRef<HTMLInputElement>(null);
   const treeRef = useRef<HTMLDivElement>(null);
   const now = useNow(READING_CLOCK_MS, board.readAt !== "" || board.failure !== null);
@@ -196,10 +197,63 @@ function BoardScreen({ board }: { board: Board }) {
     setOpenCard(null);
     focusRow(openKey);
   };
+  // revealCard opens a card of the reading in the panel with its section expanded; the focus goes to
+  // its row once it is drawn, or, with fromRequest, to the panel when a filter hides the row.
+  const reveal = useRef<{ key: string; fromRequest: boolean } | null>(null);
+  const [revealed, setRevealed] = useState(0);
+  const revealCard = (key: string, fromRequest: boolean) => {
+    const card = cards.find((candidate) => candidate.key === key);
+    if (card === undefined) {
+      return;
+    }
+    const section = sections(board, cards).find((candidate) =>
+      candidate.cards.some((member) => member.key === key),
+    );
+    if (section !== undefined && collapsed.has(section.id)) {
+      toggleSection(section.id);
+    }
+    openInPanel(card);
+    reveal.current = { key, fromRequest };
+    setRevealed((count) => count + 1);
+  };
+  // biome-ignore lint/correctness/useExhaustiveDependencies: it runs when a reveal is asked for, once the rows are drawn
+  useLayoutEffect(() => {
+    const target = reveal.current;
+    if (target === null) {
+      return;
+    }
+    reveal.current = null;
+    const row = Array.from(
+      treeRef.current?.querySelectorAll<HTMLElement>("[data-row-key]") ?? [],
+    ).find((element) => element.getAttribute("data-row-key") === target.key);
+    if (row !== undefined) {
+      row.focus();
+      row.scrollIntoView?.({ block: "nearest" });
+    } else if (target.fromRequest) {
+      requestAnimationFrame(() => {
+        const panel = document.querySelector(".list-panel");
+        (
+          panel?.querySelector<HTMLElement>(
+            '[data-panel-actions] button:not([aria-disabled="true"])',
+          ) ?? panel?.querySelector<HTMLElement>('button[aria-label="Close"]')
+        )?.focus();
+      });
+    }
+  }, [revealed]);
+  // The board a task's card panel or a discussion asked for opens the card here.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the request is taken once, when it arrives
+  useEffect(() => {
+    if (boardCardRequest?.boardId !== board.id) {
+      return;
+    }
+    revealCard(boardCardRequest.key, true);
+    clearBoardCardRequest();
+  }, [boardCardRequest]);
+
   // The panel mounts after the key that opened it: the focus waits a frame.
   const focusPrimary = () =>
     requestAnimationFrame(() =>
-      document.querySelector<HTMLElement>(".list-panel [data-primary-action]")?.focus(),
+      document.querySelector<HTMLElement>(".list-panel [data-primary]")?.focus(),
     );
   const enterSelecting = () => {
     setSelecting(true);
@@ -430,28 +484,16 @@ function BoardScreen({ board }: { board: Board }) {
       <PanelLayout
         panel={
           openCard !== null && (
-            <ListPanel
-              label={`Card #${openCard.number}`}
-              number={`#${openCard.number}`}
-              repository={openCard.repository}
-              url={openCard.url}
-              onOpenExternal={(url) => void openExternal(url)}
+            <BoardCardPanel
+              board={board}
+              card={openCard}
+              outOfReading={!cardKeys.has(openCard.key)}
+              start={start}
+              now={now}
               onClose={closePanel}
-              scrollKey={openCard.key}
-            >
-              <CardDetail
-                board={board}
-                card={openCard}
-                start={start}
-                onSelect={(key) => {
-                  const next = cards.find((card) => card.key === key);
-                  if (next !== undefined) {
-                    openInPanel(next);
-                  }
-                }}
-                onDiscuss={() => discuss([openCard.key])}
-              />
-            </ListPanel>
+              onOpenCard={(key) => revealCard(key, false)}
+              onDiscuss={() => discuss([openCard.key])}
+            />
           )
         }
       >

@@ -899,6 +899,34 @@ describe("marker request", () => {
   });
 });
 
+describe("board card request", () => {
+  const BOARD_PLACE: Location = { kind: "board", id: BOARD.id };
+
+  it("opens the board with the card asked, stacks the place behind and clears on demand", () => {
+    useAppStore.getState().applyState(withTasks({ boards: [BOARD] }));
+
+    useAppStore.getState().openBoardCard(BOARD.id, "acme/web#7");
+
+    expect(location()).toEqual(BOARD_PLACE);
+    expect(useAppStore.getState().back).toEqual([HOME]);
+    expect(useAppStore.getState().boardCardRequest).toEqual({
+      boardId: BOARD.id,
+      key: "acme/web#7",
+    });
+
+    useAppStore.getState().clearBoardCardRequest();
+    expect(useAppStore.getState().boardCardRequest).toBeNull();
+  });
+
+  it("is not made by a plain navigation", () => {
+    useAppStore.getState().applyState(withTasks({ boards: [BOARD] }));
+
+    useAppStore.getState().go(BOARD_PLACE);
+
+    expect(useAppStore.getState().boardCardRequest).toBeNull();
+  });
+});
+
 describe("open situation", () => {
   it("opens the task of a situation, the focus going to what it asks", () => {
     useAppStore.getState().applyState(withTasks());

@@ -191,6 +191,12 @@ export interface AppStore {
   drafts: Record<string, string>;
   /** markerRequest is a marker of a task the conversation opens and focuses: the last one of its type. */
   markerRequest: { taskId: string; type: MarkerType } | null;
+  /**
+   * boardCardRequest is a card of a board the board view opens in its panel once it is on screen,
+   * with its section expanded and the focus on its row; the view takes it and clears it. It is
+   * never stacked nor stored.
+   */
+  boardCardRequest: CardRef | null;
   /** openStepTab is the conversation tab of a step, by stepTabKey. */
   openStepTab: Record<string, StepTab>;
   /** prDrafts is the pull request the user is editing, by task id. */
@@ -261,6 +267,9 @@ export interface AppStore {
   /** requestMarkerOpen asks the conversation of a task to open and focus its last marker of a type. */
   requestMarkerOpen: (taskId: string, type: MarkerType) => void;
   clearMarkerRequest: () => void;
+  /** openBoardCard opens a board with one of its cards in the panel. */
+  openBoardCard: (boardId: string, key: string) => void;
+  clearBoardCardRequest: () => void;
   /** openPanel opens an auxiliary panel of the place on screen, closing the one open; null closes it. */
   openPanel: (panel: PanelId | null) => void;
   /** openPanelAt opens an auxiliary panel of the place on screen already at one of its documents. */
@@ -530,6 +539,7 @@ function initialTaskUi(): Pick<
   | "transcripts"
   | "drafts"
   | "markerRequest"
+  | "boardCardRequest"
   | "openStepTab"
   | "prDrafts"
   | "questionChoices"
@@ -550,6 +560,7 @@ function initialTaskUi(): Pick<
     transcripts: {},
     drafts: {},
     markerRequest: null,
+    boardCardRequest: null,
     openStepTab: {},
     prDrafts: {},
     questionChoices: {},
@@ -849,6 +860,16 @@ export const useAppStore = create<AppStore>()((set, get) => {
     requestMarkerOpen: (taskId, type) => set({ markerRequest: { taskId, type } }),
 
     clearMarkerRequest: () => set({ markerRequest: null }),
+
+    openBoardCard: (boardId, key) =>
+      leave(() =>
+        set((state) => ({
+          ...navigate(state, { kind: "board", id: boardId }, null),
+          boardCardRequest: { boardId, key },
+        })),
+      ),
+
+    clearBoardCardRequest: () => set({ boardCardRequest: null }),
 
     openPanel: (panel) => set({ panel, panelDocument: null }),
 

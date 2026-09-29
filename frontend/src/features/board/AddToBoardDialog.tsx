@@ -1,13 +1,6 @@
 import { useEffect, useState } from "react";
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Button } from "@/components/system/Button";
+import { Dialog, DialogBody, DialogCancel, DialogFooter } from "@/components/system/Dialog";
 import { choicesOf, chosenCloneOf } from "@/features/boards/board-dialog";
 import { RepositoryLinkRow } from "@/features/boards/RepositoryLinkRow";
 import { messageOf } from "@/lib/errors";
@@ -20,28 +13,35 @@ export interface AddToBoardDialogProps {
   fullName: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** onAdded runs once the repository is on the board and the dialog has closed. */
+  onAdded: () => void;
 }
 
 /** AddToBoardDialog adds the repository of a card to the board, tied to a clone when one is found. */
-export function AddToBoardDialog({ boardId, fullName, open, onOpenChange }: AddToBoardDialogProps) {
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      {/* The form lives only while the dialog is open, so every opening checks the repository again. */}
-      {open && <AddToBoardForm boardId={boardId} fullName={fullName} onOpenChange={onOpenChange} />}
-    </Dialog>
-  );
-}
-
-type AddToBoardFormProps = Omit<AddToBoardDialogProps, "open">;
-
-function AddToBoardForm({ boardId, fullName, onOpenChange }: AddToBoardFormProps) {
+export function AddToBoardDialog({
+  boardId,
+  fullName,
+  open,
+  onOpenChange,
+  onAdded,
+}: AddToBoardDialogProps) {
   const [option, setOption] = useState<BoardRepositoryOption | null>(null);
   const [chosenClones, setChosenClones] = useState<Record<string, string>>({});
-  const [busy, setBusy] = useState(true);
+  const [checking, setChecking] = useState(false);
+  const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Every opening checks the repository again.
   useEffect(() => {
+    if (!open) {
+      return;
+    }
     let cancelled = false;
+    setOption(null);
+    setChosenClones({});
+    setError(null);
+    setAdding(false);
+    setChecking(true);
     checkBoardRepository(boardId, fullName)
       .then((checked) => {
         if (!cancelled) {
@@ -55,63 +55,70 @@ function AddToBoardForm({ boardId, fullName, onOpenChange }: AddToBoardFormProps
       })
       .finally(() => {
         if (!cancelled) {
-          setBusy(false);
+          setChecking(false);
         }
       });
     return () => {
       cancelled = true;
     };
-  }, [boardId, fullName]);
+  }, [open, boardId, fullName]);
 
   const [choice] = option === null ? [] : choicesOf([option], chosenClones);
+  const busy = checking || adding;
 
   const add = async () => {
-    if (choice === undefined) {
+    if (choice === undefined || busy) {
       return;
     }
-    setBusy(true);
+    setAdding(true);
     setError(null);
     try {
       await addRepositoryToBoard(boardId, choice);
+      setAdding(false);
       onOpenChange(false);
+      onAdded();
     } catch (failure) {
       setError(messageOf(failure));
-      setBusy(false);
+      setAdding(false);
     }
   };
 
   return (
-    <DialogContent>
-      <DialogHeader>
-        <DialogTitle>{`Add ${fullName} to the board`}</DialogTitle>
-        <DialogDescription>The board manages the repository from now on.</DialogDescription>
-      </DialogHeader>
-      {option === null ? (
-        busy && <p className="text-sm text-muted-foreground">Checking the repository…</p>
-      ) : (
-        <ul className="rounded-md border">
-          <RepositoryLinkRow
-            option={option}
-            chosenClone={chosenCloneOf(option, chosenClones)}
-            disabled={busy}
-            onCheckedChange={(checked) => setOption({ ...option, checked })}
-            onCloneChange={(path) => setChosenClones({ [option.fullName]: path })}
-          />
-        </ul>
-      )}
-      {error !== null && (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
-      )}
-      <DialogFooter>
-        <Button variant="outline" onClick={() => onOpenChange(false)}>
-          Cancel
-        </Button>
-        <Button disabled={busy || choice === undefined} onClick={() => void add()}>
+    <Dialog
+      open={open}
+      onOpenChange={onOpenChange}
+      size="wide"
+      title={`Add ${fullName} to the board`}
+      subtitle="The board manages the repository from now on."
+      onConfirm={() => void add()}
+    >
+      <DialogBody>
+        {option === null ? (
+          checking && <p>Checking the repository…</p>
+        ) : (
+          <ul className="rounded-md border border-line-2">
+            <RepositoryLinkRow
+              option={option}
+              chosenClone={chosenCloneOf(option, chosenClones)}
+              disabled={busy}
+              onCheckedChange={(checked) => setOption({ ...option, checked })}
+              onCloneChange={(path) => setChosenClones({ [option.fullName]: path })}
+            />
+          </ul>
+        )}
+      </DialogBody>
+      <DialogFooter {...(error !== null ? { refusal: error } : {})}>
+        <DialogCancel />
+        <Button
+          variant="primary"
+          loading={adding}
+          loadingLabel="Adding…"
+          disabled={(checking && !adding) || choice === undefined}
+          onClick={() => void add()}
+        >
           Add to board
         </Button>
       </DialogFooter>
-    </DialogContent>
+    </Dialog>
   );
 }

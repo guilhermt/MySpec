@@ -131,6 +131,20 @@ describe("CardPanel", () => {
     expect(api.openExternal).toHaveBeenCalledWith("https://github.com/dev/api/issues/7");
   });
 
+  it("opens a relation that is a card of the reading in the board's panel", async () => {
+    const sibling = makeBoardCard({ key: "dev/web#13", number: 13, title: "Reset the password" });
+    const { user } = panel([makeBoard({ id: "board-1", cards: [READ_CARD, sibling] })]);
+
+    await user.click(screen.getByRole("link", { name: "#13 Reset the password" }));
+
+    expect(useAppStore.getState().boardCardRequest).toEqual({
+      boardId: "board-1",
+      key: "dev/web#13",
+    });
+    expect(useAppStore.getState().location).toEqual({ kind: "board", id: "board-1" });
+    expect(api.openExternal).not.toHaveBeenCalled();
+  });
+
   it("leaves out the groups without relations", () => {
     panel([makeBoard({ cards: [makeBoardCard()] })]);
 

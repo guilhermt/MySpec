@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 import { StateGlyph } from "./StateGlyph";
 
 export interface NoticeStripProps {
+  id?: string;
   title: string;
   reason?: string;
   action?: ReactNode;
@@ -14,6 +15,7 @@ export interface NoticeStripProps {
 
 /** NoticeStrip is the strip that says something could not be read, with the action that retries. */
 export function NoticeStrip({
+  id,
   title,
   reason,
   action,
@@ -24,6 +26,7 @@ export function NoticeStrip({
 }: NoticeStripProps) {
   return (
     <div
+      id={id}
       role={role}
       className={cn(
         "flex min-h-(--size-ask) flex-wrap items-center gap-2 rounded-sm bg-surface-0 py-1.5 pr-1.5 pl-4 text-(length:--text-meta) leading-(--leading-meta)",

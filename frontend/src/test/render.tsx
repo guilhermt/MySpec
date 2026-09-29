@@ -25,6 +25,7 @@ export interface StoreOptions {
       | "transcripts"
       | "drafts"
       | "markerRequest"
+      | "boardCardRequest"
       | "openStepTab"
       | "prDrafts"
       | "questionChoices"
@@ -69,6 +70,7 @@ export function resetAppStore(options: StoreOptions = {}): void {
     transcripts: options.ui?.transcripts ?? {},
     drafts: options.ui?.drafts ?? {},
     markerRequest: options.ui?.markerRequest ?? null,
+    boardCardRequest: options.ui?.boardCardRequest ?? null,
     openStepTab: options.ui?.openStepTab ?? {},
     prDrafts: options.ui?.prDrafts ?? {},
     questionChoices: options.ui?.questionChoices ?? {},

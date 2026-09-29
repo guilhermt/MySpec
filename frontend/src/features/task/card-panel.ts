@@ -33,7 +33,11 @@ export function referenceOf(
 }
 
 /** epicGroup is the epic of a card, as its group of one relation; the task keeps no state of it. */
-function epicGroup(epic: CardIssue | null, repository: string): RelationGroup {
+function epicGroup(
+  epic: CardIssue | null,
+  repository: string,
+  boardCards: ReadonlySet<string>,
+): RelationGroup {
   return {
     label: "Epic",
     items:
@@ -46,16 +50,20 @@ function epicGroup(epic: CardIssue | null, repository: string): RelationGroup {
               title: epic.title,
               meta: "",
               url: epic.url,
+              ...(boardCards.has(epic.key) ? { cardKey: epic.key } : {}),
             },
           ],
   };
 }
 
-/** relationsOf is everything the last reading found around a card, each group only with items. */
-export function relationsOf(card: BoardCard): RelationGroup[] {
+/**
+ * relationsOf is everything the last reading found around a card, each group only with items. A
+ * relation that is a card of the reading (its key is in boardCards) carries its cardKey.
+ */
+export function relationsOf(card: BoardCard, boardCards: ReadonlySet<string>): RelationGroup[] {
   const siblings = card.siblings ?? [];
   return [
-    epicGroup(card.epic, card.repository),
+    epicGroup(card.epic, card.repository, boardCards),
     {
       label: `Cards of the epic · ${siblings.length}`,
       items: siblings.map((sibling) => ({
@@ -64,6 +72,7 @@ export function relationsOf(card: BoardCard): RelationGroup[] {
         title: sibling.title,
         meta: sibling.status !== "" ? sibling.status : stateLabel(asIssueState(sibling.state)),
         url: sibling.url,
+        ...(sibling.onBoard && boardCards.has(sibling.key) ? { cardKey: sibling.key } : {}),
       })),
     },
     {
@@ -75,6 +84,9 @@ export function relationsOf(card: BoardCard): RelationGroup[] {
         meta: stateLabel(asIssueState(dependency.state)),
         url: dependency.url,
         ...(dependency.satisfied ? {} : { warning: "Not satisfied" }),
+        ...(dependency.onBoard && boardCards.has(dependency.key)
+          ? { cardKey: dependency.key }
+          : {}),
       })),
     },
     {
@@ -103,7 +115,11 @@ export interface CardView {
 }
 
 /** cardViewOf is the card of the last reading, or what the task keeps of it outside that reading. */
-export function cardViewOf(kept: TaskCard, read: BoardCard | null): CardView {
+export function cardViewOf(
+  kept: TaskCard,
+  read: BoardCard | null,
+  boardCards: ReadonlySet<string>,
+): CardView {
   if (read === null) {
     return {
       repository: kept.repository,
@@ -112,7 +128,7 @@ export function cardViewOf(kept: TaskCard, read: BoardCard | null): CardView {
       status: kept.status,
       title: kept.title,
       body: "",
-      relations: [epicGroup(kept.epic, kept.repository)],
+      relations: [epicGroup(kept.epic, kept.repository, boardCards)],
     };
   }
   return {
@@ -122,6 +138,6 @@ export function cardViewOf(kept: TaskCard, read: BoardCard | null): CardView {
     status: read.status,
     title: read.title,
     body: read.body,
-    relations: relationsOf(read),
+    relations: relationsOf(read, boardCards),
   };
 }

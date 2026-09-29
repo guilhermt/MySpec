@@ -353,28 +353,6 @@ export function unsatisfied(card: BoardCard): CardDependency[] {
 }
 
 /**
- * actionHint is what keeps Start task from opening the creation dialog at once
- * for a card, shown next to or instead of the button; null when
- * nothing does.
- */
-export function actionHint(card: BoardCard, app: State | null): string | null {
-  switch (card.action) {
-    case "clone":
-      return `${card.repository} isn't cloned yet.`;
-    case "clone_missing": {
-      const path = findRepository(app, card.repositoryId)?.path ?? "";
-      return `The clone at ${path} is missing.`;
-    }
-    case "add_to_board":
-      return `${card.repository} isn't managed by this board.`;
-    case "other_board":
-      return `${card.repository} belongs to the board ${card.otherBoard}.`;
-    default:
-      return null;
-  }
-}
-
-/**
  * isCheckable tells whether a card can go into a discussion: it has a
  * repository, and that repository is one the board manages.
  */
