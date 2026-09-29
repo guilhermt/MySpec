@@ -12,7 +12,7 @@ vars:
   # the default is 4, or the cores there are when there are fewer.
   JOBS:
     sh: 'n=$(nproc); echo "${MYSPEC_JOBS:-$(( n < 4 ? n : 4 ))}"'
-  # The branch point with main, from which check:fast picks the frontend tests to run.
+  # The branch point with main, from which test:web picks the frontend tests to run.
   BASE:
     sh: git merge-base HEAD origin/main 2>/dev/null || echo HEAD
 
@@ -88,35 +88,35 @@ tasks:
   test:
     deps: [test:go, test:web]
 
-  test:fast:
-    summary: The tests of the inner loop, test:go:fast and test:web:fast
-    deps: [test:go:fast, test:web:fast]
-
   test:go:
+    summary: Runs the Go tests; a package that did not change comes from the test cache. The CI adds -race with `task test:go -- -race`
+    deps: [embed:stub]
+    cmds:
+      - gotestsum --format pkgname-and-test-fails -- -p {{.JOBS}} {{.CLI_ARGS}} ./...
+
+  test:web:
+    summary: Runs the frontend tests, both suites, that reach a file changed since the branch left main
+    dir: frontend
+    cmds:
+      - pnpm exec vitest run --changed {{.BASE}} --passWithNoTests --maxWorkers={{.JOBS}}
+
+  test:full:
+    deps: [test:go:full, test:web:full]
+
+  test:go:full:
+    summary: Runs every Go test with the race detector, in shuffled order, with coverage and its thresholds
     deps: [embed:stub]
     cmds:
       - mkdir -p coverage
       - gotestsum --format testdox -- -race -shuffle=on -count=1 -p {{.JOBS}} -coverprofile=coverage/go.out ./...
       - go-test-coverage --config .testcoverage.yml
 
-  test:go:fast:
-    summary: Runs the Go tests without the race detector nor coverage, so a package that did not change comes from the test cache
-    deps: [embed:stub]
-    cmds:
-      - gotestsum --format pkgname-and-test-fails -- -p {{.JOBS}} ./...
-
-  test:web:
-    summary: Runs the jsdom suite with coverage, then the computed-style suite in Chromium
+  test:web:full:
+    summary: Runs the jsdom suite with coverage and its thresholds, then the computed-style suite in Chromium
     dir: frontend
     cmds:
       - pnpm test:coverage --maxWorkers={{.JOBS}}
       - pnpm test:painted --maxWorkers={{.JOBS}}
-
-  test:web:fast:
-    summary: Runs the jsdom tests that reach a file changed since the branch left main, without coverage
-    dir: frontend
-    cmds:
-      - pnpm exec vitest run --project unit --changed {{.BASE}} --passWithNoTests --maxWorkers={{.JOBS}}
 
   captures:
     summary: Runs the computed-style suite saving the screenshots of the pull request to frontend/captures
@@ -189,20 +189,14 @@ tasks:
       - git diff --exit-code -- frontend/bindings
 
   check:
-    summary: Everything the CI runs, in order, one check at a time on the machine
-    # The lock lives outside the repository, so it holds across every clone and worktree: a second
-    # check waits for the first instead of splitting the cores with it.
-    vars:
-      LOCK: '{{env "XDG_RUNTIME_DIR" | default "/tmp"}}/myspec-check.lock'
+    summary: The everyday check, in seconds, for the agents and the CI
     cmds:
-      - |
-        if ! flock -n "{{.LOCK}}" true; then echo "task check: waiting for another check on this machine"; fi
-        flock "{{.LOCK}}" nice -n 10 "{{.TASK_EXE}}" tidy:check lint typecheck test vuln bindings:check
+      - nice -n 10 "{{.TASK_EXE}}" tidy:check lint typecheck test vuln bindings:check
 
-  check:fast:
-    summary: The checks of the inner loop, in seconds, without the race detector, the shuffle, coverage, the computed-style suite, vuln and bindings
+  check:full:
+    summary: Every test with the race detector, the shuffle and coverage; run on request and weekly in the CI
     cmds:
-      - nice -n 10 "{{.TASK_EXE}}" tidy:check lint typecheck test:fast
+      - nice -n 10 "{{.TASK_EXE}}" tidy:check lint typecheck test:full vuln bindings:check
 
   install:
     summary: Installs the app for the current user (binary, launcher entry, icons)

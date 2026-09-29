@@ -30,7 +30,7 @@ jobs:
     outputs:
       frontend: ${{ steps.filter.outputs.frontend }}
       go: ${{ steps.filter.outputs.go }}
-      app: ${{ steps.filter.outputs.app }}
+      build: ${{ steps.filter.outputs.build }}
     steps:
       - uses: dorny/paths-filter@v4
         id: filter
@@ -40,7 +40,6 @@ jobs:
               - Taskfile.yml
               - mise.toml
               - .github/workflows/ci.yml
-              - .github/scripts/**
             frontend:
               - *shared
               - frontend/**
@@ -52,20 +51,21 @@ jobs:
               - go.sum
               - internal/**
               - .golangci.yml
-              - .testcoverage.yml
-            app:
+            build:
+              - *shared
               - build/**
+              - go.mod
+              - go.sum
+              - frontend/package.json
+              - frontend/pnpm-lock.yaml
+              - frontend/vite.config.ts
 
-  # The frontend runs only on pull requests: main receives what a pull request already proved.
   web:
     name: Frontend
     needs: changes
     if: needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    permissions:
-      contents: read
-      pull-requests: write
     defaults:
       run:
         working-directory: frontend
@@ -85,7 +85,6 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: task lint:web
       - run: pnpm typecheck
-      - run: pnpm test:coverage --reporter=default --reporter=json --outputFile.json=./coverage/test-results.json
       - name: Resolve the Playwright version
         id: playwright
         run: echo "version=$(node -p "require('playwright/package.json').version")" >> "$GITHUB_OUTPUT"
@@ -95,39 +94,16 @@ jobs:
           key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
       - name: Install the Chromium of Playwright
         run: pnpm exec playwright install --with-deps --only-shell chromium
-      - run: pnpm test:painted
-      - uses: davelosert/vitest-coverage-report-action@v2
-        if: github.event_name == 'pull_request'
-        with:
-          working-directory: ./frontend
-          json-summary-path: ./coverage/coverage-summary.json
-          json-final-path: ./coverage/coverage-final.json
-          vite-config-path: ./vitest.config.ts
-      # The action takes no extra text, so the run summary is added to the
-      # comment it just wrote, found by the marker the action leaves behind.
-      - name: Add the test summary to the coverage comment
-        if: github.event_name == 'pull_request'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          python3 ../.github/scripts/coverage_comment.py \
-            --report ./coverage/test-results.json \
-            --repo ${{ github.repository }} \
-            --pr ${{ github.event.pull_request.number }} \
-            --marker '<!-- vitest-coverage-report-marker-./frontend -->'
+      - run: pnpm test
 
-  # Go runs on every push to main too: the coverage report of a pull request compares with the
-  # artifact of the last run on main.
+  # Go also runs on every push to main, which writes the cache the pull requests start from, the
+  # test results included: a package a pull request does not reach comes from the cache.
   go:
     name: Go
     needs: changes
     if: ${{ !cancelled() && (github.event_name == 'push' || needs.changes.outputs.go == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    permissions:
-      contents: read
-      actions: read
-      pull-requests: write
     steps:
       - uses: actions/checkout@v7
       - uses: jdx/mise-action@v4
@@ -135,8 +111,7 @@ jobs:
           cache: true
       - name: Install GTK and WebKitGTK headers
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libgtk-4-dev libwebkitgtk-6.0-dev pkg-config
-      # A cache key is written once, so the key carries the commit and only main writes one: every
-      # run starts from the modules and the build cache of the latest main.
+      # A cache key is written once, so the key carries the commit and only main writes one.
       - uses: actions/cache/restore@v6
         with:
           path: |
@@ -146,12 +121,15 @@ jobs:
           restore-keys: |
             go-${{ runner.os }}-${{ hashFiles('go.sum') }}-
             go-${{ runner.os }}-
+      - name: Install wails3
+        run: |
+          go install tool
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
       - run: task tidy:check
       - run: task lint:go
       - run: task vuln
-      - run: task test:go
-        env:
-          GOTESTSUM_JUNITFILE: coverage/junit.xml
+      - run: task bindings:check
+      - run: task test:go -- -race
       - uses: actions/cache/save@v6
         if: github.event_name == 'push'
         with:
@@ -159,39 +137,11 @@ jobs:
             ~/go/pkg/mod
             ~/.cache/go-build
           key: go-${{ runner.os }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
-      - uses: actions/upload-artifact@v7
-        with:
-          name: code-coverage
-          path: coverage/go.out
-      - uses: fgrosse/go-coverage-report@v1.3.1
-        id: coverage
-        if: github.event_name == 'pull_request'
-        with:
-          coverage-artifact-name: code-coverage
-          coverage-file-name: go.out
-          root-package: github.com/guilhermt/myspec
-          # The report is posted below instead, with the run summary on it.
-          skip-comment: true
-      - name: Comment the coverage report with the test summary
-        if: github.event_name == 'pull_request' && steps.coverage.outputs.coverage_report != ''
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPORT: ${{ steps.coverage.outputs.coverage_report }}
-        run: |
-          printf '%s' "$REPORT" > coverage/report.md
-          python3 .github/scripts/coverage_comment.py \
-            --report coverage/junit.xml \
-            --repo ${{ github.repository }} \
-            --pr ${{ github.event.pull_request.number }} \
-            --marker '<!-- go-coverage-report -->' \
-            --body-file coverage/report.md
 
-  # Build runs beside the other two, not after them: it proves the bindings and the binary,
-  # which do not depend on the tests.
   build:
     name: Build
     needs: changes
-    if: needs.changes.outputs.frontend == 'true' || needs.changes.outputs.go == 'true' || needs.changes.outputs.app == 'true'
+    if: needs.changes.outputs.build == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -201,8 +151,6 @@ jobs:
           cache: true
       - name: Install GTK and WebKitGTK headers
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libgtk-4-dev libwebkitgtk-6.0-dev pkg-config
-      # A cache key is written once, so the key carries the commit and only main writes one: every
-      # run starts from the modules and the build cache of the latest main.
       - uses: actions/cache/restore@v6
         with:
           path: |
@@ -218,7 +166,6 @@ jobs:
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
       - run: pnpm install --frozen-lockfile
         working-directory: frontend
-      - run: task bindings:check
       - run: task build
       - uses: actions/upload-artifact@v7
         with:

@@ -1,29 +1,29 @@
 # Testes
 
-Os testes são o que permite mudar o produto com confiança, e os limiares de cobertura fazem o CI falhar quando uma mudança chega sem eles. Uma feature está pronta quando os testes dela passam com `task test`, junto com todos os outros.
+Os testes são o que permite mudar o produto com confiança. Uma feature está pronta quando os testes dela passam com `task test`, junto com todos os outros. A cobertura e os limiares são medidos à parte, por `task test:full`, sob demanda e toda semana no CI.
 
 ## Como rodar
 
 | Comando | O que roda |
 |---|---|
-| `task test` | Tudo: Go e frontend, com cobertura |
-| `task test:go` | gotestsum com `-race -shuffle=on -count=1`, cobertura e o limiar de `.testcoverage.yml` |
-| `task test:web` | Vitest: a suíte do jsdom com cobertura e os limiares de `vitest.config.ts`, depois a de estilo computado no Chromium |
-| `task test:fast` | O laço de trabalho: `test:go:fast` e `test:web:fast` |
-| `task test:go:fast` | Os testes Go sem `-race`, sem embaralhar e sem cobertura, então um pacote que não mudou vem do cache de testes do Go |
-| `task test:web:fast` | Os testes do jsdom que alcançam um arquivo mudado desde que a branch saiu de `main`, sem cobertura; uma mudança na configuração do Vitest roda todos |
+| `task test` | `test:go` e `test:web`, em segundos |
+| `task test:go` | Os testes Go; um pacote que não mudou vem do cache de testes do Go. O CI acrescenta `-race` com `task test:go -- -race` |
+| `task test:web` | Os testes das duas suítes do frontend que alcançam um arquivo mudado desde que a branch saiu de `main`; uma mudança na configuração do Vitest roda todos |
+| `task test:full` | `test:go:full` e `test:web:full`, só quando pedido |
+| `task test:go:full` | gotestsum com `-race -shuffle=on -count=1`, cobertura e o limiar de `.testcoverage.yml` |
+| `task test:web:full` | Vitest: a suíte do jsdom com cobertura e os limiares de `vitest.config.ts`, depois a de estilo computado no Chromium |
 | `go test -run 'TestNome' ./internal/pacote/` | Um teste Go |
 | `pnpm vitest run <arquivo>` (em `frontend/`) | Um arquivo de testes do frontend |
 | `pnpm test:watch` (em `frontend/`) | Vitest interativo, na suíte do jsdom |
 | `pnpm test:painted` (em `frontend/`) | Só a suíte de estilo computado |
 
-Os testes Go rodam com o detector de corrida e em ordem embaralhada. Um teste que passa só numa ordem ou só sem `-race` está errado. As versões rápidas deixam o detector e o embaralhamento de fora porque eles custam caro e desligam o cache: o detector deixa a suíte três a quatro vezes mais lenta, e o `-shuffle` e o `-count=1` fazem cada pacote rodar de novo mesmo sem mudança. Elas servem ao laço de trabalho; o que prova a mudança é `task test`.
+Um teste que passa só numa ordem ou só sem `-race` está errado. Na máquina, `task test:go` deixa o detector de corrida de fora, porque ele deixa a suíte três a quatro vezes mais lenta; o CI roda com ele. O embaralhamento e o `-count=1` ficam só em `task test:go:full`, porque fazem cada pacote rodar de novo mesmo sem mudança.
 
 Cada ferramenta usa no máximo `JOBS` núcleos, 4 por padrão ou os que a máquina tiver se forem menos, e `MYSPEC_JOBS` muda o valor: `-p` do `go test`, `--maxWorkers` do Vitest e `--concurrency` do golangci-lint. Sem o limite, cada ferramenta toma todos os núcleos, e vários agentes rodando as verificações ao mesmo tempo disputam a máquina.
 
 ## Limiares
 
-Go: 60% por arquivo, 70% por pacote, 80% no total, excluindo `internal/app`, `main.go` e os pacotes de fakes. Frontend: 80% de linhas, funções e statements e 70% de branches, excluindo `components/ui`, `test/` e `main.tsx`, medidos só na suíte do jsdom. O CI comenta a cobertura e a diferença em relação a `main` em cada pull request.
+Go: 60% por arquivo, 70% por pacote, 80% no total, excluindo `internal/app`, `main.go` e os pacotes de fakes. Frontend: 80% de linhas, funções e statements e 70% de branches, excluindo `components/ui`, `test/` e `main.tsx`, medidos só na suíte do jsdom. Medidos por `task test:full`.
 
 ## Testes em Go
 
