@@ -39,16 +39,16 @@ Settings é um lugar da área principal (`structure.md` §1). Ele abre pelo bot�
 
 Fechar (**Close**, `Esc`, `Ctrl+,` de novo) volta ao lugar anterior, nunca à Home.
 
-**Settings abre em Defaults.** Um link de fora abre a página dele: **Edit the board in Settings…**, do `⋯` do board, abre Boards, e o aviso de clone abre Repositories.
+**Settings abre em Defaults.** Um link de fora abre a página dele: **Edit the board in Settings…**, do `⋯` do board, abre Boards. Aberto por `Ctrl+,` ou por um link, o foco vai ao item da página na navegação; pelo clique no rodapé, fica no botão.
 
 **A navegação** fica à esquerda, com a largura `--snav-w` (13rem), e tem quatro itens: **Defaults**, **Boards**, **Repositories** e **Prompts**. Cada item tem o ícone e o nome.
 
 - O aberto é o lugar aberto: véu `--brand-tint-plane`, anel `--brand-ring`, ícone em `--brand-ink`, peso 500 e `aria-current="page"`.
-- **Repositories** leva `◇ N` à direita quando algum clone está inexistente, com o motivo no tooltip e na descrição acessível.
-- `↑` e `↓` percorrem os itens.
+- **Repositories** leva `◇ N` à direita quando algum clone está inexistente, com N o número deles (um repositório sem clone não conta) e o motivo no tooltip e na descrição acessível: `The clone of acme/infra is missing`, `The clones of 2 repositories are missing: acme/infra, acme/tools`.
+- A navegação é uma parada de Tab. `↑` e `↓` trocam de página, `Home` e `End` vão às pontas; com a navegação em linha, `←` e `→` também.
 - A navegação fica fixa ao rolar a página.
 
-O par navegação e página fica centrado em pixel inteiro, com `--space-12` entre os dois e a página na medida `--measure`. Abaixo de 820 px de área principal (janela abaixo de cerca de 1100 px), a navegação vira uma linha acima da página. Na metade do monitor, ela fica à esquerda.
+O par navegação e página fica centrado em pixel inteiro, com `--space-12` entre os dois e a página na medida `--measure` (800 px; a largura máxima da caixa inclui as folgas dos lados). Abaixo de 820 px de área principal (janela abaixo de cerca de 1100 px), a navegação vira uma linha acima da página. Na metade do monitor, ela fica à esquerda, e a página tem 674 px. Abaixo de 720 px de área principal, as ações da direita de uma linha de Settings descem para baixo do texto.
 
 Não há página de aparência. O tema fica só no botão do rodapé da lateral (System, Light, Dark, em ciclo).
 
@@ -69,7 +69,7 @@ Título `Defaults`, com a frase `What a new task, review or discussion starts wi
 - `Agent`: `An agent reviews each step with the implementer; clean steps are committed.`
 - `Manual`: `You review each step in VS Code, stage the files and approve.`
 
-A escolhida tem véu `--brand-tint` e anel `--brand-ring`. Ao escolher, a opção mostra o spinner e `· saving…`. Uma falha ao salvar aparece sob as opções, em vermelho, com **Try again**, como na linha do modelo.
+A escolhida tem véu `--brand-tint` e anel `--brand-ring`. Ao escolher, a opção mostra o spinner e `· saving…`. Uma falha ao salvar volta à escolha salva e aparece sob as opções, em vermelho, com **Try again**, como na linha do modelo: `Couldn't save Manual: <mensagem>`. Abaixo de 820 px de área principal, as duas opções ficam uma sobre a outra.
 
 **Models.** Ao lado do título da seção vem `6 of 9 changed from the factory defaults`. As etapas ficam em grupos contornados por `--line-1`, uma linha por etapa:
 
@@ -84,24 +84,24 @@ Cada linha tem o nome da etapa à esquerda e o chip de modelo e esforço à dire
 
 - **Escolha própria:** o chip mudado da fábrica fica em `--ink-1`, peso 500, borda `--line-3`, e diz o padrão de fábrica no tooltip (`Factory default: Fable 5.1 · high`).
 - **Escolha de fábrica:** fica quieta, em `--ink-2`, com `The factory default` no tooltip.
-- O nome acessível diz tudo: `PRD: Opus 5.5 (1M) · xhigh, changed from the factory default Fable 5.1 · high`.
+- O nome acessível diz tudo: `PRD: Opus 5.5 (1M) · xhigh, changed from the factory default Fable 5.1 · high`; indisponível, `Step review: Opus 4.1 · high, unavailable, changed from the factory default Opus 5.5 (1M) · high`.
 
 **O menu do chip** tem dois grupos de `menuitemradio`, uma escolha em cada:
 
 - `Model`, os modelos do catálogo, na ordem do CLI;
 - `Effort · <modelo>`, os esforços do modelo escolhido.
 
-O padrão de fábrica tem a marca `factory` à direita. No pé do menu vem `From the Claude Code installed here, read when MySpec opened.` Um modelo sem esforço (`Haiku 4.5`) não tem o grupo de esforço, e o menu diz `Haiku 4.5 has no effort levels.`
+O modelo de fábrica tem a marca `factory` à direita, e o esforço de fábrica a tem só quando o modelo escolhido é o de fábrica. No pé do menu vem `From the Claude Code installed here, read when MySpec opened.` Um modelo sem esforço (`Haiku 4.5`) não tem o grupo de esforço, e o menu diz `Haiku 4.5 has no effort levels.` A marca `factory` e o pé são só de Defaults, onde a fábrica é a referência; o título `Effort · <modelo>`, a razão de indisponível e o menu que espera o catálogo valem em todo seletor de modelo do produto.
 
 **Estados da linha:**
 
 | Estado | O que aparece |
 |---|---|
 | Salvando | O chip com o spinner e `Saving…` |
-| Falha ao salvar | O chip volta ao valor anterior. Sob a linha, em vermelho: `Couldn't save Opus 5.5 (1M) · high: no space left on the disk of ~/.local/share/myspec. Free some space, then try again.` e **Try again** |
-| Indisponível | `◇ Opus 4.1 · high · unavailable`. O tooltip diz `The installed Claude Code no longer lists Opus 4.1. A session still starts with it, and the CLI decides.` O produto nunca troca a escolha |
-| Lendo o catálogo | A escolha salva continua à vista, no chip, com o **brilho** de leitura (`principles.md` §8) e sem spinner. Ao lado do título da seção vem `Reading the models of Claude Code…`, com brilho. Só o menu espera a leitura, e o tooltip diz isso |
-| Nenhuma leitura deu certo | A faixa afundada `◇ Claude Code was not found` · `Install it or point MYSPEC_CLAUDE_PATH at the executable, then reopen MySpec. The choices below stay as they are.`, nunca vermelha, com os outros dois textos de `features.md` (Modelos e esforço) conforme o caso. Os chips mostram as escolhas salvas, e o menu diz por quê, no lugar das opções |
+| Falha ao salvar | O chip volta ao valor anterior. Sob a linha, em vermelho: `Couldn't save Opus 5.5 (1M) · high: ` e a mensagem, com **Try again**. Com o disco cheio, a mensagem é `no space left on the disk of ~/.local/share/myspec. Free some space, then try again.` |
+| Indisponível | `◇ Opus 4.1 · high · unavailable`. O tooltip diz `The installed Claude Code no longer lists Opus 4.1. A session still starts with it, and the CLI decides.`, ou, com o modelo listado e o esforço não, `The installed Claude Code doesn't offer max for Haiku 4.5. A session still starts with it, and the CLI decides.` O produto nunca troca a escolha |
+| Lendo o catálogo | A escolha salva continua à vista, no chip, com o **brilho** de leitura (`principles.md` §8) e sem spinner. Ao lado do título da seção vem `Reading the models of Claude Code…`, com brilho, no lugar da contagem. Só o menu espera a leitura: ele não abre, e o tooltip diz `Reading the models of Claude Code · the menu opens when it ends` |
+| Nenhuma leitura deu certo | A faixa afundada, nunca vermelha, por causa: `◇ Claude Code was not found` · `Install it or point MYSPEC_CLAUDE_PATH at the executable, then reopen MySpec. The choices below stay as they are.`; `◇ The installed Claude Code doesn't list its models` · `Update it, then reopen MySpec. The choices below stay as they are.`; `◇ Couldn't read the models of Claude Code` · `Reopen MySpec to try again. The choices below stay as they are.` Os chips mostram as escolhas salvas, e o menu diz por quê, no lugar das opções, com os textos de `features.md` (Modelos e esforço) |
 
 No pé da seção: `A commit runs in the session of its step or of its pull request review, with that session's model and effort.`
 
@@ -111,22 +111,24 @@ Título `Boards`, com a frase `The GitHub projects your tasks start from, each w
 
 - o ícone do board;
 - o título, peso 500, e o projeto no GitHub como link (`acme/projects/7 ↗`, com a URL no tooltip);
-- `Organization · 6 repositories: api, billing, docs, gateway, sdk-js, web`;
-- `Final: Done, Won't do, Duplicate · New cards: None`;
-- à direita, a idade da leitura (`Read 2m ago`, `Read yesterday`, `Not read yet`, com a hora no tooltip), **Edit…** secundário e **Remove…** fantasma.
+- `Organization · 6 repositories: api, billing, docs, gateway, sdk-js, web` (`No repositories` sem nenhum; `dono/nome` em todos quando algum não é do dono do board, para dois nomes curtos iguais não se confundirem);
+- `Final: Done, Won't do, Duplicate · New cards: None` (`Final: None` sem final); num board sem campo `Status`, `No Status field: its cards end when their issues close`;
+- à direita, a idade da leitura, a mesma do cabeçalho do board (`Read 2m ago`, `Read 1d ago`, `Not read yet`, `Reading…`, com a hora no tooltip), **Edit…** secundário e **Remove…** fantasma.
 
-**A falha de leitura** segue `screens/board.md` §3.8: nunca é vermelha, nunca é situação. A idade vira `◇ Read failed 18m ago`. Sob a linha entra uma faixa afundada com `◇`, a mensagem de `features.md` (Falhas), `The last reading stays in use.` e **Try again**. Relendo, a idade diz `Reading…` com o spinner, e **Try again** diz `Trying…`.
+**Sem board**, a página diz `No boards yet` / `Add a board to start tasks from the cards of a GitHub project.`, com **Add board**, secundário, sob o texto: a ação do vazio é a saída dele, mesmo com o cabeçalho a tendo.
+
+**A falha de leitura** segue `screens/board.md` §3.8: nunca é vermelha, nunca é situação. A idade vira `◇ Read failed 18m ago`. Sob a linha entra uma faixa afundada com `◇`, a mensagem de `features.md` (Falhas), `The last reading stays in use.` e **Try again**. Relendo, a idade diz `Reading…` com o spinner, e **Try again** dá lugar a `Reading…` com o spinner, como toda faixa de aviso tentando. A idade é o componente do cabeçalho do board, com as formas `Not read yet` e `◇ Read failed 18m ago`, que ele não mostra.
 
 ### 2.4 O diálogo de board
 
-É o diálogo largo (`--size-dialog-wide`), a `8vh` do topo. O título é **Add board** ou **Edit board**, e o subtítulo diz o board e o passo: `Data Platform · acme · Step 2 of 3 · Statuses`. No rodapé ficam, da esquerda para a direita:
+É o diálogo largo (`--size-dialog-wide`), a `8vh` do topo. O título é **Add board** ou **Edit board**, e o subtítulo diz o board e o passo: `Data Platform · acme · Step 2 of 3 · Statuses`; o primeiro passo do Add, sem board ainda, `Step 1 of 3 · The project`; um diálogo de um passo só não diz `Step 1 of 1`. No rodapé ficam, da esquerda para a direita:
 
 - **Back**, fantasma com a seta, a partir do segundo passo, que volta ao passo anterior do mesmo diálogo;
 - o que falta ou o que a confirmação faz, em `--text-meta`, ou a recusa em vermelho numa linha própria acima dos botões;
 - **Cancel**;
 - o primário, com `Ctrl ↵`.
 
-O foco começa no primeiro campo do passo. Cada abertura relê o board.
+O foco começa no primeiro campo do passo, também depois de **Back** e **Continue**. **Back** guarda o que foi escolhido nos passos seguintes; o passo 1 com a mesma URL não relê, e uma URL mudada relê e recomeça as escolhas. Cada abertura relê o board. Confirmando, o primário diz `Adding…` ou `Saving…`, e **Cancel** e **Back** ficam tracejados.
 
 **Add board, em três passos:**
 
@@ -134,43 +136,43 @@ O foco começa no primeiro campo do passo. Cada abertura relê o board.
    - O campo `URL of the GitHub project`, em mono, com a ajuda `github.com/orgs/<org>/projects/<n> or github.com/users/<user>/projects/<n>. Views and filters in the URL are fine.`
    - **Continue**, e `Enter` lê.
    - **Lendo:** o campo fica desabilitado, o rodapé diz `Reading the board…`, e **Continue** diz `Reading…` com o spinner.
-   - **Recusa:** o campo fica com a borda e o trilho de erro, e a mensagem vai sob ele, em vermelho, com o que fazer. As mensagens são `This isn't the URL of a GitHub project.`, `<título> is already registered.` e as de `features.md` (Falhas). Um exemplo: `The board doesn't exist or this account can't read it. Check the number, or run gh auth refresh -s read:project.` O usuário corrige e lê de novo.
+   - **Recusa:** o campo fica com a borda e o trilho de erro, e a mensagem vai sob ele, em vermelho, com o que fazer. As mensagens são `This isn't the URL of a GitHub project.`, `<título> is already registered.` e as de `features.md` (Falhas). Um exemplo: `The board doesn't exist or this account can't read it. Check the number and that this account can see the project.` O usuário corrige e lê de novo.
 2. **Statuses** (`Step 2 of 3`).
    - `Mark the statuses that end the work on a card, and the status a card published by a discussion starts in.`
    - Uma tabela só, com as opções na ordem do board e duas colunas: `Ends the work` (caixa de seleção) e `New cards` (rádio). A última linha é `No status`, só com o rádio.
-   - A pré-marcação é a de `features.md` (Cadastrar um board), com a ajuda `Done and To do are marked for you, from their names.`
+   - A pré-marcação é a de `features.md` (Cadastrar um board), com a ajuda que nomeia o que foi marcado: `Done and To do are marked for you, from their names.` (`Done is marked for you, from its name.`; sem nenhum, sem ajuda).
    - **Continue**.
 3. **Repositories** (`Step 3 of 3`).
    - `Check the repositories this board manages. They come from the issues on the board.`
-   - Uma linha por repositório, marcada, com o nome em peso 500, `N cards` e, à direita, como ele fica ligado: `Registered · <caminho>`, `Registered · Not cloned`, `Clone found · <caminho>`, `Clone found · 2 clones` (um menu na linha escolhe o clone) ou `Registered without a clone`.
+   - Uma linha por repositório, marcada, com o nome em peso 500, `N cards` e, à direita, como ele fica ligado: `Registered · <caminho>`, `Registered · Not cloned`, `Registered · the clone at <caminho> is missing`, `Clone found · <caminho>`, `Clone found · 2 clones:` seguido do seletor com o clone escolhido, na mesma linha, ou `Registered without a clone`.
    - O repositório de outro board fica desabilitado, com a caixa tracejada e `acme/api belongs to the board Platform Roadmap.`
    - O campo `owner/name` com **Add** acrescenta um repositório, com as recusas de `features.md`.
    - **Add board**.
 
 **Um board sem campo `Status`** pula o segundo passo e conta um a menos: `Release Train · acme · Step 2 of 2 · Repositories`. O passo dos repositórios abre com a nota afundada `◇ This board has no Status field, so there are no statuses to mark: its cards end when their issues close.`
 
-**Edit board, em dois passos.** Ele abre relendo o board, com `Reading the board…` e só **Cancel**. Uma falha da releitura aparece no lugar, com **Try again**.
+**Edit board, em dois passos.** Ele abre relendo o board, com `Reading the board…` e só **Cancel**. Uma falha da releitura aparece no corpo, em vermelho, e o rodapé ganha **Try again**, primário, que relê.
 
-1. **Statuses** (`Platform Roadmap · acme · Step 1 of 2 · Statuses`). Os finais vêm como guardados. Quando o board mudou, entra no alto a nota afundada `◇ The board changed since it was saved. Archived is gone from its statuses, and QA is new, not marked.` A opção nova tem a etiqueta `new`, desmarcada. O status de cards novos volta a `No status` quando a opção sumiu.
+1. **Statuses** (`Platform Roadmap · acme · Step 1 of 2 · Statuses`). Os finais vêm como guardados. Quando o board mudou desde o último cadastro ou edição, entra no alto a nota afundada `◇ The board changed since it was saved. Archived is gone from its statuses, and QA is new, not marked.`: as opções que sumiram (`Archived and Blocked are gone…`) e as novas (`QA and Staging are new…`), cada parte só quando existe, e ` New cards now start with no status.` quando o status de cards novos sumiu. A opção nova tem a etiqueta `new`, desmarcada. O status de cards novos volta a `No status` quando a opção sumiu.
 2. **Repositories** (`Step 2 of 2`). Os do board vêm marcados, e os outros repositórios das issues, desmarcados. **Save**.
 
 **Desmarcar um repositório do board diz a consequência na linha dele.** A linha fica afundada, e embaixo vem, com a seta:
 
-- `Moves to No board: it has a clone. Nothing on disk changes.` (ou `it has a clone and 3 archived tasks. Its tasks keep working.`);
+- `Moves to No board: it has ` e o que ele tem, na ordem `a clone`, `N active tasks`, `N archived tasks`, `N reviews`, só as partes que existem, e depois `. Its tasks keep working.` com tasks, `. Its reviews keep working.` só com reviews, ou `. Nothing on disk changes.` só com o clone (`Moves to No board: it has a clone. Nothing on disk changes.`, `Moves to No board: it has a clone and 3 archived tasks. Its tasks keep working.`);
 - `Leaves MySpec: it has no clone, tasks or reviews.`
 
-O rodapé soma, ao lado de **Save**: `acme/docs moves to No board, and acme/billing leaves MySpec.` Um erro ao salvar aparece no rodapé, em vermelho, e o diálogo fica aberto.
+O rodapé soma, ao lado de **Save**: `acme/docs moves to No board, and acme/billing leaves MySpec.` (`acme/docs and acme/web move to No board.`; um destino só, sem o `, and`). Um erro ao salvar aparece no rodapé, em vermelho, e o diálogo fica aberto.
 
 ### 2.5 Remove board
 
 É o diálogo mínimo de confirmação (`alertdialog`), com o foco em **Cancel**:
 
 - título `Remove Platform Roadmap?`;
-- corpo com o texto de `features.md`: `5 repositories move to No board and 1 leaves MySpec. Tasks keep their cards, and nothing changes on GitHub or on disk.`;
-- uma linha afundada com os nomes por destino: `To No board: api, docs, gateway, sdk-js, web` e `Leaves MySpec: billing, with no clone, tasks or reviews`;
+- corpo com o texto de `features.md`: `5 repositories move to No board and 1 leaves MySpec. Tasks keep their cards, and nothing changes on GitHub or on disk.`, sem a parte que dá zero (`1 repository moves to No board.`; num board sem repositório, `The board has no repositories.`);
+- uma linha afundada com os nomes por destino, cada um só quando tem algum: `To No board: api, docs, gateway, sdk-js, web` e `Leaves MySpec: billing, with no clone, tasks or reviews`;
 - **Cancel** e **Remove board**, perigoso.
 
-Enquanto a prévia é lida, o corpo diz `The board leaves MySpec.` Um erro fica no diálogo.
+Enquanto a prévia é lida, o corpo diz `The board leaves MySpec.`, sem a linha afundada, e **Remove board** fica habilitado; uma prévia que falha deixa esse corpo com a linha apagada `Couldn't tell what happens to its repositories: <mensagem>`, e remover continua possível. Removendo, `Removing…` e **Cancel** tracejado; um erro fica no rodapé, e o diálogo aberto.
 
 ### 2.6 Repositories
 
@@ -194,7 +196,7 @@ Com as instruções de review definidas, a segunda linha diz `· Review instruct
 | Sem clone | `◇ Its cards can't start a task until it's cloned.` | **Clone** |
 | Clonando | O spinner e `Cloning into ~/code/android…` | — |
 | O clone falhou | A mensagem do `gh`, em vermelho | **Try again** |
-| Clone inexistente | `◇ The clone is missing. Its task can't start a step or close until it has one.` | **Change path…** |
+| Clone inexistente | `◇ The clone is missing. Its tasks can't start a step or close until it has one.` | **Change path…** |
 | **Change path** recusado | Em vermelho, sob a linha: `~/code/infra-old is a clone of acme/terraform, not of acme/infra.` | — |
 
 **O `⋯`** tem:
@@ -203,18 +205,18 @@ Com as instruções de review definidas, a segunda linha diz `· Review instruct
 - **Review instructions…**, com `None` ou `Set`;
 - depois de um separador, **Remove…**.
 
-**Remove…** fica desabilitado em `--ink-4`, nunca em vermelho, com o motivo abaixo dele no menu: `8 archived tasks and 4 reviews: delete them first.`
+**Remove…** fica desabilitado em `--ink-4`, nunca em vermelho, com o motivo abaixo dele no menu: as tasks ativas, as arquivadas e os reviews que ele tem, só os que existem, e `: delete them first.` (`8 archived tasks and 4 reviews: delete them first.`). Num repositório clonando, **Change path…** e **Remove…** ficam desabilitados, com `Cloning…` como razão.
 
 **Review instructions** abre sob a linha um bloco afundado com:
 
 - o rótulo `Review instructions`;
 - a área de texto em mono, de 5 linhas;
 - a ajuda `Added to every pull request review of acme/web, the reviews of task pull requests included. A change applies from the next pass.`;
-- **Cancel** e **Save**.
+- **Cancel** e **Save**, secundário, tracejado sem mudança. Settings não tem primária, e mais de um bloco pode ficar aberto. `Esc` no bloco cancela, sem fechar Settings, e o foco volta ao `⋯`.
 
-**Clone folder** fica no pé da página: `Where Clone puts a repository that isn't on this machine`, com o valor (`Not chosen · you're asked the first time you clone`, ou o caminho em mono) e **Choose…**.
+**Clone folder** fica no pé da página: `Where Clone puts a repository that isn't on this machine`, com o valor (`Not chosen · you're asked the first time you clone`, ou o caminho em mono) e **Choose…**. Uma falha de **Choose…** fica sob a linha, em vermelho.
 
-**Vazio.** Sem repositório, a página diz `No repositories yet` / `Add a clone from this machine, or add a board: the repositories of its issues come with it.`, com **Go to Boards**. O `◇` da navegação some.
+**Vazio.** Sem repositório, a página diz `No repositories yet` / `Add a clone from this machine, or add a board: the repositories of its issues come with it.`, com as duas saídas que o texto oferece: **Add repository**, secundário, e **Go to Boards**, fantasma. O `◇` da navegação some.
 
 ### 2.7 Add repository
 
@@ -224,9 +226,10 @@ Com as instruções de review definidas, a segunda linha diz `· Review instruct
 |---|---|
 | Varrendo | `Scanning your home folder…` com o spinner (`role="status"`). **Add repository** fica tracejado, com `Wait for the scan to end.` ao lado |
 | Lista | O filtro `Filter by name or path`. Primeiro os clones disponíveis, em ordem alfabética, cada um com a caixa, `dono/nome` e o caminho em mono. O clone de um repositório registrado sem clone diz `Registered without a clone: this links the clone to it.` Os já registrados ficam dobrados no fim, em `Already registered 9`, desabilitados |
+| A varredura falhou | `Couldn't scan your home folder: <mensagem>` em vermelho, com **Try again**, que varre de novo; **Browse…** continua valendo |
 | Nada achado | `No GitHub clones were found in your home folder, up to 6 folders deep.` |
 | Filtro sem resultado | `No repositories match.` |
-| Confirmar | **Add 2 repositories** cadastra um por vez. Se todos passam, o diálogo fecha. Uma recusa fica sob a linha, em vermelho, com a linha ainda marcada; os que passaram viram registrados |
+| Confirmar | **Add 2 repositories** cadastra um por vez; **Cancel** e **Browse…** ficam tracejados até o último. Se todos passam, o diálogo fecha. Uma recusa fica sob a linha, em vermelho, com a linha ainda marcada; os que passaram viram registrados |
 | **Browse…** | À esquerda do rodapé. Abre o seletor nativo. A recusa vai em vermelho, numa linha própria acima dos botões: `~/Downloads/site is not the root of a git repository.` |
 
 ### 2.8 Remove repository
@@ -238,9 +241,11 @@ Com as instruções de review definidas, a segunda linha diz `· Review instruct
 - a linha apagada `A reading of the board suggests it again while its issues are there.`;
 - **Cancel** e **Remove repository**, perigoso.
 
+Sem board, o corpo não cita o board, nem a linha apagada; sem clone, `Nothing is deleted on disk.` O diálogo fica aberto até o fim, com `Removing…`, e um erro fica no rodapé.
+
 ### 2.9 Prompts
 
-**A lista.** Título `Prompts`, com a frase `The instructions each session starts with. A prompt you never edit follows the default of every new version of MySpec.` Os nove prompts ficam numa lista contornada, na ordem do workflow. Cada linha é um link com o ícone, o nome (peso 500), a descrição de `research/rest.md` §1.5 e, à direita, `Default` em `--ink-4` ou a etiqueta `Edited Sep 20`, com a seta. A linha tem hover, foco e pressionado.
+**A lista.** Título `Prompts`, com a frase `The instructions each session starts with. A prompt you never edit follows the default of every new version of MySpec.` Os nove prompts ficam numa lista contornada, na ordem do workflow. Cada linha é um link com o ícone, o nome (peso 500), a descrição de `research/rest.md` §1.5 e, à direita, `Default` em `--ink-4` ou a etiqueta `Edited Sep 20` (`Edited today`, `Edited yesterday`, `Edited Sep 20, 2025` de outro ano, com a hora inteira no tooltip), com a seta. A linha tem hover, foco e pressionado. Uma falha ao ler quais estão editados deixa a coluna da direita vazia, com `Couldn't read which prompts are edited: <mensagem>` e **Try again** sob a lista; cada prompt continua abrindo.
 
 **O prompt.** No alto fica **← Prompts**. O cabeçalho tem:
 
@@ -251,7 +256,11 @@ Com as instruções de review definidas, a segunda linha diz `· Review instruct
 O texto vem renderizado num bloco contornado, com os placeholders como etiqueta mono (`{{prd_path}}`, com `Filled when the session starts` no tooltip). No pé: `MySpec fills the placeholders when a session starts. A session that is running keeps the prompt it started with.`
 
 - **Lendo:** o esqueleto de três linhas.
-- **A leitura falhou:** o aviso local, dispensável.
+- **A leitura falhou:** a faixa local `Couldn't read the PRD prompt`, com a mensagem e **Try again**, porque a página não tem mais nada a mostrar.
+
+Lendo ou com a falha, **Edit** e **Reset to default…** ficam tracejados, com a razão.
+
+Um prompt nunca editado não tem etiqueta nem a frase das linhas.
 
 **A edição.** No alto fica **← PRD**. Título `Editing the PRD prompt`, com `Markdown. The placeholders are filled when a session starts.` A área de texto em mono ocupa a coluna, e à direita fica a coluna **Placeholders** (`The ones the default uses. Move or remove any of them.`). Cada placeholder aparece como etiqueta, com o que ele vira e, nos três casos em que se aplica, o que acontece sem ele (`Without it, the initial context is added at the end.`). Abaixo de 820 px, a coluna desce para baixo do editor.
 
@@ -358,31 +367,36 @@ Apagado, a área volta ao History, que já não tem a linha.
 
 ## 5. O início do app
 
-Antes do primeiro estado, a janela nunca fica em branco.
+Antes do primeiro estado, a janela nunca fica em branco: ela abre antes de o app abrir os dados.
 
-- **A lateral:** em esqueleto, com o topo, os nós e as linhas em blocos com brilho, e o seletor de tema no rodapé.
-- **A área principal:** a marca e `Starting MySpec…`, com os passos que bloqueiam a primeira tela, nomeados enquanto rodam. Cada passo tem o visto quando feito, o spinner quando roda e o círculo quando ainda não começou:
-  - `Opening your data`;
-  - `Checking the clones of 12 repositories`.
+- **A lateral:** em esqueleto, na hora, com o topo, os nós e as linhas em blocos com brilho, e o seletor de tema no rodapé; com a faixa recolhida guardada, o esqueleto é a faixa. O tema é o que a interface pintou por último, ou o do sistema, até o estado chegar; o seletor mostra a preferência guardada, e a escolha é salva quando o início termina.
+- **A área principal**, só depois de 400 ms, para uma abertura normal não piscar: a marca e `Starting MySpec…`, com os passos que bloqueiam a primeira tela, nomeados enquanto rodam. Cada passo tem o visto quando feito, o spinner quando roda e o círculo quando ainda não começou:
+  - `Opening your data`: o teste do diretório de dados, o banco com as migrações, as configurações, os prompts, as conversas e o que está guardado;
+  - `Checking the clones of 12 repositories` (`the clone of 1 repository`), que aparece quando o primeiro termina e só com algum repositório com caminho; as tasks, os reviews e as discussões são retomados depois dele, porque precisam saber que clone falta.
 
   O que não bloqueia (a leitura do catálogo, que tem a última leitura guardada) não entra na lista.
-- **Um passo lento** mostra o tempo e a razão: `12s · ~/code/infra doesn't answer`.
+- **Um passo lento** (acima de 3 s) mostra o tempo, a cada segundo (`12s`, `1m 15s`), e, no dos clones, a razão: `12s · ~/code/infra doesn't answer`, o primeiro caminho que passou de 3 s. O início não tem prazo total: um clone lento não o derruba, e o usuário vê por quê.
 
 **A falha:**
 
 - a lateral fica em esqueleto parado, sem brilho;
-- a área diz `MySpec couldn't start` com o losango de erro, e `MySpec can't open its data. Nothing was changed: your tasks, documents and worktrees are as they were. Give your user back the folder ~/.local/share/myspec, then try again.`;
+- a área diz, na hora, `MySpec couldn't start` com o losango de erro, e o texto do caso, com o diretório de dados e o log que o app usa (os exemplos são os padrão):
+  - permissão negada nos dados: `MySpec can't open its data. Nothing was changed: your tasks, documents and worktrees are as they were. Give your user back the folder ~/.local/share/myspec, then try again.`;
+  - disco cheio: `MySpec can't open its data: the disk of ~/.local/share/myspec is full. Free some space, then try again.`;
+  - qualquer outro: `MySpec couldn't finish starting. If trying again fails the same way, the log at ~/.local/state/myspec/myspec.log says what happened before it.`;
 - o erro fica num bloco de código copiável (`open ~/.local/share/myspec/myspec.db: permission denied`);
-- **Try again** `Enter` é a primária, com o foco.
+- **Try again** `Enter` é a primária, com o foco. Ela volta aos passos e recomeça o início, sem reabrir o app. Com o foco em **Copy** ou no tema, `Enter` é desse botão.
+
+Uma falha antes de haver janela (criar os diretórios, abrir o log) sai com o erro no terminal. Uma migração recusada termina o primeiro passo e abre a seção 7.
 
 ## 6. As boas-vindas
 
-As boas-vindas aparecem enquanto nenhum board e nenhum repositório estão cadastrados: na primeira execução e depois de remover o último.
+As boas-vindas aparecem enquanto nenhum board e nenhum repositório estão cadastrados e nenhum item está ativo: na primeira execução e depois de remover o último. Uma discussão ativa de um board removido deixa o app no shell normal, com a árvore, porque ainda trabalha e notifica. Elas são a Home desse momento, dentro do shell. Os lugares que valem são a Home, Settings e, com algo arquivado, History e os arquivados; qualquer outro vira a Home. `Ctrl+,`, `Esc` e `Alt+←` `Alt+→` agem; `Ctrl+N`, `Ctrl+J` e `Ctrl+E` não. Depois do primeiro cadastro, o lugar na tela fica. `Welcome to MySpec` é o título do lugar: recebe o foco na volta de Settings, e **Add board** o recebe quando as boas-vindas aparecem.
 
-**A lateral** tem só o topo e o rodapé:
+**A lateral** tem só o topo e o rodapé, sem `«`, filtro nem árvore:
 
 - **New** fica tracejado, com `Register a board or a repository first`;
-- **History** fica tracejado, com `Nothing archived yet`;
+- **History** fica tracejado, com `Nothing archived yet`, quando nada está arquivado, e funciona quando algo está (uma discussão arquivada de um board removido);
 - o tema e **Settings** funcionam, e `Ctrl+,` abre Settings.
 
 **A área principal** é uma coluna na medida `--measure-read`:
@@ -395,25 +409,27 @@ As boas-vindas aparecem enquanto nenhum board e nenhum repositório estão cadas
 
    Cada linha abre o diálogo da seção 2.4 ou da 2.7.
 
-**This machine** aparece só quando falta algo. Numa primeira execução que funciona, não há nada a checar. Cada item tem o losango contornado `◇`, o que falta em peso 500, o que fazer e, quando há, o comando em mono com **Copy**:
+**This machine** aparece só quando falta algo. Numa primeira execução que funciona, não há nada a checar. Cada item tem o losango contornado `◇`, o que falta em peso 500, o que fazer e, quando há, o comando em mono com **Copy**, nesta ordem:
 
 | Falta | Texto | Comando |
 |---|---|---|
-| O `gh` sem login | `The GitHub CLI isn't signed in` · `Sign in from a terminal, then add a board. Adding a repository works without it.` | `gh auth login` |
+| O Claude Code não encontrado nesta execução | `Claude Code was not found` · `Every task, review and discussion runs in it. Install it, or point MYSPEC_CLAUDE_PATH at the executable, then reopen MySpec. You can register boards and repositories meanwhile.` | — |
 | O `gh` não instalado | `The GitHub CLI isn't installed` · `MySpec reads boards and pull requests through it. Install it and sign in, then add a board.` | `gh auth login` |
-| O Claude Code não encontrado | `Claude Code was not found` · `Every task, review and discussion runs in it. Install it, or point MYSPEC_CLAUDE_PATH at the executable, then reopen MySpec. You can register boards and repositories meanwhile.` | — |
+| O `gh` sem login | `The GitHub CLI isn't signed in` · `Sign in from a terminal, then add a board. Adding a repository works without it.` | `gh auth login` |
 
-Depois do primeiro cadastro, a tela dá lugar à Home com `Nothing in progress` (`screens/board.md` §2.2).
+A checagem roda quando as boas-vindas aparecem, quando a leitura dos modelos do Claude Code termina (ela roda em segundo plano, e a primeira execução numa máquina sem Claude Code é o caso que o bloco cobre) e sempre que a janela volta ao foco, para o usuário resolver num terminal e voltar. O Claude Code conta como achado quando a leitura deu certo ou só não listou os modelos. O login é lido do `gh` local, sem rede. Um item que a checagem não sabe não aparece.
+
+Depois do primeiro cadastro, a tela dá lugar à Home com `Nothing in progress` (`screens/board.md` §2.2), com o foco no título dela.
 
 ## 7. A migração recusada
 
-**MySpec couldn't be updated** ocupa a janela inteira, sem a lateral e sem atalhos, numa coluna na medida `--measure-read`. De cima para baixo:
+**MySpec couldn't be updated** ocupa a janela inteira, sem a lateral e sem atalhos, numa coluna na medida `--measure-read`, no último tema que a interface usou, ou no do sistema. De cima para baixo:
 
 1. a marca e o título em `--text-display`;
 2. o texto de `features.md` (Dados de uma versão com áreas de trabalho);
-3. **um bloco afundado por tipo de caso,** com os textos de `research/rest.md` §4. Cada bloco tem o título, o que fazer e, separados por fios, os lugares (repositório ou caminho em mono), o detalhe (`The origin remote is not on GitHub: git@gitlab.com:acme/legacy-portal.git`) e as tasks recuadas, em mono, com a etapa ou o caminho;
+3. **um bloco afundado por tipo de caso,** com os textos de `research/rest.md` §4. Cada bloco tem o título, o que fazer e, separados por fios, os lugares (repositório ou caminho em mono), o detalhe (`The origin remote is not on GitHub: git@gitlab.com:acme/legacy-portal.git`) e as tasks recuadas, em mono, com a área de trabalho ou o caminho (o que a migração sabe de cada task);
 4. `Once they're resolved, open this version again and the update runs again.`;
-5. **Copy the list**, secundário, que copia os casos como texto.
+5. **Copy the list**, secundário, que copia os casos como texto: o título, e por tipo o título, o que fazer, `- <lugar>` com o detalhe e `  - <task> · <área ou caminho>`. Copiado, diz `Copied` por 2 s; sem acesso à área de transferência, `Can't copy · select the text`.
 
 ## 8. O aviso do app e os toasts
 
@@ -590,7 +606,7 @@ São 61 textos. Esta seção é a fonte única dos textos das notificações; as
 | Permission | `Permission requested in the discussion.` | A discussão, o foco em **Allow** | igual |
 | Waiting for reply | `The agent is waiting for your reply in the discussion.` | A discussão, o foco no compositor | igual |
 | Session error | `The session stopped with an error in the discussion.` | A discussão, o foco em **Retry** | igual |
-| Drafts can't be read | `The agent wrote drafts the app can't read in the discussion.` | A discussão, o marco com a linha que falha | igual |
+| Drafts can't be read | `The agent wrote drafts the app can't read in the discussion.` | A discussão, o foco no compositor, com a pastilha **Ask to fix the drafts** | igual |
 | Decide drafts | `There are 5 drafts to decide in the discussion.` | A discussão, o primeiro rascunho a decidir | muda |
 | Epic can't publish, dois cards ou mais, um aprovado | `The epic can't publish: approve one more of its cards, or discard it.` | A discussão, o épico aberto | novo |
 | Epic can't publish, dois cards ou mais, nenhum aprovado | `The epic can't publish: approve two more of its cards, or discard it.` | A discussão, o épico aberto | novo |
@@ -620,7 +636,7 @@ São 61 textos. Esta seção é a fonte única dos textos das notificações; as
 | `Ctrl+,` | Qualquer lugar, as boas-vindas incluídas | Abre ou fecha Settings |
 | `Esc` | Settings | Fecha Settings e volta ao lugar anterior |
 | `Esc` | Um diálogo, um menu | Fecha e devolve o foco ao gatilho |
-| `↑` `↓` | A navegação de Settings | Troca de página |
+| `↑` `↓` `Home` `End` | A navegação de Settings | Troca de página; com a navegação em linha, `←` `→` também |
 | `Ctrl ↵` | Um diálogo | Confirma com o primário |
 | `Enter` | O passo da URL do board | Lê o board |
 | `Ctrl S` | A edição de um prompt | Salva |
@@ -635,7 +651,9 @@ São 61 textos. Esta seção é a fonte única dos textos das notificações; as
 - as confirmações destrutivas começam em **Cancel**;
 - History começa na busca, ou na linha recém-arquivada quando se chega pela página do item que saiu;
 - a página do item que saiu começa em **Next that needs you**;
-- as boas-vindas começam em **Add board**.
+- as boas-vindas começam em **Add board**;
+- Settings aberto por `Ctrl+,` ou por um link começa no item da página na navegação;
+- o início que falhou começa em **Try again**.
 
 ## 14. O que muda em `features.md` e em `structure.md`
 
@@ -738,14 +756,14 @@ São 61 textos. Esta seção é a fonte única dos textos das notificações; as
 | As opções de status que sumiram e as novas, no Edit | A nota do passo dos status | Pequeno: a comparação entre o guardado e o relido |
 | Os arquivos não commitados e os commits fora da base | A prévia do Delete e do Discard step | Pequeno: `previewDelete` já lê a worktree e a branch |
 | Desde quando está pausado | O marco `Paused by you` e o tooltip da pílula | Pequeno (`structure.md` §8) |
-| O progresso do início, passo a passo, com o tempo | `Starting MySpec…` | Pequeno (`structure.md` §8) |
-| Se o Claude Code foi achado, se o `gh` existe e se tem login | `This machine` nas boas-vindas | Pequeno: o primeiro sai da leitura do catálogo, os outros de um `gh auth status` na abertura das boas-vindas |
+| O progresso do início, passo a passo, com o tempo | `Starting MySpec…` | Médio, dentro da task 10: a janela antes dos dados (`backend.md` P35) |
+| Se o Claude Code foi achado, se o `gh` existe e se tem login | `This machine` nas boas-vindas | Pequeno: o primeiro sai da leitura do catálogo desta execução, os outros do `gh` local, sem rede (`backend.md` P36) |
 | As contagens e os nomes nos corpos das notificações, e os corpos das situações novas da discussão | A seção 11 | Pequeno: os dados estão nas situações |
 | O título da PR no título da notificação de review | A seção 11 | Nenhum: já está no review |
 | A ação que falhou, no aviso do app | O rótulo do aviso | Só frontend: cada chamada sabe qual ação fez |
 | O aviso de arquivamento de review e de discussão | O toast | Só frontend: `reviewHistory` e `discussionHistory` já chegam |
 | A lista do History por partes (90 dias e os mais antigos sob demanda) | Muitos itens no History | Pequeno: uma consulta com data de corte |
-| A data da edição de um prompt e o número de linhas da versão editada e do padrão | `Edited Sep 20` na lista e no prompt; `Your version has 92 lines; the default of this version has 87.` | Pequeno: a data do arquivo do prompt editado. As linhas são só frontend se o texto editado e o padrão chegam |
+| A data da edição de um prompt e o número de linhas da versão editada e do padrão | `Edited Sep 20` na lista e no prompt; `Your version has 92 lines; the default of this version has 87.` | Pequeno: a data do arquivo do prompt editado e as linhas dos dois textos, contadas no Go (`backend.md` P34) |
 
 ## 16. Os componentes que entram em `system/components.md`
 
