@@ -269,8 +269,8 @@ Tem quatro formas: **quieta**, quando um cartão na conversa tem o conteúdo e a
 | `findings` (PR da task e review) | `Decide findings · <lugar>` e o progresso (a passada está na pílula) | **Next to decide**; **Apply approved** ou **Publish review…** com o que falta |
 | `review_report` pronto | `Ready to publish` ou `Ready to apply` | **Publish review…** ou **Apply approved** |
 | `new_commits`, `pass_blocked` | A razão, os checks pelo nome e o conflito | **Review again…** |
-| `pr_trouble` | `Checks failed`, `Conflict with base`, os checks pelo nome | **Review again** |
-| `publish_failed` | A razão | No review, **Publish review**. Na discussão, **Show** leva ao rascunho em que a publicação parou |
+| `pr_trouble` | `Checks failed`, `Conflict with base`, os checks pelo nome | **Review again** na task; **Review again…** no review, que abre o diálogo |
+| `publish_failed` | A razão | No review, **Publish review…**, que abre o diálogo de publicação. Na discussão, **Show** leva ao rascunho em que a publicação parou |
 | `drafts` | `Decide drafts · round N` e o progresso | **Next to decide** |
 | Épico que não publica, épico descartado (discussão) | O que falta (`approve one more, or discard the epic`) | **Show**, que leva ao épico |
 | Rascunhos ilegíveis (discussão) | `Waiting for the drafts` | Nenhuma: vai pelo compositor, com **Ask to fix the drafts** |
@@ -359,8 +359,8 @@ Sob o cabeçalho, na medida da conversa, quando algo bloqueia sem ser a situaç�
 | `D` | Lista do board | Discussão com a seleção, ou com o card do foco |
 | `N` | Visão do board, fora de um campo | **New discussion**, sem cards |
 | `Space` | Linha do card | Entra no modo de seleção e marca, ou alterna |
-| `R` | Linha da PR | **Start review**, **Open review** ou **Open task** |
-| `O` | Linha da PR, apontamento | Abre a PR no GitHub; no apontamento, em `Files changed`, na linha |
+| `R` | Linha da PR, painel da PR | **Start review**, **Open review** ou **Open task**; num repositório sem clone, o painel com o foco em **Clone and continue**; num fork e num clone inexistente, diz por quê |
+| `O` | Linha da PR, painel da PR, apontamento | Abre a PR no GitHub; no apontamento, em `Files changed`, na linha; no review, fora de um apontamento, não age |
 | ←→ | Abas `Implementer` e `Reviewer` | Trocam de aba |
 | 1–9 | Cartão de pergunta ou de permissão | Responde |
 | `A`, `D` | Apontamento ou rascunho em foco | Aprova, descarta. No apontamento, e no rascunho quando o gesto não publica, leva ao próximo por decidir. No rascunho, ignorado por 900 ms depois de avançar e na repetição da tecla |

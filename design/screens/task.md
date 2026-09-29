@@ -249,7 +249,7 @@ Os apontamentos de uma passada do review da PR da task são decididos na convers
 - **O cartão** fica logo depois do marco `Review 1 written · changes · 4 findings`. É neutro, com o cabeçalho `Findings · 4`, o resumo editável (`Summary · editable`) e um apontamento por item.
 - **Cada apontamento** tem o número, a localização em mono (um link que abre o editor na linha, ou `General`), o texto editável e o par **Approve** `A` / **Discard** `D`. A decisão ativa fica pressionada (`aria-pressed`), e um segundo clique a desfaz (`Approved · click again to undo`). O apontamento em foco tem o anel `--brand-ring`.
 - **A barra** diz o progresso (`1 of 4 decided`) e tem **Next to decide** `Alt ↓` e **Apply approved**. **Apply approved** fica tracejado até tudo estar decidido, com `Decide 3 more` ao lado. Ele envia os aprovados ao agente, e o marco `You decided · 3 approved, 1 discarded` entra na conversa.
-- **Pedir ao agente** que acrescente, mude ou retire um apontamento vai pelo compositor. O cartão novo nasce no fim com as decisões mantidas, e o antigo vira o marco `Review 1 revised`.
+- **Pedir ao agente** que acrescente, mude ou retire um apontamento vai pelo compositor. (A task 7 muda esta regra pela de `review.md` §20, item 8: um marco por leitura do relatório, e o cartão logo depois do mais recente.) O cartão novo nasce no fim com as decisões mantidas, e o antigo vira o marco `Review 1 revised`.
 
 Isto é uma mudança de feature: hoje esses apontamentos são decididos em texto (`features.md`, Review de pull request). O custo está na seção 15.
 
