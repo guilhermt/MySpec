@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { QuestionCard } from "@/features/chat/entries/QuestionCard";
 import { api, type QuestionEntry } from "@/lib/wails";
@@ -162,6 +162,21 @@ describe("QuestionCard pending", () => {
     expect(await screen.findByText("Not sent · the session stopped")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Answer/ })).toBeInTheDocument();
     expect(useAppStore.getState().error).toBeNull();
+  });
+
+  it("drops its old failure when the composer starts sending the answer", async () => {
+    vi.mocked(api.answerQuestion).mockRejectedValueOnce(new Error("the session stopped"));
+    const { user } = card();
+
+    await user.click(screen.getByRole("radio", { name: /SQLite/ }));
+    await user.click(screen.getByRole("button", { name: /Answer/ }));
+    expect(await screen.findByText("Not sent · the session stopped")).toBeInTheDocument();
+
+    act(() => useAppStore.getState().setQuestionSending("req-1", true));
+    act(() => useAppStore.getState().setQuestionSending("req-1", false));
+
+    expect(screen.queryByText(/Not sent/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Answer/ })).toBeInTheDocument();
   });
 
   it("toggles the checkboxes of a multiSelect", async () => {

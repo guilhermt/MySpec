@@ -185,6 +185,30 @@ func TestReadStepReportsCountsTheFindings(t *testing.T) {
 				"2. A case is missing.\n\n## Accepted divergences\n\nNone.\n",
 			want: 2,
 		},
+		"a heading that only starts with the word is no title": {
+			body: "## What was reviewed\n\n### Findings of pass 1\n\nAll were addressed.\n\n## Findings\n\n1. A handle leaks.\n" +
+				"2. A case is missing.\n\n## Accepted divergences\n\nNone.\n",
+			want: 2,
+		},
+		"a bold line that only starts with the word is no title": {
+			body: "## What was reviewed\n\n**Findings** of pass 1 were addressed.\n\n## Findings\n\n1. A handle leaks.\n" +
+				"2. A case is missing.\n\n## Accepted divergences\n\nNone.\n",
+			want: 2,
+		},
+		"a bold section line ends a section whose title is a heading": {
+			body: "## Findings\n1. a\n2. b\n**Accepted divergences**:\n- x\n- y\n",
+			want: 2,
+		},
+		"a fenced Findings heading before the title is no title": {
+			body: "## What was reviewed\n\n```md\n## Findings\n\n- one\n```\n\n## Findings\n\n1. A handle leaks.\n" +
+				"2. A case is missing.\n\n## Accepted divergences\n\nNone.\n",
+			want: 2,
+		},
+		"a fenced item at the first column does not count": {
+			body: "## Findings\n\n  1. The script prints nothing.\n\n```sh\n- x\n```\n\n  2. A case is missing.\n\n" +
+				"## Accepted divergences\n\nNone.\n",
+			want: 2,
+		},
 	}
 
 	for name, tc := range tests {

@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { Composer, type ComposerProps } from "@/features/chat/Composer";
 import { QuestionCard } from "@/features/chat/entries/QuestionCard";
@@ -390,6 +390,133 @@ describe("Composer", () => {
 
     expect(api.answerQuestion).not.toHaveBeenCalled();
     expect(field()).toHaveValue("Disk");
+  });
+
+  it("shows the system's Sending… on Send while the card's answer is on its way", () => {
+    renderWithStore(composer(makeTask(), { question: asking(), otherPrimary: true }), {
+      ui: {
+        drafts: { "task-1|prd": "Disk" },
+        questionChoices: { "req-1": { 0: { labels: ["Per key"], other: null } } },
+        questionSending: { "req-1": true },
+      },
+    });
+
+    expect(screen.getByRole("button", { name: "Sending…" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Send" })).not.toBeInTheDocument();
+  });
+
+  it("drops the card's old failure when the composer sends the answer", async () => {
+    vi.mocked(api.answerQuestion).mockRejectedValueOnce(new Error("the session stopped"));
+    let resolve: () => void = () => {};
+    vi.mocked(api.answerQuestion).mockReturnValueOnce(
+      new Promise<void>((done) => {
+        resolve = done;
+      }),
+    );
+    const question = asking();
+    const { user } = renderWithStore(
+      <>
+        <QuestionCard taskId="task-1" stage="prd" question={question} createdAt="" />
+        {composer(makeTask(), { question, otherPrimary: true })}
+      </>,
+      {
+        ui: {
+          questionChoices: {
+            "req-1": {
+              0: { labels: ["Per key"], other: null },
+              1: { labels: ["Redis"], other: null },
+            },
+          },
+        },
+      },
+    );
+
+    await user.click(screen.getByRole("button", { name: /Answer/ }));
+    expect(await screen.findByText("Not sent · the session stopped")).toBeInTheDocument();
+
+    await user.click(field());
+    await user.keyboard("{Enter}");
+
+    expect(api.answerQuestion).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText(/Not sent/)).not.toBeInTheDocument();
+    resolve();
+  });
+
+  it("drops the composer's failure when the card answers, and offers Send, not Send again", async () => {
+    vi.mocked(api.answerQuestion).mockRejectedValueOnce(new Error("the session stopped"));
+    const question = asking();
+    const { user } = renderWithStore(
+      <>
+        <QuestionCard taskId="task-1" stage="prd" question={question} createdAt="" />
+        {composer(makeTask(), { question, otherPrimary: true })}
+      </>,
+      {
+        ui: {
+          drafts: { "task-1|prd": "Disk" },
+          questionChoices: { "req-1": { 0: { labels: ["Per key"], other: null } } },
+        },
+      },
+    );
+
+    await user.click(field());
+    await user.keyboard("{Enter}");
+    expect(await screen.findByText("Not sent · the session stopped")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Send again" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("radio", { name: /Redis/ }));
+    await user.click(screen.getByRole("button", { name: /Answer/ }));
+
+    expect(api.answerQuestion).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText(/Not sent/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Send again" })).not.toBeInTheDocument();
+  });
+
+  it("drops the composer's failure when the question settles", async () => {
+    vi.mocked(api.answerQuestion).mockRejectedValueOnce(new Error("the session stopped"));
+    const question = asking();
+    const { user, rerender } = renderWithStore(
+      composer(makeTask(), { question, otherPrimary: true }),
+      {
+        ui: {
+          drafts: { "task-1|prd": "Disk" },
+          questionChoices: { "req-1": { 0: { labels: ["Per key"], other: null } } },
+        },
+      },
+    );
+
+    await user.click(field());
+    await user.keyboard("{Enter}");
+    expect(await screen.findByText("Not sent · the session stopped")).toBeInTheDocument();
+
+    rerender(composer(makeTask(), { question: null, otherPrimary: true }));
+
+    expect(screen.queryByText(/Not sent/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Send" })).toBeInTheDocument();
+  });
+
+  it("brings no choices back for a question that settled while its answer failed", async () => {
+    let reject: (error: Error) => void = () => {};
+    vi.mocked(api.answerQuestion).mockReturnValueOnce(
+      new Promise<void>((_, fail) => {
+        reject = fail;
+      }),
+    );
+    const question = asking();
+    const { user } = renderWithStore(composer(makeTask(), { question, otherPrimary: true }), {
+      ui: {
+        drafts: { "task-1|prd": "Disk" },
+        questionChoices: { "req-1": { 0: { labels: ["Per key"], other: null } } },
+      },
+    });
+
+    await user.click(field());
+    await user.keyboard("{Enter}");
+    act(() => useAppStore.setState({ questionChoices: {}, questionSending: {} }));
+    reject(new Error("no request"));
+
+    await waitFor(() => expect(api.answerQuestion).toHaveBeenCalledTimes(1));
+    await screen.findByText("Not sent · no request");
+    expect(useAppStore.getState().questionChoices["req-1"]).toBeUndefined();
   });
 
   it("changes the model of the session it writes to", async () => {

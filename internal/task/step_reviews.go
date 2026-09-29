@@ -119,11 +119,14 @@ const sectionNames = `what was reviewed|checks|findings|accepted divergences|con
 
 var (
 	// findingsHeading is a heading that opens the Findings section, with its
-	// level.
-	findingsHeading = regexp.MustCompile(`(?i)^\s*(#{1,6})\s+(?:\d+[.)]\s*)?(?:\*\*)?findings\b\s*:?\s*(?:\*\*)?\s*:?`)
+	// level: the heading holds only the name, so "### Findings of pass 1" is
+	// no title.
+	findingsHeading = regexp.MustCompile(`(?i)^\s*(#{1,6})\s+(?:\d+[.)]\s*)?(?:\*\*)?\s*findings\s*:?\s*(?:\*\*)?\s*:?\s*$`)
 	// findingsBold is a bold line that opens the Findings section, numbered or
-	// not, with the colon inside the bold, after it or absent.
-	findingsBold = regexp.MustCompile(`(?i)^\s*(?:\d+[.)]\s*)?\*\*\s*findings\s*(?::\s*\*\*|\*\*\s*:?)`)
+	// not: the bold name alone on its line, or followed by a colon, inside the
+	// bold or after it, and the text of the section that goes on. "**Findings**
+	// of pass 1 were addressed." has no colon after the name and is no title.
+	findingsBold = regexp.MustCompile(`(?i)^\s*(?:\d+[.)]\s*)?\*\*\s*findings\s*(?::\s*\*\*(.*)|\*\*\s*(?::(.*))?)$`)
 	// heading is a Markdown heading, with its level.
 	heading = regexp.MustCompile(`^\s*(#{1,6})\s+\S`)
 	// reportSection is a bold line that opens a section of the report: the
@@ -147,11 +150,13 @@ var (
 // shallowest level in it, else one per item of the outermost list, else 1 for
 // text that is no list, and -1 when there is no such section.
 //
-// The title is a heading or a bold line; prose that starts with the word is
-// no title. Under a heading title, the section ends at a heading of the same
-// level or above. Under a bold title, the headings stay inside it, and it ends
-// at the bold line of another section of the report or at a heading that is
-// only the name of one, as "## Accepted divergences". The lines of a fenced
+// The title is a heading that holds only the name or a bold line with the name
+// alone or followed by a colon; prose that starts with the word is no title.
+// Under a heading title, the section ends at a heading of the same level or
+// above, or at the bold line of another section of the report. Under a bold
+// title, the headings stay inside it, and it ends at the bold line of another
+// section of the report or at a heading that is only the name of one, as
+// "## Accepted divergences". The lines of a fenced
 // code block neither open nor end the section, and never count.
 func countFindings(body string) int {
 	lines := markFences(strings.Split(body, "\n"))
@@ -198,17 +203,17 @@ func markFences(lines []string) []reportLine {
 
 // findingsTitleOf finds the line that opens the Findings section: its index
 // (-1 when there is none), the level of its heading (0 for a bold title) and
-// the text after the title on the same line.
+// the text after the title on the same line, which only a bold title has.
 func findingsTitleOf(lines []reportLine) (index, level int, rest string) {
 	for i, line := range lines {
 		if line.fenced {
 			continue
 		}
 		if match := findingsHeading.FindStringSubmatch(line.text); match != nil {
-			return i, len(match[1]), line.text[len(match[0]):]
+			return i, len(match[1]), ""
 		}
-		if match := findingsBold.FindString(line.text); match != "" {
-			return i, 0, line.text[len(match):]
+		if match := findingsBold.FindStringSubmatch(line.text); match != nil {
+			return i, 0, match[1] + match[2]
 		}
 	}
 	return -1, 0, ""
@@ -221,8 +226,11 @@ func findingsSection(lines []reportLine, level int) []reportLine {
 		if line.fenced {
 			return false
 		}
+		if reportSection.MatchString(line.text) {
+			return true
+		}
 		if level == 0 {
-			return reportSection.MatchString(line.text) || sectionHeading.MatchString(line.text)
+			return sectionHeading.MatchString(line.text)
 		}
 		match := heading.FindStringSubmatch(line.text)
 		return match != nil && len(match[1]) <= level

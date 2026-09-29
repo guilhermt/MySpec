@@ -319,6 +319,31 @@ func TestRefreshingThePullRequestDuringTheReviewDoesNotMarkItOpenedAgain(t *test
 	}
 }
 
+func TestRefreshingThePullRequestWhileAPassCommitsKeepsTheStatus(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.gh.setPR("task-1", withChecks(failing(gh.MergeableClean, "lint")))
+	inPR(f, "task-1", plan(), task.PRCommitting)
+
+	before := f.tasks.inspectCount()
+	if err := f.service.RefreshPR(t.Context(), "task-1"); err != nil {
+		t.Fatalf("RefreshPR() = %v, want nil", err)
+	}
+	f.waitPRRun(t, "the new reading to be recorded", func(run task.PRRun) bool {
+		return slices.ContainsFunc(run.PR.Checks, func(c gh.Check) bool { return c.Name == "lint" })
+	})
+	// The reading asks for an evaluation once it is recorded.
+	f.waitEvaluations(t, before+1)
+
+	if run, _ := f.tasks.prRun("task-1"); run.Status != task.PRCommitting {
+		t.Errorf("status = %q, want the commit where it was", run.Status)
+	}
+	if diff := cmp.Diff([]keyedMarker(nil), f.sessions.marked(session.MarkerPROpened)); diff != "" {
+		t.Errorf("pr_opened markers mismatch (-want +got):\n%s", diff)
+	}
+}
+
 func TestRefreshingABlockedReviewResumesItWithoutMarkingThePullRequestOpenedAgain(t *testing.T) {
 	t.Parallel()
 

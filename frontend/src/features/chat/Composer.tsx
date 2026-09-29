@@ -98,6 +98,19 @@ export function Composer({
   // backToCard counts the texts that left the card incomplete: after each one is drawn on the card,
   // the focus goes to its first question without a choice.
   const [backToCard, setBackToCard] = useState(0);
+  const requestId = question?.requestId;
+
+  // A failure belongs to the question it was told for: the card sending the answer, or the question
+  // settling, leaves it behind, so it doesn't outlive the answer that went through the other side.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the failure is cleared when the question changes.
+  useEffect(() => {
+    setError("");
+  }, [requestId]);
+  useEffect(() => {
+    if (answerSending) {
+      setError("");
+    }
+  }, [answerSending]);
 
   useEffect(() => {
     if (backToCard > 0) {
@@ -162,7 +175,8 @@ export function Composer({
     setError(failure);
     if (failure === "") {
       setDraft(taskId, stage, "");
-    } else {
+    } else if (useAppStore.getState().questionChoices[q.requestId] === next.choices) {
+      // Back to what the card held, unless the question settled while the answer was on its way.
       setQuestionChoices(q.requestId, choices);
     }
   };
@@ -215,7 +229,7 @@ export function Composer({
       variant={!turnRunning && sendIsPrimary(draft, otherPrimary) ? "primary" : "secondary"}
       {...(turnRunning ? {} : { shortcut: "↵" })}
       {...(empty ? { disabled: true, disabledReason: "Write a message" } : {})}
-      loading={sending}
+      loading={sending || answerSending}
       loadingLabel="Sending…"
       onClick={send}
     >

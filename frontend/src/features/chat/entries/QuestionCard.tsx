@@ -1,4 +1,4 @@
-import { type KeyboardEvent, useId, useState } from "react";
+import { type KeyboardEvent, useEffect, useId, useState } from "react";
 import { Button } from "@/components/system/Button";
 import { Icon } from "@/components/system/Icon";
 import { ICONS } from "@/components/system/icons";
@@ -170,6 +170,13 @@ function PendingQuestion({ taskId, stage, question, flash }: PendingQuestionProp
   // until the conversation turns the card into its answer.
   const sending = useAppStore((state) => state.questionSending[question.requestId] === true);
   const [failure, setFailure] = useState("");
+
+  // A send that starts, from the composer or from here, leaves the failure of the last one behind.
+  useEffect(() => {
+    if (sending) {
+      setFailure("");
+    }
+  }, [sending]);
 
   const missing = missingOf(questions, choices);
   const keys = (questions[0]?.options ?? []).length + 1;
