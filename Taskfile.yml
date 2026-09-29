@@ -189,7 +189,7 @@ tasks:
       - git diff --exit-code -- frontend/bindings
 
   check:
-    summary: The everyday check, in seconds, for the agents and the CI
+    summary: The everyday check, in seconds
     cmds:
       - nice -n 10 "{{.TASK_EXE}}" tidy:check lint typecheck test vuln bindings:check
 

@@ -18,7 +18,7 @@ export default mergeConfig(
       vmMemoryLimit: "1GB",
       coverage: {
         provider: "v8",
-        reporter: ["text", "json", "json-summary", "lcov"],
+        reporter: ["text", "lcov"],
         reportOnFailure: true,
         include: ["src/**"],
         exclude: ["src/components/ui/**", "src/test/**", "src/main.tsx", "src/**/*.test.{ts,tsx}"],
