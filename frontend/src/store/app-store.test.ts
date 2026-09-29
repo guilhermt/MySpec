@@ -1847,7 +1847,7 @@ describe("discussions", () => {
 
   it("opens and closes the dialog that creates a discussion", () => {
     const { result } = renderHook(() => useNewDiscussion());
-    const ref = { boardId: BOARD.id, cardKeys: ["dev/web#12"] };
+    const ref = { boardId: BOARD.id, cardKeys: ["dev/web#12"], askBoard: false };
 
     expect(result.current).toBeNull();
 
@@ -2090,7 +2090,7 @@ describe("navigation", () => {
     expect(back.at(-1)).toEqual(TASK);
   });
 
-  it("goes to the first board for Home while there is no task", () => {
+  it("stays on Home when there is no task", () => {
     useAppStore
       .getState()
       .applyState(makeState({ repositories: [WEB], tasks: [], boards: [BOARD] }));
@@ -2098,7 +2098,7 @@ describe("navigation", () => {
 
     useAppStore.getState().go(HOME);
 
-    expect(location()).toEqual({ kind: "board", id: BOARD.id });
+    expect(location()).toEqual(HOME);
   });
 
   it("closes the panel of the place it leaves", () => {
@@ -2517,12 +2517,12 @@ describe("place in a new snapshot", () => {
     expect(useAppStore.getState().announcement).toBeNull();
   });
 
-  it("shows the first board for Home while there is no task", () => {
+  it("shows Home at start when there is no task", () => {
     useAppStore
       .getState()
       .applyState(makeState({ repositories: [WEB], tasks: [], boards: [BOARD] }));
 
-    expect(location()).toEqual({ kind: "board", id: BOARD.id });
+    expect(location()).toEqual(HOME);
   });
 
   it("closes the panel when the place on screen changes", () => {
@@ -2551,7 +2551,6 @@ describe("place in a new snapshot", () => {
 
 describe("places beside the one on screen", () => {
   const BOARD_PLACE: Location = { kind: "board", id: BOARD.id };
-  const SETTINGS: Location = { kind: "settings", section: "defaults" };
 
   beforeEach(() => {
     localStorage.clear();
@@ -2588,33 +2587,6 @@ describe("places beside the one on screen", () => {
     useAppStore.getState().closeSettings();
 
     expect(location()).toEqual(HOME);
-  });
-
-  it("does not keep behind the board Home stands for the same board from the last run", () => {
-    const state = makeState({ repositories: [WEB], tasks: [], boards: [BOARD] });
-    useAppStore.getState().applyState(state);
-    expect(location()).toEqual(BOARD_PLACE);
-    useAppStore.setState(initialNav());
-    expect(useAppStore.getState().back).toEqual([BOARD_PLACE]);
-
-    useAppStore.getState().applyState(state);
-
-    expect(useAppStore.getState()).toMatchObject({ location: BOARD_PLACE, back: [], forward: [] });
-  });
-
-  it("does not keep behind the board Home stands for going back to it", () => {
-    useAppStore
-      .getState()
-      .applyState(makeState({ repositories: [WEB], tasks: [], boards: [BOARD] }));
-    useAppStore.setState({ location: SETTINGS, back: [BOARD_PLACE, HOME], forward: [] });
-
-    useAppStore.getState().goBack();
-
-    expect(useAppStore.getState()).toMatchObject({
-      location: BOARD_PLACE,
-      back: [],
-      forward: [SETTINGS],
-    });
   });
 
   it("does not offer the board on screen behind a task that left after it", () => {

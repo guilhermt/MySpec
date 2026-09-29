@@ -216,15 +216,6 @@ export function isActiveItem(location: Location): boolean {
   return location.kind === "task" || location.kind === "review" || location.kind === "discussion";
 }
 
-/** resolveHome is the place Home stands for: the first board while there is no task, Home otherwise; any other place is itself. */
-export function resolveHome(app: State | null, location: Location): Location {
-  const [first] = app?.boards ?? [];
-  if (location.kind !== "home" || (app?.tasks ?? []).length > 0 || first === undefined) {
-    return location;
-  }
-  return { kind: "board", id: first.id };
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }

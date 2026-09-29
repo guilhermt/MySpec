@@ -13,7 +13,6 @@ import {
   locationExists,
   NAV_LIMIT,
   openItemId,
-  resolveHome,
   type SettingsSection,
   sameLocation,
 } from "@/lib/locations";
@@ -123,6 +122,8 @@ export interface TextDraft {
 export interface NewDiscussionRef {
   boardId: string;
   cardKeys: string[];
+  /** askBoard is the dialog asking which board: opened from a place without a board, with more than one board. */
+  askBoard: boolean;
 }
 
 /** PullRef names one pull request: the repository it belongs to and its number. */
@@ -576,8 +577,7 @@ type Navigation = Pick<
 // beside drops the places at the end of a history that are the place on
 // screen, which Back or Forward would only open again: leaving the page of an
 // item that left stacks nothing, so the place it opens may already be the
-// last one behind it, and Home may resolve to the board kept behind it. The
-// same list comes back when nothing is dropped.
+// last one behind it. The same list comes back when nothing is dropped.
 function beside(places: Location[], location: Location): Location[] {
   const end = places.reduce(
     (kept, place, at) => (sameLocation(place, location) ? kept : at + 1),
@@ -595,7 +595,7 @@ function navigate(
   location: Location,
   focus: AppStore["pendingFocus"],
 ): Navigation {
-  const target = resolveHome(state.app, location);
+  const target = location;
   const common = {
     location: target,
     panel: null,
@@ -619,7 +619,7 @@ function navigate(
 // is not the place on screen, which a place that left between them can hide
 // from beside.
 function reachable(app: State | null, place: Location, current: Location): boolean {
-  return locationExists(app, place) && !sameLocation(resolveHome(app, place), current);
+  return locationExists(app, place) && !sameLocation(place, current);
 }
 
 // travel opens the nearest place behind (or ahead of) the current one it can
@@ -642,7 +642,7 @@ function travel(
   }
   const rest = from.slice(0, index);
   const behind = state.location.kind === "gone" ? to : [...to, state.location].slice(-NAV_LIMIT);
-  const location = resolveHome(state.app, place);
+  const location = place;
   return {
     location,
     back: beside(direction === "back" ? rest : behind, location),
@@ -717,7 +717,6 @@ function placeIn(prev: State | null, next: State, location: Location): Location 
       return gone("board", board.id, board.title, "");
     }
     case "home":
-      return resolveHome(next, location);
     case "reviews":
     case "history":
     case "settings":

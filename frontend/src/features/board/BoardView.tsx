@@ -110,7 +110,8 @@ function BoardScreen({ board }: { board: Board }) {
     });
   const clearChecked = () => setChecked(new Set());
   const checkable = (card: BoardCard) => isCheckable(card, app, board.id);
-  const openDiscuss = (cardKeys: string[]) => openNewDiscussion({ boardId: board.id, cardKeys });
+  const openDiscuss = (cardKeys: string[]) =>
+    openNewDiscussion({ boardId: board.id, cardKeys, askBoard: false });
 
   const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     // Dialogs render in a portal: their keys are not the view's.

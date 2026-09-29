@@ -55,7 +55,7 @@ describe("App", () => {
     expect(
       await screen.findByRole("button", { name: "Repository filter: All repositories" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("No tasks yet")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Start" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Theme: System" })).toBeInTheDocument();
   });
 
@@ -147,13 +147,13 @@ describe("App", () => {
     await user.click(await screen.findByRole("treeitem", { name: /^task add-login\./ }));
 
     expect(await screen.findByRole("button", { name: "More actions" })).toBeInTheDocument();
-    expect(screen.queryByText("No task open")).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Start" })).not.toBeInTheDocument();
 
     act(() => {
       useAppStore.getState().go({ kind: "home" });
     });
 
-    expect(await screen.findByText("No task open")).toBeInTheDocument();
+    expect(await screen.findByRole("region", { name: "Start" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "More actions" })).not.toBeInTheDocument();
   });
 
@@ -164,13 +164,13 @@ describe("App", () => {
     await user.click(await screen.findByRole("button", { name: /^History/ }));
 
     expect(screen.getByRole("heading", { name: "History" })).toBeInTheDocument();
-    expect(screen.queryByText("No tasks yet")).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Start" })).not.toBeInTheDocument();
 
     act(() => {
       useAppStore.getState().go({ kind: "home" });
     });
 
-    expect(screen.getByText("No tasks yet")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Start" })).toBeInTheDocument();
   });
 
   it("gives the main area to an archived task, and to a live one over it", async () => {
@@ -206,7 +206,7 @@ describe("App", () => {
     });
 
     expect(screen.getByRole("heading", { level: 1, name: "Platform" })).toBeInTheDocument();
-    expect(screen.queryByText("No task open")).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Start" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("treeitem", { name: /^task add-login\./ }));
 
@@ -219,7 +219,7 @@ describe("App", () => {
       makeState({ repositories: [makeRepository({ cloned: false, cloning: true, path: "" })] }),
     );
     renderWithStore(<App />);
-    await screen.findByText("No tasks yet");
+    await screen.findByRole("region", { name: "Start" });
 
     act(() => {
       useAppStore
@@ -329,7 +329,7 @@ describe("App", () => {
       makeState({ reviewCenter: makeReviewCenter({ pullRequests: [makePullRequestRow()] }) }),
     );
     renderWithStore(<App />);
-    await screen.findByText("No tasks yet");
+    await screen.findByRole("region", { name: "Start" });
 
     act(() => {
       useAppStore.getState().openStartReview({ repositoryId: "repo-1", number: 31 });
@@ -343,7 +343,7 @@ describe("App", () => {
       makeState({ repositories: [makeRepository({ cloned: false, cloning: true, path: "" })] }),
     );
     renderWithStore(<App />);
-    await screen.findByText("No tasks yet");
+    await screen.findByRole("region", { name: "Start" });
 
     act(() => {
       useAppStore.getState().setPendingReview({ repositoryId: "repo-1", number: 31 });

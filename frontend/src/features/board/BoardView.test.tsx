@@ -202,7 +202,11 @@ describe("BoardView", () => {
 
     await user.click(screen.getByRole("button", { name: "New discussion" }));
 
-    expect(useAppStore.getState().newDiscussion).toEqual({ boardId: "board-1", cardKeys: [] });
+    expect(useAppStore.getState().newDiscussion).toEqual({
+      boardId: "board-1",
+      cardKeys: [],
+      askBoard: false,
+    });
   });
 
   it("opens a discussion of the cards picked from the header", async () => {
@@ -215,6 +219,7 @@ describe("BoardView", () => {
     expect(useAppStore.getState().newDiscussion).toEqual({
       boardId: "board-1",
       cardKeys: ["dev/web#12", "dev/web#7"],
+      askBoard: false,
     });
   });
 
@@ -239,6 +244,7 @@ describe("BoardView", () => {
     expect(useAppStore.getState().newDiscussion).toEqual({
       boardId: "board-1",
       cardKeys: ["dev/web#12", "dev/web#7"],
+      askBoard: false,
     });
   });
 
@@ -264,6 +270,7 @@ describe("BoardView", () => {
     expect(useAppStore.getState().newDiscussion).toEqual({
       boardId: "board-1",
       cardKeys: ["dev/web#12"],
+      askBoard: false,
     });
   });
 
@@ -317,6 +324,7 @@ describe("BoardView", () => {
     expect(useAppStore.getState().newDiscussion).toEqual({
       boardId: "board-1",
       cardKeys: ["dev/web#12"],
+      askBoard: false,
     });
   });
 

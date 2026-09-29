@@ -3,27 +3,6 @@ import { boardOfRepository, findBoard } from "@/lib/boards";
 import type { Location } from "@/lib/locations";
 import type { State } from "@/lib/wails";
 
-/**
- * discussionBoard is the board New discussion opens the dialog for: the board
- * on screen, or the board of the item on screen (a task by its repository, a
- * discussion by its own); else the board of the last discussion; else the
- * first board by title. null without a board.
- */
-export function discussionBoard(app: State | null, location: Location): string | null {
-  if (app === null) {
-    return null;
-  }
-  const here = placeBoard(app, location);
-  if (here !== null) {
-    return here;
-  }
-  const last = app.discussions?.at(-1);
-  if (last !== undefined && findBoard(app, last.boardId) !== null) {
-    return last.boardId;
-  }
-  return app.boards?.[0]?.id ?? null;
-}
-
 /** DiscussionTarget is what New discussion does from a place: open the dialog, asking the board or not, or say why it can't. */
 export type DiscussionTarget =
   | { kind: "open"; boardId: string; askBoard: boolean }

@@ -54,7 +54,11 @@ describe("NewMenu", () => {
 
     await user.click(screen.getByRole("menuitem", { name: "New discussion" }));
 
-    expect(useAppStore.getState().newDiscussion).toEqual({ boardId: "board-2", cardKeys: [] });
+    expect(useAppStore.getState().newDiscussion).toEqual({
+      boardId: "board-2",
+      cardKeys: [],
+      askBoard: false,
+    });
   });
 
   it("disables New discussion without a board, with the reason", async () => {
@@ -63,6 +67,30 @@ describe("NewMenu", () => {
     expect(
       screen.getByRole("menuitem", {
         name: "New discussion · Add a board to discuss its cards.",
+      }),
+    ).toHaveAttribute("aria-disabled", "true");
+  });
+
+  it("asks the board from a place without one, with several boards", async () => {
+    const { user } = await openMenu({
+      state: makeState({ boards: [makeBoard({ id: "board-1" }), makeBoard({ id: "board-2" })] }),
+    });
+
+    await user.click(screen.getByRole("menuitem", { name: "New discussion" }));
+
+    expect(useAppStore.getState().newDiscussion).toEqual({
+      boardId: "board-1",
+      cardKeys: [],
+      askBoard: true,
+    });
+  });
+
+  it("disables New discussion while no board was read, with the reason", async () => {
+    await openMenu({ state: makeState({ boards: [makeBoard({ readAt: "" })] }) });
+
+    expect(
+      screen.getByRole("menuitem", {
+        name: "New discussion · The board hasn't been read yet.",
       }),
     ).toHaveAttribute("aria-disabled", "true");
   });

@@ -12,7 +12,6 @@ import {
   locationExists,
   locationTitle,
   openItemId,
-  resolveHome,
   sameLocation,
 } from "@/lib/locations";
 import {
@@ -203,28 +202,6 @@ describe("openItemId and isActiveItem", () => {
   ])("%o opens %s", (location, id) => {
     expect(openItemId(location)).toBe(id);
     expect(isActiveItem(location)).toBe(id !== null);
-  });
-});
-
-describe("resolveHome", () => {
-  it.each<[string, Parameters<typeof resolveHome>[0], Location, Location]>([
-    [
-      "Home without a task is the first board",
-      makeState({ boards: [ROADMAP, makeBoard({ id: "board-2", title: "Zeta" })], tasks: [] }),
-      HOME,
-      { kind: "board", id: "board-1" },
-    ],
-    ["Home with a task is Home", app, HOME, HOME],
-    ["Home without a board is Home", makeState({ boards: [], tasks: [] }), HOME, HOME],
-    ["Home before the first snapshot is Home", null, HOME, HOME],
-    [
-      "another place is itself",
-      makeState({ boards: [ROADMAP], tasks: [] }),
-      { kind: "reviews" },
-      { kind: "reviews" },
-    ],
-  ])("%s", (_name, state, location, resolved) => {
-    expect(resolveHome(state, location)).toEqual(resolved);
   });
 });
 
