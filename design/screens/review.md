@@ -241,14 +241,14 @@ Os apontamentos de uma passada com `changes` são um cartão neutro na conversa,
 
 | Situação | A barra diz | Ações | Variante |
 |---|---|---|---|
-| Decidindo (`review_report` · decide) | `● Decide findings · pass 1 34m` · `1 of 3 decided` (com commits depois da passada, `· 2 commits arrived after this pass`, também com tudo decidido) | **Next to decide** `Alt ↓`; `Decide 2 more` ao lado de **Publish review…** tracejado (no Apply, **Apply approved**) | decisão |
+| Decidindo (`review_report` · decide) | `● Decide findings · pass 1 34m` · `1 of 3 decided` (com commits depois da passada, `· 2 commits arrived after this pass`, também com tudo decidido) | **Next to decide** `Alt ↓` e **Approve the rest** (aprova de uma vez os que ainda não têm decisão; sem tecla; terminado o gesto, o foco vai à primária que a barra passa a ter, **Publish review…** ou, no Apply, **Apply approved**); `Decide 2 more` ao lado de **Publish review…** tracejado (no Apply, **Apply approved**) | decisão |
 | Tudo decidido (`review_report` · publish) | `● Ready to publish · pass 1 41m` · `2 approved · 1 discarded` | **Publish review…** `Ctrl ↵`, primária, que abre o diálogo | decisão |
 | Passe limpo | `● Ready to publish · pass 1` · `A clean pass` | **Publish review…** | decisão |
 | A publicação falhou (`publish_failed`) | `◆ Publish failed · pass 1 !1m` e a razão, com o trilho | **Publish review…** `Ctrl ↵`, primária, que abre o diálogo com o veredito e a caixa do resumo da tentativa que falhou | erro |
 | Modo Apply | seção 14 | **Apply approved** | decisão |
 | Pergunta, permissão | `● Question · pass 1 18m`, `● Permission · pass 1 4m` | **Show**, que leva ao cartão | quieta |
 | Erro de sessão | `◆ Session error · pass 1 !5m` | **Retry reviewer**, primária, com a sessão parada; um turno que falhou com o processo vivo não tem ação, e a resposta vai pelo compositor | erro |
-| Relatório ilegível (`reply`) | `● Waiting for the report · pass 1 3m` e a razão, cortada com tooltip | nenhuma: o pedido de correção vai pelo compositor | tingida |
+| Relatório ilegível (`reply`) | `● Waiting for the report · pass 1 3m` e a razão, cortada com tooltip, no texto do produto (`The report can't be read: finding 2 does not open with its location.`) | nenhuma: o pedido de correção vai pelo compositor | tingida |
 | Commits novos, check que falhou, conflito, passada bloqueada | seção 12 | **Review again…** | tingida ou erro |
 
 O lugar de toda barra do review é a passada (`pass 1`), porque o review tem uma conversa só, salvo `Ready to merge`, que diz a PR, como na task. `Ctrl+Enter` age quando a primária da barra é **Publish review…** habilitada (`Ready to publish`, `Publish failed`), e é ela que escreve `Ctrl ↵`; com a decisão em curso, não age. Pausado, a barra fica com o que o estado pede e com as ações, na forma quieta, com as duas barras no lugar do glifo e sem chip de tempo, como na task; as situações da sessão (pergunta, permissão, erro) não aparecem enquanto ele está pausado.
@@ -292,7 +292,7 @@ Numa PR sua iniciada com **Apply** (`features.md`, Corrigir a própria pull requ
 
 - a barra, com tudo decidido, é `● Ready to apply · pass 1` · `2 approved findings go to the agent`, com **Apply approved** primário; sem nada aprovado, ou com uma passada limpa, o review fica pronto para merge: `● Ready to merge · web#2288` · `Nothing approved in pass 1` (ou `A clean pass`), com **Open PR**, secundário, como na task;
 - não há diálogo de publicação nem veredito;
-- depois de **Apply approved**, o marco `Sent to the agent · 2 approved findings to apply` entra na conversa, e o ciclo é o `changes_review` da PR da task (`screens/task.md` §7: `Review changes`, o cartão de arquivos, **Approve** em 100%, o commit, a passada nova que espera os checks).
+- depois de **Apply approved**, o marco `You decided · 2 approved, 1 discarded` e a mensagem do produto `MySpec → Reviewer · apply 2 approved findings` entram na conversa (a mensagem diz os aprovados e os descartados, e o envio não tem marco próprio), e o ciclo é o `changes_review` da PR da task (`screens/task.md` §7: `Review changes`, o cartão de arquivos, **Approve** em 100%, o commit, a passada nova que espera os checks).
 
 ## 15. O encerramento pelo merge
 
@@ -392,7 +392,7 @@ A ordem de Tab na lista: cabeçalho, barra de filtros, a lista (uma parada), o p
 | A descrição da PR | O painel da PR | Pequeno: hoje só entra no `context.md`; expor o `body` da leitura |
 | O seu último review de uma PR revisada, com o estado e a data | O painel (`Your review`) | Pequeno: a query já lê o último review da conta do `gh` |
 | A lista dos commits novos desde a passada (hash, assunto e autor) | O marco `3 new commits` | Pequeno: os commits da PR na leitura de cada minuto, porque a worktree só anda no **Review again** (`backend.md` P18) |
-| Marcos de decisão, de publicação e de envio ao agente | `You decided…`, `Published pass 1…`, `Sent to the agent…` | Pequeno: tipos novos de marcador, como em `screens/task.md` §15 |
+| Marcos de decisão e de publicação | `You decided…`, `Published pass 1…` (o envio ao agente é a mensagem do produto) | Pequeno: tipos novos de marcador, como em `screens/task.md` §15 |
 | Quem fez o merge e quando | A página do review que saiu | Pequeno: a leitura de cada minuto já vê o merge |
 | `checkError` com quando falhou | A faixa `Couldn't check GitHub · 3m ago` | Pequeno: hoje chega só a razão |
 | Quando a leitura de um repositório falhou (`failedAt`) | A faixa de falha da lista | Nenhum ou pequeno, como no board |
@@ -410,7 +410,7 @@ O coordenador consolida. Os estados de cada um estão em `components.html`.
 - **Diálogo de início de review**, com a espera dos checks e o resto atrás de um clique.
 - **Pílula do review**, a etapa atual do stepper, sozinha.
 - **Apontamento** com título e a **localização** de duas ações (GitHub e editor).
-- **Barra de decisão**, a barra do pedido com **Next to decide** e **Publish review…** ou **Apply approved**.
+- **Barra de decisão**, a barra do pedido com **Next to decide**, **Approve the rest** e **Publish review…** ou **Apply approved**.
 - **Diálogo de publicação**, com o veredito como pergunta sem marcação, a **etiqueta `Suggested`** e o resumo opcional com a caixa de seleção.
 - **Faixa de aviso do review** (`Couldn't check GitHub`) e **nota afundada** (commits depois da passada, decisões que uma nova passada descarta).
 - **Página do review que saiu**.

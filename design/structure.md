@@ -110,7 +110,7 @@ Nas fórmulas: `N/M` é o step e o total, `<etapa>` é `PRD`, `Tech spec`, `Plan
 | `step_empty` | `No changes · Step N/M` | igual |
 | `pr_blocked` | `PR blocked · <razão>` | `PR blocked` |
 | `draft` | `Draft to approve · PR` | `Draft · PR` |
-| `findings` (PR da task) | `Decide findings · PR review · pass K · a of b` | `Decide findings · a/b` |
+| `findings` (PR da task) | `Decide findings · PR review · pass K · a of b`; tudo decidido com algum aprovado, `Ready to apply · PR review · pass K` (sem nenhum aprovado, a PR fica `Ready to merge`, a linha `merge`); numa passada em texto, `Decide findings · PR review · pass K` | `Decide findings · a/b`, `Ready to apply · PR review`, `Decide findings · PR review` |
 | `changes_review` | `Review changes · <lugar>`; com stage, `· P% staged`; pronto, `Approve changes · <lugar>`. Lugar: `PR review` na task, `pass K` no review | Sem o `% staged` |
 | `pr_trouble` | `Checks failed`, `Conflict with base` ou `Checks failed · conflict`, seguido de `PR #P` na task e de `pass K` no review | Na task, `#P` no lugar de `PR #P` |
 | `pr_closed` | `PR closed unmerged · #P` | igual |
@@ -266,7 +266,8 @@ Tem quatro formas: **quieta**, quando um cartão na conversa tem o conteúdo e a
 | `step_review`, `changes_review` | O progresso de stage | **Open in VS Code**, **Approve** com o que falta |
 | `step_empty` | `Step N has no changes` | **Discard step N…**; ou pedir uma mudança pelo compositor |
 | `draft` | Que o rascunho da PR espera o OK | **Approve draft**, **Discard draft** |
-| `findings` (PR da task e review) | `Decide findings · <lugar>` e o progresso (a passada está na pílula) | **Next to decide**; **Apply approved** ou **Publish review…** com o que falta |
+| `findings` (PR da task e review) | `Decide findings · <lugar>` e o progresso; na PR da task, o lugar é `PR review · pass N` | **Next to decide**, **Approve the rest**; **Apply approved** ou **Publish review…** com o que falta. Na PR da task, uma passada em texto (pedida antes do formato de apontamentos) não tem ação, e a resposta vai pelo compositor |
+| `findings` pronto (PR da task) | `Ready to apply` e quantos aprovados vão ao agente; sem nenhum aprovado, a PR fica `Ready to merge` sozinha, como no modo Apply | **Apply approved** |
 | `review_report` pronto | `Ready to publish` ou `Ready to apply` | **Publish review…** ou **Apply approved** |
 | `new_commits`, `pass_blocked` | A razão, os checks pelo nome e o conflito | **Review again…** |
 | `pr_trouble` | `Checks failed`, `Conflict with base`, os checks pelo nome | **Review again** na task; **Review again…** no review, que abre o diálogo |
@@ -275,7 +276,7 @@ Tem quatro formas: **quieta**, quando um cartão na conversa tem o conteúdo e a
 | Épico que não publica, épico descartado (discussão) | O que falta (`approve one more, or discard the epic`) | **Show**, que leva ao épico |
 | Rascunhos ilegíveis (discussão) | `Waiting for the drafts` | Nenhuma: vai pelo compositor, com **Ask to fix the drafts** |
 | `pr_closed` | `PR closed unmerged` | **Delete task…** |
-| `merge` | `Ready to merge`, depois `Ready to close` e o que o encerramento faz | **Open PR**, depois **Close task** |
+| `merge` | `Ready to merge` (depois de uma passada toda descartada, `Nothing approved in pass N`), depois `Ready to close` e o que o encerramento faz | **Open PR**, depois **Close task** |
 | Pronta para arquivar (discussão) | `Ready to archive` e o que foi publicado | **Archive…** |
 
 **Único lugar da ação e as exceções.** A ação que resolve uma situação fica na barra do pedido e em nenhum outro lugar da tela. As exceções são três, cada uma por uma razão:
@@ -368,7 +369,7 @@ Sob o cabeçalho, na medida da conversa, quando algo bloqueia sem ser a situaç�
 | `Enter`, ↑↓ | Lista dos rascunhos | Abrem o rascunho dobrado, vão ao anterior e ao próximo |
 | `Alt+↓`, `Alt+↑` | Item com apontamentos ou rascunhos a decidir | Próximo e anterior por decidir |
 | `Ctrl+E` | Item com worktree; apontamento em foco | **Open in VS Code**; no apontamento, na linha |
-| `Ctrl+Enter` | Diálogos; barra de decisão | Confirma o diálogo; na barra ou no cartão, abre a publicação |
+| `Ctrl+Enter` | Diálogos; barra de decisão | Confirma o diálogo; na barra ou no cartão, abre a publicação. Na PR da task e no modo Apply, não age |
 | 1–3 | Diálogo de publicação | Escolhem o veredito |
 | `Enter`, `Shift+Enter` | Compositor | Envia, quebra a linha |
 | `Ctrl+S` | Editor de prompt | Salva |

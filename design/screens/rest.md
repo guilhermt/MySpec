@@ -523,7 +523,7 @@ A última coluna compara com o texto de hoje:
 - **novo**: uma situação decidida na rodada da discussão, que ainda não tem texto;
 - **igual**: o texto de hoje.
 
-São 55 textos.
+São 57 textos.
 
 **Task**
 
@@ -552,12 +552,14 @@ São 55 textos.
 | PR blocked | `The pull request is blocked: the branch has no commits ahead of dev.` | A PR, o foco em **Try again** | igual |
 | Draft | `The pull request draft is ready for your OK.` | A PR, o rascunho na conversa, o foco em **Approve draft** | igual |
 | Findings | `The review of the pull request found 4 changes for you to decide.` | O PR review, o primeiro apontamento a decidir | muda |
+| Findings · ready to apply | `The approved findings of the pull request review are ready to apply.` (a decisão terminou enquanto o revisor trabalhava) | O PR review, o foco em **Apply approved** | novo |
 | Changes to review | `The changes from the review of the pull request are ready for your review.` | O PR review, o foco em **Open in VS Code** | igual |
 | No commit after approval · PR | `The last approval of the pull request didn't produce a commit.` | O PR review, o foco em **Open in VS Code** | igual |
 | Check failed after review | `A check failed after the review: e2e (chromium).` | O PR review, o check pelo nome, o foco em **Review again** | igual |
 | Checks failed after review | `Checks failed after the review: e2e (chromium), lint.` | O PR review, os checks pelo nome, o foco em **Review again** | igual |
 | Conflict after review | `The pull request has a conflict with dev.` | O PR review, o foco em **Review again** | igual |
 | Ready to merge | `PR #1284 is ready to merge.` | A PR, o foco em **Open PR** | muda |
+| Ready to merge · nothing approved | `PR #1284 is ready to merge: every finding of the review was discarded.` | A PR, o foco em **Open PR** | novo |
 | Ready to close | `PR #1284 was merged. The task is ready to close.` | A PR, o foco em **Close task** | muda |
 | PR closed | `PR #1284 was closed without a merge.` | A PR, o foco em **Delete task…** | igual |
 

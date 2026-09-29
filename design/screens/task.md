@@ -182,6 +182,7 @@ Fica acima do compositor, na coluna da conversa, com a mesma borda esquerda e di
 **Variantes.**
 - **Quieta** (`--surface-0`): o cartão na conversa tem o conteúdo e a resposta, e a barra leva a ele com **Show**.
 - **Tingida** (`--state-wait-veil`): o pedido não tem cartão com ação própria, e a barra tem a ação.
+- **De decisão**: tingida. Com algo por decidir, o progresso, **Next to decide** `Alt ↓`, **Approve the rest** e a primária tracejada com o que falta; com tudo decidido, só a primária (os apontamentos da PR).
 - **Erro** (`--state-error-veil` com trilho).
 - **Encerramento**: fundo quieto, rótulo em `--state-close`.
 
@@ -206,15 +207,19 @@ Fica acima do compositor, na coluna da conversa, com a mesma borda esquerda e di
 | `step_review` (`Manual`, ou depois de três rodadas ou de **Review myself**) | `Review step 4 9m` · `5 of 7 files staged · 71%`, depois `Approve step 4` | **Open in VS Code**, **Approve** (tracejado com `Stage 2 more files` até 100%) | — | tingida |
 | `step_empty` | `Step 4 has no changes` | **Discard step 4…** (repetida do `⋯`); pedir uma mudança pelo compositor | — | tingida |
 | `draft` | `Draft to approve` | **Approve draft** (primária), **Discard draft** (repetida do `⋯`). O rascunho, editável, fica na conversa | — | tingida |
-| `findings` | `Decide findings · PR review 12m` · `1 of 4 decided` | **Next to decide** `Alt ↓`, **Apply approved** (tracejado com `Decide 3 more`) | `A` e `D` no apontamento em foco, `Alt+↓` e `Alt+↑` | tingida |
-| `changes_review` | `Review changes` · `3 of 5 files staged`, depois `Approve changes` | **Open in VS Code**, **Approve** | — | tingida |
+| `findings` · decide | `Decide findings · PR review · pass 1 12m` · `1 of 4 decided` (e `· the worktree has changes` quando há) | **Next to decide** `Alt ↓`, **Approve the rest** (secundários), **Apply approved** (primária tracejada com `Decide 3 more`) | `A` e `D` no apontamento em foco, `Alt+↓` e `Alt+↑` | de decisão |
+| `findings` · apply (tudo decidido, algum aprovado) | `Ready to apply · PR review · pass 1` · `3 approved findings go to the agent` | **Apply approved** (primária) | — | de decisão |
+| `findings` de uma passada em texto (pedida antes do formato de apontamentos) | `Decide findings · PR review · pass 1` | nenhuma: a resposta vai pelo compositor | `Enter` no compositor | tingida |
+| `changes_review` | `Review changes` · `3 of 5 files staged`, depois `Approve changes`; sem nenhuma mudança depois de **Apply approved**, `No file changed`. A resposta vai pelo compositor com `Ask the reviewer for a change…` | **Open in VS Code**, **Approve** (tracejado com `No change to approve` sem mudança) | — | tingida |
 | `pr_trouble` | `Checks failed`, `Conflict with base` ou `Checks failed · conflict`, com os checks pelo nome; com a leitura falha, `Couldn't confirm the merge` | **Review again**; com a leitura falha e o encerramento oferecido, **Close task** secundário | — | erro |
 | `pr_closed` | `PR closed unmerged` | **Delete task…** (repetida do `⋯`) | — | erro |
-| `merge` (forma `merge`, a PR esperando o merge) | `Ready to merge · #1284` | **Open PR** | — | tingida |
+| `merge` (forma `merge`, a PR esperando o merge) | `Ready to merge · #1284`; depois de uma passada com todos os apontamentos descartados, `· Nothing approved in pass 1`, com a conversa do review aberta e o cartão | **Open PR** | — | tingida |
 | `merge` (forma `close`, o merge sem confirmação: a leitura falhou) | `Ready to close · #1284` · `Couldn't confirm the merge · Removes the worktree and the branch, then updates dev` | **Open PR**, **Close task** (primária) | — | encerramento |
 | `merge` (forma `close`, mergeada) | `Ready to close · #1284 merged 2h` · `Removes the worktree and the branch, then updates dev` | **Close task** (primária) | — | encerramento |
 
 A barra é `role="region"` com nome, e o texto de estado é `role="status"`. Um botão desabilitado tem borda tracejada e a razão ao lado, ligada por `aria-describedby`.
+
+O lugar das barras dos apontamentos (`findings`: `decide`, `apply` e a passada em texto) é `PR review · pass N`, porque é a passada que se decide; as outras barras da PR dizem `PR review`, e a passada fica na pílula.
 
 ## 8. O compositor
 
@@ -229,6 +234,7 @@ A barra é `role="region"` com nome, e o texto de estado é `role="status"`. Um 
 - `Queue a message for the implementer…` com o agente trabalhando;
 - `Sending restarts the reviewer's session…` com a sessão parada num erro, e `Reply to the reviewer to go on…` depois de um turno que falhou com o processo vivo;
 - `Ask the reviewer to add, change or drop a finding…` com apontamentos;
+- `Ask the reviewer for a change…` com as mudanças da PR em review (`changes_review`), como `Ask the implementer for a change…` num step;
 - `Sending resumes the task…` com a task pausada: enviar retoma a sessão;
 - `Answer with 1–3 above, or queue a message for the implementer…` com uma permissão aberta;
 - `Write your answer to “Limits” and press Enter…` depois de **Other…**;
@@ -244,12 +250,20 @@ Com uma pergunta aberta, o que se escreve responde a pergunta, como **Other…**
 
 ## 9. Os apontamentos da PR da task
 
-Os apontamentos de uma passada do review da PR da task são decididos na conversa, num cartão de decisão, com a barra do pedido como barra de decisão. É a mesma forma da pergunta, e o mesmo componente de apontamento do centro de review.
+Os apontamentos de uma passada do review da PR da task são decididos na conversa, num cartão de decisão, com a barra do pedido como barra de decisão. É o mesmo cartão e o mesmo apontamento do centro de review (`review.md` §9), na decisão do modo Apply (`review.md` §14). O material da task de implementação é `design/tasks/07-task-findings.md`.
 
-- **O cartão** fica logo depois do marco `Review 1 written · changes · 4 findings`. É neutro, com o cabeçalho `Findings · 4`, o resumo editável (`Summary · editable`) e um apontamento por item.
-- **Cada apontamento** tem o número, a localização em mono (um link que abre o editor na linha, ou `General`), o texto editável e o par **Approve** `A` / **Discard** `D`. A decisão ativa fica pressionada (`aria-pressed`), e um segundo clique a desfaz (`Approved · click again to undo`). O apontamento em foco tem o anel `--brand-ring`.
-- **A barra** diz o progresso (`1 of 4 decided`) e tem **Next to decide** `Alt ↓` e **Apply approved**. **Apply approved** fica tracejado até tudo estar decidido, com `Decide 3 more` ao lado. Ele envia os aprovados ao agente, e o marco `You decided · 3 approved, 1 discarded` entra na conversa.
-- **Pedir ao agente** que acrescente, mude ou retire um apontamento vai pelo compositor. (A task 7 muda esta regra pela de `review.md` §20, item 8: um marco por leitura do relatório, e o cartão logo depois do mais recente.) O cartão novo nasce no fim com as decisões mantidas, e o antigo vira o marco `Review 1 revised`.
+- **O relatório** tem o formato do centro de review: o resumo, `## Findings` e um bloco por apontamento, `### N · título`, `Location: arquivo:linha` ou `general`, e o texto. O prompt de review de PR da task recebe as seções `Findings format` e `Applying`.
+- **O cartão** fica logo depois do marco mais recente do relatório da passada (`Review 1 written · changes · 4 findings`, ou `Review 1 revised · …`). É neutro, com o cabeçalho `Findings` e o número, sem o progresso (a barra o diz) e sem o resumo, que fica no relatório que o marco abre. Uma parada de Tab, com roving tabindex.
+- **Cada apontamento** tem o número, o título (sem título, a localização no lugar), a localização, o texto do agente renderizado, o par **Approve** `A` / **Discard** `D` e **Edit** `E`. A localização ancorada abre a PR no GitHub, em `Files changed`, na linha (`O`), e o botão `<>` ao lado abre o VS Code na linha (`Ctrl+E`); a geral diz `General · not on a line of the diff`. A decisão ativa fica pressionada (`aria-pressed`), e um segundo clique a desfaz (`Approved · click again to undo`). O descartado continua legível, com o título em `--ink-2`. **Edit** abre o Markdown cru numa área de cinco linhas, `Saved as you type. It goes to the agent as you leave it.`, com **Done**.
+- **O teclado:** `A` e `D` decidem e levam ao próximo por decidir, que rola ao centro; `Alt+↓` e `Alt+↑` vão ao próximo e ao anterior de qualquer lugar da tela; `↑` `↓` andam entre os apontamentos e, nas pontas, continuam o percurso da conversa; `Ctrl+Enter` não age.
+- **A barra** diz `Decide findings · PR review · pass 1` e o progresso (`1 of 4 decided`), com **Next to decide** `Alt ↓`, **Approve the rest** (aprova de uma vez os que ainda não têm decisão; sem tecla) e **Apply approved** tracejado com `Decide 3 more`. Com tudo decidido e algum aprovado, `Ready to apply · PR review · pass 1` com **Apply approved**, que envia os aprovados ao revisor, com o texto como o usuário o deixou, e lista os descartados para ele não os apontar de novo; o marco `You decided · 3 approved, 1 discarded` e a mensagem do produto `MySpec → Reviewer · apply 3 approved findings` entram na conversa, e o ciclo segue pelo `changes_review`, o commit e a passada seguinte.
+- **Tudo descartado** leva a PR a `Ready to merge` sozinho, como no modo Apply (`review.md` §14): a barra diz `Ready to merge · #1284 · Nothing approved in pass 1`, a conversa continua aberta, com o cartão e o compositor, e desfazer um descarte volta à decisão até o merge. Um check que falha ou um conflito depois da passada dão `pr_trouble` como hoje, com o cartão ainda na conversa e a decisão ainda permitida. No merge ou no fechamento da PR, o produto fecha a conversa do review, e daí tudo segue como hoje, **Close task** incluído. Assim o review da PR da task termina num relatório limpo ou numa passada toda descartada.
+- **Mudanças na worktree antes do envio** (pedidas ao revisor pelo compositor) vão ao review junto com as dos aprovados; com tudo descartado, elas mesmas são o `Review changes`. Enquanto a decisão não acaba, a barra diz `· the worktree has changes`.
+- **Enquanto o revisor trabalha** (uma reescrita pedida) não há barra; o cartão fica, e o compositor diz `Queue a message for the reviewer…`.
+- **Pedir ao agente** que acrescente, mude ou retire um apontamento vai pelo compositor (`Ask the reviewer to add, change or drop a finding…`). O agente reescreve o relatório no lugar; o produto grava o marco `Review 1 revised · changes · 4 findings`, e o cartão passa para logo depois dele, com a decisão e o texto dos apontamentos que não mudaram. O marco anterior do relatório fica sem conteúdo.
+- **Depois do envio** não há cartão: o marco `You decided` abre os apontamentos como eram, desabilitados, com `Sent to the agent · 17:36` ou `Not sent`. Depois do merge, o cartão de uma passada toda descartada fica no lugar, desabilitado, com `Not sent`.
+- **Um relatório que o produto não consegue ler** deixa a barra `Waiting for reply · PR review` com a razão (`The report can't be read: finding 2 does not open with its location.`), e o pedido de correção vai pelo compositor.
+- **Uma passada pedida antes do formato de apontamentos** continua decidida em texto até acabar: o marco sem a contagem, a barra sem ação e a resposta pelo compositor (`Tell the reviewer which findings to apply…`). A passada seguinte já tem o cartão.
 
 Isto é uma mudança de feature: hoje esses apontamentos são decididos em texto (`features.md`, Review de pull request). O custo está na seção 15.
 
@@ -362,10 +376,11 @@ A task de referência é `Rate limit per API key`, Structured, modo `Agent`, com
 | `→` `←` | Grupo, comando, marco ou dobra em foco na conversa | Abre, dobra |
 | `1`–`9` | Cartão de pergunta, ou a entrada dele | Escolhe a opção; `Enter` envia |
 | `1`–`3` | Cartão de permissão, ou a entrada dele | **Allow**, **Allow for this session**, **Deny…** |
-| `A`, `D` | Apontamento em foco | Aprova, descarta |
+| `A`, `D` | Apontamento em foco | Aprova, descarta, e leva ao próximo por decidir |
+| `E`, `O` | Apontamento em foco | Edita o texto; abre a PR no GitHub, em `Files changed`, na linha |
 | `Alt+↓`, `Alt+↑` | Com apontamentos a decidir | Próximo e anterior por decidir |
 | `Enter`, `Shift+Enter` | Compositor | Envia, quebra a linha |
-| `Ctrl+E` | Item com worktree | **Open in VS Code**. Atalho novo, escrito no item do `⋯` |
+| `Ctrl+E` | Item com worktree; apontamento em foco | **Open in VS Code**; no apontamento, na linha. Atalho novo, escrito no item do `⋯` |
 | `↑` `↓` `Enter` | `⋯`, popovers, `listbox` | Percorrem e escolhem |
 | `Esc` | Qualquer lugar | Fecha o `listbox`, o popover, o `⋯` e o painel, e sai de uma conversa anterior, nesta ordem. Com o foco na conversa, devolve o foco ao compositor |
 
