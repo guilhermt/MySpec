@@ -92,6 +92,22 @@ function toggle(key: string, item: HTMLElement, items: readonly HTMLElement[]): 
 }
 
 /**
+ * stepFeed moves from an entry of the feed to the one before it (-1) or after it (1): an entry with
+ * data-feed-keys="own" walks its own lines with the arrows and hands over to the feed at its ends.
+ */
+export function stepFeed(entry: HTMLElement, by: -1 | 1): void {
+  const feed = entry.closest<HTMLElement>("[role=feed]");
+  if (feed === null) {
+    return;
+  }
+  const items = itemsOf(feed);
+  const index = items.indexOf(entry);
+  if (index !== -1) {
+    go(items[index + by], items);
+  }
+}
+
+/**
  * useFeed makes the feed one stop of Tab over its entries, the elements with data-feed-item in the
  * order of the page: arriving, the pending card or the last entry; the arrows, Page Up and Down,
  * Home and End walk them; → and ← open and fold the data-feed-toggle of an entry, and ← goes from

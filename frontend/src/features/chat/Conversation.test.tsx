@@ -530,6 +530,21 @@ describe("Conversation", () => {
     expect([...places].sort((a, b) => a - b)).toEqual(places);
   });
 
+  it("ends with the activity of the place in place of the work of the session", () => {
+    renderWithStore(
+      <Conversation
+        stage="prd"
+        taskId="task-1"
+        session={makeTask({ sessionStatus: "working", turnRunning: true, processRunning: true })}
+        activity="Opening the pull request…"
+      />,
+      { state: withTask(), ui: { transcripts: ready([makeEntry("user")]) } },
+    );
+
+    expect(screen.getByRole("status")).toHaveTextContent("Opening the pull request…");
+    expect(screen.queryByText("Thinking…")).not.toBeInTheDocument();
+  });
+
   it("tells an error of the session, without a button", () => {
     renderWithStore(<Conversation stage="prd" taskId="task-1" session={makeTask()} />, {
       state: withTask(),

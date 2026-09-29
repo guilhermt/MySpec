@@ -246,7 +246,7 @@ describe("detailsOf, Pull request", () => {
     });
   });
 
-  it("lists the closed review of a done pull request as an earlier conversation, with every report", () => {
+  it("lists the closed review of a done pull request as the one on screen, with every report", () => {
     const task = makeTask({
       stage: "pr",
       conversations: [conversation("pr"), conversation("pr_review")],
@@ -267,7 +267,7 @@ describe("detailsOf, Pull request", () => {
     expect(detailsOf(task, null, null).pullRequest).toEqual({
       conversations: [
         { stage: "pr", label: "Draft and opening · #1284", startedAt: AT, now: false },
-        { stage: "pr_review", label: "PR review", startedAt: AT, now: false },
+        { stage: "pr_review", label: "PR review", startedAt: AT, now: true },
       ],
       reports: [
         {
@@ -290,6 +290,34 @@ describe("detailsOf, Pull request", () => {
         state: "open",
       },
     });
+  });
+});
+
+describe("detailsOf, Pull request past its review", () => {
+  it.each(["done", "trouble", "merged", "pr_closed"])(
+    "has the review on screen with the pull request %s",
+    (status) => {
+      const task = makeTask({
+        stage: "pr",
+        conversations: [conversation("pr"), conversation("pr_review")],
+        pr: makePullRequest({ status, prNumber: 1284, sessionStage: "" }),
+      });
+
+      expect(detailsOf(task, null, null).pullRequest?.conversations).toEqual([
+        { stage: "pr", label: "Draft and opening · #1284", startedAt: AT, now: false },
+        { stage: "pr_review", label: "PR review", startedAt: AT, now: true },
+      ]);
+    },
+  );
+
+  it("leaves the review an earlier conversation while a pass waits for the checks", () => {
+    const task = makeTask({
+      stage: "pr",
+      conversations: [conversation("pr"), conversation("pr_review")],
+      pr: makePullRequest({ status: "waiting_checks", prNumber: 1284, sessionStage: "" }),
+    });
+
+    expect(detailsOf(task, null, null).pullRequest?.conversations[1]?.now).toBe(false);
   });
 });
 

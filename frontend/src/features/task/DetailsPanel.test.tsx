@@ -627,6 +627,23 @@ describe("DetailsPanel, conversations", () => {
     ]);
   });
 
+  it("says now on the conversation of the review once the pull request is merged, the one on screen", () => {
+    details({
+      ...inPR({ status: "merged", prState: "merged", sessionStage: "" }),
+      conversations: [
+        makeTaskConversation({ stage: "pr", startedAt: STARTED }),
+        makeTaskConversation({ stage: "pr_review", startedAt: STARTED }),
+      ],
+    });
+
+    const rows = within(group("Pull request")).getAllByRole("listitem");
+    expect(rows.slice(0, 2).map((row) => row.textContent)).toEqual([
+      `Draft and opening · #1284${time}`,
+      "PR reviewnow",
+    ]);
+    expect(within(group("Pull request")).queryByRole("button", { name: /^PR review/ })).toBeNull();
+  });
+
   it("has a Pull request group with only its conversations before a report or the opening", () => {
     details(
       makeTask({

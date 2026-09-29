@@ -1,5 +1,5 @@
 import { type MarkerView, mergedLineOf } from "@/features/chat/markers";
-import { prBlockHint } from "@/features/task/pr-status";
+import { draftAtHand, prBlockHint } from "@/features/task/pr-status";
 import { blockHint, currentStepOf, stepPhaseLabel } from "@/features/task/step-status";
 import type { PRStatus, PullRequest, Step, TaskSummary } from "@/lib/wails";
 import {
@@ -203,4 +203,46 @@ export function hasComposer(view: PlaceView, prStatus?: string): boolean {
     return false;
   }
   return prStatus === undefined || !CLOSED_SESSION.includes(asPRStatus(prStatus));
+}
+
+/** hasReviewConversation reports whether the review of the pull request has a conversation: the index of the conversations of the task lists it once the first pass started. */
+export function hasReviewConversation(task: TaskSummary): boolean {
+  return (task.conversations ?? []).some((conversation) => conversation.stage === "pr_review");
+}
+
+/** FixedCard is the card the screen draws at the end of a conversation, outside its transcript. */
+export type FixedCard = "files" | "draft" | "checks";
+
+// FILES_STEP are the states of a step whose changed files are the user's to read: in review, and
+// committing (a commit that failed included); review_failed is the worktree that couldn't be read.
+const FILES_STEP: readonly string[] = [
+  "awaiting_review",
+  "in_review",
+  "ready_to_approve",
+  "review_failed",
+  "committing",
+];
+
+// FILES_PR are the states of the pull request whose applied changes are the user's to read.
+const FILES_PR: readonly PRStatus[] = ["in_review", "ready_to_approve", "committing"];
+
+/** stepFixedCardOf is the fixed card of the conversation of a step, on both tabs: its changed files, or none. */
+export function stepFixedCardOf(step: Step): FixedCard | null {
+  return FILES_STEP.includes(asStepStatus(step.status)) ? "files" : null;
+}
+
+/**
+ * prFixedCardOf is the fixed card of the conversation of the pull request: the changed files of a
+ * round, the draft while it is the user's to send, the live checks while a later pass waits for
+ * them; none otherwise.
+ */
+export function prFixedCardOf(pr: PullRequest): FixedCard | null {
+  const status = asPRStatus(pr.status);
+  if (FILES_PR.includes(status)) {
+    return "files";
+  }
+  if (draftAtHand(pr)) {
+    return "draft";
+  }
+  return status === "waiting_checks" ? "checks" : null;
 }

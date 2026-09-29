@@ -201,6 +201,8 @@ export interface ConversationProps {
   endLine?: ReactNode;
   /** fixed is the fixed card after the entries: changed files, the PR draft, the live checks. */
   fixed?: ReactNode;
+  /** activity is what the place does at the end, in place of the work of the session: Opening the pull request… */
+  activity?: string;
   /** replyWaiting marks the last block of the last speech with the rail of a question in text (the reply situation). */
   replyWaiting?: boolean;
 }
@@ -213,6 +215,7 @@ export function Conversation({
   readOnly = false,
   endLine,
   fixed,
+  activity,
   replyWaiting = false,
 }: ConversationProps) {
   const transcript = useTranscript(taskId, stage);
@@ -355,7 +358,12 @@ export function Conversation({
                       />
                     ),
                 )}
-              {!readOnly && <Activity session={session} entries={entries} />}
+              {!readOnly &&
+                (activity !== undefined ? (
+                  <Activity text={activity} />
+                ) : (
+                  <Activity session={session} entries={entries} />
+                ))}
             </>
           )}
         </div>

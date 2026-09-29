@@ -28,4 +28,14 @@ describe("ErrorBlock", () => {
     expect(screen.getByText("exit status 1")).toHaveClass("font-mono", "overflow-x-auto");
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
+
+  it("tells why a place could not go on, named by it, outside the walk of the feed", () => {
+    renderWithStore(
+      <ErrorBlock explanation="The worktree folder already exists." detail="fatal: exists" />,
+    );
+
+    const block = screen.getByRole("article", { name: "The worktree folder already exists." });
+    expect(block).toHaveTextContent("fatal: exists");
+    expect(block).not.toHaveAttribute("data-feed-item");
+  });
 });

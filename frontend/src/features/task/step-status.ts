@@ -1,6 +1,6 @@
 import type { SessionState } from "@/features/chat/session";
 import type { StatusTone } from "@/features/task/status";
-import type { BlockReason, Review, Step, TaskSummary } from "@/lib/wails";
+import type { Review, Step, TaskSummary } from "@/lib/wails";
 import { asBlockReason, asReviewMode, asSessionStatus, asStepStatus } from "@/lib/wails";
 
 /** currentStepOf is the step that runs or runs next, null when there is none. */
@@ -207,26 +207,6 @@ export function currentStepDisplay(task: TaskSummary): StepDisplay {
     return { label: `Review ${step.review?.percent ?? 0}%`, tone: stepStatusTone(step) };
   }
   return sessionDisplay(task, step) ?? { label: stepStatusLabel(step), tone: stepStatusTone(step) };
-}
-
-/** blockTitle names why a step could not start. */
-export function blockTitle(reason: BlockReason): string {
-  switch (reason) {
-    case "dirty_worktree":
-      return "The worktree has uncommitted changes";
-    case "fetch_failed":
-      return "Couldn't fetch origin";
-    case "no_base_branch":
-      return "No base branch";
-    case "path_exists":
-      return "The worktree folder already exists";
-    case "branch_exists":
-      return "The branch already exists";
-    case "git_failed":
-      return "Git failed";
-    case "clone_missing":
-      return "The clone of the repository is missing";
-  }
 }
 
 /** blockHint tells the user what to do about a block. */

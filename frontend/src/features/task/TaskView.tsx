@@ -11,7 +11,7 @@ import { DetailsPanel } from "@/features/task/DetailsPanel";
 import { earlierPlace } from "@/features/task/details";
 import { EarlierConversationFoot } from "@/features/task/EarlierConversationFoot";
 import { PRPane } from "@/features/task/PRPane";
-import { ReviewStrip } from "@/features/task/ReviewStrip";
+import { hasReviewConversation, prPlaceOf } from "@/features/task/place";
 import { screenSituationKindOf, screenStageOf } from "@/features/task/request";
 import { focusRequest, focusTitle, useFocusRescue } from "@/features/task/request-focus";
 import { StepPane } from "@/features/task/StepPane";
@@ -32,21 +32,16 @@ import {
   useTask,
 } from "@/store/app-store";
 
-/**
- * StepTop is what sits over the conversation of the step: the agent tabs and the review of the
- * step, in the conversation column.
- */
+/** StepTop is what sits over the conversation of the step: the agent tabs, in the conversation column. */
 function StepTop({ task, step }: { task: TaskSummary; step: Step }) {
-  const review = step.review !== null && hasStepSession(step) ? step.review : null;
   // Only whether there are tabs matters here: AgentTabs says which one is chosen.
-  if (agentTabsOf(task, step, "implementer", 0) === null && review === null) {
+  if (agentTabsOf(task, step, "implementer", 0) === null) {
     return null;
   }
   return (
     <div className="shrink-0 px-(--space-6) pt-(--space-1)">
       <div className={COLUMN_CLASS}>
         <AgentTabs task={task} step={step} />
-        {review !== null && <ReviewStrip taskId={task.id} subject="step" review={review} />}
       </div>
     </div>
   );
@@ -126,8 +121,14 @@ export function TaskView({ taskId }: TaskViewProps) {
   const pr = task === null ? null : prOf(task);
   // The conversation on screen is the one of the stage the task is in: the tab
   // of the step that runs in the implementation stage, the pull request in the
-  // PR one. Both open a session of their own only once they get that far.
-  const stage = task === null ? "" : screenStageOf(task, stepTab);
+  // PR one. Both open a session of their own only once they get that far. Past
+  // its review, the pull request reads the conversation of the review, closed.
+  const closedReview =
+    task !== null &&
+    opening &&
+    pr !== null &&
+    prPlaceOf(task, pr, hasReviewConversation(task)).kind === "closedReview";
+  const stage = task === null ? "" : closedReview ? "pr_review" : screenStageOf(task, stepTab);
   const hasConversation =
     task !== null && (implementing ? hasStepSession(step) : opening ? stage !== "" : true);
   const conversationReady = useAppStore(

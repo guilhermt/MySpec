@@ -2,12 +2,20 @@ import { fireEvent, screen } from "@testing-library/react";
 import { useRef } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { useGlobalShortcuts } from "@/app/useGlobalShortcuts";
-import { useFeed } from "@/features/chat/useFeed";
+import { stepFeed, useFeed } from "@/features/chat/useFeed";
 import { renderWithStore } from "@/test/render";
 
 // Feed is a conversation of three entries: a speech, a group that opens with a command inside, and
 // a card, with the composer after it.
-function Feed({ pending = false, composer = true }: { pending?: boolean; composer?: boolean }) {
+function Feed({
+  pending = false,
+  composer = true,
+  own = false,
+}: {
+  pending?: boolean;
+  composer?: boolean;
+  own?: boolean;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   useFeed(ref);
   useGlobalShortcuts();
@@ -24,6 +32,7 @@ function Feed({ pending = false, composer = true }: { pending?: boolean; compose
           tabIndex={-1}
           aria-label="Card"
           {...(pending ? { "data-pending-card": "question" } : {})}
+          {...(own ? { "data-feed-keys": "own" } : {})}
         />
       </div>
       {composer && <textarea id="composer-input" aria-label="Composer" />}
@@ -113,6 +122,20 @@ describe("useFeed", () => {
     key(link, "ArrowDown");
 
     expect(link).toHaveFocus();
+  });
+
+  it("leaves the arrows to an entry that keeps its own, which hands over at its ends", () => {
+    renderWithStore(<Feed own />);
+    entry("Card").focus();
+
+    key(entry("Card"), "ArrowUp");
+    expect(entry("Card")).toHaveFocus();
+
+    stepFeed(entry("Card"), 1);
+    expect(entry("Card")).toHaveFocus();
+    stepFeed(entry("Card"), -1);
+    expect(entry("Group")).toHaveFocus();
+    expect(entry("Group")).toHaveAttribute("tabindex", "0");
   });
 
   it("opens and folds an entry with → and ←, and goes from an inner entry to its own", () => {

@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   blockHint,
-  blockTitle,
   canApprove,
   canReviewMyself,
   currentStepDisplay,
@@ -13,7 +12,7 @@ import {
   stepStatusLabel,
   stepStatusTone,
 } from "@/features/task/step-status";
-import type { BlockReason, Step, TaskSummary } from "@/lib/wails";
+import type { Step, TaskSummary } from "@/lib/wails";
 import { makeReview, makeStep, makeStepReviewer, makeTask } from "@/test/wails-mock";
 
 function implementing(step: Partial<Step>, task: Partial<TaskSummary> = {}): TaskSummary {
@@ -270,20 +269,6 @@ describe("currentStepDisplay", () => {
     );
 
     expect(currentStepDisplay(task)).toEqual({ label: "Permission", tone: "idle" });
-  });
-});
-
-describe("blockTitle", () => {
-  it.each([
-    ["dirty_worktree", "The worktree has uncommitted changes"],
-    ["fetch_failed", "Couldn't fetch origin"],
-    ["no_base_branch", "No base branch"],
-    ["path_exists", "The worktree folder already exists"],
-    ["branch_exists", "The branch already exists"],
-    ["git_failed", "Git failed"],
-    ["clone_missing", "The clone of the repository is missing"],
-  ] as const)("names %s", (reason: BlockReason, expected) => {
-    expect(blockTitle(reason)).toBe(expected);
   });
 });
 

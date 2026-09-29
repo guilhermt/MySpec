@@ -2,6 +2,7 @@ import { screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { DraftCard } from "@/features/task/DraftCard";
 import type { PullRequest } from "@/lib/wails";
+import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
 import { makePullRequest, makeState, makeTask } from "@/test/wails-mock";
 
@@ -34,11 +35,29 @@ describe("DraftCard", () => {
     expect(screen.getByLabelText("Description")).toHaveValue(DRAFT.body);
   });
 
-  it("shows the base of the branch without letting it be edited", () => {
+  it("says the branch it goes into without letting it be edited", () => {
     card();
 
-    expect(screen.getByText("origin/dev")).toBeInTheDocument();
+    expect(screen.getByText("into dev")).toBeInTheDocument();
     expect(screen.getAllByRole("textbox")).toHaveLength(2);
+  });
+
+  it("is one entry of the feed that keeps its keys, with the description in mono", () => {
+    card();
+
+    const draft = screen.getByRole("article", { name: "Pull request draft" });
+    expect(draft).toHaveAttribute("data-feed-item");
+    expect(draft).toHaveAttribute("data-feed-keys", "own");
+    expect(screen.getByLabelText("Description")).toHaveClass("font-mono", "resize-y");
+  });
+
+  it("keeps the edit of the user in the store", async () => {
+    const { user } = card();
+
+    await user.clear(screen.getByLabelText("Title"));
+    await user.type(screen.getByLabelText("Title"), "Mine");
+
+    expect(useAppStore.getState().prDrafts["task-1"]).toEqual({ title: "Mine", body: DRAFT.body });
   });
 
   it("prefers what the user is editing over the file", () => {

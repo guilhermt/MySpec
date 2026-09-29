@@ -191,7 +191,7 @@ describe("TaskView", () => {
     expect(screen.getByRole("textbox")).toHaveValue("For the reviewer");
   });
 
-  it("puts the tabs over the conversation they switch, with no review strip under the agent", () => {
+  it("puts the tabs over the conversation they switch, with no changed files under the agent", () => {
     stepView(UNDER_AGENT_REVIEW);
 
     const tablist = screen.getByRole("tablist", { name: "Conversations" });
@@ -203,18 +203,20 @@ describe("TaskView", () => {
     expect(
       tablist.compareDocumentPosition(conversation as Node) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-    expect(screen.queryByRole("progressbar", { name: "Review progress" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("article", { name: /^Changed files/ })).not.toBeInTheDocument();
   });
 
-  it("puts the review of the step under the header, above the conversation", () => {
-    stepView({ status: "in_review", review: makeReview({ staged: 3, total: 5, percent: 60 }) });
+  it("puts the changed files of the step at the end of its conversation", async () => {
+    stepView({ status: "in_review", review: makeReview({ staged: 1, total: 2, percent: 50 }) });
 
-    const strip = screen.getByRole("progressbar", { name: "Review progress" });
+    const feed = screen.getByRole("feed");
+    const card = await within(feed).findByRole("article", { name: "Changed files · 2" });
     expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
     expect(
-      strip.compareDocumentPosition(screen.getByText("Add a login screen")) &
+      screen.getByText("Add a login screen").compareDocumentPosition(card) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+    expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
   });
 
   it("shows no conversation while the step is blocked", () => {
@@ -229,7 +231,11 @@ describe("TaskView", () => {
       currentStep: 1,
     });
 
-    expect(screen.getByRole("alert")).toHaveTextContent("Couldn't fetch origin");
+    expect(
+      screen.getByRole("article", {
+        name: "Check the network and the credentials of origin, then try again.",
+      }),
+    ).toHaveTextContent("fatal: unable to access");
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
     expect(api.getTranscript).not.toHaveBeenCalled();
   });
@@ -350,17 +356,31 @@ describe("TaskView", () => {
       }),
     });
 
-    expect(screen.getByLabelText("Title")).toHaveValue("Wire the api");
-    await waitFor(() => {
-      expect(api.getTranscript).toHaveBeenCalledWith("task-1", "pr");
-    });
+    expect(await screen.findByLabelText("Title")).toHaveValue("Wire the api");
+    expect(api.getTranscript).toHaveBeenCalledWith("task-1", "pr");
   });
 
   it("asks for no conversation while the pull request has none", () => {
     view({ stage: "pr", pr: makePullRequest({ status: "preparing", sessionStage: "" }) });
 
-    expect(screen.getByText("Checking GitHub…")).toBeInTheDocument();
+    expect(screen.getByText("Preparing the pull request…")).toBeInTheDocument();
     expect(api.getTranscript).not.toHaveBeenCalled();
+  });
+
+  it("reads the conversation of the review once the pull request is merged", async () => {
+    view({
+      stage: "pr",
+      pr: makePullRequest({ status: "merged", prState: "merged", prNumber: 12, sessionStage: "" }),
+      conversations: [
+        makeTaskConversation({ stage: "pr" }),
+        makeTaskConversation({ stage: "pr_review" }),
+      ],
+    });
+
+    await waitFor(() => {
+      expect(api.getTranscript).toHaveBeenCalledWith("task-1", "pr_review");
+    });
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
   });
 
   it("lets nothing but the conversation scroll in its column", () => {
@@ -450,11 +470,10 @@ describe("TaskView, earlier conversation", () => {
 
   const EARLIER_REGION = "Step 1 · Implementer, an earlier conversation";
 
-  it("has the tabs, the review, the meter and the composer before an earlier conversation opens", () => {
+  it("has the tabs, the meter and the composer before an earlier conversation opens", () => {
     loop();
 
     expect(screen.getByRole("tablist", { name: "Conversations" })).toBeInTheDocument();
-    expect(screen.getByRole("progressbar", { name: "Review progress" })).toBeInTheDocument();
     expect(screen.getByRole("meter", { name: "Context" })).toBeInTheDocument();
     expect(screen.getByRole("textbox")).toBeInTheDocument();
   });
@@ -484,11 +503,10 @@ describe("TaskView, earlier conversation", () => {
     expect(screen.queryByRole("button", { name: /Retry|Answer|Allow|Deny|Remove/ })).toBeNull();
   });
 
-  it("hides the tabs, the review of the step and the meter, and keeps the stepper and the panels", () => {
+  it("hides the tabs and the meter, and keeps the stepper and the panels", () => {
     loop({ ui: { earlierConversation: { taskId: "task-1", stage: "step:1", from: null } } });
 
     expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
-    expect(screen.queryByRole("progressbar", { name: "Review progress" })).toBeNull();
     expect(screen.queryByRole("meter", { name: "Context" })).not.toBeInTheDocument();
     expect(screen.getByRole("list", { name: /^Progress/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Details" })).toBeInTheDocument();
@@ -594,7 +612,8 @@ describe("TaskView, earlier conversation", () => {
 
     await user.click(screen.getByRole("button", { name: "Back to the pull request" }));
 
-    expect(document.querySelector('[data-slot="conversation"]')).toBeNull();
+    expect(screen.getByText("Preparing the pull request…")).toBeInTheDocument();
+    expect(screen.queryByRole("feed")).toBeNull();
     expect(screen.getByRole("heading", { level: 1 })).toHaveFocus();
   });
 

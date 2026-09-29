@@ -61,7 +61,8 @@ interface Row {
     | "DraftCard"
     | "PRPane notes"
     | "QuestionCard"
-    | "PermissionCard";
+    | "PermissionCard"
+    | "ReviewStrip";
   button: string;
   state: string;
   task: TaskSummary;
@@ -71,6 +72,8 @@ interface Row {
   /** trigger is the text in the bar that holds the tooltip. */
   trigger?: RegExp;
   disabled?: boolean;
+  /** card names the fixed card that holds the control; the pending card when not given. */
+  card?: RegExp;
   /** role is the role of the control in the card, a button when not given. */
   role?: "radio";
   /** transcripts are the conversations the screen reads, with the pending card of a row. */
@@ -92,6 +95,14 @@ function permissionEntry(suggestions: string): Entry {
     ? entry
     : { ...entry, permission: { ...entry.permission, suggestions } };
 }
+
+// DELETED is a review of the step with a file that was deleted.
+const DELETED = makeReview({
+  files: [{ path: "src/legacy.ts", kind: "deleted", staged: false, partial: false }],
+  staged: 0,
+  total: 1,
+  percent: 0,
+});
 
 const ROWS: Row[] = [
   {
@@ -330,6 +341,118 @@ const ROWS: Row[] = [
     where: "tooltip",
     trigger: /^Review again$/,
     name: /^Review again reads GitHub and turns this into findings of a new pass\.$/,
+  },
+  {
+    origin: "PRPane notes",
+    button: "#N",
+    state: "waiting for the merge",
+    task: inPR({ ...OPENED, status: "done", prState: "open" }, "merge", "merge"),
+    where: "menu",
+    name: /^Open PR$/,
+  },
+  {
+    origin: "PRPane notes",
+    button: "#N",
+    state: "in trouble",
+    task: inPR(
+      { ...OPENED, status: "trouble", trouble: { failedChecks: ["build"], conflict: false } },
+      "pr_trouble",
+      "checks",
+    ),
+    where: "menu",
+    name: /^Open PR$/,
+  },
+  {
+    origin: "PRPane notes",
+    button: "#N",
+    state: "merged",
+    task: inPR(
+      { ...OPENED, status: "merged", prState: "merged", canClose: true },
+      "merge",
+      "close",
+    ),
+    where: "menu",
+    name: /^Open PR$/,
+  },
+  {
+    origin: "PRPane notes",
+    button: "#N",
+    state: "closed without a merge",
+    task: inPR({ ...OPENED, status: "pr_closed", prState: "closed" }, "pr_closed"),
+    where: "menu",
+    name: /^Open PR$/,
+  },
+  {
+    origin: "ReviewStrip",
+    button: "a file",
+    state: "awaiting review",
+    task: inStep(
+      { status: "awaiting_review", review: makeReview() },
+      { situations: [stepSituation("step_review", "review")] },
+    ),
+    where: "card",
+    card: /^Changed files/,
+    name: /src\/api\/login\.ts/,
+  },
+  {
+    origin: "ReviewStrip",
+    button: "a file",
+    state: "ready to approve",
+    task: inStep(
+      { status: "ready_to_approve", review: REVIEWING },
+      { situations: [stepSituation("step_review", "approve")] },
+    ),
+    where: "card",
+    card: /^Changed files/,
+    name: /src\/LoginForm\.tsx/,
+  },
+  {
+    origin: "ReviewStrip",
+    button: "a file",
+    state: "committing",
+    task: inStep({ status: "committing", review: REVIEWING }),
+    where: "card",
+    card: /^Changed files/,
+    name: /src\/LoginForm\.tsx/,
+  },
+  {
+    origin: "ReviewStrip",
+    button: "a deleted file",
+    state: "awaiting review",
+    task: inStep(
+      { status: "awaiting_review", review: DELETED },
+      { situations: [stepSituation("step_review", "review")] },
+    ),
+    where: "card",
+    card: /^Changed files/,
+    name: /src\/legacy\.ts/,
+    disabled: true,
+  },
+  {
+    origin: "ReviewStrip",
+    button: "a file",
+    state: "changes of the pull request to review",
+    task: inPR(
+      { ...OPENED, status: "in_review", review: makeReview(), sessionStage: "pr_review" },
+      "changes_review",
+      "review",
+    ),
+    where: "card",
+    card: /^Changed files/,
+    name: /src\/api\/login\.ts/,
+  },
+  {
+    origin: "ReviewStrip",
+    button: "a file",
+    state: "changes of the pull request ready to approve",
+    task: inPR(
+      { ...OPENED, status: "ready_to_approve", review: REVIEWING, sessionStage: "pr_review" },
+      "changes_review",
+      "approve",
+    ),
+    where: "card",
+    card: /^Changed files/,
+    name: /src\/LoginForm\.tsx/,
   },
   {
     origin: "PRBar",
@@ -654,7 +777,7 @@ const ROWS: Row[] = [
 describe("where the actions of the bars that left went", () => {
   it.each(ROWS)(
     "$origin: $button, $state, is in the $where",
-    async ({ task, where, name, trigger, disabled, role, transcripts }) => {
+    async ({ task, where, name, trigger, disabled, card: cardName, role, transcripts }) => {
       const { user } = renderWithStore(<TaskView taskId={task.id} />, {
         state: makeState({
           tasks: [task],
@@ -678,11 +801,14 @@ describe("where the actions of the bars that left went", () => {
         expect(found).toHaveTextContent(name);
         return;
       } else if (where === "card") {
-        const card = await waitFor(() => {
-          const pending = document.querySelector<HTMLElement>("[data-pending-card]");
-          expect(pending).not.toBeNull();
-          return pending as HTMLElement;
-        });
+        const card =
+          cardName === undefined
+            ? await waitFor(() => {
+                const pending = document.querySelector<HTMLElement>("[data-pending-card]");
+                expect(pending).not.toBeNull();
+                return pending as HTMLElement;
+              })
+            : await screen.findByRole("article", { name: cardName });
         found = within(card).getByRole(role ?? "button", { name });
       } else if (where === "header") {
         found = within(screen.getByRole("banner")).getByRole("button", { name });

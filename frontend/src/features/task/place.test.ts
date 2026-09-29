@@ -1,8 +1,23 @@
 import { describe, expect, it } from "vitest";
 import type { MarkerView } from "@/features/chat/markers";
-import { hasComposer, type PlaceView, prPlaceOf, stepPlaceOf } from "@/features/task/place";
+import {
+  type FixedCard,
+  hasComposer,
+  hasReviewConversation,
+  type PlaceView,
+  prFixedCardOf,
+  prPlaceOf,
+  stepFixedCardOf,
+  stepPlaceOf,
+} from "@/features/task/place";
 import type { PullRequest, Step, TaskSummary } from "@/lib/wails";
-import { makePRCheck, makePullRequest, makeStep, makeTask } from "@/test/wails-mock";
+import {
+  makePRCheck,
+  makePullRequest,
+  makeStep,
+  makeTask,
+  makeTaskConversation,
+} from "@/test/wails-mock";
 
 /** inStep is a task of seven steps whose fifth runs, in the given state. */
 function inStep(step: Partial<Step>, task: Partial<TaskSummary> = {}): TaskSummary {
@@ -299,5 +314,61 @@ describe("hasComposer", () => {
     ["the closed review", { kind: "closedReview", endLine: null }, "merged", false],
   ])("answers for %s", (_, view, prStatus, expected) => {
     expect(hasComposer(view, prStatus)).toBe(expected);
+  });
+});
+
+describe("hasReviewConversation", () => {
+  it("is the conversation of the review listed among the conversations of the task", () => {
+    const listed = makeTask({
+      conversations: [
+        makeTaskConversation({ stage: "pr" }),
+        makeTaskConversation({ stage: "pr_review" }),
+      ],
+    });
+    const unlisted = makeTask({ conversations: [makeTaskConversation({ stage: "pr" })] });
+
+    expect(hasReviewConversation(listed)).toBe(true);
+    expect(hasReviewConversation(unlisted)).toBe(false);
+    expect(hasReviewConversation(makeTask({ conversations: null }))).toBe(false);
+  });
+});
+
+describe("stepFixedCardOf", () => {
+  it.each<[string, FixedCard | null]>([
+    ["implementing", null],
+    ["agent_review", null],
+    ["addressing_review", null],
+    ["awaiting_review", "files"],
+    ["in_review", "files"],
+    ["ready_to_approve", "files"],
+    ["review_failed", "files"],
+    ["committing", "files"],
+    ["nothing_to_commit", null],
+  ])("gives a step %s the card %s", (status, expected) => {
+    expect(stepFixedCardOf(makeStep({ status }))).toBe(expected);
+  });
+});
+
+describe("prFixedCardOf", () => {
+  const DRAFT = { title: "Add login", body: "The login page.", file: "draft.md" };
+
+  it.each<[string, Partial<PullRequest>, FixedCard | null]>([
+    ["the draft being written", { status: "drafting", draft: null }, null],
+    ["the draft ready", { status: "draft_ready", draft: DRAFT }, "draft"],
+    ["the draft an opening that failed left", { status: "awaiting_reply", draft: DRAFT }, "draft"],
+    [
+      "a reply the review waits for",
+      { status: "awaiting_reply", draft: DRAFT, prNumber: 12 },
+      null,
+    ],
+    ["the opening", { status: "opening", draft: DRAFT }, null],
+    ["a pass of the review", { status: "reviewing", prNumber: 12 }, null],
+    ["the findings to decide", { status: "awaiting_decision", prNumber: 12 }, null],
+    ["the changes to review", { status: "in_review", prNumber: 12 }, "files"],
+    ["the changes ready to approve", { status: "ready_to_approve", prNumber: 12 }, "files"],
+    ["the commit of the changes", { status: "committing", prNumber: 12 }, "files"],
+    ["a later pass waiting for the checks", { status: "waiting_checks", prNumber: 12 }, "checks"],
+  ])("gives %s its card", (_, fields, expected) => {
+    expect(prFixedCardOf(makePullRequest(fields))).toBe(expected);
   });
 });
