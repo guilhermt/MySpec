@@ -42,6 +42,7 @@ import type {
   BoardCard,
   DiscussionSummary,
   Leftover,
+  MarkerType,
   Migration,
   ModelCatalog,
   Place,
@@ -163,8 +164,11 @@ export interface AppStore {
    * Details; every navigation clears it, and it is never stacked nor stored.
    */
   earlierConversation: EarlierConversation | null;
-  /** pendingFocus is where the focus goes once the new place is on screen: its title, or the back or forward button. */
-  pendingFocus: "title" | "back" | "forward" | null;
+  /**
+   * pendingFocus is where the focus goes once the new place is on screen: its title, the back or
+   * forward button, or what the situation of a task asks (request), which the task screen settles.
+   */
+  pendingFocus: "title" | "back" | "forward" | "request" | null;
   /** sidebarRail is the sidebar collapsed into its strip; kept across runs. */
   sidebarRail: boolean;
   /** toasts are the notices of items that left without being open, the oldest first, three at most. */
@@ -176,6 +180,8 @@ export interface AppStore {
   /** transcripts and drafts are keyed by sessionKey: a task has one per stage. */
   transcripts: Record<string, TranscriptState>;
   drafts: Record<string, string>;
+  /** markerRequest is a marker of a task the conversation opens and focuses: the last one of its type. */
+  markerRequest: { taskId: string; type: MarkerType } | null;
   /** openStepTab is the conversation tab of a step, by stepTabKey. */
   openStepTab: Record<string, StepTab>;
   /** prDrafts is the pull request the user is editing, by task id. */
@@ -229,6 +235,9 @@ export interface AppStore {
   /** goForward opens the nearest place ahead of the current one that still exists; with none, nothing happens. */
   goForward: (options?: { focus?: "title" | "forward" }) => void;
   clearPendingFocus: () => void;
+  /** requestMarkerOpen asks the conversation of a task to open and focus its last marker of a type. */
+  requestMarkerOpen: (taskId: string, type: MarkerType) => void;
+  clearMarkerRequest: () => void;
   /** openPanel opens an auxiliary panel of the place on screen, closing the one open; null closes it. */
   openPanel: (panel: PanelId | null) => void;
   /** openEarlierConversation puts an earlier conversation of a task in place of the one of its place. */
@@ -463,6 +472,7 @@ function initialTaskUi(): Pick<
   AppStore,
   | "transcripts"
   | "drafts"
+  | "markerRequest"
   | "openStepTab"
   | "prDrafts"
   | "newTaskOpen"
@@ -480,6 +490,7 @@ function initialTaskUi(): Pick<
   return {
     transcripts: {},
     drafts: {},
+    markerRequest: null,
     openStepTab: {},
     prDrafts: {},
     newTaskOpen: false,
@@ -775,6 +786,10 @@ export const useAppStore = create<AppStore>()((set, get) => {
 
     clearPendingFocus: () => set({ pendingFocus: null }),
 
+    requestMarkerOpen: (taskId, type) => set({ markerRequest: { taskId, type } }),
+
+    clearMarkerRequest: () => set({ markerRequest: null }),
+
     openPanel: (panel) => set({ panel }),
 
     openEarlierConversation: (taskId, stage, fromPanel) =>
@@ -973,9 +988,10 @@ export const useAppStore = create<AppStore>()((set, get) => {
       if (location === null) {
         return;
       }
+      // A task takes the focus to what its situation asks; a review and a discussion, to the title.
       leave(() =>
         set((state) => ({
-          ...navigate(state, location, "title"),
+          ...navigate(state, location, location.kind === "task" ? "request" : "title"),
           openStepTab:
             location.kind === "task"
               ? withStepTab(state.openStepTab, itemId, place)

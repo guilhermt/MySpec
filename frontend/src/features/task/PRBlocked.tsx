@@ -1,19 +1,15 @@
-import { RotateCcw } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { prBlockHint, prBlockTitle } from "@/features/task/pr-status";
 import { asPRBlockReason, type PullRequest } from "@/lib/wails";
-import { retryPR } from "@/store/actions";
 
 export interface PRBlockedProps {
-  taskId: string;
   pr: PullRequest;
 }
 
 /**
- * PRBlocked is why the PR stage of a task could not go on and how to get out
- * of it. What gh or git said is shown as they said it, never translated.
+ * PRBlocked is why the PR stage of a task could not go on; the way out is on the request bar. What
+ * gh or git said is shown as they said it, never translated.
  */
-export function PRBlocked({ taskId, pr }: PRBlockedProps) {
+export function PRBlocked({ pr }: PRBlockedProps) {
   const reason = asPRBlockReason(pr.block?.reason ?? "");
   const detail = pr.block?.detail ?? "";
 
@@ -31,12 +27,6 @@ export function PRBlocked({ taskId, pr }: PRBlockedProps) {
               {detail}
             </pre>
           )}
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => void retryPR(taskId)}>
-            <RotateCcw />
-            Try again
-          </Button>
         </div>
       </div>
     </div>

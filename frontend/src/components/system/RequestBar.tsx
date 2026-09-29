@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "./Button";
 import { type GlyphState, StateGlyph } from "./StateGlyph";
 import { TimeChip } from "./TimeChip";
+import { Tooltip } from "./Tooltip";
 
 /** RequestForm is each form of the request bar (components.md, Barra do pedido). */
 export type RequestForm = "quiet" | "tinted" | "decision" | "error" | "closing";
@@ -16,6 +17,10 @@ export interface RequestBarProps {
   time?: { short: string; long: string; tone: "wait" | "error" | "close" };
   /** progress is how far the request is: "1 of 4 decided", "5 of 7 files staged · 71%". */
   progress?: string;
+  /** progressTooltip is the reason behind the progress: why the merge couldn't be confirmed. */
+  progressTooltip?: string;
+  /** flash blinks the bar in the veil of its gravity, as the situation is born with the screen open. */
+  flash?: "error" | "wait";
   /** status is the sentence the bar's status says when it appears or changes on its own. */
   status: string;
   actions: ReactNode;
@@ -30,6 +35,12 @@ export interface OtherConversationBarProps {
   onGo: () => void;
   /** goLabel names the way to the other conversation: "Go to reviewer". */
   goLabel: string;
+  /** status is what the bar's status says; the label when absent. */
+  status?: string;
+  /** goTooltip says where Go leads: "Show the reviewer's conversation". */
+  goTooltip?: string;
+  /** flash blinks the bar in the veil of its gravity, as the situation is born with the screen open. */
+  flash?: "error" | "wait";
 }
 
 /**
@@ -71,11 +82,27 @@ export function RequestBar({
   place,
   time,
   progress,
+  progressTooltip,
+  flash,
   status,
   actions,
 }: RequestBarProps) {
+  const middle = progress !== undefined && (
+    <span
+      className="text-(length:--text-meta) leading-(--leading-meta) text-ink-2"
+      {...(progressTooltip !== undefined ? { tabIndex: 0 } : {})}
+    >
+      {progress}
+    </span>
+  );
   return (
-    <section aria-label="Request" data-form={form} className={cn(BAR, BACKGROUNDS[form])}>
+    <section
+      aria-label="Request"
+      data-form={form}
+      tabIndex={-1}
+      {...(flash !== undefined ? { "data-flash": flash } : {})}
+      className={cn(BAR, BACKGROUNDS[form], "situation-flash outline-none")}
+    >
       <span role="status" className="sr-only">
         {status}
       </span>
@@ -85,11 +112,12 @@ export function RequestBar({
         {place !== undefined && <span className="text-ink-2">· {place}</span>}
         {time !== undefined && <TimeChip tone={time.tone} time={time.short} longTime={time.long} />}
       </span>
-      {progress !== undefined && (
-        <span className="text-(length:--text-meta) leading-(--leading-meta) text-ink-2">
-          {progress}
-        </span>
-      )}
+      {middle !== false &&
+        (progressTooltip === undefined ? (
+          middle
+        ) : (
+          <Tooltip content={progressTooltip}>{middle}</Tooltip>
+        ))}
       <div className="ml-auto flex flex-wrap items-center gap-1.5">{actions}</div>
     </section>
   );
@@ -105,15 +133,25 @@ export function OtherConversationBar({
   time,
   onGo,
   goLabel,
+  goTooltip,
+  flash,
+  status = label,
 }: OtherConversationBarProps) {
+  const go = (
+    <Button size="sm" onClick={onGo}>
+      {goLabel}
+    </Button>
+  );
   return (
     <section
       aria-label="Request"
       data-form={failed ? "other-failed" : "other-waits"}
-      className={cn(BAR, "bg-surface-0", failed && RAIL)}
+      tabIndex={-1}
+      {...(flash !== undefined ? { "data-flash": flash } : {})}
+      className={cn(BAR, "bg-surface-0 situation-flash outline-none", failed && RAIL)}
     >
       <span role="status" className="sr-only">
-        {label}
+        {status}
       </span>
       <span className="inline-flex items-center gap-2 whitespace-nowrap">
         <StateGlyph state={failed ? "error" : "wait"} />
@@ -123,9 +161,7 @@ export function OtherConversationBar({
         )}
       </span>
       <div className="ml-auto flex items-center gap-1.5">
-        <Button size="sm" onClick={onGo}>
-          {goLabel}
-        </Button>
+        {goTooltip === undefined ? go : <Tooltip content={goTooltip}>{go}</Tooltip>}
       </div>
     </section>
   );

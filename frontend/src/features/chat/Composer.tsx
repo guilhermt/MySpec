@@ -90,6 +90,7 @@ export function Composer({ taskId, stage, session }: ComposerProps) {
       <div className="mx-auto flex w-full max-w-[58.5rem] flex-col gap-1.5">
         <div className="flex items-end gap-2">
           <Textarea
+            id="composer-input"
             value={draft}
             onChange={(event) => setDraft(taskId, stage, event.target.value)}
             onKeyDown={onKeyDown}

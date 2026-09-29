@@ -72,8 +72,6 @@ describe("PRPane", () => {
     pane({ status: "awaiting_reply", draft: DRAFT });
 
     expect(screen.getByLabelText("Title")).toHaveValue(DRAFT.title);
-    // Trying again needs no message to the agent first.
-    expect(screen.getByRole("button", { name: "Open PR" })).toBeEnabled();
     expect(screen.getByPlaceholderText("Reply to the agent…")).toBeInTheDocument();
   });
 
@@ -162,16 +160,6 @@ describe("PRPane", () => {
     expect(screen.getByRole("region", { name: "Request" })).toHaveTextContent("Ready to merge");
   });
 
-  it("says when the merge couldn't be confirmed", () => {
-    pane({ status: "done", prNumber: 12, checkError: "gh: not authenticated" });
-
-    expect(
-      screen.getByText(
-        "The merge couldn't be confirmed: gh: not authenticated. If you merged it, close the task anyway.",
-      ),
-    ).toBeInTheDocument();
-  });
-
   it("lists what went wrong after the review, with no buttons of its own", () => {
     pane({
       status: "trouble",
@@ -185,9 +173,6 @@ describe("PRPane", () => {
     expect(screen.getByText("Check failed: ci")).toBeInTheDocument();
     expect(screen.getByText("Check failed: lint")).toBeInTheDocument();
     expect(screen.getByText("Conflict with main")).toBeInTheDocument();
-    expect(
-      screen.getByText("Review again reads GitHub and turns this into findings of a new pass."),
-    ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Review again" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Refresh PR" })).not.toBeInTheDocument();
   });

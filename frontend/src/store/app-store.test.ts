@@ -791,14 +791,27 @@ function reviewerPlace(step: number): Place {
   return { kind: "step_review", stage: "", step };
 }
 
+describe("marker request", () => {
+  it("asks the conversation of a task to open a marker, until it is cleared", () => {
+    useAppStore.getState().requestMarkerOpen("task-1", "plan_invalid");
+    expect(useAppStore.getState().markerRequest).toEqual({
+      taskId: "task-1",
+      type: "plan_invalid",
+    });
+
+    useAppStore.getState().clearMarkerRequest();
+    expect(useAppStore.getState().markerRequest).toBeNull();
+  });
+});
+
 describe("open situation", () => {
-  it("opens the task of a situation", () => {
+  it("opens the task of a situation, the focus going to what it asks", () => {
     useAppStore.getState().applyState(withTasks());
 
     useAppStore.getState().openSituation(API_TASK.id, stagePlace("prd"));
 
     expect(location()).toEqual({ kind: "task", id: API_TASK.id });
-    expect(useAppStore.getState().pendingFocus).toBe("title");
+    expect(useAppStore.getState().pendingFocus).toBe("request");
   });
 
   it("opens the reviewer tab of the step the situation is in", () => {

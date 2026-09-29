@@ -23,6 +23,7 @@ export interface StoreOptions {
       | "expectGone"
       | "transcripts"
       | "drafts"
+      | "markerRequest"
       | "openStepTab"
       | "prDrafts"
       | "newTaskOpen"
@@ -63,6 +64,7 @@ export function resetAppStore(options: StoreOptions = {}): void {
     expectGone: options.ui?.expectGone ?? null,
     transcripts: options.ui?.transcripts ?? {},
     drafts: options.ui?.drafts ?? {},
+    markerRequest: options.ui?.markerRequest ?? null,
     openStepTab: options.ui?.openStepTab ?? {},
     prDrafts: options.ui?.prDrafts ?? {},
     newTaskOpen: options.ui?.newTaskOpen ?? false,

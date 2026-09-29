@@ -49,7 +49,7 @@ function Place() {
   return <LocationHeader key={JSON.stringify(location)} />;
 }
 
-function header(ui: Partial<Pick<AppStore, "location" | "back" | "forward">>) {
+function header(ui: Partial<Pick<AppStore, "location" | "back" | "forward" | "pendingFocus">>) {
   return renderWithStore(<Place />, { state: app, ui });
 }
 
@@ -137,6 +137,13 @@ describe("LocationHeader", () => {
 
     expect(screen.getByRole("heading", { level: 1, name: "add-login" })).toHaveFocus();
     expect(useAppStore.getState().pendingFocus).toBeNull();
+  });
+
+  it("leaves the focus of a situation of a task to the task screen", () => {
+    header({ location: TASK, pendingFocus: "request" });
+
+    expect(screen.getByRole("heading", { level: 1, name: "add-login" })).not.toHaveFocus();
+    expect(useAppStore.getState().pendingFocus).toBe("request");
   });
 
   it("takes the focus to the title after a level of the breadcrumb", async () => {

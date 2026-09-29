@@ -1,7 +1,7 @@
 import { screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { StepBlocked } from "@/features/task/StepBlocked";
-import { api, type StepBlock } from "@/lib/wails";
+import type { StepBlock } from "@/lib/wails";
 import { renderWithStore } from "@/test/render";
 import { makeState, makeStep, makeTask } from "@/test/wails-mock";
 
@@ -37,25 +37,9 @@ describe("StepBlocked", () => {
     expect(screen.getByText("fatal: could not read Username").tagName).toBe("PRE");
   });
 
-  it("starts the step over", async () => {
-    const { user } = blocked({ reason: "fetch_failed" });
+  it("leaves the way out to the request bar", () => {
+    blocked();
 
-    await user.click(screen.getByRole("button", { name: "Try again" }));
-
-    expect(api.retryStep).toHaveBeenCalledWith("task-1");
-  });
-
-  it("cleans the worktree and starts, only for a dirty one", async () => {
-    const { user } = blocked();
-
-    await user.click(screen.getByRole("button", { name: "Clean and start" }));
-
-    expect(api.cleanAndStartStep).toHaveBeenCalledWith("task-1");
-  });
-
-  it("has nothing to clean when the block is not dirt", () => {
-    blocked({ reason: "branch_exists" });
-
-    expect(screen.queryByRole("button", { name: "Clean and start" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 });

@@ -575,3 +575,84 @@ describe("TaskView, earlier conversation", () => {
     expect(screen.getByRole("tablist", { name: "Conversations" })).toBeInTheDocument();
   });
 });
+
+describe("TaskView, the focus on arriving at a situation", () => {
+  function arrive(task: TaskSummary) {
+    return renderWithStore(<TaskView taskId={task.id} />, {
+      state: makeState({ tasks: [task] }),
+      ui: { location: { kind: "task", id: task.id }, pendingFocus: "request" },
+    });
+  }
+
+  it("goes to the primary of the bar once the conversation is read", async () => {
+    arrive(
+      makeTask({
+        stage: "implementation",
+        currentStep: 1,
+        steps: [
+          makeStep({
+            status: "ready_to_approve",
+            review: makeReview({ staged: 2, total: 2, percent: 100 }),
+          }),
+        ],
+        situations: [
+          makeSituation({
+            kind: "step_review",
+            form: "approve",
+            place: { kind: "step", stage: "", step: 1 },
+          }),
+        ],
+      }),
+    );
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "Approve" })).toHaveFocus());
+    expect(useAppStore.getState().pendingFocus).toBeNull();
+  });
+
+  it("goes to the composer when the answer goes through it", async () => {
+    arrive(
+      makeTask({
+        stage: "prd",
+        situations: [
+          makeSituation({ kind: "reply", place: { kind: "stage", stage: "prd", step: 0 } }),
+        ],
+      }),
+    );
+
+    await waitFor(() => expect(document.getElementById("composer-input")).toHaveFocus());
+  });
+
+  it("goes to Try again of a blocked step, which has no conversation", async () => {
+    arrive(
+      makeTask({
+        stage: "implementation",
+        currentStep: 1,
+        steps: [
+          makeStep({ status: "blocked", block: { reason: "fetch_failed", detail: "", files: 0 } }),
+        ],
+        situations: [
+          makeSituation({
+            kind: "step_blocked",
+            group: "error",
+            place: { kind: "step", stage: "", step: 1 },
+          }),
+        ],
+      }),
+    );
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "Try again" })).toHaveFocus());
+  });
+
+  it("falls back to the title when what the situation asks isn't on screen", async () => {
+    arrive(
+      makeTask({
+        stage: "prd",
+        situations: [
+          makeSituation({ kind: "question", place: { kind: "stage", stage: "prd", step: 0 } }),
+        ],
+      }),
+    );
+
+    await waitFor(() => expect(screen.getByRole("heading", { level: 1 })).toHaveFocus());
+  });
+});

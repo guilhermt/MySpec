@@ -132,7 +132,73 @@ describe("RequestBar", () => {
   });
 });
 
+describe("RequestBar, the flash and the tooltip of the middle", () => {
+  it("blinks in the veil of its gravity while the situation flashes", () => {
+    renderWithStore(
+      <RequestBar
+        form="error"
+        glyph="error"
+        label="PR blocked"
+        status=""
+        flash="error"
+        actions={null}
+      />,
+    );
+
+    expect(bar()).toHaveClass("situation-flash");
+    expect(bar()).toHaveAttribute("data-flash", "error");
+  });
+
+  it("does not blink otherwise", () => {
+    renderWithStore(
+      <RequestBar form="error" glyph="error" label="PR blocked" status="" actions={null} />,
+    );
+
+    expect(bar()).not.toHaveAttribute("data-flash");
+  });
+
+  it("says the reason behind the middle in its tooltip", async () => {
+    const { user } = renderWithStore(
+      <RequestBar
+        form="closing"
+        glyph="close"
+        label="Ready to close"
+        progress="Couldn't confirm the merge"
+        progressTooltip="gh: not authenticated"
+        status=""
+        actions={null}
+      />,
+    );
+
+    await user.hover(within(bar()).getByText("Couldn't confirm the merge"));
+
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("gh: not authenticated");
+  });
+});
+
 describe("OtherConversationBar", () => {
+  it("says where Go leads in its tooltip, and blinks while the other situation flashes", async () => {
+    const { user } = renderWithStore(
+      <OtherConversationBar
+        failed={false}
+        label="The reviewer waits · Question"
+        status=""
+        onGo={vi.fn()}
+        goLabel="Go to reviewer"
+        goTooltip="Show the reviewer's conversation"
+        flash="wait"
+      />,
+    );
+
+    expect(bar()).toHaveAttribute("data-flash", "wait");
+    expect(within(bar()).getByRole("status")).toHaveTextContent(/^$/);
+    await user.hover(within(bar()).getByRole("button", { name: "Go to reviewer" }));
+
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "Show the reviewer's conversation",
+    );
+  });
+
   it("says the other conversation waits and leads there", async () => {
     const onGo = vi.fn();
     const { user } = renderWithStore(

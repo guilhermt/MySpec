@@ -1,6 +1,6 @@
 import type { RequestForm } from "@/components/system/RequestBar";
 import type { GlyphState } from "@/components/system/StateGlyph";
-import { canCloseTask, closeHint } from "@/features/task/pr-status";
+import { canCloseTask, closeHint, draftAtHand } from "@/features/task/pr-status";
 import {
   currentStepOf,
   hasStepSession,
@@ -22,6 +22,7 @@ import {
 import { asLifecycleStage, stageLabel } from "@/lib/stages";
 import type {
   BlockReason,
+  Entry,
   PRBlockReason,
   PullRequest,
   Repository,
@@ -34,6 +35,7 @@ import type {
 } from "@/lib/wails";
 import {
   asBlockReason,
+  asPermissionStatus,
   asPlaceKind,
   asPRBlockReason,
   asPRStatus,
@@ -510,19 +512,40 @@ function formOf(situation: Situation): Want["form"] {
   }
 }
 
-// screenSituation is the situation of the task whose bar the task screen draws, null when there is none.
-function screenSituation(task: TaskSummary): Situation | null {
+// TASK_KINDS are the situations of a task whose bar the task screen draws.
+const TASK_KINDS: readonly SituationKind[] = [
+  ...STEP_KINDS,
+  ...PR_KINDS,
+  "ready_to_continue",
+  "question",
+  "permission",
+  "reply",
+  "session_error",
+  "step_blocked",
+  "worktree_unreadable",
+  "pr_blocked",
+  "plan_invalid",
+  "findings",
+];
+
+// screenSituation is the situation of the conversation on screen, null when there is none: the one
+// of the step (step_review and step_empty are on both tabs), of the tab on screen, of the stage or
+// of the pull request.
+function screenSituation(task: TaskSummary, tab: StepTab): Situation | null {
   const step = currentStepOf(task);
-  const inStep = step === null ? null : stepSituation(task, step.number);
-  if (inStep !== null && STEP_KINDS.includes(asSituationKind(inStep.kind))) {
-    return inStep;
+  let found: Situation | null = null;
+  if (step !== null) {
+    const inStep = stepSituation(task, step.number);
+    const onReviewer = tab === "reviewer" && step.reviewer !== null;
+    found =
+      inStep !== null && STEP_KINDS.includes(asSituationKind(inStep.kind))
+        ? inStep
+        : onReviewer
+          ? reviewerSituation(task, step.number)
+          : inStep;
   }
-  const stage = stageSituation(task);
-  if (stage !== null && asSituationKind(stage.kind) === "ready_to_continue") {
-    return stage;
-  }
-  const pr = prSituation(task);
-  return pr !== null && PR_KINDS.includes(asSituationKind(pr.kind)) ? pr : null;
+  found ??= stageSituation(task) ?? prSituation(task);
+  return found !== null && TASK_KINDS.includes(asSituationKind(found.kind)) ? found : null;
 }
 
 // pausedWant is what the state of the step or of the pull request asks for while the task is paused.
@@ -576,37 +599,113 @@ export function pausedRequestOf(
   return bar === null ? null : { ...clean(bar), form: "quiet", glyph: "paused", situationId: null };
 }
 
+// situationRequestOf is the bar of a situation of the task, without the wait.
+function situationRequestOf(
+  situation: Situation,
+  task: TaskSummary,
+  pending: PendingRequest | null,
+  repository: Repository | null,
+  editedDraft: PrDraft | null,
+): TaskRequestModel | null {
+  const kind = asSituationKind(situation.kind);
+  switch (kind) {
+    case "question":
+    case "permission":
+    case "reply":
+    case "session_error": {
+      const atHand =
+        asPlaceKind(situation.place.kind) === "pr" && task.pr !== null && draftAtHand(task.pr);
+      return sessionRequestOf(situation, task, pending, atHand, editedDraft);
+    }
+    case "step_blocked":
+    case "worktree_unreadable":
+    case "pr_blocked":
+      return blockRequestOf(situation, task);
+    case "plan_invalid":
+      return planRequestOf(situation, task);
+    case "findings":
+      return findingsRequestOf(situation, task);
+    default: {
+      const bar = barOf(
+        task,
+        { kind: kind as RequestKind, form: formOf(situation) },
+        repository,
+        editedDraft,
+      );
+      return bar === null ? null : drawn(situation, bar);
+    }
+  }
+}
+
 /**
- * taskRequestOf is the request bar of the task screen in task 3: the eight situations of §4.2 (not
- * paused), or what the state of the step or the PR asks for (paused); null for everything else.
+ * taskRequestOf is the request bar of the task screen: the situation of the conversation on screen
+ * (not paused), or what the state of the step or the PR asks for (paused); null for everything
+ * else. pending is the card the conversation on screen holds pending.
  */
 export function taskRequestOf(
   task: TaskSummary,
-  _tab: StepTab,
+  tab: StepTab,
   now: number,
   repository: Repository | null = null,
   editedDraft: PrDraft | null = null,
+  pending: PendingRequest | null = null,
 ): TaskRequestModel | null {
   if (isPaused(task)) {
     return pausedRequestOf(task, repository, editedDraft);
   }
-  const situation = screenSituation(task);
-  if (situation === null) {
-    return null;
-  }
-  const kind = asSituationKind(situation.kind) as RequestKind;
-  const bar = barOf(task, { kind, form: formOf(situation) }, repository, editedDraft);
-  if (bar === null) {
+  const situation = screenSituation(task, tab);
+  const request =
+    situation === null
+      ? null
+      : situationRequestOf(situation, task, pending, repository, editedDraft);
+  if (situation === null || request === null) {
     return null;
   }
   return {
-    ...drawn(situation, bar),
+    ...request,
     time: {
       short: compactWait(situation.startedAt, now),
       long: spokenWait(situation.startedAt, now),
       tone: TONES[asSituationGroup(situation.group)],
     },
   };
+}
+
+/** pendingRequestOf is the card a conversation holds pending, from its entries: the last question or permission still unanswered. */
+export function pendingRequestOf(entries: readonly Entry[]): PendingRequest | null {
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    const entry = entries[index];
+    if (entry?.question != null && asPermissionStatus(entry.question.status) === "pending") {
+      return { kind: "question", questions: (entry.question.questions ?? []).length };
+    }
+    if (entry?.permission != null && asPermissionStatus(entry.permission.status) === "pending") {
+      return { kind: "permission", defaultToNo: entry.permission.defaultToNo };
+    }
+  }
+  return null;
+}
+
+/**
+ * screenStageOf is the session stage of the conversation on screen: the tab of the step that runs
+ * in the implementation, the pull request's in the PR stage, the stage itself before; "" when the
+ * place has none yet.
+ */
+export function screenStageOf(task: TaskSummary, tab: StepTab): string {
+  switch (asTaskStage(task.stage)) {
+    case "implementation": {
+      const step = currentStepOf(task);
+      if (step === null) {
+        return "";
+      }
+      return tab === "reviewer" && step.reviewer !== null
+        ? step.reviewer.sessionStage
+        : stepStage(step.number);
+    }
+    case "pr":
+      return task.pr?.sessionStage ?? "";
+    default:
+      return task.stage;
+  }
 }
 
 /** BLOCK_WORDS are the short reasons of a blocked step, the place of its bar. */

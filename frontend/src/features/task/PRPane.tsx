@@ -88,11 +88,6 @@ function AwaitingMerge({ pr }: { pr: PullRequest }) {
         The last review pass closed with nothing to change. Merge it on GitHub; the app checks every
         minute and offers the closing once it's merged.
       </p>
-      {pr.checkError !== "" && (
-        <p className="text-sm text-muted-foreground">
-          {`The merge couldn't be confirmed: ${pr.checkError}. If you merged it, close the task anyway.`}
-        </p>
-      )}
       <PRLink pr={pr} />
       {reports.length > 0 && (
         <ul className="flex flex-col gap-0.5 text-sm text-muted-foreground">
@@ -117,14 +112,6 @@ function Troubled({ pr }: { pr: PullRequest }) {
         ))}
         {pr.trouble.conflict && <li>{`Conflict with ${prBaseName(pr)}`}</li>}
       </ul>
-      <p className="text-sm text-muted-foreground">
-        Review again reads GitHub and turns this into findings of a new pass.
-      </p>
-      {pr.checkError !== "" && (
-        <p className="text-sm text-muted-foreground">
-          {`The merge couldn't be confirmed: ${pr.checkError}. If you merged it, close the task anyway.`}
-        </p>
-      )}
       <PRLink pr={pr} />
     </Note>
   );
@@ -258,11 +245,16 @@ export function PRPane({ task, pr, tab }: PRPaneProps) {
     case "preparing":
       return <Waiting text="Checking GitHub…" />;
     case "blocked":
-      return <PRBlocked taskId={task.id} pr={pr} />;
+      return (
+        <>
+          <PRBlocked pr={pr} />
+          {request}
+        </>
+      );
     case "draft_ready":
       return (
         <>
-          <DraftCard taskId={task.id} pr={pr} showOpenPR={false} />
+          <DraftCard taskId={task.id} pr={pr} />
           {chat}
         </>
       );
@@ -291,7 +283,7 @@ export function PRPane({ task, pr, tab }: PRPaneProps) {
       // Only the draft an opening that failed left is still there to send.
       return (
         <>
-          {draftAtHand(pr) && <DraftCard taskId={task.id} pr={pr} showOpenPR />}
+          {draftAtHand(pr) && <DraftCard taskId={task.id} pr={pr} />}
           {chat}
         </>
       );

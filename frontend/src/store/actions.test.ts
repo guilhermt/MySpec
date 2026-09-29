@@ -16,6 +16,7 @@ import {
   backToStage,
   browseRepository,
   cardContext,
+  changeClonePath,
   changeRepositoryPath,
   checkBoardRepository,
   chooseCloneFolder,
@@ -320,6 +321,15 @@ describe("scanning, adding and moving a repository", () => {
 });
 
 describe("clone actions", () => {
+  it("change the path of a clone from a bar, the failure in the app notice", async () => {
+    vi.mocked(api.changeRepositoryPath).mockRejectedValueOnce(new Error("not a clone"));
+
+    await changeClonePath("repo-1");
+
+    expect(api.changeRepositoryPath).toHaveBeenCalledWith("repo-1");
+    expect(useAppStore.getState().error?.label).toBe("Couldn't change the path of the clone");
+  });
+
   it("clone a repository and answer whether the clone started", async () => {
     vi.mocked(api.cloneRepository).mockResolvedValueOnce(false);
 
@@ -634,6 +644,13 @@ describe("task actions", () => {
     vi.mocked(api.setReviewMode).mockRejectedValueOnce(new Error("no step is left to start"));
 
     expect(await setReviewModeInPlace("task-1", "manual")).toBe("no step is left to start");
+    expect(useAppStore.getState().error).toBeNull();
+  });
+
+  it("answers the failure of cleaning the worktree instead of the app notice", async () => {
+    vi.mocked(api.cleanAndStartStep).mockRejectedValueOnce(new Error("git clean failed"));
+
+    expect(await cleanAndStartStep("task-1")).toBe("git clean failed");
     expect(useAppStore.getState().error).toBeNull();
   });
 

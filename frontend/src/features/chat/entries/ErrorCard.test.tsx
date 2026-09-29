@@ -1,7 +1,7 @@
 import { screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { ErrorCard } from "@/features/chat/entries/ErrorCard";
-import { api, type ErrorEntry, type ErrorKind } from "@/lib/wails";
+import type { ErrorEntry, ErrorKind } from "@/lib/wails";
 import { renderWithStore } from "@/test/render";
 import { makeState, makeTask } from "@/test/wails-mock";
 
@@ -10,7 +10,6 @@ function failure(overrides: Partial<ErrorEntry> = {}): ErrorEntry {
 }
 
 const STOPPED = makeState({ tasks: [makeTask({ id: "task-1", sessionStatus: "error" })] });
-const RECOVERED = makeState({ tasks: [makeTask({ id: "task-1", sessionStatus: "waiting" })] });
 
 describe("ErrorCard", () => {
   it.each([
@@ -28,41 +27,11 @@ describe("ErrorCard", () => {
     expect(screen.getByText("the agent stopped")).toBeInTheDocument();
   });
 
-  it("retries the turn that failed", async () => {
-    const { user } = renderWithStore(<ErrorCard stage="prd" taskId="task-1" error={failure()} />, {
-      state: STOPPED,
-    });
-
-    await user.click(screen.getByRole("button", { name: "Retry" }));
-
-    expect(api.retry).toHaveBeenCalledWith("task-1", "prd");
-  });
-
-  it("offers no retry for a failure nothing can undo", () => {
-    renderWithStore(
-      <ErrorCard stage="prd" taskId="task-1" error={failure({ retryable: false })} />,
-      {
-        state: STOPPED,
-      },
-    );
-
-    expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
-  });
-
-  it("offers no retry once the session has moved on", () => {
+  it("leaves retrying to the request bar", () => {
     renderWithStore(<ErrorCard stage="prd" taskId="task-1" error={failure()} />, {
-      state: RECOVERED,
-    });
-
-    expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
-  });
-
-  it("offers no retry in an earlier conversation, even with the session stopped on it", () => {
-    renderWithStore(<ErrorCard stage="prd" taskId="task-1" error={failure()} readOnly />, {
       state: STOPPED,
     });
 
-    expect(screen.getByRole("alert")).toHaveTextContent("The agent couldn't finish");
     expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
   });
 });

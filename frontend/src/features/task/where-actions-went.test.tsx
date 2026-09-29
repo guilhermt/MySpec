@@ -47,15 +47,25 @@ const PR_SESSION = { sessionStage: "pr_review", sessionStatus: "working" };
 
 const REVIEWING = makeReview({ staged: 2, total: 2, percent: 100 });
 
-/** Row is a button of a bar that left, in a state it appeared in, and where it is now. */
+/** Row is a control that left its place, in a state it appeared in, and where it is now. */
 interface Row {
-  origin: "StepBar" | "PRBar" | "StageTrack";
+  origin:
+    | "StepBar"
+    | "PRBar"
+    | "StageTrack"
+    | "ErrorCard"
+    | "StepBlocked"
+    | "PRBlocked"
+    | "DraftCard"
+    | "PRPane notes";
   button: string;
   state: string;
   task: TaskSummary;
-  where: "menu" | "bar" | "header" | "pane";
-  /** name is the accessible name in the new place. */
+  where: "menu" | "bar" | "header" | "pane" | "card" | "composer" | "entry" | "tooltip";
+  /** name is the accessible name in the new place; in a tooltip, its text. */
   name: RegExp;
+  /** trigger is the text in the bar that holds the tooltip. */
+  trigger?: RegExp;
   disabled?: boolean;
 }
 
@@ -173,12 +183,129 @@ const ROWS: Row[] = [
     disabled: true,
   },
   {
-    origin: "PRBar",
+    origin: "DraftCard",
     button: "Open PR",
     state: "the draft a failed opening left",
-    task: inPR({ status: "awaiting_reply", draft: DRAFT, sessionStage: "pr" }),
-    where: "pane",
-    name: /^Open PR$/,
+    task: inPR({ status: "awaiting_reply", draft: DRAFT, sessionStage: "pr" }, "reply"),
+    where: "bar",
+    name: /^Approve draft$/,
+  },
+  {
+    origin: "DraftCard",
+    button: "Open PR",
+    state: "the draft a failed opening left, the agent still working",
+    task: inPR(
+      { status: "awaiting_reply", draft: DRAFT, sessionStage: "pr", turnRunning: true },
+      "reply",
+    ),
+    where: "bar",
+    name: /^Approve draft$/,
+    disabled: true,
+  },
+  {
+    origin: "ErrorCard",
+    button: "Retry",
+    state: "the session of the step stopped",
+    task: inStep(
+      { status: "implementing" },
+      {
+        sessionStatus: "error",
+        lastError: "claude exited",
+        situations: [stepSituation("session_error")],
+      },
+    ),
+    where: "bar",
+    name: /^Retry implementer$/,
+  },
+  {
+    origin: "ErrorCard",
+    button: "Retry",
+    state: "the session of the PRD stopped",
+    task: makeTask({
+      stage: "prd",
+      sessionStatus: "error",
+      lastError: "not logged in",
+      situations: [
+        makeSituation({ kind: "session_error", place: { kind: "stage", stage: "prd", step: 0 } }),
+      ],
+    }),
+    where: "bar",
+    name: /^Retry PRD agent$/,
+  },
+  {
+    origin: "StepBlocked",
+    button: "Try again",
+    state: "the step blocked",
+    task: inStep(
+      { status: "blocked", block: { reason: "fetch_failed", detail: "", files: 0 } },
+      { situations: [stepSituation("step_blocked")] },
+    ),
+    where: "bar",
+    name: /^Try again$/,
+  },
+  {
+    origin: "StepBlocked",
+    button: "Clean and start",
+    state: "the worktree not clean",
+    task: inStep(
+      { status: "blocked", block: { reason: "dirty_worktree", detail: " M a.ts", files: 1 } },
+      { situations: [stepSituation("step_blocked")] },
+    ),
+    where: "bar",
+    name: /^Clean and start…$/,
+  },
+  {
+    origin: "PRBlocked",
+    button: "Try again",
+    state: "the pull request blocked",
+    task: inPR({ status: "blocked", block: { reason: "gh_failed", detail: "" } }, "pr_blocked"),
+    where: "bar",
+    name: /^Try again$/,
+  },
+  {
+    origin: "PRPane notes",
+    button: "The merge couldn't be confirmed",
+    state: "waiting for the merge",
+    task: inPR(
+      { ...OPENED, status: "done", canClose: true, checkError: "gh: not authenticated" },
+      "merge",
+      "close",
+    ),
+    where: "tooltip",
+    trigger: /^Couldn't confirm the merge/,
+    name: /^gh: not authenticated$/,
+  },
+  {
+    origin: "PRPane notes",
+    button: "The merge couldn't be confirmed",
+    state: "in trouble",
+    task: inPR(
+      {
+        ...OPENED,
+        status: "trouble",
+        canClose: true,
+        checkError: "gh: not authenticated",
+        trouble: { failedChecks: ["build"], conflict: false },
+      },
+      "pr_trouble",
+      "checks",
+    ),
+    where: "tooltip",
+    trigger: /Couldn't confirm the merge$/,
+    name: /^gh: not authenticated$/,
+  },
+  {
+    origin: "PRPane notes",
+    button: "Review again reads GitHub",
+    state: "in trouble",
+    task: inPR(
+      { ...OPENED, status: "trouble", trouble: { failedChecks: ["build"], conflict: false } },
+      "pr_trouble",
+      "checks",
+    ),
+    where: "tooltip",
+    trigger: /^Review again$/,
+    name: /^Review again reads GitHub and turns this into findings of a new pass\.$/,
   },
   {
     origin: "PRBar",
@@ -456,7 +583,7 @@ const ROWS: Row[] = [
 describe("where the actions of the bars that left went", () => {
   it.each(ROWS)(
     "$origin: $button, $state, is in the $where",
-    async ({ task, where, name, disabled }) => {
+    async ({ task, where, name, trigger, disabled }) => {
       const { user } = renderWithStore(<TaskView taskId={task.id} />, {
         state: makeState({
           tasks: [task],
@@ -473,6 +600,12 @@ describe("where the actions of the bars that left went", () => {
         found = within(screen.getByRole("region", { name: "Request" })).getByRole("button", {
           name,
         });
+      } else if (where === "tooltip") {
+        const bar = screen.getByRole("region", { name: "Request" });
+        await user.hover(within(bar).getByText(trigger ?? /^$/));
+        found = await screen.findByRole("tooltip");
+        expect(found).toHaveTextContent(name);
+        return;
       } else if (where === "header") {
         found = within(screen.getByRole("banner")).getByRole("button", { name });
       } else {
@@ -486,4 +619,116 @@ describe("where the actions of the bars that left went", () => {
       }
     },
   );
+});
+
+// The seventeen situations of the bar and the paused one: the screen draws one primary at most.
+const SITUATIONS: [string, TaskSummary][] = [
+  [
+    "step_review",
+    inStep(
+      { status: "ready_to_approve", review: REVIEWING },
+      { situations: [stepSituation("step_review", "approve")] },
+    ),
+  ],
+  [
+    "step_empty",
+    inStep({ status: "nothing_to_commit" }, { situations: [stepSituation("step_empty")] }),
+  ],
+  [
+    "ready_to_continue",
+    makeTask({
+      stage: "prd",
+      revisiting: true,
+      canContinue: true,
+      situations: [
+        makeSituation({
+          kind: "ready_to_continue",
+          place: { kind: "stage", stage: "prd", step: 0 },
+        }),
+      ],
+    }),
+  ],
+  ["draft", inPR({ status: "draft_ready", draft: DRAFT }, "draft")],
+  [
+    "changes_review",
+    inPR(
+      { ...OPENED, status: "ready_to_approve", review: REVIEWING, sessionStage: "pr_review" },
+      "changes_review",
+      "approve",
+    ),
+  ],
+  ["merge", inPR({ ...OPENED, status: "merged", canClose: true }, "merge", "close")],
+  [
+    "pr_trouble",
+    inPR(
+      {
+        ...OPENED,
+        status: "trouble",
+        canClose: true,
+        trouble: { failedChecks: ["build"], conflict: false },
+      },
+      "pr_trouble",
+      "checks",
+    ),
+  ],
+  ["pr_closed", inPR({ ...OPENED, status: "pr_closed" }, "pr_closed")],
+  ["question", inStep({ status: "implementing" }, { situations: [stepSituation("question")] })],
+  ["permission", inStep({ status: "implementing" }, { situations: [stepSituation("permission")] })],
+  ["reply", inPR({ status: "awaiting_reply", draft: DRAFT, sessionStage: "pr" }, "reply")],
+  [
+    "session_error",
+    inStep(
+      { status: "implementing" },
+      { lastError: "claude exited", situations: [stepSituation("session_error")] },
+    ),
+  ],
+  [
+    "step_blocked",
+    inStep(
+      { status: "blocked", block: { reason: "dirty_worktree", detail: " M a.ts", files: 1 } },
+      { situations: [stepSituation("step_blocked")] },
+    ),
+  ],
+  [
+    "worktree_unreadable",
+    inStep({ status: "implementing" }, { situations: [stepSituation("worktree_unreadable")] }),
+  ],
+  [
+    "pr_blocked",
+    inPR({ status: "blocked", block: { reason: "gh_failed", detail: "" } }, "pr_blocked"),
+  ],
+  [
+    "plan_invalid",
+    makeTask({
+      stage: "plan",
+      planProblems: [{ file: "02.md", message: "no title" }],
+      situations: [
+        makeSituation({ kind: "plan_invalid", place: { kind: "stage", stage: "plan", step: 0 } }),
+      ],
+    }),
+  ],
+  [
+    "findings",
+    inPR({ ...OPENED, status: "awaiting_decision", sessionStage: "pr_review" }, "findings"),
+  ],
+  [
+    "paused",
+    inStep({ status: "ready_to_approve", review: REVIEWING }, { sessionStatus: "paused" }),
+  ],
+];
+
+describe("the primary of the task screen", () => {
+  it.each(SITUATIONS)("is one at most in %s", (_kind, task) => {
+    const { container } = renderWithStore(<TaskView taskId={task.id} />, {
+      state: makeState({
+        tasks: [task],
+        repositories: [makeRepository({ id: task.repositoryId })],
+      }),
+      ui: { location: { kind: "task", id: task.id } },
+    });
+
+    expect(container.querySelectorAll("button[data-variant=primary]").length).toBeLessThanOrEqual(
+      1,
+    );
+  });
 });

@@ -1,7 +1,4 @@
-import { Button } from "@/components/ui/button";
 import { asErrorKind, type ErrorEntry, type ErrorKind } from "@/lib/wails";
-import { retry } from "@/store/actions";
-import { useTask } from "@/store/app-store";
 
 const TITLES: Record<ErrorKind, string> = {
   process_exit: "The session stopped unexpectedly",
@@ -19,14 +16,8 @@ export interface ErrorCardProps {
   readOnly?: boolean;
 }
 
-/**
- * ErrorCard is a failure the user has to see. Retrying is offered only while
- * the task is still stopped on it: an error already left behind is history.
- */
-export function ErrorCard({ taskId, stage, error, readOnly = false }: ErrorCardProps) {
-  const task = useTask(taskId);
-  const canRetry = !readOnly && error.retryable && task?.sessionStatus === "error";
-
+/** ErrorCard is a failure the user has to see; retrying is on the request bar. */
+export function ErrorCard({ error }: ErrorCardProps) {
   return (
     <div
       role="alert"
@@ -34,13 +25,6 @@ export function ErrorCard({ taskId, stage, error, readOnly = false }: ErrorCardP
     >
       <p className="font-medium">{TITLES[asErrorKind(error.kind)]}</p>
       {error.message !== "" && <p className="break-words select-text">{error.message}</p>}
-      {canRetry && (
-        <div>
-          <Button variant="outline" size="sm" onClick={() => void retry(taskId, stage)}>
-            Retry
-          </Button>
-        </div>
-      )}
     </div>
   );
 }

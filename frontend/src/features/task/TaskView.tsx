@@ -13,14 +13,18 @@ import { EarlierConversationFoot } from "@/features/task/EarlierConversationFoot
 import { PlanProblemsNotice } from "@/features/task/PlanProblemsNotice";
 import { PRPane } from "@/features/task/PRPane";
 import { ReviewStrip } from "@/features/task/ReviewStrip";
+import { screenStageOf } from "@/features/task/request";
+import { focusRequest, focusTitle, useFocusRescue } from "@/features/task/request-focus";
 import { StepPane } from "@/features/task/StepPane";
-import { currentStepOf, hasStepSession, stepStage } from "@/features/task/step-status";
+import { currentStepOf, hasStepSession } from "@/features/task/step-status";
 import { TaskHeader } from "@/features/task/TaskHeader";
 import { TaskRequest } from "@/features/task/TaskRequest";
+import { useTaskRequest } from "@/features/task/useTaskRequest";
 import { prOf } from "@/lib/pull-requests";
 import { asTaskStage, type Step, sessionKey, type TaskSummary } from "@/lib/wails";
 import { loadTranscript } from "@/store/actions";
 import {
+  type StepTab,
   useAppStore,
   useEarlierConversation,
   useOpenStepTab,
@@ -78,6 +82,30 @@ function EarlierConversation({ task, stage }: { task: TaskSummary; stage: string
   );
 }
 
+/**
+ * ArrivalFocus takes the focus, on arriving at a situation of the task, to what it asks once the
+ * conversation and the bar are on screen: the pending card, the primary of the bar, the composer,
+ * or the bar; the title when none is there.
+ */
+function ArrivalFocus({ task, tab, ready }: { task: TaskSummary; tab: StepTab; ready: boolean }) {
+  const pendingFocus = useAppStore((state) => state.pendingFocus);
+  const clearPendingFocus = useAppStore((state) => state.clearPendingFocus);
+  const { request } = useTaskRequest(task, tab);
+  const target = request?.focus ?? "composer";
+
+  useEffect(() => {
+    if (pendingFocus !== "request" || !ready) {
+      return;
+    }
+    if (!focusRequest(target)) {
+      focusTitle();
+    }
+    clearPendingFocus();
+  }, [pendingFocus, ready, target, clearPendingFocus]);
+
+  return null;
+}
+
 export interface TaskViewProps {
   taskId: string;
 }
@@ -103,22 +131,14 @@ export function TaskView({ taskId }: TaskViewProps) {
   // The conversation on screen is the one of the stage the task is in: the tab
   // of the step that runs in the implementation stage, the pull request in the
   // PR one. Both open a session of their own only once they get that far.
-  const stage = (() => {
-    if (implementing) {
-      if (step === null) {
-        return "";
-      }
-      return stepTab === "reviewer" && step.reviewer !== null
-        ? step.reviewer.sessionStage
-        : stepStage(step.number);
-    }
-    if (opening) {
-      return pr?.sessionStage ?? "";
-    }
-    return task?.stage ?? "";
-  })();
+  const stage = task === null ? "" : screenStageOf(task, stepTab);
   const hasConversation =
     task !== null && (implementing ? hasStepSession(step) : opening ? stage !== "" : true);
+  const conversationReady = useAppStore(
+    (state) => state.transcripts[sessionKey(taskId, stage)]?.status === "ready",
+  );
+  const rescue = useRef<HTMLElement>(null);
+  useFocusRescue(rescue);
 
   // The conversation is fetched once and then kept: leaving the task and coming
   // back costs nothing, and the events keep being applied while it is away. It
@@ -133,15 +153,16 @@ export function TaskView({ taskId }: TaskViewProps) {
   // A new task is on screen before the snapshot that brings it: the header shows it loading.
   if (task === null) {
     return (
-      <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
+      <section ref={rescue} className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
         <TaskHeader task={null} />
       </section>
     );
   }
 
   return (
-    <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
+    <section ref={rescue} className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
       <TaskHeader task={task} />
+      <ArrivalFocus task={task} tab={stepTab} ready={!hasConversation || conversationReady} />
       <PanelLayout
         panel={
           panel === "details" ? (

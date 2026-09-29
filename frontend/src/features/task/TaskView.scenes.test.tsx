@@ -84,7 +84,7 @@ describe("TaskView, the nine scenes", () => {
     scene("manual");
 
     const bar = screen.getByRole("region", { name: "Request" });
-    expect(within(bar).getByRole("status")).toHaveTextContent("Review step 4");
+    expect(bar).toHaveTextContent("Review step 4");
     expect(bar).toHaveTextContent("5 of 7 files staged · 71%");
     expect(within(bar).getByRole("button", { name: "Open in VS Code" })).toBeInTheDocument();
     expect(within(bar).getByRole("button", { name: "Approve" })).toHaveAttribute(
@@ -97,7 +97,7 @@ describe("TaskView, the nine scenes", () => {
     scene("close");
 
     const bar = screen.getByRole("region", { name: "Request" });
-    expect(within(bar).getByRole("status")).toHaveTextContent("Ready to close");
+    expect(bar).toHaveTextContent("Ready to close");
     expect(bar).toHaveTextContent("#1284 merged");
     expect(bar).toHaveTextContent("Removes the worktree and the branch, then updates dev");
     expect(within(bar).getByRole("button", { name: "Close task" })).not.toHaveAttribute(
@@ -130,14 +130,23 @@ describe("TaskView, the nine scenes", () => {
     },
   );
 
-  it.each<SceneName>(["plan", "run", "ask", "error", "blocked", "checks", "findings"])(
-    "has no request bar in the %s scene",
-    (name) => {
-      scene(name);
+  it.each<[SceneName, string]>([
+    ["plan", "Waiting for reply· PRD"],
+    ["ask", "Question· Reviewer"],
+    ["error", "Session error· Reviewer"],
+    ["blocked", "Step 5 blocked· worktree not clean"],
+    ["findings", "Decide findings· PR review"],
+  ])("draws the bar of the %s scene", (name, label) => {
+    scene(name);
 
-      expect(screen.queryByRole("region", { name: "Request" })).not.toBeInTheDocument();
-    },
-  );
+    expect(screen.getByRole("region", { name: "Request" })).toHaveTextContent(label);
+  });
+
+  it.each<SceneName>(["run", "checks"])("has no request bar in the %s scene", (name) => {
+    scene(name);
+
+    expect(screen.queryByRole("region", { name: "Request" })).not.toBeInTheDocument();
+  });
 
   it("has no context meter in the checks scene, where no conversation is on screen", () => {
     scene("checks");

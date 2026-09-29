@@ -69,7 +69,12 @@ export function StepPane({ task }: StepPaneProps) {
 
   switch (asStepStatus(step.status)) {
     case "blocked":
-      return <StepBlocked task={task} step={step} />;
+      return (
+        <>
+          <StepBlocked task={task} step={step} />
+          <TaskRequest task={task} tab={chosen} />
+        </>
+      );
     case "preparing":
       return <Waiting text={stepPhaseLabel(step.phase)} />;
     case "not_started":

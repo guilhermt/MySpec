@@ -1,26 +1,20 @@
-import { GitPullRequestArrow } from "lucide-react";
 import { useEffect, useRef } from "react";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { canOpenPR } from "@/features/task/pr-status";
 import type { PullRequest } from "@/lib/wails";
-import { openPR } from "@/store/actions";
 import { useAppStore, usePrDraft } from "@/store/app-store";
 
 export interface DraftCardProps {
   taskId: string;
   pr: PullRequest;
-  /** showOpenPR draws the card's own Open PR: the draft a failed opening left, which no bar asks to approve. */
-  showOpenPR: boolean;
 }
 
 /**
  * DraftCard is the pull request the agent wrote, as the user edits it. The
  * draft on disk is the starting point; what the user types survives every
- * update but one, and only opening the pull request sends it.
+ * update but one, and only Approve draft on the request bar sends it.
  */
-export function DraftCard({ taskId, pr, showOpenPR }: DraftCardProps) {
+export function DraftCard({ taskId, pr }: DraftCardProps) {
   const edited = usePrDraft(taskId);
   const setPrDraft = useAppStore((state) => state.setPrDraft);
   const clearPrDraft = useAppStore((state) => state.clearPrDraft);
@@ -42,7 +36,6 @@ export function DraftCard({ taskId, pr, showOpenPR }: DraftCardProps) {
 
   const title = edited?.title ?? fileTitle;
   const body = edited?.body ?? fileBody;
-  const ready = canOpenPR(pr) && title.trim() !== "" && body.trim() !== "";
 
   const edit = (next: { title?: string; body?: string }) =>
     setPrDraft(taskId, { title, body, ...next });
@@ -77,14 +70,6 @@ export function DraftCard({ taskId, pr, showOpenPR }: DraftCardProps) {
             className="max-h-72 min-h-32 resize-none font-mono text-xs"
           />
         </div>
-        {showOpenPR && (
-          <div className="flex items-center justify-end">
-            <Button size="sm" disabled={!ready} onClick={() => void openPR(taskId, title, body)}>
-              <GitPullRequestArrow />
-              Open PR
-            </Button>
-          </div>
-        )}
       </div>
     </div>
   );

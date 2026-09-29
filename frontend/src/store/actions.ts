@@ -136,6 +136,13 @@ export function changeRepositoryPath(id: string): Promise<void> {
   return api.changeRepositoryPath(id);
 }
 
+/** changeClonePath is changeRepositoryPath for a bar, which has no place for the failure: the app notice says it. */
+export function changeClonePath(id: string): Promise<void> {
+  return run(fail("Couldn't change the path of the clone", TRY), () =>
+    api.changeRepositoryPath(id),
+  );
+}
+
 /**
  * cloneRepository does not swallow its failure either: the row or the card that
  * asked shows it. It answers false when the user cancelled choosing the clone
@@ -490,12 +497,12 @@ export function retryStep(taskId: string): Promise<void> {
   );
 }
 
-/** cleanAndStartStep throws away every change in the worktree and starts the step. */
-export function cleanAndStartStep(taskId: string): Promise<void> {
-  return run(
-    fail(`Couldn't clean the worktree of ${theItem(taskId)}`, cloneRemedy(taskId, TRY)),
-    () => api.cleanAndStartStep(taskId),
-  );
+/**
+ * cleanAndStartStep throws away every change in the worktree and starts the step. Its dialog shows
+ * the failure: it answers the message of the failure, or null, and leaves the app notice alone.
+ */
+export function cleanAndStartStep(taskId: string): Promise<string | null> {
+  return inPlace(() => api.cleanAndStartStep(taskId));
 }
 
 /** discardStep deletes the conversation of the step and runs it again from scratch. */

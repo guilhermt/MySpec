@@ -1,7 +1,7 @@
 import { screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { PRBlocked } from "@/features/task/PRBlocked";
-import { api, type PRBlock } from "@/lib/wails";
+import type { PRBlock } from "@/lib/wails";
 import { renderWithStore } from "@/test/render";
 import { makePullRequest, makeState, makeTask } from "@/test/wails-mock";
 
@@ -11,7 +11,7 @@ function blocked(block: Partial<PRBlock> = {}) {
     block: { reason: "gh_unauthenticated", detail: "", ...block },
   });
   const task = makeTask({ stage: "pr", pr });
-  return renderWithStore(<PRBlocked taskId={task.id} pr={pr} />, {
+  return renderWithStore(<PRBlocked pr={pr} />, {
     state: makeState({ tasks: [task] }),
   });
 }
@@ -37,11 +37,9 @@ describe("PRBlocked", () => {
     expect(screen.getByText("gh: could not resolve to a Repository").tagName).toBe("PRE");
   });
 
-  it("starts the stage over", async () => {
-    const { user } = blocked();
+  it("leaves the way out to the request bar", () => {
+    blocked();
 
-    await user.click(screen.getByRole("button", { name: "Try again" }));
-
-    expect(api.retryPR).toHaveBeenCalledWith("task-1");
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 });

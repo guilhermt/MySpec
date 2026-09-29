@@ -6,16 +6,19 @@ import {
   otherConversationOf,
   type PendingRequest,
   pausedRequestOf,
+  pendingRequestOf,
   planRequestOf,
   retryLabelOf,
+  screenStageOf,
   sessionRequestOf,
   type TaskRequestModel,
   taskRequestOf,
 } from "@/features/task/request";
 import { cloneMissingText } from "@/lib/repositories";
-import type { PullRequest, Situation, Step, StepReviewer, TaskSummary } from "@/lib/wails";
+import type { Entry, PullRequest, Situation, Step, StepReviewer, TaskSummary } from "@/lib/wails";
 import type { PrDraft, StepTab } from "@/store/app-store";
 import {
+  makeEntry,
   makePullRequest,
   makeRepository,
   makeReview,
@@ -550,22 +553,117 @@ describe("taskRequestOf and pausedRequestOf", () => {
     expect(taskRequestOf(task("paused", []), "implementer", NOW)).toBeNull();
   });
 
-  it.each([
-    [
-      "a question",
-      situation("question", "waiting", "", { kind: "step_review", stage: "", step: 4 }),
-    ],
-    ["a session error", situation("session_error", "error", "", STEP_PLACE)],
-    ["findings", situation("findings", "waiting", "")],
-  ])("leaves %s to the conversation", (_, found) => {
+  // The situations of task 4 reach the bar through taskRequestOf: the one of the conversation on
+  // screen, with the wait.
+  const REVIEWER_PLACE = { kind: "step_review", stage: "", step: 4 };
+  const withReviewer = (found: Situation, overrides: Partial<TaskSummary> = {}) =>
+    makeTask({
+      stage: "implementation",
+      currentStep: 4,
+      steps: [
+        makeStep({
+          number: 4,
+          status: "agent_review",
+          reviewer: makeStepReviewer({ sessionStage: "step_review:4", lastError: "claude exited" }),
+        }),
+      ],
+      situations: [found],
+      ...overrides,
+    });
+
+  it("draws the question of the reviewer on its tab, with the questions pending", () => {
+    const task = withReviewer(situation("question", "waiting", "", REVIEWER_PLACE));
+
+    expect(
+      taskRequestOf(task, "reviewer", NOW, null, null, { kind: "question", questions: 2 }),
+    ).toMatchObject({
+      label: "Question",
+      place: "Reviewer",
+      progress: "2 questions",
+      time: WAIT,
+      focus: "question",
+    });
+  });
+
+  it("leaves the situation of the other tab to the bar of the other conversation", () => {
+    const task = withReviewer(situation("question", "waiting", "", REVIEWER_PLACE));
+
+    expect(taskRequestOf(task, "implementer", NOW)).toBeNull();
+  });
+
+  it("retries the session of the reviewer that stopped", () => {
+    const task = withReviewer(situation("session_error", "error", "", REVIEWER_PLACE));
+
+    expect(taskRequestOf(task, "reviewer", NOW)).toMatchObject({
+      label: "Session error",
+      place: "Reviewer",
+      time: ERROR,
+      actions: [{ action: "retrySession", label: "Retry reviewer", stage: "step_review:4" }],
+      focus: "primary",
+    });
+  });
+
+  it("draws the blocked step on the implementer's tab", () => {
     const task = makeTask({
       stage: "implementation",
       currentStep: 4,
-      steps: [makeStep({ number: 4, status: "agent_review" })],
-      situations: [found],
+      steps: [
+        makeStep({
+          number: 4,
+          status: "blocked",
+          block: { reason: "fetch_failed", detail: "", files: 0 },
+        }),
+      ],
+      situations: [situation("step_blocked", "error", "", STEP_PLACE)],
     });
 
-    expect(taskRequestOf(task, "implementer", NOW)).toBeNull();
+    expect(taskRequestOf(task, "implementer", NOW)).toMatchObject({
+      label: "Step 4 blocked",
+      place: "fetch failed",
+      actions: [{ action: "retryStep", label: "Try again" }],
+    });
+  });
+
+  it("offers the draft a failed opening left on the reply of the PR", () => {
+    const task = makeTask({
+      stage: "pr",
+      pr: makePullRequest({ status: "awaiting_reply", sessionStage: "pr", draft: DRAFT }),
+      situations: [situation("reply", "waiting", "")],
+    });
+
+    expect(taskRequestOf(task, "implementer", NOW)).toMatchObject({
+      label: "Waiting for reply",
+      place: "PR",
+      actions: [{ action: "approveDraft", label: "Approve draft" }],
+      focus: "primary",
+    });
+  });
+
+  it("draws the findings of the PR review, the plan still invalid and the PR blocked", () => {
+    const findings = makeTask({
+      stage: "pr",
+      pr: makePullRequest({ sessionStage: "pr_review" }),
+      situations: [situation("findings", "waiting", "")],
+    });
+    const plan = makeTask({
+      stage: "plan",
+      planProblems: [{ file: "03.md", message: "no title" }],
+      situations: [
+        situation("plan_invalid", "waiting", "", { kind: "stage", stage: "plan", step: 0 }),
+      ],
+    });
+    const blocked = makeTask({
+      stage: "pr",
+      pr: makePullRequest({ status: "blocked", block: { reason: "gh_missing", detail: "" } }),
+      situations: [situation("pr_blocked", "error", "")],
+    });
+
+    expect(taskRequestOf(findings, "implementer", NOW)?.label).toBe("Decide findings");
+    expect(taskRequestOf(plan, "implementer", NOW)?.label).toBe("Plan still invalid");
+    expect(taskRequestOf(blocked, "implementer", NOW)).toMatchObject({
+      label: "PR blocked",
+      place: "gh not installed",
+    });
   });
 
   it("draws the One-Shot step_empty with the discard of the implementation", () => {
@@ -1314,5 +1412,73 @@ describe("otherConversationOf", () => {
     ],
   ])("draws nothing when %s", (_name, tab, task) => {
     expect(otherConversationOf(task, tab, NOW)).toBeNull();
+  });
+});
+
+describe("pendingRequestOf", () => {
+  const pendingPermission = makeEntry("permission");
+  const answered = (entry: Entry): Entry =>
+    entry.question !== null
+      ? { ...entry, question: { ...entry.question, status: "answered" } }
+      : { ...entry, permission: entry.permission && { ...entry.permission, status: "allowed" } };
+
+  it.each<[string, Entry[], PendingRequest | null]>([
+    ["a conversation that asks nothing", [makeEntry("assistant")], null],
+    ["a pending question", [makeEntry("question")], { kind: "question", questions: 1 }],
+    [
+      "a pending permission that defaults to no",
+      [
+        {
+          ...pendingPermission,
+          permission: pendingPermission.permission && {
+            ...pendingPermission.permission,
+            defaultToNo: true,
+          },
+        },
+      ],
+      { kind: "permission", defaultToNo: true },
+    ],
+    ["a question already answered", [answered(makeEntry("question"))], null],
+    [
+      "an answered permission before a pending question",
+      [answered(makeEntry("permission")), makeEntry("question")],
+      { kind: "question", questions: 1 },
+    ],
+  ])("reads %s", (_name, entries, pending) => {
+    expect(pendingRequestOf(entries)).toEqual(pending);
+  });
+});
+
+describe("screenStageOf", () => {
+  const implementing = makeTask({
+    stage: "implementation",
+    currentStep: 2,
+    steps: [makeStep({ number: 2, reviewer: makeStepReviewer({ sessionStage: "step_review:2" }) })],
+  });
+
+  it.each<[string, TaskSummary, StepTab, string]>([
+    [
+      "the stage before the implementation",
+      makeTask({ stage: "tech_spec" }),
+      "implementer",
+      "tech_spec",
+    ],
+    ["the implementer's tab", implementing, "implementer", "step:2"],
+    ["the reviewer's tab", implementing, "reviewer", "step_review:2"],
+    [
+      "the reviewer's tab of a step without one",
+      makeTask({ stage: "implementation", currentStep: 1, steps: [makeStep()] }),
+      "reviewer",
+      "step:1",
+    ],
+    [
+      "the pull request",
+      makeTask({ stage: "pr", pr: makePullRequest({ sessionStage: "pr_review" }) }),
+      "implementer",
+      "pr_review",
+    ],
+    ["the PR stage before its session", makeTask({ stage: "pr", pr: null }), "implementer", ""],
+  ])("is %s", (_name, task, tab, stage) => {
+    expect(screenStageOf(task, tab)).toBe(stage);
   });
 });
