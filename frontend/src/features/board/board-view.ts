@@ -1,3 +1,4 @@
+import type { KeyNoticeText } from "@/components/system/KeyNotice";
 import { type ItemRow, type RowTone, taskRow } from "@/features/sidebar/sidebar-tree";
 import { referenceOf } from "@/features/task/card-panel";
 import { findRepository } from "@/lib/repositories";
@@ -603,12 +604,6 @@ export function cardRowModel(card: BoardCard, ctx: RowContext): CardRowModel {
 /** selectionSuffix is what the label of a row adds in the select mode: ". selected". */
 export function selectionSuffix(state: "selected" | "not selected" | "can't be selected"): string {
   return `. ${state}`;
-}
-
-/** KeyNoticeText is a key notice: what it says, and why the key does nothing. */
-export interface KeyNoticeText {
-  title: string;
-  reason: string;
 }
 
 const NOT_IN_READING = "The card isn't in the last reading of the board.";

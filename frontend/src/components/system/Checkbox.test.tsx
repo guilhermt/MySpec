@@ -2,7 +2,7 @@ import { screen } from "@testing-library/react";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { renderWithStore } from "@/test/render";
-import { Checkbox } from "./Checkbox";
+import { Checkbox, CheckboxSign } from "./Checkbox";
 
 function Subject() {
   const [checked, setChecked] = useState(false);
@@ -76,5 +76,28 @@ describe("Checkbox", () => {
     expect(box).toHaveAttribute("aria-busy", "true");
     await user.click(box);
     expect(onCheckedChange).not.toHaveBeenCalled();
+  });
+});
+
+describe("CheckboxSign", () => {
+  it("is the box alone, hidden from assistive technology", () => {
+    const { container } = renderWithStore(<CheckboxSign checked={false} />);
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+    const sign = container.firstElementChild;
+    expect(sign).toHaveAttribute("aria-hidden", "true");
+    expect(sign).not.toHaveAttribute("data-checked");
+    expect(sign?.querySelector("svg")).toBeNull();
+  });
+
+  it("draws the check and the state of a checked sign", () => {
+    const { container } = renderWithStore(<CheckboxSign checked />);
+    const sign = container.firstElementChild;
+    expect(sign).toHaveAttribute("data-checked");
+    expect(sign?.querySelector("svg")).toBeInTheDocument();
+  });
+
+  it("marks a disabled sign", () => {
+    const { container } = renderWithStore(<CheckboxSign checked={false} disabled />);
+    expect(container.firstElementChild).toHaveAttribute("data-disabled");
   });
 });

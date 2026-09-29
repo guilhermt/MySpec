@@ -7,6 +7,7 @@ import { Button } from "./Button";
 import {
   type FilterCycle,
   Menu,
+  MenuCheckboxItem,
   MenuContent,
   MenuCycleItem,
   MenuGroup,
@@ -194,5 +195,39 @@ describe("MenuRadioItem", () => {
     expect(item).toHaveAttribute("aria-disabled", "true");
     await user.click(item);
     expect(onValueChange).not.toHaveBeenCalled();
+  });
+});
+
+describe("MenuCheckboxItem", () => {
+  function Filters({ onChange }: { onChange: (checked: boolean) => void }) {
+    return (
+      <Menu>
+        <MenuTrigger render={<Button />}>Filter</MenuTrigger>
+        <MenuContent>
+          <MenuCheckboxItem checked onCheckedChange={onChange}>
+            acme/api
+          </MenuCheckboxItem>
+          <MenuCheckboxItem checked={false} onCheckedChange={onChange}>
+            acme/web
+          </MenuCheckboxItem>
+        </MenuContent>
+      </Menu>
+    );
+  }
+
+  it("is a menuitemcheckbox that says whether it is checked", async () => {
+    const { user } = renderWithStore(<Filters onChange={() => {}} />);
+    await user.click(screen.getByRole("button", { name: "Filter" }));
+    expect(await screen.findByRole("menuitemcheckbox", { name: "acme/api" })).toBeChecked();
+    expect(screen.getByRole("menuitemcheckbox", { name: "acme/web" })).not.toBeChecked();
+  });
+
+  it("reports the choice and closes the menu", async () => {
+    const onChange = vi.fn();
+    const { user } = renderWithStore(<Filters onChange={onChange} />);
+    await user.click(screen.getByRole("button", { name: "Filter" }));
+    await user.click(await screen.findByRole("menuitemcheckbox", { name: "acme/web" }));
+    expect(onChange).toHaveBeenCalledWith(true, expect.anything());
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
 });

@@ -168,6 +168,38 @@ export function MenuRadioItem({ value, children, icon, sub, unavailable }: MenuR
   );
 }
 
+export interface MenuCheckboxItemProps {
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
+  children: ReactNode;
+}
+
+/**
+ * MenuCheckboxItem is a choice that is on or off, with its check at the start in the brand ink like
+ * MenuRadioItem. A click closes the menu, so a filter chosen from it takes effect at once.
+ */
+export function MenuCheckboxItem({ checked, onCheckedChange, children }: MenuCheckboxItemProps) {
+  return (
+    <BaseMenu.CheckboxItem
+      checked={checked}
+      onCheckedChange={onCheckedChange}
+      closeOnClick
+      className={cn(
+        "relative flex cursor-default items-center outline-hidden select-none",
+        MENU_ITEM,
+      )}
+    >
+      <BaseMenu.CheckboxItemIndicator
+        keepMounted
+        className="size-(--icon) text-brand-ink data-unchecked:invisible"
+      >
+        <Icon icon={ICONS.done} />
+      </BaseMenu.CheckboxItemIndicator>
+      <span>{children}</span>
+    </BaseMenu.CheckboxItem>
+  );
+}
+
 /** FilterCycle is the state of a three-way filter: no filter, hidden, or only this. */
 export type FilterCycle = "any" | "hidden" | "only";
 

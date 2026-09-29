@@ -58,7 +58,7 @@ const EM_TOKENS = ["--link-offset", "--tracking-caps"];
 /** The prefixes of the layout widths, which may depend on the window. */
 const LAYOUT_WIDTHS = /^--(sidebar-|panel-|measure|list-|size-|col-|snav-)/;
 
-/** Layout widths still unrounded: task 2 rounds them, with the panels that use them. */
+/** Layout widths rounded where they are used, not in the token. */
 const UNROUNDED_WIDTHS = ["--panel-width", "--panel-card-width"];
 
 function placementClasses(element: Element): string[] {

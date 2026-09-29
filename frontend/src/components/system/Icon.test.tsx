@@ -40,6 +40,20 @@ describe("Icon", () => {
     expect(new Set(Object.values(ICONS)).size).toBe(Object.keys(ICONS).length);
   });
 
+  it.each([
+    "refresh",
+    "filter",
+    "clone",
+    "select",
+    "settings",
+    "plus",
+    "repository",
+    "epic",
+  ] as const)("has the %s icon, distinct from retry", (meaning) => {
+    expect(ICONS[meaning]).toBeDefined();
+    expect(ICONS[meaning]).not.toBe(ICONS.retry);
+  });
+
   it("is the one source of a mapped icon in the system components", () => {
     const mapped = new Set<unknown>(Object.values(ICONS));
     const icons = lucide as unknown as Record<string, unknown>;

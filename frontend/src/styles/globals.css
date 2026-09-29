@@ -389,6 +389,14 @@
   .situation-flash[data-flash="wait"] {
     --flash-veil: var(--state-wait-veil);
   }
+
+  /* A card a new reading brings blinks twice in the neutral veil. */
+  @media (prefers-reduced-motion: no-preference) {
+    .row-flash {
+      --flash-veil: var(--veil-press);
+      animation: situation-flash var(--duration-slow) var(--ease-standard) 2;
+    }
+  }
 }
 
 @keyframes situation-flash {

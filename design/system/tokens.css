@@ -96,12 +96,12 @@
      the scan width of a row; the columns of a row are fixed so they line up from row to row. */
   --list-measure: calc(var(--measure) + var(--space-16) * 5);      /* the board, Reviews and History lists: 70rem */
   --panel-card-width: clamp(22.5rem, 42%, 40rem);                  /* the card and pull request panel: a body is read there */
-  --size-dialog-wide: calc(var(--size-dialog) + var(--space-16));  /* creation and start dialogs: a 64-character name fits */
+  --size-dialog-wide: calc(var(--size-dialog) + var(--space-16) + var(--space-8));  /* creation and start dialogs: a 64-character name fits */
   --col-num: var(--space-12);                                      /* card row: #474 */
   --col-epic: calc(var(--space-16) * 2.25);                        /* card row: the epic's title */
-  --col-dep: calc(var(--space-12) + var(--space-2));               /* card row: ◇ #461 +1 */
+  --col-dep: calc(var(--space-16) + var(--space-2));               /* card row: ◇ #461 +1 */
   --col-task: calc(var(--space-16) * 3);                           /* card row: ● Question · Step 3/7 */
-  --col-keys: calc(var(--space-16) + var(--space-12));             /* card and pull request rows: S start  D discuss */
+  --col-keys: calc(var(--space-16) + var(--space-12) + var(--space-2));  /* card and pull request rows: S start  D discuss */
   --col-ref: calc(var(--space-16) + var(--space-8));               /* pull request row: web#2291 */
   --col-author: calc(var(--space-16) + var(--space-8));            /* pull request row: dependabot */
   --col-state: calc(var(--space-16) * 3 + var(--space-4));         /* pull request row: Decide findings · pass 1 · 1/3 */
