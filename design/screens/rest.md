@@ -523,7 +523,7 @@ A última coluna compara com o texto de hoje:
 - **novo**: uma situação decidida na rodada da discussão, que ainda não tem texto;
 - **igual**: o texto de hoje.
 
-São 57 textos.
+São 61 textos. Esta seção é a fonte única dos textos das notificações; as variantes de uma situação têm uma linha cada.
 
 **Task**
 
@@ -592,8 +592,12 @@ São 57 textos.
 | Session error | `The session stopped with an error in the discussion.` | A discussão, o foco em **Retry** | igual |
 | Drafts can't be read | `The agent wrote drafts the app can't read in the discussion.` | A discussão, o marco com a linha que falha | igual |
 | Decide drafts | `There are 5 drafts to decide in the discussion.` | A discussão, o primeiro rascunho a decidir | muda |
-| Epic can't publish | `The epic can't publish: approve one more of its cards, or discard it.` | A discussão, o épico aberto | novo |
-| Epic discarded | `The epic is discarded, and 2 of its approved cards won't publish.` | A discussão, o épico aberto | novo |
+| Epic can't publish, dois cards ou mais, um aprovado | `The epic can't publish: approve one more of its cards, or discard it.` | A discussão, o épico aberto | novo |
+| Epic can't publish, dois cards ou mais, nenhum aprovado | `The epic can't publish: approve two more of its cards, or discard it.` | A discussão, o épico aberto | novo |
+| Epic can't publish, um card | `The epic can't publish: it has one card. Move another into it, or discard it.` | A discussão, o épico aberto | novo |
+| Epic can't publish, nenhum card | `The epic can't publish: it has no cards. Move two into it, or discard it.` | A discussão, o épico aberto | novo |
+| Epic discarded, dois ou mais cards aprovados | `The epic is discarded, and 2 of its approved cards won't publish.` | A discussão, o épico aberto | novo |
+| Epic discarded, um card aprovado | `The epic is discarded, and its approved card won't publish.` | A discussão, o épico aberto | novo |
 | Publish failed | `Couldn't publish “Overage on the monthly invoice”: GitHub's rate limit was reached.` | A discussão, o rascunho, com **Retry** | muda |
 | Ready to archive | `Every draft is published or discarded. The discussion is ready to archive.` | A discussão, o foco em **Archive…** | novo |
 ## 12. Os estados de toda tela (`brief.md` §7)

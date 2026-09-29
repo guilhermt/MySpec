@@ -187,6 +187,8 @@ Aprovar é uma escrita no GitHub e não tem confirmação. Por isso:
 
 O título não se repete acima dos campos. Embaixo, `Saved as you type. The agent's next revision of this draft replaces your edits.` e **Done**. `Esc` fecha.
 
+**Só a decisão publica.** Mudar **Repository**, **Epic** ou **Depends on** de um rascunho aprovado e não publicado retira a aprovação dele, e a do épico que ganha ou perde o card; o estado volta a `Not decided`, e o próximo **Approve** mostra a linha do que publica. O título, o corpo e o módulo mantêm a aprovação. Um rascunho sem título, que só existe num épico agrupado antes do diálogo da seção 12, tem **Approve** tracejado com `Name the draft to approve it.`
+
 ## 6. A publicação
 
 As regras de `features.md` (Aprovar e publicar), sem **Publish epic**:
@@ -202,9 +204,16 @@ As regras de `features.md` (Aprovar e publicar), sem **Publish epic**:
 | **Rascunho de um repositório que saiu do board** | Não publica: **Approve** tracejado, com a razão |
 | **Card com épico existente** (**Existing issue…**) | Como um card solto, e vira sub-issue daquele épico |
 
+**A regra exata** (`tasks/08-chained-publication.md` §4.2), a mesma no Go e na linha do que o gesto publica:
+- um rascunho aprovado publica quando tudo de que ele precisa antes já está no GitHub ou vai na mesma corrida: o épico dele, as dependências dele e, num épico, as dependências de fora dos cards aprovados;
+- o épico precisa, além disso, estar aprovado, com todos os cards decididos e ao menos dois aprovados, até a primeira escrita dele; um épico que já começou no GitHub termina;
+- uma dependência num rascunho descartado sai, com o aviso, e o dependente segue;
+- uma dependência cujo fecho alcança um card não descartado de um épico descartado segura o dependente, que diz `Approved · waits for <título>`; isso passa pelo épico: um épico cujo card depende de um desses fica segurado, com os cards dele. Nenhum deles segura o arquivamento, e todos arquivam como `Not published`;
+- um ciclo entre rascunhos aprovados publica junto, quebrado pela posição, com o aviso da dependência que não pôde ser registrada.
+
 **A corrida** publica um rascunho de cada vez, na ordem das dependências (épico antes dos cards, dependência antes do dependente, empate pela posição). Depois de uma corrida, o produto relê o board, como hoje.
 
-**A falha** para a corrida e não perde nada. O rascunho em que ela parou fica com o trilho de erro, a razão e **Retry**. Os que vinham depois dizem por que não foram (`Waits for Overage on the monthly invoice`, `Not published · the run stopped before it`). **Retry** continua de onde parou, sem criar nada duas vezes. As razões são as dez de `features.md`. O marco da rodada vira `Publication stopped`, e a barra, `Publish failed`.
+**A falha** para a corrida e não perde nada. O rascunho em que ela parou fica com o trilho de erro, a razão e **Retry**. O que depende dele espera e diz `Approved · waits for <título>` (o card de um épico que falhou, `Approved · waits for the epic`). Os independentes continuam: a avaliação seguinte faz outra corrida com eles, e um aprovado depois também publica. **Retry**, de qualquer rascunho que falhou, limpa as falhas e continua a cadeia de onde parou, sem criar nada duas vezes. Descartar ou desfazer a decisão de um rascunho cuja publicação falhou antes de escrever no GitHub limpa a falha dele, e o agente reescrever esse rascunho também: ele volta sem decisão. As razões são as dez de `features.md`. O marco da rodada vira `Publication stopped`, e a barra, `Publish failed`.
 
 **Não há toast.** O item está aberto, e `components.md` (Toast e aviso) deixa o toast para o item que saiu sem estar aberto. A publicação é dita no rascunho, no marco da rodada e, quando pede algo, na barra.
 
@@ -242,6 +251,19 @@ A barra do pedido de `screens/task.md` §7, acima do compositor. Ela diz o que f
 
 **Prioridade:** falha, épico descartado, decidir, épico que não publica, publicando, pronta para arquivar.
 
+**A situação durante uma corrida.** A situação que espera o usuário (falha, épico descartado, decidir, épico que não publica) fica de pé enquanto uma corrida escreve outros rascunhos; a pílula e a árvore dizem `publishing` pelo spinner. Só `Ready to archive` espera a corrida acabar.
+
+**A saída do épico que não publica** depende de quantos cards ele tem. Os textos da barra, do rascunho e da razão de **Archive…** estão aqui; os da notificação, em `screens/rest.md` §11. `a` é o número de cards aprovados; `b`, o de cards do épico.
+
+| Caso | O rascunho (épico e card aprovado) | O meio da barra | A razão de **Archive…** |
+|---|---|---|---|
+| Dois cards ou mais, um aprovado | `Approved · the epic needs two approved cards · 1 of 3` | `1 of 3 cards approved · approve one more, or discard the epic` | `The epic can't publish: approve one more card, or discard the epic.` |
+| Dois cards ou mais, nenhum aprovado | `Approved · the epic needs two approved cards · 0 of 3` | `0 of 3 cards approved · approve two more, or discard the epic` | `The epic can't publish: approve two more cards, or discard the epic.` |
+| Um card | `Approved · the epic needs two approved cards · a of 1` | `a of 1 card approved · move another card into it, or discard the epic` | `The epic can't publish: move another card into it, or discard the epic.` |
+| Nenhum card | `Approved · the epic has no cards` | `No cards · move two cards into it, or discard the epic` | `The epic can't publish: move two cards into it, or discard the epic.` |
+
+`Epic discarded`: `2 approved cards of it won't publish · approve the epic again, or discard them`; com um, `1 approved card of it won't publish · approve the epic again, or discard it`. Com mais de um épico nesses estados, a barra fala do primeiro pela posição.
+
 A barra é `role="region"` com nome, e o texto de estado é `role="status"`. Uma barra que nasce com a tela aberta pisca e é anunciada.
 
 ## 9. O compositor
@@ -273,7 +295,7 @@ Os painéis ficam fechados por padrão e nunca abrem sozinhos. Abre um de cada v
 **Archive…** fica na barra de encerramento e no `⋯`. No `⋯`, desabilitado, ele diz o que impede e a saída:
 - `· a publication failed: Retry it, or discard the draft`;
 - `· a publication is running`;
-- `· the epic can't publish: approve one more card, or discard the epic`;
+- `· the epic can't publish: approve one more card, or discard the epic` (as variantes da seção 8);
 - `· approved drafts wait to be published`.
 
 Um card de épico descartado, um bloqueado por aviso e um rascunho sem decisão não impedem: eles arquivam como `Not published`.
@@ -384,7 +406,7 @@ A ordem de Tab é: cabeçalho (navegação, breadcrumb, pílula, ferramentas), a
 | Dado | Para | Custo |
 |---|---|---|
 | **A publicação em cadeia**: o épico publicado quando está aprovado e todos os cards dele estão decididos, com ao menos dois aprovados; o card depois do épico e das dependências; sem **Publish epic** | O modelo da tela | **Médio.** `discussionflow/publish.go` e `decide.go` passam a tratar o épico como dependência na corrida de cada decisão, e `PublishEpic` sai |
-| O que um gesto publica (a cadeia) | A linha antes da decisão | Nenhum: derivado no frontend das decisões, das dependências e do que já foi publicado, com a mesma regra do backend |
+| O que um gesto publica (a cadeia) | A linha antes da decisão | Pequeno: o DTO do rascunho traz o que **Approve** e **Discard** publicariam agora, calculado pela função da cadeia que a task 8 cria (`discussionflow/chain.go`), para a regra existir num lugar só (`backend.md` F16) |
 | Marcos de discussão: contexto, documento escrito, rascunhos escritos, revisados (com quantos mudaram) e ilegíveis, e o marco da rodada de publicação, que se atualiza | A conversa | Pequeno: tipos novos de marcador. O backend já sabe `documentRevision`, `draftsRevision`, `revision`, `publishedAt` e `unreadableDrafts` |
 | A versão anterior dos rascunhos revisados (título, dependências, decisão) | O marco `Drafts revised` | Pequeno: o reconcile guarda o anterior antes de substituir |
 | O número da rodada de cada rascunho | A pílula, o cartão, os marcos, a regra de dobrar | Pequeno: um contador que sobe quando uma leitura traz rascunhos novos depois de uma publicação |
