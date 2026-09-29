@@ -802,6 +802,7 @@ func (f *fixture) snapshot() bindings.State {
 		Boards: bindings.FromBoards(
 			f.boards.List(), f.boards.Stored, f.boards.Reading,
 			f.repositories.List(), f.repositories.Missing, f.taskSvc.CardTasks(),
+			f.discussions.CardWriters(),
 		),
 		ReviewCenter: bindings.FromReviewCenter(
 			f.pullRequests.Readings(), f.pullRequests.Reading(), f.pullRequests.ReadAt(),

@@ -71,6 +71,7 @@ func (a *App) snapshot() bindings.State {
 		Boards: bindings.FromBoards(
 			a.boards.List(), a.boards.Stored, a.boards.Reading,
 			a.repositories.List(), a.repositories.Missing, a.tasks.CardTasks(),
+			a.discussions.CardWriters(),
 		),
 		ReviewCenter: bindings.FromReviewCenter(
 			a.pulls.Readings(), a.pulls.Reading(), a.pulls.ReadAt(), a.pulls.Viewer(), a.pulls.Filters(),

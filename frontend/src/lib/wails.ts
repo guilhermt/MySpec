@@ -95,6 +95,7 @@ import type {
   TranscriptEvent,
   UserEntry,
   WorktreePreview,
+  WritingDiscussion,
 } from "@bindings/models";
 import * as RepositoryService from "@bindings/repositoryservice";
 import * as ReviewService from "@bindings/reviewservice";
@@ -197,6 +198,7 @@ export type {
   TranscriptEvent,
   UserEntry,
   WorktreePreview,
+  WritingDiscussion,
 };
 
 export type ThemePreference = "system" | "light" | "dark";

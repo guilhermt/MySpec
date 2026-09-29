@@ -990,6 +990,8 @@ type BoardCard struct {
 	// same reason as State.Theme.
 	Action     string `json:"action"`
 	OtherBoard string `json:"otherBoard"` // other_board: the title of that board
+	// WrittenBy is the discussion that wrote the card; nil for none.
+	WrittenBy *WritingDiscussion `json:"writtenBy"`
 }
 
 // TaskCard is the card a task was created from.
@@ -1003,6 +1005,13 @@ type TaskCard struct {
 	Status     string     `json:"status"`
 	State      string     `json:"state"`
 	Epic       *CardIssue `json:"epic"` // State of the epic is ""; the task does not keep it
+}
+
+// WritingDiscussion is the discussion that wrote a card.
+type WritingDiscussion struct {
+	ID       string `json:"id"`
+	Title    string `json:"title"`
+	Archived bool   `json:"archived"`
 }
 
 // BoardRepositoryOption is a repository the board dialog offers, with how it

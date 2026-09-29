@@ -16,6 +16,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/google/uuid"
+
+	"github.com/guilhermt/myspec/internal/task"
 )
 
 // dirPerm keeps the artifact folders private to the user.
@@ -631,58 +633,80 @@ func (s *Service) ReadArtifact(id, name string) (string, error) {
 	return string(content), nil
 }
 
+// Writer is the discussion that wrote a card: the one whose publication of
+// the issue is the most recent.
+type Writer struct {
+	ID       string
+	Title    string
+	Archived bool
+}
+
+// written is a discussion that wrote a card and when its last publication of
+// the issue finished.
+type written struct {
+	discussion Discussion
+	archived   bool
+	at         time.Time
+}
+
+// cardWriters is, for each card key (task.IssueKey), the discussion that
+// wrote it: the most recent publication of the issue wins, and a tie goes to
+// the newer discussion. Active and archived discussions count; a publication
+// still running counts with the zero time.
+func cardWriters(active, archived []Discussion, drafts map[string][]Draft) map[string]written {
+	writers := map[string]written{}
+	consider := func(d Discussion, isArchived bool) {
+		for _, draft := range drafts[d.ID] {
+			if draft.Published.Outcome == OutcomeNone {
+				continue
+			}
+			key := task.IssueKey(draft.Owner, draft.Name, draft.Published.Number)
+			best, found := writers[key]
+			when := draft.Published.At
+			if !found || when.After(best.at) || (when.Equal(best.at) && d.CreatedAt.After(best.discussion.CreatedAt)) {
+				writers[key] = written{discussion: d, archived: isArchived, at: when}
+			}
+		}
+	}
+	for _, d := range active {
+		consider(d, false)
+	}
+	for _, d := range archived {
+		consider(d, true)
+	}
+	return writers
+}
+
+// CardWriters is, for each card key, the discussion that wrote the card,
+// with the same choice DocumentOfCard makes. It reads nothing from disk.
+func (s *Service) CardWriters() map[string]Writer {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	writers := cardWriters(s.discussions, s.archived, s.drafts)
+	converted := make(map[string]Writer, len(writers))
+	for key, w := range writers {
+		converted[key] = Writer{ID: w.discussion.ID, Title: w.discussion.Title, Archived: w.archived}
+	}
+	return converted
+}
+
 // DocumentOfCard is the understanding of the discussion that wrote a card,
 // which is what a task created from it reads. The most recent publication of
 // the issue wins.
 func (s *Service) DocumentOfCard(owner, name string, number int) (string, bool) {
 	s.mu.Lock()
-	var (
-		best  Discussion
-		at    time.Time
-		found bool
-	)
-	for _, d := range slices.Concat(s.discussions, s.archived) {
-		if !publishes(s.drafts[d.ID], owner, name, number) {
-			continue
-		}
-		when := latestPublication(s.drafts[d.ID], owner, name, number)
-		if !found || when.After(at) || (when.Equal(at) && d.CreatedAt.After(best.CreatedAt)) {
-			best, at, found = d, when, true
-		}
-	}
+	w, found := cardWriters(s.discussions, s.archived, s.drafts)[task.IssueKey(owner, name, number)]
 	s.mu.Unlock()
 
 	if !found {
 		return "", false
 	}
-	content, err := os.ReadFile(best.DocumentPath())
+	content, err := os.ReadFile(w.discussion.DocumentPath())
 	if err != nil {
 		return "", false
 	}
 	return string(content), true
-}
-
-// publishes reports whether one of the drafts wrote the issue.
-func publishes(drafts []Draft, owner, name string, number int) bool {
-	return slices.ContainsFunc(drafts, func(d Draft) bool { return wrote(d, owner, name, number) })
-}
-
-// latestPublication is when the last draft that wrote the issue finished. A
-// publication still running has none.
-func latestPublication(drafts []Draft, owner, name string, number int) time.Time {
-	var at time.Time
-	for _, draft := range drafts {
-		if wrote(draft, owner, name, number) && draft.Published.At.After(at) {
-			at = draft.Published.At
-		}
-	}
-	return at
-}
-
-// wrote reports whether a draft created or updated the issue.
-func wrote(d Draft, owner, name string, number int) bool {
-	return d.Published.Outcome != OutcomeNone && d.Published.Number == number &&
-		strings.EqualFold(d.Owner, owner) && strings.EqualFold(d.Name, name)
 }
 
 // editDraft rewrites one draft of an active discussion with what the user

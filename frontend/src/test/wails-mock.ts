@@ -62,6 +62,7 @@ import type {
   ThemePreference,
   Transcript,
   TranscriptEvent,
+  WritingDiscussion,
 } from "@/lib/wails";
 
 export const api = {
@@ -457,8 +458,15 @@ export function makeBoardCard(overrides: Partial<BoardCard> = {}): BoardCard {
     archivedTaskId: "",
     action: "start",
     otherBoard: "",
+    writtenBy: null,
     ...overrides,
   };
+}
+
+export function makeWritingDiscussion(
+  overrides: Partial<WritingDiscussion> = {},
+): WritingDiscussion {
+  return { id: "discussion-1", title: "Usage-based pricing tiers", archived: false, ...overrides };
 }
 
 export function makeTaskCard(overrides: Partial<TaskCard> = {}): TaskCard {

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 
@@ -452,6 +453,167 @@ func TestTheDocumentOfACardIsTheOneOfTheDiscussionThatPublishedItLast(t *testing
 	}
 	if _, ok = f.service.DocumentOfCard("acme", "web", 99); ok {
 		t.Error("a card nobody published has a document")
+	}
+}
+
+// publishedBy makes d publish the issue acme/web#31 at the given time; a zero
+// time is a publication still running.
+func (f *fixture) publishedBy(d discussion.Discussion, at time.Time) {
+	f.t.Helper()
+
+	f.record(d.ID, artifactOf(draftOf("one", "Kind: new", "Repository: ACME/Web")))
+	if err := f.service.RecordPublication(f.t.Context(), d.ID, "one", func(draft *discussion.Draft) {
+		draft.Published.Outcome, draft.Published.Number = discussion.OutcomeCreated, 31
+		draft.Published.At = at
+	}); err != nil {
+		f.t.Fatalf("record publication: %v", err)
+	}
+}
+
+// writerScenarios are the cases of the discussion that wrote a card. older is
+// created before newer, and want is the one that wins.
+var writerScenarios = []struct {
+	name string
+	// publish makes the discussions publish, and archive says which of the two
+	// leave the active list; deleted is dropped.
+	publish func(f *fixture, older, newer discussion.Discussion)
+	archive []string
+	deleted []string
+	want    string // "older", "newer" or "" for none
+	wantArc bool
+}{
+	{
+		name: "the most recent publication wins",
+		publish: func(f *fixture, older, newer discussion.Discussion) {
+			f.publishedBy(older, base.Add(time.Hour))
+			f.publishedBy(newer, base.Add(time.Minute))
+		},
+		want: "older",
+	},
+	{
+		name: "a tie goes to the newer discussion",
+		publish: func(f *fixture, older, newer discussion.Discussion) {
+			f.publishedBy(newer, base.Add(time.Hour))
+			f.publishedBy(older, base.Add(time.Hour))
+		},
+		want: "newer",
+	},
+	{
+		name: "an archived discussion counts",
+		publish: func(f *fixture, older, _ discussion.Discussion) {
+			f.publishedBy(older, base.Add(time.Hour))
+		},
+		archive: []string{"older"},
+		want:    "older",
+		wantArc: true,
+	},
+	{
+		name: "a deleted discussion is out",
+		publish: func(f *fixture, older, newer discussion.Discussion) {
+			f.publishedBy(older, base.Add(time.Hour))
+			f.publishedBy(newer, base.Add(2*time.Hour))
+		},
+		deleted: []string{"newer"},
+		want:    "older",
+	},
+	{
+		name: "a publication still running counts",
+		publish: func(f *fixture, older, _ discussion.Discussion) {
+			f.publishedBy(older, time.Time{})
+		},
+		want: "older",
+	},
+	{
+		name: "no publication is no writer",
+		publish: func(*fixture, discussion.Discussion, discussion.Discussion) {
+		},
+		want: "",
+	},
+}
+
+// writerFixture runs a scenario and answers the discussions it made.
+func writerFixture(t *testing.T, scenario int) (f *fixture, chosen map[string]discussion.Discussion) {
+	t.Helper()
+
+	sc := writerScenarios[scenario]
+	f = newFixture(t)
+	older, newer := f.create(), f.create()
+	chosen = map[string]discussion.Discussion{"older": older, "newer": newer}
+	for _, d := range []discussion.Discussion{older, newer} {
+		if err := os.WriteFile(d.DocumentPath(), []byte("document of "+d.ID), 0o600); err != nil {
+			t.Fatalf("write document: %v", err)
+		}
+	}
+	sc.publish(f, older, newer)
+	for _, name := range sc.archive {
+		if _, err := f.service.Archive(t.Context(), chosen[name].ID); err != nil {
+			t.Fatalf("archive: %v", err)
+		}
+	}
+	for _, name := range sc.deleted {
+		if err := f.service.Delete(t.Context(), chosen[name].ID); err != nil {
+			t.Fatalf("delete: %v", err)
+		}
+	}
+	return f, chosen
+}
+
+func TestCardWritersIsTheDiscussionOfTheMostRecentPublication(t *testing.T) {
+	t.Parallel()
+
+	for i, sc := range writerScenarios {
+		t.Run(sc.name, func(t *testing.T) {
+			t.Parallel()
+
+			f, chosen := writerFixture(t, i)
+			got := f.service.CardWriters()
+			if got == nil {
+				t.Fatal("CardWriters() = nil, want a map")
+			}
+			want := map[string]discussion.Writer{}
+			if sc.want != "" {
+				d := chosen[sc.want]
+				want["acme/web#31"] = discussion.Writer{ID: d.ID, Title: d.Title, Archived: sc.wantArc}
+			}
+			if diff := cmp.Diff(want, got); diff != "" {
+				t.Errorf("CardWriters() mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestDocumentOfCardReadsTheDocumentOfTheCardWriter(t *testing.T) {
+	t.Parallel()
+
+	for i, sc := range writerScenarios {
+		t.Run(sc.name, func(t *testing.T) {
+			t.Parallel()
+
+			f, chosen := writerFixture(t, i)
+			got, ok := f.service.DocumentOfCard("ACME", "Web", 31)
+			if sc.want == "" {
+				if ok {
+					t.Errorf("DocumentOfCard() = %q, want none", got)
+				}
+				return
+			}
+			if want := "document of " + chosen[sc.want].ID; !ok || got != want {
+				t.Errorf("DocumentOfCard() = %q, %v, want %q", got, ok, want)
+			}
+		})
+	}
+}
+
+func TestCardWritersDoesNotDistinguishTheCaseOfTheRepository(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	d := f.create()
+	f.publishedBy(d, base.Add(time.Hour)) // drafted as ACME/Web
+
+	got := f.service.CardWriters()
+	if _, ok := got["acme/web#31"]; !ok || len(got) != 1 {
+		t.Errorf("CardWriters() = %+v, want one writer under acme/web#31", got)
 	}
 }
 
