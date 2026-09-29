@@ -270,7 +270,7 @@ func (s *Service) spawnPrepare(id string, opts prepareOptions) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	l.preparing, l.cancel = true, cancel
-	go s.prepare(ctx, id, opts)
+	s.spawned.Go(func() { s.prepare(ctx, id, opts) })
 }
 
 // setPhase records what the preparation of a task is doing and tells the app.

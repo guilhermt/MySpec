@@ -304,12 +304,12 @@ func (s *Service) spawnPRWork(id string, work func(context.Context, string)) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	l.pr = &prWork{running: true, cancel: cancel}
-	s.mu.Unlock()
-
-	go func() {
+	// Counted before the lock is released, so that Close never misses it.
+	s.spawned.Go(func() {
 		defer s.finishPRWork(id)
 		work(ctx, id)
-	}()
+	})
+	s.mu.Unlock()
 }
 
 // finishPRWork forgets the work of the PR stage and releases its context. A

@@ -179,6 +179,9 @@ type Service struct {
 	mu     sync.Mutex
 	locks  map[string]*taskLock // by task id
 	closed bool
+	// spawned counts the preparations and the PR work in flight, which Close
+	// cancels and waits for.
+	spawned sync.WaitGroup
 }
 
 // taskLock serializes the work on one task and coalesces its pending checks.

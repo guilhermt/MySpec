@@ -334,12 +334,12 @@ func (s *Service) Sync(ctx context.Context) {
 	}
 }
 
-// Close stops the flow from evaluating anything else and cancels every
-// preparation in flight. The evaluations under way end on their own.
+// Close stops the flow from evaluating anything else, cancels every
+// preparation and every work of the PR stage in flight and waits for them to
+// end, so that none of them writes to the disk after it returns. The
+// evaluations under way end on their own.
 func (s *Service) Close() {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	s.closed = true
 	for _, l := range s.locks {
 		if l.cancel != nil {
@@ -349,6 +349,9 @@ func (s *Service) Close() {
 			l.pr.cancel()
 		}
 	}
+	s.mu.Unlock()
+
+	s.spawned.Wait()
 }
 
 // isClosed reports whether the flow was closed.

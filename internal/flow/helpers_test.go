@@ -1257,6 +1257,7 @@ type memWorktrees struct {
 	cleanErr  error
 	removeErr error
 	block     chan struct{} // when set, Ensure waits on it or on the context
+	linger    chan struct{} // when set, a cancelled Ensure waits on it before it returns
 
 	closeResult task.CloseResult // what every closing answers with
 	closeCalls  []closeCall      // the closings the flow asked for, in order
@@ -1337,13 +1338,16 @@ func (m *memWorktrees) Ensure(
 ) (worktree.Worktree, error) {
 	m.mu.Lock()
 	m.calls = append(m.calls, "ensure:"+t.ID+":"+registered.FullName())
-	block, phases, err := m.block, slices.Clone(m.phases), m.ensureErr
+	block, linger, phases, err := m.block, m.linger, slices.Clone(m.phases), m.ensureErr
 	m.mu.Unlock()
 
 	if block != nil {
 		select {
 		case <-block:
 		case <-ctx.Done():
+			if linger != nil {
+				<-linger
+			}
 			return worktree.Worktree{}, ctx.Err()
 		}
 	}
@@ -1525,6 +1529,17 @@ func (m *memWorktrees) blockEnsure() chan struct{} {
 
 	m.block = make(chan struct{})
 	return m.block
+}
+
+// lingerOnCancel keeps a cancelled creation of a worktree running until the
+// returned channel is closed, as git goes on writing for a moment after it is
+// told to stop.
+func (m *memWorktrees) lingerOnCancel() chan struct{} {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.linger = make(chan struct{})
+	return m.linger
 }
 
 // memReviews is an in-memory flow.Reviews: it hands out the reading a test
