@@ -1,7 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  actionHint,
-  actionLabel,
   anyDecided,
   decidedCount,
   findingLocation,
@@ -18,13 +16,10 @@ import {
 } from "@/features/reviews/review-status";
 import type { PullReviewStatus } from "@/lib/wails";
 import {
-  makePullRequestRow,
-  makeRepository,
   makeReviewFinding,
   makeReviewPass,
   makeReviewSummary,
   makeSituation,
-  makeState,
 } from "@/test/wails-mock";
 
 describe("reviewStatusLabel", () => {
@@ -177,39 +172,6 @@ describe("outcomeLabel", () => {
     ["", "Closed"],
   ])("reads the outcome %j", (outcome, label) => {
     expect(outcomeLabel(outcome)).toBe(label);
-  });
-});
-
-describe("actionLabel", () => {
-  it("offers the review, even when the repository still has to be cloned", () => {
-    expect(actionLabel(makePullRequestRow({ action: "review" }))).toBe("Review");
-    expect(actionLabel(makePullRequestRow({ action: "clone" }))).toBe("Review");
-    expect(actionLabel(makePullRequestRow({ action: "fork" }))).toBe("Review");
-  });
-
-  it("opens the review or the task the pull request already has", () => {
-    expect(actionLabel(makePullRequestRow({ action: "open_review" }))).toBe("Open review");
-    expect(actionLabel(makePullRequestRow({ action: "open_task" }))).toBe("Open task");
-  });
-});
-
-describe("actionHint", () => {
-  it("says a fork can't be reviewed", () => {
-    expect(actionHint(makePullRequestRow({ action: "fork" }), makeState())).toBe(
-      "Pull requests from forks can't be reviewed yet.",
-    );
-  });
-
-  it("says where the missing clone was", () => {
-    const app = makeState({ repositories: [makeRepository({ path: "/home/dev/web" })] });
-
-    expect(actionHint(makePullRequestRow({ action: "clone_missing" }), app)).toBe(
-      "The clone at /home/dev/web is missing.",
-    );
-  });
-
-  it("holds nothing back from a pull request that can be reviewed", () => {
-    expect(actionHint(makePullRequestRow({ action: "review" }), makeState())).toBeNull();
   });
 });
 

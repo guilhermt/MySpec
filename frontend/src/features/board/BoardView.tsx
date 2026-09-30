@@ -43,7 +43,7 @@ import { useAppStore, useBoard, useRepository } from "@/store/app-store";
 const READING_CLOCK_MS = 60_000;
 
 /** FLASH_MS is how long a card a new reading brought stays flagged: its blink, twice (--duration-slow). */
-const FLASH_MS = 2 * 280;
+export const FLASH_MS = 2 * 280;
 
 /** LIST_COLUMN is the reading column of a list: --list-measure on whole pixels, with --space-6 at each side at least. */
 export const LIST_COLUMN =
@@ -74,7 +74,8 @@ export function BoardView({ boardId }: BoardViewProps) {
   return <BoardScreen key={boardId} board={board} />;
 }
 
-function isTyping(target: EventTarget): boolean {
+/** isTyping is whether the key went to a field, where the letters are text and not shortcuts. */
+export function isTyping(target: EventTarget): boolean {
   return (
     target instanceof HTMLElement &&
     (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)

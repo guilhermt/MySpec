@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/system/Button";
-import { Chip } from "@/components/system/Chip";
 import {
   FilterBar,
   FilterChip,
@@ -28,21 +27,14 @@ const CYCLE_NOTE = "click to hide, again to keep only";
 
 export interface ReviewsFilterBarProps {
   center: ReviewCenter;
-  /** pendingOnly is the switch that keeps only what waits for the user; the view applies it. */
-  pendingOnly: boolean;
-  onPendingOnlyChange: (pendingOnly: boolean) => void;
 }
 
 /**
  * ReviewsFilterBar narrows what the Reviews view lists and counts: the chosen filters as chips and
  * the Filter menu. The filters live in Go, so what the user chooses here is remembered between
- * runs; the pending-only switch is not one of them, and lasts while the view is open.
+ * runs.
  */
-export function ReviewsFilterBar({
-  center,
-  pendingOnly,
-  onPendingOnlyChange,
-}: ReviewsFilterBarProps) {
+export function ReviewsFilterBar({ center }: ReviewsFilterBarProps) {
   const app = useAppStore((state) => state.app);
   // The last choice sent, shown at once until a snapshot carries it: the
   // menu stays open for several clicks in a row, and each click builds on the
@@ -90,9 +82,6 @@ export function ReviewsFilterBar({
 
   return (
     <FilterBar label="Filter the pull requests">
-      <Chip kind="toggle" pressed={pendingOnly} onPressedChange={onPendingOnlyChange}>
-        Pending only
-      </Chip>
       {filterChips(filters, app).map((chip) => (
         <FilterChip
           key={`${chip.kind}:${chip.value}:${chip.label}`}
@@ -107,15 +96,8 @@ export function ReviewsFilterBar({
         cycles={cycles}
         onCycle={cycle}
       />
-      {(filtersActive(filters) || pendingOnly) && (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => {
-            onPendingOnlyChange(false);
-            change(EMPTY_REVIEW_FILTERS);
-          }}
-        >
+      {filtersActive(filters) && (
+        <Button variant="ghost" size="sm" onClick={() => change(EMPTY_REVIEW_FILTERS)}>
           Clear filters
         </Button>
       )}

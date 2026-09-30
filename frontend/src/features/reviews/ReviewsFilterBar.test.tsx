@@ -1,5 +1,4 @@
 import { screen } from "@testing-library/react";
-import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { ReviewsFilterBar } from "@/features/reviews/ReviewsFilterBar";
 import { api, type ReviewCenter } from "@/lib/wails";
@@ -16,20 +15,8 @@ function centerOf(center: Partial<ReviewCenter> = {}) {
   return makeReviewCenter({ authors: ["alice", "dependabot"], labels: ["bug"], ...center });
 }
 
-/** Bar is the filter bar under the view that owns the pending-only switch. */
-function Bar({ center }: { center: ReviewCenter }) {
-  const [pendingOnly, setPendingOnly] = useState(false);
-  return (
-    <ReviewsFilterBar
-      center={center}
-      pendingOnly={pendingOnly}
-      onPendingOnlyChange={setPendingOnly}
-    />
-  );
-}
-
 function bar(center: Partial<ReviewCenter> = {}) {
-  return renderWithStore(<Bar center={centerOf(center)} />, {
+  return renderWithStore(<ReviewsFilterBar center={centerOf(center)} />, {
     state: makeState({
       boards: [makeBoard({ id: "board-1", title: "Mobile App" })],
       repositories: [makeRepository({ id: "repo-1", fullName: "acme/web" })],
@@ -114,28 +101,10 @@ describe("ReviewsFilterBar", () => {
     );
   });
 
-  it("turns pending only on without asking Go to store it", async () => {
-    const { user } = bar();
+  it("has no Pending only switch: the Pending section says it", () => {
+    bar({ filters: makeReviewFilters({ authorsExclude: ["dependabot"] }) });
 
-    await user.click(screen.getByRole("button", { name: "Pending only" }));
-
-    expect(screen.getByRole("button", { name: "Pending only" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    expect(api.setReviewFilters).not.toHaveBeenCalled();
-  });
-
-  it("clears pending only along with the filters", async () => {
-    const { user } = bar();
-    await user.click(screen.getByRole("button", { name: "Pending only" }));
-
-    await user.click(screen.getByRole("button", { name: "Clear filters" }));
-
-    expect(screen.getByRole("button", { name: "Pending only" })).toHaveAttribute(
-      "aria-pressed",
-      "false",
-    );
+    expect(screen.queryByRole("button", { name: "Pending only" })).not.toBeInTheDocument();
   });
 
   it("clears every filter at once, and offers it only while filtering", async () => {
@@ -187,8 +156,12 @@ describe("ReviewsFilterBar", () => {
     await user.click(screen.getByRole("button", { name: "Filter" }));
     await user.click(await screen.findByRole("menuitemcheckbox", { name: "No board" }));
 
-    rerender(<Bar center={centerOf({ filters: makeReviewFilters({ boardId: "__none__" }) })} />);
-    rerender(<Bar center={centerOf()} />);
+    rerender(
+      <ReviewsFilterBar
+        center={centerOf({ filters: makeReviewFilters({ boardId: "__none__" }) })}
+      />,
+    );
+    rerender(<ReviewsFilterBar center={centerOf()} />);
 
     expect(screen.queryByRole("button", { name: /^Remove the filter/ })).not.toBeInTheDocument();
   });

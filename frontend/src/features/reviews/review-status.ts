@@ -1,11 +1,9 @@
 import type { StatusTone } from "@/features/task/status";
 import { troubleText } from "@/lib/pull-requests";
-import { cloneMissingText, findRepository } from "@/lib/repositories";
 import { summaryLabel } from "@/lib/situations";
-import type { PullRequestRow, ReviewFinding, ReviewPass, ReviewSummary, State } from "@/lib/wails";
+import type { ReviewFinding, ReviewPass, ReviewSummary } from "@/lib/wails";
 import {
   asFindingPlacement,
-  asPullRequestAction,
   asPullRequestOutcome,
   asPullReviewStatus,
   asReviewVerdict,
@@ -177,35 +175,4 @@ export function placementLabel(placement: string): string {
 /** outcomeLabel is what became of the pull request of an archived review. */
 export function outcomeLabel(outcome: string): string {
   return asPullRequestOutcome(outcome) === "merged" ? "Merged" : "Closed";
-}
-
-/** actionLabel is what the button of a pull request row offers. */
-export function actionLabel(row: PullRequestRow): string {
-  switch (asPullRequestAction(row.action)) {
-    case "open_review":
-      return "Open review";
-    case "open_task":
-      return "Open task";
-    // A pull request whose repository has no clone yet is still reviewed from
-    // this button: the dialog offers the clone.
-    case "review":
-    case "clone":
-    case "clone_missing":
-    case "fork":
-      return "Review";
-  }
-}
-
-/** actionHint is what keeps a pull request from being reviewed, null when nothing does. */
-export function actionHint(row: PullRequestRow, app: State | null): string | null {
-  switch (asPullRequestAction(row.action)) {
-    case "fork":
-      return "Pull requests from forks can't be reviewed yet.";
-    case "clone_missing": {
-      const repository = findRepository(app, row.repositoryId);
-      return repository === null ? null : cloneMissingText(repository);
-    }
-    default:
-      return null;
-  }
 }
