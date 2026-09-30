@@ -131,7 +131,7 @@ export function BoardFilterBar({
       {filterChips(filters, board, app).map((chip) => (
         <FilterChip key={chip.kind} model={chip} onRemove={clear[chip.kind]} />
       ))}
-      <FilterMenu groups={groups} onPick={pick} />
+      <FilterMenu tooltip="Repository, assignee, status" groups={groups} onPick={pick} />
       {filtersActive(filters) && (
         <Button variant="ghost" size="sm" onClick={() => onChange(EMPTY_FILTERS)}>
           Clear filters

@@ -20,13 +20,39 @@ export interface ItemBlockProps {
   onOpen: () => void;
   /** openLabel names the button: "Open the task". */
   openLabel: string;
+  /** openText is the text of the button: "Open" by default, "Open review", "Open task". */
+  openText?: string;
+  /** primary draws Open as the primary button: the item waits for the user. */
+  primary?: boolean;
+  /** shortcut is the key of Open, in its tooltip: "R". */
+  shortcut?: string;
 }
 
 /**
  * ItemBlock is an item of the tree shown in a panel: its type, its name, what it is doing with the
  * clock, and Open. It is raised over the panel.
  */
-export function ItemBlock({ kind, name, line2, clock, onOpen, openLabel }: ItemBlockProps) {
+export function ItemBlock({
+  kind,
+  name,
+  line2,
+  clock,
+  onOpen,
+  openLabel,
+  openText = "Open",
+  primary = false,
+  shortcut,
+}: ItemBlockProps) {
+  const open = (
+    <Button
+      variant={primary ? "primary" : "secondary"}
+      size="sm"
+      aria-label={openLabel}
+      onClick={onOpen}
+    >
+      {openText}
+    </Button>
+  );
   return (
     <div className="flex items-center gap-(--space-3) rounded-md bg-surface-2 p-(--space-3) shadow-xs">
       <div className="flex min-w-0 flex-1 flex-col gap-(--space-0-5)">
@@ -44,9 +70,13 @@ export function ItemBlock({ kind, name, line2, clock, onOpen, openLabel }: ItemB
           {clock?.kind === "chip" && <ItemClockView clock={clock} />}
         </div>
       </div>
-      <Button variant="secondary" size="sm" aria-label={openLabel} onClick={onOpen}>
-        Open
-      </Button>
+      {shortcut === undefined ? (
+        open
+      ) : (
+        <Tooltip content={openText} shortcut={shortcut}>
+          {open}
+        </Tooltip>
+      )}
     </div>
   );
 }

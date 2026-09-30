@@ -2,7 +2,7 @@ import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { renderWithStore } from "@/test/render";
-import { Finding, type FindingView } from "./Finding";
+import { Finding, type FindingProps, type FindingView } from "./Finding";
 
 function view(overrides: Partial<FindingView> = {}): FindingView {
   return {
@@ -67,5 +67,182 @@ describe("Finding", () => {
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
     expect(screen.getByText("General · not on a line of the diff")).toBeInTheDocument();
     expect(screen.getByRole("group")).not.toHaveAttribute("data-disabled");
+  });
+
+  describe("while it is decided on", () => {
+    function open(overrides: Partial<FindingProps> = {}, model: Partial<FindingView> = {}) {
+      const props = {
+        onDecide: vi.fn(),
+        onEdit: vi.fn(),
+        onDraftChange: vi.fn(),
+        onDraftBlur: vi.fn(),
+        onDone: vi.fn(),
+        onOpenLine: vi.fn(),
+        onOpenEditor: vi.fn(),
+        onRetry: vi.fn(),
+      };
+      renderWithStore(
+        <Finding
+          model={view({ decision: "", disabled: null, ...model })}
+          editNote="Saved as you type. It goes to GitHub as you leave it."
+          renderText={(text) => <p>{text}</p>}
+          {...props}
+          {...overrides}
+        />,
+      );
+      return props;
+    }
+
+    it("approves, discards and undoes with a click", async () => {
+      const props = open();
+      await userEvent.click(screen.getByRole("button", { name: "Approve" }));
+      await userEvent.click(screen.getByRole("button", { name: "Discard" }));
+
+      expect(props.onDecide.mock.calls).toEqual([["approved"], ["discarded"]]);
+    });
+
+    it("undoes the decision it already holds", async () => {
+      const props = open({}, { decision: "approved" });
+
+      expect(screen.getByRole("button", { name: "Approve" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+      expect(screen.getByText("Approved · click again to undo")).toBeInTheDocument();
+      await userEvent.click(screen.getByRole("button", { name: "Approve" }));
+
+      expect(props.onDecide).toHaveBeenCalledWith("");
+    });
+
+    it("says it is saving and offers to try a failed save again", async () => {
+      const props = open({ saving: true, error: "text" });
+
+      expect(screen.getByText("Saving…")).toBeInTheDocument();
+      expect(screen.getByText(/Couldn't save the text/)).toBeInTheDocument();
+      await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+      expect(props.onRetry).toHaveBeenCalledTimes(1);
+    });
+
+    it("edits with E, opens the line with O and the editor with Ctrl+E", async () => {
+      const props = open();
+      screen.getByRole("group").focus();
+
+      await userEvent.keyboard("e");
+      await userEvent.keyboard("o");
+      await userEvent.keyboard("{Control>}e{/Control}");
+
+      expect(props.onEdit).toHaveBeenCalledTimes(1);
+      expect(props.onOpenLine).toHaveBeenCalledTimes(1);
+      expect(props.onOpenEditor).toHaveBeenCalledTimes(1);
+    });
+
+    it("leaves A and D to the card around it", async () => {
+      const props = open();
+      screen.getByRole("group").focus();
+
+      await userEvent.keyboard("ad");
+
+      expect(props.onDecide).not.toHaveBeenCalled();
+    });
+
+    it("opens the editor on its own line with a named button", async () => {
+      const props = open();
+
+      await userEvent.click(
+        screen.getByRole("button", { name: "Open line 84 of GeneralForm.tsx in VS Code" }),
+      );
+
+      expect(props.onOpenEditor).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("while it is edited", () => {
+    function edit(draft: string) {
+      const onDone = vi.fn();
+      const onDraftChange = vi.fn();
+      const onEdit = vi.fn();
+      renderWithStore(
+        <Finding
+          model={view({ decision: "", disabled: null })}
+          editNote="Saved as you type. It goes to GitHub as you leave it."
+          editing
+          draft={draft}
+          onDone={onDone}
+          onDraftChange={onDraftChange}
+          onEdit={onEdit}
+          onOpenLine={vi.fn()}
+          renderText={(text) => <p>{text}</p>}
+        />,
+      );
+      return { onDone, onDraftChange, onEdit };
+    }
+
+    it("puts the focus in the field and reports what is typed", async () => {
+      const { onDraftChange } = edit("");
+      const field = screen.getByRole("textbox", { name: "Text of finding 2" });
+
+      expect(field).toHaveFocus();
+      await userEvent.type(field, "x");
+
+      expect(onDraftChange).toHaveBeenCalledWith("x");
+    });
+
+    it("keeps the keys of the card out of the field", async () => {
+      const { onEdit } = edit("a");
+
+      await userEvent.type(screen.getByRole("textbox"), "eo");
+
+      expect(onEdit).not.toHaveBeenCalled();
+    });
+
+    it("finishes with Esc or Done and gives the focus back to the finding", async () => {
+      const { onDone } = edit("Drops the value.");
+
+      await userEvent.keyboard("{Escape}");
+      expect(screen.getByRole("group")).toHaveFocus();
+      await userEvent.click(screen.getByRole("button", { name: "Done" }));
+
+      expect(onDone).toHaveBeenCalledTimes(2);
+    });
+
+    it("asks for a text when the field is empty", () => {
+      edit("");
+
+      expect(screen.getByRole("textbox")).toBeInvalid();
+      expect(screen.getByText("Write the finding, or discard it.")).toBeInTheDocument();
+    });
+  });
+
+  it("takes the location for the title and draws no decision once disabled", () => {
+    renderWithStore(
+      <Finding
+        model={view({ locationAsTitle: true })}
+        onOpenLine={vi.fn()}
+        renderText={(text) => <p>{text}</p>}
+      />,
+    );
+
+    expect(screen.getAllByRole("link")).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: "Approve" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
+  });
+
+  it("keeps only O and Ctrl+E once disabled", async () => {
+    const onEdit = vi.fn();
+    const onOpenLine = vi.fn();
+    renderWithStore(
+      <Finding
+        model={view()}
+        onEdit={onEdit}
+        onOpenLine={onOpenLine}
+        renderText={(text) => <p>{text}</p>}
+      />,
+    );
+    screen.getByRole("group").focus();
+
+    await userEvent.keyboard("eo");
+
+    expect(onEdit).not.toHaveBeenCalled();
+    expect(onOpenLine).toHaveBeenCalledTimes(1);
   });
 });

@@ -70,7 +70,9 @@ describe("FilterChip", () => {
 
 describe("FilterMenu", () => {
   async function open(onPick = vi.fn()) {
-    const rendered = renderWithStore(<FilterMenu groups={GROUPS} onPick={onPick} />);
+    const rendered = renderWithStore(
+      <FilterMenu tooltip="Repository, assignee, status" groups={GROUPS} onPick={onPick} />,
+    );
     await rendered.user.click(screen.getByRole("button", { name: "Filter" }));
     await screen.findByRole("menu");
     return { ...rendered, onPick };
@@ -99,5 +101,41 @@ describe("FilterMenu", () => {
     const { user, onPick } = await open();
     await user.click(screen.getByRole("menuitemcheckbox", { name: "acme/api" }));
     expect(onPick).toHaveBeenCalledWith("Repository", "r1", false);
+  });
+
+  it("says in the tooltip what it filters by", async () => {
+    const { user } = await open();
+    await user.keyboard("{Escape}");
+    await user.hover(screen.getByRole("button", { name: "Filter" }));
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Repository, assignee, status");
+  });
+
+  it("cycles a three-way filter after the other groups, keeping the menu open", async () => {
+    const onCycle = vi.fn();
+    const { user } = renderWithStore(
+      <FilterMenu
+        tooltip="Board, repository, author, label"
+        groups={GROUPS}
+        onPick={vi.fn()}
+        cycles={[
+          {
+            label: "Label",
+            note: "click to hide, again to keep only",
+            items: [{ value: "deps", label: "dependencies", state: "hidden" }],
+          },
+        ]}
+        onCycle={onCycle}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Filter" }));
+    await screen.findByRole("menu");
+    expect(screen.getByRole("group", { name: /Label/ })).toHaveTextContent(
+      "click to hide, again to keep only",
+    );
+    await user.click(
+      screen.getByRole("menuitem", { name: "dependencies: hidden. Click to cycle." }),
+    );
+    expect(onCycle).toHaveBeenCalledWith("Label", "deps", "only");
+    expect(screen.getByRole("menu")).toBeInTheDocument();
   });
 });

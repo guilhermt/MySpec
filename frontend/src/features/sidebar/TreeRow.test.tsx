@@ -21,7 +21,7 @@ import {
 // The meta that does not fit is a layout jsdom cannot make: the measure is switched by hand.
 // Each drawing of a row measures, so the count of measures tells whether it drew again.
 const measure = vi.hoisted(() => ({ fits: true, count: 0 }));
-vi.mock("@/features/sidebar/useFits", () => ({
+vi.mock("@/components/system/fits", () => ({
   useFits: () => {
     measure.count += 1;
     return measure.fits;

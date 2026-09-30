@@ -1,12 +1,12 @@
-import { useRef, useState } from "react";
-import { Button } from "@/components/system/Button";
+import { useState } from "react";
 import { OtherConversationBar, RequestBar } from "@/components/system/RequestBar";
-import { Tooltip } from "@/components/system/Tooltip";
 import { CleanAndStartDialog } from "@/features/task/CleanAndStartDialog";
 import { DeleteTaskDialog } from "@/features/task/DeleteTaskDialog";
 import { DiscardStepDialog } from "@/features/task/DiscardStepDialog";
 import type { TaskRequestAction, TaskRequestButton } from "@/features/task/request";
+import { RequestButtons } from "@/features/task/request-buttons";
 import { currentStepOf } from "@/features/task/step-status";
+import { useBornStatus } from "@/features/task/useBornStatus";
 import { useTaskRequest } from "@/features/task/useTaskRequest";
 import { focusRequest } from "@/lib/focus";
 import type { TaskSummary } from "@/lib/wails";
@@ -72,24 +72,6 @@ function run(button: TaskRequestButton, task: TaskSummary, edited: PrDraft | nul
     default:
       return Promise.resolve();
   }
-}
-
-/**
- * useBornStatus is what the status of the bar announces: nothing for the situation already there
- * when the screen mounted, and for one born after, the status it was born with, frozen the first
- * time its id is seen so a later change to its form isn't announced again.
- */
-function useBornStatus(situationId: string | null, status: string): string {
-  const mounted = useRef<{ situationId: string | null } | null>(null);
-  const born = useRef<{ situationId: string; status: string } | null>(null);
-  mounted.current ??= { situationId };
-  if (situationId === null || situationId === mounted.current.situationId) {
-    return "";
-  }
-  if (born.current?.situationId !== situationId) {
-    born.current = { situationId, status };
-  }
-  return born.current.status;
 }
 
 export interface TaskRequestProps {
@@ -179,36 +161,10 @@ export function TaskRequest({ task, tab }: TaskRequestProps) {
           ? { progressTooltip: request.progressTooltip }
           : {})}
         {...(flash !== undefined ? { flash } : {})}
-        actions={request.actions.map((button) => {
-          const control = (
-            <Button
-              key={button.action}
-              size="sm"
-              variant={button.variant}
-              {...(button.disabledReason !== undefined
-                ? { disabled: true, disabledReason: button.disabledReason }
-                : {})}
-              {...(button.loadingLabel !== ""
-                ? { loading: running === button.action, loadingLabel: button.loadingLabel }
-                : {})}
-              onClick={() => void press(button)}
-            >
-              {button.label}
-            </Button>
-          );
-          // The key of the action, or what it does when its label doesn't say, is in its tooltip.
-          if (button.shortcut === undefined && button.tooltip === undefined) {
-            return control;
-          }
-          return (
-            <Tooltip
-              key={button.action}
-              content={button.tooltip ?? button.label}
-              {...(button.shortcut !== undefined ? { shortcut: button.shortcut } : {})}
-            >
-              {control}
-            </Tooltip>
-          );
+        actions={RequestButtons({
+          buttons: request.actions,
+          running,
+          onPress: (button) => void press(button),
         })}
       />
       {step !== null && (

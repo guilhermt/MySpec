@@ -46,4 +46,23 @@ describe.each(THEMES)("ItemBlock in the %s theme", (theme) => {
       "secondary",
     );
   });
+
+  it("paints Open as the primary when the item waits", () => {
+    setTheme(theme);
+    render(
+      <ItemBlock
+        kind="review"
+        name="Review of acme/api#12"
+        line2={{ tone: "wait", text: "Findings to decide" }}
+        clock={null}
+        openLabel="Open review"
+        openText="Open review"
+        primary
+        shortcut="R"
+        onOpen={() => {}}
+      />,
+    );
+    const want = { background: token("--brand"), color: token("--brand-on") };
+    expect(paintOf(screen.getByRole("button", { name: "Open review" }), want)).toEqual(want);
+  });
 });

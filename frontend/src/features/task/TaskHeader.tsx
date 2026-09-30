@@ -1,5 +1,4 @@
-import { useState } from "react";
-import { PauseButton } from "@/components/PauseButton";
+import { ItemPause } from "@/components/ItemPause";
 import { PanelGroup } from "@/components/system/AuxPanel";
 import { ContextMeter } from "@/components/system/ContextMeter";
 import { ICONS } from "@/components/system/icons";
@@ -11,14 +10,11 @@ import { loadingSteps, stepperOf } from "@/features/task/stepper";
 import { TaskMenu } from "@/features/task/TaskMenu";
 import {
   contextDetail,
-  isPaused,
   pauseRefusal,
   screenSession,
   waitingSession,
 } from "@/features/task/task-session";
 import { asSessionStatus, asTaskMode, type TaskCard, type TaskSummary } from "@/lib/wails";
-import { clockTime } from "@/lib/when";
-import { pause, resume } from "@/store/actions";
 import { useAppStore, useEarlierConversation, useOpenStepTab, usePanel } from "@/store/app-store";
 
 export interface TaskHeaderProps {
@@ -143,7 +139,13 @@ function TaskTools({ task, now }: { task: TaskSummary; now: number }) {
           detail={contextDetail(onScreen)}
         />
       )}
-      <TaskPause task={task} now={now} />
+      <ItemPause
+        id={task.id}
+        item="the task"
+        session={waitingSession(task)}
+        refusal={(session) => pauseRefusal(task, session)}
+        now={now}
+      />
       <PanelGroup
         panels={task.card === null ? panels : [...panels, cardPanel(task.card)]}
         open={panel}
@@ -151,39 +153,5 @@ function TaskTools({ task, now }: { task: TaskSummary; now: number }) {
       />
       <TaskMenu task={task} />
     </>
-  );
-}
-
-/**
- * TaskPause pauses or resumes the conversation the task waits on, with no dialog: Pausing… until the
- * call comes back.
- */
-function TaskPause({ task, now }: { task: TaskSummary; now: number }) {
-  const [loading, setLoading] = useState(false);
-  const session = waitingSession(task);
-  if (session === null) {
-    return null;
-  }
-  const paused = isPaused(task);
-  const refusal = paused ? null : pauseRefusal(task, session);
-
-  const act = async () => {
-    setLoading(true);
-    try {
-      await (paused ? resume(task.id, session.stage) : pause(task.id, session.stage));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <PauseButton
-      paused={paused}
-      loading={loading}
-      {...(refusal !== null ? { disabledReason: refusal } : {})}
-      pausedSince={session.pausedAt === "" ? "" : clockTime(session.pausedAt, now)}
-      item="the task"
-      onClick={() => void act()}
-    />
   );
 }

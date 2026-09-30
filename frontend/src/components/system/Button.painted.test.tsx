@@ -141,6 +141,15 @@ describe.each(THEMES)("Button in the %s theme", (theme) => {
     expect(paintOf(button, want)).toEqual(want);
   });
 
+  it("keeps a pressed secondary in the brand tint, also under the pointer", async () => {
+    setTheme(theme);
+    render(<Button pressed>Approve</Button>);
+    const button = screen.getByRole("button", { name: "Approve" });
+    await userEvent.hover(button);
+    const want = { background: token("--brand-tint"), color: token("--brand-ink") };
+    expect(paintOf(button, want)).toEqual(want);
+  });
+
   it("measures the three heights of the system", () => {
     setTheme(theme);
     render(

@@ -3,10 +3,10 @@ import { AuxPanel } from "@/components/system/AuxPanel";
 import { EmptyState } from "@/components/system/EmptyState";
 import { Icon } from "@/components/system/Icon";
 import { ICONS } from "@/components/system/icons";
+import { PanelRow } from "@/components/system/PanelRow";
+import { PanelSection } from "@/components/system/PanelSection";
 import { artifactGroupsOf } from "@/features/task/artifacts";
 import { PanelDocument } from "@/features/task/PanelDocument";
-import { PanelRow } from "@/features/task/PanelRow";
-import { PanelSection } from "@/features/task/PanelSection";
 import { asTaskMode, type TaskSummary } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
 

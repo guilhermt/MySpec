@@ -6,7 +6,7 @@ export interface PanelSectionProps {
   children: ReactNode;
 }
 
-/** PanelSection is a group of a panel of the task, with its legend in capitals, named by it. */
+/** PanelSection is a group of a panel, with its legend in capitals, named by it. */
 export function PanelSection({ legend, children }: PanelSectionProps) {
   return (
     <section aria-label={legend} className="flex flex-col">

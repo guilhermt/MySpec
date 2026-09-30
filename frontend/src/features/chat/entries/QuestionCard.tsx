@@ -2,6 +2,7 @@ import { type KeyboardEvent, useEffect, useId, useState } from "react";
 import { Button } from "@/components/system/Button";
 import { Icon } from "@/components/system/Icon";
 import { ICONS } from "@/components/system/icons";
+import { KEY_CLASS, OPTION_CLASS } from "@/components/system/OptionGroup";
 import { Spinner } from "@/components/system/Spinner";
 import { Tooltip } from "@/components/system/Tooltip";
 import { answersOf, type QuestionChoices } from "@/features/chat/composer";
@@ -26,12 +27,6 @@ export const ANSWERED_CARD =
 
 /** ENTRY is the article a card stands in, the entry of the feed that holds it. */
 export const ENTRY = "rounded-lg outline-none focus-visible:focus-ring";
-
-const OPTION =
-  "flex w-full items-start gap-(--space-3) rounded-md border border-line-2 bg-surface-2 px-(--space-3) py-(--space-2) text-left transition-[background-color,border-color] duration-(--duration-fast) ease-standard outline-none not-aria-disabled:hover:border-line-3 not-aria-disabled:hover:bg-surface-2-hover focus-visible:focus-ring aria-checked:border-brand-ring aria-checked:bg-brand-tint aria-disabled:cursor-not-allowed";
-
-const KEY =
-  "inline-grid h-(--key-size) min-w-(--key-size) flex-none place-items-center rounded-xs border border-line-2 border-b-(length:--border-2) bg-surface-2 font-mono text-(length:--text-micro) leading-(--leading-micro) text-ink-2 group-aria-checked:border-brand-ring group-aria-checked:text-brand-ink";
 
 function hasChoice(choice: QuestionChoices[number] | undefined): boolean {
   return (
@@ -349,10 +344,10 @@ function QuestionGroup({ at, question, titleId, choice, disabled, onPick }: Ques
             aria-checked={checked[index] ?? false}
             aria-disabled={disabled || undefined}
             tabIndex={stop < 0 || stop === index ? 0 : -1}
-            className={cn("group", OPTION)}
+            className={cn("group", OPTION_CLASS)}
             onClick={() => onPick(index)}
           >
-            <span className={KEY}>{index + 1}</span>
+            <span className={KEY_CLASS}>{index + 1}</span>
             <span className="flex flex-col gap-(--space-0-5) font-medium text-ink-1">
               {row.title}
               {row.note !== "" && (

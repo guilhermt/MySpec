@@ -3,9 +3,11 @@ import { Chip } from "./Chip";
 import { Icon } from "./Icon";
 import { ICONS } from "./icons";
 import {
+  type FilterCycle,
   Menu,
   MenuCheckboxItem,
   MenuContent,
+  MenuCycleItem,
   MenuGroup,
   MenuGroupLabel,
   MenuSeparator,
@@ -68,17 +70,33 @@ export interface FilterGroup {
   items: { value: string; label: string; checked: boolean }[];
 }
 
+/** FilterCycleGroup is a group of three-way filters: each value any, hidden or the only one. */
+export interface FilterCycleGroup {
+  label: string;
+  /** note follows the label: "click to hide, again to keep only". */
+  note: string;
+  items: { value: string; label: string; state: FilterCycle }[];
+}
+
 export interface FilterMenuProps {
+  /** tooltip says what the menu filters by: "Repository, assignee, status". */
+  tooltip: string;
   groups: readonly FilterGroup[];
   /** onPick chooses the item of a group; picking the checked one unchecks it. */
   onPick: (group: string, value: string, checked: boolean) => void;
+  /** cycles are the groups of three-way filters, after the others. */
+  cycles?: readonly FilterCycleGroup[];
+  onCycle?: (group: string, value: string, next: FilterCycle) => void;
 }
 
-/** FilterMenu is the Filter chip and its menu: a group for each filter, one item checked at most in each. */
-export function FilterMenu({ groups, onPick }: FilterMenuProps) {
+/**
+ * FilterMenu is the Filter chip and its menu: a group for each filter, one item checked at most in
+ * each, then the groups of three-way filters.
+ */
+export function FilterMenu({ tooltip, groups, onPick, cycles = [], onCycle }: FilterMenuProps) {
   return (
     <Menu>
-      <Tooltip content="Repository, assignee, status">
+      <Tooltip content={tooltip}>
         <MenuTrigger
           render={
             <Chip kind="menu">
@@ -102,6 +120,22 @@ export function FilterMenu({ groups, onPick }: FilterMenuProps) {
                 >
                   {item.label}
                 </MenuCheckboxItem>
+              ))}
+            </MenuGroup>
+          </div>
+        ))}
+        {cycles.map((group, index) => (
+          <div key={group.label} className="flex flex-col gap-0.5">
+            {(groups.length > 0 || index > 0) && <MenuSeparator />}
+            <MenuGroup>
+              <MenuGroupLabel note={group.note}>{group.label}</MenuGroupLabel>
+              {group.items.map((item) => (
+                <MenuCycleItem
+                  key={item.value}
+                  label={item.label}
+                  state={item.state}
+                  onStateChange={(next) => onCycle?.(group.label, item.value, next)}
+                />
               ))}
             </MenuGroup>
           </div>

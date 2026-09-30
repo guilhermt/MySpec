@@ -38,7 +38,7 @@ const NESTED =
   "min-h-(--size-control-xs) pl-[calc(var(--space-2)+var(--icon-sm)+var(--space-2))] text-ink-2";
 
 /**
- * PanelRow is one row of a list in a panel of the task: the glyph, the text and the meta on the
+ * PanelRow is one row of a list in a panel: the glyph, the text and the meta on the
  * right. A row that opens something is a button; a row that holds controls is not.
  */
 export function PanelRow({

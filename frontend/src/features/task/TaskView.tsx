@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { ArrivalFocus } from "@/components/ArrivalFocus";
 import { PanelLayout } from "@/components/system/AuxPanel";
 import { Conversation } from "@/features/chat/Conversation";
 import { COLUMN_CLASS } from "@/features/chat/ConversationColumn";
@@ -20,7 +21,6 @@ import { TaskComposer } from "@/features/task/TaskComposer";
 import { TaskHeader } from "@/features/task/TaskHeader";
 import { TaskRequest } from "@/features/task/TaskRequest";
 import { useTaskRequest } from "@/features/task/useTaskRequest";
-import { focusRequest, focusTitle } from "@/lib/focus";
 import { prOf } from "@/lib/pull-requests";
 import { asTaskStage, type Step, sessionKey, type TaskSummary } from "@/lib/wails";
 import { loadTranscript } from "@/store/actions";
@@ -75,27 +75,12 @@ function EarlierConversation({ task, stage }: { task: TaskSummary; stage: string
 }
 
 /**
- * ArrivalFocus takes the focus, on arriving at a situation of the task, to what it asks once the
- * conversation and the bar are on screen: the pending card, the primary of the bar, the composer,
- * or the bar; the title when none is there.
+ * TaskArrival is the focus on arriving at a situation of the task, apart from TaskView so only it
+ * follows the clock of the request.
  */
-function ArrivalFocus({ task, tab, ready }: { task: TaskSummary; tab: StepTab; ready: boolean }) {
-  const pendingFocus = useAppStore((state) => state.pendingFocus);
-  const clearPendingFocus = useAppStore((state) => state.clearPendingFocus);
+function TaskArrival({ task, tab, ready }: { task: TaskSummary; tab: StepTab; ready: boolean }) {
   const { request } = useTaskRequest(task, tab);
-  const target = request?.focus ?? "composer";
-
-  useEffect(() => {
-    if (pendingFocus !== "request" || !ready) {
-      return;
-    }
-    if (!focusRequest(target)) {
-      focusTitle();
-    }
-    clearPendingFocus();
-  }, [pendingFocus, ready, target, clearPendingFocus]);
-
-  return null;
+  return <ArrivalFocus target={request?.focus ?? null} ready={ready} />;
 }
 
 export interface TaskViewProps {
@@ -162,7 +147,7 @@ export function TaskView({ taskId }: TaskViewProps) {
   return (
     <section ref={rescue} className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
       <TaskHeader task={task} />
-      <ArrivalFocus task={task} tab={stepTab} ready={!hasConversation || conversationSettled} />
+      <TaskArrival task={task} tab={stepTab} ready={!hasConversation || conversationSettled} />
       <PanelLayout
         panel={
           panel === "details" ? (

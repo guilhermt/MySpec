@@ -427,8 +427,7 @@ export function reviewComposerContext(review: ReviewSummary): ReviewComposerCont
   return {
     findings: false,
     askForChange: status === "in_review" || status === "ready_to_approve",
-    reviseFindings:
-      last !== undefined && last.recorded && !last.clean && !last.published && !last.sent,
+    reviseFindings: last?.recorded === true && !last.clean && !last.published && !last.sent,
     item: "review",
   };
 }
