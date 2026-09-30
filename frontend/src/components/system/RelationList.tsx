@@ -1,5 +1,6 @@
 import type { MouseEvent } from "react";
 import { Link } from "./Link";
+import { Tooltip } from "./Tooltip";
 
 /** RelationItem is one relation: a card, a dependency or a pull request on GitHub. */
 export interface RelationItem {
@@ -71,7 +72,9 @@ export function RelationList({ groups, onOpen, onOpenCard }: RelationListProps) 
                     className="min-w-0 gap-(--space-1-5)"
                   >
                     <span className="font-mono text-(length:--text-micro)">{item.number}</span>{" "}
-                    <span className="truncate">{item.title}</span>
+                    <Tooltip content={item.title}>
+                      <span className="truncate">{item.title}</span>
+                    </Tooltip>
                   </Link>
                   <span className="ml-auto flex shrink-0 items-center gap-(--space-2) whitespace-nowrap">
                     {item.meta !== "" && (

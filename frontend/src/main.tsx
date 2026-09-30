@@ -9,15 +9,18 @@ if (container === null) {
   throw new Error("missing #root element");
 }
 
-// The measurement of the conversation (src/dev) takes the place of the app only under the dev
-// server; the production build drops this branch, and the module with it.
-if (
-  import.meta.env.DEV &&
-  new URLSearchParams(window.location.search).get("measure") === "conversation"
-) {
+// The measurements (src/dev) take the place of the app only under the dev server; the production
+// build drops these branches, and the modules with them.
+const measure = import.meta.env.DEV
+  ? new URLSearchParams(window.location.search).get("measure")
+  : null;
+
+if (measure === "conversation") {
   void import("@/dev/measure-conversation").then(({ measureConversation }) =>
     measureConversation(container),
   );
+} else if (measure === "board") {
+  void import("@/dev/measure-board").then(({ measureBoard }) => measureBoard(container));
 } else {
   createRoot(container).render(
     <StrictMode>

@@ -58,7 +58,8 @@ export interface CardRowProps {
   onFocus: () => void;
 }
 
-// The classes of the narrow form (@max-[1040px]/list:) are written whole, since Tailwind reads the
+// The classes of the narrow form (@max-[1041px]/list:, which Tailwind reads as a container under
+// 1041px, so a list of 1040px or less) are written whole, since Tailwind reads the
 // source as text: in the container the scroll area names "list", the meta goes to a second line
 // under the title.
 const META = "text-(length:--text-meta) leading-(--leading-meta)";
@@ -84,10 +85,10 @@ function TaskCell({ model }: { model: CardRowView }): ReactElement | null {
   const { task } = model;
   if (task === null) return null;
   const wrap = cn(
-    "col-start-6 row-start-1 inline-flex min-w-0 items-center gap-(--space-1-5) whitespace-nowrap @max-[1040px]/list:col-auto @max-[1040px]/list:row-auto @max-[1040px]/list:flex-[0_1_auto]",
+    "col-start-6 row-start-1 inline-flex min-w-0 items-center gap-(--space-1-5) whitespace-nowrap @max-[1041px]/list:col-auto @max-[1041px]/list:row-auto @max-[1041px]/list:flex-[0_1_auto]",
     META,
     model.dependency !== null &&
-      "@max-[1040px]/list:max-w-[calc(100%-var(--col-dep)-var(--space-4))]",
+      "@max-[1041px]/list:max-w-[calc(100%-var(--col-dep)-var(--space-4))]",
   );
   switch (task.kind) {
     case "task":
@@ -141,7 +142,7 @@ function KeysCell({
     <span
       aria-hidden="true"
       className={cn(
-        "col-start-7 row-start-1 invisible inline-flex items-center justify-end gap-(--space-2) whitespace-nowrap text-(length:--text-micro) leading-(--leading-micro) text-ink-3 group-focus-visible/row:visible @max-[1040px]/list:col-start-4",
+        "col-start-7 row-start-1 invisible inline-flex items-center justify-end gap-(--space-2) whitespace-nowrap text-(length:--text-micro) leading-(--leading-micro) text-ink-3 group-focus-visible/row:visible @max-[1041px]/list:col-start-4",
       )}
     >
       {keys.map(([key, name]) => (
@@ -187,8 +188,8 @@ export function CardRow({
       className={cn(
         "group/row relative grid min-h-(--size-control) cursor-pointer items-center gap-x-(--space-2) rounded-sm px-(--space-2) text-(length:--text-ui) leading-(--leading-ui) text-ink-1 outline-none transition-[background-color,box-shadow] duration-(--duration-fast) ease-standard focus-visible:focus-ring",
         "grid-cols-[var(--icon)_var(--col-num)_minmax(0,1fr)_var(--col-epic)_var(--col-dep)_var(--col-task)_var(--col-keys)]",
-        "@max-[1040px]/list:grid-cols-[var(--icon)_var(--col-num)_minmax(0,1fr)_var(--col-keys)]",
-        has2 && "@max-[1040px]/list:gap-y-(--space-0-5) @max-[1040px]/list:py-(--space-1-5)",
+        "@max-[1041px]/list:grid-cols-[var(--icon)_var(--col-num)_minmax(0,1fr)_var(--col-keys)]",
+        has2 && "@max-[1041px]/list:gap-y-(--space-0-5) @max-[1041px]/list:py-(--space-1-5)",
         open
           ? "bg-brand-tint-plane shadow-[inset_0_0_0_var(--border)_var(--brand-ring)]"
           : "hover:bg-veil-hover active:bg-veil-press",
@@ -233,7 +234,7 @@ export function CardRow({
         )}
       />
       {has2 && (
-        <span className="contents @max-[1040px]/list:col-start-3 @max-[1040px]/list:row-start-2 @max-[1040px]/list:flex @max-[1040px]/list:h-(--leading-meta) @max-[1040px]/list:flex-row-reverse @max-[1040px]/list:flex-wrap @max-[1040px]/list:justify-end @max-[1040px]/list:gap-x-(--space-4) @max-[1040px]/list:overflow-hidden">
+        <span className="contents @max-[1041px]/list:col-start-3 @max-[1041px]/list:row-start-2 @max-[1041px]/list:flex @max-[1041px]/list:h-(--leading-meta) @max-[1041px]/list:flex-row-reverse @max-[1041px]/list:flex-wrap @max-[1041px]/list:justify-end @max-[1041px]/list:gap-x-(--space-4) @max-[1041px]/list:overflow-hidden">
           <TaskCell model={model} />
           {model.dependency !== null && (
             <Tooltip content={model.dependency.tooltip}>
@@ -241,7 +242,7 @@ export function CardRow({
                 className={cn(
                   "col-start-5 row-start-1 inline-flex min-w-0 items-center gap-(--space-1-5) whitespace-nowrap text-ink-3",
                   META,
-                  "@max-[1040px]/list:col-auto @max-[1040px]/list:row-auto @max-[1040px]/list:flex-none",
+                  "@max-[1041px]/list:col-auto @max-[1041px]/list:row-auto @max-[1041px]/list:flex-none",
                 )}
               >
                 <StateGlyph state="blocked" size="sm" />
@@ -256,7 +257,7 @@ export function CardRow({
               className={cn(
                 "col-start-4 row-start-1 text-ink-3",
                 META,
-                "@max-[1040px]/list:col-auto @max-[1040px]/list:row-auto @max-[1040px]/list:min-w-(--space-12) @max-[1040px]/list:max-w-max @max-[1040px]/list:flex-[1_1_var(--space-12)]",
+                "@max-[1041px]/list:col-auto @max-[1041px]/list:row-auto @max-[1041px]/list:min-w-(--space-12) @max-[1041px]/list:max-w-max @max-[1041px]/list:flex-[1_1_var(--space-12)]",
               )}
             />
           )}
