@@ -8,6 +8,7 @@ import {
   cutTexts,
   mainArea,
   offWholePixels,
+  resolve,
   setTheme,
   settle,
   THEMES,
@@ -129,6 +130,10 @@ describe.each(THEMES)("Home, the scenes in the %s theme", (theme) => {
     const area = await draw("home-none", WIDE_MAIN);
 
     expect(within(area).queryByRole("button", { name: /^Continue: / })).not.toBeInTheDocument();
-    expect(within(area).getByText("Nothing in progress")).toBeVisible();
+    const title = within(area).getByText("Nothing in progress");
+    expect(title).toBeVisible();
+    // The empty state of a page: the title in --text-ui 600, no bigger than the labels of Start.
+    expect(getComputedStyle(title).fontSize).toBe(resolve("var(--text-ui)", "font-size"));
+    expect(getComputedStyle(title).fontWeight).toBe("600");
   });
 });

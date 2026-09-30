@@ -1,8 +1,8 @@
 import { type ReactNode, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Continue } from "@/components/system/Continue";
+import { EmptyState } from "@/components/system/EmptyState";
 import { ICONS } from "@/components/system/icons";
 import { Kbd } from "@/components/system/Kbd";
-import { PlaceEmpty } from "@/components/system/PlaceEmpty";
 import { ScrollArea } from "@/components/system/ScrollArea";
 import {
   BoardStartRow,
@@ -119,12 +119,10 @@ export function Home() {
         >
           <Section title="Continue">
             {model === null ? (
-              <PlaceEmpty title="Nothing in progress" className="pt-0">
-                <p>
-                  No task, review or discussion is active. Start one from a card, a pull request or
-                  a board.
-                </p>
-              </PlaceEmpty>
+              <EmptyState title="Nothing in progress">
+                No task, review or discussion is active. Start one from a card, a pull request or a
+                board.
+              </EmptyState>
             ) : (
               <Continue
                 model={model}
