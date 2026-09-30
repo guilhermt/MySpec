@@ -138,6 +138,9 @@ describe.each(THEMES)("BoardView, the scenes in the %s theme", (theme) => {
 
     expect(area.querySelectorAll("[data-row-key]")).toHaveLength(46);
     expect(area.querySelectorAll("[data-section-id]")).toHaveLength(10);
+    // The keyboard is on the row of #474, which shows its keys.
+    expect(document.activeElement).toBe(rowOf(474));
+    expect(getComputedStyle(rowOf(474).lastElementChild as Element).visibility).toBe("visible");
   });
 
   describe("the card open beside the list", () => {

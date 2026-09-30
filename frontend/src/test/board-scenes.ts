@@ -1245,7 +1245,10 @@ export function boardScene(name: BoardSceneName): BoardSceneSetup {
         },
       };
     case "board":
-      return onBoard(stateOf(platform()));
+      // The mock has the keyboard on the row of #474, which shows its keys.
+      return onBoard(stateOf(platform()), async () => {
+        act(() => rowOf(474).focus());
+      });
     case "card":
       return onBoard(stateOf(platform()), open(474));
     case "create-card":
