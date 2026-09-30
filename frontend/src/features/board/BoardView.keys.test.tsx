@@ -536,7 +536,7 @@ describe("the keyboard of the board", () => {
   });
 
   describe("Esc", () => {
-    it("closes the notice, then the panel, and gives the focus back to the row", async () => {
+    it("closes the notice, then the panel, and leaves the focus on the row it is on", async () => {
       const { user } = view({ cards: [LOGIN, card(2, { action: "closed" })] });
       await user.click(row(12));
       expect(screen.getByRole("complementary")).toBeInTheDocument();
@@ -549,6 +549,19 @@ describe("the keyboard of the board", () => {
       expect(screen.getByRole("complementary")).toBeInTheDocument();
 
       await user.keyboard("{Escape}");
+      await waitFor(() => expect(screen.queryByRole("complementary")).not.toBeInTheDocument());
+      expect(row(2)).toHaveFocus();
+    });
+
+    it("gives the focus back to the row of the card when it was in the panel", async () => {
+      const { user } = view({ cards: [LOGIN, card(2, { action: "closed" })] });
+      await user.click(row(12));
+      within(screen.getByRole("complementary"))
+        .getByRole("button", { name: /^Start task/ })
+        .focus();
+
+      await user.keyboard("{Escape}");
+
       await waitFor(() => expect(screen.queryByRole("complementary")).not.toBeInTheDocument());
       expect(row(12)).toHaveFocus();
     });

@@ -105,7 +105,7 @@ A visão é navegável pelo teclado, com uma parada de `Tab` só na lista, a úl
 - `N` abre uma discussão do board sem cards, de qualquer ponto da visão fora de um campo, também no modo; num board nunca lido, o aviso `No discussion yet · The board hasn't been read yet.` aponta para **New discussion**.
 - `/` foca a busca, fora do modo de seleção; `↓` e `Esc` na busca levam o foco à lista.
 
-O aviso de uma tecla fica sobre a linha por quatro segundos sem tirar o foco dela; a tecla seguinte, um clique ou uma rolagem o fecham. O `Esc` da visão fecha, um por vez, o aviso, o painel (o foco volta à linha dele) e o modo de seleção.
+O aviso de uma tecla fica sobre a linha por quatro segundos sem tirar o foco dela; a tecla seguinte, um clique ou uma rolagem o fecham. O `Esc` da visão fecha, um por vez, o aviso, o painel (com o foco no painel, ele volta à linha do card; numa linha da lista, fica nela) e o modo de seleção.
 
 ### Start task
 

@@ -199,10 +199,15 @@ function BoardScreen({ board }: { board: Board }) {
     setOpenKey(card.key);
     setOpenCard(card);
   };
+  // closePanel closes the card; the focus goes back to its row only when it was in the panel, and a
+  // focus on the list stays where it is.
   const closePanel = () => {
+    const inPanel = document.activeElement?.closest(".list-panel") != null;
     setOpenKey(null);
     setOpenCard(null);
-    focusRow(openKey);
+    if (inPanel) {
+      focusRow(openKey);
+    }
   };
   // revealCard opens a card of the reading in the panel with its section expanded; the focus goes to
   // its row once it is drawn, or, with fromRequest, to the panel when a filter hides the row.
