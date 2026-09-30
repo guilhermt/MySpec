@@ -2,7 +2,7 @@
 
 Dois workflows. `.github/workflows/ci.yml` é a verificação de todo dia: roda a cada pull request para `main` e a cada push em `main`, e uma execução nova no mesmo ref cancela a anterior. `.github/workflows/full.yml` é a verificação completa, com cobertura: roda toda segunda-feira e sob demanda, pelo **Run workflow** da aba Actions. O repositório só usa `main`; não há branch `dev`.
 
-Os jobs rodam num runner self-hosted, pelo rótulo `laptop` (`runs-on: laptop`), uma instância só, que roda um job por vez. O `ci.yml` roda só o que uma mudança alcança, sem cobertura, e os jobs rodam lado a lado.
+O runner de um repositório privado tem 2 vCPUs e 8 GB, e cada job é cobrado em minutos inteiros, arredondados para cima. Por isso o `ci.yml` roda só o que uma mudança alcança, sem cobertura, e os jobs rodam lado a lado.
 
 ## Verificação de todo dia
 
@@ -17,7 +17,7 @@ O frontend é `frontend/**` e `biome.json`; o Go é `*.go`, `go.mod`, `go.sum`, 
 
 O frontend roda as suítes inteiras, e não só o que a mudança alcança como `task check` faz na máquina, porque o `--changed` do Vitest não segue imports dinâmicos nem o CSS. O Go roda com o detector de corrida e sai barato mesmo assim: o push em `main` grava o cache do Go com os resultados dos testes, e numa pull request um pacote que ela não alcança vem desse cache.
 
-A toolchain vem de `mise.toml` pelo `jdx/mise-action`, o que mantém o CI e a máquina nas mesmas versões. O runner `laptop` guarda as ferramentas instaladas entre as execuções, então o cache do mise só é usado num runner hospedado pelo GitHub. O cgo precisa das bibliotecas do GTK 4 e do WebKitGTK 6, e o Chromium do Playwright, das bibliotecas de sistema dele. O runner `laptop` já as tem, e instalá-las pediria `sudo`, que um job não tem ali; por isso os passos que as instalam (`apt-get` de `libgtk-4-dev` e `libwebkitgtk-6.0-dev` nos jobs `Go` e `Build`, e o `--with-deps` do Playwright no `Frontend`) só rodam num runner hospedado pelo GitHub (`runner.environment == 'github-hosted'`). O `wails3` vem por `go install tool`, e o `Frontend` baixa o Chromium do Playwright, com o `~/.cache/ms-playwright` em cache pela versão do `playwright`. O store do pnpm e o cache de módulos e de build do Go são preservados entre execuções. O do Go é gravado só em `main`, com o commit na chave, porque uma chave de cache nunca é reescrita: toda execução parte do cache do último `main`.
+A toolchain vem de `mise.toml` pelo `jdx/mise-action`, o que mantém o CI e a máquina nas mesmas versões. Os jobs `Go` e `Build` instalam `libgtk-4-dev` e `libwebkitgtk-6.0-dev`, que o cgo precisa e a imagem do runner não traz, e o `wails3` por `go install tool`. O `Frontend` instala o Chromium do Playwright com as bibliotecas de sistema dele, com o `~/.cache/ms-playwright` em cache pela versão do `playwright`. O store do pnpm e o cache de módulos e de build do Go são preservados entre execuções. O do Go é gravado só em `main`, com o commit na chave, porque uma chave de cache nunca é reescrita: toda execução parte do cache do último `main`.
 
 ## Verificação completa
 
