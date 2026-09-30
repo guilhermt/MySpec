@@ -1252,7 +1252,8 @@ export function boardScene(name: BoardSceneName): BoardSceneSetup {
     case "card":
       return onBoard(stateOf(platform()), open(474));
     case "create-card":
-      return onBoard(stateOf(platform()), async () => {
+      // The Settings of the mock have Agent as the review mode of a new task.
+      return onBoard({ ...stateOf(platform()), reviewModeDefault: "agent" }, async () => {
         act(() => useAppStore.getState().openNewTask({ boardId: PLATFORM_ID, key: cardKey(474) }));
       });
     case "reading":
