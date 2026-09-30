@@ -12,6 +12,7 @@ import {
   makePullRequestRow,
   makeRepository,
   makeReviewCenter,
+  makeReviewPass,
   makeReviewSummary,
   makeSituation,
   makeState,
@@ -290,6 +291,7 @@ describe("App", () => {
           makeReviewSummary({
             status: "ready_to_publish",
             canPublish: true,
+            passes: [makeReviewPass()],
             situations: [readyToPublish("review-1")],
           }),
           makeReviewSummary({
@@ -299,6 +301,7 @@ describe("App", () => {
             verdicts: ["comment"],
             status: "ready_to_publish",
             canPublish: true,
+            passes: [makeReviewPass()],
             situations: [readyToPublish("review-2")],
           }),
         ],
@@ -311,7 +314,9 @@ describe("App", () => {
       useAppStore.getState().openReview("review-1");
     });
     await user.click(screen.getByRole("button", { name: "Publish review…" }));
-    expect(screen.getByRole("radio", { name: "Approve" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: /Approve/ })).not.toBeChecked();
+    await user.keyboard("2");
+    expect(screen.getByRole("radio", { name: /Approve/ })).toBeChecked();
     await user.click(screen.getByRole("button", { name: "Cancel" }));
 
     act(() => {
@@ -319,7 +324,8 @@ describe("App", () => {
     });
     await user.click(screen.getByRole("button", { name: "Publish review…" }));
 
-    expect(screen.getByRole("radio", { name: "Comment" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: /Comment/ })).toBeChecked();
+    expect(screen.getByRole("radio", { name: /Approve/ })).not.toBeChecked();
   });
 
   it("gives the main area to an archived review, inside the history", async () => {

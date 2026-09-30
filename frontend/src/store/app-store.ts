@@ -50,6 +50,7 @@ import type {
   Repository,
   ReviewCenter,
   ReviewSummary,
+  ReviewVerdict,
   Situation,
   State,
   TaskSummary,
@@ -124,6 +125,22 @@ export interface NewDiscussionRef {
   cardKeys: string[];
   /** askBoard is the dialog asking which board: opened from a place without a board, with more than one board. */
   askBoard: boolean;
+}
+
+/**
+ * PublishAttempt is what the publish dialog held when a publication failed: the pass, the verdict and
+ * the summary box, so the dialog opens again on the same choices.
+ */
+export interface PublishAttempt {
+  pass: number;
+  verdict: ReviewVerdict | null;
+  withSummary: boolean;
+}
+
+/** ReviewDialog is the dialog of a review that is open: the publication or another pass. */
+export interface ReviewDialog {
+  reviewId: string;
+  kind: "publish" | "again";
 }
 
 /** PullRef names one pull request: the repository it belongs to and its number. */
@@ -225,6 +242,16 @@ export interface AppStore {
   startReview: PullRef | null;
   /** pendingReview is a pull request waiting for the clone of its repository to open the dialog. */
   pendingReview: PullRef | null;
+  /**
+   * publishAttempts are the failed publications by review id, until one succeeds. Kept for the run
+   * of the app only.
+   */
+  publishAttempts: Record<string, PublishAttempt>;
+  /**
+   * reviewDialog is the publish or Review again dialog that is open, null when none is. The bar, the
+   * ⋯ and Ctrl+Enter open them, so the state lives here; it is neither in the stack nor stored.
+   */
+  reviewDialog: ReviewDialog | null;
   /** newDiscussion is what the dialog that creates a discussion is open for, null when it is closed. */
   newDiscussion: NewDiscussionRef | null;
   /**
@@ -294,6 +321,10 @@ export interface AppStore {
   /** openStartReview opens the dialog that starts a review of a pull request. */
   openStartReview: (pull: PullRef) => void;
   closeStartReview: () => void;
+  /** setPublishAttempt keeps what a failed publication held, or forgets it with null. */
+  setPublishAttempt: (reviewId: string, attempt: PublishAttempt | null) => void;
+  openReviewDialog: (reviewId: string, kind: ReviewDialog["kind"]) => void;
+  closeReviewDialog: () => void;
   setPendingReview: (pending: PullRef | null) => void;
   openDiscussion: (id: string) => void;
   openArchivedDiscussion: (id: string) => void;
@@ -549,6 +580,8 @@ function initialTaskUi(): Pick<
   | "pendingStart"
   | "startReview"
   | "pendingReview"
+  | "publishAttempts"
+  | "reviewDialog"
   | "newDiscussion"
   | "textDrafts"
   | "lastRepositoryId"
@@ -570,6 +603,8 @@ function initialTaskUi(): Pick<
     pendingStart: null,
     startReview: null,
     pendingReview: null,
+    publishAttempts: {},
+    reviewDialog: null,
     newDiscussion: null,
     textDrafts: {},
     lastRepositoryId: null,
@@ -835,9 +870,20 @@ export const useAppStore = create<AppStore>()((set, get) => {
                 id: (state.announcement?.id ?? 0) + 1,
                 text: goneTitle(arrived, goneOutcome(next, arrived)),
               };
+        // A review that is gone takes its failed publication and its open dialog with it.
+        const reviewIds = new Set((next.reviews ?? []).map((review) => review.id));
+        const attempts = Object.entries(state.publishAttempts);
+        const publishAttempts = attempts.every(([id]) => reviewIds.has(id))
+          ? state.publishAttempts
+          : Object.fromEntries(attempts.filter(([id]) => reviewIds.has(id)));
         return {
           app: next,
           lastRepositoryId,
+          publishAttempts,
+          reviewDialog:
+            state.reviewDialog !== null && !reviewIds.has(state.reviewDialog.reviewId)
+              ? null
+              : state.reviewDialog,
           location,
           back: moved ? beside(state.back, location) : state.back,
           forward: moved ? beside(state.forward, location) : state.forward,
@@ -918,6 +964,16 @@ export const useAppStore = create<AppStore>()((set, get) => {
     openStartReview: (pull) => set({ startReview: pull }),
 
     closeStartReview: () => set({ startReview: null }),
+
+    setPublishAttempt: (reviewId, attempt) =>
+      set((state) => {
+        const { [reviewId]: _dropped, ...rest } = state.publishAttempts;
+        return { publishAttempts: attempt === null ? rest : { ...rest, [reviewId]: attempt } };
+      }),
+
+    openReviewDialog: (reviewId, kind) => set({ reviewDialog: { reviewId, kind } }),
+
+    closeReviewDialog: () => set({ reviewDialog: null }),
 
     setPendingReview: (pending) => set({ pendingReview: pending }),
 

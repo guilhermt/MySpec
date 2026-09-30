@@ -11,14 +11,11 @@ import {
 } from "@/components/system/Menu";
 import { useNow } from "@/features/attention/useNow";
 import { DeleteReviewDialog } from "@/features/reviews/DeleteReviewDialog";
-import { ReviewAgainDialog } from "@/features/reviews/ReviewAgainDialog";
 import { type ReviewMenuAction, reviewMenu } from "@/features/reviews/review-header";
 import { TaskMenuRow } from "@/features/task/TaskMenu";
 import type { ReviewSummary } from "@/lib/wails";
 import { openExternal, openReviewInEditor, refreshReviewPR } from "@/store/actions";
-
-/** Opened is the dialog an item of the ⋯ left open. */
-type Opened = "reviewAgain" | "deleteReview";
+import { useAppStore } from "@/store/app-store";
 
 // MINUTE is how often the age of the reading in the ⋯ is read again.
 const MINUTE = 60_000;
@@ -29,8 +26,9 @@ export interface ReviewMenuProps {
 
 /** ReviewMenu is the ⋯ of a review: its pull request, another pass, and its deletion. */
 export function ReviewMenu({ review }: ReviewMenuProps) {
-  const [opened, setOpened] = useState<Opened | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [reading, setReading] = useState(false);
+  const openReviewDialog = useAppStore((state) => state.openReviewDialog);
   const groups = reviewMenu(review, useNow(MINUTE, true));
 
   const refresh = async () => {
@@ -54,14 +52,12 @@ export function ReviewMenu({ review }: ReviewMenuProps) {
         void openReviewInEditor(review.id);
         break;
       case "reviewAgain":
-      case "deleteReview":
-        setOpened(action);
+        // The dialog is the review screen's, which the bar and Ctrl+Enter open too.
+        openReviewDialog(review.id, "again");
         break;
-    }
-  };
-  const close = (open: boolean) => {
-    if (!open) {
-      setOpened(null);
+      case "deleteReview":
+        setDeleting(true);
+        break;
     }
   };
 
@@ -90,8 +86,7 @@ export function ReviewMenu({ review }: ReviewMenuProps) {
         </MenuContent>
       </Menu>
 
-      <ReviewAgainDialog review={review} open={opened === "reviewAgain"} onOpenChange={close} />
-      <DeleteReviewDialog review={review} open={opened === "deleteReview"} onOpenChange={close} />
+      <DeleteReviewDialog review={review} open={deleting} onOpenChange={setDeleting} />
     </>
   );
 }

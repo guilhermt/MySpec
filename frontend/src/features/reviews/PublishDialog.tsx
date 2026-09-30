@@ -1,18 +1,36 @@
-import { useId, useState } from "react";
-import { Button } from "@/components/ui/button";
+import { useEffect, useId, useRef, useState } from "react";
+import { Badge } from "@/components/system/Badge";
+import { Button } from "@/components/system/Button";
+import { Checkbox } from "@/components/system/Checkbox";
+import { Dialog, DialogBody, DialogCancel, DialogFooter } from "@/components/system/Dialog";
+import { ICONS } from "@/components/system/icons";
+import { OptionGroup } from "@/components/system/OptionGroup";
+import { SunkenLine } from "@/components/system/SunkenLine";
+import { Textarea } from "@/components/system/Textarea";
+import { Tooltip } from "@/components/system/Tooltip";
 import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { lastRecordedPass, publishCounts, verdictLabel } from "@/features/reviews/review-status";
+  allowedVerdicts,
+  counted,
+  goesLine,
+  initialVerdict,
+  publishLabel,
+  publishReason,
+  suggestedVerdict,
+  summaryStart,
+  VERDICTS,
+} from "@/features/reviews/publish";
+import { lastRecordedPass } from "@/features/reviews/review-status";
+import { useFindingText } from "@/features/reviews/useFindingText";
 import { messageOf } from "@/lib/errors";
-import { asReviewVerdict, type ReviewSummary, type ReviewVerdict } from "@/lib/wails";
-import { publishReview } from "@/store/actions";
+import { reviewName } from "@/lib/situations";
+import {
+  asReviewVerdict,
+  type ReviewPass,
+  type ReviewSummary,
+  type ReviewVerdict,
+} from "@/lib/wails";
+import { publishReview, saveReviewSummary } from "@/store/actions";
+import { useAppStore } from "@/store/app-store";
 
 export interface PublishDialogProps {
   review: ReviewSummary;
@@ -22,104 +40,269 @@ export interface PublishDialogProps {
   onReviewAgain: () => void;
 }
 
-/** PublishDialog sends the pass the user decided on to GitHub, with a verdict. */
+/** PublishDialog sends the pass the user decided on to GitHub, with a verdict and, optionally, the summary. */
 export function PublishDialog({ review, open, onOpenChange, onReviewAgain }: PublishDialogProps) {
+  const pass = lastRecordedPass(review);
+  // The form lives only while the dialog is open, so every opening starts from the last failed
+  // attempt, without its error.
+  if (!open || pass === null) {
+    return null;
+  }
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      {/* The form lives only while the dialog is open, so every opening starts without the last error. */}
-      {open && (
-        <PublishForm review={review} onOpenChange={onOpenChange} onReviewAgain={onReviewAgain} />
-      )}
-    </Dialog>
+    <PublishForm
+      review={review}
+      pass={pass}
+      onOpenChange={onOpenChange}
+      onReviewAgain={onReviewAgain}
+    />
   );
 }
 
-type PublishFormProps = Omit<PublishDialogProps, "open">;
+interface PublishFormProps extends Omit<PublishDialogProps, "open"> {
+  pass: ReviewPass;
+}
 
-function PublishForm({ review, onOpenChange, onReviewAgain }: PublishFormProps) {
-  const verdicts = review.verdicts ?? [];
-  const [verdict, setVerdict] = useState<ReviewVerdict>(() =>
-    asReviewVerdict(verdicts[0] ?? "comment"),
+const META = "text-(length:--text-meta) leading-(--leading-meta)";
+
+// staleNote is what the dialog says when the pull request moved after the pass.
+function staleNote(review: ReviewSummary): string {
+  const arrived =
+    review.staleCommits > 0
+      ? `${counted(review.staleCommits, "commit")} arrived`
+      : "New commits arrived";
+  return `${arrived} after this pass. Findings on lines that left the diff go in the review body.`;
+}
+
+function PublishForm({ review, pass, onOpenChange, onReviewAgain }: PublishFormProps) {
+  const attempt = useAppStore((state) => state.publishAttempts[review.id] ?? null);
+  const setPublishAttempt = useAppStore((state) => state.setPublishAttempt);
+
+  const text = useFindingText(
+    review.id,
+    pass.pass,
+    "summary",
+    pass.summary,
+    pass.revision,
+    (next) => void saveReviewSummary(review.id, pass.pass, next),
   );
-  const [error, setError] = useState<string | null>(null);
+  // The rules read the summary as it is typed, before the save reaches the pass.
+  const live: ReviewPass = { ...pass, summary: text.value };
+
+  const [withSummary, setWithSummary] = useState(
+    attempt !== null && attempt.pass === pass.pass ? attempt.withSummary : true,
+  );
+  const [verdict, setVerdict] = useState<ReviewVerdict | null>(() =>
+    initialVerdict(allowedVerdicts(review, live, withSummary).allowed, attempt, pass.pass),
+  );
+  const [editing, setEditing] = useState(false);
   const [publishing, setPublishing] = useState(false);
-  const labelId = useId();
+  const [error, setError] = useState<string | null>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  const editRef = useRef<HTMLButtonElement>(null);
+  const reasonId = useId();
 
-  const pass = lastRecordedPass(review);
+  const { allowed, reason } = allowedVerdicts(review, live, withSummary);
+  const [only] = allowed;
+  // The only verdict GitHub takes is the one chosen; a choice the summary made impossible is none.
+  const chosen =
+    verdict !== null && allowed.includes(verdict)
+      ? verdict
+      : allowed.length === 1 && only !== undefined
+        ? only
+        : null;
+  const suggested = suggestedVerdict(review, live);
+  const footerReason = publishReason(allowed, chosen);
+  const hasSummary = text.value.trim() !== "";
+  const approved = (pass.findings ?? []).some((finding) => finding.decision === "approved");
 
-  const publish = () => {
+  // Closing the edit leaves the focus where the edit began, inside the dialog.
+  const editOpened = useRef(false);
+  useEffect(() => {
+    if (editing) {
+      editOpened.current = true;
+    } else if (editOpened.current) {
+      editOpened.current = false;
+      editRef.current?.focus();
+    }
+  }, [editing]);
+
+  // The digits choose a verdict from wherever the focus is, but the summary field types them.
+  const latest = useRef({ allowed, publishing });
+  useEffect(() => {
+    latest.current = { allowed, publishing };
+  });
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.ctrlKey || event.metaKey || event.altKey || event.repeat) return;
+      if (event.target instanceof Element && event.target.closest("input, textarea")) return;
+      const option = VERDICTS.find((each) => each.key === event.key);
+      if (option === undefined) return;
+      const { allowed: takes, publishing: busy } = latest.current;
+      if (busy || !takes.includes(option.verdict)) return;
+      event.preventDefault();
+      setVerdict(option.verdict);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  const publish = async () => {
+    if (chosen === null || publishing) {
+      return;
+    }
     setPublishing(true);
     setError(null);
-    publishReview(review.id, verdict, true)
-      .then(() => {
-        onOpenChange(false);
-        setPublishing(false);
-      })
-      .catch((reason: unknown) => {
-        setError(messageOf(reason));
-        setPublishing(false);
-      });
+    try {
+      // The summary still waiting to be saved goes before the publication reads it.
+      if (withSummary && text.value !== pass.summary) {
+        await saveReviewSummary(review.id, pass.pass, text.value);
+      }
+      await publishReview(review.id, chosen, withSummary);
+      setPublishAttempt(review.id, null);
+      onOpenChange(false);
+    } catch (reason: unknown) {
+      setError(messageOf(reason));
+      setPublishAttempt(review.id, { pass: pass.pass, verdict: chosen, withSummary });
+      setPublishing(false);
+    }
   };
 
+  const options = VERDICTS.map((option) => {
+    const taken = allowed.includes(option.verdict);
+    return {
+      value: option.verdict,
+      key: option.key,
+      title: option.name,
+      note: option.description,
+      ...(taken && suggested?.verdict === option.verdict
+        ? {
+            badge: (
+              <Tooltip content={suggested.why}>
+                <span>
+                  <Badge variant="suggested">Suggested</Badge>
+                </span>
+              </Tooltip>
+            ),
+          }
+        : {}),
+      ...(!taken && reason !== null ? { disabledReason: reason } : {}),
+    };
+  });
+
+  const carries =
+    pass.clean || !approved
+      ? "The review carries the verdict only."
+      : "The review carries the verdict and the comments only.";
+
   return (
-    <DialogContent className="sm:max-w-lg">
-      <DialogHeader>
-        <DialogTitle>Publish review</DialogTitle>
-      </DialogHeader>
+    <Dialog
+      open
+      onOpenChange={(next) => {
+        // Esc and × wait for GitHub, like Cancel.
+        if (!next && !publishing) {
+          onOpenChange(false);
+        }
+      }}
+      title={`Publish the review of ${reviewName(review)}`}
+      onConfirm={() => void publish()}
+      initialFocus={cancelRef}
+    >
+      <DialogBody className="gap-(--space-4)">
+        {review.stalePass && (
+          <SunkenLine
+            icon={ICONS.details}
+            action={
+              <Button
+                variant="ghost"
+                size="xs"
+                disabled={publishing}
+                onClick={() => {
+                  onOpenChange(false);
+                  onReviewAgain();
+                }}
+              >
+                Review again instead
+              </Button>
+            }
+          >
+            {staleNote(review)}
+          </SunkenLine>
+        )}
 
-      <div className="flex flex-col gap-1.5">
-        <Label id={labelId}>Verdict</Label>
-        <RadioGroup
-          aria-labelledby={labelId}
-          value={verdict}
-          onValueChange={(value: string) => setVerdict(asReviewVerdict(value))}
-        >
-          {verdicts.map((option) => (
-            // The label wraps the row, so the radio is named by the text beside it.
-            <label key={option} className="flex cursor-pointer items-center gap-2 text-sm">
-              <RadioGroupItem aria-labelledby={`${labelId}-${option}`} value={option} />
-              <span id={`${labelId}-${option}`}>{verdictLabel(option)}</span>
-            </label>
-          ))}
-        </RadioGroup>
-      </div>
+        <div inert={publishing} className="flex flex-col gap-(--space-1)">
+          <span className={`${META} font-medium text-ink-2`}>Verdict</span>
+          <OptionGroup
+            label="Verdict"
+            value={chosen}
+            options={options}
+            onChange={(value) => setVerdict(asReviewVerdict(value))}
+          />
+        </div>
 
-      {pass !== null && <p className="text-sm text-muted-foreground">{publishCounts(pass)}</p>}
+        <SunkenLine>{goesLine(live, withSummary, chosen)}</SunkenLine>
 
-      {review.stalePass && (
-        <div className="flex flex-col items-start gap-2 rounded-lg border p-3">
-          <p className="text-sm">
-            The pull request has new commits since this pass. Findings on lines that left the diff
-            go in the review body.
-          </p>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              onOpenChange(false);
-              onReviewAgain();
+        <div inert={publishing} className="flex flex-col gap-(--space-1)">
+          <Checkbox
+            checked={withSummary}
+            onCheckedChange={(next) => {
+              setWithSummary(next);
+              if (!next) {
+                setEditing(false);
+              }
             }}
           >
-            Review again instead
-          </Button>
+            Include the summary
+          </Checkbox>
+          {withSummary && editing && (
+            <Textarea
+              aria-label="Summary"
+              rows={5}
+              autoFocus
+              value={text.value}
+              onChange={(event) => text.onChange(event.target.value)}
+              onBlur={text.onBlur}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  // The edit closes first; the next Esc closes the dialog.
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setEditing(false);
+                }
+              }}
+            />
+          )}
+          {withSummary && !editing && (
+            <div className="flex flex-wrap items-center gap-(--space-2) px-(--space-2)">
+              <span
+                className={`min-w-0 flex-1 ${META} ${hasSummary ? "text-ink-2" : "text-ink-3"}`}
+              >
+                {hasSummary ? summaryStart(text.value) : "The summary is empty."}
+              </span>
+              <Button ref={editRef} variant="ghost" size="xs" onClick={() => setEditing(true)}>
+                Edit
+              </Button>
+            </div>
+          )}
+          {!withSummary && <p className={`px-(--space-2) ${META} text-ink-3`}>{carries}</p>}
         </div>
-      )}
+      </DialogBody>
 
-      {error !== null && (
-        <p role="alert" className="break-all text-sm text-destructive">
-          {error}
-        </p>
-      )}
-
-      <DialogFooter>
-        <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
-          Cancel
-        </Button>
-        <Button type="button" disabled={publishing} onClick={publish}>
-          {publishing ? "Publishing…" : "Publish"}
+      <DialogFooter
+        {...(footerReason !== null ? { reason: { id: reasonId, text: footerReason } } : {})}
+        {...(error !== null ? { refusal: error } : {})}
+      >
+        <DialogCancel ref={cancelRef} disabled={publishing} />
+        <Button
+          variant="primary"
+          shortcut="Ctrl ↵"
+          {...(chosen === null ? { disabled: true, reasonId } : {})}
+          loading={publishing}
+          loadingLabel="Publishing…"
+          onClick={() => void publish()}
+        >
+          {publishLabel(chosen)}
         </Button>
       </DialogFooter>
-    </DialogContent>
+    </Dialog>
   );
 }

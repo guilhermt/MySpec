@@ -35,6 +35,8 @@ export interface StoreOptions {
       | "pendingStart"
       | "startReview"
       | "pendingReview"
+      | "publishAttempts"
+      | "reviewDialog"
       | "newDiscussion"
       | "textDrafts"
       | "sidebarCollapsed"
@@ -80,6 +82,8 @@ export function resetAppStore(options: StoreOptions = {}): void {
     pendingStart: options.ui?.pendingStart ?? null,
     startReview: options.ui?.startReview ?? null,
     pendingReview: options.ui?.pendingReview ?? null,
+    publishAttempts: options.ui?.publishAttempts ?? {},
+    reviewDialog: options.ui?.reviewDialog ?? null,
     newDiscussion: options.ui?.newDiscussion ?? null,
     textDrafts: options.ui?.textDrafts ?? {},
     sidebarCollapsed: options.ui?.sidebarCollapsed ?? new Set<string>(),

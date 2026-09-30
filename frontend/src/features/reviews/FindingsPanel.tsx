@@ -1,39 +1,10 @@
 import { ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Textarea } from "@/components/ui/textarea";
 import { FindingCard } from "@/features/reviews/FindingCard";
 import { decidedCount, lastRecordedPass, reportLabel } from "@/features/reviews/review-status";
-import { useFindingText } from "@/features/reviews/useFindingText";
 import { cn } from "@/lib/utils";
-import type { ReviewPass, ReviewSummary } from "@/lib/wails";
-import { saveReviewSummary } from "@/store/actions";
-
-/** Summary is the opening words of the report, as the user leaves them. */
-function Summary({ reviewId, pass }: { reviewId: string; pass: ReviewPass }) {
-  const text = useFindingText(
-    reviewId,
-    pass.pass,
-    "summary",
-    pass.summary,
-    pass.revision,
-    (next) => void saveReviewSummary(reviewId, pass.pass, next),
-  );
-
-  if (pass.published) {
-    return <p className="text-sm whitespace-pre-wrap">{text.value}</p>;
-  }
-  return (
-    <Textarea
-      aria-label="Summary"
-      rows={3}
-      value={text.value}
-      onChange={(event) => text.onChange(event.target.value)}
-      onBlur={text.onBlur}
-      className="max-h-72 field-sizing-content text-sm"
-    />
-  );
-}
+import type { ReviewSummary } from "@/lib/wails";
 
 export interface FindingsPanelProps {
   review: ReviewSummary;
@@ -41,7 +12,8 @@ export interface FindingsPanelProps {
 
 /**
  * FindingsPanel is the report of the last pass as a list the user decides on,
- * one finding at a time. A pass already published is there to read.
+ * one finding at a time. A pass already published is there to read. The summary belongs to the
+ * publish dialog.
  */
 export function FindingsPanel({ review }: FindingsPanelProps) {
   const pass = lastRecordedPass(review);
@@ -77,7 +49,6 @@ export function FindingsPanel({ review }: FindingsPanelProps) {
       </CollapsibleTrigger>
       <CollapsibleContent className="max-h-[50dvh] overflow-y-auto px-3 pb-3">
         <div className="mx-auto flex w-full max-w-[58.5rem] flex-col gap-3">
-          <Summary reviewId={review.id} pass={pass} />
           {findings.length === 0 ? (
             <p className="text-sm text-muted-foreground">Nothing to change.</p>
           ) : (

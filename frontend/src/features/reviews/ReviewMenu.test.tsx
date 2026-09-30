@@ -2,6 +2,7 @@ import { screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { ReviewMenu } from "@/features/reviews/ReviewMenu";
 import { api, type ReviewSummary } from "@/lib/wails";
+import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
 import { makeReviewSummary, makeState } from "@/test/wails-mock";
 
@@ -70,13 +71,13 @@ describe("ReviewMenu", () => {
     expect(item).toHaveTextContent("the worktree doesn't exist yet");
   });
 
-  it("asks for another pass in a dialog", async () => {
+  it("opens the Review again dialog of the screen", async () => {
     const { user } = menu({ canReviewAgain: true });
     await openMenu(user);
 
     await user.click(screen.getByRole("menuitem", { name: "Review again…" }));
 
-    expect(await screen.findByRole("heading", { name: "Review again" })).toBeInTheDocument();
+    expect(useAppStore.getState().reviewDialog).toEqual({ reviewId: "review-1", kind: "again" });
   });
 
   it("disables Review again… with what holds it back", async () => {

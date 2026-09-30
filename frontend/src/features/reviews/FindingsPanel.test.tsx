@@ -1,7 +1,7 @@
 import { screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { FindingsPanel } from "@/features/reviews/FindingsPanel";
-import { api, type ReviewSummary } from "@/lib/wails";
+import type { ReviewSummary } from "@/lib/wails";
 import { renderWithStore } from "@/test/render";
 import { makeReviewFinding, makeReviewPass, makeReviewSummary, makeState } from "@/test/wails-mock";
 
@@ -38,14 +38,11 @@ describe("FindingsPanel", () => {
     expect(screen.getAllByRole("listitem")).toHaveLength(2);
   });
 
-  it("records the summary the user left", async () => {
-    const { user } = panel();
+  it("leaves the summary to the publish dialog", () => {
+    panel();
 
-    await user.clear(screen.getByLabelText("Summary"));
-    await user.type(screen.getByLabelText("Summary"), "One thing left.");
-    await user.tab();
-
-    expect(api.setReviewSummary).toHaveBeenCalledWith("review-1", 1, "One thing left.");
+    expect(screen.queryByLabelText("Summary")).not.toBeInTheDocument();
+    expect(screen.queryByText("Two things to fix.")).not.toBeInTheDocument();
   });
 
   it("says a clean pass has nothing to change", () => {
@@ -61,17 +58,17 @@ describe("FindingsPanel", () => {
     });
 
     expect(screen.getByText("Review 1 · changes · published")).toBeInTheDocument();
-    expect(screen.queryByLabelText("Summary")).not.toBeInTheDocument();
+    expect(screen.queryAllByRole("listitem")).toHaveLength(0);
   });
 
   it("folds away and comes back", async () => {
     const { user } = panel();
 
     await user.click(screen.getByRole("button", { name: /Review 1 · changes/ }));
-    expect(screen.queryByLabelText("Summary")).not.toBeInTheDocument();
+    expect(screen.queryAllByRole("listitem")).toHaveLength(0);
 
     await user.click(screen.getByRole("button", { name: /Review 1 · changes/ }));
-    expect(screen.getByLabelText("Summary")).toBeInTheDocument();
+    expect(screen.getAllByRole("listitem")).toHaveLength(1);
   });
 
   it("opens again when a new pass comes in after a published one", () => {
@@ -80,7 +77,7 @@ describe("FindingsPanel", () => {
     const { rerender } = renderWithStore(<FindingsPanel review={review} />, {
       state: makeState({ reviews: [review] }),
     });
-    expect(screen.queryByLabelText("Summary")).not.toBeInTheDocument();
+    expect(screen.queryAllByRole("listitem")).toHaveLength(0);
 
     rerender(
       <FindingsPanel
@@ -91,6 +88,6 @@ describe("FindingsPanel", () => {
     );
 
     expect(screen.getByText("Review 2 · changes")).toBeInTheDocument();
-    expect(screen.getByLabelText("Summary")).toBeInTheDocument();
+    expect(screen.getAllByRole("listitem")).toHaveLength(1);
   });
 });

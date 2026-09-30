@@ -46,10 +46,11 @@ export interface ReviewRequestProps {
  */
 export function ReviewRequest({ review }: ReviewRequestProps) {
   const [running, setRunning] = useState<ReviewRequestAction | null>(null);
-  const [publishing, setPublishing] = useState(false);
-  const [asking, setAsking] = useState(false);
   const flashing = useFlashing();
   const announce = useAppStore((state) => state.announce);
+  const dialog = useAppStore((state) => state.reviewDialog);
+  const openReviewDialog = useAppStore((state) => state.openReviewDialog);
+  const closeReviewDialog = useAppStore((state) => state.closeReviewDialog);
   const request = useReviewRequest(review);
   const situationId = request?.situationId ?? null;
   const status = useBornStatus(situationId, request?.status ?? "");
@@ -63,15 +64,24 @@ export function ReviewRequest({ review }: ReviewRequestProps) {
     }
   }, [status, request, situationId, review, announce]);
 
+  // A dialog left open goes with the screen: the store holds it, and coming back must not bring it.
+  useEffect(() => closeReviewDialog, [closeReviewDialog]);
+
+  const mine = dialog !== null && dialog.reviewId === review.id ? dialog.kind : null;
+  const close = (open: boolean) => {
+    if (!open) {
+      closeReviewDialog();
+    }
+  };
   const dialogs = (
     <>
       <PublishDialog
         review={review}
-        open={publishing}
-        onOpenChange={setPublishing}
-        onReviewAgain={() => setAsking(true)}
+        open={mine === "publish"}
+        onOpenChange={close}
+        onReviewAgain={() => openReviewDialog(review.id, "again")}
       />
-      <ReviewAgainDialog review={review} open={asking} onOpenChange={setAsking} />
+      <ReviewAgainDialog review={review} open={mine === "again"} onOpenChange={close} />
     </>
   );
   if (request === null) {
@@ -84,10 +94,10 @@ export function ReviewRequest({ review }: ReviewRequestProps) {
         focusRequest(request.focus);
         return;
       case "publish":
-        setPublishing(true);
+        openReviewDialog(review.id, "publish");
         return;
       case "reviewAgain":
-        setAsking(true);
+        openReviewDialog(review.id, "again");
         return;
     }
     setRunning(action);
@@ -107,7 +117,7 @@ export function ReviewRequest({ review }: ReviewRequestProps) {
     const primary = request.actions.find((button) => button.variant === "primary");
     if (primary?.action === "publish" && primary.disabledReason === undefined) {
       event.preventDefault();
-      setPublishing(true);
+      openReviewDialog(review.id, "publish");
     }
   };
 

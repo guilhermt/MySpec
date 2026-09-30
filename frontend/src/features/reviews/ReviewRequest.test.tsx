@@ -99,7 +99,10 @@ describe("ReviewRequest", () => {
 
     await user.click(screen.getByRole("button", { name: "Publish review…" }));
 
-    expect(await screen.findByRole("heading", { name: "Publish review" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("dialog", { name: "Publish the review of web#31" }),
+    ).toBeInTheDocument();
+    expect(useAppStore.getState().reviewDialog).toEqual({ reviewId: "review-1", kind: "publish" });
   });
 
   it("opens the publication with Ctrl+Enter from the bar when Publish is the primary and enabled", async () => {
@@ -112,7 +115,9 @@ describe("ReviewRequest", () => {
     request().focus();
     await user.keyboard("{Control>}{Enter}{/Control}");
 
-    expect(await screen.findByRole("heading", { name: "Publish review" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("dialog", { name: "Publish the review of web#31" }),
+    ).toBeInTheDocument();
   });
 
   it("leaves Ctrl+Enter alone while the publication waits for decisions", async () => {
@@ -195,7 +200,48 @@ describe("ReviewRequest", () => {
     expect(request()).toHaveTextContent("New commits");
     await user.click(screen.getByRole("button", { name: "Review again…" }));
 
-    expect(await screen.findByRole("heading", { name: "Review again" })).toBeInTheDocument();
+    expect(await screen.findByRole("dialog", { name: "Review web#31 again" })).toBeInTheDocument();
+  });
+
+  it("opens the dialog another part of the screen asked for, and only for its own review", () => {
+    bar(
+      { status: "ready_to_publish", canPublish: true },
+      { reviewDialog: { reviewId: "review-1", kind: "again" } },
+    );
+
+    expect(screen.getByRole("dialog", { name: "Review web#31 again" })).toBeInTheDocument();
+  });
+
+  it("ignores a dialog asked for another review", () => {
+    bar({}, { reviewDialog: { reviewId: "review-9", kind: "publish" } });
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("closes the dialog in the store, and leaves it closed when the screen goes away", async () => {
+    const { user, unmount } = bar(
+      { status: "ready_to_publish", canPublish: true },
+      { reviewDialog: { reviewId: "review-1", kind: "publish" } },
+    );
+
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(useAppStore.getState().reviewDialog).toBeNull();
+
+    act(() => useAppStore.getState().openReviewDialog("review-1", "again"));
+    unmount();
+    expect(useAppStore.getState().reviewDialog).toBeNull();
+  });
+
+  it("goes from the publication to another pass when the pull request moved", async () => {
+    const { user } = bar(
+      { status: "ready_to_publish", canPublish: true, stalePass: true, staleCommits: 2 },
+      { reviewDialog: { reviewId: "review-1", kind: "publish" } },
+    );
+
+    await user.click(screen.getByRole("button", { name: "Review again instead" }));
+
+    expect(useAppStore.getState().reviewDialog).toEqual({ reviewId: "review-1", kind: "again" });
+    expect(await screen.findByRole("dialog", { name: "Review web#31 again" })).toBeInTheDocument();
   });
 
   it("restarts the reviewer after its session stopped", async () => {

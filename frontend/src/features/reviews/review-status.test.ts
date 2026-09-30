@@ -1,12 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
-  anyDecided,
   decidedCount,
   findingLocation,
   lastRecordedPass,
   outcomeLabel,
   placementLabel,
-  publishCounts,
   reportLabel,
   verdictLabel,
 } from "@/features/reviews/review-status";
@@ -95,43 +93,5 @@ describe("lastRecordedPass", () => {
 
   it("is nothing before a report came in", () => {
     expect(lastRecordedPass(makeReviewSummary({ passes: [] }))).toBeNull();
-  });
-});
-
-describe("anyDecided", () => {
-  it("knows whether the user has decided on anything of a pass", () => {
-    expect(anyDecided(makeReviewPass())).toBe(false);
-    expect(
-      anyDecided(makeReviewPass({ findings: [makeReviewFinding({ decision: "discarded" })] })),
-    ).toBe(true);
-  });
-});
-
-describe("publishCounts", () => {
-  it("splits the approved findings between the diff and the body", () => {
-    const pass = makeReviewPass({
-      findings: [
-        makeReviewFinding({ number: 1, decision: "approved" }),
-        makeReviewFinding({ number: 2, decision: "approved" }),
-        makeReviewFinding({ number: 3, path: "", line: 0, decision: "approved" }),
-        makeReviewFinding({ number: 4, decision: "discarded" }),
-      ],
-    });
-
-    expect(publishCounts(pass)).toBe("2 inline comments · 1 in the body");
-  });
-
-  it("counts one of each in the singular", () => {
-    const pass = makeReviewPass({
-      findings: [makeReviewFinding({ decision: "approved" })],
-    });
-
-    expect(publishCounts(pass)).toBe("1 inline comment");
-  });
-
-  it("says when only the summary and the verdict go", () => {
-    expect(publishCounts(makeReviewPass({ findings: [] }))).toBe(
-      "The summary and the verdict only",
-    );
   });
 });
