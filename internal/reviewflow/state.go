@@ -2,8 +2,11 @@ package reviewflow
 
 import (
 	"slices"
+	"time"
 
+	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/prreview"
+	"github.com/guilhermt/myspec/internal/pulls"
 	"github.com/guilhermt/myspec/internal/review"
 	"github.com/guilhermt/myspec/internal/session"
 )
@@ -49,6 +52,20 @@ type State struct {
 	// CheckError is what the last reading of the pull request said when it
 	// failed.
 	CheckError string
+	// Checks are the live checks and the merge of the last reading.
+	Checks gh.PRChecks
+	// CheckedAt is when that reading was made; zero before one since the app
+	// started.
+	CheckedAt time.Time
+	// CheckErrorAt is the first failing reading of the run of failures; zero
+	// when the last one worked.
+	CheckErrorAt time.Time
+	// NewCommits is how many commits came since the published commit, -1 when
+	// it is not among the recent ones; 0 outside StatusNewCommits.
+	NewCommits int
+	// StaleCommits is how many commits came since the commit of the pass being
+	// decided, -1 when unknown; 0 when the pass is not stale.
+	StaleCommits int
 	// UnreadableReport is why the report of the pass the app asked for could
 	// not be read; "" when that is not the case.
 	UnreadableReport string
@@ -73,12 +90,16 @@ func (s *Service) State(id string) (State, bool) {
 	l := s.lockOf(id)
 
 	s.mu.Lock()
+	recent := l.recent
 	state := State{
 		Review:           stored,
 		Passes:           passes,
 		Session:          sum,
 		SessionOpen:      open,
 		CheckError:       l.checkError,
+		CheckedAt:        l.checkedAt,
+		CheckErrorAt:     l.checkErrorAt,
+		Checks:           l.checks,
 		UnreadableReport: l.unreadable,
 		CommitFailed:     l.commitFailed,
 		PassBlocked:      l.passBlocked,
@@ -102,6 +123,12 @@ func (s *Service) State(id string) (State, bool) {
 		PassBlocked: state.PassBlocked,
 	})
 	state.StalePass = stale(stored, last)
+	if state.Status == StatusNewCommits {
+		state.NewCommits = commitsSince(recent, stored.PublishedCommit)
+	}
+	if state.StalePass {
+		state.StaleCommits = commitsSince(recent, stored.PassCommit)
+	}
 	return state, true
 }
 
@@ -228,4 +255,21 @@ func lastPass(passes []prreview.Pass) prreview.Pass {
 		}
 	}
 	return prreview.Pass{}
+}
+
+// commitsSince is how many of the recent commits, oldest first, came after the
+// commit sha: 0 for no commit or when it is the last one, -1 when it is not
+// among them.
+func commitsSince(recent []pulls.Commit, sha string) int {
+	if sha == "" {
+		return 0
+	}
+	if len(recent) == 0 {
+		return -1
+	}
+	i := slices.IndexFunc(recent, func(c pulls.Commit) bool { return c.SHA == sha })
+	if i < 0 {
+		return -1
+	}
+	return len(recent) - 1 - i
 }

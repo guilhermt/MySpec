@@ -20,6 +20,10 @@ import (
 // and waits for gh to answer.
 const publishTimeout = time.Minute
 
+// refreshTimeout bounds RefreshPR: a reading under way, then this one, each
+// bounded by the thirty seconds of a reading.
+const refreshTimeout = 2 * time.Minute
+
 // errNotAnchored is a finding the user asked to open that points at no line of
 // the pull request.
 var errNotAnchored = errors.New("bindings: the finding is not anchored to a file")
@@ -169,8 +173,9 @@ func (s *ReviewService) SetReviewSummary(id string, pass int, text string) error
 }
 
 // PublishReview sends the findings the user approved to GitHub as one review,
-// with the verdict they chose: approve, request_changes or comment.
-func (s *ReviewService) PublishReview(id, verdict string) error {
+// with the verdict they chose: approve, request_changes or comment. The
+// summary of the pass goes in the body only with withSummary.
+func (s *ReviewService) PublishReview(id, verdict string, withSummary bool) error {
 	v, err := prreview.ParseVerdict(verdict)
 	if err != nil {
 		return s.fail("PublishReview", err)
@@ -179,8 +184,20 @@ func (s *ReviewService) PublishReview(id, verdict string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), publishTimeout)
 	defer cancel()
 
-	if err := s.flow.Publish(ctx, id, v); err != nil {
+	if err := s.flow.Publish(ctx, id, v, withSummary); err != nil {
 		return s.fail("PublishReview", err)
+	}
+	return nil
+}
+
+// RefreshPR reads the pull request of a review now, out of the minute, and
+// answers once the reading is over.
+func (s *ReviewService) RefreshPR(id string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), refreshTimeout)
+	defer cancel()
+
+	if err := s.flow.RefreshPR(ctx, id); err != nil {
+		return s.fail("RefreshPR", err)
 	}
 	return nil
 }

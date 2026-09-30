@@ -103,11 +103,18 @@ func (s *Service) rereadPass(ctx context.Context, stored prreview.Review) {
 	// A rewrite that brought the report back to what was recorded changes no
 	// finding, but it does settle the warning that the app could not read it.
 	settled := s.setUnreadable(stored.ID, "")
-	if change == prreview.ChangeNone {
+	switch change {
+	case prreview.ChangeNone:
 		if settled {
 			s.notify(stored.ID)
 		}
 		return
+	case prreview.ChangeTitles:
+		// Only the titles of the findings came in: nothing the user decided on
+		// changed, so there is no rewrite to tell.
+		s.notify(stored.ID)
+		return
+	case prreview.ChangeRevised:
 	}
 	s.log.Info("review report rewritten", "review", stored.ID, "pass", pass)
 	s.notify(stored.ID)

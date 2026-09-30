@@ -20,7 +20,8 @@ const rightSide = "RIGHT"
 // the account gh is logged in as: every approved finding on a line of the diff
 // becomes an inline comment, the rest goes in the body after the summary. A
 // publication that fails leaves every decision and every edit where they are.
-func (s *Service) Publish(ctx context.Context, id string, verdict prreview.Verdict) error {
+// The summary goes in the body only when withSummary says so.
+func (s *Service) Publish(ctx context.Context, id string, verdict prreview.Verdict, withSummary bool) error {
 	l := s.lockOf(id)
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -36,7 +37,7 @@ func (s *Service) Publish(ctx context.Context, id string, verdict prreview.Verdi
 		return fmt.Errorf("publish review %s: %w", ref, err)
 	}
 
-	input, placements, err := s.reviewInput(ctx, stored, repo, pass, verdict)
+	input, placements, summaryGoes, err := s.reviewInput(ctx, stored, repo, pass, verdict, withSummary)
 	if errors.Is(err, ErrEmptyReview) {
 		// Nothing failed: there is nothing to publish yet.
 		return fmt.Errorf("publish review %s: %w", ref, err)
@@ -50,7 +51,7 @@ func (s *Service) Publish(ctx context.Context, id string, verdict prreview.Verdi
 	}
 
 	if err = s.reviews.MarkPublished(ctx, id, pass.Number, verdict,
-		strings.TrimSpace(pass.Summary) != "", url, input.CommitID, placements); err != nil {
+		summaryGoes, url, input.CommitID, placements); err != nil {
 		return err
 	}
 	s.pulls.Refresh()
@@ -88,18 +89,18 @@ func (s *Service) publishable(state State, verdict prreview.Verdict) (prreview.P
 // goes in the body instead of failing the publication.
 func (s *Service) reviewInput(
 	ctx context.Context, stored prreview.Review, repo repository.Repository,
-	pass prreview.Pass, verdict prreview.Verdict,
-) (gh.ReviewInput, map[int]prreview.Placement, error) {
+	pass prreview.Pass, verdict prreview.Verdict, withSummary bool,
+) (gh.ReviewInput, map[int]prreview.Placement, bool, error) {
 	detail, err := s.detailOf(ctx, repo, stored.Number)
 	if err != nil {
-		return gh.ReviewInput{}, nil, err
+		return gh.ReviewInput{}, nil, false, err
 	}
 	if detail.State != string(prreview.PROpen) {
-		return gh.ReviewInput{}, nil, ErrNotOpen
+		return gh.ReviewInput{}, nil, false, ErrNotOpen
 	}
 	diff, err := s.gh.PRDiff(ctx, repo.Owner, repo.Name, stored.Number)
 	if err != nil {
-		return gh.ReviewInput{}, nil, err
+		return gh.ReviewInput{}, nil, false, err
 	}
 
 	lines := prreview.RightLines(diff)
@@ -122,9 +123,17 @@ func (s *Service) reviewInput(
 		}
 	}
 
-	body := prreview.PublishedBody(pass.Summary, general, demoted)
+	summary := ""
+	if withSummary {
+		summary = pass.Summary
+	}
+	body := prreview.PublishedBody(summary, general, demoted)
 	if body == "" && len(comments) == 0 && verdict != prreview.VerdictApprove {
-		return gh.ReviewInput{}, nil, ErrEmptyReview
+		return gh.ReviewInput{}, nil, false, ErrEmptyReview
+	}
+	if body == "" && verdict != prreview.VerdictApprove {
+		// GitHub takes no request for changes or comment without a body.
+		body = minimalBody(len(comments))
 	}
 	input := gh.ReviewInput{
 		CommitID: detail.HeadCommit,
@@ -132,7 +141,16 @@ func (s *Service) reviewInput(
 		Body:     body,
 		Comments: comments,
 	}
-	return input, placements, nil
+	return input, placements, strings.TrimSpace(summary) != "", nil
+}
+
+// minimalBody is the body of a review that has inline comments and nothing
+// else to say, which GitHub refuses to take empty.
+func minimalBody(comments int) string {
+	if comments == 1 {
+		return "Review with 1 inline comment."
+	}
+	return fmt.Sprintf("Review with %d inline comments.", comments)
 }
 
 // publishFailed keeps why a publication failed, so that the review says it and

@@ -53,6 +53,9 @@ func (s *Service) Apply(ctx context.Context, id string) error {
 		return err
 	}
 
+	if err = s.reviews.MarkSent(ctx, id, last.Number); err != nil {
+		s.log.Error("record review pass sent failed", "review", id, "pass", last.Number, "error", err)
+	}
 	s.log.Info("review findings applying", "review", id, "pass", last.Number, "findings", len(approved))
 	s.notify(id)
 	return nil

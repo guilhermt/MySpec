@@ -1396,8 +1396,9 @@ export const api = {
     ReviewService.SetFindingText(id, pass, number, text),
   setReviewSummary: (id: string, pass: number, text: string): Promise<void> =>
     ReviewService.SetReviewSummary(id, pass, text),
-  publishReview: (id: string, verdict: ReviewVerdict): Promise<void> =>
-    ReviewService.PublishReview(id, verdict),
+  publishReview: (id: string, verdict: ReviewVerdict, withSummary: boolean): Promise<void> =>
+    ReviewService.PublishReview(id, verdict, withSummary),
+  refreshReviewPR: (id: string): Promise<void> => ReviewService.RefreshPR(id),
   applyReview: (id: string): Promise<void> => ReviewService.ApplyReview(id),
   approveReview: (id: string): Promise<void> => ReviewService.ApproveReview(id),
   deleteReview: (id: string): Promise<DeleteResult> => ReviewService.DeleteReview(id),

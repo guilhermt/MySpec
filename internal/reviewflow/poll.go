@@ -3,6 +3,7 @@ package reviewflow
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/guilhermt/myspec/internal/models"
@@ -29,7 +30,7 @@ func (s *Service) Poll() {
 		ctx, cancel := context.WithTimeout(context.Background(), prCheckTimeout)
 		defer cancel()
 
-		s.poll(ctx)
+		s.read(ctx, s.reviews.List())
 	}()
 }
 
@@ -43,6 +44,7 @@ func (s *Service) startPolling() bool {
 		return false
 	}
 	s.polling = true
+	s.pollDone = make(chan struct{})
 	return true
 }
 
@@ -52,12 +54,72 @@ func (s *Service) stopPolling() {
 	defer s.mu.Unlock()
 
 	s.polling = false
+	close(s.pollDone)
+	s.pollDone = nil
 }
 
-// poll reads every pull request under review in one call and settles what
+// pollingDone is the channel the reading under way closes when it ends; false
+// when none is under way, or the flow was closed.
+func (s *Service) pollingDone() (<-chan struct{}, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.closed || s.pollDone == nil {
+		return nil, false
+	}
+	return s.pollDone, true
+}
+
+// RefreshPR reads the pull request of a review now, out of the minute: after a
+// reading already under way, which it waits for, when that reading did not
+// bring the review.
+func (s *Service) RefreshPR(ctx context.Context, id string) error {
+	stored, ok := s.reviews.Get(id)
+	if !ok {
+		return fmt.Errorf("refresh review %s: %w", id, prreview.ErrNotFound)
+	}
+	asked := time.Now().UTC()
+	for {
+		if s.startPolling() {
+			defer s.stopPolling()
+
+			readCtx, cancel := context.WithTimeout(ctx, prCheckTimeout)
+			defer cancel()
+
+			s.read(readCtx, []prreview.Review{stored})
+			return nil
+		}
+		done, reading := s.pollingDone()
+		if !reading {
+			if s.isClosed() {
+				return nil
+			}
+			continue
+		}
+		select {
+		case <-done:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+		if s.readAtOf(id).After(asked) {
+			return nil
+		}
+	}
+}
+
+// readAtOf is when the pull request of a review was last read, good or not.
+func (s *Service) readAtOf(id string) time.Time {
+	l := s.lockOf(id)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return l.readAt
+}
+
+// read reads the pull requests of the reviews in one call and settles what
 // each review makes of it.
-func (s *Service) poll(ctx context.Context) {
-	active := s.reviews.List()
+func (s *Service) read(ctx context.Context, active []prreview.Review) {
 	refs := make([]pulls.Ref, 0, len(active))
 	of := map[pulls.Ref]prreview.Review{}
 	for _, stored := range active {
@@ -81,7 +143,7 @@ func (s *Service) poll(ctx context.Context) {
 			message = failure.Message()
 		}
 		for _, stored := range of {
-			if s.setCheckError(stored.ID, err.Error()) {
+			if s.setCheckError(stored.ID, message) {
 				s.notify(stored.ID)
 			}
 			if stored.Phase == prreview.PhaseWaitingChecks {
@@ -112,6 +174,7 @@ func (s *Service) settle(ctx context.Context, id string, detail pulls.Detail) {
 		return
 	}
 	changed := s.setCheckError(id, "")
+	changed = s.setReading(id, detail) || changed
 
 	state := prreview.PRState(detail.State)
 	if stored.HeadCommit != detail.HeadCommit || stored.Title != detail.Title || stored.PRState != state {
@@ -127,7 +190,7 @@ func (s *Service) settle(ctx context.Context, id string, detail pulls.Detail) {
 	}
 
 	if state == prreview.PRMerged || state == prreview.PRClosed {
-		s.end(ctx, stored, state)
+		s.end(ctx, stored, detail)
 		return
 	}
 	if updated, moved := s.recordTrouble(ctx, stored, detail.Checks); moved {
@@ -144,7 +207,8 @@ func (s *Service) settle(ctx context.Context, id string, detail pulls.Detail) {
 // end closes a review whose pull request is over: the conversation and the
 // worktree go, and the review moves to the history. It waits for nobody, so
 // it raises no situation and rings no bell.
-func (s *Service) end(ctx context.Context, stored prreview.Review, state prreview.PRState) {
+func (s *Service) end(ctx context.Context, stored prreview.Review, detail pulls.Detail) {
+	state := prreview.PRState(detail.State)
 	if err := s.sessions.DiscardTask(ctx, stored.ID); err != nil {
 		s.log.Error("discard review session failed", "review", stored.ID, "error", err)
 	}
@@ -152,7 +216,9 @@ func (s *Service) end(ctx context.Context, stored prreview.Review, state prrevie
 	if err := s.worktrees.Remove(ctx, stored.ID); err != nil {
 		s.log.Warn("remove review worktree failed", "review", stored.ID, "error", err)
 	}
-	if _, err := s.reviews.Archive(ctx, stored.ID, prreview.End{State: state}); err != nil {
+	if _, err := s.reviews.Archive(ctx, stored.ID, prreview.End{
+		State: state, MergedBy: detail.MergedBy, MergedAt: detail.MergedAt, ClosedAt: detail.ClosedAt,
+	}); err != nil {
 		s.log.Error("archive review failed", "review", stored.ID, "error", err)
 		return
 	}
@@ -209,14 +275,38 @@ func (s *Service) Sync(ctx context.Context) {
 }
 
 // setCheckError records what the last reading of a pull request said when it
-// failed, "" when it worked, and says whether that changed.
+// failed, "" when it worked, and says whether that changed. The hour of a
+// failure is the first of its run.
 func (s *Service) setCheckError(id, reason string) bool {
 	l := s.lockOf(id)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	now := time.Now().UTC()
+	l.readAt = now
 	changed := l.checkError != reason
 	l.checkError = reason
+	switch {
+	case reason == "":
+		l.checkErrorAt = time.Time{}
+	case l.checkErrorAt.IsZero():
+		l.checkErrorAt = now
+	}
 	return changed
+}
+
+// setReading keeps what a good reading of a pull request said: the checks and
+// the merge, the recent commits and when it was made. It always changes
+// something, since the interface shows how long ago the reading was.
+func (s *Service) setReading(id string, detail pulls.Detail) bool {
+	l := s.lockOf(id)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	l.checks = detail.Checks
+	l.recent = detail.Commits
+	l.checkedAt = time.Now().UTC()
+	return true
 }

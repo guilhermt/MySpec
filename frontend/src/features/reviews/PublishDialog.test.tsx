@@ -54,7 +54,7 @@ describe("PublishDialog", () => {
     await user.click(screen.getByRole("radio", { name: "Request changes" }));
     await user.click(screen.getByRole("button", { name: "Publish" }));
 
-    expect(api.publishReview).toHaveBeenCalledWith("review-1", "request_changes");
+    expect(api.publishReview).toHaveBeenCalledWith("review-1", "request_changes", true);
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 

@@ -50,7 +50,7 @@ function PublishForm({ review, onOpenChange, onReviewAgain }: PublishFormProps) 
   const publish = () => {
     setPublishing(true);
     setError(null);
-    publishReview(review.id, verdict)
+    publishReview(review.id, verdict, true)
       .then(() => {
         onOpenChange(false);
         setPublishing(false);

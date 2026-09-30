@@ -56,6 +56,7 @@ import {
   refreshCard,
   refreshPR,
   refreshPullRequests,
+  refreshReviewPR,
   removeBoard,
   removeDraftDependency,
   removePending,
@@ -972,20 +973,42 @@ describe("review actions shown in place", () => {
 
     expect(await startReview(request)).toBe("review-9");
     await askReviewAgain("review-1", "look at the tests");
-    await publishReview("review-1", "request_changes");
+    await publishReview("review-1", "request_changes", false);
     await setReviewInstructions("repo-1", "Look at the migrations.");
 
     expect(api.startReview).toHaveBeenCalledWith(request);
     expect(api.askReviewAgain).toHaveBeenCalledWith("review-1", "look at the tests");
-    expect(api.publishReview).toHaveBeenCalledWith("review-1", "request_changes");
+    expect(api.publishReview).toHaveBeenCalledWith("review-1", "request_changes", false);
     expect(api.setReviewInstructions).toHaveBeenCalledWith("repo-1", "Look at the migrations.");
   });
 
   it("reject instead of using the app notice", async () => {
     vi.mocked(api.publishReview).mockRejectedValueOnce(new Error("gh is not authenticated"));
 
-    await expect(publishReview("review-1", "approve")).rejects.toThrow("gh is not authenticated");
+    await expect(publishReview("review-1", "approve", true)).rejects.toThrow(
+      "gh is not authenticated",
+    );
     expect(useAppStore.getState().error).toBeNull();
+  });
+});
+
+describe("refreshReviewPR", () => {
+  it("reads the pull request of the review and answers once it is over", async () => {
+    await refreshReviewPR("review-1");
+
+    expect(api.refreshReviewPR).toHaveBeenCalledWith("review-1");
+    expect(useAppStore.getState().error).toBeNull();
+  });
+
+  it("says in the app notice when the reading fails", async () => {
+    vi.mocked(api.refreshReviewPR).mockRejectedValueOnce(new Error("gh is not authenticated"));
+
+    await refreshReviewPR("review-1");
+
+    expect(useAppStore.getState().error).toEqual({
+      label: "Couldn't check the pull request of the item",
+      detail: "gh is not authenticated. Check that gh is signed in.",
+    });
   });
 });
 

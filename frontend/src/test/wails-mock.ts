@@ -220,9 +220,10 @@ export const api = {
   setReviewSummary: vi.fn<(id: string, pass: number, text: string) => Promise<void>>(() =>
     Promise.resolve(),
   ),
-  publishReview: vi.fn<(id: string, verdict: ReviewVerdict) => Promise<void>>(() =>
-    Promise.resolve(),
+  publishReview: vi.fn<(id: string, verdict: ReviewVerdict, withSummary: boolean) => Promise<void>>(
+    () => Promise.resolve(),
   ),
+  refreshReviewPR: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
   applyReview: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
   approveReview: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
   deleteReview: vi.fn<(id: string) => Promise<DeleteResult>>(() =>
@@ -945,6 +946,12 @@ export function makeReviewSummary(overrides: Partial<ReviewSummary> = {}): Revie
     passes: [],
     stalePass: false,
     checkError: "",
+    checkErrorAt: "",
+    checks: [],
+    mergeable: "",
+    checkedAt: "",
+    newCommits: 0,
+    staleCommits: 0,
     trouble: { failedChecks: [], conflict: false },
     publishError: "",
     passBlocked: "",
@@ -995,6 +1002,13 @@ export function makeReviewPass(overrides: Partial<ReviewPass> = {}): ReviewPass 
     publishedUrl: "",
     verdict: "",
     edited: false,
+    checks: [],
+    mergeable: "",
+    checksReadAt: "",
+    recordedAt: "",
+    sentAt: "",
+    sent: false,
+    summaryPublished: false,
     ...overrides,
   };
 }
@@ -1024,8 +1038,12 @@ export function makeArchivedReview(overrides: Partial<ArchivedReview> = {}): Arc
     url: "https://github.com/dev/web/pull/31",
     mode: "publish",
     outcome: "merged",
+    baseBranch: "dev",
     card: null,
     passes: [makeReviewPass()],
+    mergedBy: "",
+    mergedAt: "",
+    closedAt: "",
     createdAt: "2026-09-16T12:00:00Z",
     archivedAt: "2026-09-17T12:00:00Z",
     ...overrides,

@@ -132,7 +132,7 @@ var (
 // closed: a failed publication keeps them, and the bindings answer with them.
 const (
 	GoneMessage    = "This pull request is no longer on GitHub."
-	NotOpenMessage = "This pull request isn't open."
+	NotOpenMessage = "The pull request isn't open anymore."
 )
 
 // Service is the state machine of every review of a pull request.
@@ -155,6 +155,8 @@ type Service struct {
 	locks   map[string]*reviewLock // by review id
 	closed  bool
 	polling bool // a reading of the pull requests of the reviews is under way
+	// pollDone is closed when the reading under way ends; nil when none is.
+	pollDone chan struct{}
 }
 
 // reviewLock serializes the work on one review and coalesces its pending
@@ -167,8 +169,21 @@ type reviewLock struct {
 	// next report the agent writes settles it.
 	unreadable string
 	// checkError is what the last reading of the pull request said when it
-	// failed; "" when it worked.
+	// failed, as the user reads it; "" when it worked.
 	checkError string
+	// checkErrorAt is the first failing reading of the run of failures; zero
+	// when the last reading worked.
+	checkErrorAt time.Time
+	// checks and the merge of the last good reading; zero before one.
+	checks gh.PRChecks
+	// checkedAt is when that reading was made; zero before one since the app
+	// started.
+	checkedAt time.Time
+	// recent are the last 50 commits of the last good reading, oldest first.
+	recent []pulls.Commit
+	// readAt is the last reading, good or not; RefreshPR waits for one after
+	// its call.
+	readAt time.Time
 	// commitFailed says the last approval of apply mode ended without a
 	// commit. Like the flow of a task, it is transient on purpose.
 	commitFailed bool

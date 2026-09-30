@@ -578,3 +578,21 @@ func TestOnlyTheFindingsWhoseFixesWentUpAreListedAsApplied(t *testing.T) {
 		})
 	}
 }
+
+func TestApplyingRecordsWhenTheApprovedFindingsWentToTheAgent(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := applyDecided(t, f)
+	if !f.pass(t, id, 1).SentAt.IsZero() {
+		t.Fatal("the pass has an hour of sending before it was sent")
+	}
+
+	if err := f.service.Apply(t.Context(), id); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+
+	if f.pass(t, id, 1).SentAt.IsZero() {
+		t.Error("the pass kept no hour for the moment the findings went")
+	}
+}

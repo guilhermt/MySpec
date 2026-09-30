@@ -316,3 +316,68 @@ func TestAClosedFlowEvaluatesNothingElse(t *testing.T) {
 		t.Error("a closed flow recorded a report")
 	}
 }
+
+// titledFindings is twoFindings after the agent wrote the title of each
+// finding on the line of its number, and nothing else.
+const titledFindings = `Two things to fix.
+
+## Findings
+
+### 1 · The reading is never cached
+Location: internal/board/service.go:12
+
+The reading is never cached.
+
+### 2 · No test for the cache
+Location: general
+
+The cache has no test.`
+
+func TestTheFirstReportRecordsWhenItWasRecorded(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := asked(t, f)
+	f.writeReport(t, id, 1, reportFile("changes", twoFindings))
+
+	f.evaluated(t, id, func(s reviewflow.State) bool {
+		return s.Status == reviewflow.StatusAwaitingDecision
+	}, "the report of the first pass to be recorded")
+
+	if f.pass(t, id, 1).RecordedAt.IsZero() {
+		t.Error("the pass kept no hour for its report")
+	}
+}
+
+func TestARereadThatOnlyBringsTitlesKeepsTheRevisionAndTheDecisions(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := asked(t, f)
+	f.writeReport(t, id, 1, reportFile("changes", twoFindings))
+	f.evaluated(t, id, func(s reviewflow.State) bool {
+		return s.Status == reviewflow.StatusAwaitingDecision
+	}, "the report of the first pass to be recorded")
+	f.decide(t, id, 1, 1, prreview.DecisionApproved)
+	recordedAt := f.pass(t, id, 1).RecordedAt
+	f.changed() // forget what was announced so far
+
+	f.writeReport(t, id, 1, reportFile("changes", titledFindings))
+	f.evaluated(t, id, func(s reviewflow.State) bool {
+		return len(s.Passes) == 1 && s.Passes[0].Findings[0].Title != ""
+	}, "the titles to be recorded")
+
+	pass := f.pass(t, id, 1)
+	if pass.Revision != 1 {
+		t.Errorf("revision = %d, want the revision the titles did not raise", pass.Revision)
+	}
+	if got := []string{pass.Findings[0].Title, pass.Findings[1].Title}; !slices.Equal(got, []string{"The reading is never cached", "No test for the cache"}) {
+		t.Errorf("titles = %q, want the ones of the report", got)
+	}
+	if pass.Findings[0].Decision != prreview.DecisionApproved || !pass.RecordedAt.Equal(recordedAt) {
+		t.Errorf("pass = %+v, want the decision and the hour of the report kept", pass)
+	}
+	if !slices.Contains(f.changed(), id) {
+		t.Error("the app was not told the titles arrived")
+	}
+}

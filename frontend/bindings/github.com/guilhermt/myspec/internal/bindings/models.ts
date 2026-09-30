@@ -149,10 +149,24 @@ export interface ArchivedReview {
     "outcome": string;
 
     /**
+     * as GitHub names it, without origin/
+     */
+    "baseBranch": string;
+
+    /**
      * nil when the pull request had no card
      */
     "card": PullCard | null;
     "passes": ReviewPass[] | null;
+
+    /**
+     * MergedBy is the login of who merged the pull request, MergedAt when, and
+     * ClosedAt when it closed (RFC 3339); "" when it did not happen or was not
+     * kept.
+     */
+    "mergedBy": string;
+    "mergedAt": string;
+    "closedAt": string;
     "createdAt": string;
     "archivedAt": string;
 }
@@ -1763,7 +1777,7 @@ export interface PullRequestRow {
 
     /**
      * NewCommitCount is how many commits came after that review; -1 when its
-     * commit is not among the last 30.
+     * commit is not among the last 100.
      */
     "newCommitCount": number;
 }
@@ -2133,6 +2147,36 @@ export interface ReviewPass {
      * from what the report has, which another pass would discard.
      */
     "edited": boolean;
+
+    /**
+     * Checks, Mergeable and ChecksReadAt are the checks of the reading that let
+     * the pass start, whether the branch merged into the base then, and when it
+     * was made (RFC 3339); empty for a pass sent before they were kept.
+     * never nil
+     */
+    "checks": PRCheck[] | null;
+    "mergeable": string;
+    "checksReadAt": string;
+
+    /**
+     * when the report was first recorded, RFC 3339; "" when unknown
+     */
+    "recordedAt": string;
+
+    /**
+     * when the approved findings went to the agent, RFC 3339; "" when unknown
+     */
+    "sentAt": string;
+
+    /**
+     * the approved findings went to the agent (apply mode)
+     */
+    "sent": boolean;
+
+    /**
+     * the summary went with the published review
+     */
+    "summaryPublished": boolean;
 }
 
 /**
@@ -2195,9 +2239,29 @@ export interface ReviewSummary {
 
     /**
      * CheckError is what the last automatic reading of the pull request said
-     * when it failed; "" otherwise.
+     * when it failed, as the user reads it; "" otherwise. CheckErrorAt is the
+     * first failing reading of the run (RFC 3339); "" when the last one worked.
      */
     "checkError": string;
+    "checkErrorAt": string;
+
+    /**
+     * Checks and Mergeable are the live checks and the merge of the last
+     * reading; CheckedAt is when it was made (RFC 3339), "" before one since
+     * the app started.
+     * never nil
+     */
+    "checks": PRCheck[] | null;
+    "mergeable": string;
+    "checkedAt": string;
+
+    /**
+     * NewCommits is how many commits came since the published commit, -1 when
+     * unknown, 0 outside new_commits; StaleCommits, since the pass being
+     * decided, -1 when unknown, 0 when the pass isn't stale.
+     */
+    "newCommits": number;
+    "staleCommits": number;
 
     /**
      * Trouble is what went wrong since the last review pass; meaningful in

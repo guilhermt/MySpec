@@ -675,8 +675,20 @@ export function askReviewAgain(id: string, instructions: string): Promise<void> 
   return api.askReviewAgain(id, instructions);
 }
 
-export function publishReview(id: string, verdict: ReviewVerdict): Promise<void> {
-  return api.publishReview(id, verdict);
+/** publishReview sends the review to GitHub; the summary goes in the body only with withSummary. */
+export function publishReview(
+  id: string,
+  verdict: ReviewVerdict,
+  withSummary: boolean,
+): Promise<void> {
+  return api.publishReview(id, verdict, withSummary);
+}
+
+/** refreshReviewPR reads the pull request of a review now, out of the minute. */
+export function refreshReviewPR(id: string): Promise<void> {
+  return run(fail(`Couldn't check the pull request of ${theItem(id)}`, GH), () =>
+    api.refreshReviewPR(id),
+  );
 }
 
 /** setReviewInstructions changes what every review of a repository is told to look at. */

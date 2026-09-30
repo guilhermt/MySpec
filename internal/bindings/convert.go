@@ -1509,6 +1509,12 @@ func FromReviews(
 			Passes:           fromPasses(state.Passes, stored.URL),
 			StalePass:        state.StalePass,
 			CheckError:       state.CheckError,
+			CheckErrorAt:     timeOrEmpty(state.CheckErrorAt),
+			Checks:           fromChecks(state.Checks.Checks),
+			Mergeable:        string(state.Checks.Mergeable),
+			CheckedAt:        timeOrEmpty(state.CheckedAt),
+			NewCommits:       state.NewCommits,
+			StaleCommits:     state.StaleCommits,
 			Trouble:          fromTrouble(stored.Trouble),
 			PublishError:     stored.PublishError,
 			PassBlocked:      state.PassBlocked,
@@ -1627,8 +1633,12 @@ func FromArchivedReviews(
 			URL:          stored.URL,
 			Mode:         string(stored.Mode),
 			Outcome:      string(stored.PRState),
+			BaseBranch:   stored.BaseBranch,
 			Card:         fromReviewCard(stored.Card),
 			Passes:       fromPasses(passes(stored.ID), stored.URL),
+			MergedBy:     stored.MergedBy,
+			MergedAt:     timeOrEmpty(stored.MergedAt),
+			ClosedAt:     timeOrEmpty(stored.ClosedAt),
 			CreatedAt:    stored.CreatedAt.Format(time.RFC3339),
 			ArchivedAt:   stored.ArchivedAt.Format(time.RFC3339),
 		}
@@ -1663,6 +1673,14 @@ func fromPasses(passes []prreview.Pass, prURL string) []ReviewPass {
 			Published:    pass.Published(),
 			Verdict:      string(pass.Verdict),
 			PublishedURL: pass.PublishedURL,
+
+			Checks:           fromChecks(pass.Checks),
+			Mergeable:        string(pass.Mergeable),
+			ChecksReadAt:     timeOrEmpty(pass.ChecksReadAt),
+			RecordedAt:       timeOrEmpty(pass.RecordedAt),
+			SentAt:           timeOrEmpty(pass.SentAt),
+			Sent:             !pass.SentAt.IsZero() || pass.Applied,
+			SummaryPublished: pass.SummaryPublished,
 		}
 		if pass.Published() {
 			converted[i].PublishedAt = pass.PublishedAt.Format(time.RFC3339)

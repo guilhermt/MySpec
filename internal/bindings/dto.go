@@ -1170,7 +1170,7 @@ type PullRequestRow struct {
 	// one.
 	YourReview *PullReview `json:"yourReview"`
 	// NewCommitCount is how many commits came after that review; -1 when its
-	// commit is not among the last 30.
+	// commit is not among the last 100.
 	NewCommitCount int `json:"newCommitCount"`
 }
 
@@ -1221,6 +1221,16 @@ type ReviewPass struct {
 	// Edited is whether the user changed the summary or the text of a finding
 	// from what the report has, which another pass would discard.
 	Edited bool `json:"edited"`
+	// Checks, Mergeable and ChecksReadAt are the checks of the reading that let
+	// the pass start, whether the branch merged into the base then, and when it
+	// was made (RFC 3339); empty for a pass sent before they were kept.
+	Checks           []PRCheck `json:"checks"` // never nil
+	Mergeable        string    `json:"mergeable"`
+	ChecksReadAt     string    `json:"checksReadAt"`
+	RecordedAt       string    `json:"recordedAt"`       // when the report was first recorded, RFC 3339; "" when unknown
+	SentAt           string    `json:"sentAt"`           // when the approved findings went to the agent, RFC 3339; "" when unknown
+	Sent             bool      `json:"sent"`             // the approved findings went to the agent (apply mode)
+	SummaryPublished bool      `json:"summaryPublished"` // the summary went with the published review
 }
 
 // ReviewSummary is an active review of a pull request, with the state of its
@@ -1250,8 +1260,21 @@ type ReviewSummary struct {
 	// deciding on.
 	StalePass bool `json:"stalePass"`
 	// CheckError is what the last automatic reading of the pull request said
-	// when it failed; "" otherwise.
-	CheckError string `json:"checkError"`
+	// when it failed, as the user reads it; "" otherwise. CheckErrorAt is the
+	// first failing reading of the run (RFC 3339); "" when the last one worked.
+	CheckError   string `json:"checkError"`
+	CheckErrorAt string `json:"checkErrorAt"`
+	// Checks and Mergeable are the live checks and the merge of the last
+	// reading; CheckedAt is when it was made (RFC 3339), "" before one since
+	// the app started.
+	Checks    []PRCheck `json:"checks"` // never nil
+	Mergeable string    `json:"mergeable"`
+	CheckedAt string    `json:"checkedAt"`
+	// NewCommits is how many commits came since the published commit, -1 when
+	// unknown, 0 outside new_commits; StaleCommits, since the pass being
+	// decided, -1 when unknown, 0 when the pass isn't stale.
+	NewCommits   int `json:"newCommits"`
+	StaleCommits int `json:"staleCommits"`
 	// Trouble is what went wrong since the last review pass; meaningful in
 	// trouble.
 	Trouble PRTrouble `json:"trouble"`
@@ -1322,10 +1345,17 @@ type ArchivedReview struct {
 	Mode string `json:"mode"`
 	// Outcome is merged or closed: what became of the pull request.
 	Outcome    string       `json:"outcome"`
-	Card       *PullCard    `json:"card"` // nil when the pull request had no card
+	BaseBranch string       `json:"baseBranch"` // as GitHub names it, without origin/
+	Card       *PullCard    `json:"card"`       // nil when the pull request had no card
 	Passes     []ReviewPass `json:"passes"`
-	CreatedAt  string       `json:"createdAt"`
-	ArchivedAt string       `json:"archivedAt"`
+	// MergedBy is the login of who merged the pull request, MergedAt when, and
+	// ClosedAt when it closed (RFC 3339); "" when it did not happen or was not
+	// kept.
+	MergedBy   string `json:"mergedBy"`
+	MergedAt   string `json:"mergedAt"`
+	ClosedAt   string `json:"closedAt"`
+	CreatedAt  string `json:"createdAt"`
+	ArchivedAt string `json:"archivedAt"`
 }
 
 // StartReviewRequest is what the user chose in the dialog that starts a review.

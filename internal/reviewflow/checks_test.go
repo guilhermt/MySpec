@@ -422,3 +422,70 @@ func TestAPassKeepsWhatTheReadingItStartsFromShowsWrong(t *testing.T) {
 			stored.TroubleBaseline, stored.Trouble)
 	}
 }
+
+func TestTheFirstPassKeepsTheChecksOfTheReadingThatLetItStart(t *testing.T) {
+	t.Parallel()
+
+	t.Run("at once", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture(t)
+		f.pulls.seed(withChecks(openPR(), gh.MergeableClean, passedCheck, failedCheck))
+		id := f.start(t)
+
+		pass := f.pass(t, id, 1)
+		if diff := cmp.Diff([]gh.Check{passedCheck, failedCheck}, pass.Checks); diff != "" {
+			t.Errorf("checks (-want +got):\n%s", diff)
+		}
+		if pass.Mergeable != gh.MergeableClean || pass.ChecksReadAt.IsZero() {
+			t.Errorf("pass = %+v, want the merge and the hour of the reading", pass)
+		}
+	})
+
+	t.Run("after the wait", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture(t)
+		id := waiting(t, f)
+		f.pulls.seed(withChecks(openPR(), gh.MergeableConflicting, passedCheck))
+		f.polled(t, id, func(s reviewflow.State) bool {
+			return s.Review.Phase == prreview.PhaseNone
+		}, "the first pass to start once the check passed")
+
+		pass := f.pass(t, id, 1)
+		if diff := cmp.Diff([]gh.Check{passedCheck}, pass.Checks); diff != "" {
+			t.Errorf("checks (-want +got):\n%s", diff)
+		}
+		if pass.Mergeable != gh.MergeableConflicting {
+			t.Errorf("mergeable = %q, want the merge of the reading that settled the wait", pass.Mergeable)
+		}
+		// Later readings of the minute move the hour of the review on, never the
+		// one the pass kept.
+		if got := f.state(t, id).CheckedAt; pass.ChecksReadAt.IsZero() || pass.ChecksReadAt.After(got) {
+			t.Errorf("checksReadAt = %v, want the hour of a reading up to %v", pass.ChecksReadAt, got)
+		}
+	})
+}
+
+func TestALaterPassKeepsTheChecksOfItsOwnReading(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := decided(t, f)
+	f.pulls.seed(withChecks(openPR(), gh.MergeableClean, passedCheck))
+
+	if err := f.service.ReviewAgain(t.Context(), id, ""); err != nil {
+		t.Fatalf("review again: %v", err)
+	}
+
+	pass := f.pass(t, id, 2)
+	if diff := cmp.Diff([]gh.Check{passedCheck}, pass.Checks); diff != "" {
+		t.Errorf("checks (-want +got):\n%s", diff)
+	}
+	if pass.ChecksReadAt.IsZero() {
+		t.Error("the pass kept no hour for its reading")
+	}
+	if first := f.pass(t, id, 1); len(first.Checks) != 0 {
+		t.Errorf("checks of the first pass = %+v, want the ones of the pass before left alone", first.Checks)
+	}
+}

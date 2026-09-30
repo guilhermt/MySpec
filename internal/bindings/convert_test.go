@@ -2451,6 +2451,7 @@ func TestFromReviewsCarriesThePassesTheVerdictsAndTheSituationsOfAReview(t *test
 		}},
 		Revision: 1, Published: true, PublishedAt: readAt.Format(time.RFC3339),
 		PublishedURL: "https://github.com/acme/web/pull/7#pullrequestreview-1", Verdict: "comment",
+		Checks: []bindings.PRCheck{},
 	}
 	if diff := cmp.Diff([]bindings.ReviewPass{wantPass}, got.Passes); diff != "" {
 		t.Errorf("passes (-want +got):\n%s", diff)
@@ -2531,6 +2532,7 @@ func TestFromArchivedReviewsCarriesWhatBecameOfThePullRequest(t *testing.T) {
 		ID: "review-1", RepositoryID: "r-1", Number: 7, Title: "Add the login screen",
 		Author: "alice", URL: "https://github.com/acme/web/pull/7", Mode: prreview.ModePublish,
 		PRState: prreview.PRMerged, CreatedAt: readAt, ArchivedAt: readAt.Add(time.Hour),
+		BaseBranch: "main", MergedBy: "bob", MergedAt: readAt.Add(30 * time.Minute),
 	}
 	passes := func(id string) []prreview.Pass {
 		if id != "review-1" {
@@ -2551,8 +2553,11 @@ func TestFromArchivedReviewsCarriesWhatBecameOfThePullRequest(t *testing.T) {
 				Number: 1, Path: "main.go", Line: 12, LineURL: "https://github.com/acme/web/pull/7/files#diff-2873f79a86c0d8b3335cd7731b0ecf7dd4301eb19a82ef7a1cba7589b5252261R12", Text: "Handle the error.",
 				Decision: "approved",
 			}},
-			Revision: 1,
+			Revision: 1, Checks: []bindings.PRCheck{},
 		}},
+		BaseBranch: "main",
+		MergedBy:   "bob",
+		MergedAt:   readAt.Add(30 * time.Minute).Format(time.RFC3339),
 		CreatedAt:  readAt.Format(time.RFC3339),
 		ArchivedAt: readAt.Add(time.Hour).Format(time.RFC3339),
 	}}
@@ -3286,5 +3291,78 @@ func TestFromReviewsCarriesTheTitleAndTheLineOnGitHubOfAFinding(t *testing.T) {
 	}
 	if diff := cmp.Diff(want, got.Passes[0].Findings); diff != "" {
 		t.Errorf("findings (-want +got):\n%s", diff)
+	}
+}
+
+func TestFromReviewsCarriesTheLiveReadingOfThePullRequest(t *testing.T) {
+	t.Parallel()
+
+	state := reviewState(reviewflow.StatusNewCommits, recordedPass(1, prreview.DecisionApproved))
+	state.Checks = gh.PRChecks{
+		Checks:    []gh.Check{{Name: "test", URL: "https://github.com/acme/web/actions/runs/1", Conclusion: "success"}},
+		Mergeable: gh.MergeableConflicting,
+	}
+	state.CheckedAt = readAt
+	state.CheckErrorAt = readAt.Add(-time.Minute)
+	state.CheckError = "GitHub can't be reached."
+	state.NewCommits = 3
+	state.StaleCommits = -1
+
+	got := bindings.FromReviews([]reviewflow.State{state}, nil, reviewRepos)[0]
+
+	if len(got.Checks) != 1 || got.Checks[0].Name != "test" || got.Mergeable != "conflicting" {
+		t.Errorf("checks = %+v, mergeable = %q, want the checks and the merge of the reading", got.Checks, got.Mergeable)
+	}
+	if got.CheckedAt != readAt.Format(time.RFC3339) || got.CheckErrorAt != readAt.Add(-time.Minute).Format(time.RFC3339) {
+		t.Errorf("checkedAt = %q, checkErrorAt = %q, want the hours of the readings", got.CheckedAt, got.CheckErrorAt)
+	}
+	if got.NewCommits != 3 || got.StaleCommits != -1 {
+		t.Errorf("newCommits = %d, staleCommits = %d, want 3 and -1", got.NewCommits, got.StaleCommits)
+	}
+
+	none := bindings.FromReviews([]reviewflow.State{reviewState(reviewflow.StatusReviewing, recordedPass(1, prreview.DecisionNone))}, nil, reviewRepos)[0]
+	if none.Checks == nil || none.CheckedAt != "" || none.CheckErrorAt != "" {
+		t.Errorf("review without a reading = %+v, want empty checks and no hours", none)
+	}
+}
+
+func TestFromReviewsCarriesTheChecksAndTheHoursOfAPass(t *testing.T) {
+	t.Parallel()
+
+	sent := recordedPass(1, prreview.DecisionApproved)
+	sent.Checks = []gh.Check{{Name: "lint", URL: "https://github.com/acme/web/actions/runs/2", Conclusion: "failure"}}
+	sent.Mergeable = gh.MergeableClean
+	sent.ChecksReadAt = readAt
+	sent.RecordedAt = readAt.Add(time.Minute)
+	sent.SentAt = readAt.Add(2 * time.Minute)
+	sent.SummaryPublished = true
+	applied := recordedPass(2, prreview.DecisionApproved)
+	applied.Applied = true
+	plain := recordedPass(3, prreview.DecisionApproved)
+
+	state := reviewState(reviewflow.StatusPublished, sent)
+	state.Passes = []prreview.Pass{sent, applied, plain}
+
+	got := bindings.FromReviews([]reviewflow.State{state}, nil, reviewRepos)[0].Passes
+
+	if len(got[0].Checks) != 1 || got[0].Checks[0].Name != "lint" || got[0].Mergeable != "mergeable" {
+		t.Errorf("checks = %+v, mergeable = %q, want the ones of the reading that let the pass start",
+			got[0].Checks, got[0].Mergeable)
+	}
+	if got[0].ChecksReadAt != readAt.Format(time.RFC3339) ||
+		got[0].RecordedAt != readAt.Add(time.Minute).Format(time.RFC3339) ||
+		got[0].SentAt != readAt.Add(2*time.Minute).Format(time.RFC3339) {
+		t.Errorf("hours = %q %q %q, want the ones of the pass", got[0].ChecksReadAt, got[0].RecordedAt, got[0].SentAt)
+	}
+	if !got[0].SummaryPublished {
+		t.Error("summaryPublished = false, want true")
+	}
+	for i, want := range []bool{true, true, false} {
+		if got[i].Sent != want {
+			t.Errorf("pass %d sent = %v, want %v", i+1, got[i].Sent, want)
+		}
+	}
+	if got[2].Checks == nil || got[2].SentAt != "" || got[2].ChecksReadAt != "" {
+		t.Errorf("pass without them = %+v, want empty checks and no hours", got[2])
 	}
 }

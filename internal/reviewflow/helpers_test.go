@@ -455,6 +455,10 @@ type memPulls struct {
 	err       error
 	refreshes int
 	reads     int // the readings of GitHub that went out
+	// hold, when set, is what a reading waits on after it took its answer, and
+	// entered says that a reading got there.
+	hold    chan struct{}
+	entered chan struct{}
 }
 
 func newPulls() *memPulls {
@@ -482,7 +486,27 @@ func (m *memPulls) ReadDetails(_ context.Context, refs []pulls.Ref) (map[pulls.R
 			found[ref] = detail
 		}
 	}
+	if m.hold != nil {
+		hold, entered := m.hold, m.entered
+		m.mu.Unlock()
+		entered <- struct{}{}
+		<-hold
+		m.mu.Lock()
+	}
 	return found, nil
+}
+
+// holdReadings makes the next readings wait, after taking the answer they
+// give, until the returned function lets them go; the channel receives one
+// value for every reading that started waiting.
+func (m *memPulls) holdReadings() (release func(), entered <-chan struct{}) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.hold, m.entered = make(chan struct{}), make(chan struct{}, 8)
+	hold := m.hold
+	var once sync.Once
+	return func() { once.Do(func() { close(hold) }) }, m.entered
 }
 
 func (m *memPulls) Refresh() {
