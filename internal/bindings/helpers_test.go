@@ -128,6 +128,73 @@ func (e *fakeEditor) opened() []string {
 	return slices.Clone(e.paths)
 }
 
+// faults are the failures a test puts in the store under the services: a
+// session that cannot be recorded, which is a first session that does not
+// start, and a task that cannot be deleted.
+type faults struct {
+	mu            sync.Mutex
+	sessionInsert error
+	taskDelete    error
+}
+
+// failSessions makes every session recorded from now on fail with err.
+func (f *faults) failSessions(err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.sessionInsert = err
+}
+
+// failTaskDeletes makes every task deleted from now on fail with err.
+func (f *faults) failTaskDeletes(err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.taskDelete = err
+}
+
+func (f *faults) session() error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	return f.sessionInsert
+}
+
+func (f *faults) deletion() error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	return f.taskDelete
+}
+
+// faultySessions is the table of sessions, failing an insert when the faults
+// say so.
+type faultySessions struct {
+	*store.SessionsRepo
+	faults *faults
+}
+
+func (r faultySessions) Insert(ctx context.Context, rec session.Record) error {
+	if err := r.faults.session(); err != nil {
+		return err
+	}
+	return r.SessionsRepo.Insert(ctx, rec)
+}
+
+// faultyTasks is the table of tasks, failing a deletion when the faults say
+// so.
+type faultyTasks struct {
+	*store.TasksRepo
+	faults *faults
+}
+
+func (r faultyTasks) Delete(ctx context.Context, id string) error {
+	if err := r.faults.deletion(); err != nil {
+		return err
+	}
+	return r.TasksRepo.Delete(ctx, id)
+}
+
 // fakeSituationStore stands in for the table of situations. It remembers
 // nothing, which is all a service that never loads a task needs.
 type fakeSituationStore struct{}
@@ -295,6 +362,7 @@ type fixture struct {
 	scanRoot       string // the folder the repository scan starts at
 	editor         *fakeEditor
 	logs           *syncBuffer
+	faults         *faults
 
 	mu          sync.Mutex
 	identities  map[string]repository.Identity // by clone path
@@ -322,6 +390,7 @@ func newFixture(t *testing.T) *fixture {
 		scanRoot:    t.TempDir(),
 		editor:      &fakeEditor{},
 		logs:        logs,
+		faults:      &faults{},
 		identities:  map[string]repository.Identity{},
 		corrections: map[string]int{},
 	}
@@ -336,7 +405,7 @@ func newFixture(t *testing.T) *fixture {
 		t.Fatalf("prompts.Prepare() = %v, want nil", err)
 	}
 	f.sessions = session.New(session.Deps{
-		Sessions: st.Sessions,
+		Sessions: faultySessions{SessionsRepo: st.Sessions, faults: f.faults},
 		Entries:  st.Entries,
 		Launcher: fakeLauncher{env: f.env},
 		RenderPrompt: func(stage prompts.Stage, vars prompts.Vars) (string, error) {
@@ -362,7 +431,7 @@ func newFixture(t *testing.T) *fixture {
 		ScanRoot: f.scanRoot,
 	})
 	f.taskSvc, err = task.New(task.Deps{
-		Repo:         st.Tasks,
+		Repo:         faultyTasks{TasksRepo: st.Tasks, faults: f.faults},
 		DataDir:      f.dataDir,
 		Log:          log,
 		Repositories: f.repositories.Get,
@@ -802,6 +871,7 @@ func (f *fixture) snapshot() bindings.State {
 		Boards: bindings.FromBoards(
 			f.boards.List(), f.boards.Stored, f.boards.Reading,
 			f.repositories.List(), f.repositories.Missing, f.taskSvc.CardTasks(),
+			f.discussions.CardWriters(),
 		),
 		ReviewCenter: bindings.FromReviewCenter(
 			f.pullRequests.Readings(), f.pullRequests.Reading(), f.pullRequests.ReadAt(),

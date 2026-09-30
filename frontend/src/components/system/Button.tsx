@@ -78,6 +78,8 @@ export function Button({
 }: ButtonProps) {
   const ownReasonId = useId();
   const solid = variant === "primary" || variant === "danger";
+  // A dashed button has no body: its key is the plain one, which the solid ring would hide.
+  const keyOnSolid = solid && !disabled;
   const describedBy =
     reasonId ?? (disabled && disabledReason !== undefined ? ownReasonId : undefined);
 
@@ -122,8 +124,8 @@ export function Button({
             <span aria-hidden="true">
               {/* The key of the action has no border and no body; on a solid button it keeps the ring of on-primary. */}
               <Kbd
-                variant={solid ? "on-primary" : "default"}
-                className={cn("h-auto", !solid && "border-0 bg-transparent px-0 shadow-none")}
+                variant={keyOnSolid ? "on-primary" : "default"}
+                className={cn("h-auto", !keyOnSolid && "border-0 bg-transparent px-0 shadow-none")}
               >
                 {shortcut}
               </Kbd>

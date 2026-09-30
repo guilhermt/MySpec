@@ -25,7 +25,22 @@ const kbd = cva(
   },
 );
 
+// The fonts of the app have no ↵, so the system draws it with a font of its own, whose width may
+// fall between pixels. In a box of 1em it keeps a whole width whatever font draws it.
+function keys(children: ReactNode): ReactNode {
+  if (typeof children !== "string") return children;
+  const at = children.indexOf("↵");
+  if (at < 0) return children;
+  return (
+    <>
+      {children.slice(0, at)}
+      <span className="inline-block w-[1em] text-center">↵</span>
+      {keys(children.slice(at + 1))}
+    </>
+  );
+}
+
 /** Kbd is a key of a shortcut, on a surface, on the primary button, or as the jump key. */
 export function Kbd({ variant = "default", size = "md", children, className }: KbdProps) {
-  return <UiKbd className={cn(kbd({ variant, size }), className)}>{children}</UiKbd>;
+  return <UiKbd className={cn(kbd({ variant, size }), className)}>{keys(children)}</UiKbd>;
 }

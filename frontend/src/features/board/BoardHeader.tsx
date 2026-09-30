@@ -1,79 +1,108 @@
-import { LoaderCircle, MessagesSquare, RefreshCw, TriangleAlert } from "lucide-react";
+import { useId } from "react";
+import { Button } from "@/components/system/Button";
 import { IconButton } from "@/components/system/IconButton";
 import { ICONS } from "@/components/system/icons";
-import { Button } from "@/components/ui/button";
-import { useNow } from "@/features/attention/useNow";
+import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/system/Menu";
+import { ReadingAge } from "@/components/system/ReadingAge";
+import { Tooltip } from "@/components/system/Tooltip";
 import { LocationHeader } from "@/features/navigation/LocationHeader";
 import type { Board } from "@/lib/wails";
-import { age } from "@/lib/when";
 import { openExternal, refreshBoard } from "@/store/actions";
+import { useAppStore } from "@/store/app-store";
 
-/** READING_CLOCK_MS is how often the time since the last reading is told again: a minute. */
-const READING_CLOCK_MS = 60_000;
+/** NEW_DISCUSSION_ID is the button that starts a discussion of the board, which the key notice of N points at. */
+export const NEW_DISCUSSION_ID = "board-new-discussion";
 
 export interface BoardHeaderProps {
   board: Board;
-  /** onNewDiscussion opens a discussion of the board with the cards picked, if any. */
+  /** now is the clock the age of the reading counts from. */
+  now: number;
+  /** onNewDiscussion opens a discussion of the board with no card. */
   onNewDiscussion: () => void;
+  /** onEnterSelect starts choosing the cards to discuss. */
+  onEnterSelect: () => void;
+  /** selectDisabledReason is why no card can be selected now, null when one can. */
+  selectDisabledReason: string | null;
 }
 
 /**
- * BoardHeader is the header of the place of a board, with how its last reading went and what the
- * user can do to it on the right. A failed reading shows as a line under it.
+ * BoardHeader is the header of the place of a board: how old its reading is and what the user can
+ * do to the board, on the right.
  */
-export function BoardHeader({ board, onNewDiscussion }: BoardHeaderProps) {
-  const now = useNow(READING_CLOCK_MS, board.readAt !== "");
+export function BoardHeader({
+  board,
+  now,
+  onNewDiscussion,
+  onEnterSelect,
+  selectDisabledReason,
+}: BoardHeaderProps) {
+  const openSettings = useAppStore((state) => state.openSettings);
+  const reasonId = useId();
+  const neverRead = board.readAt === "";
+  const newDiscussionReason = neverRead ? "The board hasn't been read yet." : undefined;
+  const newDiscussionTip = `New discussion on ${board.title}, without cards · N`;
 
   return (
-    <>
-      <LocationHeader>
-        {board.readAt !== "" && (
-          <span className="text-xs text-muted-foreground">
-            {`checked ${age(board.readAt, now)}`}
-          </span>
-        )}
-        {board.reading && (
-          <LoaderCircle
-            role="status"
-            aria-label="Reading the board"
-            className="size-3.5 animate-spin text-muted-foreground"
-          />
-        )}
+    <LocationHeader>
+      <ReadingAge readAt={board.readAt} reading={board.reading} now={now} />
+      <IconButton
+        label="Refresh"
+        tooltip="Read the board again"
+        icon={ICONS.refresh}
+        size="sm"
+        disabled={board.reading}
+        disabledReason="A reading is running."
+        onClick={() => void refreshBoard(board.id)}
+      />
+      <span aria-hidden="true" className="h-(--size-control-sm) w-(--border) bg-line-1" />
+      <Tooltip content={newDiscussionReason ?? newDiscussionTip}>
         <Button
-          variant="outline"
+          id={NEW_DISCUSSION_ID}
+          variant="secondary"
           size="sm"
-          disabled={board.readAt === ""}
+          icon={ICONS.discussion}
+          shortcut="N"
+          disabled={neverRead}
+          {...(newDiscussionReason !== undefined ? { reasonId } : {})}
           onClick={onNewDiscussion}
         >
-          <MessagesSquare aria-hidden="true" />
           New discussion
         </Button>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label="Refresh"
-          disabled={board.reading}
-          onClick={() => void refreshBoard(board.id)}
-        >
-          <RefreshCw aria-hidden="true" />
-        </Button>
-        <IconButton
-          label="Open on GitHub"
-          icon={ICONS.external}
-          size="sm"
-          onClick={() => void openExternal(board.url)}
-        />
-      </LocationHeader>
-      {/* A board never read shows its failure in place of the cards. */}
-      {board.failure !== null && board.readAt !== "" && (
-        <p
-          role="alert"
-          className="flex items-start gap-1.5 border-b px-4 py-2 text-xs text-destructive"
-        >
-          <TriangleAlert aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
-          <span className="break-all">{board.failure.message}</span>
-        </p>
+      </Tooltip>
+      {newDiscussionReason !== undefined && (
+        <span id={reasonId} className="sr-only">
+          {newDiscussionReason}
+        </span>
       )}
-    </>
+      <Menu>
+        <MenuTrigger
+          render={
+            <IconButton
+              label="More actions"
+              tooltip="Select cards, open on GitHub, edit the board"
+              icon={ICONS.more}
+              size="sm"
+            />
+          }
+        />
+        <MenuContent align="end">
+          <MenuItem
+            icon={ICONS.select}
+            shortcut="Space"
+            {...(selectDisabledReason !== null ? { disabledReason: selectDisabledReason } : {})}
+            onClick={onEnterSelect}
+          >
+            Select cards to discuss
+          </MenuItem>
+          <MenuItem icon={ICONS.external} onClick={() => void openExternal(board.url)}>
+            Open on GitHub
+          </MenuItem>
+          <MenuSeparator />
+          <MenuItem icon={ICONS.settings} onClick={() => openSettings("boards")}>
+            Edit the board in Settings…
+          </MenuItem>
+        </MenuContent>
+      </Menu>
+    </LocationHeader>
   );
 }

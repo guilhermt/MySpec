@@ -1,5 +1,5 @@
 import { screen, within } from "@testing-library/react";
-import { useState } from "react";
+import { createRef, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { renderWithStore } from "@/test/render";
 import { SearchInput, type SearchInputProps } from "./SearchInput";
@@ -91,5 +91,33 @@ describe("SearchInput", () => {
       "aria-disabled",
       "true",
     );
+  });
+
+  it("declares no landmark when the bar around it is the search", () => {
+    renderWithStore(<Subject landmark={false} />);
+    expect(screen.queryByRole("search")).not.toBeInTheDocument();
+    expect(screen.getByRole("searchbox", { name: "Search tasks" })).toBeInTheDocument();
+  });
+
+  it("hands its text field to an object ref", () => {
+    const ref = createRef<HTMLInputElement>();
+    renderWithStore(<Subject inputRef={ref} />);
+    expect(ref.current).toBe(screen.getByRole("searchbox", { name: "Search tasks" }));
+  });
+
+  it("hands its text field to a callback ref, and still clears with the focus", async () => {
+    const seen: (HTMLInputElement | null)[] = [];
+    const { user } = renderWithStore(
+      <Subject
+        inputRef={(element) => {
+          seen.push(element);
+        }}
+      />,
+    );
+    const box = screen.getByRole("searchbox", { name: "Search tasks" });
+    expect(seen).toContain(box);
+    await user.type(box, "a");
+    await user.click(screen.getByRole("button", { name: "Clear search" }));
+    expect(box).toHaveFocus();
   });
 });

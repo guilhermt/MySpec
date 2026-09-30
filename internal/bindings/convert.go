@@ -898,8 +898,8 @@ const (
 )
 
 // FromBoards converts the registered boards with their stored readings, the
-// repositories each one manages and, for every card, the tasks created from it
-// and what Start task does for it. The slices are always allocated so the
+// repositories each one manages and, for every card, the tasks created from it,
+// the discussion that wrote it and what Start task does for it. The slices are always allocated so the
 // frontend never sees null.
 func FromBoards(
 	boards []board.Board,
@@ -908,6 +908,7 @@ func FromBoards(
 	repositories []repository.Repository,
 	missing func(id string) bool,
 	cardTasks map[string]task.CardTaskIDs,
+	writers map[string]discussion.Writer,
 ) []Board {
 	boardsByID := make(map[string]board.Board, len(boards))
 	for _, b := range boards {
@@ -950,7 +951,7 @@ func FromBoards(
 		converted[i].Statuses = fromStatusOptions(s.Reading.Statuses, b.FinalStatuses)
 		cards := make([]BoardCard, len(s.Reading.Cards))
 		for j, card := range s.Reading.Cards {
-			cards[j] = fromBoardCard(b, card, repositoriesByKey, boardsByID, missing, cardTasks)
+			cards[j] = fromBoardCard(b, card, repositoriesByKey, boardsByID, missing, cardTasks, writers)
 		}
 		converted[i].Cards = cards
 	}
@@ -985,6 +986,7 @@ func fromBoardCard(
 	boardsByID map[string]board.Board,
 	missing func(id string) bool,
 	cardTasks map[string]task.CardTaskIDs,
+	writers map[string]discussion.Writer,
 ) BoardCard {
 	ids := cardTasks[card.Key()]
 	repo, registered := repositoriesByKey[strings.ToLower(card.FullName())]
@@ -1007,6 +1009,9 @@ func fromBoardCard(
 	if card.Epic != nil {
 		epic := fromCardIssue(card.Epic.Issue)
 		converted.Epic, converted.EpicBody = &epic, card.Epic.Body
+	}
+	if writer, ok := writers[card.Key()]; ok {
+		converted.WrittenBy = &WritingDiscussion{ID: writer.ID, Title: writer.Title, Archived: writer.Archived}
 	}
 	if registered {
 		converted.RepositoryID = repo.ID

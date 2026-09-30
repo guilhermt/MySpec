@@ -94,6 +94,30 @@ export function age(iso: string, now: number): string {
   return `${Math.floor(elapsed / DAY_MS)}d ago`;
 }
 
+/** readMoment is when a reading happened: 14:08 today, yesterday at 17:40, Sep 21 at 17:40 before. */
+export function readMoment(iso: string, now: number): string {
+  const date = parse(iso);
+  if (date === null) {
+    return "";
+  }
+  const clock = CLOCK.format(date);
+  switch (daysBefore(date, now)) {
+    case 0:
+      return clock;
+    case 1:
+      return `yesterday at ${clock}`;
+    default:
+      return `${DAY.format(date)} at ${clock}`;
+  }
+}
+
+/** readClock is when a reading happened, for its tooltip: "at 14:08" today, "yesterday at 17:40", "Sep 21 at 17:40" before. */
+export function readClock(iso: string, now: number): string {
+  const moment = readMoment(iso, now);
+  const date = parse(iso);
+  return date !== null && daysBefore(date, now) === 0 ? `at ${moment}` : moment;
+}
+
 /** duration is a length of time: 42s, 4m 12s, 1h 3m. */
 export function duration(ms: number): string {
   const seconds = Math.max(Math.floor(ms / SECOND_MS), 0);

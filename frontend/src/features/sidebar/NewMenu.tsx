@@ -4,7 +4,7 @@ import { Icon } from "@/components/system/Icon";
 import { IconButton } from "@/components/system/IconButton";
 import { Menu, MenuContent, MenuItem, MenuTrigger } from "@/components/system/Menu";
 import { Tooltip } from "@/components/system/Tooltip";
-import { discussionBoard } from "@/features/sidebar/new-discussion-board";
+import { discussionTarget } from "@/features/sidebar/new-discussion-board";
 import { useAppStore, useLocation } from "@/store/app-store";
 
 export interface NewMenuProps {
@@ -20,7 +20,7 @@ const NEW_SHORTCUT = "Ctrl+N";
 
 /**
  * NewMenu starts something new: a task, the review of a pull request, or a
- * discussion of the board of the place on screen.
+ * discussion, asking the board when the place has none.
  */
 export function NewMenu({ rail = false }: NewMenuProps) {
   const app = useAppStore((state) => state.app);
@@ -28,7 +28,7 @@ export function NewMenu({ rail = false }: NewMenuProps) {
   const openNewTask = useAppStore((state) => state.openNewTask);
   const openReviews = useAppStore((state) => state.openReviews);
   const openNewDiscussion = useAppStore((state) => state.openNewDiscussion);
-  const boardId = discussionBoard(app, location);
+  const target = discussionTarget(app, location);
 
   return (
     <Menu>
@@ -58,9 +58,16 @@ export function NewMenu({ rail = false }: NewMenuProps) {
         </MenuItem>
         <MenuItem onClick={() => openReviews()}>Review a pull request</MenuItem>
         <MenuItem
-          {...(boardId === null
-            ? { disabledReason: "Add a board to discuss its cards." }
-            : { onClick: () => openNewDiscussion({ boardId, cardKeys: [] }) })}
+          {...(target.kind === "disabled"
+            ? { disabledReason: target.reason }
+            : {
+                onClick: () =>
+                  openNewDiscussion({
+                    boardId: target.boardId,
+                    cardKeys: [],
+                    askBoard: target.askBoard,
+                  }),
+              })}
         >
           New discussion
         </MenuItem>

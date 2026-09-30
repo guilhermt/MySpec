@@ -72,6 +72,8 @@ As capturas da tela da task, nas larguras, nas nove cenas, na barra e no composi
 
 A conversa longa é medida no motor do app. Com o Vite de pé (`task dev`, ou `pnpm dev` em `frontend/`), a URL `http://127.0.0.1:9245/?measure=conversation` aberta num WebKitGTK 6.0, como o `MiniBrowser` do pacote `webkitgtk-6.0` (`/usr/lib/webkitgtk-6.0/MiniBrowser` no Arch), monta no lugar do app `frontend/src/dev/measure-conversation.tsx`: uma conversa de 1.500 entradas em quatro trechos, três dobrados, com o agente escrevendo no fim. Ela mede a primeira pintura, do render ao quadro seguinte ao commit, e as atualizações do texto em streaming, o trabalho de cada uma e o tempo até o quadro seguinte, e escreve os números no console e na página. A ferramenta só existe no servidor de dev: o build de produção não a leva.
 
+A lista do board é medida do mesmo modo. A URL `http://127.0.0.1:9245/?measure=board` monta no lugar do app `frontend/src/dev/measure-board.tsx`: um board de 2.000 cards em dez status, com épicos, dependências e tasks na proporção do `Platform Roadmap` e todas as seções expandidas. Ela mede a primeira pintura de `BoardView`, do render ao quadro seguinte ao commit, uma tecla na busca, do `onChange` ao quadro com a lista nova, e `↓`, do `keydown` ao quadro seguinte. Cada medida roda uma vez fria e cinco quentes, e a saída, no console e na página, traz a mediana e o máximo das quentes ao lado da fria, com as metas de 300 ms, 50 ms e 16 ms. Também só existe no servidor de dev.
+
 ## Instalação
 
 `task install` faz o build e escreve, sob `$HOME`:

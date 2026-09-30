@@ -58,7 +58,7 @@ const EM_TOKENS = ["--link-offset", "--tracking-caps"];
 /** The prefixes of the layout widths, which may depend on the window. */
 const LAYOUT_WIDTHS = /^--(sidebar-|panel-|measure|list-|size-|col-|snav-)/;
 
-/** Layout widths still unrounded: task 2 rounds them, with the panels that use them. */
+/** Layout widths rounded where they are used, not in the token. */
 const UNROUNDED_WIDTHS = ["--panel-width", "--panel-card-width"];
 
 function placementClasses(element: Element): string[] {
@@ -217,6 +217,18 @@ describe("globals.css", () => {
 
   it("measures the panel beside the column from the width the stylesheet puts it there", () => {
     expect(GLOBALS).toContain(`@container main (min-width: ${AUX_PANEL_COLUMN_MIN}px) {`);
+  });
+
+  it("rounds the width of the list panel and puts it beside the list from 800px of main area", () => {
+    expect(GLOBALS).toMatch(
+      /\.list-panel \{[^}]*width: round\(down, var\(--panel-card-width\), 1px\);/,
+    );
+    expect(GLOBALS).toMatch(
+      /@container main \(min-width: 800px\) \{\s*\.list-panel \{\s*position: relative;/,
+    );
+    expect(GLOBALS).toContain(
+      "[data-leaving] > .list-panel {\n    animation: aux-panel-exit var(--duration-fast) var(--ease-exit) forwards;",
+    );
   });
 
   it("blinks a new situation twice for --duration-slow, and never with reduced motion", () => {

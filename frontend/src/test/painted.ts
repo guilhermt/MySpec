@@ -4,8 +4,8 @@
  */
 
 import type { CSSProperties } from "react";
-import { inject } from "vitest";
-import { page } from "vitest/browser";
+import { inject, vi } from "vitest";
+import { page, userEvent } from "vitest/browser";
 
 declare module "vitest" {
   export interface ProvidedContext {
@@ -270,6 +270,18 @@ export function edgesOf(element: Element): Edges {
   return { left, right };
 }
 
+/**
+ * spillsOut says whether what an element holds reaches past its box on either side. A cell aligned
+ * to its end spills to the left, which its scrollWidth never counts.
+ */
+export function spillsOut(element: Element): boolean {
+  const { left, right } = element.getBoundingClientRect();
+  return [...element.children].some((child) => {
+    const box = child.getBoundingClientRect();
+    return box.left < left || box.right > right;
+  });
+}
+
 /** innerEdgesOf are the edges of the content box of an element: its box less its side paddings. */
 export function innerEdgesOf(element: Element): Edges {
   const { left, right } = element.getBoundingClientRect();
@@ -278,6 +290,87 @@ export function innerEdgesOf(element: Element): Edges {
     left: left + parseFloat(style.paddingLeft) + parseFloat(style.borderLeftWidth),
     right: right - parseFloat(style.paddingRight) - parseFloat(style.borderRightWidth),
   };
+}
+
+/**
+ * settle waits for the animations of the page that end, so a box is measured where it stays; one
+ * that repeats forever, like a spinner or a shimmer, is not waited for.
+ */
+export async function settle(): Promise<void> {
+  const ending = document
+    .getAnimations()
+    .filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity);
+  await Promise.allSettled(ending.map((animation) => animation.finished));
+}
+
+/** nameOf is what names an element in a failure: its label, else the start of its text. */
+function nameOf(element: Element): string {
+  return element.getAttribute("aria-label") ?? element.textContent?.trim().slice(0, 48) ?? "";
+}
+
+/** offWholePixels are the names of the elements whose left or right edge is not on a whole pixel. */
+export function offWholePixels(elements: Iterable<Element>): string[] {
+  return [...elements]
+    .filter((element) => {
+      const { left, right } = edgesOf(element);
+      return !Number.isInteger(left) || !Number.isInteger(right);
+    })
+    .map(nameOf);
+}
+
+/**
+ * visiblePrimaries are the primary buttons that take room on screen, whatever the Button of the
+ * system marks with data-variant.
+ */
+export function visiblePrimaries(root: ParentNode = document): Element[] {
+  return [...root.querySelectorAll('[data-variant="primary"]')].filter(shows);
+}
+
+/** cutTexts are the elements under a root that cut their text with an ellipsis. */
+export function cutTexts(root: ParentNode = document): HTMLElement[] {
+  return [...root.querySelectorAll<HTMLElement>("*")].filter(
+    (element) =>
+      getComputedStyle(element).textOverflow === "ellipsis" &&
+      element.scrollWidth > element.clientWidth,
+  );
+}
+
+/**
+ * withoutTooltip are the names of the elements that say nothing when the pointer rests on them:
+ * a text the screen cuts must have its whole text in a tooltip.
+ */
+export async function withoutTooltip(elements: readonly HTMLElement[]): Promise<string[]> {
+  const missing: string[] = [];
+  for (const element of elements) {
+    await userEvent.hover(element);
+    const shown = await vi
+      .waitFor(
+        () => {
+          if (document.querySelector('[role="tooltip"]') === null) {
+            throw new Error("no tooltip");
+          }
+        },
+        { timeout: 1500 },
+      )
+      .then(
+        () => true,
+        () => false,
+      );
+    if (!shown) {
+      missing.push(nameOf(element));
+    }
+    await userEvent.unhover(element);
+    // The tooltip that closes must be gone before the next element, or it would count for that one.
+    await vi.waitFor(
+      () => {
+        if (document.querySelector('[role="tooltip"]') !== null) {
+          throw new Error(`the tooltip of ${nameOf(element)} is still open`);
+        }
+      },
+      { timeout: 1500 },
+    );
+  }
+  return missing;
 }
 
 /** capture saves a screenshot of an element for the pull request, only when MYSPEC_CAPTURES=1. */

@@ -334,6 +334,11 @@
     container: main / inline-size;
   }
 
+  /* The area of the list of a board is the container its bar measures itself against. */
+  .board-list-area {
+    container: list / inline-size;
+  }
+
   /* An auxiliary panel: beside the reading column while the column keeps
      760px (from 1120px of main area with --panel-width), over it below. */
   .aux-panel {
@@ -357,6 +362,41 @@
       box-shadow: none;
       border-left: var(--border) solid var(--line-1);
     }
+  }
+
+  /* The panel of a list: beside the list from 800px of main area, where the list keeps 440px; over it below. */
+  .list-panel {
+    width: round(down, var(--panel-card-width), 1px);
+    position: absolute;
+    inset-block: 0;
+    right: 0;
+    z-index: var(--z-float);
+    background: var(--surface-3);
+    box-shadow: var(--shadow-overlay);
+    animation: aux-panel-enter var(--duration-base) var(--ease-enter);
+  }
+  [data-leaving] > .list-panel {
+    animation: aux-panel-exit var(--duration-fast) var(--ease-exit) forwards;
+  }
+  @container main (min-width: 800px) {
+    .list-panel {
+      position: relative;
+      background: var(--surface-0);
+      box-shadow: none;
+      border-left: var(--border) solid var(--line-1);
+    }
+  }
+
+  /* The description of a card in its panel: read at the reading size, its headings no bigger than the text. */
+  .card-body {
+    font-size: var(--text-read);
+    line-height: var(--leading-read);
+    user-select: text;
+  }
+  .card-body :is(h1, h2, h3, h4, h5, h6) {
+    font-size: var(--text-body);
+    line-height: var(--leading-body);
+    font-weight: 600;
   }
 
   /* The live region of the app: toasts and announcements, bottom left of the
@@ -388,6 +428,14 @@
   }
   .situation-flash[data-flash="wait"] {
     --flash-veil: var(--state-wait-veil);
+  }
+
+  /* A card a new reading brings blinks twice in the neutral veil. */
+  @media (prefers-reduced-motion: no-preference) {
+    .row-flash {
+      --flash-veil: var(--veil-press);
+      animation: situation-flash var(--duration-slow) var(--ease-standard) 2;
+    }
   }
 }
 

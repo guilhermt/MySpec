@@ -185,6 +185,15 @@ Onde a ordem difere da sugestão e por quê: a fundação e a tela da task são 
   | Chromium do Playwright, React de produção | 100 ms | 19 ms, até 41 ms |
 
   A primeira pintura fica abaixo dos 300 ms; a atualização de streaming passa dos 16 ms de um quadro em todos os casos. **Decisão:** pela regra do material da task 4 (§4.2, A virtualização), a virtualização da conversa é desta task, com esta medida. Cada evento `text` refaz o modelo da conversa inteira (`buildConversation` sobre todas as entradas) e renderiza de novo todas as entradas montadas; é esse o custo que a solução tem de tirar de cada quadro.
+- **A lista do board, medida na task 5:** `frontend/src/dev/measure-board.tsx` (`?measure=board` no servidor de dev, [setup.md](../docs/development/setup.md)) monta um board de 2.000 cards em dez status, com épicos, dependências e tasks na proporção do `Platform Roadmap` e todas as seções expandidas (2.000 linhas montadas). Rodada no WebKitGTK 6.0 da máquina alvo, sem janela, pelo backend Broadway do GTK, com o servidor de dev (React de desenvolvimento), uma vez fria e cinco quentes:
+
+  | | Fria | Quente, mediana | Quente, máximo | Meta |
+  |---|---|---|---|---|
+  | Primeira pintura (até o quadro seguinte ao commit) | 1.190 ms | 1.732 ms | 1.760 ms | 300 ms |
+  | Uma tecla na busca (até o quadro com a lista nova) | 387 ms | 385 ms | 391 ms | 50 ms |
+  | `↓` na lista (do `keydown` ao quadro seguinte) | 437 ms | 482 ms | 498 ms | 16 ms |
+
+  As três metas foram perdidas por uma ordem de grandeza. **Decisão:** a virtualização da lista do board é desta task, com estas medidas. O custo que ela tem de tirar de cada quadro é o de refazer e pintar as 2.000 linhas montadas: cada `↓` muda o estado de foco de `CardTree` e cada tecla na busca refaz `boardRows` e o modelo de todas as linhas. `boardRows` já devolve a lista plana, a forma que a virtualização pede.
 - **`changes.md`:** o que a crítica apontar como não cumprido.
 - **`backend.md`:** nenhum.
 - **Dependências:** todas.

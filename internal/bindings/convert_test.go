@@ -1663,6 +1663,7 @@ func convertBoard(
 		repositories,
 		func(id string) bool { return missing[id] },
 		cardTasks,
+		map[string]discussion.Writer{},
 	)
 	return got[0]
 }
@@ -1828,6 +1829,37 @@ func TestFromBoardsCarriesTheCardWithItsRelationsAndTasks(t *testing.T) {
 	}
 }
 
+func TestFromBoardsSaysTheDiscussionThatWroteACard(t *testing.T) {
+	t.Parallel()
+
+	written, archived, alone := boardCard("web", 1), boardCard("web", 2), boardCard("web", 3)
+	reading := &board.Reading{Title: "Roadmap", Cards: []board.Card{written, archived, alone}}
+	writers := map[string]discussion.Writer{
+		written.Key():  {ID: "d-1", Title: "Usage tiers"},
+		archived.Key(): {ID: "d-2", Title: "Old plan", Archived: true},
+	}
+
+	got := bindings.FromBoards(
+		[]board.Board{roadmap},
+		func(string) board.Stored { return board.Stored{Reading: reading, ReadAt: readAt} },
+		func(string) bool { return false },
+		nil, func(string) bool { return false }, nil, writers,
+	)[0]
+
+	want := []*bindings.WritingDiscussion{
+		{ID: "d-1", Title: "Usage tiers"},
+		{ID: "d-2", Title: "Old plan", Archived: true},
+		nil,
+	}
+	writtenBy := make([]*bindings.WritingDiscussion, 0, len(got.Cards))
+	for _, card := range got.Cards {
+		writtenBy = append(writtenBy, card.WrittenBy)
+	}
+	if diff := cmp.Diff(want, writtenBy); diff != "" {
+		t.Errorf("WrittenBy mismatch (-want +got):\n%s", diff)
+	}
+}
+
 func TestFromBoardsNeverHandsTheFrontendNull(t *testing.T) {
 	t.Parallel()
 
@@ -1837,6 +1869,7 @@ func TestFromBoardsNeverHandsTheFrontendNull(t *testing.T) {
 		func(string) board.Stored { return board.Stored{Failure: failed, FailedAt: readAt} },
 		func(string) bool { return true },
 		nil, func(string) bool { return false }, nil,
+		map[string]discussion.Writer{},
 	)
 
 	want := []bindings.Board{{
@@ -1861,7 +1894,7 @@ func TestFromBoardsNeverHandsTheFrontendNull(t *testing.T) {
 		card.Siblings == nil || card.Dependencies == nil {
 		t.Errorf("card = %+v, want every list allocated", card)
 	}
-	if empty := bindings.FromBoards(nil, nil, nil, nil, nil, nil); empty == nil {
+	if empty := bindings.FromBoards(nil, nil, nil, nil, nil, nil, nil); empty == nil {
 		t.Error("FromBoards(nil) = nil, want an empty slice")
 	}
 }

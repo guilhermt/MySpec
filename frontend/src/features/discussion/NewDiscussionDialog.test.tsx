@@ -4,7 +4,13 @@ import { NewDiscussionDialog } from "@/features/discussion/NewDiscussionDialog";
 import { api, type Repository } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
-import { makeBoard, makeBoardCard, makeRepository, makeState } from "@/test/wails-mock";
+import {
+  makeBoard,
+  makeBoardCard,
+  makeDiscussion,
+  makeRepository,
+  makeState,
+} from "@/test/wails-mock";
 
 const LOGIN = makeBoardCard();
 const RESET = makeBoardCard({ key: "dev/web#13", number: 13, title: "Reset the password" });
@@ -15,7 +21,7 @@ function open(cardKeys: string[], repositories: Repository[] = [makeRepository()
       repositories,
       boards: [makeBoard({ cards: [LOGIN, RESET], repositoryIds: ["repo-1"] })],
     }),
-    ui: { newDiscussion: { boardId: "board-1", cardKeys } },
+    ui: { newDiscussion: { boardId: "board-1", cardKeys, askBoard: false } },
   });
 }
 
@@ -64,7 +70,7 @@ describe("NewDiscussionDialog", () => {
   it("closes over a board the app no longer has", async () => {
     const { user } = renderWithStore(<NewDiscussionDialog />, {
       state: makeState({ boards: [] }),
-      ui: { newDiscussion: { boardId: "board-1", cardKeys: [] } },
+      ui: { newDiscussion: { boardId: "board-1", cardKeys: [], askBoard: false } },
     });
 
     expect(screen.getByText("This board is no longer in the app.")).toBeInTheDocument();
@@ -81,7 +87,7 @@ describe("NewDiscussionDialog", () => {
         repositories: [makeRepository()],
         boards: [makeBoard({ cards: [long], repositoryIds: ["repo-1"] })],
       }),
-      ui: { newDiscussion: { boardId: "board-1", cardKeys: ["dev/web#20"] } },
+      ui: { newDiscussion: { boardId: "board-1", cardKeys: ["dev/web#20"], askBoard: false } },
     });
 
     expect(screen.getByText("Use at most 120 characters.")).toBeInTheDocument();
@@ -165,5 +171,71 @@ describe("NewDiscussionDialog", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("The board is being read.");
     expect(useAppStore.getState().newDiscussion).not.toBeNull();
+  });
+
+  describe("the Board field", () => {
+    const ALPHA = makeBoard({ id: "alpha", title: "Alpha", repositoryIds: ["repo-1"] });
+    const BETA = makeBoard({ id: "beta", title: "Beta", repositoryIds: ["repo-1"] });
+    const NEW = makeBoard({ id: "new", title: "New", repositoryIds: ["repo-1"], readAt: "" });
+
+    function ask() {
+      return renderWithStore(<NewDiscussionDialog />, {
+        state: makeState({
+          repositories: [makeRepository()],
+          boards: [ALPHA, BETA, NEW],
+          discussions: [makeDiscussion({ boardId: "beta", createdAt: "2026-09-20T10:00:00Z" })],
+        }),
+        ui: { newDiscussion: { boardId: "beta", cardKeys: [], askBoard: true } },
+      });
+    }
+
+    it("shows only when the dialog asks the board", () => {
+      open(["dev/web#12"]);
+
+      expect(screen.queryByRole("button", { name: /^Board:/ })).not.toBeInTheDocument();
+    });
+
+    it("starts on the board last used and takes the focus", async () => {
+      const { user } = ask();
+
+      const field = screen.getByRole("button", { name: "Board: Beta" });
+      expect(field).toHaveFocus();
+      expect(
+        screen.getByText(
+          "The discussion reads the clones of the board's repositories and publishes its cards there.",
+        ),
+      ).toBeInTheDocument();
+
+      await user.click(field);
+      expect(await screen.findByRole("menuitemradio", { name: /Beta/ })).toHaveTextContent(
+        "last used",
+      );
+      expect(screen.getByRole("menuitemradio", { name: /Alpha/ })).not.toHaveTextContent(
+        "last used",
+      );
+    });
+
+    it("disables a board that was never read, with its reason", async () => {
+      const { user } = ask();
+
+      await user.click(screen.getByRole("button", { name: "Board: Beta" }));
+
+      const option = await screen.findByRole("menuitemradio", { name: /New/ });
+      expect(option).toHaveAttribute("aria-disabled", "true");
+      expect(option).toHaveTextContent("not read yet");
+    });
+
+    it("keeps what was written when another board is chosen", async () => {
+      const { user } = ask();
+      await user.type(screen.getByLabelText("Title"), "Billing");
+      await user.type(screen.getByLabelText("What to discuss"), "The invoices are late");
+
+      await user.click(screen.getByRole("button", { name: "Board: Beta" }));
+      await user.click(await screen.findByRole("menuitemradio", { name: /Alpha/ }));
+
+      expect(screen.getByRole("button", { name: "Board: Alpha" })).toBeInTheDocument();
+      expect(screen.getByLabelText("Title")).toHaveValue("Billing");
+      expect(screen.getByLabelText("What to discuss")).toHaveValue("The invoices are late");
+    });
   });
 });

@@ -1,6 +1,7 @@
 package bindings_test
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -205,6 +206,44 @@ func TestCreateTaskIsRefusedWhenTheCloneIsMissing(t *testing.T) {
 	}
 	if want := "The clone at " + dir + " is missing."; err.Error() != want {
 		t.Errorf("CreateTask() error = %q, want %q", err, want)
+	}
+}
+
+func TestCreateTaskSaysTheTaskWasUndoneOnlyWhenItWas(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		deleteErr error
+		undone    bool
+	}{
+		{name: "the deletion worked", undone: true},
+		{name: "the deletion failed", deleteErr: errors.New("database is locked")},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			f := newFixture(t)
+			f.register(t, t.TempDir())
+			f.faults.failSessions(errors.New("disk I/O error"))
+			f.faults.failTaskDeletes(tt.deleteErr)
+
+			id, err := f.tasks.CreateTask(newTask("login-screen"))
+			if err == nil {
+				t.Fatalf("CreateTask() = %q, nil, want the first session refused", id)
+			}
+			const undone = " The task was undone."
+			if got := strings.HasSuffix(err.Error(), undone); got != tt.undone {
+				t.Errorf("CreateTask() error = %q, ends in %q = %v, want %v", err, undone, got, tt.undone)
+			}
+			if !strings.HasPrefix(err.Error(), "disk I/O error") {
+				t.Errorf("CreateTask() error = %q, want the failure of the session first", err)
+			}
+			if left := len(f.taskSvc.List()); (left == 0) != tt.undone {
+				t.Errorf("%d tasks left, want the task gone only when it was undone", left)
+			}
+		})
 	}
 }
 

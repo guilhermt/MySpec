@@ -130,19 +130,45 @@ export interface MenuRadioItemProps {
   children: ReactNode;
   icon?: IconGlyph;
   sub?: string;
+  /** subTone paints the sub as an error: the clone that failed. */
+  subTone?: "error";
   /** unavailable is a choice that is no longer offered: kept, marked with ◇, and not chosen again. */
   unavailable?: boolean;
+  /** disabled is a choice that can't be made, its reason in sub. */
+  disabled?: boolean;
+}
+
+/** MenuSub is the small text after the label of an item: its sub, or the reason a choice is off. */
+function MenuSub({ children, tone }: { children: ReactNode; tone?: "error" | undefined }) {
+  return (
+    <span
+      className={cn(
+        "text-(length:--text-meta) leading-(--leading-meta) text-ink-3",
+        tone === "error" && "text-state-error",
+      )}
+    >
+      {children}
+    </span>
+  );
 }
 
 /**
  * MenuRadioItem is a choice of a MenuRadioGroup, with its check at the start in the brand ink. It is
  * built on the Base UI item, since the radio item of the ui puts the check at the end.
  */
-export function MenuRadioItem({ value, children, icon, sub, unavailable }: MenuRadioItemProps) {
+export function MenuRadioItem({
+  value,
+  children,
+  icon,
+  sub,
+  subTone,
+  unavailable,
+  disabled,
+}: MenuRadioItemProps) {
   return (
     <BaseMenu.RadioItem
       value={value}
-      {...(unavailable ? { disabled: true } : {})}
+      {...(unavailable || disabled ? { disabled: true } : {})}
       className={cn(
         "relative flex cursor-default items-center outline-hidden select-none",
         MENU_ITEM,
@@ -161,10 +187,94 @@ export function MenuRadioItem({ value, children, icon, sub, unavailable }: MenuR
         {unavailable && " · unavailable"}
       </span>
       {sub !== undefined && " "}
-      {sub !== undefined && (
-        <span className="text-(length:--text-meta) leading-(--leading-meta) text-ink-3">{sub}</span>
-      )}
+      {sub !== undefined && <MenuSub tone={subTone}>{sub}</MenuSub>}
     </BaseMenu.RadioItem>
+  );
+}
+
+/** ItemAction is what Enter or a click does on a disabled item instead of choosing it: Clone. */
+export interface ItemAction {
+  label: string;
+  onAction: () => void;
+}
+
+/** actionItemLabel is the accessible name of a disabled item with an action: "acme/billing, not cloned. Enter clones it." */
+export function actionItemLabel(
+  label: string,
+  sub: string | undefined,
+  action: ItemAction,
+): string {
+  // The sub is a phrase that may end in its own period; the label adds the one that follows.
+  const reason = sub === undefined ? "" : `, ${sub.toLowerCase().replace(/\.$/, "")}`;
+  return `${label}${reason}. Enter ${action.label.toLowerCase()}s it.`;
+}
+
+export interface MenuActionItemProps {
+  label: string;
+  sub?: string;
+  subTone?: "error";
+  action: ItemAction;
+}
+
+/**
+ * MenuActionItem is a choice that can't be made and offers an action in its place: the label in the
+ * fourth ink, the reason, and the action as ghost text on the right. It stays on the path of the
+ * arrows, is not chosen, and keeps the menu open, so the action shows its own progress.
+ */
+export function MenuActionItem({ label, sub, subTone, action }: MenuActionItemProps) {
+  return (
+    <BaseMenu.Item
+      closeOnClick={false}
+      aria-disabled="true"
+      aria-label={actionItemLabel(label, sub, action)}
+      onClick={() => action.onAction()}
+      className={cn(
+        "relative flex cursor-default items-center outline-hidden select-none",
+        MENU_ITEM,
+        "text-ink-4 focus:text-ink-4",
+      )}
+    >
+      <span>{label}</span>
+      {sub !== undefined && <MenuSub tone={subTone}>{sub}</MenuSub>}
+      <span
+        aria-hidden="true"
+        className="ml-auto text-(length:--text-micro) leading-(--leading-micro) text-ink-3"
+      >
+        {action.label}
+      </span>
+    </BaseMenu.Item>
+  );
+}
+
+export interface MenuCheckboxItemProps {
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
+  children: ReactNode;
+}
+
+/**
+ * MenuCheckboxItem is a choice that is on or off, with its check at the start in the brand ink like
+ * MenuRadioItem. A click closes the menu, so a filter chosen from it takes effect at once.
+ */
+export function MenuCheckboxItem({ checked, onCheckedChange, children }: MenuCheckboxItemProps) {
+  return (
+    <BaseMenu.CheckboxItem
+      checked={checked}
+      onCheckedChange={onCheckedChange}
+      closeOnClick
+      className={cn(
+        "relative flex cursor-default items-center outline-hidden select-none",
+        MENU_ITEM,
+      )}
+    >
+      <BaseMenu.CheckboxItemIndicator
+        keepMounted
+        className="size-(--icon) text-brand-ink data-unchecked:invisible"
+      >
+        <Icon icon={ICONS.done} />
+      </BaseMenu.CheckboxItemIndicator>
+      <span>{children}</span>
+    </BaseMenu.CheckboxItem>
   );
 }
 

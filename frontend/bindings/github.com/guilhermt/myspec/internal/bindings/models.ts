@@ -372,6 +372,11 @@ export interface BoardCard {
      * other_board: the title of that board
      */
     "otherBoard": string;
+
+    /**
+     * WrittenBy is the discussion that wrote the card; nil for none.
+     */
+    "writtenBy": WritingDiscussion | null;
 }
 
 /**
@@ -2993,4 +2998,13 @@ export interface WorktreePreview {
      * what git said when the worktree could not be read
      */
     "error": string;
+}
+
+/**
+ * WritingDiscussion is the discussion that wrote a card.
+ */
+export interface WritingDiscussion {
+    "id": string;
+    "title": string;
+    "archived": boolean;
 }

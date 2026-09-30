@@ -19,6 +19,13 @@ describe.each(THEMES)("Kbd in the %s theme", (theme) => {
     expect(getComputedStyle(key).fontFamily).toBe(resolve("var(--font-mono)", "font-family"));
   });
 
+  it("stands ↵, which no font of the app draws, on a whole pixel", () => {
+    setTheme(theme);
+    render(<Kbd>Ctrl ↵</Kbd>);
+    const width = screen.getByText("↵").closest("kbd")?.getBoundingClientRect().width ?? 0;
+    expect(Number.isInteger(width)).toBe(true);
+  });
+
   it("measures the small size", () => {
     setTheme(theme);
     render(<Kbd size="sm">K</Kbd>);

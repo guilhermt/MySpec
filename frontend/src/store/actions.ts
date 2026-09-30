@@ -133,15 +133,16 @@ export function browseRepository(): Promise<boolean> {
   return api.browseRepository();
 }
 
-export function changeRepositoryPath(id: string): Promise<void> {
+/** changeRepositoryPath answers false when the user cancelled choosing the folder. */
+export function changeRepositoryPath(id: string): Promise<boolean> {
   return api.changeRepositoryPath(id);
 }
 
 /** changeClonePath is changeRepositoryPath for a bar, which has no place for the failure: the app notice says it. */
 export function changeClonePath(id: string): Promise<void> {
-  return run(fail("Couldn't change the path of the clone", TRY), () =>
-    api.changeRepositoryPath(id),
-  );
+  return run(fail("Couldn't change the path of the clone", TRY), async () => {
+    await api.changeRepositoryPath(id);
+  });
 }
 
 /**

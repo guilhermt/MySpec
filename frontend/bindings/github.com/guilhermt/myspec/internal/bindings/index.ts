@@ -113,5 +113,6 @@ export type {
     Transcript,
     TranscriptEvent,
     UserEntry,
-    WorktreePreview
+    WorktreePreview,
+    WritingDiscussion
 } from "./models.js";

@@ -28,10 +28,12 @@ describe("referenceOf", () => {
   });
 });
 
+const NO_KEYS: ReadonlySet<string> = new Set();
+
 describe("relationsOf", () => {
   const REPO = "dev/web";
   const group = (card: BoardCard, label: string) =>
-    relationsOf(card).find((candidate) => candidate.label === label);
+    relationsOf(card, NO_KEYS).find((candidate) => candidate.label === label);
 
   it.each([
     [
@@ -113,6 +115,53 @@ describe("relationsOf", () => {
     );
   });
 
+  describe("cardKey", () => {
+    const issue = (key: string, onBoard: boolean) => ({
+      key,
+      repository: REPO,
+      number: 1,
+      title: key,
+      url: "u",
+      state: "open",
+      status: "",
+      onBoard,
+    });
+    const card = makeBoardCard({
+      repository: REPO,
+      epic: { key: "e", repository: REPO, number: 3, title: "Accounts", url: "u", state: "open" },
+      siblings: [issue("s-in", true), issue("s-out", false), issue("s-off", true)],
+      dependencies: [
+        { ...issue("d-in", true), pullRequests: [], satisfied: true },
+        { ...issue("d-out", false), pullRequests: [], satisfied: true },
+      ],
+    });
+    const keys = new Set(["e", "s-in", "s-out", "d-in", "d-out"]);
+    const withKeys = (label: string) =>
+      relationsOf(card, keys)
+        .find((candidate) => candidate.label === label)
+        ?.items.map((item) => item.cardKey);
+
+    it.each([
+      ["the epic in the reading", "Epic", ["e"]],
+      [
+        "the siblings on the board and in the reading",
+        "Cards of the epic · 3",
+        ["s-in", undefined, undefined],
+      ],
+      ["the dependencies on the board and in the reading", "Dependencies", ["d-in", undefined]],
+    ])("marks %s", (_name, label, expected) => {
+      expect(withKeys(label)).toEqual(expected);
+    });
+
+    it("marks none without the reading", () => {
+      expect(
+        relationsOf(card, NO_KEYS)
+          .flatMap((g) => g.items)
+          .some((i) => i.cardKey),
+      ).toBe(false);
+    });
+  });
+
   it("warns when a dependency isn't satisfied, and doesn't when it is", () => {
     const card = makeBoardCard({
       repository: REPO,
@@ -160,7 +209,7 @@ describe("cardViewOf", () => {
       epic: { key: "e1", repository: "dev/web", number: 3, title: "Accounts", url: "u", state: "" },
     });
 
-    const view = cardViewOf(kept, null);
+    const view = cardViewOf(kept, null, NO_KEYS);
 
     expect(view).toMatchObject({
       repository: "dev/web",
@@ -181,12 +230,12 @@ describe("cardViewOf", () => {
     const kept = makeTaskCard({ title: "Stale title" });
     const read = makeBoardCard({ title: "Add the login screen", body: "Email and password." });
 
-    const view = cardViewOf(kept, read);
+    const view = cardViewOf(kept, read, NO_KEYS);
 
     expect(view).toMatchObject({
       title: "Add the login screen",
       body: "Email and password.",
     });
-    expect(view.relations).toEqual(relationsOf(read));
+    expect(view.relations).toEqual(relationsOf(read, NO_KEYS));
   });
 });

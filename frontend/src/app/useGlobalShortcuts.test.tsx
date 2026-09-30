@@ -135,7 +135,7 @@ describe("useGlobalShortcuts", () => {
 
     await user.keyboard("{Control>}j{/Control}");
 
-    expect(screen.getByText("No task open")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Start" })).toBeInTheDocument();
     expect(screen.getByRole("treeitem", { name: /^task add-login\./ })).toHaveAttribute(
       "aria-selected",
       "false",
@@ -236,7 +236,9 @@ describe("useGlobalShortcuts", () => {
     renderWithStore(<App />);
     await screen.findByRole("tree", { name: "Active items" });
     act(() => {
-      useAppStore.getState().openNewDiscussion({ boardId: "board-1", cardKeys: ["dev/web#12"] });
+      useAppStore
+        .getState()
+        .openNewDiscussion({ boardId: "board-1", cardKeys: ["dev/web#12"], askBoard: false });
     });
 
     for (const key of ["n", "j", ","]) {
@@ -248,6 +250,7 @@ describe("useGlobalShortcuts", () => {
     expect(useAppStore.getState().newDiscussion).toEqual({
       boardId: "board-1",
       cardKeys: ["dev/web#12"],
+      askBoard: false,
     });
     expect(useAppStore.getState().newTaskOpen).toBe(false);
     expect(useAppStore.getState().location).toEqual({ kind: "home" });

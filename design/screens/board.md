@@ -132,7 +132,7 @@ Os filtros combinam entre si e são lembrados por board entre execuções. Um fi
 | Número | `--col-num` | `#474`, em `--text-meta` e `--ink-4`, com algarismos tabulares |
 | Título | o resto | Em `--text-ui` e `--ink-1`, cortado com tooltip. O título de um épico fica em peso 500 |
 | Épico | `--col-epic` | O título do épico em `--ink-3`, cortado com tooltip. No card de um épico: `Epic · 2 of 8 finished` |
-| Dependência | `--col-dep` | Só com uma dependência não satisfeita: `◇ #461`, e `+N` quando há mais (`◇ #461 +1`). O losango contornado, em tinta neutra, nunca âmbar. O tooltip diz cada uma: `Depends on #461 Metering events from the gateway · open, Backlog. A warning: it never blocks.` |
+| Dependência | `--col-dep` | Só com uma dependência não satisfeita: `◇ #461`, e `+N` quando há mais (`◇ #461 +1`). O losango contornado, em tinta neutra, nunca âmbar. O tooltip diz cada uma: `Depends on #461 Metering events from the gateway · open, Backlog. A warning: it never blocks.` A dependência de outro repositório fica só com o número na linha (`◇ #461`), e o tooltip põe o repositório antes dele (`Depends on acme/gateway#461 …`), como o painel |
 | Task | `--col-task` | Com uma task ativa, o glifo e a forma curta da linha 2 da árvore (`structure.md` §2), com `+N` quando há mais situações: `● Question · Step 3/7`, `◌ Step 2/5 · pass 2`, `◆ Session error · Plan`, `‖ Paused · PRD`. Com espera ou erro, o rótulo fica em `--ink-1` e peso 500. Sem task e com o card numa discussão ativa, o glifo da discussão e `In discussion`, em `--ink-3`. O tooltip tem a task inteira |
 | Teclas | `--col-keys` | `S start` e `D discuss`, visíveis só na linha com o foco do teclado, e só as que agem: `S` num card sem task que pode começar uma, `D` em todo card que pode entrar numa discussão |
 
@@ -272,7 +272,7 @@ A falha nunca é situação, nunca notifica e nunca é vermelha.
 | **Name** | Vazio | Sugerido, `<número>-<slug>` até 64 (`474-usage-alerts-at-80-of-the-plan`) | Em mono, `--text-meta`. A ajuda: `Lowercase letters, digits and hyphens. It names the branch and the worktree.` |
 | **Context** | Obrigatório: uma área de texto de quatro linhas, com `What you want to build, in your own words. High level or detailed.` | A linha do contexto montado (seção 4.3) | — |
 | **A dependência** | — | Um aviso por dependência não satisfeita, neutro: `◇ Depends on #461 Metering events from the gateway` e `acme/gateway · Open · Backlog · no pull request. A warning only: the task can start.` | Nunca bloqueia |
-| **Mode** e **Review mode** | Lado a lado, com o mesmo controle segmentado (`radiogroup`, `←` `→`) | Igual | `Structured`; o modo de review de **Defaults** |
+| **Mode** e **Review mode** | Lado a lado, com o mesmo controle segmentado (`radiogroup`, `←` `→`): `Structured` / `One-Shot` e `Agent` / `Manual`, nesta ordem | Igual | `Structured`; o modo de review de **Defaults** |
 | **Models** | O resumo, que abre a lista (seção 4.5) | Igual | Os padrões de **Defaults** |
 
 Cada modo tem a linha do que faz, de `features.md`:

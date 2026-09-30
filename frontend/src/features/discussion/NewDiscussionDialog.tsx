@@ -1,5 +1,7 @@
 import { LoaderCircle, X } from "lucide-react";
-import { type FormEvent, type KeyboardEvent, useState } from "react";
+import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from "react";
+import { Field } from "@/components/system/Field";
+import { Select } from "@/components/system/Select";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -11,8 +13,11 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { useNow } from "@/features/attention/useNow";
 import { DiscussionContextPreview } from "@/features/discussion/DiscussionContextPreview";
 import {
+  BOARD_FIELD_HELP,
+  boardOptions,
   canStart,
   NOTHING_TO_DISCUSS,
   READS_CLONES,
@@ -28,7 +33,13 @@ import { choiceOf, type ModelChoice } from "@/lib/models";
 import { cloneMissingText } from "@/lib/repositories";
 import type { Board, BoardCard, Repository, StageModel } from "@/lib/wails";
 import { changeRepositoryPath, cloneRepository, startDiscussion } from "@/store/actions";
-import { useAppStore, useBoard, useNewDiscussion, useRepositories } from "@/store/app-store";
+import {
+  type NewDiscussionRef,
+  useAppStore,
+  useBoard,
+  useNewDiscussion,
+  useRepositories,
+} from "@/store/app-store";
 
 const NO_MODELS: readonly StageModel[] = [];
 
@@ -42,7 +53,6 @@ const TITLE_TOO_LONG = `Use at most ${TITLE_MAX} characters.`;
 export function NewDiscussionDialog() {
   const ref = useNewDiscussion();
   const closeNewDiscussion = useAppStore((state) => state.closeNewDiscussion);
-  const board = useBoard(ref?.boardId ?? "");
 
   if (ref === null) {
     return null;
@@ -60,39 +70,69 @@ export function NewDiscussionDialog() {
         <DialogHeader>
           <DialogTitle>New discussion</DialogTitle>
         </DialogHeader>
-        {board === null ? (
-          <>
-            <p className="text-sm text-muted-foreground">This board is no longer in the app.</p>
-            <DialogFooter>
-              <Button type="button" variant="ghost" onClick={closeNewDiscussion}>
-                Cancel
-              </Button>
-            </DialogFooter>
-          </>
-        ) : (
-          // Keyed by what the dialog opened for: another board, or another
-          // pick of cards, starts afresh, without what was typed for the last.
-          <NewDiscussionFields
-            key={`${ref.boardId}|${ref.cardKeys.join(",")}`}
-            board={board}
-            cardKeys={ref.cardKeys}
-          />
-        )}
+        {/* Keyed by what the dialog opened for: another pick of cards starts afresh, without what
+            was typed for the last. Choosing another board in the Board field keeps the key, and
+            the text with it. */}
+        <NewDiscussionFields
+          key={ref.askBoard ? "ask" : `${ref.boardId}|${ref.cardKeys.join(",")}`}
+          reference={ref}
+        />
       </DialogContent>
     </Dialog>
   );
 }
 
-interface NewDiscussionFieldsProps {
-  board: Board;
-  cardKeys: readonly string[];
+// NewDiscussionFields holds the board the discussion is about, and the form once the app has it.
+function NewDiscussionFields({ reference }: { reference: NewDiscussionRef }) {
+  const closeNewDiscussion = useAppStore((state) => state.closeNewDiscussion);
+  const [boardId, setBoardId] = useState(reference.boardId);
+  const board = useBoard(boardId);
+
+  if (board === null) {
+    return (
+      <>
+        <p className="text-sm text-muted-foreground">This board is no longer in the app.</p>
+        <DialogFooter>
+          <Button type="button" variant="ghost" onClick={closeNewDiscussion}>
+            Cancel
+          </Button>
+        </DialogFooter>
+      </>
+    );
+  }
+  return (
+    <NewDiscussionForm
+      board={board}
+      cardKeys={reference.cardKeys}
+      askBoard={reference.askBoard}
+      onBoardChange={setBoardId}
+    />
+  );
 }
 
-function NewDiscussionFields({ board, cardKeys }: NewDiscussionFieldsProps) {
+interface NewDiscussionFormProps {
+  board: Board;
+  cardKeys: readonly string[];
+  askBoard: boolean;
+  onBoardChange: (boardId: string) => void;
+}
+
+function NewDiscussionForm({ board, cardKeys, askBoard, onBoardChange }: NewDiscussionFormProps) {
   const closeNewDiscussion = useAppStore((state) => state.closeNewDiscussion);
   const openDiscussion = useAppStore((state) => state.openDiscussion);
   const defaults = useAppStore((state) => state.app?.modelDefaults ?? NO_MODELS);
   const repositories = useRepositories();
+  const app = useAppStore((state) => state.app);
+  const now = useNow(60_000, askBoard);
+  const boardField = useRef<HTMLDivElement>(null);
+
+  // Asking the board, the focus starts on its field.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: only when the dialog opens
+  useEffect(() => {
+    if (askBoard) {
+      boardField.current?.querySelector("button")?.focus();
+    }
+  }, []);
 
   // A card that is no longer in the last reading of the board is left out
   // without a word: the discussion is about the ones that are.
@@ -150,17 +190,30 @@ function NewDiscussionFields({ board, cardKeys }: NewDiscussionFieldsProps) {
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-4">
-      <div className="flex flex-col gap-0.5 rounded-lg border px-3 py-2">
-        <p className="text-sm font-medium">{board.title}</p>
-        <p className="text-xs text-muted-foreground">{`${board.owner} · #${board.number}`}</p>
-      </div>
+      {askBoard && app !== null ? (
+        <div ref={boardField}>
+          <Field label="Board" help={BOARD_FIELD_HELP}>
+            <Select
+              label="Board"
+              value={board.id}
+              options={boardOptions(app, now)}
+              onValueChange={onBoardChange}
+            />
+          </Field>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-0.5 rounded-lg border px-3 py-2">
+          <p className="text-sm font-medium">{board.title}</p>
+          <p className="text-xs text-muted-foreground">{`${board.owner} · #${board.number}`}</p>
+        </div>
+      )}
 
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="discussion-title">Title</Label>
         <Input
           id="discussion-title"
           value={title}
-          autoFocus
+          autoFocus={!askBoard}
           maxLength={TITLE_MAX}
           autoComplete="off"
           aria-invalid={problem === "too_long"}

@@ -1,26 +1,47 @@
+import { defaultDiscussionBoard } from "@/features/discussion/new-discussion";
 import { boardOfRepository, findBoard } from "@/lib/boards";
 import type { Location } from "@/lib/locations";
 import type { State } from "@/lib/wails";
 
+/** DiscussionTarget is what New discussion does from a place: open the dialog, asking the board or not, or say why it can't. */
+export type DiscussionTarget =
+  | { kind: "open"; boardId: string; askBoard: boolean }
+  | { kind: "disabled"; reason: string };
+
+const NO_BOARD: DiscussionTarget = {
+  kind: "disabled",
+  reason: "Add a board to discuss its cards.",
+};
+
+const NOT_READ: DiscussionTarget = {
+  kind: "disabled",
+  reason: "The board hasn't been read yet.",
+};
+
 /**
- * discussionBoard is the board New discussion opens the dialog for: the board
- * on screen, or the board of the item on screen (a task by its repository, a
- * discussion by its own); else the board of the last discussion; else the
- * first board by title. null without a board.
+ * discussionTarget is what New discussion does from a place: nothing without a
+ * board, and nothing while no board was read; the board of the place when it
+ * has one, and the only board when there is one; else it asks, starting from
+ * the board last used.
  */
-export function discussionBoard(app: State | null, location: Location): string | null {
-  if (app === null) {
-    return null;
+export function discussionTarget(app: State | null, location: Location): DiscussionTarget {
+  const boards = app?.boards ?? [];
+  const [only] = boards;
+  if (app === null || only === undefined) {
+    return NO_BOARD;
+  }
+  if (!boards.some((board) => board.readAt !== "")) {
+    return NOT_READ;
   }
   const here = placeBoard(app, location);
   if (here !== null) {
-    return here;
+    return { kind: "open", boardId: here, askBoard: false };
   }
-  const last = app.discussions?.at(-1);
-  if (last !== undefined && findBoard(app, last.boardId) !== null) {
-    return last.boardId;
+  if (boards.length === 1) {
+    return { kind: "open", boardId: only.id, askBoard: false };
   }
-  return app.boards?.[0]?.id ?? null;
+  const boardId = defaultDiscussionBoard(app);
+  return boardId === null ? NOT_READ : { kind: "open", boardId, askBoard: true };
 }
 
 /** placeBoard is the board of the place on screen, null when it has none. */

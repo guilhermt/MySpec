@@ -5,6 +5,8 @@ import {
   defaultCollapsed,
   EMPTY_FILTERS,
   isBoardViewMemory,
+  keptFilters,
+  namedFilters,
 } from "@/features/board/board-view";
 import { findBoard } from "@/lib/boards";
 import { boardViewKey, readStored, writeStored } from "@/lib/ui-storage";
@@ -14,7 +16,6 @@ interface ViewState {
   filters: BoardFilters;
   /** collapsed is null while the user has not chosen: the final statuses of the board then. */
   collapsed: string[] | null;
-  selectedKey: string | null;
 }
 
 function collapsedOf(boardId: string, collapsed: string[] | null): string[] {
@@ -25,17 +26,27 @@ function collapsedOf(boardId: string, collapsed: string[] | null): string[] {
   return board === null ? [] : defaultCollapsed(board);
 }
 
+/** namedOf gives the filters the names the reading of the board tells, for the chips and for the next run. */
+function namedOf(boardId: string, filters: BoardFilters): BoardFilters {
+  const { app } = useAppStore.getState();
+  const board = findBoard(app, boardId);
+  return board === null ? filters : namedFilters(filters, board, app);
+}
+
 /**
  * useBoardViewMemory is what a board view remembers, read once from the last
- * run and kept for the next one. The selected card is never kept, and the
- * collapsed sections only once the user chose them.
+ * run and kept for the next one. The collapsed sections are kept only once the
+ * user chose them.
  */
 export function useBoardViewMemory(
   boardId: string,
 ): [BoardViewMemory, Dispatch<SetStateAction<BoardViewMemory>>] {
   const [view, setView] = useState<ViewState>(() => {
     const stored = readStored(boardViewKey(boardId), { filters: EMPTY_FILTERS }, isBoardViewMemory);
-    return { filters: stored.filters, collapsed: stored.collapsed ?? null, selectedKey: null };
+    return {
+      filters: namedOf(boardId, keptFilters(stored.filters)),
+      collapsed: stored.collapsed ?? null,
+    };
   });
   // Subscribing to the board follows its statuses while the default applies.
   const board = useBoard(boardId);
@@ -48,7 +59,7 @@ export function useBoardViewMemory(
         const next = typeof action === "function" ? action(resolved) : action;
         // Collapsed sections left untouched keep following the board.
         const chosen = next.collapsed === resolved.collapsed ? current.collapsed : next.collapsed;
-        return { ...next, collapsed: chosen };
+        return { filters: namedOf(boardId, next.filters), collapsed: chosen };
       }),
     [boardId],
   );
@@ -62,5 +73,5 @@ export function useBoardViewMemory(
     );
   }, [boardId, view.filters, view.collapsed]);
 
-  return [{ filters: view.filters, collapsed, selectedKey: view.selectedKey }, setMemory];
+  return [{ filters: view.filters, collapsed }, setMemory];
 }

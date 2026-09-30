@@ -62,6 +62,7 @@ import type {
   ThemePreference,
   Transcript,
   TranscriptEvent,
+  WritingDiscussion,
 } from "@/lib/wails";
 
 export const api = {
@@ -69,7 +70,7 @@ export const api = {
   scanRepositories: vi.fn<() => Promise<RepositoryCandidate[]>>(() => Promise.resolve([])),
   addRepository: vi.fn<(path: string) => Promise<void>>(() => Promise.resolve()),
   browseRepository: vi.fn<() => Promise<boolean>>(() => Promise.resolve(false)),
-  changeRepositoryPath: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
+  changeRepositoryPath: vi.fn<(id: string) => Promise<boolean>>(() => Promise.resolve(true)),
   removeRepository: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
   setRepositoryFilter: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
   cloneRepository: vi.fn<(id: string) => Promise<boolean>>(() => Promise.resolve(true)),
@@ -457,8 +458,15 @@ export function makeBoardCard(overrides: Partial<BoardCard> = {}): BoardCard {
     archivedTaskId: "",
     action: "start",
     otherBoard: "",
+    writtenBy: null,
     ...overrides,
   };
+}
+
+export function makeWritingDiscussion(
+  overrides: Partial<WritingDiscussion> = {},
+): WritingDiscussion {
+  return { id: "discussion-1", title: "Usage-based pricing tiers", archived: false, ...overrides };
 }
 
 export function makeTaskCard(overrides: Partial<TaskCard> = {}): TaskCard {

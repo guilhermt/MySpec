@@ -9,6 +9,8 @@ import { Tooltip } from "./Tooltip";
 export interface IconButtonProps
   extends Omit<ButtonBaseProps, "variant" | "icon" | "children" | "shortcut"> {
   label: string;
+  /** tooltip is what the tooltip says when it says more than the label does. */
+  tooltip?: string;
   loading?: boolean;
   icon: IconGlyph;
   shortcut?: string;
@@ -24,6 +26,7 @@ const SQUARES = {
 /** IconButton is a square button named by its tooltip, which also carries the disabled reason. */
 export function IconButton({
   label,
+  tooltip = label,
   icon,
   shortcut,
   variant = "ghost",
@@ -42,7 +45,7 @@ export function IconButton({
   return (
     <>
       <Tooltip
-        content={reason !== undefined ? `${label} · ${reason}` : label}
+        content={reason !== undefined ? `${tooltip} · ${reason}` : tooltip}
         {...(shortcut !== undefined ? { shortcut } : {})}
       >
         <Button

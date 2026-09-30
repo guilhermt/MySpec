@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { NewTaskDialog } from "@/features/task-create/NewTaskDialog";
 import { api, type State } from "@/lib/wails";
@@ -13,6 +13,8 @@ import {
   makeState,
   makeTask,
 } from "@/test/wails-mock";
+
+const NAME_HELP = "Lowercase letters, digits and hyphens. It names the branch and the worktree.";
 
 const WEB = makeRepository();
 const API = makeRepository({
@@ -95,10 +97,10 @@ describe("NewTaskDialog", () => {
 
     expect(screen.getByText("Use lowercase letters, digits and single hyphens.")).toBeVisible();
 
-    await user.click(screen.getByRole("button", { name: 'Use "minha-feature"' }));
+    await user.click(screen.getByRole("link", { name: 'Use "minha-feature"' }));
 
     expect(screen.getByLabelText("Name")).toHaveValue("minha-feature");
-    expect(screen.getByText("Lowercase letters, digits and hyphens.")).toBeVisible();
+    expect(screen.getByText(NAME_HELP)).toBeVisible();
   });
 
   it("refuses a name another task of the repository already has", async () => {
@@ -107,7 +109,7 @@ describe("NewTaskDialog", () => {
     await user.type(screen.getByLabelText("Name"), "add-login");
 
     expect(screen.getByText("A task named add-login already exists in dev/web.")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Create" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Create" })).toHaveAttribute("aria-disabled", "true");
   });
 
   it("refuses a name an archived task of the repository already has", async () => {
@@ -151,7 +153,7 @@ describe("NewTaskDialog", () => {
 
     await user.type(screen.getByLabelText("Name"), "add-login");
 
-    expect(screen.getByText("Lowercase letters, digits and hyphens.")).toBeVisible();
+    expect(screen.getByText(NAME_HELP)).toBeVisible();
     expect(screen.queryByText(/already exists in/)).not.toBeInTheDocument();
   });
 
@@ -159,16 +161,16 @@ describe("NewTaskDialog", () => {
     const { user } = open();
     const create = screen.getByRole("button", { name: "Create" });
 
-    expect(create).toBeDisabled();
+    expect(create).toHaveAttribute("aria-disabled", "true");
 
     await user.type(screen.getByLabelText("Name"), "add-login");
-    expect(create).toBeDisabled();
+    expect(create).toHaveAttribute("aria-disabled", "true");
 
-    await user.type(screen.getByLabelText("Initial context"), "   ");
-    expect(create).toBeDisabled();
+    await user.type(screen.getByLabelText("Context"), "   ");
+    expect(create).toHaveAttribute("aria-disabled", "true");
 
-    await user.type(screen.getByLabelText("Initial context"), "A login screen");
-    expect(create).toBeEnabled();
+    await user.type(screen.getByLabelText("Context"), "A login screen");
+    expect(create).toHaveAttribute("aria-disabled", "false");
   });
 
   it("creates the task in the repository that was chosen and opens it", async () => {
@@ -178,7 +180,7 @@ describe("NewTaskDialog", () => {
     await user.click(screen.getByRole("button", { name: "Repository: dev/web" }));
     await user.click(await screen.findByRole("menuitemradio", { name: "dev/api" }));
     await user.type(screen.getByLabelText("Name"), "fix-header");
-    await user.type(screen.getByLabelText("Initial context"), "The header overlaps the menu");
+    await user.type(screen.getByLabelText("Context"), "The header overlaps the menu");
     await user.click(screen.getByRole("button", { name: "Create" }));
 
     await waitFor(() => {
@@ -236,7 +238,7 @@ describe("NewTaskDialog", () => {
     await user.keyboard("{Escape}");
 
     await user.type(screen.getByLabelText("Name"), "add-login");
-    await user.type(screen.getByLabelText("Initial context"), "A login screen");
+    await user.type(screen.getByLabelText("Context"), "A login screen");
     await user.click(screen.getByRole("button", { name: "Create" }));
 
     await waitFor(() => {
@@ -259,7 +261,7 @@ describe("NewTaskDialog", () => {
     const { user } = open();
 
     await user.type(screen.getByLabelText("Name"), "add-login");
-    await user.type(screen.getByLabelText("Initial context"), "A login screen");
+    await user.type(screen.getByLabelText("Context"), "A login screen");
     await user.click(screen.getByRole("button", { name: "Create" }));
 
     await waitFor(() => {
@@ -278,9 +280,7 @@ describe("NewTaskDialog", () => {
   it("starts from the review mode of the settings and says what it does", () => {
     open({ reviewModeDefault: "agent" });
 
-    expect(screen.getByRole("button", { name: "Task review mode: Agent" })).toHaveTextContent(
-      "Agent",
-    );
+    expect(screen.getByRole("radio", { name: "Agent" })).toBeChecked();
     expect(
       screen.getByText(
         "An agent reviews each step, and the task runs to the pull request on its own.",
@@ -295,13 +295,11 @@ describe("NewTaskDialog", () => {
       screen.getByText("You review each step in VS Code before its commit."),
     ).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Task review mode: Manual" }));
-    await user.click(await screen.findByRole("menuitemradio", { name: "Agent" }));
-    // The menu is a child popup of the dialog: a click in it leaves the dialog open.
+    await user.click(screen.getByRole("radio", { name: "Agent" }));
     expect(screen.getByRole("dialog")).toBeInTheDocument();
 
     await user.type(screen.getByLabelText("Name"), "add-login");
-    await user.type(screen.getByLabelText("Initial context"), "A login screen");
+    await user.type(screen.getByLabelText("Context"), "A login screen");
     await user.click(screen.getByRole("button", { name: "Create" }));
 
     await waitFor(() => {
@@ -317,37 +315,71 @@ describe("NewTaskDialog", () => {
     });
   });
 
+  it("lists the review modes with the agent first", () => {
+    open();
+
+    const modes = screen.getByRole("radiogroup", { name: "Review mode" });
+    expect(
+      within(modes)
+        .getAllByRole("radio")
+        .map((radio) => radio.textContent),
+    ).toEqual(["Agent", "Manual"]);
+  });
+
   it("opens on the Structured mode and says what it does", () => {
     open();
 
-    const modes = screen.getByRole("group", { name: "Mode" });
-    expect(within(modes).getByRole("button", { name: "Structured" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    expect(within(modes).getByRole("button", { name: "One-Shot" })).toHaveAttribute(
-      "aria-pressed",
-      "false",
-    );
+    const modes = screen.getByRole("radiogroup", { name: "Mode" });
+    expect(within(modes).getByRole("radio", { name: "Structured" })).toBeChecked();
+    expect(within(modes).getByRole("radio", { name: "One-Shot" })).not.toBeChecked();
     expect(
-      screen.getByText("A PRD, a tech spec and a plan of steps, each step its own commit."),
+      screen.getByText(
+        "A PRD, a tech spec and a plan of steps, each step its own commit. Fixed once the task exists.",
+      ),
     ).toBeInTheDocument();
-    expect(within(modes).getByRole("button", { name: "One-Shot" })).toBeEnabled();
+  });
+
+  it("moves Mode and Review mode with the arrow keys", async () => {
+    const { user } = open();
+
+    await user.click(screen.getByRole("radio", { name: "Structured" }));
+    await user.keyboard("{ArrowRight}");
+    expect(screen.getByRole("radio", { name: "One-Shot" })).toBeChecked();
+    await user.keyboard("{ArrowLeft}");
+    expect(screen.getByRole("radio", { name: "Structured" })).toBeChecked();
+
+    await user.click(screen.getByRole("radio", { name: "Manual" }));
+    await user.keyboard("{ArrowLeft}");
+    expect(screen.getByRole("radio", { name: "Agent" })).toBeChecked();
+    expect(
+      screen.getByText(
+        "An agent reviews each step, and the task runs to the pull request on its own.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("names the defaults in the tooltip of an own choice", async () => {
+    const { user } = open();
+
+    await user.click(screen.getByRole("button", { name: /Models/ }));
+    await user.click(await screen.findByRole("button", { name: "PRD model: Fable 5.1 · high" }));
+    await user.click(await screen.findByRole("menuitemradio", { name: "xhigh" }));
+    await user.keyboard("{Escape}");
+    await user.hover(screen.getByRole("button", { name: "PRD model: Fable 5.1 · xhigh" }));
+
+    expect((await screen.findAllByText("Defaults: Fable 5.1 · high")).length).toBeGreaterThan(0);
   });
 
   it("switches the hint and the models to the One-Shot mode", async () => {
     const { user } = open();
 
     await user.click(screen.getByRole("button", { name: /Models/ }));
-    await user.click(screen.getByRole("button", { name: "One-Shot" }));
+    await user.click(screen.getByRole("radio", { name: "One-Shot" }));
 
-    expect(screen.getByRole("button", { name: "One-Shot" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    expect(screen.getByRole("radio", { name: "One-Shot" })).toBeChecked();
     expect(
       screen.getByText(
-        "One planning conversation writes a single document, implemented in one commit.",
+        "One planning conversation writes a single document, implemented in one commit. Fixed once the task exists.",
       ),
     ).toBeInTheDocument();
     expect(
@@ -359,7 +391,7 @@ describe("NewTaskDialog", () => {
       ).not.toBeInTheDocument();
     }
 
-    await user.click(screen.getByRole("button", { name: "Structured" }));
+    await user.click(screen.getByRole("radio", { name: "Structured" }));
 
     expect(screen.getByRole("button", { name: "PRD model: Fable 5.1 · high" })).toBeInTheDocument();
     expect(
@@ -376,7 +408,7 @@ describe("NewTaskDialog", () => {
     );
     await user.click(await screen.findByRole("menuitemradio", { name: "xhigh" }));
     await user.keyboard("{Escape}");
-    await user.click(screen.getByRole("button", { name: "One-Shot" }));
+    await user.click(screen.getByRole("radio", { name: "One-Shot" }));
 
     expect(screen.getByRole("button", { name: /Models/ })).toHaveTextContent(
       "Implementation: Opus 5.5 (1M) · xhigh",
@@ -393,7 +425,7 @@ describe("NewTaskDialog", () => {
     await user.click(await screen.findByRole("button", { name: "PRD model: Fable 5.1 · high" }));
     await user.click(await screen.findByRole("menuitemradio", { name: "xhigh" }));
     await user.keyboard("{Escape}");
-    await user.click(screen.getByRole("button", { name: "One-Shot" }));
+    await user.click(screen.getByRole("radio", { name: "One-Shot" }));
 
     expect(screen.getByRole("button", { name: /Models/ })).toHaveTextContent("Defaults");
   });
@@ -401,9 +433,9 @@ describe("NewTaskDialog", () => {
   it("creates the task in the mode of the dialog", async () => {
     const { user } = open();
 
-    await user.click(screen.getByRole("button", { name: "One-Shot" }));
+    await user.click(screen.getByRole("radio", { name: "One-Shot" }));
     await user.type(screen.getByLabelText("Name"), "fix-header");
-    await user.type(screen.getByLabelText("Initial context"), "The header overlaps the menu");
+    await user.type(screen.getByLabelText("Context"), "The header overlaps the menu");
     await user.click(screen.getByRole("button", { name: "Create" }));
 
     await waitFor(() => {
@@ -423,7 +455,7 @@ describe("NewTaskDialog", () => {
     const { user } = open();
 
     await user.type(screen.getByLabelText("Name"), "add-login");
-    await user.type(screen.getByLabelText("Initial context"), "A login screen");
+    await user.type(screen.getByLabelText("Context"), "A login screen");
     await user.keyboard("{Control>}{Enter}{/Control}");
 
     await waitFor(() => {
@@ -436,12 +468,166 @@ describe("NewTaskDialog", () => {
     const { user } = open();
 
     await user.type(screen.getByLabelText("Name"), "add-login");
-    await user.type(screen.getByLabelText("Initial context"), "A login screen");
+    await user.type(screen.getByLabelText("Context"), "A login screen");
     await user.click(screen.getByRole("button", { name: "Create" }));
 
     expect(await screen.findByText("A task with this name already exists.")).toBeVisible();
     expect(useAppStore.getState().newTaskOpen).toBe(true);
-    expect(screen.getByRole("button", { name: "Create" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Create" })).toHaveAttribute(
+      "aria-disabled",
+      "false",
+    );
+  });
+
+  it("starts on the name, with the cursor after what a card suggests", async () => {
+    const card = makeBoardCard({ readAt: new Date().toISOString() });
+    open(
+      { boards: [makeBoard({ cards: [card] })] },
+      { newTaskCard: { boardId: "board-1", key: "dev/web#12" } },
+    );
+
+    const name = screen.getByLabelText("Name");
+    await waitFor(() => expect(name).toHaveFocus());
+    expect(name).toHaveProperty("selectionStart", "12-add-the-login-screen".length);
+  });
+
+  it("creates with Enter in the name", async () => {
+    const { user } = open();
+
+    await user.type(screen.getByLabelText("Context"), "A login screen");
+    await user.type(screen.getByLabelText("Name"), "add-login{Enter}");
+
+    await waitFor(() => {
+      expect(api.createTask).toHaveBeenCalledOnce();
+    });
+  });
+
+  it("closes the list of repositories before the dialog on Esc", async () => {
+    const { user } = open();
+
+    await user.click(screen.getByRole("button", { name: "Repository: dev/web" }));
+    await screen.findByRole("menuitemradio", { name: "dev/api" });
+    await user.keyboard("{Escape}");
+
+    expect(screen.queryByRole("menuitemradio", { name: "dev/api" })).not.toBeInTheDocument();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(useAppStore.getState().newTaskOpen).toBe(true);
+
+    await user.keyboard("{Escape}");
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(useAppStore.getState().newTaskOpen).toBe(false);
+  });
+
+  it("clones from the item, keeping the menu open and the item unchosen", async () => {
+    const bare = makeRepository({
+      id: "repo-3",
+      name: "infra",
+      fullName: "dev/infra",
+      cloned: false,
+    });
+    vi.mocked(api.cloneRepository).mockRejectedValue(new Error("gh: no access"));
+    const { user } = open({ repositories: [WEB, bare] });
+
+    await user.click(screen.getByRole("button", { name: "Repository: dev/web" }));
+    const item = await screen.findByRole("menuitem", { name: /dev\/infra/ });
+    expect(item).toHaveTextContent("Not cloned");
+    await user.click(item);
+
+    expect(api.cloneRepository).toHaveBeenCalledWith("repo-3");
+    expect(await screen.findAllByText("gh: no access")).toHaveLength(2);
+    expect(screen.getByRole("menuitemradio", { name: "dev/web" })).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    expect(screen.getByRole("button", { name: "Repository: dev/web" })).toBeInTheDocument();
+  });
+
+  it("says what is missing next to Create", async () => {
+    const { user } = open();
+
+    expect(screen.getByText("Name the task to create it.")).toBeVisible();
+
+    await user.type(screen.getByLabelText("Name"), "Bad Name");
+    expect(screen.getByText("Fix the name to create the task.")).toBeVisible();
+
+    await user.clear(screen.getByLabelText("Name"));
+    await user.type(screen.getByLabelText("Name"), "add-login");
+    expect(screen.getByText("Say what you want to build.")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Create" })).toHaveAccessibleDescription(
+      "Say what you want to build.",
+    );
+
+    await user.type(screen.getByLabelText("Context"), "A login screen");
+    expect(screen.queryByText("Say what you want to build.")).not.toBeInTheDocument();
+  });
+
+  it("holds the fields while the first session starts", async () => {
+    vi.mocked(api.createTask).mockReturnValue(new Promise(() => {}));
+    const { user } = open();
+
+    await user.type(screen.getByLabelText("Name"), "add-login");
+    await user.type(screen.getByLabelText("Context"), "A login screen");
+    await user.click(screen.getByRole("button", { name: "Create" }));
+
+    const creating = await screen.findByRole("button", { name: "Creating…" });
+    expect(creating).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByText("Starting the first session…")).toBeVisible();
+    expect(screen.getByLabelText("Name")).toHaveAttribute("readonly");
+    expect(screen.getByLabelText("Context")).toHaveAttribute("readonly");
+    expect(screen.getByRole("button", { name: "Cancel" })).toHaveAttribute("aria-disabled", "true");
+
+    await user.click(creating);
+    expect(api.createTask).toHaveBeenCalledOnce();
+  });
+
+  it("does not close on Esc or the close button while the first session starts", async () => {
+    vi.mocked(api.createTask).mockReturnValue(new Promise(() => {}));
+    const { user } = open();
+
+    await user.type(screen.getByLabelText("Name"), "add-login");
+    await user.type(screen.getByLabelText("Context"), "A login screen");
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    await screen.findByRole("button", { name: "Creating…" });
+
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("button", { name: "Close" }));
+
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(useAppStore.getState().newTaskOpen).toBe(true);
+  });
+
+  it("drops the failure of a creation once a field changes", async () => {
+    vi.mocked(api.createTask).mockRejectedValue(new Error("Claude Code didn't start."));
+    const { user } = open();
+
+    await user.type(screen.getByLabelText("Name"), "add-login");
+    await user.type(screen.getByLabelText("Context"), "A login screen");
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Claude Code didn't start.");
+
+    await user.clear(screen.getByLabelText("Name"));
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByText("Name the task to create it.")).toBeVisible();
+  });
+
+  it("says in the footer that the task was undone when the session did not start", async () => {
+    vi.mocked(api.createTask).mockRejectedValue(
+      new Error("Claude Code didn't start. The task was undone."),
+    );
+    const { user } = open();
+
+    await user.type(screen.getByLabelText("Name"), "add-login");
+    await user.type(screen.getByLabelText("Context"), "A login screen");
+    await user.click(screen.getByRole("button", { name: "Create" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Claude Code didn't start. The task was undone.",
+    );
+    expect(screen.getByLabelText("Name")).not.toHaveAttribute("readonly");
+    expect(screen.getByRole("button", { name: "Create" })).toHaveAttribute(
+      "aria-disabled",
+      "false",
+    );
   });
 
   it("closes without creating anything on Cancel", async () => {
@@ -466,10 +652,10 @@ describe("NewTaskDialog", () => {
       openCard();
 
       expect(screen.getByText("Add the login screen")).toBeInTheDocument();
-      expect(screen.getByText("Todo")).toBeInTheDocument();
+      expect(screen.getByText("dev/web · Todo")).toBeInTheDocument();
       expect(screen.queryByRole("button", { name: /^Repository:/ })).not.toBeInTheDocument();
       expect(screen.getByLabelText("Name")).toHaveValue("12-add-the-login-screen");
-      expect(screen.getByRole("button", { name: "Context from the card" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Show" })).toBeInTheDocument();
       await waitFor(() => {
         expect(api.cardContext).toHaveBeenCalledWith("board-1", "dev/web#12");
       });
@@ -479,7 +665,24 @@ describe("NewTaskDialog", () => {
       open({ boards: [makeBoard()] }, { newTaskCard: CARD_REF });
 
       expect(
-        screen.getByText("This card isn't in the last reading of the board."),
+        screen.getByText("◇ This card isn't in the last reading of the board."),
+      ).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Create" })).not.toBeInTheDocument();
+    });
+
+    it("says so when the card leaves the reading while the dialog is open", async () => {
+      openCard();
+      expect(screen.getByRole("button", { name: "Create" })).toBeInTheDocument();
+
+      act(() => {
+        useAppStore.setState((state) => ({
+          app: state.app === null ? null : { ...state.app, boards: [makeBoard()] },
+        }));
+      });
+
+      expect(
+        screen.getByText("◇ This card isn't in the last reading of the board."),
       ).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Create" })).not.toBeInTheDocument();
@@ -491,7 +694,10 @@ describe("NewTaskDialog", () => {
       expect(
         screen.getByText("A task named 12-add-the-login-screen already exists in dev/web."),
       ).toBeVisible();
-      expect(screen.getByRole("button", { name: "Create" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Create" })).toHaveAttribute(
+        "aria-disabled",
+        "true",
+      );
     });
 
     it("warns about unsatisfied dependencies without keeping Create out of reach", () => {
@@ -521,19 +727,25 @@ describe("NewTaskDialog", () => {
         }),
       );
 
-      expect(screen.getByText("Unsatisfied dependencies")).toBeInTheDocument();
-      expect(screen.getByText("#3 Expose the session endpoint")).toBeInTheDocument();
+      expect(screen.getByText("Depends on dev/api#3")).toBeInTheDocument();
+      expect(screen.getByText(/Expose the session endpoint/)).toBeInTheDocument();
       expect(
-        screen.getByText("dev/api · Open · In progress · PR dev/api#8 Open"),
+        screen.getByText(
+          "dev/api · Open · In progress · pull request #8 · Open. A warning only: the task can start.",
+        ),
       ).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Create" })).toBeEnabled();
+      expect(screen.getByRole("button", { name: "Create" })).toHaveAttribute(
+        "aria-disabled",
+        "false",
+      );
     });
 
     it("creates the task from the card with what the user added", async () => {
       vi.mocked(api.createTask).mockResolvedValue("task-9");
       const { user } = openCard();
 
-      await user.type(screen.getByLabelText("Additional context"), "Start with the form");
+      await user.click(screen.getByRole("button", { name: "Add to it" }));
+      await user.type(screen.getByLabelText(/Additional context/), "Start with the form");
       await user.click(screen.getByRole("button", { name: "Create" }));
 
       await waitFor(() => {

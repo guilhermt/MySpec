@@ -1,8 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { discussionBoard } from "@/features/sidebar/new-discussion-board";
+import { discussionTarget } from "@/features/sidebar/new-discussion-board";
 import { HOME, type Location } from "@/lib/locations";
 import type { State } from "@/lib/wails";
-import { makeBoard, makeDiscussion, makeRepository, makeState, makeTask } from "@/test/wails-mock";
+import {
+  makeArchivedTask,
+  makeBoard,
+  makeDiscussion,
+  makeRepository,
+  makeState,
+  makeTask,
+} from "@/test/wails-mock";
 
 const ALPHA = makeBoard({ id: "alpha", title: "Alpha" });
 const BETA = makeBoard({ id: "beta", title: "Beta" });
@@ -20,68 +27,107 @@ const APP = makeState({
     makeTask({ id: "no-board", repositoryId: "api" }),
   ],
   discussions: [
-    makeDiscussion({ id: "on-alpha", boardId: "alpha" }),
-    makeDiscussion({ id: "on-gamma", boardId: "gamma" }),
+    makeDiscussion({ id: "on-alpha", boardId: "alpha", createdAt: "2026-09-20T10:00:00Z" }),
+    makeDiscussion({ id: "on-gamma", boardId: "gamma", createdAt: "2026-09-21T10:00:00Z" }),
   ],
 });
 
-describe("discussionBoard", () => {
-  const cases: { name: string; app: State; location: Location; want: string | null }[] = [
+describe("discussionTarget", () => {
+  const UNREAD = makeBoard({ id: "unread", title: "Unread", readAt: "" });
+  const open = (boardId: string, askBoard: boolean) => ({ kind: "open", boardId, askBoard });
+
+  const cases: { name: string; app: State | null; location: Location; want: unknown }[] = [
+    {
+      name: "no board",
+      app: makeState({ boards: [] }),
+      location: HOME,
+      want: { kind: "disabled", reason: "Add a board to discuss its cards." },
+    },
+    {
+      name: "the state not arrived",
+      app: null,
+      location: HOME,
+      want: { kind: "disabled", reason: "Add a board to discuss its cards." },
+    },
+    {
+      name: "no board read, even on a board's own place",
+      app: makeState({ boards: [UNREAD] }),
+      location: { kind: "board", id: "unread" },
+      want: { kind: "disabled", reason: "The board hasn't been read yet." },
+    },
+    {
+      name: "a place with a board: a board, a task, a discussion",
+      app: APP,
+      location: { kind: "task", id: "on-beta" },
+      want: open("beta", false),
+    },
     {
       name: "the board on screen",
       app: APP,
       location: { kind: "board", id: "alpha" },
-      want: "alpha",
-    },
-    {
-      name: "the board of the task on screen, by its repository",
-      app: APP,
-      location: { kind: "task", id: "on-beta" },
-      want: "beta",
+      want: open("alpha", false),
     },
     {
       name: "the board of the discussion on screen",
       app: APP,
       location: { kind: "discussion", id: "on-alpha" },
-      want: "alpha",
+      want: open("alpha", false),
     },
     {
-      name: "the board of the last discussion, for a task without a board",
+      name: "a single board, from Home",
+      app: makeState({ boards: [ALPHA] }),
+      location: HOME,
+      want: open("alpha", false),
+    },
+    {
+      name: "Home with several boards",
+      app: APP,
+      location: HOME,
+      want: open("gamma", true),
+    },
+    {
+      name: "Reviews with several boards",
+      app: APP,
+      location: { kind: "reviews" },
+      want: open("gamma", true),
+    },
+    {
+      name: "History with several boards",
+      app: APP,
+      location: { kind: "history" },
+      want: open("gamma", true),
+    },
+    {
+      name: "Settings with several boards",
+      app: APP,
+      location: { kind: "settings", section: "boards" },
+      want: open("gamma", true),
+    },
+    {
+      name: "a task of a repository without a board",
       app: APP,
       location: { kind: "task", id: "no-board" },
-      want: "gamma",
+      want: open("gamma", true),
     },
     {
-      name: "the board of the last discussion, elsewhere",
-      app: APP,
+      name: "an archived task",
+      app: { ...APP, history: [makeArchivedTask({ id: "old" })] },
+      location: { kind: "archived-task", id: "old" },
+      want: open("gamma", true),
+    },
+    {
+      name: "the first read board, when the last used was never read",
+      app: {
+        ...APP,
+        boards: [UNREAD, ALPHA, BETA],
+        discussions: [makeDiscussion({ boardId: "unread" })],
+      },
       location: HOME,
-      want: "gamma",
-    },
-    {
-      name: "the first board, when the last discussion's board was removed",
-      app: { ...APP, boards: [ALPHA, BETA] },
-      location: HOME,
-      want: "alpha",
-    },
-    {
-      name: "the first board, without a discussion",
-      app: { ...APP, discussions: [] },
-      location: { kind: "reviews" },
-      want: "alpha",
-    },
-    {
-      name: "nothing without a board",
-      app: makeState({ boards: [] }),
-      location: HOME,
-      want: null,
+      want: open("alpha", true),
     },
   ];
 
-  it.each(cases)("opens for $name", ({ app, location, want }) => {
-    expect(discussionBoard(app, location)).toBe(want);
-  });
-
-  it("opens for nothing before the state arrives", () => {
-    expect(discussionBoard(null, HOME)).toBeNull();
+  it.each(cases)("is $name", ({ app, location, want }) => {
+    expect(discussionTarget(app, location)).toEqual(want);
   });
 });

@@ -183,8 +183,9 @@ func TestChangeRepositoryPathOpensAtTheParentOfTheClone(t *testing.T) {
 
 	moved := clone(t, f, "web-moved", "dev", "web")
 	f.picker.answer(moved, true, nil)
-	if err := f.repoService.ChangeRepositoryPath(testRepoID); err != nil {
-		t.Fatalf("ChangeRepositoryPath() = %v, want nil", err)
+	changed, err := f.repoService.ChangeRepositoryPath(testRepoID)
+	if err != nil || !changed {
+		t.Fatalf("ChangeRepositoryPath() = %v, %v, want true, nil", changed, err)
 	}
 
 	title, startIn, _ := f.picker.asked()
@@ -196,6 +197,26 @@ func TestChangeRepositoryPathOpensAtTheParentOfTheClone(t *testing.T) {
 	}
 	if got := f.state.GetState().Repositories; len(got) != 1 || got[0].Path != moved {
 		t.Errorf("repositories = %+v, want the path moved to %s", got, moved)
+	}
+}
+
+func TestChangeRepositoryPathSaysWhenTheChooserWasCancelled(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	first := clone(t, f, "web", "dev", "web")
+	f.picker.answer(first, true, nil)
+	if _, err := f.repoService.BrowseRepository(); err != nil {
+		t.Fatalf("BrowseRepository() = %v, want nil", err)
+	}
+
+	f.picker.answer("", false, nil)
+	changed, err := f.repoService.ChangeRepositoryPath(testRepoID)
+	if err != nil || changed {
+		t.Fatalf("ChangeRepositoryPath() = %v, %v, want false, nil", changed, err)
+	}
+	if got := f.state.GetState().Repositories; got[0].Path != first {
+		t.Errorf("path = %q, want it unchanged", got[0].Path)
 	}
 }
 
@@ -212,7 +233,7 @@ func TestChangeRepositoryPathRefusesAnotherRepository(t *testing.T) {
 	other := clone(t, f, "api", "dev", "api")
 	f.picker.answer(other, true, nil)
 
-	err := f.repoService.ChangeRepositoryPath(testRepoID)
+	_, err := f.repoService.ChangeRepositoryPath(testRepoID)
 	if err == nil {
 		t.Fatal("ChangeRepositoryPath() = nil, want the folder refused")
 	}
@@ -229,7 +250,7 @@ func TestChangeRepositoryPathOfARepositoryNobodyRegistered(t *testing.T) {
 
 	f := newFixture(t)
 
-	err := f.repoService.ChangeRepositoryPath("nobody")
+	_, err := f.repoService.ChangeRepositoryPath("nobody")
 	if err == nil || err.Error() != "This repository isn't registered." {
 		t.Errorf("ChangeRepositoryPath() error = %v, want the unregistered notice", err)
 	}

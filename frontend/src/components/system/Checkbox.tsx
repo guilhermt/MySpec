@@ -15,6 +15,37 @@ export interface CheckboxProps {
   className?: string;
 }
 
+export interface CheckboxSignProps {
+  checked: boolean;
+  disabled?: boolean;
+  /** row is a sign inside a Checkbox, which owns the hover, the press and the check. */
+  row?: boolean;
+  children?: ReactNode;
+}
+
+/**
+ * CheckboxSign is the box alone, aria-hidden, for a row that already has a role of its own and
+ * carries the aria-checked, like a card of the select mode. Its state comes from its own props, and
+ * it has no hover: the hover is the row's. Inside a Checkbox, the Base UI indicator draws the check.
+ */
+export function CheckboxSign({ checked, disabled, row, children }: CheckboxSignProps) {
+  return (
+    <span
+      aria-hidden="true"
+      {...(checked ? { "data-checked": "" } : {})}
+      {...(disabled ? { "data-disabled": "" } : {})}
+      className={cn(
+        "grid size-(--icon) shrink-0 place-items-center rounded-xs border border-line-3 bg-surface-input transition-colors duration-(--duration-fast) ease-standard data-checked:border-brand data-checked:bg-brand data-disabled:border-dashed data-disabled:bg-transparent",
+        row &&
+          !disabled &&
+          "group-hover/checkbox:border-ink-3 group-active/checkbox:bg-brand-tint-press",
+      )}
+    >
+      {children ?? (checked && <Icon icon={ICONS.done} size="xs" className="text-brand-on" />)}
+    </span>
+  );
+}
+
 /** Checkbox is a whole row that checks, with the box drawn at its start. */
 export function Checkbox({
   checked,
@@ -50,19 +81,11 @@ export function Checkbox({
       {loading ? (
         <Spinner tone="current" />
       ) : (
-        <span
-          aria-hidden="true"
-          className={cn(
-            "grid size-(--icon) shrink-0 place-items-center rounded-xs border border-line-3 bg-surface-input transition-colors duration-(--duration-fast) ease-standard group-data-checked/checkbox:border-brand group-data-checked/checkbox:bg-brand",
-            disabled
-              ? "border-dashed bg-transparent"
-              : "group-hover/checkbox:border-ink-3 group-active/checkbox:bg-brand-tint-press",
-          )}
-        >
+        <CheckboxSign checked={checked} {...(disabled ? { disabled } : {})} row>
           <BaseCheckbox.Indicator>
             <Icon icon={ICONS.done} size="xs" className="text-brand-on" />
           </BaseCheckbox.Indicator>
-        </span>
+        </CheckboxSign>
       )}
       {children}
     </BaseCheckbox.Root>

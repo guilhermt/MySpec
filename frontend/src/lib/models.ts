@@ -182,8 +182,9 @@ export function withChoice(
 /**
  * adjustmentSummary is what the folded Models row of the creation dialog says:
  * "Defaults" with nothing adjusted, or the first adjusted stage with its choice
- * and "+N" for the others, as in "PRD: Fable 5.1 · xhigh +1". Only the stages
- * it is given count.
+ * and "+N" for the others, as in "PRD: Fable 5.1 · xhigh +1", and " · the rest
+ * from Defaults" while a stage still follows them. Only the stages it is given
+ * count.
  */
 export function adjustmentSummary(
   catalog: ModelCatalog,
@@ -199,5 +200,6 @@ export function adjustmentSummary(
     return "Defaults";
   }
   const summary = `${modelStageLabel(first)}: ${choiceLabel(catalog, choiceOf(choices, first))}`;
-  return others.length === 0 ? summary : `${summary} +${others.length}`;
+  const counted = others.length === 0 ? summary : `${summary} +${others.length}`;
+  return adjusted.length < stages.length ? `${counted} · the rest from Defaults` : counted;
 }

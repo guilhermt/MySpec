@@ -8,4 +8,9 @@ describe("Kbd", () => {
     renderWithStore(<Kbd>K</Kbd>);
     expect(screen.getByText("K").tagName).toBe("KBD");
   });
+
+  it("keeps the whole text of a key with ↵", () => {
+    renderWithStore(<Kbd>Ctrl ↵</Kbd>);
+    expect(screen.getByText("↵").closest("kbd")).toHaveTextContent("Ctrl ↵");
+  });
 });

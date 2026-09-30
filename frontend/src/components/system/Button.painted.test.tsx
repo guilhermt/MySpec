@@ -99,6 +99,24 @@ describe.each(THEMES)("Button in the %s theme", (theme) => {
     },
   );
 
+  it("keeps the key of a dashed primary in sight, as the key of a dashed secondary", () => {
+    setTheme(theme);
+    render(
+      <>
+        <Button variant="primary" shortcut="Ctrl ↵" disabled disabledReason="Name the task">
+          Create
+        </Button>
+        <Button shortcut="Esc" disabled disabledReason="Creating the task">
+          Cancel
+        </Button>
+      </>,
+    );
+    const keyOf = (name: string) =>
+      screen.getByRole("button", { name }).querySelector("kbd") as Element;
+    const want = paintOf(keyOf("Cancel"), { color: "", background: "", border: "" });
+    expect(paintOf(keyOf("Create"), want)).toEqual(want);
+  });
+
   it("paints the error in the error ink on its veil", () => {
     setTheme(theme);
     render(<Button error>Try again</Button>);

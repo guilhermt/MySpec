@@ -2,6 +2,7 @@ import { ChevronsRight } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { Icon } from "@/components/system/Icon";
 import { IconButton } from "@/components/system/IconButton";
+import { ITEM_ICONS, TONE_GLYPHS } from "@/components/system/item-parts";
 import { ScrollArea } from "@/components/system/ScrollArea";
 import { StateGlyph } from "@/components/system/StateGlyph";
 import { TimeChip } from "@/components/system/TimeChip";
@@ -19,7 +20,6 @@ import {
   type TreeEntry,
   type TreeNode,
 } from "@/features/sidebar/sidebar-tree";
-import { ROW_GLYPHS, TYPE_ICONS } from "@/features/sidebar/TreeRow";
 import { useTreeKeyboard } from "@/features/sidebar/useTreeKeyboard";
 import { nextWaiting } from "@/lib/situations";
 import { cn } from "@/lib/utils";
@@ -151,12 +151,12 @@ function RailBlock({ row, selected, isNext, flash, tabIndex }: RailBlockProps) {
         {/* The state glyph sits in the bottom right corner of the type icon's box. */}
         <span className="relative grid size-(--icon) place-items-center">
           <Icon
-            icon={TYPE_ICONS[row.itemKind]}
+            icon={ITEM_ICONS[row.itemKind]}
             tone={selected ? "active" : "current"}
             {...(selected ? {} : { className: "text-ink-3" })}
           />
           <StateGlyph
-            state={ROW_GLYPHS[row.tone]}
+            state={TONE_GLYPHS[row.tone]}
             size="sm"
             className="absolute -right-(--space-1) bottom-0 outline-(length:--border-2) outline-surface-sidebar"
           />

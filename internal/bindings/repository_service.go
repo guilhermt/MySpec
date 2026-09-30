@@ -83,10 +83,11 @@ func (s *RepositoryService) BrowseRepository() (bool, error) {
 }
 
 // ChangeRepositoryPath asks for the new folder of the clone of a repository.
-func (s *RepositoryService) ChangeRepositoryPath(id string) error {
+// changed is false when the user cancelled the folder chooser.
+func (s *RepositoryService) ChangeRepositoryPath(id string) (changed bool, err error) {
 	repo, ok := s.repositories.Get(id)
 	if !ok {
-		return s.fail("ChangeRepositoryPath", repository.ErrNotFound)
+		return false, s.fail("ChangeRepositoryPath", repository.ErrNotFound)
 	}
 	startIn := os.Getenv("HOME")
 	if repo.Path != "" {
@@ -94,19 +95,19 @@ func (s *RepositoryService) ChangeRepositoryPath(id string) error {
 	}
 	path, picked, err := s.picker.PickFolder("Change the path of "+repo.FullName(), startIn)
 	if err != nil {
-		return s.fail("ChangeRepositoryPath", err)
+		return false, s.fail("ChangeRepositoryPath", err)
 	}
 	if !picked {
-		return nil
+		return false, nil
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), gitCallTimeout)
 	defer cancel()
 
 	if _, err := s.repositories.ChangePath(ctx, id, path); err != nil {
-		return s.fail("ChangeRepositoryPath", err)
+		return false, s.fail("ChangeRepositoryPath", err)
 	}
-	return nil
+	return true, nil
 }
 
 // CloneRepository clones a repository without a clone into the clone folder,

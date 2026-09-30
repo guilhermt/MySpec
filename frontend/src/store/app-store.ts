@@ -13,7 +13,6 @@ import {
   locationExists,
   NAV_LIMIT,
   openItemId,
-  resolveHome,
   type SettingsSection,
   sameLocation,
 } from "@/lib/locations";
@@ -123,6 +122,8 @@ export interface TextDraft {
 export interface NewDiscussionRef {
   boardId: string;
   cardKeys: string[];
+  /** askBoard is the dialog asking which board: opened from a place without a board, with more than one board. */
+  askBoard: boolean;
 }
 
 /** PullRef names one pull request: the repository it belongs to and its number. */
@@ -190,6 +191,12 @@ export interface AppStore {
   drafts: Record<string, string>;
   /** markerRequest is a marker of a task the conversation opens and focuses: the last one of its type. */
   markerRequest: { taskId: string; type: MarkerType } | null;
+  /**
+   * boardCardRequest is a card of a board the board view opens in its panel once it is on screen,
+   * with its section expanded and the focus on its row; the view takes it and clears it. It is
+   * never stacked nor stored.
+   */
+  boardCardRequest: CardRef | null;
   /** openStepTab is the conversation tab of a step, by stepTabKey. */
   openStepTab: Record<string, StepTab>;
   /** prDrafts is the pull request the user is editing, by task id. */
@@ -260,6 +267,9 @@ export interface AppStore {
   /** requestMarkerOpen asks the conversation of a task to open and focus its last marker of a type. */
   requestMarkerOpen: (taskId: string, type: MarkerType) => void;
   clearMarkerRequest: () => void;
+  /** openBoardCard opens a board with one of its cards in the panel. */
+  openBoardCard: (boardId: string, key: string) => void;
+  clearBoardCardRequest: () => void;
   /** openPanel opens an auxiliary panel of the place on screen, closing the one open; null closes it. */
   openPanel: (panel: PanelId | null) => void;
   /** openPanelAt opens an auxiliary panel of the place on screen already at one of its documents. */
@@ -529,6 +539,7 @@ function initialTaskUi(): Pick<
   | "transcripts"
   | "drafts"
   | "markerRequest"
+  | "boardCardRequest"
   | "openStepTab"
   | "prDrafts"
   | "questionChoices"
@@ -549,6 +560,7 @@ function initialTaskUi(): Pick<
     transcripts: {},
     drafts: {},
     markerRequest: null,
+    boardCardRequest: null,
     openStepTab: {},
     prDrafts: {},
     questionChoices: {},
@@ -570,14 +582,20 @@ function initialTaskUi(): Pick<
 /** Navigation is the part of the store a navigation changes. */
 type Navigation = Pick<
   AppStore,
-  "location" | "back" | "forward" | "panel" | "earlierConversation" | "pendingFocus" | "promptEdit"
+  | "location"
+  | "back"
+  | "forward"
+  | "panel"
+  | "earlierConversation"
+  | "pendingFocus"
+  | "promptEdit"
+  | "boardCardRequest"
 >;
 
 // beside drops the places at the end of a history that are the place on
 // screen, which Back or Forward would only open again: leaving the page of an
 // item that left stacks nothing, so the place it opens may already be the
-// last one behind it, and Home may resolve to the board kept behind it. The
-// same list comes back when nothing is dropped.
+// last one behind it. The same list comes back when nothing is dropped.
 function beside(places: Location[], location: Location): Location[] {
   const end = places.reduce(
     (kept, place, at) => (sameLocation(place, location) ? kept : at + 1),
@@ -589,37 +607,37 @@ function beside(places: Location[], location: Location): Location[] {
 // navigate opens a place. The same place only takes the new one (a page of
 // Settings changes without stacking); another pushes the current one behind it,
 // unless it is the page of an item that left, which is never revisited, and
-// drops whatever was ahead.
+// drops whatever was ahead. A card a board was asked to open, and never got to, is dropped with it.
 function navigate(
   state: AppStore,
   location: Location,
   focus: AppStore["pendingFocus"],
 ): Navigation {
-  const target = resolveHome(state.app, location);
   const common = {
-    location: target,
+    location,
     panel: null,
     earlierConversation: null,
     pendingFocus: focus,
     promptEdit: null,
+    boardCardRequest: null,
   };
-  if (sameLocation(state.location, target)) {
+  if (sameLocation(state.location, location)) {
     return {
       ...common,
-      back: beside(state.back, target),
-      forward: beside(state.forward, target),
+      back: beside(state.back, location),
+      forward: beside(state.forward, location),
     };
   }
   const back =
     state.location.kind === "gone" ? state.back : [...state.back, state.location].slice(-NAV_LIMIT);
-  return { ...common, back: beside(back, target), forward: [] };
+  return { ...common, back: beside(back, location), forward: [] };
 }
 
 // reachable is whether Back or Forward can go to a place: it still exists and
 // is not the place on screen, which a place that left between them can hide
 // from beside.
 function reachable(app: State | null, place: Location, current: Location): boolean {
-  return locationExists(app, place) && !sameLocation(resolveHome(app, place), current);
+  return locationExists(app, place) && !sameLocation(place, current);
 }
 
 // travel opens the nearest place behind (or ahead of) the current one it can
@@ -642,7 +660,7 @@ function travel(
   }
   const rest = from.slice(0, index);
   const behind = state.location.kind === "gone" ? to : [...to, state.location].slice(-NAV_LIMIT);
-  const location = resolveHome(state.app, place);
+  const location = place;
   return {
     location,
     back: beside(direction === "back" ? rest : behind, location),
@@ -651,6 +669,7 @@ function travel(
     earlierConversation: null,
     pendingFocus: focus,
     promptEdit: null,
+    boardCardRequest: null,
   };
 }
 
@@ -717,7 +736,6 @@ function placeIn(prev: State | null, next: State, location: Location): Location 
       return gone("board", board.id, board.title, "");
     }
     case "home":
-      return resolveHome(next, location);
     case "reviews":
     case "history":
     case "settings":
@@ -850,6 +868,16 @@ export const useAppStore = create<AppStore>()((set, get) => {
     requestMarkerOpen: (taskId, type) => set({ markerRequest: { taskId, type } }),
 
     clearMarkerRequest: () => set({ markerRequest: null }),
+
+    openBoardCard: (boardId, key) =>
+      leave(() =>
+        set((state) => ({
+          ...navigate(state, { kind: "board", id: boardId }, null),
+          boardCardRequest: { boardId, key },
+        })),
+      ),
+
+    clearBoardCardRequest: () => set({ boardCardRequest: null }),
 
     openPanel: (panel) => set({ panel, panelDocument: null }),
 

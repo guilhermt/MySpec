@@ -143,4 +143,52 @@ describe("Select", () => {
       "true",
     );
   });
+
+  it("does not choose a disabled option and gives its reason", async () => {
+    const onValueChange = vi.fn();
+    const { user } = renderWithStore(
+      <Subject
+        value="opus"
+        onValueChange={onValueChange}
+        options={[
+          { value: "opus", label: "Opus" },
+          { value: "sonnet", label: "Sonnet", disabled: true, sub: "Not offered here" },
+        ]}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Model: Opus" }));
+    await screen.findByRole("menu");
+    const option = screen.getByRole("menuitemradio", { name: "Sonnet Not offered here" });
+    expect(option).toHaveAttribute("aria-disabled", "true");
+    await user.click(option);
+    expect(onValueChange).not.toHaveBeenCalled();
+  });
+
+  it("runs the action of a disabled option and keeps the menu open", async () => {
+    const onAction = vi.fn();
+    const onValueChange = vi.fn();
+    const { user } = renderWithStore(
+      <Subject
+        value="opus"
+        onValueChange={onValueChange}
+        options={[
+          { value: "opus", label: "Opus" },
+          {
+            value: "api",
+            label: "acme/api",
+            disabled: true,
+            sub: "Not cloned",
+            action: { label: "Clone", onAction },
+          },
+        ]}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Model: Opus" }));
+    await user.click(
+      await screen.findByRole("menuitem", { name: "acme/api, not cloned. Enter clones it." }),
+    );
+    expect(onAction).toHaveBeenCalledTimes(1);
+    expect(onValueChange).not.toHaveBeenCalled();
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+  });
 });
