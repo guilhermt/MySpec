@@ -11,8 +11,6 @@ export interface ListSectionHeaderProps {
   collapsed: boolean;
   /** empty is a section without cards: no chevron, no hover, no action. */
   empty: boolean;
-  /** final marks a section of a final status, which says so after the count. */
-  final: boolean;
   tooltip: string | null;
   /** label is the accessible name: "Backlog, 27 cards". */
   label: string;
@@ -29,7 +27,6 @@ export function ListSectionHeader({
   count,
   collapsed,
   empty,
-  final,
   tooltip,
   label,
   tabStop,
@@ -71,11 +68,6 @@ export function ListSectionHeader({
         <span className="text-(length:--text-micro) leading-(--leading-micro) font-normal tabular-nums text-ink-4">
           {count}
         </span>
-        {final && (
-          <span className="text-(length:--text-micro) leading-(--leading-micro) font-normal text-ink-4">
-            final
-          </span>
-        )}
       </span>
     </div>
   );

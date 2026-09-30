@@ -228,7 +228,6 @@ export function CardTree({
               count={section.cards.length}
               collapsed={row.collapsed}
               empty={section.cards.length === 0}
-              final={section.final}
               tooltip={sectionTooltip(section)}
               label={sectionLabel(section)}
               tabStop={id === tabStop}

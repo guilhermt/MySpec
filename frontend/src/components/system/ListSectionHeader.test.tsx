@@ -13,7 +13,6 @@ function header(props: Partial<ListSectionHeaderProps> = {}) {
       count={27}
       collapsed={false}
       empty={false}
-      final={false}
       tooltip={null}
       label="Backlog, 27 cards"
       tabStop={false}
@@ -32,6 +31,18 @@ describe("ListSectionHeader", () => {
     expect(item).toHaveAttribute("aria-level", "1");
     expect(item).toHaveAttribute("aria-expanded", "true");
     expect(item).toHaveAttribute("data-section-id", "backlog");
+  });
+
+  it("writes the name and the count only, and leaves a final status to its tooltip and its name", () => {
+    header({
+      name: "Done",
+      count: 12,
+      tooltip: "A final status: folded when the board opens",
+      label: "Done, 12 cards, final status",
+    });
+    expect(
+      screen.getByRole("treeitem", { name: "Done, 12 cards, final status" }),
+    ).toHaveTextContent(/^Done12$/);
   });
 
   it("is collapsed when the section is", () => {

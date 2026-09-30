@@ -713,7 +713,7 @@ A conversa é uma coluna centrada de `--measure-conversation` (60rem, 960 px), e
 
 | | |
 |---|---|
-| Anatomia | `--size-node` de altura: chevron, o nome em `--text-meta` e peso 600, a contagem já filtrada em `--ink-4`, e o tooltip do que a seção reúne |
+| Anatomia | `--size-node` de altura: chevron, o nome em `--text-meta` e peso 600, a contagem já filtrada em `--ink-4`, e o tooltip do que a seção reúne; uma seção final se diz no tooltip e no nome acessível, nunca no texto do cabeçalho |
 | Variantes | As seções de status do board, na ordem dele; as seções de Reviews (`Pending`, `In review`, `Reviewed`, `Yours and your tasks`); o dia no History (`Monday, Sep 22 5`), sem chevron |
 | Estados | Hover, foco, pressionado, recolhida (as finais começam recolhidas; o que o usuário recolhe é lembrado), vazia (contagem 0, sem chevron nem ação), todas escondidas pelo filtro, carregando |
 | Teclado | `←` recolhe, `→` expande; `Enter` alterna; numa linha, `←` recolhe a seção dela e foca o cabeçalho |

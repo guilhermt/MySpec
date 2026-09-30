@@ -12,7 +12,6 @@ function draw(props: { collapsed?: boolean; empty?: boolean } = {}) {
       count={70}
       collapsed={props.collapsed ?? false}
       empty={props.empty ?? false}
-      final
       tooltip={null}
       label="Done, 70 cards, final status"
       tabStop
