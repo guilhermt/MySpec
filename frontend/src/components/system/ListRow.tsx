@@ -234,7 +234,7 @@ export function CardRow({
         )}
       />
       {has2 && (
-        <span className="contents @max-[1041px]/list:col-start-3 @max-[1041px]/list:row-start-2 @max-[1041px]/list:flex @max-[1041px]/list:h-(--leading-meta) @max-[1041px]/list:flex-row-reverse @max-[1041px]/list:flex-wrap @max-[1041px]/list:justify-end @max-[1041px]/list:gap-x-(--space-4) @max-[1041px]/list:overflow-hidden">
+        <span className="contents @max-[1041px]/list:col-[3/-1] @max-[1041px]/list:row-start-2 @max-[1041px]/list:flex @max-[1041px]/list:h-(--leading-meta) @max-[1041px]/list:flex-row-reverse @max-[1041px]/list:flex-wrap @max-[1041px]/list:justify-end @max-[1041px]/list:gap-x-(--space-4) @max-[1041px]/list:overflow-hidden">
           <TaskCell model={model} />
           {model.dependency !== null && (
             <Tooltip content={model.dependency.tooltip}>

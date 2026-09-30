@@ -79,6 +79,19 @@ async function draw(name: BoardSceneName, width: number) {
 const rowOf = (number: number) =>
   screen.getByRole("treeitem", { name: new RegExp(`^#${number} `) });
 
+// innermost is the deepest element of a row that holds a text, which fails the test when there is none.
+function innermost(row: HTMLElement, text: string): HTMLElement {
+  const found = [...row.querySelectorAll<HTMLElement>("*")].find(
+    (element) =>
+      element.textContent?.includes(text) &&
+      ![...element.children].some((child) => child.textContent?.includes(text)),
+  );
+  if (found === undefined) {
+    throw new Error(`${row.getAttribute("aria-label")} has no ${text}`);
+  }
+  return found;
+}
+
 /** parts are what a screen draws in a box of its own, that must stand on whole pixels. */
 function parts(area: HTMLElement): Element[] {
   return [
@@ -132,8 +145,8 @@ describe.each(THEMES)("BoardView, the scenes in the %s theme", (theme) => {
       setTheme(theme);
       await draw("card", width);
 
-      for (const [number, parts] of [
-        [474, ["Usage-based billing", "◇ #461", "Question"]],
+      for (const [number, texts] of [
+        [474, ["Usage-based billing", "#461"]],
         [412, ["API hardening", "Question · Step 3/7"]],
       ] as const) {
         const row = rowOf(number);
@@ -141,17 +154,22 @@ describe.each(THEMES)("BoardView, the scenes in the %s theme", (theme) => {
         if (!(title instanceof HTMLElement)) {
           throw new Error("a row has no title");
         }
-        for (const text of parts) {
-          const cell = [...row.querySelectorAll<HTMLElement>("*")].find(
-            (element) => element.textContent?.includes(text) && element.children.length <= 1,
-          );
-          if (cell === undefined) {
-            continue;
+        for (const text of texts) {
+          const cell = innermost(row, text);
+          const line = [...row.children].find((child) => child.contains(cell));
+          if (line === undefined) {
+            throw new Error(`#${number} has no line with ${text}`);
           }
-          // The second line sits under the title, and nothing of it is cut.
-          expect(cell.getBoundingClientRect().top, `#${number} ${text}`).toBeGreaterThanOrEqual(
+          // The second line sits under the title, and nothing of it is cut or left out of it.
+          const box = cell.getBoundingClientRect();
+          const bounds = line.getBoundingClientRect();
+          expect(box.top, `#${number} ${text}`).toBeGreaterThanOrEqual(
             title.getBoundingClientRect().bottom,
           );
+          expect(
+            box.left >= bounds.left && box.right <= bounds.right && box.bottom <= bounds.bottom,
+            `#${number} ${text} inside the second line`,
+          ).toBe(true);
           expect(cell.scrollWidth, `#${number} ${text} cut`).toBeLessThanOrEqual(cell.clientWidth);
         }
       }
