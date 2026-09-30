@@ -16,6 +16,14 @@ import {
   makeTranscript,
 } from "@/test/wails-mock";
 
+// reportMarker is the marker that says the report of a pass was written.
+function reportMarker(pass: number) {
+  const entry = makeEntry("marker");
+  return entry.marker === null
+    ? entry
+    : { ...entry, marker: { ...entry.marker, type: "pr_review_written", pass, findings: 1 } };
+}
+
 const REPORT = makeSituation({
   kind: "review_report",
   form: "publish",
@@ -56,11 +64,46 @@ describe("ReviewView", () => {
     expect(screen.queryByRole("region", { name: "Request" })).not.toBeInTheDocument();
   });
 
-  it("shows the findings of the last pass above the conversation", () => {
+  it("draws the card of findings right after the report of the pass being decided", async () => {
+    vi.mocked(api.getTranscript).mockResolvedValueOnce(
+      makeTranscript({
+        taskId: "review-1",
+        stage: "review",
+        entries: [reportMarker(1), makeEntry("assistant")],
+      }),
+    );
     view({ status: "awaiting_decision", passes: [makeReviewPass()] });
 
-    expect(screen.getByText("Review 1 · changes")).toBeInTheDocument();
-    expect(screen.getByLabelText("Finding 1")).toBeInTheDocument();
+    const feed = await screen.findByRole("feed", { name: "Conversation with the reviewer" });
+    const card = await within(feed).findByRole("group", { name: "Findings of pass 1" });
+    expect(within(card).getByRole("group", { name: /^Finding 1 of 1: / })).toBeInTheDocument();
+    const text = feed.textContent ?? "";
+    expect(text.indexOf("Review 1 written")).toBeLessThan(text.indexOf("Findings1"));
+    expect(text.indexOf("Findings1")).toBeLessThan(text.indexOf("On it."));
+  });
+
+  it("draws the card at the end of the conversation when it has no report marker", async () => {
+    view({ status: "awaiting_decision", passes: [makeReviewPass()] });
+
+    const feed = await screen.findByRole("feed", { name: "Conversation with the reviewer" });
+    expect(
+      await within(feed).findByRole("group", { name: "Findings of pass 1" }),
+    ).toBeInTheDocument();
+  });
+
+  it.each<[string, Partial<ReviewSummary>]>([
+    ["a pass published", { status: "published", passes: [makeReviewPass({ published: true })] }],
+    ["a pass sent to the agent", { mode: "apply", passes: [makeReviewPass({ sent: true })] }],
+    [
+      "a clean pass",
+      { status: "ready_to_publish", passes: [makeReviewPass({ clean: true, findings: [] })] },
+    ],
+    ["a pass a Review again left behind", { status: "waiting_checks", passes: [makeReviewPass()] }],
+  ])("draws no card for %s", async (_name, overrides) => {
+    view(overrides);
+
+    await screen.findByRole("feed", { name: "Conversation with the reviewer" });
+    expect(screen.queryByRole("group", { name: /^Findings of pass/ })).not.toBeInTheDocument();
   });
 
   it("shows the files the agent changed at the end of the conversation in apply mode", async () => {
@@ -211,16 +254,25 @@ describe("ReviewView, the focus on arriving at a situation", () => {
     expect(useAppStore.getState().pendingFocus).toBeNull();
   });
 
-  it("goes to the bar while the findings are decided above the conversation", async () => {
+  it("goes to the first finding to decide once the conversation is read", async () => {
     arrive({
       status: "awaiting_decision",
       sessionStatus: "waiting",
       turnRunning: false,
-      passes: [makeReviewPass({ findings: [makeReviewFinding()] })],
+      passes: [
+        makeReviewPass({
+          findings: [
+            makeReviewFinding({ number: 1, decision: "approved" }),
+            makeReviewFinding({ number: 2, title: "No test" }),
+          ],
+        }),
+      ],
       situations: [makeSituation({ ...REPORT, form: "" })],
     });
 
-    await waitFor(() => expect(screen.getByRole("region", { name: "Request" })).toHaveFocus());
+    await waitFor(() =>
+      expect(screen.getByRole("group", { name: /^Finding 2 of 2: No test/ })).toHaveFocus(),
+    );
   });
 
   it("goes to the composer when the review asks nothing of the bar", async () => {

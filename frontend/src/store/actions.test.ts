@@ -26,7 +26,7 @@ import {
   continueStage,
   createTask,
   decideDraft,
-  decideFinding,
+  decideFindingInPlace,
   deleteDiscussion,
   deleteReview,
   deleteTask,
@@ -70,7 +70,7 @@ import {
   reviewAgain,
   reviewStepMyself,
   saveDraftText,
-  saveFindingText,
+  saveFindingTextInPlace,
   saveReviewSummary,
   scanRepositories,
   sendMessageInPlace,
@@ -140,14 +140,13 @@ describe("the app notice of a failed action", () => {
 
   it("names an item inside the label by the title the tree gives it", async () => {
     withState();
-    vi.mocked(api.decideFinding).mockRejectedValueOnce(new Error("pass is over"));
+    vi.mocked(api.refreshReviewPR).mockRejectedValueOnce(new Error("gh is down"));
 
-    await decideFinding("review-1", 1, 3, "approved");
+    await refreshReviewPR("review-1");
 
-    expect(useAppStore.getState().error).toEqual({
-      label: "Couldn't decide finding 3 of Rate limit per API key",
-      detail: "pass is over. Try again.",
-    });
+    expect(useAppStore.getState().error?.label).toBe(
+      "Couldn't check the pull request of Rate limit per API key",
+    );
   });
 
   it("names an archived task", async () => {
@@ -885,8 +884,8 @@ describe("review actions reported in the app notice", () => {
 
     await refreshPullRequests();
     await setReviewFilters(filters);
-    await decideFinding("review-1", 1, 2, "approved");
-    await saveFindingText("review-1", 1, 2, "The token is never cleared.");
+    await decideFindingInPlace("review-1", 1, 2, "approved");
+    await saveFindingTextInPlace("review-1", 1, 2, "The token is never cleared.");
     await saveReviewSummary("review-1", 1, "Two things to fix.");
     await applyReview("review-1");
     await approveReview("review-1");
@@ -1107,6 +1106,24 @@ describe("discussion actions shown in place", () => {
     await expect(startDiscussion(request)).rejects.toThrow("This board has no clone.");
     await expect(addDraftDependency("discussion-1", "draft-1", "draft-9")).rejects.toThrow(
       "This draft doesn't exist.",
+    );
+    expect(useAppStore.getState().error).toBeNull();
+  });
+});
+
+describe("the actions of a finding, which answer on the finding", () => {
+  it("answer null when the decision or the text is recorded", async () => {
+    await expect(decideFindingInPlace("review-1", 1, 2, "approved")).resolves.toBeNull();
+    await expect(saveFindingTextInPlace("review-1", 1, 2, "Clear it.")).resolves.toBeNull();
+  });
+
+  it("answer the message of the failure and leave the app notice alone", async () => {
+    vi.mocked(api.decideFinding).mockRejectedValueOnce(new Error("pass is over"));
+    vi.mocked(api.setFindingText).mockRejectedValueOnce(new Error("pass is over"));
+
+    await expect(decideFindingInPlace("review-1", 1, 3, "approved")).resolves.toBe("pass is over");
+    await expect(saveFindingTextInPlace("review-1", 1, 3, "Clear it.")).resolves.toBe(
+      "pass is over",
     );
     expect(useAppStore.getState().error).toBeNull();
   });

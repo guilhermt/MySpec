@@ -272,6 +272,7 @@ describe("MarkerLine", () => {
           complement: "1 approved · 1 discarded",
           body: {
             kind: "findings",
+            pass: 1,
             findings: [
               {
                 id: "1",
@@ -317,6 +318,45 @@ describe("MarkerLine", () => {
       expect(api.openExternal).toHaveBeenCalledWith(
         "https://github.com/dev/web/pull/31/files#diff-aR12",
       );
+    });
+
+    it("opens the line of a decided finding in the editor with Ctrl+E", async () => {
+      const { user } = inReview(
+        view({
+          icon: "check",
+          text: "You decided",
+          complement: "1 approved",
+          body: {
+            kind: "findings",
+            pass: 1,
+            findings: [
+              {
+                id: "3",
+                number: 3,
+                name: "Finding 3 of 3: Token. src/login.ts, line 12. Approved.",
+                title: "Token",
+                locationAsTitle: false,
+                location: {
+                  kind: "anchored",
+                  text: "src/login.ts:12",
+                  url: "https://github.com/dev/web/pull/31/files#diff-aR12",
+                  line: 12,
+                  fileName: "login.ts",
+                },
+                text: "The token is never cleared.",
+                decision: "approved",
+                disabled: "Inline comment · published 13:41",
+              },
+            ],
+          },
+        }),
+      );
+
+      await user.click(screen.getByRole("button", { name: /You decided/ }));
+      screen.getByRole("group").focus();
+      await user.keyboard("{Control>}e{/Control}");
+
+      expect(api.openFindingInEditor).toHaveBeenCalledWith(review.id, 1, 3);
     });
 
     it("lists the new commits and says how many more there were", async () => {

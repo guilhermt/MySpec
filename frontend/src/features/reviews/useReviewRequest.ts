@@ -1,9 +1,5 @@
 import { useNow } from "@/features/attention/useNow";
-import {
-  type ReviewRequestModel,
-  reviewRequestOf,
-  withoutFindingStop,
-} from "@/features/reviews/review-request";
+import { type ReviewRequestModel, reviewRequestOf } from "@/features/reviews/review-request";
 import { pendingRequestOf } from "@/features/task/request";
 import { REVIEW_STAGE, type ReviewSummary, sessionKey } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
@@ -21,5 +17,18 @@ export function useReviewRequest(review: ReviewSummary): ReviewRequestModel | nu
     (state) => state.transcripts[sessionKey(review.id, REVIEW_STAGE)]?.entries,
   );
   const pending = entries === undefined ? null : pendingRequestOf(entries);
-  return withoutFindingStop(reviewRequestOf(review, now, pending));
+  return reviewRequestOf(review, now, pending);
+}
+
+/**
+ * currentReviewRequest is the request bar as it stands now, read when a key asks for it instead of
+ * followed by the screen.
+ */
+export function currentReviewRequest(review: ReviewSummary): ReviewRequestModel | null {
+  const entries = useAppStore.getState().transcripts[sessionKey(review.id, REVIEW_STAGE)]?.entries;
+  return reviewRequestOf(
+    review,
+    Date.now(),
+    entries === undefined ? null : pendingRequestOf(entries),
+  );
 }

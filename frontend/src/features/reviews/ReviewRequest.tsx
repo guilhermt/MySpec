@@ -1,5 +1,6 @@
-import { type KeyboardEvent, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { RequestBar } from "@/components/system/RequestBar";
+import { focusFindingToDecide } from "@/features/reviews/decide-keys";
 import { PublishDialog } from "@/features/reviews/PublishDialog";
 import { ReviewAgainDialog } from "@/features/reviews/ReviewAgainDialog";
 import { type ReviewRequestAction, reviewAnnouncement } from "@/features/reviews/review-request";
@@ -7,7 +8,6 @@ import { useReviewRequest } from "@/features/reviews/useReviewRequest";
 import { RequestButtons } from "@/features/task/request-buttons";
 import { useBornStatus } from "@/features/task/useBornStatus";
 import { focusRequest } from "@/lib/focus";
-import { modalOpen } from "@/lib/layers";
 import { REVIEW_STAGE, type ReviewSummary } from "@/lib/wails";
 import {
   applyReview,
@@ -93,6 +93,9 @@ export function ReviewRequest({ review }: ReviewRequestProps) {
       case "show":
         focusRequest(request.focus);
         return;
+      case "nextToDecide":
+        focusFindingToDecide(review, 1);
+        return;
       case "publish":
         openReviewDialog(review.id, "publish");
         return;
@@ -108,19 +111,6 @@ export function ReviewRequest({ review }: ReviewRequestProps) {
     }
   };
 
-  // Ctrl+Enter publishes from the bar when its primary is Publish review…, enabled. The composer
-  // and the dialogs have their own Enter.
-  const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
-    if (event.key !== "Enter" || !event.ctrlKey || event.defaultPrevented || modalOpen()) {
-      return;
-    }
-    const primary = request.actions.find((button) => button.variant === "primary");
-    if (primary?.action === "publish" && primary.disabledReason === undefined) {
-      event.preventDefault();
-      openReviewDialog(review.id, "publish");
-    }
-  };
-
   const flash =
     request.situationId !== null && flashing.has(request.situationId)
       ? request.glyph === "error"
@@ -130,8 +120,7 @@ export function ReviewRequest({ review }: ReviewRequestProps) {
 
   return (
     <>
-      {/* biome-ignore lint/a11y/noStaticElementInteractions: the key is a shortcut of the bar inside it, which the buttons already offer */}
-      <div className="shrink-0 px-(--space-6) pt-(--space-2)" onKeyDown={onKeyDown}>
+      <div className="shrink-0 px-(--space-6) pt-(--space-2)">
         <RequestBar
           form={request.form}
           glyph={request.glyph}

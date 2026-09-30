@@ -74,14 +74,18 @@ describe("ReviewRequest", () => {
     expect(screen.getByText("Decide 2 more")).toBeInTheDocument();
   });
 
-  it("does not offer Next to decide while the findings are decided above the conversation", () => {
+  it("offers Next to decide beside Publish review…, which waits for the decisions", () => {
     bar({
       status: "awaiting_decision",
       situations: [situation("review_report")],
       passes: [makeReviewPass({ findings: [makeReviewFinding()] })],
     });
 
-    expect(screen.queryByRole("button", { name: "Next to decide" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Next to decide" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Publish review…" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
   });
 
   it("says nothing when the review asks nothing", () => {
@@ -103,34 +107,6 @@ describe("ReviewRequest", () => {
       await screen.findByRole("dialog", { name: "Publish the review of web#31" }),
     ).toBeInTheDocument();
     expect(useAppStore.getState().reviewDialog).toEqual({ reviewId: "review-1", kind: "publish" });
-  });
-
-  it("opens the publication with Ctrl+Enter from the bar when Publish is the primary and enabled", async () => {
-    const { user } = bar({
-      status: "ready_to_publish",
-      canPublish: true,
-      situations: [situation("review_report", "publish")],
-    });
-
-    request().focus();
-    await user.keyboard("{Control>}{Enter}{/Control}");
-
-    expect(
-      await screen.findByRole("dialog", { name: "Publish the review of web#31" }),
-    ).toBeInTheDocument();
-  });
-
-  it("leaves Ctrl+Enter alone while the publication waits for decisions", async () => {
-    const { user } = bar({
-      status: "awaiting_decision",
-      situations: [situation("review_report")],
-      passes: [makeReviewPass({ findings: [makeReviewFinding()] })],
-    });
-
-    request().focus();
-    await user.keyboard("{Control>}{Enter}{/Control}");
-
-    expect(screen.queryByRole("heading", { name: "Publish review" })).not.toBeInTheDocument();
   });
 
   it("says why a publication failed and offers it again", () => {

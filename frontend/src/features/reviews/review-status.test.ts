@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  decidedCount,
   findingLocation,
   lastRecordedPass,
   outcomeLabel,
@@ -28,20 +27,6 @@ describe("verdictLabel", () => {
     expect(verdictLabel("approve")).toBe("Approve");
     expect(verdictLabel("request_changes")).toBe("Request changes");
     expect(verdictLabel("comment")).toBe("Comment");
-  });
-});
-
-describe("decidedCount", () => {
-  it("counts the findings the user has decided on", () => {
-    const pass = makeReviewPass({
-      findings: [
-        makeReviewFinding({ number: 1, decision: "approved" }),
-        makeReviewFinding({ number: 2, decision: "discarded" }),
-        makeReviewFinding({ number: 3, decision: "" }),
-      ],
-    });
-
-    expect(decidedCount(pass)).toBe(2);
   });
 });
 

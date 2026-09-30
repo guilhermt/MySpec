@@ -15,7 +15,7 @@ import { checkDuration, checkRows } from "@/lib/pull-requests";
 import { cn } from "@/lib/utils";
 import type { PlanProblem, ReviewSummary, TaskSummary } from "@/lib/wails";
 import { clockTime } from "@/lib/when";
-import { openExternal } from "@/store/actions";
+import { openExternal, openFindingInEditor } from "@/store/actions";
 import { type PanelId, useAppStore } from "@/store/app-store";
 
 /** MARKER_ICONS is the meaning of ICONS each icon of a line draws: the product's message is its mark. */
@@ -87,16 +87,28 @@ function ChecksBody({ body }: { body: Extract<MarkerView["body"], { kind: "check
   );
 }
 
-function FindingsBody({ body }: { body: Extract<MarkerView["body"], { kind: "findings" }> }) {
+function FindingsBody({
+  body,
+  review,
+}: {
+  body: Extract<MarkerView["body"], { kind: "findings" }>;
+  review: ReviewSummary | null;
+}) {
   return (
     <ul data-slot="marker-body" className={cn(SUNKEN, "flex flex-col gap-(--space-2)")}>
       {body.findings.map((finding) => (
         <li key={finding.id}>
           <Finding
             model={finding}
+            current
             onOpenLine={() => {
               if (finding.location.kind === "anchored") {
                 void openExternal(finding.location.url);
+              }
+            }}
+            onOpenEditor={() => {
+              if (review !== null) {
+                void openFindingInEditor(review.id, body.pass, finding.number);
               }
             }}
             renderText={(text) => <Markdown cutCode>{text}</Markdown>}
@@ -269,7 +281,7 @@ export function MarkerLine({
       content = <ChecksBody body={body} />;
       break;
     case "findings":
-      content = <FindingsBody body={body} />;
+      content = <FindingsBody body={body} review={review ?? null} />;
       break;
     case "commits":
       content = <CommitsBody body={body} />;

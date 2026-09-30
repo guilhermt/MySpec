@@ -19,11 +19,6 @@ export function verdictLabel(verdict: string): string {
   }
 }
 
-/** decidedCount is how many findings of a pass the user has already approved or discarded. */
-export function decidedCount(pass: ReviewPass): number {
-  return (pass.findings ?? []).filter((finding) => finding.decision !== "").length;
-}
-
 /**
  * lastRecordedPass is the pass the screen is about: the last one whose report
  * the app could read. null before any report came in.

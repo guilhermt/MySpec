@@ -696,28 +696,30 @@ export function setReviewInstructions(id: string, text: string): Promise<void> {
   return api.setReviewInstructions(id, text);
 }
 
-/** decideFinding records what the user decided about one finding. */
-export function decideFinding(
+/**
+ * decideFindingInPlace records what the user decided about one finding, on the finding itself: a
+ * failure answers its message and is told where the decision was, not in the app notice.
+ */
+export function decideFindingInPlace(
   id: string,
   pass: number,
   number: number,
   decision: FindingDecision,
-): Promise<void> {
-  return run(fail(`Couldn't decide finding ${number} of ${theItem(id)}`, TRY), () =>
-    api.decideFinding(id, pass, number, decision),
-  );
+): Promise<string | null> {
+  return inPlace(() => api.decideFinding(id, pass, number, decision));
 }
 
-/** saveFindingText records the text of a finding as the user left it. */
-export function saveFindingText(
+/**
+ * saveFindingTextInPlace records the text of a finding as the user left it, on the finding itself:
+ * a failure answers its message, not the app notice.
+ */
+export function saveFindingTextInPlace(
   id: string,
   pass: number,
   number: number,
   text: string,
-): Promise<void> {
-  return run(fail(`Couldn't save finding ${number} of ${theItem(id)}`, TRY), () =>
-    api.setFindingText(id, pass, number, text),
-  );
+): Promise<string | null> {
+  return inPlace(() => api.setFindingText(id, pass, number, text));
 }
 
 /** saveReviewSummary records the summary of a pass as the user left it. */

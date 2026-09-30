@@ -54,7 +54,7 @@ export type MarkerBody =
   | { kind: "artifact"; name: string; openIn: "artifacts" | "details" | "reports" }
   | { kind: "problems"; problems: PlanProblem[] }
   | { kind: "checks"; reading: ChecksReading; summary: string }
-  | { kind: "findings"; findings: FindingView[] }
+  | { kind: "findings"; pass: number; findings: FindingView[] }
   | { kind: "commits"; commits: { sha: string; subject: string }[]; more: number };
 
 /** MarkerView is a line of the conversation: a marker, a start line, a message of the product. */
@@ -430,7 +430,9 @@ export function decidedLineOf(
     "check",
     "You decided",
     said === "" ? "nothing decided" : said,
-    findings.length === 0 ? NONE : { kind: "findings", findings },
+    findings.length === 0 || pass === undefined
+      ? NONE
+      : { kind: "findings", pass: pass.pass, findings },
   );
 }
 
