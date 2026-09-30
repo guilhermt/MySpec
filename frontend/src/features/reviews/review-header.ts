@@ -250,6 +250,12 @@ export function reviewPauseRefusal(review: ReviewSummary): string | null {
     : null;
 }
 
+/** reviewContextDetail is the tooltip of the context meter: "Context used by the reviewer: 44%", "…" before the first reading. */
+export function reviewContextDetail(review: ReviewSummary): string {
+  const used = review.contextPercent === 0 ? "…" : `${Math.round(review.contextPercent)}%`;
+  return `Context used by the reviewer: ${used}`;
+}
+
 /** reviewMenu is the ⋯ of a review: the pull request, the review, and Delete review… after the separator. */
 export function reviewMenu(review: ReviewSummary, now: number): ReviewMenuGroup[] {
   const reference = reviewName(review);

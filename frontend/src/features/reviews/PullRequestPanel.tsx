@@ -7,9 +7,9 @@ import { useNow } from "@/features/attention/useNow";
 import { Markdown } from "@/features/chat/Markdown";
 import { PullRequestActions } from "@/features/reviews/PullRequestActions";
 import { prPanelModel } from "@/features/reviews/pr-panel";
-import { findBoard } from "@/lib/boards";
+import { useOpenCard } from "@/features/reviews/useOpenCard";
 import { checkDuration, checkRows } from "@/lib/pull-requests";
-import { asCheckState, type PullCard, type PullRequestRow } from "@/lib/wails";
+import { asCheckState, type PullRequestRow } from "@/lib/wails";
 import { openExternal } from "@/store/actions";
 import { useAppStore } from "@/store/app-store";
 
@@ -52,7 +52,7 @@ export function PullRequestPanel({
   onClose,
 }: PullRequestPanelProps) {
   const app = useAppStore((state) => state.app);
-  const openBoardCard = useAppStore((state) => state.openBoardCard);
+  const openCard = useOpenCard();
   const running = (row.checks ?? []).some((check) => asCheckState(check.state) === "running");
   const ticking = useNow(SECOND, running);
   const now = running ? ticking : viewNow;
@@ -80,18 +80,6 @@ export function PullRequestPanel({
     duration: checkDuration(check, now),
   }));
   const { facts, meta } = model;
-
-  // A card of the last reading of its board opens in the board; any other goes to GitHub.
-  const openCard = (card: PullCard) => {
-    const found = (findBoard(app, card.boardId)?.cards ?? []).find(
-      (candidate) => candidate.url === card.url,
-    );
-    if (found === undefined) {
-      void openExternal(card.url);
-    } else {
-      openBoardCard(card.boardId, found.key);
-    }
-  };
 
   return (
     <ListPanel

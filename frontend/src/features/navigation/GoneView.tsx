@@ -1,6 +1,7 @@
 import type { GoneAction } from "@/components/system/GonePage";
 import { GonePage } from "@/components/system/GonePage";
 import { ICONS, type IconGlyph } from "@/components/system/icons";
+import { gonePassLines, goneReviewText } from "@/features/navigation/gone-passes";
 import { LocationHeader } from "@/features/navigation/LocationHeader";
 import { findBoard } from "@/lib/boards";
 import {
@@ -12,7 +13,7 @@ import {
   locationTitle,
 } from "@/lib/locations";
 import { nextWaiting } from "@/lib/situations";
-import { useAppStore, useBackTarget } from "@/store/app-store";
+import { useAppStore, useArchivedReview, useBackTarget } from "@/store/app-store";
 
 export interface GoneViewProps {
   location: GoneLocation;
@@ -38,6 +39,27 @@ function archivedOf(item: Exclude<GoneLocation["item"], "board">, id: string): L
   }
 }
 
+/** GonePasses is the result of each pass of a review that ended: what went to GitHub or to the agent, and when. */
+function GonePasses({ lines }: { lines: readonly { text: string; time: string }[] }) {
+  return (
+    <ul
+      aria-label="Passes"
+      className="flex w-full max-w-(--measure-read) flex-col gap-(--space-1-5) rounded-md bg-surface-0 px-(--space-4) py-(--space-3) text-(length:--text-meta) leading-(--leading-meta) text-ink-1 shadow-[inset_0_0_0_var(--border)_var(--line-1)]"
+    >
+      {lines.map((line) => (
+        <li key={line.text} className="flex items-baseline justify-between gap-(--space-4)">
+          <span className="min-w-0">{line.text}</span>
+          {line.time !== "" && (
+            <span className="shrink-0 text-(length:--text-micro) leading-(--leading-micro) text-ink-3 tabular-nums">
+              {line.time}
+            </span>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 /**
  * GoneView is the place of an item that left while open: what became of it, read from the state,
  * and the ways on from there.
@@ -49,6 +71,10 @@ export function GoneView({ location }: GoneViewProps) {
   const openSituation = useAppStore((state) => state.openSituation);
   const backTarget = useBackTarget();
   const outcome = goneOutcome(app, location);
+  // A review that ended says how, from the archive; a deleted one has nothing to say.
+  const archived = useArchivedReview(location.item === "review" ? location.id : null);
+  const now = Date.now();
+  const passes = archived === null ? [] : gonePassLines(archived, now);
 
   const actions: GoneAction[] = [];
   if (location.item === "board") {
@@ -89,7 +115,14 @@ export function GoneView({ location }: GoneViewProps) {
   return (
     <section aria-label={location.name} className="flex min-h-0 flex-1 flex-col">
       <LocationHeader />
-      <GonePage icon={ICON[outcome]} title={goneTitle(location, outcome)} actions={actions} />
+      <GonePage
+        icon={ICON[outcome]}
+        title={goneTitle(location, outcome)}
+        {...(archived !== null ? { description: goneReviewText(archived, now) } : {})}
+        actions={actions}
+      >
+        {passes.length > 0 && <GonePasses lines={passes} />}
+      </GonePage>
     </section>
   );
 }

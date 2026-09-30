@@ -48,6 +48,7 @@ function waitingState() {
 }
 
 const TASK: Location = { kind: "task", id: "task-1" };
+const REVIEW: Location = { kind: "review", id: "review-1" };
 const HISTORY: Location = { kind: "history" };
 
 // press fires a key on the window, as a global shortcut listens for it.
@@ -409,6 +410,59 @@ describe("useGlobalShortcuts", () => {
     expect(press({ key: "e", ctrlKey: true }).defaultPrevented).toBe(true);
 
     expect(api.openInEditor).not.toHaveBeenCalled();
+  });
+
+  it("opens the worktree of the review on screen on Ctrl+E from the message box", async () => {
+    vi.mocked(api.getState).mockResolvedValue(
+      makeState({ reviews: [makeReviewSummary({ worktreePath: "/worktrees/web/pr_31" })] }),
+    );
+    renderWithStore(<App />, { ui: { location: REVIEW } });
+    const box = await screen.findByRole("textbox");
+    act(() => box.focus());
+
+    let event: KeyboardEvent | undefined;
+    act(() => {
+      event = press({ key: "e", ctrlKey: true, bubbles: true }, box);
+    });
+
+    expect(event?.defaultPrevented).toBe(true);
+    expect(api.openReviewInEditor).toHaveBeenCalledWith("review-1");
+    expect(api.openInEditor).not.toHaveBeenCalled();
+  });
+
+  it("leaves Ctrl+E alone on a review without a worktree", async () => {
+    vi.mocked(api.getState).mockResolvedValue(
+      makeState({ reviews: [makeReviewSummary({ worktreePath: "" })] }),
+    );
+    renderWithStore(<App />, { ui: { location: REVIEW } });
+    await screen.findByRole("textbox");
+
+    act(() => {
+      press({ key: "e", ctrlKey: true });
+    });
+
+    expect(api.openReviewInEditor).not.toHaveBeenCalled();
+  });
+
+  it("leaves a shortcut to what the screen took for itself first", async () => {
+    vi.mocked(api.getState).mockResolvedValue(
+      makeState({ reviews: [makeReviewSummary({ worktreePath: "/worktrees/web/pr_31" })] }),
+    );
+    // Ahead of the listener of the app, as a finding is: it opens its line on Ctrl+E.
+    const took = (event: KeyboardEvent) => event.preventDefault();
+    window.addEventListener("keydown", took);
+    try {
+      renderWithStore(<App />, { ui: { location: REVIEW } });
+      await screen.findByRole("textbox");
+
+      act(() => {
+        press({ key: "e", ctrlKey: true });
+      });
+    } finally {
+      window.removeEventListener("keydown", took);
+    }
+
+    expect(api.openReviewInEditor).not.toHaveBeenCalled();
   });
 
   it("closes the settings on Ctrl+, back to the place they were opened from", async () => {

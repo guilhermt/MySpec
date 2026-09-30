@@ -13,21 +13,25 @@ function bar(overrides: Partial<ReviewSummary> = {}) {
 }
 
 describe("ReviewBar", () => {
-  it("names the pull request and where the review stands", async () => {
-    const { user } = bar({ status: "ready_to_publish" });
+  it("says where the review stands, and leaves the link of the pull request to the ⋯", () => {
+    bar({ status: "ready_to_publish" });
 
     expect(screen.getByRole("status")).toHaveTextContent("Ready to publish");
-
-    await user.click(screen.getByRole("button", { name: /#31/ }));
-    expect(api.openExternal).toHaveBeenCalledWith("https://github.com/dev/web/pull/31");
+    expect(screen.queryByRole("button", { name: /#31/ })).not.toBeInTheDocument();
   });
 
   it("warns about the commits that arrived since the pass and about a publication that failed", () => {
-    bar({ stalePass: true, publishError: "GitHub said no.", checkError: "No network." });
+    bar({ stalePass: true, publishError: "GitHub said no." });
 
     expect(screen.getByText("New commits since this pass")).toBeInTheDocument();
-    expect(screen.getByText("Couldn't check GitHub")).toBeInTheDocument();
     expect(screen.getByText("GitHub said no.")).toBeInTheDocument();
+  });
+
+  it("leaves the failure of the reading of GitHub to the strip under the header", () => {
+    bar({ checkError: "No network." });
+
+    expect(screen.queryByText("Couldn't check GitHub")).not.toBeInTheDocument();
+    expect(screen.queryByText("No network.")).not.toBeInTheDocument();
   });
 
   it("says when a report could not be read and when an approval produced no commit", () => {
@@ -37,7 +41,7 @@ describe("ReviewBar", () => {
     expect(screen.getByText("The last approval didn't produce a commit.")).toBeInTheDocument();
   });
 
-  it("says why the pass could not start, and offers it again", () => {
+  it("says why the pass could not start", () => {
     bar({
       status: "pass_blocked",
       passBlocked: "GitHub CLI isn't authenticated.",
@@ -46,7 +50,6 @@ describe("ReviewBar", () => {
 
     expect(screen.getByRole("status")).toHaveTextContent("Pass blocked");
     expect(screen.getByText("GitHub CLI isn't authenticated.")).toHaveClass("text-destructive");
-    expect(screen.getByRole("button", { name: "Review again" })).toBeEnabled();
   });
 
   it("names the wait for the checks of the pull request", () => {
@@ -109,32 +112,10 @@ describe("ReviewBar", () => {
     expect(api.approveReview).toHaveBeenCalledWith("review-1");
   });
 
-  it("asks for another pass", async () => {
-    const { user } = bar({ status: "published", canReviewAgain: true });
+  it("leaves Review again and the worktree to the ⋯ of the header", () => {
+    bar({ status: "published", canReviewAgain: true });
 
-    await user.click(screen.getByRole("button", { name: "Review again" }));
-
-    expect(await screen.findByRole("heading", { name: "Review again" })).toBeInTheDocument();
-  });
-
-  it("opens the worktree in the editor, and says when there is none", async () => {
-    const { user, unmount } = bar();
-
-    await user.click(screen.getByRole("button", { name: "Open in VS Code" }));
-    expect(api.openReviewInEditor).toHaveBeenCalledWith("review-1");
-    unmount();
-
-    bar({ worktreePath: "" });
-    await user.hover(
-      screen.getByRole("button", { name: "Open in VS Code" }).parentElement as HTMLElement,
-    );
-
-    expect(await screen.findByText("The worktree doesn't exist yet")).toBeInTheDocument();
-  });
-
-  it("disables the editor while the worktree isn't there", () => {
-    bar({ worktreePath: "" });
-
-    expect(screen.getByRole("button", { name: "Open in VS Code" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Review again" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Open in VS Code" })).not.toBeInTheDocument();
   });
 });

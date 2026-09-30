@@ -1,13 +1,20 @@
-import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
+import { useEffect, useRef, useState } from "react";
+import { AuxPanel } from "@/components/system/AuxPanel";
+import { Button } from "@/components/system/Button";
+import { Icon } from "@/components/system/Icon";
+import { ICONS } from "@/components/system/icons";
+import { NoticeStrip } from "@/components/system/NoticeStrip";
+import { PanelRow } from "@/components/system/PanelRow";
+import { Skeleton, SkeletonBar } from "@/components/system/Skeleton";
 import { Markdown } from "@/features/chat/Markdown";
-import { Banner } from "@/features/notice/Notice";
 import { reportLabel, verdictLabel } from "@/features/reviews/review-status";
 import { useReviewArtifact } from "@/features/reviews/useReviewArtifact";
 import type { ReviewPass, ReviewSummary } from "@/lib/wails";
+import { readMoment } from "@/lib/when";
 import { openExternal } from "@/store/actions";
+import { useAppStore } from "@/store/app-store";
 
+/** LOADING_WIDTHS are the three bars of the skeleton while a report is read. */
 const LOADING_WIDTHS = ["w-1/2", "w-full", "w-3/4"];
 
 /** CONTEXT_FILE is the document the app writes for the agent before every pass. */
@@ -20,18 +27,28 @@ function isPass(selection: Selection): selection is { pass: number } {
   return typeof selection === "object";
 }
 
-/** Published says what became of a pass that was sent to GitHub. */
-export function Published({ pass }: { pass: ReviewPass }) {
+// selectionOf is the document a marker or a row of Details asked the panel to open at.
+function selectionOf(file: string | null, passes: readonly ReviewPass[]): Selection {
+  if (file === CONTEXT_FILE) {
+    return "context";
+  }
+  const pass = passes.find((candidate) => candidate.file === file);
+  return pass === undefined ? "list" : { pass: pass.pass };
+}
+
+export interface PublishedProps {
+  pass: ReviewPass;
+  /** now is the moment the time of the publication is told against; the present by default. */
+  now?: number;
+}
+
+/** Published says what became of a pass that was sent to GitHub: its verdict, when, and the review there. */
+export function Published({ pass, now = Date.now() }: PublishedProps) {
   return (
-    <div className="mb-3 flex items-center gap-1.5 text-xs text-muted-foreground">
-      <span>{`Published · ${verdictLabel(pass.verdict)} · ${new Date(pass.publishedAt).toLocaleString()}`}</span>
+    <div className="mb-(--space-3) flex items-center gap-(--space-2) text-(length:--text-meta) leading-(--leading-meta) text-ink-3">
+      <span>{`Published · ${verdictLabel(pass.verdict)} · ${readMoment(pass.publishedAt, now)}`}</span>
       {pass.publishedUrl !== "" && (
-        <Button
-          variant="link"
-          size="xs"
-          className="h-auto p-0 text-xs"
-          onClick={() => void openExternal(pass.publishedUrl)}
-        >
+        <Button variant="ghost" size="xs" onClick={() => void openExternal(pass.publishedUrl)}>
           Open on GitHub
         </Button>
       )}
@@ -43,12 +60,33 @@ export interface ReportsPanelProps {
   review: ReviewSummary;
 }
 
-/** ReportsPanel is what the review has written, next to the conversation. */
+/**
+ * ReportsPanel is what the review has written, next to the conversation: the context the agent was
+ * given and the report of each pass. A report opens in place of the list, with the way back to it.
+ * A marker of the conversation or a pass in Details asks for the one it names.
+ */
 export function ReportsPanel({ review }: ReportsPanelProps) {
-  const [selection, setSelection] = useState<Selection>("list");
-  const [dismissed, setDismissed] = useState("");
-
+  const openPanel = useAppStore((state) => state.openPanel);
+  const asked = useAppStore((state) => state.panelDocument);
+  const clearPanelDocument = useAppStore((state) => state.clearPanelDocument);
   const passes = (review.passes ?? []).filter((pass) => pass.recorded);
+  const [selection, setSelection] = useState<Selection>(() => selectionOf(asked, passes));
+  // The last document opened is the row the focus returns to on the way back.
+  const [last, setLast] = useState<Selection | null>(() =>
+    asked === null ? null : selectionOf(asked, passes),
+  );
+  const backRef = useRef<HTMLButtonElement>(null);
+
+  // A document asked for opens, also with the panel already open.
+  useEffect(() => {
+    if (asked !== null) {
+      const next = selectionOf(asked, passes);
+      setSelection(next);
+      setLast(next);
+      clearPanelDocument();
+    }
+  }, [asked, passes, clearPanelDocument]);
+
   const open = isPass(selection)
     ? (passes.find((pass) => pass.pass === selection.pass) ?? null)
     : null;
@@ -62,67 +100,73 @@ export function ReportsPanel({ review }: ReportsPanelProps) {
     open?.revision ?? (review.passes ?? []).length,
   );
 
-  return (
-    <section className="flex h-full min-w-0 flex-col bg-background">
-      <header className="flex h-9 shrink-0 items-center border-b px-3">
-        {view === "list" ? (
-          <span className="text-sm font-medium">Reports</span>
-        ) : (
-          <div className="flex min-w-0 items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={() => setSelection("list")}>
-              ← Reports
-            </Button>
-            <span className="min-w-0 truncate text-sm font-medium">
-              {open === null ? "Context" : reportLabel(open)}
-            </span>
-          </div>
-        )}
-      </header>
+  // The way back takes the focus as a document opens.
+  useEffect(() => {
+    if (view !== "list") {
+      backRef.current?.focus();
+    }
+  }, [view]);
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-6">
+  const isLast = (candidate: Selection) =>
+    last !== null &&
+    (isPass(candidate) ? isPass(last) && last.pass === candidate.pass : last === candidate);
+  const pick = (next: Selection) => {
+    setSelection(next);
+    setLast(next);
+  };
+
+  return (
+    <AuxPanel id="reports" title="Reports" onClose={() => openPanel(null)}>
+      <div className="flex flex-col gap-(--space-3) px-(--space-4) pt-(--space-3) pb-(--space-6)">
         {view === "list" ? (
           <ul className="flex flex-col">
             <li>
-              <button
-                type="button"
-                onClick={() => setSelection("context")}
-                className="flex w-full items-center rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent"
+              <PanelRow
+                glyph={<Icon icon={ICONS.file} size="sm" />}
+                onClick={() => pick("context")}
+                focusOnMount={isLast("context")}
               >
                 Context
-              </button>
+              </PanelRow>
             </li>
             {passes.map((pass) => (
               <li key={pass.pass}>
-                <button
-                  type="button"
-                  onClick={() => setSelection({ pass: pass.pass })}
-                  className="flex w-full items-center rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent"
+                <PanelRow
+                  glyph={<Icon icon={ICONS.file} size="sm" />}
+                  onClick={() => pick({ pass: pass.pass })}
+                  focusOnMount={isLast({ pass: pass.pass })}
                 >
                   {reportLabel(pass)}
-                </button>
+                </PanelRow>
               </li>
             ))}
           </ul>
         ) : (
           <>
+            <div className="flex min-w-0 items-center gap-(--space-2)">
+              <Button ref={backRef} variant="ghost" size="xs" onClick={() => setSelection("list")}>
+                ← Reports
+              </Button>
+              <h3 className="min-w-0 truncate font-semibold text-ink-1">
+                {open === null ? "Context" : reportLabel(open)}
+              </h3>
+            </div>
             {artifact.status === "loading" && (
-              <div className="flex flex-col gap-3">
+              <Skeleton label="Reading the report">
                 {LOADING_WIDTHS.map((width) => (
-                  <Skeleton key={width} className={`h-4 ${width}`} />
+                  <SkeletonBar key={width} className={width} />
                 ))}
-              </div>
+              </Skeleton>
             )}
-            {artifact.status === "error" && artifact.error !== dismissed && (
-              <Banner
-                className="bg-destructive/10"
+            {artifact.status === "error" && (
+              <NoticeStrip
                 title="Couldn't read the report"
-                onDismiss={() => setDismissed(artifact.error)}
-              >
-                {artifact.error}
-              </Banner>
+                reason={artifact.error}
+                className="bg-state-error-veil"
+              />
             )}
             {artifact.status === "ready" && (
-              <div className="max-w-[58.5rem] select-text">
+              <div className="select-text">
                 {open?.published === true && <Published pass={open} />}
                 <Markdown>{artifact.content}</Markdown>
               </div>
@@ -130,6 +174,6 @@ export function ReportsPanel({ review }: ReportsPanelProps) {
           </>
         )}
       </div>
-    </section>
+    </AuxPanel>
   );
 }

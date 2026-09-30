@@ -264,7 +264,8 @@ describe("App", () => {
       useAppStore.getState().openReview("review-1");
     });
 
-    expect(screen.getByRole("button", { name: "Delete review" })).toBeInTheDocument();
+    expect(screen.getByRole("list", { name: /^Progress · Pass 1/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Details" })).toBeInTheDocument();
     await waitFor(() => {
       expect(api.getTranscript).toHaveBeenCalledWith("review-1", "review");
     });

@@ -1,87 +1,86 @@
-import { Trash2 } from "lucide-react";
-import { useState } from "react";
-import { CardLink } from "@/components/CardLink";
-import { PauseButton } from "@/components/PauseButton";
+import { ItemPause } from "@/components/ItemPause";
 import { PanelGroup } from "@/components/system/AuxPanel";
+import { ContextMeter } from "@/components/system/ContextMeter";
 import { ICONS } from "@/components/system/icons";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Stepper } from "@/components/system/Stepper";
+import { useNow } from "@/features/attention/useNow";
 import { LocationHeader } from "@/features/navigation/LocationHeader";
-import { DeleteReviewDialog } from "@/features/reviews/DeleteReviewDialog";
-import { reviewStatusLabel, reviewStatusTone } from "@/features/reviews/review-status";
-import { ContextGauge } from "@/features/task/ContextGauge";
-import { ToneDot } from "@/features/task/StatusDot";
-import { reviewSituation, situationTone } from "@/lib/situations";
+import { ReviewMenu } from "@/features/reviews/ReviewMenu";
 import {
-  asPullReviewMode,
-  asSessionStatus,
-  type PullReviewMode,
-  type ReviewSummary,
-} from "@/lib/wails";
-import { pause, resume } from "@/store/actions";
+  isPausedReview,
+  reviewContextDetail,
+  reviewPauseRefusal,
+  reviewStepper,
+} from "@/features/reviews/review-header";
+import type { ReviewSummary } from "@/lib/wails";
 import { useAppStore, usePanel } from "@/store/app-store";
 
-/** MODE_LABEL names what the review does with the findings the user approves. */
-const MODE_LABEL: Record<PullReviewMode, string> = { publish: "Publish", apply: "Apply" };
+/** PANELS are the panels of a review, in their order, each with what it shows. */
+const PANELS = [
+  {
+    id: "details",
+    label: "Details",
+    tooltip: "The pull request, the checks read before each pass and the passes",
+    icon: ICONS.details,
+  },
+  { id: "reports", label: "Reports", tooltip: "Reports of every pass", icon: ICONS.file },
+] as const;
+
+// MINUTE is how often the times in the header are read again.
+const MINUTE = 60_000;
 
 export interface ReviewHeaderProps {
   review: ReviewSummary;
 }
 
 /**
- * ReviewHeader is the header of the place of a pull request under review, with what the user can
- * do to it on the right.
+ * ReviewHeader is the header of the place of a pull request under review: the title, the pill of its
+ * pass, and on the right the context meter, Pause or Resume, the panels and the ⋯. The meter and Pause
+ * are there only while the review has a session.
  */
 export function ReviewHeader({ review }: ReviewHeaderProps) {
-  const [deleting, setDeleting] = useState(false);
+  const now = useNow(MINUTE, true);
   const panel = usePanel();
   const openPanel = useAppStore((state) => state.openPanel);
-
-  const situation = reviewSituation(review);
-  // What waits on the user takes the colour of its situation; without one, the
-  // dot shows what the review is doing.
-  const tone = situation !== null ? situationTone(situation) : reviewStatusTone(review);
-  const status = asSessionStatus(review.sessionStatus);
-  const paused = status === "paused";
-  const running = review.sessionStage !== "";
+  const stepper = reviewStepper(review, now);
+  const hasSession = review.sessionStage !== "";
 
   return (
-    <LocationHeader>
-      <Badge variant="outline">{MODE_LABEL[asPullReviewMode(review.mode)]}</Badge>
-      <Badge variant="outline" className="gap-1.5">
-        <ToneDot tone={tone} />
-        {reviewStatusLabel(review)}
-      </Badge>
-      <ContextGauge percent={review.contextPercent} />
-      {running && (
-        <PauseButton
-          paused={paused}
-          disabled={!paused && status === "error"}
-          onClick={() =>
-            void (paused
-              ? resume(review.id, review.sessionStage)
-              : pause(review.id, review.sessionStage))
-          }
+    <LocationHeader
+      progress={
+        <Stepper
+          steps={stepper.steps}
+          pill={stepper.pill}
+          label={stepper.label}
+          tooltip={stepper.tooltip}
+        />
+      }
+    >
+      {hasSession && (
+        <ContextMeter
+          percent={review.contextPercent === 0 ? null : review.contextPercent}
+          paused={isPausedReview(review)}
+          compact="narrow"
+          detail={reviewContextDetail(review)}
         />
       )}
-      {review.card !== null && <CardLink card={review.card} />}
-      <PanelGroup
-        panels={[
-          { id: "reports", label: "Reports", tooltip: "Reports of every pass", icon: ICONS.file },
-        ]}
-        open={panel}
-        onOpenChange={openPanel}
+      <ItemPause
+        id={review.id}
+        item="the review"
+        session={
+          hasSession
+            ? {
+                stage: review.sessionStage,
+                sessionStatus: review.sessionStatus,
+                pausedAt: review.pausedAt,
+              }
+            : null
+        }
+        refusal={() => reviewPauseRefusal(review)}
+        now={now}
       />
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        aria-label="Delete review"
-        onClick={() => setDeleting(true)}
-      >
-        <Trash2 />
-      </Button>
-
-      <DeleteReviewDialog review={review} open={deleting} onOpenChange={setDeleting} />
+      <PanelGroup panels={PANELS} open={panel} onOpenChange={openPanel} />
+      <ReviewMenu review={review} />
     </LocationHeader>
   );
 }

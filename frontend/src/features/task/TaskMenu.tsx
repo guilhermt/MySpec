@@ -140,8 +140,14 @@ export function TaskMenu({ task }: TaskMenuProps) {
   );
 }
 
-/** TaskMenuRow is one item of the ⋯, with its tooltip when it has one. */
-function TaskMenuRow({ item, onSelect }: { item: TaskMenuItem; onSelect: () => void }) {
+/** TaskMenuRow is one item of the ⋯ of a task or a review, with its tooltip when it has one. */
+export function TaskMenuRow({
+  item,
+  onSelect,
+}: {
+  item: Omit<TaskMenuItem, "action">;
+  onSelect: () => void;
+}) {
   const row = (
     <MenuItem
       onClick={onSelect}

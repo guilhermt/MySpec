@@ -1,4 +1,4 @@
-import { reviewPass, VERDICT_WORDS } from "@/features/reviews/review-header";
+import { reviewChecks, reviewPass, VERDICT_WORDS } from "@/features/reviews/review-header";
 import {
   discussionSessions,
   type ItemSession,
@@ -560,12 +560,25 @@ function reviewStanding(review: ReviewSummary): Standing {
   const sessions = reviewSessions(review);
   const pass = `Pass ${reviewPass(review)}`;
   switch (asPullReviewStatus(review.status)) {
-    case "waiting_checks":
-      return {
-        tone: "github",
-        line2: { long: `${pass} · waiting for checks`, short: `${pass} · checks` },
-        clock: { kind: "word", word: "GitHub" },
-      };
+    case "waiting_checks": {
+      // Until a reading lists a check, the row says GitHub is being read.
+      const { passed, total } = checkCounts(reviewChecks(review));
+      return review.checkedAt === "" || total === 0
+        ? {
+            tone: "github",
+            line2: same(`${pass} · checking GitHub`),
+            clock: { kind: "word", word: "GitHub" },
+            reading: true,
+          }
+        : {
+            tone: "github",
+            line2: {
+              long: `${pass} · checks ${passed}/${total}`,
+              short: `checks ${passed}/${total}`,
+            },
+            clock: { kind: "word", word: "GitHub" },
+          };
+    }
     case "applying": {
       const applying = same(`${pass} · applying`);
       return !sessions.some((session) => session.working)

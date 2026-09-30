@@ -3,6 +3,7 @@ import {
   checkStrip,
   type ReviewMenuGroup,
   reviewAgainRefusal,
+  reviewContextDetail,
   reviewDetails,
   reviewMenu,
   reviewPass,
@@ -420,5 +421,15 @@ describe("checkStrip", () => {
     ],
   ])("draws %s", (_, overrides, strip) => {
     expect(checkStrip(review(overrides), NOW)).toEqual(strip);
+  });
+});
+
+describe("reviewContextDetail", () => {
+  it.each<[string, number, string]>([
+    ["the percent used", 44, "Context used by the reviewer: 44%"],
+    ["a rounded percent", 43.6, "Context used by the reviewer: 44%"],
+    ["… before the first reading", 0, "Context used by the reviewer: …"],
+  ])("says %s", (_, contextPercent, detail) => {
+    expect(reviewContextDetail(review({ contextPercent }))).toBe(detail);
   });
 });

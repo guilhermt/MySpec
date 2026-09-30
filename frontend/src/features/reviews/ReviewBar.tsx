@@ -1,20 +1,23 @@
-import { Check, Code, ExternalLink, GitPullRequestArrow, RotateCcw, Wrench } from "lucide-react";
+import { Check, GitPullRequestArrow, Wrench } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { PublishDialog } from "@/features/reviews/PublishDialog";
 import { ReviewAgainDialog } from "@/features/reviews/ReviewAgainDialog";
 import { reviewStatusLabel, reviewStatusTone } from "@/features/reviews/review-status";
 import { ToneDot } from "@/features/task/StatusDot";
 import { reviewSituation, situationTone } from "@/lib/situations";
 import { asPullReviewMode, type ReviewSummary } from "@/lib/wails";
-import { applyReview, approveReview, openExternal, openReviewInEditor } from "@/store/actions";
+import { applyReview, approveReview } from "@/store/actions";
 
 export interface ReviewBarProps {
   review: ReviewSummary;
 }
 
-/** ReviewBar says where the review stands and holds what can be done to it. */
+/**
+ * ReviewBar says where the review stands and holds what can be decided on it. Review again and the
+ * worktree are in the ⋯ of the header; the dialog of Review again is here only for the publication,
+ * which offers it in place of a stale pass.
+ */
 export function ReviewBar({ review }: ReviewBarProps) {
   const [publishing, setPublishing] = useState(false);
   const [asking, setAsking] = useState(false);
@@ -24,30 +27,9 @@ export function ReviewBar({ review }: ReviewBarProps) {
   // dot shows what the review is doing.
   const tone = situation !== null ? situationTone(situation) : reviewStatusTone(review);
   const applying = asPullReviewMode(review.mode) === "apply";
-  const canOpenEditor = review.worktreePath !== "";
-
-  const openButton = (
-    <Button
-      variant="outline"
-      size="sm"
-      disabled={!canOpenEditor}
-      onClick={() => void openReviewInEditor(review.id)}
-    >
-      <Code />
-      Open in VS Code
-    </Button>
-  );
 
   return (
     <div className="flex h-10 shrink-0 items-center gap-2 border-b px-3">
-      <button
-        type="button"
-        onClick={() => void openExternal(review.url)}
-        className="flex shrink-0 items-center gap-1 rounded-md text-xs text-muted-foreground transition-colors hover:text-foreground"
-      >
-        {`#${review.number}`}
-        <ExternalLink aria-hidden="true" className="size-3.5" />
-      </button>
       <span
         role="status"
         aria-live="polite"
@@ -59,11 +41,6 @@ export function ReviewBar({ review }: ReviewBarProps) {
       {review.stalePass && (
         <span className="shrink-0 text-xs text-[var(--status-attention)]">
           New commits since this pass
-        </span>
-      )}
-      {review.checkError !== "" && (
-        <span className="shrink-0 text-xs text-[var(--status-attention)]" title={review.checkError}>
-          Couldn't check GitHub
         </span>
       )}
       {review.publishError !== "" && (
@@ -112,25 +89,6 @@ export function ReviewBar({ review }: ReviewBarProps) {
           <GitPullRequestArrow />
           Publish review
         </Button>
-      )}
-
-      <Button
-        variant="outline"
-        size="sm"
-        disabled={!review.canReviewAgain}
-        onClick={() => setAsking(true)}
-      >
-        <RotateCcw />
-        Review again
-      </Button>
-
-      {canOpenEditor ? (
-        openButton
-      ) : (
-        <Tooltip>
-          <TooltipTrigger render={<span />}>{openButton}</TooltipTrigger>
-          <TooltipContent>The worktree doesn't exist yet</TooltipContent>
-        </Tooltip>
       )}
 
       <PublishDialog

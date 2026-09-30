@@ -5,7 +5,7 @@ import { focusRequest } from "@/lib/focus";
 import { layerOpen, modalOpen } from "@/lib/layers";
 import { openItemId } from "@/lib/locations";
 import { nextWaiting } from "@/lib/situations";
-import { openInEditor } from "@/store/actions";
+import { openInEditor, openReviewInEditor } from "@/store/actions";
 import { type AppStore, useAppStore } from "@/store/app-store";
 
 // The shortcuts belong to the product itself: the welcome screen and the
@@ -41,22 +41,27 @@ function runShortcut(key: string, store: AppStore): void {
       }
       break;
     case "e":
-      openTaskInEditor(store);
+      openItemInEditor(store);
       break;
     default:
       break;
   }
 }
 
-// openTaskInEditor opens the worktree of the task on screen; without a worktree there is nothing to open.
-function openTaskInEditor(store: AppStore): void {
+// openItemInEditor opens the worktree of the task or the review on screen; without a worktree there is
+// nothing to open.
+function openItemInEditor(store: AppStore): void {
   const location = store.location;
-  if (location.kind !== "task") {
-    return;
-  }
-  const task = (store.app?.tasks ?? []).find((candidate) => candidate.id === location.id);
-  if (task !== undefined && task.worktreePath !== "") {
-    void openInEditor(task.id);
+  if (location.kind === "task") {
+    const task = (store.app?.tasks ?? []).find((candidate) => candidate.id === location.id);
+    if (task !== undefined && task.worktreePath !== "") {
+      void openInEditor(task.id);
+    }
+  } else if (location.kind === "review") {
+    const review = (store.app?.reviews ?? []).find((candidate) => candidate.id === location.id);
+    if (review !== undefined && review.worktreePath !== "") {
+      void openReviewInEditor(review.id);
+    }
   }
 }
 
@@ -72,7 +77,9 @@ export function useGlobalShortcuts(): void {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const store = useAppStore.getState();
-      if (event.repeat || !isShortcut(event) || !productOnScreen(store)) {
+      // What the place on screen took for itself is not the global one's: Ctrl+E on a finding opens its
+      // line, and the worktree stays closed.
+      if (event.defaultPrevented || event.repeat || !isShortcut(event) || !productOnScreen(store)) {
         return;
       }
       event.preventDefault();
