@@ -93,7 +93,7 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
       - name: Install the Chromium of Playwright
-        run: pnpm exec playwright install --with-deps --only-shell chromium
+        run: pnpm exec playwright install ${{ runner.environment == 'github-hosted' && '--with-deps' || '' }} --only-shell chromium
       - run: pnpm test
 
   # Go also runs on every push to main, which writes the cache the pull requests start from, the
@@ -110,6 +110,7 @@ jobs:
         with:
           cache: true
       - name: Install GTK and WebKitGTK headers
+        if: runner.environment == 'github-hosted'
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libgtk-4-dev libwebkitgtk-6.0-dev pkg-config
       # A cache key is written once, so the key carries the commit and only main writes one.
       - uses: actions/cache/restore@v6
@@ -150,6 +151,7 @@ jobs:
         with:
           cache: true
       - name: Install GTK and WebKitGTK headers
+        if: runner.environment == 'github-hosted'
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libgtk-4-dev libwebkitgtk-6.0-dev pkg-config
       - uses: actions/cache/restore@v6
         with:

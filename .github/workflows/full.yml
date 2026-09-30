@@ -22,6 +22,7 @@ jobs:
         with:
           cache: true
       - name: Install GTK and WebKitGTK headers
+        if: runner.environment == 'github-hosted'
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libgtk-4-dev libwebkitgtk-6.0-dev pkg-config
       - uses: actions/cache/restore@v6
         with:
@@ -39,7 +40,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
         working-directory: frontend
       - name: Install the Chromium of Playwright
-        run: pnpm exec playwright install --with-deps --only-shell chromium
+        run: pnpm exec playwright install ${{ runner.environment == 'github-hosted' && '--with-deps' || '' }} --only-shell chromium
         working-directory: frontend
       - run: task check:full
       - run: task build
