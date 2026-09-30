@@ -1291,7 +1291,8 @@ export function boardScene(name: BoardSceneName): BoardSceneSetup {
         }
       });
     case "create":
-      return onBoard(stateOf(platform()), async (user) => {
+      // The Settings of the mock have Agent as the review mode of a new task.
+      return onBoard({ ...stateOf(platform()), reviewModeDefault: "agent" }, async (user) => {
         act(() => useAppStore.getState().openNewTask());
         await user.type(await screen.findByRole("textbox", { name: "Name" }), "Rate limit v2");
         // The context is pasted: typed key by key, it redraws the dialog over the board once per key.
