@@ -105,7 +105,7 @@ describe("BoardStartRow", () => {
     expect(screen.queryByRole("button", { name: "Try again" })).not.toBeInTheDocument();
   });
 
-  it("clones a repository, and says Cloning… while it runs", async () => {
+  it("clones a repository, and says Cloning once while it runs, with the spinner in place of Clone", async () => {
     const blocker: BlockerView = {
       kind: "not-cloned",
       repositoryId: "r1",
@@ -125,7 +125,9 @@ describe("BoardStartRow", () => {
         onChangePath={() => {}}
       />,
     );
-    expect(screen.getByRole("status")).toHaveTextContent("Cloning…");
+    expect(screen.getByRole("status")).toHaveTextContent("Cloning acme/api…");
+    expect(screen.getAllByText(/Cloning/)).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: "Clone" })).not.toBeInTheDocument();
   });
 
   it("says a clone that failed and offers Try again", async () => {

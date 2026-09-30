@@ -139,7 +139,10 @@ function BlockerLine({
   return (
     <div className="flex flex-col">
       <div className={cn("flex min-h-(--size-control-sm) items-center gap-(--space-2)", META)}>
-        <span className={cn("min-w-0 flex-1", failed ? "text-state-error" : "text-ink-2")}>
+        <span
+          {...(blocker.kind === "not-cloned" && blocker.cloning ? { role: "status" } : {})}
+          className={cn("min-w-0 flex-1", failed ? "text-state-error" : "text-ink-2")}
+        >
           {blocker.kind === "read-failed" ? blocker.message : blocker.text}
         </span>
         {blocker.kind === "read-failed" &&
@@ -153,7 +156,8 @@ function BlockerLine({
           ))}
         {blocker.kind === "not-cloned" &&
           (blocker.cloning ? (
-            <Busy>Cloning…</Busy>
+            // The line already says Cloning acme/billing…: the spinner alone takes the place of Clone.
+            <Spinner />
           ) : (
             <Button variant="ghost" size="xs" onClick={() => onClone(blocker.repositoryId)}>
               {failed ? "Try again" : "Clone"}
