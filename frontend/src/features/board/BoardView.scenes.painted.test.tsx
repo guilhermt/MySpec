@@ -17,6 +17,7 @@ import {
   resolve,
   setTheme,
   settle,
+  spillsOut,
   THEMES,
   visiblePrimaries,
   withoutTooltip,
@@ -106,7 +107,7 @@ describe.each(THEMES)("BoardView, the scenes in the %s theme", (theme) => {
       expect(title.getBoundingClientRect().width, `${label} title`).toBeGreaterThanOrEqual(
         row.getBoundingClientRect().width / 3,
       );
-      expect(keys.scrollWidth, `${label} keys`).toBeLessThanOrEqual(keys.clientWidth);
+      expect(spillsOut(keys), `${label} keys`).toBe(false);
     }
 
     // What the screen cuts says its whole text in a tooltip.

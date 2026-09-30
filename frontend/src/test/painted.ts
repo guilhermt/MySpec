@@ -270,6 +270,18 @@ export function edgesOf(element: Element): Edges {
   return { left, right };
 }
 
+/**
+ * spillsOut says whether what an element holds reaches past its box on either side. A cell aligned
+ * to its end spills to the left, which its scrollWidth never counts.
+ */
+export function spillsOut(element: Element): boolean {
+  const { left, right } = element.getBoundingClientRect();
+  return [...element.children].some((child) => {
+    const box = child.getBoundingClientRect();
+    return box.left < left || box.right > right;
+  });
+}
+
 /** innerEdgesOf are the edges of the content box of an element: its box less its side paddings. */
 export function innerEdgesOf(element: Element): Edges {
   const { left, right } = element.getBoundingClientRect();

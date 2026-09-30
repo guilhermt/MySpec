@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
-import { focusRing, paintOf, resolve, setTheme, THEMES, token } from "@/test/painted";
+import { focusRing, paintOf, resolve, setTheme, spillsOut, THEMES, token } from "@/test/painted";
 import { CardRow, type CardRowProps, type CardRowView } from "./ListRow";
 
 const MODEL: CardRowView = {
@@ -65,6 +65,10 @@ describe.each(THEMES)("CardRow in the %s theme", (theme) => {
     expect(box(cell("Usage alerts at 80% of the plan")).width).toBeGreaterThanOrEqual(1200 / 3);
     expect(box(cell("Question · Reviewer · Step 3/7")).right).toBeLessThanOrEqual(keysStart);
     expect(box(cell("#474")).left).toBe(left + px("--icon") + px("--space-2"));
+    // S start and D discuss fit inside the column of the keys, which is where the cell starts.
+    const keys = row.lastElementChild as Element;
+    expect(box(keys).left).toBe(keysStart);
+    expect(spillsOut(keys)).toBe(false);
   });
 
   it("drops the meta under the title on a narrow list, epic first", () => {
