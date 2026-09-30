@@ -1,17 +1,26 @@
-import { act, screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { StartReviewDialog } from "@/features/reviews/StartReviewDialog";
 import { api, type PullRequestRow, type Repository } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
-import { makePullRequestRow, makeRepository, makeReviewCenter, makeState } from "@/test/wails-mock";
+import {
+  makePRCheck,
+  makePullRequestRow,
+  makeRepository,
+  makeReviewCenter,
+  makeState,
+} from "@/test/wails-mock";
 
 const PULL = { repositoryId: "repo-1", number: 31 };
 
 function dialog(row: Partial<PullRequestRow> = {}, repository: Partial<Repository> = {}) {
   const state = makeState({
     repositories: [makeRepository(repository)],
-    reviewCenter: makeReviewCenter({ pullRequests: [makePullRequestRow(row)] }),
+    reviewCenter: makeReviewCenter({
+      readAt: "2026-09-16T12:00:00Z",
+      pullRequests: [makePullRequestRow({ mergeable: "mergeable", ...row })],
+    }),
   });
   return renderWithStore(<StartReviewDialog />, { state, ui: { startReview: PULL } });
 }
@@ -23,12 +32,42 @@ describe("StartReviewDialog", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("sums up the pull request and starts its review with the defaults", async () => {
+  it("names the dialog for the pull request and sums it up in a sunken line", () => {
+    dialog({
+      card: { boardId: "board-1", number: 452, title: "Idempotency", url: "", status: "" },
+    });
+
+    const dialogElement = screen.getByRole("dialog", { name: "Review web#31" });
+    expect(within(dialogElement).getByText("Add the login screen")).toBeInTheDocument();
+    expect(
+      within(dialogElement).getByText("alice · login-screen → dev · card #452"),
+    ).toBeInTheDocument();
+  });
+
+  it("leaves the card out of the summary of a pull request without one, and says you for the user's own", () => {
+    dialog({ own: true });
+
+    expect(screen.getByText("you · login-screen → dev")).toBeInTheDocument();
+  });
+
+  it("starts with the focus on Start review, the one primary", async () => {
+    dialog();
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /^Start review/ })).toHaveFocus(),
+    );
+    expect(screen.getByRole("button", { name: /^Start review/ })).toHaveAttribute(
+      "data-variant",
+      "primary",
+    );
+  });
+
+  it("starts the review with the defaults, the instructions behind a click", async () => {
     vi.mocked(api.startReview).mockResolvedValue("review-1");
     const { user } = dialog();
 
-    expect(screen.getByText("#31 Add the login screen")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Start review" }));
+    expect(screen.queryByLabelText(/^Instructions/)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^Start review/ }));
 
     expect(api.startReview).toHaveBeenCalledExactlyOnceWith({
       repositoryId: "repo-1",
@@ -44,12 +83,32 @@ describe("StartReviewDialog", () => {
     expect(useAppStore.getState().startReview).toBeNull();
   });
 
-  it("sends the instructions of the pass", async () => {
+  it("says where the model comes from", () => {
+    dialog();
+
+    expect(
+      screen.getByText("From Defaults. It can change in the conversation."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Review model:/ })).toBeInTheDocument();
+  });
+
+  it("opens Instructions on Add instructions, with the focus in it, and sends them", async () => {
     vi.mocked(api.startReview).mockResolvedValue("review-1");
     const { user } = dialog();
 
-    await user.type(screen.getByLabelText("Instructions"), "Watch the migrations.");
-    await user.click(screen.getByRole("button", { name: "Start review" }));
+    await user.click(screen.getByRole("button", { name: "Add instructions" }));
+
+    const field = screen.getByLabelText(/^Instructions/);
+    expect(field).toHaveFocus();
+    expect(field).toHaveAttribute("placeholder", "What to look at in this pass.");
+    expect(
+      screen.getByText(
+        "They go to the agent with the pull request, and show as your first message.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Add instructions" })).not.toBeInTheDocument();
+    await user.type(field, "Watch the migrations.");
+    await user.click(screen.getByRole("button", { name: /^Start review/ }));
 
     expect(api.startReview).toHaveBeenCalledWith(
       expect.objectContaining({ instructions: "Watch the migrations." }),
@@ -60,54 +119,197 @@ describe("StartReviewDialog", () => {
     vi.mocked(api.startReview).mockResolvedValue("review-1");
     const { user } = dialog();
 
-    await user.click(screen.getByLabelText("Instructions"));
+    await user.click(screen.getByRole("button", { name: "Add instructions" }));
     await user.keyboard("{Control>}{Enter}{/Control}");
 
     expect(api.startReview).toHaveBeenCalledOnce();
   });
 
-  it("offers publish and apply only for a pull request of the user", async () => {
-    dialog();
-    expect(screen.queryByRole("group", { name: "Mode" })).not.toBeInTheDocument();
+  it("closes on Esc, and closes the open listbox of the model first", async () => {
+    const { user } = dialog();
 
-    vi.mocked(api.startReview).mockResolvedValue("review-1");
-    const { user } = dialog({ own: true });
-    await user.click(screen.getByRole("button", { name: "Apply" }));
-    await user.click(screen.getByRole("button", { name: "Start review" }));
+    await user.click(screen.getByRole("button", { name: /^Review model:/ }));
+    expect(await screen.findByRole("menu")).toBeInTheDocument();
+    await user.keyboard("{Escape}");
 
-    expect(api.startReview).toHaveBeenCalledWith(expect.objectContaining({ mode: "apply" }));
-  });
-
-  it("offers the clone of a repository that has none, and waits for it", async () => {
-    vi.mocked(api.cloneRepository).mockResolvedValue(true);
-    const { user } = dialog({}, { cloned: false, path: "" });
-
-    expect(screen.getByRole("button", { name: "Start review" })).toBeDisabled();
-    await user.click(screen.getByRole("button", { name: "Clone and continue" }));
-
-    expect(api.cloneRepository).toHaveBeenCalledExactlyOnceWith("repo-1");
-    await waitFor(() => expect(useAppStore.getState().pendingReview).toEqual(PULL));
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(useAppStore.getState().startReview).toEqual(PULL);
+    await user.keyboard("{Escape}");
     expect(useAppStore.getState().startReview).toBeNull();
   });
 
-  it("shows what the start failed with, and stays open", async () => {
-    vi.mocked(api.startReview).mockRejectedValue(new Error("The worktree couldn't be created."));
-    const { user } = dialog();
+  describe("the mode", () => {
+    it("is offered only for a pull request of the user", () => {
+      dialog();
 
-    await user.click(screen.getByRole("button", { name: "Start review" }));
+      expect(screen.queryByRole("button", { name: /^Mode/ })).not.toBeInTheDocument();
+    });
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("The worktree couldn't be created.");
-    expect(useAppStore.getState().startReview).toEqual(PULL);
+    it("opens behind Mode · Publish, with the focus on the one chosen and what it does", async () => {
+      vi.mocked(api.startReview).mockResolvedValue("review-1");
+      const { user } = dialog({ own: true });
+
+      await user.click(screen.getByRole("button", { name: /^Mode · Publish/ }));
+
+      expect(screen.getByRole("radio", { name: "Publish" })).toHaveFocus();
+      expect(
+        screen.getByText(
+          "Publish posts the approved findings as a review on GitHub. Fixed once the review starts.",
+        ),
+      ).toBeInTheDocument();
+      await user.click(screen.getByRole("radio", { name: "Apply" }));
+      expect(
+        screen.getByText(
+          "Apply has the agent fix the approved findings and push them to the pull request. Fixed once the review starts.",
+        ),
+      ).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: /^Start review/ }));
+
+      expect(api.startReview).toHaveBeenCalledWith(expect.objectContaining({ mode: "apply" }));
+    });
+  });
+
+  describe("the wait for the checks", () => {
+    it("says the first pass waits for the checks, with how many passed", () => {
+      dialog({
+        checks: [
+          makePRCheck({ name: "build", state: "passed" }),
+          makePRCheck({ name: "lint", state: "passed" }),
+          makePRCheck({ name: "e2e", state: "running" }),
+          makePRCheck({ name: "deploy", state: "queued" }),
+          makePRCheck({ name: "unit", state: "passed" }),
+        ],
+      });
+
+      expect(
+        screen.getByText(
+          "The first pass starts when the checks finish: 3 of 5 passed. You can leave meanwhile.",
+        ),
+      ).toBeInTheDocument();
+    });
+
+    it("says it waits for GitHub when the merge is not calculated", () => {
+      dialog({ mergeable: "unknown", checks: [makePRCheck()] });
+
+      expect(
+        screen.getByText(
+          "The first pass starts when GitHub says whether it merges clean. You can leave meanwhile.",
+        ),
+      ).toBeInTheDocument();
+    });
+
+    it("says nothing when the checks are done and the merge is known", () => {
+      dialog({ checks: [makePRCheck()] });
+
+      expect(screen.queryByText(/The first pass starts when/)).not.toBeInTheDocument();
+    });
+  });
+
+  describe("while it starts", () => {
+    it("shows Starting… and the worktree, with the fields read-only and Cancel dashed", async () => {
+      vi.mocked(api.startReview).mockReturnValue(new Promise(() => {}));
+      const { user } = dialog();
+      await user.click(screen.getByRole("button", { name: "Add instructions" }));
+      await user.type(screen.getByLabelText(/^Instructions/), "x");
+
+      await user.click(screen.getByRole("button", { name: /^Start review/ }));
+
+      const starting = screen.getByRole("button", { name: "Starting…" });
+      expect(starting).toHaveAttribute("aria-busy", "true");
+      expect(screen.getByText("Creating the worktree…")).toBeInTheDocument();
+      expect(screen.getByLabelText(/^Instructions/)).toHaveAttribute("readonly");
+      expect(screen.getByRole("button", { name: "Cancel" })).toHaveAttribute(
+        "aria-disabled",
+        "true",
+      );
+      await user.keyboard("{Escape}");
+      expect(useAppStore.getState().startReview).toEqual(PULL);
+    });
+  });
+
+  describe("the refusals", () => {
+    it("shows what the start failed with in the footer, stays open and lets Start review repeat it", async () => {
+      vi.mocked(api.startReview)
+        .mockRejectedValueOnce(new Error("git worktree add failed: exit 128. Nothing was created."))
+        .mockResolvedValueOnce("review-1");
+      const { user } = dialog();
+
+      await user.click(screen.getByRole("button", { name: /^Start review/ }));
+
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "git worktree add failed: exit 128. Nothing was created.",
+      );
+      expect(useAppStore.getState().startReview).toEqual(PULL);
+      await user.click(screen.getByRole("button", { name: /^Start review/ }));
+      await waitFor(() => expect(api.startReview).toHaveBeenCalledTimes(2));
+    });
+
+    it("explains a repository without a clone and dashes Start review", async () => {
+      const { user } = dialog({ action: "clone" }, { cloned: false, path: "" });
+
+      const start = screen.getByRole("button", { name: /^Start review/ });
+      expect(start).toHaveAttribute("aria-disabled", "true");
+      expect(start).toHaveAccessibleDescription(
+        "dev/web isn't cloned yet. A review needs a clone.",
+      );
+      await user.click(start);
+      await user.keyboard("{Control>}{Enter}{/Control}");
+
+      expect(api.startReview).not.toHaveBeenCalled();
+    });
+
+    it("says the pull request is not in the last reading when it leaves with the dialog open", async () => {
+      const { user } = dialog();
+      await user.click(screen.getByRole("button", { name: "Add instructions" }));
+      await user.type(screen.getByLabelText(/^Instructions/), "Watch the migrations.");
+
+      act(() => {
+        useAppStore.getState().applyState(
+          makeState({
+            repositories: [makeRepository()],
+            reviewCenter: makeReviewCenter({ readAt: "2026-09-16T12:05:00Z", pullRequests: [] }),
+          }),
+        );
+      });
+
+      const start = screen.getByRole("button", { name: /^Start review/ });
+      expect(start).toHaveAttribute("aria-disabled", "true");
+      expect(start).toHaveAccessibleDescription(
+        "web#31 isn't in the last reading. It was merged or closed.",
+      );
+      expect(screen.getByLabelText(/^Instructions/)).toHaveValue("Watch the migrations.");
+      await user.click(start);
+      expect(api.startReview).not.toHaveBeenCalled();
+    });
+
+    it("says it for a pull request the reading never had", () => {
+      renderWithStore(<StartReviewDialog />, {
+        state: makeState({
+          repositories: [makeRepository()],
+          reviewCenter: makeReviewCenter({ pullRequests: [] }),
+        }),
+        ui: { startReview: PULL },
+      });
+
+      expect(screen.getByRole("dialog", { name: "Review web#31" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /^Start review/ })).toHaveAccessibleDescription(
+        "web#31 isn't in the last reading. It was merged or closed.",
+      );
+    });
   });
 
   it("starts afresh when it is opened for another pull request", async () => {
-    vi.mocked(api.startReview).mockResolvedValue("review-1");
     const state = makeState({
       repositories: [makeRepository()],
       reviewCenter: makeReviewCenter({
         pullRequests: [
-          makePullRequestRow(),
-          makePullRequestRow({ number: 32, title: "Fix the header" }),
+          makePullRequestRow({ mergeable: "mergeable" }),
+          makePullRequestRow({
+            key: "dev/web#32",
+            number: 32,
+            title: "Fix the header",
+            mergeable: "mergeable",
+          }),
         ],
       }),
     });
@@ -115,24 +317,15 @@ describe("StartReviewDialog", () => {
       state,
       ui: { startReview: { repositoryId: "repo-1", number: 32 } },
     });
-    await user.type(screen.getByLabelText("Instructions"), "Watch the migrations.");
+    await user.click(screen.getByRole("button", { name: "Add instructions" }));
+    await user.type(screen.getByLabelText(/^Instructions/), "Watch the migrations.");
 
     act(() => {
       useAppStore.getState().openStartReview(PULL);
     });
 
-    expect(await screen.findByText("#31 Add the login screen")).toBeInTheDocument();
-    expect(screen.getByLabelText("Instructions")).toHaveValue("");
-  });
-
-  it("explains a pull request that left the last reading", () => {
-    renderWithStore(<StartReviewDialog />, {
-      state: makeState({ reviewCenter: makeReviewCenter({ pullRequests: [] }) }),
-      ui: { startReview: PULL },
-    });
-
-    expect(screen.getByText("This pull request isn't in the last reading.")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Start review" })).not.toBeInTheDocument();
+    expect(await screen.findByText("Add the login screen")).toBeInTheDocument();
+    expect(screen.queryByLabelText(/^Instructions/)).not.toBeInTheDocument();
   });
 
   it("closes without starting anything on Cancel", async () => {

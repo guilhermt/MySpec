@@ -31,6 +31,24 @@ describe.each(THEMES)("ChecksList in the %s theme", (theme) => {
     });
   });
 
+  it.each([
+    [false, "--ink-4"],
+    [true, "--state-error"],
+  ] as const)("writes the trailing text of the summary, in error %s, in %s", (error, color) => {
+    setTheme(theme);
+    render(
+      <ChecksList
+        summary="All 6 passed"
+        rows={[]}
+        onOpen={() => {}}
+        trailing={{ text: "read 2m ago", error }}
+      />,
+    );
+    const trailing = screen.getByText("read 2m ago");
+    expect(paintOf(trailing, { color: "" })).toEqual({ color: token(color) });
+    expect(getComputedStyle(trailing).fontVariantNumeric).toBe("tabular-nums");
+  });
+
   it("writes the name in mono in the first ink and the duration in the fourth", () => {
     setTheme(theme);
     render(<ChecksList summary="" rows={ROWS} onOpen={() => {}} />);

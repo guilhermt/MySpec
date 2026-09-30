@@ -335,7 +335,7 @@ describe("App", () => {
       useAppStore.getState().openStartReview({ repositoryId: "repo-1", number: 31 });
     });
 
-    expect(await screen.findByRole("heading", { name: "Start review" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Review web#31" })).toBeInTheDocument();
   });
 
   it("opens the dialog that starts a review once the clone of its repository is there", async () => {

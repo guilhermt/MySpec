@@ -1,7 +1,7 @@
-import { screen } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { ReviewsView } from "@/features/reviews/ReviewsView";
-import { api, type ReviewCenter, type State } from "@/lib/wails";
+import { api, type PullRequestRow, type ReviewCenter, type State } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
 import {
@@ -153,23 +153,117 @@ describe("ReviewsView", () => {
     });
   });
 
-  it("opens the dialog that starts a review on a click on the row, as before the panel", async () => {
-    const { user } = view({ pullRequests: [makePullRequestRow()] });
+  describe("the panel of a pull request", () => {
+    const pullRequests = [
+      makePullRequestRow({ key: "dev/web#31", number: 31, title: "Add the login screen" }),
+      makePullRequestRow({ key: "dev/web#32", number: 32, title: "Fix the header" }),
+    ];
 
-    await user.click(screen.getByRole("treeitem", { name: /^web#31 / }));
+    it("opens on a click on the row, with the pull request in it and the row marked open", async () => {
+      const { user } = view({ pullRequests });
 
-    expect(useAppStore.getState().startReview).toEqual({ repositoryId: "repo-1", number: 31 });
-  });
+      expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
+      await user.click(screen.getByRole("treeitem", { name: /^web#31 / }));
 
-  it("says why a pull request from a fork cannot be reviewed when its row is clicked", async () => {
-    const { user } = view({ pullRequests: [makePullRequestRow({ action: "fork" })] });
+      const panel = screen.getByRole("complementary", { name: "Pull request web#31" });
+      expect(
+        within(panel).getByRole("heading", { name: "Add the login screen" }),
+      ).toBeInTheDocument();
+      expect(screen.getByRole("treeitem", { name: /^web#31 / })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
+      expect(useAppStore.getState().startReview).toBeNull();
+    });
 
-    await user.click(screen.getByRole("treeitem", { name: /^web#31 / }));
+    it("changes to another pull request on a click on its row", async () => {
+      const { user } = view({ pullRequests });
+      await user.click(screen.getByRole("treeitem", { name: /^web#31 / }));
 
-    expect(await screen.findByRole("status")).toHaveTextContent(
-      "No review of web#31 · Pull requests from forks can't be reviewed yet.",
-    );
-    expect(useAppStore.getState().startReview).toBeNull();
+      await user.click(screen.getByRole("treeitem", { name: /^web#32 / }));
+
+      expect(
+        screen.getByRole("complementary", { name: "Pull request web#32" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("complementary", { name: "Pull request web#31" }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("closes on a click on the row that is open, on Close and on Esc", async () => {
+      const { user } = view({ pullRequests });
+      const row = () => screen.getByRole("treeitem", { name: /^web#31 / });
+
+      await user.click(row());
+      await user.click(row());
+      await waitFor(() => expect(screen.queryByRole("complementary")).not.toBeInTheDocument());
+
+      await user.click(row());
+      await user.click(screen.getByRole("button", { name: "Close" }));
+      await waitFor(() => expect(screen.queryByRole("complementary")).not.toBeInTheDocument());
+      expect(row()).toHaveFocus();
+    });
+
+    it("opens for a pull request from a fork, and says why it cannot be reviewed", async () => {
+      const { user } = view({ pullRequests: [makePullRequestRow({ action: "fork" })] });
+
+      await user.click(screen.getByRole("treeitem", { name: /^web#31 / }));
+
+      const panel = screen.getByRole("complementary", { name: "Pull request web#31" });
+      expect(
+        within(panel).getByRole("button", { name: /^Start review/ }),
+      ).toHaveAccessibleDescription("Pull requests from forks can't be reviewed yet.");
+      expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    });
+
+    it("closes when the pull request leaves the reading", async () => {
+      const { user } = view({ pullRequests });
+      await user.click(screen.getByRole("treeitem", { name: /^web#31 / }));
+
+      act(() => {
+        useAppStore.getState().applyState(
+          makeState({
+            repositories: [makeRepository()],
+            reviewCenter: makeReviewCenter({
+              readAt: "2026-09-16T12:05:00Z",
+              pullRequests: [pullRequests[1] as PullRequestRow],
+            }),
+          }),
+        );
+      });
+
+      await waitFor(() => expect(screen.queryByRole("complementary")).not.toBeInTheDocument());
+    });
+
+    it("follows the reading of the pull request it has open", async () => {
+      const { user } = view({ pullRequests });
+      await user.click(screen.getByRole("treeitem", { name: /^web#31 / }));
+
+      act(() => {
+        useAppStore.getState().applyState(
+          makeState({
+            repositories: [makeRepository()],
+            reviewCenter: makeReviewCenter({
+              readAt: "2026-09-16T12:05:00Z",
+              pullRequests: [
+                { ...(pullRequests[0] as PullRequestRow), title: "Add the sign-in screen" },
+              ],
+            }),
+          }),
+        );
+      });
+
+      expect(screen.getByRole("heading", { name: "Add the sign-in screen" })).toBeInTheDocument();
+    });
+
+    it("starts the review from the panel", async () => {
+      const { user } = view({ pullRequests });
+      await user.click(screen.getByRole("treeitem", { name: /^web#31 / }));
+
+      await user.click(screen.getByRole("button", { name: /^Start review/ }));
+
+      expect(useAppStore.getState().startReview).toEqual({ repositoryId: "repo-1", number: 31 });
+    });
   });
 
   describe("the states of the reading", () => {

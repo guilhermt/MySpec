@@ -33,6 +33,11 @@ export interface ChecksListProps {
    * reading, and the age of the reading with its exact time in the tooltip.
    */
   live?: { header: string; age: string; ageTooltip: string; reading: boolean };
+  /**
+   * trailing is what the summary line says at its right: the age of the reading ("read 2m ago"), or
+   * the failure of the reading in the error ink. It has the exact time in the tooltip when it has one.
+   */
+  trailing?: { text: string; tooltip?: string; error?: boolean };
   /** onOpen opens the url of a check in the browser, since nothing navigates inside the webview. */
   onOpen: (url: string) => void;
 }
@@ -42,6 +47,21 @@ const WORDS: Partial<Record<CheckGlyph, string>> = {
   error: "font-medium text-state-error",
   work: "font-medium text-ink-1",
 };
+
+/** Trailing is the age of the reading, or its failure, at the right of the summary. */
+function Trailing({ text, tooltip, error }: NonNullable<ChecksListProps["trailing"]>) {
+  const span = (
+    <span
+      className={cn(
+        "whitespace-nowrap tabular-nums",
+        error === true ? "text-state-error" : "text-ink-4",
+      )}
+    >
+      {text}
+    </span>
+  );
+  return tooltip === undefined ? span : <Tooltip content={tooltip}>{span}</Tooltip>;
+}
 
 /** Glyph is the sign of a check in its column. */
 function Glyph({ glyph }: { glyph: CheckGlyph }) {
@@ -63,7 +83,7 @@ function Glyph({ glyph }: { glyph: CheckGlyph }) {
  * names itself as an external link, which onOpen opens; without one it stays plain text. The live
  * variant is the wait for the checks: a sunken block with the live header, the rows and no footer.
  */
-export function ChecksList({ summary, rows, onOpen, live }: ChecksListProps) {
+export function ChecksList({ summary, rows, onOpen, live, trailing }: ChecksListProps) {
   return (
     <div
       className={cn(
@@ -81,8 +101,13 @@ export function ChecksList({ summary, rows, onOpen, live }: ChecksListProps) {
             <span className="whitespace-nowrap text-ink-4 tabular-nums">{live.age}</span>
           </Tooltip>
         </div>
-      ) : (
+      ) : trailing === undefined ? (
         <p className="text-ink-2">{summary}</p>
+      ) : (
+        <div className="flex items-baseline gap-(--space-2)">
+          <p className="min-w-0 flex-1 text-ink-2">{summary}</p>
+          <Trailing {...trailing} />
+        </div>
       )}
       {rows.length > 0 && (
         <ul aria-label="Checks" className="flex flex-col">

@@ -55,6 +55,23 @@ describe("ChecksList", () => {
     );
   });
 
+  it("says the age of the reading at the right of the summary, with its exact time", async () => {
+    const { user } = renderWithStore(
+      <ChecksList
+        summary="All 6 passed"
+        rows={[]}
+        onOpen={() => {}}
+        trailing={{ text: "read 2m ago", tooltip: "Last read 14:02" }}
+      />,
+    );
+
+    expect(screen.getByText("All 6 passed")).toBeInTheDocument();
+    await user.hover(screen.getByText("read 2m ago"));
+    expect(await screen.findByRole("tooltip", {}, { timeout: 2000 })).toHaveTextContent(
+      "Last read 14:02",
+    );
+  });
+
   it("has no list without checks", () => {
     renderWithStore(<ChecksList summary="No checks" rows={[]} onOpen={() => {}} />);
     expect(screen.getByText("No checks")).toBeInTheDocument();

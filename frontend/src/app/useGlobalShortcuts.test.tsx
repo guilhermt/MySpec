@@ -191,7 +191,7 @@ describe("useGlobalShortcuts", () => {
     act(() => {
       useAppStore.getState().openStartReview({ repositoryId: "repo-1", number: 31 });
     });
-    await screen.findByRole("heading", { name: "Start review" });
+    await screen.findByRole("heading", { name: "Review web#31" });
 
     for (const key of ["n", "j", ","]) {
       const shortcut = createEvent.keyDown(window, { key, ctrlKey: true });
@@ -199,7 +199,7 @@ describe("useGlobalShortcuts", () => {
       expect(shortcut.defaultPrevented).toBe(true);
     }
 
-    expect(screen.getByRole("heading", { name: "Start review" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Review web#31" })).toBeInTheDocument();
     expect(useAppStore.getState().newTaskOpen).toBe(false);
     expect(useAppStore.getState().location).toEqual({ kind: "home" });
   });

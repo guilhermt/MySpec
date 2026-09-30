@@ -164,13 +164,91 @@ describe("the keyboard of Reviews", () => {
   });
 
   describe("Enter on a row", () => {
-    it("does what R does, until the panel takes it", async () => {
+    it("opens the panel of the pull request, with the focus staying on the row", async () => {
       const { user } = view();
       row(12).focus();
 
       await user.keyboard("{Enter}");
 
-      expect(useAppStore.getState().startReview).toEqual({ repositoryId: "repo-1", number: 12 });
+      expect(
+        screen.getByRole("complementary", { name: "Pull request web#12" }),
+      ).toBeInTheDocument();
+      expect(row(12)).toHaveFocus();
+      expect(useAppStore.getState().startReview).toBeNull();
+    });
+
+    it("changes the panel to the pull request of another row", async () => {
+      const { user } = view();
+      row(12).focus();
+      await user.keyboard("{Enter}{ArrowDown}{Enter}");
+
+      expect(screen.getByRole("complementary", { name: "Pull request web#7" })).toBeInTheDocument();
+    });
+
+    it("closes the panel on the row that is open", async () => {
+      const { user } = view();
+      row(12).focus();
+
+      await user.keyboard("{Enter}{Enter}");
+
+      await waitFor(() => expect(screen.queryByRole("complementary")).not.toBeInTheDocument());
+      expect(row(12)).toHaveFocus();
+    });
+
+    it("keeps the tab stop of the list on the open row when the focus left it", async () => {
+      const { user } = view();
+      await user.click(row(7));
+
+      await user.tab();
+
+      expect(row(7).tabIndex).toBe(0);
+    });
+  });
+
+  describe("a pull request that leaves the reading with its panel open", () => {
+    async function openWithFocusInPanel(number: number) {
+      const rendered = view();
+      row(number).focus();
+      await rendered.user.keyboard("{Enter}");
+      within(screen.getByRole("complementary"))
+        .getByRole("button", { name: /^(Start review|Open review)/ })
+        .focus();
+      return rendered;
+    }
+
+    it("closes the panel and puts the focus on the row that follows", async () => {
+      await openWithFocusInPanel(12);
+
+      act(() => {
+        useAppStore.getState().applyState(stateOf([SECOND, WATCHED, OLD]));
+      });
+
+      await waitFor(() => expect(screen.queryByRole("complementary")).not.toBeInTheDocument());
+      expect(row(7)).toHaveFocus();
+    });
+
+    it("puts the focus on the row before when none follows in the list", async () => {
+      await openWithFocusInPanel(9);
+
+      act(() => {
+        useAppStore.getState().applyState(stateOf([FIRST, SECOND, OLD]));
+      });
+
+      await waitFor(() => expect(screen.queryByRole("complementary")).not.toBeInTheDocument());
+      expect(row(7)).toHaveFocus();
+    });
+
+    it("leaves the focus alone when it is on the list", async () => {
+      const { user } = view();
+      row(12).focus();
+      await user.keyboard("{Enter}{ArrowDown}");
+
+      act(() => {
+        useAppStore.getState().applyState(stateOf([SECOND, WATCHED, OLD]));
+      });
+
+      await waitFor(() => expect(screen.queryByRole("complementary")).not.toBeInTheDocument());
+      expect(row(7)).toHaveFocus();
     });
   });
 
@@ -184,13 +262,32 @@ describe("the keyboard of Reviews", () => {
       expect(useAppStore.getState().startReview).toEqual({ repositoryId: "repo-1", number: 12 });
     });
 
-    it("opens the dialog on a repository to clone too, which the dialog offers", async () => {
+    it("opens the pull request in the panel with the focus on Clone and continue, on a repository to clone", async () => {
       const { user } = view([pull(12, { action: "clone" })]);
       row(12).focus();
 
       await user.keyboard("r");
 
-      expect(useAppStore.getState().startReview).toEqual({ repositoryId: "repo-1", number: 12 });
+      expect(
+        screen.getByRole("complementary", { name: "Pull request web#12" }),
+      ).toBeInTheDocument();
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: /^Clone and continue/ })).toHaveFocus(),
+      );
+      expect(useAppStore.getState().startReview).toBeNull();
+      expect(api.cloneRepository).not.toHaveBeenCalled();
+    });
+
+    it("does what it does on the row from inside the panel, for the pull request of the panel", async () => {
+      const { user } = view();
+      row(7).focus();
+      await user.keyboard("{Enter}");
+      const open = within(screen.getByRole("complementary")).getByRole("button", { name: "Close" });
+      open.focus();
+
+      await user.keyboard("r");
+
+      expect(useAppStore.getState().startReview).toEqual({ repositoryId: "repo-1", number: 7 });
     });
 
     it("opens the review the pull request has", async () => {
@@ -224,9 +321,11 @@ describe("the keyboard of Reviews", () => {
       expect(useAppStore.getState().startReview).toBeNull();
     });
 
-    it("says where the clone should be when it is gone", async () => {
+    it("says where the clone should be when it is gone, anchored to the panel from inside it", async () => {
       const { user } = view([pull(12, { action: "clone_missing" })]);
       row(12).focus();
+      await user.keyboard("{Enter}");
+      within(screen.getByRole("complementary")).getByRole("button", { name: "Close" }).focus();
 
       await user.keyboard("r");
 
@@ -267,6 +366,17 @@ describe("the keyboard of Reviews", () => {
       );
     });
 
+    it("opens the pull request of the panel from inside it", async () => {
+      const { user } = view();
+      row(7).focus();
+      await user.keyboard("{Enter}");
+      within(screen.getByRole("complementary")).getByRole("button", { name: "Close" }).focus();
+
+      await user.keyboard("o");
+
+      expect(api.openExternal).toHaveBeenCalledExactlyOnceWith("https://github.com/dev/web/pull/7");
+    });
+
     it("does nothing on a header", async () => {
       const { user } = view();
       header("Pending").focus();
@@ -278,19 +388,57 @@ describe("the keyboard of Reviews", () => {
   });
 
   describe("Esc", () => {
-    it("closes the notice, and leaves the focus on the row", async () => {
+    it("closes the notice first, and leaves the focus on the row", async () => {
       const { user } = view([pull(12, { action: "fork" })]);
       row(12).focus();
-      await user.keyboard("r");
+      await user.keyboard("{Enter}r");
       expect(await screen.findByRole("status")).toBeInTheDocument();
 
       await user.keyboard("{Escape}");
 
       await waitFor(() => expect(screen.queryByRole("status")).not.toBeInTheDocument());
+      expect(screen.getByRole("complementary")).toBeInTheDocument();
       expect(row(12)).toHaveFocus();
     });
 
-    it("is left to the global handler when there is no notice", () => {
+    it("closes the panel, with the focus going back to the row when it was in the panel", async () => {
+      const { user } = view();
+      row(12).focus();
+      await user.keyboard("{Enter}");
+      within(screen.getByRole("complementary"))
+        .getByRole("button", { name: /^Start review/ })
+        .focus();
+
+      await user.keyboard("{Escape}");
+
+      await waitFor(() => expect(screen.queryByRole("complementary")).not.toBeInTheDocument());
+      expect(row(12)).toHaveFocus();
+    });
+
+    it("closes the panel and leaves the focus where it is on the list", async () => {
+      const { user } = view();
+      row(12).focus();
+      await user.keyboard("{Enter}{ArrowDown}");
+
+      await user.keyboard("{Escape}");
+
+      await waitFor(() => expect(screen.queryByRole("complementary")).not.toBeInTheDocument());
+      expect(row(7)).toHaveFocus();
+    });
+
+    it("marks the event it handled, so the global handler does not act", async () => {
+      const { user } = view();
+      row(12).focus();
+      await user.keyboard("{Enter}");
+
+      const notCancelled = row(12).dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+      );
+
+      expect(notCancelled).toBe(false);
+    });
+
+    it("is left to the global handler when there is no notice and no panel", () => {
       view();
       row(12).focus();
 

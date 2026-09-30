@@ -1,47 +1,60 @@
-import { LoaderCircle } from "lucide-react";
-import { type FormEvent, type KeyboardEvent, useId, useState } from "react";
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { useEffect, useId, useRef, useState } from "react";
+import { Button } from "@/components/system/Button";
+import { Dialog, DialogBody, DialogCancel, DialogFooter } from "@/components/system/Dialog";
+import { Field } from "@/components/system/Field";
+import { Icon } from "@/components/system/Icon";
+import { ICONS } from "@/components/system/icons";
+import { SegmentedControl } from "@/components/system/SegmentedControl";
+import { SunkenLine } from "@/components/system/SunkenLine";
+import { Textarea } from "@/components/system/Textarea";
 import { ModelPicker } from "@/features/models/ModelPicker";
+import { panelReason, prPanelModel } from "@/features/reviews/pr-panel";
+import { rowReference } from "@/features/reviews/review-list";
 import { messageOf } from "@/lib/errors";
 import { choiceOf, type ModelChoice } from "@/lib/models";
-import { shortName } from "@/lib/repositories";
-import {
-  asPullReviewMode,
-  type PullRequestRow,
-  type PullReviewMode,
-  type StageModel,
-} from "@/lib/wails";
-import { cloneRepository, startReview } from "@/store/actions";
-import { useAppStore, useRepository, useReviewCenter, useStartReview } from "@/store/app-store";
+import { type ChecksReading, checkCounts, unfinishedChecks } from "@/lib/pull-requests";
+import { findRepository, shortName } from "@/lib/repositories";
+import type { PullRequestRow, PullReviewMode, StageModel } from "@/lib/wails";
+import { startReview } from "@/store/actions";
+import { type PullRef, useAppStore, useReviewCenter, useStartReview } from "@/store/app-store";
 
 const NO_MODELS: readonly StageModel[] = [];
 
-/** MODE_HINT says what each mode does with the findings the user approves. */
+/** MODE_HINT says what each mode does with the findings the user approves, and that it is fixed. */
 const MODE_HINT: Record<PullReviewMode, string> = {
-  publish: "Publish posts the approved findings as a review on GitHub.",
-  apply: "Apply has the agent fix the approved findings and push them to the pull request.",
+  publish:
+    "Publish posts the approved findings as a review on GitHub. Fixed once the review starts.",
+  apply:
+    "Apply has the agent fix the approved findings and push them to the pull request. Fixed once the review starts.",
 };
 
-/** MODE_LABEL names each mode in the toggle. */
-const MODE_LABEL: Record<PullReviewMode, string> = { publish: "Publish", apply: "Apply" };
+const MODES = [
+  { value: "publish", label: "Publish" },
+  { value: "apply", label: "Apply" },
+] as const satisfies readonly { value: PullReviewMode; label: string }[];
 
-const MODES: readonly PullReviewMode[] = ["publish", "apply"];
+const HINT = "text-(length:--text-meta) leading-(--leading-meta) text-ink-3";
+
+/**
+ * waitText is what the first pass waits for when the reading of the list says it has to: the checks
+ * that are not finished, or GitHub saying whether the branch merges clean. Null when it starts at once.
+ */
+function waitText(reading: ChecksReading): string | null {
+  if (unfinishedChecks(reading).length > 0) {
+    const { passed, total } = checkCounts(reading);
+    return `The first pass starts when the checks finish: ${passed} of ${total} passed. You can leave meanwhile.`;
+  }
+  if (reading.mergeable === "unknown" || reading.mergeable === "") {
+    return "The first pass starts when GitHub says whether it merges clean. You can leave meanwhile.";
+  }
+  return null;
+}
 
 /** StartReviewDialog starts the review of one pull request of the Reviews view. */
 export function StartReviewDialog() {
   const pull = useStartReview();
-  const closeStartReview = useAppStore((state) => state.closeStartReview);
   const center = useReviewCenter();
+  const key = pull === null ? null : `${pull.repositoryId}#${pull.number}`;
   const row =
     pull === null
       ? null
@@ -49,86 +62,84 @@ export function StartReviewDialog() {
           (candidate) =>
             candidate.repositoryId === pull.repositoryId && candidate.number === pull.number,
         ) ?? null);
+  // The last row of this pull request the reading had: when a reading loses it, the dialog keeps
+  // what it shows and what was typed, and says the pull request is gone.
+  const seen = useRef<{ key: string | null; row: PullRequestRow | null }>({ key: null, row: null });
+  useEffect(() => {
+    seen.current = { key, row: row ?? (seen.current.key === key ? seen.current.row : null) };
+  }, [key, row]);
 
-  if (pull === null) {
+  if (pull === null || key === null) {
     return null;
   }
-  return (
-    <Dialog
-      open
-      onOpenChange={(open) => {
-        if (!open) {
-          closeStartReview();
-        }
-      }}
-    >
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Start review</DialogTitle>
-        </DialogHeader>
-        {row === null ? (
-          <>
-            <p className="text-sm text-muted-foreground">
-              This pull request isn't in the last reading.
-            </p>
-            <DialogFooter>
-              <Button type="button" variant="ghost" onClick={closeStartReview}>
-                Cancel
-              </Button>
-            </DialogFooter>
-          </>
-        ) : (
-          // Keyed by the pull request: a dialog opened for another one starts
-          // afresh, without what was typed for the last.
-          <StartReviewFields key={`${row.repositoryId}#${row.number}`} row={row} />
-        )}
-      </DialogContent>
-    </Dialog>
-  );
+  const shown = row ?? (seen.current.key === key ? seen.current.row : null);
+  // Keyed by the pull request: a dialog opened for another one starts afresh, without what was
+  // typed for the last.
+  return <StartReviewFields key={key} pull={pull} row={shown} gone={row === null} />;
 }
 
-function StartReviewFields({ row }: { row: PullRequestRow }) {
+interface StartReviewFieldsProps {
+  pull: PullRef;
+  /** row is the pull request as the last reading has it; null when no reading ever had it. */
+  row: PullRequestRow | null;
+  /** gone is that the last reading no longer has the pull request. */
+  gone: boolean;
+}
+
+function StartReviewFields({ pull, row, gone }: StartReviewFieldsProps) {
+  const app = useAppStore((state) => state.app);
   const closeStartReview = useAppStore((state) => state.closeStartReview);
   const openReview = useAppStore((state) => state.openReview);
-  const setPendingReview = useAppStore((state) => state.setPendingReview);
   const defaults = useAppStore((state) => state.app?.modelDefaults ?? NO_MODELS);
-  const repository = useRepository(row.repositoryId);
 
   const [instructions, setInstructions] = useState("");
+  const [instructionsOpen, setInstructionsOpen] = useState(false);
   const [choice, setChoice] = useState<ModelChoice>(() => choiceOf(defaults, "pr_review"));
-  // Every review starts in publish mode: applying is a choice made for the pull
-  // request at hand, and only the user's own can be applied to.
+  // Every review starts in publish mode: applying is a choice made for the pull request at hand,
+  // and only the user's own can be applied to.
   const [mode, setMode] = useState<PullReviewMode>("publish");
+  const [modeOpen, setModeOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
-  const [cloning, setCloning] = useState(false);
-  const modeLabelId = useId();
+  const startRef = useRef<HTMLButtonElement>(null);
+  const instructionsRef = useRef<HTMLTextAreaElement>(null);
+  const modeRef = useRef<HTMLDivElement>(null);
+  const reasonId = useId();
 
-  const needsClone = repository !== null && !repository.cloned;
+  // What each disclosure opens takes the focus: the field, or the segment chosen.
+  useEffect(() => {
+    if (instructionsOpen) {
+      instructionsRef.current?.focus();
+    }
+  }, [instructionsOpen]);
+  useEffect(() => {
+    if (modeOpen) {
+      modeRef.current?.querySelector<HTMLElement>('[role="radio"][aria-checked="true"]')?.focus();
+    }
+  }, [modeOpen]);
 
-  const clone = () => {
-    setCloning(true);
-    setError(null);
-    cloneRepository(row.repositoryId)
-      .then((started) => {
-        if (started) {
-          setPendingReview({ repositoryId: row.repositoryId, number: row.number });
-          closeStartReview();
-        }
-      })
-      .catch((reason: unknown) => setError(messageOf(reason)))
-      .finally(() => setCloning(false));
-  };
+  const repository = findRepository(app, pull.repositoryId);
+  const reference =
+    row === null ? `${shortName(repository?.fullName ?? "")}#${pull.number}` : rowReference(row);
+  const model = app === null || row === null ? null : prPanelModel(row, { app, now: Date.now() });
+  // A repository without a clone reaches the dialog only by an old path: the panel offers the clone.
+  const cloneReason =
+    model !== null && model.action.kind === "clone" ? panelReason(model.action) : null;
+  const waiting = model === null ? null : waitText(model.checks.reading);
+  const blocked = gone
+    ? `${reference} isn't in the last reading. It was merged or closed.`
+    : cloneReason;
+  const footerReason = blocked ?? (starting ? "Creating the worktree…" : null);
 
   const start = () => {
-    if (starting || needsClone) {
+    if (starting || blocked !== null) {
       return;
     }
     setStarting(true);
     setError(null);
     startReview({
-      repositoryId: row.repositoryId,
-      number: row.number,
+      repositoryId: pull.repositoryId,
+      number: pull.number,
       instructions,
       model: choice.model,
       effort: choice.effort,
@@ -144,112 +155,129 @@ function StartReviewFields({ row }: { row: PullRequestRow }) {
       });
   };
 
-  const onSubmit = (event: FormEvent) => {
-    event.preventDefault();
-    start();
-  };
-
-  const onInstructionsKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
-      event.preventDefault();
-      start();
-    }
-  };
-
   return (
-    <form onSubmit={onSubmit} className="flex flex-col gap-4">
-      <div className="flex flex-col gap-0.5 rounded-lg border px-3 py-2">
-        <p className="text-sm">{`#${row.number} ${row.title}`}</p>
-        <p className="text-xs text-muted-foreground">
-          {[shortName(row.repository), row.author, row.card === null ? "" : `#${row.card.number}`]
-            .filter((part) => part !== "")
-            .join(" · ")}
-        </p>
-      </div>
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        // Esc and × wait for the worktree, like Cancel.
+        if (!open && !starting) {
+          closeStartReview();
+        }
+      }}
+      size="wide"
+      title={`Review ${reference}`}
+      onConfirm={start}
+      initialFocus={startRef}
+    >
+      <DialogBody className="gap-(--space-4)">
+        {row !== null && (
+          <SunkenLine>
+            <span className="flex flex-col">
+              <span>
+                <span className="text-ink-3 tabular-nums">{reference}</span>{" "}
+                <span className="font-medium text-ink-1">{row.title}</span>
+              </span>
+              <span className="text-ink-3">
+                {[
+                  row.own ? "you" : row.author,
+                  `${row.headBranch} → ${row.baseBranch}`,
+                  ...(row.card === null ? [] : [`card #${row.card.number}`]),
+                ].join(" · ")}
+              </span>
+            </span>
+          </SunkenLine>
+        )}
 
-      {needsClone ? (
-        <div className="flex flex-col items-start gap-2">
-          <p className="text-sm text-muted-foreground">
-            {`${row.repository} isn't cloned yet. The review needs a clone to work in.`}
-          </p>
-          {repository.cloning ? (
-            <p role="status" className="flex items-center gap-1.5 text-sm text-muted-foreground">
-              <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" />
-              {`Cloning ${row.repository}…`}
-            </p>
-          ) : (
-            <Button type="button" size="sm" disabled={cloning} onClick={clone}>
-              Clone and continue
-            </Button>
-          )}
-          {repository.cloneError !== "" && (
-            <p role="alert" className="break-all text-sm text-destructive">
-              {repository.cloneError}
-            </p>
-          )}
-        </div>
-      ) : (
-        <>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="review-instructions">Instructions</Label>
-            <Textarea
-              id="review-instructions"
-              rows={4}
-              autoFocus
-              value={instructions}
-              onChange={(event) => setInstructions(event.target.value)}
-              onKeyDown={onInstructionsKeyDown}
-              className="max-h-[40dvh] field-sizing-content"
-            />
-            <p className="text-xs text-muted-foreground">What to look at in this pass. Optional.</p>
-          </div>
+        {waiting !== null && <SunkenLine icon="github">{waiting}</SunkenLine>}
 
-          <div className="flex items-center justify-between gap-4">
-            <Label>Model</Label>
+        <div inert={starting} className="flex flex-col gap-1">
+          <span className="text-(length:--text-meta) leading-(--leading-meta) font-medium text-ink-2">
+            Model
+          </span>
+          <div className="flex flex-wrap items-center gap-(--space-3)">
             <ModelPicker label="Review" value={choice} onChange={setChoice} />
+            <span className={HINT}>From Defaults. It can change in the conversation.</span>
           </div>
+        </div>
 
-          {/* Only a pull request of the user's own can be fixed by the agent. */}
-          {row.own && (
-            <div className="flex flex-col gap-1.5">
-              <Label id={modeLabelId}>Mode</Label>
-              <ToggleGroup
-                aria-labelledby={modeLabelId}
+        {modeOpen && row?.own === true && (
+          <Field label="Mode">
+            <div ref={modeRef}>
+              <SegmentedControl
+                label="Mode"
                 size="sm"
-                value={[mode]}
-                onValueChange={(next: string[]) => {
-                  const [value] = next;
-                  if (value !== undefined) {
-                    setMode(asPullReviewMode(value));
-                  }
-                }}
-              >
-                {MODES.map((option) => (
-                  <ToggleGroupItem key={option} value={option}>
-                    {MODE_LABEL[option]}
-                  </ToggleGroupItem>
-                ))}
-              </ToggleGroup>
-              <p className="text-xs text-muted-foreground">{MODE_HINT[mode]}</p>
+                value={mode}
+                options={MODES}
+                onValueChange={setMode}
+                disabled={starting}
+              />
             </div>
-          )}
-        </>
-      )}
+            <p className={HINT}>{MODE_HINT[mode]}</p>
+          </Field>
+        )}
 
-      {error !== null && (
-        <p role="alert" className="break-all text-sm text-destructive">
-          {error}
-        </p>
-      )}
+        {instructionsOpen && (
+          <Field
+            label="Instructions"
+            complement="optional"
+            help="They go to the agent with the pull request, and show as your first message."
+          >
+            <Textarea
+              ref={instructionsRef}
+              rows={3}
+              placeholder="What to look at in this pass."
+              value={instructions}
+              readOnly={starting}
+              onChange={(event) => setInstructions(event.target.value)}
+            />
+          </Field>
+        )}
 
-      <DialogFooter>
-        <Button type="button" variant="ghost" onClick={closeStartReview}>
-          Cancel
-        </Button>
-        <Button type="submit" disabled={starting || needsClone}>
-          {starting ? "Starting…" : "Start review"}
+        {(!instructionsOpen || (row?.own === true && !modeOpen)) && (
+          <div className="flex flex-wrap items-center gap-(--space-2)">
+            {!instructionsOpen && (
+              <Button
+                variant="ghost"
+                size="xs"
+                icon={ICONS.plus}
+                disabled={starting}
+                onClick={() => setInstructionsOpen(true)}
+              >
+                Add instructions
+              </Button>
+            )}
+            {row?.own === true && !modeOpen && (
+              <Button
+                variant="ghost"
+                size="xs"
+                disabled={starting}
+                onClick={() => setModeOpen(true)}
+              >
+                {`Mode · ${MODES.find((option) => option.value === mode)?.label}`}
+                <Icon icon={ICONS.chevron} size="xs" className="rotate-90" />
+              </Button>
+            )}
+          </div>
+        )}
+      </DialogBody>
+
+      <DialogFooter
+        {...(footerReason !== null ? { reason: { id: reasonId, text: footerReason } } : {})}
+        {...(error !== null ? { refusal: error } : {})}
+      >
+        <DialogCancel disabled={starting} />
+        <Button
+          ref={startRef}
+          variant="primary"
+          shortcut="Ctrl ↵"
+          {...(blocked !== null ? { disabled: true, reasonId } : {})}
+          loading={starting}
+          loadingLabel="Starting…"
+          onClick={start}
+        >
+          Start review
         </Button>
       </DialogFooter>
-    </form>
+    </Dialog>
   );
 }

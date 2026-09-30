@@ -1,8 +1,10 @@
 import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
+import { PanelLayout } from "@/components/system/AuxPanel";
 import { KeyNotice, useKeyNotice } from "@/components/system/KeyNotice";
 import { ScrollArea } from "@/components/system/ScrollArea";
 import { useNow } from "@/features/attention/useNow";
 import { FLASH_MS, isTyping, LIST_COLUMN } from "@/features/board/BoardView";
+import { PullRequestPanel } from "@/features/reviews/PullRequestPanel";
 import { PullRequestTree } from "@/features/reviews/PullRequestTree";
 import { ReviewsFilterBar } from "@/features/reviews/ReviewsFilterBar";
 import { ReviewsHeader } from "@/features/reviews/ReviewsHeader";
@@ -45,7 +47,12 @@ export function ReviewsView() {
   const treeRef = useRef<HTMLDivElement>(null);
   const now = useNow(READING_CLOCK_MS, center.readAt !== "" || (center.failures ?? []).length > 0);
   const [newKeys, setNewKeys] = useState<ReadonlySet<string>>(NO_KEYS);
+  // The pull request of the panel, and the request to focus its clone button, which R makes.
+  const [openKey, setOpenKey] = useState<string | null>(null);
+  const [panelFocus, setPanelFocus] = useState<"clone" | null>(null);
   const pullRequests = center.pullRequests ?? NO_ROWS;
+  const openRow =
+    openKey === null ? null : (pullRequests.find((row) => row.key === openKey) ?? null);
 
   // Opening the view reads the pull requests again; the stored reading shows
   // meanwhile.
@@ -76,6 +83,12 @@ export function ReviewsView() {
   }, [newKeys]);
 
   const rows = useMemo(() => reviewRows(reviewSections(center), collapsed), [center, collapsed]);
+  // rowKeys are the pull requests the list draws, in the order it draws them.
+  const rowKeys = useMemo(
+    () => rows.flatMap((row) => (row.kind === "pr" ? [row.row.key] : [])),
+    [rows],
+  );
+  const visibleKeys = useRef<readonly string[]>(rowKeys);
   const models = useMemo(() => {
     if (app === null) {
       return new Map();
@@ -88,8 +101,58 @@ export function ReviewsView() {
     );
   }, [app, now, rows]);
 
-  // act is what R does on a pull request, and what a click or Enter on its row does until the panel
-  // takes them: a repository without a clone is offered one by the dialog itself.
+  // rowElement is the row of a pull request, or the tab stop of the list when the row is not drawn.
+  const rowElement = (key: string) =>
+    Array.from(treeRef.current?.querySelectorAll<HTMLElement>("[data-row-key]") ?? []).find(
+      (element) => element.getAttribute("data-row-key") === key,
+    ) ?? treeRef.current?.querySelector<HTMLElement>('[tabindex="0"]');
+
+  // A pull request that leaves the reading takes its panel with it. When the focus was in the panel,
+  // or had nowhere to fall, it goes to the row that follows the one that left, else the one before,
+  // else the tab stop of the list.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: it runs when the list or the open pull request changes; rowElement only reads the DOM
+  useEffect(() => {
+    const before = visibleKeys.current;
+    visibleKeys.current = rowKeys;
+    if (openKey === null || openRow !== null) {
+      return;
+    }
+    setOpenKey(null);
+    const active = document.activeElement;
+    if (active !== null && active !== document.body && active.closest(".list-panel") === null) {
+      return;
+    }
+    const alive = new Set(rowKeys);
+    const index = before.indexOf(openKey);
+    const target =
+      index < 0
+        ? undefined
+        : (before.slice(index + 1).find((key) => alive.has(key)) ??
+          before
+            .slice(0, index)
+            .reverse()
+            .find((key) => alive.has(key)));
+    (target === undefined
+      ? treeRef.current?.querySelector<HTMLElement>('[tabindex="0"]')
+      : rowElement(target)
+    )?.focus();
+  }, [rowKeys, openKey, openRow]);
+
+  // closePanel closes the pull request; the focus goes back to its row only when it was in the
+  // panel, and a focus on the list stays where it is.
+  const closePanel = () => {
+    const inPanel = document.activeElement?.closest(".list-panel") != null;
+    setOpenKey(null);
+    if (inPanel && openKey !== null) {
+      rowElement(openKey)?.focus();
+    }
+  };
+
+  // activate is what a click or Enter on a row does: it opens the panel of that pull request, and
+  // on the open one closes it.
+  const activate = (row: PullRequestRow) => setOpenKey(openKey === row.key ? null : row.key);
+
+  // act is what R does on a pull request, from its row or from its panel.
   const act = (row: PullRequestRow, anchor: Element) => {
     if (app === null) {
       return;
@@ -101,8 +164,12 @@ export function ReviewsView() {
     }
     switch (asPullRequestAction(row.action)) {
       case "review":
-      case "clone":
         openStartReview({ repositoryId: row.repositoryId, number: row.number });
+        break;
+      case "clone":
+        // A repository without a clone offers it in the panel: the dialog opens when the clone ends.
+        setOpenKey(row.key);
+        setPanelFocus("clone");
         break;
       case "open_review":
         openReview(row.reviewId);
@@ -115,10 +182,6 @@ export function ReviewsView() {
         break;
     }
   };
-  const rowElement = (key: string) =>
-    Array.from(treeRef.current?.querySelectorAll<HTMLElement>("[data-row-key]") ?? []).find(
-      (element) => element.getAttribute("data-row-key") === key,
-    ) ?? treeRef.current;
 
   const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     const target = event.target;
@@ -130,28 +193,38 @@ export function ReviewsView() {
       return;
     }
     if (event.key === "Escape") {
-      if (notice.notice === null) {
+      if (notice.notice !== null) {
+        notice.hide();
+      } else if (openKey !== null) {
+        closePanel();
+      } else {
         return;
       }
-      notice.hide();
       event.preventDefault();
       return;
     }
     const element = target.closest<HTMLElement>("[data-row-key]");
+    const panel = target.closest(".list-panel");
     const row =
       element === null
         ? undefined
         : pullRequests.find((candidate) => candidate.key === element.getAttribute("data-row-key"));
-    if (element === null || row === undefined) {
+    const pull = row ?? (panel === null ? null : openRow);
+    if (pull === null || pull === undefined) {
       return;
     }
+    const anchor =
+      element ??
+      panel?.querySelector("[data-panel-actions]") ??
+      treeRef.current?.querySelector('[tabindex="0"]') ??
+      target;
     const key = event.key.toLowerCase();
     if (key === "r") {
       event.preventDefault();
-      act(row, element);
+      act(pull, anchor);
     } else if (key === "o") {
       event.preventDefault();
-      void openExternal(row.url);
+      void openExternal(pull.url);
     }
   };
 
@@ -172,11 +245,11 @@ export function ReviewsView() {
       <PullRequestTree
         rows={rows}
         models={models}
-        openKey={null}
+        openKey={openKey}
         newKeys={newKeys}
         treeRef={treeRef}
         onToggleSection={toggleSection}
-        onActivate={(row) => act(row, rowElement(row.key) ?? document.body)}
+        onActivate={activate}
       />
     );
   }
@@ -190,13 +263,28 @@ export function ReviewsView() {
       className="flex min-h-0 min-w-0 flex-1 flex-col bg-surface-1"
     >
       <ReviewsHeader center={center} now={now} />
-      <ScrollArea className="list-area min-h-0 flex-1">
-        <div className={LIST_COLUMN}>
-          <ReviewsFailureStrips center={center} now={now} />
-          {showsBar && <ReviewsFilterBar center={center} />}
-          {content}
-        </div>
-      </ScrollArea>
+      <PanelLayout
+        panel={
+          openRow !== null && (
+            <PullRequestPanel
+              key={openRow.key}
+              row={openRow}
+              now={now}
+              panelFocus={panelFocus}
+              onPanelFocused={() => setPanelFocus(null)}
+              onClose={closePanel}
+            />
+          )
+        }
+      >
+        <ScrollArea className="list-area min-h-0 flex-1">
+          <div className={LIST_COLUMN}>
+            <ReviewsFailureStrips center={center} now={now} />
+            {showsBar && <ReviewsFilterBar center={center} />}
+            {content}
+          </div>
+        </ScrollArea>
+      </PanelLayout>
       <KeyNotice notice={notice.notice} onHide={notice.hide} />
     </section>
   );
