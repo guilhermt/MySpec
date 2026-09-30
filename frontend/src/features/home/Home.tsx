@@ -138,7 +138,7 @@ export function Home() {
           <Section title="Start">
             <div className="flex flex-col">
               <StartRow
-                icon={ICONS.task}
+                icon={ICONS.plus}
                 label="New task"
                 sub="From scratch. A card starts its task on its board."
                 shortcut="Ctrl N"
