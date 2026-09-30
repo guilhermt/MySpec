@@ -1291,8 +1291,9 @@ export function boardScene(name: BoardSceneName): BoardSceneSetup {
       return onBoard(stateOf(platform()), async (user) => {
         act(() => useAppStore.getState().openNewTask());
         await user.type(await screen.findByRole("textbox", { name: "Name" }), "Rate limit v2");
-        await user.type(
-          screen.getByRole("textbox", { name: "Context" }),
+        // The context is pasted: typed key by key, it redraws the dialog over the board once per key.
+        await user.click(screen.getByRole("textbox", { name: "Context" }));
+        await user.paste(
           "Add a daily cap per workspace on top of the rate limit per key. At the cap, answer 429 with a message that names the cap.",
         );
         await user.click(screen.getByRole("radio", { name: "One-Shot" }));
