@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   baseName,
   type CheckRow,
+  type ChecksReading,
   checkCounts,
   checkDuration,
   checkRows,
@@ -14,6 +15,7 @@ import {
   prOf,
   troubleLabel,
   troubleText,
+  unfinishedChecks,
 } from "@/lib/pull-requests";
 import type { CheckState } from "@/lib/wails";
 import { makePRCheck, makePullRequest, makeTask } from "@/test/wails-mock";
@@ -180,6 +182,82 @@ describe("checksSummary", () => {
     ],
   ])("sums up %s", (_, pr, text) => {
     expect(checksSummary(prChecks(makePullRequest(pr)))).toBe(text);
+  });
+});
+
+describe("checksSummary in the panel form", () => {
+  const read = "2026-09-27T23:59:00Z";
+  const check = (state: string) => makePRCheck({ state });
+  const reading = (overrides: Partial<ChecksReading>): ChecksReading => ({
+    checks: [],
+    mergeable: "",
+    checkedAt: read,
+    base: "dev",
+    ...overrides,
+  });
+
+  it.each([
+    ["no reading", { checkedAt: "" }, "Not read yet"],
+    ["a reading without checks", {}, "No checks"],
+    ["no checks, merging clean", { mergeable: "mergeable" }, "No checks · merges clean into dev"],
+    [
+      "every check passed",
+      { checks: ["passed", "skipped", "neutral", "passed", "passed", "passed"].map(check) },
+      "All 6 passed",
+    ],
+    [
+      "a failure, the failed first",
+      { checks: ["failed", "passed", "passed", "passed"].map(check) },
+      "1 failed · 3 of 4 passed",
+    ],
+    [
+      "checks still running and queued",
+      { checks: ["passed", "passed", "passed", "running", "queued"].map(check) },
+      "3 of 5 passed · 2 not finished",
+    ],
+    [
+      "a failure and a check not finished",
+      { checks: ["failed", "passed", "running"].map(check) },
+      "1 failed · 1 of 3 passed · 1 not finished",
+    ],
+    [
+      "every check passed, merging clean",
+      { checks: [check("passed")], mergeable: "mergeable" },
+      "All 1 passed · merges clean into dev",
+    ],
+    [
+      "a conflict with the base",
+      { checks: [check("passed")], mergeable: "conflicting" },
+      "All 1 passed · conflict with dev",
+    ],
+    [
+      "a merge GitHub didn't tell",
+      { checks: [check("passed")], mergeable: "unknown" },
+      "All 1 passed",
+    ],
+  ])("sums up %s", (_, overrides, text) => {
+    expect(checksSummary(reading(overrides), "panel")).toBe(text);
+  });
+});
+
+describe("unfinishedChecks", () => {
+  it("names the checks still running or queued, in the order GitHub gives them", () => {
+    const checks = [
+      makePRCheck({ name: "lint", state: "passed" }),
+      makePRCheck({ name: "e2e / chromium", state: "running" }),
+      makePRCheck({ name: "build", state: "failed" }),
+      makePRCheck({ name: "preview-deploy", state: "queued" }),
+    ];
+
+    expect(
+      unfinishedChecks({ checks, mergeable: "", checkedAt: "2026-09-27T23:59:00Z", base: "dev" }),
+    ).toEqual(["e2e / chromium", "preview-deploy"]);
+  });
+
+  it("is empty without checks", () => {
+    expect(unfinishedChecks({ checks: null, mergeable: "", checkedAt: "", base: "dev" })).toEqual(
+      [],
+    );
   });
 });
 

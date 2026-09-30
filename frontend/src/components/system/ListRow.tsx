@@ -25,6 +25,37 @@ export type CardRowTask =
   | { kind: "cloning"; text: string }
   | { kind: "clone-failed" };
 
+/** PullRequestRowState is what the state column of a pull request row says. */
+export type PullRequestRowState =
+  | { kind: "text"; text: string; tone: "ink-2" | "ink-3"; tooltip: string | null }
+  | {
+      kind: "review";
+      glyph: GlyphState;
+      long: string;
+      short: string;
+      strong: boolean;
+      tooltip: string;
+    }
+  | { kind: "task"; text: string; tooltip: string }
+  | { kind: "cloning"; text: string }
+  | { kind: "clone-failed" };
+
+/** PullRequestRowView is everything a pull request row draws and says; the caller builds it from the row. */
+export interface PullRequestRowView {
+  key: string;
+  reference: string;
+  referenceTooltip: string;
+  title: string;
+  tags: { text: string; tooltip: string | null }[];
+  author: string;
+  state: PullRequestRowState;
+  /** keys is what R does on the row: "review", "open", "open task"; null where R does nothing. */
+  keys: "review" | "open" | "open task" | null;
+  /** dashed is a row from a fork: drawn disabled, still on the path, still opening the panel. */
+  dashed: boolean;
+  label: string;
+}
+
 /** CardRowView is everything a row draws and says; the caller builds it from the card. */
 export interface CardRowView {
   key: string;

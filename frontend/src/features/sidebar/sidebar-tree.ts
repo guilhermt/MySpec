@@ -1,3 +1,4 @@
+import { reviewPass, VERDICT_WORDS } from "@/features/reviews/review-header";
 import {
   discussionSessions,
   type ItemSession,
@@ -243,11 +244,6 @@ function prPass(task: TaskSummary): number {
     return reports + 1;
   }
   return Math.max(reports, 1);
-}
-
-// The pass of a review: the last one it has, 1 before any.
-function reviewPass(review: ReviewSummary): number {
-  return (review.passes ?? []).at(-1)?.pass ?? 1;
 }
 
 function decided<T extends { decision: string }>(items: readonly T[]): { a: number; b: number } {
@@ -560,12 +556,6 @@ function taskStanding(task: TaskSummary): Standing {
   return sessionStanding(sessions, place, same(place));
 }
 
-const VERDICT_WORDS: Record<string, string> = {
-  approve: "approved",
-  request_changes: "changes requested",
-  comment: "commented",
-};
-
 function reviewStanding(review: ReviewSummary): Standing {
   const sessions = reviewSessions(review);
   const pass = `Pass ${reviewPass(review)}`;
@@ -804,6 +794,15 @@ export function taskRow(_app: State, task: TaskSummary, now: number): ItemRow {
     },
     now,
   );
+}
+
+/** waitSuffix is ", waiting for you for 18 minutes" for a row that has a chip, "" for one that has none. */
+export function waitSuffix(row: ItemRow): string {
+  if (row.clock?.kind !== "chip") {
+    return "";
+  }
+  const wait = row.clock.longTime === "just now" ? "less than a minute" : row.clock.longTime;
+  return `, waiting for you for ${wait}`;
 }
 
 /** reviewRow is the row of a review of a pull request. */

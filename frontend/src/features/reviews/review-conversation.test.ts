@@ -1,14 +1,22 @@
 import { describe, expect, it } from "vitest";
 import {
+  currentCardPass,
   decidedMarkerPasses,
   derivedDecidedPasses,
   disabledFindingNote,
   findingViews,
   reportMarkerIds,
+  waitingChecksFoot,
 } from "@/features/reviews/review-conversation";
 import type { Entry, MarkerEntry } from "@/lib/wails";
 import { clockTime } from "@/lib/when";
-import { makeEntry, makeReviewFinding, makeReviewPass, makeReviewSummary } from "@/test/wails-mock";
+import {
+  makeEntry,
+  makePRCheck,
+  makeReviewFinding,
+  makeReviewPass,
+  makeReviewSummary,
+} from "@/test/wails-mock";
 
 const NOW = Date.parse("2026-09-30T15:00:00Z");
 const WHEN = "2026-09-30T13:41:00Z";
@@ -155,5 +163,132 @@ describe("findingViews", () => {
       `Inline comment · published ${CLOCK}`,
       "Not published",
     ]);
+  });
+});
+
+describe("currentCardPass", () => {
+  const recorded = makeReviewPass({ pass: 1 });
+
+  it("is the last pass, recorded with findings and neither published nor sent", () => {
+    const review = makeReviewSummary({ status: "awaiting_decision", passes: [recorded] });
+
+    expect(currentCardPass(review)).toBe(recorded);
+  });
+
+  it.each([
+    { name: "without a pass", passes: [], status: "reviewing" },
+    {
+      name: "before the report",
+      passes: [makeReviewPass({ recorded: false })],
+      status: "reviewing",
+    },
+    {
+      name: "on a clean pass",
+      passes: [makeReviewPass({ clean: true, findings: [] })],
+      status: "ready_to_publish",
+    },
+    {
+      name: "without findings",
+      passes: [makeReviewPass({ findings: [] })],
+      status: "ready_to_publish",
+    },
+    { name: "once published", passes: [makeReviewPass({ published: true })], status: "published" },
+    { name: "once sent", passes: [makeReviewPass({ sent: true })], status: "in_review" },
+    {
+      name: "while the next pass waits for the checks",
+      passes: [recorded],
+      status: "waiting_checks",
+    },
+    { name: "while the next pass is blocked", passes: [recorded], status: "pass_blocked" },
+    {
+      name: "once a later pass was asked for",
+      passes: [recorded, makeReviewPass({ pass: 2, recorded: false })],
+      status: "reviewing",
+    },
+  ])("is none $name", ({ passes, status }) => {
+    expect(currentCardPass(makeReviewSummary({ status, passes }))).toBeNull();
+  });
+});
+
+describe("waitingChecksFoot", () => {
+  const running = (name: string) => makePRCheck({ name, state: "running" });
+  const LEAVE = "MySpec reads web#2291 every minute; you can leave meanwhile.";
+
+  it.each([
+    {
+      name: "the checks the first pass waits on",
+      checks: [
+        makePRCheck(),
+        running("e2e / chromium"),
+        makePRCheck({ name: "preview-deploy", state: "queued" }),
+      ],
+      mergeable: "mergeable",
+      passes: [makeReviewPass({ recorded: false })],
+      want: `The first pass starts when e2e / chromium and preview-deploy finish. ${LEAVE}`,
+    },
+    {
+      name: "a single check",
+      checks: [running("lint")],
+      mergeable: "conflicting",
+      passes: [],
+      want: `The first pass starts when lint finishes. ${LEAVE}`,
+    },
+    {
+      name: "three names, then how many more",
+      checks: ["a", "b", "c", "d", "e"].map(running),
+      mergeable: "mergeable",
+      passes: [],
+      want: `The first pass starts when a, b, c and 2 more finish. ${LEAVE}`,
+    },
+    {
+      name: "the checks and the merge",
+      checks: [running("lint"), running("test")],
+      mergeable: "unknown",
+      passes: [],
+      want: `The first pass starts when lint and test finish and GitHub says whether it merges clean. ${LEAVE}`,
+    },
+    {
+      name: "the merge alone",
+      checks: [makePRCheck()],
+      mergeable: "",
+      passes: [],
+      want: `The first pass starts when GitHub says whether web#2291 merges clean. ${LEAVE}`,
+    },
+    {
+      name: "the checks, when the reading knows nothing it waits on",
+      checks: [],
+      mergeable: "mergeable",
+      passes: [],
+      want: `The first pass starts when the checks finish. ${LEAVE}`,
+    },
+    {
+      name: "a later pass",
+      checks: [running("lint")],
+      mergeable: "mergeable",
+      passes: [
+        makeReviewPass({ pass: 1, published: true }),
+        makeReviewPass({ pass: 2, recorded: false }),
+      ],
+      want: `Pass 2 starts when lint finishes. ${LEAVE}`,
+    },
+    {
+      name: "the pass after the last report, before it is listed",
+      checks: [running("lint")],
+      mergeable: "mergeable",
+      passes: [makeReviewPass({ pass: 1, published: true })],
+      want: `Pass 2 starts when lint finishes. ${LEAVE}`,
+    },
+  ])("names $name", ({ checks, mergeable, passes, want }) => {
+    const review = makeReviewSummary({
+      repository: "acme/web",
+      number: 2291,
+      status: "waiting_checks",
+      checks,
+      mergeable,
+      checkedAt: WHEN,
+      passes,
+    });
+
+    expect(waitingChecksFoot(review)).toBe(want);
   });
 });

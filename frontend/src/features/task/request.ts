@@ -1,5 +1,4 @@
-import type { RequestForm } from "@/components/system/RequestBar";
-import type { GlyphState } from "@/components/system/StateGlyph";
+import type { RequestButton, RequestModel } from "@/components/system/RequestBar";
 import { pendingOf } from "@/features/chat/composer";
 import { voiceInSentence, voiceOf } from "@/features/chat/markers";
 import { canCloseTask, closeHint, draftAtHand } from "@/features/task/pr-status";
@@ -73,44 +72,10 @@ export type TaskRequestAction =
   | "showProblems";
 
 /** TaskRequestButton is one button of the request bar of a task. */
-export interface TaskRequestButton {
-  action: TaskRequestAction;
-  /** label is "Approve", "Discard step 4…". */
-  label: string;
-  variant: "primary" | "secondary";
-  /** shortcut is the key in the tooltip: "Ctrl+E" on Open in VS Code. */
-  shortcut?: string;
-  /** disabledReason is why the button can't be pressed: "Stage 2 more files". */
-  disabledReason?: string;
-  /** loadingLabel is "Approving…", "Continuing…", "Closing…", "Asking…"; "" when the action has none. */
-  loadingLabel: string;
-  /** tooltip says what the button does, when its label doesn't: Review again of a PR in trouble. */
-  tooltip?: string;
-  /** stage is the session Retry restarts (step:4, step_review:4, pr, pr_review, prd…); retrySession only. */
-  stage?: string;
-}
+export type TaskRequestButton = RequestButton<TaskRequestAction>;
 
 /** TaskRequestModel is the request bar of the task screen. */
-export interface TaskRequestModel {
-  /** form is tinted, error or closing, or quiet where a card holds the answer and when paused. */
-  form: RequestForm;
-  /** glyph is the one of the situation, or paused when paused. */
-  glyph: GlyphState;
-  label: string;
-  place?: string;
-  /** time is the wait of the situation; absent when paused. */
-  time?: { short: string; long: string; tone: "wait" | "error" | "close" };
-  progress?: string;
-  /** progressTooltip is the reason behind the progress: why the merge couldn't be confirmed. */
-  progressTooltip?: string;
-  /** status is the label and the place the situation was born with. */
-  status: string;
-  actions: TaskRequestButton[];
-  /** situationId is null when paused. */
-  situationId: string | null;
-  /** focus is where the focus goes on arriving at the situation, and on Show. */
-  focus: RequestFocus;
-}
+export type TaskRequestModel = RequestModel<TaskRequestAction, RequestFocus>;
 
 /** PendingRequest is the card the conversation on screen holds pending, read from its transcript. */
 export type PendingRequest =
@@ -157,12 +122,18 @@ interface Want {
  * Bar is the part of the bar both sources draw the same; without a focus of its own, the focus is
  * the primary when an action can be pressed, else the bar.
  */
-type Bar = Omit<TaskRequestModel, "glyph" | "time" | "situationId" | "focus"> & {
+export type Bar<A extends string = TaskRequestAction> = Omit<
+  RequestModel<A, RequestFocus>,
+  "glyph" | "time" | "situationId" | "focus"
+> & {
   focus?: RequestFocus;
 };
 
 /** Drawn is a bar as the task screen draws it, before the glyph, the wait and the situation. */
-type Drawn = Omit<TaskRequestModel, "glyph" | "time" | "situationId">;
+type Drawn<A extends string> = Omit<
+  RequestModel<A, RequestFocus>,
+  "glyph" | "time" | "situationId"
+>;
 
 const STEP_KINDS: readonly SituationKind[] = ["step_review", "step_empty"];
 const PR_KINDS: readonly SituationKind[] = [
@@ -173,7 +144,7 @@ const PR_KINDS: readonly SituationKind[] = [
   "pr_closed",
 ];
 
-const TONES: Record<SituationGroup, "wait" | "error" | "close"> = {
+export const TONES: Record<SituationGroup, "wait" | "error" | "close"> = {
   error: "error",
   waiting: "wait",
   closing: "close",
@@ -189,8 +160,12 @@ function openInEditor(): TaskRequestButton {
   };
 }
 
-function approve(action: TaskRequestAction, review: Review | null): TaskRequestButton {
-  const button: TaskRequestButton = {
+/** approveButton is Approve of a review of changes, dashed with what is left to stage while the review isn't whole. */
+export function approveButton<A extends string>(
+  action: A,
+  review: Review | null,
+): RequestButton<A> {
+  const button: RequestButton<A> = {
     action,
     label: "Approve",
     variant: "primary",
@@ -249,7 +224,7 @@ function stepBar(task: TaskSummary, step: Step, want: Want): Bar {
     label,
     progress: joined(notes),
     status: label,
-    actions: [openInEditor(), approve("approveStep", step.review)],
+    actions: [openInEditor(), approveButton("approveStep", step.review)],
   };
 }
 
@@ -287,7 +262,7 @@ function draftRefusal(pr: PullRequest, draft: PrDraft): string | undefined {
 }
 
 // approveDraftButton is Approve draft, disabled with the reason the draft can't be sent yet.
-function approveDraftButton(pr: PullRequest, edited: PrDraft | null): TaskRequestButton {
+export function approveDraftButton(pr: PullRequest, edited: PrDraft | null): TaskRequestButton {
   const refusal = draftRefusal(pr, effectiveDraft(pr, edited));
   return {
     action: "approveDraft",
@@ -356,7 +331,7 @@ function mergeBar(pr: PullRequest, want: Want, repository: Repository | null): B
 }
 
 /** REVIEW_AGAIN_TOOLTIP is what Review again does to a pull request in trouble. */
-const REVIEW_AGAIN_TOOLTIP =
+export const REVIEW_AGAIN_TOOLTIP =
   "Review again reads GitHub and turns this into findings of a new pass.";
 
 function troubleBar(pr: PullRequest): Bar {
@@ -427,7 +402,7 @@ function prBar(
         label,
         progress: joined(notes),
         status: label,
-        actions: [openInEditor(), approve("approvePR", pr.review)],
+        actions: [openInEditor(), approveButton("approvePR", pr.review)],
       };
     }
     case "merge":
@@ -470,13 +445,13 @@ function barOf(
 
 // focusOf is the focus of a bar without one of its own: the primary, or the first action that can
 // be pressed, when there is one; else the bar.
-function focusOf(actions: readonly TaskRequestButton[]): RequestFocus {
+function focusOf(actions: readonly RequestButton<string>[]): RequestFocus {
   return actions.some((action) => action.disabledReason === undefined) ? "primary" : "bar";
 }
 
 // clean drops the parts a bar doesn't have and settles its focus, so a bar reads the same
 // whichever source drew it.
-function clean(bar: Bar): Drawn {
+export function clean<A extends string>(bar: Bar<A>): Drawn<A> {
   const { place, progress, progressTooltip, focus, ...rest } = bar;
   return {
     ...rest,
@@ -487,8 +462,11 @@ function clean(bar: Bar): Drawn {
   };
 }
 
-// drawn is the bar of a situation, with its glyph, without the wait, which taskRequestOf adds.
-function drawn(situation: Situation, bar: Bar): TaskRequestModel {
+// drawn is the bar of a situation, with its glyph, without the wait, which the screen adds.
+export function drawn<A extends string>(
+  situation: Situation,
+  bar: Bar<A>,
+): RequestModel<A, RequestFocus> {
   return {
     ...clean(bar),
     glyph: TONES[asSituationGroup(situation.group)],
@@ -614,9 +592,16 @@ function situationRequestOf(
     case "permission":
     case "reply":
     case "session_error": {
-      const atHand =
-        asPlaceKind(situation.place.kind) === "pr" && task.pr !== null && draftAtHand(task.pr);
-      return sessionRequestOf(situation, task, pending, atHand, editedDraft);
+      const { pr } = task;
+      const session = situationSession(situation, task);
+      const actions =
+        asPlaceKind(situation.place.kind) === "pr" && pr !== null && draftAtHand(pr)
+          ? [approveDraftButton(pr, editedDraft)]
+          : [];
+      return sessionRequestOf(situation, session, conversationName(session.stage), pending, {
+        label: "Waiting for reply",
+        actions,
+      });
     }
     case "step_blocked":
     case "worktree_unreadable":
@@ -738,7 +723,7 @@ const SESSION_WORDS: Partial<Record<SituationKind, string>> = {
 const TAB_NAMES: Record<StepTab, string> = { implementer: "Implementer", reviewer: "Reviewer" };
 
 /** SHOW is the action of a bar whose card holds the answer: it goes to the card. */
-const SHOW: TaskRequestButton = {
+const SHOW: RequestButton<SessionAction> = {
   action: "show",
   label: "Show",
   variant: "secondary",
@@ -746,12 +731,12 @@ const SHOW: TaskRequestButton = {
 };
 
 // statusOf is what the bar's status says: the label and the place.
-function statusOf(label: string, place = ""): string {
+export function statusOf(label: string, place = ""): string {
   return place === "" ? label : `${label} · ${place}`;
 }
 
 // conversationName is what the bar calls a conversation of a task, by its session stage.
-function conversationName(stage: string): string {
+export function conversationName(stage: string): string {
   switch (stage.split(":")[0]) {
     case "prd":
       return "PRD";
@@ -784,15 +769,15 @@ function stepOf(task: TaskSummary, number: number): Step | null {
   return (task.steps ?? []).find((step) => step.number === number) ?? null;
 }
 
-/** SituationSession is the session a situation of a task is in. */
-interface SituationSession {
-  /** stage is the session stage: prd, step:4, step_review:4, pr, pr_review. */
+/** SituationSessionView is the session a situation is in. */
+export interface SituationSessionView {
+  /** stage is the session stage: prd, step:4, pr_review, review. */
   stage: string;
   lastError: string;
 }
 
 // situationSession is the session a situation is in, by its place.
-function situationSession(situation: Situation, task: TaskSummary): SituationSession {
+export function situationSession(situation: Situation, task: TaskSummary): SituationSessionView {
   const { place } = situation;
   switch (asPlaceKind(place.kind)) {
     case "step":
@@ -814,21 +799,22 @@ function situationSession(situation: Situation, task: TaskSummary): SituationSes
   }
 }
 
+/** SessionAction is what a bar of a conversation's situation does on its own: Show and Retry. */
+export type SessionAction = "show" | "retrySession";
+
 /**
  * sessionRequestOf is the bar of what a conversation asks: a question or a permission, quiet with
- * Show; a reply, tinted, and with the draft at hand, Approve draft; a session error, with Retry
- * when the session stopped and none when only its turn failed. The place is the conversation;
- * editedDraft is the draft as the user edited it. Without the wait, which taskRequestOf adds.
+ * Show; a reply, tinted, with what the caller says of it; a session error, with Retry when the
+ * session stopped and none when only its turn failed. The place is the conversation. Without the
+ * wait, which the screen adds.
  */
-export function sessionRequestOf(
+export function sessionRequestOf<A extends string>(
   s: Situation,
-  task: TaskSummary,
+  session: SituationSessionView,
+  place: string,
   pending: PendingRequest | null,
-  draftAtHand: boolean,
-  editedDraft: PrDraft | null = null,
-): TaskRequestModel {
-  const session = situationSession(s, task);
-  const place = conversationName(session.stage);
+  reply: { label: string; progress?: string; actions: RequestButton<A>[] },
+): RequestModel<A | SessionAction, RequestFocus> {
   switch (asSituationKind(s.kind)) {
     case "question": {
       const questions = pending?.kind === "question" ? pending.questions : 0;
@@ -854,7 +840,7 @@ export function sessionRequestOf(
     case "session_error": {
       // A turn that failed leaves the session alive: the answer goes through the composer, and
       // Retry would do nothing.
-      const actions: TaskRequestButton[] =
+      const actions: RequestButton<SessionAction>[] =
         session.lastError === ""
           ? []
           : [
@@ -875,18 +861,18 @@ export function sessionRequestOf(
         focus: actions.length > 0 ? "primary" : "composer",
       });
     }
-    default: {
-      const actions =
-        draftAtHand && task.pr !== null ? [approveDraftButton(task.pr, editedDraft)] : [];
+    default:
       return drawn(s, {
         form: "tinted",
-        label: "Waiting for reply",
+        label: reply.label,
         place,
-        status: statusOf("Waiting for reply", place),
-        actions,
-        focus: actions.length > 0 ? "primary" : "composer",
+        ...(reply.progress === undefined
+          ? {}
+          : { progress: reply.progress, progressTooltip: reply.progress }),
+        status: statusOf(reply.label, place),
+        actions: reply.actions,
+        focus: reply.actions.length > 0 ? "primary" : "composer",
       });
-    }
   }
 }
 

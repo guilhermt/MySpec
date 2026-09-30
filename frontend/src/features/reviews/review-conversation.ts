@@ -1,8 +1,84 @@
 import type { FindingView } from "@/components/system/Finding";
 import { fileName, findingName, headingOf, locationText } from "@/lib/findings";
+import { unfinishedChecks } from "@/lib/pull-requests";
+import { shortName } from "@/lib/repositories";
 import type { Entry, ReviewFinding, ReviewPass, ReviewSummary } from "@/lib/wails";
 import { asMarkerType } from "@/lib/wails";
 import { clockTime } from "@/lib/when";
+
+// LEFT_BEHIND are the statuses that say a Review again left the last pass behind: the next one was asked for.
+const LEFT_BEHIND = ["waiting_checks", "pass_blocked"];
+
+/**
+ * currentCardPass is the pass whose findings the card below the conversation holds: the last one, when
+ * its report is recorded with findings, it wasn't published or sent, and no pass after it was asked
+ * for; null otherwise.
+ */
+export function currentCardPass(review: ReviewSummary): ReviewPass | null {
+  const last = (review.passes ?? []).at(-1);
+  if (
+    last === undefined ||
+    !last.recorded ||
+    last.clean ||
+    (last.findings ?? []).length === 0 ||
+    last.published ||
+    last.sent ||
+    LEFT_BEHIND.includes(review.status)
+  ) {
+    return null;
+  }
+  return last;
+}
+
+// FOOT_NAMES is how many checks the foot of the wait names before "and 2 more".
+const FOOT_NAMES = 3;
+
+// waitingPass is the pass that waits for the checks: the last one asked for and not recorded, else the
+// one after the last report.
+function waitingPass(review: ReviewSummary): number {
+  const last = (review.passes ?? []).at(-1);
+  if (last === undefined) {
+    return 1;
+  }
+  return last.recorded ? last.pass + 1 : last.pass;
+}
+
+// listed is names joined as a sentence: "a", "a and b", "a, b and c", "a, b, c and 2 more".
+function listed(names: readonly string[]): string {
+  const shown = names.slice(0, FOOT_NAMES);
+  const more = names.length - shown.length;
+  const parts = more > 0 ? [...shown, `${more} more`] : shown;
+  const last = parts.at(-1) ?? "";
+  return parts.length === 1 ? last : `${parts.slice(0, -1).join(", ")} and ${last}`;
+}
+
+/**
+ * waitingChecksFoot is what the wait for the checks says under them: which checks the pass waits on
+ * and whether GitHub still has to say the pull request merges clean, then that you can leave: "The
+ * first pass starts when e2e / chromium and preview-deploy finish. MySpec reads web#2291 every minute;
+ * you can leave meanwhile."
+ */
+export function waitingChecksFoot(review: ReviewSummary): string {
+  const pass = waitingPass(review);
+  const subject = pass === 1 ? "The first pass" : `Pass ${pass}`;
+  const reference = `${shortName(review.repository)}#${review.number}`;
+  const names = unfinishedChecks({
+    checks: review.checks,
+    mergeable: review.mergeable,
+    checkedAt: review.checkedAt,
+    base: review.baseBranch,
+  });
+  const mergeUnknown = review.mergeable === "unknown" || review.mergeable === "";
+  let starts: string;
+  if (names.length === 0) {
+    starts = mergeUnknown ? `GitHub says whether ${reference} merges clean` : "the checks finish";
+  } else {
+    const finish = names.length === 1 ? "finishes" : "finish";
+    const merge = mergeUnknown ? " and GitHub says whether it merges clean" : "";
+    starts = `${listed(names)} ${finish}${merge}`;
+  }
+  return `${subject} starts when ${starts}. MySpec reads ${reference} every minute; you can leave meanwhile.`;
+}
 
 // reportMarkerTypes are the markers that say the report of a pass was written or rewritten.
 const REPORT_MARKERS = ["pr_review_written", "pr_review_revised"];

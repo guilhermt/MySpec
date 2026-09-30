@@ -96,8 +96,8 @@ describe("situationLabel", () => {
     ["merge", "merge", 0, "Ready to merge"],
     ["merge", "close", 0, "Ready to close"],
     ["review_report", "decide", 0, "Decide findings"],
-    ["review_report", "publish", 0, "Publish review"],
-    ["review_report", "apply", 0, "Apply findings"],
+    ["review_report", "publish", 0, "Ready to publish"],
+    ["review_report", "apply", 0, "Ready to apply"],
     ["new_commits", "", 0, "New commits"],
     ["drafts", "", 0, "Decide drafts"],
     ["publish_failed", "", 0, "Publish failed"],
@@ -109,6 +109,15 @@ describe("situationLabel", () => {
     const situation = makeSituation({ kind, form, percent, place: stepPlace(3) });
 
     expect(situationLabel(situation)).toBe(label);
+  });
+
+  it("says a review waits for the report where a task waits for a reply", () => {
+    expect(situationLabel(makeSituation({ kind: "reply", place: REVIEW_PLACE }))).toBe(
+      "Waiting for the report",
+    );
+    expect(situationLabel(makeSituation({ kind: "reply", place: PR_PLACE }))).toBe(
+      "Waiting for reply",
+    );
   });
 
   it("reads a review in a form it does not have as the start of it", () => {

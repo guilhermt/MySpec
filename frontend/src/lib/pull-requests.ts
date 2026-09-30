@@ -81,19 +81,42 @@ export function prBaseName(pr: PullRequest): string {
   return pr.prBase !== "" ? pr.prBase : baseName(pr.baseBranch);
 }
 
-/** checksSummary is the checks of a reading in one line: "3 of 5 passed · 2 not finished · 1 failed · merges clean". */
-export function checksSummary(reading: ChecksReading): string {
+/**
+ * checksSummary is the checks of a reading in one line. The task form tells the
+ * passed first: "3 of 5 passed · 2 not finished · 1 failed · merges clean". The
+ * panel form, of the list of Reviews, tells the failed first and the base of the
+ * merge: "1 failed · 3 of 4 passed · conflict with dev", "All 6 passed · merges
+ * clean into dev".
+ */
+export function checksSummary(reading: ChecksReading, form: "task" | "panel" = "task"): string {
   if (reading.checkedAt === "") {
     return "Not read yet";
   }
   const checks = reading.checks ?? [];
-  if (checks.length === 0) {
+  if (form === "task" && checks.length === 0) {
     return "No checks";
   }
   const { passed, total } = checkCounts(reading);
   const states = checks.map((check) => asCheckState(check.state));
-  const unfinished = states.filter((state) => state === "running" || state === "queued").length;
+  const unfinished = states.filter(isUnfinished).length;
   const failed = states.filter((state) => state === "failed").length;
+  const parts =
+    form === "task"
+      ? taskParts(passed, total, unfinished, failed)
+      : panelParts(passed, total, unfinished, failed);
+  if (reading.mergeable === "mergeable") {
+    parts.push(form === "task" ? "merges clean" : `merges clean into ${reading.base}`);
+  } else if (reading.mergeable === "conflicting") {
+    parts.push(`conflict with ${reading.base}`);
+  }
+  return parts.join(" · ");
+}
+
+function isUnfinished(state: CheckState): boolean {
+  return state === "running" || state === "queued";
+}
+
+function taskParts(passed: number, total: number, unfinished: number, failed: number): string[] {
   const parts = [`${passed} of ${total} passed`];
   if (unfinished > 0) {
     parts.push(`${unfinished} not finished`);
@@ -101,12 +124,29 @@ export function checksSummary(reading: ChecksReading): string {
   if (failed > 0) {
     parts.push(`${failed} failed`);
   }
-  if (reading.mergeable === "mergeable") {
-    parts.push("merges clean");
-  } else if (reading.mergeable === "conflicting") {
-    parts.push(`conflict with ${reading.base}`);
+  return parts;
+}
+
+function panelParts(passed: number, total: number, unfinished: number, failed: number): string[] {
+  if (total === 0) {
+    return ["No checks"];
   }
-  return parts.join(" · ");
+  if (failed === 0 && unfinished === 0) {
+    return [`All ${total} passed`];
+  }
+  const parts = failed > 0 ? [`${failed} failed`] : [];
+  parts.push(`${passed} of ${total} passed`);
+  if (unfinished > 0) {
+    parts.push(`${unfinished} not finished`);
+  }
+  return parts;
+}
+
+/** unfinishedChecks is the names of the checks of a reading still running or queued, in the order GitHub gives them. */
+export function unfinishedChecks(reading: ChecksReading): string[] {
+  return (reading.checks ?? [])
+    .filter((check) => isUnfinished(asCheckState(check.state)))
+    .map((check) => check.name);
 }
 
 /** CheckRow is one check of the last reading, with its times, before the duration is told. */

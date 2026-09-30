@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  approveDraftButton,
   blockRequestOf,
+  conversationName,
   findingsRequestOf,
   type OtherConversationModel,
   otherConversationOf,
@@ -11,6 +13,7 @@ import {
   retryLabelOf,
   screenStageOf,
   sessionRequestOf,
+  situationSession,
   type TaskRequestModel,
   taskRequestOf,
 } from "@/features/task/request";
@@ -1096,7 +1099,38 @@ describe("sessionRequestOf", () => {
       },
     ],
   ])("draws %s", (_name, found, task, pending, draftAtHand, edited, bar) => {
-    expect(sessionRequestOf(found, task, pending, draftAtHand, edited)).toEqual(bar);
+    const session = situationSession(found, task);
+    const actions = draftAtHand && task.pr !== null ? [approveDraftButton(task.pr, edited)] : [];
+    expect(
+      sessionRequestOf(found, session, conversationName(session.stage), pending, {
+        label: "Waiting for reply",
+        actions,
+      }),
+    ).toEqual(bar);
+  });
+
+  it("draws the reply of a review with its label and the reason, without an action", () => {
+    const reason = "The report can't be read: finding 2 does not open with its location.";
+    const found = situation("reply", "waiting", "", { kind: "review", stage: "review", step: 0 });
+
+    expect(
+      sessionRequestOf(found, { stage: "review", lastError: "" }, "pass 1", null, {
+        label: "Waiting for the report",
+        progress: reason,
+        actions: [],
+      }),
+    ).toEqual({
+      form: "tinted",
+      glyph: "wait",
+      label: "Waiting for the report",
+      place: "pass 1",
+      progress: reason,
+      progressTooltip: reason,
+      status: "Waiting for the report · pass 1",
+      actions: [],
+      situationId: "s-reply",
+      focus: "composer",
+    });
   });
 });
 

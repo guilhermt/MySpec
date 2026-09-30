@@ -1,5 +1,5 @@
 import type { KeyNoticeText } from "@/components/system/KeyNotice";
-import { type ItemRow, type RowTone, taskRow } from "@/features/sidebar/sidebar-tree";
+import { type RowTone, taskRow, waitSuffix } from "@/features/sidebar/sidebar-tree";
 import { referenceOf } from "@/features/task/card-panel";
 import { findRepository } from "@/lib/repositories";
 import type { Board, BoardCard, CardDependency, DiscussionSummary, State } from "@/lib/wails";
@@ -468,15 +468,6 @@ export interface CardRowModel {
   canDiscuss: boolean;
   /** label is the accessible name without the selection part. */
   label: string;
-}
-
-// waitSuffix is ", waiting for you for 18 minutes" for a row that has a chip, "" for one that has none.
-function waitSuffix(row: ItemRow): string {
-  if (row.clock?.kind !== "chip") {
-    return "";
-  }
-  const wait = row.clock.longTime === "just now" ? "less than a minute" : row.clock.longTime;
-  return `, waiting for you for ${wait}`;
 }
 
 function taskCell(card: BoardCard, ctx: RowContext, discussions: readonly DiscussionSummary[]) {
