@@ -45,6 +45,10 @@ export interface ComposerContext {
   findings: boolean;
   /** askForChange is the step on screen in review by the user, or without changes. */
   askForChange: boolean;
+  /** reviseFindings is a pass of the review with findings not published. */
+  reviseFindings: boolean;
+  /** item is what a paused conversation resumes: task, review. */
+  item: string;
 }
 
 /** QUICK_REPLY_MAX is the most characters of an option a quick reply shows, "…" included. */
@@ -104,7 +108,7 @@ export function placeholderOf(c: ComposerContext): string {
     return `Write your answer to “${c.otherHeader}” and press Enter…`;
   }
   if (c.paused) {
-    return "Sending resumes the task…";
+    return `Sending resumes the ${c.item}…`;
   }
   if (c.stopped) {
     return `Sending restarts the ${c.who}'s session…`;
@@ -123,6 +127,9 @@ export function placeholderOf(c: ComposerContext): string {
   }
   if (c.chips.length > 0) {
     return `Answer ${alternatives(c.chips.map((chip) => chip.key))}, or reply to the ${c.who}…`;
+  }
+  if (c.reviseFindings) {
+    return `Ask the ${c.who} to add, change or drop a finding…`;
   }
   if (c.findings) {
     return `Tell the ${c.who} which findings to apply…`;

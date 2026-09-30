@@ -133,4 +133,23 @@ describe.each(THEMES)("ChecksList in the %s theme", (theme) => {
     const glyph = document.querySelector('[data-state="github"]') as HTMLElement;
     expect(getComputedStyle(glyph).borderStyle).toBe("dashed");
   });
+  it("paints what is missing at the foot of the live variant in the third ink", () => {
+    setTheme(theme);
+    render(
+      <ChecksList
+        summary=""
+        rows={ROWS}
+        onOpen={() => {}}
+        live={{
+          header: "Waiting for checks · 4 of 6 passed",
+          age: "checked just now",
+          ageTooltip: "Checked at 14:02",
+          reading: false,
+          foot: "The first pass starts when e2e finishes.",
+        }}
+      />,
+    );
+    const foot = screen.getByText("The first pass starts when e2e finishes.");
+    expect(paintOf(foot, { color: "" })).toEqual({ color: token("--ink-3") });
+  });
 });

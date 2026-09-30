@@ -6,6 +6,7 @@ import {
   reviewChecks,
   reviewComposerContext,
   reviewRequestOf,
+  withoutFindingStop,
 } from "@/features/reviews/review-request";
 import type { ReviewSummary, Situation } from "@/lib/wails";
 import {
@@ -595,5 +596,32 @@ describe("reviewChecks", () => {
     expect(
       reviewChecks(review({ checks, mergeable: "conflicting", checkedAt: NINE_MINUTES_AGO })),
     ).toEqual({ checks, mergeable: "conflicting", checkedAt: NINE_MINUTES_AGO, base: "dev" });
+  });
+});
+
+describe("withoutFindingStop", () => {
+  const decide = () =>
+    reviewRequestOf(waiting(situation("review_report")), NOW, null) as ReviewRequestModel;
+
+  it("offers no Next to decide while the findings are decided above the conversation", () => {
+    const bar = withoutFindingStop(decide());
+
+    expect(bar?.actions.map((button) => button.action)).toEqual(["publish"]);
+  });
+
+  it("takes the arrival to the bar, where there is no finding to land on", () => {
+    expect(decide().focus).toBe("finding");
+    expect(withoutFindingStop(decide())?.focus).toBe("bar");
+  });
+
+  it("leaves the other bars as they are", () => {
+    const publish = reviewRequestOf(
+      waiting(situation("review_report", "waiting", "publish")),
+      NOW,
+      null,
+    ) as ReviewRequestModel;
+
+    expect(withoutFindingStop(publish)).toEqual(publish);
+    expect(withoutFindingStop(null)).toBeNull();
   });
 });

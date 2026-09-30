@@ -25,6 +25,17 @@ beforeEach(() => {
 
 // Two tasks wait for the user: add-login for a reply, and fix-header for an
 // error that started later.
+// readyToPublish is the situation of a review whose findings were decided.
+function readyToPublish(reviewId: string) {
+  return makeSituation({
+    id: `s-${reviewId}`,
+    taskId: reviewId,
+    kind: "review_report",
+    form: "publish",
+    place: { kind: "review", stage: "review", step: 0 },
+  });
+}
+
 function waitingState() {
   return makeState({
     tasks: [
@@ -276,13 +287,19 @@ describe("App", () => {
       makeState({
         tasks: [makeTask()],
         reviews: [
-          makeReviewSummary({ canPublish: true }),
+          makeReviewSummary({
+            status: "ready_to_publish",
+            canPublish: true,
+            situations: [readyToPublish("review-1")],
+          }),
           makeReviewSummary({
             id: "review-2",
             number: 32,
             own: true,
             verdicts: ["comment"],
+            status: "ready_to_publish",
             canPublish: true,
+            situations: [readyToPublish("review-2")],
           }),
         ],
       }),
@@ -293,14 +310,14 @@ describe("App", () => {
     act(() => {
       useAppStore.getState().openReview("review-1");
     });
-    await user.click(screen.getByRole("button", { name: "Publish review" }));
+    await user.click(screen.getByRole("button", { name: "Publish review…" }));
     expect(screen.getByRole("radio", { name: "Approve" })).toBeChecked();
     await user.click(screen.getByRole("button", { name: "Cancel" }));
 
     act(() => {
       useAppStore.getState().openReview("review-2");
     });
-    await user.click(screen.getByRole("button", { name: "Publish review" }));
+    await user.click(screen.getByRole("button", { name: "Publish review…" }));
 
     expect(screen.getByRole("radio", { name: "Comment" })).toBeChecked();
   });

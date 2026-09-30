@@ -3,7 +3,7 @@ import { fileName, findingName, headingOf, locationText } from "@/lib/findings";
 import { unfinishedChecks } from "@/lib/pull-requests";
 import { shortName } from "@/lib/repositories";
 import type { Entry, ReviewFinding, ReviewPass, ReviewSummary } from "@/lib/wails";
-import { asMarkerType } from "@/lib/wails";
+import { asMarkerType, asPullReviewStatus } from "@/lib/wails";
 import { clockTime } from "@/lib/when";
 
 // LEFT_BEHIND are the statuses that say a Review again left the last pass behind: the next one was asked for.
@@ -187,4 +187,22 @@ export function findingViews(
       disabled: disabled ? disabledFindingNote(review, pass, finding, now) : null,
     };
   });
+}
+
+/**
+ * reviewFixedCard is the fixed card at the end of the conversation of the review: the live checks
+ * while the pass waits for them, the changed files from the moment the agent rests with the changes it
+ * made applying the findings until the commit that takes them is over; null otherwise.
+ */
+export function reviewFixedCard(review: ReviewSummary): "checks" | "files" | null {
+  switch (asPullReviewStatus(review.status)) {
+    case "waiting_checks":
+      return "checks";
+    case "in_review":
+    case "ready_to_approve":
+    case "committing":
+      return "files";
+    default:
+      return null;
+  }
 }

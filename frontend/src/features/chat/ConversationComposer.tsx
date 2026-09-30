@@ -8,11 +8,11 @@ export interface ConversationComposerProps {
   session: SessionState;
 }
 
-const NO_CONTEXT = { findings: false, askForChange: false };
+const NO_CONTEXT = { findings: false, askForChange: false, reviseFindings: false, item: "task" };
 
 /**
- * ConversationComposer is the composer of a conversation without a request bar, a review's or a
- * discussion's: it answers the cards the conversation holds pending, whose button is the primary.
+ * ConversationComposer is the composer of a conversation without a request bar, a discussion's: it
+ * answers the cards the conversation holds pending, whose button is the primary.
  */
 export function ConversationComposer({ taskId, stage, session }: ConversationComposerProps) {
   const { question, permission } = useConversationCards(taskId, stage);

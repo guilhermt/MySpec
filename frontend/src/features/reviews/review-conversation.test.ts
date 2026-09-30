@@ -6,6 +6,7 @@ import {
   disabledFindingNote,
   findingViews,
   reportMarkerIds,
+  reviewFixedCard,
   waitingChecksFoot,
 } from "@/features/reviews/review-conversation";
 import type { Entry, MarkerEntry } from "@/lib/wails";
@@ -290,5 +291,22 @@ describe("waitingChecksFoot", () => {
     });
 
     expect(waitingChecksFoot(review)).toBe(want);
+  });
+});
+
+describe("reviewFixedCard", () => {
+  it.each([
+    ["waiting_checks", "checks"],
+    ["in_review", "files"],
+    ["ready_to_approve", "files"],
+    ["committing", "files"],
+    ["reviewing", null],
+    ["awaiting_decision", null],
+    ["ready_to_apply", null],
+    ["applying", null],
+    ["published", null],
+    ["trouble", null],
+  ])("is the card of %s", (status, want) => {
+    expect(reviewFixedCard(makeReviewSummary({ status }))).toBe(want);
   });
 });

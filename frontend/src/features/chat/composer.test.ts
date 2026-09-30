@@ -53,6 +53,8 @@ const REST: ComposerContext = {
   chips: [],
   findings: false,
   askForChange: false,
+  reviseFindings: false,
+  item: "task",
 };
 
 const CHIPS = [
@@ -72,6 +74,7 @@ describe("placeholderOf", () => {
       { paused: true, stopped: true, turnRunning: true },
       "Sending resumes the task…",
     ],
+    ["a paused review", { paused: true, item: "review" }, "Sending resumes the review…"],
     [
       "a session stopped on an error",
       { stopped: true, turnFailed: true, question: pending(LIMITS) },
@@ -151,6 +154,11 @@ describe("placeholderOf", () => {
       "findings in text",
       { who: "PR agent", findings: true, askForChange: true },
       "Tell the PR agent which findings to apply…",
+    ],
+    [
+      "a pass with findings to revise",
+      { who: "reviewer", reviseFindings: true, askForChange: true },
+      "Ask the reviewer to add, change or drop a finding…",
     ],
     ["a step in review by the user", { askForChange: true }, "Ask the implementer for a change…"],
     ["the rest", {}, "Reply to the implementer…"],

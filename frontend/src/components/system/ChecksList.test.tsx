@@ -164,6 +164,23 @@ describe("ChecksList", () => {
       expect(screen.queryByText(LIVE.header)).toBeNull();
     });
 
+    it("puts the action beside the age and what is missing at the foot of the block", () => {
+      renderWithStore(
+        <ChecksList
+          summary=""
+          rows={ROWS}
+          onOpen={() => {}}
+          live={{
+            ...LIVE,
+            action: <button type="button">Refresh</button>,
+            foot: "The first pass starts when e2e finishes.",
+          }}
+        />,
+      );
+      expect(screen.getByRole("button", { name: "Refresh" })).toBeInTheDocument();
+      expect(screen.getByText("The first pass starts when e2e finishes.")).toBeInTheDocument();
+    });
+
     it("says No checks without rows", () => {
       renderWithStore(
         <ChecksList

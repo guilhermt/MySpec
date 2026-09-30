@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { Icon } from "./Icon";
 import { ICONS } from "./icons";
@@ -30,9 +31,17 @@ export interface ChecksListProps {
   /**
    * live draws the wait for the checks in place of the summary: the dashed glyph, the header
    * ("Waiting for checks · 4 of 6 passed", "No checks"), or checking GitHub in a shimmer while
-   * reading, and the age of the reading with its exact time in the tooltip.
+   * reading, and the age of the reading with its exact time in the tooltip. action sits at the right
+   * of the age (Refresh) and foot is what is still missing, at the bottom of the block.
    */
-  live?: { header: string; age: string; ageTooltip: string; reading: boolean };
+  live?: {
+    header: string;
+    age: string;
+    ageTooltip: string;
+    reading: boolean;
+    action?: ReactNode;
+    foot?: string;
+  };
   /**
    * trailing is what the summary line says at its right: the age of the reading ("read 2m ago"), or
    * the failure of the reading in the error ink. It has the exact time in the tooltip when it has one.
@@ -81,7 +90,7 @@ function Glyph({ glyph }: { glyph: CheckGlyph }) {
  * ChecksList is the checks of a pull request, by name, in a panel: the summary on top and one row per
  * check with its glyph, the name in mono, the state and the duration on the right. A check with a url
  * names itself as an external link, which onOpen opens; without one it stays plain text. The live
- * variant is the wait for the checks: a sunken block with the live header, the rows and no footer.
+ * variant is the wait for the checks: a sunken block with the live header, the rows and, when there is something missing, a foot.
  */
 export function ChecksList({ summary, rows, onOpen, live, trailing }: ChecksListProps) {
   return (
@@ -100,6 +109,7 @@ export function ChecksList({ summary, rows, onOpen, live, trailing }: ChecksList
           <Tooltip content={live.ageTooltip}>
             <span className="whitespace-nowrap text-ink-4 tabular-nums">{live.age}</span>
           </Tooltip>
+          {live.action}
         </div>
       ) : trailing === undefined ? (
         <p className="text-ink-2">{summary}</p>
@@ -155,6 +165,7 @@ export function ChecksList({ summary, rows, onOpen, live, trailing }: ChecksList
           })}
         </ul>
       )}
+      {live?.foot !== undefined && <p className="pt-(--space-1) text-ink-3">{live.foot}</p>}
     </div>
   );
 }

@@ -55,7 +55,7 @@ export interface ComposerProps {
   otherPrimary: boolean;
   /** chips are the quick replies of the question in text of the reply situation. */
   chips?: QuickReply[];
-  context: Pick<ComposerContext, "findings" | "askForChange">;
+  context: Pick<ComposerContext, "findings" | "askForChange" | "reviseFindings" | "item">;
 }
 
 /** Working is the turn running: the spinner and the time since it started. */

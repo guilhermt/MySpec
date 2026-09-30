@@ -401,6 +401,22 @@ export function reviewRequestOf(
 }
 
 /**
+ * withoutFindingStop is the bar while the findings are decided in the panel above the conversation,
+ * which has no finding for Next to decide to go to and none for the arrival to land on: the button is
+ * not offered, and the focus of the arrival goes to the bar.
+ */
+export function withoutFindingStop(request: ReviewRequestModel | null): ReviewRequestModel | null {
+  if (request === null) {
+    return null;
+  }
+  return {
+    ...request,
+    actions: request.actions.filter((button) => button.action !== "nextToDecide"),
+    focus: request.focus === "finding" ? "bar" : request.focus,
+  };
+}
+
+/**
  * reviewAnnouncement is what the live region says of a bar born with the review open:
  * "web#2291: waiting for you: decide findings in pass 1", or "…: error: …" for an error.
  */
@@ -412,16 +428,10 @@ export function reviewAnnouncement(review: ReviewSummary, request: ReviewRequest
   return `${reviewName(review)}: ${tone}: ${lowerFirst(request.label)}${where}`;
 }
 
-/** ReviewComposerContext is what the composer of a review knows of it. */
-export type ReviewComposerContext = Pick<ComposerContext, "findings" | "askForChange"> & {
-  /** reviseFindings is a pass with findings, recorded and neither published nor sent. */
-  reviseFindings: boolean;
-  /** item is what a paused conversation resumes. */
-  item: "review";
-};
-
 /** reviewComposerContext is what the composer of a review says: revising the findings, asking for a change. */
-export function reviewComposerContext(review: ReviewSummary): ReviewComposerContext {
+export function reviewComposerContext(
+  review: ReviewSummary,
+): Pick<ComposerContext, "findings" | "askForChange" | "reviseFindings" | "item"> {
   const last = (review.passes ?? []).at(-1);
   const status = asPullReviewStatus(review.status);
   return {

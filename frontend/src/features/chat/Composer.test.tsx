@@ -9,7 +9,7 @@ import { renderWithStore } from "@/test/render";
 import { makeState, makeTask } from "@/test/wails-mock";
 
 const DRAFT = { "task-1|prd": "ship it" };
-const REST = { findings: false, askForChange: false };
+const REST = { findings: false, askForChange: false, reviseFindings: false, item: "task" };
 const RUNNING = { sessionStatus: "working", turnRunning: true, processRunning: true };
 
 function composer(
@@ -181,6 +181,13 @@ describe("Composer", () => {
     await user.click(send);
 
     expect(api.sendMessage).toHaveBeenCalledWith("task-1", "prd", "ship it");
+  });
+
+  it("says what a paused conversation resumes", () => {
+    const task = makeTask({ sessionStatus: "paused" });
+    renderWithStore(composer(task, { context: { ...REST, item: "review" } }));
+
+    expect(field()).toHaveAttribute("placeholder", "Sending resumes the review…");
   });
 
   it("resumes the paused task and then sends the message", async () => {

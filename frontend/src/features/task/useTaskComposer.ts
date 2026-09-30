@@ -30,6 +30,8 @@ export function useTaskComposer(
     context: {
       findings: kind === "findings",
       askForChange: kind === "step_review" || kind === "step_empty",
+      reviseFindings: false,
+      item: "task",
     },
   };
 }
