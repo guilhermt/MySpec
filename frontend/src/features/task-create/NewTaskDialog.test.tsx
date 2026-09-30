@@ -315,6 +315,17 @@ describe("NewTaskDialog", () => {
     });
   });
 
+  it("lists the review modes with the agent first", () => {
+    open();
+
+    const modes = screen.getByRole("radiogroup", { name: "Review mode" });
+    expect(
+      within(modes)
+        .getAllByRole("radio")
+        .map((radio) => radio.textContent),
+    ).toEqual(["Agent", "Manual"]);
+  });
+
   it("opens on the Structured mode and says what it does", () => {
     open();
 

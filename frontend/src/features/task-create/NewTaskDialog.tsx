@@ -37,7 +37,7 @@ import {
   withChoice,
 } from "@/lib/models";
 import { defaultRepositoryId, findRepository, takenNames } from "@/lib/repositories";
-import { REVIEW_MODES, reviewModeHint, reviewModeLabel } from "@/lib/review-modes";
+import { reviewModeHint, reviewModeLabel } from "@/lib/review-modes";
 import { TASK_MODES, taskModeHint, taskModeLabel } from "@/lib/task-modes";
 import { isValidTaskName, suggestTaskName, taskNameProblem } from "@/lib/task-name";
 import {
@@ -56,6 +56,8 @@ const NAME_HELP = "Lowercase letters, digits and hyphens. It names the branch an
 const MODE_FIXED = "Fixed once the task exists.";
 const HINT = "text-(length:--text-meta) leading-(--leading-meta) text-ink-3";
 const REVIEW_MODE_ICONS = { agent: ICONS.agentMode, manual: ICONS.manualMode } as const;
+/** DIALOG_REVIEW_MODES are the review modes as the creation dialog lists them: the agent first, as Structured leads Mode. */
+const DIALOG_REVIEW_MODES: readonly ReviewMode[] = ["agent", "manual"];
 const CONTEXT_HELP = "What you want to build, in your own words. High level or detailed.";
 
 export function NewTaskDialog() {
@@ -358,7 +360,7 @@ function NewTaskFields({ origin }: NewTaskFieldsProps) {
               label="Review mode"
               size="sm"
               value={reviewMode}
-              options={REVIEW_MODES.map((option) => ({
+              options={DIALOG_REVIEW_MODES.map((option) => ({
                 value: option,
                 label: reviewModeLabel(option),
                 icon: REVIEW_MODE_ICONS[option],

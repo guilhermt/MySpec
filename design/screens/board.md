@@ -272,7 +272,7 @@ A falha nunca é situação, nunca notifica e nunca é vermelha.
 | **Name** | Vazio | Sugerido, `<número>-<slug>` até 64 (`474-usage-alerts-at-80-of-the-plan`) | Em mono, `--text-meta`. A ajuda: `Lowercase letters, digits and hyphens. It names the branch and the worktree.` |
 | **Context** | Obrigatório: uma área de texto de quatro linhas, com `What you want to build, in your own words. High level or detailed.` | A linha do contexto montado (seção 4.3) | — |
 | **A dependência** | — | Um aviso por dependência não satisfeita, neutro: `◇ Depends on #461 Metering events from the gateway` e `acme/gateway · Open · Backlog · no pull request. A warning only: the task can start.` | Nunca bloqueia |
-| **Mode** e **Review mode** | Lado a lado, com o mesmo controle segmentado (`radiogroup`, `←` `→`) | Igual | `Structured`; o modo de review de **Defaults** |
+| **Mode** e **Review mode** | Lado a lado, com o mesmo controle segmentado (`radiogroup`, `←` `→`): `Structured` / `One-Shot` e `Agent` / `Manual`, nesta ordem | Igual | `Structured`; o modo de review de **Defaults** |
 | **Models** | O resumo, que abre a lista (seção 4.5) | Igual | Os padrões de **Defaults** |
 
 Cada modo tem a linha do que faz, de `features.md`:
