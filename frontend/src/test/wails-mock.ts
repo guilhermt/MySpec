@@ -34,6 +34,8 @@ import type {
   PromptStage,
   PullRequest,
   PullRequestRow,
+  PullReview,
+  PullsFailure,
   Repository,
   RepositoryCandidate,
   Review,
@@ -871,7 +873,8 @@ export function makeReviewFilters(overrides: Partial<ReviewFilters> = {}): Revie
     authorsExclude: [],
     labelsInclude: [],
     labelsExclude: [],
-    pendingOnly: false,
+    boardName: "",
+    repositoryName: "",
     ...overrides,
   };
 }
@@ -898,6 +901,27 @@ export function makePullRequestRow(overrides: Partial<PullRequestRow> = {}): Pul
     reviewId: "",
     action: "review",
     updatedAt: "2026-09-16T12:00:00Z",
+    headBranch: "login-screen",
+    baseBranch: "dev",
+    body: "",
+    checks: [],
+    mergeable: "",
+    yourReview: null,
+    newCommitCount: 0,
+    ...overrides,
+  };
+}
+
+export function makePullReview(overrides: Partial<PullReview> = {}): PullReview {
+  return { state: "approved", at: "2026-09-24T10:02:00Z", ...overrides };
+}
+
+export function makePullsFailure(overrides: Partial<PullsFailure> = {}): PullsFailure {
+  return {
+    repositoryId: "repo-1",
+    repository: "dev/web",
+    message: "Couldn't read from GitHub: exit status 1",
+    failedAt: "",
     ...overrides,
   };
 }

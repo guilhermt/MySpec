@@ -1,5 +1,6 @@
 {
   "data": {
+    "rateLimit": { "cost": 3 },
     "r0": {
       "pullRequests": {
         "nodes": [
@@ -15,7 +16,33 @@
             "baseRefName": "main",
             "author": { "login": "mariana" },
             "labels": { "nodes": [{ "name": "backend", "color": "0e8a16" }] },
-            "reviews": { "nodes": [] }
+            "reviews": { "nodes": [] },
+            "body": "Reads the board once per minute.",
+            "mergeable": "MERGEABLE",
+            "head": {
+              "nodes": [
+                {
+                  "commit": {
+                    "statusCheckRollup": {
+                      "contexts": {
+                        "nodes": [
+                          {
+                            "__typename": "CheckRun",
+                            "name": "test",
+                            "status": "COMPLETED",
+                            "conclusion": "SUCCESS",
+                            "detailsUrl": "https://github.com/acme/alpha/actions/runs/1/job/2",
+                            "startedAt": "2026-09-16T11:00:00Z",
+                            "completedAt": "2026-09-16T11:04:00Z"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "since": { "nodes": [{ "commit": { "oid": "aaa111" } }] }
           },
           {
             "number": 38,
@@ -29,7 +56,20 @@
             "baseRefName": "main",
             "author": { "login": "dependabot" },
             "labels": { "nodes": [{ "name": "dependencies", "color": "ededed" }] },
-            "reviews": { "nodes": [{ "commit": { "oid": "bbb111" } }] }
+            "reviews": {
+              "nodes": [{ "state": "CHANGES_REQUESTED", "submittedAt": "2026-09-15T08:00:00Z", "commit": { "oid": "bbb111" } }]
+            },
+            "body": "",
+            "mergeable": "UNKNOWN",
+            "head": { "nodes": [{ "commit": { "statusCheckRollup": null } }] },
+            "since": {
+              "nodes": [
+                { "commit": { "oid": "bbb000" } },
+                { "commit": { "oid": "bbb111" } },
+                { "commit": { "oid": "bbb1a2" } },
+                { "commit": { "oid": "bbb222" } }
+              ]
+            }
           }
         ]
       }
@@ -50,7 +90,11 @@
             "baseRefName": "main",
             "author": { "login": "guilhermt" },
             "labels": { "nodes": [] },
-            "reviews": { "nodes": [{ "commit": { "oid": "ccc333" } }] }
+            "reviews": { "nodes": [{ "state": "APPROVED", "submittedAt": "2026-09-16T07:00:00Z", "commit": { "oid": "ccc333" } }] },
+            "body": "",
+            "mergeable": "MERGEABLE",
+            "head": { "nodes": [] },
+            "since": { "nodes": [{ "commit": { "oid": "ccc333" } }] }
           }
         ]
       }

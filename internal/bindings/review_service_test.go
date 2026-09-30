@@ -70,7 +70,7 @@ func TestSetReviewFiltersChoosesWhatTheReviewsViewShows(t *testing.T) {
 	filters := bindings.ReviewFilters{
 		RepositoryID:   repoID,
 		AuthorsExclude: []string{"dependabot", " dependabot ", ""},
-		PendingOnly:    true,
+		BoardName:      "Web",
 	}
 	if err := f.reviewSvc.SetReviewFilters(filters); err != nil {
 		t.Fatalf("SetReviewFilters() = %v, want nil", err)
@@ -83,7 +83,7 @@ func TestSetReviewFiltersChoosesWhatTheReviewsViewShows(t *testing.T) {
 		AuthorsExclude: []string{"dependabot"},
 		LabelsInclude:  []string{},
 		LabelsExclude:  []string{},
-		PendingOnly:    true,
+		BoardName:      "Web",
 	}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("filters (-want +got):\n%s", diff)

@@ -1,9 +1,11 @@
 package pulls_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
@@ -48,9 +50,11 @@ type fixture struct {
 	github   *fakeGitHub
 	settings *memSettings
 	changes  *changeCounter
+	logs     *logBuffer
 
 	mu    sync.Mutex
 	repos []repository.Repository
+	clock time.Time // what the service reads as now
 }
 
 // newFixture registers acme/alpha, acme/beta and acme/gamma, none on a board,
@@ -62,6 +66,8 @@ func newFixture(t *testing.T) *fixture {
 		github:   newFakeGitHub(),
 		settings: &memSettings{values: map[string]string{}},
 		changes:  &changeCounter{},
+		logs:     &logBuffer{},
+		clock:    base,
 		repos: []repository.Repository{
 			{ID: alphaID, Owner: "acme", Name: "alpha", CreatedAt: base},
 			{ID: betaID, Owner: "acme", Name: "beta", CreatedAt: base},
@@ -73,7 +79,8 @@ func newFixture(t *testing.T) *fixture {
 		GitHub:       f.github,
 		Repositories: f.repositories,
 		Settings:     f.settings,
-		Now:          func() time.Time { return base },
+		Log:          slog.New(slog.NewTextHandler(f.logs, nil)),
+		Now:          f.now,
 		OnChange:     f.changes.inc,
 	})
 	t.Cleanup(f.service.Close)
@@ -81,6 +88,22 @@ func newFixture(t *testing.T) *fixture {
 		t.Fatalf("Sync() = %v, want nil", err)
 	}
 	return f
+}
+
+// now is the instant the service reads.
+func (f *fixture) now() time.Time {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	return f.clock
+}
+
+// advance moves the instant the service reads by d.
+func (f *fixture) advance(d time.Duration) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.clock = f.clock.Add(d)
 }
 
 // repositories is what the service reads: the registered repositories now.
@@ -317,4 +340,24 @@ func (c *changeCounter) count() int {
 	defer c.mu.Unlock()
 
 	return c.n
+}
+
+// logBuffer is what the service logged, as text.
+type logBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *logBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	return b.buf.Write(p)
+}
+
+func (b *logBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	return b.buf.String()
 }

@@ -62,6 +62,7 @@ import type {
   PullLabel,
   PullRequest,
   PullRequestRow,
+  PullReview,
   PullsFailure,
   Question,
   QuestionEntry,
@@ -165,6 +166,7 @@ export type {
   PullLabel,
   PullRequest,
   PullRequestRow,
+  PullReview,
   PullsFailure,
   Question,
   QuestionEntry,
@@ -492,6 +494,12 @@ export type PullRequestAction =
   | "clone"
   | "clone_missing"
   | "fork";
+
+/** YourReviewState is the state of the last review the account of gh submitted on a pull request. */
+export type YourReviewState = "approved" | "changes_requested" | "commented" | "dismissed";
+
+/** Mergeable is whether GitHub says the branch of a pull request merges clean into its base; "" while unread. */
+export type Mergeable = "mergeable" | "conflicting" | "unknown" | "";
 
 /** PullRequestOutcome is what became of the pull request of an archived review. */
 export type PullRequestOutcome = "merged" | "closed";
@@ -1154,6 +1162,30 @@ export function asPullRequestAction(value: string): PullRequestAction {
     // action the app does not know.
     default:
       return "fork";
+  }
+}
+
+export function asYourReviewState(value: string): YourReviewState {
+  switch (value) {
+    case "approved":
+    case "changes_requested":
+    case "commented":
+    case "dismissed":
+      return value;
+    // Commented claims the least of a review the app cannot place.
+    default:
+      return "commented";
+  }
+}
+
+export function asMergeable(value: string): Mergeable {
+  switch (value) {
+    case "mergeable":
+    case "conflicting":
+    case "unknown":
+      return value;
+    default:
+      return "";
   }
 }
 

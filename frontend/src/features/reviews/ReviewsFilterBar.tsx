@@ -16,13 +16,21 @@ import { useBoards, useRepositories } from "@/store/app-store";
 
 export interface ReviewsFilterBarProps {
   center: ReviewCenter;
+  /** pendingOnly is the switch that keeps only what waits for the user; the view applies it. */
+  pendingOnly: boolean;
+  onPendingOnlyChange: (pendingOnly: boolean) => void;
 }
 
 /**
  * ReviewsFilterBar narrows what the Reviews view lists and counts. The filters
- * live in Go, so what the user chooses here is remembered between runs.
+ * live in Go, so what the user chooses here is remembered between runs; the
+ * pending-only switch is not one of them, and lasts while the view is open.
  */
-export function ReviewsFilterBar({ center }: ReviewsFilterBarProps) {
+export function ReviewsFilterBar({
+  center,
+  pendingOnly,
+  onPendingOnlyChange,
+}: ReviewsFilterBarProps) {
   const boards = useBoards();
   const repositories = useRepositories();
   // The last choice sent, shown at once until a snapshot carries it: the
@@ -89,13 +97,20 @@ export function ReviewsFilterBar({ center }: ReviewsFilterBarProps) {
       <Toggle
         variant="outline"
         size="sm"
-        pressed={filters.pendingOnly}
-        onPressedChange={(pendingOnly) => set({ pendingOnly })}
+        pressed={pendingOnly}
+        onPressedChange={onPendingOnlyChange}
       >
         Pending only
       </Toggle>
-      {isFiltering(filters) && (
-        <Button variant="ghost" size="sm" onClick={() => change(EMPTY_REVIEW_FILTERS)}>
+      {(isFiltering(filters) || pendingOnly) && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => {
+            onPendingOnlyChange(false);
+            change(EMPTY_REVIEW_FILTERS);
+          }}
+        >
           Clear filters
         </Button>
       )}

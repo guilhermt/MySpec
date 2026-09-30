@@ -27,6 +27,19 @@ describe("visibleRows", () => {
 
     expect(visibleRows(center).map((row) => row.key)).toEqual(["dev/web#31"]);
   });
+
+  it("lists only the pull requests that wait for the user with pending only on", () => {
+    const center = makeReviewCenter({
+      pullRequests: [
+        makePullRequestRow({ key: "dev/web#31", pending: true }),
+        makePullRequestRow({ key: "dev/web#32", pending: false }),
+        makePullRequestRow({ key: "dev/web#33", pending: true, filtered: true }),
+      ],
+    });
+
+    expect(visibleRows(center, true).map((row) => row.key)).toEqual(["dev/web#31"]);
+    expect(visibleRows(center, false).map((row) => row.key)).toEqual(["dev/web#31", "dev/web#32"]);
+  });
 });
 
 describe("emptyText", () => {
@@ -101,14 +114,13 @@ describe("isFiltering", () => {
     expect(isFiltering(makeReviewFilters({ boardId: "board-1" }))).toBe(true);
     expect(isFiltering(makeReviewFilters({ repositoryId: "repo-1" }))).toBe(true);
     expect(isFiltering(makeReviewFilters({ labelsInclude: ["bug"] }))).toBe(true);
-    expect(isFiltering(makeReviewFilters({ pendingOnly: true }))).toBe(true);
   });
 });
 
 describe("sameFilters", () => {
   it("holds for the same choices in another order", () => {
-    const a = makeReviewFilters({ authorsExclude: ["dependabot", "alice"], pendingOnly: true });
-    const b = makeReviewFilters({ authorsExclude: ["alice", "dependabot"], pendingOnly: true });
+    const a = makeReviewFilters({ authorsExclude: ["dependabot", "alice"], boardId: "board-1" });
+    const b = makeReviewFilters({ authorsExclude: ["alice", "dependabot"], boardId: "board-1" });
 
     expect(sameFilters(a, b)).toBe(true);
   });
@@ -126,6 +138,5 @@ describe("sameFilters", () => {
     expect(sameFilters(base, makeReviewFilters({ authorsExclude: [] }))).toBe(false);
     expect(sameFilters(base, { ...base, labelsInclude: ["bug"] })).toBe(false);
     expect(sameFilters(base, { ...base, boardId: "board-1" })).toBe(false);
-    expect(sameFilters(base, { ...base, pendingOnly: true })).toBe(false);
   });
 });

@@ -20,15 +20,17 @@ type Filters struct {
 	AuthorsExclude []string `json:"authorsExclude"`
 	LabelsInclude  []string `json:"labelsInclude"`
 	LabelsExclude  []string `json:"labelsExclude"`
-	PendingOnly    bool     `json:"pendingOnly"`
+	// BoardName and RepositoryName are the names of the board or the repository
+	// when it was chosen, which the chip of one that left shows; Match never
+	// reads them.
+	BoardName      string `json:"boardName"`
+	RepositoryName string `json:"repositoryName"`
 }
 
 // Match reports whether a pull request passes the filters. boardID is the
 // board of its repository, "" when it belongs to none.
-func (f Filters) Match(pr PullRequest, repositoryID, boardID string, pending bool) bool {
+func (f Filters) Match(pr PullRequest, repositoryID, boardID string) bool {
 	switch {
-	case f.PendingOnly && !pending:
-		return false
 	case f.RepositoryID != "" && f.RepositoryID != repositoryID:
 		return false
 	case f.BoardID == NoBoard && boardID != "":

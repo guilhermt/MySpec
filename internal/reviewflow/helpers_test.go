@@ -1081,8 +1081,8 @@ func openPR() pulls.Detail {
 			HeadBranch: "cache-boards",
 			HeadCommit: headHash,
 			BaseBranch: "main",
+			Body:       "Keeps the last reading of a board in memory.",
 		},
-		Body:   "Keeps the last reading of a board in memory.",
 		State:  "open",
 		Checks: gh.PRChecks{Checks: []gh.Check{}, Mergeable: gh.MergeableClean},
 	}

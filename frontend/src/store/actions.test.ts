@@ -880,7 +880,7 @@ describe("readEarlierConversation", () => {
 
 describe("review actions reported in the app notice", () => {
   it("delegate to the matching binding", async () => {
-    const filters = makeReviewFilters({ pendingOnly: true });
+    const filters = makeReviewFilters({ repositoryId: "repo-1" });
 
     await refreshPullRequests();
     await setReviewFilters(filters);
@@ -921,7 +921,7 @@ describe("review actions reported in the app notice", () => {
   });
 
   it("answer whether the filters were stored", async () => {
-    const filters = makeReviewFilters({ pendingOnly: true });
+    const filters = makeReviewFilters({ repositoryId: "repo-1" });
 
     expect(await setReviewFilters(filters)).toBe(true);
 

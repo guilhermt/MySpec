@@ -1731,6 +1731,57 @@ export interface PullRequestRow {
      */
     "action": string;
     "updatedAt": string;
+
+    /**
+     * HeadBranch and BaseBranch are the branch of the pull request and the one
+     * it merges into.
+     */
+    "headBranch": string;
+    "baseBranch": string;
+
+    /**
+     * the description, Markdown; "" without one
+     */
+    "body": string;
+
+    /**
+     * never nil
+     */
+    "checks": PRCheck[] | null;
+
+    /**
+     * Mergeable is mergeable, conflicting, unknown or "", a string for the same
+     * reason as State.Theme.
+     */
+    "mergeable": string;
+
+    /**
+     * YourReview is the last review the account of gh submitted; null without
+     * one.
+     */
+    "yourReview": PullReview | null;
+
+    /**
+     * NewCommitCount is how many commits came after that review; -1 when its
+     * commit is not among the last 30.
+     */
+    "newCommitCount": number;
+}
+
+/**
+ * PullReview is a review the account of gh submitted: its state and when.
+ */
+export interface PullReview {
+    /**
+     * State is approved, changes_requested, commented or dismissed, a string for
+     * the same reason as State.Theme.
+     */
+    "state": string;
+
+    /**
+     * RFC 3339
+     */
+    "at": string;
 }
 
 /**
@@ -1744,6 +1795,11 @@ export interface PullsFailure {
      */
     "repository": string;
     "message": string;
+
+    /**
+     * RFC 3339: the first failing reading of the run
+     */
+    "failedAt": string;
 }
 
 /**
@@ -1979,7 +2035,13 @@ export interface ReviewFilters {
      * never nil
      */
     "labelsExclude": string[] | null;
-    "pendingOnly": boolean;
+
+    /**
+     * BoardName and RepositoryName are the names of the board or the repository
+     * when it was chosen, which the chip of one that left shows.
+     */
+    "boardName": string;
+    "repositoryName": string;
 }
 
 /**

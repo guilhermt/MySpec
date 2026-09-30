@@ -81,6 +81,7 @@ export type {
     PullLabel,
     PullRequest,
     PullRequestRow,
+    PullReview,
     PullsFailure,
     Question,
     QuestionEntry,

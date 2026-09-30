@@ -152,6 +152,7 @@ func (s *Service) runRead() {
 	started := s.now()
 	repos := sortedRepositories(s.repositories())
 	var found map[string]RepositoryReading
+	cost := 0
 	viewer, err := s.readViewer(ctx)
 	if err != nil {
 		var failure *Failure
@@ -161,9 +162,9 @@ func (s *Service) runRead() {
 		s.log.Warn("pull requests reading failed", "error", err)
 		found = batchFailure(repos, failure)
 	} else {
-		found = s.readAll(ctx, repos, viewer)
+		found, cost = s.readAll(ctx, repos, viewer)
 	}
-	s.save(repos, found, started)
+	s.save(repos, found, started, cost)
 }
 
 // sortedRepositories orders the registered repositories by owner/name,
@@ -179,7 +180,7 @@ func sortedRepositories(repos []repository.Repository) []repository.Repository {
 // save keeps what the reading found, in the order of the registered
 // repositories. A repository whose reading failed keeps the list the reading
 // before it found; one no longer registered is dropped.
-func (s *Service) save(repos []repository.Repository, found map[string]RepositoryReading, started time.Time) {
+func (s *Service) save(repos []repository.Repository, found map[string]RepositoryReading, started time.Time, cost int) {
 	readAt := s.now()
 
 	s.mu.Lock()
@@ -193,7 +194,14 @@ func (s *Service) save(repos []repository.Repository, found map[string]Repositor
 			continue
 		}
 		if reading.Failure != nil {
-			reading.PullRequests = s.readings[repo.ID].PullRequests
+			before := s.readings[repo.ID]
+			reading.PullRequests = before.PullRequests
+			failure := *reading.Failure
+			failure.FailedAt = readAt
+			if before.Failure != nil && !before.Failure.FailedAt.IsZero() {
+				failure.FailedAt = before.Failure.FailedAt
+			}
+			reading.Failure = &failure
 			failed++
 		}
 		if reading.PullRequests == nil {
@@ -204,7 +212,7 @@ func (s *Service) save(repos []repository.Repository, found map[string]Repositor
 	}
 	s.readings, s.readAt = readings, readAt
 	s.log.Info("pull requests read", "repositories", len(readings), "failed", failed,
-		"pull_requests", total, "duration_ms", readAt.Sub(started).Milliseconds())
+		"pull_requests", total, "duration_ms", readAt.Sub(started).Milliseconds(), "cost", cost)
 }
 
 // Reading reports whether a reading runs now.

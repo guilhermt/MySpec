@@ -5,6 +5,7 @@ import { api, type ReviewCenter, type State } from "@/lib/wails";
 import { renderWithStore } from "@/test/render";
 import {
   makePullRequestRow,
+  makePullsFailure,
   makeRepository,
   makeReviewCenter,
   makeReviewFilters,
@@ -61,7 +62,9 @@ describe("ReviewsView", () => {
   it("shows the repositories the reading failed on, and the pull requests of the others", () => {
     view({
       pullRequests: [makePullRequestRow()],
-      failures: [{ repositoryId: "repo-2", repository: "dev/api", message: "No access." }],
+      failures: [
+        makePullsFailure({ repositoryId: "repo-2", repository: "dev/api", message: "No access." }),
+      ],
     });
 
     expect(screen.getByRole("alert")).toHaveTextContent("dev/api: No access.");
@@ -71,7 +74,7 @@ describe("ReviewsView", () => {
   it("offers to clear the filters when they hide everything", async () => {
     const { user } = view({
       pullRequests: [makePullRequestRow({ filtered: true })],
-      filters: makeReviewFilters({ pendingOnly: true }),
+      filters: makeReviewFilters({ authorsExclude: ["dependabot"] }),
     });
 
     expect(screen.getByText("No pull requests match the filters.")).toBeInTheDocument();
@@ -80,8 +83,31 @@ describe("ReviewsView", () => {
     await user.click(clear as HTMLElement);
 
     expect(api.setReviewFilters).toHaveBeenCalledWith(
-      expect.objectContaining({ pendingOnly: false }),
+      expect.objectContaining({ authorsExclude: [] }),
     );
+  });
+
+  it("hides the pull requests that do not wait for the user with pending only on", async () => {
+    const { user } = view({
+      pullRequests: [
+        makePullRequestRow({ key: "dev/web#31", number: 31, pending: true }),
+        makePullRequestRow({
+          key: "dev/web#32",
+          number: 32,
+          title: "Fix the header",
+          pending: false,
+        }),
+      ],
+    });
+
+    await user.click(screen.getByRole("button", { name: "Pending only" }));
+
+    expect(screen.getAllByRole("listitem")).toHaveLength(1);
+    expect(screen.queryByText("Fix the header")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Pending only" }));
+
+    expect(screen.getAllByRole("listitem")).toHaveLength(2);
   });
 
   it("asks for a repository when none is registered", () => {

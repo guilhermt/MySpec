@@ -1271,11 +1271,12 @@ func FromReviewCenter(
 				RepositoryID: one.RepositoryID,
 				Repository:   repo.FullName,
 				Message:      one.Failure.Message(),
+				FailedAt:     timeOrEmpty(one.Failure.FailedAt),
 			})
 		}
 		for _, pr := range one.PullRequests {
 			row := fromPullRequestRow(pr, repo, viewer, filters, taskPRs, reviews, cardOf)
-			if row.Pending && !row.Filtered {
+			if row.Pending && !row.Filtered && row.ReviewID == "" {
 				center.PendingCount++
 			}
 			center.Authors = addName(center.Authors, pr.Author)
@@ -1334,28 +1335,37 @@ func fromPullRequestRow(
 		labels[i] = PullLabel{Name: label.Name, Color: label.Color}
 	}
 	row := PullRequestRow{
-		Key:          pr.Key(),
-		RepositoryID: repo.ID,
-		Repository:   repo.FullName,
-		BoardID:      repo.BoardID,
-		Number:       pr.Number,
-		Title:        pr.Title,
-		URL:          pr.URL,
-		Author:       pr.Author,
-		Labels:       labels,
-		Draft:        pr.Draft,
-		Own:          strings.EqualFold(pr.Author, viewer),
-		Card:         fromPullCard(pr, cardOf),
-		Reviewed:     pr.Reviewed,
-		NewCommits:   pr.NewCommits(),
-		TaskID:       taskOfPullRequest(taskPRs, repo.ID, pr.Number),
-		UpdatedAt:    pr.UpdatedAt.Format(time.RFC3339),
+		Key:            pr.Key(),
+		RepositoryID:   repo.ID,
+		Repository:     repo.FullName,
+		BoardID:        repo.BoardID,
+		Number:         pr.Number,
+		Title:          pr.Title,
+		URL:            pr.URL,
+		Author:         pr.Author,
+		Labels:         labels,
+		Draft:          pr.Draft,
+		Own:            strings.EqualFold(pr.Author, viewer),
+		Card:           fromPullCard(pr, cardOf),
+		Reviewed:       pr.Reviewed,
+		NewCommits:     pr.NewCommits(),
+		TaskID:         taskOfPullRequest(taskPRs, repo.ID, pr.Number),
+		UpdatedAt:      pr.UpdatedAt.Format(time.RFC3339),
+		HeadBranch:     pr.HeadBranch,
+		BaseBranch:     pr.BaseBranch,
+		Body:           pr.Body,
+		Checks:         fromChecks(pr.Checks.Checks),
+		Mergeable:      string(pr.Checks.Mergeable),
+		NewCommitCount: pr.NewCommitCount,
+	}
+	if pr.YourReview != nil {
+		row.YourReview = &PullReview{State: pr.YourReview.State, At: timeOrEmpty(pr.YourReview.At)}
 	}
 	if review, ok := reviews(repo.ID, pr.Number); ok {
 		row.ReviewID = review.ID
 	}
 	row.Pending = pulls.Pending(pr, viewer, row.TaskID != "")
-	row.Filtered = !filters.Match(pr, repo.ID, repo.BoardID, row.Pending)
+	row.Filtered = !filters.Match(pr, repo.ID, repo.BoardID)
 	row.Action = rowAction(row, pr, repo)
 	return row
 }
@@ -1418,7 +1428,8 @@ func FromReviewFilters(f pulls.Filters) ReviewFilters {
 		AuthorsExclude: names(f.AuthorsExclude),
 		LabelsInclude:  names(f.LabelsInclude),
 		LabelsExclude:  names(f.LabelsExclude),
-		PendingOnly:    f.PendingOnly,
+		BoardName:      f.BoardName,
+		RepositoryName: f.RepositoryName,
 	}
 }
 
@@ -1431,7 +1442,8 @@ func filtersOf(f ReviewFilters) pulls.Filters {
 		AuthorsExclude: names(f.AuthorsExclude),
 		LabelsInclude:  names(f.LabelsInclude),
 		LabelsExclude:  names(f.LabelsExclude),
-		PendingOnly:    f.PendingOnly,
+		BoardName:      f.BoardName,
+		RepositoryName: f.RepositoryName,
 	}
 }
 

@@ -1094,6 +1094,7 @@ type PullsFailure struct {
 	RepositoryID string `json:"repositoryId"`
 	Repository   string `json:"repository"` // owner/name
 	Message      string `json:"message"`
+	FailedAt     string `json:"failedAt"` // RFC 3339: the first failing reading of the run
 }
 
 // ReviewFilters is what the Reviews view shows. The zero value shows
@@ -1106,7 +1107,10 @@ type ReviewFilters struct {
 	AuthorsExclude []string `json:"authorsExclude"` // never nil
 	LabelsInclude  []string `json:"labelsInclude"`  // never nil
 	LabelsExclude  []string `json:"labelsExclude"`  // never nil
-	PendingOnly    bool     `json:"pendingOnly"`
+	// BoardName and RepositoryName are the names of the board or the repository
+	// when it was chosen, which the chip of one that left shows.
+	BoardName      string `json:"boardName"`
+	RepositoryName string `json:"repositoryName"`
 }
 
 // PullLabel is a label of a pull request, as GitHub colours it.
@@ -1153,6 +1157,29 @@ type PullRequestRow struct {
 	// a string for the same reason as State.Theme.
 	Action    string `json:"action"`
 	UpdatedAt string `json:"updatedAt"`
+	// HeadBranch and BaseBranch are the branch of the pull request and the one
+	// it merges into.
+	HeadBranch string    `json:"headBranch"`
+	BaseBranch string    `json:"baseBranch"`
+	Body       string    `json:"body"`   // the description, Markdown; "" without one
+	Checks     []PRCheck `json:"checks"` // never nil
+	// Mergeable is mergeable, conflicting, unknown or "", a string for the same
+	// reason as State.Theme.
+	Mergeable string `json:"mergeable"`
+	// YourReview is the last review the account of gh submitted; null without
+	// one.
+	YourReview *PullReview `json:"yourReview"`
+	// NewCommitCount is how many commits came after that review; -1 when its
+	// commit is not among the last 30.
+	NewCommitCount int `json:"newCommitCount"`
+}
+
+// PullReview is a review the account of gh submitted: its state and when.
+type PullReview struct {
+	// State is approved, changes_requested, commented or dismissed, a string for
+	// the same reason as State.Theme.
+	State string `json:"state"`
+	At    string `json:"at"` // RFC 3339
 }
 
 // ReviewFinding is one numbered finding of a pass of a review.

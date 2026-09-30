@@ -4,22 +4,24 @@
       "pullRequests": {
         "nodes": [
           {
-            "number": 12,
-            "title": "Drop the dead flag",
-            "url": "https://github.com/acme/alpha/pull/12",
+            "number": 21,
+            "title": "Rework the reading",
+            "url": "https://github.com/acme/alpha/pull/21",
             "isDraft": false,
             "isCrossRepository": false,
             "updatedAt": "2026-09-14T10:00:00Z",
-            "headRefName": "drop-dead-flag",
-            "headRefOid": "ddd444",
+            "headRefName": "rework-reading",
+            "headRefOid": "eee555",
             "baseRefName": "main",
-            "author": null,
+            "author": { "login": "mariana" },
             "labels": { "nodes": [] },
-            "reviews": { "nodes": [] },
+            "reviews": {
+              "nodes": [{ "state": "COMMENTED", "submittedAt": "2026-08-01T09:00:00Z", "commit": { "oid": "eee000" } }]
+            },
             "body": "",
             "mergeable": "MERGEABLE",
             "head": { "nodes": [] },
-            "since": { "nodes": [{ "commit": { "oid": "ddd444" } }] }
+            "since": { "nodes": [{ "commit": { "oid": "eee555" } }] }
           }
         ]
       }

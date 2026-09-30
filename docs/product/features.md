@@ -568,13 +568,13 @@ O nó **Reviews** da barra lateral e **Review a pull request**, no menu **New**,
 
 Toda pull request aberta espera o review do usuário, pedido no GitHub ou não; o pedido de review do GitHub não é usado. Uma pull request está **pendente** quando o usuário ainda não a revisou ou quando há commits novos desde o último review dele. "Revisada" vem do GitHub: conta qualquer review enviado pela conta do `gh`, publicado pelo produto ou direto no site, e "commits novos" são os que vieram depois do último deles. As pull requests do próprio usuário e as das tasks do produto aparecem na lista, mas nunca são pendentes; o que a pull request de uma task espera do usuário aparece na task.
 
-O nó **Reviews** mostra a contagem das pendentes que passam pelos filtros. Uma pull request pendente sem review iniciado não notifica e não espera pelo usuário.
+O nó **Reviews** mostra a contagem das pendentes que passam pelos filtros e ainda não têm review iniciado. Uma pull request pendente sem review iniciado não notifica e não espera pelo usuário.
 
 ### Filtros
 
 A barra de filtros tem **Board**, com os boards e `No board`, **Repository**, **Author** e **Label**, o interruptor **Pending only** e **Clear filters**. Board e repositório escolhem um valor. Autor e label servem sobretudo para tirar da vista, como as pull requests do dependabot: cada valor do menu passa, a cada clique, de sem filtro a excluído, de excluído a incluído e de volta a sem filtro, e o menu mostra o resumo, como `Any`, `−dependabot` ou `+alice −bot`. Uma pull request passa pelo autor quando nenhum autor está incluído ou o dela está, e o dela não está excluído; passa pela label quando nenhuma label está incluída ou ela tem uma das incluídas, e não tem nenhuma excluída. As comparações não diferenciam maiúsculas.
 
-Os filtros são lembrados entre execuções do app e valem para a lista e para a contagem do nó **Reviews**. Eles não escondem os reviews já iniciados, que aparecem sob **Reviews** na barra lateral mesmo com a pull request filtrada.
+Os filtros de board, repositório, autor e label são lembrados entre execuções do app e valem para a lista e para a contagem do nó **Reviews**. **Pending only** vale só para a lista e só enquanto a visão está aberta: não é lembrado, e **Clear filters** o desliga junto com os outros. Eles não escondem os reviews já iniciados, que aparecem sob **Reviews** na barra lateral mesmo com a pull request filtrada.
 
 ### Leitura das pull requests
 

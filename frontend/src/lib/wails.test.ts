@@ -22,6 +22,7 @@ import {
   asInterruptedBy,
   asIssueState,
   asMarkerType,
+  asMergeable,
   asMigrationCaseKind,
   asModelStage,
   asPermissionStatus,
@@ -49,6 +50,7 @@ import {
   asTaskStage,
   asThemePreference,
   asTranscriptEventKind,
+  asYourReviewState,
 } from "@/lib/wails";
 import { makeSituation, makeState } from "@/test/wails-mock";
 
@@ -313,6 +315,12 @@ describe("narrowing", () => {
     for (const action of ["review", "open_review", "open_task", "clone", "clone_missing", "fork"]) {
       expect(asPullRequestAction(action)).toBe(action);
     }
+    for (const state of ["approved", "changes_requested", "commented", "dismissed"]) {
+      expect(asYourReviewState(state)).toBe(state);
+    }
+    for (const mergeable of ["mergeable", "conflicting", "unknown", ""]) {
+      expect(asMergeable(mergeable)).toBe(mergeable);
+    }
     expect(asPullRequestOutcome("merged")).toBe("merged");
     expect(asPullRequestOutcome("closed")).toBe("closed");
     expect(asModelStage("discussion")).toBe("discussion");
@@ -389,6 +397,8 @@ describe("narrowing", () => {
     expect(asReviewVerdict("reject")).toBe("comment");
     expect(asPullRequestAction("merge")).toBe("fork");
     expect(asPullRequestOutcome("open")).toBe("closed");
+    expect(asYourReviewState("pending")).toBe("commented");
+    expect(asMergeable("clean")).toBe("");
     expect(asFindingDecision("deferred")).toBe("");
     expect(asFindingPlacement("thread")).toBe("");
     expect(asDiscussionStatus("archived")).toBe("discussing");
@@ -513,7 +523,8 @@ describe("api", () => {
       authorsExclude: ["dependabot"],
       labelsInclude: [],
       labelsExclude: [],
-      pendingOnly: true,
+      boardName: "",
+      repositoryName: "dev/web",
     });
     await wails.api.startReview({
       repositoryId: "repo-1",

@@ -11,7 +11,8 @@ export const EMPTY_REVIEW_FILTERS: ReviewFilters = {
   authorsExclude: [],
   labelsInclude: [],
   labelsExclude: [],
-  pendingOnly: false,
+  boardName: "",
+  repositoryName: "",
 };
 
 /** MultiFilterKind is a filter that both includes and excludes values: the author, the label. */
@@ -20,9 +21,15 @@ export type MultiFilterKind = "author" | "label";
 /** FilterState is what a multi filter does with one value. */
 export type FilterState = "include" | "exclude" | "none";
 
-/** visibleRows is what the Reviews view lists: the pull requests the filters keep, in reading order. */
-export function visibleRows(center: ReviewCenter): PullRequestRow[] {
-  return (center.pullRequests ?? []).filter((row) => !row.filtered);
+/**
+ * visibleRows is what the Reviews view lists: the pull requests the filters
+ * keep, in reading order, and only the ones that wait for the user when
+ * pendingOnly is on.
+ */
+export function visibleRows(center: ReviewCenter, pendingOnly = false): PullRequestRow[] {
+  return (center.pullRequests ?? []).filter(
+    (row) => !row.filtered && (!pendingOnly || row.pending),
+  );
 }
 
 /**
@@ -112,8 +119,7 @@ export function isFiltering(filters: ReviewFilters): boolean {
     (filters.authorsInclude ?? []).length > 0 ||
     (filters.authorsExclude ?? []).length > 0 ||
     (filters.labelsInclude ?? []).length > 0 ||
-    (filters.labelsExclude ?? []).length > 0 ||
-    filters.pendingOnly
+    (filters.labelsExclude ?? []).length > 0
   );
 }
 
@@ -142,7 +148,6 @@ export function sameFilters(a: ReviewFilters, b: ReviewFilters): boolean {
     sameList(a.authorsInclude, b.authorsInclude) &&
     sameList(a.authorsExclude, b.authorsExclude) &&
     sameList(a.labelsInclude, b.labelsInclude) &&
-    sameList(a.labelsExclude, b.labelsExclude) &&
-    a.pendingOnly === b.pendingOnly
+    sameList(a.labelsExclude, b.labelsExclude)
   );
 }

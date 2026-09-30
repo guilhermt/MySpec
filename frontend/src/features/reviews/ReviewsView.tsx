@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PullRequestRow } from "@/features/reviews/PullRequestRow";
@@ -21,6 +21,7 @@ const SKELETON_ROWS = 6;
 export function ReviewsView() {
   const app = useAppStore((state) => state.app);
   const center = useReviewCenter();
+  const [pendingOnly, setPendingOnly] = useState(false);
 
   // Opening the view reads the pull requests again; the stored reading shows
   // meanwhile.
@@ -28,8 +29,8 @@ export function ReviewsView() {
     void refreshPullRequests();
   }, []);
 
-  const rows = visibleRows(center);
-  const filtering = isFiltering(center.filters);
+  const rows = visibleRows(center, pendingOnly);
+  const filtering = isFiltering(center.filters) || pendingOnly;
 
   let content: React.ReactNode;
   if (center.readAt === "" && center.reading) {
@@ -49,7 +50,10 @@ export function ReviewsView() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => void setReviewFilters(EMPTY_REVIEW_FILTERS)}
+            onClick={() => {
+              setPendingOnly(false);
+              void setReviewFilters(EMPTY_REVIEW_FILTERS);
+            }}
           >
             Clear filters
           </Button>
@@ -70,7 +74,11 @@ export function ReviewsView() {
     <section aria-label="Reviews" className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
       <ReviewsHeader center={center} />
       <ReadFailures failures={center.failures ?? []} />
-      <ReviewsFilterBar center={center} />
+      <ReviewsFilterBar
+        center={center}
+        pendingOnly={pendingOnly}
+        onPendingOnlyChange={setPendingOnly}
+      />
       <div className="flex min-h-0 flex-1 flex-col">{content}</div>
     </section>
   );

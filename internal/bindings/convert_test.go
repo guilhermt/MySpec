@@ -2178,6 +2178,112 @@ func TestFromReviewCenterAllocatesEverythingWithoutAReading(t *testing.T) {
 	}
 }
 
+func TestFromReviewCenterDoesNotCountThePullRequestsThatAlreadyHaveAReview(t *testing.T) {
+	t.Parallel()
+
+	readings := []pulls.RepositoryReading{{
+		RepositoryID: "r-1",
+		PullRequests: []pulls.PullRequest{openPR(1, "alice", 10), openPR(2, "bob", 20)},
+	}}
+	reviews := func(_ string, number int) (prreview.Review, bool) {
+		return prreview.Review{ID: "review-1"}, number == 1
+	}
+
+	center := bindings.FromReviewCenter(
+		readings, false, readAt, "dev", pulls.Filters{}, reviewRepos, noTasks, reviews, noCard,
+	)
+
+	if center.PendingCount != 1 {
+		t.Errorf("pendingCount = %d, want 1: the pull request with an active review does not count", center.PendingCount)
+	}
+	for _, row := range center.PullRequests {
+		if !row.Pending {
+			t.Errorf("pending of #%d = false, want true: the row still waits, the count is what leaves it out", row.Number)
+		}
+	}
+}
+
+func TestFromReviewCenterCarriesWhatTheListReadsOfEachPullRequest(t *testing.T) {
+	t.Parallel()
+
+	pr := openPR(1, "alice", 0)
+	pr.HeadBranch, pr.BaseBranch, pr.Body = "login-screen", "dev", "Adds the login."
+	pr.Checks = gh.PRChecks{
+		Checks: []gh.Check{{
+			Name: "test", URL: "https://github.com/acme/web/actions/runs/1", Conclusion: "success", State: gh.CheckPassed,
+			StartedAt: readAt, CompletedAt: readAt.Add(time.Minute),
+		}},
+		Mergeable: gh.MergeableConflicting,
+	}
+	pr.Reviewed, pr.ReviewedCommit, pr.HeadCommit = true, "aaa", "bbb"
+	pr.YourReview = &pulls.YourReview{State: "changes_requested", At: readAt}
+	pr.NewCommitCount = -1
+	bare := openPR(2, "bob", 0)
+	readings := []pulls.RepositoryReading{{RepositoryID: "r-1", PullRequests: []pulls.PullRequest{pr, bare}}}
+
+	center := bindings.FromReviewCenter(
+		readings, false, readAt, "dev", pulls.Filters{}, reviewRepos, noTasks, noReview, noCard,
+	)
+
+	rowOf := func(number int) bindings.PullRequestRow {
+		for _, row := range center.PullRequests {
+			if row.Number == number {
+				return row
+			}
+		}
+		t.Fatalf("no row for #%d", number)
+		return bindings.PullRequestRow{}
+	}
+	got := rowOf(1)
+	wantChecks := []bindings.PRCheck{{
+		Name: "test", State: "passed", Conclusion: "success", URL: "https://github.com/acme/web/actions/runs/1",
+		StartedAt: readAt.Format(time.RFC3339), CompletedAt: readAt.Add(time.Minute).Format(time.RFC3339),
+	}}
+	if diff := cmp.Diff(wantChecks, got.Checks); diff != "" {
+		t.Errorf("checks (-want +got):\n%s", diff)
+	}
+	wantReview := &bindings.PullReview{State: "changes_requested", At: readAt.Format(time.RFC3339)}
+	if diff := cmp.Diff(wantReview, got.YourReview); diff != "" {
+		t.Errorf("yourReview (-want +got):\n%s", diff)
+	}
+	if got.HeadBranch != "login-screen" || got.BaseBranch != "dev" || got.Body != "Adds the login." ||
+		got.Mergeable != "conflicting" || got.NewCommitCount != -1 {
+		t.Errorf("row = %+v, want the branches, the body, the merge and the count of the pull request", got)
+	}
+
+	none := rowOf(2)
+	if none.Checks == nil || len(none.Checks) != 0 || none.YourReview != nil || none.Mergeable != "" || none.NewCommitCount != 0 {
+		t.Errorf("row without a reading = %+v, want empty checks (not nil), no review and no merge", none)
+	}
+}
+
+func TestFromReviewCenterSaysWhenTheRunOfFailuresStarted(t *testing.T) {
+	t.Parallel()
+
+	readings := []pulls.RepositoryReading{{
+		RepositoryID: "r-2",
+		Failure:      &pulls.Failure{Reason: pulls.ReasonNotFound, FailedAt: readAt},
+	}}
+
+	center := bindings.FromReviewCenter(
+		readings, false, readAt, "dev", pulls.Filters{}, reviewRepos, noTasks, noReview, noCard,
+	)
+
+	if got := center.Failures[0].FailedAt; got != readAt.Format(time.RFC3339) {
+		t.Errorf("failedAt = %q, want the first failing reading", got)
+	}
+}
+
+func TestReviewFiltersCarryTheNamesOfTheBoardAndTheRepository(t *testing.T) {
+	t.Parallel()
+
+	got := bindings.FromReviewFilters(pulls.Filters{BoardID: "board-1", BoardName: "Web", RepositoryName: "web"})
+
+	if got.BoardName != "Web" || got.RepositoryName != "web" {
+		t.Errorf("filters = %+v, want the names of the board and the repository", got)
+	}
+}
+
 // reviewState is a review of acme/web#7 in a status, with one recorded pass.
 func reviewState(status reviewflow.Status, pass prreview.Pass) reviewflow.State {
 	stored := prreview.Review{
