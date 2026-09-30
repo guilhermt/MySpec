@@ -215,7 +215,7 @@ export function BoardStartRow({ line, onOpen, ...actions }: BoardStartRowProps) 
             className={cn(
               "shrink-0 whitespace-nowrap",
               META,
-              reading.tone === "failed" ? "text-state-error" : "text-ink-3",
+              reading.tone === "failed" ? "text-ink-2" : "text-ink-3",
             )}
           >
             {reading.shimmer ? <Shimmer>{reading.text}</Shimmer> : reading.text}

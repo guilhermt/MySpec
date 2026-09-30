@@ -79,8 +79,9 @@ describe.each(THEMES)("StartRow in the %s theme", (theme) => {
     const label = screen.getByText("Platform Roadmap").getBoundingClientRect();
     const message = screen.getByText("gh: rate limited").getBoundingClientRect();
     expect(message.left).toBe(label.left);
+    // The failure is neutral, never a situation.
     expect(getComputedStyle(screen.getByText("◇ Read failed 18m ago")).color).toBe(
-      token("--state-error"),
+      token("--ink-2"),
     );
   });
 
