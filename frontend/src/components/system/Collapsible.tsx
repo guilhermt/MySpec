@@ -13,10 +13,17 @@ export const Collapsible = UICollapsible;
 
 export interface CollapsibleTriggerProps extends ComponentProps<typeof UICollapsibleTrigger> {
   className?: string;
+  /** chevronSize is the size of the chevron: --icon-sm by default, --icon-xs in a row of a form. */
+  chevronSize?: "sm" | "xs";
 }
 
 /** CollapsibleTrigger opens the section, with a chevron that turns when it is open. */
-export function CollapsibleTrigger({ className, children, ...props }: CollapsibleTriggerProps) {
+export function CollapsibleTrigger({
+  className,
+  chevronSize = "sm",
+  children,
+  ...props
+}: CollapsibleTriggerProps) {
   return (
     <UICollapsibleTrigger
       {...props}
@@ -27,7 +34,7 @@ export function CollapsibleTrigger({ className, children, ...props }: Collapsibl
     >
       <Icon
         icon={ICONS.chevron}
-        size="sm"
+        size={chevronSize}
         className="transition-transform duration-(--duration-fast) ease-standard group-data-panel-open/collapsible:rotate-90"
       />
       {children}

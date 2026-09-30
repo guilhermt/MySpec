@@ -62,6 +62,15 @@ describe.each(THEMES)("NewTaskDialog, the scenes in the %s theme", (theme) => {
     // What the dialog cuts says its whole text in a tooltip.
     expect(await withoutTooltip(cutTexts(dialog))).toEqual([]);
 
+    // Models opens with one chevron, of --icon-xs.
+    const chevrons = within(dialog)
+      .getByRole("button", { name: /^Models/ })
+      .querySelectorAll("svg");
+    expect(chevrons).toHaveLength(1);
+    expect(chevrons[0]?.getBoundingClientRect().width).toBe(
+      parseFloat(resolve("var(--icon-xs)", "width")),
+    );
+
     // Create is the one primary.
     expect(visiblePrimaries()).toHaveLength(1);
     expect(within(dialog).getByRole("button", { name: /^Create/ })).toHaveAttribute(

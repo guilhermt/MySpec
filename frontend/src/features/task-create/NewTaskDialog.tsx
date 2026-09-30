@@ -8,7 +8,6 @@ import {
 import { DependencyNotice } from "@/components/system/DependencyNotice";
 import { Dialog, DialogBody, DialogCancel, DialogFooter } from "@/components/system/Dialog";
 import { Field } from "@/components/system/Field";
-import { Icon } from "@/components/system/Icon";
 import { Input } from "@/components/system/Input";
 import { ICONS } from "@/components/system/icons";
 import { Link } from "@/components/system/Link";
@@ -372,12 +371,10 @@ function NewTaskFields({ origin }: NewTaskFieldsProps) {
         </div>
 
         <Collapsible open={modelsOpen} onOpenChange={setModelsOpen} className="flex flex-col gap-2">
-          <CollapsibleTrigger className="group/models flex h-(--size-control) items-center gap-2 rounded-sm text-left text-(length:--text-body) leading-(--leading-body) outline-none focus-visible:focus-ring">
-            <Icon
-              icon={ICONS.chevron}
-              size="xs"
-              className="transition-transform duration-(--duration-fast) ease-standard group-data-panel-open/models:rotate-90"
-            />
+          <CollapsibleTrigger
+            chevronSize="xs"
+            className="flex h-(--size-control) items-center gap-2 rounded-sm text-left text-(length:--text-body) leading-(--leading-body) outline-none focus-visible:focus-ring"
+          >
             <span className="font-medium text-ink-1">Models</span>
             <span className="ml-auto min-w-0 truncate text-(length:--text-meta) text-ink-3">
               {adjustmentSummary(catalog, choices, defaults, modelStages)}
