@@ -45,7 +45,7 @@ export function FailureStrip({ board, now }: FailureStripProps) {
     <NoticeStrip
       title={`Couldn't read the board · ${age(board.failure.failedAt, now)}`}
       reason={board.failure.message}
-      role={board.reading ? "status" : "alert"}
+      role="alert"
       action={<TryAgain board={board} />}
       className="mb-(--space-4)"
     />

@@ -40,7 +40,7 @@ export function BoardHeader({
   const reasonId = useId();
   const neverRead = board.readAt === "";
   const newDiscussionReason = neverRead ? "The board hasn't been read yet." : undefined;
-  const newDiscussionTip = `New discussion on ${board.title}, without cards`;
+  const newDiscussionTip = `New discussion on ${board.title}, without cards · N`;
 
   return (
     <LocationHeader>
@@ -61,6 +61,7 @@ export function BoardHeader({
           variant="secondary"
           size="sm"
           icon={ICONS.discussion}
+          shortcut="N"
           disabled={neverRead}
           {...(newDiscussionReason !== undefined ? { reasonId } : {})}
           onClick={onNewDiscussion}
@@ -87,6 +88,7 @@ export function BoardHeader({
         <MenuContent align="end">
           <MenuItem
             icon={ICONS.select}
+            shortcut="Space"
             {...(selectDisabledReason !== null ? { disabledReason: selectDisabledReason } : {})}
             onClick={onEnterSelect}
           >

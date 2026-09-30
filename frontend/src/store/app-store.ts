@@ -582,7 +582,14 @@ function initialTaskUi(): Pick<
 /** Navigation is the part of the store a navigation changes. */
 type Navigation = Pick<
   AppStore,
-  "location" | "back" | "forward" | "panel" | "earlierConversation" | "pendingFocus" | "promptEdit"
+  | "location"
+  | "back"
+  | "forward"
+  | "panel"
+  | "earlierConversation"
+  | "pendingFocus"
+  | "promptEdit"
+  | "boardCardRequest"
 >;
 
 // beside drops the places at the end of a history that are the place on
@@ -600,30 +607,30 @@ function beside(places: Location[], location: Location): Location[] {
 // navigate opens a place. The same place only takes the new one (a page of
 // Settings changes without stacking); another pushes the current one behind it,
 // unless it is the page of an item that left, which is never revisited, and
-// drops whatever was ahead.
+// drops whatever was ahead. A card a board was asked to open, and never got to, is dropped with it.
 function navigate(
   state: AppStore,
   location: Location,
   focus: AppStore["pendingFocus"],
 ): Navigation {
-  const target = location;
   const common = {
-    location: target,
+    location,
     panel: null,
     earlierConversation: null,
     pendingFocus: focus,
     promptEdit: null,
+    boardCardRequest: null,
   };
-  if (sameLocation(state.location, target)) {
+  if (sameLocation(state.location, location)) {
     return {
       ...common,
-      back: beside(state.back, target),
-      forward: beside(state.forward, target),
+      back: beside(state.back, location),
+      forward: beside(state.forward, location),
     };
   }
   const back =
     state.location.kind === "gone" ? state.back : [...state.back, state.location].slice(-NAV_LIMIT);
-  return { ...common, back: beside(back, target), forward: [] };
+  return { ...common, back: beside(back, location), forward: [] };
 }
 
 // reachable is whether Back or Forward can go to a place: it still exists and
@@ -662,6 +669,7 @@ function travel(
     earlierConversation: null,
     pendingFocus: focus,
     promptEdit: null,
+    boardCardRequest: null,
   };
 }
 

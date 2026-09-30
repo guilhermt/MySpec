@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { Home } from "@/features/home/Home";
 import { HOME } from "@/lib/locations";
 import { api, type Situation } from "@/lib/wails";
-import { useAppStore } from "@/store/app-store";
+import { stepTabKey, useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
 import {
   makeBoard,
@@ -27,16 +27,30 @@ function withTask(situations: Situation[]) {
 
 describe("Home", () => {
   describe("Continue", () => {
-    it("opens the item where its most serious situation is", async () => {
-      const situation = makeSituation({ taskId: "task-1", group: "waiting" });
+    it("opens the item where its most serious situation is, with Enter", async () => {
+      const waiting = makeSituation({
+        id: "wait",
+        taskId: "task-1",
+        group: "waiting",
+        place: { kind: "step", stage: "", step: 5 },
+      });
+      const error = makeSituation({
+        id: "error",
+        taskId: "task-1",
+        group: "error",
+        place: { kind: "step_review", stage: "", step: 3 },
+      });
       const { user } = renderWithStore(<Home />, {
-        state: withTask([situation]),
+        state: withTask([waiting, error]),
         ui: { location: HOME, back: [TASK] },
       });
 
-      await user.click(screen.getByRole("button", { name: /^Continue: / }));
+      await user.keyboard("{Enter}");
 
       expect(useAppStore.getState().location).toEqual(TASK);
+      expect(useAppStore.getState().openStepTab).toEqual({
+        [stepTabKey("task-1", 3)]: "reviewer",
+      });
     });
 
     it("opens the item itself without a situation", async () => {
@@ -89,6 +103,17 @@ describe("Home", () => {
   });
 
   describe("Start", () => {
+    it("says what New task and New discussion lead to", () => {
+      renderWithStore(<Home />, { state: makeState({ boards: [makeBoard()] }) });
+
+      expect(screen.getByRole("button", { name: "New task" })).toHaveAccessibleDescription(
+        "From scratch. A card starts its task on its board.",
+      );
+      expect(screen.getByRole("button", { name: "New discussion" })).toHaveAccessibleDescription(
+        "About the demand of one board",
+      );
+    });
+
     it("opens the creation dialog from New task", async () => {
       const { user } = renderWithStore(<Home />, { state: makeState() });
 
@@ -227,18 +252,12 @@ describe("Home", () => {
       expect(within(group).getByText("No board")).toBeInTheDocument();
       expect(within(group).getByText("loose")).toBeInTheDocument();
     });
-
-    it("has no Boards section without boards or loose repositories", () => {
-      renderWithStore(<Home />, { state: makeState({ repositories: [] }) });
-
-      expect(screen.queryByRole("heading", { name: "Boards" })).not.toBeInTheDocument();
-    });
   });
 
   it("lists the shortcuts", () => {
     renderWithStore(<Home />, { state: makeState() });
 
-    const shortcuts = screen.getByLabelText("Shortcuts");
+    const shortcuts = screen.getByText("Shortcuts:").parentElement as HTMLElement;
     for (const text of ["Next that needs you", "New task", "Back", "Settings"]) {
       expect(within(shortcuts).getByText(text)).toBeInTheDocument();
     }

@@ -34,7 +34,7 @@ const APP = makeState({
   history: [makeArchivedTask({ id: "old-task", name: "400-old" })],
 });
 
-const IDLE: CloneState = { cloning: false, error: null };
+const IDLE: CloneState = { cloning: false, error: null, opensDialog: false };
 
 function context(card: BoardCard, overrides: Partial<CardPanelContext> = {}): CardPanelContext {
   const board = overrides.board ?? makeBoard({ id: "board-1", cards: [card] });
@@ -104,7 +104,7 @@ describe("the actions of the panel", () => {
     {
       name: "clone, running",
       card: { action: "clone" },
-      context: { clone: { cloning: true, error: null } },
+      context: { clone: { cloning: true, error: null, opensDialog: true } },
       want: {
         primary: { kind: "cloning", repository: "acme/api" },
         changePath: false,
@@ -117,9 +117,23 @@ describe("the actions of the panel", () => {
       },
     },
     {
+      name: "clone, running for a card that did not ask",
+      card: { action: "clone" },
+      context: { clone: { cloning: true, error: null, opensDialog: false } },
+      want: {
+        primary: { kind: "cloning", repository: "acme/api" },
+        changePath: false,
+        discuss: { disabled: false },
+        reason: { text: "The clone is running.", tone: "neutral" },
+        discussReason: null,
+      },
+    },
+    {
       name: "clone, failed",
       card: { action: "clone" },
-      context: { clone: { cloning: false, error: "gh: repository not found" } },
+      context: {
+        clone: { cloning: false, error: "gh: repository not found", opensDialog: false },
+      },
       want: {
         primary: { kind: "retry-clone" },
         changePath: false,

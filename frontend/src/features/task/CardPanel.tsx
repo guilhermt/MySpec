@@ -68,7 +68,12 @@ export function CardPanel({ task }: CardPanelProps) {
         <RelationList
           groups={card.relations}
           onOpen={(url) => void openExternal(url)}
-          onOpenCard={(key) => openBoardCard(task.card?.boardId ?? "", key)}
+          onOpenCard={(key) => {
+            const boardId = task.card?.boardId ?? "";
+            if (boardId !== "") {
+              openBoardCard(boardId, key);
+            }
+          }}
         />
       </div>
     </AuxPanel>

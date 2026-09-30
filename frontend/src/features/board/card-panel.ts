@@ -81,6 +81,8 @@ export interface CardPanelModel {
 export interface CloneState {
   cloning: boolean;
   error: string | null;
+  /** opensDialog is whether the clone running is one this card asked for, which opens the dialog when it ends. */
+  opensDialog: boolean;
 }
 
 /** CardPanelContext is what the panel reads beyond its card. */
@@ -120,7 +122,11 @@ function panelActions(card: BoardCard, ctx: CardPanelContext): PanelActions {
         return build(
           { kind: "cloning", repository: card.repository },
           !checkable,
-          neutral("The dialog opens when the clone ends. You can leave the board meanwhile."),
+          neutral(
+            ctx.clone.opensDialog
+              ? "The dialog opens when the clone ends. You can leave the board meanwhile."
+              : "The clone is running.",
+          ),
         );
       }
       if (ctx.clone.error !== null && ctx.clone.error !== "") {

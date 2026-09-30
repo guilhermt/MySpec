@@ -64,6 +64,7 @@ export function BoardCardPanel({
   const openArchived = useAppStore((state) => state.openArchived);
   const openDiscussion = useAppStore((state) => state.openDiscussion);
   const openArchivedDiscussion = useAppStore((state) => state.openArchivedDiscussion);
+  const pendingStart = useAppStore((state) => state.pendingStart);
   const repository = useRepository(card.repositoryId);
   const children = useMemo(() => epicChildren(board.cards ?? []), [board.cards]);
   // Add to board, once done, leaves the focus on the primary the reading brings for the card.
@@ -89,6 +90,7 @@ export function BoardCardPanel({
     clone: {
       cloning: repository?.cloning === true,
       error: (repository?.cloneError ?? "") !== "" ? (repository?.cloneError ?? "") : start.error,
+      opensDialog: pendingStart?.key === card.key,
     },
     outOfReading,
   });

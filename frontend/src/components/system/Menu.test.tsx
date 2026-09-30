@@ -241,6 +241,9 @@ describe("MenuActionItem", () => {
     expect(actionItemLabel("acme/billing", "Not cloned", action)).toBe(
       "acme/billing, not cloned. Enter clones it.",
     );
+    expect(actionItemLabel("acme/billing", "Clone denied.", action)).toBe(
+      "acme/billing, clone denied. Enter clones it.",
+    );
     expect(actionItemLabel("acme/billing", undefined, action)).toBe(
       "acme/billing. Enter clones it.",
     );

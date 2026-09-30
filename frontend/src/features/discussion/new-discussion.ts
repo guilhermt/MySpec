@@ -63,9 +63,6 @@ export function unclonedRepositories(
 export const BOARD_FIELD_HELP =
   "The discussion reads the clones of the board's repositories and publishes its cards there.";
 
-/** BoardOption is an option of the Board field: a board never read is disabled, its reason in sub. */
-export type BoardOption = SelectOption & { disabled?: boolean };
-
 /** lastUsedBoard is the board of the discussion created last, active or archived; null when none still exists. */
 export function lastUsedBoard(app: State): string | null {
   const discussions = [...(app.discussions ?? []), ...(app.discussionHistory ?? [])];
@@ -97,7 +94,7 @@ function repositoryNames(app: State, board: Board): string {
 }
 
 /** boardOptions are the options of the Board field, in the order of app.boards. */
-export function boardOptions(app: State, now: number): BoardOption[] {
+export function boardOptions(app: State, now: number): SelectOption[] {
   const last = lastUsedBoard(app);
   return (app.boards ?? []).map((board) => {
     if (board.readAt === "") {

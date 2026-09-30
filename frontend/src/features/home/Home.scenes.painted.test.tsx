@@ -70,10 +70,34 @@ describe.each(THEMES)("Home, the scenes in the %s theme", (theme) => {
       ).toEqual([]);
 
       // The shortcuts stay inside the column.
-      const shortcuts = within(area).getByRole("list", { name: "Shortcuts", hidden: true });
+      const shortcuts = within(area).getByText("Shortcuts:").parentElement as HTMLElement;
       expect(shortcuts.getBoundingClientRect().right).toBeLessThanOrEqual(
         column.getBoundingClientRect().right,
       );
+
+      // The name of Continue, the one title that gives way, is whole or keeps at least a third of
+      // its row; the label of a row of Start or Boards never gives way, and the keys of each fit in the row.
+      for (const button of column.querySelectorAll("button")) {
+        const title = button.querySelector("span.truncate.font-semibold");
+        if (title !== null && title.scrollWidth > title.clientWidth) {
+          expect(title.getBoundingClientRect().width).toBeGreaterThanOrEqual(
+            button.getBoundingClientRect().width / 3,
+          );
+        }
+        const label = button.querySelector(":scope > span.font-medium");
+        if (label !== null) {
+          expect(label.scrollWidth).toBeLessThanOrEqual(label.clientWidth);
+        }
+        for (const keys of button.querySelectorAll("kbd")) {
+          expect(keys.scrollWidth).toBeLessThanOrEqual(keys.clientWidth);
+          expect(keys.getBoundingClientRect().right).toBeLessThanOrEqual(
+            button.getBoundingClientRect().right,
+          );
+        }
+      }
+      for (const keys of column.querySelectorAll('span[aria-hidden="true"]')) {
+        expect(keys.scrollWidth).toBeLessThanOrEqual(keys.clientWidth);
+      }
 
       // What the screen cuts says its whole text in a tooltip.
       expect(await withoutTooltip(cutTexts(area))).toEqual([]);
@@ -91,6 +115,13 @@ describe.each(THEMES)("Home, the scenes in the %s theme", (theme) => {
 
     const button = within(area).getByRole("button", { name: /^Continue: / });
     expect(button.scrollWidth).toBeLessThanOrEqual(button.clientWidth);
+  });
+
+  it("starts the focus on Continue in the home scene", async () => {
+    setTheme(theme);
+    const area = await draw("home", HALF_MAIN);
+
+    expect(within(area).getByRole("button", { name: /^Continue: / })).toHaveFocus();
   });
 
   it("says nothing is in progress in place of Continue in the home-none scene", async () => {

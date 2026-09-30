@@ -188,7 +188,12 @@ func undoneFailure(failed, deleteErr error) error {
 	if deleteErr != nil {
 		return failed
 	}
-	return errors.New(failed.Error() + " The task was undone.")
+	message := failed.Error()
+	separator := " "
+	if !strings.HasSuffix(message, ".") && !strings.HasSuffix(message, "!") && !strings.HasSuffix(message, "?") {
+		separator = ". "
+	}
+	return errors.New(message + separator + "The task was undone.")
 }
 
 // managingRepository is the registered repository of a card, when the board of

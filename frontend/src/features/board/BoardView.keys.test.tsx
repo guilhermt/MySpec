@@ -1,6 +1,8 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { BoardView } from "@/features/board/BoardView";
+import { EMPTY_FILTERS } from "@/features/board/board-view";
+import { boardViewKey } from "@/lib/ui-storage";
 import { api, type Board, type BoardCard, type State } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
@@ -145,7 +147,22 @@ describe("the keyboard of the board", () => {
       expect(row(8)).toHaveFocus();
     });
 
-    it("moves the focus to the row before when the last of its section leaves", () => {
+    it("moves the focus to the next visible card when the last of its section leaves", () => {
+      localStorage.setItem(
+        boardViewKey("board-1"),
+        JSON.stringify({ filters: EMPTY_FILTERS, collapsed: [] }),
+      );
+      view();
+      row(8).focus();
+
+      act(() => {
+        useAppStore.getState().applyState(stateWith({ cards: [LOGIN, HEADER, SHIPPED] }));
+      });
+
+      expect(row(3)).toHaveFocus();
+    });
+
+    it("moves the focus to the row before when no card follows the one that leaves", () => {
       view();
       row(8).focus();
 

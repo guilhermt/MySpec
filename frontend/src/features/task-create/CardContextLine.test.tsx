@@ -38,7 +38,7 @@ describe("CardContextLine", () => {
 
   it("shows and hides the context of the card", async () => {
     const { user } = line(FRESH());
-    await waitFor(() => expect(api.cardContext).toHaveBeenCalled());
+    await screen.findByText(/characters/);
 
     const show = screen.getByRole("button", { name: "Show" });
     expect(show).toHaveAttribute("aria-expanded", "false");
@@ -114,5 +114,17 @@ describe("CardContextLine", () => {
       "◇ Couldn't refresh the card: GitHub rate limit reached. The task will use the last reading.",
     );
     expect(screen.getByRole("status")).toHaveTextContent("From the card: #12");
+  });
+
+  it("counts nothing and keeps Show out of reach when the context could not be read", async () => {
+    vi.mocked(api.cardContext).mockResolvedValue("");
+
+    line(FRESH());
+
+    await waitFor(() => expect(api.cardContext).toHaveBeenCalled());
+    expect(screen.getByText("From the card: #12")).toBeVisible();
+    expect(screen.queryByText(/characters/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Show" })).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByText("The context isn't read yet.")).toBeVisible();
   });
 });

@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { TONE_GLYPHS } from "@/components/system/item-parts";
 import {
   CardRow,
   type CardRowTask,
@@ -21,7 +22,6 @@ import {
   sectionTooltip,
   selectionSuffix,
 } from "@/features/board/board-view";
-import { ROW_GLYPHS } from "@/features/sidebar/TreeRow";
 import type { Board, BoardCard } from "@/lib/wails";
 
 export interface CardTreeProps {
@@ -39,8 +39,6 @@ export interface CardTreeProps {
   onToggleSection: (id: string) => void;
   /** onActivateCard opens or closes a card, or toggles it in the select mode. */
   onActivateCard: (card: BoardCard) => void;
-  /** onFocusKey tells the card row that took the focus. */
-  onFocusKey?: (key: string) => void;
 }
 
 // An entry of the tree is a section header or a card row, named by what its element carries.
@@ -71,7 +69,7 @@ function entryElement(tree: HTMLElement, id: string): HTMLElement | null {
 function rowView(model: CardRowModel, selection: RowSelection | null): CardRowView {
   const task: CardRowTask | null =
     model.task?.kind === "task"
-      ? { ...model.task, kind: "task", glyph: ROW_GLYPHS[model.task.tone] }
+      ? { ...model.task, kind: "task", glyph: TONE_GLYPHS[model.task.tone] }
       : model.task;
   return {
     ...model,
@@ -96,7 +94,6 @@ export function CardTree({
   treeRef,
   onToggleSection,
   onActivateCard,
-  onFocusKey,
 }: CardTreeProps): ReactElement {
   const [focused, setFocused] = useState<string | null>(null);
   const previous = useRef<readonly BoardRow[]>(rows);
@@ -220,12 +217,7 @@ export function CardTree({
     >
       {rows.map((row) => {
         const id = entryId(row);
-        const focusThis = () => {
-          setFocused(id);
-          if (row.kind === "card") {
-            onFocusKey?.(row.card.key);
-          }
-        };
+        const focusThis = () => setFocused(id);
         if (row.kind === "section") {
           const { section } = row;
           return (

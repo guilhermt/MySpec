@@ -1241,6 +1241,7 @@ export function boardScene(name: BoardSceneName): BoardSceneSetup {
         storage: {},
         after: async (user) => {
           await user.click(screen.getByRole("button", { name: /^New discussion/ }));
+          await user.click(await screen.findByRole("button", { name: /^Board: / }));
         },
       };
     case "board":
@@ -1281,7 +1282,7 @@ export function boardScene(name: BoardSceneName): BoardSceneSetup {
     case "select":
       return onBoard(stateOf(platform()), async (user) => {
         await user.click(screen.getByRole("button", { name: "More actions" }));
-        await user.click(await screen.findByRole("menuitem", { name: "Select cards to discuss" }));
+        await user.click(await screen.findByRole("menuitem", { name: /^Select cards to discuss/ }));
         for (const number of [455, 461, 475]) {
           await user.click(rowOf(number));
         }
@@ -1289,12 +1290,16 @@ export function boardScene(name: BoardSceneName): BoardSceneSetup {
     case "create":
       return onBoard(stateOf(platform()), async (user) => {
         act(() => useAppStore.getState().openNewTask());
-        await user.type(await screen.findByRole("textbox", { name: "Name" }), "rate-limit-v2");
+        await user.type(await screen.findByRole("textbox", { name: "Name" }), "Rate limit v2");
         await user.type(
           screen.getByRole("textbox", { name: "Context" }),
           "Add a daily cap per workspace on top of the rate limit per key. At the cap, answer 429 with a message that names the cap.",
         );
+        await user.click(screen.getByRole("radio", { name: "One-Shot" }));
         await user.click(screen.getByRole("button", { name: /^Models/ }));
+        await user.click(await screen.findByRole("button", { name: /^One-Shot planning model:/ }));
+        await user.click(await screen.findByRole("menuitemradio", { name: "xhigh" }));
+        await user.keyboard("{Escape}");
       });
   }
 }

@@ -4,10 +4,10 @@ import { Icon } from "@/components/system/Icon";
 import { ITEM_ICONS, TONE_GLYPHS } from "@/components/system/item-parts";
 import { Kbd } from "@/components/system/Kbd";
 import { Shimmer } from "@/components/system/Shimmer";
-import { type GlyphState, StateGlyph } from "@/components/system/StateGlyph";
+import { StateGlyph } from "@/components/system/StateGlyph";
 import { TimeChip } from "@/components/system/TimeChip";
 import { Tooltip } from "@/components/system/Tooltip";
-import type { ItemKind, ItemRow, RowFlash, RowTone } from "@/features/sidebar/sidebar-tree";
+import type { ItemRow, RowFlash } from "@/features/sidebar/sidebar-tree";
 import { useFits } from "@/features/sidebar/useFits";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/app-store";
@@ -24,12 +24,6 @@ export interface TreeRowProps {
   narrow: boolean;
   tabIndex: 0 | -1;
 }
-
-/** TYPE_ICONS is the type glyph of each kind of item, on its row and on its block of the strip. */
-export const TYPE_ICONS = ITEM_ICONS satisfies Record<ItemKind, unknown>;
-
-/** ROW_GLYPHS is the state glyph of each tone, on a row and on its block of the strip. */
-export const ROW_GLYPHS = TONE_GLYPHS satisfies Record<RowTone, GlyphState>;
 
 const MICRO = "text-(length:--text-micro) leading-(--leading-micro)";
 // FAINT is the fourth ink of the quiet texts, which steps up to the third on the open row and on the
@@ -100,7 +94,7 @@ function TreeRowView({ row, level, selected, isNext, flash, narrow, tabIndex }: 
       >
         <span className="grid place-items-center">
           <Icon
-            icon={TYPE_ICONS[row.itemKind]}
+            icon={ITEM_ICONS[row.itemKind]}
             tone={selected ? "active" : "current"}
             {...(selected ? {} : { className: "text-ink-4" })}
           />
@@ -152,7 +146,7 @@ function TreeRowView({ row, level, selected, isNext, flash, narrow, tabIndex }: 
         </span>
 
         <span className="grid place-items-center">
-          <StateGlyph state={ROW_GLYPHS[row.tone]} />
+          <StateGlyph state={TONE_GLYPHS[row.tone]} />
         </span>
         <span
           ref={line2}

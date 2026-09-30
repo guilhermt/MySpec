@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { NewTaskDialog } from "@/features/task-create/NewTaskDialog";
 import { api, type State } from "@/lib/wails";
@@ -501,6 +501,11 @@ describe("NewTaskDialog", () => {
     expect(screen.queryByRole("menuitemradio", { name: "dev/api" })).not.toBeInTheDocument();
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(useAppStore.getState().newTaskOpen).toBe(true);
+
+    await user.keyboard("{Escape}");
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(useAppStore.getState().newTaskOpen).toBe(false);
   });
 
   it("clones from the item, keeping the menu open and the item unchosen", async () => {
@@ -563,6 +568,37 @@ describe("NewTaskDialog", () => {
     expect(api.createTask).toHaveBeenCalledOnce();
   });
 
+  it("does not close on Esc or the close button while the first session starts", async () => {
+    vi.mocked(api.createTask).mockReturnValue(new Promise(() => {}));
+    const { user } = open();
+
+    await user.type(screen.getByLabelText("Name"), "add-login");
+    await user.type(screen.getByLabelText("Context"), "A login screen");
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    await screen.findByRole("button", { name: "Creating…" });
+
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("button", { name: "Close" }));
+
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(useAppStore.getState().newTaskOpen).toBe(true);
+  });
+
+  it("drops the failure of a creation once a field changes", async () => {
+    vi.mocked(api.createTask).mockRejectedValue(new Error("Claude Code didn't start."));
+    const { user } = open();
+
+    await user.type(screen.getByLabelText("Name"), "add-login");
+    await user.type(screen.getByLabelText("Context"), "A login screen");
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Claude Code didn't start.");
+
+    await user.clear(screen.getByLabelText("Name"));
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByText("Name the task to create it.")).toBeVisible();
+  });
+
   it("says in the footer that the task was undone when the session did not start", async () => {
     vi.mocked(api.createTask).mockRejectedValue(
       new Error("Claude Code didn't start. The task was undone."),
@@ -616,6 +652,23 @@ describe("NewTaskDialog", () => {
 
     it("says so when the card is not in the last reading", () => {
       open({ boards: [makeBoard()] }, { newTaskCard: CARD_REF });
+
+      expect(
+        screen.getByText("◇ This card isn't in the last reading of the board."),
+      ).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Create" })).not.toBeInTheDocument();
+    });
+
+    it("says so when the card leaves the reading while the dialog is open", async () => {
+      openCard();
+      expect(screen.getByRole("button", { name: "Create" })).toBeInTheDocument();
+
+      act(() => {
+        useAppStore.setState((state) => ({
+          app: state.app === null ? null : { ...state.app, boards: [makeBoard()] },
+        }));
+      });
 
       expect(
         screen.getByText("◇ This card isn't in the last reading of the board."),

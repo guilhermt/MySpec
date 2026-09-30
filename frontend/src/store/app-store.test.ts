@@ -918,6 +918,15 @@ describe("board card request", () => {
     expect(useAppStore.getState().boardCardRequest).toBeNull();
   });
 
+  it("is dropped by a navigation elsewhere before the board took it", () => {
+    useAppStore.getState().applyState(withTasks({ boards: [BOARD] }));
+    useAppStore.getState().openBoardCard(BOARD.id, "acme/web#7");
+
+    useAppStore.getState().go(HOME);
+
+    expect(useAppStore.getState().boardCardRequest).toBeNull();
+  });
+
   it("is not made by a plain navigation", () => {
     useAppStore.getState().applyState(withTasks({ boards: [BOARD] }));
 

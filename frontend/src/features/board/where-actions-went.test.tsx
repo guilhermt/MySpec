@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import type { UserEvent } from "@testing-library/user-event";
 import { afterEach, describe, expect, it } from "vitest";
 import { BoardView } from "@/features/board/BoardView";
@@ -209,8 +209,9 @@ const ROWS: Row[] = [
     control: "the sibling that selects the card",
     scene: "card",
     screen: "board",
-    role: "link",
-    name: /^#430 Retry failed billing webhooks/,
+    steps: click("link", /^#430 Retry failed billing webhooks/),
+    role: "complementary",
+    name: "Card #430",
   },
 
   // The Home.
@@ -225,10 +226,27 @@ const ROWS: Row[] = [
     name: "Repository: acme/api",
   },
   {
+    control: "Clone, on a repository without a clone (selector of the dialog)",
+    scene: "create",
+    screen: "dialog",
+    steps: click("button", "Repository: acme/api"),
+    role: "menuitem",
+    name: "acme/billing, not cloned. Enter clones it.",
+  },
+  {
     control: "Context from the card",
     scene: "create-card",
     screen: "dialog",
-    steps: click("button", "Show"),
+    // Show waits for the context to arrive.
+    steps: async (user) => {
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: "Show" })).not.toHaveAttribute(
+          "aria-disabled",
+          "true",
+        ),
+      );
+      await user.click(screen.getByRole("button", { name: "Show" }));
+    },
     role: "region",
     name: "The context from the card",
   },

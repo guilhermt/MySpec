@@ -139,16 +139,7 @@ function BlockerLine({
   return (
     <div className="flex flex-col">
       <div className={cn("flex min-h-(--size-control-sm) items-center gap-(--space-2)", META)}>
-        <span
-          className={cn(
-            "min-w-0 flex-1",
-            blocker.kind === "read-failed"
-              ? "text-ink-2"
-              : failed
-                ? "text-state-error"
-                : "text-ink-2",
-          )}
-        >
+        <span className={cn("min-w-0 flex-1", failed ? "text-state-error" : "text-ink-2")}>
           {blocker.kind === "read-failed" ? blocker.message : blocker.text}
         </span>
         {blocker.kind === "read-failed" &&

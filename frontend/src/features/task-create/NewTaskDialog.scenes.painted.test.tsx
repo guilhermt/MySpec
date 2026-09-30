@@ -55,7 +55,7 @@ describe.each(THEMES)("NewTaskDialog, the scenes in the %s theme", (theme) => {
     expect(offWholePixels([dialog, ...dialog.querySelectorAll("input, textarea, button")])).toEqual(
       [],
     );
-    expect(dialog.getBoundingClientRect().width).toBeLessThanOrEqual(
+    expect(dialog.getBoundingClientRect().width).toBe(
       parseFloat(resolve("var(--size-dialog-wide)", "width")),
     );
 

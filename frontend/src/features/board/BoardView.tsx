@@ -123,9 +123,16 @@ function BoardScreen({ board }: { board: Board }) {
       return;
     }
     setNewKeys(new Set(brought));
+  }, [cardKeys]);
+
+  // The flash ends on its own timer, which a later reading does not cancel.
+  useEffect(() => {
+    if (newKeys.size === 0) {
+      return;
+    }
     const timer = setTimeout(() => setNewKeys(NO_KEYS), FLASH_MS);
     return () => clearTimeout(timer);
-  }, [cardKeys]);
+  }, [newKeys]);
 
   const collapsed = useMemo(() => new Set(memory.collapsed), [memory.collapsed]);
   const filtered = useMemo(() => filterCards(board, memory.filters), [board, memory.filters]);
@@ -234,7 +241,7 @@ function BoardScreen({ board }: { board: Board }) {
         const panel = document.querySelector(".list-panel");
         (
           panel?.querySelector<HTMLElement>(
-            '[data-panel-actions] button:not([aria-disabled="true"])',
+            '[data-panel-actions] button:not([aria-disabled="true"]):not([aria-busy="true"])',
           ) ?? panel?.querySelector<HTMLElement>('button[aria-label="Close"]')
         )?.focus();
       });
@@ -485,6 +492,7 @@ function BoardScreen({ board }: { board: Board }) {
         panel={
           openCard !== null && (
             <BoardCardPanel
+              key={openCard.key}
               board={board}
               card={openCard}
               outOfReading={!cardKeys.has(openCard.key)}

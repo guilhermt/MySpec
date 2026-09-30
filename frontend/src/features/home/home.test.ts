@@ -87,10 +87,25 @@ describe("continueItem", () => {
   });
 
   it.each([
-    ["a task on a board", task("old"), "Platform Roadmap"],
-    ["a review", { kind: "review", id: "review-1" } as const, "Reviews"],
-    ["a discussion", { kind: "discussion", id: "disc-1" } as const, "Platform Roadmap"],
-  ])("says where %s lives", (_, location, crumbs) => {
+    [
+      "a task on a board",
+      task("old"),
+      "Platform Roadmap",
+      "Continue: task old-task. idle, PRD. web. Platform Roadmap",
+    ],
+    [
+      "a review",
+      { kind: "review", id: "review-1" } as const,
+      "Reviews",
+      "Continue: pull request review Add login. agent working, Pass 1. Reviewer working for less than a minute: thinking. context 0% used. web#31. Reviews",
+    ],
+    [
+      "a discussion",
+      { kind: "discussion", id: "disc-1" } as const,
+      "Platform Roadmap",
+      "Continue: discussion Pricing. agent working, Discussing. Discussion agent working for less than a minute: thinking. context 0% used. #12. Platform Roadmap",
+    ],
+  ])("says where %s lives", (_, location, crumbs, label) => {
     const state: State = {
       ...app,
       tasks: (app.tasks ?? []).map((item) => ({ ...item, repositoryId: "repo-1" })),
@@ -98,7 +113,7 @@ describe("continueItem", () => {
     const model = continueItem(state, location, [], null, NOW);
 
     expect(model?.crumbs).toBe(crumbs);
-    expect(model?.label).toBe(`Continue: ${model?.row.label}. ${crumbs}`);
+    expect(model?.label).toBe(label);
   });
 
   it("says No board for a task of a repository without one", () => {

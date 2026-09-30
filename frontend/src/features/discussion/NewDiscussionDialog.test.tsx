@@ -195,8 +195,8 @@ describe("NewDiscussionDialog", () => {
       expect(screen.queryByRole("button", { name: /^Board:/ })).not.toBeInTheDocument();
     });
 
-    it("starts on the board last used and takes the focus", () => {
-      ask();
+    it("starts on the board last used and takes the focus", async () => {
+      const { user } = ask();
 
       const field = screen.getByRole("button", { name: "Board: Beta" });
       expect(field).toHaveFocus();
@@ -205,6 +205,14 @@ describe("NewDiscussionDialog", () => {
           "The discussion reads the clones of the board's repositories and publishes its cards there.",
         ),
       ).toBeInTheDocument();
+
+      await user.click(field);
+      expect(await screen.findByRole("menuitemradio", { name: /Beta/ })).toHaveTextContent(
+        "last used",
+      );
+      expect(screen.getByRole("menuitemradio", { name: /Alpha/ })).not.toHaveTextContent(
+        "last used",
+      );
     });
 
     it("disables a board that was never read, with its reason", async () => {

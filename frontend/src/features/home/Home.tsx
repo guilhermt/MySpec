@@ -142,6 +142,7 @@ export function Home() {
               <StartRow
                 icon={ICONS.task}
                 label="New task"
+                sub="From scratch. A card starts its task on its board."
                 shortcut="Ctrl N"
                 onClick={() => openNewTask()}
               />
@@ -155,6 +156,7 @@ export function Home() {
               <StartRow
                 icon={ICONS.discussion}
                 label="New discussion"
+                sub="About the demand of one board"
                 {...(discussion.kind === "disabled" ? { disabledReason: discussion.reason } : {})}
                 onClick={() => {
                   if (discussion.kind === "open") {
@@ -169,44 +171,40 @@ export function Home() {
             </div>
           </Section>
 
-          {(lines.length > 0 || noBoard !== null) && (
-            <Section title="Boards">
-              <div className="flex flex-col">
-                {lines.map((line) => (
-                  <BoardStartRow
-                    key={line.boardId}
-                    line={{ ...line, blockers: withErrors(line.blockers) }}
-                    onOpen={() => openBoard(line.boardId)}
-                    onRetryRead={() => void refreshBoard(line.boardId)}
-                    {...actions}
-                  />
-                ))}
-                {noBoard !== null && (
-                  <NoBoardRow
-                    names={noBoard.names}
-                    blockers={withErrors(noBoard.blockers)}
-                    {...actions}
-                  />
-                )}
-              </div>
-            </Section>
-          )}
+          <Section title="Boards">
+            <div className="flex flex-col">
+              {lines.map((line) => (
+                <BoardStartRow
+                  key={line.boardId}
+                  line={{ ...line, blockers: withErrors(line.blockers) }}
+                  onOpen={() => openBoard(line.boardId)}
+                  onRetryRead={() => void refreshBoard(line.boardId)}
+                  {...actions}
+                />
+              ))}
+              {noBoard !== null && (
+                <NoBoardRow
+                  names={noBoard.names}
+                  blockers={withErrors(noBoard.blockers)}
+                  {...actions}
+                />
+              )}
+            </div>
+          </Section>
 
-          <ul
-            aria-label="Shortcuts"
-            className="flex flex-wrap gap-x-(--space-5) gap-y-(--space-1) text-(length:--text-meta) leading-(--leading-meta) text-ink-3"
-          >
+          <p className="flex flex-wrap gap-x-(--space-5) gap-y-(--space-1) text-(length:--text-meta) leading-(--leading-meta) text-ink-3">
+            <span className="sr-only">Shortcuts: </span>
             {SHORTCUTS.map(({ keys, text }) => (
-              <li key={text} className="inline-flex items-center gap-(--space-1-5)">
+              <span key={text} className="inline-flex items-center gap-(--space-1-5)">
                 <span className="inline-flex gap-(--space-0-5)">
                   {keys.map((key) => (
                     <Kbd key={key}>{key}</Kbd>
                   ))}
                 </span>
                 {text}
-              </li>
+              </span>
             ))}
-          </ul>
+          </p>
         </div>
       </ScrollArea>
     </section>

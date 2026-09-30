@@ -204,7 +204,8 @@ export function actionItemLabel(
   sub: string | undefined,
   action: ItemAction,
 ): string {
-  const reason = sub === undefined ? "" : `, ${sub.toLowerCase()}`;
+  // The sub is a phrase that may end in its own period; the label adds the one that follows.
+  const reason = sub === undefined ? "" : `, ${sub.toLowerCase().replace(/\.$/, "")}`;
   return `${label}${reason}. Enter ${action.label.toLowerCase()}s it.`;
 }
 
@@ -222,12 +223,16 @@ export interface MenuActionItemProps {
  */
 export function MenuActionItem({ label, sub, subTone, action }: MenuActionItemProps) {
   return (
-    <DropdownMenuItem
+    <BaseMenu.Item
       closeOnClick={false}
       aria-disabled="true"
       aria-label={actionItemLabel(label, sub, action)}
       onClick={() => action.onAction()}
-      className={cn(MENU_ITEM, "text-ink-4 focus:text-ink-4")}
+      className={cn(
+        "relative flex cursor-default items-center outline-hidden select-none",
+        MENU_ITEM,
+        "text-ink-4 focus:text-ink-4",
+      )}
     >
       <span>{label}</span>
       {sub !== undefined && <MenuSub tone={subTone}>{sub}</MenuSub>}
@@ -237,7 +242,7 @@ export function MenuActionItem({ label, sub, subTone, action }: MenuActionItemPr
       >
         {action.label}
       </span>
-    </DropdownMenuItem>
+    </BaseMenu.Item>
   );
 }
 

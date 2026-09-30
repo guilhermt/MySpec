@@ -13,7 +13,7 @@ export interface ContinueModel {
   row: ItemRow;
   /** crumbs is where the item lives: "Platform Roadmap / API hardening", "No board", "Reviews". */
   crumbs: string;
-  /** label is "Continue: <row.label>. <crumbs>". */
+  /** label is "Continue: <row.label> <crumbs>", the label of the row already ends in a period. */
   label: string;
   /** situation is where Enter opens the item: the most serious situation, null without one. */
   situation: { itemId: string; place: Place } | null;
@@ -95,7 +95,7 @@ export function continueItem(
     location: found,
     row,
     crumbs,
-    label: crumbs === "" ? `Continue: ${row.label}` : `Continue: ${row.label}. ${crumbs}`,
+    label: crumbs === "" ? `Continue: ${row.label}` : `Continue: ${row.label} ${crumbs}`,
     situation: main === undefined ? null : { itemId: row.id, place: main.place },
   };
 }

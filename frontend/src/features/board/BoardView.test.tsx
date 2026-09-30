@@ -259,25 +259,6 @@ describe("BoardView", () => {
     });
   });
 
-  it("focuses the search on /", async () => {
-    const { user } = view();
-    screen.getByRole("treeitem", { name: /#12/ }).focus();
-
-    await user.keyboard("/");
-
-    expect(screen.getByRole("searchbox", { name: "Search cards" })).toHaveFocus();
-    expect(screen.getByRole("searchbox", { name: "Search cards" })).toHaveValue("");
-  });
-
-  it("starts a task for the focused card on S", async () => {
-    const { user } = view();
-    screen.getByRole("treeitem", { name: /#12/ }).focus();
-
-    await user.keyboard("s");
-
-    expect(useAppStore.getState().newTaskCard).toEqual({ boardId: "board-1", key: "dev/web#12" });
-  });
-
   it("opens a discussion of the board with no card from the header", async () => {
     const { user } = view();
 
@@ -298,17 +279,21 @@ describe("BoardView", () => {
     expect(button).toHaveAccessibleDescription("The board hasn't been read yet.");
   });
 
-  it("discusses the focused card on D", async () => {
-    const { user } = view();
-    screen.getByRole("treeitem", { name: /#12/ }).focus();
+  it("ends the flash of a new card even when another reading arrives meanwhile", async () => {
+    view();
+    const fresh = makeBoardCard({ key: "dev/web#20", number: 20, title: "Brand new" });
 
-    await user.keyboard("d");
-
-    expect(useAppStore.getState().newDiscussion).toEqual({
-      boardId: "board-1",
-      cardKeys: ["dev/web#12"],
-      askBoard: false,
+    act(() => {
+      useAppStore.getState().applyState(stateWith({ cards: [LOGIN, HEADER, SHIPPED, fresh] }));
     });
+    const item = screen.getByRole("treeitem", { name: /#20/ });
+    expect(item).toHaveClass("row-flash");
+
+    act(() => {
+      useAppStore.getState().applyState(stateWith({ cards: [LOGIN, HEADER, SHIPPED, fresh] }));
+    });
+
+    await waitFor(() => expect(item).not.toHaveClass("row-flash"));
   });
 
   it("refreshes from the header", async () => {
@@ -346,7 +331,9 @@ describe("BoardView", () => {
     it("holds selecting, GitHub and the board settings", async () => {
       await openMenu();
 
-      expect(screen.getByRole("menuitem", { name: "Select cards to discuss" })).toBeInTheDocument();
+      expect(
+        screen.getByRole("menuitem", { name: /^Select cards to discuss/ }),
+      ).toBeInTheDocument();
       expect(screen.getByRole("menuitem", { name: "Open on GitHub" })).toBeInTheDocument();
       expect(
         screen.getByRole("menuitem", { name: "Edit the board in Settings…" }),
@@ -424,6 +411,7 @@ describe("BoardView", () => {
         useAppStore.getState().applyState(stateWith({ failure, reading: true }));
       });
       expect(screen.queryByRole("button", { name: "Try again" })).not.toBeInTheDocument();
+      expect(screen.getByRole("alert")).toHaveTextContent("Reading…");
       expect(screen.getAllByRole("status").some((node) => node.textContent === "Reading…")).toBe(
         true,
       );

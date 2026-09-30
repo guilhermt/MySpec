@@ -42,6 +42,7 @@ function Harness({
   const start = useStartCard(BOARD, card);
   return (
     <BoardCardPanel
+      key={card.key}
       board={{ ...BOARD, cards: [card, ...others] }}
       card={card}
       outOfReading={outOfReading}
@@ -170,6 +171,19 @@ describe("BoardCardPanel", () => {
         "aria-busy",
         "true",
       );
+      expect(screen.getByText("The clone is running.")).toBeInTheDocument();
+    });
+
+    it("promises the dialog only for the card that asked for the clone", () => {
+      const card = makeBoardCard({ action: "clone" });
+      renderWithStore(<Harness card={card} />, {
+        state: {
+          ...makeState({ boards: [BOARD] }),
+          repositories: [makeRepository({ boardId: BOARD.id, ...uncloned, cloning: true })],
+        },
+        ui: { pendingStart: { boardId: BOARD.id, key: card.key, repositoryId: "repo-1" } },
+      });
+
       expect(
         screen.getByText(
           "The dialog opens when the clone ends. You can leave the board meanwhile.",
@@ -235,6 +249,32 @@ describe("BoardCardPanel", () => {
     });
   });
 
+  describe("Change path… and the card it was for", () => {
+    it("does not show its refusal on another card", async () => {
+      vi.mocked(api.changeRepositoryPath).mockRejectedValueOnce(
+        new Error("That isn't a clone of dev/web."),
+      );
+      const { user } = panel(makeBoardCard({ action: "clone_missing" }), { missing: true });
+      await user.click(screen.getByRole("button", { name: "Change path…" }));
+      expect(await screen.findByRole("alert")).toBeInTheDocument();
+
+      act(() => setCard(makeBoardCard({ key: "dev/web#13", number: 13, action: "clone_missing" })));
+
+      expect(screen.getByRole("complementary", { name: "Card #13" })).toBeInTheDocument();
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    });
+
+    it("does not take the focus to another card after a picker that was cancelled", async () => {
+      const { user } = panel(makeBoardCard({ action: "clone_missing" }), { missing: true });
+      await user.click(screen.getByRole("button", { name: "Change path…" }));
+      expect(api.changeRepositoryPath).toHaveBeenCalledWith("repo-1");
+
+      act(() => setCard(makeBoardCard({ key: "dev/web#13", number: 13, action: "start" })));
+
+      expect(screen.getByRole("button", { name: /^Start task/ })).not.toHaveFocus();
+    });
+  });
+
   describe("Add to board", () => {
     it("asks in the dialog, adds, and takes the focus to the primary the card gets", async () => {
       vi.mocked(api.checkBoardRepository).mockResolvedValue(
@@ -256,6 +296,23 @@ describe("BoardCardPanel", () => {
         expect(screen.getByRole("button", { name: /^Start task/ })).toHaveFocus(),
       );
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+
+    it("takes the focus to Clone and continue when the card gets a clone to make", async () => {
+      vi.mocked(api.checkBoardRepository).mockResolvedValue(
+        makeBoardRepositoryOption({ link: "clone", path: "/home/dev/web", checked: false }),
+      );
+      const { user } = panel(makeBoardCard({ action: "add_to_board", repositoryId: "" }));
+
+      await user.click(screen.getByRole("button", { name: /^Start task/ }));
+      const dialog = await screen.findByRole("dialog", { name: "Add dev/web to the board" });
+      await within(dialog).findByText("dev/web");
+      await user.click(within(dialog).getByRole("button", { name: "Add to board" }));
+      act(() => setCard(makeBoardCard({ action: "clone" })));
+
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: /^Clone and continue/ })).toHaveFocus(),
+      );
     });
 
     it("shows the refusal in the dialog and stays open", async () => {

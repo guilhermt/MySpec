@@ -175,6 +175,20 @@ function NewTaskFields({ origin }: NewTaskFieldsProps) {
   const block = createBlock({ repositoryId, problem, fromCard: origin !== null, context });
   const dependencies = origin === null ? [] : unsatisfied(origin.card);
 
+  // A refusal belongs to what was sent: once a field changes, it is no longer about the form.
+  const changeName = (value: string) => {
+    setError(null);
+    setName(value);
+  };
+  const changeContext = (value: string) => {
+    setError(null);
+    setContext(value);
+  };
+  const changeRepository = (id: string) => {
+    setError(null);
+    setChosenRepositoryId(id);
+  };
+
   const create = () => {
     if (block !== null || creating) {
       return;
@@ -225,7 +239,8 @@ function NewTaskFields({ origin }: NewTaskFieldsProps) {
     <Dialog
       open
       onOpenChange={(open) => {
-        if (!open) {
+        // Esc and × wait for the first session, like Cancel.
+        if (!open && !creating) {
           closeNewTask();
         }
       }}
@@ -241,7 +256,7 @@ function NewTaskFields({ origin }: NewTaskFieldsProps) {
               label="Repository"
               value={repositoryId}
               options={app === null ? [] : repositoryOptions(app, cloneErrors, clone)}
-              onValueChange={setChosenRepositoryId}
+              onValueChange={changeRepository}
               placeholder="Choose a repository"
               disabled={creating}
             />
@@ -282,7 +297,7 @@ function NewTaskFields({ origin }: NewTaskFieldsProps) {
               spellCheck={false}
               autoComplete="off"
               readOnly={creating}
-              onChange={(event) => setName(event.target.value)}
+              onChange={(event) => changeName(event.target.value)}
               onKeyDown={onNameKeyDown}
             />
           </Field>
@@ -291,7 +306,7 @@ function NewTaskFields({ origin }: NewTaskFieldsProps) {
               href="#"
               onClick={(event) => {
                 event.preventDefault();
-                setName(suggestion);
+                changeName(suggestion);
               }}
             >
               {`Use "${suggestion}"`}
@@ -305,7 +320,7 @@ function NewTaskFields({ origin }: NewTaskFieldsProps) {
               rows={4}
               value={context}
               readOnly={creating}
-              onChange={(event) => setContext(event.target.value)}
+              onChange={(event) => changeContext(event.target.value)}
             />
           </Field>
         ) : (
@@ -313,7 +328,7 @@ function NewTaskFields({ origin }: NewTaskFieldsProps) {
             boardId={origin.boardId}
             card={origin.card}
             additional={context}
-            onAdditionalChange={setContext}
+            onAdditionalChange={changeContext}
             readOnly={creating}
           />
         )}

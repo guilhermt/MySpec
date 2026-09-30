@@ -64,7 +64,8 @@ export function CardContextLine({
     let cancelled = false;
     void cardContext(boardId, key).then((context) => {
       if (!cancelled) {
-        setText(context);
+        // A read that failed comes back empty, and a card always has a context to show.
+        setText(context === "" ? null : context);
       }
     });
     return () => {
@@ -84,8 +85,10 @@ export function CardContextLine({
               size="xs"
               aria-expanded={open}
               aria-controls={textId}
-              disabled={refreshing}
-              disabledReason="The card is being read again."
+              disabled={refreshing || text === null}
+              disabledReason={
+                refreshing ? "The card is being read again." : "The context isn't read yet."
+              }
               onClick={() => setOpen((current) => !current)}
             >
               {open ? "Hide" : "Show"}
@@ -117,7 +120,7 @@ export function CardContextLine({
           summary
         )}
       </SunkenLine>
-      {open && !refreshing && (
+      {open && !refreshing && text !== null && (
         <section
           id={textId}
           // A region that scrolls takes the keyboard.
@@ -126,7 +129,7 @@ export function CardContextLine({
           aria-label="The context from the card"
           className="max-h-[calc(var(--leading-body)*9)] overflow-y-auto rounded-md px-(--space-4) py-(--space-3) text-(length:--text-body) leading-(--leading-body) text-ink-1 ring-1 ring-line-1 select-text focus-visible:focus-ring"
         >
-          <Markdown>{text ?? ""}</Markdown>
+          <Markdown>{text}</Markdown>
         </section>
       )}
       {adding && (
