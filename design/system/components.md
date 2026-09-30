@@ -885,12 +885,12 @@ Os tokens de medida e de layout da conversa, das listas, do painel da lista, do 
 | `--measure-read` | `42rem` | Um bloco curto de texto: a Home, a página do item que saiu, o início |
 | `--list-measure` | `calc(var(--measure) + var(--space-16) * 5)` | A coluna da lista do board e de Reviews |
 | `--panel-card-width` | `clamp(22.5rem, 42%, 40rem)` | O painel da lista |
-| `--size-dialog-wide` | `calc(var(--size-dialog) + var(--space-16) + var(--space-8))` | O diálogo largo, 576 px, o valor decidido, que a task 5 leva a `tokens.css` com os testes (hoje o token dá 544): um nome de 64 caracteres em Fira Code de 13 px (512 px) cabe no campo, com o corpo do diálogo (`--space-5` de cada lado) e o campo (10 px de folga e a borda de cada lado) |
+| `--size-dialog-wide` | `calc(var(--size-dialog) + var(--space-16) + var(--space-8))` | O diálogo largo, 576 px: um nome de 64 caracteres em Fira Code de 13 px (512 px) cabe no campo, com o corpo do diálogo (`--space-5` de cada lado) e o campo (10 px de folga e a borda de cada lado) |
 | `--col-num` | `var(--space-12)` | Linha do card |
 | `--col-epic` | `calc(var(--space-16) * 2.25)` | Linha do card |
-| `--col-dep` | `calc(var(--space-16) + var(--space-2))` | Linha do card, 72 px, o valor decidido, que a task 5 leva a `tokens.css` com os testes (hoje 56): o glifo de 8 px, `--space-1-5` e `#1291 +1` medem 60 px, e `#12345 +9`, 69 |
+| `--col-dep` | `calc(var(--space-16) + var(--space-2))` | Linha do card, 72 px: o glifo de 8 px, `--space-1-5` e `#1291 +1` medem 60 px, e `#12345 +9`, 69 |
 | `--col-task` | `calc(var(--space-16) * 3)` | Linha do card |
-| `--col-keys` | `calc(var(--space-16) + var(--space-12) + var(--space-2))` | Linha do card e da PR, 120 px, o valor decidido, que a task 5 leva a `tokens.css` com os testes (hoje 112): `S start` e `D discuss` com `--space-2` entre as duas (117 px); o rótulo das chaves de `Details` usa a mesma largura |
+| `--col-keys` | `calc(var(--space-16) + var(--space-12) + var(--space-2))` | Linha do card e da PR, 120 px: `S start` e `D discuss` com `--space-2` entre as duas (117 px); o rótulo das chaves de `Details` usa a mesma largura |
 | `--col-ref` | `calc(var(--space-16) + var(--space-8))` | Linha da PR |
 | `--col-author` | `calc(var(--space-16) + var(--space-8))` | Linha da PR |
 | `--col-state` | `calc(var(--space-16) * 3 + var(--space-4))` | Linha da PR |
