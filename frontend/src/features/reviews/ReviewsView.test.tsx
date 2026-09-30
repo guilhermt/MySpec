@@ -12,9 +12,6 @@ import {
   makeState,
 } from "@/test/wails-mock";
 
-/** PLACEHOLDER_ROWS is how many rows ReviewsView stands in with, its SKELETON_ROWS. */
-const PLACEHOLDER_ROWS = 6;
-
 function view(center: Partial<ReviewCenter> = {}, state?: State) {
   const app =
     state ??
@@ -32,7 +29,7 @@ describe("ReviewsView", () => {
     expect(api.refreshPullRequests).toHaveBeenCalledOnce();
   });
 
-  it("lists the pull requests the filters keep", () => {
+  it("lists the pull requests the filters keep, under the bar of filters", () => {
     view({
       pullRequests: [
         makePullRequestRow({ key: "dev/web#31", number: 31 }),
@@ -42,77 +39,146 @@ describe("ReviewsView", () => {
     });
 
     expect(screen.getByRole("region", { name: "Reviews" })).toBeInTheDocument();
+    expect(screen.getByRole("search", { name: "Filter the pull requests" })).toBeInTheDocument();
     expect(screen.getAllByRole("listitem")).toHaveLength(2);
     expect(screen.queryByText("Bump deps")).not.toBeInTheDocument();
   });
 
-  it("shows placeholder rows while the first reading runs", () => {
-    const { container } = view({ readAt: "", reading: true });
+  describe("the states of the reading", () => {
+    it("shows a skeleton of four bars and no bar while the first reading runs", () => {
+      const { container } = view({ readAt: "", reading: true });
 
-    expect(screen.queryByRole("list")).not.toBeInTheDocument();
-    expect(container.querySelectorAll('[data-slot="skeleton"]')).toHaveLength(PLACEHOLDER_ROWS);
-  });
-
-  it("says when nothing is open", () => {
-    view();
-
-    expect(screen.getByText("No open pull requests.")).toBeInTheDocument();
-  });
-
-  it("shows the repositories the reading failed on, and the pull requests of the others", () => {
-    view({
-      pullRequests: [makePullRequestRow()],
-      failures: [
-        makePullsFailure({ repositoryId: "repo-2", repository: "dev/api", message: "No access." }),
-      ],
+      expect(
+        screen.getByRole("status", { name: "Reading the pull requests…" }),
+      ).toBeInTheDocument();
+      expect(container.querySelectorAll('[data-slot="skeleton"]')).toHaveLength(4);
+      expect(screen.queryByRole("search")).not.toBeInTheDocument();
     });
 
-    expect(screen.getByRole("alert")).toHaveTextContent("dev/api: No access.");
-    expect(screen.getByText("Add the login screen")).toBeInTheDocument();
-  });
+    it("keeps the stored list while a reading runs, and says so in the header", () => {
+      view({ reading: true, pullRequests: [makePullRequestRow()] });
 
-  it("offers to clear the filters when they hide everything", async () => {
-    const { user } = view({
-      pullRequests: [makePullRequestRow({ filtered: true })],
-      filters: makeReviewFilters({ authorsExclude: ["dependabot"] }),
+      expect(screen.getByText("Add the login screen")).toBeInTheDocument();
+      expect(screen.getByText("Reading…")).toBeInTheDocument();
     });
 
-    expect(screen.getByText("No pull requests match the filters.")).toBeInTheDocument();
-    // The bar offers it too; the empty state is the second.
-    const [, clear] = screen.getAllByRole("button", { name: "Clear filters" });
-    await user.click(clear as HTMLElement);
+    it("asks for a repository when none is registered", () => {
+      view({}, makeState({ repositories: [], reviewCenter: makeReviewCenter({ readAt: "x" }) }));
 
-    expect(api.setReviewFilters).toHaveBeenCalledWith(
-      expect.objectContaining({ authorsExclude: [] }),
-    );
-  });
-
-  it("hides the pull requests that do not wait for the user with pending only on", async () => {
-    const { user } = view({
-      pullRequests: [
-        makePullRequestRow({ key: "dev/web#31", number: 31, pending: true }),
-        makePullRequestRow({
-          key: "dev/web#32",
-          number: 32,
-          title: "Fix the header",
-          pending: false,
-        }),
-      ],
+      expect(
+        screen.getByText("Register a repository to see its pull requests."),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole("search")).not.toBeInTheDocument();
     });
 
-    await user.click(screen.getByRole("button", { name: "Pending only" }));
+    it("says when nothing is open, with Read now and no bar", async () => {
+      const { user } = view();
 
-    expect(screen.getAllByRole("listitem")).toHaveLength(1);
-    expect(screen.queryByText("Fix the header")).not.toBeInTheDocument();
+      expect(screen.getByText("No open pull requests.")).toBeInTheDocument();
+      expect(screen.queryByRole("search")).not.toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Read now" }));
 
-    await user.click(screen.getByRole("button", { name: "Pending only" }));
+      // Once on opening, once on Read now.
+      expect(api.refreshPullRequests).toHaveBeenCalledTimes(2);
+    });
 
-    expect(screen.getAllByRole("listitem")).toHaveLength(2);
+    it("offers to clear the filters when they hide everything, with the bar in sight", async () => {
+      const { user } = view({
+        pullRequests: [makePullRequestRow({ filtered: true })],
+        filters: makeReviewFilters({ authorsExclude: ["dependabot"] }),
+      });
+
+      expect(screen.getByText("No pull requests match the filters.")).toBeInTheDocument();
+      expect(screen.getByText("1 is open; the filters hide it.")).toBeInTheDocument();
+      expect(screen.getByRole("search", { name: "Filter the pull requests" })).toBeInTheDocument();
+      // The bar offers it too; the empty state is the second.
+      const [, clear] = screen.getAllByRole("button", { name: "Clear filters" });
+      await user.click(clear as HTMLElement);
+
+      expect(api.setReviewFilters).toHaveBeenCalledWith(
+        expect.objectContaining({ authorsExclude: [] }),
+      );
+    });
   });
 
-  it("asks for a repository when none is registered", () => {
-    view({}, makeState({ repositories: [], reviewCenter: makeReviewCenter({ readAt: "x" }) }));
+  describe("the repositories that failed", () => {
+    it("draws a strip for each, and lists the pull requests of the others", () => {
+      view({
+        pullRequests: [makePullRequestRow()],
+        failures: [
+          makePullsFailure({
+            repositoryId: "repo-2",
+            repository: "dev/api",
+            message: "gh is not authenticated. Run gh auth login.",
+          }),
+        ],
+      });
 
-    expect(screen.getByText("Register a repository to see its pull requests.")).toBeInTheDocument();
+      const strip = screen.getByRole("alert");
+      expect(strip).toHaveTextContent("Couldn't read dev/api");
+      expect(strip).toHaveTextContent("gh is not authenticated. Run gh auth login.");
+      expect(screen.getByText("Add the login screen")).toBeInTheDocument();
+    });
+
+    it("keeps the strip over an empty list", () => {
+      view({
+        readAt: "",
+        failures: [makePullsFailure({ repository: "dev/web", message: "No access." })],
+      });
+
+      expect(screen.getByRole("alert")).toHaveTextContent("Couldn't read dev/web");
+      expect(screen.getByText("No open pull requests.")).toBeInTheDocument();
+    });
+
+    it("reads again on Try again", async () => {
+      const { user } = view({ failures: [makePullsFailure()] });
+
+      await user.click(screen.getByRole("button", { name: "Try again" }));
+
+      // Once on opening, once on Try again.
+      expect(api.refreshPullRequests).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe("pending only", () => {
+    const pullRequests = [
+      makePullRequestRow({ key: "dev/web#31", number: 31, pending: true }),
+      makePullRequestRow({
+        key: "dev/web#32",
+        number: 32,
+        title: "Fix the header",
+        pending: false,
+      }),
+    ];
+
+    it("hides the pull requests that do not wait for the user", async () => {
+      const { user } = view({ pullRequests });
+
+      await user.click(screen.getByRole("button", { name: "Pending only" }));
+
+      expect(screen.getAllByRole("listitem")).toHaveLength(1);
+      expect(screen.queryByText("Fix the header")).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: "Pending only" }));
+
+      expect(screen.getAllByRole("listitem")).toHaveLength(2);
+    });
+
+    it("says nothing matches when it hides everything, and Clear filters turns it off", async () => {
+      const { user } = view({
+        pullRequests: [makePullRequestRow({ key: "dev/web#32", pending: false })],
+      });
+      await user.click(screen.getByRole("button", { name: "Pending only" }));
+
+      expect(screen.getByText("No pull requests match the filters.")).toBeInTheDocument();
+      const [, clear] = screen.getAllByRole("button", { name: "Clear filters" });
+      await user.click(clear as HTMLElement);
+
+      expect(screen.getByRole("button", { name: "Pending only" })).toHaveAttribute(
+        "aria-pressed",
+        "false",
+      );
+      expect(screen.getAllByRole("listitem")).toHaveLength(1);
+    });
   });
 });

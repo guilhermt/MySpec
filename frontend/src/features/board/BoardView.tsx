@@ -45,8 +45,8 @@ const READING_CLOCK_MS = 60_000;
 /** FLASH_MS is how long a card a new reading brought stays flagged: its blink, twice (--duration-slow). */
 const FLASH_MS = 2 * 280;
 
-/** COLUMN is the reading column of the list: --list-measure on whole pixels, with --space-6 at each side at least. */
-const COLUMN =
+/** LIST_COLUMN is the reading column of a list: --list-measure on whole pixels, with --space-6 at each side at least. */
+export const LIST_COLUMN =
   "mx-auto w-[min(round(down,var(--list-measure),1px),100%-2*var(--space-6))] pb-(--space-12)";
 
 /** NO_CARDS stands for a board whose reading brought no cards, always the same array. */
@@ -510,8 +510,8 @@ function BoardScreen({ board }: { board: Board }) {
           )
         }
       >
-        <ScrollArea className="board-list-area min-h-0 flex-1">
-          <div className={COLUMN}>
+        <ScrollArea className="list-area min-h-0 flex-1">
+          <div className={LIST_COLUMN}>
             {showsFailureStrip(board) && <FailureStrip board={board} now={now} />}
             {bar}
             {content}

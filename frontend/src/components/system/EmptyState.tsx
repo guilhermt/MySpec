@@ -3,7 +3,8 @@ import { cn } from "@/lib/utils";
 
 export interface EmptyStateProps {
   title: string;
-  children: ReactNode;
+  /** children is the text under the title; a place that says it all in the title has none. */
+  children?: ReactNode;
   action?: ReactNode;
   className?: string;
 }
@@ -15,9 +16,11 @@ export function EmptyState({ title, children, action, className }: EmptyStatePro
       <p className="text-(length:--text-ui) leading-(--leading-ui) font-semibold text-ink-1">
         {title}
       </p>
-      <div className="max-w-(--measure-read) text-(length:--text-body) leading-(--leading-body) text-ink-3">
-        {children}
-      </div>
+      {children !== undefined && (
+        <div className="max-w-(--measure-read) text-(length:--text-body) leading-(--leading-body) text-ink-3">
+          {children}
+        </div>
+      )}
       {action !== undefined && <div className="mt-1">{action}</div>}
     </div>
   );

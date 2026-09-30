@@ -334,8 +334,8 @@
     container: main / inline-size;
   }
 
-  /* The area of the list of a board is the container its bar measures itself against. */
-  .board-list-area {
+  /* The area of a list, a board or Reviews, is the container its bar measures itself against. */
+  .list-area {
     container: list / inline-size;
   }
 
