@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { BoardView } from "@/features/board/BoardView";
 import {
@@ -19,6 +19,7 @@ import {
   settle,
   spillsOut,
   THEMES,
+  token,
   visiblePrimaries,
   withoutTooltip,
 } from "@/test/painted";
@@ -141,6 +142,14 @@ describe.each(THEMES)("BoardView, the scenes in the %s theme", (theme) => {
     // The keyboard is on the row of #474, which shows its keys.
     expect(document.activeElement).toBe(rowOf(474));
     expect(getComputedStyle(rowOf(474).lastElementChild as Element).visibility).toBe("visible");
+  });
+
+  it("writes the reason under the actions of the panel in the second ink", async () => {
+    setTheme(theme);
+    await draw("no-clone", WIDE_MAIN);
+
+    const reason = within(screen.getByRole("complementary")).getByText(/isn't cloned yet/);
+    expect(getComputedStyle(reason).color).toBe(token("--ink-2"));
   });
 
   describe("the card open beside the list", () => {

@@ -166,7 +166,7 @@ export function CardActions({
           className={cn(
             REASON,
             "break-words",
-            reason.tone === "error" ? "text-state-error" : "text-ink-3",
+            reason.tone === "error" ? "text-state-error" : "text-ink-2",
           )}
         >
           {reason.text}
