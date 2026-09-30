@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/repository"
 )
 
@@ -37,6 +38,9 @@ type Store interface {
 	// review is not nil, all or nothing.
 	WritePass(ctx context.Context, pass Pass, review *Review) error
 	UpdateFinding(ctx context.Context, reviewID string, pass int, finding Finding) error
+	// UpdateFindingTitles rewrites the titles of the findings of a pass, by
+	// number, and nothing else of them.
+	UpdateFindingTitles(ctx context.Context, reviewID string, pass int, titles map[int]string) error
 }
 
 // Deps are what Service needs from the outside.
@@ -355,56 +359,92 @@ func (s *Service) UnaskPass(ctx context.Context, id string, pass int) error {
 	return nil
 }
 
-// RecordReport reconciles the report of a pass with what is stored. changed
-// reports whether anything moved: a report equal to the one recorded, and a
-// pass already published, change nothing.
-func (s *Service) RecordReport(ctx context.Context, id string, report Report, commit string) (Pass, bool, error) {
+// Change is what recording a report did to the pass: nothing, only the
+// titles of its findings, or a revision.
+type Change int
+
+// The changes RecordReport reports.
+const (
+	ChangeNone Change = iota
+	ChangeTitles
+	ChangeRevised
+)
+
+// RecordReport reconciles the report of a pass with what is stored and says
+// what it changed: a report equal to the one recorded, and a pass already
+// published, change nothing; one that differs only in the titles of its
+// findings changes only them; the first report of a pass and any other that
+// differs are a revision.
+func (s *Service) RecordReport(ctx context.Context, id string, report Report, commit string) (Pass, Change, error) {
 	if _, ok := s.Get(id); !ok {
-		return Pass{}, false, fmt.Errorf("record report of review %s: %w", id, ErrNotFound)
+		return Pass{}, ChangeNone, fmt.Errorf("record report of review %s: %w", id, ErrNotFound)
 	}
 	stored, ok := s.pass(id, report.Pass)
 	if !ok {
-		return Pass{}, false, fmt.Errorf("record pass %d of review %s: %w", report.Pass, id, ErrNotFound)
+		return Pass{}, ChangeNone, fmt.Errorf("record pass %d of review %s: %w", report.Pass, id, ErrNotFound)
 	}
 	if stored.Published() {
-		return stored, false, nil
+		return stored, ChangeNone, nil
 	}
 
 	if !stored.Recorded {
 		return s.recordFirst(ctx, stored, report, commit)
 	}
 	if same(stored, report) {
-		return stored, false, nil
+		return stored, ChangeNone, nil
+	}
+	if sameExceptTitles(stored, report) {
+		return s.retitle(ctx, stored, report)
 	}
 	return s.recordAgain(ctx, stored, report)
 }
 
 // recordFirst writes the first readable report of a pass, and moves the review
 // to it.
-func (s *Service) recordFirst(ctx context.Context, pass Pass, report Report, commit string) (Pass, bool, error) {
+func (s *Service) recordFirst(ctx context.Context, pass Pass, report Report, commit string) (Pass, Change, error) {
 	pass.Recorded = true
 	pass.Clean = report.Clean
 	pass.Commit = commit
 	pass.SummaryOriginal, pass.Summary = report.Summary, report.Summary
 	pass.Revision = 1
+	pass.RecordedAt = s.now().UTC()
 	pass.Findings = fresh(report.Findings)
 
 	if err := s.writePass(ctx, pass, func(r *Review) {
 		r.ReportedPass, r.PassCommit = pass.Number, commit
 	}); err != nil {
-		return Pass{}, false, err
+		return Pass{}, ChangeNone, err
 	}
 
 	s.log.Info("review report recorded", "review", pass.ReviewID, "pass", pass.Number,
 		"clean", pass.Clean, "findings", len(pass.Findings))
 	s.changed()
-	return pass, true, nil
+	return pass, ChangeRevised, nil
+}
+
+// retitle writes the titles of a report that says the same as the pass in
+// everything else. It is no revision.
+func (s *Service) retitle(ctx context.Context, pass Pass, report Report) (Pass, Change, error) {
+	titles := make(map[int]string, len(report.Findings))
+	pass.Findings = slices.Clone(pass.Findings)
+	for i, parsed := range report.Findings {
+		titles[parsed.Number] = parsed.Title
+		pass.Findings[i].Title = parsed.Title
+	}
+	if err := s.store.UpdateFindingTitles(ctx, pass.ReviewID, pass.Number, titles); err != nil {
+		return Pass{}, ChangeNone, err
+	}
+	s.savePass(pass)
+
+	s.log.Info("review titles rewritten", "review", pass.ReviewID, "pass", pass.Number)
+	s.changed()
+	return pass, ChangeTitles, nil
 }
 
 // recordAgain reconciles a report the agent rewrote with what the user already
 // did with it: an edited summary and the decisions of the findings that are
 // still there survive.
-func (s *Service) recordAgain(ctx context.Context, pass Pass, report Report) (Pass, bool, error) {
+func (s *Service) recordAgain(ctx context.Context, pass Pass, report Report) (Pass, Change, error) {
 	if pass.SummaryOriginal != report.Summary {
 		pass.Summary = report.Summary
 		pass.SummaryOriginal = report.Summary
@@ -414,13 +454,13 @@ func (s *Service) recordAgain(ctx context.Context, pass Pass, report Report) (Pa
 	pass.Revision++
 
 	if err := s.writePass(ctx, pass, nil); err != nil {
-		return Pass{}, false, err
+		return Pass{}, ChangeNone, err
 	}
 
 	s.log.Info("review report rewritten", "review", pass.ReviewID, "pass", pass.Number,
 		"revision", pass.Revision, "findings", len(pass.Findings))
 	s.changed()
-	return pass, true, nil
+	return pass, ChangeRevised, nil
 }
 
 // writePass persists a pass with its findings and, when advance is not nil,
@@ -526,9 +566,10 @@ func (s *Service) deciding(id string, pass int) (Pass, error) {
 	return stored, nil
 }
 
-// MarkPublished records the review the app sent to GitHub: the verdict, where
-// each finding went and the head it was sent against.
-func (s *Service) MarkPublished(ctx context.Context, id string, pass int, verdict Verdict,
+// MarkPublished records the review the app sent to GitHub: the verdict,
+// whether the summary went with it, where each finding went and the head it
+// was sent against.
+func (s *Service) MarkPublished(ctx context.Context, id string, pass int, verdict Verdict, summary bool,
 	url, commit string, placements map[int]Placement,
 ) error {
 	published, err := ParseVerdict(string(verdict))
@@ -543,6 +584,7 @@ func (s *Service) MarkPublished(ctx context.Context, id string, pass int, verdic
 	stored.Verdict = published
 	stored.PublishedAt = s.now().UTC()
 	stored.PublishedURL = url
+	stored.SummaryPublished = summary
 	stored.Findings = slices.Clone(stored.Findings)
 	for i := range stored.Findings {
 		stored.Findings[i].Placement = placements[stored.Findings[i].Number]
@@ -555,6 +597,41 @@ func (s *Service) MarkPublished(ctx context.Context, id string, pass int, verdic
 		return err
 	}
 	s.log.Info("review published", "review", id, "pass", pass, "verdict", string(published), "url", url)
+	s.changed()
+	return nil
+}
+
+// MarkChecks records the checks and the merge of the reading that let a pass
+// start, and when it was made.
+func (s *Service) MarkChecks(ctx context.Context, id string, pass int, checks gh.PRChecks, readAt time.Time) error {
+	return s.markPass(ctx, id, pass, "checks", func(p *Pass) {
+		p.Checks = slices.Clone(checks.Checks)
+		p.Mergeable = checks.Mergeable
+		p.ChecksReadAt = readAt.UTC()
+	})
+}
+
+// MarkSent records that the approved findings of a pass went to the agent, in
+// apply mode.
+func (s *Service) MarkSent(ctx context.Context, id string, pass int) error {
+	return s.markPass(ctx, id, pass, "sent", func(p *Pass) { p.SentAt = s.now().UTC() })
+}
+
+// markPass rewrites a stored pass with what mutate changes on it.
+func (s *Service) markPass(ctx context.Context, id string, pass int, what string, mutate func(*Pass)) error {
+	if _, ok := s.Get(id); !ok {
+		return fmt.Errorf("mark %s of pass %d of review %s: %w", what, pass, id, ErrNotFound)
+	}
+	stored, ok := s.pass(id, pass)
+	if !ok {
+		return fmt.Errorf("mark %s of pass %d of review %s: %w", what, pass, id, ErrNotFound)
+	}
+
+	mutate(&stored)
+	if err := s.store.UpsertPass(ctx, stored); err != nil {
+		return err
+	}
+	s.savePass(stored)
 	s.changed()
 	return nil
 }
@@ -585,14 +662,15 @@ func (s *Service) MarkApplied(ctx context.Context, id string, pass int) error {
 }
 
 // Archive takes a review out of the active list and into the history, with
-// what became of the pull request. There is no way back.
-func (s *Service) Archive(ctx context.Context, id string, state PRState) (Review, error) {
+// how the pull request ended. There is no way back.
+func (s *Service) Archive(ctx context.Context, id string, end End) (Review, error) {
 	review, ok := s.Get(id)
 	if !ok {
 		return Review{}, fmt.Errorf("archive review %s: %w", id, ErrNotFound)
 	}
 
-	review.PRState = state
+	review.PRState = end.State
+	review.MergedBy, review.MergedAt, review.ClosedAt = end.MergedBy, end.MergedAt, end.ClosedAt
 	review.ArchivedAt = s.now().UTC()
 	review.UpdatedAt = review.ArchivedAt
 	if err := s.store.Update(ctx, review); err != nil {
@@ -609,7 +687,7 @@ func (s *Service) Archive(ctx context.Context, id string, state PRState) (Review
 	s.archived = slices.Insert(s.archived, 0, review)
 	s.mu.Unlock()
 
-	s.log.Info("review archived", "review", id, "state", string(state))
+	s.log.Info("review archived", "review", id, "state", string(end.State))
 	s.changed()
 	return review, nil
 }
@@ -746,8 +824,20 @@ func indexOf(reviews []Review, id string) int {
 }
 
 // same reports whether a report says what the pass already recorded: the same
-// summary, and the same findings in the same places with the same words.
+// summary, and the same findings in the same places with the same titles and
+// words.
 func same(pass Pass, report Report) bool {
+	return sameFindings(pass, report, true)
+}
+
+// sameExceptTitles is same without the titles of the findings.
+func sameExceptTitles(pass Pass, report Report) bool {
+	return sameFindings(pass, report, false)
+}
+
+// sameFindings compares a report with a pass, the titles of the findings
+// included when withTitles is set.
+func sameFindings(pass Pass, report Report, withTitles bool) bool {
 	if pass.SummaryOriginal != report.Summary || len(pass.Findings) != len(report.Findings) {
 		return false
 	}
@@ -755,6 +845,9 @@ func same(pass Pass, report Report) bool {
 		parsed := report.Findings[i]
 		if finding.Number != parsed.Number || finding.Path != parsed.Path ||
 			finding.Line != parsed.Line || finding.Original != parsed.Text {
+			return false
+		}
+		if withTitles && finding.Title != parsed.Title {
 			return false
 		}
 	}
@@ -767,6 +860,7 @@ func fresh(parsed []ParsedFinding) []Finding {
 	for _, finding := range parsed {
 		findings = append(findings, Finding{
 			Number:   finding.Number,
+			Title:    finding.Title,
 			Path:     finding.Path,
 			Line:     finding.Line,
 			Original: finding.Text,
@@ -811,6 +905,7 @@ func clonePasses(passes []Pass) []Pass {
 // clonePass copies a pass with its findings.
 func clonePass(pass Pass) Pass {
 	pass.Findings = slices.Clone(pass.Findings)
+	pass.Checks = slices.Clone(pass.Checks)
 	return pass
 }
 

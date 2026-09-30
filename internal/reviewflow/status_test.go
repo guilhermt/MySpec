@@ -62,7 +62,7 @@ func published(t *testing.T, f *fixture) string {
 	id := deciding(t, f)
 	f.decide(t, id, 1, 1, prreview.DecisionApproved)
 	f.decide(t, id, 1, 2, prreview.DecisionDiscarded)
-	err := f.reviews.MarkPublished(t.Context(), id, 1, prreview.VerdictRequestChanges,
+	err := f.reviews.MarkPublished(t.Context(), id, 1, prreview.VerdictRequestChanges, false,
 		"https://github.com/dev/web/pull/42#pullrequestreview-1", headHash,
 		map[int]prreview.Placement{1: prreview.PlacementInline})
 	if err != nil {

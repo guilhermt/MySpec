@@ -1158,9 +1158,12 @@ type PullRequestRow struct {
 // ReviewFinding is one numbered finding of a pass of a review.
 type ReviewFinding struct {
 	Number int    `json:"number"`
+	Title  string `json:"title"`
 	Path   string `json:"path"` // the file it is anchored to; "" for a general finding
 	Line   int    `json:"line"` // the line of the new side of the diff; 0 for a general finding
-	Text   string `json:"text"`
+	// LineURL is the line in Files changed on GitHub; "" for a general finding.
+	LineURL string `json:"lineUrl"`
+	Text    string `json:"text"`
 	// Decision is "", approved or discarded, a string for the same reason as
 	// State.Theme.
 	Decision string `json:"decision"`

@@ -118,14 +118,31 @@ type Review struct {
 	TroubleBaseline gh.Trouble
 	Trouble         gh.Trouble
 
+	// MergedBy, MergedAt and ClosedAt are who merged the pull request and
+	// when, and when it closed, as gh read them when the review ended; empty
+	// for a review archived before they were kept.
+	MergedBy string
+	MergedAt time.Time
+	ClosedAt time.Time
+
 	ArchivedAt time.Time
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
 }
 
+// End is how the pull request of a review ended: merged or closed, with who
+// merged it and when, as gh reads them.
+type End struct {
+	State    PRState
+	MergedBy string
+	MergedAt time.Time
+	ClosedAt time.Time
+}
+
 // Finding is one numbered finding of a pass.
 type Finding struct {
 	Number    int
+	Title     string // as the report has it; "" when it has none
 	Path      string // the file it is anchored to; "" for a general finding
 	Line      int    // the line of the new side of the diff; 0 for a general finding
 	Original  string // as the report has it
@@ -151,7 +168,15 @@ type Pass struct {
 	PublishedURL    string
 	// Applied is set once the fixes of the approved findings went up in a
 	// commit the app asked for, in apply mode.
-	Applied   bool
+	Applied bool
+
+	Checks           []gh.Check   // the checks of the reading that let the pass start; nil before it was sent and for a pass sent before they were kept
+	Mergeable        gh.Mergeable // "" as Checks
+	ChecksReadAt     time.Time    // when that reading was made; zero as Checks
+	RecordedAt       time.Time    // when the report was first recorded; zero before, and for a pass recorded before it was kept
+	SentAt           time.Time    // apply mode: when the approved findings went to the agent; zero before
+	SummaryPublished bool         // the summary went with the published review
+
 	Findings  []Finding
 	CreatedAt time.Time
 }

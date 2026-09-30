@@ -1987,6 +1987,7 @@ export interface ReviewFilters {
  */
 export interface ReviewFinding {
     "number": number;
+    "title": string;
 
     /**
      * the file it is anchored to; "" for a general finding
@@ -1997,6 +1998,11 @@ export interface ReviewFinding {
      * the line of the new side of the diff; 0 for a general finding
      */
     "line": number;
+
+    /**
+     * LineURL is the line in Files changed on GitHub; "" for a general finding.
+     */
+    "lineUrl": string;
     "text": string;
 
     /**

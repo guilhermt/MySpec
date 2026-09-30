@@ -978,8 +978,10 @@ export function makeReviewPass(overrides: Partial<ReviewPass> = {}): ReviewPass 
 export function makeReviewFinding(overrides: Partial<ReviewFinding> = {}): ReviewFinding {
   return {
     number: 1,
+    title: "The token is never cleared",
     path: "src/login.ts",
     line: 12,
+    lineUrl: "https://github.com/dev/web/pull/31/files#diff-…R12",
     text: "The token is never cleared.",
     decision: "",
     placement: "",

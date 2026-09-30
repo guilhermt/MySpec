@@ -1,6 +1,8 @@
 package bindings
 
 import (
+	"crypto/sha256"
+	"fmt"
 	"slices"
 	"strconv"
 	"strings"
@@ -1492,7 +1494,7 @@ func FromReviews(
 			Status:           string(state.Status),
 			Card:             fromReviewCard(stored.Card),
 			WorktreePath:     state.WorktreePath,
-			Passes:           fromPasses(state.Passes),
+			Passes:           fromPasses(state.Passes, stored.URL),
 			StalePass:        state.StalePass,
 			CheckError:       state.CheckError,
 			Trouble:          fromTrouble(stored.Trouble),
@@ -1614,7 +1616,7 @@ func FromArchivedReviews(
 			Mode:         string(stored.Mode),
 			Outcome:      string(stored.PRState),
 			Card:         fromReviewCard(stored.Card),
-			Passes:       fromPasses(passes(stored.ID)),
+			Passes:       fromPasses(passes(stored.ID), stored.URL),
 			CreatedAt:    stored.CreatedAt.Format(time.RFC3339),
 			ArchivedAt:   stored.ArchivedAt.Format(time.RFC3339),
 		}
@@ -1633,7 +1635,7 @@ func fromReviewCard(c *prreview.Card) *PullCard {
 
 // fromPasses converts the passes of a review, always returning a slice so the
 // frontend never sees null.
-func fromPasses(passes []prreview.Pass) []ReviewPass {
+func fromPasses(passes []prreview.Pass, prURL string) []ReviewPass {
 	converted := make([]ReviewPass, len(passes))
 	for i, pass := range passes {
 		converted[i] = ReviewPass{
@@ -1643,7 +1645,7 @@ func fromPasses(passes []prreview.Pass) []ReviewPass {
 			Clean:        pass.Clean,
 			Instructions: pass.Instructions,
 			Summary:      pass.Summary,
-			Findings:     fromFindings(pass.Findings),
+			Findings:     fromFindings(pass.Findings, prURL),
 			Revision:     pass.Revision,
 			Edited:       edited(pass),
 			Published:    pass.Published(),
@@ -1673,19 +1675,31 @@ func edited(pass prreview.Pass) bool {
 
 // fromFindings converts the findings of a pass, always returning a slice so the
 // frontend never sees null.
-func fromFindings(findings []prreview.Finding) []ReviewFinding {
+func fromFindings(findings []prreview.Finding, prURL string) []ReviewFinding {
 	converted := make([]ReviewFinding, len(findings))
 	for i, finding := range findings {
 		converted[i] = ReviewFinding{
 			Number:    finding.Number,
+			Title:     finding.Title,
 			Path:      finding.Path,
 			Line:      finding.Line,
+			LineURL:   lineURL(prURL, finding),
 			Text:      finding.Text,
 			Decision:  string(finding.Decision),
 			Placement: string(finding.Placement),
 		}
 	}
 	return converted
+}
+
+// lineURL is the line of an anchored finding in Files changed on GitHub: the
+// anchor of a file there is the SHA-256 of its path, and R the line of the new
+// side. "" for a general finding.
+func lineURL(prURL string, f prreview.Finding) string {
+	if !f.Anchored() {
+		return ""
+	}
+	return fmt.Sprintf("%s/files#diff-%xR%d", prURL, sha256.Sum256([]byte(f.Path)), f.Line)
 }
 
 // FromDiscussions converts the active discussions with the situations each one

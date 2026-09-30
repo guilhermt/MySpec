@@ -119,6 +119,9 @@ func TestAReportTheAppCannotReadLeavesTheReviewWaitingWithTheReason(t *testing.T
 	if state.Status != reviewflow.StatusAwaitingReply {
 		t.Errorf("status = %q, want %q", state.Status, reviewflow.StatusAwaitingReply)
 	}
+	if want := "The report can't be read: status \"perfect\" is neither clean nor changes."; state.UnreadableReport != want {
+		t.Errorf("unreadable report = %q, want %q", state.UnreadableReport, want)
+	}
 	if f.pass(t, id, 1).Recorded {
 		t.Error("a report the app cannot read was recorded")
 	}

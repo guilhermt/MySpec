@@ -152,7 +152,7 @@ func (s *Service) end(ctx context.Context, stored prreview.Review, state prrevie
 	if err := s.worktrees.Remove(ctx, stored.ID); err != nil {
 		s.log.Warn("remove review worktree failed", "review", stored.ID, "error", err)
 	}
-	if _, err := s.reviews.Archive(ctx, stored.ID, state); err != nil {
+	if _, err := s.reviews.Archive(ctx, stored.ID, prreview.End{State: state}); err != nil {
 		s.log.Error("archive review failed", "review", stored.ID, "error", err)
 		return
 	}

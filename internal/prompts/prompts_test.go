@@ -1179,6 +1179,33 @@ func TestRenderAppendsTheSectionsOfAReviewOfAPullRequestWithoutATaskInOrder(t *t
 	}
 }
 
+func TestTheReportFormatOfAnExternalReviewAsksForTheTitleOfEachFinding(t *testing.T) {
+	t.Parallel()
+
+	const heading = "### 1 · <a short title of what is wrong, one line, no Markdown>"
+	dataDir := t.TempDir()
+	write(t, dataDir, prompts.StagePRReview, "review it")
+
+	got, err := prompts.Render(dataDir, prompts.StagePRReview, externalReviewVars())
+	if err != nil {
+		t.Fatalf("Render() = %v, want nil", err)
+	}
+	if !strings.Contains(got, heading) {
+		t.Errorf("Render() = %q, want the example of a finding to carry %q", got, heading)
+	}
+	if !strings.Contains(got, `The title follows the number on the same line, after " · "`) {
+		t.Errorf("Render() = %q, want the sentence that explains the title", got)
+	}
+
+	task, err := prompts.Render(dataDir, prompts.StagePRReview, everyVar())
+	if err != nil {
+		t.Fatalf("Render() of a task = %v, want nil", err)
+	}
+	if strings.Contains(task, heading) {
+		t.Errorf("Render() of a task = %q, want no format of findings", task)
+	}
+}
+
 func TestRenderAppendsTheSectionsOfADiscussionInOrder(t *testing.T) {
 	t.Parallel()
 

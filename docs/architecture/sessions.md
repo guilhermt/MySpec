@@ -100,7 +100,7 @@ O review do centro de review usa o prompt de review de PR, com `prompts.Vars.Ext
 `prompts.Render` acrescenta ao prompt, depois da seção `## One-Shot task`, nesta ordem e cada uma, fora as do GitHub, só quando se aplica:
 
 1. `## Pull request without a task`: que não há PRD nem tech spec, que toda referência a eles é o documento de contexto, que o card e a descrição são o critério e que a worktree está em detached HEAD, com a base.
-2. `## Findings format`: o formato do corpo do relatório que o app lê, que substitui o que o prompt diz sobre o corpo. Depois do cabeçalho `---`, o resumo; depois, uma linha `## Findings` e um bloco por apontamento, `### <n>` seguido de `Location: <arquivo>:<linha>` ou `Location: general` e do texto.
+2. `## Findings format`: o formato do corpo do relatório que o app lê, que substitui o que o prompt diz sobre o corpo. Depois do cabeçalho `---`, o resumo; depois, uma linha `## Findings` e um bloco por apontamento, `### <n> · <título>`, com o título de poucas palavras sobre o que está errado, sem Markdown, na mesma linha do número, seguido de `Location: <arquivo>:<linha>` ou `Location: general` e do texto.
 3. `## Publishing`, no modo publicar: que o usuário decide cada apontamento no app e o app publica os aprovados, que o agente escreve cada apontamento como um comentário que o autor lê, que ele nunca edita, commita nem faz push, e que um pedido de mudança nos apontamentos é feito reescrevendo o relatório da passada no lugar. `## Applying`, no modo aplicar: que o agente implementa só o que o app enviar como aprovado.
 4. `## GitHub checks and conflicts` e `## GitHub status`, sempre, descritas em [Prompts](#prompts).
 5. `## Review instructions`, com as instruções fixas do repositório.

@@ -120,7 +120,11 @@ func TestDecidingOnTheFindingsOfAPassReachesTheState(t *testing.T) {
 	}
 	if diff := cmp.Diff(
 		[]bindings.ReviewFinding{
-			{Number: 1, Path: "main.go", Line: 12, Text: "Handle the error of the login call.", Decision: "approved"},
+			{
+				Number: 1, Path: "main.go", Line: 12, Text: "Handle the error of the login call.", Decision: "approved",
+				LineURL: "https://github.com/dev/web/pull/7/files" +
+					"#diff-2873f79a86c0d8b3335cd7731b0ecf7dd4301eb19a82ef7a1cba7589b5252261R12",
+			},
 			{Number: 2, Text: "The pull request has no tests.", Decision: "discarded"},
 		},
 		pass.Findings,

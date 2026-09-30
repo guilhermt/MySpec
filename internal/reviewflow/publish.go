@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/prreview"
@@ -48,7 +49,8 @@ func (s *Service) Publish(ctx context.Context, id string, verdict prreview.Verdi
 		return s.publishFailed(ctx, stored, ref, err)
 	}
 
-	if err = s.reviews.MarkPublished(ctx, id, pass.Number, verdict, url, input.CommitID, placements); err != nil {
+	if err = s.reviews.MarkPublished(ctx, id, pass.Number, verdict,
+		strings.TrimSpace(pass.Summary) != "", url, input.CommitID, placements); err != nil {
 		return err
 	}
 	s.pulls.Refresh()

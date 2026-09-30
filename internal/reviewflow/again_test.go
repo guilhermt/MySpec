@@ -105,7 +105,7 @@ func TestANewPassListsTheFindingsTheAuthorAlreadySaw(t *testing.T) {
 
 	f := newFixture(t)
 	id := decided(t, f)
-	if err := f.reviews.MarkPublished(t.Context(), id, 1, prreview.VerdictRequestChanges,
+	if err := f.reviews.MarkPublished(t.Context(), id, 1, prreview.VerdictRequestChanges, false,
 		"https://github.com/dev/web/pull/42#pullrequestreview-1", headHash,
 		map[int]prreview.Placement{1: prreview.PlacementInline},
 	); err != nil {

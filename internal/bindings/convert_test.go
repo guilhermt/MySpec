@@ -2340,7 +2340,7 @@ func TestFromReviewsCarriesThePassesTheVerdictsAndTheSituationsOfAReview(t *test
 	wantPass := bindings.ReviewPass{
 		Pass: 1, File: "review-1.md", Recorded: true, Summary: "Two things to look at.",
 		Findings: []bindings.ReviewFinding{{
-			Number: 1, Path: "main.go", Line: 12, Text: "Handle the error.",
+			Number: 1, Path: "main.go", Line: 12, LineURL: "https://github.com/acme/web/pull/7/files#diff-2873f79a86c0d8b3335cd7731b0ecf7dd4301eb19a82ef7a1cba7589b5252261R12", Text: "Handle the error.",
 			Decision: "approved", Placement: "inline",
 		}},
 		Revision: 1, Published: true, PublishedAt: readAt.Format(time.RFC3339),
@@ -2442,7 +2442,8 @@ func TestFromArchivedReviewsCarriesWhatBecameOfThePullRequest(t *testing.T) {
 		Passes: []bindings.ReviewPass{{
 			Pass: 1, File: "review-1.md", Recorded: true, Summary: "Two things to look at.",
 			Findings: []bindings.ReviewFinding{{
-				Number: 1, Path: "main.go", Line: 12, Text: "Handle the error.", Decision: "approved",
+				Number: 1, Path: "main.go", Line: 12, LineURL: "https://github.com/acme/web/pull/7/files#diff-2873f79a86c0d8b3335cd7731b0ecf7dd4301eb19a82ef7a1cba7589b5252261R12", Text: "Handle the error.",
+				Decision: "approved",
 			}},
 			Revision: 1,
 		}},
@@ -3155,5 +3156,29 @@ func TestEverySessionBlockCarriesWhenItsSessionWasPaused(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestFromReviewsCarriesTheTitleAndTheLineOnGitHubOfAFinding(t *testing.T) {
+	t.Parallel()
+
+	pass := recordedPass(1, prreview.DecisionNone)
+	pass.Findings = []prreview.Finding{
+		{Number: 1, Title: "The error is dropped", Path: "main.go", Line: 12, Original: "a", Text: "a"},
+		{Number: 2, Title: "No tests", Original: "b", Text: "b"},
+	}
+	state := reviewState(reviewflow.StatusReadyToPublish, pass)
+
+	got := bindings.FromReviews([]reviewflow.State{state}, nil, reviewRepos)[0]
+
+	// The anchor is the SHA-256 of "main.go", computed apart from the code.
+	const anchored = "https://github.com/acme/web/pull/7/files" +
+		"#diff-2873f79a86c0d8b3335cd7731b0ecf7dd4301eb19a82ef7a1cba7589b5252261R12"
+	want := []bindings.ReviewFinding{
+		{Number: 1, Title: "The error is dropped", Path: "main.go", Line: 12, LineURL: anchored, Text: "a"},
+		{Number: 2, Title: "No tests", Text: "b"},
+	}
+	if diff := cmp.Diff(want, got.Passes[0].Findings); diff != "" {
+		t.Errorf("findings (-want +got):\n%s", diff)
 	}
 }

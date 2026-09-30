@@ -10,7 +10,7 @@ import (
 )
 
 // schemaVersionNow is how many migrations the embedded set holds.
-const schemaVersionNow = 20
+const schemaVersionNow = 21
 
 func TestOpenMemoryAppliesMigrations(t *testing.T) {
 	t.Parallel()

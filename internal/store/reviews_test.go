@@ -432,3 +432,56 @@ func TestDeletingAPassTakesItsFindingsAndLeavesTheOtherPasses(t *testing.T) {
 		t.Errorf("Passes() mismatch (-want +got):\n%s", diff)
 	}
 }
+
+func TestTheColumnsOfTheReviewScreenRoundTrip(t *testing.T) {
+	t.Parallel()
+	s := newStoreWithRepositories(t)
+
+	review := newReview("review-1", webRepo, 7, fixedTime)
+	review.MergedBy = "rsouza"
+	review.MergedAt = fixedTime.Add(time.Hour)
+	review.ClosedAt = fixedTime.Add(time.Hour)
+	insertReview(t, s, review)
+
+	finding := newFinding(1, "main.go", 3)
+	finding.Title = "The token is never cleared"
+	pass := newPass(review.ID, 1, finding)
+	pass.Checks = []gh.Check{{Name: "build", Conclusion: "success", State: gh.CheckPassed, StartedAt: fixedTime, CompletedAt: fixedTime.Add(time.Minute)}}
+	pass.Mergeable = gh.MergeableConflicting
+	pass.ChecksReadAt = fixedTime.Add(2 * time.Hour)
+	pass.RecordedAt = fixedTime.Add(3 * time.Hour)
+	pass.SentAt = fixedTime.Add(4 * time.Hour)
+	pass.SummaryPublished = true
+	seedPass(t, s, pass)
+
+	if diff := cmp.Diff([]prreview.Review{review}, listActiveReviews(t, s)); diff != "" {
+		t.Errorf("ListActive() mismatch (-want +got):\n%s", diff)
+	}
+	if diff := cmp.Diff([]prreview.Pass{pass}, passesOf(t, s, review.ID)); diff != "" {
+		t.Errorf("Passes() mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestUpdateFindingTitlesRewritesOnlyTheTitles(t *testing.T) {
+	t.Parallel()
+	s := newStoreWithRepositories(t)
+
+	review := newReview("review-1", webRepo, 7, fixedTime)
+	insertReview(t, s, review)
+	first, second := newFinding(1, "main.go", 3), newFinding(2, "main.go", 9)
+	first.Title = "Old"
+	first.Decision = prreview.DecisionApproved
+	first.Text = "as the user left it"
+	seedPass(t, s, newPass(review.ID, 1, first, second))
+
+	titles := map[int]string{1: "New", 2: "Second"}
+	if err := s.Reviews.UpdateFindingTitles(t.Context(), review.ID, 1, titles); err != nil {
+		t.Fatalf("UpdateFindingTitles() = %v, want nil", err)
+	}
+
+	first.Title, second.Title = "New", "Second"
+	want := []prreview.Finding{first, second}
+	if diff := cmp.Diff(want, passesOf(t, s, review.ID)[0].Findings); diff != "" {
+		t.Errorf("findings mismatch (-want +got):\n%s", diff)
+	}
+}
