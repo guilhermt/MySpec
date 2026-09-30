@@ -1242,7 +1242,8 @@ export const api = {
     (await RepositoryService.ScanRepositories()) ?? [],
   addRepository: (path: string): Promise<void> => RepositoryService.AddRepository(path),
   browseRepository: (): Promise<boolean> => RepositoryService.BrowseRepository(),
-  changeRepositoryPath: (id: string): Promise<void> => RepositoryService.ChangeRepositoryPath(id),
+  changeRepositoryPath: (id: string): Promise<boolean> =>
+    RepositoryService.ChangeRepositoryPath(id),
   removeRepository: (id: string): Promise<void> => RepositoryService.RemoveRepository(id),
   setRepositoryFilter: (id: string): Promise<void> => RepositoryService.SetRepositoryFilter(id),
   cloneRepository: (id: string): Promise<boolean> => RepositoryService.CloneRepository(id),

@@ -264,7 +264,19 @@ describe("BoardCardPanel", () => {
       expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     });
 
+    it("does not take the focus to the card later after a picker that was cancelled", async () => {
+      vi.mocked(api.changeRepositoryPath).mockResolvedValueOnce(false);
+      const { user } = panel(makeBoardCard({ action: "clone_missing" }), { missing: true });
+      await user.click(screen.getByRole("button", { name: "Change path…" }));
+      await waitFor(() => expect(api.changeRepositoryPath).toHaveBeenCalledWith("repo-1"));
+
+      act(() => setCard(makeBoardCard({ action: "start" })));
+
+      expect(screen.getByRole("button", { name: /^Start task/ })).not.toHaveFocus();
+    });
+
     it("does not take the focus to another card after a picker that was cancelled", async () => {
+      vi.mocked(api.changeRepositoryPath).mockResolvedValueOnce(false);
       const { user } = panel(makeBoardCard({ action: "clone_missing" }), { missing: true });
       await user.click(screen.getByRole("button", { name: "Change path…" }));
       expect(api.changeRepositoryPath).toHaveBeenCalledWith("repo-1");

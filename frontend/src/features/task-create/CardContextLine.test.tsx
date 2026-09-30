@@ -125,6 +125,6 @@ describe("CardContextLine", () => {
     expect(screen.getByText("From the card: #12")).toBeVisible();
     expect(screen.queryByText(/characters/)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Show" })).toHaveAttribute("aria-disabled", "true");
-    expect(screen.getByText("The context isn't read yet.")).toBeVisible();
+    expect(await screen.findByText("Couldn't read the context.")).toBeVisible();
   });
 });

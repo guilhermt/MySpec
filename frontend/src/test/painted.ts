@@ -349,16 +349,14 @@ export async function withoutTooltip(elements: readonly HTMLElement[]): Promise<
     }
     await userEvent.unhover(element);
     // The tooltip that closes must be gone before the next element, or it would count for that one.
-    await vi
-      .waitFor(
-        () => {
-          if (document.querySelector('[role="tooltip"]') !== null) {
-            throw new Error("tooltip still open");
-          }
-        },
-        { timeout: 1500 },
-      )
-      .catch(() => undefined);
+    await vi.waitFor(
+      () => {
+        if (document.querySelector('[role="tooltip"]') !== null) {
+          throw new Error(`the tooltip of ${nameOf(element)} is still open`);
+        }
+      },
+      { timeout: 1500 },
+    );
   }
   return missing;
 }

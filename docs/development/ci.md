@@ -2,7 +2,7 @@
 
 Dois workflows. `.github/workflows/ci.yml` é a verificação de todo dia: roda a cada pull request para `main` e a cada push em `main`, e uma execução nova no mesmo ref cancela a anterior. `.github/workflows/full.yml` é a verificação completa, com cobertura: roda toda segunda-feira e sob demanda, pelo **Run workflow** da aba Actions. O repositório só usa `main`; não há branch `dev`.
 
-O runner de um repositório privado tem 2 vCPUs e 8 GB, e cada job é cobrado em minutos inteiros, arredondados para cima. Por isso o `ci.yml` roda só o que uma mudança alcança, sem cobertura, e os jobs rodam lado a lado.
+Os jobs rodam num runner self-hosted, pelo rótulo `laptop` (`runs-on: laptop`). O `ci.yml` roda só o que uma mudança alcança, sem cobertura, e os jobs rodam lado a lado.
 
 ## Verificação de todo dia
 

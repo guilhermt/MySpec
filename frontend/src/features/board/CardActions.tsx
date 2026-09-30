@@ -56,8 +56,8 @@ export function CardActions({
   const changePath = async () => {
     setPathError(null);
     try {
-      await changeRepositoryPath(card.repositoryId);
-      focusAfterPath.current = true;
+      // A cancelled chooser leaves the card as it was, and the focus where it is.
+      focusAfterPath.current = await changeRepositoryPath(card.repositoryId);
     } catch (failure) {
       setPathError(messageOf(failure));
     }

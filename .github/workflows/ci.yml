@@ -22,7 +22,7 @@ jobs:
   changes:
     name: Changes
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: laptop
     timeout-minutes: 5
     permissions:
       contents: read
@@ -64,7 +64,7 @@ jobs:
     name: Frontend
     needs: changes
     if: needs.changes.outputs.frontend == 'true'
-    runs-on: ubuntu-latest
+    runs-on: laptop
     timeout-minutes: 15
     defaults:
       run:
@@ -102,7 +102,7 @@ jobs:
     name: Go
     needs: changes
     if: ${{ !cancelled() && (github.event_name == 'push' || needs.changes.outputs.go == 'true') }}
-    runs-on: ubuntu-latest
+    runs-on: laptop
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
@@ -142,7 +142,7 @@ jobs:
     name: Build
     needs: changes
     if: needs.changes.outputs.build == 'true'
-    runs-on: ubuntu-latest
+    runs-on: laptop
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7

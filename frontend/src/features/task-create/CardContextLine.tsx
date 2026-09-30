@@ -36,6 +36,8 @@ export function CardContextLine({
   const [open, setOpen] = useState(false);
   const [adding, setAdding] = useState(false);
   const [text, setText] = useState<string | null>(null);
+  // A read that failed leaves no text; the app notice already said why.
+  const [unread, setUnread] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState<string | null>(null);
   // The context is read again once the refresh ends, whatever its outcome.
@@ -66,6 +68,7 @@ export function CardContextLine({
       if (!cancelled) {
         // A read that failed comes back empty, and a card always has a context to show.
         setText(context === "" ? null : context);
+        setUnread(context === "");
       }
     });
     return () => {
@@ -87,7 +90,11 @@ export function CardContextLine({
               aria-controls={textId}
               disabled={refreshing || text === null}
               disabledReason={
-                refreshing ? "The card is being read again." : "The context isn't read yet."
+                refreshing
+                  ? "The card is being read again."
+                  : unread
+                    ? "Couldn't read the context."
+                    : "The context isn't read yet."
               }
               onClick={() => setOpen((current) => !current)}
             >

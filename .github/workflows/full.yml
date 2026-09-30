@@ -14,7 +14,7 @@ env:
 jobs:
   full:
     name: Full check
-    runs-on: ubuntu-latest
+    runs-on: laptop
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v7

@@ -33,8 +33,9 @@ export function BrowseRepository(): $CancellablePromise<boolean> {
 
 /**
  * ChangeRepositoryPath asks for the new folder of the clone of a repository.
+ * changed is false when the user cancelled the folder chooser.
  */
-export function ChangeRepositoryPath(id: string): $CancellablePromise<void> {
+export function ChangeRepositoryPath(id: string): $CancellablePromise<boolean> {
     return $Call.ByID(2545565548, id);
 }
 

@@ -70,7 +70,7 @@ export const api = {
   scanRepositories: vi.fn<() => Promise<RepositoryCandidate[]>>(() => Promise.resolve([])),
   addRepository: vi.fn<(path: string) => Promise<void>>(() => Promise.resolve()),
   browseRepository: vi.fn<() => Promise<boolean>>(() => Promise.resolve(false)),
-  changeRepositoryPath: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
+  changeRepositoryPath: vi.fn<(id: string) => Promise<boolean>>(() => Promise.resolve(true)),
   removeRepository: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
   setRepositoryFilter: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
   cloneRepository: vi.fn<(id: string) => Promise<boolean>>(() => Promise.resolve(true)),
