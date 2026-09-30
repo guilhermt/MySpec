@@ -43,6 +43,7 @@ import type {
   Entry,
   ErrorEntry,
   Leftover,
+  MarkerCommit,
   MarkerEntry,
   Migration,
   MigrationCase,
@@ -147,6 +148,7 @@ export type {
   Entry,
   ErrorEntry,
   Leftover,
+  MarkerCommit,
   MarkerEntry,
   Migration,
   MigrationCase,
@@ -331,6 +333,10 @@ export type MarkerType =
   | "one_shot_written"
   | "one_shot_updated"
   | "pr_review_written"
+  | "pr_review_revised"
+  | "findings_decided"
+  | "review_published"
+  | "new_commits"
   | "step_review_started"
   | "step_review_written"
   | "review_started"
@@ -823,6 +829,10 @@ export function asMarkerType(value: string): MarkerType {
     case "one_shot_written":
     case "one_shot_updated":
     case "pr_review_written":
+    case "pr_review_revised":
+    case "findings_decided":
+    case "review_published":
+    case "new_commits":
     case "step_review_started":
     case "step_review_written":
     case "review_started":

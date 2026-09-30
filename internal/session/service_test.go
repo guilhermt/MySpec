@@ -1278,13 +1278,58 @@ func TestMarkPRReview(t *testing.T) {
 	f.start(t, taskInfo(t, "t1"))
 	f.waitIdle(t, prd("t1"))
 
-	f.service.MarkPRReview(t.Context(), prd("t1"), 2, true)
-	f.service.MarkPRReview(t.Context(), prd("missing"), 1, false)
+	f.service.MarkPRReview(t.Context(), prd("t1"), 2, true, -1)
+	f.service.MarkPRReview(t.Context(), prd("t1"), 3, false, 4)
+	f.service.MarkPRReview(t.Context(), prd("missing"), 1, false, 0)
 
 	markers := f.entriesOf(t, prd("t1"), session.KindMarker)
-	want := &session.MarkerEntry{Type: session.MarkerPRReviewWritten, Pass: 2, Clean: true}
-	if diff := cmp.Diff(want, markers[len(markers)-1].Marker); diff != "" {
-		t.Errorf("marker mismatch (-want +got):\n%s", diff)
+	findings := 4
+	want := []*session.MarkerEntry{
+		// A count the report did not give is unknown, not zero.
+		{Type: session.MarkerPRReviewWritten, Pass: 2, Clean: true},
+		{Type: session.MarkerPRReviewWritten, Pass: 3, Findings: &findings},
+	}
+	got := []*session.MarkerEntry{markers[len(markers)-2].Marker, markers[len(markers)-1].Marker}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("markers mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestTheMarkersOfAReviewAreRecordedWithTheirFields(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	f.start(t, taskInfo(t, "t1"))
+	f.waitIdle(t, prd("t1"))
+
+	commits := []session.MarkerCommit{{SHA: "c19f02e", Subject: "Fix the time zone rule", Author: "rsouza"}}
+	f.service.MarkPRReviewRevised(t.Context(), prd("t1"), 2, false, 3)
+	f.service.MarkFindingsDecided(t.Context(), prd("t1"), 2, 2, 1)
+	f.service.MarkReviewPublished(t.Context(), prd("t1"), session.PublishedReview{
+		Pass: 2, Verdict: "request_changes", Inline: 2, Body: 1, Summary: true, Minimal: false,
+		URL: "https://github.com/acme/api/pull/7#pullrequestreview-1",
+	})
+	f.service.MarkNewCommits(t.Context(), prd("t1"), commits, 1)
+	f.service.MarkNewCommits(t.Context(), prd("t1"), nil, -1)
+
+	markers := f.entriesOf(t, prd("t1"), session.KindMarker)
+	revised := 3
+	want := []*session.MarkerEntry{
+		{Type: session.MarkerPRReviewRevised, Pass: 2, Findings: &revised},
+		{Type: session.MarkerFindingsDecided, Pass: 2, Approved: 2, Discarded: 1},
+		{
+			Type: session.MarkerReviewPublished, Pass: 2, Verdict: "request_changes", Inline: 2, Body: 1, Summary: true,
+			URL: "https://github.com/acme/api/pull/7#pullrequestreview-1",
+		},
+		{Type: session.MarkerNewCommits, Commits: commits, Count: 1},
+		{Type: session.MarkerNewCommits, Count: -1},
+	}
+	got := make([]*session.MarkerEntry, 0, len(want))
+	for _, marker := range markers[len(markers)-len(want):] {
+		got = append(got, marker.Marker)
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("markers mismatch (-want +got):\n%s", diff)
 	}
 }
 
@@ -2339,7 +2384,9 @@ func TestStartOfAReviewOfAPullRequestMarksItAndSendsWhatTheUserWroteForThePass(t
 	if len(tr.Entries) != 3 {
 		t.Fatalf("entries = %d, want the review marker, the prompt and its answer", len(tr.Entries))
 	}
-	wantMarker := &session.MarkerEntry{Type: session.MarkerReviewStarted}
+	wantMarker := &session.MarkerEntry{
+		Type: session.MarkerReviewStarted, Model: string(models.Opus55), Effort: string(models.High), Mode: "publish",
+	}
 	if diff := cmp.Diff(wantMarker, tr.Entries[0].Marker); diff != "" {
 		t.Errorf("marker mismatch (-want +got):\n%s", diff)
 	}
@@ -2358,6 +2405,20 @@ func TestStartOfAReviewOfAPullRequestMarksItAndSendsWhatTheUserWroteForThePass(t
 	}
 	if got := tr.Entries[2].Assistant.Text; got != rendered {
 		t.Errorf("prompt sent = %q, want %q", got, rendered)
+	}
+}
+
+func TestStartOfAReviewToApplyMarksItWithTheModeApply(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	info := atReview(taskInfo(t, "r1"))
+	info.Publish = false
+	f.start(t, info)
+	f.waitIdle(t, info.Key())
+
+	if got := f.transcript(t, info.Key()).Entries[0].Marker.Mode; got != "apply" {
+		t.Errorf("mode = %q, want apply", got)
 	}
 }
 

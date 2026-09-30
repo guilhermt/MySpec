@@ -153,6 +153,17 @@ func (s *Service) passBlockedOf(id string) string {
 	return l.passBlocked
 }
 
+// checksCount counts the checks of a reading that finished without failing
+// and all of them.
+func checksCount(checks gh.PRChecks) (passed, total int) {
+	for _, check := range checks.Checks {
+		if !check.Failed() && !check.Pending {
+			passed++
+		}
+	}
+	return passed, len(checks.Checks)
+}
+
 // checkedAtOf is when the last good reading of the pull request of a review
 // was made, zero before one since the app started.
 func (s *Service) checkedAtOf(id string) time.Time {

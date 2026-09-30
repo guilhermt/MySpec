@@ -29,9 +29,30 @@ export function isOpen(pr: PullRequest): boolean {
   return pr.prNumber > 0;
 }
 
-/** checkCounts is how many checks of the last reading passed, skipped and neutral included, of how many. */
-export function checkCounts(pr: PullRequest): { passed: number; total: number } {
-  return countChecks(pr.checks ?? []);
+/** ChecksReading is a reading of the checks of a pull request: the checks, the merge, when, and the base. */
+export interface ChecksReading {
+  checks: readonly PRCheck[] | null;
+  /** mergeable is mergeable, conflicting, unknown or "". */
+  mergeable: string;
+  /** checkedAt is when the reading was made; "" before the first one. */
+  checkedAt: string;
+  /** base is the branch the pull request merges into, for "conflict with dev". */
+  base: string;
+}
+
+/** prChecks is the reading of the checks of the pull request of a task. */
+export function prChecks(pr: PullRequest): ChecksReading {
+  return {
+    checks: pr.checks,
+    mergeable: pr.mergeable,
+    checkedAt: pr.checkedAt,
+    base: prBaseName(pr),
+  };
+}
+
+/** checkCounts is how many checks of a reading passed, skipped and neutral included, of how many. */
+export function checkCounts(reading: ChecksReading): { passed: number; total: number } {
+  return countChecks(reading.checks ?? []);
 }
 
 function countChecks(checks: readonly PRCheck[]): { passed: number; total: number } {
@@ -60,16 +81,16 @@ export function prBaseName(pr: PullRequest): string {
   return pr.prBase !== "" ? pr.prBase : baseName(pr.baseBranch);
 }
 
-/** checksSummary is the checks of the last reading in one line: "3 of 5 passed · 2 not finished · 1 failed · merges clean". */
-export function checksSummary(pr: PullRequest): string {
-  if (pr.checkedAt === "") {
+/** checksSummary is the checks of a reading in one line: "3 of 5 passed · 2 not finished · 1 failed · merges clean". */
+export function checksSummary(reading: ChecksReading): string {
+  if (reading.checkedAt === "") {
     return "Not read yet";
   }
-  const checks = pr.checks ?? [];
+  const checks = reading.checks ?? [];
   if (checks.length === 0) {
     return "No checks";
   }
-  const { passed, total } = checkCounts(pr);
+  const { passed, total } = checkCounts(reading);
   const states = checks.map((check) => asCheckState(check.state));
   const unfinished = states.filter((state) => state === "running" || state === "queued").length;
   const failed = states.filter((state) => state === "failed").length;
@@ -80,10 +101,10 @@ export function checksSummary(pr: PullRequest): string {
   if (failed > 0) {
     parts.push(`${failed} failed`);
   }
-  if (pr.mergeable === "mergeable") {
+  if (reading.mergeable === "mergeable") {
     parts.push("merges clean");
-  } else if (pr.mergeable === "conflicting") {
-    parts.push(`conflict with ${prBaseName(pr)}`);
+  } else if (reading.mergeable === "conflicting") {
+    parts.push(`conflict with ${reading.base}`);
   }
   return parts.join(" · ");
 }
@@ -111,9 +132,9 @@ const CHECK_GLYPHS: Record<CheckState, CheckGlyph> = {
   queued: "todo",
 };
 
-/** checkRows is the checks of the last reading, by name, in the order GitHub gives them. */
-export function checkRows(pr: PullRequest): CheckRow[] {
-  return (pr.checks ?? []).map((check) => {
+/** checkRows is the checks of a reading, by name, in the order GitHub gives them. */
+export function checkRows(reading: ChecksReading): CheckRow[] {
+  return (reading.checks ?? []).map((check) => {
     const state = asCheckState(check.state);
     return {
       name: check.name,

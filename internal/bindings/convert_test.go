@@ -949,6 +949,9 @@ func markerDTO(m bindings.MarkerEntry) *bindings.MarkerEntry {
 	if m.Problems == nil {
 		m.Problems = []bindings.PlanProblem{}
 	}
+	if m.Commits == nil {
+		m.Commits = []bindings.MarkerCommit{}
+	}
 	return &m
 }
 
@@ -1005,6 +1008,40 @@ func TestFromEntryCarriesTheNewMarkerFields(t *testing.T) {
 			},
 			want: markerDTO(bindings.MarkerEntry{
 				Type: "plan_invalid", Findings: -1, Problems: []bindings.PlanProblem{{File: "01-a.md", Message: "no title"}},
+			}),
+		},
+		"review_started": {
+			marker: &session.MarkerEntry{Type: session.MarkerReviewStarted, Model: "opus-5-5", Effort: "high", Mode: "publish"},
+			want: markerDTO(bindings.MarkerEntry{
+				Type: "review_started", Findings: -1, Model: "opus-5-5", Effort: "high", Mode: "publish",
+			}),
+		},
+		"pr_review_revised": {
+			marker: &session.MarkerEntry{Type: session.MarkerPRReviewRevised, Pass: 2, Findings: new(3)},
+			want:   markerDTO(bindings.MarkerEntry{Type: "pr_review_revised", Pass: 2, Findings: 3}),
+		},
+		"findings_decided": {
+			marker: &session.MarkerEntry{Type: session.MarkerFindingsDecided, Pass: 2, Approved: 2, Discarded: 1},
+			want:   markerDTO(bindings.MarkerEntry{Type: "findings_decided", Pass: 2, Findings: -1, Approved: 2, Discarded: 1}),
+		},
+		"review_published": {
+			marker: &session.MarkerEntry{
+				Type: session.MarkerReviewPublished, Pass: 2, Verdict: "comment", Inline: 2, Body: 1, Summary: true,
+				Minimal: false, URL: "https://github.com/acme/api/pull/7#pullrequestreview-1",
+			},
+			want: markerDTO(bindings.MarkerEntry{
+				Type: "review_published", Pass: 2, Findings: -1, Verdict: "comment", Inline: 2, Body: 1, Summary: true,
+				URL: "https://github.com/acme/api/pull/7#pullrequestreview-1",
+			}),
+		},
+		"new_commits": {
+			marker: &session.MarkerEntry{
+				Type: session.MarkerNewCommits, Count: -1,
+				Commits: []session.MarkerCommit{{SHA: "c19f02e", Subject: "Fix the time zone rule", Author: "rsouza"}},
+			},
+			want: markerDTO(bindings.MarkerEntry{
+				Type: "new_commits", Findings: -1, Count: -1,
+				Commits: []bindings.MarkerCommit{{SHA: "c19f02e", Subject: "Fix the time zone rule", Author: "rsouza"}},
 			}),
 		},
 		"interrupted": {

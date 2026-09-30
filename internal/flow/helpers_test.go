@@ -1011,7 +1011,7 @@ func (m *memSessions) SendCorrection(_ context.Context, k session.Key, msg sessi
 	return m.send(k, msg, true)
 }
 
-func (m *memSessions) MarkPRReview(_ context.Context, k session.Key, pass int, clean bool) {
+func (m *memSessions) MarkPRReview(_ context.Context, k session.Key, pass int, clean bool, _ int) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 

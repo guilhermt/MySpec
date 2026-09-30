@@ -11,6 +11,7 @@ import (
 	"github.com/guilhermt/myspec/internal/prreview"
 	"github.com/guilhermt/myspec/internal/pulls"
 	"github.com/guilhermt/myspec/internal/reviewflow"
+	"github.com/guilhermt/myspec/internal/session"
 )
 
 // prDiff is the diff of the pull request under review: line 12 of the service
@@ -433,5 +434,65 @@ func TestAnApprovalWithNothingToSayGoesWithAnEmptyBody(t *testing.T) {
 
 	if sent := f.gh.inputs[0]; sent.Event != gh.EventApprove || sent.Body != "" {
 		t.Errorf("review sent = %+v, want an approval with an empty body", sent)
+	}
+}
+
+func TestPublishingMarksWhatWasDecidedAndWhatWentToGitHub(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := toPublish(t, f)
+	f.decide(t, id, 1, 2, prreview.DecisionApproved)
+
+	if err := f.service.Publish(t.Context(), id, prreview.VerdictRequestChanges, true); err != nil {
+		t.Fatalf("publish review: %v", err)
+	}
+
+	wantDecided := []session.MarkerEntry{{Type: session.MarkerFindingsDecided, Pass: 1, Approved: 2}}
+	if diff := cmp.Diff(wantDecided, f.sessions.markersOf(session.MarkerFindingsDecided)); diff != "" {
+		t.Errorf("findings_decided markers (-want +got):\n%s", diff)
+	}
+	wantPublished := []session.MarkerEntry{{
+		Type: session.MarkerReviewPublished, Pass: 1, Verdict: "request_changes", Inline: 1, Body: 1, Summary: true,
+		URL: "https://github.com/dev/web/pull/42#pullrequestreview-1",
+	}}
+	if diff := cmp.Diff(wantPublished, f.sessions.markersOf(session.MarkerReviewPublished)); diff != "" {
+		t.Errorf("review_published markers (-want +got):\n%s", diff)
+	}
+}
+
+func TestAReviewPublishedWithTheMinimalBodyIsMarkedAsSuch(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.gh.diff = prDiff
+	id := asked(t, f)
+	finding := prreview.ParsedFinding{Number: 1, Path: "internal/board/service.go", Line: 12, Text: "Look at this line."}
+	f.record(t, id, changesReport(1, "Some things.", finding), headHash)
+	f.decide(t, id, 1, 1, prreview.DecisionApproved)
+
+	if err := f.service.Publish(t.Context(), id, prreview.VerdictComment, false); err != nil {
+		t.Fatalf("publish review: %v", err)
+	}
+
+	got := f.sessions.markersOf(session.MarkerReviewPublished)
+	if len(got) != 1 || got[0].Inline != 1 || got[0].Body != 0 || got[0].Summary || !got[0].Minimal {
+		t.Errorf("review_published markers = %+v, want one inline comment, no summary and the minimal body", got)
+	}
+}
+
+func TestAReviewThatFailedToPublishMarksNothing(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := toPublish(t, f)
+	f.gh.createErr = errors.New("boom")
+
+	if err := f.service.Publish(t.Context(), id, prreview.VerdictComment, true); err == nil {
+		t.Fatal("publish review = nil, want the failure")
+	}
+
+	if got := f.sessions.markersOf(session.MarkerReviewPublished); len(got) != 0 {
+		t.Errorf("review_published markers = %+v, want none", got)
 	}
 }

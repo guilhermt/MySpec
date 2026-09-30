@@ -62,6 +62,7 @@ export type {
     Entry,
     ErrorEntry,
     Leftover,
+    MarkerCommit,
     MarkerEntry,
     Migration,
     MigrationCase,

@@ -33,7 +33,14 @@ type Sessions interface {
 	Summary(k session.Key) (session.Summary, bool)
 	Exists(ctx context.Context, k session.Key) (bool, error)
 	SendFromApp(ctx context.Context, k session.Key, m session.AppMessage) error
-	MarkPRReview(ctx context.Context, k session.Key, pass int, clean bool)
+	MarkPRReview(ctx context.Context, k session.Key, pass int, clean bool, findings int)
+	MarkPRReviewRevised(ctx context.Context, k session.Key, pass int, clean bool, findings int)
+	MarkChecksRead(ctx context.Context, k session.Key, pass, passed, total int, failed []string, conflict bool)
+	MarkFindingsDecided(ctx context.Context, k session.Key, pass, approved, discarded int)
+	MarkReviewPublished(ctx context.Context, k session.Key, p session.PublishedReview)
+	MarkNewCommits(ctx context.Context, k session.Key, commits []session.MarkerCommit, count int)
+	MarkChangesApproved(ctx context.Context, k session.Key, files int)
+	MarkCommitted(ctx context.Context, k session.Key, sha, subject string, pushed bool, number int)
 }
 
 // Worktrees is what the reviews need from internal/worktree: a worktree on a
@@ -47,6 +54,7 @@ type Worktrees interface {
 	Status(ctx context.Context, wt worktree.Worktree) (git.Status, error)
 	Clean(ctx context.Context, wt worktree.Worktree) error
 	Remove(ctx context.Context, itemID string) error
+	Commit(ctx context.Context, wt worktree.Worktree, rev string) (git.Commit, error)
 }
 
 // Pulls is what the reviews need from internal/pulls: the pull request as

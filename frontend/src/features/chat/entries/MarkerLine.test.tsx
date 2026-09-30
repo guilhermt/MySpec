@@ -6,7 +6,13 @@ import { api } from "@/lib/wails";
 import { clockTime } from "@/lib/when";
 import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
-import { makeState, makeTask } from "@/test/wails-mock";
+import {
+  makePRCheck,
+  makeReviewPass,
+  makeReviewSummary,
+  makeState,
+  makeTask,
+} from "@/test/wails-mock";
 
 const AT = "2026-09-28T14:19:00Z";
 const TIME = clockTime(AT, Date.now());
@@ -195,5 +201,163 @@ describe("MarkerLine", () => {
     expect(toggle).toHaveAttribute("aria-expanded", "true");
     expect(toggle).toHaveFocus();
     expect(onRequested).toHaveBeenCalledOnce();
+  });
+
+  describe("in a review", () => {
+    const review = makeReviewSummary({
+      passes: [makeReviewPass({ pass: 2, file: "review-2.md", revision: 3 })],
+    });
+
+    function inReview(marker: MarkerView) {
+      return renderWithStore(<MarkerLine view={marker} createdAt={AT} review={review} />, {
+        state: makeState({ reviews: [review] }),
+        ui: { location: { kind: "review", id: review.id } },
+      });
+    }
+
+    it("reads the report of a pass from the review, with the way to Reports", async () => {
+      vi.mocked(api.readReviewArtifact).mockResolvedValue("## Two things");
+      const { user } = inReview(
+        view({
+          text: "Review 2 written",
+          body: { kind: "artifact", name: "review-2.md", openIn: "reports" },
+        }),
+      );
+      expect(api.readReviewArtifact).not.toHaveBeenCalled();
+
+      await user.click(screen.getByRole("button", { name: /Review 2 written/ }));
+
+      expect(await screen.findByTestId("markdown")).toHaveTextContent("## Two things");
+      expect(api.readReviewArtifact).toHaveBeenCalledWith(review.id, "review-2.md");
+      expect(api.readArtifact).not.toHaveBeenCalled();
+
+      await user.click(screen.getByRole("button", { name: "Open in Reports" }));
+
+      expect(useAppStore.getState()).toMatchObject({
+        panel: "reports",
+        panelDocument: "review-2.md",
+      });
+    });
+
+    it("lists the checks the pass started from, each with its state and duration", async () => {
+      const reading = {
+        checks: [
+          makePRCheck({ name: "lint", state: "passed" }),
+          makePRCheck({ name: "e2e", state: "failed", conclusion: "failure" }),
+        ],
+        mergeable: "mergeable",
+        checkedAt: AT,
+        base: "dev",
+      };
+      const { user } = inReview(
+        view({
+          icon: "checks",
+          text: "Checks read before pass 2",
+          body: { kind: "checks", reading, summary: "1 of 2 passed · 1 failed · merges clean" },
+        }),
+      );
+
+      await user.click(screen.getByRole("button", { name: /Checks read before pass 2/ }));
+
+      expect(screen.getByText("1 of 2 passed · 1 failed · merges clean")).toBeInTheDocument();
+      expect(screen.getByText("lint")).toBeInTheDocument();
+      expect(screen.getByText("e2e")).toBeInTheDocument();
+    });
+
+    it("lists the findings of a decided pass, disabled, with where each went", async () => {
+      const { user } = inReview(
+        view({
+          icon: "check",
+          text: "You decided",
+          complement: "1 approved · 1 discarded",
+          body: {
+            kind: "findings",
+            findings: [
+              {
+                id: "1",
+                number: 1,
+                name: "Finding 1 of 2: Token. src/login.ts, line 12. Approved.",
+                title: "Token",
+                locationAsTitle: false,
+                location: {
+                  kind: "anchored",
+                  text: "src/login.ts:12",
+                  url: "https://github.com/dev/web/pull/31/files#diff-aR12",
+                  line: 12,
+                  fileName: "login.ts",
+                },
+                text: "The token is never cleared.",
+                decision: "approved",
+                disabled: "Inline comment · published 13:41",
+              },
+              {
+                id: "2",
+                number: 2,
+                name: "Finding 2 of 2: No test. General. Discarded.",
+                title: "No test",
+                locationAsTitle: false,
+                location: { kind: "general", text: "General · not on a line of the diff" },
+                text: "There is no test.",
+                decision: "discarded",
+                disabled: "Not published",
+              },
+            ],
+          },
+        }),
+      );
+
+      await user.click(screen.getByRole("button", { name: /You decided/ }));
+
+      expect(screen.getAllByRole("group")).toHaveLength(2);
+      expect(screen.getByText("Inline comment · published 13:41")).toBeInTheDocument();
+      expect(screen.getByText("Not published")).toBeInTheDocument();
+
+      await user.click(screen.getByRole("link", { name: "src/login.ts:12" }));
+
+      expect(api.openExternal).toHaveBeenCalledWith(
+        "https://github.com/dev/web/pull/31/files#diff-aR12",
+      );
+    });
+
+    it("lists the new commits and says how many more there were", async () => {
+      const { user } = inReview(
+        view({
+          icon: "commit",
+          text: "14 new commits",
+          complement: "by rsouza",
+          body: {
+            kind: "commits",
+            commits: [
+              { sha: "c19f02e", subject: "Fix the time zone rule" },
+              { sha: "ab12cd3", subject: "Cover it" },
+            ],
+            more: 12,
+          },
+        }),
+      );
+
+      await user.click(screen.getByRole("button", { name: /14 new commits/ }));
+
+      expect(screen.getAllByRole("listitem").map((item) => item.textContent)).toEqual([
+        "c19f02e Fix the time zone rule",
+        "ab12cd3 Cover it",
+        "and 12 more",
+      ]);
+    });
+
+    it("opens the review on GitHub from its link, which is no button inside the line", async () => {
+      const { user } = inReview(
+        view({
+          icon: "pullRequest",
+          text: "Published pass 1",
+          complement: "Approve · the verdict only",
+          link: { label: "GitHub", url: "https://github.com/dev/web/pull/31#r1" },
+        }),
+      );
+
+      await user.click(screen.getByRole("button", { name: "GitHub" }));
+
+      expect(api.openExternal).toHaveBeenCalledWith("https://github.com/dev/web/pull/31#r1");
+    });
   });
 });

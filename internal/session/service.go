@@ -394,7 +394,13 @@ func (s *Service) Start(ctx context.Context, t TaskInfo, restarted bool) error {
 	case t.Stage == ReviewStage:
 		// The review of a pull request has no stage to announce: the item is the
 		// review itself.
-		marker = MarkerEntry{Type: MarkerReviewStarted}
+		mode := "apply"
+		if t.Publish {
+			mode = "publish"
+		}
+		marker = MarkerEntry{
+			Type: MarkerReviewStarted, Model: string(r.rec.Choice.Model), Effort: string(r.rec.Choice.Effort), Mode: mode,
+		}
 	case t.Stage == DiscussionStage:
 		// A discussion has no stage to announce either: the item is the
 		// conversation itself.
@@ -886,19 +892,52 @@ func (s *Service) MarkArtifact(ctx context.Context, k Key, kind ArtifactKind, fi
 }
 
 // MarkPRReview records that a pass of the review of a pull request was
-// written, with its verdict.
-func (s *Service) MarkPRReview(ctx context.Context, k Key, pass int, clean bool) {
-	s.mark(ctx, k, &MarkerEntry{Type: MarkerPRReviewWritten, Pass: pass, Clean: clean})
+// written, with its verdict and how many findings it reported (-1 unknown).
+func (s *Service) MarkPRReview(ctx context.Context, k Key, pass int, clean bool, findings int) {
+	s.mark(ctx, k, reportMarker(MarkerPRReviewWritten, pass, clean, findings))
+}
+
+// MarkPRReviewRevised records that the agent rewrote the report of a pass of
+// the review of a pull request, with its verdict and how many findings it now
+// reports (-1 unknown).
+func (s *Service) MarkPRReviewRevised(ctx context.Context, k Key, pass int, clean bool, findings int) {
+	s.mark(ctx, k, reportMarker(MarkerPRReviewRevised, pass, clean, findings))
+}
+
+// MarkFindingsDecided records how many findings of a pass were approved and
+// how many discarded.
+func (s *Service) MarkFindingsDecided(ctx context.Context, k Key, pass, approved, discarded int) {
+	s.mark(ctx, k, &MarkerEntry{Type: MarkerFindingsDecided, Pass: pass, Approved: approved, Discarded: discarded})
+}
+
+// MarkReviewPublished records that a pass was published on GitHub as a review.
+func (s *Service) MarkReviewPublished(ctx context.Context, k Key, p PublishedReview) {
+	s.mark(ctx, k, &MarkerEntry{
+		Type: MarkerReviewPublished, Pass: p.Pass, Verdict: p.Verdict, Inline: p.Inline, Body: p.Body,
+		Summary: p.Summary, Minimal: p.Minimal, URL: p.URL,
+	})
+}
+
+// MarkNewCommits records the commits that reached the pull request after its
+// review was published; count is how many came, -1 when the commit the
+// published review was about is not among the ones read.
+func (s *Service) MarkNewCommits(ctx context.Context, k Key, commits []MarkerCommit, count int) {
+	s.mark(ctx, k, &MarkerEntry{Type: MarkerNewCommits, Commits: commits, Count: count})
+}
+
+// reportMarker is the marker of a written or revised report.
+func reportMarker(t MarkerType, pass int, clean bool, findings int) *MarkerEntry {
+	marker := &MarkerEntry{Type: t, Pass: pass, Clean: clean}
+	if findings >= 0 {
+		marker.Findings = &findings
+	}
+	return marker
 }
 
 // MarkStepReview records that a pass of the agent review of a step was
 // written, with its verdict and how many findings it reported (-1 unknown).
 func (s *Service) MarkStepReview(ctx context.Context, k Key, pass int, clean bool, findings int) {
-	marker := &MarkerEntry{Type: MarkerStepReviewWritten, Pass: pass, Clean: clean}
-	if findings >= 0 {
-		marker.Findings = &findings
-	}
-	s.mark(ctx, k, marker)
+	s.mark(ctx, k, reportMarker(MarkerStepReviewWritten, pass, clean, findings))
 }
 
 // mark records a marker in the conversation of a session; a session that is

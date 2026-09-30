@@ -7,13 +7,20 @@ import { ReportsPanel } from "@/features/reviews/ReportsPanel";
 import { ReviewBar } from "@/features/reviews/ReviewBar";
 import { ReviewHeader } from "@/features/reviews/ReviewHeader";
 import { showsChanges } from "@/features/reviews/review-status";
+import { useDecidedLines } from "@/features/reviews/useDecidedLines";
 import { ReviewStrip } from "@/features/task/ReviewStrip";
-import { REVIEW_STAGE, sessionKey } from "@/lib/wails";
+import { REVIEW_STAGE, type ReviewSummary, sessionKey } from "@/lib/wails";
 import { loadTranscript } from "@/store/actions";
 import { useAppStore, usePanel, useReview } from "@/store/app-store";
 
 export interface ReviewViewProps {
   reviewId: string;
+}
+
+// ReviewConversation is the conversation of a review, with the decisions of the passes it never recorded.
+function ReviewConversation({ review }: { review: ReviewSummary }) {
+  const decided = useDecidedLines(review);
+  return <Conversation taskId={review.id} stage={REVIEW_STAGE} session={review} after={decided} />;
 }
 
 /** ReviewView is the screen of one review: the findings, the conversation and the reports. */
@@ -53,7 +60,7 @@ export function ReviewView({ reviewId }: ReviewViewProps) {
           <ReviewStrip taskId={review.id} subject="pr" review={review.review} />
         )}
         <FindingsPanel review={review} />
-        <Conversation taskId={review.id} stage={REVIEW_STAGE} session={review} />
+        <ReviewConversation review={review} />
         <ConversationComposer taskId={review.id} stage={REVIEW_STAGE} session={review} />
       </PanelLayout>
     </section>

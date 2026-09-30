@@ -719,16 +719,18 @@ type QuestionEntry struct {
 type MarkerEntry struct {
 	// Type is prd_written, prd_updated, tech_spec_written, tech_spec_updated,
 	// plan_written, plan_updated, one_shot_written, one_shot_updated,
-	// pr_review_written, step_review_started, step_review_written,
-	// review_started, discussion_started, stage_started, step_started,
-	// compacted, interrupted, retried, committed, pr_opened, checks_read,
-	// draft_approved, changes_approved, paused or plan_invalid.
+	// pr_review_written, pr_review_revised, findings_decided,
+	// review_published, new_commits, step_review_started,
+	// step_review_written, review_started, discussion_started, stage_started,
+	// step_started, compacted, interrupted, retried, committed, pr_opened,
+	// checks_read, draft_approved, changes_approved, paused or plan_invalid.
 	Type      string `json:"type"`
 	PreTokens int    `json:"preTokens"`
 	// Stage belongs to stage_started alone, Step to the markers of a step
 	// (step_started, step_review_started), Pass to the markers of a review
-	// (pr_review_written, step_review_written) with Clean; Findings belongs to
-	// step_review_written alone, -1 when unknown; Restarted belongs to
+	// (pr_review_written, pr_review_revised, step_review_written) with Clean;
+	// Findings belongs to pr_review_written, pr_review_revised and
+	// step_review_written, -1 when unknown; Restarted belongs to
 	// stage_started and step_started.
 	Stage     string `json:"stage"`
 	Step      int    `json:"step"`
@@ -759,6 +761,31 @@ type MarkerEntry struct {
 	Title    string        `json:"title"`
 	Files    int           `json:"files"`
 	Problems []PlanProblem `json:"problems"`
+	// Model, Effort and Mode (publish or apply) belong to review_started;
+	// Approved and Discarded to findings_decided; Verdict, Inline, Body,
+	// Summary, Minimal and URL to review_published; Commits (never nil) and
+	// Count (-1 when the head before is not among the ones read) to
+	// new_commits.
+	Model     string         `json:"model"`
+	Effort    string         `json:"effort"`
+	Mode      string         `json:"mode"`
+	Approved  int            `json:"approved"`
+	Discarded int            `json:"discarded"`
+	Verdict   string         `json:"verdict"`
+	Inline    int            `json:"inline"`
+	Body      int            `json:"body"`
+	Summary   bool           `json:"summary"`
+	Minimal   bool           `json:"minimal"`
+	URL       string         `json:"url"`
+	Commits   []MarkerCommit `json:"commits"`
+	Count     int            `json:"count"`
+}
+
+// MarkerCommit is a commit of a new_commits marker; the SHA is the short one.
+type MarkerCommit struct {
+	SHA     string `json:"sha"`
+	Subject string `json:"subject"`
+	Author  string `json:"author"`
 }
 
 // ErrorEntry is a failure shown in the conversation.

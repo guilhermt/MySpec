@@ -5,11 +5,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
+
 	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/prreview"
 	"github.com/guilhermt/myspec/internal/review"
 	"github.com/guilhermt/myspec/internal/reviewflow"
 	"github.com/guilhermt/myspec/internal/session"
+	"github.com/guilhermt/myspec/internal/task"
 	"github.com/guilhermt/myspec/internal/worktree"
 )
 
@@ -594,5 +597,83 @@ func TestApplyingRecordsWhenTheApprovedFindingsWentToTheAgent(t *testing.T) {
 
 	if f.pass(t, id, 1).SentAt.IsZero() {
 		t.Error("the pass kept no hour for the moment the findings went")
+	}
+}
+
+func TestApplyingMarksHowManyFindingsTheUserApprovedAndDiscarded(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := applyDecided(t, f)
+
+	if err := f.service.Apply(t.Context(), id); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+
+	pass := f.pass(t, id, 1)
+	var approved, discarded int
+	for _, finding := range pass.Findings {
+		switch finding.Decision {
+		case prreview.DecisionApproved:
+			approved++
+		case prreview.DecisionDiscarded:
+			discarded++
+		case prreview.DecisionNone:
+		}
+	}
+	want := []session.MarkerEntry{
+		{Type: session.MarkerFindingsDecided, Pass: 1, Approved: approved, Discarded: discarded},
+	}
+	if diff := cmp.Diff(want, f.sessions.markersOf(session.MarkerFindingsDecided)); diff != "" {
+		t.Errorf("findings_decided markers (-want +got):\n%s", diff)
+	}
+}
+
+func TestApprovingMarksTheChangesApproved(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := committing(t, f)
+
+	total := f.state(t, id).Watch.Total
+	want := []session.MarkerEntry{{Type: session.MarkerChangesApproved, Files: total}}
+	if diff := cmp.Diff(want, f.sessions.markersOf(session.MarkerChangesApproved)); diff != "" {
+		t.Errorf("changes_approved markers (-want +got):\n%s", diff)
+	}
+}
+
+func TestACommitThatWentUpIsMarkedWithItsSubjectAndThePullRequest(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name      string
+		commitErr error
+		subject   string
+	}{
+		{"read", nil, "Fix the time zone rule"},
+		// The commit is a fact of the branch; its subject is a nicety.
+		{"unreadable", errGit, ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+
+			f := newFixture(t)
+			id := committing(t, f)
+			f.worktrees.commitErr = c.commitErr
+			f.watch.setSnapshot(review.Snapshot{Head: commitHash})
+			f.sessions.goIdle(id)
+
+			f.evaluated(t, id, func(s reviewflow.State) bool {
+				return s.Review.AskedPass == 2
+			}, "the second pass to be asked for")
+
+			want := []session.MarkerEntry{{
+				Type: session.MarkerCommitted, SHA: task.ShortSHA(commitHash), Subject: c.subject, Pushed: true, Number: 42,
+			}}
+			if diff := cmp.Diff(want, f.sessions.markersOf(session.MarkerCommitted)); diff != "" {
+				t.Errorf("committed markers (-want +got):\n%s", diff)
+			}
+		})
 	}
 }

@@ -1,6 +1,7 @@
 package reviewflow_test
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -518,5 +519,88 @@ func TestRefreshPRRefusesAReviewThatIsGoneAndReadsNothingOnceClosed(t *testing.T
 	}
 	if got := f.pulls.readings(); got != before {
 		t.Errorf("readings = %d, want none after the flow closed", got-before)
+	}
+}
+
+func TestANewHeadAfterThePublicationMarksTheCommitsBetweenTheTwoHeads(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := toPublish(t, f)
+	if err := f.service.Publish(t.Context(), id, prreview.VerdictComment, true); err != nil {
+		t.Fatalf("publish review: %v", err)
+	}
+	moved := openPR()
+	moved.HeadCommit = otherHash
+	moved.Commits = []pulls.Commit{
+		{SHA: "0000000aaaa", Subject: "Before the review", Author: "rsouza"},
+		{SHA: headHash, Subject: "The one reviewed", Author: "rsouza"},
+		{SHA: "1111111bbbb", Subject: "Fix the time zone rule", Author: "rsouza"},
+		{SHA: otherHash, Subject: "Cover the cache", Author: "tchen"},
+	}
+	f.pulls.seed(moved)
+
+	f.polled(t, id, func(s reviewflow.State) bool {
+		return s.Status == reviewflow.StatusNewCommits
+	}, "the new commits of the pull request to be noticed")
+
+	want := []session.MarkerEntry{{
+		Type: session.MarkerNewCommits, Count: 2,
+		Commits: []session.MarkerCommit{
+			{SHA: "1111111", Subject: "Fix the time zone rule", Author: "rsouza"},
+			{SHA: "bbb2222", Subject: "Cover the cache", Author: "tchen"},
+		},
+	}}
+	if diff := cmp.Diff(want, f.sessions.markersOf(session.MarkerNewCommits)); diff != "" {
+		t.Errorf("new_commits markers (-want +got):\n%s", diff)
+	}
+}
+
+func TestANewHeadWhoseParentIsNotAmongTheRecentCommitsMarksTheLastTwentyAndCountsMinusOne(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := toPublish(t, f)
+	if err := f.service.Publish(t.Context(), id, prreview.VerdictComment, true); err != nil {
+		t.Fatalf("publish review: %v", err)
+	}
+	moved := openPR()
+	moved.HeadCommit = otherHash
+	for i := range 30 {
+		moved.Commits = append(moved.Commits, pulls.Commit{
+			SHA: fmt.Sprintf("%07d", i), Subject: fmt.Sprintf("Commit %d", i), Author: "rsouza",
+		})
+	}
+	f.pulls.seed(moved)
+
+	f.polled(t, id, func(s reviewflow.State) bool {
+		return s.Status == reviewflow.StatusNewCommits
+	}, "the new commits of the pull request to be noticed")
+
+	got := f.sessions.markersOf(session.MarkerNewCommits)
+	if len(got) != 1 || got[0].Count != -1 || len(got[0].Commits) != 20 {
+		t.Fatalf("new_commits markers = %+v, want one with 20 commits and count -1", got)
+	}
+	if first := got[0].Commits[0]; first.Subject != "Commit 10" {
+		t.Errorf("first commit = %+v, want the 11th of the thirty", first)
+	}
+}
+
+func TestAHeadThatMovedBeforeAnyPublicationMarksNoCommits(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := deciding(t, f)
+	moved := openPR()
+	moved.HeadCommit = otherHash
+	f.pulls.seed(moved)
+
+	f.polled(t, id, func(reviewflow.State) bool {
+		stored, _ := f.reviews.Get(id)
+		return stored.HeadCommit == otherHash
+	}, "the new head to be read")
+
+	if got := f.sessions.markersOf(session.MarkerNewCommits); len(got) != 0 {
+		t.Errorf("new_commits markers = %+v, want none before the review was published", got)
 	}
 }

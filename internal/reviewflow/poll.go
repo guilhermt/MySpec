@@ -4,12 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prreview"
 	"github.com/guilhermt/myspec/internal/pulls"
 	"github.com/guilhermt/myspec/internal/repository"
+	"github.com/guilhermt/myspec/internal/session"
+	"github.com/guilhermt/myspec/internal/task"
 )
 
 // prCheckTimeout bounds the one reading of GitHub a round of polling makes,
@@ -177,6 +180,9 @@ func (s *Service) settle(ctx context.Context, id string, detail pulls.Detail) {
 	changed = s.setReading(id, detail) || changed
 
 	state := prreview.PRState(detail.State)
+	if stored.PublishedPass > 0 && stored.HeadCommit != "" && stored.HeadCommit != detail.HeadCommit {
+		s.markNewCommits(ctx, stored, detail)
+	}
 	if stored.HeadCommit != detail.HeadCommit || stored.Title != detail.Title || stored.PRState != state {
 		updated, err := s.reviews.Update(ctx, id, func(r *prreview.Review) {
 			r.HeadCommit, r.Title, r.PRState = detail.HeadCommit, detail.Title, state
@@ -203,6 +209,29 @@ func (s *Service) settle(ctx context.Context, id string, detail pulls.Detail) {
 		s.continueWait(ctx, stored, detail)
 	}
 }
+
+// markNewCommits records in the conversation the commits that reached the
+// pull request after its review was published: the ones after the head the
+// review was made on, or the last twenty when that head is not among the
+// recent ones, which count -1.
+func (s *Service) markNewCommits(ctx context.Context, stored prreview.Review, detail pulls.Detail) {
+	news, count := detail.Commits, -1
+	if i := slices.IndexFunc(detail.Commits, func(c pulls.Commit) bool { return c.SHA == stored.HeadCommit }); i >= 0 {
+		news = detail.Commits[i+1:]
+		count = len(news)
+	} else if len(news) > newCommitsKept {
+		news = news[len(news)-newCommitsKept:]
+	}
+	commits := make([]session.MarkerCommit, 0, len(news))
+	for _, c := range news {
+		commits = append(commits, session.MarkerCommit{SHA: task.ShortSHA(c.SHA), Subject: c.Subject, Author: c.Author})
+	}
+	s.sessions.MarkNewCommits(ctx, sessionKey(stored.ID), commits, count)
+}
+
+// newCommitsKept is how many commits the marker of new commits keeps when the
+// head the review was made on is not among the ones read.
+const newCommitsKept = 20
 
 // end closes a review whose pull request is over: the conversation and the
 // worktree go, and the review moves to the history. It waits for nobody, so

@@ -816,7 +816,7 @@ func (s *Service) recordReport(
 		return task.PRRun{}, false
 	}
 	s.setPassAsked(t.ID, "")
-	s.sessions.MarkPRReview(ctx, key, report.Pass, report.Clean)
+	s.sessions.MarkPRReview(ctx, key, report.Pass, report.Clean, -1)
 	s.log.Info("pr review written", "task", t.ID, "pass", report.Pass)
 	return updated, true
 }

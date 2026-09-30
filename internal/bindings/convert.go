@@ -819,6 +819,19 @@ func FromEntry(e session.Entry) Entry {
 			Title:         e.Marker.Title,
 			Files:         e.Marker.Files,
 			Problems:      fromMarkerProblems(e.Marker.Problems),
+			Model:         e.Marker.Model,
+			Effort:        e.Marker.Effort,
+			Mode:          e.Marker.Mode,
+			Approved:      e.Marker.Approved,
+			Discarded:     e.Marker.Discarded,
+			Verdict:       e.Marker.Verdict,
+			Inline:        e.Marker.Inline,
+			Body:          e.Marker.Body,
+			Summary:       e.Marker.Summary,
+			Minimal:       e.Marker.Minimal,
+			URL:           e.Marker.URL,
+			Commits:       fromMarkerCommits(e.Marker.Commits),
+			Count:         e.Marker.Count,
 		}
 		if e.Marker.Findings != nil {
 			converted.Marker.Findings = *e.Marker.Findings
@@ -2160,6 +2173,15 @@ func turnStart(summary session.Summary) string {
 		return ""
 	}
 	return summary.TurnStartedAt.Format(time.RFC3339)
+}
+
+// fromMarkerCommits converts the commits of a new_commits marker; never nil.
+func fromMarkerCommits(commits []session.MarkerCommit) []MarkerCommit {
+	out := make([]MarkerCommit, 0, len(commits))
+	for _, commit := range commits {
+		out = append(out, MarkerCommit{SHA: commit.SHA, Subject: commit.Subject, Author: commit.Author})
+	}
+	return out
 }
 
 // fromMarkerProblems converts the problems of a plan_invalid marker; never nil.

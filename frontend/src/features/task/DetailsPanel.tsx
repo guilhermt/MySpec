@@ -28,7 +28,7 @@ import { ReviewModePopover } from "@/features/task/ReviewModePopover";
 import { screenSession } from "@/features/task/task-session";
 import { choiceLabel, choiceOf, type ModelChoice } from "@/lib/models";
 import { displayPath } from "@/lib/paths";
-import { checkDuration, checkRows, checksSummary } from "@/lib/pull-requests";
+import { checkDuration, checkRows, checksSummary, prChecks } from "@/lib/pull-requests";
 import { reviewModeLabel } from "@/lib/review-modes";
 import { cn } from "@/lib/utils";
 import {
@@ -479,7 +479,10 @@ interface PullRequestFactsProps {
  */
 function PullRequestFacts({ pr, facts }: PullRequestFactsProps) {
   const now = useNow(SECOND, true);
-  const rows = checkRows(pr).map((row) => ({ ...row, duration: checkDuration(row, now) }));
+  const rows = checkRows(prChecks(pr)).map((row) => ({
+    ...row,
+    duration: checkDuration(row, now),
+  }));
   const ended = facts.state === "merged" || facts.state === "closed" ? ` · ${facts.state}` : "";
 
   return (
@@ -490,7 +493,7 @@ function PullRequestFacts({ pr, facts }: PullRequestFactsProps) {
       </Fact>
       <Fact label="Checks">
         <ChecksList
-          summary={checksSummary(pr)}
+          summary={checksSummary(prChecks(pr))}
           rows={rows}
           onOpen={(url) => void openExternal(url)}
         />

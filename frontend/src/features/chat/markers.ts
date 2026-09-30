@@ -1,4 +1,8 @@
-import { baseName, prBaseName } from "@/lib/pull-requests";
+import type { FindingView } from "@/components/system/Finding";
+import { publishedGoes, verdictName } from "@/features/reviews/publish";
+import { findingViews } from "@/features/reviews/review-conversation";
+import { modelLabel } from "@/lib/models";
+import { baseName, type ChecksReading, checksSummary, prBaseName } from "@/lib/pull-requests";
 import { lowerFirst } from "@/lib/situations";
 import { asLifecycleStage, stageLabel } from "@/lib/stages";
 import type {
@@ -7,6 +11,8 @@ import type {
   MarkerType,
   PlanProblem,
   PullRequest,
+  ReviewPass,
+  ReviewSummary,
   TaskSummary,
   UserEntry,
 } from "@/lib/wails";
@@ -38,14 +44,18 @@ export type MarkerIcon =
 
 /**
  * MarkerBody is what a line opens in place: nothing; Markdown (a prompt, an initial context, a
- * message of the product); a document of the task, read with useArtifact on opening, with the
- * panel of its foot; or the problems of a plan.
+ * message of the product); a document of the task or of the review, read on opening, with the panel
+ * of its foot; the problems of a plan; the checks a pass started from; the findings a pass decided;
+ * or the commits that reached a pull request.
  */
 export type MarkerBody =
   | { kind: "none" }
   | { kind: "markdown"; text: string }
   | { kind: "artifact"; name: string; openIn: "artifacts" | "details" | "reports" }
-  | { kind: "problems"; problems: PlanProblem[] };
+  | { kind: "problems"; problems: PlanProblem[] }
+  | { kind: "checks"; reading: ChecksReading; summary: string }
+  | { kind: "findings"; findings: FindingView[] }
+  | { kind: "commits"; commits: { sha: string; subject: string }[]; more: number };
 
 /** MarkerView is a line of the conversation: a marker, a start line, a message of the product. */
 export interface MarkerView {
@@ -55,6 +65,8 @@ export interface MarkerView {
   /** complement is what follows the text, in the quiet tone; "" when none. */
   complement: string;
   body: MarkerBody;
+  /** link is the external action of the line, drawn on the right before the time. */
+  link?: { label: string; url: string };
   /** timeHidden says the line never shows its time, not even on hover: a retry. */
   timeHidden: boolean;
 }
@@ -65,6 +77,10 @@ export interface MarkerContext {
   stage: string;
   /** task is the task of the conversation, null in a review and a discussion. */
   task: TaskSummary | null;
+  /** review is the review of the conversation, null in a task and a discussion. */
+  review: ReviewSummary | null;
+  /** latestReport is the id of the latest report marker of each pass of a review; empty elsewhere. */
+  latestReport: ReadonlyMap<number, string>;
   oneShot: boolean;
 }
 
@@ -138,7 +154,8 @@ function firstPassComplement(oneShot: boolean): string {
 
 // StartOf is what opened a conversation: its marker, or for a prompt without
 // one, what the stage of the conversation says it was.
-type StartOf = Pick<MarkerEntry, "type" | "stage" | "step" | "restarted">;
+type StartOf = Pick<MarkerEntry, "type" | "stage" | "step" | "restarted"> &
+  Partial<Pick<MarkerEntry, "model" | "effort" | "mode">>;
 
 function startOfStage(stage: string): StartOf {
   const step = stepNumberOf(stage) ?? 0;
@@ -226,8 +243,17 @@ function startView(start: StartOf, prompt: UserEntry | null, ctx: MarkerContext)
         firstPassComplement(ctx.oneShot),
         markdownOf(prompt?.text ?? ""),
       );
+    // What the user wrote for the first pass reads as their own message after this line.
     case "review_started":
-      return line("start", "Review started", "pass 1", markdownOf(prompt?.text ?? ""));
+      return line(
+        "start",
+        "Review started",
+        parts(
+          modelLabel(start.model ?? ""),
+          start.effort ?? "",
+          start.mode === "publish" ? "Publish" : start.mode === "apply" ? "Apply" : "",
+        ),
+      );
     case "discussion_started":
       return line("start", "Discussion started", "", markdownOf(prompt?.text ?? ""));
     default:
@@ -324,10 +350,24 @@ function stepReviewLine(marker: MarkerEntry, ctx: MarkerContext): MarkerView {
   return line("file", `Review ${marker.pass} written`, verdict, body);
 }
 
-// prReviewLine is the report of a pass of the review of a pull request. A
-// marker recorded before it kept clean says nothing but its pass, unless the
-// report of the pass tells.
-function prReviewLine(marker: MarkerEntry, ctx: MarkerContext): MarkerView {
+// prReviewLine is the report of a pass of the review of a pull request, written or rewritten. A
+// marker recorded before it kept clean says nothing but its pass, unless the report of the pass tells.
+function prReviewLine(marker: MarkerEntry, ctx: MarkerContext, entryId: string): MarkerView {
+  const revised = marker.type === "pr_review_revised";
+  const text = `Review ${marker.pass} ${revised ? "revised" : "written"}`;
+  if (ctx.review !== null) {
+    const verdict = marker.clean
+      ? "clean"
+      : marker.findings >= 0
+        ? `changes · ${counted(marker.findings, "finding")}`
+        : "changes";
+    // Only the latest marker of a pass opens its report: the file is the one that stands.
+    const body: MarkerBody =
+      ctx.latestReport.get(marker.pass) === entryId
+        ? { kind: "artifact", name: `review-${marker.pass}.md`, openIn: "reports" }
+        : NONE;
+    return line("file", text, verdict, body);
+  }
   const report = (ctx.task?.pr?.reports ?? []).find((one) => one.pass === marker.pass);
   const verdict =
     marker.clean || report?.clean === true ? "clean" : report === undefined ? "" : "changes";
@@ -335,14 +375,17 @@ function prReviewLine(marker: MarkerEntry, ctx: MarkerContext): MarkerView {
     report === undefined
       ? NONE
       : { kind: "artifact", name: `pr/${report.file}`, openIn: "details" };
-  return line("file", `Review ${marker.pass} written`, verdict, body);
+  return line("file", text, verdict, body);
 }
 
-// checksLine is what the checks said before a pass of the review of a pull request.
+// checksLine is what the checks said before a pass of the review of a pull request. In a review it
+// opens the checks the pass started from.
 function checksLine(marker: MarkerEntry, ctx: MarkerContext): MarkerView {
   const failed = marker.failed ?? [];
   const pr = ctx.task?.pr ?? null;
-  const conflict = pr === null ? "conflict" : `conflict with ${prBaseName(pr)}`;
+  const base =
+    ctx.review !== null ? baseName(ctx.review.baseBranch) : pr === null ? "" : prBaseName(pr);
+  const conflict = base === "" ? "conflict" : `conflict with ${base}`;
   return line(
     "checks",
     `Checks read before pass ${marker.pass}`,
@@ -351,7 +394,100 @@ function checksLine(marker: MarkerEntry, ctx: MarkerContext): MarkerView {
       failed.length > 0 ? `${failed.join(", ")} failed` : "",
       marker.conflict ? conflict : "",
     ),
+    checksBody(marker.pass, ctx.review, base),
   );
+}
+
+// checksBody is the checks a pass of a review started from, nothing for a pass that kept none.
+function checksBody(pass: number, review: ReviewSummary | null, base: string): MarkerBody {
+  const stored = (review?.passes ?? []).find((one) => one.pass === pass);
+  if (stored === undefined || stored.checksReadAt === "") {
+    return NONE;
+  }
+  const reading: ChecksReading = {
+    checks: stored.checks,
+    mergeable: stored.mergeable,
+    checkedAt: stored.checksReadAt,
+    base,
+  };
+  return { kind: "checks", reading, summary: checksSummary(reading) };
+}
+
+/** decidedLineOf is the line You decided of a pass: what the user approved and discarded, and the findings with where each went. */
+export function decidedLineOf(
+  review: ReviewSummary | null,
+  pass: ReviewPass | undefined,
+  counts: { approved: number; discarded: number },
+  now: number,
+): MarkerView {
+  const said = parts(
+    counts.approved > 0 ? `${counts.approved} approved` : "",
+    counts.discarded > 0 ? `${counts.discarded} discarded` : "",
+  );
+  const findings =
+    review === null || pass === undefined ? [] : findingViews(review, pass, now, true);
+  return line(
+    "check",
+    "You decided",
+    said === "" ? "nothing decided" : said,
+    findings.length === 0 ? NONE : { kind: "findings", findings },
+  );
+}
+
+/** derivedDecidedLineOf is the line You decided of a pass from before the marker existed, counted from its findings. */
+export function derivedDecidedLineOf(
+  review: ReviewSummary,
+  pass: ReviewPass,
+  now: number,
+): MarkerView {
+  const findings = pass.findings ?? [];
+  return decidedLineOf(
+    review,
+    pass,
+    {
+      approved: findings.filter((one) => one.decision === "approved").length,
+      discarded: findings.filter((one) => one.decision === "discarded").length,
+    },
+    now,
+  );
+}
+
+// authorsOf are the authors of some commits, each once, in order: "rsouza and tchen", "a, b and c".
+function authorsOf(commits: readonly { author: string }[]): string {
+  const names = [...new Set(commits.map((commit) => commit.author).filter((name) => name !== ""))];
+  const last = names.pop();
+  if (last === undefined) {
+    return "";
+  }
+  return names.length === 0 ? last : `${names.join(", ")} and ${last}`;
+}
+
+// NEW_COMMITS_SHOWN is how many commits the line of new commits lists.
+const NEW_COMMITS_SHOWN = 20;
+
+// newCommitsLine is the commits that reached a pull request after its review was published.
+function newCommitsLine(marker: MarkerEntry): MarkerView {
+  const commits = marker.commits ?? [];
+  const shown = commits.slice(-NEW_COMMITS_SHOWN).map(({ sha, subject }) => ({ sha, subject }));
+  const by = authorsOf(commits);
+  return line(
+    "commit",
+    marker.count > 0 ? counted(marker.count, "new commit") : "New commits",
+    by === "" ? "" : `by ${by}`,
+    shown.length === 0
+      ? NONE
+      : { kind: "commits", commits: shown, more: Math.max(0, marker.count - NEW_COMMITS_SHOWN) },
+  );
+}
+
+// reviewPublishedLine is a pass published on GitHub, with the way to the review there.
+function reviewPublishedLine(marker: MarkerEntry): MarkerView {
+  const view = line(
+    "pullRequest",
+    `Published pass ${marker.pass}`,
+    parts(verdictName(marker.verdict), publishedGoes(marker)),
+  );
+  return marker.url === "" ? view : { ...view, link: { label: "GitHub", url: marker.url } };
 }
 
 // RETRY_REASONS are why the API call was retried, in the past (§4.2 A atividade).
@@ -382,7 +518,12 @@ function planInvalidLine(marker: MarkerEntry): MarkerView {
 }
 
 /** markerOf is how a marker reads (table Marcos); null for a type the app does not know, which is not drawn. */
-export function markerOf(marker: MarkerEntry, ctx: MarkerContext): MarkerView | null {
+export function markerOf(
+  marker: MarkerEntry,
+  ctx: MarkerContext,
+  entryId = "",
+  now = Date.now(),
+): MarkerView | null {
   const type = asMarkerType(marker.type);
   if (type !== marker.type) {
     return null;
@@ -406,7 +547,19 @@ export function markerOf(marker: MarkerEntry, ctx: MarkerContext): MarkerView | 
     case "step_review_written":
       return stepReviewLine(marker, ctx);
     case "pr_review_written":
-      return prReviewLine(marker, ctx);
+    case "pr_review_revised":
+      return prReviewLine(marker, ctx, entryId);
+    case "findings_decided":
+      return decidedLineOf(
+        ctx.review,
+        (ctx.review?.passes ?? []).find((one) => one.pass === marker.pass),
+        marker,
+        now,
+      );
+    case "review_published":
+      return reviewPublishedLine(marker);
+    case "new_commits":
+      return newCommitsLine(marker);
     case "committed":
       return line(
         "commit",

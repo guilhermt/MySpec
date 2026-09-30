@@ -1,6 +1,6 @@
 import { ChecksList } from "@/components/system/ChecksList";
 import { useNow } from "@/features/attention/useNow";
-import { checkDuration, checkRows, liveChecksHeader } from "@/lib/pull-requests";
+import { checkDuration, checkRows, liveChecksHeader, prChecks } from "@/lib/pull-requests";
 import type { PullRequest } from "@/lib/wails";
 import { age, fullTime } from "@/lib/when";
 import { openExternal } from "@/store/actions";
@@ -20,7 +20,10 @@ export interface LiveChecksProps {
  */
 export function LiveChecks({ pr, fixed = false }: LiveChecksProps) {
   const now = useNow(SECOND, true);
-  const rows = checkRows(pr).map((row) => ({ ...row, duration: checkDuration(row, now) }));
+  const rows = checkRows(prChecks(pr)).map((row) => ({
+    ...row,
+    duration: checkDuration(row, now),
+  }));
   const reading = pr.checkedAt === "";
   const header = liveChecksHeader(pr.checks);
   const list = (

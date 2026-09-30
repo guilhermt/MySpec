@@ -6,6 +6,7 @@ import { renderWithStore } from "@/test/render";
 import {
   makeEntry,
   makeReview,
+  makeReviewFinding,
   makeReviewPass,
   makeReviewSummary,
   makeState,
@@ -97,5 +98,40 @@ describe("ReviewView", () => {
     const feed = await screen.findByRole("feed", { name: "Conversation with the reviewer" });
     expect(within(feed).getByRole("article", { name: /^Reviewer, / })).toHaveTextContent("On it.");
     expect(within(feed).getByRole("article", { name: /^Session error, / })).toBeInTheDocument();
+  });
+
+  it("draws the decisions of a pass published before the conversation recorded them, after its report", async () => {
+    const written = makeEntry("marker");
+    const report =
+      written.marker === null
+        ? written
+        : {
+            ...written,
+            marker: { ...written.marker, type: "pr_review_written", pass: 1, findings: 1 },
+          };
+    vi.mocked(api.getTranscript).mockResolvedValueOnce(
+      makeTranscript({
+        taskId: "review-1",
+        stage: "review",
+        entries: [report, makeEntry("assistant")],
+      }),
+    );
+    view({
+      status: "published",
+      passes: [
+        makeReviewPass({
+          published: true,
+          publishedAt: "2026-09-30T13:41:00Z",
+          findings: [makeReviewFinding({ decision: "approved", placement: "inline" })],
+        }),
+      ],
+    });
+
+    const feed = await screen.findByRole("feed", { name: "Conversation with the reviewer" });
+    const decided = await within(feed).findByRole("article", { name: /^You decided · 1 approved/ });
+    const text = feed.textContent ?? "";
+    expect(text.indexOf("Review 1 written")).toBeLessThan(text.indexOf("You decided"));
+    expect(text.indexOf("You decided")).toBeLessThan(text.indexOf("On it."));
+    expect(decided).toBeInTheDocument();
   });
 });

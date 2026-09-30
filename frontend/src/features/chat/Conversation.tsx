@@ -31,8 +31,9 @@ import {
 import type { SessionState } from "@/features/chat/session";
 import { useAutoScroll } from "@/features/chat/useAutoScroll";
 import { useFeed } from "@/features/chat/useFeed";
+import { reportMarkerIds } from "@/features/reviews/review-conversation";
 import { asSituationKind, asTaskMode, type Entry } from "@/lib/wails";
-import { useAppStore, useFlashing, useTask, useTranscript } from "@/store/app-store";
+import { useAppStore, useFlashing, useReview, useTask, useTranscript } from "@/store/app-store";
 
 const NO_ENTRIES: readonly Entry[] = [];
 
@@ -118,6 +119,7 @@ function RowView({
           view={startLineOf(row.marker, row.prompt, ctx)}
           createdAt={(row.marker ?? row.prompt)?.createdAt ?? ""}
           task={ctx.task}
+          review={ctx.review}
         />
       );
     case "product":
@@ -126,15 +128,17 @@ function RowView({
           view={productMessageOf(row.entry.user, voice, ctx)}
           createdAt={row.entry.createdAt}
           task={ctx.task}
+          review={ctx.review}
         />
       );
     case "marker": {
-      const view = row.entry.marker === null ? null : markerOf(row.entry.marker, ctx);
+      const view = row.entry.marker === null ? null : markerOf(row.entry.marker, ctx, row.entry.id);
       return view === null ? null : (
         <MarkerLine
           view={view}
           createdAt={row.entry.createdAt}
           task={ctx.task}
+          review={ctx.review}
           requested={requested}
           onRequested={onRequested}
         />
@@ -197,6 +201,12 @@ export interface ConversationProps {
    * queued, no activity, and it opens at its start without following the end.
    */
   readOnly?: boolean;
+  /**
+   * after is what is drawn right after an entry, by its id: a line derived from the data, like the
+   * decisions of a pass the conversation never recorded. An id not in the conversation draws its node
+   * at the end, after endLine.
+   */
+  after?: ReadonlyMap<string, ReactNode>;
   /** endLine is the derived line after the entries (Merged …, Closed …). */
   endLine?: ReactNode;
   /** fixed is the fixed card after the entries: changed files, the PR draft, the live checks. */
@@ -213,6 +223,7 @@ export function Conversation({
   stage,
   session,
   readOnly = false,
+  after,
   endLine,
   fixed,
   activity,
@@ -220,6 +231,7 @@ export function Conversation({
 }: ConversationProps) {
   const transcript = useTranscript(taskId, stage);
   const task = useTask(taskId);
+  const review = useReview(taskId);
   const markerRequest = useAppStore((state) => state.markerRequest);
   const clearMarkerRequest = useAppStore((state) => state.clearMarkerRequest);
   const flash = useCardFlash(taskId);
@@ -251,9 +263,16 @@ export function Conversation({
     (transcript.status === "loading" && entries.length === 0 && pending.length === 0);
   const railKey = replyWaiting ? lastCompleteSpeech(rows) : "";
   const waiting = useMemo(() => waitingToolUseId(entries), [entries]);
+  const latestReport = useMemo(() => reportMarkerIds(entries), [entries]);
   const ctx = useMemo<MarkerContext>(
-    () => ({ stage, task, oneShot: task !== null && asTaskMode(task.mode) === "one_shot" }),
-    [stage, task],
+    () => ({
+      stage,
+      task,
+      review,
+      latestReport,
+      oneShot: task !== null && asTaskMode(task.mode) === "one_shot",
+    }),
+    [stage, task, review, latestReport],
   );
   // The stretches that fold are settled once, when the entries first arrive: a stretch that stops
   // being the last on screen stays open, so nothing folds under the reader.
@@ -313,22 +332,28 @@ export function Conversation({
             <>
               {model.stretches.map((stretch) => {
                 const views = stretch.rows.map((row) => (
-                  <RowView
-                    key={row.key}
-                    taskId={taskId}
-                    stage={stage}
-                    row={row}
-                    voice={voice}
-                    ctx={ctx}
-                    readOnly={readOnly}
-                    railLast={row.key === railKey}
-                    waitingToolUseId={waiting}
-                    requested={row.key === asked?.row}
-                    onRequested={clearMarkerRequest}
-                    flash={readOnly ? null : flash}
-                  />
+                  <Fragment key={row.key}>
+                    <RowView
+                      taskId={taskId}
+                      stage={stage}
+                      row={row}
+                      voice={voice}
+                      ctx={ctx}
+                      readOnly={readOnly}
+                      railLast={row.key === railKey}
+                      waitingToolUseId={waiting}
+                      requested={row.key === asked?.row}
+                      onRequested={clearMarkerRequest}
+                      flash={readOnly ? null : flash}
+                    />
+                    {after?.get(row.key)}
+                  </Fragment>
                 ));
-                return foldable?.has(stretch.key) ? (
+                // A stretch that holds a derived line stays open: it is drawn inside the stretch.
+                const folds =
+                  foldable?.has(stretch.key) === true &&
+                  !stretch.rows.some((row) => after?.has(row.key));
+                return folds ? (
                   <StretchFold
                     key={stretch.key}
                     fold={stretchFoldOf(stretch, ctx, Date.now())}
@@ -342,6 +367,11 @@ export function Conversation({
                 );
               })}
               {endLine}
+              {[...(after ?? [])]
+                .filter(([key]) => !rowKeys.includes(key))
+                .map(([key, node]) => (
+                  <Fragment key={key}>{node}</Fragment>
+                ))}
               {fixed}
               {/* An earlier conversation is read without what was queued: it sends nothing more. */}
               {!readOnly &&

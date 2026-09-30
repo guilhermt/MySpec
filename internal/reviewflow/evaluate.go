@@ -68,7 +68,7 @@ func (s *Service) recordAsked(
 		s.log.Error("record review report failed", "review", stored.ID, "pass", pass, "error", err)
 		return
 	}
-	s.sessions.MarkPRReview(ctx, key, pass, report.Clean)
+	s.sessions.MarkPRReview(ctx, key, pass, report.Clean, len(report.Findings))
 	s.setUnreadable(stored.ID, "")
 	s.log.Info("review report recorded", "review", stored.ID, "pass", pass)
 	s.notify(stored.ID)
@@ -115,6 +115,7 @@ func (s *Service) rereadPass(ctx context.Context, stored prreview.Review) {
 		s.notify(stored.ID)
 		return
 	case prreview.ChangeRevised:
+		s.sessions.MarkPRReviewRevised(ctx, sessionKey(stored.ID), pass, report.Clean, len(report.Findings))
 	}
 	s.log.Info("review report rewritten", "review", stored.ID, "pass", pass)
 	s.notify(stored.ID)

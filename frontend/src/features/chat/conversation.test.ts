@@ -40,6 +40,19 @@ const MARKER: MarkerEntry = {
   title: "",
   files: 0,
   problems: [],
+  model: "",
+  effort: "",
+  mode: "",
+  approved: 0,
+  discarded: 0,
+  verdict: "",
+  inline: 0,
+  body: 0,
+  summary: false,
+  minimal: false,
+  url: "",
+  commits: [],
+  count: 0,
 };
 const USER: UserEntry = {
   text: "",
@@ -128,6 +141,44 @@ describe("buildConversation", () => {
 
     expect(rowsOf(buildConversation([first], "PRD agent"))).toEqual([
       { kind: "start", key: first.id, marker: null, prompt: first },
+    ]);
+  });
+
+  it("draws the start of a review alone, and what you wrote for the first pass as your message", () => {
+    const start = marker({
+      type: "review_started",
+      model: "claude-opus-5-5",
+      effort: "high",
+      mode: "publish",
+    });
+    const first = user({
+      prompt: true,
+      text: "Look at the migrations.",
+      sent: "Review the pull request.",
+    });
+    const model = buildConversation([start, first, said("Reading the diff.")], "Reviewer");
+
+    expect(rowsOf(model)).toEqual([
+      { kind: "start", key: start.id, marker: start, prompt: null },
+      { kind: "user", key: first.id, entry: first },
+      expect.objectContaining({ kind: "speech" }),
+    ]);
+  });
+
+  it("draws nothing for the prompt of a review when you wrote nothing for the first pass", () => {
+    const start = marker({ type: "review_started" });
+    const first = user({ prompt: true, text: "  ", sent: "Review the pull request." });
+    const model = buildConversation([start, first, said("Reading the diff.")], "Reviewer");
+
+    expect(kinds(model)).toEqual(["start", "speech"]);
+    expect(rowsOf(model)[0]).toEqual({ kind: "start", key: start.id, marker: start, prompt: null });
+  });
+
+  it("draws the start of a review alone when its prompt has not arrived", () => {
+    const start = marker({ type: "review_started" });
+
+    expect(rowsOf(buildConversation([start], "Reviewer"))).toEqual([
+      { kind: "start", key: start.id, marker: start, prompt: null },
     ]);
   });
 
@@ -540,6 +591,8 @@ describe("stretchFoldOf", () => {
   const ctx: MarkerContext = {
     stage: "step:6",
     task: makeTask({ steps: [makeStep({ number: 6, file: "06-throttle-metrics.md" })] }),
+    review: null,
+    latestReport: new Map(),
     oneShot: false,
   };
   const stretch = (fields: Partial<Stretch>): Stretch => ({

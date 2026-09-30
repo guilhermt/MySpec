@@ -10,6 +10,7 @@ import {
   isReviewed,
   liveChecksHeader,
   prBaseName,
+  prChecks,
   prOf,
   troubleLabel,
   troubleText,
@@ -95,7 +96,7 @@ describe("checkCounts", () => {
       { passed: 3, total: 6 },
     ],
   ])("counts %s", (_name, checks, want) => {
-    expect(checkCounts(makePullRequest({ checks }))).toEqual(want);
+    expect(checkCounts(prChecks(makePullRequest({ checks })))).toEqual(want);
   });
 });
 
@@ -178,7 +179,7 @@ describe("checksSummary", () => {
       "1 of 1 passed",
     ],
   ])("sums up %s", (_, pr, text) => {
-    expect(checksSummary(makePullRequest(pr))).toBe(text);
+    expect(checksSummary(prChecks(makePullRequest(pr)))).toBe(text);
   });
 });
 
@@ -193,7 +194,7 @@ describe("checkRows", () => {
   ])("draws a %s check with %s", (state, glyph, tooltip) => {
     const check = makePRCheck({ name: "lint", state, conclusion: "timed_out" });
 
-    expect(checkRows(makePullRequest({ checks: [check] }))).toEqual([
+    expect(checkRows(prChecks(makePullRequest({ checks: [check] })))).toEqual([
       {
         name: "lint",
         state,

@@ -10,6 +10,7 @@ import (
 	"github.com/guilhermt/myspec/internal/prreview"
 	"github.com/guilhermt/myspec/internal/pulls"
 	"github.com/guilhermt/myspec/internal/repository"
+	"github.com/guilhermt/myspec/internal/session"
 )
 
 // rightSide is the side of the diff an inline comment of a review sits on:
@@ -54,6 +55,19 @@ func (s *Service) Publish(ctx context.Context, id string, verdict prreview.Verdi
 		summaryGoes, url, input.CommitID, placements); err != nil {
 		return err
 	}
+	approved, discarded := countDecisions(pass)
+	key := sessionKey(id)
+	s.sessions.MarkFindingsDecided(ctx, key, pass.Number, approved, discarded)
+	inBody := 0
+	for _, placement := range placements {
+		if placement == prreview.PlacementBody {
+			inBody++
+		}
+	}
+	s.sessions.MarkReviewPublished(ctx, key, session.PublishedReview{
+		Pass: pass.Number, Verdict: string(verdict), Inline: len(input.Comments), Body: inBody,
+		Summary: summaryGoes, Minimal: inBody == 0 && !summaryGoes && input.Body != "", URL: url,
+	})
 	s.pulls.Refresh()
 	s.log.Info("review published", "review", id, "repository", repo.FullName(),
 		"number", stored.Number, "pass", pass.Number, "verdict", string(verdict))

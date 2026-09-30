@@ -8,6 +8,7 @@ import (
 
 	"github.com/guilhermt/myspec/internal/prreview"
 	"github.com/guilhermt/myspec/internal/reviewflow"
+	"github.com/guilhermt/myspec/internal/session"
 )
 
 // twoFindings is the report of a pass as the agent writes it: a summary and
@@ -379,5 +380,53 @@ func TestARereadThatOnlyBringsTitlesKeepsTheRevisionAndTheDecisions(t *testing.T
 	}
 	if !slices.Contains(f.changed(), id) {
 		t.Error("the app was not told the titles arrived")
+	}
+}
+
+func TestTheReportOfAPassIsMarkedWithItsFindingCount(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := asked(t, f)
+	f.writeReport(t, id, 1, reportFile("changes", twoFindings))
+	f.evaluated(t, id, func(s reviewflow.State) bool {
+		return s.Status == reviewflow.StatusAwaitingDecision &&
+			len(f.sessions.markersOf(session.MarkerPRReviewWritten)) == 1
+	}, "the report of the first pass to be recorded")
+
+	findings := 2
+	want := []session.MarkerEntry{{Type: session.MarkerPRReviewWritten, Pass: 1, Findings: &findings}}
+	if diff := cmp.Diff(want, f.sessions.markersOf(session.MarkerPRReviewWritten)); diff != "" {
+		t.Errorf("pr_review_written markers (-want +got):\n%s", diff)
+	}
+}
+
+func TestARewrittenReportIsMarkedRevisedAndARereadOfTheTitlesIsNot(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := asked(t, f)
+	f.writeReport(t, id, 1, reportFile("changes", twoFindings))
+	f.evaluated(t, id, func(s reviewflow.State) bool {
+		return s.Status == reviewflow.StatusAwaitingDecision
+	}, "the report of the first pass to be recorded")
+
+	f.writeReport(t, id, 1, reportFile("changes", titledFindings))
+	f.evaluated(t, id, func(s reviewflow.State) bool {
+		return len(s.Passes) == 1 && s.Passes[0].Findings[0].Title != ""
+	}, "the titles to be recorded")
+	if got := f.sessions.markersOf(session.MarkerPRReviewRevised); len(got) != 0 {
+		t.Fatalf("pr_review_revised markers = %+v, want none for titles alone", got)
+	}
+
+	f.writeReport(t, id, 1, reportFile("changes", oneFinding))
+	f.evaluated(t, id, func(s reviewflow.State) bool {
+		return len(s.Passes) == 1 && s.Passes[0].Revision == 2
+	}, "the rewritten report to be recorded")
+
+	findings := 1
+	want := []session.MarkerEntry{{Type: session.MarkerPRReviewRevised, Pass: 1, Findings: &findings}}
+	if diff := cmp.Diff(want, f.sessions.markersOf(session.MarkerPRReviewRevised)); diff != "" {
+		t.Errorf("pr_review_revised markers (-want +got):\n%s", diff)
 	}
 }

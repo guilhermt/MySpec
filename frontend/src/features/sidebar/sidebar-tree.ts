@@ -6,7 +6,7 @@ import {
   workingSession,
 } from "@/features/sidebar/sessions";
 import { boardOfRepository } from "@/lib/boards";
-import { checkCounts } from "@/lib/pull-requests";
+import { checkCounts, prChecks } from "@/lib/pull-requests";
 import { ALL_REPOSITORIES, findRepository, shortName, tasksInFilter } from "@/lib/repositories";
 import { compactWait, compareSituations, spokenWait } from "@/lib/situations";
 import type {
@@ -535,7 +535,7 @@ function taskStanding(task: TaskSummary): Standing {
         return appWork(same("Closing"));
       case "waiting_checks": {
         // Until a reading of gh lists a check, the row says GitHub is being read.
-        const { passed, total } = checkCounts(task.pr);
+        const { passed, total } = checkCounts(prChecks(task.pr));
         return task.pr.checkedAt === "" || total === 0
           ? {
               tone: "github",
