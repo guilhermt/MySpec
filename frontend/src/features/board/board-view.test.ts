@@ -769,13 +769,19 @@ describe("cardRowModel", () => {
     expect(row.label).not.toContain("#463");
   });
 
-  it("names a dependency of another repository in the column", () => {
+  it("writes only the number of a dependency of another repository, which the tooltip names", () => {
     const row = cardRowModel(
       card({ dependencies: [dependency(7, { repository: "acme/gateway" })] }),
       context(),
     );
 
-    expect(row.dependency?.text).toBe("acme/gateway#7");
+    expect(row.dependency).toEqual({
+      text: "#7",
+      tooltip: [
+        "Depends on acme/gateway#7 Metering events from the gateway · open, Backlog. A warning: it never blocks.",
+      ],
+    });
+    expect(row.label).toContain(". depends on acme/gateway#7, not satisfied");
   });
 
   describe("the task column", () => {

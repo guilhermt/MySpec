@@ -517,8 +517,9 @@ function dependencyCell(card: BoardCard) {
     return null;
   }
   const more = missing.length > 1 ? ` +${missing.length - 1}` : "";
+  // The column has the number only, even of another repository, which the tooltip and the panel name.
   return {
-    text: `${referenceOf(first, card.repository)}${more}`,
+    text: `#${first.number}${more}`,
     tooltip: missing.map((dependency) => dependencyLine(dependency, card.repository)),
   };
 }

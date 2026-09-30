@@ -80,12 +80,12 @@ async function draw(name: BoardSceneName, width: number) {
 const rowOf = (number: number) =>
   screen.getByRole("treeitem", { name: new RegExp(`^#${number} `) });
 
-// innermost is the deepest element of a row that holds a text, which fails the test when there is none.
+// innermost is the deepest element of a row whose text is exactly a text, which fails the test when there is none.
 function innermost(row: HTMLElement, text: string): HTMLElement {
   const found = [...row.querySelectorAll<HTMLElement>("*")].find(
     (element) =>
-      element.textContent?.includes(text) &&
-      ![...element.children].some((child) => child.textContent?.includes(text)),
+      element.textContent === text &&
+      ![...element.children].some((child) => child.textContent === text),
   );
   if (found === undefined) {
     throw new Error(`${row.getAttribute("aria-label")} has no ${text}`);
