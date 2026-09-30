@@ -332,3 +332,63 @@ Em ordem de gravidade.
   - Os defeitos à vista: **Models** com `› ›` (bloqueio 5), `Manual` antes de `Agent` (item 20 de "Pode esperar") e, no livre, o **Create** tracejado sem o `Ctrl ↵` visível (item 12).
 - **Tempo.** O teclado e a digitação têm atraso no Broadway, que é do transporte, não do app. Não é medida; a medição de `implementation.md` também é do Broadway, com o React de desenvolvimento.
 - **O que o app não mostrou:** meio pixel e a borda 1040/1041. Sem devtools no Broadway, isso fica com as provas pintadas, que fazem essa parte.
+
+## Segunda leitura (03f0c3a)
+
+Só as correções, `266ca3c..03f0c3a` (19 commits), na worktree de revisão. O app não rodou. As mutações rodaram na própria worktree, uma por vez, cada uma desfeita com `git checkout` (o `git status` ficou limpo no fim).
+
+### Veredito
+
+**Mergear.** Os oito bloqueios estão fechados como o "Mudar" pedia, e as mutações que sobreviviam agora morrem. As duas decisões do coordenador e a correção da segunda linha batem com a régua. Nada do que as correções trouxeram bloqueia.
+
+- `task check`: `exit 0`, com 2.685 testes Go e 5.111 testes web em 296 arquivos.
+- CI: o run `36725241717` roda em `03f0c3a`, com **Go** e **Frontend** verdes e **Build** pulado.
+- A PR está `MERGEABLE` e `CLEAN`.
+
+### Os bloqueios
+
+| # | Situação | Evidência |
+|---|---|---|
+| 1 | Fechado | **A branch:** `captures/52-redesign-5-home-board-and-task-creation` existe no `origin`, com o commit às 10:55, depois de `03f0c3a` (10:54). **O corpo da PR:** tem as tabelas no formato da #71: cena, mock e uma coluna por largura e tema. São 60 imagens: as treze cenas e `home-none` a 2180 e a 978, e `card` também a 950 e a 812. **Os arquivos:** cada uma das 60 URLs existe na árvore da branch (`gh api …/git/trees`), e nenhuma falta. **As capturas vistas:** `board-board-2180-light`, `board-board-978-dark`, `create-2180-light`, `create-card-2180-light` e `board-card-812-light`. Nelas estão #474 com o foco e `S start D discuss`, a dependência `◇ #461`, **Models** com um chevron, **Create** tracejado com `Ctrl ↵` à vista, `Agent` / `Manual` com `Agent` escolhido e, a 812, a segunda linha inteira |
+| 2 | Fechado | `internal/bindings/task_service_test.go:212` chama `CreateTask` com a sessão recusada (`faultySessions`, `helpers_test.go`) nos dois casos pedidos. **Mutações em `task_service.go:179`:** `return "", failed` → falha; `undoneFailure(failed, nil)` → falha; sem `Delete` → falha |
+| 3 | Fechado | **A prova:** `spillsOut` (`test/painted.ts:277`) compara as caixas dos filhos com a da célula. Ela é usada em `BoardView.scenes.painted.test.tsx:124` e em `ListRow.painted.test.tsx:71`. **Mutação:** `--col-keys` em 112 → 30 falham, com `keys: expected true to be false` |
+| 4 | Fechado | **A prova:** `innermost` (`BoardView.scenes.painted.test.tsx:84`) falha quando a parte falta; procura `#461` e `Question · Step 3/7`, e tirou `Question` de #474. A linha 183 confere cada parte dentro da segunda linha. **Mutações em `ListRow.tsx`, a dependência:** tirada → 8 falham (`has no #461`); cortada em `max-w-5` → 4 falham (`#461 cut`); empurrada para uma linha escondida (`basis-full`) → 6 falham |
+| 5 | Fechado | **O código:** `NewTaskDialog.tsx:377` passa `chevronSize="xs"` ao trigger do system, sem o `Icon` próprio. **A prova:** `NewTaskDialog.scenes.painted.test.tsx:65` exige um `svg` de `--icon-xs`. **Mutação:** `chevronSize="sm"` → 8 de 8 falham |
+| 6 | Fechado | `StartRow.tsx:222` escreve a falha em `--ink-2`, e `StartRow.painted.test.tsx:84` exige `--ink-2` |
+| 7 | Fechado | **O código:** `BoardView.tsx:204–211` só devolve o foco com ele dentro de `.list-panel`. **As provas:** `BoardView.keys.test.tsx:539` (o foco fica na linha em que está) e `:556` (do painel, o foco volta a #12). **Mutações:** sempre devolver → falha a `:539`; nunca devolver → falha a `:556` |
+| 8 | Fechado | **`design-system.md:170`:** diz `@max-[1041px]/list` e explica a borda. **`components.md:888, 891, 893`:** estão sem os `(hoje …)`. **A procura:** nada no diff de `docs/` e `design/` fala em histórico. Os únicos candidatos são "troca `aria-selected`" e "passam para uma segunda linha", que descrevem comportamento |
+
+**As duas decisões do coordenador:**
+- **A dependência pelo número.** `board-view.ts:522` escreve `#N`, e o repositório fica no tooltip, no nome acessível e no painel (`board-view.test.ts:772`). Na captura a 812, o painel diz `Depends on acme/gateway#461`. `board.md:135` e `features.md:83` dizem o mesmo.
+- **As cenas com Agent.** `board-scenes.ts:1256, 1296` partem de `reviewModeDefault: "agent"`.
+
+**A segunda linha estreita.**
+- **O código:** `ListRow.tsx:237` usa `col-[3/-1]`, como `components.md:706` ("da coluna do título à das teclas"), `05:197` (308 px de segunda linha a 452 de contêiner: 180 + 8 + 120) e o mock (`board.css`, `grid-column: 3 / -1`).
+- **A mutação:** com a classe de volta a `col-start-3`, falham só as duas provas a 812 (`#412 API hardening inside the second line`). A 978, a coluna do título sozinha já cabe a linha.
+- **A linha larga:** a classe só vale sob `@max-[1041px]`. Fora dela, `meta` continua `display: contents`, e as 80 provas pintadas da linha passam.
+
+### "Podem esperar" fechados
+
+| Item | Evidência |
+|---|---|
+| 3 | `Home.tsx:141`, `ICONS.plus` |
+| 4 | `Home.tsx:122` usa `EmptyState`, com o título em `--text-ui` 600, provado em `Home.scenes.painted.test.tsx` |
+| 5 | `CardActions.tsx:169` usa `--ink-2`, provado em `BoardView.scenes.painted.test.tsx:147` |
+| 6 | `StartRow.tsx:143, 160`: um `role="status"`, e o `Spinner` no lugar de **Clone**. `StartRow.test.tsx` conta um só `Cloning` |
+| 7 | `ListSectionHeader` sem `final`. O tooltip e o nome acessível da seção final seguem de `sectionTooltip` e `sectionLabel` (`board-view.ts:328–340`), e `ListSectionHeader.test.tsx:36` prova o nome e o texto `Done12`. `components.md:716` registra a regra |
+| 8 | `board-scenes.ts:1250` foca #474, e `BoardView.scenes.painted.test.tsx:143` o prova. A captura mostra as teclas |
+| 12 | `Button.tsx:82`, `keyOnSolid`. `Button.painted.test.tsx:102` compara a tecla do primário tracejado com a do secundário tracejado. Com `loading`, a tecla não aparece |
+| 20 | `NewTaskDialog.tsx:60`, `DIALOG_REVIEW_MODES`, com a prova em `NewTaskDialog.test.tsx`. `REVIEW_MODES` e o `ReviewModePicker` de Settings não mudaram. `board.md:275` e `features.md:343` registram a ordem |
+
+**`chevronSize`:** o `CollapsibleTrigger` do system é usado só pelo diálogo. `DraftsPanel`, `FindingsPanel`, `RepositoryRow` e `DiscussionContextPreview` importam o de `components/ui/collapsible`. Por isso o padrão `sm` não muda ninguém.
+
+### O que segue aberto
+
+Os itens 1, 2, 9, 10, 11 e 13 a 21 de "Podem esperar", como estavam. Nenhum deles bloqueia.
+
+### O que as correções trouxeram
+
+Nada que bloqueie. São três observações pequenas:
+- **O comentário de `REVIEW_MODES`.** `lib/review-modes.ts:3` diz "in the order the pickers list them". Agora o diálogo lista `Agent` / `Manual`, como o popover da task (`ReviewModePopover.tsx:28–33`), e só o `ReviewModePicker` de Settings segue `Manual` / `Agent`. O comentário fica meio verdadeiro até a task de Settings decidir a ordem.
+- **`closePanel` acha o painel pela classe CSS** (`BoardView.tsx:207`, `.closest(".list-panel")`). Funciona, e a mutação prova isso. Opinião: um `ref` do `ListPanel` desacoplaria a visão do nome da classe de `globals.css`.
+- **O `role="status"` de `Cloning` nasce junto com o texto** (`StartRow.tsx:143`). A região é posta no mesmo render em que o texto muda, e é o mesmo caso do item 21. O `Busy` anterior tinha o mesmo defeito, então a correção não piorou nada.
