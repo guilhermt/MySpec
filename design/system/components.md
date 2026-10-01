@@ -255,6 +255,18 @@ Cada componente embrulha um primitivo gerado em `frontend/src/components/ui` (nu
 | Acessibilidade | `radiogroup` com nome; ←→ ou ↑↓ trocam |
 | Faça | Use o rádio numa lista de opções curtas; use a opção de pergunta quando cada opção tem uma linha do que faz |
 
+### Grupo de opções
+
+| | |
+|---|---|
+| Anatomia | Uma coluna de opções de pergunta, `--space-1-5` entre elas. Cada opção é uma caixa de raio `--radius-md` em `--surface-2` com anel `--line-2`, `--space-3` dos lados e `--space-2` em cima e embaixo, com a tecla (`1`, em `--key-size`, com o anel `--line-2` e `--border-2` embaixo, mono `--text-micro` `--ink-2`), o título em 500 `--ink-1`, uma etiqueta opcional depois dele (`Suggested`) e, embaixo, a nota do que a opção faz em `--text-meta` `--ink-3` |
+| Estados | Padrão; hover (anel `--line-3`, fundo `--surface-2-hover`); foco (anel por fora); escolhida (fundo `--brand-tint`, anel `--brand-ring`, a tecla com a borda `--brand-ring` e a tinta `--brand-ink`); nenhuma escolhida, que o grupo aceita; desabilitada (tracejada, o título em `--ink-4`, sem hover, a razão embaixo em `--text-meta` `--ink-3`) |
+| Tokens | `--surface-2`, `--surface-2-hover`, `--line-2`, `--line-3`, `--border-2`, `--brand-tint`, `--brand-ring`, `--brand-ink`, `--ink-1`, `--ink-2`, `--ink-3`, `--ink-4`, `--text-micro`, `--text-meta`, `--radius-md`, `--key-size`, `--space-1-5`, `--space-2`, `--space-3` |
+| Usos | **Verdict** no diálogo de publicação; as opções do cartão de pergunta da conversa são desenhadas igual |
+| Teclado | Uma parada de Tab: a opção escolhida, senão a primeira habilitada. ↑↓ andam entre as habilitadas, com volta; `Space` e `Enter` escolhem. As teclas numéricas ficam com quem usa o grupo |
+| Acessibilidade | `radiogroup` com nome; cada opção é um `radio` com `aria-checked`; a desabilitada tem `aria-disabled` e a razão por `aria-describedby` |
+| Faça | Use quando cada opção tem uma linha do que faz, ou quando nenhuma pode vir marcada; para opções curtas, o rádio |
+
 ### Controle segmentado
 
 | | |
@@ -791,7 +803,7 @@ A conversa é uma coluna centrada de `--measure-conversation` (60rem, 960 px), e
 
 | | |
 |---|---|
-| Anatomia | Diálogo mínimo: `Publish the review of web#2291`; a nota de commits depois da passada, quando há; **Verdict**, os três vereditos como opções de pergunta (`1 Request changes`, `2 Approve`, `3 Comment`, cada um com o que faz), **nenhum marcado**, o sugerido pelas decisões com a etiqueta `Suggested` e o porquê no tooltip; a linha do que vai para o GitHub; **Include the summary**, caixa marcada com o começo do resumo e **Edit**; rodapé com `Choose a verdict` ao lado de **Publish** tracejado, depois **Publish · Request changes** `Ctrl ↵` |
+| Anatomia | Diálogo mínimo: `Publish the review of web#2291`; a nota de commits depois da passada, quando há; **Verdict**, os três vereditos num grupo de opções (`OptionGroup`: `1 Request changes`, `2 Approve`, `3 Comment`, cada um com o que faz), **nenhum marcado**, o sugerido pelas decisões com a etiqueta `Suggested` e o porquê no tooltip; a linha do que vai para o GitHub; **Include the summary**, caixa marcada com o começo do resumo e **Edit**; rodapé com `Choose a verdict` ao lado de **Publish** tracejado, depois **Publish · Request changes** `Ctrl ↵` |
 | Regras | As do GitHub (PR própria só `Comment`; sem resumo e sem apontamento aprovado só `Approve`; nenhum aceito), em `screens/review.md` §11 |
 | Estados | Nada escolhido, escolhido, só um possível (marcado, com a razão), editando o resumo, publicando, falha |
 | Teclado | Foco inicial em **Cancel**; `1`–`3` escolhem; ↑↓ percorrem |
