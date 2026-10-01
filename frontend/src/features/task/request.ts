@@ -21,6 +21,7 @@ import { prBaseName, troubleLabel } from "@/lib/pull-requests";
 import { fallbackReason } from "@/lib/review-modes";
 import {
   compactWait,
+  counted,
   lowerFirst,
   prSituation,
   reviewerSituation,
@@ -193,6 +194,17 @@ export function approveButton<A extends string>(
     return { ...button, disabledReason: `Stage ${left} more ${left === 1 ? "file" : "files"}` };
   }
   return button;
+}
+
+/** approveRestButton approves at once the findings with no decision, on the bar of either review; it has no key. */
+export function approveRestButton<A extends string>(left: number): RequestButton<A> {
+  return {
+    action: "approveRest" as A,
+    label: "Approve the rest",
+    variant: "secondary",
+    tooltip: `Approve the ${counted(left, "finding")} not decided yet`,
+    loadingLabel: "Approving…",
+  };
 }
 
 // staged is how far a review got: "5 of 7 files staged · 71%"; "" when the worktree couldn't be read.

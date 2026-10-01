@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { menuItems, type TaskMenuGroup, taskMenuOf } from "@/features/task/task-menu";
 import type { PullRequest, Step, TaskSummary } from "@/lib/wails";
-import { makePullRequest, makeStep, makeTask } from "@/test/wails-mock";
+import { makePRReport, makePullRequest, makeStep, makeTask } from "@/test/wails-mock";
 
 const NOW = Date.parse("2026-09-27T15:00:00Z");
 const WORKTREE = "/home/dev/.local/share/myspec/worktrees/dev/web/add-login";
@@ -240,6 +240,24 @@ describe("taskMenuOf, the items", () => {
     const [pr] = taskMenuOf(open("done", { checkedAt }), NOW);
 
     expect(pr?.items.find((item) => item.id === "pr.refresh")?.tooltip).toBe(tooltip);
+  });
+
+  it.each([
+    [
+      "edited findings",
+      true,
+      "awaiting_decision",
+      "Starts pass 2. The decisions of review 1 aren't applied.",
+    ],
+    ["untouched findings", false, "awaiting_decision", undefined],
+    ["a pass already sent", true, "committing", undefined],
+  ])("tells what Review again leaves behind with %s", (_, edited, status, tooltip) => {
+    const [pr] = taskMenuOf(
+      open(status, { currentPass: 1, reports: [makePRReport({ edited })] }),
+      NOW,
+    );
+
+    expect(pr?.items.find((item) => item.id === "pr.reviewAgain")?.tooltip).toBe(tooltip);
   });
 
   it("opens the pull request on GitHub", () => {

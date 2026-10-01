@@ -1,4 +1,9 @@
-import { type Bar, statusOf, type TaskRequestButton } from "@/features/task/request";
+import {
+  approveRestButton,
+  type Bar,
+  statusOf,
+  type TaskRequestButton,
+} from "@/features/task/request";
 import { decidedCounts } from "@/lib/findings";
 import { counted } from "@/lib/situations";
 import type {
@@ -34,17 +39,6 @@ const NEXT_TO_DECIDE: TaskRequestButton = {
   tooltip: "The next finding to decide · Alt+↓",
   loadingLabel: "",
 };
-
-// approveRestButton approves at once the findings with no decision; it has no key.
-function approveRestButton(left: number): TaskRequestButton {
-  return {
-    action: "approveRest",
-    label: "Approve the rest",
-    variant: "secondary",
-    tooltip: `Approve the ${counted(left, "finding")} not decided yet`,
-    loadingLabel: "Approving…",
-  };
-}
 
 // applyFindingsButton sends the approved findings to the agent; dashed with what is left to decide.
 function applyFindingsButton(disabledReason?: string): TaskRequestButton {
@@ -113,6 +107,12 @@ export function cardOf(pr: PullRequest): { report: PRReport; disabled: boolean }
     return { report, disabled: false };
   }
   return null;
+}
+
+/** cardFindings are the findings of the card the conversation holds to be decided; null when it holds none or it is disabled. */
+export function cardFindings(task: TaskSummary): readonly ReviewFinding[] | null {
+  const card = task.pr === null ? null : cardOf(task.pr);
+  return card === null || card.disabled ? null : card.report.findings;
 }
 
 /** FindingsForm is the shape of the bar of the findings: deciding, ready to apply, or a pass in text. */

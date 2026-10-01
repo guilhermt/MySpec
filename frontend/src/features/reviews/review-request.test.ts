@@ -76,6 +76,15 @@ const NEXT_TO_DECIDE = {
   loadingLabel: "",
 } as const;
 
+// The pass of these cases has 1 of 3 findings decided.
+const APPROVE_REST = {
+  action: "approveRest",
+  label: "Approve the rest",
+  variant: "secondary",
+  tooltip: "Approve the 2 findings not decided yet",
+  loadingLabel: "Approving…",
+} as const;
+
 const PUBLISH = {
   action: "publish",
   label: "Publish review…",
@@ -106,6 +115,7 @@ describe("reviewRequestOf, the situations of the review", () => {
         status: "Decide findings · pass 1",
         actions: [
           NEXT_TO_DECIDE,
+          APPROVE_REST,
           {
             action: "publish",
             label: "Publish review…",
@@ -135,6 +145,7 @@ describe("reviewRequestOf, the situations of the review", () => {
         status: "Decide findings · pass 1",
         actions: [
           NEXT_TO_DECIDE,
+          APPROVE_REST,
           {
             action: "apply",
             label: "Apply approved",
@@ -396,6 +407,51 @@ describe("reviewRequestOf, the situations of the review", () => {
   });
 });
 
+describe("reviewRequestOf, Approve the rest", () => {
+  const actionsOf = (found: ReviewSummary) =>
+    reviewRequestOf(found, NOW, null)?.actions.map((button) => button.action);
+
+  it("is on the bar of the findings to decide, in either mode, before the primary", () => {
+    const decide = situation("review_report", "waiting", "decide");
+
+    expect(actionsOf(waiting(decide))).toEqual(["nextToDecide", "approveRest", "publish"]);
+    expect(actionsOf(waiting(decide, { mode: "apply" }))).toEqual([
+      "nextToDecide",
+      "approveRest",
+      "apply",
+    ]);
+  });
+
+  it("says the one finding it approves in the singular", () => {
+    const found = waiting(situation("review_report", "waiting", "decide"), {
+      passes: [decided(["approved", "discarded", ""])],
+    });
+
+    expect(reviewRequestOf(found, NOW, null)?.actions[1]?.tooltip).toBe(
+      "Approve the 1 finding not decided yet",
+    );
+  });
+
+  it.each([
+    [
+      "ready to publish",
+      waiting(situation("review_report", "closing", "publish"), {
+        passes: [decided(["approved"])],
+      }),
+    ],
+    [
+      "ready to apply",
+      waiting(situation("review_report", "waiting", "apply"), {
+        mode: "apply",
+        passes: [decided(["approved"])],
+      }),
+    ],
+    ["the changes to approve", waiting(situation("changes_review", "waiting", "approve"))],
+  ])("is not on the bar of %s", (_, found) => {
+    expect(actionsOf(found)).not.toContain("approveRest");
+  });
+});
+
 describe("reviewRequestOf, the situations of the conversation", () => {
   const asked = { status: "awaiting_reply", passes: [makeReviewPass({ recorded: false })] };
 
@@ -481,6 +537,7 @@ describe("reviewRequestOf, paused and at rest", () => {
       status: "Decide findings · pass 1",
       actions: [
         NEXT_TO_DECIDE,
+        APPROVE_REST,
         {
           action: "publish",
           label: "Publish review…",

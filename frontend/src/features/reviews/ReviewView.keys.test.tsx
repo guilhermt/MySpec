@@ -130,6 +130,59 @@ describe("ReviewView, the keys of the findings", () => {
   });
 });
 
+describe("ReviewView, Approve the rest", () => {
+  const approvedAll = FINDINGS.map((each) => makeReviewFinding({ ...each, decision: "approved" }));
+
+  it("approves what has no decision, without a key", async () => {
+    const { user } = screenOf();
+    await screen.findByRole("group", { name: "Findings of pass 1" });
+
+    const button = screen.getByRole("button", { name: "Approve the rest" });
+    expect(button).not.toHaveTextContent(/Ctrl|Alt/);
+    await user.click(button);
+
+    expect(api.approveRestOfFindings).toHaveBeenCalledWith("review-1", 1);
+  });
+
+  it("takes the focus to the primary the bar has once the rest is approved", async () => {
+    const { user } = screenOf();
+    await screen.findByRole("group", { name: "Findings of pass 1" });
+
+    await user.click(screen.getByRole("button", { name: "Approve the rest" }));
+    await waitFor(() => expect(api.approveRestOfFindings).toHaveBeenCalled());
+    useAppStore.getState().applyState(
+      makeState({
+        reviews: [
+          makeReviewSummary({
+            status: "ready_to_publish",
+            canPublish: true,
+            sessionStatus: "waiting",
+            turnRunning: false,
+            processRunning: false,
+            passes: [makeReviewPass({ findings: approvedAll })],
+            situations: [PUBLISH],
+          }),
+        ],
+      }),
+    );
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Publish review…" })).toHaveFocus(),
+    );
+  });
+
+  it("leaves the focus where it was when approving the rest failed", async () => {
+    vi.mocked(api.approveRestOfFindings).mockRejectedValueOnce(new Error("no"));
+    const { user } = screenOf();
+    await screen.findByRole("group", { name: "Findings of pass 1" });
+
+    await user.click(screen.getByRole("button", { name: "Approve the rest" }));
+    await waitFor(() => expect(api.approveRestOfFindings).toHaveBeenCalled());
+
+    expect(screen.getByRole("button", { name: "Publish review…" })).not.toHaveFocus();
+  });
+});
+
 describe("ReviewView, Ctrl+Enter", () => {
   const ready = {
     status: "ready_to_publish",

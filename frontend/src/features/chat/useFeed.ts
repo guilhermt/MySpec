@@ -15,6 +15,9 @@ const ENTRY = "[data-feed-entry]";
 const CONTROL =
   'a[href], button, input, select, textarea, summary, iframe, [tabindex], [contenteditable="true"], [contenteditable=""]';
 
+/** WALK_KEYS are the keys that walk the entries of the feed beyond the arrows. */
+const WALK_KEYS: readonly string[] = ["Home", "End", "PageUp", "PageDown"];
+
 /** PAGE is how many entries Page Up and Page Down move. */
 const PAGE = 10;
 
@@ -242,7 +245,12 @@ export function useFeed(feedRef: RefObject<HTMLElement | null>): void {
     };
 
     const onKeyDown = (event: KeyboardEvent) => {
-      const item = event.target instanceof HTMLElement ? event.target : null;
+      const origin = event.target instanceof HTMLElement ? event.target : null;
+      // A finding of a card of findings walks the conversation from the card around it.
+      const item =
+        origin?.matches("[data-finding-id]") && WALK_KEYS.includes(event.key)
+          ? origin.closest<HTMLElement>(ITEM)
+          : origin;
       if (item === null || !item.matches(ITEM) || event.altKey || event.ctrlKey || event.metaKey) {
         return;
       }

@@ -43,16 +43,24 @@ function fail(label: string, remedy: Remedy | null): Failure {
   return { label, remedy };
 }
 
-// No action touches `app`: the new state always arrives through state:changed.
-async function run(failure: Failure, operation: () => Promise<void>): Promise<void> {
+// No action touches `app`: the new state always arrives through state:changed. attempt answers
+// whether the operation went through, for the actions whose caller goes on only then.
+async function attempt(failure: Failure, operation: () => Promise<void>): Promise<boolean> {
   try {
     await operation();
+    return true;
   } catch (error) {
     useAppStore.getState().setError({
       label: failure.label,
       detail: noticeDetail(messageOf(error), failure.remedy),
     });
+    return false;
   }
+}
+
+// run is attempt for the actions nothing waits on the outcome of.
+async function run(failure: Failure, operation: () => Promise<void>): Promise<void> {
+  await attempt(failure, operation);
 }
 
 // inPlace runs an action whose failure has a place of its own on screen: it answers the message of
@@ -800,6 +808,27 @@ export function openPRFindingInEditor(taskId: string, pass: number, number: numb
   return run(
     fail(`Couldn't open finding ${number} of ${theItem(taskId)} in the editor`, null),
     () => api.openPRFindingInEditor(taskId, pass, number),
+  );
+}
+
+/** approveRestOfPRFindings approves every finding of the pass of the pull request of a task that has no decision; it answers whether it did. */
+export function approveRestOfPRFindings(taskId: string, pass: number): Promise<boolean> {
+  return attempt(fail(`Couldn't approve the rest of the findings of ${theItem(taskId)}`, TRY), () =>
+    api.approveRestOfPRFindings(taskId, pass),
+  );
+}
+
+/** applyPRFindings sends the agent the findings of the pull request of a task the user approved. */
+export function applyPRFindings(taskId: string): Promise<void> {
+  return run(fail(`Couldn't apply the approved findings of ${theItem(taskId)}`, TRY), () =>
+    api.applyPRFindings(taskId),
+  );
+}
+
+/** approveRestOfFindings approves every finding of the pass of a review that has no decision; it answers whether it did. */
+export function approveRestOfFindings(id: string, pass: number): Promise<boolean> {
+  return attempt(fail(`Couldn't approve the rest of the findings of ${theItem(id)}`, TRY), () =>
+    api.approveRestOfFindings(id, pass),
   );
 }
 
