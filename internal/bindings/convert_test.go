@@ -949,6 +949,9 @@ func markerDTO(m bindings.MarkerEntry) *bindings.MarkerEntry {
 	if m.Problems == nil {
 		m.Problems = []bindings.PlanProblem{}
 	}
+	if m.Commits == nil {
+		m.Commits = []bindings.MarkerCommit{}
+	}
 	return &m
 }
 
@@ -1005,6 +1008,40 @@ func TestFromEntryCarriesTheNewMarkerFields(t *testing.T) {
 			},
 			want: markerDTO(bindings.MarkerEntry{
 				Type: "plan_invalid", Findings: -1, Problems: []bindings.PlanProblem{{File: "01-a.md", Message: "no title"}},
+			}),
+		},
+		"review_started": {
+			marker: &session.MarkerEntry{Type: session.MarkerReviewStarted, Model: "opus-5-5", Effort: "high", Mode: "publish"},
+			want: markerDTO(bindings.MarkerEntry{
+				Type: "review_started", Findings: -1, Model: "opus-5-5", Effort: "high", Mode: "publish",
+			}),
+		},
+		"pr_review_revised": {
+			marker: &session.MarkerEntry{Type: session.MarkerPRReviewRevised, Pass: 2, Findings: new(3)},
+			want:   markerDTO(bindings.MarkerEntry{Type: "pr_review_revised", Pass: 2, Findings: 3}),
+		},
+		"findings_decided": {
+			marker: &session.MarkerEntry{Type: session.MarkerFindingsDecided, Pass: 2, Approved: 2, Discarded: 1},
+			want:   markerDTO(bindings.MarkerEntry{Type: "findings_decided", Pass: 2, Findings: -1, Approved: 2, Discarded: 1}),
+		},
+		"review_published": {
+			marker: &session.MarkerEntry{
+				Type: session.MarkerReviewPublished, Pass: 2, Verdict: "comment", Inline: 2, Body: 1, Summary: true,
+				Minimal: false, URL: "https://github.com/acme/api/pull/7#pullrequestreview-1",
+			},
+			want: markerDTO(bindings.MarkerEntry{
+				Type: "review_published", Pass: 2, Findings: -1, Verdict: "comment", Inline: 2, Body: 1, Summary: true,
+				URL: "https://github.com/acme/api/pull/7#pullrequestreview-1",
+			}),
+		},
+		"new_commits": {
+			marker: &session.MarkerEntry{
+				Type: session.MarkerNewCommits, Count: -1,
+				Commits: []session.MarkerCommit{{SHA: "c19f02e", Subject: "Fix the time zone rule", Author: "rsouza"}},
+			},
+			want: markerDTO(bindings.MarkerEntry{
+				Type: "new_commits", Findings: -1, Count: -1,
+				Commits: []bindings.MarkerCommit{{SHA: "c19f02e", Subject: "Fix the time zone rule", Author: "rsouza"}},
 			}),
 		},
 		"interrupted": {
@@ -2178,6 +2215,112 @@ func TestFromReviewCenterAllocatesEverythingWithoutAReading(t *testing.T) {
 	}
 }
 
+func TestFromReviewCenterDoesNotCountThePullRequestsThatAlreadyHaveAReview(t *testing.T) {
+	t.Parallel()
+
+	readings := []pulls.RepositoryReading{{
+		RepositoryID: "r-1",
+		PullRequests: []pulls.PullRequest{openPR(1, "alice", 10), openPR(2, "bob", 20)},
+	}}
+	reviews := func(_ string, number int) (prreview.Review, bool) {
+		return prreview.Review{ID: "review-1"}, number == 1
+	}
+
+	center := bindings.FromReviewCenter(
+		readings, false, readAt, "dev", pulls.Filters{}, reviewRepos, noTasks, reviews, noCard,
+	)
+
+	if center.PendingCount != 1 {
+		t.Errorf("pendingCount = %d, want 1: the pull request with an active review does not count", center.PendingCount)
+	}
+	for _, row := range center.PullRequests {
+		if !row.Pending {
+			t.Errorf("pending of #%d = false, want true: the row still waits, the count is what leaves it out", row.Number)
+		}
+	}
+}
+
+func TestFromReviewCenterCarriesWhatTheListReadsOfEachPullRequest(t *testing.T) {
+	t.Parallel()
+
+	pr := openPR(1, "alice", 0)
+	pr.HeadBranch, pr.BaseBranch, pr.Body = "login-screen", "dev", "Adds the login."
+	pr.Checks = gh.PRChecks{
+		Checks: []gh.Check{{
+			Name: "test", URL: "https://github.com/acme/web/actions/runs/1", Conclusion: "success", State: gh.CheckPassed,
+			StartedAt: readAt, CompletedAt: readAt.Add(time.Minute),
+		}},
+		Mergeable: gh.MergeableConflicting,
+	}
+	pr.Reviewed, pr.ReviewedCommit, pr.HeadCommit = true, "aaa", "bbb"
+	pr.YourReview = &pulls.YourReview{State: "changes_requested", At: readAt}
+	pr.NewCommitCount = -1
+	bare := openPR(2, "bob", 0)
+	readings := []pulls.RepositoryReading{{RepositoryID: "r-1", PullRequests: []pulls.PullRequest{pr, bare}}}
+
+	center := bindings.FromReviewCenter(
+		readings, false, readAt, "dev", pulls.Filters{}, reviewRepos, noTasks, noReview, noCard,
+	)
+
+	rowOf := func(number int) bindings.PullRequestRow {
+		for _, row := range center.PullRequests {
+			if row.Number == number {
+				return row
+			}
+		}
+		t.Fatalf("no row for #%d", number)
+		return bindings.PullRequestRow{}
+	}
+	got := rowOf(1)
+	wantChecks := []bindings.PRCheck{{
+		Name: "test", State: "passed", Conclusion: "success", URL: "https://github.com/acme/web/actions/runs/1",
+		StartedAt: readAt.Format(time.RFC3339), CompletedAt: readAt.Add(time.Minute).Format(time.RFC3339),
+	}}
+	if diff := cmp.Diff(wantChecks, got.Checks); diff != "" {
+		t.Errorf("checks (-want +got):\n%s", diff)
+	}
+	wantReview := &bindings.PullReview{State: "changes_requested", At: readAt.Format(time.RFC3339)}
+	if diff := cmp.Diff(wantReview, got.YourReview); diff != "" {
+		t.Errorf("yourReview (-want +got):\n%s", diff)
+	}
+	if got.HeadBranch != "login-screen" || got.BaseBranch != "dev" || got.Body != "Adds the login." ||
+		got.Mergeable != "conflicting" || got.NewCommitCount != -1 {
+		t.Errorf("row = %+v, want the branches, the body, the merge and the count of the pull request", got)
+	}
+
+	none := rowOf(2)
+	if none.Checks == nil || len(none.Checks) != 0 || none.YourReview != nil || none.Mergeable != "" || none.NewCommitCount != 0 {
+		t.Errorf("row without a reading = %+v, want empty checks (not nil), no review and no merge", none)
+	}
+}
+
+func TestFromReviewCenterSaysWhenTheRunOfFailuresStarted(t *testing.T) {
+	t.Parallel()
+
+	readings := []pulls.RepositoryReading{{
+		RepositoryID: "r-2",
+		Failure:      &pulls.Failure{Reason: pulls.ReasonNotFound, FailedAt: readAt},
+	}}
+
+	center := bindings.FromReviewCenter(
+		readings, false, readAt, "dev", pulls.Filters{}, reviewRepos, noTasks, noReview, noCard,
+	)
+
+	if got := center.Failures[0].FailedAt; got != readAt.Format(time.RFC3339) {
+		t.Errorf("failedAt = %q, want the first failing reading", got)
+	}
+}
+
+func TestReviewFiltersCarryTheNamesOfTheBoardAndTheRepository(t *testing.T) {
+	t.Parallel()
+
+	got := bindings.FromReviewFilters(pulls.Filters{BoardID: "board-1", BoardName: "Web", RepositoryName: "web"})
+
+	if got.BoardName != "Web" || got.RepositoryName != "web" {
+		t.Errorf("filters = %+v, want the names of the board and the repository", got)
+	}
+}
+
 // reviewState is a review of acme/web#7 in a status, with one recorded pass.
 func reviewState(status reviewflow.Status, pass prreview.Pass) reviewflow.State {
 	stored := prreview.Review{
@@ -2340,11 +2483,12 @@ func TestFromReviewsCarriesThePassesTheVerdictsAndTheSituationsOfAReview(t *test
 	wantPass := bindings.ReviewPass{
 		Pass: 1, File: "review-1.md", Recorded: true, Summary: "Two things to look at.",
 		Findings: []bindings.ReviewFinding{{
-			Number: 1, Path: "main.go", Line: 12, Text: "Handle the error.",
+			Number: 1, Path: "main.go", Line: 12, LineURL: "https://github.com/acme/web/pull/7/files#diff-2873f79a86c0d8b3335cd7731b0ecf7dd4301eb19a82ef7a1cba7589b5252261R12", Text: "Handle the error.",
 			Decision: "approved", Placement: "inline",
 		}},
 		Revision: 1, Published: true, PublishedAt: readAt.Format(time.RFC3339),
 		PublishedURL: "https://github.com/acme/web/pull/7#pullrequestreview-1", Verdict: "comment",
+		Checks: []bindings.PRCheck{},
 	}
 	if diff := cmp.Diff([]bindings.ReviewPass{wantPass}, got.Passes); diff != "" {
 		t.Errorf("passes (-want +got):\n%s", diff)
@@ -2425,6 +2569,7 @@ func TestFromArchivedReviewsCarriesWhatBecameOfThePullRequest(t *testing.T) {
 		ID: "review-1", RepositoryID: "r-1", Number: 7, Title: "Add the login screen",
 		Author: "alice", URL: "https://github.com/acme/web/pull/7", Mode: prreview.ModePublish,
 		PRState: prreview.PRMerged, CreatedAt: readAt, ArchivedAt: readAt.Add(time.Hour),
+		BaseBranch: "main", MergedBy: "bob", MergedAt: readAt.Add(30 * time.Minute),
 	}
 	passes := func(id string) []prreview.Pass {
 		if id != "review-1" {
@@ -2442,10 +2587,14 @@ func TestFromArchivedReviewsCarriesWhatBecameOfThePullRequest(t *testing.T) {
 		Passes: []bindings.ReviewPass{{
 			Pass: 1, File: "review-1.md", Recorded: true, Summary: "Two things to look at.",
 			Findings: []bindings.ReviewFinding{{
-				Number: 1, Path: "main.go", Line: 12, Text: "Handle the error.", Decision: "approved",
+				Number: 1, Path: "main.go", Line: 12, LineURL: "https://github.com/acme/web/pull/7/files#diff-2873f79a86c0d8b3335cd7731b0ecf7dd4301eb19a82ef7a1cba7589b5252261R12", Text: "Handle the error.",
+				Decision: "approved",
 			}},
-			Revision: 1,
+			Revision: 1, Checks: []bindings.PRCheck{},
 		}},
+		BaseBranch: "main",
+		MergedBy:   "bob",
+		MergedAt:   readAt.Add(30 * time.Minute).Format(time.RFC3339),
 		CreatedAt:  readAt.Format(time.RFC3339),
 		ArchivedAt: readAt.Add(time.Hour).Format(time.RFC3339),
 	}}
@@ -3155,5 +3304,102 @@ func TestEverySessionBlockCarriesWhenItsSessionWasPaused(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestFromReviewsCarriesTheTitleAndTheLineOnGitHubOfAFinding(t *testing.T) {
+	t.Parallel()
+
+	pass := recordedPass(1, prreview.DecisionNone)
+	pass.Findings = []prreview.Finding{
+		{Number: 1, Title: "The error is dropped", Path: "main.go", Line: 12, Original: "a", Text: "a"},
+		{Number: 2, Title: "No tests", Original: "b", Text: "b"},
+	}
+	state := reviewState(reviewflow.StatusReadyToPublish, pass)
+
+	got := bindings.FromReviews([]reviewflow.State{state}, nil, reviewRepos)[0]
+
+	// The anchor is the SHA-256 of "main.go", computed apart from the code.
+	const anchored = "https://github.com/acme/web/pull/7/files" +
+		"#diff-2873f79a86c0d8b3335cd7731b0ecf7dd4301eb19a82ef7a1cba7589b5252261R12"
+	want := []bindings.ReviewFinding{
+		{Number: 1, Title: "The error is dropped", Path: "main.go", Line: 12, LineURL: anchored, Text: "a"},
+		{Number: 2, Title: "No tests", Text: "b"},
+	}
+	if diff := cmp.Diff(want, got.Passes[0].Findings); diff != "" {
+		t.Errorf("findings (-want +got):\n%s", diff)
+	}
+}
+
+func TestFromReviewsCarriesTheLiveReadingOfThePullRequest(t *testing.T) {
+	t.Parallel()
+
+	state := reviewState(reviewflow.StatusNewCommits, recordedPass(1, prreview.DecisionApproved))
+	state.Checks = gh.PRChecks{
+		Checks:    []gh.Check{{Name: "test", URL: "https://github.com/acme/web/actions/runs/1", Conclusion: "success"}},
+		Mergeable: gh.MergeableConflicting,
+	}
+	state.CheckedAt = readAt
+	state.CheckErrorAt = readAt.Add(-time.Minute)
+	state.CheckError = "GitHub can't be reached."
+	state.NewCommits = 3
+	state.StaleCommits = -1
+
+	got := bindings.FromReviews([]reviewflow.State{state}, nil, reviewRepos)[0]
+
+	if len(got.Checks) != 1 || got.Checks[0].Name != "test" || got.Mergeable != "conflicting" {
+		t.Errorf("checks = %+v, mergeable = %q, want the checks and the merge of the reading", got.Checks, got.Mergeable)
+	}
+	if got.CheckedAt != readAt.Format(time.RFC3339) || got.CheckErrorAt != readAt.Add(-time.Minute).Format(time.RFC3339) {
+		t.Errorf("checkedAt = %q, checkErrorAt = %q, want the hours of the readings", got.CheckedAt, got.CheckErrorAt)
+	}
+	if got.NewCommits != 3 || got.StaleCommits != -1 {
+		t.Errorf("newCommits = %d, staleCommits = %d, want 3 and -1", got.NewCommits, got.StaleCommits)
+	}
+
+	none := bindings.FromReviews([]reviewflow.State{reviewState(reviewflow.StatusReviewing, recordedPass(1, prreview.DecisionNone))}, nil, reviewRepos)[0]
+	if none.Checks == nil || none.CheckedAt != "" || none.CheckErrorAt != "" {
+		t.Errorf("review without a reading = %+v, want empty checks and no hours", none)
+	}
+}
+
+func TestFromReviewsCarriesTheChecksAndTheHoursOfAPass(t *testing.T) {
+	t.Parallel()
+
+	sent := recordedPass(1, prreview.DecisionApproved)
+	sent.Checks = []gh.Check{{Name: "lint", URL: "https://github.com/acme/web/actions/runs/2", Conclusion: "failure"}}
+	sent.Mergeable = gh.MergeableClean
+	sent.ChecksReadAt = readAt
+	sent.RecordedAt = readAt.Add(time.Minute)
+	sent.SentAt = readAt.Add(2 * time.Minute)
+	sent.SummaryPublished = true
+	applied := recordedPass(2, prreview.DecisionApproved)
+	applied.Applied = true
+	plain := recordedPass(3, prreview.DecisionApproved)
+
+	state := reviewState(reviewflow.StatusPublished, sent)
+	state.Passes = []prreview.Pass{sent, applied, plain}
+
+	got := bindings.FromReviews([]reviewflow.State{state}, nil, reviewRepos)[0].Passes
+
+	if len(got[0].Checks) != 1 || got[0].Checks[0].Name != "lint" || got[0].Mergeable != "mergeable" {
+		t.Errorf("checks = %+v, mergeable = %q, want the ones of the reading that let the pass start",
+			got[0].Checks, got[0].Mergeable)
+	}
+	if got[0].ChecksReadAt != readAt.Format(time.RFC3339) ||
+		got[0].RecordedAt != readAt.Add(time.Minute).Format(time.RFC3339) ||
+		got[0].SentAt != readAt.Add(2*time.Minute).Format(time.RFC3339) {
+		t.Errorf("hours = %q %q %q, want the ones of the pass", got[0].ChecksReadAt, got[0].RecordedAt, got[0].SentAt)
+	}
+	if !got[0].SummaryPublished {
+		t.Error("summaryPublished = false, want true")
+	}
+	for i, want := range []bool{true, true, false} {
+		if got[i].Sent != want {
+			t.Errorf("pass %d sent = %v, want %v", i+1, got[i].Sent, want)
+		}
+	}
+	if got[2].Checks == nil || got[2].SentAt != "" || got[2].ChecksReadAt != "" {
+		t.Errorf("pass without them = %+v, want empty checks and no hours", got[2])
 	}
 }

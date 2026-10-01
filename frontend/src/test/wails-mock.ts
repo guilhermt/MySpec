@@ -25,6 +25,7 @@ import type {
   Entry,
   EntryKind,
   FindingDecision,
+  MarkerCommit,
   Migration,
   ModelCatalog,
   ModelStage,
@@ -34,6 +35,8 @@ import type {
   PromptStage,
   PullRequest,
   PullRequestRow,
+  PullReview,
+  PullsFailure,
   Repository,
   RepositoryCandidate,
   Review,
@@ -218,9 +221,10 @@ export const api = {
   setReviewSummary: vi.fn<(id: string, pass: number, text: string) => Promise<void>>(() =>
     Promise.resolve(),
   ),
-  publishReview: vi.fn<(id: string, verdict: ReviewVerdict) => Promise<void>>(() =>
-    Promise.resolve(),
+  publishReview: vi.fn<(id: string, verdict: ReviewVerdict, withSummary: boolean) => Promise<void>>(
+    () => Promise.resolve(),
   ),
+  refreshReviewPR: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
   applyReview: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
   approveReview: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
   deleteReview: vi.fn<(id: string) => Promise<DeleteResult>>(() =>
@@ -871,7 +875,8 @@ export function makeReviewFilters(overrides: Partial<ReviewFilters> = {}): Revie
     authorsExclude: [],
     labelsInclude: [],
     labelsExclude: [],
-    pendingOnly: false,
+    boardName: "",
+    repositoryName: "",
     ...overrides,
   };
 }
@@ -898,6 +903,31 @@ export function makePullRequestRow(overrides: Partial<PullRequestRow> = {}): Pul
     reviewId: "",
     action: "review",
     updatedAt: "2026-09-16T12:00:00Z",
+    headBranch: "login-screen",
+    baseBranch: "dev",
+    body: "",
+    checks: [],
+    mergeable: "",
+    yourReview: null,
+    newCommitCount: 0,
+    ...overrides,
+  };
+}
+
+export function makePullReview(overrides: Partial<PullReview> = {}): PullReview {
+  return { state: "approved", at: "2026-09-24T10:02:00Z", ...overrides };
+}
+
+export function makeMarkerCommit(overrides: Partial<MarkerCommit> = {}): MarkerCommit {
+  return { sha: "c19f02e", subject: "Fix the time zone rule", author: "rsouza", ...overrides };
+}
+
+export function makePullsFailure(overrides: Partial<PullsFailure> = {}): PullsFailure {
+  return {
+    repositoryId: "repo-1",
+    repository: "dev/web",
+    message: "Couldn't read from GitHub: exit status 1",
+    failedAt: "",
     ...overrides,
   };
 }
@@ -921,6 +951,12 @@ export function makeReviewSummary(overrides: Partial<ReviewSummary> = {}): Revie
     passes: [],
     stalePass: false,
     checkError: "",
+    checkErrorAt: "",
+    checks: [],
+    mergeable: "",
+    checkedAt: "",
+    newCommits: 0,
+    staleCommits: 0,
     trouble: { failedChecks: [], conflict: false },
     publishError: "",
     passBlocked: "",
@@ -971,6 +1007,13 @@ export function makeReviewPass(overrides: Partial<ReviewPass> = {}): ReviewPass 
     publishedUrl: "",
     verdict: "",
     edited: false,
+    checks: [],
+    mergeable: "",
+    checksReadAt: "",
+    recordedAt: "",
+    sentAt: "",
+    sent: false,
+    summaryPublished: false,
     ...overrides,
   };
 }
@@ -978,8 +1021,10 @@ export function makeReviewPass(overrides: Partial<ReviewPass> = {}): ReviewPass 
 export function makeReviewFinding(overrides: Partial<ReviewFinding> = {}): ReviewFinding {
   return {
     number: 1,
+    title: "The token is never cleared",
     path: "src/login.ts",
     line: 12,
+    lineUrl: "https://github.com/dev/web/pull/31/files#diff-…R12",
     text: "The token is never cleared.",
     decision: "",
     placement: "",
@@ -998,8 +1043,12 @@ export function makeArchivedReview(overrides: Partial<ArchivedReview> = {}): Arc
     url: "https://github.com/dev/web/pull/31",
     mode: "publish",
     outcome: "merged",
+    baseBranch: "dev",
     card: null,
     passes: [makeReviewPass()],
+    mergedBy: "",
+    mergedAt: "",
+    closedAt: "",
     createdAt: "2026-09-16T12:00:00Z",
     archivedAt: "2026-09-17T12:00:00Z",
     ...overrides,
@@ -1240,6 +1289,19 @@ function payloadOf(kind: EntryKind): Omit<Entry, "id" | "seq" | "turnId" | "kind
           title: "",
           files: 0,
           problems: [],
+          model: "",
+          effort: "",
+          mode: "",
+          approved: 0,
+          discarded: 0,
+          verdict: "",
+          inline: 0,
+          body: 0,
+          summary: false,
+          minimal: false,
+          url: "",
+          commits: [],
+          count: 0,
         },
       };
     case "error":

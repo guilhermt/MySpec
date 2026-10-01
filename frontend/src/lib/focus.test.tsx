@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { focusRequest, focusTitle } from "@/lib/focus";
 
 // Group is a question of the card: a radio group whose stop of Tab is the chosen option, else the
@@ -95,11 +95,62 @@ describe("focusRequest", () => {
     expect(screen.getByRole("region", { name: "Request" })).toHaveFocus();
   });
 
+  it("takes the focus to the first finding to decide, else to the first finding, centred", () => {
+    const scroll = vi.spyOn(Element.prototype, "scrollIntoView");
+    const { rerender } = render(
+      <div data-decision-card="">
+        <button
+          type="button"
+          aria-label="Finding 1"
+          tabIndex={-1}
+          data-finding=""
+          data-decided="true"
+        />
+        <button
+          type="button"
+          aria-label="Finding 2"
+          tabIndex={-1}
+          data-finding=""
+          data-decided="false"
+          data-disabled=""
+        />
+        <button
+          type="button"
+          aria-label="Finding 3"
+          tabIndex={-1}
+          data-finding=""
+          data-decided="false"
+        />
+      </div>,
+    );
+
+    expect(focusRequest("finding")).toBe(true);
+    const third = screen.getByRole("button", { name: "Finding 3" });
+    expect(third).toHaveFocus();
+    expect(scroll).toHaveBeenCalledWith({ block: "center" });
+
+    rerender(
+      <div data-decision-card="">
+        <button
+          type="button"
+          aria-label="Finding 1"
+          tabIndex={-1}
+          data-finding=""
+          data-decided="true"
+        />
+      </div>,
+    );
+    focusRequest("finding");
+    expect(screen.getByRole("button", { name: "Finding 1" })).toHaveFocus();
+    scroll.mockRestore();
+  });
+
   it("answers false without the target on screen", () => {
     render(<Screen />);
 
     expect(focusRequest("question")).toBe(false);
     expect(focusRequest("permission")).toBe(false);
+    expect(focusRequest("finding")).toBe(false);
   });
 });
 

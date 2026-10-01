@@ -1,7 +1,7 @@
 import { ArrowDown } from "lucide-react";
 import { type RefObject, useEffect, useState } from "react";
+import { observeSize } from "@/components/system/fits";
 import { Icon } from "@/components/system/Icon";
-import { observeSize } from "@/features/sidebar/useFits";
 import { ENTRY_ATTRIBUTE } from "@/features/sidebar/useTreeKeyboard";
 
 export interface MoreBelowProps {

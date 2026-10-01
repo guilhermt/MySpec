@@ -40,7 +40,7 @@ const button = cva(
     variants: {
       variant: {
         secondary:
-          "hover:bg-surface-2 not-aria-disabled:hover:bg-surface-2-hover not-aria-disabled:hover:text-ink-1 not-aria-disabled:active:bg-surface-2-press not-aria-disabled:active:shadow-none focus-visible:border-line-2",
+          "hover:bg-surface-2 not-aria-disabled:not-aria-pressed:hover:bg-surface-2-hover not-aria-disabled:not-aria-pressed:hover:text-ink-1 not-aria-disabled:not-aria-pressed:active:bg-surface-2-press not-aria-disabled:not-aria-pressed:active:shadow-none focus-visible:border-line-2 aria-pressed:border-transparent aria-pressed:bg-brand-tint aria-pressed:text-brand-ink aria-pressed:shadow-[inset_0_0_0_var(--border)_var(--brand-ring)]",
         primary:
           "hover:bg-brand border-brand bg-brand text-brand-on shadow-primary not-aria-disabled:hover:border-brand-hover not-aria-disabled:hover:bg-brand-hover not-aria-disabled:active:border-brand-active not-aria-disabled:active:bg-brand-active not-aria-disabled:active:shadow-none focus-visible:border-brand",
         danger:
@@ -137,15 +137,16 @@ export function Button({
   );
 
   if (!disabled || disabledReason === undefined || reasonId !== undefined) return control;
+  // What is missing reads before the button it holds back: Decide 2 more, then Publish review….
   return (
     <span className="inline-flex items-center gap-2">
-      {control}
       <span
         id={ownReasonId}
         className="text-(length:--text-meta) leading-(--leading-meta) text-ink-3"
       >
         {disabledReason}
       </span>
+      {control}
     </span>
   );
 }

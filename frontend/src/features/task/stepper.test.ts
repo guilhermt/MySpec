@@ -520,7 +520,15 @@ describe("stepperOf, the name and the tooltip", () => {
 // shown is the stepper as the scenes of the mock write it: ✓ for a done stage, [the pill], ○ for one to come.
 function shown(task: TaskSummary): string {
   const { steps: stages, pill: current } = stepperOf(task, NOW);
-  const glyphs = { work: "◌", wait: "●", error: "◆", close: "○", github: "◌", paused: "‖" };
+  const glyphs = {
+    work: "◌",
+    wait: "●",
+    error: "◆",
+    close: "○",
+    github: "◌",
+    paused: "‖",
+    idle: "○",
+  };
   return stages
     .map((stage) => {
       if (stage.state === "done") {

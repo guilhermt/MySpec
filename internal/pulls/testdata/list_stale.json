@@ -1,0 +1,32 @@
+{
+  "data": {
+    "r0": {
+      "pullRequests": {
+        "nodes": [
+          {
+            "number": 21,
+            "title": "Rework the reading",
+            "url": "https://github.com/acme/alpha/pull/21",
+            "isDraft": false,
+            "isCrossRepository": false,
+            "updatedAt": "2026-09-14T10:00:00Z",
+            "headRefName": "rework-reading",
+            "headRefOid": "eee555",
+            "baseRefName": "main",
+            "author": { "login": "mariana" },
+            "labels": { "nodes": [] },
+            "reviews": {
+              "nodes": [{ "state": "COMMENTED", "submittedAt": "2026-08-01T09:00:00Z", "commit": { "oid": "eee000" } }]
+            },
+            "body": "",
+            "mergeable": "MERGEABLE",
+            "head": { "nodes": [] },
+            "since": { "nodes": [{ "commit": { "oid": "eee555" } }] }
+          }
+        ]
+      }
+    },
+    "r1": { "pullRequests": { "nodes": [] } },
+    "r2": { "pullRequests": { "nodes": [] } }
+  }
+}

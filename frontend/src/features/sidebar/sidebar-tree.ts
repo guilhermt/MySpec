@@ -1,3 +1,4 @@
+import { reviewChecks, reviewPass, VERDICT_WORDS } from "@/features/reviews/review-header";
 import {
   discussionSessions,
   type ItemSession,
@@ -6,7 +7,7 @@ import {
   workingSession,
 } from "@/features/sidebar/sessions";
 import { boardOfRepository } from "@/lib/boards";
-import { checkCounts } from "@/lib/pull-requests";
+import { checkCounts, prChecks } from "@/lib/pull-requests";
 import { ALL_REPOSITORIES, findRepository, shortName, tasksInFilter } from "@/lib/repositories";
 import { compactWait, compareSituations, spokenWait } from "@/lib/situations";
 import type {
@@ -245,11 +246,6 @@ function prPass(task: TaskSummary): number {
   return Math.max(reports, 1);
 }
 
-// The pass of a review: the last one it has, 1 before any.
-function reviewPass(review: ReviewSummary): number {
-  return (review.passes ?? []).at(-1)?.pass ?? 1;
-}
-
 function decided<T extends { decision: string }>(items: readonly T[]): { a: number; b: number } {
   return { a: items.filter((item) => item.decision !== "").length, b: items.length };
 }
@@ -338,7 +334,11 @@ function situationText(owner: Owner, situation: Situation): RowText {
     case "question":
     case "reply": {
       const place = conversationPlace(owner, situation);
-      const label = CONVERSATION_LABELS[kind];
+      // A review waits on its reviewer for the report of a pass, as its bar says.
+      const label =
+        kind === "reply" && owner.kind === "review"
+          ? "Waiting for the report"
+          : CONVERSATION_LABELS[kind];
       return { long: `${label} · ${place.long}`, short: `${label} · ${place.short}` };
     }
     case "step_blocked": {
@@ -535,7 +535,7 @@ function taskStanding(task: TaskSummary): Standing {
         return appWork(same("Closing"));
       case "waiting_checks": {
         // Until a reading of gh lists a check, the row says GitHub is being read.
-        const { passed, total } = checkCounts(task.pr);
+        const { passed, total } = checkCounts(prChecks(task.pr));
         return task.pr.checkedAt === "" || total === 0
           ? {
               tone: "github",
@@ -560,22 +560,29 @@ function taskStanding(task: TaskSummary): Standing {
   return sessionStanding(sessions, place, same(place));
 }
 
-const VERDICT_WORDS: Record<string, string> = {
-  approve: "approved",
-  request_changes: "changes requested",
-  comment: "commented",
-};
-
 function reviewStanding(review: ReviewSummary): Standing {
   const sessions = reviewSessions(review);
   const pass = `Pass ${reviewPass(review)}`;
   switch (asPullReviewStatus(review.status)) {
-    case "waiting_checks":
-      return {
-        tone: "github",
-        line2: { long: `${pass} · waiting for checks`, short: `${pass} · checks` },
-        clock: { kind: "word", word: "GitHub" },
-      };
+    case "waiting_checks": {
+      // Until a reading lists a check, the row says GitHub is being read.
+      const { passed, total } = checkCounts(reviewChecks(review));
+      return review.checkedAt === "" || total === 0
+        ? {
+            tone: "github",
+            line2: same(`${pass} · checking GitHub`),
+            clock: { kind: "word", word: "GitHub" },
+            reading: true,
+          }
+        : {
+            tone: "github",
+            line2: {
+              long: `${pass} · checks ${passed}/${total}`,
+              short: `checks ${passed}/${total}`,
+            },
+            clock: { kind: "word", word: "GitHub" },
+          };
+    }
     case "applying": {
       const applying = same(`${pass} · applying`);
       return !sessions.some((session) => session.working)
@@ -804,6 +811,15 @@ export function taskRow(_app: State, task: TaskSummary, now: number): ItemRow {
     },
     now,
   );
+}
+
+/** waitSuffix is ", waiting for you for 18 minutes" for a row that has a chip, "" for one that has none. */
+export function waitSuffix(row: ItemRow): string {
+  if (row.clock?.kind !== "chip") {
+    return "";
+  }
+  const wait = row.clock.longTime === "just now" ? "less than a minute" : row.clock.longTime;
+  return `, waiting for you for ${wait}`;
 }
 
 /** reviewRow is the row of a review of a pull request. */

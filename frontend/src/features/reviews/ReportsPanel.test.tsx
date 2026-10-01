@@ -1,18 +1,32 @@
-import { screen } from "@testing-library/react";
+import { act, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { ReportsPanel } from "@/features/reviews/ReportsPanel";
 import { api, type ReviewSummary } from "@/lib/wails";
-import { renderWithStore } from "@/test/render";
+import { useAppStore } from "@/store/app-store";
+import { renderWithStore, type StoreOptions } from "@/test/render";
 import { makeReviewPass, makeReviewSummary, makeState } from "@/test/wails-mock";
 
-function panel(overrides: Partial<ReviewSummary> = {}) {
+function panel(overrides: Partial<ReviewSummary> = {}, ui: NonNullable<StoreOptions["ui"]> = {}) {
   const review = makeReviewSummary({ passes: [makeReviewPass()], ...overrides });
   return renderWithStore(<ReportsPanel review={review} />, {
     state: makeState({ reviews: [review] }),
+    ui,
   });
 }
 
 describe("ReportsPanel", () => {
+  it("is the aside Reports, closed by ×", async () => {
+    const { user } = panel({}, { panel: "reports" });
+
+    await user.click(
+      within(screen.getByRole("complementary", { name: "Reports" })).getByRole("button", {
+        name: "Close",
+      }),
+    );
+
+    expect(useAppStore.getState().panel).toBeNull();
+  });
+
   it("lists the context and every pass that was recorded", () => {
     panel({
       passes: [
@@ -68,6 +82,45 @@ describe("ReportsPanel", () => {
     expect(api.readReviewArtifact).toHaveBeenLastCalledWith("review-1", "context.md");
   });
 
+  it("focuses the way back in a report, and its row on the way back", async () => {
+    const { user } = panel();
+
+    await user.click(screen.getByRole("button", { name: "Review 1 · changes" }));
+    expect(screen.getByRole("button", { name: "← Reports" })).toHaveFocus();
+
+    await user.click(screen.getByRole("button", { name: "← Reports" }));
+    expect(screen.getByRole("button", { name: "Review 1 · changes" })).toHaveFocus();
+  });
+
+  it("opens at the report a pass of Details asked for, also with the panel already open", async () => {
+    const review = makeReviewSummary({
+      passes: [makeReviewPass(), makeReviewPass({ pass: 2, file: "review-2.md" })],
+    });
+    renderWithStore(<ReportsPanel review={review} />, {
+      state: makeState({ reviews: [review] }),
+    });
+    expect(screen.getByRole("button", { name: "Context" })).toBeInTheDocument();
+
+    act(() => useAppStore.getState().openPanelAt("reports", "review-2.md"));
+
+    expect(await screen.findByRole("heading", { name: "Review 2 · changes" })).toBeInTheDocument();
+    expect(api.readReviewArtifact).toHaveBeenCalledWith("review-1", "review-2.md");
+    expect(useAppStore.getState().panelDocument).toBeNull();
+  });
+
+  it("opens at the context a marker asked for", async () => {
+    panel({}, { panel: "reports", panelDocument: "context.md" });
+
+    expect(await screen.findByRole("heading", { name: "Context" })).toBeInTheDocument();
+    expect(api.readReviewArtifact).toHaveBeenCalledWith("review-1", "context.md");
+  });
+
+  it("falls back to the list for a document the review doesn't have", () => {
+    panel({}, { panel: "reports", panelDocument: "review-7.md" });
+
+    expect(screen.getByRole("button", { name: "Context" })).toBeInTheDocument();
+  });
+
   it("says when a pass was published, and opens the review on GitHub", async () => {
     const { user } = panel({
       passes: [
@@ -82,7 +135,7 @@ describe("ReportsPanel", () => {
 
     await user.click(screen.getByRole("button", { name: /Review 1 · changes · published/ }));
 
-    expect(await screen.findByText(/Published · Request changes/)).toBeInTheDocument();
+    expect(await screen.findByText(/^Published · Request changes · /)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Open on GitHub" }));
     expect(api.openExternal).toHaveBeenCalledWith(
       "https://github.com/dev/web/pull/31#pullrequestreview-1",

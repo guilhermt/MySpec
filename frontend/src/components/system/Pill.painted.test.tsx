@@ -107,4 +107,19 @@ describe.each(THEMES)("Pill in the %s theme", (theme) => {
     const body = pill(PILL, 1000);
     expect(getComputedStyle(body).paddingLeft).toBe("10px");
   });
+
+  it("draws the published pill with the idle circle and the word at 400", () => {
+    setTheme(theme);
+    pill({
+      ...PILL,
+      name: "Published",
+      position: "",
+      qualifier: "",
+      glyph: "idle",
+      word: "approved",
+      state: "published",
+    });
+    expect(getComputedStyle(screen.getByText("approved")).fontWeight).toBe("400");
+    expect(document.querySelector("[data-state='idle']")).not.toBeNull();
+  });
 });

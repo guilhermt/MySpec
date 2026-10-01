@@ -47,9 +47,9 @@ As seções substituem o interruptor **Pending only**. A contagem do nó **Revie
 | Coluna | Largura | Conteúdo |
 |---|---|---|
 | Referência | `--col-ref` | `web#2291`, em `--text-meta` e `--ink-4`, algarismos tabulares; `--ink-3` na linha aberta |
-| Título | o resto | Em `--text-ui` e `--ink-1`, cortado com tooltip. Depois dele, até duas etiquetas contornadas por `--line-2`, em `--text-micro`: `Draft` e a primeira label que não repete o autor (`dependabot` não aparece na PR do dependabot), com `+N` quando há mais labels, que o tooltip lista. As etiquetas não cortam: o título corta antes |
+| Título | o resto | Em `--text-ui` e `--ink-1`, cortado com tooltip. Depois dele, até duas etiquetas contornadas por `--line-2`, em `--text-micro`: `Draft` e a primeira label que não repete o autor (`dependabot` não aparece na PR do dependabot), com `+N` quando há mais labels, que o tooltip lista. As etiquetas não cortam e cedem antes do título: quando ele ficaria abaixo de um terço da linha, elas viram um só `+N`, com `Draft` e todas as labels no tooltip, e, quando nem ele cabe ao lado do terço (a 812 px, com o painel), saem da linha e ficam no nome acessível dela; o painel aberto as mostra |
 | Autor | `--col-author` | O login em `--ink-3`; `you` na sua |
-| Estado | `--col-state` | O que importa: `Never reviewed` e `3 new commits` em `--ink-2`, peso 400, os dois com o mesmo peso porque nenhum é situação (`New commits` quando o commit do seu review não está entre os 100 últimos da PR); com review, o glifo e a linha 2 da árvore na forma longa (`● Decide findings · pass 1 · 1/3` em `--ink-1` e peso 500 quando espera por você; `○ Published · changes requested` quando não), e a forma curta quando a longa não cabe; `Task · Rate limit per API key` com o glifo da task; `Yours`; `Reviewed` em `--ink-3`, com o seu review no tooltip (`You approved it today at 10:02`); numa PR de fork, `From a fork · can't be reviewed yet` |
+| Estado | `--col-state` | O que importa: `Never reviewed` e `3 new commits` em `--ink-2`, peso 400, os dois com o mesmo peso porque nenhum é situação (`New commits` quando o commit do seu review não está entre os 100 últimos da PR); com review, o glifo e a linha 2 da árvore na forma longa (`● Decide findings · pass 1 · 1 of 3` em `--ink-1` e peso 500 quando espera por você; `○ Published · changes requested` quando não), e a forma curta quando a longa não cabe; `Task · Rate limit per API key` com o glifo da task; `Yours`; `Reviewed` em `--ink-3`, com o seu review no tooltip (`You approved it today at 10:02`); numa PR de fork, `From a fork · can't be reviewed yet` |
 | Teclas | `--col-keys` | `R review`, `R open` ou `R open task`, visível só na linha com o foco |
 
 Sem tamanho, idade, checks, card, labels na segunda linha e ícone **Open on GitHub**: o card, os checks e a descrição estão no painel, e `O` abre a PR no GitHub. O nome acessível é a frase inteira: `api#1302 Idempotency keys for payment retries. by lnakamura. pending: never reviewed`, com o draft e o review quando há.
@@ -165,7 +165,7 @@ A pílula é uma parada de Tab com o estado inteiro no nome acessível (`Progres
 
 **O `⋯`**, agrupado:
 
-- **Pull request web#2291:** **Open PR**, **Refresh PR** (tooltip `checked 40s ago`), **Open in VS Code** `Ctrl+E` (desabilitado com `· the worktree doesn't exist yet` antes de ela existir);
+- **Pull request web#2291:** **Open PR**, **Refresh PR** (tooltip `checked just now`), **Open in VS Code** `Ctrl+E` (desabilitado com `· the worktree doesn't exist yet` antes de ela existir);
 - **Review:** **Review again…**, desabilitado com a razão quando o produto não aceita uma passada (`· a pass waits for the checks`, `· a pass is running`, `· the report of pass 1 isn't in yet`, `· the reviewer is working`, `· the agent is applying the findings`, `· the changes are being committed`);
 - depois de um separador, **Delete review…**, em vermelho, com a confirmação do produto (`The worktree, the conversation and the reports go away. What was published on GitHub stays.`).
 
@@ -194,7 +194,7 @@ Pergunta, permissão, erro de sessão e fila seguem a task.
 
 Antes de cada passada, com algum check pendente ou a mergeabilidade não calculada:
 
-- a conversa tem o início e as instruções; embaixo, o bloco dos checks pelo nome (`.gh`): `◌ Waiting for checks · 4 of 6 passed`, `checked 40s ago` e **Refresh**; uma linha por check, com o glifo, o nome em mono, o estado (`passed`, `running` em peso 500, `queued`, `failed` em vermelho) e a duração; e ao pé `The first pass starts when e2e / chromium and preview-deploy finish. MySpec reads web#2291 every minute; you can leave meanwhile.`;
+- a conversa tem o início e as instruções; embaixo, o bloco dos checks pelo nome (`.gh`): `◌ Waiting for checks · 4 of 6 passed`, `checked just now` e **Refresh**; uma linha por check, com o glifo, o nome em mono, o estado (`passed`, `running` em peso 500, `queued`, `failed` em vermelho) e a duração; e ao pé `The first pass starts when e2e / chromium and preview-deploy finish. MySpec reads web#2291 every minute; you can leave meanwhile.`;
 - sem compositor e sem barra do pedido: é o GitHub trabalhando, não uma situação;
 - a pílula diz `checks 4/6` com o círculo tracejado, e a linha da árvore `Pass 1 · checks 4/6` com `GitHub` à direita.
 

@@ -719,16 +719,18 @@ type QuestionEntry struct {
 type MarkerEntry struct {
 	// Type is prd_written, prd_updated, tech_spec_written, tech_spec_updated,
 	// plan_written, plan_updated, one_shot_written, one_shot_updated,
-	// pr_review_written, step_review_started, step_review_written,
-	// review_started, discussion_started, stage_started, step_started,
-	// compacted, interrupted, retried, committed, pr_opened, checks_read,
-	// draft_approved, changes_approved, paused or plan_invalid.
+	// pr_review_written, pr_review_revised, findings_decided,
+	// review_published, new_commits, step_review_started,
+	// step_review_written, review_started, discussion_started, stage_started,
+	// step_started, compacted, interrupted, retried, committed, pr_opened,
+	// checks_read, draft_approved, changes_approved, paused or plan_invalid.
 	Type      string `json:"type"`
 	PreTokens int    `json:"preTokens"`
 	// Stage belongs to stage_started alone, Step to the markers of a step
 	// (step_started, step_review_started), Pass to the markers of a review
-	// (pr_review_written, step_review_written) with Clean; Findings belongs to
-	// step_review_written alone, -1 when unknown; Restarted belongs to
+	// (pr_review_written, pr_review_revised, step_review_written) with Clean;
+	// Findings belongs to pr_review_written, pr_review_revised and
+	// step_review_written, -1 when unknown; Restarted belongs to
 	// stage_started and step_started.
 	Stage     string `json:"stage"`
 	Step      int    `json:"step"`
@@ -759,6 +761,31 @@ type MarkerEntry struct {
 	Title    string        `json:"title"`
 	Files    int           `json:"files"`
 	Problems []PlanProblem `json:"problems"`
+	// Model, Effort and Mode (publish or apply) belong to review_started;
+	// Approved and Discarded to findings_decided; Verdict, Inline, Body,
+	// Summary, Minimal and URL to review_published; Commits (never nil) and
+	// Count (-1 when the head before is not among the ones read) to
+	// new_commits.
+	Model     string         `json:"model"`
+	Effort    string         `json:"effort"`
+	Mode      string         `json:"mode"`
+	Approved  int            `json:"approved"`
+	Discarded int            `json:"discarded"`
+	Verdict   string         `json:"verdict"`
+	Inline    int            `json:"inline"`
+	Body      int            `json:"body"`
+	Summary   bool           `json:"summary"`
+	Minimal   bool           `json:"minimal"`
+	URL       string         `json:"url"`
+	Commits   []MarkerCommit `json:"commits"`
+	Count     int            `json:"count"`
+}
+
+// MarkerCommit is a commit of a new_commits marker; the SHA is the short one.
+type MarkerCommit struct {
+	SHA     string `json:"sha"`
+	Subject string `json:"subject"`
+	Author  string `json:"author"`
 }
 
 // ErrorEntry is a failure shown in the conversation.
@@ -1081,7 +1108,8 @@ type ReviewCenter struct {
 	ReadAt   string         `json:"readAt"` // "" before the first reading
 	Reading  bool           `json:"reading"`
 	Filters  ReviewFilters  `json:"filters"`
-	// PendingCount is how many pending pull requests pass the filters.
+	// PendingCount is how many pending pull requests pass the filters and have no
+	// active review.
 	PendingCount int `json:"pendingCount"`
 	// Authors and Labels are what the reading found, of every pull request and
 	// not only the ones the filters keep, in alphabetical order; never nil.
@@ -1094,6 +1122,7 @@ type PullsFailure struct {
 	RepositoryID string `json:"repositoryId"`
 	Repository   string `json:"repository"` // owner/name
 	Message      string `json:"message"`
+	FailedAt     string `json:"failedAt"` // RFC 3339: the first failing reading of the run
 }
 
 // ReviewFilters is what the Reviews view shows. The zero value shows
@@ -1106,7 +1135,10 @@ type ReviewFilters struct {
 	AuthorsExclude []string `json:"authorsExclude"` // never nil
 	LabelsInclude  []string `json:"labelsInclude"`  // never nil
 	LabelsExclude  []string `json:"labelsExclude"`  // never nil
-	PendingOnly    bool     `json:"pendingOnly"`
+	// BoardName and RepositoryName are the names of the board or the repository
+	// when it was chosen, which the chip of one that left shows.
+	BoardName      string `json:"boardName"`
+	RepositoryName string `json:"repositoryName"`
 }
 
 // PullLabel is a label of a pull request, as GitHub colours it.
@@ -1153,14 +1185,40 @@ type PullRequestRow struct {
 	// a string for the same reason as State.Theme.
 	Action    string `json:"action"`
 	UpdatedAt string `json:"updatedAt"`
+	// HeadBranch and BaseBranch are the branch of the pull request and the one
+	// it merges into.
+	HeadBranch string    `json:"headBranch"`
+	BaseBranch string    `json:"baseBranch"`
+	Body       string    `json:"body"`   // the description, Markdown; "" without one
+	Checks     []PRCheck `json:"checks"` // never nil
+	// Mergeable is mergeable, conflicting, unknown or "", a string for the same
+	// reason as State.Theme.
+	Mergeable string `json:"mergeable"`
+	// YourReview is the last review the account of gh submitted; null without
+	// one.
+	YourReview *PullReview `json:"yourReview"`
+	// NewCommitCount is how many commits came after that review; -1 when its
+	// commit is not among the last 100.
+	NewCommitCount int `json:"newCommitCount"`
+}
+
+// PullReview is a review the account of gh submitted: its state and when.
+type PullReview struct {
+	// State is approved, changes_requested, commented or dismissed, a string for
+	// the same reason as State.Theme.
+	State string `json:"state"`
+	At    string `json:"at"` // RFC 3339
 }
 
 // ReviewFinding is one numbered finding of a pass of a review.
 type ReviewFinding struct {
 	Number int    `json:"number"`
+	Title  string `json:"title"`
 	Path   string `json:"path"` // the file it is anchored to; "" for a general finding
 	Line   int    `json:"line"` // the line of the new side of the diff; 0 for a general finding
-	Text   string `json:"text"`
+	// LineURL is the line in Files changed on GitHub; "" for a general finding.
+	LineURL string `json:"lineUrl"`
+	Text    string `json:"text"`
 	// Decision is "", approved or discarded, a string for the same reason as
 	// State.Theme.
 	Decision string `json:"decision"`
@@ -1191,6 +1249,16 @@ type ReviewPass struct {
 	// Edited is whether the user changed the summary or the text of a finding
 	// from what the report has, which another pass would discard.
 	Edited bool `json:"edited"`
+	// Checks, Mergeable and ChecksReadAt are the checks of the reading that let
+	// the pass start, whether the branch merged into the base then, and when it
+	// was made (RFC 3339); empty for a pass sent before they were kept.
+	Checks           []PRCheck `json:"checks"` // never nil
+	Mergeable        string    `json:"mergeable"`
+	ChecksReadAt     string    `json:"checksReadAt"`
+	RecordedAt       string    `json:"recordedAt"`       // when the report was first recorded, RFC 3339; "" when unknown
+	SentAt           string    `json:"sentAt"`           // when the approved findings went to the agent, RFC 3339; "" when unknown
+	Sent             bool      `json:"sent"`             // the approved findings went to the agent (apply mode)
+	SummaryPublished bool      `json:"summaryPublished"` // the summary went with the published review
 }
 
 // ReviewSummary is an active review of a pull request, with the state of its
@@ -1220,8 +1288,21 @@ type ReviewSummary struct {
 	// deciding on.
 	StalePass bool `json:"stalePass"`
 	// CheckError is what the last automatic reading of the pull request said
-	// when it failed; "" otherwise.
-	CheckError string `json:"checkError"`
+	// when it failed, as the user reads it; "" otherwise. CheckErrorAt is the
+	// first failing reading of the run (RFC 3339); "" when the last one worked.
+	CheckError   string `json:"checkError"`
+	CheckErrorAt string `json:"checkErrorAt"`
+	// Checks and Mergeable are the live checks and the merge of the last
+	// reading; CheckedAt is when it was made (RFC 3339), "" before one since
+	// the app started.
+	Checks    []PRCheck `json:"checks"` // never nil
+	Mergeable string    `json:"mergeable"`
+	CheckedAt string    `json:"checkedAt"`
+	// NewCommits is how many commits came since the published commit, -1 when
+	// unknown, 0 outside new_commits; StaleCommits, since the pass being
+	// decided, -1 when unknown, 0 when the pass isn't stale.
+	NewCommits   int `json:"newCommits"`
+	StaleCommits int `json:"staleCommits"`
 	// Trouble is what went wrong since the last review pass; meaningful in
 	// trouble.
 	Trouble PRTrouble `json:"trouble"`
@@ -1292,10 +1373,17 @@ type ArchivedReview struct {
 	Mode string `json:"mode"`
 	// Outcome is merged or closed: what became of the pull request.
 	Outcome    string       `json:"outcome"`
-	Card       *PullCard    `json:"card"` // nil when the pull request had no card
+	BaseBranch string       `json:"baseBranch"` // as GitHub names it, without origin/
+	Card       *PullCard    `json:"card"`       // nil when the pull request had no card
 	Passes     []ReviewPass `json:"passes"`
-	CreatedAt  string       `json:"createdAt"`
-	ArchivedAt string       `json:"archivedAt"`
+	// MergedBy is the login of who merged the pull request, MergedAt when, and
+	// ClosedAt when it closed (RFC 3339); "" when it did not happen or was not
+	// kept.
+	MergedBy   string `json:"mergedBy"`
+	MergedAt   string `json:"mergedAt"`
+	ClosedAt   string `json:"closedAt"`
+	CreatedAt  string `json:"createdAt"`
+	ArchivedAt string `json:"archivedAt"`
 }
 
 // StartReviewRequest is what the user chose in the dialog that starts a review.

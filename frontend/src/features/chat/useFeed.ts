@@ -55,13 +55,15 @@ const held = new WeakMap<HTMLElement, string | null>();
 
 // makeCurrent leaves one stop of Tab in the feed, the item given, and in Tab only the controls of
 // that item: the others' are taken out, and given back when their item becomes the current one.
+// An item with data-feed-stop="inner" is never the stop itself: its stop is the line it keeps in
+// Tab, one of its controls.
 function makeCurrent(
   feed: HTMLElement,
   items: readonly HTMLElement[],
   current: HTMLElement | null,
 ) {
   for (const item of items) {
-    setTabIndex(item, item === current ? 0 : -1);
+    setTabIndex(item, item === current && item.dataset.feedStop !== "inner" ? 0 : -1);
   }
   for (const control of feed.querySelectorAll<HTMLElement>(CONTROL)) {
     if (control.matches(ITEM)) {
@@ -197,7 +199,8 @@ export function stepFeed(entry: HTMLElement, by: -1 | 1): void {
  * order of the page: arriving, the pending card or the last entry; Tab goes through the controls
  * of the current entry only, and then out of the feed. The arrows, Page Up and Down, Home and End
  * walk the entries; → and ← open and fold the data-feed-toggle of an entry, and ← goes from a
- * folded inner entry to the one around it. An entry with data-feed-keys="own" keeps the arrows; a
+ * folded inner entry to the one around it. An entry with data-feed-keys="own" keeps the arrows, and
+ * one with data-feed-stop="inner" has its stop in a line of its own, never itself; a
  * data-feed-entry is an entry whose toggle is its stop.
  */
 export function useFeed(feedRef: RefObject<HTMLElement | null>): void {

@@ -44,6 +44,11 @@ export function lowerFirst(text: string): string {
   return `${text.charAt(0).toLowerCase()}${text.slice(1)}`;
 }
 
+/** counted is a count with its noun, in the plural unless it is one: "1 finding", "0 findings", "3 findings". */
+export function counted(count: number, noun: string): string {
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
+
 /**
  * situationLabel is what a situation asks of the user, in the few words the
  * lists and the section have room for. A situation with more than one form
@@ -70,8 +75,11 @@ export function situationLabel(situation: Situation): string {
       return "Permission";
     case "question":
       return "Question";
+    // A review waits on its reviewer for the report of a pass.
     case "reply":
-      return "Waiting for reply";
+      return asPlaceKind(situation.place.kind) === "review"
+        ? "Waiting for the report"
+        : "Waiting for reply";
     case "ready_to_continue":
       return "Ready to continue";
     // The two reviews move through review, staged and approve; a form outside
@@ -94,12 +102,12 @@ export function situationLabel(situation: Situation): string {
       return form === "approve" ? "Approve changes" : "Review changes";
     case "merge":
       return form === "close" ? "Ready to close" : "Ready to merge";
-    // A review report is decided on, then published, and in apply mode applied.
+    // A review report is decided on, then ready to publish, and in apply mode ready to apply.
     case "review_report":
       if (form === "publish") {
-        return "Publish review";
+        return "Ready to publish";
       }
-      return form === "apply" ? "Apply findings" : "Decide findings";
+      return form === "apply" ? "Ready to apply" : "Decide findings";
     case "new_commits":
       return "New commits";
     case "drafts":

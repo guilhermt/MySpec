@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { GoneView } from "@/features/navigation/GoneView";
 import type { GoneLocation, Location } from "@/lib/locations";
@@ -11,6 +11,8 @@ import {
   makeArchivedTask,
   makeBoard,
   makeRepository,
+  makeReviewFinding,
+  makeReviewPass,
   makeSituation,
   makeState,
   makeTask,
@@ -29,6 +31,13 @@ function stateWith(overrides: Partial<State> = {}): State {
     tasks: [WAITING],
     ...overrides,
   });
+}
+
+// today is a moment of today, as the page tells it: by the time alone.
+function today(hour: number, minute: number): string {
+  const date = new Date();
+  date.setHours(hour, minute, 0, 0);
+  return date.toISOString();
 }
 
 function gone(item: GoneLocation["item"], id: string, name: string, boardId = ""): GoneLocation {
@@ -81,6 +90,86 @@ describe("GoneView", () => {
 
     expect(screen.getByText("web#12 was merged, and its review ended")).toBeInTheDocument();
     expect(actions()).toEqual(["Next that needs you", "Open in History", "Back to Reviews"]);
+  });
+
+  it("tells who merged the pull request and when, then the result of each pass", () => {
+    const at = today;
+    page(
+      gone("review", "review-1", "web#12"),
+      stateWith({
+        reviewHistory: [
+          makeArchivedReview({
+            id: "review-1",
+            outcome: "merged",
+            mergedBy: "rsouza",
+            mergedAt: at(16, 20),
+            baseBranch: "dev",
+            passes: [
+              makeReviewPass({
+                pass: 1,
+                published: true,
+                publishedAt: at(13, 41),
+                verdict: "request_changes",
+                findings: [
+                  makeReviewFinding({ number: 1, placement: "inline" }),
+                  makeReviewFinding({ number: 2, placement: "inline" }),
+                ],
+              }),
+              makeReviewPass({ pass: 2, file: "review-2.md", findings: [] }),
+            ],
+          }),
+        ],
+      }),
+    );
+
+    expect(
+      screen.getByText(
+        "rsouza merged it into dev at 16:20. MySpec stopped the session and removed the worktree. The reports and the verdicts are in History; the conversation isn't kept.",
+      ),
+    ).toBeInTheDocument();
+    const passes = screen.getByRole("list", { name: "Passes" });
+    expect(
+      within(passes)
+        .getAllByRole("listitem")
+        .map((item) => item.textContent),
+    ).toEqual(["Pass 1 · Request changes · 2 inline comments13:41", "Pass 2 · not published"]);
+  });
+
+  it("tells when a pull request was closed without a merge", () => {
+    const closedAt = today(16, 20);
+    page(
+      gone("review", "review-1", "web#12"),
+      stateWith({
+        reviewHistory: [makeArchivedReview({ id: "review-1", outcome: "closed", closedAt })],
+      }),
+    );
+
+    expect(
+      screen.getByText(/^It was closed at 16:20\. MySpec stopped the session/),
+    ).toBeInTheDocument();
+  });
+
+  it("leaves out a time the archive didn't keep, and the passes of a review without any report", () => {
+    page(
+      gone("review", "review-1", "web#12"),
+      stateWith({
+        reviewHistory: [
+          makeArchivedReview({ id: "review-1", outcome: "merged", passes: [], mergedBy: "" }),
+        ],
+      }),
+    );
+
+    expect(
+      screen.getByText(/^It was merged into dev\. MySpec stopped the session/),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: "Passes" })).not.toBeInTheDocument();
+  });
+
+  it("says nothing more of a review that was deleted", () => {
+    page(gone("review", "review-1", "web#12"), stateWith());
+
+    expect(screen.queryByText(/MySpec stopped the session/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: "Passes" })).not.toBeInTheDocument();
   });
 
   it("shows a review that was closed without a merge", () => {

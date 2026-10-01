@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { describe, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { paintOf, resolve, setTheme, THEMES, token } from "@/test/painted";
+import { paintOf, resolve, setTheme, THEMES, TRANSPARENT, token } from "@/test/painted";
 import { Button } from "./Button";
 import { Dialog, DialogBody, DialogCancel, DialogFooter, type DialogProps } from "./Dialog";
 
@@ -67,6 +67,22 @@ describe.each(THEMES)("Dialog in the %s theme", (theme) => {
     if (footer !== null) {
       expect(paintOf(footer, { background: "" })).toEqual({ background: token("--surface-0") });
     }
+  });
+
+  it("draws Cancel as a ghost, without a body", () => {
+    setTheme(theme);
+    render(
+      <Dialog open onOpenChange={() => {}} title="Delete the task" alert>
+        <DialogBody>The worktree is removed.</DialogBody>
+        <DialogFooter>
+          <DialogCancel />
+          <Button variant="danger">Delete</Button>
+        </DialogFooter>
+      </Dialog>,
+    );
+    const cancel = screen.getByRole("button", { name: "Cancel" });
+    const want = { background: TRANSPARENT, border: TRANSPARENT, color: token("--ink-2") };
+    expect(paintOf(cancel, want)).toEqual(want);
   });
 
   it("lays the scrim behind it, without blur", () => {

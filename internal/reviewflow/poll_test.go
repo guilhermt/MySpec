@@ -1,11 +1,16 @@
 package reviewflow_test
 
 import (
+	"fmt"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
+
 	"github.com/guilhermt/myspec/internal/gh"
+	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prreview"
 	"github.com/guilhermt/myspec/internal/pulls"
 	"github.com/guilhermt/myspec/internal/reviewflow"
@@ -168,7 +173,7 @@ func TestACommitOnAPublishedPullRequestBringsTheReviewBackToTheUser(t *testing.T
 
 	f := newFixture(t)
 	id := toPublish(t, f)
-	if err := f.service.Publish(t.Context(), id, prreview.VerdictComment); err != nil {
+	if err := f.service.Publish(t.Context(), id, prreview.VerdictComment, true); err != nil {
 		t.Fatalf("publish review: %v", err)
 	}
 	moved := openPR()
@@ -316,5 +321,343 @@ func TestSyncLeavesAReviewWithoutAConversationAlone(t *testing.T) {
 	}
 	if _, open := f.sessions.Summary(session.Key{TaskID: id, Stage: session.ReviewStage}); open {
 		t.Error("the review has a conversation it never had")
+	}
+}
+
+func TestAReadingKeepsTheChecksTheMergeAndTheHourOfTheLastGoodReading(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := deciding(t, f)
+	if got := f.state(t, id); len(got.Checks.Checks) != 0 || !got.CheckedAt.IsZero() {
+		t.Fatalf("state = %+v, want no reading before the first one", got)
+	}
+	f.pulls.seed(withChecks(openPR(), gh.MergeableConflicting, passedCheck, failedCheck))
+
+	f.polled(t, id, func(s reviewflow.State) bool { return !s.CheckedAt.IsZero() }, "the reading to reach the review")
+
+	state := f.state(t, id)
+	if diff := cmp.Diff([]gh.Check{passedCheck, failedCheck}, state.Checks.Checks); diff != "" {
+		t.Errorf("checks (-want +got):\n%s", diff)
+	}
+	if state.Checks.Mergeable != gh.MergeableConflicting {
+		t.Errorf("mergeable = %q, want conflicting", state.Checks.Mergeable)
+	}
+	if !slices.Contains(f.changed(), id) {
+		t.Error("the app was not told the review changed")
+	}
+}
+
+func TestAFailingReadingKeepsTheHourOfItsFirstFailureAndSaysItInTheWordsOfTheProduct(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := toPublish(t, f)
+	f.pulls.failWith(unauthenticated)
+
+	f.polled(t, id, func(s reviewflow.State) bool { return s.CheckError != "" }, "the failed reading to reach the review")
+
+	first := f.state(t, id)
+	if first.CheckError != unauthenticated.Message() || strings.HasPrefix(first.CheckError, "pulls: ") {
+		t.Errorf("check error = %q, want %q", first.CheckError, unauthenticated.Message())
+	}
+	if first.CheckErrorAt.IsZero() {
+		t.Fatal("checkErrorAt is zero after a failing reading")
+	}
+
+	f.pollOnce(t)
+	if got := f.state(t, id).CheckErrorAt; !got.Equal(first.CheckErrorAt) {
+		t.Errorf("checkErrorAt = %v, want the hour of the first failure, %v", got, first.CheckErrorAt)
+	}
+
+	f.pulls.failWith(nil)
+	f.polled(t, id, func(s reviewflow.State) bool { return s.CheckError == "" }, "the reading that worked to settle the failure")
+	if got := f.state(t, id).CheckErrorAt; !got.IsZero() {
+		t.Errorf("checkErrorAt = %v, want it gone with the first good reading", got)
+	}
+}
+
+func TestAMergedPullRequestArchivesItsReviewWithWhoMergedItAndWhen(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := toPublish(t, f)
+	mergedAt := time.Date(2026, 9, 30, 12, 0, 0, 0, time.UTC)
+	merged := openPR()
+	merged.State = string(prreview.PRMerged)
+	merged.MergedBy, merged.MergedAt, merged.ClosedAt = "rsouza", mergedAt, mergedAt
+	f.pulls.seed(merged)
+
+	f.service.Poll()
+	waitFor(t, "the review to reach the history", func() bool {
+		stored, ok := f.reviews.Lookup(id)
+		return ok && stored.Archived()
+	})
+
+	stored, _ := f.reviews.Lookup(id)
+	if stored.MergedBy != "rsouza" || !stored.MergedAt.Equal(mergedAt) || !stored.ClosedAt.Equal(mergedAt) {
+		t.Errorf("review = %+v, want who merged it and when", stored)
+	}
+}
+
+func TestAClosedPullRequestArchivesItsReviewWithWhenItClosed(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := toPublish(t, f)
+	closedAt := time.Date(2026, 9, 30, 13, 0, 0, 0, time.UTC)
+	closed := openPR()
+	closed.State = string(prreview.PRClosed)
+	closed.ClosedAt = closedAt
+	f.pulls.seed(closed)
+
+	f.service.Poll()
+	waitFor(t, "the review to reach the history", func() bool {
+		stored, ok := f.reviews.Lookup(id)
+		return ok && stored.Archived()
+	})
+
+	stored, _ := f.reviews.Lookup(id)
+	if stored.MergedBy != "" || !stored.MergedAt.IsZero() || !stored.ClosedAt.Equal(closedAt) {
+		t.Errorf("review = %+v, want only when it closed", stored)
+	}
+}
+
+func TestRefreshPRReadsTheReviewOutOfTheMinute(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := deciding(t, f)
+	f.pulls.seed(withChecks(openPR(), gh.MergeableClean, passedCheck))
+	before := f.pulls.readings()
+
+	if err := f.service.RefreshPR(t.Context(), id); err != nil {
+		t.Fatalf("refresh review: %v", err)
+	}
+
+	if got := f.pulls.readings(); got != before+1 {
+		t.Errorf("readings = %d, want one more than %d", got, before)
+	}
+	if state := f.state(t, id); state.CheckedAt.IsZero() || len(state.Checks.Checks) != 1 {
+		t.Errorf("state = %+v, want the reading the call made", state)
+	}
+}
+
+func TestRefreshPRWaitsForTheReadingUnderWayWhenItBringsTheReview(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := deciding(t, f)
+	f.pulls.seed(withChecks(openPR(), gh.MergeableClean, passedCheck))
+	before := f.pulls.readings()
+	release, entered := f.pulls.holdReadings()
+	t.Cleanup(release)
+
+	f.service.Poll()
+	<-entered
+	done := make(chan error, 1)
+	go func() { done <- f.service.RefreshPR(t.Context(), id) }()
+
+	select {
+	case err := <-done:
+		t.Fatalf("refresh review returned %v before the reading under way ended", err)
+	case <-time.After(settleWait):
+	}
+	release()
+	if err := <-done; err != nil {
+		t.Fatalf("refresh review: %v", err)
+	}
+
+	if got := f.pulls.readings(); got != before+1 {
+		t.Errorf("readings = %d, want only the one that was under way (%d)", got, before+1)
+	}
+	if f.state(t, id).CheckedAt.IsZero() {
+		t.Error("the review has no reading after the refresh")
+	}
+}
+
+func TestRefreshPRReadsOnlyTheReviewAfterAReadingThatDidNotBringIt(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := deciding(t, f)
+	other := openPR()
+	other.Number, other.HeadBranch = prNumber+1, "label-cache"
+	other.URL = "https://github.com/dev/web/pull/43"
+	f.pulls.seed(other)
+	if _, err := f.service.Start(t.Context(), reviewflow.StartParams{
+		RepositoryID: repoID,
+		Number:       other.Number,
+		Choice:       models.Choice{Model: models.Opus55, Effort: models.High},
+		Mode:         prreview.ModePublish,
+	}); err != nil {
+		t.Fatalf("start the other review: %v", err)
+	}
+	f.pulls.forget(prNumber)
+	before := f.pulls.readings()
+	release, entered := f.pulls.holdReadings()
+	t.Cleanup(release)
+
+	f.service.Poll()
+	<-entered
+	done := make(chan error, 1)
+	go func() { done <- f.service.RefreshPR(t.Context(), id) }()
+	time.Sleep(settleWait)
+	f.pulls.seed(openPR())
+	release()
+	if err := <-done; err != nil {
+		t.Fatalf("refresh review: %v", err)
+	}
+
+	if got := f.pulls.readings(); got != before+2 {
+		t.Errorf("readings = %d, want the one under way and the one of the refresh (%d)", got, before+2)
+	}
+	if f.state(t, id).CheckedAt.IsZero() {
+		t.Error("the review has no reading after the refresh")
+	}
+	asked := f.pulls.refsRead()
+	if len(asked) < before+2 {
+		t.Fatalf("readings = %v, want the one under way and the one of the refresh", asked)
+	}
+	if len(asked[before]) != 2 {
+		t.Errorf("refs of the reading under way = %v, want both reviews", asked[before])
+	}
+	want := []pulls.Ref{{Owner: "dev", Name: "web", Number: prNumber}}
+	if diff := cmp.Diff(want, asked[before+1]); diff != "" {
+		t.Errorf("refs of the reading of the refresh (-want +got):\n%s", diff)
+	}
+}
+
+func TestRefreshPRRefusesAReviewThatIsGoneAndReadsNothingOnceClosed(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := deciding(t, f)
+
+	wantErrIs(t, f.service.RefreshPR(t.Context(), "review-gone"), prreview.ErrNotFound)
+
+	before := f.pulls.readings()
+	f.service.Close()
+	if err := f.service.RefreshPR(t.Context(), id); err != nil {
+		t.Errorf("refresh review = %v, want nil on a closed flow", err)
+	}
+	if got := f.pulls.readings(); got != before {
+		t.Errorf("readings = %d, want none after the flow closed", got-before)
+	}
+}
+
+func TestANewHeadAfterThePublicationMarksTheCommitsBetweenTheTwoHeads(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := toPublish(t, f)
+	if err := f.service.Publish(t.Context(), id, prreview.VerdictComment, true); err != nil {
+		t.Fatalf("publish review: %v", err)
+	}
+	moved := openPR()
+	moved.HeadCommit = otherHash
+	moved.Commits = []pulls.Commit{
+		{SHA: "0000000aaaa", Subject: "Before the review", Author: "rsouza"},
+		{SHA: headHash, Subject: "The one reviewed", Author: "rsouza"},
+		{SHA: "1111111bbbb", Subject: "Fix the time zone rule", Author: "rsouza"},
+		{SHA: otherHash, Subject: "Cover the cache", Author: "tchen"},
+	}
+	f.pulls.seed(moved)
+
+	f.polled(t, id, func(s reviewflow.State) bool {
+		return s.Status == reviewflow.StatusNewCommits
+	}, "the new commits of the pull request to be noticed")
+
+	want := []session.MarkerEntry{{
+		Type: session.MarkerNewCommits, Count: 2,
+		Commits: []session.MarkerCommit{
+			{SHA: "1111111", Subject: "Fix the time zone rule", Author: "rsouza"},
+			{SHA: "bbb2222", Subject: "Cover the cache", Author: "tchen"},
+		},
+	}}
+	if diff := cmp.Diff(want, f.sessions.markersOf(session.MarkerNewCommits)); diff != "" {
+		t.Errorf("new_commits markers (-want +got):\n%s", diff)
+	}
+}
+
+func TestTheNewCommitsAreMarkedOnlyOnceTheNewHeadIsStored(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := toPublish(t, f)
+	if err := f.service.Publish(t.Context(), id, prreview.VerdictComment, true); err != nil {
+		t.Fatalf("publish review: %v", err)
+	}
+	moved := openPR()
+	moved.HeadCommit = otherHash
+	moved.Commits = []pulls.Commit{
+		{SHA: headHash, Subject: "The one reviewed", Author: "rsouza"},
+		{SHA: otherHash, Subject: "Cover the cache", Author: "tchen"},
+	}
+	f.pulls.seed(moved)
+	f.store.failUpdate(errStore)
+
+	f.pollOnce(t)
+	f.pollOnce(t)
+	if got := f.sessions.markersOf(session.MarkerNewCommits); len(got) != 0 {
+		t.Fatalf("new_commits markers = %+v, want none while the store fails", got)
+	}
+
+	f.store.failUpdate(nil)
+	f.polled(t, id, func(s reviewflow.State) bool {
+		return s.Status == reviewflow.StatusNewCommits
+	}, "the new commits of the pull request to be noticed")
+	f.pollOnce(t)
+	if got := f.sessions.markersOf(session.MarkerNewCommits); len(got) != 1 || got[0].Count != 1 {
+		t.Errorf("new_commits markers = %+v, want one with one commit", got)
+	}
+}
+
+func TestANewHeadWhoseParentIsNotAmongTheRecentCommitsMarksTheLastTwentyAndCountsMinusOne(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := toPublish(t, f)
+	if err := f.service.Publish(t.Context(), id, prreview.VerdictComment, true); err != nil {
+		t.Fatalf("publish review: %v", err)
+	}
+	moved := openPR()
+	moved.HeadCommit = otherHash
+	for i := range 30 {
+		moved.Commits = append(moved.Commits, pulls.Commit{
+			SHA: fmt.Sprintf("%07d", i), Subject: fmt.Sprintf("Commit %d", i), Author: "rsouza",
+		})
+	}
+	f.pulls.seed(moved)
+
+	f.polled(t, id, func(s reviewflow.State) bool {
+		return s.Status == reviewflow.StatusNewCommits
+	}, "the new commits of the pull request to be noticed")
+
+	got := f.sessions.markersOf(session.MarkerNewCommits)
+	if len(got) != 1 || got[0].Count != -1 || len(got[0].Commits) != 20 {
+		t.Fatalf("new_commits markers = %+v, want one with 20 commits and count -1", got)
+	}
+	if first := got[0].Commits[0]; first.Subject != "Commit 10" {
+		t.Errorf("first commit = %+v, want the 11th of the thirty", first)
+	}
+}
+
+func TestAHeadThatMovedBeforeAnyPublicationMarksNoCommits(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := deciding(t, f)
+	moved := openPR()
+	moved.HeadCommit = otherHash
+	f.pulls.seed(moved)
+
+	f.polled(t, id, func(reviewflow.State) bool {
+		stored, _ := f.reviews.Get(id)
+		return stored.HeadCommit == otherHash
+	}, "the new head to be read")
+
+	if got := f.sessions.markersOf(session.MarkerNewCommits); len(got) != 0 {
+		t.Errorf("new_commits markers = %+v, want none before the review was published", got)
 	}
 }

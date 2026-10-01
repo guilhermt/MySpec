@@ -15,6 +15,7 @@ import {
 import { screenSituationKindOf } from "@/features/task/request";
 import { TaskComposer } from "@/features/task/TaskComposer";
 import { TaskRequest } from "@/features/task/TaskRequest";
+import { prChecks } from "@/lib/pull-requests";
 import { asPRState, asPRStatus, type PullRequest, type TaskSummary } from "@/lib/wails";
 import type { StepTab } from "@/store/app-store";
 
@@ -26,7 +27,7 @@ function fixedOf(task: TaskSummary, pr: PullRequest): ReactNode {
     case "draft":
       return <DraftCard taskId={task.id} pr={pr} />;
     case "checks":
-      return <LiveChecks pr={pr} fixed />;
+      return <LiveChecks reading={prChecks(pr)} fixed />;
     case null:
       return undefined;
   }
@@ -55,7 +56,11 @@ export function PRPane({ task, pr, tab }: PRPaneProps) {
     case "empty":
       return (
         <>
-          <PlaceColumn view={view} checks={<LiveChecks pr={pr} />} endLineAt={endLineAt} />
+          <PlaceColumn
+            view={view}
+            checks={<LiveChecks reading={prChecks(pr)} />}
+            endLineAt={endLineAt}
+          />
           {request}
         </>
       );

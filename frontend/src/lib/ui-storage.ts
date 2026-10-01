@@ -39,3 +39,9 @@ export const LAST_ITEM_KEY = "myspec.nav.last-item";
 
 /** SIDEBAR_RAIL_KEY is where the sidebar being collapsed into its strip is kept. */
 export const SIDEBAR_RAIL_KEY = "myspec.sidebar.rail";
+
+/**
+ * REVIEWS_SECTIONS_KEY is where the sections of Reviews the user collapsed or expanded are kept:
+ * `{ collapsed: string[] }`; absent until the first choice, when the default holds.
+ */
+export const REVIEWS_SECTIONS_KEY = "myspec.reviews.sections";

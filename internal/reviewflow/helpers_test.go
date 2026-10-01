@@ -50,6 +50,7 @@ var base = time.Date(2026, time.September, 17, 12, 0, 0, 0, time.UTC)
 var (
 	errGitHub = errors.New("gh: cannot reach github")
 	errGit    = errors.New("git: cannot create the worktree")
+	errStore  = errors.New("store: database is locked")
 )
 
 // memSessions is an in-memory reviewflow.Sessions recording what it was asked
@@ -61,9 +62,10 @@ type memSessions struct {
 	stored    map[session.Key]bool // the sessions ever created, open or not
 	calls     []string
 	messages  []string
-	apps      []session.AppMessage // every message of the app, with its kind and numbers
-	err       error                // returned by every call that changes something
-	startErr  error                // returned by Start alone
+	apps      []session.AppMessage  // every message of the app, with its kind and numbers
+	markers   []session.MarkerEntry // every marker the flow recorded, in order
+	err       error                 // returned by every call that changes something
+	startErr  error                 // returned by Start alone
 }
 
 func newSessions() *memSessions {
@@ -201,11 +203,83 @@ func (m *memSessions) SendFromApp(_ context.Context, k session.Key, msg session.
 	return nil
 }
 
-func (m *memSessions) MarkPRReview(_ context.Context, k session.Key, pass int, clean bool) {
+func (m *memSessions) MarkPRReview(_ context.Context, k session.Key, pass int, clean bool, findings int) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	m.calls = append(m.calls, "mark:"+k.TaskID+":pass="+strconv.Itoa(pass)+":clean="+strconv.FormatBool(clean))
+	m.markers = append(m.markers, reportMarker(session.MarkerPRReviewWritten, pass, clean, findings))
+}
+
+func (m *memSessions) MarkPRReviewRevised(_ context.Context, _ session.Key, pass int, clean bool, findings int) {
+	m.record(reportMarker(session.MarkerPRReviewRevised, pass, clean, findings))
+}
+
+func (m *memSessions) MarkChecksRead(
+	_ context.Context, _ session.Key, pass, passed, total int, failed []string, conflict bool,
+) {
+	m.record(session.MarkerEntry{
+		Type: session.MarkerChecksRead, Pass: pass, Passed: passed, Total: total, Failed: failed, Conflict: conflict,
+	})
+}
+
+func (m *memSessions) MarkFindingsDecided(_ context.Context, _ session.Key, pass, approved, discarded int) {
+	m.record(session.MarkerEntry{
+		Type: session.MarkerFindingsDecided, Pass: pass, Approved: approved, Discarded: discarded,
+	})
+}
+
+func (m *memSessions) MarkReviewPublished(_ context.Context, _ session.Key, p session.PublishedReview) {
+	m.record(session.MarkerEntry{
+		Type: session.MarkerReviewPublished, Pass: p.Pass, Verdict: p.Verdict, Inline: p.Inline, Body: p.Body,
+		Summary: p.Summary, Minimal: p.Minimal, URL: p.URL,
+	})
+}
+
+func (m *memSessions) MarkNewCommits(_ context.Context, _ session.Key, commits []session.MarkerCommit, count int) {
+	m.record(session.MarkerEntry{Type: session.MarkerNewCommits, Commits: commits, Count: count})
+}
+
+func (m *memSessions) MarkChangesApproved(_ context.Context, _ session.Key, files int) {
+	m.record(session.MarkerEntry{Type: session.MarkerChangesApproved, Files: files})
+}
+
+func (m *memSessions) MarkCommitted(
+	_ context.Context, _ session.Key, sha, subject string, pushed bool, number int,
+) {
+	m.record(session.MarkerEntry{
+		Type: session.MarkerCommitted, SHA: sha, Subject: subject, Pushed: pushed, Number: number,
+	})
+}
+
+func (m *memSessions) record(marker session.MarkerEntry) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.markers = append(m.markers, marker)
+}
+
+// markersOf is the markers of a type the flow recorded, in order.
+func (m *memSessions) markersOf(t session.MarkerType) []session.MarkerEntry {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	var found []session.MarkerEntry
+	for _, marker := range m.markers {
+		if marker.Type == t {
+			found = append(found, marker)
+		}
+	}
+	return found
+}
+
+// reportMarker is the marker of a written or revised report.
+func reportMarker(t session.MarkerType, pass int, clean bool, findings int) session.MarkerEntry {
+	marker := session.MarkerEntry{Type: t, Pass: pass, Clean: clean}
+	if findings >= 0 {
+		marker.Findings = &findings
+	}
+	return marker
 }
 
 // sentApps is the kind and the numbers of every message of the app, without
@@ -317,6 +391,7 @@ type memWorktrees struct {
 	updateErr  error
 	updateOnce bool // the update failure is spent on the next call
 	removeErr  error
+	commitErr  error // returned when a commit is read
 }
 
 func newWorktrees(dataDir string) *memWorktrees {
@@ -375,6 +450,16 @@ func (m *memWorktrees) Status(_ context.Context, wt worktree.Worktree) (git.Stat
 		return git.Status{}, m.statusErr
 	}
 	return git.Status{Head: m.head}, nil
+}
+
+func (m *memWorktrees) Commit(_ context.Context, _ worktree.Worktree, rev string) (git.Commit, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.commitErr != nil {
+		return git.Commit{}, m.commitErr
+	}
+	return git.Commit{SHA: rev, Subject: "Fix the time zone rule"}, nil
 }
 
 func (m *memWorktrees) Clean(_ context.Context, wt worktree.Worktree) error {
@@ -454,7 +539,12 @@ type memPulls struct {
 	details   map[pulls.Ref]pulls.Detail
 	err       error
 	refreshes int
-	reads     int // the readings of GitHub that went out
+	reads     int           // the readings of GitHub that went out
+	asked     [][]pulls.Ref // the pull requests each of them asked for
+	// hold, when set, is what a reading waits on after it took its answer, and
+	// entered says that a reading got there.
+	hold    chan struct{}
+	entered chan struct{}
 }
 
 func newPulls() *memPulls {
@@ -473,6 +563,7 @@ func (m *memPulls) ReadDetails(_ context.Context, refs []pulls.Ref) (map[pulls.R
 	defer m.mu.Unlock()
 
 	m.reads++
+	m.asked = append(m.asked, slices.Clone(refs))
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -482,7 +573,27 @@ func (m *memPulls) ReadDetails(_ context.Context, refs []pulls.Ref) (map[pulls.R
 			found[ref] = detail
 		}
 	}
+	if m.hold != nil {
+		hold, entered := m.hold, m.entered
+		m.mu.Unlock()
+		entered <- struct{}{}
+		<-hold
+		m.mu.Lock()
+	}
 	return found, nil
+}
+
+// holdReadings makes the next readings wait, after taking the answer they
+// give, until the returned function lets them go; the channel receives one
+// value for every reading that started waiting.
+func (m *memPulls) holdReadings() (release func(), entered <-chan struct{}) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.hold, m.entered = make(chan struct{}), make(chan struct{}, 8)
+	hold := m.hold
+	var once sync.Once
+	return func() { once.Do(func() { close(hold) }) }, m.entered
 }
 
 func (m *memPulls) Refresh() {
@@ -506,6 +617,14 @@ func (m *memPulls) readings() int {
 	defer m.mu.Unlock()
 
 	return m.reads
+}
+
+// refsRead is the pull requests every reading of GitHub asked for, in order.
+func (m *memPulls) refsRead() [][]pulls.Ref {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return slices.Clone(m.asked)
 }
 
 // forget drops a pull request, which is one GitHub answers nothing for.
@@ -650,11 +769,14 @@ func (m *memGH) CreateReview(_ context.Context, _, _ string, _ int, in gh.Review
 	return m.url, nil
 }
 
-// memReviewStore is an in-memory prreview.Store.
+// memReviewStore is an in-memory prreview.Store, which answers with the
+// failures it was told to.
 type memReviewStore struct {
-	mu      sync.Mutex
-	reviews []prreview.Review
-	passes  map[string][]prreview.Pass
+	mu        sync.Mutex
+	reviews   []prreview.Review
+	passes    map[string][]prreview.Pass
+	updateErr error // returned by every update of a review
+	upsertErr error // returned by every write of a pass
 }
 
 func newReviewStore() *memReviewStore {
@@ -695,10 +817,29 @@ func (m *memReviewStore) Insert(_ context.Context, stored prreview.Review) error
 	return nil
 }
 
+// failUpdate makes every update of a review fail with err; nil heals it.
+func (m *memReviewStore) failUpdate(err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.updateErr = err
+}
+
+// failUpsertPass makes every write of a pass fail with err; nil heals it.
+func (m *memReviewStore) failUpsertPass(err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.upsertErr = err
+}
+
 func (m *memReviewStore) Update(_ context.Context, stored prreview.Review) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	if m.updateErr != nil {
+		return m.updateErr
+	}
 	index := m.indexOf(stored.ID)
 	if index < 0 {
 		return os.ErrNotExist
@@ -743,6 +884,9 @@ func (m *memReviewStore) UpsertPass(_ context.Context, pass prreview.Pass) error
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	if m.upsertErr != nil {
+		return m.upsertErr
+	}
 	passes := m.passes[pass.ReviewID]
 	index := slices.IndexFunc(passes, func(p prreview.Pass) bool { return p.Number == pass.Number })
 	if index < 0 {
@@ -808,6 +952,23 @@ func (m *memReviewStore) UpdateFinding(
 		return os.ErrNotExist
 	}
 	findings[at] = finding
+	return nil
+}
+
+func (m *memReviewStore) UpdateFindingTitles(_ context.Context, reviewID string, pass int, titles map[int]string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	index := slices.IndexFunc(m.passes[reviewID], func(p prreview.Pass) bool { return p.Number == pass })
+	if index < 0 {
+		return os.ErrNotExist
+	}
+	findings := m.passes[reviewID][index].Findings
+	for i := range findings {
+		if title, ok := titles[findings[i].Number]; ok {
+			findings[i].Title = title
+		}
+	}
 	return nil
 }
 
@@ -1064,8 +1225,8 @@ func openPR() pulls.Detail {
 			HeadBranch: "cache-boards",
 			HeadCommit: headHash,
 			BaseBranch: "main",
+			Body:       "Keeps the last reading of a board in memory.",
 		},
-		Body:   "Keeps the last reading of a board in memory.",
 		State:  "open",
 		Checks: gh.PRChecks{Checks: []gh.Check{}, Mergeable: gh.MergeableClean},
 	}

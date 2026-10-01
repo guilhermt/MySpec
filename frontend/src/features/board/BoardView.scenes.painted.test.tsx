@@ -191,7 +191,7 @@ describe.each(THEMES)("BoardView, the scenes in the %s theme", (theme) => {
       setTheme(theme);
       const { area } = await draw("card", NARROW_MAIN);
 
-      const list = area.querySelector<HTMLElement>(".board-list-area");
+      const list = area.querySelector<HTMLElement>(".list-area");
       expect(list?.getBoundingClientRect().width).toBe(452);
       expect(edgesOf(screen.getByRole("complementary")).left).toBe(edgesOf(list as Element).right);
     });
@@ -200,7 +200,7 @@ describe.each(THEMES)("BoardView, the scenes in the %s theme", (theme) => {
       setTheme(theme);
       const { area } = await draw("card", 790);
 
-      const list = area.querySelector<HTMLElement>(".board-list-area");
+      const list = area.querySelector<HTMLElement>(".list-area");
       const panel = screen.getByRole("complementary").getBoundingClientRect();
       const box = (list as Element).getBoundingClientRect();
       expect(box.width).toBe(790);
@@ -215,7 +215,7 @@ describe.each(THEMES)("BoardView, the scenes in the %s theme", (theme) => {
     setTheme(theme);
     const { area } = await draw("board", width);
 
-    const list = area.querySelector<HTMLElement>(".board-list-area");
+    const list = area.querySelector<HTMLElement>(".list-area");
     expect(list?.getBoundingClientRect().width).toBe(width);
     const row = rowOf(474).getBoundingClientRect();
     expect(row.height > parseFloat(resolve("var(--size-control)", "height"))).toBe(second);

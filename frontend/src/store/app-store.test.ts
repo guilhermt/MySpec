@@ -1711,7 +1711,7 @@ describe("reviews", () => {
     expect(result.current).toBeNull();
   });
 
-  it("opens the review a situation is in, and ignores one that is gone", () => {
+  it("opens the review a situation is in, the focus going to what it asks, and ignores one that is gone", () => {
     useAppStore.getState().applyState(withReviews());
 
     useAppStore.getState().openSituation("review-gone", REVIEW_PLACE);
@@ -1719,7 +1719,7 @@ describe("reviews", () => {
 
     useAppStore.getState().openSituation(REVIEW.id, REVIEW_PLACE);
     expect(location()).toEqual({ kind: "review", id: REVIEW.id });
-    expect(useAppStore.getState().pendingFocus).toBe("title");
+    expect(useAppStore.getState().pendingFocus).toBe("request");
   });
 
   it("is the situation of the open review on screen", () => {
@@ -2793,5 +2793,62 @@ describe("earlier conversation", () => {
     useAppStore.getState().applyState(makeState({ repositories: [], boards: [], tasks: [] }));
 
     expect(useAppStore.getState().earlierConversation).toBeNull();
+  });
+});
+
+describe("the dialogs of a review", () => {
+  const attempt = { pass: 1, verdict: "comment", withSummary: false } as const;
+
+  it("keeps a failed publication by review until it is forgotten", () => {
+    act(() => {
+      useAppStore.getState().setPublishAttempt("review-1", attempt);
+      useAppStore.getState().setPublishAttempt("review-2", { ...attempt, pass: 2 });
+    });
+    expect(useAppStore.getState().publishAttempts).toEqual({
+      "review-1": attempt,
+      "review-2": { ...attempt, pass: 2 },
+    });
+
+    act(() => useAppStore.getState().setPublishAttempt("review-1", null));
+
+    expect(useAppStore.getState().publishAttempts).toEqual({
+      "review-2": { ...attempt, pass: 2 },
+    });
+  });
+
+  it("opens and closes the publication or another pass of a review", () => {
+    act(() => useAppStore.getState().openReviewDialog("review-1", "publish"));
+    expect(useAppStore.getState().reviewDialog).toEqual({ reviewId: "review-1", kind: "publish" });
+
+    act(() => useAppStore.getState().openReviewDialog("review-1", "again"));
+    expect(useAppStore.getState().reviewDialog).toEqual({ reviewId: "review-1", kind: "again" });
+
+    act(() => useAppStore.getState().closeReviewDialog());
+    expect(useAppStore.getState().reviewDialog).toBeNull();
+  });
+
+  it("drops the attempt and the dialog of a review a snapshot no longer has", () => {
+    act(() => {
+      useAppStore.getState().applyState(withReviews({}));
+      useAppStore.getState().setPublishAttempt(REVIEW.id, attempt);
+      useAppStore.getState().setPublishAttempt("review-gone", attempt);
+      useAppStore.getState().openReviewDialog("review-gone", "publish");
+    });
+
+    act(() => useAppStore.getState().applyState(withReviews({})));
+
+    expect(useAppStore.getState().publishAttempts).toEqual({ [REVIEW.id]: attempt });
+    expect(useAppStore.getState().reviewDialog).toBeNull();
+  });
+
+  it("keeps the dialog of a review the snapshot still has", () => {
+    act(() => {
+      useAppStore.getState().applyState(withReviews({}));
+      useAppStore.getState().openReviewDialog(REVIEW.id, "again");
+    });
+
+    act(() => useAppStore.getState().applyState(withReviews({})));
+
+    expect(useAppStore.getState().reviewDialog).toEqual({ reviewId: REVIEW.id, kind: "again" });
   });
 });

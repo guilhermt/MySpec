@@ -46,6 +46,7 @@ The commits mix two changes.
 		Findings: []prreview.ParsedFinding{
 			{
 				Number: 1,
+				Title:  "Missing test",
 				Path:   filepath.Join("internal", "task", "service.go"),
 				Line:   120,
 				Text:   "The new branch has no test.\n\nIt fails silently.",
@@ -123,6 +124,107 @@ func TestAReportTheProductCannotActOnIsUnreadable(t *testing.T) {
 				t.Errorf("error = %v, want ErrUnreadable", err)
 			}
 		})
+	}
+}
+
+func TestTheTitleOfAFindingIsWhatFollowsItsNumber(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		heading string
+		want    string
+	}{
+		{"### 1 · Título", "Título"},
+		{"### 1. Título", "Título"},
+		{"### 1 - Título", "Título"},
+		{"### 1 – Título", "Título"},
+		{"### 1: Título", "Título"},
+		{"### 1 **Título**", "Título"},
+		{"### 1 · **Título**", "Título"},
+		{"### 1", ""},
+		{"### 1 · O `timezone` perde o required", "O `timezone` perde o required"},
+		{"### 1 · **Bold** and more", "**Bold** and more"},
+	}
+
+	for _, c := range cases {
+		t.Run(c.heading, func(t *testing.T) {
+			t.Parallel()
+
+			content := report("changes", "## Findings\n\n"+c.heading+"\nLocation: general\n\nA thing.\n")
+			got, err := prreview.ParseReport(content, 1)
+			if err != nil {
+				t.Fatalf("parse report: %v", err)
+			}
+			if len(got.Findings) != 1 || got.Findings[0].Title != c.want {
+				t.Errorf("findings = %+v, want one titled %q", got.Findings, c.want)
+			}
+		})
+	}
+}
+
+func TestReasonSaysTheRuleOfAnUnreadableReport(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name    string
+		content string
+		want    string
+	}{
+		{"without front matter", "Nothing to change.\n", "The report can't be read: it has no front matter."},
+		{
+			"with a status of its own", report("looks-good", "Fine.\n"),
+			`The report can't be read: status "looks-good" is neither clean nor changes.`,
+		},
+		{
+			"declaring another pass", "---\nstatus: clean\npass: 2\n---\n\nAll good.\n",
+			`The report can't be read: it declares pass "2", and it is pass 1.`,
+		},
+		{
+			"with the same number twice",
+			report("changes", "## Findings\n\n### 1\nLocation: general\n\nOne.\n\n### 1\nLocation: general\n\nTwo.\n"),
+			"The report can't be read: finding 1 appears twice.",
+		},
+		{
+			"with a finding that says where it is not", report("changes", "## Findings\n\n### 2\n\nA thing.\n"),
+			"The report can't be read: finding 2 does not open with its location.",
+		},
+		{
+			"with a finding that says nothing", report("changes", "## Findings\n\n### 2\nLocation: main.go:2\n"),
+			"The report can't be read: finding 2 says nothing.",
+		},
+		{
+			"asking for changes with no finding", report("changes", "Off.\n"),
+			"The report can't be read: it asks for changes and has no finding.",
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+
+			path := filepath.Join(t.TempDir(), "review-1.md")
+			writeFile(t, filepath.Dir(path), filepath.Base(path), c.content)
+
+			_, _, err := prreview.ReadReport(path, 1)
+			if got := prreview.Reason(err); got != c.want {
+				t.Errorf("Reason() = %q, want %q", got, c.want)
+			}
+		})
+	}
+}
+
+func TestReasonOfAnErrorThatIsNotAboutTheFormatIsTheGenericSentence(t *testing.T) {
+	t.Parallel()
+
+	const generic = "The report can't be read."
+	for name, err := range map[string]error{
+		"an I/O error":    errors.New("read report /x: permission denied"),
+		"a bare sentinel": prreview.ErrUnreadable,
+		"a nil error":     nil,
+	} {
+		if got := prreview.Reason(err); got != generic {
+			t.Errorf("Reason(%s) = %q, want %q", name, got, generic)
+		}
 	}
 }
 

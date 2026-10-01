@@ -2,6 +2,7 @@ package reviewflow
 
 import (
 	"context"
+	"time"
 
 	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/prreview"
@@ -65,8 +66,9 @@ func (s *Service) continueWait(ctx context.Context, stored prreview.Review, deta
 		s.log.Error("ask review pass failed", "review", id, "error", err)
 		return
 	}
-	// The pass was asked for when the wait began.
-	if err = s.sendPass(ctx, stored, repo, wt, detail.Checks); err != nil {
+	// The pass was asked for when the wait began; the reading that lets it
+	// start is the one of the poll that just settled.
+	if err = s.sendPass(ctx, stored, repo, wt, detail.Checks, s.checkedAtOf(id)); err != nil {
 		return
 	}
 	if err = s.setPhase(ctx, id, prreview.PhaseNone); err != nil {
@@ -149,4 +151,15 @@ func (s *Service) passBlockedOf(id string) string {
 	defer s.mu.Unlock()
 
 	return l.passBlocked
+}
+
+// checkedAtOf is when the last good reading of the pull request of a review
+// was made, zero before one since the app started.
+func (s *Service) checkedAtOf(id string) time.Time {
+	l := s.lockOf(id)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return l.checkedAt
 }

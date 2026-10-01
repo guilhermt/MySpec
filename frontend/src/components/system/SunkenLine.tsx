@@ -5,7 +5,8 @@ import type { IconGlyph } from "./icons";
 import { StateGlyph } from "./StateGlyph";
 
 export interface SunkenLineProps {
-  icon?: IconGlyph | "blocked";
+  /** icon is a muted icon, or the state glyph that says the line waits: blocked, or GitHub. */
+  icon?: IconGlyph | "blocked" | "github";
   children: ReactNode;
   action?: ReactNode;
   id?: string;
@@ -22,8 +23,8 @@ export function SunkenLine({ icon, children, action, id, className }: SunkenLine
         className,
       )}
     >
-      {icon === "blocked" ? (
-        <StateGlyph state="blocked" />
+      {icon === "blocked" || icon === "github" ? (
+        <StateGlyph state={icon} />
       ) : (
         icon !== undefined && <Icon icon={icon} size="sm" tone="muted" />
       )}

@@ -383,7 +383,9 @@ function NewTaskFields({ origin }: NewTaskFieldsProps) {
             </span>
           </CollapsibleTrigger>
           <CollapsibleContent>
-            <ul className="flex flex-col divide-y divide-line-1 rounded-md border border-line-1">
+            {/* The rule between two rows is a shadow inside the lower one: a border would take a pixel
+                off its height, and the chip it centres would fall on half a pixel. */}
+            <ul className="flex flex-col rounded-md border border-line-1 [&>li+li]:shadow-[inset_0_var(--border)_0_var(--line-1)]">
               {modelStages.map((stage) => {
                 const own = !sameChoice(choiceOf(choices, stage), choiceOf(defaults, stage));
                 return (

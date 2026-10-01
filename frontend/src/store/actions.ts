@@ -675,8 +675,20 @@ export function askReviewAgain(id: string, instructions: string): Promise<void> 
   return api.askReviewAgain(id, instructions);
 }
 
-export function publishReview(id: string, verdict: ReviewVerdict): Promise<void> {
-  return api.publishReview(id, verdict);
+/** publishReview sends the review to GitHub; the summary goes in the body only with withSummary. */
+export function publishReview(
+  id: string,
+  verdict: ReviewVerdict,
+  withSummary: boolean,
+): Promise<void> {
+  return api.publishReview(id, verdict, withSummary);
+}
+
+/** refreshReviewPR reads the pull request of a review now, out of the minute. */
+export function refreshReviewPR(id: string): Promise<void> {
+  return run(fail(`Couldn't check the pull request of ${theItem(id)}`, GH), () =>
+    api.refreshReviewPR(id),
+  );
 }
 
 /** setReviewInstructions changes what every review of a repository is told to look at. */
@@ -684,28 +696,42 @@ export function setReviewInstructions(id: string, text: string): Promise<void> {
   return api.setReviewInstructions(id, text);
 }
 
-/** decideFinding records what the user decided about one finding. */
-export function decideFinding(
+/**
+ * decideFindingInPlace records what the user decided about one finding, on the finding itself: a
+ * failure answers its message and is told where the decision was, not in the app notice.
+ */
+export function decideFindingInPlace(
   id: string,
   pass: number,
   number: number,
   decision: FindingDecision,
-): Promise<void> {
-  return run(fail(`Couldn't decide finding ${number} of ${theItem(id)}`, TRY), () =>
-    api.decideFinding(id, pass, number, decision),
-  );
+): Promise<string | null> {
+  return inPlace(() => api.decideFinding(id, pass, number, decision));
 }
 
-/** saveFindingText records the text of a finding as the user left it. */
-export function saveFindingText(
+/**
+ * saveFindingTextInPlace records the text of a finding as the user left it, on the finding itself:
+ * a failure answers its message, not the app notice.
+ */
+export function saveFindingTextInPlace(
   id: string,
   pass: number,
   number: number,
   text: string,
-): Promise<void> {
-  return run(fail(`Couldn't save finding ${number} of ${theItem(id)}`, TRY), () =>
-    api.setFindingText(id, pass, number, text),
-  );
+): Promise<string | null> {
+  return inPlace(() => api.setFindingText(id, pass, number, text));
+}
+
+/**
+ * saveReviewSummaryInPlace is saveReviewSummary for the publish dialog, which saves the summary
+ * right before publishing and shows its failure in its own footer: it answers the message, or null.
+ */
+export function saveReviewSummaryInPlace(
+  id: string,
+  pass: number,
+  text: string,
+): Promise<string | null> {
+  return inPlace(() => api.setReviewSummary(id, pass, text));
 }
 
 /** saveReviewSummary records the summary of a pass as the user left it. */

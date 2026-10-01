@@ -1,6 +1,7 @@
-import type { ReactElement } from "react";
+import { type ReactElement, type RefObject, useLayoutEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { CheckboxSign } from "./Checkbox";
+import { observeSize, useFits } from "./fits";
 import { Icon } from "./Icon";
 import { ICONS } from "./icons";
 import { Kbd } from "./Kbd";
@@ -24,6 +25,39 @@ export type CardRowTask =
   | { kind: "discussion"; tooltip: string }
   | { kind: "cloning"; text: string }
   | { kind: "clone-failed" };
+
+/** PullRequestRowState is what the state column of a pull request row says. */
+export type PullRequestRowState =
+  | { kind: "text"; text: string; tone: "ink-2" | "ink-3"; tooltip: string | null }
+  | {
+      kind: "review";
+      glyph: GlyphState;
+      long: string;
+      short: string;
+      strong: boolean;
+      tooltip: string;
+    }
+  | { kind: "task"; text: string; tooltip: string }
+  | { kind: "cloning"; text: string }
+  | { kind: "clone-failed" };
+
+/** PullRequestRowView is everything a pull request row draws and says; the caller builds it from the row. */
+export interface PullRequestRowView {
+  key: string;
+  reference: string;
+  referenceTooltip: string;
+  title: string;
+  tags: { text: string; tooltip: string | null }[];
+  /** folded is the one tag the tags fold into before the title goes under a third of the row; null without tags. */
+  folded: { text: string; tooltip: string } | null;
+  author: string;
+  state: PullRequestRowState;
+  /** keys is what R does on the row: "review", "open", "open task"; null where R does nothing. */
+  keys: "review" | "open" | "open task" | null;
+  /** dashed is a row from a fork: drawn disabled, still on the path, still opening the panel. */
+  dashed: boolean;
+  label: string;
+}
 
 /** CardRowView is everything a row draws and says; the caller builds it from the card. */
 export interface CardRowView {
@@ -63,6 +97,24 @@ export interface CardRowProps {
 // source as text: in the container the scroll area names "list", the meta goes to a second line
 // under the title.
 const META = "text-(length:--text-meta) leading-(--leading-meta)";
+
+/** ROW is the root of a row of a list: a line of --size-control, ringed on keyboard focus. */
+const ROW =
+  "group/row relative grid min-h-(--size-control) cursor-pointer items-center gap-x-(--space-2) rounded-sm px-(--space-2) text-(length:--text-ui) leading-(--leading-ui) text-ink-1 outline-none transition-[background-color,box-shadow] duration-(--duration-fast) ease-standard focus-visible:focus-ring";
+
+/** ROW_OPEN is the row of the panel, on the brand plane with its ring. */
+const ROW_OPEN = "bg-brand-tint-plane shadow-[inset_0_0_0_var(--border)_var(--brand-ring)]";
+
+/** ROW_REST is a row that is not open: it steps up on hover and press. */
+const ROW_REST = "hover:bg-veil-hover active:bg-veil-press";
+
+/** ROW_DASHED is the dashed outline of a row drawn disabled. */
+const ROW_DASHED =
+  "outline-(length:--border) outline-dashed outline-line-3 -outline-offset-(length:--border)";
+
+/** KEYS is the column of the keys, shown only with the keyboard focus on the row. */
+const KEYS =
+  "row-start-1 invisible inline-flex items-center justify-end gap-(--space-2) whitespace-nowrap text-(length:--text-micro) leading-(--leading-micro) text-ink-3 group-focus-visible/row:visible";
 
 /** Cell is a truncated text of the row with its whole text in the tooltip. */
 function Cell({
@@ -139,12 +191,7 @@ function KeysCell({
           ...(model.canDiscuss ? [["D", "discuss"] as [string, string]] : []),
         ];
   return (
-    <span
-      aria-hidden="true"
-      className={cn(
-        "col-start-7 row-start-1 invisible inline-flex items-center justify-end gap-(--space-2) whitespace-nowrap text-(length:--text-micro) leading-(--leading-micro) text-ink-3 group-focus-visible/row:visible @max-[1041px]/list:col-start-4",
-      )}
-    >
+    <span aria-hidden="true" className={cn("col-start-7 @max-[1041px]/list:col-start-4", KEYS)}>
       {keys.map(([key, name]) => (
         <span key={key} className="inline-flex items-center gap-(--space-1)">
           <Kbd size="sm">{key}</Kbd>
@@ -186,15 +233,12 @@ export function CardRow({
       onClick={onActivate}
       onFocus={onFocus}
       className={cn(
-        "group/row relative grid min-h-(--size-control) cursor-pointer items-center gap-x-(--space-2) rounded-sm px-(--space-2) text-(length:--text-ui) leading-(--leading-ui) text-ink-1 outline-none transition-[background-color,box-shadow] duration-(--duration-fast) ease-standard focus-visible:focus-ring",
+        ROW,
         "grid-cols-[var(--icon)_var(--col-num)_minmax(0,1fr)_var(--col-epic)_var(--col-dep)_var(--col-task)_var(--col-keys)]",
         "@max-[1041px]/list:grid-cols-[var(--icon)_var(--col-num)_minmax(0,1fr)_var(--col-keys)]",
         has2 && "@max-[1041px]/list:gap-y-(--space-0-5) @max-[1041px]/list:py-(--space-1-5)",
-        open
-          ? "bg-brand-tint-plane shadow-[inset_0_0_0_var(--border)_var(--brand-ring)]"
-          : "hover:bg-veil-hover active:bg-veil-press",
-        disabled &&
-          "cursor-not-allowed outline-(length:--border) outline-dashed outline-line-3 -outline-offset-(length:--border)",
+        open ? ROW_OPEN : ROW_REST,
+        disabled && cn("cursor-not-allowed", ROW_DASHED),
         model.task?.kind === "clone-failed" && "error-rail-bar",
         flash && "row-flash",
       )}
@@ -264,6 +308,244 @@ export function CardRow({
         </span>
       )}
       <KeysCell model={model} selection={selection} />
+    </div>
+  );
+}
+
+export interface PullRequestRowProps {
+  model: PullRequestRowView;
+  /** open is the pull request of the panel. */
+  open: boolean;
+  /** tabStop is the row the list's one tab stop sits on. */
+  tabStop: boolean;
+  /** flash is a pull request a new reading brought: it blinks twice. */
+  flash: boolean;
+  onActivate: () => void;
+  onFocus: () => void;
+}
+
+/**
+ * ReviewText is the review in the state column: the long form while it fits the column, else the
+ * short one, cut with the tooltip after that. The measure is an invisible, nowrap copy of the long form.
+ */
+function ReviewText({
+  state,
+}: {
+  state: Extract<PullRequestRowState, { kind: "review" }>;
+}): ReactElement {
+  const box = useRef<HTMLSpanElement>(null);
+  const measure = useRef<HTMLSpanElement>(null);
+  const fits = useFits(box, measure, state.long);
+  return (
+    <span ref={box} className="relative flex min-w-0 flex-1">
+      <span
+        ref={measure}
+        aria-hidden="true"
+        className="invisible absolute top-0 left-0 whitespace-nowrap"
+      >
+        {state.long}
+      </span>
+      <Cell
+        text={fits ? state.long : state.short}
+        tooltip={state.tooltip}
+        className={state.strong ? "font-medium text-ink-1" : "text-ink-2"}
+      />
+    </span>
+  );
+}
+
+function StateCell({ state }: { state: PullRequestRowState }): ReactElement {
+  const wrap = cn(
+    "col-start-4 row-start-1 inline-flex min-w-0 items-center gap-(--space-1-5) whitespace-nowrap @max-[1041px]/list:col-auto @max-[1041px]/list:row-auto @max-[1041px]/list:flex-[1_1_0]",
+    META,
+  );
+  switch (state.kind) {
+    case "text":
+      return (
+        <span className={cn(wrap, state.tone === "ink-2" ? "text-ink-2" : "text-ink-3")}>
+          {state.tooltip === null ? (
+            <span className="min-w-0 truncate">{state.text}</span>
+          ) : (
+            <Cell text={state.text} tooltip={state.tooltip} />
+          )}
+        </span>
+      );
+    case "review":
+      return (
+        <span className={wrap}>
+          <StateGlyph state={state.glyph} size="sm" />
+          <ReviewText state={state} />
+        </span>
+      );
+    case "task":
+      return (
+        <span className={cn(wrap, "text-ink-2")}>
+          <Icon icon={ICONS.task} size="sm" />
+          <Cell text={state.text} tooltip={state.tooltip} />
+        </span>
+      );
+    case "cloning":
+      return (
+        <span className={cn(wrap, "text-ink-3")}>
+          <Spinner />
+          <span className="min-w-0 truncate">{state.text}</span>
+        </span>
+      );
+    case "clone-failed":
+      return <span className={cn(wrap, "text-state-error")}>Clone failed</span>;
+  }
+}
+
+/** Tag is a tag after the title of a pull request row: outlined, micro, never cut. */
+function Tag({ text, tooltip }: { text: string; tooltip: string | null }): ReactElement {
+  const drawn = (
+    <span className="inline-flex shrink-0 items-center rounded-xs border border-line-2 px-(--space-1) text-(length:--text-micro) leading-(--leading-micro) whitespace-nowrap text-ink-3">
+      {text}
+    </span>
+  );
+  return tooltip === null ? drawn : <Tooltip content={tooltip}>{drawn}</Tooltip>;
+}
+
+/** TagsForm is how the tags of a pull request row show: whole, folded into one +N, or not at all. */
+type TagsForm = "whole" | "folded" | "none";
+
+/**
+ * useTagsForm is how the tags of a row show beside the title, the first child of the column, so the
+ * title is whole or has a third of the row, the parent of the column, at least: whole while that
+ * holds beside them, else folded into one +N while it holds beside that, else none, since a tag never
+ * cuts. Each form's width is taken while it is drawn; the caller draws a row with other tags anew.
+ */
+function useTagsForm(
+  column: RefObject<HTMLElement | null>,
+  tags: RefObject<HTMLElement | null>,
+  hasTags: boolean,
+): TagsForm {
+  const [form, setForm] = useState<TagsForm>("whole");
+  // widths are the room each form takes beside the title, the gap before it included; 0 until drawn.
+  const widths = useRef({ whole: 0, folded: 0 });
+
+  useLayoutEffect(() => {
+    const box = column.current;
+    const title = box?.firstElementChild;
+    const row = box?.parentElement;
+    if (!hasTags || box == null || title == null || row == null) {
+      return;
+    }
+    const check = () => {
+      const drawn = tags.current;
+      if (form !== "none" && drawn !== null) {
+        const gap = parseFloat(getComputedStyle(box).columnGap) || 0;
+        widths.current[form] = drawn.getBoundingClientRect().width + gap;
+      }
+      // The title needs its whole text, or a third of the row when its text is longer than that.
+      const least = Math.min(title.scrollWidth, row.getBoundingClientRect().width / 3);
+      const keeps = (width: number) => box.getBoundingClientRect().width - width >= least;
+      const { whole, folded } = widths.current;
+      setForm(keeps(whole) ? "whole" : folded === 0 || keeps(folded) ? "folded" : "none");
+    };
+    check();
+    return observeSize(box, check);
+  }, [column, tags, hasTags, form]);
+
+  return form;
+}
+
+/**
+ * TitleCell is the title of a pull request row and its tags after it. The title is whole or has a
+ * third of the row at least, and a tag never cuts: the tags give way first, folded into one +N that
+ * names them all in its tooltip, and then gone, still in the accessible name of the row.
+ */
+function TitleCell({ model }: { model: PullRequestRowView }): ReactElement {
+  const column = useRef<HTMLSpanElement>(null);
+  const tags = useRef<HTMLSpanElement>(null);
+  const form = useTagsForm(column, tags, model.tags.length > 0);
+  return (
+    <span
+      ref={column}
+      className="col-start-2 row-start-1 flex min-w-0 items-center gap-(--space-2) overflow-hidden"
+    >
+      <Cell
+        text={model.title}
+        tooltip={model.title}
+        className={model.dashed ? "text-ink-4" : "text-ink-1"}
+      />
+      {model.tags.length > 0 && form !== "none" && (
+        <span ref={tags} className="inline-flex shrink-0 items-center gap-(--space-2)">
+          {form === "folded" && model.folded !== null ? (
+            <Tag text={model.folded.text} tooltip={model.folded.tooltip} />
+          ) : (
+            model.tags.map((tag) => <Tag key={tag.text} text={tag.text} tooltip={tag.tooltip} />)
+          )}
+        </span>
+      )}
+    </span>
+  );
+}
+
+/**
+ * PullRequestRow is the row of a pull request in the list of reviews: a treeitem of level 2 on a
+ * fixed grid of columns, with the author and the state under the title on a narrow list.
+ */
+export function PullRequestRow({
+  model,
+  open,
+  tabStop,
+  flash,
+  onActivate,
+  onFocus,
+}: PullRequestRowProps): ReactElement {
+  return (
+    // biome-ignore lint/a11y/useKeyWithClickEvents: the list owns the keyboard of its rows
+    <div
+      role="treeitem"
+      aria-level={2}
+      aria-label={model.label}
+      aria-selected={open}
+      tabIndex={tabStop ? 0 : -1}
+      data-row-key={model.key}
+      onClick={onActivate}
+      onFocus={onFocus}
+      className={cn(
+        ROW,
+        "grid-cols-[var(--col-ref)_minmax(0,1fr)_var(--col-author)_var(--col-state)_var(--col-keys)]",
+        "@max-[1041px]/list:grid-cols-[var(--col-ref)_minmax(0,1fr)_var(--col-keys)] @max-[1041px]/list:gap-y-(--space-0-5) @max-[1041px]/list:py-(--space-1-5)",
+        open ? ROW_OPEN : ROW_REST,
+        model.dashed && ROW_DASHED,
+        model.state.kind === "clone-failed" && "error-rail-bar",
+        flash && "row-flash",
+      )}
+    >
+      <Cell
+        text={model.reference}
+        tooltip={model.referenceTooltip}
+        className={cn(
+          "col-start-1 row-start-1 tabular-nums",
+          META,
+          open ? "text-ink-3" : "text-ink-4",
+        )}
+      />
+      {/* Other tags are other widths: the title cell is drawn anew to measure them. */}
+      <TitleCell key={model.tags.map((tag) => tag.text).join("\n")} model={model} />
+      <span className="contents @max-[1041px]/list:col-[2/-1] @max-[1041px]/list:row-start-2 @max-[1041px]/list:flex @max-[1041px]/list:h-(--leading-meta) @max-[1041px]/list:flex-nowrap @max-[1041px]/list:gap-x-(--space-4) @max-[1041px]/list:overflow-hidden">
+        <Cell
+          text={model.author}
+          tooltip={model.author}
+          className={cn(
+            "col-start-3 row-start-1 text-ink-3",
+            META,
+            "@max-[1041px]/list:col-auto @max-[1041px]/list:row-auto @max-[1041px]/list:flex-[0_1_auto]",
+          )}
+        />
+        <StateCell state={model.state} />
+      </span>
+      <span aria-hidden="true" className={cn("col-start-5 @max-[1041px]/list:col-start-3", KEYS)}>
+        {model.keys !== null && (
+          <span className="inline-flex items-center gap-(--space-1)">
+            <Kbd size="sm">R</Kbd>
+            {model.keys}
+          </span>
+        )}
+      </span>
     </div>
   );
 }

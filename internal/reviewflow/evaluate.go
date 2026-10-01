@@ -68,7 +68,7 @@ func (s *Service) recordAsked(
 		s.log.Error("record review report failed", "review", stored.ID, "pass", pass, "error", err)
 		return
 	}
-	s.sessions.MarkPRReview(ctx, key, pass, report.Clean)
+	s.sessions.MarkPRReview(ctx, key, pass, report.Clean, len(report.Findings))
 	s.setUnreadable(stored.ID, "")
 	s.log.Info("review report recorded", "review", stored.ID, "pass", pass)
 	s.notify(stored.ID)
@@ -95,7 +95,7 @@ func (s *Service) rereadPass(ctx context.Context, stored prreview.Review) {
 		return
 	}
 
-	_, changed, err := s.reviews.RecordReport(ctx, stored.ID, report, last.Commit)
+	_, change, err := s.reviews.RecordReport(ctx, stored.ID, report, last.Commit)
 	if err != nil {
 		s.log.Error("record review report failed", "review", stored.ID, "pass", pass, "error", err)
 		return
@@ -103,11 +103,19 @@ func (s *Service) rereadPass(ctx context.Context, stored prreview.Review) {
 	// A rewrite that brought the report back to what was recorded changes no
 	// finding, but it does settle the warning that the app could not read it.
 	settled := s.setUnreadable(stored.ID, "")
-	if !changed {
+	switch change {
+	case prreview.ChangeNone:
 		if settled {
 			s.notify(stored.ID)
 		}
 		return
+	case prreview.ChangeTitles:
+		// Only the titles of the findings came in: nothing the user decided on
+		// changed, so there is no rewrite to tell.
+		s.notify(stored.ID)
+		return
+	case prreview.ChangeRevised:
+		s.sessions.MarkPRReviewRevised(ctx, sessionKey(stored.ID), pass, report.Clean, len(report.Findings))
 	}
 	s.log.Info("review report rewritten", "review", stored.ID, "pass", pass)
 	s.notify(stored.ID)
@@ -121,7 +129,7 @@ func (s *Service) reportUnreadable(id string, pass int, err error) {
 		return
 	}
 	s.log.Warn("review report is unreadable", "review", id, "pass", pass, "error", err)
-	if s.setUnreadable(id, err.Error()) {
+	if s.setUnreadable(id, prreview.Reason(err)) {
 		s.notify(id)
 	}
 }

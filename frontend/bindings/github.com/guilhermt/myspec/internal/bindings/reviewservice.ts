@@ -66,10 +66,11 @@ export function OpenReviewInEditor(id: string): $CancellablePromise<void> {
 
 /**
  * PublishReview sends the findings the user approved to GitHub as one review,
- * with the verdict they chose: approve, request_changes or comment.
+ * with the verdict they chose: approve, request_changes or comment. The
+ * summary of the pass goes in the body only with withSummary.
  */
-export function PublishReview(id: string, verdict: string): $CancellablePromise<void> {
-    return $Call.ByID(2987531066, id, verdict);
+export function PublishReview(id: string, verdict: string, withSummary: boolean): $CancellablePromise<void> {
+    return $Call.ByID(2987531066, id, verdict, withSummary);
 }
 
 /**
@@ -78,6 +79,14 @@ export function PublishReview(id: string, verdict: string): $CancellablePromise<
  */
 export function ReadReviewArtifact(id: string, name: string): $CancellablePromise<string> {
     return $Call.ByID(2360141537, id, name);
+}
+
+/**
+ * RefreshPR reads the pull request of a review now, out of the minute, and
+ * answers once the reading is over.
+ */
+export function RefreshPR(id: string): $CancellablePromise<void> {
+    return $Call.ByID(2564923056, id);
 }
 
 /**

@@ -31,6 +31,24 @@ describe.each(THEMES)("ChecksList in the %s theme", (theme) => {
     });
   });
 
+  it.each([
+    [false, "--ink-4"],
+    [true, "--state-error"],
+  ] as const)("writes the trailing text of the summary, in error %s, in %s", (error, color) => {
+    setTheme(theme);
+    render(
+      <ChecksList
+        summary="All 6 passed"
+        rows={[]}
+        onOpen={() => {}}
+        trailing={{ text: "read 2m ago", error }}
+      />,
+    );
+    const trailing = screen.getByText("read 2m ago");
+    expect(paintOf(trailing, { color: "" })).toEqual({ color: token(color) });
+    expect(getComputedStyle(trailing).fontVariantNumeric).toBe("tabular-nums");
+  });
+
   it("writes the name in mono in the first ink and the duration in the fourth", () => {
     setTheme(theme);
     render(<ChecksList summary="" rows={ROWS} onOpen={() => {}} />);
@@ -114,5 +132,24 @@ describe.each(THEMES)("ChecksList in the %s theme", (theme) => {
     expect(paintOf(block, { background: "" })).toEqual({ background: token("--surface-0") });
     const glyph = document.querySelector('[data-state="github"]') as HTMLElement;
     expect(getComputedStyle(glyph).borderStyle).toBe("dashed");
+  });
+  it("paints what is missing at the foot of the live variant in the third ink", () => {
+    setTheme(theme);
+    render(
+      <ChecksList
+        summary=""
+        rows={ROWS}
+        onOpen={() => {}}
+        live={{
+          header: "Waiting for checks · 4 of 6 passed",
+          age: "checked just now",
+          ageTooltip: "Checked at 14:02",
+          reading: false,
+          foot: "The first pass starts when e2e finishes.",
+        }}
+      />,
+    );
+    const foot = screen.getByText("The first pass starts when e2e finishes.");
+    expect(paintOf(foot, { color: "" })).toEqual({ color: token("--ink-3") });
   });
 });

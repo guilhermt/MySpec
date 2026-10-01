@@ -28,9 +28,10 @@ const generalLocation = "general"
 // reportFileName is the name a report of a pass may have: review-<pass>.md.
 var reportFileName = regexp.MustCompile(`^review-\d+\.md$`)
 
-// findingHeading opens one finding, with its number; whatever follows the
-// number is a title for the reader.
-var findingHeading = regexp.MustCompile(`^###\s+(\d+)\b.*$`)
+// findingHeading opens one finding, with its number and, after it, the
+// title of what is wrong: "### 1 · Title", "### 1. Title", "### 1 - Title",
+// "### 1: Title", "### 1 **Title**". The title may be missing.
+var findingHeading = regexp.MustCompile(`^###\s+(\d+)\b\s*(?:[·.:\-–—]\s*)?(.*)$`)
 
 // locationLine is the first line of a finding, which says where it points.
 var locationLine = regexp.MustCompile(`^Location:\s*(.+)$`)
@@ -43,6 +44,7 @@ var ErrUnreadable = errors.New("prreview: the report can't be read")
 // anything about it.
 type ParsedFinding struct {
 	Number int
+	Title  string // "" when the report writes none
 	Path   string // "" for a general finding
 	Line   int    // 0 for a general finding
 	Text   string
@@ -104,6 +106,22 @@ func ParseReport(content string, pass int) (Report, error) {
 	return Report{Pass: pass, Clean: clean, Summary: summary, Findings: findings}, nil
 }
 
+// Reason is why a report can't be read, as the user reads it: the rule it
+// breaks, without the path of the file or the prefix of the package, with a
+// capital and a full stop. An error that is not about the format of the
+// report reads as the app's generic sentence.
+func Reason(err error) string {
+	const generic = "The report can't be read."
+	if !errors.Is(err, ErrUnreadable) {
+		return generic
+	}
+	_, rule, found := strings.Cut(err.Error(), ErrUnreadable.Error()+": ")
+	if !found || strings.TrimSpace(rule) == "" {
+		return generic
+	}
+	return "The report can't be read: " + strings.TrimSpace(rule) + "."
+}
+
 // parseStatus reads the verdict of the header.
 func parseStatus(value string) (clean bool, err error) {
 	switch strings.TrimSpace(value) {
@@ -151,12 +169,13 @@ func parseFindings(lines []string) ([]ParsedFinding, error) {
 		current  []string
 		open     = false
 		number   = 0
+		title    = ""
 	)
 	flush := func() error {
 		if !open {
 			return nil
 		}
-		finding, err := parseFinding(number, current)
+		finding, err := parseFinding(number, title, current)
 		if err != nil {
 			return err
 		}
@@ -181,12 +200,22 @@ func parseFindings(lines []string) ([]ParsedFinding, error) {
 		if hasNumber(findings, next) {
 			return nil, fmt.Errorf("%w: finding %d appears twice", ErrUnreadable, next)
 		}
-		open, number, current = true, next, nil
+		open, number, title, current = true, next, findingTitle(match[2]), nil
 	}
 	if err := flush(); err != nil {
 		return nil, err
 	}
 	return findings, nil
+}
+
+// findingTitle cleans the title a heading carries: trimmed, and without the
+// pair of ** that wraps all of it. Inline code stays as it is.
+func findingTitle(raw string) string {
+	title := strings.TrimSpace(raw)
+	if strings.HasPrefix(title, "**") && strings.HasSuffix(title, "**") && len(title) > 4 {
+		title = strings.TrimSpace(title[2 : len(title)-2])
+	}
+	return title
 }
 
 // hasNumber reports whether a finding of that number was read already.
@@ -201,7 +230,7 @@ func hasNumber(findings []ParsedFinding, number int) bool {
 
 // parseFinding reads the body of one finding: where it points, and what it
 // says.
-func parseFinding(number int, lines []string) (ParsedFinding, error) {
+func parseFinding(number int, title string, lines []string) (ParsedFinding, error) {
 	index := -1
 	for i, line := range lines {
 		if strings.TrimSpace(line) != "" {
@@ -227,7 +256,7 @@ func parseFinding(number int, lines []string) (ParsedFinding, error) {
 	if text == "" {
 		return ParsedFinding{}, fmt.Errorf("%w: finding %d says nothing", ErrUnreadable, number)
 	}
-	return ParsedFinding{Number: number, Path: path, Line: line, Text: text}, nil
+	return ParsedFinding{Number: number, Title: title, Path: path, Line: line, Text: text}, nil
 }
 
 // parseLocation reads the location of a finding: a line of a file of the pull

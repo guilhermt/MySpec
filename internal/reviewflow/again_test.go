@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
+	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/prreview"
 	"github.com/guilhermt/myspec/internal/reviewflow"
 	"github.com/guilhermt/myspec/internal/session"
@@ -105,7 +106,7 @@ func TestANewPassListsTheFindingsTheAuthorAlreadySaw(t *testing.T) {
 
 	f := newFixture(t)
 	id := decided(t, f)
-	if err := f.reviews.MarkPublished(t.Context(), id, 1, prreview.VerdictRequestChanges,
+	if err := f.reviews.MarkPublished(t.Context(), id, 1, prreview.VerdictRequestChanges, false,
 		"https://github.com/dev/web/pull/42#pullrequestreview-1", headHash,
 		map[int]prreview.Placement{1: prreview.PlacementInline},
 	); err != nil {
@@ -365,5 +366,25 @@ func TestANewPassSaysWhatChangedOnlyWhenItKnowsTheCommitThePassBeforeCovered(t *
 				t.Error("the message points at the diff since a commit nobody knows")
 			}
 		})
+	}
+}
+
+func TestAPassMarksTheChecksItStartedFrom(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := decided(t, f)
+	f.pulls.seed(withChecks(openPR(), gh.MergeableConflicting, passedCheck, failedCheck))
+
+	if err := f.service.ReviewAgain(t.Context(), id, ""); err != nil {
+		t.Fatalf("review again: %v", err)
+	}
+
+	want := []session.MarkerEntry{{
+		Type: session.MarkerChecksRead, Pass: 2, Passed: 1, Total: 2, Failed: []string{failedCheck.Name}, Conflict: true,
+	}}
+	marked := f.sessions.markersOf(session.MarkerChecksRead)
+	if diff := cmp.Diff(want, marked[len(marked)-1:]); diff != "" {
+		t.Errorf("checks_read markers (-want +got):\n%s", diff)
 	}
 }

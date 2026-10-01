@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { type ReactNode, useEffect, useRef } from "react";
 import { Button } from "./Button";
 import { Icon } from "./Icon";
 import type { IconGlyph } from "./icons";
@@ -17,6 +17,10 @@ export interface GoneAction {
 export interface GonePageProps {
   icon: IconGlyph;
   title: string;
+  /** description is the paragraph after the title: what happened, in a sentence or two. */
+  description?: string;
+  /** children is the block between the text and the actions, drawn by the caller. */
+  children?: ReactNode;
   /** actions are in their order; the first enabled one is the primary and takes the focus when the page appears. */
   actions: readonly GoneAction[];
 }
@@ -25,7 +29,7 @@ export interface GonePageProps {
  * GonePage stands in the place of an item that left while open: what became of it and where to
  * go from here. The first action that can run is the primary one and holds the focus.
  */
-export function GonePage({ icon, title, actions }: GonePageProps) {
+export function GonePage({ icon, title, description, children, actions }: GonePageProps) {
   const primaryRef = useRef<HTMLButtonElement>(null);
   const primary = actions.findIndex((action) => action.disabledReason === undefined);
 
@@ -39,6 +43,12 @@ export function GonePage({ icon, title, actions }: GonePageProps) {
       <p className="text-(length:--text-title) leading-(--leading-title) font-semibold text-ink-1">
         {title}
       </p>
+      {description !== undefined && (
+        <p className="max-w-(--measure-read) text-(length:--text-body) leading-(--leading-body) text-ink-2">
+          {description}
+        </p>
+      )}
+      {children}
       <div className="flex flex-wrap items-center gap-2">
         {actions.map((action, index) => {
           const button = (

@@ -94,6 +94,25 @@ export function age(iso: string, now: number): string {
   return `${Math.floor(elapsed / DAY_MS)}d ago`;
 }
 
+/** ageLong is how long ago, in words: just now under a minute, 1 minute ago, 2 hours ago, 3 days ago. */
+export function ageLong(iso: string, now: number): string {
+  const date = parse(iso);
+  if (date === null) {
+    return "";
+  }
+  const elapsed = now - date.getTime();
+  if (elapsed < MINUTE_MS) {
+    return "just now";
+  }
+  const [count, unit] =
+    elapsed < HOUR_MS
+      ? [Math.floor(elapsed / MINUTE_MS), "minute"]
+      : elapsed < DAY_MS
+        ? [Math.floor(elapsed / HOUR_MS), "hour"]
+        : [Math.floor(elapsed / DAY_MS), "day"];
+  return `${count} ${unit}${count === 1 ? "" : "s"} ago`;
+}
+
 /** readMoment is when a reading happened: 14:08 today, yesterday at 17:40, Sep 21 at 17:40 before. */
 export function readMoment(iso: string, now: number): string {
   const date = parse(iso);
@@ -108,6 +127,23 @@ export function readMoment(iso: string, now: number): string {
       return `yesterday at ${clock}`;
     default:
       return `${DAY.format(date)} at ${clock}`;
+  }
+}
+
+/** reviewMoment is when a review was submitted, to follow a verb: today at 10:02, yesterday at 17:40, on Sep 22 at 09:30. */
+export function reviewMoment(iso: string, now: number): string {
+  const date = parse(iso);
+  if (date === null) {
+    return "";
+  }
+  const moment = readMoment(iso, now);
+  switch (daysBefore(date, now)) {
+    case 0:
+      return `today at ${moment}`;
+    case 1:
+      return moment;
+    default:
+      return `on ${moment}`;
   }
 }
 

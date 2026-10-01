@@ -1,32 +1,43 @@
 import { useEffect, useState } from "react";
-import { FilterMenu } from "@/components/FilterMenu";
-import { Button } from "@/components/ui/button";
-import { Toggle } from "@/components/ui/toggle";
-import { MultiFilterMenu } from "@/features/reviews/MultiFilterMenu";
+import { Button } from "@/components/system/Button";
 import {
+  FilterBar,
+  FilterChip,
+  type FilterCycleGroup,
+  FilterMenu,
+} from "@/components/system/FilterBar";
+import type { FilterCycle } from "@/components/system/Menu";
+import {
+  cycled,
   EMPTY_REVIEW_FILTERS,
-  isFiltering,
-  NO_BOARD,
+  filterChips,
+  filterGroups,
+  filtersActive,
   sameFilters,
-} from "@/features/reviews/reviews-view";
-import { shortName } from "@/lib/repositories";
+  withBoard,
+  withoutChip,
+  withRepository,
+} from "@/features/reviews/review-list";
 import type { ReviewCenter, ReviewFilters } from "@/lib/wails";
 import { setReviewFilters } from "@/store/actions";
-import { useBoards, useRepositories } from "@/store/app-store";
+import { useAppStore } from "@/store/app-store";
+
+/** CYCLE_NOTE follows the legend of Author and Label in the menu. */
+const CYCLE_NOTE = "click to hide, again to keep only";
 
 export interface ReviewsFilterBarProps {
   center: ReviewCenter;
 }
 
 /**
- * ReviewsFilterBar narrows what the Reviews view lists and counts. The filters
- * live in Go, so what the user chooses here is remembered between runs.
+ * ReviewsFilterBar narrows what the Reviews view lists and counts: the chosen filters as chips and
+ * the Filter menu. The filters live in Go, so what the user chooses here is remembered between
+ * runs.
  */
 export function ReviewsFilterBar({ center }: ReviewsFilterBarProps) {
-  const boards = useBoards();
-  const repositories = useRepositories();
+  const app = useAppStore((state) => state.app);
   // The last choice sent, shown at once until a snapshot carries it: the
-  // menus stay open for several clicks in a row, and each click builds on the
+  // menu stays open for several clicks in a row, and each click builds on the
   // one before it, not on a snapshot that has not caught up yet.
   const [pending, setPending] = useState<ReviewFilters | null>(null);
   const filters = pending ?? center.filters;
@@ -37,6 +48,10 @@ export function ReviewsFilterBar({ center }: ReviewsFilterBarProps) {
     }
   }, [pending, center.filters]);
 
+  if (app === null) {
+    return null;
+  }
+
   const change = (next: ReviewFilters) => {
     setPending(next);
     void setReviewFilters(next).then((stored) => {
@@ -46,59 +61,46 @@ export function ReviewsFilterBar({ center }: ReviewsFilterBarProps) {
       }
     });
   };
-  const set = (partial: Partial<ReviewFilters>) => change({ ...filters, ...partial });
 
-  const boardOptions = [
-    ...boards.map((board) => ({ value: board.id, label: board.title })),
-    { value: NO_BOARD, label: "No board" },
+  const { board, repository, authors, labels } = filterGroups(filters, center, app);
+  const cycles: FilterCycleGroup[] = [
+    { label: "Author", note: CYCLE_NOTE, items: authors },
+    { label: "Label", note: CYCLE_NOTE, items: labels },
   ];
-  const repositoryOptions = repositories.map((repository) => ({
-    value: repository.id,
-    label: shortName(repository.fullName),
-    title: repository.fullName,
-  }));
+  const nameOf = (group: { items: { value: string; label: string }[] }, value: string) =>
+    group.items.find((item) => item.value === value)?.label ?? "";
+
+  const pick = (group: string, value: string) => {
+    if (group === "Board") {
+      change(withBoard(filters, value, nameOf(board, value)));
+    } else {
+      change(withRepository(filters, value, nameOf(repository, value)));
+    }
+  };
+  const cycle = (group: string, value: string, next: FilterCycle) =>
+    change(cycled(filters, group === "Author" ? "author" : "label", value, next));
 
   return (
-    <div className="flex flex-wrap items-center gap-2 border-b px-4 py-2">
+    <FilterBar label="Filter the pull requests">
+      {filterChips(filters, app).map((chip) => (
+        <FilterChip
+          key={`${chip.kind}:${chip.value}:${chip.label}`}
+          model={chip}
+          onRemove={() => change(withoutChip(filters, chip))}
+        />
+      ))}
       <FilterMenu
-        name="Board"
-        value={filters.boardId}
-        options={boardOptions}
-        onChange={(boardId) => set({ boardId })}
+        tooltip="Board, repository, author, label"
+        groups={[board, repository]}
+        onPick={pick}
+        cycles={cycles}
+        onCycle={cycle}
       />
-      <FilterMenu
-        name="Repository"
-        value={filters.repositoryId}
-        options={repositoryOptions}
-        onChange={(repositoryId) => set({ repositoryId })}
-      />
-      <MultiFilterMenu
-        name="Author"
-        kind="author"
-        values={center.authors ?? []}
-        filters={filters}
-        onChange={change}
-      />
-      <MultiFilterMenu
-        name="Label"
-        kind="label"
-        values={center.labels ?? []}
-        filters={filters}
-        onChange={change}
-      />
-      <Toggle
-        variant="outline"
-        size="sm"
-        pressed={filters.pendingOnly}
-        onPressedChange={(pendingOnly) => set({ pendingOnly })}
-      >
-        Pending only
-      </Toggle>
-      {isFiltering(filters) && (
+      {filtersActive(filters) && (
         <Button variant="ghost" size="sm" onClick={() => change(EMPTY_REVIEW_FILTERS)}>
           Clear filters
         </Button>
       )}
-    </div>
+    </FilterBar>
   );
 }

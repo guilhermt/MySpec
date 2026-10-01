@@ -149,10 +149,24 @@ export interface ArchivedReview {
     "outcome": string;
 
     /**
+     * as GitHub names it, without origin/
+     */
+    "baseBranch": string;
+
+    /**
      * nil when the pull request had no card
      */
     "card": PullCard | null;
     "passes": ReviewPass[] | null;
+
+    /**
+     * MergedBy is the login of who merged the pull request, MergedAt when, and
+     * ClosedAt when it closed (RFC 3339); "" when it did not happen or was not
+     * kept.
+     */
+    "mergedBy": string;
+    "mergedAt": string;
+    "closedAt": string;
     "createdAt": string;
     "archivedAt": string;
 }
@@ -1161,16 +1175,26 @@ export interface Leftover {
 }
 
 /**
+ * MarkerCommit is a commit of a new_commits marker; the SHA is the short one.
+ */
+export interface MarkerCommit {
+    "sha": string;
+    "subject": string;
+    "author": string;
+}
+
+/**
  * MarkerEntry is a milestone of the conversation.
  */
 export interface MarkerEntry {
     /**
      * Type is prd_written, prd_updated, tech_spec_written, tech_spec_updated,
      * plan_written, plan_updated, one_shot_written, one_shot_updated,
-     * pr_review_written, step_review_started, step_review_written,
-     * review_started, discussion_started, stage_started, step_started,
-     * compacted, interrupted, retried, committed, pr_opened, checks_read,
-     * draft_approved, changes_approved, paused or plan_invalid.
+     * pr_review_written, pr_review_revised, findings_decided,
+     * review_published, new_commits, step_review_started,
+     * step_review_written, review_started, discussion_started, stage_started,
+     * step_started, compacted, interrupted, retried, committed, pr_opened,
+     * checks_read, draft_approved, changes_approved, paused or plan_invalid.
      */
     "type": string;
     "preTokens": number;
@@ -1178,8 +1202,9 @@ export interface MarkerEntry {
     /**
      * Stage belongs to stage_started alone, Step to the markers of a step
      * (step_started, step_review_started), Pass to the markers of a review
-     * (pr_review_written, step_review_written) with Clean; Findings belongs to
-     * step_review_written alone, -1 when unknown; Restarted belongs to
+     * (pr_review_written, pr_review_revised, step_review_written) with Clean;
+     * Findings belongs to pr_review_written, pr_review_revised and
+     * step_review_written, -1 when unknown; Restarted belongs to
      * stage_started and step_started.
      */
     "stage": string;
@@ -1217,6 +1242,27 @@ export interface MarkerEntry {
     "title": string;
     "files": number;
     "problems": PlanProblem[] | null;
+
+    /**
+     * Model, Effort and Mode (publish or apply) belong to review_started;
+     * Approved and Discarded to findings_decided; Verdict, Inline, Body,
+     * Summary, Minimal and URL to review_published; Commits (never nil) and
+     * Count (-1 when the head before is not among the ones read) to
+     * new_commits.
+     */
+    "model": string;
+    "effort": string;
+    "mode": string;
+    "approved": number;
+    "discarded": number;
+    "verdict": string;
+    "inline": number;
+    "body": number;
+    "summary": boolean;
+    "minimal": boolean;
+    "url": string;
+    "commits": MarkerCommit[] | null;
+    "count": number;
 }
 
 /**
@@ -1731,6 +1777,57 @@ export interface PullRequestRow {
      */
     "action": string;
     "updatedAt": string;
+
+    /**
+     * HeadBranch and BaseBranch are the branch of the pull request and the one
+     * it merges into.
+     */
+    "headBranch": string;
+    "baseBranch": string;
+
+    /**
+     * the description, Markdown; "" without one
+     */
+    "body": string;
+
+    /**
+     * never nil
+     */
+    "checks": PRCheck[] | null;
+
+    /**
+     * Mergeable is mergeable, conflicting, unknown or "", a string for the same
+     * reason as State.Theme.
+     */
+    "mergeable": string;
+
+    /**
+     * YourReview is the last review the account of gh submitted; null without
+     * one.
+     */
+    "yourReview": PullReview | null;
+
+    /**
+     * NewCommitCount is how many commits came after that review; -1 when its
+     * commit is not among the last 100.
+     */
+    "newCommitCount": number;
+}
+
+/**
+ * PullReview is a review the account of gh submitted: its state and when.
+ */
+export interface PullReview {
+    /**
+     * State is approved, changes_requested, commented or dismissed, a string for
+     * the same reason as State.Theme.
+     */
+    "state": string;
+
+    /**
+     * RFC 3339
+     */
+    "at": string;
 }
 
 /**
@@ -1744,6 +1841,11 @@ export interface PullsFailure {
      */
     "repository": string;
     "message": string;
+
+    /**
+     * RFC 3339: the first failing reading of the run
+     */
+    "failedAt": string;
 }
 
 /**
@@ -1910,7 +2012,8 @@ export interface ReviewCenter {
     "filters": ReviewFilters;
 
     /**
-     * PendingCount is how many pending pull requests pass the filters.
+     * PendingCount is how many pending pull requests pass the filters and have no
+     * active review.
      */
     "pendingCount": number;
 
@@ -1979,7 +2082,13 @@ export interface ReviewFilters {
      * never nil
      */
     "labelsExclude": string[] | null;
-    "pendingOnly": boolean;
+
+    /**
+     * BoardName and RepositoryName are the names of the board or the repository
+     * when it was chosen, which the chip of one that left shows.
+     */
+    "boardName": string;
+    "repositoryName": string;
 }
 
 /**
@@ -1987,6 +2096,7 @@ export interface ReviewFilters {
  */
 export interface ReviewFinding {
     "number": number;
+    "title": string;
 
     /**
      * the file it is anchored to; "" for a general finding
@@ -1997,6 +2107,11 @@ export interface ReviewFinding {
      * the line of the new side of the diff; 0 for a general finding
      */
     "line": number;
+
+    /**
+     * LineURL is the line in Files changed on GitHub; "" for a general finding.
+     */
+    "lineUrl": string;
     "text": string;
 
     /**
@@ -2065,6 +2180,36 @@ export interface ReviewPass {
      * from what the report has, which another pass would discard.
      */
     "edited": boolean;
+
+    /**
+     * Checks, Mergeable and ChecksReadAt are the checks of the reading that let
+     * the pass start, whether the branch merged into the base then, and when it
+     * was made (RFC 3339); empty for a pass sent before they were kept.
+     * never nil
+     */
+    "checks": PRCheck[] | null;
+    "mergeable": string;
+    "checksReadAt": string;
+
+    /**
+     * when the report was first recorded, RFC 3339; "" when unknown
+     */
+    "recordedAt": string;
+
+    /**
+     * when the approved findings went to the agent, RFC 3339; "" when unknown
+     */
+    "sentAt": string;
+
+    /**
+     * the approved findings went to the agent (apply mode)
+     */
+    "sent": boolean;
+
+    /**
+     * the summary went with the published review
+     */
+    "summaryPublished": boolean;
 }
 
 /**
@@ -2127,9 +2272,29 @@ export interface ReviewSummary {
 
     /**
      * CheckError is what the last automatic reading of the pull request said
-     * when it failed; "" otherwise.
+     * when it failed, as the user reads it; "" otherwise. CheckErrorAt is the
+     * first failing reading of the run (RFC 3339); "" when the last one worked.
      */
     "checkError": string;
+    "checkErrorAt": string;
+
+    /**
+     * Checks and Mergeable are the live checks and the merge of the last
+     * reading; CheckedAt is when it was made (RFC 3339), "" before one since
+     * the app started.
+     * never nil
+     */
+    "checks": PRCheck[] | null;
+    "mergeable": string;
+    "checkedAt": string;
+
+    /**
+     * NewCommits is how many commits came since the published commit, -1 when
+     * unknown, 0 outside new_commits; StaleCommits, since the pass being
+     * decided, -1 when unknown, 0 when the pass isn't stale.
+     */
+    "newCommits": number;
+    "staleCommits": number;
 
     /**
      * Trouble is what went wrong since the last review pass; meaningful in

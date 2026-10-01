@@ -80,7 +80,7 @@ type Sessions interface {
 	LastReply(k session.Key) string
 	SendFromApp(ctx context.Context, k session.Key, m session.AppMessage) error
 	SendCorrection(ctx context.Context, k session.Key, m session.AppMessage) error
-	MarkPRReview(ctx context.Context, k session.Key, pass int, clean bool)
+	MarkPRReview(ctx context.Context, k session.Key, pass int, clean bool, findings int)
 	MarkStepReview(ctx context.Context, k session.Key, pass int, clean bool, findings int)
 	MarkCommitted(ctx context.Context, k session.Key, sha, subject string, pushed bool, number int)
 	MarkPROpened(ctx context.Context, k session.Key, number int, base string)

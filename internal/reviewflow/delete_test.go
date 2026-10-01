@@ -61,7 +61,7 @@ func TestAReviewInTheHistoryIsDeletedToo(t *testing.T) {
 
 	f := newFixture(t)
 	id := decided(t, f)
-	if _, err := f.reviews.Archive(t.Context(), id, prreview.PRMerged); err != nil {
+	if _, err := f.reviews.Archive(t.Context(), id, prreview.End{State: prreview.PRMerged}); err != nil {
 		t.Fatalf("archive review: %v", err)
 	}
 

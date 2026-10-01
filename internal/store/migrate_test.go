@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"maps"
 	"slices"
@@ -28,18 +29,20 @@ import (
 // that brought the mode of a task, boardsVersion the one that brought the
 // boards, itemsVersion the one that brought the items and the reviews,
 // taskScreenVersion the one that brought the pause time, the commit time and
-// the checks, and latestVersion the version the embedded migrations end at.
+// the checks, reviewScreenVersion the one that brought the title of a finding
+// and the summary of a pass that was published, and latestVersion the version the embedded migrations end at.
 const (
-	stagesVersion     = 3
-	commitsVersion    = 5
-	prVersion         = 6
-	modelsVersion     = 9
-	reviewModeVersion = 10
-	modeVersion       = 11
-	boardsVersion     = 14
-	itemsVersion      = 15
-	taskScreenVersion = 19
-	latestVersion     = 20
+	stagesVersion       = 3
+	commitsVersion      = 5
+	prVersion           = 6
+	modelsVersion       = 9
+	reviewModeVersion   = 10
+	modeVersion         = 11
+	boardsVersion       = 14
+	itemsVersion        = 15
+	taskScreenVersion   = 19
+	reviewScreenVersion = 21
+	latestVersion       = 21
 )
 
 // upgradeTime is the instant the repositories of the fake upgrades are stamped
@@ -1063,4 +1066,61 @@ func openAt(t *testing.T, version int) *sql.DB {
 		}
 	}
 	return db
+}
+
+func TestMigrateMarksTheSummaryOfThePassesPublishedBeforeIt(t *testing.T) {
+	t.Parallel()
+
+	db := openAt(t, reviewScreenVersion-1)
+	seedRepositoryAndTask(t, db)
+	const insertReview = `INSERT INTO reviews
+		(id, repository_id, number, title, author, url, head_branch, base_branch, mode, artifacts_dir,
+			created_at, updated_at)
+		VALUES ('review-1', 'repo-1', 7, 'Read the boards', 'colleague', 'https://github.com/acme/api/pull/7',
+			'boards', 'main', 'publish', '/data/reviews/acme/api/pr-7-abcdef12',
+			'2026-09-06T10:00:00Z', '2026-09-06T10:00:00Z')`
+	const insertPass = `INSERT INTO review_passes (review_id, pass, summary, published_at, created_at)
+		VALUES ('review-1', ?, ?, ?, '2026-09-06T10:00:00Z')`
+	const insertFinding = `INSERT INTO review_findings (review_id, pass, number, original, text)
+		VALUES ('review-1', 1, 1, 'the line is wrong', 'the line is wrong')`
+	if _, err := db.ExecContext(t.Context(), insertReview); err != nil {
+		t.Fatalf("insert review: %v", err)
+	}
+	passes := []struct {
+		number      int
+		summary     string
+		publishedAt any
+	}{
+		{1, "Two things to fix.", "2026-09-06T11:00:00Z"},
+		{2, "  \n ", "2026-09-06T12:00:00Z"},
+		{3, "Not sent yet.", nil},
+		// Only the characters strings.TrimSpace takes, with no space: SQLite's
+		// trim with no characters given would keep them.
+		{4, "\n\t\r\n", "2026-09-06T13:00:00Z"},
+	}
+	for _, pass := range passes {
+		if _, err := db.ExecContext(t.Context(), insertPass, pass.number, pass.summary, pass.publishedAt); err != nil {
+			t.Fatalf("insert pass %d: %v", pass.number, err)
+		}
+	}
+	if _, err := db.ExecContext(t.Context(), insertFinding); err != nil {
+		t.Fatalf("insert finding: %v", err)
+	}
+
+	if err := migrate(t.Context(), db, slog.New(slog.DiscardHandler), carryOver(t)); err != nil {
+		t.Fatalf("migrate() = %v, want nil", err)
+	}
+
+	for _, want := range []struct {
+		pass      int
+		published string
+	}{{1, "1"}, {2, "0"}, {3, "0"}, {4, "0"}} {
+		query := fmt.Sprintf(`SELECT summary_published FROM review_passes WHERE pass = %d`, want.pass)
+		if got := readOne(t, db, query); got != want.published {
+			t.Errorf("summary_published of pass %d = %s, want %s", want.pass, got, want.published)
+		}
+	}
+	if got := readOne(t, db, `SELECT title FROM review_findings WHERE number = 1`); got != "" {
+		t.Errorf("title of a finding recorded before the column = %q, want it empty", got)
+	}
 }

@@ -30,6 +30,15 @@ func TestAReadingKeepsWhatTheBatchCouldReadOfEachRepository(t *testing.T) {
 			Labels:     []pulls.Label{{Name: "backend", Color: "0e8a16"}},
 			HeadBranch: "cache-board-reading", HeadCommit: "aaa111", BaseBranch: "main",
 			UpdatedAt: time.Date(2026, time.September, 16, 11, 30, 0, 0, time.UTC),
+			Body:      "Reads the board once per minute.",
+			Checks: gh.PRChecks{
+				Checks: []gh.Check{{
+					Name: "test", URL: "https://github.com/acme/alpha/actions/runs/1/job/2", Conclusion: "success", State: gh.CheckPassed,
+					StartedAt:   time.Date(2026, time.September, 16, 11, 0, 0, 0, time.UTC),
+					CompletedAt: time.Date(2026, time.September, 16, 11, 4, 0, 0, time.UTC),
+				}},
+				Mergeable: gh.MergeableClean,
+			},
 		},
 		{
 			Owner: "acme", Name: "alpha", Number: 38,
@@ -43,6 +52,9 @@ func TestAReadingKeepsWhatTheBatchCouldReadOfEachRepository(t *testing.T) {
 			UpdatedAt:      time.Date(2026, time.September, 15, 9, 0, 0, 0, time.UTC),
 			Reviewed:       true,
 			ReviewedCommit: "bbb111",
+			Checks:         gh.PRChecks{Checks: []gh.Check{}, Mergeable: gh.MergeableUnknown},
+			YourReview:     &pulls.YourReview{State: "changes_requested", At: time.Date(2026, time.September, 15, 8, 0, 0, 0, time.UTC)},
+			NewCommitCount: 2,
 		},
 	}
 	if diff := cmp.Diff(want, f.reading(t, alphaID).PullRequests); diff != "" {
@@ -224,7 +236,11 @@ func TestReadDetailsReadsTheChecksAndTheMergeState(t *testing.T) {
 
 	want := gh.PRChecks{
 		Checks: []gh.Check{
-			{Name: "test", URL: "https://github.com/acme/alpha/actions/runs/1/job/2", Conclusion: "success", State: gh.CheckPassed},
+			{
+				Name: "test", URL: "https://github.com/acme/alpha/actions/runs/1/job/2", Conclusion: "success", State: gh.CheckPassed,
+				StartedAt:   time.Date(2026, time.September, 16, 11, 0, 0, 0, time.UTC),
+				CompletedAt: time.Date(2026, time.September, 16, 11, 4, 0, 0, time.UTC),
+			},
 			{Name: "ci/deploy", URL: "https://ci.example.com/deploy/3", Conclusion: "failure", State: gh.CheckFailed},
 		},
 		Mergeable: gh.MergeableClean,
@@ -239,6 +255,131 @@ func TestReadDetailsReadsTheChecksAndTheMergeState(t *testing.T) {
 
 	query := f.github.made(queryDetail)[0].Query
 	for _, field := range []string{"mergeable", "statusCheckRollup", "... on CheckRun", "... on StatusContext"} {
+		if !strings.Contains(query, field) {
+			t.Errorf("the detail query does not ask for %q", field)
+		}
+	}
+}
+
+func TestTheListQueryAsksForWhatOnlyTheListShows(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.github.reply(queryList, load(t, "list_partial.json"), nil)
+	f.refresh(t)
+
+	query := f.github.made(queryList)[0].Query
+	for _, field := range []string{
+		"head: commits(last: 1)", "since: commits(last: 100)", "body", "mergeable",
+		"startedAt completedAt", "rateLimit { cost }", "nodes { state submittedAt commit { oid } }",
+	} {
+		if !strings.Contains(query, field) {
+			t.Errorf("the list query does not ask for %q", field)
+		}
+	}
+}
+
+func TestTheListReadsTheChecksTheBodyAndTheReviewOfEachPullRequest(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.github.reply(queryList, load(t, "list_partial.json"), nil)
+	f.refresh(t)
+
+	pr := f.pullRequest(t, alphaID, 42)
+	wantChecks := gh.PRChecks{
+		Checks: []gh.Check{{
+			Name: "test", URL: "https://github.com/acme/alpha/actions/runs/1/job/2", Conclusion: "success", State: gh.CheckPassed,
+			StartedAt:   time.Date(2026, time.September, 16, 11, 0, 0, 0, time.UTC),
+			CompletedAt: time.Date(2026, time.September, 16, 11, 4, 0, 0, time.UTC),
+		}},
+		Mergeable: gh.MergeableClean,
+	}
+	if diff := cmp.Diff(wantChecks, pr.Checks); diff != "" {
+		t.Errorf("the checks of acme/alpha#42 mismatch (-want +got):\n%s", diff)
+	}
+	if pr.Body != "Reads the board once per minute." || pr.YourReview != nil {
+		t.Errorf("acme/alpha#42 has body %q and review %v, want its body and no review", pr.Body, pr.YourReview)
+	}
+
+	bump := f.pullRequest(t, alphaID, 38)
+	wantReview := &pulls.YourReview{State: "changes_requested", At: time.Date(2026, time.September, 15, 8, 0, 0, 0, time.UTC)}
+	if diff := cmp.Diff(wantReview, bump.YourReview); diff != "" {
+		t.Errorf("the review of acme/alpha#38 mismatch (-want +got):\n%s", diff)
+	}
+	if bump.Checks.Mergeable != gh.MergeableUnknown || len(bump.Checks.Checks) != 0 {
+		t.Errorf("the checks of acme/alpha#38 = %+v, want none and an unknown merge", bump.Checks)
+	}
+}
+
+func TestTheCommitsAfterYourReviewAreCountedInTheThreeCases(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.github.reply(queryList, load(t, "list_partial.json"), nil)
+	f.refresh(t)
+	cases := []struct {
+		name string
+		repo string
+		pr   int
+		want int
+	}{
+		{name: "without a review", repo: alphaID, pr: 42, want: 0},
+		{name: "with the commit among the last hundred", repo: alphaID, pr: 38, want: 2},
+		{name: "with the head as the reviewed commit", repo: gammaID, pr: 7, want: 0},
+	}
+	for _, c := range cases {
+		if got := f.pullRequest(t, c.repo, c.pr).NewCommitCount; got != c.want {
+			t.Errorf("%s: NewCommitCount = %d, want %d", c.name, got, c.want)
+		}
+	}
+
+	f.github.reply(queryList, load(t, "list_stale.json"), nil)
+	f.refresh(t)
+	if got := f.pullRequest(t, alphaID, 21).NewCommitCount; got != -1 {
+		t.Errorf("with the commit out of the last hundred: NewCommitCount = %d, want -1", got)
+	}
+}
+
+func TestReadDetailsReadsTheHoursTheCommitsAndTheMerge(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.github.reply(queryDetail, load(t, "detail.json"), nil)
+	refs := []pulls.Ref{
+		{Owner: "acme", Name: "alpha", Number: 42},
+		{Owner: "acme", Name: "gamma", Number: 7},
+	}
+	found, err := f.service.ReadDetails(t.Context(), refs)
+	if err != nil {
+		t.Fatalf("ReadDetails() = %v, want nil", err)
+	}
+
+	merged := found[refs[0]]
+	if got := merged.Checks.Checks[0].CompletedAt; !got.Equal(time.Date(2026, time.September, 16, 11, 4, 0, 0, time.UTC)) {
+		t.Errorf("the first check completed at %v, want 11:04", got)
+	}
+	wantCommits := []pulls.Commit{
+		{SHA: "aaa000", Subject: "Read the board once", Author: "mariana"},
+		{SHA: "aaa111", Subject: "Cache it", Author: "Ana Bot"},
+	}
+	if diff := cmp.Diff(wantCommits, merged.Commits); diff != "" {
+		t.Errorf("the commits mismatch (-want +got):\n%s", diff)
+	}
+	if merged.MergedBy != "rsouza" || !merged.MergedAt.Equal(time.Date(2026, time.September, 16, 12, 0, 0, 0, time.UTC)) {
+		t.Errorf("merged by %q at %v, want rsouza at 12:00", merged.MergedBy, merged.MergedAt)
+	}
+
+	closed := found[refs[1]]
+	if closed.MergedBy != "" || !closed.MergedAt.IsZero() || closed.ClosedAt.IsZero() {
+		t.Errorf("the closed one = %q, %v, %v, want no merge and a close", closed.MergedBy, closed.MergedAt, closed.ClosedAt)
+	}
+	if closed.Commits == nil || len(closed.Commits) != 0 {
+		t.Errorf("Commits = %v, want an empty list", closed.Commits)
+	}
+
+	query := f.github.made(queryDetail)[0].Query
+	for _, field := range []string{"head: commits(last: 1)", "recent: commits(last: 50)", "mergedBy { login } mergedAt closedAt", "startedAt completedAt"} {
 		if !strings.Contains(query, field) {
 			t.Errorf("the detail query does not ask for %q", field)
 		}

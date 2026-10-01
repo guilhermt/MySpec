@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   age,
+  ageLong,
   clockTime,
   duration,
   fullTime,
   readClock,
   readMoment,
+  reviewMoment,
   shortTime,
   startedTime,
 } from "@/lib/when";
@@ -85,6 +87,34 @@ describe("readMoment and readClock", () => {
   ])("writes a reading of %s", (_, iso, moment, clock) => {
     expect(readMoment(iso, NOW)).toBe(moment);
     expect(readClock(iso, NOW)).toBe(clock);
+  });
+});
+
+describe("reviewMoment", () => {
+  it.each([
+    ["today", local(2026, 8, 27, 10, 2), "today at 10:02"],
+    ["yesterday", local(2026, 8, 26, 17, 40), "yesterday at 17:40"],
+    ["before", local(2026, 8, 22, 9, 30), "on Sep 22 at 09:30"],
+    ["no time", "", ""],
+  ])("writes a review of %s", (_, iso, moment) => {
+    expect(reviewMoment(iso, NOW)).toBe(moment);
+  });
+});
+
+describe("ageLong", () => {
+  const ago = (ms: number) => new Date(NOW - ms).toISOString();
+
+  it.each([
+    ["under a minute", ago(59_000), "just now"],
+    ["a minute", ago(60_000), "1 minute ago"],
+    ["minutes", ago(42 * 60_000), "42 minutes ago"],
+    ["an hour", ago(60 * 60_000), "1 hour ago"],
+    ["hours", ago(2 * 60 * 60_000 + 59 * 60_000), "2 hours ago"],
+    ["a day", ago(24 * 60 * 60_000), "1 day ago"],
+    ["days", ago(3 * 24 * 60 * 60_000), "3 days ago"],
+    ["no time", "", ""],
+  ])("writes an age of %s", (_, iso, text) => {
+    expect(ageLong(iso, NOW)).toBe(text);
   });
 });
 

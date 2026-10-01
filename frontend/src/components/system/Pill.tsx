@@ -3,7 +3,15 @@ import { Shimmer } from "./Shimmer";
 import { StateGlyph } from "./StateGlyph";
 
 /** StepperGlyph is the state glyph of the pill; null draws no glyph and no divider. */
-export type StepperGlyph = "work" | "wait" | "error" | "close" | "github" | "paused" | null;
+export type StepperGlyph =
+  | "work"
+  | "wait"
+  | "error"
+  | "close"
+  | "github"
+  | "paused"
+  | "idle"
+  | null;
 
 /** PillView is what the pill of the current stage says. */
 export interface PillView {
@@ -45,7 +53,7 @@ export function Pill({ pill }: PillProps) {
       {pill.qualifier}
     </span>
   );
-  const light = pill.glyph === "work" || pill.glyph === "github";
+  const light = pill.glyph === "work" || pill.glyph === "github" || pill.glyph === "idle";
   return (
     <span
       data-paused={pill.paused || undefined}

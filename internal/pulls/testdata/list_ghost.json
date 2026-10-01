@@ -15,7 +15,11 @@
             "baseRefName": "main",
             "author": null,
             "labels": { "nodes": [] },
-            "reviews": { "nodes": [] }
+            "reviews": { "nodes": [] },
+            "body": "",
+            "mergeable": "MERGEABLE",
+            "head": { "nodes": [] },
+            "since": { "nodes": [{ "commit": { "oid": "ddd444" } }] }
           }
         ]
       }

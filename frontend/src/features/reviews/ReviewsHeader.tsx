@@ -1,45 +1,30 @@
-import { LoaderCircle, RefreshCw } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { useNow } from "@/features/attention/useNow";
+import { IconButton } from "@/components/system/IconButton";
+import { ICONS } from "@/components/system/icons";
+import { ReadingAge } from "@/components/system/ReadingAge";
 import { LocationHeader } from "@/features/navigation/LocationHeader";
 import type { ReviewCenter } from "@/lib/wails";
-import { age } from "@/lib/when";
 import { refreshPullRequests } from "@/store/actions";
-
-/** READING_CLOCK_MS is how often the time since the last reading is told again: a minute. */
-const READING_CLOCK_MS = 60_000;
 
 export interface ReviewsHeaderProps {
   center: ReviewCenter;
+  /** now is the clock the age of the reading counts from. */
+  now: number;
 }
 
-/** ReviewsHeader is the header of the place of Reviews, with how its last reading went on the right. */
-export function ReviewsHeader({ center }: ReviewsHeaderProps) {
-  const now = useNow(READING_CLOCK_MS, center.readAt !== "");
-
+/** ReviewsHeader is the header of the place of Reviews: how old its reading is, and Refresh, on the right. */
+export function ReviewsHeader({ center, now }: ReviewsHeaderProps) {
   return (
     <LocationHeader>
-      {center.readAt !== "" && (
-        <span className="text-xs text-muted-foreground">
-          {`checked ${age(center.readAt, now)}`}
-        </span>
-      )}
-      {center.reading && (
-        <LoaderCircle
-          role="status"
-          aria-label="Reading pull requests"
-          className="size-3.5 animate-spin text-muted-foreground"
-        />
-      )}
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        aria-label="Refresh"
+      <ReadingAge readAt={center.readAt} reading={center.reading} now={now} />
+      <IconButton
+        label="Refresh"
+        tooltip="Read the pull requests again"
+        icon={ICONS.refresh}
+        size="sm"
         disabled={center.reading}
+        disabledReason="A reading is running."
         onClick={() => void refreshPullRequests()}
-      >
-        <RefreshCw aria-hidden="true" />
-      </Button>
+      />
     </LocationHeader>
   );
 }

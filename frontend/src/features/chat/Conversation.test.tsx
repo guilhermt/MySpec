@@ -761,3 +761,91 @@ describe("Conversation stretches and markers", () => {
     );
   });
 });
+
+describe("Conversation after", () => {
+  const marker = (type: string, fields: Partial<NonNullable<Entry["marker"]>> = {}): Entry => {
+    const entry = makeEntry("marker");
+    return entry.marker === null
+      ? entry
+      : { ...entry, marker: { ...entry.marker, type, ...fields } };
+  };
+
+  it("draws a node right after the entry it is keyed by", () => {
+    const first = marker("paused");
+    const second = makeEntry("user");
+    renderWithStore(
+      <Conversation
+        stage="prd"
+        taskId="task-1"
+        session={makeTask()}
+        after={new Map([[first.id, <p key="derived">The derived line</p>]])}
+      />,
+      { state: withTask(), ui: { transcripts: ready([first, second]) } },
+    );
+
+    const text = screen.getByRole("feed").textContent ?? "";
+    expect(text.indexOf("Paused by you")).toBeLessThan(text.indexOf("The derived line"));
+    expect(text.indexOf("The derived line")).toBeLessThan(text.indexOf("Add a login screen"));
+  });
+
+  it("draws the node of an id it does not have after the end line and before the fixed card", () => {
+    renderWithStore(
+      <Conversation
+        stage="prd"
+        taskId="task-1"
+        session={makeTask()}
+        after={new Map([["nowhere", <p key="derived">The derived line</p>]])}
+        endLine={<p>The end line</p>}
+        fixed={<p>The fixed card</p>}
+      />,
+      { state: withTask(), ui: { transcripts: ready([makeEntry("user")]) } },
+    );
+
+    const text = screen.getByRole("feed").textContent ?? "";
+    const places = ["Add a login screen", "The end line", "The derived line", "The fixed card"].map(
+      (part) => text.indexOf(part),
+    );
+    expect(places.every((place) => place >= 0)).toBe(true);
+    expect([...places].sort((a, b) => a - b)).toEqual(places);
+  });
+
+  it("never folds a stretch that holds a derived line", () => {
+    const speeches = Array.from({ length: 12 }, (_, index) => {
+      const entry = makeEntry("assistant");
+      return entry.assistant === null
+        ? entry
+        : {
+            ...entry,
+            assistant: { ...entry.assistant, text: `Speech ${index}.`, messageId: `m${index}` },
+          };
+    });
+    const round = makeEntry("user");
+    const next =
+      round.user === null
+        ? round
+        : {
+            ...round,
+            user: {
+              ...round.user,
+              text: "Again.",
+              app: true,
+              appKind: "correction",
+              appRound: 1,
+              appRounds: 3,
+              appCount: 1,
+            },
+          };
+    const after = new Map([[speeches[3]?.id ?? "", <p key="derived">The derived line</p>]]);
+
+    renderWithStore(
+      <Conversation stage="plan" taskId="task-1" session={makeTask()} after={after} />,
+      {
+        state: withTask(),
+        ui: { transcripts: { "task-1|plan": readyState([...speeches, next]) } },
+      },
+    );
+
+    expect(screen.queryByRole("button", { name: /^Earlier:/ })).not.toBeInTheDocument();
+    expect(screen.getByText("The derived line")).toBeInTheDocument();
+  });
+});

@@ -1,16 +1,21 @@
 import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { Button } from "@/components/system/Button";
+import { ChecksList } from "@/components/system/ChecksList";
+import { Finding } from "@/components/system/Finding";
 import { Icon } from "@/components/system/Icon";
 import { ICONS, type IconMeaning } from "@/components/system/icons";
 import { Shimmer } from "@/components/system/Shimmer";
 import { Chevron } from "@/features/chat/entries/Chevron";
 import { Markdown } from "@/features/chat/Markdown";
 import type { MarkerIcon, MarkerView } from "@/features/chat/markers";
+import { useReviewArtifact } from "@/features/reviews/useReviewArtifact";
 import { useArtifact } from "@/features/task/useArtifact";
 import { splitFrontMatter } from "@/lib/front-matter";
+import { checkDuration, checkRows } from "@/lib/pull-requests";
 import { cn } from "@/lib/utils";
-import type { PlanProblem, TaskSummary } from "@/lib/wails";
+import type { PlanProblem, ReviewSummary, TaskSummary } from "@/lib/wails";
 import { clockTime } from "@/lib/when";
+import { openExternal, openFindingInEditor } from "@/store/actions";
 import { type PanelId, useAppStore } from "@/store/app-store";
 
 /** MARKER_ICONS is the meaning of ICONS each icon of a line draws: the product's message is its mark. */
@@ -69,6 +74,70 @@ function ProblemsBody({ problems }: { problems: readonly PlanProblem[] }) {
   );
 }
 
+function ChecksBody({ body }: { body: Extract<MarkerView["body"], { kind: "checks" }> }) {
+  const now = Date.now();
+  const rows = checkRows(body.reading).map((row) => ({
+    ...row,
+    duration: checkDuration(row, now),
+  }));
+  return (
+    <div data-slot="marker-body" className={SUNKEN}>
+      <ChecksList summary={body.summary} rows={rows} onOpen={(url) => void openExternal(url)} />
+    </div>
+  );
+}
+
+function FindingsBody({
+  body,
+  review,
+}: {
+  body: Extract<MarkerView["body"], { kind: "findings" }>;
+  review: ReviewSummary | null;
+}) {
+  return (
+    <ul data-slot="marker-body" className={cn(SUNKEN, "flex flex-col gap-(--space-2)")}>
+      {body.findings.map((finding) => (
+        <li key={finding.id}>
+          <Finding
+            model={finding}
+            current={false}
+            onOpenLine={() => {
+              if (finding.location.kind === "anchored") {
+                void openExternal(finding.location.url);
+              }
+            }}
+            onOpenEditor={() => {
+              if (review !== null) {
+                void openFindingInEditor(review.id, body.pass, finding.number);
+              }
+            }}
+            renderText={(text) => <Markdown cutCode>{text}</Markdown>}
+          />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function CommitsBody({ body }: { body: Extract<MarkerView["body"], { kind: "commits" }> }) {
+  return (
+    <ul
+      data-slot="marker-body"
+      className={cn(
+        SUNKEN,
+        "flex flex-col gap-(--space-1) font-mono text-(length:--text-micro) leading-(--leading-micro) text-ink-2 select-text [font-variant-ligatures:none]",
+      )}
+    >
+      {body.commits.map((commit) => (
+        <li key={commit.sha} className="break-words">
+          {`${commit.sha} ${commit.subject}`}
+        </li>
+      ))}
+      {body.more > 0 && <li className="text-ink-3">{`and ${body.more} more`}</li>}
+    </ul>
+  );
+}
+
 // documentText is what a document reads in place: a step file without its metadata header.
 function documentText(name: string, content: string): string {
   return name.startsWith("steps/") ? splitFrontMatter(content).body : content;
@@ -80,6 +149,8 @@ export interface MarkerLineProps {
   createdAt: string;
   /** task is the task whose documents an artifact body reads; null outside a task, where none opens. */
   task?: TaskSummary | null;
+  /** review is the review whose documents an artifact body reads; null outside a review. */
+  review?: ReviewSummary | null;
   /** requested opens the line and gives it the focus, once: the request bar asked for it. */
   requested?: boolean;
   /** onRequested says the request was settled. */
@@ -95,6 +166,7 @@ export function MarkerLine({
   view,
   createdAt,
   task = null,
+  review = null,
   requested = false,
   onRequested,
 }: MarkerLineProps) {
@@ -108,11 +180,22 @@ export function MarkerLine({
   const openPanelAt = useAppStore((state) => state.openPanelAt);
   const { body } = view;
   const opens = body.kind !== "none";
-  const artifact = useArtifact(
+  const taskArtifact = useArtifact(
     task?.id ?? "",
     open && body.kind === "artifact" && task !== null ? body.name : null,
     (task?.artifactVersion ?? 0) + attempt,
   );
+  // The report of a pass is read again when the agent writes it again, which is its revision.
+  const passRevision =
+    body.kind === "artifact"
+      ? ((review?.passes ?? []).find((pass) => pass.file === body.name)?.revision ?? 0)
+      : 0;
+  const reviewArtifact = useReviewArtifact(
+    review?.id ?? "",
+    open && body.kind === "artifact" && review !== null ? body.name : null,
+    passRevision + attempt,
+  );
+  const artifact = review === null ? taskArtifact : reviewArtifact;
   const time = clockTime(createdAt, Date.now());
   const said = view.complement === "" ? view.text : `${view.text} · ${view.complement}`;
   const name = time === "" ? said : `${said}, ${time}`;
@@ -149,8 +232,25 @@ export function MarkerLine({
       {view.complement !== "" && (
         <span className="min-w-0 truncate text-ink-3">{view.complement}</span>
       )}
+      {/* The link is an action of its own: a line that opens is a button, which holds no other. */}
+      {view.link !== undefined && !opens && (
+        <Button
+          variant="ghost"
+          size="xs"
+          icon={ICONS.external}
+          className="ml-auto shrink-0"
+          onClick={() => void openExternal(view.link?.url ?? "")}
+        >
+          {view.link.label}
+        </Button>
+      )}
       {!view.timeHidden && (
-        <span className="entry-time ml-auto shrink-0 text-(length:--text-micro) leading-(--leading-micro) text-ink-4 tabular-nums">
+        <span
+          className={cn(
+            "entry-time shrink-0 text-(length:--text-micro) leading-(--leading-micro) text-ink-4 tabular-nums",
+            view.link === undefined || opens ? "ml-auto" : "",
+          )}
+        >
           {time}
         </span>
       )}
@@ -176,6 +276,15 @@ export function MarkerLine({
       break;
     case "problems":
       content = <ProblemsBody problems={body.problems} />;
+      break;
+    case "checks":
+      content = <ChecksBody body={body} />;
+      break;
+    case "findings":
+      content = <FindingsBody body={body} review={review ?? null} />;
+      break;
+    case "commits":
+      content = <CommitsBody body={body} />;
       break;
     case "artifact": {
       const foot = FOOTS[body.openIn];

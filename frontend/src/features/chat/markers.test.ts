@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  derivedDecidedLineOf,
   type MarkerContext,
   type MarkerView,
   markerOf,
@@ -10,7 +11,19 @@ import {
   voiceOf,
 } from "@/features/chat/markers";
 import type { Entry, MarkerEntry, PullRequest, TaskSummary, UserEntry } from "@/lib/wails";
-import { makeEntry, makePullRequest, makeStep, makeTask, makeTaskCard } from "@/test/wails-mock";
+import { clockTime } from "@/lib/when";
+import {
+  makeEntry,
+  makeMarkerCommit,
+  makePRCheck,
+  makePullRequest,
+  makeReviewFinding,
+  makeReviewPass,
+  makeReviewSummary,
+  makeStep,
+  makeTask,
+  makeTaskCard,
+} from "@/test/wails-mock";
 
 // A marker and a message as an old transcript keeps them: every field at its zero.
 const MARKER: MarkerEntry = {
@@ -38,6 +51,19 @@ const MARKER: MarkerEntry = {
   title: "",
   files: 0,
   problems: [],
+  model: "",
+  effort: "",
+  mode: "",
+  approved: 0,
+  discarded: 0,
+  verdict: "",
+  inline: 0,
+  body: 0,
+  summary: false,
+  minimal: false,
+  url: "",
+  commits: [],
+  count: 0,
 };
 const USER: UserEntry = {
   text: "",
@@ -83,6 +109,8 @@ const task: TaskSummary = makeTask({
 const ctx = (stage: string, rest: Partial<MarkerContext> = {}): MarkerContext => ({
   stage,
   task,
+  review: null,
+  latestReport: new Map(),
   oneShot: false,
   ...rest,
 });
@@ -239,13 +267,34 @@ describe("startLineOf", () => {
     ],
     [
       "a review",
-      markerEntry({ type: "review_started" }),
+      markerEntry({
+        type: "review_started",
+        model: "claude-opus-5-5[1m]",
+        effort: "high",
+        mode: "publish",
+      }),
+      null,
+      ctx("review", { task: null }),
+      view("start", "Review started", { complement: "Opus 5.5 (1M) · high · Publish" }),
+    ],
+    [
+      "a review to apply, whose prompt is the message of the user",
+      markerEntry({
+        type: "review_started",
+        model: "claude-sonnet-5-5",
+        effort: "medium",
+        mode: "apply",
+      }),
       prompt({ text: "Focus on the migrations." }),
       ctx("review", { task: null }),
-      view("start", "Review started", {
-        complement: "pass 1",
-        body: { kind: "markdown", text: "Focus on the migrations." },
-      }),
+      view("start", "Review started", { complement: "Sonnet 5.5 · medium · Apply" }),
+    ],
+    [
+      "a review started before the marker kept its model",
+      markerEntry({ type: "review_started" }),
+      null,
+      ctx("review", { task: null }),
+      view("start", "Review started"),
     ],
     [
       "a discussion",
@@ -627,6 +676,310 @@ describe("markerOf", () => {
     ["a type the app does not know", { type: "rewound" }, ctx("step:3"), null],
   ])("reads %s", (_, fields, context, expected) => {
     expect(markerOf(marker(fields), context)).toEqual(expected);
+  });
+});
+
+describe("markerOf in a review", () => {
+  const NOW = Date.parse("2026-09-30T15:00:00Z");
+  // The hour as the machine writes it: the same instant reads differently by time zone.
+  const PUBLISHED = clockTime("2026-09-30T13:41:00Z", NOW);
+  const findings = [
+    makeReviewFinding({
+      number: 1,
+      title: "The token is never cleared",
+      placement: "inline",
+      decision: "approved",
+    }),
+    makeReviewFinding({
+      number: 2,
+      title: "No test",
+      path: "",
+      line: 0,
+      placement: "body",
+      decision: "approved",
+    }),
+    makeReviewFinding({ number: 3, title: "Naming", decision: "discarded" }),
+  ];
+  const review = makeReviewSummary({
+    baseBranch: "origin/dev",
+    passes: [
+      makeReviewPass({
+        pass: 1,
+        findings,
+        publishedAt: "2026-09-30T13:41:00Z",
+        checks: [makePRCheck({ name: "lint", state: "failed" })],
+        mergeable: "conflicting",
+        checksReadAt: "2026-09-30T12:00:00Z",
+      }),
+      makeReviewPass({ pass: 2, checks: [], checksReadAt: "" }),
+    ],
+  });
+  const inReview = ctx("review", {
+    task: null,
+    review,
+    latestReport: new Map([[1, "entry-9"]]),
+  });
+
+  it.each([
+    { type: "pr_review_written", findings: 3, want: "changes · 3 findings" },
+    { type: "pr_review_written", findings: 1, want: "changes · 1 finding" },
+    { type: "pr_review_written", findings: -1, want: "changes" },
+    { type: "pr_review_written", clean: true, findings: 0, want: "clean" },
+    { type: "pr_review_revised", findings: 2, want: "changes · 2 findings" },
+  ])("reads the report $type with $findings findings as $want", ({ want, ...fields }) => {
+    const read = markerOf(marker({ pass: 1, ...fields }), inReview, "entry-9", NOW);
+
+    expect(read?.complement).toBe(want);
+    expect(read?.text).toBe(
+      fields.type === "pr_review_revised" ? "Review 1 revised" : "Review 1 written",
+    );
+  });
+
+  it("opens the report of a pass only at its latest marker", () => {
+    const written = marker({ type: "pr_review_written", pass: 1 });
+
+    expect(markerOf(written, inReview, "entry-9", NOW)?.body).toEqual({
+      kind: "artifact",
+      name: "review-1.md",
+      openIn: "reports",
+    });
+    expect(markerOf(written, inReview, "entry-3", NOW)?.body).toEqual({ kind: "none" });
+  });
+
+  it("opens the checks a pass started from, against the base of the pull request", () => {
+    const read = markerOf(
+      marker({
+        type: "checks_read",
+        pass: 1,
+        passed: 0,
+        total: 1,
+        failed: ["lint"],
+        conflict: true,
+      }),
+      inReview,
+      "entry-2",
+      NOW,
+    );
+
+    expect(read?.complement).toBe("0 of 1 passed · lint failed · conflict with dev");
+    expect(read?.body).toEqual({
+      kind: "checks",
+      reading: {
+        checks: review.passes?.[0]?.checks,
+        mergeable: "conflicting",
+        checkedAt: "2026-09-30T12:00:00Z",
+        base: "dev",
+      },
+      summary: "0 of 1 passed · 1 failed · conflict with dev",
+    });
+  });
+
+  it("opens no checks for a pass that kept none", () => {
+    const read = markerOf(
+      marker({ type: "checks_read", pass: 2, total: 0 }),
+      inReview,
+      "entry-2",
+      NOW,
+    );
+
+    expect(read?.body).toEqual({ kind: "none" });
+  });
+
+  it("reads what the user decided and opens the findings where each went", () => {
+    const read = markerOf(
+      marker({ type: "findings_decided", pass: 1, approved: 2, discarded: 1 }),
+      inReview,
+      "entry-4",
+      NOW,
+    );
+
+    expect(read).toMatchObject({
+      icon: "check",
+      text: "You decided",
+      complement: "2 approved · 1 discarded",
+    });
+    expect(read?.body.kind).toBe("findings");
+    const shown = read?.body.kind === "findings" ? read.body.findings : [];
+    expect(shown.map((finding) => finding.disabled)).toEqual([
+      `Inline comment · published ${PUBLISHED}`,
+      `In the review body · published ${PUBLISHED}`,
+      "Not published",
+    ]);
+    expect(shown[0]?.name).toBe(
+      "Finding 1 of 3: The token is never cleared. src/login.ts, line 12. Approved.",
+    );
+  });
+
+  it.each([
+    { approved: 2, discarded: 0, want: "2 approved" },
+    { approved: 0, discarded: 3, want: "3 discarded" },
+    { approved: 0, discarded: 0, want: "nothing decided" },
+  ])("drops the zero of $approved approved and $discarded discarded", ({ want, ...counts }) => {
+    const read = markerOf(
+      marker({ type: "findings_decided", pass: 1, ...counts }),
+      inReview,
+      "e",
+      NOW,
+    );
+
+    expect(read?.complement).toBe(want);
+  });
+
+  it("says where a pass went in apply mode", () => {
+    const applying = makeReviewSummary({
+      mode: "apply",
+      passes: [makeReviewPass({ pass: 1, findings, sent: true, sentAt: "2026-09-30T13:41:00Z" })],
+    });
+    const read = markerOf(
+      marker({ type: "findings_decided", pass: 1, approved: 2, discarded: 1 }),
+      ctx("review", { task: null, review: applying }),
+      "e",
+      NOW,
+    );
+
+    const shown = read?.body.kind === "findings" ? read.body.findings : [];
+    expect(shown.map((finding) => finding.disabled)).toEqual([
+      `Sent to the agent · ${PUBLISHED}`,
+      `Sent to the agent · ${PUBLISHED}`,
+      "Not sent",
+    ]);
+  });
+
+  it("opens nothing for a decision the review does not hold", () => {
+    const read = markerOf(
+      marker({ type: "findings_decided", pass: 1, approved: 1 }),
+      ctx("review", { task: null }),
+      "e",
+      NOW,
+    );
+
+    expect(read).toEqual(view("check", "You decided", { complement: "1 approved" }));
+  });
+
+  it.each([
+    {
+      name: "inline and the summary",
+      fields: { verdict: "request_changes", inline: 2, summary: true },
+      complement: "Request changes · 2 inline comments · the summary in the body",
+    },
+    {
+      name: "the minimal body",
+      fields: { verdict: "comment", inline: 1, minimal: true },
+      complement: 'Comment · 1 inline comment · "Review with 1 inline comment." in the body',
+    },
+    {
+      name: "a bare approval",
+      fields: { verdict: "approve" },
+      complement: "Approve · the verdict only",
+    },
+  ])("reads a review published with $name", ({ fields, complement }) => {
+    const read = markerOf(
+      marker({
+        type: "review_published",
+        pass: 2,
+        url: "https://github.com/dev/web/pull/31#r1",
+        ...fields,
+      }),
+      inReview,
+      "e",
+      NOW,
+    );
+
+    expect(read).toEqual(
+      view("pullRequest", "Published pass 2", {
+        complement,
+        link: { label: "GitHub", url: "https://github.com/dev/web/pull/31#r1" },
+      }),
+    );
+  });
+
+  it("links to no review it has no address for", () => {
+    const read = markerOf(
+      marker({ type: "review_published", pass: 1, verdict: "approve" }),
+      inReview,
+      "e",
+      NOW,
+    );
+
+    expect(read?.link).toBeUndefined();
+  });
+
+  it.each([
+    {
+      name: "commits by two people",
+      fields: {
+        count: 2,
+        commits: [
+          makeMarkerCommit(),
+          makeMarkerCommit({ sha: "ab12cd3", subject: "Cover it", author: "tchen" }),
+        ],
+      },
+      text: "2 new commits",
+      complement: "by rsouza and tchen",
+      body: {
+        kind: "commits" as const,
+        commits: [
+          { sha: "c19f02e", subject: "Fix the time zone rule" },
+          { sha: "ab12cd3", subject: "Cover it" },
+        ],
+        more: 0,
+      },
+    },
+    {
+      name: "one commit",
+      fields: { count: 1, commits: [makeMarkerCommit({ subject: "Fix it" })] },
+      text: "1 new commit",
+      complement: "by rsouza",
+      body: { kind: "commits" as const, commits: [{ sha: "c19f02e", subject: "Fix it" }], more: 0 },
+    },
+    {
+      name: "a count that is not known",
+      fields: { count: -1, commits: [makeMarkerCommit({ subject: "Fix it", author: "a" })] },
+      text: "New commits",
+      complement: "by a",
+      body: { kind: "commits" as const, commits: [{ sha: "c19f02e", subject: "Fix it" }], more: 0 },
+    },
+  ])("reads $name", ({ fields, text, complement, body }) => {
+    expect(markerOf(marker({ type: "new_commits", ...fields }), inReview, "e", NOW)).toEqual(
+      view("commit", text, { complement, body }),
+    );
+  });
+
+  it("lists the last twenty commits and counts the rest", () => {
+    const commits = Array.from({ length: 32 }, (_, index) =>
+      makeMarkerCommit({
+        sha: `c${String(index).padStart(6, "0")}`,
+        subject: `Commit ${index}`,
+        author: ["a", "b", "a", "c"][index % 4] ?? "",
+      }),
+    );
+
+    const read = markerOf(marker({ type: "new_commits", count: 32, commits }), inReview, "e", NOW);
+
+    expect(read?.complement).toBe("by a, b and c");
+    expect(read?.body).toMatchObject({ kind: "commits", more: 12 });
+    expect(read?.body.kind === "commits" ? read.body.commits : []).toHaveLength(20);
+    expect(read?.body.kind === "commits" ? read.body.commits[0]?.subject : "").toBe("Commit 12");
+  });
+});
+
+describe("derivedDecidedLineOf", () => {
+  it("counts the decisions of a pass from before the marker", () => {
+    const pass = makeReviewPass({
+      pass: 1,
+      published: true,
+      publishedAt: "2026-09-30T13:41:00Z",
+      findings: [
+        makeReviewFinding({ number: 1, decision: "approved", placement: "inline" }),
+        makeReviewFinding({ number: 2, decision: "discarded" }),
+      ],
+    });
+    const review = makeReviewSummary({ passes: [pass] });
+
+    const line = derivedDecidedLineOf(review, pass, Date.parse("2026-09-30T15:00:00Z"));
+
+    expect(line).toMatchObject({ text: "You decided", complement: "1 approved · 1 discarded" });
+    expect(line.body.kind).toBe("findings");
   });
 });
 

@@ -1,7 +1,14 @@
+import { useState } from "react";
+import { Button } from "@/components/system/Button";
 import { ChecksList } from "@/components/system/ChecksList";
+import { Spinner } from "@/components/system/Spinner";
 import { useNow } from "@/features/attention/useNow";
-import { checkDuration, checkRows, liveChecksHeader } from "@/lib/pull-requests";
-import type { PullRequest } from "@/lib/wails";
+import {
+  type ChecksReading,
+  checkDuration,
+  checkRows,
+  liveChecksHeader,
+} from "@/lib/pull-requests";
 import { age, fullTime } from "@/lib/when";
 import { openExternal } from "@/store/actions";
 
@@ -9,20 +16,56 @@ import { openExternal } from "@/store/actions";
 const SECOND = 1000;
 
 export interface LiveChecksProps {
-  pr: PullRequest;
+  reading: ChecksReading;
+  /** foot is what is still missing, at the foot of the block: the wait for the first pass. */
+  foot?: string;
+  /** onRefresh reads the pull request now; Refresh is in the header while it is given. */
+  onRefresh?: () => Promise<void>;
   /** fixed is the card at the end of the conversation of the review: one entry of its feed. */
   fixed?: boolean;
+}
+
+/** Refresh reads the pull request out of the minute: Refresh, and Reading… while the promise runs. */
+function Refresh({ onRefresh }: { onRefresh: () => Promise<void> }) {
+  const [running, setRunning] = useState(false);
+  if (running) {
+    return (
+      <span
+        role="status"
+        className="inline-flex items-center gap-(--space-1-5) px-(--space-2) text-(length:--text-meta) leading-(--leading-meta) text-ink-3"
+      >
+        <Spinner />
+        Reading…
+      </span>
+    );
+  }
+  const press = async () => {
+    setRunning(true);
+    try {
+      await onRefresh();
+    } finally {
+      setRunning(false);
+    }
+  };
+  return (
+    <Button variant="ghost" size="xs" onClick={() => void press()}>
+      Refresh
+    </Button>
+  );
 }
 
 /**
  * LiveChecks is the wait for the checks of the pull request, read every minute: the header with the
  * count, checking GitHub before the first reading, when it was read, and a line per check.
  */
-export function LiveChecks({ pr, fixed = false }: LiveChecksProps) {
+export function LiveChecks({ reading, foot, onRefresh, fixed = false }: LiveChecksProps) {
   const now = useNow(SECOND, true);
-  const rows = checkRows(pr).map((row) => ({ ...row, duration: checkDuration(row, now) }));
-  const reading = pr.checkedAt === "";
-  const header = liveChecksHeader(pr.checks);
+  const rows = checkRows(reading).map((row) => ({
+    ...row,
+    duration: checkDuration(row, now),
+  }));
+  const unread = reading.checkedAt === "";
+  const header = liveChecksHeader(reading.checks);
   const list = (
     <ChecksList
       summary={header}
@@ -30,9 +73,11 @@ export function LiveChecks({ pr, fixed = false }: LiveChecksProps) {
       onOpen={(url) => void openExternal(url)}
       live={{
         header,
-        age: reading ? "" : `checked ${age(pr.checkedAt, now)}`,
-        ageTooltip: reading ? "" : fullTime(pr.checkedAt),
-        reading,
+        age: unread ? "" : `checked ${age(reading.checkedAt, now)}`,
+        ageTooltip: unread ? "" : fullTime(reading.checkedAt),
+        reading: unread,
+        ...(onRefresh !== undefined ? { action: <Refresh onRefresh={onRefresh} /> } : {}),
+        ...(foot !== undefined ? { foot } : {}),
       }}
     />
   );
@@ -43,7 +88,7 @@ export function LiveChecks({ pr, fixed = false }: LiveChecksProps) {
     <article
       data-feed-item
       tabIndex={-1}
-      aria-label={reading ? "checking GitHub" : header}
+      aria-label={unread ? "checking GitHub" : header}
       className="rounded-md outline-none focus-visible:focus-ring"
     >
       {list}

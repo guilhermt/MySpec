@@ -22,6 +22,7 @@ import {
   asInterruptedBy,
   asIssueState,
   asMarkerType,
+  asMergeable,
   asMigrationCaseKind,
   asModelStage,
   asPermissionStatus,
@@ -49,6 +50,7 @@ import {
   asTaskStage,
   asThemePreference,
   asTranscriptEventKind,
+  asYourReviewState,
 } from "@/lib/wails";
 import { makeSituation, makeState } from "@/test/wails-mock";
 
@@ -313,6 +315,12 @@ describe("narrowing", () => {
     for (const action of ["review", "open_review", "open_task", "clone", "clone_missing", "fork"]) {
       expect(asPullRequestAction(action)).toBe(action);
     }
+    for (const state of ["approved", "changes_requested", "commented", "dismissed"]) {
+      expect(asYourReviewState(state)).toBe(state);
+    }
+    for (const mergeable of ["mergeable", "conflicting", "unknown", ""]) {
+      expect(asMergeable(mergeable)).toBe(mergeable);
+    }
     expect(asPullRequestOutcome("merged")).toBe("merged");
     expect(asPullRequestOutcome("closed")).toBe("closed");
     expect(asModelStage("discussion")).toBe("discussion");
@@ -389,6 +397,8 @@ describe("narrowing", () => {
     expect(asReviewVerdict("reject")).toBe("comment");
     expect(asPullRequestAction("merge")).toBe("fork");
     expect(asPullRequestOutcome("open")).toBe("closed");
+    expect(asYourReviewState("pending")).toBe("commented");
+    expect(asMergeable("clean")).toBe("");
     expect(asFindingDecision("deferred")).toBe("");
     expect(asFindingPlacement("thread")).toBe("");
     expect(asDiscussionStatus("archived")).toBe("discussing");
@@ -513,7 +523,8 @@ describe("api", () => {
       authorsExclude: ["dependabot"],
       labelsInclude: [],
       labelsExclude: [],
-      pendingOnly: true,
+      boardName: "",
+      repositoryName: "dev/web",
     });
     await wails.api.startReview({
       repositoryId: "repo-1",
@@ -527,7 +538,8 @@ describe("api", () => {
     await wails.api.decideFinding("review-1", 1, 2, "approved");
     await wails.api.setFindingText("review-1", 1, 2, "The token is never cleared.");
     await wails.api.setReviewSummary("review-1", 1, "Two things to fix.");
-    await wails.api.publishReview("review-1", "request_changes");
+    await wails.api.publishReview("review-1", "request_changes", false);
+    await wails.api.refreshReviewPR("review-1");
     await wails.api.applyReview("review-1");
     await wails.api.approveReview("review-1");
     await wails.api.deleteReview("review-1");
@@ -561,9 +573,9 @@ describe("api", () => {
     await wails.api.deleteDiscussion("discussion-1");
     await wails.api.readDiscussionArtifact("discussion-1", "discussion.md");
 
-    expect(Call.ByID).toHaveBeenCalledTimes(92);
+    expect(Call.ByID).toHaveBeenCalledTimes(93);
     const ids = vi.mocked(Call.ByID).mock.calls.map(([id]) => id);
-    expect(new Set(ids).size).toBe(92);
+    expect(new Set(ids).size).toBe(93);
   });
 
   it("opens a link in the browser of the desktop, never in the webview", async () => {

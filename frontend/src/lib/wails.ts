@@ -43,6 +43,7 @@ import type {
   Entry,
   ErrorEntry,
   Leftover,
+  MarkerCommit,
   MarkerEntry,
   Migration,
   MigrationCase,
@@ -62,6 +63,7 @@ import type {
   PullLabel,
   PullRequest,
   PullRequestRow,
+  PullReview,
   PullsFailure,
   Question,
   QuestionEntry,
@@ -146,6 +148,7 @@ export type {
   Entry,
   ErrorEntry,
   Leftover,
+  MarkerCommit,
   MarkerEntry,
   Migration,
   MigrationCase,
@@ -165,6 +168,7 @@ export type {
   PullLabel,
   PullRequest,
   PullRequestRow,
+  PullReview,
   PullsFailure,
   Question,
   QuestionEntry,
@@ -329,6 +333,10 @@ export type MarkerType =
   | "one_shot_written"
   | "one_shot_updated"
   | "pr_review_written"
+  | "pr_review_revised"
+  | "findings_decided"
+  | "review_published"
+  | "new_commits"
   | "step_review_started"
   | "step_review_written"
   | "review_started"
@@ -492,6 +500,12 @@ export type PullRequestAction =
   | "clone"
   | "clone_missing"
   | "fork";
+
+/** YourReviewState is the state of the last review the account of gh submitted on a pull request. */
+export type YourReviewState = "approved" | "changes_requested" | "commented" | "dismissed";
+
+/** Mergeable is whether GitHub says the branch of a pull request merges clean into its base; "" while unread. */
+export type Mergeable = "mergeable" | "conflicting" | "unknown" | "";
 
 /** PullRequestOutcome is what became of the pull request of an archived review. */
 export type PullRequestOutcome = "merged" | "closed";
@@ -815,6 +829,10 @@ export function asMarkerType(value: string): MarkerType {
     case "one_shot_written":
     case "one_shot_updated":
     case "pr_review_written":
+    case "pr_review_revised":
+    case "findings_decided":
+    case "review_published":
+    case "new_commits":
     case "step_review_started":
     case "step_review_written":
     case "review_started":
@@ -1157,6 +1175,30 @@ export function asPullRequestAction(value: string): PullRequestAction {
   }
 }
 
+export function asYourReviewState(value: string): YourReviewState {
+  switch (value) {
+    case "approved":
+    case "changes_requested":
+    case "commented":
+    case "dismissed":
+      return value;
+    // Commented claims the least of a review the app cannot place.
+    default:
+      return "commented";
+  }
+}
+
+export function asMergeable(value: string): Mergeable {
+  switch (value) {
+    case "mergeable":
+    case "conflicting":
+    case "unknown":
+      return value;
+    default:
+      return "";
+  }
+}
+
 export function asPullRequestOutcome(value: string): PullRequestOutcome {
   switch (value) {
     case "merged":
@@ -1364,8 +1406,9 @@ export const api = {
     ReviewService.SetFindingText(id, pass, number, text),
   setReviewSummary: (id: string, pass: number, text: string): Promise<void> =>
     ReviewService.SetReviewSummary(id, pass, text),
-  publishReview: (id: string, verdict: ReviewVerdict): Promise<void> =>
-    ReviewService.PublishReview(id, verdict),
+  publishReview: (id: string, verdict: ReviewVerdict, withSummary: boolean): Promise<void> =>
+    ReviewService.PublishReview(id, verdict, withSummary),
+  refreshReviewPR: (id: string): Promise<void> => ReviewService.RefreshPR(id),
   applyReview: (id: string): Promise<void> => ReviewService.ApplyReview(id),
   approveReview: (id: string): Promise<void> => ReviewService.ApproveReview(id),
   deleteReview: (id: string): Promise<DeleteResult> => ReviewService.DeleteReview(id),

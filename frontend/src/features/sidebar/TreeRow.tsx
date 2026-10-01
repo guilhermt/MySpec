@@ -1,5 +1,6 @@
 import { memo, useEffect, useRef } from "react";
 import { ContextMeter } from "@/components/system/ContextMeter";
+import { useFits } from "@/components/system/fits";
 import { Icon } from "@/components/system/Icon";
 import { ITEM_ICONS, TONE_GLYPHS } from "@/components/system/item-parts";
 import { Kbd } from "@/components/system/Kbd";
@@ -8,7 +9,6 @@ import { StateGlyph } from "@/components/system/StateGlyph";
 import { TimeChip } from "@/components/system/TimeChip";
 import { Tooltip } from "@/components/system/Tooltip";
 import type { ItemRow, RowFlash } from "@/features/sidebar/sidebar-tree";
-import { useFits } from "@/features/sidebar/useFits";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/app-store";
 

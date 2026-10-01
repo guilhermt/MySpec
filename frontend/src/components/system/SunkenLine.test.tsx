@@ -24,6 +24,11 @@ describe("SunkenLine", () => {
     expect(container.querySelector('[data-state="blocked"]')).toBeInTheDocument();
   });
 
+  it("draws the GitHub glyph", () => {
+    const { container } = renderWithStore(<SunkenLine icon="github">Waiting.</SunkenLine>);
+    expect(container.querySelector('[data-state="github"]')).toBeInTheDocument();
+  });
+
   it("describes a button that points to it", () => {
     renderWithStore(
       <>

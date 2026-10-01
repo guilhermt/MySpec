@@ -18,7 +18,7 @@
         "state": "MERGED",
         "merged": true,
         "mergeable": "MERGEABLE",
-        "commits": {
+        "head": {
           "nodes": [
             {
               "commit": {
@@ -30,7 +30,9 @@
                         "name": "test",
                         "status": "COMPLETED",
                         "conclusion": "SUCCESS",
-                        "detailsUrl": "https://github.com/acme/alpha/actions/runs/1/job/2"
+                        "detailsUrl": "https://github.com/acme/alpha/actions/runs/1/job/2",
+                        "startedAt": "2026-09-16T11:00:00Z",
+                        "completedAt": "2026-09-16T11:04:00Z"
                       },
                       {
                         "__typename": "StatusContext",
@@ -41,6 +43,27 @@
                     ]
                   }
                 }
+              }
+            }
+          ]
+        },
+        "mergedBy": { "login": "rsouza" },
+        "mergedAt": "2026-09-16T12:00:00Z",
+        "closedAt": "2026-09-16T12:00:00Z",
+        "recent": {
+          "nodes": [
+            {
+              "commit": {
+                "oid": "aaa000",
+                "messageHeadline": "Read the board once",
+                "author": { "name": "Mariana Lima", "user": { "login": "mariana" } }
+              }
+            },
+            {
+              "commit": {
+                "oid": "aaa111",
+                "messageHeadline": "Cache it",
+                "author": { "name": "Ana Bot", "user": null }
               }
             }
           ]
@@ -65,7 +88,11 @@
         "state": "CLOSED",
         "merged": false,
         "mergeable": "CONFLICTING",
-        "commits": { "nodes": [{ "commit": { "statusCheckRollup": null } }] }
+        "head": { "nodes": [{ "commit": { "statusCheckRollup": null } }] },
+        "mergedBy": null,
+        "mergedAt": null,
+        "closedAt": "2026-09-16T09:00:00Z",
+        "recent": { "nodes": [] }
       }
     },
     "p2": null

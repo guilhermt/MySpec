@@ -33,7 +33,14 @@ type Sessions interface {
 	Summary(k session.Key) (session.Summary, bool)
 	Exists(ctx context.Context, k session.Key) (bool, error)
 	SendFromApp(ctx context.Context, k session.Key, m session.AppMessage) error
-	MarkPRReview(ctx context.Context, k session.Key, pass int, clean bool)
+	MarkPRReview(ctx context.Context, k session.Key, pass int, clean bool, findings int)
+	MarkPRReviewRevised(ctx context.Context, k session.Key, pass int, clean bool, findings int)
+	MarkChecksRead(ctx context.Context, k session.Key, pass, passed, total int, failed []string, conflict bool)
+	MarkFindingsDecided(ctx context.Context, k session.Key, pass, approved, discarded int)
+	MarkReviewPublished(ctx context.Context, k session.Key, p session.PublishedReview)
+	MarkNewCommits(ctx context.Context, k session.Key, commits []session.MarkerCommit, count int)
+	MarkChangesApproved(ctx context.Context, k session.Key, files int)
+	MarkCommitted(ctx context.Context, k session.Key, sha, subject string, pushed bool, number int)
 }
 
 // Worktrees is what the reviews need from internal/worktree: a worktree on a
@@ -47,6 +54,7 @@ type Worktrees interface {
 	Status(ctx context.Context, wt worktree.Worktree) (git.Status, error)
 	Clean(ctx context.Context, wt worktree.Worktree) error
 	Remove(ctx context.Context, itemID string) error
+	Commit(ctx context.Context, wt worktree.Worktree, rev string) (git.Commit, error)
 }
 
 // Pulls is what the reviews need from internal/pulls: the pull request as
@@ -132,7 +140,7 @@ var (
 // closed: a failed publication keeps them, and the bindings answer with them.
 const (
 	GoneMessage    = "This pull request is no longer on GitHub."
-	NotOpenMessage = "This pull request isn't open."
+	NotOpenMessage = "The pull request isn't open anymore."
 )
 
 // Service is the state machine of every review of a pull request.
@@ -155,6 +163,8 @@ type Service struct {
 	locks   map[string]*reviewLock // by review id
 	closed  bool
 	polling bool // a reading of the pull requests of the reviews is under way
+	// pollDone is closed when the reading under way ends; nil when none is.
+	pollDone chan struct{}
 }
 
 // reviewLock serializes the work on one review and coalesces its pending
@@ -167,8 +177,21 @@ type reviewLock struct {
 	// next report the agent writes settles it.
 	unreadable string
 	// checkError is what the last reading of the pull request said when it
-	// failed; "" when it worked.
+	// failed, as the user reads it; "" when it worked.
 	checkError string
+	// checkErrorAt is the first failing reading of the run of failures; zero
+	// when the last reading worked.
+	checkErrorAt time.Time
+	// checks and the merge of the last good reading; zero before one.
+	checks gh.PRChecks
+	// checkedAt is when that reading was made; zero before one since the app
+	// started.
+	checkedAt time.Time
+	// recent are the last 50 commits of the last good reading, oldest first.
+	recent []pulls.Commit
+	// readAt is the last reading, good or not; RefreshPR waits for one after
+	// its call.
+	readAt time.Time
 	// commitFailed says the last approval of apply mode ended without a
 	// commit. Like the flow of a task, it is transient on purpose.
 	commitFailed bool

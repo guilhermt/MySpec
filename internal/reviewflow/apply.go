@@ -6,9 +6,11 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/prreview"
 	"github.com/guilhermt/myspec/internal/session"
+	"github.com/guilhermt/myspec/internal/task"
 	"github.com/guilhermt/myspec/internal/worktree"
 )
 
@@ -53,6 +55,11 @@ func (s *Service) Apply(ctx context.Context, id string) error {
 		return err
 	}
 
+	if err = s.reviews.MarkSent(ctx, id, last.Number); err != nil {
+		s.log.Error("record review pass sent failed", "review", id, "pass", last.Number, "error", err)
+	}
+	approvedCount, discarded := countDecisions(last)
+	s.sessions.MarkFindingsDecided(ctx, sessionKey(id), last.Number, approvedCount, discarded)
 	s.log.Info("review findings applying", "review", id, "pass", last.Number, "findings", len(approved))
 	s.notify(id)
 	return nil
@@ -127,6 +134,7 @@ func (s *Service) Approve(ctx context.Context, id string) error {
 		return err
 	}
 
+	s.sessions.MarkChangesApproved(ctx, sessionKey(id), state.Watch.Total)
 	s.log.Info("review changes approved", "review", id, "files", state.Watch.Total)
 	s.notify(id)
 	return nil
@@ -178,7 +186,9 @@ func (s *Service) evaluateCommit(ctx context.Context, stored prreview.Review, wt
 	// The fixes of the pass went up whatever becomes of the next one, and the
 	// next one lists them as applied. The review stays committing until that
 	// pass is asked for, so that the next evaluation tries both again instead
-	// of offering to apply findings that already went up.
+	// of offering to apply findings that already went up. The conversation
+	// marks the commit only once the review waits for the checks of the next
+	// pass, so that a failed write that is tried again marks it once.
 	if err := s.reviews.MarkApplied(ctx, id, stored.ReportedPass); err != nil {
 		s.log.Error("mark review pass applied failed", "review", id, "pass", stored.ReportedPass, "error", err)
 		return
@@ -199,10 +209,40 @@ func (s *Service) evaluateCommit(ctx context.Context, stored prreview.Review, wt
 		s.log.Error("record review phase failed", "review", id, "error", err)
 		return
 	}
+	s.markCommit(ctx, id, wt, snap.Head, stored.Number)
 	s.watch.Forget(id)
 	s.log.Info("review commit pushed", "review", id, "commit", snap.Head)
 	s.notify(id)
 	s.Poll()
+}
+
+// markCommit records in the conversation the commit that went up to the pull
+// request; a commit that cannot be read is recorded without its subject.
+func (s *Service) markCommit(ctx context.Context, id string, wt worktree.Worktree, head string, number int) {
+	commit := git.Commit{SHA: head}
+	read, err := s.worktrees.Commit(ctx, wt, head)
+	if err != nil {
+		// The commit is a fact of the branch; its subject is a nicety.
+		s.log.Warn("read commit failed", "review", id, "error", err)
+	} else {
+		commit = read
+	}
+	s.sessions.MarkCommitted(ctx, sessionKey(id), task.ShortSHA(commit.SHA), commit.Subject, true, number)
+}
+
+// countDecisions counts the findings of a pass the user approved and the ones
+// they discarded.
+func countDecisions(pass prreview.Pass) (approved, discarded int) {
+	for _, finding := range pass.Findings {
+		switch finding.Decision {
+		case prreview.DecisionApproved:
+			approved++
+		case prreview.DecisionDiscarded:
+			discarded++
+		case prreview.DecisionNone:
+		}
+	}
+	return approved, discarded
 }
 
 // setPhase records where a review is in the cycle of a pass.

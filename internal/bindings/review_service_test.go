@@ -70,7 +70,7 @@ func TestSetReviewFiltersChoosesWhatTheReviewsViewShows(t *testing.T) {
 	filters := bindings.ReviewFilters{
 		RepositoryID:   repoID,
 		AuthorsExclude: []string{"dependabot", " dependabot ", ""},
-		PendingOnly:    true,
+		BoardName:      "Web",
 	}
 	if err := f.reviewSvc.SetReviewFilters(filters); err != nil {
 		t.Fatalf("SetReviewFilters() = %v, want nil", err)
@@ -83,7 +83,7 @@ func TestSetReviewFiltersChoosesWhatTheReviewsViewShows(t *testing.T) {
 		AuthorsExclude: []string{"dependabot"},
 		LabelsInclude:  []string{},
 		LabelsExclude:  []string{},
-		PendingOnly:    true,
+		BoardName:      "Web",
 	}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("filters (-want +got):\n%s", diff)
@@ -120,7 +120,11 @@ func TestDecidingOnTheFindingsOfAPassReachesTheState(t *testing.T) {
 	}
 	if diff := cmp.Diff(
 		[]bindings.ReviewFinding{
-			{Number: 1, Path: "main.go", Line: 12, Text: "Handle the error of the login call.", Decision: "approved"},
+			{
+				Number: 1, Path: "main.go", Line: 12, Text: "Handle the error of the login call.", Decision: "approved",
+				LineURL: "https://github.com/dev/web/pull/7/files" +
+					"#diff-2873f79a86c0d8b3335cd7731b0ecf7dd4301eb19a82ef7a1cba7589b5252261R12",
+			},
 			{Number: 2, Text: "The pull request has no tests.", Decision: "discarded"},
 		},
 		pass.Findings,
@@ -168,12 +172,61 @@ func TestPublishingAReviewIsRefusedUntilItIsReady(t *testing.T) {
 	review := f.seedReview(t, repoID)
 	f.seedWorktree(t, review.ID, t.TempDir())
 
-	if err := f.reviewSvc.PublishReview(review.ID, "lgtm"); err == nil {
+	if err := f.reviewSvc.PublishReview(review.ID, "lgtm", true); err == nil {
 		t.Error("PublishReview(lgtm) = nil, want an unknown verdict")
 	}
-	err := f.reviewSvc.PublishReview(review.ID, "approve")
+	err := f.reviewSvc.PublishReview(review.ID, "approve", true)
 	if err == nil || err.Error() != "The review isn't ready for that." {
 		t.Errorf("PublishReview() = %v, want the sentence about a review that is not ready", err)
+	}
+}
+
+func TestRefreshingTheReviewOfAPullRequestReadsItAtOnce(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	repoID := f.register(t, t.TempDir())
+	review := f.seedReview(t, repoID)
+	f.seedWorktree(t, review.ID, t.TempDir())
+	f.github.reply(`{
+  "viewer": { "login": "dev" },
+  "p0": {
+    "pullRequest": {
+      "number": 7,
+      "title": "Add the login screen and its tests",
+      "url": "https://github.com/dev/web/pull/7",
+      "isDraft": false,
+      "isCrossRepository": false,
+      "updatedAt": "2026-09-16T11:30:00Z",
+      "headRefName": "login",
+      "headRefOid": "abc123",
+      "baseRefName": "main",
+      "author": { "login": "alice" },
+      "labels": { "nodes": [] },
+      "reviews": { "nodes": [] },
+      "body": "",
+      "state": "OPEN",
+      "merged": false,
+      "mergeable": "MERGEABLE",
+      "head": { "nodes": [] },
+      "recent": { "nodes": [] }
+    }
+  }
+}`)
+
+	if err := f.reviewSvc.RefreshPR(review.ID); err != nil {
+		t.Fatalf("RefreshPR() = %v, want nil", err)
+	}
+
+	got := f.reviewOf(t, review.ID)
+	if got.Title != "Add the login screen and its tests" || got.CheckedAt == "" || got.Mergeable != "mergeable" {
+		t.Errorf("review = title %q, checkedAt %q, mergeable %q, want the reading the call made",
+			got.Title, got.CheckedAt, got.Mergeable)
+	}
+
+	err := f.reviewSvc.RefreshPR("review-gone")
+	if err == nil || err.Error() != "This review no longer exists." {
+		t.Errorf("RefreshPR(gone) = %v, want the sentence about a review that is gone", err)
 	}
 }
 

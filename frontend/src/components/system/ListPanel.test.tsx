@@ -37,6 +37,26 @@ describe("ListPanel", () => {
     expect(onOpenExternal).toHaveBeenCalledWith("https://github.com/acme/api/issues/474");
   });
 
+  it("puts the key of Open on GitHub in its tooltip when given", async () => {
+    const { user } = renderWithStore(
+      <ListPanel
+        label="Pull request #12"
+        number="#12"
+        repository="acme/api"
+        url="https://github.com/acme/api/pull/12"
+        onOpenExternal={vi.fn()}
+        onClose={vi.fn()}
+        scrollKey="12"
+        openShortcut="O"
+      >
+        <p>The body</p>
+      </ListPanel>,
+    );
+    await user.hover(screen.getByRole("button", { name: "Open #12 on GitHub" }));
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Open on GitHub");
+    expect(screen.getByRole("tooltip")).toHaveTextContent("O");
+  });
+
   it("closes", async () => {
     const { user, onClose } = panel();
     await user.click(screen.getByRole("button", { name: "Close" }));

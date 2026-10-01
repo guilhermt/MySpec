@@ -1,10 +1,13 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
+import { ExternalLink } from "@/components/ExternalLink";
+import { FACTS, Fact } from "@/components/Facts";
 import { AUX_PANEL_COLUMN_MIN, AuxPanel } from "@/components/system/AuxPanel";
 import { ChecksList } from "@/components/system/ChecksList";
 import { Chip } from "@/components/system/Chip";
 import { Icon } from "@/components/system/Icon";
 import { ICONS } from "@/components/system/icons";
-import { Link } from "@/components/system/Link";
+import { PanelRow } from "@/components/system/PanelRow";
+import { PanelSection } from "@/components/system/PanelSection";
 import { Spinner } from "@/components/system/Spinner";
 import { StateGlyph } from "@/components/system/StateGlyph";
 import { Tooltip } from "@/components/system/Tooltip";
@@ -22,13 +25,11 @@ import {
 import { earlierRowId, leaveEarlierConversation } from "@/features/task/earlier-conversation";
 import { ModelsPopover } from "@/features/task/ModelsPopover";
 import { PanelDocument } from "@/features/task/PanelDocument";
-import { PanelRow } from "@/features/task/PanelRow";
-import { PanelSection } from "@/features/task/PanelSection";
 import { ReviewModePopover } from "@/features/task/ReviewModePopover";
 import { screenSession } from "@/features/task/task-session";
 import { choiceLabel, choiceOf, type ModelChoice } from "@/lib/models";
 import { displayPath } from "@/lib/paths";
-import { checkDuration, checkRows, checksSummary } from "@/lib/pull-requests";
+import { checkDuration, checkRows, checksSummary, prChecks } from "@/lib/pull-requests";
 import { reviewModeLabel } from "@/lib/review-modes";
 import { cn } from "@/lib/utils";
 import {
@@ -437,36 +438,6 @@ function StepChoosers({ task, step }: { task: TaskSummary; step: Step }) {
   );
 }
 
-/** Fact is one key and its value in a list of facts. */
-function Fact({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <>
-      <dt className="text-ink-3">{label}</dt>
-      <dd className="min-w-0 text-ink-1 wrap-anywhere">{children}</dd>
-    </>
-  );
-}
-
-/** FACTS is a list of keys and values: the key in its column, the value beside it. */
-const FACTS =
-  "grid grid-cols-[minmax(0,var(--col-keys))_minmax(0,1fr)] items-baseline gap-x-(--space-3) gap-y-(--space-1-5)";
-
-/** ExternalLink is a link that opens in the browser, since nothing navigates inside the webview. */
-function ExternalLink({ url, children }: { url: string; children: ReactNode }) {
-  return (
-    <Link
-      href={url}
-      external
-      onClick={(event) => {
-        event.preventDefault();
-        void openExternal(url);
-      }}
-    >
-      {children}
-    </Link>
-  );
-}
-
 interface PullRequestFactsProps {
   pr: PullRequest;
   facts: NonNullable<NonNullable<DetailsModel["pullRequest"]>["pr"]>;
@@ -479,7 +450,10 @@ interface PullRequestFactsProps {
  */
 function PullRequestFacts({ pr, facts }: PullRequestFactsProps) {
   const now = useNow(SECOND, true);
-  const rows = checkRows(pr).map((row) => ({ ...row, duration: checkDuration(row, now) }));
+  const rows = checkRows(prChecks(pr)).map((row) => ({
+    ...row,
+    duration: checkDuration(row, now),
+  }));
   const ended = facts.state === "merged" || facts.state === "closed" ? ` · ${facts.state}` : "";
 
   return (
@@ -490,7 +464,7 @@ function PullRequestFacts({ pr, facts }: PullRequestFactsProps) {
       </Fact>
       <Fact label="Checks">
         <ChecksList
-          summary={checksSummary(pr)}
+          summary={checksSummary(prChecks(pr))}
           rows={rows}
           onOpen={(url) => void openExternal(url)}
         />

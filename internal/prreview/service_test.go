@@ -5,9 +5,11 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 
+	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/prreview"
 )
 
@@ -178,12 +180,12 @@ func TestAReportThatSaysTheSameThingChangesNothing(t *testing.T) {
 	review := f.recorded(t, 42, report, "commit-1")
 	before := f.changed()
 
-	_, changed, err := f.service.RecordReport(t.Context(), review.ID, report, "commit-2")
+	_, change, err := f.service.RecordReport(t.Context(), review.ID, report, "commit-2")
 	if err != nil {
 		t.Fatalf("record report: %v", err)
 	}
-	if changed {
-		t.Error("changed = true, want false for the same report")
+	if change != prreview.ChangeNone {
+		t.Errorf("change = %v, want ChangeNone for the same report", change)
 	}
 	if f.changed() != before {
 		t.Error("the service announced a change nobody made")
@@ -212,12 +214,12 @@ func TestARewrittenReportKeepsTheDecisionsOfTheFindingsThatStand(t *testing.T) {
 	second := changesReport(1, "Two things.",
 		prreview.ParsedFinding{Number: 1, Path: "main.go", Line: 12, Text: "No test."},
 		prreview.ParsedFinding{Number: 2, Path: "main.go", Line: 40, Text: "This name says nothing."})
-	pass, changed, err := f.service.RecordReport(t.Context(), review.ID, second, "commit-2")
+	pass, change, err := f.service.RecordReport(t.Context(), review.ID, second, "commit-2")
 	if err != nil {
 		t.Fatalf("record report: %v", err)
 	}
-	if !changed {
-		t.Error("changed = false, want true for a rewritten report")
+	if change != prreview.ChangeRevised {
+		t.Errorf("change = %v, want ChangeRevised for a rewritten report", change)
 	}
 
 	want := []prreview.Finding{
@@ -300,12 +302,12 @@ func TestAReportThatCouldNotBeStoredLeavesThePassToBeRecordedAgain(t *testing.T)
 	}
 
 	f.store.writeErr = nil
-	_, changed, err := f.service.RecordReport(t.Context(), review.ID, report, "commit-1")
+	_, change, err := f.service.RecordReport(t.Context(), review.ID, report, "commit-1")
 	if err != nil {
 		t.Fatalf("record report again: %v", err)
 	}
-	if !changed {
-		t.Error("changed = false, want the report recorded on the second try")
+	if change != prreview.ChangeRevised {
+		t.Errorf("change = %v, want the report recorded on the second try", change)
 	}
 	if got := f.store.storedReview(t, review.ID); got.ReportedPass != 1 || got.PassCommit != "commit-1" {
 		t.Errorf("stored review = %+v, want pass 1 on commit-1", got)
@@ -319,7 +321,7 @@ func TestAPublicationThatCouldNotBeStoredIsPublishedAgain(t *testing.T) {
 	review := f.recorded(t, 42, cleanReport(1, "All good."), "commit-1")
 
 	f.store.writeErr = errors.New("database is locked")
-	err := f.service.MarkPublished(t.Context(), review.ID, 1, prreview.VerdictComment,
+	err := f.service.MarkPublished(t.Context(), review.ID, 1, prreview.VerdictComment, false,
 		"https://github.com/dev/web/pull/42#r1", "commit-1", nil)
 	if err == nil {
 		t.Fatal("mark published: want an error")
@@ -393,12 +395,12 @@ func TestAPublishedPassIsNeverTouchedAgain(t *testing.T) {
 	review := f.recorded(t, 42, cleanReport(1, "All good."), "commit-1")
 	publish(t, f, review.ID, 1, nil)
 
-	_, changed, err := f.service.RecordReport(t.Context(), review.ID, cleanReport(1, "Other words."), "commit-2")
+	_, change, err := f.service.RecordReport(t.Context(), review.ID, cleanReport(1, "Other words."), "commit-2")
 	if err != nil {
 		t.Fatalf("record report: %v", err)
 	}
-	if changed {
-		t.Error("changed = true, want a published pass left alone")
+	if change != prreview.ChangeNone {
+		t.Errorf("change = %v, want a published pass left alone", change)
 	}
 	if got := f.pass(t, review.ID, 1).Summary; got != "All good." {
 		t.Errorf("summary = %q, want the published one", got)
@@ -470,7 +472,7 @@ func TestAPublishedPassCarriesWhereEachFindingWentAndTheHeadItWasSentAgainst(t *
 
 	placements := map[int]prreview.Placement{1: prreview.PlacementInline, 2: prreview.PlacementBody}
 	if err := f.service.MarkPublished(t.Context(), review.ID, 1,
-		prreview.VerdictRequestChanges, "https://github.com/dev/web/pull/42#r1", "commit-2", placements); err != nil {
+		prreview.VerdictRequestChanges, false, "https://github.com/dev/web/pull/42#r1", "commit-2", placements); err != nil {
 		t.Fatalf("mark published: %v", err)
 	}
 
@@ -499,7 +501,7 @@ func TestAVerdictTheProductDoesNotHaveIsRefused(t *testing.T) {
 	f := newFixture(t)
 	review := f.recorded(t, 42, cleanReport(1, "All good."), "commit-1")
 
-	err := f.service.MarkPublished(t.Context(), review.ID, 1, prreview.Verdict("merge"), "", "commit-1", nil)
+	err := f.service.MarkPublished(t.Context(), review.ID, 1, prreview.Verdict("merge"), false, "", "commit-1", nil)
 	if !errors.Is(err, prreview.ErrUnknownVerdict) {
 		t.Errorf("error = %v, want ErrUnknownVerdict", err)
 	}
@@ -511,7 +513,7 @@ func TestAnArchivedReviewLeavesTheListForTheHistoryWithWhatBecameOfThePullReques
 	f := newFixture(t)
 	review := f.recorded(t, 42, cleanReport(1, "All good."), "commit-1")
 
-	archived, err := f.service.Archive(t.Context(), review.ID, prreview.PRMerged)
+	archived, err := f.service.Archive(t.Context(), review.ID, prreview.End{State: prreview.PRMerged})
 	if err != nil {
 		t.Fatalf("archive review: %v", err)
 	}
@@ -564,10 +566,13 @@ func TestAnActionOnAReviewNobodyHasIsRefused(t *testing.T) {
 	cases := map[string]error{
 		"ask pass": func() error { _, err := f.service.AskPass(ctx, "nope", 1, ""); return err }(),
 		"update":   func() error { _, err := f.service.Update(ctx, "nope", func(*prreview.Review) {}); return err }(),
-		"archive":  func() error { _, err := f.service.Archive(ctx, "nope", prreview.PRClosed); return err }(),
-		"delete":   f.service.Delete(ctx, "nope"),
-		"unask":    f.service.UnaskPass(ctx, "nope", 1),
-		"context":  f.service.WriteContext("nope", "# Title"),
+		"archive": func() error {
+			_, err := f.service.Archive(ctx, "nope", prreview.End{State: prreview.PRClosed})
+			return err
+		}(),
+		"delete":  f.service.Delete(ctx, "nope"),
+		"unask":   f.service.UnaskPass(ctx, "nope", 1),
+		"context": f.service.WriteContext("nope", "# Title"),
 	}
 	for name, err := range cases {
 		if !errors.Is(err, prreview.ErrNotFound) {
@@ -618,7 +623,7 @@ func TestTheReviewsOfARepositoryAreCountedActiveAndArchived(t *testing.T) {
 	f := newFixture(t)
 	f.create(t, 42)
 	second := f.create(t, 43)
-	if _, err := f.service.Archive(t.Context(), second.ID, prreview.PRClosed); err != nil {
+	if _, err := f.service.Archive(t.Context(), second.ID, prreview.End{State: prreview.PRClosed}); err != nil {
 		t.Fatalf("archive review: %v", err)
 	}
 
@@ -641,7 +646,7 @@ func TestSyncLoadsTheReviewsWithThePassesOfEachOne(t *testing.T) {
 	review := f.recorded(t, 42, changesReport(1, "One thing.",
 		prreview.ParsedFinding{Number: 1, Text: "A thing."}), "commit-1")
 	archived := f.create(t, 43)
-	if _, err := f.service.Archive(t.Context(), archived.ID, prreview.PRMerged); err != nil {
+	if _, err := f.service.Archive(t.Context(), archived.ID, prreview.End{State: prreview.PRMerged}); err != nil {
 		t.Fatalf("archive review: %v", err)
 	}
 
@@ -685,7 +690,7 @@ func TestAPassACallerHoldsNeverChangesUnderIt(t *testing.T) {
 func publish(t *testing.T, f *fixture, id string, pass int, placements map[int]prreview.Placement) {
 	t.Helper()
 
-	err := f.service.MarkPublished(t.Context(), id, pass, prreview.VerdictComment,
+	err := f.service.MarkPublished(t.Context(), id, pass, prreview.VerdictComment, false,
 		"https://github.com/dev/web/pull/42#r1", "commit-1", placements)
 	if err != nil {
 		t.Fatalf("mark published: %v", err)
@@ -709,5 +714,169 @@ func TestAPassBeforeTheLastRecordedOneIsNoLongerDecidedOn(t *testing.T) {
 	err := f.service.Decide(t.Context(), review.ID, 1, 1, prreview.DecisionDiscarded)
 	if !errors.Is(err, prreview.ErrNotDeciding) {
 		t.Errorf("error = %v, want ErrNotDeciding", err)
+	}
+}
+
+func TestARewrittenReportKeepsTheDecisionAndTheTextWhenOnlyTheTitleChanged(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	first := changesReport(1, "One thing.",
+		prreview.ParsedFinding{Number: 1, Title: "Old", Path: "main.go", Line: 12, Text: "No test."})
+	review := f.recorded(t, 42, first, "commit-1")
+	if err := f.service.Decide(t.Context(), review.ID, 1, 1, prreview.DecisionApproved); err != nil {
+		t.Fatalf("decide: %v", err)
+	}
+	if err := f.service.SetFindingText(t.Context(), review.ID, 1, 1, "Cover it."); err != nil {
+		t.Fatalf("set finding text: %v", err)
+	}
+
+	second := changesReport(1, "One thing.",
+		prreview.ParsedFinding{Number: 1, Title: "New", Path: "main.go", Line: 12, Text: "No test."},
+		prreview.ParsedFinding{Number: 2, Title: "Extra", Text: "Another."})
+	pass, _, err := f.service.RecordReport(t.Context(), review.ID, second, "commit-2")
+	if err != nil {
+		t.Fatalf("record report: %v", err)
+	}
+
+	got := pass.Findings[0]
+	if got.Title != "New" || got.Text != "Cover it." || got.Decision != prreview.DecisionApproved {
+		t.Errorf("finding = %+v, want the new title with the text and the decision the user left", got)
+	}
+}
+
+func TestAReportThatDiffersOnlyInTheTitlesIsNoRevision(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	first := changesReport(1, "Two things.",
+		prreview.ParsedFinding{Number: 1, Path: "main.go", Line: 12, Text: "No test."},
+		prreview.ParsedFinding{Number: 2, Text: "Mixed commits."})
+	review := f.recorded(t, 42, first, "commit-1")
+	if err := f.service.Decide(t.Context(), review.ID, 1, 2, prreview.DecisionDiscarded); err != nil {
+		t.Fatalf("decide: %v", err)
+	}
+	before := f.changed()
+
+	titled := changesReport(1, "Two things.",
+		prreview.ParsedFinding{Number: 1, Title: "No test", Path: "main.go", Line: 12, Text: "No test."},
+		prreview.ParsedFinding{Number: 2, Title: "Mixed commits", Text: "Mixed commits."})
+	pass, change, err := f.service.RecordReport(t.Context(), review.ID, titled, "commit-2")
+	if err != nil {
+		t.Fatalf("record report: %v", err)
+	}
+
+	if change != prreview.ChangeTitles {
+		t.Errorf("change = %v, want ChangeTitles", change)
+	}
+	if pass.Revision != 1 || f.pass(t, review.ID, 1).Revision != 1 {
+		t.Errorf("revision = %d, want it still 1", pass.Revision)
+	}
+	if f.changed() == before {
+		t.Error("the service did not announce the titles")
+	}
+	stored := f.store.storedPass(t, review.ID, 1).Findings
+	if stored[0].Title != "No test" || stored[1].Title != "Mixed commits" || stored[1].Decision != prreview.DecisionDiscarded {
+		t.Errorf("stored findings = %+v, want the titles written and the decision kept", stored)
+	}
+
+	_, again, err := f.service.RecordReport(t.Context(), review.ID, titled, "commit-2")
+	if err != nil || again != prreview.ChangeNone {
+		t.Errorf("RecordReport(same titles) = %v, %v, want ChangeNone", again, err)
+	}
+}
+
+func TestAFindingStoredWithoutATitleReadsWithoutOne(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	review := f.recorded(t, 42, changesReport(1, "One thing.",
+		prreview.ParsedFinding{Number: 1, Text: "A thing."}), "commit-1")
+
+	if got := f.pass(t, review.ID, 1).Findings[0].Title; got != "" {
+		t.Errorf("title = %q, want it empty", got)
+	}
+}
+
+func TestTheFirstReportOfAPassIsRecordedAtTheTimeItWasRead(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	report := changesReport(1, "One thing.", prreview.ParsedFinding{Number: 1, Text: "A thing."})
+	review := f.recorded(t, 42, report, "commit-1")
+
+	recordedAt := f.pass(t, review.ID, 1).RecordedAt
+	if recordedAt.IsZero() {
+		t.Fatal("RecordedAt is zero, want the time of the first report")
+	}
+
+	rewritten := changesReport(1, "One thing.", prreview.ParsedFinding{Number: 1, Text: "Another thing."})
+	if _, _, err := f.service.RecordReport(t.Context(), review.ID, rewritten, "commit-1"); err != nil {
+		t.Fatalf("record report: %v", err)
+	}
+	if got := f.pass(t, review.ID, 1).RecordedAt; !got.Equal(recordedAt) {
+		t.Errorf("RecordedAt = %v after a rewrite, want %v", got, recordedAt)
+	}
+}
+
+func TestTheChecksTheSendAndThePublicationOfAPassAreKept(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	review := f.recorded(t, 42, changesReport(1, "One thing.",
+		prreview.ParsedFinding{Number: 1, Text: "A thing."}), "commit-1")
+
+	readAt := base.Add(time.Hour)
+	checks := gh.PRChecks{
+		Checks:    []gh.Check{{Name: "build", State: gh.CheckPassed, Conclusion: "success"}},
+		Mergeable: gh.MergeableConflicting,
+	}
+	if err := f.service.MarkChecks(t.Context(), review.ID, 1, checks, readAt); err != nil {
+		t.Fatalf("mark checks: %v", err)
+	}
+	if err := f.service.MarkSent(t.Context(), review.ID, 1); err != nil {
+		t.Fatalf("mark sent: %v", err)
+	}
+	if err := f.service.Decide(t.Context(), review.ID, 1, 1, prreview.DecisionApproved); err != nil {
+		t.Fatalf("decide: %v", err)
+	}
+	err := f.service.MarkPublished(t.Context(), review.ID, 1, prreview.VerdictComment, true,
+		"https://github.com/dev/web/pull/42#r1", "commit-1", nil)
+	if err != nil {
+		t.Fatalf("mark published: %v", err)
+	}
+
+	for name, pass := range map[string]prreview.Pass{"service": f.pass(t, review.ID, 1), "store": f.store.storedPass(t, review.ID, 1)} {
+		if diff := cmp.Diff(checks.Checks, pass.Checks); diff != "" {
+			t.Errorf("%s checks (-want +got):\n%s", name, diff)
+		}
+		if pass.Mergeable != gh.MergeableConflicting || !pass.ChecksReadAt.Equal(readAt) {
+			t.Errorf("%s pass = %+v, want the merge and the time of the reading", name, pass)
+		}
+		if pass.SentAt.IsZero() || !pass.SummaryPublished {
+			t.Errorf("%s pass = %+v, want SentAt set and the summary published", name, pass)
+		}
+	}
+}
+
+func TestArchivingAReviewKeepsHowThePullRequestEnded(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	review := f.create(t, 42)
+	mergedAt := base.Add(time.Hour)
+
+	end := prreview.End{State: prreview.PRMerged, MergedBy: "rsouza", MergedAt: mergedAt, ClosedAt: mergedAt}
+	archived, err := f.service.Archive(t.Context(), review.ID, end)
+	if err != nil {
+		t.Fatalf("archive: %v", err)
+	}
+
+	if archived.PRState != prreview.PRMerged || archived.MergedBy != "rsouza" ||
+		!archived.MergedAt.Equal(mergedAt) || !archived.ClosedAt.Equal(mergedAt) {
+		t.Errorf("archived = %+v, want the merge kept", archived)
+	}
+	if got := f.store.storedReview(t, review.ID); got.MergedBy != "rsouza" || !got.MergedAt.Equal(mergedAt) {
+		t.Errorf("stored review = %+v, want the merge kept", got)
 	}
 }

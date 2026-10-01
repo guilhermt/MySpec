@@ -218,6 +218,10 @@ const (
 	MarkerOneShotWritten    MarkerType = "one_shot_written"
 	MarkerOneShotUpdated    MarkerType = "one_shot_updated"
 	MarkerPRReviewWritten   MarkerType = "pr_review_written"
+	MarkerPRReviewRevised   MarkerType = "pr_review_revised"
+	MarkerFindingsDecided   MarkerType = "findings_decided"
+	MarkerReviewPublished   MarkerType = "review_published"
+	MarkerNewCommits        MarkerType = "new_commits"
 	MarkerReviewStarted     MarkerType = "review_started"
 	MarkerDiscussionStarted MarkerType = "discussion_started"
 	MarkerStepReviewStarted MarkerType = "step_review_started"
@@ -282,10 +286,11 @@ type MarkerEntry struct {
 	PreTokens int        `json:"preTokens"` // compacted only
 	Stage     string     `json:"stage"`     // stage_started only
 	Step      int        `json:"step"`      // step_started and step_review_started only
-	Pass      int        `json:"pass"`      // pr_review_written, step_review_written and checks_read only: the pass it closed or starts
-	Clean     bool       `json:"clean"`     // pr_review_written and step_review_written only: the pass found nothing to change
-	// Findings is how many findings the pass of a step review reported,
-	// step_review_written only; nil when unknown.
+	Pass      int        `json:"pass"`      // the review markers and step_review_written: the pass it closed, starts or is about
+	Clean     bool       `json:"clean"`     // pr_review_written, pr_review_revised and step_review_written only: the pass found nothing to change
+	// Findings is how many findings the pass of a review reported,
+	// pr_review_written, pr_review_revised and step_review_written only; nil
+	// when unknown.
 	Findings  *int `json:"findings"`
 	Restarted bool `json:"restarted"` // stage_started and step_started only: it was started again
 	// Percent is how full the context was, compacted only; 0 when the window
@@ -310,6 +315,39 @@ type MarkerEntry struct {
 	Title    string        `json:"title"`    // draft_approved
 	Files    int           `json:"files"`    // changes_approved
 	Problems []PlanProblem `json:"problems"` // plan_invalid
+
+	Model     string         `json:"model"`     // review_started: the model of the session
+	Effort    string         `json:"effort"`    // review_started: its effort
+	Mode      string         `json:"mode"`      // review_started: publish or apply
+	Approved  int            `json:"approved"`  // findings_decided
+	Discarded int            `json:"discarded"` // findings_decided
+	Verdict   string         `json:"verdict"`   // review_published: approve, request_changes or comment
+	Inline    int            `json:"inline"`    // review_published: findings as inline comments
+	Body      int            `json:"body"`      // review_published: findings in the body
+	Summary   bool           `json:"summary"`   // review_published: the summary went in the body
+	Minimal   bool           `json:"minimal"`   // review_published: the body was "Review with N inline comments."
+	URL       string         `json:"url"`       // review_published: the review on GitHub
+	Commits   []MarkerCommit `json:"commits"`   // new_commits: the commits between the two heads, oldest first
+	Count     int            `json:"count"`     // new_commits: how many came, -1 when the head before is not among the ones read
+}
+
+// MarkerCommit is a commit of a new_commits marker; the SHA is the short one.
+type MarkerCommit struct {
+	SHA     string `json:"sha"`
+	Subject string `json:"subject"`
+	Author  string `json:"author"`
+}
+
+// PublishedReview is what a review published on GitHub says of itself, for the
+// review_published marker.
+type PublishedReview struct {
+	Pass    int
+	Verdict string
+	Inline  int // findings as inline comments
+	Body    int // findings in the body
+	Summary bool
+	Minimal bool
+	URL     string
 }
 
 // PlanProblem is a problem of a plan that is not valid, plan_invalid only.

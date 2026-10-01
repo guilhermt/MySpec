@@ -122,7 +122,8 @@ describe("ArchivedReviewView", () => {
     const { user } = view();
 
     await user.click(screen.getByRole("button", { name: "Delete review" }));
-    await user.click(await screen.findByRole("button", { name: "Delete" }));
+    const dialog = await screen.findByRole("alertdialog");
+    await user.click(within(dialog).getByRole("button", { name: "Delete review" }));
 
     expect(api.deleteReview).toHaveBeenCalledWith("review-1");
   });

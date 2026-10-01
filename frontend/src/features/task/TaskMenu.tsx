@@ -1,4 +1,5 @@
 import { Fragment, useRef, useState } from "react";
+import { MenuRow } from "@/components/MenuRow";
 import { IconButton } from "@/components/system/IconButton";
 import { ICONS } from "@/components/system/icons";
 import {
@@ -6,11 +7,9 @@ import {
   MenuContent,
   MenuGroup,
   MenuGroupLabel,
-  MenuItem,
   MenuSeparator,
   MenuTrigger,
 } from "@/components/system/Menu";
-import { Tooltip } from "@/components/system/Tooltip";
 import { useNow } from "@/features/attention/useNow";
 import { DeleteTaskDialog } from "@/features/task/DeleteTaskDialog";
 import { DiscardStepDialog } from "@/features/task/DiscardStepDialog";
@@ -19,7 +18,7 @@ import { ReviewModePopover } from "@/features/task/ReviewModePopover";
 import { StageActionDialog } from "@/features/task/StageActionDialog";
 import type { StageAction } from "@/features/task/stage-actions";
 import { currentStepOf } from "@/features/task/step-status";
-import { type TaskMenuAction, type TaskMenuItem, taskMenuOf } from "@/features/task/task-menu";
+import { type TaskMenuAction, taskMenuOf } from "@/features/task/task-menu";
 import type { TaskStage, TaskSummary } from "@/lib/wails";
 import {
   discardDraft,
@@ -97,7 +96,7 @@ export function TaskMenu({ task }: TaskMenuProps) {
               <MenuGroup>
                 {group.label !== null && <MenuGroupLabel>{group.label}</MenuGroupLabel>}
                 {group.items.map((item) => (
-                  <TaskMenuRow key={item.id} item={item} onSelect={() => run(item.action)} />
+                  <MenuRow key={item.id} item={item} onSelect={() => run(item.action)} />
                 ))}
               </MenuGroup>
             </Fragment>
@@ -138,22 +137,4 @@ export function TaskMenu({ task }: TaskMenuProps) {
       />
     </>
   );
-}
-
-/** TaskMenuRow is one item of the ⋯, with its tooltip when it has one. */
-function TaskMenuRow({ item, onSelect }: { item: TaskMenuItem; onSelect: () => void }) {
-  const row = (
-    <MenuItem
-      onClick={onSelect}
-      {...(item.icon !== undefined ? { icon: ICONS[item.icon] } : {})}
-      {...(item.shortcut !== undefined ? { shortcut: item.shortcut } : {})}
-      {...(item.sub !== undefined ? { sub: item.sub } : {})}
-      {...(item.disabledReason !== undefined ? { disabledReason: item.disabledReason } : {})}
-      {...(item.destructive ? { destructive: true } : {})}
-    >
-      {item.label}
-      {item.opensPopover && <span aria-hidden="true"> ›</span>}
-    </MenuItem>
-  );
-  return item.tooltip === undefined ? row : <Tooltip content={item.tooltip}>{row}</Tooltip>;
 }

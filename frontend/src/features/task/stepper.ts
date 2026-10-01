@@ -2,7 +2,7 @@ import type { PillView, StepperGlyph } from "@/components/system/Pill";
 import type { StepperStepView } from "@/components/system/Stepper";
 import { currentStepOf } from "@/features/task/step-status";
 import { isPaused, waitingSession } from "@/features/task/task-session";
-import { checkCounts } from "@/lib/pull-requests";
+import { checkCounts, prChecks } from "@/lib/pull-requests";
 import { situationFragment } from "@/lib/situations";
 import { type LifecycleStage, lifecycleOf, stageLabel, stageState } from "@/lib/stages";
 import type { PullRequest, Situation, SituationGroup, Step, TaskSummary } from "@/lib/wails";
@@ -181,7 +181,7 @@ function prReviewMoment(task: TaskSummary, pr: PullRequest): Moment {
   const name = stageLabel("pr_review");
   switch (asPRStatus(pr.status)) {
     case "waiting_checks": {
-      const { passed, total } = checkCounts(pr);
+      const { passed, total } = checkCounts(prChecks(pr));
       if (pr.checkedAt !== "" && total > 0) {
         return busy(name, `waiting for the checks, ${passed} of ${total} passed`, {
           glyph: "github",

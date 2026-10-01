@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/prreview"
 )
 
@@ -21,14 +22,15 @@ type ReviewsRepo struct{ db *sql.DB }
 const reviewColumns = `id, repository_id, number, title, author, url, head_branch, base_branch,
 	own, mode, phase, card, artifacts_dir, asked_pass, reported_pass, pass_commit,
 	published_pass, published_commit, head_commit, pr_state, pr_checked_at, publish_error,
-	trouble_baseline, trouble, archived_at, created_at, updated_at`
+	trouble_baseline, trouble, archived_at, created_at, updated_at, merged_by, merged_at, closed_at`
 
 // passColumns is the column list every pass query selects, in scan order.
 const passColumns = `review_id, pass, instructions, recorded, clean, commit_sha,
-	summary_original, summary, revision, verdict, published_at, published_url, created_at, applied`
+	summary_original, summary, revision, verdict, published_at, published_url, created_at, applied,
+	checks, mergeable, checks_read_at, recorded_at, sent_at, summary_published`
 
 // findingColumns is the column list every finding query selects, in scan order.
-const findingColumns = `review_id, pass, number, path, line, original, text, decision, placement`
+const findingColumns = `review_id, pass, number, path, line, original, text, decision, placement, title`
 
 // ListActive returns the reviews that were not archived, in creation order.
 func (r *ReviewsRepo) ListActive(ctx context.Context) ([]prreview.Review, error) {
@@ -71,7 +73,7 @@ func (r *ReviewsRepo) listReviews(ctx context.Context, query string) ([]prreview
 // Insert stores a new review.
 func (r *ReviewsRepo) Insert(ctx context.Context, review prreview.Review) error {
 	const stmt = `INSERT INTO reviews (` + reviewColumns + `)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	card, err := encodeCard(review.Card)
 	if err != nil {
@@ -87,7 +89,8 @@ func (r *ReviewsRepo) Insert(ctx context.Context, review prreview.Review) error 
 		review.AskedPass, review.ReportedPass, review.PassCommit,
 		review.PublishedPass, review.PublishedCommit, review.HeadCommit,
 		string(review.PRState), nullTime(review.PRCheckedAt), review.PublishError,
-		baseline, trouble, nullTime(review.ArchivedAt), formatTime(review.CreatedAt), formatTime(review.UpdatedAt))
+		baseline, trouble, nullTime(review.ArchivedAt), formatTime(review.CreatedAt), formatTime(review.UpdatedAt),
+		review.MergedBy, formatTimeOrEmpty(review.MergedAt), formatTimeOrEmpty(review.ClosedAt))
 	if err != nil {
 		return fmt.Errorf("insert review %s: %w", review.ID, err)
 	}
@@ -105,7 +108,8 @@ func updateReview(ctx context.Context, db execer, review prreview.Review) error 
 	const stmt = `UPDATE reviews SET title = ?, author = ?, url = ?, head_branch = ?, base_branch = ?,
 		own = ?, mode = ?, phase = ?, card = ?, asked_pass = ?, reported_pass = ?, pass_commit = ?,
 		published_pass = ?, published_commit = ?, head_commit = ?, pr_state = ?, pr_checked_at = ?,
-		publish_error = ?, trouble_baseline = ?, trouble = ?, updated_at = ?
+		publish_error = ?, trouble_baseline = ?, trouble = ?, updated_at = ?,
+			merged_by = ?, merged_at = ?, closed_at = ?
 		WHERE id = ?`
 
 	card, err := encodeCard(review.Card)
@@ -121,7 +125,8 @@ func updateReview(ctx context.Context, db execer, review prreview.Review) error 
 		card, review.AskedPass, review.ReportedPass, review.PassCommit,
 		review.PublishedPass, review.PublishedCommit, review.HeadCommit,
 		string(review.PRState), nullTime(review.PRCheckedAt), review.PublishError,
-		baseline, trouble, formatTime(review.UpdatedAt), review.ID)
+		baseline, trouble, formatTime(review.UpdatedAt),
+		review.MergedBy, formatTimeOrEmpty(review.MergedAt), formatTimeOrEmpty(review.ClosedAt), review.ID)
 	if err != nil {
 		return fmt.Errorf("update review %s: %w", review.ID, err)
 	}
@@ -216,7 +221,7 @@ func (r *ReviewsRepo) UpsertPass(ctx context.Context, pass prreview.Pass) error 
 // upsertPass runs UpsertPass on the database or inside a transaction.
 func upsertPass(ctx context.Context, db execer, pass prreview.Pass) error {
 	const stmt = `INSERT INTO review_passes (` + passColumns + `)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (review_id, pass) DO UPDATE SET
 			instructions = excluded.instructions,
 			recorded = excluded.recorded,
@@ -228,12 +233,24 @@ func upsertPass(ctx context.Context, db execer, pass prreview.Pass) error {
 			verdict = excluded.verdict,
 			published_at = excluded.published_at,
 			published_url = excluded.published_url,
-			applied = excluded.applied`
+			applied = excluded.applied,
+			checks = excluded.checks,
+			mergeable = excluded.mergeable,
+			checks_read_at = excluded.checks_read_at,
+			recorded_at = excluded.recorded_at,
+			sent_at = excluded.sent_at,
+			summary_published = excluded.summary_published`
 
-	_, err := db.ExecContext(ctx, stmt, pass.ReviewID, pass.Number, pass.Instructions,
+	checks, err := encodeChecks(pass.Checks)
+	if err != nil {
+		return fmt.Errorf("upsert pass %d of review %s: %w", pass.Number, pass.ReviewID, err)
+	}
+	_, err = db.ExecContext(ctx, stmt, pass.ReviewID, pass.Number, pass.Instructions,
 		pass.Recorded, pass.Clean, pass.Commit, pass.SummaryOriginal, pass.Summary, pass.Revision,
 		string(pass.Verdict), nullTime(pass.PublishedAt), pass.PublishedURL,
-		formatTime(pass.CreatedAt), pass.Applied)
+		formatTime(pass.CreatedAt), pass.Applied, checks, string(pass.Mergeable),
+		formatTimeOrEmpty(pass.ChecksReadAt), formatTimeOrEmpty(pass.RecordedAt),
+		formatTimeOrEmpty(pass.SentAt), pass.SummaryPublished)
 	if err != nil {
 		return fmt.Errorf("upsert pass %d of review %s: %w", pass.Number, pass.ReviewID, err)
 	}
@@ -281,14 +298,15 @@ func (r *ReviewsRepo) WritePass(ctx context.Context, pass prreview.Pass, review 
 func replaceFindings(ctx context.Context, tx *sql.Tx, pass prreview.Pass) error {
 	const clearFindings = `DELETE FROM review_findings WHERE review_id = ? AND pass = ?`
 	const stmt = `INSERT INTO review_findings (` + findingColumns + `)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	if _, err := tx.ExecContext(ctx, clearFindings, pass.ReviewID, pass.Number); err != nil {
 		return fmt.Errorf("clear findings of pass %d of review %s: %w", pass.Number, pass.ReviewID, err)
 	}
 	for _, finding := range pass.Findings {
 		_, err := tx.ExecContext(ctx, stmt, pass.ReviewID, pass.Number, finding.Number, finding.Path,
-			finding.Line, finding.Original, finding.Text, string(finding.Decision), string(finding.Placement))
+			finding.Line, finding.Original, finding.Text, string(finding.Decision), string(finding.Placement),
+			finding.Title)
 		if err != nil {
 			return fmt.Errorf("insert finding %d of pass %d of review %s: %w",
 				finding.Number, pass.Number, pass.ReviewID, err)
@@ -312,6 +330,28 @@ func (r *ReviewsRepo) UpdateFinding(ctx context.Context, reviewID string, pass i
 	return nil
 }
 
+// UpdateFindingTitles rewrites the titles of the findings of a pass, by number,
+// leaving everything else of them as it is.
+func (r *ReviewsRepo) UpdateFindingTitles(ctx context.Context, reviewID string, pass int, titles map[int]string) error {
+	const stmt = `UPDATE review_findings SET title = ? WHERE review_id = ? AND pass = ? AND number = ?`
+
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin update titles of pass %d of review %s: %w", pass, reviewID, err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	for number, title := range titles {
+		if _, err = tx.ExecContext(ctx, stmt, title, reviewID, pass, number); err != nil {
+			return fmt.Errorf("update title of finding %d of pass %d of review %s: %w", number, pass, reviewID, err)
+		}
+	}
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("commit update titles of pass %d of review %s: %w", pass, reviewID, err)
+	}
+	return nil
+}
+
 // scanReview reads a review row. The enums are taken as stored: only the app
 // writes these columns.
 func scanReview(row scanner) (prreview.Review, error) {
@@ -323,12 +363,14 @@ func scanReview(row scanner) (prreview.Review, error) {
 		checkedAt            sql.NullString
 		archivedAt           sql.NullString
 		createdAt, updatedAt string
+		mergedAt, closedAt   string
 	)
 	err := row.Scan(&review.ID, &review.RepositoryID, &review.Number, &review.Title, &review.Author,
 		&review.URL, &review.HeadBranch, &review.BaseBranch, &review.Own, &mode, &phase, &card,
 		&review.ArtifactsDir, &review.AskedPass, &review.ReportedPass, &review.PassCommit,
 		&review.PublishedPass, &review.PublishedCommit, &review.HeadCommit, &state, &checkedAt,
-		&review.PublishError, &baseline, &trouble, &archivedAt, &createdAt, &updatedAt)
+		&review.PublishError, &baseline, &trouble, &archivedAt, &createdAt, &updatedAt,
+		&review.MergedBy, &mergedAt, &closedAt)
 	if err != nil {
 		return prreview.Review{}, fmt.Errorf("scan review: %w", err)
 	}
@@ -363,6 +405,12 @@ func scanReview(row scanner) (prreview.Review, error) {
 	if review.UpdatedAt, err = parseTime(updatedAt, subject); err != nil {
 		return prreview.Review{}, err
 	}
+	if review.MergedAt, err = parseTimeOrEmpty(mergedAt, subject); err != nil {
+		return prreview.Review{}, err
+	}
+	if review.ClosedAt, err = parseTimeOrEmpty(closedAt, subject); err != nil {
+		return prreview.Review{}, err
+	}
 	return review, nil
 }
 
@@ -373,17 +421,34 @@ func scanPass(row scanner) (prreview.Pass, error) {
 		verdict     string
 		publishedAt sql.NullString
 		createdAt   string
+		checks      string
+		mergeable   string
+
+		checksReadAt, recordedAt, sentAt string
 	)
 	err := row.Scan(&pass.ReviewID, &pass.Number, &pass.Instructions, &pass.Recorded, &pass.Clean,
 		&pass.Commit, &pass.SummaryOriginal, &pass.Summary, &pass.Revision, &verdict, &publishedAt,
-		&pass.PublishedURL, &createdAt, &pass.Applied)
+		&pass.PublishedURL, &createdAt, &pass.Applied, &checks, &mergeable, &checksReadAt,
+		&recordedAt, &sentAt, &pass.SummaryPublished)
 	if err != nil {
 		return prreview.Pass{}, fmt.Errorf("scan pass: %w", err)
 	}
 
 	pass.Verdict = prreview.Verdict(verdict)
+	pass.Mergeable = gh.Mergeable(mergeable)
 
 	subject := fmt.Sprintf("pass %d of review %s", pass.Number, pass.ReviewID)
+	if pass.Checks, err = decodeChecks(checks); err != nil {
+		return prreview.Pass{}, fmt.Errorf("read %s: %w", subject, err)
+	}
+	for _, field := range []struct {
+		value string
+		into  *time.Time
+	}{{checksReadAt, &pass.ChecksReadAt}, {recordedAt, &pass.RecordedAt}, {sentAt, &pass.SentAt}} {
+		if *field.into, err = parseTimeOrEmpty(field.value, subject); err != nil {
+			return prreview.Pass{}, err
+		}
+	}
 	if publishedAt.Valid {
 		if pass.PublishedAt, err = parseTime(publishedAt.String, subject); err != nil {
 			return prreview.Pass{}, err
@@ -404,7 +469,7 @@ func scanFinding(row scanner) (int, prreview.Finding, error) {
 		decision, placement string
 	)
 	err := row.Scan(&reviewID, &pass, &finding.Number, &finding.Path, &finding.Line,
-		&finding.Original, &finding.Text, &decision, &placement)
+		&finding.Original, &finding.Text, &decision, &placement, &finding.Title)
 	if err != nil {
 		return 0, prreview.Finding{}, fmt.Errorf("scan finding: %w", err)
 	}

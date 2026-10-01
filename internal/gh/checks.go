@@ -189,6 +189,18 @@ func (c PRChecks) Failed() []Check {
 	return failed
 }
 
+// Passed is how many checks finished without failing; a pending check has
+// not passed yet.
+func (c PRChecks) Passed() int {
+	passed := 0
+	for _, check := range c.Checks {
+		if !check.Failed() && !check.Pending {
+			passed++
+		}
+	}
+	return passed
+}
+
 // Conflicting reports whether the branch has conflicts with its base.
 func (c PRChecks) Conflicting() bool {
 	return c.Mergeable == MergeableConflicting

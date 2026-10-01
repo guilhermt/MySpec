@@ -23,6 +23,8 @@ export interface ListPanelProps {
   onClose: () => void;
   /** scrollKey resets the body's scroll to the top when it changes: another card. */
   scrollKey: string;
+  /** openShortcut is the key of Open on GitHub, in its tooltip: "O". */
+  openShortcut?: string;
   children: ReactNode;
 }
 
@@ -38,6 +40,7 @@ export function ListPanel({
   onOpenExternal,
   onClose,
   scrollKey,
+  openShortcut,
   children,
 }: ListPanelProps) {
   const viewport = useRef<HTMLDivElement>(null);
@@ -55,7 +58,10 @@ export function ListPanel({
           {` · ${repository}`}
         </span>
         {/* The button is named for the card and the tooltip says the way, so it is a Button, not an IconButton. */}
-        <Tooltip content="Open on GitHub">
+        <Tooltip
+          content="Open on GitHub"
+          {...(openShortcut !== undefined ? { shortcut: openShortcut } : {})}
+        >
           <Button
             variant="ghost"
             size="sm"

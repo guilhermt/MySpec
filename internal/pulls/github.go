@@ -50,25 +50,36 @@ fragment pr on PullRequest {
   author { login }
   labels(first: 20) { nodes { name color } }
   reviews(last: 1, author: $viewer, states: [APPROVED, CHANGES_REQUESTED, COMMENTED, DISMISSED]) {
-    nodes { commit { oid } }
+    nodes { state submittedAt commit { oid } }
   }
 }
 `
 
 // listRepository reads the open pull requests of one repository of a batch:
-// the alias, the owner variable and the name variable.
+// the alias, the owner variable and the name variable. Beyond the fragment, it
+// reads what only the list shows: the description, whether the branch merges
+// clean, the checks of the head and the last hundred commits, which say how
+// many came after the last review of the viewer.
 const listRepository = `%s: repository(owner: $%s, name: $%s) {
-  pullRequests(states: OPEN, first: 100, orderBy: {field: UPDATED_AT, direction: DESC}) { nodes { ...pr } }
+  pullRequests(states: OPEN, first: 100, orderBy: {field: UPDATED_AT, direction: DESC}) { nodes { ...pr body mergeable
+    head: commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: 100) { nodes {
+      __typename ... on CheckRun { name status conclusion detailsUrl startedAt completedAt } ... on StatusContext { context state targetUrl }
+    } } } } } }
+    since: commits(last: 100) { nodes { commit { oid } } }
+  } }
 }
 `
 
 // detailRepository reads one pull request of a batch: the alias, the owner
 // variable, the name variable and the number variable. Beyond the list, it
-// reads whether the branch merges clean and the checks of the last commit.
+// reads whether the branch merges clean, the checks of the last commit with
+// their hours, the last fifty commits and how the pull request ended.
 const detailRepository = `%s: repository(owner: $%s, name: $%s) { pullRequest(number: $%s) { ...pr body state merged mergeable
-  commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: 100) { nodes {
-    __typename ... on CheckRun { name status conclusion detailsUrl } ... on StatusContext { context state targetUrl }
+  mergedBy { login } mergedAt closedAt
+  head: commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: 100) { nodes {
+    __typename ... on CheckRun { name status conclusion detailsUrl startedAt completedAt } ... on StatusContext { context state targetUrl }
   } } } } } }
+  recent: commits(last: 50) { nodes { commit { oid messageHeadline author { name user { login } } } } }
 } }
 `
 
@@ -89,7 +100,7 @@ func listQuery(n int) string {
 	for i := range n {
 		fmt.Fprintf(&b, listRepository, alias(listAlias, i), ownerVar(i), nameVar(i))
 	}
-	b.WriteString("}\n")
+	b.WriteString("  rateLimit { cost }\n}\n")
 	b.WriteString(prFragment)
 	return b.String()
 }
@@ -152,7 +163,9 @@ type prNode struct {
 	} `json:"labels"`
 	Reviews struct {
 		Nodes []struct {
-			Commit *struct {
+			State       string    `json:"state"`
+			SubmittedAt time.Time `json:"submittedAt"`
+			Commit      *struct {
 				OID string `json:"oid"`
 			} `json:"commit"`
 		} `json:"nodes"`
@@ -186,11 +199,79 @@ func (n prNode) pullRequest(owner, name string) PullRequest {
 	}
 	if len(n.Reviews.Nodes) > 0 {
 		pr.Reviewed = true
+		pr.YourReview = &YourReview{State: strings.ToLower(n.Reviews.Nodes[0].State), At: n.Reviews.Nodes[0].SubmittedAt}
 		if commit := n.Reviews.Nodes[0].Commit; commit != nil {
 			pr.ReviewedCommit = commit.OID
 		}
 	}
 	return pr
+}
+
+// checksNode is the checks of the head of a pull request, as the aliased
+// commits(last: 1) of both queries answer them.
+type checksNode struct {
+	Nodes []struct {
+		Commit struct {
+			// StatusCheckRollup is null for a commit with no checks.
+			StatusCheckRollup *struct {
+				Contexts struct {
+					Nodes []gh.CheckNode `json:"nodes"`
+				} `json:"contexts"`
+			} `json:"statusCheckRollup"`
+		} `json:"commit"`
+	} `json:"nodes"`
+}
+
+// nodes are the checks of the last commit; nil when the pull request has no
+// commit or the commit no checks.
+func (c checksNode) nodes() []gh.CheckNode {
+	if len(c.Nodes) == 0 {
+		return nil
+	}
+	rollup := c.Nodes[0].Commit.StatusCheckRollup
+	if rollup == nil {
+		return nil
+	}
+	return rollup.Contexts.Nodes
+}
+
+// listNode is a pull request as the list reads it.
+type listNode struct {
+	prNode
+	Body      string     `json:"body"`
+	Mergeable string     `json:"mergeable"`
+	Head      checksNode `json:"head"`
+	Since     struct {
+		Nodes []struct {
+			Commit struct {
+				OID string `json:"oid"`
+			} `json:"commit"`
+		} `json:"nodes"`
+	} `json:"since"`
+}
+
+// pullRequest is the node as a PullRequest of the repository owner/name.
+func (n listNode) pullRequest(owner, name string) PullRequest {
+	pr := n.prNode.pullRequest(owner, name)
+	pr.Body = n.Body
+	pr.Checks = gh.ParseChecks(n.Head.nodes(), n.Mergeable)
+	pr.NewCommitCount = n.newCommitCount(pr)
+	return pr
+}
+
+// newCommitCount is how many commits came after the commit of the last review
+// of the viewer: 0 without a review or when the head is its commit, -1 when
+// its commit is not among the last hundred.
+func (n listNode) newCommitCount(pr PullRequest) int {
+	if !pr.Reviewed || pr.ReviewedCommit == "" || pr.ReviewedCommit == pr.HeadCommit {
+		return 0
+	}
+	for i, c := range n.Since.Nodes {
+		if c.Commit.OID == pr.ReviewedCommit {
+			return len(n.Since.Nodes) - 1 - i
+		}
+	}
+	return -1
 }
 
 // detailNode is a pull request read on its own.
@@ -201,18 +282,26 @@ type detailNode struct {
 	Merged bool   `json:"merged"`
 
 	Mergeable string `json:"mergeable"`
-	Commits   struct {
+	MergedBy  *struct {
+		Login string `json:"login"`
+	} `json:"mergedBy"`
+	MergedAt *time.Time `json:"mergedAt"`
+	ClosedAt *time.Time `json:"closedAt"`
+	Head     checksNode `json:"head"`
+	Recent   struct {
 		Nodes []struct {
 			Commit struct {
-				// StatusCheckRollup is null for a commit with no checks.
-				StatusCheckRollup *struct {
-					Contexts struct {
-						Nodes []gh.CheckNode `json:"nodes"`
-					} `json:"contexts"`
-				} `json:"statusCheckRollup"`
+				OID             string `json:"oid"`
+				MessageHeadline string `json:"messageHeadline"`
+				Author          struct {
+					Name string `json:"name"`
+					User *struct {
+						Login string `json:"login"`
+					} `json:"user"`
+				} `json:"author"`
 			} `json:"commit"`
 		} `json:"nodes"`
-	} `json:"commits"`
+	} `json:"recent"`
 }
 
 // detail is the node as a Detail of the repository owner/name.
@@ -221,25 +310,31 @@ func (n detailNode) detail(owner, name string) Detail {
 	if n.Merged {
 		state = "merged"
 	}
-	return Detail{
-		PullRequest: n.pullRequest(owner, name),
-		Body:        n.Body,
+	pr := n.pullRequest(owner, name)
+	pr.Body = n.Body
+	detail := Detail{
+		PullRequest: pr,
 		State:       state,
-		Checks:      gh.ParseChecks(n.checkNodes(), n.Mergeable),
+		Checks:      gh.ParseChecks(n.Head.nodes(), n.Mergeable),
+		Commits:     make([]Commit, 0, len(n.Recent.Nodes)),
 	}
-}
-
-// checkNodes are the checks of the last commit; nil when the pull request has
-// no commit or the commit no checks.
-func (n detailNode) checkNodes() []gh.CheckNode {
-	if len(n.Commits.Nodes) == 0 {
-		return nil
+	if n.MergedBy != nil {
+		detail.MergedBy = n.MergedBy.Login
 	}
-	rollup := n.Commits.Nodes[0].Commit.StatusCheckRollup
-	if rollup == nil {
-		return nil
+	if n.MergedAt != nil {
+		detail.MergedAt = *n.MergedAt
 	}
-	return rollup.Contexts.Nodes
+	if n.ClosedAt != nil {
+		detail.ClosedAt = *n.ClosedAt
+	}
+	for _, c := range n.Recent.Nodes {
+		author := c.Commit.Author.Name
+		if c.Commit.Author.User != nil && c.Commit.Author.User.Login != "" {
+			author = c.Commit.Author.User.Login
+		}
+		detail.Commits = append(detail.Commits, Commit{SHA: c.Commit.OID, Subject: c.Commit.MessageHeadline, Author: author})
+	}
+	return detail
 }
 
 // readViewer is the account gh is authenticated as, read once and kept. It
@@ -275,22 +370,26 @@ func (s *Service) readViewer(ctx context.Context) (string, error) {
 }
 
 // readAll reads the open pull requests of repos, in batches, and returns what
-// it found for each one by repository id. A repository whose reading failed
-// carries the failure and no list.
-func (s *Service) readAll(ctx context.Context, repos []repository.Repository, viewer string) map[string]RepositoryReading {
+// it found for each one by repository id, and what GitHub priced the queries
+// at. A repository whose reading failed carries the failure and no list.
+func (s *Service) readAll(ctx context.Context, repos []repository.Repository, viewer string) (map[string]RepositoryReading, int) {
 	found := make(map[string]RepositoryReading, len(repos))
+	cost := 0
 	for chunk := range slices.Chunk(repos, batchSize) {
-		for id, reading := range s.readBatch(ctx, chunk, viewer) {
+		readings, batchCost := s.readBatch(ctx, chunk, viewer)
+		cost += batchCost
+		for id, reading := range readings {
 			found[id] = reading
 		}
 	}
-	return found
+	return found, cost
 }
 
 // readBatch reads one batch of repositories. A call that failed altogether is
 // the failure of every repository of the batch; an error GitHub answered for
-// one alias is the failure of that repository alone.
-func (s *Service) readBatch(ctx context.Context, batch []repository.Repository, viewer string) map[string]RepositoryReading {
+// one alias is the failure of that repository alone. The cost is what GitHub
+// priced the query at; 0 for a call that failed.
+func (s *Service) readBatch(ctx context.Context, batch []repository.Repository, viewer string) (map[string]RepositoryReading, int) {
 	vars := gh.Vars{"viewer": viewer}
 	for i, repo := range batch {
 		vars[ownerVar(i)], vars[nameVar(i)] = repo.Owner, repo.Name
@@ -298,11 +397,20 @@ func (s *Service) readBatch(ctx context.Context, batch []repository.Repository, 
 	resp, err := s.github.GraphQL(ctx, listQuery(len(batch)), vars)
 	if err != nil {
 		s.log.Warn("pull requests reading failed", "repositories", len(batch), "error", err)
-		return batchFailure(batch, FailureOf(err))
+		return batchFailure(batch, FailureOf(err)), 0
 	}
 	var data map[string]json.RawMessage
 	if err := json.Unmarshal(resp.Data, &data); err != nil {
-		return batchFailure(batch, FailureOf(fmt.Errorf("decode pull requests: %w", err)))
+		return batchFailure(batch, FailureOf(fmt.Errorf("decode pull requests: %w", err))), 0
+	}
+	var priced struct {
+		RateLimit *struct {
+			Cost int `json:"cost"`
+		} `json:"rateLimit"`
+	}
+	cost := 0
+	if err := json.Unmarshal(resp.Data, &priced); err == nil && priced.RateLimit != nil {
+		cost = priced.RateLimit.Cost
 	}
 
 	failures := aliasFailures(resp.Errors, listAlias, len(batch))
@@ -320,7 +428,7 @@ func (s *Service) readBatch(ctx context.Context, batch []repository.Repository, 
 		}
 		found[repo.ID] = RepositoryReading{RepositoryID: repo.ID, PullRequests: prs}
 	}
-	return found
+	return found, cost
 }
 
 // decodeList is the pull requests one alias of a list query answered; never
@@ -332,7 +440,7 @@ func decodeList(raw json.RawMessage, repo repository.Repository) ([]PullRequest,
 	}
 	var node struct {
 		PullRequests struct {
-			Nodes []prNode `json:"nodes"`
+			Nodes []listNode `json:"nodes"`
 		} `json:"pullRequests"`
 	}
 	if err := json.Unmarshal(raw, &node); err != nil {

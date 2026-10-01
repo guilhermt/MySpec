@@ -201,6 +201,23 @@ func (m *memStore) UpdateFinding(_ context.Context, reviewID string, pass int, f
 	return nil
 }
 
+func (m *memStore) UpdateFindingTitles(_ context.Context, reviewID string, pass int, titles map[int]string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	index := slices.IndexFunc(m.passes[reviewID], func(p prreview.Pass) bool { return p.Number == pass })
+	if index < 0 {
+		return os.ErrNotExist
+	}
+	findings := m.passes[reviewID][index].Findings
+	for i := range findings {
+		if title, ok := titles[findings[i].Number]; ok {
+			findings[i].Title = title
+		}
+	}
+	return nil
+}
+
 // indexOf is the position of a review, -1 when it is not stored. The caller
 // holds the mutex.
 func (m *memStore) indexOf(id string) int {

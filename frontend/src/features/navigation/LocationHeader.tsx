@@ -40,8 +40,8 @@ export function LocationHeader({ progress, children }: LocationHeaderProps) {
 
   // The header is drawn again with every place, so the focus a navigation
   // asked for lands here: the title, or the button that was clicked. Forward
-  // with nowhere left to go leaves the focus on Back. What a situation of a task asks is the task
-  // screen's to settle.
+  // with nowhere left to go leaves the focus on Back. What a situation of a task or a review asks is
+  // the screen of the item's to settle.
   useEffect(() => {
     if (pendingFocus === null || pendingFocus === "request") {
       return;

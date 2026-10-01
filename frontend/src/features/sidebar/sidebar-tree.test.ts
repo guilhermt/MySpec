@@ -307,6 +307,11 @@ describe("the line 2 of a review with a situation", () => {
   it.each<[Partial<Situation>, string, string]>([
     [{ kind: "question", place: REVIEW_PLACE }, "Question · pass 2", "Question · pass 2"],
     [
+      { kind: "reply", place: REVIEW_PLACE },
+      "Waiting for the report · pass 2",
+      "Waiting for the report · pass 2",
+    ],
+    [
       { kind: "review_report", form: "decide", place: REVIEW_PLACE },
       "Decide findings · pass 2 · 1 of 2",
       "Decide findings · 1/2",
@@ -633,11 +638,52 @@ describe("the line of an item without a situation", () => {
       "Pass 2",
     ],
     [
-      "a review waiting for the checks",
+      "a review waiting for the checks, before GitHub's first reading",
       reviewWith({ status: "waiting_checks" }),
       "github",
-      "Pass 2 · waiting for checks",
-      "Pass 2 · checks",
+      "Pass 2 · checking GitHub",
+      "Pass 2 · checking GitHub",
+    ],
+    [
+      "a review waiting for the checks, counting skipped and neutral as passed",
+      reviewWith({
+        status: "waiting_checks",
+        checkedAt: "2026-09-05T11:59:00Z",
+        checks: [
+          makePRCheck({ name: "go" }),
+          makePRCheck({ name: "docs", state: "skipped", conclusion: "skipped" }),
+          makePRCheck({ name: "lint", state: "neutral", conclusion: "neutral" }),
+          makePRCheck({ name: "web", state: "running", conclusion: "", completedAt: "" }),
+          makePRCheck({ name: "build", state: "failed", conclusion: "failure" }),
+          makePRCheck({ name: "e2e", state: "queued", conclusion: "", completedAt: "" }),
+        ],
+      }),
+      "github",
+      "Pass 2 · checks 3/6",
+      "checks 3/6",
+    ],
+    [
+      "the first pass waiting for the checks, before GitHub's first reading",
+      reviewWith({ status: "waiting_checks", passes: [] }),
+      "github",
+      "Pass 1 · checking GitHub",
+      "Pass 1 · checking GitHub",
+    ],
+    [
+      "the first pass waiting for the checks, four of six passed",
+      reviewWith({
+        status: "waiting_checks",
+        passes: [],
+        checkedAt: "2026-09-05T11:59:00Z",
+        checks: [
+          ...["lint", "unit", "build", "docs"].map((name) => makePRCheck({ name })),
+          makePRCheck({ name: "e2e", state: "running", conclusion: "", completedAt: "" }),
+          makePRCheck({ name: "deploy", state: "queued", conclusion: "", completedAt: "" }),
+        ],
+      }),
+      "github",
+      "Pass 1 · checks 4/6",
+      "checks 4/6",
     ],
     [
       "a review applying",
@@ -662,6 +708,19 @@ describe("the line of an item without a situation", () => {
     ],
   ])("reads %s", (_case, review, tone, long, short) => {
     expect(reviewRow(review, NOW)).toMatchObject({ tone, line2: { long, short } });
+  });
+
+  it("shimmers the line of a review until a reading lists a check, and only then, with GitHub on the right", () => {
+    const waiting = (checkedAt: string, checks = [makePRCheck()]) =>
+      reviewRow(reviewWith({ status: "waiting_checks", checkedAt, checks }), NOW);
+
+    expect(waiting("").reading).toBe(true);
+    expect(waiting("2026-09-05T11:59:00Z", []).reading).toBe(true);
+    expect(waiting("2026-09-05T11:59:00Z").reading).toBe(false);
+    expect(reviewRow(reviewWith(), NOW).reading).toBe(false);
+    for (const row of [waiting(""), waiting("2026-09-05T11:59:00Z")]) {
+      expect(row.clock).toEqual({ kind: "word", word: "GitHub" });
+    }
   });
 
   it.each<[string, DiscussionSummary, RowTone, string]>([
@@ -816,7 +875,7 @@ describe("the accessible name", () => {
 
   it("tells a review waiting on GitHub", () => {
     expect(reviewRow(reviewWith({ status: "waiting_checks" }), NOW).label).toBe(
-      "pull request review Add the login screen. waiting on GitHub, Pass 2 · waiting for checks. web#31.",
+      "pull request review Add the login screen. waiting on GitHub, Pass 2 · checking GitHub. web#31.",
     );
   });
 

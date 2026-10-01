@@ -8,6 +8,46 @@ import { Tooltip } from "./Tooltip";
 /** RequestForm is each form of the request bar (components.md, Barra do pedido). */
 export type RequestForm = "quiet" | "tinted" | "decision" | "error" | "closing";
 
+/** RequestButton is one button of a request bar. */
+export interface RequestButton<A extends string> {
+  action: A;
+  /** label is "Approve", "Discard step 4…". */
+  label: string;
+  variant: "primary" | "secondary";
+  /** shortcut is the key written on the button: "Alt ↓" on Next to decide, "Ctrl E" on Open in VS Code. */
+  shortcut?: string;
+  /** disabledReason is why the button can't be pressed: "Stage 2 more files". */
+  disabledReason?: string;
+  /** loadingLabel is "Approving…", "Continuing…", "Closing…", "Asking…"; "" when the action has none. */
+  loadingLabel: string;
+  /** tooltip says what the button does, when its label doesn't: Review again of a PR in trouble. */
+  tooltip?: string;
+  /** stage is the session Retry restarts (step:4, step_review:4, pr, pr_review, prd…); retrySession only. */
+  stage?: string;
+}
+
+/** RequestModel is a request bar: the form, what it says and the buttons, and where the focus goes. */
+export interface RequestModel<A extends string, F extends string> {
+  /** form is tinted, error or closing, or quiet where a card holds the answer and when paused. */
+  form: RequestForm;
+  /** glyph is the one of the situation, or paused when paused. */
+  glyph: GlyphState;
+  label: string;
+  place?: string;
+  /** time is the wait of the situation; absent when paused. */
+  time?: { short: string; long: string; tone: "wait" | "error" | "close" };
+  progress?: string;
+  /** progressTooltip is the reason behind the progress: why the merge couldn't be confirmed. */
+  progressTooltip?: string;
+  /** status is the label and the place the situation was born with. */
+  status: string;
+  actions: RequestButton<A>[];
+  /** situationId is null when paused. */
+  situationId: string | null;
+  /** focus is where the focus goes on arriving at the situation, and on Show. */
+  focus: F;
+}
+
 export interface RequestBarProps {
   form: RequestForm;
   glyph: GlyphState;

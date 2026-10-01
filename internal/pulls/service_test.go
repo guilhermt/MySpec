@@ -3,6 +3,8 @@ package pulls_test
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -10,6 +12,7 @@ import (
 
 	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/pulls"
+	"github.com/guilhermt/myspec/internal/repository"
 )
 
 func TestARefreshAskedWhileAReadingRunsBecomesOneReadingAfterIt(t *testing.T) {
@@ -178,7 +181,8 @@ func TestTheFiltersOfTheViewSurviveTheApp(t *testing.T) {
 		AuthorsInclude: []string{},
 		LabelsInclude:  []string{},
 		LabelsExclude:  []string{},
-		PendingOnly:    true,
+		BoardName:      "Web",
+		RepositoryName: "alpha",
 	}
 	if err := f.service.SetFilters(t.Context(), want); err != nil {
 		t.Fatalf("SetFilters() = %v, want nil", err)
@@ -232,10 +236,10 @@ func TestSetFiltersFailsWhenTheyCannotBeStored(t *testing.T) {
 
 	f := newFixture(t)
 	f.settings.setErr = errors.New("database is locked")
-	if err := f.service.SetFilters(t.Context(), pulls.Filters{PendingOnly: true}); err == nil {
+	if err := f.service.SetFilters(t.Context(), pulls.Filters{BoardID: "board-1"}); err == nil {
 		t.Errorf("SetFilters() = nil, want the error of the settings")
 	}
-	if f.service.Filters().PendingOnly {
+	if f.service.Filters().BoardID != "" {
 		t.Errorf("Filters() kept filters that were not stored")
 	}
 }
@@ -250,5 +254,55 @@ func waitCalls(t *testing.T, g *fakeGitHub, kind string, n int) {
 			t.Fatalf("the fake answered %d queries of %q within %s, want %d", len(g.made(kind)), kind, pollTimeout, n)
 		}
 		time.Sleep(pollStep)
+	}
+}
+
+func TestTheFirstFailureOfARunOfFailuresIsWhenItStartedAndTheNextGoodReadingClearsIt(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.github.reply(queryList, load(t, "list_partial.json"), nil)
+	f.refresh(t)
+
+	f.advance(time.Minute)
+	first := f.service.ReadAt()
+	f.github.reply(queryList, gh.Response{}, gh.ErrNotAuthenticated)
+	f.refresh(t)
+	f.advance(time.Minute)
+	f.refresh(t)
+
+	failure := f.reading(t, alphaID).Failure
+	if failure == nil || !failure.FailedAt.Equal(base.Add(time.Minute)) {
+		t.Fatalf("FailedAt = %v, want the first failing reading at %v (last good %v)", failure, base.Add(time.Minute), first)
+	}
+
+	f.advance(time.Minute)
+	f.github.reply(queryList, load(t, "list_partial.json"), nil)
+	f.refresh(t)
+	if got := f.reading(t, alphaID).Failure; got != nil {
+		t.Errorf("Failure = %v after a good reading, want none", got)
+	}
+}
+
+func TestTheCostOfTheReadingGoesToTheLog(t *testing.T) {
+	t.Parallel()
+
+	// Sixteen repositories take two queries, each priced 3 by its reply.
+	f := newFixture(t)
+	repos := make([]repository.Repository, 0, 16)
+	for i := range 16 {
+		repos = append(repos, repository.Repository{
+			ID: fmt.Sprintf("repo-%02d", i+1), Owner: "acme", Name: fmt.Sprintf("app-%02d", i+1), CreatedAt: base,
+		})
+	}
+	f.register(repos)
+	f.github.reply(queryList, load(t, "list_partial.json"), nil)
+	f.refresh(t)
+
+	if calls := len(f.github.made(queryList)); calls != 2 {
+		t.Fatalf("the reading made %d list queries, want two", calls)
+	}
+	if got := f.logs.String(); !strings.Contains(got, "pull requests read") || !strings.Contains(got, "cost=6") {
+		t.Errorf("the log = %q, want the reading with the cost of both queries, cost=6", got)
 	}
 }

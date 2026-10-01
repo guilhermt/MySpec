@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/models"
@@ -243,7 +244,7 @@ func (s *Service) requestPass(
 		return stored, nil
 	}
 
-	if err = s.sendPass(ctx, stored, repo, wt, detail.Checks); err != nil {
+	if err = s.sendPass(ctx, stored, repo, wt, detail.Checks, time.Now().UTC()); err != nil {
 		return prreview.Review{}, err
 	}
 	if stored.Phase == prreview.PhaseWaitingChecks {
@@ -263,7 +264,7 @@ func (s *Service) requestPass(
 // asks for it again.
 func (s *Service) sendPass(
 	ctx context.Context, stored prreview.Review, repo repository.Repository, wt worktree.Worktree,
-	checks gh.PRChecks,
+	checks gh.PRChecks, readAt time.Time,
 ) error {
 	pass := stored.ReportedPass + 1
 	asked, _ := s.passOf(stored.ID, pass)
@@ -289,6 +290,13 @@ func (s *Service) sendPass(
 	// Why the report of a pass before could not be read says nothing about
 	// this one.
 	s.setUnreadable(stored.ID, "")
+	// The pass went to the agent already: the checks it started from are kept
+	// for the record, and failing to keep them takes nothing back.
+	if err = s.reviews.MarkChecks(ctx, stored.ID, pass, checks, readAt); err != nil {
+		s.log.Error("record review pass checks failed", "review", stored.ID, "pass", pass, "error", err)
+	}
+	trouble := checks.Trouble()
+	s.sessions.MarkChecksRead(ctx, sessionKey(stored.ID), pass, checks.Passed(), len(checks.Checks), trouble.FailedChecks, trouble.Conflict)
 	s.recordBaseline(ctx, stored.ID, checks)
 
 	s.log.Info("review pass asked", "review", stored.ID, "pass", pass)

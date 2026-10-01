@@ -25,6 +25,8 @@ type Failure struct {
 	Reason  Reason    `json:"reason"`
 	Detail  string    `json:"detail"`  // failed: what gh said
 	ResetAt time.Time `json:"resetAt"` // rate_limited
+	// FailedAt is the first failing reading of the run of failures.
+	FailedAt time.Time `json:"failedAt"`
 }
 
 func (f *Failure) Error() string { return "pulls: " + f.Message() }

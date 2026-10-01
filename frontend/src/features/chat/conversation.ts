@@ -66,6 +66,8 @@ export interface ConversationModel {
   stretches: Stretch[];
 }
 
+const NO_REPORTS: ReadonlyMap<number, string> = new Map();
+
 // The markers that open a conversation, joined with the prompt after them.
 const START_MARKERS: readonly MarkerType[] = [
   "stage_started",
@@ -228,9 +230,11 @@ function userRow(entry: Entry): Row {
   return { kind: "user", key: entry.id, entry };
 }
 
-// markerRow is the row of a marker and how many entries it takes: a start
+// markerRows are the rows of a marker and how many entries they take: a start
 // marker takes the prompt after it; the one of a reviewer disappears into it.
-function markerRow(list: readonly Entry[], index: number): { row: Row; taken: number } | null {
+// The start of a review is its line alone, and what the user wrote for the
+// first pass is the row of their own message after it.
+function markerRows(list: readonly Entry[], index: number): { rows: Row[]; taken: number } | null {
   const entry = list[index];
   const next = list[index + 1];
   const type = markerTypeOf(entry);
@@ -239,17 +243,31 @@ function markerRow(list: readonly Entry[], index: number): { row: Row; taken: nu
   }
   if (type === "step_review_started") {
     return next !== undefined && isPrompt(next)
-      ? { row: { kind: "product", key: next.id, entry: next, firstReviewerPass: true }, taken: 2 }
-      : { row: { kind: "start", key: entry.id, marker: entry, prompt: null }, taken: 1 };
+      ? {
+          rows: [{ kind: "product", key: next.id, entry: next, firstReviewerPass: true }],
+          taken: 2,
+        }
+      : { rows: [{ kind: "start", key: entry.id, marker: entry, prompt: null }], taken: 1 };
+  }
+  if (type === "review_started") {
+    const start: Row = { kind: "start", key: entry.id, marker: entry, prompt: null };
+    if (next === undefined || !isPrompt(next)) {
+      return { rows: [start], taken: 1 };
+    }
+    const written = (next.user?.text ?? "").trim() !== "";
+    return {
+      rows: written ? [start, { kind: "user", key: next.id, entry: next }] : [start],
+      taken: 2,
+    };
   }
   if (START_MARKERS.includes(type)) {
     const prompt = next !== undefined && isPrompt(next) ? next : null;
     return {
-      row: { kind: "start", key: entry.id, marker: entry, prompt },
+      rows: [{ kind: "start", key: entry.id, marker: entry, prompt }],
       taken: prompt === null ? 1 : 2,
     };
   }
-  return { row: { kind: "marker", key: entry.id, entry }, taken: 1 };
+  return { rows: [{ kind: "marker", key: entry.id, entry }], taken: 1 };
 }
 
 // rowsOf turns the entries into rows: the actions of a turn grouped, the start
@@ -311,9 +329,11 @@ function rowsOf(list: readonly Entry[], voice: string, waiting: string | null): 
         break;
       case "marker": {
         // A marker of a type the app does not know is not drawn, and breaks nothing.
-        const marker = markerRow(list, index);
+        const marker = markerRows(list, index);
         if (marker !== null) {
-          push(marker.row);
+          for (const row of marker.rows) {
+            push(row);
+          }
           index += marker.taken;
           continue;
         }
@@ -386,7 +406,13 @@ function stretchOf(rows: Row[], voice: string): Stretch {
     from:
       user === null || user === undefined
         ? ""
-        : productMessageOf(user, voice, { stage: "", task: null, oneShot: false }).complement,
+        : productMessageOf(user, voice, {
+            stage: "",
+            task: null,
+            review: null,
+            latestReport: NO_REPORTS,
+            oneShot: false,
+          }).complement,
     startedAt: first === undefined ? "" : (entriesOf(first)[0]?.createdAt ?? ""),
     endedAt: last === undefined ? "" : lastTime(last),
   };

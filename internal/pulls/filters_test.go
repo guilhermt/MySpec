@@ -21,7 +21,6 @@ func TestAFilterKeepsThePullRequestsItNames(t *testing.T) {
 	cases := []struct {
 		name    string
 		filters pulls.Filters
-		pending bool
 		want    bool
 	}{
 		{name: "the zero value keeps everything", want: true},
@@ -38,14 +37,13 @@ func TestAFilterKeepsThePullRequestsItNames(t *testing.T) {
 		{name: "a label it has not", filters: pulls.Filters{LabelsInclude: []string{"docs"}}},
 		{name: "one of its labels excluded", filters: pulls.Filters{LabelsExclude: []string{"chore"}}},
 		{name: "a label it has not excluded", filters: pulls.Filters{LabelsExclude: []string{"docs"}}, want: true},
-		{name: "pending only, while pending", filters: pulls.Filters{PendingOnly: true}, pending: true, want: true},
-		{name: "pending only, while not pending", filters: pulls.Filters{PendingOnly: true}},
+		{name: "the names of the board and the repository are never read", filters: pulls.Filters{BoardName: "Other", RepositoryName: "other"}, want: true},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
 
-			if got := c.filters.Match(filtered, alphaID, "board-1", c.pending); got != c.want {
+			if got := c.filters.Match(filtered, alphaID, "board-1"); got != c.want {
 				t.Errorf("Match() = %v, want %v", got, c.want)
 			}
 		})
@@ -56,7 +54,7 @@ func TestAPullRequestWithoutABoardPassesTheNoBoardFilter(t *testing.T) {
 	t.Parallel()
 
 	f := pulls.Filters{BoardID: pulls.NoBoard}
-	if !f.Match(filtered, alphaID, "", false) {
+	if !f.Match(filtered, alphaID, "") {
 		t.Errorf("Match() = false, want true for a repository on no board")
 	}
 }
@@ -65,13 +63,13 @@ func TestAPullRequestWithoutALabelPassesOnlyAnEmptyIncludeList(t *testing.T) {
 	t.Parallel()
 
 	bare := pulls.PullRequest{Author: "mariana"}
-	if !(pulls.Filters{}).Match(bare, alphaID, "", false) {
+	if !(pulls.Filters{}).Match(bare, alphaID, "") {
 		t.Errorf("Match() = false, want true with no filter")
 	}
-	if (pulls.Filters{LabelsInclude: []string{"backend"}}).Match(bare, alphaID, "", false) {
+	if (pulls.Filters{LabelsInclude: []string{"backend"}}).Match(bare, alphaID, "") {
 		t.Errorf("Match() = true, want false: it has no label to include")
 	}
-	if !(pulls.Filters{LabelsExclude: []string{"backend"}}).Match(bare, alphaID, "", false) {
+	if !(pulls.Filters{LabelsExclude: []string{"backend"}}).Match(bare, alphaID, "") {
 		t.Errorf("Match() = false, want true: it has no label to exclude")
 	}
 }
@@ -125,6 +123,27 @@ func TestStoredFiltersAreSortedWithoutBlanksAndWithoutRepeats(t *testing.T) {
 		AuthorsExclude: []string{"dependabot", "renovate"},
 		LabelsInclude:  []string{},
 		LabelsExclude:  []string{},
+	}
+	if diff := cmp.Diff(want, f.service.Filters()); diff != "" {
+		t.Errorf("Filters() (-want +got):\n%s", diff)
+	}
+}
+
+func TestAStoredFilterWithPendingOnlyIsReadWithoutIt(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	if err := f.settings.Set(t.Context(), "review_filters", `{"repositoryId":"repo-1","pendingOnly":true,"boardName":"Web"}`); err != nil {
+		t.Fatalf("Set() = %v, want nil", err)
+	}
+	if err := f.service.Sync(t.Context()); err != nil {
+		t.Fatalf("Sync() = %v, want nil", err)
+	}
+
+	want := pulls.Filters{
+		RepositoryID: "repo-1", BoardName: "Web",
+		AuthorsInclude: []string{}, AuthorsExclude: []string{},
+		LabelsInclude: []string{}, LabelsExclude: []string{},
 	}
 	if diff := cmp.Diff(want, f.service.Filters()); diff != "" {
 		t.Errorf("Filters() (-want +got):\n%s", diff)

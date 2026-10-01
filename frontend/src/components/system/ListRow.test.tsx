@@ -1,7 +1,14 @@
 import { screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { renderWithStore } from "@/test/render";
-import { CardRow, type CardRowProps, type CardRowView } from "./ListRow";
+import {
+  CardRow,
+  type CardRowProps,
+  type CardRowView,
+  PullRequestRow,
+  type PullRequestRowProps,
+  type PullRequestRowView,
+} from "./ListRow";
 
 const PLAIN: CardRowView = {
   key: "acme/api#474",
@@ -152,6 +159,148 @@ describe("CardRow", () => {
 
   it("blinks when a reading brought it", () => {
     row({}, { flash: true });
+    expect(item()).toHaveClass("row-flash");
+  });
+});
+
+const PR: PullRequestRowView = {
+  key: "acme/web#2291",
+  reference: "web#2291",
+  referenceTooltip: "acme/web#2291",
+  title: "Move the billing page to the new layout",
+  tags: [
+    { text: "Draft", tooltip: null },
+    { text: "Fork", tooltip: "From jdoe/web" },
+  ],
+  folded: { text: "+2", tooltip: "Draft\nFork" },
+  author: "dependabot",
+  state: { kind: "text", text: "Not reviewed", tone: "ink-3", tooltip: null },
+  keys: "review",
+  dashed: false,
+  label: "web#2291 Move the billing page to the new layout. dependabot. Not reviewed",
+};
+
+function prRow(model: Partial<PullRequestRowView> = {}, props: Partial<PullRequestRowProps> = {}) {
+  const onActivate = vi.fn();
+  const onFocus = vi.fn();
+  const rendered = renderWithStore(
+    <PullRequestRow
+      model={{ ...PR, ...model }}
+      open={false}
+      tabStop={false}
+      flash={false}
+      onActivate={onActivate}
+      onFocus={onFocus}
+      {...props}
+    />,
+  );
+  return { ...rendered, onActivate, onFocus };
+}
+
+describe("PullRequestRow", () => {
+  it("is a treeitem of level 2 named by the label of its model", () => {
+    prRow();
+    expect(item()).toHaveAccessibleName(PR.label);
+    expect(item()).toHaveAttribute("aria-level", "2");
+    expect(item()).toHaveAttribute("data-row-key", "acme/web#2291");
+  });
+
+  it("draws the reference, the title, the tags and the author", () => {
+    prRow();
+    for (const text of ["web#2291", PR.title, "Draft", "Fork", "dependabot"]) {
+      expect(screen.getByText(text)).toBeInTheDocument();
+    }
+  });
+
+  it.each([
+    [false, "false"],
+    [true, "true"],
+  ])("is aria-selected=%s when open is %s", (open, selected) => {
+    prRow({}, { open });
+    expect(item()).toHaveAttribute("aria-selected", selected);
+  });
+
+  it("holds the tab stop only when it is the stop", () => {
+    prRow({}, { tabStop: true });
+    expect(item()).toHaveAttribute("tabindex", "0");
+  });
+
+  it("activates on a click and reports the focus", async () => {
+    const { user, onActivate, onFocus } = prRow();
+    await user.click(item());
+    expect(onActivate).toHaveBeenCalledOnce();
+    expect(onFocus).toHaveBeenCalled();
+  });
+
+  it("says the tooltip of a tag that has one", async () => {
+    const { user } = prRow();
+    await user.hover(screen.getByText("Fork"));
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("From jdoe/web");
+  });
+
+  describe("state", () => {
+    it("says a text state", () => {
+      prRow({
+        state: { kind: "text", text: "Checks failing", tone: "ink-2", tooltip: "2 failed" },
+      });
+      expect(screen.getByText("Checks failing")).toBeInTheDocument();
+    });
+
+    it("says the long form of a review while it fits", () => {
+      prRow({
+        state: {
+          kind: "review",
+          glyph: "wait",
+          long: "Decide findings · pass 1 · 1/3",
+          short: "Decide findings",
+          strong: true,
+          tooltip: "The review waits for you",
+        },
+      });
+      expect(screen.getAllByText("Decide findings · pass 1 · 1/3")).toHaveLength(2);
+      expect(screen.queryByText("Decide findings")).not.toBeInTheDocument();
+    });
+
+    it("says the task that holds the pull request", () => {
+      prRow({ state: { kind: "task", text: "Step 3/7", tooltip: "add-login: Step 3/7" } });
+      expect(screen.getByText("Step 3/7")).toBeInTheDocument();
+    });
+
+    it("says the clone that runs", () => {
+      prRow({ state: { kind: "cloning", text: "Cloning acme/web…" } });
+      expect(screen.getByText("Cloning acme/web…")).toBeInTheDocument();
+    });
+
+    it("says the clone that failed, on the error rail", () => {
+      prRow({ state: { kind: "clone-failed" } });
+      expect(screen.getByText("Clone failed")).toBeInTheDocument();
+      expect(item()).toHaveClass("error-rail-bar");
+    });
+  });
+
+  describe("keys", () => {
+    it.each(["review", "open", "open task"] as const)("says R %s", (keys) => {
+      prRow({ keys });
+      expect(screen.getByText("R")).toBeInTheDocument();
+      expect(screen.getByText(keys)).toBeInTheDocument();
+      expect(screen.getByText(keys).closest('[aria-hidden="true"]')).not.toBeNull();
+    });
+
+    it("is empty where R does nothing", () => {
+      prRow({ keys: null });
+      expect(screen.queryByText("R")).not.toBeInTheDocument();
+    });
+  });
+
+  it("stays on the path, and acts, when dashed", async () => {
+    const { user, onActivate } = prRow({ dashed: true }, { tabStop: true });
+    expect(item()).not.toHaveAttribute("aria-disabled");
+    await user.click(item());
+    expect(onActivate).toHaveBeenCalledOnce();
+  });
+
+  it("blinks when a reading brought it", () => {
+    prRow({}, { flash: true });
     expect(item()).toHaveClass("row-flash");
   });
 });

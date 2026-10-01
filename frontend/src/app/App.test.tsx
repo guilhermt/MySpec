@@ -12,6 +12,7 @@ import {
   makePullRequestRow,
   makeRepository,
   makeReviewCenter,
+  makeReviewPass,
   makeReviewSummary,
   makeSituation,
   makeState,
@@ -25,6 +26,17 @@ beforeEach(() => {
 
 // Two tasks wait for the user: add-login for a reply, and fix-header for an
 // error that started later.
+// readyToPublish is the situation of a review whose findings were decided.
+function readyToPublish(reviewId: string) {
+  return makeSituation({
+    id: `s-${reviewId}`,
+    taskId: reviewId,
+    kind: "review_report",
+    form: "publish",
+    place: { kind: "review", stage: "review", step: 0 },
+  });
+}
+
 function waitingState() {
   return makeState({
     tasks: [
@@ -264,7 +276,8 @@ describe("App", () => {
       useAppStore.getState().openReview("review-1");
     });
 
-    expect(screen.getByRole("button", { name: "Delete review" })).toBeInTheDocument();
+    expect(screen.getByRole("list", { name: /^Progress · Pass 1/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Details" })).toBeInTheDocument();
     await waitFor(() => {
       expect(api.getTranscript).toHaveBeenCalledWith("review-1", "review");
     });
@@ -275,13 +288,21 @@ describe("App", () => {
       makeState({
         tasks: [makeTask()],
         reviews: [
-          makeReviewSummary({ canPublish: true }),
+          makeReviewSummary({
+            status: "ready_to_publish",
+            canPublish: true,
+            passes: [makeReviewPass()],
+            situations: [readyToPublish("review-1")],
+          }),
           makeReviewSummary({
             id: "review-2",
             number: 32,
             own: true,
             verdicts: ["comment"],
+            status: "ready_to_publish",
             canPublish: true,
+            passes: [makeReviewPass()],
+            situations: [readyToPublish("review-2")],
           }),
         ],
       }),
@@ -292,16 +313,19 @@ describe("App", () => {
     act(() => {
       useAppStore.getState().openReview("review-1");
     });
-    await user.click(screen.getByRole("button", { name: "Publish review" }));
-    expect(screen.getByRole("radio", { name: "Approve" })).toBeChecked();
+    await user.click(screen.getByRole("button", { name: "Publish review…" }));
+    expect(screen.getByRole("radio", { name: /Approve/ })).not.toBeChecked();
+    await user.keyboard("2");
+    expect(screen.getByRole("radio", { name: /Approve/ })).toBeChecked();
     await user.click(screen.getByRole("button", { name: "Cancel" }));
 
     act(() => {
       useAppStore.getState().openReview("review-2");
     });
-    await user.click(screen.getByRole("button", { name: "Publish review" }));
+    await user.click(screen.getByRole("button", { name: "Publish review…" }));
 
-    expect(screen.getByRole("radio", { name: "Comment" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: /Comment/ })).toBeChecked();
+    expect(screen.getByRole("radio", { name: /Approve/ })).not.toBeChecked();
   });
 
   it("gives the main area to an archived review, inside the history", async () => {
@@ -335,7 +359,7 @@ describe("App", () => {
       useAppStore.getState().openStartReview({ repositoryId: "repo-1", number: 31 });
     });
 
-    expect(await screen.findByRole("heading", { name: "Start review" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Review web#31" })).toBeInTheDocument();
   });
 
   it("opens the dialog that starts a review once the clone of its repository is there", async () => {

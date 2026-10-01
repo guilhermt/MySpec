@@ -5,6 +5,7 @@ import (
 
 	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/prreview"
+	"github.com/guilhermt/myspec/internal/pulls"
 	"github.com/guilhermt/myspec/internal/review"
 	"github.com/guilhermt/myspec/internal/reviewflow"
 )
@@ -62,7 +63,7 @@ func published(t *testing.T, f *fixture) string {
 	id := deciding(t, f)
 	f.decide(t, id, 1, 1, prreview.DecisionApproved)
 	f.decide(t, id, 1, 2, prreview.DecisionDiscarded)
-	err := f.reviews.MarkPublished(t.Context(), id, 1, prreview.VerdictRequestChanges,
+	err := f.reviews.MarkPublished(t.Context(), id, 1, prreview.VerdictRequestChanges, false,
 		"https://github.com/dev/web/pull/42#pullrequestreview-1", headHash,
 		map[int]prreview.Placement{1: prreview.PlacementInline})
 	if err != nil {
@@ -461,5 +462,66 @@ func TestTheStateOfAReviewInApplyModeCarriesTheReadingOfItsWorktree(t *testing.T
 	state := f.state(t, id)
 	if state.Watch == nil || state.Watch.Total != 2 {
 		t.Errorf("watch = %+v, want the reading of the worktree", state.Watch)
+	}
+}
+
+func TestTheStateCountsTheCommitsSinceThePublishedOne(t *testing.T) {
+	t.Parallel()
+
+	commit := func(sha string) pulls.Commit { return pulls.Commit{SHA: sha, Subject: sha, Author: "rsouza"} }
+	cases := map[string]struct {
+		recent []pulls.Commit
+		want   int
+	}{
+		"the published commit among them": {[]pulls.Commit{commit("c0"), commit(headHash), commit("c2"), commit(otherHash)}, 2},
+		"the published commit is not":     {[]pulls.Commit{commit("c2"), commit(otherHash)}, -1},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			f := newFixture(t)
+			id := toPublish(t, f)
+			if err := f.service.Publish(t.Context(), id, prreview.VerdictComment, true); err != nil {
+				t.Fatalf("publish review: %v", err)
+			}
+			moved := openPR()
+			moved.HeadCommit, moved.Commits = otherHash, c.recent
+			f.pulls.seed(moved)
+
+			f.polled(t, id, func(s reviewflow.State) bool {
+				return s.Status == reviewflow.StatusNewCommits
+			}, "the new commits to be noticed")
+
+			if got := f.state(t, id).NewCommits; got != c.want {
+				t.Errorf("new commits = %d, want %d", got, c.want)
+			}
+		})
+	}
+}
+
+func TestTheStateCountsTheCommitsSinceThePassBeingDecided(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := deciding(t, f)
+
+	if got := f.state(t, id); got.StaleCommits != 0 || got.NewCommits != 0 {
+		t.Errorf("state = stale %d, new %d, want 0 and 0 while the pass is current", got.StaleCommits, got.NewCommits)
+	}
+
+	f.update(t, id, func(r *prreview.Review) { r.HeadCommit = otherHash })
+	if got := f.state(t, id).StaleCommits; got != -1 {
+		t.Errorf("stale commits = %d, want -1 before any reading says which commits came", got)
+	}
+
+	moved := openPR()
+	moved.HeadCommit = otherHash
+	moved.Commits = []pulls.Commit{{SHA: headHash}, {SHA: "c2"}, {SHA: otherHash}}
+	f.pulls.seed(moved)
+	f.polled(t, id, func(s reviewflow.State) bool { return !s.CheckedAt.IsZero() }, "the reading to reach the review")
+
+	if got := f.state(t, id).StaleCommits; got != 2 {
+		t.Errorf("stale commits = %d, want 2", got)
 	}
 }

@@ -55,6 +55,23 @@ describe("ChecksList", () => {
     );
   });
 
+  it("says the age of the reading at the right of the summary, with its exact time", async () => {
+    const { user } = renderWithStore(
+      <ChecksList
+        summary="All 6 passed"
+        rows={[]}
+        onOpen={() => {}}
+        trailing={{ text: "read 2m ago", tooltip: "Last read 14:02" }}
+      />,
+    );
+
+    expect(screen.getByText("All 6 passed")).toBeInTheDocument();
+    await user.hover(screen.getByText("read 2m ago"));
+    expect(await screen.findByRole("tooltip", {}, { timeout: 2000 })).toHaveTextContent(
+      "Last read 14:02",
+    );
+  });
+
   it("has no list without checks", () => {
     renderWithStore(<ChecksList summary="No checks" rows={[]} onOpen={() => {}} />);
     expect(screen.getByText("No checks")).toBeInTheDocument();
@@ -145,6 +162,23 @@ describe("ChecksList", () => {
       );
       expect(screen.getByText("checking GitHub")).toHaveClass("shimmer-text");
       expect(screen.queryByText(LIVE.header)).toBeNull();
+    });
+
+    it("puts the action beside the age and what is missing at the foot of the block", () => {
+      renderWithStore(
+        <ChecksList
+          summary=""
+          rows={ROWS}
+          onOpen={() => {}}
+          live={{
+            ...LIVE,
+            action: <button type="button">Refresh</button>,
+            foot: "The first pass starts when e2e finishes.",
+          }}
+        />,
+      );
+      expect(screen.getByRole("button", { name: "Refresh" })).toBeInTheDocument();
+      expect(screen.getByText("The first pass starts when e2e finishes.")).toBeInTheDocument();
     });
 
     it("says No checks without rows", () => {
