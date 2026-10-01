@@ -1,6 +1,7 @@
 import { type KeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { PanelLayout } from "@/components/system/AuxPanel";
 import { KeyNotice, useKeyNotice } from "@/components/system/KeyNotice";
+import { isTyping } from "@/components/system/keys";
 import { ScrollArea } from "@/components/system/ScrollArea";
 import { SelectionBar } from "@/components/system/SelectionBar";
 import { useNow } from "@/features/attention/useNow";
@@ -72,14 +73,6 @@ export function BoardView({ boardId }: BoardViewProps) {
   }
   // Each board remembers its own filters and sections.
   return <BoardScreen key={boardId} board={board} />;
-}
-
-/** isTyping is whether the key went to a field, where the letters are text and not shortcuts. */
-export function isTyping(target: EventTarget): boolean {
-  return (
-    target instanceof HTMLElement &&
-    (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)
-  );
 }
 
 function BoardScreen({ board }: { board: Board }) {

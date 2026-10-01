@@ -3,6 +3,7 @@ package pulls_test
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/pulls"
+	"github.com/guilhermt/myspec/internal/repository"
 )
 
 func TestARefreshAskedWhileAReadingRunsBecomesOneReadingAfterIt(t *testing.T) {
@@ -285,11 +287,22 @@ func TestTheFirstFailureOfARunOfFailuresIsWhenItStartedAndTheNextGoodReadingClea
 func TestTheCostOfTheReadingGoesToTheLog(t *testing.T) {
 	t.Parallel()
 
+	// Sixteen repositories take two queries, each priced 3 by its reply.
 	f := newFixture(t)
+	repos := make([]repository.Repository, 0, 16)
+	for i := range 16 {
+		repos = append(repos, repository.Repository{
+			ID: fmt.Sprintf("repo-%02d", i+1), Owner: "acme", Name: fmt.Sprintf("app-%02d", i+1), CreatedAt: base,
+		})
+	}
+	f.register(repos)
 	f.github.reply(queryList, load(t, "list_partial.json"), nil)
 	f.refresh(t)
 
-	if got := f.logs.String(); !strings.Contains(got, "pull requests read") || !strings.Contains(got, "cost=3") {
-		t.Errorf("the log = %q, want the reading with cost=3", got)
+	if calls := len(f.github.made(queryList)); calls != 2 {
+		t.Fatalf("the reading made %d list queries, want two", calls)
+	}
+	if got := f.logs.String(); !strings.Contains(got, "pull requests read") || !strings.Contains(got, "cost=6") {
+		t.Errorf("the log = %q, want the reading with the cost of both queries, cost=6", got)
 	}
 }

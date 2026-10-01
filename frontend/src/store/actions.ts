@@ -722,6 +722,18 @@ export function saveFindingTextInPlace(
   return inPlace(() => api.setFindingText(id, pass, number, text));
 }
 
+/**
+ * saveReviewSummaryInPlace is saveReviewSummary for the publish dialog, which saves the summary
+ * right before publishing and shows its failure in its own footer: it answers the message, or null.
+ */
+export function saveReviewSummaryInPlace(
+  id: string,
+  pass: number,
+  text: string,
+): Promise<string | null> {
+  return inPlace(() => api.setReviewSummary(id, pass, text));
+}
+
 /** saveReviewSummary records the summary of a pass as the user left it. */
 export function saveReviewSummary(id: string, pass: number, text: string): Promise<void> {
   return run(fail(`Couldn't save the summary of ${theItem(id)}`, TRY), () =>

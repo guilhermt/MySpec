@@ -196,7 +196,7 @@ describe("checksSummary in the panel form", () => {
     ...overrides,
   });
 
-  it.each([
+  it.each<[string, Partial<ChecksReading>, string]>([
     ["no reading", { checkedAt: "" }, "Not read yet"],
     ["a reading without checks", {}, "No checks"],
     ["no checks, merging clean", { mergeable: "mergeable" }, "No checks · merges clean into dev"],

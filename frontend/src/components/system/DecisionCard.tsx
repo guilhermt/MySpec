@@ -1,4 +1,5 @@
 import { type KeyboardEvent, type ReactNode, useRef, useState } from "react";
+import { isTyping } from "./keys";
 
 export interface DecisionCardItem {
   id: string;
@@ -19,16 +20,6 @@ export interface DecisionCardProps {
   onLeave?: (by: -1 | 1) => void;
   /** renderItem draws one item, with whether it holds the card's tab stop. */
   renderItem: (item: DecisionCardItem, current: boolean) => ReactNode;
-}
-
-/** inField tells a key that comes from a text field, which is the field's own. */
-function inField(target: EventTarget): boolean {
-  return (
-    target instanceof HTMLElement &&
-    (target instanceof HTMLInputElement ||
-      target instanceof HTMLTextAreaElement ||
-      target.isContentEditable)
-  );
 }
 
 /**
@@ -59,7 +50,7 @@ export function DecisionCard({
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
-    if (event.repeat || inField(event.target)) return;
+    if (event.repeat || isTyping(event.target)) return;
     if (event.ctrlKey || event.metaKey || event.altKey) return;
     const origin = (event.target as HTMLElement).closest<HTMLElement>("[data-finding-id]");
     const index = items.findIndex((item) => item.id === origin?.dataset.findingId);

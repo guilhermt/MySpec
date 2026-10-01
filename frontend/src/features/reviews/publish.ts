@@ -1,29 +1,7 @@
-import type {
-  MarkerEntry,
-  ReviewFinding,
-  ReviewPass,
-  ReviewSummary,
-  ReviewVerdict,
-} from "@/lib/wails";
-
-/** counted is a count with its noun: "1 finding", "3 findings". */
-export function counted(count: number, noun: string): string {
-  return `${count} ${noun}${count === 1 ? "" : "s"}`;
-}
-
-/** verdictName is the verdict of a published review as GitHub calls it: Request changes, Approve, Comment. */
-export function verdictName(verdict: string): string {
-  switch (verdict) {
-    case "request_changes":
-      return "Request changes";
-    case "approve":
-      return "Approve";
-    case "comment":
-      return "Comment";
-    default:
-      return "";
-  }
-}
+import { verdictLabel } from "@/features/reviews/review-status";
+import { decidedCounts } from "@/lib/findings";
+import { counted } from "@/lib/situations";
+import type { MarkerEntry, ReviewPass, ReviewSummary, ReviewVerdict } from "@/lib/wails";
 
 /** VERDICTS are the verdicts the publish dialog offers, in its order, with the key that picks each. */
 export const VERDICTS: readonly {
@@ -35,19 +13,19 @@ export const VERDICTS: readonly {
   {
     verdict: "request_changes",
     key: "1",
-    name: verdictName("request_changes"),
+    name: verdictLabel("request_changes"),
     description: "The author addresses the findings before the merge.",
   },
   {
     verdict: "approve",
     key: "2",
-    name: verdictName("approve"),
+    name: verdictLabel("approve"),
     description: "It can be merged as it is.",
   },
   {
     verdict: "comment",
     key: "3",
-    name: verdictName("comment"),
+    name: verdictLabel("comment"),
     description: "Feedback without a verdict.",
   },
 ];
@@ -62,9 +40,9 @@ export interface PublishAttemptLike {
   withSummary: boolean;
 }
 
-// approvedOf are the findings of a pass the user approved.
-function approvedOf(pass: ReviewPass): ReviewFinding[] {
-  return (pass.findings ?? []).filter((finding) => finding.decision === "approved");
+// approvedCount is how many findings of a pass the user approved.
+function approvedCount(pass: ReviewPass): number {
+  return decidedCounts(pass.findings ?? []).approved;
 }
 
 // hasSummary says whether the summary goes with the review: the box is checked and the summary says something.
@@ -86,7 +64,7 @@ export function suggestedVerdict(
   if (pass.clean) {
     return { verdict: "approve", why: "Suggested by your decisions: a clean pass" };
   }
-  const approved = approvedOf(pass).length;
+  const approved = approvedCount(pass);
   if (approved > 0) {
     return {
       verdict: "request_changes",
@@ -106,7 +84,7 @@ export function allowedVerdicts(
   pass: ReviewPass,
   withSummary: boolean,
 ): { allowed: ReviewVerdict[]; reason: string | null } {
-  const bare = !hasSummary(pass, withSummary) && approvedOf(pass).length === 0;
+  const bare = !hasSummary(pass, withSummary) && approvedCount(pass) === 0;
   if (review.own && bare) {
     return {
       allowed: [],
@@ -143,14 +121,15 @@ export function goesLine(
     return `A clean pass · ${then}`;
   }
   const findings = pass.findings ?? [];
-  const discarded = findings.filter((finding) => finding.decision === "discarded").length;
+  const { approved, discarded } = decidedCounts(findings);
   const tail = discarded > 0 ? ` · ${counted(discarded, "finding")} discarded, not published` : "";
-  const approved = approvedOf(pass);
-  if (approved.length === 0) {
+  if (approved === 0) {
     return `No finding approved · ${then}${tail}`;
   }
-  const inline = approved.filter((finding) => finding.path !== "").length;
-  const body = approved.length - inline;
+  const inline = findings.filter(
+    (finding) => finding.decision === "approved" && finding.path !== "",
+  ).length;
+  const body = approved - inline;
   const minimal =
     inline > 0 &&
     body === 0 &&
@@ -179,7 +158,7 @@ export function summaryStart(summary: string): string {
 
 /** publishLabel is the primary button of the publish dialog: Publish, or Publish · Request changes once a verdict is chosen. */
 export function publishLabel(verdict: ReviewVerdict | null): string {
-  return verdict === null ? "Publish" : `Publish · ${verdictName(verdict)}`;
+  return verdict === null ? "Publish" : `Publish · ${verdictLabel(verdict)}`;
 }
 
 /** publishReason is why Publish is disabled, at the left of the footer; null once a verdict is chosen. */

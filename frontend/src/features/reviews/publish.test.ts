@@ -9,7 +9,6 @@ import {
   suggestedVerdict,
   summaryStart,
   VERDICTS,
-  verdictName,
 } from "@/features/reviews/publish";
 import type { ReviewFinding, ReviewVerdict } from "@/lib/wails";
 import { makeReviewFinding, makeReviewPass, makeReviewSummary } from "@/test/wails-mock";
@@ -67,17 +66,6 @@ describe("publishedGoes", () => {
     },
   ])("$name", ({ marker, want }) => {
     expect(publishedGoes(marker)).toBe(want);
-  });
-});
-
-describe("verdictName", () => {
-  it.each([
-    ["request_changes", "Request changes"],
-    ["approve", "Approve"],
-    ["comment", "Comment"],
-    ["", ""],
-  ])("names %j as %j", (verdict, want) => {
-    expect(verdictName(verdict)).toBe(want);
   });
 });
 

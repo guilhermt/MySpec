@@ -14,6 +14,7 @@ import type { Entry, MarkerEntry, PullRequest, TaskSummary, UserEntry } from "@/
 import { clockTime } from "@/lib/when";
 import {
   makeEntry,
+  makeMarkerCommit,
   makePRCheck,
   makePullRequest,
   makeReviewFinding,
@@ -909,8 +910,8 @@ describe("markerOf in a review", () => {
       fields: {
         count: 2,
         commits: [
-          { sha: "c19f02e", subject: "Fix the time zone rule", author: "rsouza" },
-          { sha: "ab12cd3", subject: "Cover it", author: "tchen" },
+          makeMarkerCommit(),
+          makeMarkerCommit({ sha: "ab12cd3", subject: "Cover it", author: "tchen" }),
         ],
       },
       text: "2 new commits",
@@ -926,14 +927,14 @@ describe("markerOf in a review", () => {
     },
     {
       name: "one commit",
-      fields: { count: 1, commits: [{ sha: "c19f02e", subject: "Fix it", author: "rsouza" }] },
+      fields: { count: 1, commits: [makeMarkerCommit({ subject: "Fix it" })] },
       text: "1 new commit",
       complement: "by rsouza",
       body: { kind: "commits" as const, commits: [{ sha: "c19f02e", subject: "Fix it" }], more: 0 },
     },
     {
       name: "a count that is not known",
-      fields: { count: -1, commits: [{ sha: "c19f02e", subject: "Fix it", author: "a" }] },
+      fields: { count: -1, commits: [makeMarkerCommit({ subject: "Fix it", author: "a" })] },
       text: "New commits",
       complement: "by a",
       body: { kind: "commits" as const, commits: [{ sha: "c19f02e", subject: "Fix it" }], more: 0 },
@@ -945,11 +946,13 @@ describe("markerOf in a review", () => {
   });
 
   it("lists the last twenty commits and counts the rest", () => {
-    const commits = Array.from({ length: 32 }, (_, index) => ({
-      sha: `c${String(index).padStart(6, "0")}`,
-      subject: `Commit ${index}`,
-      author: ["a", "b", "a", "c"][index % 4] ?? "",
-    }));
+    const commits = Array.from({ length: 32 }, (_, index) =>
+      makeMarkerCommit({
+        sha: `c${String(index).padStart(6, "0")}`,
+        subject: `Commit ${index}`,
+        author: ["a", "b", "a", "c"][index % 4] ?? "",
+      }),
+    );
 
     const read = markerOf(marker({ type: "new_commits", count: 32, commits }), inReview, "e", NOW);
 

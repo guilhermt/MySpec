@@ -186,8 +186,9 @@ func (s *Service) evaluateCommit(ctx context.Context, stored prreview.Review, wt
 	// The fixes of the pass went up whatever becomes of the next one, and the
 	// next one lists them as applied. The review stays committing until that
 	// pass is asked for, so that the next evaluation tries both again instead
-	// of offering to apply findings that already went up.
-	s.markCommit(ctx, id, wt, snap.Head, stored.Number)
+	// of offering to apply findings that already went up. The conversation
+	// marks the commit only once the review waits for the checks of the next
+	// pass, so that a failed write that is tried again marks it once.
 	if err := s.reviews.MarkApplied(ctx, id, stored.ReportedPass); err != nil {
 		s.log.Error("mark review pass applied failed", "review", id, "pass", stored.ReportedPass, "error", err)
 		return
@@ -208,6 +209,7 @@ func (s *Service) evaluateCommit(ctx context.Context, stored prreview.Review, wt
 		s.log.Error("record review phase failed", "review", id, "error", err)
 		return
 	}
+	s.markCommit(ctx, id, wt, snap.Head, stored.Number)
 	s.watch.Forget(id)
 	s.log.Info("review commit pushed", "review", id, "commit", snap.Head)
 	s.notify(id)

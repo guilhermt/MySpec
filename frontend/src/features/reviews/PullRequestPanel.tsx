@@ -1,4 +1,5 @@
-import { type ReactNode, useEffect } from "react";
+import { useEffect } from "react";
+import { FACTS, Fact } from "@/components/Facts";
 import { ChecksList } from "@/components/system/ChecksList";
 import { Link } from "@/components/system/Link";
 import { ListPanel } from "@/components/system/ListPanel";
@@ -25,19 +26,6 @@ export interface PullRequestPanelProps {
   /** onPanelFocused tells the view the request was taken. */
   onPanelFocused: () => void;
   onClose: () => void;
-}
-
-/** FACTS is the list of keys and values under the actions: the key in its column, the value beside it. */
-const FACTS =
-  "grid grid-cols-[max-content_1fr] gap-x-(--space-4) gap-y-(--space-1) text-(length:--text-meta) leading-(--leading-meta)";
-
-function Fact({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <>
-      <dt className="text-ink-3">{label}</dt>
-      <dd className="min-w-0 text-ink-1 wrap-anywhere">{children}</dd>
-    </>
-  );
 }
 
 /**

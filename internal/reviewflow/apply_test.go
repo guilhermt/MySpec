@@ -677,3 +677,39 @@ func TestACommitThatWentUpIsMarkedWithItsSubjectAndThePullRequest(t *testing.T) 
 		})
 	}
 }
+
+func TestACommitIsMarkedOnlyOnceThePassAfterItIsRecorded(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		fail func(*memReviewStore, error)
+	}{
+		{"the pass is not marked applied", (*memReviewStore).failUpsertPass},
+		{"the next pass is not asked for", (*memReviewStore).failUpdate},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+
+			f := newFixture(t)
+			id := committing(t, f)
+			f.watch.setSnapshot(review.Snapshot{Head: commitHash})
+			f.sessions.goIdle(id)
+			c.fail(f.store, errStore)
+
+			f.settled(t, id)
+			if got := f.sessions.markersOf(session.MarkerCommitted); len(got) != 0 {
+				t.Fatalf("committed markers = %+v, want none while the store fails", got)
+			}
+
+			c.fail(f.store, nil)
+			f.evaluated(t, id, func(s reviewflow.State) bool {
+				return s.Review.Phase == prreview.PhaseWaitingChecks
+			}, "the second pass to wait for the checks")
+			if got := f.sessions.markersOf(session.MarkerCommitted); len(got) != 1 {
+				t.Errorf("committed markers = %+v, want one", got)
+			}
+		})
+	}
+}

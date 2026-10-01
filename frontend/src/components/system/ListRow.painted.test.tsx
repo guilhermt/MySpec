@@ -259,6 +259,27 @@ describe.each(THEMES)("PullRequestRow in the %s theme", (theme) => {
     expect(title.top - box(row).top).toBeGreaterThanOrEqual(px("--space-1-5"));
   });
 
+  // The second line starts at 1040px of list and below: the last width on one line, then the first on two.
+  it.each([
+    [1041, false],
+    [1040, true],
+  ])("at a list of %ipx puts the author and the state on a second line: %s", (width, second) => {
+    setTheme(theme);
+    const row = drawPR(width);
+    const title = box(cell("Move the billing page to the new layout"));
+    const author = box(cell("dependabot"));
+    const state = box(shown("Decide findings · pass 1 · 1/3") as Element);
+    expect(box(row).height > px("--size-control")).toBe(second);
+    for (const part of [author, state]) {
+      if (second) {
+        expect(part.top).toBeGreaterThan(title.bottom - 1);
+      } else {
+        expect(part.top).toBeLessThan(title.bottom);
+        expect(part.left).toBeGreaterThan(title.right - 1);
+      }
+    }
+  });
+
   it("takes the short form of a review that does not fit its column", () => {
     setTheme(theme);
     drawPR(1200, {

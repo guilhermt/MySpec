@@ -92,11 +92,14 @@ describe("PullRequestPanel", () => {
   });
 
   describe("the action", () => {
-    it("is Start review, the one primary, with R, which opens the dialog", async () => {
+    it("is Start review, the one primary, with R in its tooltip, which opens the dialog", async () => {
       const { user } = panel();
 
-      const start = screen.getByRole("button", { name: /^Start review/ });
+      const start = screen.getByRole("button", { name: "Start review" });
       expect(start).toHaveAttribute("data-variant", "primary");
+      expect(start).toHaveTextContent(/^Start review$/);
+      await user.hover(start);
+      expect(await screen.findByRole("tooltip")).toHaveTextContent("Start reviewR");
       await user.click(start);
 
       expect(useAppStore.getState().startReview).toEqual({ repositoryId: "repo-1", number: 1302 });
@@ -220,6 +223,28 @@ describe("PullRequestPanel", () => {
         );
       });
 
+      it("moves the focus to Start review of your own pull request once the path changes", async () => {
+        vi.mocked(api.changeRepositoryPath).mockResolvedValue(true);
+        const { user, rerender, pull } = panel({ row: { action: "clone_missing", own: true } });
+
+        await user.click(screen.getByRole("button", { name: "Change path…" }));
+        rerender(
+          <PullRequestPanel
+            row={{ ...pull, action: "review" }}
+            now={NOW}
+            panelFocus={null}
+            onPanelFocused={() => {}}
+            onClose={() => {}}
+          />,
+        );
+
+        const start = await screen.findByRole("button", { name: /^Start review/ });
+        expect(start).toHaveAccessibleDescription(
+          "Your own pull request: the review can publish a comment, or apply its findings.",
+        );
+        await waitFor(() => expect(start).toHaveFocus());
+      });
+
       it("leaves the focus alone when the user cancels the chooser", async () => {
         vi.mocked(api.changeRepositoryPath).mockResolvedValue(false);
         const { user, rerender, pull } = panel({ row: { action: "clone_missing" } });
@@ -260,10 +285,17 @@ describe("PullRequestPanel", () => {
           repository: { cloned: false, path: "" },
         });
 
-        expect(
-          screen.getByRole("button", { name: /^Clone and continue/ }),
-        ).toHaveAccessibleDescription("acme/api isn't cloned yet. A review needs a clone.");
-        await user.click(screen.getByRole("button", { name: /^Clone and continue/ }));
+        const clone = screen.getByRole("button", { name: "Clone and continue" });
+        expect(clone).toHaveAccessibleDescription(
+          "acme/api isn't cloned yet. A review needs a clone.",
+        );
+        // The key is in the tooltip only, once.
+        expect(clone).toHaveTextContent(/^Clone and continue$/);
+        await user.hover(clone);
+        expect(await screen.findByRole("tooltip")).toHaveTextContent(
+          /^Clone, then open the start dialogR$/,
+        );
+        await user.click(clone);
 
         expect(api.cloneRepository).toHaveBeenCalledExactlyOnceWith("repo-1");
         await waitFor(() =>
@@ -301,7 +333,9 @@ describe("PullRequestPanel", () => {
           repository: { cloned: false, path: "", cloneError: "gh: repository not found" },
         });
 
-        expect(screen.getByRole("button", { name: /^Try the clone again/ })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Try the clone again" })).toHaveTextContent(
+          /^Try the clone again$/,
+        );
         expect(screen.getByRole("alert")).toHaveTextContent("gh: repository not found");
       });
 

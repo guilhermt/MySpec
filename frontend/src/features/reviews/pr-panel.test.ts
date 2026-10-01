@@ -95,7 +95,7 @@ describe("prPanelModel", () => {
       "one whose clone is missing",
       { action: "clone_missing" },
       { path: "~/code/web" },
-      { kind: "clone-missing", path: "~/code/web" },
+      { kind: "clone-missing", reason: "The clone at ~/code/web is missing." },
     ],
     [
       "one never cloned",
@@ -212,7 +212,10 @@ describe("panelReason", () => {
       "The review of this pull request happens in its task.",
     ],
     [{ kind: "fork" }, "Pull requests from forks can't be reviewed yet."],
-    [{ kind: "clone-missing", path: "~/code/web" }, "The clone at ~/code/web is missing."],
+    [
+      { kind: "clone-missing", reason: "The clone at ~/code/web is missing." },
+      "The clone at ~/code/web is missing.",
+    ],
     [
       { kind: "clone", state: "idle", repository: "acme/docs", message: "" },
       "acme/docs isn't cloned yet. A review needs a clone.",

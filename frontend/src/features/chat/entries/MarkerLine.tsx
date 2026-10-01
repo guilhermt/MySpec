@@ -100,7 +100,7 @@ function FindingsBody({
         <li key={finding.id}>
           <Finding
             model={finding}
-            current
+            current={false}
             onOpenLine={() => {
               if (finding.location.kind === "anchored") {
                 void openExternal(finding.location.url);

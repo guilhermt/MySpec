@@ -50,6 +50,7 @@ var base = time.Date(2026, time.September, 17, 12, 0, 0, 0, time.UTC)
 var (
 	errGitHub = errors.New("gh: cannot reach github")
 	errGit    = errors.New("git: cannot create the worktree")
+	errStore  = errors.New("store: database is locked")
 )
 
 // memSessions is an in-memory reviewflow.Sessions recording what it was asked
@@ -538,7 +539,8 @@ type memPulls struct {
 	details   map[pulls.Ref]pulls.Detail
 	err       error
 	refreshes int
-	reads     int // the readings of GitHub that went out
+	reads     int           // the readings of GitHub that went out
+	asked     [][]pulls.Ref // the pull requests each of them asked for
 	// hold, when set, is what a reading waits on after it took its answer, and
 	// entered says that a reading got there.
 	hold    chan struct{}
@@ -561,6 +563,7 @@ func (m *memPulls) ReadDetails(_ context.Context, refs []pulls.Ref) (map[pulls.R
 	defer m.mu.Unlock()
 
 	m.reads++
+	m.asked = append(m.asked, slices.Clone(refs))
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -614,6 +617,14 @@ func (m *memPulls) readings() int {
 	defer m.mu.Unlock()
 
 	return m.reads
+}
+
+// refsRead is the pull requests every reading of GitHub asked for, in order.
+func (m *memPulls) refsRead() [][]pulls.Ref {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return slices.Clone(m.asked)
 }
 
 // forget drops a pull request, which is one GitHub answers nothing for.
@@ -758,11 +769,14 @@ func (m *memGH) CreateReview(_ context.Context, _, _ string, _ int, in gh.Review
 	return m.url, nil
 }
 
-// memReviewStore is an in-memory prreview.Store.
+// memReviewStore is an in-memory prreview.Store, which answers with the
+// failures it was told to.
 type memReviewStore struct {
-	mu      sync.Mutex
-	reviews []prreview.Review
-	passes  map[string][]prreview.Pass
+	mu        sync.Mutex
+	reviews   []prreview.Review
+	passes    map[string][]prreview.Pass
+	updateErr error // returned by every update of a review
+	upsertErr error // returned by every write of a pass
 }
 
 func newReviewStore() *memReviewStore {
@@ -803,10 +817,29 @@ func (m *memReviewStore) Insert(_ context.Context, stored prreview.Review) error
 	return nil
 }
 
+// failUpdate makes every update of a review fail with err; nil heals it.
+func (m *memReviewStore) failUpdate(err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.updateErr = err
+}
+
+// failUpsertPass makes every write of a pass fail with err; nil heals it.
+func (m *memReviewStore) failUpsertPass(err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.upsertErr = err
+}
+
 func (m *memReviewStore) Update(_ context.Context, stored prreview.Review) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	if m.updateErr != nil {
+		return m.updateErr
+	}
 	index := m.indexOf(stored.ID)
 	if index < 0 {
 		return os.ErrNotExist
@@ -851,6 +884,9 @@ func (m *memReviewStore) UpsertPass(_ context.Context, pass prreview.Pass) error
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	if m.upsertErr != nil {
+		return m.upsertErr
+	}
 	passes := m.passes[pass.ReviewID]
 	index := slices.IndexFunc(passes, func(p prreview.Pass) bool { return p.Number == pass.Number })
 	if index < 0 {

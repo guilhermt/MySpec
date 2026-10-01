@@ -1,13 +1,9 @@
+import { lastRecordedPass } from "@/features/reviews/review-status";
 import type { ReviewPass, ReviewSummary } from "@/lib/wails";
 
 // lastWhere is the last pass of a review that satisfies a test; null without one.
 function lastWhere(review: ReviewSummary, test: (pass: ReviewPass) => boolean): ReviewPass | null {
   return [...(review.passes ?? [])].reverse().find(test) ?? null;
-}
-
-// lastRecorded is the last pass with a report, the one a Review again comes after; null without one.
-function lastRecorded(review: ReviewSummary): ReviewPass | null {
-  return lastWhere(review, (pass) => pass.recorded);
 }
 
 // lastPublished is the last pass published on GitHub; null without one.
@@ -20,7 +16,7 @@ function lastPublished(review: ReviewSummary): ReviewPass | null {
  * report wasn't published or sent, and a finding of it was decided or something of it edited.
  */
 export function discardsDecisions(review: ReviewSummary): boolean {
-  const pass = lastRecorded(review);
+  const pass = lastRecordedPass(review);
   if (pass === null || pass.published || pass.sent) {
     return false;
   }
@@ -29,7 +25,7 @@ export function discardsDecisions(review: ReviewSummary): boolean {
 
 /** againNote is the note of the Review again dialog when it discards the decisions; null otherwise. */
 export function againNote(review: ReviewSummary): string | null {
-  const pass = lastRecorded(review);
+  const pass = lastRecordedPass(review);
   if (pass === null || !discardsDecisions(review)) {
     return null;
   }
@@ -41,7 +37,7 @@ export function againNote(review: ReviewSummary): string | null {
  * commits and the checks, and says which of the 2 published findings they fix."
  */
 export function againText(review: ReviewSummary): string {
-  const next = `Pass ${(lastRecorded(review)?.pass ?? 0) + 1}`;
+  const next = `Pass ${(lastRecordedPass(review)?.pass ?? 0) + 1}`;
   switch (review.status) {
     case "new_commits":
       return `${next} reads ${newCommitsText(review.newCommits)} and the checks, and ${newCommitsDo(review)}.`;

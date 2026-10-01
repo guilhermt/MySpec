@@ -1094,6 +1094,9 @@ func TestMigrateMarksTheSummaryOfThePassesPublishedBeforeIt(t *testing.T) {
 		{1, "Two things to fix.", "2026-09-06T11:00:00Z"},
 		{2, "  \n ", "2026-09-06T12:00:00Z"},
 		{3, "Not sent yet.", nil},
+		// Only the characters strings.TrimSpace takes, with no space: SQLite's
+		// trim with no characters given would keep them.
+		{4, "\n\t\r\n", "2026-09-06T13:00:00Z"},
 	}
 	for _, pass := range passes {
 		if _, err := db.ExecContext(t.Context(), insertPass, pass.number, pass.summary, pass.publishedAt); err != nil {
@@ -1111,7 +1114,7 @@ func TestMigrateMarksTheSummaryOfThePassesPublishedBeforeIt(t *testing.T) {
 	for _, want := range []struct {
 		pass      int
 		published string
-	}{{1, "1"}, {2, "0"}, {3, "0"}} {
+	}{{1, "1"}, {2, "0"}, {3, "0"}, {4, "0"}} {
 		query := fmt.Sprintf(`SELECT summary_published FROM review_passes WHERE pass = %d`, want.pass)
 		if got := readOne(t, db, query); got != want.published {
 			t.Errorf("summary_published of pass %d = %s, want %s", want.pass, got, want.published)

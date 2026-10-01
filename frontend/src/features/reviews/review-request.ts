@@ -1,6 +1,7 @@
 import type { RequestButton, RequestModel } from "@/components/system/RequestBar";
 import type { ComposerContext } from "@/features/chat/composer";
 import { isPausedReview, reviewChecks, reviewPass } from "@/features/reviews/review-header";
+import { lastRecordedPass } from "@/features/reviews/review-status";
 import {
   approveButton,
   type Bar,
@@ -13,10 +14,18 @@ import {
   TONES,
 } from "@/features/task/request";
 import { reviewCountLabel } from "@/features/task/step-status";
+import { decidedCounts } from "@/lib/findings";
 import type { RequestFocus } from "@/lib/focus";
 import { checksSummary, troubleLabel, troubleText } from "@/lib/pull-requests";
-import { compactWait, lowerFirst, reviewName, reviewSituation, spokenWait } from "@/lib/situations";
-import type { ReviewPass, ReviewSummary, Situation, SituationKind } from "@/lib/wails";
+import {
+  compactWait,
+  counted,
+  lowerFirst,
+  reviewName,
+  reviewSituation,
+  spokenWait,
+} from "@/lib/situations";
+import type { ReviewSummary, Situation, SituationKind } from "@/lib/wails";
 import {
   asPullReviewMode,
   asPullReviewStatus,
@@ -120,17 +129,8 @@ function reviewAgainButton(tooltip?: string): ReviewButton {
   };
 }
 
-function counted(count: number, noun: string): string {
-  return `${count} ${noun}${count === 1 ? "" : "s"}`;
-}
-
 function joined(parts: readonly string[]): string {
   return parts.filter((part) => part !== "").join(" · ");
-}
-
-// reportPass is the pass whose report the user decides on: the last one recorded.
-function reportPass(review: ReviewSummary): ReviewPass | null {
-  return (review.passes ?? []).filter((pass) => pass.recorded).at(-1) ?? null;
 }
 
 // staleNote is what the bar adds while the pull request moved after the pass being decided.
@@ -143,23 +143,12 @@ function staleNote(review: ReviewSummary): string {
     : "commits arrived after this pass";
 }
 
-function decisions(pass: ReviewPass | null): { decided: number; approved: number; total: number } {
-  const findings = pass?.findings ?? [];
-  return {
-    decided: findings.filter((finding) => finding.decision !== "").length,
-    approved: findings.filter((finding) => finding.decision === "approved").length,
-    total: findings.length,
-  };
-}
-
 function reportBar(review: ReviewSummary, form: Want["form"], place: string): ReviewBar {
-  const pass = reportPass(review);
-  const { decided, approved, total } = decisions(pass);
+  const pass = lastRecordedPass(review);
+  const { decided, approved, discarded, total } = decidedCounts(pass?.findings ?? []);
   const apply = asPullReviewMode(review.mode) === "apply";
   if (form === "publish") {
-    const outcome = pass?.clean
-      ? "A clean pass"
-      : `${approved} approved · ${decided - approved} discarded`;
+    const outcome = pass?.clean ? "A clean pass" : `${approved} approved · ${discarded} discarded`;
     return {
       form: "decision",
       label: "Ready to publish",
@@ -257,7 +246,9 @@ function barOf(review: ReviewSummary, want: Want): ReviewBar {
         form: "tinted",
         label: "Ready to merge",
         place: reference,
-        progress: reportPass(review)?.clean ? "A clean pass" : `Nothing approved in pass ${n}`,
+        progress: lastRecordedPass(review)?.clean
+          ? "A clean pass"
+          : `Nothing approved in pass ${n}`,
         status: statusOf("Ready to merge", reference),
         actions: [OPEN_PR],
       };

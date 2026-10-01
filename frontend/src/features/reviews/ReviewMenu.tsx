@@ -1,4 +1,5 @@
 import { Fragment, useState } from "react";
+import { MenuRow } from "@/components/MenuRow";
 import { IconButton } from "@/components/system/IconButton";
 import { ICONS } from "@/components/system/icons";
 import {
@@ -12,7 +13,6 @@ import {
 import { useNow } from "@/features/attention/useNow";
 import { DeleteReviewDialog } from "@/features/reviews/DeleteReviewDialog";
 import { type ReviewMenuAction, reviewMenu } from "@/features/reviews/review-header";
-import { TaskMenuRow } from "@/features/task/TaskMenu";
 import type { ReviewSummary } from "@/lib/wails";
 import { openExternal, openReviewInEditor, refreshReviewPR } from "@/store/actions";
 import { useAppStore } from "@/store/app-store";
@@ -72,7 +72,7 @@ export function ReviewMenu({ review }: ReviewMenuProps) {
               <MenuGroup>
                 {group.label !== null && <MenuGroupLabel>{group.label}</MenuGroupLabel>}
                 {group.items.map((item) => (
-                  <TaskMenuRow
+                  <MenuRow
                     key={item.id}
                     item={
                       item.action === "refreshPR" && reading ? { ...item, sub: "Reading…" } : item

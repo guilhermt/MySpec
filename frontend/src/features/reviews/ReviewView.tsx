@@ -46,11 +46,13 @@ function ReviewConversation({ review }: { review: ReviewSummary }) {
   const anchors = useConversationAnchors(review);
   return (
     <Conversation
+      key="conversation:review"
       taskId={review.id}
       stage={REVIEW_STAGE}
       session={review}
       after={anchors}
       fixed={fixedOf(review)}
+      replyWaiting={false}
     />
   );
 }

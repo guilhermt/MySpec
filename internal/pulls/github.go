@@ -58,14 +58,14 @@ fragment pr on PullRequest {
 // listRepository reads the open pull requests of one repository of a batch:
 // the alias, the owner variable and the name variable. Beyond the fragment, it
 // reads what only the list shows: the description, whether the branch merges
-// clean, the checks of the head and the last thirty commits, which say how
+// clean, the checks of the head and the last hundred commits, which say how
 // many came after the last review of the viewer.
 const listRepository = `%s: repository(owner: $%s, name: $%s) {
   pullRequests(states: OPEN, first: 100, orderBy: {field: UPDATED_AT, direction: DESC}) { nodes { ...pr body mergeable
     head: commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: 100) { nodes {
       __typename ... on CheckRun { name status conclusion detailsUrl startedAt completedAt } ... on StatusContext { context state targetUrl }
     } } } } } }
-    since: commits(last: 30) { nodes { commit { oid } } }
+    since: commits(last: 100) { nodes { commit { oid } } }
   } }
 }
 `
@@ -73,7 +73,7 @@ const listRepository = `%s: repository(owner: $%s, name: $%s) {
 // detailRepository reads one pull request of a batch: the alias, the owner
 // variable, the name variable and the number variable. Beyond the list, it
 // reads whether the branch merges clean, the checks of the last commit with
-// their hours, the last thirty commits and how the pull request ended.
+// their hours, the last fifty commits and how the pull request ended.
 const detailRepository = `%s: repository(owner: $%s, name: $%s) { pullRequest(number: $%s) { ...pr body state merged mergeable
   mergedBy { login } mergedAt closedAt
   head: commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: 100) { nodes {
@@ -261,7 +261,7 @@ func (n listNode) pullRequest(owner, name string) PullRequest {
 
 // newCommitCount is how many commits came after the commit of the last review
 // of the viewer: 0 without a review or when the head is its commit, -1 when
-// its commit is not among the last thirty.
+// its commit is not among the last hundred.
 func (n listNode) newCommitCount(pr PullRequest) int {
 	if !pr.Reviewed || pr.ReviewedCommit == "" || pr.ReviewedCommit == pr.HeadCommit {
 		return 0

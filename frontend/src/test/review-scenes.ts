@@ -603,8 +603,14 @@ function webReview(moment: WebMoment, flags: ReviewFlags, now: string): ReviewSu
   const apply = flags.apply === true;
   const nowIso = new Date(now).toISOString();
   const live = moment === "checks" ? WEB_CHECKS_WAITING : WEB_CHECKS;
-  // The last reading of every minute: 40 seconds ago, or before the first one that failed.
-  const checkedAt = moment === "checks" ? at("13:09:20") : before(nowIso, 40);
+  // The last good reading of every minute: with a reading that failed at 13:50, the one before it at
+  // 13:49; otherwise 40 seconds ago, or 13:09:20 while the checks run. The checks completed before it.
+  const checkedAt =
+    flags.checkerr === true
+      ? at("13:49")
+      : moment === "checks"
+        ? at("13:09:20")
+        : before(nowIso, 40);
   const base: Partial<ReviewSummary> = {
     id: REVIEW_ID,
     repositoryId: repositoryId(WEB.repository),
@@ -636,7 +642,6 @@ function webReview(moment: WebMoment, flags: ReviewFlags, now: string): ReviewSu
       ? {
           checkError: "GitHub's rate limit was reached. It resets at 14:32.",
           checkErrorAt: at("13:50"),
-          checkedAt: at("13:49"),
         }
       : {}),
   };

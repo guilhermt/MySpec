@@ -1,5 +1,7 @@
 import type { PullRequestRowState } from "@/components/system/ListRow";
 import {
+  cloneMissingReason,
+  FORK_REASON,
   pullRequestRowModel,
   rowReference,
   sectionOf,
@@ -8,7 +10,7 @@ import {
 import { type ChecksReading, checksSummary, unfinishedChecks } from "@/lib/pull-requests";
 import { findRepository } from "@/lib/repositories";
 import type { PullCard, PullRequestRow, ReviewSummary, State, TaskSummary } from "@/lib/wails";
-import { asPullRequestAction } from "@/lib/wails";
+import { asMergeable, asPullRequestAction } from "@/lib/wails";
 import { age, ageLong, fullTime, readClock } from "@/lib/when";
 
 /**
@@ -22,7 +24,7 @@ export type PanelAction =
   | { kind: "review"; review: ReviewSummary }
   | { kind: "task"; task: TaskSummary | null; taskId: string }
   | { kind: "fork" }
-  | { kind: "clone-missing"; path: string }
+  | { kind: "clone-missing"; reason: string }
   | {
       kind: "clone";
       state: "idle" | "cloning" | "failed";
@@ -91,7 +93,7 @@ function actionOf(row: PullRequestRow, app: State, reading: ChecksReading): Pane
     case "fork":
       return { kind: "fork" };
     case "clone_missing":
-      return { kind: "clone-missing", path: repository?.path ?? "" };
+      return { kind: "clone-missing", reason: cloneMissingReason(row, app) };
     case "clone": {
       const message = repository?.cloneError ?? "";
       return {
@@ -117,9 +119,9 @@ export function panelReason(action: PanelAction): string | null {
     case "task":
       return "The review of this pull request happens in its task.";
     case "fork":
-      return "Pull requests from forks can't be reviewed yet.";
+      return FORK_REASON;
     case "clone-missing":
-      return `The clone at ${action.path} is missing.`;
+      return action.reason;
     case "clone":
       switch (action.state) {
         case "idle":
@@ -151,7 +153,7 @@ export function prPanelModel(row: PullRequestRow, ctx: { app: State; now: number
   const center = ctx.app.reviewCenter;
   const reading: ChecksReading = {
     checks: row.checks,
-    mergeable: row.mergeable,
+    mergeable: asMergeable(row.mergeable),
     checkedAt: center.readAt,
     base: row.baseBranch,
   };

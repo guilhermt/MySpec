@@ -7,6 +7,7 @@ import {
   announcePlace,
   compactWait,
   compareSituations,
+  counted,
   DURATION_SLOW_MS,
   discussionSituation,
   FLASH_MS,
@@ -392,5 +393,15 @@ describe("compactWait and spokenWait", () => {
   ])("tells a wait of %s", (_wait, startedAt, compact, spoken) => {
     expect(compactWait(startedAt, now)).toBe(compact);
     expect(spokenWait(startedAt, now)).toBe(spoken);
+  });
+});
+
+describe("counted", () => {
+  it.each([
+    [0, "0 findings"],
+    [1, "1 finding"],
+    [3, "3 findings"],
+  ])("counts %i as %j", (count, want) => {
+    expect(counted(count, "finding")).toBe(want);
   });
 });

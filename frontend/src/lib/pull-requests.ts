@@ -1,13 +1,14 @@
 import type { CheckGlyph } from "@/components/system/ChecksList";
 import type {
   CheckState,
+  Mergeable,
   PRCheck,
   PRStatus,
   PRTrouble,
   PullRequest,
   TaskSummary,
 } from "@/lib/wails";
-import { asCheckState, asPRStatus } from "@/lib/wails";
+import { asCheckState, asMergeable, asPRStatus } from "@/lib/wails";
 import { duration } from "@/lib/when";
 
 // The states the pull request reaches once its review is behind it: from there
@@ -32,8 +33,8 @@ export function isOpen(pr: PullRequest): boolean {
 /** ChecksReading is a reading of the checks of a pull request: the checks, the merge, when, and the base. */
 export interface ChecksReading {
   checks: readonly PRCheck[] | null;
-  /** mergeable is mergeable, conflicting, unknown or "". */
-  mergeable: string;
+  /** mergeable is whether the branch merges clean into the base; "" while GitHub has not said. */
+  mergeable: Mergeable;
   /** checkedAt is when the reading was made; "" before the first one. */
   checkedAt: string;
   /** base is the branch the pull request merges into, for "conflict with dev". */
@@ -44,7 +45,7 @@ export interface ChecksReading {
 export function prChecks(pr: PullRequest): ChecksReading {
   return {
     checks: pr.checks,
-    mergeable: pr.mergeable,
+    mergeable: asMergeable(pr.mergeable),
     checkedAt: pr.checkedAt,
     base: prBaseName(pr),
   };

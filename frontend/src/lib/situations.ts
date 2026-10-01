@@ -44,6 +44,11 @@ export function lowerFirst(text: string): string {
   return `${text.charAt(0).toLowerCase()}${text.slice(1)}`;
 }
 
+/** counted is a count with its noun, in the plural unless it is one: "1 finding", "0 findings", "3 findings". */
+export function counted(count: number, noun: string): string {
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
+
 /**
  * situationLabel is what a situation asks of the user, in the few words the
  * lists and the section have room for. A situation with more than one form

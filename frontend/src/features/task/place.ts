@@ -1,6 +1,7 @@
 import { type MarkerView, mergedLineOf } from "@/features/chat/markers";
 import { draftAtHand, prBlockHint } from "@/features/task/pr-status";
 import { blockHint, currentStepOf, stepPhaseLabel } from "@/features/task/step-status";
+import { counted } from "@/lib/situations";
 import type { PRStatus, PullRequest, Step, TaskSummary } from "@/lib/wails";
 import {
   asCheckState,
@@ -30,11 +31,6 @@ export type PlaceView =
     }
   /** closedReview is the conversation of the review of the pull request, read-only, with the line of its end. */
   | { kind: "closedReview"; endLine: MarkerView | null };
-
-// counted is a count with its noun: "1 step", "7 steps".
-function counted(count: number, noun: string): string {
-  return `${count} ${noun}${count === 1 ? "" : "s"}`;
-}
 
 // listed is names in a sentence: "a", "a and b", "a, b and c".
 function listed(names: readonly string[]): string {

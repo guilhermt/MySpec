@@ -2,7 +2,7 @@ import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { renderWithStore } from "@/test/render";
-import { Finding, type FindingProps, type FindingView } from "./Finding";
+import { type DecidableFindingProps, Finding, type FindingView } from "./Finding";
 
 function view(overrides: Partial<FindingView> = {}): FindingView {
   return {
@@ -28,7 +28,13 @@ function view(overrides: Partial<FindingView> = {}): FindingView {
 describe("Finding", () => {
   it("names itself, says what it says and where it went", () => {
     renderWithStore(
-      <Finding model={view()} onOpenLine={vi.fn()} renderText={(text) => <p>{text}</p>} />,
+      <Finding
+        model={view()}
+        current={false}
+        onOpenLine={vi.fn()}
+        onOpenEditor={vi.fn()}
+        renderText={(text) => <p>{text}</p>}
+      />,
     );
 
     const group = screen.getByRole("group", { name: view().name });
@@ -42,7 +48,13 @@ describe("Finding", () => {
   it("opens the line on GitHub when its location is clicked", async () => {
     const onOpenLine = vi.fn();
     renderWithStore(
-      <Finding model={view()} onOpenLine={onOpenLine} renderText={(text) => <p>{text}</p>} />,
+      <Finding
+        model={view()}
+        current={false}
+        onOpenLine={onOpenLine}
+        onOpenEditor={vi.fn()}
+        renderText={(text) => <p>{text}</p>}
+      />,
     );
 
     await userEvent.click(
@@ -59,7 +71,9 @@ describe("Finding", () => {
           location: { kind: "general", text: "General · not on a line of the diff" },
           disabled: null,
         })}
+        current={false}
         onOpenLine={vi.fn()}
+        onOpenEditor={vi.fn()}
         renderText={(text) => <p>{text}</p>}
       />,
     );
@@ -70,7 +84,10 @@ describe("Finding", () => {
   });
 
   describe("while it is decided on", () => {
-    function open(overrides: Partial<FindingProps> = {}, model: Partial<FindingView> = {}) {
+    function open(
+      overrides: Partial<DecidableFindingProps> = {},
+      model: Partial<FindingView> = {},
+    ) {
       const props = {
         onDecide: vi.fn(),
         onEdit: vi.fn(),
@@ -84,7 +101,12 @@ describe("Finding", () => {
       renderWithStore(
         <Finding
           model={view({ decision: "", disabled: null, ...model })}
+          current
           editNote="Saved as you type. It goes to GitHub as you leave it."
+          editing={false}
+          draft=""
+          saving={false}
+          error={null}
           renderText={(text) => <p>{text}</p>}
           {...props}
           {...overrides}
@@ -164,13 +186,20 @@ describe("Finding", () => {
       renderWithStore(
         <Finding
           model={view({ decision: "", disabled: null })}
+          current
           editNote="Saved as you type. It goes to GitHub as you leave it."
           editing
           draft={draft}
+          saving={false}
+          error={null}
+          onDecide={vi.fn()}
           onDone={onDone}
           onDraftChange={onDraftChange}
+          onDraftBlur={vi.fn()}
           onEdit={onEdit}
           onOpenLine={vi.fn()}
+          onOpenEditor={vi.fn()}
+          onRetry={vi.fn()}
           renderText={(text) => <p>{text}</p>}
         />,
       );
@@ -217,7 +246,9 @@ describe("Finding", () => {
     renderWithStore(
       <Finding
         model={view({ locationAsTitle: true })}
+        current={false}
         onOpenLine={vi.fn()}
+        onOpenEditor={vi.fn()}
         renderText={(text) => <p>{text}</p>}
       />,
     );
@@ -227,22 +258,26 @@ describe("Finding", () => {
     expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
   });
 
-  it("keeps only O and Ctrl+E once disabled", async () => {
-    const onEdit = vi.fn();
+  it("keeps only O and Ctrl+E once disabled, and no tab stop of its own", async () => {
     const onOpenLine = vi.fn();
+    const onOpenEditor = vi.fn();
     renderWithStore(
       <Finding
         model={view()}
-        onEdit={onEdit}
+        current={false}
         onOpenLine={onOpenLine}
+        onOpenEditor={onOpenEditor}
         renderText={(text) => <p>{text}</p>}
       />,
     );
-    screen.getByRole("group").focus();
+    const group = screen.getByRole("group");
+    expect(group).toHaveAttribute("tabindex", "-1");
+    group.focus();
 
-    await userEvent.keyboard("eo");
+    await userEvent.keyboard("eo{Control>}e{/Control}");
 
-    expect(onEdit).not.toHaveBeenCalled();
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
     expect(onOpenLine).toHaveBeenCalledTimes(1);
+    expect(onOpenEditor).toHaveBeenCalledTimes(1);
   });
 });

@@ -10,7 +10,6 @@ import { Textarea } from "@/components/system/Textarea";
 import { Tooltip } from "@/components/system/Tooltip";
 import {
   allowedVerdicts,
-  counted,
   goesLine,
   initialVerdict,
   publishLabel,
@@ -22,15 +21,15 @@ import {
 import { lastRecordedPass } from "@/features/reviews/review-status";
 import { useFindingText } from "@/features/reviews/useFindingText";
 import { messageOf } from "@/lib/errors";
-import { reviewName } from "@/lib/situations";
+import { counted, reviewName } from "@/lib/situations";
 import {
   asReviewVerdict,
   type ReviewPass,
   type ReviewSummary,
   type ReviewVerdict,
 } from "@/lib/wails";
-import { publishReview, saveReviewSummary } from "@/store/actions";
-import { useAppStore } from "@/store/app-store";
+import { publishReview, saveReviewSummary, saveReviewSummaryInPlace } from "@/store/actions";
+import { useAppStore, usePublishAttempt } from "@/store/app-store";
 
 export interface PublishDialogProps {
   review: ReviewSummary;
@@ -74,7 +73,7 @@ function staleNote(review: ReviewSummary): string {
 }
 
 function PublishForm({ review, pass, onOpenChange, onReviewAgain }: PublishFormProps) {
-  const attempt = useAppStore((state) => state.publishAttempts[review.id] ?? null);
+  const attempt = usePublishAttempt(review.id);
   const setPublishAttempt = useAppStore((state) => state.setPublishAttempt);
 
   const text = useFindingText(
@@ -152,18 +151,26 @@ function PublishForm({ review, pass, onOpenChange, onReviewAgain }: PublishFormP
     }
     setPublishing(true);
     setError(null);
-    try {
-      // The summary still waiting to be saved goes before the publication reads it.
-      if (withSummary && text.value !== pass.summary) {
-        await saveReviewSummary(review.id, pass.pass, text.value);
+    const failed = (message: string) => {
+      setError(message);
+      setPublishAttempt(review.id, { pass: pass.pass, verdict: chosen, withSummary });
+      setPublishing(false);
+    };
+    // The summary still waiting to be saved goes before the publication reads it; a summary that
+    // did not save stops the publication, which would carry the old one.
+    if (withSummary && text.value !== pass.summary) {
+      const unsaved = await saveReviewSummaryInPlace(review.id, pass.pass, text.value);
+      if (unsaved !== null) {
+        failed(`Couldn't save the summary: ${unsaved}`);
+        return;
       }
+    }
+    try {
       await publishReview(review.id, chosen, withSummary);
       setPublishAttempt(review.id, null);
       onOpenChange(false);
     } catch (reason: unknown) {
-      setError(messageOf(reason));
-      setPublishAttempt(review.id, { pass: pass.pass, verdict: chosen, withSummary });
-      setPublishing(false);
+      failed(messageOf(reason));
     }
   };
 

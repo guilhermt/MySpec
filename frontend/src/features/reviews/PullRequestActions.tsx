@@ -39,7 +39,7 @@ export function PullRequestActions({ row, action, reference, app, now }: PullReq
   const reason = panelReason(action);
 
   useEffect(() => {
-    if (focusAfterPath.current && action.kind === "start") {
+    if (focusAfterPath.current && (action.kind === "start" || action.kind === "start-own")) {
       focusAfterPath.current = false;
       root.current?.querySelector<HTMLElement>("[data-primary]")?.focus();
     }
@@ -76,9 +76,11 @@ export function PullRequestActions({ row, action, reference, app, now }: PullReq
     case "start":
     case "start-own":
       control = (
-        <Button {...common} shortcut="R" {...describedBy} onClick={start}>
-          Start review
-        </Button>
+        <Tooltip content="Start review" shortcut="R">
+          <Button {...common} {...describedBy} onClick={start}>
+            Start review
+          </Button>
+        </Tooltip>
       );
       break;
     case "fork":
@@ -112,20 +114,16 @@ export function PullRequestActions({ row, action, reference, app, now }: PullReq
         );
       } else if (action.state === "failed") {
         control = (
-          <Button {...common} shortcut="R" {...describedBy} onClick={() => void clone()}>
-            Try the clone again
-          </Button>
+          <Tooltip content="Try the clone again" shortcut="R">
+            <Button {...common} {...describedBy} onClick={() => void clone()}>
+              Try the clone again
+            </Button>
+          </Tooltip>
         );
       } else {
         control = (
-          <Tooltip content="Clone, then open the start dialog · R">
-            <Button
-              {...common}
-              icon={ICONS.clone}
-              shortcut="R"
-              {...describedBy}
-              onClick={() => void clone()}
-            >
+          <Tooltip content="Clone, then open the start dialog" shortcut="R">
+            <Button {...common} icon={ICONS.clone} {...describedBy} onClick={() => void clone()}>
               Clone and continue
             </Button>
           </Tooltip>

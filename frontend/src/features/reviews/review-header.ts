@@ -1,9 +1,15 @@
+import type { MenuRowItem } from "@/components/MenuRow";
 import type { PillView, StepperGlyph } from "@/components/system/Pill";
 import type { StepperStepView } from "@/components/system/Stepper";
-import type { TaskMenuItem } from "@/features/task/task-menu";
 import { choiceLabel } from "@/lib/models";
 import { type ChecksReading, checkCounts, checksSummary } from "@/lib/pull-requests";
-import { lowerFirst, reviewName, situationFragment, situationLabel } from "@/lib/situations";
+import {
+  counted,
+  lowerFirst,
+  reviewName,
+  situationFragment,
+  situationLabel,
+} from "@/lib/situations";
 import type {
   ModelCatalog,
   PullCard,
@@ -15,6 +21,7 @@ import type {
   SituationGroup,
 } from "@/lib/wails";
 import {
+  asMergeable,
   asPullReviewMode,
   asPullReviewStatus,
   asSessionStatus,
@@ -57,7 +64,7 @@ export function isPausedReview(review: ReviewSummary): boolean {
 export function reviewChecks(review: ReviewSummary): ChecksReading {
   return {
     checks: review.checks,
-    mergeable: review.mergeable,
+    mergeable: asMergeable(review.mergeable),
     checkedAt: review.checkedAt,
     base: review.baseBranch,
   };
@@ -205,7 +212,9 @@ export type ReviewMenuAction =
   | "deleteReview";
 
 /** ReviewMenuItem is one item of the ⋯ of a review, as the ⋯ of a task draws it. */
-export interface ReviewMenuItem extends Omit<TaskMenuItem, "action"> {
+export interface ReviewMenuItem extends MenuRowItem {
+  /** id is a stable key: "review.again", "review.delete". */
+  id: string;
   action: ReviewMenuAction;
 }
 
@@ -332,10 +341,6 @@ export interface ReviewDetailsModel {
   review: { mode: string; model: string; worktree: string; started: string };
 }
 
-function counted(count: number, noun: string): string {
-  return `${count} ${noun}${count === 1 ? "" : "s"}`;
-}
-
 // passText is a pass as the Passes of Details list it.
 function passText(review: ReviewSummary, pass: ReviewPass, last: boolean): string {
   const name = `Pass ${pass.pass}`;
@@ -378,7 +383,7 @@ export function reviewDetails(
     .map((pass) => {
       const reading: ChecksReading = {
         checks: pass.checks,
-        mergeable: pass.mergeable,
+        mergeable: asMergeable(pass.mergeable),
         checkedAt: pass.checksReadAt,
         base: review.baseBranch,
       };

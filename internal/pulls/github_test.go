@@ -270,7 +270,7 @@ func TestTheListQueryAsksForWhatOnlyTheListShows(t *testing.T) {
 
 	query := f.github.made(queryList)[0].Query
 	for _, field := range []string{
-		"head: commits(last: 1)", "since: commits(last: 30)", "body", "mergeable",
+		"head: commits(last: 1)", "since: commits(last: 100)", "body", "mergeable",
 		"startedAt completedAt", "rateLimit { cost }", "nodes { state submittedAt commit { oid } }",
 	} {
 		if !strings.Contains(query, field) {
@@ -325,7 +325,7 @@ func TestTheCommitsAfterYourReviewAreCountedInTheThreeCases(t *testing.T) {
 		want int
 	}{
 		{name: "without a review", repo: alphaID, pr: 42, want: 0},
-		{name: "with the commit among the last thirty", repo: alphaID, pr: 38, want: 2},
+		{name: "with the commit among the last hundred", repo: alphaID, pr: 38, want: 2},
 		{name: "with the head as the reviewed commit", repo: gammaID, pr: 7, want: 0},
 	}
 	for _, c := range cases {
@@ -337,7 +337,7 @@ func TestTheCommitsAfterYourReviewAreCountedInTheThreeCases(t *testing.T) {
 	f.github.reply(queryList, load(t, "list_stale.json"), nil)
 	f.refresh(t)
 	if got := f.pullRequest(t, alphaID, 21).NewCommitCount; got != -1 {
-		t.Errorf("with the commit out of the last thirty: NewCommitCount = %d, want -1", got)
+		t.Errorf("with the commit out of the last hundred: NewCommitCount = %d, want -1", got)
 	}
 }
 

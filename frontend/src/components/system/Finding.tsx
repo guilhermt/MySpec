@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "./Button";
 import { IconButton } from "./IconButton";
 import { ICONS } from "./icons";
+import { isTyping } from "./keys";
 import { Link } from "./Link";
 import { Spinner } from "./Spinner";
 import { Textarea } from "./Textarea";
@@ -29,50 +30,53 @@ export interface FindingView {
   disabled: string | null;
 }
 
-export interface FindingProps {
+interface FindingCommonProps {
   model: FindingView;
-  /** current is the finding the card's one tab stop sits on. */
-  current?: boolean;
-  /** editNote is "Saved as you type. It goes to GitHub as you leave it." or the Apply one. */
-  editNote?: string;
-  editing?: boolean;
-  /** draft is the text in the field while editing; the last saved text stays when it is empty. */
-  draft?: string;
-  saving?: boolean;
-  error?: "decision" | "text" | null;
-  onDecide?: (decision: FindingDecision) => void;
-  onEdit?: () => void;
-  onDraftChange?: (text: string) => void;
-  onDraftBlur?: () => void;
-  onDone?: () => void;
+  /** current is the finding the card's one tab stop sits on; a disabled one in a conversation line is never. */
+  current: boolean;
   onOpenLine: () => void;
-  onOpenEditor?: () => void;
-  onRetry?: () => void;
+  onOpenEditor: () => void;
   /** renderText draws the Markdown of the text: the system knows no Markdown renderer. */
   renderText: (text: string) => ReactNode;
 }
 
-const META = "text-(length:--text-meta) leading-(--leading-meta)";
-
-/** inField tells a key that comes from a text field, which is the field's own. */
-function inField(target: EventTarget): boolean {
-  return (
-    target instanceof HTMLElement &&
-    (target instanceof HTMLInputElement ||
-      target instanceof HTMLTextAreaElement ||
-      target.isContentEditable)
-  );
+/** DecidableFindingProps are the props of a finding still decided on, with the decision and the edit. */
+export interface DecidableFindingProps extends FindingCommonProps {
+  /** editNote is "Saved as you type. It goes to GitHub as you leave it." or the Apply one. */
+  editNote: string;
+  editing: boolean;
+  /** draft is the text in the field while editing; the last saved text stays when it is empty. */
+  draft: string;
+  saving: boolean;
+  error: "decision" | "text" | null;
+  onDecide: (decision: FindingDecision) => void;
+  onEdit: () => void;
+  onDraftChange: (text: string) => void;
+  onDraftBlur: () => void;
+  onDone: () => void;
+  onRetry: () => void;
 }
+
+/**
+ * DisabledFindingProps are the props of a finding published or sent, whose model carries where it
+ * went: it decides and edits nothing, so it takes none of the props of the decision and the edit.
+ */
+export type DisabledFindingProps = FindingCommonProps & {
+  [K in Exclude<keyof DecidableFindingProps, keyof FindingCommonProps>]?: never;
+};
+
+export type FindingProps = DecidableFindingProps | DisabledFindingProps;
+
+const META = "text-(length:--text-meta) leading-(--leading-meta)";
 
 /**
  * Finding is one finding of a review: what is wrong, where, and what the user said about it, with the
  * decision on it and the way to edit its text. Once published or sent it is disabled: it says where
- * it went and decides nothing. A disabled finding needs none of the handlers of the decision and the
- * edit.
+ * it went and decides nothing, and takes none of the props of the decision and the edit.
  */
 export function Finding({
   model,
-  current = false,
+  current,
   editNote = "",
   editing = false,
   draft = "",
@@ -111,11 +115,11 @@ export function Finding({
       done();
       return;
     }
-    if (event.repeat || inField(event.target)) return;
+    if (event.repeat || isTyping(event.target)) return;
     if (event.ctrlKey && !event.metaKey && !event.altKey && event.key.toLowerCase() === "e") {
       if (!anchored) return;
       event.preventDefault();
-      onOpenEditor?.();
+      onOpenEditor();
       return;
     }
     if (event.ctrlKey || event.metaKey || event.altKey) return;
@@ -154,7 +158,7 @@ export function Finding({
           tooltip="Open in VS Code at this line"
           shortcut="Ctrl+E"
           size="xs"
-          onClick={() => onOpenEditor?.()}
+          onClick={onOpenEditor}
         />
       </span>
     ) : (

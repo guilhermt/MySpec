@@ -1,4 +1,4 @@
-import type { IconMeaning } from "@/components/system/icons";
+import type { MenuRowItem } from "@/components/MenuRow";
 import { canDiscardDraft, reviewAgainRefusal } from "@/features/task/pr-status";
 import { type StageAction, stageNoun } from "@/features/task/stage-actions";
 import { canReviewMyself, currentStepOf, hasStepSession } from "@/features/task/step-status";
@@ -23,24 +23,10 @@ export type TaskMenuAction =
   | { kind: "deleteTask" };
 
 /** TaskMenuItem is one item of the ⋯ of a task. */
-export interface TaskMenuItem {
+export interface TaskMenuItem extends MenuRowItem {
   /** id is a stable key: "step.openInEditor", "task.back.prd". */
   id: string;
-  /** label is "Discard step 4…", "Back to PRD…", "Review mode". */
-  label: string;
   action: TaskMenuAction;
-  icon?: IconMeaning;
-  /** shortcut is "Ctrl+E". */
-  shortcut?: string;
-  /** sub is the hint beside the label: "Agent", "Manual", "per stage". */
-  sub?: string;
-  /** opensPopover draws the ›. */
-  opensPopover?: boolean;
-  /** tooltip is "Read the pull request now · checked 2m ago". */
-  tooltip?: string;
-  /** disabledReason is why the item can't be chosen: "the worktree doesn't exist yet". */
-  disabledReason?: string;
-  destructive?: boolean;
 }
 
 /** TaskMenuGroup is a group of the ⋯; a null label is the group after the separator. */

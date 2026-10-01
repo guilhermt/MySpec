@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { DecisionCard, type DecisionCardItem } from "@/components/system/DecisionCard";
 import { Finding, type FindingDecision, type FindingView } from "@/components/system/Finding";
 import { Markdown } from "@/features/chat/Markdown";
@@ -16,13 +16,20 @@ import {
 /** Attempt is what the user asked of a finding: the decision or the text, kept to try it again. */
 type Attempt = { kind: "decision"; decision: FindingDecision } | { kind: "text"; text: string };
 
-/** Standing is where the last asks of a finding stand: one under way, or the one that failed. */
+/**
+ * Standing is where the last ask of one kind about a finding stands: under way, or failed. The
+ * decision and the text each have their own, so one never clears or hides the other.
+ */
 interface Standing {
   saving: boolean;
   failed: Attempt | null;
 }
 
+/** Standings are the standing of the decision and of the text of one finding. */
+type Standings = Record<Attempt["kind"], Standing>;
+
 const IDLE: Standing = { saving: false, failed: null };
+const ALL_IDLE: Standings = { decision: IDLE, text: IDLE };
 
 const EDIT_NOTES = {
   publish: "Saved as you type. It goes to GitHub as you leave it.",
@@ -35,14 +42,22 @@ interface CardFindingProps {
   finding: ReviewFinding;
   model: FindingView;
   current: boolean;
-  standing: Standing;
+  standings: Standings;
   onAsk: (attempt: Attempt) => void;
 }
 
 // CardFinding joins the Finding of the system to the review: the text as it is edited, the
 // decision, the ways to open the line. It is keyed by the number of its finding, so a report written
 // again keeps the editing open of a finding that did not change.
-function CardFinding({ review, pass, finding, model, current, standing, onAsk }: CardFindingProps) {
+function CardFinding({
+  review,
+  pass,
+  finding,
+  model,
+  current,
+  standings,
+  onAsk,
+}: CardFindingProps) {
   const [editing, setEditing] = useState(false);
   const text = useFindingText(
     review.id,
@@ -63,6 +78,10 @@ function CardFinding({ review, pass, finding, model, current, standing, onAsk }:
     }
   }
 
+  // Either save under way shows; a failed decision shows before a failed text, and Try again asks
+  // again the one shown.
+  const failed = standings.decision.failed ?? standings.text.failed;
+
   return (
     <Finding
       model={model}
@@ -70,8 +89,8 @@ function CardFinding({ review, pass, finding, model, current, standing, onAsk }:
       editNote={EDIT_NOTES[review.mode === "apply" ? "apply" : "publish"]}
       editing={editing}
       draft={text.value}
-      saving={standing.saving}
-      error={standing.failed?.kind ?? null}
+      saving={standings.decision.saving || standings.text.saving}
+      error={failed?.kind ?? null}
       onDecide={(decision) => onAsk({ kind: "decision", decision })}
       onEdit={() => setEditing(true)}
       onDraftChange={text.onChange}
@@ -84,8 +103,8 @@ function CardFinding({ review, pass, finding, model, current, standing, onAsk }:
       }}
       onOpenEditor={() => void openFindingInEditor(review.id, pass.pass, finding.number)}
       onRetry={() => {
-        if (standing.failed !== null) {
-          onAsk(standing.failed);
+        if (failed !== null) {
+          onAsk(failed);
         }
       }}
       renderText={(value) => <Markdown cutCode>{value}</Markdown>}
@@ -104,7 +123,10 @@ export interface FindingsCardProps {
  */
 export function FindingsCard({ review, pass }: FindingsCardProps) {
   const findings = pass.findings ?? [];
-  const [standings, setStandings] = useState<Record<number, Standing>>({});
+  const [standings, setStandings] = useState<Record<number, Standings>>({});
+  // asked counts the asks of each kind about each finding, so only the latest one settles its
+  // standing: an earlier save that ends later neither clears the saving nor brings back a failure.
+  const asked = useRef(new Map<string, number>());
   const views = findingViews(review, pass, Date.now());
   const items: DecisionCardItem[] = views.map((view) => ({
     id: view.id,
@@ -112,16 +134,24 @@ export function FindingsCard({ review, pass }: FindingsCardProps) {
     disabled: false,
   }));
 
+  const settle = (number: number, kind: Attempt["kind"], standing: Standing) =>
+    setStandings((all) => ({
+      ...all,
+      [number]: { ...(all[number] ?? ALL_IDLE), [kind]: standing },
+    }));
+
   const ask = async (number: number, attempt: Attempt) => {
-    setStandings((all) => ({ ...all, [number]: { saving: true, failed: null } }));
+    const key = `${number}:${attempt.kind}`;
+    const turn = (asked.current.get(key) ?? 0) + 1;
+    asked.current.set(key, turn);
+    settle(number, attempt.kind, { saving: true, failed: null });
     const failure =
       attempt.kind === "decision"
         ? await decideFindingInPlace(review.id, pass.pass, number, attempt.decision)
         : await saveFindingTextInPlace(review.id, pass.pass, number, attempt.text);
-    setStandings((all) => ({
-      ...all,
-      [number]: { saving: false, failed: failure === null ? null : attempt },
-    }));
+    if (asked.current.get(key) === turn) {
+      settle(number, attempt.kind, { saving: false, failed: failure === null ? null : attempt });
+    }
   };
 
   const onDecide = (id: string, key: "approve" | "discard"): "advance" | "stay" => {
@@ -163,7 +193,7 @@ export function FindingsCard({ review, pass }: FindingsCardProps) {
             finding={finding}
             model={model}
             current={current}
-            standing={standings[finding.number] ?? IDLE}
+            standings={standings[finding.number] ?? ALL_IDLE}
             onAsk={(attempt) => void ask(finding.number, attempt)}
           />
         );

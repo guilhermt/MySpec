@@ -1,8 +1,9 @@
 import { screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ReviewsView } from "@/features/reviews/ReviewsView";
 import { StartReviewDialog } from "@/features/reviews/StartReviewDialog";
 import { reviewRow } from "@/features/sidebar/sidebar-tree";
+import { REVIEWS_SECTIONS_KEY } from "@/lib/ui-storage";
 import type { State } from "@/lib/wails";
 import {
   capture,
@@ -137,6 +138,22 @@ function withTestRow(scene: ReviewScene): ReviewScene {
   return { ...scene, state };
 }
 
+// expanded is the scene with every section of the list expanded, so a proof measures every row of it:
+// the scene starts with Reviewed and Yours and your tasks collapsed.
+function expanded(scene: ReviewScene): ReviewScene {
+  return {
+    ...scene,
+    storage: { ...scene.storage, [REVIEWS_SECTIONS_KEY]: JSON.stringify({ collapsed: [] }) },
+  };
+}
+
+// rowsOf are the rows of the list drawn, every pull request of the scene's reading.
+function rowsOf(area: HTMLElement, scene: ReviewScene): HTMLElement[] {
+  const rows = [...area.querySelectorAll<HTMLElement>("[data-row-key]")];
+  expect(rows.length).toBe((scene.state.reviewCenter.pullRequests ?? []).length);
+  return rows;
+}
+
 // shownText is what a cell shows, without the invisible copy a review keeps to measure its long form.
 function shownText(cell: Element): string {
   return [cell, ...cell.querySelectorAll("span")]
@@ -181,7 +198,9 @@ describe.each(THEMES)("ReviewsView, the scenes in the %s theme", (theme) => {
   });
 
   describe("the widths of the list", () => {
-    const scene = reviewScene("list");
+    const scene = expanded(reviewScene("list"));
+    // The browser keeps localStorage between the tests: the scenes after these start collapsed again.
+    afterEach(() => localStorage.removeItem(REVIEWS_SECTIONS_KEY));
     fixReviewSceneClock(scene);
 
     it.each([
@@ -193,7 +212,7 @@ describe.each(THEMES)("ReviewsView, the scenes in the %s theme", (theme) => {
 
       const list = area.querySelector<HTMLElement>(".list-area");
       expect(list?.getBoundingClientRect().width).toBe(width);
-      for (const row of area.querySelectorAll<HTMLElement>("[data-row-key]")) {
+      for (const row of rowsOf(area, scene)) {
         const label = row.getAttribute("aria-label") ?? "";
         expect(
           row.getBoundingClientRect().height > px("--size-control"),
@@ -212,9 +231,7 @@ describe.each(THEMES)("ReviewsView, the scenes in the %s theme", (theme) => {
       const list = area.querySelector<HTMLElement>(".list-area");
       expect(list?.getBoundingClientRect().width).toBe(452);
       expect(edgesOf(screen.getByRole("complementary")).left).toBe(edgesOf(list as Element).right);
-      const rows = area.querySelectorAll<HTMLElement>("[data-row-key]");
-      expect(rows.length).toBeGreaterThan(0);
-      for (const row of rows) {
+      for (const row of rowsOf(area, scene)) {
         const label = row.getAttribute("aria-label") ?? "";
         const { title, meta } = piecesOf(row);
         const line = meta.getBoundingClientRect();

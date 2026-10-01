@@ -1,9 +1,11 @@
 import type { FindingView } from "@/components/system/Finding";
-import { publishedGoes, verdictName } from "@/features/reviews/publish";
+import { publishedGoes } from "@/features/reviews/publish";
 import { findingViews } from "@/features/reviews/review-conversation";
+import { verdictLabel } from "@/features/reviews/review-status";
+import { decidedCounts } from "@/lib/findings";
 import { modelLabel } from "@/lib/models";
 import { baseName, type ChecksReading, checksSummary, prBaseName } from "@/lib/pull-requests";
-import { lowerFirst } from "@/lib/situations";
+import { counted, lowerFirst } from "@/lib/situations";
 import { asLifecycleStage, stageLabel } from "@/lib/stages";
 import type {
   Entry,
@@ -20,6 +22,7 @@ import {
   asAppKind,
   asInterruptedBy,
   asMarkerType,
+  asMergeable,
   asPRState,
   asRetryReason,
   DISCUSSION_STAGE,
@@ -113,11 +116,6 @@ export function voiceInSentence(voice: string): string {
 }
 
 const NONE: MarkerBody = { kind: "none" };
-
-// counted is a count with its noun: "1 finding", "3 findings".
-function counted(count: number, noun: string): string {
-  return `${count} ${noun}${count === 1 ? "" : "s"}`;
-}
 
 // parts joins the parts of a complement that say something.
 function parts(...all: string[]): string {
@@ -406,7 +404,7 @@ function checksBody(pass: number, review: ReviewSummary | null, base: string): M
   }
   const reading: ChecksReading = {
     checks: stored.checks,
-    mergeable: stored.mergeable,
+    mergeable: asMergeable(stored.mergeable),
     checkedAt: stored.checksReadAt,
     base,
   };
@@ -442,16 +440,7 @@ export function derivedDecidedLineOf(
   pass: ReviewPass,
   now: number,
 ): MarkerView {
-  const findings = pass.findings ?? [];
-  return decidedLineOf(
-    review,
-    pass,
-    {
-      approved: findings.filter((one) => one.decision === "approved").length,
-      discarded: findings.filter((one) => one.decision === "discarded").length,
-    },
-    now,
-  );
+  return decidedLineOf(review, pass, decidedCounts(pass.findings ?? []), now);
 }
 
 // authorsOf are the authors of some commits, each once, in order: "rsouza and tchen", "a, b and c".
@@ -487,7 +476,7 @@ function reviewPublishedLine(marker: MarkerEntry): MarkerView {
   const view = line(
     "pullRequest",
     `Published pass ${marker.pass}`,
-    parts(verdictName(marker.verdict), publishedGoes(marker)),
+    parts(verdictLabel(marker.verdict), publishedGoes(marker)),
   );
   return marker.url === "" ? view : { ...view, link: { label: "GitHub", url: marker.url } };
 }

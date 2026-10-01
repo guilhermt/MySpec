@@ -287,6 +287,10 @@ interface Row {
   /** text is what the new place says, for a control that became words. */
   text?: RegExp;
   disabled?: boolean;
+  /** description is the accessible description of the control: the reason under it. */
+  description?: string;
+  /** check proves the rest of the new place: what the control there holds. */
+  check?: (place: HTMLElement) => void;
 }
 
 // placeOf is the element of the new place, once the steps are done.
@@ -658,6 +662,7 @@ const ROWS: Row[] = [
     where: "panel",
     name: /^Start review/,
     disabled: true,
+    description: "Pull requests from forks can't be reviewed yet.",
   },
   {
     origin: "PullRequestRow",
@@ -668,6 +673,7 @@ const ROWS: Row[] = [
     where: "panel",
     name: /^Start review/,
     disabled: true,
+    description: "The clone at /home/dev/projects/web is missing.",
   },
   {
     origin: "PullRequestRow",
@@ -677,6 +683,7 @@ const ROWS: Row[] = [
     steps: openPanel,
     where: "panel",
     name: /^Change path…$/,
+    text: /The clone at \/home\/dev\/projects\/web is missing\./,
   },
 
   // The dialog that starts a review.
@@ -1164,6 +1171,14 @@ const ROWS: Row[] = [
     where: "marker",
     holder: /^You decided/,
     text: /Inline comment · published/,
+    // The finding there is disabled: it says where it went, and offers no decision and no edit.
+    check: (place) => {
+      const finding = within(place).getByRole("group", { name: /^Finding 1 of 1/ });
+      expect(finding).toHaveAttribute("data-disabled");
+      for (const control of [/^Approve/, /^Discard/, /^Edit/]) {
+        expect(within(finding).queryByRole("button", { name: control })).not.toBeInTheDocument();
+      }
+    },
   },
 
   // The publication.
@@ -1289,7 +1304,7 @@ afterEach(() => {
 describe("where the controls of the components that left went", () => {
   it.each(ROWS)(
     "$origin: $control, $state, is in the $where",
-    async ({ draw, steps, where, holder, role, name, text, disabled }) => {
+    async ({ draw, steps, where, holder, role, name, text, disabled, description, check }) => {
       const { user } = draw();
       await steps?.(user);
       const place = await placeOf(where, holder);
@@ -1297,6 +1312,7 @@ describe("where the controls of the components that left went", () => {
       if (text !== undefined) {
         await waitFor(() => expect(place).toHaveTextContent(text));
       }
+      check?.(place);
       if (name === undefined) {
         return;
       }
@@ -1306,6 +1322,9 @@ describe("where the controls of the components that left went", () => {
         expect(found).toHaveAttribute("aria-disabled", "true");
       } else {
         expect(found).not.toHaveAttribute("aria-disabled", "true");
+      }
+      if (description !== undefined) {
+        expect(found).toHaveAccessibleDescription(description);
       }
     },
   );
@@ -1326,6 +1345,18 @@ describe("where the controls of the components that left went", () => {
     await user.keyboard("r");
 
     expect(useAppStore.getState().startReview).toEqual({ repositoryId: "repo-1", number: 31 });
+  });
+
+  it("puts the reason of the action of a row from a fork at R, in the notice of the key", async () => {
+    const { user } = list({ action: "fork" })();
+    screen.getByRole("treeitem", { name: /^web#31 / }).focus();
+
+    await user.keyboard("r");
+
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "No review of web#31 · Pull requests from forks can't be reviewed yet.",
+    );
+    expect(useAppStore.getState().startReview).toBeNull();
   });
 });
 

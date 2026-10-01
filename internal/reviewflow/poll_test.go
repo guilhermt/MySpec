@@ -10,6 +10,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 
 	"github.com/guilhermt/myspec/internal/gh"
+	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prreview"
 	"github.com/guilhermt/myspec/internal/pulls"
 	"github.com/guilhermt/myspec/internal/reviewflow"
@@ -480,6 +481,18 @@ func TestRefreshPRReadsOnlyTheReviewAfterAReadingThatDidNotBringIt(t *testing.T)
 
 	f := newFixture(t)
 	id := deciding(t, f)
+	other := openPR()
+	other.Number, other.HeadBranch = prNumber+1, "label-cache"
+	other.URL = "https://github.com/dev/web/pull/43"
+	f.pulls.seed(other)
+	if _, err := f.service.Start(t.Context(), reviewflow.StartParams{
+		RepositoryID: repoID,
+		Number:       other.Number,
+		Choice:       models.Choice{Model: models.Opus55, Effort: models.High},
+		Mode:         prreview.ModePublish,
+	}); err != nil {
+		t.Fatalf("start the other review: %v", err)
+	}
 	f.pulls.forget(prNumber)
 	before := f.pulls.readings()
 	release, entered := f.pulls.holdReadings()
@@ -501,6 +514,17 @@ func TestRefreshPRReadsOnlyTheReviewAfterAReadingThatDidNotBringIt(t *testing.T)
 	}
 	if f.state(t, id).CheckedAt.IsZero() {
 		t.Error("the review has no reading after the refresh")
+	}
+	asked := f.pulls.refsRead()
+	if len(asked) < before+2 {
+		t.Fatalf("readings = %v, want the one under way and the one of the refresh", asked)
+	}
+	if len(asked[before]) != 2 {
+		t.Errorf("refs of the reading under way = %v, want both reviews", asked[before])
+	}
+	want := []pulls.Ref{{Owner: "dev", Name: "web", Number: prNumber}}
+	if diff := cmp.Diff(want, asked[before+1]); diff != "" {
+		t.Errorf("refs of the reading of the refresh (-want +got):\n%s", diff)
 	}
 }
 
@@ -553,6 +577,39 @@ func TestANewHeadAfterThePublicationMarksTheCommitsBetweenTheTwoHeads(t *testing
 	}}
 	if diff := cmp.Diff(want, f.sessions.markersOf(session.MarkerNewCommits)); diff != "" {
 		t.Errorf("new_commits markers (-want +got):\n%s", diff)
+	}
+}
+
+func TestTheNewCommitsAreMarkedOnlyOnceTheNewHeadIsStored(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := toPublish(t, f)
+	if err := f.service.Publish(t.Context(), id, prreview.VerdictComment, true); err != nil {
+		t.Fatalf("publish review: %v", err)
+	}
+	moved := openPR()
+	moved.HeadCommit = otherHash
+	moved.Commits = []pulls.Commit{
+		{SHA: headHash, Subject: "The one reviewed", Author: "rsouza"},
+		{SHA: otherHash, Subject: "Cover the cache", Author: "tchen"},
+	}
+	f.pulls.seed(moved)
+	f.store.failUpdate(errStore)
+
+	f.pollOnce(t)
+	f.pollOnce(t)
+	if got := f.sessions.markersOf(session.MarkerNewCommits); len(got) != 0 {
+		t.Fatalf("new_commits markers = %+v, want none while the store fails", got)
+	}
+
+	f.store.failUpdate(nil)
+	f.polled(t, id, func(s reviewflow.State) bool {
+		return s.Status == reviewflow.StatusNewCommits
+	}, "the new commits of the pull request to be noticed")
+	f.pollOnce(t)
+	if got := f.sessions.markersOf(session.MarkerNewCommits); len(got) != 1 || got[0].Count != 1 {
+		t.Errorf("new_commits markers = %+v, want one with one commit", got)
 	}
 }
 

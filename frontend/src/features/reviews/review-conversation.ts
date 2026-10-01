@@ -1,9 +1,9 @@
 import type { FindingView } from "@/components/system/Finding";
 import { fileName, findingName, headingOf, locationText } from "@/lib/findings";
-import { unfinishedChecks } from "@/lib/pull-requests";
+import { type ChecksReading, unfinishedChecks } from "@/lib/pull-requests";
 import { shortName } from "@/lib/repositories";
 import type { Entry, ReviewFinding, ReviewPass, ReviewSummary } from "@/lib/wails";
-import { asMarkerType, asPullReviewStatus } from "@/lib/wails";
+import { asMarkerType, asMergeable, asPullReviewStatus } from "@/lib/wails";
 import { clockTime } from "@/lib/when";
 
 // LEFT_BEHIND are the statuses that say a Review again left the last pass behind: the next one was asked for.
@@ -62,13 +62,14 @@ export function waitingChecksFoot(review: ReviewSummary): string {
   const pass = waitingPass(review);
   const subject = pass === 1 ? "The first pass" : `Pass ${pass}`;
   const reference = `${shortName(review.repository)}#${review.number}`;
-  const names = unfinishedChecks({
+  const reading: ChecksReading = {
     checks: review.checks,
-    mergeable: review.mergeable,
+    mergeable: asMergeable(review.mergeable),
     checkedAt: review.checkedAt,
     base: review.baseBranch,
-  });
-  const mergeUnknown = review.mergeable === "unknown" || review.mergeable === "";
+  };
+  const names = unfinishedChecks(reading);
+  const mergeUnknown = reading.mergeable === "unknown" || reading.mergeable === "";
   let starts: string;
   if (names.length === 0) {
     starts = mergeUnknown ? `GitHub says whether ${reference} merges clean` : "the checks finish";

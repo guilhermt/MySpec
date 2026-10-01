@@ -25,6 +25,7 @@ import type {
   Entry,
   EntryKind,
   FindingDecision,
+  MarkerCommit,
   Migration,
   ModelCatalog,
   ModelStage,
@@ -915,6 +916,10 @@ export function makePullRequestRow(overrides: Partial<PullRequestRow> = {}): Pul
 
 export function makePullReview(overrides: Partial<PullReview> = {}): PullReview {
   return { state: "approved", at: "2026-09-24T10:02:00Z", ...overrides };
+}
+
+export function makeMarkerCommit(overrides: Partial<MarkerCommit> = {}): MarkerCommit {
+  return { sha: "c19f02e", subject: "Fix the time zone rule", author: "rsouza", ...overrides };
 }
 
 export function makePullsFailure(overrides: Partial<PullsFailure> = {}): PullsFailure {

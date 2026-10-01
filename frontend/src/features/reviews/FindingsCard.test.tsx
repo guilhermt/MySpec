@@ -190,6 +190,45 @@ describe("FindingsCard", () => {
 
       expect(await within(finding(1)).findByText(/Couldn't save the text/)).toBeInTheDocument();
     });
+
+    it("keeps a failed decision when the text saves, and tries the decision again", async () => {
+      vi.mocked(api.decideFinding).mockRejectedValueOnce(new Error("pass is over"));
+      const { user } = card();
+
+      await user.click(within(finding(1)).getByRole("button", { name: "Approve" }));
+      expect(await within(finding(1)).findByText(/Couldn't save the decision/)).toBeInTheDocument();
+
+      await user.click(within(finding(1)).getByRole("button", { name: "Edit" }));
+      await user.type(screen.getByRole("textbox", { name: "Text of finding 1" }), " Now.");
+      await user.click(screen.getByRole("button", { name: "Done" }));
+      await waitFor(() => expect(api.setFindingText).toHaveBeenCalled());
+
+      expect(within(finding(1)).getByText(/Couldn't save the decision/)).toBeInTheDocument();
+      await user.click(within(finding(1)).getByRole("button", { name: "Try again" }));
+      expect(api.decideFinding).toHaveBeenLastCalledWith("review-1", 1, 1, "approved");
+    });
+
+    it("keeps saving while the decision is under way, though the text already saved", async () => {
+      let settle: () => void = () => {};
+      vi.mocked(api.decideFinding).mockReturnValueOnce(
+        new Promise<void>((resolve) => {
+          settle = resolve;
+        }),
+      );
+      const { user } = card();
+
+      await user.click(within(finding(1)).getByRole("button", { name: "Approve" }));
+      await user.click(within(finding(1)).getByRole("button", { name: "Edit" }));
+      await user.type(screen.getByRole("textbox", { name: "Text of finding 1" }), " Now.");
+      await user.click(screen.getByRole("button", { name: "Done" }));
+      await waitFor(() => expect(api.setFindingText).toHaveBeenCalled());
+
+      expect(within(finding(1)).getByText("Saving…")).toBeInTheDocument();
+      await act(async () => settle());
+      await waitFor(() =>
+        expect(within(finding(1)).queryByText("Saving…")).not.toBeInTheDocument(),
+      );
+    });
   });
 
   describe("a report written again", () => {

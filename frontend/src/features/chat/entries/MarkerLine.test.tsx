@@ -2,6 +2,7 @@ import { screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { MarkerLine } from "@/features/chat/entries/MarkerLine";
 import type { MarkerView } from "@/features/chat/markers";
+import type { ChecksReading } from "@/lib/pull-requests";
 import { api } from "@/lib/wails";
 import { clockTime } from "@/lib/when";
 import { useAppStore } from "@/store/app-store";
@@ -240,7 +241,7 @@ describe("MarkerLine", () => {
     });
 
     it("lists the checks the pass started from, each with its state and duration", async () => {
-      const reading = {
+      const reading: ChecksReading = {
         checks: [
           makePRCheck({ name: "lint", state: "passed" }),
           makePRCheck({ name: "e2e", state: "failed", conclusion: "failure" }),
@@ -309,7 +310,12 @@ describe("MarkerLine", () => {
 
       await user.click(screen.getByRole("button", { name: /You decided/ }));
 
-      expect(screen.getAllByRole("group")).toHaveLength(2);
+      const findings = screen.getAllByRole("group");
+      expect(findings).toHaveLength(2);
+      // The findings of a line add no tab stops to the conversation.
+      for (const finding of findings) {
+        expect(finding).toHaveAttribute("tabindex", "-1");
+      }
       expect(screen.getByText("Inline comment · published 13:41")).toBeInTheDocument();
       expect(screen.getByText("Not published")).toBeInTheDocument();
 

@@ -96,12 +96,21 @@ describe("ReviewView", () => {
   });
 
   it("draws the card at the end of the conversation when it has no report marker", async () => {
+    vi.mocked(api.getTranscript).mockResolvedValueOnce(
+      makeTranscript({
+        taskId: "review-1",
+        stage: "review",
+        entries: [makeEntry("assistant")],
+      }),
+    );
     view({ status: "awaiting_decision", passes: [makeReviewPass()] });
 
     const feed = await screen.findByRole("feed", { name: "Conversation with the reviewer" });
-    expect(
-      await within(feed).findByRole("group", { name: "Findings of pass 1" }),
-    ).toBeInTheDocument();
+    await within(feed).findByRole("group", { name: "Findings of pass 1" });
+    await within(feed).findByText("On it.");
+    const text = feed.textContent ?? "";
+    expect(text.indexOf("On it.")).toBeGreaterThan(-1);
+    expect(text.indexOf("On it.")).toBeLessThan(text.indexOf("Findings1"));
   });
 
   it.each<[string, Partial<ReviewSummary>]>([
@@ -235,7 +244,8 @@ describe("ReviewView", () => {
     });
 
     const feed = await screen.findByRole("feed", { name: "Conversation with the reviewer" });
-    const decided = await within(feed).findByRole("article", { name: /^You decided · 1 approved/ });
+    // Derived from the data, the line carries no time of its own.
+    const decided = await within(feed).findByRole("article", { name: "You decided · 1 approved" });
     const text = feed.textContent ?? "";
     expect(text.indexOf("Review 1 written")).toBeLessThan(text.indexOf("You decided"));
     expect(text.indexOf("You decided")).toBeLessThan(text.indexOf("On it."));

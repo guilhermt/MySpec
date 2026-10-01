@@ -204,6 +204,28 @@ describe("PublishDialog", () => {
     expect(api.setReviewSummary).toHaveBeenCalledWith("review-1", 1, "One thing left.");
   });
 
+  it("stops before publishing when the summary does not save, and says so in the footer", async () => {
+    vi.mocked(api.setReviewSummary).mockRejectedValue(new Error("disk full"));
+    const { user, onOpenChange } = dialog();
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    await user.clear(screen.getByRole("textbox", { name: "Summary" }));
+    await user.type(screen.getByRole("textbox", { name: "Summary" }), "One thing left.");
+    await user.keyboard("{Escape}2");
+
+    await user.click(publishButton());
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Couldn't save the summary: disk full",
+    );
+    expect(api.publishReview).not.toHaveBeenCalled();
+    expect(onOpenChange).not.toHaveBeenCalled();
+    expect(useAppStore.getState().publishAttempts["review-1"]).toEqual({
+      pass: 1,
+      verdict: "approve",
+      withSummary: true,
+    });
+  });
+
   it("shows a failed publication in the footer and keeps the attempt for the next opening", async () => {
     vi.mocked(api.publishReview).mockRejectedValueOnce(
       new Error("Couldn't publish to GitHub: no."),

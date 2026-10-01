@@ -30,10 +30,19 @@ function draw(model: Partial<FindingView> = {}, current = true, error: "decision
     <Finding
       model={view(model)}
       current={current}
-      error={error}
       editNote="Saved as you type."
+      editing={false}
+      draft=""
+      saving={false}
+      error={error}
       onDecide={() => {}}
+      onEdit={() => {}}
+      onDraftChange={() => {}}
+      onDraftBlur={() => {}}
+      onDone={() => {}}
       onOpenLine={() => {}}
+      onOpenEditor={() => {}}
+      onRetry={() => {}}
       renderText={(text) => <p>{text}</p>}
     />,
   );

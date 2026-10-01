@@ -1,3 +1,5 @@
+import { ExternalLink } from "@/components/ExternalLink";
+import { FACTS, Fact } from "@/components/Facts";
 import { AuxPanel } from "@/components/system/AuxPanel";
 import { ChecksList } from "@/components/system/ChecksList";
 import { Icon } from "@/components/system/Icon";
@@ -9,7 +11,6 @@ import { Tooltip } from "@/components/system/Tooltip";
 import { useNow } from "@/features/attention/useNow";
 import { reviewDetails } from "@/features/reviews/review-header";
 import { useOpenCard } from "@/features/reviews/useOpenCard";
-import { ExternalLink, FACTS, Fact } from "@/features/task/DetailsPanel";
 import { displayPath } from "@/lib/paths";
 import { checkDuration, checkRows } from "@/lib/pull-requests";
 import type { ReviewSummary } from "@/lib/wails";

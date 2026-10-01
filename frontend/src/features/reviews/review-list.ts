@@ -5,6 +5,7 @@ import type { PullRequestRowState, PullRequestRowView } from "@/components/syste
 import type { FilterCycle } from "@/components/system/Menu";
 import { reviewRow, waitSuffix } from "@/features/sidebar/sidebar-tree";
 import { cloneMissingText, findRepository, shortName } from "@/lib/repositories";
+import { lowerFirst } from "@/lib/situations";
 import type { PullRequestRow, PullReview, ReviewCenter, ReviewFilters, State } from "@/lib/wails";
 import { asPullRequestAction, asYourReviewState } from "@/lib/wails";
 import { age, reviewMoment } from "@/lib/when";
@@ -148,10 +149,6 @@ interface RowState {
   spoken: string;
 }
 
-function lowerFirst(text: string): string {
-  return text.charAt(0).toLowerCase() + text.slice(1);
-}
-
 // rowState is the state of a row by the first case that holds: review, task,
 // yours, fork, clone, pending, reviewed.
 function rowState(row: PullRequestRow, ctx: PullRequestRowContext): RowState {
@@ -292,22 +289,25 @@ export function pullRequestRowModel(
   };
 }
 
+/** FORK_REASON is why a pull request from a fork has no review, in the panel and in the notice of R. */
+export const FORK_REASON = "Pull requests from forks can't be reviewed yet.";
+
+/** cloneMissingReason is why a pull request of a repository whose clone is missing has no review. */
+export function cloneMissingReason(row: PullRequestRow, app: State): string {
+  const repository = findRepository(app, row.repositoryId);
+  return repository === null
+    ? `The clone of ${row.repository} is missing.`
+    : cloneMissingText(repository);
+}
+
 /** reviewKeyNotice is why R does nothing on a row, null when it acts. */
 export function reviewKeyNotice(row: PullRequestRow, app: State): KeyNoticeText | null {
   const title = `No review of ${rowReference(row)}`;
   switch (asPullRequestAction(row.action)) {
     case "fork":
-      return { title, reason: "Pull requests from forks can't be reviewed yet." };
-    case "clone_missing": {
-      const repository = findRepository(app, row.repositoryId);
-      return {
-        title,
-        reason:
-          repository === null
-            ? `The clone of ${row.repository} is missing.`
-            : cloneMissingText(repository),
-      };
-    }
+      return { title, reason: FORK_REASON };
+    case "clone_missing":
+      return { title, reason: cloneMissingReason(row, app) };
     default:
       return null;
   }

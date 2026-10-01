@@ -19,7 +19,8 @@ const END = "end";
  * useConversationAnchors is what the conversation of a review draws after one of its entries, by the
  * id of the entry: the card of findings after the latest report of the pass being decided, and the
  * line You decided of each pass published or sent before the conversation recorded its decisions,
- * derived from its findings, after the report of the pass.
+ * derived from its findings, after the report of the pass. The derived line carries no time: the
+ * moment of the publication would read out of order among the entries that follow the report.
  */
 export function useConversationAnchors(review: ReviewSummary): ReadonlyMap<string, ReactNode> {
   const entries = useTranscript(review.id, REVIEW_STAGE)?.entries ?? NO_ENTRIES;
@@ -33,7 +34,7 @@ export function useConversationAnchors(review: ReviewSummary): ReadonlyMap<strin
         <MarkerLine
           key={`decided-${pass.pass}`}
           view={derivedDecidedLineOf(review, pass, now)}
-          createdAt={pass.publishedAt !== "" ? pass.publishedAt : pass.sentAt}
+          createdAt=""
           review={review}
         />,
       );

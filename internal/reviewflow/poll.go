@@ -180,9 +180,9 @@ func (s *Service) settle(ctx context.Context, id string, detail pulls.Detail) {
 	changed = s.setReading(id, detail) || changed
 
 	state := prreview.PRState(detail.State)
-	if stored.PublishedPass > 0 && stored.HeadCommit != "" && stored.HeadCommit != detail.HeadCommit {
-		s.markNewCommits(ctx, stored, detail)
-	}
+	// The marker of new commits goes in only once the new head is stored, so
+	// that a failed write marks them again on the next reading, not twice.
+	headMoved := stored.PublishedPass > 0 && stored.HeadCommit != "" && stored.HeadCommit != detail.HeadCommit
 	if stored.HeadCommit != detail.HeadCommit || stored.Title != detail.Title || stored.PRState != state {
 		updated, err := s.reviews.Update(ctx, id, func(r *prreview.Review) {
 			r.HeadCommit, r.Title, r.PRState = detail.HeadCommit, detail.Title, state
@@ -191,6 +191,9 @@ func (s *Service) settle(ctx context.Context, id string, detail pulls.Detail) {
 		if err != nil {
 			s.log.Error("update review failed", "review", id, "error", err)
 			return
+		}
+		if headMoved {
+			s.markNewCommits(ctx, stored, detail)
 		}
 		stored, changed = updated, true
 	}

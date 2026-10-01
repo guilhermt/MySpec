@@ -1,4 +1,5 @@
-import { counted, verdictName } from "@/features/reviews/publish";
+import { verdictLabel } from "@/features/reviews/review-status";
+import { counted } from "@/lib/situations";
 import type { ArchivedReview, ReviewPass } from "@/lib/wails";
 import { clockTime } from "@/lib/when";
 
@@ -46,7 +47,7 @@ function publishedLine(pass: ReviewPass, now: number): { text: string; time: str
   if (!pass.published) {
     return { text: `Pass ${pass.pass} · not published`, time: "" };
   }
-  const parts = [`Pass ${pass.pass}`, verdictName(pass.verdict), publishedWhat(pass)];
+  const parts = [`Pass ${pass.pass}`, verdictLabel(pass.verdict), publishedWhat(pass)];
   return {
     text: parts.filter((part) => part !== "").join(" · "),
     time: clockTime(pass.publishedAt, now),

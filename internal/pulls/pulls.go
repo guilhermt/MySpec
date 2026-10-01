@@ -45,7 +45,7 @@ type PullRequest struct {
 	YourReview *YourReview
 	// NewCommitCount is how many commits came after the commit of that review:
 	// 0 without one or when the head is that commit, -1 when that commit is not
-	// among the last 30 of the pull request.
+	// among the last 100 of the pull request.
 	NewCommitCount int
 }
 

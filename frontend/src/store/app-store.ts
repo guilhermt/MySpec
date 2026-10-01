@@ -1507,6 +1507,11 @@ export function useStartReview(): PullRef | null {
   return useAppStore((state) => state.startReview);
 }
 
+/** usePublishAttempt is what the publish dialog of a review held when its publication failed, null when none did. */
+export function usePublishAttempt(reviewId: string): PublishAttempt | null {
+  return useAppStore((state) => state.publishAttempts[reviewId] ?? null);
+}
+
 /**
  * useTextDraft is the text the user is editing and the revision it was typed
  * against, null when they are editing none.

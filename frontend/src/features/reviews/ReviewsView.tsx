@@ -1,9 +1,10 @@
 import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { PanelLayout } from "@/components/system/AuxPanel";
 import { KeyNotice, useKeyNotice } from "@/components/system/KeyNotice";
+import { isTyping } from "@/components/system/keys";
 import { ScrollArea } from "@/components/system/ScrollArea";
 import { useNow } from "@/features/attention/useNow";
-import { FLASH_MS, isTyping, LIST_COLUMN } from "@/features/board/BoardView";
+import { FLASH_MS, LIST_COLUMN } from "@/features/board/BoardView";
 import { PullRequestPanel } from "@/features/reviews/PullRequestPanel";
 import { PullRequestTree } from "@/features/reviews/PullRequestTree";
 import { ReviewsFilterBar } from "@/features/reviews/ReviewsFilterBar";
