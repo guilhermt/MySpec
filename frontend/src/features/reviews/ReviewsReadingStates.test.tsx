@@ -109,6 +109,23 @@ describe("the empty states", () => {
     expect(api.refreshPullRequests).toHaveBeenCalledOnce();
   });
 
+  it("dashes Read now while a reading runs over the empty list, with the reason", async () => {
+    const { user } = renderWithStore(
+      <NoPullRequests
+        app={makeState({
+          repositories: [makeRepository()],
+          reviewCenter: makeReviewCenter({ readAt: "2026-09-24T17:58:00Z", reading: true }),
+        })}
+      />,
+    );
+
+    const read = screen.getByRole("button", { name: "Read now" });
+    expect(read).toHaveAttribute("aria-disabled", "true");
+    expect(read).toHaveAccessibleDescription("A reading is running.");
+    await user.click(read);
+    expect(api.refreshPullRequests).not.toHaveBeenCalled();
+  });
+
   it("counts the pull requests the filters hide, and clears the filters", async () => {
     let cleared = 0;
     const center = makeReviewCenter({

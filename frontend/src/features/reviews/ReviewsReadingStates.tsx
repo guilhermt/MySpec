@@ -67,13 +67,22 @@ export function NoRepositories() {
   return <EmptyState title="Register a repository to see its pull requests." />;
 }
 
-/** NoPullRequests is a reading that found no open pull request. */
+/**
+ * NoPullRequests is a reading that found no open pull request. While a reading runs, the reading
+ * wins: Read now is dashed, as Refresh is.
+ */
 export function NoPullRequests({ app }: { app: State }) {
   return (
     <EmptyState
       title="No open pull requests."
       action={
-        <Button variant="secondary" size="sm" onClick={() => void refreshPullRequests()}>
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={app.reviewCenter.reading}
+          disabledReason="A reading is running."
+          onClick={() => void refreshPullRequests()}
+        >
           Read now
         </Button>
       }
