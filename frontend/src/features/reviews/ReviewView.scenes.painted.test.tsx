@@ -106,13 +106,13 @@ const dialog = () => document.querySelector<HTMLElement>('[role="dialog"]');
 
 /**
  * parts are what the screen draws in a box of its own, that must stand on whole pixels: the card of
- * findings and each finding, the bar of the request, the composer, the strip, the page of the review
- * that left, the panels and the dialog.
+ * findings, each finding and its number and body, the bar of the request, the composer, the strip,
+ * the page of the review that left, the panels and the dialog.
  */
 function parts(area: HTMLElement): Element[] {
   const open = dialog();
   return [
-    ...area.querySelectorAll("[data-decision-card], [data-finding-id]"),
+    ...area.querySelectorAll("[data-decision-card], [data-finding-id], [data-finding-id] > *"),
     ...area.querySelectorAll('section[aria-label="Request"], [data-slot="composer"]'),
     ...area.querySelectorAll('[role="alert"], [role="status"], aside, article'),
     ...(open === null ? [] : [open]),

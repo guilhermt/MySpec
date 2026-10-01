@@ -308,12 +308,16 @@ function nameOf(element: Element): string {
   return element.getAttribute("aria-label") ?? element.textContent?.trim().slice(0, 48) ?? "";
 }
 
-/** offWholePixels are the names of the elements whose left or right edge is not on a whole pixel. */
+/**
+ * offWholePixels are the names of the elements with an edge, on any side, that is not on a whole
+ * pixel. A text only the screen reader hears (sr-only) draws no box, and is left out.
+ */
 export function offWholePixels(elements: Iterable<Element>): string[] {
   return [...elements]
     .filter((element) => {
-      const { left, right } = edgesOf(element);
-      return !Number.isInteger(left) || !Number.isInteger(right);
+      if (element.classList.contains("sr-only")) return false;
+      const { left, right, top, bottom } = element.getBoundingClientRect();
+      return ![left, right, top, bottom].every(Number.isInteger);
     })
     .map(nameOf);
 }
