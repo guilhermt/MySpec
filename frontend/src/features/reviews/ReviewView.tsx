@@ -3,19 +3,23 @@ import { ArrivalFocus } from "@/components/ArrivalFocus";
 import { PanelLayout } from "@/components/system/AuxPanel";
 import { Conversation } from "@/features/chat/Conversation";
 import { CheckStrip } from "@/features/reviews/CheckStrip";
-import { focusFindingToDecide } from "@/features/reviews/decide-keys";
 import { ReportsPanel } from "@/features/reviews/ReportsPanel";
 import { ReviewComposer } from "@/features/reviews/ReviewComposer";
 import { ReviewDetails } from "@/features/reviews/ReviewDetails";
 import { ReviewHeader } from "@/features/reviews/ReviewHeader";
 import { ReviewRequest } from "@/features/reviews/ReviewRequest";
-import { reviewFixedCard, waitingChecksFoot } from "@/features/reviews/review-conversation";
+import {
+  currentCardPass,
+  reviewFixedCard,
+  waitingChecksFoot,
+} from "@/features/reviews/review-conversation";
 import { hasReviewComposer, reviewChecks } from "@/features/reviews/review-request";
 import { useConversationAnchors } from "@/features/reviews/useConversationAnchors";
 import { currentReviewRequest, useReviewRequest } from "@/features/reviews/useReviewRequest";
 import { ChangedFilesCard } from "@/features/task/ChangedFilesCard";
 import { LiveChecks } from "@/features/task/LiveChecks";
 import { useFocusRescue } from "@/features/task/request-focus";
+import { focusFindingToDecide } from "@/lib/focus";
 import { modalOpen } from "@/lib/layers";
 import { REVIEW_STAGE, type ReviewSummary, sessionKey } from "@/lib/wails";
 import { loadTranscript, refreshReviewPR } from "@/store/actions";
@@ -106,7 +110,10 @@ export function ReviewView({ reviewId }: ReviewViewProps) {
     if (event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
       if (event.key === "ArrowDown" || event.key === "ArrowUp") {
         event.preventDefault();
-        focusFindingToDecide(review, event.key === "ArrowDown" ? 1 : -1);
+        focusFindingToDecide(
+          currentCardPass(review)?.findings ?? null,
+          event.key === "ArrowDown" ? 1 : -1,
+        );
       }
       return;
     }

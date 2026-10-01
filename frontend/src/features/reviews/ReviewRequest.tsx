@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { RequestBar } from "@/components/system/RequestBar";
-import { focusFindingToDecide } from "@/features/reviews/decide-keys";
 import { PublishDialog } from "@/features/reviews/PublishDialog";
 import { ReviewAgainDialog } from "@/features/reviews/ReviewAgainDialog";
+import { currentCardPass } from "@/features/reviews/review-conversation";
 import { type ReviewRequestAction, reviewAnnouncement } from "@/features/reviews/review-request";
 import { useReviewRequest } from "@/features/reviews/useReviewRequest";
 import { RequestButtons } from "@/features/task/request-buttons";
 import { useBornStatus } from "@/features/task/useBornStatus";
-import { focusRequest } from "@/lib/focus";
+import { focusFindingToDecide, focusRequest } from "@/lib/focus";
 import { REVIEW_STAGE, type ReviewSummary } from "@/lib/wails";
 import {
   applyReview,
@@ -94,7 +94,7 @@ export function ReviewRequest({ review }: ReviewRequestProps) {
         focusRequest(request.focus);
         return;
       case "nextToDecide":
-        focusFindingToDecide(review, 1);
+        focusFindingToDecide(currentCardPass(review)?.findings ?? null, 1);
         return;
       case "publish":
         openReviewDialog(review.id, "publish");

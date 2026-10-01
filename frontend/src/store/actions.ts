@@ -723,6 +723,32 @@ export function saveFindingTextInPlace(
 }
 
 /**
+ * decidePRFindingInPlace records what the user decided about one finding of the review of the pull
+ * request of a task, on the finding itself: a failure answers its message, not the app notice.
+ */
+export function decidePRFindingInPlace(
+  taskId: string,
+  pass: number,
+  number: number,
+  decision: FindingDecision,
+): Promise<string | null> {
+  return inPlace(() => api.decidePRFinding(taskId, pass, number, decision));
+}
+
+/**
+ * savePRFindingTextInPlace records the text of a finding of the review of the pull request of a
+ * task as the user left it, on the finding itself: a failure answers its message, not the app notice.
+ */
+export function savePRFindingTextInPlace(
+  taskId: string,
+  pass: number,
+  number: number,
+  text: string,
+): Promise<string | null> {
+  return inPlace(() => api.setPRFindingText(taskId, pass, number, text));
+}
+
+/**
  * saveReviewSummaryInPlace is saveReviewSummary for the publish dialog, which saves the summary
  * right before publishing and shows its failure in its own footer: it answers the message, or null.
  */

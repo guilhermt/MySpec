@@ -9,6 +9,12 @@ import { clockTime } from "@/lib/when";
 // LEFT_BEHIND are the statuses that say a Review again left the last pass behind: the next one was asked for.
 const LEFT_BEHIND = ["waiting_checks", "pass_blocked"];
 
+/** EDIT_NOTES say where the text of a finding goes as the user leaves it, by the mode of the review. */
+export const EDIT_NOTES = {
+  publish: "Saved as you type. It goes to GitHub as you leave it.",
+  apply: "Saved as you type. It goes to the agent as you leave it.",
+};
+
 /**
  * currentCardPass is the pass whose findings the card below the conversation holds: the last one, when
  * its report is recorded with findings, it wasn't published or sent, and no pass after it was asked

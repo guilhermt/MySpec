@@ -15,6 +15,7 @@ import {
 import { screenSituationKindOf } from "@/features/task/request";
 import { TaskComposer } from "@/features/task/TaskComposer";
 import { TaskRequest } from "@/features/task/TaskRequest";
+import { usePRConversationAnchors } from "@/features/task/usePRConversationAnchors";
 import { prChecks } from "@/lib/pull-requests";
 import { asPRState, asPRStatus, type PullRequest, type TaskSummary } from "@/lib/wails";
 import type { StepTab } from "@/store/app-store";
@@ -45,6 +46,7 @@ export interface PRPaneProps {
  * without a conversation. The request bar is under each of them.
  */
 export function PRPane({ task, pr, tab }: PRPaneProps) {
+  const anchors = usePRConversationAnchors(task, pr);
   const view = prPlaceOf(task, pr, hasReviewConversation(task));
   const request = <TaskRequest task={task} tab={tab} />;
   // The line of the merge says when it happened; the closing of the pull request has no time.
@@ -73,6 +75,7 @@ export function PRPane({ task, pr, tab }: PRPaneProps) {
             stage="pr_review"
             session={IDLE_SESSION}
             readOnly
+            after={anchors}
             endLine={
               view.endLine === null ? undefined : (
                 <MarkerLine view={view.endLine} createdAt={endLineAt} />
@@ -91,6 +94,7 @@ export function PRPane({ task, pr, tab }: PRPaneProps) {
             stage={pr.sessionStage}
             session={pr}
             fixed={fixedOf(task, pr)}
+            after={anchors}
             {...(asPRStatus(pr.status) === "opening"
               ? { activity: "Opening the pull request…" }
               : {})}

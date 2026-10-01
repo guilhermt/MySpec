@@ -194,6 +194,14 @@ export function stepFeed(entry: HTMLElement, by: -1 | 1): void {
   }
 }
 
+/** leaveDecisionCard goes on along the conversation from the card of findings, by one entry up or down. */
+export function leaveDecisionCard(by: -1 | 1): void {
+  const card = document.querySelector<HTMLElement>("[data-decision-card]");
+  if (card !== null) {
+    stepFeed(card, by);
+  }
+}
+
 /**
  * useFeed makes the feed one stop of Tab over its entries, the elements with data-feed-item in the
  * order of the page: arriving, the pending card or the last entry; Tab goes through the controls
